@@ -1,0 +1,13 @@
+{
+  "name": "web-mediacenter",
+  "version": "1.0.0",
+  "description": "网页版媒体中心 - 上传端 + 显示端",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  }
+}

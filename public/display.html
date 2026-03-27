@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>媒体显示端</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #mediaContainer {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #mediaImage {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            display: none;
+            transition: transform 0.3s ease, object-fit 0.3s ease;
+        }
+        
+        #mediaImage.height {
+            height: 100%;
+            width: auto;
+            max-width: none;
+            max-height: none;
+            object-fit: contain;
+        }
+        
+        #mediaImage.width {
+            width: 100%;
+            max-width: none;
+            max-height: none;
+            height: auto;
+            object-fit: contain;
+        }
+        
+        #mediaImage.crop {
+            position: absolute;
+            max-width: none;
+            max-height: none;
+        }
+        
+        #mediaVideo {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            display: none;
+            transition: transform 0.3s ease, object-fit 0.3s ease;
+        }
+        
+        #mediaVideo.height {
+            height: 100%;
+            width: auto;
+            max-width: none;
+            max-height: none;
+            object-fit: contain;
+        }
+        
+        #mediaVideo.width {
+            width: 100%;
+            max-width: none;
+            max-height: none;
+            height: auto;
+            object-fit: contain;
+        }
+        
+        #mediaVideo.crop {
+            position: absolute;
+            max-width: none;
+            max-height: none;
+        }
+        
+        #timeDisplay {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            font-size: 48px;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+            font-weight: 300;
+            z-index: 100;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        #fileNameDisplay {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.8);
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            max-width: 60%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        #connectionStatus {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-size: 16px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+        
+        .connected {
+            background: rgba(56, 239, 125, 0.3);
+            color: #38ef7d;
+        }
+        
+        .disconnected {
+            background: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        
+        .connecting {
+            background: rgba(59, 130, 246, 0.3);
+            color: #3b82f6;
+        }
+        
+        #waitingMessage {
+            position: absolute;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        #waitingMessage h2 {
+            font-size: 32px;
+            font-weight: 300;
+            margin-bottom: 15px;
+        }
+        
+        #waitingMessage p {
+            font-size: 18px;
+        }
+        
+        @media (max-width: 768px) {
+            #timeDisplay {
+                font-size: 32px;
+                top: 10px;
+                right: 10px;
+            }
+            
+            #fileNameDisplay {
+                font-size: 16px;
+                bottom: 10px;
+                left: 10px;
+            }
+            
+            #connectionStatus {
+                font-size: 12px;
+                top: 10px;
+                left: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="connectionStatus" class="connecting">连接中...</div>
+    <div id="timeDisplay"></div>
+    <div id="fileNameDisplay"></div>
+    
+    <div id="mediaContainer">
+        <div id="waitingMessage">
+            <h2>等待媒体...</h2>
+            <p>请在上传端选择图片或视频</p>
+        </div>
+        <img id="mediaImage">
+        <video id="mediaVideo" autoplay loop playsinline></video>
+    </div>
+
+    <script>
+        const connectionStatus = document.getElementById('connectionStatus');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const waitingMessage = document.getElementById('waitingMessage');
+        const mediaImage = document.getElementById('mediaImage');
+        const mediaVideo = document.getElementById('mediaVideo');
+        
+        let currentRotation = 0;
+        let currentFit = 'contain';
+        let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
+        let displayWs = null;
+        
+        function sendCanvasSize() {
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({
+                    type: 'canvasSize',
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                }));
+            }
+        }
+        
+        function applyRotation() {
+            const transform = `rotate(${currentRotation}deg)`;
+            mediaImage.style.transform = transform;
+            mediaVideo.style.transform = transform;
+        }
+        
+        function applyFit(fit) {
+            currentFit = fit;
+            mediaImage.classList.remove('height', 'width', 'crop');
+            mediaVideo.classList.remove('height', 'width', 'crop');
+            
+            if (fit === 'height') {
+                mediaImage.classList.add('height');
+                mediaVideo.classList.add('height');
+            } else if (fit === 'width') {
+                mediaImage.classList.add('width');
+                mediaVideo.classList.add('width');
+            } else if (fit === 'crop') {
+                mediaImage.classList.add('height');
+                mediaVideo.classList.add('height');
+            }
+            
+            applyCrop();
+        }
+        
+        function applyCrop() {
+            const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
+            
+            media.classList.remove('crop');
+            media.style.width = '';
+            media.style.height = '';
+            media.style.left = '';
+            media.style.top = '';
+            
+            if (currentFit !== 'height' && currentFit !== 'width' && currentFit !== 'crop') {
+                return;
+            }
+            
+            const container = document.getElementById('mediaContainer');
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            
+            const naturalWidth = media.naturalWidth || media.videoWidth || containerWidth;
+            const naturalHeight = media.naturalHeight || media.videoHeight || containerHeight;
+            
+            const isRotated = currentRotation === 90 || currentRotation === 270;
+            const mediaRatio = naturalWidth / naturalHeight;
+            
+            if (currentFit === 'height') {
+                if (isRotated) {
+                    const displayHeight = containerWidth;
+                    const displayWidth = containerWidth * mediaRatio;
+                    media.style.width = displayWidth + 'px';
+                    media.style.height = displayHeight + 'px';
+                    media.style.maxWidth = 'none';
+                    media.style.maxHeight = 'none';
+                }
+                return;
+            }
+            
+            if (currentFit === 'width') {
+                if (isRotated) {
+                    const displayWidth = containerHeight;
+                    const displayHeight = containerHeight / mediaRatio;
+                    media.style.width = displayWidth + 'px';
+                    media.style.height = displayHeight + 'px';
+                    media.style.maxWidth = 'none';
+                    media.style.maxHeight = 'none';
+                }
+                return;
+            }
+            
+            if (currentFit !== 'crop') {
+                return;
+            }
+            
+            const containerRatio = containerWidth / containerHeight;
+            let displayWidth, displayHeight;
+            
+            if (isRotated) {
+                const rotatedRatio = 1 / mediaRatio;
+                if (rotatedRatio > containerRatio) {
+                    displayHeight = containerWidth;
+                    displayWidth = containerWidth * mediaRatio;
+                } else {
+                    displayWidth = containerHeight;
+                    displayHeight = containerHeight / mediaRatio;
+                }
+            } else {
+                if (mediaRatio > containerRatio) {
+                    displayHeight = containerHeight;
+                    displayWidth = containerHeight * mediaRatio;
+                } else {
+                    displayWidth = containerWidth;
+                    displayHeight = containerWidth / mediaRatio;
+                }
+            }
+            
+            const cropWidth = displayWidth * (currentCrop.width / 100);
+            const cropHeight = displayHeight * (currentCrop.height / 100);
+            const cropX = displayWidth * (currentCrop.x / 100);
+            const cropY = displayHeight * (currentCrop.y / 100);
+            
+            let targetWidth, targetHeight;
+            if (isRotated) {
+                targetWidth = containerHeight;
+                targetHeight = containerWidth;
+            } else {
+                targetWidth = containerWidth;
+                targetHeight = containerHeight;
+            }
+            
+            const scaleX = targetWidth / cropWidth;
+            const scaleY = targetHeight / cropHeight;
+            const scale = Math.max(scaleX, scaleY);
+            
+            media.classList.add('crop');
+            media.style.width = displayWidth * scale + 'px';
+            media.style.height = displayHeight * scale + 'px';
+            media.style.left = -cropX * scale + 'px';
+            media.style.top = -cropY * scale + 'px';
+        }
+        
+        window.addEventListener('resize', applyCrop);
+        
+        function updateTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            timeDisplay.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+        
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        function setConnectionStatus(status, text) {
+            connectionStatus.className = status;
+            connectionStatus.textContent = text;
+        }
+        
+        function showMedia(data) {
+            waitingMessage.style.display = 'none';
+            
+            if (data.type === 'url') {
+                if (data.mediaType === 'video') {
+                    mediaImage.style.display = 'none';
+                    mediaVideo.style.display = 'block';
+                    mediaVideo.src = data.url;
+                    mediaVideo.load();
+                    mediaVideo.play().catch(e => console.log('自动播放被阻止'));
+                    mediaVideo.onloadedmetadata = () => applyCrop();
+                } else {
+                    mediaVideo.style.display = 'none';
+                    mediaImage.style.display = 'block';
+                    mediaImage.src = data.url;
+                    mediaImage.onload = () => applyCrop();
+                }
+                const urlParts = data.url.split('/');
+                fileNameDisplay.textContent = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || '来自URL';
+            } else if (data.type === 'base64') {
+                const src = 'data:application/octet-stream;base64,' + data.data;
+                
+                if (data.mediaType === 'video') {
+                    mediaImage.style.display = 'none';
+                    mediaVideo.style.display = 'block';
+                    mediaVideo.src = src;
+                    mediaVideo.load();
+                    mediaVideo.play().catch(e => console.log('自动播放被阻止'));
+                    mediaVideo.onloadedmetadata = () => applyCrop();
+                } else {
+                    mediaVideo.style.display = 'none';
+                    mediaImage.style.display = 'block';
+                    mediaImage.src = src;
+                    mediaImage.onload = () => applyCrop();
+                }
+                fileNameDisplay.textContent = data.fileName || '未知文件';
+            }
+        }
+        
+        function handleControl(data) {
+            switch (data.action) {
+                case 'rotate':
+                    currentRotation = data.value !== undefined ? data.value : data.rotation;
+                    applyRotation();
+                    applyCrop();
+                    break;
+                    
+                case 'fit':
+                    applyFit(data.value);
+                    break;
+                    
+                case 'play':
+                    if (data.value === true) {
+                        mediaVideo.play().catch(e => console.log('播放被阻止'));
+                    } else {
+                        mediaVideo.pause();
+                    }
+                    break;
+                    
+                case 'seek':
+                    if (mediaVideo.duration) {
+                        mediaVideo.currentTime = (data.value / 100) * mediaVideo.duration;
+                    }
+                    break;
+                    
+                case 'volume':
+                    mediaVideo.volume = data.value / 100;
+                    break;
+                    
+                case 'crop':
+                    currentCrop = data.value;
+                    applyCrop();
+                    break;
+            }
+        }
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/display`;
+            
+            displayWs = new WebSocket(wsUrl);
+            
+            displayWs.onopen = function() {
+                setConnectionStatus('connected', '已连接');
+                sendCanvasSize();
+            };
+            
+            displayWs.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'serverStartTime') {
+                        const storedTime = localStorage.getItem('serverStartTime');
+                        if (storedTime && storedTime !== String(data.time)) {
+                            localStorage.setItem('serverStartTime', data.time);
+                            location.reload();
+                        } else {
+                            localStorage.setItem('serverStartTime', data.time);
+                        }
+                        return;
+                    }
+                    
+                    if (data.type === 'displayId') {
+                        displayId = data.id;
+                        return;
+                    }
+                    
+                    if (data.type === 'control') {
+                        handleControl(data);
+                    } else {
+                        showMedia(data);
+                    }
+                } catch (e) {
+                    console.error('解析消息失败:', e);
+                }
+            };
+            
+            displayWs.onclose = function() {
+                setConnectionStatus('disconnected', '已断开');
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            displayWs.onerror = function(error) {
+                console.error('WebSocket错误:', error);
+                setConnectionStatus('disconnected', '连接错误');
+            };
+        }
+        
+        window.addEventListener('resize', function() {
+            applyCrop();
+            sendCanvasSize();
+        });
+        
+        connectWebSocket();
+        
+        document.addEventListener('click', function() {
+            if (mediaVideo.style.display === 'block' && mediaVideo.paused) {
+                mediaVideo.play().catch(e => console.log('播放被阻止'));
+            }
+        });
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'f' || e.key === 'F') {
+                if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                } else {
+                    document.documentElement.requestFullscreen();
+                }
+            }
+            
+            if (e.key === ' ') {
+                if (mediaVideo.paused) {
+                    mediaVideo.play();
+                } else {
+                    mediaVideo.pause();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>媒体上传端</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .section h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #a0a0a0;
+        }
+        
+        .file-input-wrapper {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .file-label {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            min-width: 140px;
+        }
+        
+        .file-label.image {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+        }
+        
+        .file-label.video {
+            background: linear-gradient(135deg, #ee0979, #ff6a00);
+        }
+        
+        .file-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .url-input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .url-input-group input {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .url-input-group input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+        
+        .url-input-group button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .url-input-group button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            z-index: 9999;
+            animation: toastFade 2s ease forwards;
+            pointer-events: none;
+        }
+        
+        .toast-success {
+            background: rgba(56, 239, 125, 0.9);
+            color: #fff;
+            box-shadow: 0 10px 40px rgba(56, 239, 125, 0.4);
+        }
+        
+        .toast-error {
+            background: rgba(239, 68, 68, 0.9);
+            color: #fff;
+            box-shadow: 0 10px 40px rgba(239, 68, 68, 0.4);
+        }
+        
+        .toast-loading {
+            background: rgba(59, 130, 246, 0.9);
+            color: #fff;
+            box-shadow: 0 10px 40px rgba(59, 130, 246, 0.4);
+        }
+        
+        @keyframes toastFade {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -30%);
+            }
+            15% {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+            70% {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -70%);
+            }
+        }
+        
+        .media-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .display-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .display-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .display-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .display-item.active {
+            background: rgba(0, 210, 255, 0.2);
+            border: 1px solid rgba(0, 210, 255, 0.5);
+        }
+        
+        .display-item-id {
+            font-family: monospace;
+            font-size: 14px;
+            color: #fff;
+        }
+        
+        .display-item-size {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        .media-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .media-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .media-item.active {
+            background: rgba(0, 210, 255, 0.2);
+            border: 1px solid rgba(0, 210, 255, 0.5);
+        }
+        
+        .media-thumb {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+            margin-right: 12px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .media-info {
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .media-name {
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+        
+        .media-meta {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        .media-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .media-actions button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-play {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            color: #fff;
+        }
+        
+        .btn-delete {
+            background: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .control-item {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 15px;
+            border-radius: 12px;
+        }
+        
+        .control-item label {
+            display: block;
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            color: #fff;
+        }
+        
+        .control-btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .control-btn.active {
+            box-shadow: 0 0 0 2px #fff;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+            cursor: pointer;
+        }
+        
+        .info-section {
+            text-align: center;
+            padding: 15px;
+        }
+        
+        .info-section p {
+            color: #a0a0a0;
+            font-size: 14px;
+        }
+        
+        .info-section a {
+            color: #00d2ff;
+            text-decoration: none;
+        }
+        
+        .crop-control {
+            margin-top: 15px;
+        }
+        
+        .crop-preview-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .crop-preview-media {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transition: transform 0.3s ease;
+        }
+        
+        .crop-preview-media.rotate-90 {
+            transform: rotate(90deg);
+        }
+        
+        .crop-preview-media.rotate-180 {
+            transform: rotate(180deg);
+        }
+        
+        .crop-preview-media.rotate-270 {
+            transform: rotate(270deg);
+        }
+        
+        .crop-box {
+            position: absolute;
+            border: 2px solid #00d2ff;
+            background: rgba(0, 210, 255, 0.1);
+            cursor: move;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+            pointer-events: auto;
+        }
+        
+        .crop-box::before {
+            content: '';
+            position: absolute;
+            top: 33.33%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .crop-box::after {
+            content: '';
+            position: absolute;
+            top: 66.66%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .crop-box-h1, .crop-box-h2 {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .crop-box-h1 { top: 33.33%; }
+        .crop-box-h2 { top: 66.66%; }
+        
+        .crop-box-v1, .crop-box-v2 {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .crop-box-v1 { left: 33.33%; }
+        .crop-box-v2 { left: 66.66%; }
+        
+        .crop-resize-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #00d2ff;
+            border-radius: 2px;
+        }
+        
+        .crop-resize-handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
+        .crop-resize-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
+        .crop-resize-handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+        .crop-resize-handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
+        
+        .crop-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .empty-list {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+        }
+        
+        @media (max-width: 480px) {
+            .url-input-group {
+                flex-direction: column;
+            }
+            
+            .file-label {
+                width: 100%;
+            }
+            
+            .control-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>媒体上传端</h1>
+        
+        <div class="section">
+            <h2>上传文件</h2>
+            <div class="file-input-wrapper">
+                <label class="file-label image" for="imageInput">选择图片/GIF</label>
+                <label class="file-label video" for="videoInput">选择视频</label>
+            </div>
+            <input type="file" id="imageInput" accept="image/*">
+            <input type="file" id="videoInput" accept="video/*">
+        </div>
+        
+        <div class="section">
+            <h2>URL上传</h2>
+            <div class="url-input-group">
+                <input type="text" id="urlInput" placeholder="输入图片/视频URL">
+                <button onclick="uploadByUrl()">发送</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>服务器资源 <button onclick="loadMediaList()" style="float:right;padding:4px 12px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:12px;">刷新</button></h2>
+            <div class="media-list" id="mediaList">
+                <div class="empty-list">暂无资源</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>显示端选择</h2>
+            <div class="display-list" id="displayList">
+                <div class="empty-list">暂无显示端连接</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>显示控制</h2>
+            <div class="control-grid">
+                <div class="control-item">
+                    <label>画面填充</label>
+                    <div class="control-buttons">
+                        <button class="control-btn" onclick="sendFitMode('contain')">适应</button>
+                        <button class="control-btn" onclick="sendFitMode('height')">高度铺满</button>
+                        <button class="control-btn" onclick="sendFitMode('width')">宽度铺满</button>
+                        <button class="control-btn" onclick="sendFitMode('crop')">裁剪</button>
+                    </div>
+                </div>
+                
+                <div class="control-item">
+                    <label>视频播放</label>
+                    <div class="control-buttons">
+                        <button class="control-btn" onclick="sendControl('play', true)">播放</button>
+                        <button class="control-btn" onclick="sendControl('play', false)">暂停</button>
+                    </div>
+                </div>
+                
+                <div class="control-item">
+                    <label>播放进度: <span id="progressValue">0</span>%</label>
+                    <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="updateProgress(this.value)">
+                </div>
+                
+                <div class="control-item">
+                    <label>音量: <span id="volumeValue">100</span>%</label>
+                    <input type="range" id="volumeSlider" min="0" max="100" value="100" oninput="updateVolume(this.value)">
+                </div>
+            </div>
+            
+            <div class="crop-control">
+                <label style="display:block;font-size:14px;color:#fff;margin-bottom:10px;font-weight:500;">画面裁剪区域</label>
+                <div class="crop-preview-container" id="cropPreviewContainer">
+                    <img class="crop-preview-media" id="cropPreviewImg" style="display:none;">
+                    <video class="crop-preview-media" id="cropPreviewVideo" style="display:none;" muted></video>
+                    <div class="crop-box" id="cropBox" style="display:none;">
+                        <div class="crop-box-h1"></div>
+                        <div class="crop-box-h2"></div>
+                        <div class="crop-box-v1"></div>
+                        <div class="crop-box-v2"></div>
+                        <div class="crop-resize-handle nw" data-handle="nw"></div>
+                        <div class="crop-resize-handle ne" data-handle="ne"></div>
+                        <div class="crop-resize-handle sw" data-handle="sw"></div>
+                        <div class="crop-resize-handle se" data-handle="se"></div>
+                    </div>
+                </div>
+                <div class="crop-buttons">
+                    <button class="control-btn" onclick="setCropRotation(0)">0°</button>
+                    <button class="control-btn" onclick="setCropRotation(90)">90°</button>
+                    <button class="control-btn" onclick="setCropRotation(180)">180°</button>
+                    <button class="control-btn" onclick="setCropRotation(270)">270°</button>
+                    <button class="control-btn" onclick="resetCrop()">重置裁剪</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section info-section">
+            <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
+        </div>
+    </div>
+
+    <script>
+        function showToast(message, type) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+            
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => toast.remove(), 2000);
+        }
+        
+        function detectMediaType(name) {
+            const ext = name.toLowerCase().split('.').pop().split('?')[0];
+            if (['gif'].includes(ext)) return 'gif';
+            if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+            return 'image';
+        }
+        
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
+        function uploadFile(file) {
+            if (!currentDisplayId) {
+                showToast('请先选择显示端', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('displayId', currentDisplayId);
+            
+            showToast('正在上传...', 'loading');
+            
+            fetch('/upload-file', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('上传成功！', 'success');
+                    loadMediaList();
+                } else {
+                    showToast('上传失败: ' + data.message, 'error');
+                }
+            })
+            .catch(err => {
+                showToast('上传失败: ' + err, 'error');
+            });
+        }
+        
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) uploadFile(file);
+            this.value = '';
+        });
+        
+        document.getElementById('videoInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) uploadFile(file);
+            this.value = '';
+        });
+        
+        function uploadByUrl() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) {
+                showToast('请输入URL', 'error');
+                return;
+            }
+            
+            const mediaType = detectMediaType(url);
+            sendMedia({
+                type: 'url',
+                url: url,
+                mediaType: mediaType
+            });
+            
+            document.getElementById('urlInput').value = '';
+        }
+        
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') uploadByUrl();
+        });
+        
+        function loadMediaList() {
+            fetch('/media-list')
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    renderMediaList(data.list);
+                }
+            });
+        }
+        
+        function renderMediaList(list) {
+            const container = document.getElementById('mediaList');
+            
+            if (list.length === 0) {
+                container.innerHTML = '<div class="empty-list">暂无资源</div>';
+                return;
+            }
+            
+            container.innerHTML = list.map(item => {
+                let thumbHtml;
+                if (item.mediaType === 'video') {
+                    thumbHtml = `<video class="media-thumb" src="${item.url}" muted preload="metadata" onloadeddata="this.currentTime=0.1"></video>`;
+                } else {
+                    thumbHtml = `<img class="media-thumb" src="${item.url}" loading="lazy">`;
+                }
+                
+                return `
+                    <div class="media-item" data-url="${item.url}">
+                        ${thumbHtml}
+                        <div class="media-info">
+                            <div class="media-name" title="${item.name}">${item.name}</div>
+                            <div class="media-meta">${item.mediaType} · ${formatSize(item.size)}</div>
+                        </div>
+                        <div class="media-actions">
+                            <button class="btn-play" onclick="playMedia('${item.url}', event)">播放</button>
+                            <button class="btn-delete" onclick="deleteMedia('${item.name}', event)">删除</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function playMedia(url, event) {
+            event.stopPropagation();
+            
+            const mediaType = detectMediaType(url);
+            showCropPreview(url, mediaType);
+            
+            sendMedia({
+                type: 'url',
+                url: url,
+                mediaType: mediaType
+            });
+            
+            document.querySelectorAll('.media-item').forEach(el => el.classList.remove('active'));
+            event.target.closest('.media-item').classList.add('active');
+        }
+        
+        function deleteMedia(name, event) {
+            event.stopPropagation();
+            
+            if (!confirm('确定删除此文件？')) return;
+            
+            fetch(`/media/${encodeURIComponent(name)}`, {
+                method: 'DELETE'
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showToast('已删除', 'success');
+                    loadMediaList();
+                } else {
+                    showToast('删除失败', 'error');
+                }
+            });
+        }
+        
+        function sendFitMode(fit) {
+            sendControl('fit', fit);
+            sendControl('crop', cropData);
+            setTimeout(() => updateCropBox(), 100);
+        }
+        
+        function updateProgress(value) {
+            document.getElementById('progressValue').textContent = value;
+        }
+        
+        function updateVolume(value) {
+            document.getElementById('volumeValue').textContent = value;
+        }
+        
+        document.getElementById('progressSlider').addEventListener('change', function() {
+            sendControl('seek', parseInt(this.value));
+        });
+        
+        document.getElementById('volumeSlider').addEventListener('input', function() {
+            sendControl('volume', parseInt(this.value));
+        });
+        
+        let currentCropMedia = null;
+        let cropData = { x: 0, y: 0, width: 100, height: 100 };
+        let cropRotation = 0;
+        let displayCanvasSize = { width: 1920, height: 1080 };
+        let currentDisplayId = null;
+        let displayList = [];
+        let controlWs = null;
+        let isDragging = false;
+        let isResizing = false;
+        let resizeHandle = null;
+        let dragStart = { x: 0, y: 0 };
+        let cropStart = { x: 0, y: 0, width: 0, height: 0 };
+        
+        const cropBox = document.getElementById('cropBox');
+        const cropContainer = document.getElementById('cropPreviewContainer');
+        const cropPreviewImg = document.getElementById('cropPreviewImg');
+        const cropPreviewVideo = document.getElementById('cropPreviewVideo');
+        
+        function updateCropContainerSize() {
+            const aspectRatio = displayCanvasSize.width / displayCanvasSize.height;
+            const containerWidth = cropContainer.parentElement.clientWidth;
+            const containerHeight = containerWidth / aspectRatio;
+            cropContainer.style.height = containerHeight + 'px';
+        }
+        
+        function renderDisplayList() {
+            const container = document.getElementById('displayList');
+            
+            if (displayList.length === 0) {
+                container.innerHTML = '<div class="empty-list">暂无显示端连接</div>';
+                currentDisplayId = null;
+                return;
+            }
+            
+            container.innerHTML = displayList.map(d => `
+                <div class="display-item ${d.id === currentDisplayId ? 'active' : ''}" onclick="selectDisplay('${d.id}')">
+                    <span class="display-item-id">${d.ip || 'unknown'}</span>
+                    <span class="display-item-size">${d.canvasSize.width}x${d.canvasSize.height}</span>
+                </div>
+            `).join('');
+            
+            if (!currentDisplayId && displayList.length > 0) {
+                selectDisplay(displayList[0].id);
+            }
+        }
+        
+        function selectDisplay(id) {
+            currentDisplayId = id;
+            renderDisplayList();
+            
+            const display = displayList.find(d => d.id === id);
+            if (display) {
+                displayCanvasSize = display.canvasSize;
+                updateCropContainerSize();
+            }
+            
+            if (controlWs && controlWs.readyState === WebSocket.OPEN) {
+                controlWs.send(JSON.stringify({
+                    type: 'getState',
+                    displayId: id
+                }));
+            }
+        }
+        
+        function connectControlWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/control`;
+            
+            controlWs = new WebSocket(wsUrl);
+            
+            controlWs.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'serverStartTime') {
+                        const storedTime = localStorage.getItem('serverStartTime');
+                        if (storedTime && storedTime !== String(data.time)) {
+                            localStorage.setItem('serverStartTime', data.time);
+                            location.reload();
+                        } else {
+                            localStorage.setItem('serverStartTime', data.time);
+                        }
+                        return;
+                    }
+                    
+                    if (data.type === 'displayList') {
+                        displayList = data.list;
+                        renderDisplayList();
+                    } else if (data.type === 'displayState') {
+                        if (data.displayId === currentDisplayId) {
+                            cropRotation = data.state.rotation;
+                            cropData = data.state.crop;
+                            displayCanvasSize = data.state.canvasSize;
+                            
+                            if (data.state.currentMediaUrl) {
+                                showCropPreview(data.state.currentMediaUrl, data.state.currentMediaType);
+                            }
+                            
+                            updateCropContainerSize();
+                            updateCropBox();
+                            
+                            cropPreviewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+                            cropPreviewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+                            
+                            if (cropRotation === 90) {
+                                cropPreviewImg.classList.add('rotate-90');
+                                cropPreviewVideo.classList.add('rotate-90');
+                            } else if (cropRotation === 180) {
+                                cropPreviewImg.classList.add('rotate-180');
+                                cropPreviewVideo.classList.add('rotate-180');
+                            } else if (cropRotation === 270) {
+                                cropPreviewImg.classList.add('rotate-270');
+                                cropPreviewVideo.classList.add('rotate-270');
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('解析消息失败:', e);
+                }
+            };
+            
+            controlWs.onclose = function() {
+                setTimeout(connectControlWebSocket, 3000);
+            };
+        }
+        
+        function sendControl(action, value) {
+            if (!currentDisplayId) {
+                showToast('请先选择显示端', 'error');
+                return;
+            }
+            
+            if (controlWs && controlWs.readyState === WebSocket.OPEN) {
+                controlWs.send(JSON.stringify({
+                    type: 'control',
+                    displayId: currentDisplayId,
+                    action: action,
+                    value: value
+                }));
+                showToast('指令已发送', 'success');
+            }
+        }
+        
+        function sendMedia(mediaData) {
+            if (!currentDisplayId) {
+                showToast('请先选择显示端', 'error');
+                return;
+            }
+            
+            if (controlWs && controlWs.readyState === WebSocket.OPEN) {
+                controlWs.send(JSON.stringify({
+                    type: 'media',
+                    displayId: currentDisplayId,
+                    media: mediaData
+                }));
+                showToast('已发送到显示端', 'success');
+            }
+        }
+        
+        window.addEventListener('resize', () => {
+            updateCropContainerSize();
+            updateCropBox();
+        });
+        
+        function initCropControls() {
+            cropBox.addEventListener('mousedown', onCropMouseDown);
+            document.addEventListener('mousemove', onCropMouseMove);
+            document.addEventListener('mouseup', onCropMouseUp);
+            
+            cropBox.addEventListener('touchstart', onCropTouchStart, { passive: false });
+            document.addEventListener('touchmove', onCropTouchMove, { passive: false });
+            document.addEventListener('touchend', onCropTouchEnd);
+        }
+        
+        function onCropMouseDown(e) {
+            if (e.target.classList.contains('crop-resize-handle')) {
+                isResizing = true;
+                resizeHandle = e.target.dataset.handle;
+            } else {
+                isDragging = true;
+            }
+            dragStart = { x: e.clientX, y: e.clientY };
+            cropStart = { ...cropData };
+            e.preventDefault();
+        }
+        
+        function onCropMouseMove(e) {
+            if (!isDragging && !isResizing) return;
+            
+            const media = cropPreviewImg.style.display !== 'none' ? cropPreviewImg : cropPreviewVideo;
+            const mediaRect = media.getBoundingClientRect();
+            
+            let dx = ((e.clientX - dragStart.x) / mediaRect.width) * 100;
+            let dy = ((e.clientY - dragStart.y) / mediaRect.height) * 100;
+            
+            if (isDragging) {
+                cropData.x = Math.max(0, Math.min(100 - cropData.width, cropStart.x + dx));
+                cropData.y = Math.max(0, Math.min(100 - cropData.height, cropStart.y + dy));
+            } else if (isResizing) {
+                const aspectRatio = displayCanvasSize.width / displayCanvasSize.height;
+                const mediaAspect = mediaRect.width / mediaRect.height;
+                let delta;
+                
+                if (aspectRatio > mediaAspect) {
+                    delta = dx;
+                } else {
+                    delta = dy;
+                }
+                
+                let newW, newH, newX, newY;
+                
+                if (resizeHandle.includes('e')) {
+                    newW = Math.max(10, Math.min(100 - cropStart.x, cropStart.width + delta));
+                    newH = newW / aspectRatio * mediaAspect;
+                    if (newH > 100) {
+                        newH = 100;
+                        newW = newH * aspectRatio / mediaAspect;
+                    }
+                    newX = cropStart.x;
+                    newY = cropStart.y;
+                } else if (resizeHandle.includes('w')) {
+                    newW = Math.max(10, cropStart.width - delta);
+                    newH = newW / aspectRatio * mediaAspect;
+                    if (newH > 100) {
+                        newH = 100;
+                        newW = newH * aspectRatio / mediaAspect;
+                    }
+                    newX = Math.max(0, cropStart.x + cropStart.width - newW);
+                    newY = cropStart.y;
+                } else if (resizeHandle.includes('s')) {
+                    newH = Math.max(10, Math.min(100 - cropStart.y, cropStart.height + delta));
+                    newW = newH * aspectRatio / mediaAspect;
+                    if (newW > 100) {
+                        newW = 100;
+                        newH = newW * mediaAspect / aspectRatio;
+                    }
+                    newX = cropStart.x;
+                    newY = cropStart.y;
+                } else if (resizeHandle.includes('n')) {
+                    newH = Math.max(10, cropStart.height - delta);
+                    newW = newH * aspectRatio / mediaAspect;
+                    if (newW > 100) {
+                        newW = 100;
+                        newH = newW * mediaAspect / aspectRatio;
+                    }
+                    newX = cropStart.x;
+                    newY = Math.max(0, cropStart.y + cropStart.height - newH);
+                } else {
+                    newX = cropStart.x;
+                    newY = cropStart.y;
+                    newW = cropStart.width;
+                    newH = cropStart.height;
+                }
+                
+                if (newX + newW > 100) {
+                    newW = 100 - newX;
+                    newH = newW * mediaAspect / aspectRatio;
+                }
+                if (newY + newH > 100) {
+                    newH = 100 - newY;
+                    newW = newH * aspectRatio / mediaAspect;
+                }
+                
+                cropData.x = newX;
+                cropData.y = newY;
+                cropData.width = newW;
+                cropData.height = newH;
+            }
+            
+            updateCropBox();
+            sendControl('crop', cropData);
+        }
+        
+        function onCropMouseUp() {
+            isDragging = false;
+            isResizing = false;
+            resizeHandle = null;
+        }
+        
+        function onCropTouchStart(e) {
+            const touch = e.touches[0];
+            onCropMouseDown({ 
+                clientX: touch.clientX, 
+                clientY: touch.clientY,
+                target: e.target,
+                preventDefault: () => e.preventDefault()
+            });
+        }
+        
+        function onCropTouchMove(e) {
+            const touch = e.touches[0];
+            onCropMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+        }
+        
+        function onCropTouchEnd() {
+            onCropMouseUp();
+        }
+        
+        function updateCropBox() {
+            const media = cropPreviewImg.style.display !== 'none' ? cropPreviewImg : cropPreviewVideo;
+            const mediaRect = media.getBoundingClientRect();
+            const containerRect = cropContainer.getBoundingClientRect();
+            
+            const offsetX = mediaRect.left - containerRect.left;
+            const offsetY = mediaRect.top - containerRect.top;
+            const mediaWidth = mediaRect.width;
+            const mediaHeight = mediaRect.height;
+            
+            cropBox.style.left = (offsetX + (cropData.x / 100) * mediaWidth) + 'px';
+            cropBox.style.top = (offsetY + (cropData.y / 100) * mediaHeight) + 'px';
+            cropBox.style.width = (cropData.width / 100) * mediaWidth + 'px';
+            cropBox.style.height = (cropData.height / 100) * mediaHeight + 'px';
+        }
+        
+        function setCropRotation(rotation) {
+            cropRotation = rotation;
+            
+            cropPreviewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+            cropPreviewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+            
+            if (rotation === 90) {
+                cropPreviewImg.classList.add('rotate-90');
+                cropPreviewVideo.classList.add('rotate-90');
+            } else if (rotation === 180) {
+                cropPreviewImg.classList.add('rotate-180');
+                cropPreviewVideo.classList.add('rotate-180');
+            } else if (rotation === 270) {
+                cropPreviewImg.classList.add('rotate-270');
+                cropPreviewVideo.classList.add('rotate-270');
+            }
+            
+            sendControl('rotate', rotation);
+            sendControl('crop', cropData);
+            
+            setTimeout(() => updateCropBox(), 350);
+        }
+        
+        function showCropPreview(url, mediaType) {
+            currentCropMedia = url;
+            
+            if (mediaType === 'video') {
+                cropPreviewVideo.src = url;
+                cropPreviewVideo.style.display = 'block';
+                cropPreviewImg.style.display = 'none';
+                cropPreviewVideo.onloadedmetadata = () => {
+                    updateCropBox();
+                };
+            } else {
+                cropPreviewImg.src = url;
+                cropPreviewImg.style.display = 'block';
+                cropPreviewVideo.style.display = 'none';
+                cropPreviewImg.onload = () => {
+                    updateCropBox();
+                };
+            }
+            
+            cropBox.style.display = 'block';
+            updateCropBox();
+        }
+        
+        function resetCrop() {
+            const media = cropPreviewImg.style.display !== 'none' ? cropPreviewImg : cropPreviewVideo;
+            const mediaRect = media.getBoundingClientRect();
+            
+            const aspectRatio = displayCanvasSize.width / displayCanvasSize.height;
+            const mediaAspect = mediaRect.width / mediaRect.height;
+            
+            let newW, newH;
+            if (aspectRatio > mediaAspect) {
+                newW = 100;
+                newH = 100 * mediaAspect / aspectRatio;
+            } else {
+                newH = 100;
+                newW = 100 * aspectRatio / mediaAspect;
+            }
+            
+            cropData = {
+                x: (100 - newW) / 2,
+                y: (100 - newH) / 2,
+                width: newW,
+                height: newH
+            };
+            updateCropBox();
+            sendControl('crop', cropData);
+        }
+        
+        function applyCrop() {
+            sendControl('crop', cropData);
+            showToast('裁剪区域已应用', 'success');
+        }
+        
+        initCropControls();
+        connectControlWebSocket();
+        updateCropContainerSize();
+        loadMediaList();
+    </script>
+</body>
+</html>
