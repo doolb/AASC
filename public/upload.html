@@ -793,6 +793,39 @@
         const cropPreviewImg = document.getElementById('cropPreviewImg');
         const cropPreviewVideo = document.getElementById('cropPreviewVideo');
         
+        function convertCropToOriginal(visualCrop, rotation) {
+            if (rotation === 0) {
+                return { ...visualCrop };
+            } else if (rotation === 90) {
+                return {
+                    x: 100 - visualCrop.y - visualCrop.height,
+                    y: visualCrop.x,
+                    width: visualCrop.height,
+                    height: visualCrop.width
+                };
+            } else if (rotation === 180) {
+                return {
+                    x: 100 - visualCrop.x - visualCrop.width,
+                    y: 100 - visualCrop.y - visualCrop.height,
+                    width: visualCrop.width,
+                    height: visualCrop.height
+                };
+            } else if (rotation === 270) {
+                return {
+                    x: visualCrop.y,
+                    y: 100 - visualCrop.x - visualCrop.width,
+                    width: visualCrop.height,
+                    height: visualCrop.width
+                };
+            }
+            return { ...visualCrop };
+        }
+        
+        function sendCropData() {
+            const originalCrop = convertCropToOriginal(cropData, cropRotation);
+            sendControl('crop', originalCrop);
+        }
+        
         function updateCropContainerSize() {
             const aspectRatio = displayCanvasSize.width / displayCanvasSize.height;
             const containerWidth = cropContainer.parentElement.clientWidth;
@@ -1045,7 +1078,7 @@
             }
             
             updateCropBox();
-            sendControl('crop', cropData);
+            sendCropData();
         }
         
         function onCropMouseUp() {
@@ -1107,9 +1140,35 @@
             }
             
             sendControl('rotate', rotation);
-            sendControl('crop', cropData);
             
-            setTimeout(() => updateCropBox(), 350);
+            setTimeout(() => {
+                recalculateCropSize();
+            }, 350);
+        }
+        
+        function recalculateCropSize() {
+            const media = cropPreviewImg.style.display !== 'none' ? cropPreviewImg : cropPreviewVideo;
+            const mediaRect = media.getBoundingClientRect();
+            
+            const aspectRatio = displayCanvasSize.width / displayCanvasSize.height;
+            const mediaAspect = mediaRect.width / mediaRect.height;
+            
+            let newW, newH;
+            if (aspectRatio > mediaAspect) {
+                newW = 100;
+                newH = 100 * mediaAspect / aspectRatio;
+            } else {
+                newH = 100;
+                newW = 100 * aspectRatio / mediaAspect;
+            }
+            
+            cropData.width = newW;
+            cropData.height = newH;
+            cropData.x = (100 - newW) / 2;
+            cropData.y = (100 - newH) / 2;
+            
+            updateCropBox();
+            sendCropData();
         }
         
         function showCropPreview(url, mediaType) {
@@ -1120,19 +1179,18 @@
                 cropPreviewVideo.style.display = 'block';
                 cropPreviewImg.style.display = 'none';
                 cropPreviewVideo.onloadedmetadata = () => {
-                    updateCropBox();
+                    recalculateCropSize();
                 };
             } else {
                 cropPreviewImg.src = url;
                 cropPreviewImg.style.display = 'block';
                 cropPreviewVideo.style.display = 'none';
                 cropPreviewImg.onload = () => {
-                    updateCropBox();
+                    recalculateCropSize();
                 };
             }
             
             cropBox.style.display = 'block';
-            updateCropBox();
         }
         
         function resetCrop() {
@@ -1158,11 +1216,11 @@
                 height: newH
             };
             updateCropBox();
-            sendControl('crop', cropData);
+            sendCropData();
         }
         
         function applyCrop() {
-            sendControl('crop', cropData);
+            sendCropData();
             showToast('裁剪区域已应用', 'success');
         }
         
