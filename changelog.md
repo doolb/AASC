@@ -12,15 +12,40 @@
 
 ## 历史记录
 
+### 2026-03-29 优化媒体库 URL 生成
+
+**已优化功能：**
+- 默认 uploads 目录使用静态文件服务 `/uploads/`
+- 其他本地目录使用动态静态路由 `/media/{id}/`
+- HTTP 媒体库直接使用原始 HTTP 路径，不走代理
+
+**改动文件：**
+- core/media-library.js: LocalProvider 添加动态路由支持，HttpProvider 直接返回原始 URL
+- server.js: 初始化时动态添加本地媒体库静态路由，确保路由在服务器启动前注册
+- docs/spec/media-library.md: 更新伪代码描述
+
+### 2026-03-29 聊天语音手动播放句子分割
+
+**已完成功能：**
+- 聊天语音手动播放时，进行句子分割
+- 长文本按句子分批生成 TTS 并播放
+
+**改动文件：**
+- server.js: TTS play action 处理逻辑添加句子分割
+- docs/spec/websocket.md: 更新伪代码描述
+
 ### 2026-03-29 修复 TTS 语音播报 404 错误
 
 **已修复问题：**
 - 显示端语音播报播不出来
-- 原因：TTS 文件路径改为 `uploads/tts/`，但 API 返回的 URL 仍是 `/uploads/xxx`
-- 修复：API 返回正确的 URL `/uploads/tts/${fileName}`
+- 整点报时无法正常播放
+- 原因：TTS 文件路径改为 `uploads/tts/`，但多处代码返回的 URL 仍是 `/uploads/xxx`
+- 修复：所有 TTS 相关代码返回正确的 URL `/uploads/tts/${fileName}`
 
 **改动文件：**
-- server.js: POST /api/tts/generate 返回正确的 audioUrl
+- server.js: /api/tts/generate 和 Chat TTS 返回正确的 audioUrl
+- core/timeAnnounce.js: 整点报时返回正确的 audioUrl
+- core/reminder.js: 提醒功能返回正确的 audioUrl
 
 ### 2026-03-29 修复本地媒体库播放 404 错误
 

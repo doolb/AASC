@@ -221,7 +221,7 @@ async function triggerReminder(reminder, repeatIndex = 0) {
                         sendToDisplay(displayId, {
                             type: 'reminder',
                             action: 'voice',
-                            audioUrl: `/uploads/${fileName}`,
+                            audioUrl: `/uploads/tts/${fileName}`,
                             text: fullContent,
                             repeatIndex: i + 1,
                             totalRepeat: repeatCount
@@ -325,7 +325,7 @@ async function testReminder(reminderData, targetDisplayId = null, sendFunc = nul
                 sendTo(displayId, {
                     type: 'reminder',
                     action: 'voice',
-                    audioUrl: `/uploads/${audioFileName}`,
+                    audioUrl: `/uploads/tts/${audioFileName}`,
                     text: fullContent,
                     repeatIndex: i + 1,
                     totalRepeat: repeatCount

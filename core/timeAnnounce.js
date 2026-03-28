@@ -109,7 +109,7 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
         const announceData = {
             type: 'tts',
             action: 'playAudio',
-            audioUrl: `/uploads/${fileName}`,
+            audioUrl: `/uploads/tts/${fileName}`,
             text: timeText
         };
         

@@ -42,9 +42,33 @@ const mediaLibraryManager = new MediaLibraryManager({
 
 mediaLibraryManager.init().then(() => {
     console.log('媒体库初始化完成');
+    
+    const localRoutes = mediaLibraryManager.getLocalLibraryRoutes();
+    localRoutes.forEach(route => {
+        app.use(route.routePrefix, express.static(route.basePath));
+        console.log(`[媒体库] 静态路由: ${route.routePrefix} -> ${route.basePath}`);
+    });
+    
+    startServer();
 }).catch(err => {
     console.error('媒体库初始化失败:', err.message);
+    startServer();
 });
+
+function startServer() {
+    server.listen(PORT, '0.0.0.0', () => {
+        const localIP = getLocalIP();
+        console.log('='.repeat(50));
+        console.log('媒体中心服务器已启动');
+        console.log('='.repeat(50));
+        console.log(`上传端地址: http://${localIP}:${PORT}/upload`);
+        console.log(`显示端地址: http://${localIP}:${PORT}/display`);
+        console.log('='.repeat(50));
+        
+        timeAnnounce.start(displayClients, sendToDisplay);
+        reminder.start(displayClients, sendToDisplay);
+    });
+}
 
 function generateId() {
     return Math.random().toString(36).substring(2, 10);
@@ -889,6 +913,24 @@ wss.on('connection', (ws, req) => {
                         displayClients.forEach((displayData, id) => {
                             sendToDisplay(id, data);
                         });
+                    } else if (data.action === 'play' && data.text) {
+                        (async () => {
+                            try {
+                                const sentences = chat.splitIntoSentences(data.text);
+                                for (const sentence of sentences) {
+                                    const audioPath = await tts.generateTTS(sentence);
+                                    const fileName = path.basename(audioPath);
+                                    sendToDisplay(displayId, {
+                                        type: 'tts',
+                                        action: 'playAudio',
+                                        audioUrl: `/uploads/tts/${fileName}`,
+                                        text: sentence
+                                    });
+                                }
+                            } catch (err) {
+                                console.error('[TTS] 播放失败:', err.message);
+                            }
+                        })();
                     } else {
                         sendToDisplay(displayId, data);
                     }
@@ -913,7 +955,7 @@ wss.on('connection', (ws, req) => {
                                         sendToDisplay(displayId, {
                                             type: 'tts',
                                             action: 'playAudio',
-                                            audioUrl: `/uploads/${fileName}`,
+                                            audioUrl: `/uploads/tts/${fileName}`,
                                             text: sentence
                                         });
                                     } catch (ttsErr) {
@@ -986,19 +1028,6 @@ function getLocalIP() {
     return '127.0.0.1';
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-    const localIP = getLocalIP();
-    console.log('='.repeat(50));
-    console.log('媒体中心服务器已启动');
-    console.log('='.repeat(50));
-    console.log(`上传端地址: http://${localIP}:${PORT}/upload`);
-    console.log(`显示端地址: http://${localIP}:${PORT}/display`);
-    console.log('='.repeat(50));
-    
-    timeAnnounce.start(displayClients, sendToDisplay);
-    reminder.start(displayClients, sendToDisplay);
-    
-    setInterval(() => {
-        tts.cleanupOldTtsFiles();
-    }, 5 * 60 * 1000);
-});
+setInterval(() => {
+    tts.cleanupOldTtsFiles();
+}, 5 * 60 * 1000);

@@ -73,7 +73,16 @@
             递归删除目录
     
     getPublicUrl(filePath):
-        返回 "http://{本地IP}:{端口}/api/media-libraries/{id}/proxy/{filePath}"
+        如果 basePath === uploads 目录:
+            返回 "http://{本地IP}:{端口}/uploads/{filePath}"
+        否则:
+            返回 "http://{本地IP}:{端口}/media/{id}/{filePath}"
+    
+    getRoutePrefix():
+        返回 "/media/{id}"
+    
+    getBasePath():
+        返回 basePath
     
     _resolvePath(relativePath):
         resolved = path.join(basePath, relativePath)
@@ -106,7 +115,7 @@
         返回 response.body（流）
     
     getPublicUrl(filePath):
-        返回 "/api/media-libraries/{id}/proxy{filePath}"
+        返回 baseUrl + filePath（直接使用原始HTTP路径）
     
     _parseHtmlListing(html, basePath):
         items = []

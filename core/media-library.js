@@ -64,6 +64,9 @@ class LocalProvider extends MediaLibraryProvider {
         this.basePath = path.resolve(config.path);
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
+        const uploadsDir = path.resolve(process.cwd(), 'uploads');
+        this.isUploadsDir = this.basePath === uploadsDir;
+        this.routePrefix = `/media/${config.id}`;
     }
 
     async connect() {
@@ -198,7 +201,18 @@ class LocalProvider extends MediaLibraryProvider {
         const localIP = this.getLocalIP();
         const port = this.getPort();
         const cleanPath = filePath.replace(/^\//, '');
-        return `http://${localIP}:${port}/api/media-libraries/${this.config.id}/proxy/${encodeURIComponent(cleanPath)}`;
+        if (this.isUploadsDir) {
+            return `http://${localIP}:${port}/uploads/${encodeURIComponent(cleanPath)}`;
+        }
+        return `http://${localIP}:${port}${this.routePrefix}/${encodeURIComponent(cleanPath)}`;
+    }
+    
+    getRoutePrefix() {
+        return this.routePrefix;
+    }
+    
+    getBasePath() {
+        return this.basePath;
     }
 
     _resolvePath(relativePath) {
@@ -296,10 +310,7 @@ class HttpProvider extends MediaLibraryProvider {
     }
 
     getPublicUrl(filePath) {
-        const localIP = this.getLocalIP();
-        const port = this.getPort();
-        const cleanPath = filePath.replace(/^\//, '');
-        return `http://${localIP}:${port}/api/media-libraries/${this.config.id}/proxy/${encodeURIComponent(cleanPath)}`;
+        return this._buildUrl(filePath).replace(/\/$/, '');
     }
 
     async _fetchList(dirPath) {
@@ -822,6 +833,22 @@ class MediaLibraryManager {
         this.saveConfig();
         
         return library.config;
+    }
+    
+    getLocalLibraryRoutes() {
+        const routes = [];
+        
+        this.libraries.forEach((lib, id) => {
+            if (lib.provider instanceof LocalProvider && !lib.provider.isUploadsDir) {
+                routes.push({
+                    id: id,
+                    routePrefix: lib.provider.getRoutePrefix(),
+                    basePath: lib.provider.getBasePath()
+                });
+            }
+        });
+        
+        return routes;
     }
 }
 

@@ -212,6 +212,13 @@ wss.on('connection', (ws, req)):
         构建文本: "用户问：{user}。回答：{assistant}"
         发送 WebSocket { type: 'tts', displayId, action: 'play', text }
     
+    服务端处理 TTS play:
+        接收 { type: 'tts', action: 'play', text }
+        调用 chat.splitIntoSentences(text) 分割句子
+        遍历每个句子:
+            调用 tts.generateTTS(sentence)
+            发送 { type: 'tts', action: 'playAudio', audioUrl, text } 到显示端
+    
     handleChunk(data):
         更新流式消息内容
     
