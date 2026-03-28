@@ -1,4 +1,6 @@
 const MediaList = {
+    currentMediaUrl: null,
+    
     formatSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -40,9 +42,15 @@ const MediaList = {
                 thumbHtml = `<img class="media-thumb" src="${item.url}" loading="lazy">`;
             }
             
+            const isPlaying = this.currentMediaUrl === item.url;
+            const playingBadge = isPlaying ? '<span class="playing-badge">正在播放</span>' : '';
+            
             return `
-                <div class="media-item" data-url="${item.url}">
-                    ${thumbHtml}
+                <div class="media-item ${isPlaying ? 'playing' : ''}" data-url="${item.url}">
+                    <div class="media-thumb-wrapper">
+                        ${thumbHtml}
+                        ${playingBadge}
+                    </div>
                     <div class="media-info">
                         <div class="media-name" title="${item.name}">${item.name}</div>
                         <div class="media-meta">${item.mediaType} · ${this.formatSize(item.size)}</div>
@@ -73,8 +81,45 @@ const MediaList = {
             });
         }
         
-        document.querySelectorAll('.media-item').forEach(el => el.classList.remove('active'));
-        event.target.closest('.media-item').classList.add('active');
+        this.setCurrentMedia(url);
+    },
+    
+    setCurrentMedia(url) {
+        this.currentMediaUrl = url;
+        
+        let playingElement = null;
+        
+        document.querySelectorAll('.media-item').forEach(el => {
+            const itemUrl = el.dataset.url;
+            const wrapper = el.querySelector('.media-thumb-wrapper');
+            const badge = el.querySelector('.playing-badge');
+            
+            if (itemUrl === url) {
+                el.classList.add('playing');
+                playingElement = el;
+                if (!badge && wrapper) {
+                    const newBadge = document.createElement('span');
+                    newBadge.className = 'playing-badge';
+                    newBadge.textContent = '正在播放';
+                    wrapper.appendChild(newBadge);
+                }
+            } else {
+                el.classList.remove('playing');
+                if (badge) {
+                    badge.remove();
+                }
+            }
+        });
+        
+        if (playingElement) {
+            const container = document.getElementById('mediaList');
+            const containerRect = container.getBoundingClientRect();
+            const elementRect = playingElement.getBoundingClientRect();
+            
+            if (elementRect.top < containerRect.top || elementRect.bottom > containerRect.bottom) {
+                playingElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
     },
     
     async delete(name, event) {

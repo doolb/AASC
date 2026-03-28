@@ -34,10 +34,31 @@ tts.js
 - 现在控制端看不到预览图，点播放也没有显示到显示端,控制端媒体列表看不到预览图
 - 控制端需要看到媒体列表，图片，gif，视频的预览图，有一部分显示端的画面没有正常显示
 
+- ✅ 已完成~~控制端媒体列表标注当前播放的媒体~~
+  - media-list.js:2 添加 `currentMediaUrl` 属性存储当前播放媒体
+  - media-list.js:46-48 渲染时判断是否正在播放，添加 `.playing` 类和徽章
+  - media-list.js:83-126 `setCurrentMedia(url)` 方法更新播放状态并滚动到当前播放项
+  - websocket.js:69-71 收到 `displayState` 时同步更新媒体列表播放状态
+  - upload.css:232-258 `.media-item.playing` 绿色边框，`.playing-badge` 徽章样式
+
 
 - 新增保存显示端当前播放列表，画面填充设置，服务端重启后，可以恢复到上次播放的状态，
  - 需要区分不同的显示端，用ip地址区分
  - 音量状态也要保留，控制端的语音滑动框也需要同步恢复
+
+# 控制端
+- ✅ 已完成~~服务端重启按钮，点击后，会发送重启请求到服务端，服务端会重启，显示端会重新连接~~
+  - server.js:303-336 `POST /api/restart` 接口
+  - server.js:316-325 使用 `spawn` 启动新进程后退出，实现自重启
+  - upload.html:118 添加重启服务器按钮
+  - controls.js:83-117 `restartServer()` 发送重启请求，5秒后自动刷新页面
+
+## 控制端查看显示端信息
+- ✅ 已完成~~显示端navigator.userAgent，用于判断显示端的浏览器类型，然后可以在控制端查看内容,参考showinfo.html~~ 
+- ✅ 已完成~~控制端显示列表新增详情按钮，点击可查看显示端的功能支持（Feature Support）~~ 
+  - 上传 display.html:sendFeatureSupport
+
+# 媒体库功能
 - 新增媒体库功能，用户可以在控制端查看和管理已上传的媒体
  - 支持视频和图片上传
  - 支持删除已上传的媒体
@@ -47,55 +68,8 @@ tts.js
  - 支持上传文件夹
  - 支持删除文件夹
  - 支持http协议的媒体库
+ - 使用smb2库 支持smb协议的媒体库 ，参考smb2.js
 
-# 控制端
-- ✅ 已完成~~服务端重启按钮，点击后，会发送重启请求到服务端，服务端会重启，显示端会重新连接~~
-  - server.js:321-341 `POST /api/restart` 接口，关闭所有 WebSocket 连接后退出进程
-  - upload.html:118 添加重启服务器按钮
-  - controls.js:83-117 `restartServer()` 发送重启请求，5秒后自动刷新页面
-
-## 控制端查看显示端信息
-- ✅ 已完成~~显示端navigator.userAgent，用于判断显示端的浏览器类型，然后可以在控制端查看内容,参考showinfo.html~~ 
-- ✅ 已完成~~控制端显示列表新增详情按钮，点击可查看显示端的功能支持（Feature Support）~~ 
-  - 上传 display.html:sendFeatureSupport
-
-
-- 使用smb2库 支持smb协议的媒体库
-const SMB2 = require('smb2'); // 如果安装的是 @marsaud/smb2，则 require('@marsaud/smb2')
-
-// 配置连接参数
-const smb2Client = new SMB2({
-  share: '\\\\192.168.1.100\\sharedFolder', // SMB共享地址，注意双反斜杠转义
-  domain: 'WORKGROUP',    // 域名，通常默认 WORKGROUP
-  username: 'yourUsername',
-  password: 'yourPassword',
-  debug: true // 开启调试模式，查看通信日志（可选）
-});
-
-// 示例1：读取文件内容
-smb2Client.readFile('folder/test.txt', (err, data) => {
-  if (err) {
-    console.error('读取失败:', err);
-    return;
-  }
-  console.log('文件内容:', data.toString());
-  
-  // 操作完成后建议关闭连接以释放资源
-  smb2Client.close();
-});
-
-// 示例2：读取目录列表
-smb2Client.readdir('folder', (err, files) => {
-  if (err) throw err;
-  console.log('目录下的文件:', files);
-});
-
-// 示例3：写入文件
-const content = Buffer.from('Hello SMB Server');
-smb2Client.writeFile('folder/newFile.txt', content, (err) => {
-  if (err) throw err;
-  console.log('文件写入成功');
-});
 
 - 服务器重启后，状态恢复功能，需要从本地配置表中读取上次播放的状态，
  - 播放列表
