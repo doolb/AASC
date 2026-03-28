@@ -2,7 +2,9 @@ const tts = require('./tts');
 
 let timeAnnounceConfig = {
     enabled: true,
-    interval: 30
+    interval: 15,
+    repeatCount: 3,
+    repeatDelay: 3000
 };
 
 let lastAnnounceMinute = -1;
@@ -12,9 +14,12 @@ function init(config) {
     if (config) {
         if (config.enabled !== undefined) timeAnnounceConfig.enabled = config.enabled;
         if (config.interval !== undefined) timeAnnounceConfig.interval = config.interval;
+        if (config.repeatCount !== undefined) timeAnnounceConfig.repeatCount = config.repeatCount;
+        if (config.repeatDelay !== undefined) timeAnnounceConfig.repeatDelay = config.repeatDelay;
     }
     console.log(`[整点报时] 状态: ${timeAnnounceConfig.enabled ? '启用' : '禁用'}`);
     console.log(`[整点报时] 间隔: ${timeAnnounceConfig.interval}分钟`);
+    console.log(`[整点报时] 重复次数: ${timeAnnounceConfig.repeatCount}次`);
 }
 
 function getConfig() {
@@ -24,6 +29,8 @@ function getConfig() {
 function setConfig(config) {
     if (config.enabled !== undefined) timeAnnounceConfig.enabled = config.enabled;
     if (config.interval !== undefined) timeAnnounceConfig.interval = config.interval;
+    if (config.repeatCount !== undefined) timeAnnounceConfig.repeatCount = config.repeatCount;
+    if (config.repeatDelay !== undefined) timeAnnounceConfig.repeatDelay = config.repeatDelay;
 }
 
 function shouldAnnounce() {
@@ -105,9 +112,21 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
         };
         
         if (displayClients && sendToDisplay) {
-            displayClients.forEach((displayData, displayId) => {
-                sendToDisplay(displayId, announceData);
-            });
+            const repeatCount = timeAnnounceConfig.repeatCount || 1;
+            const repeatDelay = timeAnnounceConfig.repeatDelay || 3000;
+            
+            for (let i = 0; i < repeatCount; i++) {
+                displayClients.forEach((displayData, displayId) => {
+                    sendToDisplay(displayId, {
+                        ...announceData,
+                        audioUrl: '/uploads/temp_tts.wav?t=' + Date.now() + '&r=' + i
+                    });
+                });
+                
+                if (i < repeatCount - 1) {
+                    await new Promise(resolve => setTimeout(resolve, repeatDelay));
+                }
+            }
         }
         
         return true;

@@ -38,6 +38,10 @@ const App = {
         if (window.Chat) {
             window.Chat.init();
         }
+        
+        if (window.Tts) {
+            window.Tts.init();
+        }
     }
 };
 

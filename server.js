@@ -267,9 +267,9 @@ app.get('/api/timeAnnounce/config', (req, res) => {
 
 app.post('/api/timeAnnounce/config', (req, res) => {
     try {
-        const { enabled, interval } = req.body;
+        const { enabled, interval, repeatCount, repeatDelay } = req.body;
         
-        timeAnnounce.setConfig({ enabled, interval });
+        timeAnnounce.setConfig({ enabled, interval, repeatCount, repeatDelay });
         config.set('timeAnnounce', timeAnnounce.getConfig());
         
         res.json({ 

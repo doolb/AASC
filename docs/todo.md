@@ -6,7 +6,7 @@
  - 业务代码负责处理业务逻辑，如裁剪、播放视频等
 
  
-- 显示端支持通过
+- ✅ 已完成~~显示端支持通过~~
 tts.js
 生成语音功能，用于显示端播放语音
 播放媒体时，显示端会自动播放语音，语音内容是当前媒体的名称
@@ -28,7 +28,7 @@ tts.js
   - crop.js `setRotation()` 供外部设置旋转状态
   - websocket.js:50-52 收到 `displayState` 时更新填充模式按钮状态
   - upload.css `.active` 蓝色渐变背景
-- 新加一个本地配置表，
+- ✅ 已完成~~新加一个本地配置表，~~
  - 保存端口配置，保存语音服务地址，语音服务端口
  - 保存媒体库配置，保存媒体库文件夹路径，多个媒体库
 - 现在控制端看不到预览图，点播放也没有显示到显示端,控制端媒体列表看不到预览图
@@ -42,7 +42,7 @@ tts.js
   - upload.css:232-258 `.media-item.playing` 绿色边框，`.playing-badge` 徽章样式
 
 
-- 新增保存显示端当前播放列表，画面填充设置，服务端重启后，可以恢复到上次播放的状态，
+- ✅ 已完成~~新增保存显示端当前播放列表，画面填充设置，服务端重启后，可以恢复到上次播放的状态，~~
  - 需要区分不同的显示端，用ip地址区分
  - 音量状态也要保留，控制端的语音滑动框也需要同步恢复
 
@@ -109,15 +109,19 @@ tts.js
     - `checkAndAnnounce()` 检查并执行报时
     - `generateTimeText()` 生成报时文本（如"现在时间是下午3点整"）
     - `shouldAnnounce()` 判断是否应该报时（支持15/30/60分钟间隔）
+    - `getConfig()` / `setConfig()` 获取/设置配置（支持 repeatCount、repeatDelay）
   - server.js 集成
     - 引入 timeAnnounce 模块
     - 服务器启动时调用 `timeAnnounce.start()`
+    - `/api/timeAnnounce/config` GET/POST 获取/设置整点报时配置
     - 处理 `testTimeAnnounce` action，强制触发报时
-  - 控制端测试按钮
-    - upload.html 添加"测试整点报时"按钮
-    - tts.js `testTimeAnnounce()` 发送测试请求
+  - 控制端配置界面
+    - upload.html 添加整点报时设置面板
+    - 支持配置：启用/禁用、播报间隔（15/30/60分钟）、重复次数、重复间隔
+    - tts.js `loadTimeAnnounceConfig()` / `saveTimeAnnounceConfig()` 加载/保存配置
   - 播报逻辑
     - 整点报时：发送到所有显示端
+    - 支持重复播报：可配置重复次数和间隔时间
     - 测试整点报时：发送到所有显示端
     - 自定义播报：需要选择显示端，只发送到选中的显示端
     - 停止播报：停止所有显示端的播报
@@ -208,3 +212,4 @@ tts.js
   - `queueTts(item)` 将语音项加入队列
   - `playNextTts()` 播放下一条语音，等上一句说完再说下一句
   - 监听 `ended` 和 `error` 事件自动播放下一条
+
