@@ -8,6 +8,7 @@ const { pipeline } = require('stream');
 const config = require('./core/config');
 const tts = require('./core/tts');
 const timeAnnounce = require('./core/timeAnnounce');
+const chat = require('./core/chat');
 
 config.loadConfig();
 
@@ -28,6 +29,7 @@ let serverStartTime = Date.now();
 
 tts.init(config.getTtsConfig());
 timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
+chat.init(config.get('chat', {}));
 
 function generateId() {
     return Math.random().toString(36).substring(2, 10);
@@ -300,6 +302,85 @@ app.get('/api/config', (req, res) => {
     });
 });
 
+app.get('/api/chat/config', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        config: chat.getConfig()
+    });
+});
+
+app.post('/api/chat/config', (req, res) => {
+    try {
+        const newConfig = chat.setConfig(req.body);
+        config.set('chat', newConfig);
+        res.json({ 
+            status: 'success', 
+            message: '聊天配置已更新',
+            config: newConfig
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+app.get('/api/chat/history', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        history: chat.getHistory()
+    });
+});
+
+app.post('/api/chat/clear', (req, res) => {
+    chat.clearHistory();
+    res.json({ 
+        status: 'success', 
+        message: '聊天记录已清空'
+    });
+});
+
+app.get('/api/chat/templates', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        templates: chat.getTemplates()
+    });
+});
+
+app.post('/api/chat/templates', (req, res) => {
+    try {
+        const templates = chat.setTemplates(req.body.templates);
+        res.json({ 
+            status: 'success', 
+            templates: templates
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '模板更新失败' });
+    }
+});
+
+app.post('/api/chat/templates/add', (req, res) => {
+    try {
+        const templates = chat.addTemplate(req.body);
+        res.json({ 
+            status: 'success', 
+            templates: templates
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '模板添加失败' });
+    }
+});
+
+app.delete('/api/chat/templates/:id', (req, res) => {
+    try {
+        const templates = chat.removeTemplate(req.params.id);
+        res.json({ 
+            status: 'success', 
+            templates: templates
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '模板删除失败' });
+    }
+});
+
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
     
@@ -502,6 +583,56 @@ wss.on('connection', (ws, req) => {
                     } else {
                         sendToDisplay(displayId, data);
                     }
+                } else if (data.type === 'chat') {
+                    (async () => {
+                        try {
+                            const result = await chat.chat(data.message, {
+                                useTemplate: data.useTemplate,
+                                displayId: displayId
+                            });
+                            
+                            if (result.success) {
+                                ws.send(JSON.stringify({
+                                    type: 'chatResponse',
+                                    success: true,
+                                    message: result.message,
+                                    history: result.history
+                                }));
+                                
+                                const ttsResult = await tts.generateTTS(result.message);
+                                sendToDisplay(displayId, {
+                                    type: 'tts',
+                                    action: 'playAudio',
+                                    audioUrl: `/uploads/temp_tts.wav?t=${Date.now()}`,
+                                    text: result.message
+                                });
+                            } else {
+                                ws.send(JSON.stringify({
+                                    type: 'chatResponse',
+                                    success: false,
+                                    error: result.error
+                                }));
+                            }
+                        } catch (err) {
+                            console.error('[Chat] 处理失败:', err.message);
+                            ws.send(JSON.stringify({
+                                type: 'chatResponse',
+                                success: false,
+                                error: err.message
+                            }));
+                        }
+                    })();
+                } else if (data.type === 'chatHistory') {
+                    ws.send(JSON.stringify({
+                        type: 'chatHistory',
+                        history: chat.getHistory()
+                    }));
+                } else if (data.type === 'clearChatHistory') {
+                    chat.clearHistory();
+                    ws.send(JSON.stringify({
+                        type: 'chatHistory',
+                        history: []
+                    }));
                 }
             } catch (e) {
                 console.error('解析控制端消息失败:', e);

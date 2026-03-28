@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>媒体上传端</title>
     <link rel="stylesheet" href="css/upload.css">
+    <link rel="stylesheet" href="css/chat.css">
 </head>
 <body>
     <div class="container">
@@ -116,6 +117,11 @@
             <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
             <button class="control-btn restart-btn" onclick="restartServer()" style="margin-top: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">重启服务器</button>
         </div>
+        
+        <div class="section">
+            <h2>AI 聊天助手</h2>
+            <div class="chat-container" id="chatContainer"></div>
+        </div>
     </div>
     
     <div class="modal-overlay" id="featureModal">
@@ -128,6 +134,24 @@
             <div class="feature-list" id="featureList"></div>
         </div>
     </div>
+    
+    <div class="chat-modal-overlay" id="chatTemplateModal">
+        <div class="chat-modal-content">
+            <div class="chat-modal-header">
+                <h3>聊天模板</h3>
+                <button class="chat-modal-close" onclick="Chat.hideTemplates()">&times;</button>
+            </div>
+            <div class="chat-modal-body">
+                <div id="chatTemplateList"></div>
+                <div class="chat-add-template">
+                    <h4>添加新模板</h4>
+                    <input type="text" id="newTemplateName" placeholder="模板名称">
+                    <textarea id="newTemplateContent" placeholder="模板内容"></textarea>
+                    <button class="chat-add-btn" onclick="Chat.addTemplate()">添加模板</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="js/toast.js"></script>
     <script src="js/upload.js"></script>
@@ -137,6 +161,7 @@
     <script src="js/crop.js"></script>
     <script src="js/tts.js"></script>
     <script src="js/controls.js"></script>
+    <script src="js/chat.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

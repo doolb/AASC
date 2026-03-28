@@ -27,8 +27,16 @@ const App = {
             window.Crop.updateContainerSize();
         }
         
+        if (window.LibraryManager) {
+            window.LibraryManager.load();
+        }
+        
         if (window.MediaList) {
             window.MediaList.load();
+        }
+        
+        if (window.Chat) {
+            window.Chat.init();
         }
     }
 };

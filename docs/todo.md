@@ -132,9 +132,33 @@ tts.js
  - 取消提醒：用户可以在控制端取消提醒，服务端会停止提醒用户
  - 临时提醒和每天提醒：用户可以选择临时提醒，提醒时间只在当前时间生效，每天提醒，提醒时间每天生效
 
-## 聊天功能
-- 用户在控制端输入聊天内容，服务端通过api http://0.0.0.0:8080/v1/chat/completions 调用openai api，获取回复内容
+## ✅ 已完成 聊天功能
+- 用户在控制端输入聊天内容，服务端通过api http://192.168.1.12:8080/v1/chat/completions 调用openai api，获取回复内容
 - 服务端将回复内容下发到显示端，通过语音播报
 - 服务器将回复内容，发送到控制端，用户可以在控制端查看回复内容
 - 聊天记录：用户可以在控制端查看聊天记录，包括用户输入的聊天内容，和回复内容
 - 聊天模板，用户可以在控制端设置聊天模板，如"你好"，"你好，我是用户"等，服务端会在新聊天时，先发送模板，再发送用户输入的聊天内容
+
+### 实现代码
+- core/chat.js 聊天模块
+  - `init(config)` 初始化配置
+  - `chat(message, options)` 调用 OpenAI API 获取回复
+  - `getHistory()` 获取聊天记录
+  - `clearHistory()` 清空聊天记录
+  - `getTemplates()` / `setTemplates()` / `addTemplate()` / `removeTemplate()` 聊天模板管理
+- server.js 聊天 API 和 WebSocket 处理
+  - `/api/chat/config` GET/POST 获取/设置聊天配置
+  - `/api/chat/history` GET 获取聊天记录
+  - `/api/chat/clear` POST 清空聊天记录
+  - `/api/chat/templates` GET/POST 获取/设置聊天模板
+  - WebSocket `chat` 消息处理：调用 API -> 返回回复 -> 生成 TTS -> 发送到显示端（使用 `playAudio` action 避免重复生成）
+- public/js/chat.js 控制端聊天模块
+  - `init()` 初始化聊天界面
+  - `sendMessage()` 发送聊天消息
+  - `handleResponse(data)` 处理聊天响应
+  - `showTemplates()` / `addTemplate()` / `deleteTemplate()` 模板管理
+- public/css/chat.css 聊天界面样式
+- public/upload.html 添加聊天 UI 区域和模板弹窗
+
+### Bug 修复
+- 修复聊天 TTS 重复生成问题：服务端已生成 TTS 后发送 `action: 'playAudio'` 直接播放，避免显示端再次生成

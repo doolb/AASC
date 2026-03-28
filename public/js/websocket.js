@@ -74,6 +74,15 @@ const WebSocketManager = {
                     window.Crop.updateBox();
                 }
             }
+        } else if (data.type === 'chatResponse') {
+            if (window.Chat) {
+                window.Chat.handleResponse(data);
+            }
+        } else if (data.type === 'chatHistory') {
+            if (window.Chat) {
+                window.Chat.history = data.history;
+                window.Chat.renderHistory();
+            }
         }
     },
     
