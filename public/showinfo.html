@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>浏览器信息检测</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0c0c;
+      --bg-card: #161616;
+      --bg-elevated: #1f1f1f;
+      --fg: #e4e4e4;
+      --muted: #737373;
+      --accent: #3b82f6;
+      --accent-dim: rgba(59, 130, 246, 0.15);
+      --border: #2a2a2a;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Sans SC', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Noise texture overlay */
+    .noise-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    }
+
+    /* Grid background */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-size: 40px 40px;
+      background-image: 
+        linear-gradient(to right, rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+    }
+
+    /* Glow effect */
+    .glow-orb {
+      position: fixed;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .glow-orb-1 {
+      top: -200px;
+      right: -100px;
+      background: var(--accent);
+    }
+
+    .glow-orb-2 {
+      bottom: -200px;
+      left: -100px;
+      background: #8b5cf6;
+    }
+
+    /* Browser icon */
+    .browser-icon {
+      width: 120px;
+      height: 120px;
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .browser-icon::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+    }
+
+    /* Info card */
+    .info-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .info-card:hover {
+      border-color: rgba(59, 130, 246, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .info-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--fg);
+      text-align: right;
+      max-width: 60%;
+      word-break: break-all;
+    }
+
+    /* Feature badge */
+    .feature-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .feature-badge.supported {
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .feature-badge.unsupported {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    /* Progress bar */
+    .progress-bar {
+      height: 6px;
+      background: var(--bg-elevated);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 1s ease;
+    }
+
+    /* UA string display */
+    .ua-display {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+
+    .ua-display code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* Entry animation */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(20px);
+      animation: fadeIn 0.5s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fade-in {
+        animation: none;
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="noise-overlay"></div>
+  <div class="grid-bg"></div>
+  <div class="glow-orb glow-orb-1"></div>
+  <div class="glow-orb glow-orb-2"></div>
+
+  <main class="relative z-10 min-h-screen px-4 py-12">
+    <div class="max-w-2xl mx-auto">
+      
+      <!-- Header -->
+      <div class="text-center mb-12 fade-in">
+        <h1 class="text-3xl md:text-4xl font-bold mb-3">浏览器信息检测</h1>
+        <p class="text-[var(--muted)]">检测当前浏览器及其功能支持情况</p>
+      </div>
+
+      <!-- Browser Identity -->
+      <div class="info-card mb-6 fade-in delay-1">
+        <div class="p-6 flex flex-col md:flex-row items-center gap-6">
+          <div class="browser-icon" id="browserIcon" style="background: var(--accent);">
+            <!-- Icon injected by JS -->
+          </div>
+          <div class="flex-1 text-center md:text-left">
+            <div class="text-sm text-[var(--muted)] mb-1">当前浏览器</div>
+            <h2 class="text-2xl font-bold mb-2" id="browserName">检测中...</h2>
+            <div class="flex flex-wrap gap-2 justify-center md:justify-start" id="browserBadges">
+              <!-- Badges injected by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Basic Info -->
+      <div class="info-card mb-6 fade-in delay-2">
+        <div class="px-5 py-4 border-b border-[var(--border)]">
+          <h3 class="font-semibold">基本信息</h3>
+        </div>
+        <div id="basicInfo">
+          <!-- Rows injected by JS -->
+        </div>
+      </div>
+
+      <!-- Feature Support -->
+      <div class="info-card mb-6 fade-in delay-3">
+        <div class="px-5 py-4 border-b border-[var(--border)]">
+          <h3 class="font-semibold">功能支持</h3>
+        </div>
+        <div id="featureSupport">
+          <!-- Rows injected by JS -->
+        </div>
+      </div>
+
+      <!-- User Agent -->
+      <div class="info-card fade-in delay-4">
+        <div class="px-5 py-4 border-b border-[var(--border)]">
+          <h3 class="font-semibold">User Agent 字符串</h3>
+        </div>
+        <div class="p-5">
+          <div class="ua-display">
+            <code id="userAgentString"></code>
+          </div>
+          <p class="text-xs text-[var(--muted)] mt-3">
+            提示：User Agent 可被用户或浏览器扩展修改，不代表真实浏览器
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    // Browser icons (SVG)
+    const browserIcons = {
+      chrome: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/>
+        <circle cx="12" cy="12" r="4" fill="white"/>
+        <path d="M12 8L21 12" stroke="white" stroke-width="1.5"/>
+        <path d="M8 16L12 8" stroke="white" stroke-width="1.5"/>
+        <path d="M16 16H8" stroke="white" stroke-width="1.5"/>
+      </svg>`,
+      safari: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/>
+        <path d="M12 2v2M12 20v2M2 12h2M20 12h2" stroke="white" stroke-width="1.5"/>
+        <path d="M8 8l8 8" stroke="white" stroke-width="1.5"/>
+        <path d="M16 8l-8 8" stroke="white" stroke-width="1.5" opacity="0.5"/>
+      </svg>`,
+      firefox: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/>
+        <path d="M6 12c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="white" stroke-width="1.5"/>
+        <path d="M18 12c0 3.3-2.7 6-6 6" stroke="white" stroke-width="1.5" opacity="0.6"/>
+      </svg>`,
+      edge: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <path d="M12 22c5.5 0 10-4.5 10-10S17.5 2 12 2" stroke="white" stroke-width="1.5"/>
+        <path d="M12 22c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6" stroke="white" stroke-width="1.5"/>
+        <circle cx="15" cy="10" r="2" fill="white"/>
+      </svg>`,
+      opera: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <ellipse cx="12" cy="12" rx="10" ry="10" stroke="white" stroke-width="1.5"/>
+        <ellipse cx="12" cy="12" rx="5" ry="8" stroke="white" stroke-width="1.5"/>
+      </svg>`,
+      brave: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <path d="M12 2L3 6v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V6l-9-4z" stroke="white" stroke-width="1.5" fill="none"/>
+        <path d="M9 10l3 5 3-5" stroke="white" stroke-width="1.5"/>
+      </svg>`,
+      samsung: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/>
+        <path d="M8 10h8M8 14h8" stroke="white" stroke-width="1.5"/>
+      </svg>`,
+      uc: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/>
+        <path d="M8 12a4 4 0 1 0 8 0" stroke="white" stroke-width="1.5"/>
+      </svg>`,
+      unknown: `<svg viewBox="0 0 24 24" fill="none" width="64" height="64">
+        <circle cx="12" cy="12" r="10" stroke="white" stroke-width="1.5"/>
+        <path d="M9 9a3 3 0 1 1 4 2.8V14" stroke="white" stroke-width="1.5"/>
+        <circle cx="12" cy="17" r="1" fill="white"/>
+      </svg>`
+    };
+
+    // Browser colors
+    const browserColors = {
+      chrome: '#4285f4',
+      safari: '#007aff',
+      firefox: '#ff7139',
+      edge: '#0078d4',
+      opera: '#ff1b2d',
+      brave: '#fb542b',
+      samsung: '#1428a0',
+      uc: '#ff6600',
+      unknown: '#6b7280'
+    };
+
+    // Detect browser
+    function detectBrowser() {
+      const ua = navigator.userAgent;
+      const uaLower = ua.toLowerCase();
+
+      // Order matters - more specific first
+      if (uaLower.includes('edg/')) {
+        return { name: 'Microsoft Edge', key: 'edge', version: getVersion(ua, 'Edg/') };
+      }
+      if (uaLower.includes('opr/') || uaLower.includes('opera')) {
+        return { name: 'Opera', key: 'opera', version: getVersion(ua, 'OPR/') || getVersion(ua, 'Opera') };
+      }
+      if (uaLower.includes('brave')) {
+        return { name: 'Brave', key: 'brave', version: getVersion(ua, 'Chrome/') };
+      }
+      if (uaLower.includes('samsungbrowser')) {
+        return { name: 'Samsung Internet', key: 'samsung', version: getVersion(ua, 'SamsungBrowser/') };
+      }
+      if (uaLower.includes('ucbrowser') || uaLower.includes('ubrowser')) {
+        return { name: 'UC Browser', key: 'uc', version: getVersion(ua, 'UCBrowser/') || getVersion(ua, 'UBrowser/') };
+      }
+      if (uaLower.includes('firefox')) {
+        return { name: 'Firefox', key: 'firefox', version: getVersion(ua, 'Firefox/') };
+      }
+      if (uaLower.includes('safari') && !uaLower.includes('chrome')) {
+        return { name: 'Safari', key: 'safari', version: getVersion(ua, 'Version/') };
+      }
+      if (uaLower.includes('chrome')) {
+        return { name: 'Google Chrome', key: 'chrome', version: getVersion(ua, 'Chrome/') };
+      }
+
+      return { name: '未知浏览器', key: 'unknown', version: '未知' };
+    }
+
+    function getVersion(ua, prefix) {
+      const index = ua.indexOf(prefix);
+      if (index === -1) return '未知';
+      const version = ua.substring(index + prefix.length).split(' ')[0];
+      return version.split('.')[0] || '未知';
+    }
+
+    // Detect OS
+    function detectOS() {
+      const ua = navigator.userAgent;
+      
+      if (ua.includes('Windows NT 10')) return 'Windows 10/11';
+      if (ua.includes('Windows NT 6.3')) return 'Windows 8.1';
+      if (ua.includes('Windows NT 6.2')) return 'Windows 8';
+      if (ua.includes('Windows NT 6.1')) return 'Windows 7';
+      if (ua.includes('Mac OS X')) {
+        const match = ua.match(/Mac OS X (\d+[._]\d+)/);
+        return match ? `macOS ${match[1].replace('_', '.')}` : 'macOS';
+      }
+      if (ua.includes('Android')) {
+        const match = ua.match(/Android (\d+(\.\d+)?)/);
+        return match ? `Android ${match[1]}` : 'Android';
+      }
+      if (ua.includes('iPhone OS') || ua.includes('iPad')) {
+        const match = ua.match(/OS (\d+[._]\d+)/);
+        return match ? `iOS ${match[1].replace('_', '.')}` : 'iOS';
+      }
+      if (ua.includes('Linux')) return 'Linux';
+      if (ua.includes('CrOS')) return 'Chrome OS';
+      
+      return '未知系统';
+    }
+
+    // Detect device type
+    function detectDevice() {
+      const ua = navigator.userAgent;
+      
+      if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+        if (/iPad|Android/i.test(ua) || ua.includes('Tablet')) {
+          return '平板设备';
+        }
+        return '移动设备';
+      }
+      return '桌面设备';
+    }
+
+    // Feature detection
+    function detectFeatures() {
+      return [
+        {
+          name: 'Web Speech API',
+          supported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+          note: '语音识别'
+        },
+        {
+          name: 'WebRTC',
+          supported: !!(window.RTCPeerConnection || window.webkitRTCPeerConnection),
+          note: '实时通信'
+        },
+        {
+          name: 'WebGL',
+          supported: (function() {
+            try {
+              const canvas = document.createElement('canvas');
+              return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+            } catch(e) { return false; }
+          })(),
+          note: '3D图形'
+        },
+        {
+          name: 'Service Worker',
+          supported: 'serviceWorker' in navigator,
+          note: '离线缓存'
+        },
+        {
+          name: 'WebAssembly',
+          supported: typeof WebAssembly === 'object',
+          note: '高性能计算'
+        },
+        {
+          name: 'Clipboard API',
+          supported: navigator.clipboard && typeof navigator.clipboard.writeText === 'function',
+          note: '剪贴板'
+        },
+        {
+          name: 'Geolocation',
+          supported: 'geolocation' in navigator,
+          note: '地理位置'
+        },
+        {
+          name: 'Web Workers',
+          supported: typeof Worker !== 'undefined',
+          note: '后台线程'
+        }
+      ];
+    }
+
+    // Render page
+    function render() {
+      const browser = detectBrowser();
+      const os = detectOS();
+      const device = detectDevice();
+      const features = detectFeatures();
+
+      // Browser icon
+      const browserIcon = document.getElementById('browserIcon');
+      browserIcon.style.background = browserColors[browser.key];
+      browserIcon.innerHTML = browserIcons[browser.key];
+
+      // Browser name
+      document.getElementById('browserName').textContent = `${browser.name} ${browser.version}`;
+
+      // Browser badges
+      const badges = document.getElementById('browserBadges');
+      badges.innerHTML = `
+        <span class="feature-badge supported">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          ${os}
+        </span>
+        <span class="feature-badge" style="background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(59,130,246,0.2);">
+          ${device}
+        </span>
+      `;
+
+      // Basic info
+      const basicInfo = document.getElementById('basicInfo');
+      basicInfo.innerHTML = `
+        <div class="info-row">
+          <span class="info-label">浏览器</span>
+          <span class="info-value">${browser.name}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">版本</span>
+          <span class="info-value">${browser.version}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">操作系统</span>
+          <span class="info-value">${os}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">设备类型</span>
+          <span class="info-value">${device}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">语言</span>
+          <span class="info-value">${navigator.language || '未知'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">屏幕分辨率</span>
+          <span class="info-value">${screen.width} x ${screen.height}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">视口大小</span>
+          <span class="info-value">${window.innerWidth} x ${window.innerHeight}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">设备像素比</span>
+          <span class="info-value">${window.devicePixelRatio}x</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">CPU 核心数</span>
+          <span class="info-value">${navigator.hardwareConcurrency || '未知'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">内存</span>
+          <span class="info-value">${navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '未知'}</span>
+        </div>
+      `;
+
+      // Feature support
+      const featureSupport = document.getElementById('featureSupport');
+      featureSupport.innerHTML = features.map(f => `
+        <div class="info-row">
+          <span class="info-label">
+            ${f.name}
+            <span class="text-xs text-[var(--muted)] ml-1">${f.note}</span>
+          </span>
+          <span class="feature-badge ${f.supported ? 'supported' : 'unsupported'}">
+            ${f.supported ? '支持' : '不支持'}
+          </span>
+        </div>
+      `).join('');
+
+      // User agent string
+      document.getElementById('userAgentString').textContent = navigator.userAgent;
+    }
+
+    // Initialize
+    render();
+
+    // Update viewport size on resize
+    window.addEventListener('resize', () => {
+      const infoRows = document.querySelectorAll('.info-row .info-value');
+      if (infoRows[6]) {
+        infoRows[6].textContent = `${window.innerWidth} x ${window.innerHeight}`;
+      }
+    });
+  </script>
+</body>
+</html>

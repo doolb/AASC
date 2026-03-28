@@ -73,3 +73,7 @@ PORT=3000 npm start
 3. 错误处理使用 try-catch
 4. 避免全局变量污染
 5. DOM 操作尽量批量处理
+
+## 可沉淀
+- 更新todo.md
+- 更新 docs 目录下的文件
