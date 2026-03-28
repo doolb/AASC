@@ -5,6 +5,12 @@
  - 核心代码负责处理显示端和控制端的通信
  - 业务代码负责处理业务逻辑，如裁剪、播放视频等
 
+## ✅ 已完成 CSS 文件拆分
+- display.html CSS 拆分到 `public/css/display.css`
+  - 包含媒体容器、时间显示、文件名显示、连接状态样式
+  - 包含提醒弹窗样式 `.reminder-popup`
+  - 包含响应式布局 `@media (max-width: 768px)`
+
 # 项目结构
 ## 配置文件目录
 - ✅ 已完成~~配置文件统一迁移到 `config/` 目录~~
@@ -135,21 +141,52 @@ tts.js
     - 停止播报：停止所有显示端的播报
   - 优化：服务端生成 TTS 后直接发送音频 URL，显示端直接播放，避免重复生成
 
-## 提醒功能
- - 新增提醒功能，用户可以在控制端设置提醒时间，服务端会在指定时间提醒用户、
+## ✅ 已完成 提醒功能
+ - 新增提醒功能，用户可以在控制端设置提醒时间，服务端会在指定时间提醒用户
  - 提醒内容：用户输入的提醒内容
- - 提醒时间：用户设置的提醒时间，
+ - 提醒时间：用户设置的提醒时间
  - 提醒方式：用户选择的提醒方式，如语音播报，弹窗提示等，在所有显示端都生效
- - 服务端记录提醒时间，提醒方式，提醒内容，
- - 服务端在指定时间，根据提醒方式，提醒用户，
+ - 服务端记录提醒时间，提醒方式，提醒内容
+ - 服务端在指定时间，根据提醒方式，提醒用户
  - 语音播报：生成语音播报，下发到显示端
  - 弹窗提示：在显示端弹窗提示用户，提醒内容
  - 提醒内容：提醒时间+提醒内容
- - 重复提醒：用户可以选择重复提醒，重复提醒时间间隔，
+ - 重复提醒：用户可以选择重复提醒，重复提醒时间间隔
  - 重复提醒时间间隔：用户设置的重复提醒时间间隔，单位为分钟
- - 重复提醒次数：用户设置的重复提醒次数，0表示无限重复， 默认10次
+ - 重复提醒次数：用户设置的重复提醒次数，0表示无限重复，默认10次
  - 取消提醒：用户可以在控制端取消提醒，服务端会停止提醒用户
  - 临时提醒和每天提醒：用户可以选择临时提醒，提醒时间只在当前时间生效，每天提醒，提醒时间每天生效
+
+### 实现代码
+- core/reminder.js 提醒核心模块
+  - `init()` 初始化，加载提醒数据
+  - `addReminder(data)` 添加提醒
+  - `updateReminder(id, data)` 更新提醒
+  - `deleteReminder(id)` 删除提醒
+  - `toggleReminder(id, enabled)` 启用/禁用提醒
+  - `start(displayClients, sendToDisplay)` 启动定时检查
+  - `checkReminders()` 检查并触发提醒
+  - `triggerReminder(reminder)` 执行提醒动作
+  - `testReminder(reminderData)` 测试提醒
+- server.js 提醒 API
+  - `/api/reminders` GET 获取所有提醒
+  - `/api/reminders` POST 创建新提醒
+  - `/api/reminders/:id` PUT 更新提醒
+  - `/api/reminders/:id` DELETE 删除提醒
+  - `/api/reminders/:id/toggle` POST 启用/禁用提醒
+  - `/api/reminders/test` POST 测试提醒
+- public/js/reminder.js 控制端提醒管理
+  - `loadReminders()` 加载提醒列表
+  - `renderReminderList()` 渲染提醒列表
+  - `addReminder()` 添加提醒
+  - `toggleReminder(id, enabled)` 切换提醒状态
+  - `deleteReminder(id)` 删除提醒
+  - `testReminder()` 测试提醒
+- public/display.html 显示端弹窗
+  - `handleReminder(data)` 处理提醒消息
+  - `showReminderPopup(time, content)` 显示弹窗提示
+- config/reminders.json 提醒数据存储
+- docs/spec/reminder.md 提醒功能规格文档
 
 # 语音播报功能
 - 优先级

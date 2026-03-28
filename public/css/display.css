@@ -1,0 +1,229 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#mediaContainer {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#mediaImage {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: none;
+    transition: transform 0.3s ease, object-fit 0.3s ease;
+}
+
+#mediaImage.height {
+    height: 100%;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    object-fit: contain;
+}
+
+#mediaImage.width {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: auto;
+    object-fit: contain;
+}
+
+#mediaImage.crop {
+    position: absolute;
+    max-width: none;
+    max-height: none;
+}
+
+#mediaVideo {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: none;
+    transition: transform 0.3s ease, object-fit 0.3s ease;
+}
+
+#mediaVideo.height {
+    height: 100%;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    object-fit: contain;
+}
+
+#mediaVideo.width {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: auto;
+    object-fit: contain;
+}
+
+#mediaVideo.crop {
+    position: absolute;
+    max-width: none;
+    max-height: none;
+}
+
+#timeDisplay {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    font-size: 48px;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+    font-weight: 300;
+    z-index: 100;
+    font-variant-numeric: tabular-nums;
+}
+
+#fileNameDisplay {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.8);
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+    z-index: 100;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#connectionStatus {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    font-size: 16px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    z-index: 100;
+    transition: all 0.3s ease;
+}
+
+.connected {
+    background: rgba(56, 239, 125, 0.3);
+    color: #38ef7d;
+}
+
+.disconnected {
+    background: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.connecting {
+    background: rgba(59, 130, 246, 0.3);
+    color: #3b82f6;
+}
+
+#waitingMessage {
+    position: absolute;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+#waitingMessage h2 {
+    font-size: 32px;
+    font-weight: 300;
+    margin-bottom: 15px;
+}
+
+#waitingMessage p {
+    font-size: 18px;
+}
+
+.reminder-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(30, 30, 30, 0.95));
+    border: 3px solid #4CAF50;
+    border-radius: 20px;
+    padding: 50px 80px;
+    text-align: center;
+    animation: popupPulse 0.5s ease, popupGlow 2s ease-in-out infinite;
+    z-index: 10000;
+    box-shadow: 0 0 60px rgba(76, 175, 80, 0.5);
+}
+
+.reminder-popup .time {
+    font-size: 56px;
+    color: #4CAF50;
+    margin-bottom: 20px;
+    font-weight: 300;
+    text-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+}
+
+.reminder-popup .content {
+    font-size: 36px;
+    color: #fff;
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+.reminder-popup .close-btn {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 28px;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.reminder-popup .close-btn:hover {
+    color: #fff;
+}
+
+@keyframes popupPulse {
+    0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+@keyframes popupGlow {
+    0%, 100% { box-shadow: 0 0 60px rgba(76, 175, 80, 0.5); }
+    50% { box-shadow: 0 0 80px rgba(76, 175, 80, 0.8); }
+}
+
+@media (max-width: 768px) {
+    #timeDisplay {
+        font-size: 32px;
+        top: 10px;
+        right: 10px;
+    }
+    
+    #fileNameDisplay {
+        font-size: 16px;
+        bottom: 10px;
+        left: 10px;
+    }
+    
+    #connectionStatus {
+        font-size: 12px;
+        top: 10px;
+        left: 10px;
+    }
+}

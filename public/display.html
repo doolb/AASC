@@ -4,183 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>媒体显示端</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #000;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        #mediaContainer {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        #mediaImage {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: none;
-            transition: transform 0.3s ease, object-fit 0.3s ease;
-        }
-        
-        #mediaImage.height {
-            height: 100%;
-            width: auto;
-            max-width: none;
-            max-height: none;
-            object-fit: contain;
-        }
-        
-        #mediaImage.width {
-            width: 100%;
-            max-width: none;
-            max-height: none;
-            height: auto;
-            object-fit: contain;
-        }
-        
-        #mediaImage.crop {
-            position: absolute;
-            max-width: none;
-            max-height: none;
-        }
-        
-        #mediaVideo {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: none;
-            transition: transform 0.3s ease, object-fit 0.3s ease;
-        }
-        
-        #mediaVideo.height {
-            height: 100%;
-            width: auto;
-            max-width: none;
-            max-height: none;
-            object-fit: contain;
-        }
-        
-        #mediaVideo.width {
-            width: 100%;
-            max-width: none;
-            max-height: none;
-            height: auto;
-            object-fit: contain;
-        }
-        
-        #mediaVideo.crop {
-            position: absolute;
-            max-width: none;
-            max-height: none;
-        }
-        
-        #timeDisplay {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            font-size: 48px;
-            color: rgba(255, 255, 255, 0.9);
-            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
-            font-weight: 300;
-            z-index: 100;
-            font-variant-numeric: tabular-nums;
-        }
-        
-        #fileNameDisplay {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            font-size: 24px;
-            color: rgba(255, 255, 255, 0.8);
-            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
-            z-index: 100;
-            max-width: 60%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        #connectionStatus {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            font-size: 16px;
-            padding: 8px 16px;
-            border-radius: 20px;
-            z-index: 100;
-            transition: all 0.3s ease;
-        }
-        
-        .connected {
-            background: rgba(56, 239, 125, 0.3);
-            color: #38ef7d;
-        }
-        
-        .disconnected {
-            background: rgba(239, 68, 68, 0.3);
-            color: #ef4444;
-        }
-        
-        .connecting {
-            background: rgba(59, 130, 246, 0.3);
-            color: #3b82f6;
-        }
-        
-        #waitingMessage {
-            position: absolute;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.5);
-        }
-        
-        #waitingMessage h2 {
-            font-size: 32px;
-            font-weight: 300;
-            margin-bottom: 15px;
-        }
-        
-        #waitingMessage p {
-            font-size: 18px;
-        }
-        
-        @media (max-width: 768px) {
-            #timeDisplay {
-                font-size: 32px;
-                top: 10px;
-                right: 10px;
-            }
-            
-            #fileNameDisplay {
-                font-size: 16px;
-                bottom: 10px;
-                left: 10px;
-            }
-            
-            #connectionStatus {
-                font-size: 12px;
-                top: 10px;
-                left: 10px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="css/display.css">
 </head>
 <body>
     <div id="connectionStatus" class="connecting">连接中...</div>
@@ -601,6 +425,37 @@
             }
         }
         
+        function handleReminder(data) {
+            if (data.action === 'popup') {
+                showReminderPopup(data.time, data.content);
+            } else if (data.action === 'voice') {
+                queueTts({ audioUrl: data.audioUrl, text: data.text });
+            }
+        }
+        
+        function showReminderPopup(time, content) {
+            const existing = document.querySelector('.reminder-popup');
+            if (existing) {
+                existing.remove();
+            }
+            
+            const popup = document.createElement('div');
+            popup.className = 'reminder-popup';
+            popup.innerHTML = `
+                <span class="close-btn" onclick="this.parentElement.remove()">×</span>
+                <div class="time">${time}</div>
+                <div class="content">${content}</div>
+            `;
+            document.body.appendChild(popup);
+            
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.style.animation = 'popupPulse 0.3s ease reverse';
+                    setTimeout(() => popup.remove(), 300);
+                }
+            }, 10000);
+        }
+        
         function handleRestoreState(state) {
             if (!state) return;
             
@@ -765,6 +620,8 @@
                         handleControl(data);
                     } else if (data.type === 'tts') {
                         handleTTS(data);
+                    } else if (data.type === 'reminder') {
+                        handleReminder(data);
                     } else if (data.type === 'restoreState') {
                         handleRestoreState(data.state);
                     } else {

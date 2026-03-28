@@ -1,0 +1,21 @@
+[
+  {
+    "id": "r_xr0vorz4_1774699159320",
+    "content": "主人你该休息了",
+    "time": "22:30",
+    "type": "daily",
+    "methods": [
+      "voice",
+      "popup"
+    ],
+    "repeat": {
+      "enabled": true,
+      "interval": 3,
+      "count": 5
+    },
+    "enabled": true,
+    "createdAt": 1774699159320,
+    "lastTriggered": null,
+    "nextTrigger": 1774708200000
+  }
+]

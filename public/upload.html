@@ -150,6 +150,62 @@
         </div>
         
         <div class="section">
+            <h2>提醒设置</h2>
+            <div class="reminder-form" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: block; margin-bottom: 5px;">提醒内容</label>
+                        <input type="text" id="reminderContent" placeholder="输入提醒内容" style="width: 100%; padding: 10px; border: none; border-radius: 8px; background: rgba(255,255,255,0.1); color: #fff; font-size: 14px; outline: none;">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: block; margin-bottom: 5px;">提醒时间</label>
+                        <input type="time" id="reminderTime" style="width: 100%; padding: 10px; border: none; border-radius: 8px; background: rgba(255,255,255,0.1); color: #fff; font-size: 14px; outline: none;">
+                    </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 10px; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="font-size: 12px; color: rgba(255,255,255,0.6);">类型:</label>
+                        <select id="reminderType" style="padding: 8px 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; font-size: 13px;">
+                            <option value="once">临时提醒</option>
+                            <option value="daily">每天提醒</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="font-size: 12px; color: rgba(255,255,255,0.6);">方式:</label>
+                        <label style="font-size: 13px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="reminderMethodVoice" checked> 语音播报
+                        </label>
+                        <label style="font-size: 13px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="reminderMethodPopup" checked> 弹窗提示
+                        </label>
+                    </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; align-items: center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: flex; align-items: center; gap: 5px;">
+                        <input type="checkbox" id="reminderRepeatEnabled"> 重复提醒
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">间隔:</span>
+                        <input type="number" id="reminderRepeatInterval" min="1" max="60" value="5" style="width: 50px; padding: 5px; border: none; border-radius: 4px; background: rgba(255,255,255,0.1); color: #fff; font-size: 12px; text-align: center;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">分钟</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">次数:</span>
+                        <input type="number" id="reminderRepeatCount" min="0" max="100" value="10" style="width: 50px; padding: 5px; border: none; border-radius: 4px; background: rgba(255,255,255,0.1); color: #fff; font-size: 12px; text-align: center;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">(0=无限)</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="control-btn" onclick="addReminder()" style="padding: 10px 20px; background: linear-gradient(135deg, #4CAF50, #45a049);">添加提醒</button>
+                    <button class="control-btn" onclick="testReminder()" style="padding: 10px 20px; background: linear-gradient(135deg, #2196F3, #1976D2);">测试提醒</button>
+                </div>
+            </div>
+            <div class="reminder-list" id="reminderList" style="max-height: 300px; overflow-y: auto;">
+                <div class="empty-list">暂无提醒</div>
+            </div>
+        </div>
+        
+        <div class="section">
             <h2>AI 聊天助手</h2>
             <div class="chat-container" id="chatContainer"></div>
         </div>
@@ -211,6 +267,7 @@
     <script src="js/crop.js"></script>
     <script src="js/tts.js"></script>
     <script src="js/controls.js"></script>
+    <script src="js/reminder.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/main.js"></script>
 </body>

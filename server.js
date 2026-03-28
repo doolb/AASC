@@ -9,6 +9,7 @@ const config = require('./core/config');
 const tts = require('./core/tts');
 const timeAnnounce = require('./core/timeAnnounce');
 const chat = require('./core/chat');
+const reminder = require('./core/reminder');
 
 config.loadConfig();
 
@@ -30,6 +31,7 @@ let serverStartTime = Date.now();
 tts.init(config.getTtsConfig());
 timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
 chat.init(config.get('chat', {}));
+reminder.init();
 
 function generateId() {
     return Math.random().toString(36).substring(2, 10);
@@ -381,6 +383,92 @@ app.delete('/api/chat/templates/:id', (req, res) => {
     }
 });
 
+app.get('/api/reminders', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        reminders: reminder.getAllReminders()
+    });
+});
+
+app.post('/api/reminders', (req, res) => {
+    try {
+        const { content, time, type, methods, repeat } = req.body;
+        
+        if (!content || !time) {
+            return res.status(400).json({ status: 'error', message: '内容和时间不能为空' });
+        }
+        
+        const newReminder = reminder.addReminder({ content, time, type, methods, repeat });
+        res.json({ 
+            status: 'success', 
+            message: '提醒已创建',
+            reminder: newReminder
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '创建提醒失败: ' + err.message });
+    }
+});
+
+app.put('/api/reminders/:id', (req, res) => {
+    try {
+        const updated = reminder.updateReminder(req.params.id, req.body);
+        if (!updated) {
+            return res.status(404).json({ status: 'error', message: '提醒不存在' });
+        }
+        res.json({ 
+            status: 'success', 
+            message: '提醒已更新',
+            reminder: updated
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '更新提醒失败: ' + err.message });
+    }
+});
+
+app.delete('/api/reminders/:id', (req, res) => {
+    try {
+        const deleted = reminder.deleteReminder(req.params.id);
+        if (!deleted) {
+            return res.status(404).json({ status: 'error', message: '提醒不存在' });
+        }
+        res.json({ 
+            status: 'success', 
+            message: '提醒已删除'
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '删除提醒失败: ' + err.message });
+    }
+});
+
+app.post('/api/reminders/:id/toggle', (req, res) => {
+    try {
+        const { enabled } = req.body;
+        const updated = reminder.toggleReminder(req.params.id, enabled);
+        if (!updated) {
+            return res.status(404).json({ status: 'error', message: '提醒不存在' });
+        }
+        res.json({ 
+            status: 'success', 
+            message: enabled ? '提醒已启用' : '提醒已禁用',
+            reminder: updated
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '操作失败: ' + err.message });
+    }
+});
+
+app.post('/api/reminders/test', async (req, res) => {
+    try {
+        await reminder.testReminder(req.body);
+        res.json({ 
+            status: 'success', 
+            message: '测试提醒已发送'
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '测试提醒失败: ' + err.message });
+    }
+});
+
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
     
@@ -686,4 +774,5 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('='.repeat(50));
     
     timeAnnounce.start(displayClients, sendToDisplay);
+    reminder.start(displayClients, sendToDisplay);
 });

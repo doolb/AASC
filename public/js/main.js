@@ -42,6 +42,10 @@ const App = {
         if (window.Tts) {
             window.Tts.init();
         }
+        
+        if (window.Reminder) {
+            window.Reminder.load();
+        }
     }
 };
 
