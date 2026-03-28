@@ -85,8 +85,8 @@ const App = {
             window.LibraryManager.load();
         }
         
-        if (window.MediaList) {
-            window.MediaList.load();
+        if (window.MediaLibrary) {
+            window.MediaLibrary.init();
         }
         
         if (window.Chat) {

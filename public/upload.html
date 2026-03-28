@@ -6,6 +6,7 @@
     <title>媒体上传端</title>
     <link rel="stylesheet" href="css/upload.css">
     <link rel="stylesheet" href="css/chat.css">
+    <link rel="stylesheet" href="css/media-library.css">
 </head>
 <body>
     <nav class="sidebar">
@@ -62,9 +63,33 @@
             </div>
             
             <div class="section">
-                <h2>服务器资源 <button onclick="loadMediaList()" style="float:right;padding:4px 12px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:12px;">刷新</button></h2>
-                <div class="media-list" id="mediaList">
-                    <div class="empty-list">暂无资源</div>
+                <h2>媒体库</h2>
+                <div class="media-library-container">
+                    <div class="media-library-header">
+                        <div class="library-selector" id="mediaLibraryList">
+                            <div class="empty-list">暂无媒体库</div>
+                        </div>
+                    </div>
+                    <div class="media-library-toolbar">
+                        <div class="media-library-breadcrumb" id="mediaLibraryBreadcrumb">
+                            <span class="breadcrumb-item">根目录</span>
+                        </div>
+                        <div class="media-library-actions">
+                            <label class="upload-btn">
+                                上传文件
+                                <input type="file" id="batchFileInput" multiple accept="image/*,video/*" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
+                            </label>
+                            <label class="upload-btn">
+                                上传文件夹
+                                <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" onchange="MediaLibrary.uploadFolder(this.files)">
+                            </label>
+                            <button onclick="MediaLibrary.showCreateFolderDialog()">新建文件夹</button>
+                            <button onclick="MediaLibrary.loadContent(MediaLibrary.currentPath)">刷新</button>
+                        </div>
+                    </div>
+                    <div class="media-library-content" id="mediaLibraryContent">
+                        <div class="empty-list">暂无文件</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -378,7 +403,7 @@
 
     <script src="js/toast.js"></script>
     <script src="js/upload.js"></script>
-    <script src="js/media-list.js"></script>
+    <script src="js/media-library.js"></script>
     <script src="js/display-list.js"></script>
     <script src="js/websocket.js"></script>
     <script src="js/crop.js"></script>

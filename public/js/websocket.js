@@ -65,8 +65,8 @@ const WebSocketManager = {
                     window.Crop.showPreview(data.state.currentMediaUrl, data.state.currentMediaType);
                 }
                 
-                if (data.state.currentMediaUrl && window.MediaList) {
-                    window.MediaList.setCurrentMedia(data.state.currentMediaUrl);
+                if (data.state.currentMediaUrl && window.MediaLibrary) {
+                    window.MediaLibrary.setCurrentMedia(data.state.currentMediaUrl);
                 }
                 
                 if (window.Crop) {

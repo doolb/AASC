@@ -5,117 +5,224 @@
 ### 显示端连接 (/display)
 
 **server.js 实现**:
-```javascript
-wss.on('connection', (ws, req) => {
-    if (url === '/display' || url.startsWith('/display')) {
-        const displayId = generateId();
-        const clientIP = getClientIP(req);
-        const savedState = config.getDisplayState(clientIP);
+```
+wss.on('connection', (ws, req)):
+    如果 url === '/display' 或以 '/display' 开头:
+        displayId = generateId()
+        clientIP = getClientIP(req)
+        savedState = config.getDisplayState(clientIP)
         
         displayClients.set(displayId, {
             ws: ws,
             ip: clientIP,
             state: { ...createDisplayState(), ...savedState }
-        });
+        })
         
-        ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
-        ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
+        发送 { type: 'serverStartTime', time: serverStartTime }
+        发送 { type: 'displayId', id: displayId, ip: clientIP }
         
-        if (savedState && savedState.currentMedia) {
-            ws.send(JSON.stringify({ type: 'restoreState', state: savedState }));
-        }
-    }
-});
+        如果 savedState 存在且有 currentMedia:
+            发送 { type: 'restoreState', state: savedState }
+        
+        广播显示端列表到控制端
+        
+        监听消息:
+            如果 type === 'canvasSize':
+                更新 state.canvasSize
+                广播显示端列表
+            如果 type === 'browserInfo':
+                更新 state.browserInfo
+                广播显示端列表
+        
+        监听关闭:
+            从 displayClients 删除
+            广播显示端列表
 ```
 
 ### 控制端连接 (/control)
 
 **server.js 实现**:
-```javascript
-if (url === '/control' || url.startsWith('/control')) {
-    controlClients.add(ws);
-    ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
-    ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
-}
+```
+如果 url === '/control' 或以 '/control' 开头:
+    controlClients.add(ws)
+    
+    发送 { type: 'serverStartTime', time: serverStartTime }
+    发送 { type: 'displayList', list: getDisplayList() }
+    
+    监听消息:
+        解析 JSON 数据
+        
+        如果 type === 'getState':
+            获取显示端状态
+            发送 { type: 'displayState', displayId, state }
+        
+        如果 type === 'media':
+            更新 displayData.state.currentMedia
+            发送媒体数据到显示端
+        
+        如果 type === 'control':
+            根据 action 更新状态:
+                'rotate' -> state.rotation = value
+                'fit' -> state.fit = value
+                'crop' -> state.crop = value
+                'volume' -> state.volume = value
+                'play' -> state.isPlaying = value
+            发送控制数据到显示端
+            保存显示端状态
+        
+        如果 type === 'tts':
+            处理 TTS 相关操作
+        
+        如果 type === 'chat':
+            处理聊天相关操作
+    
+    监听关闭:
+        从 controlClients 删除
 ```
 
-## 消息处理
-
-### 显示端状态 (DisplayState)
+## 显示端状态结构
 
 ```javascript
 {
-    currentMedia: null,
-    rotation: 0,
-    fit: 'contain',
-    crop: { x: 0, y: 0, width: 100, height: 100 },
-    volume: 100,
-    isPlaying: false,
-    canvasSize: { width: 1920, height: 1080 },
-    browserInfo: null
+    currentMedia: null,          // 当前媒体
+    rotation: 0,                 // 旋转角度 (0, 90, 180, 270)
+    fit: 'contain',              // 填充模式 (contain, height, width, crop)
+    crop: { x: 0, y: 0, width: 100, height: 100 },  // 裁剪区域
+    volume: 100,                 // 音量 (0-100)
+    isPlaying: false,            // 播放状态
+    canvasSize: { width: 1920, height: 1080 },  // 画布尺寸
+    browserInfo: null            // 浏览器信息
 }
 ```
 
-### 控制端发送消息
+## 消息类型
 
-**public/js/websocket.js 实现**:
-```javascript
-sendControl(action, value) {
-    this.ws.send(JSON.stringify({
-        type: 'control',
-        displayId: window.currentDisplayId,
-        action: action,
-        value: value
-    }));
-}
+### 服务端 -> 显示端
 
-sendMedia(mediaData) {
-    this.ws.send(JSON.stringify({
-        type: 'media',
-        displayId: window.currentDisplayId,
-        media: mediaData
-    }));
-}
+| 类型 | 说明 | 数据 |
+|------|------|------|
+| serverStartTime | 服务器启动时间 | `{ type, time }` |
+| displayId | 显示端ID | `{ type, id, ip }` |
+| restoreState | 恢复状态 | `{ type, state }` |
+| media | 媒体数据 | `{ type, url, mediaType, ... }` |
+| control | 控制指令 | `{ type, action, value }` |
+| reminder | 提醒消息 | `{ type, action, title, time, content }` |
+| tts | TTS 播放 | `{ type, action, audioUrl, text }` |
+
+### 服务端 -> 控制端
+
+| 类型 | 说明 | 数据 |
+|------|------|------|
+| serverStartTime | 服务器启动时间 | `{ type, time }` |
+| displayList | 显示端列表 | `{ type, list: [...] }` |
+| displayState | 显示端状态 | `{ type, displayId, state }` |
+| chatChunk | 聊天流式响应块 | `{ type, chunk, fullMessage }` |
+| chatResponse | 聊天完整响应 | `{ type, message, history }` |
+| chatHistory | 聊天历史 | `{ type, history }` |
+
+### 控制端 -> 服务端
+
+| 类型 | 说明 | 数据 |
+|------|------|------|
+| getState | 获取显示端状态 | `{ type, displayId }` |
+| media | 发送媒体 | `{ type, displayId, media }` |
+| control | 控制指令 | `{ type, displayId, action, value }` |
+| tts | TTS 操作 | `{ type, displayId, action, ... }` |
+| chat | 聊天请求 | `{ type, displayId, message, ... }` |
+
+## 前端 WebSocket 客户端
+
+**public/js/websocket.js**:
+
 ```
-
-### 服务端处理控制消息
-
-```javascript
-if (data.type === 'control') {
-    const displayData = displayClients.get(data.displayId);
-    if (displayData) {
-        if (data.action === 'rotate') displayData.state.rotation = data.value;
-        if (data.action === 'fit') displayData.state.fit = data.value;
-        if (data.action === 'crop') displayData.state.crop = data.value;
-        if (data.action === 'volume') displayData.state.volume = data.value;
-        if (data.action === 'play') displayData.state.isPlaying = data.value;
+对象 WebSocketManager:
+    属性:
+        ws: WebSocket 实例
+    
+    connect():
+        构建连接URL: ws://host/control
+        创建 WebSocket
+        设置消息处理
+        设置重连逻辑 (3秒延迟)
+    
+    handleMessage(data):
+        如果 type === 'serverStartTime':
+            检查服务器是否重启
+            如果重启则刷新页面
         
-        sendToDisplay(data.displayId, { type: 'control', action: data.action, value: data.value });
-        config.saveDisplayState(displayData.ip, displayData.state);
-    }
-}
+        如果 type === 'displayList':
+            更新 DisplayList.list
+            渲染显示端列表
+        
+        如果 type === 'displayState':
+            如果 displayId 匹配当前选择:
+                更新 Crop 组件
+                更新 Controls 组件
+                更新音量显示
+                更新播放状态
+        
+        如果 type === 'chatChunk':
+            调用 Chat.handleChunk()
+        
+        如果 type === 'chatResponse':
+            调用 Chat.handleResponse()
+        
+        如果 type === 'chatHistory':
+            更新 Chat.history
+            渲染历史
+    
+    sendControl(action, value):
+        检查 currentDisplayId
+        发送 { type: 'control', displayId, action, value }
+        显示成功提示
+    
+    sendMedia(mediaData):
+        检查 currentDisplayId
+        发送 { type: 'media', displayId, media: mediaData }
+        显示成功提示
+    
+    sendTts(action, data):
+        检查 currentDisplayId
+        发送 { type: 'tts', displayId, action, ...data }
 ```
 
 ## 广播函数
 
-```javascript
-function broadcastToControls(data) {
-    const message = JSON.stringify(data);
-    controlClients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    });
-}
+```
+function broadcastToControls(data):
+    message = JSON.stringify(data)
+    遍历 controlClients:
+        如果 client.readyState === OPEN:
+            client.send(message)
 
-function sendToDisplay(displayId, data) {
-    const displayData = displayClients.get(displayId);
-    if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
-        displayData.ws.send(JSON.stringify(data));
-        return true;
-    }
-    return false;
-}
+function sendToDisplay(displayId, data):
+    获取 displayData
+    如果存在且 ws.readyState === OPEN:
+        ws.send(JSON.stringify(data))
+        返回 true
+    返回 false
+```
+
+## 辅助函数
+
+```
+function generateId():
+    返回 Math.random().toString(36).substring(2, 10)
+
+function getClientIP(req):
+    如果有 x-forwarded-for 头:
+        返回第一个IP
+    否则:
+        返回 req.socket.remoteAddress
+
+function getDisplayList():
+    遍历 displayClients
+    返回 [{ id, ip, canvasSize, browserInfo }, ...]
+
+function getLocalIP():
+    获取网络接口
+    查找非内部IPv4地址
+    返回地址或 '127.0.0.1'
 ```
 
 ## 相关文件
@@ -123,5 +230,5 @@ function sendToDisplay(displayId, data) {
 | 文件 | 说明 |
 |------|------|
 | server.js | 服务端 WebSocket 处理 |
-| core/connection.js | 连接管理模块 |
+| core/connection.js | 连接管理模块 (备用) |
 | public/js/websocket.js | 控制端 WebSocket 客户端 |

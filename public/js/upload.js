@@ -27,8 +27,8 @@ const Upload = {
             
             if (data.status === 'success') {
                 showToast('上传成功！', 'success');
-                if (window.MediaList) {
-                    window.MediaList.load();
+                if (window.MediaLibrary) {
+                    window.MediaLibrary.loadContent(window.MediaLibrary.currentPath);
                 }
             } else {
                 showToast('上传失败: ' + data.message, 'error');
@@ -90,3 +90,4 @@ const Upload = {
 };
 
 window.uploadByUrl = Upload.uploadByUrl.bind(Upload);
+window.Upload = Upload;

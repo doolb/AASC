@@ -2,7 +2,7 @@
 
 ## 概述
 
-控制端页面 (upload.html) 添加左侧导航栏，实现功能模块的快速切换。
+控制端页面 (upload.html) 使用左侧导航栏，实现功能模块的快速切换。
 
 ## 布局结构
 
@@ -23,9 +23,9 @@
 
 | 导航项 | ID | 包含模块 | 图标 |
 |--------|-----|----------|------|
-| 媒体管理 | media | 上传文件、URL上传、服务器资源 | 📁 |
-| 显示控制 | display | 显示端选择、显示控制、裁剪 | 🖥️ |
-| 提醒设置 | reminder | 提醒设置 | ⏰ |
+| 媒体管理 | media | 显示端选择、上传文件、URL上传、服务器资源 | 📁 |
+| 显示控制 | display | 显示端选择、显示控制、裁剪、TTS、整点报时 | 🖥️ |
+| 提醒设置 | reminder | 提醒表单、提醒列表 | ⏰ |
 | AI助手 | chat | AI聊天助手 | 💬 |
 
 ## HTML 结构
@@ -132,67 +132,80 @@ body {
 ## JavaScript 交互
 
 ### 导航切换
-```javascript
-function initSidebar() {
-    const navItems = document.querySelectorAll('.nav-item');
+```
+function initSidebar():
+    获取所有 .nav-item
     
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            const target = item.dataset.target;
-            switchPanel(target);
-            
-            navItems.forEach(n => n.classList.remove('active'));
-            item.classList.add('active');
-        });
-    });
-}
+    为每个 nav-item 添加点击事件:
+        获取 data-target 属性
+        调用 switchPanel(target)
+        
+        移除所有 nav-item 的 active 类
+        为当前项添加 active 类
 
-function switchPanel(targetId) {
-    const panels = document.querySelectorAll('.panel');
-    panels.forEach(panel => {
-        panel.style.display = panel.id === `panel-${targetId}` ? 'block' : 'none';
-    });
-}
+function switchPanel(targetId):
+    获取所有 .panel
+    对于每个 panel:
+        如果 panel.id === 'panel-' + targetId:
+            显示 panel
+        否则:
+            隐藏 panel
 ```
 
 ### 状态持久化
-```javascript
-function saveLastPanel(panelId) {
-    localStorage.setItem('lastPanel', panelId);
-}
+```
+function saveLastPanel(panelId):
+    localStorage.setItem('lastPanel', panelId)
 
-function loadLastPanel() {
-    const lastPanel = localStorage.getItem('lastPanel') || 'media';
-    switchPanel(lastPanel);
-    document.querySelector(`[data-target="${lastPanel}"]`)?.classList.add('active');
-}
+function loadLastPanel():
+    lastPanel = localStorage.getItem('lastPanel') || 'media'
+    调用 switchPanel(lastPanel)
+    为对应 nav-item 添加 active 类
 ```
 
-## 响应式设计
+## 面板内容
 
-小屏幕 (max-width: 768px) 时：
-- 侧边栏可折叠为图标模式
-- 或转为底部导航栏
+### panel-media
+- 显示端选择
+- 上传文件 (图片/GIF、视频)
+- URL上传
+- 服务器资源列表
 
-## 改动文件清单
+### panel-display
+- 显示端选择
+- 显示控制 (画面填充、播放控制、进度、音量)
+- 语音播报 (TTS)
+- 整点报时设置
+- 画面裁剪区域
 
-| 文件 | 改动内容 |
-|------|----------|
-| public/upload.html | 重构页面布局，添加侧边栏和面板结构 |
-| public/css/upload.css | 添加侧边栏样式 |
-| public/js/main.js | 添加导航切换逻辑和状态持久化 |
+### panel-reminder
+- 提醒表单 (内容、时间、类型、方式、重复设置)
+- 提醒列表
 
-## 实现步骤
+### panel-chat
+- AI聊天助手界面
+- 聊天历史
+- 模板管理
+- 设置面板
 
-1. 修改 upload.html 结构
-   - 添加 `<nav class="sidebar">` 侧边栏
-   - 将现有模块按分组放入 `<section class="panel">`
-   
-2. 添加 CSS 样式
-   - Flexbox 布局
-   - 侧边栏固定定位
-   - 导航项样式和激活状态
+## 弹窗组件
 
-3. 添加 JavaScript 交互
-   - 导航点击切换面板
-   - 状态持久化到 localStorage
+### featureModal
+显示端信息弹窗，展示浏览器详情和功能支持。
+
+### chatTemplateModal
+聊天模板管理弹窗。
+
+### chatConfigModal
+聊天设置弹窗。
+
+### editReminderModal
+编辑提醒弹窗。
+
+## 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| public/upload.html | 页面结构和布局 |
+| public/css/upload.css | 侧边栏和面板样式 |
+| public/js/main.js | 导航切换逻辑 |

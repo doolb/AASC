@@ -65,3 +65,9 @@
  - ✅已完成 界面左侧页签导航
    - 改动文件：public/upload.html, public/css/upload.css, public/js/main.js
    - 功能：左侧固定宽度侧边栏 + 右侧自适应内容区，使用 localStorage 记住用户最后选中的面板
+
+## 文件上传
+ - ✅已完成 [2026-03-28][2026-03-28] 上传文件功能修复
+   - 改动文件：public/js/upload.js
+   - 问题：Upload 对象未导出到 window，导致 main.js 中 window.Upload.init() 无法执行
+   - 修复：添加 window.Upload = Upload 导出
