@@ -5,12 +5,16 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { pipeline } = require('stream');
+const config = require('./core/config');
+const tts = require('./core/tts');
+
+config.loadConfig();
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const PORT = process.env.PORT || 8081;
+const PORT = config.get('server.port', 8081);
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -20,6 +24,8 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 let displayClients = new Map();
 let controlClients = new Set();
 let serverStartTime = Date.now();
+
+tts.init(config.getTtsConfig());
 
 function generateId() {
     return Math.random().toString(36).substring(2, 10);
@@ -31,6 +37,7 @@ function createDisplayState() {
         rotation: 0,
         fit: 'contain',
         crop: { x: 0, y: 0, width: 100, height: 100 },
+        volume: 100,
         canvasSize: { width: 1920, height: 1080 }
     };
 }
@@ -197,6 +204,61 @@ app.delete('/media/:filename', (req, res) => {
     }
 });
 
+app.post('/api/tts/generate', async (req, res) => {
+    try {
+        const { text, voice, speed } = req.body;
+        
+        if (!text) {
+            return res.status(400).json({ status: 'error', message: 'text 不能为空' });
+        }
+        
+        const audioPath = await tts.generateTTS(text, voice, speed);
+        res.json({ 
+            status: 'success', 
+            audioUrl: `/uploads/temp_tts.wav?t=${Date.now()}`,
+            message: 'TTS生成成功'
+        });
+    } catch (err) {
+        console.error('TTS生成失败:', err);
+        res.status(500).json({ status: 'error', message: 'TTS生成失败: ' + err.message });
+    }
+});
+
+app.get('/api/tts/config', (req, res) => {
+    const ttsConfig = config.getTtsConfig();
+    res.json({ 
+        status: 'success', 
+        serviceUrl: ttsConfig.serviceUrl,
+        defaultVoice: ttsConfig.defaultVoice,
+        defaultSpeed: ttsConfig.defaultSpeed
+    });
+});
+
+app.post('/api/tts/config', (req, res) => {
+    try {
+        const { serviceUrl, defaultVoice, defaultSpeed } = req.body;
+        
+        const ttsConfig = {};
+        if (serviceUrl !== undefined) ttsConfig.serviceUrl = serviceUrl;
+        if (defaultVoice !== undefined) ttsConfig.defaultVoice = defaultVoice;
+        if (defaultSpeed !== undefined) ttsConfig.defaultSpeed = defaultSpeed;
+        
+        config.setTtsConfig(ttsConfig);
+        tts.init(config.getTtsConfig());
+        
+        res.json({ status: 'success', message: 'TTS配置已更新' });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+app.get('/api/config', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        config: config.getConfig()
+    });
+});
+
 function detectMediaType(name) {
     const ext = name.toLowerCase().split('.').pop().split('?')[0];
     if (['gif'].includes(ext)) return 'gif';
@@ -248,15 +310,27 @@ wss.on('connection', (ws, req) => {
     if (url === '/display' || url.startsWith('/display')) {
         const displayId = generateId();
         const clientIP = getClientIP(req);
+        const savedState = config.getDisplayState(clientIP);
         displayClients.set(displayId, {
             ws: ws,
             ip: clientIP,
-            state: createDisplayState()
+            state: {
+                ...createDisplayState(),
+                ...savedState
+            }
         });
         console.log(`显示端 ${displayId} (${clientIP}) 已连接，当前连接数: ${displayClients.size}`);
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
-        ws.send(JSON.stringify({ type: 'displayId', id: displayId }));
+        ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
+        
+        if (savedState && savedState.currentMedia) {
+            ws.send(JSON.stringify({ 
+                type: 'restoreState',
+                state: savedState
+            }));
+        }
+        
         broadcastToControls({ type: 'displayList', list: getDisplayList() });
         
         ws.on('message', (message) => {
@@ -306,15 +380,24 @@ wss.on('connection', (ws, req) => {
                     }));
                 } else if (data.type === 'media') {
                     displayData.state.currentMedia = data.media;
+                    config.updateDisplayState(displayData.ip, { currentMedia: data.media });
                     sendToDisplay(displayId, data.media);
                 } else if (data.type === 'control') {
                     if (data.action === 'rotate') {
                         displayData.state.rotation = data.value;
+                        config.updateDisplayState(displayData.ip, { rotation: data.value });
                     } else if (data.action === 'fit') {
                         displayData.state.fit = data.value;
+                        config.updateDisplayState(displayData.ip, { fit: data.value });
                     } else if (data.action === 'crop') {
                         displayData.state.crop = data.value;
+                        config.updateDisplayState(displayData.ip, { crop: data.value });
+                    } else if (data.action === 'volume') {
+                        displayData.state.volume = data.value;
+                        config.updateDisplayState(displayData.ip, { volume: data.value });
                     }
+                    sendToDisplay(displayId, data);
+                } else if (data.type === 'tts') {
                     sendToDisplay(displayId, data);
                 }
             } catch (e) {

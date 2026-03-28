@@ -195,6 +195,8 @@
         <img id="mediaImage">
         <video id="mediaVideo" autoplay loop playsinline></video>
     </div>
+    
+    <audio id="ttsAudio" style="display:none;"></audio>
 
     <script>
         const connectionStatus = document.getElementById('connectionStatus');
@@ -203,11 +205,13 @@
         const waitingMessage = document.getElementById('waitingMessage');
         const mediaImage = document.getElementById('mediaImage');
         const mediaVideo = document.getElementById('mediaVideo');
+        const ttsAudio = document.getElementById('ttsAudio');
         
         let currentRotation = 0;
         let currentFit = 'contain';
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let displayWs = null;
+        let autoTtsEnabled = true;
         
         function sendCanvasSize() {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -360,8 +364,78 @@
             connectionStatus.textContent = text;
         }
         
+        function playTTS(text) {
+            fetch('/api/tts/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    ttsAudio.src = data.audioUrl;
+                    ttsAudio.play().catch(e => console.log('TTS播放被阻止'));
+                }
+            })
+            .catch(err => console.error('TTS生成失败:', err));
+        }
+        
+        function handleTTS(data) {
+            if (data.action === 'play') {
+                playTTS(data.text);
+            } else if (data.action === 'stop') {
+                ttsAudio.pause();
+                ttsAudio.currentTime = 0;
+            } else if (data.action === 'setAutoTts') {
+                autoTtsEnabled = data.enabled;
+            }
+        }
+        
+        function handleRestoreState(state) {
+            if (!state) return;
+            
+            if (state.rotation !== undefined) {
+                currentRotation = state.rotation;
+                applyRotation();
+            }
+            
+            if (state.fit !== undefined) {
+                applyFit(state.fit);
+            }
+            
+            if (state.crop !== undefined) {
+                currentCrop = state.crop;
+                applyCrop();
+            }
+            
+            if (state.volume !== undefined) {
+                mediaVideo.volume = state.volume / 100;
+            }
+            
+            if (state.currentMedia) {
+                showMedia(state.currentMedia);
+            }
+        }
+        
+        function extractFileName(url) {
+            try {
+                const urlParts = url.split('/');
+                let fileName = urlParts[urlParts.length - 1].split('?')[0];
+                fileName = decodeURIComponent(fileName);
+                const dotIndex = fileName.lastIndexOf('.');
+                if (dotIndex > 0) {
+                    fileName = fileName.substring(0, dotIndex);
+                }
+                return fileName;
+            } catch (e) {
+                return '';
+            }
+        }
+        
         function showMedia(data) {
             waitingMessage.style.display = 'none';
+            
+            let mediaName = '';
             
             if (data.type === 'url') {
                 if (data.mediaType === 'video') {
@@ -378,7 +452,8 @@
                     mediaImage.onload = () => applyCrop();
                 }
                 const urlParts = data.url.split('/');
-                fileNameDisplay.textContent = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || '来自URL';
+                mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || '来自URL';
+                fileNameDisplay.textContent = mediaName;
             } else if (data.type === 'base64') {
                 const src = 'data:application/octet-stream;base64,' + data.data;
                 
@@ -395,7 +470,15 @@
                     mediaImage.src = src;
                     mediaImage.onload = () => applyCrop();
                 }
-                fileNameDisplay.textContent = data.fileName || '未知文件';
+                mediaName = data.fileName || '未知文件';
+                fileNameDisplay.textContent = mediaName;
+            }
+            
+            if (autoTtsEnabled && mediaName) {
+                const displayName = extractFileName(mediaName);
+                if (displayName) {
+                    playTTS(displayName);
+                }
             }
         }
         
@@ -469,6 +552,10 @@
                     
                     if (data.type === 'control') {
                         handleControl(data);
+                    } else if (data.type === 'tts') {
+                        handleTTS(data);
+                    } else if (data.type === 'restoreState') {
+                        handleRestoreState(data.state);
                     } else {
                         showMedia(data);
                     }

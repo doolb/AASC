@@ -4,36 +4,37 @@ const fs = require('fs');
 const path = require('path');
 
 const OUTPUT_WAV = path.join(process.cwd(), 'uploads/temp_tts.wav');
-const DEFAULT_VOICE = 'Microsoft Xiaoxiao';
 
-let ttsServiceUrl = 'http://192.168.1.16:3000/api/tts';
+let ttsConfig = {
+    serviceUrl: 'http://192.168.1.16:3000/api/tts',
+    defaultVoice: 'Microsoft Xiaoxiao',
+    defaultSpeed: 0
+};
 
 function init(config) {
-    if (config && config.ttsServiceUrl) {
-        ttsServiceUrl = config.ttsServiceUrl;
+    if (config) {
+        if (config.serviceUrl) ttsConfig.serviceUrl = config.serviceUrl;
+        if (config.defaultVoice) ttsConfig.defaultVoice = config.defaultVoice;
+        if (config.defaultSpeed !== undefined) ttsConfig.defaultSpeed = config.defaultSpeed;
     }
-    console.log(`[TTS] 服务地址: ${ttsServiceUrl}`);
+    console.log(`[TTS] 服务地址: ${ttsConfig.serviceUrl}`);
+    console.log(`[TTS] 默认语音: ${ttsConfig.defaultVoice}`);
 }
 
-function getTtsServiceUrl() {
-    return ttsServiceUrl;
-}
-
-function setTtsServiceUrl(url) {
-    ttsServiceUrl = url;
-    console.log(`[TTS] 服务地址已更新: ${ttsServiceUrl}`);
+function getConfig() {
+    return { ...ttsConfig };
 }
 
 function callExternalTTS(text, voice, speed) {
     return new Promise((resolve, reject) => {
-        const urlObj = new URL(ttsServiceUrl);
+        const urlObj = new URL(ttsConfig.serviceUrl);
         const isHttps = urlObj.protocol === 'https:';
         const httpModule = isHttps ? https : http;
         
         const postData = JSON.stringify({
             text: text,
-            voice: voice || DEFAULT_VOICE,
-            speed: speed || 0
+            voice: voice || ttsConfig.defaultVoice,
+            speed: speed !== undefined ? speed : ttsConfig.defaultSpeed
         });
         
         const options = {
@@ -83,8 +84,11 @@ async function generateTTS(text, voice, speed) {
         throw new Error('text 不能为空');
     }
     
-    const finalVoice = voice || DEFAULT_VOICE;
-    console.log(`[TTS] 生成: "${text}" | 语音: ${finalVoice} | 语速: ${speed || 0}`);
+    const finalVoice = voice || ttsConfig.defaultVoice;
+    const finalSpeed = speed !== undefined ? speed : ttsConfig.defaultSpeed;
+    console.log(`[TTS] 生成: "${text}" | 语音: ${finalVoice} | 语速: ${finalSpeed}`);
+    
+    cleanupTTS();
     
     await callExternalTTS(text, voice, speed);
     
@@ -100,8 +104,12 @@ function getTTSAudioPath() {
 }
 
 function cleanupTTS() {
-    if (fs.existsSync(OUTPUT_WAV)) {
-        fs.unlinkSync(OUTPUT_WAV);
+    try {
+        if (fs.existsSync(OUTPUT_WAV)) {
+            fs.unlinkSync(OUTPUT_WAV);
+        }
+    } catch (err) {
+        console.error('[TTS] 清理临时文件失败:', err.message);
     }
 }
 
@@ -110,7 +118,5 @@ module.exports = {
     generateTTS,
     getTTSAudioPath,
     cleanupTTS,
-    DEFAULT_VOICE,
-    getTtsServiceUrl,
-    setTtsServiceUrl
+    getConfig
 };

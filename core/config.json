@@ -1,0 +1,45 @@
+{
+  "server": {
+    "port": 8081
+  },
+  "tts": {
+    "serviceUrl": "http://192.168.1.16:3000/api/tts",
+    "defaultVoice": "Microsoft Xiaoxiao",
+    "defaultSpeed": 0
+  },
+  "displayStates": {
+    "192.168.1.12": {
+      "currentMedia": {
+        "type": "url",
+        "url": "http://192.168.1.39:8081/uploads/1774626243895_27401_2.mp4",
+        "mediaType": "video"
+      },
+      "rotation": 0,
+      "fit": "contain",
+      "crop": {
+        "x": 0,
+        "y": 29.094773715204745,
+        "width": 100,
+        "height": 41.81045256959051
+      },
+      "playlist": [],
+      "volume": 0
+    },
+    "192.168.1.39": {
+      "currentMedia": {
+        "type": "url",
+        "url": "http://192.168.1.39:8081/uploads/1774668209326_%E7%8E%8B%E8%80%85%E8%8D%A3%E8%80%80%E7%91%B6%E6%97%B6%E4%B9%8B%E7%A5%88%E6%84%BF.mp4",
+        "mediaType": "video"
+      },
+      "rotation": 0,
+      "fit": "contain",
+      "crop": {
+        "x": 0,
+        "y": 31.03904789826657,
+        "width": 100,
+        "height": 37.92190420346686
+      },
+      "playlist": []
+    }
+  }
+}

@@ -556,6 +556,18 @@
                 </div>
             </div>
             
+            <div class="control-item" style="margin-top: 15px;">
+                <label>语音播报 (TTS)</label>
+                <div class="control-buttons">
+                    <button class="control-btn" id="autoTtsBtn" onclick="toggleAutoTts()">自动播报: 开</button>
+                    <button class="control-btn" onclick="stopTts()">停止播报</button>
+                </div>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="ttsTextInput" placeholder="输入要播报的文字" style="width: calc(100% - 70px);padding: 10px;border: none;border-radius: 8px;background: rgba(255,255,255,0.1);color: #fff;font-size: 14px;outline: none;">
+                    <button class="control-btn" onclick="playCustomTts()" style="padding: 10px 16px;">播放</button>
+                </div>
+            </div>
+            
             <div class="crop-control">
                 <label style="display:block;font-size:14px;color:#fff;margin-bottom:10px;font-weight:500;">画面裁剪区域</label>
                 <div class="crop-preview-container" id="cropPreviewContainer">
@@ -902,6 +914,13 @@
                             cropData = data.state.crop;
                             displayCanvasSize = data.state.canvasSize;
                             
+                            if (data.state.volume !== undefined) {
+                                const volumeSlider = document.getElementById('volumeSlider');
+                                const volumeValue = document.getElementById('volumeValue');
+                                if (volumeSlider) volumeSlider.value = data.state.volume;
+                                if (volumeValue) volumeValue.textContent = data.state.volume;
+                            }
+                            
                             if (data.state.currentMediaUrl) {
                                 showCropPreview(data.state.currentMediaUrl, data.state.currentMediaType);
                             }
@@ -1222,6 +1241,64 @@
         function applyCrop() {
             sendCropData();
             showToast('裁剪区域已应用', 'success');
+        }
+        
+        let autoTtsEnabled = true;
+        
+        function toggleAutoTts() {
+            autoTtsEnabled = !autoTtsEnabled;
+            const btn = document.getElementById('autoTtsBtn');
+            btn.textContent = '自动播报: ' + (autoTtsEnabled ? '开' : '关');
+            
+            if (controlWs && controlWs.readyState === WebSocket.OPEN && currentDisplayId) {
+                controlWs.send(JSON.stringify({
+                    type: 'tts',
+                    displayId: currentDisplayId,
+                    action: 'setAutoTts',
+                    enabled: autoTtsEnabled
+                }));
+            }
+            
+            showToast('自动播报已' + (autoTtsEnabled ? '开启' : '关闭'), 'success');
+        }
+        
+        function stopTts() {
+            if (!currentDisplayId) {
+                showToast('请先选择显示端', 'error');
+                return;
+            }
+            
+            if (controlWs && controlWs.readyState === WebSocket.OPEN) {
+                controlWs.send(JSON.stringify({
+                    type: 'tts',
+                    displayId: currentDisplayId,
+                    action: 'stop'
+                }));
+                showToast('已停止播报', 'success');
+            }
+        }
+        
+        function playCustomTts() {
+            const text = document.getElementById('ttsTextInput').value.trim();
+            if (!text) {
+                showToast('请输入要播报的文字', 'error');
+                return;
+            }
+            
+            if (!currentDisplayId) {
+                showToast('请先选择显示端', 'error');
+                return;
+            }
+            
+            if (controlWs && controlWs.readyState === WebSocket.OPEN) {
+                controlWs.send(JSON.stringify({
+                    type: 'tts',
+                    displayId: currentDisplayId,
+                    action: 'play',
+                    text: text
+                }));
+                showToast('已发送播报请求', 'success');
+            }
         }
         
         initCropControls();
