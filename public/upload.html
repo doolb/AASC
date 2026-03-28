@@ -152,6 +152,25 @@
             </div>
         </div>
     </div>
+    
+    <div class="chat-modal-overlay" id="chatConfigModal">
+        <div class="chat-modal-content">
+            <div class="chat-modal-header">
+                <h3>聊天设置</h3>
+                <button class="chat-modal-close" onclick="hideChatConfig()">&times;</button>
+            </div>
+            <div class="chat-modal-body">
+                <div class="chat-config-item">
+                    <label for="chatSystemPrompt">系统提示词 (System Prompt)</label>
+                    <textarea id="chatSystemPrompt" placeholder="设置 AI 的角色和行为方式..."></textarea>
+                    <p class="chat-config-hint">系统提示词用于定义 AI 助手的角色、行为方式和回答风格。</p>
+                </div>
+                <div class="chat-config-actions">
+                    <button class="chat-add-btn" onclick="saveChatConfig()">保存设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="js/toast.js"></script>
     <script src="js/upload.js"></script>

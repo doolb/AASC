@@ -58,6 +58,13 @@ tts.js
 - ✅ 已完成~~控制端显示列表新增详情按钮，点击可查看显示端的功能支持（Feature Support）~~ 
   - 上传 display.html:sendFeatureSupport
 
+## 显示端切换功能
+- 新增显示端全选和自适应功能，
+ - 全选时，下发到所有显示端，
+ - 自适应时，根据显示端画面比例（包含旋转角度）和媒体比例来下发媒体，
+ - 横向的媒体，下发到横向显示端
+ - 纵向的媒体，下发到纵向显示端
+
 # 媒体库功能
 - 新增媒体库功能，用户可以在控制端查看和管理已上传的媒体
  - 支持视频和图片上传
@@ -132,17 +139,33 @@ tts.js
  - 取消提醒：用户可以在控制端取消提醒，服务端会停止提醒用户
  - 临时提醒和每天提醒：用户可以选择临时提醒，提醒时间只在当前时间生效，每天提醒，提醒时间每天生效
 
+# 语音播报功能
+- 优先级
+  - 1. 自定义播报
+  - 2. 提醒播报
+  - 3. 整点报时
+  - 4. 测试整点报时
+  - 5. 聊天播报
+  - 6. 文件名播放
+
 ## ✅ 已完成 聊天功能
 - 用户在控制端输入聊天内容，服务端通过api http://192.168.1.12:8080/v1/chat/completions 调用openai api，获取回复内容
 - 服务端将回复内容下发到显示端，通过语音播报
 - 服务器将回复内容，发送到控制端，用户可以在控制端查看回复内容
 - 聊天记录：用户可以在控制端查看聊天记录，包括用户输入的聊天内容，和回复内容
 - 聊天模板，用户可以在控制端设置聊天模板，如"你好"，"你好，我是用户"等，服务端会在新聊天时，先发送模板，再发送用户输入的聊天内容
+- 生成语音时，使用流式生成，不需要等待回复内容完整，即可开始播放，
+ - 当以感叹号，句号，分号，引号，~，…结尾时，就可以生成语音，不需要等待回复内容完整。
+ - 流式语音要等上一个说完在说下一个，不能同时说多个句子
 
 ### 实现代码
 - core/chat.js 聊天模块
   - `init(config)` 初始化配置
-  - `chat(message, options)` 调用 OpenAI API 获取回复
+  - `chat(message, options)` 调用 OpenAI API 获取回复（非流式）
+  - `chatStream(message, options, callbacks)` 流式调用 OpenAI API
+  - `isSentenceEnd(text)` 检测句子是否结束
+    - 英文：`.` `!` `?` `~` `;` `"` `'`
+    - 中文：`。` `！` `？` `；` `"` `"` `'` `'` `…`
   - `getHistory()` 获取聊天记录
   - `clearHistory()` 清空聊天记录
   - `getTemplates()` / `setTemplates()` / `addTemplate()` / `removeTemplate()` 聊天模板管理
@@ -151,14 +174,37 @@ tts.js
   - `/api/chat/history` GET 获取聊天记录
   - `/api/chat/clear` POST 清空聊天记录
   - `/api/chat/templates` GET/POST 获取/设置聊天模板
-  - WebSocket `chat` 消息处理：调用 API -> 返回回复 -> 生成 TTS -> 发送到显示端（使用 `playAudio` action 避免重复生成）
+  - WebSocket `chat` 消息处理：使用 `chatStream` 流式调用
+    - `onChunk` 回调：实时发送 `chatChunk` 消息到控制端
+    - `onSentence` 回调：检测到句子结束时生成 TTS 并发送到显示端
+    - `onComplete` 回调：发送 `chatResponse` 消息到控制端
 - public/js/chat.js 控制端聊天模块
   - `init()` 初始化聊天界面
   - `sendMessage()` 发送聊天消息
-  - `handleResponse(data)` 处理聊天响应
+  - `showStreamingMessage()` 显示流式消息容器
+  - `handleChunk(data)` 处理流式消息块，实时更新显示
+  - `handleResponse(data)` 处理聊天完成响应
   - `showTemplates()` / `addTemplate()` / `deleteTemplate()` 模板管理
+  - `showConfig()` / `hideConfig()` / `saveConfig()` 配置管理（systemPrompt）
+  - `loadConfig()` 加载聊天配置
 - public/css/chat.css 聊天界面样式
-- public/upload.html 添加聊天 UI 区域和模板弹窗
+  - `.chat-cursor` 光标闪烁动画
+  - `.chat-config-item` 配置项样式
+- public/upload.html 添加聊天 UI 区域、模板弹窗和配置弹窗
 
 ### Bug 修复
+- ✅ 已完成~~修复聊天历史丢失问题：服务器重启后聊天记录丢失~~
+  - core/chat.js 添加聊天历史持久化功能
+    - `loadHistory()` 启动时从 `chat-history.json` 加载历史记录
+    - `saveHistory()` 每次对话后保存历史记录到文件
+    - `trimHistory()` 限制历史记录最大数量为 100 条
+  - `init()` 中调用 `loadHistory()` 自动加载
+  - `chat()` 和 `chatStream()` 对话完成后调用 `trimHistory()` + `saveHistory()`
+  - `clearHistory()` 清空时也保存到文件
 - 修复聊天 TTS 重复生成问题：服务端已生成 TTS 后发送 `action: 'playAudio'` 直接播放，避免显示端再次生成
+- 修复流式语音播放重叠问题：显示端实现 TTS 队列机制
+  - `ttsQueue` 存储待播放的语音项
+  - `isPlayingTts` 标记当前是否正在播放
+  - `queueTts(item)` 将语音项加入队列
+  - `playNextTts()` 播放下一条语音，等上一句说完再说下一句
+  - 监听 `ended` 和 `error` 事件自动播放下一条

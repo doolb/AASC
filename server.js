@@ -586,33 +586,46 @@ wss.on('connection', (ws, req) => {
                 } else if (data.type === 'chat') {
                     (async () => {
                         try {
-                            const result = await chat.chat(data.message, {
+                            await chat.chatStream(data.message, {
                                 useTemplate: data.useTemplate,
                                 displayId: displayId
+                            }, {
+                                onChunk: (chunk, fullMessage) => {
+                                    ws.send(JSON.stringify({
+                                        type: 'chatChunk',
+                                        chunk: chunk,
+                                        message: fullMessage
+                                    }));
+                                },
+                                onSentence: async (sentence, fullMessage) => {
+                                    try {
+                                        const audioPath = await tts.generateTTS(sentence);
+                                        sendToDisplay(displayId, {
+                                            type: 'tts',
+                                            action: 'playAudio',
+                                            audioUrl: `/uploads/temp_tts.wav?t=${Date.now()}`,
+                                            text: sentence
+                                        });
+                                    } catch (ttsErr) {
+                                        console.error('[Chat] TTS生成失败:', ttsErr.message);
+                                    }
+                                },
+                                onComplete: (fullMessage, history) => {
+                                    ws.send(JSON.stringify({
+                                        type: 'chatResponse',
+                                        success: true,
+                                        message: fullMessage,
+                                        history: history
+                                    }));
+                                },
+                                onError: (error) => {
+                                    ws.send(JSON.stringify({
+                                        type: 'chatResponse',
+                                        success: false,
+                                        error: error
+                                    }));
+                                }
                             });
-                            
-                            if (result.success) {
-                                ws.send(JSON.stringify({
-                                    type: 'chatResponse',
-                                    success: true,
-                                    message: result.message,
-                                    history: result.history
-                                }));
-                                
-                                const ttsResult = await tts.generateTTS(result.message);
-                                sendToDisplay(displayId, {
-                                    type: 'tts',
-                                    action: 'playAudio',
-                                    audioUrl: `/uploads/temp_tts.wav?t=${Date.now()}`,
-                                    text: result.message
-                                });
-                            } else {
-                                ws.send(JSON.stringify({
-                                    type: 'chatResponse',
-                                    success: false,
-                                    error: result.error
-                                }));
-                            }
                         } catch (err) {
                             console.error('[Chat] 处理失败:', err.message);
                             ws.send(JSON.stringify({

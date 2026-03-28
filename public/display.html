@@ -212,6 +212,8 @@
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let displayWs = null;
         let autoTtsEnabled = true;
+        let ttsQueue = [];
+        let isPlayingTts = false;
         
         function sendCanvasSize() {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -523,15 +525,77 @@
             .catch(err => console.error('TTS生成失败:', err));
         }
         
+        function playNextTts() {
+            if (isPlayingTts || ttsQueue.length === 0) {
+                return;
+            }
+            
+            isPlayingTts = true;
+            const item = ttsQueue.shift();
+            
+            if (item.audioUrl) {
+                ttsAudio.src = item.audioUrl;
+                ttsAudio.play().catch(e => {
+                    console.log('TTS播放被阻止');
+                    isPlayingTts = false;
+                    playNextTts();
+                });
+            } else if (item.text) {
+                fetch('/api/tts/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: item.text })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        ttsAudio.src = data.audioUrl;
+                        ttsAudio.play().catch(e => {
+                            console.log('TTS播放被阻止');
+                            isPlayingTts = false;
+                            playNextTts();
+                        });
+                    } else {
+                        isPlayingTts = false;
+                        playNextTts();
+                    }
+                })
+                .catch(err => {
+                    console.error('TTS生成失败:', err);
+                    isPlayingTts = false;
+                    playNextTts();
+                });
+            } else {
+                isPlayingTts = false;
+                playNextTts();
+            }
+        }
+        
+        function queueTts(item) {
+            ttsQueue.push(item);
+            playNextTts();
+        }
+        
+        ttsAudio.addEventListener('ended', () => {
+            isPlayingTts = false;
+            playNextTts();
+        });
+        
+        ttsAudio.addEventListener('error', () => {
+            isPlayingTts = false;
+            playNextTts();
+        });
+        
         function handleTTS(data) {
             if (data.action === 'play') {
-                playTTS(data.text);
+                queueTts({ text: data.text });
             } else if (data.action === 'playAudio') {
-                ttsAudio.src = data.audioUrl;
-                ttsAudio.play().catch(e => console.log('TTS播放被阻止'));
+                queueTts({ audioUrl: data.audioUrl });
             } else if (data.action === 'stop') {
+                ttsQueue = [];
                 ttsAudio.pause();
                 ttsAudio.currentTime = 0;
+                isPlayingTts = false;
             } else if (data.action === 'setAutoTts') {
                 autoTtsEnabled = data.enabled;
             }

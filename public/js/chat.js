@@ -1,11 +1,17 @@
 const Chat = {
     history: [],
     templates: [],
+    config: {
+        systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。'
+    },
     isLoading: false,
+    currentStreamingMessage: '',
+    currentUserMessage: '',
     
     init() {
         this.loadHistory();
         this.loadTemplates();
+        this.loadConfig();
         this.render();
     },
     
@@ -33,6 +39,40 @@ const Chat = {
             .catch(err => console.error('加载聊天模板失败:', err));
     },
     
+    loadConfig() {
+        fetch('/api/chat/config')
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success' && data.config) {
+                    if (data.config.systemPrompt) {
+                        this.config.systemPrompt = data.config.systemPrompt;
+                    }
+                }
+            })
+            .catch(err => console.error('加载聊天配置失败:', err));
+    },
+    
+    saveConfig() {
+        const systemPromptInput = document.getElementById('chatSystemPrompt');
+        if (systemPromptInput) {
+            this.config.systemPrompt = systemPromptInput.value.trim() || '你是一个友好的助手，请用简洁的语言回答问题。';
+        }
+        
+        fetch('/api/chat/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.config)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.showToast('配置已保存', 'success');
+                this.hideConfig();
+            }
+        })
+        .catch(err => window.showToast('保存配置失败', 'error'));
+    },
+    
     render() {
         const container = document.getElementById('chatContainer');
         if (!container) return;
@@ -41,6 +81,7 @@ const Chat = {
             <div class="chat-header">
                 <h3>AI 聊天助手</h3>
                 <div class="chat-actions">
+                    <button class="chat-action-btn" onclick="Chat.showConfig()">设置</button>
                     <button class="chat-action-btn" onclick="Chat.showTemplates()">模板</button>
                     <button class="chat-action-btn" onclick="Chat.clearHistory()">清空</button>
                 </div>
@@ -116,7 +157,10 @@ const Chat = {
         const useTemplate = templateSelect ? templateSelect.value : null;
         
         this.isLoading = true;
+        this.currentStreamingMessage = '';
+        this.currentUserMessage = message;
         this.updateSendButton();
+        this.showStreamingMessage(message);
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
@@ -131,13 +175,61 @@ const Chat = {
         input.value = '';
     },
     
+    showStreamingMessage(userMessage) {
+        const messagesContainer = document.getElementById('chatMessages');
+        if (!messagesContainer) return;
+        
+        const emptyMsg = messagesContainer.querySelector('.chat-empty');
+        if (emptyMsg) {
+            emptyMsg.remove();
+        }
+        
+        const group = document.createElement('div');
+        group.className = 'chat-message-group';
+        group.id = 'streamingGroup';
+        group.innerHTML = `
+            <div class="chat-message user">
+                <div class="chat-message-content">${this.escapeHtml(userMessage)}</div>
+            </div>
+            <div class="chat-message assistant">
+                <div class="chat-message-content" id="streamingContent"><span class="chat-cursor">|</span></div>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(group);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    },
+    
+    handleChunk(data) {
+        this.currentStreamingMessage = data.message;
+        
+        const streamingContent = document.getElementById('streamingContent');
+        if (streamingContent) {
+            streamingContent.innerHTML = this.escapeHtml(data.message) + '<span class="chat-cursor">|</span>';
+            
+            const messagesContainer = document.getElementById('chatMessages');
+            if (messagesContainer) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+    },
+    
     handleResponse(data) {
         this.isLoading = false;
         this.updateSendButton();
         
+        const streamingGroup = document.getElementById('streamingGroup');
+        if (streamingGroup) {
+            const streamingContent = streamingGroup.querySelector('#streamingContent');
+            if (streamingContent) {
+                streamingContent.innerHTML = this.escapeHtml(data.message);
+                streamingContent.removeAttribute('id');
+            }
+            streamingGroup.removeAttribute('id');
+        }
+        
         if (data.success) {
             this.history = data.history;
-            this.renderHistory();
         } else {
             window.showToast('聊天失败: ' + data.error, 'error');
         }
@@ -164,6 +256,24 @@ const Chat = {
                 }
             })
             .catch(err => window.showToast('清空失败', 'error'));
+    },
+    
+    showConfig() {
+        const modal = document.getElementById('chatConfigModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            const textarea = document.getElementById('chatSystemPrompt');
+            if (textarea) {
+                textarea.value = this.config.systemPrompt;
+            }
+        }
+    },
+    
+    hideConfig() {
+        const modal = document.getElementById('chatConfigModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
     },
     
     showTemplates() {
@@ -256,3 +366,5 @@ const Chat = {
 };
 
 window.Chat = Chat;
+window.saveChatConfig = Chat.saveConfig.bind(Chat);
+window.hideChatConfig = Chat.hideConfig.bind(Chat);
