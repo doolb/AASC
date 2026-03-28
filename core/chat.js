@@ -3,7 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const HISTORY_FILE = path.join(__dirname, 'chat-history.json');
+const HISTORY_FILE = path.join(__dirname, '../config/chat-history.json');
 const MAX_HISTORY_SIZE = 100;
 
 let chatConfig = {

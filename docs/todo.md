@@ -5,6 +5,14 @@
  - 核心代码负责处理显示端和控制端的通信
  - 业务代码负责处理业务逻辑，如裁剪、播放视频等
 
+# 项目结构
+## 配置文件目录
+- ✅ 已完成~~配置文件统一迁移到 `config/` 目录~~
+  - `config/config.json` - 主配置文件（服务器端口、TTS配置、显示端状态、聊天配置）
+  - `config/chat-history.json` - 聊天历史记录
+  - `config/media-libraries.json` - 媒体库配置
+  - core/config.js:4 路径更新为 `path.join(__dirname, '../config/config.json')`
+  - core/chat.js:7 路径更新为 `path.join(__dirname, '../config/chat-history.json')`
  
 - ✅ 已完成~~显示端支持通过~~
 tts.js
