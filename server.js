@@ -38,6 +38,7 @@ function createDisplayState() {
         fit: 'contain',
         crop: { x: 0, y: 0, width: 100, height: 100 },
         volume: 100,
+        isPlaying: false,
         canvasSize: { width: 1920, height: 1080 },
         browserInfo: null
     };
@@ -410,6 +411,9 @@ wss.on('connection', (ws, req) => {
                     } else if (data.action === 'volume') {
                         displayData.state.volume = data.value;
                         config.updateDisplayState(displayData.ip, { volume: data.value });
+                    } else if (data.action === 'play') {
+                        displayData.state.isPlaying = data.value;
+                        config.updateDisplayState(displayData.ip, { isPlaying: data.value });
                     }
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {

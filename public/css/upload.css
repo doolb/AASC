@@ -320,7 +320,16 @@ input[type="file"] {
 }
 
 .control-btn.active {
+    background: linear-gradient(135deg, #00d2ff, #3a7bd5);
     box-shadow: 0 0 0 2px #fff;
+}
+
+.control-btn.playing {
+    background: linear-gradient(135deg, #11998e, #38ef7d);
+}
+
+.control-btn.paused {
+    background: linear-gradient(135deg, #ee0979, #ff6a00);
 }
 
 input[type="range"] {

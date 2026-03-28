@@ -48,18 +48,17 @@
                 <div class="control-item">
                     <label>画面填充</label>
                     <div class="control-buttons">
-                        <button class="control-btn" onclick="sendFitMode('contain')">适应</button>
-                        <button class="control-btn" onclick="sendFitMode('height')">高度铺满</button>
-                        <button class="control-btn" onclick="sendFitMode('width')">宽度铺满</button>
-                        <button class="control-btn" onclick="sendFitMode('crop')">裁剪</button>
+                        <button class="control-btn" data-fit="contain" onclick="sendFitMode('contain')">适应</button>
+                        <button class="control-btn" data-fit="height" onclick="sendFitMode('height')">高度铺满</button>
+                        <button class="control-btn" data-fit="width" onclick="sendFitMode('width')">宽度铺满</button>
+                        <button class="control-btn" data-fit="crop" onclick="sendFitMode('crop')">裁剪</button>
                     </div>
                 </div>
                 
                 <div class="control-item">
                     <label>视频播放</label>
                     <div class="control-buttons">
-                        <button class="control-btn" onclick="sendControl('play', true)">播放</button>
-                        <button class="control-btn" onclick="sendControl('play', false)">暂停</button>
+                        <button class="control-btn paused" id="playPauseBtn" onclick="togglePlayPause()">播放</button>
                     </div>
                 </div>
                 
@@ -103,10 +102,10 @@
                     </div>
                 </div>
                 <div class="crop-buttons">
-                    <button class="control-btn" onclick="setCropRotation(0)">0°</button>
-                    <button class="control-btn" onclick="setCropRotation(90)">90°</button>
-                    <button class="control-btn" onclick="setCropRotation(180)">180°</button>
-                    <button class="control-btn" onclick="setCropRotation(270)">270°</button>
+                    <button class="control-btn" data-rotation="0" onclick="setCropRotation(0)">0°</button>
+                    <button class="control-btn" data-rotation="90" onclick="setCropRotation(90)">90°</button>
+                    <button class="control-btn" data-rotation="180" onclick="setCropRotation(180)">180°</button>
+                    <button class="control-btn" data-rotation="270" onclick="setCropRotation(270)">270°</button>
                     <button class="control-btn" onclick="resetCrop()">重置裁剪</button>
                 </div>
             </div>

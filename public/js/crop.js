@@ -84,6 +84,9 @@ const Crop = {
     
     setRotation(rotation) {
         this.rotation = rotation;
+        document.querySelectorAll('[data-rotation]').forEach(btn => {
+            btn.classList.toggle('active', parseInt(btn.dataset.rotation) === rotation);
+        });
     },
     
     setData(data) {
@@ -92,6 +95,10 @@ const Crop = {
     
     applyRotation(rotation) {
         this.rotation = rotation;
+        
+        document.querySelectorAll('[data-rotation]').forEach(btn => {
+            btn.classList.toggle('active', parseInt(btn.dataset.rotation) === rotation);
+        });
         
         this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
         this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');

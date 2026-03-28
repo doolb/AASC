@@ -5,13 +5,31 @@
  - 核心代码负责处理显示端和控制端的通信
  - 业务代码负责处理业务逻辑，如裁剪、播放视频等
 
-
+- 控制端查看显示端信息
+ - 显示端参考showinfo.html上传自己的浏览器信息，可以在控制端查看
+ 
 - 显示端支持通过
 tts.js
 生成语音功能，用于显示端播放语音
 播放媒体时，显示端会自动播放语音，语音内容是当前媒体的名称
 
-- 合并播放和暂停按钮，显示端参考showinfo.html上传自己的浏览器信息，可以在控制端查看
+- ✅ 已完成~~合并播放和暂停按钮~~
+  - upload.html:59-63 将两个按钮合并为一个切换按钮 `<button id="playPauseBtn" onclick="togglePlayPause()">`
+  - controls.js `togglePlayPause()` 切换播放/暂停状态，自动更新按钮文字和背景颜色
+  - controls.js `setPlayingState(playing)` 供外部设置播放状态
+  - upload.css `.playing` 绿色渐变, `.paused` 橙红色渐变
+  - server.js:43 `createDisplayState()` 添加 `isPlaying` 状态字段
+  - server.js:415-417 处理 `play` action 时保存播放状态
+  - websocket.js:57-59 收到 `displayState` 时更新播放按钮状态
+
+- ✅ 已完成~~画面填充和旋转按钮选中状态背景颜色切换~~
+  - upload.html 画面填充按钮添加 `data-fit` 属性，旋转按钮添加 `data-rotation` 属性
+  - controls.js `sendFitMode()` 点击时更新按钮选中状态
+  - controls.js `setFitMode()` 供外部设置填充模式状态
+  - crop.js `applyRotation()` 点击时更新按钮选中状态
+  - crop.js `setRotation()` 供外部设置旋转状态
+  - websocket.js:50-52 收到 `displayState` 时更新填充模式按钮状态
+  - upload.css `.active` 蓝色渐变背景
 - 新加一个本地配置表，
  - 保存端口配置，保存语音服务地址，语音服务端口
  - 保存媒体库配置，保存媒体库文件夹路径，多个媒体库
