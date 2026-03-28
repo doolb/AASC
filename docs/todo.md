@@ -5,8 +5,6 @@
  - 核心代码负责处理显示端和控制端的通信
  - 业务代码负责处理业务逻辑，如裁剪、播放视频等
 
-- 控制端查看显示端信息
- - 显示端参考showinfo.html上传自己的浏览器信息，可以在控制端查看
  
 - 显示端支持通过
 tts.js
@@ -50,6 +48,13 @@ tts.js
  - 支持删除文件夹
  - 支持http协议的媒体库
 
+# 控制端
+- ✅ 已完成~~服务端重启按钮，点击后，会发送重启请求到服务端，服务端会重启，显示端会重新连接~~
+  - server.js:321-341 `POST /api/restart` 接口，关闭所有 WebSocket 连接后退出进程
+  - upload.html:118 添加重启服务器按钮
+  - controls.js:83-117 `restartServer()` 发送重启请求，5秒后自动刷新页面
+
+## 控制端查看显示端信息
 - ✅ 已完成~~显示端navigator.userAgent，用于判断显示端的浏览器类型，然后可以在控制端查看内容,参考showinfo.html~~ 
 - ✅ 已完成~~控制端显示列表新增详情按钮，点击可查看显示端的功能支持（Feature Support）~~ 
   - 上传 display.html:sendFeatureSupport
@@ -97,6 +102,7 @@ smb2Client.writeFile('folder/newFile.txt', content, (err) => {
  - 画面填充设置
  - 音量状态
  - 语音滑动框位置
+ - bug：重启后，显示端先连接，再断开，会触发两次tts生成，实际语音只播了一次
 
 - ✅ 已完成~~upload.html 拆分代码，每个文件负责一个功能模块~~
  - upload.html 负责上传文件
@@ -112,3 +118,26 @@ smb2Client.writeFile('folder/newFile.txt', content, (err) => {
   - main.js 主入口和初始化
  - css
   - upload.css 负责上传文件的样式
+
+## 辅助功能
+- ✅ 已完成~~整点报时功能，每整点半个小时报一次，在服务端检查当前时间是否是整点，是则报时，生成语音播报，下发到显示端~~
+  - core/timeAnnounce.js 整点报时模块
+    - `init(config)` 初始化配置
+    - `start(displayClients, sendToDisplay)` 启动定时器
+    - `stop()` 停止定时器
+    - `checkAndAnnounce()` 检查并执行报时
+    - `generateTimeText()` 生成报时文本（如"现在时间是下午3点整"）
+    - `shouldAnnounce()` 判断是否应该报时（支持15/30/60分钟间隔）
+  - server.js 集成
+    - 引入 timeAnnounce 模块
+    - 服务器启动时调用 `timeAnnounce.start()`
+    - 处理 `testTimeAnnounce` action，强制触发报时
+  - 控制端测试按钮
+    - upload.html 添加"测试整点报时"按钮
+    - tts.js `testTimeAnnounce()` 发送测试请求
+  - 播报逻辑
+    - 整点报时：发送到所有显示端
+    - 测试整点报时：发送到所有显示端
+    - 自定义播报：需要选择显示端，只发送到选中的显示端
+    - 停止播报：停止所有显示端的播报
+  - 优化：服务端生成 TTS 后直接发送音频 URL，显示端直接播放，避免重复生成

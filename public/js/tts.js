@@ -24,11 +24,6 @@ const Tts = {
     },
     
     stop() {
-        if (!window.currentDisplayId) {
-            showToast('请先选择显示端', 'error');
-            return;
-        }
-        
         if (window.WebSocketManager) {
             window.WebSocketManager.sendTts('stop');
             showToast('已停止播报', 'success');
@@ -53,9 +48,17 @@ const Tts = {
             window.WebSocketManager.sendTts('play', { text: text });
             showToast('已发送播报请求', 'success');
         }
+    },
+    
+    testTimeAnnounce() {
+        if (window.WebSocketManager) {
+            window.WebSocketManager.sendTts('testTimeAnnounce');
+            showToast('已发送整点报时测试请求', 'success');
+        }
     }
 };
 
 window.toggleAutoTts = Tts.toggleAutoTts.bind(Tts);
 window.stopTts = Tts.stop.bind(Tts);
 window.playCustomTts = Tts.playCustom.bind(Tts);
+window.testTimeAnnounce = Tts.testTimeAnnounce.bind(Tts);

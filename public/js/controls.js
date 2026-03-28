@@ -79,6 +79,41 @@ const Controls = {
                 }
             });
         }
+    },
+    
+    async restartServer() {
+        if (!confirm('确定要重启服务器吗？重启后显示端会自动重新连接。')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/restart', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                if (window.showToast) {
+                    showToast('服务器正在重启，请稍候...', 'success');
+                }
+                
+                setTimeout(() => {
+                    location.reload();
+                }, 5000);
+            } else {
+                if (window.showToast) {
+                    showToast('重启失败: ' + result.message, 'error');
+                }
+            }
+        } catch (err) {
+            if (window.showToast) {
+                showToast('重启请求失败: ' + err.message, 'error');
+            }
+        }
     }
 };
 
@@ -86,4 +121,5 @@ window.updateProgress = Controls.updateProgress.bind(Controls);
 window.updateVolume = Controls.updateVolume.bind(Controls);
 window.sendFitMode = Controls.sendFitMode.bind(Controls);
 window.togglePlayPause = Controls.togglePlayPause.bind(Controls);
+window.restartServer = Controls.restartServer.bind(Controls);
 window.Controls = Controls;

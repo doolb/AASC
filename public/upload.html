@@ -78,6 +78,7 @@
                 <div class="control-buttons">
                     <button class="control-btn" id="autoTtsBtn" onclick="toggleAutoTts()">自动播报: 开</button>
                     <button class="control-btn" onclick="stopTts()">停止播报</button>
+                    <button class="control-btn" onclick="testTimeAnnounce()">测试整点报时</button>
                 </div>
                 <div style="margin-top: 10px;">
                     <input type="text" id="ttsTextInput" placeholder="输入要播报的文字" style="width: calc(100% - 70px);padding: 10px;border: none;border-radius: 8px;background: rgba(255,255,255,0.1);color: #fff;font-size: 14px;outline: none;">
@@ -113,6 +114,7 @@
         
         <div class="section info-section">
             <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
+            <button class="control-btn restart-btn" onclick="restartServer()" style="margin-top: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">重启服务器</button>
         </div>
     </div>
     

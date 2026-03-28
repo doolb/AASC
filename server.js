@@ -7,6 +7,7 @@ const fs = require('fs');
 const { pipeline } = require('stream');
 const config = require('./core/config');
 const tts = require('./core/tts');
+const timeAnnounce = require('./core/timeAnnounce');
 
 config.loadConfig();
 
@@ -26,6 +27,7 @@ let controlClients = new Set();
 let serverStartTime = Date.now();
 
 tts.init(config.getTtsConfig());
+timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
 
 function generateId() {
     return Math.random().toString(36).substring(2, 10);
@@ -254,11 +256,79 @@ app.post('/api/tts/config', (req, res) => {
     }
 });
 
+app.get('/api/timeAnnounce/config', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        config: timeAnnounce.getConfig()
+    });
+});
+
+app.post('/api/timeAnnounce/config', (req, res) => {
+    try {
+        const { enabled, interval } = req.body;
+        
+        timeAnnounce.setConfig({ enabled, interval });
+        config.set('timeAnnounce', timeAnnounce.getConfig());
+        
+        res.json({ 
+            status: 'success', 
+            message: '整点报时配置已更新',
+            config: timeAnnounce.getConfig()
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+app.post('/api/timeAnnounce/test', async (req, res) => {
+    try {
+        const result = await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
+        if (result) {
+            res.json({ status: 'success', message: '整点报时测试成功' });
+        } else {
+            res.json({ status: 'error', message: '整点报时测试失败' });
+        }
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '整点报时测试失败: ' + err.message });
+    }
+});
+
 app.get('/api/config', (req, res) => {
     res.json({ 
         status: 'success', 
         config: config.getConfig()
     });
+});
+
+app.post('/api/restart', (req, res) => {
+    res.json({ status: 'success', message: '服务器正在重启...' });
+    
+    console.log('收到重启请求，正在关闭服务器...');
+    
+    setTimeout(() => {
+        wss.clients.forEach(client => {
+            client.close();
+        });
+        
+        server.close(() => {
+            console.log('服务器已关闭，正在重启...');
+            
+            const { spawn } = require('child_process');
+            const args = process.argv.slice(1);
+            
+            spawn(process.execPath, args, {
+                detached: true,
+                stdio: 'inherit',
+                cwd: process.cwd()
+            });
+            
+            process.exit(0);
+        });
+        
+        setTimeout(() => {
+            process.exit(0);
+        }, 3000);
+    }, 100);
 });
 
 function detectMediaType(name) {
@@ -417,7 +487,21 @@ wss.on('connection', (ws, req) => {
                     }
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {
-                    sendToDisplay(displayId, data);
+                    if (data.action === 'testTimeAnnounce') {
+                        (async () => {
+                            try {
+                                await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
+                            } catch (err) {
+                                console.error('[整点报时] 测试失败:', err.message);
+                            }
+                        })();
+                    } else if (data.action === 'stop') {
+                        displayClients.forEach((displayData, id) => {
+                            sendToDisplay(id, data);
+                        });
+                    } else {
+                        sendToDisplay(displayId, data);
+                    }
                 }
             } catch (e) {
                 console.error('解析控制端消息失败:', e);
@@ -456,4 +540,6 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`上传端地址: http://${localIP}:${PORT}/upload`);
     console.log(`显示端地址: http://${localIP}:${PORT}/display`);
     console.log('='.repeat(50));
+    
+    timeAnnounce.start(displayClients, sendToDisplay);
 });

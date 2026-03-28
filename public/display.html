@@ -526,6 +526,9 @@
         function handleTTS(data) {
             if (data.action === 'play') {
                 playTTS(data.text);
+            } else if (data.action === 'playAudio') {
+                ttsAudio.src = data.audioUrl;
+                ttsAudio.play().catch(e => console.log('TTS播放被阻止'));
             } else if (data.action === 'stop') {
                 ttsAudio.pause();
                 ttsAudio.currentTime = 0;
