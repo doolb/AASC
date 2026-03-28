@@ -59,6 +59,7 @@ function addReminder(data) {
             interval: data.repeat?.interval || 5,
             count: data.repeat?.count || 10
         },
+        repeatCount: data.repeatCount || 1,
         enabled: true,
         createdAt: Date.now(),
         lastTriggered: null,
@@ -90,6 +91,7 @@ function updateReminder(id, data) {
     if (data.repeat !== undefined) {
         reminder.repeat = { ...reminder.repeat, ...data.repeat };
     }
+    if (data.repeatCount !== undefined) reminder.repeatCount = data.repeatCount;
     
     saveReminders();
     console.log(`[提醒] 已更新: ${reminder.id}`);
@@ -190,33 +192,47 @@ async function triggerReminder(reminder, repeatIndex = 0) {
     
     saveReminders();
     
-    if (displayClients && sendToDisplay) {
-        if (reminder.methods.includes('popup')) {
-            displayClients.forEach((displayData, displayId) => {
-                sendToDisplay(displayId, {
-                    type: 'reminder',
-                    action: 'popup',
-                    title: '提醒',
-                    time: timeText,
-                    content: reminder.content
-                });
-            });
-        }
+    const repeatCount = reminder.repeatCount || 1;
+    
+    for (let i = 0; i < repeatCount; i++) {
+        const currentRepeatIndex = repeatIndex * repeatCount + i;
         
-        if (reminder.methods.includes('voice')) {
-            try {
-                await tts.generateTTS(fullContent);
-                
+        if (displayClients && sendToDisplay) {
+            if (reminder.methods.includes('popup')) {
                 displayClients.forEach((displayData, displayId) => {
                     sendToDisplay(displayId, {
                         type: 'reminder',
-                        action: 'voice',
-                        audioUrl: '/uploads/temp_tts.wav?t=' + Date.now() + '&r=' + repeatIndex,
-                        text: fullContent
+                        action: 'popup',
+                        title: '提醒',
+                        time: timeText,
+                        content: reminder.content,
+                        repeatIndex: i + 1,
+                        totalRepeat: repeatCount
                     });
                 });
-            } catch (err) {
-                console.error('[提醒] 语音生成失败:', err.message);
+            }
+            
+            if (reminder.methods.includes('voice')) {
+                try {
+                    await tts.generateTTS(fullContent);
+                    
+                    displayClients.forEach((displayData, displayId) => {
+                        sendToDisplay(displayId, {
+                            type: 'reminder',
+                            action: 'voice',
+                            audioUrl: '/uploads/temp_tts.wav?t=' + Date.now() + '&r=' + currentRepeatIndex,
+                            text: fullContent,
+                            repeatIndex: i + 1,
+                            totalRepeat: repeatCount
+                        });
+                    });
+                    
+                    if (i < repeatCount - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                    }
+                } catch (err) {
+                    console.error('[提醒] 语音生成失败:', err.message);
+                }
             }
         }
     }
@@ -238,37 +254,9 @@ async function checkReminders() {
                 
                 for (let i = 1; i < repeatCount; i++) {
                     setTimeout(async () => {
-                        if (displayClients && sendToDisplay) {
-                            const timeText = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                            const fullContent = `${timeText} ${reminder.content}`;
-                            
-                            if (reminder.methods.includes('popup')) {
-                                displayClients.forEach((displayData, displayId) => {
-                                    sendToDisplay(displayId, {
-                                        type: 'reminder',
-                                        action: 'popup',
-                                        title: '提醒',
-                                        time: timeText,
-                                        content: reminder.content
-                                    });
-                                });
-                            }
-                            
-                            if (reminder.methods.includes('voice')) {
-                                try {
-                                    await tts.generateTTS(fullContent);
-                                    displayClients.forEach((displayData, displayId) => {
-                                        sendToDisplay(displayId, {
-                                            type: 'reminder',
-                                            action: 'voice',
-                                            audioUrl: '/uploads/temp_tts.wav?t=' + Date.now() + '&r=' + i,
-                                            text: fullContent
-                                        });
-                                    });
-                                } catch (err) {
-                                    console.error('[提醒] 重复语音生成失败:', err.message);
-                                }
-                            }
+                        const reminderData = getReminder(reminder.id);
+                        if (reminderData && reminderData.enabled) {
+                            await triggerReminder(reminderData, i);
                         }
                     }, i * repeatInterval * 60 * 1000);
                 }
@@ -297,39 +285,67 @@ function stop() {
     }
 }
 
-async function testReminder(reminderData) {
+async function testReminder(reminderData, targetDisplayId = null, sendFunc = null) {
     const now = new Date();
     const timeText = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     const fullContent = `${timeText} ${reminderData.content || '测试提醒'}`;
+    const repeatCount = reminderData.repeatCount || 1;
     
-    if (displayClients && sendToDisplay) {
-        if (reminderData.methods && reminderData.methods.includes('popup')) {
-            displayClients.forEach((displayData, displayId) => {
-                sendToDisplay(displayId, {
+    const sendTo = sendFunc || sendToDisplay;
+    const clients = targetDisplayId ? null : displayClients;
+    
+    for (let i = 0; i < repeatCount; i++) {
+        const sendReminder = (displayId) => {
+            if (reminderData.methods && reminderData.methods.includes('popup')) {
+                sendTo(displayId, {
                     type: 'reminder',
                     action: 'popup',
                     title: '测试提醒',
                     time: timeText,
-                    content: reminderData.content || '这是一条测试提醒'
+                    content: reminderData.content || '这是一条测试提醒',
+                    repeatIndex: i + 1,
+                    totalRepeat: repeatCount
                 });
+            }
+            
+            if (!reminderData.methods || reminderData.methods.includes('voice')) {
+                sendTo(displayId, {
+                    type: 'reminder',
+                    action: 'voice',
+                    audioUrl: '/uploads/temp_tts.wav?t=' + Date.now() + '&r=' + i,
+                    text: fullContent,
+                    repeatIndex: i + 1,
+                    totalRepeat: repeatCount
+                });
+            }
+        };
+        
+        if (targetDisplayId && sendTo) {
+            if (reminderData.methods && reminderData.methods.includes('voice')) {
+                try {
+                    await tts.generateTTS(fullContent);
+                } catch (err) {
+                    console.error('[提醒] 测试语音生成失败:', err.message);
+                    throw err;
+                }
+            }
+            sendReminder(targetDisplayId);
+        } else if (clients && sendTo) {
+            if (reminderData.methods && reminderData.methods.includes('voice')) {
+                try {
+                    await tts.generateTTS(fullContent);
+                } catch (err) {
+                    console.error('[提醒] 测试语音生成失败:', err.message);
+                    throw err;
+                }
+            }
+            clients.forEach((displayData, displayId) => {
+                sendReminder(displayId);
             });
         }
         
-        if (!reminderData.methods || reminderData.methods.includes('voice')) {
-            try {
-                await tts.generateTTS(fullContent);
-                displayClients.forEach((displayData, displayId) => {
-                    sendToDisplay(displayId, {
-                        type: 'reminder',
-                        action: 'voice',
-                        audioUrl: '/uploads/temp_tts.wav?t=' + Date.now(),
-                        text: fullContent
-                    });
-                });
-            } catch (err) {
-                console.error('[提醒] 测试语音生成失败:', err.message);
-                throw err;
-            }
+        if (i < repeatCount - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
         }
     }
     

@@ -469,6 +469,34 @@ app.post('/api/reminders/test', async (req, res) => {
     }
 });
 
+app.post('/api/reminders/:id/test', async (req, res) => {
+    try {
+        const reminderData = reminder.getReminder(req.params.id);
+        if (!reminderData) {
+            return res.status(404).json({ status: 'error', message: '提醒不存在' });
+        }
+        
+        const { displayId } = req.body;
+        
+        if (displayId) {
+            const displayData = displayClients.get(displayId);
+            if (!displayData) {
+                return res.status(404).json({ status: 'error', message: '显示端不存在' });
+            }
+            await reminder.testReminder(reminderData, displayId, sendToDisplay);
+        } else {
+            await reminder.testReminder(reminderData);
+        }
+        
+        res.json({ 
+            status: 'success', 
+            message: '测试提醒已发送'
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '测试提醒失败: ' + err.message });
+    }
+});
+
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
     

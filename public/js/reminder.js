@@ -39,9 +39,16 @@ function renderReminderList() {
             <div style="font-size: 14px; color: #fff; margin-bottom: 8px;">${r.content}</div>
             <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">
                 方式: ${r.methods && r.methods.includes('voice') ? '语音播报' : ''}${r.methods && r.methods.includes('voice') && r.methods.includes('popup') ? ' + ' : ''}${r.methods && r.methods.includes('popup') ? '弹窗提示' : ''}
-                ${r.repeat && r.repeat.enabled ? ` | 重复: 每${r.repeat.interval}分钟, ${r.repeat.count === 0 ? '无限' : r.repeat.count + '次'}` : ''}
+                ${r.repeatCount && r.repeatCount > 1 ? ` | 每次重复: ${r.repeatCount}次` : ''}
+                ${r.repeat && r.repeat.enabled ? ` | 重复提醒: 每${r.repeat.interval}分钟, ${r.repeat.count === 0 ? '无限' : r.repeat.count + '次'}` : ''}
             </div>
             <div style="display: flex; gap: 8px;">
+                <button class="control-btn" onclick="testSingleReminder('${r.id}')" style="padding: 5px 12px; font-size: 12px; background: linear-gradient(135deg, #FF9800, #F57C00);">
+                    测试
+                </button>
+                <button class="control-btn" onclick="editReminder('${r.id}')" style="padding: 5px 12px; font-size: 12px; background: linear-gradient(135deg, #2196F3, #1976D2);">
+                    编辑
+                </button>
                 <button class="control-btn" onclick="toggleReminder('${r.id}', ${!r.enabled})" style="padding: 5px 12px; font-size: 12px; background: ${r.enabled ? 'linear-gradient(135deg, #f44336, #d32f2f)' : 'linear-gradient(135deg, #4CAF50, #45a049)'};">
                     ${r.enabled ? '禁用' : '启用'}
                 </button>
@@ -62,6 +69,7 @@ function addReminder() {
     const repeatEnabled = document.getElementById('reminderRepeatEnabled').checked;
     const repeatInterval = parseInt(document.getElementById('reminderRepeatInterval').value) || 5;
     const repeatCount = parseInt(document.getElementById('reminderRepeatCount').value) || 10;
+    const repeatEachTime = parseInt(document.getElementById('reminderRepeatEachTime')?.value) || 1;
     
     if (!content) {
         Toast.show('请输入提醒内容', 'error');
@@ -94,7 +102,8 @@ function addReminder() {
                 enabled: repeatEnabled,
                 interval: repeatInterval,
                 count: repeatCount
-            }
+            },
+            repeatCount: repeatEachTime
         })
     })
     .then(res => res.json())
@@ -160,6 +169,7 @@ function testReminder() {
     const content = document.getElementById('reminderContent').value.trim() || '这是一条测试提醒';
     const methodVoice = document.getElementById('reminderMethodVoice').checked;
     const methodPopup = document.getElementById('reminderMethodPopup').checked;
+    const repeatEachTime = parseInt(document.getElementById('reminderRepeatEachTime')?.value) || 1;
     
     const methods = [];
     if (methodVoice) methods.push('voice');
@@ -172,7 +182,7 @@ function testReminder() {
     fetch('/api/reminders/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, methods })
+        body: JSON.stringify({ content, methods, repeatCount: repeatEachTime })
     })
     .then(res => res.json())
     .then(data => {
@@ -188,10 +198,128 @@ function testReminder() {
     });
 }
 
+function editReminder(id) {
+    const reminder = reminders.find(r => r.id === id);
+    if (!reminder) {
+        Toast.show('提醒不存在', 'error');
+        return;
+    }
+    
+    document.getElementById('editReminderId').value = reminder.id;
+    document.getElementById('editReminderContent').value = reminder.content || '';
+    document.getElementById('editReminderTime').value = reminder.time || '';
+    document.getElementById('editReminderType').value = reminder.type || 'once';
+    document.getElementById('editReminderMethodVoice').checked = reminder.methods && reminder.methods.includes('voice');
+    document.getElementById('editReminderMethodPopup').checked = reminder.methods && reminder.methods.includes('popup');
+    document.getElementById('editReminderRepeatEachTime').value = reminder.repeatCount || 1;
+    document.getElementById('editReminderRepeatEnabled').checked = reminder.repeat && reminder.repeat.enabled;
+    document.getElementById('editReminderRepeatInterval').value = reminder.repeat?.interval || 5;
+    document.getElementById('editReminderRepeatCount').value = reminder.repeat?.count || 10;
+    
+    document.getElementById('editReminderModal').classList.add('active');
+}
+
+function closeEditReminderModal() {
+    document.getElementById('editReminderModal').classList.remove('active');
+}
+
+function saveEditReminder() {
+    const id = document.getElementById('editReminderId').value;
+    const content = document.getElementById('editReminderContent').value.trim();
+    const time = document.getElementById('editReminderTime').value;
+    const type = document.getElementById('editReminderType').value;
+    const methodVoice = document.getElementById('editReminderMethodVoice').checked;
+    const methodPopup = document.getElementById('editReminderMethodPopup').checked;
+    const repeatEnabled = document.getElementById('editReminderRepeatEnabled').checked;
+    const repeatInterval = parseInt(document.getElementById('editReminderRepeatInterval').value) || 5;
+    const repeatCount = parseInt(document.getElementById('editReminderRepeatCount').value) || 10;
+    const repeatEachTime = parseInt(document.getElementById('editReminderRepeatEachTime').value) || 1;
+    
+    if (!content) {
+        Toast.show('请输入提醒内容', 'error');
+        return;
+    }
+    
+    if (!time) {
+        Toast.show('请选择提醒时间', 'error');
+        return;
+    }
+    
+    const methods = [];
+    if (methodVoice) methods.push('voice');
+    if (methodPopup) methods.push('popup');
+    
+    if (methods.length === 0) {
+        Toast.show('请选择至少一种提醒方式', 'error');
+        return;
+    }
+    
+    fetch(`/api/reminders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            content,
+            time,
+            type,
+            methods,
+            repeatCount: repeatEachTime,
+            repeat: {
+                enabled: repeatEnabled,
+                interval: repeatInterval,
+                count: repeatCount
+            }
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            Toast.show('提醒已更新', 'success');
+            closeEditReminderModal();
+            loadReminders();
+        } else {
+            Toast.show(data.message || '更新失败', 'error');
+        }
+    })
+    .catch(err => {
+        console.error('更新提醒失败:', err);
+        Toast.show('更新失败', 'error');
+    });
+}
+
+function testSingleReminder(id) {
+    const displayId = window.currentDisplayId || null;
+    
+    fetch(`/api/reminders/${id}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            Toast.show(displayId ? '测试提醒已发送到选中显示端' : '测试提醒已发送到所有显示端', 'success');
+        } else {
+            Toast.show(data.message || '测试失败', 'error');
+        }
+    })
+    .catch(err => {
+        console.error('测试提醒失败:', err);
+        Toast.show('测试失败', 'error');
+    });
+}
+
 window.Reminder = {
     load: loadReminders,
     add: addReminder,
+    edit: editReminder,
+    saveEdit: saveEditReminder,
+    closeEditModal: closeEditReminderModal,
     toggle: toggleReminder,
     delete: deleteReminder,
     test: testReminder
 };
+
+window.editReminder = editReminder;
+window.saveEditReminder = saveEditReminder;
+window.closeEditReminderModal = closeEditReminderModal;
+window.testSingleReminder = testSingleReminder;

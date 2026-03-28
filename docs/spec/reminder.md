@@ -16,10 +16,11 @@
     type: "daily",               // 类型: "once"(临时) | "daily"(每天)
     methods: ["voice", "popup"], // 提醒方式数组
     repeat: {
-        enabled: true,           // 是否重复
+        enabled: true,           // 是否重复提醒
         interval: 5,             // 间隔(分钟)
         count: 3                 // 次数, 0=无限
     },
+    repeatCount: 3,              // 每次提醒重复次数(1-10), 默认1
     enabled: true,              // 是否启用
     createdAt: 1712016000000,   // 创建时间戳
     lastTriggered: null,        // 上次触发时间
@@ -53,6 +54,7 @@ Content-Type: application/json
     "time": "14:30",
     "type": "daily",
     "methods": ["voice", "popup"],
+    "repeatCount": 3,
     "repeat": {
         "enabled": true,
         "interval": 5,
@@ -61,7 +63,27 @@ Content-Type: application/json
 }
 ```
 
-### 3.2 测试提醒
+### 3.2 更新提醒
+
+```http
+PUT /api/reminders/:id
+Content-Type: application/json
+
+{
+    "content": "开会时间到了（已修改）",
+    "time": "15:00",
+    "type": "daily",
+    "methods": ["voice", "popup"],
+    "repeatCount": 2,
+    "repeat": {
+        "enabled": false,
+        "interval": 5,
+        "count": 10
+    }
+}
+```
+
+### 3.3 测试提醒
 
 ```http
 POST /api/reminders/test
@@ -69,9 +91,24 @@ Content-Type: application/json
 
 {
     "content": "测试提醒内容",
-    "methods": ["voice", "popup"]
+    "methods": ["voice", "popup"],
+    "repeatCount": 1
 }
 ```
+
+### 3.4 测试指定提醒
+
+```http
+POST /api/reminders/:id/test
+Content-Type: application/json
+
+{
+    "displayId": "display_123"
+}
+```
+
+参数说明：
+- `displayId` (可选): 指定发送到的显示端ID，不传则发送到所有显示端
 
 ## 4. WebSocket 消息
 
@@ -115,7 +152,7 @@ Content-Type: application/json
 | `stop()` | 停止定时器 |
 | `checkReminders()` | 检查并触发提醒 |
 | `triggerReminder(reminder)` | 执行提醒动作 |
-| `testReminder(reminderData)` | 测试提醒 |
+| `testReminder(reminderData, targetDisplayId, sendFunc)` | 测试提醒（支持指定显示端） |
 
 ### 5.2 定时检查逻辑
 
@@ -133,6 +170,9 @@ Content-Type: application/json
 | `loadReminders()` | 加载提醒列表 |
 | `renderReminderList()` | 渲染提醒列表 |
 | `addReminder()` | 添加提醒 |
+| `editReminder(id)` | 打开编辑弹窗 |
+| `saveEditReminder()` | 保存编辑 |
+| `testSingleReminder(id)` | 测试单条提醒 |
 | `toggleReminder(id, enabled)` | 切换提醒状态 |
 | `deleteReminder(id)` | 删除提醒 |
 | `testReminder()` | 测试提醒 |
@@ -167,6 +207,17 @@ Content-Type: application/json
 - **间隔时间**: 1-60 分钟
 - **重复次数**: 0 表示无限重复，否则为指定次数
 
+## 10. 每次提醒重复次数
+
+每次触发提醒时，可以设置重复播报/弹窗的次数：
+
+- **repeatCount**: 每次提醒的重复次数 (1-10)
+- 默认值为 1，即只播报一次
+- 设置为 3 时，每次触发会连续播报/弹窗 3 次
+- 与"重复提醒"功能独立：
+  - "重复提醒"：触发后间隔一段时间再次触发
+  - "每次提醒重复次数"：每次触发时连续重复几次
+
 ## 10. 语音播报优先级
 
 ```
@@ -187,4 +238,26 @@ Content-Type: application/json
 | `public/js/reminder.js` | 控制端提醒管理 |
 | `public/upload.html` | 控制端界面（含提醒设置） |
 | `public/display.html` | 显示端界面（含弹窗功能） |
+| `public/css/chat.css` | 编辑弹窗样式（含 `.chat-modal-overlay.active`） |
 | `server.js` | 服务端（含提醒 API） |
+
+## 12. Bug 修复记录
+
+### 12.1 提醒编辑弹窗无法显示
+
+**问题描述**：点击提醒列表中的"编辑"按钮，弹窗没有显示。
+
+**问题原因**：
+- `public/css/chat.css` 中 `.chat-modal-overlay` 默认设置了 `display: none;`
+- 缺少 `.chat-modal-overlay.active` 样式定义
+- JavaScript 添加 `active` 类后，弹窗仍然是隐藏状态
+
+**解决方案**：
+在 `public/css/chat.css` 中添加：
+```css
+.chat-modal-overlay.active {
+    display: flex;
+}
+```
+
+**修复文件**：`public/css/chat.css`

@@ -1,5 +1,44 @@
 # Web MediaCenter - 代码规范
 
+## 技术栈
+
+- Node.js + Express
+- WebSocket (ws 库)
+- 原生 HTML/CSS/JavaScript (无框架)
+
+## 开发命令
+
+```bash
+# 安装依赖
+npm install
+
+# 启动服务器
+npm start
+
+# 指定端口启动
+PORT=3000 npm start
+```
+
+## 代码规范
+
+### 命名约定
+
+- 变量/函数: camelCase (如 `currentFit`, `applyCrop`)
+- 常量: UPPER_SNAKE_CASE (如 `UPLOADS_DIR`)
+- CSS 类: kebab-case (如 `.crop-box`, `.control-btn`)
+- CSS ID: camelCase (如 `#mediaContainer`)
+
+### 文件结构
+
+- HTML 文件内嵌 CSS 和 JavaScript，不使用外部文件
+- 按功能分组代码：状态管理 → DOM 元素 → 核心功能 → 事件处理 → 初始化
+- 拆分代码为多个文件，每个文件负责一个功能模块
+- 单个文件代码行数不超过 1000 行
+
+### WebSocket 消息格式
+
+所有消息使用 JSON 格式，包含 `type` 字段标识消息类型。
+
 ## 1. 项目结构
 
 ```

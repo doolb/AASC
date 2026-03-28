@@ -67,6 +67,22 @@ tts.js
   - upload.html:118 添加重启服务器按钮
   - controls.js:83-117 `restartServer()` 发送重启请求，5秒后自动刷新页面
 
+## 页面交互
+- ✅ 已完成~~界面左侧有一个页签，可以快速跳转不同的功能模块~~
+ - 功能模块分组：
+   - 媒体管理：上传文件、URL上传、服务器资源
+   - 显示控制：显示端选择、显示控制、裁剪
+   - 提醒设置：提醒设置
+   - AI助手：AI聊天助手
+ - 布局：左侧固定宽度侧边栏 + 右侧自适应内容区
+ - 交互：点击导航项切换显示对应面板
+ - 状态持久化：使用 localStorage 记住用户最后选中的面板
+ - 实现代码：
+   - public/upload.html 添加侧边栏 `<nav class="sidebar">` 和面板 `<section class="panel">`
+   - public/css/upload.css 添加 `.sidebar`, `.nav-item`, `.content`, `.panel` 样式
+   - public/js/main.js 添加 `Sidebar` 对象，包含 `init()`, `switchPanel()`, `saveLastPanel()`, `loadLastPanel()` 方法
+ - 实现：详见 docs/spec/sidebar.md
+
 ## 控制端查看显示端信息
 - ✅ 已完成~~显示端navigator.userAgent，用于判断显示端的浏览器类型，然后可以在控制端查看内容,参考showinfo.html~~ 
 - ✅ 已完成~~控制端显示列表新增详情按钮，点击可查看显示端的功能支持（Feature Support）~~ 
@@ -151,23 +167,27 @@ tts.js
  - 语音播报：生成语音播报，下发到显示端
  - 弹窗提示：在显示端弹窗提示用户，提醒内容
  - 提醒内容：提醒时间+提醒内容
+ - 每次提醒重复次数：每次触发提醒时，重复播报/弹窗的次数（1-10次），默认1次
  - 重复提醒：用户可以选择重复提醒，重复提醒时间间隔
  - 重复提醒时间间隔：用户设置的重复提醒时间间隔，单位为分钟
  - 重复提醒次数：用户设置的重复提醒次数，0表示无限重复，默认10次
  - 取消提醒：用户可以在控制端取消提醒，服务端会停止提醒用户
  - 临时提醒和每天提醒：用户可以选择临时提醒，提醒时间只在当前时间生效，每天提醒，提醒时间每天生效
+ - 编辑提醒：用户可以编辑已创建的提醒，修改提醒内容、时间、类型、方式、重复次数等
+ - 单独测试提醒：可以选中某条提醒进行测试，支持发送到选中显示端或所有显示端
+ - 媒体管理界面显示端选择：在媒体管理界面也可以选择显示端
 
 ### 实现代码
 - core/reminder.js 提醒核心模块
   - `init()` 初始化，加载提醒数据
-  - `addReminder(data)` 添加提醒
+  - `addReminder(data)` 添加提醒（支持 repeatCount 字段）
   - `updateReminder(id, data)` 更新提醒
   - `deleteReminder(id)` 删除提醒
   - `toggleReminder(id, enabled)` 启用/禁用提醒
   - `start(displayClients, sendToDisplay)` 启动定时检查
   - `checkReminders()` 检查并触发提醒
-  - `triggerReminder(reminder)` 执行提醒动作
-  - `testReminder(reminderData)` 测试提醒
+  - `triggerReminder(reminder)` 执行提醒动作（支持重复播报）
+  - `testReminder(reminderData, targetDisplayId, sendFunc)` 测试提醒（支持指定显示端）
 - server.js 提醒 API
   - `/api/reminders` GET 获取所有提醒
   - `/api/reminders` POST 创建新提醒
@@ -175,13 +195,21 @@ tts.js
   - `/api/reminders/:id` DELETE 删除提醒
   - `/api/reminders/:id/toggle` POST 启用/禁用提醒
   - `/api/reminders/test` POST 测试提醒
+  - `/api/reminders/:id/test` POST 测试指定提醒（支持 displayId 参数）
 - public/js/reminder.js 控制端提醒管理
   - `loadReminders()` 加载提醒列表
   - `renderReminderList()` 渲染提醒列表
   - `addReminder()` 添加提醒
+  - `editReminder(id)` 打开编辑弹窗
+  - `saveEditReminder()` 保存编辑
+  - `testSingleReminder(id)` 测试单条提醒
+  - `closeEditReminderModal()` 关闭编辑弹窗
   - `toggleReminder(id, enabled)` 切换提醒状态
   - `deleteReminder(id)` 删除提醒
   - `testReminder()` 测试提醒
+- public/upload.html 编辑弹窗界面
+  - 编辑提醒弹窗 `#editReminderModal`
+  - 支持编辑：内容、时间、类型、方式、每次重复次数、重复提醒设置
 - public/display.html 显示端弹窗
   - `handleReminder(data)` 处理提醒消息
   - `showReminderPopup(time, content)` 显示弹窗提示
@@ -242,6 +270,9 @@ tts.js
 - public/upload.html 添加聊天 UI 区域、模板弹窗和配置弹窗
 
 ### Bug 修复
+- ✅ 已完成~~修复提醒编辑弹窗无法显示问题~~
+  - 问题原因：`.chat-modal-overlay.active` CSS 样式缺失
+  - 修复文件：public/css/chat.css 添加 `.chat-modal-overlay.active { display: flex; }`
 - ✅ 已完成~~修复聊天历史丢失问题：服务器重启后聊天记录丢失~~
   - core/chat.js 添加聊天历史持久化功能
     - `loadHistory()` 启动时从 `chat-history.json` 加载历史记录

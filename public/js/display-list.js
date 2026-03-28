@@ -2,11 +2,23 @@ const DisplayList = {
     list: [],
     
     render() {
-        const container = document.getElementById('displayList');
+        this.renderToContainer('displayList');
+        this.renderToContainer('mediaDisplayList');
+        
+        if (!window.currentDisplayId && this.list.length > 0) {
+            this.select(this.list[0].id);
+        }
+    },
+    
+    renderToContainer(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
         
         if (this.list.length === 0) {
             container.innerHTML = '<div class="empty-list">暂无显示端连接</div>';
-            window.currentDisplayId = null;
+            if (containerId === 'displayList') {
+                window.currentDisplayId = null;
+            }
             return;
         }
         
@@ -42,10 +54,6 @@ const DisplayList = {
                 </div>
             `;
         }).join('');
-        
-        if (!window.currentDisplayId && this.list.length > 0) {
-            this.select(this.list[0].id);
-        }
     },
     
     select(id) {

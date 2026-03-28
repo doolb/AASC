@@ -8,43 +8,79 @@
     <link rel="stylesheet" href="css/chat.css">
 </head>
 <body>
-    <div class="container">
-        <h1>媒体上传端</h1>
-        
-        <div class="section">
-            <h2>上传文件</h2>
-            <div class="file-input-wrapper">
-                <label class="file-label image" for="imageInput">选择图片/GIF</label>
-                <label class="file-label video" for="videoInput">选择视频</label>
-            </div>
-            <input type="file" id="imageInput" accept="image/*">
-            <input type="file" id="videoInput" accept="video/*">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <span class="logo">MC</span>
         </div>
-        
-        <div class="section">
-            <h2>URL上传</h2>
-            <div class="url-input-group">
-                <input type="text" id="urlInput" placeholder="输入图片/视频URL">
-                <button onclick="uploadByUrl()">发送</button>
-            </div>
+        <div class="sidebar-nav">
+            <button class="nav-item active" data-target="media" title="媒体管理">
+                <span class="nav-icon">📁</span>
+                <span class="nav-text">媒体</span>
+            </button>
+            <button class="nav-item" data-target="display" title="显示控制">
+                <span class="nav-icon">🖥️</span>
+                <span class="nav-text">显示</span>
+            </button>
+            <button class="nav-item" data-target="reminder" title="提醒设置">
+                <span class="nav-icon">⏰</span>
+                <span class="nav-text">提醒</span>
+            </button>
+            <button class="nav-item" data-target="chat" title="AI助手">
+                <span class="nav-icon">💬</span>
+                <span class="nav-text">助手</span>
+            </button>
         </div>
-        
-        <div class="section">
-            <h2>服务器资源 <button onclick="loadMediaList()" style="float:right;padding:4px 12px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:12px;">刷新</button></h2>
-            <div class="media-list" id="mediaList">
-                <div class="empty-list">暂无资源</div>
+    </nav>
+    
+    <main class="content">
+        <section class="panel" id="panel-media">
+            <h1 class="page-title">媒体管理</h1>
+            
+            <div class="section">
+                <h2>显示端选择</h2>
+                <div class="display-list" id="mediaDisplayList">
+                    <div class="empty-list">暂无显示端连接</div>
+                </div>
             </div>
-        </div>
-        
-        <div class="section">
-            <h2>显示端选择</h2>
-            <div class="display-list" id="displayList">
-                <div class="empty-list">暂无显示端连接</div>
+            
+            <div class="section">
+                <h2>上传文件</h2>
+                <div class="file-input-wrapper">
+                    <label class="file-label image" for="imageInput">选择图片/GIF</label>
+                    <label class="file-label video" for="videoInput">选择视频</label>
+                </div>
+                <input type="file" id="imageInput" accept="image/*">
+                <input type="file" id="videoInput" accept="video/*">
             </div>
-        </div>
+            
+            <div class="section">
+                <h2>URL上传</h2>
+                <div class="url-input-group">
+                    <input type="text" id="urlInput" placeholder="输入图片/视频URL">
+                    <button onclick="uploadByUrl()">发送</button>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>服务器资源 <button onclick="loadMediaList()" style="float:right;padding:4px 12px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:12px;">刷新</button></h2>
+                <div class="media-list" id="mediaList">
+                    <div class="empty-list">暂无资源</div>
+                </div>
+            </div>
+        </section>
         
-        <div class="section">
-            <h2>显示控制</h2>
+        <section class="panel" id="panel-display" style="display:none;">
+            <h1 class="page-title">显示控制</h1>
+            
+            <div class="section">
+                <h2>显示端选择</h2>
+                <div class="display-list" id="displayList">
+                    <div class="empty-list">暂无显示端连接</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>显示控制</h2>
             <div class="control-grid">
                 <div class="control-item">
                     <label>画面填充</label>
@@ -148,9 +184,13 @@
             <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
             <button class="control-btn restart-btn" onclick="restartServer()" style="margin-top: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">重启服务器</button>
         </div>
+        </section>
         
-        <div class="section">
-            <h2>提醒设置</h2>
+        <section class="panel" id="panel-reminder" style="display:none;">
+            <h1 class="page-title">提醒设置</h1>
+            
+            <div class="section">
+                <h2>提醒设置</h2>
             <div class="reminder-form" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 15px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
                     <div>
@@ -181,6 +221,13 @@
                     </div>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; align-items: center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">每次重复:</span>
+                        <input type="number" id="reminderRepeatEachTime" min="1" max="10" value="1" style="width: 50px; padding: 5px; border: none; border-radius: 4px; background: rgba(255,255,255,0.1); color: #fff; font-size: 12px; text-align: center;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">次</span>
+                    </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; align-items: center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
                     <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: flex; align-items: center; gap: 5px;">
                         <input type="checkbox" id="reminderRepeatEnabled"> 重复提醒
                     </label>
@@ -204,12 +251,17 @@
                 <div class="empty-list">暂无提醒</div>
             </div>
         </div>
+        </section>
         
-        <div class="section">
-            <h2>AI 聊天助手</h2>
-            <div class="chat-container" id="chatContainer"></div>
-        </div>
-    </div>
+        <section class="panel" id="panel-chat" style="display:none;">
+            <h1 class="page-title">AI 助手</h1>
+            
+            <div class="section">
+                <h2>AI 聊天助手</h2>
+                <div class="chat-container" id="chatContainer"></div>
+            </div>
+        </section>
+    </main>
     
     <div class="modal-overlay" id="featureModal">
         <div class="modal-content">
@@ -254,6 +306,71 @@
                 </div>
                 <div class="chat-config-actions">
                     <button class="chat-add-btn" onclick="saveChatConfig()">保存设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chat-modal-overlay" id="editReminderModal">
+        <div class="chat-modal-content" style="max-width: 500px;">
+            <div class="chat-modal-header">
+                <h3>编辑提醒</h3>
+                <button class="chat-modal-close" onclick="closeEditReminderModal()">&times;</button>
+            </div>
+            <div class="chat-modal-body">
+                <input type="hidden" id="editReminderId">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: block; margin-bottom: 5px;">提醒内容</label>
+                        <input type="text" id="editReminderContent" placeholder="输入提醒内容" style="width: 100%; padding: 10px; border: none; border-radius: 8px; background: rgba(255,255,255,0.1); color: #fff; font-size: 14px; outline: none;">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: block; margin-bottom: 5px;">提醒时间</label>
+                        <input type="time" id="editReminderTime" style="width: 100%; padding: 10px; border: none; border-radius: 8px; background: rgba(255,255,255,0.1); color: #fff; font-size: 14px; outline: none;">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: block; margin-bottom: 5px;">类型</label>
+                        <select id="editReminderType" style="width: 100%; padding: 8px 12px; border: none; border-radius: 6px; background: rgba(255,255,255,0.1); color: #fff; font-size: 13px;">
+                            <option value="once">临时提醒</option>
+                            <option value="daily">每天提醒</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding-top: 20px;">
+                        <label style="font-size: 13px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="editReminderMethodVoice"> 语音播报
+                        </label>
+                        <label style="font-size: 13px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="editReminderMethodPopup"> 弹窗提示
+                        </label>
+                    </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; align-items: center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">每次重复:</span>
+                        <input type="number" id="editReminderRepeatEachTime" min="1" max="10" value="1" style="width: 50px; padding: 5px; border: none; border-radius: 4px; background: rgba(255,255,255,0.1); color: #fff; font-size: 12px; text-align: center;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">次</span>
+                    </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; align-items: center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <label style="font-size: 12px; color: rgba(255,255,255,0.6); display: flex; align-items: center; gap: 5px;">
+                        <input type="checkbox" id="editReminderRepeatEnabled"> 重复提醒
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">间隔:</span>
+                        <input type="number" id="editReminderRepeatInterval" min="1" max="60" value="5" style="width: 50px; padding: 5px; border: none; border-radius: 4px; background: rgba(255,255,255,0.1); color: #fff; font-size: 12px; text-align: center;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">分钟</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">次数:</span>
+                        <input type="number" id="editReminderRepeatCount" min="0" max="100" value="10" style="width: 50px; padding: 5px; border: none; border-radius: 4px; background: rgba(255,255,255,0.1); color: #fff; font-size: 12px; text-align: center;">
+                        <span style="font-size: 12px; color: rgba(255,255,255,0.6);">(0=无限)</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button class="control-btn" onclick="closeEditReminderModal()" style="padding: 10px 20px; background: linear-gradient(135deg, #9E9E9E, #757575);">取消</button>
+                    <button class="control-btn" onclick="saveEditReminder()" style="padding: 10px 20px; background: linear-gradient(135deg, #4CAF50, #45a049);">保存</button>
                 </div>
             </div>
         </div>
