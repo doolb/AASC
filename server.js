@@ -38,7 +38,8 @@ function createDisplayState() {
         fit: 'contain',
         crop: { x: 0, y: 0, width: 100, height: 100 },
         volume: 100,
-        canvasSize: { width: 1920, height: 1080 }
+        canvasSize: { width: 1920, height: 1080 },
+        browserInfo: null
     };
 }
 
@@ -272,7 +273,8 @@ function getDisplayList() {
         list.push({
             id: id,
             ip: data.ip,
-            canvasSize: data.state.canvasSize
+            canvasSize: data.state.canvasSize,
+            browserInfo: data.state.browserInfo
         });
     });
     return list;
@@ -340,6 +342,19 @@ wss.on('connection', (ws, req) => {
                 
                 if (data.type === 'canvasSize' && displayData) {
                     displayData.state.canvasSize = { width: data.width, height: data.height };
+                    broadcastToControls({ type: 'displayList', list: getDisplayList() });
+                } else if (data.type === 'browserInfo' && displayData) {
+                    displayData.state.browserInfo = {
+                        userAgent: data.userAgent,
+                        browserName: data.browserName,
+                        browserVersion: data.browserVersion,
+                        os: data.os,
+                        deviceType: data.deviceType,
+                        screenWidth: data.screenWidth,
+                        screenHeight: data.screenHeight,
+                        devicePixelRatio: data.devicePixelRatio,
+                        featureSupport: data.featureSupport
+                    };
                     broadcastToControls({ type: 'displayList', list: getDisplayList() });
                 }
             } catch (e) {

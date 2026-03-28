@@ -32,7 +32,9 @@ tts.js
  - 支持删除文件夹
  - 支持http协议的媒体库
 
-- 显示端navigator.userAgent，用于判断显示端的浏览器类型，然后可以在控制端查看内容,参考showinfo.html
+- ✅ 已完成~~显示端navigator.userAgent，用于判断显示端的浏览器类型，然后可以在控制端查看内容,参考showinfo.html~~ 
+- ✅ 已完成~~控制端显示列表新增详情按钮，点击可查看显示端的功能支持（Feature Support）~~ 
+  - 上传 display.html:sendFeatureSupport
 
 
 - 使用smb2库 支持smb协议的媒体库
@@ -71,3 +73,24 @@ smb2Client.writeFile('folder/newFile.txt', content, (err) => {
   if (err) throw err;
   console.log('文件写入成功');
 });
+
+- 服务器重启后，状态恢复功能，需要从本地配置表中读取上次播放的状态，
+ - 播放列表
+ - 画面填充设置
+ - 音量状态
+ - 语音滑动框位置
+
+- ✅ 已完成~~upload.html 拆分代码，每个文件负责一个功能模块~~
+ - upload.html 负责上传文件
+ - js
+  - websocket.js 负责处理与服务端的websocket通信
+  - media-list.js 负责处理媒体上传的业务逻辑 显示媒体列表
+  - display-list.js 负责处理显示端的业务逻辑
+  - crop.js 负责处理裁剪功能
+  - tts.js 负责处理语音播报功能
+  - controls.js 负责处理进度/音量控制
+  - toast.js 负责处理提示消息
+  - upload.js 负责处理文件上传
+  - main.js 主入口和初始化
+ - css
+  - upload.css 负责上传文件的样式
