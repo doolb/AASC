@@ -3,7 +3,8 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const OUTPUT_WAV = path.join(process.cwd(), 'uploads/temp_tts.wav');
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+const TTS_DIR = path.join(UPLOADS_DIR, 'tts');
 
 let ttsConfig = {
     serviceUrl: 'http://192.168.1.16:3000/api/tts',
@@ -25,7 +26,16 @@ function getConfig() {
     return { ...ttsConfig };
 }
 
-function callExternalTTS(text, voice, speed) {
+function generateUniquePath() {
+    if (!fs.existsSync(TTS_DIR)) {
+        fs.mkdirSync(TTS_DIR, { recursive: true });
+    }
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return path.join(TTS_DIR, `tts_${timestamp}_${random}.wav`);
+}
+
+function callExternalTTS(text, voice, speed, outputPath) {
     return new Promise((resolve, reject) => {
         const urlObj = new URL(ttsConfig.serviceUrl);
         const isHttps = urlObj.protocol === 'https:';
@@ -58,11 +68,11 @@ function callExternalTTS(text, voice, speed) {
                 return;
             }
             
-            const writeStream = fs.createWriteStream(OUTPUT_WAV);
+            const writeStream = fs.createWriteStream(outputPath);
             res.pipe(writeStream);
             
             writeStream.on('finish', () => {
-                resolve(OUTPUT_WAV);
+                resolve(outputPath);
             });
             
             writeStream.on('error', (err) => {
@@ -86,37 +96,44 @@ async function generateTTS(text, voice, speed) {
     
     const finalVoice = voice || ttsConfig.defaultVoice;
     const finalSpeed = speed !== undefined ? speed : ttsConfig.defaultSpeed;
+    const outputPath = generateUniquePath();
+    
     console.log(`[TTS] 生成: "${text}" | 语音: ${finalVoice} | 语速: ${finalSpeed}`);
     
-    cleanupTTS();
+    await callExternalTTS(text, voice, speed, outputPath);
     
-    await callExternalTTS(text, voice, speed);
-    
-    if (!fs.existsSync(OUTPUT_WAV)) {
+    if (!fs.existsSync(outputPath)) {
         throw new Error('音频文件生成失败');
     }
     
-    return OUTPUT_WAV;
+    return outputPath;
 }
 
-function getTTSAudioPath() {
-    return OUTPUT_WAV;
-}
-
-function cleanupTTS() {
+function cleanupOldTtsFiles() {
+    if (!fs.existsSync(TTS_DIR)) return;
+    
     try {
-        if (fs.existsSync(OUTPUT_WAV)) {
-            fs.unlinkSync(OUTPUT_WAV);
-        }
+        const files = fs.readdirSync(TTS_DIR);
+        const ttsFiles = files.filter(f => f.startsWith('tts_') && f.endsWith('.wav'));
+        const now = Date.now();
+        const maxAge = 10 * 60 * 1000;
+        
+        ttsFiles.forEach(f => {
+            const filePath = path.join(TTS_DIR, f);
+            const stat = fs.statSync(filePath);
+            if (now - stat.mtimeMs > maxAge) {
+                fs.unlinkSync(filePath);
+                console.log(`[TTS] 清理旧文件: ${f}`);
+            }
+        });
     } catch (err) {
-        console.error('[TTS] 清理临时文件失败:', err.message);
+        console.error('[TTS] 清理旧文件失败:', err.message);
     }
 }
 
 module.exports = {
     init,
     generateTTS,
-    getTTSAudioPath,
-    cleanupTTS,
+    cleanupOldTtsFiles,
     getConfig
 };

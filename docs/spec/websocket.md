@@ -186,6 +186,41 @@ wss.on('connection', (ws, req)):
         发送 { type: 'tts', displayId, action, ...data }
 ```
 
+## Chat 模块
+
+```
+对象 Chat:
+    属性:
+        history: []           // 聊天历史
+        templates: []         // 聊天模板
+        config: {}            // 聊天配置
+        isLoading: false      // 是否正在加载
+    
+    init():
+        调用 loadHistory()
+        调用 loadTemplates()
+        调用 loadConfig()
+        渲染界面
+    
+    renderHistory():
+        遍历 history
+        生成消息组HTML
+        每条助手消息添加播放按钮
+    
+    playMessage(index):
+        获取历史消息
+        构建文本: "用户问：{user}。回答：{assistant}"
+        发送 WebSocket { type: 'tts', displayId, action: 'play', text }
+    
+    handleChunk(data):
+        更新流式消息内容
+    
+    handleResponse(data):
+        完成流式消息
+        添加播放按钮到新消息
+        更新历史记录
+```
+
 ## 广播函数
 
 ```

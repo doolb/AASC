@@ -198,7 +198,7 @@ class LocalProvider extends MediaLibraryProvider {
         const localIP = this.getLocalIP();
         const port = this.getPort();
         const cleanPath = filePath.replace(/^\//, '');
-        return `http://${localIP}:${port}/uploads/${encodeURIComponent(cleanPath)}`;
+        return `http://${localIP}:${port}/api/media-libraries/${this.config.id}/proxy/${encodeURIComponent(cleanPath)}`;
     }
 
     _resolvePath(relativePath) {
@@ -789,9 +789,21 @@ class MediaLibraryManager {
             id: configData.id || `lib_${Date.now()}`,
             name: configData.name,
             type: configData.type || 'local',
-            path: configData.path,
             readonly: configData.readonly || false
         };
+        
+        if (configData.type === 'http') {
+            config.url = configData.url;
+            config.username = configData.username;
+            config.password = configData.password;
+        } else if (configData.type === 'smb') {
+            config.share = configData.share;
+            config.domain = configData.domain;
+            config.username = configData.username;
+            config.password = configData.password;
+        } else {
+            config.path = configData.path;
+        }
         
         await this.addLibrary(config);
         this.saveConfig();

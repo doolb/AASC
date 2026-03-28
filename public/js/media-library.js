@@ -353,8 +353,11 @@ const MediaLibrary = {
                 <span class="library-name">${lib.name}</span>
                 ${lib.isDefault ? '<span class="library-default">默认</span>' : ''}
                 ${lib.readonly ? '<span class="library-readonly">只读</span>' : ''}
+                <button class="library-edit-btn" onclick="event.stopPropagation(); MediaLibrary.showEditLibraryDialog('${lib.id}')" title="编辑">⚙️</button>
             </div>
-        `).join('');
+        `).join('') + `
+            <button class="library-add-btn" onclick="MediaLibrary.showAddLibraryDialog()" title="添加媒体库">+ 添加</button>
+        `;
     },
     
     renderBreadcrumb() {
@@ -564,6 +567,258 @@ const MediaLibrary = {
             }
         } catch (err) {
             showToast('设置失败: ' + err.message, 'error');
+        }
+    },
+    
+    showAddLibraryDialog() {
+        const existingModal = document.getElementById('libraryModal');
+        if (existingModal) existingModal.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'libraryModal';
+        modal.className = 'library-modal';
+        modal.innerHTML = `
+            <div class="library-modal-content">
+                <div class="library-modal-header">
+                    <h3>添加媒体库</h3>
+                    <button class="modal-close" onclick="this.closest('.library-modal').remove()">×</button>
+                </div>
+                <div class="library-modal-body">
+                    <div class="form-group">
+                        <label>名称 <span class="required">*</span></label>
+                        <input type="text" id="libName" placeholder="输入媒体库名称">
+                    </div>
+                    <div class="form-group">
+                        <label>类型</label>
+                        <select id="libType" onchange="MediaLibrary.onTypeChange(this.value)">
+                            <option value="local">本地磁盘</option>
+                            <option value="http">HTTP远程</option>
+                            <option value="smb">SMB网络共享</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="libPathGroup">
+                        <label>路径</label>
+                        <input type="text" id="libPath" placeholder="例如: ./uploads 或 /data/media">
+                    </div>
+                    <div class="form-group http-only" style="display:none;">
+                        <label>URL</label>
+                        <input type="text" id="libUrl" placeholder="例如: http://192.168.1.100/media">
+                    </div>
+                    <div class="form-group http-only smb-only" style="display:none;">
+                        <label>用户名</label>
+                        <input type="text" id="libUsername" placeholder="用户名（可选）">
+                    </div>
+                    <div class="form-group http-only smb-only" style="display:none;">
+                        <label>密码</label>
+                        <input type="password" id="libPassword" placeholder="密码（可选）">
+                    </div>
+                    <div class="form-group smb-only" style="display:none;">
+                        <label>共享路径</label>
+                        <input type="text" id="libShare" placeholder="例如: \\\\192.168.1.100\\share">
+                    </div>
+                    <div class="form-group smb-only" style="display:none;">
+                        <label>域</label>
+                        <input type="text" id="libDomain" placeholder="域（可选）">
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="libReadonly">
+                            只读模式（禁止上传和删除）
+                        </label>
+                    </div>
+                </div>
+                <div class="library-modal-footer">
+                    <button class="btn-cancel" onclick="this.closest('.library-modal').remove()">取消</button>
+                    <button class="btn-save" onclick="MediaLibrary.addLibraryFromForm()">添加</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    },
+    
+    showEditLibraryDialog(id) {
+        const lib = this.libraries.find(l => l.id === id);
+        if (!lib) return;
+        
+        const existingModal = document.getElementById('libraryModal');
+        if (existingModal) existingModal.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'libraryModal';
+        modal.className = 'library-modal';
+        modal.dataset.libraryId = id;
+        modal.innerHTML = `
+            <div class="library-modal-content">
+                <div class="library-modal-header">
+                    <h3>编辑媒体库</h3>
+                    <button class="modal-close" onclick="this.closest('.library-modal').remove()">×</button>
+                </div>
+                <div class="library-modal-body">
+                    <div class="form-group">
+                        <label>名称 <span class="required">*</span></label>
+                        <input type="text" id="libName" value="${lib.name || ''}" placeholder="输入媒体库名称">
+                    </div>
+                    <div class="form-group">
+                        <label>类型</label>
+                        <select id="libType" disabled>
+                            <option value="local" ${lib.type === 'local' ? 'selected' : ''}>本地磁盘</option>
+                            <option value="http" ${lib.type === 'http' ? 'selected' : ''}>HTTP远程</option>
+                            <option value="smb" ${lib.type === 'smb' ? 'selected' : ''}>SMB网络共享</option>
+                        </select>
+                        <small style="color: rgba(255,255,255,0.5);">类型创建后不可修改</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="libReadonly" ${lib.readonly ? 'checked' : ''}>
+                            只读模式（禁止上传和删除）
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="libDefault" ${lib.isDefault ? 'checked' : ''}>
+                            设为默认媒体库
+                        </label>
+                    </div>
+                </div>
+                <div class="library-modal-footer">
+                    <button class="btn-delete" onclick="MediaLibrary.deleteLibrary('${id}')">删除</button>
+                    <button class="btn-cancel" onclick="this.closest('.library-modal').remove()">取消</button>
+                    <button class="btn-save" onclick="MediaLibrary.updateLibraryFromForm('${id}')">保存</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    },
+    
+    onTypeChange(type) {
+        document.querySelectorAll('.http-only').forEach(el => {
+            el.style.display = (type === 'http' || type === 'smb') ? 'block' : 'none';
+        });
+        document.querySelectorAll('.smb-only').forEach(el => {
+            el.style.display = type === 'smb' ? 'block' : 'none';
+        });
+        document.getElementById('libPathGroup').style.display = type === 'local' ? 'block' : 'none';
+    },
+    
+    async addLibraryFromForm() {
+        const name = document.getElementById('libName').value.trim();
+        const type = document.getElementById('libType').value;
+        
+        if (!name) {
+            showToast('请输入媒体库名称', 'error');
+            return;
+        }
+        
+        const config = { name, type };
+        
+        if (type === 'local') {
+            config.path = document.getElementById('libPath').value.trim() || './uploads';
+        } else if (type === 'http') {
+            config.url = document.getElementById('libUrl').value.trim();
+            config.username = document.getElementById('libUsername').value.trim();
+            config.password = document.getElementById('libPassword').value;
+            if (!config.url) {
+                showToast('请输入HTTP URL', 'error');
+                return;
+            }
+        } else if (type === 'smb') {
+            config.share = document.getElementById('libShare').value.trim();
+            config.username = document.getElementById('libUsername').value.trim();
+            config.password = document.getElementById('libPassword').value;
+            config.domain = document.getElementById('libDomain').value.trim();
+            if (!config.share) {
+                showToast('请输入SMB共享路径', 'error');
+                return;
+            }
+        }
+        
+        config.readonly = document.getElementById('libReadonly').checked;
+        
+        try {
+            showToast('正在添加媒体库...', 'loading');
+            
+            const res = await fetch('/api/media-libraries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            
+            const data = await res.json();
+            
+            if (data.status === 'success') {
+                showToast('媒体库添加成功', 'success');
+                document.getElementById('libraryModal').remove();
+                await this.loadLibraries();
+                this.render();
+            } else {
+                showToast('添加失败: ' + data.message, 'error');
+            }
+        } catch (err) {
+            showToast('添加失败: ' + err.message, 'error');
+        }
+    },
+    
+    async updateLibraryFromForm(id) {
+        const name = document.getElementById('libName').value.trim();
+        
+        if (!name) {
+            showToast('请输入媒体库名称', 'error');
+            return;
+        }
+        
+        const updates = {
+            name,
+            readonly: document.getElementById('libReadonly').checked,
+            isDefault: document.getElementById('libDefault').checked
+        };
+        
+        try {
+            const res = await fetch(`/api/media-libraries/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+            
+            const data = await res.json();
+            
+            if (data.status === 'success') {
+                showToast('媒体库已更新', 'success');
+                document.getElementById('libraryModal').remove();
+                await this.loadLibraries();
+                this.render();
+            } else {
+                showToast('更新失败: ' + data.message, 'error');
+            }
+        } catch (err) {
+            showToast('更新失败: ' + err.message, 'error');
+        }
+    },
+    
+    async deleteLibrary(id) {
+        if (!confirm('确定删除此媒体库？此操作不会删除实际文件。')) return;
+        
+        try {
+            const res = await fetch(`/api/media-libraries/${id}`, {
+                method: 'DELETE'
+            });
+            
+            const data = await res.json();
+            
+            if (data.status === 'success') {
+                showToast('媒体库已删除', 'success');
+                document.getElementById('libraryModal').remove();
+                
+                if (this.currentLibrary?.id === id) {
+                    this.currentLibrary = null;
+                }
+                
+                await this.loadLibraries();
+                this.render();
+            } else {
+                showToast('删除失败: ' + data.message, 'error');
+            }
+        } catch (err) {
+            showToast('删除失败: ' + err.message, 'error');
         }
     }
 };

@@ -118,7 +118,8 @@
 **实现**:
 ```
 调用 tts.generateTTS(text, voice, speed)
-返回音频URL: /uploads/temp_tts.wav?t={时间戳}
+生成文件保存到 uploads/tts/tts_{timestamp}_{random}.wav
+返回音频URL: /uploads/tts/tts_{timestamp}_{random}.wav
 ```
 
 ## 整点报时 API

@@ -111,13 +111,14 @@ const Chat = {
             return;
         }
         
-        messagesContainer.innerHTML = this.history.map(item => `
-            <div class="chat-message-group">
+        messagesContainer.innerHTML = this.history.map((item, index) => `
+            <div class="chat-message-group" data-index="${index}">
                 <div class="chat-message user">
                     <div class="chat-message-content">${this.escapeHtml(item.user)}</div>
                 </div>
                 <div class="chat-message assistant">
                     <div class="chat-message-content">${this.escapeHtml(item.assistant)}</div>
+                    <button class="chat-play-btn" onclick="Chat.playMessage(${index})" title="播放语音">🔊</button>
                 </div>
             </div>
         `).join('');
@@ -226,12 +227,45 @@ const Chat = {
                 streamingContent.removeAttribute('id');
             }
             streamingGroup.removeAttribute('id');
+            
+            const assistantMsg = streamingGroup.querySelector('.chat-message.assistant');
+            if (assistantMsg && data.success) {
+                const playBtn = document.createElement('button');
+                playBtn.className = 'chat-play-btn';
+                playBtn.textContent = '🔊';
+                playBtn.title = '播放语音';
+                playBtn.onclick = () => this.playMessage(this.history.length - 1);
+                assistantMsg.appendChild(playBtn);
+            }
         }
         
         if (data.success) {
             this.history = data.history;
         } else {
             window.showToast('聊天失败: ' + data.error, 'error');
+        }
+    },
+    
+    playMessage(index) {
+        const item = this.history[index];
+        if (!item) return;
+        
+        if (!window.currentDisplayId) {
+            window.showToast('请先选择显示端', 'error');
+            return;
+        }
+        
+        const text = `用户问：${item.user}。回答：${item.assistant}`;
+        
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'tts',
+                displayId: window.currentDisplayId,
+                action: 'play',
+                text: text
+            }));
+            window.showToast('正在播放...', 'success');
         }
     },
     

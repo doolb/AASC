@@ -1,3 +1,4 @@
+const path = require('path');
 const tts = require('./tts');
 
 let timeAnnounceConfig = {
@@ -102,12 +103,13 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
     console.log(`[整点报时] ${timeText}`);
     
     try {
-        await tts.generateTTS(timeText);
+        const audioPath = await tts.generateTTS(timeText);
+        const fileName = path.basename(audioPath);
         
         const announceData = {
             type: 'tts',
             action: 'playAudio',
-            audioUrl: '/uploads/temp_tts.wav?t=' + Date.now(),
+            audioUrl: `/uploads/${fileName}`,
             text: timeText
         };
         
@@ -117,10 +119,7 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
             
             for (let i = 0; i < repeatCount; i++) {
                 displayClients.forEach((displayData, displayId) => {
-                    sendToDisplay(displayId, {
-                        ...announceData,
-                        audioUrl: '/uploads/temp_tts.wav?t=' + Date.now() + '&r=' + i
-                    });
+                    sendToDisplay(displayId, announceData);
                 });
                 
                 if (i < repeatCount - 1) {

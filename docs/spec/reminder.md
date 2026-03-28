@@ -304,7 +304,7 @@
 {
     type: 'reminder',
     action: 'voice',
-    audioUrl: '/uploads/temp_tts.wav?t=123456&r=0',
+    audioUrl: '/uploads/tts/tts_1234567890_abc123.wav',
     text: '14:30 开会时间到了',
     repeatIndex: 1,
     totalRepeat: 3

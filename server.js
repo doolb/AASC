@@ -10,6 +10,7 @@ const tts = require('./core/tts');
 const timeAnnounce = require('./core/timeAnnounce');
 const chat = require('./core/chat');
 const reminder = require('./core/reminder');
+const { MediaLibraryManager } = require('./core/media-library');
 
 config.loadConfig();
 
@@ -32,6 +33,18 @@ tts.init(config.getTtsConfig());
 timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
 chat.init(config.get('chat', {}));
 reminder.init();
+
+const mediaLibraryManager = new MediaLibraryManager({
+    configPath: path.join(__dirname, 'config/media-libraries.json'),
+    getPort: () => PORT,
+    getLocalIP: getLocalIP
+});
+
+mediaLibraryManager.init().then(() => {
+    console.log('媒体库初始化完成');
+}).catch(err => {
+    console.error('媒体库初始化失败:', err.message);
+});
 
 function generateId() {
     return Math.random().toString(36).substring(2, 10);
@@ -221,9 +234,10 @@ app.post('/api/tts/generate', async (req, res) => {
         }
         
         const audioPath = await tts.generateTTS(text, voice, speed);
+        const fileName = path.basename(audioPath);
         res.json({ 
             status: 'success', 
-            audioUrl: `/uploads/temp_tts.wav?t=${Date.now()}`,
+            audioUrl: `/uploads/tts/${fileName}`,
             message: 'TTS生成成功'
         });
     } catch (err) {
@@ -497,6 +511,185 @@ app.post('/api/reminders/:id/test', async (req, res) => {
     }
 });
 
+app.get('/api/media-libraries', (req, res) => {
+    res.json({
+        status: 'success',
+        libraries: mediaLibraryManager.listLibraries(),
+        defaultLibraryId: mediaLibraryManager.getDefaultLibraryId()
+    });
+});
+
+app.post('/api/media-libraries', async (req, res) => {
+    try {
+        const { name, type, path: libPath, url, share, domain, username, password, readonly } = req.body;
+        
+        if (!name) {
+            return res.status(400).json({ status: 'error', message: '名称不能为空' });
+        }
+        
+        const config = await mediaLibraryManager.addLibraryFromConfig({
+            name,
+            type: type || 'local',
+            path: libPath,
+            url,
+            share,
+            domain,
+            username,
+            password,
+            readonly: readonly || false
+        });
+        
+        res.json({ status: 'success', library: config });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.put('/api/media-libraries/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, readonly, isDefault } = req.body;
+        
+        const updates = {};
+        if (name !== undefined) updates.name = name;
+        if (readonly !== undefined) updates.readonly = readonly;
+        
+        const config = mediaLibraryManager.updateLibraryConfig(id, updates);
+        
+        if (isDefault) {
+            mediaLibraryManager.setDefault(id);
+        }
+        
+        res.json({ status: 'success', library: config });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.delete('/api/media-libraries/:id', async (req, res) => {
+    try {
+        await mediaLibraryManager.removeLibrary(req.params.id);
+        mediaLibraryManager.saveConfig();
+        res.json({ status: 'success', message: '媒体库已删除' });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.get('/api/media-libraries/:id/list', async (req, res) => {
+    try {
+        const { path: dirPath = '/' } = req.query;
+        const items = await mediaLibraryManager.list(req.params.id, dirPath);
+        res.json({ status: 'success', items });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.post('/api/media-libraries/:id/upload', async (req, res) => {
+    try {
+        const multipart = await parseMultipart(req);
+        const file = multipart.files.file || multipart.files.files;
+        const dirPath = multipart.fields.path || '/';
+        
+        if (!file) {
+            return res.status(400).json({ status: 'error', message: '没有上传文件' });
+        }
+        
+        const result = await mediaLibraryManager.upload(req.params.id, dirPath, file);
+        res.json({ status: 'success', file: result });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.delete('/api/media-libraries/:id/file', async (req, res) => {
+    try {
+        const { path: filePath } = req.query;
+        
+        if (!filePath) {
+            return res.status(400).json({ status: 'error', message: '路径不能为空' });
+        }
+        
+        await mediaLibraryManager.delete(req.params.id, filePath);
+        res.json({ status: 'success', message: '文件已删除' });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.post('/api/media-libraries/:id/folder', async (req, res) => {
+    try {
+        const { path: dirPath, name } = req.body;
+        
+        if (!name) {
+            return res.status(400).json({ status: 'error', message: '文件夹名称不能为空' });
+        }
+        
+        const result = await mediaLibraryManager.createFolder(req.params.id, dirPath || '/', name);
+        res.json({ status: 'success', folder: result });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.delete('/api/media-libraries/:id/folder', async (req, res) => {
+    try {
+        const { path: folderPath } = req.query;
+        
+        if (!folderPath) {
+            return res.status(400).json({ status: 'error', message: '路径不能为空' });
+        }
+        
+        await mediaLibraryManager.deleteFolder(req.params.id, folderPath);
+        res.json({ status: 'success', message: '文件夹已删除' });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.post('/api/media-libraries/:id/set-default', (req, res) => {
+    try {
+        mediaLibraryManager.setDefault(req.params.id);
+        res.json({ status: 'success', message: '已设为默认媒体库' });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
+app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
+    try {
+        const filePath = decodeURIComponent(req.params[0]);
+        
+        if (!filePath) {
+            return res.status(400).json({ status: 'error', message: '文件路径不能为空' });
+        }
+        
+        const stream = await mediaLibraryManager.getFileStream(req.params.id, filePath);
+        
+        const ext = filePath.toLowerCase().split('.').pop();
+        const mimeTypes = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'mp4': 'video/mp4',
+            'webm': 'video/webm',
+            'mov': 'video/quicktime',
+            'avi': 'video/x-msvideo',
+            'mkv': 'video/x-matroska'
+        };
+        
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        
+        stream.pipe(res);
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
     
@@ -716,10 +909,11 @@ wss.on('connection', (ws, req) => {
                                 onSentence: async (sentence, fullMessage) => {
                                     try {
                                         const audioPath = await tts.generateTTS(sentence);
+                                        const fileName = path.basename(audioPath);
                                         sendToDisplay(displayId, {
                                             type: 'tts',
                                             action: 'playAudio',
-                                            audioUrl: `/uploads/temp_tts.wav?t=${Date.now()}`,
+                                            audioUrl: `/uploads/${fileName}`,
                                             text: sentence
                                         });
                                     } catch (ttsErr) {
@@ -803,4 +997,8 @@ server.listen(PORT, '0.0.0.0', () => {
     
     timeAnnounce.start(displayClients, sendToDisplay);
     reminder.start(displayClients, sendToDisplay);
+    
+    setInterval(() => {
+        tts.cleanupOldTtsFiles();
+    }, 5 * 60 * 1000);
 });

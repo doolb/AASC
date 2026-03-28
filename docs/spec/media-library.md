@@ -73,7 +73,7 @@
             递归删除目录
     
     getPublicUrl(filePath):
-        返回 "http://{本地IP}:{端口}/uploads/{filePath}"
+        返回 "http://{本地IP}:{端口}/api/media-libraries/{id}/proxy/{filePath}"
     
     _resolvePath(relativePath):
         resolved = path.join(basePath, relativePath)
@@ -379,6 +379,39 @@ GET /api/media-libraries/:id/proxy/*
     setupDragDrop():
         监听 dragover 事件（显示拖拽区域）
         监听 drop 事件（上传文件）
+    
+    showAddLibraryDialog():
+        创建模态框DOM
+        显示添加媒体库表单
+        支持选择类型（本地/HTTP/SMB）
+        根据类型显示不同字段
+    
+    showEditLibraryDialog(id):
+        获取媒体库配置
+        创建模态框DOM
+        显示编辑表单（名称、只读、默认）
+        类型不可修改
+    
+    onTypeChange(type):
+        本地类型：显示路径字段
+        HTTP类型：显示URL、用户名、密码字段
+        SMB类型：显示共享路径、域、用户名、密码字段
+    
+    addLibraryFromForm():
+        收集表单数据
+        验证必填字段
+        POST /api/media-libraries
+        成功后刷新媒体库列表
+    
+    updateLibraryFromForm(id):
+        收集表单数据
+        PUT /api/media-libraries/{id}
+        成功后刷新媒体库列表
+    
+    deleteLibrary(id):
+        确认对话框
+        DELETE /api/media-libraries/{id}
+        成功后刷新媒体库列表
 ```
 
 ## 配置文件结构

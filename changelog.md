@@ -12,6 +12,61 @@
 
 ## 历史记录
 
+### 2026-03-29 修复 TTS 语音播报 404 错误
+
+**已修复问题：**
+- 显示端语音播报播不出来
+- 原因：TTS 文件路径改为 `uploads/tts/`，但 API 返回的 URL 仍是 `/uploads/xxx`
+- 修复：API 返回正确的 URL `/uploads/tts/${fileName}`
+
+**改动文件：**
+- server.js: POST /api/tts/generate 返回正确的 audioUrl
+
+### 2026-03-29 修复本地媒体库播放 404 错误
+
+**已修复问题：**
+- 新增的本地媒体库播放报错 404 Not Found
+- 原因：本地媒体库 URL 错误地使用 `/uploads/` 路径，但服务器只映射了 `./uploads` 目录
+- 修复：所有本地媒体库统一使用代理 API `/api/media-libraries/{id}/proxy/`
+
+**改动文件：**
+- core/media-library.js: LocalProvider.getPublicUrl 使用代理 API
+- docs/spec/media-library.md: 更新伪代码描述
+
+### 2026-03-29 AI 聊天助手播放功能
+
+**已完成功能：**
+- AI 聊天助手每条消息添加播放按钮
+- 点击播放按钮通过 TTS 播放聊天内容
+
+**改动文件：**
+- public/js/chat.js: 添加 playMessage 方法，renderHistory 添加播放按钮
+- public/css/chat.css: 添加播放按钮样式
+- docs/spec/websocket.md: 添加 Chat 模块伪代码描述
+
+### 2026-03-29 TTS 文件存储路径调整
+
+**已完成功能：**
+- TTS 生成的音频文件保存到 `uploads/tts/` 文件夹
+
+**改动文件：**
+- core/tts.js: 修改 TTS 文件保存路径
+
+### 2026-03-29 控制端媒体库管理
+
+**已完成功能：**
+- 控制端添加媒体库 UI（添加/编辑/删除媒体库）
+- 支持添加本地磁盘、HTTP远程、SMB网络共享三种类型媒体库
+- 编辑媒体库：修改名称、只读模式、设为默认
+- 删除媒体库
+
+**改动文件：**
+- public/js/media-library.js: 添加 showAddLibraryDialog, showEditLibraryDialog, onTypeChange, addLibraryFromForm, updateLibraryFromForm, deleteLibrary 方法
+- public/css/media-library.css: 添加模态框和表单样式
+- core/media-library.js: addLibraryFromConfig 支持 HTTP 和 SMB 类型配置
+- server.js: POST /api/media-libraries 支持更多参数
+- docs/spec/media-library.md: 更新伪代码描述
+
 ### 提醒功能
 - 提醒类型：临时提醒、每天提醒
 - 提醒方式：语音播报、弹窗提示

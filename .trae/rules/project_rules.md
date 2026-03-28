@@ -7,12 +7,12 @@
 | docs/design.md | 项目设计文档索引 |
 | docs/design/*.md | 每个功能模块的设计文档 |
 | docs/spec.md | 项目实现文档索引 |
-| docs/spec/*.md | 每个功能模块的实现文档，使用伪代码描述 |
+| docs/spec/*.md | 每个功能模块的实现文档，使用伪代码描述，和实际代码同步更新 |
 | docs/todo.md | 项目未完成任务列表 |
 | docs/usage.md | 项目使用说明 |
 | docs/rules.md | 代码规范、文件结构、命名约定 |
 | docs/ref.md | 外部资源参考（API文档、库文档等） |
-| changelog.md | 项目变更日志（工具生成） |
+| changelog.md | 项目变更日志 （新需求、修复问题、优化性能等） |
 | readme.md | 项目介绍、安装说明、使用说明 |
 
 ## 代码规范
@@ -25,10 +25,9 @@
 
 ## 注意事项
 
-1. 每次对话完成后一定要更新 `todo.md` 和对应的 `design` 文档
-2. 已完成的功能从 `todo.md` 删除，记录到 `docs/design/*.md`，不需要记录到 `todo.md` 里
-3. 更新代码前，先更新 `docs/spec/*.md` 中的实现思路
-4. `changelog.md` 通过工具根据desgin文档内的时间自动更新
+1. 每次对话完成后一定要更新 `todo.md` 和对应的 `design` 文档 以及 `spec` 文档 以及 `changelog.md` 文档
+2. 已完成的功能从 `todo.md` 删除，记录到 `changelog.md`，不需要记录到 `todo.md` 里
+3. 更新代码前，先更新 `docs/spec/*.md` 中的伪代码描述，如果没有对应的文件，就创建一个
 
 ## 任务记录格式
 
@@ -42,6 +41,6 @@
 
 ## 对话注意事项
 
-- 从 `docs/spec/*.md` 查看项目实现文档
-- 一定要将用户问题记录到 `docs/design.md` 和 `docs/spec/*.md` 对应模块
+- 可以从 `docs/spec/*.md` 查看项目实现文档
+- 一定要将变更记录到 `changelog.md` 中
 - 已完成任务添加 ✅已完成 标记，记录改动文件，然后从 `todo.md` 删除该任务
