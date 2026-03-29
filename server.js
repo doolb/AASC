@@ -70,6 +70,7 @@ function startServer() {
         timeAnnounce.start(displayClients, sendToDisplay);
         reminder.start(displayClients, sendToDisplay);
         voiceCommand.setClients(displayClients, sendToDisplay, broadcastToControls);
+        voiceCommand.setMediaLibrary(mediaLibraryManager);
     });
 }
 
@@ -567,6 +568,20 @@ app.post('/api/media-libraries', async (req, res) => {
             password,
             readonly: readonly || false
         });
+        
+        if (type === 'local' || !type) {
+            const library = mediaLibraryManager.getLibrary(config.id);
+            if (library && library.provider && library.provider.getRoutePrefix && library.provider.getBasePath) {
+                const routePrefix = library.provider.getRoutePrefix();
+                const basePath = library.provider.getBasePath();
+                const isUploadsDir = library.provider.isUploadsDir;
+                
+                if (!isUploadsDir) {
+                    app.use(routePrefix, express.static(basePath));
+                    console.log(`[媒体库] 动态添加静态路由: ${routePrefix} -> ${basePath}`);
+                }
+            }
+        }
         
         res.json({ status: 'success', library: config });
     } catch (err) {

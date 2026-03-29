@@ -1,9 +1,17 @@
 const DisplayList = {
     list: [],
     
+    getDisplays() {
+        return this.list || [];
+    },
+    
     render() {
         this.renderToContainer('displayList');
         this.renderToContainer('mediaDisplayList');
+        
+        if (window.FloatingControl) {
+            window.FloatingControl.updateDisplayList();
+        }
         
         if (!window.currentDisplayId && this.list.length > 0) {
             this.select(this.list[0].id);
@@ -72,6 +80,10 @@ const DisplayList = {
     select(id) {
         window.currentDisplayId = id;
         this.render();
+        
+        if (window.FloatingControl) {
+            window.FloatingControl.setSelectedDisplay(id);
+        }
         
         const display = this.list.find(d => d.id === id);
         if (display) {

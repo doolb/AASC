@@ -104,6 +104,10 @@ const App = {
         if (window.Search) {
             window.Search.init();
         }
+        
+        if (window.FloatingControl) {
+            window.FloatingControl.init();
+        }
     }
 };
 

@@ -277,8 +277,14 @@ function getCommands() {
 
 function setCommands(commands) {
     console.log('[Chat] setCommands 收到:', JSON.stringify(commands));
-    chatCommands = { ...chatCommands, ...commands };
-    console.log('[Chat] setCommands 合并后:', JSON.stringify(chatCommands));
+    if (commands && typeof commands === 'object') {
+        if (commands.commands) {
+            chatCommands = { commands: { ...commands.commands } };
+        } else {
+            chatCommands = { commands: { ...commands } };
+        }
+    }
+    console.log('[Chat] setCommands 处理后:', JSON.stringify(chatCommands));
     saveCommands();
     return getCommands();
 }

@@ -2,7 +2,40 @@
 
 ## [Unreleased]
 
+### Bug 修复
+- ✅ 修复 DisplayList.getDisplays 方法未定义导致的 WebSocket 消息解析失败
+  - 问题：floating-control.js 调用了不存在的 getDisplays 方法
+  - 修复：在 display-list.js 中添加 getDisplays 方法
+  - 改动文件：public/js/display-list.js
+- ✅ 修复自定义指令没有保存到文件的问题
+  - 问题：setCommands 函数使用展开运算符错误合并数据结构
+  - 修复：正确处理 commands 数据结构
+  - 改动文件：core/chat.js
+- ✅ 修复新增本地媒体库后无法访问文件的问题
+  - 问题：静态路由只在服务器启动时设置，新增媒体库时未动态添加
+  - 修复：在添加媒体库 API 中动态注册静态路由
+  - 改动文件：server.js
+
 ### 新增
+- 显示端控制页面重构
+  - ✅ 浮动控制面板：固定在页面右下角，可在所有页面访问
+  - ✅ 快速播放命令：输入文件名直接播放
+  - ✅ 显示端选择、播放控制、音量控制、画面填充
+  - 改动文件：public/upload.html, public/css/upload.css, public/js/floating-control.js
+- 播放命令功能
+  - ✅ 指令：`播放{文件名}` 搜索并播放媒体文件
+  - ✅ 支持搜索所有媒体库
+  - ✅ 多个匹配时列出选项让用户选择
+  - 改动文件：core/voiceCommand.js, server.js
+- 通用时间解析功能
+  - ✅ 支持"今天"、"明天"、"后天"等相对日期
+  - ✅ 支持"X秒/分钟/小时/天/周/月/年前/后"等相对时间
+  - ✅ 支持"X月X日"、"X年X月X日"等绝对日期
+  - ✅ 支持中文数字和阿拉伯数字混合
+  - 改动文件：core/timeParser.js, docs/spec/timeParser.md
+- 天气语音播报
+  - ✅ 天气查询结果自动生成 TTS 语音播报
+  - 改动文件：core/voiceCommand.js
 - 聊天系统重构
   - ✅ 群聊/私聊模式支持
   - ✅ 系统指令功能（系统帮助、私聊、退出私聊）
@@ -21,14 +54,21 @@
 - 搜索功能：`搜索{关键词}`
 - 取消操作：`拒绝`、`取消`
 - 指定助手对话：`{助手名字}{消息}`
+- 播放命令：`播放{文件名}`
 
 ### 改动文件
-- core/chat.js: 新增会话状态管理、自定义指令、重要记录功能
-- core/voiceCommand.js: 新增 handleSystemCommand、executeCommands 函数
-- public/js/chat.js: 重写前端聊天模块，支持群聊/私聊模式、控制端播放
-- public/js/websocket.js: 新增消息类型处理
-- public/css/chat.css: 新增模式指示器、控制端播放选项样式
-- server.js: 新增聊天消息处理、会话管理、指令执行等 API
+- core/timeParser.js: 新增通用时间解析模块
+- core/voiceCommand.js: 新增播放命令处理、天气语音播报
+- public/upload.html: 新增浮动控制面板
+- public/css/upload.css: 新增浮动面板样式
+- public/js/floating-control.js: 新增浮动控制面板模块
+- public/js/display-list.js: 同步浮动控制面板状态
+- public/js/websocket.js: 同步浮动控制面板状态
+- public/js/main.js: 初始化浮动控制面板
+- server.js: 设置媒体库管理器到语音命令模块
+- docs/design/display-control-refactor.md: 新增设计文档
+- docs/spec/timeParser.md: 新增时间解析实现文档
+- docs/task/2026-03-29_显示端控制页面重构.md: 新增任务文档
 
 ### 修复
 - ✅ 已完成 [2026-03-29][2026-03-29] 修复自定义系统指令无法正确识别的问题

@@ -50,15 +50,27 @@ const WebSocketManager = {
                     window.Controls.setFitMode(data.state.fit);
                 }
                 
+                if (data.state.fit !== undefined && window.FloatingControl) {
+                    window.FloatingControl.setFitMode(data.state.fit);
+                }
+                
                 if (data.state.volume !== undefined) {
                     const volumeSlider = document.getElementById('volumeSlider');
                     const volumeValue = document.getElementById('volumeValue');
                     if (volumeSlider) volumeSlider.value = data.state.volume;
                     if (volumeValue) volumeValue.textContent = data.state.volume;
+                    
+                    if (window.FloatingControl) {
+                        window.FloatingControl.updateVolume(data.state.volume);
+                    }
                 }
                 
                 if (data.state.isPlaying !== undefined && window.Controls) {
                     window.Controls.setPlayingState(data.state.isPlaying);
+                }
+                
+                if (data.state.isPlaying !== undefined && window.FloatingControl) {
+                    window.FloatingControl.setPlayingState(data.state.isPlaying);
                 }
                 
                 if (data.state.currentMediaUrl && window.Crop) {

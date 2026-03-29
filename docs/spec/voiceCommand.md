@@ -313,10 +313,100 @@ processVoiceCommand(text, displayId):
 
 ```
 遍历 actions 数组:
-    ├─ "今天天气" -> handleSearchCommand('搜索今天天气')
+    ├─ "今天天气" -> handleWeatherCommand('', displayId)
     ├─ "今日提醒" -> 查询今日提醒并播报
     ├─ 以"搜索"开头 -> handleSearchCommand(action)
     ├─ 包含"提醒" -> handleReminderCommand(action)
     ├─ 包含"报时" -> handleTimeAnnounceCommand(action)
+    ├─ 包含"播放" -> handlePlayCommand(action)
     └─ 其他 -> callbacks.onChat(action)
+```
+
+## 播放命令功能
+
+### handlePlayCommand(text, displayId)
+
+```
+处理 "播放{文件名}" 指令:
+    提取文件名关键词
+    ↓
+调用 searchMediaFiles(keyword) 搜索所有媒体库
+    ↓
+匹配结果:
+    ├─ 无匹配 -> 语音提示 "没有找到文件"
+    ├─ 单个匹配 -> 直接播放
+    └─ 多个匹配 -> 列出选项让用户选择
+        └─ 创建待确认记录 (30秒过期)
+```
+
+### searchMediaFiles(keyword)
+
+```
+遍历所有媒体库:
+    对于每个媒体库:
+        递归搜索所有文件
+        匹配文件名包含关键词的文件
+    返回匹配列表
+```
+
+### handlePlaySelection(confirmationId, selection, displayId)
+
+```
+处理用户选择:
+    获取待确认记录
+    解析选择序号
+    发送媒体到显示端播放
+```
+
+### 选择指令格式
+
+```
+"第一个" / "第1个" / "1" -> 选择第1个
+"第二个" / "第2个" / "2" -> 选择第2个
+...
+"第十个" / "第10个" / "10" -> 选择第10个
+```
+
+## 时间解析功能
+
+### parseTimeExpression(text)
+
+使用 timeParser 模块解析时间表达式，支持：
+
+| 类型 | 示例 | 说明 |
+|------|------|------|
+| 相对日期 | 今天、明天、后天 | 相对于当前日期 |
+| 相对时间 | 3秒后、5分钟后、2小时后 | 相对于当前时间 |
+| 绝对时间 | 3点、15点30分 | 指定时间 |
+
+详见 [timeParser.md](timeParser.md)
+
+## 报时功能
+
+### handleTimeAnnounceCommand(text, displayId)
+
+```
+处理报时相关指令:
+    ├─ 包含"关闭报时" -> 关闭报时功能，播报提示
+    ├─ 包含"开启报时" -> 开启报时功能，播报提示
+    └─ 其他（报时/现在几点） -> 播报当前时间
+```
+
+### 报时指令格式
+
+| 指令 | 说明 |
+|------|------|
+| 报时 | 播报当前时间 |
+| 现在几点 | 播报当前时间 |
+| 开启报时 | 开启整点报时功能 |
+| 关闭报时 | 关闭整点报时功能 |
+
+### 报时文本生成
+
+使用 timeAnnounce 模块生成报时文本：
+
+```
+timeAnnounce.generateTimeText():
+    获取当前时间
+    生成格式: "现在是{年}年{月}月{日}日{星期}，{上午/下午/晚上}{时}点{分}分"
 ```

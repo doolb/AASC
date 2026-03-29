@@ -3,6 +3,7 @@ const tts = require('./tts');
 const reminder = require('./reminder');
 const timeAnnounce = require('./timeAnnounce');
 const chat = require('./chat');
+const timeParser = require('./timeParser');
 
 const SEARCH_HISTORY_FILE = path.join(__dirname, '../config/search-history.json');
 
@@ -11,6 +12,7 @@ let pendingConfirmations = new Map();
 let displayClients = null;
 let sendToDisplay = null;
 let broadcastToControls = null;
+let mediaLibraryManager = null;
 
 let assistantConfig = {
     defaultName: '小爱',
@@ -61,6 +63,10 @@ function setClients(clients, sendFunc, broadcastFunc) {
     displayClients = clients;
     sendToDisplay = sendFunc;
     broadcastToControls = broadcastFunc;
+}
+
+function setMediaLibrary(manager) {
+    mediaLibraryManager = manager;
 }
 
 function parseTimeExpression(text) {
@@ -269,6 +275,190 @@ async function handleTimeAnnounceCommand(text, displayId) {
             console.error('[语音命令] 报时语音生成失败:', err.message);
         }
     }
+}
+
+async function handlePlayCommand(text, displayId) {
+    let fileName = text.replace(/播放/, '').trim();
+    
+    if (!fileName) {
+        const responseText = '请问您要播放什么文件？';
+        if (displayId && sendToDisplay) {
+            try {
+                const audioPath = await tts.generateTTS(responseText);
+                const fileName = path.basename(audioPath);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: responseText,
+                    audioUrl: `/uploads/tts/${fileName}`
+                });
+            } catch (err) {
+                console.error('[语音命令] 播放语音生成失败:', err.message);
+            }
+        }
+        return;
+    }
+    
+    console.log(`[播放命令] 搜索文件: ${fileName}`);
+    
+    const matches = await searchMediaFiles(fileName);
+    
+    if (matches.length === 0) {
+        const responseText = `没有找到名为"${fileName}"的文件`;
+        if (displayId && sendToDisplay) {
+            try {
+                const audioPath = await tts.generateTTS(responseText);
+                const audioFileName = path.basename(audioPath);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: responseText,
+                    audioUrl: `/uploads/tts/${audioFileName}`
+                });
+            } catch (err) {
+                console.error('[语音命令] 播放语音生成失败:', err.message);
+            }
+        }
+        return;
+    }
+    
+    if (matches.length === 1) {
+        const file = matches[0];
+        const responseText = `正在播放${file.name}`;
+        
+        if (displayId && sendToDisplay) {
+            try {
+                const audioPath = await tts.generateTTS(responseText);
+                const audioFileName = path.basename(audioPath);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: responseText,
+                    audioUrl: `/uploads/tts/${audioFileName}`
+                });
+                
+                sendToDisplay(displayId, {
+                    type: 'media',
+                    url: file.url,
+                    mediaType: file.mediaType,
+                    name: file.name
+                });
+            } catch (err) {
+                console.error('[语音命令] 播放语音生成失败:', err.message);
+            }
+        }
+        return;
+    }
+    
+    const fileList = matches.slice(0, 5).map((f, i) => `${i + 1}. ${f.name}`).join('，');
+    const responseText = `找到${matches.length}个匹配的文件：${fileList}。请说第几个来选择`;
+    
+    const confirmationId = `play_${Date.now()}`;
+    pendingConfirmations.set(confirmationId, {
+        type: 'play',
+        displayId: displayId,
+        data: { matches: matches },
+        expiresAt: Date.now() + 30000
+    });
+    
+    if (displayId && sendToDisplay) {
+        try {
+            const audioPath = await tts.generateTTS(responseText);
+            const audioFileName = path.basename(audioPath);
+            sendToDisplay(displayId, {
+                type: 'voiceCommand',
+                action: 'playChoices',
+                confirmationId: confirmationId,
+                matches: matches.slice(0, 5),
+                text: responseText,
+                audioUrl: `/uploads/tts/${audioFileName}`
+            });
+        } catch (err) {
+            console.error('[语音命令] 播放语音生成失败:', err.message);
+        }
+    }
+}
+
+async function searchMediaFiles(keyword) {
+    const matches = [];
+    const keywordLower = keyword.toLowerCase();
+    
+    if (!mediaLibraryManager) {
+        console.warn('[播放命令] 媒体库管理器未初始化');
+        return matches;
+    }
+    
+    const libraries = mediaLibraryManager.listLibraries();
+    
+    for (const lib of libraries) {
+        try {
+            const items = await searchInLibrary(lib.id, keywordLower);
+            matches.push(...items);
+        } catch (err) {
+            console.error(`[播放命令] 搜索媒体库 ${lib.id} 失败:`, err.message);
+        }
+    }
+    
+    return matches;
+}
+
+async function searchInLibrary(libraryId, keyword) {
+    const matches = [];
+    
+    async function searchDir(dirPath) {
+        try {
+            const items = await mediaLibraryManager.list(libraryId, dirPath);
+            
+            for (const item of items) {
+                if (item.type === 'folder') {
+                    await searchDir(item.path);
+                } else if (item.type === 'file') {
+                    const nameLower = item.name.toLowerCase();
+                    if (nameLower.includes(keyword)) {
+                        matches.push({
+                            name: item.name,
+                            path: item.path,
+                            url: item.url,
+                            mediaType: item.mediaType,
+                            libraryId: libraryId
+                        });
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(`[播放命令] 搜索目录 ${dirPath} 失败:`, err.message);
+        }
+    }
+    
+    await searchDir('/');
+    return matches;
+}
+
+function handlePlaySelection(confirmationId, selection, displayId) {
+    const confirmation = pendingConfirmations.get(confirmationId);
+    if (!confirmation || confirmation.type !== 'play') {
+        return false;
+    }
+    
+    pendingConfirmations.delete(confirmationId);
+    
+    const index = parseInt(selection) - 1;
+    if (index < 0 || index >= confirmation.data.matches.length) {
+        return false;
+    }
+    
+    const file = confirmation.data.matches[index];
+    
+    if (displayId && sendToDisplay) {
+        sendToDisplay(displayId, {
+            type: 'media',
+            url: file.url,
+            mediaType: file.mediaType,
+            name: file.name
+        });
+    }
+    
+    return true;
 }
 
 async function handleWeatherCommand(text, displayId) {
@@ -585,6 +775,37 @@ async function processVoiceCommand(text, displayId) {
         return;
     }
     
+    if (trimmedText.includes('播放')) {
+        await handlePlayCommand(trimmedText, displayId);
+        return;
+    }
+    
+    const selectionMatch = trimmedText.match(/^第?([一二三四五六七八九十\d]+)[个条]?$/);
+    if (selectionMatch) {
+        const selection = timeParser.chineseToNumber(selectionMatch[1]) || parseInt(selectionMatch[1]);
+        for (const [id, confirmation] of pendingConfirmations) {
+            if (confirmation.type === 'play' && confirmation.displayId === displayId) {
+                const handled = handlePlaySelection(id, selection, displayId);
+                if (handled) {
+                    const responseText = '好的';
+                    try {
+                        const audioPath = await tts.generateTTS(responseText);
+                        const fileName = path.basename(audioPath);
+                        sendToDisplay(displayId, {
+                            type: 'voiceCommand',
+                            action: 'response',
+                            text: responseText,
+                            audioUrl: `/uploads/tts/${fileName}`
+                        });
+                    } catch (err) {
+                        console.error('[语音命令] 选择语音生成失败:', err.message);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+    
     const assistant = findAssistant(assistantConfig.defaultName);
     if (trimmedText.includes(assistant.name)) {
         const message = trimmedText.replace(assistant.name, '').trim();
@@ -693,11 +914,14 @@ async function executeCommands(actions, displayId, callbacks) {
 module.exports = {
     init,
     setClients,
+    setMediaLibrary,
     processVoiceCommand,
     handleReminderCommand,
     handleTimeAnnounceCommand,
     handleWeatherCommand,
     handleSearchCommand,
+    handlePlayCommand,
+    handlePlaySelection,
     executeReminderConfirmation,
     handleCancelCommand,
     getSearchHistory,

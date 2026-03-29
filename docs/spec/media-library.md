@@ -268,6 +268,9 @@ POST /api/media-libraries
         生成唯一ID
         构建配置对象
         调用 mediaLibraryManager.addLibrary(config)
+        如果是本地媒体库:
+            获取 provider 的路由前缀和基础路径
+            动态注册静态路由: app.use(routePrefix, express.static(basePath))
         保存配置
     返回: { status: "success", library: config }
 

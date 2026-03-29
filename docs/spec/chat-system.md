@@ -212,7 +212,10 @@ getTemplateByName(name):
     用于私聊时匹配系统提示词
 
 setCommands(commands):
-    设置 chatCommands.commands = commands
+    如果 commands 包含 commands 字段:
+        设置 chatCommands.commands = commands.commands
+    否则:
+        设置 chatCommands.commands = commands
     调用 saveCommands()
 
 getCommands():

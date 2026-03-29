@@ -434,6 +434,51 @@
     <script src="js/reminder.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/search.js"></script>
+    <script src="js/floating-control.js"></script>
     <script src="js/main.js"></script>
+    
+    <div class="floating-control" id="floatingControl">
+        <div class="floating-control-toggle" id="floatingControlToggle" onclick="FloatingControl.toggle()">
+            <span class="toggle-icon">⚙️</span>
+        </div>
+        <div class="floating-control-panel" id="floatingControlPanel">
+            <div class="floating-control-header">
+                <span>快捷控制</span>
+                <button class="floating-close" onclick="FloatingControl.toggle()">×</button>
+            </div>
+            <div class="floating-control-body">
+                <div class="floating-control-item">
+                    <label>显示端</label>
+                    <select id="floatingDisplaySelect" onchange="FloatingControl.selectDisplay(this.value)">
+                        <option value="">选择显示端</option>
+                    </select>
+                </div>
+                <div class="floating-control-item">
+                    <label>播放控制</label>
+                    <div class="floating-control-buttons">
+                        <button class="floating-btn" id="floatingPlayPauseBtn" onclick="FloatingControl.togglePlay()">播放</button>
+                    </div>
+                </div>
+                <div class="floating-control-item">
+                    <label>音量: <span id="floatingVolumeValue">100</span>%</label>
+                    <input type="range" id="floatingVolumeSlider" min="0" max="100" value="100" oninput="FloatingControl.setVolume(this.value)">
+                </div>
+                <div class="floating-control-item">
+                    <label>画面填充</label>
+                    <div class="floating-control-buttons">
+                        <button class="floating-btn" data-fit="contain" onclick="FloatingControl.setFit('contain')">适应</button>
+                        <button class="floating-btn" data-fit="crop" onclick="FloatingControl.setFit('crop')">裁剪</button>
+                    </div>
+                </div>
+                <div class="floating-control-item">
+                    <label>快速播放</label>
+                    <div class="floating-play-input">
+                        <input type="text" id="floatingPlayInput" placeholder="输入文件名" onkeypress="FloatingControl.onPlayInputKeypress(event)">
+                        <button class="floating-btn" onclick="FloatingControl.playByName()">播放</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
