@@ -479,18 +479,8 @@ const Chat = {
     },
     
     handleSystemCommand(text) {
-        if (text === '系统帮助') {
-            const helpText = `系统指令帮助：
-- 系统帮助：显示此帮助
-- 私聊{助手名字}：进入私聊模式
-- 退出私聊：退出私聊模式
-- 提醒{时间} {内容}：设置提醒
-- 报时/现在几点：播报当前时间
-- 开启/关闭报时：控制报时功能
-- 搜索{关键词}：搜索信息
-- 拒绝/取消：取消待确认操作
-- 系统记录{内容}：保存重要记录`;
-            alert(helpText);
+        if (text === '系统') {
+            this.showHelp();
             return true;
         }
         
@@ -522,18 +512,29 @@ const Chat = {
         for (const [keyword, actions] of Object.entries(this.commands.commands || {})) {
             if (text.includes(keyword)) {
                 this.addSystemMessage(`执行指令组合: ${keyword}`);
-                if (window.WebSocketManager && window.WebSocketManager.ws && 
-                    window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
-                    window.WebSocketManager.ws.send(JSON.stringify({
-                        type: 'executeCommands',
-                        keyword: keyword,
-                        actions: actions,
-                        displayId: window.currentDisplayId,
-                        playOnControl: this.session.playOnControl
-                    }));
-                }
+                this.executeCommands(actions);
                 return true;
             }
+        }
+        
+        if (text.includes('提醒')) {
+            this.handleReminderCommand(text);
+            return true;
+        }
+        
+        if (text.includes('报时') || text.includes('现在几点')) {
+            this.handleTimeAnnounceCommand(text);
+            return true;
+        }
+        
+        if (text.includes('天气')) {
+            this.handleWeatherCommand(text);
+            return true;
+        }
+        
+        if (text.includes('搜索')) {
+            this.handleSearchCommand(text);
+            return true;
         }
         
         return false;
@@ -759,6 +760,20 @@ const Chat = {
         }
     },
     
+    showHelp() {
+        const modal = document.getElementById('chatHelpModal');
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+    },
+    
+    hideHelp() {
+        const modal = document.getElementById('chatHelpModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    },
+    
     showTemplates() {
         const modal = document.getElementById('chatTemplateModal');
         if (modal) {
@@ -870,10 +885,48 @@ const Chat = {
     processVoiceCommand(text) {
         if (!text) return;
         
+        if (text === '系统') {
+            this.showHelp();
+            return;
+        }
+        
+        if (text.startsWith('私聊')) {
+            const name = text.substring(2).trim();
+            if (name) {
+                const template = this.templates.find(t => t.name === name);
+                if (template) {
+                    this.setMode('private', name);
+                    this.addSystemMessage(`已进入私聊模式，正在与 ${name} 对话`);
+                    return;
+                }
+            }
+            if (this.templates.length > 0) {
+                this.setMode('private', this.templates[0].name);
+                this.addSystemMessage(`已进入私聊模式，正在与 ${this.templates[0].name} 对话`);
+            }
+            return;
+        }
+        
+        if (text === '退出私聊') {
+            this.setMode('group', null);
+            this.addSystemMessage('已退出私聊模式');
+            return;
+        }
+        
+        for (const [keyword, actions] of Object.entries(this.commands.commands || {})) {
+            if (text.includes(keyword)) {
+                this.addSystemMessage(`执行指令组合: ${keyword}`);
+                this.executeCommands(actions);
+                return;
+            }
+        }
+        
         if (text.includes('提醒')) {
             this.handleReminderCommand(text);
         } else if (text.includes('报时') || text.includes('现在几点')) {
             this.handleTimeAnnounceCommand(text);
+        } else if (text.includes('天气')) {
+            this.handleWeatherCommand(text);
         } else if (text.includes('搜索')) {
             this.handleSearchCommand(text);
         } else if (text.startsWith('聊天')) {
@@ -911,11 +964,41 @@ const Chat = {
         }
     },
     
+    executeCommands(actions) {
+        for (const action of actions) {
+            if (action === '今天天气') {
+                this.handleSearchCommand('搜索今天天气');
+            } else if (action === '今日提醒') {
+                this.handleTodayReminders();
+            } else if (action.startsWith('搜索')) {
+                this.handleSearchCommand(action);
+            } else if (action.includes('提醒')) {
+                this.handleReminderCommand(action);
+            } else if (action.includes('报时')) {
+                this.handleTimeAnnounceCommand(action);
+            } else {
+                this.sendVoiceMessage(action);
+            }
+        }
+    },
+    
+    handleTodayReminders() {
+        this.addSystemMessage('正在查询今日提醒...');
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'getReminders'
+            }));
+        }
+    },
+    
     handleReminderCommand(text) {
         if (!window.currentDisplayId && !this.session.playOnControl) {
             window.showToast('请先选择显示端或开启控制端播放', 'error');
             return;
         }
+        
+        this.addSystemMessage(`设置提醒: ${text}`);
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
@@ -936,7 +1019,7 @@ const Chat = {
                     action: 'disable'
                 }));
             }
-            window.showToast('已关闭报时功能', 'success');
+            this.addSystemMessage('已关闭报时功能');
         } else if (text.includes('开启报时')) {
             if (window.WebSocketManager && window.WebSocketManager.ws) {
                 window.WebSocketManager.ws.send(JSON.stringify({
@@ -944,7 +1027,7 @@ const Chat = {
                     action: 'enable'
                 }));
             }
-            window.showToast('已开启报时功能', 'success');
+            this.addSystemMessage('已开启报时功能');
         } else {
             if (window.WebSocketManager && window.WebSocketManager.ws) {
                 window.WebSocketManager.ws.send(JSON.stringify({
@@ -952,14 +1035,46 @@ const Chat = {
                     action: 'announce'
                 }));
             }
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            this.addSystemMessage(`现在时间是 ${hours} 点 ${minutes} 分`);
         }
     },
     
     handleSearchCommand(text) {
+        const query = text.replace(/搜索/, '').trim();
+        if (!query) {
+            this.addSystemMessage('请输入搜索内容');
+            return;
+        }
+        
         if (!window.currentDisplayId && !this.session.playOnControl) {
             window.showToast('请先选择显示端或开启控制端播放', 'error');
             return;
         }
+        
+        this.addSystemMessage(`正在搜索: ${query}`);
+        
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'voiceCommand',
+                displayId: window.currentDisplayId,
+                text: text,
+                playOnControl: this.session.playOnControl
+            }));
+        }
+    },
+    
+    handleWeatherCommand(text) {
+        if (!window.currentDisplayId && !this.session.playOnControl) {
+            window.showToast('请先选择显示端或开启控制端播放', 'error');
+            return;
+        }
+        
+        const city = text.replace(/天气|今天|明天|后天/g, '').trim();
+        this.addSystemMessage(`正在查询${city || '本地'}天气...`);
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {

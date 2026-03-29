@@ -888,7 +888,66 @@ wss.on('connection', (ws, req) => {
                     (async () => {
                         try {
                             const result = await voiceCommand.processVoiceCommand(data.text, displayId);
-                            if (result && result.type === 'chat') {
+                            if (result && result.type === 'showHelp') {
+                                ws.send(JSON.stringify({
+                                    type: 'showHelp'
+                                }));
+                            } else if (result && result.type === 'commands') {
+                                await voiceCommand.executeCommands(result.actions, displayId, {
+                                    onChat: async (message) => {
+                                        const originalPrompt = chat.getConfig().systemPrompt;
+                                        const assistant = voiceCommand.findAssistant(voiceCommand.getAssistantConfig().defaultName);
+                                        if (assistant && assistant.template) {
+                                            chat.setConfig({ systemPrompt: assistant.template });
+                                        }
+                                        
+                                        await chat.chatStream(message, {
+                                            useTemplate: null,
+                                            displayId: displayId
+                                        }, {
+                                            onChunk: (chunk, fullMessage) => {
+                                                ws.send(JSON.stringify({
+                                                    type: 'chatChunk',
+                                                    chunk: chunk,
+                                                    message: fullMessage
+                                                }));
+                                            },
+                                            onSentence: async (sentence, fullMessage) => {
+                                                if (!displayId) return;
+                                                try {
+                                                    const audioPath = await tts.generateTTS(sentence);
+                                                    const fileName = path.basename(audioPath);
+                                                    sendToDisplay(displayId, {
+                                                        type: 'tts',
+                                                        action: 'playAudio',
+                                                        audioUrl: `/uploads/tts/${fileName}`,
+                                                        text: sentence
+                                                    });
+                                                } catch (ttsErr) {
+                                                    console.error('[VoiceCommand] TTS生成失败:', ttsErr.message);
+                                                }
+                                            },
+                                            onComplete: (fullMessage, history) => {
+                                                ws.send(JSON.stringify({
+                                                    type: 'chatResponse',
+                                                    success: true,
+                                                    message: fullMessage,
+                                                    history: history
+                                                }));
+                                            },
+                                            onError: (error) => {
+                                                ws.send(JSON.stringify({
+                                                    type: 'chatResponse',
+                                                    success: false,
+                                                    error: error
+                                                }));
+                                            }
+                                        });
+                                        
+                                        chat.setConfig({ systemPrompt: originalPrompt });
+                                    }
+                                });
+                            } else if (result && result.type === 'chat') {
                                 const originalPrompt = chat.getConfig().systemPrompt;
                                 if (result.systemPrompt) {
                                     chat.setConfig({ systemPrompt: result.systemPrompt });
@@ -982,6 +1041,62 @@ wss.on('connection', (ws, req) => {
                         config: voiceCommand.getAssistantConfig()
                     }));
                     return;
+                } else if (data.type === 'timeAnnounce') {
+                    if (data.action === 'enable') {
+                        timeAnnounce.setConfig({ enabled: true });
+                        config.set('timeAnnounce', timeAnnounce.getConfig());
+                    } else if (data.action === 'disable') {
+                        timeAnnounce.setConfig({ enabled: false });
+                        config.set('timeAnnounce', timeAnnounce.getConfig());
+                    } else if (data.action === 'announce') {
+                        (async () => {
+                            try {
+                                await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
+                            } catch (err) {
+                                console.error('[整点报时] 语音触发失败:', err.message);
+                            }
+                        })();
+                    }
+                    return;
+                } else if (data.type === 'getReminders') {
+                    (async () => {
+                        const reminders = reminder.getReminders();
+                        const today = new Date();
+                        const todayReminders = reminders.filter(r => {
+                            const reminderTime = new Date(r.timestamp);
+                            return reminderTime.toDateString() === today.toDateString();
+                        });
+                        
+                        if (todayReminders.length > 0 && displayId) {
+                            const text = todayReminders.map(r => `${r.time} ${r.content}`).join('，');
+                            try {
+                                const audioPath = await tts.generateTTS(`今日提醒：${text}`);
+                                const fileName = path.basename(audioPath);
+                                sendToDisplay(displayId, {
+                                    type: 'tts',
+                                    action: 'playAudio',
+                                    audioUrl: `/uploads/tts/${fileName}`,
+                                    text: `今日提醒：${text}`
+                                });
+                            } catch (err) {
+                                console.error('[语音命令] 今日提醒语音生成失败:', err.message);
+                            }
+                        } else if (displayId) {
+                            try {
+                                const audioPath = await tts.generateTTS('今天没有提醒');
+                                const fileName = path.basename(audioPath);
+                                sendToDisplay(displayId, {
+                                    type: 'tts',
+                                    action: 'playAudio',
+                                    audioUrl: `/uploads/tts/${fileName}`,
+                                    text: '今天没有提醒'
+                                });
+                            } catch (err) {
+                                console.error('[语音命令] 今日提醒语音生成失败:', err.message);
+                            }
+                        }
+                    })();
+                    return;
                 }
                 
                 if (!displayData) return;
@@ -1062,22 +1177,6 @@ wss.on('connection', (ws, req) => {
                         })();
                     } else {
                         sendToDisplay(displayId, data);
-                    }
-                } else if (data.type === 'timeAnnounce') {
-                    if (data.action === 'enable') {
-                        timeAnnounce.setConfig({ enabled: true });
-                        config.set('timeAnnounce', timeAnnounce.getConfig());
-                    } else if (data.action === 'disable') {
-                        timeAnnounce.setConfig({ enabled: false });
-                        config.set('timeAnnounce', timeAnnounce.getConfig());
-                    } else if (data.action === 'announce') {
-                        (async () => {
-                            try {
-                                await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
-                            } catch (err) {
-                                console.error('[整点报时] 语音触发失败:', err.message);
-                            }
-                        })();
                     }
                 } else if (data.type === 'chat') {
                     (async () => {

@@ -345,18 +345,9 @@ chatStream(userMessage, options, callbacks):
     handleSystemCommand(text, displayId):
         处理系统指令:
         
-        如果 text === '系统帮助':
-            生成帮助文本:
-                "系统指令帮助：
-                 - 系统帮助：显示此帮助
-                 - 私聊{助手名字}：进入私聊模式
-                 - 退出私聊：退出私聊模式
-                 - 提醒{时间} {内容}：设置提醒
-                 - 报时/现在几点：播报当前时间
-                 - 开启/关闭报时：控制报时功能
-                 - 搜索{关键词}：搜索信息
-                 - 拒绝/取消：取消待确认操作"
-            返回 { type: 'systemMessage', content: helpText }
+        如果 text === '系统':
+            调用 showHelp() 显示 HTML 弹窗
+            返回 true
         
         如果 text 以 '私聊' 开头:
             提取助手名字
@@ -553,9 +544,12 @@ const Chat = {
         显示助手消息占位符，助手名字使用 assistantName 参数
     
     handleSystemCommand(text):
-        如果 text === '系统帮助':
-            显示帮助信息
-            使用 alert 弹窗显示
+        处理聊天框输入的系统指令:
+        
+        如果 text === '系统':
+            调用 showHelp() 显示 HTML 弹窗
+            返回 true
+        
         如果 text 以 '私聊' 开头:
             提取助手名字
             如果名字存在:
@@ -564,9 +558,92 @@ const Chat = {
             否则如果模板列表不为空:
                 使用第一个模板作为默认助手
                 进入私聊模式
+            返回 true
+        
         如果 text === '退出私聊':
             调用 setMode('group', null)
             添加系统消息
+            返回 true
+        
+        检查自定义指令:
+            遍历 commands.commands
+            如果 text 匹配关键词:
+                调用 executeCommands(actions)
+                返回 true
+        
+        检查内置指令:
+            包含 '提醒' -> handleReminderCommand(text), 返回 true
+            包含 '报时' 或 '现在几点' -> handleTimeAnnounceCommand(text), 返回 true
+            包含 '搜索' -> handleSearchCommand(text), 返回 true
+        
+        返回 false (不是系统指令，交给聊天处理)
+    
+    processVoiceCommand(text):
+        处理显示端语音输入:
+        
+        如果 text === '系统':
+            调用 showHelp()
+            返回
+        
+        如果 text 以 '私聊' 开头:
+            提取助手名字，进入私聊模式
+            返回
+        
+        如果 text === '退出私聊':
+            退出私聊模式
+            返回
+        
+        检查自定义指令:
+            遍历 commands.commands
+            如果 text 匹配关键词:
+                调用 executeCommands(actions)
+                返回
+        
+        检查内置指令:
+            包含 '提醒' -> handleReminderCommand(text)
+            包含 '报时' 或 '现在几点' -> handleTimeAnnounceCommand(text)
+            包含 '天气' -> handleWeatherCommand(text)
+            包含 '搜索' -> handleSearchCommand(text)
+            以 '聊天' 开头 -> 发送聊天消息
+        
+        其他:
+            检查是否包含助手名字
+            如果包含 -> 发送聊天消息
+            否则 -> 发送 voiceCommand 到服务端处理
+    
+    executeCommands(actions):
+        执行指令组合:
+        
+        遍历 actions:
+            如果 action === '今天天气':
+                调用 handleWeatherCommand('')
+            如果 action === '今日提醒':
+                调用 handleTodayReminders()
+            如果 action 以 '搜索' 开头:
+                调用 handleSearchCommand(action)
+            如果 action 包含 '提醒':
+                调用 handleReminderCommand(action)
+            如果 action 包含 '报时':
+                调用 handleTimeAnnounceCommand(action)
+            其他:
+                调用 sendVoiceMessage(action)
+    
+    handleTodayReminders():
+        显示 "正在查询今日提醒..."
+        发送 { type: 'getReminders' } 到服务端
+        服务端查询今日提醒并播报
+    
+    handleWeatherCommand(text):
+        处理天气查询:
+        
+        提取城市名称:
+            移除 "天气"、"今天"、"明天"、"后天" 等关键词
+            默认 "Beijing"
+        
+        显示 "正在查询{城市}天气..."
+        发送 voiceCommand 到服务端
+        服务端调用 wttr.in API 获取天气
+        返回天气结果并播报
     
     handleChunk(data):
         更新流式消息内容

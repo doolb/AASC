@@ -40,62 +40,72 @@
     "target": "小爱"
   },
   {
-    "id": "1774786933751qve0",
-    "timestamp": 1774786933751,
+    "id": "17747916331587djf",
+    "timestamp": 1774791633158,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "小爱你是谁",
-    "mode": "group",
-    "target": null
+    "content": "报时",
+    "mode": "private",
+    "target": "妲己"
   },
   {
-    "id": "1774786940235hagt",
-    "timestamp": 1774786940235,
+    "id": "1774791647727aisn",
+    "timestamp": 1774791647727,
     "role": "assistant",
     "name": "妲己",
     "ip": "",
-    "content": "啊啊啊！我可是要和小爱一起做很多有趣的事呢！小爱，你是我最喜欢的人啦！我们去玩吧！让我们一起创造奇迹！",
-    "mode": "group",
-    "target": null
+    "content": "好啊！那我来告诉你吧！我是妲己，一个会用电子猫的。我会在任何时间、地点、场合都准时报时。有什么需要我帮忙的吗？比如：找地方、打闹、开开心心等等。要和我一起玩嘛！\n\n*轻轻拍手，眼睛亮起来*\n\n来啦，让我们一起玩个好玩的游戏吧！",
+    "mode": "private",
+    "target": "妲己"
   },
   {
-    "id": "17747874718340cfm",
-    "timestamp": 1774787471834,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "小爱你是谁",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "17747874759371xf5",
-    "timestamp": 1774787475937,
-    "role": "assistant",
-    "name": "小爱",
-    "ip": "",
-    "content": "我叫小爱，一个非常贴心、专业的AI助手。有什么需要帮助的吗？😊",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "17747874824199goh",
-    "timestamp": 1774787482419,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "妲己你是谁",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1774787489455t67a",
-    "timestamp": 1774787489455,
+    "id": "1774793685578nw0j",
+    "timestamp": 1774793685578,
     "role": "assistant",
     "name": "妲己",
     "ip": "",
-    "content": "我叫妲己，是九尾电子猫的姐姐。我是你们最贴心、最可爱的守护者，和你们一起在电子世界中自由自在地生活和成长！",
+    "content": "啊！我闻到你的声音了呢~来来来，来陪我玩个游戏吧？要不要先给我看看我做的什么？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1774793694363i2hv",
+    "timestamp": 1774793694366,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "报时",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1774793703613wsvf",
+    "timestamp": 1774793703613,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "啊啊！我也是报告时间啦~要不我们去检查一下电器设备了？说不定哪里出了问题呢。不过现在还不是时候睡觉的时候呢，就先先休息一下吧！",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1774793985459qqqc",
+    "timestamp": 1774793985459,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "报时",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1774793995862mldk",
+    "timestamp": 1774793995862,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "好的！我来给你报时啦！（俏皮地）说吧，我的时间是几点了？要不我先去查一下啦！（神秘地）不过要小心点哦，因为时间有时候会和我有点毛病呢。",
     "mode": "group",
     "target": null
   }

@@ -82,6 +82,10 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleResponse(data);
             }
+        } else if (data.type === 'showHelp') {
+            if (window.Chat) {
+                window.Chat.showHelp();
+            }
         } else if (data.type === 'chatHistory') {
             if (window.Chat) {
                 window.Chat.history = data.history;

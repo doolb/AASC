@@ -31,7 +31,40 @@
 - server.js: 新增聊天消息处理、会话管理、指令执行等 API
 
 ### 修复
-- 待修复的问题
+- ✅ 已完成 [2026-03-29][2026-03-29] 修复自定义系统指令无法正确识别的问题
+  - 问题原因：server.js 中 processVoiceCommand 返回 commands 类型时没有处理
+  - 改动文件：server.js, docs/spec/voiceCommand.md
+- ✅ 已完成 [2026-03-29][2026-03-29] 修复控制端语音输入自定义指令和报时指令无法识别的问题
+  - 问题原因：控制端 processVoiceCommand 没有检查自定义指令，timeAnnounce 消息处理在 displayData 检查之后
+  - 改动文件：public/js/chat.js, server.js, docs/spec/chat-system.md
+- ✅ 已完成 [2026-03-29][2026-03-29] 修复控制端聊天框输入内置指令无法识别的问题
+  - 问题原因：handleSystemCommand 只检查自定义指令，没有检查内置指令（报时、提醒、搜索）
+  - 改动文件：public/js/chat.js
+- ✅ 已完成 [2026-03-29][2026-03-29] 优化指令执行提示，显示执行结果
+  - 报时：显示当前时间
+  - 搜索：显示正在搜索的内容
+  - 提醒：显示设置的提醒内容
+  - 今日提醒：显示查询提示
+  - 改动文件：public/js/chat.js
+- ✅ 已完成 [2026-03-29][2026-03-29] 添加天气查询功能
+  - 使用 wttr.in API 查询天气
+  - 支持城市名称查询，默认北京
+  - 改动文件：core/voiceCommand.js, public/js/chat.js
+
+### 2026-03-29 优化系统帮助指令
+
+**已修改功能：**
+- 系统帮助指令从"系统帮助"精简为"系统"
+- 帮助弹窗从 alert 改为 HTML 模态框实现，体验更好
+- 修复语音命令中系统指令无法正确识别的问题
+
+**改动文件：**
+- public/js/chat.js: handleSystemCommand 改为调用 showHelp()，新增 showHelp/hideHelp 函数
+- public/upload.html: 新增 chatHelpModal 模态框 HTML
+- public/js/websocket.js: 新增 showHelp 消息类型处理
+- core/voiceCommand.js: 系统指令改为返回 { type: 'showHelp' }
+- server.js: 新增 showHelp 消息类型处理
+- docs/spec/chat-system.md: 更新伪代码描述
 
 ### 2026-03-29 修复群聊助手名字显示问题
 

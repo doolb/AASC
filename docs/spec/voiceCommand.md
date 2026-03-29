@@ -106,7 +106,37 @@ handleTimeAnnounceCommand(text, displayId):
         生成 TTS 并播放
 ```
 
-### 4. 搜索功能
+### 4. 天气查询功能
+
+**服务端实现**:
+```
+handleWeatherCommand(text, displayId):
+    提取城市名称:
+        移除 "天气"、"今天"、"明天"、"后天" 等关键词
+        如果没有城市名称: 默认 "Beijing"
+    
+    调用 wttr.in API:
+        URL: https://wttr.in/{city}?format=j1&lang=zh
+        Headers: User-Agent: curl
+    
+    解析返回数据:
+        cityName: 城市名称
+        temp: 当前温度（摄氏度）
+        weather: 天气描述
+        humidity: 湿度
+    
+    生成天气文本:
+        "{cityName}当前天气：{weather}，温度{temp}度，湿度{humidity}%"
+    
+    如果 displayId 存在:
+        生成 TTS 并播放
+        发送天气结果到显示端
+    
+    如果请求失败:
+        语音播放 "获取天气失败，请稍后再试"
+```
+
+### 5. 搜索功能
 
 **服务端实现**:
 ```
@@ -251,3 +281,42 @@ processVoiceCommand(text, displayId):
 | public/js/chat.js | 控制端语音命令处理 |
 | public/js/websocket.js | WebSocket 消息处理 |
 | public/css/display.css | 显示端样式 |
+
+## 系统指令处理流程
+
+### processVoiceCommand 返回类型
+
+| 类型 | 说明 | 处理方式 |
+|------|------|----------|
+| showHelp | 显示帮助 | 发送 showHelp 消息到控制端 |
+| commands | 自定义指令组合 | 调用 executeCommands 执行指令列表 |
+| chat | 聊天消息 | 调用 chat.chatStream 进行对话 |
+| privateMode | 进入私聊模式 | 设置会话为私聊模式 |
+| groupMode | 退出私聊模式 | 设置会话为群聊模式 |
+| systemMessage | 系统消息 | 显示系统提示 |
+
+### server.js 处理 voiceCommand 消息
+
+```
+接收 voiceCommand 消息
+    ↓
+调用 voiceCommand.processVoiceCommand(text, displayId)
+    ↓
+根据 result.type 处理:
+    ├─ showHelp: 发送 { type: 'showHelp' }
+    ├─ commands: 调用 executeCommands(actions, displayId, callbacks)
+    │   └─ callbacks.onChat: 调用 chat.chatStream
+    └─ chat: 调用 chat.chatStream
+```
+
+### executeCommands 执行逻辑
+
+```
+遍历 actions 数组:
+    ├─ "今天天气" -> handleSearchCommand('搜索今天天气')
+    ├─ "今日提醒" -> 查询今日提醒并播报
+    ├─ 以"搜索"开头 -> handleSearchCommand(action)
+    ├─ 包含"提醒" -> handleReminderCommand(action)
+    ├─ 包含"报时" -> handleTimeAnnounceCommand(action)
+    └─ 其他 -> callbacks.onChat(action)
+```

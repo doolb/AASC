@@ -150,7 +150,10 @@ function saveCommands() {
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
+        console.log('[Chat] saveCommands 保存到:', COMMANDS_FILE);
+        console.log('[Chat] saveCommands 内容:', JSON.stringify(chatCommands));
         fs.writeFileSync(COMMANDS_FILE, JSON.stringify(chatCommands, null, 2), 'utf8');
+        console.log('[Chat] 自定义指令保存成功');
     } catch (err) {
         console.error('[Chat] 保存自定义指令失败:', err.message);
     }
@@ -273,7 +276,9 @@ function getCommands() {
 }
 
 function setCommands(commands) {
+    console.log('[Chat] setCommands 收到:', JSON.stringify(commands));
     chatCommands = { ...chatCommands, ...commands };
+    console.log('[Chat] setCommands 合并后:', JSON.stringify(chatCommands));
     saveCommands();
     return getCommands();
 }

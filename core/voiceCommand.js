@@ -271,6 +271,65 @@ async function handleTimeAnnounceCommand(text, displayId) {
     }
 }
 
+async function handleWeatherCommand(text, displayId) {
+    const axios = require('axios');
+    
+    let city = text.replace(/天气|今天|明天|后天/g, '').trim();
+    
+    try {
+        const url = city 
+            ? `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=zh`
+            : `https://wttr.in/?format=j1&lang=zh`;
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'curl'
+            },
+            timeout: 10000
+        });
+        
+        const data = response.data;
+        const current = data.current_condition[0];
+        const cityName = data.nearest_area[0].areaName[0].value;
+        const temp = current.temp_C;
+        const weather = current.lang_zh ? current.lang_zh[0].value : current.weatherDesc[0].value;
+        const humidity = current.humidity;
+        
+        const weatherText = `${cityName}当前天气：${weather}，温度${temp}度，湿度${humidity}%`;
+        
+        if (displayId && sendToDisplay) {
+            try {
+                const audioPath = await tts.generateTTS(weatherText);
+                const fileName = path.basename(audioPath);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'weatherResult',
+                    text: weatherText,
+                    audioUrl: `/uploads/tts/${fileName}`
+                });
+            } catch (err) {
+                console.error('[语音命令] 天气语音生成失败:', err.message);
+            }
+        }
+    } catch (err) {
+        console.error('[语音命令] 获取天气失败:', err.message);
+        const errorText = '获取天气失败，请稍后再试';
+        if (displayId && sendToDisplay) {
+            try {
+                const audioPath = await tts.generateTTS(errorText);
+                const fileName = path.basename(audioPath);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: errorText,
+                    audioUrl: `/uploads/tts/${fileName}`
+                });
+            } catch (ttsErr) {
+                console.error('[语音命令] 错误语音生成失败:', ttsErr.message);
+            }
+        }
+    }
+}
+
 async function handleSearchCommand(text, displayId) {
     let query = text.replace(/搜索/, '').trim();
     
@@ -516,6 +575,11 @@ async function processVoiceCommand(text, displayId) {
         return;
     }
     
+    if (trimmedText.includes('天气')) {
+        await handleWeatherCommand(trimmedText, displayId);
+        return;
+    }
+    
     if (trimmedText.includes('搜索')) {
         await handleSearchCommand(trimmedText, displayId);
         return;
@@ -543,18 +607,8 @@ async function processVoiceCommand(text, displayId) {
 function handleSystemCommand(text, displayId) {
     const trimmedText = text.trim();
     
-    if (trimmedText === '系统帮助') {
-        const helpText = `系统指令帮助：
-- 系统帮助：显示此帮助
-- 私聊{助手名字}：进入私聊模式
-- 退出私聊：退出私聊模式
-- 提醒{时间} {内容}：设置提醒
-- 报时/现在几点：播报当前时间
-- 开启/关闭报时：控制报时功能
-- 搜索{关键词}：搜索信息
-- 拒绝/取消：取消待确认操作
-- 系统记录{内容}：保存重要记录`;
-        return { type: 'systemMessage', content: helpText };
+    if (trimmedText === '系统') {
+        return { type: 'showHelp' };
     }
     
     if (trimmedText.startsWith('私聊')) {
@@ -585,7 +639,7 @@ function handleSystemCommand(text, displayId) {
 async function executeCommands(actions, displayId, callbacks) {
     for (const action of actions) {
         if (action === '今天天气') {
-            await handleSearchCommand('搜索今天天气', displayId);
+            await handleWeatherCommand('', displayId);
         } else if (action === '今日提醒') {
             const reminders = reminder.getReminders();
             const today = new Date();
@@ -642,6 +696,7 @@ module.exports = {
     processVoiceCommand,
     handleReminderCommand,
     handleTimeAnnounceCommand,
+    handleWeatherCommand,
     handleSearchCommand,
     executeReminderConfirmation,
     handleCancelCommand,
