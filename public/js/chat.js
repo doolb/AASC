@@ -7,12 +7,126 @@ const Chat = {
     isLoading: false,
     currentStreamingMessage: '',
     currentUserMessage: '',
+    isListening: false,
+    recognition: null,
+    voiceParts: [],
     
     init() {
         this.loadHistory();
         this.loadTemplates();
         this.loadConfig();
+        this.initVoiceRecognition();
         this.render();
+    },
+    
+    initVoiceRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            console.log('浏览器不支持语音识别');
+            return;
+        }
+        
+        this.recognition = new SpeechRecognition();
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
+        this.recognition.lang = 'zh-CN';
+        
+        this.recognition.onstart = () => {
+            this.isListening = true;
+            this.voiceParts = [];
+            this.updateVoiceButton();
+            console.log('语音识别已启动');
+        };
+        
+        this.recognition.onend = () => {
+            this.isListening = false;
+            this.updateVoiceButton();
+            console.log('语音识别已停止');
+        };
+        
+        this.recognition.onerror = (event) => {
+            console.error('语音识别错误:', event.error);
+            this.isListening = false;
+            this.updateVoiceButton();
+        };
+        
+        this.recognition.onresult = (event) => {
+            this.handleVoiceResult(event);
+        };
+    },
+    
+    handleVoiceResult(event) {
+        const results = event.results[event.resultIndex];
+        const transcript = results[0].transcript;
+        
+        if (this.voiceParts.length === 0) {
+            this.voiceParts[0] = transcript;
+        } else {
+            this.voiceParts[this.voiceParts.length - 1] = transcript;
+        }
+        
+        const input = document.getElementById('chatInput');
+        if (input) {
+            input.value = this.voiceParts.join('') + '…';
+        }
+        
+        if (results.isFinal) {
+            const finalText = this.voiceParts[this.voiceParts.length - 1].trim();
+            this.voiceParts.push('');
+            
+            if (finalText.startsWith('聊天')) {
+                const message = finalText.substring(2).trim();
+                if (message) {
+                    this.stopListening();
+                    setTimeout(() => {
+                        this.sendVoiceMessage(message);
+                    }, 300);
+                }
+            }
+        }
+    },
+    
+    toggleVoice() {
+        if (!this.recognition) {
+            window.showToast('浏览器不支持语音识别', 'error');
+            return;
+        }
+        
+        if (this.isListening) {
+            this.stopListening();
+        } else {
+            this.startListening();
+        }
+    },
+    
+    startListening() {
+        if (this.recognition && !this.isListening) {
+            this.voiceParts = [];
+            this.recognition.start();
+        }
+    },
+    
+    stopListening() {
+        if (this.recognition && this.isListening) {
+            this.recognition.stop();
+        }
+    },
+    
+    updateVoiceButton() {
+        const btn = document.getElementById('voiceInputBtn');
+        if (btn) {
+            btn.textContent = this.isListening ? '🔴' : '🎤';
+            btn.title = this.isListening ? '停止语音输入' : '开始语音输入';
+            btn.classList.toggle('listening', this.isListening);
+        }
+    },
+    
+    sendVoiceMessage(message) {
+        const input = document.getElementById('chatInput');
+        if (input) {
+            input.value = message;
+        }
+        this.sendMessage();
     },
     
     loadHistory() {
@@ -92,7 +206,8 @@ const Chat = {
                     <option value="">不使用模板</option>
                 </select>
                 <div class="chat-input-row">
-                    <input type="text" id="chatInput" placeholder="输入消息..." onkeypress="Chat.handleKeyPress(event)">
+                    <button id="voiceInputBtn" class="voice-input-btn" onclick="Chat.toggleVoice()" title="开始语音输入">🎤</button>
+                    <input type="text" id="chatInput" placeholder="输入消息... (说"聊天xxx"触发语音对话)" onkeypress="Chat.handleKeyPress(event)">
                     <button class="chat-send-btn" onclick="Chat.sendMessage()" id="chatSendBtn">发送</button>
                 </div>
             </div>
@@ -396,6 +511,83 @@ const Chat = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+    
+    handleDisplayVoiceInput(data) {
+        if (data.displayId !== window.currentDisplayId) {
+            return;
+        }
+        
+        const input = document.getElementById('chatInput');
+        if (input) {
+            if (data.isFinal) {
+                input.value = data.fullText;
+            } else {
+                input.value = data.fullText + '…';
+            }
+        }
+        
+        if (data.isFinal) {
+            this.processVoiceCommand(data.fullText.trim());
+        }
+    },
+    
+    processVoiceCommand(text) {
+        if (!text) return;
+        
+        if (text.includes('提醒')) {
+            this.handleReminderCommand(text);
+        } else if (text.includes('报时') || text.includes('现在几点')) {
+            this.handleTimeAnnounceCommand(text);
+        } else if (text.includes('搜索')) {
+            this.handleSearchCommand(text);
+        } else if (text.startsWith('聊天')) {
+            const message = text.substring(2).trim();
+            if (message) {
+                setTimeout(() => {
+                    this.sendVoiceMessage(message);
+                }, 300);
+            }
+        } else {
+            setTimeout(() => {
+                this.sendVoiceMessage(text);
+            }, 300);
+        }
+    },
+    
+    handleReminderCommand(text) {
+        window.showToast('提醒功能开发中...', 'info');
+    },
+    
+    handleTimeAnnounceCommand(text) {
+        if (text.includes('关闭报时')) {
+            if (window.WebSocketManager && window.WebSocketManager.ws) {
+                window.WebSocketManager.ws.send(JSON.stringify({
+                    type: 'timeAnnounce',
+                    action: 'disable'
+                }));
+            }
+            window.showToast('已关闭报时功能', 'success');
+        } else if (text.includes('开启报时')) {
+            if (window.WebSocketManager && window.WebSocketManager.ws) {
+                window.WebSocketManager.ws.send(JSON.stringify({
+                    type: 'timeAnnounce',
+                    action: 'enable'
+                }));
+            }
+            window.showToast('已开启报时功能', 'success');
+        } else {
+            if (window.WebSocketManager && window.WebSocketManager.ws) {
+                window.WebSocketManager.ws.send(JSON.stringify({
+                    type: 'timeAnnounce',
+                    action: 'announce'
+                }));
+            }
+        }
+    },
+    
+    handleSearchCommand(text) {
+        window.showToast('搜索功能开发中...', 'info');
     }
 };
 

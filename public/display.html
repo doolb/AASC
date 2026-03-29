@@ -10,6 +10,7 @@
     <div id="connectionStatus" class="connecting">连接中...</div>
     <div id="timeDisplay"></div>
     <div id="fileNameDisplay"></div>
+    <div id="voiceStatus" class="voice-status-hidden">语音</div>
     
     <div id="mediaContainer">
         <div id="waitingMessage">
@@ -594,6 +595,7 @@
                 setConnectionStatus('connected', '已连接');
                 sendCanvasSize();
                 sendBrowserInfo();
+                sendVoiceStatus();
             };
             
             displayWs.onmessage = function(event) {
@@ -649,6 +651,123 @@
         });
         
         connectWebSocket();
+        
+        let recognition = null;
+        let isListening = false;
+        let voiceParts = [];
+        let voiceSupported = false;
+        
+        initVoiceRecognition();
+        updateVoiceStatusDisplay();
+        
+        function updateVoiceStatusDisplay() {
+            const statusEl = document.getElementById('voiceStatus');
+            if (!statusEl) return;
+            
+            if (!voiceSupported) {
+                statusEl.className = 'voice-status-unsupported';
+                statusEl.title = '不支持语音识别';
+            } else if (isListening) {
+                statusEl.className = 'voice-status-listening';
+                statusEl.title = '语音识别中...';
+            } else {
+                statusEl.className = 'voice-status-ready';
+                statusEl.title = '语音识别就绪';
+            }
+        }
+        
+        function sendVoiceStatus() {
+            updateVoiceStatusDisplay();
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({
+                    type: 'voiceStatus',
+                    supported: voiceSupported,
+                    listening: isListening
+                }));
+            }
+        }
+        
+        function initVoiceRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                console.log('浏览器不支持语音识别');
+                voiceSupported = false;
+                return;
+            }
+            
+            voiceSupported = true;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'zh-CN';
+            
+            recognition.onstart = () => {
+                isListening = true;
+                voiceParts = [];
+                console.log('显示端语音识别已启动');
+                sendVoiceStatus();
+            };
+            
+            recognition.onend = () => {
+                isListening = false;
+                console.log('显示端语音识别已停止');
+                sendVoiceStatus();
+                setTimeout(() => {
+                    if (recognition && !isListening) {
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.log('语音识别重启失败:', e);
+                        }
+                    }
+                }, 1000);
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('显示端语音识别错误:', event.error);
+                if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                    isListening = false;
+                    sendVoiceStatus();
+                }
+            };
+            
+            recognition.onresult = (event) => {
+                handleVoiceResult(event);
+            };
+            
+            try {
+                recognition.start();
+                console.log('显示端语音识别初始化完成');
+            } catch (e) {
+                console.error('语音识别启动失败:', e);
+            }
+        }
+        
+        function handleVoiceResult(event) {
+            const results = event.results[event.resultIndex];
+            const transcript = results[0].transcript;
+            
+            if (voiceParts.length === 0) {
+                voiceParts[0] = transcript;
+            } else {
+                voiceParts[voiceParts.length - 1] = transcript;
+            }
+            
+            console.log('显示端语音输入: ' + transcript, 'isFinal:', results.isFinal);
+            
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({
+                    type: 'voiceInput',
+                    text: transcript,
+                    isFinal: results.isFinal,
+                    fullText: voiceParts.join('')
+                }));
+            }
+            
+            if (results.isFinal) {
+                voiceParts.push('');
+            }
+        }
         
         document.addEventListener('click', function() {
             if (mediaVideo.style.display === 'block' && mediaVideo.paused) {

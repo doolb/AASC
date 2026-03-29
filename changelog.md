@@ -8,9 +8,67 @@
 ### 修复
 - 待修复的问题
 
+### 2026-03-29 修复 HTTP 媒体库配置保存丢失 URL 字段
+
+**已修复问题：**
+- 控制端添加 HTTP 类型媒体库后，重启服务端报错：`Cannot read properties of undefined (reading 'replace')`
+- 原因：`saveConfig` 方法保存配置时只保存了 `path` 字段，没有保存 HTTP/SMB 类型需要的 `url`、`username`、`password` 等字段
+
+**改动文件：**
+- core/media-library.js: 修复 `saveConfig` 方法，根据媒体库类型保存对应字段
+
 ---
 
 ## 历史记录
+
+### 2026-03-29 显示端语音识别状态显示
+
+**已完成功能：**
+- 控制端显示端列表显示语音识别状态图标
+- 状态图标：🎤 识别中（闪烁动画）、🎤 就绪（半透明）、🎤 不支持（灰色）
+
+**改动文件：**
+- public/display.html: 添加 sendVoiceStatus 函数上报语音状态
+- server.js: 添加 voiceStatus 消息处理和状态存储
+- public/js/display-list.js: 渲染语音状态图标
+- public/css/upload.css: 添加语音状态样式和动画
+
+### 2026-03-29 修复媒体库符号链接访问错误
+
+**已修复问题：**
+- 本地媒体库遇到损坏的符号链接时抛出 ENOENT 错误
+
+**改动文件：**
+- core/media-library.js: 使用 lstatSync 代替 statSync，跳过损坏的符号链接
+
+### 2026-03-29 显示端语音识别转发到控制端
+
+**已完成功能：**
+- 显示端启动时自动启动语音识别
+- 语音识别结果通过 WebSocket 转发到控制端
+- 控制端 Chat 模块接收显示端语音输入
+- 支持在显示端说"聊天xxx"触发控制端对话
+
+**改动文件：**
+- public/display.html: 添加语音识别初始化和结果发送
+- server.js: 添加 voiceInput 消息转发
+- public/js/websocket.js: 添加 voiceInput 消息处理
+- public/js/chat.js: 添加 handleDisplayVoiceInput 方法
+- docs/spec/websocket.md: 更新消息类型文档
+- docs/design/display.md: 更新设计文档
+
+### 2026-03-29 语音输入功能
+
+**已完成功能：**
+- 控制端添加语音输入按钮
+- 支持语音识别（Web Speech API）
+- 说"聊天xxx"触发语音对话，自动发送消息给 AI 助手
+- AI 回复后自动播放到显示端
+
+**改动文件：**
+- public/js/chat.js: 添加语音识别功能和语音命令处理
+- public/css/chat.css: 添加语音输入按钮样式
+- docs/spec/websocket.md: 更新伪代码描述
 
 ### 2026-03-29 优化媒体库 URL 生成
 

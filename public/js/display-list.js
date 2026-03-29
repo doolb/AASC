@@ -39,12 +39,25 @@ const DisplayList = {
                     </div>
                 `;
             }
+            
+            let voiceStatusHtml = '';
+            if (d.voiceSupported === true) {
+                if (d.voiceListening) {
+                    voiceStatusHtml = '<span class="voice-status listening" title="语音识别中">语音</span>';
+                } else {
+                    voiceStatusHtml = '<span class="voice-status ready" title="语音识别就绪">语音</span>';
+                }
+            } else if (d.voiceSupported === false) {
+                voiceStatusHtml = '<span class="voice-status unsupported" title="不支持语音识别">语音</span>';
+            }
+            
             return `
                 <div class="display-item ${d.id === window.currentDisplayId ? 'active' : ''}" onclick="DisplayList.select('${d.id}')">
                     <div style="flex:1;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <span class="display-item-id">${d.ip || 'unknown'}</span>
                             <div style="display:flex;align-items:center;gap:8px;">
+                                ${voiceStatusHtml}
                                 <span class="display-item-size">${d.canvasSize.width}x${d.canvasSize.height}</span>
                                 ${d.browserInfo ? `<button class="info-btn" onclick="event.stopPropagation();DisplayList.showFeatureModal('${d.id}')">详情</button>` : ''}
                             </div>

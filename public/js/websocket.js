@@ -87,6 +87,10 @@ const WebSocketManager = {
                 window.Chat.history = data.history;
                 window.Chat.renderHistory();
             }
+        } else if (data.type === 'voiceInput') {
+            if (window.Chat) {
+                window.Chat.handleDisplayVoiceInput(data);
+            }
         }
     },
     

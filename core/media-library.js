@@ -94,20 +94,34 @@ class LocalProvider extends MediaLibraryProvider {
         return items
             .filter(name => !name.startsWith('.'))
             .map(name => {
-                const itemPath = path.join(fullPath, name);
-                const stat = fs.statSync(itemPath);
-                const relativePath = path.join(dirPath, name).replace(/\\/g, '/');
-                
-                return {
-                    name: name,
-                    path: relativePath,
-                    type: stat.isDirectory() ? 'folder' : 'file',
-                    mediaType: stat.isDirectory() ? 'folder' : this.detectMediaType(name),
-                    size: stat.size,
-                    modifiedTime: stat.mtime,
-                    url: this.getPublicUrl(relativePath)
-                };
+                try {
+                    const itemPath = path.join(fullPath, name);
+                    const stat = fs.lstatSync(itemPath);
+                    
+                    if (stat.isSymbolicLink()) {
+                        try {
+                            fs.statSync(itemPath);
+                        } catch (e) {
+                            return null;
+                        }
+                    }
+                    
+                    const relativePath = path.join(dirPath, name).replace(/\\/g, '/');
+                    
+                    return {
+                        name: name,
+                        path: relativePath,
+                        type: stat.isDirectory() ? 'folder' : 'file',
+                        mediaType: stat.isDirectory() ? 'folder' : this.detectMediaType(name),
+                        size: stat.size,
+                        modifiedTime: stat.mtime,
+                        url: this.getPublicUrl(relativePath)
+                    };
+                } catch (e) {
+                    return null;
+                }
             })
+            .filter(item => item !== null)
             .sort((a, b) => {
                 if (a.type === 'folder' && b.type !== 'folder') return -1;
                 if (a.type !== 'folder' && b.type === 'folder') return 1;
@@ -777,14 +791,28 @@ class MediaLibraryManager {
         };
         
         this.libraries.forEach((lib, id) => {
-            config.libraries.push({
+            const libConfig = {
                 id: lib.config.id,
                 name: lib.config.name,
                 type: lib.config.type,
-                path: lib.config.path,
                 isDefault: id === this.defaultLibraryId,
                 readonly: lib.config.readonly || false
-            });
+            };
+            
+            if (lib.config.type === 'http') {
+                libConfig.url = lib.config.url;
+                libConfig.username = lib.config.username;
+                libConfig.password = lib.config.password;
+            } else if (lib.config.type === 'smb') {
+                libConfig.share = lib.config.share;
+                libConfig.domain = lib.config.domain;
+                libConfig.username = lib.config.username;
+                libConfig.password = lib.config.password;
+            } else {
+                libConfig.path = lib.config.path;
+            }
+            
+            config.libraries.push(libConfig);
         });
         
         const dir = path.dirname(this.configPath);

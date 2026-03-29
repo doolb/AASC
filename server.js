@@ -759,7 +759,9 @@ function getDisplayList() {
             id: id,
             ip: data.ip,
             canvasSize: data.state.canvasSize,
-            browserInfo: data.state.browserInfo
+            browserInfo: data.state.browserInfo,
+            voiceSupported: data.state.voiceSupported,
+            voiceListening: data.state.voiceListening
         });
     });
     return list;
@@ -840,6 +842,18 @@ wss.on('connection', (ws, req) => {
                         devicePixelRatio: data.devicePixelRatio,
                         featureSupport: data.featureSupport
                     };
+                    broadcastToControls({ type: 'displayList', list: getDisplayList() });
+                } else if (data.type === 'voiceInput' && displayData) {
+                    broadcastToControls({
+                        type: 'voiceInput',
+                        displayId: displayId,
+                        text: data.text,
+                        isFinal: data.isFinal,
+                        fullText: data.fullText
+                    });
+                } else if (data.type === 'voiceStatus' && displayData) {
+                    displayData.state.voiceSupported = data.supported;
+                    displayData.state.voiceListening = data.listening;
                     broadcastToControls({ type: 'displayList', list: getDisplayList() });
                 }
             } catch (e) {
@@ -933,6 +947,22 @@ wss.on('connection', (ws, req) => {
                         })();
                     } else {
                         sendToDisplay(displayId, data);
+                    }
+                } else if (data.type === 'timeAnnounce') {
+                    if (data.action === 'enable') {
+                        timeAnnounce.setConfig({ enabled: true });
+                        config.set('timeAnnounce', timeAnnounce.getConfig());
+                    } else if (data.action === 'disable') {
+                        timeAnnounce.setConfig({ enabled: false });
+                        config.set('timeAnnounce', timeAnnounce.getConfig());
+                    } else if (data.action === 'announce') {
+                        (async () => {
+                            try {
+                                await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
+                            } catch (err) {
+                                console.error('[整点报时] 语音触发失败:', err.message);
+                            }
+                        })();
                     }
                 } else if (data.type === 'chat') {
                     (async () => {

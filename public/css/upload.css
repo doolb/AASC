@@ -298,6 +298,34 @@ input[type="file"] {
     color: #888;
 }
 
+.voice-status {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    opacity: 0.5;
+}
+
+.voice-status.listening {
+    opacity: 1;
+    background: rgba(76, 175, 80, 0.8);
+    animation: voice-pulse 1s ease-in-out infinite;
+}
+
+.voice-status.ready {
+    opacity: 0.8;
+}
+
+.voice-status.unsupported {
+    opacity: 0.3;
+}
+
+@keyframes voice-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
 .media-item {
     display: flex;
     align-items: center;

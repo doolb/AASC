@@ -233,7 +233,15 @@
         调用 provider.getFileStream(filePath)
     
     saveConfig():
-        遍历 libraries 构建配置对象
+        遍历 libraries 构建配置对象:
+            对于每个 library:
+                基础配置: id, name, type, isDefault, readonly
+                如果 type === "http":
+                    添加 url, username, password
+                否则如果 type === "smb":
+                    添加 share, domain, username, password
+                否则 (local):
+                    添加 path
         写入配置文件
 ```
 
@@ -442,9 +450,11 @@ GET /api/media-libraries/:id/proxy/*
       "id": "http_media",
       "name": "远程媒体库",
       "type": "http",
-      "baseUrl": "http://192.168.1.100:8080/media",
+      "url": "http://192.168.1.100:8080/media",
+      "username": "user",
+      "password": "password",
       "isDefault": false,
-      "readonly": true
+      "readonly": false
     },
     {
       "id": "smb_share",
