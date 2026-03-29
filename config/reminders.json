@@ -15,7 +15,27 @@
     },
     "enabled": true,
     "createdAt": 1774699159320,
-    "lastTriggered": null,
-    "nextTrigger": 1774708200000
+    "lastTriggered": 1774708961435,
+    "nextTrigger": 1774794600000
+  },
+  {
+    "id": "r_kgnz3afm_1774702355818",
+    "content": "主人我来了",
+    "time": "21:20",
+    "type": "once",
+    "methods": [
+      "voice",
+      "popup"
+    ],
+    "repeat": {
+      "enabled": true,
+      "interval": 1,
+      "count": 3
+    },
+    "repeatCount": 5,
+    "enabled": false,
+    "createdAt": 1774702355818,
+    "lastTriggered": 1774704011877,
+    "nextTrigger": null
   }
 ]

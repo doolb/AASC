@@ -782,3 +782,139 @@ input[type="range"]::-webkit-slider-thumb {
         grid-template-columns: 1fr;
     }
 }
+
+.search-input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.search-input-group input {
+    flex: 1;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+}
+
+.search-input-group input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.search-input-group button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.search-input-group button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 210, 255, 0.3);
+}
+
+.search-history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.search-history-header h2 {
+    margin: 0;
+}
+
+.clear-btn {
+    padding: 5px 15px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+}
+
+.clear-btn:hover {
+    background: rgba(255, 107, 107, 0.3);
+    color: #fff;
+}
+
+.search-history-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.search-history-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    gap: 10px;
+    transition: all 0.3s ease;
+}
+
+.search-history-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.search-history-item .time {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.search-history-item .content {
+    flex: 1;
+    min-width: 0;
+}
+
+.search-history-item .keyword {
+    font-weight: 500;
+    color: #00d2ff;
+    margin-bottom: 5px;
+    word-break: break-word;
+}
+
+.search-history-item .result {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.search-history-item .actions {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.search-history-item .action-btn {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+}
+
+.search-history-item .action-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.search-history-item .action-btn.delete:hover {
+    background: rgba(255, 107, 107, 0.3);
+    color: #ff6b6b;
+}

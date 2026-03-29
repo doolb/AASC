@@ -181,6 +181,16 @@
 **改动文件：**
 - core/media-library.js: SmbProvider 类
 
+### 2026-03-29 优化 SMB 媒体库配置界面
+
+**改进内容：**
+- 将 SMB 共享路径拆分为"服务器地址"和"共享路径"两个独立字段
+- 用户只需输入服务器 IP 和共享名称，无需手动拼接完整路径
+
+**改动文件：**
+- public/js/media-library.js: 添加服务器地址输入框
+- core/media-library.js: SmbProvider 添加 `_buildSharePath` 方法
+
 ### 2026-03-28 移除旧的 media-list.js 组件
 
 **已完成功能：**

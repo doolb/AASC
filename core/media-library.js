@@ -416,7 +416,9 @@ class HttpProvider extends MediaLibraryProvider {
 class SmbProvider extends MediaLibraryProvider {
     constructor(config, options = {}) {
         super(config);
-        this.share = config.share;
+        this.server = config.server;
+        this.sharePath = config.share;
+        this.share = this._buildSharePath(config.server, config.share);
         this.domain = config.domain || 'WORKGROUP';
         this.username = config.username;
         this.password = config.password;
@@ -425,8 +427,28 @@ class SmbProvider extends MediaLibraryProvider {
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
     }
 
+    _buildSharePath(server, sharePath) {
+        if (!server || !sharePath) {
+            return '';
+        }
+        const cleanShare = sharePath.replace(/^[\/\\]+/, '').replace(/[\/\\]+$/, '').replace(/[\/\\]+/g, '\\');
+        return `\\\\${server}\\${cleanShare}`;
+    }
+
     async connect() {
         try {
+            if (!this.server) {
+                throw new Error('SMB服务器地址不能为空');
+            }
+            
+            if (!this.sharePath) {
+                throw new Error('SMB共享路径不能为空');
+            }
+            
+            if (!this.share) {
+                throw new Error('SMB共享路径构建失败');
+            }
+            
             const SMB2 = this._loadSmb2();
             
             this.smbClient = new SMB2({
@@ -436,7 +458,7 @@ class SmbProvider extends MediaLibraryProvider {
                 password: this.password
             });
             
-            await this._readdir('/');
+            await this._readdir('');
             this.connected = true;
             return true;
         } catch (err) {
@@ -466,7 +488,7 @@ class SmbProvider extends MediaLibraryProvider {
     }
 
     async list(dirPath = '/') {
-        const cleanPath = dirPath.replace(/^\//, '');
+        let cleanPath = dirPath.replace(/^\//, '').replace(/\/$/, '');
         const files = await this._readdir(cleanPath);
         
         return files.map(file => {
@@ -540,7 +562,8 @@ class SmbProvider extends MediaLibraryProvider {
 
     _readdir(dirPath) {
         return new Promise((resolve, reject) => {
-            this.smbClient.readdir(dirPath, (err, files) => {
+            const path = dirPath || '';
+            this.smbClient.readdir(path, (err, files) => {
                 if (err) {
                     reject(err);
                     return;
@@ -804,6 +827,7 @@ class MediaLibraryManager {
                 libConfig.username = lib.config.username;
                 libConfig.password = lib.config.password;
             } else if (lib.config.type === 'smb') {
+                libConfig.server = lib.config.server;
                 libConfig.share = lib.config.share;
                 libConfig.domain = lib.config.domain;
                 libConfig.username = lib.config.username;
@@ -836,6 +860,7 @@ class MediaLibraryManager {
             config.username = configData.username;
             config.password = configData.password;
         } else if (configData.type === 'smb') {
+            config.server = configData.server;
             config.share = configData.share;
             config.domain = configData.domain;
             config.username = configData.username;

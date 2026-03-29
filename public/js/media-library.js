@@ -613,8 +613,12 @@ const MediaLibrary = {
                         <input type="password" id="libPassword" placeholder="密码（可选）">
                     </div>
                     <div class="form-group smb-only" style="display:none;">
-                        <label>共享路径</label>
-                        <input type="text" id="libShare" placeholder="例如: \\\\192.168.1.100\\share">
+                        <label>服务器地址 <span class="required">*</span></label>
+                        <input type="text" id="libServer" placeholder="例如: 192.168.1.100">
+                    </div>
+                    <div class="form-group smb-only" style="display:none;">
+                        <label>共享路径 <span class="required">*</span></label>
+                        <input type="text" id="libShare" placeholder="例如: share 或 share/subfolder">
                     </div>
                     <div class="form-group smb-only" style="display:none;">
                         <label>域</label>
@@ -722,10 +726,15 @@ const MediaLibrary = {
                 return;
             }
         } else if (type === 'smb') {
+            config.server = document.getElementById('libServer').value.trim();
             config.share = document.getElementById('libShare').value.trim();
             config.username = document.getElementById('libUsername').value.trim();
             config.password = document.getElementById('libPassword').value;
             config.domain = document.getElementById('libDomain').value.trim();
+            if (!config.server) {
+                showToast('请输入SMB服务器地址', 'error');
+                return;
+            }
             if (!config.share) {
                 showToast('请输入SMB共享路径', 'error');
                 return;

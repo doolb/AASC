@@ -30,4 +30,5 @@
 | 控制端 | [control.md](design/control.md) | 媒体管理、显示控制、裁剪预览 |
 | 媒体库 | [media-library.md](design/media-library.md) | 多媒体库管理、多协议支持、文件操作 |
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |
+| 聊天系统 | [chat-system.md](design/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | WebSocket | [websocket.md](design/websocket.md) | 通信协议、消息类型 |

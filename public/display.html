@@ -11,6 +11,7 @@
     <div id="timeDisplay"></div>
     <div id="fileNameDisplay"></div>
     <div id="voiceStatus" class="voice-status-hidden">语音</div>
+    <div id="voiceTextDisplay" class="voice-text-hidden"></div>
     
     <div id="mediaContainer">
         <div id="waitingMessage">
@@ -27,6 +28,8 @@
         const connectionStatus = document.getElementById('connectionStatus');
         const timeDisplay = document.getElementById('timeDisplay');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const voiceStatus = document.getElementById('voiceStatus');
+        const voiceTextDisplay = document.getElementById('voiceTextDisplay');
         const waitingMessage = document.getElementById('waitingMessage');
         const mediaImage = document.getElementById('mediaImage');
         const mediaVideo = document.getElementById('mediaVideo');
@@ -39,6 +42,10 @@
         let autoTtsEnabled = true;
         let ttsQueue = [];
         let isPlayingTts = false;
+        let voiceSupported = false;
+        let isListening = false;
+        let voiceParts = [];
+        let recognition = null;
         
         function sendCanvasSize() {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -358,10 +365,15 @@
             isPlayingTts = true;
             const item = ttsQueue.shift();
             
+            if (item.text) {
+                showTtsText(item.text);
+            }
+            
             if (item.audioUrl) {
                 ttsAudio.src = item.audioUrl;
                 ttsAudio.play().catch(e => {
                     console.log('TTS播放被阻止');
+                    hideTtsText();
                     isPlayingTts = false;
                     playNextTts();
                 });
@@ -377,6 +389,7 @@
                         ttsAudio.src = data.audioUrl;
                         ttsAudio.play().catch(e => {
                             console.log('TTS播放被阻止');
+                            hideTtsText();
                             isPlayingTts = false;
                             playNextTts();
                         });
@@ -402,20 +415,35 @@
         }
         
         ttsAudio.addEventListener('ended', () => {
+            hideTtsText();
             isPlayingTts = false;
             playNextTts();
         });
         
         ttsAudio.addEventListener('error', () => {
+            hideTtsText();
             isPlayingTts = false;
             playNextTts();
         });
+        
+        function showTtsText(text) {
+            if (voiceTextDisplay && text) {
+                voiceTextDisplay.textContent = text;
+                voiceTextDisplay.className = 'voice-text-visible';
+            }
+        }
+        
+        function hideTtsText() {
+            if (voiceTextDisplay) {
+                voiceTextDisplay.className = 'voice-text-hidden';
+            }
+        }
         
         function handleTTS(data) {
             if (data.action === 'play') {
                 queueTts({ text: data.text });
             } else if (data.action === 'playAudio') {
-                queueTts({ audioUrl: data.audioUrl });
+                queueTts({ audioUrl: data.audioUrl, text: data.text });
             } else if (data.action === 'stop') {
                 ttsQueue = [];
                 ttsAudio.pause();
@@ -432,6 +460,98 @@
             } else if (data.action === 'voice') {
                 queueTts({ audioUrl: data.audioUrl, text: data.text });
             }
+        }
+        
+        function handleVoiceCommand(data) {
+            if (data.action === 'confirm') {
+                showVoiceConfirmPopup(data.confirmationId, data.text, data.audioUrl);
+            } else if (data.action === 'response') {
+                if (data.audioUrl) {
+                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                }
+                showVoiceResponsePopup(data.text);
+            } else if (data.action === 'searchResult') {
+                if (data.audioUrl) {
+                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                }
+                showSearchResultPopup(data.query, data.results);
+            }
+        }
+        
+        function showVoiceConfirmPopup(confirmationId, text, audioUrl) {
+            const existing = document.querySelector('.voice-confirm-popup');
+            if (existing) {
+                existing.remove();
+            }
+            
+            if (audioUrl) {
+                queueTts({ audioUrl: audioUrl, text: text });
+            }
+            
+            const popup = document.createElement('div');
+            popup.className = 'voice-confirm-popup';
+            popup.innerHTML = `
+                <div class="voice-confirm-content">${text}</div>
+                <div class="voice-confirm-hint">5秒内无回复将自动确认</div>
+            `;
+            document.body.appendChild(popup);
+            
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.remove();
+                }
+            }, 6000);
+        }
+        
+        function showVoiceResponsePopup(text) {
+            const existing = document.querySelector('.voice-response-popup');
+            if (existing) {
+                existing.remove();
+            }
+            
+            const popup = document.createElement('div');
+            popup.className = 'voice-response-popup';
+            popup.innerHTML = `<div class="voice-response-content">${text}</div>`;
+            document.body.appendChild(popup);
+            
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.remove();
+                }
+            }, 5000);
+        }
+        
+        function showSearchResultPopup(query, results) {
+            const existing = document.querySelector('.search-result-popup');
+            if (existing) {
+                existing.remove();
+            }
+            
+            let contentHtml = '';
+            if (results.type === 'ai_answer') {
+                contentHtml = `<div class="search-ai-answer">${results.content}</div>`;
+            } else if (results.type === 'first_result') {
+                contentHtml = `
+                    <div class="search-result-title">${results.title}</div>
+                    <div class="search-result-snippet">${results.snippet}</div>
+                `;
+            } else {
+                contentHtml = `<div class="search-no-result">没有找到结果</div>`;
+            }
+            
+            const popup = document.createElement('div');
+            popup.className = 'search-result-popup';
+            popup.innerHTML = `
+                <div class="search-result-query">搜索: ${query}</div>
+                <div class="search-result-body">${contentHtml}</div>
+            `;
+            document.body.appendChild(popup);
+            
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.remove();
+                }
+            }, 10000);
         }
         
         function showReminderPopup(time, content) {
@@ -626,6 +746,8 @@
                         handleReminder(data);
                     } else if (data.type === 'restoreState') {
                         handleRestoreState(data.state);
+                    } else if (data.type === 'voiceCommand') {
+                        handleVoiceCommand(data);
                     } else {
                         showMedia(data);
                     }
@@ -652,27 +774,32 @@
         
         connectWebSocket();
         
-        let recognition = null;
-        let isListening = false;
-        let voiceParts = [];
-        let voiceSupported = false;
-        
         initVoiceRecognition();
         updateVoiceStatusDisplay();
         
         function updateVoiceStatusDisplay() {
-            const statusEl = document.getElementById('voiceStatus');
-            if (!statusEl) return;
+            if (!voiceStatus) return;
             
             if (!voiceSupported) {
-                statusEl.className = 'voice-status-unsupported';
-                statusEl.title = '不支持语音识别';
+                voiceStatus.className = 'voice-status-unsupported';
+                voiceStatus.title = '不支持语音识别';
             } else if (isListening) {
-                statusEl.className = 'voice-status-listening';
-                statusEl.title = '语音识别中...';
+                voiceStatus.className = 'voice-status-listening';
+                voiceStatus.title = '语音识别中...';
             } else {
-                statusEl.className = 'voice-status-ready';
-                statusEl.title = '语音识别就绪';
+                voiceStatus.className = 'voice-status-ready';
+                voiceStatus.title = '语音识别就绪';
+            }
+        }
+        
+        function updateVoiceTextDisplay(text, isFinal) {
+            if (!voiceTextDisplay) return;
+            
+            if (text) {
+                voiceTextDisplay.textContent = text + (isFinal ? '' : '…');
+                voiceTextDisplay.className = 'voice-text-visible';
+            } else {
+                voiceTextDisplay.className = 'voice-text-hidden';
             }
         }
         
@@ -692,6 +819,7 @@
             if (!SpeechRecognition) {
                 console.log('浏览器不支持语音识别');
                 voiceSupported = false;
+                updateVoiceStatusDisplay();
                 return;
             }
             
@@ -753,18 +881,24 @@
                 voiceParts[voiceParts.length - 1] = transcript;
             }
             
+            const fullText = voiceParts.join('');
             console.log('显示端语音输入: ' + transcript, 'isFinal:', results.isFinal);
+            
+            updateVoiceTextDisplay(fullText, results.isFinal);
             
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 displayWs.send(JSON.stringify({
                     type: 'voiceInput',
                     text: transcript,
                     isFinal: results.isFinal,
-                    fullText: voiceParts.join('')
+                    fullText: fullText
                 }));
             }
             
             if (results.isFinal) {
+                setTimeout(() => {
+                    updateVoiceTextDisplay('', true);
+                }, 3000);
                 voiceParts.push('');
             }
         }

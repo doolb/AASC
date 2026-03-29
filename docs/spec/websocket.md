@@ -145,7 +145,16 @@ wss.on('connection', (ws, req)):
 | media | 发送媒体 | `{ type, displayId, media }` |
 | control | 控制指令 | `{ type, displayId, action, value }` |
 | tts | TTS 操作 | `{ type, displayId, action, ... }` |
-| chat | 聊天请求 | `{ type, displayId, message, ... }` |
+| chatMessage | 聊天请求 | `{ type, content, mode, target, templateTarget, displayId, playOnControl }` |
+| chat | 聊天请求(旧) | `{ type, displayId, message, ... }` |
+
+**chatMessage 字段说明**:
+- content: 消息内容
+- mode: 'group' 或 'private'
+- target: 私聊时的助手名字，群聊时为 null
+- templateTarget: 群聊时使用的模板助手名字（用于系统提示词）
+- displayId: 显示端ID
+- playOnControl: 是否在控制端播放语音
 
 ## 前端 WebSocket 客户端
 
@@ -297,11 +306,21 @@ wss.on('connection', (ws, req)):
         发送 WebSocket { type: 'tts', displayId, action: 'play', text }
     
     服务端处理 TTS play:
-        接收 { type: 'tts', action: 'play', text }
+        接收 { type: 'tts', action: 'play', text, displayId, playOnControl }
         调用 chat.splitIntoSentences(text) 分割句子
+        句子结束符包括: '.', '!', '?', '~', '～', '。', '！', '？', '；', ';', '"', '"', ''', ''', '…'
         遍历每个句子:
             调用 tts.generateTTS(sentence)
-            发送 { type: 'tts', action: 'playAudio', audioUrl, text } 到显示端
+            如果 playOnControl 为 true:
+                发送 { type: 'playOnControl', audioUrl, text } 到控制端
+            否则如果 displayId 存在:
+                发送 { type: 'tts', action: 'playAudio', audioUrl, text } 到显示端
+    
+    handlePlayOnControl(data):
+        接收 { type: 'playOnControl', audioUrl, text }
+        将音频加入播放队列
+        如果当前没有播放，从队列取出音频播放
+        播放完成后自动播放下一个队列中的音频
     
     handleChunk(data):
         更新流式消息内容

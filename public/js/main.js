@@ -100,6 +100,10 @@ const App = {
         if (window.Reminder) {
             window.Reminder.load();
         }
+        
+        if (window.Search) {
+            window.Search.init();
+        }
     }
 };
 

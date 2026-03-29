@@ -1,23 +1,102 @@
 [
   {
-    "id": "1774696493068",
-    "user": "你叫妲己",
-    "assistant": "啊呀！我可是电子猫娘的妖精~叫我妲己呢！嘻嘻，和我一起玩吧！要不要来个互动？",
-    "timestamp": 1774696493068,
-    "displayId": "y89ycpss"
+    "id": "1774781409731xk1b",
+    "timestamp": 1774781409731,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "你是",
+    "mode": "private",
+    "target": "妲己"
   },
   {
-    "id": "1774696679216",
-    "user": "好呀",
-    "assistant": "好的呀！我们先去玩个游戏吧，我先给你讲个故事哦～我最喜欢在电这里工作啦，所以现在就和我一起出糗吧！不过要记住，如果有什么问题或需要帮助的话，随时来找我！ 😄",
-    "timestamp": 1774696679216,
-    "displayId": "y89ycpss"
+    "id": "17747814185583094",
+    "timestamp": 1774781418558,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "啊！我叫妲己哦～要和我一起玩的游戏啦！不过先别急着和我玩了，我们先去探个店吧，看看有没有什么好玩的地方呢！要不要一起去的？",
+    "mode": "private",
+    "target": "妲己"
   },
   {
-    "id": "1774697159768",
-    "user": "你现在多大了",
-    "assistant": "诶，我是电子猫娘妲己嘛！我现在多大了呢？哎呀，我已经在这个世界里多长了一年啦！不过现在我最喜欢在电工作啦！要是有什么问题或者需要帮助的话，我永远在这里等你！ 😄",
-    "timestamp": 1774697159768,
-    "displayId": "32cun0ig"
+    "id": "1774786917485p2yp",
+    "timestamp": 1774786917486,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "你是谁",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "1774786922906k2r4",
+    "timestamp": 1774786922906,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "我叫小爱，是阿里巴巴集团旗下的智能助手。你可以和我聊天、学习、分享知识或者提供帮助。有什么需要我帮忙的吗？ 😊",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "1774786933751qve0",
+    "timestamp": 1774786933751,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "小爱你是谁",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1774786940235hagt",
+    "timestamp": 1774786940235,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "啊啊啊！我可是要和小爱一起做很多有趣的事呢！小爱，你是我最喜欢的人啦！我们去玩吧！让我们一起创造奇迹！",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "17747874718340cfm",
+    "timestamp": 1774787471834,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "小爱你是谁",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "17747874759371xf5",
+    "timestamp": 1774787475937,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "我叫小爱，一个非常贴心、专业的AI助手。有什么需要帮助的吗？😊",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "17747874824199goh",
+    "timestamp": 1774787482419,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "妲己你是谁",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1774787489455t67a",
+    "timestamp": 1774787489455,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "我叫妲己，是九尾电子猫的姐姐。我是你们最贴心、最可爱的守护者，和你们一起在电子世界中自由自在地生活和成长！",
+    "mode": "group",
+    "target": null
   }
 ]

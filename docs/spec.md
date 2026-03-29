@@ -14,6 +14,8 @@
 | 提醒功能 | [reminder.md](spec/reminder.md) | 提醒数据结构、触发逻辑、定时检查 |
 | 侧边栏导航 | [sidebar.md](spec/sidebar.md) | 侧边栏布局、面板切换、交互逻辑 |
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
+| 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
+| 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |
 
 ## 核心模块
 
@@ -26,6 +28,7 @@
 | TTS | core/tts.js | 语音合成 |
 | 聊天 | core/chat.js | AI 聊天功能 |
 | 整点报时 | core/timeAnnounce.js | 整点报时功能 |
+| 语音命令 | core/voiceCommand.js | 语音命令处理模块 |
 
 ## 前端模块
 
@@ -39,6 +42,7 @@
 | 媒体库 | public/js/media-library.js | 媒体库列表、文件管理、播放控制 |
 | 提醒界面 | public/js/reminder.js | 提醒管理界面 |
 | 聊天界面 | public/js/chat.js | AI 聊天界面 |
+| 搜索界面 | public/js/search.js | 搜索历史管理、手动搜索 |
 | 主入口 | public/js/main.js | 初始化、导航切换 |
 | 上传功能 | public/js/upload.js | 文件上传处理 |
 | 显示端列表 | public/js/display-list.js | 显示端选择器 |

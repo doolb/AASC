@@ -4,11 +4,15 @@
   "description": "网页版媒体中心 - 上传端 + 显示端",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node --openssl-legacy-provider server.js"
   },
   "dependencies": {
     "@marsaud/smb2": "^0.18.0",
+    "axios": "^1.14.0",
+    "cheerio": "^1.2.0",
     "express": "^4.18.2",
+    "puppeteer": "^24.40.0",
+    "puppeteer-core": "^24.40.0",
     "ws": "^8.14.2"
   }
 }

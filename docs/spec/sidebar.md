@@ -27,6 +27,7 @@
 | 显示控制 | display | 显示端选择、显示控制、裁剪、TTS、整点报时 | 🖥️ |
 | 提醒设置 | reminder | 提醒表单、提醒列表 | ⏰ |
 | AI助手 | chat | AI聊天助手 | 💬 |
+| 搜索 | search | 手动搜索、搜索历史 | 🔍 |
 
 ## HTML 结构
 
@@ -53,6 +54,10 @@
                 <span class="nav-icon">💬</span>
                 <span class="nav-text">助手</span>
             </button>
+            <button class="nav-item" data-target="search" title="搜索">
+                <span class="nav-icon">🔍</span>
+                <span class="nav-text">搜索</span>
+            </button>
         </div>
     </nav>
     
@@ -68,6 +73,9 @@
         </section>
         <section class="panel" id="panel-chat" style="display:none;">
             <!-- AI助手模块 -->
+        </section>
+        <section class="panel" id="panel-search" style="display:none;">
+            <!-- 搜索模块 -->
         </section>
     </main>
 </body>

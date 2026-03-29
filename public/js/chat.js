@@ -4,17 +4,39 @@ const Chat = {
     config: {
         systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。'
     },
+    assistantConfig: {
+        defaultName: '小爱',
+        assistants: [
+            { name: '小爱', template: '你是小爱，一个友好、活泼的智能助手。请用简洁、亲切的语言回答问题。' }
+        ]
+    },
+    session: {
+        mode: 'group',
+        privateTarget: null,
+        playOnControl: false
+    },
+    commands: {
+        commands: {}
+    },
+    searchHistory: [],
     isLoading: false,
     currentStreamingMessage: '',
     currentUserMessage: '',
     isListening: false,
     recognition: null,
     voiceParts: [],
+    audioQueue: [],
+    isPlayingAudio: false,
+    currentAudio: null,
     
     init() {
         this.loadHistory();
         this.loadTemplates();
         this.loadConfig();
+        this.loadAssistantConfig();
+        this.loadSearchHistory();
+        this.loadSession();
+        this.loadCommands();
         this.initVoiceRecognition();
         this.render();
     },
@@ -147,7 +169,7 @@ const Chat = {
             .then(data => {
                 if (data.status === 'success') {
                     this.templates = data.templates;
-                    this.renderTemplates();
+                    this.render();
                 }
             })
             .catch(err => console.error('加载聊天模板失败:', err));
@@ -164,6 +186,75 @@ const Chat = {
                 }
             })
             .catch(err => console.error('加载聊天配置失败:', err));
+    },
+    
+    loadAssistantConfig() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'getAssistantConfig'
+            }));
+        }
+    },
+    
+    loadSearchHistory() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'getSearchHistory'
+            }));
+        }
+    },
+    
+    loadSession() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'getChatSession'
+            }));
+        }
+    },
+    
+    loadCommands() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'getChatCommands'
+            }));
+        }
+    },
+    
+    saveSession() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setChatSession',
+                session: this.session
+            }));
+        }
+    },
+    
+    saveCommands() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setChatCommands',
+                commands: this.commands
+            }));
+        }
+    },
+    
+    setMode(mode, target = null) {
+        this.session.mode = mode;
+        this.session.privateTarget = target;
+        this.saveSession();
+        this.render();
+    },
+    
+    togglePlayOnControl() {
+        this.session.playOnControl = !this.session.playOnControl;
+        this.saveSession();
+        this.renderPlayOnControlToggle();
     },
     
     saveConfig() {
@@ -191,62 +282,125 @@ const Chat = {
         const container = document.getElementById('chatContainer');
         if (!container) return;
         
+        let tabsHtml = '<div class="chat-tabs"><div class="chat-tab' + (this.session.mode === 'group' ? ' active' : '') + '" onclick="Chat.setMode(\'group\', null)">群聊</div>';
+        this.templates.forEach(t => {
+            const isActive = this.session.mode === 'private' && this.session.privateTarget === t.name;
+            tabsHtml += `<div class="chat-tab${isActive ? ' active' : ''}" onclick="Chat.setMode('private', '${this.escapeHtml(t.name)}')">${this.escapeHtml(t.name)}</div>`;
+        });
+        tabsHtml += '</div>';
+        
         container.innerHTML = `
-            <div class="chat-header">
-                <h3>AI 聊天助手</h3>
-                <div class="chat-actions">
-                    <button class="chat-action-btn" onclick="Chat.showConfig()">设置</button>
-                    <button class="chat-action-btn" onclick="Chat.showTemplates()">模板</button>
-                    <button class="chat-action-btn" onclick="Chat.clearHistory()">清空</button>
+            ${tabsHtml}
+            <div class="chat-main">
+                <div class="chat-header">
+                    <h3>AI 聊天助手</h3>
+                    <div class="chat-mode-indicator" id="chatModeIndicator"></div>
+                    <div class="chat-actions">
+                        <button class="chat-action-btn" onclick="Chat.showConfig()">设置</button>
+                        <button class="chat-action-btn" onclick="Chat.showTemplates()">模板</button>
+                        <button class="chat-action-btn" onclick="Chat.showCommands()">指令</button>
+                        <button class="chat-action-btn" onclick="Chat.clearHistory()">清空</button>
+                    </div>
                 </div>
-            </div>
-            <div class="chat-messages" id="chatMessages"></div>
-            <div class="chat-input-area">
-                <select id="chatTemplateSelect" class="chat-template-select">
-                    <option value="">不使用模板</option>
-                </select>
-                <div class="chat-input-row">
-                    <button id="voiceInputBtn" class="voice-input-btn" onclick="Chat.toggleVoice()" title="开始语音输入">🎤</button>
-                    <input type="text" id="chatInput" placeholder="输入消息... (说"聊天xxx"触发语音对话)" onkeypress="Chat.handleKeyPress(event)">
-                    <button class="chat-send-btn" onclick="Chat.sendMessage()" id="chatSendBtn">发送</button>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-area">
+                    <div class="chat-input-row">
+                        <button id="voiceInputBtn" class="voice-input-btn" onclick="Chat.toggleVoice()" title="开始语音输入">🎤</button>
+                        <input type="text" id="chatInput" placeholder="输入消息... (说"聊天xxx"触发语音对话)" onkeypress="Chat.handleKeyPress(event)">
+                        <button class="chat-send-btn" onclick="Chat.sendMessage()" id="chatSendBtn">发送</button>
+                    </div>
+                    <div class="chat-options">
+                        <label class="chat-option">
+                            <input type="checkbox" id="playOnControlCheckbox" onchange="Chat.togglePlayOnControl()">
+                            在控制端播放语音
+                        </label>
+                    </div>
                 </div>
+                <div class="chat-search-history" id="chatSearchHistory"></div>
             </div>
         `;
         
         this.renderHistory();
-        this.renderTemplates();
+        this.renderModeIndicator();
+        this.renderPlayOnControlToggle();
+        this.renderSearchHistory();
+    },
+    
+    renderModeIndicator() {
+        const indicator = document.getElementById('chatModeIndicator');
+        if (!indicator) return;
+        
+        if (this.session.mode === 'private') {
+            indicator.innerHTML = `
+                <span class="mode-badge private">私聊: ${this.escapeHtml(this.session.privateTarget)}</span>
+                <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出私聊</button>
+            `;
+        } else {
+            indicator.innerHTML = '<span class="mode-badge group">群聊</span>';
+        }
+    },
+    
+    renderPlayOnControlToggle() {
+        const checkbox = document.getElementById('playOnControlCheckbox');
+        if (checkbox) {
+            checkbox.checked = this.session.playOnControl;
+        }
     },
     
     renderHistory() {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
         
-        if (this.history.length === 0) {
+        let indexedHistory = this.history.map((item, index) => ({ item, originalIndex: index }));
+        if (this.session.mode === 'private' && this.session.privateTarget) {
+            indexedHistory = indexedHistory.filter(({ item }) => 
+                item.mode === 'private' && item.target === this.session.privateTarget
+            );
+        } else {
+            indexedHistory = indexedHistory.filter(({ item }) => 
+                item.mode !== 'private'
+            );
+        }
+        
+        if (indexedHistory.length === 0) {
             messagesContainer.innerHTML = '<div class="chat-empty">暂无聊天记录</div>';
             return;
         }
         
-        messagesContainer.innerHTML = this.history.map((item, index) => `
-            <div class="chat-message-group" data-index="${index}">
-                <div class="chat-message user">
-                    <div class="chat-message-content">${this.escapeHtml(item.user)}</div>
+        messagesContainer.innerHTML = indexedHistory.map(({ item, originalIndex }) => {
+            let roleClass = item.role || 'user';
+            let name = item.name;
+            let content = item.content || item.assistant || item.user || '';
+            
+            if (item.role === 'control') {
+                roleClass = 'user';
+                name = '用户';
+            } else if (item.role === 'assistant') {
+                if (item.mode === 'private' && item.target) {
+                    name = item.target;
+                } else {
+                    name = item.name || '助手';
+                }
+            } else if (item.user) {
+                roleClass = 'user';
+                name = '用户';
+                content = item.user;
+            } else if (item.assistant) {
+                roleClass = 'assistant';
+                name = '助手';
+                content = item.assistant;
+            }
+            
+            return `
+                <div class="chat-message ${roleClass}" data-index="${originalIndex}">
+                    <div class="chat-message-header">${this.escapeHtml(name)}</div>
+                    <div class="chat-message-content">${this.escapeHtml(content)}</div>
+                    <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                 </div>
-                <div class="chat-message assistant">
-                    <div class="chat-message-content">${this.escapeHtml(item.assistant)}</div>
-                    <button class="chat-play-btn" onclick="Chat.playMessage(${index})" title="播放语音">🔊</button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
         
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    },
-    
-    renderTemplates() {
-        const select = document.getElementById('chatTemplateSelect');
-        if (!select) return;
-        
-        select.innerHTML = '<option value="">不使用模板</option>' + 
-            this.templates.map(t => `<option value="${t.id}">${this.escapeHtml(t.name)}</option>`).join('');
     },
     
     handleKeyPress(event) {
@@ -260,38 +414,136 @@ const Chat = {
         if (this.isLoading) return;
         
         const input = document.getElementById('chatInput');
-        const templateSelect = document.getElementById('chatTemplateSelect');
-        const message = input.value.trim();
+        let message = input.value.trim();
         
         if (!message) return;
         
-        if (!window.currentDisplayId) {
-            window.showToast('请先选择显示端', 'error');
+        const systemResult = this.handleSystemCommand(message);
+        if (systemResult) {
+            input.value = '';
             return;
         }
         
-        const useTemplate = templateSelect ? templateSelect.value : null;
+        let mode = this.session.mode;
+        let target = this.session.privateTarget;
+        let templateTarget = null;
+        let displayMessage = message;
+        let sendMessage = message;
+        
+        if (mode === 'group') {
+            for (const template of this.templates) {
+                if (message.startsWith(template.name)) {
+                    templateTarget = template.name;
+                    sendMessage = message.substring(template.name.length).trim();
+                    if (!sendMessage) {
+                        this.addSystemMessage(`已进入与 ${template.name} 的私聊模式`);
+                        input.value = '';
+                        return;
+                    }
+                    break;
+                }
+            }
+            if (!templateTarget && this.templates.length > 0) {
+                templateTarget = this.templates[0].name;
+            }
+        }
         
         this.isLoading = true;
         this.currentStreamingMessage = '';
-        this.currentUserMessage = message;
+        this.currentUserMessage = displayMessage;
         this.updateSendButton();
-        this.showStreamingMessage(message);
+        
+        let assistantName = '助手';
+        if (mode === 'private' && target) {
+            assistantName = target;
+        } else if (templateTarget) {
+            assistantName = templateTarget;
+        }
+        this.showStreamingMessage(displayMessage, assistantName);
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             window.WebSocketManager.ws.send(JSON.stringify({
-                type: 'chat',
+                type: 'chatMessage',
+                content: sendMessage,
+                displayContent: displayMessage,
+                mode: mode,
+                target: target,
+                templateTarget: templateTarget,
                 displayId: window.currentDisplayId,
-                message: message,
-                useTemplate: useTemplate || null
+                playOnControl: this.session.playOnControl
             }));
         }
         
         input.value = '';
     },
     
-    showStreamingMessage(userMessage) {
+    handleSystemCommand(text) {
+        if (text === '系统帮助') {
+            const helpText = `系统指令帮助：
+- 系统帮助：显示此帮助
+- 私聊{助手名字}：进入私聊模式
+- 退出私聊：退出私聊模式
+- 提醒{时间} {内容}：设置提醒
+- 报时/现在几点：播报当前时间
+- 开启/关闭报时：控制报时功能
+- 搜索{关键词}：搜索信息
+- 拒绝/取消：取消待确认操作
+- 系统记录{内容}：保存重要记录`;
+            alert(helpText);
+            return true;
+        }
+        
+        if (text.startsWith('私聊')) {
+            const name = text.substring(2).trim();
+            if (name) {
+                const template = this.templates.find(t => t.name === name);
+                if (template) {
+                    this.setMode('private', name);
+                    this.addSystemMessage(`已进入与 ${name} 的私聊模式`);
+                    return true;
+                }
+            } else if (this.templates.length > 0) {
+                const defaultTemplate = this.templates[0];
+                this.setMode('private', defaultTemplate.name);
+                this.addSystemMessage(`已进入与 ${defaultTemplate.name} 的私聊模式`);
+                return true;
+            }
+            this.addSystemMessage('请指定有效的助手名字');
+            return true;
+        }
+        
+        if (text === '退出私聊') {
+            this.setMode('group', null);
+            this.addSystemMessage('已退出私聊模式');
+            return true;
+        }
+        
+        for (const [keyword, actions] of Object.entries(this.commands.commands || {})) {
+            if (text.includes(keyword)) {
+                this.addSystemMessage(`执行指令组合: ${keyword}`);
+                if (window.WebSocketManager && window.WebSocketManager.ws && 
+                    window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+                    window.WebSocketManager.ws.send(JSON.stringify({
+                        type: 'executeCommands',
+                        keyword: keyword,
+                        actions: actions,
+                        displayId: window.currentDisplayId,
+                        playOnControl: this.session.playOnControl
+                    }));
+                }
+                return true;
+            }
+        }
+        
+        return false;
+    },
+    
+    addSystemMessage(content) {
+        window.showToast(content, 'info');
+    },
+    
+    showStreamingMessage(userMessage, assistantName = '助手') {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
         
@@ -301,18 +553,24 @@ const Chat = {
         }
         
         const group = document.createElement('div');
-        group.className = 'chat-message-group';
+        group.className = 'chat-message user streaming';
         group.id = 'streamingGroup';
         group.innerHTML = `
-            <div class="chat-message user">
-                <div class="chat-message-content">${this.escapeHtml(userMessage)}</div>
-            </div>
-            <div class="chat-message assistant">
-                <div class="chat-message-content" id="streamingContent"><span class="chat-cursor">|</span></div>
-            </div>
+            <div class="chat-message-header">用户</div>
+            <div class="chat-message-content">${this.escapeHtml(userMessage)}</div>
         `;
         
         messagesContainer.appendChild(group);
+        
+        const assistantMsg = document.createElement('div');
+        assistantMsg.className = 'chat-message assistant';
+        assistantMsg.id = 'streamingAssistant';
+        assistantMsg.innerHTML = `
+            <div class="chat-message-header">${this.escapeHtml(assistantName)}</div>
+            <div class="chat-message-content" id="streamingContent"><span class="chat-cursor">|</span></div>
+        `;
+        
+        messagesContainer.appendChild(assistantMsg);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
     
@@ -334,23 +592,28 @@ const Chat = {
         this.isLoading = false;
         this.updateSendButton();
         
+        const streamingContent = document.getElementById('streamingContent');
+        if (streamingContent) {
+            streamingContent.innerHTML = this.escapeHtml(data.message);
+            streamingContent.removeAttribute('id');
+        }
+        
         const streamingGroup = document.getElementById('streamingGroup');
         if (streamingGroup) {
-            const streamingContent = streamingGroup.querySelector('#streamingContent');
-            if (streamingContent) {
-                streamingContent.innerHTML = this.escapeHtml(data.message);
-                streamingContent.removeAttribute('id');
-            }
             streamingGroup.removeAttribute('id');
+        }
+        
+        const streamingAssistant = document.getElementById('streamingAssistant');
+        if (streamingAssistant) {
+            streamingAssistant.removeAttribute('id');
             
-            const assistantMsg = streamingGroup.querySelector('.chat-message.assistant');
-            if (assistantMsg && data.success) {
+            if (data.success) {
                 const playBtn = document.createElement('button');
                 playBtn.className = 'chat-play-btn';
                 playBtn.textContent = '🔊';
                 playBtn.title = '播放语音';
                 playBtn.onclick = () => this.playMessage(this.history.length - 1);
-                assistantMsg.appendChild(playBtn);
+                streamingAssistant.appendChild(playBtn);
             }
         }
         
@@ -361,27 +624,88 @@ const Chat = {
         }
     },
     
-    playMessage(index) {
-        const item = this.history[index];
-        if (!item) return;
+    handleNewMessage(data) {
+        this.history.push(data.message);
+        const msg = data.message;
+        const shouldRender = 
+            (this.session.mode === 'private' && this.session.privateTarget === msg.target && msg.mode === 'private') ||
+            (this.session.mode !== 'private' && msg.mode !== 'private');
         
-        if (!window.currentDisplayId) {
-            window.showToast('请先选择显示端', 'error');
-            return;
+        if (shouldRender) {
+            this.renderHistory();
+            this.playMessage({ content: msg.content, displayId: data.displayId, playOnControl: data.playOnControl });
+        }
+    },
+    
+    playMessage(indexOrData) {
+        let content, displayId, playOnControl;
+        
+        if (typeof indexOrData === 'object') {
+            content = indexOrData.content;
+            displayId = indexOrData.displayId;
+            playOnControl = indexOrData.playOnControl;
+        } else {
+            const item = this.history[indexOrData];
+            if (!item) return;
+            content = item.content || item.assistant || item.user;
+            displayId = window.currentDisplayId;
+            playOnControl = this.session.playOnControl;
         }
         
-        const text = `用户问：${item.user}。回答：${item.assistant}`;
+        if (!content) return;
         
+        this.playText(content, displayId, playOnControl);
+    },
+    
+    playText(text, displayId, playOnControl) {
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'tts',
-                displayId: window.currentDisplayId,
+                displayId: displayId || null,
                 action: 'play',
-                text: text
+                text: text,
+                playOnControl: playOnControl || !displayId
             }));
-            window.showToast('正在播放...', 'success');
         }
+    },
+    
+    playOnControlDevice(audioUrl, text) {
+        this.audioQueue.push({ audioUrl, text });
+        this.processAudioQueue();
+    },
+    
+    processAudioQueue() {
+        if (this.isPlayingAudio || this.audioQueue.length === 0) {
+            return;
+        }
+        
+        this.isPlayingAudio = true;
+        const { audioUrl, text } = this.audioQueue.shift();
+        
+        const audio = new Audio(audioUrl);
+        this.currentAudio = audio;
+        
+        audio.onended = () => {
+            this.currentAudio = null;
+            this.isPlayingAudio = false;
+            this.processAudioQueue();
+        };
+        
+        audio.onerror = () => {
+            window.showToast('音频播放失败', 'error');
+            this.currentAudio = null;
+            this.isPlayingAudio = false;
+            this.processAudioQueue();
+        };
+        
+        audio.play().catch(err => {
+            console.error('播放失败:', err);
+            window.showToast('音频播放失败', 'error');
+            this.currentAudio = null;
+            this.isPlayingAudio = false;
+            this.processAudioQueue();
+        });
     },
     
     updateSendButton() {
@@ -393,13 +717,23 @@ const Chat = {
     },
     
     clearHistory() {
-        if (!confirm('确定要清空聊天记录吗？')) return;
+        const mode = this.session.mode;
+        const target = this.session.privateTarget;
+        const confirmText = mode === 'private' 
+            ? `确定要清空与 ${target} 的聊天记录吗？` 
+            : '确定要清空群聊记录吗？';
         
-        fetch('/api/chat/clear', { method: 'POST' })
+        if (!confirm(confirmText)) return;
+        
+        fetch('/api/chat/clear', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, target })
+        })
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'success') {
-                    this.history = [];
+                    this.history = data.history;
                     this.renderHistory();
                     window.showToast('聊天记录已清空', 'success');
                 }
@@ -455,7 +789,7 @@ const Chat = {
                     <div class="chat-template-name">${this.escapeHtml(t.name)}</div>
                     <div class="chat-template-content">${this.escapeHtml(t.content)}</div>
                 </div>
-                <button class="chat-template-delete" onclick="Chat.deleteTemplate('${t.id}')">删除</button>
+                <button class="chat-template-delete" onclick="Chat.deleteTemplate(\`${this.escapeHtml(t.name)}\`)">删除</button>
             </div>
         `).join('');
     },
@@ -481,7 +815,7 @@ const Chat = {
         .then(data => {
             if (data.status === 'success') {
                 this.templates = data.templates;
-                this.renderTemplates();
+                this.render();
                 this.renderTemplateList();
                 nameInput.value = '';
                 contentInput.value = '';
@@ -491,23 +825,24 @@ const Chat = {
         .catch(err => window.showToast('添加失败', 'error'));
     },
     
-    deleteTemplate(id) {
+    deleteTemplate(name) {
         if (!confirm('确定要删除这个模板吗？')) return;
         
-        fetch(`/api/chat/templates/${id}`, { method: 'DELETE' })
+        fetch(`/api/chat/templates/${encodeURIComponent(name)}`, { method: 'DELETE' })
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'success') {
                     this.templates = data.templates;
-                    this.renderTemplates();
+                    this.render();
                     this.renderTemplateList();
                     window.showToast('模板已删除', 'success');
                 }
             })
-            .catch(err => window.showToast('删除失败', 'error'));
+        .catch(err => window.showToast('删除失败', 'error'));
     },
     
     escapeHtml(text) {
+        if (!text) return '';
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
@@ -549,14 +884,48 @@ const Chat = {
                 }, 300);
             }
         } else {
-            setTimeout(() => {
-                this.sendVoiceMessage(text);
-            }, 300);
+            const assistantName = this.assistantConfig.defaultName || '小爱';
+            if (text.includes(assistantName)) {
+                const message = text.replace(assistantName, '').trim();
+                if (message) {
+                    setTimeout(() => {
+                        this.sendVoiceMessage(message);
+                    }, 300);
+                }
+            } else {
+                if (!window.currentDisplayId && !this.session.playOnControl) {
+                    window.showToast('请先选择显示端或开启控制端播放', 'error');
+                    return;
+                }
+                
+                if (window.WebSocketManager && window.WebSocketManager.ws && 
+                    window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+                    window.WebSocketManager.ws.send(JSON.stringify({
+                        type: 'voiceCommand',
+                        displayId: window.currentDisplayId,
+                        text: text,
+                        playOnControl: this.session.playOnControl
+                    }));
+                }
+            }
         }
     },
     
     handleReminderCommand(text) {
-        window.showToast('提醒功能开发中...', 'info');
+        if (!window.currentDisplayId && !this.session.playOnControl) {
+            window.showToast('请先选择显示端或开启控制端播放', 'error');
+            return;
+        }
+        
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'voiceCommand',
+                displayId: window.currentDisplayId,
+                text: text,
+                playOnControl: this.session.playOnControl
+            }));
+        }
     },
     
     handleTimeAnnounceCommand(text) {
@@ -587,7 +956,194 @@ const Chat = {
     },
     
     handleSearchCommand(text) {
-        window.showToast('搜索功能开发中...', 'info');
+        if (!window.currentDisplayId && !this.session.playOnControl) {
+            window.showToast('请先选择显示端或开启控制端播放', 'error');
+            return;
+        }
+        
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'voiceCommand',
+                displayId: window.currentDisplayId,
+                text: text,
+                playOnControl: this.session.playOnControl
+            }));
+        }
+    },
+    
+    handleSession(data) {
+        if (data.session) {
+            this.session = { ...this.session, ...data.session };
+            this.renderModeIndicator();
+            this.renderPlayOnControlToggle();
+        }
+    },
+    
+    handleCommands(data) {
+        if (data.commands) {
+            this.commands = data.commands;
+        }
+    },
+    
+    handlePlayOnControl(data) {
+        if (data.audioUrl) {
+            this.playOnControlDevice(data.audioUrl, data.text);
+        }
+    },
+    
+    renderSearchHistory() {
+        const container = document.getElementById('chatSearchHistory');
+        if (!container) return;
+        
+        if (this.searchHistory.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        container.innerHTML = `
+            <div class="search-history-header">
+                <h4>搜索历史</h4>
+                <button class="clear-btn" onclick="Chat.clearSearchHistory()">清空</button>
+            </div>
+            <div class="search-history-list">
+                ${this.searchHistory.slice(-10).reverse().map(item => `
+                    <div class="search-history-item">
+                        <div class="time">${this.formatTime(item.timestamp)}</div>
+                        <div class="content">
+                            <div class="keyword">${this.escapeHtml(item.query)}</div>
+                            <div class="result">${this.escapeHtml(item.results?.snippet || item.results?.title || '无结果')}</div>
+                        </div>
+                        <div class="actions">
+                            <button class="action-btn" onclick="Chat.playSearchResult('${item.id}')" title="播放结果">播放</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    },
+    
+    formatTime(timestamp) {
+        const date = new Date(timestamp);
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${month}-${day} ${hours}:${minutes}`;
+    },
+    
+    playSearchResult(id) {
+        const item = this.searchHistory.find(h => h.id === id);
+        if (!item) return;
+        
+        let text = '';
+        if (item.results && item.results.snippet) {
+            text = item.results.snippet;
+        } else if (item.results && item.results.title) {
+            text = item.results.title;
+        } else {
+            text = `搜索${item.query}，未找到相关结果`;
+        }
+        
+        this.playText(text, window.currentDisplayId, this.session.playOnControl);
+    },
+    
+    clearSearchHistory() {
+        if (this.searchHistory.length === 0) {
+            window.showToast('暂无搜索记录', 'info');
+            return;
+        }
+        
+        if (!confirm('确定要清空所有搜索历史吗？')) return;
+        
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'clearSearchHistory'
+            }));
+            this.searchHistory = [];
+            this.renderSearchHistory();
+            window.showToast('已清空搜索历史', 'success');
+        }
+    },
+    
+    showCommands() {
+        let modal = document.getElementById('chatCommandsModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'chatCommandsModal';
+            modal.className = 'chat-modal-overlay';
+            document.body.appendChild(modal);
+        }
+        
+        modal.style.display = 'flex';
+        modal.innerHTML = `
+            <div class="chat-modal-content">
+                <div class="chat-modal-header">
+                    <h3>自定义指令配置</h3>
+                    <button class="chat-modal-close" onclick="Chat.hideCommands()">&times;</button>
+                </div>
+                <div class="chat-modal-body">
+                    <div class="chat-commands-list" id="chatCommandsList">
+                        ${Object.entries(this.commands.commands || {}).map(([keyword, actions]) => `
+                            <div class="chat-command-item">
+                                <div class="command-keyword">${this.escapeHtml(keyword)}</div>
+                                <div class="command-actions">${this.escapeHtml(actions.join(', '))}</div>
+                                <button class="chat-template-delete" onclick="Chat.deleteCommand('${this.escapeHtml(keyword)}')">删除</button>
+                            </div>
+                        `).join('') || '<div class="chat-empty">暂无自定义指令</div>'}
+                    </div>
+                    <div class="chat-add-template">
+                        <h4>添加新指令</h4>
+                        <input type="text" id="newCommandKeyword" placeholder="关键词 (如: 早上好)">
+                        <textarea id="newCommandActions" placeholder="指令列表，每行一个 (如:&#10;今天天气&#10;今日提醒&#10;报时)"></textarea>
+                        <button class="chat-add-btn" onclick="Chat.addCommand()">添加指令</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+    
+    hideCommands() {
+        const modal = document.getElementById('chatCommandsModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    },
+    
+    addCommand() {
+        const keywordInput = document.getElementById('newCommandKeyword');
+        const actionsInput = document.getElementById('newCommandActions');
+        
+        const keyword = keywordInput.value.trim();
+        const actionsText = actionsInput.value.trim();
+        
+        if (!keyword || !actionsText) {
+            window.showToast('请填写关键词和指令列表', 'error');
+            return;
+        }
+        
+        const actions = actionsText.split('\n').map(a => a.trim()).filter(a => a);
+        if (actions.length === 0) {
+            window.showToast('请至少添加一个指令', 'error');
+            return;
+        }
+        
+        this.commands.commands = this.commands.commands || {};
+        this.commands.commands[keyword] = actions;
+        this.saveCommands();
+        this.showCommands();
+        window.showToast('指令添加成功', 'success');
+    },
+    
+    deleteCommand(keyword) {
+        if (!confirm(`确定要删除指令 "${keyword}" 吗？`)) return;
+        
+        delete this.commands.commands[keyword];
+        this.saveCommands();
+        this.showCommands();
+        window.showToast('指令已删除', 'success');
     }
 };
 

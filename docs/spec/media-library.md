@@ -133,11 +133,20 @@
 类 SmbProvider 继承 MediaLibraryProvider:
     属性:
         client: SMB2客户端实例
-        share: 共享路径
+        server: SMB服务器地址（如 192.168.1.100）
+        sharePath: 共享路径（如 share 或 share/subfolder）
+        share: 完整共享路径（自动构建为 \\server\share）
+    
+    _buildSharePath(server, sharePath):
+        清理 sharePath 前后的斜杠
+        返回 "\\\\" + server + "\\" + sharePath
     
     connect():
+        验证 server 不为空
+        验证 sharePath 不为空
+        构建 share = _buildSharePath(server, sharePath)
         client = new SMB2({
-            share: config.share,
+            share: share,
             domain: config.domain,
             username: config.username,
             password: config.password
@@ -412,7 +421,7 @@ GET /api/media-libraries/:id/proxy/*
     onTypeChange(type):
         本地类型：显示路径字段
         HTTP类型：显示URL、用户名、密码字段
-        SMB类型：显示共享路径、域、用户名、密码字段
+        SMB类型：显示服务器地址、共享路径、域、用户名、密码字段
     
     addLibraryFromForm():
         收集表单数据
@@ -460,7 +469,8 @@ GET /api/media-libraries/:id/proxy/*
       "id": "smb_share",
       "name": "NAS共享",
       "type": "smb",
-      "share": "\\\\192.168.1.200\\media",
+      "server": "192.168.1.200",
+      "share": "media",
       "domain": "WORKGROUP",
       "username": "user",
       "password": "encrypted_password",

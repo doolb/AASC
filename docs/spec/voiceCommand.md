@@ -1,0 +1,253 @@
+# 语音命令实现文档
+
+## 模块概述
+
+语音命令模块 (`core/voiceCommand.js`) 处理显示端语音识别后的命令解析和执行。
+
+## 核心功能
+
+### 1. 语音状态显示
+
+**显示端实现** (`public/display.html`):
+```
+变量:
+    voiceSupported: 是否支持语音识别
+    isListening: 是否正在识别
+    voiceParts: 语音识别分段
+    recognition: SpeechRecognition 实例
+
+initVoiceRecognition():
+    检查浏览器是否支持 SpeechRecognition
+    如果不支持:
+        设置 voiceSupported = false
+        调用 updateVoiceStatusDisplay()
+        返回
+    设置 voiceSupported = true
+    创建 SpeechRecognition 实例
+    设置 continuous = true, interimResults = true
+    设置 lang = 'zh-CN'
+    绑定事件:
+        onstart: 设置 isListening = true, 调用 sendVoiceStatus()
+        onend: 设置 isListening = false, 调用 sendVoiceStatus(), 1秒后重启
+        onerror: 如果不是 no-speech/aborted, 设置 isListening = false
+        onresult: 调用 handleVoiceResult(event)
+    启动识别
+
+updateVoiceStatusDisplay():
+    如果不支持: 显示灰色 "语音"
+    如果正在识别: 显示绿色闪烁 "语音"
+    否则: 显示半透明 "语音"
+
+updateVoiceTextDisplay(text, isFinal):
+    如果有文字: 显示语音识别文字（临时结果带…）
+    否则: 隐藏
+
+handleVoiceResult(event):
+    获取识别结果
+    更新 voiceTextDisplay 显示
+    发送 { type: 'voiceInput', text, isFinal, fullText } 到服务器
+    如果是最终结果: 3秒后隐藏文字显示
+```
+
+### 2. 提醒功能
+
+**服务端实现** (`core/voiceCommand.js`):
+```
+parseTimeExpression(text):
+    解析时间表达式:
+        - "X分钟后" -> 相对时间
+        - "X秒后" -> 相对时间
+        - "X小时后" -> 相对时间
+        - "X点X分" -> 绝对时间
+        - 默认 -> 5分钟后
+
+parseRepeatRule(text):
+    解析重复规则:
+        - "每天" -> daily
+        - "每周" -> weekly
+        - "每月" -> monthly
+        - "每年" -> yearly
+        - 默认 -> once
+
+extractReminderContent(text):
+    提取提醒内容:
+        - 移除 "提醒我"
+        - 移除时间表达式
+        - 移除重复规则
+        - 返回剩余内容
+
+handleReminderCommand(text, displayId):
+    解析时间和重复规则
+    生成确认文本
+    创建待确认记录 (5秒过期)
+    生成 TTS 语音播放确认
+    发送确认弹窗到显示端
+    5秒后自动确认
+
+executeReminderConfirmation(confirmationId, confirmed):
+    如果确认:
+        调用 reminder.addReminder() 添加提醒
+    删除待确认记录
+```
+
+### 3. 报时功能
+
+**服务端实现**:
+```
+handleTimeAnnounceCommand(text, displayId):
+    如果 text 包含 "关闭报时":
+        设置 timeAnnounce.enabled = false
+        语音播放 "已关闭报时功能"
+    否则如果 text 包含 "开启报时":
+        设置 timeAnnounce.enabled = true
+        语音播放 "已开启报时功能"
+    否则:
+        调用 timeAnnounce.generateTimeText() 生成时间文本
+        生成 TTS 并播放
+```
+
+### 4. 搜索功能
+
+**服务端实现**:
+```
+handleSearchCommand(text, displayId):
+    提取搜索关键词
+    如果 displayId 存在:
+        语音播放 "正在搜索..."
+    调用 performSearch(query) 执行搜索
+    保存搜索历史
+    广播搜索历史到控制端
+    如果 displayId 存在:
+        语音播放搜索结果
+        发送搜索结果弹窗到显示端
+
+performSearch(query):
+    使用 axios 发送 HTTP 请求到 Bing 搜索
+    使用 cheerio 解析 HTML
+    尝试获取 AI 回答区域 #b_pole
+    如果存在 AI 回答:
+        返回 { type: 'ai_answer', content }
+    否则:
+        获取第一个搜索结果 li
+        返回 { type: 'first_result', title, link, snippet }
+    如果没有结果:
+        返回 { type: 'error', message }
+```
+
+### 5. AI 助手响应
+
+**服务端实现**:
+```
+assistantConfig:
+    defaultName: '小爱'
+    assistants: [{ name, template }]
+
+findAssistant(name):
+    在 assistants 中查找匹配的助手
+    如果没找到: 返回默认助手
+
+processVoiceCommand(text, displayId):
+    如果包含 "拒绝"/"取消":
+        取消待确认操作
+    否则如果包含 "提醒":
+        调用 handleReminderCommand()
+    否则如果包含 "报时"/"现在几点":
+        调用 handleTimeAnnounceCommand()
+    否则如果包含 "搜索":
+        调用 handleSearchCommand()
+    否则:
+        返回 { type: 'chat', message, systemPrompt }
+```
+
+## WebSocket 消息类型
+
+### 显示端 -> 服务端
+
+| 类型 | 说明 | 数据 |
+|------|------|------|
+| voiceInput | 语音输入 | `{ type, text, isFinal, fullText }` |
+| voiceStatus | 语音状态 | `{ type, supported, listening }` |
+
+### 服务端 -> 显示端
+
+| 类型 | 说明 | 数据 |
+|------|------|------|
+| voiceCommand | 语音命令响应 | `{ type, action, text, audioUrl, ... }` |
+
+### 控制端 -> 服务端
+
+| 类型 | 说明 | 数据 |
+|------|------|------|
+| voiceCommand | 处理语音命令 | `{ type, displayId, text }` |
+| confirmVoiceCommand | 确认语音命令 | `{ type, confirmationId, confirmed }` |
+| getSearchHistory | 获取搜索历史 | `{ type }` |
+| clearSearchHistory | 清空搜索历史 | `{ type }` |
+| deleteSearchHistory | 删除搜索记录 | `{ type, id }` |
+| getAssistantConfig | 获取助手配置 | `{ type }` |
+| setAssistantConfig | 设置助手配置 | `{ type, config }` |
+
+### 服务端 -> 控制端
+
+| 类型 | 说明 | 数据 |
+|------|------|------|
+| searchHistory | 搜索历史 | `{ type, history }` |
+| assistantConfig | 助手配置 | `{ type, config }` |
+
+## 数据结构
+
+### 搜索历史项
+
+```javascript
+{
+    id: string,          // 唯一标识
+    query: string,       // 搜索关键词
+    results: {           // 搜索结果
+        type: string,    // 'first_result' | 'ai_answer' | 'error'
+        title: string,   // 标题
+        snippet: string, // 摘要
+        link: string     // 链接
+    },
+    timestamp: number    // 时间戳
+}
+```
+
+### 助手配置
+
+```javascript
+{
+    defaultName: string,     // 默认助手名字
+    assistants: [{           // 助手列表
+        name: string,        // 助手名字
+        template: string     // 系统提示模板
+    }]
+}
+```
+
+### 待确认记录
+
+```javascript
+{
+    type: string,           // 'reminder'
+    displayId: string,      // 显示端ID
+    data: {                 // 提醒数据
+        content: string,
+        time: string,
+        type: string,
+        methods: string[],
+        repeat: object,
+        repeatCount: number
+    },
+    expiresAt: number       // 过期时间
+}
+```
+
+## 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| core/voiceCommand.js | 语音命令处理模块 |
+| server.js | WebSocket 消息路由 |
+| public/display.html | 显示端语音识别和UI |
+| public/js/chat.js | 控制端语音命令处理 |
+| public/js/websocket.js | WebSocket 消息处理 |
+| public/css/display.css | 显示端样式 |

@@ -91,6 +91,33 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleDisplayVoiceInput(data);
             }
+        } else if (data.type === 'searchHistory') {
+            if (window.Chat) {
+                window.Chat.searchHistory = data.history;
+            }
+            if (window.Search) {
+                window.Search.setHistory(data.history);
+            }
+        } else if (data.type === 'assistantConfig') {
+            if (window.Chat && data.config) {
+                window.Chat.assistantConfig = data.config;
+            }
+        } else if (data.type === 'chatSession') {
+            if (window.Chat) {
+                window.Chat.handleSession(data);
+            }
+        } else if (data.type === 'chatCommands') {
+            if (window.Chat) {
+                window.Chat.handleCommands(data);
+            }
+        } else if (data.type === 'playOnControl') {
+            if (window.Chat) {
+                window.Chat.handlePlayOnControl(data);
+            }
+        } else if (data.type === 'newChatMessage') {
+            if (window.Chat) {
+                window.Chat.handleNewMessage(data);
+            }
         }
     },
     
