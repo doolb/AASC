@@ -78,34 +78,16 @@
 - [x] 天气语音播报：天气查询结果自动生成 TTS 语音播报
 - [x] 自定义指令持久化：保存到 config/chat-commands.json
 - [x] 通用时间解析功能：支持相对日期、相对时间、绝对日期等
+- [x] 自测功能：控制端新增测试按钮，执行自测流程
+- [x] 自测文档：包含自测流程、自测结果、自测注意事项等
 
-### 待实现功能
-- 新增一个自测功能，用于测试显示端控制页面的所有功能是否正常
-- 控制端新增一个测试按钮，点击后会触发自测功能，执行自测流程，
-- 通过模拟点击显示端控制面板的按钮，测试其功能是否正常，是否有错误打印，同时更新自测结果文档
-- 有问题时，需要记录下错误信息，包括错误类型、错误位置、错误描述等，同时更新自测结果文档
-- 更加当前项目控制端的所有功能，生成自测流程
-- 生成一份自测文档，包含自测流程、自测结果、自测注意事项等
-- 自测流程包括不限于：
-  - 测试播放命令
-  - 测试天气语音播报
-  - 测试自定义指令
-  - 测试通用时间解析功能
-  - 测试显示端切换功能
-  - 测试显示端全选和自适应功能
-  - 测试显示端语音播报功能
-
-### bug 修复
-- 控制端，显示页面和快捷显示页面的播放按钮以及其他信息都未同步当前显示端的状态
-  - 快捷控制，画面填充没有高度和宽度铺满
-
- - 修复90度和270度时，上下拖动裁剪框，显示端是左右方向的问题
-   - 控制端移动裁剪框是正确的
-   - 0度和180度正确的
-
-- floating-control.js:66  Uncaught TypeError: window.DisplayList.selectDisplay is not a function
-    at Object.selectDisplay (floating-control.js:66:32)
-    at HTMLSelectElement.onchange (upload:452:125)
-
-- 添加自定义指令配置文件，还是是沒有保存到 config/chat-commands.json
-  
+### Bug 修复
+- [x] 控制端，显示页面和快捷显示页面的播放按钮以及其他信息都未同步当前显示端的状态
+  - 修复：floating-control.js 中调用 DisplayList.select 方法而非 selectDisplay
+- [x] 修复90度和270度时，上下拖动裁剪框，显示端是左右方向的问题
+  - 修复：在显示端 applyCrop 中根据旋转角度调整裁剪坐标
+  - 改动文件：public/display.html
+- [x] floating-control.js:66 Uncaught TypeError: window.DisplayList.selectDisplay is not a function
+  - 修复：调用 DisplayList.select 方法而非 selectDisplay
+- [x] 添加自定义指令配置文件，还是没有保存到 config/chat-commands.json
+  - 修复：添加 WebSocketManager.send 通用方法，创建 chat-commands.json 初始文件

@@ -734,6 +734,35 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
     }
 });
 
+app.get('/api/status', (req, res) => {
+    res.json({
+        status: 'ok',
+        uptime: Math.floor((Date.now() - serverStartTime) / 1000),
+        displayCount: displayClients.size,
+        controlCount: controlClients.size,
+        serverStartTime: serverStartTime
+    });
+});
+
+app.post('/api/time/parse', (req, res) => {
+    try {
+        const { text } = req.body;
+        if (!text) {
+            return res.status(400).json({ status: 'error', message: '缺少文本参数' });
+        }
+        
+        const timeParser = require('./core/timeParser');
+        const result = timeParser.parseTime(text);
+        
+        res.json({
+            status: 'success',
+            result: result
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
+
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
     

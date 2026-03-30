@@ -2,7 +2,35 @@
 
 ## [Unreleased]
 
+### 新增
+- ✅ 自测功能
+  - 控制端新增测试按钮（绿色按钮 🧪）
+  - 自动测试显示端连接、WebSocket连接、播放控制、画面控制、语音功能等
+  - 测试结果按类别分组显示，支持导出 JSON 报告
+  - 改动文件：public/js/self-test.js, public/css/upload.css, public/upload.html
+- ✅ 自测文档
+  - 包含自测流程、测试项目、注意事项
+  - 改动文件：docs/self-test.md
+
 ### Bug 修复
+- ✅ 修复 floating-control.js 调用错误方法的问题
+  - 问题：调用 DisplayList.selectDisplay 方法不存在
+  - 修复：改为调用 DisplayList.select 方法
+  - 改动文件：public/js/floating-control.js
+- ✅ 修复 90度和270度时裁剪框拖动方向错误的问题
+  - 问题：显示端旋转后裁剪区域位置不正确
+  - 修复：在显示端 applyCrop 中根据旋转角度调整裁剪坐标
+  - 改动文件：public/display.html
+- ✅ 修复自定义指令配置文件保存问题
+  - 问题：WebSocketManager 缺少通用 send 方法
+  - 修复：添加 WebSocketManager.send 方法，创建 chat-commands.json 初始文件
+  - 改动文件：public/js/websocket.js, config/chat-commands.json
+- ✅ 新增服务器状态 API 和时间解析 API
+  - GET /api/status：获取服务器运行状态
+  - POST /api/time/parse：解析时间表达式
+  - 改动文件：server.js
+
+### Bug 修复（历史）
 - ✅ 修复 DisplayList.getDisplays 方法未定义导致的 WebSocket 消息解析失败
   - 问题：floating-control.js 调用了不存在的 getDisplays 方法
   - 修复：在 display-list.js 中添加 getDisplays 方法
@@ -16,7 +44,7 @@
   - 修复：在添加媒体库 API 中动态注册静态路由
   - 改动文件：server.js
 
-### 新增
+### 新增（历史）
 - 显示端控制页面重构
   - ✅ 浮动控制面板：固定在页面右下角，可在所有页面访问
   - ✅ 快速播放命令：输入文件名直接播放

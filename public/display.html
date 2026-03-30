@@ -298,10 +298,34 @@
                 }
             }
             
-            const cropWidth = displayWidth * (currentCrop.width / 100);
-            const cropHeight = displayHeight * (currentCrop.height / 100);
-            const cropX = displayWidth * (currentCrop.x / 100);
-            const cropY = displayHeight * (currentCrop.y / 100);
+            let adjustedCrop = currentCrop;
+            if (currentRotation === 90) {
+                adjustedCrop = {
+                    x: 100 - currentCrop.y - currentCrop.height,
+                    y: currentCrop.x,
+                    width: currentCrop.height,
+                    height: currentCrop.width
+                };
+            } else if (currentRotation === 180) {
+                adjustedCrop = {
+                    x: 100 - currentCrop.x - currentCrop.width,
+                    y: 100 - currentCrop.y - currentCrop.height,
+                    width: currentCrop.width,
+                    height: currentCrop.height
+                };
+            } else if (currentRotation === 270) {
+                adjustedCrop = {
+                    x: currentCrop.y,
+                    y: 100 - currentCrop.x - currentCrop.width,
+                    width: currentCrop.height,
+                    height: currentCrop.width
+                };
+            }
+            
+            const cropWidth = displayWidth * (adjustedCrop.width / 100);
+            const cropHeight = displayHeight * (adjustedCrop.height / 100);
+            const cropX = displayWidth * (adjustedCrop.x / 100);
+            const cropY = displayHeight * (adjustedCrop.y / 100);
             
             let targetWidth, targetHeight;
             if (isRotated) {

@@ -63,7 +63,7 @@ const FloatingControl = {
         this.saveState();
         
         if (window.DisplayList) {
-            window.DisplayList.selectDisplay(displayId);
+            window.DisplayList.select(displayId);
         }
     },
     
