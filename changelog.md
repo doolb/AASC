@@ -18,9 +18,9 @@
   - 修复：改为调用 DisplayList.select 方法
   - 改动文件：public/js/floating-control.js
 - ✅ 修复 90度和270度时裁剪框拖动方向错误的问题
-  - 问题：显示端旋转后裁剪区域位置不正确
-  - 修复：在显示端 applyCrop 中根据旋转角度调整裁剪坐标
-  - 改动文件：public/display.html
+  - 问题：旋转后拖动方向与实际方向不一致
+  - 修复：在 onMouseMove 中根据旋转角度调整拖动方向
+  - 改动文件：public/js/crop.js
 - ✅ 修复自定义指令配置文件保存问题
   - 问题：WebSocketManager 缺少通用 send 方法
   - 修复：添加 WebSocketManager.send 方法，创建 chat-commands.json 初始文件

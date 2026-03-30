@@ -216,9 +216,12 @@ const Crop = {
         let dx = ((e.clientX - this.dragStart.x) / mediaRect.width) * 100;
         let dy = ((e.clientY - this.dragStart.y) / mediaRect.height) * 100;
         
+        let adjustedDx = dx;
+        let adjustedDy = dy;
+        
         if (this.isDragging) {
-            this.data.x = Math.max(0, Math.min(100 - this.data.width, this.cropStart.x + dx));
-            this.data.y = Math.max(0, Math.min(100 - this.data.height, this.cropStart.y + dy));
+            this.data.x = Math.max(0, Math.min(100 - this.data.width, this.cropStart.x + adjustedDx));
+            this.data.y = Math.max(0, Math.min(100 - this.data.height, this.cropStart.y + adjustedDy));
         } else if (this.isResizing) {
             const aspectRatio = window.displayCanvasSize.width / window.displayCanvasSize.height;
             const mediaAspect = mediaRect.width / mediaRect.height;
