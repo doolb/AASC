@@ -15,8 +15,8 @@
     },
     "enabled": true,
     "createdAt": 1774699159320,
-    "lastTriggered": 1774794797450,
-    "nextTrigger": 1774881000000
+    "lastTriggered": 1774881196543,
+    "nextTrigger": 1774967400000
   },
   {
     "id": "r_kgnz3afm_1774702355818",
@@ -37,5 +37,25 @@
     "createdAt": 1774702355818,
     "lastTriggered": 1774704011877,
     "nextTrigger": null
+  },
+  {
+    "id": "r_ulv65501_1774882468993",
+    "content": "今天",
+    "time": "22:59",
+    "type": "once",
+    "methods": [
+      "voice",
+      "popup"
+    ],
+    "repeat": {
+      "enabled": true,
+      "interval": 3,
+      "count": 3
+    },
+    "repeatCount": 3,
+    "enabled": true,
+    "createdAt": 1774882468993,
+    "lastTriggered": null,
+    "nextTrigger": 1774882740000
   }
 ]

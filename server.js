@@ -1141,6 +1141,45 @@ wss.on('connection', (ws, req) => {
                         }
                     })();
                     return;
+                } else if (data.type === 'chatHistory') {
+                    ws.send(JSON.stringify({
+                        type: 'chatHistory',
+                        history: chat.getHistory()
+                    }));
+                    return;
+                } else if (data.type === 'clearChatHistory') {
+                    chat.clearHistory();
+                    ws.send(JSON.stringify({
+                        type: 'chatHistory',
+                        history: []
+                    }));
+                    return;
+                } else if (data.type === 'getChatSession') {
+                    ws.send(JSON.stringify({
+                        type: 'chatSession',
+                        session: chat.getSession()
+                    }));
+                    return;
+                } else if (data.type === 'setChatSession') {
+                    chat.setSession(data.session);
+                    broadcastToControls({
+                        type: 'chatSession',
+                        session: chat.getSession()
+                    });
+                    return;
+                } else if (data.type === 'getChatCommands') {
+                    ws.send(JSON.stringify({
+                        type: 'chatCommands',
+                        commands: chat.getCommands()
+                    }));
+                    return;
+                } else if (data.type === 'setChatCommands') {
+                    chat.setCommands(data.commands);
+                    broadcastToControls({
+                        type: 'chatCommands',
+                        commands: chat.getCommands()
+                    });
+                    return;
                 }
                 
                 if (!displayData) return;
@@ -1275,39 +1314,6 @@ wss.on('connection', (ws, req) => {
                             }));
                         }
                     })();
-                } else if (data.type === 'chatHistory') {
-                    ws.send(JSON.stringify({
-                        type: 'chatHistory',
-                        history: chat.getHistory()
-                    }));
-                } else if (data.type === 'clearChatHistory') {
-                    chat.clearHistory();
-                    ws.send(JSON.stringify({
-                        type: 'chatHistory',
-                        history: []
-                    }));
-                } else if (data.type === 'getChatSession') {
-                    ws.send(JSON.stringify({
-                        type: 'chatSession',
-                        session: chat.getSession()
-                    }));
-                } else if (data.type === 'setChatSession') {
-                    chat.setSession(data.session);
-                    broadcastToControls({
-                        type: 'chatSession',
-                        session: chat.getSession()
-                    });
-                } else if (data.type === 'getChatCommands') {
-                    ws.send(JSON.stringify({
-                        type: 'chatCommands',
-                        commands: chat.getCommands()
-                    }));
-                } else if (data.type === 'setChatCommands') {
-                    chat.setCommands(data.commands);
-                    broadcastToControls({
-                        type: 'chatCommands',
-                        commands: chat.getCommands()
-                    });
                 } else if (data.type === 'chatMessage') {
                     (async () => {
                         try {

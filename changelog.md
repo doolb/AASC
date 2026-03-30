@@ -25,6 +25,12 @@
   - 问题：WebSocketManager 缺少通用 send 方法
   - 修复：添加 WebSocketManager.send 方法，创建 chat-commands.json 初始文件
   - 改动文件：public/js/websocket.js, config/chat-commands.json
+- ✅ 修复自定义指令无法保存到文件的问题
+  - 问题：WebSocket 连接是异步的，loadCommands 在连接完成前被调用，导致数据未加载
+  - 修复：添加 WebSocket onopen 回调，连接成功后重新加载 commands 数据
+  - 问题2：`if (!displayData) return;` 检查在 setChatCommands 之前，导致没有显示端时无法保存
+  - 修复：将 chatHistory、chatSession、chatCommands 相关消息处理移到 displayData 检查之前
+  - 改动文件：public/js/websocket.js, public/js/chat.js, server.js
 - ✅ 新增服务器状态 API 和时间解析 API
   - GET /api/status：获取服务器运行状态
   - POST /api/time/parse：解析时间表达式

@@ -17,9 +17,9 @@
       "rotation": 180,
       "fit": "crop",
       "crop": {
-        "x": 0,
+        "x": null,
         "y": 0,
-        "width": 95.86077844311377,
+        "width": null,
         "height": 100
       },
       "playlist": [],
@@ -35,10 +35,10 @@
       "rotation": 90,
       "fit": "width",
       "crop": {
-        "x": 28.90625,
-        "y": 0,
-        "width": 42.1875,
-        "height": 100
+        "x": 0,
+        "y": null,
+        "width": 100,
+        "height": null
       },
       "playlist": [],
       "isPlaying": true

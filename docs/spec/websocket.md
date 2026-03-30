@@ -57,29 +57,66 @@ wss.on('connection', (ws, req)):
     监听消息:
         解析 JSON 数据
         
-        如果 type === 'getState':
-            获取显示端状态
-            发送 { type: 'displayState', displayId, state }
+        处理不需要显示端的消息 (无 displayData 检查):
+            如果 type === 'voiceCommand':
+                处理语音命令
+            如果 type === 'confirmVoiceCommand':
+                确认语音命令
+            如果 type === 'getSearchHistory':
+                返回搜索历史
+            如果 type === 'clearSearchHistory':
+                清空搜索历史
+            如果 type === 'deleteSearchHistory':
+                删除单条搜索历史
+            如果 type === 'getAssistantConfig':
+                返回助手配置
+            如果 type === 'setAssistantConfig':
+                设置助手配置
+            如果 type === 'timeAnnounce':
+                处理整点报时
+            如果 type === 'getReminders':
+                获取今日提醒
+            如果 type === 'chatHistory':
+                返回聊天历史
+            如果 type === 'clearChatHistory':
+                清空聊天历史
+            如果 type === 'getChatSession':
+                返回聊天会话
+            如果 type === 'setChatSession':
+                设置聊天会话
+            如果 type === 'getChatCommands':
+                返回自定义指令
+            如果 type === 'setChatCommands':
+                设置自定义指令
         
-        如果 type === 'media':
-            更新 displayData.state.currentMedia
-            发送媒体数据到显示端
+        检查显示端连接:
+            如果 displayData 不存在:
+                return (不处理后续需要显示端的消息)
         
-        如果 type === 'control':
-            根据 action 更新状态:
-                'rotate' -> state.rotation = value
-                'fit' -> state.fit = value
-                'crop' -> state.crop = value
-                'volume' -> state.volume = value
-                'play' -> state.isPlaying = value
-            发送控制数据到显示端
-            保存显示端状态
-        
-        如果 type === 'tts':
-            处理 TTS 相关操作
-        
-        如果 type === 'chat':
-            处理聊天相关操作
+        处理需要显示端的消息:
+            如果 type === 'getState':
+                获取显示端状态
+                发送 { type: 'displayState', displayId, state }
+            
+            如果 type === 'media':
+                更新 displayData.state.currentMedia
+                发送媒体数据到显示端
+            
+            如果 type === 'control':
+                根据 action 更新状态:
+                    'rotate' -> state.rotation = value
+                    'fit' -> state.fit = value
+                    'crop' -> state.crop = value
+                    'volume' -> state.volume = value
+                    'play' -> state.isPlaying = value
+                发送控制数据到显示端
+                保存显示端状态
+            
+            如果 type === 'tts':
+                处理 TTS 相关操作
+            
+            如果 type === 'chat':
+                处理聊天相关操作
     
     监听关闭:
         从 controlClients 删除
@@ -168,6 +205,9 @@ wss.on('connection', (ws, req)):
     connect():
         构建连接URL: ws://host/control
         创建 WebSocket
+        设置 onopen 回调:
+            打印连接成功日志
+            调用 Chat.onWebSocketOpen() 加载数据
         设置消息处理
         设置重连逻辑 (3秒延迟)
     

@@ -7,6 +7,13 @@ const WebSocketManager = {
         
         this.ws = new WebSocket(wsUrl);
         
+        this.ws.onopen = () => {
+            console.log('WebSocket 连接成功');
+            if (window.Chat) {
+                window.Chat.onWebSocketOpen();
+            }
+        };
+        
         this.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);

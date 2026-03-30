@@ -428,6 +428,13 @@ const Chat = {
         调用 initVoiceRecognition()
         调用 render()
     
+    onWebSocketOpen():
+        WebSocket 连接成功后调用
+        重新调用 loadHistory()
+        重新调用 loadSession()
+        重新调用 loadCommands()
+        确保数据在连接成功后正确加载
+    
     loadSession():
         请求 GET /api/chat/session
         更新 this.session

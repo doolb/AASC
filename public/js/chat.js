@@ -41,6 +41,12 @@ const Chat = {
         this.render();
     },
     
+    onWebSocketOpen() {
+        this.loadHistory();
+        this.loadSession();
+        this.loadCommands();
+    },
+    
     initVoiceRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
