@@ -1,0 +1,428 @@
+{
+  "capabilities": [
+    {
+      "id": "message-handler",
+      "name": "消息处理",
+      "category": "basic",
+      "level": 1,
+      "securityLevel": 0,
+      "description": "基础消息接收和处理能力"
+    },
+    {
+      "id": "event-emitter",
+      "name": "事件触发",
+      "category": "basic",
+      "level": 1,
+      "securityLevel": 0,
+      "description": "事件触发和监听能力"
+    },
+    {
+      "id": "time-parser",
+      "name": "时间解析",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "解析自然语言时间表达式",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "时间表达式，如'明天上午9点'"
+          }
+        },
+        "required": ["expression"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "timestamp": { "type": "number" },
+          "formatted": { "type": "string" },
+          "components": { "type": "object" }
+        }
+      }
+    },
+    {
+      "id": "state-manager",
+      "name": "状态管理",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "执行者状态管理能力"
+    },
+    {
+      "id": "display-text",
+      "name": "文本显示",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "在显示端显示文本内容",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "duration": { "type": "number" }
+        },
+        "required": ["text"]
+      }
+    },
+    {
+      "id": "display-state",
+      "name": "显示状态",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "获取/设置显示端状态"
+    },
+    {
+      "id": "scheduler",
+      "name": "定时任务",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "定时执行任务能力"
+    },
+    {
+      "id": "voice-synthesis",
+      "name": "语音合成",
+      "category": "professional",
+      "level": 3,
+      "securityLevel": 0,
+      "description": "文字转语音",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "voice": { "type": "string" },
+          "speed": { "type": "number" }
+        },
+        "required": ["text"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "audioUrl": { "type": "string" },
+          "duration": { "type": "number" }
+        }
+      }
+    },
+    {
+      "id": "voice-broadcast",
+      "name": "语音播报",
+      "category": "professional",
+      "level": 3,
+      "securityLevel": 0,
+      "description": "语音播报到显示端/控制端",
+      "inherits": ["voice-synthesis"],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "target": { "type": "string" }
+        },
+        "required": ["text"]
+      }
+    },
+    {
+      "id": "voice-recognition",
+      "name": "语音识别",
+      "category": "professional",
+      "level": 3,
+      "securityLevel": 0,
+      "description": "语音转文字（前端实现）",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "audioData": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "confidence": { "type": "number" }
+        }
+      }
+    },
+    {
+      "id": "reminder-manage",
+      "name": "提醒管理",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 1,
+      "description": "添加/删除/查询提醒",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": { "type": "string", "enum": ["add", "delete", "list", "get"] },
+          "reminder": { "type": "object" }
+        }
+      }
+    },
+    {
+      "id": "reminder-trigger",
+      "name": "提醒触发",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 1,
+      "description": "触发提醒通知"
+    },
+    {
+      "id": "reminder-get",
+      "name": "获取提醒",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 1,
+      "description": "根据ID获取提醒详情",
+      "inherits": ["reminder-manage"]
+    },
+    {
+      "id": "media-search",
+      "name": "媒体搜索",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "搜索媒体文件",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "keyword": { "type": "string" },
+          "type": { "type": "string" },
+          "limit": { "type": "number" }
+        },
+        "required": ["keyword"]
+      },
+      "outputSchema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "path": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "id": "media-play",
+      "name": "媒体播放",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "播放媒体文件",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mediaId": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    {
+      "id": "weather-fetch",
+      "name": "天气获取",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "获取天气信息",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "temperature": { "type": "string" },
+          "text": { "type": "string" },
+          "humidity": { "type": "string" }
+        }
+      }
+    },
+    {
+      "id": "web-search",
+      "name": "网页搜索",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "执行网页搜索"
+    },
+    {
+      "id": "llm-base",
+      "name": "语言模型基础",
+      "category": "professional",
+      "level": 4,
+      "securityLevel": 1,
+      "description": "AI语言模型基础能力",
+      "config": {
+        "model": "default",
+        "maxTokens": 4096,
+        "temperature": 0.7
+      }
+    },
+    {
+      "id": "chat",
+      "name": "AI对话",
+      "category": "professional",
+      "level": 4,
+      "securityLevel": 1,
+      "description": "AI对话生成",
+      "inherits": ["llm-base"],
+      "extensions": {
+        "systemPrompt": "你是一个友好的助手"
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "context": { "type": "object" }
+        },
+        "required": ["text"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" },
+          "tokens": { "type": "number" }
+        }
+      }
+    },
+    {
+      "id": "chat-stream",
+      "name": "AI流式对话",
+      "category": "professional",
+      "level": 4,
+      "securityLevel": 1,
+      "description": "AI流式对话生成",
+      "inherits": ["chat"]
+    },
+    {
+      "id": "chat-template",
+      "name": "对话模板",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 1,
+      "description": "管理对话模板"
+    },
+    {
+      "id": "chat-history",
+      "name": "对话历史",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 1,
+      "description": "管理对话历史"
+    },
+    {
+      "id": "important-record",
+      "name": "重要记录",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 2,
+      "description": "保存重要记录"
+    },
+    {
+      "id": "time-announce",
+      "name": "整点报时",
+      "category": "special",
+      "level": 3,
+      "securityLevel": 0,
+      "description": "定时报时功能",
+      "dependencies": ["time-parser", "voice-broadcast"]
+    },
+    {
+      "id": "media-library",
+      "name": "媒体库管理",
+      "category": "special",
+      "level": 3,
+      "securityLevel": 1,
+      "description": "多源媒体管理能力"
+    },
+    {
+      "id": "media-library-local",
+      "name": "本地媒体库",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "本地文件系统媒体库",
+      "inherits": ["media-library"]
+    },
+    {
+      "id": "media-library-http",
+      "name": "HTTP媒体库",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "HTTP媒体库",
+      "inherits": ["media-library"]
+    },
+    {
+      "id": "media-library-smb",
+      "name": "SMB媒体库",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 0,
+      "description": "SMB网络共享媒体库",
+      "inherits": ["media-library"]
+    },
+    {
+      "id": "connection-manage",
+      "name": "连接管理",
+      "category": "special",
+      "level": 3,
+      "securityLevel": 1,
+      "description": "管理显示端/控制端连接"
+    },
+    {
+      "id": "display-control",
+      "name": "显示控制",
+      "category": "special",
+      "level": 3,
+      "securityLevel": 1,
+      "description": "控制显示端画面"
+    },
+    {
+      "id": "voice-command",
+      "name": "语音命令",
+      "category": "special",
+      "level": 4,
+      "securityLevel": 0,
+      "description": "语音命令解析和执行",
+      "dependencies": ["voice-recognition", "chat"]
+    },
+    {
+      "id": "system-command",
+      "name": "系统指令",
+      "category": "special",
+      "level": 3,
+      "securityLevel": 2,
+      "description": "系统指令处理"
+    },
+    {
+      "id": "private-chat",
+      "name": "私聊模式",
+      "category": "basic",
+      "level": 2,
+      "securityLevel": 2,
+      "description": "私聊模式管理"
+    },
+    {
+      "id": "distributed-coordination",
+      "name": "分布式协调",
+      "category": "special",
+      "level": 5,
+      "securityLevel": 4,
+      "description": "跨节点协调能力"
+    },
+    {
+      "id": "security-auth",
+      "name": "安全认证",
+      "category": "special",
+      "level": 5,
+      "securityLevel": 5,
+      "description": "身份认证和授权能力"
+    }
+  ],
+  "savedAt": 1711843200000
+}

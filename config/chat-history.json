@@ -60,52 +60,22 @@
     "target": "妲己"
   },
   {
-    "id": "1774793685578nw0j",
-    "timestamp": 1774793685578,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "啊！我闻到你的声音了呢~来来来，来陪我玩个游戏吧？要不要先给我看看我做的什么？",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1774793694363i2hv",
-    "timestamp": 1774793694366,
+    "id": "17748905341507vuv",
+    "timestamp": 1774890534150,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "报时",
+    "content": "静音",
     "mode": "group",
     "target": null
   },
   {
-    "id": "1774793703613wsvf",
-    "timestamp": 1774793703613,
+    "id": "1774890560979uriu",
+    "timestamp": 1774890560979,
     "role": "assistant",
     "name": "妲己",
     "ip": "",
-    "content": "啊啊！我也是报告时间啦~要不我们去检查一下电器设备了？说不定哪里出了问题呢。不过现在还不是时候睡觉的时候呢，就先先休息一下吧！",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1774793985459qqqc",
-    "timestamp": 1774793985459,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "报时",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1774793995862mldk",
-    "timestamp": 1774793995862,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "好的！我来给你报时啦！（俏皮地）说吧，我的时间是几点了？要不我先去查一下啦！（神秘地）不过要小心点哦，因为时间有时候会和我有点毛病呢。",
+    "content": "诶？你是不是又在找我了？不过我可不在场呢。我最喜欢在安静的时候和小明一起玩了呢！不过你要是不听话的话，我就...就...就...就不理你啦。",
     "mode": "group",
     "target": null
   }

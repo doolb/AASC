@@ -32,3 +32,4 @@
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |
 | 聊天系统 | [chat-system.md](design/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | WebSocket | [websocket.md](design/websocket.md) | 通信协议、消息类型 |
+| AASC架构 | [aasc.md](design/aasc.md) | 消息总线架构、执行者模型、用户模型、能力继承 |

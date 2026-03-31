@@ -503,3 +503,41 @@ console.log('密码:', password); // 禁止
 cropData.x = Math.max(0, Math.min(100 - cropData.width, value));
 cropData.width = Math.max(10, Math.min(100, value));
 ```
+
+## 11. AASC 系统规范
+
+AASC（Actor-based Asynchronous Service Communication）是基于消息总线的分布式系统架构。
+
+### 11.1 核心原则
+
+1. **执行者模型**：所有系统能力抽象为"执行者"（Actor），是系统中最小的能力单元
+2. **消息驱动**：执行者之间通过消息总线通信，基于发布-订阅模式实现松耦合
+3. **能力解耦**：能力是独立定义的功能单元，不绑定到特定执行者，可被多个执行者共享
+4. **管道组合**：多个能力可按管道方式组合，实现复杂业务流程
+
+### 11.2 角色类型
+
+- **server**：服务器执行者（指令处理器、媒体库管理、定时任务）
+- **display**：显示端执行者（画面渲染、语音播报）
+- **control**：控制端执行者（媒体上传、控制指令）
+
+### 11.3 能力等级
+
+- **L1 基础级**：简单的消息处理和转发
+- **L2 标准级**：单一功能实现
+- **L3 进阶级**：多功能组合
+- **L4 高级**：复杂业务逻辑
+- **L5 专家级**：系统核心能力
+
+### 11.4 命名约定
+
+| 类型 | 命名风格 | 示例 |
+|------|----------|------|
+| 执行者类 | PascalCase + Actor 后缀 | `ChatActor` |
+| 执行者文件 | kebab-case + -actor 后缀 | `chat-actor.js` |
+| 能力ID | kebab-case | `voice-recognition` |
+| 消息主题 | 点分隔 | `media.control` |
+
+### 11.5 详细文档
+
+详细设计见 `docs/design/aasc.md`，实现细节见 `docs/spec/aasc.md`

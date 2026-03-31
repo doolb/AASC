@@ -3,6 +3,119 @@
 ## [Unreleased]
 
 ### 新增
+- ✅ 能力组合系统实现
+  - 创建能力管道执行器：aasc/pipeline.js
+    - PipelineContext: 管道执行上下文，支持数据存储、步骤结果、错误管理
+    - PipelineStep: 管道步骤定义，支持输入输出映射、错误策略、重试机制
+    - PipelineExecutor: 管道执行器，支持顺序/并行执行、能力调用
+    - PipelineBuilder: 管道构建器，支持链式调用
+  - 创建能力组合定义：aasc/composition.js
+    - Trigger: 触发器定义，支持命令/事件/定时/手动/能力触发
+    - CapabilityComposition: 能力组合，包含触发器、管道、降级管道
+    - CompositionRegistry: 组合注册表，支持加载/保存/注册/查询
+    - CompositionExecutor: 组合执行器，支持按触发执行
+    - CompositionBuilder: 组合构建器，支持链式调用
+  - 创建能力等级计算器：aasc/level-calculator.js
+    - CapabilityScore: 能力分数，包含等级、权重、加权分数
+    - ActorLevelScore: 执行者等级分数，包含综合等级、分类分数、建议
+    - CapabilityLevelCalculator: 等级计算器，支持执行者/系统等级计算、排名
+    - LevelCalculatorBuilder: 计算器构建器
+  - 创建能力配置文件：config/capabilities.json
+    - 定义 35+ 个能力，按等级分类
+    - 包含基础能力（L1-L2）、专业能力（L3-L4）、特殊能力（L3-L5）
+    - 支持能力继承和依赖关系
+  - 更新入口文件：aasc/index.js
+    - 导出所有能力组合系统模块
+  - 更新文档：docs/spec/aasc.md
+    - 添加管道执行器详细实现
+    - 添加能力组合定义详细实现
+    - 添加能力等级计算器详细实现
+    - 添加使用示例和配置文件说明
+  - 更新自测模块：public/js/self-test.js
+    - 添加能力组合系统测试用例（8个）
+    - 管道模块测试、组合模块测试、等级计算器模块测试
+    - 能力配置文件测试、能力等级分布测试、能力分类测试
+    - 能力继承测试、入口导出测试
+  - 更新自测文档：docs/self-test.md
+    - 添加能力组合系统测试项目说明
+- ✅ 能力组合系统设计
+  - 新增能力组合系统设计文档：docs/design/aasc.md 第12章
+  - 定义原子能力（Atomic Capability）结构：输入输出模式、默认执行者、超时、重试策略
+  - **核心原则：能力与执行者解耦**
+    - 能力是独立定义的功能单元，不绑定到特定执行者
+    - 一个能力可以被多个执行者共享使用
+    - 执行者通过能力ID引用能力，声明自己拥有哪些能力
+  - 定义能力组合（Capability Composition）：触发条件、执行管道、降级管道
+  - 设计能力管道（Pipeline）执行流程：顺序执行、并行执行
+  - 设计能力等级评估体系：综合等级计算、分类得分、组合得分
+  - 设计能力配置系统：JSON配置文件、配置管理器
+  - 提供完整示例：报时功能、天气播报、提醒播报
+  - 更新文件：docs/design/aasc.md, docs/spec/aasc.md, docs/todo.md
+- ✅ 现有系统功能抽象
+  - 梳理 core/ 目录下所有核心模块功能
+  - 梳理 aasc/actors/ 目录下所有执行者功能
+  - 抽象为 25+ 个独立能力，按等级分类：
+    - 基础能力（L1-L2）：时间解析、消息处理、事件触发、状态管理、文本显示、显示状态
+    - 专业能力（L3-L4）：语音合成、语音播报、提醒管理、媒体搜索、天气获取、网页搜索、AI对话、重要记录
+    - 特殊能力（L3-L5）：整点报时、媒体库管理、连接管理、语音命令、系统指令、私聊模式
+  - 定义能力组合示例：报时功能、提醒播报、天气播报、播放媒体
+  - 创建任务文档：docs/task/2026-03-31_能力组合系统实现.md
+  - 更新文件：docs/todo.md
+- ✅ AASC 系统架构设计文档
+  - 创建完整的设计文档：docs/design/aasc.md
+  - 包含消息协议规范、执行者模型、用户模型、能力继承机制
+  - 新增执行者能力等级评级（L1-L5）
+  - 新增用户模型：用户认证、保密等级（0-5级）、权限控制
+  - 新增用户记录功能：系统记录指令、记录存储和查询
+  - 新增分布式部署方案和迁移计划
+  - 更新文件：docs/design/aasc.md, docs/design.md, docs/todo.md
+- ✅ AASC 系统核心实现
+  - 第一阶段：消息总线基础
+    - 创建消息协议模块：aasc/message.js
+    - 创建消息总线核心：aasc/message-bus.js
+    - 创建执行者基类：aasc/actor.js
+    - 创建消息路由和过滤：aasc/router.js
+  - 第二阶段：执行者模型
+    - 创建执行者注册表：aasc/registry.js
+    - 实现能力等级评级（L1-L5）
+    - 实现安全等级（0-5级）
+  - 第三阶段：用户模型
+    - 创建用户模块：aasc/user.js
+    - 实现用户存储、权限管理
+    - 创建用户记录模块：aasc/record.js
+  - 第四阶段：能力继承
+    - 创建能力模块：aasc/capability.js
+    - 实现能力继承解析器
+    - 定义默认能力集
+  - 第五阶段：模块迁移
+    - 创建提醒执行者：aasc/actors/reminder-actor.js
+    - 创建聊天执行者：aasc/actors/chat-actor.js
+    - 创建语音命令执行者：aasc/actors/voice-command-actor.js
+    - 创建媒体控制执行者：aasc/actors/media-control-actor.js
+    - 创建媒体库管理执行者：aasc/actors/media-library-actor.js
+    - 创建画面渲染控制执行者：aasc/actors/display-render-actor.js
+    - 创建系统指令执行者：aasc/actors/system-command-actor.js
+    - 创建私聊模式执行者：aasc/actors/private-chat-actor.js
+    - 创建重要记录执行者：aasc/actors/important-record-actor.js
+    - 创建搜索执行者：aasc/actors/search-actor.js
+    - 创建语音播报执行者：aasc/actors/tts-actor.js
+  - 第六阶段：分布式支持
+    - 创建集群模块：aasc/cluster.js
+    - 实现集群节点管理
+    - 实现跨节点路由
+    - 实现边缘计算编排
+  - 更新文件：docs/spec/aasc.md, docs/spec.md
+- ✅ AASC 系统任务文档
+  - 创建任务文档：docs/task/2026-03-30_AASC系统实现.md
+  - 包含设计需求、实现规范、自测用例、性能测试、风险评估、预计工时
+- ✅ AASC 系统自测用例
+  - 新增 AASC 模块加载测试
+  - 新增 AASC 消息 API 测试
+  - 新增 AASC 执行者注册表测试
+  - 新增 AASC 用户存储测试
+  - 新增 AASC 能力注册表测试
+  - 新增 AASC 集群状态测试
+  - 改动文件：public/js/self-test.js, docs/self-test.md
 - ✅ 自测功能
   - 控制端新增测试按钮（绿色按钮 🧪）
   - 自动测试显示端连接、WebSocket连接、播放控制、画面控制、语音功能等
