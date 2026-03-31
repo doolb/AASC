@@ -543,7 +543,67 @@ const Chat = {
             return true;
         }
         
+        if (text === '静音' || text.includes('全部静音')) {
+            this.handleMuteCommand();
+            return true;
+        }
+        
+        if (text.includes('取消静音') || text === '恢复音量') {
+            this.handleUnmuteCommand();
+            return true;
+        }
+        
+        if (text.includes('今日提醒') || text.includes('今天提醒')) {
+            this.handleTodayReminders();
+            return true;
+        }
+        
+        if (text.includes('明日提醒') || text.includes('明天提醒')) {
+            this.handleTomorrowReminders();
+            return true;
+        }
+        
         return false;
+    },
+    
+    handleMuteCommand() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'mute'
+            }));
+            this.addSystemMessage('正在静音所有显示端...');
+        }
+    },
+    
+    handleUnmuteCommand() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'unmute'
+            }));
+            this.addSystemMessage('正在取消静音...');
+        }
+    },
+    
+    handleTodayReminders() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'todayReminders',
+                displayId: window.currentDisplayId
+            }));
+        }
+    },
+    
+    handleTomorrowReminders() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'tomorrowReminders',
+                displayId: window.currentDisplayId
+            }));
+        }
     },
     
     addSystemMessage(content) {

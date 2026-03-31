@@ -141,6 +141,15 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleNewMessage(data);
             }
+        } else if (data.type === 'muteResult') {
+            if (window.Chat) {
+                window.Chat.addSystemMessage(data.message);
+            }
+        } else if (data.type === 'muteState') {
+            if (window.Chat) {
+                const msg = data.isMuted ? '当前处于静音状态' : '当前未静音';
+                window.Chat.addSystemMessage(msg);
+            }
         }
     },
     

@@ -840,6 +840,7 @@ function getDisplayList() {
             id: id,
             ip: data.ip,
             canvasSize: data.state.canvasSize,
+            rotation: data.state.rotation || 0,
             browserInfo: data.state.browserInfo,
             voiceSupported: data.state.voiceSupported,
             voiceListening: data.state.voiceListening
@@ -1256,6 +1257,42 @@ wss.on('connection', (ws, req) => {
                         type: 'chatCommands',
                         commands: chat.getCommands()
                     });
+                    return;
+                } else if (data.type === 'mute') {
+                    const result = muteAllDisplays();
+                    ws.send(JSON.stringify({
+                        type: 'muteResult',
+                        success: result,
+                        message: result ? '已静音所有显示端' : '已经是静音状态',
+                        isMuted: muteState.isMuted
+                    }));
+                    return;
+                } else if (data.type === 'unmute') {
+                    const result = unmuteAllDisplays();
+                    ws.send(JSON.stringify({
+                        type: 'muteResult',
+                        success: result,
+                        message: result ? '已取消静音' : '当前不是静音状态',
+                        isMuted: muteState.isMuted
+                    }));
+                    return;
+                } else if (data.type === 'todayReminders') {
+                    (async () => {
+                        try {
+                            await voiceCommand.handleTodayReminders(data.displayId || displayId);
+                        } catch (err) {
+                            console.error('[今日提醒] 处理失败:', err.message);
+                        }
+                    })();
+                    return;
+                } else if (data.type === 'tomorrowReminders') {
+                    (async () => {
+                        try {
+                            await voiceCommand.handleTomorrowReminders(data.displayId || displayId);
+                        } catch (err) {
+                            console.error('[明日提醒] 处理失败:', err.message);
+                        }
+                    })();
                     return;
                 }
                 

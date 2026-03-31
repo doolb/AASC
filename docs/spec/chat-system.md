@@ -584,9 +584,28 @@ const Chat = {
         检查内置指令:
             包含 '提醒' -> handleReminderCommand(text), 返回 true
             包含 '报时' 或 '现在几点' -> handleTimeAnnounceCommand(text), 返回 true
+            包含 '天气' -> handleWeatherCommand(text), 返回 true
             包含 '搜索' -> handleSearchCommand(text), 返回 true
+            等于 '静音' 或 包含 '全部静音' -> handleMuteCommand(), 返回 true
+            包含 '取消静音' 或 等于 '恢复音量' -> handleUnmuteCommand(), 返回 true
+            包含 '今日提醒' 或 '今天提醒' -> handleTodayReminders(), 返回 true
+            包含 '明日提醒' 或 '明天提醒' -> handleTomorrowReminders(), 返回 true
         
         返回 false (不是系统指令，交给聊天处理)
+    
+    handleMuteCommand():
+        发送 { type: 'mute' } 到服务端
+        显示 "正在静音所有显示端..."
+    
+    handleUnmuteCommand():
+        发送 { type: 'unmute' } 到服务端
+        显示 "正在取消静音..."
+    
+    handleTodayReminders():
+        发送 { type: 'todayReminders', displayId: currentDisplayId } 到服务端
+    
+    handleTomorrowReminders():
+        发送 { type: 'tomorrowReminders', displayId: currentDisplayId } 到服务端
     
     processVoiceCommand(text):
         处理显示端语音输入:
@@ -755,6 +774,12 @@ handleMessage(data):
     
     如果 data.type === 'playOnControl':
         调用 Chat.playOnControl(data.text)
+    
+    如果 data.type === 'muteResult':
+        调用 Chat.addSystemMessage(data.message)
+    
+    如果 data.type === 'muteState':
+        显示静音状态消息
 
 sendChatMessage(content, options):
     发送 {
@@ -822,6 +847,20 @@ WebSocket 消息处理:
     调用 chat.setCommands(data.commands)
     广播指令更新
 
+如果 data.type === 'mute':
+    调用 muteAllDisplays()
+    发送 { type: 'muteResult', success, message, isMuted }
+
+如果 data.type === 'unmute':
+    调用 unmuteAllDisplays()
+    发送 { type: 'muteResult', success, message, isMuted }
+
+如果 data.type === 'todayReminders':
+    调用 voiceCommand.handleTodayReminders(displayId)
+
+如果 data.type === 'tomorrowReminders':
+    调用 voiceCommand.handleTomorrowReminders(displayId)
+
 HTTP API 新增:
 
 GET /api/chat/session:
@@ -882,6 +921,12 @@ POST /api/chat/assistants:
 | chatCommands | 服务端->控制端 | 自定义指令 |
 | systemMessage | 服务端->控制端 | 系统消息 |
 | playOnControl | 服务端->控制端 | 控制端播放语音 |
+| mute | 控制端->服务端 | 静音所有显示端 |
+| unmute | 控制端->服务端 | 取消静音 |
+| muteResult | 服务端->控制端 | 静音操作结果 |
+| muteState | 服务端->控制端 | 静音状态变化 |
+| todayReminders | 控制端->服务端 | 查询今日提醒 |
+| tomorrowReminders | 控制端->服务端 | 查询明日提醒 |
 
 ## 文件列表
 

@@ -234,6 +234,25 @@
   - 改动文件：docs/self-test.md
 
 ### Bug 修复
+- ✅ 修复控制端无法执行静音/取消静音命令的问题
+  - 问题：控制端 handleSystemCommand 缺少静音和取消静音的处理
+  - 修复：添加 handleMuteCommand 和 handleUnmuteCommand 方法
+  - 修复：server.js 添加 mute 和 unmute 消息类型处理
+  - 修复：websocket.js 添加 muteResult 和 muteState 消息类型处理
+  - 改动文件：public/js/chat.js, server.js, public/js/websocket.js
+- ✅ 修复系统指令帮助内容不完整的问题
+  - 问题：帮助内容缺少静音、取消静音、今日提醒、明日提醒、天气、播放等指令
+  - 修复：更新帮助模态框内容
+  - 改动文件：public/upload.html
+- ✅ 修复显示端横竖判断未考虑旋转角度的问题
+  - 问题：getDisplayList 函数未返回 rotation 属性
+  - 修复：在 getDisplayList 中添加 rotation 属性
+  - 改动文件：server.js
+- ✅ 修复 DataSnapshot Proxy 导致无限递归的问题
+  - 问题：Proxy handler 检查 `prop in DataSnapshot.prototype` 只检查基类原型，导致子类方法无法正确访问
+  - 当 `config.js` 设置 `module.exports.get = ...` 时，由于 `module.exports = config`（Proxy 对象），实际上修改了 `config.get`，形成循环引用
+  - 修复：将 `prop in DataSnapshot.prototype` 改为 `prop in target`，检查整个原型链
+  - 改动文件：core/data-snapshot/DataSnapshot.js
 - ✅ 修复音量滑条拖动时鼠标变成禁止图标的问题
   - 问题：之前故意添加的禁止图标功能影响用户体验
   - 修复：移除 CSS 中的 `cursor: not-allowed` 样式和 JS 中的 `dragging` 类事件

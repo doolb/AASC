@@ -95,7 +95,7 @@ class DataSnapshot {
                 if (typeof prop === 'symbol') {
                     return target[prop];
                 }
-                if (prop.startsWith('_') || prop in DataSnapshot.prototype) {
+                if (prop.startsWith('_') || prop in target) {
                     return target[prop];
                 }
                 const value = target._data[prop];
