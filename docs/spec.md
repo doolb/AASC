@@ -12,6 +12,7 @@
 | WebSocket | [websocket.md](spec/websocket.md) | 连接处理、消息类型、广播函数、前端客户端 |
 | 配置管理 | [config.md](spec/config.md) | 配置文件、API、显示端状态、播放列表 |
 | 提醒功能 | [reminder.md](spec/reminder.md) | 提醒数据结构、触发逻辑、定时检查 |
+| 时间监听 | [timeListener.md](spec/timeListener.md) | 时间变化事件监听、事件类型、API接口 |
 | 侧边栏导航 | [sidebar.md](spec/sidebar.md) | 侧边栏布局、面板切换、交互逻辑 |
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
@@ -19,6 +20,7 @@
 | AASC系统 | [aasc.md](spec/aasc.md) | 消息总线、执行者模型、消息路由、消息过滤 |
 | DataSnapshot | [data-snapshot.md](spec/data-snapshot.md) | 数据快照、IFile/IFileSystem接口、RealFileSystem/JsonFile实现 |
 | ViewBind | [viewbind.md](spec/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
+| 显示端选择 | [display-selection.md](spec/display-selection.md) | 单选、全选、自适应选择模式 |
 
 ## 核心模块
 
@@ -27,6 +29,7 @@
 | 服务器 | server.js | Express + WebSocket 主入口 |
 | 配置 | core/config.js | 配置加载、保存、获取 |
 | 连接 | core/connection.js | WebSocket 连接管理 (备用) |
+| 时间监听 | core/timeListener.js | 时间变化事件监听 |
 | 提醒 | core/reminder.js | 提醒逻辑处理 |
 | TTS | core/tts.js | 语音合成 |
 | 聊天 | core/chat.js | AI 聊天功能 |

@@ -251,14 +251,21 @@
 
 ```
 保存 displayClients 和 sendToDisplay 引用
-设置每分钟执行 checkReminders 的定时器
+注册时间监听器的 minute 事件
+```
+
+### onMinuteChange(eventData)
+分钟变化回调。
+
+```
+调用 checkReminders() 检查提醒
 ```
 
 ### stop()
 停止定时检查。
 
 ```
-清除定时器
+取消时间监听器的 minute 事件订阅
 ```
 
 ### testReminder(reminderData, targetDisplayId, sendFunc)

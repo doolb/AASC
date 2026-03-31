@@ -88,9 +88,55 @@ executeReminderConfirmation(confirmationId, confirmed):
     如果确认:
         调用 reminder.addReminder() 添加提醒
     删除待确认记录
+
+handleTodayReminders(displayId):
+    获取所有提醒
+    筛选今日提醒:
+        - 每日提醒 (type === 'daily')
+        - 今日一次性提醒 (type === 'once' 且 nextTrigger 是今天)
+    按时间排序
+    生成语音播报: "今天有X个提醒：时间1 内容1，时间2 内容2..."
+    如果没有提醒: "今天没有提醒"
+
+handleTomorrowReminders(displayId):
+    获取所有提醒
+    筛选明日提醒:
+        - 每日提醒 (type === 'daily')
+        - 明日一次性提醒 (type === 'once' 且 nextTrigger 是明天)
+    按时间排序
+    生成语音播报: "明天有X个提醒：时间1 内容1，时间2 内容2..."
+    如果没有提醒: "明天没有提醒"
 ```
 
-### 3. 报时功能
+### 3. 静音功能
+
+**服务端实现**:
+```
+handleMuteCommand(displayId):
+    检查静音功能是否可用
+    调用 muteAllDisplays() 执行静音
+    生成语音播报:
+        - 成功: "已静音所有显示端"
+        - 已静音: "已经是静音状态"
+
+handleUnmuteCommand(displayId):
+    检查取消静音功能是否可用
+    调用 unmuteAllDisplays() 取消静音
+    生成语音播报:
+        - 成功: "已取消静音"
+        - 未静音: "当前不是静音状态"
+```
+
+**静音指令格式**:
+
+| 指令 | 说明 |
+|------|------|
+| 静音 | 静音所有显示端 |
+| 全部静音 | 静音所有显示端 |
+| 取消静音 | 取消静音，恢复之前音量 |
+| 恢复音量 | 取消静音，恢复之前音量 |
+
+### 4. 报时功能
 
 **服务端实现**:
 ```

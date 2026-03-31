@@ -1,5 +1,6 @@
 const path = require('path');
 const tts = require('./tts');
+const timeListener = require('./timeListener');
 
 let timeAnnounceConfig = {
     enabled: true,
@@ -9,7 +10,8 @@ let timeAnnounceConfig = {
 };
 
 let lastAnnounceMinute = -1;
-let announceTimer = null;
+let displayClientsRef = null;
+let sendToDisplayRef = null;
 
 function init(config) {
     if (config) {
@@ -34,23 +36,21 @@ function setConfig(config) {
     if (config.repeatDelay !== undefined) timeAnnounceConfig.repeatDelay = config.repeatDelay;
 }
 
-function shouldAnnounce() {
+function shouldAnnounce(minute) {
     if (!timeAnnounceConfig.enabled) return false;
-    
-    const now = new Date();
-    const minute = now.getMinutes();
     
     if (minute === lastAnnounceMinute) return false;
     
-    if (timeAnnounceConfig.interval === 60) {
-        return minute === 0;
-    } else if (timeAnnounceConfig.interval === 30) {
-        return minute === 0 || minute === 30;
-    } else if (timeAnnounceConfig.interval === 15) {
-        return minute === 0 || minute === 15 || minute === 30 || minute === 45;
+    switch (timeAnnounceConfig.interval) {
+        case 60:
+            return minute === 0;
+        case 30:
+            return minute === 0 || minute === 30;
+        case 15:
+            return minute === 0 || minute === 15 || minute === 30 || minute === 45;
+        default:
+            return false;
     }
-    
-    return false;
 }
 
 function generateTimeText() {
@@ -93,14 +93,18 @@ function generateTimeText() {
 }
 
 async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
-    if (!force && !shouldAnnounce()) return;
-    
     const now = new Date();
     const minute = now.getMinutes();
+    
+    if (!force && !shouldAnnounce(minute)) return;
+    
     lastAnnounceMinute = minute;
     
     const timeText = generateTimeText();
     console.log(`[整点报时] ${timeText}`);
+    
+    const clients = displayClients || displayClientsRef;
+    const send = sendToDisplay || sendToDisplayRef;
     
     try {
         const audioPath = await tts.generateTTS(timeText);
@@ -113,13 +117,13 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
             text: timeText
         };
         
-        if (displayClients && sendToDisplay) {
+        if (clients && send) {
             const repeatCount = timeAnnounceConfig.repeatCount || 1;
             const repeatDelay = timeAnnounceConfig.repeatDelay || 3000;
             
             for (let i = 0; i < repeatCount; i++) {
-                displayClients.forEach((displayData, displayId) => {
-                    sendToDisplay(displayId, announceData);
+                clients.forEach((displayData, displayId) => {
+                    send(displayId, announceData);
                 });
                 
                 if (i < repeatCount - 1) {
@@ -135,26 +139,24 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
     }
 }
 
-function start(displayClients, sendToDisplay) {
-    if (announceTimer) {
-        clearInterval(announceTimer);
+function onMinuteChange(eventData) {
+    if (shouldAnnounce(eventData.minute)) {
+        checkAndAnnounce();
     }
+}
+
+function start(displayClients, sendToDisplay) {
+    displayClientsRef = displayClients;
+    sendToDisplayRef = sendToDisplay;
     
-    announceTimer = setInterval(() => {
-        checkAndAnnounce(displayClients, sendToDisplay);
-    }, 60000);
+    timeListener.on('minute', onMinuteChange);
     
-    checkAndAnnounce(displayClients, sendToDisplay);
-    
-    console.log('[整点报时] 定时器已启动');
+    console.log('[整点报时] 已注册时间监听');
 }
 
 function stop() {
-    if (announceTimer) {
-        clearInterval(announceTimer);
-        announceTimer = null;
-        console.log('[整点报时] 定时器已停止');
-    }
+    timeListener.off('minute', onMinuteChange);
+    console.log('[整点报时] 已取消时间监听');
 }
 
 module.exports = {

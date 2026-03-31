@@ -13,6 +13,8 @@ let displayClients = null;
 let sendToDisplay = null;
 let broadcastToControls = null;
 let mediaLibraryManager = null;
+let muteAllDisplays = null;
+let unmuteAllDisplays = null;
 
 let assistantConfig = {
     defaultName: '小爱',
@@ -63,6 +65,11 @@ function setClients(clients, sendFunc, broadcastFunc) {
     displayClients = clients;
     sendToDisplay = sendFunc;
     broadcastToControls = broadcastFunc;
+}
+
+function setMuteFunctions(muteFunc, unmuteFunc) {
+    muteAllDisplays = muteFunc;
+    unmuteAllDisplays = unmuteFunc;
 }
 
 function setMediaLibrary(manager) {
@@ -274,6 +281,153 @@ async function handleTimeAnnounceCommand(text, displayId) {
         } catch (err) {
             console.error('[语音命令] 报时语音生成失败:', err.message);
         }
+    }
+}
+
+async function handleTodayReminders(displayId) {
+    const allReminders = reminder.getAllReminders();
+    const today = new Date();
+    const todayStr = today.toDateString();
+    
+    const todayReminders = allReminders.filter(r => {
+        if (!r.enabled) return false;
+        if (r.type === 'daily') return true;
+        if (r.type === 'once' && r.nextTrigger) {
+            const triggerDate = new Date(r.nextTrigger);
+            return triggerDate.toDateString() === todayStr;
+        }
+        return false;
+    });
+    
+    let responseText;
+    if (todayReminders.length > 0) {
+        const sortedReminders = todayReminders.sort((a, b) => a.time.localeCompare(b.time));
+        const reminderTexts = sortedReminders.map(r => `${r.time} ${r.content}`);
+        responseText = `今天有${todayReminders.length}个提醒：${reminderTexts.join('，')}`;
+    } else {
+        responseText = '今天没有提醒';
+    }
+    
+    try {
+        const audioPath = await tts.generateTTS(responseText);
+        const fileName = path.basename(audioPath);
+        sendToDisplay(displayId, {
+            type: 'tts',
+            action: 'playAudio',
+            audioUrl: `/uploads/tts/${fileName}`,
+            text: responseText
+        });
+    } catch (err) {
+        console.error('[语音命令] 今日提醒语音生成失败:', err.message);
+    }
+}
+
+async function handleTomorrowReminders(displayId) {
+    const allReminders = reminder.getAllReminders();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toDateString();
+    
+    const tomorrowReminders = allReminders.filter(r => {
+        if (!r.enabled) return false;
+        if (r.type === 'daily') return true;
+        if (r.type === 'once' && r.nextTrigger) {
+            const triggerDate = new Date(r.nextTrigger);
+            return triggerDate.toDateString() === tomorrowStr;
+        }
+        return false;
+    });
+    
+    let responseText;
+    if (tomorrowReminders.length > 0) {
+        const sortedReminders = tomorrowReminders.sort((a, b) => a.time.localeCompare(b.time));
+        const reminderTexts = sortedReminders.map(r => `${r.time} ${r.content}`);
+        responseText = `明天有${tomorrowReminders.length}个提醒：${reminderTexts.join('，')}`;
+    } else {
+        responseText = '明天没有提醒';
+    }
+    
+    try {
+        const audioPath = await tts.generateTTS(responseText);
+        const fileName = path.basename(audioPath);
+        sendToDisplay(displayId, {
+            type: 'tts',
+            action: 'playAudio',
+            audioUrl: `/uploads/tts/${fileName}`,
+            text: responseText
+        });
+    } catch (err) {
+        console.error('[语音命令] 明日提醒语音生成失败:', err.message);
+    }
+}
+
+async function handleMuteCommand(displayId) {
+    if (!muteAllDisplays) {
+        const responseText = '静音功能不可用';
+        try {
+            const audioPath = await tts.generateTTS(responseText);
+            const fileName = path.basename(audioPath);
+            sendToDisplay(displayId, {
+                type: 'voiceCommand',
+                action: 'response',
+                text: responseText,
+                audioUrl: `/uploads/tts/${fileName}`
+            });
+        } catch (err) {
+            console.error('[语音命令] 静音语音生成失败:', err.message);
+        }
+        return;
+    }
+    
+    const result = muteAllDisplays();
+    const responseText = result ? '已静音所有显示端' : '已经是静音状态';
+    
+    try {
+        const audioPath = await tts.generateTTS(responseText);
+        const fileName = path.basename(audioPath);
+        sendToDisplay(displayId, {
+            type: 'voiceCommand',
+            action: 'response',
+            text: responseText,
+            audioUrl: `/uploads/tts/${fileName}`
+        });
+    } catch (err) {
+        console.error('[语音命令] 静音语音生成失败:', err.message);
+    }
+}
+
+async function handleUnmuteCommand(displayId) {
+    if (!unmuteAllDisplays) {
+        const responseText = '取消静音功能不可用';
+        try {
+            const audioPath = await tts.generateTTS(responseText);
+            const fileName = path.basename(audioPath);
+            sendToDisplay(displayId, {
+                type: 'voiceCommand',
+                action: 'response',
+                text: responseText,
+                audioUrl: `/uploads/tts/${fileName}`
+            });
+        } catch (err) {
+            console.error('[语音命令] 取消静音语音生成失败:', err.message);
+        }
+        return;
+    }
+    
+    const result = unmuteAllDisplays();
+    const responseText = result ? '已取消静音' : '当前不是静音状态';
+    
+    try {
+        const audioPath = await tts.generateTTS(responseText);
+        const fileName = path.basename(audioPath);
+        sendToDisplay(displayId, {
+            type: 'voiceCommand',
+            action: 'response',
+            text: responseText,
+            audioUrl: `/uploads/tts/${fileName}`
+        });
+    } catch (err) {
+        console.error('[语音命令] 取消静音语音生成失败:', err.message);
     }
 }
 
@@ -755,6 +909,26 @@ async function processVoiceCommand(text, displayId) {
         }
     }
     
+    if (trimmedText === '静音' || trimmedText.includes('全部静音')) {
+        await handleMuteCommand(displayId);
+        return;
+    }
+    
+    if (trimmedText.includes('取消静音') || trimmedText === '恢复音量') {
+        await handleUnmuteCommand(displayId);
+        return;
+    }
+    
+    if (trimmedText.includes('今日提醒') || trimmedText.includes('今天提醒')) {
+        await handleTodayReminders(displayId);
+        return;
+    }
+    
+    if (trimmedText.includes('明日提醒') || trimmedText.includes('明天提醒')) {
+        await handleTomorrowReminders(displayId);
+        return;
+    }
+    
     if (trimmedText.includes('提醒')) {
         await handleReminderCommand(trimmedText, displayId);
         return;
@@ -862,41 +1036,9 @@ async function executeCommands(actions, displayId, callbacks) {
         if (action === '今天天气') {
             await handleWeatherCommand('', displayId);
         } else if (action === '今日提醒') {
-            const reminders = reminder.getReminders();
-            const today = new Date();
-            const todayReminders = reminders.filter(r => {
-                const reminderTime = new Date(r.timestamp);
-                return reminderTime.toDateString() === today.toDateString();
-            });
-            
-            if (todayReminders.length > 0) {
-                const text = todayReminders.map(r => `${r.time} ${r.content}`).join('，');
-                try {
-                    const audioPath = await tts.generateTTS(`今日提醒：${text}`);
-                    const fileName = path.basename(audioPath);
-                    sendToDisplay(displayId, {
-                        type: 'tts',
-                        action: 'playAudio',
-                        audioUrl: `/uploads/tts/${fileName}`,
-                        text: `今日提醒：${text}`
-                    });
-                } catch (err) {
-                    console.error('[语音命令] 今日提醒语音生成失败:', err.message);
-                }
-            } else {
-                try {
-                    const audioPath = await tts.generateTTS('今天没有提醒');
-                    const fileName = path.basename(audioPath);
-                    sendToDisplay(displayId, {
-                        type: 'tts',
-                        action: 'playAudio',
-                        audioUrl: `/uploads/tts/${fileName}`,
-                        text: '今天没有提醒'
-                    });
-                } catch (err) {
-                    console.error('[语音命令] 今日提醒语音生成失败:', err.message);
-                }
-            }
+            await handleTodayReminders(displayId);
+        } else if (action === '明日提醒') {
+            await handleTomorrowReminders(displayId);
         } else if (action.startsWith('搜索')) {
             await handleSearchCommand(action, displayId);
         } else if (action.includes('提醒')) {
@@ -914,10 +1056,15 @@ async function executeCommands(actions, displayId, callbacks) {
 module.exports = {
     init,
     setClients,
+    setMuteFunctions,
     setMediaLibrary,
     processVoiceCommand,
     handleReminderCommand,
     handleTimeAnnounceCommand,
+    handleTodayReminders,
+    handleTomorrowReminders,
+    handleMuteCommand,
+    handleUnmuteCommand,
     handleWeatherCommand,
     handleSearchCommand,
     handlePlayCommand,

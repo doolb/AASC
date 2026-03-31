@@ -26,7 +26,7 @@
 
 | 模块 | 文档 | 说明 |
 |------|------|------|
-| 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪 |
+| 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪、选择模式 |
 | 控制端 | [control.md](design/control.md) | 媒体管理、显示控制、裁剪预览 |
 | 媒体库 | [media-library.md](design/media-library.md) | 多媒体库管理、多协议支持、文件操作 |
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |

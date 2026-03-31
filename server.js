@@ -7,6 +7,7 @@ const fs = require('fs');
 const { pipeline } = require('stream');
 const config = require('./core/config');
 const tts = require('./core/tts');
+const timeListener = require('./core/timeListener');
 const timeAnnounce = require('./core/timeAnnounce');
 const chat = require('./core/chat');
 const reminder = require('./core/reminder');
@@ -29,6 +30,10 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 let displayClients = new Map();
 let controlClients = new Set();
 let serverStartTime = Date.now();
+let muteState = {
+    isMuted: false,
+    previousVolumes: new Map()
+};
 
 tts.init(config.getTtsConfig());
 timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
@@ -67,10 +72,12 @@ function startServer() {
         console.log(`显示端地址: http://${localIP}:${PORT}/display`);
         console.log('='.repeat(50));
         
+        timeListener.start();
         timeAnnounce.start(displayClients, sendToDisplay);
         reminder.start(displayClients, sendToDisplay);
         voiceCommand.setClients(displayClients, sendToDisplay, broadcastToControls);
         voiceCommand.setMediaLibrary(mediaLibraryManager);
+        voiceCommand.setMuteFunctions(muteAllDisplays, unmuteAllDisplays);
     });
 }
 
@@ -763,6 +770,31 @@ app.post('/api/time/parse', (req, res) => {
     }
 });
 
+app.get('/api/mute', (req, res) => {
+    res.json({
+        status: 'success',
+        isMuted: muteState.isMuted
+    });
+});
+
+app.post('/api/mute', (req, res) => {
+    const result = muteAllDisplays();
+    res.json({
+        status: result ? 'success' : 'error',
+        message: result ? '已静音所有显示端' : '已经是静音状态',
+        isMuted: muteState.isMuted
+    });
+});
+
+app.post('/api/unmute', (req, res) => {
+    const result = unmuteAllDisplays();
+    res.json({
+        status: result ? 'success' : 'error',
+        message: result ? '已取消静音所有显示端' : '当前不是静音状态',
+        isMuted: muteState.isMuted
+    });
+});
+
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
     
@@ -832,6 +864,51 @@ function sendToDisplay(displayId, data) {
         return true;
     }
     return false;
+}
+
+function muteAllDisplays() {
+    if (muteState.isMuted) return false;
+    
+    displayClients.forEach((displayData, displayId) => {
+        muteState.previousVolumes.set(displayId, displayData.state.volume);
+        displayData.state.volume = 0;
+        sendToDisplay(displayId, {
+            type: 'control',
+            action: 'volume',
+            value: 0
+        });
+    });
+    
+    muteState.isMuted = true;
+    broadcastToControls({ type: 'muteState', isMuted: true });
+    console.log('[静音] 所有显示端已静音');
+    return true;
+}
+
+function unmuteAllDisplays() {
+    if (!muteState.isMuted) return false;
+    
+    displayClients.forEach((displayData, displayId) => {
+        const previousVolume = muteState.previousVolumes.get(displayId) || 100;
+        displayData.state.volume = previousVolume;
+        sendToDisplay(displayId, {
+            type: 'control',
+            action: 'volume',
+            value: previousVolume
+        });
+    });
+    
+    muteState.isMuted = false;
+    muteState.previousVolumes.clear();
+    broadcastToControls({ type: 'muteState', isMuted: false });
+    console.log('[静音] 所有显示端已取消静音');
+    return true;
+}
+
+function getMuteState() {
+    return {
+        isMuted: muteState.isMuted
+    };
 }
 
 function getClientIP(req) {
@@ -1199,6 +1276,16 @@ wss.on('connection', (ws, req) => {
                     displayData.state.currentMedia = data.media;
                     config.updateDisplayState(displayData.ip, { currentMedia: data.media });
                     sendToDisplay(displayId, data.media);
+                } else if (data.type === 'mediaBatch') {
+                    const displayIds = data.displayIds || [];
+                    displayIds.forEach(id => {
+                        const dd = displayClients.get(id);
+                        if (dd) {
+                            dd.state.currentMedia = data.media;
+                            config.updateDisplayState(dd.ip, { currentMedia: data.media });
+                            sendToDisplay(id, data.media);
+                        }
+                    });
                 } else if (data.type === 'control') {
                     if (data.action === 'rotate') {
                         displayData.state.rotation = data.value;

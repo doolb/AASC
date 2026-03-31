@@ -1,19 +1,84 @@
 const DisplayList = {
     list: [],
+    selectionMode: 'single',
     
     getDisplays() {
         return this.list || [];
+    },
+    
+    setSelectionMode(mode) {
+        if (mode !== 'single' && mode !== 'all' && mode !== 'adaptive') {
+            return;
+        }
+        
+        this.selectionMode = mode;
+        this.renderSelectionMode();
+        
+        if (mode === 'single' && !window.currentDisplayId && this.list.length > 0) {
+            this.select(this.list[0].id);
+        }
+    },
+    
+    getSelectedDisplayIds(mediaRatio) {
+        switch (this.selectionMode) {
+            case 'single':
+                return window.currentDisplayId ? [window.currentDisplayId] : [];
+            case 'all':
+                return this.list.map(d => d.id);
+            case 'adaptive':
+                return this.getAdaptiveDisplayIds(mediaRatio);
+            default:
+                return [];
+        }
+    },
+    
+    getAdaptiveDisplayIds(mediaRatio) {
+        const isLandscapeMedia = mediaRatio > 1;
+        const isPortraitMedia = mediaRatio < 1;
+        
+        return this.list.filter(display => {
+            const isLandscapeDisplay = this.isDisplayLandscape(display);
+            
+            if (isLandscapeMedia) {
+                return isLandscapeDisplay;
+            } else if (isPortraitMedia) {
+                return !isLandscapeDisplay;
+            } else {
+                return true;
+            }
+        }).map(d => d.id);
+    },
+    
+    isDisplayLandscape(display) {
+        const { width, height } = display.canvasSize || { width: 1920, height: 1080 };
+        const rotation = display.rotation || 0;
+        
+        let isLandscape = width >= height;
+        
+        if (rotation === 90 || rotation === 270) {
+            isLandscape = !isLandscape;
+        }
+        
+        return isLandscape;
+    },
+    
+    renderSelectionMode() {
+        document.querySelectorAll('[data-selection-mode]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.selectionMode === this.selectionMode);
+        });
     },
     
     render() {
         this.renderToContainer('displayList');
         this.renderToContainer('mediaDisplayList');
         
+        this.renderSelectionMode();
+        
         if (window.FloatingControl) {
             window.FloatingControl.updateDisplayList();
         }
         
-        if (!window.currentDisplayId && this.list.length > 0) {
+        if (this.selectionMode === 'single' && !window.currentDisplayId && this.list.length > 0) {
             this.select(this.list[0].id);
         }
     },
@@ -30,7 +95,31 @@ const DisplayList = {
             return;
         }
         
-        container.innerHTML = this.list.map(d => {
+        let selectionModeHtml = `
+            <div class="selection-mode-bar">
+                <button class="selection-mode-btn ${this.selectionMode === 'single' ? 'active' : ''}" 
+                        data-selection-mode="single" onclick="DisplayList.setSelectionMode('single')">
+                    单选
+                </button>
+                <button class="selection-mode-btn ${this.selectionMode === 'all' ? 'active' : ''}" 
+                        data-selection-mode="all" onclick="DisplayList.setSelectionMode('all')">
+                    全选
+                </button>
+                <button class="selection-mode-btn ${this.selectionMode === 'adaptive' ? 'active' : ''}" 
+                        data-selection-mode="adaptive" onclick="DisplayList.setSelectionMode('adaptive')">
+                    自适应
+                </button>
+            </div>
+        `;
+        
+        let listHtml = this.list.map(d => {
+            let isActive = false;
+            if (this.selectionMode === 'single') {
+                isActive = d.id === window.currentDisplayId;
+            } else if (this.selectionMode === 'all') {
+                isActive = true;
+            }
+            
             let browserInfoHtml = '';
             if (d.browserInfo) {
                 const bi = d.browserInfo;
@@ -59,12 +148,17 @@ const DisplayList = {
                 voiceStatusHtml = '<span class="voice-status unsupported" title="不支持语音识别">语音</span>';
             }
             
+            let directionIndicator = '';
+            const isLandscape = this.isDisplayLandscape(d);
+            directionIndicator = `<span class="direction-indicator ${isLandscape ? 'landscape' : 'portrait'}" title="${isLandscape ? '横向' : '纵向'}">${isLandscape ? '↔' : '↕'}</span>`;
+            
             return `
-                <div class="display-item ${d.id === window.currentDisplayId ? 'active' : ''}" onclick="DisplayList.select('${d.id}')">
+                <div class="display-item ${isActive ? 'active' : ''}" onclick="DisplayList.select('${d.id}')">
                     <div style="flex:1;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <span class="display-item-id">${d.ip || 'unknown'}</span>
                             <div style="display:flex;align-items:center;gap:8px;">
+                                ${directionIndicator}
                                 ${voiceStatusHtml}
                                 <span class="display-item-size">${d.canvasSize.width}x${d.canvasSize.height}</span>
                                 ${d.browserInfo ? `<button class="info-btn" onclick="event.stopPropagation();DisplayList.showFeatureModal('${d.id}')">详情</button>` : ''}
@@ -75,6 +169,8 @@ const DisplayList = {
                 </div>
             `;
         }).join('');
+        
+        container.innerHTML = selectionModeHtml + listHtml;
     },
     
     select(id) {

@@ -162,19 +162,62 @@ const WebSocketManager = {
     },
     
     sendMedia(mediaData) {
-        if (!window.currentDisplayId) {
-            showToast('请先选择显示端', 'error');
+        this.sendMediaWithRatio(mediaData, null);
+    },
+    
+    async sendMediaWithRatio(mediaData, mediaRatio) {
+        if (!window.DisplayList) {
+            showToast('显示端列表未初始化', 'error');
+            return;
+        }
+        
+        if (mediaRatio === null) {
+            mediaRatio = await this.getMediaRatio(mediaData);
+        }
+        
+        const displayIds = window.DisplayList.getSelectedDisplayIds(mediaRatio);
+        
+        if (displayIds.length === 0) {
+            showToast('没有可用的显示端', 'error');
             return;
         }
         
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
-                type: 'media',
-                displayId: window.currentDisplayId,
+                type: 'mediaBatch',
+                displayIds: displayIds,
                 media: mediaData
             }));
-            showToast('已发送到显示端', 'success');
+            showToast(`已发送到 ${displayIds.length} 个显示端`, 'success');
         }
+    },
+    
+    async getMediaRatio(mediaData) {
+        if (mediaData.width && mediaData.height) {
+            return mediaData.width / mediaData.height;
+        }
+        
+        if (!mediaData.url) {
+            return 1;
+        }
+        
+        return new Promise((resolve) => {
+            if (mediaData.mediaType === 'video') {
+                const video = document.createElement('video');
+                video.onloadedmetadata = () => {
+                    resolve(video.videoWidth / video.videoHeight);
+                };
+                video.onerror = () => resolve(1);
+                video.src = mediaData.url;
+            } else {
+                const img = new Image();
+                img.onload = () => {
+                    resolve(img.naturalWidth / img.naturalHeight);
+                };
+                img.onerror = () => resolve(1);
+                img.src = mediaData.url;
+            }
+        });
     },
     
     sendTts(action, data = {}) {

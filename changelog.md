@@ -3,6 +3,62 @@
 ## [Unreleased]
 
 ### 新增
+- ✅ 显示端全选和自适应功能
+  - 新增三种选择模式：单选、全选、自适应
+  - 单选模式：选择单个显示端进行媒体下发（默认模式）
+  - 全选模式：媒体下发到所有已连接的显示端
+  - 自适应模式：根据媒体比例自动匹配显示端方向
+    - 横向媒体（宽 > 高）下发到横向显示端
+    - 纵向媒体（高 > 宽）下发到纵向显示端
+    - 显示端方向判断考虑旋转角度（90°/270° 时方向互换）
+  - 显示端列表新增方向指示器（↔ 横向 / ↕ 纵向）
+  - 改动文件：public/js/display-list.js, public/js/websocket.js, server.js, public/css/upload.css
+  - 设计文档：docs/design/display.md
+  - 实现文档：docs/spec/display-selection.md
+  - 任务文档：docs/task/2026-03-31_显示端全选和自适应功能.md
+- ✅ 时间监听能力实现
+  - 创建时间监听模块：core/timeListener.js
+    - 支持分钟、小时、天级别的时间变化事件
+    - 提供 on/off/once 事件订阅方法
+    - 单例模式，全局统一管理
+  - 重构报时模块使用时间监听
+    - 移除独立定时器，改用时间监听事件
+    - 改动文件：core/timeAnnounce.js
+  - 重构提醒模块使用时间监听
+    - 移除独立定时器，改用时间监听事件
+    - 改动文件：core/reminder.js
+  - 更新 server.js 启动时间监听
+  - 设计文档：docs/task/2026-03-31_提醒增强与静音功能.md
+- ✅ 静音/取消静音功能实现
+  - 新增静音状态管理：server.js
+    - muteState 对象存储静音状态和之前音量
+    - muteAllDisplays() 静音所有显示端
+    - unmuteAllDisplays() 取消静音恢复音量
+  - 新增静音 API 端点
+    - GET /api/mute 获取静音状态
+    - POST /api/mute 执行静音
+    - DELETE /api/mute 取消静音
+  - 新增语音命令处理：core/voiceCommand.js
+    - handleMuteCommand() 处理静音命令
+    - handleUnmuteCommand() 处理取消静音命令
+    - 支持指令：静音、全部静音、取消静音、恢复音量
+  - 设计文档：docs/task/2026-03-31_提醒增强与静音功能.md
+- ~~✅ 音量滑条拖动禁止图标~~ (已移除，影响用户体验)
+  - ~~新增 CSS 样式：public/css/upload.css~~
+    - ~~拖动时显示 not-allowed 光标~~
+  - ~~新增事件监听：public/js/controls.js, public/js/floating-control.js~~
+    - ~~mousedown 添加 dragging 类~~
+    - ~~mouseup/mouseleave 移除 dragging 类~~
+  - 设计文档：docs/task/2026-03-31_提醒增强与静音功能.md
+- ✅ 今日/明日提醒功能实现
+  - 新增 handleTodayReminders() 函数：core/voiceCommand.js
+    - 筛选今日提醒（每日提醒 + 今日一次性提醒）
+    - 按时间排序并语音播报
+  - 新增 handleTomorrowReminders() 函数：core/voiceCommand.js
+    - 筛选明日提醒（每日提醒 + 明日一次性提醒）
+    - 按时间排序并语音播报
+  - 支持语音指令：今日提醒、今天提醒、明日提醒、明天提醒
+  - 设计文档：docs/task/2026-03-31_提醒增强与静音功能.md
 - ✅ ViewBind 视图绑定模块实现
   - 创建 core/viewbind 目录
   - 实现 ViewBind 类：core/viewbind/ViewBind.js
@@ -178,6 +234,10 @@
   - 改动文件：docs/self-test.md
 
 ### Bug 修复
+- ✅ 修复音量滑条拖动时鼠标变成禁止图标的问题
+  - 问题：之前故意添加的禁止图标功能影响用户体验
+  - 修复：移除 CSS 中的 `cursor: not-allowed` 样式和 JS 中的 `dragging` 类事件
+  - 改动文件：public/css/upload.css, public/js/controls.js, public/js/floating-control.js
 - ✅ 修复 floating-control.js 调用错误方法的问题
   - 问题：调用 DisplayList.selectDisplay 方法不存在
   - 修复：改为调用 DisplayList.select 方法

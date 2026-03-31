@@ -1,11 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const tts = require('./tts');
+const timeListener = require('./timeListener');
 
 const REMINDERS_FILE = path.join(__dirname, '../config/reminders.json');
 
 let reminders = [];
-let checkTimer = null;
 let displayClients = null;
 let sendToDisplay = null;
 
@@ -266,24 +266,22 @@ async function checkReminders() {
     }
 }
 
+function onMinuteChange(eventData) {
+    checkReminders();
+}
+
 function start(clients, sendFunc) {
     displayClients = clients;
     sendToDisplay = sendFunc;
     
-    if (checkTimer) {
-        clearInterval(checkTimer);
-    }
+    timeListener.on('minute', onMinuteChange);
     
-    checkTimer = setInterval(checkReminders, 60000);
-    console.log('[提醒] 定时器已启动');
+    console.log('[提醒] 已注册时间监听');
 }
 
 function stop() {
-    if (checkTimer) {
-        clearInterval(checkTimer);
-        checkTimer = null;
-        console.log('[提醒] 定时器已停止');
-    }
+    timeListener.off('minute', onMinuteChange);
+    console.log('[提醒] 已取消时间监听');
 }
 
 async function testReminder(reminderData, targetDisplayId = null, sendFunc = null) {
