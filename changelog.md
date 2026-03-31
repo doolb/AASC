@@ -3,6 +3,58 @@
 ## [Unreleased]
 
 ### 新增
+- ✅ ViewBind 视图绑定模块实现
+  - 创建 core/viewbind 目录
+  - 实现 ViewBind 类：core/viewbind/ViewBind.js
+    - 数据存储、绑定/解绑管理、变更通知
+    - 支持通配符绑定和指定 key 绑定
+    - 支持深度比较，避免相同数据触发通知
+    - 支持 set/update 方法修改数据
+    - 支持在通知过程中延迟解绑
+  - 实现 ViewBindList 类：core/viewbind/ViewBindList.js
+    - 列表数据管理、列表变化通知
+    - 支持 push/pop/remove/insert/clear 操作
+    - 支持为每个元素创建 ViewBind
+    - 支持 forEach/map/filter/find 方法
+  - 扩展 DataSnapshot 类：core/data-snapshot/DataSnapshot.js
+    - 添加 bind/unbind/unbindAll 方法
+    - 修改 _save 方法触发变更通知
+  - 添加单元测试
+    - ViewBind 测试：10 个用例
+    - ViewBindList 测试：13 个用例
+    - DataSnapshot 绑定测试：6 个用例
+  - 创建实现文档：docs/spec/viewbind.md
+  - 更新文件：docs/spec.md, docs/todo.md
+- ✅ ViewBind 视图绑定功能需求分析
+  - 创建设计文档：docs/design/viewbind.md
+  - 分析 Unity C# 版本 viewbind 实现的核心功能
+  - 设计 JavaScript 版本的 ViewBind 类和 ViewBindList 类
+  - 设计与 DataSnapshot 模块的集成方案
+  - 定义前端使用示例和模块集成方案
+  - 创建任务文档：docs/task/2026-03-31_ViewBind实现.md
+  - 更新文件：docs/design/viewbind.md, docs/design.md, docs/todo.md
+- ✅ DataSnapshot 数据快照模块
+  - 创建 core/data-snapshot 目录
+  - 实现 DataSnapshot 基类：core/data-snapshot/DataSnapshot.js
+    - 使用 Proxy 代理属性访问，实现透明的数据持久化
+    - 支持嵌套对象修改自动保存
+    - 支持默认值定义（static defaults）
+    - 支持批量操作（batch 方法）
+    - 自动创建目录结构
+    - 深度克隆和深度合并
+  - 实现 JsonFile 工具类：core/data-snapshot/JsonFile.js
+    - 静态方法：read, write, exists, delete, readOrDefault
+  - 创建模块入口：core/data-snapshot/index.js
+  - 重构 config.js 使用 DataSnapshot
+    - Config 类继承 DataSnapshot 基类
+    - 保持原有 API 兼容性
+    - 简化代码，移除手动加载/保存逻辑
+  - 添加单元测试：core/data-snapshot/DataSnapshot.test.js
+    - 11 个测试用例全部通过
+    - 覆盖：默认值、自动保存、嵌套对象、删除属性、批量操作、文件加载、深度合并
+  - 设计文档：docs/design/data-snapshot.md
+  - 实现文档：docs/spec/data-snapshot.md
+  - 任务文档：docs/task/2026-03-31_DataSnapshot实现.md
 - ✅ 能力组合系统实现
   - 创建能力管道执行器：aasc/pipeline.js
     - PipelineContext: 管道执行上下文，支持数据存储、步骤结果、错误管理

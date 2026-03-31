@@ -1,19 +1,7 @@
-const fs = require('fs');
 const path = require('path');
+const DataSnapshot = require('./data-snapshot');
 
 const CONFIG_FILE = path.join(__dirname, '../config/config.json');
-
-const defaultConfig = {
-    server: {
-        port: 8081
-    },
-    tts: {
-        serviceUrl: 'http://192.168.1.16:3000/api/tts',
-        defaultVoice: 'Microsoft Xiaoxiao',
-        defaultSpeed: 0
-    },
-    displayStates: {}
-};
 
 const defaultDisplayState = {
     currentMedia: null,
@@ -24,169 +12,136 @@ const defaultDisplayState = {
     playlist: []
 };
 
-let config = null;
-
-function loadConfig() {
-    try {
-        if (fs.existsSync(CONFIG_FILE)) {
-            const data = fs.readFileSync(CONFIG_FILE, 'utf8');
-            const loadedConfig = JSON.parse(data);
-            config = deepMerge(defaultConfig, loadedConfig);
-        } else {
-            config = { ...defaultConfig };
-            saveConfig();
-        }
-    } catch (err) {
-        console.error('[Config] 加载配置失败:', err.message);
-        config = { ...defaultConfig };
-    }
-    return config;
-}
-
-function deepMerge(target, source) {
-    const result = { ...target };
-    for (const key in source) {
-        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-            result[key] = deepMerge(target[key] || {}, source[key]);
-        } else {
-            result[key] = source[key];
-        }
-    }
-    return result;
-}
-
-function saveConfig() {
-    try {
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
-        return true;
-    } catch (err) {
-        console.error('[Config] 保存配置失败:', err.message);
-        return false;
-    }
-}
-
-function getConfig() {
-    if (!config) {
-        loadConfig();
-    }
-    return config;
-}
-
-function get(key, defaultValue) {
-    const cfg = getConfig();
-    const keys = key.split('.');
-    let value = cfg;
-    for (const k of keys) {
-        if (value && typeof value === 'object' && k in value) {
-            value = value[k];
-        } else {
-            return defaultValue;
-        }
-    }
-    return value;
-}
-
-function set(key, value) {
-    const cfg = getConfig();
-    const keys = key.split('.');
-    let obj = cfg;
-    for (let i = 0; i < keys.length - 1; i++) {
-        if (!(keys[i] in obj)) {
-            obj[keys[i]] = {};
-        }
-        obj = obj[keys[i]];
-    }
-    obj[keys[keys.length - 1]] = value;
-    saveConfig();
-}
-
-function setTtsConfig(ttsConfig) {
-    if (ttsConfig.serviceUrl !== undefined) {
-        set('tts.serviceUrl', ttsConfig.serviceUrl);
-    }
-    if (ttsConfig.defaultVoice !== undefined) {
-        set('tts.defaultVoice', ttsConfig.defaultVoice);
-    }
-    if (ttsConfig.defaultSpeed !== undefined) {
-        set('tts.defaultSpeed', ttsConfig.defaultSpeed);
-    }
-}
-
-function getTtsConfig() {
-    return {
-        serviceUrl: get('tts.serviceUrl'),
-        defaultVoice: get('tts.defaultVoice'),
-        defaultSpeed: get('tts.defaultSpeed')
+class Config extends DataSnapshot {
+    static defaults = {
+        server: {
+            port: 8081
+        },
+        tts: {
+            serviceUrl: 'http://192.168.1.16:3000/api/tts',
+            defaultVoice: 'Microsoft Xiaoxiao',
+            defaultSpeed: 0
+        },
+        displayStates: {}
     };
-}
 
-function getDisplayState(ip) {
-    const states = get('displayStates', {});
-    const key = ip || 'default';
-    return states[key] || { ...defaultDisplayState };
-}
+    get(key, defaultValue) {
+        const keys = key.split('.');
+        let value = this._data;
+        for (const k of keys) {
+            if (value && typeof value === 'object' && k in value) {
+                value = value[k];
+            } else {
+                return defaultValue;
+            }
+        }
+        return value;
+    }
 
-function setDisplayState(ip, state) {
-    const states = get('displayStates', {});
-    const key = ip || 'default';
-    states[key] = state;
-    set('displayStates', states);
-}
+    set(key, value) {
+        const keys = key.split('.');
+        let obj = this._data;
+        for (let i = 0; i < keys.length - 1; i++) {
+            if (!(keys[i] in obj)) {
+                obj[keys[i]] = {};
+            }
+            obj = obj[keys[i]];
+        }
+        obj[keys[keys.length - 1]] = value;
+        this._save();
+    }
 
-function updateDisplayState(ip, partialState) {
-    const currentState = getDisplayState(ip);
-    const newState = { ...currentState, ...partialState };
-    setDisplayState(ip, newState);
-    return newState;
-}
+    setTtsConfig(ttsConfig) {
+        this.batch((data) => {
+            if (ttsConfig.serviceUrl !== undefined) {
+                data.tts.serviceUrl = ttsConfig.serviceUrl;
+            }
+            if (ttsConfig.defaultVoice !== undefined) {
+                data.tts.defaultVoice = ttsConfig.defaultVoice;
+            }
+            if (ttsConfig.defaultSpeed !== undefined) {
+                data.tts.defaultSpeed = ttsConfig.defaultSpeed;
+            }
+        });
+    }
 
-function addToPlaylist(ip, media) {
-    const state = getDisplayState(ip);
-    if (!state.playlist) {
+    getTtsConfig() {
+        return {
+            serviceUrl: this.get('tts.serviceUrl'),
+            defaultVoice: this.get('tts.defaultVoice'),
+            defaultSpeed: this.get('tts.defaultSpeed')
+        };
+    }
+
+    getDisplayState(ip) {
+        const states = this.get('displayStates', {});
+        const key = ip || 'default';
+        return states[key] || { ...defaultDisplayState };
+    }
+
+    setDisplayState(ip, state) {
+        const states = this.get('displayStates', {});
+        const key = ip || 'default';
+        states[key] = state;
+        this.set('displayStates', states);
+    }
+
+    updateDisplayState(ip, partialState) {
+        const currentState = this.getDisplayState(ip);
+        const newState = { ...currentState, ...partialState };
+        this.setDisplayState(ip, newState);
+        return newState;
+    }
+
+    addToPlaylist(ip, media) {
+        const state = this.getDisplayState(ip);
+        if (!state.playlist) {
+            state.playlist = [];
+        }
+        state.playlist.push(media);
+        this.setDisplayState(ip, state);
+    }
+
+    removeFromPlaylist(ip, index) {
+        const state = this.getDisplayState(ip);
+        if (state.playlist && index >= 0 && index < state.playlist.length) {
+            state.playlist.splice(index, 1);
+            this.setDisplayState(ip, state);
+        }
+    }
+
+    clearPlaylist(ip) {
+        const state = this.getDisplayState(ip);
         state.playlist = [];
+        this.setDisplayState(ip, state);
     }
-    state.playlist.push(media);
-    setDisplayState(ip, state);
-}
 
-function removeFromPlaylist(ip, index) {
-    const state = getDisplayState(ip);
-    if (state.playlist && index >= 0 && index < state.playlist.length) {
-        state.playlist.splice(index, 1);
-        setDisplayState(ip, state);
+    getPlaylist(ip) {
+        const state = this.getDisplayState(ip);
+        return state.playlist || [];
+    }
+
+    getAllDisplayStates() {
+        return this.get('displayStates', {});
     }
 }
 
-function clearPlaylist(ip) {
-    const state = getDisplayState(ip);
-    state.playlist = [];
-    setDisplayState(ip, state);
-}
+const config = new Config(CONFIG_FILE);
 
-function getPlaylist(ip) {
-    const state = getDisplayState(ip);
-    return state.playlist || [];
-}
-
-function getAllDisplayStates() {
-    return get('displayStates', {});
-}
-
-module.exports = {
-    loadConfig,
-    saveConfig,
-    getConfig,
-    get,
-    set,
-    setTtsConfig,
-    getTtsConfig,
-    getDisplayState,
-    setDisplayState,
-    updateDisplayState,
-    addToPlaylist,
-    removeFromPlaylist,
-    clearPlaylist,
-    getPlaylist,
-    getAllDisplayStates,
-    defaultDisplayState
-};
+module.exports = config;
+module.exports.defaultDisplayState = defaultDisplayState;
+module.exports.loadConfig = () => config;
+module.exports.saveConfig = () => { config._save(); return true; };
+module.exports.getConfig = () => config;
+module.exports.get = (key, defaultValue) => config.get(key, defaultValue);
+module.exports.set = (key, value) => config.set(key, value);
+module.exports.setTtsConfig = (ttsConfig) => config.setTtsConfig(ttsConfig);
+module.exports.getTtsConfig = () => config.getTtsConfig();
+module.exports.getDisplayState = (ip) => config.getDisplayState(ip);
+module.exports.setDisplayState = (ip, state) => config.setDisplayState(ip, state);
+module.exports.updateDisplayState = (ip, partialState) => config.updateDisplayState(ip, partialState);
+module.exports.addToPlaylist = (ip, media) => config.addToPlaylist(ip, media);
+module.exports.removeFromPlaylist = (ip, index) => config.removeFromPlaylist(ip, index);
+module.exports.clearPlaylist = (ip) => config.clearPlaylist(ip);
+module.exports.getPlaylist = (ip) => config.getPlaylist(ip);
+module.exports.getAllDisplayStates = () => config.getAllDisplayStates();

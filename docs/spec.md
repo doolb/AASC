@@ -17,6 +17,8 @@
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |
 | AASC系统 | [aasc.md](spec/aasc.md) | 消息总线、执行者模型、消息路由、消息过滤 |
+| DataSnapshot | [data-snapshot.md](spec/data-snapshot.md) | 数据快照、IFile/IFileSystem接口、RealFileSystem/JsonFile实现 |
+| ViewBind | [viewbind.md](spec/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 
 ## 核心模块
 
