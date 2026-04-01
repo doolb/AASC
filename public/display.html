@@ -57,15 +57,19 @@
             }
         }
         
-        function sendCommandAck(commandType, success, details) {
+        function sendCommandAck(commandType, success, details, extraData) {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                displayWs.send(JSON.stringify({
+                const ack = {
                     type: 'commandAck',
                     commandType: commandType,
                     success: success,
                     details: details || '',
                     timestamp: Date.now()
-                }));
+                };
+                if (extraData) {
+                    ack.extraData = extraData;
+                }
+                displayWs.send(JSON.stringify(ack));
             }
         }
         
@@ -246,10 +250,6 @@
             media.style.left = '';
             media.style.top = '';
             
-            if (currentFit !== 'height' && currentFit !== 'width' && currentFit !== 'crop') {
-                return;
-            }
-            
             const container = document.getElementById('mediaContainer');
             const containerWidth = container.clientWidth;
             const containerHeight = container.clientHeight;
@@ -258,6 +258,20 @@
             const naturalHeight = media.naturalHeight || media.videoHeight || containerHeight;
             
             const isRotated = currentRotation === 90 || currentRotation === 270;
+            
+            const baseInfo = {
+                容器尺寸: { width: containerWidth, height: containerHeight },
+                媒体原始尺寸: { width: naturalWidth, height: naturalHeight },
+                当前旋转: currentRotation,
+                是否旋转: isRotated,
+                当前适配模式: currentFit,
+                当前裁剪百分比: currentCrop
+            };
+            
+            if (currentFit !== 'height' && currentFit !== 'width' && currentFit !== 'crop') {
+                return { ...baseInfo, 状态: '非适配模式' };
+            }
+            
             const mediaRatio = naturalWidth / naturalHeight;
             
             if (currentFit === 'height') {
@@ -269,7 +283,7 @@
                     media.style.maxWidth = 'none';
                     media.style.maxHeight = 'none';
                 }
-                return;
+                return { ...baseInfo, 状态: '高度适配模式' };
             }
             
             if (currentFit === 'width') {
@@ -281,11 +295,11 @@
                     media.style.maxWidth = 'none';
                     media.style.maxHeight = 'none';
                 }
-                return;
+                return { ...baseInfo, 状态: '宽度适配模式' };
             }
             
             if (currentFit !== 'crop') {
-                return;
+                return { ...baseInfo, 状态: '非裁剪模式' };
             }
             
             const containerRatio = containerWidth / containerHeight;
@@ -310,16 +324,23 @@
                 }
             }
             
-            const cropWidth = displayWidth * (currentCrop.width / 100);
-            const cropHeight = displayHeight * (currentCrop.height / 100);
-            const cropX = displayWidth * (currentCrop.x / 100);
-            const cropY = displayHeight * (currentCrop.y / 100);
-            
+            let cropWidth, cropHeight, cropX, cropY;
             let targetWidth, targetHeight;
+            
             if (isRotated) {
+                const visualWidth = displayHeight;
+                const visualHeight = displayWidth;
+                cropWidth = visualWidth * (currentCrop.width / 100);
+                cropHeight = visualHeight * (currentCrop.height / 100);
+                cropX = visualWidth * (currentCrop.x / 100);
+                cropY = visualHeight * (currentCrop.y / 100);
                 targetWidth = containerHeight;
                 targetHeight = containerWidth;
             } else {
+                cropWidth = displayWidth * (currentCrop.width / 100);
+                cropHeight = displayHeight * (currentCrop.height / 100);
+                cropX = displayWidth * (currentCrop.x / 100);
+                cropY = displayHeight * (currentCrop.y / 100);
                 targetWidth = containerWidth;
                 targetHeight = containerHeight;
             }
@@ -328,11 +349,38 @@
             const scaleY = targetHeight / cropHeight;
             const scale = Math.max(scaleX, scaleY);
             
+            let finalWidth, finalHeight, finalLeft, finalTop;
+            
+            if (isRotated) {
+                finalWidth = cropHeight * scale;
+                finalHeight = cropWidth * scale;
+                finalLeft = -cropY * scale;
+                finalTop = -cropX * scale;
+            } else {
+                finalWidth = displayWidth * scale;
+                finalHeight = displayHeight * scale;
+                finalLeft = -cropX * scale;
+                finalTop = -cropY * scale;
+            }
+            
             media.classList.add('crop');
-            media.style.width = displayWidth * scale + 'px';
-            media.style.height = displayHeight * scale + 'px';
-            media.style.left = -cropX * scale + 'px';
-            media.style.top = -cropY * scale + 'px';
+            media.style.width = finalWidth + 'px';
+            media.style.height = finalHeight + 'px';
+            media.style.left = finalLeft + 'px';
+            media.style.top = finalTop + 'px';
+            
+            return {
+                ...baseInfo,
+                状态: '裁剪模式',
+                媒体显示尺寸: { width: displayWidth, height: displayHeight },
+                裁剪像素值: { cropX, cropY, cropWidth, cropHeight },
+                最终样式: {
+                    width: Math.round(finalWidth) + 'px',
+                    height: Math.round(finalHeight) + 'px',
+                    left: Math.round(finalLeft) + 'px',
+                    top: Math.round(finalTop) + 'px'
+                }
+            };
         }
         
         window.addEventListener('resize', applyCrop);
@@ -750,7 +798,8 @@
                     
                 case 'crop':
                     currentCrop = data.value;
-                    applyCrop();
+                    const cropInfo = applyCrop();
+                    sendCommandAck('crop', true, '裁剪已应用', cropInfo);
                     break;
             }
         }
@@ -791,7 +840,9 @@
                     
                     if (data.type === 'control') {
                         handleControl(data);
-                        sendCommandAck('control', true, data.action);
+                        if (data.action !== 'crop') {
+                            sendCommandAck('control', true, data.action);
+                        }
                     } else if (data.type === 'tts') {
                         handleTTS(data);
                         sendCommandAck('tts', true, data.action);

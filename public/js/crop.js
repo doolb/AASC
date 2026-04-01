@@ -53,9 +53,12 @@ const Crop = {
     },
     
     sendData() {
-        const originalCrop = this.convertToOriginal(this.data, this.rotation);
+        console.log('[控制端-裁剪] sendData:', {
+            视觉裁剪数据: { ...this.data },
+            旋转角度: this.rotation
+        });
         if (window.WebSocketManager) {
-            window.WebSocketManager.sendControl('crop', originalCrop);
+            window.WebSocketManager.sendControl('crop', this.data);
         }
     },
     
@@ -76,10 +79,22 @@ const Crop = {
         const mediaWidth = mediaRect.width;
         const mediaHeight = mediaRect.height;
         
-        this.box.style.left = (offsetX + (this.data.x / 100) * mediaWidth) + 'px';
-        this.box.style.top = (offsetY + (this.data.y / 100) * mediaHeight) + 'px';
-        this.box.style.width = (this.data.width / 100) * mediaWidth + 'px';
-        this.box.style.height = (this.data.height / 100) * mediaHeight + 'px';
+        const boxLeft = (offsetX + (this.data.x / 100) * mediaWidth);
+        const boxTop = (offsetY + (this.data.y / 100) * mediaHeight);
+        const boxWidth = (this.data.width / 100) * mediaWidth;
+        const boxHeight = (this.data.height / 100) * mediaHeight;
+        
+        console.log('[控制端-裁剪] updateBox:', {
+            媒体尺寸: { width: mediaWidth, height: mediaHeight },
+            媒体偏移: { x: offsetX, y: offsetY },
+            裁剪框像素位置: { left: boxLeft, top: boxTop, width: boxWidth, height: boxHeight },
+            裁剪框百分比: { x: this.data.x, y: this.data.y, width: this.data.width, height: this.data.height }
+        });
+        
+        this.box.style.left = boxLeft + 'px';
+        this.box.style.top = boxTop + 'px';
+        this.box.style.width = boxWidth + 'px';
+        this.box.style.height = boxHeight + 'px';
     },
     
     setRotation(rotation) {
@@ -143,6 +158,12 @@ const Crop = {
         this.data.height = newH;
         this.data.x = (100 - newW) / 2;
         this.data.y = (100 - newH) / 2;
+        
+        console.log('[控制端-裁剪] recalculateSize:', {
+            显示画布比例: aspectRatio,
+            媒体比例: mediaAspect,
+            计算后裁剪框: { x: this.data.x, y: this.data.y, width: newW, height: newH }
+        });
         
         this.updateBox();
         if (sendToDisplay) {
@@ -227,7 +248,26 @@ const Crop = {
         } else if (this.isResizing) {
             const aspectRatio = window.displayCanvasSize.width / window.displayCanvasSize.height;
             const mediaAspect = mediaRect.width / mediaRect.height;
+            
             let delta;
+            let handle = this.resizeHandle;
+            
+            if (this.rotation === 90) {
+                if (handle === 'nw') handle = 'sw';
+                else if (handle === 'ne') handle = 'nw';
+                else if (handle === 'se') handle = 'ne';
+                else if (handle === 'sw') handle = 'se';
+            } else if (this.rotation === 180) {
+                if (handle === 'nw') handle = 'se';
+                else if (handle === 'ne') handle = 'sw';
+                else if (handle === 'se') handle = 'nw';
+                else if (handle === 'sw') handle = 'ne';
+            } else if (this.rotation === 270) {
+                if (handle === 'nw') handle = 'ne';
+                else if (handle === 'ne') handle = 'se';
+                else if (handle === 'se') handle = 'sw';
+                else if (handle === 'sw') handle = 'nw';
+            }
             
             if (aspectRatio > mediaAspect) {
                 delta = dx;
@@ -237,7 +277,7 @@ const Crop = {
             
             let newW, newH, newX, newY;
             
-            if (this.resizeHandle.includes('e')) {
+            if (handle.includes('e')) {
                 newW = Math.max(10, Math.min(100 - this.cropStart.x, this.cropStart.width + delta));
                 newH = newW / aspectRatio * mediaAspect;
                 if (newH > 100) {
@@ -246,7 +286,7 @@ const Crop = {
                 }
                 newX = this.cropStart.x;
                 newY = this.cropStart.y;
-            } else if (this.resizeHandle.includes('w')) {
+            } else if (handle.includes('w')) {
                 newW = Math.max(10, this.cropStart.width - delta);
                 newH = newW / aspectRatio * mediaAspect;
                 if (newH > 100) {
@@ -255,7 +295,7 @@ const Crop = {
                 }
                 newX = Math.max(0, this.cropStart.x + this.cropStart.width - newW);
                 newY = this.cropStart.y;
-            } else if (this.resizeHandle.includes('s')) {
+            } else if (handle.includes('s')) {
                 newH = Math.max(10, Math.min(100 - this.cropStart.y, this.cropStart.height + delta));
                 newW = newH * aspectRatio / mediaAspect;
                 if (newW > 100) {
@@ -264,7 +304,7 @@ const Crop = {
                 }
                 newX = this.cropStart.x;
                 newY = this.cropStart.y;
-            } else if (this.resizeHandle.includes('n')) {
+            } else if (handle.includes('n')) {
                 newH = Math.max(10, this.cropStart.height - delta);
                 newW = newH * aspectRatio / mediaAspect;
                 if (newW > 100) {

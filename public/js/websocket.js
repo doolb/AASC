@@ -152,6 +152,9 @@ const WebSocketManager = {
             }
         } else if (data.type === 'commandAck') {
             console.log('[控制端] 收到 commandAck:', data.commandType, 'from', data.displayId);
+            if (data.commandType === 'crop' && data.extraData) {
+                console.log('[控制端-裁剪] 显示端确认:', data.extraData);
+            }
             if (window.SelfTest) {
                 window.SelfTest.handleAck(data);
             }

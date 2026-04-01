@@ -984,14 +984,18 @@ wss.on('connection', (ws, req) => {
                     broadcastToControls({ type: 'displayList', list: getDisplayList() });
                 } else if (data.type === 'commandAck' && displayData) {
                     console.log('[服务端] 收到显示端 commandAck:', data.commandType, 'from', displayId);
-                    broadcastToControls({
+                    const ackMsg = {
                         type: 'commandAck',
                         displayId: displayId,
                         commandType: data.commandType,
                         success: data.success,
                         details: data.details,
                         timestamp: data.timestamp
-                    });
+                    };
+                    if (data.extraData) {
+                        ackMsg.extraData = data.extraData;
+                    }
+                    broadcastToControls(ackMsg);
                 }
             } catch (e) {
                 console.error('解析显示端消息失败:', e);

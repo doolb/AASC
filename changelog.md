@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Bug 修复
+- ✅ 画面裁剪模式添加调试打印语句
+  - 控制端添加打印语句：public/js/crop.js
+    - sendData: 直接发送视觉裁剪数据，不再转换原始数据
+    - updateBox: 打印媒体尺寸、媒体偏移、裁剪框像素位置、裁剪框百分比
+    - recalculateSize: 打印显示画布比例、媒体比例、计算后裁剪框
+    - 修复旋转时拖动方向不正确的问题（90/180/270度）
+    - 修复旋转时调整大小方向不正确的问题（90/180/270度）
+  - 显示端通过确认消息发送尺寸信息给控制端：public/display.html
+    - applyCrop 返回裁剪信息对象（包含状态、容器尺寸、媒体尺寸等）
+    - sendCommandAck 支持 extraData 参数
+    - crop 命令发送包含尺寸信息的确认消息
+    - 修复 applyCrop 在非裁剪模式下不返回值的问题
+    - 修复 90/270 度旋转时裁剪坐标计算错误的问题
+  - 控制端接收并打印显示端尺寸信息：public/js/websocket.js
+    - 收到 crop 确认消息时打印显示端尺寸信息
+  - 服务端转发确认消息：server.js
+    - 修复转发 commandAck 时未包含 extraData 字段的问题
+  - 改动文件：public/js/crop.js, public/display.html, public/js/websocket.js, server.js
+
 ### 新增
 - ✅ 显示端全选和自适应功能
   - 新增三种选择模式：单选、全选、自适应
