@@ -52,21 +52,52 @@ const Crop = {
         return { ...visualCrop };
     },
     
+    logDebugInfo(title = '调试信息') {
+        const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+        const mediaRect = media.getBoundingClientRect();
+        const containerRect = this.container.getBoundingClientRect();
+        const boxRect = this.box.getBoundingClientRect();
+        
+        console.log(`[控制端-裁剪] ${title}:`, {
+            画布容器: {
+                位置: { left: containerRect.left, top: containerRect.top },
+                尺寸: { width: containerRect.width, height: containerRect.height }
+            },
+            媒体元素: {
+                位置: { left: mediaRect.left, top: mediaRect.top },
+                尺寸: { width: mediaRect.width, height: mediaRect.height },
+                相对容器偏移: {
+                    x: mediaRect.left - containerRect.left,
+                    y: mediaRect.top - containerRect.top
+                }
+            },
+            裁剪框: {
+                位置: { left: boxRect.left, top: boxRect.top },
+                尺寸: { width: boxRect.width, height: boxRect.height },
+                相对容器偏移: {
+                    x: boxRect.left - containerRect.left,
+                    y: boxRect.top - containerRect.top
+                },
+                百分比数据: { ...this.data }
+            },
+            旋转角度: this.rotation
+        });
+    },
+    
     sendData() {
         console.log('[控制端-裁剪] sendData:', {
             视觉裁剪数据: { ...this.data },
             旋转角度: this.rotation
         });
+        this.logDebugInfo('sendData 发送数据');
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('crop', this.data);
         }
     },
     
     updateContainerSize() {
-        const aspectRatio = window.displayCanvasSize.width / window.displayCanvasSize.height;
         const containerWidth = this.container.parentElement.clientWidth;
-        const containerHeight = containerWidth / aspectRatio;
-        this.container.style.height = containerHeight + 'px';
+        this.container.style.height = containerWidth + 'px';
     },
     
     updateBox() {
@@ -95,6 +126,8 @@ const Crop = {
         this.box.style.top = boxTop + 'px';
         this.box.style.width = boxWidth + 'px';
         this.box.style.height = boxHeight + 'px';
+        
+        this.logDebugInfo('updateBox 更新裁剪框');
     },
     
     setRotation(rotation) {
@@ -109,7 +142,13 @@ const Crop = {
     },
     
     applyRotation(rotation) {
+        const oldRotation = this.rotation;
         this.rotation = rotation;
+        
+        console.log('[控制端-裁剪] applyRotation:', {
+            原旋转角度: oldRotation,
+            新旋转角度: rotation
+        });
         
         document.querySelectorAll('[data-rotation]').forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.rotation) === rotation);
@@ -162,7 +201,8 @@ const Crop = {
         console.log('[控制端-裁剪] recalculateSize:', {
             显示画布比例: aspectRatio,
             媒体比例: mediaAspect,
-            计算后裁剪框: { x: this.data.x, y: this.data.y, width: newW, height: newH }
+            计算后裁剪框: { x: this.data.x, y: this.data.y, width: newW, height: newH },
+            旋转角度: this.rotation
         });
         
         this.updateBox();
@@ -198,8 +238,8 @@ const Crop = {
         const mediaRect = media.getBoundingClientRect();
         
         const aspectRatio = window.displayCanvasSize.width / window.displayCanvasSize.height;
-        const mediaAspect = mediaRect.width / mediaRect.height;
-        
+        let mediaAspect = mediaRect.width / mediaRect.height;
+
         let newW, newH;
         if (aspectRatio > mediaAspect) {
             newW = 100;
