@@ -416,6 +416,52 @@ const Chat = {
         }
     },
     
+    checkMultiHandlerKeywords(message) {
+        const keywords = [];
+        
+        if (message.includes('天气')) {
+            keywords.push('weather');
+        }
+        if (message.includes('提醒')) {
+            keywords.push('reminder');
+        }
+        if (message.includes('报时') || message.includes('现在几点')) {
+            keywords.push('time');
+        }
+        if (message.includes('搜索')) {
+            keywords.push('search');
+        }
+        
+        for (const keyword of Object.keys(this.commands.commands || {})) {
+            if (message.includes(keyword)) {
+                keywords.push('command:' + keyword);
+            }
+        }
+        
+        return keywords;
+    },
+    
+    executeMultiHandlers(message, keywords) {
+        for (const key of keywords) {
+            if (key === 'weather') {
+                this.handleWeatherCommand(message);
+            } else if (key === 'reminder') {
+                this.handleReminderCommand(message);
+            } else if (key === 'time') {
+                this.handleTimeAnnounceCommand(message);
+            } else if (key === 'search') {
+                this.handleSearchCommand(message);
+            } else if (key.startsWith('command:')) {
+                const keyword = key.substring(8);
+                const actions = this.commands.commands[keyword];
+                if (actions) {
+                    this.addSystemMessage(`执行指令组合: ${keyword}`);
+                    this.executeCommands(actions);
+                }
+            }
+        }
+    },
+    
     sendMessage() {
         if (this.isLoading) return;
         
@@ -424,10 +470,12 @@ const Chat = {
         
         if (!message) return;
         
-        const systemResult = this.handleSystemCommand(message);
-        if (systemResult) {
-            input.value = '';
-            return;
+        if (this.session.mode === 'private') {
+            const systemResult = this.handleSystemCommand(message);
+            if (systemResult) {
+                input.value = '';
+                return;
+            }
         }
         
         let mode = this.session.mode;
@@ -435,8 +483,17 @@ const Chat = {
         let templateTarget = null;
         let displayMessage = message;
         let sendMessage = message;
+        let multiHandlerKeywords = [];
         
         if (mode === 'group') {
+            const systemResult = this.handleSystemCommand(message);
+            if (systemResult) {
+                input.value = '';
+                return;
+            }
+            
+            multiHandlerKeywords = this.checkMultiHandlerKeywords(message);
+            
             for (const template of this.templates) {
                 if (message.startsWith(template.name)) {
                     templateTarget = template.name;
@@ -458,6 +515,10 @@ const Chat = {
         this.currentStreamingMessage = '';
         this.currentUserMessage = displayMessage;
         this.updateSendButton();
+        
+        if (mode === 'group' && multiHandlerKeywords.length > 0) {
+            this.executeMultiHandlers(message, multiHandlerKeywords);
+        }
         
         let assistantName = '助手';
         if (mode === 'private' && target) {
@@ -485,6 +546,21 @@ const Chat = {
     },
     
     handleSystemCommand(text) {
+        if (this.session.mode === 'private') {
+            if (text === '退出私聊') {
+                this.setMode('group', null);
+                this.addSystemMessage('已退出私聊模式');
+                return true;
+            }
+            
+            if (text === '系统' || text.startsWith('系统')) {
+                const cmd = text.substring(2).trim() || text;
+                return this.handleSystemCommand(cmd);
+            }
+            
+            return false;
+        }
+        
         if (text === '系统') {
             this.showHelp();
             return true;
@@ -563,7 +639,37 @@ const Chat = {
             return true;
         }
         
+        if (text.includes('播放')) {
+            this.handlePlayCommand(text);
+            return true;
+        }
+        
         return false;
+    },
+    
+    handlePlayCommand(text) {
+        if (!window.currentDisplayId) {
+            window.showToast('请先选择显示端', 'error');
+            return;
+        }
+        
+        const fileName = text.replace(/播放/, '').trim();
+        if (!fileName) {
+            this.addSystemMessage('请输入要播放的文件名');
+            return;
+        }
+        
+        this.addSystemMessage(`正在搜索: ${fileName}`);
+        
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'voiceCommand',
+                displayId: window.currentDisplayId,
+                text: text,
+                playOnControl: false
+            }));
+        }
     },
     
     handleMuteCommand() {
@@ -606,8 +712,33 @@ const Chat = {
         }
     },
     
-    addSystemMessage(content) {
-        window.showToast(content, 'info');
+    addSystemMessage(content, type = 'info') {
+        window.showToast(content, type);
+        
+        const messagesContainer = document.getElementById('chatMessages');
+        if (!messagesContainer) return;
+        
+        const emptyMsg = messagesContainer.querySelector('.chat-empty');
+        if (emptyMsg) {
+            emptyMsg.remove();
+        }
+        
+        const msg = document.createElement('div');
+        msg.className = 'chat-message system';
+        msg.innerHTML = `
+            <div class="chat-message-content">${this.escapeHtml(content)}</div>
+        `;
+        messagesContainer.appendChild(msg);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    },
+    
+    addCommandAckMessage(displayId, commandType, success, details) {
+        const display = window.DisplayList ? window.DisplayList.getDisplays().find(d => d.id === displayId) : null;
+        const displayName = display ? (display.ip || displayId) : displayId;
+        const icon = success ? '✓' : '✗';
+        const type = success ? 'success' : 'error';
+        const content = `${icon} 显示端 ${displayName} ${commandType} 命令${success ? '已确认' : '执行失败'}${details ? ': ' + details : ''}`;
+        this.addSystemMessage(content, type);
     },
     
     showStreamingMessage(userMessage, assistantName = '助手') {

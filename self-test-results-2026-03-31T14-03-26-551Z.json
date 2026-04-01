@@ -1,0 +1,343 @@
+{
+  "testResults": {
+    "passed": 23,
+    "failed": 10,
+    "skipped": 0,
+    "total": 33
+  },
+  "results": [
+    {
+      "id": "display_connection",
+      "name": "显示端连接测试",
+      "category": "基础功能",
+      "description": "检查是否有显示端连接",
+      "success": true,
+      "message": "已连接 2 个显示端",
+      "details": "192.168.1.12, 192.168.1.39",
+      "timestamp": "2026-03-31T14:02:28.476Z"
+    },
+    {
+      "id": "websocket_connection",
+      "name": "WebSocket连接测试",
+      "category": "基础功能",
+      "description": "检查WebSocket连接状态",
+      "success": true,
+      "message": "WebSocket连接正常",
+      "details": "readyState: OPEN",
+      "timestamp": "2026-03-31T14:02:28.779Z"
+    },
+    {
+      "id": "play_command",
+      "name": "播放命令测试",
+      "category": "播放控制",
+      "description": "测试播放命令发送",
+      "success": true,
+      "message": "播放命令已发送",
+      "details": "displayId: rqit0g7z",
+      "timestamp": "2026-03-31T14:02:29.079Z"
+    },
+    {
+      "id": "pause_command",
+      "name": "暂停命令测试",
+      "category": "播放控制",
+      "description": "测试暂停命令发送",
+      "success": true,
+      "message": "暂停命令已发送",
+      "details": "displayId: rqit0g7z",
+      "timestamp": "2026-03-31T14:02:29.380Z"
+    },
+    {
+      "id": "fit_mode_contain",
+      "name": "画面填充-适应测试",
+      "category": "画面控制",
+      "description": "测试适应模式",
+      "success": true,
+      "message": "适应模式命令已发送",
+      "details": "fit: contain",
+      "timestamp": "2026-03-31T14:02:29.684Z"
+    },
+    {
+      "id": "fit_mode_height",
+      "name": "画面填充-高度铺满测试",
+      "category": "画面控制",
+      "description": "测试高度铺满模式",
+      "success": true,
+      "message": "高度铺满命令已发送",
+      "details": "fit: height",
+      "timestamp": "2026-03-31T14:02:29.996Z"
+    },
+    {
+      "id": "fit_mode_width",
+      "name": "画面填充-宽度铺满测试",
+      "category": "画面控制",
+      "description": "测试宽度铺满模式",
+      "success": true,
+      "message": "宽度铺满命令已发送",
+      "details": "fit: width",
+      "timestamp": "2026-03-31T14:02:30.300Z"
+    },
+    {
+      "id": "fit_mode_crop",
+      "name": "画面填充-裁剪测试",
+      "category": "画面控制",
+      "description": "测试裁剪模式",
+      "success": true,
+      "message": "裁剪模式命令已发送",
+      "details": "fit: crop",
+      "timestamp": "2026-03-31T14:02:30.604Z"
+    },
+    {
+      "id": "volume_control",
+      "name": "音量控制测试",
+      "category": "播放控制",
+      "description": "测试音量调节",
+      "success": true,
+      "message": "音量命令已发送",
+      "details": "volume: 50",
+      "timestamp": "2026-03-31T14:02:30.913Z"
+    },
+    {
+      "id": "rotation_0",
+      "name": "旋转-0度测试",
+      "category": "画面控制",
+      "description": "测试0度旋转",
+      "success": true,
+      "message": "0度旋转命令已发送",
+      "details": "rotation: 0",
+      "timestamp": "2026-03-31T14:02:31.224Z"
+    },
+    {
+      "id": "rotation_90",
+      "name": "旋转-90度测试",
+      "category": "画面控制",
+      "description": "测试90度旋转",
+      "success": true,
+      "message": "90度旋转命令已发送",
+      "details": "rotation: 90",
+      "timestamp": "2026-03-31T14:02:31.530Z"
+    },
+    {
+      "id": "rotation_180",
+      "name": "旋转-180度测试",
+      "category": "画面控制",
+      "description": "测试180度旋转",
+      "success": true,
+      "message": "180度旋转命令已发送",
+      "details": "rotation: 180",
+      "timestamp": "2026-03-31T14:02:31.844Z"
+    },
+    {
+      "id": "rotation_270",
+      "name": "旋转-270度测试",
+      "category": "画面控制",
+      "description": "测试270度旋转",
+      "success": true,
+      "message": "270度旋转命令已发送",
+      "details": "rotation: 270",
+      "timestamp": "2026-03-31T14:02:32.146Z"
+    },
+    {
+      "id": "tts_custom",
+      "name": "自定义语音播报测试",
+      "category": "语音功能",
+      "description": "测试自定义TTS播报",
+      "success": true,
+      "message": "TTS命令已发送",
+      "details": "text: 自测语音播报测试",
+      "timestamp": "2026-03-31T14:02:32.448Z"
+    },
+    {
+      "id": "display_switch",
+      "name": "显示端切换测试",
+      "category": "显示端控制",
+      "description": "测试显示端切换功能",
+      "success": true,
+      "message": "显示端切换测试完成",
+      "details": "切换到 obixt2d0 后返回",
+      "timestamp": "2026-03-31T14:02:32.759Z"
+    },
+    {
+      "id": "time_parser",
+      "name": "时间解析功能测试",
+      "category": "辅助功能",
+      "description": "测试通用时间解析",
+      "success": true,
+      "message": "时间解析测试通过",
+      "details": "5分钟后: 5分钟后; 明天8点: 明天8点; 下午3点: 3点",
+      "timestamp": "2026-03-31T14:02:33.102Z"
+    },
+    {
+      "id": "crop_reset",
+      "name": "裁剪重置测试",
+      "category": "画面控制",
+      "description": "测试裁剪重置功能",
+      "success": true,
+      "message": "裁剪重置命令已发送",
+      "details": "crop reset",
+      "timestamp": "2026-03-31T14:02:33.410Z"
+    },
+    {
+      "id": "controls_init",
+      "name": "控制模块初始化测试",
+      "category": "基础功能",
+      "description": "检查控制模块是否正确初始化",
+      "success": true,
+      "message": "所有模块已初始化",
+      "details": "Controls: OK, DisplayList: OK, WebSocketManager: OK, Crop: OK, Chat: OK, MediaLibrary: OK",
+      "timestamp": "2026-03-31T14:02:33.714Z"
+    },
+    {
+      "id": "server_status",
+      "name": "服务器状态测试",
+      "category": "基础功能",
+      "description": "检查服务器连接状态",
+      "success": true,
+      "message": "服务器运行正常",
+      "details": "uptime: 2分钟",
+      "timestamp": "2026-03-31T14:02:34.073Z"
+    },
+    {
+      "id": "aasc_module_load",
+      "name": "AASC模块加载测试",
+      "category": "AASC系统",
+      "description": "检查AASC系统模块是否正确加载",
+      "success": false,
+      "message": "AASC模块不可访问",
+      "details": "状态码: 404",
+      "timestamp": "2026-03-31T14:02:34.390Z"
+    },
+    {
+      "id": "aasc_message_api",
+      "name": "AASC消息API测试",
+      "category": "AASC系统",
+      "description": "测试AASC消息协议API",
+      "success": false,
+      "message": "消息API响应异常",
+      "details": "状态码: 404",
+      "timestamp": "2026-03-31T14:02:34.699Z"
+    },
+    {
+      "id": "aasc_actor_registry",
+      "name": "AASC执行者注册表测试",
+      "category": "AASC系统",
+      "description": "测试执行者注册表API",
+      "success": true,
+      "message": "执行者注册表API未实现（预期行为）",
+      "details": "API将在后续集成时实现",
+      "timestamp": "2026-03-31T14:02:35.010Z"
+    },
+    {
+      "id": "aasc_user_store",
+      "name": "AASC用户存储测试",
+      "category": "AASC系统",
+      "description": "测试用户存储功能",
+      "success": true,
+      "message": "用户存储API未实现（预期行为）",
+      "details": "API将在后续集成时实现",
+      "timestamp": "2026-03-31T14:02:35.320Z"
+    },
+    {
+      "id": "aasc_capability_registry",
+      "name": "AASC能力注册表测试",
+      "category": "AASC系统",
+      "description": "测试能力注册表功能",
+      "success": true,
+      "message": "能力注册表API未实现（预期行为）",
+      "details": "API将在后续集成时实现",
+      "timestamp": "2026-03-31T14:02:35.641Z"
+    },
+    {
+      "id": "aasc_cluster_status",
+      "name": "AASC集群状态测试",
+      "category": "AASC系统",
+      "description": "测试集群状态功能",
+      "success": true,
+      "message": "集群API未实现（预期行为）",
+      "details": "API将在后续集成时实现",
+      "timestamp": "2026-03-31T14:02:35.949Z"
+    },
+    {
+      "id": "aasc_pipeline_module",
+      "name": "AASC管道模块测试",
+      "category": "能力组合系统",
+      "description": "测试能力管道执行器模块加载",
+      "success": false,
+      "message": "管道模块不可访问",
+      "details": "状态码: 404",
+      "timestamp": "2026-03-31T14:02:36.256Z"
+    },
+    {
+      "id": "aasc_composition_module",
+      "name": "AASC组合模块测试",
+      "category": "能力组合系统",
+      "description": "测试能力组合定义模块加载",
+      "success": false,
+      "message": "组合模块不可访问",
+      "details": "状态码: 404",
+      "timestamp": "2026-03-31T14:02:36.560Z"
+    },
+    {
+      "id": "aasc_level_calculator_module",
+      "name": "AASC等级计算器模块测试",
+      "category": "能力组合系统",
+      "description": "测试能力等级计算器模块加载",
+      "success": false,
+      "message": "等级计算器模块不可访问",
+      "details": "状态码: 404",
+      "timestamp": "2026-03-31T14:02:36.868Z"
+    },
+    {
+      "id": "aasc_capabilities_config",
+      "name": "AASC能力配置文件测试",
+      "category": "能力组合系统",
+      "description": "测试能力配置文件加载",
+      "success": false,
+      "message": "能力配置文件不可访问",
+      "details": "状态码: 404",
+      "timestamp": "2026-03-31T14:02:37.181Z"
+    },
+    {
+      "id": "aasc_capability_levels",
+      "name": "AASC能力等级分布测试",
+      "category": "能力组合系统",
+      "description": "测试能力等级分布是否合理",
+      "success": false,
+      "message": "无法获取能力配置",
+      "details": "请求失败",
+      "timestamp": "2026-03-31T14:02:37.492Z"
+    },
+    {
+      "id": "aasc_capability_categories",
+      "name": "AASC能力分类测试",
+      "category": "能力组合系统",
+      "description": "测试能力分类是否完整",
+      "success": false,
+      "message": "无法获取能力配置",
+      "details": "请求失败",
+      "timestamp": "2026-03-31T14:02:37.804Z"
+    },
+    {
+      "id": "aasc_capability_inheritance",
+      "name": "AASC能力继承测试",
+      "category": "能力组合系统",
+      "description": "测试能力继承关系是否正确",
+      "success": false,
+      "message": "无法获取能力配置",
+      "details": "请求失败",
+      "timestamp": "2026-03-31T14:02:38.111Z"
+    },
+    {
+      "id": "aasc_index_exports",
+      "name": "AASC入口导出测试",
+      "category": "能力组合系统",
+      "description": "测试入口文件是否正确导出所有模块",
+      "success": false,
+      "message": "入口文件不可访问",
+      "details": "状态码: 404",
+      "timestamp": "2026-03-31T14:02:38.430Z"
+    }
+  ],
+  "exportTime": "2026-03-31T14:03:26.551Z",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
+  "url": "http://192.168.1.39:8081/upload"
+}

@@ -8,6 +8,34 @@ const SelfTest = {
         skipped: 0,
         total: 0
     },
+    pendingAcks: new Map(),
+    ackTimeout: 5000,
+    
+    waitForAck(commandType, displayId, timeout = this.ackTimeout) {
+        return new Promise((resolve) => {
+            const key = `${displayId}_${commandType}`;
+            const timer = setTimeout(() => {
+                this.pendingAcks.delete(key);
+                resolve({ success: false, message: '等待确认超时', details: `${commandType} 命令未收到显示端确认` });
+            }, timeout);
+            
+            this.pendingAcks.set(key, { resolve, timer, commandType, displayId });
+        });
+    },
+    
+    handleAck(data) {
+        const key = `${data.displayId}_${data.commandType}`;
+        const pending = this.pendingAcks.get(key);
+        if (pending) {
+            clearTimeout(pending.timer);
+            this.pendingAcks.delete(key);
+            pending.resolve({
+                success: data.success,
+                message: data.success ? '显示端已确认' : '显示端处理失败',
+                details: `displayId: ${data.displayId}, commandType: ${data.commandType}, details: ${data.details}`
+            });
+        }
+    },
     
     tests: [
         {
@@ -42,7 +70,7 @@ const SelfTest = {
         {
             id: 'play_command',
             name: '播放命令测试',
-            description: '测试播放命令发送',
+            description: '测试播放命令发送并等待显示端确认',
             category: '播放控制',
             run: async () => {
                 if (!window.currentDisplayId) {
@@ -52,8 +80,14 @@ const SelfTest = {
                     return { success: false, message: 'WebSocket未连接', details: '无法发送命令' };
                 }
                 try {
+                    const ackPromise = window.SelfTest.waitForAck('control', window.currentDisplayId);
                     window.WebSocketManager.sendControl('play', true);
-                    return { success: true, message: '播放命令已发送', details: 'displayId: ' + window.currentDisplayId };
+                    const ackResult = await ackPromise;
+                    return { 
+                        success: ackResult.success, 
+                        message: ackResult.success ? '播放命令已确认' : '播放命令未确认', 
+                        details: ackResult.details 
+                    };
                 } catch (err) {
                     return { success: false, message: '发送失败', details: err.message };
                 }
@@ -62,7 +96,7 @@ const SelfTest = {
         {
             id: 'pause_command',
             name: '暂停命令测试',
-            description: '测试暂停命令发送',
+            description: '测试暂停命令发送并等待显示端确认',
             category: '播放控制',
             run: async () => {
                 if (!window.currentDisplayId) {
@@ -72,8 +106,14 @@ const SelfTest = {
                     return { success: false, message: 'WebSocket未连接', details: '无法发送命令' };
                 }
                 try {
+                    const ackPromise = window.SelfTest.waitForAck('control', window.currentDisplayId);
                     window.WebSocketManager.sendControl('play', false);
-                    return { success: true, message: '暂停命令已发送', details: 'displayId: ' + window.currentDisplayId };
+                    const ackResult = await ackPromise;
+                    return { 
+                        success: ackResult.success, 
+                        message: ackResult.success ? '暂停命令已确认' : '暂停命令未确认', 
+                        details: ackResult.details 
+                    };
                 } catch (err) {
                     return { success: false, message: '发送失败', details: err.message };
                 }

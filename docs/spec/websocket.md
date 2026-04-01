@@ -38,6 +38,8 @@ wss.on('connection', (ws, req)):
                 广播显示端列表
             如果 type === 'voiceInput':
                 广播到控制端 { type: 'voiceInput', displayId, text, isFinal, fullText }
+            如果 type === 'commandAck':
+                广播到控制端 { type: 'commandAck', displayId, commandType, success, details, timestamp }
         
         监听关闭:
             从 displayClients 删除
@@ -164,6 +166,7 @@ wss.on('connection', (ws, req)):
 | chatResponse | 聊天完整响应 | `{ type, message, history }` |
 | chatHistory | 聊天历史 | `{ type, history }` |
 | voiceInput | 显示端语音输入 | `{ type, displayId, text, isFinal, fullText }` |
+| commandAck | 命令确认 | `{ type, displayId, commandType, success, details, timestamp }` |
 
 ### 显示端 -> 服务端
 
@@ -173,6 +176,7 @@ wss.on('connection', (ws, req)):
 | browserInfo | 浏览器信息 | `{ type, userAgent, browserName, ... }` |
 | voiceInput | 语音输入 | `{ type, text, isFinal, fullText }` |
 | voiceStatus | 语音识别状态 | `{ type, supported, listening }` |
+| commandAck | 命令确认 | `{ type, commandType, success, details, timestamp }` |
 
 ### 控制端 -> 服务端
 
@@ -236,6 +240,12 @@ wss.on('connection', (ws, req)):
         如果 type === 'chatHistory':
             更新 Chat.history
             渲染历史
+        
+        如果 type === 'commandAck':
+            如果 SelfTest 存在:
+                调用 SelfTest.handleAck(data)
+            如果 Chat 存在:
+                调用 Chat.addCommandAckMessage(displayId, commandType, success, details)
     
     sendControl(action, value):
         检查 currentDisplayId

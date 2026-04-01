@@ -234,6 +234,79 @@
   - 改动文件：docs/self-test.md
 
 ### Bug 修复
+- ✅ 修复播放媒体时没有收到 media 类型确认消息的问题
+  - 问题：mediaBatch 消息没有 displayId 字段，导致 displayData 为 undefined，代码直接 return
+  - 原因：mediaBatch 处理逻辑在 `if (!displayData) return;` 之后
+  - 修复：将 mediaBatch 处理逻辑移到 `if (!displayData) return;` 之前
+  - 改动文件：server.js
+- ✅ 修复播放媒体时显示端确认消息类型错误的问题
+  - 问题：点击播放媒体时，控制端会发送裁剪消息，导致显示端确认消息显示为 crop 而不是 media
+  - 原因：showPreview 函数调用 recalculateSize 时会自动发送 crop 消息
+  - 修复：给 recalculateSize 添加 sendToDisplay 参数，showPreview 时传入 false 不发送数据
+  - 改动文件：public/js/crop.js
+- ✅ 修复AI助手界面搜索记录撑大界面导致操作区域被遮挡的问题
+  - 问题：搜索记录没有高度限制，会撑大整个聊天界面
+  - 修复：给 chat-container 添加 max-height: 500px 限制
+  - 修复：给 chat-main 添加 overflow-y: auto 和 min-height: 0 使其可滚动
+  - 修复：给 chat-search-history 添加 max-height: 150px 和 overflow-y: auto
+  - 修复：给 search-history-list 添加 max-height: 100px
+  - 改动文件：public/css/chat.css
+- ✅ 修复获取天气失败 Request failed with status code 502
+  - 问题：wttr.in 天气API服务不稳定，偶尔返回502错误
+  - 修复：添加重试机制，最多重试3次，每次间隔1秒
+  - 修复：增加请求超时时间从10秒到15秒
+  - 修复：优化错误提示信息
+  - 改动文件：core/voiceCommand.js
+- ✅ 修复90度和270度时，上下拖动裁剪框，显示端是左右方向的问题
+  - 问题：旋转90或270度后，拖动方向没有根据旋转角度调整
+  - 修复：在 onMouseMove 中根据旋转角度交换 dx 和 dy
+  - 修复：90度时 dy 取反，270度时 dx 取反
+  - 修复：调整大小时根据旋转角度选择正确的 delta 值
+  - 改动文件：public/js/crop.js
+- ✅ 新增消息确认机制：控制端发给显示端的消息，显示端进行确认，控制端显示确认结果
+  - 需求：控制端发送命令后需要知道显示端是否正确接收并处理
+  - 实现：显示端处理命令后发送 commandAck 确认消息
+  - 实现：控制端在聊天界面显示确认结果
+  - 改动文件：public/display.html, server.js, public/js/websocket.js, public/js/chat.js, public/css/chat.css
+- ✅ 新增群聊模式多处理器功能：同一消息可被多个执行者处理
+  - 需求：群聊模式下，如"今天天气很好"，可以同时触发天气查询和AI助手回复
+  - 实现：添加 checkMultiHandlerKeywords 方法检测多处理器关键词
+  - 实现：添加 executeMultiHandlers 方法执行多个处理器
+  - 实现：支持天气、提醒、报时、搜索、自定义指令等多处理器
+  - 改动文件：public/js/chat.js
+- ✅ 修复控制端选择媒体播放，显示端没有响应的问题
+  - 问题：sendMedia 函数没有正确等待异步操作完成
+  - 修复：将 sendMedia 改为 async 函数，使用 await 等待 sendMediaWithRatio 完成
+  - 改动文件：public/js/websocket.js
+- ✅ 新增私聊模式不响应系统命令功能
+  - 需求：私聊模式下只响应"系统"开头的命令和"退出私聊"命令
+  - 实现：在 handleSystemCommand 开头添加私聊模式检查
+  - 改动文件：public/js/chat.js
+- ✅ 新增自测功能：判断显示端是否接收到控制端指令
+  - 需求：自测时需要验证显示端是否正确接收并处理指令
+  - 实现：显示端在处理指令后发送 commandAck 确认消息
+  - 实现：服务端转发 commandAck 到控制端
+  - 实现：自测功能添加 waitForAck 方法等待确认消息
+  - 改动文件：public/display.html, server.js, public/js/websocket.js, public/js/self-test.js
+- ✅ 修复播放媒体没有发到显示端的问题
+  - 问题：handlePlayCommand 和 handlePlaySelection 没有 callbacks 参数支持
+  - 修复：添加 callbacks 参数，支持控制端播放语音提示
+  - 修复：媒体始终发送到显示端，语音提示根据 playOnControl 决定播放位置
+  - 改动文件：core/voiceCommand.js
+- ✅ 修复天气结果没有在显示端播报的问题
+  - 问题：显示端 handleVoiceCommand 缺少 weatherResult action 的处理
+  - 修复：添加 weatherResult 和 playChoices action 的处理
+  - 修复：添加 showPlayChoicesPopup 函数显示播放选择弹窗
+  - 改动文件：public/display.html, public/css/display.css
+- ✅ 修复控制端播放媒体功能不生效的问题
+  - 问题：控制端 handleSystemCommand 缺少播放命令的处理
+  - 修复：添加 handlePlayCommand 方法，检查显示端选择并发送播放命令
+  - 改动文件：public/js/chat.js
+- ✅ 修复天气命令不支持控制端播放的问题
+  - 问题：天气命令只支持显示端播放，控制端开启"在控制端播放语音"时无法获取天气结果
+  - 修复：修改 processVoiceCommand 和 handleWeatherCommand 支持 callbacks 参数
+  - 修复：服务端传递 playOnControl 回调函数，支持在控制端播放天气结果
+  - 改动文件：core/voiceCommand.js, server.js
 - ✅ 修复控制端无法执行静音/取消静音命令的问题
   - 问题：控制端 handleSystemCommand 缺少静音和取消静音的处理
   - 修复：添加 handleMuteCommand 和 handleUnmuteCommand 方法

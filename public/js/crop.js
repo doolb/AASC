@@ -123,7 +123,7 @@ const Crop = {
         }, 350);
     },
     
-    recalculateSize() {
+    recalculateSize(sendToDisplay = true) {
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
         const mediaRect = media.getBoundingClientRect();
         
@@ -145,7 +145,9 @@ const Crop = {
         this.data.y = (100 - newH) / 2;
         
         this.updateBox();
-        this.sendData();
+        if (sendToDisplay) {
+            this.sendData();
+        }
     },
     
     showPreview(url, mediaType) {
@@ -156,14 +158,14 @@ const Crop = {
             this.previewVideo.style.display = 'block';
             this.previewImg.style.display = 'none';
             this.previewVideo.onloadedmetadata = () => {
-                this.recalculateSize();
+                this.recalculateSize(false);
             };
         } else {
             this.previewImg.src = url;
             this.previewImg.style.display = 'block';
             this.previewVideo.style.display = 'none';
             this.previewImg.onload = () => {
-                this.recalculateSize();
+                this.recalculateSize(false);
             };
         }
         

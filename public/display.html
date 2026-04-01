@@ -57,6 +57,18 @@
             }
         }
         
+        function sendCommandAck(commandType, success, details) {
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({
+                    type: 'commandAck',
+                    commandType: commandType,
+                    success: success,
+                    details: details || '',
+                    timestamp: Date.now()
+                }));
+            }
+        }
+        
         function getBrowserInfo() {
             const ua = navigator.userAgent;
             const uaLower = ua.toLowerCase();
@@ -475,6 +487,16 @@
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
                 }
                 showSearchResultPopup(data.query, data.results);
+            } else if (data.action === 'weatherResult') {
+                if (data.audioUrl) {
+                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                }
+                showVoiceResponsePopup(data.text);
+            } else if (data.action === 'playChoices') {
+                if (data.audioUrl) {
+                    queueTts({ audioUrl: data.audioUrl, text: data.text });
+                }
+                showPlayChoicesPopup(data.confirmationId, data.matches, data.text);
             }
         }
         
@@ -552,6 +574,34 @@
                     popup.remove();
                 }
             }, 10000);
+        }
+        
+        function showPlayChoicesPopup(confirmationId, matches, text) {
+            const existing = document.querySelector('.play-choices-popup');
+            if (existing) {
+                existing.remove();
+            }
+            
+            let listHtml = '';
+            if (matches && matches.length > 0) {
+                listHtml = matches.map((item, index) => 
+                    `<div class="play-choice-item">${index + 1}. ${item.name}</div>`
+                ).join('');
+            }
+            
+            const popup = document.createElement('div');
+            popup.className = 'play-choices-popup';
+            popup.innerHTML = `
+                <div class="play-choices-text">${text}</div>
+                <div class="play-choices-list">${listHtml}</div>
+            `;
+            document.body.appendChild(popup);
+            
+            setTimeout(() => {
+                if (popup.parentElement) {
+                    popup.remove();
+                }
+            }, 30000);
         }
         
         function showReminderPopup(time, content) {
@@ -721,6 +771,7 @@
             displayWs.onmessage = function(event) {
                 try {
                     const data = JSON.parse(event.data);
+                    console.log('[显示端] 收到消息:', data.type, data);
                     
                     if (data.type === 'serverStartTime') {
                         const storedTime = localStorage.getItem('serverStartTime');
@@ -740,16 +791,23 @@
                     
                     if (data.type === 'control') {
                         handleControl(data);
+                        sendCommandAck('control', true, data.action);
                     } else if (data.type === 'tts') {
                         handleTTS(data);
+                        sendCommandAck('tts', true, data.action);
                     } else if (data.type === 'reminder') {
                         handleReminder(data);
+                        sendCommandAck('reminder', true, data.action);
                     } else if (data.type === 'restoreState') {
                         handleRestoreState(data.state);
+                        sendCommandAck('restoreState', true, 'state restored');
                     } else if (data.type === 'voiceCommand') {
                         handleVoiceCommand(data);
+                        sendCommandAck('voiceCommand', true, data.action);
                     } else {
+                        console.log('[显示端] 处理媒体消息，发送 media 确认');
                         showMedia(data);
+                        sendCommandAck('media', true, data.type);
                     }
                 } catch (e) {
                     console.error('解析消息失败:', e);

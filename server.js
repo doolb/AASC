@@ -982,6 +982,16 @@ wss.on('connection', (ws, req) => {
                     displayData.state.voiceSupported = data.supported;
                     displayData.state.voiceListening = data.listening;
                     broadcastToControls({ type: 'displayList', list: getDisplayList() });
+                } else if (data.type === 'commandAck' && displayData) {
+                    console.log('[服务端] 收到显示端 commandAck:', data.commandType, 'from', displayId);
+                    broadcastToControls({
+                        type: 'commandAck',
+                        displayId: displayId,
+                        commandType: data.commandType,
+                        success: data.success,
+                        details: data.details,
+                        timestamp: data.timestamp
+                    });
                 }
             } catch (e) {
                 console.error('解析显示端消息失败:', e);
@@ -1009,7 +1019,39 @@ wss.on('connection', (ws, req) => {
                 if (data.type === 'voiceCommand') {
                     (async () => {
                         try {
-                            const result = await voiceCommand.processVoiceCommand(data.text, displayId);
+                            const playOnControl = data.playOnControl || false;
+                            const targetDisplayId = data.displayId || displayId;
+                            
+                            const callbacks = playOnControl ? {
+                                onResult: async (text) => {
+                                    try {
+                                        const audioPath = await tts.generateTTS(text);
+                                        const fileName = path.basename(audioPath);
+                                        ws.send(JSON.stringify({
+                                            type: 'playOnControl',
+                                            audioUrl: `/uploads/tts/${fileName}`,
+                                            text: text
+                                        }));
+                                    } catch (err) {
+                                        console.error('[VoiceCommand] TTS生成失败:', err.message);
+                                    }
+                                },
+                                onError: async (text) => {
+                                    try {
+                                        const audioPath = await tts.generateTTS(text);
+                                        const fileName = path.basename(audioPath);
+                                        ws.send(JSON.stringify({
+                                            type: 'playOnControl',
+                                            audioUrl: `/uploads/tts/${fileName}`,
+                                            text: text
+                                        }));
+                                    } catch (err) {
+                                        console.error('[VoiceCommand] TTS生成失败:', err.message);
+                                    }
+                                }
+                            } : null;
+                            
+                            const result = await voiceCommand.processVoiceCommand(data.text, targetDisplayId, callbacks);
                             if (result && result.type === 'showHelp') {
                                 ws.send(JSON.stringify({
                                     type: 'showHelp'
@@ -1294,6 +1336,21 @@ wss.on('connection', (ws, req) => {
                         }
                     })();
                     return;
+                } else if (data.type === 'mediaBatch') {
+                    console.log('[服务端] 收到 mediaBatch, displayIds:', data.displayIds);
+                    const displayIds = data.displayIds || [];
+                    displayIds.forEach(id => {
+                        const dd = displayClients.get(id);
+                        if (dd) {
+                            dd.state.currentMedia = data.media;
+                            config.updateDisplayState(dd.ip, { currentMedia: data.media });
+                            console.log('[服务端] 发送媒体到显示端:', id);
+                            sendToDisplay(id, data.media);
+                        } else {
+                            console.log('[服务端] 显示端不存在:', id);
+                        }
+                    });
+                    return;
                 }
                 
                 if (!displayData) return;
@@ -1313,16 +1370,6 @@ wss.on('connection', (ws, req) => {
                     displayData.state.currentMedia = data.media;
                     config.updateDisplayState(displayData.ip, { currentMedia: data.media });
                     sendToDisplay(displayId, data.media);
-                } else if (data.type === 'mediaBatch') {
-                    const displayIds = data.displayIds || [];
-                    displayIds.forEach(id => {
-                        const dd = displayClients.get(id);
-                        if (dd) {
-                            dd.state.currentMedia = data.media;
-                            config.updateDisplayState(dd.ip, { currentMedia: data.media });
-                            sendToDisplay(id, data.media);
-                        }
-                    });
                 } else if (data.type === 'control') {
                     if (data.action === 'rotate') {
                         displayData.state.rotation = data.value;

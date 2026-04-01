@@ -98,5 +98,25 @@
     "content": "诶，我不能继续这样啦。我觉得我需要一个更安静的环境吗？或者你有什么事需要我帮忙的呢？",
     "mode": "group",
     "target": null
+  },
+  {
+    "id": "17749722786209e5b",
+    "timestamp": 1774972278620,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "天气",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "1774972294161gv51",
+    "timestamp": 1774972294161,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "诶，这下是阴天呢！我最喜欢在阳台上晒太阳了。不过今天天气有点冷，要不要我带我去外面看看？",
+    "mode": "private",
+    "target": "妲己"
   }
 ]

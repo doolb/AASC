@@ -431,20 +431,22 @@ async function handleUnmuteCommand(displayId) {
     }
 }
 
-async function handlePlayCommand(text, displayId) {
+async function handlePlayCommand(text, displayId, callbacks) {
     let fileName = text.replace(/播放/, '').trim();
     
     if (!fileName) {
         const responseText = '请问您要播放什么文件？';
-        if (displayId && sendToDisplay) {
+        if (callbacks && callbacks.onResult) {
+            callbacks.onResult(responseText);
+        } else if (displayId && sendToDisplay) {
             try {
                 const audioPath = await tts.generateTTS(responseText);
-                const fileName = path.basename(audioPath);
+                const audioFileName = path.basename(audioPath);
                 sendToDisplay(displayId, {
                     type: 'voiceCommand',
                     action: 'response',
                     text: responseText,
-                    audioUrl: `/uploads/tts/${fileName}`
+                    audioUrl: `/uploads/tts/${audioFileName}`
                 });
             } catch (err) {
                 console.error('[语音命令] 播放语音生成失败:', err.message);
@@ -459,7 +461,9 @@ async function handlePlayCommand(text, displayId) {
     
     if (matches.length === 0) {
         const responseText = `没有找到名为"${fileName}"的文件`;
-        if (displayId && sendToDisplay) {
+        if (callbacks && callbacks.onResult) {
+            callbacks.onResult(responseText);
+        } else if (displayId && sendToDisplay) {
             try {
                 const audioPath = await tts.generateTTS(responseText);
                 const audioFileName = path.basename(audioPath);
@@ -480,16 +484,22 @@ async function handlePlayCommand(text, displayId) {
         const file = matches[0];
         const responseText = `正在播放${file.name}`;
         
+        if (callbacks && callbacks.onResult) {
+            callbacks.onResult(responseText);
+        }
+        
         if (displayId && sendToDisplay) {
             try {
-                const audioPath = await tts.generateTTS(responseText);
-                const audioFileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: responseText,
-                    audioUrl: `/uploads/tts/${audioFileName}`
-                });
+                if (!callbacks) {
+                    const audioPath = await tts.generateTTS(responseText);
+                    const audioFileName = path.basename(audioPath);
+                    sendToDisplay(displayId, {
+                        type: 'voiceCommand',
+                        action: 'response',
+                        text: responseText,
+                        audioUrl: `/uploads/tts/${audioFileName}`
+                    });
+                }
                 
                 sendToDisplay(displayId, {
                     type: 'media',
@@ -511,22 +521,37 @@ async function handlePlayCommand(text, displayId) {
     pendingConfirmations.set(confirmationId, {
         type: 'play',
         displayId: displayId,
+        callbacks: callbacks,
         data: { matches: matches },
         expiresAt: Date.now() + 30000
     });
     
+    if (callbacks && callbacks.onResult) {
+        callbacks.onResult(responseText);
+    }
+    
     if (displayId && sendToDisplay) {
         try {
-            const audioPath = await tts.generateTTS(responseText);
-            const audioFileName = path.basename(audioPath);
-            sendToDisplay(displayId, {
-                type: 'voiceCommand',
-                action: 'playChoices',
-                confirmationId: confirmationId,
-                matches: matches.slice(0, 5),
-                text: responseText,
-                audioUrl: `/uploads/tts/${audioFileName}`
-            });
+            if (!callbacks) {
+                const audioPath = await tts.generateTTS(responseText);
+                const audioFileName = path.basename(audioPath);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'playChoices',
+                    confirmationId: confirmationId,
+                    matches: matches.slice(0, 5),
+                    text: responseText,
+                    audioUrl: `/uploads/tts/${audioFileName}`
+                });
+            } else {
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'playChoices',
+                    confirmationId: confirmationId,
+                    matches: matches.slice(0, 5),
+                    text: responseText
+                });
+            }
         } catch (err) {
             console.error('[语音命令] 播放语音生成失败:', err.message);
         }
@@ -588,7 +613,7 @@ async function searchInLibrary(libraryId, keyword) {
     return matches;
 }
 
-function handlePlaySelection(confirmationId, selection, displayId) {
+async function handlePlaySelection(confirmationId, selection, displayId) {
     const confirmation = pendingConfirmations.get(confirmationId);
     if (!confirmation || confirmation.type !== 'play') {
         return false;
@@ -602,8 +627,30 @@ function handlePlaySelection(confirmationId, selection, displayId) {
     }
     
     const file = confirmation.data.matches[index];
+    const responseText = `正在播放${file.name}`;
+    
+    const callbacks = confirmation.callbacks;
+    
+    if (callbacks && callbacks.onResult) {
+        callbacks.onResult(responseText);
+    }
     
     if (displayId && sendToDisplay) {
+        if (!callbacks) {
+            try {
+                const audioPath = await tts.generateTTS(responseText);
+                const audioFileName = path.basename(audioPath);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: responseText,
+                    audioUrl: `/uploads/tts/${audioFileName}`
+                });
+            } catch (err) {
+                console.error('[语音命令] 播放语音生成失败:', err.message);
+            }
+        }
+        
         sendToDisplay(displayId, {
             type: 'media',
             url: file.url,
@@ -615,23 +662,47 @@ function handlePlaySelection(confirmationId, selection, displayId) {
     return true;
 }
 
-async function handleWeatherCommand(text, displayId) {
+async function handleWeatherCommand(text, displayId, callbacks) {
     const axios = require('axios');
     
     let city = text.replace(/天气|今天|明天|后天/g, '').trim();
     
-    try {
+    const tryFetchWeather = async (retryCount = 0) => {
         const url = city 
             ? `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=zh`
             : `https://wttr.in/?format=j1&lang=zh`;
+        
         const response = await axios.get(url, {
             headers: {
                 'User-Agent': 'curl'
             },
-            timeout: 10000
+            timeout: 15000
         });
         
-        const data = response.data;
+        return response.data;
+    };
+    
+    try {
+        let data;
+        let lastError;
+        
+        for (let i = 0; i < 3; i++) {
+            try {
+                data = await tryFetchWeather(i);
+                break;
+            } catch (err) {
+                lastError = err;
+                console.log(`[语音命令] 天气API第${i + 1}次请求失败:`, err.message);
+                if (i < 2) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+        
+        if (!data) {
+            throw lastError;
+        }
+        
         const current = data.current_condition[0];
         const cityName = data.nearest_area[0].areaName[0].value;
         const temp = current.temp_C;
@@ -640,7 +711,9 @@ async function handleWeatherCommand(text, displayId) {
         
         const weatherText = `${cityName}当前天气：${weather}，温度${temp}度，湿度${humidity}%`;
         
-        if (displayId && sendToDisplay) {
+        if (callbacks && callbacks.onResult) {
+            callbacks.onResult(weatherText);
+        } else if (displayId && sendToDisplay) {
             try {
                 const audioPath = await tts.generateTTS(weatherText);
                 const fileName = path.basename(audioPath);
@@ -656,8 +729,10 @@ async function handleWeatherCommand(text, displayId) {
         }
     } catch (err) {
         console.error('[语音命令] 获取天气失败:', err.message);
-        const errorText = '获取天气失败，请稍后再试';
-        if (displayId && sendToDisplay) {
+        const errorText = '获取天气失败，天气服务暂时不可用，请稍后再试';
+        if (callbacks && callbacks.onError) {
+            callbacks.onError(errorText);
+        } else if (displayId && sendToDisplay) {
             try {
                 const audioPath = await tts.generateTTS(errorText);
                 const fileName = path.basename(audioPath);
@@ -879,8 +954,8 @@ function setAssistantConfig(config) {
     if (config.assistants) assistantConfig.assistants = config.assistants;
 }
 
-async function processVoiceCommand(text, displayId) {
-    if (!text || !displayId) return;
+async function processVoiceCommand(text, displayId, callbacks) {
+    if (!text) return;
     
     const trimmedText = text.trim();
     
@@ -896,12 +971,16 @@ async function processVoiceCommand(text, displayId) {
             try {
                 const audioPath = await tts.generateTTS(responseText);
                 const fileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: responseText,
-                    audioUrl: `/uploads/tts/${fileName}`
-                });
+                if (callbacks && callbacks.onResult) {
+                    callbacks.onResult(responseText);
+                } else if (displayId && sendToDisplay) {
+                    sendToDisplay(displayId, {
+                        type: 'voiceCommand',
+                        action: 'response',
+                        text: responseText,
+                        audioUrl: `/uploads/tts/${fileName}`
+                    });
+                }
             } catch (err) {
                 console.error('[语音命令] 取消语音生成失败:', err.message);
             }
@@ -940,7 +1019,7 @@ async function processVoiceCommand(text, displayId) {
     }
     
     if (trimmedText.includes('天气')) {
-        await handleWeatherCommand(trimmedText, displayId);
+        await handleWeatherCommand(trimmedText, displayId, callbacks);
         return;
     }
     
@@ -950,7 +1029,7 @@ async function processVoiceCommand(text, displayId) {
     }
     
     if (trimmedText.includes('播放')) {
-        await handlePlayCommand(trimmedText, displayId);
+        await handlePlayCommand(trimmedText, displayId, callbacks);
         return;
     }
     
@@ -959,21 +1038,8 @@ async function processVoiceCommand(text, displayId) {
         const selection = timeParser.chineseToNumber(selectionMatch[1]) || parseInt(selectionMatch[1]);
         for (const [id, confirmation] of pendingConfirmations) {
             if (confirmation.type === 'play' && confirmation.displayId === displayId) {
-                const handled = handlePlaySelection(id, selection, displayId);
+                const handled = await handlePlaySelection(id, selection, displayId);
                 if (handled) {
-                    const responseText = '好的';
-                    try {
-                        const audioPath = await tts.generateTTS(responseText);
-                        const fileName = path.basename(audioPath);
-                        sendToDisplay(displayId, {
-                            type: 'voiceCommand',
-                            action: 'response',
-                            text: responseText,
-                            audioUrl: `/uploads/tts/${fileName}`
-                        });
-                    } catch (err) {
-                        console.error('[语音命令] 选择语音生成失败:', err.message);
-                    }
                     return;
                 }
             }

@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-async function getWeather(city = 'Beijing') {
+async function getWeather(city = '') {
     try {
         // format=j1 表示返回 JSON 数据
         // lang=zh 表示语言（部分描述会中英混合）

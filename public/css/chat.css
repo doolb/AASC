@@ -4,6 +4,7 @@
     margin-top: 15px;
     display: flex;
     overflow: hidden;
+    max-height: 700px;
 }
 
 .chat-tabs {
@@ -41,6 +42,8 @@
     padding: 15px;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .chat-message.assistant {
@@ -158,6 +161,20 @@
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
     border-bottom-left-radius: 4px;
+}
+
+.chat-message.system {
+    justify-content: center;
+}
+
+.chat-message.system .chat-message-content {
+    background: rgba(102, 126, 234, 0.2);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 12px;
+    max-width: 90%;
+    text-align: center;
 }
 
 .chat-input-area {
@@ -594,6 +611,9 @@
     padding: 15px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+    flex-shrink: 0;
 }
 
 .search-history-header {
@@ -625,7 +645,7 @@
 }
 
 .search-history-list {
-    max-height: 200px;
+    max-height: 100px;
     overflow-y: auto;
 }
 

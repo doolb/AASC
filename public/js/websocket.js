@@ -150,6 +150,14 @@ const WebSocketManager = {
                 const msg = data.isMuted ? '当前处于静音状态' : '当前未静音';
                 window.Chat.addSystemMessage(msg);
             }
+        } else if (data.type === 'commandAck') {
+            console.log('[控制端] 收到 commandAck:', data.commandType, 'from', data.displayId);
+            if (window.SelfTest) {
+                window.SelfTest.handleAck(data);
+            }
+            if (window.Chat) {
+                window.Chat.addCommandAckMessage(data.displayId, data.commandType, data.success, data.details);
+            }
         }
     },
     
@@ -170,8 +178,8 @@ const WebSocketManager = {
         }
     },
     
-    sendMedia(mediaData) {
-        this.sendMediaWithRatio(mediaData, null);
+    async sendMedia(mediaData) {
+        await this.sendMediaWithRatio(mediaData, null);
     },
     
     async sendMediaWithRatio(mediaData, mediaRatio) {
@@ -185,6 +193,7 @@ const WebSocketManager = {
         }
         
         const displayIds = window.DisplayList.getSelectedDisplayIds(mediaRatio);
+        console.log('[控制端] sendMedia displayIds:', displayIds, 'mediaRatio:', mediaRatio);
         
         if (displayIds.length === 0) {
             showToast('没有可用的显示端', 'error');

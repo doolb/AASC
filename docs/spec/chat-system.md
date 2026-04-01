@@ -335,18 +335,41 @@ chatStream(userMessage, options, callbacks):
         在 assistants 中查找匹配的助手
         如果没找到: 返回默认助手
     
-    processVoiceCommand(text, displayId):
+    processVoiceCommand(text, displayId, callbacks):
         处理语音命令入口:
-            1. 检查取消命令
-            2. 检查提醒命令
-            3. 检查报时命令
-            4. 检查搜索命令
-            5. 检查助手名字
-            6. 默认返回聊天
+            1. 检查系统指令
+            2. 检查取消命令
+            3. 检查静音/取消静音命令
+            4. 检查今日/明日提醒命令
+            5. 检查提醒命令
+            6. 检查报时命令
+            7. 检查天气命令 (传递 callbacks)
+            8. 检查搜索命令
+            9. 检查播放命令 (传递 callbacks)
+            10. 检查播放选择 (第几个)
+            11. 检查助手名字
+            12. 默认返回聊天
+        
+        callbacks 参数说明:
+            onResult(text): 成功时调用，用于发送结果到控制端
+            onError(text): 失败时调用，用于发送错误消息到控制端
 
 新增函数:
     handleSystemCommand(text, displayId):
         处理系统指令:
+        
+        私聊模式检查:
+            如果 session.mode === 'private':
+                如果 text === '退出私聊':
+                    调用 setMode('group', null)
+                    添加系统消息 '已退出私聊模式'
+                    返回 true
+                
+                如果 text === '系统' 或 text 以 '系统' 开头:
+                    提取实际命令 (去掉 '系统' 前缀)
+                    递归调用 handleSystemCommand(实际命令)
+                
+                返回 false (私聊模式不响应其他系统命令)
         
         如果 text === '系统':
             调用 showHelp() 显示 HTML 弹窗
@@ -366,6 +389,117 @@ chatStream(userMessage, options, callbacks):
                 返回 { type: 'commands', keyword, actions: [...] }
         
         返回 null (不是系统指令)
+
+    handleWeatherCommand(text, displayId, callbacks):
+        处理天气查询:
+        
+        提取城市名称:
+            移除 "天气"、"今天"、"明天"、"后天" 等关键词
+        
+        调用 wttr.in API 获取天气:
+            URL: https://wttr.in/{city}?format=j1&lang=zh
+            超时: 10秒
+        
+        解析天气数据:
+            cityName = data.nearest_area[0].areaName[0].value
+            temp = data.current_condition[0].temp_C
+            weather = data.current_condition[0].lang_zh[0].value
+            humidity = data.current_condition[0].humidity
+        
+        生成天气文本:
+            "{cityName}当前天气：{weather}，温度{temp}度，湿度{humidity}%"
+        
+        发送结果:
+            如果 callbacks.onResult 存在:
+                调用 callbacks.onResult(weatherText)
+            否则如果 displayId 存在:
+                生成 TTS 音频
+                发送到显示端:
+                    type: 'voiceCommand'
+                    action: 'weatherResult'
+                    text: weatherText
+                    audioUrl: '/uploads/tts/{fileName}'
+        
+        错误处理:
+            如果请求失败:
+                如果 callbacks.onError 存在:
+                    调用 callbacks.onError('获取天气失败，请稍后再试')
+                否则如果 displayId 存在:
+                    生成错误语音发送到显示端:
+                        type: 'voiceCommand'
+                        action: 'response'
+                        text: errorText
+                        audioUrl: '/uploads/tts/{fileName}'
+    
+    handlePlayCommand(text, displayId, callbacks):
+        处理播放媒体命令:
+        
+        提取文件名:
+            移除 "播放" 关键词
+        
+        如果文件名为空:
+            生成提示 "请问您要播放什么文件？"
+            如果 callbacks.onResult 存在:
+                调用 callbacks.onResult(responseText)
+            否则发送到显示端
+            返回
+        
+        搜索媒体文件:
+            调用 searchMediaFiles(fileName)
+        
+        如果没有匹配:
+            生成提示 "没有找到名为'{fileName}'的文件"
+            如果 callbacks.onResult 存在:
+                调用 callbacks.onResult(responseText)
+            否则发送到显示端
+            返回
+        
+        如果只有一个匹配:
+            生成提示 "正在播放{file.name}"
+            如果 callbacks.onResult 存在:
+                调用 callbacks.onResult(responseText)
+            否则发送语音到显示端
+            发送媒体到显示端:
+                type: 'media'
+                url: file.url
+                mediaType: file.mediaType
+                name: file.name
+        
+        如果有多个匹配:
+            生成选择提示 "找到N个匹配的文件：1.xxx，2.xxx。请说第几个来选择"
+            保存待确认信息到 pendingConfirmations
+            如果 callbacks.onResult 存在:
+                调用 callbacks.onResult(responseText)
+            发送选择列表到显示端
+    
+    handlePlaySelection(confirmationId, selection, displayId):
+        处理播放选择:
+        
+        获取待确认信息:
+            从 pendingConfirmations 获取
+        
+        验证选择序号:
+            index = selection - 1
+            如果 index 超出范围: 返回 false
+        
+        获取选中的文件:
+            file = confirmation.data.matches[index]
+        
+        生成播放提示:
+            responseText = "正在播放{file.name}"
+        
+        处理语音提示:
+            如果 confirmation.callbacks.onResult 存在:
+                调用 callbacks.onResult(responseText)
+            否则发送语音到显示端
+        
+        发送媒体到显示端:
+            type: 'media'
+            url: file.url
+            mediaType: file.mediaType
+            name: file.name
+        
+        返回 true
 
     executeCommands(actions, displayId, callbacks):
         执行指令组合:
@@ -519,18 +653,42 @@ const Chat = {
     
     sendMessage():
         获取消息内容
-        初始化 displayMessage = message, sendMessage = message
+        初始化 displayMessage = message, sendMessage = message, multiHandlerKeywords = []
+        
+        如果是私聊模式:
+            调用 handleSystemCommand(message)
+            如果返回 true:
+                清空输入框
+                返回
+        
         如果是群聊模式:
-            遍历模板列表
-            如果消息以模板名字开头:
-                设置 templateTarget = 模板名字
-                sendMessage = 去掉助手名字前缀后的内容
-                如果 sendMessage 为空:
-                    toast 提示进入私聊模式
-                    返回
-                break
+            调用 handleSystemCommand(message)
+            如果返回 true:
+                清空输入框
+                返回
+            
+            检查多处理器关键词:
+                调用 checkMultiHandlerKeywords(message)
+                返回匹配的关键词列表
+            
+            遍历模板列表:
+                如果消息以模板名字开头:
+                    设置 templateTarget = 模板名字
+                    sendMessage = 去掉助手名字前缀后的内容
+                    如果 sendMessage 为空:
+                        toast 提示进入私聊模式
+                        返回
+                    break
             如果没有匹配到助手名字且有模板:
                 设置 templateTarget = 第一个模板的助手名字
+        
+        设置 isLoading = true
+        更新发送按钮状态
+        
+        如果是群聊模式且有匹配的多处理器关键词:
+            调用 executeMultiHandlers(message, multiHandlerKeywords)
+            同时执行系统命令和发送给AI助手
+        
         计算助手名字:
             如果是私聊模式且有 target:
                 assistantName = target
@@ -548,6 +706,40 @@ const Chat = {
             templateTarget: templateTarget (群聊时用于系统提示词)
             displayId: currentDisplayId
             playOnControl: this.session.playOnControl
+    
+    checkMultiHandlerKeywords(message):
+        检查消息是否包含多处理器关键词:
+        
+        如果 message 包含 '天气':
+            添加 'weather' 到关键词列表
+        如果 message 包含 '提醒':
+            添加 'reminder' 到关键词列表
+        如果 message 包含 '报时' 或 '现在几点':
+            添加 'time' 到关键词列表
+        如果 message 包含 '搜索':
+            添加 'search' 到关键词列表
+        遍历自定义指令关键词:
+            如果 message 包含关键词:
+                添加 'command:{keyword}' 到关键词列表
+        
+        返回关键词列表
+    
+    executeMultiHandlers(message, keywords):
+        执行多个处理器:
+        
+        遍历关键词列表:
+            如果是 'weather':
+                调用 handleWeatherCommand(message)
+            如果是 'reminder':
+                调用 handleReminderCommand(message)
+            如果是 'time':
+                调用 handleTimeAnnounceCommand(message)
+            如果是 'search':
+                调用 handleSearchCommand(message)
+            如果以 'command:' 开头:
+                提取关键词
+                获取对应的指令列表
+                调用 executeCommands(actions)
     
     showStreamingMessage(userMessage, assistantName):
         显示用户消息
@@ -590,8 +782,32 @@ const Chat = {
             包含 '取消静音' 或 等于 '恢复音量' -> handleUnmuteCommand(), 返回 true
             包含 '今日提醒' 或 '今天提醒' -> handleTodayReminders(), 返回 true
             包含 '明日提醒' 或 '明天提醒' -> handleTomorrowReminders(), 返回 true
+            包含 '播放' -> handlePlayCommand(text), 返回 true
         
         返回 false (不是系统指令，交给聊天处理)
+    
+    handlePlayCommand(text):
+        处理播放媒体命令:
+        
+        检查显示端:
+            如果 window.currentDisplayId 不存在:
+                显示错误 "请先选择显示端"
+                返回
+        
+        提取文件名:
+            移除 "播放" 关键词
+        
+        如果文件名为空:
+            显示提示 "请输入要播放的文件名"
+            返回
+        
+        显示 "正在搜索: {fileName}"
+        
+        发送 voiceCommand 到服务端:
+            type: 'voiceCommand'
+            displayId: window.currentDisplayId
+            text: text
+            playOnControl: false
     
     handleMuteCommand():
         发送 { type: 'mute' } 到服务端
@@ -855,6 +1071,26 @@ WebSocket 消息处理:
     调用 unmuteAllDisplays()
     发送 { type: 'muteResult', success, message, isMuted }
 
+如果 data.type === 'voiceCommand':
+    获取 playOnControl 和 targetDisplayId
+    
+    构建 callbacks:
+        如果 playOnControl:
+            onResult: 生成 TTS 音频，发送 { type: 'playOnControl' } 到控制端
+            onError: 生成 TTS 音频，发送 { type: 'playOnControl' } 到控制端
+        否则:
+            callbacks = null
+    
+    调用 voiceCommand.processVoiceCommand(text, targetDisplayId, callbacks)
+    
+    处理返回结果:
+        如果 result.type === 'showHelp':
+            发送 { type: 'showHelp' }
+        如果 result.type === 'commands':
+            执行指令组合
+        如果 result.type === 'chat':
+            发送聊天消息
+
 如果 data.type === 'todayReminders':
     调用 voiceCommand.handleTodayReminders(displayId)
 
@@ -907,6 +1143,43 @@ POST /api/chat/assistants:
         如果 data.text 存在:
             调用 showMessageText(data.text)
         继续现有播放逻辑
+    
+    handleVoiceCommand(data):
+        处理语音命令结果:
+        
+        如果 data.action === 'confirm':
+            显示确认弹窗
+            播放音频
+        
+        如果 data.action === 'response':
+            播放音频
+            显示响应弹窗
+        
+        如果 data.action === 'searchResult':
+            播放音频
+            显示搜索结果弹窗
+        
+        如果 data.action === 'weatherResult':
+            播放音频
+            显示响应弹窗 (天气文本)
+        
+        如果 data.action === 'playChoices':
+            播放音频
+            显示播放选择弹窗
+            列出匹配的文件列表
+    
+    showPlayChoicesPopup(confirmationId, matches, text):
+        显示播放选择弹窗:
+        
+        创建弹窗元素:
+            类名: 'play-choices-popup'
+            内容: 提示文本 + 文件列表
+        
+        文件列表:
+            遍历 matches:
+                显示 "序号. 文件名"
+        
+        30秒后自动关闭
 ```
 
 ## 消息类型汇总
