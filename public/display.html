@@ -352,10 +352,14 @@
             let finalWidth, finalHeight, finalLeft, finalTop;
             
             if (isRotated) {
-                finalWidth = cropHeight * scale;
-                finalHeight = cropWidth * scale;
-                finalLeft = -cropY * scale;
-                finalTop = -cropX * scale;
+                //finalWidth = cropHeight * scale;
+                //finalHeight = cropWidth * scale;
+                //finalLeft = -cropY * scale;
+                //finalTop = -cropX * scale;
+                finalWidth = cropWidth * scale;
+                finalHeight = cropHeight * scale;
+                finalLeft = -cropWidth / 4 * scale;
+                finalTop = -cropY * scale;
             } else {
                 finalWidth = displayWidth * scale;
                 finalHeight = displayHeight * scale;
