@@ -128,6 +128,10 @@ const App = {
     }
 };
 
+window.openViewerFullscreen = () => {
+    window.open('/viewer3d.html', '_blank');
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
 });

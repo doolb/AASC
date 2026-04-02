@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            background: #1a1a2e;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .control-group {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+        }
+        .control-group h3 {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .control-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .control-btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .control-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 210, 255, 0.3);
+        }
+        .control-btn.active {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+        }
+        .info-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #fff;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 100;
+        }
+        .scale-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #fff;
+            font-family: monospace;
+            font-size: 14px;
+            z-index: 100;
+        }
+        .scale-indicator .scale-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00d2ff;
+        }
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 18px;
+            z-index: 200;
+        }
+        .actor-tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            pointer-events: none;
+            z-index: 150;
+            max-width: 280px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .actor-tooltip .tooltip-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .actor-tooltip .tooltip-icon {
+            font-size: 16px;
+        }
+        .actor-tooltip .tooltip-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+        .actor-tooltip .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .actor-tooltip .tooltip-label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+        }
+        .actor-tooltip .tooltip-section {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .actor-tooltip .cap-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 12px;
+        }
+        .actor-tooltip .cap-level {
+            color: #00d2ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div class="controls">
+        <div class="control-group">
+            <h3>预设场景</h3>
+            <div class="control-buttons">
+                <button class="control-btn" onclick="Viewer.loadPreset('solar')">太阳系</button>
+                <button class="control-btn" onclick="Viewer.loadPreset('earth')">地球</button>
+                <button class="control-btn" onclick="Viewer.loadPreset('city')">城市</button>
+                <button class="control-btn active" onclick="Viewer.loadPreset('actors')">执行者</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <h3>显示模式</h3>
+            <div class="control-buttons">
+                <button class="control-btn active" onclick="Viewer.setRenderMode('normal')">正常</button>
+                <button class="control-btn" onclick="Viewer.setRenderMode('wireframe')">线框</button>
+                <button class="control-btn" onclick="Viewer.toggleBuildings()">建筑</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <h3>控制</h3>
+            <div class="control-buttons">
+                <button class="control-btn" onclick="Viewer.resetCamera()">重置视角</button>
+                <button class="control-btn" onclick="Viewer.toggleAutoRotate()">自动旋转</button>
+                <button class="control-btn" onclick="Viewer.refreshActors()">刷新</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="scale-indicator">
+        <div>当前尺度</div>
+        <div class="scale-value" id="scaleValue">执行者</div>
+    </div>
+    
+    <div class="info-panel" id="infoPanel">
+        <div>FPS: <span id="fps">60</span></div>
+        <div>建筑: <span id="buildingCount">0</span></div>
+        <div>执行者: <span id="actorCount">0</span></div>
+        <div>距离: <span id="cameraDistance">0</span></div>
+    </div>
+    
+    <div class="loading" id="loading">加载中...</div>
+    <div class="actor-tooltip" id="actorTooltip" style="display:none;"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.183.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/"
+        }
+    }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        const STATUS_COLORS = {
+            ready: 0x38ef7d,
+            busy: 0xffaa00,
+            offline: 0x666666,
+            error: 0xff4444,
+            online: 0x38ef7d
+        };
+        
+        const ROLE_COLORS = {
+            server: 0x00d2ff,
+            display: 0x38ef7d,
+            control: 0xff6b6b
+        };
+        
+        const ROLE_SHAPES = {
+            server: 'octahedron',
+            display: 'box',
+            control: 'cone'
+        };
+        
+        const BUILDING_COLORS = {
+            server: 0x1a3a4a,
+            display: 0x1a4a3a,
+            control: 0x4a1a2a
+        };
+        
+        const BUILDING_SIZES = {
+            server: { width: 4, height: 2.5, depth: 4 },
+            display: { width: 3, height: 2, depth: 3 },
+            control: { width: 2.5, height: 1.8, depth: 2.5 }
+        };
+        
+        const BUILDING_ICONS = {
+            server: '🖥️',
+            display: '📺',
+            control: '📱'
+        };
+        
+        const SCALE_LEVELS = {
+            solar: { name: '太阳系', scale: 1e9, distance: 500 },
+            earth: { name: '地球', scale: 1e6, distance: 50 },
+            city: { name: '城市', scale: 1e3, distance: 5 },
+            actors: { name: '执行者', scale: 1, distance: 12 }
+        };
+        
+        let currentScale = 'actors';
+        
+        const Viewer = {
+            scene: null,
+            camera: null,
+            renderer: null,
+            controls: null,
+            objects: [],
+            actors: [],
+            buildings: [],
+            actorMeshes: new Map(),
+            buildingMeshes: new Map(),
+            autoRotate: false,
+            showBuildings: true,
+            clock: new THREE.Clock(),
+            frameCount: 0,
+            lastTime: 0,
+            raycaster: new THREE.Raycaster(),
+            mouse: new THREE.Vector2(),
+            hoveredObject: null,
+            updateInterval: null,
+            
+            async init() {
+                const container = document.getElementById('canvas-container');
+                
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1a1a2e);
+                this.scene.fog = new THREE.Fog(0x1a1a2e, 20, 60);
+                
+                this.camera = new THREE.PerspectiveCamera(
+                    60,
+                    window.innerWidth / window.innerHeight,
+                    0.001,
+                    1e12
+                );
+                this.camera.position.set(12, 10, 12);
+                
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                container.appendChild(this.renderer.domElement);
+                
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+                this.controls.screenSpacePanning = true;
+                this.controls.minDistance = 0.1;
+                this.controls.maxDistance = 100;
+                
+                this.setupLights();
+                this.setupGrid();
+                this.setupInteraction();
+                
+                await this.loadPreset('actors');
+                
+                window.addEventListener('resize', () => this.onResize());
+                
+                document.getElementById('loading').style.display = 'none';
+                
+                this.startActorUpdates();
+                
+                this.animate();
+            },
+            
+            setupLights() {
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(15, 25, 15);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                directionalLight.shadow.camera.near = 0.5;
+                directionalLight.shadow.camera.far = 100;
+                directionalLight.shadow.camera.left = -20;
+                directionalLight.shadow.camera.right = 20;
+                directionalLight.shadow.camera.top = 20;
+                directionalLight.shadow.camera.bottom = -20;
+                this.scene.add(directionalLight);
+                
+                const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x362d26, 0.3);
+                this.scene.add(hemisphereLight);
+            },
+            
+            setupGrid() {
+                const gridHelper = new THREE.GridHelper(40, 40, 0x444444, 0x333333);
+                gridHelper.name = 'grid';
+                this.scene.add(gridHelper);
+            },
+            
+            setupInteraction() {
+                this.renderer.domElement.addEventListener('mousemove', (e) => {
+                    this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                    
+                    this.checkHover(e);
+                });
+                
+                this.renderer.domElement.addEventListener('click', (e) => {
+                    if (this.hoveredObject) {
+                        this.focusOnObject(this.hoveredObject);
+                    }
+                });
+            },
+            
+            checkHover(event) {
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                
+                const allMeshes = [
+                    ...Array.from(this.buildingMeshes.values()),
+                    ...Array.from(this.actorMeshes.values())
+                ];
+                
+                const intersects = this.raycaster.intersectObjects(allMeshes, true);
+                
+                const tooltip = document.getElementById('actorTooltip');
+                
+                if (intersects.length > 0) {
+                    let mesh = intersects[0].object;
+                    while (mesh.parent && !mesh.userData.objectId && !mesh.userData.actorId) {
+                        mesh = mesh.parent;
+                    }
+                    
+                    if (mesh.userData.objectId) {
+                        const building = this.buildings.find(b => b.id === mesh.userData.objectId);
+                        if (building) {
+                            this.hoveredObject = { type: 'building', data: building };
+                            this.showBuildingTooltip(building, event.clientX, event.clientY);
+                            document.body.style.cursor = 'pointer';
+                            return;
+                        }
+                    }
+                    
+                    if (mesh.userData.actorId) {
+                        const actor = this.actors.find(a => a.id === mesh.userData.actorId);
+                        if (actor) {
+                            this.hoveredObject = { type: 'actor', data: actor };
+                            this.showActorTooltip(actor, event.clientX, event.clientY);
+                            document.body.style.cursor = 'pointer';
+                            return;
+                        }
+                    }
+                }
+                
+                this.hoveredObject = null;
+                tooltip.style.display = 'none';
+                document.body.style.cursor = 'default';
+            },
+            
+            showBuildingTooltip(building, x, y) {
+                const tooltip = document.getElementById('actorTooltip');
+                const statusColor = this.getStatusColor(building.status);
+                const icon = BUILDING_ICONS[building.type] || '🏢';
+                
+                let actorsHtml = '';
+                if (building.actors && building.actors.length > 0) {
+                    actorsHtml = '<div class="tooltip-section">';
+                    actorsHtml += '<div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:4px;">内部执行者:</div>';
+                    building.actors.forEach(actor => {
+                        const actorStatusColor = this.getStatusColor(actor.status);
+                        actorsHtml += `<div class="tooltip-row">
+                            <span class="status-dot" style="background:${actorStatusColor}"></span>
+                            <span>${actor.name}</span>
+                        </div>`;
+                    });
+                    actorsHtml += '</div>';
+                }
+                
+                tooltip.innerHTML = `
+                    <div class="tooltip-title">
+                        <span class="tooltip-icon">${icon}</span>
+                        <span>${building.name}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="status-dot" style="background:${statusColor}"></span>
+                        <span>${this.getStatusText(building.status)}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">类型:</span>
+                        <span>${this.getBuildingTypeName(building.type)}</span>
+                    </div>
+                    ${building.metadata?.ip ? `<div class="tooltip-row"><span class="tooltip-label">IP:</span><span>${building.metadata.ip}</span></div>` : ''}
+                    ${actorsHtml}
+                `;
+                
+                tooltip.style.display = 'block';
+                tooltip.style.left = (x + 15) + 'px';
+                tooltip.style.top = (y + 15) + 'px';
+            },
+            
+            showActorTooltip(actor, x, y) {
+                const tooltip = document.getElementById('actorTooltip');
+                const statusColor = this.getStatusColor(actor.status);
+                const icon = BUILDING_ICONS[actor.address?.role] || '👤';
+                
+                let capsHtml = '';
+                if (actor.capabilities && actor.capabilities.length > 0) {
+                    capsHtml = '<div class="tooltip-section">';
+                    actor.capabilities.forEach(cap => {
+                        capsHtml += `<div class="cap-item">
+                            <span>${cap.name}</span>
+                            <span class="cap-level">Lv.${cap.level}</span>
+                        </div>`;
+                    });
+                    capsHtml += '</div>';
+                }
+                
+                tooltip.innerHTML = `
+                    <div class="tooltip-title">
+                        <span class="tooltip-icon">${icon}</span>
+                        <span>${actor.name}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="status-dot" style="background:${statusColor}"></span>
+                        <span>${this.getStatusText(actor.status)}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">角色:</span>
+                        <span>${this.getBuildingTypeName(actor.address?.role)}</span>
+                    </div>
+                    ${actor.address?.ip ? `<div class="tooltip-row"><span class="tooltip-label">IP:</span><span>${actor.address.ip}</span></div>` : ''}
+                    ${capsHtml}
+                `;
+                
+                tooltip.style.display = 'block';
+                tooltip.style.left = (x + 15) + 'px';
+                tooltip.style.top = (y + 15) + 'px';
+            },
+            
+            getStatusColor(status) {
+                const colors = {
+                    ready: '#38ef7d',
+                    busy: '#ffaa00',
+                    offline: '#666666',
+                    error: '#ff4444',
+                    online: '#38ef7d'
+                };
+                return colors[status] || colors.offline;
+            },
+            
+            getStatusText(status) {
+                const texts = {
+                    ready: '就绪',
+                    busy: '忙碌',
+                    offline: '离线',
+                    error: '错误',
+                    online: '在线'
+                };
+                return texts[status] || '未知';
+            },
+            
+            getBuildingTypeName(type) {
+                const names = {
+                    server: '服务器',
+                    display: '显示端',
+                    control: '控制端'
+                };
+                return names[type] || type;
+            },
+            
+            focusOnObject(obj) {
+                let targetMesh = null;
+                
+                if (obj.type === 'building') {
+                    targetMesh = this.buildingMeshes.get(obj.data.id);
+                } else if (obj.type === 'actor') {
+                    targetMesh = this.actorMeshes.get(obj.data.id);
+                }
+                
+                if (targetMesh) {
+                    this.controls.target.copy(targetMesh.position);
+                }
+            },
+            
+            clearScene() {
+                this.objects.forEach(obj => {
+                    this.scene.remove(obj);
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) {
+                            obj.material.forEach(m => m.dispose());
+                        } else {
+                            obj.material.dispose();
+                        }
+                    }
+                });
+                this.objects = [];
+                
+                this.buildingMeshes.forEach((mesh, id) => {
+                    this.scene.remove(mesh);
+                    mesh.traverse(child => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => m.dispose());
+                            } else {
+                                child.material.dispose();
+                            }
+                        }
+                    });
+                });
+                this.buildingMeshes.clear();
+                this.buildings = [];
+                
+                this.actorMeshes.forEach((mesh, id) => {
+                    this.scene.remove(mesh);
+                    mesh.traverse(child => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => m.dispose());
+                            } else {
+                                child.material.dispose();
+                            }
+                        }
+                    });
+                });
+                this.actorMeshes.clear();
+                this.actors = [];
+            },
+            
+            async loadPreset(preset) {
+                this.clearScene();
+                currentScale = preset;
+                const config = SCALE_LEVELS[preset];
+                
+                document.querySelectorAll('.control-group:first-child .control-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.textContent.includes(config.name)) {
+                        btn.classList.add('active');
+                    }
+                });
+                
+                document.getElementById('scaleValue').textContent = config.name;
+                
+                switch(preset) {
+                    case 'solar':
+                        this.createSolarSystem();
+                        break;
+                    case 'earth':
+                        this.createEarth();
+                        break;
+                    case 'city':
+                        this.createCity();
+                        break;
+                    case 'actors':
+                    default:
+                        await this.createActorsScene();
+                        break;
+                }
+                
+                const grid = this.scene.getObjectByName('grid');
+                if (grid) {
+                    const scale = config.scale;
+                    grid.scale.set(scale, scale, scale);
+                }
+                
+                this.camera.position.set(config.distance, config.distance * 0.8, config.distance);
+                this.controls.target.set(0, 0, 0);
+                this.controls.update();
+            },
+            
+            async createActorsScene() {
+                const groundGeometry = new THREE.PlaneGeometry(50, 50);
+                const groundMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x1a1a2e,
+                    roughness: 0.9
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                this.scene.add(ground);
+                this.objects.push(ground);
+                
+                await this.fetchAndDisplayActors();
+            },
+            
+            async fetchAndDisplayActors() {
+                try {
+                    const response = await fetch('/api/actors');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success' && data.actors) {
+                        this.actors = data.actors.map(actor => ({
+                            ...actor,
+                            id: this.getActorId(actor.address)
+                        }));
+                        
+                        this.buildBuildings();
+                        this.displayBuildings();
+                        this.updateCounts();
+                    }
+                } catch (e) {
+                    console.error('获取执行者失败:', e);
+                }
+            },
+            
+            getActorId(address) {
+                if (!address) return 'unknown';
+                return `${address.ip || 'unknown'}-${address.role || 'server'}-${address.name || 'unknown'}`;
+            },
+            
+            buildBuildings() {
+                this.buildings = [];
+                const buildingMap = new Map();
+                
+                this.actors.forEach(actor => {
+                    const buildingId = `${actor.address?.role || 'server'}-${actor.address?.ip || 'unknown'}`;
+                    
+                    if (!buildingMap.has(buildingId)) {
+                        buildingMap.set(buildingId, {
+                            id: buildingId,
+                            type: actor.address?.role || 'server',
+                            name: this.getBuildingName(actor),
+                            status: actor.status === 'offline' ? 'offline' : 'online',
+                            actors: [],
+                            metadata: {
+                                ip: actor.address?.ip || ''
+                            }
+                        });
+                    }
+                    
+                    buildingMap.get(buildingId).actors.push(actor);
+                });
+                
+                this.buildings = Array.from(buildingMap.values());
+            },
+            
+            getBuildingName(actor) {
+                const role = actor.address?.role || 'server';
+                const names = {
+                    server: '服务器机房',
+                    display: '显示终端',
+                    control: '控制中心'
+                };
+                return `${names[role] || '设备'} ${actor.address?.ip || ''}`;
+            },
+            
+            displayBuildings() {
+                const centerX = 0;
+                const centerZ = 0;
+                
+                const servers = this.buildings.filter(b => b.type === 'server');
+                const displays = this.buildings.filter(b => b.type === 'display');
+                const controls = this.buildings.filter(b => b.type === 'control');
+                
+                servers.forEach((building, index) => {
+                    const x = centerX;
+                    const z = centerZ;
+                    this.createBuildingMesh(building, x, z);
+                });
+                
+                displays.forEach((building, index) => {
+                    const count = displays.length;
+                    const radius = 8;
+                    const angle = (index / count) * Math.PI * 2 - Math.PI / 2;
+                    const x = centerX + Math.cos(angle) * radius;
+                    const z = centerZ + Math.sin(angle) * radius;
+                    this.createBuildingMesh(building, x, z);
+                });
+                
+                controls.forEach((building, index) => {
+                    const count = controls.length;
+                    const radius = 14;
+                    const angle = (index / count) * Math.PI * 2;
+                    const x = centerX + Math.cos(angle) * radius;
+                    const z = centerZ + Math.sin(angle) * radius;
+                    this.createBuildingMesh(building, x, z);
+                });
+                
+                this.createConnections();
+            },
+            
+            createBuildingMesh(building, x, z) {
+                const size = BUILDING_SIZES[building.type] || BUILDING_SIZES.server;
+                const color = BUILDING_COLORS[building.type] || BUILDING_COLORS.server;
+                
+                const group = new THREE.Group();
+                group.userData.objectId = building.id;
+                
+                const floorGeometry = new THREE.BoxGeometry(size.width, 0.1, size.depth);
+                const floorMaterial = new THREE.MeshStandardMaterial({
+                    color: color,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                floor.position.y = 0.05;
+                floor.receiveShadow = true;
+                group.add(floor);
+                
+                const wallMaterial = new THREE.MeshStandardMaterial({
+                    color: color,
+                    roughness: 0.7,
+                    metalness: 0.3,
+                    transparent: true,
+                    opacity: 0.6
+                });
+                
+                const wallHeight = size.height;
+                const wallThickness = 0.1;
+                
+                const backWall = new THREE.Mesh(
+                    new THREE.BoxGeometry(size.width, wallHeight, wallThickness),
+                    wallMaterial
+                );
+                backWall.position.set(0, wallHeight / 2, -size.depth / 2);
+                backWall.castShadow = true;
+                group.add(backWall);
+                
+                const leftWall = new THREE.Mesh(
+                    new THREE.BoxGeometry(wallThickness, wallHeight, size.depth),
+                    wallMaterial
+                );
+                leftWall.position.set(-size.width / 2, wallHeight / 2, 0);
+                leftWall.castShadow = true;
+                group.add(leftWall);
+                
+                const rightWall = new THREE.Mesh(
+                    new THREE.BoxGeometry(wallThickness, wallHeight, size.depth),
+                    wallMaterial
+                );
+                rightWall.position.set(size.width / 2, wallHeight / 2, 0);
+                rightWall.castShadow = true;
+                group.add(rightWall);
+                
+                const frontLeftWall = new THREE.Mesh(
+                    new THREE.BoxGeometry(size.width / 2 - 0.4, wallHeight, wallThickness),
+                    wallMaterial
+                );
+                frontLeftWall.position.set(-size.width / 4 - 0.2, wallHeight / 2, size.depth / 2);
+                frontLeftWall.castShadow = true;
+                group.add(frontLeftWall);
+                
+                const frontRightWall = new THREE.Mesh(
+                    new THREE.BoxGeometry(size.width / 2 - 0.4, wallHeight, wallThickness),
+                    wallMaterial
+                );
+                frontRightWall.position.set(size.width / 4 + 0.2, wallHeight / 2, size.depth / 2);
+                frontRightWall.castShadow = true;
+                group.add(frontRightWall);
+                
+                const doorTop = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.8, wallHeight - 1.2, wallThickness),
+                    wallMaterial
+                );
+                doorTop.position.set(0, wallHeight / 2 + 0.6, size.depth / 2);
+                doorTop.castShadow = true;
+                group.add(doorTop);
+                
+                const statusLight = new THREE.PointLight(
+                    STATUS_COLORS[building.status] || STATUS_COLORS.offline,
+                    0.5,
+                    size.width * 2
+                );
+                statusLight.position.set(0, wallHeight + 0.5, 0);
+                group.add(statusLight);
+                
+                const labelCanvas = document.createElement('canvas');
+                labelCanvas.width = 256;
+                labelCanvas.height = 64;
+                const ctx = labelCanvas.getContext('2d');
+                ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+                ctx.fillRect(0, 0, 256, 64);
+                ctx.font = 'bold 20px Arial';
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.fillText(building.name, 128, 40);
+                
+                const labelTexture = new THREE.CanvasTexture(labelCanvas);
+                const labelMaterial = new THREE.SpriteMaterial({ 
+                    map: labelTexture,
+                    transparent: true
+                });
+                const label = new THREE.Sprite(labelMaterial);
+                label.position.y = wallHeight + 1;
+                label.scale.set(3, 0.75, 1);
+                group.add(label);
+                
+                building.actors.forEach((actor, index) => {
+                    const actorSize = 0.3;
+                    const cols = Math.ceil(Math.sqrt(building.actors.length));
+                    const row = Math.floor(index / cols);
+                    const col = index % cols;
+                    const offsetX = (col - (cols - 1) / 2) * 0.6;
+                    const offsetZ = (row - Math.floor(Math.ceil(building.actors.length / cols) - 1) / 2) * 0.6;
+                    
+                    this.createActorMesh(actor, x + offsetX, z + offsetZ, actorSize, group);
+                });
+                
+                group.position.set(x, 0, z);
+                
+                this.scene.add(group);
+                this.buildingMeshes.set(building.id, group);
+            },
+            
+            createActorMesh(actor, x, z, size, parentGroup) {
+                const role = actor.address?.role || 'server';
+                const status = actor.status || 'offline';
+                const color = ROLE_COLORS[role] || 0x00d2ff;
+                const statusColor = STATUS_COLORS[status] || STATUS_COLORS.offline;
+                
+                const group = new THREE.Group();
+                group.userData.actorId = actor.id;
+                
+                let mainGeometry;
+                switch (ROLE_SHAPES[role]) {
+                    case 'octahedron':
+                        mainGeometry = new THREE.OctahedronGeometry(size * 0.5);
+                        break;
+                    case 'cone':
+                        mainGeometry = new THREE.ConeGeometry(size * 0.4, size * 0.8, 6);
+                        break;
+                    default:
+                        mainGeometry = new THREE.BoxGeometry(size * 0.5, size * 0.5, size * 0.5);
+                }
+                
+                const mainMaterial = new THREE.MeshStandardMaterial({
+                    color: color,
+                    roughness: 0.3,
+                    metalness: 0.5,
+                    emissive: color,
+                    emissiveIntensity: 0.3
+                });
+                
+                const mainMesh = new THREE.Mesh(mainGeometry, mainMaterial);
+                mainMesh.position.y = size * 0.5 + 0.1;
+                mainMesh.castShadow = true;
+                group.add(mainMesh);
+                
+                const ringGeometry = new THREE.TorusGeometry(size * 0.6, 0.03, 8, 32);
+                const ringMaterial = new THREE.MeshBasicMaterial({
+                    color: statusColor,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.position.y = size * 0.5 + 0.1;
+                ring.rotation.x = Math.PI / 2;
+                group.add(ring);
+                
+                group.position.set(x - parentGroup.position.x, 0, z - parentGroup.position.z);
+                parentGroup.add(group);
+                
+                this.actorMeshes.set(actor.id, group);
+            },
+            
+            createConnections() {
+                const servers = this.buildings.filter(b => b.type === 'server');
+                if (servers.length === 0) return;
+                
+                const serverMesh = this.buildingMeshes.get(servers[0].id);
+                if (!serverMesh) return;
+                
+                this.buildings.forEach(building => {
+                    if (building.type === 'server') return;
+                    
+                    const buildingMesh = this.buildingMeshes.get(building.id);
+                    if (!buildingMesh) return;
+                    
+                    const points = [];
+                    points.push(serverMesh.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+                    points.push(buildingMesh.position.clone().add(new THREE.Vector3(0, 1, 0)));
+                    
+                    const curve = new THREE.QuadraticBezierCurve3(
+                        points[0],
+                        new THREE.Vector3(
+                            (points[0].x + points[1].x) / 2,
+                            Math.max(points[0].y, points[1].y) + 2,
+                            (points[0].z + points[1].z) / 2
+                        ),
+                        points[1]
+                    );
+                    
+                    const geometry = new THREE.TubeGeometry(curve, 20, 0.03, 8, false);
+                    const material = new THREE.MeshBasicMaterial({
+                        color: 0x444466,
+                        transparent: true,
+                        opacity: 0.4
+                    });
+                    const tube = new THREE.Mesh(geometry, material);
+                    this.scene.add(tube);
+                    this.objects.push(tube);
+                });
+            },
+            
+            toggleBuildings() {
+                this.showBuildings = !this.showBuildings;
+                
+                this.buildingMeshes.forEach(mesh => {
+                    mesh.visible = this.showBuildings;
+                });
+                
+                const btn = event.target;
+                btn.classList.toggle('active', this.showBuildings);
+            },
+            
+            async refreshActors() {
+                await this.fetchAndDisplayActors();
+            },
+            
+            startActorUpdates() {
+                this.updateInterval = setInterval(() => {
+                    if (currentScale === 'actors') {
+                        this.fetchAndDisplayActors();
+                    }
+                }, 5000);
+            },
+            
+            updateCounts() {
+                document.getElementById('buildingCount').textContent = this.buildings.length;
+                document.getElementById('actorCount').textContent = this.actors.length;
+            },
+            
+            createSolarSystem() {
+                const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
+                const sunMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xffdd00
+                });
+                const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+                sun.name = 'sun';
+                this.scene.add(sun);
+                this.objects.push(sun);
+                
+                const sunLight = new THREE.PointLight(0xffdd00, 2, 1000);
+                sun.add(sunLight);
+                
+                const planets = [
+                    { name: '水星', distance: 15, size: 0.3, color: 0x888888 },
+                    { name: '金星', distance: 25, size: 0.5, color: 0xffcc66 },
+                    { name: '地球', distance: 35, size: 0.5, color: 0x4488ff },
+                    { name: '火星', distance: 50, size: 0.4, color: 0xff6644 },
+                    { name: '木星', distance: 80, size: 2, color: 0xffaa77 },
+                    { name: '土星', distance: 120, size: 1.5, color: 0xddcc88 }
+                ];
+                
+                planets.forEach(planet => {
+                    const geometry = new THREE.SphereGeometry(planet.size, 16, 16);
+                    const material = new THREE.MeshStandardMaterial({ color: planet.color });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.x = planet.distance;
+                    mesh.name = planet.name;
+                    this.scene.add(mesh);
+                    this.objects.push(mesh);
+                    
+                    const orbitGeometry = new THREE.RingGeometry(planet.distance - 0.1, planet.distance + 0.1, 64);
+                    const orbitMaterial = new THREE.MeshBasicMaterial({ 
+                        color: 0x333333, 
+                        side: THREE.DoubleSide 
+                    });
+                    const orbit = new THREE.Mesh(orbitGeometry, orbitMaterial);
+                    orbit.rotation.x = Math.PI / 2;
+                    this.scene.add(orbit);
+                    this.objects.push(orbit);
+                });
+            },
+            
+            createEarth() {
+                const earthGeometry = new THREE.SphereGeometry(3, 64, 64);
+                const earthMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x4488ff,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+                const earth = new THREE.Mesh(earthGeometry, earthMaterial);
+                earth.name = 'earth';
+                this.scene.add(earth);
+                this.objects.push(earth);
+                
+                const moonGeometry = new THREE.SphereGeometry(0.8, 32, 32);
+                const moonMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+                const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+                moon.position.x = 8;
+                moon.name = 'moon';
+                this.scene.add(moon);
+                this.objects.push(moon);
+            },
+            
+            createCity() {
+                const buildingCount = 50;
+                const areaSize = 20;
+                
+                for (let i = 0; i < buildingCount; i++) {
+                    const width = 0.5 + Math.random() * 1.5;
+                    const height = 1 + Math.random() * 5;
+                    const depth = 0.5 + Math.random() * 1.5;
+                    
+                    const geometry = new THREE.BoxGeometry(width, height, depth);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color().setHSL(0.6, 0.3, 0.3 + Math.random() * 0.3),
+                        roughness: 0.7,
+                        metalness: 0.3
+                    });
+                    
+                    const building = new THREE.Mesh(geometry, material);
+                    building.position.x = (Math.random() - 0.5) * areaSize;
+                    building.position.y = height / 2;
+                    building.position.z = (Math.random() - 0.5) * areaSize;
+                    building.castShadow = true;
+                    building.receiveShadow = true;
+                    
+                    this.scene.add(building);
+                    this.objects.push(building);
+                }
+                
+                const groundGeometry = new THREE.PlaneGeometry(areaSize * 2, areaSize * 2);
+                const groundMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x333333,
+                    roughness: 0.9
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                this.scene.add(ground);
+                this.objects.push(ground);
+            },
+            
+            setRenderMode(mode) {
+                document.querySelectorAll('.control-group:nth-child(2) .control-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                event.target.classList.add('active');
+                
+                const allObjects = [...this.objects, ...Array.from(this.buildingMeshes.values()), ...Array.from(this.actorMeshes.values())];
+                allObjects.forEach(obj => {
+                    obj.traverse(child => {
+                        if (child.material && !child.material.isSpriteMaterial) {
+                            child.material.wireframe = mode === 'wireframe';
+                        }
+                    });
+                });
+            },
+            
+            resetCamera() {
+                const config = SCALE_LEVELS[currentScale];
+                this.camera.position.set(config.distance, config.distance * 0.8, config.distance);
+                this.controls.target.set(0, 0, 0);
+                this.controls.update();
+            },
+            
+            toggleAutoRotate() {
+                this.autoRotate = !this.autoRotate;
+                this.controls.autoRotate = this.autoRotate;
+                this.controls.autoRotateSpeed = 1;
+                
+                const btn = event.target;
+                btn.classList.toggle('active', this.autoRotate);
+            },
+            
+            onResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            },
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                const delta = this.clock.getDelta();
+                const elapsed = this.clock.getElapsedTime();
+                
+                this.controls.update();
+                
+                this.buildingMeshes.forEach((mesh, id) => {
+                    const building = this.buildings.find(b => b.id === id);
+                    if (building && building.type === 'server') {
+                        mesh.rotation.y = elapsed * 0.05;
+                    }
+                    
+                    mesh.children.forEach(child => {
+                        if (child.geometry && child.geometry.type === 'TorusGeometry') {
+                            child.rotation.z = elapsed * 2;
+                        }
+                    });
+                });
+                
+                this.actorMeshes.forEach((mesh, id) => {
+                    const actor = this.actors.find(a => a.id === id);
+                    if (actor && actor.address?.role === 'server') {
+                        mesh.rotation.y = elapsed * 0.3;
+                    }
+                    
+                    mesh.children.forEach(child => {
+                        if (child.geometry && child.geometry.type === 'TorusGeometry') {
+                            child.rotation.z = elapsed * 2;
+                        }
+                    });
+                });
+                
+                this.renderer.render(this.scene, this.camera);
+                
+                this.frameCount++;
+                if (elapsed - this.lastTime >= 1) {
+                    document.getElementById('fps').textContent = this.frameCount;
+                    this.frameCount = 0;
+                    this.lastTime = elapsed;
+                }
+                
+                document.getElementById('cameraDistance').textContent = 
+                    this.camera.position.length().toFixed(2);
+            }
+        };
+        
+        window.Viewer = Viewer;
+        
+        Viewer.init();
+    </script>
+</body>
+</html>

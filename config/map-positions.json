@@ -1,0 +1,23 @@
+{
+  "server-192.168.1.39": {
+    "position": {
+      "x": 131,
+      "y": 505
+    },
+    "updatedAt": 1775141367872
+  },
+  "control-unknown": {
+    "position": {
+      "x": 596,
+      "y": 592
+    },
+    "updatedAt": 1775141370885
+  },
+  "display-unknown": {
+    "position": {
+      "x": 463,
+      "y": 203
+    },
+    "updatedAt": 1775145273880
+  }
+}
