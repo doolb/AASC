@@ -1,6 +1,6 @@
-const { IRenderer, RendererEvents } = require('./i-renderer');
-const BuildingSprite = require('../sprites/building-sprite');
-const ActorSprite = require('../sprites/actor-sprite');
+import { IRenderer, RendererEvents } from './i-renderer.js';
+import BuildingSprite from '../sprites/building-sprite.js';
+import ActorSprite from '../sprites/actor-sprite.js';
 
 class RendererPixi extends IRenderer {
   constructor(options = {}) {
@@ -166,6 +166,10 @@ class RendererPixi extends IRenderer {
       this.emit(RendererEvents.BUILDING_HOVER, data);
     });
     
+    sprite.on('dragend', (data) => {
+      this.emit(RendererEvents.BUILDING_DRAG_END, data);
+    });
+    
     this.buildingLayer.addChild(container);
     this.buildingSprites.set(building.id, sprite);
     
@@ -317,4 +321,4 @@ class RendererPixi extends IRenderer {
   }
 }
 
-module.exports = RendererPixi;
+export default RendererPixi;

@@ -1,7 +1,7 @@
-const { MapData, BuildingData, ActorData } = require('./core/map-data');
-const DataAdapter = require('./core/data-adapter');
-const RendererPixi = require('./renderer/renderer-pixi');
-const { RendererEvents } = require('./renderer/i-renderer');
+import { MapData, BuildingData, ActorData } from './core/map-data.js';
+import DataAdapter from './core/data-adapter.js';
+import RendererPixi from './renderer/renderer-pixi.js';
+import { RendererEvents } from './renderer/i-renderer.js';
 
 class MapPanel {
   constructor(options = {}) {
@@ -101,15 +101,62 @@ class MapPanel {
     this.renderer.on(RendererEvents.ACTOR_HOVER, (data) => {
       this.showTooltip(data, 'actor');
     });
+    
+    this.renderer.on(RendererEvents.BUILDING_DRAG_END, (data) => {
+      this.saveBuildingPosition(data);
+    });
+  }
+  
+  async saveBuildingPosition(building) {
+    try {
+      const response = await fetch(`${this.apiBase}/api/map-positions/${building.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          position: building.position
+        })
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
+        console.log(`[MapPanel] 保存建筑位置成功: ${building.id}`);
+      }
+    } catch (error) {
+      console.error('[MapPanel] 保存建筑位置失败:', error);
+    }
+  }
+  
+  async loadSavedPositions() {
+    try {
+      const response = await fetch(`${this.apiBase}/api/map-positions`);
+      const result = await response.json();
+      if (result.status === 'success' && result.positions) {
+        return result.positions;
+      }
+    } catch (error) {
+      console.error('[MapPanel] 加载保存的位置失败:', error);
+    }
+    return {};
   }
 
   async loadData() {
     try {
-      const response = await fetch(`${this.apiBase}/api/map-data`);
-      const result = await response.json();
+      const [mapResponse, positions] = await Promise.all([
+        fetch(`${this.apiBase}/api/map-data`),
+        this.loadSavedPositions()
+      ]);
+      const result = await mapResponse.json();
       
       if (result.status === 'success') {
         this.mapData = this.dataAdapter.adaptActorRegistry(result.data);
+        
+        if (Object.keys(positions).length > 0) {
+          this.mapData.buildings.forEach(building => {
+            if (positions[building.id]) {
+              building.position = positions[building.id].position;
+            }
+          });
+        }
+        
         this.renderer.setData(this.mapData);
       }
     } catch (error) {
@@ -401,6 +448,6 @@ class MapPanel {
   }
 }
 
-module.exports = MapPanel;
+export default MapPanel;
 
 window.MapPanel = MapPanel;

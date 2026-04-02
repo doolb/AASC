@@ -867,6 +867,65 @@ app.post('/api/time/parse', (req, res) => {
     }
 });
 
+const mapPositionsPath = path.join(__dirname, 'config/map-positions.json');
+
+function loadMapPositions() {
+    try {
+        if (fs.existsSync(mapPositionsPath)) {
+            const data = fs.readFileSync(mapPositionsPath, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error('加载地图位置失败:', error);
+    }
+    return {};
+}
+
+function saveMapPositions(positions) {
+    try {
+        fs.writeFileSync(mapPositionsPath, JSON.stringify(positions, null, 2), 'utf8');
+        return true;
+    } catch (error) {
+        console.error('保存地图位置失败:', error);
+        return false;
+    }
+}
+
+app.get('/api/map-positions', (req, res) => {
+    const positions = loadMapPositions();
+    res.json({
+        status: 'success',
+        positions: positions
+    });
+});
+
+app.put('/api/map-positions/:id', (req, res) => {
+    const { id } = req.params;
+    const { position } = req.body;
+    
+    if (!position || typeof position.x !== 'number' || typeof position.y !== 'number') {
+        return res.status(400).json({
+            status: 'error',
+            message: '无效的位置数据'
+        });
+    }
+    
+    const positions = loadMapPositions();
+    positions[id] = { position, updatedAt: Date.now() };
+    
+    if (saveMapPositions(positions)) {
+        res.json({
+            status: 'success',
+            message: '位置保存成功'
+        });
+    } else {
+        res.status(500).json({
+            status: 'error',
+            message: '保存位置失败'
+        });
+    }
+});
+
 app.get('/api/mute', (req, res) => {
     res.json({
         status: 'success',

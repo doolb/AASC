@@ -1,4 +1,4 @@
-const { BuildingColors, BuildingIcons, StatusColors, BuildingStatus } = require('../core/constants');
+import { BuildingColors, BuildingIcons, StatusColors, BuildingStatus } from '../core/constants.js';
 
 class BuildingSprite {
   constructor(data, options = {}) {
@@ -23,14 +23,15 @@ class BuildingSprite {
   }
 
   create(PIXI) {
+    this.PIXI = PIXI;
     this.container = new PIXI.Container();
     this.container.sortableChildren = true;
     
-    this.createBackground(PIXI);
-    this.createIcon(PIXI);
-    this.createLabel(PIXI);
-    this.createStatusIndicator(PIXI);
-    this.createActorContainer(PIXI);
+    this.createBackground();
+    this.createIcon();
+    this.createLabel();
+    this.createStatusIndicator();
+    this.createActorContainer();
     
     this.updatePosition();
     this.setupInteraction();
@@ -38,8 +39,8 @@ class BuildingSprite {
     return this.container;
   }
 
-  createBackground(PIXI) {
-    this.background = new PIXI.Graphics();
+  createBackground() {
+    this.background = new this.PIXI.Graphics();
     this.container.addChild(this.background);
     this.drawBackground();
   }
@@ -71,10 +72,10 @@ class BuildingSprite {
     }
   }
 
-  createIcon(PIXI) {
+  createIcon() {
     const icon = BuildingIcons[this.data.type] || '📦';
     
-    this.iconText = new PIXI.Text(icon, {
+    this.iconText = new this.PIXI.Text(icon, {
       fontFamily: 'Arial',
       fontSize: 28,
       fill: 0xffffff,
@@ -88,8 +89,8 @@ class BuildingSprite {
     this.container.addChild(this.iconText);
   }
 
-  createLabel(PIXI) {
-    this.labelText = new PIXI.Text(this.data.name, {
+  createLabel() {
+    this.labelText = new this.PIXI.Text(this.data.name, {
       fontFamily: 'Arial',
       fontSize: 12,
       fill: 0xffffff,
@@ -105,8 +106,8 @@ class BuildingSprite {
     this.container.addChild(this.labelText);
   }
 
-  createStatusIndicator(PIXI) {
-    this.statusIndicator = new PIXI.Graphics();
+  createStatusIndicator() {
+    this.statusIndicator = new this.PIXI.Graphics();
     this.container.addChild(this.statusIndicator);
     this.drawStatusIndicator();
   }
@@ -144,8 +145,8 @@ class BuildingSprite {
     }
   }
 
-  createActorContainer(PIXI) {
-    this.actorContainer = new PIXI.Container();
+  createActorContainer() {
+    this.actorContainer = new this.PIXI.Container();
     this.actorContainer.y = this.data.size.height / 2 + 20;
     this.container.addChild(this.actorContainer);
   }
@@ -203,17 +204,73 @@ class BuildingSprite {
     this.container.eventMode = 'static';
     this.container.cursor = 'pointer';
     
-    this.container.on('pointerover', () => {
-      this.highlight(true);
-      this.emit('hover', this.data);
+    this.isDragging = false;
+    this.dragStartPos = { x: 0, y: 0 };
+    this.buildingStartPos = { x: 0, y: 0 };
+    
+    this.container.on('pointerover', (e) => {
+      if (!this.isDragging) {
+        this.highlight(true);
+        this.emit('hover', this.data);
+      }
     });
     
     this.container.on('pointerout', () => {
-      this.highlight(false);
+      if (!this.isDragging) {
+        this.highlight(false);
+      }
     });
     
-    this.container.on('pointerdown', () => {
-      this.emit('click', this.data);
+    this.container.on('pointerdown', (e) => {
+      this.isDragging = true;
+      this.dragStartPos = { x: e.global.x, y: e.global.y };
+      this.buildingStartPos = { x: this.data.position.x, y: this.data.position.y };
+      this.container.cursor = 'grabbing';
+      this.container.zIndex = 1000;
+      this.emit('dragstart', this.data);
+    });
+    
+    this.container.on('pointermove', (e) => {
+      if (this.isDragging) {
+        const dx = e.global.x - this.dragStartPos.x;
+        const dy = e.global.y - this.dragStartPos.y;
+        
+        this.data.position.x = this.buildingStartPos.x + dx;
+        this.data.position.y = this.buildingStartPos.y + dy;
+        
+        this.updatePosition();
+        this.emit('dragging', this.data);
+      }
+    });
+    
+    this.container.on('pointerup', (e) => {
+      if (this.isDragging) {
+        this.isDragging = false;
+        this.container.cursor = 'pointer';
+        this.container.zIndex = 1;
+        this.highlight(false);
+        this.emit('dragend', this.data);
+      }
+    });
+    
+    this.container.on('pointerupoutside', (e) => {
+      if (this.isDragging) {
+        this.isDragging = false;
+        this.container.cursor = 'pointer';
+        this.container.zIndex = 1;
+        this.highlight(false);
+        this.emit('dragend', this.data);
+      }
+    });
+    
+    this.container.on('click', (e) => {
+      if (!this.isDragging) {
+        const dx = Math.abs(e.global.x - this.dragStartPos.x);
+        const dy = Math.abs(e.global.y - this.dragStartPos.y);
+        if (dx < 5 && dy < 5) {
+          this.emit('click', this.data);
+        }
+      }
     });
   }
 
@@ -257,4 +314,4 @@ class BuildingSprite {
   }
 }
 
-module.exports = BuildingSprite;
+export default BuildingSprite;

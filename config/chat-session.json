@@ -1,5 +1,5 @@
 {
-  "mode": "group",
-  "privateTarget": null,
+  "mode": "private",
+  "privateTarget": "妲己",
   "playOnControl": false
 }

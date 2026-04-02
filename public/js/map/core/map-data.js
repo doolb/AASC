@@ -1,4 +1,4 @@
-const { ActorStatus, LevelSizeMap, StatusColors, CapabilityCategory, AccessoryIcons } = require('./constants');
+import { ActorStatus, LevelSizeMap, StatusColors, CapabilityCategory, AccessoryIcons } from './constants.js';
 
 class BuildingData {
   constructor(options = {}) {
@@ -254,7 +254,7 @@ class MapData {
   }
 }
 
-module.exports = {
+export {
   BuildingData,
   ActorData,
   ConnectionData,

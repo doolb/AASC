@@ -1,5 +1,5 @@
-const { BuildingData, ActorData, MapData } = require('./map-data');
-const { BuildingType, BuildingSize, LevelSizeMap, StatusColors, ActorStatus } = require('./constants');
+import { BuildingData, ActorData, MapData } from './map-data.js';
+import { BuildingType, BuildingSize, LevelSizeMap, StatusColors, ActorStatus } from './constants.js';
 
 class DataAdapter {
   constructor(options = {}) {
@@ -240,4 +240,4 @@ class DataAdapter {
   }
 }
 
-module.exports = DataAdapter;
+export default DataAdapter;

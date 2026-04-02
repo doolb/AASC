@@ -94,10 +94,11 @@ const RendererEvents = {
   BUILDING_HOVER: 'building:hover',
   ACTOR_HOVER: 'actor:hover',
   VIEW_CHANGE: 'view:change',
-  READY: 'ready'
+  READY: 'ready',
+  BUILDING_DRAG_END: 'building:dragend'
 };
 
-module.exports = {
+export {
   IRenderer,
   RendererEvents
 };

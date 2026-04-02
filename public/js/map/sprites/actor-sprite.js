@@ -1,4 +1,4 @@
-const { StatusColors, LevelSizeMap, ActorStatus } = require('../core/constants');
+import { StatusColors, LevelSizeMap, ActorStatus } from '../core/constants.js';
 
 class ActorSprite {
   constructor(data, options = {}) {
@@ -24,18 +24,19 @@ class ActorSprite {
   }
 
   create(PIXI) {
+    this.PIXI = PIXI;
     this.container = new PIXI.Container();
     this.container.sortableChildren = true;
     
-    this.createStatusRing(PIXI);
-    this.createBody(PIXI);
+    this.createStatusRing();
+    this.createBody();
     
     if (this.options.showAccessories) {
-      this.createAccessories(PIXI);
+      this.createAccessories();
     }
     
     if (this.options.showLabel) {
-      this.createLabel(PIXI);
+      this.createLabel();
     }
     
     this.updatePosition();
@@ -44,8 +45,8 @@ class ActorSprite {
     return this.container;
   }
 
-  createStatusRing(PIXI) {
-    this.statusRing = new PIXI.Graphics();
+  createStatusRing() {
+    this.statusRing = new this.PIXI.Graphics();
     this.container.addChild(this.statusRing);
     this.drawStatusRing();
   }
@@ -75,8 +76,8 @@ class ActorSprite {
     }
   }
 
-  createBody(PIXI) {
-    this.body = new PIXI.Graphics();
+  createBody() {
+    this.body = new this.PIXI.Graphics();
     this.container.addChild(this.body);
     this.drawBody();
   }
@@ -98,7 +99,7 @@ class ActorSprite {
     this.body.drawCircle(-radius * 0.3, -radius * 0.3, radius * 0.3);
     this.body.endFill();
     
-    const levelText = new PIXI.Text(this.data.maxLevel.toString(), {
+    const levelText = new this.PIXI.Text(this.data.maxLevel.toString(), {
       fontFamily: 'Arial',
       fontSize: Math.max(10, size / 3),
       fill: 0xffffff,
@@ -107,19 +108,18 @@ class ActorSprite {
     });
     levelText.anchor.set(0.5);
     
-    const texture = PIXI.RenderTexture.create({ width: size, height: size });
     this.body.addChild(levelText);
   }
 
-  createAccessories(PIXI) {
-    this.accessoryContainer = new PIXI.Container();
+  createAccessories() {
+    this.accessoryContainer = new this.PIXI.Container();
     this.container.addChild(this.accessoryContainer);
     
     const accessories = this.data.visual.accessories || [];
     const size = this.data.visual.size;
     
     accessories.forEach((icon, index) => {
-      const text = new PIXI.Text(icon, {
+      const text = new this.PIXI.Text(icon, {
         fontFamily: 'Arial',
         fontSize: 12,
         fill: 0xffffff
@@ -133,8 +133,8 @@ class ActorSprite {
     });
   }
 
-  createLabel(PIXI) {
-    this.labelText = new PIXI.Text(this.data.name, {
+  createLabel() {
+    this.labelText = new this.PIXI.Text(this.data.name, {
       fontFamily: 'Arial',
       fontSize: 10,
       fill: 0xcccccc,
@@ -237,4 +237,4 @@ class ActorSprite {
   }
 }
 
-module.exports = ActorSprite;
+export default ActorSprite;

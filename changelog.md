@@ -2,6 +2,53 @@
 
 ## [Unreleased]
 
+### 新功能
+- ✅ 地图建筑拖拽和位置持久化
+  - 功能：支持拖拽建筑到指定位置，位置自动保存，重启后还原
+  - 实现：
+    - BuildingSprite 添加拖拽事件处理
+    - MapPanel 监听拖拽结束事件并保存位置到服务器
+    - 服务端添加 API：GET/PUT /api/map-positions
+    - 位置数据存储在 config/map-positions.json
+  - 改动文件：
+    - public/js/map/sprites/building-sprite.js
+    - public/js/map/renderer/renderer-pixi.js
+    - public/js/map/renderer/i-renderer.js
+    - public/js/map/map-panel.js
+    - server.js
+
+### Bug 修复
+- ✅ 修复 Sprite 类中 PIXI 对象未定义错误
+  - 问题：`create(PIXI)` 方法接收 PIXI 参数，但其他方法无法访问
+  - 错误：`PIXI is not defined` 在 `drawBody()` 等方法中
+  - 修复：在 `create()` 方法中保存 `this.PIXI = PIXI`，其他方法使用 `this.PIXI`
+  - 改动文件：
+    - public/js/map/sprites/actor-sprite.js
+    - public/js/map/sprites/building-sprite.js
+- ✅ 修复 pixi.js 模块解析错误
+  - 问题：浏览器无法解析裸模块说明符 `pixi.js`
+  - 错误：`Failed to resolve module specifier 'pixi.js'`
+  - 修复：在 HTML 中添加 Import Map，映射 `pixi.js` 到 CDN URL
+  - 改动文件：public/upload.html
+- ✅ 修复地图模块 CommonJS 模块语法在浏览器中不兼容的问题
+  - 问题：map 模块使用 CommonJS 语法（require/module.exports），浏览器不支持
+  - 错误：`module is not defined` 和 `Identifier 'XXX' has already been declared`
+  - 修复：将所有 map 模块文件转换为 ES Modules (ESM) 格式
+    - `require('./file')` → `import ... from './file.js'`
+    - `module.exports = xxx` → `export default xxx`
+    - `module.exports = { xxx }` → `export { xxx }`
+  - 修复：HTML 中使用 `<script type="module">` 加载入口文件
+  - 改动文件：
+    - public/js/map/core/constants.js
+    - public/js/map/core/map-data.js
+    - public/js/map/core/data-adapter.js
+    - public/js/map/renderer/i-renderer.js
+    - public/js/map/renderer/renderer-pixi.js
+    - public/js/map/sprites/building-sprite.js
+    - public/js/map/sprites/actor-sprite.js
+    - public/js/map/map-panel.js
+    - public/upload.html
+
 ### 新增
 - ✅ 执行者能力可视化管理系统
   - 新增地图可视化面板，展示系统执行者和能力

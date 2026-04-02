@@ -276,6 +276,9 @@ BuildingSprite extends PIXI.Container
 ├── label: PIXI.Text              # 标签
 ├── statusIndicator: PIXI.Graphics # 状态指示器
 ├── actorContainer: PIXI.Container # 人物容器
+├── isDragging: boolean           # 是否正在拖拽
+├── dragStartPos: { x, y }        # 拖拽起始位置
+└── buildingStartPos: { x, y }    # 建筑起始位置
 
 方法
 ├── update(data)                  # 更新数据
@@ -283,7 +286,23 @@ BuildingSprite extends PIXI.Container
 ├── addActor(actorSprite)         # 添加人物
 ├── removeActor(actorId)          # 移除人物
 ├── setPosition(x, y)             # 设置位置
-└── highlight(enabled)            # 高亮显示
+├── highlight(enabled)            # 高亮显示
+└── setupInteraction()            # 设置交互（含拖拽）
+```
+
+### 拖拽功能
+
+```
+拖拽流程
+├── pointerdown: 记录起始位置，设置拖拽状态
+├── pointermove: 计算偏移量，更新建筑位置
+├── pointerup: 结束拖拽，触发 dragend 事件
+└── pointerupoutside: 处理拖出边界的情况
+
+事件
+├── dragstart: 开始拖拽
+├── dragging: 拖拽中
+└── dragend: 拖拽结束（触发位置保存）
 ```
 
 ### 绘制逻辑
@@ -364,6 +383,42 @@ MapPanel
 ```
 
 ## 服务端 API
+
+### GET /api/map-positions
+
+获取所有建筑的保存位置。
+
+**响应**:
+```json
+{
+  "status": "success",
+  "positions": {
+    "building-id": {
+      "position": { "x": 100, "y": 200 },
+      "updatedAt": 1712016000000
+    }
+  }
+}
+```
+
+### PUT /api/map-positions/:id
+
+保存建筑位置。
+
+**请求**:
+```json
+{
+  "position": { "x": 100, "y": 200 }
+}
+```
+
+**响应**:
+```json
+{
+  "status": "success",
+  "message": "位置保存成功"
+}
+```
 
 ### GET /api/actors
 

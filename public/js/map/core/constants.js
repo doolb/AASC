@@ -64,7 +64,7 @@ const AccessoryIcons = {
   special: '✨'
 };
 
-module.exports = {
+export {
   BuildingType,
   BuildingStatus,
   ActorStatus,

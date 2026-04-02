@@ -364,6 +364,56 @@
 退出当前进程
 ```
 
+## 地图位置 API
+
+### GET /api/map-positions
+获取所有建筑的保存位置。
+
+**响应**:
+```json
+{
+  "status": "success",
+  "positions": {
+    "building-id": {
+      "position": { "x": 100, "y": 200 },
+      "updatedAt": 1712016000000
+    }
+  }
+}
+```
+
+**实现**:
+```
+读取 config/map-positions.json
+如果文件不存在，返回空对象
+```
+
+### PUT /api/map-positions/:id
+保存建筑位置。
+
+**请求**:
+```json
+{
+  "position": { "x": 100, "y": 200 }
+}
+```
+
+**响应**:
+```json
+{
+  "status": "success",
+  "message": "位置保存成功"
+}
+```
+
+**实现**:
+```
+验证位置数据 (x, y 必须是数字)
+读取现有位置数据
+更新指定建筑的位置
+写入 config/map-positions.json
+```
+
 ## 媒体类型检测
 
 ```

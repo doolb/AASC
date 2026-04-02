@@ -8,6 +8,13 @@
     <link rel="stylesheet" href="css/chat.css">
     <link rel="stylesheet" href="css/media-library.css">
     <link rel="stylesheet" href="css/map.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "pixi.js": "https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.mjs"
+        }
+    }
+    </script>
 </head>
 <body>
     <nav class="sidebar">
@@ -455,14 +462,7 @@
     <script src="js/search.js"></script>
     <script src="js/floating-control.js"></script>
     <script src="js/self-test.js"></script>
-    <script src="js/map/core/constants.js"></script>
-    <script src="js/map/core/map-data.js"></script>
-    <script src="js/map/core/data-adapter.js"></script>
-    <script src="js/map/renderer/i-renderer.js"></script>
-    <script src="js/map/sprites/building-sprite.js"></script>
-    <script src="js/map/sprites/actor-sprite.js"></script>
-    <script src="js/map/renderer/renderer-pixi.js"></script>
-    <script src="js/map/map-panel.js"></script>
+    <script type="module" src="js/map/map-panel.js"></script>
     <script src="js/main.js"></script>
     
     <div class="self-test-trigger">
