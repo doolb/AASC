@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+### 新增
+- ✅ 执行者能力可视化管理系统
+  - 新增地图可视化面板，展示系统执行者和能力
+  - 使用 PixiJS 实现 2D 渲染，支持未来扩展 3D
+  - 架构设计支持 2D/3D 渲染器切换
+  - 核心数据模型：
+    - BuildingData: 建筑数据模型，代表物理设备
+    - ActorData: 执行者数据模型，代表系统执行者
+    - ConnectionData: 连接数据模型，代表执行者之间的关系
+  - 数据适配器：将 AASC 系统数据转换为可视化数据
+  - 渲染器接口：定义统一的渲染器接口，支持多种渲染后端
+  - PixiJS 渲染器实现：
+    - 分层渲染（连接层、建筑层、执行者层）
+    - 支持缩放、平移、拖拽交互
+    - 实时更新执行者状态
+  - 精灵组件：
+    - BuildingSprite: 建筑精灵，显示设备类型和状态
+    - ActorSprite: 执行者精灵，显示执行者和能力
+  - 地图面板功能：
+    - 工具栏：缩放控制、视图重置、图例显示
+    - 详情面板：显示选中实体的详细信息
+    - 实时数据更新：通过 WebSocket 接收状态变化
+  - 服务端 API：
+    - GET /api/map-data: 获取完整地图数据
+    - GET /api/actors: 获取执行者列表
+  - 改动文件：
+    - public/js/map/core/constants.js
+    - public/js/map/core/map-data.js
+    - public/js/map/core/data-adapter.js
+    - public/js/map/renderer/i-renderer.js
+    - public/js/map/renderer/renderer-pixi.js
+    - public/js/map/sprites/building-sprite.js
+    - public/js/map/sprites/actor-sprite.js
+    - public/js/map/map-panel.js
+    - public/css/map.css
+    - public/upload.html
+    - public/js/main.js
+    - server.js
+  - 设计文档：docs/design/map-visualization.md
+  - 实现文档：docs/spec/map-visualization.md
+  - 任务文档：docs/task/2026-04-02_执行者能力可视化管理.md
+
 ### Bug 修复
 - ✅ 画面裁剪模式添加调试打印语句
   - 控制端添加打印语句：public/js/crop.js

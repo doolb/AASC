@@ -25,6 +25,10 @@ const Sidebar = {
         panels.forEach(panel => {
             panel.style.display = panel.id === `panel-${targetId}` ? 'block' : 'none';
         });
+        
+        if (targetId === 'map') {
+            App.initMapPanel();
+        }
     },
     
     saveLastPanel(panelId) {
@@ -54,6 +58,8 @@ const Sidebar = {
 };
 
 const App = {
+    mapPanel: null,
+    
     init() {
         Sidebar.init();
         
@@ -107,6 +113,17 @@ const App = {
         
         if (window.FloatingControl) {
             window.FloatingControl.init();
+        }
+    },
+    
+    async initMapPanel() {
+        if (this.mapPanel) return;
+        
+        if (window.MapPanel) {
+            this.mapPanel = new window.MapPanel({
+                container: document.getElementById('map-container')
+            });
+            await this.mapPanel.init();
         }
     }
 };

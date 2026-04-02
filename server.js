@@ -751,6 +751,103 @@ app.get('/api/status', (req, res) => {
     });
 });
 
+app.get('/api/map-data', (req, res) => {
+    try {
+        const localIP = getLocalIP();
+        const actors = [];
+        
+        actors.push({
+            address: { ip: localIP, role: 'server', name: 'main' },
+            status: 'ready',
+            capabilities: [
+                { id: 'routing', name: '消息路由', category: 'special', level: 5 },
+                { id: 'media-library', name: '媒体库管理', category: 'special', level: 3 },
+                { id: 'chat', name: 'AI对话', category: 'professional', level: 4 }
+            ],
+            lastHeartbeat: Date.now(),
+            metadata: {
+                resources: {
+                    hasSpeaker: true
+                }
+            }
+        });
+        
+        displayClients.forEach((state, displayId) => {
+            actors.push({
+                address: { ip: state.browserInfo?.ip || 'unknown', role: 'display', name: displayId },
+                status: state.isPlaying ? 'busy' : 'ready',
+                capabilities: [
+                    { id: 'display', name: '显示', category: 'basic', level: 2 },
+                    { id: 'voice-broadcast', name: '语音播报', category: 'professional', level: 3 }
+                ],
+                lastHeartbeat: Date.now(),
+                metadata: {
+                    browserInfo: state.browserInfo,
+                    canvasSize: state.canvasSize
+                }
+            });
+        });
+        
+        controlClients.forEach((clientData, clientId) => {
+            actors.push({
+                address: { ip: clientData?.ip || 'unknown', role: 'control', name: clientId },
+                status: 'ready',
+                capabilities: [
+                    { id: 'control', name: '控制', category: 'basic', level: 1 }
+                ],
+                lastHeartbeat: Date.now()
+            });
+        });
+        
+        res.json({
+            status: 'success',
+            data: {
+                actors: actors,
+                exportedAt: Date.now()
+            }
+        });
+    } catch (err) {
+        console.error('获取地图数据失败:', err);
+        res.status(500).json({ status: 'error', message: '获取地图数据失败: ' + err.message });
+    }
+});
+
+app.get('/api/actors', (req, res) => {
+    try {
+        const localIP = getLocalIP();
+        const actors = [];
+        
+        actors.push({
+            address: { ip: localIP, role: 'server', name: 'main' },
+            status: 'ready',
+            capabilities: [
+                { id: 'routing', name: '消息路由', category: 'special', level: 5 },
+                { id: 'media-library', name: '媒体库管理', category: 'special', level: 3 },
+                { id: 'chat', name: 'AI对话', category: 'professional', level: 4 }
+            ],
+            lastHeartbeat: Date.now()
+        });
+        
+        displayClients.forEach((state, displayId) => {
+            actors.push({
+                address: { ip: state.browserInfo?.ip || 'unknown', role: 'display', name: displayId },
+                status: state.isPlaying ? 'busy' : 'ready',
+                capabilities: [
+                    { id: 'display', name: '显示', category: 'basic', level: 2 }
+                ],
+                lastHeartbeat: Date.now()
+            });
+        });
+        
+        res.json({
+            status: 'success',
+            actors: actors
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '获取执行者数据失败' });
+    }
+});
+
 app.post('/api/time/parse', (req, res) => {
     try {
         const { text } = req.body;
