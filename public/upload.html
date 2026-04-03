@@ -218,6 +218,55 @@
                     <button class="control-btn" data-rotation="270" onclick="setCropRotation(270)">270°</button>
                     <button class="control-btn" onclick="resetCrop()">重置裁剪</button>
                 </div>
+                <div class="crop-manual-input">
+                    <label style="display:block;font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:8px;">手动设置裁剪参数 (%)</label>
+                    <div class="crop-input-grid">
+                        <div class="crop-input-item">
+                            <label>X:</label>
+                            <input type="number" id="cropInputX" min="0" max="100" step="0.1" value="0" onchange="setCropManually()">
+                        </div>
+                        <div class="crop-input-item">
+                            <label>Y:</label>
+                            <input type="number" id="cropInputY" min="0" max="100" step="0.1" value="0" onchange="setCropManually()">
+                        </div>
+                        <div class="crop-input-item">
+                            <label>宽度:</label>
+                            <input type="number" id="cropInputWidth" min="0" max="100" step="0.1" value="100" onchange="setCropManually()">
+                        </div>
+                        <div class="crop-input-item">
+                            <label>高度:</label>
+                            <input type="number" id="cropInputHeight" min="0" max="100" step="0.1" value="100" onchange="setCropManually()">
+                        </div>
+                    </div>
+                    <button class="control-btn" onclick="applyManualCrop()" style="margin-top:8px;">应用裁剪</button>
+                </div>
+                <div class="crop-custom-mode">
+                    <label style="display:block;font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:8px;">自定义模式 (px)</label>
+                    <div class="crop-input-grid">
+                        <div class="crop-input-item">
+                            <label>宽度:</label>
+                            <input type="number" id="customWidth" min="0" step="1" value="1920" onchange="updateCustomPreview()">
+                        </div>
+                        <div class="crop-input-item">
+                            <label>高度:</label>
+                            <input type="number" id="customHeight" min="0" step="1" value="1080" onchange="updateCustomPreview()">
+                        </div>
+                        <div class="crop-input-item">
+                            <label>左边距:</label>
+                            <input type="number" id="customLeft" step="1" value="0" onchange="updateCustomPreview()">
+                        </div>
+                        <div class="crop-input-item">
+                            <label>上边距:</label>
+                            <input type="number" id="customTop" step="1" value="0" onchange="updateCustomPreview()">
+                        </div>
+                    </div>
+                    <button class="control-btn" onclick="applyCustomMode()" style="margin-top:8px;">应用自定义</button>
+                </div>
+                <div class="crop-display-info" id="cropDisplayInfo" style="display:none;">
+                    <label style="display:block;font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:8px;">显示端回传信息</label>
+                    <div class="crop-info-grid" id="cropInfoGrid">
+                    </div>
+                </div>
             </div>
         </div>
         

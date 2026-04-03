@@ -2,7 +2,65 @@
 
 ## [Unreleased]
 
+### Bug 修复
+- ✅ 修复旋转90度后位置偏移554px的问题
+  - 问题：媒体旋转90度后，显示位置出现约554px的偏差
+  - 原因：CSS transform rotate 是围绕元素中心旋转的，旋转后元素视觉边界框改变，但代码未补偿这个偏移
+  - 计算：偏移量 = (finalWidth - finalHeight) / 2
+  - 修复：在 applyCrop 函数中添加旋转补偿逻辑
+    - cropX 计算简化为 `displayWidth * (currentCrop.y / 100)`
+    - finalTop 改为 `-cropX * scale`
+    - 旋转补偿：`finalLeft -= rotationOffset; finalTop += rotationOffset`
+  - 改动文件：
+    - public/display.html
+- ✅ 修复 90°/270° 旋转时裁剪框位置不一致的问题
+  - 问题：当媒体旋转 90° 或 270° 时，显示端显示的裁剪位置与控制端裁剪框不一致
+  - 原因1：display.html 中 applyCrop 函数的旋转媒体显示尺寸计算逻辑条件分支错误
+  - 原因2：旋转后的坐标转换公式错误，视觉坐标与原始坐标的对应关系计算有误
+  - 原因3：finalLeft 和 finalTop 的计算未考虑旋转后的方向交换
+  - 修复：
+    - 修正显示尺寸计算的条件分支
+    - 修正坐标转换公式：原始X=100%-视觉Y-视觉高度，原始Y=视觉X
+    - 交换 finalLeft 和 finalTop 的计算（旋转后 left 控制视觉上下，top 控制视觉左右）
+  - 改动文件：
+    - public/display.html
+
 ### 新功能
+- ✅ 添加裁剪自定义模式
+  - 功能：允许手动输入显示宽度、显示高度、左边距、上边距，完全自定义媒体显示参数
+  - 实现：
+    - 在裁剪控制区域添加自定义模式输入框（宽度、高度、左边距、上边距）
+    - 添加"应用自定义"按钮，点击后发送自定义参数到显示端
+    - 显示端添加 applyCustomCrop 函数处理自定义模式
+    - 自定义模式使用黄色边框样式区分
+  - 改动文件：
+    - public/upload.html
+    - public/css/upload.css
+    - public/js/crop.js
+    - public/display.html
+- ✅ 添加手动设置显示端裁剪参数功能
+  - 功能：在显示控制面板添加手动输入裁剪参数的 UI，支持精确设置裁剪区域
+  - 实现：
+    - 在 upload.html 裁剪控制区域添加 X、Y、宽度、高度四个输入框
+    - 输入值范围为 0-100%（百分比）
+    - 输入框与裁剪框双向同步：拖拽裁剪框时自动更新输入框，修改输入框时实时更新裁剪框
+    - 使用与现有裁剪功能相同的计算公式
+    - 添加"应用裁剪"按钮，点击后自动切换到裁剪模式并发送数据到显示端
+  - 改动文件：
+    - public/upload.html
+    - public/css/upload.css
+    - public/js/crop.js
+- ✅ 在控制端显示显示端回传的裁剪信息
+  - 功能：在裁剪控制区域显示显示端回传的详细裁剪信息
+  - 实现：
+    - 添加"显示端回传信息"面板，显示容器尺寸、媒体尺寸、旋转角度、适配模式、裁剪百分比、最终样式等
+    - 去掉 crop.js 中的调试打印语句（console.log）
+    - 通过 websocket.js 中的 updateCropDisplayInfo 函数更新 UI
+  - 改动文件：
+    - public/upload.html
+    - public/css/upload.css
+    - public/js/websocket.js
+    - public/js/crop.js
 - ✅ 集成 3D 场景查看器
   - 功能：在上传端添加 3D 展示面板，支持多尺度场景切换
   - 实现：

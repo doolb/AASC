@@ -52,44 +52,7 @@ const Crop = {
         return { ...visualCrop };
     },
     
-    logDebugInfo(title = '调试信息') {
-        const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
-        const mediaRect = media.getBoundingClientRect();
-        const containerRect = this.container.getBoundingClientRect();
-        const boxRect = this.box.getBoundingClientRect();
-        
-        console.log(`[控制端-裁剪] ${title}:`, {
-            画布容器: {
-                位置: { left: containerRect.left, top: containerRect.top },
-                尺寸: { width: containerRect.width, height: containerRect.height }
-            },
-            媒体元素: {
-                位置: { left: mediaRect.left, top: mediaRect.top },
-                尺寸: { width: mediaRect.width, height: mediaRect.height },
-                相对容器偏移: {
-                    x: mediaRect.left - containerRect.left,
-                    y: mediaRect.top - containerRect.top
-                }
-            },
-            裁剪框: {
-                位置: { left: boxRect.left, top: boxRect.top },
-                尺寸: { width: boxRect.width, height: boxRect.height },
-                相对容器偏移: {
-                    x: boxRect.left - containerRect.left,
-                    y: boxRect.top - containerRect.top
-                },
-                百分比数据: { ...this.data }
-            },
-            旋转角度: this.rotation
-        });
-    },
-    
     sendData() {
-        console.log('[控制端-裁剪] sendData:', {
-            视觉裁剪数据: { ...this.data },
-            旋转角度: this.rotation
-        });
-        this.logDebugInfo('sendData 发送数据');
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('crop', this.data);
         }
@@ -115,19 +78,12 @@ const Crop = {
         const boxWidth = (this.data.width / 100) * mediaWidth;
         const boxHeight = (this.data.height / 100) * mediaHeight;
         
-        console.log('[控制端-裁剪] updateBox:', {
-            媒体尺寸: { width: mediaWidth, height: mediaHeight },
-            媒体偏移: { x: offsetX, y: offsetY },
-            裁剪框像素位置: { left: boxLeft, top: boxTop, width: boxWidth, height: boxHeight },
-            裁剪框百分比: { x: this.data.x, y: this.data.y, width: this.data.width, height: this.data.height }
-        });
-        
         this.box.style.left = boxLeft + 'px';
         this.box.style.top = boxTop + 'px';
         this.box.style.width = boxWidth + 'px';
         this.box.style.height = boxHeight + 'px';
         
-        this.logDebugInfo('updateBox 更新裁剪框');
+        this.updateInputFields();
     },
     
     setRotation(rotation) {
@@ -142,13 +98,7 @@ const Crop = {
     },
     
     applyRotation(rotation) {
-        const oldRotation = this.rotation;
         this.rotation = rotation;
-        
-        console.log('[控制端-裁剪] applyRotation:', {
-            原旋转角度: oldRotation,
-            新旋转角度: rotation
-        });
         
         document.querySelectorAll('[data-rotation]').forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.rotation) === rotation);
@@ -197,13 +147,6 @@ const Crop = {
         this.data.height = newH;
         this.data.x = (100 - newW) / 2;
         this.data.y = (100 - newH) / 2;
-        
-        console.log('[控制端-裁剪] recalculateSize:', {
-            显示画布比例: aspectRatio,
-            媒体比例: mediaAspect,
-            计算后裁剪框: { x: this.data.x, y: this.data.y, width: newW, height: newH },
-            旋转角度: this.rotation
-        });
         
         this.updateBox();
         if (sendToDisplay) {
@@ -417,9 +360,90 @@ const Crop = {
             this.updateContainerSize();
             this.updateBox();
         });
+    },
+    
+    updateInputFields() {
+        const inputX = document.getElementById('cropInputX');
+        const inputY = document.getElementById('cropInputY');
+        const inputWidth = document.getElementById('cropInputWidth');
+        const inputHeight = document.getElementById('cropInputHeight');
+        
+        if (inputX) inputX.value = this.data.x.toFixed(1);
+        if (inputY) inputY.value = this.data.y.toFixed(1);
+        if (inputWidth) inputWidth.value = this.data.width.toFixed(1);
+        if (inputHeight) inputHeight.value = this.data.height.toFixed(1);
+    },
+    
+    setCropManually() {
+        const inputX = document.getElementById('cropInputX');
+        const inputY = document.getElementById('cropInputY');
+        const inputWidth = document.getElementById('cropInputWidth');
+        const inputHeight = document.getElementById('cropInputHeight');
+        
+        if (!inputX || !inputY || !inputWidth || !inputHeight) return;
+        
+        let x = parseFloat(inputX.value) || 0;
+        let y = parseFloat(inputY.value) || 0;
+        let width = parseFloat(inputWidth.value) || 10;
+        let height = parseFloat(inputHeight.value) || 10;
+        
+        x = Math.max(0, Math.min(100, x));
+        y = Math.max(0, Math.min(100, y));
+        width = Math.max(1, Math.min(100 - x, width));
+        height = Math.max(1, Math.min(100 - y, height));
+        
+        this.data.x = x;
+        this.data.y = y;
+        this.data.width = width;
+        this.data.height = height;
+        
+        this.updateBox();
+    },
+    
+    applyManualCrop() {
+        this.setCropManually();
+        
+        if (window.Controls) {
+            window.Controls.sendFitMode('crop');
+        } else {
+            this.sendData();
+        }
+    },
+    
+    updateCustomPreview() {
+    },
+    
+    applyCustomMode() {
+        const customWidth = parseInt(document.getElementById('customWidth').value) || 1920;
+        const customHeight = parseInt(document.getElementById('customHeight').value) || 1080;
+        const customLeft = parseInt(document.getElementById('customLeft').value) || 0;
+        const customTop = parseInt(document.getElementById('customTop').value) || 0;
+        
+        const customData = {
+            mode: 'custom',
+            width: customWidth,
+            height: customHeight,
+            left: customLeft,
+            top: customTop
+        };
+        
+        if (window.WebSocketManager) {
+            window.WebSocketManager.sendControl('customCrop', customData);
+        }
+        
+        document.querySelectorAll('[data-fit]').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        const customBtn = document.querySelector('[data-fit="custom"]');
+        if (customBtn) customBtn.classList.add('active');
     }
 };
 
 window.setCropRotation = Crop.applyRotation.bind(Crop);
 window.resetCrop = Crop.reset.bind(Crop);
+window.setCropManually = Crop.setCropManually.bind(Crop);
+window.applyManualCrop = Crop.applyManualCrop.bind(Crop);
+window.updateCustomPreview = Crop.updateCustomPreview.bind(Crop);
+window.applyCustomMode = Crop.applyCustomMode.bind(Crop);
 window.Crop = Crop;

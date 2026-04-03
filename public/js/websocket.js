@@ -151,9 +151,8 @@ const WebSocketManager = {
                 window.Chat.addSystemMessage(msg);
             }
         } else if (data.type === 'commandAck') {
-            console.log('[控制端] 收到 commandAck:', data.commandType, 'from', data.displayId);
             if (data.commandType === 'crop' && data.extraData) {
-                console.log('[控制端-裁剪] 显示端确认:', data.extraData);
+                updateCropDisplayInfo(data.extraData);
             }
             if (window.SelfTest) {
                 window.SelfTest.handleAck(data);
@@ -267,3 +266,57 @@ const WebSocketManager = {
 window.sendControl = WebSocketManager.sendControl.bind(WebSocketManager);
 window.sendMedia = WebSocketManager.sendMedia.bind(WebSocketManager);
 window.WebSocketManager = WebSocketManager;
+
+function updateCropDisplayInfo(info) {
+    const container = document.getElementById('cropDisplayInfo');
+    const grid = document.getElementById('cropInfoGrid');
+    
+    if (!container || !grid) return;
+    
+    container.style.display = 'block';
+    
+    const items = [];
+    
+    if (info.容器尺寸) {
+        items.push({ label: '容器宽度', value: info.容器尺寸.width + 'px' });
+        items.push({ label: '容器高度', value: info.容器尺寸.height + 'px' });
+    }
+    
+    if (info.媒体原始尺寸) {
+        items.push({ label: '媒体宽度', value: info.媒体原始尺寸.width + 'px' });
+        items.push({ label: '媒体高度', value: info.媒体原始尺寸.height + 'px' });
+    }
+    
+    if (info.当前旋转 !== undefined) {
+        items.push({ label: '旋转角度', value: info.当前旋转 + '°' });
+    }
+    
+    if (info.当前适配模式) {
+        items.push({ label: '适配模式', value: info.当前适配模式 });
+    }
+    
+    if (info.当前裁剪百分比) {
+        items.push({ label: '裁剪X', value: info.当前裁剪百分比.x.toFixed(1) + '%' });
+        items.push({ label: '裁剪Y', value: info.当前裁剪百分比.y.toFixed(1) + '%' });
+        items.push({ label: '裁剪宽度', value: info.当前裁剪百分比.width.toFixed(1) + '%' });
+        items.push({ label: '裁剪高度', value: info.当前裁剪百分比.height.toFixed(1) + '%' });
+    }
+    
+    if (info.最终样式) {
+        items.push({ label: '显示宽度', value: info.最终样式.width });
+        items.push({ label: '显示高度', value: info.最终样式.height });
+        items.push({ label: '左边距', value: info.最终样式.left });
+        items.push({ label: '上边距', value: info.最终样式.top });
+    }
+    
+    if (info.状态) {
+        items.push({ label: '状态', value: info.状态 });
+    }
+    
+    grid.innerHTML = items.map(item => `
+        <div class="crop-info-item">
+            <span class="info-label">${item.label}:</span>
+            <span class="info-value">${item.value}</span>
+        </div>
+    `).join('');
+}

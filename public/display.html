@@ -308,11 +308,11 @@
             if (isRotated) {
                 const rotatedRatio = 1 / mediaRatio;
                 if (rotatedRatio > containerRatio) {
-                    displayHeight = containerWidth;
-                    displayWidth = containerWidth * mediaRatio;
+                    displayWidth = containerWidth;
+                    displayHeight = containerWidth / mediaRatio;
                 } else {
-                    displayWidth = containerHeight;
-                    displayHeight = containerHeight / mediaRatio;
+                    displayHeight = containerHeight;
+                    displayWidth = containerHeight * mediaRatio;
                 }
             } else {
                 if (mediaRatio > containerRatio) {
@@ -328,12 +328,10 @@
             let targetWidth, targetHeight;
             
             if (isRotated) {
-                const visualWidth = displayHeight;
-                const visualHeight = displayWidth;
-                cropWidth = visualWidth * (currentCrop.width / 100);
-                cropHeight = visualHeight * (currentCrop.height / 100);
-                cropX = visualWidth * (currentCrop.x / 100);
-                cropY = visualHeight * (currentCrop.y / 100);
+                cropWidth = displayWidth * (currentCrop.height / 100);
+                cropHeight = displayHeight * (currentCrop.width / 100);
+                cropX = displayWidth *  (currentCrop.y / 100);
+                cropY = displayHeight * (currentCrop.x / 100);
                 targetWidth = containerHeight;
                 targetHeight = containerWidth;
             } else {
@@ -352,14 +350,17 @@
             let finalWidth, finalHeight, finalLeft, finalTop;
             
             if (isRotated) {
-                //finalWidth = cropHeight * scale;
-                //finalHeight = cropWidth * scale;
-                //finalLeft = -cropY * scale;
-                //finalTop = -cropX * scale;
-                finalWidth = cropWidth * scale;
-                finalHeight = cropHeight * scale;
-                finalLeft = -cropWidth / 4 * scale;
-                finalTop = -cropY * scale;
+                finalWidth = displayWidth * scale;
+                finalHeight = displayHeight * scale;
+                finalLeft = -cropY * scale;
+                finalTop = -cropX * scale;
+                
+                // 旋转补偿：CSS transform rotate 是围绕元素中心旋转的
+                // 旋转90度后，元素视觉宽度变为原高度，视觉高度变为原宽度
+                // 需要补偿 (finalWidth - finalHeight) / 2 的偏移
+                const rotationOffset = (finalWidth - finalHeight) / 2;
+                finalLeft -= rotationOffset;
+                finalTop += rotationOffset;
             } else {
                 finalWidth = displayWidth * scale;
                 finalHeight = displayHeight * scale;
@@ -384,6 +385,36 @@
                     left: Math.round(finalLeft) + 'px',
                     top: Math.round(finalTop) + 'px'
                 }
+            };
+        }
+        
+        function applyCustomCrop(customData) {
+            const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
+            
+            media.classList.remove('crop');
+            media.classList.add('height');
+            media.style.position = 'absolute';
+            media.style.maxWidth = 'none';
+            media.style.maxHeight = 'none';
+            
+            const width = customData.width || 1920;
+            const height = customData.height || 1080;
+            const left = customData.left || 0;
+            const top = customData.top || 0;
+            
+            media.style.width = width + 'px';
+            media.style.height = height + 'px';
+            media.style.left = left + 'px';
+            media.style.top = top + 'px';
+            
+            currentFit = 'custom';
+            
+            return {
+                自定义模式: true,
+                宽度: width + 'px',
+                高度: height + 'px',
+                左边距: left + 'px',
+                上边距: top + 'px'
             };
         }
         
@@ -802,8 +833,14 @@
                     
                 case 'crop':
                     currentCrop = data.value;
+                    currentFit = 'crop';
                     const cropInfo = applyCrop();
                     sendCommandAck('crop', true, '裁剪已应用', cropInfo);
+                    break;
+                    
+                case 'customCrop':
+                    applyCustomCrop(data.value);
+                    sendCommandAck('customCrop', true, '自定义裁剪已应用');
                     break;
             }
         }
