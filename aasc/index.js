@@ -10,6 +10,28 @@ const { PipelineStatus, StepErrorStrategy, PipelineContext, PipelineStep, Pipeli
 const { TriggerType, CompositionStatus, Trigger, CapabilityComposition, CompositionRegistry, CompositionExecutor, CompositionBuilder, defaultCompositions, initDefaultCompositions } = require('./composition');
 const { ScoreWeight, CategoryWeights, CapabilityScore, ActorLevelScore, CapabilityLevelCalculator, LevelCalculatorBuilder } = require('./level-calculator');
 
+const { MessageParser } = require('./components/message-parser');
+const { MessageDispatcher } = require('./components/message-dispatcher');
+const { StateManager } = require('./components/state-manager');
+
+const { WebSocketSystem } = require('./system/websocket-system');
+
+const { BaseAgent, AgentBuilder, VoiceCommandAgent, ChatAgent, MediaControlAgent, TTSAgent, ReminderAgent, DisplayRenderAgent, SystemCommandAgent, SearchAgent } = require('./agents');
+
+const { AgentActorAdapter, ActorFactory } = require('./actor-adapter');
+
+const { 
+    MiddlewareManager, 
+    ValidationMiddleware, 
+    LoggingMiddleware, 
+    ErrorHandlingMiddleware, 
+    AuthenticationMiddleware,
+    RateLimitMiddleware, 
+    TimeoutMiddleware, 
+    DisplayCheckMiddleware, 
+    createMiddlewareChain 
+} = require('./middleware');
+
 module.exports = {
   MessageBus,
   getBus,
@@ -71,5 +93,30 @@ module.exports = {
   CapabilityScore,
   ActorLevelScore,
   CapabilityLevelCalculator,
-  LevelCalculatorBuilder
+  LevelCalculatorBuilder,
+  MessageParser,
+  MessageDispatcher,
+  StateManager,
+  WebSocketSystem,
+  BaseAgent,
+  AgentBuilder,
+  VoiceCommandAgent,
+  ChatAgent,
+  MediaControlAgent,
+  TTSAgent,
+  ReminderAgent,
+  DisplayRenderAgent,
+  SystemCommandAgent,
+  SearchAgent,
+  AgentActorAdapter,
+  ActorFactory,
+  MiddlewareManager,
+  ValidationMiddleware,
+  LoggingMiddleware,
+  ErrorHandlingMiddleware,
+  AuthenticationMiddleware,
+  RateLimitMiddleware,
+  TimeoutMiddleware,
+  DisplayCheckMiddleware,
+  createMiddlewareChain
 };

@@ -11,20 +11,20 @@
     "192.168.1.12": {
       "currentMedia": {
         "type": "url",
-        "url": "http://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
+        "url": "http://192.168.1.39:8081/uploads/1774541075724_27856_1.mp4",
         "mediaType": "video"
       },
-      "rotation": 270,
+      "rotation": 180,
       "fit": "crop",
       "crop": {
-        "x": 46.67253004983876,
-        "y": 37.4543577803036,
-        "width": 52.85839929639402,
-        "height": 17.446893478232653
+        "x": null,
+        "y": 0,
+        "width": null,
+        "height": 100
       },
       "playlist": [],
       "volume": 0,
-      "isPlaying": false
+      "isPlaying": true
     },
     "192.168.1.39": {
       "currentMedia": {
@@ -35,13 +35,13 @@
       "rotation": 0,
       "fit": "crop",
       "crop": {
-        "x": 0,
-        "y": 20.85875659630607,
-        "width": 100,
-        "height": 42.1875
+        "x": 5.277044854881266,
+        "y": 35.58707124010553,
+        "width": 46.56356295895985,
+        "height": 64.41292875989447
       },
       "playlist": [],
-      "isPlaying": true
+      "isPlaying": false
     },
     "192.168.1.101": {
       "currentMedia": {
@@ -56,6 +56,19 @@
         "y": 16.4914263403415,
         "width": 60.73460938517993,
         "height": 81.38379392678826
+      },
+      "volume": 100,
+      "playlist": []
+    },
+    "192.168.1.19": {
+      "currentMedia": null,
+      "rotation": 0,
+      "fit": "contain",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100
       },
       "volume": 100,
       "playlist": []

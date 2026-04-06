@@ -18,6 +18,9 @@ wss.on('connection', (ws, req)):
             state: { ...createDisplayState(), ...savedState }
         })
         
+        如果 aascSystem 存在:
+            调用 aascSystem.handleDisplayConnect(displayId, clientIP, ws, savedState)
+        
         发送 { type: 'serverStartTime', time: serverStartTime }
         发送 { type: 'displayId', id: displayId, ip: clientIP }
         
@@ -27,22 +30,20 @@ wss.on('connection', (ws, req)):
         广播显示端列表到控制端
         
         监听消息:
-            如果 type === 'canvasSize':
-                更新 state.canvasSize
-                广播显示端列表
-            如果 type === 'browserInfo':
-                更新 state.browserInfo
-                广播显示端列表
-            如果 type === 'voiceStatus':
-                更新 state.voiceSupported, state.voiceListening
-                广播显示端列表
-            如果 type === 'voiceInput':
-                广播到控制端 { type: 'voiceInput', displayId, text, isFinal, fullText }
-            如果 type === 'commandAck':
-                广播到控制端 { type: 'commandAck', displayId, commandType, success, details, timestamp }
+            解析 JSON 数据
+            data.displayId = displayId
+            
+            如果 aascSystem 存在:
+                result = await aascSystem.handleDisplayMessage(displayId, data, ws)
+                如果 result.success === false 且有 reason:
+                    打印警告日志
+            否则:
+                调用 handleDisplayMessageFallback(displayId, data, ws)
         
         监听关闭:
             从 displayClients 删除
+            如果 aascSystem 存在:
+                调用 aascSystem.handleDisplayDisconnect(displayId)
             广播显示端列表
 ```
 
@@ -52,6 +53,9 @@ wss.on('connection', (ws, req)):
 ```
 如果 url === '/control' 或以 '/control' 开头:
     controlClients.add(ws)
+    
+    如果 aascSystem 存在:
+        调用 aascSystem.handleControlConnect(ws)
     
     发送 { type: 'serverStartTime', time: serverStartTime }
     发送 { type: 'displayList', list: getDisplayList() }
@@ -122,6 +126,8 @@ wss.on('connection', (ws, req)):
     
     监听关闭:
         从 controlClients 删除
+        如果 aascSystem 存在:
+            调用 aascSystem.handleControlDisconnect(ws)
 ```
 
 ## 显示端状态结构

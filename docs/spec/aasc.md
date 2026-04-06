@@ -8,29 +8,47 @@ AASC（Actor-based Asynchronous Service Communication）系统的核心实现，
 
 ```
 aasc/
-├── index.js          # 入口文件，导出所有模块
-├── message.js        # 消息协议定义
-├── message-bus.js    # 消息总线核心
-├── actor.js          # 执行者基类
-├── router.js         # 消息路由和过滤
-├── registry.js       # 执行者注册表
-├── user.js           # 用户模型
-├── record.js         # 用户记录
-├── capability.js     # 能力继承
-├── cluster.js        # 分布式集群
-└── actors/           # 具体执行者实现
+├── index.js              # 入口文件，导出所有模块
+├── init.js               # 系统初始化
+├── message.js            # 消息协议定义
+├── message-bus.js        # 消息总线核心
+├── actor.js              # 执行者基类
+├── actor-adapter.js      # Actor 适配器，将 Agent 包装成 Actor
+├── router.js             # 消息路由和过滤
+├── registry.js           # 执行者注册表
+├── user.js               # 用户模型
+├── record.js             # 用户记录
+├── capability.js         # 能力继承
+├── cluster.js            # 分布式集群
+├── pipeline.js           # 能力管道执行器
+├── composition.js        # 能力组合定义
+├── level-calculator.js   # 能力等级计算器
+├── actors/               # 具体执行者实现
+│   ├── index.js
+│   ├── reminder-actor.js
+│   ├── chat-actor.js
+│   ├── voice-command-actor.js
+│   ├── media-control-actor.js
+│   ├── media-library-actor.js
+│   ├── display-render-actor.js
+│   ├── system-command-actor.js
+│   ├── private-chat-actor.js
+│   ├── important-record-actor.js
+│   ├── search-actor.js
+│   └── tts-actor.js
+├── agents/               # Agent 层实现
+│   ├── index.js          # 所有 Agent 实现
+│   └── base-agent.js     # Agent 基类
+├── components/           # 可复用组件
+│   ├── index.js
+│   ├── message-parser.js     # 消息解析器
+│   ├── message-dispatcher.js # 消息分发器
+│   └── state-manager.js      # 状态管理器
+├── middleware/           # 中间件
+│   └── index.js          # 验证、日志、错误处理、限流、超时
+└── system/               # 系统层
     ├── index.js
-    ├── reminder-actor.js
-    ├── chat-actor.js
-    ├── voice-command-actor.js
-    ├── media-control-actor.js
-    ├── media-library-actor.js
-    ├── display-render-actor.js
-    ├── system-command-actor.js
-    ├── private-chat-actor.js
-    ├── important-record-actor.js
-    ├── search-actor.js
-    └── tts-actor.js
+    └── websocket-system.js   # WebSocket 系统核心
 ```
 
 ## 消息协议 (message.js)
@@ -673,3 +691,330 @@ console.log(`Actor level: ${actorScore.overallLevel}`);
 能力配置文件: config/capabilities.json
 
 组合配置文件: config/compositions.json（自动生成）
+
+## AASC 四层架构实现
+
+### 架构概述
+
+AASC (Advance Action System Control) 架构将系统分为四层：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     System 层                                │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              WebSocketSystem                         │   │
+│  │  - 初始化和管理所有 Actor                            │   │
+│  │  - 协调消息总线                                      │   │
+│  │  - 处理 WebSocket 连接                               │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                           │
+           ┌───────────────┼───────────────┐
+           ▼               ▼               ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│   Actor 层      │ │   Actor 层      │ │   Actor 层      │
+│ VoiceCommand    │ │ Chat            │ │ MediaControl    │
+│ Actor           │ │ Actor           │ │ Actor           │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+           │               │               │
+           ▼               ▼               ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│   Agent 层      │ │   Agent 层      │ │   Agent 层      │
+│ VoiceCommand    │ │ Chat            │ │ MediaControl    │
+│ Agent           │ │ Agent           │ │ Agent           │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+           │               │               │
+           └───────────────┼───────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Component 层                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │MessageParser│  │Dispatcher   │  │StateManager │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Component 层
+
+#### MessageParser (消息解析器)
+
+```
+MessageParser
+├── parse(rawMessage)           # 解析原始消息
+├── parseToMessage(rawMessage)  # 解析并转换为 Message 对象
+├── validate(data)              # 验证消息数据
+├── transform(data)             # 转换消息数据
+├── registerValidator(field, fn) # 注册验证器
+└── registerTransformer(field, fn) # 注册转换器
+```
+
+#### MessageDispatcher (消息路由分发器)
+
+```
+MessageDispatcher
+├── dispatch(message, context)  # 分发消息到对应处理器
+├── registerRoute(route)        # 注册路由规则
+├── registerHandler(type, handler) # 注册处理器
+├── use(middleware)             # 添加中间件
+├── setDefaultHandler(handler)  # 设置默认处理器
+└── getHandlers()               # 获取所有处理器
+```
+
+#### StateManager (状态管理器)
+
+```
+StateManager
+├── get(name, defaultValue)     # 获取状态
+├── set(name, value)            # 设置状态
+├── update(name, updater)       # 更新状态
+├── delete(name)                # 删除状态
+├── registerState(name, config) # 注册状态
+├── getDisplayClient(displayId) # 获取显示端客户端
+├── setDisplayClient(displayId, data) # 设置显示端客户端
+├── removeDisplayClient(displayId) # 移除显示端客户端
+└── getDisplayList()            # 获取显示端列表
+```
+
+### Agent 层
+
+#### Agent 基类
+
+```
+BaseAgent
+├── name: string                # Agent 名称
+├── description: string         # Agent 描述
+├── capabilities: array         # 能力列表
+├── dependencies: array         # 依赖列表
+├── init()                      # 初始化
+├── destroy()                   # 销毁
+├── execute(action, params, context) # 执行操作
+├── hasCapability(capabilityId) # 检查能力
+└── getInfo()                   # 获取信息
+```
+
+#### 已实现的 Agent
+
+| Agent | 能力 | 说明 |
+|-------|------|------|
+| VoiceCommandAgent | voice-command | 语音命令处理 |
+| ChatAgent | chat | 聊天处理 |
+| MediaControlAgent | media-control | 媒体控制 |
+| TTSAgent | tts | 语音合成 |
+| ReminderAgent | reminder | 提醒处理 |
+| DisplayRenderAgent | display-render | 显示端渲染 |
+| SystemCommandAgent | system-command | 系统命令 |
+| SearchAgent | search | 搜索处理 |
+
+#### MediaControlAgent 详细实现
+
+```
+MediaControlAgent
+├── sendMedia(params, context)       # 发送媒体到显示端
+│   ├── 获取 displayClient
+│   ├── 更新 displayClient.state.currentMedia
+│   ├── 调用 config.updateDisplayState(ip, { currentMedia }) # 持久化状态
+│   └── 调用 context.sendToDisplay(displayId, media)
+│
+├── sendMediaBatch(params, context)  # 批量发送媒体
+│   └── 遍历 displayIds:
+│       ├── 更新 displayClient.state.currentMedia
+│       ├── 调用 config.updateDisplayState(ip, { currentMedia }) # 持久化状态
+│       └── 调用 context.sendToDisplay(displayId, media)
+│
+├── sendControl(params, context)     # 发送控制指令
+│   ├── 获取 displayClient
+│   ├── 根据 action 更新状态:
+│   │   ├── 'rotate' -> state.rotation = value, config.updateDisplayState(ip, { rotation })
+│   │   ├── 'fit' -> state.fit = value, config.updateDisplayState(ip, { fit })
+│   │   ├── 'crop' -> state.crop = value, config.updateDisplayState(ip, { crop })
+│   │   ├── 'volume' -> state.volume = value, config.updateDisplayState(ip, { volume })
+│   │   └── 'play' -> state.isPlaying = value, config.updateDisplayState(ip, { isPlaying })
+│   └── 调用 context.sendToDisplay(displayId, { type: 'control', action, value })
+│
+└── getState(params, context)        # 获取显示端状态
+```
+
+### System 层
+
+#### WebSocketSystem
+
+```
+WebSocketSystem
+├── bus: MessageBus             # 消息总线
+├── parser: MessageParser       # 消息解析器
+├── dispatcher: MessageDispatcher # 消息分发器
+├── stateManager: StateManager  # 状态管理器
+├── actors: Map                 # Actor 注册表
+├── agents: Map                 # Agent 注册表
+├── initialize()                # 初始化系统
+├── registerActor(name, actor)  # 注册 Actor
+├── registerAgent(name, agent)  # 注册 Agent
+├── use(middleware)             # 添加中间件
+├── handleDisplayMessage(displayId, message, ws) # 处理显示端消息
+├── handleControlMessage(message, ws) # 处理控制端消息
+├── handleDisplayConnect(displayId, clientIP, ws, savedState) # 处理显示端连接，savedState 为已保存的状态
+├── handleDisplayDisconnect(displayId) # 处理显示端断开
+├── handleControlConnect(ws)    # 处理控制端连接
+├── handleControlDisconnect(ws) # 处理控制端断开
+├── sendToDisplay(displayId, data) # 发送消息到显示端
+├── broadcastToControls(data)   # 广播消息到控制端
+├── getDisplayList()            # 获取显示端列表
+├── getStats()                  # 获取系统统计
+└── shutdown()                  # 关闭系统
+```
+
+#### handleDisplayConnect 实现
+
+```
+handleDisplayConnect(displayId, clientIP, ws, savedState = null):
+    displayState = {
+        ws: ws,
+        ip: clientIP,
+        state: { ...createDisplayState(), ...savedState }  # 合并默认状态和已保存状态
+    }
+    
+    stateManager.setDisplayClient(displayId, displayState)
+    
+    如果 callbacks.onDisplayConnect 存在:
+        调用 callbacks.onDisplayConnect(displayId, clientIP, ws)
+    
+    broadcastToControls({ type: 'displayList', list: stateManager.getDisplayList() })
+    
+    返回 displayState
+```
+
+### 中间件
+
+#### 内置中间件
+
+| 中间件 | 说明 |
+|--------|------|
+| ValidationMiddleware | 消息验证 |
+| LoggingMiddleware | 日志记录 |
+| ErrorHandlingMiddleware | 错误处理 |
+| AuthenticationMiddleware | 身份认证 |
+| RateLimitMiddleware | 请求限流 |
+| TimeoutMiddleware | 超时处理 |
+| DisplayCheckMiddleware | 显示端检查 |
+
+#### RateLimitMiddleware 配置
+
+```
+RateLimitMiddleware options:
+├── maxRequests: number      # 最大请求数，默认 100
+├── windowMs: number         # 时间窗口（毫秒），默认 60000
+└── exemptTypes: string[]    # 豁免限流的消息类型
+    ├── 'voiceStatus'        # 语音状态（高频）
+    ├── 'voiceInput'         # 语音输入（高频）
+    ├── 'heartbeat'          # 心跳
+    ├── 'commandAck'         # 命令确认（高频）
+    ├── 'canvasSize'         # 画布尺寸同步（高频）
+    └── 'browserInfo'        # 浏览器信息同步（高频）
+```
+
+#### 使用示例
+
+```javascript
+const { createMiddlewareChain } = require('./aasc');
+
+const middlewareChain = createMiddlewareChain({
+    logging: true,
+    errorHandling: true,
+    validation: true,
+    displayCheck: true,
+    timeout: 30000,
+    rateLimit: {
+        maxRequests: 100,
+        windowMs: 60000,
+        exemptTypes: ['voiceStatus', 'voiceInput', 'heartbeat', 'commandAck', 'canvasSize', 'browserInfo']
+    }
+});
+
+wsSystem.use(async (message, context) => {
+    const result = await middlewareChain.execute(message, context);
+    if (result && result.success === false) {
+        return false;  // 中间件拒绝
+    }
+    return message;
+});
+```
+
+### 消息类型映射
+
+| 消息类型 | 处理 Actor | 处理 Agent |
+|----------|------------|------------|
+| voiceCommand | voice-command-actor | VoiceCommandAgent |
+| chat | chat-actor | ChatAgent |
+| chatMessage | chat-actor | ChatAgent |
+| media | media-control-actor | MediaControlAgent |
+| mediaBatch | media-control-actor | MediaControlAgent |
+| control | media-control-actor | MediaControlAgent |
+| tts | tts-actor | TTSAgent |
+| getReminders | reminder-actor | ReminderAgent |
+| timeAnnounce | system-command-actor | SystemCommandAgent |
+| canvasSize | display-render-actor | DisplayRenderAgent |
+| browserInfo | display-render-actor | DisplayRenderAgent |
+| voiceInput | voice-command-actor | VoiceCommandAgent |
+| commandAck | display-render-actor | DisplayRenderAgent |
+| getSearchHistory | search-actor | SearchAgent |
+| getAssistantConfig | voice-command-actor | VoiceCommandAgent |
+
+### 初始化流程
+
+```javascript
+const { initializeAASCSystem } = require('./aasc/init');
+
+const wsSystem = await initializeAASCSystem({
+    localIP,
+    port: PORT,
+    voiceCommand,
+    chat,
+    tts,
+    reminder,
+    timeAnnounce,
+    config,
+    sendToDisplay,
+    broadcastToControls,
+    onDisplayConnect: (displayId, clientIP, ws) => { },
+    onDisplayDisconnect: (displayId) => { },
+    onControlConnect: (ws) => { },
+    onControlDisconnect: (ws) => { }
+});
+```
+
+### 扩展新功能
+
+1. 创建新的 Agent：
+
+```javascript
+class MyAgent extends BaseAgent {
+    constructor(options) {
+        super({
+            name: 'my-agent',
+            capabilities: [{ id: 'my-capability', category: 'basic', level: 2 }],
+            ...options
+        });
+    }
+
+    async myAction(params, context) {
+        return { success: true };
+    }
+}
+```
+
+2. 创建 Actor 适配器：
+
+```javascript
+const actor = AgentActorAdapter.createFromAgent(new MyAgent(), {
+    name: 'my-actor',
+    supportedTypes: ['myType'],
+    actionMap: { 'myType': 'myAction' }
+});
+```
+
+3. 注册到系统：
+
+```javascript
+await actor.init();
+wsSystem.registerActor('my-actor', actor);
+```

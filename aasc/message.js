@@ -73,19 +73,21 @@ class Message {
     this.type = options.type || MessageType.COMMAND;
     this.priority = options.priority !== undefined ? options.priority : Priority.NORMAL;
     this.timestamp = options.timestamp || Date.now();
-    this.source = options.source instanceof ActorAddress 
-      ? options.source 
-      : ActorAddress.fromJSON(options.source);
-    this.target = options.target 
-      ? (options.target instanceof ActorAddress 
-        ? options.target 
-        : ActorAddress.fromJSON(options.target))
-      : null;
+    this.source = this._parseAddress(options.source, new ActorAddress('system', 'system', 'message-bus'));
+    this.target = this._parseAddress(options.target, null);
     this.topic = options.topic || null;
     this.payload = options.payload || {};
     this.ttl = options.ttl || 60000;
     this.requiresAck = options.requiresAck || false;
     this.correlationId = options.correlationId || null;
+    this.silent = options.silent || false;
+  }
+
+  _parseAddress(value, defaultValue) {
+    if (!value) return defaultValue;
+    if (value instanceof ActorAddress) return value;
+    if (value.ip !== undefined) return ActorAddress.fromJSON(value);
+    return defaultValue;
   }
 
   generateId() {

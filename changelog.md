@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### 架构重构
+- ✅ 重构 server.js 中的 ws.on('message') 函数，按 AASC 架构进行模块化设计
+  - AASC (Advance Action System Control) 架构分为四层：
+    - **Actor 层**：执行者，组合 Agent 组件，处理消息路由和分发
+    - **Agent 层**：能力 Agent，处理具体的业务逻辑（如语音命令、聊天、媒体控制等）
+    - **System 层**：构建核心系统，协调 Actor 与 Agent 之间的通信
+    - **Component 层**：抽象可复用组件（消息解析器、路由分发器、状态管理器）
+  - 新增文件：
+    - aasc/components/message-parser.js - 消息解析器组件
+    - aasc/components/message-dispatcher.js - 消息路由分发器组件
+    - aasc/components/state-manager.js - 状态管理器组件
+    - aasc/components/index.js - 组件导出
+    - aasc/system/websocket-system.js - WebSocket 系统核心
+    - aasc/system/index.js - 系统层导出
+    - aasc/agents/base-agent.js - Agent 基类
+    - aasc/agents/index.js - Agent 层实现（VoiceCommandAgent, ChatAgent, MediaControlAgent, TTSAgent, ReminderAgent, DisplayRenderAgent, SystemCommandAgent, SearchAgent）
+    - aasc/actor-adapter.js - Actor 适配器，将 Agent 包装成 Actor
+    - aasc/middleware/index.js - 中间件（验证、日志、错误处理、限流、超时）
+    - aasc/init.js - AASC 系统初始化
+  - 实现功能：
+    - 消息路由机制，根据消息类型自动分发到对应的 Actor 处理
+    - 插件化扩展，新功能可通过注册新 Actor 实现
+    - 消息验证和错误处理中间件
+    - 请求限流和超时处理
+    - 保留 fallback 机制，确保向后兼容
+  - 改动文件：
+    - server.js - 集成 AASC 系统
+    - aasc/index.js - 导出新模块
+
 ### Bug 修复
 - ✅ 修复旋转90度后位置偏移554px的问题
   - 问题：媒体旋转90度后，显示位置出现约554px的偏差
@@ -24,6 +53,46 @@
     - 交换 finalLeft 和 finalTop 的计算（旋转后 left 控制视觉上下，top 控制视觉左右）
   - 改动文件：
     - public/display.html
+
+- ✅ 修复 AASC 系统显示端消息处理失败 "Middleware rejected" 的问题
+  - 问题：显示端发送 control 类型消息时，AASC 系统返回 "Middleware rejected" 错误
+  - 原因：server.js 中显示端连接/断开时，只更新了本地的 displayClients Map，但没有同步到 AASC 系统的 stateManager，导致 DisplayCheckMiddleware 检查显示端不存在而拒绝消息
+  - 修复：在 server.js 中添加对 aascSystem.handleDisplayConnect/handleDisplayDisconnect 和 handleControlConnect/handleControlDisconnect 的调用
+  - 改动文件：
+    - server.js
+
+- ✅ 修复高频消息类型被限流中间件拒绝的问题
+  - 问题：commandAck、canvasSize、browserInfo 等高频消息被限流中间件拒绝
+  - 原因：这些消息类型未添加到限流豁免列表中
+  - 修复：在 init.js 的 rateLimit 配置中添加 exemptTypes，豁免高频状态同步消息
+  - 改动文件：
+    - aasc/init.js
+
+- ✅ 修复重启服务器后显示端未恢复上次播放状态的问题
+  - 问题：服务器重启后，显示端重新连接时没有恢复之前的播放状态
+  - 原因：aascSystem.handleDisplayConnect() 创建了新的默认状态，没有合并 savedState
+  - 修复：修改 handleDisplayConnect 方法接受 savedState 参数，并在 server.js 中传递该参数
+  - 改动文件：
+    - aasc/system/websocket-system.js
+    - server.js
+
+- ✅ 修复 AASC 系统媒体状态未持久化的问题
+  - 问题：选择新媒体后，状态没有被保存，重启服务器后恢复为默认媒体
+  - 原因：MediaControlAgent 中缺少 config.updateDisplayState() 调用，媒体状态未持久化到配置文件
+  - 修复：在 sendMedia、sendMediaBatch、sendControl 方法中添加 config.updateDisplayState() 调用
+  - 改动文件：
+    - aasc/agents/index.js
+
+- ✅ 更新 spec 文档以同步代码变更
+  - 更新 docs/spec/websocket.md：添加 AASC 系统调用（handleDisplayConnect/handleDisplayDisconnect/handleControlConnect/handleControlDisconnect）
+  - 更新 docs/spec/aasc.md：
+    - 更新模块结构，添加新文件（init.js, actor-adapter.js, agents/, components/, middleware/, system/）
+    - 添加 MediaControlAgent 详细实现描述，包含状态持久化逻辑
+    - 添加 handleDisplayConnect 实现描述，包含 savedState 参数
+    - 添加 RateLimitMiddleware 配置说明，包含 exemptTypes
+  - 改动文件：
+    - docs/spec/websocket.md
+    - docs/spec/aasc.md
 
 ### 新功能
 - ✅ 添加裁剪自定义模式

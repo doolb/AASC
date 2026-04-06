@@ -13,6 +13,7 @@ const chat = require('./core/chat');
 const reminder = require('./core/reminder');
 const voiceCommand = require('./core/voiceCommand');
 const { MediaLibraryManager } = require('./core/media-library');
+const { initializeAASCSystem } = require('./aasc/init');
 
 config.loadConfig();
 
@@ -34,6 +35,8 @@ let muteState = {
     isMuted: false,
     previousVolumes: new Map()
 };
+
+let aascSystem = null;
 
 tts.init(config.getTtsConfig());
 timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
@@ -63,7 +66,7 @@ mediaLibraryManager.init().then(() => {
 });
 
 function startServer() {
-    server.listen(PORT, '0.0.0.0', () => {
+    server.listen(PORT, '0.0.0.0', async () => {
         const localIP = getLocalIP();
         console.log('='.repeat(50));
         console.log('媒体中心服务器已启动');
@@ -78,6 +81,37 @@ function startServer() {
         voiceCommand.setClients(displayClients, sendToDisplay, broadcastToControls);
         voiceCommand.setMediaLibrary(mediaLibraryManager);
         voiceCommand.setMuteFunctions(muteAllDisplays, unmuteAllDisplays);
+
+        try {
+            aascSystem = await initializeAASCSystem({
+                localIP,
+                port: PORT,
+                voiceCommand,
+                chat,
+                tts,
+                reminder,
+                timeAnnounce,
+                config,
+                sendToDisplay,
+                broadcastToControls,
+                onDisplayConnect: (displayId, clientIP, ws) => {
+                    console.log(`[AASC] 显示端连接: ${displayId} (${clientIP})`);
+                },
+                onDisplayDisconnect: (displayId) => {
+                    console.log(`[AASC] 显示端断开: ${displayId}`);
+                },
+                onControlConnect: (ws) => {
+                    console.log(`[AASC] 控制端连接`);
+                },
+                onControlDisconnect: (ws) => {
+                    console.log(`[AASC] 控制端断开`);
+                }
+            });
+            
+            console.log('[AASC] 系统初始化完成');
+        } catch (error) {
+            console.error('[AASC] 系统初始化失败:', error.message);
+        }
     });
 }
 
@@ -1093,6 +1127,10 @@ wss.on('connection', (ws, req) => {
         });
         console.log(`显示端 ${displayId} (${clientIP}) 已连接，当前连接数: ${displayClients.size}`);
         
+        if (aascSystem) {
+            aascSystem.handleDisplayConnect(displayId, clientIP, ws, savedState);
+        }
+        
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
         
@@ -1105,53 +1143,18 @@ wss.on('connection', (ws, req) => {
         
         broadcastToControls({ type: 'displayList', list: getDisplayList() });
         
-        ws.on('message', (message) => {
+        ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
-                const displayData = displayClients.get(displayId);
+                data.displayId = displayId;
                 
-                if (data.type === 'canvasSize' && displayData) {
-                    displayData.state.canvasSize = { width: data.width, height: data.height };
-                    broadcastToControls({ type: 'displayList', list: getDisplayList() });
-                } else if (data.type === 'browserInfo' && displayData) {
-                    displayData.state.browserInfo = {
-                        userAgent: data.userAgent,
-                        browserName: data.browserName,
-                        browserVersion: data.browserVersion,
-                        os: data.os,
-                        deviceType: data.deviceType,
-                        screenWidth: data.screenWidth,
-                        screenHeight: data.screenHeight,
-                        devicePixelRatio: data.devicePixelRatio,
-                        featureSupport: data.featureSupport
-                    };
-                    broadcastToControls({ type: 'displayList', list: getDisplayList() });
-                } else if (data.type === 'voiceInput' && displayData) {
-                    broadcastToControls({
-                        type: 'voiceInput',
-                        displayId: displayId,
-                        text: data.text,
-                        isFinal: data.isFinal,
-                        fullText: data.fullText
-                    });
-                } else if (data.type === 'voiceStatus' && displayData) {
-                    displayData.state.voiceSupported = data.supported;
-                    displayData.state.voiceListening = data.listening;
-                    broadcastToControls({ type: 'displayList', list: getDisplayList() });
-                } else if (data.type === 'commandAck' && displayData) {
-                    console.log('[服务端] 收到显示端 commandAck:', data.commandType, 'from', displayId);
-                    const ackMsg = {
-                        type: 'commandAck',
-                        displayId: displayId,
-                        commandType: data.commandType,
-                        success: data.success,
-                        details: data.details,
-                        timestamp: data.timestamp
-                    };
-                    if (data.extraData) {
-                        ackMsg.extraData = data.extraData;
+                if (aascSystem) {
+                    const result = await aascSystem.handleDisplayMessage(displayId, data, ws);
+                    if (!result.success && result.reason) {
+                        console.warn('[AASC] 消息处理失败:', result.reason);
                     }
-                    broadcastToControls(ackMsg);
+                } else {
+                    handleDisplayMessageFallback(displayId, data, ws);
                 }
             } catch (e) {
                 console.error('解析显示端消息失败:', e);
@@ -1160,23 +1163,106 @@ wss.on('connection', (ws, req) => {
         
         ws.on('close', () => {
             displayClients.delete(displayId);
+            if (aascSystem) {
+                aascSystem.handleDisplayDisconnect(displayId);
+            }
             console.log(`显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
             broadcastToControls({ type: 'displayList', list: getDisplayList() });
         });
     } else if (url === '/control' || url.startsWith('/control')) {
         controlClients.add(ws);
+        if (aascSystem) {
+            aascSystem.handleControlConnect(ws);
+        }
         console.log(`控制端已连接，当前连接数: ${controlClients.size}`);
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         
-        ws.on('message', (message) => {
+        ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
-                const displayId = data.displayId;
-                const displayData = displayClients.get(displayId);
                 
-                if (data.type === 'voiceCommand') {
+                if (aascSystem) {
+                    const result = await aascSystem.handleControlMessage(data, ws);
+                    if (!result.success && result.reason) {
+                        console.warn('[AASC] 消息处理失败:', result.reason);
+                    }
+                } else {
+                    await handleControlMessageFallback(data, ws);
+                }
+            } catch (e) {
+                console.error('解析控制端消息失败:', e);
+            }
+        });
+        
+        ws.on('close', () => {
+            controlClients.delete(ws);
+            if (aascSystem) {
+                aascSystem.handleControlDisconnect(ws);
+            }
+            console.log(`控制端已断开，当前连接数: ${controlClients.size}`);
+        });
+    }
+    
+    ws.on('error', (error) => {
+        console.error('WebSocket错误:', error.message);
+    });
+});
+
+function handleDisplayMessageFallback(displayId, data, ws) {
+    const displayData = displayClients.get(displayId);
+    
+    if (data.type === 'canvasSize' && displayData) {
+        displayData.state.canvasSize = { width: data.width, height: data.height };
+        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+    } else if (data.type === 'browserInfo' && displayData) {
+        displayData.state.browserInfo = {
+            userAgent: data.userAgent,
+            browserName: data.browserName,
+            browserVersion: data.browserVersion,
+            os: data.os,
+            deviceType: data.deviceType,
+            screenWidth: data.screenWidth,
+            screenHeight: data.screenHeight,
+            devicePixelRatio: data.devicePixelRatio,
+            featureSupport: data.featureSupport
+        };
+        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+    } else if (data.type === 'voiceInput' && displayData) {
+        broadcastToControls({
+            type: 'voiceInput',
+            displayId: displayId,
+            text: data.text,
+            isFinal: data.isFinal,
+            fullText: data.fullText
+        });
+    } else if (data.type === 'voiceStatus' && displayData) {
+        displayData.state.voiceSupported = data.supported;
+        displayData.state.voiceListening = data.listening;
+        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+    } else if (data.type === 'commandAck' && displayData) {
+        console.log('[服务端] 收到显示端 commandAck:', data.commandType, 'from', displayId);
+        const ackMsg = {
+            type: 'commandAck',
+            displayId: displayId,
+            commandType: data.commandType,
+            success: data.success,
+            details: data.details,
+            timestamp: data.timestamp
+        };
+        if (data.extraData) {
+            ackMsg.extraData = data.extraData;
+        }
+        broadcastToControls(ackMsg);
+    }
+}
+
+async function handleControlMessageFallback(data, ws) {
+    const displayId = data.displayId;
+    const displayData = displayClients.get(displayId);
+    
+    if (data.type === 'voiceCommand') {
                     (async () => {
                         try {
                             const playOnControl = data.playOnControl || false;
@@ -1766,21 +1852,7 @@ wss.on('connection', (ws, req) => {
                         }
                     })();
                 }
-            } catch (e) {
-                console.error('解析控制端消息失败:', e);
-            }
-        });
-        
-        ws.on('close', () => {
-            controlClients.delete(ws);
-            console.log(`控制端已断开，当前连接数: ${controlClients.size}`);
-        });
-    }
-    
-    ws.on('error', (error) => {
-        console.error('WebSocket错误:', error.message);
-    });
-});
+}
 
 function getLocalIP() {
     return '192.168.1.39';

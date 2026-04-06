@@ -1570,3 +1570,343 @@ const reminderAnnounceComposition = {
 4. **降级处理**：支持 fallback 机制，提高系统可靠性
 5. **并行执行**：支持并行执行多个能力，提高效率
 6. **条件执行**：支持条件判断，实现复杂逻辑
+
+---
+
+## 13. AASC 四层架构设计
+
+### 13.1 架构概述
+
+AASC (Advance Action System Control) 四层架构是对原有执行者模型的进一步抽象和模块化：
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        System 层 (系统层)                            │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                    WebSocketSystem                             │ │
+│  │  - 初始化和管理所有 Actor                                      │ │
+│  │  - 协调消息总线 (MessageBus)                                   │ │
+│  │  - 处理 WebSocket 连接生命周期                                 │ │
+│  │  - 提供系统级 API (sendToDisplay, broadcastToControls)        │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+            ┌─────────────────┼─────────────────┐
+            ▼                 ▼                 ▼
+┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
+│    Actor 层       │ │    Actor 层       │ │    Actor 层       │
+│ VoiceCommandActor │ │    ChatActor      │ │ MediaControlActor │
+│                   │ │                   │ │                   │
+│ - 消息路由        │ │ - 消息路由        │ │ - 消息路由        │
+│ - Agent 组合      │ │ - Agent 组合      │ │ - Agent 组合      │
+│ - 能力声明        │ │ - 能力声明        │ │ - 能力声明        │
+└───────────────────┘ └───────────────────┘ └───────────────────┘
+            │                 │                 │
+            ▼                 ▼                 ▼
+┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
+│    Agent 层       │ │    Agent 层       │ │    Agent 层       │
+│ VoiceCommandAgent │ │    ChatAgent      │ │ MediaControlAgent │
+│                   │ │                   │ │                   │
+│ - 业务逻辑        │ │ - 业务逻辑        │ │ - 业务逻辑        │
+│ - 能力实现        │ │ - 能力实现        │ │ - 能力实现        │
+│ - 依赖注入        │ │ - 依赖注入        │ │ - 依赖注入        │
+└───────────────────┘ └───────────────────┘ └───────────────────┘
+            │                 │                 │
+            └─────────────────┼─────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Component 层 (组件层)                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐     │
+│  │  MessageParser  │  │   Dispatcher    │  │  StateManager   │     │
+│  │                 │  │                 │  │                 │     │
+│  │  - 消息解析     │  │  - 消息路由     │  │  - 状态存储     │     │
+│  │  - 消息验证     │  │  - 处理器注册   │  │  - 状态变更     │     │
+│  │  - 消息转换     │  │  - 中间件链     │  │  - 历史记录     │     │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 13.2 各层职责
+
+#### 13.2.1 System 层
+
+System 层是整个架构的顶层协调者：
+
+```typescript
+interface WebSocketSystemInterface {
+    bus: MessageBus;              // 消息总线
+    parser: MessageParser;        // 消息解析器
+    dispatcher: MessageDispatcher; // 消息分发器
+    stateManager: StateManager;   // 状态管理器
+    actors: Map<string, Actor>;   // Actor 注册表
+    agents: Map<string, Agent>;   // Agent 注册表
+    
+    initialize(): Promise<void>;  // 初始化系统
+    registerActor(name: string, actor: Actor): void; // 注册 Actor
+    registerAgent(name: string, agent: Agent): void; // 注册 Agent
+    use(middleware: Middleware): void; // 添加中间件
+    
+    handleDisplayMessage(displayId: string, message: any, ws: WebSocket): Promise<Result>;
+    handleControlMessage(message: any, ws: WebSocket): Promise<Result>;
+    handleDisplayConnect(displayId: string, clientIP: string, ws: WebSocket): void;
+    handleDisplayDisconnect(displayId: string): void;
+    handleControlConnect(ws: WebSocket): void;
+    handleControlDisconnect(ws: WebSocket): void;
+    
+    sendToDisplay(displayId: string, data: any): void;
+    broadcastToControls(data: any): void;
+    getDisplayList(): DisplayInfo[];
+    getStats(): SystemStats;
+    shutdown(): Promise<void>;
+}
+```
+
+#### 13.2.2 Actor 层
+
+Actor 层负责消息路由和 Agent 组合：
+
+```typescript
+interface ActorInterface {
+    name: string;                 // Actor 名称
+    capabilities: Capability[];   // 能力列表
+    agents: Agent[];              // 组合的 Agent 列表
+    supportedTypes: string[];     // 支持的消息类型
+    
+    init(): Promise<void>;        // 初始化
+    destroy(): Promise<void>;     // 销毁
+    canHandle(messageType: string): boolean; // 检查是否能处理
+    handle(message: Message, context: Context): Promise<Result>; // 处理消息
+}
+```
+
+#### 13.2.3 Agent 层
+
+Agent 层实现具体的业务逻辑：
+
+```typescript
+interface AgentInterface {
+    name: string;                 // Agent 名称
+    description: string;          // Agent 描述
+    capabilities: Capability[];   // 能力列表
+    dependencies: string[];       // 依赖列表
+    
+    init(): Promise<void>;        // 初始化
+    destroy(): Promise<void>;     // 销毁
+    execute(action: string, params: any, context: Context): Promise<Result>;
+    hasCapability(capabilityId: string): boolean;
+}
+```
+
+#### 13.2.4 Component 层
+
+Component 层提供可复用的基础组件：
+
+```typescript
+interface MessageParserInterface {
+    parse(rawMessage: any): ParsedMessage;
+    parseToMessage(rawMessage: any, source: ActorAddress): Message;
+    validate(data: any): ValidationResult;
+    transform(data: any): any;
+    registerValidator(field: string, validator: Validator): void;
+    registerTransformer(field: string, transformer: Transformer): void;
+}
+
+interface MessageDispatcherInterface {
+    dispatch(message: Message, context: Context): Promise<Result>;
+    registerRoute(route: RoutingRule): void;
+    registerHandler(type: string, handler: Handler): void;
+    use(middleware: Middleware): void;
+    setDefaultHandler(handler: Handler): void;
+}
+
+interface StateManagerInterface {
+    get(name: string, defaultValue?: any): any;
+    set(name: string, value: any): void;
+    update(name: string, updater: (value: any) => any): void;
+    delete(name: string): void;
+    
+    getDisplayClient(displayId: string): DisplayClient | undefined;
+    setDisplayClient(displayId: string, data: DisplayClientData): void;
+    removeDisplayClient(displayId: string): void;
+    getDisplayList(): DisplayInfo[];
+}
+```
+
+### 13.3 消息处理流程
+
+```
+WebSocket 消息到达
+    ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ System 层                                                            │
+│   handleDisplayMessage / handleControlMessage                        │
+│   ↓                                                                  │
+│   MessageParser.parse() → 解析消息                                   │
+│   ↓                                                                  │
+│   中间件链执行 → 验证、日志、限流等                                   │
+│   ↓                                                                  │
+│   MessageDispatcher.dispatch() → 路由分发                            │
+└─────────────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ Actor 层                                                            │
+│   根据 message.type 查找对应的 Actor                                 │
+│   ↓                                                                  │
+│   Actor.canHandle() → 检查是否能处理                                 │
+│   ↓                                                                  │
+│   Actor.handle() → 调用 Agent 处理                                   │
+└─────────────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ Agent 层                                                            │
+│   Agent.execute(action, params, context)                            │
+│   ↓                                                                  │
+│   执行具体业务逻辑                                                   │
+│   ↓                                                                  │
+│   调用外部模块 (voiceCommand, chat, tts 等)                          │
+│   ↓                                                                  │
+│   返回处理结果                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+    ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ Component 层                                                        │
+│   StateManager 更新状态                                              │
+│   ↓                                                                  │
+│   记录历史、触发事件等                                               │
+└─────────────────────────────────────────────────────────────────────┘
+    ↓
+返回响应给 WebSocket 客户端
+```
+
+### 13.4 中间件系统
+
+中间件用于处理横切关注点：
+
+```typescript
+interface Middleware {
+    name: string;
+    execute(message: Message, context: Context, next: NextFunction): Promise<Result>;
+}
+
+const middlewares = {
+    ValidationMiddleware: {
+        name: 'validation',
+        execute: async (message, context, next) => {
+            const validation = validateMessage(message);
+            if (!validation.valid) {
+                return { success: false, error: validation.error };
+            }
+            return next();
+        }
+    },
+    
+    LoggingMiddleware: {
+        name: 'logging',
+        execute: async (message, context, next) => {
+            const startTime = Date.now();
+            console.log(`[${message.type}] 处理开始`);
+            const result = await next();
+            console.log(`[${message.type}] 处理完成, 耗时: ${Date.now() - startTime}ms`);
+            return result;
+        }
+    },
+    
+    ErrorHandlingMiddleware: {
+        name: 'error-handling',
+        execute: async (message, context, next) => {
+            try {
+                return await next();
+            } catch (error) {
+                console.error(`[${message.type}] 处理错误:`, error);
+                return { success: false, error: error.message };
+            }
+        }
+    },
+    
+    RateLimitMiddleware: {
+        name: 'rate-limit',
+        execute: async (message, context, next) => {
+            const key = `${context.sourceIp}:${message.type}`;
+            if (isRateLimited(key)) {
+                return { success: false, error: '请求过于频繁' };
+            }
+            return next();
+        }
+    },
+    
+    TimeoutMiddleware: {
+        name: 'timeout',
+        execute: async (message, context, next) => {
+            return Promise.race([
+                next(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('处理超时')), 30000)
+                )
+            ]);
+        }
+    }
+};
+```
+
+### 13.5 扩展新功能
+
+添加新功能的步骤：
+
+1. **创建 Agent**：实现业务逻辑
+2. **创建 Actor 适配器**：将 Agent 包装为 Actor
+3. **注册到 System**：将 Actor 添加到系统
+
+```javascript
+const { BaseAgent, AgentActorAdapter, WebSocketSystem } = require('./aasc');
+
+class MyFeatureAgent extends BaseAgent {
+    constructor(options) {
+        super({
+            name: 'my-feature-agent',
+            description: '新功能 Agent',
+            capabilities: [
+                { id: 'my-feature', name: '新功能', category: 'professional', level: 3 }
+            ],
+            ...options
+        });
+        this.myDependency = options.myDependency;
+    }
+    
+    async myAction(params, context) {
+        return { success: true, data: '处理结果' };
+    }
+}
+
+const agent = new MyFeatureAgent({ myDependency: myModule });
+const actor = AgentActorAdapter.createFromAgent(agent, {
+    name: 'my-feature-actor',
+    supportedTypes: ['myType'],
+    actionMap: { 'myType': 'myAction' }
+});
+
+await actor.init();
+wsSystem.registerActor('my-feature-actor', actor);
+```
+
+### 13.6 与原有架构的关系
+
+AASC 四层架构是对原有执行者模型的增强：
+
+| 原有概念 | AASC 对应 | 说明 |
+|----------|-----------|------|
+| Actor | Actor 层 | 保持不变，增加 Agent 组合 |
+| Capability | Agent 层的能力 | 能力由 Agent 实现 |
+| Message | Component 层 | 消息解析由 MessageParser 处理 |
+| MessageBus | System 层 | 由 WebSocketSystem 协调 |
+| 无 | Component 层 | 新增可复用组件层 |
+| 无 | 中间件 | 新增横切关注点处理 |
+
+### 13.7 优势
+
+1. **模块化**：各层职责清晰，易于理解和维护
+2. **可扩展**：通过注册新 Actor/Agent 轻松扩展功能
+3. **可测试**：各层可独立测试
+4. **可复用**：Component 层组件可在不同场景复用
+5. **松耦合**：通过依赖注入和接口解耦
+6. **中间件**：横切关注点集中处理，避免代码重复
+7. **向后兼容**：保留 fallback 机制，平滑迁移
