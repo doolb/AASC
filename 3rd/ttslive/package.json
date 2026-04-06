@@ -1,0 +1,17 @@
+{
+  "name": "ttslive",
+  "version": "1.0.0",
+  "description": "实时 TTS 对话系统 - Node.js 版本",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "sherpa-onnx-node": "^1.12.35",
+    "uuid": "^9.0.0"
+  }
+}
