@@ -63,11 +63,50 @@ let currentSessionId = null;
 
 const SENTENCE_DELIMITERS = new Set([',', '，', '。', '！', '？', '；', '.', '!', '?', ';', '\n', '~', '～', '…', '"']);
 
+const IGNORED_PATTERNS = [
+    /^(the|a|an|is|are|was|were|it|this|that|so|um|uh|oh|ah|yeah|yes|no|ok|okay|hey|hi|hello)[.!?]?$/i,
+    /^[a-z]{1,3}[.!?]?$/i,
+    /^[\s\p{P}]+$/u,
+    /^(嗯|啊|哦|呃|唔|额|哈|呀|吧|呢|嘛|吗|呀|哎|唉|噢|喔|哇|嘻|嘿|哼|嘘|咳|喂|嗨|哎哟|哎呀)[.!?。！？]?$/,
+    /^[\d\s.!?，。！？、]+$/
+];
+
 function hasValidContent(text) {
     const hasChinese = /[\u4e00-\u9fa5]/.test(text);
     const hasEnglish = /[a-zA-Z]/.test(text);
     const hasNumber = /[0-9]/.test(text);
-    return hasChinese || hasEnglish || hasNumber;
+    
+    if (!hasChinese && !hasEnglish && !hasNumber) {
+        return false;
+    }
+    
+    const trimmed = text.trim().toLowerCase();
+    
+    for (const pattern of IGNORED_PATTERNS) {
+        if (pattern.test(trimmed)) {
+            console.log(`🔇 屏蔽无效输入: "${text}" 匹配规则: ${pattern}`);
+            return false;
+        }
+    }
+    
+    const wordCount = trimmed.split(/\s+/).filter(w => w.length > 0).length;
+    if (hasEnglish && !hasChinese && wordCount < 2) {
+        const cleanWord = trimmed.replace(/[.!?，。！？]/g, '');
+        if (cleanWord.length < 4) {
+            console.log(`🔇 屏蔽短输入: "${text}"`);
+            return false;
+        }
+    }
+    
+    if (hasChinese) {
+        const chineseChars = text.match(/[\u4e00-\u9fa5]/g) || [];
+        if (chineseChars.length < 2) {
+            console.log(`🔇 屏蔽短中文输入: "${text}"`);
+            return false;
+        }
+    }
+    
+    return true;
 }
 
 function cleanupOldAudioFiles() {

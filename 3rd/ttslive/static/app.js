@@ -180,6 +180,25 @@ let speechStartTime = null;
 const SILENCE_THRESHOLD = 0.01;
 const SILENCE_DURATION = 1000;
 
+const toastContainer = document.getElementById('toast-container');
+
+function showToast(message, type = 'start') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    const icon = type === 'start' ? 'fa-microphone' : 'fa-stop';
+    toast.innerHTML = `<i class="fas ${icon}"></i><span>${message}</span>`;
+    
+    toastContainer.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 1500);
+}
+
 async function startRecording() {
     if (isRecording) return;
     try {
@@ -239,7 +258,9 @@ async function startRecording() {
         silenceStartTime = null;
         hasSpeech = false;
         recordingStartTime = Date.now();
-        speechStartTime = null; 
+        speechStartTime = null;
+        
+        showToast('开始监听', 'start');
         
         initAudioContext();
         const source = audioContext.createMediaStreamSource(stream);
@@ -268,6 +289,8 @@ function stopRecording() {
         recordBtn.classList.remove('recording');
         silenceStartTime = null;
         hasSpeech = false;
+        
+        showToast('停止监听', 'stop');
     }
 }
 
@@ -324,7 +347,6 @@ async function playNextAudio() {
         return;
     }
 
-    // 非打断模式下，如果正在录音需要先停录，等待首段音频播放结束后再恢复
     if (noInterruptCheckbox.checked && isRecording) {
         console.log("不打断模式: 停止录音，等待播放完成");
         wasListeningBeforePlayback = isAlwaysListening;
@@ -352,8 +374,14 @@ async function playNextAudio() {
         }
     }
     
-    audioPlayer.play().catch(e => console.error('Play error:', e));
-    setStatus('SPEAKING...', 'busy');
+    try {
+        await audioPlayer.play();
+        setStatus('SPEAKING...', 'busy');
+    } catch (e) {
+        console.error('Play error:', e);
+        playNextAudio();
+        return;
+    }
 
     audioPlayer.onended = () => {
         console.log(`🎵 播放完成，播放下一个`);
@@ -391,6 +419,11 @@ async function handleStream(response) {
                         isLLMGenerating = true;
                         assistantMsgEl = addMessage('assistant', '');
                         console.log(`🆕 新会话开始: ${data.session_id}`);
+                        
+                        if (noInterruptCheckbox.checked && isAlwaysListening && !isRecording) {
+                            wasListeningBeforePlayback = true;
+                            console.log("不打断模式: 会话开始，标记需要恢复监听");
+                        }
                     } else if (data.type === 'status') {
                         setStatus(data.message, 'busy');
                     } else if (data.type === 'text') {
@@ -445,6 +478,12 @@ async function handleStream(response) {
                         isLLMGenerating = false;
                         console.log('✅ LLM 生成完成');
                         if (assistantMsgEl) assistantMsgEl.classList.remove('typing');
+                        
+                        if (noInterruptCheckbox.checked && wasListeningBeforePlayback && !isPlaying && !isRecording) {
+                            console.log("不打断模式: LLM完成且无播放，恢复监听...");
+                            wasListeningBeforePlayback = false;
+                            setTimeout(startRecording, 500);
+                        }
                     }
                 } catch (e) {
                     console.error('Parse error:', e);
