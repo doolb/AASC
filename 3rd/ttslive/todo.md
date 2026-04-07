@@ -37,6 +37,10 @@
 - ✅ TTS 播放时停止录音
 - ✅ 等待 LLM 生成完成且所有 TTS 播放完成后再恢复监听
 - ✅ 防止 TTS 语音被 ASR 误识别
+- ✅ 修复自动监听模式下 TTS 不播放的问题
+  - 修复 `audioContext.resume()` 未被等待的问题
+  - 修复 `wasListeningBeforePlayback` 初始化问题
+  - 改进 `playNextAudio` 中的条件判断逻辑
 
 ### 自动化功能
 - ✅ 浏览器打开自动开始监听
@@ -84,7 +88,3 @@ npm start
 ```
 
 访问 https://localhost:8000 (需要 HTTPS 才能使用麦克风)
-
-
-
-ttslive 浏览器连接时，自动开始语音监听，并处于非打断模式，通过语音输入时，tt生成后没有播放

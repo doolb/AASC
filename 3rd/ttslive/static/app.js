@@ -132,7 +132,7 @@ let smoothedAvg = 0;
 const monitorCanvas = document.getElementById('mini-monitor');
 const monitorCtx = monitorCanvas.getContext('2d');
 
-function initAudioContext() {
+async function initAudioContext() {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         
@@ -150,7 +150,7 @@ function initAudioContext() {
         isAudioInit = true;
     }
     if (audioContext.state === 'suspended') {
-        audioContext.resume();
+        await audioContext.resume();
     }
 }
 
@@ -310,7 +310,7 @@ async function playNextAudio() {
     if (audioQueue.length === 0) {
         isPlaying = false;
         setStatus('WAITING FOR INPUT...');
-        
+
         if (noInterruptCheckbox.checked && wasListeningBeforePlayback && !isLLMGenerating) {
             console.log("不打断模式: 播放完成，恢复监听...");
             wasListeningBeforePlayback = false;
@@ -324,15 +324,11 @@ async function playNextAudio() {
         return;
     }
 
+    // 非打断模式下，如果正在录音需要先停录，等待首段音频播放结束后再恢复
     if (noInterruptCheckbox.checked && isRecording) {
         console.log("不打断模式: 停止录音，等待播放完成");
         wasListeningBeforePlayback = isAlwaysListening;
         stopRecording();
-    }
-    
-    if (noInterruptCheckbox.checked && isAlwaysListening && !wasListeningBeforePlayback) {
-        console.log("不打断模式: 标记需要恢复监听");
-        wasListeningBeforePlayback = true;
     }
     
     isPlaying = true;
@@ -341,7 +337,7 @@ async function playNextAudio() {
     
     console.log(`🎵 开始播放: ${url}, 剩余队列: ${audioQueue.length}`);
     
-    initAudioContext();
+    await initAudioContext();
     
     audioPlayer.src = url;
     
@@ -500,6 +496,7 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     recordBtn.addEventListener('click', () => {
         if (!isAlwaysListening) {
             isAlwaysListening = true;
+            wasListeningBeforePlayback = true;
             recordBtn.classList.add('active');
             const label = recordBtn.querySelector('.btn-label');
             if (label) label.textContent = 'ALWAYS LISTENING';
@@ -693,6 +690,7 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     setTimeout(() => {
         console.log('自动启动监听...');
         isAlwaysListening = true;
+        wasListeningBeforePlayback = true;
         recordBtn.classList.add('active');
         const label = recordBtn.querySelector('.btn-label');
         if (label) label.textContent = 'ALWAYS LISTENING';
