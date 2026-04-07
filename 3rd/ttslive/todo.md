@@ -84,3 +84,7 @@ npm start
 ```
 
 访问 https://localhost:8000 (需要 HTTPS 才能使用麦克风)
+
+
+
+ttslive 浏览器连接时，自动开始语音监听，并处于非打断模式，通过语音输入时，tt生成后没有播放
