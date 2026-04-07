@@ -472,6 +472,30 @@ body {
     box-shadow: 0 0 30px rgba(255, 0, 85, 0.3);
 }
 
+.toast.success {
+    border-color: #00ff88;
+    color: #00ff88;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+}
+
+.toast.error {
+    border-color: var(--accent-error);
+    color: var(--accent-error);
+    box-shadow: 0 0 30px rgba(255, 0, 85, 0.3);
+}
+
+.toast.warning {
+    border-color: #ffaa00;
+    color: #ffaa00;
+    box-shadow: 0 0 30px rgba(255, 170, 0, 0.3);
+}
+
+.toast.info {
+    border-color: var(--accent-purple);
+    color: var(--accent-purple);
+    box-shadow: 0 0 30px rgba(189, 0, 255, 0.3);
+}
+
 .toast i {
     font-size: 1.2rem;
 }

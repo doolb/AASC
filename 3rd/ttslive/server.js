@@ -67,8 +67,7 @@ const IGNORED_PATTERNS = [
     /^(the|a|an|is|are|was|were|it|this|that|so|um|uh|oh|ah|yeah|yes|no|ok|okay|hey|hi|hello)[.!?]?$/i,
     /^[a-z]{1,3}[.!?]?$/i,
     /^[\s\p{P}]+$/u,
-    /^(嗯|啊|哦|呃|唔|额|哈|呀|吧|呢|嘛|吗|呀|哎|唉|噢|喔|哇|嘻|嘿|哼|嘘|咳|喂|嗨|哎哟|哎呀)[.!?。！？]?$/,
-    /^[\d\s.!?，。！？、]+$/
+    /^[\s.!?，。！？、]+$/
 ];
 
 function hasValidContent(text) {

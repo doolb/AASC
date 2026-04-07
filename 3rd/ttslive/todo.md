@@ -88,3 +88,5 @@ npm start
 ```
 
 访问 https://localhost:8000 (需要 HTTPS 才能使用麦克风)
+
+现在监听正常了，但是语音没有播放

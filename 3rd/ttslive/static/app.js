@@ -182,11 +182,19 @@ const SILENCE_DURATION = 1000;
 
 const toastContainer = document.getElementById('toast-container');
 
-function showToast(message, type = 'start') {
+function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     
-    const icon = type === 'start' ? 'fa-microphone' : 'fa-stop';
+    let icon = 'fa-info-circle';
+    switch (type) {
+        case 'start': icon = 'fa-microphone'; break;
+        case 'stop': icon = 'fa-stop'; break;
+        case 'success': icon = 'fa-check-circle'; break;
+        case 'error': icon = 'fa-exclamation-circle'; break;
+        case 'warning': icon = 'fa-exclamation-triangle'; break;
+        case 'info': icon = 'fa-info-circle'; break;
+    }
     toast.innerHTML = `<i class="fas ${icon}"></i><span>${message}</span>`;
     
     toastContainer.appendChild(toast);
@@ -218,7 +226,7 @@ async function startRecording() {
             stream.getTracks().forEach(track => track.stop());
             
             if (currentAbortController) {
-                console.log('🛑 取消上一次请求');
+                showToast('取消上一次请求', 'warning');
                 currentAbortController.abort();
                 currentAbortController = null;
             }
@@ -243,9 +251,10 @@ async function startRecording() {
                 handleStream(response);
             } catch (e) {
                 if (e.name === 'AbortError') {
-                    console.log('请求已取消');
+                    showToast('请求已取消', 'info');
                 } else {
                     console.error(e);
+                    showToast('请求错误', 'error');
                     setStatus('ERROR', 'busy');
                 }
             }
@@ -328,27 +337,23 @@ function addMessage(role, content) {
 }
 
 async function playNextAudio() {
-    console.log(`🎵 playNextAudio: 队列长度=${audioQueue.length}, isPlaying=${isPlaying}, isLLMGenerating=${isLLMGenerating}, isAlwaysListening=${isAlwaysListening}, wasListeningBeforePlayback=${wasListeningBeforePlayback}`);
-    
     if (audioQueue.length === 0) {
         isPlaying = false;
         setStatus('WAITING FOR INPUT...');
 
         if (noInterruptCheckbox.checked && wasListeningBeforePlayback && !isLLMGenerating) {
-            console.log("不打断模式: 播放完成，恢复监听...");
+            showToast('恢复监听', 'start');
             wasListeningBeforePlayback = false;
             setTimeout(startRecording, 500);
         } else if (isAlwaysListening && !noInterruptCheckbox.checked) {
-            console.log("Continuous Mode: Playback finished, restarting listener...");
+            showToast('恢复监听', 'start');
             setTimeout(startRecording, 500);
         } else if (isLLMGenerating) {
-            console.log("LLM 仍在生成，等待更多音频...");
         }
         return;
     }
 
     if (noInterruptCheckbox.checked && isRecording) {
-        console.log("不打断模式: 停止录音，等待播放完成");
         wasListeningBeforePlayback = isAlwaysListening;
         stopRecording();
     }
@@ -357,28 +362,26 @@ async function playNextAudio() {
     const audioData = audioQueue.shift();
     const url = audioData.url;
     
-    console.log(`🎵 开始播放: ${url}, 剩余队列: ${audioQueue.length}`);
-    
-    await initAudioContext();
-    
-    audioPlayer.src = url;
-    
-    if (!currentAudioSource) {
-        try {
-            const source = audioContext.createMediaElementSource(audioPlayer);
-            source.connect(analyser);
-            analyser.connect(audioContext.destination);
-            currentAudioSource = source; 
-        } catch (e) {
-            console.log('Audio source already created');
-        }
-    }
-    
     try {
+        await initAudioContext();
+        
+        audioPlayer.src = url;
+        
+        if (!currentAudioSource) {
+            try {
+                const source = audioContext.createMediaElementSource(audioPlayer);
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+                currentAudioSource = source; 
+            } catch (e) {
+            }
+        }
+        
         await audioPlayer.play();
         setStatus('SPEAKING...', 'busy');
     } catch (e) {
-        console.error('Play error:', e);
+        console.error('播放错误:', e);
+        isPlaying = false;
         playNextAudio();
         return;
     }
@@ -390,6 +393,7 @@ async function playNextAudio() {
     
     audioPlayer.onerror = (e) => {
         console.error('Audio error:', e);
+        isPlaying = false;
         playNextAudio();
     };
 }
@@ -418,17 +422,15 @@ async function handleStream(response) {
                         activeSessionId = data.session_id;
                         isLLMGenerating = true;
                         assistantMsgEl = addMessage('assistant', '');
-                        console.log(`🆕 新会话开始: ${data.session_id}`);
+                        showToast('处理中...', 'info');
                         
                         if (noInterruptCheckbox.checked && isAlwaysListening && !isRecording) {
                             wasListeningBeforePlayback = true;
-                            console.log("不打断模式: 会话开始，标记需要恢复监听");
                         }
                     } else if (data.type === 'status') {
                         setStatus(data.message, 'busy');
                     } else if (data.type === 'text') {
                         if (data.session_id && data.session_id !== activeSessionId) {
-                            console.log(`⏭️ 跳过旧会话文本: ${data.session_id}`);
                             continue;
                         }
                         if (!assistantMsgEl) continue;
@@ -437,36 +439,34 @@ async function handleStream(response) {
                         chatHistory.scrollTop = chatHistory.scrollHeight;
                     } else if (data.type === 'audio') {
                         if (data.session_id && data.session_id !== activeSessionId) {
-                            console.log(`⏭️ 跳过旧会话音频: ${data.session_id}`);
                             continue;
                         }
                         if (isFirstAudioOfSession) {
                             isFirstAudioOfSession = false;
-                            console.log('🎯 新会话第一个音频，中断当前播放');
                             audioPlayer.pause();
                             audioPlayer.currentTime = 0;
                             audioQueue = [];
                             isPlaying = false;
                         }
                         audioQueue.push(data);
-                        console.log(`📥 音频入队: ${data.url}, 队列长度: ${audioQueue.length}, 正在播放: ${isPlaying}`);
                         if (!isPlaying) {
                             playNextAudio();
                         }
                     } else if (data.type === 'asr') {
                         addMessage('user', data.text);
                     } else if (data.type === 'ignored') {
-                        console.log('🔇 语音输入被忽略:', data.message);
+                        showToast('无效输入', 'warning');
                         setStatus('NO VALID INPUT');
                         if (isAlwaysListening) {
                             setTimeout(startRecording, 500);
                         }
                     } else if (data.type === 'interrupted') {
-                        console.log('⏹️ 会话被中断');
+                        showToast('会话中断', 'warning');
                         isLLMGenerating = false;
                         if (assistantMsgEl) assistantMsgEl.classList.remove('typing');
                     } else if (data.type === 'error') {
                         console.error('Error:', data.message);
+                        showToast('错误: ' + data.message, 'error');
                         setStatus('ERROR', 'busy');
                         isLLMGenerating = false;
                         if (assistantMsgEl) {
@@ -476,11 +476,11 @@ async function handleStream(response) {
                         }
                     } else if (data.type === 'end') {
                         isLLMGenerating = false;
-                        console.log('✅ LLM 生成完成');
+                        showToast('生成完成', 'success');
                         if (assistantMsgEl) assistantMsgEl.classList.remove('typing');
                         
                         if (noInterruptCheckbox.checked && wasListeningBeforePlayback && !isPlaying && !isRecording) {
-                            console.log("不打断模式: LLM完成且无播放，恢复监听...");
+                            showToast('恢复监听', 'start');
                             wasListeningBeforePlayback = false;
                             setTimeout(startRecording, 500);
                         }
@@ -498,7 +498,7 @@ async function sendText() {
     if (!text) return;
     
     if (currentAbortController) {
-        console.log('🛑 取消上一次请求');
+        showToast('取消上一次请求', 'warning');
         currentAbortController.abort();
         currentAbortController = null;
     }
@@ -523,9 +523,10 @@ async function sendText() {
         handleStream(response);
     } catch (e) {
         if (e.name === 'AbortError') {
-            console.log('请求已取消');
+            showToast('请求已取消', 'info');
         } else {
             console.error(e);
+            showToast('请求错误', 'error');
             setStatus('ERROR', 'busy');
         }
     }
@@ -628,14 +629,12 @@ function animate() {
             if (rms >= SILENCE_THRESHOLD) {
                 if (!hasSpeech && !speechStartTime) {
                     speechStartTime = Date.now();
-                    console.log(`语音开始时间: ${speechStartTime - recordingStartTime}ms`);
                 }
                 hasSpeech = true;
                 silenceStartTime = null;
             } else if (hasSpeech) {
                 if (!silenceStartTime) silenceStartTime = Date.now();
                 if (Date.now() - silenceStartTime > SILENCE_DURATION) {
-                    console.log(`VAD: ${SILENCE_DURATION}ms silence detected, auto-stopping...`);
                     stopRecording();
                 }
             }
@@ -682,18 +681,14 @@ function animate() {
 }
 
 try {
-    console.log("Initializing 3D Scene...");
     init3D();
     animate();
 } catch (e) {
     console.error("3D Init Failed:", e);
 }
 
-console.log("App loaded, binding events...");
-
 if (sendBtn) {
     sendBtn.addEventListener('click', () => {
-        console.log("Send button clicked");
         sendText();
     });
 } else {
@@ -703,7 +698,6 @@ if (sendBtn) {
 if (textInput) {
     textInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            console.log("Enter key pressed");
             sendText();
         }
     });
@@ -727,7 +721,6 @@ window.addEventListener('resize', () => {
 
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     setTimeout(() => {
-        console.log('自动启动监听...');
         isAlwaysListening = true;
         wasListeningBeforePlayback = true;
         recordBtn.classList.add('active');
