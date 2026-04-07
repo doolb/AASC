@@ -587,6 +587,14 @@ function drawMonitor(data) {
     }
 }
 
+window.addEventListener('load', () => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        setTimeout(() => {
+            recordBtn.click();
+        }, 500);
+    }
+});
+
 function drawIdleMonitor(t) {
     monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
     monitorCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
@@ -718,14 +726,3 @@ window.addEventListener('resize', () => {
         renderer.setSize(window.innerWidth, window.innerHeight);
     }
 });
-
-if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    setTimeout(() => {
-        isAlwaysListening = true;
-        wasListeningBeforePlayback = true;
-        recordBtn.classList.add('active');
-        const label = recordBtn.querySelector('.btn-label');
-        if (label) label.textContent = 'ALWAYS LISTENING';
-        startRecording();
-    }, 1000);
-}

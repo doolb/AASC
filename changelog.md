@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 新功能
+- ✅ ttslive 自动监听功能
+  - 页面加载完成后自动进入自动监听模式
+  - 通过模拟点击 recordBtn 按钮实现
+  - 延迟 500ms 确保页面完全加载
+  - 检查浏览器是否支持 mediaDevices.getUserMedia
+  - 改动文件：
+    - 3rd/ttslive/static/app.js
+
 ### 架构重构
 - ✅ 重构 server.js 中的 ws.on('message') 函数，按 AASC 架构进行模块化设计
   - AASC (Advance Action System Control) 架构分为四层：
