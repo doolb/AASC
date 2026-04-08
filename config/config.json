@@ -11,11 +11,11 @@
     "192.168.1.12": {
       "currentMedia": {
         "type": "url",
-        "url": "http://192.168.1.39:8081/uploads/1774541075724_27856_1.mp4",
+        "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
         "mediaType": "video"
       },
-      "rotation": 180,
-      "fit": "crop",
+      "rotation": 0,
+      "fit": "height",
       "crop": {
         "x": null,
         "y": 0,
@@ -49,13 +49,13 @@
         "url": "http://192.168.1.39:8081/api/media-libraries/local_uploads/proxy/1774543864439_27363_1.jpeg",
         "mediaType": "image"
       },
-      "rotation": 270,
-      "fit": "crop",
+      "rotation": 0,
+      "fit": "contain",
       "crop": {
-        "x": 39.26539061482007,
-        "y": 16.4914263403415,
-        "width": 60.73460938517993,
-        "height": 81.38379392678826
+        "x": null,
+        "y": 0,
+        "width": null,
+        "height": 100
       },
       "volume": 100,
       "playlist": []

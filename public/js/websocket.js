@@ -296,10 +296,11 @@ function updateCropDisplayInfo(info) {
     }
     
     if (info.当前裁剪百分比) {
-        items.push({ label: '裁剪X', value: info.当前裁剪百分比.x.toFixed(1) + '%' });
-        items.push({ label: '裁剪Y', value: info.当前裁剪百分比.y.toFixed(1) + '%' });
-        items.push({ label: '裁剪宽度', value: info.当前裁剪百分比.width.toFixed(1) + '%' });
-        items.push({ label: '裁剪高度', value: info.当前裁剪百分比.height.toFixed(1) + '%' });
+        const crop = info.当前裁剪百分比;
+        if (crop.x != null) items.push({ label: '裁剪X', value: crop.x.toFixed(1) + '%' });
+        if (crop.y != null) items.push({ label: '裁剪Y', value: crop.y.toFixed(1) + '%' });
+        if (crop.width != null) items.push({ label: '裁剪宽度', value: crop.width.toFixed(1) + '%' });
+        if (crop.height != null) items.push({ label: '裁剪高度', value: crop.height.toFixed(1) + '%' });
     }
     
     if (info.最终样式) {

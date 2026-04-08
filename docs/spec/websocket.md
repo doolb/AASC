@@ -440,27 +440,57 @@ function getLocalIP():
 
 ```
 变量:
-    recognition: SpeechRecognition 实例
-    isListening: 是否正在识别
-    voiceParts: 语音识别分段
+    mediaRecorder: MediaRecorder 实例
+    audioChunks: 音频数据块
+    micStream: 麦克风流
+    audioContext: AudioContext 实例
+    analyser: 音频分析器
+    silenceStartTime: 静音开始时间
+    isListening: 是否正在录音
     voiceSupported: 是否支持语音识别
 
 initVoiceRecognition():
-    检查浏览器是否支持 SpeechRecognition
-    如果不支持:
+    调用 checkAsrStatus()
+
+checkAsrStatus():
+    发送 GET /api/asr/status 请求
+    如果 data.ready:
+        设置 voiceSupported = true
+        调用 startVoiceRecording()
+    否则:
         设置 voiceSupported = false
         调用 updateVoiceStatusDisplay()
-        返回
-    设置 voiceSupported = true
-    创建 SpeechRecognition 实例
-    设置 continuous = true, interimResults = true
-    设置 lang = 'zh-CN'
-    绑定事件:
-        onstart: 设置 isListening = true, 调用 sendVoiceStatus()
-        onend: 设置 isListening = false, 调用 sendVoiceStatus(), 1秒后重启
-        onerror: 如果不是 no-speech/aborted, 设置 isListening = false, 调用 sendVoiceStatus()
-        onresult: 调用 handleVoiceResult(event)
-    启动识别
+
+startVoiceRecording():
+    如果 isListening 为 true, 返回
+    调用 navigator.mediaDevices.getUserMedia() 获取麦克风
+    创建 MediaRecorder 实例
+    设置 ondataavailable: 收集音频数据
+    设置 onstop: 发送音频识别请求，重新开始录音
+    启动录音
+    设置 isListening = true
+    调用 sendVoiceStatus()
+    调用 startSilenceDetection()
+
+startSilenceDetection():
+    创建 AudioContext 和 Analyser
+    循环检测音量:
+        如果平均音量 < 5:
+            记录静音开始时间
+            如果静音超过 1500ms:
+                停止录音并发送识别
+        否则:
+            重置静音时间
+
+stopSilenceDetection():
+    关闭 AudioContext
+
+sendAudioForRecognition(audioBlob):
+    创建 FormData，添加音频文件
+    发送 POST /api/asr/recognize 请求
+    如果成功:
+        更新语音文本显示
+        发送 WebSocket 消息 { type: 'voiceInput', text, isFinal: true, fullText }
 
 updateVoiceStatusDisplay():
     获取 #voiceStatus 元素
@@ -478,11 +508,191 @@ sendVoiceStatus():
     调用 updateVoiceStatusDisplay()
     如果 WebSocket 已连接:
         发送 { type: 'voiceStatus', supported, listening }
+```
 
-handleVoiceResult(event):
-    获取识别结果
-    如果 WebSocket 已连接:
-        发送 { type: 'voiceInput', text, isFinal, fullText }
+## 控制端语音识别
+
+**public/js/chat.js**:
+
+```
+变量:
+    mediaRecorder: MediaRecorder 实例
+    audioChunks: 音频数据块
+    micStream: 麦克风流
+    audioContext: AudioContext 实例
+    analyser: 音频分析器
+    silenceStartTime: 静音开始时间
+    isListening: 是否正在录音
+    asrSupported: ASR 服务是否可用
+
+initVoiceRecognition():
+    发送 GET /api/asr/status 请求
+    设置 asrSupported = data.ready
+
+toggleVoice():
+    如果 isListening:
+        调用 stopListening()
+    否则:
+        调用 startListening()
+
+startListening():
+    如果 isListening 为 true, 返回
+    调用 navigator.mediaDevices.getUserMedia() 获取麦克风
+    创建 MediaRecorder 实例
+    设置 ondataavailable: 收集音频数据
+    设置 onstop: 发送音频识别请求
+    启动录音
+    设置 isListening = true
+    调用 updateVoiceButton()
+    调用 startSilenceDetection()
+
+stopListening():
+    停止 MediaRecorder
+    设置 isListening = false
+    调用 updateVoiceButton()
+    调用 stopSilenceDetection()
+
+startSilenceDetection():
+    创建 AudioContext 和 Analyser
+    循环检测音量:
+        如果平均音量 < 5:
+            记录静音开始时间
+            如果静音超过 1500ms:
+                调用 stopListening()
+        否则:
+            重置静音时间
+
+stopSilenceDetection():
+    关闭 AudioContext
+
+sendAudioForRecognition(audioBlob):
+    创建 FormData，添加音频文件
+    发送 POST /api/asr/recognize 请求
+    如果成功:
+        更新输入框内容
+        如果以"聊天"开头:
+            发送消息
+
+updateVoiceButton():
+    更新语音按钮状态（🔴/🎤）
+```
+
+## ASR 模块
+
+**core/asr.js**:
+
+```
+类 SherpaOnnxASR:
+    属性:
+        modelDir: 模型目录路径
+        initialized: 是否已初始化
+
+    构造函数(options):
+        设置 modelDir
+        调用 initRecognizer()
+
+    initRecognizer():
+        检查模型文件是否存在
+        创建 sherpaOnnx.OfflineRecognizer 实例
+        设置 initialized = true
+
+    isReady():
+        返回 initialized && recognizer !== null
+
+    recognize(audioPath):
+        创建识别流
+        读取音频文件
+        调用 recognizer.decode()
+        返回识别结果文本
+
+    readWavFile(filePath):
+        读取 WAV 文件
+        解析音频数据
+        返回 { samples, sampleRate }
+
+    convertAudioFile(filePath):
+        使用 ffmpeg 转换音频格式
+        返回转换后的音频数据
+
+模块导出:
+    init(options): 初始化 ASR 实例
+    recognize(audioPath): 识别音频文件
+    isReady(): 检查 ASR 是否就绪
+```
+
+## ASR API 接口
+
+**server.js**:
+
+```
+GET /api/asr/status:
+    返回:
+        { status: 'success', ready: boolean }
+
+POST /api/asr/recognize:
+    请求:
+        FormData { audio: 音频文件 }
+    处理流程:
+        1. 检查音频文件是否存在
+        2. 检查 ASR 服务是否就绪
+        3. 调用 ASR 识别音频
+        4. 删除临时音频文件
+        5. 检查识别结果是否为空
+        6. 调用 hasValidContent() 检查有效性
+    返回:
+        { status: 'success', text: 识别结果 }
+        或 { status: 'ignored', message: '未检测到有效内容', text: 识别结果 }
+        或 { status: 'error', message: 错误信息 }
+
+hasValidContent(text):
+    检查是否包含中文/英文/数字
+    屏蔽无效输入（um, uh, yeah 等）
+    屏蔽过短输入（中文<2字，英文<4字符）
+    返回 boolean
+```
+
+## 语音识别模式
+
+### 不打断模式
+
+**public/js/chat.js**:
+
+```
+属性:
+    noInterruptMode: true (默认开启)
+    wasListeningBeforePlayback: false
+    isAlwaysListening: false
+
+processAudioQueue():
+    如果音频队列为空:
+        如果 noInterruptMode && wasListeningBeforePlayback && !isLoading:
+            恢复监听
+    如果 noInterruptMode && isListening:
+        保存监听状态
+        停止录音
+    播放音频
+```
+
+### 自动监听模式
+
+**public/display.html**:
+
+```
+WebSocket 连接成功后:
+    如果 voiceSupported && !isAlwaysListening:
+        延迟 1 秒
+        设置 isAlwaysListening = true
+        调用 startVoiceRecording()
+```
+
+### 无效语音处理
+
+```
+sendAudioForRecognition():
+    如果 data.status === 'ignored':
+        显示提示 '无效语音输入'
+        如果 isAlwaysListening:
+            延迟 500ms 恢复监听
 ```
 
 ## 控制端显示端列表
@@ -500,4 +710,45 @@ renderToContainer(containerId):
                     显示 "语音" (ready 样式，半透明)
             否则如果 voiceSupported === false:
                 显示 "语音" (unsupported 样式，灰色)
+```
+
+## 裁剪信息显示
+
+**public/js/websocket.js**:
+
+```
+function updateCropDisplayInfo(info):
+    获取容器元素
+    如果容器不存在，返回
+    
+    显示容器
+    
+    创建空 items 数组
+    
+    如果 info.容器尺寸 存在:
+        添加容器宽度和高度信息
+    
+    如果 info.媒体原始尺寸 存在:
+        添加媒体宽度和高度信息
+    
+    如果 info.当前旋转 不为 undefined:
+        添加旋转角度信息
+    
+    如果 info.当前适配模式 存在:
+        添加适配模式信息
+    
+    如果 info.当前裁剪百分比 存在:
+        crop = info.当前裁剪百分比
+        如果 crop.x 不为 null: 添加裁剪X信息
+        如果 crop.y 不为 null: 添加裁剪Y信息
+        如果 crop.width 不为 null: 添加裁剪宽度信息
+        如果 crop.height 不为 null: 添加裁剪高度信息
+    
+    如果 info.最终样式 存在:
+        添加显示宽度、高度、左边距、上边距信息
+    
+    如果 info.状态 存在:
+        添加状态信息
+    
+    渲染 items 到 grid 容器
 ```

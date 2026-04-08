@@ -24,6 +24,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    z-index: 1;
 }
 
 #mediaImage {
@@ -432,4 +433,14 @@ body {
 
 .play-choice-item:last-child {
     border-bottom: none;
+}
+
+#mini-monitor {
+    position: fixed;
+    bottom: 50px;
+    left: 20px;
+    z-index: 2000;
+    opacity: 0.8;
+    border-radius: 4px;
+    pointer-events: none;
 }

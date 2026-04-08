@@ -1,12 +1,15 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const WebSocket = require('ws');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { pipeline } = require('stream');
+const multer = require('multer');
 const config = require('./core/config');
 const tts = require('./core/tts');
+const asr = require('./core/asr');
 const timeListener = require('./core/timeListener');
 const timeAnnounce = require('./core/timeAnnounce');
 const chat = require('./core/chat');
@@ -18,14 +21,37 @@ const { initializeAASCSystem } = require('./aasc/init');
 config.loadConfig();
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
 
 const PORT = config.get('server.port', 8081);
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const ASR_TEMP_DIR = path.join(__dirname, 'temp', 'asr');
+
+const sslKeyPath = path.join(__dirname, 'ssl', 'key.pem');
+const sslCertPath = path.join(__dirname, 'ssl', 'cert.pem');
+
+let server;
+let useHttps = false;
+
+if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
+    const sslOptions = {
+        key: fs.readFileSync(sslKeyPath),
+        cert: fs.readFileSync(sslCertPath)
+    };
+    server = https.createServer(sslOptions, app);
+    useHttps = true;
+} else {
+    server = http.createServer(app);
+    useHttps = false;
+}
+
+const wss = new WebSocket.Server({ server });
 
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(ASR_TEMP_DIR)) {
+    fs.mkdirSync(ASR_TEMP_DIR, { recursive: true });
 }
 
 let displayClients = new Map();
@@ -39,15 +65,62 @@ let muteState = {
 let aascSystem = null;
 
 tts.init(config.getTtsConfig());
+asr.init(config.get('asr', {}));
 timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
 chat.init(config.get('chat', {}));
 reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
 
+const IGNORED_PATTERNS = [
+    /^(the|a|an|is|are|was|were|it|this|that|so|um|uh|oh|ah|yeah|yes|no|ok|okay|hey|hi|hello)[.!?]?$/i,
+    /^[a-z]{1,3}[.!?]?$/i,
+    /^[\s\p{P}]+$/u,
+    /^[\s.!?，。！？、]+$/
+];
+
+function hasValidContent(text) {
+    const hasChinese = /[\u4e00-\u9fa5]/.test(text);
+    const hasEnglish = /[a-zA-Z]/.test(text);
+    const hasNumber = /[0-9]/.test(text);
+    
+    if (!hasChinese && !hasEnglish && !hasNumber) {
+        return false;
+    }
+    
+    const trimmed = text.trim().toLowerCase();
+    
+    for (const pattern of IGNORED_PATTERNS) {
+        if (pattern.test(trimmed)) {
+            console.log(`🔇 屏蔽无效输入: "${text}" 匹配规则: ${pattern}`);
+            return false;
+        }
+    }
+    
+    const wordCount = trimmed.split(/\s+/).filter(w => w.length > 0).length;
+    if (hasEnglish && !hasChinese && wordCount < 2) {
+        const cleanWord = trimmed.replace(/[.!?，。！？]/g, '');
+        if (cleanWord.length < 4) {
+            console.log(`🔇 屏蔽短输入: "${text}"`);
+            return false;
+        }
+    }
+    
+    if (hasChinese) {
+        const chineseChars = text.match(/[\u4e00-\u9fa5]/g) || [];
+        if (chineseChars.length < 2) {
+            console.log(`🔇 屏蔽短中文输入: "${text}"`);
+            return false;
+        }
+    }
+    
+    return true;
+}
+
 const mediaLibraryManager = new MediaLibraryManager({
     configPath: path.join(__dirname, 'config/media-libraries.json'),
     getPort: () => PORT,
-    getLocalIP: getLocalIP
+    getLocalIP: getLocalIP,
+    isHttps: () => useHttps
 });
 
 mediaLibraryManager.init().then(() => {
@@ -68,11 +141,18 @@ mediaLibraryManager.init().then(() => {
 function startServer() {
     server.listen(PORT, '0.0.0.0', async () => {
         const localIP = getLocalIP();
+        const protocol = useHttps ? 'https' : 'http';
         console.log('='.repeat(50));
         console.log('媒体中心服务器已启动');
         console.log('='.repeat(50));
-        console.log(`上传端地址: http://${localIP}:${PORT}/upload`);
-        console.log(`显示端地址: http://${localIP}:${PORT}/display`);
+        console.log(`上传端地址: ${protocol}://${localIP}:${PORT}/upload`);
+        console.log(`显示端地址: ${protocol}://${localIP}:${PORT}/display`);
+        if (useHttps) {
+            console.log('✅ HTTPS 已启用，支持麦克风等安全特性');
+        } else {
+            console.log('⚠️  HTTP 模式，麦克风功能需要 HTTPS 或 localhost');
+            console.log('   如需 HTTPS，请在 ssl/ 目录放置 key.pem 和 cert.pem');
+        }
         console.log('='.repeat(50));
         
         timeListener.start();
@@ -230,7 +310,8 @@ app.post('/upload-file', async (req, res) => {
         fs.writeFileSync(filePath, file.data);
         
         const localIP = getLocalIP();
-        const fileUrl = `http://${localIP}:${PORT}/uploads/${encodeURIComponent(uniqueName)}`;
+        const protocol = useHttps ? 'https' : 'http';
+        const fileUrl = `${protocol}://${localIP}:${PORT}/uploads/${encodeURIComponent(uniqueName)}`;
         
         const mediaData = {
             type: 'url',
@@ -257,6 +338,7 @@ app.get('/media-list', (req, res) => {
     try {
         const files = fs.readdirSync(UPLOADS_DIR);
         const localIP = getLocalIP();
+        const protocol = useHttps ? 'https' : 'http';
         
         const mediaList = files
             .filter(f => !f.startsWith('.'))
@@ -264,7 +346,7 @@ app.get('/media-list', (req, res) => {
                 const stat = fs.statSync(path.join(UPLOADS_DIR, f));
                 return {
                     name: f,
-                    url: `http://${localIP}:${PORT}/uploads/${encodeURIComponent(f)}`,
+                    url: `${protocol}://${localIP}:${PORT}/uploads/${encodeURIComponent(f)}`,
                     mediaType: detectMediaType(f),
                     size: stat.size,
                     time: stat.mtime
@@ -340,6 +422,60 @@ app.post('/api/tts/config', (req, res) => {
         res.json({ status: 'success', message: 'TTS配置已更新' });
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+const asrUpload = multer({ dest: ASR_TEMP_DIR });
+
+app.get('/api/asr/status', (req, res) => {
+    res.json({ 
+        status: 'success', 
+        ready: asr.isReady()
+    });
+});
+
+app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ status: 'error', message: '未收到音频文件' });
+        }
+        
+        if (!asr.isReady()) {
+            fs.unlinkSync(req.file.path);
+            return res.status(503).json({ status: 'error', message: 'ASR 服务未初始化' });
+        }
+        
+        const recognizedText = await asr.recognize(req.file.path);
+        
+        fs.unlinkSync(req.file.path);
+        
+        if (!recognizedText || !recognizedText.trim()) {
+            return res.json({ 
+                status: 'ignored', 
+                message: '未识别到有效语音',
+                text: ''
+            });
+        }
+        
+        if (!hasValidContent(recognizedText)) {
+            console.log(`忽略无效语音输入: ${recognizedText}`);
+            return res.json({ 
+                status: 'ignored', 
+                message: '未检测到有效内容',
+                text: recognizedText
+            });
+        }
+        
+        res.json({ 
+            status: 'success', 
+            text: recognizedText
+        });
+    } catch (err) {
+        console.error('ASR 识别失败:', err);
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        res.status(500).json({ status: 'error', message: '语音识别失败: ' + err.message });
     }
 });
 

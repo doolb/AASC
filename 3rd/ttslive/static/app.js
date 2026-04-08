@@ -126,8 +126,48 @@ function init3D() {
 let audioContext, analyser, dataArray;
 let micAnalyser, micDataArray, micTimeDomainData;
 let isAudioInit = false;
+let isAudioUnlocked = false;
 let smoothedBass = 0;
 let smoothedAvg = 0;
+
+const audioUnlockOverlay = document.getElementById('audio-unlock-overlay');
+
+function unlockAudio() {
+    if (isAudioUnlocked) return;
+    
+    isAudioUnlocked = true;
+    
+    if (audioUnlockOverlay) {
+        audioUnlockOverlay.classList.add('hidden');
+        setTimeout(() => {
+            audioUnlockOverlay.style.display = 'none';
+        }, 500);
+    }
+    
+    initAudioContext().then(() => {
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        const silentAudio = document.createElement('audio');
+        silentAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+        silentAudio.play().catch(() => {});
+        
+        if (audioQueue.length > 0 && !isPlaying) {
+            playNextAudio();
+        }
+    });
+}
+
+if (audioUnlockOverlay) {
+    audioUnlockOverlay.addEventListener('click', unlockAudio);
+    audioUnlockOverlay.addEventListener('touchstart', unlockAudio, { passive: true });
+}
+
+document.addEventListener('click', function checkFirstInteraction(e) {
+    if (e.target !== audioUnlockOverlay && !audioUnlockOverlay?.contains(e.target)) {
+        unlockAudio();
+    }
+}, { once: false });
 
 const monitorCanvas = document.getElementById('mini-monitor');
 const monitorCtx = monitorCanvas.getContext('2d');
@@ -381,6 +421,19 @@ async function playNextAudio() {
         setStatus('SPEAKING...', 'busy');
     } catch (e) {
         console.error('播放错误:', e);
+        
+        if (e.name === 'NotAllowedError') {
+            isAudioUnlocked = false;
+            if (audioUnlockOverlay) {
+                audioUnlockOverlay.style.display = 'flex';
+                audioUnlockOverlay.classList.remove('hidden');
+                showToast('请点击屏幕解锁音频', 'warning');
+            }
+            audioQueue.unshift(audioData);
+            isPlaying = false;
+            return;
+        }
+        
         isPlaying = false;
         playNextAudio();
         return;

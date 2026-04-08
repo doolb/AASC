@@ -64,6 +64,7 @@ class LocalProvider extends MediaLibraryProvider {
         this.basePath = path.resolve(config.path);
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
+        this.isHttps = options.isHttps || (() => false);
         const uploadsDir = path.resolve(process.cwd(), 'uploads');
         this.isUploadsDir = this.basePath === uploadsDir;
         this.routePrefix = `/media/${config.id}`;
@@ -214,11 +215,12 @@ class LocalProvider extends MediaLibraryProvider {
     getPublicUrl(filePath) {
         const localIP = this.getLocalIP();
         const port = this.getPort();
+        const protocol = this.isHttps() ? 'https' : 'http';
         const cleanPath = filePath.replace(/^\//, '');
         if (this.isUploadsDir) {
-            return `http://${localIP}:${port}/uploads/${encodeURIComponent(cleanPath)}`;
+            return `${protocol}://${localIP}:${port}/uploads/${encodeURIComponent(cleanPath)}`;
         }
-        return `http://${localIP}:${port}${this.routePrefix}/${encodeURIComponent(cleanPath)}`;
+        return `${protocol}://${localIP}:${port}${this.routePrefix}/${encodeURIComponent(cleanPath)}`;
     }
     
     getRoutePrefix() {
@@ -425,6 +427,7 @@ class SmbProvider extends MediaLibraryProvider {
         this.smbClient = null;
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
+        this.isHttps = options.isHttps || (() => false);
     }
 
     _buildSharePath(server, sharePath) {
@@ -556,8 +559,9 @@ class SmbProvider extends MediaLibraryProvider {
     getPublicUrl(filePath) {
         const localIP = this.getLocalIP();
         const port = this.getPort();
+        const protocol = this.isHttps() ? 'https' : 'http';
         const cleanPath = filePath.replace(/^\//, '');
-        return `http://${localIP}:${port}/api/media-libraries/${this.config.id}/proxy/${encodeURIComponent(cleanPath)}`;
+        return `${protocol}://${localIP}:${port}/api/media-libraries/${this.config.id}/proxy/${encodeURIComponent(cleanPath)}`;
     }
 
     _readdir(dirPath) {
@@ -611,6 +615,7 @@ class MediaLibraryManager {
         this.configPath = options.configPath || path.join(__dirname, '../config/media-libraries.json');
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
+        this.isHttps = options.isHttps || (() => false);
     }
 
     async init() {
@@ -635,20 +640,23 @@ class MediaLibraryManager {
             case 'local':
                 provider = new LocalProvider(config, {
                     getPort: this.getPort,
-                    getLocalIP: this.getLocalIP
+                    getLocalIP: this.getLocalIP,
+                    isHttps: this.isHttps
                 });
                 break;
             case 'http':
             case 'https':
                 provider = new HttpProvider(config, {
                     getPort: this.getPort,
-                    getLocalIP: this.getLocalIP
+                    getLocalIP: this.getLocalIP,
+                    isHttps: this.isHttps
                 });
                 break;
             case 'smb':
                 provider = new SmbProvider(config, {
                     getPort: this.getPort,
-                    getLocalIP: this.getLocalIP
+                    getLocalIP: this.getLocalIP,
+                    isHttps: this.isHttps
                 });
                 break;
             default:

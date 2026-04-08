@@ -2,7 +2,83 @@
 
 ## [Unreleased]
 
+### Bug 修复
+- ✅ 修复 TTS Live 浏览器自动播放限制问题
+  - 原因：浏览器自动播放策略要求音频播放必须由用户交互触发
+  - 解决：添加音频解锁覆盖层，用户首次点击后解锁音频播放
+  - 改动文件：
+    - 3rd/ttslive/static/index.html - 添加解锁覆盖层 HTML
+    - 3rd/ttslive/static/style.css - 添加解锁覆盖层样式
+    - 3rd/ttslive/static/app.js - 添加解锁逻辑和错误处理
+
+- ✅ 修复裁剪信息显示的空值处理错误
+  - 原因：当裁剪百分比属性为 null 时，调用 toFixed() 导致 TypeError
+  - 解决：在调用 toFixed() 前检查属性是否为 null
+  - 改动文件：
+    - public/js/websocket.js - updateCropDisplayInfo 添加空值检查
+    - public/js/crop.js - updateInputFields 添加空值检查
+
+- ✅ 修复音频可视化被视频遮挡的问题
+  - 原因：视频元素应用 transform 属性后创建新的层叠上下文
+  - 解决：给 #mediaContainer 添加 z-index: 1，确保在 mini-monitor (z-index: 2000) 下面
+  - 改动文件：
+    - public/css/display.css - 添加 z-index: 1 到 #mediaContainer
+
 ### 新功能
+- ✅ 显示端音频频谱可视化
+  - 左下角显示 mini-monitor 频谱条形图
+  - 录音时显示实时音频频谱和"监听中"标识
+  - 空闲时显示波浪动画
+  - z-index: 2000 确保在视频上方
+  - 改动文件：
+    - public/display.html - 添加 canvas 和频谱绘制代码
+    - public/css/display.css - 添加 mini-monitor 样式
+
+- ✅ 修复 voiceInput 路由错误
+  - voiceInput 消息从 voice-command-actor 改为 display-render-actor
+  - 改动文件：
+    - aasc/components/message-dispatcher.js - 修正路由配置
+
+- ✅ 本地媒体库 HTTPS 协议支持
+  - 媒体库 URL 根据服务器 HTTPS 状态自动选择协议
+  - LocalProvider、SmbProvider 支持 isHttps 选项
+  - 改动文件：
+    - core/media-library.js - 添加 isHttps 参数支持
+    - server.js - 传入 isHttps 回调函数
+
+- ✅ 语音识别完整功能（参考 ttslive 设计）
+  - 语音输入有效性检查（hasValidContent）
+    - 必须包含中文/英文/数字
+    - 屏蔽无效输入（如 "um", "uh", "yeah" 等）
+    - 屏蔽过短的输入（中文少于2字，英文少于4字符）
+  - 无效语音自动忽略并恢复监听
+    - 返回 'ignored' 状态
+    - 自动恢复监听模式
+  - 不打断模式（默认开启）
+    - TTS 播放时自动停止录音
+    - 播放完成后自动恢复监听
+  - 自动监听模式
+    - 页面加载后自动启动监听
+    - 显示端 WebSocket 连接成功后自动进入监听模式
+  - 改动文件：
+    - server.js - 添加 hasValidContent 函数和有效性检查
+    - public/js/chat.js - 控制端不打断模式和自动监听
+    - public/display.html - 显示端不打断模式和自动监听
+
+- ✅ 本地 ASR 语音识别功能（替换 Web Speech API）
+  - 使用 sherpa-onnx-node + SenseVoice 模型进行本地语音识别
+  - 控制端和显示端都支持本地 ASR
+  - 支持 VAD 静音检测（RMS 阈值 0.01，静音时长 1秒）
+  - 添加 HTTPS 支持（ssl/key.pem 和 ssl/cert.pem）
+  - 新增 API 接口：
+    - GET /api/asr/status - 获取 ASR 服务状态
+    - POST /api/asr/recognize - 音频识别接口
+  - 改动文件：
+    - core/asr.js - ASR 模块（新增）
+    - server.js - 添加 ASR 初始化和 API 接口
+    - public/js/chat.js - 控制端使用本地 ASR
+    - public/display.html - 显示端使用本地 ASR
+
 - ✅ ttslive 自动监听功能
   - 页面加载完成后自动进入自动监听模式
   - 通过模拟点击 recordBtn 按钮实现

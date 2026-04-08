@@ -107,7 +107,7 @@ class MessageDispatcher {
 
         this.registerRoute({
             type: 'voiceInput',
-            handler: 'voice-command-actor',
+            handler: 'display-render-actor',
             priority: 10
         });
 

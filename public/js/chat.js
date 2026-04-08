@@ -23,11 +23,22 @@ const Chat = {
     currentStreamingMessage: '',
     currentUserMessage: '',
     isListening: false,
-    recognition: null,
-    voiceParts: [],
+    mediaRecorder: null,
+    audioChunks: [],
+    asrSupported: false,
     audioQueue: [],
     isPlayingAudio: false,
     currentAudio: null,
+    silenceStartTime: null,
+    audioContext: null,
+    analyser: null,
+    micStream: null,
+    hasSpeech: false,
+    speechStartTime: null,
+    recordingStartTime: null,
+    isAlwaysListening: false,
+    wasListeningBeforePlayback: false,
+    noInterruptMode: true,
     
     init() {
         this.loadHistory();
@@ -47,79 +58,24 @@ const Chat = {
         this.loadCommands();
     },
     
-    initVoiceRecognition() {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            console.log('浏览器不支持语音识别');
-            return;
-        }
-        
-        this.recognition = new SpeechRecognition();
-        this.recognition.continuous = true;
-        this.recognition.interimResults = true;
-        this.recognition.lang = 'zh-CN';
-        
-        this.recognition.onstart = () => {
-            this.isListening = true;
-            this.voiceParts = [];
-            this.updateVoiceButton();
-            console.log('语音识别已启动');
-        };
-        
-        this.recognition.onend = () => {
-            this.isListening = false;
-            this.updateVoiceButton();
-            console.log('语音识别已停止');
-        };
-        
-        this.recognition.onerror = (event) => {
-            console.error('语音识别错误:', event.error);
-            this.isListening = false;
-            this.updateVoiceButton();
-        };
-        
-        this.recognition.onresult = (event) => {
-            this.handleVoiceResult(event);
-        };
-    },
-    
-    handleVoiceResult(event) {
-        const results = event.results[event.resultIndex];
-        const transcript = results[0].transcript;
-        
-        if (this.voiceParts.length === 0) {
-            this.voiceParts[0] = transcript;
-        } else {
-            this.voiceParts[this.voiceParts.length - 1] = transcript;
-        }
-        
-        const input = document.getElementById('chatInput');
-        if (input) {
-            input.value = this.voiceParts.join('') + '…';
-        }
-        
-        if (results.isFinal) {
-            const finalText = this.voiceParts[this.voiceParts.length - 1].trim();
-            this.voiceParts.push('');
+    async initVoiceRecognition() {
+        try {
+            const response = await fetch('/api/asr/status');
+            const data = await response.json();
+            this.asrSupported = data.ready;
             
-            if (finalText.startsWith('聊天')) {
-                const message = finalText.substring(2).trim();
-                if (message) {
-                    this.stopListening();
-                    setTimeout(() => {
-                        this.sendVoiceMessage(message);
-                    }, 300);
-                }
+            if (this.asrSupported) {
+                console.log('本地 ASR 服务可用');
+            } else {
+                console.log('ASR 服务未初始化，请检查模型文件');
             }
+        } catch (e) {
+            console.log('ASR 服务不可用:', e.message);
+            this.asrSupported = false;
         }
     },
     
     toggleVoice() {
-        if (!this.recognition) {
-            window.showToast('浏览器不支持语音识别', 'error');
-            return;
-        }
-        
         if (this.isListening) {
             this.stopListening();
         } else {
@@ -127,16 +83,197 @@ const Chat = {
         }
     },
     
-    startListening() {
-        if (this.recognition && !this.isListening) {
-            this.voiceParts = [];
-            this.recognition.start();
+    async startListening() {
+        if (this.isListening) return;
+        
+        try {
+            this.micStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 16000
+                }
+            });
+            
+            this.mediaRecorder = new MediaRecorder(this.micStream);
+            this.audioChunks = [];
+            
+            this.mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    this.audioChunks.push(e.data);
+                }
+            };
+            
+            this.mediaRecorder.onstop = async () => {
+                if (this.micStream) {
+                    this.micStream.getTracks().forEach(track => track.stop());
+                    this.micStream = null;
+                }
+                
+                if (this.audioChunks.length === 0) {
+                    this.isListening = false;
+                    this.updateVoiceButton();
+                    return;
+                }
+                
+                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                await this.sendAudioForRecognition(audioBlob);
+            };
+            
+            this.mediaRecorder.start();
+            this.isListening = true;
+            this.updateVoiceButton();
+            this.silenceStartTime = null;
+            this.hasSpeech = false;
+            this.speechStartTime = null;
+            this.recordingStartTime = Date.now();
+            console.log('语音录制已启动');
+            
+            this.startSilenceDetection();
+            
+        } catch (e) {
+            console.error('麦克风访问失败:', e);
+            let msg = '无法访问麦克风';
+            if (e.name === 'NotAllowedError') {
+                msg = '麦克风权限被拒绝';
+            } else if (e.name === 'NotFoundError') {
+                msg = '未找到麦克风设备';
+            }
+            window.showToast(msg, 'error');
         }
     },
     
     stopListening() {
-        if (this.recognition && this.isListening) {
-            this.recognition.stop();
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            this.mediaRecorder.stop();
+        }
+        this.isListening = false;
+        this.hasSpeech = false;
+        this.speechStartTime = null;
+        this.silenceStartTime = null;
+        this.updateVoiceButton();
+        this.stopSilenceDetection();
+        console.log('语音录制已停止');
+    },
+    
+    startSilenceDetection() {
+        if (!this.micStream) return;
+        
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = this.audioContext.createMediaStreamSource(this.micStream);
+            this.analyser = this.audioContext.createAnalyser();
+            this.analyser.fftSize = 2048;
+            source.connect(this.analyser);
+            
+            const SILENCE_THRESHOLD = 0.01;
+            const SILENCE_DURATION = 1000;
+            const MIN_SPEECH_DURATION = 300;
+            
+            const checkSilence = () => {
+                if (!this.isListening || !this.analyser) return;
+                
+                const timeDomainData = new Uint8Array(this.analyser.fftSize);
+                this.analyser.getByteTimeDomainData(timeDomainData);
+                
+                let sumSquares = 0;
+                for (let i = 0; i < timeDomainData.length; i++) {
+                    const normalized = (timeDomainData[i] - 128) / 128;
+                    sumSquares += normalized * normalized;
+                }
+                const rms = Math.sqrt(sumSquares / timeDomainData.length);
+                
+                if (rms >= SILENCE_THRESHOLD) {
+                    if (!this.hasSpeech && !this.speechStartTime) {
+                        this.speechStartTime = Date.now();
+                    }
+                    this.hasSpeech = true;
+                    this.silenceStartTime = null;
+                } else if (this.hasSpeech) {
+                    if (!this.silenceStartTime) {
+                        this.silenceStartTime = Date.now();
+                    }
+                    if (Date.now() - this.silenceStartTime > SILENCE_DURATION) {
+                        const speechDuration = this.speechStartTime ? Date.now() - this.speechStartTime : 0;
+                        if (speechDuration >= MIN_SPEECH_DURATION) {
+                            console.log('检测到静音，自动停止录音');
+                            this.stopListening();
+                            return;
+                        }
+                    }
+                }
+                
+                requestAnimationFrame(checkSilence);
+            };
+            
+            requestAnimationFrame(checkSilence);
+        } catch (e) {
+            console.log('静音检测初始化失败:', e);
+        }
+    },
+    
+    stopSilenceDetection() {
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+            this.analyser = null;
+        }
+    },
+    
+    async sendAudioForRecognition(audioBlob) {
+        const input = document.getElementById('chatInput');
+        if (input) {
+            input.value = '正在识别...';
+        }
+        
+        try {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            
+            const response = await fetch('/api/asr/recognize', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'success' && data.text) {
+                const recognizedText = data.text.trim();
+                console.log('识别结果:', recognizedText);
+                
+                if (input) {
+                    input.value = recognizedText;
+                }
+                
+                if (recognizedText.startsWith('聊天')) {
+                    const message = recognizedText.substring(2).trim();
+                    if (message) {
+                        setTimeout(() => {
+                            this.sendVoiceMessage(message);
+                        }, 300);
+                    }
+                }
+            } else if (data.status === 'ignored') {
+                console.log('无效语音输入，已忽略:', data.text);
+                if (input) {
+                    input.value = '';
+                }
+                window.showToast('无效语音输入', 'warning');
+                if (this.isAlwaysListening) {
+                    setTimeout(() => this.startListening(), 500);
+                }
+            } else {
+                if (input) {
+                    input.value = '';
+                }
+                window.showToast(data.message || '语音识别失败', 'error');
+            }
+        } catch (e) {
+            console.error('语音识别请求失败:', e);
+            if (input) {
+                input.value = '';
+            }
+            window.showToast('语音识别请求失败', 'error');
         }
     },
     
@@ -875,7 +1012,22 @@ const Chat = {
     
     processAudioQueue() {
         if (this.isPlayingAudio || this.audioQueue.length === 0) {
+            if (this.audioQueue.length === 0) {
+                if (this.noInterruptMode && this.wasListeningBeforePlayback && !this.isLoading) {
+                    console.log('播放完成，恢复监听');
+                    this.wasListeningBeforePlayback = false;
+                    setTimeout(() => this.startListening(), 500);
+                } else if (this.isAlwaysListening && !this.noInterruptMode) {
+                    console.log('自动恢复监听');
+                    setTimeout(() => this.startListening(), 500);
+                }
+            }
             return;
+        }
+        
+        if (this.noInterruptMode && this.isListening) {
+            this.wasListeningBeforePlayback = this.isAlwaysListening;
+            this.stopListening();
         }
         
         this.isPlayingAudio = true;

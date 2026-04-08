@@ -368,10 +368,10 @@ const Crop = {
         const inputWidth = document.getElementById('cropInputWidth');
         const inputHeight = document.getElementById('cropInputHeight');
         
-        if (inputX) inputX.value = this.data.x.toFixed(1);
-        if (inputY) inputY.value = this.data.y.toFixed(1);
-        if (inputWidth) inputWidth.value = this.data.width.toFixed(1);
-        if (inputHeight) inputHeight.value = this.data.height.toFixed(1);
+        if (inputX && this.data.x != null) inputX.value = this.data.x.toFixed(1);
+        if (inputY && this.data.y != null) inputY.value = this.data.y.toFixed(1);
+        if (inputWidth && this.data.width != null) inputWidth.value = this.data.width.toFixed(1);
+        if (inputHeight && this.data.height != null) inputHeight.value = this.data.height.toFixed(1);
     },
     
     setCropManually() {

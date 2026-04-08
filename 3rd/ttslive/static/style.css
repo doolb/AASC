@@ -537,3 +537,49 @@ body {
         z-index: 20;
     }
 }
+
+#audio-unlock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(3, 3, 3, 0.95);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity 0.5s ease;
+}
+
+#audio-unlock-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.unlock-content {
+    text-align: center;
+    animation: fadeIn 0.5s ease;
+}
+
+.unlock-icon {
+    font-size: 4rem;
+    color: var(--accent-cyan);
+    margin-bottom: 20px;
+    animation: pulse 2s infinite;
+}
+
+.unlock-content h2 {
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: 4px;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+.unlock-content p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+}

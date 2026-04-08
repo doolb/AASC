@@ -80,23 +80,43 @@
     "target": "妲己"
   },
   {
-    "id": "1775057273539b86g",
-    "timestamp": 1775057273539,
+    "id": "1775574382194su9d",
+    "timestamp": 1775574382194,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "小爱你是谁",
-    "mode": "group",
-    "target": null
+    "content": "你好呀。",
+    "mode": "private",
+    "target": "妲己"
   },
   {
-    "id": "17750572861984lhv",
-    "timestamp": 1775057286198,
+    "id": "1775574391614xgo0",
+    "timestamp": 1775574391614,
     "role": "assistant",
-    "name": "小爱",
+    "name": "助手",
     "ip": "",
-    "content": "我叫小爱，一个聪明、贴心的AI助手。有什么问题或需要帮助的地方，随时和我沟通哦！",
-    "mode": "group",
-    "target": null
+    "content": "哎呀！我正在发情哦～快看我啦，感觉特别开心、兴奋呢！不过现在可能需要好好休息一下了，所以你要注意身体啊～要不要先做点什么？我来帮你吧。",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "1775574459913go0k",
+    "timestamp": 1775574459913,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "Kkan",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "17755744654580qzw",
+    "timestamp": 1775574465458,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的！我是KAN的电子猫娘~要和我一起玩吧！有什么需要我帮你做事情的吗？",
+    "mode": "private",
+    "target": "妲己"
   }
 ]
