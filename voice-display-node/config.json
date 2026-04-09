@@ -1,0 +1,5 @@
+{
+    "serverUrl": "http://localhost:3000",
+    "displayId": "voice-display-node-1",
+    "vadThreshold": 0.01
+}

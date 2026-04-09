@@ -2,9 +2,15 @@
 
 ## 概述
 
-独立的 Go 程序，作为纯语音交互的显示端客户端，通过 WebSocket 连接到主服务器，接收 TTS 音频播放，并通过服务器端 ASR 发送语音输入。本地只负责录音和 VAD 检测，识别由服务器完成。
+独立的客户端程序，作为纯语音交互的显示端，通过 WebSocket 连接到主服务器，接收 TTS 音频播放，并通过服务器端 ASR 发送语音输入。本地只负责录音和 VAD 检测，识别由服务器完成。
+
+支持两种实现：
+- **Go 实现** (`voice-display/`)：无窗口界面，适合后台运行
+- **Node.js 实现** (`voice-display-node/`)：跨平台，依赖 ffmpeg
 
 ## 项目结构
+
+### Go 实现
 
 ```
 voice-display/
@@ -14,6 +20,18 @@ voice-display/
 ├── recorder.go    # 音频录制器（录音 + VAD + WAV 编码）
 ├── config.json    # 配置文件
 └── go.mod         # Go 模块定义
+```
+
+### Node.js 实现
+
+```
+voice-display-node/
+├── main.js            # 主程序，WebSocket 连接和消息处理
+├── audio-player.js    # 音频播放器（Speaker + wav 解码）
+├── asr-client.js      # 服务器端 ASR 客户端
+├── audio-recorder.js  # 音频录制器（ffmpeg + VAD + WAV 编码）
+├── config.json        # 配置文件
+└── package.json       # Node.js 模块定义
 ```
 
 ## 配置格式
@@ -194,10 +212,251 @@ main():
     调用 Stop() 清理资源
 ```
 
-## 依赖
+## Go 实现依赖
 
 | 包 | 版本 | 说明 |
 |------|------|------|
 | github.com/gorilla/websocket | v1.5.1 | WebSocket 客户端 |
 | github.com/hajimehoshi/oto/v2 | v2.4.0 | 音频播放 |
 | github.com/gen2brain/malgo | v0.11.6 | 音频录制（麦克风输入） |
+
+---
+
+## Node.js 实现
+
+### VoiceDisplay 主类
+
+```
+class VoiceDisplay:
+    config: Object
+    ws: WebSocket
+    asr: ServerASR
+    audio: AudioPlayer
+    recorder: AudioRecorder
+    connected: boolean
+    stopController: AbortController
+    reconnectAttempts: number
+```
+
+### 连接流程
+```
+connect():
+    解析服务器URL
+    构建 WebSocket URL (ws:// 或 wss://)
+    创建 WebSocket 连接
+    监听 open 事件
+    发送注册消息: { type: "register", clientType: "display", displayId }
+    监听 message 事件处理消息
+    监听 close 事件触发重连
+    监听 error 事件处理错误
+```
+
+### 消息处理
+```
+handleMessage(msgType, data):
+    "tts":
+        playAudio -> 从URL下载并播放音频
+        play -> 播报文本
+        stop -> 停止播放
+    "voiceInput": 记录确认
+    "control": 记录控制指令
+```
+
+### 重连机制
+```
+reconnect():
+    检查是否达到最大重连次数 (5次)
+    计算延迟 (重试次数 * 2000ms)
+    延迟后尝试重新连接
+    重连成功后重置计数器
+    全部失败后退出程序
+```
+
+### AudioPlayer 音频播放器
+
+```
+class AudioPlayer:
+    speaker: Speaker
+    isPlaying: boolean
+    stopRequested: boolean
+```
+
+#### 播放流程
+```
+playFromURL(url):
+    使用 node-fetch 下载音频
+    读取全部数据到 Buffer
+    使用 wav.Reader 解析 WAV 格式
+    创建 Speaker 实例播放
+    等待播放完成
+```
+
+#### 停止播放
+```
+stop():
+    设置 stopRequested = true
+    调用 speaker.end() 关闭播放器
+    重置 isPlaying = false
+```
+
+### ServerASR 服务器端语音识别客户端
+
+```
+class ServerASR:
+    serverURL: string
+    ready: boolean
+```
+
+#### 检查 ASR 可用性
+```
+checkReady():
+    发送 GET /api/asr/status 请求
+    解析响应: { ready: boolean }
+    更新 ready 状态
+    返回 ready 状态
+```
+
+#### 识别音频
+```
+recognize(wavData):
+    创建 HTTP POST 请求到 /api/asr/recognize
+    使用 FormData 构造 multipart/form-data
+    字段名 "audio"，文件名 "audio.wav"
+    发送请求
+    解析响应:
+        status == "success": 返回 { text, status: "success" }
+        status == "ignored": 返回 { text: "", status: "ignored" }
+        其他: 抛出错误
+```
+
+### AudioRecorder 音频录制器
+
+```
+class AudioRecorder:
+    sampleRate: number (16000)
+    vadThreshold: number (0.01)
+    minSpeechDuration: number (300)
+    recording: boolean
+    audioInput: naudiodon.AudioIO
+```
+
+#### 录音流程
+```
+start(onAudioData, signals):
+    创建 naudiodon.AudioIO 实例:
+        channelCount: 1
+        sampleFormat: SampleFormat16Bit
+        sampleRate: 16000
+        deviceId: -1 (默认设备)
+    监听 data 事件接收音频数据
+    按帧处理 (20ms/帧):
+        转换为 int16 格式
+        计算 RMS 音量
+        RMS >= 阈值: 标记有语音，累积音频数据
+        RMS < 阈值 且 有语音 且 持续足够长:
+            编码为 WAV 格式
+            调用 onAudioData(wavData)
+    监听 stopSignal 退出
+    调用 audioInput.start() 开始录音
+```
+
+#### 停止录音
+```
+stop():
+    设置 recording = false
+    调用 audioInput.quit() 关闭录音器
+    重置 audioInput = null
+```
+
+#### 获取设备列表
+```
+static getDevices():
+    调用 naudiodon.getDevices()
+    过滤出 maxInputChannels > 0 的设备
+    返回可用音频输入设备列表
+```
+
+#### WAV 编码
+```
+encodeWAV(samples, sampleRate):
+    创建 Buffer (44字节头 + 数据)
+    写入 RIFF 头
+    写入 fmt 子块 (PCM, 单声道, 16bit, sampleRate)
+    写入 data 子块 (原始 PCM 数据)
+    返回 Buffer
+```
+
+#### VAD 静音检测
+```
+参数:
+    vadThreshold: 0.01 (RMS阈值)
+    minSpeechDuration: 300 (最短语音时长ms)
+
+逻辑:
+    有语音 + RMS < 阈值 + 语音持续 > minSpeechDuration -> 编码WAV并发送
+```
+
+#### 计算 RMS
+```
+computeRMS(samples):
+    计算所有采样点的平方和
+    除以采样点数量
+    返回平方根
+```
+
+### 启动流程
+
+```
+main():
+    加载配置文件 (config.json 或命令行参数)
+    创建 VoiceDisplay 实例
+    注册信号处理 (SIGINT, SIGTERM)
+    调用 start():
+        初始化 AudioPlayer
+        初始化 ServerASR (传入服务器URL)
+        检查服务器 ASR 可用性
+        初始化 AudioRecorder
+        连接服务器
+        启动语音识别 (如果服务器ASR可用)
+    等待退出信号
+    调用 stop() 清理资源
+```
+
+### Node.js 依赖
+
+| 包 | 版本 | 说明 |
+|------|------|------|
+| ws | ^8.16.0 | WebSocket 客户端 |
+| form-data | ^4.0.0 | 构造 multipart/form-data |
+| node-fetch | ^2.7.0 | HTTP 请求 |
+| speaker | ^0.5.4 | 音频播放 |
+| naudiodon | ^2.3.3 | 音频录制（PortAudio） |
+| wav | ^1.0.2 | WAV 解码 |
+
+### 系统依赖
+
+| 依赖 | 说明 |
+|------|------|
+| node-gyp | Speaker/naudiodon 模块编译 |
+| PortAudio | naudiodon 底层依赖（Windows 通常已内置） |
+
+### 使用方法
+
+```bash
+# 安装依赖
+cd voice-display-node
+npm install
+
+# 启动（使用默认配置）
+npm start
+
+# 启动（使用指定配置文件）
+node main.js /path/to/config.json
+```
+
+### 注意事项
+
+1. **原生模块编译**：Speaker 和 naudiodon 需要编译，需要 node-gyp 和编译工具链
+2. **Windows 编译工具**：运行 `npm install -g windows-build-tools` 安装编译工具
+3. **PortAudio**：naudiodon 基于 PortAudio，Windows 上通常已内置
+4. **跨平台兼容**：naudiodon 支持 Windows、Linux、macOS

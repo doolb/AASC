@@ -4,6 +4,7 @@
 - 添加纯语音输入和输出的显示端，
   - ✅ 基础框架已完成（WebSocket连接、音频播放、录音、VAD静音检测）
   - ✅ 改为使用服务器端 ASR（通过 HTTP POST /api/asr/recognize）
+  - ✅ Node.js 实现已完成（voice-display-node/）
   - 可以在windows后台运行，不占用前端界面
   - 在电脑播放音频时，不监听麦克风输入
   - go 实现，无窗口界面（包括控制台），有任务栏图标

@@ -76,6 +76,26 @@
     - voice-display/config.json - 配置文件
     - voice-display/go.mod - Go 模块定义
 
+- ✅ 添加纯语音输入输出显示端（Node.js实现）
+  - 功能：独立的 Node.js 程序，作为纯语音交互的显示端客户端
+  - 实现：
+    - WebSocket 连接到主服务器，注册为显示端
+    - 服务器端 ASR 语音识别（通过 HTTP POST /api/asr/recognize）
+    - 音频播放（Speaker + wav 解码）
+    - 音频录制（naudiodon + PortAudio，无需 ffmpeg）
+    - 自动重连机制
+    - VAD 静音检测
+    - WAV 编码
+    - 跨平台支持（Windows/Linux/macOS）
+  - 改动文件：
+    - voice-display-node/main.js - 主程序，WebSocket 连接和消息处理
+    - voice-display-node/audio-player.js - 音频播放器（Speaker + wav 解码）
+    - voice-display-node/asr-client.js - 服务器端 ASR 客户端
+    - voice-display-node/audio-recorder.js - 音频录制器（naudiodon + VAD + WAV 编码）
+    - voice-display-node/config.json - 配置文件
+    - voice-display-node/package.json - Node.js 模块定义
+    - docs/spec/voice-display.md - 添加 Node.js 实现文档
+
 - ✅ 添加子服务器管理功能
   - 功能：支持主服务器将显示端请求分发到多个子服务器，实现负载均衡和分布式部署
   - 实现：
