@@ -22,6 +22,9 @@
 | ViewBind | [viewbind.md](spec/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 | 显示端选择 | [display-selection.md](spec/display-selection.md) | 单选、全选、自适应选择模式 |
 | 地图可视化 | [map-visualization.md](spec/map-visualization.md) | 执行者能力可视化、PixiJS渲染器、数据模型 |
+| 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
+| 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、回退策略 |
+| 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
 
 ## 核心模块
 
@@ -36,6 +39,7 @@
 | 聊天 | core/chat.js | AI 聊天功能 |
 | 整点报时 | core/timeAnnounce.js | 整点报时功能 |
 | 语音命令 | core/voiceCommand.js | 语音命令处理模块 |
+| 子服务器 | core/sub-server.js | 子服务器管理、负载均衡 |
 
 ## 前端模块
 
@@ -54,6 +58,7 @@
 | 上传功能 | public/js/upload.js | 文件上传处理 |
 | 显示端列表 | public/js/display-list.js | 显示端选择器 |
 | TTS控制 | public/js/tts.js | TTS 前端控制 |
+| 本地ASR | public/js/sherpa-asr.js | sherpa-onnx-wasm 本地语音识别 |
 | Toast提示 | public/js/toast.js | 消息提示组件 |
 
 ## 配置文件

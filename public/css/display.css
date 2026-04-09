@@ -435,12 +435,27 @@ body {
     border-bottom: none;
 }
 
-#mini-monitor {
+.monitor-wrapper {
     position: fixed;
     bottom: 50px;
     left: 20px;
     z-index: 2000;
-    opacity: 0.8;
-    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     pointer-events: none;
+}
+
+.monitor-label {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.3);
+    margin-bottom: 5px;
+    letter-spacing: 1px;
+}
+
+#mini-monitor {
+    border-bottom: 1px solid #00f2ff;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(to top, rgba(0, 242, 255, 0.05), transparent);
 }

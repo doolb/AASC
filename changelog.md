@@ -3,6 +3,108 @@
 ## [Unreleased]
 
 ### Bug 修复
+- ✅ 修复 viewer3d.html fetchAndDisplayActors TypeError: Failed to fetch
+  - 原因：fetchAndDisplayActors 缺少错误处理，服务器不可达时每5秒打印错误
+  - 解决：添加页面可见性检查（document.hidden）、HTTP状态码检查、错误计数和日志降频（前3次+每10次打印）、指数退避重试间隔（5s→60s）
+  - 改动文件：
+    - public/viewer3d.html - fetchAndDisplayActors 添加错误处理，startActorUpdates 改用 setTimeout 递归调度+退避，添加 stopActorUpdates
+
+- ✅ 修复控制端发送聊天没有正常显示
+  - 原因：handleResponse 中流式DOM元素被意外移除时，消息不会显示
+  - 解决：先更新 history 数据，再处理流式元素；如果流式元素不存在，回退到 renderHistory 重新渲染
+  - 改动文件：
+    - public/js/chat.js - handleResponse 调整逻辑顺序，添加 renderHistory 回退
+
+- ✅ 修复显示端一直发送无效语音输入
+  - 原因：语音识别返回"ignored"后立即重新监听，形成无限循环
+  - 解决：添加连续忽略计数器（consecutiveIgnoreCount），超过3次后进入冷却期（10s×2^n），冷却期内不启动录音；成功识别后重置计数器
+  - 改动文件：
+    - public/display.html - 添加 consecutiveIgnoreCount/voiceCooldownUntil 变量，sendAudioForRecognition 添加冷却逻辑，startVoiceRecording 添加冷却检查
+
+- ✅ 修复控制端非裁剪适配模式自动发送crop数据
+  - 原因：sendFitMode 总是同时发送 fit 和 crop 两条消息，导致非裁剪模式也被切换
+  - 解决：只在 fit === 'crop' 时发送 crop 数据
+  - 改动文件：
+    - public/js/controls.js - sendFitMode 添加条件判断
+
+- ✅ 修复控制端裁剪框不显示
+  - 原因：媒体元素尺寸为0时 updateBox 不处理，showPreview 在媒体未加载时不重试
+  - 解决：updateBox 添加空值检查和零尺寸处理，showPreview 添加 _retryShowPreview 重试机制（最多5次，递增延迟）
+  - 改动文件：
+    - public/js/crop.js - updateBox 添加防御性检查，showPreview 添加重试逻辑
+
+- ✅ 修复测试整点报时功能不生效
+  - 原因：sendTts 方法要求 currentDisplayId 存在，但整点报时测试不需要指定显示端
+  - 解决：testTimeAnnounce 直接发送 WebSocket 消息，绕过 sendTts 的显示端检查
+  - 改动文件：
+    - public/js/tts.js - testTimeAnnounce 改为直接发送 WebSocket 消息
+
+### 新功能
+- ✅ 显示端UI旋转补偿
+  - 功能：当显示端旋转90°/270°时，时间、文件名等UI元素自动反向旋转，保持文字始终正向可读
+  - 实现：applyRotation 中对UI元素添加反向旋转 transform，90°/270°时限制 maxWidth 为 50vh
+  - 改动文件：
+    - public/display.html - applyRotation 添加UI元素旋转补偿
+
+- ✅ 添加显示端本地语音识别（sherpa-onnx-wasm）
+  - 功能：显示端可使用浏览器本地 WASM 进行语音识别，无需发送音频到服务器
+  - 实现：
+    - 创建 sherpa-asr.js 模块，懒加载 WASM 模型
+    - 支持流式识别（startStreaming/stopStreaming）
+    - 自动回退到服务器端 ASR
+    - 添加 /api/config/localAsr 配置端点
+  - 改动文件：
+    - public/js/sherpa-asr.js（新增）
+    - public/display.html - 集成本地 ASR，添加 initLocalAsr 函数
+    - server.js - 添加 /api/config/localAsr 端点
+
+- ✅ 添加纯语音输入输出显示端（Go实现）
+  - 功能：独立的 Go 程序，作为纯语音交互的显示端客户端
+  - 实现：
+    - WebSocket 连接到主服务器，注册为显示端
+    - 本地 ASR 语音识别（go-whisper）
+    - 音频播放（oto）
+    - 自动重连机制
+    - VAD 静音检测
+  - 改动文件：
+    - voice-display/main.go（新增）- 主程序，WebSocket 连接和消息处理
+    - voice-display/audio.go（新增）- 音频播放器
+    - voice-display/asr.go（新增）- ASR 语音识别引擎
+    - voice-display/recorder.go（新增）- 音频录制器
+    - voice-display/config.json（新增）- 配置文件
+    - voice-display/go.mod（新增）- Go 模块定义
+
+- ✅ 添加子服务器管理功能
+  - 功能：支持主服务器将显示端请求分发到多个子服务器，实现负载均衡和分布式部署
+  - 实现：
+    - SubServer 类：单个子服务器管理（健康检查、显示端注册/注销、消息转发）
+    - SubServerManager 类：子服务器集合管理（添加/删除、负载均衡选择、健康检查调度）
+    - API 端点：GET/POST/DELETE /api/subservers，GET /api/subservers/health
+    - 配置持久化到 config.json
+  - 改动文件：
+    - core/sub-server.js（新增）- SubServer 和 SubServerManager 类
+    - server.js - 集成子服务器管理器，添加 API 端点
+
+### Bug 修复
+- ✅ 控制器播放语音时停止监听麦克风
+  - 原因：播放 TTS 语音时麦克风仍在监听，会拾取播放的语音导致误触发
+  - 解决：playText 发送 TTS 时停止监听；handlePlayOnControl 接收语音播放时停止监听；LLM 响应完成后延迟恢复监听（显示端播放）；本地音频播放完成后恢复监听；添加"播放时暂停监听"UI 开关
+  - 改动文件：
+    - public/js/chat.js - playText 添加 noInterruptMode 停止监听，handlePlayOnControl 添加停止监听，handleResponse 添加延迟恢复监听，添加 toggleNoInterrupt 方法和 UI
+
+- ✅ 修复控制器裁剪区域不显示的问题
+  - 原因：showPreview 中 onload/onloadedmetadata 在 src 之后设置，缓存图片可能丢失事件；displayCanvasSize 为空时 recalculateSize 直接返回不更新裁剪框
+  - 解决：先设置事件处理器再设置 src；添加已加载媒体检测；displayCanvasSize 添加默认值回退；裁剪框仅在有效尺寸时显示
+  - 改动文件：
+    - public/js/crop.js - showPreview 调整事件绑定顺序和已加载检测，recalculateSize/reset/onMouseMove 添加 displayCanvasSize 回退，updateBox 仅在有效尺寸时显示裁剪框，updateContainerSize 防止零宽度
+
+- ✅ 修复 mini monitor 显示与 ttslive 不一致的问题
+  - 原因：display.html 的 mini monitor 缺少标签、边框样式、渐变背景，且有多余的绿色边框和"监听中"文字
+  - 解决：完全对齐 ttslive 的 mini monitor UI 样式和绘制逻辑
+  - 改动文件：
+    - public/display.html - 添加 monitor-wrapper 和 monitor-label，drawMonitor/drawIdleMonitor 内部 clearRect，移除动画循环中的边框和文字绘制
+    - public/css/display.css - 添加 monitor-wrapper 和 monitor-label 样式，#mini-monitor 添加 border-bottom/border-left/gradient-background
+
 - ✅ 修复 TTS Live 浏览器自动播放限制问题
   - 原因：浏览器自动播放策略要求音频播放必须由用户交互触发
   - 解决：添加音频解锁覆盖层，用户首次点击后解锁音频播放

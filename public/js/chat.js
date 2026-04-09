@@ -457,6 +457,10 @@ const Chat = {
                             <input type="checkbox" id="playOnControlCheckbox" onchange="Chat.togglePlayOnControl()">
                             在控制端播放语音
                         </label>
+                        <label class="chat-option">
+                            <input type="checkbox" id="noInterruptCheckbox" onchange="Chat.toggleNoInterrupt()" checked>
+                            播放时暂停监听
+                        </label>
                     </div>
                 </div>
                 <div class="chat-search-history" id="chatSearchHistory"></div>
@@ -488,6 +492,14 @@ const Chat = {
         if (checkbox) {
             checkbox.checked = this.session.playOnControl;
         }
+        const noInterruptCheckbox = document.getElementById('noInterruptCheckbox');
+        if (noInterruptCheckbox) {
+            noInterruptCheckbox.checked = this.noInterruptMode;
+        }
+    },
+    
+    toggleNoInterrupt() {
+        this.noInterruptMode = !this.noInterruptMode;
     },
     
     renderHistory() {
@@ -927,18 +939,36 @@ const Chat = {
         this.isLoading = false;
         this.updateSendButton();
         
+        if (this.noInterruptMode && this.wasListeningBeforePlayback && !this.isPlayingAudio) {
+            console.log('LLM响应完成，延迟恢复监听');
+            const savedWasListening = this.wasListeningBeforePlayback;
+            this.wasListeningBeforePlayback = false;
+            setTimeout(() => {
+                if (savedWasListening && !this.isPlayingAudio && !this.isListening) {
+                    this.startListening();
+                }
+            }, 3000);
+        }
+        
         const streamingContent = document.getElementById('streamingContent');
+        const streamingGroup = document.getElementById('streamingGroup');
+        const streamingAssistant = document.getElementById('streamingAssistant');
+        
+        if (data.success) {
+            this.history = data.history;
+        } else {
+            window.showToast('聊天失败: ' + data.error, 'error');
+        }
+        
         if (streamingContent) {
             streamingContent.innerHTML = this.escapeHtml(data.message);
             streamingContent.removeAttribute('id');
         }
         
-        const streamingGroup = document.getElementById('streamingGroup');
         if (streamingGroup) {
             streamingGroup.removeAttribute('id');
         }
         
-        const streamingAssistant = document.getElementById('streamingAssistant');
         if (streamingAssistant) {
             streamingAssistant.removeAttribute('id');
             
@@ -950,12 +980,8 @@ const Chat = {
                 playBtn.onclick = () => this.playMessage(this.history.length - 1);
                 streamingAssistant.appendChild(playBtn);
             }
-        }
-        
-        if (data.success) {
-            this.history = data.history;
-        } else {
-            window.showToast('聊天失败: ' + data.error, 'error');
+        } else if (data.success) {
+            this.renderHistory();
         }
     },
     
@@ -993,6 +1019,11 @@ const Chat = {
     },
     
     playText(text, displayId, playOnControl) {
+        if (this.noInterruptMode && this.isListening) {
+            this.wasListeningBeforePlayback = this.isAlwaysListening;
+            this.stopListening();
+        }
+        
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             window.WebSocketManager.ws.send(JSON.stringify({
@@ -1013,7 +1044,7 @@ const Chat = {
     processAudioQueue() {
         if (this.isPlayingAudio || this.audioQueue.length === 0) {
             if (this.audioQueue.length === 0) {
-                if (this.noInterruptMode && this.wasListeningBeforePlayback && !this.isLoading) {
+                if (this.noInterruptMode && this.wasListeningBeforePlayback && !this.isLoading && !this.isPlayingAudio) {
                     console.log('播放完成，恢复监听');
                     this.wasListeningBeforePlayback = false;
                     setTimeout(() => this.startListening(), 500);
@@ -1023,11 +1054,6 @@ const Chat = {
                 }
             }
             return;
-        }
-        
-        if (this.noInterruptMode && this.isListening) {
-            this.wasListeningBeforePlayback = this.isAlwaysListening;
-            this.stopListening();
         }
         
         this.isPlayingAudio = true;
@@ -1452,6 +1478,10 @@ const Chat = {
     
     handlePlayOnControl(data) {
         if (data.audioUrl) {
+            if (this.noInterruptMode && this.isListening) {
+                this.wasListeningBeforePlayback = this.isAlwaysListening;
+                this.stopListening();
+            }
             this.playOnControlDevice(data.audioUrl, data.text);
         }
     },

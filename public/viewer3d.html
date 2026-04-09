@@ -644,7 +644,12 @@
             
             async fetchAndDisplayActors() {
                 try {
+                    if (document.hidden) return;
+                    
                     const response = await fetch('/api/actors');
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
                     const data = await response.json();
                     
                     if (data.status === 'success' && data.actors) {
@@ -656,9 +661,13 @@
                         this.buildBuildings();
                         this.displayBuildings();
                         this.updateCounts();
+                        this.fetchErrorCount = 0;
                     }
                 } catch (e) {
-                    console.error('获取执行者失败:', e);
+                    this.fetchErrorCount = (this.fetchErrorCount || 0) + 1;
+                    if (this.fetchErrorCount <= 3 || this.fetchErrorCount % 10 === 0) {
+                        console.warn('获取执行者失败 (第' + this.fetchErrorCount + '次):', e.message);
+                    }
                 }
             },
             
@@ -967,11 +976,30 @@
             },
             
             startActorUpdates() {
-                this.updateInterval = setInterval(() => {
-                    if (currentScale === 'actors') {
-                        this.fetchAndDisplayActors();
-                    }
-                }, 5000);
+                this.actorUpdateTimer = null;
+                const scheduleUpdate = () => {
+                    const errorCount = this.fetchErrorCount || 0;
+                    const baseInterval = 5000;
+                    const interval = errorCount > 3 ? Math.min(baseInterval * Math.pow(2, Math.min(errorCount - 3, 5)), 60000) : baseInterval;
+                    this.actorUpdateTimer = setTimeout(async () => {
+                        if (currentScale === 'actors' && !document.hidden) {
+                            await this.fetchAndDisplayActors();
+                        }
+                        scheduleUpdate();
+                    }, interval);
+                };
+                scheduleUpdate();
+            },
+            
+            stopActorUpdates() {
+                if (this.actorUpdateTimer) {
+                    clearTimeout(this.actorUpdateTimer);
+                    this.actorUpdateTimer = null;
+                }
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                    this.updateInterval = null;
+                }
             },
             
             updateCounts() {

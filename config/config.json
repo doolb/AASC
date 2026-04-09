@@ -14,12 +14,12 @@
         "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
         "mediaType": "video"
       },
-      "rotation": 0,
-      "fit": "height",
+      "rotation": 90,
+      "fit": "width",
       "crop": {
-        "x": null,
+        "x": 0,
         "y": 0,
-        "width": null,
+        "width": 100,
         "height": 100
       },
       "playlist": [],
@@ -46,19 +46,20 @@
     "192.168.1.101": {
       "currentMedia": {
         "type": "url",
-        "url": "http://192.168.1.39:8081/api/media-libraries/local_uploads/proxy/1774543864439_27363_1.jpeg",
-        "mediaType": "image"
+        "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
+        "mediaType": "video"
       },
       "rotation": 0,
       "fit": "contain",
       "crop": {
-        "x": null,
+        "x": 0,
         "y": 0,
-        "width": null,
+        "width": 100,
         "height": 100
       },
-      "volume": 100,
-      "playlist": []
+      "volume": 6,
+      "playlist": [],
+      "isPlaying": false
     },
     "192.168.1.19": {
       "currentMedia": null,

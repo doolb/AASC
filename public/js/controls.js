@@ -45,7 +45,9 @@ const Controls = {
         
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('fit', fit);
-            window.WebSocketManager.sendControl('crop', window.Crop ? window.Crop.data : { x: 0, y: 0, width: 100, height: 100 });
+            if (fit === 'crop') {
+                window.WebSocketManager.sendControl('crop', window.Crop ? window.Crop.data : { x: 0, y: 0, width: 100, height: 100 });
+            }
         }
         setTimeout(() => {
             if (window.Crop) {

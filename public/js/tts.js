@@ -113,9 +113,15 @@ const Tts = {
     },
     
     testTimeAnnounce() {
-        if (window.WebSocketManager) {
-            window.WebSocketManager.sendTts('testTimeAnnounce');
+        if (window.WebSocketManager && window.WebSocketManager.ws && 
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'tts',
+                action: 'testTimeAnnounce'
+            }));
             showToast('已发送整点报时测试请求', 'success');
+        } else {
+            showToast('未连接到服务器', 'error');
         }
     }
 };

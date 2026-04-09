@@ -16,6 +16,7 @@ const chat = require('./core/chat');
 const reminder = require('./core/reminder');
 const voiceCommand = require('./core/voiceCommand');
 const { MediaLibraryManager } = require('./core/media-library');
+const { SubServerManager } = require('./core/sub-server');
 const { initializeAASCSystem } = require('./aasc/init');
 
 config.loadConfig();
@@ -122,6 +123,14 @@ const mediaLibraryManager = new MediaLibraryManager({
     getLocalIP: getLocalIP,
     isHttps: () => useHttps
 });
+
+const subServerManager = new SubServerManager();
+
+const subServerConfig = config.get('subServers');
+if (subServerConfig) {
+    subServerManager.loadFromConfig(subServerConfig);
+    subServerManager.startHealthCheck();
+}
 
 mediaLibraryManager.init().then(() => {
     console.log('媒体库初始化完成');
@@ -423,6 +432,51 @@ app.post('/api/tts/config', (req, res) => {
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });
     }
+});
+
+app.get('/api/config/localAsr', (req, res) => {
+    const localAsrConfig = config.get('localAsr') || { enabled: false };
+    res.json({ status: 'success', enabled: localAsrConfig.enabled });
+});
+
+app.post('/api/config/localAsr', (req, res) => {
+    try {
+        const { enabled } = req.body;
+        config.set('localAsr', { enabled: !!enabled });
+        res.json({ status: 'success', enabled: !!enabled });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+app.get('/api/subservers', (req, res) => {
+    const servers = subServerManager.getAllServers().map(s => s.toJSON());
+    res.json({ status: 'success', servers });
+});
+
+app.post('/api/subservers', (req, res) => {
+    try {
+        const { id, url, name, maxDisplays, priority, enabled } = req.body;
+        if (!id || !url) {
+            return res.status(400).json({ status: 'error', message: 'id和url必填' });
+        }
+        const server = subServerManager.addServer(id, url, { name, maxDisplays, priority, enabled });
+        config.set('subServers', subServerManager.saveToConfig());
+        res.json({ status: 'success', server: server.toJSON() });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '添加子服务器失败' });
+    }
+});
+
+app.delete('/api/subservers/:id', (req, res) => {
+    const removed = subServerManager.removeServer(req.params.id);
+    config.set('subServers', subServerManager.saveToConfig());
+    res.json({ status: removed ? 'success' : 'error', message: removed ? '已删除' : '服务器不存在' });
+});
+
+app.get('/api/subservers/health', async (req, res) => {
+    const summary = await subServerManager.checkAllHealth();
+    res.json({ status: 'success', ...summary });
 });
 
 const asrUpload = multer({ dest: ASR_TEMP_DIR });

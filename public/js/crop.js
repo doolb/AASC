@@ -60,13 +60,22 @@ const Crop = {
     
     updateContainerSize() {
         const containerWidth = this.container.parentElement.clientWidth;
-        this.container.style.height = containerWidth + 'px';
+        if (containerWidth > 0) {
+            this.container.style.height = containerWidth + 'px';
+        }
     },
     
     updateBox() {
+        if (!this.box || !this.container) return;
+        
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
         const mediaRect = media.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
+        
+        if (mediaRect.width === 0 || mediaRect.height === 0) {
+            this.box.style.display = 'none';
+            return;
+        }
         
         const offsetX = mediaRect.left - containerRect.left;
         const offsetY = mediaRect.top - containerRect.top;
@@ -77,6 +86,10 @@ const Crop = {
         const boxTop = (offsetY + (this.data.y / 100) * mediaHeight);
         const boxWidth = (this.data.width / 100) * mediaWidth;
         const boxHeight = (this.data.height / 100) * mediaHeight;
+        
+        if (boxWidth > 0 && boxHeight > 0) {
+            this.box.style.display = 'block';
+        }
         
         this.box.style.left = boxLeft + 'px';
         this.box.style.top = boxTop + 'px';
@@ -131,7 +144,12 @@ const Crop = {
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
         const mediaRect = media.getBoundingClientRect();
         
-        const aspectRatio = window.displayCanvasSize.width / window.displayCanvasSize.height;
+        if (mediaRect.width === 0 || mediaRect.height === 0) {
+            return;
+        }
+        
+        const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
+        const aspectRatio = canvasSize.width / canvasSize.height;
         const mediaAspect = mediaRect.width / mediaRect.height;
         
         let newW, newH;
@@ -148,6 +166,7 @@ const Crop = {
         this.data.x = (100 - newW) / 2;
         this.data.y = (100 - newH) / 2;
         
+        this.box.style.display = 'block';
         this.updateBox();
         if (sendToDisplay) {
             this.sendData();
@@ -158,29 +177,55 @@ const Crop = {
         this.currentMedia = url;
         
         if (mediaType === 'video') {
-            this.previewVideo.src = url;
             this.previewVideo.style.display = 'block';
             this.previewImg.style.display = 'none';
             this.previewVideo.onloadedmetadata = () => {
                 this.recalculateSize(false);
             };
+            this.previewVideo.src = url;
+            if (this.previewVideo.readyState >= 1) {
+                this.recalculateSize(false);
+            } else {
+                this._retryShowPreview(0);
+            }
         } else {
-            this.previewImg.src = url;
             this.previewImg.style.display = 'block';
             this.previewVideo.style.display = 'none';
             this.previewImg.onload = () => {
                 this.recalculateSize(false);
             };
+            this.previewImg.src = url;
+            if (this.previewImg.complete && this.previewImg.naturalWidth > 0) {
+                this.recalculateSize(false);
+            } else {
+                this._retryShowPreview(0);
+            }
         }
-        
-        this.box.style.display = 'block';
+    },
+    
+    _retryShowPreview(retryCount) {
+        if (retryCount >= 5) return;
+        setTimeout(() => {
+            const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+            const mediaRect = media.getBoundingClientRect();
+            if (mediaRect.width > 0 && mediaRect.height > 0) {
+                this.recalculateSize(false);
+            } else {
+                this._retryShowPreview(retryCount + 1);
+            }
+        }, 200 * (retryCount + 1));
     },
     
     reset() {
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
         const mediaRect = media.getBoundingClientRect();
         
-        const aspectRatio = window.displayCanvasSize.width / window.displayCanvasSize.height;
+        if (mediaRect.width === 0 || mediaRect.height === 0) {
+            return;
+        }
+        
+        const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
+        const aspectRatio = canvasSize.width / canvasSize.height;
         let mediaAspect = mediaRect.width / mediaRect.height;
 
         let newW, newH;
@@ -229,7 +274,8 @@ const Crop = {
             this.data.x = Math.max(0, Math.min(100 - this.data.width, this.cropStart.x + adjustedDx));
             this.data.y = Math.max(0, Math.min(100 - this.data.height, this.cropStart.y + adjustedDy));
         } else if (this.isResizing) {
-            const aspectRatio = window.displayCanvasSize.width / window.displayCanvasSize.height;
+            const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
+            const aspectRatio = canvasSize.width / canvasSize.height;
             const mediaAspect = mediaRect.width / mediaRect.height;
             
             let delta;
@@ -368,10 +414,10 @@ const Crop = {
         const inputWidth = document.getElementById('cropInputWidth');
         const inputHeight = document.getElementById('cropInputHeight');
         
-        if (inputX && this.data.x != null) inputX.value = this.data.x.toFixed(1);
-        if (inputY && this.data.y != null) inputY.value = this.data.y.toFixed(1);
-        if (inputWidth && this.data.width != null) inputWidth.value = this.data.width.toFixed(1);
-        if (inputHeight && this.data.height != null) inputHeight.value = this.data.height.toFixed(1);
+        if (inputX && this.data.x != null && !isNaN(this.data.x)) inputX.value = this.data.x.toFixed(1);
+        if (inputY && this.data.y != null && !isNaN(this.data.y)) inputY.value = this.data.y.toFixed(1);
+        if (inputWidth && this.data.width != null && !isNaN(this.data.width)) inputWidth.value = this.data.width.toFixed(1);
+        if (inputHeight && this.data.height != null && !isNaN(this.data.height)) inputHeight.value = this.data.height.toFixed(1);
     },
     
     setCropManually() {

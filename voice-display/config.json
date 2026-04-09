@@ -1,0 +1,6 @@
+{
+    "serverUrl": "http://localhost:3000",
+    "asrModelPath": "",
+    "displayId": "voice-display-1",
+    "vadThreshold": 0.5
+}

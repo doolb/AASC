@@ -437,3 +437,121 @@ function detectMediaType(name):
 | core/chat.js | 聊天功能 |
 | core/reminder.js | 提醒功能 |
 | core/timeAnnounce.js | 整点报时功能 |
+| core/sub-server.js | 子服务器管理 |
+
+## 本地 ASR 配置 API
+
+### GET /api/config/localAsr
+获取本地 ASR 配置。
+
+**响应**:
+```json
+{
+  "status": "success",
+  "enabled": false
+}
+```
+
+**实现**:
+```
+从 config 读取 localAsr 配置
+返回 enabled 状态
+```
+
+### POST /api/config/localAsr
+更新本地 ASR 配置。
+
+**请求**:
+```json
+{
+  "enabled": true
+}
+```
+
+**实现**:
+```
+调用 config.set('localAsr', { enabled })
+返回更新后的配置
+```
+
+## 子服务器管理 API
+
+### GET /api/subservers
+获取所有子服务器列表。
+
+**响应**:
+```json
+{
+  "status": "success",
+  "servers": [
+    {
+      "id": "sub1",
+      "url": "http://192.168.1.100:3001",
+      "name": "子服务器1",
+      "maxDisplays": 10,
+      "currentDisplays": 3,
+      "priority": 0,
+      "enabled": true,
+      "healthy": true,
+      "latency": 15,
+      "lastHealthCheck": "2026-04-09T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+**实现**:
+```
+从 subServerManager 获取所有服务器
+映射为 JSON 格式返回
+```
+
+### POST /api/subservers
+添加子服务器。
+
+**请求**:
+```json
+{
+  "id": "sub1",
+  "url": "http://192.168.1.100:3001",
+  "name": "子服务器1",
+  "maxDisplays": 10,
+  "priority": 0,
+  "enabled": true
+}
+```
+
+**实现**:
+```
+验证 id 和 url 必填
+调用 subServerManager.addServer()
+持久化配置到 config
+```
+
+### DELETE /api/subservers/:id
+删除子服务器。
+
+**实现**:
+```
+调用 subServerManager.removeServer()
+持久化配置到 config
+```
+
+### GET /api/subservers/health
+检查所有子服务器健康状态。
+
+**响应**:
+```json
+{
+  "status": "success",
+  "total": 3,
+  "healthy": 2,
+  "unhealthy": 1
+}
+```
+
+**实现**:
+```
+并行执行所有子服务器的 healthCheck
+汇总结果返回
+```

@@ -12,7 +12,10 @@
     <div id="fileNameDisplay"></div>
     <div id="voiceStatus" class="voice-status-hidden">语音</div>
     <div id="voiceTextDisplay" class="voice-text-hidden"></div>
-    <canvas id="mini-monitor" width="160" height="50"></canvas>
+    <div class="monitor-wrapper">
+        <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
+        <canvas id="mini-monitor" width="160" height="50"></canvas>
+    </div>
     
     <div id="mediaContainer">
         <div id="waitingMessage">
@@ -24,7 +27,7 @@
     </div>
     
     <audio id="ttsAudio" style="display:none;"></audio>
-
+    <script src="js/sherpa-asr.js"></script>
     <script>
         const connectionStatus = document.getElementById('connectionStatus');
         const timeDisplay = document.getElementById('timeDisplay');
@@ -60,6 +63,12 @@
         let isPlayingAudio = false;
         let currentAudio = null;
         let isLLMGenerating = false;
+        let consecutiveIgnoreCount = 0;
+        let voiceCooldownUntil = 0;
+        const MAX_CONSECUTIVE_IGNORES = 3;
+        const VOICE_COOLDOWN_MS = 10000;
+        let localAsrAvailable = false;
+        let localAsrStreaming = false;
         
         let monitorTime = 0;
         let monitorAnalyser = null;
@@ -69,6 +78,7 @@
         const monitorCtx = monitorCanvas.getContext('2d');
         
         function drawMonitor(data) {
+            monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
             monitorCtx.fillStyle = '#00f2ff';
             
             const barWidth = 3;
@@ -87,6 +97,7 @@
         }
         
         function drawIdleMonitor(t) {
+            monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
             monitorCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             for (let i = 0; i < monitorCanvas.width; i += 4) {
                 const h = 5 + Math.sin(i * 0.1 + t * 5) * 3;
@@ -98,26 +109,12 @@
             requestAnimationFrame(animateMonitor);
             monitorTime += 0.005;
 
-            monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
-
             if (isListening && analyser) {
                 const data = new Uint8Array(analyser.frequencyBinCount);
                 analyser.getByteFrequencyData(data);
                 drawMonitor(data);
-                
-                monitorCtx.strokeStyle = '#4CAF50';
-                monitorCtx.lineWidth = 2;
-                monitorCtx.strokeRect(1, 1, monitorCanvas.width - 2, monitorCanvas.height - 2);
-                
-                monitorCtx.fillStyle = '#4CAF50';
-                monitorCtx.font = 'bold 10px Arial';
-                monitorCtx.fillText('监听中', 5, 12);
             } else {
                 drawIdleMonitor(monitorTime);
-                
-                monitorCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-                monitorCtx.lineWidth = 1;
-                monitorCtx.strokeRect(0.5, 0.5, monitorCanvas.width - 1, monitorCanvas.height - 1);
             }
         }
         
@@ -296,6 +293,21 @@
             const transform = `rotate(${currentRotation}deg)`;
             mediaImage.style.transform = transform;
             mediaVideo.style.transform = transform;
+            
+            const uiElements = [timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay];
+            const counterRotation = -currentRotation;
+            
+            uiElements.forEach(el => {
+                if (!el) return;
+                el.style.transform = `rotate(${counterRotation}deg)`;
+                
+                if (currentRotation === 90 || currentRotation === 270) {
+                    el.style.transformOrigin = 'center center';
+                    el.style.maxWidth = '50vh';
+                } else {
+                    el.style.maxWidth = '';
+                }
+            });
         }
         
         function applyFit(fit) {
@@ -1038,6 +1050,11 @@
         }
         
         function sendVoiceStatus() {
+            if (!isListening && localAsrStreaming) {
+                SherpaASR.stopStreaming();
+                localAsrStreaming = false;
+            }
+            
             updateVoiceStatusDisplay();
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 displayWs.send(JSON.stringify({
@@ -1054,12 +1071,23 @@
         
         async function checkAsrStatus() {
             try {
+                const localAsrReady = await initLocalAsr();
+                if (localAsrReady) {
+                    localAsrAvailable = true;
+                    voiceSupported = true;
+                    console.log('显示端本地 WASM ASR 可用');
+                    if (isAlwaysListening) {
+                        startVoiceRecording();
+                    }
+                    return;
+                }
+                
                 const response = await fetch('/api/asr/status');
                 const data = await response.json();
                 voiceSupported = data.ready;
                 
                 if (voiceSupported) {
-                    console.log('显示端本地 ASR 服务可用');
+                    console.log('显示端服务器 ASR 服务可用');
                     startVoiceRecording();
                 } else {
                     console.log('ASR 服务未初始化');
@@ -1072,8 +1100,64 @@
             }
         }
         
+        async function initLocalAsr() {
+            try {
+                if (!window.SherpaASR) return false;
+                
+                const enabled = await fetch('/api/config/localAsr')
+                    .then(r => r.json())
+                    .then(d => d.enabled)
+                    .catch(() => false);
+                
+                if (!enabled) return false;
+                
+                const ready = await SherpaASR.init({ enabled: true });
+                if (ready) {
+                    SherpaASR.onPartial = (text) => {
+                        if (text) {
+                            updateVoiceTextDisplay(text, true);
+                        }
+                    };
+                    SherpaASR.onResult = (text) => {
+                        if (!text) return;
+                        
+                        consecutiveIgnoreCount = 0;
+                        console.log('显示端本地ASR识别结果:', text);
+                        updateVoiceTextDisplay(text, true);
+                        
+                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                            displayWs.send(JSON.stringify({
+                                type: 'voiceInput',
+                                text: text,
+                                isFinal: true,
+                                fullText: text
+                            }));
+                        }
+                        
+                        setTimeout(() => {
+                            updateVoiceTextDisplay('', true);
+                        }, 3000);
+                    };
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.log('本地ASR初始化失败:', e.message);
+                return false;
+            }
+        }
+        
         async function startVoiceRecording() {
             if (isListening) return;
+            
+            if (Date.now() < voiceCooldownUntil) {
+                const remainingMs = voiceCooldownUntil - Date.now();
+                console.log('显示端语音冷却中，剩余' + Math.ceil(remainingMs / 1000) + '秒');
+                if (isAlwaysListening) {
+                    setTimeout(() => startVoiceRecording(), remainingMs + 500);
+                }
+                return;
+            }
             
             try {
                 micStream = await navigator.mediaDevices.getUserMedia({ 
@@ -1083,6 +1167,20 @@
                         sampleRate: 16000
                     }
                 });
+                
+                if (localAsrAvailable && SherpaASR.isLoaded) {
+                    const started = await SherpaASR.startStreaming(micStream);
+                    if (started) {
+                        localAsrStreaming = true;
+                        isListening = true;
+                        hasSpeech = false;
+                        speechStartTime = null;
+                        silenceStartTime = null;
+                        console.log('显示端本地ASR流式识别已启动');
+                        sendVoiceStatus();
+                        return;
+                    }
+                }
                 
                 mediaRecorder = new MediaRecorder(micStream);
                 audioChunks = [];
@@ -1214,6 +1312,8 @@
                     const recognizedText = data.text.trim();
                     console.log('显示端识别结果:', recognizedText);
                     
+                    consecutiveIgnoreCount = 0;
+                    
                     updateVoiceTextDisplay(recognizedText, true);
                     
                     if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -1229,9 +1329,26 @@
                         updateVoiceTextDisplay('', true);
                     }, 3000);
                 } else if (data.status === 'ignored') {
-                    console.log('显示端无效语音输入，已忽略:', data.text);
+                    consecutiveIgnoreCount++;
+                    console.log('显示端无效语音输入，已忽略 (' + consecutiveIgnoreCount + '/' + MAX_CONSECUTIVE_IGNORES + '):', data.text);
                     updateVoiceTextDisplay('', true);
-                    if (isAlwaysListening) {
+                    
+                    if (consecutiveIgnoreCount >= MAX_CONSECUTIVE_IGNORES) {
+                        const cooldownMs = VOICE_COOLDOWN_MS * Math.pow(2, Math.min(consecutiveIgnoreCount - MAX_CONSECUTIVE_IGNORES, 3));
+                        voiceCooldownUntil = Date.now() + cooldownMs;
+                        console.log('显示端连续' + consecutiveIgnoreCount + '次无效输入，冷却' + (cooldownMs / 1000) + '秒');
+                        isListening = false;
+                        sendVoiceStatus();
+                        
+                        if (isAlwaysListening) {
+                            setTimeout(() => {
+                                if (Date.now() >= voiceCooldownUntil) {
+                                    consecutiveIgnoreCount = 0;
+                                    startVoiceRecording();
+                                }
+                            }, cooldownMs);
+                        }
+                    } else if (isAlwaysListening) {
                         setTimeout(() => startVoiceRecording(), 500);
                     }
                 }

@@ -36,3 +36,4 @@
 | DataSnapshot | [data-snapshot.md](design/data-snapshot.md) | 数据快照、内存数据持久化、调试友好 |
 | ViewBind | [viewbind.md](design/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 | 地图可视化 | [map-visualization.md](design/map-visualization.md) | 执行者能力可视化、2D地图渲染、PixiJS渲染器 |
+| 子服务器 | [sub-server.md](design/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |

@@ -924,27 +924,59 @@ const Chat = {
     playText(text, displayId, playOnControl):
         播放文本到指定设备:
         
-        如果 playOnControl === true:
-            调用 playOnControlDevice(text)
-        否则如果 displayId 存在:
-            发送到显示端播放:
-                type: 'tts'
-                action: 'play'
-                displayId: displayId
-                text: text
-        否则:
-            调用 playOnControlDevice(text)
+        如果 noInterruptMode 为 true 且 isListening 为 true:
+            wasListeningBeforePlayback = isAlwaysListening
+            调用 stopListening()
+        
+        发送 TTS 请求到服务器:
+            type: 'tts'
+            displayId: displayId
+            action: 'play'
+            text: text
+            playOnControl: playOnControl
     
-    playOnControlDevice(text):
+    playOnControlDevice(audioUrl, text):
         在控制端播放语音:
         
-        如果支持 speechSynthesis:
-            创建 SpeechSynthesisUtterance
-            设置 lang = 'zh-CN'
-            调用 speechSynthesis.speak()
-        否则:
-            请求 TTS API 生成音频
-            创建 Audio 元素播放
+        添加到 audioQueue
+        调用 processAudioQueue()
+    
+    processAudioQueue():
+        如果 isPlayingAudio 或 audioQueue 为空:
+            如果 audioQueue 为空:
+                如果 noInterruptMode 且 wasListeningBeforePlayback 且非加载中且非播放中:
+                    wasListeningBeforePlayback = false
+                    延迟 500ms 后 startListening()
+                否则如果 isAlwaysListening 且非 noInterruptMode:
+                    延迟 500ms 后 startListening()
+            返回
+        
+        isPlayingAudio = true
+        从 audioQueue 取出音频
+        创建 Audio 元素播放
+        播放完成/失败后:
+            isPlayingAudio = false
+            递归调用 processAudioQueue()
+    
+    handlePlayOnControl(data):
+        接收服务器发来的控制端播放音频:
+        
+        如果 noInterruptMode 为 true 且 isListening 为 true:
+            wasListeningBeforePlayback = isAlwaysListening
+            调用 stopListening()
+        
+        调用 playOnControlDevice(data.audioUrl, data.text)
+    
+    handleResponse(data):
+        LLM 响应完成:
+        
+        isLoading = false
+        
+        如果 noInterruptMode 且 wasListeningBeforePlayback 且非 isPlayingAudio:
+            wasListeningBeforePlayback = false
+            延迟 3000ms 后（等待显示端 TTS 播放完成）:
+                如果非 isPlayingAudio 且非 isListening:
+                    startListening()
     
     showConfig():
         显示设置面板:
