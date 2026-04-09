@@ -15,22 +15,21 @@ import (
 )
 
 type Config struct {
-	ServerURL    string `json:"serverUrl"`
-	ASRModelPath string `json:"asrModelPath"`
-	DisplayID    string `json:"displayId"`
+	ServerURL    string  `json:"serverUrl"`
+	DisplayID    string  `json:"displayId"`
 	VADThreshold float64 `json:"vadThreshold"`
 }
 
 type VoiceDisplay struct {
-	config     *Config
-	ws         *websocket.Conn
-	wsMutex    sync.Mutex
-	asr        *ASREngine
-	audio      *AudioPlayer
-	recorder   *AudioRecorder
-	stopChan   chan struct{}
-	connected  bool
-	connMutex  sync.Mutex
+	config    *Config
+	ws        *websocket.Conn
+	wsMutex   sync.Mutex
+	asr       *ServerASR
+	audio     *AudioPlayer
+	recorder  *AudioRecorder
+	stopChan  chan struct{}
+	connected bool
+	connMutex sync.Mutex
 }
 
 func NewVoiceDisplay(cfg *Config) *VoiceDisplay {
@@ -62,9 +61,9 @@ func (vd *VoiceDisplay) Connect() error {
 	vd.setConnected(true)
 
 	registerMsg := map[string]interface{}{
-		"type":      "register",
+		"type":       "register",
 		"clientType": "display",
-		"displayId": vd.config.DisplayID,
+		"displayId":  vd.config.DisplayID,
 	}
 	vd.sendJSON(registerMsg)
 
@@ -165,23 +164,30 @@ func (vd *VoiceDisplay) sendVoiceInput(text string) {
 }
 
 func (vd *VoiceDisplay) startVoiceRecognition() error {
-	if vd.asr == nil {
-		return fmt.Errorf("ASR引擎未初始化")
+	if vd.asr == nil || !vd.asr.IsReady() {
+		return fmt.Errorf("服务器端ASR不可用")
 	}
 
-	log.Printf("[语音] 开始语音识别...")
+	log.Printf("[语音] 开始语音识别（服务器端ASR）...")
 
 	go func() {
-		audioChan := make(chan []float32, 100)
-		
+		audioChan := make(chan []byte, 100)
+
 		go vd.recorder.Start(audioChan, vd.stopChan)
-		
-		vd.asr.ProcessStream(audioChan, func(text string, isFinal bool) {
-			if isFinal && text != "" {
+
+		for wavData := range audioChan {
+			text, err := vd.asr.Recognize(wavData)
+			if err != nil {
+				log.Printf("[语音] 服务器识别失败: %v", err)
+				continue
+			}
+			if text != "" {
 				log.Printf("[语音] 识别结果: %s", text)
 				vd.sendVoiceInput(text)
+			} else {
+				log.Printf("[语音] 服务器忽略该段音频")
 			}
-		})
+		}
 	}()
 
 	return nil
@@ -227,11 +233,11 @@ func (vd *VoiceDisplay) ListenMessages() {
 
 func (vd *VoiceDisplay) reconnect() {
 	vd.setConnected(false)
-	
+
 	for i := 1; i <= 5; i++ {
 		log.Printf("[重连] 第%d次尝试重连...", i)
 		time.Sleep(time.Duration(i*2) * time.Second)
-		
+
 		if err := vd.Connect(); err != nil {
 			log.Printf("[重连] 重连失败: %v", err)
 			continue
@@ -239,7 +245,7 @@ func (vd *VoiceDisplay) reconnect() {
 		log.Printf("[重连] 重连成功")
 		return
 	}
-	
+
 	log.Printf("[重连] 重连失败，退出")
 	close(vd.stopChan)
 }
@@ -252,9 +258,9 @@ func (vd *VoiceDisplay) Start() error {
 		return fmt.Errorf("初始化音频播放器失败: %w", err)
 	}
 
-	vd.asr, err = NewASREngine(vd.config.ASRModelPath)
-	if err != nil {
-		log.Printf("[警告] ASR引擎初始化失败: %v，语音识别不可用", err)
+	vd.asr = NewServerASR(vd.config.ServerURL)
+	if !vd.asr.IsReady() {
+		log.Printf("[警告] 服务器端ASR不可用，语音识别功能将不可用")
 	}
 
 	vd.recorder = NewAudioRecorder()
@@ -263,7 +269,7 @@ func (vd *VoiceDisplay) Start() error {
 		return fmt.Errorf("连接服务器失败: %w", err)
 	}
 
-	if vd.asr != nil {
+	if vd.asr != nil && vd.asr.IsReady() {
 		if err := vd.startVoiceRecognition(); err != nil {
 			log.Printf("[警告] 语音识别启动失败: %v", err)
 		}

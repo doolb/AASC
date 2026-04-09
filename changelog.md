@@ -62,17 +62,19 @@
   - 功能：独立的 Go 程序，作为纯语音交互的显示端客户端
   - 实现：
     - WebSocket 连接到主服务器，注册为显示端
-    - 本地 ASR 语音识别（go-whisper）
+    - 服务器端 ASR 语音识别（通过 HTTP POST /api/asr/recognize）
     - 音频播放（oto）
+    - 音频录制（malgo）
     - 自动重连机制
     - VAD 静音检测
+    - WAV 编码
   - 改动文件：
-    - voice-display/main.go（新增）- 主程序，WebSocket 连接和消息处理
-    - voice-display/audio.go（新增）- 音频播放器
-    - voice-display/asr.go（新增）- ASR 语音识别引擎
-    - voice-display/recorder.go（新增）- 音频录制器
-    - voice-display/config.json（新增）- 配置文件
-    - voice-display/go.mod（新增）- Go 模块定义
+    - voice-display/main.go - 主程序，WebSocket 连接和消息处理
+    - voice-display/audio.go - 音频播放器
+    - voice-display/asr.go - 服务器端 ASR 客户端
+    - voice-display/recorder.go - 音频录制器（录音 + VAD + WAV 编码）
+    - voice-display/config.json - 配置文件
+    - voice-display/go.mod - Go 模块定义
 
 - ✅ 添加子服务器管理功能
   - 功能：支持主服务器将显示端请求分发到多个子服务器，实现负载均衡和分布式部署
