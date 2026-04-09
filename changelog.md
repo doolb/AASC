@@ -3,6 +3,97 @@
 ## [Unreleased]
 
 ### Bug 修复
+- ✅ 修复显示端没有[Crop]打印日志
+  - 原因：display.html 的 applyCrop 函数没有日志输出
+  - 解决：在 applyCrop 函数中添加详细日志，包括容器尺寸、媒体尺寸、旋转角度、适配模式、裁剪百分比、最终样式等
+  - 改动文件：
+    - public/display.html - applyCrop 添加详细日志输出
+
+- ✅ 修复整点报时设置状态显示问题
+  - 原因：renderTimeAnnounceConfig 函数缺少日志，难以排查配置加载和渲染问题
+  - 解决：在 loadTimeAnnounceConfig 和 renderTimeAnnounceConfig 函数中添加详细日志
+  - 改动文件：
+    - public/js/tts.js - 添加配置加载和渲染日志
+
+- ✅ 修复UI旋转后超出画面边界
+  - 原因：applyRotation 函数没有边界检查，旋转后的UI元素可能超出画面
+  - 解决：添加边界检查逻辑，使用 requestAnimationFrame 在旋转后检查元素位置，超出边界时自动调整
+  - 改动文件：
+    - public/display.html - applyRotation 添加边界检查
+
+- ✅ 更新 voice-display-node 安装文档
+  - 原因：speaker 原生模块需要 Python 和 Visual Studio Build Tools 编译
+  - 解决：添加详细的 Windows 安装步骤和常见问题解答
+  - 改动文件：
+    - docs/spec/voice-display.md - 添加 Python、VS Build Tools 安装说明
+
+- ✅ 移除 speaker 依赖，改用系统命令播放音频
+  - 原因：speaker 原生模块需要 Python 和编译工具，安装复杂
+  - 解决：使用系统命令播放音频（Windows: PowerShell, macOS: afplay, Linux: aplay），无需编译原生模块
+  - 改动文件：
+    - voice-display-node/audio-player.js - 重写为使用系统命令
+    - voice-display-node/package.json - 移除 speaker 和 wav 依赖
+
+- ✅ 修复控制端裁剪框自动显示问题
+  - 原因：收到显示端状态更新时自动调用 showPreview 显示裁剪框
+  - 解决：只有当媒体 URL 变化时才调用 showPreview，刷新页面后能正确恢复裁剪框预览
+  - 改动文件：
+    - public/js/websocket.js - 添加媒体 URL 变化检查
+
+- ✅ 修复子显示端连接服务器使用内网IP
+  - 原因：config.json 中配置的是 localhost:3000，其他设备无法连接
+  - 解决：服务器启动时自动将内网 IP 写入 voice-display-node/config.json
+  - 改动文件：
+    - server.js - 添加 updateVoiceDisplayConfig 函数
+
+- ✅ 修复控制端裁剪框刷新页面后不显示的问题
+  - 原因：页面刷新后 currentDisplayId 为 null，displayState 消息被跳过
+  - 解决：收到 displayState 时自动选择显示端
+  - 改动文件：
+    - public/js/websocket.js - 添加自动选择显示端逻辑
+
+- ✅ UI旋转90度和270度时宽高切换显示
+  - 需求：旋转时UI元素保持在视觉上的正确位置
+  - 实现：根据旋转角度重新定位UI元素
+  - 改动文件：
+    - public/display.html - 重写 applyRotation 函数
+
+- ✅ 今天提醒和明天提醒指令排除每天重复的提示
+  - 原因：daily 类型的提醒被包含在今日/明日提醒中
+  - 解决：过滤时排除 daily 类型
+  - 改动文件：
+    - core/voiceCommand.js - 修改过滤逻辑
+
+- ✅ 子显示端支持使用自签wss
+  - 原因：WebSocket 默认验证证书，自签名证书会被拒绝
+  - 解决：wss 连接时设置 rejectUnauthorized: false
+  - 改动文件：
+    - voice-display-node/main.js - 添加 wsOptions 配置
+
+- ✅ 修复控制端裁剪框刷新页面后不显示的问题
+  - 原因：页面刷新后没有发送 getState 消息获取显示端状态
+  - 解决：收到 displayList 时自动选择显示端并发送 getState
+  - 改动文件：
+    - public/js/websocket.js - 添加自动发送 getState 逻辑
+
+- ✅ UI旋转90度时时间竖向显示在右上角
+  - 需求：90度时时间从上到下竖向显示在右上角
+  - 实现：使用 writingMode: vertical-rl 实现竖向文字
+  - 改动文件：
+    - public/display.html - 修改 applyRotation 函数
+
+- ✅ 修复聊天发送消息没反应的问题
+  - 原因：WebSocket 连接未建立时发送消息没有任何提示
+  - 解决：添加错误处理和重连逻辑
+  - 改动文件：
+    - public/js/chat.js - 添加 WebSocket 连接检查和重连
+
+- ✅ 修复控制端裁剪框刷新页面后不显示的问题
+  - 原因：页面刷新后需要主动发送 getState 获取显示端状态
+  - 解决：收到 displayList 时自动发送 getState
+  - 改动文件：
+    - public/js/websocket.js - 添加自动发送 getState 逻辑和详细日志
+
 - ✅ 修复 viewer3d.html fetchAndDisplayActors TypeError: Failed to fetch
   - 原因：fetchAndDisplayActors 缺少错误处理，服务器不可达时每5秒打印错误
   - 解决：添加页面可见性检查（document.hidden）、HTTP状态码检查、错误计数和日志降频（前3次+每10次打印）、指数退避重试间隔（5s→60s）
@@ -32,6 +123,64 @@
   - 解决：updateBox 添加空值检查和零尺寸处理，showPreview 添加 _retryShowPreview 重试机制（最多5次，递增延迟）
   - 改动文件：
     - public/js/crop.js - updateBox 添加防御性检查，showPreview 添加重试逻辑
+
+- ✅ 修复裁剪框在媒体加载后被隐藏的问题
+  - 原因：updateBox 在媒体尺寸为0时设置 `display: none`，导致裁剪框被隐藏
+  - 解决：移除 updateBox 中的 `this.box.style.display = 'none'`，当媒体尺寸为0时只返回不更新位置，但不隐藏裁剪框
+  - 改动文件：
+    - public/js/crop.js - updateBox 移除隐藏裁剪框的逻辑
+
+- ✅ 修复裁剪框媒体尺寸为0的根本原因
+  - 原因：图片/视频加载后立即调用 recalculateSize，但浏览器还未完成布局计算，getBoundingClientRect 返回 0
+  - 解决：使用 requestAnimationFrame 确保在下一帧渲染后再计算尺寸
+  - 改动文件：
+    - public/js/crop.js - showPreview 中所有 recalculateSize 调用改用 requestAnimationFrame 包装
+
+- ✅ 修复 tts-agent Cannot read properties of undefined (reading 'length') 错误
+  - 原因：splitIntoSentences 函数未检查 text 参数是否为空，当 text 为 undefined 时报错
+  - 解决：在 splitIntoSentences 函数开头添加空值检查，如果 text 为空或非字符串则返回空数组
+  - 改动文件：
+    - core/chat.js - splitIntoSentences 添加空值检查
+
+- ✅ voice-display-node 录音器改用 PvRecorder 替代 naudiodon
+  - 原因：naudiodon 安装时需要 Python 和编译工具链
+  - 解决：使用 @picovoice/pvrecorder-node 替代，预编译无需 Python
+  - 实现：
+    - 新增 audio-recorder-pv.js 使用 PvRecorder API
+    - main.js 自动检测并优先使用 PvRecorder，失败则回退到 naudiodon
+    - package.json 将录音库移到 optionalDependencies
+  - 改动文件：
+    - voice-display-node/audio-recorder-pv.js（新增）
+    - voice-display-node/main.js - 添加录音器自动检测逻辑
+    - voice-display-node/package.json - 调整依赖配置
+
+- ✅ 添加裁剪框调试日志
+  - 目的：排查媒体尺寸为0的根本原因
+  - 在 showPreview、recalculateSize、updateBox 中添加详细日志
+  - 在 websocket.js 中添加 displayState 消息处理日志
+  - 在 crop.js init 中添加元素存在性检查
+  - 在 display.html 中添加 TTS 播放日志
+  - 改动文件：
+    - public/js/crop.js - 添加 console.log 调试输出
+    - public/js/websocket.js - 添加 displayState 调试日志
+    - public/display.html - 添加 TTS 播放调试日志
+
+- ✅ 修复测试整点报时没有声音的问题
+  - 原因：checkAndAnnounce 没有检查是否有显示端连接，且缺少日志
+  - 解决：添加显示端连接检查，如果没有连接的显示端则输出警告并返回 false；添加详细日志
+  - 原因2：AASC actor-adapter 没有正确路由 testTimeAnnounce action
+  - 解决：修改 handleMessage 添加特殊操作优先处理逻辑（testTimeAnnounce, stop, getState, getReminders）
+  - 改动文件：
+    - core/timeAnnounce.js - checkAndAnnounce 添加连接检查和日志
+    - aasc/actor-adapter.js - handleMessage 添加特殊操作路由逻辑
+
+- ✅ 修复90度/270度旋转时UI上下反转的问题
+  - 原因：反向旋转后文字上下颠倒
+  - 解决：90度/270度时，在反向旋转后额外添加 scaleY(-1) 翻转，使文字保持正向
+  - 原因2：UI元素绕自身中心旋转，而不是画面中心
+  - 解决：计算 UI 元素相对于画面中心的偏移，设置正确的 transform-origin
+  - 改动文件：
+    - public/display.html - applyRotation 添加 scaleY(-1) 处理和 transform-origin 计算
 
 - ✅ 修复测试整点报时功能不生效
   - 原因：sendTts 方法要求 currentDisplayId 存在，但整点报时测试不需要指定显示端

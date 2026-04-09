@@ -1,17 +1,24 @@
 /**
  * 音频播放器模块
- * 支持从URL下载并播放音频，支持WAV格式
+ * 使用系统命令播放音频，无需编译原生模块
+ * 
+ * Windows: 使用 PowerShell 的 Start-SoundFile
+ * macOS: 使用 afplay
+ * Linux: 使用 aplay 或 paplay
  */
 
-const Speaker = require('speaker');
+const { exec } = require('child_process');
 const fetch = require('node-fetch');
-const wav = require('wav');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 class AudioPlayer {
     constructor() {
-        this.speaker = null;
         this.isPlaying = false;
         this.stopRequested = false;
+        this.currentProcess = null;
+        this.tempDir = os.tmpdir();
     }
 
     /**
@@ -36,7 +43,16 @@ class AudioPlayer {
 
             console.log(`[音频] 下载完成 (${buffer.length} bytes)`);
             
-            await this.playWavBuffer(buffer);
+            const tempFile = path.join(this.tempDir, `audio_${Date.now()}.wav`);
+            fs.writeFileSync(tempFile, buffer);
+            
+            await this.playFile(tempFile);
+            
+            try {
+                fs.unlinkSync(tempFile);
+            } catch (e) {
+                // 忽略删除失败
+            }
         } catch (error) {
             this.isPlaying = false;
             throw error;
@@ -44,11 +60,11 @@ class AudioPlayer {
     }
 
     /**
-     * 播放WAV格式的Buffer
-     * @param {Buffer} wavBuffer - WAV格式的音频数据
+     * 播放本地音频文件
+     * @param {string} filePath - 音频文件路径
      * @returns {Promise<void>}
      */
-    playWavBuffer(wavBuffer) {
+    playFile(filePath) {
         return new Promise((resolve, reject) => {
             if (this.stopRequested) {
                 this.isPlaying = false;
@@ -56,47 +72,70 @@ class AudioPlayer {
                 return;
             }
 
-            const reader = new wav.Reader();
-            
-            reader.on('format', (format) => {
-                if (this.stopRequested) {
+            const platform = os.platform();
+            let command;
+            let args = [];
+
+            if (platform === 'win32') {
+                command = 'powershell';
+                args = [
+                    '-c',
+                    `(New-Object Media.SoundPlayer "${filePath}").PlaySync()`
+                ];
+            } else if (platform === 'darwin') {
+                command = 'afplay';
+                args = [filePath];
+            } else {
+                command = 'aplay';
+                args = [filePath];
+            }
+
+            console.log(`[音频] 使用系统播放器: ${command} ${args.join(' ')}`);
+
+            this.currentProcess = exec(
+                `"${command}" ${args.map(a => `"${a}"`).join(' ')}`,
+                { windowsHide: true },
+                (error, stdout, stderr) => {
+                    this.currentProcess = null;
                     this.isPlaying = false;
-                    resolve();
-                    return;
-                }
-
-                console.log(`[音频] 格式: ${format.sampleRate}Hz, ${format.channels}声道, ${format.bitDepth}bit`);
-
-                this.speaker = new Speaker({
-                    channels: format.channels,
-                    bitDepth: format.bitDepth,
-                    sampleRate: format.sampleRate
-                });
-
-                this.speaker.on('close', () => {
-                    this.isPlaying = false;
-                    this.speaker = null;
+                    
+                    if (this.stopRequested) {
+                        console.log('[音频] 播放已停止');
+                        resolve();
+                        return;
+                    }
+                    
+                    if (error && !error.killed) {
+                        console.error('[音频] 播放错误:', error.message);
+                        reject(error);
+                        return;
+                    }
+                    
                     console.log('[音频] 播放完成');
                     resolve();
-                });
-
-                this.speaker.on('error', (err) => {
-                    this.isPlaying = false;
-                    this.speaker = null;
-                    reject(err);
-                });
-
-                reader.pipe(this.speaker);
-            });
-
-            reader.on('error', (err) => {
-                this.isPlaying = false;
-                reject(err);
-            });
-
-            const bufferStream = require('stream').Readable.from(wavBuffer);
-            bufferStream.pipe(reader);
+                }
+            );
         });
+    }
+
+    /**
+     * 播放WAV格式的Buffer
+     * @param {Buffer} wavBuffer - WAV格式的音频数据
+     * @returns {Promise<void>}
+     */
+    async playWavBuffer(wavBuffer) {
+        const tempFile = path.join(this.tempDir, `audio_${Date.now()}.wav`);
+        fs.writeFileSync(tempFile, wavBuffer);
+        
+        try {
+            await this.playFile(tempFile);
+        } finally {
+            try {
+                fs.unlinkSync(tempFile);
+            } catch (e) {
+                // 忽略删除失败
+            }
+        }
     }
 
     /**
@@ -105,10 +144,10 @@ class AudioPlayer {
     stop() {
         this.stopRequested = true;
         
-        if (this.speaker) {
+        if (this.currentProcess) {
             try {
-                this.speaker.end();
-                this.speaker = null;
+                this.currentProcess.kill();
+                this.currentProcess = null;
             } catch (error) {
                 console.error('[音频] 停止播放时出错:', error.message);
             }

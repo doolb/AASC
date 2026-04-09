@@ -364,7 +364,9 @@ wss.on('connection', (ws, req)):
     服务端处理 TTS play:
         接收 { type: 'tts', action: 'play', text, displayId, playOnControl }
         调用 chat.splitIntoSentences(text) 分割句子
-        句子结束符包括: '.', '!', '?', '~', '～', '。', '！', '？', '；', ';', '"', '"', ''', ''', '…'
+        splitIntoSentences 函数:
+            如果 text 为空或非字符串，返回空数组
+            句子结束符包括: '.', '!', '?', '~', '～', '。', '！', '？', '；', ';', '"', '"', ''', ''', '…'
         遍历每个句子:
             调用 tts.generateTTS(sentence)
             如果 playOnControl 为 true:

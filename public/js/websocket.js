@@ -45,7 +45,24 @@ const WebSocketManager = {
                 window.DisplayList.list = data.list;
                 window.DisplayList.render();
             }
+            
+            if (!window.currentDisplayId && data.list && data.list.length > 0) {
+                console.log('[WS] displayList: 自动选择第一个显示端并发送 getState');
+                window.currentDisplayId = data.list[0].id;
+                this.send({ type: 'getState', displayId: data.list[0].id });
+            }
         } else if (data.type === 'displayState') {
+            console.log('[WS] displayState 收到, displayId:', data.displayId, 'currentDisplayId:', window.currentDisplayId);
+            console.log('[WS] displayState state:', JSON.stringify(data.state, null, 2).substring(0, 500));
+            
+            if (!window.currentDisplayId && data.displayId) {
+                console.log('[WS] 自动选择显示端:', data.displayId);
+                window.currentDisplayId = data.displayId;
+                if (window.DisplayList) {
+                    window.DisplayList.render();
+                }
+            }
+            
             if (data.displayId === window.currentDisplayId) {
                 if (window.Crop) {
                     window.Crop.setRotation(data.state.rotation);
@@ -80,8 +97,18 @@ const WebSocketManager = {
                     window.FloatingControl.setPlayingState(data.state.isPlaying);
                 }
                 
+                console.log('[WS] currentMediaUrl:', data.state.currentMediaUrl, 'Crop:', !!window.Crop);
                 if (data.state.currentMediaUrl && window.Crop) {
-                    window.Crop.showPreview(data.state.currentMediaUrl, data.state.currentMediaType);
+                    console.log('[WS] Crop.currentMedia:', window.Crop.currentMedia);
+                    console.log('[WS] 是否需要更新预览:', window.Crop.currentMedia !== data.state.currentMediaUrl);
+                    if (window.Crop.currentMedia !== data.state.currentMediaUrl) {
+                        console.log('[WS] 调用 showPreview, url:', data.state.currentMediaUrl, 'mediaType:', data.state.currentMediaType);
+                        window.Crop.showPreview(data.state.currentMediaUrl, data.state.currentMediaType);
+                    }
+                } else if (!data.state.currentMediaUrl) {
+                    console.log('[WS] currentMediaUrl 不存在，跳过 showPreview');
+                } else if (!window.Crop) {
+                    console.log('[WS] Crop 模块不存在，跳过 showPreview');
                 }
                 
                 if (data.state.currentMediaUrl && window.MediaLibrary) {
@@ -92,6 +119,8 @@ const WebSocketManager = {
                     window.Crop.updateContainerSize();
                     window.Crop.updateBox();
                 }
+            } else {
+                console.log('[WS] displayState displayId 不匹配，跳过处理');
             }
         } else if (data.type === 'chatChunk') {
             if (window.Chat) {

@@ -66,14 +66,19 @@ const Crop = {
     },
     
     updateBox() {
-        if (!this.box || !this.container) return;
+        if (!this.box || !this.container) {
+            console.log('[Crop] updateBox: box 或 container 不存在');
+            return;
+        }
         
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
         const mediaRect = media.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
         
+        console.log('[Crop] updateBox: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'containerRect=', containerRect.width, 'x', containerRect.height);
+        
         if (mediaRect.width === 0 || mediaRect.height === 0) {
-            this.box.style.display = 'none';
+            console.log('[Crop] updateBox: 媒体尺寸为0，跳过');
             return;
         }
         
@@ -86,6 +91,8 @@ const Crop = {
         const boxTop = (offsetY + (this.data.y / 100) * mediaHeight);
         const boxWidth = (this.data.width / 100) * mediaWidth;
         const boxHeight = (this.data.height / 100) * mediaHeight;
+        
+        console.log('[Crop] updateBox: box位置=', boxLeft, ',', boxTop, '尺寸=', boxWidth, 'x', boxHeight);
         
         if (boxWidth > 0 && boxHeight > 0) {
             this.box.style.display = 'block';
@@ -144,7 +151,10 @@ const Crop = {
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
         const mediaRect = media.getBoundingClientRect();
         
+        console.log('[Crop] recalculateSize: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'sendToDisplay=', sendToDisplay);
+        
         if (mediaRect.width === 0 || mediaRect.height === 0) {
+            console.log('[Crop] recalculateSize: 媒体尺寸为0，跳过');
             return;
         }
         
@@ -175,29 +185,57 @@ const Crop = {
     
     showPreview(url, mediaType) {
         this.currentMedia = url;
+        console.log('[Crop] showPreview 开始, url:', url, 'mediaType:', mediaType);
         
         if (mediaType === 'video') {
             this.previewVideo.style.display = 'block';
             this.previewImg.style.display = 'none';
             this.previewVideo.onloadedmetadata = () => {
-                this.recalculateSize(false);
+                console.log('[Crop] video onloadedmetadata 触发');
+                console.log('[Crop] video.readyState:', this.previewVideo.readyState);
+                console.log('[Crop] video.videoWidth:', this.previewVideo.videoWidth, 'videoHeight:', this.previewVideo.videoHeight);
+                requestAnimationFrame(() => {
+                    const rect = this.previewVideo.getBoundingClientRect();
+                    console.log('[Crop] video getBoundingClientRect:', rect.width, 'x', rect.height);
+                    this.recalculateSize(false);
+                });
             };
             this.previewVideo.src = url;
+            console.log('[Crop] video.src 设置完成, readyState:', this.previewVideo.readyState);
             if (this.previewVideo.readyState >= 1) {
-                this.recalculateSize(false);
+                console.log('[Crop] video readyState >= 1, 立即计算');
+                requestAnimationFrame(() => {
+                    const rect = this.previewVideo.getBoundingClientRect();
+                    console.log('[Crop] video getBoundingClientRect (立即):', rect.width, 'x', rect.height);
+                    this.recalculateSize(false);
+                });
             } else {
+                console.log('[Crop] video readyState < 1, 启动重试');
                 this._retryShowPreview(0);
             }
         } else {
             this.previewImg.style.display = 'block';
             this.previewVideo.style.display = 'none';
             this.previewImg.onload = () => {
-                this.recalculateSize(false);
+                console.log('[Crop] img onload 触发');
+                console.log('[Crop] img.naturalWidth:', this.previewImg.naturalWidth, 'naturalHeight:', this.previewImg.naturalHeight);
+                requestAnimationFrame(() => {
+                    const rect = this.previewImg.getBoundingClientRect();
+                    console.log('[Crop] img getBoundingClientRect:', rect.width, 'x', rect.height);
+                    this.recalculateSize(false);
+                });
             };
             this.previewImg.src = url;
+            console.log('[Crop] img.src 设置完成, complete:', this.previewImg.complete, 'naturalWidth:', this.previewImg.naturalWidth);
             if (this.previewImg.complete && this.previewImg.naturalWidth > 0) {
-                this.recalculateSize(false);
+                console.log('[Crop] img 已加载完成, 立即计算');
+                requestAnimationFrame(() => {
+                    const rect = this.previewImg.getBoundingClientRect();
+                    console.log('[Crop] img getBoundingClientRect (立即):', rect.width, 'x', rect.height);
+                    this.recalculateSize(false);
+                });
             } else {
+                console.log('[Crop] img 未加载完成, 启动重试');
                 this._retryShowPreview(0);
             }
         }
@@ -394,6 +432,17 @@ const Crop = {
     },
     
     init() {
+        if (!this.box) {
+            console.error('[Crop] init: cropBox 元素不存在');
+            return;
+        }
+        if (!this.container) {
+            console.error('[Crop] init: cropPreviewContainer 元素不存在');
+            return;
+        }
+        
+        console.log('[Crop] init: 初始化成功');
+        
         this.box.addEventListener('mousedown', (e) => this.onMouseDown(e));
         document.addEventListener('mousemove', (e) => this.onMouseMove(e));
         document.addEventListener('mouseup', () => this.onMouseUp());

@@ -276,18 +276,25 @@ reconnect():
 
 ```
 class AudioPlayer:
-    speaker: Speaker
     isPlaying: boolean
     stopRequested: boolean
+    currentProcess: ChildProcess
+    tempDir: string
 ```
 
 #### 播放流程
 ```
 playFromURL(url):
-    使用 node-fetch 下载音频
-    读取全部数据到 Buffer
-    使用 wav.Reader 解析 WAV 格式
-    创建 Speaker 实例播放
+    下载音频到临时文件
+    调用 playFile(tempFile)
+    删除临时文件
+
+playFile(filePath):
+    根据平台选择播放命令:
+        Windows: powershell -c "(New-Object Media.SoundPlayer filePath).PlaySync()"
+        macOS: afplay filePath
+        Linux: aplay filePath
+    创建子进程执行命令
     等待播放完成
 ```
 
@@ -295,7 +302,7 @@ playFromURL(url):
 ```
 stop():
     设置 stopRequested = true
-    调用 speaker.end() 关闭播放器
+    调用 currentProcess.kill() 终止子进程
     重置 isPlaying = false
 ```
 
@@ -429,16 +436,54 @@ main():
 | ws | ^8.16.0 | WebSocket 客户端 |
 | form-data | ^4.0.0 | 构造 multipart/form-data |
 | node-fetch | ^2.7.0 | HTTP 请求 |
-| speaker | ^0.5.4 | 音频播放 |
-| naudiodon | ^2.3.3 | 音频录制（PortAudio） |
-| wav | ^1.0.2 | WAV 解码 |
+| @picovoice/pvrecorder-node | ^1.2.8 | 音频录制（可选，预编译无需 Python） |
+| naudiodon | ^2.3.3 | 音频录制（可选，需要编译） |
 
 ### 系统依赖
 
 | 依赖 | 说明 |
 |------|------|
-| node-gyp | Speaker/naudiodon 模块编译 |
+| node-gyp | naudiodon 模块编译（可选，仅用于录音） |
 | PortAudio | naudiodon 底层依赖（Windows 通常已内置） |
+
+**注意**：音频播放已改用系统命令，无需编译原生模块：
+- Windows: PowerShell `(New-Object Media.SoundPlayer).PlaySync()`
+- macOS: `afplay`
+- Linux: `aplay`
+
+### Windows 安装步骤
+
+1. **安装项目依赖**
+   ```bash
+   cd voice-display-node
+   npm install
+   ```
+
+2. **（可选）安装录音支持**
+   如果需要本地录音功能，需要安装编译工具：
+   - 安装 Python 3.x 并添加到 PATH
+   - 安装 Visual Studio Build Tools（选择 "Desktop development with C++"）
+   - 运行 `npm install -g windows-build-tools`
+
+   或使用预编译的 PvRecorder（推荐）：
+   ```bash
+   npm install @picovoice/pvrecorder-node
+   ```
+
+### 常见问题
+
+**Q: npm install 报错 "gyp ERR! find Python"**
+- 仅录音功能需要 Python，播放功能不受影响
+- 如需录音，安装 Python 3.x 并添加到 PATH
+
+**Q: npm install 报错 "gyp ERR! find VS"**
+- 仅录音功能需要 VS Build Tools
+- 如需录音，安装 Visual Studio Build Tools
+
+**Q: 音频播放失败**
+- Windows: 确保 PowerShell 可用
+- macOS: 确保 afplay 命令存在
+- Linux: 安装 alsa-utils (`apt install alsa-utils`)
 
 ### 使用方法
 

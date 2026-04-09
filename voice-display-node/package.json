@@ -18,9 +18,10 @@
   "dependencies": {
     "ws": "^8.16.0",
     "form-data": "^4.0.0",
-    "node-fetch": "^2.7.0",
-    "speaker": "^0.5.4",
-    "naudiodon": "^2.3.3",
-    "wav": "^1.0.2"
+    "node-fetch": "^2.7.0"
+  },
+  "optionalDependencies": {
+    "@picovoice/pvrecorder-node": "^1.2.8",
+    "naudiodon": "^2.3.3"
   }
 }

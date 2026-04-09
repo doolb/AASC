@@ -378,6 +378,10 @@ function isSentenceEnd(text) {
 }
 
 function splitIntoSentences(text) {
+    if (!text || typeof text !== 'string') {
+        return [];
+    }
+    
     const sentences = [];
     let current = '';
     

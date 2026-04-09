@@ -295,19 +295,75 @@
             mediaVideo.style.transform = transform;
             
             const uiElements = [timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay];
-            const counterRotation = -currentRotation;
             
             uiElements.forEach(el => {
                 if (!el) return;
-                el.style.transform = `rotate(${counterRotation}deg)`;
-                
-                if (currentRotation === 90 || currentRotation === 270) {
-                    el.style.transformOrigin = 'center center';
-                    el.style.maxWidth = '50vh';
-                } else {
-                    el.style.maxWidth = '';
-                }
+                el.style.transform = '';
+                el.style.transformOrigin = '';
+                el.style.left = '';
+                el.style.top = '';
+                el.style.right = '';
+                el.style.bottom = '';
+                el.style.maxWidth = '';
+                el.style.writingMode = '';
+                el.style.textOrientation = '';
             });
+            
+            if (currentRotation === 0) {
+                timeDisplay.style.top = '20px';
+                timeDisplay.style.right = '20px';
+                fileNameDisplay.style.bottom = '20px';
+                fileNameDisplay.style.left = '20px';
+                voiceStatus.style.top = '20px';
+                voiceStatus.style.left = '20px';
+                if (voiceTextDisplay) {
+                    voiceTextDisplay.style.bottom = '60px';
+                    voiceTextDisplay.style.left = '20px';
+                }
+            } else if (currentRotation === 90) {
+                timeDisplay.style.top = '20px';
+                timeDisplay.style.right = '20px';
+                timeDisplay.style.writingMode = 'vertical-rl';
+                timeDisplay.style.textOrientation = 'mixed';
+                fileNameDisplay.style.top = '20px';
+                fileNameDisplay.style.right = '80px';
+                fileNameDisplay.style.writingMode = 'vertical-rl';
+                fileNameDisplay.style.textOrientation = 'mixed';
+                voiceStatus.style.bottom = '20px';
+                voiceStatus.style.left = '20px';
+                if (voiceTextDisplay) {
+                    voiceTextDisplay.style.bottom = '60px';
+                    voiceTextDisplay.style.left = '20px';
+                }
+                uiElements.forEach(el => {
+                    if (el) el.style.maxWidth = '50vh';
+                });
+            } else if (currentRotation === 180) {
+                timeDisplay.style.bottom = '20px';
+                timeDisplay.style.left = '20px';
+                fileNameDisplay.style.top = '20px';
+                fileNameDisplay.style.right = '20px';
+                voiceStatus.style.bottom = '20px';
+                voiceStatus.style.right = '20px';
+                if (voiceTextDisplay) {
+                    voiceTextDisplay.style.top = '60px';
+                    voiceTextDisplay.style.right = '20px';
+                }
+            } else if (currentRotation === 270) {
+                timeDisplay.style.top = '20px';
+                timeDisplay.style.left = '20px';
+                fileNameDisplay.style.bottom = '20px';
+                fileNameDisplay.style.left = '20px';
+                voiceStatus.style.top = '20px';
+                voiceStatus.style.right = '20px';
+                if (voiceTextDisplay) {
+                    voiceTextDisplay.style.top = '60px';
+                    voiceTextDisplay.style.right = '20px';
+                }
+                uiElements.forEach(el => {
+                    if (el) el.style.maxWidth = '50vh';
+                });
+            }
         }
         
         function applyFit(fit) {
@@ -347,6 +403,13 @@
             
             const isRotated = currentRotation === 90 || currentRotation === 270;
             
+            console.log('[Crop] applyCrop 开始');
+            console.log('[Crop] 容器尺寸:', containerWidth, 'x', containerHeight);
+            console.log('[Crop] 媒体原始尺寸:', naturalWidth, 'x', naturalHeight);
+            console.log('[Crop] 当前旋转:', currentRotation, '是否旋转:', isRotated);
+            console.log('[Crop] 当前适配模式:', currentFit);
+            console.log('[Crop] 当前裁剪百分比:', JSON.stringify(currentCrop));
+            
             const baseInfo = {
                 容器尺寸: { width: containerWidth, height: containerHeight },
                 媒体原始尺寸: { width: naturalWidth, height: naturalHeight },
@@ -357,6 +420,7 @@
             };
             
             if (currentFit !== 'height' && currentFit !== 'width' && currentFit !== 'crop') {
+                console.log('[Crop] 非适配模式，跳过');
                 return { ...baseInfo, 状态: '非适配模式' };
             }
             
@@ -462,6 +526,16 @@
             media.style.left = finalLeft + 'px';
             media.style.top = finalTop + 'px';
             
+            console.log('[Crop] 裁剪计算完成');
+            console.log('[Crop] 显示尺寸:', displayWidth, 'x', displayHeight);
+            console.log('[Crop] 裁剪像素值:', { cropX, cropY, cropWidth, cropHeight });
+            console.log('[Crop] 最终样式:', {
+                width: Math.round(finalWidth) + 'px',
+                height: Math.round(finalHeight) + 'px',
+                left: Math.round(finalLeft) + 'px',
+                top: Math.round(finalTop) + 'px'
+            });
+            
             return {
                 ...baseInfo,
                 状态: '裁剪模式',
@@ -541,12 +615,15 @@
         }
         
         function playNextTts() {
+            console.log('[显示端] playNextTts: isPlayingTts=', isPlayingTts, 'queue=', ttsQueue.length);
             if (isPlayingTts || ttsQueue.length === 0) {
                 return;
             }
             
             isPlayingTts = true;
             const item = ttsQueue.shift();
+            
+            console.log('[显示端] 播放TTS:', item.audioUrl || item.text);
             
             if (item.text) {
                 showTtsText(item.text);
@@ -555,7 +632,7 @@
             if (item.audioUrl) {
                 ttsAudio.src = item.audioUrl;
                 ttsAudio.play().catch(e => {
-                    console.log('TTS播放被阻止');
+                    console.log('TTS播放被阻止:', e.message);
                     hideTtsText();
                     isPlayingTts = false;
                     playNextTts();
@@ -623,6 +700,7 @@
         }
         
         function handleTTS(data) {
+            console.log('[显示端] 收到TTS消息:', data.action, data.audioUrl || data.text);
             if (data.action === 'play') {
                 queueTts({ text: data.text });
             } else if (data.action === 'playAudio') {

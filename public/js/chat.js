@@ -689,6 +689,14 @@ const Chat = {
                 displayId: window.currentDisplayId,
                 playOnControl: this.session.playOnControl
             }));
+        } else {
+            this.addSystemMessage('WebSocket 连接未建立，正在重连...');
+            if (window.WebSocketManager) {
+                window.WebSocketManager.connect();
+            }
+            this.isLoading = false;
+            this.updateSendButton();
+            return;
         }
         
         input.value = '';

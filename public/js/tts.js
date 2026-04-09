@@ -16,7 +16,9 @@ const Tts = {
             .then(res => res.json())
             .then(data => {
                 if (data.status === 'success' && data.config) {
+                    console.log('[TTS] 加载整点报时配置:', data.config);
                     this.timeAnnounceConfig = { ...this.timeAnnounceConfig, ...data.config };
+                    console.log('[TTS] 合并后配置:', this.timeAnnounceConfig);
                     this.renderTimeAnnounceConfig();
                 }
             })
@@ -29,10 +31,31 @@ const Tts = {
         const repeatCountInput = document.getElementById('timeAnnounceRepeatCount');
         const repeatDelayInput = document.getElementById('timeAnnounceRepeatDelay');
         
-        if (enabledSelect) enabledSelect.value = this.timeAnnounceConfig.enabled ? 'true' : 'false';
-        if (intervalSelect) intervalSelect.value = String(this.timeAnnounceConfig.interval);
-        if (repeatCountInput) repeatCountInput.value = this.timeAnnounceConfig.repeatCount || 3;
-        if (repeatDelayInput) repeatDelayInput.value = (this.timeAnnounceConfig.repeatDelay || 3000) / 1000;
+        console.log('[TTS] renderTimeAnnounceConfig 开始');
+        console.log('[TTS] 配置值:', this.timeAnnounceConfig);
+        console.log('[TTS] DOM元素:', {
+            enabledSelect: !!enabledSelect,
+            intervalSelect: !!intervalSelect,
+            repeatCountInput: !!repeatCountInput,
+            repeatDelayInput: !!repeatDelayInput
+        });
+        
+        if (enabledSelect) {
+            enabledSelect.value = this.timeAnnounceConfig.enabled ? 'true' : 'false';
+            console.log('[TTS] 设置 enabledSelect.value =', enabledSelect.value);
+        }
+        if (intervalSelect) {
+            intervalSelect.value = String(this.timeAnnounceConfig.interval);
+            console.log('[TTS] 设置 intervalSelect.value =', intervalSelect.value);
+        }
+        if (repeatCountInput) {
+            repeatCountInput.value = this.timeAnnounceConfig.repeatCount || 3;
+            console.log('[TTS] 设置 repeatCountInput.value =', repeatCountInput.value);
+        }
+        if (repeatDelayInput) {
+            repeatDelayInput.value = (this.timeAnnounceConfig.repeatDelay || 3000) / 1000;
+            console.log('[TTS] 设置 repeatDelayInput.value =', repeatDelayInput.value);
+        }
     },
     
     saveTimeAnnounceConfig() {

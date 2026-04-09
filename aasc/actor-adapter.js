@@ -50,7 +50,21 @@ class AgentActorAdapter extends Actor {
         const data = message.payload || message;
         const type = data.type;
         
-        const action = this.actionMap[type] || type;
+        const specialActions = ['testTimeAnnounce', 'stop', 'getState', 'getReminders'];
+        
+        let action;
+        if (data.action && specialActions.includes(data.action)) {
+            action = data.action;
+        } else if (this.actionMap[type]) {
+            action = this.actionMap[type];
+        } else if (data.action) {
+            action = data.action;
+            if (action === 'play') {
+                action = 'playText';
+            }
+        } else {
+            action = type;
+        }
         
         try {
             const result = await this.agent.execute(action, data, context);

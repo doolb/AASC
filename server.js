@@ -164,6 +164,8 @@ function startServer() {
         }
         console.log('='.repeat(50));
         
+        updateVoiceDisplayConfig(localIP, PORT, protocol);
+        
         timeListener.start();
         timeAnnounce.start(displayClients, sendToDisplay);
         reminder.start(displayClients, sendToDisplay);
@@ -2055,6 +2057,21 @@ function getLocalIP() {
         }
     }
     return '127.0.0.1';
+}
+
+function updateVoiceDisplayConfig(localIP, port, protocol) {
+    const configPath = path.join(__dirname, 'voice-display-node', 'config.json');
+    try {
+        const config = {
+            serverUrl: `${protocol}://${localIP}:${port}`,
+            displayId: 'voice-display-node-1',
+            vadThreshold: 0.01
+        };
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+        console.log(`[子显示端] 配置已更新: ${protocol}://${localIP}:${port}`);
+    } catch (err) {
+        console.error('[子显示端] 配置更新失败:', err.message);
+    }
 }
 
 setInterval(() => {

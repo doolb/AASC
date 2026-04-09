@@ -106,6 +106,13 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
     const clients = displayClients || displayClientsRef;
     const send = sendToDisplay || sendToDisplayRef;
     
+    if (!clients || clients.size === 0) {
+        console.warn('[整点报时] 没有连接的显示端，无法播放');
+        return false;
+    }
+    
+    console.log(`[整点报时] 将发送到 ${clients.size} 个显示端`);
+    
     try {
         const audioPath = await tts.generateTTS(timeText);
         const fileName = path.basename(audioPath);
@@ -117,18 +124,17 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
             text: timeText
         };
         
-        if (clients && send) {
-            const repeatCount = timeAnnounceConfig.repeatCount || 1;
-            const repeatDelay = timeAnnounceConfig.repeatDelay || 3000;
+        const repeatCount = timeAnnounceConfig.repeatCount || 1;
+        const repeatDelay = timeAnnounceConfig.repeatDelay || 3000;
+        
+        for (let i = 0; i < repeatCount; i++) {
+            clients.forEach((displayData, displayId) => {
+                console.log(`[整点报时] 发送到显示端: ${displayId}`);
+                send(displayId, announceData);
+            });
             
-            for (let i = 0; i < repeatCount; i++) {
-                clients.forEach((displayData, displayId) => {
-                    send(displayId, announceData);
-                });
-                
-                if (i < repeatCount - 1) {
-                    await new Promise(resolve => setTimeout(resolve, repeatDelay));
-                }
+            if (i < repeatCount - 1) {
+                await new Promise(resolve => setTimeout(resolve, repeatDelay));
             }
         }
         

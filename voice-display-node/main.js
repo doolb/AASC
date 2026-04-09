@@ -6,6 +6,10 @@
  * - 接收 TTS 音频播放
  * - 通过服务器端 ASR 发送语音输入
  * - 本地录音和 VAD 检测
+ * 
+ * 录音方式:
+ * - 优先使用 @picovoice/pvrecorder-node (预编译，无需 Python)
+ * - 回退到 naudiodon (需要 Python 编译)
  */
 
 const WebSocket = require('ws');
@@ -14,7 +18,22 @@ const path = require('path');
 const URL = require('url');
 const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
-const AudioRecorder = require('./audio-recorder');
+
+let AudioRecorder;
+try {
+    AudioRecorder = require('./audio-recorder-pv');
+    console.log('[初始化] 使用 PvRecorder 录音器 (无需 Python)');
+} catch (e) {
+    console.log('[初始化] PvRecorder 不可用，尝试 naudiodon...');
+    try {
+        AudioRecorder = require('./audio-recorder');
+        console.log('[初始化] 使用 naudiodon 录音器');
+    } catch (e2) {
+        console.warn('[初始化] 警告: 没有可用的录音器，语音识别功能将不可用');
+        console.warn('[初始化] 请安装 @picovoice/pvrecorder-node (推荐) 或 naudiodon');
+        AudioRecorder = null;
+    }
+}
 
 class VoiceDisplay {
     /**
@@ -44,7 +63,11 @@ class VoiceDisplay {
         console.log(`[连接] 正在连接到 ${wsUrl}`);
 
         return new Promise((resolve, reject) => {
-            this.ws = new WebSocket(wsUrl);
+            const wsOptions = wsProtocol === 'wss:' ? {
+                rejectUnauthorized: false
+            } : undefined;
+            
+            this.ws = new WebSocket(wsUrl, wsOptions);
 
             this.ws.on('open', () => {
                 this.connected = true;
@@ -189,6 +212,11 @@ class VoiceDisplay {
      * @returns {Promise<void>}
      */
     async startVoiceRecognition() {
+        if (!AudioRecorder) {
+            console.log('[语音] 录音器不可用，语音识别功能将不可用');
+            return;
+        }
+
         if (!this.asr || !this.asr.isReady()) {
             console.log('[语音] 服务器端 ASR 不可用，语音识别功能将不可用');
             return;
@@ -255,15 +283,19 @@ class VoiceDisplay {
             console.log('[警告] 服务器端 ASR 不可用，语音识别功能将不可用');
         }
 
-        this.recorder = new AudioRecorder({
-            sampleRate: 16000,
-            vadThreshold: this.config.vadThreshold || 0.01,
-            minSpeechDuration: 300
-        });
+        if (AudioRecorder) {
+            this.recorder = new AudioRecorder({
+                sampleRate: 16000,
+                vadThreshold: this.config.vadThreshold || 0.01,
+                minSpeechDuration: 300
+            });
+        } else {
+            console.log('[警告] 录音器不可用，语音识别功能将不可用');
+        }
 
         await this.connect();
 
-        if (this.asr && this.asr.isReady()) {
+        if (this.recorder && this.asr && this.asr.isReady()) {
             await this.startVoiceRecognition();
         }
 

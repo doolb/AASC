@@ -291,7 +291,7 @@ async function handleTodayReminders(displayId) {
     
     const todayReminders = allReminders.filter(r => {
         if (!r.enabled) return false;
-        if (r.type === 'daily') return true;
+        if (r.type === 'daily') return false;
         if (r.type === 'once' && r.nextTrigger) {
             const triggerDate = new Date(r.nextTrigger);
             return triggerDate.toDateString() === todayStr;
@@ -330,7 +330,7 @@ async function handleTomorrowReminders(displayId) {
     
     const tomorrowReminders = allReminders.filter(r => {
         if (!r.enabled) return false;
-        if (r.type === 'daily') return true;
+        if (r.type === 'daily') return false;
         if (r.type === 'once' && r.nextTrigger) {
             const triggerDate = new Date(r.nextTrigger);
             return triggerDate.toDateString() === tomorrowStr;

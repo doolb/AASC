@@ -118,25 +118,5 @@
     "content": "好的！我是KAN的电子猫娘~要和我一起玩吧！有什么需要我帮你做事情的吗？",
     "mode": "private",
     "target": "妲己"
-  },
-  {
-    "id": "1775661610734johq",
-    "timestamp": 1775661610734,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "你好",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1775661622624k6bm",
-    "timestamp": 1775661622624,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "诶，早啊！今天有什么事情要我帮忙吗？需要我帮你准备什么吗？或者有什么想了解的？",
-    "mode": "group",
-    "target": null
   }
 ]
