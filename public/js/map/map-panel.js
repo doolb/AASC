@@ -210,8 +210,23 @@ class MapPanel {
   }
 
   connectWebSocket() {
+    if (window.WebSocketManager && window.WebSocketManager.ws) {
+      const originalOnMessage = window.WebSocketManager.ws.onmessage;
+      window.WebSocketManager.ws.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.handleWebSocketMessage(data);
+        } catch (e) {
+          // 忽略非JSON消息
+        }
+      });
+      this.wsClient = window.WebSocketManager.ws;
+      console.log('[MapPanel] 使用控制端WebSocket连接');
+      return;
+    }
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const wsUrl = `${protocol}//${window.location.host}/control`;
     
     try {
       this.wsClient = new WebSocket(wsUrl);
@@ -278,7 +293,20 @@ class MapPanel {
   }
 
   handleDisplayListUpdate(data) {
-    // 处理显示端列表更新
+    if (!data || !data.list) return;
+    
+    const serverIP = window.serverIP || '';
+    
+    const displayClients = new Map();
+    data.list.forEach(display => {
+      displayClients.set(display.id, {
+        browserInfo: display.browserInfo,
+        isSubDisplay: display.isSubDisplay || false
+      });
+    });
+    
+    this.mapData = this.dataAdapter.adaptDisplayClients(displayClients, serverIP);
+    this.renderer.setData(this.mapData);
   }
 
   showBuildingDetail(data) {

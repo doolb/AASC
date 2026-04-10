@@ -58,7 +58,7 @@ class VoiceDisplay {
     async connect() {
         const parsedUrl = URL.parse(this.config.serverUrl);
         const wsProtocol = parsedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${parsedUrl.host}/ws`;
+        const wsUrl = `${wsProtocol}//${parsedUrl.host}/display?subDisplay=true&displayId=${encodeURIComponent(this.config.displayId)}`;
 
         console.log(`[连接] 正在连接到 ${wsUrl}`);
 
@@ -72,12 +72,6 @@ class VoiceDisplay {
             this.ws.on('open', () => {
                 this.connected = true;
                 this.reconnectAttempts = 0;
-
-                this.sendJSON({
-                    type: 'register',
-                    clientType: 'display',
-                    displayId: this.config.displayId
-                });
 
                 console.log(`[连接] 已连接，显示端ID: ${this.config.displayId}`);
                 resolve();
@@ -124,6 +118,15 @@ class VoiceDisplay {
      */
     handleMessage(msgType, data) {
         switch (msgType) {
+            case 'displayId':
+                console.log(`[消息] 收到显示端ID: ${data.id}, IP: ${data.ip}`);
+                break;
+            case 'serverStartTime':
+                console.log(`[消息] 服务器启动时间: ${data.time}`);
+                break;
+            case 'restoreState':
+                console.log(`[消息] 收到恢复状态`);
+                break;
             case 'tts':
                 this.handleTTS(data);
                 break;
@@ -132,6 +135,9 @@ class VoiceDisplay {
                 break;
             case 'control':
                 console.log('[消息] 收到控制指令:', data);
+                break;
+            case 'media':
+                console.log('[消息] 收到媒体指令（子显示端不支持媒体显示）:', data.type);
                 break;
             default:
                 console.log('[消息] 未知消息类型:', msgType);

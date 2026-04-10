@@ -64,19 +64,24 @@ type VoiceDisplay struct:
 Connect():
     解析服务器URL
     构建 WebSocket URL (ws:// 或 wss://)
+    连接路径: /display?subDisplay=true&displayId=<displayId>
     建立 WebSocket 连接
-    发送注册消息: { type: "register", clientType: "display", displayId }
+    （不再需要发送 register 消息，服务端通过 URL 参数识别子显示端）
 ```
 
 ### 消息处理
 ```
 handleMessage(msgType, data):
+    "displayId": 记录服务端分配的显示端ID
+    "serverStartTime": 记录服务器启动时间
+    "restoreState": 记录恢复状态
     "tts":
         playAudio -> 从URL下载并播放音频
         play -> 播报文本
         stop -> 停止播放
     "voiceInput": 记录确认
     "control": 记录控制指令
+    "media": 记录媒体指令（子显示端不支持媒体显示）
 ```
 
 ### 重连机制
@@ -243,9 +248,10 @@ class VoiceDisplay:
 connect():
     解析服务器URL
     构建 WebSocket URL (ws:// 或 wss://)
+    连接路径: /display?subDisplay=true&displayId=<displayId>
     创建 WebSocket 连接
     监听 open 事件
-    发送注册消息: { type: "register", clientType: "display", displayId }
+    （不再需要发送 register 消息，服务端通过 URL 参数识别子显示端）
     监听 message 事件处理消息
     监听 close 事件触发重连
     监听 error 事件处理错误
@@ -254,12 +260,16 @@ connect():
 ### 消息处理
 ```
 handleMessage(msgType, data):
+    "displayId": 记录服务端分配的显示端ID
+    "serverStartTime": 记录服务器启动时间
+    "restoreState": 记录恢复状态
     "tts":
         playAudio -> 从URL下载并播放音频
         play -> 播报文本
         stop -> 停止播放
     "voiceInput": 记录确认
     "control": 记录控制指令
+    "media": 记录媒体指令（子显示端不支持媒体显示）
 ```
 
 ### 重连机制

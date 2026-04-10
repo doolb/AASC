@@ -5,28 +5,33 @@
 
 const fetch = require('node-fetch');
 const FormData = require('form-data');
+const https = require('https');
+
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+});
 
 class ServerASR {
-    /**
-     * @param {string} serverURL - 服务器地址
-     */
     constructor(serverURL) {
         this.serverURL = serverURL;
         this.ready = false;
         this.checkReady();
     }
 
-    /**
-     * 检查服务器 ASR 是否可用
-     * @returns {Promise<boolean>}
-     */
+    _getFetchOptions(options = {}) {
+        if (this.serverURL.startsWith('https://')) {
+            options.agent = httpsAgent;
+        }
+        return options;
+    }
+
     async checkReady() {
         try {
             const url = `${this.serverURL}/api/asr/status`;
-            const response = await fetch(url, {
+            const response = await fetch(url, this._getFetchOptions({
                 method: 'GET',
                 timeout: 5000
-            });
+            }));
 
             if (!response.ok) {
                 console.log('[ASR] 检查ASR状态失败: HTTP', response.status);
@@ -82,11 +87,11 @@ class ServerASR {
                 contentType: 'audio/wav'
             });
 
-            const response = await fetch(url, {
+            const response = await fetch(url, this._getFetchOptions({
                 method: 'POST',
                 body: formData,
                 timeout: 30000
-            });
+            }));
 
             if (!response.ok) {
                 const body = await response.text();

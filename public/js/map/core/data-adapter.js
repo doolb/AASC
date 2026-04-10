@@ -111,6 +111,8 @@ class DataAdapter {
     switch (role) {
       case 'display':
         return BuildingType.DISPLAY;
+      case 'sub-display':
+        return BuildingType.SUB_DISPLAY;
       case 'control':
         return BuildingType.CONTROL;
       default:
@@ -122,6 +124,7 @@ class DataAdapter {
     const typeNames = {
       server: '服务器',
       display: '显示端',
+      'sub-display': '子显示端',
       control: '控制端'
     };
     return `${typeNames[type] || '设备'} ${address.name || address.ip || 'Unknown'}`;
@@ -146,6 +149,7 @@ class DataAdapter {
     
     const servers = buildings.filter(b => b.type === BuildingType.SERVER);
     const displays = buildings.filter(b => b.type === BuildingType.DISPLAY);
+    const subDisplays = buildings.filter(b => b.type === BuildingType.SUB_DISPLAY);
     const controls = buildings.filter(b => b.type === BuildingType.CONTROL);
     
     servers.forEach((building, index) => {
@@ -163,6 +167,16 @@ class DataAdapter {
       const total = displays.length;
       const radius = 200;
       const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
+      building.position = {
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius
+      };
+    });
+    
+    subDisplays.forEach((building, index) => {
+      const total = subDisplays.length;
+      const radius = 160;
+      const angle = (index / Math.max(total, 1)) * Math.PI * 2 - Math.PI / 4;
       building.position = {
         x: centerX + Math.cos(angle) * radius,
         y: centerY + Math.sin(angle) * radius
@@ -217,14 +231,17 @@ class DataAdapter {
     }
     
     displayClients.forEach((state, displayId) => {
+      const isSubDisplay = state.isSubDisplay || false;
+      const buildingType = isSubDisplay ? BuildingType.SUB_DISPLAY : BuildingType.DISPLAY;
       const building = new BuildingData({
         id: `display-${displayId}`,
-        type: BuildingType.DISPLAY,
-        name: `显示端 ${displayId}`,
+        type: buildingType,
+        name: `${isSubDisplay ? '子显示端' : '显示端'} ${displayId}`,
         status: 'online',
-        size: BuildingSize.display,
+        size: BuildingSize[buildingType] || BuildingSize.display,
         metadata: {
-          browserInfo: state.browserInfo
+          browserInfo: state.browserInfo,
+          isSubDisplay: isSubDisplay
         },
         actors: []
       });

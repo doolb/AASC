@@ -264,6 +264,7 @@ class StateManager {
             list.push({
                 id: id,
                 ip: data.ip,
+                isSubDisplay: data.isSubDisplay || data.state?.isSubDisplay || false,
                 canvasSize: data.state?.canvasSize,
                 rotation: data.state?.rotation || 0,
                 browserInfo: data.state?.browserInfo,

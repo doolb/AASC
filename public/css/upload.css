@@ -321,6 +321,25 @@ input[type="file"] {
     opacity: 0.3;
 }
 
+.sub-display-indicator {
+    font-size: 14px;
+    cursor: help;
+}
+
+.sub-display-tag {
+    font-size: 10px;
+    background: rgba(255, 165, 0, 0.3);
+    color: #ffa500;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.display-item.sub-display {
+    border-left: 3px solid rgba(255, 165, 0, 0.5);
+}
+
 @keyframes voice-pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }

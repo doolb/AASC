@@ -895,7 +895,7 @@ handleDisplayConnect(displayId, clientIP, ws, savedState = null):
 | AuthenticationMiddleware | 身份认证 |
 | RateLimitMiddleware | 请求限流 |
 | TimeoutMiddleware | 超时处理 |
-| DisplayCheckMiddleware | 显示端检查 |
+| DisplayCheckMiddleware | 显示端检查（仅检查 media/control/tts 类型） |
 
 #### RateLimitMiddleware 配置
 

@@ -152,12 +152,18 @@ const DisplayList = {
             const isLandscape = this.isDisplayLandscape(d);
             directionIndicator = `<span class="direction-indicator ${isLandscape ? 'landscape' : 'portrait'}" title="${isLandscape ? '横向' : '纵向'}">${isLandscape ? '↔' : '↕'}</span>`;
             
+            let subDisplayIndicator = '';
+            if (d.isSubDisplay) {
+                subDisplayIndicator = '<span class="sub-display-indicator" title="子显示端（语音端）">🎤</span>';
+            }
+            
             return `
-                <div class="display-item ${isActive ? 'active' : ''}" onclick="DisplayList.select('${d.id}')">
+                <div class="display-item ${isActive ? 'active' : ''} ${d.isSubDisplay ? 'sub-display' : ''}" onclick="DisplayList.select('${d.id}')">
                     <div style="flex:1;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <span class="display-item-id">${d.ip || 'unknown'}</span>
+                            <span class="display-item-id">${d.ip || 'unknown'}${d.isSubDisplay ? ' <span class="sub-display-tag">子显示端</span>' : ''}</span>
                             <div style="display:flex;align-items:center;gap:8px;">
+                                ${subDisplayIndicator}
                                 ${directionIndicator}
                                 ${voiceStatusHtml}
                                 <span class="display-item-size">${d.canvasSize.width}x${d.canvasSize.height}</span>

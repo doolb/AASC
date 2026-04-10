@@ -53,7 +53,6 @@ const WebSocketManager = {
             }
         } else if (data.type === 'displayState') {
             console.log('[WS] displayState 收到, displayId:', data.displayId, 'currentDisplayId:', window.currentDisplayId);
-            console.log('[WS] displayState state:', JSON.stringify(data.state, null, 2).substring(0, 500));
             
             if (!window.currentDisplayId && data.displayId) {
                 console.log('[WS] 自动选择显示端:', data.displayId);
@@ -97,27 +96,28 @@ const WebSocketManager = {
                     window.FloatingControl.setPlayingState(data.state.isPlaying);
                 }
                 
-                console.log('[WS] currentMediaUrl:', data.state.currentMediaUrl, 'Crop:', !!window.Crop);
                 if (data.state.currentMediaUrl && window.Crop) {
-                    console.log('[WS] Crop.currentMedia:', window.Crop.currentMedia);
-                    console.log('[WS] 是否需要更新预览:', window.Crop.currentMedia !== data.state.currentMediaUrl);
                     if (window.Crop.currentMedia !== data.state.currentMediaUrl) {
                         console.log('[WS] 调用 showPreview, url:', data.state.currentMediaUrl, 'mediaType:', data.state.currentMediaType);
-                        window.Crop.showPreview(data.state.currentMediaUrl, data.state.currentMediaType);
+                        const savedCrop = { ...data.state.crop };
+                        const savedRotation = data.state.rotation;
+                        window.Crop.showPreview(data.state.currentMediaUrl, data.state.currentMediaType, () => {
+                            window.Crop.setData(savedCrop);
+                            window.Crop.setRotation(savedRotation);
+                            window.Crop.updateBox();
+                        });
+                    } else {
+                        if (window.Crop) {
+                            window.Crop.updateContainerSize();
+                            window.Crop.updateBox();
+                        }
                     }
                 } else if (!data.state.currentMediaUrl) {
                     console.log('[WS] currentMediaUrl 不存在，跳过 showPreview');
-                } else if (!window.Crop) {
-                    console.log('[WS] Crop 模块不存在，跳过 showPreview');
                 }
                 
                 if (data.state.currentMediaUrl && window.MediaLibrary) {
                     window.MediaLibrary.setCurrentMedia(data.state.currentMediaUrl);
-                }
-                
-                if (window.Crop) {
-                    window.Crop.updateContainerSize();
-                    window.Crop.updateBox();
                 }
             } else {
                 console.log('[WS] displayState displayId 不匹配，跳过处理');
@@ -270,18 +270,35 @@ const WebSocketManager = {
     },
     
     sendTts(action, data = {}) {
-        if (!window.currentDisplayId) {
-            showToast('请先选择显示端', 'error');
-            return;
-        }
-        
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({
-                type: 'tts',
-                displayId: window.currentDisplayId,
-                action: action,
-                ...data
-            }));
+            const selectionMode = window.DisplayList ? window.DisplayList.selectionMode : 'single';
+            
+            if (selectionMode === 'all' || selectionMode === 'adaptive') {
+                const selectedIds = window.DisplayList ? window.DisplayList.getSelectedDisplayIds() : [];
+                if (selectedIds.length === 0) {
+                    showToast('请先选择显示端', 'error');
+                    return;
+                }
+                
+                this.ws.send(JSON.stringify({
+                    type: 'tts',
+                    action: action,
+                    displayIds: selectedIds,
+                    ...data
+                }));
+            } else {
+                if (!window.currentDisplayId) {
+                    showToast('请先选择显示端', 'error');
+                    return;
+                }
+                
+                this.ws.send(JSON.stringify({
+                    type: 'tts',
+                    displayId: window.currentDisplayId,
+                    action: action,
+                    ...data
+                }));
+            }
         }
     },
     

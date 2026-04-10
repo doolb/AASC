@@ -2,7 +2,53 @@
 
 ## [Unreleased]
 
+### 新功能
+- ✅ 子显示端（语音端）完整支持
+  - 需求：控制端/显示端列表要包含子显示端，地图里也要显示，语音播放也需要发送到子显示端
+  - 实现：
+    - voice-display-node 改为通过 /display 路径连接服务器，URL 参数 subDisplay=true 标识为子显示端
+    - 服务端识别子显示端连接，在 displayClients 中标记 isSubDisplay
+    - getDisplayList 返回 isSubDisplay 字段
+    - 控制端显示端列表添加子显示端标识（🎤图标 + "子显示端"标签 + 橙色左边框）
+    - 地图添加 SUB_DISPLAY 建筑类型（橙色，🎤图标）
+    - 地图面板实现 handleDisplayListUpdate，实时更新地图上的显示端
+    - 地图面板优先使用控制端 WebSocket 连接
+    - TTS/语音播报支持多显示端发送（displayIds 数组），全选/自适应模式时发送到所有选中的显示端
+    - chatMessage 也支持多显示端发送
+  - 改动文件：
+    - voice-display-node/main.js - 改用 /display 路径连接，移除 register 消息，添加更多消息类型处理
+    - server.js - 解析 URL 参数识别子显示端，getDisplayList 添加 isSubDisplay，TTS/chat 支持 displayIds
+    - aasc/middleware/index.js - DisplayCheckMiddleware 从 typesRequiringDisplay 中移除 chat/chatMessage
+    - aasc/components/state-manager.js - getDisplayList 添加 isSubDisplay
+    - public/js/display-list.js - 子显示端视觉区分
+    - public/css/upload.css - 子显示端样式
+    - public/js/map/core/constants.js - 添加 SUB_DISPLAY 类型、颜色、尺寸、图标
+    - public/js/map/core/data-adapter.js - 支持子显示端建筑类型和布局
+    - public/js/map/map-panel.js - 实现 handleDisplayListUpdate，优先使用控制端 WebSocket
+    - public/js/websocket.js - sendTts 支持多显示端
+    - public/js/chat.js - chatMessage 和 TTS 支持多显示端
+
 ### Bug 修复
+- ✅ 修复 AASC Middleware rejected 错误
+  - 原因：DisplayCheckMiddleware 将 chat/chatMessage 类型列入需要显示端验证的类型，但 chat 消息不一定需要 displayId
+  - 解决：从 typesRequiringDisplay 中移除 chat/chatMessage，当显示端不存在时改为警告并放行
+  - 改动文件：
+    - aasc/middleware/index.js - DisplayCheckMiddleware 修改验证逻辑
+
+- ✅ 修复控制端裁剪框刷新页面后不显示
+  - 原因：showPreview 中 recalculateSize 会覆盖 setData 设置的裁剪数据；displayState 处理中 updateBox 在媒体加载前调用
+  - 解决：showPreview 添加 onReady 回调参数，displayState 处理时保存裁剪数据，在媒体加载完成后通过回调恢复裁剪数据并更新裁剪框
+  - 改动文件：
+    - public/js/crop.js - showPreview 添加 onReady 回调，_retryShowPreview 支持回调
+    - public/js/websocket.js - displayState 处理时使用回调恢复裁剪数据
+
+- ✅ 修复 voice-display-node TTS 播放音频失败（self-signed certificate）
+  - 原因：node-fetch 默认验证 SSL 证书，自签名证书被拒绝
+  - 解决：audio-player.js 和 asr-client.js 添加自定义 https.Agent，设置 rejectUnauthorized: false
+  - 改动文件：
+    - voice-display-node/audio-player.js - 添加 httpsAgent，playFromURL 使用自定义 agent
+    - voice-display-node/asr-client.js - 添加 httpsAgent，_getFetchOptions 方法统一处理
+
 - ✅ 修复显示端没有[Crop]打印日志
   - 原因：display.html 的 applyCrop 函数没有日志输出
   - 解决：在 applyCrop 函数中添加详细日志，包括容器尺寸、媒体尺寸、旋转角度、适配模式、裁剪百分比、最终样式等

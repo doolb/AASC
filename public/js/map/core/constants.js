@@ -1,6 +1,7 @@
 const BuildingType = {
   SERVER: 'server',
   DISPLAY: 'display',
+  SUB_DISPLAY: 'sub-display',
   CONTROL: 'control'
 };
 
@@ -27,6 +28,7 @@ const CapabilityCategory = {
 const BuildingColors = {
   server: 0x3498db,
   display: 0x2ecc71,
+  'sub-display': 0xffa500,
   control: 0xe67e22
 };
 
@@ -49,12 +51,14 @@ const LevelSizeMap = {
 const BuildingSize = {
   server: { width: 140, height: 100 },
   display: { width: 100, height: 70 },
+  'sub-display': { width: 80, height: 55 },
   control: { width: 80, height: 60 }
 };
 
 const BuildingIcons = {
   server: '🖥️',
   display: '📺',
+  'sub-display': '🎤',
   control: '📱'
 };
 

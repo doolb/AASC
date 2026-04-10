@@ -159,7 +159,7 @@ const TimeoutMiddleware = (timeoutMs = 30000) => {
 
 const DisplayCheckMiddleware = {
     handle(message, context, next) {
-        const typesRequiringDisplay = ['media', 'control', 'tts', 'chat', 'chatMessage'];
+        const typesRequiringDisplay = ['media', 'control', 'tts'];
         
         if (typesRequiringDisplay.includes(message.type)) {
             const displayId = message.displayId;
@@ -170,10 +170,8 @@ const DisplayCheckMiddleware = {
 
             const displayClient = context.stateManager?.getDisplayClient(displayId);
             if (!displayClient) {
-                return { 
-                    success: false, 
-                    error: `显示端不存在: ${displayId}` 
-                };
+                console.warn(`[DisplayCheckMiddleware] 显示端不存在: ${displayId}, 消息类型: ${message.type}, 放行处理`);
+                return next();
             }
         }
 

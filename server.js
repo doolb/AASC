@@ -1221,6 +1221,7 @@ function getDisplayList() {
         list.push({
             id: id,
             ip: data.ip,
+            isSubDisplay: data.isSubDisplay || data.state.isSubDisplay || false,
             canvasSize: data.state.canvasSize,
             rotation: data.state.rotation || 0,
             browserInfo: data.state.browserInfo,
@@ -1306,18 +1307,23 @@ wss.on('connection', (ws, req) => {
     const url = req.url || '/';
     
     if (url === '/display' || url.startsWith('/display')) {
-        const displayId = generateId();
+        const urlParams = new URL(url, 'http://localhost');
+        const isSubDisplay = urlParams.searchParams.get('subDisplay') === 'true';
+        const customDisplayId = urlParams.searchParams.get('displayId');
+        const displayId = customDisplayId || generateId();
         const clientIP = getClientIP(req);
         const savedState = config.getDisplayState(clientIP);
         displayClients.set(displayId, {
             ws: ws,
             ip: clientIP,
+            isSubDisplay: isSubDisplay,
             state: {
                 ...createDisplayState(),
-                ...savedState
+                ...savedState,
+                isSubDisplay: isSubDisplay
             }
         });
-        console.log(`显示端 ${displayId} (${clientIP}) 已连接，当前连接数: ${displayClients.size}`);
+        console.log(`显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
         
         if (aascSystem) {
             aascSystem.handleDisplayConnect(displayId, clientIP, ws, savedState);
@@ -1843,6 +1849,8 @@ async function handleControlMessageFallback(data, ws) {
                         (async () => {
                             try {
                                 const sentences = chat.splitIntoSentences(data.text);
+                                const targetDisplayIds = data.displayIds || (displayId ? [displayId] : []);
+                                
                                 for (const sentence of sentences) {
                                     const audioPath = await tts.generateTTS(sentence);
                                     const fileName = path.basename(audioPath);
@@ -1854,6 +1862,24 @@ async function handleControlMessageFallback(data, ws) {
                                             audioUrl: audioUrl,
                                             text: sentence
                                         }));
+                                    } else if (data.broadcastAll) {
+                                        displayClients.forEach((displayData, id) => {
+                                            sendToDisplay(id, {
+                                                type: 'tts',
+                                                action: 'playAudio',
+                                                audioUrl: audioUrl,
+                                                text: sentence
+                                            });
+                                        });
+                                    } else if (targetDisplayIds.length > 0) {
+                                        for (const targetId of targetDisplayIds) {
+                                            sendToDisplay(targetId, {
+                                                type: 'tts',
+                                                action: 'playAudio',
+                                                audioUrl: audioUrl,
+                                                text: sentence
+                                            });
+                                        }
                                     } else if (displayId) {
                                         sendToDisplay(displayId, {
                                             type: 'tts',
@@ -1929,6 +1955,7 @@ async function handleControlMessageFallback(data, ws) {
                             const session = chat.getSession();
                             const playOnControl = data.playOnControl || session.playOnControl;
                             const targetDisplayId = data.displayId || displayId;
+                            const targetDisplayIds = data.displayIds || [];
                             
                             const messageMode = data.mode || session.mode;
                             const messageTarget = messageMode === 'private' ? (data.target || session.privateTarget) : null;
@@ -1979,6 +2006,15 @@ async function handleControlMessageFallback(data, ws) {
                                                 audioUrl: audioUrl,
                                                 text: sentence
                                             }));
+                                        } else if (targetDisplayIds.length > 0) {
+                                            for (const tid of targetDisplayIds) {
+                                                sendToDisplay(tid, {
+                                                    type: 'tts',
+                                                    action: 'playAudio',
+                                                    audioUrl: audioUrl,
+                                                    text: sentence
+                                                });
+                                            }
                                         } else if (targetDisplayId) {
                                             sendToDisplay(targetDisplayId, {
                                                 type: 'tts',

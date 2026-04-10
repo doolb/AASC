@@ -9,9 +9,14 @@
 
 const { exec } = require('child_process');
 const fetch = require('node-fetch');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+});
 
 class AudioPlayer {
     constructor() {
@@ -21,11 +26,6 @@ class AudioPlayer {
         this.tempDir = os.tmpdir();
     }
 
-    /**
-     * 从URL播放音频
-     * @param {string} url - 音频URL
-     * @returns {Promise<void>}
-     */
     async playFromURL(url) {
         try {
             this.stopRequested = false;
@@ -33,7 +33,12 @@ class AudioPlayer {
 
             console.log(`[音频] 正在下载: ${url}`);
             
-            const response = await fetch(url);
+            const fetchOptions = {};
+            if (url.startsWith('https://')) {
+                fetchOptions.agent = httpsAgent;
+            }
+            
+            const response = await fetch(url, fetchOptions);
             if (!response.ok) {
                 throw new Error(`下载音频失败: HTTP ${response.status}`);
             }

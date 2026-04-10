@@ -11,16 +11,16 @@
     "192.168.1.12": {
       "currentMedia": {
         "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
-        "mediaType": "video"
+        "url": "https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png",
+        "mediaType": "image"
       },
-      "rotation": 90,
-      "fit": "height",
+      "rotation": 0,
+      "fit": "crop",
       "crop": {
         "x": 0,
-        "y": 0,
+        "y": 29.06992782465275,
         "width": 100,
-        "height": 100
+        "height": 31.041958491715615
       },
       "playlist": [],
       "volume": 0,
@@ -99,6 +99,4 @@
       "height": 100
     },
     "volume": 100,
-    "playlist": []
-  }
-}
+    "

@@ -31,6 +31,7 @@ public/js/map/
 const BuildingType = {
   SERVER: 'server',
   DISPLAY: 'display',
+  SUB_DISPLAY: 'sub-display',
   CONTROL: 'control'
 };
 

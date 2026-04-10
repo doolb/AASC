@@ -183,34 +183,37 @@ const Crop = {
         }
     },
     
-    showPreview(url, mediaType) {
+    showPreview(url, mediaType, onReady) {
         this.currentMedia = url;
-        console.log('[Crop] showPreview 开始, url:', url, 'mediaType:', mediaType);
+        this._onReadyCallback = onReady || null;
+        console.log('[Crop] showPreview 开始, url:', url, 'mediaType:', mediaType, 'hasCallback:', !!onReady);
         
         if (mediaType === 'video') {
             this.previewVideo.style.display = 'block';
             this.previewImg.style.display = 'none';
             this.previewVideo.onloadedmetadata = () => {
                 console.log('[Crop] video onloadedmetadata 触发');
-                console.log('[Crop] video.readyState:', this.previewVideo.readyState);
-                console.log('[Crop] video.videoWidth:', this.previewVideo.videoWidth, 'videoHeight:', this.previewVideo.videoHeight);
                 requestAnimationFrame(() => {
-                    const rect = this.previewVideo.getBoundingClientRect();
-                    console.log('[Crop] video getBoundingClientRect:', rect.width, 'x', rect.height);
-                    this.recalculateSize(false);
+                    if (this._onReadyCallback) {
+                        this._onReadyCallback();
+                        this._onReadyCallback = null;
+                    } else {
+                        this.recalculateSize(false);
+                    }
                 });
             };
             this.previewVideo.src = url;
-            console.log('[Crop] video.src 设置完成, readyState:', this.previewVideo.readyState);
             if (this.previewVideo.readyState >= 1) {
                 console.log('[Crop] video readyState >= 1, 立即计算');
                 requestAnimationFrame(() => {
-                    const rect = this.previewVideo.getBoundingClientRect();
-                    console.log('[Crop] video getBoundingClientRect (立即):', rect.width, 'x', rect.height);
-                    this.recalculateSize(false);
+                    if (this._onReadyCallback) {
+                        this._onReadyCallback();
+                        this._onReadyCallback = null;
+                    } else {
+                        this.recalculateSize(false);
+                    }
                 });
             } else {
-                console.log('[Crop] video readyState < 1, 启动重试');
                 this._retryShowPreview(0);
             }
         } else {
@@ -218,24 +221,27 @@ const Crop = {
             this.previewVideo.style.display = 'none';
             this.previewImg.onload = () => {
                 console.log('[Crop] img onload 触发');
-                console.log('[Crop] img.naturalWidth:', this.previewImg.naturalWidth, 'naturalHeight:', this.previewImg.naturalHeight);
                 requestAnimationFrame(() => {
-                    const rect = this.previewImg.getBoundingClientRect();
-                    console.log('[Crop] img getBoundingClientRect:', rect.width, 'x', rect.height);
-                    this.recalculateSize(false);
+                    if (this._onReadyCallback) {
+                        this._onReadyCallback();
+                        this._onReadyCallback = null;
+                    } else {
+                        this.recalculateSize(false);
+                    }
                 });
             };
             this.previewImg.src = url;
-            console.log('[Crop] img.src 设置完成, complete:', this.previewImg.complete, 'naturalWidth:', this.previewImg.naturalWidth);
             if (this.previewImg.complete && this.previewImg.naturalWidth > 0) {
                 console.log('[Crop] img 已加载完成, 立即计算');
                 requestAnimationFrame(() => {
-                    const rect = this.previewImg.getBoundingClientRect();
-                    console.log('[Crop] img getBoundingClientRect (立即):', rect.width, 'x', rect.height);
-                    this.recalculateSize(false);
+                    if (this._onReadyCallback) {
+                        this._onReadyCallback();
+                        this._onReadyCallback = null;
+                    } else {
+                        this.recalculateSize(false);
+                    }
                 });
             } else {
-                console.log('[Crop] img 未加载完成, 启动重试');
                 this._retryShowPreview(0);
             }
         }
@@ -247,7 +253,12 @@ const Crop = {
             const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
             const mediaRect = media.getBoundingClientRect();
             if (mediaRect.width > 0 && mediaRect.height > 0) {
-                this.recalculateSize(false);
+                if (this._onReadyCallback) {
+                    this._onReadyCallback();
+                    this._onReadyCallback = null;
+                } else {
+                    this.recalculateSize(false);
+                }
             } else {
                 this._retryShowPreview(retryCount + 1);
             }

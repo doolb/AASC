@@ -679,16 +679,25 @@ const Chat = {
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
-            window.WebSocketManager.ws.send(JSON.stringify({
+            const selectionMode = window.DisplayList ? window.DisplayList.selectionMode : 'single';
+            const chatMessage = {
                 type: 'chatMessage',
                 content: sendMessage,
                 displayContent: displayMessage,
                 mode: mode,
                 target: target,
                 templateTarget: templateTarget,
-                displayId: window.currentDisplayId,
                 playOnControl: this.session.playOnControl
-            }));
+            };
+            
+            if (selectionMode === 'all' || selectionMode === 'adaptive') {
+                const selectedIds = window.DisplayList ? window.DisplayList.getSelectedDisplayIds() : [];
+                chatMessage.displayIds = selectedIds;
+            } else {
+                chatMessage.displayId = window.currentDisplayId;
+            }
+            
+            window.WebSocketManager.ws.send(JSON.stringify(chatMessage));
         } else {
             this.addSystemMessage('WebSocket 连接未建立，正在重连...');
             if (window.WebSocketManager) {
@@ -1034,13 +1043,22 @@ const Chat = {
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
-            window.WebSocketManager.ws.send(JSON.stringify({
+            const selectionMode = window.DisplayList ? window.DisplayList.selectionMode : 'single';
+            const message = {
                 type: 'tts',
-                displayId: displayId || null,
                 action: 'play',
                 text: text,
                 playOnControl: playOnControl || !displayId
-            }));
+            };
+            
+            if (selectionMode === 'all' || selectionMode === 'adaptive') {
+                const selectedIds = window.DisplayList ? window.DisplayList.getSelectedDisplayIds() : [];
+                message.displayIds = selectedIds;
+            } else {
+                message.displayId = displayId || null;
+            }
+            
+            window.WebSocketManager.ws.send(JSON.stringify(message));
         }
     },
     
