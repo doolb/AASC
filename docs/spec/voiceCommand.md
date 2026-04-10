@@ -34,12 +34,12 @@ initVoiceRecognition():
     启动识别
 
 updateVoiceStatusDisplay():
-    如果不支持: 显示灰色 "语音"
-    如果正在识别: 显示绿色闪烁 "语音"
+    如果不支持: 显示灰色 "语音"（font-size: 24px, padding: 10px 20px, border-radius: 12px）
+    如果正在识别: 显示绿色闪烁 "语音"（scale动画 + box-shadow发光效果）
     否则: 显示半透明 "语音"
 
 updateVoiceTextDisplay(text, isFinal):
-    如果有文字: 显示语音识别文字（临时结果带…）
+    如果有文字: 显示语音识别文字（font-size: 24px, padding: 12px 20px, border-radius: 12px，临时结果带…）
     否则: 隐藏
 
 handleVoiceResult(event):

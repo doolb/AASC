@@ -25,6 +25,19 @@
     - public/css/upload.css - 添加树状列表样式
 
 ### Bug 修复
+- ✅ 显示端语音状态UI大小不正确
+  - 问题：`#voiceStatus` 的 font-size 为 14px、padding 为 6px 12px，与显示端其他UI元素（时间48px、文件名24px）不协调，整体偏小
+  - 修复：
+    - `#voiceStatus` font-size 从 14px 调整为 24px，padding 从 6px 12px 调整为 10px 20px，border-radius 从 4px 调整为 12px
+    - `#voiceTextDisplay` font-size 从 18px 调整为 24px，padding 从 10px 16px 调整为 12px 20px，border-radius 从 8px 调整为 12px，bottom 从 60px 调整为 80px
+    - `voice-pulse` 动画优化：添加 box-shadow 发光效果，缩放从 1.2 调整为 1.1，动画周期从 1s 调整为 1.5s
+    - 添加 text-shadow 增强文字可读性
+    - 响应式媒体查询 `@media (max-width: 768px)` 中添加 `#voiceStatus` 和 `#voiceTextDisplay` 适配
+    - 旋转逻辑中 voiceTextDisplay 偏移从 60px 调整为 80px
+  - 改动文件：
+    - public/css/display.css - 语音状态和语音文字显示样式调整
+    - public/display.html - 旋转逻辑中 voiceTextDisplay 位置偏移调整
+
 - ✅ 控制端画面裁剪区域刷新页面后不显示媒体和裁剪框
   - 问题：AASC 系统中 `MediaControlAgent.getState()` 方法错误地使用 `context.sendToDisplay()` 将 `displayState` 发送给显示端，而非发送给请求该状态的控制端
   - 原因：控制端刷新页面后发送 `getState` 请求，但响应被发到了显示端，控制端永远收不到 `displayState`，导致 `Crop.showPreview()` 不被调用

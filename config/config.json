@@ -14,13 +14,13 @@
         "url": "https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png",
         "mediaType": "image"
       },
-      "rotation": 0,
+      "rotation": 90,
       "fit": "crop",
       "crop": {
         "x": 0,
-        "y": 29.06992782465275,
+        "y": 15.078453300093692,
         "width": 100,
-        "height": 31.041958491715615
+        "height": 69.84309339981262
       },
       "playlist": [],
       "volume": 0,
@@ -53,9 +53,9 @@
       "fit": "crop",
       "crop": {
         "x": 0,
-        "y": 0,
+        "y": 34.76701761291619,
         "width": 100,
-        "height": 100
+        "height": 30.465964774167617
       },
       "volume": 6,
       "playlist": [],
@@ -73,6 +73,12 @@
       },
       "volume": 100,
       "playlist": []
+    }
+  },
+  "deviceEvents": {
+    "192.168.1.101": {
+      "onConnect": "早上好",
+      "onDisconnect": "晚安"
     }
   },
   "chat": {
@@ -99,4 +105,6 @@
       "height": 100
     },
     "volume": 100,
-    "
+    "playlist": []
+  }
+}
