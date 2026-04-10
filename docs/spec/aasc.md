@@ -832,6 +832,14 @@ MediaControlAgent
 │   └── 调用 context.sendToDisplay(displayId, { type: 'control', action, value })
 │
 └── getState(params, context)        # 获取显示端状态
+    ├── 获取 displayClient
+    ├── 如果 displayClient 不存在:
+    │   └── 通过 context.ws.send() 发送空 state 给控制端
+    ├── 复制 state
+    ├── 如果 state.currentMedia 存在:
+    │   ├── state.currentMediaUrl = state.currentMedia.url
+    │   └── state.currentMediaType = state.currentMedia.mediaType
+    └── 通过 context.ws.send() 发送 displayState 给控制端（非显示端）
 ```
 
 ### System 层

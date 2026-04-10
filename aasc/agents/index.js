@@ -498,6 +498,13 @@ class MediaControlAgent extends BaseAgent {
         
         const displayClient = context.stateManager?.getDisplayClient(displayId);
         if (!displayClient) {
+            if (context.ws) {
+                context.ws.send(JSON.stringify({
+                    type: 'displayState',
+                    displayId: displayId,
+                    state: {}
+                }));
+            }
             return { success: true, displayId, state: {} };
         }
 
@@ -507,11 +514,13 @@ class MediaControlAgent extends BaseAgent {
             state.currentMediaType = state.currentMedia.mediaType;
         }
 
-        context.sendToDisplay(displayId, {
-            type: 'displayState',
-            displayId: displayId,
-            state: state
-        });
+        if (context.ws) {
+            context.ws.send(JSON.stringify({
+                type: 'displayState',
+                displayId: displayId,
+                state: state
+            }));
+        }
 
         return { success: true, displayId, state };
     }

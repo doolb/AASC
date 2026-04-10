@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Bug 修复
+- ✅ 控制端画面裁剪区域刷新页面后不显示媒体和裁剪框
+  - 问题：AASC 系统中 `MediaControlAgent.getState()` 方法错误地使用 `context.sendToDisplay()` 将 `displayState` 发送给显示端，而非发送给请求该状态的控制端
+  - 原因：控制端刷新页面后发送 `getState` 请求，但响应被发到了显示端，控制端永远收不到 `displayState`，导致 `Crop.showPreview()` 不被调用
+  - 修复：将 `context.sendToDisplay()` 改为 `context.ws.send()`，直接将 `displayState` 发回给控制端 WebSocket 连接
+  - 改动文件：
+    - aasc/agents/index.js - MediaControlAgent.getState() 修改发送目标
+
 ### 新功能
 - ✅ 子显示端（语音端）完整支持
   - 需求：控制端/显示端列表要包含子显示端，地图里也要显示，语音播放也需要发送到子显示端
