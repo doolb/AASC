@@ -1626,3 +1626,230 @@ input[type="range"]::-webkit-slider-thumb:active {
     font-size: 13px !important;
     color: rgba(255, 255, 255, 0.4) !important;
 }
+
+.device-tree {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    padding: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.tree-node-wrapper {
+    user-select: none;
+}
+
+.tree-node {
+    display: flex;
+    align-items: center;
+    padding: 5px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+    gap: 4px;
+    min-height: 28px;
+}
+
+.tree-node:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.tree-node.selected {
+    background: rgba(0, 210, 255, 0.15);
+}
+
+.tree-toggle {
+    width: 16px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.tree-toggle:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.tree-toggle-spacer {
+    width: 16px;
+    flex-shrink: 0;
+}
+
+.tree-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.tree-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+}
+
+.tree-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.tree-status.online {
+    background: #2ecc71;
+    box-shadow: 0 0 4px rgba(46, 204, 113, 0.5);
+}
+
+.tree-info-item {
+    opacity: 0.7;
+    cursor: default;
+}
+
+.tree-info-item .tree-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.tree-children {
+    margin-left: 0;
+}
+
+.tree-setting-control {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.tree-setting-select {
+    padding: 2px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    outline: none;
+}
+
+.tree-setting-select option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+.tree-setting-range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tree-setting-range {
+    width: 80px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.tree-setting-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #00d2ff;
+    cursor: pointer;
+}
+
+.tree-setting-range-value {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 30px;
+    text-align: right;
+}
+
+.tree-event-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.tree-event-input {
+    width: 120px;
+    padding: 3px 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 11px;
+    outline: none;
+}
+
+.tree-event-input:focus {
+    border-color: #00d2ff;
+}
+
+.tree-event-input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.tree-event-save {
+    padding: 2px 8px;
+    font-size: 11px;
+    background: rgba(0, 210, 255, 0.3);
+    border: none;
+    border-radius: 3px;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+.tree-event-save:hover {
+    background: rgba(0, 210, 255, 0.5);
+}
+
+.tree-selection-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+}
+
+.tree-selection-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tree-selection-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.tree-selection-btn.active {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+}
+
+.tree-selection-icon {
+    font-size: 12px;
+}

@@ -67,6 +67,10 @@ const App = {
             window.DisplayList.init();
         }
         
+        if (window.DeviceTree) {
+            window.DeviceTree.init();
+        }
+        
         if (window.Upload) {
             window.Upload.init();
         }

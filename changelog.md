@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### 新功能
+- ✅ 添加树状结构的设备列表
+  - 需求：在控制端添加树状结构的设备列表，支持展开/收起、设备设置编辑、连线/掉线自定义指令
+  - 实现：
+    - 后端：core/config.js 添加 deviceEvents 配置管理（getDeviceEvents/getDeviceEvent/setDeviceEvent/removeDeviceEvent）
+    - 后端：server.js 添加设备事件 API（GET/PUT/DELETE /api/device-events/:ip）和设备设置 API（GET/PUT /api/device-settings/:displayId）
+    - 后端：server.js 添加 executeDeviceEvent 函数，在显示端连线/掉线时自动执行自定义指令
+    - 前端：新增 device-tree.js 树状设备列表组件，支持展开/收起节点
+    - 前端：树节点包含画面设置（旋转/填充/音量/画布）、事件指令（连线/掉线指令配置）、浏览器信息
+    - 前端：选择模式栏（单选/全选/自适应）集成到树状列表顶部
+    - 前端：WebSocket 添加 deviceEventExecuted 消息处理，显示指令执行通知
+    - HTML：upload.html 中显示端选择区域替换为设备树容器
+    - CSS：upload.css 添加完整的树状列表样式
+  - 改动文件：
+    - core/config.js - 添加 deviceEvents 配置管理方法
+    - server.js - 添加设备事件/设置 API 端点和 executeDeviceEvent 函数
+    - public/js/device-tree.js（新增）- 树状设备列表前端组件
+    - public/js/websocket.js - 添加 DeviceTree 同步和 deviceEventExecuted 消息处理
+    - public/js/main.js - 初始化 DeviceTree
+    - public/upload.html - 替换显示端列表为设备树容器
+    - public/css/upload.css - 添加树状列表样式
+
 ### Bug 修复
 - ✅ 控制端画面裁剪区域刷新页面后不显示媒体和裁剪框
   - 问题：AASC 系统中 `MediaControlAgent.getState()` 方法错误地使用 `context.sendToDisplay()` 将 `displayState` 发送给显示端，而非发送给请求该状态的控制端

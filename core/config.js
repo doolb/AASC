@@ -22,7 +22,8 @@ class Config extends DataSnapshot {
             defaultVoice: 'Microsoft Xiaoxiao',
             defaultSpeed: 0
         },
-        displayStates: {}
+        displayStates: {},
+        deviceEvents: {}
     };
 
     get(key, defaultValue) {
@@ -124,6 +125,32 @@ class Config extends DataSnapshot {
     getAllDisplayStates() {
         return this.get('displayStates', {});
     }
+
+    getDeviceEvents() {
+        return this.get('deviceEvents', {});
+    }
+
+    getDeviceEvent(ip) {
+        const events = this.getDeviceEvents();
+        return events[ip] || events['default'] || { onConnect: '', onDisconnect: '' };
+    }
+
+    setDeviceEvent(ip, eventConfig) {
+        const events = this.getDeviceEvents();
+        events[ip] = {
+            onConnect: eventConfig.onConnect !== undefined ? eventConfig.onConnect : '',
+            onDisconnect: eventConfig.onDisconnect !== undefined ? eventConfig.onDisconnect : ''
+        };
+        this.set('deviceEvents', events);
+        return events[ip];
+    }
+
+    removeDeviceEvent(ip) {
+        const events = this.getDeviceEvents();
+        delete events[ip];
+        this.set('deviceEvents', events);
+        return true;
+    }
 }
 
 const config = new Config(CONFIG_FILE);
@@ -145,3 +172,7 @@ module.exports.removeFromPlaylist = (ip, index) => config.removeFromPlaylist(ip,
 module.exports.clearPlaylist = (ip) => config.clearPlaylist(ip);
 module.exports.getPlaylist = (ip) => config.getPlaylist(ip);
 module.exports.getAllDisplayStates = () => config.getAllDisplayStates();
+module.exports.getDeviceEvents = () => config.getDeviceEvents();
+module.exports.getDeviceEvent = (ip) => config.getDeviceEvent(ip);
+module.exports.setDeviceEvent = (ip, eventConfig) => config.setDeviceEvent(ip, eventConfig);
+module.exports.removeDeviceEvent = (ip) => config.removeDeviceEvent(ip);

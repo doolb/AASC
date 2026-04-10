@@ -12,6 +12,11 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.onWebSocketOpen();
             }
+            if (window.DeviceTree) {
+                const host = window.location.hostname || '127.0.0.1';
+                const port = window.location.port || '8081';
+                window.DeviceTree.setServerInfo(host, port);
+            }
         };
         
         this.ws.onmessage = (event) => {
@@ -46,10 +51,19 @@ const WebSocketManager = {
                 window.DisplayList.render();
             }
             
+            if (window.DeviceTree) {
+                window.DeviceTree.setDisplayList(data.list);
+            }
+            
             if (!window.currentDisplayId && data.list && data.list.length > 0) {
                 console.log('[WS] displayList: 自动选择第一个显示端并发送 getState');
                 window.currentDisplayId = data.list[0].id;
                 this.send({ type: 'getState', displayId: data.list[0].id });
+            }
+        } else if (data.type === 'deviceEventExecuted') {
+            const eventLabel = data.eventType === 'onConnect' ? '连线' : '掉线';
+            if (window.showToast) {
+                window.showToast(`设备 ${data.ip} ${eventLabel}指令已执行: ${data.command}`, 'success');
             }
         } else if (data.type === 'displayState') {
             console.log('[WS] displayState 收到, displayId:', data.displayId, 'currentDisplayId:', window.currentDisplayId);

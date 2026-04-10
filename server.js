@@ -1159,6 +1159,117 @@ app.get('/api/mute', (req, res) => {
     });
 });
 
+app.get('/api/device-events', (req, res) => {
+    res.json({
+        status: 'success',
+        events: config.getDeviceEvents()
+    });
+});
+
+app.put('/api/device-events/:ip', (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { onConnect, onDisconnect } = req.body;
+        
+        if (!ip) {
+            return res.status(400).json({ status: 'error', message: 'IP 参数不能为空' });
+        }
+        
+        const eventConfig = config.setDeviceEvent(ip, { onConnect, onDisconnect });
+        res.json({
+            status: 'success',
+            event: eventConfig,
+            message: '设备事件配置已更新'
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败: ' + err.message });
+    }
+});
+
+app.delete('/api/device-events/:ip', (req, res) => {
+    try {
+        const { ip } = req.params;
+        config.removeDeviceEvent(ip);
+        res.json({
+            status: 'success',
+            message: '设备事件配置已删除'
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '删除失败: ' + err.message });
+    }
+});
+
+app.get('/api/device-settings/:displayId', (req, res) => {
+    try {
+        const { displayId } = req.params;
+        const displayData = displayClients.get(displayId);
+        
+        if (displayData) {
+            res.json({
+                status: 'success',
+                settings: displayData.state,
+                online: true
+            });
+        } else {
+            let savedIp = null;
+            const states = config.getAllDisplayStates();
+            for (const [ip, state] of Object.entries(states)) {
+                if (state.displayId === displayId) {
+                    savedIp = ip;
+                    break;
+                }
+            }
+            
+            if (savedIp) {
+                res.json({
+                    status: 'success',
+                    settings: config.getDisplayState(savedIp),
+                    online: false
+                });
+            } else {
+                res.status(404).json({ status: 'error', message: '设备不存在' });
+            }
+        }
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '获取设置失败: ' + err.message });
+    }
+});
+
+app.put('/api/device-settings/:displayId', (req, res) => {
+    try {
+        const { displayId } = req.params;
+        const displayData = displayClients.get(displayId);
+        
+        if (displayData) {
+            const updates = req.body;
+            const validActions = ['rotation', 'fit', 'volume', 'crop', 'isPlaying'];
+            
+            for (const [key, value] of Object.entries(updates)) {
+                if (validActions.includes(key)) {
+                    displayData.state[key] = value;
+                    config.updateDisplayState(displayData.ip, { [key]: value });
+                    
+                    sendToDisplay(displayId, {
+                        type: 'control',
+                        action: key,
+                        value: value
+                    });
+                }
+            }
+            
+            res.json({
+                status: 'success',
+                settings: displayData.state,
+                online: true
+            });
+        } else {
+            res.status(404).json({ status: 'error', message: '设备不在线，无法修改设置' });
+        }
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '更新设置失败: ' + err.message });
+    }
+});
+
 app.post('/api/mute', (req, res) => {
     const result = muteAllDisplays();
     res.json({
@@ -1341,6 +1452,8 @@ wss.on('connection', (ws, req) => {
         
         broadcastToControls({ type: 'displayList', list: getDisplayList() });
         
+        executeDeviceEvent(clientIP, 'onConnect');
+        
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
@@ -1360,12 +1473,14 @@ wss.on('connection', (ws, req) => {
         });
         
         ws.on('close', () => {
+            const disconnectedIP = clientIP;
             displayClients.delete(displayId);
             if (aascSystem) {
                 aascSystem.handleDisplayDisconnect(displayId);
             }
             console.log(`显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
             broadcastToControls({ type: 'displayList', list: getDisplayList() });
+            executeDeviceEvent(disconnectedIP, 'onDisconnect');
         });
     } else if (url === '/control' || url.startsWith('/control')) {
         controlClients.add(ws);
@@ -2093,6 +2208,35 @@ function getLocalIP() {
         }
     }
     return '127.0.0.1';
+}
+
+async function executeDeviceEvent(ip, eventType) {
+    try {
+        const eventConfig = config.getDeviceEvent(ip);
+        let command = eventConfig[eventType];
+        
+        if (!command) {
+            const defaultConfig = config.getDeviceEvent('default');
+            command = defaultConfig[eventType];
+        }
+        
+        if (!command) return;
+        
+        console.log(`[设备事件] ${ip} ${eventType}: ${command}`);
+        
+        const result = await voiceCommand.processVoiceCommand(command, null, null);
+        
+        broadcastToControls({
+            type: 'deviceEventExecuted',
+            ip: ip,
+            eventType: eventType,
+            command: command,
+            result: result,
+            timestamp: Date.now()
+        });
+    } catch (err) {
+        console.error(`[设备事件] 执行失败 ${ip} ${eventType}:`, err.message);
+    }
 }
 
 function updateVoiceDisplayConfig(localIP, port, protocol) {
