@@ -89,8 +89,6 @@ body {
 
 #timeDisplay {
     position: fixed;
-    top: 20px;
-    right: 20px;
     font-size: 48px;
     color: rgba(255, 255, 255, 0.9);
     text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
@@ -101,8 +99,6 @@ body {
 
 #fileNameDisplay {
     position: fixed;
-    bottom: 20px;
-    left: 20px;
     font-size: 24px;
     color: rgba(255, 255, 255, 0.8);
     text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
@@ -229,9 +225,9 @@ body {
     }
     
     #voiceStatus {
-        font-size: 18px;
-        padding: 8px 14px;
-        border-radius: 8px;
+        font-size: 14px;
+        padding: 4px 10px;
+        border-radius: 6px;
     }
     
     #voiceTextDisplay {
@@ -244,16 +240,15 @@ body {
 
 #voiceStatus {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    font-size: 24px;
-    padding: 10px 20px;
-    border-radius: 12px;
+    font-size: 16px;
+    padding: 6px 12px;
+    border-radius: 8px;
     background: rgba(0, 0, 0, 0.6);
     color: #fff;
     z-index: 1000;
     transition: all 0.3s ease;
     text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
+    white-space: nowrap;
 }
 
 .voice-status-hidden {
@@ -281,8 +276,6 @@ body {
 
 #voiceTextDisplay {
     position: fixed;
-    bottom: 80px;
-    right: 20px;
     font-size: 24px;
     padding: 12px 20px;
     border-radius: 12px;

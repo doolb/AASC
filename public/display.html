@@ -335,7 +335,7 @@
                     voiceTextDisplay.style.bottom = '80px';
                     voiceTextDisplay.style.left = '20px';
                 }
-                uiElements.forEach(el => {
+                [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
                     if (el) el.style.maxWidth = '50vh';
                 });
             } else if (currentRotation === 180) {
@@ -360,7 +360,7 @@
                     voiceTextDisplay.style.top = '80px';
                     voiceTextDisplay.style.right = '20px';
                 }
-                uiElements.forEach(el => {
+                [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
                     if (el) el.style.maxWidth = '50vh';
                 });
             }
@@ -1096,6 +1096,7 @@
             sendCanvasSize();
         });
         
+        applyRotation();
         connectWebSocket();
         
         initVoiceRecognition();
