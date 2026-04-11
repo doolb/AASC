@@ -76,6 +76,15 @@
     - voice-display-node/main.js - 添加 voiceCommand 消息处理和 handleVoiceCommand 方法
     - voice-display/main.go - 添加 voiceCommand 消息处理和 handleVoiceCommand 方法
     - server.js - executeDeviceEvent 离线事件时找其他在线显示端
+- ✅ 早上好组合指令天气TTS未正常播放 & 指令回复不应发给聊天助手
+  - 问题1：`executeCommands` 调用 `processVoiceCommand(action, displayId, null)` 时传入 `callbacks=null`，导致 `handleWeatherCommand` 等函数走 `sendToDisplay` 分支直接发送 `voiceCommand` 消息，子显示端不识别该消息类型
+  - 问题2：之前修复时将 `onResult` 映射到 `onChat` → `handleChatMessage`，导致指令回复（天气、报时等）被发给聊天助手处理，而非直接 TTS 播放
+  - 修复：
+    - 子显示端添加 `voiceCommand` 消息处理（Node.js/Go），支持直接播放 TTS
+    - `executeCommands` 传 `callbacks=null` 给 `processVoiceCommand`，让指令处理函数直接通过 `sendToDisplay` 发送 TTS，不经过聊天助手
+    - 只有 `processVoiceCommand` 返回 `{ type: 'chat' }` 的非指令文本才走 `onChat` → 聊天助手
+  - 改动文件：
+    - core/voiceCommand.js - executeCommands 传 null callbacks，指令回复不经过聊天助手
   - 改动文件：
     - public/js/crop.js - setRotation() 添加 CSS 旋转类应用
 
