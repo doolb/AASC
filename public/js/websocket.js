@@ -78,8 +78,6 @@ const WebSocketManager = {
             
             if (data.displayId === window.currentDisplayId) {
                 if (window.Crop) {
-                    window.Crop.setRotation(data.state.rotation);
-                    window.Crop.setData(data.state.crop);
                     window.displayCanvasSize = data.state.canvasSize;
                 }
                 
@@ -111,19 +109,25 @@ const WebSocketManager = {
                 }
                 
                 if (data.state.currentMediaUrl && window.Crop) {
+                    const savedCrop = { ...data.state.crop };
+                    const savedRotation = data.state.rotation;
                     if (window.Crop.currentMedia !== data.state.currentMediaUrl) {
                         console.log('[WS] 调用 showPreview, url:', data.state.currentMediaUrl, 'mediaType:', data.state.currentMediaType);
-                        const savedCrop = { ...data.state.crop };
-                        const savedRotation = data.state.rotation;
                         window.Crop.showPreview(data.state.currentMediaUrl, data.state.currentMediaType, () => {
                             window.Crop.setData(savedCrop);
                             window.Crop.setRotation(savedRotation);
-                            window.Crop.updateBox();
+                            setTimeout(() => {
+                                window.Crop.updateBox();
+                            }, 350);
                         });
                     } else {
                         if (window.Crop) {
+                            window.Crop.setData(savedCrop);
+                            window.Crop.setRotation(savedRotation);
                             window.Crop.updateContainerSize();
-                            window.Crop.updateBox();
+                            setTimeout(() => {
+                                window.Crop.updateBox();
+                            }, 350);
                         }
                     }
                 } else if (!data.state.currentMediaUrl) {

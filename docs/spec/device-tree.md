@@ -98,10 +98,44 @@ module.exports 导出:
 
 ### 连线/掉线指令执行 (server.js)
 
-#### executeDeviceEvent(ip, eventType)
+#### handleChatMessage(options)
 
 ```
-async function executeDeviceEvent(ip, eventType):
+共享函数，处理聊天消息流，用于 chatMessage、voiceCommand、executeDeviceEvent
+
+参数:
+  content: 消息内容
+  displayContent: 显示内容（可选，默认使用 content）
+  displayId: 显示端ID
+  displayIds: 多显示端ID列表（可选）
+  playOnControl: 是否在控制端播放（可选）
+  systemPrompt: 自定义系统提示词（可选）
+  templateTarget: 模板目标名称（可选）
+  mode: 会话模式，默认 'group'
+  target: 私聊目标（可选）
+  sendToControl: 回调函数，发送消息给控制端
+
+处理逻辑:
+  chat.addMessage({ role: 'control', content })
+  
+  如果有 templateTarget: 使用模板的 systemPrompt
+  否则如果有 systemPrompt: 使用自定义 systemPrompt
+  
+  await chat.chatStream(content, { displayId, systemPrompt, includeHistory }, {
+    onChunk: sendToControl({ type: 'chatChunk', chunk, message })
+    onSentence:
+      如果 playOnControl: sendToControl({ type: 'playOnControl', audioUrl, text })
+      否则如果 displayIds: 遍历 sendToDisplay(tid, { type: 'tts', ... })
+      否则: sendToDisplay(displayId, { type: 'tts', ... })
+    onComplete: chat.addMessage({ role: 'assistant' }), sendToControl({ type: 'chatResponse', ... })
+    onError: sendToControl({ type: 'chatResponse', success: false, error })
+  })
+```
+
+#### executeDeviceEvent(ip, eventType, displayId)
+
+```
+async function executeDeviceEvent(ip, eventType, displayId):
   try:
     eventConfig = config.getDeviceEvent(ip)
     command = eventConfig[eventType]
@@ -115,7 +149,21 @@ async function executeDeviceEvent(ip, eventType):
     
     打印日志: `[设备事件] ${ip} ${eventType}: ${command}`
     
-    result = await voiceCommand.processVoiceCommand(command, null, null)
+    sendToControl = (msg) => broadcastToControls(msg)
+    
+    result = await voiceCommand.processVoiceCommand(command, displayId, null)
+    
+    如果 result 为空: return
+    
+    如果 result.type === 'showHelp':
+      sendToControl({ type: 'showHelp' })
+    如果 result.type === 'commands':
+      await voiceCommand.executeCommands(result.actions, displayId, {
+        onChat: async (message) =>
+          await handleChatMessage({ content: message, displayId, sendToControl })
+      })
+    如果 result.type === 'chat':
+      await handleChatMessage({ content: result.message, displayId, systemPrompt: result.systemPrompt, sendToControl })
     
     broadcastToControls({
       type: 'deviceEventExecuted',
@@ -134,18 +182,18 @@ async function executeDeviceEvent(ip, eventType):
 ```
 // 显示端 WebSocket 连接处理中
 broadcastToControls({ type: 'displayList', list: getDisplayList() })
-executeDeviceEvent(clientIP, 'onConnect')  // 新增
+executeDeviceEvent(clientIP, 'onConnect', displayId)
 ```
 
 #### 在显示端断开时调用
 
 ```
 ws.on('close', () => {
-  const disconnectedIP = clientIP  // 先保存 IP
+  const disconnectedIP = clientIP
   displayClients.delete(displayId)
   ...
   broadcastToControls({ type: 'displayList', list: getDisplayList() })
-  executeDeviceEvent(disconnectedIP, 'onDisconnect')  // 新增
+  executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId)
 })
 ```
 

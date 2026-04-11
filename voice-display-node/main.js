@@ -139,6 +139,12 @@ class VoiceDisplay {
             case 'media':
                 console.log('[消息] 收到媒体指令（子显示端不支持媒体显示）:', data.type);
                 break;
+            case 'reminder':
+                this.handleReminder(data);
+                break;
+            case 'voiceCommand':
+                this.handleVoiceCommand(data);
+                break;
             default:
                 console.log('[消息] 未知消息类型:', msgType);
         }
@@ -174,6 +180,74 @@ class VoiceDisplay {
                 }
                 console.log('[TTS] 停止播报');
                 break;
+        }
+    }
+
+    /**
+     * 处理提醒消息
+     * @param {Object} data - 提醒数据
+     */
+    async handleReminder(data) {
+        const action = data.action;
+
+        switch (action) {
+            case 'voice':
+                if (data.audioUrl) {
+                    console.log(`[提醒] 播报: ${data.text || ''}`);
+                    await this.playAudioFromURL(data.audioUrl);
+                }
+                break;
+            case 'popup':
+                console.log(`[提醒] 弹窗: ${data.content || ''}`);
+                break;
+            default:
+                console.log('[提醒] 未知动作:', action);
+        }
+    }
+
+    /**
+     * 处理语音命令消息
+     * @param {Object} data - 语音命令数据
+     */
+    async handleVoiceCommand(data) {
+        const action = data.action;
+
+        switch (action) {
+            case 'confirm':
+                if (data.audioUrl) {
+                    console.log(`[语音命令] 确认: ${data.text || ''}`);
+                    await this.playAudioFromURL(data.audioUrl);
+                }
+                break;
+            case 'response':
+                if (data.audioUrl) {
+                    console.log(`[语音命令] 响应: ${data.text || ''}`);
+                    await this.playAudioFromURL(data.audioUrl);
+                }
+                break;
+            case 'searchResult':
+                if (data.audioUrl) {
+                    console.log(`[语音命令] 搜索结果: ${data.text || ''}`);
+                    await this.playAudioFromURL(data.audioUrl);
+                }
+                break;
+            case 'weatherResult':
+                if (data.audioUrl) {
+                    console.log(`[语音命令] 天气结果: ${data.text || ''}`);
+                    await this.playAudioFromURL(data.audioUrl);
+                }
+                break;
+            case 'playChoices':
+                if (data.audioUrl) {
+                    console.log(`[语音命令] 播放选项: ${data.text || ''}`);
+                    await this.playAudioFromURL(data.audioUrl);
+                }
+                break;
+            default:
+                if (data.audioUrl) {
+                    console.log(`[语音命令] ${action}: ${data.text || ''}`);
+                    await this.playAudioFromURL(data.audioUrl);
+                }
         }
     }
 

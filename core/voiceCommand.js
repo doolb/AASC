@@ -1050,19 +1050,11 @@ async function processVoiceCommand(text, displayId, callbacks) {
     if (trimmedText.includes(assistant.name)) {
         const message = trimmedText.replace(assistant.name, '').trim();
         if (message) {
-            return {
-                type: 'chat',
-                message: message,
-                systemPrompt: assistant.template
-            };
+            return { type: 'chat', message, systemPrompt: assistant.template };
         }
     }
     
-    return {
-        type: 'chat',
-        message: trimmedText,
-        systemPrompt: assistant.template
-    };
+    return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };
 }
 
 function handleSystemCommand(text, displayId) {
@@ -1097,23 +1089,34 @@ function handleSystemCommand(text, displayId) {
     return null;
 }
 
-async function executeCommands(actions, displayId, callbacks) {
+async function executeCommands(actions, displayId, callbacks, depth = 0) {
+    if (depth > 3) {
+        console.warn('[语音命令] 指令嵌套深度超过限制');
+        return;
+    }
+    
     for (const action of actions) {
-        if (action === '今天天气') {
-            await handleWeatherCommand('', displayId);
-        } else if (action === '今日提醒') {
-            await handleTodayReminders(displayId);
-        } else if (action === '明日提醒') {
-            await handleTomorrowReminders(displayId);
-        } else if (action.startsWith('搜索')) {
-            await handleSearchCommand(action, displayId);
-        } else if (action.includes('提醒')) {
-            await handleReminderCommand(action, displayId);
-        } else if (action.includes('报时')) {
-            await handleTimeAnnounceCommand(action, displayId);
-        } else {
+        const result = await processVoiceCommand(action, displayId, null);
+        
+        if (!result) continue;
+        
+        if (result.type === 'commands') {
+            await executeCommands(result.actions, displayId, callbacks, depth + 1);
+        } else if (result.type === 'chat') {
             if (callbacks && callbacks.onChat) {
-                callbacks.onChat(action);
+                callbacks.onChat(result.message, result.systemPrompt);
+            }
+        } else if (result.type === 'showHelp') {
+            if (callbacks && callbacks.onShowHelp) {
+                callbacks.onShowHelp();
+            }
+        } else if (result.type === 'privateMode' || result.type === 'groupMode') {
+            if (callbacks && callbacks.onModeChange) {
+                callbacks.onModeChange(result.type, result.target);
+            }
+        } else if (result.type === 'systemMessage') {
+            if (callbacks && callbacks.onSystemMessage) {
+                callbacks.onSystemMessage(result.content);
             }
         }
     }

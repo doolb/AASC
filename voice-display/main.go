@@ -100,6 +100,10 @@ func (vd *VoiceDisplay) handleMessage(msgType string, data map[string]interface{
 		log.Printf("[消息] 收到语音输入确认")
 	case "control":
 		log.Printf("[消息] 收到控制指令: %v", data)
+	case "reminder":
+		vd.handleReminder(data)
+	case "voiceCommand":
+		vd.handleVoiceCommand(data)
 	default:
 		log.Printf("[消息] 未知消息类型: %s", msgType)
 	}
@@ -127,6 +131,65 @@ func (vd *VoiceDisplay) handleTTS(data map[string]interface{}) {
 			vd.audio.Stop()
 		}
 		log.Printf("[TTS] 停止播报")
+	}
+}
+
+func (vd *VoiceDisplay) handleReminder(data map[string]interface{}) {
+	action, _ := data["action"].(string)
+	switch action {
+	case "voice":
+		audioUrl, _ := data["audioUrl"].(string)
+		text, _ := data["text"].(string)
+		if text != "" {
+			log.Printf("[提醒] 播报: %s", text)
+		}
+		if audioUrl != "" {
+			vd.playAudioFromURL(audioUrl)
+		}
+	case "popup":
+		content, _ := data["content"].(string)
+		log.Printf("[提醒] 弹窗: %s", content)
+	default:
+		log.Printf("[提醒] 未知动作: %s", action)
+	}
+}
+
+func (vd *VoiceDisplay) handleVoiceCommand(data map[string]interface{}) {
+	action, _ := data["action"].(string)
+	audioUrl, _ := data["audioUrl"].(string)
+	text, _ := data["text"].(string)
+
+	switch action {
+	case "confirm":
+		if audioUrl != "" {
+			log.Printf("[语音命令] 确认: %s", text)
+			vd.playAudioFromURL(audioUrl)
+		}
+	case "response":
+		if audioUrl != "" {
+			log.Printf("[语音命令] 响应: %s", text)
+			vd.playAudioFromURL(audioUrl)
+		}
+	case "searchResult":
+		if audioUrl != "" {
+			log.Printf("[语音命令] 搜索结果: %s", text)
+			vd.playAudioFromURL(audioUrl)
+		}
+	case "weatherResult":
+		if audioUrl != "" {
+			log.Printf("[语音命令] 天气结果: %s", text)
+			vd.playAudioFromURL(audioUrl)
+		}
+	case "playChoices":
+		if audioUrl != "" {
+			log.Printf("[语音命令] 播放选项: %s", text)
+			vd.playAudioFromURL(audioUrl)
+		}
+	default:
+		if audioUrl != "" {
+			log.Printf("[语音命令] %s: %s", action, text)
+			vd.playAudioFromURL(audioUrl)
+		}
 	}
 }
 

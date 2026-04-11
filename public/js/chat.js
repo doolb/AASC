@@ -1366,20 +1366,14 @@ const Chat = {
     },
     
     executeCommands(actions) {
-        for (const action of actions) {
-            if (action === '今天天气') {
-                this.handleSearchCommand('搜索今天天气');
-            } else if (action === '今日提醒') {
-                this.handleTodayReminders();
-            } else if (action.startsWith('搜索')) {
-                this.handleSearchCommand(action);
-            } else if (action.includes('提醒')) {
-                this.handleReminderCommand(action);
-            } else if (action.includes('报时')) {
-                this.handleTimeAnnounceCommand(action);
-            } else {
-                this.sendVoiceMessage(action);
-            }
+        if (window.WebSocketManager && window.WebSocketManager.ws &&
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'executeCommands',
+                actions: actions,
+                displayId: window.currentDisplayId,
+                playOnControl: this.session.playOnControl
+            }));
         }
     },
     

@@ -25,6 +25,70 @@
     - public/css/upload.css - 添加树状列表样式
 
 ### Bug 修复
+- ✅ 控制端画面裁剪区域刷新页面后裁剪框没有和显示端实际角度一样
+  - 问题：`Crop.setRotation()` 只设置了 `this.rotation` 值和按钮状态，但没有给预览图片添加 CSS 旋转类（如 `rotate-90`），导致刷新页面后裁剪框角度与显示端不一致
+  - 修复：在 `setRotation()` 中添加与 `applyRotation()` 相同的 CSS 旋转类应用逻辑，但不发送控制指令到显示端
+- ✅ 控制端画面裁剪区域刷新页面后裁剪框位置和大小与显示端不一致
+  - 问题：`displayState` 恢复时，`setRotation` 添加 CSS 旋转类后有 300ms transition 动画，但 `updateBox` 立即调用，导致 `getBoundingClientRect()` 获取的是动画中间状态的位置；另外 `setData` 和 `setRotation` 在 `showPreview` 之前调用，图片未加载时设置无效
+  - 修复：调整 `displayState` 恢复顺序，先设置 `canvasSize` 和 `fit` 模式，再在 `showPreview` 回调中 `setData` + `setRotation`，最后延迟 350ms 后 `updateBox`；非媒体切换时也先 `setData` + `setRotation` 再延迟 `updateBox`
+  - 改动文件：
+    - public/js/websocket.js - 重构 displayState 恢复逻辑
+- ✅ 设备事件指令处理逻辑重构，事件指令和 #chatInput 使用相同处理逻辑
+  - 问题：设备事件指令（连线/掉线）的聊天处理和 #chatInput 不一致，缺少 chat.addMessage 记录、多显示端支持、playOnControl 等功能
+  - 修复：
+    - 提取 `handleChatMessage(options)` 共享函数，包含完整的聊天处理逻辑（addMessage、chatStream、多显示端、playOnControl 等）
+    - `chatMessage`、`voiceCommand`、`executeDeviceEvent` 的聊天部分都通过 `handleChatMessage` 处理
+    - `processVoiceCommand` 不再自己处理 chatStream，只返回结果让 server.js 用 `handleChatMessage` 处理
+    - 删除 `voiceCommand.js` 中的 `handleChatStream` 函数
+  - 改动文件：
+    - server.js - 新增 handleChatMessage 共享函数，简化 chatMessage/voiceCommand/executeDeviceEvent 处理
+    - core/voiceCommand.js - 删除 handleChatStream，processVoiceCommand 不再接收 sendToControl 参数
+- ✅ 子显示端不识别 reminder 消息类型
+  - 问题：`reminder.js` 通过 `sendToDisplay` 发送 `type: 'reminder'` 消息，但子显示端（Node.js/Go）不认识该消息类型，报"未知消息类型: reminder"
+  - 修复：在子显示端添加 `handleReminder` 方法，处理 `voice` 动作（播放TTS音频）和 `popup` 动作（日志记录）
+  - 改动文件：
+    - voice-display-node/main.js - 添加 reminder 消息处理和 handleReminder 方法
+    - voice-display/main.go - 添加 reminder 消息处理和 handleReminder 方法
+- ✅ 事件指令被处理两次
+  - 问题：`executeCommands` 有独立的匹配逻辑（`action.includes('报时')`等），和 `processVoiceCommand` 的逻辑不一致，导致：
+    - "报时" 和 "开启报时" 都匹配 `includes('报时')`，`handleTimeAnnounceCommand` 被调用两次
+    - "今天提醒" 不匹配 `=== '今日提醒'`，落到 `includes('提醒')` 走了 `handleReminderCommand`（创建提醒）而非 `handleTodayReminders`（播报今日提醒）
+    - "静音"/"取消静音" 等指令没有对应处理，走了 `onChat` → `handleChatMessage` 而非 `handleMuteCommand`/`handleUnmuteCommand`
+  - 修复：
+    - `executeCommands` 改为对每个 action 调用 `processVoiceCommand`，复用同一套匹配逻辑，消除重复处理
+    - 添加递归深度限制（3层），防止自定义指令循环引用
+    - `onChat` 回调新增 `systemPrompt` 参数，支持自定义系统提示词
+    - 新增 `onShowHelp`、`onModeChange`、`onSystemMessage` 回调
+    - 修复 `server.js` 中 `executeCommands` 消息处理使用了不存在的 `window.WebSocketManager`
+    - 客户端 `chat.js` 的 `executeCommands` 改为发送 `executeCommands` 消息到服务端，不再本地匹配
+  - 改动文件：
+    - core/voiceCommand.js - executeCommands 改为调用 processVoiceCommand
+    - server.js - 更新所有 executeCommands 调用的回调参数，修复 executeCommands 消息处理
+    - public/js/chat.js - executeCommands 改为发送消息到服务端
+- ✅ 子显示端不识别 voiceCommand 消息类型 & 设备离线指令语音发送给已断开显示端
+  - 问题1：`voiceCommand.js` 通过 `sendToDisplay` 发送 `type: 'voiceCommand'` 消息（confirm/response/searchResult/weatherResult/playChoices），子显示端不认识该消息类型
+  - 问题2：设备离线事件 `onDisconnect` 触发时，`displayClients.delete(displayId)` 已执行，`executeDeviceEvent` 传入的 `displayId` 对应的显示端已断开，TTS 无法送达
+  - 修复：
+    - 子显示端（Node.js/Go）添加 `voiceCommand` 消息处理，播放 TTS 音频
+    - `executeDeviceEvent` 在 `onDisconnect` 事件时，检测原显示端是否在线，若已断开则找其他在线显示端播报语音
+    - 若无在线显示端则跳过语音播报，仅通知控制端
+  - 改动文件：
+    - voice-display-node/main.js - 添加 voiceCommand 消息处理和 handleVoiceCommand 方法
+    - voice-display/main.go - 添加 voiceCommand 消息处理和 handleVoiceCommand 方法
+    - server.js - executeDeviceEvent 离线事件时找其他在线显示端
+  - 改动文件：
+    - public/js/crop.js - setRotation() 添加 CSS 旋转类应用
+
+- ✅ 设备事件指令没有发送给聊天模块统一处理
+  - 问题：`executeDeviceEvent()` 调用 `voiceCommand.processVoiceCommand(command, null, null)` 时传入 `displayId=null` 和 `callbacks=null`，导致返回聊天类型结果时无法通过聊天模块处理，TTS 也无法发送到显示端
+  - 修复：
+    - `executeDeviceEvent()` 新增 `displayId` 参数，传入显示端ID
+    - 处理 `processVoiceCommand` 返回结果：`showHelp` 类型广播给控制端，`commands` 和 `chat` 类型通过 `chat.chatStream` 统一处理
+    - 聊天结果通过 `broadcastToControls` 发送给控制端，TTS 通过 `sendToDisplay` 发送给显示端
+    - 调用处传入 `displayId` 参数
+  - 改动文件：
+    - server.js - executeDeviceEvent 添加 displayId 参数和聊天模块处理逻辑
+
 - ✅ 显示端语音状态UI大小不正确
   - 问题：`#voiceStatus` 的 font-size 为 14px、padding 为 6px 12px，与显示端其他UI元素（时间48px、文件名24px）不协调，整体偏小
   - 修复：

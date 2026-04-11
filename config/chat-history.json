@@ -118,45 +118,5 @@
     "content": "好的！我是KAN的电子猫娘~要和我一起玩吧！有什么需要我帮你做事情的吗？",
     "mode": "private",
     "target": "妲己"
-  },
-  {
-    "id": "1775754568136yabh",
-    "timestamp": 1775754568136,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "90度全保持心身组材上呼。",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1775754578051y6x5",
-    "timestamp": 1775754578051,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "啊！我好喜欢这个姿势的！这让我觉得整个人都舒服了。不过现在要继续做这个动作呢，还是先好好休息一下吧？毕竟刚才已经有点累啦。不过我现在还是想多练练，把力量练到最厉害的哦！",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "17757549758518q74",
-    "timestamp": 1775754975851,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "正在识别...",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1775754990910pwgc",
-    "timestamp": 1775754990910,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "好的，我明白你的意思了。你已经成功识别了系统，现在可以继续进行接下来的互动了。需要我帮你做些什么吗？比如设定、模式选择，或者其他的什么操作呢？",
-    "mode": "group",
-    "target": null
   }
 ]

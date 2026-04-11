@@ -1452,7 +1452,7 @@ wss.on('connection', (ws, req) => {
         
         broadcastToControls({ type: 'displayList', list: getDisplayList() });
         
-        executeDeviceEvent(clientIP, 'onConnect');
+        executeDeviceEvent(clientIP, 'onConnect', displayId);
         
         ws.on('message', async (message) => {
             try {
@@ -1480,7 +1480,7 @@ wss.on('connection', (ws, req) => {
             }
             console.log(`显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
             broadcastToControls({ type: 'displayList', list: getDisplayList() });
-            executeDeviceEvent(disconnectedIP, 'onDisconnect');
+            executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
         });
     } else if (url === '/control' || url.startsWith('/control')) {
         controlClients.add(ws);
@@ -1581,16 +1581,20 @@ async function handleControlMessageFallback(data, ws) {
                             const playOnControl = data.playOnControl || false;
                             const targetDisplayId = data.displayId || displayId;
                             
+                            const sendToControl = (msg) => {
+                                ws.send(JSON.stringify(msg));
+                            };
+                            
                             const callbacks = playOnControl ? {
                                 onResult: async (text) => {
                                     try {
                                         const audioPath = await tts.generateTTS(text);
                                         const fileName = path.basename(audioPath);
-                                        ws.send(JSON.stringify({
+                                        sendToControl({
                                             type: 'playOnControl',
                                             audioUrl: `/uploads/tts/${fileName}`,
                                             text: text
-                                        }));
+                                        });
                                     } catch (err) {
                                         console.error('[VoiceCommand] TTS生成失败:', err.message);
                                     }
@@ -1599,11 +1603,11 @@ async function handleControlMessageFallback(data, ws) {
                                     try {
                                         const audioPath = await tts.generateTTS(text);
                                         const fileName = path.basename(audioPath);
-                                        ws.send(JSON.stringify({
+                                        sendToControl({
                                             type: 'playOnControl',
                                             audioUrl: `/uploads/tts/${fileName}`,
                                             text: text
-                                        }));
+                                        });
                                     } catch (err) {
                                         console.error('[VoiceCommand] TTS生成失败:', err.message);
                                     }
@@ -1611,117 +1615,44 @@ async function handleControlMessageFallback(data, ws) {
                             } : null;
                             
                             const result = await voiceCommand.processVoiceCommand(data.text, targetDisplayId, callbacks);
-                            if (result && result.type === 'showHelp') {
-                                ws.send(JSON.stringify({
-                                    type: 'showHelp'
-                                }));
-                            } else if (result && result.type === 'commands') {
-                                await voiceCommand.executeCommands(result.actions, displayId, {
-                                    onChat: async (message) => {
-                                        const originalPrompt = chat.getConfig().systemPrompt;
-                                        const assistant = voiceCommand.findAssistant(voiceCommand.getAssistantConfig().defaultName);
-                                        if (assistant && assistant.template) {
-                                            chat.setConfig({ systemPrompt: assistant.template });
-                                        }
-                                        
-                                        await chat.chatStream(message, {
-                                            useTemplate: null,
-                                            displayId: displayId
-                                        }, {
-                                            onChunk: (chunk, fullMessage) => {
-                                                ws.send(JSON.stringify({
-                                                    type: 'chatChunk',
-                                                    chunk: chunk,
-                                                    message: fullMessage
-                                                }));
-                                            },
-                                            onSentence: async (sentence, fullMessage) => {
-                                                if (!displayId) return;
-                                                try {
-                                                    const audioPath = await tts.generateTTS(sentence);
-                                                    const fileName = path.basename(audioPath);
-                                                    sendToDisplay(displayId, {
-                                                        type: 'tts',
-                                                        action: 'playAudio',
-                                                        audioUrl: `/uploads/tts/${fileName}`,
-                                                        text: sentence
-                                                    });
-                                                } catch (ttsErr) {
-                                                    console.error('[VoiceCommand] TTS生成失败:', ttsErr.message);
-                                                }
-                                            },
-                                            onComplete: (fullMessage, history) => {
-                                                ws.send(JSON.stringify({
-                                                    type: 'chatResponse',
-                                                    success: true,
-                                                    message: fullMessage,
-                                                    history: history
-                                                }));
-                                            },
-                                            onError: (error) => {
-                                                ws.send(JSON.stringify({
-                                                    type: 'chatResponse',
-                                                    success: false,
-                                                    error: error
-                                                }));
-                                            }
+                            
+                            if (!result) return;
+                            
+                            if (result.type === 'showHelp') {
+                                sendToControl({ type: 'showHelp' });
+                            } else if (result.type === 'commands') {
+                                await voiceCommand.executeCommands(result.actions, targetDisplayId, {
+                                    onChat: async (message, systemPrompt) => {
+                                        await handleChatMessage({
+                                            content: message,
+                                            displayId: targetDisplayId,
+                                            playOnControl: playOnControl,
+                                            systemPrompt: systemPrompt,
+                                            sendToControl: sendToControl
                                         });
-                                        
-                                        chat.setConfig({ systemPrompt: originalPrompt });
+                                    },
+                                    onShowHelp: () => {
+                                        sendToControl({ type: 'showHelp' });
+                                    },
+                                    onModeChange: (mode, target) => {
+                                        sendToControl({ type: mode, target: target });
+                                    },
+                                    onSystemMessage: (content) => {
+                                        sendToControl({ type: 'systemMessage', content: content });
                                     }
                                 });
-                            } else if (result && result.type === 'chat') {
-                                const originalPrompt = chat.getConfig().systemPrompt;
-                                if (result.systemPrompt) {
-                                    chat.setConfig({ systemPrompt: result.systemPrompt });
-                                }
-                                
-                                await chat.chatStream(result.message, {
-                                    useTemplate: null,
-                                    displayId: displayId
-                                }, {
-                                    onChunk: (chunk, fullMessage) => {
-                                        ws.send(JSON.stringify({
-                                            type: 'chatChunk',
-                                            chunk: chunk,
-                                            message: fullMessage
-                                        }));
-                                    },
-                                    onSentence: async (sentence, fullMessage) => {
-                                        if (!displayId) return;
-                                        try {
-                                            const audioPath = await tts.generateTTS(sentence);
-                                            const fileName = path.basename(audioPath);
-                                            sendToDisplay(displayId, {
-                                                type: 'tts',
-                                                action: 'playAudio',
-                                                audioUrl: `/uploads/tts/${fileName}`,
-                                                text: sentence
-                                            });
-                                        } catch (ttsErr) {
-                                            console.error('[VoiceCommand] TTS生成失败:', ttsErr.message);
-                                        }
-                                    },
-                                    onComplete: (fullMessage, history) => {
-                                        ws.send(JSON.stringify({
-                                            type: 'chatResponse',
-                                            success: true,
-                                            message: fullMessage,
-                                            history: history
-                                        }));
-                                    },
-                                    onError: (error) => {
-                                        ws.send(JSON.stringify({
-                                            type: 'chatResponse',
-                                            success: false,
-                                            error: error
-                                        }));
-                                    }
+                            } else if (result.type === 'chat') {
+                                await handleChatMessage({
+                                    content: result.message,
+                                    displayId: targetDisplayId,
+                                    playOnControl: playOnControl,
+                                    systemPrompt: result.systemPrompt,
+                                    sendToControl: sendToControl
                                 });
-                                
-                                if (result.systemPrompt) {
-                                    chat.setConfig({ systemPrompt: originalPrompt });
-                                }
+                            } else if (result.type === 'privateMode' || result.type === 'groupMode') {
+                                sendToControl({ type: result.type, target: result.target });
+                            } else if (result.type === 'systemMessage') {
+                                sendToControl({ type: 'systemMessage', content: result.content });
                             }
                         } catch (err) {
                             console.error('[VoiceCommand] 处理失败:', err.message);
@@ -2068,102 +1999,20 @@ async function handleControlMessageFallback(data, ws) {
                     (async () => {
                         try {
                             const session = chat.getSession();
-                            const playOnControl = data.playOnControl || session.playOnControl;
                             const targetDisplayId = data.displayId || displayId;
                             const targetDisplayIds = data.displayIds || [];
                             
-                            const messageMode = data.mode || session.mode;
-                            const messageTarget = messageMode === 'private' ? (data.target || session.privateTarget) : null;
-                            
-                            chat.addMessage({
-                                role: 'control',
-                                name: '控制端',
-                                content: data.displayContent || data.content,
-                                mode: messageMode,
-                                target: messageTarget
-                            });
-                            
-                            let systemPrompt = null;
-                            let includeHistory = false;
-                            const templateTarget = data.templateTarget || data.target;
-                            if (templateTarget) {
-                                const template = chat.getTemplateByName(templateTarget);
-                                if (template) {
-                                    systemPrompt = template.content;
-                                    if (messageMode === 'private') {
-                                        includeHistory = true;
-                                    }
-                                }
-                            }
-                            
-                            await chat.chatStream(data.content, {
-                                useTemplate: data.useTemplate,
+                            await handleChatMessage({
+                                content: data.content,
+                                displayContent: data.displayContent || data.content,
                                 displayId: targetDisplayId,
-                                systemPrompt: systemPrompt,
-                                includeHistory: includeHistory
-                            }, {
-                                onChunk: (chunk, fullMessage) => {
-                                    ws.send(JSON.stringify({
-                                        type: 'chatChunk',
-                                        chunk: chunk,
-                                        message: fullMessage
-                                    }));
-                                },
-                                onSentence: async (sentence, fullMessage) => {
-                                    try {
-                                        const audioPath = await tts.generateTTS(sentence);
-                                        const fileName = path.basename(audioPath);
-                                        const audioUrl = `/uploads/tts/${fileName}`;
-                                        
-                                        if (playOnControl) {
-                                            ws.send(JSON.stringify({
-                                                type: 'playOnControl',
-                                                audioUrl: audioUrl,
-                                                text: sentence
-                                            }));
-                                        } else if (targetDisplayIds.length > 0) {
-                                            for (const tid of targetDisplayIds) {
-                                                sendToDisplay(tid, {
-                                                    type: 'tts',
-                                                    action: 'playAudio',
-                                                    audioUrl: audioUrl,
-                                                    text: sentence
-                                                });
-                                            }
-                                        } else if (targetDisplayId) {
-                                            sendToDisplay(targetDisplayId, {
-                                                type: 'tts',
-                                                action: 'playAudio',
-                                                audioUrl: audioUrl,
-                                                text: sentence
-                                            });
-                                        }
-                                    } catch (ttsErr) {
-                                        console.error('[Chat] TTS生成失败:', ttsErr.message);
-                                    }
-                                },
-                                onComplete: (fullMessage, history) => {
-                                    chat.addMessage({
-                                        role: 'assistant',
-                                        name: templateTarget || '助手',
-                                        content: fullMessage,
-                                        mode: messageMode,
-                                        target: messageTarget
-                                    });
-                                    
-                                    ws.send(JSON.stringify({
-                                        type: 'chatResponse',
-                                        success: true,
-                                        message: fullMessage,
-                                        history: chat.getHistory()
-                                    }));
-                                },
-                                onError: (error) => {
-                                    ws.send(JSON.stringify({
-                                        type: 'chatResponse',
-                                        success: false,
-                                        error: error
-                                    }));
+                                displayIds: targetDisplayIds,
+                                playOnControl: data.playOnControl || session.playOnControl,
+                                templateTarget: data.templateTarget || data.target,
+                                mode: data.mode || session.mode,
+                                target: data.mode === 'private' ? (data.target || session.privateTarget) : null,
+                                sendToControl: (msg) => {
+                                    ws.send(JSON.stringify(msg));
                                 }
                             });
                         } catch (err) {
@@ -2179,15 +2028,25 @@ async function handleControlMessageFallback(data, ws) {
                     (async () => {
                         try {
                             await voiceCommand.executeCommands(data.actions, data.displayId, {
-                                onChat: (message) => {
-                                    if (window.WebSocketManager && window.WebSocketManager.ws) {
-                                        ws.send(JSON.stringify({
-                                            type: 'chatMessage',
-                                            content: message,
-                                            displayId: data.displayId,
-                                            playOnControl: data.playOnControl
-                                        }));
-                                    }
+                                onChat: async (message, systemPrompt) => {
+                                    await handleChatMessage({
+                                        content: message,
+                                        displayId: data.displayId,
+                                        playOnControl: data.playOnControl,
+                                        systemPrompt: systemPrompt,
+                                        sendToControl: (msg) => {
+                                            ws.send(JSON.stringify(msg));
+                                        }
+                                    });
+                                },
+                                onShowHelp: () => {
+                                    ws.send(JSON.stringify({ type: 'showHelp' }));
+                                },
+                                onModeChange: (mode, target) => {
+                                    ws.send(JSON.stringify({ type: mode, target: target }));
+                                },
+                                onSystemMessage: (content) => {
+                                    ws.send(JSON.stringify({ type: 'systemMessage', content: content }));
                                 }
                             });
                         } catch (err) {
@@ -2210,7 +2069,102 @@ function getLocalIP() {
     return '127.0.0.1';
 }
 
-async function executeDeviceEvent(ip, eventType) {
+async function handleChatMessage(options) {
+    const {
+        content,
+        displayContent,
+        displayId,
+        displayIds = [],
+        playOnControl = false,
+        systemPrompt: customSystemPrompt,
+        templateTarget,
+        mode = 'group',
+        target,
+        sendToControl
+    } = options;
+    
+    const messageMode = mode;
+    const messageTarget = messageMode === 'private' ? target : null;
+    
+    chat.addMessage({
+        role: 'control',
+        name: '控制端',
+        content: displayContent || content,
+        mode: messageMode,
+        target: messageTarget
+    });
+    
+    let systemPrompt = null;
+    let includeHistory = false;
+    if (templateTarget) {
+        const template = chat.getTemplateByName(templateTarget);
+        if (template) {
+            systemPrompt = template.content;
+            if (messageMode === 'private') {
+                includeHistory = true;
+            }
+        }
+    }
+    if (customSystemPrompt && !templateTarget) {
+        systemPrompt = customSystemPrompt;
+    }
+    
+    await chat.chatStream(content, {
+        useTemplate: null,
+        displayId: displayId,
+        systemPrompt: systemPrompt,
+        includeHistory: includeHistory
+    }, {
+        onChunk: (chunk, fullMessage) => {
+            sendToControl({ type: 'chatChunk', chunk, message: fullMessage });
+        },
+        onSentence: async (sentence, fullMessage) => {
+            try {
+                const audioPath = await tts.generateTTS(sentence);
+                const fileName = path.basename(audioPath);
+                const audioUrl = `/uploads/tts/${fileName}`;
+                
+                if (playOnControl) {
+                    sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
+                } else if (displayIds.length > 0) {
+                    for (const tid of displayIds) {
+                        sendToDisplay(tid, {
+                            type: 'tts',
+                            action: 'playAudio',
+                            audioUrl: audioUrl,
+                            text: sentence
+                        });
+                    }
+                } else if (displayId) {
+                    sendToDisplay(displayId, {
+                        type: 'tts',
+                        action: 'playAudio',
+                        audioUrl: audioUrl,
+                        text: sentence
+                    });
+                }
+            } catch (ttsErr) {
+                console.error('[Chat] TTS生成失败:', ttsErr.message);
+            }
+        },
+        onComplete: (fullMessage, history) => {
+            chat.addMessage({
+                role: 'assistant',
+                name: templateTarget || '助手',
+                content: fullMessage,
+                mode: messageMode,
+                target: messageTarget
+            });
+            
+            sendToControl({ type: 'chatResponse', success: true, message: fullMessage, history: chat.getHistory() });
+        },
+        onError: (error) => {
+            sendToControl({ type: 'chatResponse', success: false, error });
+        }
+    });
+}
+
+async function executeDeviceEvent(ip, eventType, displayId) {
     try {
         const eventConfig = config.getDeviceEvent(ip);
         let command = eventConfig[eventType];
@@ -2224,7 +2178,75 @@ async function executeDeviceEvent(ip, eventType) {
         
         console.log(`[设备事件] ${ip} ${eventType}: ${command}`);
         
-        const result = await voiceCommand.processVoiceCommand(command, null, null);
+        let targetDisplayId = displayId;
+        if (eventType === 'onDisconnect') {
+            const disconnectedDisplay = displayClients.get(displayId);
+            if (disconnectedDisplay) {
+                // 显示端还在 displayClients 中，正常发送
+            } else {
+                // 显示端已断开，找其他在线显示端
+                let found = false;
+                for (const [id, data] of displayClients) {
+                    if (data.ws.readyState === WebSocket.OPEN) {
+                        targetDisplayId = id;
+                        found = true;
+                        console.log(`[设备事件] 原显示端已断开，转发到显示端 ${id}`);
+                        break;
+                    }
+                }
+                if (!found) {
+                    console.log('[设备事件] 没有在线显示端，跳过语音播报');
+                    broadcastToControls({
+                        type: 'deviceEventExecuted',
+                        ip: ip,
+                        eventType: eventType,
+                        command: command,
+                        result: null,
+                        timestamp: Date.now()
+                    });
+                    return;
+                }
+            }
+        }
+        
+        const sendToControl = (msg) => {
+            broadcastToControls(msg);
+        };
+        
+        const result = await voiceCommand.processVoiceCommand(command, targetDisplayId, null);
+        
+        if (!result) return;
+        
+        if (result.type === 'showHelp') {
+            sendToControl({ type: 'showHelp' });
+        } else if (result.type === 'commands') {
+            await voiceCommand.executeCommands(result.actions, targetDisplayId, {
+                onChat: async (message, systemPrompt) => {
+                    await handleChatMessage({
+                        content: message,
+                        displayId: targetDisplayId,
+                        systemPrompt: systemPrompt,
+                        sendToControl: sendToControl
+                    });
+                },
+                onShowHelp: () => {
+                    sendToControl({ type: 'showHelp' });
+                },
+                onModeChange: (mode, target) => {
+                    sendToControl({ type: mode, target: target });
+                },
+                onSystemMessage: (content) => {
+                    sendToControl({ type: 'systemMessage', content: content });
+                }
+            });
+        } else if (result.type === 'chat') {
+            await handleChatMessage({
+                content: result.message,
+                displayId: targetDisplayId,
+                systemPrompt: result.systemPrompt,
+                sendToControl: sendToControl
+            });
+        }
         
         broadcastToControls({
             type: 'deviceEventExecuted',

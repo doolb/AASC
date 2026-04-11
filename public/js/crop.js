@@ -111,6 +111,20 @@ const Crop = {
         document.querySelectorAll('[data-rotation]').forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.rotation) === rotation);
         });
+        
+        this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+        this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+        
+        if (rotation === 90) {
+            this.previewImg.classList.add('rotate-90');
+            this.previewVideo.classList.add('rotate-90');
+        } else if (rotation === 180) {
+            this.previewImg.classList.add('rotate-180');
+            this.previewVideo.classList.add('rotate-180');
+        } else if (rotation === 270) {
+            this.previewImg.classList.add('rotate-270');
+            this.previewVideo.classList.add('rotate-270');
+        }
     },
     
     setData(data) {

@@ -222,17 +222,60 @@ findAssistant(name):
     在 assistants 中查找匹配的助手
     如果没找到: 返回默认助手
 
-processVoiceCommand(text, displayId):
+processVoiceCommand(text, displayId, callbacks):
     如果包含 "拒绝"/"取消":
         取消待确认操作
     否则如果包含 "提醒":
         调用 handleReminderCommand()
     否则如果包含 "报时"/"现在几点":
         调用 handleTimeAnnounceCommand()
-    否则如果包含 "搜索":
-        调用 handleSearchCommand()
     否则:
         返回 { type: 'chat', message, systemPrompt }
+```
+
+## server.js 处理逻辑
+
+### handleChatMessage(options)
+
+```
+共享函数，处理聊天消息流，用于 chatMessage、voiceCommand、executeDeviceEvent
+与 #chatInput 走完全相同的处理逻辑
+
+参数:
+  content: 消息内容
+  displayId: 显示端ID
+  displayIds: 多显示端ID列表
+  playOnControl: 是否在控制端播放
+  systemPrompt: 自定义系统提示词
+  templateTarget: 模板目标名称
+  mode: 会话模式
+  target: 私聊目标
+  sendToControl: 回调函数
+
+处理逻辑:
+  chat.addMessage({ role: 'control', content })
+  chat.chatStream(content, { displayId, systemPrompt }, {
+    onChunk: sendToControl({ type: 'chatChunk' })
+    onSentence: sendToDisplay({ type: 'tts' }) 或 sendToControl({ type: 'playOnControl' })
+    onComplete: chat.addMessage({ role: 'assistant' }), sendToControl({ type: 'chatResponse' })
+    onError: sendToControl({ type: 'chatResponse', success: false })
+  })
+```
+
+### voiceCommand 消息处理流程
+
+```
+接收 voiceCommand 消息
+    ↓
+调用 voiceCommand.processVoiceCommand(text, displayId, callbacks)
+    ↓
+根据 result.type 处理:
+    ├─ 指令类(报时/天气/提醒等): processVoiceCommand 内部直接执行
+    ├─ showHelp: sendToControl({ type: 'showHelp' })
+    ├─ commands: executeCommands，非指令走 handleChatMessage
+    ├─ chat: 调用 handleChatMessage（和 #chatInput 相同逻辑）
+    ├─ privateMode/groupMode: sendToControl({ type: ... })
+    └─ systemMessage: sendToControl({ type: 'systemMessage' })
 ```
 
 ## WebSocket 消息类型
@@ -334,38 +377,28 @@ processVoiceCommand(text, displayId):
 
 | 类型 | 说明 | 处理方式 |
 |------|------|----------|
-| showHelp | 显示帮助 | 发送 showHelp 消息到控制端 |
-| commands | 自定义指令组合 | 调用 executeCommands 执行指令列表 |
-| chat | 聊天消息 | 调用 chat.chatStream 进行对话 |
-| privateMode | 进入私聊模式 | 设置会话为私聊模式 |
-| groupMode | 退出私聊模式 | 设置会话为群聊模式 |
-| systemMessage | 系统消息 | 显示系统提示 |
-
-### server.js 处理 voiceCommand 消息
-
-```
-接收 voiceCommand 消息
-    ↓
-调用 voiceCommand.processVoiceCommand(text, displayId)
-    ↓
-根据 result.type 处理:
-    ├─ showHelp: 发送 { type: 'showHelp' }
-    ├─ commands: 调用 executeCommands(actions, displayId, callbacks)
-    │   └─ callbacks.onChat: 调用 chat.chatStream
-    └─ chat: 调用 chat.chatStream
-```
+| showHelp | 显示帮助 | server.js 发送 showHelp 消息到控制端 |
+| commands | 自定义指令组合 | server.js 调用 executeCommands，非指令走 handleChatMessage |
+| chat | 聊天消息 | server.js 调用 handleChatMessage（和 #chatInput 相同逻辑） |
+| privateMode | 进入私聊模式 | server.js 发送 privateMode 消息到控制端 |
+| groupMode | 退出私聊模式 | server.js 发送 groupMode 消息到控制端 |
+| systemMessage | 系统消息 | server.js 发送 systemMessage 消息到控制端 |
 
 ### executeCommands 执行逻辑
 
 ```
 遍历 actions 数组:
-    ├─ "今天天气" -> handleWeatherCommand('', displayId)
-    ├─ "今日提醒" -> 查询今日提醒并播报
-    ├─ 以"搜索"开头 -> handleSearchCommand(action)
-    ├─ 包含"提醒" -> handleReminderCommand(action)
-    ├─ 包含"报时" -> handleTimeAnnounceCommand(action)
-    ├─ 包含"播放" -> handlePlayCommand(action)
-    └─ 其他 -> callbacks.onChat(action)
+    对每个 action 调用 processVoiceCommand(action, displayId, null)
+    ↓
+    根据 result.type 处理:
+    ├─ result 为空 (undefined): 命令已被 processVoiceCommand 内部处理（报时/天气/提醒等）
+    ├─ result.type === 'commands': 递归调用 executeCommands(result.actions, depth+1)
+    ├─ result.type === 'chat': callbacks.onChat(result.message, result.systemPrompt)
+    ├─ result.type === 'showHelp': callbacks.onShowHelp()
+    ├─ result.type === 'privateMode'/'groupMode': callbacks.onModeChange(type, target)
+    └─ result.type === 'systemMessage': callbacks.onSystemMessage(content)
+
+递归深度限制: 3层，防止自定义指令循环引用
 ```
 
 ## 播放命令功能
