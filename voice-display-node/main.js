@@ -177,8 +177,9 @@ class VoiceDisplay {
             case 'stop':
                 if (this.audio) {
                     this.audio.stop();
+                    this.audio.clearQueue();
                 }
-                console.log('[TTS] 停止播报');
+                console.log('[TTS] 停止播报并清空队列');
                 break;
         }
     }
@@ -264,9 +265,9 @@ class VoiceDisplay {
         const fullURL = `${this.config.serverUrl}${audioUrl}`;
 
         try {
-            await this.audio.playFromURL(fullURL);
+            this.audio.queueURL(fullURL);
         } catch (error) {
-            console.error('[TTS] 播放音频失败:', error.message);
+            console.error('[TTS] 加入播放队列失败:', error.message);
         }
     }
 

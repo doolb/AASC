@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Bug 修复
+- ✅ 子显示端语音播放无排队机制
+  - 问题：子显示端（Node.js/Go）收到多个TTS消息时，音频并行播放而非排队依次播放，导致语音混乱
+  - 修复：在 AudioPlayer 中添加播放队列（playQueue + processQueue），新音频加入队列后依次播放
+  - 实现：
+    - Node.js：audio-player.js 添加 queueURL/queueBuffer/processQueue/clearQueue 方法，main.js 的 playAudioFromURL 改为调用 queueURL
+    - Go：audio.go 添加 QueueURL/QueueData/processQueue/ClearQueue 方法，main.go 的 playAudioFromURL 改为调用 QueueURL
+    - TTS stop 动作同时清空队列（clearQueue/ClearQueue）
+    - stopRequested 标志确保停止时跳过队列中剩余音频
+  - 改动文件：
+    - voice-display-node/audio-player.js - 添加播放队列机制
+    - voice-display-node/main.js - playAudioFromURL 改用队列，stop 清空队列
+    - voice-display/audio.go - 添加播放队列机制
+    - voice-display/main.go - playAudioFromURL 改用队列，stop 清空队列
+    - docs/spec/voice-display.md - 更新 AudioPlayer 伪代码
+
 ### 新功能
 - ✅ 显示端UI四角布局 + 旋转重力方向调整
   - 需求：旋转后UI元素保持在以0度为基准的画面四角，根据新重力方向调整文字垂直方向

@@ -24,15 +24,82 @@ class AudioPlayer {
         this.stopRequested = false;
         this.currentProcess = null;
         this.tempDir = os.tmpdir();
+        this.playQueue = [];
+        this.isProcessingQueue = false;
+    }
+
+    /**
+     * 将音频URL加入播放队列
+     * @param {string} url - 音频URL
+     */
+    queueURL(url) {
+        this.stopRequested = false;
+        this.playQueue.push({ type: 'url', url });
+        console.log(`[音频队列] 加入队列，当前队列长度: ${this.playQueue.length}`);
+        this.processQueue();
+    }
+
+    /**
+     * 将音频Buffer加入播放队列
+     * @param {Buffer} wavBuffer - WAV格式音频数据
+     */
+    queueBuffer(wavBuffer) {
+        this.stopRequested = false;
+        this.playQueue.push({ type: 'buffer', buffer: wavBuffer });
+        console.log(`[音频队列] 加入队列，当前队列长度: ${this.playQueue.length}`);
+        this.processQueue();
+    }
+
+    /**
+     * 处理播放队列
+     */
+    async processQueue() {
+        if (this.isProcessingQueue) return;
+        if (this.playQueue.length === 0) return;
+
+        this.isProcessingQueue = true;
+
+        while (this.playQueue.length > 0) {
+            if (this.stopRequested) {
+                console.log('[音频队列] 收到停止信号，退出队列处理');
+                break;
+            }
+
+            const item = this.playQueue.shift();
+
+            try {
+                if (item.type === 'url') {
+                    await this.playFromURL(item.url);
+                } else if (item.type === 'buffer') {
+                    await this.playWavBuffer(item.buffer);
+                }
+            } catch (error) {
+                console.error('[音频队列] 播放失败:', error.message);
+            }
+        }
+
+        this.isProcessingQueue = false;
+    }
+
+    /**
+     * 清空播放队列
+     */
+    clearQueue() {
+        this.playQueue = [];
+        console.log('[音频队列] 已清空');
     }
 
     async playFromURL(url) {
         try {
-            this.stopRequested = false;
             this.isPlaying = true;
 
             console.log(`[音频] 正在下载: ${url}`);
             
+            if (this.stopRequested) {
+                this.isPlaying = false;
+                console.log('[音频] 跳过播放（已停止）');
+                return;
+            }
             const fetchOptions = {};
             if (url.startsWith('https://')) {
                 fetchOptions.agent = httpsAgent;
@@ -159,6 +226,7 @@ class AudioPlayer {
         }
         
         this.isPlaying = false;
+        this.isProcessingQueue = false;
         console.log('[音频] 已停止播放');
     }
 

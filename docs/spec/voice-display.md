@@ -101,15 +101,61 @@ type AudioPlayer struct:
     player: *oto.Player
     mu: sync.Mutex
     stopChan: chan struct{}
+    playQueue: []queueItem
+    queueMu: sync.Mutex
+    processing: bool
+    stopRequested: bool
+
+type queueItem struct:
+    itemType: string  // "url" 或 "data"
+    url: string
+    data: []byte
+```
+
+### 播放队列机制
+```
+QueueURL(url):
+    重置 stopRequested = false
+    将 {type: "url", url} 加入 playQueue
+    启动 processQueue 协程
+
+QueueData(data):
+    重置 stopRequested = false
+    将 {type: "data", data} 加入 playQueue
+    启动 processQueue 协程
+
+processQueue():
+    如果 processing == true，返回（避免重复处理）
+    设置 processing = true
+    循环:
+        如果 stopRequested 或队列为空，退出循环
+        取出队列首项
+        根据 itemType 调用 PlayFromURL 或 playData
+    设置 processing = false
+
+ClearQueue():
+    清空 playQueue
+
+Stop():
+    设置 stopRequested = true
+    设置 processing = false
+    关闭当前 player
 ```
 
 ### 播放流程
 ```
 PlayFromURL(url):
+    加锁
+    如果 stopRequested，跳过播放
     HTTP GET 下载音频
     读取全部数据到内存
-    创建 oto.Player 播放
-    等待播放完成
+    调用 playData 播放
+    解锁
+
+playData(data):
+    如果 stopRequested，跳过播放
+    关闭旧 player
+    创建新 oto.Player 播放
 ```
 
 ## ServerASR 服务器端语音识别客户端
@@ -290,16 +336,45 @@ class AudioPlayer:
     stopRequested: boolean
     currentProcess: ChildProcess
     tempDir: string
+    playQueue: Array<{type: 'url'|'buffer', url?: string, buffer?: Buffer}>
+    isProcessingQueue: boolean
+```
+
+#### 播放队列机制
+```
+queueURL(url):
+    重置 stopRequested = false
+    将 {type: 'url', url} 加入 playQueue
+    调用 processQueue()
+
+queueBuffer(wavBuffer):
+    重置 stopRequested = false
+    将 {type: 'buffer', buffer: wavBuffer} 加入 playQueue
+    调用 processQueue()
+
+processQueue():
+    如果 isProcessingQueue == true，返回（避免重复处理）
+    设置 isProcessingQueue = true
+    循环:
+        如果 stopRequested 或队列为空，退出循环
+        取出队列首项
+        根据 type 调用 playFromURL 或 playWavBuffer
+    设置 isProcessingQueue = false
+
+clearQueue():
+    清空 playQueue
 ```
 
 #### 播放流程
 ```
 playFromURL(url):
+    如果 stopRequested，跳过播放
     下载音频到临时文件
     调用 playFile(tempFile)
     删除临时文件
 
 playFile(filePath):
+    如果 stopRequested，跳过播放
     根据平台选择播放命令:
         Windows: powershell -c "(New-Object Media.SoundPlayer filePath).PlaySync()"
         macOS: afplay filePath
@@ -314,6 +389,7 @@ stop():
     设置 stopRequested = true
     调用 currentProcess.kill() 终止子进程
     重置 isPlaying = false
+    重置 isProcessingQueue = false
 ```
 
 ### ServerASR 服务器端语音识别客户端

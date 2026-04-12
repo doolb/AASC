@@ -129,8 +129,9 @@ func (vd *VoiceDisplay) handleTTS(data map[string]interface{}) {
 	case "stop":
 		if vd.audio != nil {
 			vd.audio.Stop()
+			vd.audio.ClearQueue()
 		}
-		log.Printf("[TTS] 停止播报")
+		log.Printf("[TTS] 停止播报并清空队列")
 	}
 }
 
@@ -202,9 +203,7 @@ func (vd *VoiceDisplay) playAudioFromURL(audioUrl string) {
 	serverBase := vd.config.ServerURL
 	fullURL := fmt.Sprintf("%s%s", serverBase, audioUrl)
 
-	if err := vd.audio.PlayFromURL(fullURL); err != nil {
-		log.Printf("[TTS] 播放音频失败: %v", err)
-	}
+	vd.audio.QueueURL(fullURL)
 }
 
 func (vd *VoiceDisplay) sendVoiceInput(text string) {
