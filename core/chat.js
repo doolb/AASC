@@ -38,6 +38,7 @@ let chatCommands = {
     commands: {}
 };
 let importantRecords = [];
+let historySaveTimer = null;
 
 function loadHistory() {
     try {
@@ -53,11 +54,17 @@ function loadHistory() {
 }
 
 function saveHistory() {
-    try {
-        fs.writeFileSync(HISTORY_FILE, JSON.stringify(chatHistory, null, 2), 'utf8');
-    } catch (err) {
-        console.error('[Chat] 保存历史记录失败:', err.message);
+    if (historySaveTimer) {
+        clearTimeout(historySaveTimer);
     }
+    historySaveTimer = setTimeout(() => {
+        try {
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(chatHistory, null, 2), 'utf8');
+        } catch (err) {
+            console.error('[Chat] 保存历史记录失败:', err.message);
+        }
+        historySaveTimer = null;
+    }, 2000);
 }
 
 function trimHistory() {

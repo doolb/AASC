@@ -65,6 +65,16 @@ function setClients(clients, sendFunc, broadcastFunc) {
     displayClients = clients;
     sendToDisplay = sendFunc;
     broadcastToControls = broadcastFunc;
+    
+    setInterval(() => {
+        const now = Date.now();
+        for (const [id, confirmation] of pendingConfirmations) {
+            if (confirmation.expiresAt && confirmation.expiresAt <= now) {
+                pendingConfirmations.delete(id);
+                console.log(`[语音命令] 清理过期确认: ${id}`);
+            }
+        }
+    }, 60000);
 }
 
 function setMuteFunctions(muteFunc, unmuteFunc) {
@@ -525,6 +535,14 @@ async function handlePlayCommand(text, displayId, callbacks) {
         data: { matches: matches },
         expiresAt: Date.now() + 30000
     });
+    
+    setTimeout(() => {
+        const confirmation = pendingConfirmations.get(confirmationId);
+        if (confirmation && confirmation.expiresAt <= Date.now()) {
+            pendingConfirmations.delete(confirmationId);
+            console.log(`[语音命令] 播放选择已过期: ${confirmationId}`);
+        }
+    }, 35000);
     
     if (callbacks && callbacks.onResult) {
         callbacks.onResult(responseText);

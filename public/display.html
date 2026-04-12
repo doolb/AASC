@@ -352,8 +352,12 @@
             } else if (currentRotation === 270) {
                 timeDisplay.style.top = '20px';
                 timeDisplay.style.left = '20px';
+                timeDisplay.style.writingMode = 'vertical-rl';
+                timeDisplay.style.textOrientation = 'mixed';
                 fileNameDisplay.style.bottom = '20px';
                 fileNameDisplay.style.left = '20px';
+                fileNameDisplay.style.writingMode = 'vertical-rl';
+                fileNameDisplay.style.textOrientation = 'mixed';
                 voiceStatus.style.top = '20px';
                 voiceStatus.style.right = '20px';
                 if (voiceTextDisplay) {

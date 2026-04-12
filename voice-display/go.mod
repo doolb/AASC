@@ -3,9 +3,9 @@ module voice-display
 go 1.21
 
 require (
-	github.com/gen2brain/malgo v0.11.6
-	github.com/gorilla/websocket v1.5.1
-	github.com/hajimehoshi/oto/v2 v2.4.0
+	github.com/gen2brain/malgo
+	github.com/gorilla/websocket
+	github.com/hajimehoshi/oto/v2
 )
 
 require (

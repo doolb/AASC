@@ -85,6 +85,25 @@
     - 只有 `processVoiceCommand` 返回 `{ type: 'chat' }` 的非指令文本才走 `onChat` → 聊天助手
   - 改动文件：
     - core/voiceCommand.js - executeCommands 传 null callbacks，指令回复不经过聊天助手
+- ✅ 显示端文字旋转方向修复
+  - 问题：180度时文字没有自身翻转，90度时布局和文字方向不正确
+  - 修复：
+    - 180度：所有UI元素添加 `transform: rotate(180deg)`，文字自身上下翻转
+    - 90度：参考270度布局位置，文字使用 `writingMode: vertical-lr` + `transform: rotate(180deg)` 上下翻转
+    - 270度：补充 `writingMode: vertical-rl` 设置
+  - 改动文件：
+    - public/display.html - applyRotation() 修改90度和180度的文字旋转逻辑
+- ✅ 服务端被Linux OOM Killer杀掉问题优化
+  - 问题：服务端运行一段时间后被Linux系统杀掉，疑似内存泄漏
+  - 修复：
+    - `pendingConfirmations` 中 play 类型确认添加自动过期清理（setTimeout 35秒）
+    - 添加定期清理过期确认项的机制（每60秒检查）
+    - `chatHistory` 保存改为防抖模式（2秒延迟），避免每次 addMessage 都写文件
+    - 添加内存监控日志（每10分钟打印 RSS/Heap/External）
+  - 改动文件：
+    - core/voiceCommand.js - play 确认过期清理 + 定期清理过期确认项
+    - core/chat.js - saveHistory 改为防抖模式
+    - server.js - 添加内存监控日志
   - 改动文件：
     - public/js/crop.js - setRotation() 添加 CSS 旋转类应用
 

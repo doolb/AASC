@@ -2279,3 +2279,9 @@ function updateVoiceDisplayConfig(localIP, port, protocol) {
 setInterval(() => {
     tts.cleanupOldTtsFiles();
 }, 5 * 60 * 1000);
+
+setInterval(() => {
+    const usage = process.memoryUsage();
+    const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + 'MB';
+    console.log(`[内存] RSS: ${mb(usage.rss)} | Heap: ${mb(usage.heapUsed)}/${mb(usage.heapTotal)} | External: ${mb(usage.external)}`);
+}, 10 * 60 * 1000);
