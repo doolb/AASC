@@ -3,6 +3,29 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 显示端UI四角布局 + 旋转重力方向调整
+  - 需求：旋转后UI元素保持在以0度为基准的画面四角，根据新重力方向调整文字垂直方向
+  - 实现：
+    - UI四角布局：连接状态（左上）、时间（右上）、文件名（左下）、音频可视化/语音（右下）
+    - 旋转后位置映射：UI元素保持在0度基准的物理位置
+    - 90度：使用 writingMode: vertical-rl 实现竖向文字，字符顶部朝左（=物理上方）
+    - 270度：使用 writingMode: vertical-rl + rotate(180deg) 实现竖向文字，字符顶部朝右（=物理上方）
+    - 180度：使用 transform: rotate(180deg) 翻转文字
+    - connectionStatus 和 monitor-wrapper 纳入旋转管理（之前不参与旋转）
+    - CSS 移除 connectionStatus 和 monitor-wrapper 的固定定位，由 JS 统一管理
+    - 响应式媒体查询移除固定定位属性，避免与旋转逻辑冲突
+  - 改动文件：
+    - public/display.html - 重写 applyRotation 函数，添加 monitorWrapper 元素引用和 id
+    - public/css/display.css - 移除 connectionStatus/monitor-wrapper 固定定位，添加 transition
+    - docs/spec/display-ui-rotation.md（新增）- 旋转功能实现文档
+
+### Bug 修复
+- ✅ 设备连线指令重复触发TTS
+  - 问题：显示端频繁重连时，executeDeviceEvent 被多次调用，导致同一连线指令（如"早上好"）重复执行，生成多次相同的TTS
+  - 修复：在 executeDeviceEvent 中添加30秒防抖机制，同一IP同一事件在30秒内不重复执行
+  - 改动文件：
+    - server.js - 添加 deviceEventDebounce Map 和防抖检查逻辑
+
 - ✅ 添加树状结构的设备列表
   - 需求：在控制端添加树状结构的设备列表，支持展开/收起、设备设置编辑、连线/掉线自定义指令
   - 实现：

@@ -14,13 +14,13 @@
         "url": "https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png",
         "mediaType": "image"
       },
-      "rotation": 0,
+      "rotation": 90,
       "fit": "crop",
       "crop": {
         "x": 0,
-        "y": 33.68040213522781,
+        "y": 13.281595192492247,
         "width": 100,
-        "height": 32.63919572954438
+        "height": 73.4368096150155
       },
       "playlist": [],
       "volume": 0,
@@ -49,13 +49,13 @@
         "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
         "mediaType": "video"
       },
-      "rotation": 90,
+      "rotation": 0,
       "fit": "crop",
       "crop": {
         "x": 0,
-        "y": 68.35937330191072,
+        "y": 0.000002683400204261943,
         "width": 100,
-        "height": 31.64062669808928
+        "height": 99.99999463319959
       },
       "volume": 6,
       "playlist": [],
@@ -106,5 +106,3 @@
     },
     "volume": 100,
     "playlist": []
-  }
-}

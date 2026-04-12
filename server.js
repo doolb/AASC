@@ -2164,8 +2164,19 @@ async function handleChatMessage(options) {
     });
 }
 
+const deviceEventDebounce = new Map();
+const DEVICE_EVENT_DEBOUNCE_MS = 30000;
+
 async function executeDeviceEvent(ip, eventType, displayId) {
     try {
+        const debounceKey = `${ip}_${eventType}`;
+        const lastTime = deviceEventDebounce.get(debounceKey) || 0;
+        if (Date.now() - lastTime < DEVICE_EVENT_DEBOUNCE_MS) {
+            console.log(`[设备事件] 防抖跳过: ${ip} ${eventType}，距上次 ${Math.round((Date.now() - lastTime) / 1000)}s`);
+            return;
+        }
+        deviceEventDebounce.set(debounceKey, Date.now());
+        
         const eventConfig = config.getDeviceEvent(ip);
         let command = eventConfig[eventType];
         

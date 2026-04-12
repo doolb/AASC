@@ -18,7 +18,25 @@
 - 支持 0°、90°、180°、270°
 - 旋转 90° 或 270° 时，height/width 模式效果互换
 
+### UI四角布局
+
+旋转后UI元素保持在以0度为基准的画面四角，根据新重力方向调整文字垂直方向。
+
+| 位置 | UI元素 | 说明 |
+|------|--------|------|
+| 左上 | connectionStatus | 连接状态 |
+| 右上 | timeDisplay | 时间显示 |
+| 左下 | fileNameDisplay | 文件名 |
+| 右下 | monitor-wrapper + voiceStatus | 音频可视化 + 语音状态 |
+
 ### 旋转文字
+
+| 旋转角度 | 重力方向 | 文字方向 |
+|----------|----------|----------|
+| 0° | 向下 | 水平，从左到右 |
+| 90° | 向右 | 竖向，从上到下（writingMode: vertical-rl + rotate(180deg)） |
+| 180° | 向上 | 水平，翻转180度 |
+| 270° | 向左 | 竖向，从上到下（writingMode: vertical-rl） |
 
 
 ## 裁剪功能
@@ -91,3 +109,16 @@
    - 显示端列表新增方向指示器（↔ 横向 / ↕ 纵向）
    - 实现文档：docs/spec/display-selection.md
    - 任务文档：docs/task/2026-03-31_显示端全选和自适应功能.md
+
+## 显示端UI旋转
+ - ✅已完成 [2026-04-12][2026-04-12] UI四角布局 + 旋转重力方向调整
+   - 改动文件：public/display.html, public/css/display.css, server.js
+   - 功能：UI元素按四角布局（连接状态左上、时间右上、文件名左下、音频可视化/语音右下），旋转后保持在0度基准的物理位置，文字方向根据重力方向调整
+   - 90度/270度使用 writingMode: vertical-rl 实现竖向文字
+   - 180度使用 transform: rotate(180deg) 翻转文字
+   - connectionStatus 和 monitor-wrapper 纳入旋转管理
+   - 实现文档：docs/spec/display-ui-rotation.md
+ - ✅已完成 [2026-04-12][2026-04-12] 设备连线指令TTS防抖
+   - 改动文件：server.js
+   - 功能：executeDeviceEvent 添加30秒防抖，同一IP同一事件不重复执行
+   - 修复显示端频繁重连导致重复触发连线指令的问题

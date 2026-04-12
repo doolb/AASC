@@ -12,7 +12,7 @@
     <div id="fileNameDisplay"></div>
     <div id="voiceStatus" class="voice-status-hidden">语音</div>
     <div id="voiceTextDisplay" class="voice-text-hidden"></div>
-    <div class="monitor-wrapper">
+    <div class="monitor-wrapper" id="monitorWrapper">
         <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
         <canvas id="mini-monitor" width="160" height="50"></canvas>
     </div>
@@ -34,6 +34,7 @@
         const fileNameDisplay = document.getElementById('fileNameDisplay');
         const voiceStatus = document.getElementById('voiceStatus');
         const voiceTextDisplay = document.getElementById('voiceTextDisplay');
+        const monitorWrapper = document.getElementById('monitorWrapper');
         const waitingMessage = document.getElementById('waitingMessage');
         const mediaImage = document.getElementById('mediaImage');
         const mediaVideo = document.getElementById('mediaVideo');
@@ -294,7 +295,7 @@
             mediaImage.style.transform = transform;
             mediaVideo.style.transform = transform;
             
-            const uiElements = [timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay];
+            const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay, monitorWrapper];
             
             uiElements.forEach(el => {
                 if (!el) return;
@@ -307,62 +308,107 @@
                 el.style.maxWidth = '';
                 el.style.writingMode = '';
                 el.style.textOrientation = '';
+                el.style.flexDirection = '';
             });
             
             if (currentRotation === 0) {
+                connectionStatus.style.top = '20px';
+                connectionStatus.style.left = '20px';
                 timeDisplay.style.top = '20px';
                 timeDisplay.style.right = '20px';
                 fileNameDisplay.style.bottom = '20px';
                 fileNameDisplay.style.left = '20px';
-                voiceStatus.style.top = '20px';
-                voiceStatus.style.left = '20px';
+                monitorWrapper.style.bottom = '20px';
+                monitorWrapper.style.right = '20px';
+                voiceStatus.style.bottom = '80px';
+                voiceStatus.style.right = '20px';
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.top = '80px';
-                    voiceTextDisplay.style.left = '20px';
+                    voiceTextDisplay.style.bottom = '140px';
+                    voiceTextDisplay.style.right = '20px';
                 }
             } else if (currentRotation === 90) {
-                timeDisplay.style.top = '20px';
+                connectionStatus.style.top = '20px';
+                connectionStatus.style.right = '20px';
+                connectionStatus.style.writingMode = 'vertical-rl';
+                connectionStatus.style.textOrientation = 'mixed';
+                
+                timeDisplay.style.bottom = '20px';
                 timeDisplay.style.right = '20px';
                 timeDisplay.style.writingMode = 'vertical-rl';
                 timeDisplay.style.textOrientation = 'mixed';
+                
                 fileNameDisplay.style.top = '20px';
-                fileNameDisplay.style.right = '80px';
+                fileNameDisplay.style.left = '20px';
                 fileNameDisplay.style.writingMode = 'vertical-rl';
                 fileNameDisplay.style.textOrientation = 'mixed';
-                voiceStatus.style.bottom = '20px';
+                
+                monitorWrapper.style.bottom = '20px';
+                monitorWrapper.style.left = '20px';
+                monitorWrapper.style.flexDirection = 'column-reverse';
+                
+                voiceStatus.style.bottom = '80px';
                 voiceStatus.style.left = '20px';
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.bottom = '80px';
+                    voiceTextDisplay.style.bottom = '140px';
                     voiceTextDisplay.style.left = '20px';
+                    voiceTextDisplay.style.maxWidth = '50vh';
                 }
                 [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
                     if (el) el.style.maxWidth = '50vh';
                 });
             } else if (currentRotation === 180) {
+                connectionStatus.style.bottom = '20px';
+                connectionStatus.style.right = '20px';
+                connectionStatus.style.transform = 'rotate(180deg)';
+                
                 timeDisplay.style.bottom = '20px';
                 timeDisplay.style.left = '20px';
+                timeDisplay.style.transform = 'rotate(180deg)';
+                
                 fileNameDisplay.style.top = '20px';
                 fileNameDisplay.style.right = '20px';
-                voiceStatus.style.bottom = '20px';
-                voiceStatus.style.right = '20px';
+                fileNameDisplay.style.transform = 'rotate(180deg)';
+                
+                monitorWrapper.style.top = '20px';
+                monitorWrapper.style.left = '20px';
+                
+                voiceStatus.style.top = '80px';
+                voiceStatus.style.left = '20px';
+                voiceStatus.style.transform = 'rotate(180deg)';
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.bottom = '80px';
-                    voiceTextDisplay.style.right = '20px';
+                    voiceTextDisplay.style.top = '140px';
+                    voiceTextDisplay.style.left = '20px';
+                    voiceTextDisplay.style.transform = 'rotate(180deg)';
                 }
             } else if (currentRotation === 270) {
+                connectionStatus.style.bottom = '20px';
+                connectionStatus.style.left = '20px';
+                connectionStatus.style.writingMode = 'vertical-rl';
+                connectionStatus.style.textOrientation = 'mixed';
+                connectionStatus.style.transform = 'rotate(180deg)';
+                
                 timeDisplay.style.top = '20px';
                 timeDisplay.style.left = '20px';
                 timeDisplay.style.writingMode = 'vertical-rl';
                 timeDisplay.style.textOrientation = 'mixed';
+                timeDisplay.style.transform = 'rotate(180deg)';
+                
                 fileNameDisplay.style.bottom = '20px';
-                fileNameDisplay.style.left = '20px';
+                fileNameDisplay.style.right = '20px';
                 fileNameDisplay.style.writingMode = 'vertical-rl';
                 fileNameDisplay.style.textOrientation = 'mixed';
-                voiceStatus.style.top = '20px';
+                fileNameDisplay.style.transform = 'rotate(180deg)';
+                
+                monitorWrapper.style.top = '20px';
+                monitorWrapper.style.right = '20px';
+                monitorWrapper.style.flexDirection = 'column-reverse';
+                
+                voiceStatus.style.top = '80px';
                 voiceStatus.style.right = '20px';
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.top = '80px';
+                    voiceTextDisplay.style.top = '140px';
                     voiceTextDisplay.style.right = '20px';
+                    voiceTextDisplay.style.maxWidth = '50vh';
                 }
                 [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
                     if (el) el.style.maxWidth = '50vh';
