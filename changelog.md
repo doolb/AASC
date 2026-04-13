@@ -9,6 +9,12 @@
   - 改动文件：
     - core/voiceCommand.js - 添加天气API地址日志打印
 
+- ✅ 语音输入日志打印显示端IP
+  - 需求：服务端打印语音输入时带上显示端的IP地址
+  - 实现：在 VoiceCommandAgent.processVoiceInput 中添加日志打印，格式为 `[语音输入] 显示端 {displayId} ({displayIP}): {voiceText}`
+  - 改动文件：
+    - aasc/agents/index.js - VoiceCommandAgent.processVoiceInput 添加日志打印
+
 - ✅ 子显示端3分钟不在线自动执行离线指令
   - 需求：子显示端3分钟不在线时，自动执行离线指令
   - 实现：
@@ -23,6 +29,25 @@
     - aasc/system/websocket-system.js - 处理心跳消息
 
 ### Bug 修复
+- ✅ 子显示端语音输入未被处理
+  - 问题：子显示端（voice-display-node）发送的语音输入（voiceInput）消息没有被处理成语音命令
+  - 原因：
+    - voiceInput 消息被错误地路由到 display-render-actor，而不是 voice-command-actor
+    - VoiceCommandAgent 缺少 processVoiceInput 方法
+    - ActorFactory 配置错误，将 voiceInput 分配给了 DisplayRenderAgent
+  - 修复：
+    - 修改 message-dispatcher.js，将 voiceInput 消息路由到 voice-command-actor
+    - 在 voice-command-actor.js 中添加 handleVoiceInput 方法
+    - 在 VoiceCommandAgent 中添加 processVoiceInput 方法，调用 voiceCommand.processVoiceCommand
+    - 修改 ActorFactory.createVoiceCommandActor，添加 voiceInput 支持到 supportedTypes 和 actionMap
+    - 从 ActorFactory.createDisplayRenderActor 中移除 voiceInput 支持
+    - 从 DisplayRenderAgent 中删除 handleVoiceInput 方法
+  - 改动文件：
+    - aasc/components/message-dispatcher.js - 修改 voiceInput 路由
+    - aasc/actors/voice-command-actor.js - 添加 handleVoiceInput 方法
+    - aasc/agents/index.js - VoiceCommandAgent 添加 processVoiceInput，DisplayRenderAgent 删除 handleVoiceInput
+    - aasc/actor-adapter.js - ActorFactory 配置修正
+
 - ✅ 子显示端语音播放无排队机制
   - 问题：子显示端（Node.js/Go）收到多个TTS消息时，音频并行播放而非排队依次播放，导致语音混乱
   - 修复：在 AudioPlayer 中添加播放队列（playQueue + processQueue），新音频加入队列后依次播放

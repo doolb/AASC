@@ -38,6 +38,7 @@ class VoiceCommandActor extends Actor {
     this.registerHandler(MessageTopic.VOICE, this.handleVoice.bind(this));
     this.registerHandler('voice.command', this.handleCommand.bind(this));
     this.registerHandler('voice.parse', this.handleParse.bind(this));
+    this.registerHandler('voiceInput', this.handleVoiceInput.bind(this));
   }
 
   async handleVoice(message) {
@@ -70,6 +71,23 @@ class VoiceCommandActor extends Actor {
     try {
       const parsed = this.voiceCommandCore.parseCommand(text);
       return { success: true, data: parsed };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleVoiceInput(message) {
+    const payload = message.payload || {};
+    const text = payload.text || payload.fullText;
+    const displayId = payload.displayId;
+    
+    if (!text) {
+      return { success: false, error: 'No text in voiceInput message' };
+    }
+    
+    try {
+      const result = await this.voiceCommandCore.processVoiceCommand(text, displayId, null);
+      return { success: true, data: result };
     } catch (error) {
       return { success: false, error: error.message };
     }

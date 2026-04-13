@@ -150,6 +150,29 @@ class VoiceCommandAgent extends BaseAgent {
         this.voiceCommand.setAssistantConfig(config);
         return this.voiceCommand.getAssistantConfig();
     }
+
+    async processVoiceInput(params, context) {
+        const { text, displayId, fullText } = params;
+        
+        if (!this.voiceCommand) {
+            throw new Error('VoiceCommand 模块未初始化');
+        }
+
+        const voiceText = text || fullText;
+        
+        if (!voiceText) {
+            return { success: false, error: 'No text in voiceInput' };
+        }
+
+        const displayClient = context.stateManager?.getDisplayClient(displayId);
+        const displayIP = displayClient?.ip || 'unknown';
+        
+        console.log(`[语音输入] 显示端 ${displayId} (${displayIP}): ${voiceText}`);
+
+        const result = await this.voiceCommand.processVoiceCommand(voiceText, displayId, null);
+        
+        return { success: true, data: result };
+    }
 }
 
 class ChatAgent extends BaseAgent {
@@ -710,20 +733,6 @@ class DisplayRenderAgent extends BaseAgent {
         };
 
         context.broadcastToControls({ type: 'displayList', list: context.stateManager.getDisplayList() });
-
-        return { success: true };
-    }
-
-    async handleVoiceInput(params, context) {
-        const { displayId, text, isFinal, fullText } = params;
-
-        context.broadcastToControls({
-            type: 'voiceInput',
-            displayId: displayId,
-            text: text,
-            isFinal: isFinal,
-            fullText: fullText
-        });
 
         return { success: true };
     }

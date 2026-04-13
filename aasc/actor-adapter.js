@@ -100,6 +100,7 @@ class ActorFactory {
             name: 'voice-command-actor',
             supportedTypes: [
                 'voiceCommand',
+                'voiceInput',
                 'confirmVoiceCommand',
                 'executeCommands',
                 'getSearchHistory',
@@ -110,6 +111,7 @@ class ActorFactory {
             ],
             actionMap: {
                 'voiceCommand': 'processCommand',
+                'voiceInput': 'processVoiceInput',
                 'confirmVoiceCommand': 'confirmCommand',
                 'executeCommands': 'executeCommands',
                 'getSearchHistory': 'getSearchHistory',
@@ -192,12 +194,11 @@ class ActorFactory {
         
         return AgentActorAdapter.createFromAgent(agent, {
             name: 'display-render-actor',
-            supportedTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'commandAck'],
-            silentTypes: ['voiceStatus', 'voiceInput'],
+            supportedTypes: ['canvasSize', 'browserInfo', 'voiceStatus', 'commandAck'],
+            silentTypes: ['voiceStatus'],
             actionMap: {
                 'canvasSize': 'updateCanvasSize',
                 'browserInfo': 'updateBrowserInfo',
-                'voiceInput': 'handleVoiceInput',
                 'voiceStatus': 'updateVoiceStatus',
                 'commandAck': 'handleCommandAck'
             },

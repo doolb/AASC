@@ -760,6 +760,35 @@ MessageDispatcher
 └── getHandlers()               # 获取所有处理器
 ```
 
+##### 默认路由规则
+
+| 消息类型 | 目标 Actor | 说明 |
+|---------|-----------|------|
+| voiceCommand | voice-command-actor | 语音命令处理 |
+| voiceInput | voice-command-actor | 语音输入处理（子显示端） |
+| confirmVoiceCommand | voice-command-actor | 确认语音命令 |
+| executeCommands | voice-command-actor | 执行命令 |
+| getAssistantConfig | voice-command-actor | 获取助手配置 |
+| setAssistantConfig | voice-command-actor | 设置助手配置 |
+| chat | chat-actor | 聊天消息 |
+| chatMessage | chat-actor | 聊天消息 |
+| media | media-control-actor | 媒体控制 |
+| mediaBatch | media-control-actor | 批量媒体控制 |
+| control | media-control-actor | 显示控制 |
+| getState | media-control-actor | 获取状态 |
+| tts | tts-actor | 语音合成 |
+| getReminders | reminder-actor | 获取提醒列表 |
+| timeAnnounce | system-command-actor | 整点报时 |
+| canvasSize | display-render-actor | 画布尺寸更新 |
+| browserInfo | display-render-actor | 浏览器信息 |
+| commandAck | display-render-actor | 命令确认 |
+| voiceStatus | display-render-actor | 语音状态 |
+| getSearchHistory | search-actor | 获取搜索历史 |
+| clearSearchHistory | search-actor | 清空搜索历史 |
+| deleteSearchHistory | search-actor | 删除搜索历史 |
+
+**注意**：voiceInput 消息由子显示端（voice-display-node）发送，包含语音识别文本，路由到 voice-command-actor 进行语音命令处理。
+
 #### StateManager (状态管理器)
 
 ```

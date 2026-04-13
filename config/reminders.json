@@ -18,45 +18,5 @@
     "lastTriggered": 1775313198969,
     "nextTrigger": 1775399400000,
     "repeatCount": 5
-  },
-  {
-    "id": "r_c9tw321a_1775875391732",
-    "content": "今天",
-    "time": "10:48",
-    "type": "once",
-    "methods": [
-      "voice",
-      "popup"
-    ],
-    "repeat": {
-      "enabled": true,
-      "interval": 3,
-      "count": 3
-    },
-    "repeatCount": 3,
-    "enabled": false,
-    "createdAt": 1775875391732,
-    "lastTriggered": 1775875680696,
-    "nextTrigger": null
-  },
-  {
-    "id": "r_eudxnl4x_1775875393786",
-    "content": "今天",
-    "time": "10:48",
-    "type": "once",
-    "methods": [
-      "voice",
-      "popup"
-    ],
-    "repeat": {
-      "enabled": true,
-      "interval": 3,
-      "count": 3
-    },
-    "repeatCount": 3,
-    "enabled": false,
-    "createdAt": 1775875393786,
-    "lastTriggered": 1775875688759,
-    "nextTrigger": null
   }
 ]
