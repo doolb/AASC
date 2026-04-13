@@ -1428,6 +1428,7 @@ wss.on('connection', (ws, req) => {
             ws: ws,
             ip: clientIP,
             isSubDisplay: isSubDisplay,
+            lastSeen: Date.now(),
             state: {
                 ...createDisplayState(),
                 ...savedState,
@@ -1456,6 +1457,11 @@ wss.on('connection', (ws, req) => {
         
         ws.on('message', async (message) => {
             try {
+                const displayData = displayClients.get(displayId);
+                if (displayData) {
+                    displayData.lastSeen = Date.now();
+                }
+                
                 const data = JSON.parse(message);
                 data.displayId = displayId;
                 
@@ -2290,6 +2296,31 @@ function updateVoiceDisplayConfig(localIP, port, protocol) {
 setInterval(() => {
     tts.cleanupOldTtsFiles();
 }, 5 * 60 * 1000);
+
+const SUB_DISPLAY_TIMEOUT_MS = 3 * 60 * 1000;
+const SUB_DISPLAY_CHECK_INTERVAL_MS = 30 * 1000;
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [displayId, displayData] of displayClients) {
+        if (displayData.isSubDisplay && displayData.lastSeen) {
+            const elapsed = now - displayData.lastSeen;
+            if (elapsed > SUB_DISPLAY_TIMEOUT_MS) {
+                console.log(`[子显示端] ${displayId} 超过3分钟未响应，执行离线指令`);
+                
+                const disconnectedIP = displayData.ip;
+                executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
+                
+                displayClients.delete(displayId);
+                if (aascSystem) {
+                    aascSystem.handleDisplayDisconnect(displayId);
+                }
+                console.log(`[子显示端] ${displayId} 已强制断开，当前连接数: ${displayClients.size}`);
+                broadcastToControls({ type: 'displayList', list: getDisplayList() });
+            }
+        }
+    }
+}, SUB_DISPLAY_CHECK_INTERVAL_MS);
 
 setInterval(() => {
     const usage = process.memoryUsage();

@@ -161,9 +161,16 @@ handleWeatherCommand(text, displayId):
         移除 "天气"、"今天"、"明天"、"后天" 等关键词
         如果没有城市名称: 默认 "Beijing"
     
-    调用 wttr.in API:
+    构建天气API URL:
         URL: https://wttr.in/{city}?format=j1&lang=zh
+    
+    打印日志:
+        console.log("[语音命令] 天气API地址: {URL}")
+    
+    调用 wttr.in API:
         Headers: User-Agent: curl
+        timeout: 15000ms
+        重试: 最多3次，每次间隔1秒
     
     解析返回数据:
         cityName: 城市名称

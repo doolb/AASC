@@ -683,12 +683,14 @@ async function handlePlaySelection(confirmationId, selection, displayId) {
 async function handleWeatherCommand(text, displayId, callbacks) {
     const axios = require('axios');
     
-    let city = text.replace(/天气|今天|明天|后天/g, '').trim();
+    let city = text.replace(/天气|今天|明天|后天|明日|后日|现在|当前/g, '').trim();
     
     const tryFetchWeather = async (retryCount = 0) => {
         const url = city 
             ? `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=zh`
             : `https://wttr.in/?format=j1&lang=zh`;
+        
+        console.log(`[语音命令] 天气API地址: ${url} ${text}`);
         
         const response = await axios.get(url, {
             headers: {

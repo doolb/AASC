@@ -15,6 +15,8 @@ wss.on('connection', (ws, req)):
         displayClients.set(displayId, {
             ws: ws,
             ip: clientIP,
+            isSubDisplay: isSubDisplay,
+            lastSeen: Date.now(),
             state: { ...createDisplayState(), ...savedState }
         })
         
@@ -31,6 +33,7 @@ wss.on('connection', (ws, req)):
         
         监听消息:
             解析 JSON 数据
+            更新 lastSeen = Date.now()
             data.displayId = displayId
             
             如果 aascSystem 存在:
@@ -45,6 +48,35 @@ wss.on('connection', (ws, req)):
             如果 aascSystem 存在:
                 调用 aascSystem.handleDisplayDisconnect(displayId)
             广播显示端列表
+```
+
+### 子显示端心跳检测
+
+**server.js 实现**:
+```
+常量:
+    SUB_DISPLAY_TIMEOUT_MS = 3 * 60 * 1000  // 3分钟超时
+    SUB_DISPLAY_CHECK_INTERVAL_MS = 30 * 1000  // 每30秒检查一次
+
+定时器检查逻辑:
+    setInterval(() => {
+        now = Date.now()
+        遍历 displayClients:
+            如果 displayData.isSubDisplay 且 displayData.lastSeen 存在:
+                elapsed = now - displayData.lastSeen
+                如果 elapsed > SUB_DISPLAY_TIMEOUT_MS:
+                    打印日志 "[子显示端] {displayId} 超过3分钟未响应，执行离线指令"
+                    
+                    调用 executeDeviceEvent(ip, 'onDisconnect', displayId)
+                    
+                    从 displayClients 删除 displayId
+                    
+                    如果 aascSystem 存在:
+                        调用 aascSystem.handleDisplayDisconnect(displayId)
+                    
+                    打印日志 "[子显示端] {displayId} 已强制断开"
+                    广播显示端列表到控制端
+    }, SUB_DISPLAY_CHECK_INTERVAL_MS)
 ```
 
 ### 控制端连接 (/control)

@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### 新功能
+- ✅ 天气API地址日志打印
+  - 需求：获取天气时打印天气API的地址，方便调试
+  - 实现：在 handleWeatherCommand 函数中添加 console.log 打印天气API URL
+  - 改动文件：
+    - core/voiceCommand.js - 添加天气API地址日志打印
+
+- ✅ 子显示端3分钟不在线自动执行离线指令
+  - 需求：子显示端3分钟不在线时，自动执行离线指令
+  - 实现：
+    - displayClients 中添加 lastSeen 时间戳，记录最后活跃时间
+    - 收到消息时更新 lastSeen 时间戳
+    - 添加定时器（每30秒检查一次），检测子显示端是否超过3分钟未响应
+    - 超时时执行离线指令（executeDeviceEvent）并断开连接
+  - 改动文件：
+    - server.js - 添加 lastSeen 时间戳和心跳检测定时器
+
 ### Bug 修复
 - ✅ 子显示端语音播放无排队机制
   - 问题：子显示端（Node.js/Go）收到多个TTS消息时，音频并行播放而非排队依次播放，导致语音混乱
