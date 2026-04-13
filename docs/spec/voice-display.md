@@ -287,6 +287,8 @@ class VoiceDisplay:
     connected: boolean
     stopController: AbortController
     reconnectAttempts: number
+    heartbeatInterval: 定时器引用
+    heartbeatIntervalMs: number (60000)
 ```
 
 ### 连接流程
@@ -296,11 +298,33 @@ connect():
     构建 WebSocket URL (ws:// 或 wss://)
     连接路径: /display?subDisplay=true&displayId=<displayId>
     创建 WebSocket 连接
-    监听 open 事件
-    （不再需要发送 register 消息，服务端通过 URL 参数识别子显示端）
+    监听 open 事件:
+        设置 connected = true
+        重置 reconnectAttempts = 0
+        调用 startHeartbeat() 启动心跳
     监听 message 事件处理消息
     监听 close 事件触发重连
     监听 error 事件处理错误
+```
+
+### 心跳机制
+```
+startHeartbeat():
+    调用 stopHeartbeat() 停止已有心跳
+    设置 heartbeatInterval = setInterval(() => {
+        如果 WebSocket 已连接 (readyState === OPEN):
+            发送 { type: 'heartbeat' }
+    }, heartbeatIntervalMs)
+    打印日志 "[心跳] 已启动，间隔 60 秒"
+
+stopHeartbeat():
+    如果 heartbeatInterval 存在:
+        清除定时器
+        设置 heartbeatInterval = null
+
+心跳时机:
+    启动: WebSocket 连接成功后
+    停止: stop() 方法中
 ```
 
 ### 消息处理

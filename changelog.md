@@ -14,10 +14,13 @@
   - 实现：
     - displayClients 中添加 lastSeen 时间戳，记录最后活跃时间
     - 收到消息时更新 lastSeen 时间戳
-    - 添加定时器（每30秒检查一次），检测子显示端是否超过3分钟未响应
+    - 子显示端添加心跳机制，每60秒发送一次心跳消息
+    - 服务端添加定时器（每30秒检查一次），检测子显示端是否超过3分钟未响应
     - 超时时执行离线指令（executeDeviceEvent）并断开连接
   - 改动文件：
     - server.js - 添加 lastSeen 时间戳和心跳检测定时器
+    - voice-display-node/main.js - 添加心跳发送机制
+    - aasc/system/websocket-system.js - 处理心跳消息
 
 ### Bug 修复
 - ✅ 子显示端语音播放无排队机制

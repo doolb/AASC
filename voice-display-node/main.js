@@ -49,6 +49,8 @@ class VoiceDisplay {
         this.stopController = new AbortController();
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
+        this.heartbeatInterval = null;
+        this.heartbeatIntervalMs = 60 * 1000;
     }
 
     /**
@@ -74,6 +76,7 @@ class VoiceDisplay {
                 this.reconnectAttempts = 0;
 
                 console.log(`[连接] 已连接，显示端ID: ${this.config.displayId}`);
+                this.startHeartbeat();
                 resolve();
             });
 
@@ -388,6 +391,7 @@ class VoiceDisplay {
      */
     stop() {
         this.stopController.abort();
+        this.stopHeartbeat();
 
         if (this.recorder) {
             this.recorder.stop();
@@ -403,6 +407,25 @@ class VoiceDisplay {
         }
 
         console.log('[停止] 语音显示端已停止');
+    }
+
+    startHeartbeat() {
+        this.stopHeartbeat();
+        
+        this.heartbeatInterval = setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.sendJSON({ type: 'heartbeat' });
+            }
+        }, this.heartbeatIntervalMs);
+        
+        console.log(`[心跳] 已启动，间隔 ${this.heartbeatIntervalMs / 1000} 秒`);
+    }
+
+    stopHeartbeat() {
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
     }
 }
 

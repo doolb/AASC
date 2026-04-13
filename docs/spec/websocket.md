@@ -79,6 +79,31 @@ wss.on('connection', (ws, req)):
     }, SUB_DISPLAY_CHECK_INTERVAL_MS)
 ```
 
+**子显示端心跳发送 (voice-display-node/main.js)**:
+```
+类 VoiceDisplay:
+    属性:
+        heartbeatInterval: 定时器引用
+        heartbeatIntervalMs: 60 * 1000  // 60秒间隔
+
+    startHeartbeat():
+        停止已有心跳定时器
+        设置 heartbeatInterval = setInterval(() => {
+            如果 WebSocket 已连接:
+                发送 { type: 'heartbeat' }
+        }, heartbeatIntervalMs)
+        打印日志 "[心跳] 已启动，间隔 60 秒"
+
+    stopHeartbeat():
+        清除心跳定时器
+
+    启动时机:
+        在 WebSocket 连接成功后调用 startHeartbeat()
+
+    停止时机:
+        在 stop() 方法中调用 stopHeartbeat()
+```
+
 ### 控制端连接 (/control)
 
 **server.js 实现**:

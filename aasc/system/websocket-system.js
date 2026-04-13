@@ -151,6 +151,10 @@ class WebSocketSystem {
     }
 
     async handleDisplayMessage(displayId, rawMessage, ws) {
+        if (rawMessage && rawMessage.type === 'heartbeat') {
+            return { success: true, dispatched: false };
+        }
+
         const source = new ActorAddress(
             this._getDisplayIP(displayId),
             'display',

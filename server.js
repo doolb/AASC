@@ -1532,7 +1532,9 @@ wss.on('connection', (ws, req) => {
 function handleDisplayMessageFallback(displayId, data, ws) {
     const displayData = displayClients.get(displayId);
     
-    if (data.type === 'canvasSize' && displayData) {
+    if (data.type === 'heartbeat') {
+        return;
+    } else if (data.type === 'canvasSize' && displayData) {
         displayData.state.canvasSize = { width: data.width, height: data.height };
         broadcastToControls({ type: 'displayList', list: getDisplayList() });
     } else if (data.type === 'browserInfo' && displayData) {
