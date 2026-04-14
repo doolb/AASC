@@ -3,6 +3,39 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 显示端分布式能力
+  - 需求：每个显示端可以声明自身能力，服务端根据能力进行智能路由
+  - 实现：
+    - 新增 DisplayCapabilities 数据结构（mediaRendering、voicePlayback、voiceRecording、voiceRecognition、displayText）
+    - 新增 DEFAULT_CAPABILITIES 和 SUB_DISPLAY_CAPABILITIES 常量
+    - 服务端 createDisplayState 添加 capabilities 字段
+    - 服务端新增 capabilities 消息处理（显示端声明能力）
+    - 服务端新增 updateCapabilities 消息处理（控制端修改能力）
+    - 服务端新增 capabilitiesUpdated 消息（通知显示端能力已更新）
+    - 服务端新增 getDisplayCapabilities、getDisplaysWithCapability、sendToDisplaysWithCapability 辅助函数
+    - TTS 广播（broadcastAll）只发送给有 voicePlayback 能力的显示端
+    - TTS 指定显示端播放时检查 voicePlayback 能力
+    - TTS stop 只发送给有 voicePlayback 能力的显示端
+    - 显示端新增 detectCapabilities 自动检测能力（getUserMedia、ASR可用性）
+    - 显示端新增 declareCapabilities 声明能力
+    - 显示端新增 handleCapabilitiesUpdated 处理能力更新
+    - 显示端 startVoiceRecording 检查 voiceRecording 能力
+    - 控制端显示端列表新增能力图标（🖥️🔊🎙️🧠）
+    - 控制端新增能力编辑弹窗（showCapabilityEditor）
+    - 地图数据 API 和 actors API 根据能力动态生成能力列表
+    - 子显示端（Node.js/Go/C#）连接时自动声明 SUB_DISPLAY_CAPABILITIES
+  - 改动文件：
+    - server.js - 能力常量、状态扩展、消息处理、路由辅助函数、TTS路由、地图数据API
+    - public/display.html - 能力检测、声明、更新处理、录音能力检查
+    - public/js/display-list.js - 能力图标、能力编辑弹窗
+    - public/css/upload.css - 能力图标样式、能力编辑弹窗样式
+    - voice-display-node/main.js - 子显示端能力声明
+    - voice-display/main.go - 子显示端能力声明(Go)
+    - voice-display-cs/VoiceDisplay.cs - 子显示端能力声明(C#)
+    - docs/design/display-capability.md - 设计文档
+    - docs/spec/display-capability.md - 实现文档
+
+### 新功能
 - ✅ 子显示端播放语音时暂停录音
   - 需求：子显示端播放TTS语音时暂停录音，防止麦克风拾取TTS输出造成回声反馈
   - 实现：

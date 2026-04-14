@@ -122,3 +122,13 @@
    - 改动文件：server.js
    - 功能：executeDeviceEvent 添加30秒防抖，同一IP同一事件不重复执行
    - 修复显示端频繁重连导致重复触发连线指令的问题
+
+## 显示端分布式能力
+ - ✅已完成 [2026-04-14][2026-04-14] 显示端能力声明与智能路由
+   - 改动文件：server.js, public/display.html, public/js/display-list.js, public/css/upload.css, voice-display-node/main.js, voice-display/main.go, voice-display-cs/VoiceDisplay.cs
+   - 功能：显示端连接时自动检测并声明能力（媒体渲染、语音播放、语音录音、语音识别、文本显示）
+   - 服务端根据能力路由：TTS只发给有播放能力的显示端，录音只开启有录音能力的显示端
+   - 控制端显示端列表展示能力图标，支持手动编辑能力标记
+   - 子显示端自动声明为纯语音能力（无媒体渲染、无文本显示）
+   - 设计文档：docs/design/display-capability.md
+   - 实现文档：docs/spec/display-capability.md

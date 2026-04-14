@@ -1071,6 +1071,7 @@
                 setConnectionStatus('connected', '已连接');
                 sendCanvasSize();
                 sendBrowserInfo();
+                declareCapabilities();
                 sendVoiceStatus();
                 
                 if (voiceSupported && !isAlwaysListening) {
@@ -1100,6 +1101,11 @@
                     
                     if (data.type === 'displayId') {
                         displayId = data.id;
+                        return;
+                    }
+                    
+                    if (data.type === 'capabilitiesUpdated') {
+                        handleCapabilitiesUpdated(data);
                         return;
                     }
                     
@@ -1194,6 +1200,72 @@
             }
         }
         
+        let currentCapabilities = null;
+        
+        async function detectCapabilities() {
+            const capabilities = {
+                mediaRendering: true,
+                voicePlayback: true,
+                voiceRecording: false,
+                voiceRecognition: false,
+                displayText: true
+            };
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                capabilities.voiceRecording = true;
+                stream.getTracks().forEach(track => track.stop());
+            } catch (e) {
+                capabilities.voiceRecording = false;
+            }
+            
+            if (localAsrAvailable || voiceSupported) {
+                capabilities.voiceRecognition = true;
+            } else {
+                try {
+                    const response = await fetch('/api/asr/status');
+                    const result = await response.json();
+                    if (result.available || result.ready) {
+                        capabilities.voiceRecognition = true;
+                    }
+                } catch (e) {
+                    capabilities.voiceRecognition = false;
+                }
+            }
+            
+            return capabilities;
+        }
+        
+        async function declareCapabilities() {
+            try {
+                const capabilities = await detectCapabilities();
+                currentCapabilities = capabilities;
+                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                    displayWs.send(JSON.stringify({
+                        type: 'capabilities',
+                        capabilities: capabilities
+                    }));
+                    console.log('[能力] 已声明能力:', capabilities);
+                }
+            } catch (e) {
+                console.error('[能力] 声明失败:', e);
+            }
+        }
+        
+        function handleCapabilitiesUpdated(data) {
+            if (data.capabilities) {
+                currentCapabilities = data.capabilities;
+                console.log('[能力] 能力已更新:', data.capabilities);
+                if (!data.capabilities.voiceRecording && isListening) {
+                    stopVoiceRecording();
+                }
+                if (!data.capabilities.voiceRecognition && localAsrStreaming) {
+                    SherpaASR.stopStreaming();
+                    localAsrStreaming = false;
+                }
+            }
+        }
+        
         function initVoiceRecognition() {
             checkAsrStatus();
         }
@@ -1278,6 +1350,11 @@
         
         async function startVoiceRecording() {
             if (isListening) return;
+            
+            if (currentCapabilities && !currentCapabilities.voiceRecording) {
+                console.log('[能力] 无语音录音能力，跳过录音启动');
+                return;
+            }
             
             if (Date.now() < voiceCooldownUntil) {
                 const remainingMs = voiceCooldownUntil - Date.now();

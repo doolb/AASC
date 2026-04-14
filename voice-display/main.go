@@ -69,6 +69,8 @@ func (vd *VoiceDisplay) Connect() error {
 	}
 	vd.sendJSON(registerMsg)
 
+	vd.declareCapabilities()
+
 	log.Printf("[连接] 已连接，显示端ID: %s", vd.config.DisplayID)
 	return nil
 }
@@ -92,6 +94,20 @@ func (vd *VoiceDisplay) sendJSON(data map[string]interface{}) error {
 		return fmt.Errorf("WebSocket未连接")
 	}
 	return vd.ws.WriteJSON(data)
+}
+
+func (vd *VoiceDisplay) declareCapabilities() {
+	vd.sendJSON(map[string]interface{}{
+		"type": "capabilities",
+		"capabilities": map[string]bool{
+			"mediaRendering":   false,
+			"voicePlayback":    true,
+			"voiceRecording":   true,
+			"voiceRecognition": true,
+			"displayText":      false,
+		},
+	})
+	log.Println("[能力] 已声明子显示端能力")
 }
 
 func (vd *VoiceDisplay) handleMessage(msgType string, data map[string]interface{}) {

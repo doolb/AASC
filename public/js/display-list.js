@@ -157,6 +157,17 @@ const DisplayList = {
                 subDisplayIndicator = '<span class="sub-display-indicator" title="子显示端（语音端）">🎤</span>';
             }
             
+            let capabilityIcons = '';
+            if (d.capabilities) {
+                const caps = d.capabilities;
+                capabilityIcons = `
+                    <span class="cap-icon ${caps.mediaRendering ? 'active' : 'inactive'}" title="媒体渲染${caps.mediaRendering ? '' : '（不可用）'}">🖥️</span>
+                    <span class="cap-icon ${caps.voicePlayback ? 'active' : 'inactive'}" title="语音播放${caps.voicePlayback ? '' : '（不可用）'}">🔊</span>
+                    <span class="cap-icon ${caps.voiceRecording ? 'active' : 'inactive'}" title="语音录音${caps.voiceRecording ? '' : '（不可用）'}">🎙️</span>
+                    <span class="cap-icon ${caps.voiceRecognition ? 'active' : 'inactive'}" title="语音识别${caps.voiceRecognition ? '' : '（不可用）'}">🧠</span>
+                `;
+            }
+            
             return `
                 <div class="display-item ${isActive ? 'active' : ''} ${d.isSubDisplay ? 'sub-display' : ''}" onclick="DisplayList.select('${d.id}')">
                     <div style="flex:1;">
@@ -164,10 +175,12 @@ const DisplayList = {
                             <span class="display-item-id">${d.ip || 'unknown'}${d.isSubDisplay ? ' <span class="sub-display-tag">子显示端</span>' : ''}</span>
                             <div style="display:flex;align-items:center;gap:8px;">
                                 ${subDisplayIndicator}
+                                ${capabilityIcons}
                                 ${directionIndicator}
                                 ${voiceStatusHtml}
                                 <span class="display-item-size">${d.canvasSize.width}x${d.canvasSize.height}</span>
                                 ${d.browserInfo ? `<button class="info-btn" onclick="event.stopPropagation();DisplayList.showFeatureModal('${d.id}')">详情</button>` : ''}
+                                <button class="info-btn" onclick="event.stopPropagation();DisplayList.showCapabilityEditor('${d.id}')" title="能力设置">⚙️</button>
                             </div>
                         </div>
                         ${browserInfoHtml}
@@ -259,6 +272,93 @@ const DisplayList = {
     
     closeFeatureModal() {
         document.getElementById('featureModal').classList.remove('active');
+    },
+    
+    showCapabilityEditor(displayId) {
+        const display = this.list.find(d => d.id === displayId);
+        if (!display) return;
+        
+        const caps = display.capabilities || {
+            mediaRendering: true,
+            voicePlayback: true,
+            voiceRecording: true,
+            voiceRecognition: false,
+            displayText: true
+        };
+        
+        const existing = document.getElementById('capabilityModal');
+        if (existing) existing.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'capabilityModal';
+        modal.className = 'capability-modal';
+        modal.innerHTML = `
+            <div class="capability-editor">
+                <h3>显示端 ${display.ip || 'unknown'} 能力设置</h3>
+                <div class="capability-list">
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.mediaRendering ? 'checked' : ''} data-cap="mediaRendering">
+                        <span>🖥️ 媒体渲染</span>
+                        <span class="capability-desc">能显示图片/视频</span>
+                    </label>
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.voicePlayback ? 'checked' : ''} data-cap="voicePlayback">
+                        <span>🔊 语音播放</span>
+                        <span class="capability-desc">能播放TTS音频</span>
+                    </label>
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.voiceRecording ? 'checked' : ''} data-cap="voiceRecording">
+                        <span>🎙️ 语音录音</span>
+                        <span class="capability-desc">能录制音频</span>
+                    </label>
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.voiceRecognition ? 'checked' : ''} data-cap="voiceRecognition">
+                        <span>🧠 语音识别</span>
+                        <span class="capability-desc">能进行语音识别</span>
+                    </label>
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.displayText ? 'checked' : ''} data-cap="displayText">
+                        <span>📝 文本显示</span>
+                        <span class="capability-desc">能显示文字覆盖层</span>
+                    </label>
+                </div>
+                <div class="capability-actions">
+                    <button class="capability-save-btn" onclick="DisplayList.saveCapabilities('${displayId}')">保存</button>
+                    <button class="capability-cancel-btn" onclick="DisplayList.closeCapabilityEditor()">取消</button>
+                </div>
+            </div>
+        `;
+        
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.closeCapabilityEditor();
+            }
+        });
+        
+        document.body.appendChild(modal);
+    },
+    
+    saveCapabilities(displayId) {
+        const checkboxes = document.querySelectorAll('#capabilityModal input[type="checkbox"]');
+        const capabilities = {};
+        checkboxes.forEach(cb => {
+            capabilities[cb.dataset.cap] = cb.checked;
+        });
+        
+        if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'updateCapabilities',
+                displayId: displayId,
+                capabilities: capabilities
+            }));
+        }
+        
+        this.closeCapabilityEditor();
+    },
+    
+    closeCapabilityEditor() {
+        const modal = document.getElementById('capabilityModal');
+        if (modal) modal.remove();
     },
     
     init() {

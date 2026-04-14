@@ -78,6 +78,7 @@ class VoiceDisplay {
 
                 console.log(`[连接] 已连接，显示端ID: ${this.config.displayId}`);
                 this.startHeartbeat();
+                this.declareCapabilities();
                 resolve();
             });
 
@@ -113,6 +114,20 @@ class VoiceDisplay {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
         }
+    }
+
+    declareCapabilities() {
+        this.sendJSON({
+            type: 'capabilities',
+            capabilities: {
+                mediaRendering: false,
+                voicePlayback: true,
+                voiceRecording: true,
+                voiceRecognition: true,
+                displayText: false
+            }
+        });
+        console.log('[能力] 已声明子显示端能力');
     }
 
     /**

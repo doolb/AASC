@@ -39,6 +39,8 @@ public class VoiceDisplay : IDisposable
         _reconnectAttempts = 0;
 
         Console.WriteLine($"[连接] 已连接，显示端ID: {_config.DisplayId}");
+
+        await DeclareCapabilitiesAsync();
     }
 
     private async Task SendJsonAsync(Dictionary<string, object> data)
@@ -49,6 +51,23 @@ public class VoiceDisplay : IDisposable
         var bytes = Encoding.UTF8.GetBytes(json);
         await _ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true,
             _stopCts?.Token ?? CancellationToken.None);
+    }
+
+    private async Task DeclareCapabilitiesAsync()
+    {
+        await SendJsonAsync(new Dictionary<string, object>
+        {
+            ["type"] = "capabilities",
+            ["capabilities"] = new Dictionary<string, bool>
+            {
+                ["mediaRendering"] = false,
+                ["voicePlayback"] = true,
+                ["voiceRecording"] = true,
+                ["voiceRecognition"] = true,
+                ["displayText"] = false
+            }
+        });
+        Console.WriteLine("[能力] 已声明子显示端能力");
     }
 
     private async Task ListenMessagesAsync()

@@ -210,6 +210,22 @@ function generateId() {
     return Math.random().toString(36).substring(2, 10);
 }
 
+const DEFAULT_CAPABILITIES = {
+    mediaRendering: true,
+    voicePlayback: true,
+    voiceRecording: true,
+    voiceRecognition: false,
+    displayText: true
+};
+
+const SUB_DISPLAY_CAPABILITIES = {
+    mediaRendering: false,
+    voicePlayback: true,
+    voiceRecording: true,
+    voiceRecognition: true,
+    displayText: false
+};
+
 function createDisplayState() {
     return {
         currentMedia: null,
@@ -219,7 +235,8 @@ function createDisplayState() {
         volume: 100,
         isPlaying: false,
         canvasSize: { width: 1920, height: 1080 },
-        browserInfo: null
+        browserInfo: null,
+        capabilities: null
     };
 }
 
@@ -999,17 +1016,31 @@ app.get('/api/map-data', (req, res) => {
         });
         
         displayClients.forEach((state, displayId) => {
+            const caps = state.state?.capabilities || DEFAULT_CAPABILITIES;
+            const capabilities = [];
+            if (caps.mediaRendering) {
+                capabilities.push({ id: 'display', name: '显示', category: 'basic', level: 2 });
+            }
+            if (caps.voicePlayback) {
+                capabilities.push({ id: 'voice-broadcast', name: '语音播报', category: 'professional', level: 3 });
+            }
+            if (caps.voiceRecording) {
+                capabilities.push({ id: 'voice-recording', name: '语音录音', category: 'professional', level: 2 });
+            }
+            if (caps.voiceRecognition) {
+                capabilities.push({ id: 'voice-recognition', name: '语音识别', category: 'professional', level: 3 });
+            }
+            if (caps.displayText) {
+                capabilities.push({ id: 'display-text', name: '文本显示', category: 'basic', level: 2 });
+            }
             actors.push({
-                address: { ip: state.browserInfo?.ip || 'unknown', role: 'display', name: displayId },
-                status: state.isPlaying ? 'busy' : 'ready',
-                capabilities: [
-                    { id: 'display', name: '显示', category: 'basic', level: 2 },
-                    { id: 'voice-broadcast', name: '语音播报', category: 'professional', level: 3 }
-                ],
+                address: { ip: state.state?.browserInfo?.ip || state.ip || 'unknown', role: 'display', name: displayId },
+                status: state.state?.isPlaying ? 'busy' : 'ready',
+                capabilities: capabilities,
                 lastHeartbeat: Date.now(),
                 metadata: {
-                    browserInfo: state.browserInfo,
-                    canvasSize: state.canvasSize
+                    browserInfo: state.state?.browserInfo,
+                    canvasSize: state.state?.canvasSize
                 }
             });
         });
@@ -1055,12 +1086,18 @@ app.get('/api/actors', (req, res) => {
         });
         
         displayClients.forEach((state, displayId) => {
+            const caps = state.state?.capabilities || DEFAULT_CAPABILITIES;
+            const capabilities = [];
+            if (caps.mediaRendering) {
+                capabilities.push({ id: 'display', name: '显示', category: 'basic', level: 2 });
+            }
+            if (caps.voicePlayback) {
+                capabilities.push({ id: 'voice-broadcast', name: '语音播报', category: 'professional', level: 3 });
+            }
             actors.push({
-                address: { ip: state.browserInfo?.ip || 'unknown', role: 'display', name: displayId },
-                status: state.isPlaying ? 'busy' : 'ready',
-                capabilities: [
-                    { id: 'display', name: '显示', category: 'basic', level: 2 }
-                ],
+                address: { ip: state.state?.browserInfo?.ip || state.ip || 'unknown', role: 'display', name: displayId },
+                status: state.state?.isPlaying ? 'busy' : 'ready',
+                capabilities: capabilities,
                 lastHeartbeat: Date.now()
             });
         });
@@ -1329,6 +1366,7 @@ function detectMediaType(name) {
 function getDisplayList() {
     const list = [];
     displayClients.forEach((data, id) => {
+        const caps = data.state.capabilities || DEFAULT_CAPABILITIES;
         list.push({
             id: id,
             ip: data.ip,
@@ -1337,10 +1375,36 @@ function getDisplayList() {
             rotation: data.state.rotation || 0,
             browserInfo: data.state.browserInfo,
             voiceSupported: data.state.voiceSupported,
-            voiceListening: data.state.voiceListening
+            voiceListening: data.state.voiceListening,
+            capabilities: caps
         });
     });
     return list;
+}
+
+function getDisplayCapabilities(displayId) {
+    const displayData = displayClients.get(displayId);
+    if (!displayData) return null;
+    return displayData.state.capabilities || DEFAULT_CAPABILITIES;
+}
+
+function getDisplaysWithCapability(capabilityName) {
+    const result = [];
+    displayClients.forEach((data, id) => {
+        const caps = data.state.capabilities || DEFAULT_CAPABILITIES;
+        if (caps[capabilityName] === true) {
+            result.push({ id, data });
+        }
+    });
+    return result;
+}
+
+function sendToDisplaysWithCapability(capabilityName, message) {
+    const displays = getDisplaysWithCapability(capabilityName);
+    for (const display of displays) {
+        sendToDisplay(display.id, message);
+    }
+    return displays.length;
 }
 
 function broadcastToControls(data) {
@@ -1432,7 +1496,8 @@ wss.on('connection', (ws, req) => {
             state: {
                 ...createDisplayState(),
                 ...savedState,
-                isSubDisplay: isSubDisplay
+                isSubDisplay: isSubDisplay,
+                capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : (savedState?.capabilities || null)
             }
         });
         console.log(`显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
@@ -1502,7 +1567,22 @@ wss.on('connection', (ws, req) => {
             try {
                 const data = JSON.parse(message);
                 
-                if (aascSystem) {
+                if (data.type === 'updateCapabilities') {
+                    const targetDisplayId = data.displayId;
+                    const targetDisplayData = displayClients.get(targetDisplayId);
+                    if (targetDisplayData) {
+                        targetDisplayData.state.capabilities = {
+                            ...DEFAULT_CAPABILITIES,
+                            ...data.capabilities
+                        };
+                        sendToDisplay(targetDisplayId, {
+                            type: 'capabilitiesUpdated',
+                            capabilities: targetDisplayData.state.capabilities
+                        });
+                        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+                        console.log(`[能力] 控制端更新显示端 ${targetDisplayId} 能力:`, targetDisplayData.state.capabilities);
+                    }
+                } else if (aascSystem) {
                     const result = await aascSystem.handleControlMessage(data, ws);
                     if (!result.success && result.reason) {
                         console.warn('[AASC] 消息处理失败:', result.reason);
@@ -1561,6 +1641,13 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     } else if (data.type === 'voiceStatus' && displayData) {
         displayData.state.voiceSupported = data.supported;
         displayData.state.voiceListening = data.listening;
+        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+    } else if (data.type === 'capabilities' && displayData) {
+        displayData.state.capabilities = {
+            ...DEFAULT_CAPABILITIES,
+            ...data.capabilities
+        };
+        console.log(`[能力] 显示端 ${displayId} 声明能力:`, displayData.state.capabilities);
         broadcastToControls({ type: 'displayList', list: getDisplayList() });
     } else if (data.type === 'commandAck' && displayData) {
         console.log('[服务端] 收到显示端 commandAck:', data.commandType, 'from', displayId);
@@ -1896,9 +1983,7 @@ async function handleControlMessageFallback(data, ws) {
                             }
                         })();
                     } else if (data.action === 'stop') {
-                        displayClients.forEach((displayData, id) => {
-                            sendToDisplay(id, data);
-                        });
+                        sendToDisplaysWithCapability('voicePlayback', data);
                     } else if (data.action === 'play' && data.text) {
                         (async () => {
                             try {
@@ -1917,22 +2002,23 @@ async function handleControlMessageFallback(data, ws) {
                                             text: sentence
                                         }));
                                     } else if (data.broadcastAll) {
-                                        displayClients.forEach((displayData, id) => {
-                                            sendToDisplay(id, {
-                                                type: 'tts',
-                                                action: 'playAudio',
-                                                audioUrl: audioUrl,
-                                                text: sentence
-                                            });
+                                        sendToDisplaysWithCapability('voicePlayback', {
+                                            type: 'tts',
+                                            action: 'playAudio',
+                                            audioUrl: audioUrl,
+                                            text: sentence
                                         });
                                     } else if (targetDisplayIds.length > 0) {
                                         for (const targetId of targetDisplayIds) {
-                                            sendToDisplay(targetId, {
-                                                type: 'tts',
-                                                action: 'playAudio',
-                                                audioUrl: audioUrl,
-                                                text: sentence
-                                            });
+                                            const caps = getDisplayCapabilities(targetId);
+                                            if (caps && caps.voicePlayback) {
+                                                sendToDisplay(targetId, {
+                                                    type: 'tts',
+                                                    action: 'playAudio',
+                                                    audioUrl: audioUrl,
+                                                    text: sentence
+                                                });
+                                            }
                                         }
                                     } else if (displayId) {
                                         sendToDisplay(displayId, {

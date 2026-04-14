@@ -37,3 +37,4 @@
 | ViewBind | [viewbind.md](design/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 | 地图可视化 | [map-visualization.md](design/map-visualization.md) | 执行者能力可视化、2D地图渲染、PixiJS渲染器 |
 | 子服务器 | [sub-server.md](design/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
+| 显示端分布式能力 | [display-capability.md](design/display-capability.md) | 显示端能力声明、能力路由、分布式协调 |
