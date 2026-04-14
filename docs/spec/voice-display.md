@@ -57,6 +57,7 @@ type VoiceDisplay struct:
     stopChan: chan struct{}
     connected: bool
     connMutex: sync.Mutex
+    asrReadyChan: chan struct{}  // ASR就绪通知通道
 ```
 
 ### 连接流程
@@ -105,6 +106,9 @@ type AudioPlayer struct:
     queueMu: sync.Mutex
     processing: bool
     stopRequested: bool
+    playing: bool
+    onPlayStart: func()  // 播放开始回调
+    onPlayEnd: func()    // 播放结束回调
 
 type queueItem struct:
     itemType: string  // "url" 或 "data"
@@ -127,11 +131,24 @@ QueueData(data):
 processQueue():
     如果 processing == true，返回（避免重复处理）
     设置 processing = true
+    设置 playing = true
+    调用 onPlayStart()
     循环:
         如果 stopRequested 或队列为空，退出循环
         取出队列首项
         根据 itemType 调用 PlayFromURL 或 playData
+    设置 playing = false
     设置 processing = false
+    调用 onPlayEnd()
+
+IsPlaying() bool:
+    返回 playing
+
+SetOnPlayStart(callback):
+    设置 onPlayStart = callback
+
+SetOnPlayEnd(callback):
+    设置 onPlayEnd = callback
 
 ClearQueue():
     清空 playQueue
@@ -139,6 +156,7 @@ ClearQueue():
 Stop():
     设置 stopRequested = true
     设置 processing = false
+    设置 playing = false
     关闭当前 player
 ```
 
@@ -192,9 +210,9 @@ Recognize(wavData []byte) (string, error):
 ```
 type AudioRecorder struct:
     recording: bool
+    paused: bool
     mu: sync.Mutex
     sampleRate: int (16000)
-}
 ```
 
 ### 录音流程
@@ -203,6 +221,7 @@ Start(audioChan chan<- []byte, stopChan <-chan struct{}) error:
     使用 malgo 初始化麦克风录音
     配置: 16kHz, 单声道, 16bit PCM
     循环读取音频数据
+    如果 paused，重置语音状态，跳过处理
     转换为 int16 格式
     计算 RMS 音量
     RMS >= 阈值: 标记有语音，累积音频数据
@@ -210,6 +229,24 @@ Start(audioChan chan<- []byte, stopChan <-chan struct{}) error:
         将累积的 int16 数据编码为 WAV 格式
         发送 WAV 字节到 audioChan
     监听 stopChan 退出
+```
+
+### 暂停/恢复录音
+```
+Pause():
+    加锁
+    设置 paused = true
+    解锁
+
+Resume():
+    加锁
+    设置 paused = false
+    解锁
+
+IsPaused() bool:
+    加锁
+    返回 paused
+    解锁
 ```
 
 ### WAV 编码
@@ -242,6 +279,31 @@ startVoiceRecognition():
         循环从 audioChan 读取 WAV 数据
         调用 asr.Recognize(wavData) 发送到服务器识别
         如果识别结果非空，调用 sendVoiceInput(text)
+
+waitForASRReady():
+    如果 asr.IsReady()，直接返回
+    启动 goroutine:
+        循环每5秒检查一次 asr.IsReady()
+        就绪后:
+            发送信号到 asrReadyChan
+            调用 startVoiceRecognition()
+```
+
+## 播放时暂停录音机制
+
+```
+setupPlaybackPause():
+    设置 audio.onPlayStart = recorder.Pause
+    设置 audio.onPlayEnd = recorder.Resume
+    
+    播放开始时:
+        调用 recorder.Pause()
+        重置录音器的语音累积状态
+        防止麦克风拾取TTS输出造成回声
+    
+    播放结束时:
+        调用 recorder.Resume()
+        恢复正常录音
 ```
 
 ## 启动流程
@@ -253,11 +315,15 @@ main():
     注册信号处理 (SIGINT, SIGTERM)
     调用 Start():
         初始化 AudioPlayer
+        设置播放暂停录音回调 (setupPlaybackPause)
         初始化 ServerASR (传入服务器URL)
         检查服务器 ASR 可用性
         初始化 AudioRecorder
         连接服务器
-        启动语音识别 (如果服务器ASR可用)
+        如果服务器ASR可用:
+            启动语音识别
+        否则:
+            启动 waitForASRReady() 等待ASR就绪
         启动消息监听
     等待退出信号
     调用 Stop() 清理资源
@@ -362,6 +428,8 @@ class AudioPlayer:
     tempDir: string
     playQueue: Array<{type: 'url'|'buffer', url?: string, buffer?: Buffer}>
     isProcessingQueue: boolean
+    onPlayStart: Function | null  // 播放开始回调
+    onPlayEnd: Function | null    // 播放结束回调
 ```
 
 #### 播放队列机制
@@ -379,11 +447,13 @@ queueBuffer(wavBuffer):
 processQueue():
     如果 isProcessingQueue == true，返回（避免重复处理）
     设置 isProcessingQueue = true
+    如果 onPlayStart 存在，调用 onPlayStart()
     循环:
         如果 stopRequested 或队列为空，退出循环
         取出队列首项
         根据 type 调用 playFromURL 或 playWavBuffer
     设置 isProcessingQueue = false
+    如果 onPlayEnd 存在，调用 onPlayEnd()
 
 clearQueue():
     清空 playQueue
@@ -431,6 +501,13 @@ checkReady():
     解析响应: { ready: boolean }
     更新 ready 状态
     返回 ready 状态
+
+waitForReady(pollInterval = 5000):
+    返回 Promise:
+        如果 ready == true，立即 resolve
+        否则:
+            设置定时器每 pollInterval 毫秒检查一次 checkReady()
+            就绪后清除定时器并 resolve
 ```
 
 #### 识别音频
@@ -454,6 +531,7 @@ class AudioRecorder:
     vadThreshold: number (0.01)
     minSpeechDuration: number (300)
     recording: boolean
+    paused: boolean
     audioInput: naudiodon.AudioIO
 ```
 
@@ -467,6 +545,7 @@ start(onAudioData, signals):
         deviceId: -1 (默认设备)
     监听 data 事件接收音频数据
     按帧处理 (20ms/帧):
+        如果 paused，重置语音状态，跳过处理
         转换为 int16 格式
         计算 RMS 音量
         RMS >= 阈值: 标记有语音，累积音频数据
@@ -483,6 +562,18 @@ stop():
     设置 recording = false
     调用 audioInput.quit() 关闭录音器
     重置 audioInput = null
+```
+
+#### 暂停/恢复录音
+```
+pause():
+    设置 paused = true
+
+resume():
+    设置 paused = false
+
+isPaused():
+    返回 paused
 ```
 
 #### 获取设备列表
@@ -530,11 +621,15 @@ main():
     注册信号处理 (SIGINT, SIGTERM)
     调用 start():
         初始化 AudioPlayer
+        设置播放暂停录音回调 (audio.onPlayStart = recorder.pause, audio.onPlayEnd = recorder.resume)
         初始化 ServerASR (传入服务器URL)
-        检查服务器 ASR 可用性
+        await 检查服务器 ASR 可用性
         初始化 AudioRecorder
         连接服务器
-        启动语音识别 (如果服务器ASR可用)
+        如果服务器ASR可用:
+            启动语音识别
+        否则:
+            启动 waitForASRReady() 等待ASR就绪后自动开始录音
     等待退出信号
     调用 stop() 清理资源
 ```

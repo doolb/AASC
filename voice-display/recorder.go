@@ -10,6 +10,7 @@ import (
 
 type AudioRecorder struct {
 	recording  bool
+	paused     bool
 	mu         sync.Mutex
 	sampleRate int
 }
@@ -44,6 +45,17 @@ func (r *AudioRecorder) Start(audioChan chan<- []byte, stopChan <-chan struct{})
 	silenceFramesNeeded := minSpeechDuration / frameDurationMs
 
 	onRecvFrames := func(pOutputSample, pInputSamples []byte, framecount uint32) {
+		r.mu.Lock()
+		isPaused := r.paused
+		r.mu.Unlock()
+
+		if isPaused {
+			hasSpeech = false
+			speechSamples = nil
+			silenceFrameCount = 0
+			return
+		}
+
 		samples := make([]int16, framecount)
 		for i := uint32(0); i < framecount; i++ {
 			samples[i] = int16(binary.LittleEndian.Uint16(pInputSamples[i*2 : i*2+2]))
@@ -116,6 +128,26 @@ func (r *AudioRecorder) IsRecording() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.recording
+}
+
+func (r *AudioRecorder) Pause() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.paused = true
+	log.Printf("[录音] 已暂停")
+}
+
+func (r *AudioRecorder) Resume() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.paused = false
+	log.Printf("[录音] 已恢复")
+}
+
+func (r *AudioRecorder) IsPaused() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.paused
 }
 
 func encodeWAV(samples []int16, sampleRate int) []byte {

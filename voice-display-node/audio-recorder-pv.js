@@ -25,6 +25,7 @@ class AudioRecorderPv {
         this.frameLength = options.frameLength || 512;
         
         this.recording = false;
+        this.paused = false;
         this.recorder = null;
     }
 
@@ -75,6 +76,13 @@ class AudioRecorderPv {
                     try {
                         const frame = await this.recorder.read();
                         
+                        if (this.paused) {
+                            hasSpeech = false;
+                            speechSamples = [];
+                            silenceFrameCount = 0;
+                            continue;
+                        }
+
                         const rms = this.computeRMS(frame);
 
                         if (rms >= this.vadThreshold) {
@@ -151,6 +159,20 @@ class AudioRecorderPv {
      */
     isRecording() {
         return this.recording;
+    }
+
+    pause() {
+        this.paused = true;
+        console.log('[录音] 已暂停');
+    }
+
+    resume() {
+        this.paused = false;
+        console.log('[录音] 已恢复');
+    }
+
+    isPaused() {
+        return this.paused;
     }
 
     /**

@@ -21,21 +21,23 @@ type Config struct {
 }
 
 type VoiceDisplay struct {
-	config    *Config
-	ws        *websocket.Conn
-	wsMutex   sync.Mutex
-	asr       *ServerASR
-	audio     *AudioPlayer
-	recorder  *AudioRecorder
-	stopChan  chan struct{}
-	connected bool
-	connMutex sync.Mutex
+	config       *Config
+	ws           *websocket.Conn
+	wsMutex      sync.Mutex
+	asr          *ServerASR
+	audio        *AudioPlayer
+	recorder     *AudioRecorder
+	stopChan     chan struct{}
+	connected    bool
+	connMutex    sync.Mutex
+	asrReadyChan chan struct{}
 }
 
 func NewVoiceDisplay(cfg *Config) *VoiceDisplay {
 	return &VoiceDisplay{
-		config:   cfg,
-		stopChan: make(chan struct{}),
+		config:       cfg,
+		stopChan:     make(chan struct{}),
+		asrReadyChan: make(chan struct{}, 1),
 	}
 }
 
@@ -255,6 +257,48 @@ func (vd *VoiceDisplay) startVoiceRecognition() error {
 	return nil
 }
 
+func (vd *VoiceDisplay) waitForASRReady() {
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-vd.stopChan:
+				return
+			case <-ticker.C:
+				if vd.asr != nil && vd.asr.RefreshStatus() {
+					log.Printf("[ASR] 服务器端ASR已就绪，启动语音识别")
+					select {
+					case vd.asrReadyChan <- struct{}{}:
+					default:
+					}
+					if err := vd.startVoiceRecognition(); err != nil {
+						log.Printf("[ASR] 启动语音识别失败: %v", err)
+					}
+					return
+				}
+			}
+		}
+	}()
+}
+
+func (vd *VoiceDisplay) setupPlaybackPause() {
+	if vd.audio == nil || vd.recorder == nil {
+		return
+	}
+
+	vd.audio.SetOnPlayStart(func() {
+		log.Printf("[录音] 播放开始，暂停录音")
+		vd.recorder.Pause()
+	})
+
+	vd.audio.SetOnPlayEnd(func() {
+		log.Printf("[录音] 播放结束，恢复录音")
+		vd.recorder.Resume()
+	})
+}
+
 func (vd *VoiceDisplay) ListenMessages() {
 	defer func() {
 		vd.setConnected(false)
@@ -327,6 +371,8 @@ func (vd *VoiceDisplay) Start() error {
 
 	vd.recorder = NewAudioRecorder()
 
+	vd.setupPlaybackPause()
+
 	if err := vd.Connect(); err != nil {
 		return fmt.Errorf("连接服务器失败: %w", err)
 	}
@@ -335,6 +381,9 @@ func (vd *VoiceDisplay) Start() error {
 		if err := vd.startVoiceRecognition(); err != nil {
 			log.Printf("[警告] 语音识别启动失败: %v", err)
 		}
+	} else {
+		log.Printf("[ASR] 等待ASR就绪...")
+		vd.waitForASRReady()
 	}
 
 	go vd.ListenMessages()

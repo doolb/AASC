@@ -73,6 +73,27 @@ class ServerASR {
     }
 
     /**
+     * 等待 ASR 就绪
+     * @param {number} pollInterval - 轮询间隔（毫秒）
+     * @returns {Promise<boolean>}
+     */
+    async waitForReady(pollInterval = 5000) {
+        if (this.ready) {
+            return true;
+        }
+
+        return new Promise((resolve) => {
+            const timer = setInterval(async () => {
+                const ready = await this.checkReady();
+                if (ready) {
+                    clearInterval(timer);
+                    resolve(true);
+                }
+            }, pollInterval);
+        });
+    }
+
+    /**
      * 识别音频
      * @param {Buffer} wavData - WAV格式的音频数据
      * @returns {Promise<{text: string, status: string}>}

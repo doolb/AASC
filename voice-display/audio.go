@@ -18,14 +18,17 @@ type queueItem struct {
 }
 
 type AudioPlayer struct {
-	context      *oto.Context
-	player       *oto.Player
-	mu           sync.Mutex
-	stopChan     chan struct{}
-	playQueue    []queueItem
-	queueMu      sync.Mutex
-	processing   bool
+	context       *oto.Context
+	player        *oto.Player
+	mu            sync.Mutex
+	stopChan      chan struct{}
+	playQueue     []queueItem
+	queueMu       sync.Mutex
+	processing    bool
 	stopRequested bool
+	playing       bool
+	onPlayStart   func()
+	onPlayEnd     func()
 }
 
 func NewAudioPlayer() (*AudioPlayer, error) {
@@ -75,12 +78,22 @@ func (ap *AudioPlayer) processQueue() {
 		return
 	}
 	ap.processing = true
+	ap.playing = true
 	ap.queueMu.Unlock()
+
+	if ap.onPlayStart != nil {
+		ap.onPlayStart()
+	}
 
 	defer func() {
 		ap.queueMu.Lock()
+		ap.playing = false
 		ap.processing = false
 		ap.queueMu.Unlock()
+
+		if ap.onPlayEnd != nil {
+			ap.onPlayEnd()
+		}
 	}()
 
 	for {
@@ -179,11 +192,26 @@ func (ap *AudioPlayer) Stop() {
 
 	ap.stopRequested = true
 	ap.processing = false
+	ap.playing = false
 
 	if ap.player != nil {
 		ap.player.Close()
 		ap.player = nil
 	}
+}
+
+func (ap *AudioPlayer) IsPlaying() bool {
+	ap.queueMu.Lock()
+	defer ap.queueMu.Unlock()
+	return ap.playing
+}
+
+func (ap *AudioPlayer) SetOnPlayStart(callback func()) {
+	ap.onPlayStart = callback
+}
+
+func (ap *AudioPlayer) SetOnPlayEnd(callback func()) {
+	ap.onPlayEnd = callback
 }
 
 func (ap *AudioPlayer) PlayTTSResponse(audioUrl string) error {

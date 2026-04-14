@@ -3,6 +3,41 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 子显示端播放语音时暂停录音
+  - 需求：子显示端播放TTS语音时暂停录音，防止麦克风拾取TTS输出造成回声反馈
+  - 实现：
+    - AudioPlayer 添加 onPlayStart/onPlayEnd 回调，播放队列开始时触发 onPlayStart，队列结束时触发 onPlayEnd
+    - AudioPlayer 添加 IsPlaying()/isCurrentlyPlaying() 方法和 playing 状态
+    - AudioRecorder 添加 Pause()/Resume()/IsPaused() 方法（Go）和 pause()/resume()/isPaused() 方法（Node.js）
+    - 录音暂停时重置语音累积状态（hasSpeech、speechSamples、silenceFrameCount），防止暂停前的片段被误发
+    - VoiceDisplay 设置播放回调：onPlayStart → recorder.Pause()，onPlayEnd → recorder.Resume()
+    - Go 和 Node.js 两种实现均已更新
+  - 改动文件：
+    - voice-display/audio.go - 添加 playing 字段、onPlayStart/onPlayEnd 回调、IsPlaying/SetOnPlayStart/SetOnPlayEnd 方法
+    - voice-display/recorder.go - 添加 paused 字段、Pause/Resume/IsPaused 方法、onRecvFrames 暂停检查
+    - voice-display/main.go - 添加 setupPlaybackPause 方法、asrReadyChan 通道
+    - voice-display-node/audio-player.js - 添加 onPlayStart/onPlayEnd 回调
+    - voice-display-node/audio-recorder.js - 添加 paused 字段、pause/resume/isPaused 方法、data 事件暂停检查
+    - voice-display-node/audio-recorder-pv.js - 添加 paused 字段、pause/resume/isPaused 方法、recordLoop 暂停检查
+    - voice-display-node/main.js - 添加 setupPlaybackPause、waitForASRReady 方法
+    - docs/spec/voice-display.md - 更新伪代码
+
+- ✅ ServerASR checkReady 就绪后自动开始录音
+  - 需求：子显示端启动时如果ASR不可用，后续ASR就绪后应自动开始语音识别
+  - 实现：
+    - Node.js：ServerASR 构造函数中 checkReady() 是异步调用但未 await，导致 isReady() 始终返回 false
+    - 修复：start() 中改为 await this.asr.checkReady()，确保就绪状态正确
+    - 添加 waitForASRReady() 方法：ASR 不可用时每5秒轮询检查，就绪后自动启动语音识别
+    - ServerASR 添加 waitForReady() 方法，支持 Promise 方式等待就绪
+    - Go：添加 waitForASRReady() 方法，使用 ticker 每5秒检查 asr.RefreshStatus()
+    - stop() 中清理轮询定时器
+  - 改动文件：
+    - voice-display-node/asr-client.js - 添加 waitForReady 方法
+    - voice-display-node/main.js - 修复 checkReady 异步问题，添加 waitForASRReady 方法
+    - voice-display/main.go - 添加 waitForASRReady 方法、asrReadyChan 通道
+    - docs/spec/voice-display.md - 更新伪代码
+
+### 新功能
 - ✅ 天气API地址日志打印
   - 需求：获取天气时打印天气API的地址，方便调试
   - 实现：在 handleWeatherCommand 函数中添加 console.log 打印天气API URL

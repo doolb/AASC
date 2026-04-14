@@ -26,6 +26,8 @@ class AudioPlayer {
         this.tempDir = os.tmpdir();
         this.playQueue = [];
         this.isProcessingQueue = false;
+        this.onPlayStart = null;
+        this.onPlayEnd = null;
     }
 
     /**
@@ -59,6 +61,10 @@ class AudioPlayer {
 
         this.isProcessingQueue = true;
 
+        if (this.onPlayStart) {
+            this.onPlayStart();
+        }
+
         while (this.playQueue.length > 0) {
             if (this.stopRequested) {
                 console.log('[音频队列] 收到停止信号，退出队列处理');
@@ -79,6 +85,10 @@ class AudioPlayer {
         }
 
         this.isProcessingQueue = false;
+
+        if (this.onPlayEnd) {
+            this.onPlayEnd();
+        }
     }
 
     /**

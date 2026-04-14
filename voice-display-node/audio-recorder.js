@@ -19,6 +19,7 @@ class AudioRecorder {
         this.minSpeechDuration = options.minSpeechDuration || 300;
         
         this.recording = false;
+        this.paused = false;
         this.audioInput = null;
     }
 
@@ -93,6 +94,13 @@ class AudioRecorder {
 
                 this.audioInput.on('data', (data) => {
                     if (!this.recording) return;
+
+                    if (this.paused) {
+                        hasSpeech = false;
+                        speechSamples = [];
+                        silenceFrameCount = 0;
+                        return;
+                    }
 
                     bufferQueue = Buffer.concat([bufferQueue, data]);
 
@@ -173,6 +181,20 @@ class AudioRecorder {
      */
     isRecording() {
         return this.recording;
+    }
+
+    pause() {
+        this.paused = true;
+        console.log('[录音] 已暂停');
+    }
+
+    resume() {
+        this.paused = false;
+        console.log('[录音] 已恢复');
+    }
+
+    isPaused() {
+        return this.paused;
     }
 
     /**

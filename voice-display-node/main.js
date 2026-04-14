@@ -51,6 +51,7 @@ class VoiceDisplay {
         this.maxReconnectAttempts = 5;
         this.heartbeatInterval = null;
         this.heartbeatIntervalMs = 60 * 1000;
+        this.asrPollTimer = null;
     }
 
     /**
@@ -363,6 +364,7 @@ class VoiceDisplay {
         this.audio = new AudioPlayer();
 
         this.asr = new ServerASR(this.config.serverUrl);
+        await this.asr.checkReady();
         if (!this.asr.isReady()) {
             console.log('[警告] 服务器端 ASR 不可用，语音识别功能将不可用');
         }
@@ -377,13 +379,60 @@ class VoiceDisplay {
             console.log('[警告] 录音器不可用，语音识别功能将不可用');
         }
 
+        this.setupPlaybackPause();
+
         await this.connect();
 
         if (this.recorder && this.asr && this.asr.isReady()) {
             await this.startVoiceRecognition();
+        } else if (this.recorder && this.asr && !this.asr.isReady()) {
+            console.log('[ASR] 等待ASR就绪...');
+            this.waitForASRReady();
         }
 
         console.log('[启动] 语音显示端已启动');
+    }
+
+    /**
+     * 设置播放时暂停录音的回调
+     */
+    setupPlaybackPause() {
+        if (!this.audio || !this.recorder) {
+            return;
+        }
+
+        this.audio.onPlayStart = () => {
+            console.log('[录音] 播放开始，暂停录音');
+            this.recorder.pause();
+        };
+
+        this.audio.onPlayEnd = () => {
+            console.log('[录音] 播放结束，恢复录音');
+            this.recorder.resume();
+        };
+    }
+
+    /**
+     * 等待ASR就绪后自动开始录音
+     */
+    waitForASRReady() {
+        if (this.asrPollTimer) {
+            clearInterval(this.asrPollTimer);
+        }
+
+        this.asrPollTimer = setInterval(async () => {
+            try {
+                const ready = await this.asr.checkReady();
+                if (ready) {
+                    clearInterval(this.asrPollTimer);
+                    this.asrPollTimer = null;
+                    console.log('[ASR] 服务器端ASR已就绪，启动语音识别');
+                    await this.startVoiceRecognition();
+                }
+            } catch (error) {
+                console.error('[ASR] 检查ASR状态失败:', error.message);
+            }
+        }, 5000);
     }
 
     /**
@@ -392,6 +441,11 @@ class VoiceDisplay {
     stop() {
         this.stopController.abort();
         this.stopHeartbeat();
+
+        if (this.asrPollTimer) {
+            clearInterval(this.asrPollTimer);
+            this.asrPollTimer = null;
+        }
 
         if (this.recorder) {
             this.recorder.stop();
