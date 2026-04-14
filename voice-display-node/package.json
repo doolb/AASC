@@ -16,9 +16,10 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ws": "^8.16.0",
     "form-data": "^4.0.0",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "sherpa-onnx-node": "^1.12.38",
+    "ws": "^8.16.0"
   },
   "optionalDependencies": {
     "@picovoice/pvrecorder-node": "^1.2.8",

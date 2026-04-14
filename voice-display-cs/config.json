@@ -1,0 +1,5 @@
+{
+    "serverUrl": "https://192.168.1.39:8081",
+    "displayId": "voice-display-cs-1",
+    "vadThreshold": 0.01
+}
