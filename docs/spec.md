@@ -21,6 +21,8 @@
 | DataSnapshot | [data-snapshot.md](spec/data-snapshot.md) | 数据快照、IFile/IFileSystem接口、RealFileSystem/JsonFile实现 |
 | ViewBind | [viewbind.md](spec/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 | 显示端选择 | [display-selection.md](spec/display-selection.md) | 单选、全选、自适应选择模式 |
+| 设备列表 | [device-list.md](spec/device-list.md) | 设备列表组件，合并 DisplayList 和 DeviceTree |
+| 设备树 | [device-tree.md](spec/device-tree.md) | 树状结构设备列表（已合并到 device-list） |
 | 地图可视化 | [map-visualization.md](spec/map-visualization.md) | 执行者能力可视化、PixiJS渲染器、数据模型 |
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、回退策略 |
@@ -58,7 +60,7 @@
 | 搜索界面 | public/js/search.js | 搜索历史管理、手动搜索 |
 | 主入口 | public/js/main.js | 初始化、导航切换 |
 | 上传功能 | public/js/upload.js | 文件上传处理 |
-| 显示端列表 | public/js/display-list.js | 显示端选择器 |
+| 显示端列表 | public/js/device-list.js | 设备列表组件，支持列表/树形视图切换 |
 | TTS控制 | public/js/tts.js | TTS 前端控制 |
 | 本地ASR | public/js/sherpa-asr.js | sherpa-onnx-wasm 本地语音识别 |
 | Toast提示 | public/js/toast.js | 消息提示组件 |

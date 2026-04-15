@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 合并 DisplayList 和 DeviceTree 组件，支持视图切换
+  - 需求：将 display-list.js 和 device-tree.js 合并为一个组件，支持列表视图和树形视图切换
+  - 实现：
+    - 创建新的 device-list.js 组件，合并两个组件的所有功能
+    - 新增 viewMode 属性，支持 'tree' 和 'list' 两种视图模式
+    - 新增视图切换按钮，点击可在树形视图和列表视图之间切换
+    - 统一数据管理，保留选择模式（单选/全选/自适应）功能
+    - 保留树形视图的所有功能：设备设置、事件指令、浏览器信息、设备能力
+    - 兼容性：同时设置 window.DisplayList、window.DeviceList、window.DeviceTree
+  - 改动文件：
+    - `public/js/device-list.js` (新增，合并 display-list.js 和 device-tree.js)
+    - `public/js/display-list.js` (已删除)
+    - `public/js/device-tree.js` (已删除)
+    - `public/upload.html`
+    - `public/css/upload.css`
+    - `public/js/websocket.js`
+    - `public/js/main.js`
+    - `docs/spec/device-list.md` (新增)
 - ✅ 设备树添加设备能力下拉菜单
   - 需求：在设备列表的浏览器信息后面添加设备能力下拉菜单，可以查看和设置能力
   - 实现：

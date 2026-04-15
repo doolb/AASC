@@ -12,10 +12,10 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.onWebSocketOpen();
             }
-            if (window.DeviceTree) {
+            if (window.DeviceList) {
                 const host = window.location.hostname || '127.0.0.1';
                 const port = window.location.port || '8081';
-                window.DeviceTree.setServerInfo(host, port);
+                window.DeviceList.setServerInfo(host, port);
             }
         };
         
@@ -46,13 +46,8 @@ const WebSocketManager = {
         }
         
         if (data.type === 'displayList') {
-            if (window.DisplayList) {
-                window.DisplayList.list = data.list;
-                window.DisplayList.render();
-            }
-            
-            if (window.DeviceTree) {
-                window.DeviceTree.setDisplayList(data.list);
+            if (window.DeviceList) {
+                window.DeviceList.setDisplayList(data.list);
             }
             
             if (!window.currentDisplayId && data.list && data.list.length > 0) {

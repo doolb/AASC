@@ -63,12 +63,8 @@ const App = {
     init() {
         Sidebar.init();
         
-        if (window.DisplayList) {
-            window.DisplayList.init();
-        }
-        
-        if (window.DeviceTree) {
-            window.DeviceTree.init();
+        if (window.DeviceList) {
+            window.DeviceList.init();
         }
         
         if (window.Upload) {
