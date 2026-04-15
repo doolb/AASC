@@ -97,6 +97,15 @@ const DeviceTree = {
                         expanded: this.expandedNodes.has(`${display.id}-info`),
                         displayData: display,
                         children: this.buildInfoChildren(display)
+                    },
+                    {
+                        id: `${display.id}-capabilities`,
+                        label: '设备能力',
+                        icon: '⚡',
+                        type: 'capabilities',
+                        expanded: this.expandedNodes.has(`${display.id}-capabilities`),
+                        displayData: display,
+                        children: this.buildCapabilitiesChildren(display)
                     }
                 ]
             };
@@ -217,6 +226,44 @@ const DeviceTree = {
         return children;
     },
 
+    buildCapabilitiesChildren(display) {
+        const children = [];
+        const caps = display.capabilities || {
+            mediaRendering: true,
+            voicePlayback: true,
+            voiceRecording: true,
+            voiceRecognition: false,
+            displayText: true
+        };
+
+        const capabilityDefinitions = [
+            { key: 'mediaRendering', label: '媒体渲染', icon: '🖥️' },
+            { key: 'voicePlayback', label: '语音播放', icon: '🔊' },
+            { key: 'voiceRecording', label: '语音录音', icon: '🎙️' },
+            { key: 'voiceRecognition', label: '语音识别', icon: '🧠' },
+            { key: 'displayText', label: '文本显示', icon: '📝' }
+        ];
+
+        for (const capDef of capabilityDefinitions) {
+            children.push({
+                id: `${display.id}-cap-${capDef.key}`,
+                label: capDef.label,
+                icon: capDef.icon,
+                type: 'capability-item',
+                capabilityKey: capDef.key,
+                value: caps[capDef.key] !== undefined ? caps[capDef.key] : true,
+                editable: true,
+                inputType: 'select',
+                options: [
+                    { value: true, label: '启用' },
+                    { value: false, label: '禁用' }
+                ]
+            });
+        }
+
+        return children;
+    },
+
     render() {
         this.renderToContainer('deviceTree');
         this.renderToContainer('mediaDeviceTree');
@@ -326,6 +373,13 @@ const DeviceTree = {
             const eventEl = this.renderEventControl(node);
             if (eventEl) {
                 nodeEl.appendChild(eventEl);
+            }
+        }
+
+        if (node.type === 'capability-item') {
+            const capEl = this.renderCapabilityControl(node);
+            if (capEl) {
+                nodeEl.appendChild(capEl);
             }
         }
 
@@ -451,6 +505,32 @@ const DeviceTree = {
         return container;
     },
 
+    renderCapabilityControl(node) {
+        const container = document.createElement('div');
+        container.className = 'tree-capability-control';
+
+        const select = document.createElement('select');
+        select.className = 'tree-capability-select';
+        for (const opt of node.options) {
+            const option = document.createElement('option');
+            option.value = String(opt.value);
+            option.textContent = opt.label;
+            if (String(opt.value) === String(node.value)) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        }
+        select.addEventListener('change', (e) => {
+            e.stopPropagation();
+            const value = e.target.value === 'true';
+            this.updateCapability(node.id, node.capabilityKey, value);
+        });
+        select.addEventListener('click', (e) => e.stopPropagation());
+        container.appendChild(select);
+
+        return container;
+    },
+
     toggleNode(nodeId) {
         if (this.expandedNodes.has(nodeId)) {
             this.expandedNodes.delete(nodeId);
@@ -490,6 +570,43 @@ const DeviceTree = {
 
         if (window.showToast) {
             window.showToast(`${key} 已更新`, 'success');
+        }
+    },
+
+    updateCapability(nodeId, key, value) {
+        const displayId = nodeId.replace(`-cap-${key}`, '');
+        const display = this.displayList.find(d => d.id === displayId);
+        if (!display) return;
+
+        const capabilities = display.capabilities || {
+            mediaRendering: true,
+            voicePlayback: true,
+            voiceRecording: true,
+            voiceRecognition: false,
+            displayText: true
+        };
+
+        capabilities[key] = value;
+
+        if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'updateCapabilities',
+                displayId: displayId,
+                capabilities: capabilities
+            }));
+        }
+
+        display.capabilities = capabilities;
+
+        if (window.showToast) {
+            const labelMap = {
+                mediaRendering: '媒体渲染',
+                voicePlayback: '语音播放',
+                voiceRecording: '语音录音',
+                voiceRecognition: '语音识别',
+                displayText: '文本显示'
+            };
+            window.showToast(`${labelMap[key] || key} 已${value ? '启用' : '禁用'}`, 'success');
         }
     },
 

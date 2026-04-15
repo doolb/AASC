@@ -266,7 +266,8 @@ async fetch PUT /api/device-events/${encodeURIComponent(ip)}
     children: [
       settings 节点 (画面设置),
       events 节点 (事件指令),
-      info 节点 (浏览器信息)
+      info 节点 (浏览器信息),
+      capabilities 节点 (设备能力)
     ]
 
   serverNode.children.push(displayNode)
@@ -322,6 +323,40 @@ async fetch PUT /api/device-events/${encodeURIComponent(ip)}
   返回 [{ id: `${display.id}-noInfo`, label: '暂无信息', type: 'info-item' }]
 ```
 
+#### buildCapabilitiesChildren(display)
+
+```
+获取 display.capabilities 或使用默认值:
+  mediaRendering: true
+  voicePlayback: true
+  voiceRecording: true
+  voiceRecognition: false
+  displayText: true
+
+定义能力列表:
+  [
+    { key: 'mediaRendering', label: '媒体渲染', icon: '🖥️' },
+    { key: 'voicePlayback', label: '语音播放', icon: '🔊' },
+    { key: 'voiceRecording', label: '语音录音', icon: '🎙️' },
+    { key: 'voiceRecognition', label: '语音识别', icon: '🧠' },
+    { key: 'displayText', label: '文本显示', icon: '📝' }
+  ]
+
+遍历能力列表:
+  创建节点:
+    id: `${display.id}-cap-${key}`
+    label: 能力标签
+    icon: 能力图标
+    type: 'capability-item'
+    capabilityKey: 能力键名
+    value: 当前能力值
+    editable: true
+    inputType: 'select'
+    options: [{ value: true, label: '启用' }, { value: false, label: '禁用' }]
+
+返回能力节点列表
+```
+
 #### render()
 
 ```
@@ -374,6 +409,7 @@ async fetch PUT /api/device-events/${encodeURIComponent(ip)}
 
 如果 type === 'setting-item': 渲染 renderSettingControl(node)
 如果 type === 'event-item': 渲染 renderEventControl(node)
+如果 type === 'capability-item': 渲染 renderCapabilityControl(node)
 如果 status === 'online': 创建 span.tree-status.online
 如果 type === 'info-item': 添加 'tree-info-item' class
 如果 displayData 且 type === undefined: 添加点击事件 selectDisplay(node.id)
@@ -426,6 +462,20 @@ async fetch PUT /api/device-events/${encodeURIComponent(ip)}
 返回 container
 ```
 
+#### renderCapabilityControl(node)
+
+```
+创建 container div.tree-capability-control
+创建 select.tree-capability-select
+  遍历 options 创建 option 元素
+  value: String(opt.value)
+  根据 node.value 设置选中状态
+  change 事件: updateCapability(node.id, capabilityKey, value)
+  click 事件: stopPropagation
+
+返回 container
+```
+
 #### toggleNode(nodeId)
 
 ```
@@ -449,6 +499,19 @@ async fetch PUT /api/device-events/${encodeURIComponent(ip)}
 通过 WebSocket 发送控制指令:
   { type: 'control', displayId, action: key, value }
 更新本地 displayList 中对应 display 的值
+显示 toast 提示
+```
+
+#### updateCapability(nodeId, key, value)
+
+```
+从 nodeId 解析 displayId (移除 `-cap-${key}` 后缀)
+获取 display 数据
+获取当前能力配置或使用默认值
+更新指定能力的值
+通过 WebSocket 发送更新请求:
+  { type: 'updateCapabilities', displayId, capabilities }
+更新本地 displayList 中对应 display 的 capabilities
 显示 toast 提示
 ```
 

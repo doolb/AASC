@@ -43,12 +43,12 @@
         "mediaType": "image"
       },
       "rotation": 90,
-      "fit": "height",
+      "fit": "crop",
       "crop": {
         "x": 0,
-        "y": 23.587921183549987,
-        "width": 100,
-        "height": 32.63919572954438
+        "y": 12.904467594305604,
+        "width": 92.4662291403182,
+        "height": 67.90488429168133
       },
       "playlist": [],
       "volume": 0,

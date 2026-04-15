@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 设备树添加设备能力下拉菜单
+  - 需求：在设备列表的浏览器信息后面添加设备能力下拉菜单，可以查看和设置能力
+  - 实现：
+    - 在 device-tree.js 中添加设备能力节点，位于浏览器信息节点后面
+    - 添加 buildCapabilitiesChildren 方法构建能力子节点
+    - 添加 renderCapabilityControl 方法渲染能力下拉菜单
+    - 添加 updateCapability 方法通过 WebSocket 更新能力设置
+    - 支持的能力：媒体渲染、语音播放、语音录音、语音识别、文本显示
+  - 改动文件：
+    - `public/js/device-tree.js`
+    - `public/css/upload.css`
+    - `docs/spec/device-tree.md`
 - ✅ 控制端设备能力查看与设置功能完善
   - 需求：控制端可以查看和设置设备能力
   - 实现：
