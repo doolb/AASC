@@ -130,6 +130,12 @@ class MessageDispatcher {
         });
 
         this.registerRoute({
+            type: 'capabilities',
+            handler: 'display-render-actor',
+            priority: 10
+        });
+
+        this.registerRoute({
             type: 'voiceStatus',
             handler: 'display-render-actor',
             priority: 10

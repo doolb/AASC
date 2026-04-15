@@ -166,10 +166,16 @@ class VoiceCommandAgent extends BaseAgent {
 
         const displayClient = context.stateManager?.getDisplayClient(displayId);
         const displayIP = displayClient?.ip || 'unknown';
-        
-        console.log(`[语音输入] 显示端 ${displayId} (${displayIP}): ${voiceText}`);
+        const normalizedText = typeof voiceText === 'string' ? voiceText.trim() : '';
 
-        const result = await this.voiceCommand.processVoiceCommand(voiceText, displayId, null);
+        if (!normalizedText || /^[\s.!?，。！？、]+$/u.test(normalizedText)) {
+            console.log(`[语音输入] 忽略无效语音输入: ${voiceText}`);
+            return { success: true, ignored: true };
+        }
+        
+        console.log(`[语音输入] 显示端 ${displayId} (${displayIP}): ${normalizedText}`);
+
+        const result = await this.voiceCommand.enqueueVoiceInput(normalizedText, displayId, null);
         
         return { success: true, data: result };
     }
@@ -772,6 +778,28 @@ class DisplayRenderAgent extends BaseAgent {
         context.broadcastToControls(ackMsg);
 
         return { success: true };
+    }
+
+    async updateCapabilities(params, context) {
+        const { displayId, capabilities } = params;
+        const displayClient = context.stateManager?.getDisplayClient(displayId);
+        if (!displayClient) {
+            return { success: true, warning: `显示端不存在: ${displayId}` };
+        }
+
+        displayClient.state.capabilities = {
+            mediaRendering: true,
+            voicePlayback: true,
+            voiceRecording: true,
+            voiceRecognition: false,
+            displayText: true,
+            ...(capabilities || {})
+        };
+
+        context.broadcastToControls({ type: 'displayList', list: context.stateManager.getDisplayList() });
+        console.log(`[能力] 显示端 ${displayId} 声明能力:`, displayClient.state.capabilities);
+
+        return { success: true, capabilities: displayClient.state.capabilities };
     }
 }
 

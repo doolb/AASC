@@ -52,6 +52,7 @@ class VoiceDisplay {
         this.heartbeatInterval = null;
         this.heartbeatIntervalMs = 60 * 1000;
         this.asrPollTimer = null;
+        this.recordingEnabled = true;
     }
 
     /**
@@ -153,7 +154,7 @@ class VoiceDisplay {
                 console.log('[消息] 收到语音输入确认');
                 break;
             case 'control':
-                console.log('[消息] 收到控制指令:', data);
+                this.handleControl(data);
                 break;
             case 'media':
                 console.log('[消息] 收到媒体指令（子显示端不支持媒体显示）:', data.type);
@@ -166,6 +167,18 @@ class VoiceDisplay {
                 break;
             default:
                 console.log('[消息] 未知消息类型:', msgType);
+        }
+    }
+
+    handleControl(data) {
+        console.log('[消息] 收到控制指令:', data);
+
+        if (data.action === 'setRecording') {
+            if (data.enabled) {
+                this.enableRecording();
+            } else {
+                this.disableRecording();
+            }
         }
     }
 
@@ -345,6 +358,22 @@ class VoiceDisplay {
         });
     }
 
+    enableRecording() {
+        this.recordingEnabled = true;
+        if (this.recorder) {
+            this.recorder.resume();
+        }
+        console.log('[录音] 已通过远程指令开启录音');
+    }
+
+    disableRecording() {
+        this.recordingEnabled = false;
+        if (this.recorder) {
+            this.recorder.pause();
+        }
+        console.log('[录音] 已通过远程指令关闭录音');
+    }
+
     /**
      * 重连机制
      */
@@ -423,7 +452,9 @@ class VoiceDisplay {
 
         this.audio.onPlayEnd = () => {
             console.log('[录音] 播放结束，恢复录音');
-            this.recorder.resume();
+            if (this.recordingEnabled) {
+                this.recorder.resume();
+            }
         };
     }
 

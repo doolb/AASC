@@ -3,6 +3,39 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 语音输入排队、提醒确认增强与天气回退
+  - 需求：完成 todo 中语音输入排队、提醒确认、录音开关、提醒模板、天气城市回退与 capabilities 路由修复
+  - 实现：
+    - `core/voiceCommand.js` 新增 `enqueueVoiceInput`，按显示端串行处理语音输入
+    - 提醒确认文案加入今天/明天的 24 小时制时间，去除 5 秒自动确认
+    - 提醒确认新增防重入保护，避免重复确认重复添加
+    - 提醒创建成功后增加语音提示，取消时也有语音反馈
+    - 新增“开启录音 / 关闭录音 / 开始录音 / 停止录音”语音指令
+    - 新增提醒模板、前缀、后缀配置
+    - 天气查询新增城市白名单和默认城市回退，并清洗中文标点
+    - AASC 新增 `capabilities` 路由与状态更新逻辑
+    - Node 子显示端新增 `setRecording` 控制处理，支持暂停/恢复录音
+  - 改动文件：
+    - `core/voiceCommand.js`
+    - `aasc/agents/index.js`
+    - `aasc/actor-adapter.js`
+    - `aasc/components/message-dispatcher.js`
+    - `voice-display-node/main.js`
+    - `core/config.js`
+    - `server.js`
+    - `docs/spec/voiceCommand.md`
+    - `docs/spec/voice-display.md`
+    - `docs/spec/aasc.md`
+    - `docs/spec/config.md`
+    - `docs/design/reminder.md`
+    - `docs/design/aasc.md`
+    - `docs/task/2026-04-15_语音队列提醒确认与天气回退.md`
+    - `docs/todo.md`
+
+### Bug 修复
+- ✅ 修复 AASC 无法处理 capabilities 消息
+  - 问题：子显示端声明能力后，AASC 报错 `No handler found for type: capabilities`
+  - 修复：在 message dispatcher、actor adapter、display render agent 中补齐 `capabilities` 处理链路
 - ✅ 显示端分布式能力
   - 需求：每个显示端可以声明自身能力，服务端根据能力进行智能路由
   - 实现：
@@ -1405,7 +1438,7 @@
   - 改动文件：public/js/chat.js
 - ✅ 已完成 [2026-03-29][2026-03-29] 添加天气查询功能
   - 使用 wttr.in API 查询天气
-  - 支持城市名称查询，默认北京
+  - 支持城市名称查询，默认ip地址
   - 改动文件：core/voiceCommand.js, public/js/chat.js
 
 ### 2026-03-29 优化系统帮助指令

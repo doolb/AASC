@@ -78,16 +78,27 @@ extractReminderContent(text):
 
 handleReminderCommand(text, displayId):
     解析时间和重复规则
-    生成确认文本
-    创建待确认记录 (5秒过期)
+    使用 reminderTemplate/reminderTemplatePrefix/reminderTemplateSuffix 拼接提醒内容
+    生成确认文本，明确播报相对时间 + 今天/明天的24小时制时间
+    创建待确认记录 (30秒过期)
     生成 TTS 语音播放确认
     发送确认弹窗到显示端
-    5秒后自动确认
+    等待用户明确确认，不再超时自动确认
 
 executeReminderConfirmation(confirmationId, confirmed):
+    如果 confirmation.confirmedAt 已存在:
+        忽略重复确认
     如果确认:
         调用 reminder.addReminder() 添加提醒
+        语音播报“提醒添加成功”并带上24小时制时间
+    否则:
+        语音播报“已取消这次提醒”
     删除待确认记录
+
+enqueueVoiceInput(text, displayId, callbacks):
+    以 displayId 作为队列键
+    将当前语音输入串行挂到上一个 Promise 后面
+    当前任务结束后清理空队列
 
 handleTodayReminders(displayId):
     获取所有提醒
@@ -159,7 +170,9 @@ handleTimeAnnounceCommand(text, displayId):
 handleWeatherCommand(text, displayId):
     提取城市名称:
         移除 "天气"、"今天"、"明天"、"后天" 等关键词
-        如果没有城市名称: 默认 "Beijing"
+        清除全角句号、逗号、问号等无效标点
+        如果城市不在 weatherCities 配置里:
+            回退到 defaultWeatherCity
     
     构建天气API URL:
         URL: https://wttr.in/{city}?format=j1&lang=zh
@@ -179,7 +192,10 @@ handleWeatherCommand(text, displayId):
         humidity: 湿度
     
     生成天气文本:
-        "{cityName}当前天气：{weather}，温度{temp}度，湿度{humidity}%"
+        如果发生默认城市回退:
+            "没有找到{requestedCity}，为你播报默认城市{cityName}的天气。{cityName}当前天气：..."
+        否则:
+            "{cityName}当前天气：{weather}，温度{temp}度，湿度{humidity}%"
     
     如果 displayId 存在:
         生成 TTS 并播放
@@ -232,6 +248,10 @@ findAssistant(name):
 processVoiceCommand(text, displayId, callbacks):
     如果包含 "拒绝"/"取消":
         取消待确认操作
+    否则如果是 "确认"/"确认添加"/"是"/"好的":
+        确认最近一条 reminder 待确认记录
+    否则如果包含 "开启录音"/"开始录音"/"关闭录音"/"停止录音":
+        发送 setRecording 控制消息到显示端
     否则如果包含 "提醒":
         调用 handleReminderCommand()
     否则如果包含 "报时"/"现在几点":

@@ -1755,7 +1755,7 @@ async function handleControlMessageFallback(data, ws) {
                     })();
                     return;
                 } else if (data.type === 'confirmVoiceCommand') {
-                    voiceCommand.executeReminderConfirmation(data.confirmationId, data.confirmed);
+                    await voiceCommand.executeReminderConfirmation(data.confirmationId, data.confirmed);
                     return;
                 } else if (data.type === 'getSearchHistory') {
                     ws.send(JSON.stringify({

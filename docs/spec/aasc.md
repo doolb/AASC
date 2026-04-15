@@ -993,8 +993,30 @@ wsSystem.use(async (message, context) => {
 | browserInfo | display-render-actor | DisplayRenderAgent |
 | voiceInput | voice-command-actor | VoiceCommandAgent |
 | commandAck | display-render-actor | DisplayRenderAgent |
+| capabilities | display-render-actor | DisplayRenderAgent |
 | getSearchHistory | search-actor | SearchAgent |
 | getAssistantConfig | voice-command-actor | VoiceCommandAgent |
+
+### 语音输入与能力声明补充
+
+```javascript
+VoiceCommandAgent.processVoiceInput(params, context):
+    读取 text/fullText
+    如果内容为空或只包含标点:
+        直接忽略
+    读取 displayId 对应的显示端 IP
+    打印 `[语音输入] 显示端 {displayId} ({displayIP}): {text}`
+    调用 voiceCommand.enqueueVoiceInput()，保证同一显示端语音串行执行
+
+DisplayRenderAgent.updateCapabilities(params, context):
+    读取 displayId / capabilities
+    与默认能力集合合并
+    写回 stateManager.displayClient.state.capabilities
+    广播最新 displayList 给控制端
+
+MessageDispatcher:
+    注册 capabilities -> display-render-actor 路由
+```
 
 ### 初始化流程
 

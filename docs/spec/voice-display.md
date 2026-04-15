@@ -81,7 +81,11 @@ handleMessage(msgType, data):
         play -> 播报文本
         stop -> 停止播放
     "voiceInput": 记录确认
-    "control": 记录控制指令
+    "control":
+        如果 action == "setRecording":
+            enabled == true -> 恢复录音
+            enabled == false -> 暂停录音
+        其余情况记录控制指令
     "media": 记录媒体指令（子显示端不支持媒体显示）
 ```
 
@@ -237,6 +241,16 @@ Pause():
     加锁
     设置 paused = true
     解锁
+
+Node.js VoiceDisplay:
+    recordingEnabled: boolean
+    enableRecording():
+        recordingEnabled = true
+        recorder.resume()
+    disableRecording():
+        recordingEnabled = false
+        recorder.pause()
+    播放结束时仅在 recordingEnabled == true 时恢复录音
 
 Resume():
     加锁

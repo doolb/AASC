@@ -22,6 +22,16 @@ class Config extends DataSnapshot {
             defaultVoice: 'Microsoft Xiaoxiao',
             defaultSpeed: 0
         },
+        voiceCommand: {
+            defaultWeatherCity: '',
+            weatherCities: [
+                '北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '天津',
+                '武汉', '西安', '长沙', '郑州', '青岛', '厦门', '福州', '宁波', '无锡', '合肥'
+            ],
+            reminderTemplate: '{content}',
+            reminderTemplatePrefix: '',
+            reminderTemplateSuffix: ''
+        },
         displayStates: {},
         deviceEvents: {}
     };

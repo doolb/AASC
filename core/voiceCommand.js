@@ -15,15 +15,31 @@ let broadcastToControls = null;
 let mediaLibraryManager = null;
 let muteAllDisplays = null;
 let unmuteAllDisplays = null;
+let voiceInputQueues = new Map();
+
+const DEFAULT_WEATHER_CITIES = [
+    '北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '天津',
+    '武汉', '西安', '长沙', '郑州', '青岛', '厦门', '福州', '宁波', '无锡', '合肥'
+];
 
 let assistantConfig = {
     defaultName: '小爱',
     assistants: [
         { name: '小爱', template: '你是小爱，一个友好、活泼的智能助手。请用简洁、亲切的语言回答问题。' }
-    ]
+    ],
+    defaultWeatherCity: '',
+    weatherCities: DEFAULT_WEATHER_CITIES,
+    reminderTemplate: '{content}',
+    reminderTemplatePrefix: '',
+    reminderTemplateSuffix: ''
 };
 
 function init(config = {}) {
+    assistantConfig = {
+        ...assistantConfig,
+        ...config
+    };
+
     if (config.assistantName) {
         assistantConfig.defaultName = config.assistantName;
     }
@@ -84,6 +100,106 @@ function setMuteFunctions(muteFunc, unmuteFunc) {
 
 function setMediaLibrary(manager) {
     mediaLibraryManager = manager;
+}
+
+function buildDisplayAudioUrl(audioPath) {
+    const fileName = path.basename(audioPath);
+    return `/uploads/tts/${fileName}`;
+}
+
+async function speakToDisplay(displayId, text, action = 'response', extra = {}) {
+    if (!displayId || !sendToDisplay) {
+        return false;
+    }
+
+    const audioPath = await tts.generateTTS(text);
+    sendToDisplay(displayId, {
+        type: 'voiceCommand',
+        action,
+        text,
+        audioUrl: buildDisplayAudioUrl(audioPath),
+        ...extra
+    });
+
+    return true;
+}
+
+function formatReminderContent(content) {
+    const template = assistantConfig.reminderTemplate || '{content}';
+    const prefix = assistantConfig.reminderTemplatePrefix || '';
+    const suffix = assistantConfig.reminderTemplateSuffix || '';
+    return `${prefix}${template.replace(/\{content\}/g, content)}${suffix}`.trim();
+}
+
+function formatDateTimeLabel(date) {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const targetStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    const diffDays = Math.round((targetStart - todayStart) / (24 * 60 * 60 * 1000));
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+
+    if (diffDays === 0) {
+        return `今天${hours}:${minutes}`;
+    }
+    if (diffDays === 1) {
+        return `明天${hours}:${minutes}`;
+    }
+
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${hours}:${minutes}`;
+}
+
+function sanitizeCityName(text) {
+    if (!text) {
+        return '';
+    }
+
+    return text
+        .replace(/天气|今天|明天|后天|明日|后日|现在|当前|查询|播报|一下|怎么样|如何|情况/g, '')
+        .replace(/[，。！？、,.!?；;:“”"'‘’]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function resolveWeatherCity(text) {
+    const requestedCity = sanitizeCityName(text);
+    const cityList = Array.isArray(assistantConfig.weatherCities) && assistantConfig.weatherCities.length > 0
+        ? assistantConfig.weatherCities
+        : DEFAULT_WEATHER_CITIES;
+    const defaultCity = assistantConfig.defaultWeatherCity;
+
+    if (!requestedCity) {
+        return {
+            city: defaultCity,
+            requestedCity: '',
+            usedDefault: true
+        };
+    }
+
+    const matchedCity = cityList.find(item => item === requestedCity || item.includes(requestedCity) || requestedCity.includes(item));
+    if (matchedCity) {
+        return {
+            city: matchedCity,
+            requestedCity,
+            usedDefault: false
+        };
+    }
+
+    return {
+        city: defaultCity,
+        requestedCity,
+        usedDefault: true
+    };
+}
+
+function getPendingConfirmationByDisplay(displayId, type) {
+    for (const [id, confirmation] of pendingConfirmations) {
+        if (confirmation.displayId === displayId && (!type || confirmation.type === type)) {
+            return [id, confirmation];
+        }
+    }
+
+    return null;
 }
 
 function parseTimeExpression(text) {
@@ -159,25 +275,27 @@ function extractReminderContent(text) {
     if (!content) {
         content = '该做事了';
     }
-    
-    return content;
+
+    return formatReminderContent(content);
 }
 
 async function handleReminderCommand(text, displayId) {
     const { targetTime, timeDescription } = parseTimeExpression(text);
     const { type: repeatType, description: repeatDescription } = parseRepeatRule(text);
     const content = extractReminderContent(text);
+    const absoluteTimeLabel = formatDateTimeLabel(targetTime);
     
     const hours = targetTime.getHours().toString().padStart(2, '0');
     const minutes = targetTime.getMinutes().toString().padStart(2, '0');
     const timeStr = `${hours}:${minutes}`;
     
-    const confirmText = `好的，我将${repeatDescription === '一次性' ? '' : repeatDescription}在${timeDescription}提醒你：${content}。是否确认？`;
+    const confirmText = `好的，我将${repeatDescription === '一次性' ? '' : repeatDescription}在${timeDescription}，也就是${absoluteTimeLabel}提醒你：${content}。是否确认？`;
     
     const confirmationId = `reminder_${Date.now()}`;
     pendingConfirmations.set(confirmationId, {
         type: 'reminder',
         displayId: displayId,
+        confirmedAt: null,
         data: {
             content: content,
             time: timeStr,
@@ -190,42 +308,57 @@ async function handleReminderCommand(text, displayId) {
             },
             repeatCount: 3
         },
-        expiresAt: Date.now() + 5000
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 30000
     });
     
     try {
-        const audioPath = await tts.generateTTS(confirmText);
-        const fileName = path.basename(audioPath);
-        
         sendToDisplay(displayId, {
             type: 'voiceCommand',
             action: 'confirm',
             confirmationId: confirmationId,
             text: confirmText,
-            audioUrl: `/uploads/tts/${fileName}`
+            audioUrl: buildDisplayAudioUrl(await tts.generateTTS(confirmText))
         });
-        
-        setTimeout(() => {
-            const confirmation = pendingConfirmations.get(confirmationId);
-            if (confirmation && confirmation.expiresAt <= Date.now()) {
-                executeReminderConfirmation(confirmationId, true);
-            }
-        }, 5000);
     } catch (err) {
         console.error('[语音命令] 提醒确认语音生成失败:', err.message);
     }
 }
 
-function executeReminderConfirmation(confirmationId, confirmed) {
+async function executeReminderConfirmation(confirmationId, confirmed) {
     const confirmation = pendingConfirmations.get(confirmationId);
     if (!confirmation) return false;
+
+    if (confirmation.confirmedAt) {
+        console.log(`[语音命令] 忽略重复确认: ${confirmationId}`);
+        return false;
+    }
+
+    confirmation.confirmedAt = Date.now();
     
     pendingConfirmations.delete(confirmationId);
     
     if (confirmed) {
         const newReminder = reminder.addReminder(confirmation.data);
         console.log(`[语音命令] 提醒已添加: ${newReminder.time} - ${newReminder.content}`);
+        if (confirmation.displayId) {
+            try {
+                const nextTrigger = newReminder.nextTrigger ? new Date(newReminder.nextTrigger) : new Date();
+                const successText = `提醒添加成功，时间是${formatDateTimeLabel(nextTrigger)}，内容是${newReminder.content}`;
+                await speakToDisplay(confirmation.displayId, successText, 'response');
+            } catch (err) {
+                console.error('[语音命令] 提醒成功语音生成失败:', err.message);
+            }
+        }
         return true;
+    }
+
+    if (confirmation.displayId) {
+        try {
+            await speakToDisplay(confirmation.displayId, '好的，已取消这次提醒', 'response');
+        } catch (err) {
+            console.error('[语音命令] 提醒取消语音生成失败:', err.message);
+        }
     }
     
     return false;
@@ -292,6 +425,43 @@ async function handleTimeAnnounceCommand(text, displayId) {
             console.error('[语音命令] 报时语音生成失败:', err.message);
         }
     }
+}
+
+async function handleRecordingCommand(text, displayId) {
+    if (!displayId || !sendToDisplay) {
+        return false;
+    }
+
+    const shouldEnable = text.includes('开启录音') || text.includes('开始录音');
+    const shouldDisable = text.includes('关闭录音') || text.includes('停止录音');
+
+    if (!shouldEnable && !shouldDisable) {
+        return false;
+    }
+
+    sendToDisplay(displayId, {
+        type: 'control',
+        action: 'setRecording',
+        enabled: shouldEnable
+    });
+
+    try {
+        await speakToDisplay(displayId, shouldEnable ? '已开启录音' : '已关闭录音', 'response');
+    } catch (err) {
+        console.error('[语音命令] 录音指令语音生成失败:', err.message);
+    }
+
+    return true;
+}
+
+async function handleAffirmCommand(displayId) {
+    const pending = getPendingConfirmationByDisplay(displayId, 'reminder');
+    if (!pending) {
+        return false;
+    }
+
+    const [confirmationId] = pending;
+    return executeReminderConfirmation(confirmationId, true);
 }
 
 async function handleTodayReminders(displayId) {
@@ -682,11 +852,11 @@ async function handlePlaySelection(confirmationId, selection, displayId) {
 
 async function handleWeatherCommand(text, displayId, callbacks) {
     const axios = require('axios');
-    
-    let city = text.replace(/天气|今天|明天|后天|明日|后日|现在|当前/g, '').trim();
-    
+    const weatherRequest = resolveWeatherCity(text);
+    const city = weatherRequest.city;
+    console.log(`[语音命令] 天气查询城市: ${city}`);
     const tryFetchWeather = async (retryCount = 0) => {
-        const url = city 
+        const url = city.length > 0
             ? `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=zh`
             : `https://wttr.in/?format=j1&lang=zh`;
         
@@ -723,13 +893,19 @@ async function handleWeatherCommand(text, displayId, callbacks) {
             throw lastError;
         }
         
-        const current = data.current_condition[0];
-        const cityName = data.nearest_area[0].areaName[0].value;
+        const current = data.current_condition?.[0];
+        const cityName = data.nearest_area?.[0]?.areaName?.[0]?.value || city;
+        if (!current) {
+            throw new Error('天气数据为空');
+        }
         const temp = current.temp_C;
         const weather = current.lang_zh ? current.lang_zh[0].value : current.weatherDesc[0].value;
         const humidity = current.humidity;
-        
-        const weatherText = `${cityName}当前天气：${weather}，温度${temp}度，湿度${humidity}%`;
+
+        const fallbackText = weatherRequest.usedDefault && weatherRequest.requestedCity
+            ? `没有找到${weatherRequest.requestedCity}，为你播报默认城市${cityName}的天气。`
+            : '';
+        const weatherText = `${fallbackText}${cityName}当前天气：${weather}，温度${temp}度，湿度${humidity}%`;
         
         if (callbacks && callbacks.onResult) {
             callbacks.onResult(weatherText);
@@ -972,6 +1148,27 @@ function getAssistantConfig() {
 function setAssistantConfig(config) {
     if (config.defaultName) assistantConfig.defaultName = config.defaultName;
     if (config.assistants) assistantConfig.assistants = config.assistants;
+    if (config.defaultWeatherCity) assistantConfig.defaultWeatherCity = config.defaultWeatherCity;
+    if (config.weatherCities) assistantConfig.weatherCities = config.weatherCities;
+    if (config.reminderTemplate !== undefined) assistantConfig.reminderTemplate = config.reminderTemplate;
+    if (config.reminderTemplatePrefix !== undefined) assistantConfig.reminderTemplatePrefix = config.reminderTemplatePrefix;
+    if (config.reminderTemplateSuffix !== undefined) assistantConfig.reminderTemplateSuffix = config.reminderTemplateSuffix;
+}
+
+function enqueueVoiceInput(text, displayId, callbacks) {
+    const queueKey = displayId || 'default';
+    const previousTask = voiceInputQueues.get(queueKey) || Promise.resolve();
+    const currentTask = previousTask
+        .catch(() => undefined)
+        .then(() => processVoiceCommand(text, displayId, callbacks));
+
+    voiceInputQueues.set(queueKey, currentTask.finally(() => {
+        if (voiceInputQueues.get(queueKey) === currentTask) {
+            voiceInputQueues.delete(queueKey);
+        }
+    }));
+
+    return currentTask;
 }
 
 async function processVoiceCommand(text, displayId, callbacks) {
@@ -1004,6 +1201,20 @@ async function processVoiceCommand(text, displayId, callbacks) {
             } catch (err) {
                 console.error('[语音命令] 取消语音生成失败:', err.message);
             }
+            return;
+        }
+    }
+
+    if (trimmedText === '确认' || trimmedText === '确认添加' || trimmedText === '是' || trimmedText === '好的') {
+        const confirmed = await handleAffirmCommand(displayId);
+        if (confirmed) {
+            return;
+        }
+    }
+
+    if (trimmedText.includes('开启录音') || trimmedText.includes('开始录音') || trimmedText.includes('关闭录音') || trimmedText.includes('停止录音')) {
+        const handledRecording = await handleRecordingCommand(trimmedText, displayId);
+        if (handledRecording) {
             return;
         }
     }
@@ -1148,6 +1359,7 @@ module.exports = {
     setMuteFunctions,
     setMediaLibrary,
     processVoiceCommand,
+    enqueueVoiceInput,
     handleReminderCommand,
     handleTimeAnnounceCommand,
     handleTodayReminders,

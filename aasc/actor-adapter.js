@@ -194,13 +194,14 @@ class ActorFactory {
         
         return AgentActorAdapter.createFromAgent(agent, {
             name: 'display-render-actor',
-            supportedTypes: ['canvasSize', 'browserInfo', 'voiceStatus', 'commandAck'],
+            supportedTypes: ['canvasSize', 'browserInfo', 'voiceStatus', 'commandAck', 'capabilities'],
             silentTypes: ['voiceStatus'],
             actionMap: {
                 'canvasSize': 'updateCanvasSize',
                 'browserInfo': 'updateBrowserInfo',
                 'voiceStatus': 'updateVoiceStatus',
-                'commandAck': 'handleCommandAck'
+                'commandAck': 'handleCommandAck',
+                'capabilities': 'updateCapabilities'
             },
             ...options
         });
