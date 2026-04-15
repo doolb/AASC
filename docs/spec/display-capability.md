@@ -375,6 +375,10 @@ function renderCapabilityIcons(capabilities):
     icons += `<span class="cap-icon ${capabilities.voiceRecognition ? 'active' : 'inactive'}" 
                 title="语音识别${capabilities.voiceRecognition ? '' : '（不可用）'}">🧠</span>`
     
+    // 文本显示
+    icons += `<span class="cap-icon ${capabilities.displayText ? 'active' : 'inactive'}" 
+                title="文本显示${capabilities.displayText ? '' : '（不可用）'}">📝</span>`
+    
     return icons
 ```
 

@@ -165,6 +165,7 @@ const DisplayList = {
                     <span class="cap-icon ${caps.voicePlayback ? 'active' : 'inactive'}" title="语音播放${caps.voicePlayback ? '' : '（不可用）'}">🔊</span>
                     <span class="cap-icon ${caps.voiceRecording ? 'active' : 'inactive'}" title="语音录音${caps.voiceRecording ? '' : '（不可用）'}">🎙️</span>
                     <span class="cap-icon ${caps.voiceRecognition ? 'active' : 'inactive'}" title="语音识别${caps.voiceRecognition ? '' : '（不可用）'}">🧠</span>
+                    <span class="cap-icon ${caps.displayText ? 'active' : 'inactive'}" title="文本显示${caps.displayText ? '' : '（不可用）'}">📝</span>
                 `;
             }
             
