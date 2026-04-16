@@ -16,6 +16,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "blessed": "^0.1.81",
     "form-data": "^4.0.0",
     "node-fetch": "^2.7.0",
     "sherpa-onnx-node": "^1.12.38",

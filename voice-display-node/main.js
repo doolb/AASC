@@ -18,19 +18,39 @@ const path = require('path');
 const URL = require('url');
 const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
+const SubDisplayTUI = require('./tui');
+
+const useTUI = !process.argv.includes('--no-tui');
+const tui = new SubDisplayTUI({ enabled: useTUI });
+
+function log(category, message) {
+    if (useTUI) {
+        tui.addLog(category, message);
+    } else {
+        const timestamp = new Date().toTimeString().split(' ')[0];
+        console.log(`${timestamp} [${category}] ${message}`);
+    }
+}
+
+function logError(category, message) {
+    if (useTUI) {
+        tui.addLog(category, message);
+    }
+    console.error(`[${category}] ${message}`);
+}
 
 let AudioRecorder;
 try {
     AudioRecorder = require('./audio-recorder-pv');
-    console.log('[初始化] 使用 PvRecorder 录音器 (无需 Python)');
+    log('启动', '使用 PvRecorder 录音器 (无需 Python)');
 } catch (e) {
-    console.log('[初始化] PvRecorder 不可用，尝试 naudiodon...');
+    log('启动', 'PvRecorder 不可用，尝试 naudiodon...');
     try {
         AudioRecorder = require('./audio-recorder');
-        console.log('[初始化] 使用 naudiodon 录音器');
+        log('启动', '使用 naudiodon 录音器');
     } catch (e2) {
-        console.warn('[初始化] 警告: 没有可用的录音器，语音识别功能将不可用');
-        console.warn('[初始化] 请安装 @picovoice/pvrecorder-node (推荐) 或 naudiodon');
+        logError('启动', '警告: 没有可用的录音器，语音识别功能将不可用');
+        logError('启动', '请安装 @picovoice/pvrecorder-node (推荐) 或 naudiodon');
         AudioRecorder = null;
     }
 }
@@ -53,6 +73,30 @@ class VoiceDisplay {
         this.heartbeatIntervalMs = 60 * 1000;
         this.asrPollTimer = null;
         this.recordingEnabled = true;
+        this.lastRecognition = '';
+    }
+
+    updateTUIConnectionState() {
+        if (!useTUI) return;
+        tui.updateConnectionState({
+            connected: this.connected,
+            serverUrl: this.config.serverUrl,
+            displayId: this.config.displayId,
+            heartbeatStatus: this.heartbeatInterval ? '运行中' : '未启动',
+            reconnectAttempts: this.reconnectAttempts,
+            maxReconnectAttempts: this.maxReconnectAttempts
+        });
+    }
+
+    updateTUIRecordingState() {
+        if (!useTUI) return;
+        tui.updateRecordingState({
+            recordingEnabled: this.recordingEnabled,
+            asrReady: this.asr ? this.asr.isReady() : false,
+            vadStatus: this.recorder ? '运行中' : '未启动',
+            playQueueSize: this.audio ? this.audio.queueLength || 0 : 0,
+            lastRecognition: this.lastRecognition || '-'
+        });
     }
 
     /**
@@ -64,7 +108,7 @@ class VoiceDisplay {
         const wsProtocol = parsedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${parsedUrl.host}/display?subDisplay=true&displayId=${encodeURIComponent(this.config.displayId)}`;
 
-        console.log(`[连接] 正在连接到 ${wsUrl}`);
+        log('连接', `正在连接到 ${wsUrl}`);
 
         return new Promise((resolve, reject) => {
             const wsOptions = wsProtocol === 'wss:' ? {
@@ -77,9 +121,10 @@ class VoiceDisplay {
                 this.connected = true;
                 this.reconnectAttempts = 0;
 
-                console.log(`[连接] 已连接，显示端ID: ${this.config.displayId}`);
+                log('连接', `已连接，显示端ID: ${this.config.displayId}`);
                 this.startHeartbeat();
                 this.declareCapabilities();
+                this.updateTUIConnectionState();
                 resolve();
             });
 
@@ -88,18 +133,19 @@ class VoiceDisplay {
                     const msg = JSON.parse(data.toString());
                     this.handleMessage(msg.type, msg);
                 } catch (error) {
-                    console.error('[消息] 解析消息失败:', error.message);
+                    logError('错误', `解析消息失败: ${error.message}`);
                 }
             });
 
             this.ws.on('close', () => {
                 this.connected = false;
-                console.log('[连接] 连接已关闭');
+                log('断开', '连接已关闭');
+                this.updateTUIConnectionState();
                 this.reconnect();
             });
 
             this.ws.on('error', (error) => {
-                console.error('[连接] WebSocket错误:', error.message);
+                logError('连接', `WebSocket错误: ${error.message}`);
                 if (!this.connected) {
                     reject(error);
                 }
@@ -128,7 +174,7 @@ class VoiceDisplay {
                 displayText: false
             }
         });
-        console.log('[能力] 已声明子显示端能力');
+        log('能力', '已声明子显示端能力');
     }
 
     /**
@@ -139,25 +185,25 @@ class VoiceDisplay {
     handleMessage(msgType, data) {
         switch (msgType) {
             case 'displayId':
-                console.log(`[消息] 收到显示端ID: ${data.id}, IP: ${data.ip}`);
+                log('连接', `收到显示端ID: ${data.id}, IP: ${data.ip}`);
                 break;
             case 'serverStartTime':
-                console.log(`[消息] 服务器启动时间: ${data.time}`);
+                log('系统', `服务器启动时间: ${data.time}`);
                 break;
             case 'restoreState':
-                console.log(`[消息] 收到恢复状态`);
+                log('系统', '收到恢复状态');
                 break;
             case 'tts':
                 this.handleTTS(data);
                 break;
             case 'voiceInput':
-                console.log('[消息] 收到语音输入确认');
+                log('语音', '收到语音输入确认');
                 break;
             case 'control':
                 this.handleControl(data);
                 break;
             case 'media':
-                console.log('[消息] 收到媒体指令（子显示端不支持媒体显示）:', data.type);
+                log('系统', `收到媒体指令（子显示端不支持媒体显示）: ${data.type}`);
                 break;
             case 'reminder':
                 this.handleReminder(data);
@@ -166,12 +212,12 @@ class VoiceDisplay {
                 this.handleVoiceCommand(data);
                 break;
             default:
-                console.log('[消息] 未知消息类型:', msgType);
+                log('系统', `未知消息类型: ${msgType}`);
         }
     }
 
     handleControl(data) {
-        console.log('[消息] 收到控制指令:', data);
+        log('系统', `收到控制指令: ${JSON.stringify(data)}`);
 
         if (data.action === 'setRecording') {
             if (data.enabled) {
@@ -194,7 +240,7 @@ class VoiceDisplay {
                 const audioUrl = data.audioUrl;
                 const text = data.text;
                 if (text) {
-                    console.log(`[TTS] 播报: ${text}`);
+                    log('TTS', `播报: ${text}`);
                 }
                 if (audioUrl) {
                     await this.playAudioFromURL(audioUrl);
@@ -203,7 +249,7 @@ class VoiceDisplay {
             case 'play':
                 const playText = data.text;
                 if (playText) {
-                    console.log(`[TTS] 播报文本: ${playText}`);
+                    log('TTS', `播报文本: ${playText}`);
                 }
                 break;
             case 'stop':
@@ -211,7 +257,7 @@ class VoiceDisplay {
                     this.audio.stop();
                     this.audio.clearQueue();
                 }
-                console.log('[TTS] 停止播报并清空队列');
+                log('TTS', '停止播报并清空队列');
                 break;
         }
     }
@@ -226,15 +272,15 @@ class VoiceDisplay {
         switch (action) {
             case 'voice':
                 if (data.audioUrl) {
-                    console.log(`[提醒] 播报: ${data.text || ''}`);
+                    log('提醒', `播报: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
                 break;
             case 'popup':
-                console.log(`[提醒] 弹窗: ${data.content || ''}`);
+                log('提醒', `弹窗: ${data.content || ''}`);
                 break;
             default:
-                console.log('[提醒] 未知动作:', action);
+                log('提醒', `未知动作: ${action}`);
         }
     }
 
@@ -248,37 +294,37 @@ class VoiceDisplay {
         switch (action) {
             case 'confirm':
                 if (data.audioUrl) {
-                    console.log(`[语音命令] 确认: ${data.text || ''}`);
+                    log('语音', `确认: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
                 break;
             case 'response':
                 if (data.audioUrl) {
-                    console.log(`[语音命令] 响应: ${data.text || ''}`);
+                    log('语音', `响应: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
                 break;
             case 'searchResult':
                 if (data.audioUrl) {
-                    console.log(`[语音命令] 搜索结果: ${data.text || ''}`);
+                    log('语音', `搜索结果: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
                 break;
             case 'weatherResult':
                 if (data.audioUrl) {
-                    console.log(`[语音命令] 天气结果: ${data.text || ''}`);
+                    log('语音', `天气结果: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
                 break;
             case 'playChoices':
                 if (data.audioUrl) {
-                    console.log(`[语音命令] 播放选项: ${data.text || ''}`);
+                    log('语音', `播放选项: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
                 break;
             default:
                 if (data.audioUrl) {
-                    console.log(`[语音命令] ${action}: ${data.text || ''}`);
+                    log('语音', `${action}: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
         }
@@ -290,7 +336,7 @@ class VoiceDisplay {
      */
     async playAudioFromURL(audioUrl) {
         if (!this.audio) {
-            console.log('[TTS] 音频播放器未初始化');
+            log('TTS', '音频播放器未初始化');
             return;
         }
 
@@ -299,7 +345,7 @@ class VoiceDisplay {
         try {
             this.audio.queueURL(fullURL);
         } catch (error) {
-            console.error('[TTS] 加入播放队列失败:', error.message);
+            logError('TTS', `加入播放队列失败: ${error.message}`);
         }
     }
 
@@ -317,7 +363,7 @@ class VoiceDisplay {
             fullText: text
         });
 
-        console.log(`[语音] 已发送: ${text}`);
+        log('语音', `已发送: ${text}`);
     }
 
     /**
@@ -326,35 +372,37 @@ class VoiceDisplay {
      */
     async startVoiceRecognition() {
         if (!AudioRecorder) {
-            console.log('[语音] 录音器不可用，语音识别功能将不可用');
+            logError('语音', '录音器不可用，语音识别功能将不可用');
             return;
         }
 
         if (!this.asr || !this.asr.isReady()) {
-            console.log('[语音] 服务器端 ASR 不可用，语音识别功能将不可用');
+            logError('语音', '服务器端 ASR 不可用，语音识别功能将不可用');
             return;
         }
 
-        console.log('[语音] 开始语音识别（服务器端ASR）...');
+        log('语音', '开始语音识别（服务器端ASR）...');
 
         const onAudioData = async (wavData) => {
             try {
                 const result = await this.asr.recognize(wavData);
                 if (result.status === 'success' && result.text) {
-                    console.log(`[语音] 识别结果: ${result.text}`);
+                    log('语音', `识别结果: ${result.text}`);
+                    this.lastRecognition = result.text;
+                    this.updateTUIRecordingState();
                     this.sendVoiceInput(result.text);
                 } else if (result.status === 'ignored') {
-                    console.log('[语音] 服务器忽略该段音频');
+                    log('语音', '服务器忽略该段音频');
                 }
             } catch (error) {
-                console.error('[语音] 服务器识别失败:', error.message);
+                logError('语音', `服务器识别失败: ${error.message}`);
             }
         };
 
         this.recorder.start(onAudioData, {
             stopSignal: this.stopController.signal
         }).catch(error => {
-            console.error('[语音] 录音错误:', error.message);
+            logError('语音', `录音错误: ${error.message}`);
         });
     }
 
@@ -363,7 +411,9 @@ class VoiceDisplay {
         if (this.recorder) {
             this.recorder.resume();
         }
-        console.log('[录音] 已通过远程指令开启录音');
+        log('录音', '已通过远程指令开启录音');
+        this.recordingEnabled = true;
+        this.updateTUIRecordingState();
     }
 
     disableRecording() {
@@ -371,7 +421,9 @@ class VoiceDisplay {
         if (this.recorder) {
             this.recorder.pause();
         }
-        console.log('[录音] 已通过远程指令关闭录音');
+        log('录音', '已通过远程指令关闭录音');
+        this.recordingEnabled = false;
+        this.updateTUIRecordingState();
     }
 
     /**
@@ -379,7 +431,7 @@ class VoiceDisplay {
      */
     async reconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.log('[重连] 达到最大重连次数，退出');
+            log('重连', '达到最大重连次数，退出');
             this.stop();
             return;
         }
@@ -387,15 +439,16 @@ class VoiceDisplay {
         this.reconnectAttempts++;
         const delay = this.reconnectAttempts * 2000;
 
-        console.log(`[重连] 第${this.reconnectAttempts}次尝试重连，${delay/1000}秒后...`);
+        log('重连', `第${this.reconnectAttempts}次尝试重连，${delay/1000}秒后...`);
 
         await new Promise(resolve => setTimeout(resolve, delay));
 
         try {
             await this.connect();
-            console.log('[重连] 重连成功');
+            log('重连', '重连成功');
+            this.updateTUIConnectionState();
         } catch (error) {
-            console.error('[重连] 重连失败:', error.message);
+            logError('重连', `重连失败: ${error.message}`);
             this.reconnect();
         }
     }
@@ -410,7 +463,7 @@ class VoiceDisplay {
         this.asr = new ServerASR(this.config.serverUrl);
         await this.asr.checkReady();
         if (!this.asr.isReady()) {
-            console.log('[警告] 服务器端 ASR 不可用，语音识别功能将不可用');
+            log('ASR', '服务器端 ASR 不可用，语音识别功能将不可用');
         }
 
         if (AudioRecorder) {
@@ -420,7 +473,7 @@ class VoiceDisplay {
                 minSpeechDuration: 300
             });
         } else {
-            console.log('[警告] 录音器不可用，语音识别功能将不可用');
+            log('录音', '录音器不可用，语音识别功能将不可用');
         }
 
         this.setupPlaybackPause();
@@ -430,11 +483,11 @@ class VoiceDisplay {
         if (this.recorder && this.asr && this.asr.isReady()) {
             await this.startVoiceRecognition();
         } else if (this.recorder && this.asr && !this.asr.isReady()) {
-            console.log('[ASR] 等待ASR就绪...');
+            log('ASR', '等待ASR就绪...');
             this.waitForASRReady();
         }
 
-        console.log('[启动] 语音显示端已启动');
+        log('启动', '语音显示端已启动');
     }
 
     /**
@@ -446,12 +499,12 @@ class VoiceDisplay {
         }
 
         this.audio.onPlayStart = () => {
-            console.log('[录音] 播放开始，暂停录音');
+            log('录音', '播放开始，暂停录音');
             this.recorder.pause();
         };
 
         this.audio.onPlayEnd = () => {
-            console.log('[录音] 播放结束，恢复录音');
+            log('录音', '播放结束，恢复录音');
             if (this.recordingEnabled) {
                 this.recorder.resume();
             }
@@ -472,11 +525,11 @@ class VoiceDisplay {
                 if (ready) {
                     clearInterval(this.asrPollTimer);
                     this.asrPollTimer = null;
-                    console.log('[ASR] 服务器端ASR已就绪，启动语音识别');
+                    log('ASR', '服务器端ASR已就绪，启动语音识别');
                     await this.startVoiceRecognition();
                 }
             } catch (error) {
-                console.error('[ASR] 检查ASR状态失败:', error.message);
+                logError('ASR', `检查ASR状态失败: ${error.message}`);
             }
         }, 5000);
     }
@@ -506,7 +559,7 @@ class VoiceDisplay {
             this.ws.close();
         }
 
-        console.log('[停止] 语音显示端已停止');
+        log('停止', '语音显示端已停止');
     }
 
     startHeartbeat() {
@@ -518,7 +571,7 @@ class VoiceDisplay {
             }
         }, this.heartbeatIntervalMs);
         
-        console.log(`[心跳] 已启动，间隔 ${this.heartbeatIntervalMs / 1000} 秒`);
+        log('心跳', `已启动，间隔 ${this.heartbeatIntervalMs / 1000} 秒`);
     }
 
     stopHeartbeat() {
@@ -546,7 +599,7 @@ function loadConfig(configPath) {
         const config = JSON.parse(configData);
         return { ...defaultConfig, ...config };
     } catch (error) {
-        console.warn(`[配置] 加载配置文件失败，使用默认配置: ${error.message}`);
+        logError('配置', `加载配置文件失败，使用默认配置: ${error.message}`);
         return defaultConfig;
     }
 }
@@ -560,8 +613,21 @@ async function main() {
 
     const voiceDisplay = new VoiceDisplay(config);
 
+    if (useTUI) {
+        tui.displayId = config.displayId || 'unknown';
+        tui.headerBox.setContent(` Voice Display Node - ${config.displayId || 'unknown'} `);
+        tui.updateConnectionState({
+            connected: false,
+            serverUrl: config.serverUrl,
+            displayId: config.displayId,
+            heartbeatStatus: '未启动',
+            reconnectAttempts: 0,
+            maxReconnectAttempts: 5
+        });
+    }
+
     process.on('SIGINT', () => {
-        console.log('\n收到退出信号，正在关闭...');
+        log('系统', '\n收到退出信号，正在关闭...');
         voiceDisplay.stop();
         process.exit(0);
     });
@@ -574,7 +640,7 @@ async function main() {
     try {
         await voiceDisplay.start();
     } catch (error) {
-        console.error('启动失败:', error.message);
+        logError('系统', `启动失败: ${error.message}`);
         process.exit(1);
     }
 }

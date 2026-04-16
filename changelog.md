@@ -3,6 +3,27 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 服务端和子显示端 TUI 界面显示
+  - 需求：服务端和子显示端使用 TUI 界面替代 console.log 输出，提供结构化信息面板
+  - 实现：
+    - 使用 blessed 库实现终端用户界面
+    - 服务端 TUI（ServerTUI）：标题栏、系统状态面板、设备列表表格、事件日志面板
+    - 子显示端 TUI（SubDisplayTUI）：标题栏、连接状态面板、录音状态面板、事件日志面板
+    - 日志分类颜色编码（连接/断开/语音/TTS/提醒/设备/错误等）
+    - 支持 `--no-tui` 参数禁用 TUI，回退到纯日志模式
+    - 服务端定时刷新系统状态和设备列表
+    - 子显示端实时更新连接状态和录音状态
+    - 所有 console.log/error 替换为 log()/logError() 抽象函数
+  - 改动文件：
+    - `core/tui.js` (新增，ServerTUI 实现)
+    - `voice-display-node/tui.js` (新增，SubDisplayTUI 实现)
+    - `server.js` (集成 TUI，替换 console.log)
+    - `voice-display-node/main.js` (集成 TUI，替换 console.log)
+    - `package.json` (添加 blessed 依赖)
+    - `voice-display-node/package.json` (添加 blessed 依赖)
+    - `docs/design/tui.md` (新增，TUI 设计文档)
+    - `docs/spec/tui.md` (新增，TUI 实现文档)
+    - `docs/task/2026-04-16_TUI界面实现.md` (新增，任务文档)
 - ✅ 合并 DisplayList 和 DeviceTree 组件，支持视图切换
   - 需求：将 display-list.js 和 device-tree.js 合并为一个组件，支持列表视图和树形视图切换
   - 实现：

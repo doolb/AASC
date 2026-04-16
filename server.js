@@ -18,8 +18,28 @@ const voiceCommand = require('./core/voiceCommand');
 const { MediaLibraryManager } = require('./core/media-library');
 const { SubServerManager } = require('./core/sub-server');
 const { initializeAASCSystem } = require('./aasc/init');
+const ServerTUI = require('./core/tui');
 
 config.loadConfig();
+
+const useTUI = !process.argv.includes('--no-tui');
+const tui = new ServerTUI({ enabled: useTUI });
+
+function log(category, message) {
+    if (useTUI) {
+        tui.addLog(category, message);
+    } else {
+        const timestamp = new Date().toTimeString().split(' ')[0];
+        console.log(`${timestamp} [${category}] ${message}`);
+    }
+}
+
+function logError(category, message) {
+    if (useTUI) {
+        tui.addLog(category, message);
+    }
+    console.error(`[${category}] ${message}`);
+}
 
 const app = express();
 
@@ -92,7 +112,7 @@ function hasValidContent(text) {
     
     for (const pattern of IGNORED_PATTERNS) {
         if (pattern.test(trimmed)) {
-            console.log(`🔇 屏蔽无效输入: "${text}" 匹配规则: ${pattern}`);
+            log('语音', `屏蔽无效输入: "${text}" 匹配规则: ${pattern}`);
             return false;
         }
     }
@@ -101,7 +121,7 @@ function hasValidContent(text) {
     if (hasEnglish && !hasChinese && wordCount < 2) {
         const cleanWord = trimmed.replace(/[.!?，。！？]/g, '');
         if (cleanWord.length < 4) {
-            console.log(`🔇 屏蔽短输入: "${text}"`);
+            log('语音', `屏蔽短输入: "${text}"`);
             return false;
         }
     }
@@ -109,7 +129,7 @@ function hasValidContent(text) {
     if (hasChinese) {
         const chineseChars = text.match(/[\u4e00-\u9fa5]/g) || [];
         if (chineseChars.length < 2) {
-            console.log(`🔇 屏蔽短中文输入: "${text}"`);
+            log('语音', `屏蔽短中文输入: "${text}"`);
             return false;
         }
     }
@@ -133,17 +153,17 @@ if (subServerConfig) {
 }
 
 mediaLibraryManager.init().then(() => {
-    console.log('媒体库初始化完成');
+    log('媒体库', '媒体库初始化完成');
     
     const localRoutes = mediaLibraryManager.getLocalLibraryRoutes();
     localRoutes.forEach(route => {
         app.use(route.routePrefix, express.static(route.basePath));
-        console.log(`[媒体库] 静态路由: ${route.routePrefix} -> ${route.basePath}`);
+        log('媒体库', `静态路由: ${route.routePrefix} -> ${route.basePath}`);
     });
     
     startServer();
 }).catch(err => {
-    console.error('媒体库初始化失败:', err.message);
+    logError('媒体库', `初始化失败: ${err.message}`);
     startServer();
 });
 
@@ -151,18 +171,16 @@ function startServer() {
     server.listen(PORT, '0.0.0.0', async () => {
         const localIP = getLocalIP();
         const protocol = useHttps ? 'https' : 'http';
-        console.log('='.repeat(50));
-        console.log('媒体中心服务器已启动');
-        console.log('='.repeat(50));
-        console.log(`上传端地址: ${protocol}://${localIP}:${PORT}/upload`);
-        console.log(`显示端地址: ${protocol}://${localIP}:${PORT}/display`);
+        log('系统', '媒体中心服务器已启动');
+        log('系统', `上传端地址: ${protocol}://${localIP}:${PORT}/upload`);
+        log('系统', `显示端地址: ${protocol}://${localIP}:${PORT}/display`);
         if (useHttps) {
-            console.log('✅ HTTPS 已启用，支持麦克风等安全特性');
+            log('系统', 'HTTPS 已启用，支持麦克风等安全特性');
         } else {
-            console.log('⚠️  HTTP 模式，麦克风功能需要 HTTPS 或 localhost');
-            console.log('   如需 HTTPS，请在 ssl/ 目录放置 key.pem 和 cert.pem');
+            log('系统', 'HTTP 模式，麦克风功能需要 HTTPS 或 localhost');
         }
-        console.log('='.repeat(50));
+        
+        tui.setHeader(protocol, localIP, PORT);
         
         updateVoiceDisplayConfig(localIP, PORT, protocol);
         
@@ -186,23 +204,40 @@ function startServer() {
                 sendToDisplay,
                 broadcastToControls,
                 onDisplayConnect: (displayId, clientIP, ws) => {
-                    console.log(`[AASC] 显示端连接: ${displayId} (${clientIP})`);
+                    log('AASC', `显示端连接: ${displayId} (${clientIP})`);
                 },
                 onDisplayDisconnect: (displayId) => {
-                    console.log(`[AASC] 显示端断开: ${displayId}`);
+                    log('AASC', `显示端断开: ${displayId}`);
                 },
                 onControlConnect: (ws) => {
-                    console.log(`[AASC] 控制端连接`);
+                    log('AASC', '控制端连接');
                 },
                 onControlDisconnect: (ws) => {
-                    console.log(`[AASC] 控制端断开`);
+                    log('AASC', '控制端断开');
                 }
             });
             
-            console.log('[AASC] 系统初始化完成');
+            log('AASC', '系统初始化完成');
         } catch (error) {
-            console.error('[AASC] 系统初始化失败:', error.message);
+            logError('AASC', `系统初始化失败: ${error.message}`);
         }
+
+        tui.startRefresh(
+            () => {
+                const usage = process.memoryUsage();
+                return {
+                    uptime: Math.floor((Date.now() - serverStartTime) / 1000),
+                    memoryRSS: usage.rss,
+                    memoryHeapUsed: usage.heapUsed,
+                    memoryHeapTotal: usage.heapTotal,
+                    protocol: useHttps ? 'HTTPS' : 'HTTP',
+                    isMuted: muteState.isMuted,
+                    displayCount: displayClients.size,
+                    controlCount: controlClients.size
+                };
+            },
+            () => getDisplayList()
+        );
     });
 }
 
@@ -357,7 +392,7 @@ app.post('/upload-file', async (req, res) => {
         }
         res.json({ status: 'success', message: '媒体已发送到显示端' });
     } catch (err) {
-        console.error('文件上传失败:', err);
+        logError('错误', `文件上传失败: ${err.message}`);
         res.status(500).json({ status: 'error', message: '文件上传失败: ' + err.message });
     }
 });
@@ -420,7 +455,7 @@ app.post('/api/tts/generate', async (req, res) => {
             message: 'TTS生成成功'
         });
     } catch (err) {
-        console.error('TTS生成失败:', err);
+        logError('TTS', `生成失败: ${err.message}`);
         res.status(500).json({ status: 'error', message: 'TTS生成失败: ' + err.message });
     }
 });
@@ -531,7 +566,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
         }
         
         if (!hasValidContent(recognizedText)) {
-            console.log(`忽略无效语音输入: ${recognizedText}`);
+            log('语音', `忽略无效语音输入: ${recognizedText}`);
             return res.json({ 
                 status: 'ignored', 
                 message: '未检测到有效内容',
@@ -544,7 +579,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
             text: recognizedText
         });
     } catch (err) {
-        console.error('ASR 识别失败:', err);
+        logError('语音', `ASR识别失败: ${err.message}`);
         if (req.file && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
@@ -828,7 +863,7 @@ app.post('/api/media-libraries', async (req, res) => {
                 
                 if (!isUploadsDir) {
                     app.use(routePrefix, express.static(basePath));
-                    console.log(`[媒体库] 动态添加静态路由: ${routePrefix} -> ${basePath}`);
+                    log('媒体库', `动态添加静态路由: ${routePrefix} -> ${basePath}`);
                 }
             }
         }
@@ -1064,7 +1099,7 @@ app.get('/api/map-data', (req, res) => {
             }
         });
     } catch (err) {
-        console.error('获取地图数据失败:', err);
+        logError('错误', `获取地图数据失败: ${err.message}`);
         res.status(500).json({ status: 'error', message: '获取地图数据失败: ' + err.message });
     }
 });
@@ -1139,7 +1174,7 @@ function loadMapPositions() {
             return JSON.parse(data);
         }
     } catch (error) {
-        console.error('加载地图位置失败:', error);
+        logError('错误', `加载地图位置失败: ${error.message}`);
     }
     return {};
 }
@@ -1149,7 +1184,7 @@ function saveMapPositions(positions) {
         fs.writeFileSync(mapPositionsPath, JSON.stringify(positions, null, 2), 'utf8');
         return true;
     } catch (error) {
-        console.error('保存地图位置失败:', error);
+        logError('错误', `保存地图位置失败: ${error.message}`);
         return false;
     }
 }
@@ -1328,7 +1363,7 @@ app.post('/api/unmute', (req, res) => {
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
     
-    console.log('收到重启请求，正在关闭服务器...');
+    log('系统', '收到重启请求，正在关闭服务器...');
     
     setTimeout(() => {
         wss.clients.forEach(client => {
@@ -1336,7 +1371,7 @@ app.post('/api/restart', (req, res) => {
         });
         
         server.close(() => {
-            console.log('服务器已关闭，正在重启...');
+            log('系统', '服务器已关闭，正在重启...');
             
             const { spawn } = require('child_process');
             const args = process.argv.slice(1);
@@ -1440,7 +1475,7 @@ function muteAllDisplays() {
     
     muteState.isMuted = true;
     broadcastToControls({ type: 'muteState', isMuted: true });
-    console.log('[静音] 所有显示端已静音');
+    log('静音', '所有显示端已静音');
     return true;
 }
 
@@ -1460,7 +1495,7 @@ function unmuteAllDisplays() {
     muteState.isMuted = false;
     muteState.previousVolumes.clear();
     broadcastToControls({ type: 'muteState', isMuted: false });
-    console.log('[静音] 所有显示端已取消静音');
+    log('静音', '所有显示端已取消静音');
     return true;
 }
 
@@ -1500,7 +1535,7 @@ wss.on('connection', (ws, req) => {
                 capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : (savedState?.capabilities || null)
             }
         });
-        console.log(`显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
+        log('连接', `显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
         
         if (aascSystem) {
             aascSystem.handleDisplayConnect(displayId, clientIP, ws, savedState);
@@ -1533,13 +1568,13 @@ wss.on('connection', (ws, req) => {
                 if (aascSystem) {
                     const result = await aascSystem.handleDisplayMessage(displayId, data, ws);
                     if (!result.success && result.reason) {
-                        console.warn('[AASC] 消息处理失败:', result.reason);
+                        log('AASC', `消息处理失败: ${result.reason}`);
                     }
                 } else {
                     handleDisplayMessageFallback(displayId, data, ws);
                 }
             } catch (e) {
-                console.error('解析显示端消息失败:', e);
+                logError('错误', `解析显示端消息失败: ${e.message}`);
             }
         });
         
@@ -1549,7 +1584,7 @@ wss.on('connection', (ws, req) => {
             if (aascSystem) {
                 aascSystem.handleDisplayDisconnect(displayId);
             }
-            console.log(`显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
+            log('断开', `显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
             broadcastToControls({ type: 'displayList', list: getDisplayList() });
             executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
         });
@@ -1558,7 +1593,7 @@ wss.on('connection', (ws, req) => {
         if (aascSystem) {
             aascSystem.handleControlConnect(ws);
         }
-        console.log(`控制端已连接，当前连接数: ${controlClients.size}`);
+        log('连接', `控制端已连接，当前连接数: ${controlClients.size}`);
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
@@ -1580,18 +1615,18 @@ wss.on('connection', (ws, req) => {
                             capabilities: targetDisplayData.state.capabilities
                         });
                         broadcastToControls({ type: 'displayList', list: getDisplayList() });
-                        console.log(`[能力] 控制端更新显示端 ${targetDisplayId} 能力:`, targetDisplayData.state.capabilities);
+                        log('能力', `控制端更新显示端 ${targetDisplayId} 能力`);
                     }
                 } else if (aascSystem) {
                     const result = await aascSystem.handleControlMessage(data, ws);
                     if (!result.success && result.reason) {
-                        console.warn('[AASC] 消息处理失败:', result.reason);
+                        log('AASC', `消息处理失败: ${result.reason}`);
                     }
                 } else {
                     await handleControlMessageFallback(data, ws);
                 }
             } catch (e) {
-                console.error('解析控制端消息失败:', e);
+                logError('错误', `解析控制端消息失败: ${e.message}`);
             }
         });
         
@@ -1600,12 +1635,12 @@ wss.on('connection', (ws, req) => {
             if (aascSystem) {
                 aascSystem.handleControlDisconnect(ws);
             }
-            console.log(`控制端已断开，当前连接数: ${controlClients.size}`);
+            log('断开', `控制端已断开，当前连接数: ${controlClients.size}`);
         });
     }
     
     ws.on('error', (error) => {
-        console.error('WebSocket错误:', error.message);
+        logError('错误', `WebSocket错误: ${error.message}`);
     });
 });
 
@@ -1647,10 +1682,10 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             ...DEFAULT_CAPABILITIES,
             ...data.capabilities
         };
-        console.log(`[能力] 显示端 ${displayId} 声明能力:`, displayData.state.capabilities);
+        log('能力', `显示端 ${displayId} 声明能力`);
         broadcastToControls({ type: 'displayList', list: getDisplayList() });
     } else if (data.type === 'commandAck' && displayData) {
-        console.log('[服务端] 收到显示端 commandAck:', data.commandType, 'from', displayId);
+        log('系统', `收到显示端 commandAck: ${data.commandType} from ${displayId}`);
         const ackMsg = {
             type: 'commandAck',
             displayId: displayId,
@@ -1691,7 +1726,7 @@ async function handleControlMessageFallback(data, ws) {
                                             text: text
                                         });
                                     } catch (err) {
-                                        console.error('[VoiceCommand] TTS生成失败:', err.message);
+                                        logError('VoiceCommand', `TTS生成失败: ${err.message}`);
                                     }
                                 },
                                 onError: async (text) => {
@@ -1704,7 +1739,7 @@ async function handleControlMessageFallback(data, ws) {
                                             text: text
                                         });
                                     } catch (err) {
-                                        console.error('[VoiceCommand] TTS生成失败:', err.message);
+                                        logError('VoiceCommand', `TTS生成失败: ${err.message}`);
                                     }
                                 }
                             } : null;
@@ -1750,7 +1785,7 @@ async function handleControlMessageFallback(data, ws) {
                                 sendToControl({ type: 'systemMessage', content: result.content });
                             }
                         } catch (err) {
-                            console.error('[VoiceCommand] 处理失败:', err.message);
+                            logError('VoiceCommand', `处理失败: ${err.message}`);
                         }
                     })();
                     return;
@@ -1802,7 +1837,7 @@ async function handleControlMessageFallback(data, ws) {
                             try {
                                 await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
                             } catch (err) {
-                                console.error('[整点报时] 语音触发失败:', err.message);
+                                logError('整点报时', `语音触发失败: ${err.message}`);
                             }
                         })();
                     }
@@ -1828,7 +1863,7 @@ async function handleControlMessageFallback(data, ws) {
                                     text: `今日提醒：${text}`
                                 });
                             } catch (err) {
-                                console.error('[语音命令] 今日提醒语音生成失败:', err.message);
+                                logError('语音命令', `今日提醒语音生成失败: ${err.message}`);
                             }
                         } else if (displayId) {
                             try {
@@ -1841,7 +1876,7 @@ async function handleControlMessageFallback(data, ws) {
                                     text: '今天没有提醒'
                                 });
                             } catch (err) {
-                                console.error('[语音命令] 今日提醒语音生成失败:', err.message);
+                                logError('语音命令', `今日提醒语音生成失败: ${err.message}`);
                             }
                         }
                     })();
@@ -1908,7 +1943,7 @@ async function handleControlMessageFallback(data, ws) {
                         try {
                             await voiceCommand.handleTodayReminders(data.displayId || displayId);
                         } catch (err) {
-                            console.error('[今日提醒] 处理失败:', err.message);
+                            logError('今日提醒', `处理失败: ${err.message}`);
                         }
                     })();
                     return;
@@ -1917,22 +1952,22 @@ async function handleControlMessageFallback(data, ws) {
                         try {
                             await voiceCommand.handleTomorrowReminders(data.displayId || displayId);
                         } catch (err) {
-                            console.error('[明日提醒] 处理失败:', err.message);
+                            logError('明日提醒', `处理失败: ${err.message}`);
                         }
                     })();
                     return;
                 } else if (data.type === 'mediaBatch') {
-                    console.log('[服务端] 收到 mediaBatch, displayIds:', data.displayIds);
+                    log('系统', `收到 mediaBatch, displayIds: ${data.displayIds}`);
                     const displayIds = data.displayIds || [];
                     displayIds.forEach(id => {
                         const dd = displayClients.get(id);
                         if (dd) {
                             dd.state.currentMedia = data.media;
                             config.updateDisplayState(dd.ip, { currentMedia: data.media });
-                            console.log('[服务端] 发送媒体到显示端:', id);
+                            log('系统', `发送媒体到显示端: ${id}`);
                             sendToDisplay(id, data.media);
                         } else {
-                            console.log('[服务端] 显示端不存在:', id);
+                            log('系统', `显示端不存在: ${id}`);
                         }
                     });
                     return;
@@ -1979,7 +2014,7 @@ async function handleControlMessageFallback(data, ws) {
                             try {
                                 await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
                             } catch (err) {
-                                console.error('[整点报时] 测试失败:', err.message);
+                                logError('整点报时', `测试失败: ${err.message}`);
                             }
                         })();
                     } else if (data.action === 'stop') {
@@ -2030,7 +2065,7 @@ async function handleControlMessageFallback(data, ws) {
                                     }
                                 }
                             } catch (err) {
-                                console.error('[TTS] 播放失败:', err.message);
+                                logError('TTS', `播放失败: ${err.message}`);
                             }
                         })();
                     } else {
@@ -2061,7 +2096,7 @@ async function handleControlMessageFallback(data, ws) {
                                             text: sentence
                                         });
                                     } catch (ttsErr) {
-                                        console.error('[Chat] TTS生成失败:', ttsErr.message);
+                                        logError('Chat', `TTS生成失败: ${ttsErr.message}`);
                                     }
                                 },
                                 onComplete: (fullMessage, history) => {
@@ -2081,7 +2116,7 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                             });
                         } catch (err) {
-                            console.error('[Chat] 处理失败:', err.message);
+                            logError('Chat', `处理失败: ${err.message}`);
                             ws.send(JSON.stringify({
                                 type: 'chatResponse',
                                 success: false,
@@ -2110,7 +2145,7 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                             });
                         } catch (err) {
-                            console.error('[Chat] 处理失败:', err.message);
+                            logError('Chat', `处理失败: ${err.message}`);
                             ws.send(JSON.stringify({
                                 type: 'chatResponse',
                                 success: false,
@@ -2144,7 +2179,7 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                             });
                         } catch (err) {
-                            console.error('[Commands] 执行失败:', err.message);
+                            logError('Commands', `执行失败: ${err.message}`);
                         }
                     })();
                 }
@@ -2238,7 +2273,7 @@ async function handleChatMessage(options) {
                     });
                 }
             } catch (ttsErr) {
-                console.error('[Chat] TTS生成失败:', ttsErr.message);
+                logError('Chat', `TTS生成失败: ${ttsErr.message}`);
             }
         },
         onComplete: (fullMessage, history) => {
@@ -2266,7 +2301,7 @@ async function executeDeviceEvent(ip, eventType, displayId) {
         const debounceKey = `${ip}_${eventType}`;
         const lastTime = deviceEventDebounce.get(debounceKey) || 0;
         if (Date.now() - lastTime < DEVICE_EVENT_DEBOUNCE_MS) {
-            console.log(`[设备事件] 防抖跳过: ${ip} ${eventType}，距上次 ${Math.round((Date.now() - lastTime) / 1000)}s`);
+            log('设备', `防抖跳过: ${ip} ${eventType}，距上次 ${Math.round((Date.now() - lastTime) / 1000)}s`);
             return;
         }
         deviceEventDebounce.set(debounceKey, Date.now());
@@ -2281,7 +2316,7 @@ async function executeDeviceEvent(ip, eventType, displayId) {
         
         if (!command) return;
         
-        console.log(`[设备事件] ${ip} ${eventType}: ${command}`);
+        log('设备', `${ip} ${eventType}: ${command}`);
         
         let targetDisplayId = displayId;
         if (eventType === 'onDisconnect') {
@@ -2295,12 +2330,12 @@ async function executeDeviceEvent(ip, eventType, displayId) {
                     if (data.ws.readyState === WebSocket.OPEN) {
                         targetDisplayId = id;
                         found = true;
-                        console.log(`[设备事件] 原显示端已断开，转发到显示端 ${id}`);
+                        log('设备', `原显示端已断开，转发到显示端 ${id}`);
                         break;
                     }
                 }
                 if (!found) {
-                    console.log('[设备事件] 没有在线显示端，跳过语音播报');
+                    log('设备', '没有在线显示端，跳过语音播报');
                     broadcastToControls({
                         type: 'deviceEventExecuted',
                         ip: ip,
@@ -2362,7 +2397,7 @@ async function executeDeviceEvent(ip, eventType, displayId) {
             timestamp: Date.now()
         });
     } catch (err) {
-        console.error(`[设备事件] 执行失败 ${ip} ${eventType}:`, err.message);
+        logError('设备', `执行失败 ${ip} ${eventType}: ${err.message}`);
     }
 }
 
@@ -2375,9 +2410,9 @@ function updateVoiceDisplayConfig(localIP, port, protocol) {
             vadThreshold: 0.01
         };
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-        console.log(`[子显示端] 配置已更新: ${protocol}://${localIP}:${port}`);
+        log('子显示端', `配置已更新: ${protocol}://${localIP}:${port}`);
     } catch (err) {
-        console.error('[子显示端] 配置更新失败:', err.message);
+        logError('子显示端', `配置更新失败: ${err.message}`);
     }
 }
 
@@ -2394,7 +2429,7 @@ setInterval(() => {
         if (displayData.isSubDisplay && displayData.lastSeen) {
             const elapsed = now - displayData.lastSeen;
             if (elapsed > SUB_DISPLAY_TIMEOUT_MS) {
-                console.log(`[子显示端] ${displayId} 超过3分钟未响应，执行离线指令`);
+                log('子显示端', `${displayId} 超过3分钟未响应，执行离线指令`);
                 
                 const disconnectedIP = displayData.ip;
                 executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
@@ -2403,7 +2438,7 @@ setInterval(() => {
                 if (aascSystem) {
                     aascSystem.handleDisplayDisconnect(displayId);
                 }
-                console.log(`[子显示端] ${displayId} 已强制断开，当前连接数: ${displayClients.size}`);
+                log('子显示端', `${displayId} 已强制断开，当前连接数: ${displayClients.size}`);
                 broadcastToControls({ type: 'displayList', list: getDisplayList() });
             }
         }
@@ -2413,5 +2448,5 @@ setInterval(() => {
 setInterval(() => {
     const usage = process.memoryUsage();
     const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + 'MB';
-    console.log(`[内存] RSS: ${mb(usage.rss)} | Heap: ${mb(usage.heapUsed)}/${mb(usage.heapTotal)} | External: ${mb(usage.external)}`);
+    log('内存', `RSS: ${mb(usage.rss)} | Heap: ${mb(usage.heapUsed)}/${mb(usage.heapTotal)} | External: ${mb(usage.external)}`);
 }, 10 * 60 * 1000);
