@@ -4,6 +4,31 @@
 
 使用 blessed 库为服务端和子显示端实现 TUI 界面，替代 console.log 输出。
 
+### blessed 补丁
+
+```
+const _origGetShrinkContent = blessed.Element.prototype._getShrinkContent;
+blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
+    if (!this._clines) {
+        return { xi: xi, xl: xl, yi: yi, yl: yl };
+    }
+    return _origGetShrinkContent.call(this, xi, xl, yi, yl);
+};
+
+在加载 blessed 后，monkey-patch _getShrinkContent 方法：
+    保存原始 _getShrinkContent 到 _origGetShrinkContent
+    替换为:
+        如果 this._clines 为 undefined:
+            返回原始坐标 { xi, xl, yi, yl }
+        否则:
+            调用原始 _origGetShrinkContent
+
+原因：blessed Table 组件 attach 时调用 setContent('')，
+触发 clearPos → _getShrinkContent，但 _clines 尚未初始化，
+导致 TypeError: Cannot read properties of undefined (reading 'length')
+```
+
+
 ## 服务端 TUI - ServerTUI
 
 ### 伪代码
