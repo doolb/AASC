@@ -94,6 +94,16 @@
     - `docs/todo.md`
 
 ### Bug 修复
+- ✅ 修复 TUI 设备列表表格渲染错误
+  - 问题：设备数据中 `id` 属性为 `undefined` 时，blessed Table 组件报错 `TypeError: Cannot read properties of undefined (reading 'length')`
+  - 修复：
+    - 在 `updateDeviceList` 方法中添加完善的防御性检查
+    - 检查 `devices` 参数是否存在且为数组
+    - 使用 `filter(d => d != null)` 过滤掉 null 和 undefined 元素
+    - 使用 `String()` 转换确保所有值都是字符串
+    - 为 `id` 和 `ip` 添加更严格的检查 `(d.id != null && d.id !== undefined)`
+  - 改动文件：
+    - `core/tui.js` - updateDeviceList 方法添加完善的防御性检查
 - ✅ 修复 AASC 无法处理 capabilities 消息
   - 问题：子显示端声明能力后，AASC 报错 `No handler found for type: capabilities`
   - 修复：在 message dispatcher、actor adapter、display render agent 中补齐 `capabilities` 处理链路

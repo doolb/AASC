@@ -108,7 +108,7 @@ class ServerTUI {
             scrollable: true
         });
 
-        this.deviceTable = blessed.table({
+        this.deviceTable = blessed.box({
             top: 1,
             left: '30%',
             width: '70%',
@@ -131,7 +131,7 @@ class ServerTUI {
                 }
             },
             tags: true,
-            data: [['ID', 'IP', '类型', '能力']]
+            scrollable: true
         });
 
         this.logBox = blessed.log({
@@ -198,12 +198,29 @@ class ServerTUI {
 
     updateDeviceList(devices) {
         if (!this.enabled) return;
-        const rows = devices.map(d => {
+        if (!devices || !Array.isArray(devices)) {
+            this.deviceTable.setContent(' ID         IP              类型     能力');
+            this._scheduleRender();
+            return;
+        }
+
+        const header = ' ID         IP              类型     能力';
+        const filteredDevices = devices.filter(d => d != null);
+        const rows = filteredDevices.map((d) => {
             const typeStr = d.isSubDisplay ? '子显示' : '显示端';
             const caps = d.capabilities || {};
-            return [d.id, d.ip || '-', typeStr, formatCapabilities(caps)];
+            const id = (d.id != null && d.id !== undefined) ? String(d.id) : '-';
+            const ip = (d.ip != null && d.ip !== undefined) ? String(d.ip) : '-';
+
+            return [
+                id.padEnd(10),
+                ip.padEnd(15),
+                typeStr.padEnd(6),
+                formatCapabilities(caps)
+            ].join(' ');
         });
-        this.deviceTable.setData([['ID', 'IP', '类型', '能力'], ...rows]);
+
+        this.deviceTable.setContent([header, ...rows].join('\n'));
         this._scheduleRender();
     }
 
