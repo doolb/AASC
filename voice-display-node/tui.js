@@ -10,16 +10,16 @@ const CATEGORY_COLORS = {
     'ASR': 'cyan',
     '心跳': 'gray',
     '错误': 'red',
-    '系统': 'white',
+    '系统': 'gray',
     '重连': 'yellow',
-    '配置': 'white',
+    '配置': 'gray',
     '能力': 'blue',
     '启动': 'green',
     '停止': 'red'
 };
 
 function getCategoryColor(category) {
-    return CATEGORY_COLORS[category] || 'white';
+    return CATEGORY_COLORS[category] || 'gray';
 }
 
 function getTimestamp() {
