@@ -15,6 +15,17 @@
     - `core/tui.js` (ServerTUI 添加滚动键绑定)
     - `voice-display-node/tui.js` (SubDisplayTUI 添加滚动键绑定)
     - `docs/spec/tui.md` (更新伪代码)
+- ✅ TUI 设备列表文本对齐修复
+  - 需求：设备列表中含中文的列（类型）与表头未对齐
+  - 原因：`padEnd()` 按字符数填充，中文字符在终端占2列宽度，导致实际显示宽度不一致
+  - 实现：
+    - 新增 `displayWidth()` 函数，计算字符串的终端显示宽度（CJK/全角/Emoji 算2列，其余算1列）
+    - 新增 `padEndDisplay()` 函数，按终端显示宽度填充空格
+    - 设备列表各列改用 `padEndDisplay()` 替代 `padEnd()`
+    - 类型列宽度从 6 调整为 8（3个中文字=6列+2列间距）
+  - 改动文件：
+    - `core/tui.js` (添加 displayWidth/padEndDisplay，修改 updateDeviceList)
+    - `docs/spec/tui.md` (更新伪代码)
 - ✅ 服务端和子显示端 TUI 界面显示
   - 需求：服务端和子显示端使用 TUI 界面替代 console.log 输出，提供结构化信息面板
   - 实现：

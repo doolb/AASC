@@ -153,17 +153,15 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
 
     方法 更新设备列表(设备数组):
         如果 !this.enabled: 返回
+        表头 = ' ID         IP              类型     能力'
         行数据 = 设备数组.map(设备 => [
-            设备.id || '-',
-            设备.ip || '-',
-            设备.类型,
+            按显示宽度填充(设备.id || '-', 10),
+            按显示宽度填充(设备.ip || '-', 15),
+            按显示宽度填充(设备.类型, 8),
             格式化能力(设备.能力)
-        ])
-        this.deviceTable.setData({
-            表头: ['ID', 'IP', '类型', '能力'],
-            数据: 行数据
-        })
-        this.screen.render()
+        ].join(' '))
+        this.deviceTable.setContent([表头, ...行数据].join('\n'))
+        this._scheduleRender()
 
     方法 添加日志(类别, 消息):
         如果 !this.enabled: 返回
@@ -210,6 +208,20 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
 ### 格式化辅助函数
 
 ```
+函数 计算显示宽度(字符串):
+    宽度 = 0
+    遍历字符串中每个字符:
+        如果字符是CJK/全角/Emoji字符:
+            宽度 += 2
+        否则:
+            宽度 += 1
+    返回 宽度
+
+函数 按显示宽度填充(字符串, 目标宽度):
+    当前宽度 = 计算显示宽度(字符串)
+    填充空格数 = Math.max(0, 目标宽度 - 当前宽度)
+    返回 字符串 + ' '.repeat(填充空格数)
+
 函数 格式化运行时间(秒数):
     天 = Math.floor(秒数 / 86400)
     时 = Math.floor((秒数 % 86400) / 3600)

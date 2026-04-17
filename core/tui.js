@@ -58,6 +58,38 @@ function getTimestamp() {
     return now.toTimeString().split(' ')[0];
 }
 
+function displayWidth(str) {
+    let width = 0;
+    for (const ch of str) {
+        const code = ch.codePointAt(0);
+        if (code >= 0x1100 && (
+            code <= 0x115F ||
+            code === 0x2329 || code === 0x232A ||
+            (code >= 0x2E80 && code <= 0xA4CF && code !== 0x303F) ||
+            (code >= 0xAC00 && code <= 0xD7A3) ||
+            (code >= 0xF900 && code <= 0xFAFF) ||
+            (code >= 0xFE10 && code <= 0xFE19) ||
+            (code >= 0xFE30 && code <= 0xFE6F) ||
+            (code >= 0xFF01 && code <= 0xFF60) ||
+            (code >= 0xFFE0 && code <= 0xFFE6) ||
+            (code >= 0x1F300 && code <= 0x1F9FF) ||
+            (code >= 0x20000 && code <= 0x2FFFD) ||
+            (code >= 0x30000 && code <= 0x3FFFD)
+        )) {
+            width += 2;
+        } else {
+            width += 1;
+        }
+    }
+    return width;
+}
+
+function padEndDisplay(str, targetWidth) {
+    const currentWidth = displayWidth(str);
+    const padding = Math.max(0, targetWidth - currentWidth);
+    return str + ' '.repeat(padding);
+}
+
 class ServerTUI {
     constructor(options = {}) {
         this.enabled = options.enabled !== false;
@@ -218,9 +250,9 @@ class ServerTUI {
             const ip = (d.ip != null && d.ip !== undefined) ? String(d.ip) : '-';
 
             return [
-                id.padEnd(10),
-                ip.padEnd(15),
-                typeStr.padEnd(6),
+                padEndDisplay(id, 10),
+                padEndDisplay(ip, 15),
+                padEndDisplay(typeStr, 8),
                 formatCapabilities(caps)
             ].join(' ');
         });
