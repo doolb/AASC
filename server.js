@@ -19,11 +19,20 @@ const { MediaLibraryManager } = require('./core/media-library');
 const { SubServerManager } = require('./core/sub-server');
 const { initializeAASCSystem } = require('./aasc/init');
 const ServerTUI = require('./core/tui');
+const { installConsoleRedirect } = require('./core/console-redirect');
 
 config.loadConfig();
 
 const useTUI = !process.argv.includes('--no-tui');
 const tui = new ServerTUI({ enabled: useTUI });
+
+installConsoleRedirect({
+    enabled: useTUI,
+    writeLog: (level, message) => {
+        const category = level === 'error' ? '错误' : '系统';
+        tui.addLog(category, message);
+    }
+});
 
 function log(category, message) {
     if (useTUI) {
@@ -37,6 +46,7 @@ function log(category, message) {
 function logError(category, message) {
     if (useTUI) {
         tui.addLog(category, message);
+        return;
     }
     console.error(`[${category}] ${message}`);
 }

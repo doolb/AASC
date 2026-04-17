@@ -19,9 +19,18 @@ const URL = require('url');
 const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
 const SubDisplayTUI = require('./tui');
+const { installConsoleRedirect } = require('../core/console-redirect');
 
 const useTUI = !process.argv.includes('--no-tui');
 const tui = new SubDisplayTUI({ enabled: useTUI });
+
+installConsoleRedirect({
+    enabled: useTUI,
+    writeLog: (level, message) => {
+        const category = level === 'error' ? '错误' : '系统';
+        tui.addLog(category, message);
+    }
+});
 
 function log(category, message) {
     if (useTUI) {
@@ -35,6 +44,7 @@ function log(category, message) {
 function logError(category, message) {
     if (useTUI) {
         tui.addLog(category, message);
+        return;
     }
     console.error(`[${category}] ${message}`);
 }

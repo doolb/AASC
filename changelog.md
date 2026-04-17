@@ -94,6 +94,15 @@
     - `docs/todo.md`
 
 ### Bug 修复
+- ✅ TUI 模式下禁用直接 console 输出
+  - 问题：部分模块/第三方库仍会 `console.log/error` 直接写 stdout/stderr，导致 blessed TUI 渲染被破坏（文本串到其他面板/边框溢出）
+  - 修复：在 TUI 启用时重定向 `console.log/info/warn/error/debug` 到 TUI 日志；同时 `logError()` 在 TUI 模式下不再写 stderr
+  - 改动文件：
+    - `core/console-redirect.js` (新增，console 重定向工具)
+    - `server.js`
+    - `voice-display-node/main.js`
+    - `docs/design/tui.md`
+    - `docs/spec/tui.md`
 - ✅ 修复 TUI 设备列表表格渲染错误
   - 问题：设备数据中 `id` 属性为 `undefined` 时，blessed Table 组件报错 `TypeError: Cannot read properties of undefined (reading 'length')`
   - 修复：

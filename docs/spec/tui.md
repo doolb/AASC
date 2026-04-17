@@ -328,7 +328,17 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
     function logError(category, message):
         如果 useTUI:
             tui.addLog(category, message)
+            return  // TUI 模式下禁止直接写 stdout/stderr
         console.error(`[${category}] ${message}`)
+
+    // TUI 模式下重定向 console.*，避免第三方库/遗留代码破坏 blessed 渲染
+    installConsoleRedirect({
+        enabled: useTUI,
+        writeLog: (level, message) => {
+            category = (level === 'error') ? '错误' : '系统'
+            tui.addLog(category, message)
+        }
+    })
 
 替换所有 console.log 为 log():
     显示端连接 → log('连接', `显示端 ${id} (${ip}) 已连接`)
@@ -363,7 +373,17 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
     function logError(category, message):
         如果 useTUI:
             tui.addLog(category, message)
+            return  // TUI 模式下禁止直接写 stdout/stderr
         console.error(`[${category}] ${message}`)
+
+    // TUI 模式下重定向 console.*，避免第三方库/遗留代码破坏 blessed 渲染
+    installConsoleRedirect({
+        enabled: useTUI,
+        writeLog: (level, message) => {
+            category = (level === 'error') ? '错误' : '系统'
+            tui.addLog(category, message)
+        }
+    })
 
 在 VoiceDisplay 类中:
     属性 lastRecognition = ''
