@@ -89,6 +89,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
             边框: { type: 'line' },
             样式: { border: { fg: 'yellow' } },
             滚动: true,
+            可聚焦: true,
             缓冲区长度: this.maxLogLines
         })
 
@@ -97,8 +98,37 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         screen.append(deviceTable)
         screen.append(logBox)
 
+        logBox.focus()
+
         screen.key(['q', 'C-c'], () => process.exit(0))
+        this._bindScrollKeys()
         screen.render()
+
+    方法 绑定滚动键():
+        screen.key(['up'], () => {
+            logBox.scroll(-1)
+            this._scheduleRender()
+        })
+        screen.key(['down'], () => {
+            logBox.scroll(1)
+            this._scheduleRender()
+        })
+        screen.key(['pageup'], () => {
+            logBox.scroll(-(logBox.height - 2))
+            this._scheduleRender()
+        })
+        screen.key(['pagedown'], () => {
+            logBox.scroll(logBox.height - 2)
+            this._scheduleRender()
+        })
+        screen.key(['home'], () => {
+            logBox.scrollTo(0)
+            this._scheduleRender()
+        })
+        screen.key(['end'], () => {
+            logBox.scrollTo(logBox.getScrollHeight())
+            this._scheduleRender()
+        })
 
     方法 设置标题(协议, IP, 端口):
         如果 !this.enabled: 返回
@@ -258,6 +288,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
             边框: { type: 'line' },
             样式: { border: { fg: 'yellow' } },
             滚动: true,
+            可聚焦: true,
             缓冲区长度: this.maxLogLines
         })
 
@@ -266,8 +297,37 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         screen.append(recordingBox)
         screen.append(logBox)
 
+        logBox.focus()
+
         screen.key(['q', 'C-c'], () => process.exit(0))
+        this._bindScrollKeys()
         screen.render()
+
+    方法 绑定滚动键():
+        screen.key(['up'], () => {
+            logBox.scroll(-1)
+            this._scheduleRender()
+        })
+        screen.key(['down'], () => {
+            logBox.scroll(1)
+            this._scheduleRender()
+        })
+        screen.key(['pageup'], () => {
+            logBox.scroll(-(logBox.height - 2))
+            this._scheduleRender()
+        })
+        screen.key(['pagedown'], () => {
+            logBox.scroll(logBox.height - 2)
+            this._scheduleRender()
+        })
+        screen.key(['home'], () => {
+            logBox.scrollTo(0)
+            this._scheduleRender()
+        })
+        screen.key(['end'], () => {
+            logBox.scrollTo(logBox.getScrollHeight())
+            this._scheduleRender()
+        })
 
     方法 更新连接状态(状态):
         如果 !this.enabled: 返回

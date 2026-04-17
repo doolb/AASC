@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ TUI 日志窗口支持方向键滚动（兼容 tmux 远程环境）
+  - 需求：在 tmux 远程会话中使用方向键滚动日志窗口
+  - 实现：
+    - logBox 添加 `focusable: true` 属性，使其可获取焦点
+    - 初始化时自动聚焦 logBox
+    - 新增 `_bindScrollKeys()` 方法，通过 `screen.key()` 在屏幕级别绑定方向键
+    - 支持 up/down 逐行滚动、pageup/pagedown 翻页、home/end 跳转首尾
+    - 使用屏幕级别键绑定而非元素级别，确保在 tmux 等远程环境下方向键始终生效
+  - 改动文件：
+    - `core/tui.js` (ServerTUI 添加滚动键绑定)
+    - `voice-display-node/tui.js` (SubDisplayTUI 添加滚动键绑定)
+    - `docs/spec/tui.md` (更新伪代码)
 - ✅ 服务端和子显示端 TUI 界面显示
   - 需求：服务端和子显示端使用 TUI 界面替代 console.log 输出，提供结构化信息面板
   - 实现：

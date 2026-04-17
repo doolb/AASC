@@ -111,6 +111,7 @@ class SubDisplayTUI {
             },
             tags: true,
             scrollable: true,
+            focusable: true,
             scrollbar: {
                 ch: ' ',
                 track: {
@@ -128,10 +129,14 @@ class SubDisplayTUI {
         this.screen.append(this.recordingBox);
         this.screen.append(this.logBox);
 
+        this.logBox.focus();
+
         this.screen.key(['q', 'C-c'], () => {
             this.destroy();
             process.exit(0);
         });
+
+        this._bindScrollKeys();
 
         this.screen.render();
     }
@@ -172,6 +177,33 @@ class SubDisplayTUI {
         const tag = `[${category}]`;
         this.logBox.log(`{${color}-fg}${timestamp} ${tag}{/${color}-fg} ${message}`);
         this._scheduleRender();
+    }
+
+    _bindScrollKeys() {
+        this.screen.key(['up'], () => {
+            this.logBox.scroll(-1);
+            this._scheduleRender();
+        });
+        this.screen.key(['down'], () => {
+            this.logBox.scroll(1);
+            this._scheduleRender();
+        });
+        this.screen.key(['pageup'], () => {
+            this.logBox.scroll(-(this.logBox.height - 2));
+            this._scheduleRender();
+        });
+        this.screen.key(['pagedown'], () => {
+            this.logBox.scroll(this.logBox.height - 2);
+            this._scheduleRender();
+        });
+        this.screen.key(['home'], () => {
+            this.logBox.scrollTo(0);
+            this._scheduleRender();
+        });
+        this.screen.key(['end'], () => {
+            this.logBox.scrollTo(this.logBox.getScrollHeight());
+            this._scheduleRender();
+        });
     }
 
     _scheduleRender() {

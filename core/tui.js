@@ -150,6 +150,7 @@ class ServerTUI {
             },
             tags: true,
             scrollable: true,
+            focusable: true,
             scrollbar: {
                 ch: ' ',
                 track: {
@@ -167,10 +168,14 @@ class ServerTUI {
         this.screen.append(this.deviceTable);
         this.screen.append(this.logBox);
 
+        this.logBox.focus();
+
         this.screen.key(['q', 'C-c'], () => {
             this.destroy();
             process.exit(0);
         });
+
+        this._bindScrollKeys();
 
         this.screen.render();
     }
@@ -245,6 +250,33 @@ class ServerTUI {
                 // 静默忽略刷新错误
             }
         }, 2000);
+    }
+
+    _bindScrollKeys() {
+        this.screen.key(['up'], () => {
+            this.logBox.scroll(-1);
+            this._scheduleRender();
+        });
+        this.screen.key(['down'], () => {
+            this.logBox.scroll(1);
+            this._scheduleRender();
+        });
+        this.screen.key(['pageup'], () => {
+            this.logBox.scroll(-(this.logBox.height - 2));
+            this._scheduleRender();
+        });
+        this.screen.key(['pagedown'], () => {
+            this.logBox.scroll(this.logBox.height - 2);
+            this._scheduleRender();
+        });
+        this.screen.key(['home'], () => {
+            this.logBox.scrollTo(0);
+            this._scheduleRender();
+        });
+        this.screen.key(['end'], () => {
+            this.logBox.scrollTo(this.logBox.getScrollHeight());
+            this._scheduleRender();
+        });
     }
 
     _scheduleRender() {
