@@ -9,7 +9,7 @@ const CATEGORY_COLORS = {
     '设备': 'blue',
     '能力': 'blue',
     '错误': 'red',
-    '系统': 'white',
+    '系统': 'gray',
     '静音': 'yellow',
     '子显示端': 'blue',
     'AASC': 'green',
@@ -17,12 +17,12 @@ const CATEGORY_COLORS = {
     '整点报时': 'yellow',
     'Chat': 'cyan',
     'Commands': 'cyan',
-    '配置': 'white',
+    '配置': 'gray',
     '内存': 'gray'
 };
 
 function getCategoryColor(category) {
-    return CATEGORY_COLORS[category] || 'white';
+    return CATEGORY_COLORS[category] || 'gray';
 }
 
 function formatUptime(seconds) {
