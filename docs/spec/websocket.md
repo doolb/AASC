@@ -230,6 +230,9 @@ wss.on('connection', (ws, req)):
 | chatHistory | 聊天历史 | `{ type, history }` |
 | voiceInput | 显示端语音输入 | `{ type, displayId, text, isFinal, fullText }` |
 | commandAck | 命令确认 | `{ type, displayId, commandType, success, details, timestamp }` |
+| serverLog | 实时日志条目 | `{ type, entry: { id, timestamp, time, category, level, device, message, displayId } }` |
+| logHistory | 日志历史 | `{ type, entries: [...], categories: [...] }` |
+| systemStats | 系统监控数据 | `{ type, stats: { timestamp, cpu, memory, uptime } }` |
 
 ### 显示端 -> 服务端
 

@@ -38,3 +38,4 @@
 | 地图可视化 | [map-visualization.md](design/map-visualization.md) | 执行者能力可视化、2D地图渲染、PixiJS渲染器 |
 | 子服务器 | [sub-server.md](design/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | 显示端分布式能力 | [display-capability.md](design/display-capability.md) | 显示端能力声明、能力路由、分布式协调 |
+| 日志筛选与系统监控 | [log-viewer.md](design/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |

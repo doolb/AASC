@@ -122,6 +122,8 @@ func (vd *VoiceDisplay) handleMessage(msgType string, data map[string]interface{
 		vd.handleReminder(data)
 	case "voiceCommand":
 		vd.handleVoiceCommand(data)
+	case "configUpdate":
+		vd.handleConfigUpdate(data)
 	default:
 		log.Printf("[消息] 未知消息类型: %s", msgType)
 	}
@@ -151,6 +153,37 @@ func (vd *VoiceDisplay) handleTTS(data map[string]interface{}) {
 		}
 		log.Printf("[TTS] 停止播报并清空队列")
 	}
+}
+
+func (vd *VoiceDisplay) handleConfigUpdate(data map[string]interface{}) {
+	configData, ok := data["config"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	if serverURL, ok := configData["serverUrl"].(string); ok {
+		vd.config.ServerURL = serverURL
+	}
+	if displayID, ok := configData["displayId"].(string); ok {
+		vd.config.DisplayID = displayID
+	}
+	if vadThreshold, ok := configData["vadThreshold"].(float64); ok {
+		vd.config.VADThreshold = vadThreshold
+	}
+
+	configPath := "config.json"
+	if len(os.Args) > 1 {
+		configPath = os.Args[1]
+	}
+	configJSON, err := json.MarshalIndent(vd.config, "", "  ")
+	if err != nil {
+		log.Printf("[配置] 配置序列化失败: %v", err)
+		return
+	}
+	if err := os.WriteFile(configPath, configJSON, 0644); err != nil {
+		log.Printf("[配置] 配置写入失败: %v", err)
+		return
+	}
+	log.Printf("[配置] 配置已更新: serverUrl=%s, displayId=%s", vd.config.ServerURL, vd.config.DisplayID)
 }
 
 func (vd *VoiceDisplay) handleReminder(data map[string]interface{}) {

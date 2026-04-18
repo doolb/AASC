@@ -200,6 +200,9 @@ class VoiceDisplay {
             case 'serverStartTime':
                 log('系统', `服务器启动时间: ${data.time}`);
                 break;
+            case 'configUpdate':
+                this.handleConfigUpdate(data);
+                break;
             case 'restoreState':
                 log('系统', '收到恢复状态');
                 break;
@@ -235,6 +238,19 @@ class VoiceDisplay {
             } else {
                 this.disableRecording();
             }
+        }
+    }
+
+    handleConfigUpdate(data) {
+        if (!data.config) return;
+        try {
+            const configPath = path.join(__dirname, 'config.json');
+            const currentConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            const newConfig = { ...currentConfig, ...data.config };
+            fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
+            log('配置', `配置已更新: serverUrl=${newConfig.serverUrl}, displayId=${newConfig.displayId}`);
+        } catch (err) {
+            logError('配置', `配置更新失败: ${err.message}`);
         }
     }
 

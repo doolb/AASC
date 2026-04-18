@@ -2115,3 +2115,317 @@ input[type="range"]::-webkit-slider-thumb:active {
         opacity: 0.5;
     }
 }
+
+.system-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.stat-item {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #00d2ff;
+    font-family: monospace;
+}
+
+.stat-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.stat-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease, background 0.5s ease;
+}
+
+.log-filter-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.log-search-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.log-search-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.log-search-input:focus {
+    border-color: #00d2ff;
+    box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.15);
+}
+
+.log-search-input::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.log-time-select {
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+}
+
+.log-time-select option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+.log-action-btn {
+    padding: 7px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.log-action-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.log-action-btn.active {
+    background: rgba(0, 210, 255, 0.2);
+    border-color: rgba(0, 210, 255, 0.4);
+    color: #00d2ff;
+}
+
+.log-count {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: monospace;
+    padding: 0 8px;
+}
+
+.log-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.log-filter-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    min-width: 36px;
+    flex-shrink: 0;
+}
+
+.log-filter-group {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.log-filter-hint {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.3);
+    font-style: italic;
+}
+
+.log-filter-btn {
+    padding: 4px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.log-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.log-filter-btn.active {
+    background: rgba(0, 210, 255, 0.2);
+    border-color: rgba(0, 210, 255, 0.4);
+    color: #00d2ff;
+}
+
+.log-filter-level.active {
+    background: color-mix(in srgb, var(--filter-color) 20%, transparent);
+    border-color: color-mix(in srgb, var(--filter-color) 50%, transparent);
+    color: var(--filter-color);
+}
+
+.log-section {
+    padding: 0 !important;
+    background: none !important;
+    border: none !important;
+}
+
+.log-entries {
+    max-height: calc(100vh - 500px);
+    min-height: 300px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 8px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.log-empty {
+    text-align: center;
+    padding: 40px;
+    color: rgba(255, 255, 255, 0.3);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+}
+
+.log-entry {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    transition: background 0.15s;
+}
+
+.log-entry:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.log-time {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    flex-shrink: 0;
+    min-width: 65px;
+}
+
+.log-level-badge {
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.log-level-badge-error {
+    background: rgba(239, 68, 68, 0.25);
+    color: #ef4444;
+}
+
+.log-level-badge-warn {
+    background: rgba(245, 158, 11, 0.25);
+    color: #f59e0b;
+}
+
+.log-level-badge-info {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.log-level-badge-debug {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+}
+
+.log-category {
+    color: rgba(255, 255, 255, 0.6);
+    flex-shrink: 0;
+}
+
+.log-device {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.log-message {
+    color: rgba(255, 255, 255, 0.9);
+    word-break: break-all;
+}
+
+.log-level-error .log-message {
+    color: #fca5a5;
+}
+
+.log-level-warn .log-message {
+    color: #fde68a;
+}
+
+.log-level-error {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.log-level-warn {
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.log-entries mark {
+    background: rgba(0, 210, 255, 0.3);
+    color: #fff;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+@media (max-width: 768px) {
+    .system-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .log-search-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .log-search-input {
+        min-width: auto;
+    }
+
+    .log-entries {
+        max-height: calc(100vh - 600px);
+        min-height: 200px;
+    }
+}

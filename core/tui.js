@@ -40,13 +40,13 @@ function formatUptime(seconds) {
 
 function formatCapabilities(caps) {
     if (!caps) return '-';
-    const icons = [];
-    if (caps.mediaRendering) icons.push('M');
-    if (caps.voicePlayback) icons.push('P');
-    if (caps.voiceRecording) icons.push('R');
-    if (caps.voiceRecognition) icons.push('A');
-    if (caps.displayText) icons.push('T');
-    return icons.join(',') || '-';
+    const items = [];
+    if (caps.mediaRendering) items.push('媒体');
+    if (caps.voicePlayback) items.push('播放');
+    if (caps.voiceRecording) items.push('录音');
+    if (caps.voiceRecognition) items.push('识别');
+    if (caps.displayText) items.push('文字');
+    return items.join(',') || '-';
 }
 
 function formatMemory(bytes) {
@@ -98,6 +98,20 @@ class ServerTUI {
         this.maxLogLines = options.maxLogLines || 500;
         this.refreshTimer = null;
         this.renderPending = false;
+        this.logBuffer = [];
+        this.maxLogBuffer = 2000;
+        this.systemStats = null;
+
+        this.filterMode = 'level';
+        this.filterModes = ['level', 'category'];
+        this.levelFilter = 'all';
+        this.levelFilterOptions = ['all', 'error', 'warn', 'info', 'debug'];
+        this.levelFilterLabels = { all: '全部', error: '错误', warn: '警告', info: '信息', debug: '调试' };
+        this.categoryFilter = 'all';
+        this.categoryFilterOptions = ['all'];
+        this.categoryFilterLabels = { all: '全部' };
+        this.knownCategories = new Set();
+
         this._initScreen();
     }
 
@@ -126,7 +140,7 @@ class ServerTUI {
             top: 1,
             left: 0,
             width: '30%',
-            height: '40%',
+            height: '50%',
             label: ' 系统状态 ',
             border: {
                 type: 'line'
@@ -144,7 +158,7 @@ class ServerTUI {
             top: 1,
             left: '30%',
             width: '70%',
-            height: '40%',
+            height: '50%',
             label: ' 设备列表 ',
             border: {
                 type: 'line'
@@ -167,11 +181,11 @@ class ServerTUI {
         });
 
         this.logBox = blessed.log({
-            top: '40%+1',
+            top: '50%+1',
             left: 0,
             width: '100%',
-            height: '60%-2',
-            label: ' 事件日志 ',
+            height: '50%-2',
+            label: ' 事件日志 [级别:全部] ',
             border: {
                 type: 'line'
             },
@@ -207,6 +221,34 @@ class ServerTUI {
             process.exit(0);
         });
 
+        this.screen.key(['left'], () => {
+            if (this.filterMode === 'level') {
+                const idx = this.levelFilterOptions.indexOf(this.levelFilter);
+                const newIdx = (idx - 1 + this.levelFilterOptions.length) % this.levelFilterOptions.length;
+                this.setLevelFilter(this.levelFilterOptions[newIdx]);
+            } else {
+                const idx = this.categoryFilterOptions.indexOf(this.categoryFilter);
+                const newIdx = (idx - 1 + this.categoryFilterOptions.length) % this.categoryFilterOptions.length;
+                this.setCategoryFilter(this.categoryFilterOptions[newIdx]);
+            }
+        });
+        this.screen.key(['right'], () => {
+            if (this.filterMode === 'level') {
+                const idx = this.levelFilterOptions.indexOf(this.levelFilter);
+                const newIdx = (idx + 1) % this.levelFilterOptions.length;
+                this.setLevelFilter(this.levelFilterOptions[newIdx]);
+            } else {
+                const idx = this.categoryFilterOptions.indexOf(this.categoryFilter);
+                const newIdx = (idx + 1) % this.categoryFilterOptions.length;
+                this.setCategoryFilter(this.categoryFilterOptions[newIdx]);
+            }
+        });
+        this.screen.key(['tab'], () => {
+            const idx = this.filterModes.indexOf(this.filterMode);
+            this.filterMode = this.filterModes[(idx + 1) % this.filterModes.length];
+            this._updateLogLabel();
+        });
+
         this._bindScrollKeys();
 
         this.screen.render();
@@ -229,19 +271,41 @@ class ServerTUI {
             ` {bold}显示端:{/bold} ${data.displayCount}`,
             ` {bold}控制端:{/bold} ${data.controlCount}`
         ];
+
+        if (this.systemStats) {
+            const cpu = this.systemStats.cpu || {};
+            const mem = this.systemStats.memory || {};
+            const cpuUsage = parseFloat(cpu.usage || 0);
+            const memUsage = parseFloat(mem.usagePercent || 0);
+            const cpuColor = cpuUsage > 80 ? 'red' : cpuUsage > 50 ? 'yellow' : 'green';
+            const memColor = memUsage > 80 ? 'red' : memUsage > 50 ? 'yellow' : 'green';
+
+            lines.push('');
+            lines.push('{bold}── 系统监控 ──{/bold}');
+            lines.push(` {bold}CPU:{/bold} {${cpuColor}-fg}${cpuUsage}%{/${cpuColor}-fg} (${cpu.count || '-'}核)`);
+            lines.push(` {bold}内存:{/bold} {${memColor}-fg}${memUsage}%{/${memColor}-fg} (${formatMemory(mem.used)}/${formatMemory(mem.total)})`);
+            lines.push(` {bold}系统运行:{/bold} ${formatUptime(this.systemStats.uptime?.system || 0)}`);
+            lines.push(` {bold}负载:{/bold} ${(cpu.loadAvg?.['1m'] || 0).toFixed(2)} ${(cpu.loadAvg?.['5m'] || 0).toFixed(2)} ${(cpu.loadAvg?.['15m'] || 0).toFixed(2)}`);
+        }
+
         this.statusBox.setContent(lines.join('\n'));
         this._scheduleRender();
+    }
+
+    updateSystemStats(stats) {
+        if (!this.enabled) return;
+        this.systemStats = stats;
     }
 
     updateDeviceList(devices) {
         if (!this.enabled) return;
         if (!devices || !Array.isArray(devices)) {
-            this.deviceTable.setContent(' ID         IP              类型     能力');
+            this.deviceTable.setContent(' ID         IP              类型       能力');
             this._scheduleRender();
             return;
         }
 
-        const header = ' ID         IP              类型     能力';
+        const header = ' ID         IP              类型       能力';
         const filteredDevices = devices.filter(d => d != null);
         const rows = filteredDevices.map((d) => {
             const typeStr = d.isSubDisplay ? '子显示' : '显示端';
@@ -252,7 +316,7 @@ class ServerTUI {
             return [
                 padEndDisplay(id, 10),
                 padEndDisplay(ip, 15),
-                padEndDisplay(typeStr, 8),
+                padEndDisplay(typeStr, 10),
                 formatCapabilities(caps)
             ].join(' ');
         });
@@ -266,7 +330,75 @@ class ServerTUI {
         const timestamp = getTimestamp();
         const color = getCategoryColor(category);
         const tag = `[${category}]`;
-        this.logBox.log(`{${color}-fg}${timestamp} ${tag}{/${color}-fg} ${message}`);
+
+        const levelMap = {
+            '错误': 'error', '断开': 'warn', '静音': 'warn',
+            '连接': 'info', '语音': 'info', 'TTS': 'info', '提醒': 'info',
+            '设备': 'info', '能力': 'info', '系统': 'info', '子显示端': 'info',
+            'AASC': 'info', '媒体库': 'info', '整点报时': 'info',
+            'Chat': 'info', 'Commands': 'info', '配置': 'debug', '内存': 'debug'
+        };
+        const level = levelMap[category] || 'info';
+
+        this.logBuffer.push({ timestamp, category, message, level, color, tag });
+        if (this.logBuffer.length > this.maxLogBuffer) {
+            this.logBuffer = this.logBuffer.slice(-this.maxLogBuffer);
+        }
+
+        if (!this.knownCategories.has(category)) {
+            this.knownCategories.add(category);
+            this.categoryFilterOptions = ['all', ...Array.from(this.knownCategories).sort()];
+            this.categoryFilterLabels = { all: '全部' };
+            this.categoryFilterOptions.forEach(c => {
+                if (c !== 'all') this.categoryFilterLabels[c] = c;
+            });
+        }
+
+        if (this._matchesFilter(level, category)) {
+            this.logBox.log(`{${color}-fg}${timestamp} ${tag}{/${color}-fg} ${message}`);
+            this._scheduleRender();
+        }
+    }
+
+    _matchesFilter(level, category) {
+        if (this.levelFilter !== 'all' && this.levelFilter !== level) return false;
+        if (this.categoryFilter !== 'all' && this.categoryFilter !== category) return false;
+        return true;
+    }
+
+    setLevelFilter(filter) {
+        if (!this.enabled) return;
+        if (!this.levelFilterOptions.includes(filter)) return;
+        this.levelFilter = filter;
+        this._reapplyFilter();
+    }
+
+    setCategoryFilter(filter) {
+        if (!this.enabled) return;
+        if (!this.categoryFilterOptions.includes(filter)) return;
+        this.categoryFilter = filter;
+        this._reapplyFilter();
+    }
+
+    _reapplyFilter() {
+        this.logBox.setContent('');
+        const filtered = this.logBuffer.filter(e => this._matchesFilter(e.level, e.category));
+        filtered.forEach(e => {
+            this.logBox.log(`{${e.color}-fg}${e.timestamp} ${e.tag}{/${e.color}-fg} ${e.message}`);
+        });
+        this._updateLogLabel();
+        this._scheduleRender();
+    }
+
+    _updateLogLabel() {
+        const modeLabel = this.filterMode === 'level' ? '级别' : '类别';
+        let valueLabel;
+        if (this.filterMode === 'level') {
+            valueLabel = this.levelFilterLabels[this.levelFilter] || '全部';
+        } else {
+            valueLabel = this.categoryFilterLabels[this.categoryFilter] || '全部';
+        }
+        this.logBox.setLabel(` 事件日志 [${modeLabel}:${valueLabel}] `);
         this._scheduleRender();
     }
 

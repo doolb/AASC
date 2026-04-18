@@ -44,6 +44,21 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         maxLogLines: 最大日志行数 = 500
         refreshTimer: 刷新定时器
         enabled: 是否启用TUI
+        logFilter: 当前日志筛选级别 = 'all'
+        logFilterOptions: 筛选选项 = ['all', 'error', 'warn', 'info', 'debug']
+        logFilterLabels: 筛选标签 = { all: '全部', error: '错误', warn: '警告', info: '信息', debug: '调试' }
+        logBuffer: 日志缓冲区 = []
+        maxLogBuffer: 最大缓冲区大小 = 2000
+        systemStats: 系统监控数据 = null
+        filterMode: 当前筛选维度 = 'level' (可选 'level' 或 'category')
+        filterModes: 筛选维度列表 = ['level', 'category']
+        levelFilter: 级别筛选值 = 'all'
+        levelFilterOptions: 级别筛选选项 = ['all', 'error', 'warn', 'info', 'debug']
+        levelFilterLabels: 级别筛选标签 = { all: '全部', error: '错误', warn: '警告', info: '信息', debug: '调试' }
+        categoryFilter: 类别筛选值 = 'all'
+        categoryFilterOptions: 类别筛选选项 = ['all'] (动态扩展)
+        categoryFilterLabels: 类别筛选标签 = { all: '全部' } (动态扩展)
+        knownCategories: 已知类别集合 = new Set()
 
     构造函数(选项):
         如果 选项.enabled === false:
@@ -67,7 +82,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         })
 
         this.statusBox = blessed.box({
-            顶部: 1, 左边: 0, 宽度: '30%', 高度: '40%',
+            顶部: 1, 左边: 0, 宽度: '30%', 高度: '50%',
             标签: ' 系统状态 ',
             边框: { type: 'line' },
             样式: { border: { fg: 'cyan' } },
@@ -75,7 +90,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         })
 
         this.deviceTable = blessed.table({
-            顶部: 1, 左边: '30%', 宽度: '70%', 高度: '40%',
+            顶部: 1, 左边: '30%', 宽度: '70%', 高度: '50%',
             标签: ' 设备列表 ',
             边框: { type: 'line' },
             样式: { border: { fg: 'green' } },
@@ -84,8 +99,8 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         })
 
         this.logBox = blessed.log({
-            顶部: '40%+1', 左边: 0, 宽度: '100%', 高度: '60%-2',
-            标签: ' 事件日志 ',
+            顶部: '50%+1', 左边: 0, 宽度: '100%', 高度: '50%-2',
+            标签: ' 事件日志 [级别:全部] ',
             边框: { type: 'line' },
             样式: { border: { fg: 'yellow' } },
             滚动: true,
@@ -101,6 +116,31 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         logBox.focus()
 
         screen.key(['q', 'C-c'], () => process.exit(0))
+        screen.key(['left'], () => {
+            如果 this.filterMode === 'level':
+                idx = this.levelFilterOptions.indexOf(this.levelFilter)
+                newIdx = (idx - 1 + this.levelFilterOptions.length) % this.levelFilterOptions.length
+                this.setLevelFilter(this.levelFilterOptions[newIdx])
+            否则:
+                idx = this.categoryFilterOptions.indexOf(this.categoryFilter)
+                newIdx = (idx - 1 + this.categoryFilterOptions.length) % this.categoryFilterOptions.length
+                this.setCategoryFilter(this.categoryFilterOptions[newIdx])
+        })
+        screen.key(['right'], () => {
+            如果 this.filterMode === 'level':
+                idx = this.levelFilterOptions.indexOf(this.levelFilter)
+                newIdx = (idx + 1) % this.levelFilterOptions.length
+                this.setLevelFilter(this.levelFilterOptions[newIdx])
+            否则:
+                idx = this.categoryFilterOptions.indexOf(this.categoryFilter)
+                newIdx = (idx + 1) % this.categoryFilterOptions.length
+                this.setCategoryFilter(this.categoryFilterOptions[newIdx])
+        })
+        screen.key(['tab'], () => {
+            idx = this.filterModes.indexOf(this.filterMode)
+            this.filterMode = this.filterModes[(idx + 1) % this.filterModes.length]
+            this._updateLogLabel()
+        })
         this._bindScrollKeys()
         screen.render()
 
@@ -148,16 +188,33 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
             ` 显示端: ${状态数据.显示端数量}`,
             ` 控制端: ${状态数据.控制端数量}`
         ]
+        如果 this.systemStats 存在:
+            cpu = this.systemStats.cpu || {}
+            mem = this.systemStats.memory || {}
+            cpuUsage = parseFloat(cpu.usage || 0)
+            memUsage = parseFloat(mem.usagePercent || 0)
+            cpuColor = cpuUsage > 80 ? 'red' : cpuUsage > 50 ? 'yellow' : 'green'
+            memColor = memUsage > 80 ? 'red' : memUsage > 50 ? 'yellow' : 'green'
+            内容.push('')
+            内容.push('── 系统监控 ──')
+            内容.push(` CPU: ${cpuUsage}% (${cpu.count || '-'}核)`)
+            内容.push(` 内存: ${memUsage}% (${格式化内存(mem.used)}/${格式化内存(mem.total)})`)
+            内容.push(` 系统运行: ${格式化运行时间(this.systemStats.uptime?.system || 0)}`)
+            内容.push(` 负载: ${cpu.loadAvg?.['1m']} ${cpu.loadAvg?.['5m']} ${cpu.loadAvg?.['15m']}`)
         this.statusBox.setContent(内容.join('\n'))
         this.screen.render()
 
+    方法 更新系统监控数据(监控数据):
+        如果 !this.enabled: 返回
+        this.systemStats = 监控数据
+
     方法 更新设备列表(设备数组):
         如果 !this.enabled: 返回
-        表头 = ' ID         IP              类型     能力'
+        表头 = ' ID         IP              类型       能力'
         行数据 = 设备数组.map(设备 => [
             按显示宽度填充(设备.id || '-', 10),
             按显示宽度填充(设备.ip || '-', 15),
-            按显示宽度填充(设备.类型, 8),
+            按显示宽度填充(设备.类型, 10),
             格式化能力(设备.能力)
         ].join(' '))
         this.deviceTable.setContent([表头, ...行数据].join('\n'))
@@ -168,8 +225,53 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         时间戳 = 获取当前时间字符串()
         颜色 = 获取类别颜色(类别)
         标签 = `[${类别}]`
-        this.logBox.log(`{${颜色}-fg}${时间戳} ${标签}{/${颜色}-fg} ${消息}`)
-        this.screen.render()
+        级别 = 类别级别映射[类别] || 'info'
+        this.logBuffer.push({ 时间戳, 类别, 消息, 级别, 颜色, 标签 })
+        如果 this.logBuffer.length > this.maxLogBuffer:
+            this.logBuffer = this.logBuffer.slice(-this.maxLogBuffer)
+        如果 类别 不在 this.knownCategories 中:
+            this.knownCategories.add(类别)
+            this.categoryFilterOptions = ['全部', ...Array.from(this.knownCategories).sort()]
+            this.categoryFilterLabels = { all: '全部' }
+            遍历 this.categoryFilterOptions:
+                如果 c !== 'all': this.categoryFilterLabels[c] = c
+        如果 this._matchesFilter(级别, 类别):
+            this.logBox.log(`{${颜色}-fg}${时间戳} ${标签}{/${颜色}-fg} ${消息}`)
+            this._scheduleRender()
+
+    方法 _matchesFilter(级别, 类别):
+        如果 this.levelFilter !== 'all' 且 this.levelFilter !== 级别: 返回 false
+        如果 this.categoryFilter !== 'all' 且 this.categoryFilter !== 类别: 返回 false
+        返回 true
+
+    方法 setLevelFilter(筛选级别):
+        如果 !this.enabled: 返回
+        如果 筛选级别 不在 this.levelFilterOptions 中: 返回
+        this.levelFilter = 筛选级别
+        this._reapplyFilter()
+
+    方法 setCategoryFilter(筛选类别):
+        如果 !this.enabled: 返回
+        如果 筛选类别 不在 this.categoryFilterOptions 中: 返回
+        this.categoryFilter = 筛选类别
+        this._reapplyFilter()
+
+    方法 _reapplyFilter():
+        this.logBox.setContent('')
+        筛选后日志 = this.logBuffer.filter(条目 => this._matchesFilter(条目.级别, 条目.类别))
+        遍历 筛选后日志:
+            this.logBox.log(`{${条目.颜色}-fg}${条目.时间戳} ${条目.标签}{/${条目.颜色}-fg} ${条目.消息}`)
+        this._updateLogLabel()
+        this._scheduleRender()
+
+    方法 _updateLogLabel():
+        维度标签 = this.filterMode === 'level' ? '级别' : '类别'
+        如果 this.filterMode === 'level':
+            值标签 = this.levelFilterLabels[this.levelFilter] || '全部'
+        否则:
+            值标签 = this.categoryFilterLabels[this.categoryFilter] || '全部'
+        this.logBox.setLabel(` 事件日志 [${维度标签}:${值标签}] `)
+        this._scheduleRender()
 
     方法 启动定时刷新(获取状态回调, 获取设备回调):
         如果 !this.enabled: 返回
@@ -235,13 +337,13 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
     返回 部分.join(' ')
 
 函数 格式化能力(能力对象):
-    图标 = []
-    如果 能力对象.mediaRendering: 图标.push('🖥')
-    如果 能力对象.voicePlayback: 图标.push('🔊')
-    如果 能力对象.voiceRecording: 图标.push('🎙')
-    如果 能力对象.voiceRecognition: 图标.push('🧠')
-    如果 能力对象.displayText: 图标.push('📝')
-    返回 图标.join('') || '—'
+    标签 = []
+    如果 能力对象.mediaRendering: 标签.push('媒体')
+    如果 能力对象.voicePlayback: 标签.push('播放')
+    如果 能力对象.voiceRecording: 标签.push('录音')
+    如果 能力对象.voiceRecognition: 标签.push('识别')
+    如果 能力对象.displayText: 标签.push('文字')
+    返回 标签.join(',') || '-'
 ```
 
 ## 子显示端 TUI - SubDisplayTUI
@@ -426,6 +528,20 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         () => ({ 运行时间, 内存, 协议, 静音, 显示端数, 控制端数 }),
         () => getDisplayList()
     )
+
+系统监控数据推送:
+    systemMonitor.onStats((stats) => {
+        tui.updateSystemStats(stats)
+    })
+
+日志筛选键盘操作:
+    Tab: 切换筛选维度（级别 ↔ 类别）
+    ← 方向键: 在当前维度中切换到上一个选项
+    → 方向键: 在当前维度中切换到下一个选项
+    级别筛选: 全部 → 错误 → 警告 → 信息 → 调试 → 全部（循环）
+    类别筛选: 全部 → AASC → Chat → Commands → TTS → ... → 全部（循环，动态收集）
+    级别和类别筛选同时生效（AND 逻辑）
+    当前筛选维度和值显示在日志面板标签中，如 "事件日志 [级别:错误]" 或 "事件日志 [类别:语音]"
 ```
 
 ### 子显示端集成 (voice-display-node/main.js)

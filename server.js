@@ -20,35 +20,42 @@ const { SubServerManager } = require('./core/sub-server');
 const { initializeAASCSystem } = require('./aasc/init');
 const ServerTUI = require('./core/tui');
 const { installConsoleRedirect } = require('./core/console-redirect');
+const LogBuffer = require('./core/log-buffer');
+const SystemMonitor = require('./core/system-monitor');
 
 config.loadConfig();
 
 const useTUI = !process.argv.includes('--no-tui');
 const tui = new ServerTUI({ enabled: useTUI });
+const logBuffer = new LogBuffer({ maxSize: 1000 });
+const systemMonitor = new SystemMonitor({ intervalMs: 5000 });
 
 installConsoleRedirect({
     enabled: useTUI,
     writeLog: (level, message) => {
         const category = level === 'error' ? '错误' : '系统';
         tui.addLog(category, message);
+        logBuffer.add(category, message);
     }
 });
 
-function log(category, message) {
+function log(category, message, extra) {
     if (useTUI) {
         tui.addLog(category, message);
     } else {
         const timestamp = new Date().toTimeString().split(' ')[0];
         console.log(`${timestamp} [${category}] ${message}`);
     }
+    logBuffer.add(category, message, extra);
 }
 
-function logError(category, message) {
+function logError(category, message, extra) {
     if (useTUI) {
         tui.addLog(category, message);
-        return;
+    } else {
+        console.error(`[${category}] ${message}`);
     }
-    console.error(`[${category}] ${message}`);
+    logBuffer.add(category, message, extra);
 }
 
 const app = express();
@@ -178,9 +185,12 @@ mediaLibraryManager.init().then(() => {
 });
 
 function startServer() {
+    const localIP = getLocalIP();
+    const protocol = useHttps ? 'https' : 'http';
+
+    updateVoiceDisplayConfig(localIP, PORT, protocol);
+
     server.listen(PORT, '0.0.0.0', async () => {
-        const localIP = getLocalIP();
-        const protocol = useHttps ? 'https' : 'http';
         log('系统', '媒体中心服务器已启动');
         log('系统', `上传端地址: ${protocol}://${localIP}:${PORT}/upload`);
         log('系统', `显示端地址: ${protocol}://${localIP}:${PORT}/display`);
@@ -191,8 +201,6 @@ function startServer() {
         }
         
         tui.setHeader(protocol, localIP, PORT);
-        
-        updateVoiceDisplayConfig(localIP, PORT, protocol);
         
         timeListener.start();
         timeAnnounce.start(displayClients, sendToDisplay);
@@ -248,6 +256,22 @@ function startServer() {
             },
             () => getDisplayList()
         );
+
+        systemMonitor.start();
+        systemMonitor.onStats((stats) => {
+            broadcastToControls({
+                type: 'systemStats',
+                stats: stats
+            });
+            tui.updateSystemStats(stats);
+        });
+
+        logBuffer.onLogEntry((entry) => {
+            broadcastToControls({
+                type: 'serverLog',
+                entry: entry
+            });
+        });
     });
 }
 
@@ -1039,6 +1063,32 @@ app.get('/api/status', (req, res) => {
     });
 });
 
+app.get('/api/logs', (req, res) => {
+    const filters = {
+        search: req.query.search || '',
+        levels: req.query.levels ? req.query.levels.split(',') : [],
+        devices: req.query.devices ? req.query.devices.split(',') : [],
+        categories: req.query.categories ? req.query.categories.split(',') : [],
+        timeRange: req.query.timeRange || 'all',
+        limit: req.query.limit ? parseInt(req.query.limit) : 200
+    };
+    const entries = logBuffer.getEntries(filters);
+    res.json({
+        status: 'ok',
+        total: logBuffer.size,
+        filtered: entries.length,
+        entries: entries,
+        categories: logBuffer.getCategories()
+    });
+});
+
+app.get('/api/system-stats', (req, res) => {
+    res.json({
+        status: 'ok',
+        stats: systemMonitor.getStats()
+    });
+});
+
 app.get('/api/map-data', (req, res) => {
     try {
         const localIP = getLocalIP();
@@ -1554,6 +1604,19 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
         
+        if (isSubDisplay) {
+            const protocol = useHttps ? 'https' : 'http';
+            const localIP = getLocalIP();
+            ws.send(JSON.stringify({
+                type: 'configUpdate',
+                config: {
+                    serverUrl: `${protocol}://${localIP}:${PORT}`,
+                    displayId: displayId,
+                    vadThreshold: 0.01
+                }
+            }));
+        }
+        
         if (savedState && savedState.currentMedia) {
             ws.send(JSON.stringify({ 
                 type: 'restoreState',
@@ -1607,6 +1670,15 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
+        ws.send(JSON.stringify({
+            type: 'logHistory',
+            entries: logBuffer.getEntries({ limit: 200 }),
+            categories: logBuffer.getCategories()
+        }));
+        ws.send(JSON.stringify({
+            type: 'systemStats',
+            stats: systemMonitor.getStats()
+        }));
         
         ws.on('message', async (message) => {
             try {
@@ -2196,7 +2268,6 @@ async function handleControlMessageFallback(data, ws) {
 }
 
 function getLocalIP() {
-    return '192.168.1.39';
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
         for (const iface of interfaces[name]) {

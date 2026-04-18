@@ -29,6 +29,7 @@
 | 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
 | 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、旋转重力方向调整、设备事件防抖 |
 | 显示端分布式能力 | [display-capability.md](spec/display-capability.md) | 显示端能力声明、能力路由、能力编辑 |
+| 日志筛选与系统监控 | [log-viewer.md](spec/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
 
 ## 核心模块
 
@@ -44,6 +45,8 @@
 | 整点报时 | core/timeAnnounce.js | 整点报时功能 |
 | 语音命令 | core/voiceCommand.js | 语音命令处理模块 |
 | 子服务器 | core/sub-server.js | 子服务器管理、负载均衡 |
+| 日志缓冲区 | core/log-buffer.js | 结构化日志存储和筛选 |
+| 系统监控 | core/system-monitor.js | CPU和内存监控数据采集 |
 
 ## 前端模块
 
@@ -64,6 +67,7 @@
 | TTS控制 | public/js/tts.js | TTS 前端控制 |
 | 本地ASR | public/js/sherpa-asr.js | sherpa-onnx-wasm 本地语音识别 |
 | Toast提示 | public/js/toast.js | 消息提示组件 |
+| 日志查看器 | public/js/log-viewer.js | 日志筛选、系统监控显示 |
 
 ## 配置文件
 

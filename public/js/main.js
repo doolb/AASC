@@ -114,6 +114,10 @@ const App = {
         if (window.FloatingControl) {
             window.FloatingControl.init();
         }
+        
+        if (window.LogViewer) {
+            window.LogViewer.init();
+        }
     },
     
     async initMapPanel() {

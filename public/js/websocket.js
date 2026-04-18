@@ -202,6 +202,18 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.addCommandAckMessage(data.displayId, data.commandType, data.success, data.details);
             }
+        } else if (data.type === 'serverLog') {
+            if (window.LogViewer && data.entry) {
+                window.LogViewer.addEntry(data.entry);
+            }
+        } else if (data.type === 'logHistory') {
+            if (window.LogViewer && data.entries) {
+                window.LogViewer.addHistory(data.entries, data.categories);
+            }
+        } else if (data.type === 'systemStats') {
+            if (window.LogViewer && data.stats) {
+                window.LogViewer.updateSystemStats(data.stats);
+            }
         }
     },
     

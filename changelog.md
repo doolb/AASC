@@ -3,6 +3,69 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ TUI 系统监控和日志筛选
+  - 需求：服务端 TUI 上也需要显示系统监控数据和日志筛选功能
+  - 实现：
+    - TUI 状态面板新增系统监控区域，显示 CPU 使用率（带颜色）、内存使用率（带颜色）、系统运行时间、负载均值
+    - TUI 日志面板新增级别筛选功能，支持 F1-F5 快捷键切换筛选级别
+    - F1: 全部日志，F2: 错误日志，F3: 警告日志，F4: 信息日志，F5: 调试日志
+    - 日志缓冲区存储最近 2000 条日志，切换筛选时重新渲染
+    - 状态面板和设备列表高度调整为 50%，为系统监控数据留出空间
+    - systemMonitor.onStats 回调同时推送给 TUI 和控制端
+  - 改动文件：
+    - `core/tui.js` (添加 updateSystemStats、setLogFilter、logBuffer，调整布局)
+    - `server.js` (systemMonitor.onStats 推送 TUI)
+
+- ✅ 服务端启动时直接修改 voice-display-node 配置
+  - 需求：服务端启动时直接修改配置文件，不等子显示端连接时才推送
+  - 实现：
+    - 将 `updateVoiceDisplayConfig` 调用从 `server.listen` 回调内移到 `server.listen` 之前
+    - 服务端启动时立即检测本地 IP 并写入 voice-display-node/config.json
+    - Go 版 voice-display 同步添加 `handleConfigUpdate` 方法
+  - 改动文件：
+    - `server.js` (updateVoiceDisplayConfig 提前到 listen 之前)
+    - `voice-display/main.go` (添加 handleConfigUpdate 方法)
+
+- ✅ 日志筛选功能
+  - 需求：控制端日志面板支持多维度筛选，方便快速定位问题
+  - 实现：
+    - 服务端新增 `core/log-buffer.js`，结构化日志缓冲区，支持按搜索内容、级别、设备、标签、时间范围筛选
+    - 服务端新增 `core/system-monitor.js`，系统 CPU 和内存监控数据采集
+    - 服务端 `server.js` 集成日志缓冲区和系统监控，新增 `/api/logs` 和 `/api/system-stats` API 端点
+    - 服务端日志通过 WebSocket 实时广播给控制端（serverLog、logHistory、systemStats 消息类型）
+    - 客户端新增 `public/js/log-viewer.js`，日志查看器组件，支持搜索框、级别筛选、设备筛选、标签筛选、时间范围筛选
+    - 客户端系统状态面板显示 CPU 使用率、内存使用率、进程内存、堆内存、系统运行时间、进程运行时间
+    - 客户端日志面板支持自动滚动、清除筛选、清空日志
+    - 侧边栏新增"日志"导航项，日志面板包含系统状态和日志筛选两个区域
+  - 改动文件：
+    - `core/log-buffer.js` (新增，日志缓冲区)
+    - `core/system-monitor.js` (新增，系统监控)
+    - `server.js` (集成日志缓冲区和系统监控，新增 API 端点)
+    - `public/js/log-viewer.js` (新增，客户端日志查看器)
+    - `public/js/websocket.js` (添加日志和系统状态消息处理)
+    - `public/js/main.js` (初始化 LogViewer)
+    - `public/upload.html` (添加日志导航项和日志面板 HTML)
+    - `public/css/upload.css` (添加日志面板样式)
+
+### Bug 修复
+- ✅ 服务端启动时未更新 voice-display-node 配置
+  - 问题：`getLocalIP()` 函数有硬编码返回值 `return '192.168.1.39'`，导致实际 IP 检测代码永远不会执行，voice-display-node 配置中的服务器地址可能不正确
+  - 修复：
+    - 移除 `getLocalIP()` 中的硬编码返回值，恢复自动 IP 检测
+    - 子显示端连接时服务端主动推送 `configUpdate` 消息，包含最新的服务器地址和显示端 ID
+    - voice-display-node 新增 `handleConfigUpdate` 方法，收到配置更新后写入本地 config.json
+  - 改动文件：
+    - `server.js` (修复 getLocalIP，子显示端连接时推送 configUpdate)
+    - `voice-display-node/main.js` (添加 configUpdate 消息处理)
+
+- ✅ 设备列表文本未对齐，能力显示使用缩写
+  - 问题：TUI 设备列表中类型列宽度不足导致中文对齐错乱，能力显示使用 M/P/R/A/T 缩写不直观
+  - 修复：
+    - 类型列宽度从 8 调整为 10，确保中文"子显示"/"显示端"对齐
+    - `formatCapabilities` 函数改用中文标签（媒体/播放/录音/识别/文字）替代英文缩写
+  - 改动文件：
+    - `core/tui.js` (修改 formatCapabilities 和 updateDeviceList)
+
 - ✅ TUI 日志窗口支持方向键滚动（兼容 tmux 远程环境）
   - 需求：在 tmux 远程会话中使用方向键滚动日志窗口
   - 实现：

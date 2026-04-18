@@ -412,6 +412,7 @@ stopHeartbeat():
 handleMessage(msgType, data):
     "displayId": 记录服务端分配的显示端ID
     "serverStartTime": 记录服务器启动时间
+    "configUpdate": 更新本地配置文件（serverUrl, displayId, vadThreshold）
     "restoreState": 记录恢复状态
     "tts":
         playAudio -> 从URL下载并播放音频
@@ -420,6 +421,16 @@ handleMessage(msgType, data):
     "voiceInput": 记录确认
     "control": 记录控制指令
     "media": 记录媒体指令（子显示端不支持媒体显示）
+```
+
+### 配置更新处理
+```
+handleConfigUpdate(data):
+    如果 !data.config: 返回
+    读取当前 config.json
+    合并新配置: newConfig = { ...currentConfig, ...data.config }
+    写入 config.json
+    记录日志: 配置已更新
 ```
 
 ### 重连机制

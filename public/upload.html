@@ -46,6 +46,10 @@
                 <span class="nav-icon">🎮</span>
                 <span class="nav-text">3D</span>
             </button>
+            <button class="nav-item" data-target="logs" title="日志查看">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">日志</span>
+            </button>
         </div>
     </nav>
     
@@ -375,6 +379,74 @@
                 </div>
             </div>
         </section>
+
+        <section class="panel" id="panel-logs" style="display:none;">
+            <h1 class="page-title">日志查看</h1>
+
+            <div class="section">
+                <h2>系统状态</h2>
+                <div class="system-stats-grid" id="systemStats">
+                    <div class="stat-item">
+                        <span class="stat-label">CPU</span>
+                        <span class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">内存</span>
+                        <span class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">进程内存</span>
+                        <span class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">堆内存</span>
+                        <span class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">系统运行</span>
+                        <span class="stat-value">--</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">进程运行</span>
+                        <span class="stat-value">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>日志筛选</h2>
+                <div class="log-filter-bar">
+                    <div class="log-search-row">
+                        <input type="text" id="logSearchInput" class="log-search-input" placeholder="搜索日志内容...">
+                        <select id="logTimeRange" class="log-time-select">
+                            <option value="all">全部时间</option>
+                        </select>
+                        <button class="log-action-btn" onclick="LogViewer.toggleAutoScroll()" id="logAutoScrollBtn" title="自动滚动" class="active">↓ 自动滚动</button>
+                        <button class="log-action-btn" onclick="LogViewer.clearFilters()" title="清除筛选">✕ 清除筛选</button>
+                        <button class="log-action-btn" onclick="LogViewer.clearLogs()" title="清空日志">🗑 清空</button>
+                        <span class="log-count" id="logCount">0/0</span>
+                    </div>
+                    <div class="log-filter-row">
+                        <span class="log-filter-label">级别:</span>
+                        <div class="log-filter-group" id="logLevelFilters"></div>
+                    </div>
+                    <div class="log-filter-row">
+                        <span class="log-filter-label">设备:</span>
+                        <div class="log-filter-group" id="logDeviceFilters"></div>
+                    </div>
+                    <div class="log-filter-row">
+                        <span class="log-filter-label">标签:</span>
+                        <div class="log-filter-group" id="logCategoryFilters"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section log-section">
+                <div class="log-entries" id="logEntries">
+                    <div class="log-empty">暂无日志</div>
+                </div>
+            </div>
+        </section>
     </main>
     
     <div class="modal-overlay" id="featureModal">
@@ -531,6 +603,7 @@
     <script src="js/search.js"></script>
     <script src="js/floating-control.js"></script>
     <script src="js/self-test.js"></script>
+    <script src="js/log-viewer.js"></script>
     <script type="module" src="js/map/map-panel.js"></script>
     <script src="js/main.js"></script>
     
