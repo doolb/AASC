@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Bug 修复
+- ✅ TUI 模式内存泄漏修复
+  - 问题：TUI 模式长时间运行后内存持续增长，blessed.log 内部缓冲区无限膨胀
+  - 原因：
+    - blessed.log 组件虽然设置了 bufferLength，但内部 `_clines` 缓存和渲染管线不会完全释放旧内容引用
+    - ServerTUI 的 logBuffer 使用 `slice()` 创建新数组，旧数组引用可能延迟回收
+    - SubDisplayTUI 完全没有日志缓冲管理，logBox 内容无限增长
+    - `_reapplyFilter()` 重新写入所有历史日志（最多 2000 条），不限制数量
+    - `levelMap` 每次 addLog 调用都重新创建对象，增加 GC 压力
+    - `destroy()` 方法清理不彻底，未清除定时器和组件引用
+  - 修复：
+    - 新增 `_trimLogBox()` 方法，当 logBox 内部行数超过 `maxLogLines * 1.5` 时，清空并从 logBuffer 重新写入最近 `maxLogLines` 条日志
+    - 新增 `_startTrimTimer()` 定时器，每 60 秒执行一次 `_trimLogBox()`
+    - `addLog()` 中每 200 条日志触发一次 `_trimLogBox()`
+    - `logBuffer` 裁剪改用 `splice()` 原地修改，避免创建新数组
+    - `LEVEL_MAP` 提升为模块级常量，避免每次调用重复创建
+    - `_reapplyFilter()` 限制只重新写入最近 `maxLogLines` 条日志
+    - SubDisplayTUI 新增 `logBuffer`/`maxLogBuffer` 日志缓冲管理
+    - `destroy()` 方法清除所有定时器、清空缓冲区、置空组件引用
+  - 改动文件：
+    - `core/tui.js` (ServerTUI 内存泄漏修复)
+    - `voice-display-node/tui.js` (SubDisplayTUI 内存泄漏修复)
+    - `docs/spec/tui.md` (更新伪代码)
+
 ### 新功能
 - ✅ TUI 系统监控和日志筛选
   - 需求：服务端 TUI 上也需要显示系统监控数据和日志筛选功能

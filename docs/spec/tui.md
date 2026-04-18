@@ -59,6 +59,8 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         categoryFilterOptions: 类别筛选选项 = ['all'] (动态扩展)
         categoryFilterLabels: 类别筛选标签 = { all: '全部' } (动态扩展)
         knownCategories: 已知类别集合 = new Set()
+        _logCount: 日志计数器 = 0
+        _trimTimer: 定时清理定时器 = null
 
     构造函数(选项):
         如果 选项.enabled === false:
@@ -66,6 +68,8 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
             返回
         this.enabled = true
         this.maxLogLines = 选项.maxLogLines || 500
+        this._logCount = 0
+        this._trimTimer = null
         this.初始化界面()
 
     方法 初始化界面():
@@ -143,6 +147,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         })
         this._bindScrollKeys()
         screen.render()
+        this._startTrimTimer()
 
     方法 绑定滚动键():
         screen.key(['up'], () => {
@@ -225,10 +230,10 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         时间戳 = 获取当前时间字符串()
         颜色 = 获取类别颜色(类别)
         标签 = `[${类别}]`
-        级别 = 类别级别映射[类别] || 'info'
+        级别 = LEVEL_MAP[类别] || 'info'
         this.logBuffer.push({ 时间戳, 类别, 消息, 级别, 颜色, 标签 })
         如果 this.logBuffer.length > this.maxLogBuffer:
-            this.logBuffer = this.logBuffer.slice(-this.maxLogBuffer)
+            this.logBuffer.splice(0, this.logBuffer.length - this.maxLogBuffer)
         如果 类别 不在 this.knownCategories 中:
             this.knownCategories.add(类别)
             this.categoryFilterOptions = ['全部', ...Array.from(this.knownCategories).sort()]
@@ -238,6 +243,9 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         如果 this._matchesFilter(级别, 类别):
             this.logBox.log(`{${颜色}-fg}${时间戳} ${标签}{/${颜色}-fg} ${消息}`)
             this._scheduleRender()
+        this._logCount++
+        如果 this._logCount % 200 === 0:
+            this._trimLogBox()
 
     方法 _matchesFilter(级别, 类别):
         如果 this.levelFilter !== 'all' 且 this.levelFilter !== 级别: 返回 false
@@ -258,7 +266,8 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
 
     方法 _reapplyFilter():
         this.logBox.setContent('')
-        筛选后日志 = this.logBuffer.filter(条目 => this._matchesFilter(条目.级别, 条目.类别))
+        最近缓冲 = this.logBuffer.slice(-this.maxLogLines)
+        筛选后日志 = 最近缓冲.filter(条目 => this._matchesFilter(条目.级别, 条目.类别))
         遍历 筛选后日志:
             this.logBox.log(`{${条目.颜色}-fg}${条目.时间戳} ${条目.标签}{/${条目.颜色}-fg} ${条目.消息}`)
         this._updateLogLabel()
@@ -280,10 +289,35 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
             this.更新设备列表(获取设备回调())
         }, 2000)
 
+    方法 _trimLogBox():
+        如果 !this.enabled 或 !this.logBox: 返回
+        行数 = this.logBox._clines ? this.logBox._clines.length : 0
+        阈值 = Math.floor(this.maxLogLines * 1.5)
+        如果 行数 <= 阈值: 返回
+        this.logBox.setContent('')
+        最近缓冲 = this.logBuffer.slice(-this.maxLogLines)
+        遍历 最近缓冲:
+            如果 this._matchesFilter(条目.级别, 条目.类别):
+                this.logBox.log(`{${条目.颜色}-fg}${条目.时间戳} ${条目.标签}{/${条目.颜色}-fg} ${条目.消息}`)
+        this._scheduleRender()
+
+    方法 _startTrimTimer():
+        this._trimTimer = setInterval(() => {
+            this._trimLogBox()
+        }, 60000)
+
     方法 销毁():
         如果 !this.enabled: 返回
         如果 this.refreshTimer: clearInterval(this.refreshTimer)
+        如果 this._trimTimer: clearInterval(this._trimTimer)
         this.screen.destroy()
+        this.logBuffer = []
+        this.systemStats = null
+        this.headerBox = null
+        this.statusBox = null
+        this.deviceTable = null
+        this.logBox = null
+        this.screen = null
 ```
 
 ### 日志类别颜色映射
@@ -360,6 +394,10 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         logBox: 事件日志组件
         maxLogLines: 最大日志行数 = 300
         enabled: 是否启用TUI
+        logBuffer: 日志缓冲区 = []
+        maxLogBuffer: 最大缓冲区大小 = 1000
+        _logCount: 日志计数器 = 0
+        _trimTimer: 定时清理定时器 = null
 
     构造函数(选项):
         如果 选项.enabled === false:
@@ -367,6 +405,10 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
             返回
         this.enabled = true
         this.maxLogLines = 选项.maxLogLines || 300
+        this.logBuffer = []
+        this.maxLogBuffer = 1000
+        this._logCount = 0
+        this._trimTimer = null
         this.初始化界面(选项.displayId)
 
     方法 初始化界面(displayId):
@@ -416,6 +458,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         screen.key(['q', 'C-c'], () => process.exit(0))
         this._bindScrollKeys()
         screen.render()
+        this._startTrimTimer()
 
     方法 绑定滚动键():
         screen.key(['up'], () => {
@@ -475,12 +518,41 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         时间戳 = 获取当前时间字符串()
         颜色 = 获取类别颜色(类别)
         标签 = `[${类别}]`
+        this.logBuffer.push({ 时间戳, 类别, 消息, 颜色, 标签 })
+        如果 this.logBuffer.length > this.maxLogBuffer:
+            this.logBuffer.splice(0, this.logBuffer.length - this.maxLogBuffer)
         this.logBox.log(`{${颜色}-fg}${时间戳} ${标签}{/${颜色}-fg} ${消息}`)
-        this.screen.render()
+        this._scheduleRender()
+        this._logCount++
+        如果 this._logCount % 200 === 0:
+            this._trimLogBox()
+
+    方法 _trimLogBox():
+        如果 !this.enabled 或 !this.logBox: 返回
+        行数 = this.logBox._clines ? this.logBox._clines.length : 0
+        阈值 = Math.floor(this.maxLogLines * 1.5)
+        如果 行数 <= 阈值: 返回
+        this.logBox.setContent('')
+        最近缓冲 = this.logBuffer.slice(-this.maxLogLines)
+        遍历 最近缓冲:
+            this.logBox.log(`{${条目.颜色}-fg}${条目.时间戳} ${条目.标签}{/${条目.颜色}-fg} ${条目.消息}`)
+        this._scheduleRender()
+
+    方法 _startTrimTimer():
+        this._trimTimer = setInterval(() => {
+            this._trimLogBox()
+        }, 60000)
 
     方法 销毁():
         如果 !this.enabled: 返回
+        如果 this._trimTimer: clearInterval(this._trimTimer)
         this.screen.destroy()
+        this.logBuffer = []
+        this.headerBox = null
+        this.connectionBox = null
+        this.recordingBox = null
+        this.logBox = null
+        this.screen = null
 ```
 
 ## 集成方式

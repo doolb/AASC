@@ -35,6 +35,10 @@ class SubDisplayTUI {
         this.maxLogLines = options.maxLogLines || 300;
         this.displayId = options.displayId || 'unknown';
         this.renderPending = false;
+        this.logBuffer = [];
+        this.maxLogBuffer = 1000;
+        this._logCount = 0;
+        this._trimTimer = null;
         this._initScreen();
     }
 
@@ -139,6 +143,7 @@ class SubDisplayTUI {
         this._bindScrollKeys();
 
         this.screen.render();
+        this._startTrimTimer();
     }
 
     updateConnectionState(state) {
@@ -175,8 +180,19 @@ class SubDisplayTUI {
         const timestamp = getTimestamp();
         const color = getCategoryColor(category);
         const tag = `[${category}]`;
+
+        this.logBuffer.push({ timestamp, category, message, color, tag });
+        if (this.logBuffer.length > this.maxLogBuffer) {
+            this.logBuffer.splice(0, this.logBuffer.length - this.maxLogBuffer);
+        }
+
         this.logBox.log(`{${color}-fg}${timestamp} ${tag}{/${color}-fg} ${message}`);
         this._scheduleRender();
+
+        this._logCount++;
+        if (this._logCount % 200 === 0) {
+            this._trimLogBox();
+        }
     }
 
     _bindScrollKeys() {
@@ -206,6 +222,29 @@ class SubDisplayTUI {
         });
     }
 
+    _trimLogBox() {
+        if (!this.enabled || !this.logBox) return;
+
+        const lineCount = this.logBox._clines ? this.logBox._clines.length : 0;
+        const threshold = Math.floor(this.maxLogLines * 1.5);
+        if (lineCount <= threshold) return;
+
+        this.logBox.setContent('');
+
+        const recentBuffer = this.logBuffer.slice(-this.maxLogLines);
+        recentBuffer.forEach(e => {
+            this.logBox.log(`{${e.color}-fg}${e.timestamp} ${e.tag}{/${e.color}-fg} ${e.message}`);
+        });
+
+        this._scheduleRender();
+    }
+
+    _startTrimTimer() {
+        this._trimTimer = setInterval(() => {
+            this._trimLogBox();
+        }, 60000);
+    }
+
     _scheduleRender() {
         if (this.renderPending) return;
         this.renderPending = true;
@@ -222,11 +261,21 @@ class SubDisplayTUI {
 
     destroy() {
         if (!this.enabled) return;
+        if (this._trimTimer) {
+            clearInterval(this._trimTimer);
+            this._trimTimer = null;
+        }
         try {
             this.screen.destroy();
         } catch (e) {
             // 忽略销毁错误
         }
+        this.logBuffer = [];
+        this.headerBox = null;
+        this.connectionBox = null;
+        this.recordingBox = null;
+        this.logBox = null;
+        this.screen = null;
         this.enabled = false;
     }
 }

@@ -90,6 +90,14 @@ function padEndDisplay(str, targetWidth) {
     return str + ' '.repeat(padding);
 }
 
+const LEVEL_MAP = {
+    '错误': 'error', '断开': 'warn', '静音': 'warn',
+    '连接': 'info', '语音': 'info', 'TTS': 'info', '提醒': 'info',
+    '设备': 'info', '能力': 'info', '系统': 'info', '子显示端': 'info',
+    'AASC': 'info', '媒体库': 'info', '整点报时': 'info',
+    'Chat': 'info', 'Commands': 'info', '配置': 'debug', '内存': 'debug'
+};
+
 class ServerTUI {
     constructor(options = {}) {
         this.enabled = options.enabled !== false;
@@ -111,6 +119,9 @@ class ServerTUI {
         this.categoryFilterOptions = ['all'];
         this.categoryFilterLabels = { all: '全部' };
         this.knownCategories = new Set();
+
+        this._logCount = 0;
+        this._trimTimer = null;
 
         this._initScreen();
     }
@@ -252,6 +263,7 @@ class ServerTUI {
         this._bindScrollKeys();
 
         this.screen.render();
+        this._startTrimTimer();
     }
 
     setHeader(protocol, ip, port) {
@@ -330,19 +342,11 @@ class ServerTUI {
         const timestamp = getTimestamp();
         const color = getCategoryColor(category);
         const tag = `[${category}]`;
-
-        const levelMap = {
-            '错误': 'error', '断开': 'warn', '静音': 'warn',
-            '连接': 'info', '语音': 'info', 'TTS': 'info', '提醒': 'info',
-            '设备': 'info', '能力': 'info', '系统': 'info', '子显示端': 'info',
-            'AASC': 'info', '媒体库': 'info', '整点报时': 'info',
-            'Chat': 'info', 'Commands': 'info', '配置': 'debug', '内存': 'debug'
-        };
-        const level = levelMap[category] || 'info';
+        const level = LEVEL_MAP[category] || 'info';
 
         this.logBuffer.push({ timestamp, category, message, level, color, tag });
         if (this.logBuffer.length > this.maxLogBuffer) {
-            this.logBuffer = this.logBuffer.slice(-this.maxLogBuffer);
+            this.logBuffer.splice(0, this.logBuffer.length - this.maxLogBuffer);
         }
 
         if (!this.knownCategories.has(category)) {
@@ -357,6 +361,11 @@ class ServerTUI {
         if (this._matchesFilter(level, category)) {
             this.logBox.log(`{${color}-fg}${timestamp} ${tag}{/${color}-fg} ${message}`);
             this._scheduleRender();
+        }
+
+        this._logCount++;
+        if (this._logCount % 200 === 0) {
+            this._trimLogBox();
         }
     }
 
@@ -382,7 +391,8 @@ class ServerTUI {
 
     _reapplyFilter() {
         this.logBox.setContent('');
-        const filtered = this.logBuffer.filter(e => this._matchesFilter(e.level, e.category));
+        const recentBuffer = this.logBuffer.slice(-this.maxLogLines);
+        const filtered = recentBuffer.filter(e => this._matchesFilter(e.level, e.category));
         filtered.forEach(e => {
             this.logBox.log(`{${e.color}-fg}${e.timestamp} ${e.tag}{/${e.color}-fg} ${e.message}`);
         });
@@ -443,6 +453,31 @@ class ServerTUI {
         });
     }
 
+    _trimLogBox() {
+        if (!this.enabled || !this.logBox) return;
+
+        const lineCount = this.logBox._clines ? this.logBox._clines.length : 0;
+        const threshold = Math.floor(this.maxLogLines * 1.5);
+        if (lineCount <= threshold) return;
+
+        this.logBox.setContent('');
+
+        const recentBuffer = this.logBuffer.slice(-this.maxLogLines);
+        recentBuffer.forEach(e => {
+            if (this._matchesFilter(e.level, e.category)) {
+                this.logBox.log(`{${e.color}-fg}${e.timestamp} ${e.tag}{/${e.color}-fg} ${e.message}`);
+            }
+        });
+
+        this._scheduleRender();
+    }
+
+    _startTrimTimer() {
+        this._trimTimer = setInterval(() => {
+            this._trimLogBox();
+        }, 60000);
+    }
+
     _scheduleRender() {
         if (this.renderPending) return;
         this.renderPending = true;
@@ -463,11 +498,22 @@ class ServerTUI {
             clearInterval(this.refreshTimer);
             this.refreshTimer = null;
         }
+        if (this._trimTimer) {
+            clearInterval(this._trimTimer);
+            this._trimTimer = null;
+        }
         try {
             this.screen.destroy();
         } catch (e) {
             // 忽略销毁错误
         }
+        this.logBuffer = [];
+        this.systemStats = null;
+        this.headerBox = null;
+        this.statusBox = null;
+        this.deviceTable = null;
+        this.logBox = null;
+        this.screen = null;
         this.enabled = false;
     }
 }
