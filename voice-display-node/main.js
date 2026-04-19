@@ -19,6 +19,7 @@ const URL = require('url');
 const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
 const SubDisplayTUI = require('./tui');
+const SystemMonitor = require('../core/system-monitor');
 const { installConsoleRedirect } = require('../core/console-redirect');
 
 const useTUI = !process.argv.includes('--no-tui');
@@ -639,6 +640,8 @@ async function main() {
 
     const voiceDisplay = new VoiceDisplay(config);
 
+    let systemMonitor = null;
+
     if (useTUI) {
         tui.displayId = config.displayId || 'unknown';
         tui.headerBox.setContent(` Voice Display Node - ${config.displayId || 'unknown'} `);
@@ -650,15 +653,24 @@ async function main() {
             reconnectAttempts: 0,
             maxReconnectAttempts: 5
         });
+
+        systemMonitor = new SystemMonitor({ intervalMs: 5000 });
+        systemMonitor.onStats((stats) => {
+            tui.updateSystemStats(stats);
+        });
+        systemMonitor.start();
+        tui.updateSystemStats(systemMonitor.getStats());
     }
 
     process.on('SIGINT', () => {
         log('系统', '\n收到退出信号，正在关闭...');
+        if (systemMonitor) systemMonitor.stop();
         voiceDisplay.stop();
         process.exit(0);
     });
 
     process.on('SIGTERM', () => {
+        if (systemMonitor) systemMonitor.stop();
         voiceDisplay.stop();
         process.exit(0);
     });
@@ -667,6 +679,7 @@ async function main() {
         await voiceDisplay.start();
     } catch (error) {
         logError('系统', `启动失败: ${error.message}`);
+        if (systemMonitor) systemMonitor.stop();
         process.exit(1);
     }
 }

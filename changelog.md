@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### 新功能
+- ✅ 子显示端 TUI 添加系统监控面板
+  - 需求：子显示端 TUI 界面添加 CPU 和内存监控信息
+  - 实现：
+    - SubDisplayTUI 布局从两列改为三列：连接状态(34%) | 录音状态(33%) | 系统监控(33%)
+    - 新增 monitorBox 面板，显示 CPU 使用率、核心数、负载、内存使用率、已用/总量、进程 RSS、堆内存、系统运行时间、进程运行时间
+    - CPU/内存使用率超过阈值时颜色变化（>50% 黄色，>80% 红色）
+    - 集成 core/system-monitor.js，每5秒采集一次数据并更新面板
+    - 新增 formatUptime/formatMemory 辅助函数
+    - 退出时正确停止 SystemMonitor
+  - 改动文件：
+    - `voice-display-node/tui.js` (添加 monitorBox、updateSystemStats、formatUptime、formatMemory)
+    - `voice-display-node/main.js` (集成 SystemMonitor)
+    - `docs/design/tui.md` (更新子显示端布局图)
+    - `docs/spec/tui.md` (更新伪代码)
+
 ### Bug 修复
 - ✅ 服务端 RSS 内存持续增长修复（第三轮 - 根治）
   - 问题：RSS 持续增长不回落，即使 Heap 正常，堆外内存持续累积

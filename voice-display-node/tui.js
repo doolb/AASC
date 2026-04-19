@@ -27,6 +27,23 @@ function getTimestamp() {
     return now.toTimeString().split(' ')[0];
 }
 
+function formatUptime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    parts.push(`${secs}s`);
+    return parts.join(' ');
+}
+
+function formatMemory(bytes) {
+    return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+}
+
 class SubDisplayTUI {
     constructor(options = {}) {
         this.enabled = options.enabled !== false;
@@ -39,6 +56,7 @@ class SubDisplayTUI {
         this.maxLogBuffer = 1000;
         this._logCount = 0;
         this._trimTimer = null;
+        this.systemStats = null;
         this._initScreen();
     }
 
@@ -66,8 +84,8 @@ class SubDisplayTUI {
         this.connectionBox = blessed.box({
             top: 1,
             left: 0,
-            width: '50%',
-            height: '40%',
+            width: '34%',
+            height: '35%',
             label: ' 连接状态 ',
             border: {
                 type: 'line'
@@ -83,9 +101,9 @@ class SubDisplayTUI {
 
         this.recordingBox = blessed.box({
             top: 1,
-            left: '50%',
-            width: '50%',
-            height: '40%',
+            left: '34%',
+            width: '33%',
+            height: '35%',
             label: ' 录音状态 ',
             border: {
                 type: 'line'
@@ -99,11 +117,29 @@ class SubDisplayTUI {
             scrollable: true
         });
 
+        this.monitorBox = blessed.box({
+            top: 1,
+            left: '67%',
+            width: '33%',
+            height: '35%',
+            label: ' 系统监控 ',
+            border: {
+                type: 'line'
+            },
+            style: {
+                border: {
+                    fg: 'yellow'
+                }
+            },
+            tags: true,
+            scrollable: true
+        });
+
         this.logBox = blessed.log({
-            top: '40%+1',
+            top: '35%+1',
             left: 0,
             width: '100%',
-            height: '60%-2',
+            height: '65%-2',
             label: ' 事件日志 ',
             border: {
                 type: 'line'
@@ -131,6 +167,7 @@ class SubDisplayTUI {
         this.screen.append(this.headerBox);
         this.screen.append(this.connectionBox);
         this.screen.append(this.recordingBox);
+        this.screen.append(this.monitorBox);
         this.screen.append(this.logBox);
 
         this.logBox.focus();
@@ -172,6 +209,33 @@ class SubDisplayTUI {
             ` 最近识别: ${state.lastRecognition || '-'}`
         ];
         this.recordingBox.setContent(lines.join('\n'));
+        this._scheduleRender();
+    }
+
+    updateSystemStats(stats) {
+        if (!this.enabled) return;
+        this.systemStats = stats;
+
+        const cpu = stats.cpu || {};
+        const mem = stats.memory || {};
+        const uptime = stats.uptime || {};
+        const cpuUsage = parseFloat(cpu.usage || 0);
+        const memUsage = parseFloat(mem.usagePercent || 0);
+        const cpuColor = cpuUsage > 80 ? 'red' : cpuUsage > 50 ? 'yellow' : 'green';
+        const memColor = memUsage > 80 ? 'red' : memUsage > 50 ? 'yellow' : 'green';
+
+        const lines = [
+            ` {bold}CPU:{/bold} {${cpuColor}-fg}${cpuUsage}%{/${cpuColor}-fg}`,
+            ` {bold}核心:{/bold} ${cpu.count || '-'}`,
+            ` {bold}负载:{/bold} ${(cpu.loadAvg?.['1m'] || 0).toFixed(2)}`,
+            ` {bold}内存:{/bold} {${memColor}-fg}${memUsage}%{/${memColor}-fg}`,
+            ` {bold}已用:{/bold} ${formatMemory(mem.used)}/${formatMemory(mem.total)}`,
+            ` {bold}进程RSS:{/bold} ${formatMemory(mem.process?.rss || 0)}`,
+            ` {bold}堆内存:{/bold} ${formatMemory(mem.process?.heapUsed || 0)}/${formatMemory(mem.process?.heapTotal || 0)}`,
+            ` {bold}系统运行:{/bold} ${formatUptime(uptime.system || 0)}`,
+            ` {bold}进程运行:{/bold} ${formatUptime(uptime.process || 0)}`
+        ];
+        this.monitorBox.setContent(lines.join('\n'));
         this._scheduleRender();
     }
 
@@ -271,9 +335,11 @@ class SubDisplayTUI {
             // 忽略销毁错误
         }
         this.logBuffer = [];
+        this.systemStats = null;
         this.headerBox = null;
         this.connectionBox = null;
         this.recordingBox = null;
+        this.monitorBox = null;
         this.logBox = null;
         this.screen = null;
         this.enabled = false;

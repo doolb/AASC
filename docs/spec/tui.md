@@ -391,6 +391,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         headerBox: 标题栏组件
         connectionBox: 连接状态组件
         recordingBox: 录音状态组件
+        monitorBox: 系统监控组件
         logBox: 事件日志组件
         maxLogLines: 最大日志行数 = 300
         enabled: 是否启用TUI
@@ -398,6 +399,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         maxLogBuffer: 最大缓冲区大小 = 1000
         _logCount: 日志计数器 = 0
         _trimTimer: 定时清理定时器 = null
+        systemStats: 系统监控数据 = null
 
     构造函数(选项):
         如果 选项.enabled === false:
@@ -409,6 +411,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         this.maxLogBuffer = 1000
         this._logCount = 0
         this._trimTimer = null
+        this.systemStats = null
         this.初始化界面(选项.displayId)
 
     方法 初始化界面(displayId):
@@ -425,21 +428,28 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         })
 
         this.connectionBox = blessed.box({
-            顶部: 1, 左边: 0, 宽度: '50%', 高度: '40%',
+            顶部: 1, 左边: 0, 宽度: '34%', 高度: '35%',
             标签: ' 连接状态 ',
             边框: { type: 'line' },
             样式: { border: { fg: 'cyan' } }
         })
 
         this.recordingBox = blessed.box({
-            顶部: 1, 左边: '50%', 宽度: '50%', 高度: '40%',
+            顶部: 1, 左边: '34%', 宽度: '33%', 高度: '35%',
             标签: ' 录音状态 ',
             边框: { type: 'line' },
             样式: { border: { fg: 'magenta' } }
         })
 
+        this.monitorBox = blessed.box({
+            顶部: 1, 左边: '67%', 宽度: '33%', 高度: '35%',
+            标签: ' 系统监控 ',
+            边框: { type: 'line' },
+            样式: { border: { fg: 'yellow' } }
+        })
+
         this.logBox = blessed.log({
-            顶部: '40%+1', 左边: 0, 宽度: '100%', 高度: '60%-2',
+            顶部: '35%+1', 左边: 0, 宽度: '100%', 高度: '65%-2',
             标签: ' 事件日志 ',
             边框: { type: 'line' },
             样式: { border: { fg: 'yellow' } },
@@ -451,6 +461,7 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         screen.append(headerBox)
         screen.append(connectionBox)
         screen.append(recordingBox)
+        screen.append(monitorBox)
         screen.append(logBox)
 
         logBox.focus()
@@ -513,6 +524,30 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         this.recordingBox.setContent(内容.join('\n'))
         this.screen.render()
 
+    方法 更新系统监控数据(监控数据):
+        如果 !this.enabled: 返回
+        this.systemStats = 监控数据
+        cpu = 监控数据.cpu || {}
+        mem = 监控数据.memory || {}
+        uptime = 监控数据.uptime || {}
+        cpuUsage = parseFloat(cpu.usage || 0)
+        memUsage = parseFloat(mem.usagePercent || 0)
+        cpuColor = cpuUsage > 80 ? 'red' : cpuUsage > 50 ? 'yellow' : 'green'
+        memColor = memUsage > 80 ? 'red' : memUsage > 50 ? 'yellow' : 'green'
+        内容 = [
+            ` CPU: ${cpuUsage}% (颜色=${cpuColor})`,
+            ` 核心: ${cpu.count || '—'}`,
+            ` 负载: ${(cpu.loadAvg?.['1m'] || 0).toFixed(2)}`,
+            ` 内存: ${memUsage}% (颜色=${memColor})`,
+            ` 已用: ${格式化内存(mem.used)}/${格式化内存(mem.total)}`,
+            ` 进程RSS: ${格式化内存(mem.process?.rss || 0)}`,
+            ` 堆内存: ${格式化内存(mem.process?.heapUsed || 0)}/${格式化内存(mem.process?.heapTotal || 0)}`,
+            ` 系统运行: ${格式化运行时间(uptime.system || 0)}`,
+            ` 进程运行: ${格式化运行时间(uptime.process || 0)}`
+        ]
+        this.monitorBox.setContent(内容.join('\n'))
+        this._scheduleRender()
+
     方法 添加日志(类别, 消息):
         如果 !this.enabled: 返回
         时间戳 = 获取当前时间字符串()
@@ -548,9 +583,11 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         如果 this._trimTimer: clearInterval(this._trimTimer)
         this.screen.destroy()
         this.logBuffer = []
+        this.systemStats = null
         this.headerBox = null
         this.connectionBox = null
         this.recordingBox = null
+        this.monitorBox = null
         this.logBox = null
         this.screen = null
 ```
@@ -677,5 +714,16 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
     如果 useTUI:
         tui.displayId = config.displayId
         tui.headerBox.setContent(`Voice Display Node - ${config.displayId}`)
+
+        systemMonitor = new SystemMonitor({ intervalMs: 5000 })
+        systemMonitor.onStats((stats) => {
+            tui.updateSystemStats(stats)
+        })
+        systemMonitor.start()
+        tui.updateSystemStats(systemMonitor.getStats())
+
+    退出信号处理:
+        如果 systemMonitor: systemMonitor.stop()
+        voiceDisplay.stop()
         tui.updateConnectionState({ 初始状态 })
 ```
