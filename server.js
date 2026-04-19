@@ -2534,4 +2534,4 @@ setInterval(() => {
             log('内存', `GC后 RSS: ${mb(afterGc.rss)} | Heap: ${mb(afterGc.heapUsed)}/${mb(afterGc.heapTotal)}`);
         }
     }
-}, 10 * 60 * 1000);
+}, 1 * 60 * 1000);
