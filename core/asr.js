@@ -159,7 +159,7 @@ class SherpaOnnxASR {
         const rssMB = usage.rss / 1024 / 1024;
         const arrayBuffersMB = (usage.arrayBuffers || 0) / 1024 / 1024;
 
-        if (rssMB < 256 && arrayBuffersMB < 32) {
+        if (rssMB < 1024 && arrayBuffersMB < 32) {
             return;
         }
 

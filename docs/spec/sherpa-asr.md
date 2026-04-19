@@ -206,7 +206,7 @@ sendVoiceStatus():
         如果 pendingCount > 0，返回
         如果 completedCount 不是 10 的倍数，返回
         读取 process.memoryUsage()
-        如果 RSS >= 256MB 或 ArrayBuffers >= 32MB:
+        如果 RSS >= 1024MB 或 ArrayBuffers >= 32MB:
             setImmediate(() => global.gc())
     
     readWavFile(filePath):
@@ -228,7 +228,7 @@ sendVoiceStatus():
 - `readWavFile()` 使用 `Buffer.from()` 复制音频数据片段，避免 `buffer.slice()` 持有完整文件引用
 - 异常路径中也必须调用 `stream.destroy()` 防止泄漏
 - `recognize()` 采用串行队列访问单个 recognizer，避免并发请求导致 native 资源叠加
-- 服务端在 ASR 空闲且 RSS 偏高时按批次触发 `global.gc()`，帮助回收外部内存
+- 服务端在 ASR 空闲且 RSS 超过 1GB 或 ArrayBuffers 偏高时按批次触发 `global.gc()`，帮助回收外部内存
 
 ## ASR 压测脚本 (scripts/asr-stress-test.js)
 

@@ -51,6 +51,7 @@
   - 修复：
     - `core/asr.js`：为识别请求增加串行队列和最大排队数量，拆分 `performRecognition()`，统一在 `finally` 中释放 stream 和 samples 引用，并在空闲时按批次检查 RSS/ArrayBuffers 后触发 GC
     - `server.js`：新增 `cleanupTempFile()` 统一清理 ASR 上传临时文件；当队列过长时返回 429，避免请求无限堆积
+    - `core/asr.js`：将 ASR 主动 GC 的 RSS 触发阈值从 256MB 提高到 1GB，减少正常波动时的过度 GC
   - 改动文件：
     - `core/asr.js` (串行识别队列、stream 安全释放、按批次 GC)
     - `server.js` (ASR 临时文件统一清理、繁忙保护)

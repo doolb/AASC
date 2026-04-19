@@ -30,7 +30,7 @@
 ### 4. 内存回收触发策略
 
 - 识别队列为空时，按批次检查 `process.memoryUsage()`
-- 仅在 RSS 或 ArrayBuffers 超过阈值时尝试触发 `global.gc()`
+- 仅在 RSS 超过 1GB 或 ArrayBuffers 超过阈值时尝试触发 `global.gc()`
 - 避免每次识别后强制 GC，减少抖动
 
 ### 5. 压测验证工具
