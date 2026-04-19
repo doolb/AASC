@@ -160,6 +160,10 @@ sendVoiceStatus():
     属性:
         modelDir: 模型目录路径
         initialized: 是否已初始化
+        recognitionQueue: Promise 串行队列
+        maxQueueLength: 最大排队数量
+        pendingCount: 当前排队和执行数量
+        completedCount: 已完成识别数量
     
     initRecognizer():
         加载 SenseVoice 模型 (model.int8.onnx)
@@ -170,13 +174,40 @@ sendVoiceStatus():
         返回 initialized && recognizer !== null
     
     recognize(audioPath):
+        如果 pendingCount >= maxQueueLength:
+            抛出 "ASR 忙" 错误
+        pendingCount += 1
+        将任务追加到 recognitionQueue:
+            调用 performRecognition(audioPath)
+            finally:
+                pendingCount -= 1
+                completedCount += 1
+                tryCompactMemory()
+        返回排队任务结果
+
+    performRecognition(audioPath):
         创建 stream = recognizer.createStream()
         读取音频数据 = readWavFile(audioPath)
         stream.acceptWaveform(samples, sampleRate)
         recognizer.decode(stream)
         result = recognizer.getResult(stream)
-        stream.destroy()  # 释放 native C++ 对象，防止内存泄漏
+        finally:
+            destroyStreamSafely(stream)
+            audioData.samples = null
         返回 result.text
+
+    destroyStreamSafely(stream):
+        如果 stream 支持 destroy():
+            try 调用 stream.destroy()
+            catch 记录日志
+
+    tryCompactMemory():
+        如果 global.gc 不可用，返回
+        如果 pendingCount > 0，返回
+        如果 completedCount 不是 10 的倍数，返回
+        读取 process.memoryUsage()
+        如果 RSS >= 256MB 或 ArrayBuffers >= 32MB:
+            setImmediate(() => global.gc())
     
     readWavFile(filePath):
         读取文件到 buffer
@@ -196,3 +227,44 @@ sendVoiceStatus():
 - `recognize()` 中创建的 stream 必须在获取结果后调用 `destroy()` 释放 native 内存
 - `readWavFile()` 使用 `Buffer.from()` 复制音频数据片段，避免 `buffer.slice()` 持有完整文件引用
 - 异常路径中也必须调用 `stream.destroy()` 防止泄漏
+- `recognize()` 采用串行队列访问单个 recognizer，避免并发请求导致 native 资源叠加
+- 服务端在 ASR 空闲且 RSS 偏高时按批次触发 `global.gc()`，帮助回收外部内存
+
+## ASR 压测脚本 (scripts/asr-stress-test.js)
+
+```
+main():
+    解析命令行参数:
+        --url 服务端地址
+        --file 音频文件路径
+        --total 总请求数
+        --concurrency 并发数
+        --timeout 单请求超时
+        --output-every 输出频率
+        --retry-429 429 重试次数
+        --stats-interval 服务端指标采样间隔
+        --no-system-stats 关闭服务端指标采样
+
+    如果 file 不存在:
+        自动生成 16kHz 单声道 WAV 样本
+
+    读取音频文件为 Buffer
+    构造 multipart/form-data 请求体
+    记录初始进程内存
+
+    如果启用服务端指标采样:
+        周期性请求 /api/system-stats
+        记录服务端 process.rss / heapUsed / external / arrayBuffers
+        输出实时服务端内存日志
+
+    启动多个 worker 并发发送请求:
+        调用 /api/asr/recognize
+        统计 success / ignored / busy429 / failed
+        统计平均延迟和最大延迟
+        每 outputEvery 次输出一次 RSS / Heap / External / ArrayBuffers
+
+    全部完成后输出总耗时、成功率、内存快照
+    如果启用服务端指标采样:
+        输出服务端峰值指标
+        输出 RSS / External / ArrayBuffers ASCII 曲线
+```

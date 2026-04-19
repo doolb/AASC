@@ -552,6 +552,20 @@ app.get('/api/subservers/health', async (req, res) => {
 
 const asrUpload = multer({ dest: ASR_TEMP_DIR });
 
+function cleanupTempFile(filePath) {
+    if (!filePath) {
+        return;
+    }
+
+    try {
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+    } catch (error) {
+        logError('语音', `清理ASR临时文件失败: ${error.message}`);
+    }
+}
+
 app.get('/api/asr/status', (req, res) => {
     res.json({ 
         status: 'success', 
@@ -566,13 +580,12 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
         }
         
         if (!asr.isReady()) {
-            fs.unlinkSync(req.file.path);
+            cleanupTempFile(req.file.path);
             return res.status(503).json({ status: 'error', message: 'ASR 服务未初始化' });
         }
         
         const recognizedText = await asr.recognize(req.file.path);
-        
-        fs.unlinkSync(req.file.path);
+        cleanupTempFile(req.file.path);
         
         if (!recognizedText || !recognizedText.trim()) {
             return res.json({ 
@@ -594,13 +607,16 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
         res.json({ 
             status: 'success', 
             text: recognizedText
-        });
+         });
     } catch (err) {
         logError('语音', `ASR识别失败: ${err.message}`);
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
+        if (req.file) {
+            cleanupTempFile(req.file.path);
         }
-        res.status(500).json({ status: 'error', message: '语音识别失败: ' + err.message });
+
+        const isQueueBusy = err.message.includes('ASR 忙');
+        const statusCode = isQueueBusy ? 429 : 500;
+        res.status(statusCode).json({ status: 'error', message: '语音识别失败: ' + err.message });
     }
 });
 

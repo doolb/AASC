@@ -14,6 +14,10 @@ class SherpaOnnxASR {
     constructor(options = {}) {
         this.modelDir = options.modelDir || path.join(__dirname, '../models/sensevoice');
         this.initialized = false;
+        this.recognitionQueue = Promise.resolve();
+        this.maxQueueLength = Math.max(1, options.maxQueueLength || 8);
+        this.pendingCount = 0;
+        this.completedCount = 0;
         
         console.log(`\n🎤 Sherpa-ONNX ASR 初始化:`);
         console.log(`  模型目录: ${this.modelDir}`);
@@ -71,37 +75,98 @@ class SherpaOnnxASR {
         return this.initialized && recognizer !== null;
     }
 
-    recognize(audioPath) {
-        return new Promise((resolve, reject) => {
-            if (!this.initialized || !recognizer) {
-                reject(new Error('ASR 未初始化'));
-                return;
-            }
+    async recognize(audioPath) {
+        if (!this.initialized || !recognizer) {
+            throw new Error('ASR 未初始化');
+        }
 
-            let stream = null;
+        if (this.pendingCount >= this.maxQueueLength) {
+            throw new Error(`ASR 忙，排队请求过多(${this.pendingCount})`);
+        }
+
+        this.pendingCount++;
+
+        const runRecognition = async () => {
             try {
-                stream = recognizer.createStream();
-                const audioData = this.readWavFile(audioPath);
-                
-                stream.acceptWaveform({
-                    samples: audioData.samples,
-                    sampleRate: audioData.sampleRate
-                });
-                recognizer.decode(stream);
-                
-                const result = recognizer.getResult(stream);
-                
-                if (stream && typeof stream.destroy === 'function') {
-                    stream.destroy();
-                }
-                stream = null;
-                
-                resolve(result.text || '');
+                return await this.performRecognition(audioPath);
+            } finally {
+                this.pendingCount--;
+                this.completedCount++;
+                this.tryCompactMemory();
+            }
+        };
+
+        const queuedTask = this.recognitionQueue.then(runRecognition, runRecognition);
+        this.recognitionQueue = queuedTask.catch(() => {});
+        return queuedTask;
+    }
+
+    async performRecognition(audioPath) {
+        let stream = null;
+        let audioData = null;
+
+        try {
+            stream = recognizer.createStream();
+            audioData = this.readWavFile(audioPath);
+
+            stream.acceptWaveform({
+                samples: audioData.samples,
+                sampleRate: audioData.sampleRate
+            });
+            recognizer.decode(stream);
+
+            const result = recognizer.getResult(stream);
+            return result.text || '';
+        } catch (e) {
+            throw new Error(`ASR 识别失败: ${e.message}`);
+        } finally {
+            this.destroyStreamSafely(stream);
+            stream = null;
+
+            if (audioData) {
+                audioData.samples = null;
+                audioData = null;
+            }
+        }
+    }
+
+    destroyStreamSafely(stream) {
+        if (!stream || typeof stream.destroy !== 'function') {
+            return;
+        }
+
+        try {
+            stream.destroy();
+        } catch (e) {
+            console.error(`[ASR] stream.destroy() 失败: ${e.message}`);
+        }
+    }
+
+    tryCompactMemory() {
+        if (typeof global.gc !== 'function') {
+            return;
+        }
+
+        if (this.pendingCount > 0) {
+            return;
+        }
+
+        if (this.completedCount % 10 !== 0) {
+            return;
+        }
+
+        const usage = process.memoryUsage();
+        const rssMB = usage.rss / 1024 / 1024;
+        const arrayBuffersMB = (usage.arrayBuffers || 0) / 1024 / 1024;
+
+        if (rssMB < 256 && arrayBuffersMB < 32) {
+            return;
+        }
+
+        setImmediate(() => {
+            try {
+                global.gc();
             } catch (e) {
-                if (stream && typeof stream.destroy === 'function') {
-                    stream.destroy();
-                }
-                reject(new Error(`ASR 识别失败: ${e.message}`));
             }
         });
     }

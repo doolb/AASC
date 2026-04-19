@@ -3,6 +3,29 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 新增服务端 ASR 压测脚本
+  - 功能：提供 `scripts/asr-stress-test.js`，用于直接压测 `/api/asr/recognize` 并观察 RSS / Heap / External / ArrayBuffers 变化
+  - 实现：
+    - 支持 `--url`、`--file`、`--total`、`--concurrency`、`--timeout`、`--output-every`、`--retry-429` 参数
+    - 未提供音频文件时自动生成 16kHz 单声道 WAV 样本
+    - 手动构造 multipart/form-data 请求体，兼容当前 ASR 上传接口
+    - 输出 success / ignored / busy429 / failed、平均延迟、最大延迟和内存快照
+  - 改动文件：
+    - `scripts/asr-stress-test.js` (新增)
+    - `docs/design/sherpa-asr.md` (补充压测工具设计)
+    - `docs/spec/sherpa-asr.md` (补充压测脚本伪代码)
+    - `docs/task/2026-04-19_ASR压测脚本.md` (新增任务记录)
+- ✅ ASR 压测脚本联动服务端 system-stats
+  - 功能：压测 `/api/asr/recognize` 的同时自动采集 `/api/system-stats`，直接输出服务端 RSS / External / ArrayBuffers 变化曲线
+  - 实现：
+    - 抽象通用 HTTP 请求函数，复用到 ASR 请求和 system-stats 采样
+    - 新增 `--stats-interval` 和 `--no-system-stats` 参数
+    - 压测结束后输出服务端峰值指标和 ASCII 曲线，便于快速判断内存是否进入平台期
+  - 改动文件：
+    - `scripts/asr-stress-test.js` (联动 system-stats、峰值统计、ASCII 曲线)
+    - `docs/design/sherpa-asr.md` (补充联动监控设计)
+    - `docs/spec/sherpa-asr.md` (补充联动采样伪代码)
+    - `docs/task/2026-04-19_ASR压测联动system-stats.md` (新增任务记录)
 - ✅ 子显示端 TUI 添加系统监控面板
   - 需求：子显示端 TUI 界面添加 CPU 和内存监控信息
   - 实现：
@@ -19,6 +42,21 @@
     - `docs/spec/tui.md` (更新伪代码)
 
 ### Bug 修复
+- ✅ 服务端语音识别 RSS 持续上涨修复
+  - 问题：服务端 ASR 高频调用时 RSS 持续上涨，长时间运行后不回落
+  - 原因分析：
+    1. `core/asr.js` 共享单个 `OfflineRecognizer`，但没有限制并发请求，同时创建多个 stream 会让 native 资源持续堆积
+    2. 识别任务结束后虽然调用了 `stream.destroy()`，但缺少统一的 finally 生命周期管理，大数组和中间引用释放不够及时
+    3. `/api/asr/recognize` 的临时文件清理逻辑分散，错误和高负载场景下不利于统一回收
+  - 修复：
+    - `core/asr.js`：为识别请求增加串行队列和最大排队数量，拆分 `performRecognition()`，统一在 `finally` 中释放 stream 和 samples 引用，并在空闲时按批次检查 RSS/ArrayBuffers 后触发 GC
+    - `server.js`：新增 `cleanupTempFile()` 统一清理 ASR 上传临时文件；当队列过长时返回 429，避免请求无限堆积
+  - 改动文件：
+    - `core/asr.js` (串行识别队列、stream 安全释放、按批次 GC)
+    - `server.js` (ASR 临时文件统一清理、繁忙保护)
+    - `docs/design/sherpa-asr.md` (新增设计文档)
+    - `docs/spec/sherpa-asr.md` (更新伪代码)
+    - `docs/task/2026-04-19_服务端语音识别RSS上涨修复.md` (新增任务记录)
 - ✅ 服务端 RSS 内存持续增长修复（第三轮 - 根治）
   - 问题：RSS 持续增长不回落，即使 Heap 正常，堆外内存持续累积
   - 根本原因：
