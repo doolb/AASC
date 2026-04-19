@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Balabolka TTS</title>
+  <style>
+    body { font-family: "Microsoft YaHei", sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding-top: 50px; }
+    .container { background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 500px; }
+    h1 { text-align: center; color: #333; margin-bottom: 20px; }
+    
+    /* 布局样式 */
+    .control-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+    select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: white; }
+    
+    /* 语速控制样式 */
+    .speed-control { display: flex; align-items: center; gap: 10px; width: 100%; }
+    .speed-control label { white-space: nowrap; font-size: 14px; color: #666; }
+    .speed-control input[type=range] { flex: 1; cursor: pointer; }
+    .speed-val { min-width: 25px; text-align: right; font-weight: bold; color: #007bff; }
+
+    textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; resize: none; font-size: 14px; }
+    
+    button { width: 100%; margin-top: 15px; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    button:disabled { background: #ccc; }
+    
+    #status { text-align: center; margin-top: 10px; color: #666; font-size: 14px; }
+    audio { width: 100%; margin-top: 15px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Balabolka TTS</h1>
+    
+    <!-- 第一行：语音选择 -->
+    <div class="control-row">
+      <select id="voiceSelect">
+        <option value="">加载中...</option>
+      </select>
+    </div>
+
+    <!-- 第二行：语速控制 -->
+    <div class="control-row">
+      <div class="speed-control">
+        <label>语速:</label>
+        <input type="range" id="speedRange" min="-2" max="2" value="-1" step="1">
+        <span id="speedValue" class="speed-val">0</span>
+      </div>
+    </div>
+
+    <textarea id="text" placeholder="请输入文字...">你好，这是语速测试文本。</textarea>
+    
+    <button id="btn" onclick="speak()">生成语音</button>
+    
+    <div id="status"></div>
+    
+    <audio id="player" controls></audio>
+  </div>
+
+  <script>
+    function getErrorMessage(payload, fallbackMessage) {
+      if (!payload || typeof payload !== 'object') {
+        return fallbackMessage;
+      }
+
+      if (payload.details) {
+        return payload.details;
+      }
+
+      if (payload.error) {
+        return payload.error;
+      }
+
+      return fallbackMessage;
+    }
+
+    async function readErrorPayload(response) {
+      try {
+        return await response.json();
+      } catch (error) {
+        return null;
+      }
+    }
+
+    // 语速滑块实时显示数值
+    const speedRange = document.getElementById('speedRange');
+    const speedValue = document.getElementById('speedValue');
+    speedRange.oninput = function() {
+      speedValue.innerText = this.value;
+    }
+
+    // 页面加载获取语音列表
+    window.onload = async function() {
+      try {
+        const res = await fetch('/api/voices');
+        const json = await res.json();
+        const select = document.getElementById('voiceSelect');
+        
+        select.innerHTML = '';
+        var find = false;
+        if (json.success && json.data.length > 0) {
+          json.data.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item;
+            opt.innerText = item;
+            // 默认选中 Xiaoxiao
+            if (find == false && item.includes("Xiaoxiao")) {
+              opt.selected = true;
+              find = true;
+            }
+            select.appendChild(opt);
+          });
+        } else {
+          select.innerHTML = '<option value="">未找到语音</option>';
+        }
+      } catch (e) {
+        console.error('加载语音列表失败', e);
+      }
+    };
+
+    async function speak() {
+      const text = document.getElementById('text').value;
+      const voice = document.getElementById('voiceSelect').value;
+      // 获取语速值
+      const speed = document.getElementById('speedRange').value;
+
+      const btn = document.getElementById('btn');
+      const status = document.getElementById('status');
+      const player = document.getElementById('player');
+
+      if (!text) return alert('请输入文字');
+
+      btn.disabled = true;
+      status.innerText = '正在合成...';
+      player.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // 发送 speed 参数
+          body: JSON.stringify({ text: text, voice: voice, speed: speed })
+        });
+
+        if (!res.ok) {
+          const errorPayload = await readErrorPayload(res);
+          throw new Error(getErrorMessage(errorPayload, '服务器错误'));
+        }
+
+        const blob = await res.blob();
+        player.src = URL.createObjectURL(blob);
+        player.style.display = 'block';
+        player.play();
+        
+        status.innerText = '播放中...';
+
+        player.onended = () => {
+          status.innerText = '播放完毕';
+          btn.disabled = false;
+        };
+
+      } catch (e) {
+        alert('发生错误: ' + e.message);
+        status.innerText = '';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

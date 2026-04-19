@@ -1,0 +1,8 @@
+{
+  "name": "node-bal-tts",
+  "version": "1.0.0",
+  "main": "tts.js",
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}
