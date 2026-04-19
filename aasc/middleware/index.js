@@ -109,6 +109,8 @@ const RateLimitMiddleware = (options = {}) => {
     const windowMs = options.windowMs || 60000;
     const requests = new Map();
     const exemptTypes = options.exemptTypes || ['voiceStatus', 'voiceInput', 'heartbeat'];
+    let lastCleanup = Date.now();
+    const CLEANUP_INTERVAL = 5 * 60 * 1000;
 
     return {
         handle(message, context, next) {
@@ -118,6 +120,18 @@ const RateLimitMiddleware = (options = {}) => {
 
             const clientId = context.displayId || context.source?.name || 'unknown';
             const now = Date.now();
+            
+            if (now - lastCleanup > CLEANUP_INTERVAL) {
+                for (const [id, times] of requests) {
+                    const valid = times.filter(time => now - time < windowMs);
+                    if (valid.length === 0) {
+                        requests.delete(id);
+                    } else {
+                        requests.set(id, valid);
+                    }
+                }
+                lastCleanup = now;
+            }
             
             if (!requests.has(clientId)) {
                 requests.set(clientId, []);
@@ -145,10 +159,15 @@ const RateLimitMiddleware = (options = {}) => {
 const TimeoutMiddleware = (timeoutMs = 30000) => {
     return {
         handle(message, context, next) {
+            let timer = null;
             return Promise.race([
-                next(),
+                next().then(result => {
+                    if (timer) clearTimeout(timer);
+                    return result;
+                }),
                 new Promise((_, reject) => {
-                    setTimeout(() => {
+                    timer = setTimeout(() => {
+                        timer = null;
                         reject(new Error(`处理超时: ${timeoutMs}ms`));
                     }, timeoutMs);
                 })

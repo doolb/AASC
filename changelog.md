@@ -3,6 +3,44 @@
 ## [Unreleased]
 
 ### Bug 修复
+- ✅ 服务端 RSS 内存持续增长修复（第三轮 - 根治）
+  - 问题：RSS 持续增长不回落，即使 Heap 正常，堆外内存持续累积
+  - 根本原因：
+    1. `parseMultipart()` 手动解析将整个上传体（最大200MB）缓存到内存 Buffer，是 RSS 暴涨的最大来源
+    2. `StateManager._cloneValue()` 对 Map/Set 做深拷贝存入历史记录，每次状态变更都复制整个 Map，内存翻倍且不释放
+    3. `RateLimitMiddleware` 的 `requests` Map 只增不减，断开的客户端请求记录永不清理
+    4. `TimeoutMiddleware` 的 `setTimeout` 在 next() 完成后不清理，造成定时器泄漏
+    5. SMB `getFileStream()` 的 `buffer.slice()` 返回的是原 Buffer 的视图而非独立拷贝，原 Buffer 无法被 GC
+    6. `HttpProvider` 缓存 Map 无过期清理，只增不减
+    7. 显示端断开时 `muteState.previousVolumes` 条目未清理
+  - 修复：
+    - `server.js`：用 `multer` 替代 `parseMultipart()`，文件直接写入临时目录再 rename，不经过内存；媒体库上传也改用 multer；添加临时上传文件定期清理
+    - `aasc/components/state-manager.js`：`_cloneValue()` 对 Map/Set 改为轻量快照（只记录 size 和 keys），不再深拷贝；历史记录淘汰时主动 clear 旧 Map/Set
+    - `aasc/middleware/index.js`：`RateLimitMiddleware` 添加每5分钟清理过期客户端记录；`TimeoutMiddleware` 在 next() 完成后 clearTimeout
+    - `core/media-library.js`：SMB `getFileStream()` 改用 `Buffer.from()` 创建独立拷贝后立即释放原 Buffer 引用；添加 `error` 事件清理；`HttpProvider` 添加缓存过期定期清理和 disconnect 时清理定时器
+    - `server.js`：显示端断开时清理 `muteState.previousVolumes` 对应条目
+  - 改动文件：
+    - `server.js` (multer 替代 parseMultipart、临时文件清理、muteState 清理)
+    - `aasc/components/state-manager.js` (轻量快照替代深拷贝)
+    - `aasc/middleware/index.js` (RateLimit 清理、Timeout clearTimeout)
+    - `core/media-library.js` (SMB Buffer 独立拷贝、HttpProvider 缓存清理)
+- ✅ 服务端 RSS 内存持续增长修复（第二轮优化）
+  - 问题：服务端 RSS 达到 809.4MB，Heap 仅 13.2MB，堆外内存泄漏严重
+  - 原因分析：
+    1. SMB `getFileStream()` 将整个文件一次性 push 到 Readable stream，客户端断开时 Buffer 引用未释放
+    2. 文件上传后 `file.data` Buffer 引用未及时置 null，大文件上传后内存持续占用
+    3. ASR `readWavFile()` 使用 `Buffer.from(buffer.slice())` 创建不必要的 Buffer 拷贝，内存翻倍
+    4. WebSocket 关闭时未调用 `removeAllListeners()`，事件监听器闭包持有引用阻止 GC
+    5. 媒体代理路由缺少 Content-Length 和 Accept-Ranges 头，浏览器无法正确处理视频
+    6. ASR 临时文件无定期清理机制
+  - 修复：
+    - `core/media-library.js`：SMB `getFileStream()` 改为 64KB 分块流式传输，添加 `end`/`close` 事件释放 Buffer 引用；`uploadFile()` 写入文件后 `file.data = null`
+    - `core/asr.js`：`readWavFile()` 和 `convertAudioFile()` 直接从原始 buffer 读取数据，移除 `Buffer.from(buffer.slice())` 中间拷贝
+    - `server.js`：WebSocket `close` 事件中添加 `ws.removeAllListeners()`；代理路由添加 `Accept-Ranges`/`Content-Length` 头；上传路由写入文件后 `file.data = null`；内存告警增加连接状态信息；添加 ASR 临时文件定期清理（10分钟间隔，30分钟过期）
+  - 改动文件：
+    - `core/media-library.js` (SMB 流式分块、上传 Buffer 释放)
+    - `core/asr.js` (移除 Buffer 拷贝)
+    - `server.js` (WS 清理、代理头、Buffer 释放、ASR 清理、内存诊断)
 - ✅ 服务端 RSS 内存持续增长修复
   - 问题：服务端长时间运行后 RSS 持续增长到 582MB+，而 Heap 仅 14.8MB，说明是堆外（native/C++）内存泄漏
   - 原因分析：

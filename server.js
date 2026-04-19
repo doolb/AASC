@@ -357,25 +357,34 @@ function parseMultipart(req) {
     });
 }
 
-app.post('/upload-file', async (req, res) => {
+const uploadMiddleware = multer({ 
+    dest: path.join(__dirname, 'temp', 'uploads'),
+    limits: { fileSize: 200 * 1024 * 1024 }
+});
+
+if (!fs.existsSync(path.join(__dirname, 'temp', 'uploads'))) {
+    fs.mkdirSync(path.join(__dirname, 'temp', 'uploads'), { recursive: true });
+}
+
+app.post('/upload-file', uploadMiddleware.single('file'), async (req, res) => {
     try {
-        const multipart = await parseMultipart(req);
-        const file = multipart.files.file || multipart.files.media;
-        const displayId = multipart.fields.displayId;
+        const file = req.file;
+        const displayId = req.body.displayId;
         
         if (!file) {
             return res.status(400).json({ status: 'error', message: '没有上传文件' });
         }
         
         if (!displayId) {
+            fs.unlinkSync(file.path);
             return res.status(400).json({ status: 'error', message: '没有选择显示端' });
         }
         
-        const detectedType = detectMediaType(file.filename);
-        const uniqueName = `${Date.now()}_${file.filename}`;
+        const detectedType = detectMediaType(file.originalname);
+        const uniqueName = `${Date.now()}_${file.originalname}`;
         const filePath = path.join(UPLOADS_DIR, uniqueName);
         
-        fs.writeFileSync(filePath, file.data);
+        fs.renameSync(file.path, filePath);
         
         const localIP = getLocalIP();
         const protocol = useHttps ? 'https' : 'http';
@@ -384,7 +393,7 @@ app.post('/upload-file', async (req, res) => {
         const mediaData = {
             type: 'url',
             url: fileUrl,
-            fileName: file.filename,
+            fileName: file.originalname,
             mediaType: detectedType,
             timestamp: Date.now()
         };
@@ -397,6 +406,9 @@ app.post('/upload-file', async (req, res) => {
         }
         res.json({ status: 'success', message: '媒体已发送到显示端' });
     } catch (err) {
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         logError('错误', `文件上传失败: ${err.message}`);
         res.status(500).json({ status: 'error', message: '文件上传失败: ' + err.message });
     }
@@ -920,19 +932,29 @@ app.get('/api/media-libraries/:id/list', async (req, res) => {
     }
 });
 
-app.post('/api/media-libraries/:id/upload', async (req, res) => {
+app.post('/api/media-libraries/:id/upload', uploadMiddleware.single('file'), async (req, res) => {
     try {
-        const multipart = await parseMultipart(req);
-        const file = multipart.files.file || multipart.files.files;
-        const dirPath = multipart.fields.path || '/';
+        const file = req.file;
+        const dirPath = req.body.path || '/';
         
         if (!file) {
             return res.status(400).json({ status: 'error', message: '没有上传文件' });
         }
         
-        const result = await mediaLibraryManager.upload(req.params.id, dirPath, file);
+        const fileObj = {
+            filename: file.originalname,
+            data: fs.readFileSync(file.path),
+            contentType: file.mimetype
+        };
+        fs.unlinkSync(file.path);
+        
+        const result = await mediaLibraryManager.upload(req.params.id, dirPath, fileObj);
+        fileObj.data = null;
         res.json({ status: 'success', file: result });
     } catch (err) {
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         res.status(500).json({ status: 'error', message: err.message });
     }
 });
@@ -999,8 +1021,6 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
             return res.status(400).json({ status: 'error', message: '文件路径不能为空' });
         }
         
-        const stream = await mediaLibraryManager.getFileStream(req.params.id, filePath);
-        
         const ext = filePath.toLowerCase().split('.').pop();
         const mimeTypes = {
             'jpg': 'image/jpeg',
@@ -1017,6 +1037,17 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
         
         const contentType = mimeTypes[ext] || 'application/octet-stream';
         res.setHeader('Content-Type', contentType);
+        res.setHeader('Accept-Ranges', 'bytes');
+        
+        try {
+            const fileInfo = await mediaLibraryManager.getFile(req.params.id, filePath);
+            if (fileInfo && fileInfo.size) {
+                res.setHeader('Content-Length', fileInfo.size);
+            }
+        } catch (e) {
+        }
+        
+        const stream = await mediaLibraryManager.getFileStream(req.params.id, filePath);
         
         stream.pipe(res);
         
@@ -1638,7 +1669,9 @@ wss.on('connection', (ws, req) => {
         
         ws.on('close', () => {
             const disconnectedIP = clientIP;
+            muteState.previousVolumes.delete(displayId);
             displayClients.delete(displayId);
+            ws.removeAllListeners();
             if (aascSystem) {
                 aascSystem.handleDisplayDisconnect(displayId);
             }
@@ -1699,6 +1732,7 @@ wss.on('connection', (ws, req) => {
         
         ws.on('close', () => {
             controlClients.delete(ws);
+            ws.removeAllListeners();
             if (aascSystem) {
                 aascSystem.handleControlDisconnect(ws);
             }
@@ -2528,6 +2562,7 @@ setInterval(() => {
     const rssMB = usage.rss / 1024 / 1024;
     if (rssMB > 500) {
         logError('内存', `RSS超过500MB (${rssMB.toFixed(1)}MB)，可能存在内存泄漏`);
+        log('内存', `连接状态 - 显示端: ${displayClients.size} | 控制端: ${controlClients.size} | 设备事件防抖: ${deviceEventDebounce.size}`);
         if (global.gc) {
             global.gc();
             const afterGc = process.memoryUsage();
@@ -2535,3 +2570,32 @@ setInterval(() => {
         }
     }
 }, 1 * 60 * 1000);
+
+setInterval(() => {
+    try {
+        const tempDirs = [ASR_TEMP_DIR, path.join(__dirname, 'temp', 'uploads')];
+        const now = Date.now();
+        const maxAge = 30 * 60 * 1000;
+        let totalCleaned = 0;
+        
+        tempDirs.forEach(dir => {
+            if (!fs.existsSync(dir)) return;
+            const files = fs.readdirSync(dir);
+            files.forEach(f => {
+                const filePath = path.join(dir, f);
+                try {
+                    const stat = fs.statSync(filePath);
+                    if (now - stat.mtimeMs > maxAge) {
+                        fs.unlinkSync(filePath);
+                        totalCleaned++;
+                    }
+                } catch (e) {}
+            });
+        });
+        
+        if (totalCleaned > 0) {
+            log('系统', `清理临时文件: ${totalCleaned}个`);
+        }
+    } catch (err) {
+    }
+}, 10 * 60 * 1000);

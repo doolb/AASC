@@ -137,16 +137,15 @@ class SherpaOnnxASR {
             return { samples: new Float32Array(0), sampleRate: 16000 };
         }
         
-        const audioData = Buffer.from(buffer.slice(dataOffset, dataOffset + dataSize));
-        const samples = new Float32Array(audioData.length / (bitsPerSample / 8));
+        const samples = new Float32Array(dataSize / (bitsPerSample / 8));
         
         if (bitsPerSample === 16) {
             for (let i = 0; i < samples.length; i++) {
-                samples[i] = audioData.readInt16LE(i * 2) / 32768.0;
+                samples[i] = buffer.readInt16LE(dataOffset + i * 2) / 32768.0;
             }
         } else if (bitsPerSample === 32) {
             for (let i = 0; i < samples.length; i++) {
-                samples[i] = audioData.readFloatLE(i * 4);
+                samples[i] = buffer.readFloatLE(dataOffset + i * 4);
             }
         }
         
@@ -180,11 +179,10 @@ class SherpaOnnxASR {
                 dataOffset += 8 + chunkSize;
             }
             
-            const audioData = buffer.slice(dataOffset, dataOffset + dataSize);
-            const samples = new Float32Array(audioData.length / 2);
+            const samples = new Float32Array(dataSize / 2);
             
             for (let i = 0; i < samples.length; i++) {
-                samples[i] = audioData.readInt16LE(i * 2) / 32768.0;
+                samples[i] = buffer.readInt16LE(dataOffset + i * 2) / 32768.0;
             }
             
             return { samples, sampleRate };

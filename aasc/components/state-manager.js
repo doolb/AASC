@@ -136,7 +136,11 @@ class StateManager {
         });
 
         while (history.length > this.maxHistorySize) {
-            history.shift();
+            const old = history.shift();
+            if (old && old.value) {
+                if (old.value instanceof Map) old.value.clear();
+                if (old.value instanceof Set) old.value.clear();
+            }
         }
     }
 
@@ -146,11 +150,11 @@ class StateManager {
         }
 
         if (value instanceof Map) {
-            return new Map(value);
+            return { __type: 'MapSnapshot', size: value.size, keys: Array.from(value.keys()) };
         }
 
         if (value instanceof Set) {
-            return new Set(value);
+            return { __type: 'SetSnapshot', size: value.size };
         }
 
         if (Array.isArray(value)) {

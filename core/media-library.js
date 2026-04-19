@@ -161,6 +161,7 @@ class LocalProvider extends MediaLibraryProvider {
         const filePath = path.join(fullPath, uniqueName);
         
         fs.writeFileSync(filePath, file.data);
+        file.data = null;
         
         const relativePath = path.join(dirPath, uniqueName).replace(/\\/g, '/');
         
@@ -260,6 +261,16 @@ class HttpProvider extends MediaLibraryProvider {
         try {
             await this._fetchList('/');
             this.connected = true;
+            
+            this._cacheCleanupTimer = setInterval(() => {
+                const now = Date.now();
+                for (const [key, entry] of this.cache) {
+                    if (now - entry.time > this.cacheTimeout) {
+                        this.cache.delete(key);
+                    }
+                }
+            }, this.cacheTimeout);
+            
             return true;
         } catch (err) {
             throw new Error(`无法连接到HTTP服务器: ${err.message}`);
@@ -268,6 +279,10 @@ class HttpProvider extends MediaLibraryProvider {
 
     async disconnect() {
         this.cache.clear();
+        if (this._cacheCleanupTimer) {
+            clearInterval(this._cacheCleanupTimer);
+            this._cacheCleanupTimer = null;
+        }
         this.connected = false;
         return true;
     }
@@ -549,14 +564,45 @@ class SmbProvider extends MediaLibraryProvider {
         const buffer = await this._readFile(cleanPath);
         
         const { Readable } = require('stream');
+        const CHUNK_SIZE = 256 * 1024;
+        let offset = 0;
         let bufferRef = buffer;
+        let consumed = false;
+        
         const stream = new Readable({
             read() {
-                this.push(bufferRef);
-                this.push(null);
-                bufferRef = null;
+                if (!bufferRef || consumed) {
+                    this.push(null);
+                    return;
+                }
+                if (offset >= bufferRef.length) {
+                    consumed = true;
+                    bufferRef = null;
+                    this.push(null);
+                    return;
+                }
+                const end = Math.min(offset + CHUNK_SIZE, bufferRef.length);
+                const chunk = Buffer.from(bufferRef.slice(offset, end));
+                offset = end;
+                this.push(chunk);
+                
+                if (offset >= bufferRef.length) {
+                    consumed = true;
+                    bufferRef = null;
+                }
             }
         });
+        
+        const cleanup = () => {
+            if (!consumed) {
+                consumed = true;
+            }
+            bufferRef = null;
+        };
+        
+        stream.on('end', cleanup);
+        stream.on('close', cleanup);
+        stream.on('error', cleanup);
         
         return stream;
     }
