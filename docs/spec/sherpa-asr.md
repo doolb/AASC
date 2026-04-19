@@ -146,3 +146,53 @@ sendVoiceStatus():
 | public/js/sherpa-asr.js | 本地ASR模块 |
 | public/display.html | 显示端集成 |
 | server.js | 配置API端点 |
+
+## 服务端 ASR (core/asr.js)
+
+### 概述
+
+服务端使用 sherpa-onnx-node 进行语音识别，支持 WAV 文件和通过 ffmpeg 转换的其他音频格式。
+
+### SherpaOnnxASR 类
+
+```
+类 SherpaOnnxASR:
+    属性:
+        modelDir: 模型目录路径
+        initialized: 是否已初始化
+    
+    initRecognizer():
+        加载 SenseVoice 模型 (model.int8.onnx)
+        创建 OfflineRecognizer 实例
+        设置 initialized = true
+    
+    isReady():
+        返回 initialized && recognizer !== null
+    
+    recognize(audioPath):
+        创建 stream = recognizer.createStream()
+        读取音频数据 = readWavFile(audioPath)
+        stream.acceptWaveform(samples, sampleRate)
+        recognizer.decode(stream)
+        result = recognizer.getResult(stream)
+        stream.destroy()  # 释放 native C++ 对象，防止内存泄漏
+        返回 result.text
+    
+    readWavFile(filePath):
+        读取文件到 buffer
+        解析 WAV 头部获取 sampleRate、bitsPerSample、dataOffset
+        使用 Buffer.from() 复制音频数据（避免持有完整文件引用）
+        转换为 Float32Array samples
+        返回 { samples, sampleRate }
+    
+    convertAudioFile(filePath):
+        使用 ffmpeg 转换为 16kHz 单声道 WAV
+        解析转换后的文件
+        返回 { samples, sampleRate }
+```
+
+### 内存管理
+
+- `recognize()` 中创建的 stream 必须在获取结果后调用 `destroy()` 释放 native 内存
+- `readWavFile()` 使用 `Buffer.from()` 复制音频数据片段，避免 `buffer.slice()` 持有完整文件引用
+- 异常路径中也必须调用 `stream.destroy()` 防止泄漏

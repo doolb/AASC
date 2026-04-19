@@ -549,9 +549,14 @@ class SmbProvider extends MediaLibraryProvider {
         const buffer = await this._readFile(cleanPath);
         
         const { Readable } = require('stream');
-        const stream = new Readable();
-        stream.push(buffer);
-        stream.push(null);
+        let bufferRef = buffer;
+        const stream = new Readable({
+            read() {
+                this.push(bufferRef);
+                this.push(null);
+                bufferRef = null;
+            }
+        });
         
         return stream;
     }

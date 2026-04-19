@@ -3,6 +3,41 @@
 ## [Unreleased]
 
 ### Bug 修复
+- ✅ 服务端 RSS 内存持续增长修复
+  - 问题：服务端长时间运行后 RSS 持续增长到 582MB+，而 Heap 仅 14.8MB，说明是堆外（native/C++）内存泄漏
+  - 原因分析：
+    1. ASR 识别时 `recognizer.createStream()` 创建的 native stream 对象未调用 `destroy()` 释放，每次语音识别都泄漏 C++ 内存
+    2. SMB 媒体库 `getFileStream()` 将整个文件读入 Buffer（native 内存），大视频文件可达数百 MB，且 Buffer 引用未及时释放
+    3. 媒体代理 proxy 端点 `stream.pipe(res)` 无错误处理，客户端断开时 stream 不会被销毁，native 内存无法释放
+    4. `parseMultipart()` 无大小限制，整个请求体缓冲到内存
+    5. `express.json({ limit: '500mb' })` 限制过大
+    6. `deviceEventDebounce` Map 无定期清理
+  - 修复：
+    - `core/asr.js`：`recognize()` 方法在获取结果后和异常时均调用 `stream.destroy()` 释放 native 对象；`readWavFile()` 使用 `Buffer.from()` 复制音频数据，避免持有完整 WAV 文件引用
+    - `core/media-library.js`：SMB `getFileStream()` 改用延迟读取的 Readable stream，读取后立即释放 Buffer 引用
+    - `server.js`：媒体代理 proxy 端点添加 `req.on('close')` 清理 stream、`stream.on('error')` 错误处理；`parseMultipart()` 添加 200MB 大小限制和提前终止；`express.json` 限制从 500MB 降为 50MB；内存监控增加 ArrayBuffers 指标和 RSS 超 500MB 告警+自动 GC；`deviceEventDebounce` 添加每 5 分钟定期清理
+    - `package.json`：启动参数添加 `--expose-gc` 启用手动 GC
+  - 改动文件：
+    - `core/asr.js` (stream 释放、Buffer 复制)
+    - `core/media-library.js` (SMB stream 延迟读取)
+    - `server.js` (proxy 清理、上传限制、内存监控、debounce 清理)
+    - `package.json` (--expose-gc)
+- ✅ 去掉控制端聊天界面里的系统 tips
+  - 问题：`addSystemMessage()` 每次调用都在聊天消息容器中创建 `.chat-message.system` DOM 元素，系统提示消息（如"已进入私聊模式"、"正在搜索: xxx"等）不断累积，造成 DOM 节点持续增长
+  - 修复：`addSystemMessage()` 只保留 `window.showToast()` 提示，不再向聊天消息容器中追加系统消息 DOM 元素
+  - 改动文件：
+    - `public/js/chat.js` (addSystemMessage 移除 DOM 操作)
+- ✅ 去掉服务端 TUI 界面
+  - 问题：服务端 TUI 界面基于 blessed 库，长时间运行存在内存泄漏（blessed 内部缓冲区无限膨胀），且服务端通常以后台服务运行，TUI 界面实际用处不大
+  - 修复：
+    - 从 server.js 中移除 ServerTUI、installConsoleRedirect 的引入和所有 TUI 相关调用
+    - 简化 `log()`/`logError()` 函数，直接使用 console.log/error 输出
+    - 从 package.json 中移除 blessed 依赖
+    - 移除 `--no-tui` 启动参数（不再需要）
+    - 保留 `core/tui.js` 文件（子显示端 SubDisplayTUI 仍使用类似结构）
+  - 改动文件：
+    - `server.js` (移除 TUI 集成)
+    - `package.json` (移除 blessed 依赖，移除 --no-tui 参数)
 - ✅ TUI 模式内存泄漏修复
   - 问题：TUI 模式长时间运行后内存持续增长，blessed.log 内部缓冲区无限膨胀
   - 原因：

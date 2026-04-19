@@ -166,7 +166,9 @@
     getFileStream(filePath):
         使用 Promise 包装:
             client.readFile(filePath, callback)
-            返回文件数据
+            创建延迟读取的 Readable stream:
+                read() 时 push buffer 并立即释放引用
+            返回 stream
     
     uploadFile(dirPath, file):
         使用 Promise 包装:

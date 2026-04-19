@@ -4,12 +4,11 @@
   "description": "网页版媒体中心 - 上传端 + 显示端",
   "main": "server.js",
   "scripts": {
-    "start": "node --openssl-legacy-provider server.js"
+    "start": "node --openssl-legacy-provider --expose-gc server.js"
   },
   "dependencies": {
     "@marsaud/smb2": "^0.18.0",
     "axios": "^1.14.0",
-    "blessed": "^0.1.81",
     "cheerio": "^1.2.0",
     "express": "^4.18.2",
     "multer": "^2.1.1",

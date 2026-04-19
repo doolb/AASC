@@ -880,22 +880,6 @@ const Chat = {
     
     addSystemMessage(content, type = 'info') {
         window.showToast(content, type);
-        
-        const messagesContainer = document.getElementById('chatMessages');
-        if (!messagesContainer) return;
-        
-        const emptyMsg = messagesContainer.querySelector('.chat-empty');
-        if (emptyMsg) {
-            emptyMsg.remove();
-        }
-        
-        const msg = document.createElement('div');
-        msg.className = 'chat-message system';
-        msg.innerHTML = `
-            <div class="chat-message-content">${this.escapeHtml(content)}</div>
-        `;
-        messagesContainer.appendChild(msg);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
     
     addCommandAckMessage(displayId, commandType, success, details) {

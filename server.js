@@ -18,43 +18,23 @@ const voiceCommand = require('./core/voiceCommand');
 const { MediaLibraryManager } = require('./core/media-library');
 const { SubServerManager } = require('./core/sub-server');
 const { initializeAASCSystem } = require('./aasc/init');
-const ServerTUI = require('./core/tui');
-const { installConsoleRedirect } = require('./core/console-redirect');
 const LogBuffer = require('./core/log-buffer');
 const SystemMonitor = require('./core/system-monitor');
 
 config.loadConfig();
 
-const useTUI = !process.argv.includes('--no-tui');
-const tui = new ServerTUI({ enabled: useTUI });
 const logBuffer = new LogBuffer({ maxSize: 1000 });
 const systemMonitor = new SystemMonitor({ intervalMs: 5000 });
 
-installConsoleRedirect({
-    enabled: useTUI,
-    writeLog: (level, message) => {
-        const category = level === 'error' ? '错误' : '系统';
-        tui.addLog(category, message);
-        logBuffer.add(category, message);
-    }
-});
-
 function log(category, message, extra) {
-    if (useTUI) {
-        tui.addLog(category, message);
-    } else {
-        const timestamp = new Date().toTimeString().split(' ')[0];
-        console.log(`${timestamp} [${category}] ${message}`);
-    }
+    const timestamp = new Date().toTimeString().split(' ')[0];
+    console.log(`${timestamp} [${category}] ${message}`);
     logBuffer.add(category, message, extra);
 }
 
 function logError(category, message, extra) {
-    if (useTUI) {
-        tui.addLog(category, message);
-    } else {
-        console.error(`[${category}] ${message}`);
-    }
+    const timestamp = new Date().toTimeString().split(' ')[0];
+    console.error(`${timestamp} [${category}] ${message}`);
     logBuffer.add(category, message, extra);
 }
 
@@ -200,8 +180,6 @@ function startServer() {
             log('系统', 'HTTP 模式，麦克风功能需要 HTTPS 或 localhost');
         }
         
-        tui.setHeader(protocol, localIP, PORT);
-        
         timeListener.start();
         timeAnnounce.start(displayClients, sendToDisplay);
         reminder.start(displayClients, sendToDisplay);
@@ -240,30 +218,12 @@ function startServer() {
             logError('AASC', `系统初始化失败: ${error.message}`);
         }
 
-        tui.startRefresh(
-            () => {
-                const usage = process.memoryUsage();
-                return {
-                    uptime: Math.floor((Date.now() - serverStartTime) / 1000),
-                    memoryRSS: usage.rss,
-                    memoryHeapUsed: usage.heapUsed,
-                    memoryHeapTotal: usage.heapTotal,
-                    protocol: useHttps ? 'HTTPS' : 'HTTP',
-                    isMuted: muteState.isMuted,
-                    displayCount: displayClients.size,
-                    controlCount: controlClients.size
-                };
-            },
-            () => getDisplayList()
-        );
-
         systemMonitor.start();
         systemMonitor.onStats((stats) => {
             broadcastToControls({
                 type: 'systemStats',
                 stats: stats
             });
-            tui.updateSystemStats(stats);
         });
 
         logBuffer.onLogEntry((entry) => {
@@ -311,7 +271,7 @@ function createDisplayState() {
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR));
-app.use(express.json({ limit: '500mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 app.get('/', (req, res) => {
     res.redirect('/upload');
@@ -337,10 +297,21 @@ function parseMultipart(req) {
             return reject(new Error('找不到 boundary'));
         }
         
+        const MAX_UPLOAD_SIZE = 200 * 1024 * 1024;
+        let totalSize = 0;
         const chunks = [];
-        req.on('data', chunk => chunks.push(chunk));
+        req.on('data', chunk => {
+            totalSize += chunk.length;
+            if (totalSize > MAX_UPLOAD_SIZE) {
+                reject(new Error('上传文件大小超过限制(200MB)'));
+                req.destroy();
+                return;
+            }
+            chunks.push(chunk);
+        });
         req.on('end', () => {
             const buffer = Buffer.concat(chunks);
+            chunks.length = 0;
             const boundaryBuffer = Buffer.from('--' + boundary);
             const result = { fields: {}, files: {} };
             
@@ -1048,6 +1019,20 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
         res.setHeader('Content-Type', contentType);
         
         stream.pipe(res);
+        
+        req.on('close', () => {
+            if (stream && typeof stream.destroy === 'function') {
+                stream.destroy();
+            }
+        });
+        
+        stream.on('error', (err) => {
+            if (!res.headersSent) {
+                res.status(500).json({ status: 'error', message: err.message });
+            } else {
+                res.end();
+            }
+        });
     } catch (err) {
         res.status(500).json({ status: 'error', message: err.message });
     }
@@ -2377,6 +2362,15 @@ async function handleChatMessage(options) {
 const deviceEventDebounce = new Map();
 const DEVICE_EVENT_DEBOUNCE_MS = 30000;
 
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, time] of deviceEventDebounce) {
+        if (now - time > DEVICE_EVENT_DEBOUNCE_MS * 2) {
+            deviceEventDebounce.delete(key);
+        }
+    }
+}, 5 * 60 * 1000);
+
 async function executeDeviceEvent(ip, eventType, displayId) {
     try {
         const debounceKey = `${ip}_${eventType}`;
@@ -2529,5 +2523,15 @@ setInterval(() => {
 setInterval(() => {
     const usage = process.memoryUsage();
     const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + 'MB';
-    log('内存', `RSS: ${mb(usage.rss)} | Heap: ${mb(usage.heapUsed)}/${mb(usage.heapTotal)} | External: ${mb(usage.external)}`);
+    log('内存', `RSS: ${mb(usage.rss)} | Heap: ${mb(usage.heapUsed)}/${mb(usage.heapTotal)} | External: ${mb(usage.external)} | ArrayBuffers: ${mb(usage.arrayBuffers || 0)}`);
+    
+    const rssMB = usage.rss / 1024 / 1024;
+    if (rssMB > 500) {
+        logError('内存', `RSS超过500MB (${rssMB.toFixed(1)}MB)，可能存在内存泄漏`);
+        if (global.gc) {
+            global.gc();
+            const afterGc = process.memoryUsage();
+            log('内存', `GC后 RSS: ${mb(afterGc.rss)} | Heap: ${mb(afterGc.heapUsed)}/${mb(afterGc.heapTotal)}`);
+        }
+    }
 }, 10 * 60 * 1000);

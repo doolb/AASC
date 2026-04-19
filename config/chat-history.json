@@ -158,5 +158,25 @@
     "content": "好的，我明白了！目前的天气是多云，温度在26度左右，湿度42%，适合我们进行工作和活动。希望您一切顺利哦！如果有什么需要我帮忙的地方，请随时告诉我。祝好天气！",
     "mode": "group",
     "target": null
+  },
+  {
+    "id": "1776570413248jymi",
+    "timestamp": 1776570413248,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "heloo",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "17765704279427o5z",
+    "timestamp": 1776570427942,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "Hello! I'm here with you, and I'm ready to catch up with the electronic cat. Let's go on a little adventure together! Have fun chasing the stars and enjoying the cool vibes! 😄",
+    "mode": "private",
+    "target": "妲己"
   }
 ]

@@ -78,8 +78,9 @@ class SherpaOnnxASR {
                 return;
             }
 
+            let stream = null;
             try {
-                const stream = recognizer.createStream();
+                stream = recognizer.createStream();
                 const audioData = this.readWavFile(audioPath);
                 
                 stream.acceptWaveform({
@@ -89,8 +90,17 @@ class SherpaOnnxASR {
                 recognizer.decode(stream);
                 
                 const result = recognizer.getResult(stream);
+                
+                if (stream && typeof stream.destroy === 'function') {
+                    stream.destroy();
+                }
+                stream = null;
+                
                 resolve(result.text || '');
             } catch (e) {
+                if (stream && typeof stream.destroy === 'function') {
+                    stream.destroy();
+                }
                 reject(new Error(`ASR 识别失败: ${e.message}`));
             }
         });
@@ -127,7 +137,7 @@ class SherpaOnnxASR {
             return { samples: new Float32Array(0), sampleRate: 16000 };
         }
         
-        const audioData = buffer.slice(dataOffset, dataOffset + dataSize);
+        const audioData = Buffer.from(buffer.slice(dataOffset, dataOffset + dataSize));
         const samples = new Float32Array(audioData.length / (bitsPerSample / 8));
         
         if (bitsPerSample === 16) {
