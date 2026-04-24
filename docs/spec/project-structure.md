@@ -49,6 +49,7 @@ ReleaseChecklist = [
   "package.json start/main 指向 src/apps/server/boot/server-app.js",
   "静态资源目录指向 src/apps/web-mediacenter/ui/public",
   "voice-display-node 配置路径指向 3rd/voice-display-node/config.json",
+  "根目录自测结果文件已归档到 docs/self-test-results/",
   "docs/design.md 索引已更新",
   "docs/spec.md 索引已更新",
   "docs/todo.md 检查日期已更新",

@@ -17,6 +17,7 @@ src/apps/server/boot/server-app.js -> 服务端主入口
 3rd/                -> 第三方组件与子显示端程序
 config/             -> 配置数据
 docs/               -> 设计/实现/任务/TODO
+docs/self-test-results/ -> 自测结果归档
 res/                -> 模型、上传、临时文件、证书
 skills/             -> 技能配置
 src/aasc/           -> Actor 与消息总线

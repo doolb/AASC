@@ -68,6 +68,7 @@ web-mediacenter/
 | [docs/usage.md](docs/usage.md) | 使用说明 |
 | [docs/rules.md](docs/rules.md) | 代码规范 |
 | [docs/todo.md](docs/todo.md) | 未完成任务列表 |
+| [docs/self-test-results/](docs/self-test-results/) | 自测结果归档目录 |
 
 ## 技术栈
 

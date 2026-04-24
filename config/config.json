@@ -5,7 +5,17 @@
   "tts": {
     "serviceUrl": "http://192.168.1.16:3000/api/tts",
     "defaultVoice": "Microsoft Xiaoxiao",
-    "defaultSpeed": 0
+    "defaultSpeed": 0,
+    "requestTimeoutMs": 20000,
+    "maxErrorBytes": 65536
+  },
+  "asr": {
+    "maxQueueLength": 8,
+    "isolateProcess": {
+      "enabled": false,
+      "requestTimeoutMs": 60000,
+      "autoRestart": true
+    }
   },
   "voiceCommand": {
     "defaultWeatherCity": "Chengdu",

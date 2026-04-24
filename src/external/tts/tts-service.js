@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { pipeline } = require('stream');
 
 const UPLOADS_DIR = path.join(process.cwd(), 'res', 'uploads');
 const TTS_DIR = path.join(UPLOADS_DIR, 'tts');
@@ -9,7 +10,9 @@ const TTS_DIR = path.join(UPLOADS_DIR, 'tts');
 let ttsConfig = {
     serviceUrl: 'http://192.168.1.16:3000/api/tts',
     defaultVoice: 'Microsoft Xiaoxiao',
-    defaultSpeed: 0
+    defaultSpeed: 0,
+    requestTimeoutMs: 20000,
+    maxErrorBytes: 64 * 1024
 };
 
 function init(config) {
@@ -17,6 +20,12 @@ function init(config) {
         if (config.serviceUrl) ttsConfig.serviceUrl = config.serviceUrl;
         if (config.defaultVoice) ttsConfig.defaultVoice = config.defaultVoice;
         if (config.defaultSpeed !== undefined) ttsConfig.defaultSpeed = config.defaultSpeed;
+        if (config.requestTimeoutMs !== undefined) {
+            ttsConfig.requestTimeoutMs = Math.max(1000, Number(config.requestTimeoutMs) || 20000);
+        }
+        if (config.maxErrorBytes !== undefined) {
+            ttsConfig.maxErrorBytes = Math.max(1024, Number(config.maxErrorBytes) || 64 * 1024);
+        }
     }
     console.log(`[TTS] 服务地址: ${ttsConfig.serviceUrl}`);
     console.log(`[TTS] 默认语音: ${ttsConfig.defaultVoice}`);
@@ -40,7 +49,9 @@ function callExternalTTS(text, voice, speed, outputPath) {
         const urlObj = new URL(ttsConfig.serviceUrl);
         const isHttps = urlObj.protocol === 'https:';
         const httpModule = isHttps ? https : http;
-        
+        let settled = false;
+        let req = null;
+
         const postData = JSON.stringify({
             text: text,
             voice: voice || ttsConfig.defaultVoice,
@@ -50,40 +61,86 @@ function callExternalTTS(text, voice, speed, outputPath) {
         const options = {
             hostname: urlObj.hostname,
             port: urlObj.port || (isHttps ? 443 : 80),
-            path: urlObj.pathname,
+            path: `${urlObj.pathname}${urlObj.search || ''}`,
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(postData)
             }
         };
-        
-        const req = httpModule.request(options, (res) => {
+
+        function safeUnlink(filePath) {
+            if (!filePath || !fs.existsSync(filePath)) {
+                return;
+            }
+            try {
+                fs.unlinkSync(filePath);
+            } catch (error) {
+            }
+        }
+
+        function done(error, resultPath) {
+            if (settled) {
+                return;
+            }
+            settled = true;
+
+            if (error) {
+                safeUnlink(outputPath);
+                reject(error);
+                return;
+            }
+
+            resolve(resultPath);
+        }
+
+        req = httpModule.request(options, (res) => {
+
             if (res.statusCode !== 200) {
                 let errorData = '';
-                res.on('data', chunk => errorData += chunk);
+                let truncated = false;
+                let received = 0;
+
+                res.on('data', chunk => {
+                    received += chunk.length;
+                    if (received > ttsConfig.maxErrorBytes) {
+                        if (!truncated) {
+                            errorData += chunk.toString('utf8', 0, Math.max(0, ttsConfig.maxErrorBytes - (received - chunk.length)));
+                            truncated = true;
+                        }
+                        return;
+                    }
+                    errorData += chunk;
+                });
                 res.on('end', () => {
-                    reject(new Error(`TTS 服务返回错误: ${res.statusCode} - ${errorData}`));
+                    const suffix = truncated ? '...(truncated)' : '';
+                    done(new Error(`TTS 服务返回错误: ${res.statusCode} - ${errorData}${suffix}`));
                 });
                 return;
             }
-            
+
             const writeStream = fs.createWriteStream(outputPath);
-            res.pipe(writeStream);
-            
-            writeStream.on('finish', () => {
-                resolve(outputPath);
-            });
-            
-            writeStream.on('error', (err) => {
-                reject(err);
+
+            pipeline(res, writeStream, (error) => {
+                if (error) {
+                    done(new Error(`TTS 音频写入失败: ${error.message}`));
+                    return;
+                }
+                done(null, outputPath);
             });
         });
-        
+
+        req.setTimeout(ttsConfig.requestTimeoutMs, () => {
+            req.destroy(new Error(`TTS 请求超时(${ttsConfig.requestTimeoutMs}ms)`));
+        });
+
         req.on('error', (err) => {
-            reject(new Error(`TTS 服务连接失败: ${err.message}`));
+            const errorPrefix = err.message && err.message.includes('超时')
+                ? ''
+                : 'TTS 服务连接失败: ';
+            done(new Error(`${errorPrefix}${err.message}`));
         });
-        
+
         req.write(postData);
         req.end();
     });

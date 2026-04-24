@@ -3,6 +3,39 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 新增 TTS 压测脚本（联动 system-stats）
+  - 需求：提供可复用工具评估 TTS 生成链路在并发下的稳定性和内存表现
+  - 实现：
+    - 新增 `src/scripts/tts-stress-test.js`，支持 `--url/--text/--voice/--speed/--total/--concurrency/--timeout/--output-every`
+    - 默认联动 `GET /api/system-stats` 采样，输出服务端内存峰值与 RSS/External/ArrayBuffers ASCII 曲线
+    - 支持 `--no-system-stats` 关闭服务端采样
+    - `package.json` 新增脚本命令 `npm run stress:tts`
+    - 更新 `docs/design/tts.md` 与 `docs/spec/tts.md`
+    - 新增任务记录 `docs/task/2026-04-24_TTS压测脚本.md`
+  - 改动文件：
+    - `src/scripts/tts-stress-test.js` (新增)
+    - `package.json`
+    - `docs/design/tts.md`
+    - `docs/spec/tts.md`
+    - `docs/task/2026-04-24_TTS压测脚本.md` (新增)
+- ✅ 服务端 ASR 增加独立进程开关（降低主进程 RSS）
+  - 需求：支持通过开关将语言识别放到独立进程，减少主服务进程 RSS 压力
+  - 实现：
+    - `config/config.json` 与 `src/core/config/config.js` 新增 `asr.isolateProcess` 配置（`enabled/requestTimeoutMs/autoRestart`）
+    - `src/external/asr/asr-service.js` 新增 `IsolatedAsrProcessClient`，支持 IPC 请求、超时保护、异常退出自动重启
+    - 新增 `src/external/asr/asr-worker-process.js`，子进程内加载 `SherpaOnnxASR` 执行识别
+    - `/api/asr/status` 增加 `isolatedProcessEnabled` 字段，便于控制端确认当前模式
+    - 更新 `docs/design/sherpa-asr.md`、`docs/spec/sherpa-asr.md`，补充进程隔离设计和伪代码
+    - 新增任务记录 `docs/task/2026-04-24_ASR独立进程开关.md`
+  - 改动文件：
+    - `config/config.json`
+    - `src/core/config/config.js`
+    - `src/external/asr/asr-service.js`
+    - `src/external/asr/asr-worker-process.js` (新增)
+    - `src/apps/server/boot/server-app.js`
+    - `docs/design/sherpa-asr.md`
+    - `docs/spec/sherpa-asr.md`
+    - `docs/task/2026-04-24_ASR独立进程开关.md` (新增)
 - ✅ 工程目录结构整理
   - 需求：整理项目文件结构说明，统一根目录职责并补齐文档索引
   - 实现：
@@ -13,6 +46,8 @@
     - 根目录收敛迁移：`aasc -> src/aasc`、`auto-brain -> src/auto-brain`、`scripts -> src/scripts`
     - 控制端静态资源迁移：`public -> src/apps/web-mediacenter/ui/public`
     - 子显示端目录迁移：`voice-display* -> 3rd/voice-display*`
+    - 根目录自测结果文件迁移：`self-test-results-*.json -> docs/self-test-results/`
+    - `readme.md` 文档索引新增 `docs/self-test-results/` 归档入口
     - 新入口统一通过 `PROJECT_ROOT` 解析 `res/config/src/apps/web-mediacenter/ui/public/3rd/voice-display-node` 路径
     - 新增 `docs/design/project-structure.md`，定义根目录职责与治理规则
     - 新增 `docs/spec/project-structure.md`，补充目录同步与归位校验伪代码
@@ -32,6 +67,7 @@
     - `3rd/voice-display/*` (由 `voice-display/*` 迁移)
     - `3rd/voice-display-node/*` (由 `voice-display-node/*` 迁移)
     - `3rd/voice-display-cs/*` (由 `voice-display-cs/*` 迁移)
+    - `docs/self-test-results/self-test-results-2026-03-31T14-03-26-551Z.json` (由根目录迁移)
     - `.gitignore`
     - `readme.md`
     - `docs/design.md`
@@ -42,6 +78,31 @@
     - `docs/task/2026-04-24_整理文件结构.md` (新增)
     - `docs/task/2026-04-24_服务端入口迁移到src.md` (新增)
     - `docs/task/2026-04-24_根目录收敛迁移.md` (新增)
+
+### Bug 修复
+- ✅ 服务端 TTS 生成链路内存风险加固
+  - 问题：TTS 外部调用在网络异常场景下缺少超时和统一资源回收，可能导致连接/流长期占用并引发 RSS 持续波动
+  - 修复：
+    - `src/external/tts/tts-service.js` 增加 `requestTimeoutMs` 超时控制，请求超时后主动销毁连接
+    - TTS 音频写盘改为 `pipeline()`，统一成功/失败回调，减少流状态遗漏
+    - 失败路径统一删除半写音频文件，避免残留文件占用
+    - 非 200 响应增加 `maxErrorBytes` 限制，防止异常大错误体导致内存突增
+    - `config/config.json` 与 `src/core/config/config.js` 新增 TTS 稳定性配置项
+    - `/api/tts/config` 支持读写 `requestTimeoutMs/maxErrorBytes`
+    - 新增 `docs/design/tts.md` 与 `docs/spec/tts.md`，补充设计与伪代码
+    - 新增任务记录 `docs/task/2026-04-24_TTS内存风险加固.md`
+  - 改动文件：
+    - `src/external/tts/tts-service.js`
+    - `src/core/config/config.js`
+    - `config/config.json`
+    - `src/apps/server/boot/server-app.js`
+    - `docs/design/tts.md` (新增)
+    - `docs/spec/tts.md` (新增)
+    - `docs/design.md`
+    - `docs/spec.md`
+    - `docs/spec/config.md`
+    - `docs/todo.md`
+    - `docs/task/2026-04-24_TTS内存风险加固.md` (新增)
 - ✅ 日志大脑页面增强（自动刷新 + 诊断历史缓存）
   - 需求：日志大脑页支持持续观测和历史复盘
   - 实现：

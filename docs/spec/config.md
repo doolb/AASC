@@ -20,7 +20,9 @@ const defaultConfig = {
     tts: {
         serviceUrl: 'http://192.168.1.16:3000/api/tts',
         defaultVoice: 'Microsoft Xiaoxiao',
-        defaultSpeed: 0
+        defaultSpeed: 0,
+        requestTimeoutMs: 20000,
+        maxErrorBytes: 65536
     },
     voiceCommand: {
         defaultWeatherCity: '',
@@ -124,7 +126,9 @@ config.get('logBrain.defaultTimeRange', '10m');
 {
     serviceUrl: 'http://...',
     defaultVoice: 'Microsoft Xiaoxiao',
-    defaultSpeed: 0
+    defaultSpeed: 0,
+    requestTimeoutMs: 20000,
+    maxErrorBytes: 65536
 }
 ```
 
@@ -138,6 +142,10 @@ config.get('logBrain.defaultTimeRange', '10m');
     set('tts.defaultVoice', defaultVoice)
 如果 defaultSpeed 存在:
     set('tts.defaultSpeed', defaultSpeed)
+如果 requestTimeoutMs 存在:
+    set('tts.requestTimeoutMs', requestTimeoutMs)
+如果 maxErrorBytes 存在:
+    set('tts.maxErrorBytes', maxErrorBytes)
 ```
 
 ## 显示端状态 API

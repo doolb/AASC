@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { fork } = require('child_process');
 
 let sherpaOnnx = null;
 let recognizer = null;
@@ -258,11 +259,158 @@ class SherpaOnnxASR {
     }
 }
 
+function resolveIsolateProcessConfig(options = {}) {
+    const isolateOption = options.isolateProcess;
+    const asObject = isolateOption && typeof isolateOption === 'object' ? isolateOption : {};
+    const enabled = isolateOption === true || asObject.enabled === true;
+    const requestTimeoutMs = Math.max(1000, asObject.requestTimeoutMs || 60000);
+    const autoRestart = asObject.autoRestart !== false;
+
+    return {
+        enabled,
+        requestTimeoutMs,
+        autoRestart
+    };
+}
+
+class IsolatedAsrProcessClient {
+    constructor(options = {}) {
+        this.options = options;
+        this.worker = null;
+        this.ready = false;
+        this.pendingRequests = new Map();
+        this.requestIndex = 0;
+
+        const isolateConfig = resolveIsolateProcessConfig(options);
+        this.requestTimeoutMs = isolateConfig.requestTimeoutMs;
+        this.autoRestart = isolateConfig.autoRestart;
+        this.restarting = false;
+
+        this.startWorker();
+    }
+
+    startWorker() {
+        const workerPath = path.join(__dirname, 'asr-worker-process.js');
+        this.worker = fork(workerPath, [], {
+            stdio: ['inherit', 'inherit', 'inherit', 'ipc']
+        });
+
+        this.ready = false;
+        this.bindWorkerEvents();
+        this.worker.send({
+            type: 'init',
+            options: this.buildWorkerOptions()
+        });
+    }
+
+    bindWorkerEvents() {
+        this.worker.on('message', (message) => {
+            this.handleWorkerMessage(message);
+        });
+
+        this.worker.on('exit', (code, signal) => {
+            const reason = `ASR 独立进程退出 code=${code} signal=${signal}`;
+            this.ready = false;
+            this.rejectAllPending(reason);
+
+            if (!this.autoRestart || this.restarting) {
+                return;
+            }
+
+            this.restarting = true;
+            setTimeout(() => {
+                this.restarting = false;
+                this.startWorker();
+            }, 500);
+        });
+    }
+
+    buildWorkerOptions() {
+        const workerOptions = { ...this.options };
+        workerOptions.isolateProcess = { enabled: false };
+        return workerOptions;
+    }
+
+    handleWorkerMessage(message) {
+        if (!message || typeof message !== 'object') {
+            return;
+        }
+
+        if (message.type === 'ready') {
+            this.ready = message.ready === true;
+            if (!this.ready && message.error) {
+                console.error(`[ASR] 独立进程初始化失败: ${message.error}`);
+            }
+            return;
+        }
+
+        if (message.type !== 'response' || !message.id) {
+            return;
+        }
+
+        const pending = this.pendingRequests.get(message.id);
+        if (!pending) {
+            return;
+        }
+
+        clearTimeout(pending.timer);
+        this.pendingRequests.delete(message.id);
+
+        if (message.ok) {
+            pending.resolve(message.text || '');
+            return;
+        }
+
+        pending.reject(new Error(message.error || 'ASR 独立进程识别失败'));
+    }
+
+    rejectAllPending(errorMessage) {
+        for (const [requestId, pending] of this.pendingRequests.entries()) {
+            clearTimeout(pending.timer);
+            pending.reject(new Error(errorMessage));
+            this.pendingRequests.delete(requestId);
+        }
+    }
+
+    isReady() {
+        return this.ready;
+    }
+
+    async recognize(audioPath) {
+        if (!this.worker || !this.ready) {
+            throw new Error('ASR 独立进程未就绪');
+        }
+
+        this.requestIndex += 1;
+        const requestId = `asr-${Date.now()}-${this.requestIndex}`;
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                reject(new Error(`ASR 独立进程识别超时(${this.requestTimeoutMs}ms)`));
+            }, this.requestTimeoutMs);
+
+            this.pendingRequests.set(requestId, { resolve, reject, timer });
+
+            this.worker.send({
+                type: 'recognize',
+                id: requestId,
+                audioPath
+            });
+        });
+    }
+}
+
 let asrInstance = null;
 
 function init(options = {}) {
     if (!asrInstance) {
-        asrInstance = new SherpaOnnxASR(options);
+        const isolateConfig = resolveIsolateProcessConfig(options);
+        if (isolateConfig.enabled) {
+            asrInstance = new IsolatedAsrProcessClient(options);
+        } else {
+            asrInstance = new SherpaOnnxASR(options);
+        }
     }
     return asrInstance;
 }

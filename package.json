@@ -5,7 +5,8 @@
   "main": "src/apps/server/boot/server-app.js",
   "scripts": {
     "start": "node --openssl-legacy-provider --expose-gc src/apps/server/boot/server-app.js",
-    "test:log-brain": "node src/scripts/run-log-brain-tests.js"
+    "test:log-brain": "node src/scripts/run-log-brain-tests.js",
+    "stress:tts": "node src/scripts/tts-stress-test.js"
   },
   "dependencies": {
     "@marsaud/smb2": "^0.18.0",

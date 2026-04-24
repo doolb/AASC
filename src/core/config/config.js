@@ -20,7 +20,17 @@ class Config extends DataSnapshot {
         tts: {
             serviceUrl: 'http://192.168.1.16:3000/api/tts',
             defaultVoice: 'Microsoft Xiaoxiao',
-            defaultSpeed: 0
+            defaultSpeed: 0,
+            requestTimeoutMs: 20000,
+            maxErrorBytes: 65536
+        },
+        asr: {
+            maxQueueLength: 8,
+            isolateProcess: {
+                enabled: false,
+                requestTimeoutMs: 60000,
+                autoRestart: true
+            }
         },
         voiceCommand: {
             defaultWeatherCity: '',
@@ -79,6 +89,12 @@ class Config extends DataSnapshot {
             if (ttsConfig.defaultSpeed !== undefined) {
                 data.tts.defaultSpeed = ttsConfig.defaultSpeed;
             }
+            if (ttsConfig.requestTimeoutMs !== undefined) {
+                data.tts.requestTimeoutMs = ttsConfig.requestTimeoutMs;
+            }
+            if (ttsConfig.maxErrorBytes !== undefined) {
+                data.tts.maxErrorBytes = ttsConfig.maxErrorBytes;
+            }
         });
     }
 
@@ -86,7 +102,9 @@ class Config extends DataSnapshot {
         return {
             serviceUrl: this.get('tts.serviceUrl'),
             defaultVoice: this.get('tts.defaultVoice'),
-            defaultSpeed: this.get('tts.defaultSpeed')
+            defaultSpeed: this.get('tts.defaultSpeed'),
+            requestTimeoutMs: this.get('tts.requestTimeoutMs', 20000),
+            maxErrorBytes: this.get('tts.maxErrorBytes', 65536)
         };
     }
 

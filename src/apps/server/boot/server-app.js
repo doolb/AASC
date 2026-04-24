@@ -502,18 +502,22 @@ app.get('/api/tts/config', (req, res) => {
         status: 'success', 
         serviceUrl: ttsConfig.serviceUrl,
         defaultVoice: ttsConfig.defaultVoice,
-        defaultSpeed: ttsConfig.defaultSpeed
+        defaultSpeed: ttsConfig.defaultSpeed,
+        requestTimeoutMs: ttsConfig.requestTimeoutMs,
+        maxErrorBytes: ttsConfig.maxErrorBytes
     });
 });
 
 app.post('/api/tts/config', (req, res) => {
     try {
-        const { serviceUrl, defaultVoice, defaultSpeed } = req.body;
+        const { serviceUrl, defaultVoice, defaultSpeed, requestTimeoutMs, maxErrorBytes } = req.body;
         
         const ttsConfig = {};
         if (serviceUrl !== undefined) ttsConfig.serviceUrl = serviceUrl;
         if (defaultVoice !== undefined) ttsConfig.defaultVoice = defaultVoice;
         if (defaultSpeed !== undefined) ttsConfig.defaultSpeed = defaultSpeed;
+        if (requestTimeoutMs !== undefined) ttsConfig.requestTimeoutMs = requestTimeoutMs;
+        if (maxErrorBytes !== undefined) ttsConfig.maxErrorBytes = maxErrorBytes;
         
         config.setTtsConfig(ttsConfig);
         tts.init(config.getTtsConfig());
@@ -588,7 +592,8 @@ function cleanupTempFile(filePath) {
 app.get('/api/asr/status', (req, res) => {
     res.json({ 
         status: 'success', 
-        ready: asr.isReady()
+        ready: asr.isReady(),
+        isolatedProcessEnabled: config.get('asr.isolateProcess.enabled', false)
     });
 });
 
