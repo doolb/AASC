@@ -52,7 +52,7 @@
 │  └──────────────────────────────────────────────────────────────────┘  │
 │                                    │                                    │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                    core/media-library.js                          │  │
+│  │  src/apps/web-mediacenter/modules/media/media-library-app-service.js │  │
 │  │  - MediaLibraryManager: 统一管理接口                               │  │
 │  │  - LocalProvider: 本地文件系统                                     │  │
 │  │  - HttpProvider: HTTP 远程媒体库                                   │  │
@@ -72,7 +72,7 @@
 
 | 模块 | 文件 | 说明 |
 |------|------|------|
-| 媒体库核心 | core/media-library.js | 提供者接口、管理器、三种实现 |
+| 媒体库核心 | src/apps/web-mediacenter/modules/media/media-library-app-service.js | 提供者接口、管理器、三种实现 |
 | 媒体库前端 | public/js/media-library.js | UI交互、文件操作 |
 | 媒体库样式 | public/css/media-library.css | 界面样式 |
 | 媒体库配置 | config/media-libraries.json | 媒体库配置存储 |
@@ -136,7 +136,7 @@
 - 拖拽上传支持
 
 **改动文件：**
-- core/media-library.js (新增)
+- src/apps/web-mediacenter/modules/media/media-library-app-service.js (新增)
 - public/js/media-library.js (新增)
 - public/css/media-library.css (新增)
 - server.js (修改：添加 API 路由)
@@ -167,7 +167,7 @@
 - 代理访问 API
 
 **改动文件：**
-- core/media-library.js: HttpProvider 类
+- src/apps/web-mediacenter/modules/media/media-library-app-service.js: HttpProvider 类
 - server.js: 代理访问 API 路由
 
 ### 2026-03-28 SMB 媒体库支持
@@ -179,7 +179,7 @@
 - 兼容 @marsaud/smb2 和 smb2 库
 
 **改动文件：**
-- core/media-library.js: SmbProvider 类
+- src/apps/web-mediacenter/modules/media/media-library-app-service.js: SmbProvider 类
 
 ### 2026-03-29 优化 SMB 媒体库配置界面
 
@@ -189,7 +189,7 @@
 
 **改动文件：**
 - public/js/media-library.js: 添加服务器地址输入框
-- core/media-library.js: SmbProvider 添加 `_buildSharePath` 方法
+- src/apps/web-mediacenter/modules/media/media-library-app-service.js: SmbProvider 添加 `_buildSharePath` 方法
 
 ### 2026-03-28 移除旧的 media-list.js 组件
 

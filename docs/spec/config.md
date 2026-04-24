@@ -11,7 +11,7 @@
 
 ## 默认配置
 
-**core/config.js**:
+**src/core/config/config.js**:
 ```javascript
 const defaultConfig = {
     server: {
@@ -28,6 +28,12 @@ const defaultConfig = {
         reminderTemplate: '{content}',
         reminderTemplatePrefix: '',
         reminderTemplateSuffix: ''
+    },
+    logBrain: {
+        errorThreshold: 1,
+        warnThreshold: 20,
+        memoryWarningThreshold: 85,
+        defaultTimeRange: '10m'
     },
     displayStates: {}
 };
@@ -95,6 +101,18 @@ config.set('tts.defaultVoice', 'Microsoft Huihui');
 遍历路径创建中间对象
 设置最终值
 调用 saveConfig()
+```
+
+## 日志大脑配置
+
+### get('logBrain.*')
+读取日志大脑规则阈值。
+
+```javascript
+config.get('logBrain.errorThreshold', 1);
+config.get('logBrain.warnThreshold', 20);
+config.get('logBrain.memoryWarningThreshold', 85);
+config.get('logBrain.defaultTimeRange', '10m');
 ```
 
 ## TTS 配置 API
@@ -237,6 +255,6 @@ module.exports = {
 
 | 文件 | 说明 |
 |------|------|
-| core/config.js | 配置管理模块 |
+| src/core/config/config.js | 配置管理模块 |
 | server.js | 配置初始化和使用 |
 | config/config.json | 配置存储文件 |

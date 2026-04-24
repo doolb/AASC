@@ -2,7 +2,7 @@
 
 ## 模块概述
 
-时间解析模块 (`core/timeParser.js`) 提供通用的时间解析功能，支持中文自然语言时间表达式。
+时间解析模块 (`src/core/utils/time-parser.js`) 提供通用的时间解析功能，支持中文自然语言时间表达式。
 
 ## 核心功能
 
@@ -197,6 +197,6 @@ timeParser.formatTime(Date.now() + 3600000);
 
 | 文件 | 说明 |
 |------|------|
-| core/timeParser.js | 时间解析模块 |
-| core/voiceCommand.js | 使用时间解析处理提醒 |
-| core/reminder.js | 提醒功能 |
+| src/core/utils/time-parser.js | 时间解析模块 |
+| src/apps/web-mediacenter/modules/voice/voice-command-app-service.js | 使用时间解析处理提醒 |
+| src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 提醒功能 |

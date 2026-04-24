@@ -153,12 +153,12 @@
 ## 文件变更
 
 ### 新增文件
-- `core/timeParser.js` - 通用时间解析模块
+- `src/core/utils/time-parser.js` - 通用时间解析模块
 - `config/chat-commands.json` - 自定义指令配置
 
 ### 修改文件
-- `core/voiceCommand.js` - 添加播放命令处理、天气语音播报
-- `core/chat.js` - 添加自定义指令持久化
+- `src/apps/web-mediacenter/modules/voice/voice-command-app-service.js` - 添加播放命令处理、天气语音播报
+- `src/external/llm/llm-service.js` - 添加自定义指令持久化
 - `public/upload.html` - 添加浮动控制面板
 - `public/css/upload.css` - 浮动面板样式
 - `public/js/controls.js` - 浮动面板交互逻辑

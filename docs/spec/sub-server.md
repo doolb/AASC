@@ -3,7 +3,7 @@
 ## 模块结构
 
 ```
-core/sub-server.js
+src/framework/cluster/sub-server-manager.js
 ├── SubServer          # 单个子服务器管理
 │   ├── healthCheck()  # 健康检查
 │   ├── registerDisplay()    # 注册显示端
@@ -108,6 +108,6 @@ loadFromConfig(config):
 
 | 文件 | 说明 |
 |------|------|
-| core/sub-server.js | 子服务器管理核心模块 |
+| src/framework/cluster/sub-server-manager.js | 子服务器管理核心模块 |
 | server.js | API 路由和集成 |
 | config/config.json | 配置持久化 |

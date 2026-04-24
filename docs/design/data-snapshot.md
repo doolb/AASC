@@ -186,14 +186,14 @@ delete config.oldFeature;  // 自动保存
 ### 改造示例
 
 ```javascript
-// 改造前 (core/config.js)
+// 改造前 (src/core/config/config.js)
 let config = null;
 function loadConfig() { /* 手动加载 */ }
 function saveConfig() { /* 手动保存 */ }
 function get(key) { /* 手动获取 */ }
 function set(key, value) { /* 手动设置 */ }
 
-// 改造后 (core/config.js)
+// 改造后 (src/core/config/config.js)
 class Config extends DataSnapshot {
     static defaults = {
         server: { port: 8081 },

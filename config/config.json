@@ -35,6 +35,12 @@
     "reminderTemplatePrefix": "",
     "reminderTemplateSuffix": ""
   },
+  "logBrain": {
+    "errorThreshold": 1,
+    "warnThreshold": 20,
+    "memoryWarningThreshold": 85,
+    "defaultTimeRange": "10m"
+  },
   "displayStates": {
     "192.168.1.12": {
       "currentMedia": {

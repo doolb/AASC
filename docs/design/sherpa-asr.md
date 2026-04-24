@@ -11,7 +11,7 @@
 
 ### 1. 单识别器串行执行
 
-- `core/asr.js` 中的 `SherpaOnnxASR` 维持单个 `OfflineRecognizer`
+- `src/external/asr/asr-service.js` 中的 `SherpaOnnxASR` 维持单个 `OfflineRecognizer`
 - 所有 `recognize()` 请求进入串行队列，同一时刻只允许一个识别任务访问 native recognizer
 - 队列长度设置上限，超过上限时直接返回忙碌错误，避免请求堆积造成内存膨胀
 

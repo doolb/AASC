@@ -147,7 +147,7 @@ sendVoiceStatus():
 | public/display.html | 显示端集成 |
 | server.js | 配置API端点 |
 
-## 服务端 ASR (core/asr.js)
+## 服务端 ASR (src/external/asr/asr-service.js)
 
 ### 概述
 

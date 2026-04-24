@@ -37,36 +37,26 @@ npm start
 
 ## 项目结构
 
-```
+```text
 web-mediacenter/
-├── server.js           # 服务器入口
-├── package.json        # 项目配置
-├── config/             # 配置文件目录
-│   ├── config.json     # 主配置
-│   ├── chat-history.json
-│   ├── media-libraries.json
-│   └── reminders.json
-├── core/               # 核心模块
-│   ├── chat.js
-│   ├── config.js
-│   ├── connection.js
-│   ├── media.js
-│   ├── reminder.js
-│   ├── timeAnnounce.js
-│   └── tts.js
-├── public/             # 静态文件
-│   ├── css/
-│   ├── js/
-│   ├── display.html
-│   └── upload.html
-├── uploads/            # 上传文件存储
-└── docs/               # 文档
-    ├── design.md       # 设计文档索引
-    ├── spec.md         # 实现文档索引
-    ├── todo.md         # 任务列表
-    ├── usage.md        # 使用说明
-    ├── rules.md        # 代码规范
-    └── ref.md          # 参考文档
+├── package.json                 # npm 配置
+├── 3rd/                         # 第三方与子显示端程序
+│   ├── voice-display/           # Go 子显示端
+│   ├── voice-display-node/      # Node.js 子显示端
+│   └── voice-display-cs/        # C# 子显示端
+├── config/                      # 业务配置（json）
+├── docs/                        # 项目文档（design/spec/task/todo）
+├── res/                         # 统一资源目录（models/uploads/temp/certs）
+├── skills/                      # 技能配置
+├── src/                         # 分层代码主目录
+│   ├── aasc/                    # AASC 消息总线与执行者
+│   ├── auto-brain/              # Auto-Brain 决策分层模块
+│   ├── core/                    # 核心能力层
+│   ├── framework/               # 基础设施层
+│   ├── external/                # 外部能力适配层
+│   ├── scripts/                 # 工具脚本（测试/诊断/维护）
+│   └── apps/                    # 应用层（服务端入口在 src/apps/server/boot/server-app.js）
+└── node_modules/                # 依赖目录
 ```
 
 ## 文档

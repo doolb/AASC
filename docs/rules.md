@@ -6,6 +6,32 @@
 - WebSocket (ws 库)
 - 原生 HTML/CSS/JavaScript (无框架)
 
+## 新目录映射表
+
+| 旧路径 | 新路径 | 说明 |
+|------|------|------|
+| `core/config.js` | `src/core/config/config.js` | 配置管理 |
+| `core/timeParser.js` | `src/core/utils/time-parser.js` | 时间解析 |
+| `core/data-snapshot/*` | `src/core/data-snapshot/*` | 快照存储 |
+| `core/viewbind/*` | `src/core/viewbind/*` | 绑定模型 |
+| `core/log-buffer.js` | `src/framework/observability/log-buffer.js` | 日志缓冲 |
+| `core/system-monitor.js` | `src/framework/observability/system-monitor.js` | 系统监控 |
+| `core/connection.js` | `src/framework/transport/ws/connection.js` | WS 传输 |
+| `core/sub-server.js` | `src/framework/cluster/sub-server-manager.js` | 子服务管理 |
+| `core/asr.js` | `src/external/asr/asr-service.js` | ASR 服务 |
+| `core/tts.js` | `src/external/tts/tts-service.js` | TTS 服务 |
+| `core/chat.js` | `src/external/llm/llm-service.js` | LLM 服务 |
+| `core/voiceCommand.js` | `src/apps/web-mediacenter/modules/voice/voice-command-app-service.js` | 语音命令 |
+| `core/reminder.js` | `src/apps/web-mediacenter/modules/reminder/reminder-app-service.js` | 提醒服务 |
+| `core/timeAnnounce.js` | `src/apps/web-mediacenter/modules/time/time-announce-app-service.js` | 报时服务 |
+| `core/timeListener.js` | `src/apps/web-mediacenter/modules/time/time-listener-app-service.js` | 时间监听 |
+
+## 路径引用规则
+
+1. 禁止新增 `core/*` 旧路径引用。
+2. 新代码必须直接依赖 `src/core`、`src/framework`、`src/external`、`src/apps`。
+3. 若发现旧路径引用，必须在本次改动中同步替换为新路径。
+
 ## 开发命令
 
 ```bash

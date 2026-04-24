@@ -3,6 +3,365 @@
 ## [Unreleased]
 
 ### 新功能
+- ✅ 工程目录结构整理
+  - 需求：整理项目文件结构说明，统一根目录职责并补齐文档索引
+  - 实现：
+    - 更新 `readme.md` 的项目结构树，移除旧 `core/*` 表述，改为当前分层目录
+    - 将服务端入口由根目录 `server.js` 迁移为 `src/apps/server/boot/server-app.js`
+    - 启动目录命名由 `bootstrap` 简化为 `boot`
+    - `package.json` 的 `main` 与 `start` 同步切到新入口路径
+    - 根目录收敛迁移：`aasc -> src/aasc`、`auto-brain -> src/auto-brain`、`scripts -> src/scripts`
+    - 控制端静态资源迁移：`public -> src/apps/web-mediacenter/ui/public`
+    - 子显示端目录迁移：`voice-display* -> 3rd/voice-display*`
+    - 新入口统一通过 `PROJECT_ROOT` 解析 `res/config/src/apps/web-mediacenter/ui/public/3rd/voice-display-node` 路径
+    - 新增 `docs/design/project-structure.md`，定义根目录职责与治理规则
+    - 新增 `docs/spec/project-structure.md`，补充目录同步与归位校验伪代码
+    - 更新 `docs/design.md`、`docs/spec.md` 索引并同步 `docs/todo.md` 检查时间
+    - 新增任务记录 `docs/task/2026-04-24_整理文件结构.md`
+    - 新增任务记录 `docs/task/2026-04-24_服务端入口迁移到src.md`
+    - 新增任务记录 `docs/task/2026-04-24_根目录收敛迁移.md`
+  - 改动文件：
+    - `package.json`
+    - `src/apps/server/boot/server-app.js` (由 `server.js` 迁移)
+    - `src/apps/server/boot/README.md` (由 `bootstrap/README.md` 迁移)
+    - `src/scripts/run-log-brain-tests.js` (由 `scripts/run-log-brain-tests.js` 迁移)
+    - `src/scripts/asr-stress-test.js` (由 `scripts/asr-stress-test.js` 迁移)
+    - `src/aasc/*` (由 `aasc/*` 迁移)
+    - `src/auto-brain/*` (由 `auto-brain/*` 迁移)
+    - `src/apps/web-mediacenter/ui/public/*` (由 `public/*` 迁移)
+    - `3rd/voice-display/*` (由 `voice-display/*` 迁移)
+    - `3rd/voice-display-node/*` (由 `voice-display-node/*` 迁移)
+    - `3rd/voice-display-cs/*` (由 `voice-display-cs/*` 迁移)
+    - `.gitignore`
+    - `readme.md`
+    - `docs/design.md`
+    - `docs/spec.md`
+    - `docs/todo.md`
+    - `docs/design/project-structure.md` (新增)
+    - `docs/spec/project-structure.md` (新增)
+    - `docs/task/2026-04-24_整理文件结构.md` (新增)
+    - `docs/task/2026-04-24_服务端入口迁移到src.md` (新增)
+    - `docs/task/2026-04-24_根目录收敛迁移.md` (新增)
+- ✅ 日志大脑页面增强（自动刷新 + 诊断历史缓存）
+  - 需求：日志大脑页支持持续观测和历史复盘
+  - 实现：
+    - 新增自动刷新开关和刷新间隔（5s/15s/30s）
+    - 仅在日志大脑面板激活时启动轮询，离开面板自动停止
+    - 新增本地诊断历史缓存（最多 20 条）
+    - 历史记录支持“载入问题”回填到诊断输入框
+  - 改动文件：
+    - `public/js/log-brain-viewer.js`
+    - `public/upload.html`
+    - `public/css/upload.css`
+    - `public/js/main.js`
+    - `docs/design/log-brain.md`
+    - `docs/spec/log-brain.md`
+    - `docs/task/2026-04-23_日志大脑自动刷新与历史缓存.md` (新增)
+- ✅ 日志大脑诊断可视化与自动化测试收尾
+  - 需求：日志大脑接入 LLM 真诊断、控制端可视化、阈值配置化、最小回归测试和目录映射规则补齐
+  - 实现：
+    - 新增 `POST /api/logs/brain-diagnose`，内部调用 `src/external/llm/llm-service.js`
+    - 新增 `src/apps/server/api/log-brain-api.js`，统一承载 `brain-summary`/`brain-judge`/`brain-diagnose`
+    - `src/framework/observability/log-brain.js` 增加阈值配置、时间线输出、风险分级和 LLM 失败回退诊断
+    - 控制端新增“日志大脑”页（摘要卡片、时间线、一键诊断、诊断结果面板）
+    - `config/config.json` 与 `src/core/config/config.js` 增加 `logBrain` 阈值配置项
+    - 新增自动化测试：`log-brain` 单测、日志大脑 API 集成测试、runtime->device transport->receive 链路测试
+    - 新增测试入口 `npm run test:log-brain`
+    - `docs/rules.md` 新增目录映射表和“禁止新增旧路径引用”规则
+    - 新增任务记录 `docs/task/2026-04-23_日志大脑诊断可视化与测试收尾.md`
+  - 改动文件：
+    - `server.js`
+    - `src/framework/observability/log-brain.js`
+    - `src/apps/server/api/log-brain-api.js` (新增)
+    - `src/core/config/config.js`
+    - `config/config.json`
+    - `public/upload.html`
+    - `public/js/main.js`
+    - `public/js/log-brain-viewer.js` (新增)
+    - `public/css/upload.css`
+    - `src/framework/observability/log-brain.test.js` (新增)
+    - `src/apps/server/api/log-brain-api.integration.test.js` (新增)
+    - `aasc/message-bus.runtime-chain.test.js` (新增)
+    - `scripts/run-log-brain-tests.js` (新增)
+    - `package.json`
+    - `docs/design/log-brain.md`
+    - `docs/spec/log-brain.md`
+    - `docs/spec/config.md`
+    - `docs/rules.md`
+    - `docs/todo.md`
+    - `docs/task/2026-04-23_日志大脑诊断可视化与测试收尾.md` (新增)
+- ✅ Core 第七步收口（剩余模块迁移）
+  - 需求：迁移 core 目录剩余模块并删除空 core 目录，完成分层收口
+  - 实现：
+    - 迁移 `core/config.js` 到 `src/core/config/config.js`
+    - 迁移 `core/timeParser.js` 到 `src/core/utils/time-parser.js`
+    - 迁移 `core/console-redirect.js` 到 `src/framework/observability/console-redirect.js`
+    - 迁移 `core/connection.js` 到 `src/framework/transport/ws/connection.js`
+    - 迁移 `core/tui.js` 和 `core/tui-utils.js` 到 `src/framework/observability/`
+    - 迁移 `core/data-snapshot/*` 到 `src/core/data-snapshot/*`
+    - 迁移 `core/viewbind/*` 到 `src/core/viewbind/*`
+    - 替换 `server.js`、`aasc/agents/index.js`、`voice-display-node/main.js`、`voice-command-app-service.js` 引用到新路径
+    - 批量更新 design/spec 文档中的已迁移模块路径到 `src/*`
+    - 删除空 `core/` 目录
+    - 更新分层文档与任务记录 `docs/task/2026-04-23_Core第七步剩余模块迁移.md`
+  - 改动文件：
+    - `server.js`
+    - `aasc/agents/index.js`
+    - `voice-display-node/main.js`
+    - `src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`
+    - `src/core/config/config.js`
+    - `src/core/utils/time-parser.js`
+    - `src/core/data-snapshot/*`
+    - `src/core/viewbind/*`
+    - `src/framework/observability/console-redirect.js`
+    - `src/framework/transport/ws/connection.js`
+    - `src/framework/observability/server-tui.js`
+    - `src/framework/observability/tui-utils.js`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/spec.md`
+    - `docs/task/2026-04-23_Core第七步剩余模块迁移.md` (新增)
+- ✅ Core 第六步收口清理（移除兼容导出）
+  - 需求：完成已迁移模块的 core 收口，统一使用新分层路径
+  - 实现：
+    - 替换 `server.js`、`aasc/actors/*`、`aasc/agents/index.js`、`voice-display-node/main.js` 对已迁移 `core/*` 的引用
+    - 删除已迁移兼容文件：`core/asr.js`、`core/tts.js`、`core/chat.js`、`core/voiceCommand.js`、`core/reminder.js`、`core/timeAnnounce.js`、`core/timeListener.js`、`core/media-library.js`、`core/sub-server.js`、`core/log-buffer.js`、`core/system-monitor.js`、`core/media.js`
+    - 更新分层文档，新增 Core 第六阶段收口说明
+    - 更新 AASC 与 ASR 相关 spec/design 路径说明到新模块位置
+    - 新增任务记录 `docs/task/2026-04-23_Core第六步收口清理.md`
+  - 改动文件：
+    - `server.js`
+    - `aasc/actors/chat-actor.js`
+    - `aasc/actors/important-record-actor.js`
+    - `aasc/actors/private-chat-actor.js`
+    - `aasc/actors/system-command-actor.js`
+    - `aasc/actors/tts-actor.js`
+    - `aasc/actors/reminder-actor.js`
+    - `aasc/actors/voice-command-actor.js`
+    - `aasc/agents/index.js`
+    - `voice-display-node/main.js`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/spec.md`
+    - `docs/design.md`
+    - `docs/spec/aasc.md`
+    - `docs/design/sherpa-asr.md`
+    - `docs/spec/sherpa-asr.md`
+    - `docs/task/2026-04-23_Core第六步收口清理.md` (新增)
+- ✅ 新增日志大脑（用于大模型问题判断）
+  - 需求：增加“类人脑”日志大脑，把日志转换为可用于 LLM 判断问题的结构化上下文
+  - 实现：
+    - 新增 `src/framework/observability/log-brain.js`
+    - 在 `server.js` 集成日志大脑并随日志流实时摄入
+    - 新增 `GET /api/logs/brain-summary` 返回日志摘要
+    - 新增 `POST /api/logs/brain-judge` 返回 `summary`、`memory`、`prompt`
+    - 统一 API 为 `brain-summary/brain-judge`，移除旧命名接口
+    - 新增日志大脑设计/实现文档与任务记录
+  - 改动文件：
+    - `src/framework/observability/log-brain.js` (新增)
+    - `server.js`
+    - `docs/design/log-brain.md` (新增)
+    - `docs/spec/log-brain.md` (新增)
+    - `docs/design.md`
+    - `docs/spec.md`
+    - `docs/task/2026-04-23_日志大脑与LLM判断上下文.md` (新增)
+- ✅ Framework 层第五步迁移（基础设施承接）
+  - 需求：将 `sub-server`、`log-buffer`、`system-monitor` 从 `core/*` 迁入 Framework 模块目录
+  - 实现：
+    - `src/framework/cluster/sub-server-manager.js` 承接子服务器管理实现体
+    - `src/framework/observability/log-buffer.js` 承接日志缓冲实现体
+    - `src/framework/observability/system-monitor.js` 承接系统监控实现体
+    - `server.js` 入口直接依赖 Framework 模块路径
+    - `core/sub-server.js`、`core/log-buffer.js`、`core/system-monitor.js` 改为兼容转发层
+    - 更新分层文档并新增任务记录 `docs/task/2026-04-23_Framework层第五步基础设施迁移.md`
+  - 改动文件：
+    - `server.js`
+    - `src/framework/cluster/sub-server-manager.js`
+    - `src/framework/observability/log-buffer.js`
+    - `src/framework/observability/system-monitor.js`
+    - `core/sub-server.js`
+    - `core/log-buffer.js`
+    - `core/system-monitor.js`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/task/2026-04-23_Framework层第五步基础设施迁移.md` (新增)
+- ✅ App 层第四步迁移（媒体模块承接）
+  - 需求：将 `core/media-library.js` 迁入 App 模块目录并保持旧路径兼容
+  - 实现：
+    - `src/apps/web-mediacenter/modules/media/media-library-app-service.js` 承接媒体库实现体
+    - `server.js` 入口直接依赖 App media 模块路径
+    - `core/media-library.js` 改为兼容转发层
+    - 更新分层文档并新增任务记录 `docs/task/2026-04-23_App层第四步媒体迁移.md`
+  - 改动文件：
+    - `server.js`
+    - `src/apps/web-mediacenter/modules/media/media-library-app-service.js`
+    - `core/media-library.js`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/task/2026-04-23_App层第四步媒体迁移.md` (新增)
+- ✅ App 层第三步迁移（业务模块承接）
+  - 需求：将提醒、语音命令、整点报时、时间监听从 `core/*` 迁入 App 模块目录
+  - 实现：
+    - `src/apps/web-mediacenter/modules/voice/voice-command-app-service.js` 承接语音命令实现体
+    - `src/apps/web-mediacenter/modules/reminder/reminder-app-service.js` 承接提醒实现体
+    - `src/apps/web-mediacenter/modules/time/time-announce-app-service.js` 承接整点报时实现体
+    - `src/apps/web-mediacenter/modules/time/time-listener-app-service.js` 承接时间监听实现体
+    - `server.js` 入口直接依赖 App 模块路径
+    - `core/voiceCommand.js`、`core/reminder.js`、`core/timeAnnounce.js`、`core/timeListener.js` 改为兼容转发层
+    - 更新分层文档并新增任务记录 `docs/task/2026-04-23_App层第三步迁移.md`
+  - 改动文件：
+    - `server.js`
+    - `src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`
+    - `src/apps/web-mediacenter/modules/reminder/reminder-app-service.js`
+    - `src/apps/web-mediacenter/modules/time/time-announce-app-service.js`
+    - `src/apps/web-mediacenter/modules/time/time-listener-app-service.js`
+    - `core/voiceCommand.js`
+    - `core/reminder.js`
+    - `core/timeAnnounce.js`
+    - `core/timeListener.js`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/task/2026-04-23_App层第三步迁移.md` (新增)
+- ✅ External 层第二步迁移（实现体迁入）
+  - 需求：将 ASR/TTS/LLM 实现体从 `core/*` 迁入 `src/external/*`，并保持旧引用兼容
+  - 实现：
+    - `src/external/asr/asr-service.js` 承接原 `core/asr.js` 实现体并修正模型路径
+    - `src/external/tts/tts-service.js` 承接原 `core/tts.js` 实现体并使用 `res/uploads`
+    - `src/external/llm/llm-service.js` 承接原 `core/chat.js` 实现体并修正配置路径
+    - `core/asr.js`、`core/tts.js`、`core/chat.js` 改为兼容转发层
+    - 更新分层文档与 External 迁移说明
+    - 新增任务记录 `docs/task/2026-04-23_External层第二步迁移.md`
+  - 改动文件：
+    - `src/external/asr/asr-service.js`
+    - `src/external/tts/tts-service.js`
+    - `src/external/llm/llm-service.js`
+    - `core/asr.js`
+    - `core/tts.js`
+    - `core/chat.js`
+    - `src/external/README.md`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/task/2026-04-23_External层第二步迁移.md` (新增)
+- ✅ External 层第一步迁移（入口切换）
+  - 需求：在保持接口不变的前提下，把外部能力依赖从 `core/*` 迁到 `src/external/*`
+  - 实现：
+    - 新增 External 兼容服务：`asr-service`、`tts-service`、`llm-service`
+    - `server.js` 依赖切换到 `src/external/*`
+    - External 服务第一阶段采用兼容转发（转发到 `core/*`）
+    - 更新分层设计与实现文档，补充 External 迁移策略和伪代码
+    - 新增任务记录 `docs/task/2026-04-23_External层第一步迁移.md`
+  - 改动文件：
+    - `server.js`
+    - `src/external/asr/asr-service.js` (新增)
+    - `src/external/tts/tts-service.js` (新增)
+    - `src/external/llm/llm-service.js` (新增)
+    - `src/external/README.md`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/task/2026-04-23_External层第一步迁移.md` (新增)
+- ✅ 资源目录统一到 res（移除旧路径依赖）
+  - 需求：将分散的 uploads/temp/models/ssl 目录统一整理，并保持现有运行兼容
+  - 实现：
+    - `server.js` 资源路径固定为 `res/uploads`、`res/temp/asr`、`res/temp/uploads`、`res/certs`
+    - `core/asr.js` 模型目录固定为 `res/models/sensevoice`
+    - `core/media-library.js` 上传目录固定识别 `res/uploads`
+    - 旧目录 `uploads`、`temp`、`ssl` 中资源迁移到 `res/`
+    - 新增 `res/README.md` 目录说明
+    - 新增资源目录设计与实现文档
+    - 新增任务记录 `docs/task/2026-04-22_资源目录整理.md`
+  - 改动文件：
+    - `server.js`
+    - `core/asr.js`
+    - `core/media-library.js`
+    - `res/README.md` (新增)
+    - `docs/design/resource-layout.md` (新增)
+    - `docs/spec/resource-layout.md` (新增)
+    - `docs/design.md`
+    - `docs/spec.md`
+    - `docs/task/2026-04-22_资源目录整理.md` (新增)
+- ✅ 新增 server 应用骨架目录
+  - 需求：在多应用结构下增加“提供服务”类型应用目录，便于后续独立扩展
+  - 实现：
+    - 新增 `src/apps/server/` 目录及说明文件
+    - 新增 `bootstrap/`、`modules/`、`api/` 子目录说明
+    - 更新 `src/README.md` 增加多应用列表
+    - 更新分层文档，补充 `server` 目录与定位，并同步将 Capability 命名优化为 External
+    - 在实现文档新增 `StartServerApp` 伪代码
+    - 新增任务记录 `docs/task/2026-04-22_新增server应用骨架.md`
+  - 改动文件：
+    - `src/apps/server/README.md` (新增)
+    - `src/apps/server/bootstrap/README.md` (新增)
+    - `src/apps/server/modules/README.md` (新增)
+    - `src/apps/server/api/README.md` (新增)
+    - `src/README.md`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/task/2026-04-22_新增server应用骨架.md` (新增)
+- ✅ 项目分层结构第一阶段整理（Core/Framework/External/App）
+  - 需求：先整理项目结构，统一分层边界，为后续多程序扩展和渐进迁移做准备
+  - 实现：
+    - 新增 `src/` 分层骨架目录与说明文件：`core`、`framework`、`external`、`apps/web-mediacenter`
+    - 新增设计文档 `docs/design/layered-architecture.md`，定义四层职责、依赖规则、迁移策略
+    - 新增实现文档 `docs/spec/layered-architecture.md`，补充分层装配和依赖校验伪代码
+    - 更新索引 `docs/design.md`、`docs/spec.md` 挂载分层架构文档
+    - 新增任务记录 `docs/task/2026-04-22_项目分层结构整理.md`
+  - 改动文件：
+    - `src/README.md` (新增)
+    - `src/core/README.md` (新增)
+    - `src/framework/README.md` (新增)
+    - `src/external/README.md` (新增)
+    - `src/apps/web-mediacenter/README.md` (新增)
+    - `src/apps/web-mediacenter/bootstrap/README.md` (新增)
+    - `docs/design/layered-architecture.md` (新增)
+    - `docs/spec/layered-architecture.md` (新增)
+    - `docs/design.md`
+    - `docs/spec.md`
+    - `docs/task/2026-04-22_项目分层结构整理.md` (新增)
+- ✅ Auto-Brain 独立分层文档（与 AASC 解耦）
+  - 需求：将示例性的“条件反射层/小脑/大脑”升级为可工程落地的通俗分层，并明确 AASC 仅作为消息总线
+  - 实现：
+    - 新增 `docs/design/auto-brain.md`，定义 Input/Fast Decision/Action/Tuning/Planning/Guard/Monitor 七层职责与边界
+    - 新增 `docs/spec/auto-brain.md`，补充伪代码实现：主流程、原型注册扩展点、数据契约、失败回滚、AASC 主题协作
+    - `aasc/message-bus.js` 增加多运行时能力：`registerRuntime`、`unregisterRuntime`、`listRuntimes`、`buildRuntimeTopic`、`subscribeRuntime`、`publishRuntime`
+    - `aasc/message-bus.js` 增加跨设备能力：`registerDeviceTransport`、`receiveRemoteRuntimeMessage`、`targetDeviceId/targetRuntimeId` 路由、`broadcastDevices` 广播
+    - `server.js` 新增 WebSocket 设备桥接路径 `/runtime-bridge`，支持 runtime envelope 上下行与心跳
+    - 消息统计增加 `messagesByRuntime` 与 `runtimeCount`，支持按 runtime 观测总线流量
+    - 消息统计增加 `runtimeMessagesByDevice` 与 `deviceTransportCount`，支持按设备观测跨设备投递
+    - `auto-brain/src/adapters/aasc-bus-adapter.js` 与 `auto-brain/src/orchestration/behavior-orchestrator.js` 改为 runtimeId 隔离主题
+    - 新增 `auto-brain/` 代码骨架：Orchestrator、AASC 适配器、RuleTable、ActionDispatcher、PolicyGate、PlanningAdapter 等模块
+    - 清理 `docs/design/aasc.md` 与 `docs/spec/aasc.md` 中混入的 Auto-Brain 分层内容，恢复 AASC 聚焦消息总线定位
+    - 更新索引 `docs/design.md` 与 `docs/spec.md`，将 Auto-Brain 作为独立模块挂载
+    - 更新任务记录 `docs/task/2026-04-22_AASC分层与命名优化.md`
+  - 改动文件：
+    - `aasc/message-bus.js`
+    - `server.js`
+    - `auto-brain/README.md` (新增)
+    - `auto-brain/src/index.js` (新增)
+    - `auto-brain/src/orchestration/behavior-orchestrator.js` (新增)
+    - `auto-brain/src/adapters/aasc-bus-adapter.js` (新增)
+    - `auto-brain/src/core/prototype-registry.js` (新增)
+    - `auto-brain/src/contracts/signal-event.js` (新增)
+    - `auto-brain/src/contracts/execution-action.js` (新增)
+    - `auto-brain/src/contracts/outcome-feedback.js` (新增)
+    - `auto-brain/src/contracts/strategy-draft.js` (新增)
+    - `auto-brain/src/contracts/strategy-profile.js` (新增)
+    - `auto-brain/src/input/input-normalizer.js` (新增)
+    - `auto-brain/src/fast-decision/rule-table.js` (新增)
+    - `auto-brain/src/fast-decision/fast-decision-engine.js` (新增)
+    - `auto-brain/src/action/action-dispatcher.js` (新增)
+    - `auto-brain/src/tuning/tuning-engine.js` (新增)
+    - `auto-brain/src/planning/planning-adapter.js` (新增)
+    - `auto-brain/src/guard/policy-validator.js` (新增)
+    - `auto-brain/src/guard/policy-gate.js` (新增)
+    - `auto-brain/src/monitor/metrics-recorder.js` (新增)
+    - `docs/design/auto-brain.md` (新增)
+    - `docs/spec/auto-brain.md` (新增)
+    - `docs/design/aasc.md`
+    - `docs/spec/aasc.md`
+    - `docs/design.md`
+    - `docs/spec.md`
+    - `docs/task/2026-04-22_AASC分层与命名优化.md`
+    - `docs/todo.md`
 - ✅ 新增服务端 ASR 压测脚本
   - 功能：提供 `scripts/asr-stress-test.js`，用于直接压测 `/api/asr/recognize` 并观察 RSS / Heap / External / ArrayBuffers 变化
   - 实现：

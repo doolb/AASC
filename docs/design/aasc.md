@@ -737,12 +737,12 @@ class MessageSecurity {
 | 现有模块 | 执行者名称 | 能力等级 |
 |----------|------------|----------|
 | server.js | 消息路由执行者 | L5 |
-| core/voiceCommand.js | 语音命令执行者 | L4 |
-| core/chat.js | 聊天执行者 | L4 |
-| core/reminder.js | 提醒执行者 | L2 |
-| core/tts.js | 语音合成执行者 | L3 |
-| core/timeAnnounce.js | 整点报时执行者 | L2 |
-| core/media-library.js | 媒体库执行者 | L3 |
+| src/apps/web-mediacenter/modules/voice/voice-command-app-service.js | 语音命令执行者 | L4 |
+| src/external/llm/llm-service.js | 聊天执行者 | L4 |
+| src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 提醒执行者 | L2 |
+| src/external/tts/tts-service.js | 语音合成执行者 | L3 |
+| src/apps/web-mediacenter/modules/time/time-announce-app-service.js | 整点报时执行者 | L2 |
+| src/apps/web-mediacenter/modules/media/media-library-app-service.js | 媒体库执行者 | L3 |
 | public/js/controls.js | 显示控制执行者 | L3 |
 
 ### 10.3 兼容性策略
@@ -1916,3 +1916,62 @@ AASC 四层架构是对原有执行者模型的增强：
 5. **松耦合**：通过依赖注入和接口解耦
 6. **中间件**：横切关注点集中处理，避免代码重复
 7. **向后兼容**：保留 fallback 机制，平滑迁移
+
+---
+
+## 14. 多 Auto-Brain 运行时支持（AASC 仅消息总线）
+
+### 14.1 目标
+
+在同一个 AASC 总线上并行运行多个 Auto-Brain 实例，并保证运行时之间消息隔离、可观测、可管理。
+
+### 14.2 设计原则
+
+1. AASC 只负责运行时注册、主题命名、消息分发与统计。
+2. Auto-Brain 决策逻辑不进入 AASC，仍在 `auto-brain` 模块内部实现。
+3. 每个运行时必须有唯一 `runtimeId`。
+
+### 14.3 主题命名约定
+
+- 总线命名空间：`autobrain.{runtimeId}.{channel}`
+- 推荐 channel：
+  - `signal`
+  - `action.result`
+  - `strategy.updated`
+  - `health`
+
+示例：
+
+- `autobrain.runtime-alpha.signal`
+- `autobrain.runtime-beta.strategy.updated`
+
+### 14.4 运行时管理能力
+
+MessageBus 需要提供以下能力：
+
+1. `registerRuntime(runtimeId, metadata)`：注册运行时
+2. `unregisterRuntime(runtimeId)`：注销运行时
+3. `listRuntimes()`：查看运行时列表
+4. `subscribeRuntime(runtimeId, channel, handler, subscriberId)`：订阅运行时主题
+5. `publishRuntime(runtimeId, channel, payload)`：发布运行时主题消息
+
+### 14.5 跨设备消息能力
+
+1. MessageBus 通过 `localDeviceId` 标识当前设备。
+2. MessageBus 通过 `registerDeviceTransport(deviceId, transport)` 注册跨设备传输通道。
+3. 运行时消息可指定 `targetDeviceId`，由总线转发到目标设备。
+4. 远端设备通过 `receiveRemoteRuntimeMessage(envelope)` 注入本地总线。
+5. 默认桥接协议使用 WebSocket 路径 `/runtime-bridge`，用于设备间 runtime envelope 转发。
+
+### 14.6 跨设备投递规则
+
+1. 未指定目标设备时，默认在本设备投递。
+2. 指定 `targetRuntimeId` 时，优先按运行时注册的 `deviceId` 路由。
+3. 指定 `broadcastDevices` 时，按设备列表逐个投递。
+4. 目标设备无传输通道时，记录告警并返回空结果。
+
+### 14.7 统计与观测
+
+1. 在总线统计中增加 `runtimeCount`。
+2. 在总线统计中增加 `messagesByRuntime`，用于查看每个 runtime 的消息量。
+3. 在总线统计中增加 `runtimeMessagesByDevice`，用于查看每个 runtime 在各设备的投递分布。

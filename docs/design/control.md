@@ -79,6 +79,6 @@
 
 ## AI 聊天助手
  - ✅已完成 [2026-03-29][2026-03-29] 语音漏播和重复播放问题修复
-   - 改动文件：core/tts.js, server.js, core/reminder.js, core/timeAnnounce.js
+   - 改动文件：src/external/tts/tts-service.js, server.js, src/apps/web-mediacenter/modules/reminder/reminder-app-service.js, src/apps/web-mediacenter/modules/time/time-announce-app-service.js
    - 问题：所有 TTS 写入同一个文件 temp_tts.wav，并发时后一个覆盖前一个，导致中间语音丢失
    - 修复：使用唯一文件名 tts_{timestamp}_{random}.wav 生成 TTS，添加定期清理旧文件功能

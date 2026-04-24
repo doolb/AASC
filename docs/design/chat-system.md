@@ -280,8 +280,8 @@ processVoiceCommand() 处理其他命令
 - `config/chat-commands.json` - 自定义指令配置
 
 ### 修改文件
-- `core/chat.js` - 重构聊天核心逻辑
-- `core/voiceCommand.js` - 整合系统指令处理
+- `src/external/llm/llm-service.js` - 重构聊天核心逻辑
+- `src/apps/web-mediacenter/modules/voice/voice-command-app-service.js` - 整合系统指令处理
 - `public/js/chat.js` - 重构前端聊天界面
 - `public/css/chat.css` - 更新聊天样式
 - `server.js` - 更新WebSocket消息处理
