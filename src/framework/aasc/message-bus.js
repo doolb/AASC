@@ -18,6 +18,7 @@ class MessageBus {
       messagesByRuntime: {},
       runtimeMessagesByDevice: {}
     };
+    this._MAX_STATS_KEYS = 200;
   }
 
   registerRuntime(runtimeId, metadata = {}) {
@@ -487,6 +488,38 @@ class MessageBus {
       deviceTransportCount: this.deviceTransports.size,
       localDeviceId: this.localDeviceId
     };
+  }
+
+  trimStats() {
+    const trimMap = (obj, maxKeys) => {
+      const keys = Object.keys(obj);
+      if (keys.length > maxKeys) {
+        const sorted = keys.sort((a, b) => obj[b] - obj[a]);
+        const toRemove = sorted.slice(maxKeys);
+        for (const key of toRemove) {
+          delete obj[key];
+        }
+      }
+    };
+    trimMap(this.stats.messagesByType, this._MAX_STATS_KEYS);
+    trimMap(this.stats.messagesByTopic, this._MAX_STATS_KEYS);
+    trimMap(this.stats.messagesByRuntime, this._MAX_STATS_KEYS);
+
+    const devices = Object.keys(this.stats.runtimeMessagesByDevice);
+    if (devices.length > this._MAX_STATS_KEYS) {
+      const sorted = devices.sort((a, b) => {
+        const sumA = Object.values(this.stats.runtimeMessagesByDevice[a]).reduce((s, v) => s + v, 0);
+        const sumB = Object.values(this.stats.runtimeMessagesByDevice[b]).reduce((s, v) => s + v, 0);
+        return sumB - sumA;
+      });
+      const toRemove = sorted.slice(this._MAX_STATS_KEYS);
+      for (const key of toRemove) {
+        delete this.stats.runtimeMessagesByDevice[key];
+      }
+    }
+    for (const runtimeId of Object.keys(this.stats.runtimeMessagesByDevice)) {
+      trimMap(this.stats.runtimeMessagesByDevice[runtimeId], this._MAX_STATS_KEYS);
+    }
   }
 }
 

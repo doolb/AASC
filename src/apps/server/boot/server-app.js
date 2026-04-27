@@ -1732,6 +1732,9 @@ wss.on('connection', (ws, req) => {
 
         ws.on('error', (error) => {
             logError('AASC', `运行时桥接设备错误(${runtimeBridgeDeviceId}): ${error.message}`);
+            runtimeBridgeClients.delete(runtimeBridgeDeviceId);
+            unregisterRuntimeBridgeTransport(runtimeBridgeDeviceId);
+            ws.removeAllListeners();
         });
 
         return;
@@ -2547,11 +2550,11 @@ const DEVICE_EVENT_DEBOUNCE_MS = 30000;
 setInterval(() => {
     const now = Date.now();
     for (const [key, time] of deviceEventDebounce) {
-        if (now - time > DEVICE_EVENT_DEBOUNCE_MS * 2) {
+        if (now - time > DEVICE_EVENT_DEBOUNCE_MS) {
             deviceEventDebounce.delete(key);
         }
     }
-}, 5 * 60 * 1000);
+}, 1 * 60 * 1000);
 
 async function executeDeviceEvent(ip, eventType, displayId) {
     try {
@@ -2703,6 +2706,41 @@ setInterval(() => {
 }, SUB_DISPLAY_CHECK_INTERVAL_MS);
 
 setInterval(() => {
+    const deadDisplays = [];
+    displayClients.forEach((data, id) => {
+        if (data.ws.readyState !== WebSocket.OPEN && data.ws.readyState !== WebSocket.CONNECTING) {
+            deadDisplays.push(id);
+        }
+    });
+    deadDisplays.forEach(id => {
+        displayClients.delete(id);
+        if (aascSystem) {
+            aascSystem.handleDisplayDisconnect(id);
+        }
+    });
+    if (deadDisplays.length > 0) {
+        log('内存', `清理了 ${deadDisplays.length} 个已断开但未清理的显示端连接`);
+        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+    }
+
+    const deadControls = [];
+    controlClients.forEach(ws => {
+        if (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING) {
+            deadControls.push(ws);
+        }
+    });
+    deadControls.forEach(ws => {
+        controlClients.delete(ws);
+        if (aascSystem) {
+            aascSystem.handleControlDisconnect(ws);
+        }
+    });
+    if (deadControls.length > 0) {
+        log('内存', `清理了 ${deadControls.length} 个已断开但未清理的控制端连接`);
+    }
+}, 1 * 60 * 1000);
+
+setInterval(() => {
     const usage = process.memoryUsage();
     const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + 'MB';
     log('内存', `RSS: ${mb(usage.rss)} | Heap: ${mb(usage.heapUsed)}/${mb(usage.heapTotal)} | External: ${mb(usage.external)} | ArrayBuffers: ${mb(usage.arrayBuffers || 0)}`);
@@ -2716,6 +2754,10 @@ setInterval(() => {
             const afterGc = process.memoryUsage();
             log('内存', `GC后 RSS: ${mb(afterGc.rss)} | Heap: ${mb(afterGc.heapUsed)}/${mb(afterGc.heapTotal)}`);
         }
+    }
+    
+    if (aascSystem && aascSystem.bus && typeof aascSystem.bus.trimStats === 'function') {
+        aascSystem.bus.trimStats();
     }
 }, 1 * 60 * 1000);
 

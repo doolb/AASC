@@ -9,6 +9,7 @@ const COMMANDS_FILE = path.join(__dirname, '../../../config/chat-commands.json')
 const IMPORTANT_FILE = path.join(__dirname, '../../../config/important-records.json');
 const TEMPLATES_FILE = path.join(__dirname, '../../../config/chat-templates.json');
 const MAX_HISTORY_SIZE = 100;
+const MAX_MESSAGE_LENGTH = 51200;
 
 const DEFAULT_TEMPLATES = [
     {
@@ -321,13 +322,14 @@ function addImportantRecord(content, role, name) {
 }
 
 function addMessage(message) {
+    const content = message.content ? message.content.substring(0, MAX_MESSAGE_LENGTH) : '';
     const msg = {
         id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
         timestamp: Date.now(),
         role: message.role || 'user',
         name: message.name || '',
         ip: message.ip || '',
-        content: message.content,
+        content: content,
         mode: message.mode || chatSession.mode,
         target: message.target || chatSession.privateTarget
     };
@@ -336,8 +338,8 @@ function addMessage(message) {
     trimHistory();
     saveHistory();
     
-    if (message.content && message.content.startsWith('系统记录')) {
-        const importantContent = message.content.replace('系统记录', '').trim();
+    if (content && content.startsWith('系统记录')) {
+        const importantContent = content.replace('系统记录', '').trim();
         if (importantContent) {
             addImportantRecord(importantContent, msg.role, msg.name);
         }
@@ -438,8 +440,8 @@ async function chat(userMessage, options = {}) {
             
             chatHistory.push({
                 id: Date.now().toString(),
-                user: userMessage,
-                assistant: assistantMessage,
+                user: userMessage.substring(0, MAX_MESSAGE_LENGTH),
+                assistant: assistantMessage.substring(0, MAX_MESSAGE_LENGTH),
                 timestamp: Date.now(),
                 displayId: displayId
             });

@@ -50,11 +50,13 @@ class DataSnapshot {
     _createHandler() {
         const self = this;
 
-        const createNestedProxy = (obj, path = []) => {
+        const getCachedProxy = (obj) => {
             if (obj === null || typeof obj !== 'object') {
                 return obj;
             }
-
+            if (self._proxyCache.has(obj)) {
+                return self._proxyCache.get(obj);
+            }
             const handler = {
                 get(target, prop) {
                     if (typeof prop === 'symbol') {
@@ -62,7 +64,7 @@ class DataSnapshot {
                     }
                     const value = target[prop];
                     if (value && typeof value === 'object') {
-                        return createNestedProxy(value, [...path, prop]);
+                        return getCachedProxy(value);
                     }
                     return value;
                 },
@@ -87,7 +89,9 @@ class DataSnapshot {
                 }
             };
 
-            return new Proxy(obj, handler);
+            const proxy = new Proxy(obj, handler);
+            self._proxyCache.set(obj, proxy);
+            return proxy;
         };
 
         return {
@@ -100,7 +104,7 @@ class DataSnapshot {
                 }
                 const value = target._data[prop];
                 if (value && typeof value === 'object') {
-                    return createNestedProxy(value, [prop]);
+                    return getCachedProxy(value);
                 }
                 return value;
             },

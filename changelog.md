@@ -5,6 +5,40 @@
 > 归档说明：`src/core/config/config.js` 已在 2026-04-25 迁移为 `src/apps/server/modules/config/config-app-service.js`，历史条目中的旧路径仅用于回溯当时改动。
 
 ### 新功能
+
+- ✅ [2026-04-27] 实现 RSS 内存压测脚本
+  - 通用的 HTTP 压测脚本，支持可配置的 method/path/body/headers
+  - 两种运行模式：total（按请求数+并发）和 interval（按间隔+持续时间）
+  - 定时采集服务端 `/api/system-stats` 的 RSS/Heap/External 数据
+  - 同时记录本地压测进程内存占用
+  - 输出 ASCII 曲线图和最终报告（峰值内存、成功率、平均/最大延迟）
+  - 改动文件：`src/scripts/rss-stress-test.js`、`docs/spec/rss-stress-test.md`
+
+### Bug 修复
+- ✅ 服务端 RSS 持续上涨综合修复（第四轮 - 系统性加固）
+  - 问题：服务器长时间运行后 RSS 持续上涨，即使在低负载时期也不回落
+  - 原因分析：
+    1. `MessageBus.stats` 中 `messagesByRuntime` 和 `runtimeMessagesByDevice` 按 runtimeId/deviceId 累积计数，永不清除
+    2. `deviceEventDebounce` Map 每 5 分钟才清理过期 >60s 的条目，短时间窗口内大量不同 IP 的连接会导致 Map 膨胀
+    3. `DataSnapshot.createNestedProxy` 每次访问嵌套属性都创建全新 Proxy 对象，高频访问下 GC 压力大，V8 倾向于保留更多内存
+    4. `chatHistory` 单个消息内容无大小限制，大文本（如 base64 图片）可导致单条消息占用数 MB
+    5. WebSocket 连接异常断开时可能未触发 close 事件，导致 `displayClients`/`controlClients` 残留僵尸连接
+  - 修复：
+    - `src/framework/aasc/message-bus.js`：新增 `trimStats()` 方法，按消息数量排序保留 top 200 条统计键，其余删除；服务端每分钟自动调用
+    - `src/apps/server/boot/server-app.js`：`deviceEventDebounce` 清理间隔从 5 分钟改为 1 分钟，清理阈值从 `DEBOUNCE_MS * 2` 改为 `DEBOUNCE_MS`
+    - `src/apps/server/boot/server-app.js`：新增 WebSocket 连接健康检查，每分钟扫描 `displayClients`/`controlClients` 中 `readyState` 不为 OPEN 的僵尸连接并清理
+    - `src/apps/server/boot/server-app.js`：runtimeBridge 的 `error` 事件处理中增加清理逻辑，确保异常断开时释放引用
+    - `src/core/data-snapshot/DataSnapshot.js`：`createNestedProxy` 改为 `getCachedProxy`，使用 WeakMap 缓存已创建的 Proxy 对象，避免重复创建
+    - `src/external/llm/llm-service.js`：新增 `MAX_MESSAGE_LENGTH = 51200`，`addMessage` 和 `chat` 方法中自动截断超出内容，防止单条大消息撑爆内存
+  - 改动文件：
+    - `src/framework/aasc/message-bus.js`
+    - `src/core/data-snapshot/DataSnapshot.js`
+    - `src/external/llm/llm-service.js`
+    - `src/apps/server/boot/server-app.js`
+    - `docs/spec/aasc.md`
+    - `docs/spec/data-snapshot.md`
+    - `changelog.md`
+    - `docs/task/2026-04-27_RSS持续上涨综合修复.md` (新增)
 - ✅ 文档路径术语统一到当前目录结构
   - 需求：在已完成目录归位后，继续统一文档中的旧路径示例，降低新成员理解成本
   - 实现：
