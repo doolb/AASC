@@ -30,7 +30,7 @@
 
 ### 5. 配置透传
 
-- `config/config.json` 与 `src/core/config/config.js` 扩展 TTS 配置项
+- `config/config.json` 与 `src/apps/server/modules/config/config-app-service.js` 扩展 TTS 配置项
 - `/api/tts/config` 支持读写新增字段，便于线上动态调优
 
 ### 6. 压测验证工具

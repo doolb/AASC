@@ -152,7 +152,7 @@ core compatibility module:
 
 ```text
 迁移剩余核心模块:
-    core/config.js -> src/core/config/config.js
+    core/config.js -> src/apps/server/modules/config/config-app-service.js
     core/timeParser.js -> src/core/utils/time-parser.js
     core/console-redirect.js -> src/framework/observability/console-redirect.js
     core/connection.js -> src/framework/transport/ws/connection.js
@@ -164,4 +164,35 @@ core compatibility module:
 替换引用并清理目录:
     替换 server、aasc、voice-display-node 相关引用
     删除空 core 目录
+```
+
+## 13. 配置模块下沉到 App 层（伪代码）
+
+```text
+迁移配置模块:
+    src/core/config/config.js -> src/apps/server/modules/config/config-app-service.js
+
+替换引用:
+    server-app.js 使用 src/apps/server/modules/config/config-app-service
+    aasc/agents/index.js 使用 src/apps/server/modules/config/config-app-service
+
+目标:
+    server 应用相关配置归属 App 层
+    core 层仅保留纯基础能力
+```
+
+## 14. AASC 与 Auto-Brain 迁移到 Framework（伪代码）
+
+```text
+迁移目录:
+    src/aasc/* -> src/framework/aasc/*
+    src/auto-brain/* -> src/framework/auto-brain/*
+
+替换入口引用:
+    server-app.js: require(src/framework/aasc/init)
+    run-log-brain-tests.js: require(src/framework/aasc/message-bus.runtime-chain.test)
+
+静态调试路由:
+    app.use('/aasc', static(src/framework/aasc))
+    app.use('/auto-brain', static(src/framework/auto-brain))
 ```

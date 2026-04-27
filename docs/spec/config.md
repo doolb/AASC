@@ -11,7 +11,7 @@
 
 ## 默认配置
 
-**src/core/config/config.js**:
+**src/apps/server/modules/config/config-app-service.js**:
 ```javascript
 const defaultConfig = {
     server: {
@@ -263,6 +263,6 @@ module.exports = {
 
 | 文件 | 说明 |
 |------|------|
-| src/core/config/config.js | 配置管理模块 |
-| server.js | 配置初始化和使用 |
+| src/apps/server/modules/config/config-app-service.js | 配置管理模块 |
+| src/apps/server/boot/server-app.js | 配置初始化和使用 |
 | config/config.json | 配置存储文件 |

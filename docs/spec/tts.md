@@ -3,7 +3,7 @@
 ## 模块位置
 
 - `src/external/tts/tts-service.js`
-- `src/core/config/config.js`
+- `src/apps/server/modules/config/config-app-service.js`
 - `src/apps/server/boot/server-app.js`
 
 ## 配置结构

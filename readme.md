@@ -49,10 +49,8 @@ web-mediacenter/
 ├── res/                         # 统一资源目录（models/uploads/temp/certs）
 ├── skills/                      # 技能配置
 ├── src/                         # 分层代码主目录
-│   ├── aasc/                    # AASC 消息总线与执行者
-│   ├── auto-brain/              # Auto-Brain 决策分层模块
 │   ├── core/                    # 核心能力层
-│   ├── framework/               # 基础设施层
+│   ├── framework/               # 基础设施层（含 AASC 与 Auto-Brain）
 │   ├── external/                # 外部能力适配层
 │   ├── scripts/                 # 工具脚本（测试/诊断/维护）
 │   └── apps/                    # 应用层（服务端入口在 src/apps/server/boot/server-app.js）

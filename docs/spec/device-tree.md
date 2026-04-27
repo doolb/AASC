@@ -6,7 +6,7 @@
 
 ## 后端实现
 
-### 配置管理 (src/core/config/config.js)
+### 配置管理 (src/apps/server/modules/config/config-app-service.js)
 
 #### 新增 deviceEvents 配置
 
@@ -600,7 +600,7 @@ handleMessage 中新增:
 
 | 文件 | 说明 |
 |------|------|
-| src/core/config/config.js | 配置管理添加 deviceEvents（修改） |
+| src/apps/server/modules/config/config-app-service.js | 配置管理添加 deviceEvents（修改） |
 | server.js | API 端点和连线/掉线指令执行（修改） |
 | public/js/device-tree.js | 树状设备列表前端组件（新增） |
 | public/js/websocket.js | WebSocket 消息处理扩展（修改） |

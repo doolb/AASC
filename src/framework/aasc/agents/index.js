@@ -1,5 +1,5 @@
 const { BaseAgent, AgentBuilder } = require('./base-agent');
-const config = require('../../core/config/config');
+const config = require('../../../apps/server/modules/config/config-app-service');
 
 class VoiceCommandAgent extends BaseAgent {
     constructor(options = {}) {
@@ -587,7 +587,7 @@ class TTSAgent extends BaseAgent {
             throw new Error('TTS 模块未初始化');
         }
 
-        const chat = require('../../external/llm/llm-service');
+        const chat = require('../../../external/llm/llm-service');
         const sentences = chat.splitIntoSentences(text);
         const path = require('path');
 

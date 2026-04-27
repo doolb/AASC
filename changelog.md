@@ -2,7 +2,67 @@
 
 ## [Unreleased]
 
+> 归档说明：`src/core/config/config.js` 已在 2026-04-25 迁移为 `src/apps/server/modules/config/config-app-service.js`，历史条目中的旧路径仅用于回溯当时改动。
+
 ### 新功能
+- ✅ AASC 与 Auto-Brain 迁移到 Framework 层
+  - 需求：将 `aasc` 与 `auto-brain` 统一归入 Framework 层，收敛基础设施边界
+  - 实现：
+    - 目录迁移：`src/aasc/* -> src/framework/aasc/*`
+    - 目录迁移：`src/auto-brain/* -> src/framework/auto-brain/*`
+    - `src/apps/server/boot/server-app.js` 改为依赖 `src/framework/aasc/init`
+    - `src/scripts/run-log-brain-tests.js` 改为依赖 `src/framework/aasc/message-bus.runtime-chain.test`
+    - 补充静态调试路由：`/aasc -> src/framework/aasc`、`/auto-brain -> src/framework/auto-brain`
+    - 修正 AASC 目录迁移后的跨层相对路径引用
+    - 更新分层/目录/规则文档和任务记录
+    - 新增任务记录 `docs/task/2026-04-25_AASC与Auto-Brain迁移到Framework层.md`
+  - 改动文件：
+    - `src/framework/aasc/*` (由 `src/aasc/*` 迁移)
+    - `src/framework/auto-brain/*` (由 `src/auto-brain/*` 迁移)
+    - `src/apps/server/boot/server-app.js`
+    - `src/scripts/run-log-brain-tests.js`
+    - `docs/design/project-structure.md`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/rules.md`
+    - `readme.md`
+    - `docs/task/2026-04-25_AASC与Auto-Brain迁移到Framework层.md` (新增)
+- ✅ 配置模块旧路径文档归档说明统一化
+  - 需求：减少历史文档中 `src/core/config/config.js` 路径对当前实现的误导
+  - 实现：
+    - 在 `changelog.md` 顶部新增归档说明，明确当前路径为 `src/apps/server/modules/config/config-app-service.js`
+    - 更新 `docs/rules.md` 路径规则，补充“历史文档可保留旧路径但需标注现路径”
+    - 更新 `docs/design/websocket.md`、`docs/design/device-tree.md`、`docs/spec/device-tree.md`、`docs/spec/api.md`、`docs/design/data-snapshot.md` 路径说明
+    - 补充近期任务文档中的“现路径”注记
+    - 新增任务记录 `docs/task/2026-04-25_配置路径归档说明.md`
+  - 改动文件：
+    - `changelog.md`
+    - `docs/rules.md`
+    - `docs/design/websocket.md`
+    - `docs/design/device-tree.md`
+    - `docs/spec/device-tree.md`
+    - `docs/spec/api.md`
+    - `docs/design/data-snapshot.md`
+    - `docs/task/2026-04-24_ASR独立进程开关.md`
+    - `docs/task/2026-04-24_TTS内存风险加固.md`
+    - `docs/task/2026-04-25_配置路径归档说明.md` (新增)
+- ✅ 配置模块迁移到 App 层（server 应用）
+  - 需求：将 `config.js` 放到 App 层，减少 Core 层应用耦合
+  - 实现：
+    - 新增 `src/apps/server/modules/config/config-app-service.js` 承接原配置实现
+    - 删除 `src/core/config/config.js`
+    - `src/apps/server/boot/server-app.js` 与 `src/aasc/agents/index.js` 切换到新配置路径
+    - 更新分层与配置文档，补充迁移伪代码和任务记录
+    - 新增任务记录 `docs/task/2026-04-25_配置模块迁移到App层.md`
+  - 改动文件：
+    - `src/apps/server/modules/config/config-app-service.js` (新增)
+    - `src/core/config/config.js` (删除)
+    - `src/apps/server/boot/server-app.js`
+    - `src/aasc/agents/index.js`
+    - `docs/design/layered-architecture.md`
+    - `docs/spec/layered-architecture.md`
+    - `docs/spec/config.md`
+    - `docs/task/2026-04-25_配置模块迁移到App层.md` (新增)
 - ✅ 新增 TTS 压测脚本（联动 system-stats）
   - 需求：提供可复用工具评估 TTS 生成链路在并发下的稳定性和内存表现
   - 实现：

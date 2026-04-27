@@ -432,7 +432,7 @@ function detectMediaType(name):
 | 文件 | 说明 |
 |------|------|
 | server.js | HTTP API 路由定义 |
-| src/core/config/config.js | 配置管理 |
+| src/apps/server/modules/config/config-app-service.js | 配置管理 |
 | src/external/tts/tts-service.js | TTS 功能 |
 | src/external/llm/llm-service.js | 聊天功能 |
 | src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 提醒功能 |

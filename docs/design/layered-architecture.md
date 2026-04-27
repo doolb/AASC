@@ -22,9 +22,10 @@
 
 ## 当前项目映射
 
-1. AASC 归属 Framework（仅消息总线和跨设备桥接能力）。
+1. AASC 归属 Framework（`src/framework/aasc/*`，仅消息总线和跨设备桥接能力）。
 2. LLM/TTS/ASR 归属 External。
 3. 提醒/聊天/媒体控制业务规则、控制端/显示端页面归属 App。
+4. 服务端配置模块归属 `src/apps/server/modules/config/*`，由 server App 负责装配。
 
 ## 目录约定
 
@@ -85,14 +86,20 @@ src/
 3. `server.js` 入口直接依赖 Framework 模块路径。
 4. `core/*` 保留兼容导出，平滑旧路径调用。
 
+## Framework 模块迁移（第八阶段）
+
+1. 将 `src/aasc/*` 迁入 `src/framework/aasc/*`。
+2. 将 `src/auto-brain/*` 迁入 `src/framework/auto-brain/*`。
+3. server 入口与测试脚本改为依赖 Framework 新路径。
+
 ## Core 收口（第六阶段）
 
 1. 全量替换项目内部对已迁移 `core/*` 文件的引用。
 2. 删除已迁移模块在 `core/` 下的兼容导出文件。
-3. `core/` 仅保留未迁移的基础模块（如 `config`、`timeParser`、`console-redirect`）。
+3. `core/` 仅保留未迁移的基础模块（如 `timeParser`、`console-redirect`）。
 
 ## Core 收口（第七阶段）
 
-1. 将 `config`、`timeParser`、`console-redirect` 从 `core/` 迁入 `src/core` 或 `src/framework`。
+1. 将 `config`、`timeParser`、`console-redirect` 从 `core/` 迁入 `src/core`、`src/framework` 或 `src/apps`。
 2. 将 `connection`、`tui`、`tui-utils`、`data-snapshot`、`viewbind` 迁入 `src/framework` 或 `src/core`。
 3. 删除空 `core/` 目录，彻底完成旧目录收口。

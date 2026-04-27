@@ -20,8 +20,8 @@ docs/               -> 设计/实现/任务/TODO
 docs/self-test-results/ -> 自测结果归档
 res/                -> 模型、上传、临时文件、证书
 skills/             -> 技能配置
-src/aasc/           -> Actor 与消息总线
-src/auto-brain/     -> 独立决策分层
+src/framework/aasc/ -> Actor 与消息总线
+src/framework/auto-brain/ -> 独立决策分层
 src/scripts/        -> 工具脚本
 src/apps/web-mediacenter/ui/public/ -> 控制端与显示端静态页面
 src/                -> 分层主代码（core/framework/external/apps）

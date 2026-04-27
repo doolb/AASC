@@ -59,7 +59,7 @@
    - config/chat-history.json - 聊天历史记录
    - config/media-libraries.json - 媒体库配置
    - config/reminders.json - 提醒配置
-   - 改动文件：src/core/config/config.js
+   - 改动文件：src/apps/server/modules/config/config-app-service.js（历史路径：src/core/config/config.js）
 
 ## 显示端语音功能
  - ✅已完成 显示端支持通过 tts.js 生成语音功能

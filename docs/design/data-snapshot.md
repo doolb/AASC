@@ -193,7 +193,7 @@ function saveConfig() { /* 手动保存 */ }
 function get(key) { /* 手动获取 */ }
 function set(key, value) { /* 手动设置 */ }
 
-// 改造后 (src/core/config/config.js)
+// 改造后 (src/apps/server/modules/config/config-app-service.js)
 class Config extends DataSnapshot {
     static defaults = {
         server: { port: 8081 },

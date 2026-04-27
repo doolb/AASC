@@ -42,7 +42,7 @@
 | 模块 | 文件 | 说明 |
 |------|------|------|
 | 服务器 | src/apps/server/boot/server-app.js | Express + WebSocket 主入口 |
-| 配置 | src/core/config/config.js | 配置加载、保存、获取 |
+| 配置 | src/apps/server/modules/config/config-app-service.js | 配置加载、保存、获取 |
 | 连接 | src/framework/transport/ws/connection.js | WebSocket 连接管理 (备用) |
 | 时间监听 | src/apps/web-mediacenter/modules/time/time-listener-app-service.js | 时间变化事件监听 |
 | 提醒 | src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 提醒逻辑处理 |

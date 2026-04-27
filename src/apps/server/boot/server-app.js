@@ -7,7 +7,7 @@ const os = require('os');
 const fs = require('fs');
 const { pipeline } = require('stream');
 const multer = require('multer');
-const config = require('../../../core/config/config');
+const config = require('../modules/config/config-app-service');
 const tts = require('../../../external/tts/tts-service');
 const asr = require('../../../external/asr/asr-service');
 const timeListener = require('../../web-mediacenter/modules/time/time-listener-app-service');
@@ -17,7 +17,7 @@ const reminder = require('../../web-mediacenter/modules/reminder/reminder-app-se
 const voiceCommand = require('../../web-mediacenter/modules/voice/voice-command-app-service');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
-const { initializeAASCSystem } = require('../../../aasc/init');
+const { initializeAASCSystem } = require('../../../framework/aasc/init');
 const LogBuffer = require('../../../framework/observability/log-buffer');
 const SystemMonitor = require('../../../framework/observability/system-monitor');
 const LogBrain = require('../../../framework/observability/log-brain');
@@ -289,6 +289,8 @@ function createDisplayState() {
 }
 
 app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public')));
+app.use('/aasc', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'aasc')));
+app.use('/auto-brain', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'auto-brain')));
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(express.json({ limit: '50mb' }));
 

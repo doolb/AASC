@@ -1,7 +1,7 @@
 const path = require('path');
-const DataSnapshot = require('../data-snapshot');
+const DataSnapshot = require('../../../../core/data-snapshot');
 
-const CONFIG_FILE = path.join(__dirname, '../../../config/config.json');
+const CONFIG_FILE = path.join(__dirname, '../../../../../config/config.json');
 
 const defaultDisplayState = {
     currentMedia: null,
