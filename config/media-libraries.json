@@ -6,7 +6,7 @@
       "type": "local",
       "isDefault": true,
       "readonly": false,
-      "path": "./uploads"
+      "path": "./res/uploads"
     },
     {
       "id": "lib_1774720230592",

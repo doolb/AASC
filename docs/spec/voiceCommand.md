@@ -2,7 +2,7 @@
 
 ## 模块概述
 
-语音命令模块 (`core/voiceCommand.js`) 处理显示端语音识别后的命令解析和执行。
+语音命令模块 (`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`) 处理显示端语音识别后的命令解析和执行。
 
 ## 核心功能
 
@@ -51,7 +51,7 @@ handleVoiceResult(event):
 
 ### 2. 提醒功能
 
-**服务端实现** (`core/voiceCommand.js`):
+**服务端实现** (`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`):
 ```
 parseTimeExpression(text):
     解析时间表达式:
@@ -391,7 +391,7 @@ processVoiceCommand(text, displayId, callbacks):
 
 | 文件 | 说明 |
 |------|------|
-| core/voiceCommand.js | 语音命令处理模块 |
+| src/apps/web-mediacenter/modules/voice/voice-command-app-service.js | 语音命令处理模块 |
 | server.js | WebSocket 消息路由 |
 | public/display.html | 显示端语音识别和UI |
 | public/js/chat.js | 控制端语音命令处理 |

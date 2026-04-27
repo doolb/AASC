@@ -18,6 +18,8 @@
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |
 | AASC系统 | [aasc.md](spec/aasc.md) | 消息总线、执行者模型、消息路由、消息过滤 |
+| Auto-Brain | [auto-brain.md](spec/auto-brain.md) | 独立分层决策流程、策略草案把关、AASC 主题协作 |
+| 分层架构 | [layered-architecture.md](spec/layered-architecture.md) | 分层装配流程、依赖约束、模块组装伪代码 |
 | DataSnapshot | [data-snapshot.md](spec/data-snapshot.md) | 数据快照、IFile/IFileSystem接口、RealFileSystem/JsonFile实现 |
 | ViewBind | [viewbind.md](spec/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 | 显示端选择 | [display-selection.md](spec/display-selection.md) | 单选、全选、自适应选择模式 |
@@ -25,49 +27,54 @@
 | 设备树 | [device-tree.md](spec/device-tree.md) | 树状结构设备列表（已合并到 device-list） |
 | 地图可视化 | [map-visualization.md](spec/map-visualization.md) | 执行者能力可视化、PixiJS渲染器、数据模型 |
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
-| 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、回退策略 |
+| 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
+| 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求超时、pipeline 写盘、失败文件回收 |
 | 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
 | 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、旋转重力方向调整、设备事件防抖 |
 | 显示端分布式能力 | [display-capability.md](spec/display-capability.md) | 显示端能力声明、能力路由、能力编辑 |
 | 日志筛选与系统监控 | [log-viewer.md](spec/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
+| 日志大脑 | [log-brain.md](spec/log-brain.md) | 日志摘要、记忆体构建、LLM判断上下文接口 |
+| 资源目录 | [resource-layout.md](spec/resource-layout.md) | 资源路径规范、目录整理、清理伪代码 |
+| 工程目录结构 | [project-structure.md](spec/project-structure.md) | 目录扫描、分类归位、文档索引同步伪代码 |
 
 ## 核心模块
 
 | 模块 | 文件 | 说明 |
 |------|------|------|
-| 服务器 | server.js | Express + WebSocket 主入口 |
-| 配置 | core/config.js | 配置加载、保存、获取 |
-| 连接 | core/connection.js | WebSocket 连接管理 (备用) |
-| 时间监听 | core/timeListener.js | 时间变化事件监听 |
-| 提醒 | core/reminder.js | 提醒逻辑处理 |
-| TTS | core/tts.js | 语音合成 |
-| 聊天 | core/chat.js | AI 聊天功能 |
-| 整点报时 | core/timeAnnounce.js | 整点报时功能 |
-| 语音命令 | core/voiceCommand.js | 语音命令处理模块 |
-| 子服务器 | core/sub-server.js | 子服务器管理、负载均衡 |
-| 日志缓冲区 | core/log-buffer.js | 结构化日志存储和筛选 |
-| 系统监控 | core/system-monitor.js | CPU和内存监控数据采集 |
+| 服务器 | src/apps/server/boot/server-app.js | Express + WebSocket 主入口 |
+| 配置 | src/apps/server/modules/config/config-app-service.js | 配置加载、保存、获取 |
+| 连接 | src/framework/transport/ws/connection.js | WebSocket 连接管理 (备用) |
+| 时间监听 | src/apps/web-mediacenter/modules/time/time-listener-app-service.js | 时间变化事件监听 |
+| 提醒 | src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 提醒逻辑处理 |
+| TTS | src/external/tts/tts-service.js | 语音合成功能 |
+| 聊天 | src/external/llm/llm-service.js | AI 聊天功能 |
+| 整点报时 | src/apps/web-mediacenter/modules/time/time-announce-app-service.js | 整点报时功能 |
+| 语音命令 | src/apps/web-mediacenter/modules/voice/voice-command-app-service.js | 语音命令处理模块 |
+| 媒体库 | src/apps/web-mediacenter/modules/media/media-library-app-service.js | 媒体库管理和多源访问 |
+| 子服务器 | src/framework/cluster/sub-server-manager.js | 子服务器管理、负载均衡 |
+| 日志缓冲区 | src/framework/observability/log-buffer.js | 结构化日志存储和筛选 |
+| 系统监控 | src/framework/observability/system-monitor.js | CPU和内存监控数据采集 |
 
 ## 前端模块
 
 | 模块 | 文件 | 说明 |
 |------|------|------|
-| 控制端主页面 | public/upload.html | 控制端界面，包含侧边栏导航 |
-| 显示端主页面 | public/display.html | 显示端界面 |
-| WebSocket 客户端 | public/js/websocket.js | WebSocket 连接管理 |
-| 控制逻辑 | public/js/controls.js | 播放控制、画面控制 |
-| 裁剪功能 | public/js/crop.js | 裁剪框拖拽、缩放 |
-| 媒体库 | public/js/media-library.js | 媒体库列表、文件管理、播放控制 |
-| 提醒界面 | public/js/reminder.js | 提醒管理界面 |
-| 聊天界面 | public/js/chat.js | AI 聊天界面 |
-| 搜索界面 | public/js/search.js | 搜索历史管理、手动搜索 |
-| 主入口 | public/js/main.js | 初始化、导航切换 |
-| 上传功能 | public/js/upload.js | 文件上传处理 |
-| 显示端列表 | public/js/device-list.js | 设备列表组件，支持列表/树形视图切换 |
-| TTS控制 | public/js/tts.js | TTS 前端控制 |
-| 本地ASR | public/js/sherpa-asr.js | sherpa-onnx-wasm 本地语音识别 |
-| Toast提示 | public/js/toast.js | 消息提示组件 |
-| 日志查看器 | public/js/log-viewer.js | 日志筛选、系统监控显示 |
+| 控制端主页面 | src/apps/web-mediacenter/ui/public/upload.html | 控制端界面，包含侧边栏导航 |
+| 显示端主页面 | src/apps/web-mediacenter/ui/public/display.html | 显示端界面 |
+| WebSocket 客户端 | src/apps/web-mediacenter/ui/public/js/websocket.js | WebSocket 连接管理 |
+| 控制逻辑 | src/apps/web-mediacenter/ui/public/js/controls.js | 播放控制、画面控制 |
+| 裁剪功能 | src/apps/web-mediacenter/ui/public/js/crop.js | 裁剪框拖拽、缩放 |
+| 媒体库 | src/apps/web-mediacenter/ui/public/js/media-library.js | 媒体库列表、文件管理、播放控制 |
+| 提醒界面 | src/apps/web-mediacenter/ui/public/js/reminder.js | 提醒管理界面 |
+| 聊天界面 | src/apps/web-mediacenter/ui/public/js/chat.js | AI 聊天界面 |
+| 搜索界面 | src/apps/web-mediacenter/ui/public/js/search.js | 搜索历史管理、手动搜索 |
+| 主入口 | src/apps/web-mediacenter/ui/public/js/main.js | 初始化、导航切换 |
+| 上传功能 | src/apps/web-mediacenter/ui/public/js/upload.js | 文件上传处理 |
+| 显示端列表 | src/apps/web-mediacenter/ui/public/js/device-list.js | 设备列表组件，支持列表/树形视图切换 |
+| TTS控制 | src/apps/web-mediacenter/ui/public/js/tts.js | TTS 前端控制 |
+| 本地ASR | src/apps/web-mediacenter/ui/public/js/sherpa-asr.js | sherpa-onnx-wasm 本地语音识别 |
+| Toast提示 | src/apps/web-mediacenter/ui/public/js/toast.js | 消息提示组件 |
+| 日志查看器 | src/apps/web-mediacenter/ui/public/js/log-viewer.js | 日志筛选、系统监控显示 |
 
 ## 配置文件
 

@@ -2,7 +2,7 @@
 
 ## 模块概述
 
-时间监听模块 (`core/timeListener.js`) 提供统一的时间变化事件监听能力，用于监听系统时间变化并触发相应事件。
+时间监听模块 (`src/apps/web-mediacenter/modules/time/time-listener-app-service.js`) 提供统一的时间变化事件监听能力，用于监听系统时间变化并触发相应事件。
 
 ## 核心功能
 
@@ -169,7 +169,7 @@ unsubscribe(); // 或 timeListener.off('minute', callback);
 
 **报时模块集成**:
 ```javascript
-// core/timeAnnounce.js
+// src/apps/web-mediacenter/modules/time/time-announce-app-service.js
 const timeListener = require('./timeListener');
 
 function start(displayClients, sendToDisplay) {
@@ -185,7 +185,7 @@ function onMinuteChange(eventData) {
 
 **提醒模块集成**:
 ```javascript
-// core/reminder.js
+// src/apps/web-mediacenter/modules/reminder/reminder-app-service.js
 const timeListener = require('./timeListener');
 
 function start(clients, sendFunc) {
@@ -201,9 +201,9 @@ function onMinuteChange(eventData) {
 
 | 文件 | 说明 |
 |------|------|
-| core/timeListener.js | 时间监听模块 |
-| core/timeAnnounce.js | 报时模块（使用时间监听） |
-| core/reminder.js | 提醒模块（使用时间监听） |
+| src/apps/web-mediacenter/modules/time/time-listener-app-service.js | 时间监听模块 |
+| src/apps/web-mediacenter/modules/time/time-announce-app-service.js | 报时模块（使用时间监听） |
+| src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 提醒模块（使用时间监听） |
 | server.js | 服务器启动时间监听 |
 
 ## 设计优势

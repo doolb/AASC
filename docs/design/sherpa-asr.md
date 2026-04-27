@@ -11,7 +11,7 @@
 
 ### 1. 单识别器串行执行
 
-- `core/asr.js` 中的 `SherpaOnnxASR` 维持单个 `OfflineRecognizer`
+- `src/external/asr/asr-service.js` 中的 `SherpaOnnxASR` 维持单个 `OfflineRecognizer`
 - 所有 `recognize()` 请求进入串行队列，同一时刻只允许一个识别任务访问 native recognizer
 - 队列长度设置上限，超过上限时直接返回忙碌错误，避免请求堆积造成内存膨胀
 
@@ -42,6 +42,15 @@
 - 未提供样本音频时自动生成 16kHz 单声道 WAV 测试文件
 - 默认联动拉取 `/api/system-stats`，输出服务端进程 RSS / Heap / External / ArrayBuffers 峰值和 ASCII 曲线
 - 支持关闭服务端指标采样，避免在纯接口连通性测试时产生额外请求
+
+### 6. 识别进程隔离开关
+
+- 在 `asr` 配置增加 `isolateProcess.enabled` 开关，默认关闭
+- 开关打开时，主服务进程不直接加载 `sherpa-onnx-node`，改为 `fork` 独立 ASR 子进程
+- 主进程通过 IPC 发送 `recognize(audioPath)` 请求，子进程返回识别结果
+- 子进程异常退出时，按 `isolateProcess.autoRestart` 策略自动拉起，减少人工干预
+- 每个请求使用超时保护（`requestTimeoutMs`），防止子进程阻塞导致接口长期挂起
+- 通过进程隔离把 native 模型内存固定在子进程，降低主服务 RSS 压力和波动范围
 
 ## 风险与约束
 

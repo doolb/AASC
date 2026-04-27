@@ -147,7 +147,7 @@ sendVoiceStatus():
 | public/display.html | 显示端集成 |
 | server.js | 配置API端点 |
 
-## 服务端 ASR (core/asr.js)
+## 服务端 ASR (src/external/asr/asr-service.js)
 
 ### 概述
 
@@ -222,6 +222,67 @@ sendVoiceStatus():
         返回 { samples, sampleRate }
 ```
 
+### 独立进程客户端 IsolatedAsrProcessClient
+
+```
+类 IsolatedAsrProcessClient:
+    属性:
+        worker: fork 出的 ASR 子进程
+        ready: 子进程是否完成模型初始化
+        pendingRequests: requestId -> Promise 回调映射
+        requestTimeoutMs: 单次识别超时
+        autoRestart: 子进程退出后是否自动重启
+
+    startWorker():
+        fork('src/external/asr/asr-worker-process.js')
+        绑定 message/exit 事件
+        发送 init 消息给子进程
+
+    handleWorkerMessage(message):
+        如果 type=ready:
+            更新 ready 状态
+        如果 type=response:
+            按 requestId resolve/reject pending Promise
+
+    recognize(audioPath):
+        如果 !ready: 抛出未就绪错误
+        生成 requestId 并写入 pendingRequests
+        启动超时定时器
+        发送 IPC 消息 {type:'recognize', id, audioPath}
+        返回 Promise
+
+    onWorkerExit():
+        置 ready=false
+        失败回收所有 pending 请求
+        autoRestart=true 时延迟重启 worker
+```
+
+### ASR 子进程脚本 asr-worker-process.js
+
+```
+on message(type='init'):
+    asr = new SherpaOnnxASR(options)
+    send {type:'ready', ready: asr.isReady()}
+
+on message(type='recognize'):
+    try:
+        text = await asr.recognize(audioPath)
+        send {type:'response', id, ok:true, text}
+    catch error:
+        send {type:'response', id, ok:false, error:error.message}
+```
+
+### 运行模式选择
+
+```
+init(options):
+    isolateConfig = resolveIsolateProcessConfig(options)
+    如果 isolateConfig.enabled:
+        asrInstance = new IsolatedAsrProcessClient(options)
+    否则:
+        asrInstance = new SherpaOnnxASR(options)
+```
+
 ### 内存管理
 
 - `recognize()` 中创建的 stream 必须在获取结果后调用 `destroy()` 释放 native 内存
@@ -229,6 +290,7 @@ sendVoiceStatus():
 - 异常路径中也必须调用 `stream.destroy()` 防止泄漏
 - `recognize()` 采用串行队列访问单个 recognizer，避免并发请求导致 native 资源叠加
 - 服务端在 ASR 空闲且 RSS 超过 1GB 或 ArrayBuffers 偏高时按批次触发 `global.gc()`，帮助回收外部内存
+- 开启独立进程模式后，`sherpa-onnx-node` native 内存驻留在子进程，主进程只持有轻量 IPC 对象
 
 ## ASR 压测脚本 (scripts/asr-stress-test.js)
 

@@ -493,7 +493,7 @@ function getLocalIP():
 | 文件 | 说明 |
 |------|------|
 | server.js | 服务端 WebSocket 处理 |
-| core/connection.js | 连接管理模块 (备用) |
+| src/framework/transport/ws/connection.js | 连接管理模块 (备用) |
 | public/js/websocket.js | 控制端 WebSocket 客户端 |
 
 ## 显示端语音识别
@@ -641,7 +641,7 @@ updateVoiceButton():
 
 ## ASR 模块
 
-**core/asr.js**:
+**src/external/asr/asr-service.js**:
 
 ```
 类 SherpaOnnxASR:

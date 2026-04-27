@@ -182,6 +182,6 @@
 |------|------|
 | public/js/device-tree.js | 树状设备列表前端组件 |
 | public/css/upload.css | 树状列表样式 |
-| core/config.js | 配置管理（添加 deviceEvents 支持） |
+| src/apps/server/modules/config/config-app-service.js | 配置管理（添加 deviceEvents 支持） |
 | server.js | API 端点和连线/掉线指令执行 |
 | config/config.json | 设备事件配置存储 |

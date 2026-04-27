@@ -11,7 +11,7 @@
 
 ## 默认配置
 
-**core/config.js**:
+**src/apps/server/modules/config/config-app-service.js**:
 ```javascript
 const defaultConfig = {
     server: {
@@ -20,7 +20,9 @@ const defaultConfig = {
     tts: {
         serviceUrl: 'http://192.168.1.16:3000/api/tts',
         defaultVoice: 'Microsoft Xiaoxiao',
-        defaultSpeed: 0
+        defaultSpeed: 0,
+        requestTimeoutMs: 20000,
+        maxErrorBytes: 65536
     },
     voiceCommand: {
         defaultWeatherCity: '',
@@ -28,6 +30,12 @@ const defaultConfig = {
         reminderTemplate: '{content}',
         reminderTemplatePrefix: '',
         reminderTemplateSuffix: ''
+    },
+    logBrain: {
+        errorThreshold: 1,
+        warnThreshold: 20,
+        memoryWarningThreshold: 85,
+        defaultTimeRange: '10m'
     },
     displayStates: {}
 };
@@ -97,6 +105,18 @@ config.set('tts.defaultVoice', 'Microsoft Huihui');
 调用 saveConfig()
 ```
 
+## 日志大脑配置
+
+### get('logBrain.*')
+读取日志大脑规则阈值。
+
+```javascript
+config.get('logBrain.errorThreshold', 1);
+config.get('logBrain.warnThreshold', 20);
+config.get('logBrain.memoryWarningThreshold', 85);
+config.get('logBrain.defaultTimeRange', '10m');
+```
+
 ## TTS 配置 API
 
 ### getTtsConfig()
@@ -106,7 +126,9 @@ config.set('tts.defaultVoice', 'Microsoft Huihui');
 {
     serviceUrl: 'http://...',
     defaultVoice: 'Microsoft Xiaoxiao',
-    defaultSpeed: 0
+    defaultSpeed: 0,
+    requestTimeoutMs: 20000,
+    maxErrorBytes: 65536
 }
 ```
 
@@ -120,6 +142,10 @@ config.set('tts.defaultVoice', 'Microsoft Huihui');
     set('tts.defaultVoice', defaultVoice)
 如果 defaultSpeed 存在:
     set('tts.defaultSpeed', defaultSpeed)
+如果 requestTimeoutMs 存在:
+    set('tts.requestTimeoutMs', requestTimeoutMs)
+如果 maxErrorBytes 存在:
+    set('tts.maxErrorBytes', maxErrorBytes)
 ```
 
 ## 显示端状态 API
@@ -237,6 +263,6 @@ module.exports = {
 
 | 文件 | 说明 |
 |------|------|
-| core/config.js | 配置管理模块 |
-| server.js | 配置初始化和使用 |
+| src/apps/server/modules/config/config-app-service.js | 配置管理模块 |
+| src/apps/server/boot/server-app.js | 配置初始化和使用 |
 | config/config.json | 配置存储文件 |

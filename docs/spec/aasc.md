@@ -387,7 +387,7 @@ const { Actor, MessageTopic } = require('./aasc');
 
 class ReminderActor extends Actor {
   async onInit() {
-    this.reminder = require('../core/reminder');
+    this.reminder = require('../src/apps/web-mediacenter/modules/reminder/reminder-app-service');
     this.registerHandler(MessageTopic.REMINDER, this.handleReminder.bind(this));
   }
 
@@ -423,6 +423,123 @@ class ReminderActor extends Actor {
 | aasc/actors/chat-actor.js | 聊天执行者 |
 | aasc/actors/voice-command-actor.js | 语音命令执行者 |
 | aasc/actors/media-control-actor.js | 媒体控制执行者 |
+
+## 多 Auto-Brain 运行时支持（伪代码）
+
+### 1. 运行时注册与主题约定
+
+```text
+MessageBus.registerRuntime(runtimeId, metadata):
+    若 runtimeId 为空:
+        返回 false
+    若 runtimeRegistry 已存在 runtimeId:
+        返回 false
+    runtimeRegistry[runtimeId] = {
+        runtimeId,
+        metadata,
+        status: 'ready',
+        registeredAt: now,
+        lastHeartbeat: now
+    }
+    返回 true
+
+MessageBus.buildRuntimeTopic(runtimeId, channel):
+    返回 'autobrain.' + runtimeId + '.' + channel
+```
+
+### 2. 运行时订阅与发布
+
+```text
+MessageBus.subscribeRuntime(runtimeId, channel, handler, subscriberId):
+    topic = buildRuntimeTopic(runtimeId, channel)
+    subscribeHandler(topic, subscriberId, handler)
+
+MessageBus.publishRuntime(runtimeId, channel, payload):
+    topic = buildRuntimeTopic(runtimeId, channel)
+    publish({
+        type: EVENT,
+        topic,
+        payload: {
+            runtimeId,
+            channel,
+            data: payload
+        }
+    })
+```
+
+### 3. 统计扩展
+
+```text
+MessageBus.updateStats(message):
+    维持原有 totalMessages / messagesByType / messagesByTopic
+    若 topic 以 'autobrain.' 开头:
+        从 topic 解析 runtimeId
+        messagesByRuntime[runtimeId] += 1
+
+MessageBus.getStats():
+    返回 runtimeCount = runtimeRegistry.size
+    返回 messagesByRuntime
+```
+
+### 4. 跨设备消息伪代码
+
+```text
+MessageBus.registerDeviceTransport(deviceId, transport):
+    deviceTransports[deviceId] = transport
+
+MessageBus.publishRuntime(runtimeId, channel, payload, options):
+    envelope = {
+        runtimeId,
+        channel,
+        data: payload,
+        sourceDeviceId: localDeviceId,
+        targetDeviceId: options.targetDeviceId,
+        targetRuntimeId: options.targetRuntimeId
+    }
+
+    若 options.broadcastDevices 存在:
+        对每个 deviceId 执行投递
+        返回
+
+    若 envelope.targetRuntimeId 存在:
+        runtimeDeviceId = runtimeDeviceIndex[targetRuntimeId]
+        若 runtimeDeviceId != localDeviceId:
+            forwardRuntimeEnvelope(runtimeDeviceId, envelope)
+            返回
+
+    若 envelope.targetDeviceId 存在 且 envelope.targetDeviceId != localDeviceId:
+        forwardRuntimeEnvelope(envelope.targetDeviceId, envelope)
+        返回
+
+    publishRuntimeEnvelope(envelope)
+
+MessageBus.forwardRuntimeEnvelope(targetDeviceId, envelope):
+    transport = deviceTransports[targetDeviceId]
+    若 transport 不存在:
+        返回 null
+    调用 transport(envelope) 或 transport.publishRuntimeMessage(envelope)
+
+MessageBus.receiveRemoteRuntimeMessage(envelope):
+    若 targetDeviceId 不为空 且 targetDeviceId != localDeviceId:
+        返回
+    publishRuntimeEnvelope(envelope)
+```
+
+### 5. WebSocket 桥接协议（/runtime-bridge）
+
+```text
+客户端连接: ws://{host}:{port}/runtime-bridge?deviceId={deviceId}
+
+服务端下行:
+    runtimeBridge.connected
+    runtimeBridge.heartbeatAck
+    runtimeEnvelope
+
+客户端上行:
+    runtimeBridge.register
+    runtimeBridge.heartbeat
+    runtimeEnvelope
+```
 
 ## 能力组合系统
 

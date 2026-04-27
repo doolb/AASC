@@ -334,7 +334,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| core/reminder.js | 服务端提醒逻辑 |
-| core/tts.js | 语音合成服务 |
+| src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 服务端提醒逻辑 |
+| src/external/tts/tts-service.js | 语音合成服务 |
 | public/js/reminder.js | 控制端提醒界面 |
 | config/reminders.json | 提醒数据存储 |

@@ -528,7 +528,7 @@ npm install @marsaud/smb2
 
 | 文件 | 说明 |
 |------|------|
-| core/media-library.js | 媒体库核心模块 |
+| src/apps/web-mediacenter/modules/media/media-library-app-service.js | 媒体库核心模块 |
 | public/js/media-library.js | 媒体库前端模块 |
 | public/css/media-library.css | 媒体库样式 |
 | config/media-libraries.json | 媒体库配置文件 |

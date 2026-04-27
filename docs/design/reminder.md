@@ -35,7 +35,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| core/reminder.js | 服务端提醒逻辑 |
+| src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 服务端提醒逻辑 |
 | public/js/reminder.js | 控制端提醒界面 |
 | config/reminders.json | 提醒数据存储 |
 
@@ -50,9 +50,9 @@
  - ✅已完成 重复提醒：触发后按间隔时间再次提醒
  - ✅已完成 编辑提醒：支持编辑已创建的提醒
  - ✅已完成 单独测试提醒：可测试单条提醒，支持发送到选中显示端或所有显示端
-   - 改动文件：public/js/reminder.js, core/reminder.js
+   - 改动文件：public/js/reminder.js, src/apps/web-mediacenter/modules/reminder/reminder-app-service.js
  - ✅已完成 媒体管理界面显示端选择：在媒体管理界面也可以选择显示端
-   - 改动文件：public/js/reminder.js, core/reminder.js
+   - 改动文件：public/js/reminder.js, src/apps/web-mediacenter/modules/reminder/reminder-app-service.js
 
 ## Bug 修复
  - ✅已完成 修复提醒编辑弹窗无法显示问题

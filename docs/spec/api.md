@@ -432,12 +432,12 @@ function detectMediaType(name):
 | 文件 | 说明 |
 |------|------|
 | server.js | HTTP API 路由定义 |
-| core/config.js | 配置管理 |
-| core/tts.js | TTS 功能 |
-| core/chat.js | 聊天功能 |
-| core/reminder.js | 提醒功能 |
-| core/timeAnnounce.js | 整点报时功能 |
-| core/sub-server.js | 子服务器管理 |
+| src/apps/server/modules/config/config-app-service.js | 配置管理 |
+| src/external/tts/tts-service.js | TTS 功能 |
+| src/external/llm/llm-service.js | 聊天功能 |
+| src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 提醒功能 |
+| src/apps/web-mediacenter/modules/time/time-announce-app-service.js | 整点报时功能 |
+| src/framework/cluster/sub-server-manager.js | 子服务器管理 |
 
 ## 本地 ASR 配置 API
 

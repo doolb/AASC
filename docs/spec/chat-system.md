@@ -60,7 +60,7 @@
 
 ## 核心模块实现
 
-### core/chat.js
+### src/external/llm/llm-service.js
 
 ```
 常量:
@@ -257,7 +257,7 @@ chatStream(userMessage, options, callbacks):
         调用 callbacks.onComplete()
 ```
 
-### core/voiceCommand.js 更新
+### src/apps/web-mediacenter/modules/voice/voice-command-app-service.js 更新
 
 ```
 变量:
@@ -1237,8 +1237,8 @@ POST /api/chat/assistants:
 
 | 文件 | 说明 |
 |------|------|
-| core/chat.js | 聊天核心模块 |
-| core/voiceCommand.js | 语音命令处理 |
+| src/external/llm/llm-service.js | 聊天核心模块 |
+| src/apps/web-mediacenter/modules/voice/voice-command-app-service.js | 语音命令处理 |
 | public/js/chat.js | 前端聊天模块 |
 | public/js/websocket.js | WebSocket客户端 |
 | public/css/chat.css | 聊天样式 |
