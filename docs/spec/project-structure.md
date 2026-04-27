@@ -56,3 +56,49 @@ ReleaseChecklist = [
   "changelog.md 已记录目录整理"
 ]
 ```
+
+## 5. 历史目录清理与资源归位伪代码
+
+```text
+function NormalizeRootDirectories():
+    EnsureDirExists("res/uploads")
+    EnsureDirExists("res/temp/asr")
+    EnsureDirExists("res/temp/uploads")
+
+    MoveAll("uploads/*", "res/uploads/")
+    MoveAll("temp/asr/*", "res/temp/asr/")
+    MoveAll("temp/uploads/*", "res/temp/uploads/")
+
+    if Exists("models/sensevoice") and Exists("res/models/sensevoice"):
+        AssertDirectoryEquivalent("models/sensevoice", "res/models/sensevoice")
+
+    RemoveEmptyOrLegacyDir("uploads")
+    RemoveEmptyOrLegacyDir("temp")
+    RemoveEmptyOrLegacyDir("models")
+    RemoveEmptyOrLegacyDir("routes")
+    RemoveEmptyOrLegacyDir("viewbind")
+    RemoveEmptyOrLegacyDir("voice-display")
+    RemoveEmptyOrLegacyDir("voice-display-node")
+```
+
+## 6. 工具脚本路径规范伪代码
+
+```text
+function ResolveAsrStressSamplePath(fileArg):
+    if fileArg exists:
+        return AbsolutePath(fileArg)
+
+    return "res/temp/asr/asr-stress-sample.wav"
+```
+
+## 7. 文档路径统一校验伪代码
+
+```text
+function ValidateDocPathExamples(docText):
+    assert not contains(docText, "server.js") when refer to main server entry
+    assert contains(docText, "src/apps/server/boot/server-app.js") for server entry examples
+    assert not contains(docText, "voice-display-node/") as root path
+    assert contains(docText, "3rd/voice-display-node/") for sub-display examples
+    assert not contains(docText, "core/viewbind") in active examples
+    assert contains(docText, "src/core/viewbind") in active examples
+```

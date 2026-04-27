@@ -1,7 +1,6 @@
 node_modules/
-uploads/
 3rd/ttslive/outputs/
-models/sensevoice/
-temp/
+res/uploads/
+res/temp/
 3rd/voice-display-cs/obj/
 3rd/voice-display-cs/bin/

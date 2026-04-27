@@ -11,7 +11,7 @@
 │             Server (src/apps/server/boot/server-app.js)      │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
 │  │   Express   │  │  WebSocket  │  │  File Management    │  │
-│  │   HTTP API  │  │   Server    │  │  (uploads/)         │  │
+│  │   HTTP API  │  │   Server    │  │  (res/uploads/)     │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
          │                    │                    │

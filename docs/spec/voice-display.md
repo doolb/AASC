@@ -5,15 +5,15 @@
 独立的客户端程序，作为纯语音交互的显示端，通过 WebSocket 连接到主服务器，接收 TTS 音频播放，并通过服务器端 ASR 发送语音输入。本地只负责录音和 VAD 检测，识别由服务器完成。
 
 支持两种实现：
-- **Go 实现** (`voice-display/`)：无窗口界面，适合后台运行
-- **Node.js 实现** (`voice-display-node/`)：跨平台，依赖 ffmpeg
+- **Go 实现** (`3rd/voice-display/`)：无窗口界面，适合后台运行
+- **Node.js 实现** (`3rd/voice-display-node/`)：跨平台，依赖 ffmpeg
 
 ## 项目结构
 
 ### Go 实现
 
 ```
-voice-display/
+3rd/voice-display/
 ├── main.go        # 主程序，WebSocket 连接和消息处理
 ├── audio.go       # 音频播放器
 ├── asr.go         # 服务器端 ASR 客户端
@@ -25,7 +25,7 @@ voice-display/
 ### Node.js 实现
 
 ```
-voice-display-node/
+3rd/voice-display-node/
 ├── main.js            # 主程序，WebSocket 连接和消息处理
 ├── audio-player.js    # 音频播放器（Speaker + wav 解码）
 ├── asr-client.js      # 服务器端 ASR 客户端
@@ -685,7 +685,7 @@ main():
 
 1. **安装项目依赖**
    ```bash
-   cd voice-display-node
+   cd 3rd/voice-display-node
    npm install
    ```
 
@@ -719,7 +719,7 @@ main():
 
 ```bash
 # 安装依赖
-cd voice-display-node
+cd 3rd/voice-display-node
 npm install
 
 # 启动（使用默认配置）

@@ -14,7 +14,7 @@ ViewBind 是一个视图绑定模块，实现数据与视图的自动同步。�
 
 ## 背景
 
-项目中已有 Unity C# 版本的 viewbind 实现（位于 `viewbind/` 目录），核心功能包括：
+项目中已有 Unity C# 版本的 viewbind 实现（历史路径为根目录 `viewbind/`，现已迁移清理），核心功能包括：
 
 - `UIViewBind<T>` - 核心绑定类，管理数据与视图的绑定关系
 - `UIViewBindList<T>` - 列表绑定类
@@ -175,7 +175,7 @@ class DataSnapshot {
 ### 基础使用
 
 ```javascript
-const { ViewBind } = require('./core/viewbind');
+const { ViewBind } = require('./src/core/viewbind');
 
 // 创建绑定
 const displayBind = new ViewBind({
@@ -197,7 +197,7 @@ displayBind.data.status = 'disconnected';
 ### 与 DataSnapshot 集成
 
 ```javascript
-const DataSnapshot = require('./core/data-snapshot');
+const DataSnapshot = require('./src/core/data-snapshot');
 
 // 定义带绑定的配置类
 class DisplayConfig extends DataSnapshot {
@@ -226,7 +226,7 @@ displayConfig.displays.push({ id: 'display-2', ip: '192.168.1.101' });
 ### 列表绑定
 
 ```javascript
-const { ViewBindList } = require('./core/viewbind');
+const { ViewBindList } = require('./src/core/viewbind');
 
 // 创建列表绑定
 const displayListBind = new ViewBindList([
@@ -253,7 +253,7 @@ displayListBind.push({ id: 'display-3', ip: '192.168.1.102' });
 ### 前端使用
 
 ```javascript
-// public/js/viewbind.js
+// src/apps/web-mediacenter/ui/public/js/viewbind.js
 
 class ViewBind {
     constructor(initialData) {
@@ -313,14 +313,14 @@ WebSocketManager.on('displayList', (list) => {
 ## 文件结构
 
 ```
-core/
+src/core/
 ├── viewbind/
 │   ├── index.js           # 模块入口
 │   ├── ViewBind.js        # 核心绑定类
 │   ├── ViewBindList.js    # 列表绑定类
 │   └── ViewBind.test.js   # 单元测试
 
-public/
+src/apps/web-mediacenter/ui/public/
 ├── js/
 │   └── viewbind.js        # 前端绑定模块
 ```
@@ -369,5 +369,5 @@ public/
 
 ## 参考
 
-- Unity C# 版本 viewbind 实现：`viewbind/UIViewBind/`
+- Unity C# 版本 viewbind 实现：历史路径为 `viewbind/UIViewBind/`（已迁移清理）
 - DataSnapshot 设计文档：[data-snapshot.md](data-snapshot.md)

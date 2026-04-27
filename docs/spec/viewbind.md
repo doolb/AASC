@@ -7,7 +7,7 @@ ViewBind 是一个视图绑定模块，实现数据与视图的自动同步。�
 ## 项目结构
 
 ```
-core/
+src/core/
 ├── viewbind/
 │   ├── index.js           # 模块入口
 │   ├── ViewBind.js        # 核心绑定类
@@ -219,7 +219,7 @@ class DataSnapshot {
 ### ViewBind 基础使用
 
 ```javascript
-const { ViewBind } = require('./core/viewbind');
+const { ViewBind } = require('./src/core/viewbind');
 
 const displayBind = new ViewBind({
     id: 'display-1',
@@ -240,7 +240,7 @@ displayBind.data = { ...displayBind.data, status: 'disconnected' };
 ### ViewBindList 使用
 
 ```javascript
-const { ViewBindList } = require('./core/viewbind');
+const { ViewBindList } = require('./src/core/viewbind');
 
 const displayListBind = new ViewBindList([
     { id: 'display-1', ip: '192.168.1.100' },
@@ -266,7 +266,7 @@ displayListBind.push({ id: 'display-3', ip: '192.168.1.102' });
 ### DataSnapshot 绑定使用
 
 ```javascript
-const DataSnapshot = require('./core/data-snapshot');
+const DataSnapshot = require('./src/core/data-snapshot');
 
 class DisplayConfig extends DataSnapshot {
     static defaults = {

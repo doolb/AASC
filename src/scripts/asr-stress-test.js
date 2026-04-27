@@ -81,7 +81,7 @@ function resolveAudioFile(fileArg) {
         return path.resolve(fileArg);
     }
 
-    return path.join(__dirname, '../temp/asr-stress-sample.wav');
+    return path.join(__dirname, '../../res/temp/asr/asr-stress-sample.wav');
 }
 
 function ensureDirExists(dirPath) {

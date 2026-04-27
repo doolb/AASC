@@ -292,7 +292,7 @@ init(options):
 - 服务端在 ASR 空闲且 RSS 超过 1GB 或 ArrayBuffers 偏高时按批次触发 `global.gc()`，帮助回收外部内存
 - 开启独立进程模式后，`sherpa-onnx-node` native 内存驻留在子进程，主进程只持有轻量 IPC 对象
 
-## ASR 压测脚本 (scripts/asr-stress-test.js)
+## ASR 压测脚本 (src/scripts/asr-stress-test.js)
 
 ```
 main():

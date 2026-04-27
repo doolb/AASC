@@ -5,6 +5,49 @@
 > 归档说明：`src/core/config/config.js` 已在 2026-04-25 迁移为 `src/apps/server/modules/config/config-app-service.js`，历史条目中的旧路径仅用于回溯当时改动。
 
 ### 新功能
+- ✅ 文档路径术语统一到当前目录结构
+  - 需求：在已完成目录归位后，继续统一文档中的旧路径示例，降低新成员理解成本
+  - 实现：
+    - `docs/rules.md` 项目结构示例更新为当前目录（`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/`、`res/`、`3rd/`）
+    - `docs/ref.md` 项目结构示例更新为当前分层架构，移除旧 `core/public/uploads` 根目录示意
+    - `docs/design.md` 系统架构图中的文件管理路径改为 `res/uploads/`
+    - `docs/design/sherpa-asr.md` 与 `docs/spec/sherpa-asr.md` 路径更新为 `src/apps/server/boot/server-app.js`、`src/scripts/asr-stress-test.js`
+    - `docs/spec/voice-display.md` 子显示端路径更新为 `3rd/voice-display/` 与 `3rd/voice-display-node/`
+    - `docs/design/viewbind.md` 与 `docs/spec/viewbind.md` 示例路径更新为 `src/core/viewbind`、`src/core/data-snapshot`
+    - `docs/design/project-structure.md`、`docs/spec/project-structure.md` 补充文档路径统一策略与校验伪代码
+    - 更新 `docs/todo.md` 最后检查时间
+    - 新增任务记录 `docs/task/2026-04-27_文档路径术语统一.md`
+  - 改动文件：
+    - `docs/rules.md`
+    - `docs/ref.md`
+    - `docs/design.md`
+    - `docs/design/sherpa-asr.md`
+    - `docs/spec/sherpa-asr.md`
+    - `docs/spec/voice-display.md`
+    - `docs/design/viewbind.md`
+    - `docs/spec/viewbind.md`
+    - `docs/design/project-structure.md`
+    - `docs/spec/project-structure.md`
+    - `docs/todo.md`
+    - `docs/task/2026-04-27_文档路径术语统一.md` (新增)
+- ✅ 历史目录清理与资源目录归位
+  - 需求：继续整理代码结构，移除根目录历史残留目录，统一运行时资源到 `res/` 目录
+  - 实现：
+    - 清理根目录历史目录：`uploads/`、`temp/`、`models/`、`routes/`、`viewbind/`、`voice-display/`、`voice-display-node/`
+    - 资源归位：将 `uploads/*` 迁移到 `res/uploads/`，将 `temp/asr-stress-sample.wav` 与 `temp/asr/*` 迁移到 `res/temp/asr/`
+    - 补齐运行时目录：创建 `res/uploads/`、`res/temp/asr/`、`res/temp/uploads/`
+    - 更新压测脚本默认样本路径：`src/scripts/asr-stress-test.js` 改为读取 `res/temp/asr/asr-stress-sample.wav`
+    - 更新忽略规则：`.gitignore` 从旧根目录忽略切换为 `res/uploads/`、`res/temp/`
+    - 更新工程目录结构 design/spec 文档，补充历史目录清理与资源归位伪代码
+    - 更新 `docs/todo.md` 最后检查时间
+    - 新增任务记录 `docs/task/2026-04-27_整理代码结构并清理历史目录.md`
+  - 改动文件：
+    - `.gitignore`
+    - `src/scripts/asr-stress-test.js`
+    - `docs/design/project-structure.md`
+    - `docs/spec/project-structure.md`
+    - `docs/todo.md`
+    - `docs/task/2026-04-27_整理代码结构并清理历史目录.md` (新增)
 - ✅ AASC 与 Auto-Brain 迁移到 Framework 层
   - 需求：将 `aasc` 与 `auto-brain` 统一归入 Framework 层，收敛基础设施边界
   - 实现：

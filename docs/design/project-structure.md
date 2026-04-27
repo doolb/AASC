@@ -38,3 +38,17 @@ src/                -> 分层主代码（core/framework/external/apps）
 1. `readme.md` 中项目结构与当前仓库目录一致。
 2. design/spec 索引均可导航到工程目录结构文档。
 3. 目录职责说明可直接指导新文件落位。
+
+## 2026-04-27 结构归位补充
+
+1. 清理根目录历史残留目录：`uploads/`、`temp/`、`models/`、`routes/`、`viewbind/`、`voice-display/`、`voice-display-node/`。
+2. 运行时资源统一归位到 `res/`：
+   - 上传资源：`res/uploads/`
+   - 临时资源：`res/temp/asr/`、`res/temp/uploads/`
+   - 模型资源：`res/models/sensevoice/`
+3. 压测脚本默认样本路径统一为 `res/temp/asr/asr-stress-sample.wav`，与资源目录规范保持一致。
+4. 文档示例路径统一为当前结构：
+   - 服务端入口统一写为 `src/apps/server/boot/server-app.js`
+   - 静态页面目录统一写为 `src/apps/web-mediacenter/ui/public/`
+   - 子显示端目录统一写为 `3rd/voice-display/` 与 `3rd/voice-display-node/`
+   - ViewBind/DataSnapshot 示例统一写为 `src/core/*`

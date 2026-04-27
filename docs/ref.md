@@ -48,38 +48,24 @@ Control UI (控制端) <--WebSocket--> Server <--WebSocket--> Display (显示端
 
 ```
 web-mediacenter/
-├── server.js           # 服务器入口
-├── package.json        # 项目配置
-├── config/             # 配置文件目录
-│   ├── config.json     # 主配置
+├── package.json                                  # 项目配置
+├── 3rd/                                          # 第三方与子显示端程序
+│   ├── voice-display/                            # Go 子显示端
+│   └── voice-display-node/                       # Node.js 子显示端
+├── config/                                       # 配置文件目录
+│   ├── config.json                               # 主配置
 │   ├── chat-history.json
 │   ├── media-libraries.json
 │   └── reminders.json
-├── core/               # 核心模块
-│   ├── chat.js
-│   ├── config.js
-│   ├── connection.js
-│   ├── media.js
-│   ├── reminder.js
-│   ├── timeAnnounce.js
-│   └── tts.js
-├── public/             # 静态文件
-│   ├── css/
-│   ├── js/
-│   ├── display.html
-│   ├── showinfo.html
-│   └── upload.html
-├── uploads/            # 上传文件存储
-└── docs/               # 文档
-    ├── design.md       # 设计文档
-    ├── spec.md         # 实现文档
-    ├── todo.md         # 任务列表
-    ├── usage.md        # 使用说明
-    ├── rules.md        # 代码规范
-    ├── ref.md          # 参考文档
-    ├── design/         # 模块设计文档
-    ├── spec/           # 模块实现文档
-    └── ref/            # 参考代码
+├── docs/                                         # 文档
+├── res/                                          # 资源目录（models/uploads/temp/certs）
+├── src/                                          # 分层代码主目录
+│   ├── apps/server/boot/server-app.js            # 服务器入口
+│   ├── apps/web-mediacenter/ui/public/           # 控制端/显示端静态页面
+│   ├── core/                                     # 核心模块
+│   ├── framework/                                # 基础设施模块
+│   └── external/                                 # 外部能力适配模块
+└── skills/                                       # 技能配置
 ```
 
 ## 相关参考代码

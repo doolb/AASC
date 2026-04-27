@@ -24,7 +24,7 @@
 
 ### 3. 临时文件清理
 
-- `server.js` 的 `/api/asr/recognize` 在成功、忽略、异常三条路径都调用统一的临时文件清理函数
+- `src/apps/server/boot/server-app.js` 的 `/api/asr/recognize` 在成功、忽略、异常三条路径都调用统一的临时文件清理函数
 - 清理失败只记录日志，不影响接口响应
 
 ### 4. 内存回收触发策略
@@ -35,7 +35,7 @@
 
 ### 5. 压测验证工具
 
-- 提供 `scripts/asr-stress-test.js` 作为服务端 ASR 压测脚本
+- 提供 `src/scripts/asr-stress-test.js` 作为服务端 ASR 压测脚本
 - 脚本直接以 multipart/form-data 调用 `/api/asr/recognize`
 - 支持总请求数、并发数、超时、429 重试次数等参数
 - 每隔固定进度输出一次 RSS / Heap / External / ArrayBuffers，便于观察是否进入平台期
