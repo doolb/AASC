@@ -31,6 +31,30 @@
   - 沿用原有集成自测框架，累计 45 个测试全部通过
   - 改动文件：`src/core/viewbind/ViewBind.integration.test.js`、`docs/spec/viewbind.md`
 
+### Bug 修复
+
+- ✅ [2026-04-28] 修复显示端能力重启动服务器后丢失
+  - 显示端声明能力时写入 config.json（`config.updateDisplayState`）
+  - 控制端修改能力时写入 config.json
+  - 显示端重连重新声明能力时，保留用户已设置的覆盖值（合并策略）
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+
+- ✅ [2026-04-28] 显示端能力切换时联动关闭对应功能
+  - mediaRendering=false → 停止媒体播放，清空画面
+  - voicePlayback=false → 停止 TTS，清空播放队列
+  - displayText=false → 隐藏提醒弹窗和文字覆盖层
+  - 改动文件：
+    - `src/apps/web-mediacenter/ui/public/display.html`
+
+- ✅ [2026-04-28] 设备列表视图模式持久化
+  - `viewMode`（tree/list）保存到 localStorage，刷新页面后保持
+  - 树形视图的 `expandedNodes` 展开状态保存到 localStorage
+  - 改动文件：
+    - `src/apps/web-mediacenter/ui/public/js/device-list.js`
+
+### 新功能
+
 - ✅ [2026-04-27] 实现消息批处理与双向通信通道
   - MessageBatch：按时间窗口/最大条数聚合消息，支持合并函数
   - MessageBus 扩展：集成 setBatchConfig/removeBatchConfig，publish 自动走批处理

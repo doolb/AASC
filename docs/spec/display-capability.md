@@ -59,12 +59,17 @@ function createDisplayState():
 ```
 wss.on('connection', (ws, req)):
     if url 是显示端连接:
+        savedState = config.getDisplayState(clientIP)  // 从 config.json 加载持久化状态
         ...
-        // 根据 isSubDisplay 设置初始能力
-        if isSubDisplay:
-            displayData.state.capabilities = { ...SUB_DISPLAY_CAPABILITIES }
-        else:
-            displayData.state.capabilities = null  // 等待显示端声明
+        // 初始化状态：合并 savedState（包含持久化的能力、旋转、音量等）
+        displayData.state = {
+            ...createDisplayState(),
+            ...savedState,
+            isSubDisplay: isSubDisplay,
+            capabilities: isSubDisplay
+                ? { ...SUB_DISPLAY_CAPABILITIES }
+                : (savedState?.capabilities || null)  // 从持久化恢复能力
+        }
         ...
 ```
 
@@ -75,12 +80,17 @@ handleDisplayMessage(displayId, data, ws):
     if data.type === 'capabilities':
         displayData = displayClients.get(displayId)
         if displayData:
-            // 合并能力声明，未声明的字段使用默认值
+            // 合并能力声明：
+            // 1. DEFAULT_CAPABILITIES 作为默认值
+            // 2. data.capabilities 为硬件检测能力
+            // 3. displayData.state.capabilities 保留用户已设置的覆盖值（重连时不丢失）
             displayData.state.capabilities = {
                 ...DEFAULT_CAPABILITIES,
-                ...data.capabilities
+                ...data.capabilities,
+                ...displayData.state.capabilities    // 用户设置的覆盖值优先
             }
-            console.log(`[能力] 显示端 ${displayId} 声明能力:`, displayData.state.capabilities)
+            // 持久化到 config.json，防止服务器重启丢失
+            config.updateDisplayState(displayData.ip, { capabilities: displayData.state.capabilities })
             broadcastToControls({ type: 'displayList', list: getDisplayList() })
         return
 ```
@@ -103,6 +113,8 @@ handleControlMessage(ws, data):
                 type: 'capabilitiesUpdated',
                 capabilities: displayData.state.capabilities
             })
+            // 持久化到 config.json，防止服务器重启丢失
+            config.updateDisplayState(displayData.ip, { capabilities: displayData.state.capabilities })
             broadcastToControls({ type: 'displayList', list: getDisplayList() })
         return
 ```
@@ -283,12 +295,62 @@ async function declareCapabilities():
 ```
 // 处理服务端发来的能力更新
 function handleCapabilitiesUpdated(data):
-    // 服务端手动修改了能力标记
-    // 根据更新后的能力调整行为
-    if data.capabilities.voiceRecording === false && isListening:
+    currentCapabilities = data.capabilities
+    
+    // 媒体渲染能力关闭 → 停止媒体播放，清空画面
+    if !data.capabilities.mediaRendering:
+        mediaVideo.pause(); mediaVideo.src = ''
+        mediaImage.style.display = 'none'
+        mediaVideo.style.display = 'none'
+        fileNameDisplay.textContent = ''
+        waitingMessage.style.display = 'block'
+    
+    // 语音播放能力关闭 → 停止 TTS，清空队列
+    if !data.capabilities.voicePlayback:
+        ttsQueue = []
+        ttsAudio.pause(); ttsAudio.currentTime = 0
+        isPlayingTts = false
+        voiceTextDisplay.className = 'voice-text-hidden'
+    
+    // 语音录音能力关闭 → 停止录音
+    if !data.capabilities.voiceRecording && isListening:
         stopVoiceRecording()
-    if data.capabilities.voiceRecognition === false && localAsrStreaming:
+    
+    // 语音识别能力关闭 → 停止 ASR
+    if !data.capabilities.voiceRecognition && localAsrStreaming:
         SherpaASR.stopStreaming()
+        localAsrStreaming = false
+    
+    // 文本显示能力关闭 → 隐藏提醒弹窗和文字覆盖层
+    if !data.capabilities.displayText:
+        document.querySelector('.reminder-popup')?.remove()
+        voiceTextDisplay.className = 'voice-text-hidden'
+```
+
+### TTS 播放完恢复录音
+
+```
+function playNextTts():
+    if isPlayingTts: return
+    if ttsQueue.length === 0:
+        // TTS 队列播放完毕，始终监听模式下恢复录音（需能力允许）
+        if isAlwaysListening && currentCapabilities?.voiceRecording:
+            setTimeout(() => startVoiceRecording(), 500)
+        return
+    // ... 正常播放流程
+```
+
+### stopVoiceRecording
+
+```
+function stopVoiceRecording():
+    if !isListening: return
+    isListening = false
+    mediaRecorder?.stop() (如果 recording 状态)
+    stopSilenceDetection()
+    SherpaASR.stopStreaming() (如果 streaming)
+    micStream.getTracks().forEach(t => t.stop())
+    sendVoiceStatus()
 ```
 
 ### 初始化流程修改

@@ -668,7 +668,14 @@
         
         function playNextTts() {
             console.log('[显示端] playNextTts: isPlayingTts=', isPlayingTts, 'queue=', ttsQueue.length);
-            if (isPlayingTts || ttsQueue.length === 0) {
+            if (isPlayingTts) {
+                return;
+            }
+            if (ttsQueue.length === 0) {
+                // TTS 队列播放完毕，如果始终监听模式且能力允许，恢复录音
+                if (isAlwaysListening && currentCapabilities?.voiceRecording) {
+                    setTimeout(() => startVoiceRecording(), 500);
+                }
                 return;
             }
             
@@ -1273,14 +1280,46 @@
         
         function handleCapabilitiesUpdated(data) {
             if (data.capabilities) {
+                const prevCaps = currentCapabilities;
                 currentCapabilities = data.capabilities;
                 console.log('[能力] 能力已更新:', data.capabilities);
+
+                // 媒体渲染能力关闭 → 停止媒体播放，清空画面
+                if (!data.capabilities.mediaRendering) {
+                    mediaImage.style.display = 'none';
+                    mediaVideo.style.display = 'none';
+                    mediaVideo.pause();
+                    mediaVideo.src = '';
+                    mediaImage.src = '';
+                    fileNameDisplay.textContent = '';
+                    waitingMessage.style.display = 'block';
+                }
+
+                // 语音播放能力关闭 → 停止 TTS，清空队列
+                if (!data.capabilities.voicePlayback) {
+                    ttsQueue = [];
+                    ttsAudio.pause();
+                    ttsAudio.currentTime = 0;
+                    isPlayingTts = false;
+                    voiceTextDisplay.className = 'voice-text-hidden';
+                }
+
+                // 语音录音能力关闭 → 停止录音
                 if (!data.capabilities.voiceRecording && isListening) {
                     stopVoiceRecording();
                 }
+
+                // 语音识别能力关闭 → 停止 ASR
                 if (!data.capabilities.voiceRecognition && localAsrStreaming) {
                     SherpaASR.stopStreaming();
                     localAsrStreaming = false;
+                }
+
+                // 文本显示能力关闭 → 隐藏提醒弹窗和文字覆盖层
+                if (!data.capabilities.displayText) {
+                    const popup = document.querySelector('.reminder-popup');
+                    if (popup) popup.remove();
+                    voiceTextDisplay.className = 'voice-text-hidden';
                 }
             }
         }
@@ -1449,6 +1488,25 @@
             }
         }
         
+        function stopVoiceRecording() {
+            if (!isListening) return;
+            isListening = false;
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            stopSilenceDetection();
+            if (localAsrStreaming) {
+                SherpaASR.stopStreaming();
+                localAsrStreaming = false;
+            }
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+                micStream = null;
+            }
+            sendVoiceStatus();
+            console.log('[语音] 录音已停止');
+        }
+
         async function startVoiceRecording() {
             if (isListening) return;
             

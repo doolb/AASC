@@ -78,5 +78,85 @@
     "content": "我叫妲己，是一只九尾电子猫娘，来自一个科技与魔法结合的奇幻世界。你问我是谁，那就是为了告诉你真相吧！",
     "mode": "private",
     "target": "妲己"
+  },
+  {
+    "id": "1777388941247nxg9",
+    "timestamp": 1777388941247,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "感觉还不错吧。",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "17773889617840xrk",
+    "timestamp": 1777388961784,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "嗯，你也是啊，感觉不错呢！有什么想聊的吗？我在这里等你哦～ 😊",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777389015409s28c",
+    "timestamp": 1777389015409,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "好的，准备开始调整呼吸，加油，等上我。",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777389033691cb6c",
+    "timestamp": 1777389033691,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的！先做深呼吸，慢慢来啦～加油哦，等你再告诉我呢！",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777389046775bmg9",
+    "timestamp": 1777389046775,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "现在我们要进入下一个动作。",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777389053632ty7p",
+    "timestamp": 1777389053632,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的，我们进入下一个动作啦！有什么想了解的吗？",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777389115109wuux",
+    "timestamp": 1777389115109,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "电短。",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777389126772rmpp",
+    "timestamp": 1777389126772,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的！我理解了你的意思，可以随时和我沟通哦～有什么需要帮助的地方吗？",
+    "mode": "group",
+    "target": "妲己"
   }
 ]

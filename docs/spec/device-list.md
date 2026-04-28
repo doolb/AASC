@@ -83,12 +83,20 @@ isLandscape = width >= height
 ```
 验证 mode 是否为 tree/list 之一
 更新 this.viewMode
+持久化到 localStorage('deviceListViewMode')
 调用 render()
 ```
 
 #### toggleViewMode()
 ```
 在 tree 和 list 之间切换
+```
+
+#### toggleNode(nodeId)
+```
+切换展开/折叠状态
+持久化 expandedNodes 到 localStorage('deviceListExpandedNodes')
+调用 render()
 ```
 
 ### 渲染方法
@@ -274,6 +282,7 @@ isLandscape = width >= height
 
 #### init()
 ```
+从 localStorage 恢复 viewMode 和 expandedNodes（页面刷新后保持）
 调用 loadDeviceEvents()
 绑定 featureModal 点击关闭事件
 ```

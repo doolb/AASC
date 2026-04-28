@@ -198,20 +198,20 @@ class SherpaOnnxASR {
 
     readWavFile(filePath) {
         const buffer = fs.readFileSync(filePath);
-        
+
         if (buffer.toString('ascii', 0, 4) !== 'RIFF') {
             return this.convertAudioFile(filePath);
         }
-        
+
         let dataOffset = 12;
         let sampleRate = 16000;
         let dataSize = 0;
         let bitsPerSample = 16;
-        
+
         while (dataOffset < buffer.length - 8) {
             const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
             const chunkSize = buffer.readUInt32LE(dataOffset + 4);
-            
+
             if (chunkId === 'fmt ') {
                 sampleRate = buffer.readUInt32LE(dataOffset + 12);
                 bitsPerSample = buffer.readUInt16LE(dataOffset + 22);
@@ -222,43 +222,46 @@ class SherpaOnnxASR {
             }
             dataOffset += 8 + chunkSize;
         }
-        
+
         if (dataSize === 0) {
             return { samples: new Float32Array(0), sampleRate: 16000 };
         }
-        
-        const samples = new Float32Array(dataSize / (bitsPerSample / 8));
-        
+
+        const sampleCount = bitsPerSample === 16 ? dataSize / 2 : dataSize / 4;
+        const samples = new Float32Array(sampleCount);
+
         if (bitsPerSample === 16) {
-            for (let i = 0; i < samples.length; i++) {
-                samples[i] = buffer.readInt16LE(dataOffset + i * 2) / 32768.0;
+            const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
+            for (let i = 0; i < sampleCount; i++) {
+                samples[i] = int16View[i] / 32768.0;
             }
         } else if (bitsPerSample === 32) {
-            for (let i = 0; i < samples.length; i++) {
-                samples[i] = buffer.readFloatLE(dataOffset + i * 4);
+            const float32View = new Float32Array(buffer.buffer, dataOffset, sampleCount);
+            for (let i = 0; i < sampleCount; i++) {
+                samples[i] = float32View[i];
             }
         }
-        
+
         return { samples, sampleRate };
     }
     
     convertAudioFile(filePath) {
         const { execSync } = require('child_process');
         const outputPath = filePath + '.converted.wav';
-        
+
         try {
             execSync(`ffmpeg -y -i "${filePath}" -ar 16000 -ac 1 -f wav "${outputPath}"`, { stdio: 'pipe' });
             const buffer = fs.readFileSync(outputPath);
             fs.unlinkSync(outputPath);
-            
+
             let dataOffset = 12;
             let sampleRate = 16000;
             let dataSize = 0;
-            
+
             while (dataOffset < buffer.length - 8) {
                 const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
                 const chunkSize = buffer.readUInt32LE(dataOffset + 4);
-                
+
                 if (chunkId === 'fmt ') {
                     sampleRate = buffer.readUInt32LE(dataOffset + 12);
                 } else if (chunkId === 'data') {
@@ -268,13 +271,14 @@ class SherpaOnnxASR {
                 }
                 dataOffset += 8 + chunkSize;
             }
-            
-            const samples = new Float32Array(dataSize / 2);
-            
-            for (let i = 0; i < samples.length; i++) {
-                samples[i] = buffer.readInt16LE(dataOffset + i * 2) / 32768.0;
+
+            const sampleCount = dataSize / 2;
+            const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
+            const samples = new Float32Array(sampleCount);
+            for (let i = 0; i < sampleCount; i++) {
+                samples[i] = int16View[i] / 32768.0;
             }
-            
+
             return { samples, sampleRate };
         } catch (e) {
             return { samples: new Float32Array(0), sampleRate: 16000 };

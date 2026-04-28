@@ -294,17 +294,21 @@ function startServer() {
 
         systemMonitor.start();
         systemMonitor.onStats((stats) => {
-            broadcastToControls({
-                type: 'systemStats',
-                stats: stats
-            });
+            if (controlClients.size > 0) {
+                broadcastToControls({
+                    type: 'systemStats',
+                    stats: stats
+                });
+            }
         });
 
         logBuffer.onLogEntry((entry) => {
-            broadcastToControls({
-                type: 'serverLog',
-                entry: entry
-            });
+            if (controlClients.size > 0) {
+                broadcastToControls({
+                    type: 'serverLog',
+                    entry: entry
+                });
+            }
         });
     });
 }
@@ -1689,12 +1693,22 @@ function sendToDisplaysWithCapability(capabilityName, message) {
     return displays.length;
 }
 
+let displayListDebounceTimer = null;
+
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     controlClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(message);
         }
+    });
+}
+
+function broadcastDisplayList() {
+    if (displayListDebounceTimer) return;
+    displayListDebounceTimer = setImmediate(() => {
+        displayListDebounceTimer = null;
+        broadcastDisplayList();
     });
 }
 
@@ -1953,7 +1967,7 @@ wss.on('connection', (ws, req) => {
             }));
         }
         
-        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+        broadcastDisplayList();
         
         executeDeviceEvent(clientIP, 'onConnect', displayId);
         
@@ -2003,7 +2017,7 @@ wss.on('connection', (ws, req) => {
                 aascSystem.handleDisplayDisconnect(displayId);
             }
             log('断开', `显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
-            broadcastToControls({ type: 'displayList', list: getDisplayList() });
+            broadcastDisplayList();
             executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
         });
     } else if (url === '/control' || url.startsWith('/control')) {
@@ -2041,7 +2055,10 @@ wss.on('connection', (ws, req) => {
                             type: 'capabilitiesUpdated',
                             capabilities: targetDisplayData.state.capabilities
                         });
-                        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+                        if (config) {
+                            config.updateDisplayState(targetDisplayData.ip, { capabilities: targetDisplayData.state.capabilities });
+                        }
+                        broadcastDisplayList();
                         log('能力', `控制端更新显示端 ${targetDisplayId} 能力`);
                     }
                 } else if (aascSystem) {
@@ -2079,7 +2096,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         return;
     } else if (data.type === 'canvasSize' && displayData) {
         displayData.state.canvasSize = { width: data.width, height: data.height };
-        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+        broadcastDisplayList();
     } else if (data.type === 'browserInfo' && displayData) {
         displayData.state.browserInfo = {
             userAgent: data.userAgent,
@@ -2092,7 +2109,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             devicePixelRatio: data.devicePixelRatio,
             featureSupport: data.featureSupport
         };
-        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+        broadcastDisplayList();
     } else if (data.type === 'voiceInput' && displayData) {
         broadcastToControls({
             type: 'voiceInput',
@@ -2104,14 +2121,18 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     } else if (data.type === 'voiceStatus' && displayData) {
         displayData.state.voiceSupported = data.supported;
         displayData.state.voiceListening = data.listening;
-        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+        broadcastDisplayList();
     } else if (data.type === 'capabilities' && displayData) {
         displayData.state.capabilities = {
             ...DEFAULT_CAPABILITIES,
-            ...data.capabilities
+            ...data.capabilities,
+            ...displayData.state.capabilities
         };
+        if (config) {
+            config.updateDisplayState(displayData.ip, { capabilities: displayData.state.capabilities });
+        }
         log('能力', `显示端 ${displayId} 声明能力`);
-        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+        broadcastDisplayList();
     } else if (data.type === 'commandAck' && displayData) {
         log('系统', `收到显示端 commandAck: ${data.commandType} from ${displayId}`);
         const ackMsg = {
@@ -2878,7 +2899,7 @@ setInterval(() => {
                     aascSystem.handleDisplayDisconnect(displayId);
                 }
                 log('子显示端', `${displayId} 已强制断开，当前连接数: ${displayClients.size}`);
-                broadcastToControls({ type: 'displayList', list: getDisplayList() });
+                broadcastDisplayList();
             }
         }
     }
@@ -2899,7 +2920,7 @@ setInterval(() => {
     });
     if (deadDisplays.length > 0) {
         log('内存', `清理了 ${deadDisplays.length} 个已断开但未清理的显示端连接`);
-        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+        broadcastDisplayList();
     }
 
     const deadControls = [];
@@ -2919,22 +2940,29 @@ setInterval(() => {
     }
 }, 1 * 60 * 1000);
 
+let heavyMemoryCheckCount = 0;
 setInterval(() => {
     const usage = process.memoryUsage();
     const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + 'MB';
     log('内存', `RSS: ${mb(usage.rss)} | Heap: ${mb(usage.heapUsed)}/${mb(usage.heapTotal)} | External: ${mb(usage.external)} | ArrayBuffers: ${mb(usage.arrayBuffers || 0)}`);
-    
+
     const rssMB = usage.rss / 1024 / 1024;
     if (rssMB > 500) {
-        logError('内存', `RSS超过500MB (${rssMB.toFixed(1)}MB)，可能存在内存泄漏`);
+        heavyMemoryCheckCount++;
+        logError('内存', `RSS超过500MB (${rssMB.toFixed(1)}MB)`);
         log('内存', `连接状态 - 显示端: ${displayClients.size} | 控制端: ${controlClients.size} | 设备事件防抖: ${deviceEventDebounce.size}`);
         log('内存', `RSS分布: ${getRssLayout()}`);
-        log('内存', `Top RSS区段: ${getTopSmapsRss()}`);
-        if (global.gc) {
-            global.gc();
-            const afterGc = process.memoryUsage();
-            log('内存', `GC后 RSS: ${mb(afterGc.rss)} | Heap: ${mb(afterGc.heapUsed)}/${mb(afterGc.heapTotal)}`);
+        // smaps 解析和 GC 每 5 分钟执行一次，避免频繁 CPU 尖峰
+        if (heavyMemoryCheckCount % 5 === 1) {
+            log('内存', `Top RSS区段: ${getTopSmapsRss()}`);
+            if (global.gc) {
+                global.gc();
+                const afterGc = process.memoryUsage();
+                log('内存', `GC后 RSS: ${mb(afterGc.rss)} | Heap: ${mb(afterGc.heapUsed)}/${mb(afterGc.heapTotal)}`);
+            }
         }
+    } else {
+        heavyMemoryCheckCount = 0;
     }
 
     if (aascSystem && aascSystem.bus && typeof aascSystem.bus.trimStats === 'function') {

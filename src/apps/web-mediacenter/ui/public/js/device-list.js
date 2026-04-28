@@ -65,6 +65,7 @@ const DeviceList = {
             return;
         }
         this.viewMode = mode;
+        try { localStorage.setItem('deviceListViewMode', mode); } catch (e) {}
         this.render();
     },
 
@@ -74,6 +75,22 @@ const DeviceList = {
 
     init() {
         this.loadDeviceEvents();
+
+        try {
+            const savedViewMode = localStorage.getItem('deviceListViewMode');
+            if (savedViewMode === 'tree' || savedViewMode === 'list') {
+                this.viewMode = savedViewMode;
+            }
+
+            const savedExpandedNodes = localStorage.getItem('deviceListExpandedNodes');
+            if (savedExpandedNodes) {
+                const nodes = JSON.parse(savedExpandedNodes);
+                if (Array.isArray(nodes)) {
+                    this.expandedNodes = new Set(nodes);
+                }
+            }
+        } catch (e) {}
+
         const modal = document.getElementById('featureModal');
         if (modal) {
             modal.addEventListener('click', (e) => {
@@ -708,6 +725,7 @@ const DeviceList = {
         } else {
             this.expandedNodes.add(nodeId);
         }
+        try { localStorage.setItem('deviceListExpandedNodes', JSON.stringify([...this.expandedNodes])); } catch (e) {}
         this.render();
     },
 
