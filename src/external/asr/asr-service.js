@@ -21,6 +21,7 @@ class SherpaOnnxASR {
         this.pendingCount = 0;
         this.completedCount = 0;
         this.lastTrimTime = 0;
+        this.mallocTrimEnabled = options.mallocTrimEnabled !== false;
         
         console.log(`\n🎤 Sherpa-ONNX ASR 初始化:`);
         console.log(`  模型目录: ${this.modelDir}`);
@@ -181,10 +182,12 @@ class SherpaOnnxASR {
                     freed++;
                 } catch (e) {}
             }
-            try {
-                const mallocTrim = require('../../../src/native/malloc-trim/build/Release/malloc-trim');
-                freed += mallocTrim.trim();
-            } catch (e) {}
+            if (this.mallocTrimEnabled) {
+                try {
+                    const mallocTrim = require('../../../src/native/malloc-trim/build/Release/malloc-trim');
+                    freed += mallocTrim.trim();
+                } catch (e) {}
+            }
             if (freed > 0) {
                 const after = process.memoryUsage();
                 const delta = ((after.rss - usage.rss) / 1024 / 1024).toFixed(1);

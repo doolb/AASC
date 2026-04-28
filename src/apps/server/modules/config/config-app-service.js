@@ -26,6 +26,7 @@ class Config extends DataSnapshot {
         },
         asr: {
             maxQueueLength: 8,
+            mallocTrimEnabled: true,
             isolateProcess: {
                 enabled: false,
                 requestTimeoutMs: 60000,

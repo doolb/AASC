@@ -365,6 +365,12 @@ C++ N-API addon:
     编译: node-gyp rebuild
     作用: 回收 ONNX Runtime arena 在 glibc 堆中的空闲内存
     触发: ASR 每 20 次识别 / 最少 5 分钟间隔
+
+开关控制:
+    选项: mallocTrimEnabled (构造函数 options 传入)
+    默认: true
+    作用: false 时跳过 malloc_trim 调用，V8 GC 仍正常执行
+    场景: 某些环境下 malloc_trim 可能引起性能抖动，可通过此开关关闭
 ```
 
 ### ONNX Runtime 内存特性

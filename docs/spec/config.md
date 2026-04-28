@@ -24,6 +24,15 @@ const defaultConfig = {
         requestTimeoutMs: 20000,
         maxErrorBytes: 65536
     },
+    asr: {
+        maxQueueLength: 8,
+        mallocTrimEnabled: true,
+        isolateProcess: {
+            enabled: false,
+            requestTimeoutMs: 60000,
+            autoRestart: true
+        }
+    },
     voiceCommand: {
         defaultWeatherCity: '',
         weatherCities: ['北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '天津', '武汉', '西安', '长沙', '郑州', '青岛', '厦门', '福州', '宁波', '无锡', '合肥'],

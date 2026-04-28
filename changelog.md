@@ -6,6 +6,13 @@
 
 ### 新功能
 
+- ✅ [2026-04-28] malloc-trim 添加开关控制
+  - `SherpaOnnxASR` 构造函数新增 `mallocTrimEnabled` 选项，默认 true
+  - false 时跳过 malloc_trim 调用，V8 GC 不受影响
+  - 改动文件：
+    - `src/external/asr/asr-service.js`
+    - `docs/spec/sherpa-asr.md`
+
 - ✅ [2026-04-28] ASR 原生内存诊断与回收
   - 新增 RSS 内存分布诊断：`getRssLayout()` 读取 smaps_rollup，`getTopSmapsRss()` 解析 smaps 按区段 RSS 排序输出 Top8
   - 新增 `src/native/malloc-trim/` C++ N-API addon，调用 glibc `malloc_trim(0)` 回收 ONNX Runtime arena 空闲内存
