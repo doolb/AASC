@@ -33,6 +33,12 @@
 
 ### Bug 修复
 
+- ✅ [2026-04-29] 修复控制端发送聊天后服务端无响应
+  - Agent 方法中 `ws` 从 `params` 解构但实际在 `context.ws` 中，导致所有 `ws.send()` 回调被静默跳过
+  - 影响 ChatAgent.processChatMessage / processMessage、VoiceCommandAgent.processCommand / executeCommands、TTSAgent.playText 共5个方法
+  - 改动文件：
+    - `src/framework/aasc/agents/index.js`
+
 - ✅ [2026-04-28] 修复显示端能力重启动服务器后丢失
   - 显示端声明能力时写入 config.json（`config.updateDisplayState`）
   - 控制端修改能力时写入 config.json

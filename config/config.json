@@ -70,14 +70,7 @@
       },
       "playlist": [],
       "volume": 0,
-      "isPlaying": true,
-      "capabilities": {
-        "mediaRendering": true,
-        "voicePlayback": true,
-        "voiceRecording": false,
-        "voiceRecognition": true,
-        "displayText": true
-      }
+      "isPlaying": true
     },
     "192.168.1.39": {
       "currentMedia": {
