@@ -61,15 +61,19 @@ wss.on('connection', (ws, req)):
     if url 是显示端连接:
         savedState = config.getDisplayState(clientIP)  // 从 config.json 加载持久化状态
         ...
-        // 初始化状态：合并 savedState（包含持久化的能力、旋转、音量等）
+        // 初始化状态：capabilities 初始为 null，等待显示端声明
+        // userCapabilities 从持久化恢复，声明能力后自动合并
         displayData.state = {
             ...createDisplayState(),
             ...savedState,
             isSubDisplay: isSubDisplay,
             capabilities: isSubDisplay
                 ? { ...SUB_DISPLAY_CAPABILITIES }
-                : (savedState?.capabilities || null)  // 从持久化恢复能力
+                : null  // 非子显示端初始为 null，等硬件声明
         }
+        // 非子显示端：从持久化恢复用户覆盖值
+        if !isSubDisplay && savedState?.userCapabilities:
+            displayData.state.userCapabilities = { ...savedState.userCapabilities }
         ...
 ```
 
@@ -80,17 +84,14 @@ handleDisplayMessage(displayId, data, ws):
     if data.type === 'capabilities':
         displayData = displayClients.get(displayId)
         if displayData:
-            // 合并能力声明：
-            // 1. DEFAULT_CAPABILITIES 作为默认值
-            // 2. data.capabilities 为硬件检测能力
-            // 3. displayData.state.capabilities 保留用户已设置的覆盖值（重连时不丢失）
+            // 以硬件声明为基础
             displayData.state.capabilities = {
                 ...DEFAULT_CAPABILITIES,
-                ...data.capabilities,
-                ...displayData.state.capabilities    // 用户设置的覆盖值优先
+                ...data.capabilities
             }
-            // 持久化到 config.json，防止服务器重启丢失
-            config.updateDisplayState(displayData.ip, { capabilities: displayData.state.capabilities })
+            // 重连后恢复用户手动覆盖的能力值
+            if displayData.state.userCapabilities:
+                Object.assign(displayData.state.capabilities, displayData.state.userCapabilities)
             broadcastToControls({ type: 'displayList', list: getDisplayList() })
         return
 ```
@@ -108,13 +109,18 @@ handleControlMessage(ws, data):
                 ...DEFAULT_CAPABILITIES,
                 ...capabilities
             }
+            // 保存用户覆盖值，重连后恢复（与硬件能力分开跟踪）
+            displayData.state.userCapabilities = { ...capabilities }
             // 通知显示端能力已更新
             sendToDisplay(displayId, {
                 type: 'capabilitiesUpdated',
                 capabilities: displayData.state.capabilities
             })
-            // 持久化到 config.json，防止服务器重启丢失
-            config.updateDisplayState(displayData.ip, { capabilities: displayData.state.capabilities })
+            // 持久化到 config.json，保存用户覆盖值
+            config.updateDisplayState(displayData.ip, {
+                capabilities: displayData.state.capabilities,
+                userCapabilities: { ...capabilities }
+            })
             broadcastToControls({ type: 'displayList', list: getDisplayList() })
         return
 ```

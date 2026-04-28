@@ -40,6 +40,13 @@
   - 改动文件：
     - `src/apps/server/boot/server-app.js`
 
+- ✅ [2026-04-28] 修复能力持久化合并顺序导致 TTS 不播
+  - 显示端重连时持久化 `voicePlayback=false` 覆盖了硬件声明的 `true`
+  - 将用户覆盖值(`userCapabilities`)与硬件能力分开跟踪
+  - 声明能力时：硬件为基础 → 叠加用户覆盖值
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+
 - ✅ [2026-04-28] TTS/chime 测试播放问题修复
   - 修复 `broadcastDisplayList()` 递归调用自身而非发送广播的 bug，导致显示端变化无法通知控制端
   - AASC `getDisplayList()` 缺少 `capabilities` 字段，控制端看不到能力信息
