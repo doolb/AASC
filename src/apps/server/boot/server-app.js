@@ -1928,9 +1928,16 @@ wss.on('connection', (ws, req) => {
                 ...createDisplayState(),
                 ...savedState,
                 isSubDisplay: isSubDisplay,
-                capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : (savedState?.capabilities || null)
+                capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : null
             }
         });
+        // 非子显示端：从持久化恢复用户覆盖值，等显示端声明能力后自动合并
+        if (!isSubDisplay && savedState?.userCapabilities) {
+            const entry = displayClients.get(displayId);
+            if (entry) {
+                entry.state.userCapabilities = { ...savedState.userCapabilities };
+            }
+        }
         log('连接', `显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
         
         if (aascSystem) {
@@ -2051,12 +2058,17 @@ wss.on('connection', (ws, req) => {
                             ...DEFAULT_CAPABILITIES,
                             ...data.capabilities
                         };
+                        // 保存用户覆盖值，重连后恢复
+                        targetDisplayData.state.userCapabilities = { ...data.capabilities };
                         sendToDisplay(targetDisplayId, {
                             type: 'capabilitiesUpdated',
                             capabilities: targetDisplayData.state.capabilities
                         });
                         if (config) {
-                            config.updateDisplayState(targetDisplayData.ip, { capabilities: targetDisplayData.state.capabilities });
+                            config.updateDisplayState(targetDisplayData.ip, {
+                                capabilities: targetDisplayData.state.capabilities,
+                                userCapabilities: { ...data.capabilities }
+                            });
                         }
                         broadcastDisplayList();
                         log('能力', `控制端更新显示端 ${targetDisplayId} 能力`);
@@ -2125,11 +2137,11 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     } else if (data.type === 'capabilities' && displayData) {
         displayData.state.capabilities = {
             ...DEFAULT_CAPABILITIES,
-            ...data.capabilities,
-            ...displayData.state.capabilities
+            ...data.capabilities
         };
-        if (config) {
-            config.updateDisplayState(displayData.ip, { capabilities: displayData.state.capabilities });
+        // 重连后恢复用户手动覆盖的能力值
+        if (displayData.state.userCapabilities) {
+            Object.assign(displayData.state.capabilities, displayData.state.userCapabilities);
         }
         log('能力', `显示端 ${displayId} 声明能力`);
         broadcastDisplayList();
