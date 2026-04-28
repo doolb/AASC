@@ -33,8 +33,9 @@ class VoiceCommandAgent extends BaseAgent {
     }
 
     async processCommand(params, context) {
-        const { text, displayId, playOnControl, ws } = params;
-        
+        const { text, displayId, playOnControl } = params;
+        const ws = context.ws;
+
         if (!this.voiceCommand) {
             throw new Error('VoiceCommand 模块未初始化');
         }
@@ -70,8 +71,9 @@ class VoiceCommandAgent extends BaseAgent {
     }
 
     async executeCommands(params, context) {
-        const { actions, displayId, playOnControl, ws } = params;
-        
+        const { actions, displayId, playOnControl } = params;
+        const ws = context.ws;
+
         if (!this.voiceCommand) {
             throw new Error('VoiceCommand 模块未初始化');
         }
@@ -207,8 +209,9 @@ class ChatAgent extends BaseAgent {
     }
 
     async processMessage(params, context) {
-        const { message, displayId, useTemplate, playOnControl, ws } = params;
-        
+        const { message, displayId, useTemplate, playOnControl } = params;
+        const ws = context.ws;
+
         if (!this.chat) {
             throw new Error('Chat 模块未初始化');
         }
@@ -273,8 +276,9 @@ class ChatAgent extends BaseAgent {
     }
 
     async processChatMessage(params, context) {
-        const { content, displayId, mode, target, templateTarget, playOnControl, ws } = params;
-        
+        const { content, displayId, mode, target, templateTarget, playOnControl } = params;
+        const ws = context.ws;
+
         if (!this.chat) {
             throw new Error('Chat 模块未初始化');
         }
@@ -581,8 +585,9 @@ class TTSAgent extends BaseAgent {
     }
 
     async playText(params, context) {
-        const { text, displayId, playOnControl, ws } = params;
-        
+        const { text, displayId, playOnControl } = params;
+        const ws = context.ws;
+
         if (!this.tts) {
             throw new Error('TTS 模块未初始化');
         }
