@@ -40,6 +40,13 @@
   - 改动文件：
     - `src/apps/server/boot/server-app.js`
 
+- ✅ [2026-04-28] TTS/chime 测试播放问题修复
+  - 修复 `broadcastDisplayList()` 递归调用自身而非发送广播的 bug，导致显示端变化无法通知控制端
+  - AASC `getDisplayList()` 缺少 `capabilities` 字段，控制端看不到能力信息
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+    - `src/framework/aasc/components/state-manager.js`
+
 - ✅ [2026-04-28] 显示端能力切换时联动关闭对应功能
   - mediaRendering=false → 停止媒体播放，清空画面
   - voicePlayback=false → 停止 TTS，清空播放队列

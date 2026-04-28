@@ -1708,7 +1708,7 @@ function broadcastDisplayList() {
     if (displayListDebounceTimer) return;
     displayListDebounceTimer = setImmediate(() => {
         displayListDebounceTimer = null;
-        broadcastDisplayList();
+        broadcastToControls({ type: 'displayList', list: getDisplayList() });
     });
 }
 

@@ -273,7 +273,8 @@ class StateManager {
                 rotation: data.state?.rotation || 0,
                 browserInfo: data.state?.browserInfo,
                 voiceSupported: data.state?.voiceSupported,
-                voiceListening: data.state?.voiceListening
+                voiceListening: data.state?.voiceListening,
+                capabilities: data.state?.capabilities || null
             });
         });
         return list;
