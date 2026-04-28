@@ -53,6 +53,58 @@ function logError(category, message, extra) {
     logBrain.ingest(entry);
 }
 
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+}
+
+function getRssLayout() {
+    try {
+        const smaps = fs.readFileSync('/proc/self/smaps_rollup', 'utf8');
+        const rss = smaps.match(/Rss:\s+(\d+)/);
+        const pss = smaps.match(/Pss:\s+(\d+)/);
+        const heap = process.memoryUsage();
+        const mb = (v) => (v / 1024).toFixed(0);
+        let parts = [];
+        if (rss) parts.push(`RSS:${mb(rss[1])}MB`);
+        if (pss) parts.push(`PSS:${mb(pss[1])}MB`);
+        parts.push(`Heap:${(heap.heapUsed/1024/1024).toFixed(1)}MB`);
+        parts.push(`Ext:${(heap.external/1024/1024).toFixed(1)}MB`);
+        return parts.join(' ');
+    } catch (e) {
+        const heap = process.memoryUsage();
+        return `Heap:${(heap.heapUsed/1024/1024).toFixed(1)}MB Ext:${(heap.external/1024/1024).toFixed(1)}MB`;
+    }
+}
+
+function getTopSmapsRss(topN = 8) {
+    try {
+        const smaps = fs.readFileSync('/proc/self/smaps', 'utf8');
+        const regions = [];
+        let current = null;
+        const lines = smaps.split('\n');
+        for (const line of lines) {
+            const addrMatch = line.match(/^([0-9a-f]+)-([0-9a-f]+)\s+(.{4})\s+.+?\s+.+?\s+(\d+)\s+(.*)$/);
+            if (addrMatch) {
+                if (current && current.rss > 1024) regions.push(current);
+                const path = addrMatch[5] || '';
+                const perms = addrMatch[3];
+                current = { name: path ? `${path}(${perms})` : `[anon](${perms})`, rss: 0 };
+            } else if (current && line.startsWith('Rss:')) {
+                const v = parseInt(line.match(/\d+/)?.[0] || '0', 10);
+                if (!isNaN(v)) current.rss = v;
+            }
+        }
+        if (current && current.rss > 1024) regions.push(current);
+        regions.sort((a, b) => b.rss - a.rss);
+        const mb = (v) => (v / 1024).toFixed(1);
+        return regions.slice(0, topN).map(r => `${r.name}:${mb(r.rss)}MB`).join(' ');
+    } catch (e) {
+        return `[smaps解析失败: ${e.message}]`;
+    }
+}
+
 const app = express();
 
 const PORT = config.get('server.port', 8081);
@@ -611,6 +663,9 @@ function cleanupTempFile(filePath) {
 
     try {
         if (fs.existsSync(filePath)) {
+            const stat = fs.statSync(filePath);
+            const size = stat.size;
+            log('语音', `清理ASR临时文件: ${path.basename(filePath)} (${formatFileSize(size)})`);
             fs.unlinkSync(filePath);
         }
     } catch (error) {
@@ -2873,13 +2928,15 @@ setInterval(() => {
     if (rssMB > 500) {
         logError('内存', `RSS超过500MB (${rssMB.toFixed(1)}MB)，可能存在内存泄漏`);
         log('内存', `连接状态 - 显示端: ${displayClients.size} | 控制端: ${controlClients.size} | 设备事件防抖: ${deviceEventDebounce.size}`);
+        log('内存', `RSS分布: ${getRssLayout()}`);
+        log('内存', `Top RSS区段: ${getTopSmapsRss()}`);
         if (global.gc) {
             global.gc();
             const afterGc = process.memoryUsage();
             log('内存', `GC后 RSS: ${mb(afterGc.rss)} | Heap: ${mb(afterGc.heapUsed)}/${mb(afterGc.heapTotal)}`);
         }
     }
-    
+
     if (aascSystem && aascSystem.bus && typeof aascSystem.bus.trimStats === 'function') {
         aascSystem.bus.trimStats();
     }
@@ -2900,15 +2957,17 @@ setInterval(() => {
                 try {
                     const stat = fs.statSync(filePath);
                     if (now - stat.mtimeMs > maxAge) {
+                        const size = stat.size;
                         fs.unlinkSync(filePath);
                         totalCleaned++;
+                        log('系统', `清理临时文件: ${f} (${formatFileSize(size)})`);
                     }
                 } catch (e) {}
             });
         });
-        
+
         if (totalCleaned > 0) {
-            log('系统', `清理临时文件: ${totalCleaned}个`);
+            log('系统', `清理临时文件完毕: 共${totalCleaned}个`);
         }
     } catch (err) {
     }

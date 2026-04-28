@@ -20,6 +20,7 @@ class SherpaOnnxASR {
         this.maxQueueLength = Math.max(1, options.maxQueueLength || 8);
         this.pendingCount = 0;
         this.completedCount = 0;
+        this.lastTrimTime = 0;
         
         console.log(`\n🎤 Sherpa-ONNX ASR 初始化:`);
         console.log(`  模型目录: ${this.modelDir}`);
@@ -58,7 +59,7 @@ class SherpaOnnxASR {
                         useInverseTextNormalization: 1
                     },
                     tokens: tokensPath,
-                    numThreads: 4,
+                    numThreads: 1,
                     debug: false,
                     provider: 'cpu'
                 }
@@ -106,6 +107,7 @@ class SherpaOnnxASR {
     async performRecognition(audioPath) {
         let stream = null;
         let audioData = null;
+        const beforeRss = process.memoryUsage().rss;
 
         try {
             stream = recognizer.createStream();
@@ -129,6 +131,11 @@ class SherpaOnnxASR {
                 audioData.samples = null;
                 audioData = null;
             }
+
+            const deltaRss = (process.memoryUsage().rss - beforeRss) / 1024 / 1024;
+            if (Math.abs(deltaRss) > 0.5) {
+                console.log(`[ASR] 识别后RSS变化: ${deltaRss > 0 ? '+' : ''}${deltaRss.toFixed(1)}MB (音频: ${audioPath})`);
+            }
         }
     }
 
@@ -145,30 +152,43 @@ class SherpaOnnxASR {
     }
 
     tryCompactMemory() {
-        if (typeof global.gc !== 'function') {
-            return;
-        }
-
         if (this.pendingCount > 0) {
             return;
         }
 
-        if (this.completedCount % 10 !== 0) {
+        if (this.completedCount % 20 !== 0) {
             return;
         }
 
         const usage = process.memoryUsage();
         const rssMB = usage.rss / 1024 / 1024;
-        const arrayBuffersMB = (usage.arrayBuffers || 0) / 1024 / 1024;
 
-        if (rssMB < 1024 && arrayBuffersMB < 32) {
+        if (rssMB < 200) {
             return;
         }
 
+        const now = Date.now();
+        if (this.lastTrimTime && now - this.lastTrimTime < 5 * 60 * 1000) {
+            return;
+        }
+        this.lastTrimTime = now;
+
         setImmediate(() => {
+            let freed = 0;
+            if (typeof global.gc === 'function') {
+                try {
+                    global.gc();
+                    freed++;
+                } catch (e) {}
+            }
             try {
-                global.gc();
-            } catch (e) {
+                const mallocTrim = require('../../../src/native/malloc-trim/build/Release/malloc-trim');
+                freed += mallocTrim.trim();
+            } catch (e) {}
+            if (freed > 0) {
+                const after = process.memoryUsage();
+                const delta = ((after.rss - usage.rss) / 1024 / 1024).toFixed(1);
+                console.log(`[ASR] 内存回收(G+g) RSS变化: ${delta}MB`);
             }
         });
     }

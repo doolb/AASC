@@ -1,6 +1,6 @@
 ---
 name: analyze-requirement-level
-description: 统一版需求等级分析技能，支持 standard 与 enterprise 两种模式；用于分层判级、风险识别和 L4 落地改写。
+description: 统一版需求等级分析技能，支持 standard 与 enterprise 两种模式；用于分层判级、风险识别和 L4 落地改写。TRIGGER when: 用户提出新需求、新功能、修改需求、Bug修复/缺陷描述、需求变更、需求评审、方案评审。
 ---
 
 # 需求等级分析技能（统一版）
@@ -22,7 +22,17 @@ description: 统一版需求等级分析技能，支持 standard 与 enterprise 
 - 若用户未回复或回复不明确，自动按 `enterprise` 执行
 - 若用户已明确指定模式，直接执行，不再二次询问
 
-## 调用方式
+## 自动触发（必须）
+
+当用户提出以下内容时，必须自动调用本技能（无需等待用户手动 `/skill`）：
+- **新需求 / 新功能**：用户描述需要新增的功能、模块、流程
+- **Bug 修复**：用户描述缺陷现象、错误日志、异常行为
+- **需求变更**：用户要求修改已有功能的行为、输入输出、边界条件
+- **需求评审 / 方案评审**：用户要求评估需求合理性、风险、实现方案
+
+检测到上述场景后，直接执行 `enterprise` 模式分析流程，输出判级结论。
+
+## 手动调用方式
 
 ```text
 /skill analyze-requirement-level mode=standard

@@ -6,7 +6,20 @@
 
 ### 新功能
 
-- ✅ [2026-04-27] ViewBind 真实环境集成自测（1 服务器 + 多客户端，45 用例）
+- ✅ [2026-04-28] ASR 原生内存诊断与回收
+  - 新增 RSS 内存分布诊断：`getRssLayout()` 读取 smaps_rollup，`getTopSmapsRss()` 解析 smaps 按区段 RSS 排序输出 Top8
+  - 新增 `src/native/malloc-trim/` C++ N-API addon，调用 glibc `malloc_trim(0)` 回收 ONNX Runtime arena 空闲内存
+  - `tryCompactMemory()` 重写：每 20 次识别 / 最少 5 分钟间隔执行一次，先 V8 GC 再 malloc_trim
+  - `numThreads` 从 4 降至 1，减少线程池和中间缓冲区占用的 RSS
+  - ASR 识别前后打印 RSS 变化量和音频文件大小
+  - 定时清理临时文件时打印文件名和大小（`formatFileSize`）
+  - 改动文件：
+    - `src/external/asr/asr-service.js`
+    - `3rd/ttslive/core/asr.js`
+    - `src/apps/server/boot/server-app.js`
+    - `src/native/malloc-trim/malloc-trim.cc` (新增)
+    - `src/native/malloc-trim/binding.gyp` (新增)
+    - `docs/spec/sherpa-asr.md`
   - 新增 12 个测试分类覆盖：服务器生命周期、单/多显示端连接、多控制端连接、显示端断连、消息通信、控制端到显示端转发、显示端状态上报、ViewBind 集成自动通知、边界情况（无效JSON/空消息/未知路径）、压力场景（10并发/急速连接断开/大量消息）、高频心跳
   - 沿用原有集成自测框架，累计 45 个测试全部通过
   - 改动文件：`src/core/viewbind/ViewBind.integration.test.js`、`docs/spec/viewbind.md`

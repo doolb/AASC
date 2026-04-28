@@ -167,7 +167,9 @@ sendVoiceStatus():
     
     initRecognizer():
         加载 SenseVoice 模型 (model.int8.onnx)
-        创建 OfflineRecognizer 实例
+        创建 OfflineRecognizer 实例:
+            numThreads: 1（减少 ONNX Runtime arena 内存占用）
+            provider: "cpu"
         设置 initialized = true
     
     isReady():
@@ -202,12 +204,17 @@ sendVoiceStatus():
             catch 记录日志
 
     tryCompactMemory():
-        如果 global.gc 不可用，返回
         如果 pendingCount > 0，返回
-        如果 completedCount 不是 10 的倍数，返回
+        如果 completedCount 不是 20 的倍数，返回
         读取 process.memoryUsage()
-        如果 RSS >= 1024MB 或 ArrayBuffers >= 32MB:
-            setImmediate(() => global.gc())
+        如果 RSS < 200MB，返回
+        如果距上次回收 < 5分钟，返回
+        lastTrimTime = now
+        setImmediate:
+            global.gc()  // V8 堆回收
+            malloc_trim()  // glibc 原生堆回收（通过 C++ addon）
+            如果 freed > 0:
+                记录 RSS 变化
     
     readWavFile(filePath):
         读取文件到 buffer
@@ -329,4 +336,56 @@ main():
     如果启用服务端指标采样:
         输出服务端峰值指标
         输出 RSS / External / ArrayBuffers ASCII 曲线
+```
+
+## 内存优化
+
+### RSS 分布诊断 (server-app.js)
+
+```
+getRssLayout():
+    读取 /proc/self/smaps_rollup
+    输出 RSS/PSS/Heap/External 汇总
+
+getTopSmapsRss(topN=8):
+    读取 /proc/self/smaps
+    解析每个内存区段（[heap]、[anon]、共享库等）的 Rss
+    按 RSS 从大到小排序，取 topN 输出
+    用于定位 ONNX Runtime 原生内存占用分布
+```
+
+### malloc-trim 原生回收模块
+
+路径: `src/native/malloc-trim/malloc-trim.cc`
+
+```
+C++ N-API addon:
+    导出 trim() 函数
+    调用 glibc malloc_trim(0) 释放 heap 中空闲内存页回 OS
+    编译: node-gyp rebuild
+    作用: 回收 ONNX Runtime arena 在 glibc 堆中的空闲内存
+    触发: ASR 每 20 次识别 / 最少 5 分钟间隔
+```
+
+### ONNX Runtime 内存特性
+
+```
+问题:
+    - sherpa-onnx 加载 229MB model.int8.onnx
+    - 首次推理时 ONNX Runtime 分配完整计算图内存（arena + mmap）
+    - RSS 从 ~375MB 跳至 ~800MB（V8 Heap 仅 ~12MB）
+    - arena 内存管理机制导致 RSS 不回落
+
+缓解措施:
+    1. numThreads: 1 减少线程池和中间缓冲区
+    2. malloc_trim() 定期回收 glibc heap 空闲页
+    3. RSS 超 500MB 时报警并打印 Top RSS 区段分布
+    4. 服务端定时清理 ASR 临时文件时打印文件大小
+
+改动的文件:
+    - src/external/asr/asr-service.js (numThreads, tryCompactMemory, RSS 监控)
+    - 3rd/ttslive/core/asr.js (numThreads)
+    - src/native/malloc-trim/malloc-trim.cc (新增 malloc_trim addon)
+    - src/native/malloc-trim/binding.gyp (新增编译配置)
+    - src/apps/server/boot/server-app.js (getRssLayout, getTopSmapsRss, 清理日志)
 ```

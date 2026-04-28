@@ -53,7 +53,7 @@ class SherpaOnnxASR {
                         useInverseTextNormalization: 1
                     },
                     tokens: tokensPath,
-                    numThreads: 4,
+                    numThreads: 1,
                     debug: false,
                     provider: 'cpu'
                 }
