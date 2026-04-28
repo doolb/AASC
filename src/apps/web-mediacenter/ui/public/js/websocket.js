@@ -55,10 +55,18 @@ const WebSocketManager = {
                 window.currentDisplayId = data.list[0].id;
                 this.send({ type: 'getState', displayId: data.list[0].id });
             }
+
+            if (window.AsrDevice) {
+                window.AsrDevice.updateUI();
+            }
         } else if (data.type === 'deviceEventExecuted') {
             const eventLabel = data.eventType === 'onConnect' ? '连线' : '掉线';
             if (window.showToast) {
                 window.showToast(`设备 ${data.ip} ${eventLabel}指令已执行: ${data.command}`, 'success');
+            }
+        } else if (data.type === 'asrDeviceChanged') {
+            if (window.AsrDevice) {
+                window.AsrDevice.handleDeviceChanged(data.device);
             }
         } else if (data.type === 'displayState') {
             console.log('[WS] displayState 收到, displayId:', data.displayId, 'currentDisplayId:', window.currentDisplayId);

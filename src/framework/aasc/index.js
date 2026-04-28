@@ -10,6 +10,10 @@ const { PipelineStatus, StepErrorStrategy, PipelineContext, PipelineStep, Pipeli
 const { TriggerType, CompositionStatus, Trigger, CapabilityComposition, CompositionRegistry, CompositionExecutor, CompositionBuilder, defaultCompositions, initDefaultCompositions } = require('./composition');
 const { ScoreWeight, CategoryWeights, CapabilityScore, ActorLevelScore, CapabilityLevelCalculator, LevelCalculatorBuilder } = require('./level-calculator');
 
+const { MessageBatch } = require('./message-batch');
+const { ClientChannel } = require('./channel/client-channel');
+const { ServerChannel } = require('./channel/server-channel');
+
 const { MessageParser } = require('./components/message-parser');
 const { MessageDispatcher } = require('./components/message-dispatcher');
 const { StateManager } = require('./components/state-manager');
@@ -35,6 +39,9 @@ const {
 module.exports = {
   MessageBus,
   getBus,
+  MessageBatch,
+  ClientChannel,
+  ServerChannel,
   Message,
   ActorAddress,
   MessageType,

@@ -53,6 +53,8 @@ ViewBind 是一个视图绑定模块，实现数据与视图的自动同步。�
 3. **易于使用**：简单的 API 设计
 4. **高性能**：避免不必要的更新，支持批量操作
 5. **可扩展**：支持嵌套对象监听、列表绑定
+6. **回调重入一致性**：通知期间绑定/解绑/改数据的语义清晰可预期
+7. **列表引用匹配**：`setList()` 按 data 引用重建索引，排序后绑定不错位
 
 ## 核心类设计
 
@@ -126,6 +128,28 @@ class DataSnapshot {
 }
 ```
 
+## 回调重入一致性
+
+通知执行过程中可发生三种重入操作，处理策略如下：
+
+| 操作 | 策略 |
+|------|------|
+| 回调中 `unbind()` | 立即从当前 Set 中移除，本轮后续快照检查 `currentSet.has(callback)` 会跳过该回调 |
+| 回调中 `bind()` | 存入 `_pendingBinds`，本轮通知结束后按序添加并补发一次 |
+| 回调中修改 `data` | 递归 `_notifyAll` 设置 `_pendingNotifyAll`，本轮结束后触发完整补帧通知 |
+
+### ViewBindList 重排一致性
+
+`setList()` 按 data 引用（`===`）重建 `_binds` 索引，流程如下：
+
+```
+1. 遍历旧 _binds，建立 Map<dataRef, Queue<ViewBind>>
+2. 遍历新 list 的每项 item：
+   - 若 Map[item] 有队列 → 弹出复用
+   - 否则 → 创建新 ViewBind
+3. 重新映射保证排序/重排后 ViewBind 对象按 data 引用正确对齐
+```
+
 ## 属性说明
 
 ### ViewBind
@@ -136,6 +160,9 @@ class DataSnapshot {
 | _oldData | any | 上一次数据 |
 | _bindings | Map | 绑定映射表 (key -> callbacks[]) |
 | _isNotifying | boolean | 是否正在触发通知 |
+| _pendingNotifyAll | boolean | 重入时标记需补帧通知 |
+| _pendingUnbinds | Array | 通知结束后清理的空 key 列表 |
+| _pendingBinds | Array | 重入时暂存待补发的绑定 |
 
 ### ViewBindList
 
@@ -144,6 +171,10 @@ class DataSnapshot {
 | _list | Array | 内部列表数据 |
 | _binds | Array<ViewBind> | 元素绑定列表 |
 | _callbacks | Set | 列表变化回调集合 |
+| _isNotifying | boolean | 是否正在触发通知 |
+| _pendingNotifyAll | boolean | 重入时标记需补帧通知 |
+| _pendingUnbinds | Array | 重入时暂存待解绑的回调 |
+| _oldCount | number | 上一次列表长度（供回调参数使用） |
 
 ## 方法说明
 
@@ -315,10 +346,12 @@ WebSocketManager.on('displayList', (list) => {
 ```
 src/core/
 ├── viewbind/
-│   ├── index.js           # 模块入口
-│   ├── ViewBind.js        # 核心绑定类
-│   ├── ViewBindList.js    # 列表绑定类
-│   └── ViewBind.test.js   # 单元测试
+│   ├── index.js                        # 模块入口
+│   ├── ViewBind.js                     # 核心绑定类
+│   ├── ViewBindList.js                 # 列表绑定类
+│   ├── ViewBind.test.js                # 单元测试（30 用例）
+│   ├── ViewBind.self-test.js           # 通信机制自测（46 用例）
+│   └── ViewBind.integration.test.js    # 真实环境集成自测（45 用例）
 
 src/apps/web-mediacenter/ui/public/
 ├── js/

@@ -57,6 +57,8 @@
         let silenceStartTime = null;
         let hasSpeech = false;
         let speechStartTime = null;
+        let speechChunks = [];
+        let collectingSpeech = false;
         let isAlwaysListening = false;
         let wasListeningBeforePlayback = false;
         let noInterruptMode = true;
@@ -1108,7 +1110,24 @@
                         handleCapabilitiesUpdated(data);
                         return;
                     }
-                    
+
+                    if (data.type === 'asrAudio') {
+                        handleAsrAudio(data);
+                        return;
+                    }
+
+                    if (data.type === 'asrConfig') {
+                        if (data.localAsrEnabled && !localAsrAvailable) {
+                            forceInitLocalAsr();
+                        } else if (!data.localAsrEnabled && localAsrAvailable) {
+                            if (localAsrStreaming) {
+                                SherpaASR.stopStreaming();
+                                localAsrStreaming = false;
+                            }
+                        }
+                        return;
+                    }
+
                     if (data.type === 'control') {
                         handleControl(data);
                         if (data.action !== 'crop') {
@@ -1266,11 +1285,93 @@
             }
         }
         
+        async function handleAsrAudio(data) {
+            if (!SherpaASR || !SherpaASR.isLoaded) {
+                console.log('[显示端] 收到ASR音频但本地ASR未初始化');
+                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                    displayWs.send(JSON.stringify({
+                        type: 'asrResult',
+                        requestId: data.requestId,
+                        error: '本地ASR未初始化',
+                        text: ''
+                    }));
+                }
+                return;
+            }
+
+            try {
+                const text = await SherpaASR.recognizeBuffer(data.audioData);
+                console.log('[显示端] ASR识别结果:', text);
+
+                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                    displayWs.send(JSON.stringify({
+                        type: 'asrResult',
+                        requestId: data.requestId,
+                        text: text || ''
+                    }));
+                }
+            } catch (e) {
+                console.error('[显示端] ASR音频处理失败:', e.message);
+                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                    displayWs.send(JSON.stringify({
+                        type: 'asrResult',
+                        requestId: data.requestId,
+                        error: e.message,
+                        text: ''
+                    }));
+                }
+            }
+        }
+
         function initVoiceRecognition() {
             checkAsrStatus();
         }
         
-        async function checkAsrStatus() {
+        async function forceInitLocalAsr() {
+            try {
+                if (!SherpaASR) return false;
+                if (SherpaASR.isLoaded) return true;
+
+                const ready = await SherpaASR.init({ enabled: true });
+                if (ready) {
+                    SherpaASR.onPartial = (text) => {
+                        if (text) {
+                            updateVoiceTextDisplay(text, true);
+                        }
+                    };
+                    SherpaASR.onResult = (text) => {
+                        if (!text) return;
+
+                        consecutiveIgnoreCount = 0;
+                        console.log('显示端本地ASR识别结果:', text);
+                        updateVoiceTextDisplay(text, true);
+
+                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                            displayWs.send(JSON.stringify({
+                                type: 'voiceInput',
+                                text: text,
+                                isFinal: true,
+                                fullText: text
+                            }));
+                        }
+
+                        setTimeout(() => {
+                            updateVoiceTextDisplay('', true);
+                        }, 3000);
+                    };
+                    localAsrAvailable = true;
+                    voiceSupported = true;
+                    console.log('[显示端] 本地 WASM ASR 已就绪 (服务端请求)');
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.log('[显示端] 强制初始化本地ASR失败:', e.message);
+                return false;
+            }
+        }
+
+                async function checkAsrStatus() {
             try {
                 const localAsrReady = await initLocalAsr();
                 if (localAsrReady) {
@@ -1390,21 +1491,33 @@
                 
                 mediaRecorder = new MediaRecorder(micStream);
                 audioChunks = [];
-                
+                speechChunks = [];
+                collectingSpeech = false;
+
                 mediaRecorder.ondataavailable = (e) => {
                     if (e.data.size > 0) {
                         audioChunks.push(e.data);
+
+                        if (collectingSpeech || hasSpeech) {
+                            collectingSpeech = true;
+                            speechChunks.push(e.data);
+                        } else if (speechChunks.length === 0) {
+                            speechChunks.push(e.data);
+                        }
                     }
                 };
-                
+
                 mediaRecorder.onstop = async () => {
-                    if (audioChunks.length > 0) {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const useChunks = collectingSpeech ? speechChunks : audioChunks;
+                    if (useChunks.length > 0) {
+                        const audioBlob = new Blob(useChunks, { type: 'audio/webm' });
                         await sendAudioForRecognition(audioBlob);
                     }
-                    
+
                     if (isListening) {
                         audioChunks = [];
+                        speechChunks = [];
+                        collectingSpeech = false;
                         try {
                             mediaRecorder.start();
                             startSilenceDetection();

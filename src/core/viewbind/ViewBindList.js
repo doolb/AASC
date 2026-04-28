@@ -6,6 +6,7 @@ class ViewBindList {
         this._binds = [];
         this._callbacks = new Set();
         this._isNotifying = false;
+        this._pendingNotifyAll = false;
         this._pendingUnbinds = [];
         this._oldCount = 0;
 
@@ -36,9 +37,19 @@ class ViewBindList {
         this._oldCount = oldList.length;
         this._list = newList || [];
 
-        this._binds = this._list.map((item, index) => {
-            if (this._binds[index] && this._binds[index].data === item) {
-                return this._binds[index];
+        const dataQueues = new Map();
+        for (const bind of this._binds) {
+            const key = bind.data;
+            if (!dataQueues.has(key)) {
+                dataQueues.set(key, []);
+            }
+            dataQueues.get(key).push(bind);
+        }
+
+        this._binds = this._list.map((item) => {
+            const queue = dataQueues.get(item);
+            if (queue && queue.length > 0) {
+                return queue.shift();
             }
             return new ViewBind(item);
         });
@@ -134,6 +145,7 @@ class ViewBindList {
 
     _notifyAll(newList, oldList) {
         if (this._isNotifying) {
+            this._pendingNotifyAll = true;
             return;
         }
 
@@ -142,8 +154,11 @@ class ViewBindList {
         const newCount = newList.length;
         const oldCount = this._oldCount;
 
-        for (const callback of this._callbacks) {
-            this._safeCall(callback, newList, oldList, newCount, oldCount);
+        const snapshot = new Set(this._callbacks);
+        for (const callback of snapshot) {
+            if (this._callbacks.has(callback)) {
+                this._safeCall(callback, newList, oldList, newCount, oldCount);
+            }
         }
 
         this._isNotifying = false;
@@ -152,6 +167,11 @@ class ViewBindList {
             this._callbacks.delete(callback);
         }
         this._pendingUnbinds = [];
+
+        if (this._pendingNotifyAll) {
+            this._pendingNotifyAll = false;
+            this._notifyAll(newList, oldList);
+        }
     }
 
     _safeCall(callback, newList, oldList, newCount, oldCount) {

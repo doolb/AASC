@@ -304,6 +304,142 @@ test('find 查找元素', () => {
     assert.deepStrictEqual(result, { id: 2 });
 });
 
+console.log('\n--- 回调重入测试 ---\n');
+
+test('回调中解绑立即生效', () => {
+    const bind = new ViewBind({ value: 0 });
+    let callOrder = [];
+
+    const unbindA = bind.bind(() => { callOrder.push('a'); });
+
+    bind.bind(() => {
+        callOrder.push('b');
+        unbindA();
+    });
+
+    assert.deepStrictEqual(callOrder, ['a', 'b']);
+
+    bind.data = { value: 1 };
+    assert.deepStrictEqual(callOrder, ['a', 'b', 'b']);
+});
+
+test('回调中绑定会补发', () => {
+    const bind = new ViewBind({ value: 0 });
+    let lateCallCount = 0;
+
+    bind.bind(() => {
+        if (bind.data.value === 1) {
+            bind.bind('late', () => lateCallCount++);
+        }
+    });
+
+    assert.strictEqual(lateCallCount, 0);
+
+    bind.data = { value: 1 };
+    assert.strictEqual(lateCallCount, 1);
+});
+
+test('回调中改Data补帧刷新', () => {
+    const bind = new ViewBind({ value: 0 });
+    let callCount = 0;
+
+    bind.bind(() => {
+        callCount++;
+        if (bind.data.value === 1) {
+            bind.data = { value: 2 };
+        }
+    });
+
+    assert.strictEqual(callCount, 1);
+
+    bind.data = { value: 1 };
+    assert.strictEqual(bind.data.value, 2, '最终数据应为 2');
+    assert.ok(callCount >= 3, '应至少触发 3 次（初始 + 设为1 + 补帧设为2）');
+});
+
+test('回调中替换回调函数', () => {
+    const bind = new ViewBind({ value: 0 });
+    let log = [];
+
+    const oldCb = () => log.push('old');
+    const newCb = () => log.push('new');
+
+    bind.bind(oldCb);
+
+    bind.bind(() => {
+        if (bind.data.value === 1) {
+            bind.unbind(oldCb);
+            bind.bind(newCb);
+        }
+    });
+
+    log = [];
+    bind.data = { value: 1 };
+    assert.deepStrictEqual(log, ['old', 'new']);
+
+    bind.data = { value: 2 };
+    assert.deepStrictEqual(log, ['old', 'new', 'new']);
+});
+
+console.log('\n--- ViewBindList 一致性测试 ---\n');
+
+test('List长度回调old/new正确', () => {
+    const list = new ViewBindList([1, 2, 3]);
+    let lastNewCount = -1;
+    let lastOldCount = -1;
+
+    list.bind((newList, oldList, newCount, oldCount) => {
+        lastNewCount = newCount;
+        lastOldCount = oldCount;
+    });
+
+    list.push(4);
+    assert.strictEqual(lastNewCount, 4);
+    assert.strictEqual(lastOldCount, 3);
+
+    list.remove(0);
+    assert.strictEqual(lastNewCount, 3);
+    assert.strictEqual(lastOldCount, 4);
+});
+
+test('List按data定位刷新正确', () => {
+    const a = { id: 1 };
+    const b = { id: 2 };
+    const c = { id: 3 };
+    const list = new ViewBindList([a, b, c]);
+    const firstBind = list.get(0);
+
+    let itemCallCount = 0;
+    firstBind.bind(() => itemCallCount++);
+
+    assert.strictEqual(itemCallCount, 1);
+
+    list.setList([a, b, c]);
+    const newFirstBind = list.get(0);
+    assert.strictEqual(firstBind, newFirstBind, '相同 data 引用的 ViewBind 应复用');
+
+    list.setList([{ id: 4 }, b, c]);
+    const replacedBind = list.get(0);
+    assert.notStrictEqual(firstBind, replacedBind, '不同 data 应创建新 ViewBind');
+});
+
+test('List排序后索引重建正确', () => {
+    const a = { id: 1, name: 'a' };
+    const b = { id: 2, name: 'b' };
+    const c = { id: 3, name: 'c' };
+    const list = new ViewBindList([a, b, c]);
+
+    const bindA = list.get(0);
+    const bindB = list.get(1);
+    const bindC = list.get(2);
+
+    list.setList([c, a, b]);
+
+    assert.strictEqual(list.get(0), bindC, 'c 应在索引 0');
+    assert.strictEqual(list.get(1), bindA, 'a 应在索引 1');
+    assert.strictEqual(list.get(2), bindB, 'b 应在索引 2');
+});
+
 console.log('\n=== 测试结果 ===\n');
 console.log(`总计: ${testCount} 个测试`);
 console.log(`通过: ${passCount} 个测试`);

@@ -6,6 +6,18 @@
 
 ### 新功能
 
+- ✅ [2026-04-27] ViewBind 真实环境集成自测（1 服务器 + 多客户端，45 用例）
+  - 新增 12 个测试分类覆盖：服务器生命周期、单/多显示端连接、多控制端连接、显示端断连、消息通信、控制端到显示端转发、显示端状态上报、ViewBind 集成自动通知、边界情况（无效JSON/空消息/未知路径）、压力场景（10并发/急速连接断开/大量消息）、高频心跳
+  - 沿用原有集成自测框架，累计 45 个测试全部通过
+  - 改动文件：`src/core/viewbind/ViewBind.integration.test.js`、`docs/spec/viewbind.md`
+
+- ✅ [2026-04-27] 实现消息批处理与双向通信通道
+  - MessageBatch：按时间窗口/最大条数聚合消息，支持合并函数
+  - MessageBus 扩展：集成 setBatchConfig/removeBatchConfig，publish 自动走批处理
+  - ClientChannel：客户端通信封装，订阅 topic 和私有通道，断连自动清理
+  - ServerChannel：服务端通信封装，支持单播 push、广播 broadcast、clientId 生成
+  - 改动文件：`src/framework/aasc/message-batch.js`、`src/framework/aasc/message-bus.js`、`src/framework/aasc/channel/client-channel.js`、`src/framework/aasc/channel/server-channel.js`、`src/framework/aasc/index.js`、`docs/spec/aasc.md`
+
 - ✅ [2026-04-27] 实现 RSS 内存压测脚本
   - 通用的 HTTP 压测脚本，支持可配置的 method/path/body/headers
   - 两种运行模式：total（按请求数+并发）和 interval（按间隔+持续时间）
@@ -15,6 +27,27 @@
   - 改动文件：`src/scripts/rss-stress-test.js`、`docs/spec/rss-stress-test.md`
 
 ### Bug 修复
+- ✅ [2026-04-27] ViewBind 回调重入语义修复与列表索引重建
+  - 问题：ViewBind 通知期间调用 bind/unbind/修改 data 可能导致漏帧或状态不一致；ViewBindList.setList() 排序后按索引匹配 ViewBind 会导致绑定错位
+  - 修复：
+    - `ViewBind.js`：通知期间 `unbind()` 立即从 Set 移除（本轮后续快照检查跳过），`bind()` 暂存到 `_pendingBinds` 通知结束后补发，`data` 修改设 `_pendingNotifyAll` 通知结束后补帧
+    - `ViewBindList.js`：`setList()` 改为 `Map<dataRef, Queue<ViewBind>>` 按 data 引用重建 `_binds` 索引，排序/重排后绑定正确对齐
+    - `ViewBindList.js`：`_notifyAll` 增加快照 + `_pendingNotifyAll` 重入处理
+  - 新增 7 个自测：回调中解绑、回调中绑定、回调中改数据、回调替换、List old/new 长度、List 按 data 定位、List 排序后索引重建（总计 30 个测试全部通过）
+  - 改动文件：
+    - `src/core/viewbind/ViewBind.js`
+    - `src/core/viewbind/ViewBindList.js`
+    - `src/core/viewbind/ViewBind.test.js`
+    - `docs/spec/viewbind.md`
+    - `docs/design/viewbind.md`
+    - `docs/task/2026-04-27_UIViewBind自测补充与回调重入修复.md`
+
+- ✅ [2026-04-27] ViewBind 通信机制自测代码
+  - 新增 `ViewBind.self-test.js`，46 个自测用例覆盖：基础通信模式、生产-消费模式、重入一致性、列表通信、链式通信、边界情况、错误隔离、通信可靠性、资源清理、列表迭代
+  - 改动文件：
+    - `src/core/viewbind/ViewBind.self-test.js`
+    - `docs/spec/viewbind.md`
+
 - ✅ 服务端 RSS 持续上涨综合修复（第四轮 - 系统性加固）
   - 问题：服务器长时间运行后 RSS 持续上涨，即使在低负载时期也不回落
   - 原因分析：

@@ -405,6 +405,150 @@ class ReminderActor extends Actor {
 }
 ```
 
+## 消息批处理 (message-batch.js)
+
+### MessageBatch
+
+```
+MessageBatch
+├── windowMs: number            # 聚合窗口（毫秒），默认 200
+├── maxCount: number            # 最大条数，默认 50
+├── queue: Map                  # key -> mergedItem
+├── timer: Timeout              # 定时器引用
+├── flushOnEmpty: boolean       # 窗口到期时仅 1 条也 flush，默认 true
+├── push(key, item, mergeFn)    # 推入待发送项，若 key 重复则 mergeFn 合并
+├── flush()                     # 立即发送当前队列全部
+├── destroy()                   # flush + 清理定时器
+└── onFlush: callback(items)    # flush 回调（由 MessageBus 设置）
+```
+
+## 客户端通道 (channel/client-channel.js)
+
+### ClientChannel
+
+```
+ClientChannel
+├── bus: MessageBus              # 内部持有的消息总线
+├── clientId: string             # 服务端分配的客户端 ID
+├── handlerMap: Map              # topic -> handler 映射
+├── connect(clientId)            # 设置 clientId，注册已缓存的订阅
+├── send(topic, payload)         # 发送消息（经 MessageBus 聚合后发出）
+├── on(topic, handler)           # 订阅 topic（同时订阅 topic 和 topic:clientId）
+├── off(topic)                   # 取消订阅
+└── disconnect()                 # 取消所有订阅
+```
+
+### 伪代码
+
+```text
+ClientChannel.send(topic, payload):
+    bus.publish(new Message({
+        type: EVENT,
+        topic,
+        payload: { clientId, data: payload }
+    }))
+
+ClientChannel.on(topic, handler):
+    handlerMap[topic] = handler
+    若 clientId 不存在: 缓存，connect 时再订阅
+    否则:
+        bus.subscribeHandler(topic, 'client:' + clientId + ':' + topic, 包装回调)
+        bus.subscribeHandler(topic + ':' + clientId, 'client:' + clientId + ':' + topic, 包装回调)
+
+包装回调:
+    msg = 收到的消息
+    payload = msg.payload
+    若 payload.targetClientId 存在 且 payload.targetClientId != clientId:
+        跳过（私密消息非本客户端）
+    否则:
+        handler(payload.data)
+
+ClientChannel.off(topic):
+    bus.unsubscribeHandler(topic, ...)
+    bus.unsubscribeHandler(topic + ':' + clientId, ...)
+    handlerMap.delete(topic)
+```
+
+## 服务端通道 (channel/server-channel.js)
+
+### ServerChannel
+
+```
+ServerChannel
+├── bus: MessageBus              # 内部持有的消息总线
+├── handlerMap: Map              # topic -> handler 映射
+├── on(topic, handler)           # 订阅客户端消息
+├── push(clientIds[], topic, payload)  # 向指定客户端推送
+├── broadcast(topic, payload)    # 向所有订阅者广播
+└── assignClientId()             # 生成唯一 clientId
+```
+
+### 伪代码
+
+```text
+ServerChannel.on(topic, handler):
+    handlerMap[topic] = handler
+    bus.subscribeHandler(topic, 'server:' + topic, handler)
+
+ServerChannel.push(clientIds, topic, payload):
+    for each clientId in clientIds:
+        bus.publish(new Message({
+            type: EVENT,
+            topic: topic + ':' + clientId,
+            payload: { data: payload, targetClientId: clientId }
+        }))
+
+ServerChannel.broadcast(topic, payload):
+    bus.publish(new Message({
+        type: BROADCAST,
+        topic,
+        payload: { data: payload }
+    }))
+
+ServerChannel.assignClientId():
+    生成 uuid 作为 clientId
+    返回 clientId
+```
+
+## 消息总线集成
+
+### MessageBus 扩展
+
+```text
+MessageBus 新增:
+├── batchConfigs: Map            # topic -> { windowMs, maxCount, mergeFn }
+├── batchers: Map                # topic -> MessageBatch 实例
+├── setBatchConfig(topic, config) # 设置聚合配置
+├── removeBatchConfig(topic)     # 移除聚合配置
+└── publish 方法扩展:
+    若有 topic 的 batchConfig:
+        将消息推入 batchers[topic]
+        batcher.onFlush = (items) -> 逐一发送到订阅者
+    若无 batchConfig:
+        走原有广播/点对点逻辑
+```
+
+### 伪代码
+
+```text
+MessageBus.setBatchConfig(topic, config):
+    batchConfigs[topic] = config
+    batch = new MessageBatch(config)
+    batch.onFlush = (items) ->
+        for item in items:
+            // 将合并后的消息发布到 topic
+            this.publishDirect(item.message)
+    batchers[topic] = batch
+
+MessageBus.publish(message):
+    原有逻辑...
+    若 message 是 EVENT 类型 且 batchConfigs 有 message.topic:
+        batcher = batchers[message.topic]
+        batcher.push(message.topic, message, config.mergeFn)
+        返回
+    原有 broadcast/send 逻辑...
+```
+
 ## 文件清单
 
 | 文件 | 说明 |
@@ -412,6 +556,9 @@ class ReminderActor extends Actor {
 | aasc/index.js | 入口文件 |
 | aasc/message.js | 消息协议 |
 | aasc/message-bus.js | 消息总线 |
+| aasc/message-batch.js | 消息批处理 |
+| aasc/channel/client-channel.js | 客户端通信通道 |
+| aasc/channel/server-channel.js | 服务端通信通道 |
 | aasc/actor.js | 执行者基类 |
 | aasc/router.js | 消息路由 |
 | aasc/registry.js | 执行者注册表 |

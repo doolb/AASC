@@ -100,6 +100,9 @@ let muteState = {
 let aascSystem = null;
 const runtimeBridgeClients = new Map();
 
+const pendingDisplayAsrRequests = new Map();
+let pendingAsrRequestId = 0;
+
 tts.init(config.getTtsConfig());
 asr.init(config.get('asr', {}));
 timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
@@ -545,6 +548,30 @@ app.post('/api/config/localAsr', (req, res) => {
     }
 });
 
+app.get('/api/config/asrDevice', (req, res) => {
+    const device = config.get('asr.device', 'server');
+    res.json({ status: 'success', device });
+});
+
+app.post('/api/config/asrDevice', (req, res) => {
+    try {
+        const { device } = req.body;
+        if (device !== 'server' && device !== 'display') {
+            return res.status(400).json({ status: 'error', message: 'device 必须是 server 或 display' });
+        }
+        config.set('asr.device', device);
+
+        broadcastToControls({
+            type: 'asrDeviceChanged',
+            device: device
+        });
+
+        res.json({ status: 'success', device });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
 app.get('/api/subservers', (req, res) => {
     const servers = subServerManager.getAllServers().map(s => s.toJSON());
     res.json({ status: 'success', servers });
@@ -604,6 +631,48 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ status: 'error', message: '未收到音频文件' });
         }
+        const asrDevice = config.get('asr.device', 'server');
+        
+        if (asrDevice === 'display') {
+            const displayWithAsr = findDisplayWithAsr();
+            if (!displayWithAsr) {
+                cleanupTempFile(req.file.path);
+                return res.status(503).json({ status: 'error', message: '没有支持 ASR 的显示端在线' });
+            }
+        
+            try {
+                const audioBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
+                const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
+        
+                const text = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId);
+                cleanupTempFile(req.file.path);
+        
+                if (!text || !text.trim()) {
+                    return res.json({ 
+                        status: 'ignored', 
+                        message: '显示端未识别到有效语音',
+                        text: ''
+                    });
+                }
+        
+                if (!hasValidContent(text)) {
+                    log('语音', `忽略无效语音输入: ${text}`);
+                    return res.json({ 
+                        status: 'ignored', 
+                        message: '未检测到有效内容',
+                        text: text
+                    });
+                }
+        
+                return res.json({ status: 'success', text: text.trim() });
+            } catch (err) {
+                cleanupTempFile(req.file.path);
+                logError('语音', `显示端 ASR 失败: ${err.message}`);
+                return res.status(500).json({ status: 'error', message: '显示端 ASR 失败: ' + err.message });
+            }
+        }
+        
+
         
         if (!asr.isReady()) {
             cleanupTempFile(req.file.path);
@@ -1574,6 +1643,40 @@ function broadcastToControls(data) {
     });
 }
 
+function findDisplayWithAsr() {
+    for (const [displayId, displayData] of displayClients) {
+        const caps = displayData.state?.capabilities;
+        if (caps && caps.voiceRecognition) {
+            return { id: displayId, ws: displayData.ws };
+        }
+    }
+    return null;
+}
+
+function sendAudioToDisplayAsr(display, audioBase64, requestId) {
+    return new Promise((resolve, reject) => {
+        const timeoutMs = 30000;
+        const timer = setTimeout(() => {
+            pendingDisplayAsrRequests.delete(requestId);
+            reject(new Error('显示端 ASR 响应超时'));
+        }, timeoutMs);
+
+        pendingDisplayAsrRequests.set(requestId, { resolve, reject, timer });
+
+        try {
+            sendToDisplay(display.id, {
+                type: 'asrAudio',
+                audioData: audioBase64,
+                requestId: requestId
+            });
+        } catch (err) {
+            clearTimeout(timer);
+            pendingDisplayAsrRequests.delete(requestId);
+            reject(new Error('发送音频到显示端失败: ' + err.message));
+        }
+    });
+}
+
 function sendToDisplay(displayId, data) {
     const displayData = displayClients.get(displayId);
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
@@ -1780,6 +1883,13 @@ wss.on('connection', (ws, req) => {
                 }
             }));
         }
+
+        const asrDevice = config.get('asr.device', 'server');
+        ws.send(JSON.stringify({
+            type: 'asrConfig',
+            device: asrDevice,
+            localAsrEnabled: asrDevice === 'display'
+        }));
         
         if (savedState && savedState.currentMedia) {
             ws.send(JSON.stringify({ 
@@ -1801,7 +1911,21 @@ wss.on('connection', (ws, req) => {
                 
                 const data = JSON.parse(message);
                 data.displayId = displayId;
-                
+
+                if (data.type === 'asrResult') {
+                    const pending = pendingDisplayAsrRequests.get(data.requestId);
+                    if (pending) {
+                        pendingDisplayAsrRequests.delete(data.requestId);
+                        clearTimeout(pending.timer);
+                        if (data.text) {
+                            pending.resolve(data.text);
+                        } else {
+                            pending.reject(new Error(data.error || '显示端 ASR 识别失败'));
+                        }
+                    }
+                    return;
+                }
+
                 if (aascSystem) {
                     const result = await aascSystem.handleDisplayMessage(displayId, data, ws);
                     if (!result.success && result.reason) {

@@ -4,6 +4,7 @@ class ViewBind {
         this._oldData = null;
         this._bindings = new Map();
         this._isNotifying = false;
+        this._pendingNotifyAll = false;
         this._pendingUnbinds = [];
         this._pendingBinds = [];
     }
@@ -60,6 +61,11 @@ class ViewBind {
             key = '*';
         }
 
+        if (this._isNotifying) {
+            this._pendingBinds.push({ key, callback });
+            return () => this.unbind(key, callback);
+        }
+
         if (!this._bindings.has(key)) {
             this._bindings.set(key, new Set());
         }
@@ -77,15 +83,14 @@ class ViewBind {
             key = '*';
         }
 
-        if (this._isNotifying) {
-            this._pendingUnbinds.push({ key, callback });
-            return;
-        }
-
         const callbacks = this._bindings.get(key);
-        if (callbacks) {
-            callbacks.delete(callback);
-            if (callbacks.size === 0) {
+        if (!callbacks) return;
+
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+            if (this._isNotifying) {
+                this._pendingUnbinds.push({ key });
+            } else {
                 this._bindings.delete(key);
             }
         }
@@ -117,28 +122,49 @@ class ViewBind {
 
     _notifyAll() {
         if (this._isNotifying) {
+            this._pendingNotifyAll = true;
             return;
         }
 
         this._isNotifying = true;
 
-        const allCallbacks = this._bindings.get('*');
-        if (allCallbacks) {
-            for (const callback of allCallbacks) {
-                this._safeCall(callback);
-            }
+        const snapshot = [];
+        for (const [key, callbacks] of this._bindings) {
+            snapshot.push({ key, callbacks: new Set(callbacks) });
         }
 
-        for (const [key, callbacks] of this._bindings) {
-            if (key === '*') continue;
+        for (const { key, callbacks } of snapshot) {
+            const currentSet = this._bindings.get(key);
+            if (!currentSet) continue;
             for (const callback of callbacks) {
-                this._safeCall(callback);
+                if (currentSet.has(callback)) {
+                    this._safeCall(callback);
+                }
             }
         }
 
         this._isNotifying = false;
 
-        this._processPending();
+        for (const { key, callback } of this._pendingBinds) {
+            if (!this._bindings.has(key)) {
+                this._bindings.set(key, new Set());
+            }
+            this._bindings.get(key).add(callback);
+            this._safeCall(callback);
+        }
+        this._pendingBinds = [];
+
+        for (const { key } of this._pendingUnbinds) {
+            if (this._bindings.has(key) && this._bindings.get(key).size === 0) {
+                this._bindings.delete(key);
+            }
+        }
+        this._pendingUnbinds = [];
+
+        if (this._pendingNotifyAll) {
+            this._pendingNotifyAll = false;
+            this._notifyAll();
+        }
     }
 
     _notifyKey(key) {
@@ -156,18 +182,6 @@ class ViewBind {
         } catch (err) {
             console.error('[ViewBind] 回调执行错误:', err.message);
         }
-    }
-
-    _processPending() {
-        for (const { key, callback } of this._pendingUnbinds) {
-            this.unbind(key, callback);
-        }
-        this._pendingUnbinds = [];
-
-        for (const { key, callback } of this._pendingBinds) {
-            this.bind(key, callback);
-        }
-        this._pendingBinds = [];
     }
 
     get(key) {

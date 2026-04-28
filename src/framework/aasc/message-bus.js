@@ -1,4 +1,5 @@
 const { Message, ActorAddress, MessageType, Priority, MessageTopic } = require('./message');
+const { MessageBatch } = require('./message-batch');
 
 class MessageBus {
   constructor(options = {}) {
@@ -11,6 +12,8 @@ class MessageBus {
     this.messageQueue = [];
     this.isProcessing = false;
     this.handlers = new Map();
+    this.batchConfigs = new Map();
+    this.batchers = new Map();
     this.stats = {
       totalMessages: 0,
       messagesByType: {},
@@ -311,6 +314,18 @@ class MessageBus {
       return;
     }
 
+    const topic = message.topic
+    if (topic && this.batchConfigs.has(topic)) {
+      const batcher = this.batchers.get(topic)
+      const config = this.batchConfigs.get(topic)
+      batcher.push(topic, message, config.mergeFn)
+      return
+    }
+
+    await this._publishDirect(message)
+  }
+
+  async _publishDirect(message) {
     if (message.isBroadcast()) {
       await this.broadcast(message);
     } else {
@@ -369,6 +384,26 @@ class MessageBus {
     }
 
     return results;
+  }
+
+  setBatchConfig(topic, config = {}) {
+    const batch = new MessageBatch(config)
+    batch.onFlush = (items) => {
+      for (const item of items) {
+        this._publishDirect(item)
+      }
+    }
+    this.batchConfigs.set(topic, config)
+    this.batchers.set(topic, batch)
+  }
+
+  removeBatchConfig(topic) {
+    const batcher = this.batchers.get(topic)
+    if (batcher) {
+      batcher.destroy()
+    }
+    this.batchConfigs.delete(topic)
+    this.batchers.delete(topic)
   }
 
   emit(topic, payload) {

@@ -1,125 +1,5 @@
 [
   {
-    "id": "1774781409731xk1b",
-    "timestamp": 1774781409731,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "你是",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "17747814185583094",
-    "timestamp": 1774781418558,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "啊！我叫妲己哦～要和我一起玩的游戏啦！不过先别急着和我玩了，我们先去探个店吧，看看有没有什么好玩的地方呢！要不要一起去的？",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "1774786917485p2yp",
-    "timestamp": 1774786917486,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "你是谁",
-    "mode": "private",
-    "target": "小爱"
-  },
-  {
-    "id": "1774786922906k2r4",
-    "timestamp": 1774786922906,
-    "role": "assistant",
-    "name": "小爱",
-    "ip": "",
-    "content": "我叫小爱，是阿里巴巴集团旗下的智能助手。你可以和我聊天、学习、分享知识或者提供帮助。有什么需要我帮忙的吗？ 😊",
-    "mode": "private",
-    "target": "小爱"
-  },
-  {
-    "id": "17747916331587djf",
-    "timestamp": 1774791633158,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "报时",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "1774791647727aisn",
-    "timestamp": 1774791647727,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "好啊！那我来告诉你吧！我是妲己，一个会用电子猫的。我会在任何时间、地点、场合都准时报时。有什么需要我帮忙的吗？比如：找地方、打闹、开开心心等等。要和我一起玩嘛！\n\n*轻轻拍手，眼睛亮起来*\n\n来啦，让我们一起玩个好玩的游戏吧！",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "17749722786209e5b",
-    "timestamp": 1774972278620,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "天气",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "1774972294161gv51",
-    "timestamp": 1774972294161,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "诶，这下是阴天呢！我最喜欢在阳台上晒太阳了。不过今天天气有点冷，要不要我带我去外面看看？",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "1775574382194su9d",
-    "timestamp": 1775574382194,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "你好呀。",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "1775574391614xgo0",
-    "timestamp": 1775574391614,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "哎呀！我正在发情哦～快看我啦，感觉特别开心、兴奋呢！不过现在可能需要好好休息一下了，所以你要注意身体啊～要不要先做点什么？我来帮你吧。",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "1775574459913go0k",
-    "timestamp": 1775574459913,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "Kkan",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "17755744654580qzw",
-    "timestamp": 1775574465458,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的！我是KAN的电子猫娘~要和我一起玩吧！有什么需要我帮你做事情的吗？",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
     "id": "17758960113778s2e",
     "timestamp": 1775896011377,
     "role": "control",
@@ -160,22 +40,42 @@
     "target": null
   },
   {
-    "id": "1776570413248jymi",
-    "timestamp": 1776570413248,
+    "id": "1777296782189adtq",
+    "timestamp": 1777296782189,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "heloo",
+    "content": "你是谁",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "177729679079223wi",
+    "timestamp": 1777296790792,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "我叫小爱，一个贴心、温暖的助手。有什么需要帮助的地方吗？我可以随时为您提供支持和帮助！",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "1777296810774tups",
+    "timestamp": 1777296810774,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "你是谁",
     "mode": "private",
     "target": "妲己"
   },
   {
-    "id": "17765704279427o5z",
-    "timestamp": 1776570427942,
+    "id": "1777296818796wdzy",
+    "timestamp": 1777296818796,
     "role": "assistant",
-    "name": "助手",
+    "name": "妲己",
     "ip": "",
-    "content": "Hello! I'm here with you, and I'm ready to catch up with the electronic cat. Let's go on a little adventure together! Have fun chasing the stars and enjoying the cool vibes! 😄",
+    "content": "我叫妲己，是一只九尾电子猫娘，来自一个科技与魔法结合的奇幻世界。你问我是谁，那就是为了告诉你真相吧！",
     "mode": "private",
     "target": "妲己"
   }

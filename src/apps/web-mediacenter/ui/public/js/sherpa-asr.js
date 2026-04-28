@@ -228,6 +228,103 @@ const SherpaASR = {
         console.log('[SherpaASR] 已销毁');
     },
     
+    async recognizeBuffer(base64Audio) {
+        if (!this.isLoaded || !this.recognizer) {
+            throw new Error('SherpaASR 未加载');
+        }
+
+        const pcmData = this.decodeWavBase64(base64Audio);
+        if (!pcmData || pcmData.samples.length === 0) {
+            throw new Error('音频数据为空');
+        }
+
+        const stream = this.recognizer.createStream();
+        try {
+            this.recognizer.acceptWaveform(stream, pcmData.samples);
+
+            if (typeof stream.inputFinished === 'function') {
+                stream.inputFinished();
+            }
+
+            const maxAttempts = 100;
+            for (let i = 0; i < maxAttempts; i++) {
+                const result = this.recognizer.getResult(stream);
+                const text = result.text.trim();
+                if (result.isFinal) {
+                    this.recognizer.reset(stream);
+                    return text || '';
+                }
+                if (i === maxAttempts - 1) {
+                    this.recognizer.reset(stream);
+                    return text || '';
+                }
+                await new Promise(r => setTimeout(r, 10));
+            }
+        } finally {
+            try { if (this.recognizer) this.recognizer.destroyStream(stream); } catch (e) {}
+        }
+    },
+
+    decodeWavBase64(base64String) {
+        const binaryStr = atob(base64String);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+        }
+
+        if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'RIFF') {
+            const sampleRate = 16000;
+            const samples = new Float32Array(bytes.length / 2);
+            for (let i = 0; i < samples.length; i++) {
+                const val = (bytes[i * 2] | (bytes[i * 2 + 1] << 8));
+                samples[i] = val / 32768.0;
+            }
+            return { samples, sampleRate };
+        }
+
+        let dataOffset = 12;
+        let sampleRate = 16000;
+        let dataSize = 0;
+        let bitsPerSample = 16;
+
+        while (dataOffset < bytes.length - 8) {
+            const chunkId = String.fromCharCode(bytes[dataOffset], bytes[dataOffset + 1], bytes[dataOffset + 2], bytes[dataOffset + 3]);
+            const chunkSize = (bytes[dataOffset + 4]) | (bytes[dataOffset + 5] << 8) | (bytes[dataOffset + 6] << 16) | (bytes[dataOffset + 7] << 24);
+
+            if (chunkId === 'fmt ') {
+                sampleRate = (bytes[dataOffset + 12]) | (bytes[dataOffset + 13] << 8) | (bytes[dataOffset + 14] << 16) | (bytes[dataOffset + 15] << 24);
+                bitsPerSample = (bytes[dataOffset + 22]) | (bytes[dataOffset + 23] << 8);
+            } else if (chunkId === 'data') {
+                dataSize = chunkSize;
+                dataOffset += 8;
+                break;
+            }
+            dataOffset += 8 + chunkSize;
+        }
+
+        if (dataSize === 0) {
+            return { samples: new Float32Array(0), sampleRate: 16000 };
+        }
+
+        const bytesPerSample = bitsPerSample / 8;
+        const numSamples = dataSize / bytesPerSample;
+        const samples = new Float32Array(numSamples);
+
+        if (bitsPerSample === 16) {
+            for (let i = 0; i < numSamples; i++) {
+                const val = (bytes[dataOffset + i * 2]) | (bytes[dataOffset + i * 2 + 1] << 8);
+                samples[i] = val / 32768.0;
+            }
+        } else if (bitsPerSample === 32) {
+            for (let i = 0; i < numSamples; i++) {
+                const uint = (bytes[dataOffset + i * 4]) | (bytes[dataOffset + i * 4 + 1] << 8) | (bytes[dataOffset + i * 4 + 2] << 16) | (bytes[dataOffset + i * 4 + 3] << 24);
+                samples[i] = new Float32Array(new Uint32Array([uint]).buffer)[0];
+            }
+        }
+
+        return { samples, sampleRate };
+    },
+
     onPartial: null,
     onResult: null
 };
