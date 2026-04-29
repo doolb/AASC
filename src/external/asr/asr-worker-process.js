@@ -1,75 +1,22 @@
 const { SherpaOnnxASR } = require('./asr-service');
 
-let asr = null;
-
-function sendMessage(message) {
-    if (typeof process.send !== 'function') {
-        return;
-    }
-    process.send(message);
-}
-
-function initAsr(options = {}) {
-    asr = new SherpaOnnxASR(options);
-    sendMessage({
-        type: 'ready',
-        ready: asr.isReady()
-    });
-}
-
-async function handleRecognize(message) {
-    const requestId = message.id;
-    if (!requestId) {
-        return;
+process.on('message', async (message) => {
+    if (!message || message.type !== 'recognize' || !message.id) {
+        process.exit(1);
     }
 
-    if (!asr || !asr.isReady()) {
-        sendMessage({
-            type: 'response',
-            id: requestId,
-            ok: false,
-            error: 'ASR 独立进程未初始化'
-        });
-        return;
+    const asr = new SherpaOnnxASR(message.options || {});
+    if (!asr.isReady()) {
+        process.send({ type: 'response', id: message.id, ok: false, error: 'ASR 初始化失败' });
+        process.exit(1);
     }
 
     try {
         const text = await asr.recognize(message.audioPath);
-        sendMessage({
-            type: 'response',
-            id: requestId,
-            ok: true,
-            text: text || ''
-        });
+        process.send({ type: 'response', id: message.id, ok: true, text: text || '' });
     } catch (error) {
-        sendMessage({
-            type: 'response',
-            id: requestId,
-            ok: false,
-            error: error.message
-        });
-    }
-}
-
-process.on('message', async (message) => {
-    if (!message || typeof message !== 'object') {
-        return;
+        process.send({ type: 'response', id: message.id, ok: false, error: error.message });
     }
 
-    if (message.type === 'init') {
-        try {
-            initAsr(message.options || {});
-        } catch (error) {
-            sendMessage({
-                type: 'ready',
-                ready: false,
-                error: error.message
-            });
-        }
-        return;
-    }
-
-    if (message.type === 'recognize') {
-        await handleRecognize(message);
-    }
+    setImmediate(() => process.exit(0));
 });

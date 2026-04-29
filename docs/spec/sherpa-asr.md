@@ -229,65 +229,101 @@ sendVoiceStatus():
         返回 { samples, sampleRate }
 ```
 
-### 独立进程客户端 IsolatedAsrProcessClient
+### 独立进程客户端 IsolatedAsrProcessClient（一次性进程模式）
 
 ```
 类 IsolatedAsrProcessClient:
     属性:
-        worker: fork 出的 ASR 子进程
-        ready: 子进程是否完成模型初始化
-        pendingRequests: requestId -> Promise 回调映射
-        requestTimeoutMs: 单次识别超时
-        autoRestart: 子进程退出后是否自动重启
+        options: 构造选项
+        requestTimeoutMs: 单次识别超时（默认 60000ms）
+        maxQueueLength: 最大并发子进程数
+        pendingCount: 当前正在执行的子进程数
 
-    startWorker():
-        fork('src/external/asr/asr-worker-process.js')
-        绑定 message/exit 事件
-        发送 init 消息给子进程
-
-    handleWorkerMessage(message):
-        如果 type=ready:
-            更新 ready 状态
-        如果 type=response:
-            按 requestId resolve/reject pending Promise
+    isReady():
+        返回 true（不需要持久连接，随时可 fork）
 
     recognize(audioPath):
-        如果 !ready: 抛出未就绪错误
-        生成 requestId 并写入 pendingRequests
-        启动超时定时器
-        发送 IPC 消息 {type:'recognize', id, audioPath}
-        返回 Promise
+        如果 pendingCount >= maxQueueLength:
+            抛出 "ASR 忙" 错误
+        pendingCount += 1
+        try:
+            调用 spawnWorker(audioPath)
+        finally:
+            pendingCount -= 1
 
-    onWorkerExit():
-        置 ready=false
-        失败回收所有 pending 请求
-        autoRestart=true 时延迟重启 worker
+    spawnWorker(audioPath):
+        fork('src/external/asr/asr-worker-process.js')
+        生成唯一 requestId
+        设置超时定时器（requestTimeoutMs）
+        绑定 message/exit/error 事件
+        发送 IPC 消息 {type:'recognize', id, audioPath, options}
+        返回 Promise:
+            resolve: 收到 {type:'response', id, ok:true, text}
+            reject: 超时 / 进程异常退出 / 进程启动失败 / 识别错误
+
+    关键设计:
+        - 每次识别创建新进程，识别完进程自动退出
+        - 超时后 SIGKILL 强制终止
+        - settled 标志防止重复 resolve/reject
+        - 通过 pendingCount/maxQueueLength 限制并发
 ```
 
-### ASR 子进程脚本 asr-worker-process.js
+### ASR 子进程脚本 asr-worker-process.js（一次性生命周期）
 
 ```
-on message(type='init'):
-    asr = new SherpaOnnxASR(options)
-    send {type:'ready', ready: asr.isReady()}
-
-on message(type='recognize'):
+process.on('message') type='recognize':
+    asr = new SherpaOnnxASR(options)  // 加载模型
+    if !asr.isReady():
+        send {type:'response', id, ok:false, error:'初始化失败'}
+        process.exit(1)
     try:
         text = await asr.recognize(audioPath)
         send {type:'response', id, ok:true, text}
     catch error:
-        send {type:'response', id, ok:false, error:error.message}
-```
+        send {type:'response', id, ok:false, error}
+    setImmediate(() => process.exit(0))
 
-### 运行模式选择
+### 运行模式选择（默认 isolated）
 
 ```
+resolveIsolateProcessConfig(options):
+    如果 options.mode == 'isolated':         // 优先使用新 mode 字段
+        返回 {enabled: true, ...}
+    如果 options.mode == 'embedded':
+        返回 {enabled: false, ...}
+    向后兼容: 检查 options.isolateProcess.enabled
+
 init(options):
     isolateConfig = resolveIsolateProcessConfig(options)
     如果 isolateConfig.enabled:
         asrInstance = new IsolatedAsrProcessClient(options)
+        currentMode = 'isolated'
     否则:
         asrInstance = new SherpaOnnxASR(options)
+        currentMode = 'embedded'
+
+reset(options):        // 运行时切换模式
+    销毁 asrInstance
+    asrInstance = null
+    调用 init(options)
+
+getMode():
+    返回 currentMode
+```
+
+### 运行时 API
+
+```
+GET /api/config/asrMode
+    -> {status:'success', mode:'embedded'|'isolated'}
+
+POST /api/config/asrMode {mode:'isolated'}
+    -> 更新配置，调 asr.reset() 重建实例
+    -> broadcast {type:'asrModeChanged', mode}
+    -> {status:'success', mode}
+
+GET /api/asr/status
+    -> {..., mode:'embedded'|'isolated', ...}
 ```
 
 ### 内存管理
@@ -297,7 +333,12 @@ init(options):
 - 异常路径中也必须调用 `stream.destroy()` 防止泄漏
 - `recognize()` 采用串行队列访问单个 recognizer，避免并发请求导致 native 资源叠加
 - 服务端在 ASR 空闲且 RSS 超过 1GB 或 ArrayBuffers 偏高时按批次触发 `global.gc()`，帮助回收外部内存
-- 开启独立进程模式后，`sherpa-onnx-node` native 内存驻留在子进程，主进程只持有轻量 IPC 对象
+- **独立进程模式（一次性进程）：**
+  - 每次 `recognize()` 调用 fork 新进程，识别完成后子进程自动 exit(0)，native 模型内存完全释放回 OS
+  - 主进程不加载 `sherpa-onnx-node`，仅持有轻量 child_process 句柄
+  - `pendingCount` / `maxQueueLength` 控制并发子进程数量，避免同时加载多个模型实例导致 RSS 暴涨
+  - 子进程默认 60 秒超时，超时后 SIGKILL 强制终止，不会泄漏僵尸进程
+  - 每次识别都有完整的模型加载/销毁周期，适合低频识别场景；高频场景建议使用内嵌模式
 
 ## ASR 压测脚本 (src/scripts/asr-stress-test.js)
 

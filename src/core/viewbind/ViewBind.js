@@ -7,6 +7,10 @@ class ViewBind {
         this._pendingNotifyAll = false;
         this._pendingUnbinds = [];
         this._pendingBinds = [];
+        this._transport = null;           // connect 设置的传输实例
+        this._transportSend = null;        // 缓存 transport.send
+        this._transportUnsubscribe = null; // onReceive 取消函数
+        this._syncEnabled = true;          // 同步开关
     }
 
     get data() {
@@ -26,6 +30,10 @@ class ViewBind {
         this._oldData = this._data;
         this._data = value;
         this._notifyAll();
+        // 数据变化后自动同步到远端 // ViewBind.connect 机制
+        if (this._transportSend && this._syncEnabled) {
+            this._transportSend(this._data);
+        }
     }
 
     get oldData() {
@@ -207,6 +215,54 @@ class ViewBind {
         this._oldData = this._data;
         updater(this._data);
         this._notifyAll();
+    }
+
+    // connect 字段：设置外部传输实现，数据变化自动同步到远端 // 注入 TransportConnector
+    set connect(transport) {
+        if (this._transport) {
+            this.disconnect();
+        }
+        if (!transport) return;
+        this._transport = transport;
+        this._transportSend = typeof transport.send === 'function' ? transport.send.bind(transport) : null;
+        if (typeof transport.onReceive === 'function') {
+            this._transportUnsubscribe = transport.onReceive((data) => {
+                if (data !== undefined && data !== null) {
+                    this.data = data;
+                }
+            });
+        }
+    }
+
+    get connect() {
+        return this._transport;
+    }
+
+    // 断开连接，清理传输资源 // 关闭 WS 连接并释放引用
+    disconnect() {
+        if (this._transportUnsubscribe) {
+            this._transportUnsubscribe();
+            this._transportUnsubscribe = null;
+        }
+        if (this._transport && typeof this._transport.close === 'function') {
+            this._transport.close();
+        }
+        this._transport = null;
+        this._transportSend = null;
+        this._syncEnabled = true;
+    }
+
+    // 暂停数据同步到远端 // 用于批量操作避免频繁发送
+    pauseSync() {
+        this._syncEnabled = false;
+    }
+
+    // 恢复数据同步，立即发送当前数据 // 恢复后同步最新状态
+    resumeSync() {
+        this._syncEnabled = true;
+        if (this._transportSend) {
+            this._transportSend(this._data);
+        }
     }
 
     toJSON() {

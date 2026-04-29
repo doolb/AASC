@@ -43,17 +43,30 @@
 - 默认联动拉取 `/api/system-stats`，输出服务端进程 RSS / Heap / External / ArrayBuffers 峰值和 ASCII 曲线
 - 支持关闭服务端指标采样，避免在纯接口连通性测试时产生额外请求
 
-### 6. 识别进程隔离开关
+### 6. 识别进程隔离（一次性进程模式）
 
-- 在 `asr` 配置增加 `isolateProcess.enabled` 开关，默认关闭
-- 开关打开时，主服务进程不直接加载 `sherpa-onnx-node`，改为 `fork` 独立 ASR 子进程
-- 主进程通过 IPC 发送 `recognize(audioPath)` 请求，子进程返回识别结果
-- 子进程异常退出时，按 `isolateProcess.autoRestart` 策略自动拉起，减少人工干预
-- 每个请求使用超时保护（`requestTimeoutMs`），防止子进程阻塞导致接口长期挂起
-- 通过进程隔离把 native 模型内存固定在子进程，降低主服务 RSS 压力和波动范围
+- 通过 `asr.mode` 配置切换运行模式，`"isolated"`（默认，独立进程模式）或 `"embedded"`（内嵌模式）
+- 向后兼容旧的 `asr.isolateProcess.enabled` 配置
+- 独立进程模式下，主服务进程不直接加载 `sherpa-onnx-node`，改为每次 `recognize()` 调用 `fork` 一个新的 ASR 子进程
+- 子进程加载 SenseVoice 模型、执行识别、通过 IPC 返回结果，然后调用 `process.exit(0)` 退出
+- 主进程通过 IPC 发送 `{ type: 'recognize', id, audioPath, options }` 请求，子进程返回 `{ type: 'response', id, ok, text }`
+- 每个请求使用超时保护（`requestTimeoutMs`），超时后 `SIGKILL` 强制终止子进程
+- 通过 `pendingCount` / `maxQueueLength` 限制并发子进程数量，防止同时加载多个模型实例导致内存暴涨
+- 识别完成后子进程立即退出，native 模型内存完全释放回操作系统，仅在识别期间占用内存
+
+### 7. 运行时模式切换 API
+
+- `GET /api/config/asrMode` 返回当前 ASR 运行模式
+- `POST /api/config/asrMode` 运行时切换模式，请求体 `{ "mode": "embedded" | "isolated" }`
+- 切换时调用 `asr.reset()` 销毁旧实例、根据新配置重建 ASR 实例
+- `GET /api/asr/status` 返回 `mode` 字段标识当前模式
+- 模式切换后通过 WebSocket 广播 `{ type: 'asrModeChanged', mode }` 给控制端
 
 ## 风险与约束
 
 - 串行识别会降低峰值吞吐，但能换取更稳定的 native 内存占用
 - 当客户端瞬时并发过高时，可能收到 429 忙碌响应，调用端需要具备重试能力
 - `global.gc()` 依赖启动参数 `--expose-gc`，未开启时系统仍可正常工作，只是缺少主动回收
+- **一次性独立进程模式**每次识别需要重新加载模型（~120MB ONNX），增加 ~200-500ms 冷启动延迟
+- 并发识别时（`maxQueueLength > 1`），每个子进程独立加载模型，RSS 叠加为 `N × 模型内存`，需平衡并发数与可用内存
+- 子进程 exit(0) 后模型内存完全释放，但频繁 fork/exit 可能增加 PID 压力和进程调度开销

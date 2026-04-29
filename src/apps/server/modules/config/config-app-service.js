@@ -25,6 +25,7 @@ class Config extends DataSnapshot {
             maxErrorBytes: 65536
         },
         asr: {
+            mode: 'isolated',
             maxQueueLength: 8,
             mallocTrimEnabled: true,
             isolateProcess: {

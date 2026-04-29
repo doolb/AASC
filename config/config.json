@@ -10,8 +10,9 @@
     "maxErrorBytes": 65536
   },
   "asr": {
+    "mode": "isolated",
     "maxQueueLength": 8,
-    "mallocTrimEnabled": false,
+    "mallocTrimEnabled": true,
     "isolateProcess": {
       "enabled": false,
       "requestTimeoutMs": 60000,
@@ -70,7 +71,21 @@
       },
       "playlist": [],
       "volume": 0,
-      "isPlaying": true
+      "isPlaying": true,
+      "capabilities": {
+        "mediaRendering": true,
+        "voicePlayback": true,
+        "voiceRecording": true,
+        "voiceRecognition": true,
+        "displayText": true
+      },
+      "userCapabilities": {
+        "mediaRendering": true,
+        "voicePlayback": true,
+        "voiceRecording": true,
+        "voiceRecognition": true,
+        "displayText": true
+      }
     },
     "192.168.1.39": {
       "currentMedia": {

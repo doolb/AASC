@@ -6,6 +6,72 @@
 
 ### 新功能
 
+- ✅ [2026-04-29] ASR 新增 mode 配置开关（embedded/isolated），支持运行时切换
+  - 配置 `asr.mode`：`"embedded"`（内嵌模式，默认）或 `"isolated"`（独立进程模式）
+  - 向后兼容旧的 `asr.isolateProcess.enabled` 配置
+  - 新增 `asr.reset()` 销毁旧实例、按新配置重建
+  - 新增 `GET/POST /api/config/asrMode` 运行时查看/切换模式
+  - `/api/asr/status` 返回 `mode` 字段
+  - 模式切换后 WebSocket 广播 `asrModeChanged` 事件
+  - 改动文件：
+    - `src/external/asr/asr-service.js`
+    - `src/apps/server/boot/server-app.js`
+    - `config/config.json`
+    - `src/apps/server/modules/config/config-app-service.js`
+    - `docs/design/sherpa-asr.md`
+    - `docs/spec/sherpa-asr.md`
+
+- ✅ [2026-04-29] ASR 独立进程改为一次性进程模式，识别完立即释放内存
+  - IsolatedAsrProcessClient 重写为每次 recognize() fork 新进程，识别完成后子进程 exit(0)
+  - 移除持久 worker 管理（startWorker/bindWorkerEvents/rejectAllPending），简化进程生命周期
+  - 新增 pendingCount/maxQueueLength 控制并发子进程数量，防止同时加载多个模型实例
+  - 超时后 SIGKILL 强制终止，settled 标志防止重复回调
+  - 改动文件：
+    - `src/external/asr/asr-service.js`
+    - `src/external/asr/asr-worker-process.js`
+    - `docs/design/sherpa-asr.md`
+    - `docs/spec/sherpa-asr.md`
+
+- ✅ [2026-04-29] ViewBind connect 扩展与 WS 消息系统替换
+  - ViewBind 新增 connect 字段：外部注入 TransportConnector 实现，数据变化自动同步到远端
+  - 新增 WSClientConnector：TransportConnector 的 WebSocket 传输实现，支持断线重连
+  - 新增 WSViewBindServer：基于 ViewBindList 替代 WebSocketSystem，管理显示端生命周期
+  - server-app.js 中 6 个 aascSystem 调用点替换为 wsServer，handler 注册替代 Actor 路由
+  - 改动文件：
+    - `src/core/viewbind/ViewBind.js`
+    - `src/core/viewbind/WSClientConnector.js`
+    - `src/core/viewbind/WSViewBindServer.js`
+    - `src/core/viewbind/index.js`
+    - `src/core/viewbind/WSClientConnector.test.js`
+    - `src/core/viewbind/WSViewBindServer.test.js`
+    - `src/apps/server/boot/server-app.js`
+    - `.src/core/viewbind-connect.md`
+    - `.src/core/viewbind-connect-models.md`
+    - `.src/core/viewbind-ws-models.md`
+    - `.src/framework/viewbind-ws-transport.md`
+    - `.src/framework/viewbind-ws-server.md`
+    - `.src/app/viewbind-ws-integration.md`
+    - `.src/core/viewbind-connect.test.md`
+    - `.src/framework/viewbind-ws.test.md`
+    - `.src/app/viewbind-ws-integration.test.md`
+
+- ✅ [2026-04-29] 显示端→服务端音频流转 + 聊天式日志系统基础
+  - 新增 audioChunk handler：显示端采集音频分片发送到服务端，合并后调 asr.recognize
+  - LogEntry 扩展 correlationId/scope/source/targetId 字段，支持链路追踪
+  - 新增 logViewBind 实例：日志写入时自动通过 ViewBind 增量推送到控制端
+  - 新增 subscribeLog/unsubscribeLog/setLogLevel 日志订阅 handler
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+    - `src/framework/observability/log-buffer.js`
+    - `.src/core/display-asr-models.md`
+    - `.src/core/log-models.md`
+    - `.src/framework/display-asr-handler.md`
+    - `.src/framework/log-viewbind-bridge.md`
+    - `.src/app/display-asr-integration.md`
+    - `.src/app/log-system-integration.md`
+    - `.src/core/display-asr.test.md`
+    - `.src/core/log-system.test.md`
+
 - ✅ [2026-04-28] malloc-trim 添加开关控制
   - `SherpaOnnxASR` 构造函数新增 `mallocTrimEnabled` 选项，默认 true
   - false 时跳过 malloc_trim 调用，V8 GC 不受影响

@@ -15,6 +15,7 @@ const CATEGORY_LEVEL_MAP = {
     '整点报时': 'info',
     'Chat': 'info',
     'Commands': 'info',
+    'WS': 'info',
     '配置': 'debug',
     '内存': 'debug'
 };
@@ -28,6 +29,7 @@ const CATEGORY_DEVICE_MAP = {
     'AASC': 'server',
     '媒体库': 'server',
     '静音': 'server',
+    'WS': 'server',
     '语音': 'display',
     'TTS': 'display',
     '提醒': 'display',
@@ -56,7 +58,11 @@ class LogBuffer {
             level: CATEGORY_LEVEL_MAP[category] || 'info',
             device: extra.device || CATEGORY_DEVICE_MAP[category] || 'server',
             message,
-            displayId: extra.displayId || null
+            displayId: extra.displayId || null,
+            correlationId: extra.correlationId || null,
+            scope: extra.scope || null,
+            source: extra.source || null,
+            targetId: extra.targetId || null
         };
 
         this.buffer.push(entry);

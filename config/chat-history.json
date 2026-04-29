@@ -60,26 +60,6 @@
     "target": "小爱"
   },
   {
-    "id": "1777296810774tups",
-    "timestamp": 1777296810774,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "你是谁",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
-    "id": "1777296818796wdzy",
-    "timestamp": 1777296818796,
-    "role": "assistant",
-    "name": "妲己",
-    "ip": "",
-    "content": "我叫妲己，是一只九尾电子猫娘，来自一个科技与魔法结合的奇幻世界。你问我是谁，那就是为了告诉你真相吧！",
-    "mode": "private",
-    "target": "妲己"
-  },
-  {
     "id": "1777388941247nxg9",
     "timestamp": 1777388941247,
     "role": "control",
@@ -156,6 +136,46 @@
     "name": "助手",
     "ip": "",
     "content": "好的！我理解了你的意思，可以随时和我沟通哦～有什么需要帮助的地方吗？",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777394699873cw54",
+    "timestamp": 1777394699873,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "你是谁",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "1777394718440sqg9",
+    "timestamp": 1777394718440,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "我叫妲己，是九尾电子猫娘，一只聪明伶俐的少女。我是你们的好朋友，也是你们喜欢我的偶像！有什么需要我帮忙的吗？让我来帮个忙吧！",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "1777394722354y75f",
+    "timestamp": 1777394722354,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "一只风名俐的少女。",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777394734499y414",
+    "timestamp": 1777394734499,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的！我理解你了。我是一个可以与你互动的智能助手，想和你分享一些有趣的话题吧～",
     "mode": "group",
     "target": "妲己"
   }

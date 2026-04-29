@@ -17,7 +17,7 @@ const reminder = require('../../web-mediacenter/modules/reminder/reminder-app-se
 const voiceCommand = require('../../web-mediacenter/modules/voice/voice-command-app-service');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
-const { initializeAASCSystem } = require('../../../framework/aasc/init');
+const { WSViewBindServer } = require('../../../core/viewbind');
 const LogBuffer = require('../../../framework/observability/log-buffer');
 const SystemMonitor = require('../../../framework/observability/system-monitor');
 const LogBrain = require('../../../framework/observability/log-brain');
@@ -149,7 +149,7 @@ let muteState = {
     previousVolumes: new Map()
 };
 
-let aascSystem = null;
+let wsServer = null;
 const runtimeBridgeClients = new Map();
 
 const pendingDisplayAsrRequests = new Map();
@@ -261,35 +261,134 @@ function startServer() {
         voiceCommand.setMuteFunctions(muteAllDisplays, unmuteAllDisplays);
 
         try {
-            aascSystem = await initializeAASCSystem({
-                localIP,
-                port: PORT,
-                voiceCommand,
-                chat,
-                tts,
-                reminder,
-                timeAnnounce,
-                config,
-                sendToDisplay,
-                broadcastToControls,
+            wsServer = new WSViewBindServer();
+            wsServer.setCallbacks({
                 onDisplayConnect: (displayId, clientIP, ws) => {
-                    log('AASC', `显示端连接: ${displayId} (${clientIP})`);
+                    log('WS', `显示端连接: ${displayId} (${clientIP})`);
                 },
                 onDisplayDisconnect: (displayId) => {
-                    log('AASC', `显示端断开: ${displayId}`);
+                    log('WS', `显示端断开: ${displayId}`);
                 },
                 onControlConnect: (ws) => {
-                    log('AASC', '控制端连接');
+                    log('WS', '控制端连接');
                 },
                 onControlDisconnect: (ws) => {
-                    log('AASC', '控制端断开');
+                    log('WS', '控制端断开');
                 }
             });
-            
-            log('AASC', '系统初始化完成');
+
+            // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
+            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck'];
+            for (const type of displayTypes) {
+                wsServer.registerHandler(type, (data, ctx) => {
+                    handleDisplayMessageFallback(ctx.displayId, data, ctx.ws);
+                });
+            }
+
+            // audioChunk handler：显示端→服务端的音频流识别 // 分片累积后调 asr.recognize
+            const audioChunkSessions = new Map();
+            wsServer.registerHandler('audioChunk', (data, ctx) => {
+                const { requestId, chunk, isLast, sampleRate } = data;
+                if (!requestId || !chunk) return;
+
+                let session = audioChunkSessions.get(requestId);
+                if (!session) {
+                    const timer = setTimeout(() => {
+                        audioChunkSessions.delete(requestId);
+                        log('语音', `显示端音频流超时: ${requestId}`);
+                    }, 30000);
+                    session = { chunks: [], timer, lastSeen: Date.now() };
+                    audioChunkSessions.set(requestId, session);
+                }
+                session.lastSeen = Date.now();
+                session.chunks.push(Buffer.from(chunk, 'base64'));
+
+                if (isLast) {
+                    clearTimeout(session.timer);
+                    audioChunkSessions.delete(requestId);
+                    const fullBuffer = Buffer.concat(session.chunks);
+                    try {
+                        const text = asr.recognize(fullBuffer);
+                        if (text) {
+                            broadcastToControls({
+                                type: 'voiceInput',
+                                text,
+                                displayId: ctx.displayId,
+                                isFinal: true
+                            });
+                        }
+                    } catch (err) {
+                        logError('语音', `显示端音频识别失败: ${err.message}`);
+                    }
+                }
+            });
+
+            // 注册控制端消息 handler // 委托给现有的 handleControlMessageFallback
+            const controlTypes = [
+                'voiceCommand', 'confirmVoiceCommand', 'getSearchHistory', 'clearSearchHistory',
+                'deleteSearchHistory', 'getAssistantConfig', 'setAssistantConfig', 'timeAnnounce',
+                'getReminders', 'chatHistory', 'clearChatHistory', 'getChatSession', 'setChatSession',
+                'getChatCommands', 'setChatCommands', 'mute', 'unmute', 'todayReminders',
+                'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
+                'chatMessage', 'executeCommands'
+            ];
+            for (const type of controlTypes) {
+                wsServer.registerHandler(type, async (data, ctx) => {
+                    await handleControlMessageFallback(data, ctx.ws);
+                });
+            }
+
+            // 聊天式日志系统：ViewBind 绑定 // 节流推送日志到控制端
+            const logViewBind = new (require('../../../core/viewbind/ViewBind'))({
+                entries: logBuffer.buffer,
+                filter: { levels: [], devices: [] },
+                sessions: []
+            });
+            let logThrottleTimer = null;
+            logViewBind.bind(() => {
+                if (logThrottleTimer) return;
+                logThrottleTimer = setTimeout(() => {
+                    logThrottleTimer = null;
+                    const tail = logViewBind.data.entries.slice(-50);
+                    broadcastToControls({ type: 'logUpdate', entries: tail });
+                }, 200);
+            });
+            logBuffer.onLogEntry((entry) => {
+                const filter = logViewBind.data.filter;
+                if (filter.levels.length > 0 && !filter.levels.includes(entry.level)) return;
+                if (filter.devices.length > 0 && !filter.devices.includes(entry.device)) return;
+                logViewBind.data = {
+                    ...logViewBind.data,
+                    entries: [...logViewBind.data.entries, entry]
+                };
+            });
+
+            // 日志订阅 handler // 单聊/群聊/级别过滤
+            wsServer.registerHandler('subscribeLog', (data, ctx) => {
+                const { targetId, scope } = data;
+                if (!targetId) return;
+                const sessions = logViewBind.data.sessions;
+                sessions.push({ sessionId: `${targetId}-${Date.now()}`, targetId, scope: scope || 'single' });
+                logViewBind.data = { ...logViewBind.data, sessions };
+            });
+            wsServer.registerHandler('unsubscribeLog', (data, ctx) => {
+                const { targetId } = data;
+                if (!targetId) return;
+                logViewBind.data = {
+                    ...logViewBind.data,
+                    sessions: logViewBind.data.sessions.filter(s => s.targetId !== targetId)
+                };
+            });
+            wsServer.registerHandler('setLogLevel', (data, ctx) => {
+                const { levels } = data;
+                if (!Array.isArray(levels)) return;
+                logViewBind.data = { ...logViewBind.data, filter: { ...logViewBind.data.filter, levels } };
+            });
+
+            log('WS', 'ViewBind WS 系统初始化完成');
             bindRuntimeBridgeTransports();
         } catch (error) {
-            logError('AASC', `系统初始化失败: ${error.message}`);
+            logError('WS', `系统初始化失败: ${error.message}`);
         }
 
         systemMonitor.start();
@@ -628,6 +727,37 @@ app.post('/api/config/asrDevice', (req, res) => {
     }
 });
 
+app.get('/api/config/asrMode', (req, res) => {
+    const mode = config.get('asr.mode', 'embedded');
+    res.json({ status: 'success', mode });
+});
+
+app.post('/api/config/asrMode', (req, res) => {
+    try {
+        const { mode } = req.body;
+        if (mode !== 'embedded' && mode !== 'isolated') {
+            return res.status(400).json({ status: 'error', message: 'mode 必须是 embedded 或 isolated' });
+        }
+        config.set('asr.mode', mode);
+
+        const asrConfig = config.get('asr', {});
+        asrConfig.mode = mode;
+        asr.reset(asrConfig);
+
+        const modeLabel = mode === 'isolated' ? '独立进程' : '内嵌';
+        log('语音', `ASR 模式切换为: ${modeLabel}`);
+
+        broadcastToControls({
+            type: 'asrModeChanged',
+            mode
+        });
+
+        res.json({ status: 'success', mode });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '模式切换失败: ' + err.message });
+    }
+});
+
 app.get('/api/subservers', (req, res) => {
     const servers = subServerManager.getAllServers().map(s => s.toJSON());
     res.json({ status: 'success', servers });
@@ -678,9 +808,10 @@ function cleanupTempFile(filePath) {
 }
 
 app.get('/api/asr/status', (req, res) => {
-    res.json({ 
-        status: 'success', 
+    res.json({
+        status: 'success',
         ready: asr.isReady(),
+        mode: asr.getMode(),
         isolatedProcessEnabled: config.get('asr.isolateProcess.enabled', false)
     });
 });
@@ -1697,6 +1828,9 @@ let displayListDebounceTimer = null;
 
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
+    if (data.type !== 'logUpdate') {
+        log('WS', `>> ${data.type}${data.text ? ' "'+data.text+'"' : ''}${data.mode ? ' mode='+data.mode : ''}${data.stats ? ' stats=true' : ''}`, { targetId: 'all-control', source: 'server', scope: 'group' });
+    }
     controlClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(message);
@@ -1749,6 +1883,7 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
 function sendToDisplay(displayId, data) {
     const displayData = displayClients.get(displayId);
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
+        log('WS', `>> ${data.type}${data.action ? ' action='+data.action : ''}${data.url ? ' url='+data.url.substring(0,80) : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: 'server', scope: 'single', targetId: displayId });
         displayData.ws.send(JSON.stringify(data));
         return true;
     }
@@ -1814,11 +1949,11 @@ function getRuntimeBridgeDeviceId(url) {
 }
 
 function registerRuntimeBridgeTransport(deviceId, ws) {
-    if (!aascSystem || !aascSystem.bus || typeof aascSystem.bus.registerDeviceTransport !== 'function') {
+    if (!wsServer || !wsServer.bus || typeof wsServer.bus.registerDeviceTransport !== 'function') {
         return;
     }
 
-    aascSystem.bus.registerDeviceTransport(deviceId, {
+    wsServer.bus.registerDeviceTransport(deviceId, {
         publishRuntimeMessage: (envelope) => {
             if (ws.readyState !== WebSocket.OPEN) {
                 return false;
@@ -1833,10 +1968,10 @@ function registerRuntimeBridgeTransport(deviceId, ws) {
 }
 
 function unregisterRuntimeBridgeTransport(deviceId) {
-    if (!aascSystem || !aascSystem.bus || typeof aascSystem.bus.unregisterDeviceTransport !== 'function') {
+    if (!wsServer || !wsServer.bus || typeof wsServer.bus.unregisterDeviceTransport !== 'function') {
         return;
     }
-    aascSystem.bus.unregisterDeviceTransport(deviceId);
+    wsServer.bus.unregisterDeviceTransport(deviceId);
 }
 
 function bindRuntimeBridgeTransports() {
@@ -1853,7 +1988,7 @@ wss.on('connection', (ws, req) => {
         runtimeBridgeClients.set(runtimeBridgeDeviceId, ws);
         registerRuntimeBridgeTransport(runtimeBridgeDeviceId, ws);
 
-        log('AASC', `运行时桥接设备已连接: ${runtimeBridgeDeviceId}`);
+        log('WS', `运行时桥接设备已连接: ${runtimeBridgeDeviceId}`);
         ws.send(JSON.stringify({
             type: 'runtimeBridge.connected',
             deviceId: runtimeBridgeDeviceId,
@@ -1871,14 +2006,14 @@ wss.on('connection', (ws, req) => {
                         runtimeBridgeDeviceId = data.deviceId;
                         runtimeBridgeClients.set(runtimeBridgeDeviceId, ws);
                         registerRuntimeBridgeTransport(runtimeBridgeDeviceId, ws);
-                        log('AASC', `运行时桥接设备重新注册: ${runtimeBridgeDeviceId}`);
+                        log('WS', `运行时桥接设备重新注册: ${runtimeBridgeDeviceId}`);
                     }
                     return;
                 }
 
                 if (data.type === 'runtimeEnvelope' && data.envelope) {
-                    if (aascSystem && aascSystem.bus && typeof aascSystem.bus.receiveRemoteRuntimeMessage === 'function') {
-                        aascSystem.bus.receiveRemoteRuntimeMessage(data.envelope);
+                    if (wsServer && wsServer.bus && typeof wsServer.bus.receiveRemoteRuntimeMessage === 'function') {
+                        wsServer.bus.receiveRemoteRuntimeMessage(data.envelope);
                     }
                     return;
                 }
@@ -1891,7 +2026,7 @@ wss.on('connection', (ws, req) => {
                     }));
                 }
             } catch (e) {
-                logError('AASC', `运行时桥接消息解析失败: ${e.message}`);
+                logError('WS', `运行时桥接消息解析失败: ${e.message}`);
             }
         });
 
@@ -1899,11 +2034,11 @@ wss.on('connection', (ws, req) => {
             runtimeBridgeClients.delete(runtimeBridgeDeviceId);
             unregisterRuntimeBridgeTransport(runtimeBridgeDeviceId);
             ws.removeAllListeners();
-            log('AASC', `运行时桥接设备已断开: ${runtimeBridgeDeviceId}`);
+            log('WS', `运行时桥接设备已断开: ${runtimeBridgeDeviceId}`);
         });
 
         ws.on('error', (error) => {
-            logError('AASC', `运行时桥接设备错误(${runtimeBridgeDeviceId}): ${error.message}`);
+            logError('WS', `运行时桥接设备错误(${runtimeBridgeDeviceId}): ${error.message}`);
             runtimeBridgeClients.delete(runtimeBridgeDeviceId);
             unregisterRuntimeBridgeTransport(runtimeBridgeDeviceId);
             ws.removeAllListeners();
@@ -1940,8 +2075,8 @@ wss.on('connection', (ws, req) => {
         }
         log('连接', `显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
         
-        if (aascSystem) {
-            aascSystem.handleDisplayConnect(displayId, clientIP, ws, savedState);
+        if (wsServer) {
+            wsServer.handleDisplayConnect(displayId, clientIP, ws, savedState);
         }
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
@@ -1988,6 +2123,8 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
+                log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
+
                 if (data.type === 'asrResult') {
                     const pending = pendingDisplayAsrRequests.get(data.requestId);
                     if (pending) {
@@ -2002,10 +2139,10 @@ wss.on('connection', (ws, req) => {
                     return;
                 }
 
-                if (aascSystem) {
-                    const result = await aascSystem.handleDisplayMessage(displayId, data, ws);
+                if (wsServer) {
+                    const result = await wsServer.handleDisplayMessage(displayId, data, ws);
                     if (!result.success && result.reason) {
-                        log('AASC', `消息处理失败: ${result.reason}`);
+                        log('WS', `消息处理失败: ${result.reason}`);
                     }
                 } else {
                     handleDisplayMessageFallback(displayId, data, ws);
@@ -2014,14 +2151,14 @@ wss.on('connection', (ws, req) => {
                 logError('错误', `解析显示端消息失败: ${e.message}`);
             }
         });
-        
+
         ws.on('close', () => {
             const disconnectedIP = clientIP;
             muteState.previousVolumes.delete(displayId);
             displayClients.delete(displayId);
             ws.removeAllListeners();
-            if (aascSystem) {
-                aascSystem.handleDisplayDisconnect(displayId);
+            if (wsServer) {
+                wsServer.handleDisplayDisconnect(displayId);
             }
             log('断开', `显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
             broadcastDisplayList();
@@ -2029,8 +2166,8 @@ wss.on('connection', (ws, req) => {
         });
     } else if (url === '/control' || url.startsWith('/control')) {
         controlClients.add(ws);
-        if (aascSystem) {
-            aascSystem.handleControlConnect(ws);
+        if (wsServer) {
+            wsServer.handleControlConnect(ws);
         }
         log('连接', `控制端已连接，当前连接数: ${controlClients.size}`);
         
@@ -2049,7 +2186,9 @@ wss.on('connection', (ws, req) => {
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
-                
+
+                log('WS', `<< ${data.type}${data.displayId ? ' displayId='+data.displayId : ''}${data.text ? ' "'+data.text+'"' : ''}`, { source: 'control', scope: 'single', targetId: data.displayId || null });
+
                 if (data.type === 'updateCapabilities') {
                     const targetDisplayId = data.displayId;
                     const targetDisplayData = displayClients.get(targetDisplayId);
@@ -2073,10 +2212,10 @@ wss.on('connection', (ws, req) => {
                         broadcastDisplayList();
                         log('能力', `控制端更新显示端 ${targetDisplayId} 能力`);
                     }
-                } else if (aascSystem) {
-                    const result = await aascSystem.handleControlMessage(data, ws);
+                } else if (wsServer) {
+                    const result = await wsServer.handleControlMessage(data, ws);
                     if (!result.success && result.reason) {
-                        log('AASC', `消息处理失败: ${result.reason}`);
+                        log('WS', `消息处理失败: ${result.reason}`);
                     }
                 } else {
                     await handleControlMessageFallback(data, ws);
@@ -2089,8 +2228,8 @@ wss.on('connection', (ws, req) => {
         ws.on('close', () => {
             controlClients.delete(ws);
             ws.removeAllListeners();
-            if (aascSystem) {
-                aascSystem.handleControlDisconnect(ws);
+            if (wsServer) {
+                wsServer.handleControlDisconnect(ws);
             }
             log('断开', `控制端已断开，当前连接数: ${controlClients.size}`);
         });
@@ -2432,10 +2571,19 @@ async function handleControlMessageFallback(data, ws) {
                         }
                     });
                     return;
+                } else if (data.type === 'tts' && data.action === 'testTimeAnnounce') {
+                    (async () => {
+                        try {
+                            await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
+                        } catch (err) {
+                            logError('整点报时', `测试失败: ${err.message}`);
+                        }
+                    })();
+                    return;
                 }
-                
+
                 if (!displayData) return;
-                
+
                 if (data.type === 'getState') {
                     const stateToSend = { ...displayData.state };
                     if (stateToSend.currentMedia) {
@@ -2470,15 +2618,7 @@ async function handleControlMessageFallback(data, ws) {
                     }
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {
-                    if (data.action === 'testTimeAnnounce') {
-                        (async () => {
-                            try {
-                                await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
-                            } catch (err) {
-                                logError('整点报时', `测试失败: ${err.message}`);
-                            }
-                        })();
-                    } else if (data.action === 'stop') {
+                    if (data.action === 'stop') {
                         sendToDisplaysWithCapability('voicePlayback', data);
                     } else if (data.action === 'play' && data.text) {
                         (async () => {
@@ -2907,8 +3047,8 @@ setInterval(() => {
                 executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
                 
                 displayClients.delete(displayId);
-                if (aascSystem) {
-                    aascSystem.handleDisplayDisconnect(displayId);
+                if (wsServer) {
+                    wsServer.handleDisplayDisconnect(displayId);
                 }
                 log('子显示端', `${displayId} 已强制断开，当前连接数: ${displayClients.size}`);
                 broadcastDisplayList();
@@ -2926,8 +3066,8 @@ setInterval(() => {
     });
     deadDisplays.forEach(id => {
         displayClients.delete(id);
-        if (aascSystem) {
-            aascSystem.handleDisplayDisconnect(id);
+        if (wsServer) {
+            wsServer.handleDisplayDisconnect(id);
         }
     });
     if (deadDisplays.length > 0) {
@@ -2943,8 +3083,8 @@ setInterval(() => {
     });
     deadControls.forEach(ws => {
         controlClients.delete(ws);
-        if (aascSystem) {
-            aascSystem.handleControlDisconnect(ws);
+        if (wsServer) {
+            wsServer.handleControlDisconnect(ws);
         }
     });
     if (deadControls.length > 0) {
@@ -2977,8 +3117,8 @@ setInterval(() => {
         heavyMemoryCheckCount = 0;
     }
 
-    if (aascSystem && aascSystem.bus && typeof aascSystem.bus.trimStats === 'function') {
-        aascSystem.bus.trimStats();
+    if (wsServer && wsServer.bus && typeof wsServer.bus.trimStats === 'function') {
+        wsServer.bus.trimStats();
     }
 }, 1 * 60 * 1000);
 
