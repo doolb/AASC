@@ -594,27 +594,32 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
 
 ## 集成方式
 
-### 服务端集成 (server.js)
+### 服务端集成 (server-app.js)
 
 ```
-在 server.js 顶部:
-    const ServerTUI = require('./core/tui')
+在 server-app.js 顶部 require 块末尾追加:
+    const ServerTUI = require('../../../framework/observability/server-tui')
+    const { installConsoleRedirect } = require('../../../framework/observability/console-redirect')
     const useTUI = !process.argv.includes('--no-tui')
     const tui = new ServerTUI({ enabled: useTUI })
 
-    function log(category, message):
-        如果 useTUI:
-            tui.addLog(category, message)
-        否则:
-            console.log(`${timestamp} [${category}] ${message}`)
+改造 log(category, message, extra):
+    entry = logBuffer.add(category, message, extra)  // 始终写入缓冲区
+    logBrain.ingest(entry)  // 始终输入分析引擎
+    如果 useTUI:
+        tui.addLog(category, message)
+    否则:
+        console.log(`${timestamp} [${category}] ${message}`)
 
-    function logError(category, message):
-        如果 useTUI:
-            tui.addLog(category, message)
-            return  // TUI 模式下禁止直接写 stdout/stderr
-        console.error(`[${category}] ${message}`)
+改造 logError(category, message, extra):
+    entry = logBuffer.add(category, message, extra)
+    logBrain.ingest(entry)
+    如果 useTUI:
+        tui.addLog(category, message)
+    否则:
+        console.error(`${timestamp} [${category}] ${message}`)
 
-    // TUI 模式下重定向 console.*，避免第三方库/遗留代码破坏 blessed 渲染
+在 log/logError 定义后追加 TUI 模式下重定向 console.*:
     installConsoleRedirect({
         enabled: useTUI,
         writeLog: (level, message) => {
@@ -623,24 +628,30 @@ blessed.Element.prototype._getShrinkContent = function(xi, xl, yi, yl) {
         }
     })
 
-替换所有 console.log 为 log():
-    显示端连接 → log('连接', `显示端 ${id} (${ip}) 已连接`)
-    显示端断开 → log('断开', `显示端 ${id} 已断开`)
-    语音输入 → log('语音', `识别结果: ${text}`)
-    TTS播报 → log('TTS', `播报: ${text}`)
-    提醒触发 → log('提醒', `触发: ${content}`)
-    设备事件 → log('设备', `${ip} ${eventType}: ${command}`)
-    错误 → logError('错误', `${message}`)
+在 server.listen 回调内、log 输出之后:
+    tui.setHeader(protocol, localIP, PORT)
 
-启动定时刷新:
+在 WS 系统初始化成功后、systemMonitor.start 之后:
     tui.startRefresh(
-        () => ({ 运行时间, 内存, 协议, 静音, 显示端数, 控制端数 }),
+        () => ({
+            uptime: Math.floor((Date.now() - serverStartTime) / 1000),
+            memoryRSS: process.memoryUsage().rss,
+            memoryHeapUsed: process.memoryUsage().heapUsed,
+            memoryHeapTotal: process.memoryUsage().heapTotal,
+            protocol: useHttps ? 'https' : 'http',
+            isMuted: muteState.isMuted,
+            displayCount: displayClients.size,
+            controlCount: controlClients.size
+        }),
         () => getDisplayList()
     )
 
-系统监控数据推送:
+在现有的 systemMonitor.onStats 回调中追加:
     systemMonitor.onStats((stats) => {
-        tui.updateSystemStats(stats)
+        tui.updateSystemStats(stats)  // 新增行
+        if (controlClients.size > 0) {
+            broadcastToControls({ type: 'systemStats', stats })
+        }
     })
 
 日志筛选键盘操作:

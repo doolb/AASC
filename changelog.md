@@ -6,8 +6,24 @@
 
 ### 新功能
 
-- ✅ [2026-04-29] ASR 新增 mode 配置开关（embedded/isolated），支持运行时切换
-  - 配置 `asr.mode`：`"embedded"`（内嵌模式，默认）或 `"isolated"`（独立进程模式）
+- ✅ [2026-04-30] 服务端重新集成 TUI 界面（恢复目录重构时丢失的 blessed 终端界面）
+  - root `package.json` 添加 `blessed@^0.1.81` 依赖
+  - `server-app.js` 导入 ServerTUI 和 installConsoleRedirect 模块
+  - `log()`/`logError()` 增加 useTUI 分支：TUI 模式下走 tui.addLog()，否则走 console.log/error
+  - 日志数据库 logBuffer.add + logBrain.ingest 始终执行，不依赖 TUI 开关
+  - TUI 模式下调用 installConsoleRedirect() 重定向 console.*，避免第三方库破坏 blessed 渲染
+  - 服务器启动后调用 tui.setHeader(protocol, localIP, PORT) 显示标题栏
+  - 调用 tui.startRefresh() 建立 2s 定时刷新系统状态和设备列表
+  - 复用已有 systemMonitor.onStats 回调接入 tui.updateSystemStats()
+  - 支持 `--no-tui` 命令行参数禁用 TUI，回退到纯文本日志
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+    - `package.json`
+    - `docs/spec/tui.md`
+    - `.src/app/server-tui-integration.md`
+    - `.src/app/server-tui-test.md`
+    - `src/scripts/test-tui-integration.js`
+  - 配置 `asr.mode`：`"isolated"`（默认，独立进程模式）或 `"embedded"`（内嵌模式）
   - 向后兼容旧的 `asr.isolateProcess.enabled` 配置
   - 新增 `asr.reset()` 销毁旧实例、按新配置重建
   - 新增 `GET/POST /api/config/asrMode` 运行时查看/切换模式
@@ -31,6 +47,41 @@
     - `src/external/asr/asr-worker-process.js`
     - `docs/design/sherpa-asr.md`
     - `docs/spec/sherpa-asr.md`
+
+### 修复
+
+- ✅ [2026-04-29] WSViewBindServer 异步 handler 未 await 导致控制端反复断连
+  - handleControlMessage/handleDisplayMessage 改为 async，await handler 返回值
+  - 修复前 handler 返回 Promise，调用方 await 后得 undefined，访问 .success 崩溃
+  - 改动文件：
+    - `src/core/viewbind/WSViewBindServer.js`
+
+- ✅ [2026-04-29] logUpdate 推送无节流导致控制端刷屏
+  - 新增 200ms 节流定时器，批量更新合并推送，每次只发最后 50 条
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+
+- ✅ [2026-04-29] 控制端消息类型缺失导致 tts/timeAnnounce 等被静默丢弃
+  - controlTypes 补全缺失类型：tomorrowReminders/mediaBatch/tts/getState/media/control/chat/chatMessage/executeCommands
+  - testTimeAnnounce 移到 `if (!displayData) return;` 前面，不依赖 displayId
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+
+### 变更
+
+- ✅ [2026-04-29] ASR 默认模式改为 isolated（独立进程），config 中 mode 默认值同步更新
+
+### 优化
+
+- ✅ [2026-04-29] 日志系统显示格式改为箭头对话模式
+  - LogEntry 中的 source/targetId 渲染为 `设备A ⇒ 设备B: 消息` 格式
+  - 同一 correlationId 的连续消息自动缩进，展示对话链路
+  - ACK 消息添加（ACK）标记
+  - websocket.js 新增 logUpdate 类型处理
+  - 改动文件：
+    - `src/apps/web-mediacenter/ui/public/js/log-viewer.js`
+    - `src/apps/web-mediacenter/ui/public/js/websocket.js`
+    - `src/apps/web-mediacenter/ui/public/css/upload.css`
 
 - ✅ [2026-04-29] ViewBind connect 扩展与 WS 消息系统替换
   - ViewBind 新增 connect 字段：外部注入 TransportConnector 实现，数据变化自动同步到远端

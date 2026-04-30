@@ -22,6 +22,11 @@ const LogBuffer = require('../../../framework/observability/log-buffer');
 const SystemMonitor = require('../../../framework/observability/system-monitor');
 const LogBrain = require('../../../framework/observability/log-brain');
 const { registerLogBrainApi } = require('../api/log-brain-api');
+const ServerTUI = require('../../../framework/observability/server-tui');
+const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
+
+const useTUI = !process.argv.includes('--no-tui');
+const tui = new ServerTUI({ enabled: useTUI });
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
 
@@ -41,17 +46,34 @@ const logBrain = new LogBrain({
 
 function log(category, message, extra) {
     const timestamp = new Date().toTimeString().split(' ')[0];
-    console.log(`${timestamp} [${category}] ${message}`);
     const entry = logBuffer.add(category, message, extra);
     logBrain.ingest(entry);
+    if (useTUI) {
+        tui.addLog(category, message);
+    } else {
+        console.log(`${timestamp} [${category}] ${message}`);
+    }
 }
 
 function logError(category, message, extra) {
     const timestamp = new Date().toTimeString().split(' ')[0];
-    console.error(`${timestamp} [${category}] ${message}`);
     const entry = logBuffer.add(category, message, extra);
     logBrain.ingest(entry);
+    if (useTUI) {
+        tui.addLog(category, message);
+    } else {
+        console.error(`${timestamp} [${category}] ${message}`);
+    }
 }
+
+// TUI 模式下重定向 console.*，避免第三方库破坏 blessed 渲染
+installConsoleRedirect({
+    enabled: useTUI,
+    writeLog: (level, message) => {
+        const category = (level === 'error') ? '错误' : '系统';
+        tui.addLog(category, message);
+    }
+});
 
 function formatFileSize(bytes) {
     if (bytes < 1024) return bytes + 'B';
@@ -252,7 +274,9 @@ function startServer() {
         } else {
             log('系统', 'HTTP 模式，麦克风功能需要 HTTPS 或 localhost');
         }
-        
+
+        tui.setHeader(protocol, localIP, PORT);
+
         timeListener.start();
         timeAnnounce.start(displayClients, sendToDisplay);
         reminder.start(displayClients, sendToDisplay);
@@ -393,6 +417,7 @@ function startServer() {
 
         systemMonitor.start();
         systemMonitor.onStats((stats) => {
+            tui.updateSystemStats(stats);
             if (controlClients.size > 0) {
                 broadcastToControls({
                     type: 'systemStats',
@@ -401,14 +426,21 @@ function startServer() {
             }
         });
 
-        logBuffer.onLogEntry((entry) => {
-            if (controlClients.size > 0) {
-                broadcastToControls({
-                    type: 'serverLog',
-                    entry: entry
-                });
-            }
-        });
+        tui.startRefresh(
+            () => ({
+                uptime: Math.floor((Date.now() - serverStartTime) / 1000),
+                memoryRSS: process.memoryUsage().rss,
+                memoryHeapUsed: process.memoryUsage().heapUsed,
+                memoryHeapTotal: process.memoryUsage().heapTotal,
+                protocol: useHttps ? 'https' : 'http',
+                isMuted: muteState.isMuted,
+                displayCount: displayClients.size,
+                controlCount: controlClients.size
+            }),
+            () => getDisplayList()
+        );
+
+        // serverLog 已废弃，日志推送由 logViewBind + logUpdate 节流处理
     });
 }
 
@@ -1826,10 +1858,11 @@ function sendToDisplaysWithCapability(capabilityName, message) {
 
 let displayListDebounceTimer = null;
 
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
-    if (data.type !== 'logUpdate') {
-        log('WS', `>> ${data.type}${data.text ? ' "'+data.text+'"' : ''}${data.mode ? ' mode='+data.mode : ''}${data.stats ? ' stats=true' : ''}`, { targetId: 'all-control', source: 'server', scope: 'group' });
+    if (!SILENT_BROADCAST_TYPES.has(data.type)) {
+        log('WS', `>> ${data.type}${data.text ? ' "'+data.text+'"' : ''}${data.mode ? ' mode='+data.mode : ''}`, { targetId: 'all-control', source: 'server', scope: 'group' });
     }
     controlClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
