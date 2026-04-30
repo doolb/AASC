@@ -4,6 +4,7 @@ const LogViewer = {
     categories: [],
     autoScroll: true,
     maxDisplayEntries: 500,
+    _correlationStacks: new Map(),
 
     filters: {
         search: '',
@@ -174,6 +175,7 @@ const LogViewer = {
         if (this.filteredEntries.length > this.maxDisplayEntries) {
             this.filteredEntries = this.filteredEntries.slice(-this.maxDisplayEntries);
         }
+        this._resetCorrelationStacks();
         this._renderEntries();
         this._updateCount();
     },
@@ -257,22 +259,31 @@ const LogViewer = {
         }
     },
 
+    _resetCorrelationStacks() {
+        this._correlationStacks.clear();
+    },
+
     _createEntryElement(entry) {
         const div = document.createElement('div');
-        div.className = `log-entry log-level-${entry.level}`;
+        const indentClass = this._getIndentClass(entry);
+        div.className = `log-entry log-level-${entry.level}${indentClass}`;
         div.dataset.level = entry.level;
         div.dataset.device = entry.device;
         div.dataset.category = entry.category;
+        if (entry.source) div.dataset.source = entry.source;
+        if (entry.targetId) div.dataset.targetId = entry.targetId;
+        if (entry.correlationId) div.dataset.correlationId = entry.correlationId;
 
         const levelClass = `log-level-badge log-level-badge-${entry.level}`;
         const deviceLabel = this._getDeviceLabel(entry.device);
+        const arrowMsg = this._getArrowMessage(entry);
 
         div.innerHTML =
             `<span class="log-time">${this._escapeHtml(entry.time)}</span>` +
             `<span class="${levelClass}">${this._getLevelLabel(entry.level)}</span>` +
             `<span class="log-category">[${this._escapeHtml(entry.category)}]</span>` +
             `<span class="log-device">${deviceLabel}</span>` +
-            `<span class="log-message">${this._highlightSearch(this._escapeHtml(entry.message))}</span>`;
+            `<span class="log-message">${arrowMsg}</span>`;
 
         return div;
     },
@@ -282,9 +293,75 @@ const LogViewer = {
         return map[level] || level;
     },
 
-    _getDeviceLabel(device) {
-        const map = { server: '服务端', display: '显示端', control: '控制端' };
-        return map[device] || device;
+    _getIdLabel(id) {
+        if (!id) return '';
+        const labelMap = { server: '服务端', control: '控制端', 'all-control': '控制端' };
+        if (labelMap[id]) return labelMap[id];
+        const colonIdx = id.indexOf(':');
+        const clean = colonIdx > 0 ? id.slice(colonIdx + 1) : id;
+        const dotIdx = clean.lastIndexOf('.');
+        return dotIdx > 0 ? clean.slice(dotIdx + 1) : clean;
+    },
+
+    _getArrowHtml(entry) {
+        const src = this._getIdLabel(entry.source);
+        const tgt = this._getIdLabel(entry.targetId);
+        if (!src && !tgt) return '';
+        if (src && tgt) {
+            return `${this._escapeHtml(src)} <span class="log-arrow-sym">⇒</span> ${this._escapeHtml(tgt)}`;
+        }
+        return src ? `[${this._escapeHtml(src)}]` : `→ ${this._escapeHtml(tgt)}`;
+    },
+
+    _getIndentClass(entry) {
+        if (!entry.correlationId) return '';
+        if (!entry.source && !entry.targetId) return '';
+
+        let stack = this._correlationStacks.get(entry.correlationId);
+        if (!stack) {
+            stack = [];
+            this._correlationStacks.set(entry.correlationId, stack);
+        }
+
+        if (stack.length === 0) {
+            stack.push({ source: entry.source, target: entry.targetId });
+            return '';
+        }
+
+        const last = stack[stack.length - 1];
+        if (entry.source === last.target) {
+            const depth = Math.min(stack.length, 4);
+            stack.push({ source: entry.source, target: entry.targetId });
+            return ` log-indent-${depth}`;
+        }
+
+        for (let i = stack.length - 2; i >= 0; i--) {
+            if (entry.source === stack[i].target) {
+                stack.splice(i + 1);
+                const depth = Math.min(i + 1, 4);
+                stack.push({ source: entry.source, target: entry.targetId });
+                return ` log-indent-${depth}`;
+            }
+        }
+
+        stack.length = 0;
+        stack.push({ source: entry.source, target: entry.targetId });
+        return '';
+    },
+
+    _getArrowMessage(entry) {
+        const arrow = this._getArrowHtml(entry);
+        const escapedMsg = this._highlightSearch(this._escapeHtml(entry.message));
+        if (!arrow) return escapedMsg;
+        const src = this._getIdLabel(entry.source);
+        const tgt = this._getIdLabel(entry.targetId);
+        if (src && tgt) {
+            return `<span class="log-arrow">${arrow}:</span> ${escapedMsg}`;
+        }
+        if (src) {
+            return `<span class="log-arrow">${arrow}</span> ${escapedMsg}`;
+        }
+        return `<span class="log-arrow">${arrow}:</span> ${escapedMsg}`;
     },
 
     _escapeHtml(text) {
@@ -319,6 +396,7 @@ const LogViewer = {
     clearLogs() {
         this.entries = [];
         this.filteredEntries = [];
+        this._correlationStacks.clear();
         const container = document.getElementById('logEntries');
         if (container) container.innerHTML = '<div class="log-empty">暂无日志</div>';
         this._updateCount();

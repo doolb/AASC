@@ -2410,6 +2410,20 @@ input[type="range"]::-webkit-slider-thumb:active {
     padding: 0 1px;
 }
 
+.log-arrow-src { color: #60a5fa; font-weight: 500; }
+.log-arrow-tgt { color: #a78bfa; font-weight: 500; }
+.log-arrow-sym { color: rgba(255,255,255,0.3); margin: 0 2px; }
+.log-ack-badge { color: rgba(255,255,255,0.3); font-size: 10px; }
+
+.log-indent-1 { padding-left: 20px !important; }
+.log-indent-2 { padding-left: 40px !important; }
+.log-indent-3 { padding-left: 60px !important; }
+.log-indent-4 { padding-left: 80px !important; }
+.log-indent-5 { padding-left: 100px !important; }
+.log-indent-6 { padding-left: 120px !important; }
+.log-indent-7 { padding-left: 140px !important; }
+.log-indent-8 { padding-left: 160px !important; }
+
 .brain-summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

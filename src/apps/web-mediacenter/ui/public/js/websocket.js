@@ -214,6 +214,10 @@ const WebSocketManager = {
             if (window.LogViewer && data.entry) {
                 window.LogViewer.addEntry(data.entry);
             }
+        } else if (data.type === 'logUpdate') {
+            if (window.LogViewer && data.entries) {
+                data.entries.forEach(entry => window.LogViewer.addEntry(entry));
+            }
         } else if (data.type === 'logHistory') {
             if (window.LogViewer && data.entries) {
                 window.LogViewer.addHistory(data.entries, data.categories);
