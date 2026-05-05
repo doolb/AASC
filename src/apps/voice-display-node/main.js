@@ -79,7 +79,7 @@ class VoiceDisplay {
         this.connected = false;
         this.stopController = new AbortController();
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
+        this.maxReconnectAttempts = config.maxReconnectAttempts || 5;
         this.heartbeatInterval = null;
         this.heartbeatIntervalMs = 60 * 1000;
         this.asrPollTimer = null;
@@ -618,7 +618,8 @@ function loadConfig(configPath) {
     const defaultConfig = {
         serverUrl: 'http://localhost:3000',
         displayId: 'voice-display-node-1',
-        vadThreshold: 0.01
+        vadThreshold: 0.01,
+        maxReconnectAttempts: 5
     };
 
     try {
@@ -651,7 +652,7 @@ async function main() {
             displayId: config.displayId,
             heartbeatStatus: '未启动',
             reconnectAttempts: 0,
-            maxReconnectAttempts: 5
+            maxReconnectAttempts: config.maxReconnectAttempts || 5
         });
 
         systemMonitor = new SystemMonitor({ intervalMs: 5000 });

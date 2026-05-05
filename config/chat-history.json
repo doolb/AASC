@@ -178,5 +178,205 @@
     "content": "好的！我理解你了。我是一个可以与你互动的智能助手，想和你分享一些有趣的话题吧～",
     "mode": "group",
     "target": "妲己"
+  },
+  {
+    "id": "1777993153086px2r",
+    "timestamp": 1777993153086,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "志云似乎在闪电呢？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993153125338y",
+    "timestamp": 1777993153125,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "志云似乎在闪电呢？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993157484a2b9",
+    "timestamp": 1777993157484,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "哎呀，你是不是看到了闪电啦！快快去睡觉吧，我在这里陪着你呢。有什么需要我帮你吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993161380qisd",
+    "timestamp": 1777993161380,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "啊！是啊，我好像也看到了闪电呢，快看快看吧！有什么事吗？需要帮忙吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993261402x427",
+    "timestamp": 1777993261402,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "什么。",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993261480cda8",
+    "timestamp": 1777993261480,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "什么。",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993263901ai3g",
+    "timestamp": 1777993263901,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "你好呀~ 有什么事需要我帮你吗？ 😊",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993266392s2or",
+    "timestamp": 1777993266392,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "你好呀！有什么事需要我帮你吗？ 😊",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993318011fc3j",
+    "timestamp": 1777993318011,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "Yeah, do.",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993318066zw0c",
+    "timestamp": 1777993318066,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "Yeah, do.",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993320915e90b",
+    "timestamp": 1777993320915,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "嗯，你这样问我啦！有什么问题吗？我来帮你解答哦！",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993323061trhm",
+    "timestamp": 1777993323061,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的！我来帮你找答案呢~",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993393104fekq",
+    "timestamp": 1777993393104,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "never you.",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993393233pvt1",
+    "timestamp": 1777993393233,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "never you.",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993396498695y",
+    "timestamp": 1777993396498,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "啊啊啊！我懂啦！不过我们还是好好相处吧！有什么事可以和我说哦~",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993398844lvpl",
+    "timestamp": 1777993398844,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的！我明白啦，有什么问题可以问我哦～ 😊",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993442948hwbx",
+    "timestamp": 1777993442948,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "Mmmm.",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993444577nrem",
+    "timestamp": 1777993444577,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "Mmmm.",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993445890zg6q",
+    "timestamp": 1777993445890,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "嗯...你感觉怎么样呢？需要我帮你吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777993450637vnur",
+    "timestamp": 1777993450637,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "嗯...我理解了你喜欢的口味啦～有什么想聊的吗？需要我陪你一起做饭吗？或者陪我去逛街/看电影？ 😊",
+    "mode": "group",
+    "target": null
   }
 ]
