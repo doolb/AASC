@@ -13,6 +13,7 @@
     "mode": "isolated",
     "maxQueueLength": 8,
     "mallocTrimEnabled": true,
+    "requireChinese": true,
     "isolateProcess": {
       "enabled": false,
       "requestTimeoutMs": 60000,

@@ -28,6 +28,7 @@ class Config extends DataSnapshot {
             mode: 'isolated',
             maxQueueLength: 8,
             mallocTrimEnabled: true,
+            requireChinese: false,
             isolateProcess: {
                 enabled: false,
                 requestTimeoutMs: 60000,

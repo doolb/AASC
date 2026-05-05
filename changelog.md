@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### 新功能
+
+- ✅ [2026-05-05] ASR 识别结果支持配置强制要求包含中文
+  - `config.json` 新增 `asr.requireChinese` 配置项，启用后过滤不含中文的识别结果
+  - 改动文件：
+    - `config/config.json`
+    - `src/apps/server/boot/server-app.js` (hasValidContent 增加 requireChinese 判断)
+    - `src/apps/server/modules/config/config-app-service.js` (新增默认值)
+    - `docs/design/sherpa-asr.md`
+    - `docs/spec/config.md`
+    - `docs/spec/sherpa-asr.md`
+    - `changelog.md`
+
 > 归档说明：`src/core/config/config.js` 已在 2026-04-25 迁移为 `src/apps/server/modules/config/config-app-service.js`，历史条目中的旧路径仅用于回溯当时改动。
 
 ### 目录整理

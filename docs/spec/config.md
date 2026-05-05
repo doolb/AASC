@@ -25,8 +25,10 @@ const defaultConfig = {
         maxErrorBytes: 65536
     },
     asr: {
+        mode: 'isolated',
         maxQueueLength: 8,
         mallocTrimEnabled: true,
+        requireChinese: false,     // 要求识别结果必须包含中文
         isolateProcess: {
             enabled: false,
             requestTimeoutMs: 60000,

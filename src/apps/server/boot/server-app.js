@@ -195,8 +195,13 @@ function hasValidContent(text) {
     const hasChinese = /[\u4e00-\u9fa5]/.test(text);
     const hasEnglish = /[a-zA-Z]/.test(text);
     const hasNumber = /[0-9]/.test(text);
-    
+
     if (!hasChinese && !hasEnglish && !hasNumber) {
+        return false;
+    }
+
+    if (config.get('asr.requireChinese', false) && !hasChinese) {
+        log('\u8bed\u97f3', `\u5ffd\u7565\u975e\u4e2d\u6587\u8f93\u5165: "${text}"`);
         return false;
     }
     

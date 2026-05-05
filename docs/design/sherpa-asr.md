@@ -54,6 +54,13 @@
 - 通过 `pendingCount` / `maxQueueLength` 限制并发子进程数量，防止同时加载多个模型实例导致内存暴涨
 - 识别完成后子进程立即退出，native 模型内存完全释放回操作系统，仅在识别期间占用内存
 
+### 8. 中文内容强制过滤
+
+- 通过 `asr.requireChinese` 配置（默认 `false`）控制
+- 启用后，ASR 识别结果中**不包含中文字符**的文本将被过滤，返回 `ignored`
+- 该配置影响服务端 `/api/asr/recognize` 和显示端代理 ASR 两条路径
+- 配置读取位置：`server-app.js` 的 `hasValidContent()` 函数
+
 ### 7. 运行时模式切换 API
 
 - `GET /api/config/asrMode` 返回当前 ASR 运行模式
