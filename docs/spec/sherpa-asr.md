@@ -436,3 +436,49 @@ C++ N-API addon:
     - src/native/malloc-trim/binding.gyp (新增编译配置)
     - src/apps/server/boot/server-app.js (getRssLayout, getTopSmapsRss, 清理日志)
 ```
+
+## 内容过滤 (server-app.js)
+
+```
+常量 IGNORED_PATTERNS = [
+    /^(the|a|an|is|are|was|were|it|this|that|so|um|uh|oh|ah|yeah|yes|no|ok|okay|hey|hi|hello)[.!?]?$/i,
+    /^[a-z]{1,3}[.!?]?$/i,
+    /^[\s\p{P}]+$/u,
+    /^[\s.!?，。！？、]+$/
+]
+
+函数 hasValidContent(text):
+    hasChinese = /[一-龥]/.test(text)
+    hasEnglish = /[a-zA-Z]/.test(text)
+    hasNumber = /[0-9]/.test(text)
+
+    // 无任何有效字符
+    如果 not hasChinese and not hasEnglish and not hasNumber:
+        返回 false
+
+    // requireChinese 配置：强制要求包含中文
+    如果 config.get('asr.requireChinese', false) 且 not hasChinese:
+        记录日志 "忽略非中文输入"
+        返回 false
+
+    // 检查忽略模式
+    trimmed = text.trim().toLowerCase()
+    对于 IGNORED_PATTERNS 中的每个 pattern:
+        如果 pattern.test(trimmed):
+            返回 false
+
+    // 纯英文短输入过滤
+    wordCount = trimmed.split(/\s+/).filter 非空
+    如果 hasEnglish and not hasChinese and wordCount < 2:
+        cleanWord = trimmed.replace 标点
+        如果 cleanWord.length < 4:
+            返回 false
+
+    // 中文短输入过滤
+    如果 hasChinese:
+        chineseChars = text.match(/[一-龥]/g)
+        如果 chineseChars.length < 2:
+            返回 false
+
+    返回 true
+```
