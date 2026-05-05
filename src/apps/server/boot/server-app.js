@@ -340,6 +340,11 @@ function startServer() {
                                 displayId: ctx.displayId,
                                 isFinal: true
                             });
+                            handleControlMessageFallback({
+                                type: 'voiceCommand',
+                                text,
+                                displayId: ctx.displayId
+                            }, ctx.ws);
                         }
                     } catch (err) {
                         logError('语音', `显示端音频识别失败: ${err.message}`);
@@ -2302,6 +2307,15 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             isFinal: data.isFinal,
             fullText: data.fullText
         });
+
+        // 构造 voiceCommand 消息转发到控制端处理链路，复用 LLM/命令解析/执行逻辑
+        if (data.isFinal && data.text && data.text.trim()) {
+            handleControlMessageFallback({
+                type: 'voiceCommand',
+                text: data.text.trim(),
+                displayId
+            }, ws);
+        }
     } else if (data.type === 'voiceStatus' && displayData) {
         displayData.state.voiceSupported = data.supported;
         displayData.state.voiceListening = data.listening;

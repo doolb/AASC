@@ -348,7 +348,18 @@ class IsolatedAsrProcessClient {
             let settled = false;
 
             const child = fork(workerPath, [], {
-                stdio: ['inherit', 'inherit', 'inherit', 'ipc']
+                stdio: ['inherit', 'pipe', 'pipe', 'ipc']
+            });
+
+            // TUI 模式下子进程 stdout/stderr 若继承父进程会直接写终端，破坏 blessed 渲染。
+            // pipe 捕获后由主进程 console.log 输出，自动进入 TUI 日志面板。
+            child.stdout.on('data', (data) => {
+                const text = data.toString().trim();
+                if (text) console.log('[ASR子进程] ' + text);
+            });
+            child.stderr.on('data', (data) => {
+                const text = data.toString().trim();
+                if (text) console.log('[ASR子进程] ' + text);
             });
 
             const requestId = `asr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

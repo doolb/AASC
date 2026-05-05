@@ -27,9 +27,9 @@ const tui = new SubDisplayTUI({ enabled: useTUI });
 
 installConsoleRedirect({
     enabled: useTUI,
-    writeLog: (level, message) => {
-        const category = level === 'error' ? '错误' : '系统';
-        tui.addLog(category, message);
+    writeLog: (level, message, category) => {
+        const cat = category || (level === 'error' ? '错误' : '系统');
+        tui.addLog(cat, message);
     }
 });
 

@@ -50,6 +50,30 @@
 
 ### 修复
 
+- ✅ [2026-05-05] 显示端 voiceInput 仅转发到控制端，未走 LLM 处理链路
+  - handleDisplayMessageFallback: isFinal 的 voiceInput 增加 `processDisplayVoiceInput()` 调用，
+    走 voiceCommand.processVoiceCommand → LLM → executeCommands 或 chat 链路
+  - audioChunk 路径同理：asr.recognize 识别出文本后也调用 processDisplayVoiceInput()
+  - display 端 chat 结果直接用 TTS 回播到显示端，无需控制端参与
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js`
+    - `docs/spec/tui.md`
+
+- ✅ [2026-05-05] TUI 模式下 ASR 子进程（isolated mode）打印直接写终端破坏 blessed 渲染
+  - asr-service.js: fork stdio 从 `inherit` 改为 `pipe`，子进程 stdout/stderr 捕获后经
+    父进程 console.log 输出，自动进入 TUI 日志面板
+  - console-redirect.js: 新增 _extractCategory() 从 console.log('[Category] msg') 提取类别
+  - server-app.js + voice-display-node/main.js: writeLog 回调加上 category 参数支持
+  - server-tui.js + tui.js: CATEGORY_COLORS 添加 '语音输入'、'语音命令'、'ASR子进程'
+  - 改动文件：
+    - `src/external/asr/asr-service.js`
+    - `src/framework/observability/console-redirect.js`
+    - `src/framework/observability/server-tui.js`
+    - `src/apps/server/boot/server-app.js`
+    - `3rd/voice-display-node/main.js`
+    - `3rd/voice-display-node/tui.js`
+    - `docs/spec/tui.md`
+
 - ✅ [2026-04-29] WSViewBindServer 异步 handler 未 await 导致控制端反复断连
   - handleControlMessage/handleDisplayMessage 改为 async，await handler 返回值
   - 修复前 handler 返回 Promise，调用方 await 后得 undefined，访问 .success 崩溃
