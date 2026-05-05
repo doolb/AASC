@@ -22,6 +22,30 @@ const DEFAULT_WEATHER_CITIES = [
     '武汉', '西安', '长沙', '郑州', '青岛', '厦门', '福州', '宁波', '无锡', '合肥'
 ];
 
+// wttr.in 对中文 URL 路径支持不可靠，需要中文→拼音映射
+const CITY_PINYIN_MAP = {
+    '北京': 'Beijing',
+    '上海': 'Shanghai',
+    '广州': 'Guangzhou',
+    '深圳': 'Shenzhen',
+    '杭州': 'Hangzhou',
+    '南京': 'Nanjing',
+    '苏州': 'Suzhou',
+    '成都': 'Chengdu',
+    '重庆': 'Chongqing',
+    '天津': 'Tianjin',
+    '武汉': 'Wuhan',
+    '西安': "Xi'an",
+    '长沙': 'Changsha',
+    '郑州': 'Zhengzhou',
+    '青岛': 'Qingdao',
+    '厦门': 'Xiamen',
+    '福州': 'Fuzhou',
+    '宁波': 'Ningbo',
+    '无锡': 'Wuxi',
+    '合肥': 'Hefei'
+};
+
 let assistantConfig = {
     defaultName: '小爱',
     assistants: [
@@ -856,10 +880,11 @@ async function handleWeatherCommand(text, displayId, callbacks) {
     const city = weatherRequest.city;
     console.log(`[语音命令] 天气查询城市: ${city}`);
     const tryFetchWeather = async (retryCount = 0) => {
+        const weatherCity = CITY_PINYIN_MAP[city] || encodeURIComponent(city);
         const url = city.length > 0
-            ? `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=zh`
+            ? `https://wttr.in/${weatherCity}?format=j1&lang=zh`
             : `https://wttr.in/?format=j1&lang=zh`;
-        
+
         console.log(`[语音命令] 天气API地址: ${url} ${text}`);
         
         const response = await axios.get(url, {

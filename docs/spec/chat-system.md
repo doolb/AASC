@@ -31,6 +31,7 @@
   playOnControl: boolean,   // 是否在控制端播放语音
   controlName: string,      // 控制端名字
   displayNames: {}          // 显示端名字映射 { displayId: name }
+  commandMode: boolean      // 是否开启指令模式（新增，持久化到 config.json）
 }
 ```
 
@@ -337,6 +338,29 @@ chatStream(userMessage, options, callbacks):
     
     processVoiceCommand(text, displayId, callbacks):
         处理语音命令入口:
+            // 指令模式检查（新增）
+            if chatSession.commandMode == true:
+                if chatSession.mode == "private":
+                    if text in ["退出私聊", "退出"]:
+                        调用 setMode('group', null)
+                        添加系统消息 '已退出私聊模式'
+                        追加广播 privateMode/groupMode 到控制端
+                        返回空（命令已被处理）
+                    else:
+                        assistant = findAssistant(session.privateTarget)
+                        return { type: 'chat', message: text, systemPrompt: assistant.template }
+                
+                if text 包含 assistantConfig.defaultName:
+                    message = text.replace(defaultName, '').trim()
+                    if message:
+                        return { type: 'chat', message, systemPrompt: defaultAssistant.template }
+                    else:
+                        return
+                
+                // 非内置命令且无助手名字 → 忽略
+                if 不是任何内置命令关键词:
+                    return
+            
             1. 检查系统指令
             2. 检查取消命令
             3. 检查静音/取消静音命令
@@ -614,10 +638,15 @@ const Chat = {
         注: 已移除模板下拉框，改用左侧页签切换
     
     renderModeIndicator():
-        如果 mode === 'group':
-            显示 "当前模式: 群聊"
+        modeText = ''
+        如果 session.commandMode == true:
+            modeText += '[指令模式] '
+        如果 session.mode === 'group':
+            modeText += '群聊'
         否则:
-            显示 "当前模式: 私聊({target})"
+            modeText += '私聊({session.privateTarget})'
+        显示 "当前模式: {modeText}"
+        如果 session.mode === 'private':
             添加 "退出私聊" 按钮
     
     addSystemMessage(content):
@@ -823,38 +852,13 @@ const Chat = {
     handleTomorrowReminders():
         发送 { type: 'tomorrowReminders', displayId: currentDisplayId } 到服务端
     
-    processVoiceCommand(text):
-        处理显示端语音输入:
-        
-        如果 text === '系统':
-            调用 showHelp()
-            返回
-        
-        如果 text 以 '私聊' 开头:
-            提取助手名字，进入私聊模式
-            返回
-        
-        如果 text === '退出私聊':
-            退出私聊模式
-            返回
-        
-        检查自定义指令:
-            遍历 commands.commands
-            如果 text 匹配关键词:
-                调用 executeCommands(actions)
-                返回
-        
-        检查内置指令:
-            包含 '提醒' -> handleReminderCommand(text)
-            包含 '报时' 或 '现在几点' -> handleTimeAnnounceCommand(text)
-            包含 '天气' -> handleWeatherCommand(text)
-            包含 '搜索' -> handleSearchCommand(text)
-            以 '聊天' 开头 -> 发送聊天消息
-        
-        其他:
-            检查是否包含助手名字
-            如果包含 -> 发送聊天消息
-            否则 -> 发送 voiceCommand 到服务端处理
+    // 前端不再独立处理语音命令
+    // 功能由服务器端统一处理，控制端仅展示识别文本
+
+    setMode(mode, target):
+        设置 this.session.mode = mode
+        设置 this.session.privateTarget = target
+        调用 render() 刷新界面
     
     executeCommands(actions):
         执行指令组合:
@@ -1028,6 +1032,17 @@ handleMessage(data):
     
     如果 data.type === 'muteState':
         显示静音状态消息
+    
+    // 新增: 指令模式/私聊模式同步
+    如果 data.type === 'commandMode':
+        设置 Chat.session.commandMode = data.enabled
+        调用 Chat.renderModeIndicator() 更新 UI 显示
+    
+    如果 data.type === 'privateMode':
+        调用 Chat.setMode('private', data.target)
+    
+    如果 data.type === 'groupMode':
+        调用 Chat.setMode('group', null)
 
 sendChatMessage(content, options):
     发送 {
@@ -1122,6 +1137,10 @@ WebSocket 消息处理:
             执行指令组合
         如果 result.type === 'chat':
             发送聊天消息
+        如果 result.type === 'privateMode':
+            广播到所有控制端: { type: 'privateMode', target }
+        如果 result.type === 'groupMode':
+            广播到所有控制端: { type: 'groupMode' }
 
 如果 data.type === 'todayReminders':
     调用 voiceCommand.handleTodayReminders(displayId)
@@ -1232,6 +1251,9 @@ POST /api/chat/assistants:
 | muteState | 服务端->控制端 | 静音状态变化 |
 | todayReminders | 控制端->服务端 | 查询今日提醒 |
 | tomorrowReminders | 控制端->服务端 | 查询明日提醒 |
+| commandMode | 服务端->控制端 | 指令模式状态变更（新增） |
+| privateMode | 服务端->控制端 | 进入私聊模式（新增） |
+| groupMode | 服务端->控制端 | 退出私聊模式（新增） |
 
 ## 文件列表
 

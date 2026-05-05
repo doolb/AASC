@@ -4,6 +4,65 @@
 
 语音命令模块 (`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`) 处理显示端语音识别后的命令解析和执行。
 
+## 指令模式（v2）
+
+指令模式是语音输入的过滤模式，通过语音命令 "打开指令模式"/"关闭指令模式" 切换。
+
+### 指令模式状态
+
+```javascript
+// chat-session.json 新增字段
+{
+  mode: 'group' | 'private',
+  privateTarget: string | null,
+  playOnControl: boolean,
+  commandMode: boolean   // <-- 新增，持久化到 config.json
+}
+```
+
+### 指令模式规则
+
+```
+指令模式 OFF: 完全保持现有行为，不做任何拦截
+
+指令模式 ON:
+├─ 私聊模式:
+│  ├─ "退出私聊" / "退出" → 退出私聊，切换群聊，广播 groupMode 到控制端
+│  └─ 其他全部 → 发当前私聊助手 LLM，不处理任何内置命令
+└─ 群聊模式:
+   ├─ 含助手名字（defaultName）→ 去前缀后发助手 LLM，不处理指令
+   ├─ 不含助手名字 + 内置命令 → 执行命令
+   └─ 不含助手名字 + 非内置命令 → 静默忽略
+```
+
+### 指令模式切换
+
+```
+processVoiceCommand 中新增处理:
+
+if text == "打开指令模式":
+    session.commandMode = true
+    config.set('voiceCommand.commandMode', true)
+    broadcastToControls({ type: 'commandMode', enabled: true })
+    TTS播报 "已开启指令模式"
+    return
+
+if text == "关闭指令模式":
+    session.commandMode = false
+    config.set('voiceCommand.commandMode', false)
+    broadcastToControls({ type: 'commandMode', enabled: false })
+    TTS播报 "已关闭指令模式"
+    return
+```
+
+### 控制端 WebSocket 新增消息类型
+
+| 类型 | 方向 | 说明 |
+|------|------|------|
+| commandMode | 服务端→控制端 | 指令模式状态变更通知，`{ type, enabled }` |
+| privateMode | 服务端→控制端 | 进入私聊模式，`{ type, target }` |
+| groupMode | 服务端→控制端 | 退出私聊模式，`{ type }` |
+
 ## 核心功能
 
 ### 1. 语音状态显示
@@ -175,7 +234,10 @@ handleWeatherCommand(text, displayId):
             回退到 defaultWeatherCity
     
     构建天气API URL:
-        URL: https://wttr.in/{city}?format=j1&lang=zh
+        中文城市名 → 拼音映射 (CITY_PINYIN_MAP):
+            "北京" -> "Beijing", "上海" -> "Shanghai", "成都" -> "Chengdu", ...
+        取 weatherCity = CITY_PINYIN_MAP[city] ?? encodeURIComponent(city)
+        URL: https://wttr.in/{weatherCity}?format=j1&lang=zh
     
     打印日志:
         console.log("[语音命令] 天气API地址: {URL}")
@@ -246,6 +308,31 @@ findAssistant(name):
     如果没找到: 返回默认助手
 
 processVoiceCommand(text, displayId, callbacks):
+    // 第一步：系统指令始终优先执行（系统/私聊/退出私聊/自定义指令）
+    systemResult = handleSystemCommand(text, displayId)
+    if systemResult:
+        return systemResult
+    
+    // 第二步：指令模式检查
+    if session.commandMode == true:
+        if session.mode == "private":
+            // 私聊模式：退出私聊已被系统指令处理，其余全发 LLM
+            assistant = findAssistant(session.privateTarget)
+            return { type: 'chat', message: text, systemPrompt: assistant.template }
+        
+        // 群聊模式：检查是否含助手名字
+        if text 包含 assistantConfig.defaultName:
+            message = text.replace(defaultName, '').trim()
+            if message:
+                return { type: 'chat', message, systemPrompt: defaultAssistant.template }
+            else:
+                return  // 只说了名字没内容，忽略
+        
+        // 非系统指令、非助手名字 → 检查是否内置命令
+        if 不是任何内置命令(拒绝/取消/确认/录音/静音/提醒/报时/天气/搜索/播放/数字选择):
+            return  // 非内置命令，静默忽略
+    
+    // 原有逻辑继续
     如果包含 "拒绝"/"取消":
         取消待确认操作
     否则如果是 "确认"/"确认添加"/"是"/"好的":
@@ -298,12 +385,30 @@ processVoiceCommand(text, displayId, callbacks):
     ↓
 根据 result.type 处理:
     ├─ 指令类(报时/天气/提醒等): processVoiceCommand 内部直接执行
-    ├─ showHelp: sendToControl({ type: 'showHelp' })
+    ├─ showHelp:
+    │  ├─ sendToControl({ type: 'showHelp' })  // 发给请求的设备（控制端收到弹窗）
+    │  └─ 如有 display: 生成 TTS "帮助信息已发送到控制端" 播报
     ├─ commands: executeCommands，非指令走 handleChatMessage
     ├─ chat: 调用 handleChatMessage（和 #chatInput 相同逻辑）
-    ├─ privateMode/groupMode: sendToControl({ type: ... })
+    ├─ privateMode: broadcastToControls({ type: 'privateMode', target }) // 广播到所有控制端
+    ├─ groupMode: broadcastToControls({ type: 'groupMode' })            // 广播到所有控制端
     └─ systemMessage: sendToControl({ type: 'systemMessage' })
 ```
+
+### 指令模式状态初始化（服务端启动时）
+
+```
+启动或控制端连接时:
+    commandMode = config.get('voiceCommand.commandMode', false)
+    如果有控制端连接:
+        下发 { type: 'commandMode', enabled: commandMode }
+```
+
+### 关于 sendToControl 的作用域
+
+注意 `sendToControl` 是 `ws.send` 的别名，仅发给当前 WebSocket 调用者。
+当语音命令来自显示端时，ws 是显示端的连接，此时 `privateMode/groupMode/commandMode`
+等模式变更消息需要通过 `broadcastToControls` 广播到所有控制端，确保控制端 UI 同步。
 
 ## WebSocket 消息类型
 

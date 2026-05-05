@@ -2402,6 +2402,24 @@ async function handleControlMessageFallback(data, ws) {
                             
                             if (result.type === 'showHelp') {
                                 sendToControl({ type: 'showHelp' });
+                                // 如果是指令端触发的，显示端也播报提示
+                                if (targetDisplayId && sendToDisplay) {
+                                    (async () => {
+                                        try {
+                                            const helpTTS = '帮助信息已发送到控制端';
+                                            const audioPath = await tts.generateTTS(helpTTS);
+                                            const fileName = path.basename(audioPath);
+                                            sendToDisplay(targetDisplayId, {
+                                                type: 'voiceCommand',
+                                                action: 'response',
+                                                text: helpTTS,
+                                                audioUrl: `/uploads/tts/${fileName}`
+                                            });
+                                        } catch (err) {
+                                            logError('VoiceCommand', `帮助TTS生成失败: ${err.message}`);
+                                        }
+                                    })();
+                                }
                             } else if (result.type === 'commands') {
                                 await voiceCommand.executeCommands(result.actions, targetDisplayId, {
                                     onChat: async (message, systemPrompt) => {

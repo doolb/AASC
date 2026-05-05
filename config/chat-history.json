@@ -1,145 +1,5 @@
 [
   {
-    "id": "17758960113778s2e",
-    "timestamp": 1775896011377,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "Chengdu当前天气：局部多云，温度26度，湿度42%",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1775896011733vz8y",
-    "timestamp": 1775896011733,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "Chengdu当前天气：局部多云，温度26度，湿度42%",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1775896032979wmto",
-    "timestamp": 1775896032979,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的，我明白了！我正在发情，所以可以给你一个更贴心的回复啦～  \n气温26度，局部多云，湿度42%，感觉应该不错哦，要不要一起去看看？是不是想和我一起享受这个好天气呢？有什么需要我帮你找的地方吗？随时和我聊天呀～ 😊",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1775896047117vl6z",
-    "timestamp": 1775896047117,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的，我明白了！目前的天气是多云，温度在26度左右，湿度42%，适合我们进行工作和活动。希望您一切顺利哦！如果有什么需要我帮忙的地方，请随时告诉我。祝好天气！",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777296782189adtq",
-    "timestamp": 1777296782189,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "你是谁",
-    "mode": "private",
-    "target": "小爱"
-  },
-  {
-    "id": "177729679079223wi",
-    "timestamp": 1777296790792,
-    "role": "assistant",
-    "name": "小爱",
-    "ip": "",
-    "content": "我叫小爱，一个贴心、温暖的助手。有什么需要帮助的地方吗？我可以随时为您提供支持和帮助！",
-    "mode": "private",
-    "target": "小爱"
-  },
-  {
-    "id": "1777388941247nxg9",
-    "timestamp": 1777388941247,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "感觉还不错吧。",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
-    "id": "17773889617840xrk",
-    "timestamp": 1777388961784,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "嗯，你也是啊，感觉不错呢！有什么想聊的吗？我在这里等你哦～ 😊",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
-    "id": "1777389015409s28c",
-    "timestamp": 1777389015409,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "好的，准备开始调整呼吸，加油，等上我。",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
-    "id": "1777389033691cb6c",
-    "timestamp": 1777389033691,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的！先做深呼吸，慢慢来啦～加油哦，等你再告诉我呢！",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
-    "id": "1777389046775bmg9",
-    "timestamp": 1777389046775,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "现在我们要进入下一个动作。",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
-    "id": "1777389053632ty7p",
-    "timestamp": 1777389053632,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的，我们进入下一个动作啦！有什么想了解的吗？",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
-    "id": "1777389115109wuux",
-    "timestamp": 1777389115109,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "电短。",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
-    "id": "1777389126772rmpp",
-    "timestamp": 1777389126772,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的！我理解了你的意思，可以随时和我沟通哦～有什么需要帮助的地方吗？",
-    "mode": "group",
-    "target": "妲己"
-  },
-  {
     "id": "1777394699873cw54",
     "timestamp": 1777394699873,
     "role": "control",
@@ -160,223 +20,163 @@
     "target": "妲己"
   },
   {
-    "id": "1777394722354y75f",
-    "timestamp": 1777394722354,
+    "id": "17779948657777rdt",
+    "timestamp": 1777994865777,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "一只风名俐的少女。",
+    "content": "现在几点",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "1777994870046kki8",
+    "timestamp": 1777994870046,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "哎呀，我也没时间回答这个问题啦。不过我们可以放心地说，我们今天过得挺好的，还有许多精彩的事情要做呢！有什么需要我帮忙的吗？",
+    "mode": "private",
+    "target": "妲己"
+  },
+  {
+    "id": "1777996084882vgcf",
+    "timestamp": 1777996084882,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "妲己你好",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "17779960887240rmp",
+    "timestamp": 1777996088724,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "哎呀，我叫妲己，是九尾电子猫娘。我最喜欢在电脑前和你聊天啦！有什么需要我为你服务的吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777996106458tbuv",
+    "timestamp": 1777996106458,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "小爱你好",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "17779961080209mou",
+    "timestamp": 1777996108020,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "你好呀！有什么需要我帮的吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777996113971n4t7",
+    "timestamp": 1777996113971,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "小爱你是谁",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777996117074x1oc",
+    "timestamp": 1777996117074,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "我是小爱，一个非常贴心、温暖的AI助手。有什么需要我帮你解决的问题或者提供帮助的吗？😊",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1777996582472eqw2",
+    "timestamp": 1777996582472,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "嗯嗯。",
     "mode": "group",
     "target": "妲己"
   },
   {
-    "id": "1777394734499y414",
-    "timestamp": 1777394734499,
+    "id": "177799658483033k5",
+    "timestamp": 1777996584830,
     "role": "assistant",
     "name": "助手",
     "ip": "",
-    "content": "好的！我理解你了。我是一个可以与你互动的智能助手，想和你分享一些有趣的话题吧～",
+    "content": "好的呀！有什么事需要我帮你吗？",
     "mode": "group",
     "target": "妲己"
   },
   {
-    "id": "1777993153086px2r",
-    "timestamp": 1777993153086,
+    "id": "1777996665065z6fq",
+    "timestamp": 1777996665065,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "志云似乎在闪电呢？",
+    "content": "你是谁？",
     "mode": "group",
-    "target": null
+    "target": "妲己"
   },
   {
-    "id": "1777993153125338y",
-    "timestamp": 1777993153125,
+    "id": "1777996668679b7ae",
+    "timestamp": 1777996668679,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "我叫小爱！很高兴和你聊天啦～有什么想问的吗？ 😊",
+    "mode": "group",
+    "target": "妲己"
+  },
+  {
+    "id": "1777996687306ja9c",
+    "timestamp": 1777996687306,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "志云似乎在闪电呢？",
+    "content": "妲己，你是谁？",
     "mode": "group",
-    "target": null
+    "target": "妲己"
   },
   {
-    "id": "1777993157484a2b9",
-    "timestamp": 1777993157484,
+    "id": "1777996692031mfec",
+    "timestamp": 1777996692031,
     "role": "assistant",
     "name": "助手",
     "ip": "",
-    "content": "哎呀，你是不是看到了闪电啦！快快去睡觉吧，我在这里陪着你呢。有什么需要我帮你吗？",
+    "content": "你好呀！我是小爱，一个活泼可爱的智能助手哦～我们经常一起玩游戏、聊天啦！有什么想聊的吗？",
     "mode": "group",
-    "target": null
+    "target": "妲己"
   },
   {
-    "id": "1777993161380qisd",
-    "timestamp": 1777993161380,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "啊！是啊，我好像也看到了闪电呢，快看快看吧！有什么事吗？需要帮忙吗？",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993261402x427",
-    "timestamp": 1777993261402,
+    "id": "1777996878387nx8x",
+    "timestamp": 1777996878387,
     "role": "control",
     "name": "控制端",
     "ip": "",
-    "content": "什么。",
+    "content": "静音。",
     "mode": "group",
-    "target": null
+    "target": "妲己"
   },
   {
-    "id": "1777993261480cda8",
-    "timestamp": 1777993261480,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "什么。",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993263901ai3g",
-    "timestamp": 1777993263901,
+    "id": "1777996883271mng0",
+    "timestamp": 1777996883271,
     "role": "assistant",
     "name": "助手",
     "ip": "",
-    "content": "你好呀~ 有什么事需要我帮你吗？ 😊",
+    "content": "好的，请您稍等一下，我需要先确认一下是哪方面的问题了。不过现在暂时静音吧，希望您方便。有什么事情可以随时和我联系哦！",
     "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993266392s2or",
-    "timestamp": 1777993266392,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "你好呀！有什么事需要我帮你吗？ 😊",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993318011fc3j",
-    "timestamp": 1777993318011,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "Yeah, do.",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993318066zw0c",
-    "timestamp": 1777993318066,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "Yeah, do.",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993320915e90b",
-    "timestamp": 1777993320915,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "嗯，你这样问我啦！有什么问题吗？我来帮你解答哦！",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993323061trhm",
-    "timestamp": 1777993323061,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的！我来帮你找答案呢~",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993393104fekq",
-    "timestamp": 1777993393104,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "never you.",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993393233pvt1",
-    "timestamp": 1777993393233,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "never you.",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993396498695y",
-    "timestamp": 1777993396498,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "啊啊啊！我懂啦！不过我们还是好好相处吧！有什么事可以和我说哦~",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993398844lvpl",
-    "timestamp": 1777993398844,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "好的！我明白啦，有什么问题可以问我哦～ 😊",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993442948hwbx",
-    "timestamp": 1777993442948,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "Mmmm.",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993444577nrem",
-    "timestamp": 1777993444577,
-    "role": "control",
-    "name": "控制端",
-    "ip": "",
-    "content": "Mmmm.",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993445890zg6q",
-    "timestamp": 1777993445890,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "嗯...你感觉怎么样呢？需要我帮你吗？",
-    "mode": "group",
-    "target": null
-  },
-  {
-    "id": "1777993450637vnur",
-    "timestamp": 1777993450637,
-    "role": "assistant",
-    "name": "助手",
-    "ip": "",
-    "content": "嗯...我理解了你喜欢的口味啦～有什么想聊的吗？需要我陪你一起做饭吗？或者陪我去逛街/看电影？ 😊",
-    "mode": "group",
-    "target": null
+    "target": "妲己"
   }
 ]

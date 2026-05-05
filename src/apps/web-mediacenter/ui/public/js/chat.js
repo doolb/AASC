@@ -1262,9 +1262,7 @@ const Chat = {
             }
         }
         
-        if (data.isFinal) {
-            this.processVoiceCommand(data.fullText.trim());
-        }
+        // 服务端已处理 voiceInput 消息（语音命令解析），控制端仅展示识别文本
     },
     
     processVoiceCommand(text) {
