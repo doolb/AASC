@@ -40,9 +40,8 @@ npm start
 ```text
 web-mediacenter/
 ├── package.json                 # npm 配置
-├── 3rd/                         # 第三方与子显示端程序
+├── 3rd/                         # 第三方组件
 │   ├── voice-display/           # Go 子显示端
-│   ├── voice-display-node/      # Node.js 子显示端
 │   └── voice-display-cs/        # C# 子显示端
 ├── config/                      # 业务配置（json）
 ├── docs/                        # 项目文档（design/spec/task/todo）
@@ -54,6 +53,9 @@ web-mediacenter/
 │   ├── external/                # 外部能力适配层
 │   ├── scripts/                 # 工具脚本（测试/诊断/维护）
 │   └── apps/                    # 应用层（服务端入口在 src/apps/server/boot/server-app.js）
+│       ├── server/               # 服务端主程序
+│       ├── web-mediacenter/      # Web 媒体中心
+│       └── voice-display-node/   # Node.js 子显示端
 └── node_modules/                # 依赖目录
 ```
 

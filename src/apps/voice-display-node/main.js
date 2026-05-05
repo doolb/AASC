@@ -19,8 +19,8 @@ const URL = require('url');
 const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
 const SubDisplayTUI = require('./tui');
-const SystemMonitor = require('../../src/framework/observability/system-monitor');
-const { installConsoleRedirect } = require('../../src/framework/observability/console-redirect');
+const SystemMonitor = require('../../framework/observability/system-monitor');
+const { installConsoleRedirect } = require('../../framework/observability/console-redirect');
 
 const useTUI = !process.argv.includes('--no-tui');
 const tui = new SubDisplayTUI({ enabled: useTUI });

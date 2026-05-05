@@ -14,7 +14,7 @@
 
 ```text
 src/apps/server/boot/server-app.js -> 服务端主入口
-3rd/                -> 第三方组件与子显示端程序
+3rd/                -> 第三方组件
 config/             -> 配置数据
 docs/               -> 设计/实现/任务/TODO
 docs/self-test-results/ -> 自测结果归档
@@ -50,5 +50,5 @@ src/                -> 分层主代码（core/framework/external/apps）
 4. 文档示例路径统一为当前结构：
    - 服务端入口统一写为 `src/apps/server/boot/server-app.js`
    - 静态页面目录统一写为 `src/apps/web-mediacenter/ui/public/`
-   - 子显示端目录统一写为 `3rd/voice-display/` 与 `3rd/voice-display-node/`
+   - 子显示端 Node 实现目录统一写为 `src/apps/voice-display-node/`
    - ViewBind/DataSnapshot 示例统一写为 `src/core/*`

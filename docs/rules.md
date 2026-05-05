@@ -73,14 +73,15 @@ PORT=3000 npm start
 ```
 web-mediacenter/
 ├── package.json                                  # 项目配置
-├── 3rd/                                          # 第三方与子显示端程序
+├── 3rd/                                          # 第三方组件
 │   ├── voice-display/                            # Go 子显示端
-│   └── voice-display-node/                       # Node.js 子显示端
+│   └── voice-display-cs/                         # C# 子显示端
 ├── config/                                       # 配置文件目录
 ├── docs/                                         # 文档目录
 ├── res/                                          # 资源目录（models/uploads/temp/certs）
 ├── src/                                          # 分层代码主目录
 │   ├── apps/server/boot/server-app.js            # 服务器入口
+│   ├── apps/voice-display-node/                  # Node.js 子显示端
 │   └── apps/web-mediacenter/ui/public/           # 静态页面目录
 └── skills/                                       # 技能配置
 ```

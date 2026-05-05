@@ -48,7 +48,7 @@ ReleaseChecklist = [
   "readme.md 项目结构块已更新",
   "package.json start/main 指向 src/apps/server/boot/server-app.js",
   "静态资源目录指向 src/apps/web-mediacenter/ui/public",
-  "voice-display-node 配置路径指向 3rd/voice-display-node/config.json",
+  "voice-display-node 配置路径指向 src/apps/voice-display-node/config.json",
   "根目录自测结果文件已归档到 docs/self-test-results/",
   "docs/design.md 索引已更新",
   "docs/spec.md 索引已更新",
@@ -98,7 +98,7 @@ function ValidateDocPathExamples(docText):
     assert not contains(docText, "server.js") when refer to main server entry
     assert contains(docText, "src/apps/server/boot/server-app.js") for server entry examples
     assert not contains(docText, "voice-display-node/") as root path
-    assert contains(docText, "3rd/voice-display-node/") for sub-display examples
+    assert contains(docText, "src/apps/voice-display-node/") for sub-display examples
     assert not contains(docText, "core/viewbind") in active examples
     assert contains(docText, "src/core/viewbind") in active examples
 ```

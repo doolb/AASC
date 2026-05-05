@@ -6,7 +6,7 @@
 
 支持两种实现：
 - **Go 实现** (`3rd/voice-display/`)：无窗口界面，适合后台运行
-- **Node.js 实现** (`3rd/voice-display-node/`)：跨平台，依赖 ffmpeg
+- **Node.js 实现** (`src/apps/voice-display-node/`)：跨平台，依赖 ffmpeg
 
 ## 项目结构
 
@@ -25,7 +25,7 @@
 ### Node.js 实现
 
 ```
-3rd/voice-display-node/
+src/apps/voice-display-node/
 ├── main.js            # 主程序，WebSocket 连接和消息处理
 ├── audio-player.js    # 音频播放器（Speaker + wav 解码）
 ├── asr-client.js      # 服务器端 ASR 客户端
@@ -685,7 +685,7 @@ main():
 
 1. **安装项目依赖**
    ```bash
-   cd 3rd/voice-display-node
+   cd src/apps/voice-display-node
    npm install
    ```
 
@@ -719,7 +719,7 @@ main():
 
 ```bash
 # 安装依赖
-cd 3rd/voice-display-node
+cd src/apps/voice-display-node
 npm install
 
 # 启动（使用默认配置）

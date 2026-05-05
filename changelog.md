@@ -4,6 +4,20 @@
 
 > 归档说明：`src/core/config/config.js` 已在 2026-04-25 迁移为 `src/apps/server/modules/config/config-app-service.js`，历史条目中的旧路径仅用于回溯当时改动。
 
+### 目录整理
+
+- ✅ [2026-05-05] voice-display-node 从 3rd/ 迁移到 src/apps/
+  - 背景：voice-display-node 是项目自研的 Node.js 子显示端，不属于第三方代码，迁入 src/apps/ 更符合分层架构
+  - 改动文件：
+    - `3rd/voice-display-node/` → `src/apps/voice-display-node/` (整体迁移)
+    - `src/apps/voice-display-node/main.js` (框架引用路径更新)
+    - `src/apps/server/boot/server-app.js` (配置路径更新)
+    - `docs/spec/project-structure.md`
+    - `docs/spec/voice-display.md`
+    - `docs/design/project-structure.md`
+    - `readme.md`
+  - 清理：删除 `3rd/voice-display-node/` 旧目录
+
 ### 新功能
 
 - ✅ [2026-04-30] 服务端重新集成 TUI 界面（恢复目录重构时丢失的 blessed 终端界面）

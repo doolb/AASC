@@ -3061,7 +3061,7 @@ async function executeDeviceEvent(ip, eventType, displayId) {
 }
 
 function updateVoiceDisplayConfig(localIP, port, protocol) {
-    const configPath = path.join(PROJECT_ROOT, '3rd', 'voice-display-node', 'config.json');
+    const configPath = path.join(PROJECT_ROOT, 'src', 'apps', 'voice-display-node', 'config.json');
     try {
         const config = {
             serverUrl: `${protocol}://${localIP}:${port}`,
