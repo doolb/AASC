@@ -4,6 +4,28 @@
 
 ### 新功能
 
+- ✅ [2026-05-06] 子显示端 TUI 新增文本输入行（键盘输入替代语音）
+  - 在 voice-display-node TUI 底部新增 blessed.textarea 输入行
+  - Tab 切换 browse/input 焦点模式，Enter 发送文本，Esc 退回浏览
+  - 输入文本走现有 sendVoiceInput() 流程（与语音识别同链路）
+  - 输入模式下 q/C-c 禁止退出，防止误触
+  - 改动文件：
+    - `src/apps/voice-display-node/tui.js` (新增 initChatInputBar，布局微调，键盘守卫)
+    - `src/apps/voice-display-node/main.js` (main 中调用 initChatInputBar)
+    - `docs/spec/voice-display.md` (新增 TUI 文本输入功能小节)
+    - `.src/app/voice-display-text-input.md` (伪代码)
+
+- ✅ [2026-05-06] 语音指令分级路由：天气/搜索可配置由 LLM 处理
+  - 将指令分为 LOW（始终程序处理）和 HIGH（可配置路由）两级
+  - 天气/搜索默认为 HIGH 走 LLM，其余指令均为 LOW 走程序处理
+  - 支持运行时通过 WebSocket 消息 `updateCommandRouting` 切换路由
+  - 路由配置持久化到 config.json
+  - 改动文件：
+    - `src/apps/web-mediacenter/modules/voice/voice-command-app-service.js` (新增 commandLevelMap、highLevelRouting、checkCommandRouting)
+    - `src/apps/server/boot/server-app.js` (新增 updateCommandRouting WS 处理、启动加载路由配置)
+    - `.src/app/voice-command-routing.md`
+    - `docs/spec/voiceCommand.md`
+
 - ✅ [2026-05-06] LLM 服务器支持多配置切换
   - 在 config.json 的 chat 段新增 llmProfiles 列表和 activeProfile 字段，支持存储多个 LLM 服务器配置
   - 控制端聊天设置面板新增 LLM 服务器配置选择区域，可实时切换

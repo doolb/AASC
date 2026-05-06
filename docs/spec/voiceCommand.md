@@ -307,6 +307,29 @@ findAssistant(name):
     在 assistants 中查找匹配的助手
     如果没找到: 返回默认助手
 
+// 指令分级路由
+commandLevelMap:
+    weather: high, search: high
+    其余指令: low（默认）
+
+highLevelRouting:
+    weather: 'llm' | 'system'  (默认 'llm')
+    search: 'llm' | 'system'   (默认 'llm')
+
+checkCommandRouting(text, commandType):
+    如果 commandType 不是 high → 返回 null（走程序处理）
+    如果 highLevelRouting[commandType] 为 'system' → 返回 null（程序处理）
+    如果 highLevelRouting[commandType] 为 'llm':
+        构造 LLM 查询文本:
+            weather: "查询{城市名}的天气" / "查询今天的天气"
+            search: "搜索：{关键词}" / "帮我搜索一些信息"
+        返回 { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template }
+
+setCommandRouting(routing):
+    验证 routing 中的键值（只接受 weather/search 且值为 system/llm）
+    更新 highLevelRouting 内存值
+    返回是否变更
+
 processVoiceCommand(text, displayId, callbacks):
     // 第一步：系统指令始终优先执行（系统/私聊/退出私聊/自定义指令）
     systemResult = handleSystemCommand(text, displayId)
@@ -343,6 +366,14 @@ processVoiceCommand(text, displayId, callbacks):
         调用 handleReminderCommand()
     否则如果包含 "报时"/"现在几点":
         调用 handleTimeAnnounceCommand()
+    否则如果包含 "天气":
+        routing = checkCommandRouting(text, 'weather')
+        if routing: return routing  // 走 LLM
+        调用 handleWeatherCommand()
+    否则如果包含 "搜索":
+        routing = checkCommandRouting(text, 'search')
+        if routing: return routing  // 走 LLM
+        调用 handleSearchCommand()
     否则:
         返回 { type: 'chat', message, systemPrompt }
 ```
@@ -436,6 +467,7 @@ processVoiceCommand(text, displayId, callbacks):
 | deleteSearchHistory | 删除搜索记录 | `{ type, id }` |
 | getAssistantConfig | 获取助手配置 | `{ type }` |
 | setAssistantConfig | 设置助手配置 | `{ type, config }` |
+| updateCommandRouting | 更新指令路由 | `{ type, routing: { weather, search } }` |
 
 ### 服务端 -> 控制端
 
@@ -443,6 +475,7 @@ processVoiceCommand(text, displayId, callbacks):
 |------|------|------|
 | searchHistory | 搜索历史 | `{ type, history }` |
 | assistantConfig | 助手配置 | `{ type, config }` |
+| commandRouting | 指令路由配置 | `{ type, routing }` |
 
 ## 数据结构
 

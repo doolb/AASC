@@ -826,6 +826,33 @@ main():
     调用 stop() 清理资源
 ```
 
+### TUI 文本输入功能
+
+在原有 TUI 监控界面的底部添加一行文本输入栏，用于在终端直接输入文本替代语音输入。
+
+**功能流程：**
+
+```
+_initChatInputBar:
+    创建 blessed.textarea 置于屏幕底部(bottom:0, height:1)
+    调整 logBox 高度从 65%-2 变为 65%-3 (留出1行给输入栏)
+    键盘模式: browse(浏览) / input(输入)
+
+键盘交互:
+    Tab:        browse ↔ input 模式切换焦点
+    Enter:      仅 input 模式下，读取输入框文本，调用 sendVoiceInput(text)
+    Esc:        input 模式退回 browse 模式
+    q/C-c:      仅 browse 模式下退出，input 模式下禁止（防止误触）
+
+数据流:
+    键盘输入 → sendVoiceInput(text) → type:voiceInput → 服务端
+    （与语音识别结果走相同的处理链路）
+```
+
+**改动文件：**
+- `src/apps/voice-display-node/tui.js` (新增 initChatInputBar 方法)
+- `src/apps/voice-display-node/main.js` (main 中调用 initChatInputBar)
+
 ### Node.js 依赖
 
 | 包 | 版本 | 说明 |

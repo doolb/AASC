@@ -60,6 +60,9 @@ class SubDisplayTUI {
         this._logCount = 0;
         this._trimTimer = null;
         this.systemStats = null;
+        this.keyboardMode = 'browse';  // 键盘模式: browse=浏览, input=输入
+        this.inputBox = null;          // 底部文本输入行
+        this.onSendText = null;        // 文本发送回调
         this._initScreen();
     }
 
@@ -142,7 +145,7 @@ class SubDisplayTUI {
             top: '35%+1',
             left: 0,
             width: '100%',
-            height: '65%-2',
+            height: '65%-3',  // 底部留 1 行给输入栏
             label: ' 事件日志 ',
             border: {
                 type: 'line'
@@ -176,8 +179,10 @@ class SubDisplayTUI {
         this.logBox.focus();
 
         this.screen.key(['q', 'C-c'], () => {
-            this.destroy();
-            process.exit(0);
+            if (this.keyboardMode !== 'input') {  // 输入模式下禁止退出，防止误触
+                this.destroy();
+                process.exit(0);
+            }
         });
 
         this._bindScrollKeys();
@@ -324,6 +329,69 @@ class SubDisplayTUI {
             }
             this.renderPending = false;
         });
+    }
+
+    /**
+     * 初始化底部文本输入行
+     * 用于在 TUI 底栏输入文本，按 Enter 发送走 voiceInput 流程
+     * @param {Function} onSendCallback - 发送文本的回调，接收 (text) => void
+     */
+    initChatInputBar(onSendCallback) {
+        if (!this.enabled) return;
+
+        this.onSendText = onSendCallback;
+        this.keyboardMode = 'browse';  // 初始为浏览模式
+
+        this.inputBox = blessed.textarea({
+            bottom: 0,
+            left: 0,
+            width: '100%',
+            height: 1,
+            placeholder: '输入文本后 Enter 发送 (Tab 切换焦点)',
+            inputOnFocus: true,
+            style: {
+                bg: 'blue',
+                fg: 'white',
+                focus: { bg: 'green', fg: 'black' }
+            }
+        });
+
+        this.screen.append(this.inputBox);
+
+        // Tab 切换焦点：浏览模式 ↔ 输入模式
+        this.screen.key(['tab', 'S-tab'], () => {
+            if (this.keyboardMode === 'browse') {
+                this.keyboardMode = 'input';
+                this.inputBox.focus();
+            } else {
+                this.keyboardMode = 'browse';
+                this.logBox.focus();
+            }
+            this.screen.render();
+        });
+
+        // Enter 发送文本（绑定到输入框本身，避免被 inputOnFocus 截获）
+        this.inputBox.key(['enter'], () => {
+            const text = this.inputBox.getValue().trim();
+            if (text.length > 0 && this.onSendText) {
+                this.onSendText(text);
+            }
+            this.inputBox.clearValue();
+            this.screen.render();
+            return false;  // 阻止 textarea 默认的换行行为
+        });
+
+        // Esc 从输入模式退回浏览模式
+        this.screen.key(['escape'], () => {
+            if (this.keyboardMode === 'input') {
+                this.keyboardMode = 'browse';
+                this.logBox.focus();
+                this.inputBox.clearValue();
+                this.screen.render();
+            }
+        });
+
+        this.screen.render();
     }
 
     destroy() {

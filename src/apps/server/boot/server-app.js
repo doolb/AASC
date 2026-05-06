@@ -183,6 +183,11 @@ timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
 chat.init(config.get('chat', {}));
 reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
+// 加载指令分级路由配置
+const savedRouting = config.get('voiceCommand.routing');
+if (savedRouting) {
+    voiceCommand.setCommandRouting(savedRouting);
+}
 
 const IGNORED_PATTERNS = [
     /^(the|a|an|is|are|was|were|it|this|that|so|um|uh|oh|ah|yeah|yes|no|ok|okay|hey|hi|hello)[.!?]?$/i,
@@ -2588,6 +2593,14 @@ async function handleControlMessageFallback(data, ws) {
                         type: 'searchHistory',
                         history: voiceCommand.getSearchHistory()
                     }));
+                    return;
+                } else if (data.type === 'updateCommandRouting') {
+                    const changed = voiceCommand.setCommandRouting(data.routing);
+                    if (changed) {
+                        config.set('voiceCommand.routing', voiceCommand.getCommandRouting());
+                        broadcastToControls({ type: 'commandRouting', routing: voiceCommand.getCommandRouting() });
+                    }
+                    ws.send(JSON.stringify({ type: 'commandRouting', routing: voiceCommand.getCommandRouting() }));
                     return;
                 } else if (data.type === 'getAssistantConfig') {
                     ws.send(JSON.stringify({

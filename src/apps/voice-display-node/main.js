@@ -923,6 +923,13 @@ async function main() {
 
     try {
         await voiceDisplay.start();
+
+        // 连接建立后才初始化文本输入栏，确保 sendVoiceInput 能成功发送
+        if (useTUI) {
+            tui.initChatInputBar((text) => {
+                voiceDisplay.sendVoiceInput(text);
+            });
+        }
     } catch (error) {
         logError('系统', `启动失败: ${error.message}`);
         if (systemMonitor) systemMonitor.stop();

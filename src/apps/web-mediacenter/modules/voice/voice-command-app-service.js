@@ -17,6 +17,18 @@ let muteAllDisplays = null;
 let unmuteAllDisplays = null;
 let voiceInputQueues = new Map();
 
+// 指令分级路由
+const COMMAND_LEVEL = {
+    weather: 'high',
+    search: 'high'
+};
+const COMMAND_LEVEL_DEFAULT = 'low';
+
+let highLevelRouting = {
+    weather: 'llm',
+    search: 'llm'
+};
+
 const DEFAULT_WEATHER_CITIES = [
     '北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '天津',
     '武汉', '西安', '长沙', '郑州', '青岛', '厦门', '福州', '宁波', '无锡', '合肥'
@@ -124,6 +136,48 @@ function setMuteFunctions(muteFunc, unmuteFunc) {
 
 function setMediaLibrary(manager) {
     mediaLibraryManager = manager;
+}
+
+// 指令分级路由：检查高级指令是否需要转 LLM 处理
+function checkCommandRouting(text, commandType) {
+    const level = COMMAND_LEVEL[commandType] || COMMAND_LEVEL_DEFAULT;
+    if (level !== 'high') return null;
+
+    const route = highLevelRouting[commandType];
+    if (route !== 'llm') return null;
+
+    let llmQuery;
+    switch (commandType) {
+        case 'weather':
+            const cityText = text.replace(/今天|明天|后天|天气/g, '').replace(/[。，！？、；：,.!?;:]+$/, '').trim();
+            llmQuery = cityText ? `查询${cityText}的天气` : '查询今天的天气';
+            break;
+        case 'search':
+            const keyword = text.replace(/搜索/g, '').trim();
+            llmQuery = keyword ? `搜索：${keyword}` : '帮我搜索一些信息';
+            break;
+        default:
+            llmQuery = text;
+    }
+
+    const defaultAssistant = findAssistant(assistantConfig.defaultName);
+    return { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template };
+}
+
+function setCommandRouting(routing) {
+    if (!routing || typeof routing !== 'object') return false;
+    let changed = false;
+    for (const [key, value] of Object.entries(routing)) {
+        if (COMMAND_LEVEL[key] === 'high' && (value === 'system' || value === 'llm')) {
+            highLevelRouting[key] = value;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+function getCommandRouting() {
+    return { ...highLevelRouting };
 }
 
 function buildDisplayAudioUrl(audioPath) {
@@ -1348,11 +1402,15 @@ async function processVoiceCommand(text, displayId, callbacks) {
     }
     
     if (trimmedText.includes('天气')) {
+        const routing = checkCommandRouting(trimmedText, 'weather');
+        if (routing) return routing;
         await handleWeatherCommand(trimmedText, displayId, callbacks);
         return;
     }
-    
+
     if (trimmedText.includes('搜索')) {
+        const routing = checkCommandRouting(trimmedText, 'search');
+        if (routing) return routing;
         await handleSearchCommand(trimmedText, displayId);
         return;
     }
@@ -1480,5 +1538,7 @@ module.exports = {
     parseRepeatRule,
     extractReminderContent,
     handleSystemCommand,
-    executeCommands
+    executeCommands,
+    setCommandRouting,
+    getCommandRouting
 };
