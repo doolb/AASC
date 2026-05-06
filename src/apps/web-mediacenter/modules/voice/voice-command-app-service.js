@@ -1246,7 +1246,8 @@ async function processVoiceCommand(text, displayId, callbacks) {
             cmdText.includes('报时') || cmdText.includes('现在几点') ||
             cmdText.includes('天气') ||
             cmdText.includes('搜索') ||
-            cmdText.includes('播放')
+            cmdText.includes('播放') ||
+            cmdText.includes('停止播报') || cmdText.includes('中止播报')
         );
         if (!isBuiltin) {
             return;
@@ -1300,7 +1301,32 @@ async function processVoiceCommand(text, displayId, callbacks) {
         await handleUnmuteCommand(displayId);
         return;
     }
-    
+
+    // 停止播报
+    if (trimmedText.includes('停止播报') || trimmedText.includes('中止播报')) {
+        if (sendToDisplay && displayId) {
+            sendToDisplay(displayId, { type: 'tts', action: 'stop' });
+        }
+        const stopText = '已停止播报';
+        try {
+            const audioPath = await tts.generateTTS(stopText);
+            const fileName = path.basename(audioPath);
+            if (callbacks && callbacks.onResult) {
+                callbacks.onResult(stopText);
+            } else if (displayId && sendToDisplay) {
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: stopText,
+                    audioUrl: `/uploads/tts/${fileName}`
+                });
+            }
+        } catch (err) {
+            console.error('[语音命令] 停止播报TTS失败:', err.message);
+        }
+        return;
+    }
+
     if (trimmedText.includes('今日提醒') || trimmedText.includes('今天提醒')) {
         await handleTodayReminders(displayId);
         return;

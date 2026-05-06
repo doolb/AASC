@@ -525,16 +525,14 @@ class VoiceDisplay {
             return;
         }
 
+        // 播放时保持录音，让用户可以说"中止播报"中断播放
+        // VAD 自动过滤 TTS 回声，指令模式默认过滤非命令回声
         this.audio.onPlayStart = () => {
-            log('录音', '播放开始，暂停录音');
-            this.recorder.pause();
+            log('录音', '播放开始，持续录音');
         };
 
         this.audio.onPlayEnd = () => {
-            log('录音', '播放结束，恢复录音');
-            if (this.recordingEnabled) {
-                this.recorder.resume();
-            }
+            log('录音', '播放结束');
         };
     }
 
