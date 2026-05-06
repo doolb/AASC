@@ -21,7 +21,11 @@ class AudioRecorder {
         this.recording = false;
         this.paused = false;
         this.audioInput = null;
-    }
+
+        /** @type {Function|null} 语音开始回调（cut 模式用） */
+        this.onSpeechStart = null;
+        /** @type {Function|null} VAD 完成回调（cut 模式用） */
+        this.onVadSpeech = null;
 
     /**
      * 获取可用的音频输入设备列表
@@ -59,6 +63,9 @@ class AudioRecorder {
             const rms = this.computeRMS(int16Samples);
 
             if (rms >= this.vadThreshold) {
+                if (!hasSpeech && this.onSpeechStart) {
+                    this.onSpeechStart();
+                }
                 hasSpeech = true;
                 speechSamples.push(...int16Samples);
                 silenceFrameCount = 0;
@@ -70,6 +77,9 @@ class AudioRecorder {
                     if (speechSamples.length >= framesPerBuffer) {
                         const wavData = this.encodeWAV(speechSamples, this.sampleRate);
                         onAudioData(wavData);
+                        if (this.onVadSpeech) {
+                            this.onVadSpeech(wavData);
+                        }
                     }
                     speechSamples = [];
                     hasSpeech = false;

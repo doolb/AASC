@@ -12,3 +12,11 @@
 ```
 
 - 重构ai开发流程
+
+## 语音子显示端
+
+- 录音模式选项（4种模式：mute, cut, hard, soft）
+  - 受影响文件：main.js, audio-recorder.js, audio-player.js, aec-processor.js(新), config.json
+  - 设计文档：docs/design/voice-recording-mode.md
+  - 实现文档：docs/spec/voice-display.md
+  - 任务文档：docs/task/2026-05-06_录音模式选项.md

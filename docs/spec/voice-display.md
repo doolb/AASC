@@ -637,6 +637,173 @@ computeRMS(samples):
     返回平方根
 ```
 
+### 录音模式配置
+
+VoiceDisplay 支持 4 种录音模式，通过 `config.recordingMode` 配置：
+
+| 模式ID | 名称 | 说明 |
+|--------|------|------|
+| `mute` | 播放暂停录音 | 播放 TTS 时暂停录音，播放完恢复（默认） |
+| `cut` | 语音打断 | 播放时继续录音，检测到人声即停止 TTS |
+| `hard` | 系统 AEC | 使用操作系统提供的 AEC 接口（Windows WASAPI / Linux PulseAudio） |
+| `soft` | SpeexDSP AEC | 使用 SpeexDSP 算法层做回声消除 |
+
+#### 配置格式
+
+```json
+{
+    "serverUrl": "http://localhost:3000",
+    "displayId": "voice-display-node-1",
+    "vadThreshold": 0.01,
+    "maxReconnectAttempts": 5,
+    "recordingMode": "mute"
+}
+```
+
+#### 初始化路径
+
+```
+start():
+    初始化 AudioPlayer
+    初始化 ServerASR
+    初始化 AudioRecorder
+    检查 recordingMode:
+        case "mute":
+            setupPlaybackPause() → audio.onPlayStart = recorder.pause，audio.onPlayEnd = recorder.resume
+            连接服务器 → 启动语音识别
+
+        case "cut":
+            setupBargeIn():
+                audio.onPlayStart = () → 重置打断标记
+                audio.onPlayEnd = () → 恢复录音（如果已暂停）
+                // 录音全程运行，VAD 检测到人声时触发打断
+                onBargeInDetected = () → audio.stop() + clearQueue()
+            连接服务器 → 启动语音识别（录音器不暂停）
+
+        case "hard":
+            // 使用系统 AEC 录音器（Windows WASAPI / Linux PulseAudio）
+            初始化 SystemAECRecorder:
+                尝试初始化系统 AEC 接口
+                成功 → 使用 AEC 录音
+                失败 → 降级到 mute
+            setupPlaybackPause() 可选（根据平台决定是否需要）
+
+        case "soft":
+            初始化 AECProcessor (NLMS 自适应滤波器)
+            setupAECPipeline():
+                audio.onPlayData = (samples, sampleRate) → aecProcessor.setPlaybackReference(samples, sampleRate)
+                // 麦克风数据在 onAudioData 回调中经过 AEC 处理
+                // WAV 解码 → aecProcessor.processSamples() → WAV 编码 → 送 ASR
+            连接服务器 → 启动语音识别
+```
+
+#### Barge-in 打断流程
+
+```
+setupBargeIn():
+    bargeInTriggered = false
+
+    audio.onPlayStart:
+        bargeInTriggered = false
+        // 不暂停录音
+
+    onVadSpeechDetected(text):
+        if audio.isPlaying 且 !bargeInTriggered:
+            bargeInTriggered = true
+            audio.stop()       // 停止播放
+            audio.clearQueue() // 清空播放队列
+            发送 text 到 ASR   // 识别打断时的语音
+
+    audio.onPlayEnd:
+        if recordingEnabled:
+            recorder.resume()  // 确保录音恢复
+```
+
+#### System AEC 录音器
+
+##### Windows (WASAPI AEC)
+
+```
+class WASAPIAECRecorder extends AudioRecorder:
+    start(onAudioData, signals):
+        使用 WASAPI 枚举音频终端
+        检测支持 AEC 的录音设备
+        创建 AudioClient 并设置 AUDCLNT_STREAMFLAGS_ECHO_CANCELLATION
+        循环读取已消除回声的音频数据
+        按帧处理 VAD → 编码 WAV → 回调
+
+    // 系统 AEC 不可用时降级
+    static isSupported():
+        尝试初始化 WASAPI AEC 设备
+        返回 true/false
+```
+
+##### Linux (PulseAudio echo-cancel)
+
+```
+class PulseAECRecorder extends AudioRecorder:
+    start(onAudioData, signals):
+        检测 PulseAudio echo-cancel source 是否存在
+        不存在 → 自动加载 module-echo-cancel
+        使用 naudiodon 连接 echo-cancel source
+        按帧处理 VAD → 编码 WAV → 回调
+
+    static isSupported():
+        检测 PulseAudio 是否运行
+        检测 echo-cancel module 是否可用
+        返回 true/false
+```
+
+#### NLMS AEC 处理器（模式4: soft）
+
+使用 NLMS（归一化最小均方）自适应滤波器，纯 JS 实现，零原生依赖。
+
+```
+class AECProcessor:
+    W: Float64Array[1024]           // 滤波器系数
+    playBuf: Float64Array[1184]     // 参考信号环形缓冲区
+    pendingPlayFrames: Queue        // 播放帧队列
+    frameSize: number (160)         // 10ms @ 16kHz
+    sampleRate: number (16000)
+    mu: number (0.1)                // 自适应步长
+    filterLength: number (1024)     // 滤波器阶数 (64ms 回声尾长)
+
+    setPlaybackReference(samples, sampleRate):
+        由 AudioPlayer 播放时调用
+        分帧 (160 采样点) 加入 pendingPlayFrames 队列
+
+    process(micFrame):
+        从 pendingPlayFrames 取一帧参考信号
+        计算误差: e = micFrame - Σ(W[i] * playRef[i])
+        NLMS 更新: W[i] += μ * e * playRef[i] / ||playRef||²
+        返回干净语音帧
+
+    processSamples(micSamples):
+        分帧调用 process()
+
+    reset():
+        清空滤波器系数和缓冲区
+```
+
+#### 降级策略
+
+```
+initRecorderByMode(config):
+    mode = config.recordingMode 或 "mute"
+    switch mode:
+        "mute": return new AudioRecorder(config)
+        "cut":      return new AudioRecorder(config)  // 录音器相同，行为不同
+        "hard":
+            如果 Windows:  尝试 WASAPIAECRecorder，失败 → fallback
+            如果 Linux:    尝试 PulseAECRecorder，失败 → fallback
+            如果 macOS:    降级（系统无 AEC 接口）
+            fallback: log("hard 不可用，降级到 mute")
+                      return new AudioRecorder(config)
+        "soft":
+            // 纯 JS NLMS 自适应滤波器，无外部依赖
+            return new AudioRecorder(config) + new AECProcessor
+```
+
 ### 启动流程
 
 ```
@@ -646,10 +813,10 @@ main():
     注册信号处理 (SIGINT, SIGTERM)
     调用 start():
         初始化 AudioPlayer
-        设置播放暂停录音回调 (audio.onPlayStart = recorder.pause, audio.onPlayEnd = recorder.resume)
+        根据 recordingMode 选择录音策略
         初始化 ServerASR (传入服务器URL)
         await 检查服务器 ASR 可用性
-        初始化 AudioRecorder
+        初始化 AudioRecorder（根据模式选择对应录音器）
         连接服务器
         如果服务器ASR可用:
             启动语音识别

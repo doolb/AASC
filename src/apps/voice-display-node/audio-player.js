@@ -28,7 +28,12 @@ class AudioPlayer {
         this.isProcessingQueue = false;
         this.onPlayStart = null;
         this.onPlayEnd = null;
+        /** @type {Function|null} 播放PCM数据回调，用于SpeexDSP AEC参考信号 */
+        this.onPlayData = null;
     }
+
+    /** 当前队列长度 */
+    get queueLength() { return this.playQueue.length; }
 
     /**
      * 将音频URL加入播放队列
@@ -99,12 +104,31 @@ class AudioPlayer {
         console.log('[音频队列] 已清空');
     }
 
+    /**
+     * 从WAV Buffer中提取PCM采样数据
+     * @param {Buffer} wavBuffer
+     * @returns {{ samples: Int16Array, sampleRate: number }}
+     */
+    extractPCMFromWav(wavBuffer) {
+        if (wavBuffer.toString('ascii', 0, 4) !== 'RIFF') return null;
+        const sampleRate = wavBuffer.readUInt32LE(24);
+        const dataSize = wavBuffer.readUInt32LE(40);
+        const dataStart = 44;
+        const sampleCount = Math.floor(dataSize / 2);
+        if (dataStart + dataSize > wavBuffer.length) return null;
+        const samples = new Int16Array(sampleCount);
+        for (let i = 0; i < sampleCount; i++) {
+            samples[i] = wavBuffer.readInt16LE(dataStart + i * 2);
+        }
+        return { samples, sampleRate };
+    }
+
     async playFromURL(url) {
         try {
             this.isPlaying = true;
 
             console.log(`[音频] 正在下载: ${url}`);
-            
+
             if (this.stopRequested) {
                 this.isPlaying = false;
                 console.log('[音频] 跳过播放（已停止）');
@@ -114,7 +138,7 @@ class AudioPlayer {
             if (url.startsWith('https://')) {
                 fetchOptions.agent = httpsAgent;
             }
-            
+
             const response = await fetch(url, fetchOptions);
             if (!response.ok) {
                 throw new Error(`下载音频失败: HTTP ${response.status}`);
@@ -124,12 +148,19 @@ class AudioPlayer {
             const buffer = Buffer.from(arrayBuffer);
 
             console.log(`[音频] 下载完成 (${buffer.length} bytes)`);
-            
+
+            if (this.onPlayData) {
+                const pcm = this.extractPCMFromWav(buffer);
+                if (pcm) {
+                    this.onPlayData(pcm.samples, pcm.sampleRate);
+                }
+            }
+
             const tempFile = path.join(this.tempDir, `audio_${Date.now()}.wav`);
             fs.writeFileSync(tempFile, buffer);
-            
+
             await this.playFile(tempFile);
-            
+
             try {
                 fs.unlinkSync(tempFile);
             } catch (e) {
@@ -206,6 +237,13 @@ class AudioPlayer {
      * @returns {Promise<void>}
      */
     async playWavBuffer(wavBuffer) {
+        if (this.onPlayData) {
+            const pcm = this.extractPCMFromWav(wavBuffer);
+            if (pcm) {
+                this.onPlayData(pcm.samples, pcm.sampleRate);
+            }
+        }
+
         const tempFile = path.join(this.tempDir, `audio_${Date.now()}.wav`);
         fs.writeFileSync(tempFile, wavBuffer);
         

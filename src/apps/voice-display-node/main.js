@@ -16,6 +16,8 @@ const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 const URL = require('url');
+const os = require('os');
+const { exec } = require('child_process');
 const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
 const SubDisplayTUI = require('./tui');
@@ -66,6 +68,14 @@ try {
     }
 }
 
+let AECProcessor;
+try {
+    AECProcessor = require('./aec-processor');
+} catch (e) {
+    // AEC 处理器可选，soft 模式需要
+    AECProcessor = null;
+}
+
 class VoiceDisplay {
     /**
      * @param {Object} config - 配置对象
@@ -85,6 +95,10 @@ class VoiceDisplay {
         this.asrPollTimer = null;
         this.recordingEnabled = true;
         this.lastRecognition = '';
+
+        this.recordingMode = config.recordingMode || 'mute';
+        this.aecProcessor = null;
+        this.bargeInTriggered = false;
     }
 
     updateTUIConnectionState() {
@@ -412,7 +426,20 @@ class VoiceDisplay {
 
         const onAudioData = async (wavData) => {
             try {
-                const result = await this.asr.recognize(wavData);
+                let dataToSend = wavData;
+
+                // SpeexDSP 模式：将 WAV 音频经过 AEC 后再送 ASR
+                if (this.recordingMode === 'soft' && this.aecProcessor) {
+                    const pcm = AudioRecorder.prototype.decodeWav
+                        ? AudioRecorder.prototype.decodeWav(wavData)
+                        : this._decodeWavSimple(wavData);
+                    if (pcm) {
+                        const processed = this.aecProcessor.processSamples(pcm);
+                        dataToSend = this._encodeWavFromSamples(processed, 16000);
+                    }
+                }
+
+                const result = await this.asr.recognize(dataToSend);
                 if (result.status === 'success' && result.text) {
                     log('语音', `识别结果: ${result.text}`);
                     this.lastRecognition = result.text;
@@ -431,6 +458,59 @@ class VoiceDisplay {
         }).catch(error => {
             logError('语音', `录音错误: ${error.message}`);
         });
+    }
+
+    /**
+     * 简单 WAV 解码（提取 PCM int16 采样）
+     * @param {Buffer} wavData
+     * @returns {Int16Array|null}
+     */
+    _decodeWavSimple(wavData) {
+        try {
+            if (wavData.toString('ascii', 0, 4) !== 'RIFF') return null;
+            const dataSize = wavData.readUInt32LE(40);
+            const sampleCount = Math.floor(dataSize / 2);
+            if (44 + dataSize > wavData.length) return null;
+            const samples = new Int16Array(sampleCount);
+            for (let i = 0; i < sampleCount; i++) {
+                samples[i] = wavData.readInt16LE(44 + i * 2);
+            }
+            return samples;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * 从 int16 采样编码 WAV
+     * @param {Int16Array} samples
+     * @param {number} sampleRate
+     * @returns {Buffer}
+     */
+    _encodeWavFromSamples(samples, sampleRate) {
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+        const blockAlign = numChannels * bitsPerSample / 8;
+        const dataSize = samples.length * 2;
+        const buffer = Buffer.alloc(44 + dataSize);
+        buffer.write('RIFF', 0);
+        buffer.writeUInt32LE(36 + dataSize, 4);
+        buffer.write('WAVE', 8);
+        buffer.write('fmt ', 12);
+        buffer.writeUInt32LE(16, 16);
+        buffer.writeUInt16LE(1, 20);
+        buffer.writeUInt16LE(numChannels, 22);
+        buffer.writeUInt32LE(sampleRate, 24);
+        buffer.writeUInt32LE(byteRate, 28);
+        buffer.writeUInt16LE(blockAlign, 32);
+        buffer.writeUInt16LE(bitsPerSample, 34);
+        buffer.write('data', 36);
+        buffer.writeUInt32LE(dataSize, 40);
+        for (let i = 0; i < samples.length; i++) {
+            buffer.writeInt16LE(samples[i], 44 + i * 2);
+        }
+        return buffer;
     }
 
     enableRecording() {
@@ -503,7 +583,26 @@ class VoiceDisplay {
             log('录音', '录音器不可用，语音识别功能将不可用');
         }
 
-        this.setupPlaybackPause();
+        this.recordingMode = this.config.recordingMode || 'mute';
+        log('录音', `录音模式: ${this.recordingMode}`);
+
+        switch (this.recordingMode) {
+            case 'mute':
+                this.setupPlaybackPause();
+                break;
+            case 'cut':
+                this.setupBargeIn();
+                break;
+            case 'hard':
+                await this.setupSystemAEC();
+                break;
+            case 'soft':
+                this.setupSpeexDSP();
+                break;
+            default:
+                log('录音', `未知录音模式 ${this.recordingMode}，使用 mute`);
+                this.setupPlaybackPause();
+        }
 
         await this.connect();
 
@@ -518,7 +617,7 @@ class VoiceDisplay {
     }
 
     /**
-     * 设置播放时暂停录音的回调
+     * 设置播放时暂停录音的回调（模式1: mute）
      */
     setupPlaybackPause() {
         if (!this.audio || !this.recorder) {
@@ -536,6 +635,147 @@ class VoiceDisplay {
                 this.recorder.resume();
             }
         };
+    }
+
+    /**
+     * 设置语音打断（模式2: cut）
+     * 播放时继续录音，检测到人声即停止 TTS
+     */
+    setupBargeIn() {
+        if (!this.audio || !this.recorder) {
+            return;
+        }
+
+        this.bargeInTriggered = false;
+
+        this.audio.onPlayStart = () => {
+            this.bargeInTriggered = false;
+            log('打断', '播放开始，进入打断待命');
+        };
+
+        this.audio.onPlayEnd = () => {
+            log('打断', '播放结束');
+            if (this.recordingEnabled && this.recorder.isPaused()) {
+                this.recorder.resume();
+            }
+        };
+
+        this.recorder.onSpeechStart = () => {
+            if (this.audio.isCurrentlyPlaying() && !this.bargeInTriggered) {
+                this.bargeInTriggered = true;
+                log('打断', '检测到人声，停止播放');
+                this.audio.stop();
+                this.audio.clearQueue();
+            }
+        };
+    }
+
+    /**
+     * 设置系统 AEC（模式3: hard）
+     */
+    async setupSystemAEC() {
+        const platform = os.platform();
+
+        if (platform === 'win32') {
+            log('AEC', 'Windows: 尝试检测 WASAPI AEC 支持...');
+            const available = await this.detectWASAPI_AEC();
+            if (available) {
+                log('AEC', 'WASAPI AEC 可用，播放时不暂停录音');
+            } else {
+                log('AEC', 'WASAPI AEC 不可用，降级到 mute');
+                this.setupPlaybackPause();
+            }
+        } else if (platform === 'linux') {
+            log('AEC', 'Linux: 尝试检测 PulseAudio echo-cancel...');
+            const available = await this.detectPulseAudioAEC();
+            if (available) {
+                log('AEC', 'PulseAudio echo-cancel 可用，播放时不暂停录音');
+            } else {
+                log('AEC', 'PulseAudio echo-cancel 不可用，降级到 mute');
+                this.setupPlaybackPause();
+            }
+        } else {
+            log('AEC', `${platform} 不支持系统 AEC，降级到 mute`);
+            this.setupPlaybackPause();
+        }
+    }
+
+    /**
+     * 设置 软 AEC (NLMS)（模式4: soft）
+     */
+    setupSpeexDSP() {
+        if (!this.audio || !this.recorder) {
+            log('AEC', '音频播放器或录音器不可用，降级到 mute');
+            this.setupPlaybackPause();
+            return;
+        }
+
+        if (!AECProcessor) {
+            log('AEC', 'AEC 处理器不可用（缺少 aec-processor.js），降级到 mute');
+            this.setupPlaybackPause();
+            return;
+        }
+
+        this.aecProcessor = new AECProcessor({
+            sampleRate: 16000,
+            frameSize: 160
+        });
+
+        this.audio.onPlayStart = () => {
+            log('AEC', '播放开始，AEC 处理中');
+            if (this.aecProcessor) {
+                this.aecProcessor.reset();
+            }
+        };
+
+        this.audio.onPlayData = (samples, sampleRate) => {
+            if (this.aecProcessor) {
+                this.aecProcessor.setPlaybackReference(samples, sampleRate);
+            }
+        };
+
+        this.audio.onPlayEnd = () => {
+            log('AEC', '播放结束');
+        };
+
+        log('AEC', '软 AEC (NLMS) 已初始化，播放时不暂停录音');
+    }
+
+    /**
+     * 检测 Windows WASAPI AEC 支持
+     * @returns {Promise<boolean>}
+     */
+    detectWASAPI_AEC() {
+        return new Promise((resolve) => {
+            exec('powershell -c "(Get-WmiObject -Query \\"SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE \\\\"%AUDIO%\\"\\").Name"', {
+                timeout: 5000
+            }, (error) => {
+                // 如果 PowerShell 可用且能列举音频设备，认为有可能支持 WASAPI AEC
+                // 实际 WASAPI AEC 需要原生模块支持
+                if (!error) {
+                    log('AEC', '检测到 Windows 音频设备，WASAPI AEC 需要原生模块实现');
+                }
+                resolve(false);
+            });
+        });
+    }
+
+    /**
+     * 检测 Linux PulseAudio echo-cancel 支持
+     * @returns {Promise<boolean>}
+     */
+    detectPulseAudioAEC() {
+        return new Promise((resolve) => {
+            exec('pactl list sources short 2>/dev/null | grep -i echo', {
+                timeout: 3000
+            }, (error, stdout) => {
+                if (!error && stdout.trim()) {
+                    resolve(true);
+                } else {
+                    resolve(false);
+                }
+            });
+        });
     }
 
     /**
@@ -579,6 +819,10 @@ class VoiceDisplay {
         if (this.audio) {
             this.audio.stop();
         }
+        if (this.aecProcessor) {
+            this.aecProcessor.destroy();
+            this.aecProcessor = null;
+        }
         if (this.asr) {
             this.asr.close();
         }
@@ -619,7 +863,8 @@ function loadConfig(configPath) {
         serverUrl: 'http://localhost:3000',
         displayId: 'voice-display-node-1',
         vadThreshold: 0.01,
-        maxReconnectAttempts: 5
+        maxReconnectAttempts: 5,
+        recordingMode: 'mute'
     };
 
     try {
