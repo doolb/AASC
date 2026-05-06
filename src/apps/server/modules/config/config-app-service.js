@@ -52,7 +52,24 @@ class Config extends DataSnapshot {
             defaultTimeRange: '10m'
         },
         displayStates: {},
-        deviceEvents: {}
+        deviceEvents: {},
+        chat: {
+            apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
+            model: 'gpt-3.5-turbo',
+            maxTokens: 1000,
+            temperature: 0.7,
+            systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
+            activeProfile: 'default',
+            llmProfiles: [
+                {
+                    name: 'default',
+                    apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
+                    model: 'gpt-3.5-turbo',
+                    maxTokens: 1000,
+                    temperature: 0.7
+                }
+            ]
+        }
     };
 
     get(key, defaultValue) {

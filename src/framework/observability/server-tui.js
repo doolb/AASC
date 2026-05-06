@@ -287,6 +287,14 @@ class ServerTUI {
             ` {bold}控制端:{/bold} ${data.controlCount}`
         ];
 
+        if (data.llmApiUrl) {
+            lines.push('');
+            lines.push('{bold}── LLM ──{/bold}');
+            lines.push(` {bold}配置:{/bold} ${data.llmProfile || '-'}`);
+            lines.push(` {bold}API:{/bold} ${data.llmApiUrl}`);
+            lines.push(` {bold}模型:{/bold} ${data.llmModel || '-'}`);
+        }
+
         if (this.systemStats) {
             const cpu = this.systemStats.cpu || {};
             const mem = this.systemStats.memory || {};

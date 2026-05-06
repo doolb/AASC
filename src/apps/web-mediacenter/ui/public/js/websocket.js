@@ -204,6 +204,10 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleNewMessage(data);
             }
+        } else if (data.type === 'profileSwitched') {
+            if (window.Chat) {
+                window.Chat.handleProfileSwitched(data);
+            }
         } else if (data.type === 'muteResult') {
             if (window.Chat) {
                 window.Chat.addSystemMessage(data.message);

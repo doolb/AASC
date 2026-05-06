@@ -59,6 +59,23 @@
 }
 ```
 
+### LLM 配置管理 (多配置切换)
+
+```javascript
+{
+  activeProfile: string,        // 当前激活的配置名
+  llmProfiles: [{               // LLM 配置列表
+    name: string,               // 配置名称（唯一标识）
+    apiUrl: string,             // API 地址
+    model: string,              // 模型名称
+    maxTokens: number,          // 最大 token 数
+    temperature: number         // 温度参数
+  }]
+}
+```
+
+配置存储在 config.json 的 chat 段。切换配置时更新 chatConfig 的 apiUrl/model/maxTokens/temperature，systemPrompt 独立于配置。
+
 ## 核心模块实现
 
 ### src/external/llm/llm-service.js
@@ -76,8 +93,71 @@
     chatSession: 会话状态
     chatCommands: 自定义指令
     chatTemplates: 聊天模板
+    llmProfiles: LLM 配置列表
+    activeProfile: 当前激活的配置名
 
 init(config):
+    加载聊天配置
+    如果 config.llmProfiles 存在:
+        设置 llmProfiles = config.llmProfiles
+    否则:
+        从现有 chatConfig 创建默认 profile
+    如果 config.activeProfile 有效:
+        调用 applyProfile(config.activeProfile)
+    否则:
+        使用第一个 profile 或 'default'
+    加载聊天历史
+    加载会话状态
+    加载自定义指令
+    加载聊天模板
+
+applyProfile(name):
+    查找 llmProfiles 中名为 name 的 profile
+    如果找到:
+        更新 chatConfig 的 apiUrl/model/maxTokens/temperature
+        设置 activeProfile = profile.name
+
+getConfig():
+    返回 chatConfig 副本
+
+setConfig(newConfig):
+    更新 chatConfig 字段
+    如果 newConfig.llmProfiles 存在:
+        更新 llmProfiles
+    如果 newConfig.activeProfile 存在:
+        调用 applyProfile(newConfig.activeProfile)
+    返回 chatConfig
+
+getProfiles():
+    返回 llmProfiles 副本
+
+setProfiles(profiles):
+    设置 llmProfiles = profiles
+    如果 activeProfile 不在列表中:
+        使用第一个 profile
+    调用 applyProfile(activeProfile)
+    返回 llmProfiles
+
+switchProfile(name):
+    查找名为 name 的 profile
+    如果找到:
+        调用 applyProfile(name)
+        返回 true
+    返回 false
+
+getActiveProfile():
+    返回 activeProfile
+
+getProfileByName(name):
+    返回指定 profile 的副本或 null
+
+chat(userMessage, options, callbacks):
+    使用 chatConfig（由 activeProfile 决定）调用 API
+    其余逻辑不变
+
+chatStream(userMessage, options, callbacks):
+    使用 chatConfig 进行流式调用
+    其余逻辑不变
     加载聊天配置
     加载聊天历史
     加载会话状态
@@ -1170,6 +1250,22 @@ GET /api/chat/assistants:
 POST /api/chat/assistants:
     调用 chat.setAssistants(body)
     返回 { status: 'success' }
+
+新增 LLM 配置管理 API:
+
+GET /api/chat/profiles:
+    返回 { status: 'success', profiles: chat.getProfiles(), activeProfile: chat.getActiveProfile() }
+
+POST /api/chat/profiles:
+    调用 chat.setProfiles(body.profiles)
+    保存 llmProfiles 和 activeProfile 到 config.json
+    返回 { status: 'success', profiles, activeProfile }
+
+POST /api/chat/profiles/switch:
+    调用 chat.switchProfile(body.name)
+    保存 activeProfile 到 config.json
+    广播 profileSwitched 到所有控制端
+    返回 { status: 'success', activeProfile, config: { apiUrl, model } }
 ```
 
 ## 显示端实现
@@ -1254,6 +1350,8 @@ POST /api/chat/assistants:
 | commandMode | 服务端->控制端 | 指令模式状态变更（新增） |
 | privateMode | 服务端->控制端 | 进入私聊模式（新增） |
 | groupMode | 服务端->控制端 | 退出私聊模式（新增） |
+| switchProfile | 控制端->服务端 | 切换 LLM 配置（新增） |
+| profileSwitched | 服务端->控制端 | LLM 配置已切换（新增） |
 
 ## 文件列表
 

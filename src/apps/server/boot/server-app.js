@@ -372,7 +372,7 @@ function startServer() {
                 'getReminders', 'chatHistory', 'clearChatHistory', 'getChatSession', 'setChatSession',
                 'getChatCommands', 'setChatCommands', 'mute', 'unmute', 'todayReminders',
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
-                'chatMessage', 'executeCommands'
+                'chatMessage', 'executeCommands', 'switchProfile'
             ];
             for (const type of controlTypes) {
                 wsServer.registerHandler(type, async (data, ctx) => {
@@ -445,16 +445,22 @@ function startServer() {
         });
 
         tui.startRefresh(
-            () => ({
-                uptime: Math.floor((Date.now() - serverStartTime) / 1000),
-                memoryRSS: process.memoryUsage().rss,
-                memoryHeapUsed: process.memoryUsage().heapUsed,
-                memoryHeapTotal: process.memoryUsage().heapTotal,
-                protocol: useHttps ? 'https' : 'http',
-                isMuted: muteState.isMuted,
-                displayCount: displayClients.size,
-                controlCount: controlClients.size
-            }),
+            () => {
+                const chatCfg = chat.getConfig();
+                return {
+                    uptime: Math.floor((Date.now() - serverStartTime) / 1000),
+                    memoryRSS: process.memoryUsage().rss,
+                    memoryHeapUsed: process.memoryUsage().heapUsed,
+                    memoryHeapTotal: process.memoryUsage().heapTotal,
+                    protocol: useHttps ? 'https' : 'http',
+                    isMuted: muteState.isMuted,
+                    displayCount: displayClients.size,
+                    controlCount: controlClients.size,
+                    llmProfile: chat.getActiveProfile(),
+                    llmApiUrl: chatCfg.apiUrl,
+                    llmModel: chatCfg.model
+                };
+            },
             () => getDisplayList()
         );
 
@@ -1010,13 +1016,77 @@ app.post('/api/chat/config', (req, res) => {
     try {
         const newConfig = chat.setConfig(req.body);
         config.set('chat', newConfig);
-        res.json({ 
-            status: 'success', 
+        res.json({
+            status: 'success',
             message: '聊天配置已更新',
             config: newConfig
         });
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+app.get('/api/chat/profiles', (req, res) => {
+    res.json({
+        status: 'success',
+        profiles: chat.getProfiles(),
+        activeProfile: chat.getActiveProfile()
+    });
+});
+
+app.post('/api/chat/profiles', (req, res) => {
+    try {
+        const profiles = chat.setProfiles(req.body.profiles);
+        const chatCfg = chat.getConfig();
+        config.set('chat', {
+            ...chatCfg,
+            llmProfiles: profiles,
+            activeProfile: chat.getActiveProfile()
+        });
+        res.json({
+            status: 'success',
+            profiles: profiles,
+            activeProfile: chat.getActiveProfile()
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+app.post('/api/chat/profiles/switch', (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name) {
+            return res.status(400).json({ status: 'error', message: '请指定配置名称' });
+        }
+        const success = chat.switchProfile(name);
+        if (!success) {
+            return res.status(404).json({ status: 'error', message: `未找到配置: ${name}` });
+        }
+        const chatCfg = chat.getConfig();
+        config.set('chat', {
+            ...chatCfg,
+            activeProfile: chat.getActiveProfile()
+        });
+        // 广播配置切换
+        broadcastToControls({
+            type: 'profileSwitched',
+            activeProfile: chat.getActiveProfile(),
+            config: {
+                apiUrl: chatCfg.apiUrl,
+                model: chatCfg.model
+            }
+        });
+        res.json({
+            status: 'success',
+            activeProfile: chat.getActiveProfile(),
+            config: {
+                apiUrl: chatCfg.apiUrl,
+                model: chatCfg.model
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '切换配置失败' });
     }
 });
 
@@ -2890,6 +2960,34 @@ async function handleControlMessageFallback(data, ws) {
                             logError('Commands', `执行失败: ${err.message}`);
                         }
                     })();
+                } else if (data.type === 'switchProfile') {
+                    try {
+                        const { name } = data;
+                        if (name && chat.switchProfile(name)) {
+                            const chatCfg = chat.getConfig();
+                            config.set('chat', {
+                                ...chatCfg,
+                                activeProfile: chat.getActiveProfile()
+                            });
+                            ws.send(JSON.stringify({
+                                type: 'profileSwitched',
+                                activeProfile: chat.getActiveProfile(),
+                                config: { apiUrl: chatCfg.apiUrl, model: chatCfg.model }
+                            }));
+                            broadcastToControls({
+                                type: 'profileSwitched',
+                                activeProfile: chat.getActiveProfile(),
+                                config: { apiUrl: chatCfg.apiUrl, model: chatCfg.model }
+                            });
+                        } else {
+                            ws.send(JSON.stringify({
+                                type: 'profileSwitched',
+                                error: `未找到配置: ${name}`
+                            }));
+                        }
+                    } catch (err) {
+                        logError('Profile', `切换失败: ${err.message}`);
+                    }
                 }
 }
 

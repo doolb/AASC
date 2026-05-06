@@ -4,6 +4,22 @@
 
 ### 新功能
 
+- ✅ [2026-05-06] LLM 服务器支持多配置切换
+  - 在 config.json 的 chat 段新增 llmProfiles 列表和 activeProfile 字段，支持存储多个 LLM 服务器配置
+  - 控制端聊天设置面板新增 LLM 服务器配置选择区域，可实时切换
+  - 切换配置时广播到所有控制端保持同步
+  - 向后兼容：旧的单配置模式自动转换为默认 profile
+  - 改动文件：
+    - `config/config.json`
+    - `src/external/llm/llm-service.js` (新增 getProfiles/setProfiles/switchProfile 等方法)
+    - `src/apps/server/boot/server-app.js` (新增 profiles API 和 WebSocket 处理)
+    - `src/apps/server/modules/config/config-app-service.js` (新增 chat 段默认值)
+    - `src/apps/web-mediacenter/ui/public/js/chat.js` (新增配置切换 UI)
+    - `src/apps/web-mediacenter/ui/public/js/websocket.js` (新增 profileSwitched 消息处理)
+    - `src/apps/web-mediacenter/ui/public/upload.html` (新增配置选择区域)
+    - `src/apps/web-mediacenter/ui/public/css/chat.css` (新增配置选择样式)
+    - `docs/spec/chat-system.md`
+
 - ✅ [2026-05-05] ASR 识别结果支持配置强制要求包含中文
   - `config.json` 新增 `asr.requireChinese` 配置项，启用后过滤不含中文的识别结果
   - 改动文件：

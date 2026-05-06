@@ -28,6 +28,9 @@ let chatConfig = {
     systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。'
 };
 
+let llmProfiles = [];
+let activeProfile = 'default';
+
 let chatHistory = [];
 let chatTemplates = [];
 let chatSession = {
@@ -81,11 +84,40 @@ function init(config = {}) {
     if (config.maxTokens) chatConfig.maxTokens = config.maxTokens;
     if (config.temperature) chatConfig.temperature = config.temperature;
     if (config.systemPrompt) chatConfig.systemPrompt = config.systemPrompt;
+    if (config.llmProfiles) {
+        llmProfiles = config.llmProfiles;
+    } else {
+        llmProfiles = [{
+            name: 'default',
+            apiUrl: chatConfig.apiUrl,
+            model: chatConfig.model,
+            maxTokens: chatConfig.maxTokens,
+            temperature: chatConfig.temperature
+        }];
+    }
+    if (config.activeProfile && llmProfiles.some(p => p.name === config.activeProfile)) {
+        activeProfile = config.activeProfile;
+        applyProfile(activeProfile);
+    } else {
+        activeProfile = llmProfiles[0] ? llmProfiles[0].name : 'default';
+        applyProfile(activeProfile);
+    }
     loadHistory();
     loadSession();
     loadCommands();
     loadTemplates();
     loadImportantRecords();
+}
+
+function applyProfile(name) {
+    const profile = llmProfiles.find(p => p.name === name);
+    if (profile) {
+        chatConfig.apiUrl = profile.apiUrl;
+        chatConfig.model = profile.model;
+        if (profile.maxTokens) chatConfig.maxTokens = profile.maxTokens;
+        if (profile.temperature !== undefined) chatConfig.temperature = profile.temperature;
+        activeProfile = profile.name;
+    }
 }
 
 function loadTemplates() {
@@ -200,7 +232,44 @@ function setConfig(newConfig) {
     if (newConfig.maxTokens !== undefined) chatConfig.maxTokens = newConfig.maxTokens;
     if (newConfig.temperature !== undefined) chatConfig.temperature = newConfig.temperature;
     if (newConfig.systemPrompt !== undefined) chatConfig.systemPrompt = newConfig.systemPrompt;
+    if (newConfig.llmProfiles !== undefined) {
+        llmProfiles = newConfig.llmProfiles;
+    }
+    if (newConfig.activeProfile !== undefined) {
+        activeProfile = newConfig.activeProfile;
+        applyProfile(activeProfile);
+    }
     return getConfig();
+}
+
+function getProfiles() {
+    return llmProfiles.map(p => ({ ...p }));
+}
+
+function setProfiles(profiles) {
+    llmProfiles = profiles || [];
+    if (!llmProfiles.some(p => p.name === activeProfile)) {
+        activeProfile = llmProfiles[0] ? llmProfiles[0].name : 'default';
+    }
+    applyProfile(activeProfile);
+    return getProfiles();
+}
+
+function switchProfile(name) {
+    const profile = llmProfiles.find(p => p.name === name);
+    if (!profile) return false;
+    activeProfile = name;
+    applyProfile(name);
+    return true;
+}
+
+function getActiveProfile() {
+    return activeProfile;
+}
+
+function getProfileByName(name) {
+    const profile = llmProfiles.find(p => p.name === name);
+    return profile ? { ...profile } : null;
 }
 
 function getTemplates() {
@@ -646,6 +715,11 @@ module.exports = {
     init,
     getConfig,
     setConfig,
+    getProfiles,
+    setProfiles,
+    switchProfile,
+    getActiveProfile,
+    getProfileByName,
     getTemplates,
     setTemplates,
     addTemplate,

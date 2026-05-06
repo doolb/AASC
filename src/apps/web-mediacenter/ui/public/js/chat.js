@@ -39,11 +39,14 @@ const Chat = {
     isAlwaysListening: false,
     wasListeningBeforePlayback: false,
     noInterruptMode: true,
-    
+    profiles: [],
+    activeProfile: '',
+
     init() {
         this.loadHistory();
         this.loadTemplates();
         this.loadConfig();
+        this.loadProfiles();
         this.loadAssistantConfig();
         this.loadSearchHistory();
         this.loadSession();
@@ -56,6 +59,7 @@ const Chat = {
         this.loadHistory();
         this.loadSession();
         this.loadCommands();
+        this.loadProfiles();
     },
     
     async initVoiceRecognition() {
@@ -341,11 +345,55 @@ const Chat = {
     },
     
     loadSearchHistory() {
-        if (window.WebSocketManager && window.WebSocketManager.ws && 
+        if (window.WebSocketManager && window.WebSocketManager.ws &&
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'getSearchHistory'
             }));
+        }
+    },
+
+    loadProfiles() {
+        fetch('/api/chat/profiles')
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    this.profiles = data.profiles || [];
+                    this.activeProfile = data.activeProfile || '';
+                    this.renderProfileSelector();
+                }
+            })
+            .catch(err => console.error('加载LLM配置失败:', err));
+    },
+
+    switchProfile(name) {
+        fetch('/api/chat/profiles/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                this.activeProfile = data.activeProfile;
+                window.showToast(`已切换到配置: ${data.activeProfile} (${data.config.model})`, 'success');
+                this.renderProfileSelector();
+            } else {
+                window.showToast('切换配置失败: ' + (data.message || data.error), 'error');
+            }
+        })
+        .catch(err => window.showToast('切换配置失败', 'error'));
+    },
+
+    handleProfileSwitched(data) {
+        if (data.activeProfile) {
+            this.activeProfile = data.activeProfile;
+            if (data.config) {
+                this.config.apiUrl = data.config.apiUrl;
+                this.config.model = data.config.model;
+            }
+            this.renderProfileSelector();
+            window.showToast(`LLM配置已切换为: ${data.activeProfile}`, 'info');
         }
     },
     
@@ -1140,7 +1188,34 @@ const Chat = {
             if (textarea) {
                 textarea.value = this.config.systemPrompt;
             }
+            this.loadProfiles();
         }
+    },
+
+    renderProfileSelector() {
+        const container = document.getElementById('profileSelector');
+        if (!container) return;
+
+        if (this.profiles.length === 0) {
+            container.innerHTML = '<div class="chat-empty">暂无LLM配置</div>';
+            return;
+        }
+
+        let html = '<div class="profile-list">';
+        this.profiles.forEach(p => {
+            const isActive = p.name === this.activeProfile;
+            html += `
+                <div class="profile-item ${isActive ? 'active' : ''}" onclick="Chat.switchProfile('${this.escapeHtml(p.name)}')">
+                    <div class="profile-info">
+                        <span class="profile-name">${this.escapeHtml(p.name)}</span>
+                        <span class="profile-model">${this.escapeHtml(p.model)}</span>
+                    </div>
+                    <div class="profile-status">${isActive ? '✓ 当前' : '切换'}</div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        container.innerHTML = html;
     },
     
     hideConfig() {
