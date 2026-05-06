@@ -258,5 +258,35 @@
     "content": "好的，我明白了。我是妲己，一个拥有九尾电子猫的娇俏女战士。作为一个电子猫，我喜欢用科技和科技来解决问题和保护大家。我会用我的科技装备为你们提供安全、便捷的服务。如果您有任何问题或需要帮助，请随时告诉我！",
     "mode": "group",
     "target": null
+  },
+  {
+    "id": "1778069739138og33",
+    "timestamp": 1778069739138,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "，你好。",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "17780698451951kb5",
+    "timestamp": 1778069845195,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "，你在吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1778069849523sanq",
+    "timestamp": 1778069849523,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "你好呀！我小爱在吗呢呢呢呢哦～有什么需要我帮你的吗？ 😊",
+    "mode": "group",
+    "target": null
   }
 ]

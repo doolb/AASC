@@ -120,7 +120,8 @@ class VoiceDisplay {
             asrReady: this.asr ? this.asr.isReady() : false,
             vadStatus: this.recorder ? '运行中' : '未启动',
             playQueueSize: this.audio ? this.audio.queueLength || 0 : 0,
-            lastRecognition: this.lastRecognition || '-'
+            lastRecognition: this.lastRecognition || '-',
+            recordingMode: this.recordingMode
         });
     }
 
@@ -742,20 +743,77 @@ class VoiceDisplay {
     }
 
     /**
+     * 动态切换录音模式
+     * @param {string} mode - 录音模式: mute|cut|hard|soft
+     */
+    async setRecordingMode(mode) {
+        const validModes = ['mute', 'cut', 'hard', 'soft'];
+        if (!validModes.includes(mode)) {
+            log('录音', `未知录音模式: ${mode}`);
+            return;
+        }
+
+        // 清理当前模式的事件回调
+        if (this.aecProcessor) {
+            this.aecProcessor.destroy();
+            this.aecProcessor = null;
+        }
+        this.recorder.onSpeechStart = null;
+
+        this.recordingMode = mode;
+
+        switch (mode) {
+            case 'mute':
+                this.setupPlaybackPause();
+                break;
+            case 'cut':
+                this.setupBargeIn();
+                // 从 mute 切到 cut 时，如果录音被暂停则恢复
+                if (this.recorder && typeof this.recorder.isPaused === 'function' && this.recorder.isPaused()) {
+                    this.recorder.resume();
+                }
+                break;
+            case 'hard':
+                await this.setupSystemAEC();
+                break;
+            case 'soft':
+                this.setupSpeexDSP();
+                break;
+        }
+
+        log('录音', `已切换录音模式: ${mode}`);
+        this.updateTUIRecordingState();
+    }
+
+    /**
      * 检测 Windows WASAPI AEC 支持
      * @returns {Promise<boolean>}
      */
     detectWASAPI_AEC() {
         return new Promise((resolve) => {
-            exec('powershell -c "(Get-WmiObject -Query \\"SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE \\\\"%AUDIO%\\"\\").Name"', {
+            // 检查 Windows 版本（WASAPI AEC 需要 Windows 8+，即 6.2+）
+            exec('powershell -c "$v=[Environment]::OSVersion.Version; Write-Output \\"$($v.Major).$($v.Minor)\\""', {
                 timeout: 5000
-            }, (error) => {
-                // 如果 PowerShell 可用且能列举音频设备，认为有可能支持 WASAPI AEC
-                // 实际 WASAPI AEC 需要原生模块支持
-                if (!error) {
-                    log('AEC', '检测到 Windows 音频设备，WASAPI AEC 需要原生模块实现');
+            }, (error, stdout) => {
+                if (error) {
+                    log('AEC', '无法检测 Windows 版本，WASAPI AEC 不可用');
+                    resolve(false);
+                    return;
                 }
-                resolve(false);
+
+                const ver = stdout.trim();
+                const parts = ver.split('.').map(Number);
+                const major = parts[0] || 0;
+                const minor = parts[1] || 0;
+                const isWin8Plus = (major > 6) || (major === 6 && minor >= 2);
+
+                if (isWin8Plus) {
+                    log('AEC', `Windows ${ver}: WASAPI AEC 可用（录音器需使用 AUDCLNT_STREAMFLAGS_ECHO_CANCELLATION 标志）`);
+                    resolve(true);
+                } else {
+                    log('AEC', `Windows ${ver}: 版本过低，WASAPI AEC 需要 Windows 8+`);
+                    resolve(false);
+                }
             });
         });
     }
@@ -766,14 +824,30 @@ class VoiceDisplay {
      */
     detectPulseAudioAEC() {
         return new Promise((resolve) => {
+            // 先检查是否已有 echo-cancel source
             exec('pactl list sources short 2>/dev/null | grep -i echo', {
                 timeout: 3000
             }, (error, stdout) => {
                 if (!error && stdout.trim()) {
+                    log('AEC', '检测到 PulseAudio echo-cancel source');
                     resolve(true);
-                } else {
-                    resolve(false);
+                    return;
                 }
+
+                // 没有现成的 echo-cancel source，尝试自动加载
+                log('AEC', '未找到 echo-cancel source，尝试加载 module-echo-cancel...');
+                exec('pactl load-module module-echo-cancel 2>/dev/null', {
+                    timeout: 5000
+                }, (loadError, loadStdout) => {
+                    if (!loadError && loadStdout.trim()) {
+                        const moduleId = loadStdout.trim();
+                        log('AEC', `module-echo-cancel 已加载 (id=${moduleId})`);
+                        resolve(true);
+                    } else {
+                        log('AEC', '无法加载 module-echo-cancel，系统 AEC 不可用');
+                        resolve(false);
+                    }
+                });
             });
         });
     }
@@ -926,6 +1000,10 @@ async function main() {
 
         // 连接建立后才初始化文本输入栏，确保 sendVoiceInput 能成功发送
         if (useTUI) {
+            tui.currentMode = voiceDisplay.recordingMode;
+            tui.onModeChange = async (mode) => {
+                await voiceDisplay.setRecordingMode(mode);
+            };
             tui.initChatInputBar((text) => {
                 voiceDisplay.sendVoiceInput(text);
             });

@@ -25,6 +25,14 @@ function getCategoryColor(category) {
     return CATEGORY_COLORS[category] || 'gray';
 }
 
+const MODE_LIST = ['mute', 'cut', 'hard', 'soft'];
+const MODE_DISPLAY = {
+    mute: { label: '静音', color: 'blue' },
+    cut: { label: '打断', color: 'yellow' },
+    hard: { label: '硬AEC', color: 'green' },
+    soft: { label: '软AEC', color: 'magenta' }
+};
+
 function getTimestamp() {
     const now = new Date();
     return now.toTimeString().split(' ')[0];
@@ -63,6 +71,8 @@ class SubDisplayTUI {
         this.keyboardMode = 'browse';  // 键盘模式: browse=浏览, input=输入
         this.inputBox = null;          // 底部文本输入行
         this.onSendText = null;        // 文本发送回调
+        this.currentMode = 'mute';     // 当前录音模式
+        this.onModeChange = null;      // 录音模式切换回调
         this._initScreen();
     }
 
@@ -187,6 +197,17 @@ class SubDisplayTUI {
 
         this._bindScrollKeys();
 
+        // r 键循环切换录音模式（输入模式下不拦截字母 r）
+        this.screen.key(['r'], () => {
+            if (this.keyboardMode === 'input') return;
+            if (this.onModeChange) {
+                const currentIndex = MODE_LIST.indexOf(this.currentMode);
+                const nextMode = MODE_LIST[(currentIndex + 1) % MODE_LIST.length];
+                this.currentMode = nextMode;
+                this.onModeChange(nextMode);
+            }
+        });
+
         this.screen.render();
         this._startTrimTimer();
     }
@@ -209,8 +230,14 @@ class SubDisplayTUI {
         if (!this.enabled) return;
         const recIcon = state.recordingEnabled ? '{green-fg}ON{/green-fg}' : '{yellow-fg}OFF{/yellow-fg}';
         const asrIcon = state.asrReady ? '{green-fg}OK{/green-fg}' : '{red-fg}NO{/red-fg}';
+
+        this.currentMode = state.recordingMode || this.currentMode;
+        const mode = MODE_DISPLAY[this.currentMode] || MODE_DISPLAY.mute;
+        const modeLine = ` 模式: {${mode.color}-fg}[${mode.label}]{/${mode.color}-fg}`;
+
         const lines = [
             ` 录音: ${state.recordingEnabled ? '开启' : '暂停'} ${recIcon}`,
+            modeLine,
             ` ASR: ${state.asrReady ? '就绪' : '不可用'} ${asrIcon}`,
             ` VAD: ${state.vadStatus || '-'}`,
             ` 播放队列: ${state.playQueueSize || 0}`,

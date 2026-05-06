@@ -4,6 +4,15 @@
 
 ### 新功能
 
+- ✅ [2026-05-06] 子显示端 TUI 支持 `r` 键循环切换四种录音模式
+  - TUI 录音状态面板显示当前模式名及颜色标识
+  - r 键在 browse 模式下循环切换 mute→cut→hard→soft→mute
+  - 动态切换：清除旧回调/资源，按新模式重新初始化
+  - 改动文件：
+    - `src/apps/voice-display-node/tui.js` (新增 mode 常量、updateRecordingState 显示模式、r 键绑定)
+    - `src/apps/voice-display-node/main.js` (新增 setRecordingMode 方法、TUI 回调绑定)
+    - `docs/spec/voice-display.md` (新增 TUI 录音模式切换小节)
+
 - ✅ [2026-05-06] 子显示端 TUI 新增文本输入行（键盘输入替代语音）
   - 在 voice-display-node TUI 底部新增 blessed.textarea 输入行
   - Tab 切换 browse/input 焦点模式，Enter 发送文本，Esc 退回浏览

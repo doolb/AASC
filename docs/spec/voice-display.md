@@ -738,6 +738,8 @@ class WASAPIAECRecorder extends AudioRecorder:
         返回 true/false
 ```
 
+**检测逻辑：** 通过 PowerShell 检查 Windows 版本（需要 Windows 8+ 即 6.2+），因为 WASAPI AEC 是系统内置功能，通过 AUDCLNT_STREAMFLAGS_ECHO_CANCELLATION 标志在创建音频捕获流时请求。检测只验证 OS 是否支持，实际回声消除效果取决于录音器（pvrecorder/naudiodon）在打开捕获流时是否设置该标志。
+
 ##### Linux (PulseAudio echo-cancel)
 
 ```
@@ -753,6 +755,8 @@ class PulseAECRecorder extends AudioRecorder:
         检测 echo-cancel module 是否可用
         返回 true/false
 ```
+
+**检测逻辑：** 先通过 `pactl list sources short | grep echo` 查找已有 echo-cancel source，如果没找到则尝试 `pactl load-module module-echo-cancel` 自动加载。加载成功即认为可用。
 
 #### NLMS AEC 处理器（模式4: soft）
 
@@ -843,11 +847,58 @@ _initChatInputBar:
     Enter:      仅 input 模式下，读取输入框文本，调用 sendVoiceInput(text)
     Esc:        input 模式退回 browse 模式
     q/C-c:      仅 browse 模式下退出，input 模式下禁止（防止误触）
+    r:          仅 browse 模式下循环切换录音模式 (mute→cut→hard→soft→mute)
 
 数据流:
     键盘输入 → sendVoiceInput(text) → type:voiceInput → 服务端
     （与语音识别结果走相同的处理链路）
 ```
+
+### TUI 录音模式切换
+
+在 TUI 界面中按 `r` 键可循环切换四种录音模式，切换后实时生效。
+
+**切换逻辑：**
+
+```
+键盘 r (browse 模式):
+    获取当前模式在 MODE_LIST 中的索引
+    切换到下一个模式 (循环)
+    调用 onModeChange(nextMode)
+
+VoiceDisplay.setRecordingMode(mode):
+    清理当前状态:
+        销毁 AECProcessor (soft 模式)
+        清除 recorder.onSpeechStart (cut 模式)
+    设置 this.recordingMode = mode
+    根据 mode 调用对应的 setup 方法:
+        mute → setupPlaybackPause()
+        cut  → setupBargeIn()，如果录音被暂停则恢复
+        hard → setupSystemAEC() (异步检测)
+        soft → setupSpeexDSP()
+    更新 TUI 录音状态面板
+```
+
+**状态面板显示：**
+
+```
+ 录音: 开启 ON
+ 模式: [静音]    ← 模式名带颜色标识
+ ASR: 就绪 OK
+ VAD: 运行中
+ 播放队列: 0
+ 最近识别: -
+```
+
+**模式颜色标识：**
+- `mute` (静音): 蓝色
+- `cut` (打断): 黄色
+- `hard` (硬AEC): 绿色
+- `soft` (软AEC): 品红
+
+**改动文件：**
+- `src/apps/voice-display-node/tui.js` (新增 mode 常量、updateRecordingState 显示模式、r 键绑定)
+- `src/apps/voice-display-node/main.js` (新增 setRecordingMode 方法、TUI 回调绑定)
 
 **改动文件：**
 - `src/apps/voice-display-node/tui.js` (新增 initChatInputBar 方法)
