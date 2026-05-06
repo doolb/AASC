@@ -289,6 +289,14 @@ function startServer() {
         voiceCommand.setMediaLibrary(mediaLibraryManager);
         voiceCommand.setMuteFunctions(muteAllDisplays, unmuteAllDisplays);
 
+        // 初始化指令模式状态
+        const initialCommandMode = config.get('voiceCommand.commandMode', true);
+        const session = chat.getSession();
+        if (session.commandMode !== initialCommandMode) {
+            session.commandMode = initialCommandMode;
+            chat.setSession(session);
+        }
+
         try {
             wsServer = new WSViewBindServer();
             wsServer.setCallbacks({
@@ -2417,6 +2425,33 @@ async function handleControlMessageFallback(data, ws) {
                                             });
                                         } catch (err) {
                                             logError('VoiceCommand', `帮助TTS生成失败: ${err.message}`);
+                                        }
+                                    })();
+                                }
+                            } else if (result.type === 'commandMode') {
+                                const modeText = result.enabled ? '已开启指令模式' : '已关闭指令模式';
+                                // 更新会话状态
+                                const s = chat.getSession();
+                                s.commandMode = result.enabled;
+                                chat.setSession(s);
+                                // 持久化到配置
+                                config.set('voiceCommand.commandMode', result.enabled);
+                                // 广播到所有控制端
+                                broadcastToControls({ type: 'commandMode', enabled: result.enabled });
+                                // 显示端 TTS 播报
+                                if (targetDisplayId && sendToDisplay) {
+                                    (async () => {
+                                        try {
+                                            const audioPath = await tts.generateTTS(modeText);
+                                            const fileName = path.basename(audioPath);
+                                            sendToDisplay(targetDisplayId, {
+                                                type: 'voiceCommand',
+                                                action: 'response',
+                                                text: modeText,
+                                                audioUrl: `/uploads/tts/${fileName}`
+                                            });
+                                        } catch (err) {
+                                            logError('VoiceCommand', `指令模式TTS失败: ${err.message}`);
                                         }
                                     })();
                                 }

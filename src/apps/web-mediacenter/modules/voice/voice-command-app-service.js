@@ -1200,10 +1200,57 @@ async function processVoiceCommand(text, displayId, callbacks) {
     if (!text) return;
     
     const trimmedText = text.trim();
+    // 去尾标点，ASR 常附带句号问号
+    const cmdText = trimmedText.replace(/[。，！？、；：,.!?;:]+$/, '');
     
-    const systemResult = handleSystemCommand(trimmedText, displayId);
+    // 第零步：指令模式开关（始终可用，不受指令模式状态影响）
+    if (cmdText === '打开指令模式') {
+        return { type: 'commandMode', enabled: true };
+    }
+    if (cmdText === '关闭指令模式') {
+        return { type: 'commandMode', enabled: false };
+    }
+
+    // 第一步：系统指令始终优先执行
+    const systemResult = handleSystemCommand(cmdText, displayId);
     if (systemResult) {
         return systemResult;
+    }
+
+    // 第二步：指令模式过滤
+    const session = chat.getSession();
+    if (session.commandMode === true) {
+        if (session.mode === 'private') {
+            const assistant = findAssistant(session.privateTarget);
+            return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };
+        }
+
+        const defaultAssistant = findAssistant(assistantConfig.defaultName);
+        if (trimmedText.includes(defaultAssistant.name)) {
+            const message = trimmedText.replace(defaultAssistant.name, '').trim();
+            if (message) {
+                return { type: 'chat', message, systemPrompt: defaultAssistant.template };
+            }
+            return;
+        }
+
+        const isBuiltin = (
+            cmdText.includes('拒绝') || cmdText.includes('取消') ||
+            cmdText === '确认' || cmdText === '确认添加' || cmdText === '是' || cmdText === '好的' ||
+            cmdText.includes('开启录音') || cmdText.includes('开始录音') || cmdText.includes('关闭录音') || cmdText.includes('停止录音') ||
+            cmdText === '静音' || cmdText.includes('全部静音') ||
+            cmdText.includes('取消静音') || cmdText === '恢复音量' ||
+            cmdText.includes('今日提醒') || cmdText.includes('今天提醒') ||
+            cmdText.includes('明日提醒') || cmdText.includes('明天提醒') ||
+            cmdText.includes('提醒') ||
+            cmdText.includes('报时') || cmdText.includes('现在几点') ||
+            cmdText.includes('天气') ||
+            cmdText.includes('搜索') ||
+            cmdText.includes('播放')
+        );
+        if (!isBuiltin) {
+            return;
+        }
     }
     
     if (trimmedText.includes('拒绝') || trimmedText.includes('取消')) {
@@ -1230,7 +1277,7 @@ async function processVoiceCommand(text, displayId, callbacks) {
         }
     }
 
-    if (trimmedText === '确认' || trimmedText === '确认添加' || trimmedText === '是' || trimmedText === '好的') {
+    if (cmdText === '确认' || cmdText === '确认添加' || cmdText === '是' || cmdText === '好的') {
         const confirmed = await handleAffirmCommand(displayId);
         if (confirmed) {
             return;
@@ -1244,12 +1291,12 @@ async function processVoiceCommand(text, displayId, callbacks) {
         }
     }
     
-    if (trimmedText === '静音' || trimmedText.includes('全部静音')) {
+    if (cmdText === '静音' || trimmedText.includes('全部静音')) {
         await handleMuteCommand(displayId);
         return;
     }
     
-    if (trimmedText.includes('取消静音') || trimmedText === '恢复音量') {
+    if (trimmedText.includes('取消静音') || cmdText === '恢复音量') {
         await handleUnmuteCommand(displayId);
         return;
     }

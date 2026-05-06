@@ -178,5 +178,85 @@
     "content": "好的，请您稍等一下，我需要先确认一下是哪方面的问题了。不过现在暂时静音吧，希望您方便。有什么事情可以随时和我联系哦！",
     "mode": "group",
     "target": "妲己"
+  },
+  {
+    "id": "1778029038553okxf",
+    "timestamp": 1778029038554,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "今天。",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1778029042170ad2c",
+    "timestamp": 1778029042170,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的呀！今天过得开心吗？需要我陪你一起玩乐呢！有什么想聊的话题吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "17780290502948ddo",
+    "timestamp": 1778029050294,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "天持。",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1778029054670hp7f",
+    "timestamp": 1778029054670,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "好的呀，天持啊，感觉你很感兴趣呢！有什么想和我分享的吗？需要我陪你聊天或者帮忙解答什么问题吗？ 😊",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1778029313423kykr",
+    "timestamp": 1778029313423,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "，你好。",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1778029315546c3an",
+    "timestamp": 1778029315546,
+    "role": "assistant",
+    "name": "助手",
+    "ip": "",
+    "content": "你好呀！有什么事可以和我聊聊吗？",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "177802950839604ad",
+    "timestamp": 1778029508396,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "系统。",
+    "mode": "group",
+    "target": null
+  },
+  {
+    "id": "1778029514876o07d",
+    "timestamp": 1778029514876,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "好的，我明白了。我是妲己，一个拥有九尾电子猫的娇俏女战士。作为一个电子猫，我喜欢用科技和科技来解决问题和保护大家。我会用我的科技装备为你们提供安全、便捷的服务。如果您有任何问题或需要帮助，请随时告诉我！",
+    "mode": "group",
+    "target": null
   }
 ]

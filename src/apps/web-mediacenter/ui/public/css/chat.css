@@ -542,6 +542,11 @@
     color: #e74c3c;
 }
 
+.mode-badge.command {
+    background: rgba(46, 204, 113, 0.3);
+    color: #2ecc71;
+}
+
 .mode-exit-btn {
     padding: 4px 8px;
     border: none;

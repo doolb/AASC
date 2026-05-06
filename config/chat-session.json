@@ -1,5 +1,6 @@
 {
   "mode": "group",
   "privateTarget": null,
-  "playOnControl": false
+  "playOnControl": false,
+  "commandMode": true
 }

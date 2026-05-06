@@ -476,15 +476,20 @@ const Chat = {
     renderModeIndicator() {
         const indicator = document.getElementById('chatModeIndicator');
         if (!indicator) return;
-        
+
+        let html = '';
+        if (this.session.commandMode) {
+            html += '<span class="mode-badge command">指令模式</span>';
+        }
         if (this.session.mode === 'private') {
-            indicator.innerHTML = `
+            html += `
                 <span class="mode-badge private">私聊: ${this.escapeHtml(this.session.privateTarget)}</span>
                 <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出私聊</button>
             `;
         } else {
-            indicator.innerHTML = '<span class="mode-badge group">群聊</span>';
+            html += '<span class="mode-badge group">群聊</span>';
         }
+        indicator.innerHTML = html;
     },
     
     renderPlayOnControlToggle() {

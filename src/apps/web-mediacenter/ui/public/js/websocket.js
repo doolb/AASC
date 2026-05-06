@@ -164,6 +164,19 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleDisplayVoiceInput(data);
             }
+        } else if (data.type === 'commandMode') {
+            if (window.Chat) {
+                window.Chat.session.commandMode = data.enabled;
+                window.Chat.renderModeIndicator();
+            }
+        } else if (data.type === 'privateMode') {
+            if (window.Chat) {
+                window.Chat.setMode('private', data.target);
+            }
+        } else if (data.type === 'groupMode') {
+            if (window.Chat) {
+                window.Chat.setMode('group', null);
+            }
         } else if (data.type === 'searchHistory') {
             if (window.Chat) {
                 window.Chat.searchHistory = data.history;

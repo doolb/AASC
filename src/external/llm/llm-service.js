@@ -33,7 +33,8 @@ let chatTemplates = [];
 let chatSession = {
     mode: 'group',
     privateTarget: null,
-    playOnControl: false
+    playOnControl: false,
+    commandMode: true
 };
 let chatCommands = {
     commands: {}
@@ -265,6 +266,7 @@ function setSession(session) {
     if (session.mode !== undefined) chatSession.mode = session.mode;
     if (session.privateTarget !== undefined) chatSession.privateTarget = session.privateTarget;
     if (session.playOnControl !== undefined) chatSession.playOnControl = session.playOnControl;
+    if (session.commandMode !== undefined) chatSession.commandMode = session.commandMode;
     saveSession();
     return getSession();
 }
