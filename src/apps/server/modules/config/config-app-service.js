@@ -43,7 +43,11 @@ class Config extends DataSnapshot {
             ],
             reminderTemplate: '{content}',
             reminderTemplatePrefix: '',
-            reminderTemplateSuffix: ''
+            reminderTemplateSuffix: '',
+            routing: {
+                weather: 'system',
+                search: 'system'
+            }
         },
         logBrain: {
             errorThreshold: 1,

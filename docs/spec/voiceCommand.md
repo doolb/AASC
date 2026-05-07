@@ -366,14 +366,14 @@ processVoiceCommand(text, displayId, callbacks):
         调用 handleReminderCommand()
     否则如果包含 "报时"/"现在几点":
         调用 handleTimeAnnounceCommand()
-    否则如果包含 "天气":
-        routing = checkCommandRouting(text, 'weather')
-        if routing: return routing  // 走 LLM
-        调用 handleWeatherCommand()
     否则如果包含 "搜索":
         routing = checkCommandRouting(text, 'search')
         if routing: return routing  // 走 LLM
         调用 handleSearchCommand()
+    否则如果包含 "天气":
+        routing = checkCommandRouting(text, 'weather')
+        if routing: return routing  // 走 LLM
+        调用 handleWeatherCommand()
     否则:
         返回 { type: 'chat', message, systemPrompt }
 ```

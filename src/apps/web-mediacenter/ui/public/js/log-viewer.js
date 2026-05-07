@@ -275,7 +275,7 @@ const LogViewer = {
         if (entry.correlationId) div.dataset.correlationId = entry.correlationId;
 
         const levelClass = `log-level-badge log-level-badge-${entry.level}`;
-        const deviceLabel = this._getDeviceLabel(entry.device);
+        const deviceLabel = this._getIdLabel(entry.device);
         const arrowMsg = this._getArrowMessage(entry);
 
         div.innerHTML =

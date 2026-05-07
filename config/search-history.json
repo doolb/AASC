@@ -1,5 +1,38 @@
 [
   {
+    "id": "1778083915961",
+    "query": "新华。",
+    "results": {
+      "type": "first_result",
+      "title": "新华网_让新闻离你更近",
+      "link": "https://www.xinhuanet.com/",
+      "snippet": "中国主要重点新闻网站,依托新华社遍布全球的采编网络,记者遍布世界100多个国家和地区,地方频道分布全国31个省市自治区,每天24小时同时使用6种语言滚动发稿,权威、准确、及时播发国内外重要新闻 …"
+    },
+    "timestamp": 1778083915961
+  },
+  {
+    "id": "1778083821734",
+    "query": "deper take。",
+    "results": {
+      "type": "first_result",
+      "title": "DEPER - 江苏德普尔门控科技有限公司",
+      "link": "http://www.deper.com.cn/",
+      "snippet": "江苏德普尔门控科技有限公司 Copyright©2014-2022 江苏德普尔门控科技有限公司 版权所有 ICP备案号： 苏ICP备20021011号-1 隐私政策 ..."
+    },
+    "timestamp": 1778083821734
+  },
+  {
+    "id": "1778083767175",
+    "query": "看小说。",
+    "results": {
+      "type": "first_result",
+      "title": "有没有什么好的上班看小说神器,上班摸鱼那种? - 知乎",
+      "link": "https://www.zhihu.com/question/458198598",
+      "snippet": "2022年6月23日 · 【免费！！！】 Reader - 开源无边界小说阅读器（摸鱼神器） - MemoryStory (cnxiaobai.com) 可隐藏窗口、调节字体大小、、调节透明度、随意调节窗口大小、自主设定快捷键， …"
+    },
+    "timestamp": 1778083767175
+  },
+  {
     "id": "1774794980478",
     "query": "今天天气",
     "results": {

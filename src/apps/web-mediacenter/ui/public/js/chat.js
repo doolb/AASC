@@ -1205,17 +1205,113 @@ const Chat = {
         this.profiles.forEach(p => {
             const isActive = p.name === this.activeProfile;
             html += `
-                <div class="profile-item ${isActive ? 'active' : ''}" onclick="Chat.switchProfile('${this.escapeHtml(p.name)}')">
-                    <div class="profile-info">
+                <div class="profile-item ${isActive ? 'active' : ''}">
+                    <div class="profile-info" onclick="Chat.switchProfile('${this.escapeHtml(p.name)}')" style="cursor:pointer;flex:1">
                         <span class="profile-name">${this.escapeHtml(p.name)}</span>
                         <span class="profile-model">${this.escapeHtml(p.model)}</span>
                     </div>
-                    <div class="profile-status">${isActive ? '✓ 当前' : '切换'}</div>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <span class="profile-status">${isActive ? '✓ 当前' : '切换'}</span>
+                        <button class="chat-btn-icon" onclick="event.stopPropagation();Chat.editProfile('${this.escapeHtml(p.name)}')" title="编辑">✎</button>
+                        <button class="chat-btn-icon" onclick="event.stopPropagation();Chat.deleteProfile('${this.escapeHtml(p.name)}')" title="删除">✕</button>
+                    </div>
                 </div>
             `;
         });
         html += '</div>';
         container.innerHTML = html;
+    },
+
+    showAddProfile() {
+        document.getElementById('profileEditName').value = '';
+        document.getElementById('profileEditApiUrl').value = '';
+        document.getElementById('profileEditModel').value = '';
+        document.getElementById('profileEditMaxTokens').value = '';
+        document.getElementById('profileEditTemperature').value = '';
+        document.getElementById('profileEditor').style.display = 'block';
+    },
+
+    editProfile(name) {
+        const profile = this.profiles.find(p => p.name === name);
+        if (!profile) return;
+        document.getElementById('profileEditName').value = profile.name || '';
+        document.getElementById('profileEditApiUrl').value = profile.apiUrl || '';
+        document.getElementById('profileEditModel').value = profile.model || '';
+        document.getElementById('profileEditMaxTokens').value = profile.maxTokens || '';
+        document.getElementById('profileEditTemperature').value = profile.temperature || '';
+        document.getElementById('profileEditor').style.display = 'block';
+    },
+
+    cancelEditProfile() {
+        document.getElementById('profileEditor').style.display = 'none';
+    },
+
+    saveProfile() {
+        const name = document.getElementById('profileEditName').value.trim();
+        const apiUrl = document.getElementById('profileEditApiUrl').value.trim();
+        const model = document.getElementById('profileEditModel').value.trim();
+        const maxTokens = parseInt(document.getElementById('profileEditMaxTokens').value) || 1000;
+        const temperature = parseFloat(document.getElementById('profileEditTemperature').value) || 0.7;
+
+        if (!name) {
+            window.showToast('请输入配置名称', 'error');
+            return;
+        }
+        if (!apiUrl) {
+            window.showToast('请输入 API URL', 'error');
+            return;
+        }
+        if (!model) {
+            window.showToast('请输入模型名称', 'error');
+            return;
+        }
+
+        const existingIdx = this.profiles.findIndex(p => p.name === name);
+        const profile = { name, apiUrl, model, maxTokens, temperature };
+
+        if (existingIdx >= 0) {
+            this.profiles[existingIdx] = profile;
+        } else {
+            this.profiles.push(profile);
+        }
+
+        fetch('/api/chat/profiles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profiles: this.profiles })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.showToast(existingIdx >= 0 ? '配置已更新' : '配置已添加', 'success');
+                this.cancelEditProfile();
+                this.renderProfileSelector();
+            } else {
+                window.showToast('保存配置失败: ' + (data.message || data.error), 'error');
+            }
+        })
+        .catch(err => window.showToast('保存配置失败', 'error'));
+    },
+
+    deleteProfile(name) {
+        if (!confirm(`确定删除配置 "${name}" ？`)) return;
+        this.profiles = this.profiles.filter(p => p.name !== name);
+
+        fetch('/api/chat/profiles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profiles: this.profiles })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.showToast('配置已删除', 'success');
+                this.renderProfileSelector();
+            } else {
+                window.showToast('删除配置失败: ' + (data.message || data.error), 'error');
+            }
+        })
+        .catch(err => window.showToast('删除配置失败', 'error'));
     },
     
     hideConfig() {

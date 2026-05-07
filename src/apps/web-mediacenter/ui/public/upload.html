@@ -54,6 +54,10 @@
                 <span class="nav-icon">🧠</span>
                 <span class="nav-text">大脑</span>
             </button>
+            <button class="nav-item" data-target="settings" title="设置">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-text">设置</span>
+            </button>
         </div>
     </nav>
     
@@ -542,6 +546,33 @@
                 </div>
             </div>
         </section>
+
+        <section class="panel" id="panel-settings" style="display:none;">
+            <h1 class="page-title">系统设置</h1>
+
+            <div class="section">
+                <h2>高级指令路由</h2>
+                <div class="routing-hint" style="font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 15px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                    设置高级指令（天气、搜索）使用 LLM（AI 处理）或系统（内置处理）。
+                </div>
+                <div class="routing-grid">
+                    <div class="control-item">
+                        <label>天气指令</label>
+                        <div class="control-buttons">
+                            <button class="control-btn" id="routingWeatherLlm" data-routing="weather" data-value="llm" onclick="Settings.setRouting('weather', 'llm')">LLM</button>
+                            <button class="control-btn" id="routingWeatherSystem" data-routing="weather" data-value="system" onclick="Settings.setRouting('weather', 'system')">系统</button>
+                        </div>
+                    </div>
+                    <div class="control-item" style="margin-top: 12px;">
+                        <label>搜索指令</label>
+                        <div class="control-buttons">
+                            <button class="control-btn" id="routingSearchLlm" data-routing="search" data-value="llm" onclick="Settings.setRouting('search', 'llm')">LLM</button>
+                            <button class="control-btn" id="routingSearchSystem" data-routing="search" data-value="system" onclick="Settings.setRouting('search', 'system')">系统</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
     
     <div class="modal-overlay" id="featureModal">
@@ -588,6 +619,23 @@
                 <div class="chat-config-item">
                     <label>LLM 服务器配置</label>
                     <div id="profileSelector"></div>
+                    <button class="chat-add-btn" style="margin-top:8px" onclick="Chat.showAddProfile()">+ 添加配置</button>
+                </div>
+                <div class="chat-config-item" id="profileEditor" style="display:none; border:1px solid var(--border-color); border-radius:8px; padding:12px; margin-bottom:12px;">
+                    <label>配置名称</label>
+                    <input type="text" id="profileEditName" placeholder="例如: 本地模型">
+                    <label style="margin-top:8px;display:block">API URL</label>
+                    <input type="text" id="profileEditApiUrl" placeholder="http://192.168.1.12:8080/v1/chat/completions">
+                    <label style="margin-top:8px;display:block">模型</label>
+                    <input type="text" id="profileEditModel" placeholder="gpt-3.5-turbo">
+                    <label style="margin-top:8px;display:block">最大 Tokens</label>
+                    <input type="number" id="profileEditMaxTokens" placeholder="1000" min="1">
+                    <label style="margin-top:8px;display:block">温度 (Temperature)</label>
+                    <input type="number" id="profileEditTemperature" placeholder="0.7" min="0" max="2" step="0.1">
+                    <div style="display:flex;gap:8px;margin-top:10px;">
+                        <button class="chat-add-btn" onclick="Chat.saveProfile()">保存配置</button>
+                        <button class="chat-add-btn" style="background:var(--bg-secondary)" onclick="Chat.cancelEditProfile()">取消</button>
+                    </div>
                 </div>
                 <div class="chat-config-actions">
                     <button class="chat-add-btn" onclick="saveChatConfig()">保存设置</button>
@@ -706,7 +754,71 @@
     <script src="js/log-brain-viewer.js"></script>
     <script type="module" src="js/map/map-panel.js"></script>
     <script src="js/main.js"></script>
-    
+
+    <script>
+    const Settings = {
+        routing: {},
+
+        init() {
+            this.updateUI();
+            this.loadRouting();
+        },
+
+        loadRouting() {
+            const send = () => {
+                if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+                    window.WebSocketManager.send({ type: 'getCommandRouting' });
+                    return true;
+                }
+                return false;
+            };
+            if (!send()) {
+                // WebSocket 还没连上，延迟重试
+                setTimeout(() => this.loadRouting(), 1000);
+            }
+        },
+
+        handleRoutingUpdate(routing) {
+            this.routing = routing || {};
+            this.updateUI();
+        },
+
+        updateUI() {
+            const updateButton = (type, value) => {
+                const llmBtn = document.getElementById(`routing${type.charAt(0).toUpperCase() + type.slice(1)}Llm`);
+                const sysBtn = document.getElementById(`routing${type.charAt(0).toUpperCase() + type.slice(1)}System`);
+                if (llmBtn && sysBtn) {
+                    llmBtn.style.background = value === 'llm'
+                        ? 'linear-gradient(135deg, #4CAF50, #45a049)'
+                        : 'rgba(255,255,255,0.1)';
+                    sysBtn.style.background = value === 'system'
+                        ? 'linear-gradient(135deg, #4CAF50, #45a049)'
+                        : 'rgba(255,255,255,0.1)';
+                }
+            };
+            updateButton('weather', this.routing.weather);
+            updateButton('search', this.routing.search);
+        },
+
+        setRouting(type, value) {
+            if (window.WebSocketManager) {
+                const update = {};
+                update[type] = value;
+                window.WebSocketManager.send({
+                    type: 'updateCommandRouting',
+                    routing: update
+                });
+            }
+        }
+    };
+
+    window.Settings = Settings;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        Settings.init();
+    });
+    </script>
+
     <div class="self-test-trigger">
         <button class="self-test-trigger-btn" onclick="SelfTest.runAllTests()" title="运行自测">🧪</button>
     </div>

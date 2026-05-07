@@ -1063,12 +1063,55 @@ const Chat = {
                     startListening()
     
     showConfig():
-        显示设置面板:
-            系统提示词
-            自定义指令列表
-            AI助手列表
-            添加指令表单
-            添加助手表单
+        显示聊天设置弹窗:
+            系统提示词 (textarea)
+            LLM 服务器配置:
+                配置列表 (profileSelector):
+                    每个配置项显示: 名称、模型名
+                    点击配置名切换 (switchProfile)
+                    ✓ 当前 标识活跃配置
+                    ✎ 编辑按钮 (editProfile)
+                    ✕ 删除按钮 (deleteProfile)
+                + 添加配置 按钮 (showAddProfile)
+                配置编辑表单 (profileEditor):
+                    配置名称 (input)
+                    API URL (input)
+                    模型 (input)
+                    最大 Tokens (number input)
+                    温度 (number input, 0-2, step 0.1)
+                    保存配置 按钮 (saveProfile)
+                    取消 按钮 (cancelEditProfile)
+        保存设置 按钮 (saveConfig) 仅保存 systemPrompt
+
+    showAddProfile():
+        清空编辑表单
+        显示配置编辑表单
+
+    editProfile(name):
+        根据 name 查找 profile
+        填充编辑表单字段
+        显示配置编辑表单
+
+    cancelEditProfile():
+        隐藏配置编辑表单
+
+    saveProfile():
+        验证必填字段 (name, apiUrl, model)
+        如果 name 已存在 → 更新
+        否则 → 新增
+        请求 POST /api/chat/profiles { profiles }
+        更新成功后刷新列表
+
+    deleteProfile(name):
+        confirm 确认
+        从 profiles 列表中移除
+        请求 POST /api/chat/profiles { profiles }
+        更新成功后刷新列表
+
+    loadProfiles():
+        请求 GET /api/chat/profiles
+        更新 this.profiles 和 this.activeProfile
+        调用 renderProfileSelector()
     
     addCommand():
         获取关键词和指令列表

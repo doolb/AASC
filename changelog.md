@@ -4,6 +4,35 @@
 
 ### 新功能
 
+- ✅ [2026-05-07] 控制端支持添加/编辑/删除 LLM 配置
+  - 聊天设置弹窗新增配置编辑表单（name、apiUrl、model、maxTokens、temperature）
+  - 配置列表增加编辑和删除按钮
+  - 改动文件：upload.html, chat.js, chat.css, docs/spec/chat-system.md
+
+### Bug 修复
+
+- ✅ [2026-05-07] 修复控制端设置页面 LLM/系统路由按钮颜色显示问题
+  - **根本原因**：Settings 用 `const` 定义，顶层 `const` 不会创建 `window` 属性，导致 websocket.js 中 `window.Settings` 永久为 undefined，handleRoutingUpdate 从未被调用
+  - 服务端在控制端连接时主动推送 commandRouting，避免客户端额外请求
+  - `Settings.init()` 中提前调用 `updateUI()`，防止 CSS 默认红色闪烁
+  - 添加 `window.Settings = Settings` 使跨模块访问生效
+  - 改动文件：
+    - `src/apps/server/boot/server-app.js` (连接时推送 commandRouting)
+    - `src/apps/web-mediacenter/ui/public/upload.html` (添加 window.Settings)
+  - `Settings.updateUI()` 只会在收到 WebSocket 路由数据后才调用，在此之前按钮显示 CSS 默认红色渐变
+  - 修复：在 `init()` 中立即调用一次 `updateUI()`，先将按钮设为非活跃半透明状态
+  - 改动文件：`src/apps/web-mediacenter/ui/public/upload.html` (第745行)
+
+- ✅ [2026-05-07] 修复 log-viewer.js `_getDeviceLabel is not a function` 报错
+  - `_getDeviceLabel` 方法不存在，实际应为重构后更名的 `_getIdLabel`
+  - 改动文件：`src/apps/web-mediacenter/ui/public/js/log-viewer.js` (第278行)
+
+### 新功能
+
+- ✅ [2026-05-07] 语音命令搜索指令优先级高于天气指令
+  - 调整 processVoiceCommand 中搜索/天气的判定顺序：搜索先于天气
+  - 改动文件：voice-command-app-service.js, docs/spec/voiceCommand.md
+
 - ✅ [2026-05-06] 子显示端 TUI 支持 `r` 键循环切换四种录音模式
   - TUI 录音状态面板显示当前模式名及颜色标识
   - r 键在 browse 模式下循环切换 mute→cut→hard→soft→mute

@@ -377,7 +377,8 @@ function startServer() {
                 'getReminders', 'chatHistory', 'clearChatHistory', 'getChatSession', 'setChatSession',
                 'getChatCommands', 'setChatCommands', 'mute', 'unmute', 'todayReminders',
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
-                'chatMessage', 'executeCommands', 'switchProfile'
+                'chatMessage', 'executeCommands', 'switchProfile',
+                'getCommandRouting', 'updateCommandRouting'
             ];
             for (const type of controlTypes) {
                 wsServer.registerHandler(type, async (data, ctx) => {
@@ -2308,7 +2309,8 @@ wss.on('connection', (ws, req) => {
             type: 'systemStats',
             stats: systemMonitor.getStats()
         }));
-        
+        ws.send(JSON.stringify({ type: 'commandRouting', routing: voiceCommand.getCommandRouting() }));
+
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
@@ -2593,6 +2595,9 @@ async function handleControlMessageFallback(data, ws) {
                         type: 'searchHistory',
                         history: voiceCommand.getSearchHistory()
                     }));
+                    return;
+                } else if (data.type === 'getCommandRouting') {
+                    ws.send(JSON.stringify({ type: 'commandRouting', routing: voiceCommand.getCommandRouting() }));
                     return;
                 } else if (data.type === 'updateCommandRouting') {
                     const changed = voiceCommand.setCommandRouting(data.routing);

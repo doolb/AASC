@@ -208,6 +208,10 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleProfileSwitched(data);
             }
+        } else if (data.type === 'commandRouting') {
+            if (window.Settings) {
+                window.Settings.handleRoutingUpdate(data.routing);
+            }
         } else if (data.type === 'muteResult') {
             if (window.Chat) {
                 window.Chat.addSystemMessage(data.message);

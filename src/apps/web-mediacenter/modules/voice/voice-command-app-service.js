@@ -25,8 +25,8 @@ const COMMAND_LEVEL = {
 const COMMAND_LEVEL_DEFAULT = 'low';
 
 let highLevelRouting = {
-    weather: 'llm',
-    search: 'llm'
+    weather: 'system',
+    search: 'system'
 };
 
 const DEFAULT_WEATHER_CITIES = [
@@ -1401,17 +1401,17 @@ async function processVoiceCommand(text, displayId, callbacks) {
         return;
     }
     
-    if (trimmedText.includes('天气')) {
-        const routing = checkCommandRouting(trimmedText, 'weather');
-        if (routing) return routing;
-        await handleWeatherCommand(trimmedText, displayId, callbacks);
-        return;
-    }
-
     if (trimmedText.includes('搜索')) {
         const routing = checkCommandRouting(trimmedText, 'search');
         if (routing) return routing;
         await handleSearchCommand(trimmedText, displayId);
+        return;
+    }
+
+    if (trimmedText.includes('天气')) {
+        const routing = checkCommandRouting(trimmedText, 'weather');
+        if (routing) return routing;
+        await handleWeatherCommand(trimmedText, displayId, callbacks);
         return;
     }
     

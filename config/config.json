@@ -47,7 +47,11 @@
     ],
     "reminderTemplate": "{content}",
     "reminderTemplatePrefix": "",
-    "reminderTemplateSuffix": ""
+    "reminderTemplateSuffix": "",
+    "routing": {
+      "weather": "system",
+      "search": "llm"
+    }
   },
   "logBrain": {
     "errorThreshold": 1,
@@ -76,14 +80,14 @@
       "capabilities": {
         "mediaRendering": true,
         "voicePlayback": true,
-        "voiceRecording": true,
+        "voiceRecording": false,
         "voiceRecognition": true,
         "displayText": true
       },
       "userCapabilities": {
         "mediaRendering": true,
         "voicePlayback": true,
-        "voiceRecording": true,
+        "voiceRecording": false,
         "voiceRecognition": true,
         "displayText": true
       }
@@ -121,7 +125,21 @@
       },
       "volume": 6,
       "playlist": [],
-      "isPlaying": false
+      "isPlaying": false,
+      "capabilities": {
+        "mediaRendering": false,
+        "voicePlayback": true,
+        "voiceRecording": true,
+        "voiceRecognition": false,
+        "displayText": false
+      },
+      "userCapabilities": {
+        "mediaRendering": false,
+        "voicePlayback": true,
+        "voiceRecording": true,
+        "voiceRecognition": false,
+        "displayText": false
+      }
     },
     "192.168.1.19": {
       "currentMedia": null,
