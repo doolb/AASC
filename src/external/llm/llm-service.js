@@ -461,8 +461,24 @@ function buildMessages(userMessage, options = {}) {
 function isSentenceEnd(text) {
     if (!text || text.length === 0) return false;
     const lastChar = text[text.length - 1];
+    if (lastChar === '\n') return true;
     const endChars = ['.', '!', '?', '~', '～', '\u3002', '\uFF01', '\uFF1F', '\uFF1B', ';', '"', '"', '\u201C', '\u201D', '\u2018', '\u2019', '\u2026'];
     return endChars.includes(lastChar);
+}
+
+// 在 pendingText 中从右向左扫描最后一个完整句子边界
+// 中文句号/问号/感叹号直接分句，英文句点需后跟空白/换行（避免缩写和数字）
+function findLastSentenceBoundary(text) {
+    if (!text) return -1;
+    const cnEnd = new Set(['。', '！', '？', '～']);
+    const enEnd = new Set(['.', '!', '?', '~']);
+    for (let i = text.length - 2; i >= 0; i--) {
+        if (cnEnd.has(text[i])) return i + 1;
+        if (enEnd.has(text[i]) && (text[i + 1] === '\n' || text[i + 1] === ' ')) {
+            return i + 1;
+        }
+    }
+    return -1;
 }
 
 function splitIntoSentences(text) {
@@ -584,17 +600,18 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                     if (content) {
                         fullMessage += content;
                         pendingText += content;
-                        
+
                         if (onChunk) {
                             onChunk(content, fullMessage);
                         }
-                        
-                        if (isSentenceEnd(pendingText)) {
-                            const sentence = pendingText.trim();
+
+                        const splitAt = findLastSentenceBoundary(pendingText);
+                        if (splitAt >= 0) {
+                            const sentence = pendingText.substring(0, splitAt).trim();
                             if (sentence && onSentence) {
                                 onSentence(sentence, fullMessage);
                             }
-                            pendingText = '';
+                            pendingText = pendingText.substring(splitAt);
                         }
                     }
                 } catch (e) {

@@ -1279,13 +1279,15 @@ async function processVoiceCommand(text, displayId, callbacks) {
             return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };
         }
 
-        const defaultAssistant = findAssistant(assistantConfig.defaultName);
-        if (trimmedText.includes(defaultAssistant.name)) {
-            const message = trimmedText.replace(defaultAssistant.name, '').trim();
-            if (message) {
-                return { type: 'chat', message, systemPrompt: defaultAssistant.template };
+        // 匹配任意助手名字（不限于 defaultName）
+        for (const a of assistantConfig.assistants) {
+            if (trimmedText.includes(a.name)) {
+                const message = trimmedText.replace(a.name, '').trim();
+                if (message) {
+                    return { type: 'chat', message, systemPrompt: a.template };
+                }
+                return;
             }
-            return;
         }
 
         const isBuiltin = (
@@ -1433,15 +1435,19 @@ async function processVoiceCommand(text, displayId, callbacks) {
         }
     }
     
-    const assistant = findAssistant(assistantConfig.defaultName);
-    if (trimmedText.includes(assistant.name)) {
-        const message = trimmedText.replace(assistant.name, '').trim();
-        if (message) {
-            return { type: 'chat', message, systemPrompt: assistant.template };
+    // 匹配任意助手名字（不限于 defaultName）
+    for (const a of assistantConfig.assistants) {
+        if (trimmedText.includes(a.name)) {
+            const message = trimmedText.replace(a.name, '').trim();
+            if (message) {
+                return { type: 'chat', message, systemPrompt: a.template };
+            }
+            return { type: 'chat', message: trimmedText, systemPrompt: a.template };
         }
     }
-    
-    return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };
+
+    const defaultAssistant = findAssistant(assistantConfig.defaultName);
+    return { type: 'chat', message: trimmedText, systemPrompt: defaultAssistant.template };
 }
 
 function handleSystemCommand(text, displayId) {

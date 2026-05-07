@@ -8,6 +8,25 @@ const fs = require('fs');
 const { pipeline } = require('stream');
 const multer = require('multer');
 const config = require('../modules/config/config-app-service');
+
+// 移除 Markdown 标记，用于 TTS 播报前的文本清洗
+function stripMarkdown(text) {
+    return text
+        .replace(/```[\s\S]*?```/g, '')           // 代码块
+        .replace(/`([^`]+)`/g, '$1')                // 行内代码
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')   // 图片 ![alt](url)
+        .replace(/\[([^\]]*)\]\([^)]+\)/g, '$1')    // 链接 [text](url)
+        .replace(/\[source_group_web_\d+\]/g, '')   // LLM 联网搜索引用标记
+        .replace(/#{1,6}\s+/g, '')                  // 标题标记
+        .replace(/(\*{1,3}|_{1,3}|~~)(.*?)\1/g, '$2') // 粗体/斜体/删除线
+        .replace(/^[>\s]*>/gm, '')                  // 引用标记
+        .replace(/^[-*+]\s+/gm, '')                 // 无序列表标记
+        .replace(/^\d+[.)]\s+/gm, '')               // 有序列表标记
+        .replace(/^---+\s*$/gm, '')                 // 分隔线
+        .replace(/^\|.+\|$/gm, (m) => m.replace(/\|/g, ' ').replace(/:\s*[-]+\s*/g, '')) // 表格行 → 纯文本
+        .replace(/\n{3,}/g, '\n\n')                 // 过多空行压缩
+        .trim();
+}
 const tts = require('../../../external/tts/tts-service');
 const asr = require('../../../external/asr/asr-service');
 const timeListener = require('../../web-mediacenter/modules/time/time-listener-app-service');
@@ -2819,7 +2838,8 @@ async function handleControlMessageFallback(data, ws) {
                     } else if (data.action === 'play' && data.text) {
                         (async () => {
                             try {
-                                const sentences = chat.splitIntoSentences(data.text);
+                                const cleanText = stripMarkdown(data.text);
+                                const sentences = chat.splitIntoSentences(cleanText);
                                 const targetDisplayIds = data.displayIds || (displayId ? [displayId] : []);
                                 
                                 for (const sentence of sentences) {
@@ -2884,7 +2904,8 @@ async function handleControlMessageFallback(data, ws) {
                                 },
                                 onSentence: async (sentence, fullMessage) => {
                                     try {
-                                        const audioPath = await tts.generateTTS(sentence);
+                                        const cleanText = stripMarkdown(sentence);
+                                        const audioPath = await tts.generateTTS(cleanText);
                                         const fileName = path.basename(audioPath);
                                         sendToDisplay(displayId, {
                                             type: 'tts',
@@ -3076,10 +3097,11 @@ async function handleChatMessage(options) {
         },
         onSentence: async (sentence, fullMessage) => {
             try {
-                const audioPath = await tts.generateTTS(sentence);
+                const cleanText = stripMarkdown(sentence);
+                const audioPath = await tts.generateTTS(cleanText);
                 const fileName = path.basename(audioPath);
                 const audioUrl = `/uploads/tts/${fileName}`;
-                
+
                 if (playOnControl) {
                     sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
                 } else if (displayIds.length > 0) {

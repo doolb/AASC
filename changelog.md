@@ -14,6 +14,19 @@
 
 ### Bug 修复
 
+- ✅ [2026-05-07] 群聊模式匹配任意助手名字，不再仅限于 defaultName
+  - 命令模式/非命令模式均遍历 `assistantConfig.assistants`，匹配首个含助手名字的模板
+  - 改动文件：voice-command-app-service.js, docs/spec/voiceCommand.md
+
+- ✅ [2026-05-07] TTS 播报前移除 Markdown 标记符号
+  - LLM 返回的 **粗体**、`代码`、[链接](url) 等格式符号不再被 TTS 朗读
+  - 仅影响 TTS 播报文本，聊天界面仍显示原始 Markdown
+  - 改动文件：server-app.js, llm-service.js
+  - 新增 `stripMarkdown()` 处理表格、列表等复杂格式
+  - 控制端重播 TTS（playMessage / playText）同样使用 stripMarkdown 清洗后再分句生成音频
+  - `isSentenceEnd()` 新增换行符分句，避免 markdown 表格积累成一整段
+  - 新增 `findLastSentenceBoundary()` 在流式场景扫描句尾标点+换行组合分句，避免引文标记等导致不分句
+
 - ✅ [2026-05-07] 修复控制端设置页面 LLM/系统路由按钮颜色显示问题
   - **根本原因**：Settings 用 `const` 定义，顶层 `const` 不会创建 `window` 属性，导致 websocket.js 中 `window.Settings` 永久为 undefined，handleRoutingUpdate 从未被调用
   - 服务端在控制端连接时主动推送 commandRouting，避免客户端额外请求

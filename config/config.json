@@ -49,7 +49,7 @@
     "reminderTemplatePrefix": "",
     "reminderTemplateSuffix": "",
     "routing": {
-      "weather": "system",
+      "weather": "llm",
       "search": "llm"
     }
   },
@@ -162,12 +162,13 @@
     }
   },
   "chat": {
-    "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
-    "model": "Qwen3.5-Plus",
-    "maxTokens": 65536,
+    "apiUrl": "http://192.168.1.12:8080/v1/chat/completions",
+    "model": "gpt-3.5-turbo",
+    "maxTokens": 1000,
     "temperature": 0.7,
     "apiKey": "",
     "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题。",
+    "activeProfile": "default",
     "llmProfiles": [
       {
         "name": "default",
@@ -193,8 +194,7 @@
         "temperature": 0.7,
         "apiKey": ""
       }
-    ],
-    "activeProfile": "qwen3.5"
+    ]
   },
   "timeAnnounce": {
     "enabled": true,

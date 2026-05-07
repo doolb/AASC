@@ -30,7 +30,7 @@
 │  ├─ "退出私聊" / "退出" → 退出私聊，切换群聊，广播 groupMode 到控制端
 │  └─ 其他全部 → 发当前私聊助手 LLM，不处理任何内置命令
 └─ 群聊模式:
-   ├─ 含助手名字（defaultName）→ 去前缀后发助手 LLM，不处理指令
+   ├─ 含任意助手名字 → 去前缀后发对应助手 LLM，不处理指令
    ├─ 不含助手名字 + 内置命令 → 执行命令
    └─ 不含助手名字 + 非内置命令 → 静默忽略
 ```
@@ -343,13 +343,14 @@ processVoiceCommand(text, displayId, callbacks):
             assistant = findAssistant(session.privateTarget)
             return { type: 'chat', message: text, systemPrompt: assistant.template }
         
-        // 群聊模式：检查是否含助手名字
-        if text 包含 assistantConfig.defaultName:
-            message = text.replace(defaultName, '').trim()
-            if message:
-                return { type: 'chat', message, systemPrompt: defaultAssistant.template }
-            else:
-                return  // 只说了名字没内容，忽略
+        // 群聊模式：检查是否含任意助手名字
+        for each a in assistantConfig.assistants:
+            if text 包含 a.name:
+                message = text.replace(a.name, '').trim()
+                if message:
+                    return { type: 'chat', message, systemPrompt: a.template }
+                else:
+                    return  // 只说了名字没内容，忽略
         
         // 非系统指令、非助手名字 → 检查是否内置命令
         if 不是任何内置命令(拒绝/取消/确认/录音/静音/提醒/报时/天气/搜索/播放/数字选择):
