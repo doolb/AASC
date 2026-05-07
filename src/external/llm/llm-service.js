@@ -25,6 +25,7 @@ let chatConfig = {
     model: 'gpt-3.5-turbo',
     maxTokens: 1000,
     temperature: 0.7,
+    apiKey: '',
     systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。'
 };
 
@@ -92,7 +93,8 @@ function init(config = {}) {
             apiUrl: chatConfig.apiUrl,
             model: chatConfig.model,
             maxTokens: chatConfig.maxTokens,
-            temperature: chatConfig.temperature
+            temperature: chatConfig.temperature,
+            apiKey: chatConfig.apiKey
         }];
     }
     if (config.activeProfile && llmProfiles.some(p => p.name === config.activeProfile)) {
@@ -114,6 +116,7 @@ function applyProfile(name) {
     if (profile) {
         chatConfig.apiUrl = profile.apiUrl;
         chatConfig.model = profile.model;
+        chatConfig.apiKey = profile.apiKey || '';
         if (profile.maxTokens) chatConfig.maxTokens = profile.maxTokens;
         if (profile.temperature !== undefined) chatConfig.temperature = profile.temperature;
         activeProfile = profile.name;
@@ -223,7 +226,11 @@ function saveImportantRecords() {
 }
 
 function getConfig() {
-    return { ...chatConfig };
+    return {
+        ...chatConfig,
+        llmProfiles: llmProfiles.map(p => ({ ...p })),
+        activeProfile
+    };
 }
 
 function setConfig(newConfig) {
@@ -231,6 +238,7 @@ function setConfig(newConfig) {
     if (newConfig.model !== undefined) chatConfig.model = newConfig.model;
     if (newConfig.maxTokens !== undefined) chatConfig.maxTokens = newConfig.maxTokens;
     if (newConfig.temperature !== undefined) chatConfig.temperature = newConfig.temperature;
+    if (newConfig.apiKey !== undefined) chatConfig.apiKey = newConfig.apiKey;
     if (newConfig.systemPrompt !== undefined) chatConfig.systemPrompt = newConfig.systemPrompt;
     if (newConfig.llmProfiles !== undefined) {
         llmProfiles = newConfig.llmProfiles;
@@ -496,11 +504,11 @@ async function chat(userMessage, options = {}) {
             temperature: chatConfig.temperature
         };
         
+        const headers = { 'Content-Type': 'application/json' };
+        if (chatConfig.apiKey) headers['Authorization'] = 'Bearer ' + chatConfig.apiKey;
         const response = await makeRequest(chatConfig.apiUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers,
             body: JSON.stringify(requestBody)
         });
         
@@ -556,11 +564,11 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
             stream: true
         };
         
+        const streamHeaders = { 'Content-Type': 'application/json' };
+        if (chatConfig.apiKey) streamHeaders['Authorization'] = 'Bearer ' + chatConfig.apiKey;
         await makeStreamRequest(chatConfig.apiUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: streamHeaders,
             body: JSON.stringify(requestBody)
         }, (line) => {
             if (line.startsWith('data: ')) {

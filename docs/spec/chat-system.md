@@ -69,7 +69,8 @@
     apiUrl: string,             // API 地址
     model: string,              // 模型名称
     maxTokens: number,          // 最大 token 数
-    temperature: number         // 温度参数
+    temperature: number,        // 温度参数
+    apiKey: string              // API 密钥（可选）
   }]
 }
 ```
@@ -1079,17 +1080,18 @@ const Chat = {
                     模型 (input)
                     最大 Tokens (number input)
                     温度 (number input, 0-2, step 0.1)
+                    API Key (password input, 可选)
                     保存配置 按钮 (saveProfile)
                     取消 按钮 (cancelEditProfile)
         保存设置 按钮 (saveConfig) 仅保存 systemPrompt
 
     showAddProfile():
-        清空编辑表单
+        清空编辑表单（含 apiKey）
         显示配置编辑表单
 
     editProfile(name):
         根据 name 查找 profile
-        填充编辑表单字段
+        填充编辑表单字段（含 apiKey）
         显示配置编辑表单
 
     cancelEditProfile():

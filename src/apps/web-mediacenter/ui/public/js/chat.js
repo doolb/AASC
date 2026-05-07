@@ -1228,6 +1228,7 @@ const Chat = {
         document.getElementById('profileEditModel').value = '';
         document.getElementById('profileEditMaxTokens').value = '';
         document.getElementById('profileEditTemperature').value = '';
+        document.getElementById('profileEditApiKey').value = '';
         document.getElementById('profileEditor').style.display = 'block';
     },
 
@@ -1239,6 +1240,7 @@ const Chat = {
         document.getElementById('profileEditModel').value = profile.model || '';
         document.getElementById('profileEditMaxTokens').value = profile.maxTokens || '';
         document.getElementById('profileEditTemperature').value = profile.temperature || '';
+        document.getElementById('profileEditApiKey').value = profile.apiKey || '';
         document.getElementById('profileEditor').style.display = 'block';
     },
 
@@ -1252,6 +1254,7 @@ const Chat = {
         const model = document.getElementById('profileEditModel').value.trim();
         const maxTokens = parseInt(document.getElementById('profileEditMaxTokens').value) || 1000;
         const temperature = parseFloat(document.getElementById('profileEditTemperature').value) || 0.7;
+        const apiKey = document.getElementById('profileEditApiKey').value.trim();
 
         if (!name) {
             window.showToast('请输入配置名称', 'error');
@@ -1267,7 +1270,7 @@ const Chat = {
         }
 
         const existingIdx = this.profiles.findIndex(p => p.name === name);
-        const profile = { name, apiUrl, model, maxTokens, temperature };
+        const profile = { name, apiUrl, model, maxTokens, temperature, apiKey };
 
         if (existingIdx >= 0) {
             this.profiles[existingIdx] = profile;

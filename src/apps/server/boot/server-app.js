@@ -1072,7 +1072,8 @@ app.post('/api/chat/profiles/switch', (req, res) => {
         const chatCfg = chat.getConfig();
         config.set('chat', {
             ...chatCfg,
-            activeProfile: chat.getActiveProfile()
+            activeProfile: chat.getActiveProfile(),
+            llmProfiles: chat.getProfiles()
         });
         // 广播配置切换
         broadcastToControls({

@@ -348,5 +348,15 @@
     "content": "好的，我查到今天的情况，可以为你提供天气信息哦！需要的话我可以帮你分析一下。有什么需要吗？",
     "mode": "group",
     "target": null
+  },
+  {
+    "id": "1778163063245699e",
+    "timestamp": 1778163063245,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "你好",
+    "mode": "private",
+    "target": "小爱"
   }
 ]

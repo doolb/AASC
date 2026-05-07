@@ -5,9 +5,12 @@
 ### 新功能
 
 - ✅ [2026-05-07] 控制端支持添加/编辑/删除 LLM 配置
-  - 聊天设置弹窗新增配置编辑表单（name、apiUrl、model、maxTokens、temperature）
+  - 聊天设置弹窗新增配置编辑表单（name、apiUrl、model、maxTokens、temperature、apiKey）
   - 配置列表增加编辑和删除按钮
-  - 改动文件：upload.html, chat.js, chat.css, docs/spec/chat-system.md
+  - LLM 请求自动附加 `Authorization: Bearer` 头（配置了 apiKey 时）
+  - 改动文件：upload.html, chat.js, chat.css, llm-service.js, config-app-service.js, docs/spec/chat-system.md
+  - 修复：config-app-service.js 的 chat 默认值新增 apiKey 字段，确保 DataSnapshot 持久化时不会丢失
+  - 修复：`getConfig()` 返回 `llmProfiles` 和 `activeProfile`，防止 `POST /api/chat/config` 和 `POST /api/chat/profiles/switch` 保存时丢掉 profiles
 
 ### Bug 修复
 
