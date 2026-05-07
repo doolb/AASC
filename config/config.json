@@ -162,11 +162,11 @@
     }
   },
   "chat": {
-    "apiUrl": "https://open.bigmodel.cn/api/paas/v4",
-    "model": "glm-4.7-flash",
+    "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+    "model": "Qwen3.5-Plus",
     "maxTokens": 65536,
     "temperature": 0.7,
-    "apiKey": "b146170bfb04444da51eede1a4240ea0.2t4zdQvxjg71i84J",
+    "apiKey": "",
     "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题。",
     "llmProfiles": [
       {
@@ -184,9 +184,17 @@
         "maxTokens": 65536,
         "temperature": 0.7,
         "apiKey": "b146170bfb04444da51eede1a4240ea0.2t4zdQvxjg71i84J"
+      },
+      {
+        "name": "qwen3.5",
+        "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+        "model": "Qwen3.5-Plus",
+        "maxTokens": 65536,
+        "temperature": 0.7,
+        "apiKey": ""
       }
     ],
-    "activeProfile": "glm4.7-free"
+    "activeProfile": "qwen3.5"
   },
   "timeAnnounce": {
     "enabled": true,

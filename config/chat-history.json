@@ -350,12 +350,62 @@
     "target": null
   },
   {
-    "id": "1778163063245699e",
-    "timestamp": 1778163063245,
+    "id": "1778163799087z4rn",
+    "timestamp": 1778163799087,
     "role": "control",
     "name": "控制端",
     "ip": "",
     "content": "你好",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "17781638028310xad",
+    "timestamp": 1778163802831,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "哈喽，我是小酒窝呀，不是小爱哦。你是不是认错人啦？",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "1778163822796z6p7",
+    "timestamp": 1778163822796,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "你就是小爱",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "1778163825852w6x8",
+    "timestamp": 1778163825852,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "哈哈不是啦，我是小酒窝，千问家的。小爱是小爱同学，我俩不是一家人哦。你是不是同时跟好几个AI聊天，聊串了？",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "1778163841238pyrz",
+    "timestamp": 1778163841238,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "9.8和9.11哪个大",
+    "mode": "private",
+    "target": "小爱"
+  },
+  {
+    "id": "1778163848105nizz",
+    "timestamp": 1778163848105,
+    "role": "assistant",
+    "name": "小爱",
+    "ip": "",
+    "content": "9.8 比 9.11 大。\n\n比较这两个数时，先看整数部分：\n- 9.8 的整数部分是 **9**\n- 9.11 的整数部分也是 **9**\n\n整数部分相同，接着比较小数部分的第一位（十分位）：\n- 9.8 的十分位是 **8**\n- 9.11 的十分位是 **1**\n\n因为 8 > 1，所以 **9.8 > 9.11**。",
     "mode": "private",
     "target": "小爱"
   }
