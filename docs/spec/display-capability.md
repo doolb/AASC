@@ -92,6 +92,11 @@ handleDisplayMessage(displayId, data, ws):
             // 重连后恢复用户手动覆盖的能力值
             if displayData.state.userCapabilities:
                 Object.assign(displayData.state.capabilities, displayData.state.userCapabilities)
+            // 将合并后的能力通知显示端（含用户覆盖值），让显示端按限制调整行为
+            sendToDisplay(displayId, {
+                type: 'capabilitiesUpdated',
+                capabilities: displayData.state.capabilities
+            })
             broadcastToControls({ type: 'displayList', list: getDisplayList() })
         return
 ```
@@ -290,10 +295,7 @@ async function declareCapabilities():
             capabilities: capabilities
         }))
     
-    // 根据能力决定是否启动语音录音
-    if capabilities.voiceRecording && capabilities.voiceRecognition:
-        if isAlwaysListening:
-            startVoiceRecording()
+    // 不直接启动录音，等待服务器发回合并后的能力（含用户覆盖值）再决定
 ```
 
 ### 接收能力更新
@@ -322,15 +324,26 @@ function handleCapabilitiesUpdated(data):
     if !data.capabilities.voiceRecording && isListening:
         stopVoiceRecording()
     
-    // 语音识别能力关闭 → 停止 ASR
-    if !data.capabilities.voiceRecognition && localAsrStreaming:
-        SherpaASR.stopStreaming()
-        localAsrStreaming = false
+    // 语音识别能力关闭 → 停止 ASR 和录音
+    if !data.capabilities.voiceRecognition:
+        if localAsrStreaming:
+            SherpaASR.stopStreaming()
+            localAsrStreaming = false
+        if isListening:
+            stopVoiceRecording()
     
     // 文本显示能力关闭 → 隐藏提醒弹窗和文字覆盖层
     if !data.capabilities.displayText:
         document.querySelector('.reminder-popup')?.remove()
         voiceTextDisplay.className = 'voice-text-hidden'
+
+    // 初始能力从服务器到达 → 检查是否要自动启动录音
+    if pendingAutoStart && isAlwaysListening && !isListening:
+        pendingAutoStart = false
+        if data.capabilities.voiceRecording && data.capabilities.voiceRecognition:
+            startVoiceRecording()
+        else:
+            console.log('[能力] 服务器禁止语音录制，跳过自动启动')
 ```
 
 ### TTS 播放完恢复录音
@@ -359,13 +372,38 @@ function stopVoiceRecording():
     sendVoiceStatus()
 ```
 
-### 初始化流程修改
+### startVoiceRecording
+
+```
+async function startVoiceRecording():
+    if isListening: return
+    
+    // 检查服务器是否允许录音
+    if currentCapabilities && !currentCapabilities.voiceRecording:
+        return
+    if currentCapabilities && !currentCapabilities.voiceRecognition:
+        return
+    
+    // ... 正常启动录音流程
+```
+
+### 初始化启动流程
 
 ```
 // 显示端初始化时
 displayWs.onopen:
     ...
-    declareCapabilities()  // 新增：声明能力
+    declareCapabilities()  // 声明硬件能力到服务器
+    // 不自动启动录音，设置 pendingAutoStart 等待服务器能力确认
+
+// 能力从服务器返回后（含用户覆盖值）
+handleCapabilitiesUpdated(data):
+    ...
+    if pendingAutoStart && 能力允许:
+        startVoiceRecording()  // 启动录音
+
+// 旧服务器不发送 capabilitiesUpdated，pendingAutoStart 不会触发
+// 但服务器有强制启动录音的场景（voice-display-node/TTS 播完恢复）
 ```
 
 ## 子显示端实现 (voice-display-node/main.js)

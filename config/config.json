@@ -167,7 +167,9 @@
     "maxTokens": 65536,
     "temperature": 0.7,
     "apiKey": "",
+    "contextCount": 10,
     "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
+    "activeProfile": "qwen3.5",
     "llmProfiles": [
       {
         "name": "default",
@@ -175,6 +177,7 @@
         "model": "gpt-3.5-turbo",
         "maxTokens": 1000,
         "temperature": 0.7,
+        "contextCount": 5,
         "apiKey": ""
       },
       {
@@ -191,10 +194,10 @@
         "model": "Qwen3.5-Plus",
         "maxTokens": 65536,
         "temperature": 0.7,
+        "contextCount": 10,
         "apiKey": ""
       }
-    ],
-    "activeProfile": "qwen3.5"
+    ]
   },
   "timeAnnounce": {
     "enabled": true,
@@ -215,4 +218,3 @@
     "volume": 100,
     "playlist": []
   }
-}

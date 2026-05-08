@@ -60,6 +60,7 @@
         let speechChunks = [];
         let collectingSpeech = false;
         let isAlwaysListening = false;
+        let pendingAutoStart = false;
         let wasListeningBeforePlayback = false;
         let noInterruptMode = true;
         let audioQueue = [];
@@ -1083,12 +1084,10 @@
                 declareCapabilities();
                 sendVoiceStatus();
                 
-                if (voiceSupported && !isAlwaysListening) {
-                    setTimeout(() => {
-                        isAlwaysListening = true;
-                        startVoiceRecording();
-                        console.log('自动启动监听模式');
-                    }, 1000);
+                if (!isAlwaysListening) {
+                    pendingAutoStart = true;
+                    isAlwaysListening = true;
+                    console.log('标记自动启动监听模式，等待服务器能力确认');
                 }
             };
             
@@ -1309,10 +1308,15 @@
                     stopVoiceRecording();
                 }
 
-                // 语音识别能力关闭 → 停止 ASR
-                if (!data.capabilities.voiceRecognition && localAsrStreaming) {
-                    SherpaASR.stopStreaming();
-                    localAsrStreaming = false;
+                // 语音识别能力关闭 → 停止 ASR 和录音
+                if (!data.capabilities.voiceRecognition) {
+                    if (localAsrStreaming) {
+                        SherpaASR.stopStreaming();
+                        localAsrStreaming = false;
+                    }
+                    if (isListening) {
+                        stopVoiceRecording();
+                    }
                 }
 
                 // 文本显示能力关闭 → 隐藏提醒弹窗和文字覆盖层
@@ -1320,6 +1324,27 @@
                     const popup = document.querySelector('.reminder-popup');
                     if (popup) popup.remove();
                     voiceTextDisplay.className = 'voice-text-hidden';
+                }
+
+                // 初始能力从服务器到达 → 检查是否要自动启动录音
+                if (pendingAutoStart && isAlwaysListening && !isListening) {
+                    pendingAutoStart = false;
+                    if (data.capabilities.voiceRecording && data.capabilities.voiceRecognition) {
+                        console.log('[能力] 服务器能力已确认，启动录音');
+                        startVoiceRecording();
+                    } else {
+                        console.log('[能力] 服务器禁止语音录制，跳过自动启动');
+                    }
+                }
+
+                // 动态开启录音 → 如果能力从关闭变为开启，启动录音
+                if (!pendingAutoStart && isAlwaysListening && !isListening &&
+                    data.capabilities.voiceRecording && data.capabilities.voiceRecognition) {
+                    // 检测是否有能力从关闭变为开启（prevCaps 存在时才算转变，避免与初始 pendingAutoStart 冲突）
+                    if (prevCaps && (!prevCaps.voiceRecording || !prevCaps.voiceRecognition)) {
+                        console.log('[能力] 录音能力已开启，启动录音');
+                        startVoiceRecording();
+                    }
                 }
             }
         }
@@ -1417,9 +1442,7 @@
                     localAsrAvailable = true;
                     voiceSupported = true;
                     console.log('显示端本地 WASM ASR 可用');
-                    if (isAlwaysListening) {
-                        startVoiceRecording();
-                    }
+                    // 不直接启动录音，由 handleCapabilitiesUpdated 中的 pendingAutoStart 处理
                     return;
                 }
                 
@@ -1429,7 +1452,7 @@
                 
                 if (voiceSupported) {
                     console.log('显示端服务器 ASR 服务可用');
-                    startVoiceRecording();
+                    // 不直接启动录音，由 handleCapabilitiesUpdated 中的 pendingAutoStart 处理
                 } else {
                     console.log('ASR 服务未初始化');
                     updateVoiceStatusDisplay();
@@ -1514,7 +1537,12 @@
                 console.log('[能力] 无语音录音能力，跳过录音启动');
                 return;
             }
-            
+
+            if (currentCapabilities && !currentCapabilities.voiceRecognition) {
+                console.log('[能力] 无语音识别能力，跳过录音启动');
+                return;
+            }
+
             if (Date.now() < voiceCooldownUntil) {
                 const remainingMs = voiceCooldownUntil - Date.now();
                 console.log('显示端语音冷却中，剩余' + Math.ceil(remainingMs / 1000) + '秒');

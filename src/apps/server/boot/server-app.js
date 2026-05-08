@@ -2248,7 +2248,19 @@ wss.on('connection', (ws, req) => {
             device: asrDevice,
             localAsrEnabled: asrDevice === 'display'
         }));
-        
+
+        // 连接时发送服务器端保存的用户能力覆盖（如果有），让显示端启动时就知道限制
+        if (!isSubDisplay && savedState?.userCapabilities) {
+            const initialCaps = {
+                ...DEFAULT_CAPABILITIES,
+                ...savedState.userCapabilities
+            };
+            ws.send(JSON.stringify({
+                type: 'capabilitiesUpdated',
+                capabilities: initialCaps
+            }));
+        }
+
         if (savedState && savedState.currentMedia) {
             ws.send(JSON.stringify({ 
                 type: 'restoreState',
@@ -2439,6 +2451,11 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         if (displayData.state.userCapabilities) {
             Object.assign(displayData.state.capabilities, displayData.state.userCapabilities);
         }
+        // 将合并后的能力通知显示端，让显示端根据限制调整行为
+        sendToDisplay(displayId, {
+            type: 'capabilitiesUpdated',
+            capabilities: displayData.state.capabilities
+        });
         log('能力', `显示端 ${displayId} 声明能力`);
         broadcastDisplayList();
     } else if (data.type === 'commandAck' && displayData) {

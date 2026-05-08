@@ -19,9 +19,24 @@
 
 ### Bug 修复
 
-- ✅ [2026-05-07] 群聊模式匹配任意助手名字，不再仅限于 defaultName
-  - 命令模式/非命令模式均遍历 `assistantConfig.assistants`，匹配首个含助手名字的模板
-  - 改动文件：voice-command-app-service.js, docs/spec/voiceCommand.md
+- ✅ [2026-05-08] 控制端关闭"语音识别"后显示端仍在录音
+  - `voiceRecognition: false` 时只停止了本地 SherpaASR 流，未停止 MediaRecorder 和麦克风流
+  - 改为调用 `stopVoiceRecording()` 彻底停止所有录音
+  - 改动文件：display.html
+
+- ✅ [2026-05-08] 网页显示端启动时未读取服务器端录音设置，启动后直接录音
+  - 服务器连接时未将用户覆盖的能力值发送给显示端；处理 `capabilities` 消息后也未发回 `capabilitiesUpdated`
+  - 显示端 `onopen` 后直接启动录音，未等待服务器能力确认
+  - 修复：服务器连接时发送初始 `capabilitiesUpdated`（含 userCapabilities 覆盖）
+  - 修复：服务器收到 `capabilities` 后合并 userCapabilities，发回 `capabilitiesUpdated`
+  - 修复：显示端改为等待 `capabilitiesUpdated` 后按服务器能力决定是否启动录音
+  - 修复：`startVoiceRecording()` 增加 `voiceRecognition` 检查
+  - 改动文件：display.html, server-app.js, docs/spec/display-capability.md
+
+- ✅ [2026-05-08] 控制端动态开启显示端录音功能未生效
+  - `handleCapabilitiesUpdated` 只有关闭→停止的防御逻辑，缺少开启→启动的前瞻逻辑
+  - 修复：检测到 `voiceRecording` 或 `voiceRecognition` 从关闭变为开启时，自动启动录音
+  - 改动文件：display.html
 
 - ✅ [2026-05-07] TTS 播报前移除 Markdown 标记符号
   - LLM 返回的 **粗体**、`代码`、[链接](url) 等格式符号不再被 TTS 朗读
