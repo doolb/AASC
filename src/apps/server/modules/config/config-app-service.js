@@ -63,6 +63,7 @@ class Config extends DataSnapshot {
             maxTokens: 1000,
             temperature: 0.7,
             apiKey: '',
+            contextCount: 0,
             systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
             activeProfile: 'default',
             llmProfiles: [
@@ -72,7 +73,8 @@ class Config extends DataSnapshot {
                     model: 'gpt-3.5-turbo',
                     maxTokens: 1000,
                     temperature: 0.7,
-                    apiKey: ''
+                    apiKey: '',
+                    contextCount: 0
                 }
             ]
         }

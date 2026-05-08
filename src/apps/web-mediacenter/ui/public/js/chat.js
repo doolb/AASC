@@ -13,7 +13,8 @@ const Chat = {
     session: {
         mode: 'group',
         privateTarget: null,
-        playOnControl: false
+        playOnControl: false,
+        commandMode: true
     },
     commands: {
         commands: {}
@@ -453,7 +454,7 @@ const Chat = {
         if (systemPromptInput) {
             this.config.systemPrompt = systemPromptInput.value.trim() || '你是一个友好的助手，请用简洁的语言回答问题。';
         }
-        
+
         fetch('/api/chat/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1228,6 +1229,7 @@ const Chat = {
         document.getElementById('profileEditModel').value = '';
         document.getElementById('profileEditMaxTokens').value = '';
         document.getElementById('profileEditTemperature').value = '';
+        document.getElementById('profileEditContextCount').value = '';
         document.getElementById('profileEditApiKey').value = '';
         document.getElementById('profileEditor').style.display = 'block';
     },
@@ -1240,6 +1242,7 @@ const Chat = {
         document.getElementById('profileEditModel').value = profile.model || '';
         document.getElementById('profileEditMaxTokens').value = profile.maxTokens || '';
         document.getElementById('profileEditTemperature').value = profile.temperature || '';
+        document.getElementById('profileEditContextCount').value = profile.contextCount || '';
         document.getElementById('profileEditApiKey').value = profile.apiKey || '';
         document.getElementById('profileEditor').style.display = 'block';
     },
@@ -1254,6 +1257,7 @@ const Chat = {
         const model = document.getElementById('profileEditModel').value.trim();
         const maxTokens = parseInt(document.getElementById('profileEditMaxTokens').value) || 1000;
         const temperature = parseFloat(document.getElementById('profileEditTemperature').value) || 0.7;
+        const contextCount = parseInt(document.getElementById('profileEditContextCount').value) || 0;
         const apiKey = document.getElementById('profileEditApiKey').value.trim();
 
         if (!name) {
@@ -1270,7 +1274,7 @@ const Chat = {
         }
 
         const existingIdx = this.profiles.findIndex(p => p.name === name);
-        const profile = { name, apiUrl, model, maxTokens, temperature, apiKey };
+        const profile = { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey };
 
         if (existingIdx >= 0) {
             this.profiles[existingIdx] = profile;

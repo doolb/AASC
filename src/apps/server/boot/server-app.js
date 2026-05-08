@@ -3073,24 +3073,30 @@ async function handleChatMessage(options) {
     
     let systemPrompt = null;
     let includeHistory = false;
+    let contextCount = 0;
     if (templateTarget) {
         const template = chat.getTemplateByName(templateTarget);
         if (template) {
             systemPrompt = template.content;
             if (messageMode === 'private') {
                 includeHistory = true;
+                contextCount = 100;
             }
         }
+    } else {
+        contextCount = chat.getConfig().contextCount || 0;
+        if (contextCount > 0) includeHistory = true;
     }
     if (customSystemPrompt && !templateTarget) {
         systemPrompt = customSystemPrompt;
     }
-    
+
     await chat.chatStream(content, {
         useTemplate: null,
         displayId: displayId,
         systemPrompt: systemPrompt,
-        includeHistory: includeHistory
+        includeHistory: includeHistory,
+        contextCount: contextCount
     }, {
         onChunk: (chunk, fullMessage) => {
             sendToControl({ type: 'chatChunk', chunk, message: fullMessage });

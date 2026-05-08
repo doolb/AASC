@@ -26,6 +26,7 @@ let chatConfig = {
     maxTokens: 1000,
     temperature: 0.7,
     apiKey: '',
+    contextCount: 0,
     systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。'
 };
 
@@ -94,7 +95,8 @@ function init(config = {}) {
             model: chatConfig.model,
             maxTokens: chatConfig.maxTokens,
             temperature: chatConfig.temperature,
-            apiKey: chatConfig.apiKey
+            apiKey: chatConfig.apiKey,
+            contextCount: chatConfig.contextCount
         }];
     }
     if (config.activeProfile && llmProfiles.some(p => p.name === config.activeProfile)) {
@@ -119,6 +121,7 @@ function applyProfile(name) {
         chatConfig.apiKey = profile.apiKey || '';
         if (profile.maxTokens) chatConfig.maxTokens = profile.maxTokens;
         if (profile.temperature !== undefined) chatConfig.temperature = profile.temperature;
+        if (profile.contextCount !== undefined) chatConfig.contextCount = profile.contextCount;
         activeProfile = profile.name;
     }
 }
@@ -239,6 +242,7 @@ function setConfig(newConfig) {
     if (newConfig.maxTokens !== undefined) chatConfig.maxTokens = newConfig.maxTokens;
     if (newConfig.temperature !== undefined) chatConfig.temperature = newConfig.temperature;
     if (newConfig.apiKey !== undefined) chatConfig.apiKey = newConfig.apiKey;
+    if (newConfig.contextCount !== undefined) chatConfig.contextCount = newConfig.contextCount;
     if (newConfig.systemPrompt !== undefined) chatConfig.systemPrompt = newConfig.systemPrompt;
     if (newConfig.llmProfiles !== undefined) {
         llmProfiles = newConfig.llmProfiles;
@@ -428,14 +432,14 @@ function addMessage(message) {
 }
 
 function buildMessages(userMessage, options = {}) {
-    const { useTemplate = null, systemPrompt = null, includeHistory = false } = options;
-    
+    const { useTemplate = null, systemPrompt = null, includeHistory = false, contextCount = 0 } = options;
+
     const messages = [
         { role: 'system', content: systemPrompt || chatConfig.systemPrompt }
     ];
-    
-    if (includeHistory) {
-        const recentHistory = chatHistory.slice(-20);
+
+    if (includeHistory && contextCount > 0) {
+        const recentHistory = chatHistory.slice(-contextCount);
         recentHistory.forEach(item => {
             if (item.content) {
                 messages.push({ role: item.role === 'assistant' ? 'assistant' : 'user', content: item.content });
@@ -508,10 +512,10 @@ function splitIntoSentences(text) {
 }
 
 async function chat(userMessage, options = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null } = options;
-    
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0 } = options;
+
     try {
-        const messages = buildMessages(userMessage, { useTemplate, systemPrompt });
+        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount });
         
         const requestBody = {
             model: chatConfig.model,
@@ -563,14 +567,14 @@ async function chat(userMessage, options = {}) {
 }
 
 async function chatStream(userMessage, options = {}, callbacks = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null } = options;
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0 } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
-    
+
     let fullMessage = '';
     let pendingText = '';
-    
+
     try {
-        const messages = buildMessages(userMessage, { useTemplate, systemPrompt });
+        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount });
         
         const requestBody = {
             model: chatConfig.model,

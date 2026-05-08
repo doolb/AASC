@@ -4,6 +4,11 @@
 
 ### 新功能
 
+- ✅ [2026-05-07] LLM 配置支持独立设置上下文条数
+  - 每个 LLM 配置（profile）可独立设置"群聊上下文条数"，切换配置时自动切换
+  - 群聊时携带最近 N 条消息作为上下文发给 LLM（0=关闭）
+  - 改动文件：llm-service.js, server-app.js, chat.js, upload.html, config-app-service.js
+
 - ✅ [2026-05-07] 控制端支持添加/编辑/删除 LLM 配置
   - 聊天设置弹窗新增配置编辑表单（name、apiUrl、model、maxTokens、temperature、apiKey）
   - 配置列表增加编辑和删除按钮
