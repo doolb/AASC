@@ -47,6 +47,14 @@
   - `splitIntoSentences()` 新增 commaCount 计数，达到4个 `，`/`,` 时强制切分
   - 改动文件：llm-service.js
 
+- ✅ [2026-05-09] 修复网页端聊天回复换行 \n 被丢弃
+  - `chat-message-content` 缺少 `white-space: pre-wrap`，HTML 渲染时折叠了换行
+  - 改动文件：chat.css
+
+- ✅ [2026-05-09] 修复英文句点 `.` 误切分小数点（如 `1062.40` 被拆成两句）
+  - `splitIntoSentences` 对 `.` 增加后视检查：后跟空格/换行/结尾才视为句末标点
+  - 改动文件：llm-service.js
+
 - ✅ [2026-05-09] 修复 TTS 并发生成导致播放顺序错乱
   - 多句分开发送后，各句 tts.generateTTS() 异步完成顺序不定，音频发送错乱
   - 所有 onSentence 回调内用 ttsQueue Promise 链串行化 TTS 生成与发送

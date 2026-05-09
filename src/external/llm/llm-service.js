@@ -591,13 +591,18 @@ function splitIntoSentences(text) {
         }
 
         if (isSentenceEnd(current)) {
-            const trimmed = current.trim();
-            if (trimmed.length > 0) {
-                sentences.push(trimmed);
-            }
-            current = '';
-            commaCount = 0;
-        } else if (commaCount >= 4) {
+                    // 英文句点需后跟空格/换行/结尾（避免切分小数点和缩写）
+                    if (ch === '.' && i + 1 < text.length && text[i + 1] !== ' ' && text[i + 1] !== '\n') {
+                        // 不是真正的句子边界，继续积累
+                    } else {
+                        const trimmed = current.trim();
+                        if (trimmed.length > 0) {
+                            sentences.push(trimmed);
+                        }
+                        current = '';
+                        commaCount = 0;
+                    }
+                } else if (commaCount >= 4) {
             const trimmed = current.trim();
             if (trimmed.length > 0) {
                 sentences.push(trimmed);
