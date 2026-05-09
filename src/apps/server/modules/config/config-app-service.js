@@ -75,7 +75,8 @@ class Config extends DataSnapshot {
                     maxTokens: 1000,
                     temperature: 0.7,
                     apiKey: '',
-                    contextCount: 0
+                    contextCount: 0,
+                    promptFormat: 'openai'
                 }
             ]
         }

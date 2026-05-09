@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 新功能
+
+- ✅ [2026-05-09] 支持 LLM 纯文本 prompt 格式
+  - `llmProfiles` 新增 `promptFormat` 字段：`'messages'`（标准格式）或 `'raw'`（纯文本）
+  - `buildMessages()` 根据 `promptFormat` 选择输出格式
+  - raw 格式: `System:...\nUser:...\nAI:...` 单条 user 消息
+  - 改动文件：llm-service.js, config-app-service.js
+
 ### 修复
 
 - ✅ [2026-05-09] 修复 LLM 请求中用户消息重复的问题
@@ -28,6 +36,16 @@
   - 改为用 `splitIntoSentences()` 提取所有完整句子，保留末尾不完整片段
   - 改动文件：llm-service.js
   - 实现文档：docs/spec/chat-system.md
+
+- ✅ [2026-05-09] 修复引号字符被误判为句末标点导致 TTS 失败
+  - `isSentenceEnd()` 的 `endChars` 包含 `"`、`"`、`'`、`'` 等引号字符
+  - LLM 输出带引号内容时（如 `第一句是"你好"`）在引号处错误分句
+  - 移除 `endChars` 中所有引号字符
+  - 改动文件：llm-service.js
+
+- ✅ [2026-05-09] 逗号累积超过4个时自动分句，避免过长文本一次送入 TTS
+  - `splitIntoSentences()` 新增 commaCount 计数，达到4个 `，`/`,` 时强制切分
+  - 改动文件：llm-service.js
 
 - ✅ [2026-05-09] 修复 TTS 并发生成导致播放顺序错乱
   - 多句分开发送后，各句 tts.generateTTS() 异步完成顺序不定，音频发送错乱

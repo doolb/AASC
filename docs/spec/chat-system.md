@@ -70,7 +70,8 @@
     model: string,              // 模型名称
     maxTokens: number,          // 最大 token 数
     temperature: number,        // 温度参数
-    apiKey: string              // API 密钥（可选）
+    apiKey: string,             // API 密钥（可选）
+    promptFormat: string        // 消息格式: 'openai'（标准数组）| 'raw'（纯文本 System:/User:/AI:）
   }]
 }
 ```
@@ -302,16 +303,14 @@ removeCommand(keyword):
     调用 saveCommands()
 
 buildMessages(userMessage, options):
-    构建发送给AI的消息数组
-    包含系统提示词
-    如果 includeHistory 为 true:
-        先按会话过滤（私聊/群聊）:
-            私聊模式: 只取 item.mode === 'private' && item.target === target
-            群聊模式: 只取 item.mode !== 'private'
-        再取最近 contextCount 条
-    如果是私聊模式:
-        使用对应助手的模板
-    添加当前用户消息
+    根据 chatConfig.promptFormat 选择输出格式:
+        'openai'（默认）:
+            构建标准 messages 数组 [{role, content}, ...]
+            含 system、历史消息、模板、当前用户消息
+        'raw':
+            构建纯文本 prompt: System:...\nUser:...\nAI:...
+            历史消息按 User/AI 前缀逐条拼接
+            返回单条 {role:'user', content:'...'} 发送
 
 chat(userMessage, options, callbacks):
     调用 buildMessages()
@@ -327,6 +326,7 @@ chatStream(userMessage, options, callbacks):
         追加到 pendingText
         调用 callbacks.onChunk()
         用 splitIntoSentences() 拆分 pendingText:
+            分句规则: 句末标点(。！？.!?～~…)、或逗号(，,)累积≥4个
             如果有 ≥2 个句子:
                 发出前 n-1 个完整句子（调用 onSentence）
                 仅保留最后一个（可能不完整）片段

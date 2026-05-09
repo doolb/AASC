@@ -27,7 +27,8 @@ let chatConfig = {
     temperature: 0.7,
     apiKey: '',
     contextCount: 0,
-    systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。'
+    systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
+    promptFormat: 'openai'
 };
 
 let llmProfiles = [];
@@ -131,7 +132,8 @@ function init(config = {}) {
             maxTokens: chatConfig.maxTokens,
             temperature: chatConfig.temperature,
             apiKey: chatConfig.apiKey,
-            contextCount: chatConfig.contextCount
+            contextCount: chatConfig.contextCount,
+            promptFormat: chatConfig.promptFormat
         }];
     }
     if (config.activeProfile && llmProfiles.some(p => p.name === config.activeProfile)) {
@@ -157,6 +159,7 @@ function applyProfile(name) {
         if (profile.maxTokens) chatConfig.maxTokens = profile.maxTokens;
         if (profile.temperature !== undefined) chatConfig.temperature = profile.temperature;
         if (profile.contextCount !== undefined) chatConfig.contextCount = profile.contextCount;
+        if (profile.promptFormat !== undefined) chatConfig.promptFormat = profile.promptFormat;
         activeProfile = profile.name;
     }
 }
@@ -279,6 +282,7 @@ function setConfig(newConfig) {
     if (newConfig.apiKey !== undefined) chatConfig.apiKey = newConfig.apiKey;
     if (newConfig.contextCount !== undefined) chatConfig.contextCount = newConfig.contextCount;
     if (newConfig.systemPrompt !== undefined) chatConfig.systemPrompt = newConfig.systemPrompt;
+    if (newConfig.promptFormat !== undefined) chatConfig.promptFormat = newConfig.promptFormat;
     if (newConfig.llmProfiles !== undefined) {
         llmProfiles = newConfig.llmProfiles;
     }
@@ -474,16 +478,50 @@ function addMessage(message) {
 function buildMessages(userMessage, options = {}) {
     const { useTemplate = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
 
+    const format = chatConfig.promptFormat || 'openai';
+    const sysPrompt = systemPrompt || chatConfig.systemPrompt;
+
+    if (format === 'raw') {
+        // 纯文本格式: System:...\nUser:...\nAI:...
+        let raw = `System:${sysPrompt}\n`;
+        if (includeHistory && contextCount > 0) {
+            const key = sessionKey(mode, target);
+            const sessionHistory = chatHistories[key] || [];
+            let recentHistory = sessionHistory.slice(-contextCount);
+            if (recentHistory.length > 0) {
+                const last = recentHistory[recentHistory.length - 1];
+                if (last.role === 'user' || last.role === 'control') {
+                    recentHistory = recentHistory.slice(0, -1);
+                }
+            }
+            for (const item of recentHistory) {
+                if (item.content) {
+                    const role = item.role === 'assistant' ? 'AI' : 'User';
+                    raw += `${role}:${item.content}\n`;
+                } else if (item.user && item.assistant) {
+                    raw += `User:${item.user}\nAI:${item.assistant}\n`;
+                }
+            }
+        }
+        if (useTemplate && chatTemplates.length > 0) {
+            const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
+            if (template) {
+                raw += `User:${template.content}\n`;
+            }
+        }
+        raw += `User:${userMessage}`;
+        return [{ role: 'user', content: raw }];
+    }
+
+    // 标准 messages 格式
     const messages = [
-        { role: 'system', content: systemPrompt || chatConfig.systemPrompt }
+        { role: 'system', content: sysPrompt }
     ];
 
     if (includeHistory && contextCount > 0) {
         const key = sessionKey(mode, target);
         const sessionHistory = chatHistories[key] || [];
         let recentHistory = sessionHistory.slice(-contextCount);
-        // 排除最后一条 user/control 消息（即当前查询，已在 addMessage 中存储，
-        // 避免与末尾追加的 userMessage 重复）
         if (recentHistory.length > 0) {
             const last = recentHistory[recentHistory.length - 1];
             if (last.role === 'user' || last.role === 'control') {
@@ -499,16 +537,16 @@ function buildMessages(userMessage, options = {}) {
             }
         });
     }
-    
+
     if (useTemplate && chatTemplates.length > 0) {
         const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
         if (template) {
             messages.push({ role: 'user', content: template.content });
         }
     }
-    
+
     messages.push({ role: 'user', content: userMessage });
-    
+
     return messages;
 }
 
@@ -516,7 +554,7 @@ function isSentenceEnd(text) {
     if (!text || text.length === 0) return false;
     const lastChar = text[text.length - 1];
     if (lastChar === '\n') return true;
-    const endChars = ['.', '!', '?', '~', '～', '\u3002', '\uFF01', '\uFF1F', '\uFF1B', ';', '"', '"', '\u201C', '\u201D', '\u2018', '\u2019', '\u2026'];
+    const endChars = ['.', '!', '?', '~', '～', '\u3002', '\uFF01', '\uFF1F', '\uFF1B', ';', '\u2026'];
     return endChars.includes(lastChar);
 }
 
@@ -539,25 +577,40 @@ function splitIntoSentences(text) {
     if (!text || typeof text !== 'string') {
         return [];
     }
-    
+
     const sentences = [];
     let current = '';
-    
+    let commaCount = 0;
+
     for (let i = 0; i < text.length; i++) {
-        current += text[i];
+        const ch = text[i];
+        current += ch;
+
+        if (ch === '，' || ch === ',') {
+            commaCount++;
+        }
+
         if (isSentenceEnd(current)) {
             const trimmed = current.trim();
             if (trimmed.length > 0) {
                 sentences.push(trimmed);
             }
             current = '';
+            commaCount = 0;
+        } else if (commaCount >= 4) {
+            const trimmed = current.trim();
+            if (trimmed.length > 0) {
+                sentences.push(trimmed);
+            }
+            current = '';
+            commaCount = 0;
         }
     }
-    
+
     if (current.trim().length > 0) {
         sentences.push(current.trim());
     }
-    
+
     return sentences;
 }
 

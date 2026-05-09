@@ -196,9 +196,11 @@
         "maxTokens": 65536,
         "temperature": 0.7,
         "contextCount": 10,
-        "apiKey": ""
+        "apiKey": "",
+        "promptFormat": "raw"
       }
-    ]
+    ],
+    "promptFormat": "raw"
   },
   "timeAnnounce": {
     "enabled": true,

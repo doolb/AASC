@@ -661,6 +661,11 @@
                     <input type="number" id="profileEditContextCount" placeholder="0" min="0" max="50">
                     <label style="margin-top:8px;display:block">API Key (可选)</label>
                     <input type="password" id="profileEditApiKey" placeholder="sk-...">
+                    <label style="margin-top:8px;display:block">消息格式</label>
+                    <select id="profileEditPromptFormat" style="width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
+                        <option value="openai">OpenAI 格式 (messages 数组)</option>
+                        <option value="raw">纯文本格式 (System:/User:/AI:)</option>
+                    </select>
                     <div style="display:flex;gap:8px;margin-top:10px;">
                         <button class="chat-add-btn" onclick="Chat.saveProfile()">保存配置</button>
                         <button class="chat-add-btn" style="background:var(--bg-secondary)" onclick="Chat.cancelEditProfile()">取消</button>

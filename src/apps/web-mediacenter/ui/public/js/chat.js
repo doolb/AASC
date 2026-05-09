@@ -1244,6 +1244,7 @@ const Chat = {
         document.getElementById('profileEditTemperature').value = profile.temperature || '';
         document.getElementById('profileEditContextCount').value = profile.contextCount || '';
         document.getElementById('profileEditApiKey').value = profile.apiKey || '';
+        document.getElementById('profileEditPromptFormat').value = profile.promptFormat || 'openai';
         document.getElementById('profileEditor').style.display = 'block';
     },
 
@@ -1274,7 +1275,8 @@ const Chat = {
         }
 
         const existingIdx = this.profiles.findIndex(p => p.name === name);
-        const profile = { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey };
+        const promptFormat = document.getElementById('profileEditPromptFormat').value;
+        const profile = { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat };
 
         if (existingIdx >= 0) {
             this.profiles[existingIdx] = profile;
