@@ -475,16 +475,49 @@ function addMessage(message) {
     return msg;
 }
 
+function estimateTokens(text) {
+    if (!text) return 0;
+    // 粗略估算: 中文约 1-2 char/token, 英文约 4 char/token, 中英文混合保守取 / 2
+    return Math.ceil(text.length / 2);
+}
+
+function tokenCount(item) {
+    if (item.content) return estimateTokens(item.content) + 10;
+    if (item.user && item.assistant) return estimateTokens(item.user) + estimateTokens(item.assistant) + 20;
+    return 0;
+}
+
+function trimHistoryToBudget(recentHistory, budget) {
+    if (!recentHistory.length || budget <= 0) return [];
+    let total = recentHistory.reduce((s, it) => s + tokenCount(it), 0);
+    if (total <= budget) return recentHistory;
+    const trimmed = [...recentHistory];
+    while (trimmed.length > 0 && total > budget) {
+        total -= tokenCount(trimmed.shift());
+    }
+    return trimmed;
+}
+
 function buildMessages(userMessage, options = {}) {
     const { useTemplate = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
 
     const format = chatConfig.promptFormat || 'openai';
     const sysPrompt = systemPrompt || chatConfig.systemPrompt;
 
+    // 历史可用 token 预算 = maxTokens（作为上下文上限）- 固定部分
+    const inputBudget = chatConfig.maxTokens || 4096;
+
     if (format === 'raw') {
-        // 纯文本格式: System:...\nUser:...\nAI:...
         let raw = `System:${sysPrompt}\n`;
-        if (includeHistory && contextCount > 0) {
+        if (useTemplate && chatTemplates.length > 0) {
+            const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
+            if (template) raw += `User:${template.content}\n`;
+        }
+        raw += `User:${userMessage}`;
+        const fixedTokens = estimateTokens(raw);
+        const historyBudget = inputBudget - fixedTokens;
+
+        if (includeHistory && contextCount > 0 && historyBudget > 0) {
             const key = sessionKey(mode, target);
             const sessionHistory = chatHistories[key] || [];
             let recentHistory = sessionHistory.slice(-contextCount);
@@ -494,22 +527,22 @@ function buildMessages(userMessage, options = {}) {
                     recentHistory = recentHistory.slice(0, -1);
                 }
             }
+            recentHistory = trimHistoryToBudget(recentHistory, historyBudget);
+            // 重建 raw, 在 fixed 部分前插入历史
+            raw = `System:${sysPrompt}\n`;
             for (const item of recentHistory) {
                 if (item.content) {
-                    const role = item.role === 'assistant' ? 'AI' : 'User';
-                    raw += `${role}:${item.content}\n`;
+                    raw += `${item.role === 'assistant' ? 'AI' : 'User'}:${item.content}\n`;
                 } else if (item.user && item.assistant) {
                     raw += `User:${item.user}\nAI:${item.assistant}\n`;
                 }
             }
-        }
-        if (useTemplate && chatTemplates.length > 0) {
-            const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
-            if (template) {
-                raw += `User:${template.content}\n`;
+            if (useTemplate && chatTemplates.length > 0) {
+                const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
+                if (template) raw += `User:${template.content}\n`;
             }
+            raw += `User:${userMessage}`;
         }
-        raw += `User:${userMessage}`;
         return [{ role: 'user', content: raw }];
     }
 
@@ -518,7 +551,16 @@ function buildMessages(userMessage, options = {}) {
         { role: 'system', content: sysPrompt }
     ];
 
-    if (includeHistory && contextCount > 0) {
+    // 固定部分: system + template + 当前用户消息
+    let fixedTokens = tokenCount({ content: sysPrompt }) + 20;
+    if (useTemplate && chatTemplates.length > 0) {
+        const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
+        if (template) fixedTokens += tokenCount({ content: template.content }) + 10;
+    }
+    fixedTokens += tokenCount({ content: userMessage }) + 10;
+    const historyBudget = inputBudget - fixedTokens;
+
+    if (includeHistory && contextCount > 0 && historyBudget > 0) {
         const key = sessionKey(mode, target);
         const sessionHistory = chatHistories[key] || [];
         let recentHistory = sessionHistory.slice(-contextCount);
@@ -528,6 +570,7 @@ function buildMessages(userMessage, options = {}) {
                 recentHistory = recentHistory.slice(0, -1);
             }
         }
+        recentHistory = trimHistoryToBudget(recentHistory, historyBudget);
         recentHistory.forEach(item => {
             if (item.content) {
                 messages.push({ role: item.role === 'assistant' ? 'assistant' : 'user', content: item.content });
@@ -540,9 +583,7 @@ function buildMessages(userMessage, options = {}) {
 
     if (useTemplate && chatTemplates.length > 0) {
         const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
-        if (template) {
-            messages.push({ role: 'user', content: template.content });
-        }
+        if (template) messages.push({ role: 'user', content: template.content });
     }
 
     messages.push({ role: 'user', content: userMessage });

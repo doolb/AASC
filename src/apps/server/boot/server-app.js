@@ -17,6 +17,7 @@ function stripMarkdown(text) {
         .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')   // 图片 ![alt](url)
         .replace(/\[([^\]]*)\]\([^)]+\)/g, '$1')    // 链接 [text](url)
         .replace(/\[source_group_web_\d+\]/g, '')   // LLM 联网搜索引用标记
+        .replace(/\[\([^)]*\)\]/g, '')              // 内部标记标签 [(video_note_list_1)]
         .replace(/#{1,6}\s+/g, '')                  // 标题标记
         .replace(/(\*{1,3}|_{1,3}|~~)(.*?)\1/g, '$2') // 粗体/斜体/删除线
         .replace(/^[>\s]*>/gm, '')                  // 引用标记

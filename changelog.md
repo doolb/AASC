@@ -4,6 +4,11 @@
 
 ### 新功能
 
+- ✅ [2026-05-10] LLM 历史消息超出 maxTokens 时自动截断
+  - `buildMessages()` 按 maxTokens 作为上下文上限，自动截断历史
+  - 超出时从最旧的 user/assistant 消息开始删除，直到总 token 数不超出
+  - 改动文件：llm-service.js
+
 - ✅ [2026-05-09] 支持 LLM 纯文本 prompt 格式
   - `llmProfiles` 新增 `promptFormat` 字段：`'messages'`（标准格式）或 `'raw'`（纯文本）
   - `buildMessages()` 根据 `promptFormat` 选择输出格式
@@ -54,6 +59,10 @@
 - ✅ [2026-05-09] 修复英文句点 `.` 误切分小数点（如 `1062.40` 被拆成两句）
   - `splitIntoSentences` 对 `.` 增加后视检查：后跟空格/换行/结尾才视为句末标点
   - 改动文件：llm-service.js
+
+- ✅ [2026-05-10] TTS 生成时忽略内部标记标签 `[(xxx)]`
+  - `stripMarkdown` 增加 `/\[\([^)]*\)\]/g` 过滤规则
+  - 改动文件：server-app.js
 
 - ✅ [2026-05-09] 修复 TTS 并发生成导致播放顺序错乱
   - 多句分开发送后，各句 tts.generateTTS() 异步完成顺序不定，音频发送错乱

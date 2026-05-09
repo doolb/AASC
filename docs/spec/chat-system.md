@@ -71,7 +71,7 @@
     maxTokens: number,          // 最大 token 数
     temperature: number,        // 温度参数
     apiKey: string,             // API 密钥（可选）
-    promptFormat: string        // 消息格式: 'openai'（标准数组）| 'raw'（纯文本 System:/User:/AI:）
+    promptFormat: string       // 消息格式: 'openai'（标准数组）| 'raw'（纯文本 System:/User:/AI:）
   }]
 }
 ```
@@ -302,15 +302,26 @@ removeCommand(keyword):
     删除 chatCommands.commands[keyword]
     调用 saveCommands()
 
+辅助函数:
+    estimateTokens(text):
+        粗略估算 token 数: Math.ceil(text.length / 2)
+
+    trimHistoryToBudget(recentHistory, budget):
+        计算所有历史条目的 token 数
+        如果总 token 超出 budget:
+            从最旧的条目开始逐条删除，直到 ≤ budget
+        返回修剪后的数组
+
 buildMessages(userMessage, options):
+    inputBudget = maxTokens（作为上下文上限）
+    计算固定部分（system + template + 当前消息）的 token 数
+    历史可用 token = inputBudget - 固定部分
+    获取历史消息后调用 trimHistoryToBudget() 按 token 预算修剪
     根据 chatConfig.promptFormat 选择输出格式:
         'openai'（默认）:
             构建标准 messages 数组 [{role, content}, ...]
-            含 system、历史消息、模板、当前用户消息
         'raw':
             构建纯文本 prompt: System:...\nUser:...\nAI:...
-            历史消息按 User/AI 前缀逐条拼接
-            返回单条 {role:'user', content:'...'} 发送
 
 chat(userMessage, options, callbacks):
     调用 buildMessages()
