@@ -3,12 +3,12 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const HISTORY_FILE = path.join(__dirname, '../../../config/chat-history.json');
+const HISTORY_DIR = path.join(__dirname, '../../../config');
+const HISTORY_FILE_BASE = 'chat-history';
 const SESSION_FILE = path.join(__dirname, '../../../config/chat-session.json');
 const COMMANDS_FILE = path.join(__dirname, '../../../config/chat-commands.json');
 const IMPORTANT_FILE = path.join(__dirname, '../../../config/important-records.json');
 const TEMPLATES_FILE = path.join(__dirname, '../../../config/chat-templates.json');
-const MAX_HISTORY_SIZE = 100;
 const MAX_MESSAGE_LENGTH = 51200;
 
 const DEFAULT_TEMPLATES = [
@@ -33,7 +33,12 @@ let chatConfig = {
 let llmProfiles = [];
 let activeProfile = 'default';
 
-let chatHistory = [];
+let chatHistories = {};
+const MAX_HISTORY_PER_SESSION = 100;
+
+function sessionKey(mode, target) {
+    return mode === 'private' && target ? `private:${target}` : 'group';
+}
 let chatTemplates = [];
 let chatSession = {
     mode: 'group',
@@ -49,14 +54,27 @@ let historySaveTimer = null;
 
 function loadHistory() {
     try {
-        if (fs.existsSync(HISTORY_FILE)) {
-            const data = fs.readFileSync(HISTORY_FILE, 'utf8');
-            chatHistory = JSON.parse(data);
-            console.log(`[Chat] 已加载 ${chatHistory.length} 条历史记录`);
+        const allFiles = fs.readdirSync(HISTORY_DIR)
+            .filter(f => f.startsWith(HISTORY_FILE_BASE) && f.endsWith('.json'));
+
+        if (allFiles.length === 0) return;
+
+        chatHistories = {};
+        for (const file of allFiles) {
+            const data = fs.readFileSync(path.join(HISTORY_DIR, file), 'utf8');
+            const messages = JSON.parse(data);
+            for (const msg of messages) {
+                const key = sessionKey(msg.mode, msg.target);
+                if (!chatHistories[key]) chatHistories[key] = [];
+                chatHistories[key].push(msg);
+            }
         }
+
+        const total = Object.values(chatHistories).reduce((s, a) => s + a.length, 0);
+        console.log(`[Chat] 已加载 ${total} 条历史记录 (${Object.keys(chatHistories).length} 个会话)`);
     } catch (err) {
         console.error('[Chat] 加载历史记录失败:', err.message);
-        chatHistory = [];
+        chatHistories = {};
     }
 }
 
@@ -66,7 +84,22 @@ function saveHistory() {
     }
     historySaveTimer = setTimeout(() => {
         try {
-            fs.writeFileSync(HISTORY_FILE, JSON.stringify(chatHistory, null, 2), 'utf8');
+            const expectedFiles = new Set();
+            for (const [key, messages] of Object.entries(chatHistories)) {
+                if (messages.length === 0) continue;
+                const fileName = key === 'group' ? `${HISTORY_FILE_BASE}.json` : `${HISTORY_FILE_BASE}-${key.replace('private:', '')}.json`;
+                expectedFiles.add(fileName);
+                fs.writeFileSync(path.join(HISTORY_DIR, fileName), JSON.stringify(messages, null, 2), 'utf8');
+            }
+
+            // 清理已不存在的会话对应的历史文件
+            const existingFiles = fs.readdirSync(HISTORY_DIR)
+                .filter(f => f.startsWith(HISTORY_FILE_BASE) && f.endsWith('.json'));
+            for (const f of existingFiles) {
+                if (!expectedFiles.has(f)) {
+                    try { fs.unlinkSync(path.join(HISTORY_DIR, f)); } catch {}
+                }
+            }
         } catch (err) {
             console.error('[Chat] 保存历史记录失败:', err.message);
         }
@@ -75,8 +108,10 @@ function saveHistory() {
 }
 
 function trimHistory() {
-    if (chatHistory.length > MAX_HISTORY_SIZE) {
-        chatHistory = chatHistory.slice(-MAX_HISTORY_SIZE);
+    for (const key of Object.keys(chatHistories)) {
+        if (chatHistories[key].length > MAX_HISTORY_PER_SESSION) {
+            chatHistories[key] = chatHistories[key].slice(-MAX_HISTORY_PER_SESSION);
+        }
     }
 }
 
@@ -322,18 +357,21 @@ function getTemplateByName(name) {
 }
 
 function getHistory() {
-    return [...chatHistory];
+    const all = [];
+    for (const messages of Object.values(chatHistories)) {
+        all.push(...messages);
+    }
+    all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    return all;
 }
 
 function clearHistory(options = {}) {
     if (options.mode === 'private' && options.target) {
-        chatHistory = chatHistory.filter(item => 
-            !(item.mode === 'private' && item.target === options.target)
-        );
+        delete chatHistories[sessionKey(options.mode, options.target)];
     } else if (options.mode === 'group') {
-        chatHistory = chatHistory.filter(item => item.mode === 'private');
+        delete chatHistories.group;
     } else {
-        chatHistory = [];
+        chatHistories = {};
     }
     saveHistory();
     return getHistory();
@@ -416,8 +454,10 @@ function addMessage(message) {
         mode: message.mode || chatSession.mode,
         target: message.target || chatSession.privateTarget
     };
-    
-    chatHistory.push(msg);
+
+    const key = sessionKey(msg.mode, msg.target);
+    if (!chatHistories[key]) chatHistories[key] = [];
+    chatHistories[key].push(msg);
     trimHistory();
     saveHistory();
     
@@ -432,14 +472,24 @@ function addMessage(message) {
 }
 
 function buildMessages(userMessage, options = {}) {
-    const { useTemplate = null, systemPrompt = null, includeHistory = false, contextCount = 0 } = options;
+    const { useTemplate = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
 
     const messages = [
         { role: 'system', content: systemPrompt || chatConfig.systemPrompt }
     ];
 
     if (includeHistory && contextCount > 0) {
-        const recentHistory = chatHistory.slice(-contextCount);
+        const key = sessionKey(mode, target);
+        const sessionHistory = chatHistories[key] || [];
+        let recentHistory = sessionHistory.slice(-contextCount);
+        // 排除最后一条 user/control 消息（即当前查询，已在 addMessage 中存储，
+        // 避免与末尾追加的 userMessage 重复）
+        if (recentHistory.length > 0) {
+            const last = recentHistory[recentHistory.length - 1];
+            if (last.role === 'user' || last.role === 'control') {
+                recentHistory = recentHistory.slice(0, -1);
+            }
+        }
         recentHistory.forEach(item => {
             if (item.content) {
                 messages.push({ role: item.role === 'assistant' ? 'assistant' : 'user', content: item.content });
@@ -512,10 +562,10 @@ function splitIntoSentences(text) {
 }
 
 async function chat(userMessage, options = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0 } = options;
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount });
+        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount, mode, target });
         
         const requestBody = {
             model: chatConfig.model,
@@ -537,7 +587,9 @@ async function chat(userMessage, options = {}) {
         if (data.choices && data.choices[0] && data.choices[0].message) {
             const assistantMessage = data.choices[0].message.content;
             
-            chatHistory.push({
+            const groupKey = 'group';
+            if (!chatHistories[groupKey]) chatHistories[groupKey] = [];
+            chatHistories[groupKey].push({
                 id: Date.now().toString(),
                 user: userMessage.substring(0, MAX_MESSAGE_LENGTH),
                 assistant: assistantMessage.substring(0, MAX_MESSAGE_LENGTH),
@@ -567,14 +619,14 @@ async function chat(userMessage, options = {}) {
 }
 
 async function chatStream(userMessage, options = {}, callbacks = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0 } = options;
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
 
     let fullMessage = '';
     let pendingText = '';
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount });
+        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount, mode, target });
         
         const requestBody = {
             model: chatConfig.model,
@@ -609,13 +661,15 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                             onChunk(content, fullMessage);
                         }
 
-                        const splitAt = findLastSentenceBoundary(pendingText);
-                        if (splitAt >= 0) {
-                            const sentence = pendingText.substring(0, splitAt).trim();
-                            if (sentence && onSentence) {
-                                onSentence(sentence, fullMessage);
+                        // 拆分所有完整句子，只保留末尾不完整片段
+                        const sentences = splitIntoSentences(pendingText);
+                        if (sentences.length >= 2) {
+                            for (let i = 0; i < sentences.length - 1; i++) {
+                                if (onSentence) {
+                                    onSentence(sentences[i], fullMessage);
+                                }
                             }
-                            pendingText = pendingText.substring(splitAt);
+                            pendingText = sentences[sentences.length - 1];
                         }
                     }
                 } catch (e) {

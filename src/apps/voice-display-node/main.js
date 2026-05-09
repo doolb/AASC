@@ -59,22 +59,25 @@ function log(category, message) {
         const timestamp = new Date().toTimeString().split(' ')[0];
         console.log(`${timestamp} [${category}] ${message}`);
     }
-    // 按配置上报到服务器
-    if (isClientLogEnabled('info')) {
-        sendClientLog('info', category, message);
-    }
+    try {
+        if (isClientLogEnabled('info')) {
+            sendClientLog('info', category, message);
+        }
+    } catch (e) { /* 日志上报失败不影响主流程 */ }
 }
 
 function logError(category, message) {
     if (useTUI) {
         tui.addLog(category, message);
-        return;
     }
-    console.error(`[${category}] ${message}`);
-    // 按配置上报到服务器
-    if (isClientLogEnabled('error')) {
-        sendClientLog('error', category, message);
+    if (!useTUI) {
+        console.error(`[${category}] ${message}`);
     }
+    try {
+        if (isClientLogEnabled('error')) {
+            sendClientLog('error', category, message);
+        }
+    } catch (e) { /* 日志上报失败不影响主流程 */ }
 }
 
 let AudioRecorder;

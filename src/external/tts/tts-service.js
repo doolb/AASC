@@ -12,8 +12,11 @@ let ttsConfig = {
     defaultVoice: 'Microsoft Xiaoxiao',
     defaultSpeed: 0,
     requestTimeoutMs: 20000,
+    extraTimeoutPerPending: 10000,
     maxErrorBytes: 64 * 1024
 };
+
+let pendingRequests = 0;
 
 function init(config) {
     if (config) {
@@ -22,6 +25,9 @@ function init(config) {
         if (config.defaultSpeed !== undefined) ttsConfig.defaultSpeed = config.defaultSpeed;
         if (config.requestTimeoutMs !== undefined) {
             ttsConfig.requestTimeoutMs = Math.max(1000, Number(config.requestTimeoutMs) || 20000);
+        }
+        if (config.extraTimeoutPerPending !== undefined) {
+            ttsConfig.extraTimeoutPerPending = Math.max(0, Number(config.extraTimeoutPerPending) || 10000);
         }
         if (config.maxErrorBytes !== undefined) {
             ttsConfig.maxErrorBytes = Math.max(1024, Number(config.maxErrorBytes) || 64 * 1024);
@@ -32,7 +38,7 @@ function init(config) {
 }
 
 function getConfig() {
-    return { ...ttsConfig };
+    return { ...ttsConfig, pendingRequests };
 }
 
 function generateUniquePath() {
@@ -130,8 +136,10 @@ function callExternalTTS(text, voice, speed, outputPath) {
             });
         });
 
-        req.setTimeout(ttsConfig.requestTimeoutMs, () => {
-            req.destroy(new Error(`TTS 请求超时(${ttsConfig.requestTimeoutMs}ms)`));
+        const queueAhead = Math.max(0, pendingRequests - 1);
+        const effectiveTimeout = ttsConfig.requestTimeoutMs + queueAhead * ttsConfig.extraTimeoutPerPending;
+        req.setTimeout(effectiveTimeout, () => {
+            req.destroy(new Error(`TTS 请求超时(${effectiveTimeout}ms)`));
         });
 
         req.on('error', (err) => {
@@ -150,20 +158,25 @@ async function generateTTS(text, voice, speed) {
     if (!text) {
         throw new Error('text 不能为空');
     }
-    
-    const finalVoice = voice || ttsConfig.defaultVoice;
-    const finalSpeed = speed !== undefined ? speed : ttsConfig.defaultSpeed;
-    const outputPath = generateUniquePath();
-    
-    console.log(`[TTS] 生成: "${text}" | 语音: ${finalVoice} | 语速: ${finalSpeed}`);
-    
-    await callExternalTTS(text, voice, speed, outputPath);
-    
-    if (!fs.existsSync(outputPath)) {
-        throw new Error('音频文件生成失败');
+
+    pendingRequests++;
+    try {
+        const finalVoice = voice || ttsConfig.defaultVoice;
+        const finalSpeed = speed !== undefined ? speed : ttsConfig.defaultSpeed;
+        const outputPath = generateUniquePath();
+
+        console.log(`[TTS] 生成: "${text}" | 语音: ${finalVoice} | 语速: ${finalSpeed} | 排队: ${pendingRequests - 1}`);
+
+        await callExternalTTS(text, voice, speed, outputPath);
+
+        if (!fs.existsSync(outputPath)) {
+            throw new Error('音频文件生成失败');
+        }
+
+        return outputPath;
+    } finally {
+        pendingRequests--;
     }
-    
-    return outputPath;
 }
 
 function cleanupOldTtsFiles() {

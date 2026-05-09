@@ -810,19 +810,22 @@ app.get('/api/tts/config', (req, res) => {
         defaultVoice: ttsConfig.defaultVoice,
         defaultSpeed: ttsConfig.defaultSpeed,
         requestTimeoutMs: ttsConfig.requestTimeoutMs,
+        extraTimeoutPerPending: ttsConfig.extraTimeoutPerPending,
+        pendingRequests: ttsConfig.pendingRequests,
         maxErrorBytes: ttsConfig.maxErrorBytes
     });
 });
 
 app.post('/api/tts/config', (req, res) => {
     try {
-        const { serviceUrl, defaultVoice, defaultSpeed, requestTimeoutMs, maxErrorBytes } = req.body;
-        
+        const { serviceUrl, defaultVoice, defaultSpeed, requestTimeoutMs, extraTimeoutPerPending, maxErrorBytes } = req.body;
+
         const ttsConfig = {};
         if (serviceUrl !== undefined) ttsConfig.serviceUrl = serviceUrl;
         if (defaultVoice !== undefined) ttsConfig.defaultVoice = defaultVoice;
         if (defaultSpeed !== undefined) ttsConfig.defaultSpeed = defaultSpeed;
         if (requestTimeoutMs !== undefined) ttsConfig.requestTimeoutMs = requestTimeoutMs;
+        if (extraTimeoutPerPending !== undefined) ttsConfig.extraTimeoutPerPending = extraTimeoutPerPending;
         if (maxErrorBytes !== undefined) ttsConfig.maxErrorBytes = maxErrorBytes;
         
         config.setTtsConfig(ttsConfig);
@@ -2999,6 +3002,7 @@ async function handleControlMessageFallback(data, ws) {
                 } else if (data.type === 'chat') {
                     (async () => {
                         try {
+                            let ttsQueue = Promise.resolve(); // 串行化 TTS 保证播放顺序
                             await chat.chatStream(data.message, {
                                 useTemplate: data.useTemplate,
                                 displayId: displayId
@@ -3011,7 +3015,7 @@ async function handleControlMessageFallback(data, ws) {
                                     }));
                                 },
                                 onSentence: async (sentence, fullMessage) => {
-                                    try {
+                                    ttsQueue = ttsQueue.then(async () => {
                                         const cleanText = stripMarkdown(sentence);
                                         const audioPath = await tts.generateTTS(cleanText);
                                         const fileName = path.basename(audioPath);
@@ -3021,9 +3025,10 @@ async function handleControlMessageFallback(data, ws) {
                                             audioUrl: `/uploads/tts/${fileName}`,
                                             text: sentence
                                         });
-                                    } catch (ttsErr) {
-                                        logError('Chat', `TTS生成失败: ${ttsErr.message}`);
-                                    }
+                                    }).catch(err => {
+                                        logError('Chat', `TTS生成失败: ${err.message}`);
+                                    });
+                                    await ttsQueue;
                                 },
                                 onComplete: (fullMessage, history) => {
                                     ws.send(JSON.stringify({
@@ -3199,18 +3204,22 @@ async function handleChatMessage(options) {
         systemPrompt = customSystemPrompt;
     }
 
+    let ttsQueue = Promise.resolve(); // 串行化 TTS 保证播放顺序
     await chat.chatStream(content, {
         useTemplate: null,
         displayId: displayId,
         systemPrompt: systemPrompt,
         includeHistory: includeHistory,
-        contextCount: contextCount
+        contextCount: contextCount,
+        mode: messageMode,
+        target: messageTarget
     }, {
         onChunk: (chunk, fullMessage) => {
             sendToControl({ type: 'chatChunk', chunk, message: fullMessage });
         },
         onSentence: async (sentence, fullMessage) => {
-            try {
+            if (!tts) return;
+            ttsQueue = ttsQueue.then(async () => {
                 const cleanText = stripMarkdown(sentence);
                 const audioPath = await tts.generateTTS(cleanText);
                 const fileName = path.basename(audioPath);
@@ -3235,9 +3244,10 @@ async function handleChatMessage(options) {
                         text: sentence
                     });
                 }
-            } catch (ttsErr) {
-                logError('Chat', `TTS生成失败: ${ttsErr.message}`);
-            }
+            }).catch(err => {
+                logError('Chat', `TTS生成失败: ${err.message}`);
+            });
+            await ttsQueue;
         },
         onComplete: (fullMessage, history) => {
             chat.addMessage({

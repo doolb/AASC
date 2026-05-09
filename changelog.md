@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+### 修复
+
+- ✅ [2026-05-09] 修复 LLM 请求中用户消息重复的问题
+  - `addMessage()` 先存入用户消息 → `buildMessages()` 从历史取出后又追加一次
+  - `buildMessages()` 取历史时自动排除最后一条 user/control 消息（即当前查询）
+  - 改动文件：llm-service.js
+
+- ✅ [2026-05-09] 聊天历史内存与文件均按会话分离
+  - `chatHistory` 单一数组 → `chatHistories` 按 sessionKey 分组的 Map
+  - `buildMessages()` 直接读取对应会话的历史，无需过滤
+  - 群聊消息 → `chat-history.json`, 私聊角色 X → `chat-history-X.json`
+  - 每个会话独立截断（最多 100 条/会话）
+  - 改动文件：llm-service.js
+  - 实现文档：docs/spec/chat-system.md
+
+- ✅ [2026-05-09] 修复私聊时 LLM 历史消息混入其他角色对话的问题
+  - `buildMessages()` 未按 `mode`/`target` 过滤 `chatHistory`，导致妲己的对话历史中混入小爱、千问等角色的消息
+  - 改为先按会话过滤（私聊按角色名、群聊排除私聊），再取最近 N 条
+  - 改动文件：llm-service.js, server-app.js, agents/index.js
+  - 实现文档：docs/spec/chat-system.md
+
+- ✅ [2026-05-09] 修复 LLM 流式响应分句逻辑——解决快速响应时多句合并问题
+  - `findLastSentenceBoundary()` 只找最后一个分句边界，导致多个完整句子被合并发出
+  - 改为用 `splitIntoSentences()` 提取所有完整句子，保留末尾不完整片段
+  - 改动文件：llm-service.js
+  - 实现文档：docs/spec/chat-system.md
+
+- ✅ [2026-05-09] 修复 TTS 并发生成导致播放顺序错乱
+  - 多句分开发送后，各句 tts.generateTTS() 异步完成顺序不定，音频发送错乱
+  - 所有 onSentence 回调内用 ttsQueue Promise 链串行化 TTS 生成与发送
+  - 改动文件：server-app.js（2处）, agents/index.js（2处）
+  - 实现文档：docs/spec/chat-system.md
+
 ### 新功能
 
 - ✅ [2026-05-09] 日志系统与消息日志整合——消息链路追踪

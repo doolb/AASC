@@ -83,19 +83,25 @@
 
 ```
 常量:
-    HISTORY_FILE: '../config/chat-history.json'
+    HISTORY_DIR: '../config'
+    HISTORY_FILE_BASE: 'chat-history'
     SESSION_FILE: '../config/chat-session.json'
     COMMANDS_FILE: '../config/chat-commands.json'
-    MAX_HISTORY_SIZE: 100
+    MAX_HISTORY_PER_SESSION: 100
 
 变量:
     chatConfig: 聊天配置
-    chatHistory: 聊天历史
+    chatHistories: 按会话分组的消息历史 { 'group': [], 'private:妲己': [], ... }
     chatSession: 会话状态
     chatCommands: 自定义指令
     chatTemplates: 聊天模板
     llmProfiles: LLM 配置列表
     activeProfile: 当前激活的配置名
+
+辅助函数:
+    sessionKey(mode, target):
+        私聊且有 target → 'private:{target}'
+        否则 → 'group'
 
 init(config):
     加载聊天配置
@@ -166,26 +172,17 @@ chatStream(userMessage, options, callbacks):
     加载聊天模板
 
 loadHistory():
-    读取 HISTORY_FILE
-    解析 JSON
-    如果文件不存在或解析失败:
-        返回空数组
-    兼容旧格式:
-        如果 item.user 存在:
-            转换为新格式 {
-                role: 'control',
-                name: '控制端',
-                content: item.user
-            }
-            添加助手消息 {
-                role: 'assistant',
-                name: defaultName,
-                content: item.assistant
-            }
+    扫描 HISTORY_DIR 下所有 chat-history*.json 文件
+    逐个读取、解析 JSON、合并到 chatHistory
+    按 timestamp 排序
+    如果无任何文件: 返回空数组
 
 saveHistory():
-    序列化 chatHistory
-    写入 HISTORY_FILE
+    按会话分组 chatHistory:
+        group 消息 → chat-history.json
+        私聊角色 X 的消息 → chat-history-X.json
+    逐个写入对应文件
+    清理已不存在的会话对应的历史文件
 
 loadSession():
     读取 SESSION_FILE
@@ -204,37 +201,30 @@ saveCommands():
     写入 COMMANDS_FILE
 
 addMessage(data):
-    创建消息记录:
-        id: Date.now().toString()
-        timestamp: Date.now()
-        role: data.role
-        name: data.name
-        ip: data.ip
-        content: data.content
-        mode: chatSession.mode
-        target: chatSession.privateTarget
-        displayId: data.displayId
-    添加到 chatHistory
-    如果超过 MAX_HISTORY_SIZE:
-        截断历史
+    创建消息记录
+    按 sessionKey(msg.mode, msg.target) 推入 chatHistories 对应数组
+    调用 trimHistory()
     调用 saveHistory()
     返回消息记录
 
-getHistory(options):
-    options.role: 按角色过滤
-    options.mode: 按模式过滤
-    options.limit: 限制数量
-    返回过滤后的历史
+getHistory():
+    合并 chatHistories 所有会话的消息
+    按 timestamp 排序后返回
 
 clearHistory(options):
     如果 options.mode === 'private' 且有 target:
-        只删除该助手的私聊消息
+        delete chatHistories['private:{target}']
     如果 options.mode === 'group':
-        只删除群聊消息，保留私聊消息
+        delete chatHistories.group
     否则:
-        清空所有消息
+        chatHistories = {}
     调用 saveHistory()
-    返回更新后的历史
+    返回 getHistory()
+
+trimHistory():
+    对 chatHistories 中每个会话:
+        如果超过 MAX_HISTORY_PER_SESSION:
+            截断至最近 MAX_HISTORY_PER_SESSION 条
 
 setMode(mode, target):
     设置 chatSession.mode = mode
@@ -315,7 +305,10 @@ buildMessages(userMessage, options):
     构建发送给AI的消息数组
     包含系统提示词
     如果 includeHistory 为 true:
-        包含最近的历史消息
+        先按会话过滤（私聊/群聊）:
+            私聊模式: 只取 item.mode === 'private' && item.target === target
+            群聊模式: 只取 item.mode !== 'private'
+        再取最近 contextCount 条
     如果是私聊模式:
         使用对应助手的模板
     添加当前用户消息
@@ -331,12 +324,22 @@ chat(userMessage, options, callbacks):
 chatStream(userMessage, options, callbacks):
     流式调用AI API
     每收到一个chunk:
+        追加到 pendingText
         调用 callbacks.onChunk()
-    每完成一个句子:
-        调用 callbacks.onSentence()
+        用 splitIntoSentences() 拆分 pendingText:
+            如果有 ≥2 个句子:
+                发出前 n-1 个完整句子（调用 onSentence）
+                仅保留最后一个（可能不完整）片段
     完成后:
+        若 pendingText 还有剩余内容，发出（调用 onSentence）
         调用 addMessage()
         调用 callbacks.onComplete()
+
+onSentence 外部使用注意事项:
+    onSentence 内部调用 tts.generateTTS() 是异步的
+    必须用 ttsQueue 链式调用保证 TTS 生成与音频发送顺序
+    即: ttsQueue = ttsQueue.then(() => generateTTS(sentence))
+    防止句子2 的 TTS 先于句子1 完成导致播放顺序错乱
 ```
 
 ### src/apps/web-mediacenter/modules/voice/voice-command-app-service.js 更新

@@ -227,24 +227,29 @@ class ChatAgent extends BaseAgent {
                 }
             },
             onSentence: async (sentence, fullMessage) => {
-                if (this.tts && displayId && !playOnControl) {
-                    const audioPath = await this.tts.generateTTS(sentence);
-                    const fileName = require('path').basename(audioPath);
-                    context.sendToDisplay(displayId, {
-                        type: 'tts',
-                        action: 'playAudio',
-                        audioUrl: `/uploads/tts/${fileName}`,
-                        text: sentence
-                    });
-                } else if (this.tts && playOnControl && ws) {
-                    const audioPath = await this.tts.generateTTS(sentence);
-                    const fileName = require('path').basename(audioPath);
-                    ws.send(JSON.stringify({
-                        type: 'playOnControl',
-                        audioUrl: `/uploads/tts/${fileName}`,
-                        text: sentence
-                    }));
-                }
+                ttsQueue = ttsQueue.then(async () => {
+                    if (this.tts && displayId && !playOnControl) {
+                        const audioPath = await this.tts.generateTTS(sentence);
+                        const fileName = require('path').basename(audioPath);
+                        context.sendToDisplay(displayId, {
+                            type: 'tts',
+                            action: 'playAudio',
+                            audioUrl: `/uploads/tts/${fileName}`,
+                            text: sentence
+                        });
+                    } else if (this.tts && playOnControl && ws) {
+                        const audioPath = await this.tts.generateTTS(sentence);
+                        const fileName = require('path').basename(audioPath);
+                        ws.send(JSON.stringify({
+                            type: 'playOnControl',
+                            audioUrl: `/uploads/tts/${fileName}`,
+                            text: sentence
+                        }));
+                    }
+                }).catch(err => {
+                    console.error('[Agent] TTS生成失败:', err.message);
+                });
+                await ttsQueue;
             },
             onComplete: (fullMessage, history) => {
                 if (ws) {
@@ -267,6 +272,7 @@ class ChatAgent extends BaseAgent {
             }
         };
 
+        let ttsQueue = Promise.resolve();
         await this.chat.chatStream(message, {
             useTemplate,
             displayId
@@ -321,26 +327,31 @@ class ChatAgent extends BaseAgent {
                 }
             },
             onSentence: async (sentence, fullMessage) => {
-                if (this.tts) {
-                    const audioPath = await this.tts.generateTTS(sentence);
-                    const fileName = require('path').basename(audioPath);
-                    const audioUrl = `/uploads/tts/${fileName}`;
+                ttsQueue = ttsQueue.then(async () => {
+                    if (this.tts) {
+                        const audioPath = await this.tts.generateTTS(sentence);
+                        const fileName = require('path').basename(audioPath);
+                        const audioUrl = `/uploads/tts/${fileName}`;
 
-                    if (actualPlayOnControl && ws) {
-                        ws.send(JSON.stringify({
-                            type: 'playOnControl',
-                            audioUrl: audioUrl,
-                            text: sentence
-                        }));
-                    } else if (targetDisplayId) {
-                        context.sendToDisplay(targetDisplayId, {
-                            type: 'tts',
-                            action: 'playAudio',
-                            audioUrl: audioUrl,
-                            text: sentence
-                        });
+                        if (actualPlayOnControl && ws) {
+                            ws.send(JSON.stringify({
+                                type: 'playOnControl',
+                                audioUrl: audioUrl,
+                                text: sentence
+                            }));
+                        } else if (targetDisplayId) {
+                            context.sendToDisplay(targetDisplayId, {
+                                type: 'tts',
+                                action: 'playAudio',
+                                audioUrl: audioUrl,
+                                text: sentence
+                            });
+                        }
                     }
-                }
+                }).catch(err => {
+                    console.error('[Agent] TTS生成失败:', err.message);
+                });
+                await ttsQueue;
             },
             onComplete: (fullMessage, history) => {
                 this.chat.addMessage({
@@ -371,11 +382,14 @@ class ChatAgent extends BaseAgent {
             }
         };
 
+        let ttsQueue = Promise.resolve();
         await this.chat.chatStream(content, {
             useTemplate: params.useTemplate,
             displayId: targetDisplayId,
             systemPrompt: systemPrompt,
-            includeHistory: includeHistory
+            includeHistory: includeHistory,
+            mode: messageMode,
+            target: messageTarget
         }, callbacks);
 
         return { success: true };

@@ -22,6 +22,7 @@ class Config extends DataSnapshot {
             defaultVoice: 'Microsoft Xiaoxiao',
             defaultSpeed: 0,
             requestTimeoutMs: 20000,
+            extraTimeoutPerPending: 10000,
             maxErrorBytes: 65536
         },
         asr: {
@@ -120,6 +121,9 @@ class Config extends DataSnapshot {
             if (ttsConfig.requestTimeoutMs !== undefined) {
                 data.tts.requestTimeoutMs = ttsConfig.requestTimeoutMs;
             }
+            if (ttsConfig.extraTimeoutPerPending !== undefined) {
+                data.tts.extraTimeoutPerPending = ttsConfig.extraTimeoutPerPending;
+            }
             if (ttsConfig.maxErrorBytes !== undefined) {
                 data.tts.maxErrorBytes = ttsConfig.maxErrorBytes;
             }
@@ -132,6 +136,7 @@ class Config extends DataSnapshot {
             defaultVoice: this.get('tts.defaultVoice'),
             defaultSpeed: this.get('tts.defaultSpeed'),
             requestTimeoutMs: this.get('tts.requestTimeoutMs', 20000),
+            extraTimeoutPerPending: this.get('tts.extraTimeoutPerPending', 10000),
             maxErrorBytes: this.get('tts.maxErrorBytes', 65536)
         };
     }
