@@ -63,6 +63,34 @@ const logBrain = new LogBrain({
     defaultTimeRange: config.get('logBrain.defaultTimeRange', '10m')
 });
 
+// 日志上报配置存储
+const logReportStore = {
+    display: { enabled: false, level: 'error' },
+    displayOverrides: new Map(),
+    control: { enabled: false, level: 'error' }
+};
+const LOG_LEVEL_WEIGHT = { error: 4, warn: 3, info: 2, debug: 1 };
+function isLevelEnabled(configLevel, logLevel) {
+    return (LOG_LEVEL_WEIGHT[logLevel] || 0) >= (LOG_LEVEL_WEIGHT[configLevel] || 0);
+}
+function generateCorrelationId(type) {
+    return `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+}
+function sendLogReportConfigToDisplay(displayId, config) {
+    const displayData = displayClients.get(displayId);
+    if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
+        displayData.ws.send(JSON.stringify({ type: 'logReportConfig', enabled: config.enabled, level: config.level }));
+    }
+}
+function getDisplayLogReportConfig(displayId) {
+    return logReportStore.displayOverrides.get(displayId) || logReportStore.display;
+}
+function sendLogReportConfigToAllDisplays() {
+    displayClients.forEach((_, displayId) => {
+        sendLogReportConfigToDisplay(displayId, getDisplayLogReportConfig(displayId));
+    });
+}
+
 function log(category, message, extra) {
     const timestamp = new Date().toTimeString().split(' ')[0];
     const entry = logBuffer.add(category, message, extra);
@@ -450,6 +478,43 @@ function startServer() {
                 const { levels } = data;
                 if (!Array.isArray(levels)) return;
                 logViewBind.data = { ...logViewBind.data, filter: { ...logViewBind.data.filter, levels } };
+            });
+
+            // 日志上报控制 handler
+            wsServer.registerHandler('setLogReport', (data, ctx) => {
+                const { targetType, targetId, config } = data;
+                if (!targetType || !config || typeof config.enabled !== 'boolean') return;
+                const level = ['error', 'warn', 'info', 'debug'].includes(config.level) ? config.level : 'error';
+                if (targetType === 'display') {
+                    if (targetId === 'all') {
+                        logReportStore.display = { enabled: config.enabled, level };
+                        sendLogReportConfigToAllDisplays();
+                    } else {
+                        logReportStore.displayOverrides.set(targetId, { enabled: config.enabled, level });
+                        sendLogReportConfigToDisplay(targetId, { enabled: config.enabled, level });
+                    }
+                    // 广播给所有控制端更新UI
+                    broadcastToControls({ type: 'logReportConfig', target: 'display', enabled: config.enabled, level });
+                } else if (targetType === 'control') {
+                    logReportStore.control = { enabled: config.enabled, level };
+                }
+                ctx.ws.send(JSON.stringify({
+                    type: 'logReportConfigApplied',
+                    targetType,
+                    targetId: targetId || 'all',
+                    config: { enabled: config.enabled, level }
+                }));
+            });
+            wsServer.registerHandler('clientLog', (data, ctx) => {
+                const { level, category, message, deviceType, deviceId, timestamp } = data;
+                if (!level || !message) return;
+                const device = deviceType === 'display' ? (deviceId || 'unknown-display') : 'control';
+                logBuffer.add(category || '系统', message, {
+                    level: level,
+                    device: device,
+                    source: deviceType || 'unknown',
+                    targetId: deviceId || null
+                });
             });
 
             log('WS', 'ViewBind WS 系统初始化完成');
@@ -1976,7 +2041,9 @@ const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
-        log('WS', `>> ${data.type}${data.text ? ' "'+data.text+'"' : ''}${data.mode ? ' mode='+data.mode : ''}`, { targetId: 'all-control', source: 'server', scope: 'group' });
+        const extra = { targetId: 'all-control', source: 'server', scope: 'group' };
+        if (data.correlationId) extra.correlationId = data.correlationId;
+        log('WS', `>> ${data.type}${data.text ? ' "'+data.text+'"' : ''}${data.mode ? ' mode='+data.mode : ''}`, extra);
     }
     controlClients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
@@ -2030,7 +2097,10 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
 function sendToDisplay(displayId, data) {
     const displayData = displayClients.get(displayId);
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
-        log('WS', `>> ${data.type}${data.action ? ' action='+data.action : ''}${data.url ? ' url='+data.url.substring(0,80) : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: 'server', scope: 'single', targetId: displayId });
+        if (!data.correlationId) {
+            data.correlationId = generateCorrelationId(data.type || 'msg');
+        }
+        log('WS', `>> ${data.type}${data.action ? ' action='+data.action : ''}${data.url ? ' url='+data.url.substring(0,80) : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: 'server', scope: 'single', targetId: displayId, correlationId: data.correlationId });
         displayData.ws.send(JSON.stringify(data));
         return true;
     }
@@ -2228,7 +2298,11 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
-        
+
+        // 发送日志上报配置
+        const reportCfg = getDisplayLogReportConfig(displayId);
+        ws.send(JSON.stringify({ type: 'logReportConfig', enabled: reportCfg.enabled, level: reportCfg.level }));
+
         if (isSubDisplay) {
             const protocol = useHttps ? 'https' : 'http';
             const localIP = getLocalIP();
@@ -2282,7 +2356,9 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
+                if (data.type !== 'clientLog') {
+                    log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
+                }
 
                 if (data.type === 'asrResult') {
                     const pending = pendingDisplayAsrRequests.get(data.requestId);
@@ -2342,12 +2418,22 @@ wss.on('connection', (ws, req) => {
             stats: systemMonitor.getStats()
         }));
         ws.send(JSON.stringify({ type: 'commandRouting', routing: voiceCommand.getCommandRouting() }));
+        // 发送日志上报配置（控制端需要显示端默认配置和控制端自身配置）
+        ws.send(JSON.stringify({ type: 'logReportConfig', target: 'display', enabled: logReportStore.display.enabled, level: logReportStore.display.level }));
+        ws.send(JSON.stringify({ type: 'logReportConfig', target: 'control', enabled: logReportStore.control.enabled, level: logReportStore.control.level }));
 
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
 
-                log('WS', `<< ${data.type}${data.displayId ? ' displayId='+data.displayId : ''}${data.text ? ' "'+data.text+'"' : ''}`, { source: 'control', scope: 'single', targetId: data.displayId || null });
+                if (data.type !== 'clientLog' && data.type !== 'setLogReport') {
+                    if (!data.correlationId && (data.displayId || data.type === 'mediaBatch' || data.type === 'tts')) {
+                        data.correlationId = generateCorrelationId(data.type);
+                    }
+                    const extra = { source: 'control', scope: 'single', targetId: data.displayId || null };
+                    if (data.correlationId) extra.correlationId = data.correlationId;
+                    log('WS', `<< ${data.type}${data.displayId ? ' displayId='+data.displayId : ''}${data.text ? ' "'+data.text+'"' : ''}`, extra);
+                }
 
                 if (data.type === 'updateCapabilities') {
                     const targetDisplayId = data.displayId;
@@ -2459,14 +2545,19 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         log('能力', `显示端 ${displayId} 声明能力`);
         broadcastDisplayList();
     } else if (data.type === 'commandAck' && displayData) {
-        log('系统', `收到显示端 commandAck: ${data.commandType} from ${displayId}`);
+        const ackCorrelationId = data.correlationId || generateCorrelationId('ack');
+        log('WS', `<< ${displayId} ACK: ${data.commandType} ${data.success ? '✓' : '✗'} ${data.details || ''}`, {
+            displayId, source: displayId, targetId: 'server', scope: 'single',
+            correlationId: ackCorrelationId
+        });
         const ackMsg = {
             type: 'commandAck',
             displayId: displayId,
             commandType: data.commandType,
             success: data.success,
             details: data.details,
-            timestamp: data.timestamp
+            timestamp: data.timestamp,
+            correlationId: ackCorrelationId
         };
         if (data.extraData) {
             ackMsg.extraData = data.extraData;

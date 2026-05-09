@@ -346,6 +346,218 @@
 }
 ```
 
+## 日志上报控制（新增）
+
+### 服务端
+
+```
+// 日志上报配置存储（内存）：
+logReportConfig = {
+    display: {            // 显示端默认配置
+        enabled: false,
+        level: 'error'    // 最低级别阈值：error|warn|info|debug
+    },
+    displayOverrides: Map<displayId, { enabled, level }>,  // 单设备覆盖
+    control: {            // 控制端默认配置
+        enabled: false,
+        level: 'error'
+    }
+}
+
+// 级别阈值检查：
+函数 isLevelEnabled(配置级别, 日志级别):
+    级别权重 = { error: 4, warn: 3, info: 2, debug: 1 }
+    返回 级别权重[日志级别] >= 级别权重[配置级别]
+
+// setLogReport handler（控制端→服务器）：
+接收 { targetType, targetId, config: { enabled, level } }
+如果 targetType === 'display':
+    如果 targetId === 'all':
+        logReportConfig.display = { enabled, level }
+        遍历所有显示端 → 发送 { type: 'logReportConfig', enabled, level }
+    否则:
+        logReportConfig.displayOverrides.set(targetId, { enabled, level })
+        发送到对应显示端 → { type: 'logReportConfig', enabled, level }
+否则 targetType === 'control':
+    logReportConfig.control = { enabled, level }
+    发送到控制端自身 → { type: 'logReportConfig', enabled, level }
+返回控制端 → { type: 'logReportConfigApplied', targetType, targetId, config }
+
+// clientLog handler（显示端/控制端→服务器）：
+接收 { level, category, message, deviceType, deviceId, timestamp }
+logBuffer.add(category, message, {
+    level: level,
+    device: deviceType === 'display' ? displayId : 'control',
+    source: deviceType,
+    targetId: deviceId
+})
+
+// 显示端连接时：
+发送初始 logReportConfig 给显示端
+
+// 控制端连接时（新增）：
+发送当前 logReportConfig 给控制端
+```
+
+### 显示端 (voice-display-node main.js)
+
+```
+// 新增 handler：
+handleMessage: 新增 'logReportConfig' 分支：
+    存储 this.logReportConfig = { enabled, level }
+
+// 修改 log()/logError()：
+function log(category, message):
+    原有本地输出逻辑...
+    如果 this.logReportConfig?.enabled:
+        如果 isLevelEnabled(this.logReportConfig.level, 日志级别):
+            sendClientLog(级别, category, message)
+
+function sendClientLog(level, category, message):
+    sendJSON({
+        type: 'clientLog',
+        level: level,
+        category: category,
+        message: message,
+        deviceType: 'display',
+        deviceId: this.config.displayId,
+        timestamp: Date.now()
+    })
+```
+
+### 控制端 (Web UI)
+
+```
+// LogViewer 新增方法：
+
+// 日志上报配置UI：
+renderLogReportControls():
+    显示端上报: checkbox + 级别下拉框
+    控制端上报: checkbox + 级别下拉框
+
+handleLogReportConfig(config):
+    this.logReportConfig = config
+    // 启用/停用 console 拦截
+
+// console 直接拦截：
+常量 原始控制台 = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug }
+常量 控制台日志级别权重 = { error: 4, warn: 3, info: 2, debug: 1 }
+
+函数 isConsoleLogEnabled(级别):
+    如果 !LogViewer.logReportConfig?.enabled: 返回 false
+    返回 控制台日志级别权重[级别] >= 控制台日志级别权重[LogViewer.logReportConfig.level]
+
+// 替换 console 方法：
+console.log = function(...args) {
+    原始控制台.log.apply(console, args)
+    如果 isConsoleLogEnabled('info'):
+        sendClientLog('info', args)
+}
+console.info = function(...args) {
+    原始控制台.info.apply(console, args)
+    如果 isConsoleLogEnabled('info'):
+        sendClientLog('info', args)
+}
+console.warn = function(...args) {
+    原始控制台.warn.apply(console, args)
+    如果 isConsoleLogEnabled('warn'):
+        sendClientLog('warn', args)
+}
+console.error = function(...args) {
+    原始控制台.error.apply(console, args)
+    如果 isConsoleLogEnabled('error'):
+        sendClientLog('error', args)
+}
+console.debug = function(...args) {
+    原始控制台.debug.apply(console, args)
+    如果 isConsoleLogEnabled('debug'):
+        sendClientLog('debug', args)
+}
+
+// 控制端发送 clientLog：
+sendClientLog(level, args):
+    如果 this.ws?.readyState === OPEN:
+        this.ws.send({
+            type: 'clientLog',
+            level: levelMap[level],
+            category: '控制端',
+            message: util.format(...args),
+            deviceType: 'control',
+            deviceId: 'web-control',
+            timestamp: Date.now()
+        })
+```
+
+## 消息链路追踪（新增）
+
+### 服务端
+
+```
+// correlationId 生成：
+函数 generateCorrelationId(type):
+    返回 `${type}-${Date.now()}-${Math.random(36).substring(2,6)}`
+
+// sendToDisplay（增强）：
+    如果 data 没有 correlationId:
+        data.correlationId = generateCorrelationId(data.type)
+    记录日志: { source: 'server', targetId: displayId, correlationId: data.correlationId }
+    发送到显示端
+
+// broadcastToControls（增强）：
+    如果 data.correlationId 存在:
+        记录日志附带 { correlationId }
+
+// 控制端消息入口（增强）：
+    如果消息有 displayId 或属于 display 操作类型:
+        data.correlationId = generateCorrelationId(data.type)
+    记录日志附带 { source: 'control', targetId: data.displayId, correlationId }
+
+// commandAck 处理（增强）：
+    ackCorrelationId = data.correlationId || generateCorrelationId('ack')
+    记录日志: { source: displayId, targetId: 'server', correlationId: ackCorrelationId }
+    广播到控制端时携带 correlationId
+```
+
+### 显示端 (display.html)
+
+```
+变量 _lastCorrelationId = null
+
+函数 setCorrelationId(cid):
+    如果 cid: _lastCorrelationId = cid
+
+// 在 onmessage 入口调用：
+setCorrelationId(data.correlationId)
+
+// sendCommandAck 增强：
+    如果 _lastCorrelationId:
+        ack.correlationId = _lastCorrelationId
+        _lastCorrelationId = null  // 使用后清空
+```
+
+### 客户端 LogViewer
+
+```
+// _getIndentClass 改为序号深度：
+如果条目有 correlationId:
+    depth = stack.length  // 同 correlationId 出现次数
+    stack.push(条目)
+    返回 indent-{depth}   // 0→无缩进, 1+→递增缩进
+
+// _getArrowHtml 不变：
+    有 source + targetId → "${src} ⇒ ${tgt}: message"
+    只有 source → "[${src}] message"
+    只有 targetId → "→ ${tgt}: message"
+```
+
+## 消息链示例
+
+```
+控制端 ⇒ display-1: media play "music"              ← 控制端发出（同correlationId, indent 0）
+  服务端 ⇒ display-1: media action=play               ← 服务器转发（indent 1）
+    display-1 ⇒ 服务端: ACK media ✓ success           ← 显示端确认（indent 2）
+```
+
 ## WebSocket 消息类型
 
 ### 服务端 → 控制端
@@ -353,7 +565,7 @@
 ```
 serverLog:
     type: 'serverLog'
-    entry: { id, timestamp, time, category, level, device, message, displayId }
+    entry: { id, timestamp, time, category, level, device, message, displayId, correlationId, source, targetId }
 
 logHistory:
     type: 'logHistory'
@@ -363,6 +575,81 @@ logHistory:
 systemStats:
     type: 'systemStats'
     stats: { timestamp, cpu, memory, uptime }
+
+commandAck（增强）:
+    type: 'commandAck'
+    displayId: string
+    commandType: string
+    success: boolean
+    details: string
+    timestamp: number
+    correlationId: string   // 新增：关联原始命令
+    extraData: object
+
+// 新增：
+logReportConfig:
+    type: 'logReportConfig'
+    target: string       // 'display'|'control' 配置归属（仅控制端收到的消息含此字段）
+    enabled: boolean
+    level: string       // 'error'|'warn'|'info'|'debug'
+
+logReportConfigApplied:
+    type: 'logReportConfigApplied'
+    targetType: string  // 'display'|'control'
+    targetId: string    // 设备ID 或 'all'
+    config: { enabled, level }
+```
+
+### 控制端 → 服务端（新增）
+
+```
+setLogReport:
+    type: 'setLogReport'
+    targetType: string    // 'display'|'control'
+    targetId: string      // 设备ID 或 'all'
+    config: {
+        enabled: boolean,
+        level: string     // 'error'|'warn'|'info'|'debug'
+    }
+```
+
+### 显示端 ←→ 服务端（新增）
+
+```
+服务端→显示端:
+    type: 'logReportConfig'
+    enabled: boolean
+    level: string
+
+显示端→服务端:
+    type: 'clientLog'
+    level: string
+    category: string
+    message: string
+    deviceType: 'display'
+    deviceId: string
+    timestamp: number
+
+// 控制端→服务端（也可通过控制端WS发送 clientLog）:
+    type: 'clientLog'
+    level: string
+    category: string
+    message: string
+    deviceType: 'control'
+    deviceId: string
+    timestamp: number
+```
+
+## HTML 结构（新增）
+
+```
+div.section "日志上报":
+    div.log-report-row:
+        span "显示端上报:"
+        select.display-level (error/warn/info/debug)
+    div.log-report-row:
+        span "控制端上报:"
+        select.control-level (error/warn/info/debug)
 ```
 
 ## HTML 结构

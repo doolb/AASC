@@ -27,13 +27,30 @@ const { installConsoleRedirect } = require('../../framework/observability/consol
 const useTUI = !process.argv.includes('--no-tui');
 const tui = new SubDisplayTUI({ enabled: useTUI });
 
-installConsoleRedirect({
-    enabled: useTUI,
-    writeLog: (level, message, category) => {
-        const cat = category || (level === 'error' ? '错误' : '系统');
-        tui.addLog(cat, message);
-    }
-});
+// 日志上报模块级状态
+const LOG_LEVEL_WEIGHT = { error: 4, warn: 3, info: 2, debug: 1 };
+let activeDisplayInstance = null;
+
+function isClientLogEnabled(level) {
+    const inst = activeDisplayInstance;
+    if (!inst || !inst.logReportConfig || !inst.logReportConfig.enabled) return false;
+    const cfgLevel = inst.logReportConfig.level || 'error';
+    return (LOG_LEVEL_WEIGHT[level] || 0) >= (LOG_LEVEL_WEIGHT[cfgLevel] || 0);
+}
+
+function sendClientLog(level, category, message) {
+    const inst = activeDisplayInstance;
+    if (!inst || !inst.sendJSON) return;
+    inst.sendJSON({
+        type: 'clientLog',
+        level: level,
+        category: category || '系统',
+        message: message,
+        deviceType: 'display',
+        deviceId: inst.config.displayId,
+        timestamp: Date.now()
+    });
+}
 
 function log(category, message) {
     if (useTUI) {
@@ -41,6 +58,10 @@ function log(category, message) {
     } else {
         const timestamp = new Date().toTimeString().split(' ')[0];
         console.log(`${timestamp} [${category}] ${message}`);
+    }
+    // 按配置上报到服务器
+    if (isClientLogEnabled('info')) {
+        sendClientLog('info', category, message);
     }
 }
 
@@ -50,6 +71,10 @@ function logError(category, message) {
         return;
     }
     console.error(`[${category}] ${message}`);
+    // 按配置上报到服务器
+    if (isClientLogEnabled('error')) {
+        sendClientLog('error', category, message);
+    }
 }
 
 let AudioRecorder;
@@ -99,6 +124,7 @@ class VoiceDisplay {
         this.recordingMode = config.recordingMode || 'mute';
         this.aecProcessor = null;
         this.bargeInTriggered = false;
+        this.logReportConfig = null; // { enabled, level } 由服务器推送
     }
 
     updateTUIConnectionState() {
@@ -215,6 +241,10 @@ class VoiceDisplay {
                 break;
             case 'serverStartTime':
                 log('系统', `服务器启动时间: ${data.time}`);
+                break;
+            case 'logReportConfig':
+                this.logReportConfig = { enabled: data.enabled, level: data.level || 'error' };
+                log('系统', `日志上报配置已更新: ${this.logReportConfig.enabled ? '开启' : '关闭'} 级别=${this.logReportConfig.level}`);
                 break;
             case 'configUpdate':
                 this.handleConfigUpdate(data);
@@ -566,6 +596,7 @@ class VoiceDisplay {
      * @returns {Promise<void>}
      */
     async start() {
+        activeDisplayInstance = this;
         this.audio = new AudioPlayer();
 
         this.asr = new ServerASR(this.config.serverUrl);

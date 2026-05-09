@@ -458,6 +458,31 @@
                         <div class="log-filter-group" id="logCategoryFilters"></div>
                     </div>
                 </div>
+
+                <!-- 日志上报控制 -->
+                <div class="log-report-row">
+                    <span class="log-report-label">日志上报</span>
+                    <label class="log-report-item">
+                        <input type="checkbox" id="logReportDisplayCheck" onchange="LogViewer.onReportDisplayChange()">
+                        <span>显示端上报</span>
+                    </label>
+                    <select id="logReportDisplayLevel" class="log-report-level" onchange="LogViewer.onReportDisplayChange()">
+                        <option value="error">仅错误</option>
+                        <option value="warn">警告及以上</option>
+                        <option value="info">信息及以上</option>
+                        <option value="debug">全部</option>
+                    </select>
+                    <label class="log-report-item">
+                        <input type="checkbox" id="logReportControlCheck" onchange="LogViewer.onReportControlChange()">
+                        <span>控制端上报</span>
+                    </label>
+                    <select id="logReportControlLevel" class="log-report-level" onchange="LogViewer.onReportControlChange()">
+                        <option value="error">仅错误</option>
+                        <option value="warn">警告及以上</option>
+                        <option value="info">信息及以上</option>
+                        <option value="debug">全部</option>
+                    </select>
+                </div>
             </div>
 
             <div class="section log-section">

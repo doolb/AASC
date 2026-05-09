@@ -40,6 +40,8 @@ core
 `LogScope { 'single', 'group' }`  // 单聊/群聊
 `LogSession { sessionId, sourceId, targetId, scope }`  // 日志订阅会话
 `LogBufferViewBind`  // 将 LogBuffer 与 ViewBind 绑定的适配概念
+`LogReportConfig { enabled: boolean, level: string }`  // 日志上报配置：是否启用、最低级别阈值
+`LogReportStore { display: LogReportConfig, displayOverrides: Map, control: LogReportConfig }`  // 全局日志上报配置存储
 
 ## 操作流程
 
@@ -72,3 +74,10 @@ core
 - 现有：控制端连接时发送 logBuffer.getEntries({ limit: 200 }) 全量推送
 - 新增：LogBufferViewBind 增量推送，仅发送新增条目
 - 控制端设过滤器 → 发送 { type: 'setLogLevel', levels: ['warn','error'] } → 服务端更新 logViewBind.data.filter → 日志按 filter 重推
+
+### 客户端日志上报
+
+- 控制端发送 `setLogReport` → 服务端存储配置并转发
+- 显示端收到 `logReportConfig` → 本地 log() 中按级别阈值判断后发送 `clientLog`
+- 控制端收到 `logReportConfig` → 覆盖 console 方法拦截日志发送 `clientLog`
+- 级别阈值：error(4) > warn(3) > info(2) > debug(1)，配置级别表示上报该级别及更高权重级别

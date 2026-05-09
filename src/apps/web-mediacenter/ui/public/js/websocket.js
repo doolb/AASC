@@ -247,6 +247,42 @@ const WebSocketManager = {
             if (window.LogViewer && data.stats) {
                 window.LogViewer.updateSystemStats(data.stats);
             }
+        } else if (data.type === 'logReportConfig') {
+            if (window.LogViewer) {
+                window.LogViewer.handleLogReportConfig(data);
+            }
+            if (data.target === 'display') {
+                const check = document.getElementById('logReportDisplayCheck');
+                const level = document.getElementById('logReportDisplayLevel');
+                if (check) check.checked = data.enabled;
+                if (level) level.value = data.level || 'error';
+            } else if (data.target === 'control') {
+                const ctrlCheck = document.getElementById('logReportControlCheck');
+                const ctrlLevel = document.getElementById('logReportControlLevel');
+                if (ctrlCheck) ctrlCheck.checked = data.enabled;
+                if (ctrlLevel) ctrlLevel.value = data.level || 'error';
+                // 同步到LogViewer的控制台拦截
+                if (window.LogViewer) {
+                    window.LogViewer.logReportConfig = { enabled: data.enabled, level: data.level };
+                    window.LogViewer._updateConsoleIntercept();
+                }
+            }
+        } else if (data.type === 'logReportConfigApplied') {
+            if (data.targetType === 'control') {
+                // 控制端配置确认后，更新UI和处理console拦截
+                if (window.LogViewer) {
+                    window.LogViewer.logReportConfig = data.config;
+                    window.LogViewer._updateConsoleIntercept();
+                }
+                const ctrlCheck = document.getElementById('logReportControlCheck');
+                const ctrlLevel = document.getElementById('logReportControlLevel');
+                if (ctrlCheck) ctrlCheck.checked = data.config.enabled;
+                if (ctrlLevel) ctrlLevel.value = data.config.level || 'error';
+            } else if (data.targetType === 'display') {
+                if (window.showToast) {
+                    window.showToast(`日志上报配置已应用 (${data.targetType})`, 'success');
+                }
+            }
         }
     },
     

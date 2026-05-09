@@ -323,30 +323,11 @@ const LogViewer = {
             this._correlationStacks.set(entry.correlationId, stack);
         }
 
-        if (stack.length === 0) {
-            stack.push({ source: entry.source, target: entry.targetId });
-            return '';
-        }
-
-        const last = stack[stack.length - 1];
-        if (entry.source === last.target) {
-            const depth = Math.min(stack.length, 4);
-            stack.push({ source: entry.source, target: entry.targetId });
-            return ` log-indent-${depth}`;
-        }
-
-        for (let i = stack.length - 2; i >= 0; i--) {
-            if (entry.source === stack[i].target) {
-                stack.splice(i + 1);
-                const depth = Math.min(i + 1, 4);
-                stack.push({ source: entry.source, target: entry.targetId });
-                return ` log-indent-${depth}`;
-            }
-        }
-
-        stack.length = 0;
+        // 用序号深度替代 source→target 匹配：同 correlationId 的条目按到达顺序缩进
+        const depth = Math.min(stack.length, 8);
         stack.push({ source: entry.source, target: entry.targetId });
-        return '';
+        if (depth === 0) return '';
+        return ` log-indent-${depth}`;
     },
 
     _getArrowMessage(entry) {
@@ -473,6 +454,127 @@ const LogViewer = {
         if (minutes > 0) parts.push(`${minutes}m`);
         parts.push(`${secs}s`);
         return parts.join(' ');
+    },
+
+    // ===== 日志上报控制 =====
+    logReportConfig: null,  // { enabled, level } 来自服务器
+
+    handleLogReportConfig(config) {
+        this.logReportConfig = config;
+        const displayCheck = document.getElementById('logReportDisplayCheck');
+        const displayLevel = document.getElementById('logReportDisplayLevel');
+        // 显示端配置不直接控制本地checkbox - 显示端配置用于setLogReport发送
+        // 初始化时显示从服务器获取的默认值
+    },
+
+    onReportDisplayChange() {
+        const check = document.getElementById('logReportDisplayCheck');
+        const level = document.getElementById('logReportDisplayLevel');
+        if (window.WebSocketManager) {
+            window.WebSocketManager.send({
+                type: 'setLogReport',
+                targetType: 'display',
+                targetId: 'all',
+                config: { enabled: check.checked, level: level.value }
+            });
+        }
+    },
+
+    onReportControlChange() {
+        const check = document.getElementById('logReportControlCheck');
+        const level = document.getElementById('logReportControlLevel');
+        if (window.WebSocketManager) {
+            window.WebSocketManager.send({
+                type: 'setLogReport',
+                targetType: 'control',
+                targetId: 'self',
+                config: { enabled: check.checked, level: level.value }
+            });
+        }
+        this._updateConsoleIntercept();
+    },
+
+    _consoleInterceptInstalled: false,
+
+    _updateConsoleIntercept() {
+        const cfg = this.logReportConfig;
+        if (cfg && cfg.enabled) {
+            if (!this._consoleInterceptInstalled) {
+                this._installConsoleIntercept();
+            }
+        } else {
+            if (this._consoleInterceptInstalled) {
+                this._restoreConsole();
+            }
+        }
+    },
+
+    _installConsoleIntercept() {
+        if (this._consoleInterceptInstalled) return;
+        const self = this;
+        const originalConsole = {
+            log: console.log,
+            info: console.info,
+            warn: console.warn,
+            error: console.error,
+            debug: console.debug
+        };
+
+        function _sendClientLog(level, args) {
+            const cfg = self.logReportConfig;
+            if (!cfg || !cfg.enabled) return;
+            const weight = { error: 4, warn: 3, info: 2, debug: 1 };
+            if ((weight[level] || 0) < (weight[cfg.level] || 0)) return;
+            const msg = Array.from(args).map(a => {
+                try { return typeof a === 'object' ? JSON.stringify(a) : String(a); } catch(e) { return String(a); }
+            }).join(' ');
+            if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+                window.WebSocketManager.send({
+                    type: 'clientLog',
+                    level: level,
+                    category: '控制端',
+                    message: msg,
+                    deviceType: 'control',
+                    deviceId: 'web-control',
+                    timestamp: Date.now()
+                });
+            }
+        }
+
+        console.log = function(...args) {
+            originalConsole.log.apply(console, args);
+            _sendClientLog('info', args);
+        };
+        console.info = function(...args) {
+            originalConsole.info.apply(console, args);
+            _sendClientLog('info', args);
+        };
+        console.warn = function(...args) {
+            originalConsole.warn.apply(console, args);
+            _sendClientLog('warn', args);
+        };
+        console.error = function(...args) {
+            originalConsole.error.apply(console, args);
+            _sendClientLog('error', args);
+        };
+        console.debug = function(...args) {
+            originalConsole.debug.apply(console, args);
+            _sendClientLog('debug', args);
+        };
+
+        this._originalConsole = originalConsole;
+        this._consoleInterceptInstalled = true;
+    },
+
+    _restoreConsole() {
+        if (!this._originalConsole) return;
+        console.log = this._originalConsole.log;
+        console.info = this._originalConsole.info;
+        console.warn = this._originalConsole.warn;
+        console.error = this._originalConsole.error;
+        console.debug = this._originalConsole.debug;
+        this._originalConsole = null;
+        this._consoleInterceptInstalled = false;
     }
 };
 

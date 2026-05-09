@@ -2679,3 +2679,51 @@ input[type="range"]::-webkit-slider-thumb:active {
         grid-template-columns: 1fr;
     }
 }
+
+/* 日志上报控制 */
+.log-report-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.log-report-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 56px;
+    flex-shrink: 0;
+}
+
+.log-report-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+}
+
+.log-report-item input[type="checkbox"] {
+    accent-color: #00d2ff;
+}
+
+.log-report-level {
+    background: rgba(0, 0, 0, 0.3);
+    color: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.log-report-level:focus {
+    border-color: rgba(0, 210, 255, 0.4);
+    outline: none;
+}

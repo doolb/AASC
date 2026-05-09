@@ -4,6 +4,23 @@
 
 ### 新功能
 
+- ✅ [2026-05-09] 日志系统与消息日志整合——消息链路追踪
+  - 控制端发送显示端指令时自动生成 correlationId，贯穿控制端→服务器→显示端→ACK 全链路
+  - sendToDisplay 自动注入 correlationId 到下行消息，显示端回传至 commandAck
+  - commandAck 改为 WS 级别日志并携带 source/targetId/correlationId
+  - LogViewer 缩进渲染改为序号深度（同 correlationId 条目按顺序递增缩进）
+  - 改动文件：server-app.js, display.html, log-viewer.js
+  - 设计文档：docs/design/log-viewer.md
+  - 实现文档：docs/spec/log-viewer.md
+
+- ✅ [2026-05-09] 客户端日志上报控制
+  - 控制端日志面板新增日志上报配置区域，可设置显示端/控制端是否上报及级别阈值
+  - 显示端支持接收 logReportConfig，按级别阈值过滤后上报 clientLog
+  - 控制端通过覆盖 console.log/error 拦截浏览器日志，按配置发送到服务器
+  - 新增消息类型：setLogReport、logReportConfig、clientLog、logReportConfigApplied
+  - 改动文件：server-app.js, main.js, upload.html, upload.css, log-viewer.js, websocket.js
+  - 任务文档：docs/task/2026-05-09_客户端日志上报控制.md
+
 - ✅ [2026-05-07] LLM 配置支持独立设置上下文条数
   - 每个 LLM 配置（profile）可独立设置"群聊上下文条数"，切换配置时自动切换
   - 群聊时携带最近 N 条消息作为上下文发给 LLM（0=关闭）

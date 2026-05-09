@@ -66,3 +66,15 @@ framework
 - 控制端→服务端→显示端的操作在入口生成 correlationId
 - 示例：控制端播放媒体时生成 correlationId → sendToDisplay 携带 → 显示端日志携带同一 ID
 - 控制端按 correlationId 聚合展示群聊链路
+
+### 客户端日志上报（新增）
+
+- `setLogReport` handler：接收 `{ targetType, targetId, config: { enabled, level } }`
+  - `targetType`: 'display' | 'control'
+  - `targetId`: 设备ID 或 'all'
+  - `level` 阈值：error > warn > info > debug
+- 存储配置到 `logReportStore` 对象
+- 转发 `logReportConfig` 到目标设备（显示端通过 sendJSON，控制端通过响应消息）
+- `clientLog` handler：接收 `{ level, category, message, deviceType, deviceId, timestamp }`
+  - 调用 `logBuffer.add(category, message, { level, device, source, targetId })`
+- 控制端连接时发送当前 `logReportConfig`

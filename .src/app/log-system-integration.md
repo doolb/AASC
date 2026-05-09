@@ -57,3 +57,12 @@ app
 - LogBuffer.add 中 extra 的 device 和 displayId 已支持
 - 新增 extra 字段支持：correlationId, scope, source, targetId
 - 若 extra 中有这些字段，entry 中保留 // 无则跳过，不影响现有调用
+
+### 日志上报控制（新增）
+
+- 新增 `setLogReport` handler：控制端设置显示端/控制端日志上报策略（enabled + level）
+- 新增 `clientLog` handler：接收客户端上报的日志条目，存入 logBuffer
+- 新增 `logReportConfig` 消息类型：服务端转发配置给显示端/控制端
+- 显示端连接时发送当前 logReportConfig
+- 控制端连接时发送当前 logReportConfig
+- 级别阈值规则：error(4) > warn(3) > info(2) > debug(1)，配置级别表示该级别及更高权重

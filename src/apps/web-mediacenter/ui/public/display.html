@@ -134,6 +134,10 @@
             }
         }
         
+        // 存储最近收到的消息中的 correlationId，用于 commandAck 回传
+        let _lastCorrelationId = null;
+        function setCorrelationId(cid) { if (cid) _lastCorrelationId = cid; }
+
         function sendCommandAck(commandType, success, details, extraData) {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 const ack = {
@@ -143,6 +147,10 @@
                     details: details || '',
                     timestamp: Date.now()
                 };
+                if (_lastCorrelationId) {
+                    ack.correlationId = _lastCorrelationId;
+                    _lastCorrelationId = null; // 使用后清空，避免重复
+                }
                 if (extraData) {
                     ack.extraData = extraData;
                 }
@@ -1095,7 +1103,8 @@
                 try {
                     const data = JSON.parse(event.data);
                     console.log('[显示端] 收到消息:', data.type, data);
-                    
+                    setCorrelationId(data.correlationId);
+
                     if (data.type === 'serverStartTime') {
                         const storedTime = localStorage.getItem('serverStartTime');
                         if (storedTime && storedTime !== String(data.time)) {

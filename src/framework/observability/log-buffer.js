@@ -55,7 +55,7 @@ class LogBuffer {
             timestamp: Date.now(),
             time: new Date().toTimeString().split(' ')[0],
             category,
-            level: CATEGORY_LEVEL_MAP[category] || 'info',
+            level: extra.level || CATEGORY_LEVEL_MAP[category] || 'info',
             device: extra.device || CATEGORY_DEVICE_MAP[category] || 'server',
             message,
             displayId: extra.displayId || null,
