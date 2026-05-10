@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 新功能
+
+- ✅ [2026-05-10] display.html 增加 WebGPU 支持检测，WebGL 拆分为 1.0/2.0 独立检测
+  - `getFeatureSupport()` 新增 WebGPU 条目，检测 `navigator.gpu` 是否存在
+  - WebGL 拆分为 WebGL 1.0 和 WebGL 2.0 分别检测，提高精度
+  - 控制端 `DisplayList.showFeatureModal()` 自动展示该信息
+  - 改动文件：display.html
+
 ### 修复
 
 - ✅ [2026-05-10] 修复群聊模式下保留上下文条数配置不生效的问题
