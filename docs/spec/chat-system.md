@@ -1210,11 +1210,19 @@ WebSocket 消息处理:
         content: data.displayContent || data.content (优先使用完整显示内容)
         mode: messageMode
         target: messageTarget (群聊时为 null)
-    获取系统提示词:
+    获取系统提示词和历史配置:
         templateTarget = data.templateTarget || data.target
         如果 templateTarget 存在:
             获取模板作为系统提示词
-            私聊时 includeHistory = true
+            如果 mode === 'private':
+                includeHistory = true
+                contextCount = 100  // 私聊时包含全部历史
+            否则:
+                contextCount = config.contextCount || 0  // 群聊时读取配置
+                if contextCount > 0: includeHistory = true
+        否则（无模板）:
+            contextCount = config.contextCount || 0
+            if contextCount > 0: includeHistory = true
     调用 chat.chatStream() 发送消息
     添加助手消息到历史:
         mode: messageMode

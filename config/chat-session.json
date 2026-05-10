@@ -1,6 +1,6 @@
 {
-  "mode": "private",
-  "privateTarget": "小爱",
+  "mode": "group",
+  "privateTarget": null,
   "playOnControl": true,
   "commandMode": true
 }

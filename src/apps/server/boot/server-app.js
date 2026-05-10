@@ -3195,6 +3195,9 @@ async function handleChatMessage(options) {
             if (messageMode === 'private') {
                 includeHistory = true;
                 contextCount = 100;
+            } else {
+                contextCount = chat.getConfig().contextCount || 0;
+                if (contextCount > 0) includeHistory = true;
             }
         }
     } else {

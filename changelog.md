@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 修复
+
+- ✅ [2026-05-10] 修复群聊模式下保留上下文条数配置不生效的问题
+  - `handleChatMessage()` 中当 `templateTarget` 存在且为群聊模式时，未读取 `config.contextCount`，导致 `includeHistory` 始终为 `false`
+  - 前端群聊始终默认携带 `templateTarget`（第一个模板名），导致此问题每次触发
+  - 改动文件：server-app.js
+  - 实现文档：docs/spec/chat-system.md
+
 ### 新功能
 
 - ✅ [2026-05-10] LLM 历史消息超出 maxTokens 时自动截断
