@@ -2693,6 +2693,7 @@ async function handleControlMessageFallback(data, ws) {
                                     displayId: targetDisplayId,
                                     playOnControl: playOnControl,
                                     systemPrompt: result.systemPrompt,
+                                    skipHistory: result.skipHistory || false,
                                     sendToControl: sendToControl
                                 });
                             } else if (result.type === 'privateMode' || result.type === 'groupMode') {
@@ -3171,6 +3172,7 @@ async function handleChatMessage(options) {
         templateTarget,
         mode = 'group',
         target,
+        skipHistory = false,
         sendToControl
     } = options;
     
@@ -3206,6 +3208,10 @@ async function handleChatMessage(options) {
     }
     if (customSystemPrompt && !templateTarget) {
         systemPrompt = customSystemPrompt;
+    }
+    if (skipHistory) {
+        includeHistory = false;
+        contextCount = 0;
     }
 
     let ttsQueue = Promise.resolve(); // 串行化 TTS 保证播放顺序

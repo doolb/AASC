@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 优化
+
+- ✅ [2026-05-11] 天气/搜索指令路由到 LLM 时跳过聊天上下文
+  - `checkCommandRouting()` 返回值增加 `skipHistory` 标记
+  - `handleChatMessage()` 检测 `skipHistory` 后强制 `includeHistory=false`
+  - 系统指令（天气/搜索）走 LLM 时不再携带聊天历史，节省 token 并避免干扰
+  - 改动文件：voice-command-app-service.js, server-app.js
+  - 实现文档：docs/spec/voiceCommand.md
+
 ### 新功能
 
 - ✅ [2026-05-10] display.html 增加 WebGPU 支持检测，WebGL 拆分为 1.0/2.0 独立检测

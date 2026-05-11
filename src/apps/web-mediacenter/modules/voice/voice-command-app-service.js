@@ -161,7 +161,7 @@ function checkCommandRouting(text, commandType) {
     }
 
     const defaultAssistant = findAssistant(assistantConfig.defaultName);
-    return { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template };
+    return { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template, skipHistory: true };
 }
 
 function setCommandRouting(routing) {

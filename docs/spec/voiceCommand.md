@@ -323,7 +323,8 @@ checkCommandRouting(text, commandType):
         构造 LLM 查询文本:
             weather: "查询{城市名}的天气" / "查询今天的天气"
             search: "搜索：{关键词}" / "帮我搜索一些信息"
-        返回 { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template }
+        返回 { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template, skipHistory: true }
+        // skipHistory: 系统指令（天气/搜索）不走聊天上下文，节省 token 并避免干扰
 
 setCommandRouting(routing):
     验证 routing 中的键值（只接受 weather/search 且值为 system/llm）
@@ -396,11 +397,13 @@ processVoiceCommand(text, displayId, callbacks):
   templateTarget: 模板目标名称
   mode: 会话模式
   target: 私聊目标
+  skipHistory: 是否跳过聊天上下文（系统指令专用）
   sendToControl: 回调函数
 
 处理逻辑:
   chat.addMessage({ role: 'control', content })
-  chat.chatStream(content, { displayId, systemPrompt }, {
+  if skipHistory: includeHistory = false, contextCount = 0  // 覆盖现有配置
+  chat.chatStream(content, { displayId, systemPrompt, includeHistory, contextCount }, {
     onChunk: sendToControl({ type: 'chatChunk' })
     onSentence: sendToDisplay({ type: 'tts' }) 或 sendToControl({ type: 'playOnControl' })
     onComplete: chat.addMessage({ role: 'assistant' }), sendToControl({ type: 'chatResponse' })
