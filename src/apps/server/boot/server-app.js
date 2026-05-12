@@ -1201,6 +1201,43 @@ app.post('/api/chat/clear', (req, res) => {
     });
 });
 
+app.get('/api/chat/sessions', (req, res) => {
+    const target = req.query.target;
+    if (!target) {
+        return res.json({ status: 'error', message: '缺少 target 参数' });
+    }
+    res.json({ status: 'success', sessions: chat.listSessions(target) });
+});
+
+app.post('/api/chat/sessions/create', (req, res) => {
+    const { target, name } = req.body;
+    if (!target) {
+        return res.json({ status: 'error', message: '缺少 target 参数' });
+    }
+    const session = chat.createSession(target, name || '新会话');
+    res.json({ status: 'success', session });
+});
+
+app.post('/api/chat/sessions/delete', (req, res) => {
+    const { target, sessionId } = req.body;
+    const success = chat.deleteSession(target, sessionId);
+    if (success) {
+        res.json({ status: 'success' });
+    } else {
+        res.json({ status: 'error', message: '删除失败（默认会话不可删除或目标不存在）' });
+    }
+});
+
+app.post('/api/chat/sessions/switch', (req, res) => {
+    const { target, sessionId } = req.body;
+    const success = chat.switchSession(target, sessionId);
+    if (success) {
+        res.json({ status: 'success', sessionId });
+    } else {
+        res.json({ status: 'error', message: '切换失败（会话不存在）' });
+    }
+});
+
 app.get('/api/chat/templates', (req, res) => {
     res.json({ 
         status: 'success', 
@@ -2835,6 +2872,57 @@ async function handleControlMessageFallback(data, ws) {
                         session: chat.getSession()
                     });
                     return;
+                } else if (data.type === 'listPrivateSessions') {
+                    ws.send(JSON.stringify({
+                        type: 'privateSessions',
+                        target: data.target,
+                        sessions: chat.listSessions(data.target)
+                    }));
+                    return;
+                } else if (data.type === 'createPrivateSession') {
+                    const session = chat.createSession(data.target, data.name);
+                    ws.send(JSON.stringify({
+                        type: 'privateSessionCreated',
+                        target: data.target,
+                        session: session
+                    }));
+                    broadcastToControls({
+                        type: 'privateSessionCreated',
+                        target: data.target,
+                        session: session
+                    });
+                    return;
+                } else if (data.type === 'deletePrivateSession') {
+                    const success = chat.deleteSession(data.target, data.sessionId);
+                    ws.send(JSON.stringify({
+                        type: 'privateSessionDeleted',
+                        target: data.target,
+                        sessionId: data.sessionId,
+                        success: success
+                    }));
+                    if (success) {
+                        broadcastToControls({
+                            type: 'privateSessionDeleted',
+                            target: data.target,
+                            sessionId: data.sessionId
+                        });
+                    }
+                    return;
+                } else if (data.type === 'switchPrivateSession') {
+                    const success = chat.switchSession(data.target, data.sessionId);
+                    if (success) {
+                        ws.send(JSON.stringify({
+                            type: 'privateSessionSwitched',
+                            target: data.target,
+                            sessionId: data.sessionId
+                        }));
+                        broadcastToControls({
+                            type: 'privateSessionSwitched',
+                            target: data.target,
+                            sessionId: data.sessionId
+                        });
+                    }
+                    return;
                 } else if (data.type === 'getChatCommands') {
                     ws.send(JSON.stringify({
                         type: 'chatCommands',
@@ -3073,6 +3161,7 @@ async function handleControlMessageFallback(data, ws) {
                                 templateTarget: data.templateTarget || data.target,
                                 mode: data.mode || session.mode,
                                 target: data.mode === 'private' ? (data.target || session.privateTarget) : null,
+                                sessionId: data.sessionId || session.privateSessionId || 'default',
                                 sendToControl: (msg) => {
                                     ws.send(JSON.stringify(msg));
                                 }
@@ -3172,6 +3261,7 @@ async function handleChatMessage(options) {
         templateTarget,
         mode = 'group',
         target,
+        sessionId,
         skipHistory = false,
         sendToControl
     } = options;
@@ -3184,7 +3274,8 @@ async function handleChatMessage(options) {
         name: '控制端',
         content: displayContent || content,
         mode: messageMode,
-        target: messageTarget
+        target: messageTarget,
+        sessionId: sessionId
     });
     
     let systemPrompt = null;

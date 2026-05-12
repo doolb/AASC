@@ -13,8 +13,10 @@ const Chat = {
     session: {
         mode: 'group',
         privateTarget: null,
+        privateSessionId: 'default',
         playOnControl: false,
-        commandMode: true
+        commandMode: true,
+        sessions: {}
     },
     commands: {
         commands: {}
@@ -427,7 +429,7 @@ const Chat = {
     },
     
     saveCommands() {
-        if (window.WebSocketManager && window.WebSocketManager.ws && 
+        if (window.WebSocketManager && window.WebSocketManager.ws &&
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'setChatCommands',
@@ -435,12 +437,107 @@ const Chat = {
             }));
         }
     },
-    
+
+    loadSessions(target) {
+        if (!target) return;
+        fetch(`/api/chat/sessions?target=${encodeURIComponent(target)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    this.session.sessions[target] = data.sessions;
+                    this.renderSessionSelector();
+                }
+            })
+            .catch(err => console.error('加载会话列表失败:', err));
+    },
+
+    switchSession(sessionId) {
+        const target = this.session.privateTarget;
+        if (!target) return;
+
+        fetch('/api/chat/sessions/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target, sessionId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                this.session.privateSessionId = sessionId;
+                this.loadHistory();
+                this.loadSession();
+            } else {
+                window.showToast('切换会话失败: ' + (data.message || data.error), 'error');
+            }
+        })
+        .catch(err => window.showToast('切换会话失败', 'error'));
+    },
+
+    createSession() {
+        const target = this.session.privateTarget;
+        if (!target) return;
+
+        const name = prompt('请输入新会话名称:');
+        if (!name || !name.trim()) return;
+
+        fetch('/api/chat/sessions/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target, name: name.trim() })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.showToast(`会话 "${name}" 已创建`, 'success');
+                this.loadSessions(target);
+            } else {
+                window.showToast('创建会话失败: ' + (data.message || data.error), 'error');
+            }
+        })
+        .catch(err => window.showToast('创建会话失败', 'error'));
+    },
+
+    deleteSession(sessionId) {
+        if (sessionId === 'default') {
+            window.showToast('默认会话不可删除', 'error');
+            return;
+        }
+        if (!confirm('确定要删除此会话吗？（聊天记录将永久删除）')) return;
+
+        const target = this.session.privateTarget;
+        if (!target) return;
+
+        fetch('/api/chat/sessions/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target, sessionId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.showToast('会话已删除', 'success');
+                if (this.session.privateSessionId === sessionId) {
+                    this.switchSession('default');
+                } else {
+                    this.loadSessions(target);
+                    this.loadHistory();
+                }
+            } else {
+                window.showToast('删除会话失败: ' + (data.message || data.error), 'error');
+            }
+        })
+        .catch(err => window.showToast('删除会话失败', 'error'));
+    },
+
     setMode(mode, target = null) {
         this.session.mode = mode;
         this.session.privateTarget = target;
+        this.session.privateSessionId = 'default';
         this.saveSession();
         this.render();
+        if (mode === 'private' && target) {
+            this.loadSessions(target);
+        }
     },
     
     togglePlayOnControl() {
@@ -487,6 +584,7 @@ const Chat = {
                 <div class="chat-header">
                     <h3>AI 聊天助手</h3>
                     <div class="chat-mode-indicator" id="chatModeIndicator"></div>
+                    <div class="chat-session-selector" id="chatSessionSelector"></div>
                     <div class="chat-actions">
                         <button class="chat-action-btn" onclick="Chat.showConfig()">设置</button>
                         <button class="chat-action-btn" onclick="Chat.showTemplates()">模板</button>
@@ -519,6 +617,7 @@ const Chat = {
         this.renderHistory();
         this.renderModeIndicator();
         this.renderPlayOnControlToggle();
+        this.renderSessionSelector();
         this.renderSearchHistory();
     },
     
@@ -555,18 +654,54 @@ const Chat = {
     toggleNoInterrupt() {
         this.noInterruptMode = !this.noInterruptMode;
     },
-    
+
+    renderSessionSelector() {
+        const container = document.getElementById('chatSessionSelector');
+        if (!container) return;
+
+        const target = this.session.privateTarget;
+        if (this.session.mode !== 'private' || !target) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const sessions = this.session.sessions[target] || [];
+        if (sessions.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'flex';
+        let html = '<label class="session-label">会话:</label>';
+        html += '<select class="session-select" onchange="Chat.onSessionChange(this.value)">';
+        for (const s of sessions) {
+            const selected = s.id === this.session.privateSessionId ? ' selected' : '';
+            html += `<option value="${this.escapeHtml(s.id)}"${selected}>${this.escapeHtml(s.name)}</option>`;
+        }
+        html += '</select>';
+        html += '<button class="session-btn session-add" onclick="Chat.createSession()" title="新建会话">+</button>';
+        html += '<button class="session-btn session-del" onclick="Chat.deleteSession(\'' + this.escapeHtml(this.session.privateSessionId) + '\')" title="删除当前会话">×</button>';
+
+        container.innerHTML = html;
+    },
+
+    onSessionChange(sessionId) {
+        if (sessionId === this.session.privateSessionId) return;
+        this.switchSession(sessionId);
+    },
+
     renderHistory() {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
         
         let indexedHistory = this.history.map((item, index) => ({ item, originalIndex: index }));
         if (this.session.mode === 'private' && this.session.privateTarget) {
-            indexedHistory = indexedHistory.filter(({ item }) => 
+            indexedHistory = indexedHistory.filter(({ item }) =>
                 item.mode === 'private' && item.target === this.session.privateTarget
+                && (item.sessionId || 'default') === (this.session.privateSessionId || 'default')
             );
         } else {
-            indexedHistory = indexedHistory.filter(({ item }) => 
+            indexedHistory = indexedHistory.filter(({ item }) =>
                 item.mode !== 'private'
             );
         }
@@ -741,6 +876,7 @@ const Chat = {
                 mode: mode,
                 target: target,
                 templateTarget: templateTarget,
+                sessionId: this.session.privateSessionId || 'default',
                 playOnControl: this.session.playOnControl
             };
             
@@ -1159,16 +1295,23 @@ const Chat = {
     clearHistory() {
         const mode = this.session.mode;
         const target = this.session.privateTarget;
-        const confirmText = mode === 'private' 
-            ? `确定要清空与 ${target} 的聊天记录吗？` 
-            : '确定要清空群聊记录吗？';
-        
+        const sessionId = this.session.privateSessionId;
+        let confirmText;
+        if (mode === 'private') {
+            const sessions = this.session.sessions[target] || [];
+            const current = sessions.find(s => s.id === sessionId);
+            const sessionName = current ? current.name : sessionId;
+            confirmText = `确定要清空与 ${target} (${sessionName}) 的聊天记录吗？`;
+        } else {
+            confirmText = '确定要清空群聊记录吗？';
+        }
+
         if (!confirm(confirmText)) return;
-        
-        fetch('/api/chat/clear', { 
+
+        fetch('/api/chat/clear', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode, target })
+            body: JSON.stringify({ mode, target, sessionId })
         })
             .then(res => res.json())
             .then(data => {
@@ -1654,15 +1797,36 @@ const Chat = {
             this.session = { ...this.session, ...data.session };
             this.renderModeIndicator();
             this.renderPlayOnControlToggle();
+            this.renderSessionSelector();
+            if (this.session.mode === 'private' && this.session.privateTarget) {
+                this.loadSessions(this.session.privateTarget);
+            }
         }
     },
-    
+
+    handleSessionSwitched(data) {
+        if (data.sessionId) {
+            this.session.privateSessionId = data.sessionId;
+        }
+        this.loadHistory();
+        if (this.session.privateTarget) {
+            this.loadSessions(this.session.privateTarget);
+        }
+    },
+
+    handleSessionList(data) {
+        if (data.target && data.sessions) {
+            this.session.sessions[data.target] = data.sessions;
+            this.renderSessionSelector();
+        }
+    },
+
     handleCommands(data) {
         if (data.commands) {
             this.commands = data.commands;
         }
     },
-    
+
     handlePlayOnControl(data) {
         if (data.audioUrl) {
             if (this.noInterruptMode && this.isListening) {

@@ -37,15 +37,17 @@ let activeProfile = 'default';
 let chatHistories = {};
 const MAX_HISTORY_PER_SESSION = 100;
 
-function sessionKey(mode, target) {
-    return mode === 'private' && target ? `private:${target}` : 'group';
+function sessionKey(mode, target, sessionId) {
+    return mode === 'private' && target ? `private:${target}:${sessionId || 'default'}` : 'group';
 }
 let chatTemplates = [];
 let chatSession = {
     mode: 'group',
     privateTarget: null,
+    privateSessionId: 'default',
     playOnControl: false,
-    commandMode: true
+    commandMode: true,
+    sessions: {}
 };
 let chatCommands = {
     commands: {}
@@ -65,7 +67,9 @@ function loadHistory() {
             const data = fs.readFileSync(path.join(HISTORY_DIR, file), 'utf8');
             const messages = JSON.parse(data);
             for (const msg of messages) {
-                const key = sessionKey(msg.mode, msg.target);
+                // 旧消息无 sessionId → 默认 'default'
+                if (!msg.sessionId) msg.sessionId = 'default';
+                const key = sessionKey(msg.mode, msg.target, msg.sessionId);
                 if (!chatHistories[key]) chatHistories[key] = [];
                 chatHistories[key].push(msg);
             }
@@ -85,11 +89,29 @@ function saveHistory() {
     }
     historySaveTimer = setTimeout(() => {
         try {
+            const groupedByFile = {};
             const expectedFiles = new Set();
+
             for (const [key, messages] of Object.entries(chatHistories)) {
                 if (messages.length === 0) continue;
-                const fileName = key === 'group' ? `${HISTORY_FILE_BASE}.json` : `${HISTORY_FILE_BASE}-${key.replace('private:', '')}.json`;
+
+                let fileName;
+                if (key === 'group') {
+                    fileName = `${HISTORY_FILE_BASE}.json`;
+                } else {
+                    // key = 'private:小爱:default' → 提取 target = '小爱'
+                    const parts = key.split(':');
+                    const target = parts[1];
+                    fileName = `${HISTORY_FILE_BASE}-${target}.json`;
+                }
+
+                if (!groupedByFile[fileName]) groupedByFile[fileName] = [];
+                groupedByFile[fileName].push(...messages);
                 expectedFiles.add(fileName);
+            }
+
+            // 写入文件
+            for (const [fileName, messages] of Object.entries(groupedByFile)) {
                 fs.writeFileSync(path.join(HISTORY_DIR, fileName), JSON.stringify(messages, null, 2), 'utf8');
             }
 
@@ -145,6 +167,7 @@ function init(config = {}) {
     }
     loadHistory();
     loadSession();
+    ensureDefaultSessions();
     loadCommands();
     loadTemplates();
     loadImportantRecords();
@@ -214,6 +237,12 @@ function saveSession() {
         fs.writeFileSync(SESSION_FILE, JSON.stringify(chatSession, null, 2), 'utf8');
     } catch (err) {
         console.error('[Chat] 保存会话状态失败:', err.message);
+    }
+}
+
+function ensureDefaultSessions() {
+    if (!chatSession.sessions) {
+        chatSession.sessions = {};
     }
 }
 
@@ -371,7 +400,16 @@ function getHistory() {
 
 function clearHistory(options = {}) {
     if (options.mode === 'private' && options.target) {
-        delete chatHistories[sessionKey(options.mode, options.target)];
+        if (options.sessionId) {
+            delete chatHistories[sessionKey(options.mode, options.target, options.sessionId)];
+        } else {
+            // 兼容旧行为：删除该目标所有会话
+            for (const key of Object.keys(chatHistories)) {
+                if (key.startsWith(`private:${options.target}:`)) {
+                    delete chatHistories[key];
+                }
+            }
+        }
     } else if (options.mode === 'group') {
         delete chatHistories.group;
     } else {
@@ -388,8 +426,11 @@ function getSession() {
 function setSession(session) {
     if (session.mode !== undefined) chatSession.mode = session.mode;
     if (session.privateTarget !== undefined) chatSession.privateTarget = session.privateTarget;
+    if (session.privateSessionId !== undefined) chatSession.privateSessionId = session.privateSessionId;
     if (session.playOnControl !== undefined) chatSession.playOnControl = session.playOnControl;
     if (session.commandMode !== undefined) chatSession.commandMode = session.commandMode;
+    if (session.sessions !== undefined) chatSession.sessions = session.sessions;
+    if (!chatSession.sessions) chatSession.sessions = {};
     saveSession();
     return getSession();
 }
@@ -397,6 +438,7 @@ function setSession(session) {
 function setMode(mode, target = null) {
     chatSession.mode = mode;
     chatSession.privateTarget = target;
+    chatSession.privateSessionId = 'default';
     saveSession();
     return getSession();
 }
@@ -456,10 +498,11 @@ function addMessage(message) {
         ip: message.ip || '',
         content: content,
         mode: message.mode || chatSession.mode,
-        target: message.target || chatSession.privateTarget
+        target: message.target || chatSession.privateTarget,
+        sessionId: message.sessionId || chatSession.privateSessionId || 'default'
     };
 
-    const key = sessionKey(msg.mode, msg.target);
+    const key = sessionKey(msg.mode, msg.target, msg.sessionId);
     if (!chatHistories[key]) chatHistories[key] = [];
     chatHistories[key].push(msg);
     trimHistory();
@@ -518,7 +561,7 @@ function buildMessages(userMessage, options = {}) {
         const historyBudget = inputBudget - fixedTokens;
 
         if (includeHistory && contextCount > 0 && historyBudget > 0) {
-            const key = sessionKey(mode, target);
+            const key = sessionKey(mode, target, chatSession.privateSessionId);
             const sessionHistory = chatHistories[key] || [];
             let recentHistory = sessionHistory.slice(-contextCount);
             if (recentHistory.length > 0) {
@@ -561,7 +604,7 @@ function buildMessages(userMessage, options = {}) {
     const historyBudget = inputBudget - fixedTokens;
 
     if (includeHistory && contextCount > 0 && historyBudget > 0) {
-        const key = sessionKey(mode, target);
+        const key = sessionKey(mode, target, chatSession.privateSessionId);
         const sessionHistory = chatHistories[key] || [];
         let recentHistory = sessionHistory.slice(-contextCount);
         if (recentHistory.length > 0) {
@@ -893,6 +936,71 @@ function makeStreamRequest(url, options, onLine) {
     });
 }
 
+function listSessions(target) {
+    if (!chatSession.sessions) chatSession.sessions = {};
+    if (!chatSession.sessions[target]) {
+        chatSession.sessions[target] = [
+            { id: 'default', name: '默认会话', createdAt: Date.now() }
+        ];
+        saveSession();
+    }
+    return chatSession.sessions[target];
+}
+
+function createSession(target, name) {
+    if (!chatSession.sessions) chatSession.sessions = {};
+    if (!chatSession.sessions[target]) {
+        chatSession.sessions[target] = [
+            { id: 'default', name: '默认会话', createdAt: Date.now() }
+        ];
+    }
+
+    const sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    const session = {
+        id: sessionId,
+        name: name || '新会话',
+        createdAt: Date.now()
+    };
+    chatSession.sessions[target].push(session);
+    saveSession();
+    return session;
+}
+
+function deleteSession(target, sessionId) {
+    if (sessionId === 'default') return false;
+
+    if (!chatSession.sessions || !chatSession.sessions[target]) return false;
+
+    chatSession.sessions[target] = chatSession.sessions[target].filter(s => s.id !== sessionId);
+
+    // 删除对应历史
+    delete chatHistories[`private:${target}:${sessionId}`];
+    saveHistory();
+
+    // 如果当前会话被删除，切回 default
+    if (chatSession.privateTarget === target && chatSession.privateSessionId === sessionId) {
+        chatSession.privateSessionId = 'default';
+    }
+
+    saveSession();
+    return true;
+}
+
+function switchSession(target, sessionId) {
+    if (!chatSession.sessions || !chatSession.sessions[target]) return false;
+    const exists = chatSession.sessions[target].some(s => s.id === sessionId);
+    if (!exists) return false;
+
+    chatSession.privateTarget = target;
+    chatSession.privateSessionId = sessionId;
+    saveSession();
+    return true;
+}
+
+function getSessionHistory(target, sessionId) {
+    return chatHistories[`private:${target}:${sessionId || 'default'}`] || [];
+}
+
 module.exports = {
     init,
     getConfig,
@@ -919,6 +1027,11 @@ module.exports = {
     getImportantRecords,
     addImportantRecord,
     addMessage,
+    listSessions,
+    createSession,
+    deleteSession,
+    switchSession,
+    getSessionHistory,
     chat,
     chatStream,
     isSentenceEnd,

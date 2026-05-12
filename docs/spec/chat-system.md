@@ -18,6 +18,7 @@
   content: string,      // 消息内容
   mode: string,         // 模式: 'group' | 'private'
   target: string,       // 私聊对象（私聊模式）
+  sessionId: string,    // 会话ID（私聊多会话支持）
   displayId: string     // 关联的显示端ID
 }
 ```
@@ -28,10 +29,12 @@
 {
   mode: string,             // 当前模式: 'group' | 'private'
   privateTarget: string,    // 当前私聊对象
+  privateSessionId: string, // 当前私聊会话ID（默认 'default'）
   playOnControl: boolean,   // 是否在控制端播放语音
   controlName: string,      // 控制端名字
   displayNames: {}          // 显示端名字映射 { displayId: name }
   commandMode: boolean      // 是否开启指令模式（新增，持久化到 config.json）
+  sessions: {}              // 会话元数据 { "小爱": [{ id, name, createdAt }] }
 }
 ```
 
@@ -100,8 +103,8 @@
     activeProfile: 当前激活的配置名
 
 辅助函数:
-    sessionKey(mode, target):
-        私聊且有 target → 'private:{target}'
+    sessionKey(mode, target, sessionId):
+        私聊且有 target → 'private:{target}:{sessionId || "default"}'
         否则 → 'group'
 
 init(config):
@@ -202,8 +205,9 @@ saveCommands():
     写入 COMMANDS_FILE
 
 addMessage(data):
-    创建消息记录
-    按 sessionKey(msg.mode, msg.target) 推入 chatHistories 对应数组
+    创建消息记录，包含 sessionId:
+        sessionId: data.sessionId || chatSession.privateSessionId || 'default'
+    按 sessionKey(msg.mode, msg.target, msg.sessionId) 推入 chatHistories
     调用 trimHistory()
     调用 saveHistory()
     返回消息记录
@@ -214,7 +218,10 @@ getHistory():
 
 clearHistory(options):
     如果 options.mode === 'private' 且有 target:
-        delete chatHistories['private:{target}']
+        如果 options.sessionId 存在:
+            delete chatHistories['private:{target}:{sessionId}']
+        否则（兼容旧行为）:
+            删除所有 private:{target}:* 的历史
     如果 options.mode === 'group':
         delete chatHistories.group
     否则:
@@ -1419,6 +1426,14 @@ POST /api/chat/profiles/switch:
 | groupMode | 服务端->控制端 | 退出私聊模式（新增） |
 | switchProfile | 控制端->服务端 | 切换 LLM 配置（新增） |
 | profileSwitched | 服务端->控制端 | LLM 配置已切换（新增） |
+| listPrivateSessions | 控制端->服务端 | 列出私聊会话（新增） |
+| createPrivateSession | 控制端->服务端 | 创建私聊会话（新增） |
+| deletePrivateSession | 控制端->服务端 | 删除私聊会话（新增） |
+| switchPrivateSession | 控制端->服务端 | 切换私聊会话（新增） |
+| privateSessions | 服务端->控制端 | 私聊会话列表（新增） |
+| privateSessionCreated | 服务端->控制端 | 私聊会话已创建（新增） |
+| privateSessionDeleted | 服务端->控制端 | 私聊会话已删除（新增） |
+| privateSessionSwitched | 服务端->控制端 | 私聊会话已切换（新增） |
 
 ## 文件列表
 

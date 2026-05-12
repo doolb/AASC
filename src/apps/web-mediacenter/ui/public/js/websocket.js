@@ -192,6 +192,27 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleSession(data);
             }
+        } else if (data.type === 'privateSessions') {
+            if (window.Chat) {
+                window.Chat.handleSessionList(data);
+            }
+        } else if (data.type === 'privateSessionCreated') {
+            if (window.Chat) {
+                window.Chat.handleSessionList(data);
+                window.showToast('会话已创建', 'success');
+            }
+        } else if (data.type === 'privateSessionDeleted') {
+            if (window.Chat) {
+                if (window.Chat.session.privateTarget) {
+                    window.Chat.loadSessions(window.Chat.session.privateTarget);
+                }
+                window.Chat.loadHistory();
+                window.showToast('会话已删除', 'success');
+            }
+        } else if (data.type === 'privateSessionSwitched') {
+            if (window.Chat) {
+                window.Chat.handleSessionSwitched(data);
+            }
         } else if (data.type === 'chatCommands') {
             if (window.Chat) {
                 window.Chat.handleCommands(data);
