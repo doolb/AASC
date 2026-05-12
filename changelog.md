@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### 新功能
+
+- ✅ [2026-05-12] 私聊添加多会话支持，控制端下拉切换
+  - 同一助手下可创建多个独立会话，每个会话有独立的聊天上下文和历史记录
+  - 消息记录新增 sessionId 字段，会话键改为 private:{target}:{sessionId}
+  - 服务端新增 session CRUD（list/create/delete/switch），支持 WebSocket + HTTP API
+  - 控制端聊天头部新增会话下拉选择器，支持新建/删除/切换会话
+  - 向后兼容旧消息（无 sessionId 归入 default 会话）
+  - 改动文件：llm-service.js, server-app.js, chat.js, websocket.js, chat.css
+  - 设计文档：docs/design/private-chat-sessions.md
+  - 实现文档：docs/spec/chat-system.md
+
+### Bug 修复
+
+- ✅ [2026-05-12] 天气指令路由到 LLM 时默认城市丢失，LLM 误识别为上海
+  - 原因：`checkCommandRouting()` 剥离时间词（今天/明天/后天）且 fallback 硬编码"查询今天的天气"，未使用 `defaultWeatherCity`
+  - 修复：只剥离"天气"和末尾标点，保留时间词；检测文本中是否包含已配置城市，缺失时插入 `defaultWeatherCity`
+  - 效果：`"明天天气"` → `"查询成都明天的天气"`，时间正确、城市正确
+  - 改动文件：voice-command-app-service.js, docs/spec/voiceCommand.md
+  - 同一助手下可创建多个独立会话，每个会话有独立的聊天上下文和历史记录
+  - 消息记录新增 sessionId 字段，会话键改为 private:{target}:{sessionId}
+  - 服务端新增 session CRUD（list/create/delete/switch），支持 WebSocket + HTTP API
+  - 控制端聊天头部新增会话下拉选择器，支持新建/删除/切换会话
+  - 向后兼容旧消息（无 sessionId 归入 default 会话）
+  - 改动文件：llm-service.js, server-app.js, chat.js, websocket.js, chat.css
+  - 设计文档：docs/design/private-chat-sessions.md
+  - 实现文档：docs/spec/chat-system.md
+
 ### 优化
 
 - ✅ [2026-05-11] 天气/搜索指令路由到 LLM 时跳过聊天上下文

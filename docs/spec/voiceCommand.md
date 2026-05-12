@@ -321,7 +321,13 @@ checkCommandRouting(text, commandType):
     如果 highLevelRouting[commandType] 为 'system' → 返回 null（程序处理）
     如果 highLevelRouting[commandType] 为 'llm':
         构造 LLM 查询文本:
-            weather: "查询{城市名}的天气" / "查询今天的天气"
+            weather:
+                只移除 "天气" 和末尾标点，保留时间词（今天/明天/后天等）
+                如果有残留文本:
+                    检查文本中是否包含 weatherCities 中的城市名
+                    如果没城市名: 在文本前插入 defaultWeatherCity
+                    LLM 查询: "查询{文本}的天气"
+                如果没有残留文本: "查询{defaultWeatherCity}今天的天气"
             search: "搜索：{关键词}" / "帮我搜索一些信息"
         返回 { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template, skipHistory: true }
         // skipHistory: 系统指令（天气/搜索）不走聊天上下文，节省 token 并避免干扰

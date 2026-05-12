@@ -149,8 +149,21 @@ function checkCommandRouting(text, commandType) {
     let llmQuery;
     switch (commandType) {
         case 'weather':
-            const cityText = text.replace(/今天|明天|后天|天气/g, '').replace(/[。，！？、；：,.!?;:]+$/, '').trim();
-            llmQuery = cityText ? `查询${cityText}的天气` : '查询今天的天气';
+            let cityText = text.replace(/天气/g, '').replace(/[。，！？、；：,.!?;:]+$/, '').trim();
+            if (cityText) {
+                const cityList = Array.isArray(assistantConfig.weatherCities) && assistantConfig.weatherCities.length > 0
+                    ? assistantConfig.weatherCities
+                    : DEFAULT_WEATHER_CITIES;
+                const hasCity = cityList.some(city => cityText.includes(city));
+                if (!hasCity && assistantConfig.defaultWeatherCity) {
+                    cityText = assistantConfig.defaultWeatherCity + cityText;
+                }
+                llmQuery = `查询${cityText}的天气`;
+            } else {
+                llmQuery = assistantConfig.defaultWeatherCity
+                    ? `查询${assistantConfig.defaultWeatherCity}今天的天气`
+                    : '查询今天的天气';
+            }
             break;
         case 'search':
             const keyword = text.replace(/搜索/g, '').trim();
@@ -1250,13 +1263,13 @@ function enqueueVoiceInput(text, displayId, callbacks) {
     return currentTask;
 }
 
-async function processVoiceCommand(text, displayId, callbacks) {
+async function processVoiceCommand(text, displayId, callbacks, internal = false) {
     if (!text) return;
-    
+
     const trimmedText = text.trim();
     // 去尾标点，ASR 常附带句号问号
     const cmdText = trimmedText.replace(/[。，！？、；：,.!?;:]+$/, '');
-    
+
     // 第零步：指令模式开关（始终可用，不受指令模式状态影响）
     if (cmdText === '打开指令模式') {
         return { type: 'commandMode', enabled: true };
@@ -1271,9 +1284,9 @@ async function processVoiceCommand(text, displayId, callbacks) {
         return systemResult;
     }
 
-    // 第二步：指令模式过滤
+    // 第二步：指令模式过滤（组合指令的子动作跳过此检查）
     const session = chat.getSession();
-    if (session.commandMode === true) {
+    if (!internal && session.commandMode === true) {
         if (session.mode === 'private') {
             const assistant = findAssistant(session.privateTarget);
             return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };
@@ -1489,7 +1502,7 @@ async function executeCommands(actions, displayId, callbacks, depth = 0) {
     }
     
     for (const action of actions) {
-        const result = await processVoiceCommand(action, displayId, null);
+        const result = await processVoiceCommand(action, displayId, null, true);
         
         if (!result) continue;
         

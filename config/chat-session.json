@@ -1,6 +1,28 @@
 {
   "mode": "group",
   "privateTarget": null,
-  "playOnControl": true,
-  "commandMode": true
+  "privateSessionId": "default",
+  "playOnControl": false,
+  "commandMode": true,
+  "sessions": {
+    "小爱": [
+      {
+        "id": "default",
+        "name": "默认会话",
+        "createdAt": 1778594189848
+      },
+      {
+        "id": "mp2t42h35c2p",
+        "name": "1",
+        "createdAt": 1778600999559
+      }
+    ],
+    "妲己": [
+      {
+        "id": "default",
+        "name": "默认会话",
+        "createdAt": 1778594743004
+      }
+    ]
+  }
 }

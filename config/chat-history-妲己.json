@@ -7,7 +7,8 @@
     "ip": "",
     "content": "你是谁",
     "mode": "private",
-    "target": "妲己"
+    "target": "妲己",
+    "sessionId": "default"
   },
   {
     "id": "1778165732696fyeg",
@@ -17,7 +18,8 @@
     "ip": "",
     "content": "我叫妲己，一个九尾电子猫娘，来自电子世界。作为数码少女，我很喜欢和朋友们一起玩电子游戏、看电影、玩游戏，或者去逛街买电子产品。你来啦！让我们一起探索电子世界吧！",
     "mode": "private",
-    "target": "妲己"
+    "target": "妲己",
+    "sessionId": "default"
   },
   {
     "id": "1778334040003io0k",
@@ -27,7 +29,8 @@
     "ip": "",
     "content": "我的第一句话是什么",
     "mode": "private",
-    "target": "妲己"
+    "target": "妲己",
+    "sessionId": "default"
   },
   {
     "id": "1778334049249xrab",
@@ -37,7 +40,8 @@
     "ip": "",
     "content": "你刚才说的是\"你是妲己，一只九尾电子猫娘\"呀。怎么，想考我记性吗？",
     "mode": "private",
-    "target": "妲己"
+    "target": "妲己",
+    "sessionId": "default"
   },
   {
     "id": "1778334113711zmk6",
@@ -47,7 +51,8 @@
     "ip": "",
     "content": "我们说了多少句话",
     "mode": "private",
-    "target": "妲己"
+    "target": "妲己",
+    "sessionId": "default"
   },
   {
     "id": "17783341182476zc2",
@@ -57,6 +62,7 @@
     "ip": "",
     "content": "喵~ 主人，这已经是我们的第二句话啦！\n\n刚才那句自我介绍算第一句，现在这句就是第二句咯。怎么突然问这个，难道主人是在偷偷计算妲己有没有秒回你吗？放心吧，不管多少句，本喵都会一直陪着你的~ 蹭蹭~",
     "mode": "private",
-    "target": "妲己"
+    "target": "妲己",
+    "sessionId": "default"
   }
 ]
