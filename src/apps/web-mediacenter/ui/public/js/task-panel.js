@@ -1,213 +1,354 @@
 (function() {
   'use strict';
 
-  const TaskPanel = {
+  var TaskPanel = {
     instances: new Map(),
-    currentInstanceId: null,
     initDone: false,
 
-    init() {
+    init: function() {
       if (this.initDone) return;
       this.initDone = true;
       this._render();
       this._setupWS();
     },
 
-    _render() {
-      const panel = document.getElementById('panel-task');
+    _render: function() {
+      var panel = document.getElementById('panel-task');
       if (!panel) return;
-      panel.innerHTML = `
-        <h1 class="page-title">远程任务</h1>
-        <div class="section">
-          <div class="form-row">
-            <label>任务类型:</label>
-            <select id="taskType">
-              <option value="user">用户代码</option>
-              <option value="builtin">内置功能</option>
-            </select>
-            <label>执行目标:</label>
-            <select id="taskTarget">
-              <option value="server">服务端</option>
-              <option value="display">显示端</option>
-              <option value="subdisplay">子显示端</option>
-            </select>
-            <label>执行环境:</label>
-            <select id="taskEnv">
-              <option value="auto">自适应</option>
-              <option value="cpu">CPU</option>
-              <option value="webgl">WebGL</option>
-              <option value="webgpu">WebGPU</option>
-            </select>
-            <label>模式:</label>
-            <select id="taskMode">
-              <option value="one-shot">一次性</option>
-              <option value="resident">常驻</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label>任务名称:</label>
-            <input type="text" id="taskName" placeholder="my-task" value="task-" style="flex:1">
-          </div>
-          <div class="form-row">
-            <label>入口文件:</label>
-            <input type="text" id="entryFile" placeholder="task.js" style="flex:1">
-          </div>
-          <div class="form-row">
-            <label>执行文件 / 输入文件:</label>
-            <input type="file" id="taskFiles" multiple style="flex:1">
-          </div>
-          <div id="taskFileList" class="file-list" style="margin:8px 0;font-size:13px;color:#888"></div>
-          <div class="form-row">
-            <label>参数 (JSON):</label>
-            <textarea id="taskParams" rows="3" placeholder='{"width": 800}' style="flex:1"></textarea>
-          </div>
-          <div class="form-row">
-            <label>目标设备 ID:</label>
-            <input type="text" id="displayId" placeholder="留空自动选择" style="flex:1">
-          </div>
-          <button id="taskSubmitBtn" style="padding:8px 24px;margin-top:8px;cursor:pointer">提交任务</button>
-        </div>
-        <div class="section" id="taskLogSection" style="display:none">
-          <h2>实时日志</h2>
-          <pre id="taskLog" style="height:200px;overflow:auto;background:#1a1a2e;color:#e0e0e0;padding:8px;border-radius:4px;font-size:12px"></pre>
-        </div>
-        <div class="section">
-          <h2>任务实例列表</h2>
-          <div id="taskInstanceList"><div class="empty-list">暂无任务实例</div></div>
-        </div>
-      `;
+      panel.innerHTML =
+        '<h1 class="page-title">远程任务</h1>' +
 
-      document.getElementById('taskType').addEventListener('change', (e) => {
+        // ---- 提交表单 ----
+        '<div class="section">' +
+          '<div class="task-config-grid">' +
+            // 任务名称
+            '<div class="task-config-item task-config-full">' +
+              '<label>任务名称</label>' +
+              '<input type="text" id="taskName" placeholder="my-task">' +
+            '</div>' +
+            // 任务类型
+            '<div class="task-config-item">' +
+              '<label>任务类型</label>' +
+              '<select id="taskType">' +
+                '<option value="user">用户代码</option>' +
+                '<option value="builtin">内置功能</option>' +
+              '</select>' +
+            '</div>' +
+            // 执行目标
+            '<div class="task-config-item">' +
+              '<label>执行目标</label>' +
+              '<select id="taskTarget">' +
+                '<option value="server">服务端</option>' +
+                '<option value="display">显示端</option>' +
+                '<option value="subdisplay">子显示端</option>' +
+              '</select>' +
+            '</div>' +
+            // 执行环境
+            '<div class="task-config-item">' +
+              '<label>执行环境</label>' +
+              '<select id="taskEnv">' +
+                '<option value="auto">自适应</option>' +
+                '<option value="cpu">CPU</option>' +
+                '<option value="webgl">WebGL</option>' +
+                '<option value="webgpu">WebGPU</option>' +
+              '</select>' +
+            '</div>' +
+            // 模式
+            '<div class="task-config-item">' +
+              '<label>模式</label>' +
+              '<select id="taskMode">' +
+                '<option value="one-shot">一次性</option>' +
+                '<option value="resident">常驻</option>' +
+              '</select>' +
+            '</div>' +
+          '</div>' +
+
+          // 入口文件
+          '<div class="task-config-item" style="margin-bottom:12px">' +
+            '<label>入口文件</label>' +
+            '<input type="text" id="entryFile" placeholder="task.js" value="task.js">' +
+          '</div>' +
+
+          // 文件拖拽区
+          '<div class="task-file-zone" id="taskFileZone">' +
+            '<div class="task-file-zone-icon">📂</div>' +
+            '<div class="task-file-zone-text">点击选择或拖拽文件到此处</div>' +
+            '<div class="task-file-zone-hint">执行文件 + 输入文件</div>' +
+          '</div>' +
+          '<input type="file" id="taskFiles" multiple style="display:none">' +
+          '<div class="task-file-list" id="taskFileList"></div>' +
+
+          // 内置任务参数区
+          '<div class="builtin-params-area" id="builtinParamsArea">' +
+            '<div class="task-config-item">' +
+              '<label>内置功能</label>' +
+              '<select id="builtinId"></select>' +
+            '</div>' +
+            '<div id="builtinParams"></div>' +
+          '</div>' +
+
+          // 参数
+          '<div class="task-config-item" style="margin-top:12px">' +
+            '<label>参数 (JSON)</label>' +
+            '<textarea id="taskParams" rows="2" placeholder=\'{"width": 800}\'></textarea>' +
+          '</div>' +
+
+          // 目标设备
+          '<div class="task-config-item" style="margin-top:12px">' +
+            '<label>目标设备 ID <span style="color:#555;font-size:11px">(留空自动选择)</span></label>' +
+            '<input type="text" id="displayId" placeholder="显示端或子显示端 ID">' +
+          '</div>' +
+
+          '<button class="task-submit-btn" id="taskSubmitBtn">⚡ 提交任务</button>' +
+        '</div>' +
+
+        // ---- 日志区域 ----
+        '<div class="section" id="taskLogSection" style="display:none">' +
+          '<div class="task-log-container">' +
+            '<div class="task-log-header">' +
+              '<span class="task-log-header-label">📋 实时日志</span>' +
+              '<div class="task-log-header-actions">' +
+                '<button onclick="TaskPanel._clearLog()">清空</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="task-log-content" id="taskLog"></div>' +
+          '</div>' +
+        '</div>' +
+
+        // ---- 实例列表 ----
+        '<div class="section">' +
+          '<h2>任务实例</h2>' +
+          '<div id="taskInstanceList">' +
+            '<div class="task-empty-state">' +
+              '<div class="task-empty-state-icon">⚡</div>' +
+              '<div class="task-empty-state-text">暂无任务实例</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      this._bindEvents();
+    },
+
+    _bindEvents: function() {
+      var self = this;
+
+      // 任务类型切换
+      document.getElementById('taskType').addEventListener('change', function(e) {
         document.getElementById('entryFile').disabled = e.target.value === 'builtin';
+        document.getElementById('builtinParamsArea').style.display = e.target.value === 'builtin' ? 'block' : 'none';
+        if (e.target.value === 'builtin') self._loadBuiltinTasks();
       });
 
-      document.getElementById('taskFiles').addEventListener('change', (e) => {
-        const list = document.getElementById('taskFileList');
-        list.innerHTML = '';
-        for (const f of e.target.files) {
-          const div = document.createElement('div');
-          div.textContent = '  ' + f.name + ' (' + (f.size / 1024).toFixed(1) + 'KB)';
-          list.appendChild(div);
+      // 文件拖拽 / 点击
+      var fileZone = document.getElementById('taskFileZone');
+      var fileInput = document.getElementById('taskFiles');
+
+      fileZone.addEventListener('click', function() { fileInput.click(); });
+
+      fileZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        fileZone.classList.add('dragover');
+      });
+      fileZone.addEventListener('dragleave', function() {
+        fileZone.classList.remove('dragover');
+      });
+      fileZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        fileZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+          fileInput.files = e.dataTransfer.files;
+          self._updateFileList();
         }
       });
 
-      document.getElementById('taskSubmitBtn').addEventListener('click', () => this._submit());
+      fileInput.addEventListener('change', function() { self._updateFileList(); });
+
+      // 提交
+      document.getElementById('taskSubmitBtn').addEventListener('click', function() { self._submit(); });
     },
 
-    _setupWS() {
-      const ws = window.WebSocketManager;
-      if (!ws) { setTimeout(() => this._setupWS(), 500); return; }
-      const orig = ws.handleMessage;
-      ws.handleMessage = (data) => {
-        this._onWSMessage(data);
+    _updateFileList: function() {
+      var files = document.getElementById('taskFiles').files;
+      var list = document.getElementById('taskFileList');
+      list.innerHTML = '';
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var chip = document.createElement('span');
+        chip.className = 'task-file-chip';
+        chip.innerHTML = '📄 ' + f.name + ' <span style="color:#666">(' + (f.size / 1024).toFixed(1) + 'KB)</span>';
+        list.appendChild(chip);
+      }
+    },
+
+    _loadBuiltinTasks: function() {
+      // 预留：后续可从服务端获取内置任务列表
+      var sel = document.getElementById('builtinId');
+      sel.innerHTML = '<option value="image.resize">图片缩放</option>';
+    },
+
+    _setupWS: function() {
+      var self = this;
+      var ws = window.WebSocketManager;
+      if (!ws) { setTimeout(function() { self._setupWS(); }, 500); return; }
+      var orig = ws.handleMessage;
+      ws.handleMessage = function(data) {
+        self._onWSMessage(data);
         if (orig) orig.call(ws, data);
       };
     },
 
-    _onWSMessage(data) {
-      const p = data.payload || {};
+    _onWSMessage: function(data) {
+      var p = data.payload || {};
       switch (data.type) {
         case 'task:submitted':
           this._addInstance(p);
-          this._log('任务已提交: ' + p.taskName + ' (#' + p.instanceId + ')');
+          this._pLog('系统', '任务已提交: ' + p.taskName + ' (#' + p.instanceId.substring(0,8) + ')');
           break;
         case 'task:progress':
           this._updateProgress(p);
           break;
         case 'task:log':
-          this._log('[' + p.stream + '] ' + p.message, p);
+          this._pLog(p.stream, p.message, p);
           break;
         case 'task:result':
           this._onResult(p);
           break;
         case 'task:error':
-          this._log('[错误] ' + p.error, { stream: 'stderr' });
+          this._pLog('错误', p.error, { stream: 'stderr' });
           break;
         case 'task:stopped':
-          this._log('[系统] 实例已停止');
+          this._pLog('系统', '实例已停止');
           this._updateInstance(p.instanceId, { status: 'stopped' });
           break;
       }
     },
 
-    _addInstance(p) {
+    _addInstance: function(p) {
       this.instances.set(p.instanceId, { ...p, status: 'running', stage: 'submitted', timestamp: Date.now() });
       this._refreshList();
     },
 
-    _updateProgress(p) {
-      const inst = this.instances.get(p.instanceId);
+    _updateProgress: function(p) {
+      var inst = this.instances.get(p.instanceId);
       if (inst) { inst.stage = p.stage; inst.progress = p.progress; this._refreshList(); }
     },
 
-    _updateInstance(id, data) {
-      const inst = this.instances.get(id);
-      if (inst) { Object.assign(inst, data); this._refreshList(); }
+    _updateInstance: function(id, data) {
+      var inst = this.instances.get(id);
+      if (inst) { for (var k in data) { inst[k] = data[k]; } this._refreshList(); }
     },
 
-    _onResult(p) {
-      const inst = this.instances.get(p.instanceId);
+    _onResult: function(p) {
+      var inst = this.instances.get(p.instanceId);
       if (inst) {
         inst.status = p.success ? 'completed' : 'failed';
         inst.result = p;
         this._refreshList();
       }
       if (p.success) {
-        this._log('执行成功');
+        this._pLog('系统', '✅ 执行成功');
         if (p.outputFiles && p.outputFiles.length > 0) {
-          this._log('输出: ' + p.outputFiles.map(function(f) { return f.url || f.name; }).join(', '));
+          this._pLog('系统', '输出: ' + p.outputFiles.map(function(f) { return f.url || f.name; }).join(', '));
         }
       } else {
-        this._log('执行失败: ' + (p.error || '未知错误'));
+        this._pLog('错误', '❌ ' + (p.error || '未知错误'), { stream: 'stderr' });
       }
     },
 
-    _log(message, meta) {
-      const el = document.getElementById('taskLog');
-      if (!el) return;
-      var logSection = document.getElementById('taskLogSection');
-      if (logSection) logSection.style.display = 'block';
-      var time = new Date().toLocaleTimeString();
+    _pLog: function(stream, message, meta) {
+      var cont = document.getElementById('taskLog');
+      if (!cont) return;
+      var section = document.getElementById('taskLogSection');
+      if (section) section.style.display = 'block';
+
+      var time = new Date();
+      var ts = ('0' + time.getHours()).slice(-2) + ':' +
+               ('0' + time.getMinutes()).slice(-2) + ':' +
+               ('0' + time.getSeconds()).slice(-2);
+
+      var cls = 'task-log-line';
+      if (stream === 'stderr') cls += ' task-log-stream-stderr';
+      else if (stream === 'system') cls += ' task-log-stream-system';
+      else cls += ' task-log-stream-stdout';
+
       var line = document.createElement('div');
-      line.textContent = '[' + time + '] ' + message;
-      if (meta && meta.stream === 'stderr') line.style.color = '#ff6b6b';
-      else if (meta && meta.stream === 'system') line.style.color = '#69db7c';
-      el.appendChild(line);
-      el.scrollTop = el.scrollHeight;
+      line.className = cls;
+      line.innerHTML = '<span class="task-log-time">' + ts + '</span> ' + this._escapeHtml(message);
+
+      cont.appendChild(line);
+      cont.scrollTop = cont.scrollHeight;
     },
 
-    _refreshList() {
+    _clearLog: function() {
+      var cont = document.getElementById('taskLog');
+      if (cont) cont.innerHTML = '';
+      var section = document.getElementById('taskLogSection');
+      if (section) section.style.display = 'none';
+    },
+
+    _refreshList: function() {
       var container = document.getElementById('taskInstanceList');
       if (!container) return;
+
       var items = Array.from(this.instances.entries())
         .sort(function(a, b) { return b[1].timestamp - a[1].timestamp; })
-        .slice(0, 20);
+        .slice(0, 30);
+
       if (items.length === 0) {
-        container.innerHTML = '<div class="empty-list">暂无任务实例</div>';
+        container.innerHTML =
+          '<div class="task-empty-state">' +
+            '<div class="task-empty-state-icon">⚡</div>' +
+            '<div class="task-empty-state-text">暂无任务实例</div>' +
+          '</div>';
         return;
       }
-      var icons = { running: '🟢', completed: '✅', failed: '❌', stopped: '⏹', pending: '⏳' };
+
+      var icons = {
+        running: '🔄',
+        completed: '✅',
+        failed: '❌',
+        stopped: '⏹',
+        pending: '⏳',
+        pending_forward: '📤'
+      };
+
       container.innerHTML = items.map(function(item) {
         var id = item[0], inst = item[1];
         var icon = icons[inst.status] || '❓';
-        return '<div class="task-instance" style="padding:6px;border-bottom:1px solid #333;cursor:pointer;display:flex;gap:12px;align-items:center">' +
-          '<span>' + icon + '</span>' +
-          '<span>' + (inst.taskName || '-') + '</span>' +
-          '<span style="color:#888;font-size:12px">#' + id.substring(0,8) + '</span>' +
-          '<span>' + (inst.stage || inst.status) + '</span>' +
-          '<span>' + (inst.progress != null ? inst.progress + '%' : '') + '</span>' +
-          '</div>';
+        var statusText = inst.stage || inst.status;
+        var progressHtml = '';
+        if (inst.progress != null && inst.status === 'running') {
+          progressHtml = '<div class="task-progress-bar"><div class="task-progress-fill" style="width:' + inst.progress + '%"></div></div>';
+        }
+        return '<div class="task-instance-item ' + inst.status + '">' +
+          '<div class="task-instance-left">' +
+            '<span class="task-instance-icon">' + icon + '</span>' +
+            '<div class="task-instance-info">' +
+              '<div class="task-instance-name">' + (inst.taskName || '-') + '</div>' +
+              '<div class="task-instance-id">#' + id.substring(0, 8) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="task-instance-meta">' +
+            progressHtml +
+            '<span class="task-instance-status ' + inst.status + '">' + statusText + '</span>' +
+          '</div>' +
+        '</div>';
       }).join('');
     },
 
-    _submit() {
+    _submit: function() {
+      var self = this;
       var taskName = document.getElementById('taskName').value.trim();
       if (!taskName) { alert('请输入任务名称'); return; }
 
       var fileInput = document.getElementById('taskFiles');
       var files = [];
       var pending = fileInput.files.length;
-      if (pending === 0) { this._doSubmit(taskName, files); return; }
+
+      if (pending === 0) {
+        this._doSubmit(taskName, files);
+        return;
+      }
 
       for (var i = 0; i < fileInput.files.length; i++) {
         (function(file) {
@@ -215,14 +356,14 @@
           reader.onload = function() {
             files.push({ name: file.name, data: reader.result.split(',')[1] });
             pending--;
-            if (pending === 0) TaskPanel._doSubmit(taskName, files);
+            if (pending === 0) self._doSubmit(taskName, files);
           };
           reader.readAsDataURL(file);
         })(fileInput.files[i]);
       }
     },
 
-    _doSubmit(taskName, files) {
+    _doSubmit: function(taskName, files) {
       var params = {};
       try {
         var t = document.getElementById('taskParams').value;
@@ -244,16 +385,21 @@
         }
       };
 
-      var el = document.getElementById('taskLog');
-      if (el) { el.innerHTML = ''; }
+      this._clearLog();
+      this._pLog('系统', '📤 提交任务: ' + taskName + ' (' + files.length + ' 个文件)');
 
-      this._log('提交任务: ' + taskName);
       var ws = window.WebSocketManager;
       if (ws && ws.ws && ws.ws.readyState === WebSocket.OPEN) {
         ws.ws.send(JSON.stringify(msg));
       } else {
-        this._log('WebSocket 未连接');
+        this._pLog('错误', 'WebSocket 未连接', { stream: 'stderr' });
       }
+    },
+
+    _escapeHtml: function(text) {
+      var div = document.createElement('div');
+      div.appendChild(document.createTextNode(text));
+      return div.innerHTML;
     }
   };
 

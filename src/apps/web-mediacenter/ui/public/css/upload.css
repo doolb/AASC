@@ -2727,3 +2727,425 @@ input[type="range"]::-webkit-slider-thumb:active {
     border-color: rgba(0, 210, 255, 0.4);
     outline: none;
 }
+
+/* ==============================
+   远程任务面板
+   ============================== */
+
+.task-config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.task-config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.task-config-item label {
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+}
+
+.task-config-item select,
+.task-config-item input,
+.task-config-item textarea {
+    padding: 10px 14px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.task-config-item select:hover,
+.task-config-item input:hover,
+.task-config-item textarea:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.task-config-item select:focus,
+.task-config-item input:focus,
+.task-config-item textarea:focus {
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.3);
+}
+
+.task-config-item select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+.task-config-item select option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+.task-config-item textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.task-config-full {
+    grid-column: 1 / -1;
+}
+
+.task-file-zone {
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 30px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 8px;
+}
+
+.task-file-zone:hover {
+    border-color: rgba(0, 210, 255, 0.4);
+    background: rgba(0, 210, 255, 0.05);
+}
+
+.task-file-zone.dragover {
+    border-color: #00d2ff;
+    background: rgba(0, 210, 255, 0.1);
+}
+
+.task-file-zone-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    opacity: 0.6;
+}
+
+.task-file-zone-text {
+    font-size: 14px;
+    color: #888;
+}
+
+.task-file-zone-hint {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+}
+
+.task-file-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.task-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(0, 210, 255, 0.12);
+    border: 1px solid rgba(0, 210, 255, 0.2);
+    border-radius: 8px;
+    font-size: 12px;
+    color: #8cf;
+    transition: all 0.2s;
+}
+
+.task-file-chip-remove {
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 14px;
+    line-height: 1;
+}
+.task-file-chip-remove:hover {
+    opacity: 1;
+}
+
+.task-submit-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+}
+
+.task-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 210, 255, 0.3);
+}
+
+.task-submit-btn:active {
+    transform: translateY(0);
+}
+
+.task-submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* 任务实例列表 */
+.task-instance-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    transition: all 0.2s;
+}
+
+.task-instance-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.task-instance-item.completed {
+    border-color: rgba(34, 197, 94, 0.2);
+}
+
+.task-instance-item.failed {
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.task-instance-item.running {
+    border-color: rgba(0, 210, 255, 0.2);
+    animation: taskPulse 2s ease-in-out infinite;
+}
+
+@keyframes taskPulse {
+    0%, 100% { border-color: rgba(0, 210, 255, 0.2); }
+    50% { border-color: rgba(0, 210, 255, 0.5); }
+}
+
+.task-instance-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.task-instance-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.task-instance-info {
+    min-width: 0;
+}
+
+.task-instance-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-instance-id {
+    font-size: 11px;
+    color: #666;
+    font-family: monospace;
+}
+
+.task-instance-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.task-instance-status {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #888;
+}
+
+.task-instance-status.running {
+    background: rgba(0, 210, 255, 0.15);
+    color: #00d2ff;
+}
+
+.task-instance-status.completed {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.task-instance-status.failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.task-instance-status.stopped {
+    background: rgba(255, 165, 0, 0.15);
+    color: #ffa500;
+}
+
+.task-progress-bar {
+    width: 60px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.task-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+/* 日志区域 */
+.task-log-container {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.task-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.task-log-header-label {
+    font-size: 13px;
+    color: #888;
+    font-weight: 500;
+}
+
+.task-log-header-actions button {
+    padding: 4px 12px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #888;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.task-log-header-actions button:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.task-log-content {
+    height: 240px;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.task-log-content::-webkit-scrollbar {
+    width: 6px;
+}
+.task-log-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+.task-log-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.task-log-line {
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.task-log-line + .task-log-line {
+    margin-top: 2px;
+}
+
+.task-log-time {
+    color: #555;
+    user-select: none;
+}
+
+.task-log-stream-stdout {
+    color: #c0c0c0;
+}
+.task-log-stream-stderr {
+    color: #ff6b6b;
+}
+.task-log-stream-system {
+    color: #69db7c;
+}
+
+/* 空状态 */
+.task-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #555;
+}
+.task-empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.3;
+}
+.task-empty-state-text {
+    font-size: 14px;
+}
+
+/* 内置任务参数动态表单 */
+.builtin-params-area {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    display: none;
+}
+
+.builtin-param-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.builtin-param-row:last-child {
+    margin-bottom: 0;
+}
+
+.builtin-param-row label {
+    font-size: 12px;
+    color: #888;
+    min-width: 60px;
+}
+
+.builtin-param-row input {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+}
