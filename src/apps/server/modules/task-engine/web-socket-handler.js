@@ -17,6 +17,24 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
   const controlTypes = ['task:submit', 'task:stop', 'task:status', 'task:result',
                         'task:list', 'task:update', 'task:delete'];
 
+  // 获取内置任务列表（格式化为前端所需结构）
+  function getBuiltinTasks() {
+    try {
+      const registry = require('./builtin-tasks/registry');
+      if (registry.listTasks) {
+        return registry.listTasks().map(t => ({
+          taskName: t.id,
+          taskType: 'builtin',
+          builtinId: t.id,
+          name: t.name,
+          params: t.params || [],
+          instances: []
+        }));
+      }
+    } catch (e) { console.warn('[任务引擎] 内置任务不可用:', e.message); }
+    return [];
+  }
+
   // ---------------------------------------------------------------
   // 统一消息处理器
   // ---------------------------------------------------------------
@@ -112,44 +130,12 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
       // ---- 任务列表 ----
       case 'task:list': {
         try {
-          const tasks = await taskManager.listTasks();
           const filter = payload.filter || 'all';
-          let result = tasks;
-
           if (filter === 'builtin') {
-            // 内置任务由 registry 提供
-            let builtinTasks = [];
-            try {
-              const registry = require('./builtin-tasks/registry');
-              if (registry.listTasks) {
-                builtinTasks = registry.listTasks().map(t => ({
-                  taskName: t.id,
-                  taskType: 'builtin',
-                  builtinId: t.id,
-                  name: t.name,
-                  params: t.params || [],
-                  instances: []
-                }));
-              }
-            } catch (e) { /* 内置任务不可用 */ }
-            ctx.ws.send(JSON.stringify({ type: 'task:list:result', payload: { tasks: builtinTasks } }));
+            ctx.ws.send(JSON.stringify({ type: 'task:list:result', payload: { tasks: getBuiltinTasks() } }));
           } else {
-            // 合并内置任务到列表开头
-            let builtinTasks = [];
-            try {
-              const registry = require('./builtin-tasks/registry');
-              if (registry.listTasks) {
-                builtinTasks = registry.listTasks().map(t => ({
-                  taskName: t.id,
-                  taskType: 'builtin',
-                  builtinId: t.id,
-                  name: t.name,
-                  params: t.params || [],
-                  instances: []
-                }));
-              }
-            } catch (e) {}
-            ctx.ws.send(JSON.stringify({ type: 'task:list:result', payload: { tasks: [...builtinTasks, ...result] } }));
+            const tasks = await taskManager.listTasks();
+            ctx.ws.send(JSON.stringify({ type: 'task:list:result', payload: { tasks: [...getBuiltinTasks(), ...tasks] } }));
           }
         } catch (err) {
           ctx.ws.send(JSON.stringify({ type: 'task:error', payload: { error: err.message } }));
