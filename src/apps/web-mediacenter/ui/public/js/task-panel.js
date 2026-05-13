@@ -355,11 +355,12 @@
         if (caps.webgpu) capText.push('WebGPU');
         else if (caps.webgl) capText.push('WebGL');
         if (caps.cpu || capText.length === 0) capText.push('CPU');
-        html += '<div class="task-device-item" data-id="' + d.id + '">' +
+        var safeId = this._escapeAttr(d.id);
+        html += '<div class="task-device-item" data-id="' + safeId + '">' +
           '<div class="task-device-radio"></div>' +
           '<div class="task-device-info">' +
-            '<div class="task-device-name">' + d.id + '</div>' +
-            '<div class="task-device-cap">' + capText.join(', ') + '</div>' +
+            '<div class="task-device-name">' + this._escapeHtml(d.id) + '</div>' +
+            '<div class="task-device-cap">' + this._escapeHtml(capText.join(', ')) + '</div>' +
           '</div>' +
           '<span class="task-device-state ' + (isOnline ? 'online' : 'offline') + '">' + (isOnline ? '在线' : '离线') + '</span>' +
         '</div>';
@@ -525,6 +526,8 @@
         if (orig) orig.call(ws, data);
       };
       self._send({ type: 'displayList' });
+      // 延迟重试任务列表请求，确保连接已建立
+      setTimeout(function() { self._requestTaskList(); }, 500);
     },
 
     _onSubmitted: function(payload) {
@@ -610,7 +613,6 @@
 
     _onUpdated: function(payload) {
       if (payload.success) {
-        this._renderTaskList();
         this._showView('list');
       }
     },
@@ -780,9 +782,10 @@
       '</div>';
       for (var i = 0; i < this.displayList.length; i++) {
         var d = this.displayList[i];
-        listHtml += '<div class="task-device-item" data-id="' + d.id + '">' +
+        var safeId = this._escapeAttr(d.id);
+        listHtml += '<div class="task-device-item" data-id="' + safeId + '">' +
           '<div class="task-device-radio"></div>' +
-          '<div class="task-device-info"><div class="task-device-name">' + d.id + '</div></div>' +
+          '<div class="task-device-info"><div class="task-device-name">' + this._escapeHtml(d.id) + '</div></div>' +
           '<span class="task-device-state online">在线</span>' +
         '</div>';
       }
@@ -989,7 +992,7 @@
       overlay.className = 'task-confirm-overlay';
       overlay.innerHTML =
         '<div class="task-confirm-box">' +
-          '<div class="task-confirm-msg">确定要删除文件 "' + fileName.replace(/"/g, '&quot;') + '" 吗？</div>' +
+          '<div class="task-confirm-msg">确定要删除文件 "' + this._escapeHtml(fileName) + '" 吗？</div>' +
           '<div class="task-confirm-actions">' +
             '<button class="task-confirm-btn cancel" id="dfCancel">取消</button>' +
             '<button class="task-confirm-btn confirm" id="dfConfirm">删除</button>' +
@@ -1127,7 +1130,7 @@
       var overlay = document.createElement('div');
       overlay.className = 'task-confirm-overlay';
       overlay.style.cursor = 'pointer';
-      overlay.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" style="max-width:90%;max-height:90%;border-radius:12px">';
+      overlay.innerHTML = '<img src="' + this._escapeAttr(url) + '" style="max-width:90%;max-height:90%;border-radius:12px">';
       overlay.onclick = function() { document.body.removeChild(overlay); };
       document.body.appendChild(overlay);
     },
