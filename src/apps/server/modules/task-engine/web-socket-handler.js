@@ -14,7 +14,7 @@
  * @param {Function} sendToDisplay — (displayId: string, msg: object) => void，向指定显示端发送
  */
 function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDisplay) {
-  const controlTypes = ['task:submit', 'task:stop', 'task:status'];
+  const controlTypes = ['task:submit', 'task:stop', 'task:status', 'task:result'];
 
   // ---------------------------------------------------------------
   // 统一消息处理器
@@ -94,6 +94,20 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
         break;
       }
 
+      // ---- 来自显示端/子显示端的执行结果 ----
+      case 'task:result': {
+        taskManager.handleForwardResult(payload.taskName, payload.instanceId, {
+          success: payload.success,
+          error: payload.error,
+          outputFiles: payload.outputFiles
+        });
+        sendToControl({
+          type: 'task:result',
+          payload: { taskName: payload.taskName, instanceId: payload.instanceId, ...payload }
+        });
+        break;
+      }
+
       default:
         // 不做处理
         break;
@@ -110,23 +124,26 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
   // ---------------------------------------------------------------
 
   taskManager.on('progress', (instanceId, stage, progress) => {
+    const inst = taskManager.getInstance(instanceId);
     sendToControl({
       type: 'task:progress',
-      payload: { instanceId, stage, progress },
+      payload: { taskName: inst ? inst.taskName : null, instanceId, stage, progress },
     });
   });
 
   taskManager.on('result', (instanceId, result) => {
+    const inst = taskManager.getInstance(instanceId);
     sendToControl({
       type: 'task:result',
-      payload: { instanceId, ...result },
+      payload: { taskName: inst ? inst.taskName : null, instanceId, ...result },
     });
   });
 
   taskManager.on('log', (instanceId, stream, level, message) => {
+    const inst = taskManager.getInstance(instanceId);
     sendToControl({
       type: 'task:log',
-      payload: { instanceId, stream, level, message, timestamp: Date.now() },
+      payload: { taskName: inst ? inst.taskName : null, instanceId, stream, level, message, timestamp: Date.now() },
     });
   });
 }

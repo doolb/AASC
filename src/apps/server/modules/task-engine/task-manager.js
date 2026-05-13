@@ -3,6 +3,7 @@ const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const TaskIO = require('./task-io');
 const NodeJsRunner = require('./nodejs-runner');
+const PuppeteerRunner = require('./puppeteer-runner');
 
 let builtinRegistry = null;
 try {
@@ -16,6 +17,7 @@ class TaskManager extends EventEmitter {
     super();
     this.taskIO = new TaskIO(options);
     this.nodeRunner = new NodeJsRunner();
+    this.puppeteerRunner = new PuppeteerRunner();
     this.instances = new Map();
     this.maxInstances = options.maxInstances || 50;
   }
@@ -64,6 +66,10 @@ class TaskManager extends EventEmitter {
     try {
       this.emit('log', instanceId, 'system', 'info', '目标: ' + task.target + ', 环境: ' + task.env);
 
+      // 服务端执行时，GPU 环境走 Puppeteer
+      const usePuppeteer = (task.target === 'server' || !task.target) &&
+        (task.env === 'webgl' || task.env === 'webgpu');
+
       if (task.taskType === 'builtin') {
         if (!builtinRegistry) throw new Error('内置任务模块不可用');
         const result = await builtinRegistry.run(task.builtinId, {
@@ -81,7 +87,8 @@ class TaskManager extends EventEmitter {
         });
         return { taskName: task.taskName, instanceId, status: 'pending_forward' };
       } else {
-        const result = await this.nodeRunner.run({
+        const runner = usePuppeteer ? this.puppeteerRunner : this.nodeRunner;
+        const result = await runner.run({
           entryFile: task.entryFile,
           workDir: this.taskIO._taskPath(task.taskName),
           context,
@@ -144,6 +151,20 @@ class TaskManager extends EventEmitter {
     return { success: true };
   }
 
+  async handleForwardResult(taskName, instanceId, result) {
+    const instance = this.instances.get(instanceId);
+    if (!instance) return { success: false, error: '实例不存在' };
+    const task = { taskName: instance.taskName };
+    await this._handleResult(task, instanceId, instance, {
+      success: result.success,
+      error: result.error,
+      data: result.outputFiles ? { outputFiles: result.outputFiles } : undefined
+    });
+    await this.taskIO.updateLatestLink(task.taskName, instanceId);
+    await this.taskIO.cleanupOldInstances(task.taskName, this.maxInstances);
+    return { success: true };
+  }
+
   getInstance(instanceId) {
     return this.instances.get(instanceId) || null;
   }
@@ -164,6 +185,22 @@ class TaskManager extends EventEmitter {
       return sorted[0];
     }
     return null;
+  }
+
+  async destroy() {
+    // 终止所有运行中的 child process
+    if (this.nodeRunner && this.nodeRunner._children) {
+      for (const [id, child] of this.nodeRunner._children) {
+        child.kill('SIGKILL');
+      }
+      this.nodeRunner._children.clear();
+    }
+    // 关闭 Puppeteer browser
+    if (this.puppeteerRunner && this.puppeteerRunner.close) {
+      await this.puppeteerRunner.close();
+    }
+    this.removeAllListeners();
+    this.instances.clear();
   }
 }
 
