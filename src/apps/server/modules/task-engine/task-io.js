@@ -129,16 +129,16 @@ class TaskIO extends EventEmitter {
               files.push({ name: de.name, size: stat.size });
             }
           }
-        } catch (e) { /* 跳过 */ }
+        } catch (e) { console.warn('[TaskIO] 读取任务文件失败:', taskName, e.message); }
         const idx = await this.getIndex(taskName).catch(() => []);
         tasks.push({ taskName, files, instances: idx });
       }
-    } catch (e) { /* tasksDir 可能不存在 */ }
+    } catch (e) { console.warn('[TaskIO] 读取任务目录失败:', e.message); }
     return tasks;
   }
 
   async deleteTask(taskName) {
-    const taskDir = this._taskPath(taskName);
+    const taskDir = this._validateSafePath(this.tasksDir, taskName);
     try {
       await fs.promises.rm(taskDir, { recursive: true, force: true });
       return { success: true };
