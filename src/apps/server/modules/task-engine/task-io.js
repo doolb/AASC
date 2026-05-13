@@ -112,6 +112,41 @@ class TaskIO extends EventEmitter {
     await fs.promises.writeFile(this._indexPath(taskName), JSON.stringify(remaining, null, 2));
   }
 
+  async listTasks() {
+    let tasks = [];
+    try {
+      const entries = await fs.promises.readdir(this.tasksDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const taskName = entry.name;
+        const taskDir = this._taskPath(taskName);
+        const files = [];
+        try {
+          const dirEntries = await fs.promises.readdir(taskDir, { withFileTypes: true });
+          for (const de of dirEntries) {
+            if (de.isFile() && de.name !== 'results') {
+              const stat = await fs.promises.stat(path.join(taskDir, de.name));
+              files.push({ name: de.name, size: stat.size });
+            }
+          }
+        } catch (e) { /* 跳过 */ }
+        const idx = await this.getIndex(taskName).catch(() => []);
+        tasks.push({ taskName, files, instances: idx });
+      }
+    } catch (e) { /* tasksDir 可能不存在 */ }
+    return tasks;
+  }
+
+  async deleteTask(taskName) {
+    const taskDir = this._taskPath(taskName);
+    try {
+      await fs.promises.rm(taskDir, { recursive: true, force: true });
+      return { success: true };
+    } catch (e) {
+      throw new Error('删除任务失败: ' + e.message);
+    }
+  }
+
 }
 
 module.exports = TaskIO;
