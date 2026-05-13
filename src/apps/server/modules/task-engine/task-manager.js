@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const TaskIO = require('./task-io');
@@ -185,6 +186,54 @@ class TaskManager extends EventEmitter {
       return sorted[0];
     }
     return null;
+  }
+
+  async listTasks() {
+    const taskList = await this.taskIO.listTasks();
+    // 合并内存中实例的最新状态
+    for (const task of taskList) {
+      for (const inst of task.instances) {
+        const memInst = this.instances.get(inst.instanceId);
+        if (memInst) {
+          inst.status = memInst.status;
+          inst.stage = memInst.stage;
+          inst.progress = memInst.progress;
+          inst.target = memInst.target;
+        }
+      }
+      // 按时间降序排列实例
+      task.instances.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    }
+    return taskList;
+  }
+
+  async deleteTask(taskName) {
+    // 清除此任务在内存中的所有实例
+    for (const [id, inst] of this.instances) {
+      if (inst.taskName === taskName) {
+        if (this.nodeRunner.kill) this.nodeRunner.kill(id);
+        this.instances.delete(id);
+      }
+    }
+    return this.taskIO.deleteTask(taskName);
+  }
+
+  async updateTask(taskName, updates) {
+    // 更新任务文件: 替换/新增/删除
+    const toReplace = (updates.files || []).filter(f => f.action === 'replace' || !f.action);
+    const toDelete = (updates.files || []).filter(f => f.action === 'delete');
+    const taskDir = this.taskIO._taskPath(taskName);
+
+    // 删除标记的文件
+    for (const f of toDelete) {
+      const filePath = path.join(taskDir, f.name);
+      try { await fs.promises.rm(filePath, { force: true }); } catch (e) {}
+    }
+    // 替换/新增文件
+    if (toReplace.length > 0) {
+      await this.taskIO.saveTaskFiles(taskName, toReplace);
+    }
+    return { success: true };
   }
 
   async destroy() {
