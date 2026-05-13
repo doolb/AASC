@@ -147,6 +147,22 @@ class TaskIO extends EventEmitter {
     }
   }
 
+  async deleteTaskFiles(taskName, fileNames) {
+    const taskDir = this._validateSafePath(this.tasksDir, taskName);
+    const results = [];
+    for (const fileName of fileNames) {
+      try {
+        const filePath = this._validateSafePath(taskDir, fileName);
+        await fs.promises.rm(filePath, { force: true });
+        results.push({ name: fileName, success: true });
+      } catch (e) {
+        console.warn('[TaskIO] 删除任务文件失败:', fileName, e.message);
+        results.push({ name: fileName, success: false, error: e.message });
+      }
+    }
+    return results;
+  }
+
 }
 
 module.exports = TaskIO;
