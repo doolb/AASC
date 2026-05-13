@@ -42,6 +42,8 @@ const LogBuffer = require('../../../framework/observability/log-buffer');
 const SystemMonitor = require('../../../framework/observability/system-monitor');
 const LogBrain = require('../../../framework/observability/log-brain');
 const { registerLogBrainApi } = require('../api/log-brain-api');
+const TaskManager = require('../modules/task-engine/task-manager');
+const { registerTaskHandlers } = require('../modules/task-engine/web-socket-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
 
@@ -520,6 +522,14 @@ function startServer() {
 
             log('WS', 'ViewBind WS 系统初始化完成');
             bindRuntimeBridgeTransports();
+
+            // 初始化远程任务引擎
+            const taskManager = new TaskManager({ maxInstances: 50 });
+            registerTaskHandlers(wsServer, taskManager,
+                (msg) => broadcastToControls(msg),
+                (displayId, msg) => sendToDisplay(displayId, msg)
+            );
+            log('任务引擎', '远程任务系统已初始化');
         } catch (error) {
             logError('WS', `系统初始化失败: ${error.message}`);
         }
