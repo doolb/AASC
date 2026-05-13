@@ -76,6 +76,7 @@ class TaskManager extends EventEmitter {
           entryFile: task.entryFile,
           workDir: this.taskIO._taskPath(task.taskName),
           context,
+          instanceId,
           timeout: task.timeout || 30000
         });
         await this._handleResult(task, instanceId, instance, result);
@@ -123,8 +124,12 @@ class TaskManager extends EventEmitter {
   async stopInstance(taskName, instanceId) {
     const instance = this.instances.get(instanceId);
     if (!instance) return { success: false, error: '实例不存在' };
+    // Kill the child process if running via NodeJsRunner
+    if (this.nodeRunner.kill) {
+      this.nodeRunner.kill(instanceId);
+    }
     instance.status = 'stopped';
-    this.emit('log', instanceId, 'system', 'info', '已发送停止指令');
+    this.emit('log', instanceId, 'system', 'info', '已停止执行');
     return { success: true };
   }
 
@@ -134,15 +139,18 @@ class TaskManager extends EventEmitter {
 
   async getInstanceStatus(taskName, instanceId) {
     if (instanceId) {
+      // 先查内存
       const inst = this.instances.get(instanceId);
       if (inst) return inst;
-    }
-    if (!instanceId) {
+      // 再查索引
       const idx = await this.taskIO.getIndex(taskName);
-      if (idx.length > 0) {
-        idx.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-        return idx[0];
-      }
+      return idx.find(e => e.instanceId === instanceId) || null;
+    }
+    // 没有 instanceId，返回最新
+    const idx = await this.taskIO.getIndex(taskName);
+    if (idx.length > 0) {
+      idx.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      return idx[0];
     }
     return null;
   }

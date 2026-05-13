@@ -1,8 +1,13 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { fork } = require('child_process');
 
 class NodeJsRunner {
+  constructor() {
+    this._children = new Map();
+  }
+
   async run(options) {
     const { entryFile, workDir, context = {}, timeout = 30000 } = options;
     const resolvedPath = path.resolve(workDir, entryFile);
@@ -15,6 +20,8 @@ class NodeJsRunner {
     if (!fs.existsSync(resolvedPath)) {
       return { success: false, error: '入口文件不存在: ' + entryFile, logs: [] };
     }
+
+    const instanceId = options.instanceId || crypto.randomBytes(4).toString('hex');
 
     return new Promise((resolve) => {
       const logs = [];
@@ -48,9 +55,12 @@ class NodeJsRunner {
         env: { ...process.env }
       });
 
+      this._children.set(instanceId, child);
+
       const timer = setTimeout(() => {
         if (completed) return;
         completed = true;
+        this._children.delete(instanceId);
         child.kill('SIGKILL');
         resolve({
           success: false, error: 'timeout',
@@ -81,6 +91,7 @@ class NodeJsRunner {
         completed = true;
         resolvedViaIpc = true;
         clearTimeout(timer);
+        this._children.delete(instanceId);
         if (msg.type === 'result') {
           resolve({ success: true, data: msg.data, logs });
         } else if (msg.type === 'error') {
@@ -89,6 +100,7 @@ class NodeJsRunner {
       });
 
       child.on('exit', (code) => {
+        this._children.delete(instanceId);
         if (completed) return;
         completed = true;
         clearTimeout(timer);
@@ -98,6 +110,7 @@ class NodeJsRunner {
       });
 
       child.on('error', (err) => {
+        this._children.delete(instanceId);
         if (completed) return;
         completed = true;
         clearTimeout(timer);
@@ -106,6 +119,16 @@ class NodeJsRunner {
 
       child.send({ type: 'run', code: runnerCode });
     });
+  }
+
+  kill(instanceId) {
+    const child = this._children.get(instanceId);
+    if (child) {
+      child.kill('SIGKILL');
+      this._children.delete(instanceId);
+      return true;
+    }
+    return false;
   }
 }
 
