@@ -11,5 +11,7 @@ process.on('message', async (msg) => {
     } catch (err) {
       process.send({ type: 'error', error: err.message, stack: err.stack });
     }
+    // 关闭 IPC 通道，子进程自然退出
+    process.disconnect();
   }
 });
