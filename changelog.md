@@ -20,6 +20,24 @@
     - 修改：src/apps/voice-display-node/main.js
     - 文档：docs/design/remote-task-system.md, docs/spec/remote-task-system.md
 
+- ✅ [2026-05-14] 控制端任务面板重新设计：三标签导航、设备选择器、编辑、结果查看
+  - 分层标签式布局：任务列表 / 新建任务 / 运行监控
+  - 任务列表：内置任务/用户任务分组，卡片式展示，搜索筛选
+  - 新建任务：按钮式配置选择，设备选择器实时展示在线设备
+  - 运行监控：实时日志、进度条、计时器、任务迁移
+  - 编辑任务：文件替换/新增/删除，配置修改
+  - 查看结果：执行历史列表，输出文件预览/下载，日志查看
+  - 服务端新增 API：task:list / task:update / task:delete
+  - 改动文件：
+    - 重构：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 重构：src/apps/web-mediacenter/ui/public/css/upload.css (task 部分)
+    - 修改：src/apps/server/modules/task-engine/task-io.js
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+    - 修改：src/apps/server/modules/task-engine/web-socket-handler.js
+    - 新增：docs/superpowers/specs/2026-05-14-task-panel-redesign.md
+  - 设计文档：docs/superpowers/specs/2026-05-14-task-panel-redesign.md
+  - 实现文档：docs/spec/remote-task-system.md
+
 - ✅ [2026-05-12] 私聊添加多会话支持，控制端下拉切换
   - 同一助手下可创建多个独立会话，每个会话有独立的聊天上下文和历史记录
   - 消息记录新增 sessionId 字段，会话键改为 private:{target}:{sessionId}
