@@ -8,6 +8,15 @@ class TaskIO extends EventEmitter {
     this.tasksDir = options.tasksDir || path.resolve(__dirname, '../../../../../res/tasks');
   }
 
+  _validateSafePath(base, target) {
+    const resolved = path.resolve(base, target);
+    const normalizedBase = path.resolve(base);
+    if (!resolved.startsWith(normalizedBase + path.sep) && resolved !== normalizedBase) {
+      throw new Error(`路径越界: ${target} 不在 ${base} 目录内`);
+    }
+    return resolved;
+  }
+
   _taskPath(taskName) { return path.join(this.tasksDir, taskName); }
   _resultsPath(taskName) { return path.join(this._taskPath(taskName), 'results'); }
   _instancePath(taskName, instanceId) { return path.join(this._resultsPath(taskName), instanceId); }
@@ -24,15 +33,19 @@ class TaskIO extends EventEmitter {
   async saveTaskFiles(taskName, files) {
     const taskDir = await this.ensureTaskDir(taskName);
     for (const file of files) {
-      const filePath = path.join(taskDir, file.name);
+      const filePath = this._validateSafePath(taskDir, file.name);
       const dir = path.dirname(filePath);
       await fs.promises.mkdir(dir, { recursive: true });
       if (file.data) {
         await fs.promises.writeFile(filePath, Buffer.from(file.data, 'base64'));
       } else if (file.path) {
-        const srcPath = path.resolve(this.tasksDir, file.path.replace(/^\/res\/tasks\//, ''));
+        const srcPath = this._validateSafePath(this.tasksDir, file.path.replace(/^\/res\/tasks\//, ''));
         const srcExists = fs.existsSync(srcPath);
-        if (srcExists) { await fs.promises.copyFile(srcPath, filePath); }
+        if (srcExists) {
+          await fs.promises.copyFile(srcPath, filePath);
+        } else {
+          throw new Error(`引用的源文件不存在: ${file.path}`);
+        }
       }
     }
   }
