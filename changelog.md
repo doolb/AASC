@@ -4,6 +4,22 @@
 
 ### 新功能
 
+- ✅ [2026-05-13] 远程任务系统：控制端上传 JS 代码，选择服务端/显示端/子显示端执行
+  - 支持三种执行运行时：Node.js（CPU）、Puppeteer（WebGL/WebGPU）、浏览器原生
+  - 支持一次性任务和常驻任务，按实例 ID 并行管理
+  - 内置任务注册表，系统功能可拆为可复用任务模块
+  - 实时日志流推送 + 持久化 run.log
+  - 跨任务文件引用（context.refs 路径映射）
+  - 实例自动清理（保留最近 50 个）
+  - 改动文件：
+    - 新增：src/apps/server/modules/task-engine/task-io.js, nodejs-runner.js, puppeteer-runner.js, task-manager.js, web-socket-handler.js
+    - 新增：src/apps/server/modules/task-engine/builtin-tasks/registry.js, image-resize.js
+    - 新增：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 修改：src/apps/server/boot/server-app.js
+    - 修改：src/apps/web-mediacenter/ui/public/upload.html, display.html
+    - 修改：src/apps/voice-display-node/main.js
+    - 文档：docs/design/remote-task-system.md, docs/spec/remote-task-system.md
+
 - ✅ [2026-05-12] 私聊添加多会话支持，控制端下拉切换
   - 同一助手下可创建多个独立会话，每个会话有独立的聊天上下文和历史记录
   - 消息记录新增 sessionId 字段，会话键改为 private:{target}:{sessionId}

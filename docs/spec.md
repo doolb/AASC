@@ -36,6 +36,7 @@
 | 日志大脑 | [log-brain.md](spec/log-brain.md) | 日志摘要、记忆体构建、LLM判断上下文接口 |
 | 资源目录 | [resource-layout.md](spec/resource-layout.md) | 资源路径规范、目录整理、清理伪代码 |
 | 工程目录结构 | [project-structure.md](spec/project-structure.md) | 目录扫描、分类归位、文档索引同步伪代码 |
+| 远程任务系统 | [remote-task-system.md](spec/remote-task-system.md) | 远程 JS 代码执行、任务生命周期、三种运行时 |
 
 ## 核心模块
 
@@ -54,6 +55,7 @@
 | 子服务器 | src/framework/cluster/sub-server-manager.js | 子服务器管理、负载均衡 |
 | 日志缓冲区 | src/framework/observability/log-buffer.js | 结构化日志存储和筛选 |
 | 系统监控 | src/framework/observability/system-monitor.js | CPU和内存监控数据采集 |
+| 任务引擎 | src/apps/server/modules/task-engine/task-manager.js | 远程任务生命周期管理、分支分发 |
 
 ## 前端模块
 
@@ -75,6 +77,7 @@
 | 本地ASR | src/apps/web-mediacenter/ui/public/js/sherpa-asr.js | sherpa-onnx-wasm 本地语音识别 |
 | Toast提示 | src/apps/web-mediacenter/ui/public/js/toast.js | 消息提示组件 |
 | 日志查看器 | src/apps/web-mediacenter/ui/public/js/log-viewer.js | 日志筛选、系统监控显示 |
+| 远程任务面板 | src/apps/web-mediacenter/ui/public/js/task-panel.js | 远程任务提交、实时日志、实例列表 |
 
 ## 配置文件
 
@@ -93,6 +96,11 @@
 服务器 (server.js)
     ↓ WebSocket (/display)
 显示端 (display.html)
+
+远程任务数据流:
+控制端 → task:submit → 服务器 TaskManager → NodeJsRunner/PuppeteerRunner/显示端
+                                                    ↓
+                              task:progress / task:log / task:result → 控制端
 ```
 
 ## 消息流程
@@ -134,8 +142,13 @@
 ├── 提醒设置 (reminder)
 │   ├── 提醒表单
 │   └── 提醒列表
-└── AI助手 (chat)
-    └── 聊天界面
+├── AI助手 (chat)
+│   └── 聊天界面
+└── 远程任务 (task)
+    ├── 任务类型/目标/环境选择
+    ├── 文件上传
+    ├── 实时日志
+    └── 任务实例列表
 ```
 
 ### 显示端 (display.html)

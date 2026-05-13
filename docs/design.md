@@ -46,3 +46,4 @@
 | 日志大脑 | [log-brain.md](design/log-brain.md) | 类人脑日志摘要、模式提取、LLM诊断上下文 |
 | 资源目录 | [resource-layout.md](design/resource-layout.md) | res 目录分层、路径边界、统一资源规范 |
 | 工程目录结构 | [project-structure.md](design/project-structure.md) | 根目录分层、模块归位策略、文档同步规则 |
+| 远程任务系统 | [remote-task-system.md](design/remote-task-system.md) | 远程 JS 代码执行、任务生命周期、三种运行时 |
