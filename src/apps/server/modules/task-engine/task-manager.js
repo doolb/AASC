@@ -1,9 +1,15 @@
 const path = require('path');
-const fs = require('fs');
 const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const TaskIO = require('./task-io');
 const NodeJsRunner = require('./nodejs-runner');
+
+let builtinRegistry = null;
+try {
+  builtinRegistry = require('./builtin-tasks/registry');
+} catch (e) {
+  /* 内置任务模块尚不存在 */
+}
 
 class TaskManager extends EventEmitter {
   constructor(options = {}) {
@@ -19,6 +25,9 @@ class TaskManager extends EventEmitter {
   }
 
   async submit(task) {
+    if (this.instances.size >= this.maxInstances) {
+      throw new Error('超出最大实例数 (' + this.maxInstances + ')');
+    }
     const instanceId = this._generateId();
     const timestamp = Date.now();
 
@@ -56,8 +65,8 @@ class TaskManager extends EventEmitter {
       this.emit('log', instanceId, 'system', 'info', '目标: ' + task.target + ', 环境: ' + task.env);
 
       if (task.taskType === 'builtin') {
-        const registry = require('./builtin-tasks/registry');
-        const result = await registry.run(task.builtinId, {
+        if (!builtinRegistry) throw new Error('内置任务模块不可用');
+        const result = await builtinRegistry.run(task.builtinId, {
           ...context,
           instanceId,
           taskName: task.taskName,
@@ -99,10 +108,11 @@ class TaskManager extends EventEmitter {
 
   async _handleResult(task, instanceId, instance, result) {
     if (result && result.logs) {
-      for (const log of result.logs) {
+      const writePromises = result.logs.map(log => {
         this.emit('log', instanceId, log.stream, log.level, log.message);
-        await this.taskIO.writeInstanceLog(task.taskName, instanceId, log.stream, log.level, log.message);
-      }
+        return this.taskIO.writeInstanceLog(task.taskName, instanceId, log.stream, log.level, log.message);
+      });
+      await Promise.all(writePromises);
     }
 
     if (result && result.success !== false) {
@@ -124,11 +134,12 @@ class TaskManager extends EventEmitter {
   async stopInstance(taskName, instanceId) {
     const instance = this.instances.get(instanceId);
     if (!instance) return { success: false, error: '实例不存在' };
-    // Kill the child process if running via NodeJsRunner
     if (this.nodeRunner.kill) {
       this.nodeRunner.kill(instanceId);
     }
     instance.status = 'stopped';
+    await this.taskIO.updateIndex(taskName, { instanceId, status: 'stopped' });
+    await this.taskIO.writeInstanceLog(taskName, instanceId, 'system', 'info', '已停止执行');
     this.emit('log', instanceId, 'system', 'info', '已停止执行');
     return { success: true };
   }
@@ -149,8 +160,8 @@ class TaskManager extends EventEmitter {
     // 没有 instanceId，返回最新
     const idx = await this.taskIO.getIndex(taskName);
     if (idx.length > 0) {
-      idx.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-      return idx[0];
+      const sorted = [...idx].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      return sorted[0];
     }
     return null;
   }
