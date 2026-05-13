@@ -132,21 +132,22 @@
         metaHtml += '<span>' + latestTime + '</span>';
       }
 
+      var safeTaskName = this._escapeAttr(task.taskName);
       var actionsHtml = '';
       if (isBuiltin) {
-        actionsHtml += '<button class="task-card-btn primary" onclick="TaskPanel._runBuiltin(\'' + task.taskName.replace(/'/g, "\\'") + '\')">运行</button>';
-        actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewBuiltinParams(\'' + task.taskName.replace(/'/g, "\\'") + '\')">参数</button>';
+        actionsHtml += '<button class="task-card-btn primary" onclick="TaskPanel._runBuiltin(\'' + safeTaskName + '\')">运行</button>';
+        actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewBuiltinParams(\'' + safeTaskName + '\')">参数</button>';
       } else {
-        actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewEdit(\'' + task.taskName.replace(/'/g, "\\'") + '\')">编辑</button>';
+        actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewEdit(\'' + safeTaskName + '\')">编辑</button>';
         if (task.instances && task.instances.length > 0) {
-          actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewResults(\'' + task.taskName.replace(/'/g, "\\'") + '\')">结果</button>';
+          actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewResults(\'' + safeTaskName + '\')">结果</button>';
         }
-        actionsHtml += '<button class="task-card-btn danger" onclick="TaskPanel._confirmDelete(\'' + task.taskName.replace(/'/g, "\\'") + '\')">删除</button>';
+        actionsHtml += '<button class="task-card-btn danger" onclick="TaskPanel._confirmDelete(\'' + safeTaskName + '\')">删除</button>';
       }
 
       return '<div class="' + cardClass + '">' +
         '<div class="task-card-header">' +
-          '<div class="task-card-title"><span class="task-card-icon">' + icon + '</span>' + (task.name || task.taskName) + '</div>' +
+          '<div class="task-card-title"><span class="task-card-icon">' + icon + '</span>' + this._escapeHtml(task.name || task.taskName) + '</div>' +
           '<span class="task-card-status ' + statusClass + '">' + statusText + '</span>' +
         '</div>' +
         '<div class="task-card-meta">' + metaHtml + '</div>' +
@@ -378,8 +379,8 @@
       if (!sel) return;
       var builtin = this.taskList.filter(function(t) { return t.taskType === 'builtin'; });
       sel.innerHTML = builtin.map(function(t) {
-        return '<option value="' + t.taskName + '">' + (t.name || t.taskName) + '</option>';
-      }).join('');
+        return '<option value="' + this._escapeAttr(t.taskName) + '">' + this._escapeHtml(t.name || t.taskName) + '</option>';
+      }, this).join('');
       if (builtin.length === 0) {
         sel.innerHTML = '<option value="">暂无内置任务</option>';
       }
@@ -484,6 +485,8 @@
       var self = this;
       var ws = window.WebSocketManager;
       if (!ws) { setTimeout(function() { self._setupWS(); }, 500); return; }
+      if (ws._taskPanelHooked) return;
+      ws._taskPanelHooked = true;
       var orig = ws.handleMessage;
       ws.handleMessage = function(data) {
         if (data.type === 'displayList') {
@@ -689,21 +692,22 @@
         ? '<div class="task-monitor-progress"><div class="task-monitor-progress-fill" style="width:' + inst.progress + '%"></div></div>'
         : '';
 
-      return '<div class="task-monitor-card" data-instance="' + inst.instanceId + '">' +
+      var safeId = this._escapeAttr(inst.instanceId);
+      return '<div class="task-monitor-card" data-instance="' + safeId + '">' +
         '<div class="task-monitor-header">' +
-          '<span class="task-monitor-name">' + (inst.taskName || '-') + '</span>' +
+          '<span class="task-monitor-name">' + this._escapeHtml(inst.taskName || '-') + '</span>' +
           '<span class="task-monitor-timer">' + (inst.status === 'pending' ? '排队中' : duration) + '</span>' +
         '</div>' +
-        '<div class="task-monitor-stage">阶段: ' + (inst.stage || inst.status) + '</div>' +
-        '<div class="task-monitor-target">执行于: ' + (inst.target || '服务端') + ' | ' + inst.instanceId.substring(0, 8) + '</div>' +
+        '<div class="task-monitor-stage">阶段: ' + this._escapeHtml(inst.stage || inst.status) + '</div>' +
+        '<div class="task-monitor-target">执行于: ' + this._escapeHtml(inst.target || '服务端') + ' | ' + this._escapeHtml(inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</div>' +
         progressBar +
         '<div class="task-monitor-log">' +
           '<div class="task-monitor-log-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">实时日志 (' + logs.length + ' 行)</div>' +
           '<div class="task-monitor-log-content">' + (logHtml || '<div style="color:#555">等待日志...</div>') + '</div>' +
         '</div>' +
         '<div class="task-monitor-actions">' +
-          (inst.status === 'running' ? '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'' + inst.instanceId + '\')">停止</button>' : '') +
-          (inst.status === 'running' ? '<button class="task-card-btn" onclick="TaskPanel._migrateInstance(\'' + inst.instanceId + '\')">迁移到...</button>' : '') +
+          (inst.status === 'running' ? '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'' + safeId + '\')">停止</button>' : '') +
+          (inst.status === 'running' ? '<button class="task-card-btn" onclick="TaskPanel._migrateInstance(\'' + safeId + '\')">迁移到...</button>' : '') +
         '</div>' +
       '</div>';
     },
@@ -711,14 +715,16 @@
     _monitorDoneCard: function(inst) {
       var icon = inst.status === 'completed' ? '✅' : inst.status === 'failed' ? '❌' : '⏹';
       var label = inst.status === 'completed' ? '已完成' : inst.status === 'failed' ? '失败' : '已停止';
+      var safeName = this._escapeHtml(inst.taskName || '-');
+      var safeId = this._escapeAttr(inst.instanceId);
       return '<div class="task-done-card">' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<span>' + icon + '</span>' +
-          '<span style="font-size:13px;color:#aaa">' + (inst.taskName || '-') + '</span>' +
+          '<span style="font-size:13px;color:#aaa">' + safeName + '</span>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:8px">' +
           '<span style="font-size:11px;color:#666">' + label + '</span>' +
-          '<button class="task-card-btn" onclick="TaskPanel._viewInstanceResults(\'' + inst.instanceId + '\')">查看结果</button>' +
+          '<button class="task-card-btn" onclick="TaskPanel._viewInstanceResults(\'' + safeId + '\')">查看结果</button>' +
         '</div>' +
       '</div>';
     },
@@ -823,12 +829,14 @@
       var container = document.getElementById('taskTabList');
       if (!container) return;
 
+      var safeTaskName = this._escapeAttr(task.taskName);
       var filesHtml = (task.files || []).map(function(f) {
+        var safeName = this._escapeAttr(f.name);
         return '<div class="task-edit-file-row">' +
-          '<div class="task-edit-file-info">📄 ' + f.name + ' <span style="color:#666;font-size:11px">(' + (f.size / 1024).toFixed(1) + 'KB)</span></div>' +
+          '<div class="task-edit-file-info">📄 ' + this._escapeHtml(f.name) + ' <span style="color:#666;font-size:11px">(' + (f.size / 1024).toFixed(1) + 'KB)</span></div>' +
           '<div class="task-edit-file-actions">' +
-            '<button class="task-card-btn" onclick="TaskPanel._replaceFile(\'' + task.taskName.replace(/'/g, "\\'") + '\',\'' + f.name.replace(/'/g, "\\'") + '\')">替换</button>' +
-            '<button class="task-card-btn danger" onclick="TaskPanel._deleteFile(\'' + task.taskName.replace(/'/g, "\\'") + '\',\'' + f.name.replace(/'/g, "\\'") + '\')">删除</button>' +
+            '<button class="task-card-btn" onclick="TaskPanel._replaceFile(\'' + safeTaskName + '\',\'' + safeName + '\')">替换</button>' +
+            '<button class="task-card-btn danger" onclick="TaskPanel._deleteFile(\'' + safeTaskName + '\',\'' + safeName + '\')">删除</button>' +
           '</div>' +
         '</div>';
       }, this).join('');
@@ -837,7 +845,7 @@
         '<div class="task-breadcrumb">' +
           '<a onclick="TaskPanel._showView(\'list\')">任务列表</a>' +
           '<span>></span>' +
-          '<span class="current">编辑 ' + task.taskName + '</span>' +
+          '<span class="current">编辑 ' + this._escapeHtml(task.taskName) + '</span>' +
         '</div>' +
 
         '<div class="task-form-section">' +
@@ -845,11 +853,11 @@
           '<div class="task-form-row">' +
             '<div class="task-form-field">' +
               '<label>任务名称</label>' +
-              '<input type="text" id="editTaskName" value="' + task.taskName.replace(/"/g, '&quot;') + '">' +
+              '<input type="text" id="editTaskName" value="' + safeTaskName + '">' +
             '</div>' +
             '<div class="task-form-field">' +
               '<label>入口文件</label>' +
-              '<input type="text" id="editEntryFile" value="' + (task.entryFile || 'task.js').replace(/"/g, '&quot;') + '">' +
+              '<input type="text" id="editEntryFile" value="' + this._escapeAttr(task.entryFile || 'task.js') + '">' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -872,7 +880,7 @@
           '</div>' +
         '</div>' +
 
-        '<button class="task-submit-btn" onclick="TaskPanel._saveEdit(\'' + task.taskName.replace(/'/g, "\\'") + '\')" style="background:linear-gradient(135deg,#22c55e,#16a34a)">保存修改</button>';
+        '<button class="task-submit-btn" onclick="TaskPanel._saveEdit(\'' + safeTaskName + '\')" style="background:linear-gradient(135deg,#22c55e,#16a34a)">保存修改</button>';
 
       var zone = document.getElementById('editFileZone');
       var input = document.getElementById('editFiles');
@@ -943,7 +951,7 @@
       overlay.innerHTML =
         '<div class="task-confirm-box">' +
           '<div class="task-confirm-title">确认删除</div>' +
-          '<div class="task-confirm-msg">确定要删除任务 "' + taskName.replace(/"/g, '&quot;') + '" 吗？<br>所有文件和执行记录将被永久删除。</div>' +
+          '<div class="task-confirm-msg">确定要删除任务 "' + this._escapeHtml(taskName) + '" 吗？<br>所有文件和执行记录将被永久删除。</div>' +
           '<div class="task-confirm-actions">' +
             '<button class="task-confirm-btn cancel" id="delCancel">取消</button>' +
             '<button class="task-confirm-btn confirm" id="delConfirm">删除</button>' +
@@ -1040,11 +1048,12 @@
       var container = document.getElementById('taskTabList');
       if (!container) return;
 
+      var safeTaskName = this._escapeAttr(taskName);
       var historyHtml = instances.map(function(inst) {
         var icon = inst.status === 'completed' ? '✅' : inst.status === 'failed' ? '❌' : inst.status === 'stopped' ? '⏹' : '⏳';
         var sel = selected && inst.instanceId === selected.instanceId ? ' selected' : '';
         var time = inst.timestamp ? this._formatTime(inst.timestamp) : '';
-        return '<div class="task-result-history-item' + sel + '" onclick="TaskPanel._selectResult(\'' + taskName.replace(/'/g, "\\'") + '\',\'' + inst.instanceId + '\')">' +
+        return '<div class="task-result-history-item' + sel + '" onclick="TaskPanel._selectResult(\'' + safeTaskName + '\',\'' + this._escapeAttr(inst.instanceId) + '\')">' +
           '<span class="result-icon">' + icon + '</span> ' + time +
         '</div>';
       }, this).join('');
@@ -1055,7 +1064,7 @@
         '<div class="task-breadcrumb">' +
           '<a onclick="TaskPanel._showView(\'list\')">任务列表</a>' +
           '<span>></span>' +
-          '<span class="current">' + taskName + ' 执行结果</span>' +
+          '<span class="current">' + this._escapeHtml(taskName) + ' 执行结果</span>' +
         '</div>' +
         '<div class="task-result-layout">' +
           '<div class="task-result-history">' + historyHtml + '</div>' +
@@ -1076,15 +1085,16 @@
       if (outputFiles.length > 0) {
         filesHtml = outputFiles.map(function(f) {
           var url = f.url || '';
+          var safeUrl = this._escapeAttr(url);
           var isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(f.name || '');
           return '<div class="task-result-file">' +
-            '<div class="task-result-file-name">📄 ' + (f.name || '') + '</div>' +
+            '<div class="task-result-file-name">📄 ' + this._escapeHtml(f.name || '') + '</div>' +
             '<div class="task-result-file-actions">' +
-              (isImage && url ? '<button class="task-card-btn" onclick="TaskPanel._previewImage(\'' + url.replace(/'/g, "\\'") + '\')">预览</button>' : '') +
-              (url ? '<button class="task-card-btn" onclick="TaskPanel._downloadFile(\'' + url.replace(/'/g, "\\'") + '\')">下载</button>' : '') +
+              (isImage && url ? '<button class="task-card-btn" onclick="TaskPanel._previewImage(\'' + safeUrl + '\')">预览</button>' : '') +
+              (url ? '<button class="task-card-btn" onclick="TaskPanel._downloadFile(\'' + safeUrl + '\')">下载</button>' : '') +
             '</div>' +
           '</div>';
-        }).join('');
+        }, this).join('');
       }
 
       var logs = inst.logs || [];
@@ -1102,8 +1112,8 @@
       return '<div class="task-result-meta">' +
         '<div class="task-result-meta-item">状态: <strong>' + statusText + '</strong></div>' +
         '<div class="task-result-meta-item">耗时: <strong>' + duration + '</strong></div>' +
-        '<div class="task-result-meta-item">实例: <strong style="font-family:monospace">#' + (inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</strong></div>' +
-        '<div class="task-result-meta-item">环境: <strong>' + (inst.env || '-') + '</strong></div>' +
+        '<div class="task-result-meta-item">实例: <strong style="font-family:monospace">#' + this._escapeHtml(inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</strong></div>' +
+        '<div class="task-result-meta-item">环境: <strong>' + this._escapeHtml(inst.env || '-') + '</strong></div>' +
       '</div>' +
       (result.error ? '<div style="color:#ef4444;font-size:13px;margin-bottom:12px">错误: ' + this._escapeHtml(result.error) + '</div>' : '') +
       (filesHtml ? '<div class="task-result-files"><div style="font-size:11px;color:#666;margin-bottom:4px">输出文件</div>' + filesHtml + '</div>' : '') +
@@ -1117,7 +1127,7 @@
       var overlay = document.createElement('div');
       overlay.className = 'task-confirm-overlay';
       overlay.style.cursor = 'pointer';
-      overlay.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" style="max-width:90%;max-height:90%;border-radius:12px" onclick="this.parentElement.remove()">';
+      overlay.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" style="max-width:90%;max-height:90%;border-radius:12px">';
       overlay.onclick = function() { document.body.removeChild(overlay); };
       document.body.appendChild(overlay);
     },
@@ -1126,7 +1136,10 @@
       var a = document.createElement('a');
       a.href = url;
       a.download = url.split('/').pop();
+      a.style.display = 'none';
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
     },
 
     // ---- Navigation ----
@@ -1139,6 +1152,10 @@
       var div = document.createElement('div');
       div.appendChild(document.createTextNode(text));
       return div.innerHTML;
+    },
+
+    _escapeAttr: function(text) {
+      return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
   };
 
