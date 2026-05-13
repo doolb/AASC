@@ -273,6 +273,9 @@ class VoiceDisplay {
             case 'voiceCommand':
                 this.handleVoiceCommand(data);
                 break;
+            case 'task:execute':
+                this.handleTaskExecute(data.payload);
+                break;
             default:
                 log('系统', `未知消息类型: ${msgType}`);
         }
@@ -402,6 +405,70 @@ class VoiceDisplay {
                     log('语音', `${action}: ${data.text || ''}`);
                     await this.playAudioFromURL(data.audioUrl);
                 }
+        }
+    }
+
+    async handleTaskExecute(payload) {
+        var taskName = payload.taskName;
+        var instanceId = payload.instanceId;
+        var entryFile = payload.entryFile;
+        var files = payload.files || [];
+        var params = payload.params || {};
+        log('任务', '收到任务: ' + taskName + '/' + instanceId + ' 入口: ' + entryFile);
+
+        var tmpDir = path.join(os.tmpdir(), 'task-' + instanceId);
+        fs.mkdirSync(tmpDir, { recursive: true });
+
+        var fileStore = {};
+        for (var i = 0; i < files.length; i++) {
+            var f = files[i];
+            if (f.data) {
+                var filePath = path.join(tmpDir, f.name);
+                var dir = path.dirname(filePath);
+                fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(filePath, Buffer.from(f.data, 'base64'));
+                fileStore[f.name] = filePath;
+            }
+        }
+
+        var entryPath = path.join(tmpDir, entryFile);
+        if (!fs.existsSync(entryPath)) {
+            this.sendJSON({
+                type: 'task:result',
+                payload: { taskName: taskName, instanceId: instanceId, success: false, error: '入口文件不存在: ' + entryFile }
+            });
+            return;
+        }
+
+        try {
+            var context = {
+                files: fileStore,
+                params: params,
+                workDir: tmpDir
+            };
+
+            delete require.cache[require.resolve(entryPath)];
+            var entry = require(entryPath);
+            var run = typeof entry === 'function' ? entry : entry.run;
+
+            if (typeof run !== 'function') {
+                throw new Error('入口文件未导出 run 函数');
+            }
+
+            var result = await run(context);
+            this.sendJSON({
+                type: 'task:result',
+                payload: { taskName: taskName, instanceId: instanceId, success: true, data: result || {} }
+            });
+            log('任务', '任务完成: ' + taskName + '/' + instanceId);
+        } catch (err) {
+            logError('任务', '执行失败: ' + err.message);
+            this.sendJSON({
+                type: 'task:result',
+                payload: { taskName: taskName, instanceId: instanceId, success: false, error: err.message, stack: err.stack }
+            });
+        } finally {
+            fs.rmSync(tmpDir, { recursive: true, force: true });
         }
     }
 

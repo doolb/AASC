@@ -58,6 +58,10 @@
                 <span class="nav-icon">⚙️</span>
                 <span class="nav-text">设置</span>
             </button>
+            <button class="nav-item" data-target="task" title="远程任务">
+                <span class="nav-icon">⚡</span>
+                <span class="nav-text">任务</span>
+            </button>
         </div>
     </nav>
     
@@ -598,6 +602,8 @@
                 </div>
             </div>
         </section>
+        <section class="panel" id="panel-task" style="display:none;">
+        </section>
     </main>
     
     <div class="modal-overlay" id="featureModal">
@@ -788,6 +794,7 @@
     <script src="js/log-brain-viewer.js"></script>
     <script type="module" src="js/map/map-panel.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/task-panel.js"></script>
 
     <script>
     const Settings = {

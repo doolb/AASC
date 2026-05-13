@@ -1175,6 +1175,8 @@
                     } else if (data.type === 'voiceCommand') {
                         handleVoiceCommand(data);
                         sendCommandAck('voiceCommand', true, data.action);
+                    } else if (data.type === 'task:execute') {
+                        executeTask(data.payload);
                     } else {
                         console.log('[显示端] 处理媒体消息，发送 media 确认');
                         showMedia(data);
@@ -1800,7 +1802,7 @@
                     document.documentElement.requestFullscreen();
                 }
             }
-            
+
             if (e.key === ' ') {
                 if (mediaVideo.paused) {
                     mediaVideo.play();
@@ -1809,6 +1811,89 @@
                 }
             }
         });
+
+        function executeTask(payload) {
+            var taskName = payload.taskName;
+            var instanceId = payload.instanceId;
+            var entryFile = payload.entryFile;
+            var files = payload.files || [];
+            var params = payload.params || {};
+            console.log('[Task] 收到任务: ' + taskName + '/' + instanceId);
+
+            var fileStore = {};
+            for (var i = 0; i < files.length; i++) {
+                var f = files[i];
+                if (f.data) {
+                    try {
+                        var binary = atob(f.data);
+                        var bytes = new Uint8Array(binary.length);
+                        for (var j = 0; j < binary.length; j++) {
+                            bytes[j] = binary.charCodeAt(j);
+                        }
+                        fileStore[f.name] = bytes;
+                    } catch(e) {
+                        console.error('[Task] 文件加载失败: ' + f.name, e);
+                    }
+                }
+            }
+
+            var capabilities = {
+                cpu: true,
+                webgl: (function() { try {
+                    var c = document.createElement('canvas');
+                    return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+                } catch(e) { return false; } })(),
+                webgpu: !!navigator.gpu
+            };
+
+            var entryContent = fileStore[entryFile];
+            if (!entryContent) {
+                sendTaskResult(taskName, instanceId, false, '入口文件不存在: ' + entryFile, null);
+                return;
+            }
+
+            var decoder = new TextDecoder();
+            var entryCode = decoder.decode(entryContent);
+
+            try {
+                var context = {
+                    files: fileStore,
+                    capabilities: capabilities,
+                    params: params,
+                    workDir: '/workspace'
+                };
+
+                var fn = new Function('context', entryCode + '\nreturn run(context);');
+                var resultPromise = fn(context);
+
+                Promise.resolve(resultPromise).then(function(result) {
+                    var outputFiles = [];
+                    if (result && result.outputFiles) {
+                        for (var k = 0; k < result.outputFiles.length; k++) {
+                            var name = result.outputFiles[k];
+                            if (fileStore[name]) {
+                                var data = btoa(String.fromCharCode.apply(null, fileStore[name]));
+                                outputFiles.push({ name: name, data: data });
+                            }
+                        }
+                    }
+                    sendTaskResult(taskName, instanceId, true, null, outputFiles);
+                }).catch(function(err) {
+                    sendTaskResult(taskName, instanceId, false, err.message, null);
+                });
+            } catch (err) {
+                sendTaskResult(taskName, instanceId, false, err.message, null);
+            }
+        }
+
+        function sendTaskResult(taskName, instanceId, success, error, outputFiles) {
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({
+                    type: 'task:result',
+                    payload: { taskName: taskName, instanceId: instanceId, success: success, error: error, outputFiles: outputFiles || [] }
+                }));
+            }
+        }
     </script>
 </body>
 </html>
