@@ -1,5 +1,6 @@
 const tasks = {
-  'image.resize': require('./image-resize')
+  'image.resize': require('./image-resize'),
+  'model.inference': require('./model-inference')
 };
 
 module.exports = {
