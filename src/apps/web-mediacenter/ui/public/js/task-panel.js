@@ -387,6 +387,162 @@
       }
     },
 
+    _renderBuiltinParams: function(builtinId, container) {
+      if (builtinId === 'model.inference') {
+        var modelTask = null;
+        for (var i = 0; i < this.taskList.length; i++) {
+          if (this.taskList[i].taskName === builtinId) { modelTask = this.taskList[i]; break; }
+        }
+        var params = modelTask ? modelTask.params || [] : [];
+
+        var html = '';
+        for (var p = 0; p < params.length; p++) {
+          var param = params[p];
+          if (param.name === 'image') {
+            html += '<div class="task-form-field">' +
+              '<label>' + this._escapeHtml(param.label || '图片') + '</label>' +
+              '<div class="task-file-zone" id="miImageZone" style="padding:12px">' +
+              '<div class="task-file-zone-text">点击选择或拖拽图片</div></div>' +
+              '<input type="file" id="miImageFile" accept="image/*" style="display:none">' +
+              '<div id="miImagePreview" style="margin-top:4px;max-width:120px;max-height:80px;display:none"></div></div>';
+          } else if (param.name === 'prompt') {
+            html += '<div class="task-form-field">' +
+              '<label>' + this._escapeHtml(param.label || '提示词') + '</label>' +
+              '<textarea id="miPrompt" rows="2" style="width:100%;background:#1a1a2e;border:1px solid #333;border-radius:6px;color:#ccc;padding:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box">' +
+              this._escapeHtml(param.default || '') + '</textarea></div>';
+          } else if (param.name === 'modelId') {
+            html += '<div class="task-form-field">' +
+              '<label>' + this._escapeHtml(param.label || '模型') + '</label>' +
+              '<select id="miModelId">' +
+              (param.options || []).map(function(o) {
+                return '<option value="' + o + '">' + o + '</option>';
+              }).join('') + '</select></div>';
+          } else if (param.name === 'targetDisplay') {
+            html += '<div class="task-form-field">' +
+              '<label>' + this._escapeHtml(param.label || '目标显示端') + '</label>' +
+              '<div class="task-device-list" id="miDisplayList" style="max-height:150px;overflow-y:auto"></div></div>';
+          }
+        }
+        html += '<button class="task-submit-btn" id="miSubmitBtn">提交推理任务</button>';
+        container.innerHTML = html;
+        this._bindMiEvents();
+      }
+    },
+
+    _bindMiEvents: function() {
+      var self = this;
+
+      var imageZone = document.getElementById('miImageZone');
+      var imageInput = document.getElementById('miImageFile');
+      if (imageZone && imageInput) {
+        imageZone.addEventListener('click', function() { imageInput.click(); });
+        imageZone.addEventListener('dragover', function(e) { e.preventDefault(); imageZone.classList.add('dragover'); });
+        imageZone.addEventListener('dragleave', function() { imageZone.classList.remove('dragover'); });
+        imageZone.addEventListener('drop', function(e) {
+          e.preventDefault();
+          imageZone.classList.remove('dragover');
+          if (e.dataTransfer.files.length > 0) {
+            imageInput.files = e.dataTransfer.files;
+            self._previewMiImage(e.dataTransfer.files[0]);
+          }
+        });
+        imageInput.addEventListener('change', function() {
+          if (imageInput.files.length > 0) self._previewMiImage(imageInput.files[0]);
+        });
+      }
+
+      this._renderMiDisplayList();
+
+      var submitBtn = document.getElementById('miSubmitBtn');
+      if (submitBtn) {
+        submitBtn.addEventListener('click', function() { self._submitMiTask(); });
+      }
+    },
+
+    _previewMiImage: function(file) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var preview = document.getElementById('miImagePreview');
+        if (preview) {
+          preview.innerHTML = '<img src="' + e.target.result + '" style="max-width:120px;max-height:80px;border-radius:6px;object-fit:cover">';
+          preview.style.display = 'block';
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+
+    _renderMiDisplayList: function() {
+      var list = document.getElementById('miDisplayList');
+      if (!list) return;
+      var html = '';
+      for (var i = 0; i < this.displayList.length; i++) {
+        var d = this.displayList[i];
+        var caps = d.capabilities || {};
+        var hasWebGPU = !!(d.webgpu || caps.webgpu);
+        if (!hasWebGPU) continue;
+        var safeId = this._escapeAttr(d.id);
+        html += '<div class="task-device-item selected" data-id="' + safeId + '">' +
+          '<div class="task-device-radio"></div>' +
+          '<div class="task-device-info"><div class="task-device-name">' + this._escapeHtml(d.id) + '</div>' +
+          '<div class="task-device-cap">WebGPU</div></div>' +
+          '<span class="task-device-state online">在线</span></div>';
+      }
+      if (!html) {
+        html = '<div style="color:#666;font-size:12px;padding:8px">没有支持 WebGPU 的在线显示端</div>';
+      }
+      list.innerHTML = html;
+      list.addEventListener('click', function(e) {
+        var item = e.target.closest('.task-device-item');
+        if (!item) return;
+        list.querySelectorAll('.task-device-item').forEach(function(el) { el.classList.remove('selected'); });
+        item.classList.add('selected');
+      });
+    },
+
+    _submitMiTask: function() {
+      var modelId = document.getElementById('miModelId');
+      var prompt = document.getElementById('miPrompt');
+      var imageInput = document.getElementById('miImageFile');
+      var displayList = document.getElementById('miDisplayList');
+      var selectedDisplay = displayList ? displayList.querySelector('.task-device-item.selected') : null;
+
+      if (!imageInput || !imageInput.files || imageInput.files.length === 0) {
+        alert('请选择图片'); return;
+      }
+      if (!selectedDisplay || !selectedDisplay.dataset.id) {
+        alert('请选择目标显示端'); return;
+      }
+
+      var self = this;
+      var file = imageInput.files[0];
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var base64 = e.target.result.split(',')[1];
+        var params = {};
+        if (prompt && prompt.value) params.prompt = prompt.value;
+        params.modelId = modelId ? modelId.value : 'lfm-vl';
+
+        self._send({
+          type: 'task:submit',
+          payload: {
+            taskName: 'model-inference-' + Date.now(),
+            taskType: 'builtin',
+            builtinId: 'model.inference',
+            target: 'display',
+            displayId: selectedDisplay.dataset.id,
+            mode: 'one-shot',
+            env: 'webgpu',
+            files: [{ name: 'image', data: base64 }],
+            params: params
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+
+      var monitorTab = document.querySelector('[data-tab="monitor"]');
+      if (monitorTab) monitorTab.click();
+    },
+
     // ---- Submit ----
 
     _submit: function() {
@@ -694,6 +850,16 @@
         ? '<div class="task-monitor-progress"><div class="task-monitor-progress-fill" style="width:' + inst.progress + '%"></div></div>'
         : '';
 
+      var metricsHtml = '';
+      if (inst.result && inst.result.metrics) {
+        var m = inst.result.metrics;
+        metricsHtml = '<div class="task-monitor-metrics">' +
+          '<span title="首 Token 延迟">TTFT: ' + (m.ttft || '-') + 'ms</span>' +
+          '<span title="生成速度">' + (m.tokensPerSecond || '-') + ' tok/s</span>' +
+          '<span title="总 Token 数">' + (m.totalTokens || '-') + ' tokens</span>' +
+          '</div>';
+      }
+
       var safeId = this._escapeAttr(inst.instanceId);
       return '<div class="task-monitor-card" data-instance="' + safeId + '">' +
         '<div class="task-monitor-header">' +
@@ -703,6 +869,7 @@
         '<div class="task-monitor-stage">阶段: ' + this._escapeHtml(inst.stage || inst.status) + '</div>' +
         '<div class="task-monitor-target">执行于: ' + this._escapeHtml(inst.target || '服务端') + ' | ' + this._escapeHtml(inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</div>' +
         progressBar +
+        metricsHtml +
         '<div class="task-monitor-log">' +
           '<div class="task-monitor-log-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">实时日志 (' + logs.length + ' 行)</div>' +
           '<div class="task-monitor-log-content">' + (logHtml || '<div style="color:#555">等待日志...</div>') + '</div>' +
@@ -1117,6 +1284,14 @@
         '<div class="task-result-meta-item">耗时: <strong>' + duration + '</strong></div>' +
         '<div class="task-result-meta-item">实例: <strong style="font-family:monospace">#' + this._escapeHtml(inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</strong></div>' +
         '<div class="task-result-meta-item">环境: <strong>' + this._escapeHtml(inst.env || '-') + '</strong></div>' +
+      (inst.result && inst.result.metrics ? '<div class="task-result-metrics">' +
+        '<div class="task-result-metrics-title">推理性能</div>' +
+        '<div class="task-result-metrics-row">' +
+          '<span>首 Token: <strong>' + (inst.result.metrics.ttft || '-') + 'ms</strong></span>' +
+          '<span>速度: <strong>' + (inst.result.metrics.tokensPerSecond || '-') + ' tok/s</strong></span>' +
+          '<span>总 Token: <strong>' + (inst.result.metrics.totalTokens || '-') + '</strong></span>' +
+          '<span>耗时: <strong>' + (inst.result.metrics.totalDuration || '-') + 'ms</strong></span>' +
+        '</div></div>' : '') +
       '</div>' +
       (result.error ? '<div style="color:#ef4444;font-size:13px;margin-bottom:12px">错误: ' + this._escapeHtml(result.error) + '</div>' : '') +
       (filesHtml ? '<div class="task-result-files"><div style="font-size:11px;color:#666;margin-bottom:4px">输出文件</div>' + filesHtml + '</div>' : '') +
