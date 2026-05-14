@@ -607,6 +607,7 @@ app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter',
 app.use('/aasc', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'aasc')));
 app.use('/auto-brain', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'auto-brain')));
 app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use(express.json({ limit: '50mb' }));
 
 app.get('/', (req, res) => {
