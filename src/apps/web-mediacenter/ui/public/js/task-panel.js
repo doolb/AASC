@@ -868,6 +868,7 @@
           '<span title="首 Token 延迟">TTFT: ' + (m.ttft || '-') + 'ms</span>' +
           '<span title="生成速度">' + (m.tokensPerSecond || '-') + ' tok/s</span>' +
           '<span title="总 Token 数">' + (m.totalTokens || '-') + ' tokens</span>' +
+          '<span title="总耗时">' + (m.totalDuration || '-') + 'ms</span>' +
           '</div>';
       }
 
