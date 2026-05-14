@@ -55,11 +55,9 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
               payload: {
                 taskName: payload.taskName,
                 instanceId: result.instanceId,
-                entryFile: payload.entryFile,
-                files: payload.files,
-                refs: payload.refs,
-                env: payload.env,
-                mode: payload.mode,
+                builtinId: payload.builtinId || null,
+                params: result.forwardParams || payload.params || {},
+                env: payload.env || 'auto'
               },
             };
             const displayId = payload.displayId;
@@ -118,7 +116,8 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
         taskManager.handleForwardResult(payload.taskName, payload.instanceId, {
           success: payload.success,
           error: payload.error,
-          outputFiles: payload.outputFiles
+          outputFiles: payload.outputFiles,
+          metrics: payload.metrics
         });
         sendToControl({
           type: 'task:result',
