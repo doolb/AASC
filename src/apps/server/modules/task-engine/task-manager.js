@@ -72,12 +72,38 @@ class TaskManager extends EventEmitter {
 
       if (task.taskType === 'builtin') {
         if (!builtinRegistry) throw new Error('内置任务模块不可用');
+
+        // Convert files array to map for builtin tasks
+        if (task.files && task.files.length > 0) {
+          context.files = {};
+          for (const f of task.files) {
+            if (f.data) {
+              context.files[f.name] = Buffer.from(f.data, 'base64');
+            }
+          }
+        }
+
         const result = await builtinRegistry.run(task.builtinId, {
           ...context,
           instanceId,
           taskName: task.taskName,
           taskIO: this.taskIO
         });
+
+        // builtin task can request forwarding to display
+        if (result && result.forwardTo === 'display') {
+          instance.status = 'pending_forward';
+          instance.targetInfo = { displayId: task.displayId };
+          this.emit('progress', instanceId, 'forwarding', 50);
+          this.emit('log', instanceId, 'system', 'info', '正在转发到显示端...');
+          return {
+            taskName: task.taskName,
+            instanceId,
+            status: 'pending_forward',
+            forwardParams: result.forwardParams
+          };
+        }
+
         await this._handleResult(task, instanceId, instance, result);
       } else if (task.target === 'display' || task.target === 'subdisplay') {
         instance.status = 'pending_forward';
@@ -126,14 +152,14 @@ class TaskManager extends EventEmitter {
       instance.status = 'completed';
       this.emit('log', instanceId, 'system', 'info', '执行完成');
       this.emit('progress', instanceId, 'completed', 100);
-      this.emit('result', instanceId, { success: true, data: result.data || {} });
+      this.emit('result', instanceId, { success: true, data: result.data || {}, metrics: result.metrics || {} });
       await this.taskIO.updateIndex(task.taskName, { instanceId, status: 'completed', completedAt: Date.now() });
     } else {
       instance.status = 'failed';
       const errMsg = result ? result.error : '未知错误';
       this.emit('log', instanceId, 'system', 'error', '执行失败: ' + errMsg);
       this.emit('progress', instanceId, 'failed', 0);
-      this.emit('result', instanceId, { success: false, error: errMsg, stack: result ? result.stack : null });
+      this.emit('result', instanceId, { success: false, error: errMsg, stack: result ? result.stack : null, metrics: result.metrics || {} });
       await this.taskIO.updateIndex(task.taskName, { instanceId, status: 'failed', error: errMsg });
     }
   }
@@ -158,7 +184,8 @@ class TaskManager extends EventEmitter {
     await this._handleResult(task, instanceId, instance, {
       success: result.success,
       error: result.error,
-      data: result.outputFiles ? { outputFiles: result.outputFiles } : undefined
+      data: result.outputFiles ? { outputFiles: result.outputFiles } : undefined,
+      metrics: result.metrics
     });
     await this.taskIO.updateLatestLink(task.taskName, instanceId);
     await this.taskIO.cleanupOldInstances(task.taskName, this.maxInstances);
