@@ -290,6 +290,17 @@
         });
       }
 
+      var builtinSel = document.getElementById('builtinId');
+      if (builtinSel) {
+        builtinSel.addEventListener('change', function(e) {
+          var builtinId = e.target.value;
+          var container = document.getElementById('builtinParams');
+          if (container && builtinId) {
+            this._renderBuiltinParams(builtinId, container);
+          }
+        }.bind(this));
+      }
+
       document.querySelectorAll('.task-btn-group').forEach(function(group) {
         group.addEventListener('click', function(e) {
           var btn = e.target.closest('.task-btn-option');
