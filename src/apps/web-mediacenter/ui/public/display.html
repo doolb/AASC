@@ -2106,6 +2106,7 @@
         function executeTask(payload) {
             // 模型推理内置任务
             if (payload.builtinId === 'model.inference') {
+                console.log('[Model] 收到模型推理任务:', payload.instanceId, 'modelId:', payload.params ? payload.params.modelId : '?');
                 executeModelInference(payload);
                 return;
             }
@@ -2196,6 +2197,9 @@
             var prompt = params.prompt || '请详细描述这张图片';
             var imageUrl = params.imageUrl;
 
+            console.log('[Model] 开始推理:', modelId, '实例:', instanceId);
+            console.log('[Model] 参数:', JSON.stringify({ prompt: prompt ? prompt.substring(0, 50) : '', imageUrl: imageUrl ? imageUrl.substring(0, 80) : 'N/A' }));
+
             sendProgress(instanceId, 'loading-model', 10);
             sendLog(instanceId, 'system', 'info', '正在加载 ' + modelId + ' 模型...');
 
@@ -2204,11 +2208,14 @@
                 prompt: prompt,
                 signal: getAbortSignal(instanceId)
             }).then(function(result) {
+                console.log('[Model] 推理完成:', instanceId, 'tok/s:', result.metrics.tokensPerSecond, 'TTFT:', result.metrics.ttft + 'ms');
                 sendLog(instanceId, 'system', 'info', '推理完成。Token 速度: ' + result.metrics.tokensPerSecond + ' tok/s, 首 Token: ' + result.metrics.ttft + 'ms');
                 sendTaskResult(taskName, instanceId, true, null, [
                     { name: 'result.json', data: btoa(JSON.stringify({ text: result.text })) }
                 ], result.metrics);
             }).catch(function(err) {
+                console.error('[Model] 推理失败:', instanceId, err.message);
+                sendLog(instanceId, 'system', 'error', '推理失败: ' + err.message);
                 sendTaskResult(taskName, instanceId, false, err.message, null);
             });
         }
@@ -2227,6 +2234,8 @@
                     }
                 };
                 displayWs.send(JSON.stringify(msg));
+            } else {
+                console.warn('[Model] 无法发送结果: WebSocket 未连接');
             }
         }
     </script>
