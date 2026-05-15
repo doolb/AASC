@@ -12,6 +12,12 @@
     <div id="fileNameDisplay"></div>
     <div id="voiceStatus" class="voice-status-hidden">语音</div>
     <div id="voiceTextDisplay" class="voice-text-hidden"></div>
+    <div id="taskStatusDisplay" class="task-status-hidden">
+        <div class="task-status-title">模型推理中</div>
+        <div class="task-status-model" id="taskStatusModel"></div>
+        <div class="task-status-progress" id="taskStatusProgress"><span></span></div>
+        <div class="task-status-metrics" id="taskStatusMetrics"></div>
+    </div>
     <div class="monitor-wrapper" id="monitorWrapper">
         <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
         <canvas id="mini-monitor" width="160" height="50"></canvas>
@@ -40,6 +46,10 @@
         const mediaImage = document.getElementById('mediaImage');
         const mediaVideo = document.getElementById('mediaVideo');
         const ttsAudio = document.getElementById('ttsAudio');
+        const taskStatusDisplay = document.getElementById('taskStatusDisplay');
+        const taskStatusModel = document.getElementById('taskStatusModel');
+        const taskStatusProgress = document.getElementById('taskStatusProgress');
+        const taskStatusMetrics = document.getElementById('taskStatusMetrics');
         
         let currentRotation = 0;
         let currentFit = 'contain';
@@ -2209,6 +2219,8 @@
 
             sendProgress(instanceId, 'loading-model', 10);
             sendLog(instanceId, 'system', 'info', '正在加载 ' + modelId + ' 模型...');
+            showTaskStatus(modelId, 'loading-model');
+            updateTaskProgress('loading-model', 10);
 
             modelManager.run(modelId, {
                 imageUrl: imageUrl,
@@ -2217,12 +2229,16 @@
             }).then(function(result) {
                 console.log('[Model] 推理完成:', instanceId, 'tok/s:', result.metrics.tokensPerSecond, 'TTFT:', result.metrics.ttft + 'ms');
                 sendLog(instanceId, 'system', 'info', '推理完成。Token 速度: ' + result.metrics.tokensPerSecond + ' tok/s, 首 Token: ' + result.metrics.ttft + 'ms');
+                updateTaskProgress('running', 100);
+                showTaskMetrics(result.metrics);
                 sendTaskResult(taskName, instanceId, true, null, [
                     { name: 'result.json', data: btoa(JSON.stringify({ text: result.text })) }
                 ], result.metrics);
+                hideTaskStatus(5000);
             }).catch(function(err) {
                 console.error('[Model] 推理失败:', instanceId, err.message);
                 sendLog(instanceId, 'system', 'error', '推理失败: ' + err.message);
+                hideTaskStatus(0);
                 sendTaskResult(taskName, instanceId, false, err.message, null);
             });
         }
