@@ -676,6 +676,12 @@
       if (ws._taskPanelHooked) return;
       ws._taskPanelHooked = true;
       console.log('[TaskPanel] handleMessage hooked');
+      // Pull existing display list from DeviceList (sent before we hooked)
+      if (window.DeviceList && window.DeviceList.list && window.DeviceList.list.length > 0) {
+        self.displayList = window.DeviceList.list;
+        console.log('[TaskPanel] 从 DeviceList 拉取显示端列表:', self.displayList.length);
+        self._renderDeviceSelector();
+      }
       var orig = ws.handleMessage;
       ws.handleMessage = function(data) {
         console.log('[TaskPanel] onmessage type:', data.type);
