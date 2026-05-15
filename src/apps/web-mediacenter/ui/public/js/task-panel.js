@@ -388,10 +388,11 @@
         else if (caps.webgl) capText.push('WebGL');
         if (caps.cpu || capText.length === 0) capText.push('CPU');
         var safeId = this._escapeAttr(d.id);
+        var label = d.ip ? this._escapeHtml(d.id + ' (' + d.ip + ')') : this._escapeHtml(d.id);
         html += '<div class="task-device-item" data-id="' + safeId + '">' +
           '<div class="task-device-radio"></div>' +
           '<div class="task-device-info">' +
-            '<div class="task-device-name">' + this._escapeHtml(d.id) + '</div>' +
+            '<div class="task-device-name">' + label + '</div>' +
             '<div class="task-device-cap">' + this._escapeHtml(capText.join(', ')) + '</div>' +
           '</div>' +
           '<span class="task-device-state ' + (isOnline ? 'online' : 'offline') + '">' + (isOnline ? '在线' : '离线') + '</span>' +
@@ -593,9 +594,10 @@
         var d = this.displayList[i];
         var capTag = this._hasWebgpu(d) ? 'WebGPU' : 'GPU';
         var safeId = this._escapeAttr(d.id);
+        var displayLabel = d.ip ? this._escapeHtml(d.id + ' (' + d.ip + ')') : this._escapeHtml(d.id);
         html += '<div class="task-device-item selected" data-id="' + safeId + '">' +
           '<div class="task-device-radio"></div>' +
-          '<div class="task-device-info"><div class="task-device-name">' + this._escapeHtml(d.id) + '</div>' +
+          '<div class="task-device-info"><div class="task-device-name">' + displayLabel + '</div>' +
           '<div class="task-device-cap">' + capTag + '</div></div>' +
           '<span class="task-device-state online">在线</span></div>';
       }
