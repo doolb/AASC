@@ -527,11 +527,11 @@
         overlay.style.zIndex = '9999';
         var html = '<div class="task-confirm-box" style="max-width:600px;width:90%">' +
           '<div class="task-confirm-title">选择服务器图片</div>' +
-          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:400px;overflow-y:auto;padding:8px">';
+          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:400px;overflow-y:auto;padding:8px" id="miServerGrid">';
         for (var i = 0; i < images.length; i++) {
           var img = images[i];
           var safeUrl = self._escapeAttr(img.url);
-          html += '<div class="task-server-img-item" data-url="' + safeUrl + '" data-name="' + self._escapeAttr(img.name) + '" style="cursor:pointer;border:2px solid transparent;border-radius:8px;overflow:hidden;text-align:center" onclick="this.parentElement.querySelectorAll('.task-server-img-item').forEach(function(e){e.style.borderColor='transparent'});this.style.borderColor='#00d2ff';document.getElementById('miSelectedServerImg').value=this.dataset.url;document.getElementById('miSelectedServerName').textContent=this.dataset.name">' +
+          html += '<div class="task-server-img-item" data-url="' + safeUrl + '" data-name="' + self._escapeAttr(img.name) + '" style="cursor:pointer;border:2px solid transparent;border-radius:8px;overflow:hidden;text-align:center">' +
             '<img src="' + safeUrl + '" style="width:100%;height:80px;object-fit:cover;display:block">' +
             '<div style="font-size:10px;color:#aaa;padding:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + self._escapeHtml(img.name) + '</div></div>';
         }
@@ -543,6 +543,19 @@
           '<button class="task-confirm-btn confirm" id="sipConfirm" style="background:rgba(0,210,255,0.15);color:#8cf">选择</button></div></div>';
         overlay.innerHTML = html;
         document.body.appendChild(overlay);
+
+        // Image grid click delegation
+        var grid = document.getElementById('miServerGrid');
+        if (grid) {
+          grid.addEventListener('click', function(e) {
+            var item = e.target.closest('.task-server-img-item');
+            if (!item) return;
+            grid.querySelectorAll('.task-server-img-item').forEach(function(el) { el.style.borderColor = 'transparent'; });
+            item.style.borderColor = '#00d2ff';
+            document.getElementById('miSelectedServerImg').value = item.dataset.url;
+            document.getElementById('miSelectedServerName').textContent = item.dataset.name;
+          });
+        }
 
         document.getElementById('sipCancel').onclick = function() { document.body.removeChild(overlay); };
         document.getElementById('sipConfirm').onclick = function() {
