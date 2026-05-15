@@ -10,6 +10,18 @@ module.exports = {
     { name: 'targetDisplay', type: 'displaySelect', required: true, label: '目标显示端' }
   ],
   async run(context) {
+    const modelId = context.params.modelId || 'lfm-vl';
+    const prompt = context.params.prompt || '请详细描述这张图片';
+
+    // Server file: image already exists on server, use URL directly
+    if (context.params._serverImage) {
+      return {
+        forwardTo: 'display',
+        forwardParams: { modelId, prompt, imageUrl: context.params._serverImage }
+      };
+    }
+
+    // Local upload: save the uploaded image
     const imageFile = context.files && context.files['image'];
     if (!imageFile) throw new Error('缺少图片文件');
 
@@ -21,11 +33,7 @@ module.exports = {
 
     return {
       forwardTo: 'display',
-      forwardParams: {
-        modelId: context.params.modelId || 'lfm-vl',
-        prompt: context.params.prompt || '请详细描述这张图片',
-        imageUrl: `/res/tasks/${context.taskName}/${imagePath}`
-      }
+      forwardParams: { modelId, prompt, imageUrl: `/res/tasks/${context.taskName}/${imagePath}` }
     };
   }
 };

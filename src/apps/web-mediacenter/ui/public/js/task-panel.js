@@ -433,10 +433,15 @@
           if (param.name === 'image') {
             html += '<div class="task-form-field">' +
               '<label>' + this._escapeHtml(param.label || '图片') + '</label>' +
-              '<div class="task-file-zone" id="miImageZone" style="padding:12px">' +
+              '<div style="display:flex;gap:8px;margin-bottom:6px">' +
+              '<button class="task-card-btn" id="miServerImgBtn" style="flex:1">服务器图片</button>' +
+              '<button class="task-card-btn" id="miUploadImgBtn" style="flex:1">本地上传</button></div>' +
+              '<div class="task-file-zone" id="miImageZone" style="padding:12px;display:none">' +
               '<div class="task-file-zone-text">点击选择或拖拽图片</div></div>' +
               '<input type="file" id="miImageFile" accept="image/*" style="display:none">' +
-              '<div id="miImagePreview" style="margin-top:4px;max-width:120px;max-height:80px;display:none"></div></div>';
+              '<div id="miImagePreview" style="margin-top:4px;max-width:120px;max-height:80px;display:none"></div>' +
+              '<input type="hidden" id="miServerImage" value="">' +
+              '<div id="miServerImageName" style="font-size:12px;color:#8cf;margin-top:4px;display:none"></div></div>';
           } else if (param.name === 'prompt') {
             html += '<div class="task-form-field">' +
               '<label>' + this._escapeHtml(param.label || '提示词') + '</label>' +
@@ -483,12 +488,76 @@
         });
       }
 
+      // Server image picker
+      var serverBtn = document.getElementById('miServerImgBtn');
+      if (serverBtn) {
+        serverBtn.addEventListener('click', function() { self._showServerImagePicker(); });
+      }
+
+      // Upload button
+      var uploadBtn = document.getElementById('miUploadImgBtn');
+      if (uploadBtn) {
+        uploadBtn.addEventListener('click', function() {
+          var zone = document.getElementById('miImageZone');
+          var input = document.getElementById('miImageFile');
+          if (zone) { zone.style.display = 'block'; }
+          if (input) { input.click(); }
+        });
+      }
+
       this._renderMiDisplayList();
 
       var submitBtn = document.getElementById('miSubmitBtn');
       if (submitBtn) {
         submitBtn.addEventListener('click', function() { self._submitMiTask(); });
       }
+    },
+
+    _showServerImagePicker: function() {
+      var self = this;
+      fetch('/media-list').then(function(r) { return r.json(); }).then(function(data) {
+        if (data.status !== 'success') { alert('获取服务器图片列表失败'); return; }
+        var images = (data.list || []).filter(function(f) {
+          return f.mediaType === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
+        });
+        if (images.length === 0) { alert('服务器上没有图片文件'); return; }
+
+        var overlay = document.createElement('div');
+        overlay.className = 'task-confirm-overlay';
+        overlay.style.zIndex = '9999';
+        var html = '<div class="task-confirm-box" style="max-width:600px;width:90%">' +
+          '<div class="task-confirm-title">选择服务器图片</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:400px;overflow-y:auto;padding:8px">';
+        for (var i = 0; i < images.length; i++) {
+          var img = images[i];
+          var safeUrl = self._escapeAttr(img.url);
+          html += '<div class="task-server-img-item" data-url="' + safeUrl + '" data-name="' + self._escapeAttr(img.name) + '" style="cursor:pointer;border:2px solid transparent;border-radius:8px;overflow:hidden;text-align:center" onclick="this.parentElement.querySelectorAll('.task-server-img-item').forEach(function(e){e.style.borderColor='transparent'});this.style.borderColor='#00d2ff';document.getElementById('miSelectedServerImg').value=this.dataset.url;document.getElementById('miSelectedServerName').textContent=this.dataset.name">' +
+            '<img src="' + safeUrl + '" style="width:100%;height:80px;object-fit:cover;display:block">' +
+            '<div style="font-size:10px;color:#aaa;padding:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + self._escapeHtml(img.name) + '</div></div>';
+        }
+        html += '</div>' +
+          '<input type="hidden" id="miSelectedServerImg" value="">' +
+          '<div id="miSelectedServerName" style="font-size:12px;color:#8cf;text-align:center;margin:4px 0"></div>' +
+          '<div class="task-confirm-actions">' +
+          '<button class="task-confirm-btn cancel" id="sipCancel">取消</button>' +
+          '<button class="task-confirm-btn confirm" id="sipConfirm" style="background:rgba(0,210,255,0.15);color:#8cf">选择</button></div></div>';
+        overlay.innerHTML = html;
+        document.body.appendChild(overlay);
+
+        document.getElementById('sipCancel').onclick = function() { document.body.removeChild(overlay); };
+        document.getElementById('sipConfirm').onclick = function() {
+          var val = document.getElementById('miSelectedServerImg').value;
+          var name = document.getElementById('miSelectedServerName').textContent;
+          if (!val) { alert('请选择一张图片'); return; }
+          document.body.removeChild(overlay);
+          document.getElementById('miServerImage').value = val;
+          var nameEl = document.getElementById('miServerImageName');
+          if (nameEl) { nameEl.textContent = '已选择: ' + name; nameEl.style.display = 'block'; }
+          var preview = document.getElementById('miImagePreview');
+          if (preview) { preview.innerHTML = '<img src="' + val + '" style="max-width:120px;max-height:80px;border-radius:6px;object-fit:cover">'; preview.style.display = 'block'; }
+          document.getElementById('miImageFile').value = '';
+        };
+      }).catch(function(e) { alert('获取图片列表失败: ' + e.message); });
     },
 
     _previewMiImage: function(file) {
@@ -533,44 +602,54 @@
       var modelId = document.getElementById('miModelId');
       var prompt = document.getElementById('miPrompt');
       var imageInput = document.getElementById('miImageFile');
+      var serverImg = document.getElementById('miServerImage');
       var displayList = document.getElementById('miDisplayList');
       var selectedDisplay = displayList ? displayList.querySelector('.task-device-item.selected') : null;
 
-      if (!imageInput || !imageInput.files || imageInput.files.length === 0) {
-        alert('请选择图片'); return;
+      var isServerFile = serverImg && serverImg.value;
+      if (!isServerFile && (!imageInput || !imageInput.files || imageInput.files.length === 0)) {
+        alert('请选择图片（本地上传或从服务器选择）'); return;
       }
       if (!selectedDisplay || !selectedDisplay.dataset.id) {
         alert('请选择目标显示端'); return;
       }
 
       var self = this;
-      var file = imageInput.files[0];
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        var base64 = e.target.result.split(',')[1];
-        var params = {};
-        if (prompt && prompt.value) params.prompt = prompt.value;
-        params.modelId = modelId ? modelId.value : 'lfm-vl';
+      var params = {};
+      if (prompt && prompt.value) params.prompt = prompt.value;
+      params.modelId = modelId ? modelId.value : 'lfm-vl';
 
-        self._send({
-          type: 'task:submit',
-          payload: {
-            taskName: 'model-inference-' + Date.now(),
-            taskType: 'builtin',
-            builtinId: 'model.inference',
-            target: 'display',
-            displayId: selectedDisplay.dataset.id,
-            mode: 'one-shot',
-            env: 'webgpu',
-            files: [{ name: 'image', data: base64 }],
-            params: params
-          }
-        });
+      var payload = {
+        taskName: 'model-inference-' + Date.now(),
+        taskType: 'builtin',
+        builtinId: 'model.inference',
+        target: 'display',
+        displayId: selectedDisplay.dataset.id,
+        mode: 'one-shot',
+        env: 'webgpu',
+        params: params
       };
-      reader.readAsDataURL(file);
 
-      var monitorTab = document.querySelector('[data-tab="monitor"]');
-      if (monitorTab) monitorTab.click();
+      function doSubmit() {
+        self._send({ type: 'task:submit', payload: payload });
+        var monitorTab = document.querySelector('[data-tab="monitor"]');
+        if (monitorTab) monitorTab.click();
+      }
+
+      if (isServerFile) {
+        // Server file: pass URL directly in params
+        params._serverImage = serverImg.value;
+        doSubmit();
+      } else {
+        // Local upload: read as base64
+        var file = imageInput.files[0];
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          payload.files = [{ name: 'image', data: e.target.result.split(',')[1] }];
+          doSubmit();
+        };
+        reader.readAsDataURL(file);
+      }
     },
 
     // ---- Submit ----
