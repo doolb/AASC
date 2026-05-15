@@ -45,6 +45,7 @@ class TaskManager extends EventEmitter {
     };
 
     this.instances.set(instanceId, instance);
+    console.log('[TaskManager] submit:', task.taskName, 'type:', task.taskType, 'target:', task.target, 'instanceId:', instanceId);
 
     this.emit('progress', instanceId, 'preparing', 10);
     this.emit('log', instanceId, 'system', 'info', '正在准备文件...');
@@ -83,6 +84,7 @@ class TaskManager extends EventEmitter {
           }
         }
 
+        console.log('[TaskManager] 运行内置任务:', task.builtinId, 'instanceId:', instanceId);
         const result = await builtinRegistry.run(task.builtinId, {
           ...context,
           instanceId,
@@ -92,6 +94,7 @@ class TaskManager extends EventEmitter {
 
         // builtin task can request forwarding to display
         if (result && result.forwardTo === 'display') {
+          console.log('[TaskManager] 内置任务请求转发到显示端, instanceId:', instanceId);
           instance.status = 'pending_forward';
           instance.targetInfo = { displayId: task.displayId };
           this.emit('progress', instanceId, 'forwarding', 50);
@@ -108,11 +111,13 @@ class TaskManager extends EventEmitter {
       } else if (task.target === 'display' || task.target === 'subdisplay') {
         instance.status = 'pending_forward';
         instance.targetInfo = { displayId: task.displayId };
+        console.log('[TaskManager] 用户任务转发到显示端, instanceId:', instanceId, 'displayId:', task.displayId);
         process.nextTick(() => {
           this.emit('forward', instanceId, task);
         });
         return { taskName: task.taskName, instanceId, status: 'pending_forward' };
       } else {
+        console.log('[TaskManager] 服务端执行, runner:', usePuppeteer ? 'puppeteer' : 'nodejs', 'instanceId:', instanceId);
         const runner = usePuppeteer ? this.puppeteerRunner : this.nodeRunner;
         const result = await runner.run({
           entryFile: task.entryFile,
@@ -178,6 +183,7 @@ class TaskManager extends EventEmitter {
   }
 
   async handleForwardResult(taskName, instanceId, result) {
+    console.log('[TaskManager] handleForwardResult:', instanceId, '成功:', result.success, 'error:', result.error || 'none');
     const instance = this.instances.get(instanceId);
     if (!instance) return { success: false, error: '实例不存在' };
     const task = { taskName: instance.taskName };
