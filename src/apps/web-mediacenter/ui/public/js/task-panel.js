@@ -672,8 +672,15 @@
       ws.handleMessage = function(data) {
         if (data.type === 'displayList') {
           self.displayList = data.list || [];
+          console.log('[TaskPanel] 显示端列表:', JSON.stringify(self.displayList.map(function(d) {
+            return { id: d.id, caps: d.capabilities, biFS: d.browserInfo ? (d.browserInfo.featureSupport ? d.browserInfo.featureSupport.length : 0) : -1,
+              webgpu: d.webgpu, hasWebgpu: self._hasWebgpu(d) };
+          })));
           if (document.getElementById('deviceSelectorList')) {
             self._renderDeviceSelector();
+          }
+          if (document.getElementById('miDisplayList')) {
+            self._renderMiDisplayList();
           }
         }
         if (data.type === 'task:list:result') {
