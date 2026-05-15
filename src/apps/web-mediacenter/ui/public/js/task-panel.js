@@ -14,6 +14,7 @@
     init: function() {
       if (this._initDone) return;
       this._initDone = true;
+      console.log('[TaskPanel] init start, displayList:', this.displayList.length);
       this._render();
       this._setupWS();
       this._bindTabs();
@@ -501,18 +502,16 @@
       var html = '';
       for (var i = 0; i < this.displayList.length; i++) {
         var d = this.displayList[i];
-        var caps = d.capabilities || {};
-        var hasWebGPU = this._hasWebgpu(d);
-        if (!hasWebGPU) continue;
+        var capTag = this._hasWebgpu(d) ? 'WebGPU' : 'GPU';
         var safeId = this._escapeAttr(d.id);
         html += '<div class="task-device-item selected" data-id="' + safeId + '">' +
           '<div class="task-device-radio"></div>' +
           '<div class="task-device-info"><div class="task-device-name">' + this._escapeHtml(d.id) + '</div>' +
-          '<div class="task-device-cap">WebGPU</div></div>' +
+          '<div class="task-device-cap">' + capTag + '</div></div>' +
           '<span class="task-device-state online">在线</span></div>';
       }
       if (!html) {
-        html = '<div style="color:#666;font-size:12px;padding:8px">没有支持 WebGPU 的在线显示端</div>';
+        html = '<div style="color:#666;font-size:12px;padding:8px">没有在线显示端</div>';
       }
       list.innerHTML = html;
       list.addEventListener('click', function(e) {
