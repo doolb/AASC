@@ -2093,6 +2093,35 @@
             return maxIdx;
         }
 
+        // ---- Task Status Display ----
+        function showTaskStatus(modelId, stage) {
+            if (!taskStatusDisplay) return;
+            taskStatusDisplay.className = 'task-status-visible';
+            if (taskStatusModel) taskStatusModel.textContent = '模型: ' + (modelId || 'lfm-vl');
+            updateTaskProgress(stage, 0);
+        }
+        function updateTaskProgress(stage, pct) {
+            if (!taskStatusDisplay) return;
+            var titleEl = taskStatusDisplay.querySelector('.task-status-title');
+            if (titleEl) titleEl.textContent = stage === 'loading-model' ? '正在加载模型...' : stage === 'running' ? '模型推理中' : '任务状态';
+            if (taskStatusProgress) {
+                var bar = taskStatusProgress.querySelector('span');
+                if (bar) bar.style.width = Math.min(pct, 100) + '%';
+            }
+        }
+        function showTaskMetrics(metrics) {
+            if (!taskStatusMetrics || !metrics) return;
+            taskStatusMetrics.textContent = 'TTFT: ' + (metrics.ttft || '-') + 'ms | ' + (metrics.tokensPerSecond || '-') + ' tok/s | ' + (metrics.totalTokens || '-') + ' tokens';
+        }
+        function hideTaskStatus(delay) {
+            if (!taskStatusDisplay) return;
+            if (delay) {
+                setTimeout(function() { taskStatusDisplay.className = 'task-status-hidden'; }, delay);
+            } else {
+                taskStatusDisplay.className = 'task-status-hidden';
+            }
+        }
+
         var _abortControllers = {};
 
         function getAbortSignal(instanceId) {
