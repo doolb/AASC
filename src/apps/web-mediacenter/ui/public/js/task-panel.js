@@ -17,6 +17,13 @@
       console.log('[TaskPanel] init start, displayList:', this.displayList.length);
       this._render();
       this._setupWS();
+      var self = this;
+      setInterval(function() {
+        console.log('[TaskPanel] check displayList:', self.displayList.length, 'ws:', window.WebSocketManager ? 'exists' : 'null', 'hooked:', window.WebSocketManager ? window.WebSocketManager._taskPanelHooked : 'n/a');
+        if (self.displayList.length > 0) {
+          console.log('[TaskPanel] items:', JSON.stringify(self.displayList.map(function(d) { return d.id; })));
+        }
+      }, 3000);
       this._bindTabs();
       this._requestTaskList();
     },
@@ -664,11 +671,14 @@
     _setupWS: function() {
       var self = this;
       var ws = window.WebSocketManager;
+      console.log('[TaskPanel] _setupWS: ws=', !!ws, 'hooked=', ws ? ws._taskPanelHooked : 'n/a');
       if (!ws) { setTimeout(function() { self._setupWS(); }, 500); return; }
       if (ws._taskPanelHooked) return;
       ws._taskPanelHooked = true;
+      console.log('[TaskPanel] handleMessage hooked');
       var orig = ws.handleMessage;
       ws.handleMessage = function(data) {
+        console.log('[TaskPanel] onmessage type:', data.type);
         if (data.type === 'displayList') {
           self.displayList = data.list || [];
           console.log('[TaskPanel] 显示端列表:', JSON.stringify(self.displayList.map(function(d) {
