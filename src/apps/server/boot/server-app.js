@@ -608,6 +608,8 @@ app.use('/aasc', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'aas
 app.use('/auto-brain', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'auto-brain')));
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
+app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
+app.use('/js/lib', express.static(path.join(PROJECT_ROOT, 'node_modules', 'onnxruntime-web', 'dist')));
 app.use(express.json({ limit: '50mb' }));
 
 app.get('/', (req, res) => {
