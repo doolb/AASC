@@ -1260,7 +1260,14 @@
                 voicePlayback: true,
                 voiceRecording: false,
                 voiceRecognition: false,
-                displayText: true
+                displayText: true,
+                webgl: (function() {
+                    try {
+                        const c = document.createElement('canvas');
+                        return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+                    } catch(e) { return false; }
+                })(),
+                webgpu: !!navigator.gpu
             };
             
             try {

@@ -350,6 +350,19 @@
       }
     },
 
+    _hasWebgpu: function(d) {
+      if (!d) return false;
+      if (d.capabilities && d.capabilities.webgpu) return true;
+      if (d.webgpu) return true;
+      var fs = d.browserInfo && d.browserInfo.featureSupport;
+      if (fs && Array.isArray(fs)) {
+        for (var i = 0; i < fs.length; i++) {
+          if (fs[i].name === 'WebGPU' && fs[i].supported) return true;
+        }
+      }
+      return false;
+    },
+
     _renderDeviceSelector: function() {
       var list = document.getElementById('deviceSelectorList');
       if (!list) return;
@@ -363,7 +376,7 @@
         var isOnline = true;
         var caps = d.capabilities || {};
         var capText = [];
-        if (caps.webgpu) capText.push('WebGPU');
+        if (this._hasWebgpu(d)) capText.push('WebGPU');
         else if (caps.webgl) capText.push('WebGL');
         if (caps.cpu || capText.length === 0) capText.push('CPU');
         var safeId = this._escapeAttr(d.id);
@@ -489,7 +502,7 @@
       for (var i = 0; i < this.displayList.length; i++) {
         var d = this.displayList[i];
         var caps = d.capabilities || {};
-        var hasWebGPU = !!(d.webgpu || caps.webgpu);
+        var hasWebGPU = this._hasWebgpu(d);
         if (!hasWebGPU) continue;
         var safeId = this._escapeAttr(d.id);
         html += '<div class="task-device-item selected" data-id="' + safeId + '">' +
