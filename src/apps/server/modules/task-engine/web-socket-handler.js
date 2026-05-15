@@ -44,6 +44,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
     switch (data.type) {
       // ---- 提交 ----
       case 'task:submit': {
+        console.log('[WS] >> task:submit:', payload.taskName, 'type:', payload.taskType, 'builtin:', payload.builtinId, 'target:', payload.target);
         try {
           const result = await taskManager.submit(payload);
 
@@ -62,10 +63,12 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             };
             const displayId = payload.displayId;
             if (displayId && sendToDisplay) {
+              console.log('[WS] 转发 task:execute 到显示端', displayId, 'builtinId:', targetPayload.payload.builtinId);
               sendToDisplay(displayId, targetPayload);
             }
           }
 
+          console.log('[WS] << task:submitted:', result.instanceId, result.status);
           ctx.ws.send(JSON.stringify({
             type: 'task:submitted',
             payload: {
@@ -75,6 +78,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             },
           }));
         } catch (err) {
+          console.log('[WS] 提交失败:', err.message);
           ctx.ws.send(JSON.stringify({
             type: 'task:error',
             payload: { taskName: payload.taskName, error: err.message },
@@ -85,6 +89,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
       // ---- 停止 ----
       case 'task:stop': {
+        console.log('[WS] >> task:stop:', payload.taskName, payload.instanceId);
         const result = await taskManager.stopInstance(payload.taskName, payload.instanceId);
         ctx.ws.send(JSON.stringify({
           type: 'task:stopped',
@@ -113,6 +118,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
       // ---- 来自显示端/子显示端的执行结果 ----
       case 'task:result': {
+        console.log('[WS] >> task:result:', payload.instanceId, '成功:', payload.success, 'metrics:', payload.metrics ? 'yes' : 'no');
         taskManager.handleForwardResult(payload.taskName, payload.instanceId, {
           success: payload.success,
           error: payload.error,
@@ -128,6 +134,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
       // ---- 任务列表 ----
       case 'task:list': {
+        console.log('[WS] >> task:list: filter=' + payload.filter);
         try {
           const filter = payload.filter || 'all';
           if (filter === 'builtin') {
@@ -181,6 +188,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
   taskManager.on('progress', (instanceId, stage, progress) => {
     const inst = taskManager.getInstance(instanceId);
+    console.log('[WS] << task:progress:', instanceId, stage, progress);
     sendToControl({
       type: 'task:progress',
       payload: { taskName: inst ? inst.taskName : null, instanceId, stage, progress },
@@ -189,6 +197,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
   taskManager.on('result', (instanceId, result) => {
     const inst = taskManager.getInstance(instanceId);
+    console.log('[WS] << task:result:', instanceId, result.success ? 'success' : 'fail');
     sendToControl({
       type: 'task:result',
       payload: { taskName: inst ? inst.taskName : null, instanceId, ...result },
@@ -197,6 +206,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
   taskManager.on('log', (instanceId, stream, level, message) => {
     const inst = taskManager.getInstance(instanceId);
+    console.log('[WS] << task:log:', instanceId, stream, level, message.substring(0, 80));
     sendToControl({
       type: 'task:log',
       payload: { taskName: inst ? inst.taskName : null, instanceId, stream, level, message, timestamp: Date.now() },
