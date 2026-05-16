@@ -1,6 +1,6 @@
 {
-  "mode": "group",
-  "privateTarget": null,
+  "mode": "private",
+  "privateTarget": "妲己",
   "privateSessionId": "default",
   "playOnControl": false,
   "commandMode": true,
@@ -22,6 +22,11 @@
         "id": "default",
         "name": "默认会话",
         "createdAt": 1778594743004
+      },
+      {
+        "id": "mp454fe0e8dz",
+        "name": "12",
+        "createdAt": 1778681637864
       }
     ]
   }

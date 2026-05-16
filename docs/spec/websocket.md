@@ -8,7 +8,9 @@
 ```
 wss.on('connection', (ws, req)):
     如果 url === '/display' 或以 '/display' 开头:
-        displayId = generateId()
+        从 URL 参数取 displayId，没有则 generateId()
+        // 浏览器显示端通过 localStorage 持久化 displayId，重连时携带
+        // 子显示端（voice-display-node）从配置文件传入固定 displayId
         clientIP = getClientIP(req)
         savedState = config.getDisplayState(clientIP)
         

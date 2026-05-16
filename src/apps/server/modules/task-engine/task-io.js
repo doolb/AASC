@@ -1,11 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const DataSnapshot = require('../../../../core/data-snapshot');
+
+class TaskIndex extends DataSnapshot {
+  static defaults = { instances: [] };
+}
 
 class TaskIO extends EventEmitter {
   constructor(options = {}) {
     super();
     this.tasksDir = options.tasksDir || path.resolve(__dirname, '../../../../../res/tasks');
+    this._indexes = new Map();
   }
 
   _validateSafePath(base, target) {
@@ -22,6 +28,22 @@ class TaskIO extends EventEmitter {
   _instancePath(taskName, instanceId) { return path.join(this._resultsPath(taskName), instanceId); }
   _latestLink(taskName) { return path.join(this._resultsPath(taskName), 'latest'); }
   _indexPath(taskName) { return path.join(this._resultsPath(taskName), 'index.json'); }
+
+  async readTaskFiles(taskName, entryFile) {
+    const taskDir = this._taskPath(taskName);
+    const files = [];
+    try {
+      const entries = await fs.promises.readdir(taskDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile() || entry.name === 'results') continue;
+        if (entryFile && entry.name !== entryFile) continue;
+        const filePath = path.join(taskDir, entry.name);
+        const data = await fs.promises.readFile(filePath);
+        files.push({ name: entry.name, data: data.toString('base64') });
+      }
+    } catch (e) { console.warn('[TaskIO] 读取任务文件失败:', taskName, e.message); }
+    return files;
+  }
 
   async ensureTaskDir(taskName) {
     const dir = this._taskPath(taskName);
@@ -84,32 +106,68 @@ class TaskIO extends EventEmitter {
     await fs.promises.appendFile(logPath, line, 'utf8');
   }
 
+  async readInstanceLog(taskName, instanceId) {
+    const logPath = path.join(this._instancePath(taskName, instanceId), 'run.log');
+    try {
+      const content = await fs.promises.readFile(logPath, 'utf8');
+      return content;
+    } catch (e) {
+      if (e.code === 'ENOENT') return null;
+      throw e;
+    }
+  }
+
+  async deleteInstance(taskName, instanceId) {
+    const index = this._getIndex(taskName);
+    const before = index.instances.length;
+    index.instances = index.instances.filter(e => e.instanceId !== instanceId);
+    if (index.instances.length === before) return { success: false, error: '实例不存在' };
+    try { await fs.promises.rm(this._instancePath(taskName, instanceId), { recursive: true, force: true }); } catch (e) {}
+    if (index.instances.length > 0) {
+      const sorted = [...index.instances].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      await this.updateLatestLink(taskName, sorted[0].instanceId);
+    } else {
+      try { await fs.promises.unlink(this._latestLink(taskName)); } catch (e) {}
+    }
+    return { success: true };
+  }
+
+  _getIndex(taskName) {
+    let index = this._indexes.get(taskName);
+    if (!index) {
+      const idxPath = this._indexPath(taskName);
+      const dir = path.dirname(idxPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      index = new TaskIndex(idxPath);
+      this._indexes.set(taskName, index);
+    }
+    return index;
+  }
+
   async updateIndex(taskName, entry) {
-    const idxPath = this._indexPath(taskName);
-    await fs.promises.mkdir(path.dirname(idxPath), { recursive: true });
-    let idx = [];
-    try { idx = JSON.parse(await fs.promises.readFile(idxPath, 'utf8')); } catch (e) {}
-    const existing = idx.findIndex(e => e.instanceId === entry.instanceId);
-    if (existing >= 0) { idx[existing] = { ...idx[existing], ...entry }; }
-    else { idx.push(entry); }
-    await fs.promises.writeFile(idxPath, JSON.stringify(idx, null, 2));
+    const index = this._getIndex(taskName);
+    const existing = index.instances.findIndex(e => e.instanceId === entry.instanceId);
+    if (existing >= 0) {
+      index.instances[existing] = { ...index.instances[existing], ...entry };
+    } else {
+      index.instances.push(entry);
+    }
   }
 
   async getIndex(taskName) {
-    try { return JSON.parse(await fs.promises.readFile(this._indexPath(taskName), 'utf8')); }
+    try { return [...this._getIndex(taskName).instances]; }
     catch (e) { return []; }
   }
 
   async cleanupOldInstances(taskName, maxInstances = 50) {
-    const idx = await this.getIndex(taskName);
-    if (idx.length <= maxInstances) return;
-    idx.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    const toRemove = idx.slice(0, idx.length - maxInstances);
+    const index = this._getIndex(taskName);
+    if (index.instances.length <= maxInstances) return;
+    const sorted = [...index.instances].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    const toRemove = sorted.slice(0, sorted.length - maxInstances);
     for (const entry of toRemove) {
       try { fs.rmSync(this._instancePath(taskName, entry.instanceId), { recursive: true, force: true }); } catch (e) {}
     }
-    const remaining = idx.slice(idx.length - maxInstances);
-    await fs.promises.writeFile(this._indexPath(taskName), JSON.stringify(remaining, null, 2));
+    index.instances = sorted.slice(sorted.length - maxInstances);
   }
 
   async listTasks() {
@@ -138,6 +196,7 @@ class TaskIO extends EventEmitter {
   }
 
   async deleteTask(taskName) {
+    this._indexes.delete(taskName);
     const taskDir = this._validateSafePath(this.tasksDir, taskName);
     try {
       await fs.promises.rm(taskDir, { recursive: true, force: true });

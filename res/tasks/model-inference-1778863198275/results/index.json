@@ -1,0 +1,9 @@
+[
+  {
+    "instanceId": "408e2f45",
+    "taskName": "model-inference-1778863198275",
+    "status": "failed",
+    "timestamp": 1778863199100,
+    "error": "failed to load external data file: /models/lfm-vl/decoder_q4.onnx"
+  }
+]

@@ -11,6 +11,7 @@ class DataSnapshot {
         this._bindings = new Map();
         this._isNotifying = false;
         this._pendingUnbinds = [];
+        this._proxyCache = new Map();
         this._load();
         return new Proxy(this, this._createHandler());
     }

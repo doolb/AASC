@@ -15,7 +15,8 @@
  */
 function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDisplay) {
   const controlTypes = ['task:submit', 'task:stop', 'task:status', 'task:result',
-                        'task:list', 'task:update', 'task:delete'];
+                        'task:list', 'task:update', 'task:delete', 'task:get_instance_logs',
+                        'task:delete_instance'];
 
   // 获取内置任务列表（格式化为前端所需结构）
   function getBuiltinTasks() {
@@ -51,12 +52,19 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           // 如果需要转发到显示端（例如由显示端本地执行），
           // 构造 task:execute 消息发送给目标 display
           if (result.status === 'pending_forward') {
+            // 如果 files 为空（快捷运行时），从磁盘读取任务文件
+            let forwardFiles = payload.files || [];
+            if (forwardFiles.length === 0 && payload.taskType === 'user' && payload.entryFile) {
+              forwardFiles = await taskManager.taskIO.readTaskFiles(payload.taskName, payload.entryFile);
+            }
             const targetPayload = {
               type: 'task:execute',
               payload: {
                 taskName: payload.taskName,
                 instanceId: result.instanceId,
                 builtinId: payload.builtinId || null,
+                entryFile: payload.entryFile,
+                files: forwardFiles,
                 params: result.forwardParams || payload.params || {},
                 env: payload.env || 'auto'
               },
@@ -64,7 +72,13 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             const displayId = payload.displayId;
             if (displayId && sendToDisplay) {
               console.log('[WS] 转发 task:execute 到显示端', displayId, 'builtinId:', targetPayload.payload.builtinId);
-              sendToDisplay(displayId, targetPayload);
+              var sent = sendToDisplay(displayId, targetPayload);
+              if (!sent) {
+                console.error('[WS] 转发失败: 显示端不在线或连接关闭', displayId);
+                taskManager.handleForwardResult(payload.taskName, result.instanceId, {
+                  success: false, error: '显示端不在线或连接关闭: ' + displayId
+                });
+              }
             }
           }
 
@@ -119,6 +133,13 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
       // ---- 来自显示端/子显示端的执行结果 ----
       case 'task:result': {
         console.log('[WS] >> task:result:', payload.instanceId, '成功:', payload.success, 'metrics:', payload.metrics ? 'yes' : 'no');
+        // 将显示端返回的日志写入文件并广播
+        if (payload.logs && Array.isArray(payload.logs)) {
+          for (const log of payload.logs) {
+            taskManager.emit('log', payload.instanceId, log.stream || 'stdout', log.level || 'info', log.message);
+            taskManager.taskIO.writeInstanceLog(payload.taskName, payload.instanceId, log.stream || 'stdout', log.level || 'info', log.message);
+          }
+        }
         taskManager.handleForwardResult(payload.taskName, payload.instanceId, {
           success: payload.success,
           error: payload.error,
@@ -167,6 +188,46 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           ctx.ws.send(JSON.stringify({ type: 'task:deleted', payload: { taskName: payload.taskName, success: true } }));
         } catch (err) {
           ctx.ws.send(JSON.stringify({ type: 'task:error', payload: { taskName: payload.taskName, error: err.message } }));
+        }
+        break;
+      }
+
+      // ---- 删除实例 ----
+      case 'task:delete_instance': {
+        console.log('[WS] >> task:delete_instance:', payload.taskName, payload.instanceId);
+        try {
+          const result = await taskManager.deleteInstance(payload.taskName, payload.instanceId);
+          ctx.ws.send(JSON.stringify({
+            type: 'task:instance_deleted',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, success: result.success }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, error: err.message }
+          }));
+        }
+        break;
+      }
+
+      // ---- 获取实例日志 ----
+      case 'task:get_instance_logs': {
+        console.log('[WS] >> task:get_instance_logs:', payload.taskName, payload.instanceId);
+        try {
+          const logContent = await taskManager.getInstanceLog(payload.taskName, payload.instanceId);
+          ctx.ws.send(JSON.stringify({
+            type: 'task:instance_logs',
+            payload: {
+              taskName: payload.taskName,
+              instanceId: payload.instanceId,
+              logContent
+            }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, error: err.message }
+          }));
         }
         break;
       }

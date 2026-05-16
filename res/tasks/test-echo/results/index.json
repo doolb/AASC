@@ -1,0 +1,27 @@
+{
+  "instances": [
+    {
+      "instanceId": "66b3732d",
+      "taskName": "test-echo",
+      "status": "completed",
+      "timestamp": 1778895949334,
+      "target": "server",
+      "env": "auto",
+      "mode": "one-shot",
+      "displayId": null,
+      "params": 111111111,
+      "completedAt": 1778895949477
+    },
+    {
+      "instanceId": "d41a23e5",
+      "taskName": "test-echo",
+      "status": "completed",
+      "timestamp": 1778895996136,
+      "target": "server",
+      "env": "auto",
+      "mode": "one-shot",
+      "params": {},
+      "completedAt": 1778895996272
+    }
+  ]
+}

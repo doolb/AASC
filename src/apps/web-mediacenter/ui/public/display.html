@@ -1105,9 +1105,19 @@
             }
         }
         
+        function getPersistentDisplayId() {
+            let id = localStorage.getItem('displayId');
+            if (!id) {
+                id = 'display-' + Math.random().toString(36).substring(2, 10);
+                localStorage.setItem('displayId', id);
+            }
+            return id;
+        }
+
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/display`;
+            const id = getPersistentDisplayId();
+            const wsUrl = `${protocol}//${window.location.host}/display?displayId=${id}`;
             
             displayWs = new WebSocket(wsUrl);
             
@@ -2200,7 +2210,31 @@
             var decoder = new TextDecoder();
             var entryCode = decoder.decode(entryContent);
 
+            // 浏览器环境没有 module，移除 CommonJS 导出语句
+            entryCode = entryCode.replace(/module\.exports\s*=[\s\S]*?;\s*/g, '');
+
             try {
+                // 拦截 console.log/error/warn 捕获任务日志
+                var taskLogs = [];
+                var origLog = console.log;
+                var origError = console.error;
+                var origWarn = console.warn;
+                console.log = function() {
+                    var msg = Array.prototype.join.call(arguments, ' ');
+                    taskLogs.push({ stream: 'stdout', level: 'info', message: msg });
+                    origLog.apply(console, arguments);
+                };
+                console.error = function() {
+                    var msg = Array.prototype.join.call(arguments, ' ');
+                    taskLogs.push({ stream: 'stderr', level: 'error', message: msg });
+                    origError.apply(console, arguments);
+                };
+                console.warn = function() {
+                    var msg = Array.prototype.join.call(arguments, ' ');
+                    taskLogs.push({ stream: 'stdout', level: 'warn', message: msg });
+                    origWarn.apply(console, arguments);
+                };
+
                 var context = {
                     files: fileStore,
                     capabilities: capabilities,
@@ -2212,6 +2246,10 @@
                 var resultPromise = fn(context);
 
                 Promise.resolve(resultPromise).then(function(result) {
+                    // 恢复原始 console
+                    console.log = origLog;
+                    console.error = origError;
+                    console.warn = origWarn;
                     var outputFiles = [];
                     if (result && result.outputFiles) {
                         for (var k = 0; k < result.outputFiles.length; k++) {
@@ -2226,9 +2264,12 @@
                             }
                         }
                     }
-                    sendTaskResult(taskName, instanceId, true, null, outputFiles);
+                    sendTaskResult(taskName, instanceId, true, null, outputFiles, null, taskLogs);
                 }).catch(function(err) {
-                    sendTaskResult(taskName, instanceId, false, err.message, null);
+                    console.log = origLog;
+                    console.error = origError;
+                    console.warn = origWarn;
+                    sendTaskResult(taskName, instanceId, false, err.message, null, null, taskLogs);
                 });
             } catch (err) {
                 sendTaskResult(taskName, instanceId, false, err.message, null);
@@ -2272,7 +2313,7 @@
             });
         }
 
-        function sendTaskResult(taskName, instanceId, success, error, outputFiles, metrics) {
+        function sendTaskResult(taskName, instanceId, success, error, outputFiles, metrics, taskLogs) {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 var msg = {
                     type: 'task:result',
@@ -2282,7 +2323,8 @@
                         success: success,
                         error: error || null,
                         outputFiles: outputFiles || [],
-                        metrics: metrics || null
+                        metrics: metrics || null,
+                        logs: taskLogs || []
                     }
                 };
                 displayWs.send(JSON.stringify(msg));

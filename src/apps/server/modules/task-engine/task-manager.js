@@ -30,7 +30,7 @@ class TaskManager extends EventEmitter {
     if (this.instances.size >= this.maxInstances) {
       throw new Error('超出最大实例数 (' + this.maxInstances + ')');
     }
-    const instanceId = this._generateId();
+    const instanceId = task.instanceId || this._generateId();
     const timestamp = Date.now();
 
     const instance = {
@@ -52,7 +52,7 @@ class TaskManager extends EventEmitter {
 
     await this.taskIO.saveTaskFiles(task.taskName, task.files || []);
     await this.taskIO.createInstanceDir(task.taskName, instanceId);
-    await this.taskIO.updateIndex(task.taskName, { instanceId, taskName: task.taskName, status: 'running', timestamp });
+    await this.taskIO.updateIndex(task.taskName, { instanceId, taskName: task.taskName, status: 'running', timestamp, target: task.target, env: task.env, mode: task.mode, displayId: task.displayId, params: task.params || {} });
 
     instance.status = 'running';
     this.emit('progress', instanceId, 'running', 30);
@@ -112,9 +112,18 @@ class TaskManager extends EventEmitter {
         instance.status = 'pending_forward';
         instance.targetInfo = { displayId: task.displayId };
         console.log('[TaskManager] 用户任务转发到显示端, instanceId:', instanceId, 'displayId:', task.displayId);
-        process.nextTick(() => {
-          this.emit('forward', instanceId, task);
-        });
+        // 转发超时：30秒无结果自动标记失败
+        instance._forwardTimeout = setTimeout(() => {
+          const inst = this.instances.get(instanceId);
+          if (inst && inst.status === 'pending_forward') {
+            inst.status = 'failed';
+            this.emit('log', instanceId, 'system', 'error', '转发超时: 显示端未响应');
+            this.emit('progress', instanceId, 'failed', 0);
+            this.emit('result', instanceId, { success: false, error: '显示端未响应' });
+            this.taskIO.writeInstanceLog(task.taskName, instanceId, 'system', 'error', '转发超时: 显示端未响应');
+            this.taskIO.updateIndex(task.taskName, { instanceId, status: 'failed', error: '显示端未响应' });
+          }
+        }, 30000);
         return { taskName: task.taskName, instanceId, status: 'pending_forward' };
       } else {
         console.log('[TaskManager] 服务端执行, runner:', usePuppeteer ? 'puppeteer' : 'nodejs', 'instanceId:', instanceId);
@@ -146,11 +155,10 @@ class TaskManager extends EventEmitter {
 
   async _handleResult(task, instanceId, instance, result) {
     if (result && result.logs) {
-      const writePromises = result.logs.map(log => {
+      for (const log of result.logs) {
         this.emit('log', instanceId, log.stream, log.level, log.message);
-        return this.taskIO.writeInstanceLog(task.taskName, instanceId, log.stream, log.level, log.message);
-      });
-      await Promise.all(writePromises);
+        await this.taskIO.writeInstanceLog(task.taskName, instanceId, log.stream, log.level, log.message);
+      }
     }
 
     if (result && result.success !== false) {
@@ -193,6 +201,11 @@ class TaskManager extends EventEmitter {
       data: result.outputFiles ? { outputFiles: result.outputFiles } : undefined,
       metrics: result.metrics
     });
+    // 清除转发超时
+    if (instance && instance._forwardTimeout) {
+      clearTimeout(instance._forwardTimeout);
+      instance._forwardTimeout = null;
+    }
     await this.taskIO.updateLatestLink(task.taskName, instanceId);
     await this.taskIO.cleanupOldInstances(task.taskName, this.maxInstances);
     return { success: true };
@@ -237,6 +250,29 @@ class TaskManager extends EventEmitter {
       task.instances.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
     return taskList;
+  }
+
+  async getInstanceLog(taskName, instanceId) {
+    const content = await this.taskIO.readInstanceLog(taskName, instanceId);
+    if (content == null) {
+      // 尝试从内存获取日志
+      const memInst = this.instances.get(instanceId);
+      if (memInst && memInst.logs && memInst.logs.length > 0) {
+        return memInst.logs.map(l => {
+          const time = l.time ? new Date(l.time).toISOString() : new Date().toISOString();
+          return '[' + time + '] [' + (l.stream || 'stdout') + '][' + (l.level || 'info') + '] ' + l.message;
+        }).join('\n');
+      }
+      return '';
+    }
+    return content;
+  }
+
+  async deleteInstance(taskName, instanceId) {
+    // 清理内存中的实例
+    this.instances.delete(instanceId);
+    try { if (this.nodeRunner.kill) this.nodeRunner.kill(instanceId); } catch (e) {}
+    return this.taskIO.deleteInstance(taskName, instanceId);
   }
 
   async deleteTask(taskName) {

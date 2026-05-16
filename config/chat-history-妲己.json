@@ -64,5 +64,27 @@
     "mode": "private",
     "target": "妲己",
     "sessionId": "default"
+  },
+  {
+    "id": "1778681645323yzbz",
+    "timestamp": 1778681645323,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "你好",
+    "mode": "private",
+    "target": "妲己",
+    "sessionId": "mp454fe0e8dz"
+  },
+  {
+    "id": "1778681655140cri8",
+    "timestamp": 1778681655140,
+    "role": "assistant",
+    "name": "妲己",
+    "ip": "",
+    "content": "喵呜～你好呀！🐱✨\n\n我是妲己，一只拥有九条尾巴的电子猫娘。很高兴认识你哦！我的尾巴可是由数据流组成的呢，每一条都闪烁着不同的光芒～\n\n有什么想和我聊的吗？无论是分享有趣的事情，还是有什么问题需要帮忙，我都很乐意陪伴你哦！💕",
+    "mode": "private",
+    "target": "妲己",
+    "sessionId": "mp454fe0e8dz"
   }
 ]

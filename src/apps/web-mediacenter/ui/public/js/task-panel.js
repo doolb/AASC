@@ -84,24 +84,41 @@
       var builtin = this.taskList.filter(function(t) { return t.taskType === 'builtin'; });
       var user = this.taskList.filter(function(t) { return t.taskType !== 'builtin'; });
 
-      var html = '<input class="task-search" id="taskSearch" placeholder="搜索任务名称..." oninput="TaskPanel._filterTasks()">';
+      // 左列：任务列表
+      var leftHtml = '<div class="task-list-col-header">' +
+        '<input class="task-search" id="taskSearch" placeholder="搜索任务..." oninput="TaskPanel._filterTasks()">' +
+        '<button class="task-card-btn" onclick="TaskPanel._switchToNew()" style="flex-shrink:0;white-space:nowrap">+ 新建</button>' +
+      '</div>';
 
       if (builtin.length > 0) {
-        html += '<div class="task-group-title">内置任务（只读）</div>';
-        html += builtin.map(function(t) { return this._taskCardHTML(t); }, this).join('');
+        leftHtml += '<div class="task-group-title">内置任务（只读）</div>';
+        leftHtml += builtin.map(function(t) { return this._taskCardHTML(t); }, this).join('');
       }
 
-      html += '<div class="task-group-title">用户任务</div>';
+      leftHtml += '<div class="task-group-title">用户任务</div>';
       if (user.length === 0) {
-        html += '<div class="task-empty-state">' +
+        leftHtml += '<div class="task-empty-state">' +
           '<div class="task-empty-state-icon">⚡</div>' +
-          '<div class="task-empty-state-text">还没有用户任务，切换到新建任务标签创建一个</div>' +
+          '<div class="task-empty-state-text">还没有用户任务</div>' +
         '</div>';
       } else {
-        html += user.map(function(t) { return this._taskCardHTML(t); }, this).join('');
+        leftHtml += user.map(function(t) { return this._taskCardHTML(t); }, this).join('');
       }
 
-      container.innerHTML = html;
+      var middleHtml = this._selectedTaskName
+        ? this._renderInstancesCol(this._selectedTaskName)
+        : '<div class="task-three-col-placeholder">选择一个任务查看执行记录</div>';
+
+      var rightHtml = this._selectedTaskName && this._selectedInstanceId
+        ? this._renderResultCol(this._selectedTaskName, this._selectedInstanceId)
+        : '<div class="task-three-col-placeholder">选择一条执行记录查看详情</div>';
+
+      container.innerHTML =
+        '<div class="task-three-col">' +
+          '<div class="task-list-col">' + leftHtml + '</div>' +
+          '<div class="task-instances-col" id="taskInstancesCol">' + middleHtml + '</div>' +
+          '<div class="task-result-col" id="taskResultCol">' + rightHtml + '</div>' +
+        '</div>';
     },
 
     _taskCardHTML: function(task) {
@@ -141,19 +158,18 @@
       }
 
       var safeTaskName = this._escapeAttr(task.taskName);
+      var isSelected = this._selectedTaskName === task.taskName;
       var actionsHtml = '';
       if (isBuiltin) {
-        actionsHtml += '<button class="task-card-btn primary" onclick="TaskPanel._runBuiltin(\'' + safeTaskName + '\')">运行</button>';
-        actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewBuiltinParams(\'' + safeTaskName + '\')">参数</button>';
+        actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._runBuiltin(\'' + safeTaskName + '\')">运行</button>';
+        actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewBuiltinParams(\'' + safeTaskName + '\')">参数</button>';
       } else {
-        actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewEdit(\'' + safeTaskName + '\')">编辑</button>';
-        if (task.instances && task.instances.length > 0) {
-          actionsHtml += '<button class="task-card-btn" onclick="TaskPanel._viewResults(\'' + safeTaskName + '\')">结果</button>';
-        }
-        actionsHtml += '<button class="task-card-btn danger" onclick="TaskPanel._confirmDelete(\'' + safeTaskName + '\')">删除</button>';
+        actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._runUserTask(\'' + safeTaskName + '\')">运行</button>';
+        actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewEdit(\'' + safeTaskName + '\')">编辑</button>';
+        actionsHtml += '<button class="task-card-btn danger" onclick="event.stopPropagation();TaskPanel._confirmDelete(\'' + safeTaskName + '\')">删除</button>';
       }
 
-      return '<div class="' + cardClass + '">' +
+      return '<div class="' + cardClass + (isSelected ? ' selected' : '') + '" onclick="TaskPanel._selectTask(\'' + safeTaskName + '\')">' +
         '<div class="task-card-header">' +
           '<div class="task-card-title"><span class="task-card-icon">' + icon + '</span>' + this._escapeHtml(task.name || task.taskName) + '</div>' +
           '<span class="task-card-status ' + statusClass + '">' + statusText + '</span>' +
@@ -164,11 +180,119 @@
       '</div>';
     },
 
+
+
+    _selectTask: function(taskName) {
+      if (this._selectedTaskName === taskName) return;
+      this._selectedTaskName = taskName;
+      this._selectedInstanceId = null;
+      // 请求任务列表刷新（确保实例数据最新）
+      this._requestTaskList();
+    },
+
+    _switchToNew: function() {
+      var tab = document.querySelector('[data-tab="new"]');
+      if (tab) tab.click();
+    },
+
+    _renderInstancesCol: function(taskName) {
+      var task = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      if (!task) return '<div class="task-three-col-placeholder">任务不存在</div>';
+
+      var instances = task.instances || [];
+      // 合并内存状态
+      instances.forEach(function(inst) {
+        var memInst = this.instances.get(inst.instanceId);
+        if (memInst) {
+          inst.status = memInst.status;
+          inst.stage = memInst.stage;
+          inst.result = memInst.result;
+          inst.logs = memInst.logs;
+          inst.completedAt = memInst.completedAt;
+        }
+      }, this);
+      instances.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+
+      var safeTaskName = this._escapeAttr(taskName);
+      var html = '<div class="task-instances-header">' +
+        '<span class="task-group-title" style="margin:0;padding:0 4px">执行记录</span>' +
+        '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._runUserTask(\'' + safeTaskName + '\')" style="font-size:11px">运行</button>' +
+      '</div>';
+
+      if (instances.length === 0) {
+        html += '<div class="task-three-col-placeholder" style="padding:12px">暂无执行记录</div>';
+      } else {
+        for (var i = 0; i < instances.length; i++) {
+          var inst = instances[i];
+          var icon = inst.status === 'completed' ? '✅' : inst.status === 'failed' ? '❌' : inst.status === 'stopped' ? '⏹' : inst.status === 'running' ? '🔄' : '⏳';
+          var sel = inst.instanceId === this._selectedInstanceId ? ' selected' : '';
+          var time = inst.timestamp ? this._formatTime(inst.timestamp) : '';
+          var idShort = inst.instanceId ? inst.instanceId.substring(0, 6) : '';
+          var safeId = this._escapeAttr(inst.instanceId);
+          html += '<div class="task-result-history-item' + sel + '" onclick="TaskPanel._selectInstance(\'' + safeTaskName + '\',\'' + safeId + '\')">' +
+            '<span class="result-icon">' + icon + '</span>' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis">' + time + ' ' + this._escapeHtml(idShort) + '</span>' +
+            '<button class="task-result-history-del" onclick="event.stopPropagation();TaskPanel._confirmDeleteInstance(\'' + safeTaskName + '\',\'' + safeId + '\')">✕</button>' +
+          '</div>';
+        }
+      }
+
+      return html;
+    },
+
+    _selectInstance: function(taskName, instanceId) {
+      this._selectedInstanceId = instanceId;
+      var col = document.getElementById('taskResultCol');
+      if (!col) return;
+      col.innerHTML = this._renderResultCol(taskName, instanceId);
+      // 重新渲染实例列表更新选中样式
+      var instancesCol = document.getElementById('taskInstancesCol');
+      if (instancesCol) instancesCol.innerHTML = this._renderInstancesCol(taskName);
+    },
+
+    _renderResultCol: function(taskName, instanceId) {
+      var task = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      if (!task) return '<div class="task-three-col-placeholder">任务不存在</div>';
+
+      var instances = task.instances || [];
+      var inst = null;
+      for (var i = 0; i < instances.length; i++) {
+        if (instances[i].instanceId === instanceId) { inst = instances[i]; break; }
+      }
+      if (!inst) return '<div class="task-three-col-placeholder">执行记录不存在</div>';
+
+      // 合并内存状态
+      var memInst = this.instances.get(inst.instanceId);
+      if (memInst) {
+        inst.logs = memInst.logs;
+        inst.result = memInst.result;
+        inst.completedAt = memInst.completedAt;
+      }
+
+      // 如果实例没有日志，请求加载
+      if ((!inst.logs || inst.logs.length === 0) && inst.status !== 'running') {
+        var memLogs = this.instances.get(inst.instanceId);
+        if (!memLogs || !memLogs._logsLoaded) {
+          this._requestInstanceLogs(taskName, instanceId);
+        }
+      }
+
+      return this._resultDetailHTML(inst, taskName);
+    },
+
     _filterTasks: function() {
       var q = document.getElementById('taskSearch');
       if (!q) return;
       var query = q.value.toLowerCase();
-      var cards = document.querySelectorAll('#taskTabList .task-card');
+      var listCol = document.querySelector('.task-list-col');
+      if (!listCol) return;
+      var cards = listCol.querySelectorAll('.task-card');
       cards.forEach(function(c) {
         var nameEl = c.querySelector('.task-card-title');
         if (!nameEl) return;
@@ -371,8 +495,9 @@
       return false;
     },
 
-    _renderDeviceSelector: function() {
-      var list = document.getElementById('deviceSelectorList');
+    _renderDeviceSelector: function(listId) {
+      listId = listId || 'deviceSelectorList';
+      var list = document.getElementById(listId);
       if (!list) return;
       var html = '<div class="task-device-item selected" data-id="">' +
         '<div class="task-device-radio"></div>' +
@@ -406,6 +531,10 @@
         list.querySelectorAll('.task-device-item').forEach(function(el) { el.classList.remove('selected'); });
         item.classList.add('selected');
       });
+    },
+
+    _renderEditDeviceSelector: function() {
+      this._renderDeviceSelector('editDeviceSelectorList');
     },
 
     _loadBuiltinTasks: function() {
@@ -647,8 +776,6 @@
 
       function doSubmit() {
         self._send({ type: 'task:submit', payload: payload });
-        var monitorTab = document.querySelector('[data-tab="monitor"]');
-        if (monitorTab) monitorTab.click();
       }
 
       if (isServerFile) {
@@ -729,8 +856,61 @@
       };
 
       this._send(msg);
-      var monitorTab = document.querySelector('[data-tab="monitor"]');
-      if (monitorTab) monitorTab.click();
+    },
+
+    _runUserTask: function(taskName) {
+      var task = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      this._send({
+        type: 'task:submit',
+        payload: {
+          taskName: taskName,
+          taskType: 'user',
+          entryFile: (task && task.entryFile) || 'task.js',
+          target: 'server',
+          mode: 'one-shot',
+          env: 'auto',
+          params: {},
+          files: []
+        }
+      });
+    },
+
+    _runEditTask: function(taskName) {
+      var task = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      var params = {};
+      try {
+        var t = document.getElementById('editParams');
+        if (t && t.value) params = JSON.parse(t.value);
+      } catch(e) { /* ignore */ }
+
+      var targetEl = document.querySelector('#editTargetGroup .task-btn-option.active');
+      var envEl = document.querySelector('#editEnvGroup .task-btn-option.active');
+      var modeEl = document.querySelector('#editModeGroup .task-btn-option.active');
+      var deviceEl = document.querySelector('#editDeviceSelectorList .task-device-item.selected');
+      var displayId = deviceEl && deviceEl.dataset.id ? deviceEl.dataset.id : null;
+      var target = targetEl ? targetEl.dataset.value : 'server';
+      if (target === 'server') displayId = null;
+
+      this._send({
+        type: 'task:submit',
+        payload: {
+          taskName: taskName,
+          taskType: 'user',
+          entryFile: (task && task.entryFile) || 'task.js',
+          target: target,
+          displayId: displayId,
+          mode: modeEl ? modeEl.dataset.value : 'one-shot',
+          env: envEl ? envEl.dataset.value : 'auto',
+          params: params,
+          files: []
+        }
+      });
     },
 
     _runBuiltin: function(taskName) {
@@ -747,8 +927,6 @@
           files: []
         }
       });
-      var monitorTab = document.querySelector('[data-tab="monitor"]');
-      if (monitorTab) monitorTab.click();
     },
 
     _viewBuiltinParams: function(taskName) {
@@ -818,6 +996,12 @@
         }
         if (data.type === 'task:updated') {
           self._onUpdated(data.payload);
+        }
+        if (data.type === 'task:instance_logs') {
+          self._onInstanceLogs(data.payload);
+        }
+        if (data.type === 'task:instance_deleted') {
+          self._onInstanceDeleted(data.payload);
         }
         if (orig) orig.call(ws, data);
       };
@@ -905,6 +1089,56 @@
       if (payload.success) {
         this._requestTaskList();
       }
+    },
+
+    _onInstanceLogs: function(payload) {
+      var inst = this.instances.get(payload.instanceId);
+      if (!inst) {
+        this.instances.set(payload.instanceId, {
+          instanceId: payload.instanceId,
+          taskName: payload.taskName,
+          status: 'completed',
+          logs: []
+        });
+        inst = this.instances.get(payload.instanceId);
+      }
+      // 处理日志内容，空字符串也标记已加载，避免循环请求
+      if (inst && payload.logContent !== undefined && payload.logContent !== null) {
+        var lines = payload.logContent.split('\n');
+        inst.logs = [];
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line) continue;
+          // 解析格式: [ISO时间] [stream] [level] message
+          var match = line.match(/^\[([^\]]*)\]\s*\[([^\]]*)\]\s*\[([^\]]*)\]\s*(.*)$/);
+          if (match) {
+            inst.logs.push({
+              stream: match[2] || 'stdout',
+              level: match[3] || 'info',
+              message: match[4] || match[0],
+              time: new Date(match[1]).getTime() || Date.now()
+            });
+          } else {
+            inst.logs.push({ stream: 'stdout', level: 'info', message: line, time: Date.now() });
+          }
+        }
+        inst._logsLoaded = true;
+      }
+      // 三列布局中更新右列
+      if (this.currentTab === 'list' && this._selectedInstanceId === payload.instanceId) {
+        var col = document.getElementById('taskResultCol');
+        if (col) col.innerHTML = this._renderResultCol(payload.taskName, payload.instanceId);
+      }
+      // 旧版结果视图（监控标签进入）
+      if (this._resultViewTaskName === payload.taskName) {
+        this._showResultsView(payload.taskName, payload.instanceId);
+      }
+    },
+
+    _requestInstanceLogs: function(taskName, instanceId) {
+      var inst = this.instances.get(instanceId);
+      if (inst && inst._logsLoaded) return;
+      this._send({ type: 'task:get_instance_logs', payload: { taskName: taskName, instanceId: instanceId } });
     },
 
     _onUpdated: function(payload) {
@@ -1132,12 +1366,14 @@
         if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
       }
       if (!task) return;
-      this.viewStack = ['list'];
+      // 切换到新建任务页签显示编辑视图
+      var newTab = document.querySelector('[data-tab="new"]');
+      if (newTab) newTab.click();
       this._showEditView(task);
     },
 
     _showEditView: function(task) {
-      var container = document.getElementById('taskTabList');
+      var container = document.getElementById('taskTabNew');
       if (!container) return;
 
       var safeTaskName = this._escapeAttr(task.taskName);
@@ -1185,13 +1421,51 @@
 
         '<div class="task-form-section">' +
           '<div class="task-form-section-title">执行配置</div>' +
-          '<div class="task-form-field">' +
+          '<div class="task-form-row">' +
+            '<div class="task-form-field">' +
+              '<label>执行目标</label>' +
+              '<div class="task-btn-group" id="editTargetGroup">' +
+                '<button class="task-btn-option active" data-value="server">服务端</button>' +
+                '<button class="task-btn-option" data-value="display">显示端</button>' +
+                '<button class="task-btn-option" data-value="subdisplay">子显示端</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="task-form-row">' +
+            '<div class="task-form-field">' +
+              '<label>执行环境</label>' +
+              '<div class="task-btn-group" id="editEnvGroup">' +
+                '<button class="task-btn-option active" data-value="auto">自适应</button>' +
+                '<button class="task-btn-option" data-value="cpu">CPU</button>' +
+                '<button class="task-btn-option" data-value="webgl">WebGL</button>' +
+                '<button class="task-btn-option" data-value="webgpu">WebGPU</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="task-form-row">' +
+            '<div class="task-form-field">' +
+              '<label>模式</label>' +
+              '<div class="task-btn-group" id="editModeGroup">' +
+                '<button class="task-btn-option active" data-value="one-shot">一次性</button>' +
+                '<button class="task-btn-option" data-value="resident">常驻</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="task-form-field" style="margin-top:8px">' +
             '<label>参数 (JSON)</label>' +
             '<textarea id="editParams" rows="2"></textarea>' +
           '</div>' +
         '</div>' +
 
-        '<button class="task-submit-btn" onclick="TaskPanel._saveEdit(\'' + safeTaskName + '\')" style="background:linear-gradient(135deg,#22c55e,#16a34a)">保存修改</button>';
+        '<div class="task-form-section" id="editDeviceSelectorSection" style="display:none">' +
+          '<div class="task-form-section-title">目标设备</div>' +
+          '<div class="task-device-list" id="editDeviceSelectorList"></div>' +
+        '</div>' +
+
+        '<div style="display:flex;gap:8px">' +
+          '<button class="task-submit-btn" onclick="TaskPanel._runEditTask(\'' + safeTaskName + '\')" style="flex:1;background:linear-gradient(135deg,#00d2ff,#0088cc)">运行</button>' +
+          '<button class="task-submit-btn" onclick="TaskPanel._saveEdit(\'' + safeTaskName + '\')" style="flex:1;background:linear-gradient(135deg,#22c55e,#16a34a)">保存修改</button>' +
+        '</div>';
 
       var zone = document.getElementById('editFileZone');
       var input = document.getElementById('editFiles');
@@ -1209,6 +1483,31 @@
         });
         input.addEventListener('change', function() { TaskPanel._updateEditFileList(); });
       }
+
+      // 编辑视图目标切换，显示/隐藏设备选择器
+      var editTargetGroup = document.getElementById('editTargetGroup');
+      if (editTargetGroup) {
+        editTargetGroup.addEventListener('click', function(e) {
+          var btn = e.target.closest('.task-btn-option');
+          if (!btn) return;
+          editTargetGroup.querySelectorAll('.task-btn-option').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          var showDevice = btn.dataset.value === 'display' || btn.dataset.value === 'subdisplay';
+          var ds = document.getElementById('editDeviceSelectorSection');
+          if (ds) ds.style.display = showDevice ? 'block' : 'none';
+        });
+      }
+
+      // 自动填充最后一次执行的参数
+      if (task.instances && task.instances.length > 0) {
+        var lastParams = task.instances[0].params;
+        if (lastParams && typeof lastParams === 'object' && Object.keys(lastParams).length > 0) {
+          var paramsEl = document.getElementById('editParams');
+          if (paramsEl) paramsEl.value = JSON.stringify(lastParams, null, 2);
+        }
+      }
+
+      this._renderEditDeviceSelector();
     },
 
     _updateEditFileList: function() {
@@ -1254,6 +1553,61 @@
         if (t && t.value) params = JSON.parse(t.value);
       } catch(e) { /* ignore */ }
       this._send({ type: 'task:update', payload: { taskName: taskName, files: files, params: params } });
+    },
+
+    _confirmDeleteInstance: function(taskName, instanceId) {
+      var overlay = document.createElement('div');
+      overlay.className = 'task-confirm-overlay';
+      overlay.innerHTML =
+        '<div class="task-confirm-box">' +
+          '<div class="task-confirm-msg">确定要删除此执行记录吗？<br><span style="font-size:12px;color:#888">#' + this._escapeHtml(instanceId.substring(0, 8)) + '</span></div>' +
+          '<div class="task-confirm-actions">' +
+            '<button class="task-confirm-btn cancel" id="diCancel">取消</button>' +
+            '<button class="task-confirm-btn confirm" id="diConfirm">删除</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      document.getElementById('diCancel').onclick = function() { document.body.removeChild(overlay); };
+      document.getElementById('diConfirm').onclick = function() {
+        document.body.removeChild(overlay);
+        TaskPanel._send({ type: 'task:delete_instance', payload: { taskName: taskName, instanceId: instanceId } });
+      };
+    },
+
+    _runTaskFromResult: function(taskName, instanceId) {
+      var task = null;
+      var inst = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      if (task && task.instances) {
+        for (var i = 0; i < task.instances.length; i++) {
+          if (task.instances[i].instanceId === instanceId) { inst = task.instances[i]; break; }
+        }
+      }
+      this._send({
+        type: 'task:submit',
+        payload: {
+          taskName: taskName,
+          instanceId: instanceId,
+          taskType: 'user',
+          entryFile: (task && task.entryFile) || 'task.js',
+          target: (inst && inst.target) || 'server',
+          displayId: (inst && inst.displayId) || null,
+          mode: (inst && inst.mode) || 'one-shot',
+          env: (inst && inst.env) || 'auto',
+          params: (inst && inst.params) || {},
+          files: []
+        }
+      });
+    },
+
+    _onInstanceDeleted: function(payload) {
+      if (payload.success) {
+        // 从内存中清除
+        this.instances.delete(payload.instanceId);
+        this._requestTaskList();
+      }
     },
 
     _confirmDelete: function(taskName) {
@@ -1364,12 +1718,16 @@
         var icon = inst.status === 'completed' ? '✅' : inst.status === 'failed' ? '❌' : inst.status === 'stopped' ? '⏹' : '⏳';
         var sel = selected && inst.instanceId === selected.instanceId ? ' selected' : '';
         var time = inst.timestamp ? this._formatTime(inst.timestamp) : '';
-        return '<div class="task-result-history-item' + sel + '" onclick="TaskPanel._selectResult(\'' + safeTaskName + '\',\'' + this._escapeAttr(inst.instanceId) + '\')">' +
-          '<span class="result-icon">' + icon + '</span> ' + time +
+        var safeId = this._escapeAttr(inst.instanceId);
+        return '<div class="task-result-history-item' + sel + '">' +
+          '<div onclick="TaskPanel._selectResult(\'' + safeTaskName + '\',\'' + safeId + '\')" style="flex:1">' +
+            '<span class="result-icon">' + icon + '</span> ' + time +
+          '</div>' +
+          '<button class="task-result-history-del" onclick="event.stopPropagation();TaskPanel._confirmDeleteInstance(\'' + safeTaskName + '\',\'' + safeId + '\')">✕</button>' +
         '</div>';
       }, this).join('');
 
-      var detailHtml = selected ? this._resultDetailHTML(selected) : '<div class="task-empty-state"><div class="task-empty-state-text">暂无执行记录</div></div>';
+      var detailHtml = selected ? this._resultDetailHTML(selected, taskName) : '<div class="task-empty-state"><div class="task-empty-state-text">暂无执行记录</div></div>';
 
       container.innerHTML =
         '<div class="task-breadcrumb">' +
@@ -1381,13 +1739,21 @@
           '<div class="task-result-history">' + historyHtml + '</div>' +
           '<div class="task-result-detail" id="resultDetail">' + detailHtml + '</div>' +
         '</div>';
+
+      this._resultViewTaskName = taskName;
+      if (selected && (!selected.logs || selected.logs.length === 0)) {
+        var memInst = this.instances.get(selected.instanceId);
+        if (!memInst || !memInst.logs || memInst.logs.length === 0) {
+          this._requestInstanceLogs(taskName, selected.instanceId);
+        }
+      }
     },
 
     _selectResult: function(taskName, instanceId) {
       this._showResultsView(taskName, instanceId);
     },
 
-    _resultDetailHTML: function(inst) {
+    _resultDetailHTML: function(inst, taskName) {
       var statusText = inst.status === 'completed' ? '完成' : inst.status === 'failed' ? '失败' : inst.status === 'stopped' ? '已停止' : '进行中';
 
       var result = inst.result || {};
@@ -1439,6 +1805,10 @@
       '<div class="task-result-log">' +
         '<div class="task-result-log-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">完整日志 (' + logs.length + ' 行)</div>' +
         '<div class="task-result-log-content">' + (logHtml || '<span style="color:#555">无日志</span>') + '</div>' +
+      '</div>' +
+      '<div style="margin-top:12px;display:flex;gap:8px">' +
+        '<button class="task-card-btn" onclick="TaskPanel._runTaskFromResult(\'' + taskName + '\',\'' + inst.instanceId + '\')">重新执行</button>' +
+        '<button class="task-card-btn danger" onclick="TaskPanel._confirmDeleteInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">删除此执行记录</button>' +
       '</div>';
     },
 
@@ -1464,7 +1834,10 @@
     // ---- Navigation ----
 
     _showView: function(view) {
-      if (view === 'list') this._renderTaskList();
+      if (view === 'list') {
+        var listTab = document.querySelector('[data-tab="list"]');
+        if (listTab) listTab.click();
+      }
     },
 
     _escapeHtml: function(text) {

@@ -2,6 +2,144 @@
 
 ## [Unreleased]
 
+### 修复
+
+- ✅ [2026-05-16] 显示端重连后 displayId 变导致任务结果记录引用失效
+  - 浏览器显示端（display.html）改用 localStorage 持久化 displayId，重连时作为 URL 参数传递
+  - 服务端已支持自定义 displayId 参数，无需改动
+  - 子显示端（voice-display-node）配置已有固定 displayId，不受影响
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/display.html
+    - 修改：docs/spec/websocket.md
+
+### 新功能
+
+- ✅ [2026-05-16] 任务列表界面重新设计为三列布局
+  - 左列：任务列表（内置任务 + 用户任务），点击卡片选中
+  - 中列：选中任务的执行记录列表
+  - 右列：选中执行记录的详情（日志、结果、操作按钮）
+  - 任务卡片去除"结果"按钮（被中列和右列替代），新增选中态样式
+  - 新增 _selectTask / _selectInstance / _renderInstancesCol / _renderResultCol / _switchToNew
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 修改：src/apps/web-mediacenter/ui/public/css/upload.css
+
+### 新功能
+
+- ✅ [2026-05-16] 添加测试用户任务 test-echo，用于验证任务系统端到端流程
+  - 接收任意 params 参数，原样输出到日志和结果
+  - 存放于 res/tasks/ 用户任务目录
+  - 改动文件：
+    - 新增：res/tasks/test-echo/task.js
+    - 文档：docs/task/2026-05-16_测试用户任务.md
+
+- ✅ [2026-05-16] 用户任务卡片增加快捷运行按钮，支持一键提交默认配置任务
+  - 新增 _runUserTask() 方法，根据任务信息自动填充 task:submit
+  - 用户任务卡片操作栏新增 primary 样式"运行"按钮
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-16] 编辑任务视图增加运行按钮，支持编辑时携带参数提交运行
+  - 新增 _runEditTask() 方法，读取 editParams 参数后提交 task:submit
+  - 编辑视图操作栏新增运行按钮（与保存修改并列）
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-16] 任务 index.json 改用 DataSnapshot 自动加载保存
+  - 新增 TaskIndex extends DataSnapshot 管理实例索引
+  - TaskIO 缓存每个任务的 DataSnapshot 实例，修改索引属性自动持久化
+  - 修复 DataSnapshot 缺失 _proxyCache 初始化导致嵌套对象访问崩溃的 bug
+  - 改动文件：
+    - 新增：task-io.js TaskIndex 类
+    - 修改：task-io.js getIndex/updateIndex/deleteInstance/cleanupOldInstances
+    - 修改：core/data-snapshot/DataSnapshot.js 增加 _proxyCache 初始化
+
+- ✅ [2026-05-16] 显示端任务执行捕获 console.log 并回传日志
+  - display.html executeTask 拦截 console.log/error/warn 采集到 taskLogs
+  - task:result 消息新增 logs 字段携带捕获的日志
+  - 服务端收到后写入 run.log 并广播 task:log 到控制端
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/display.html
+    - 修改：web-socket-handler.js
+
+- ✅ [2026-05-16] 修复显示端任务转发失败时卡住的问题
+  - 转发时检测 sendToDisplay 返回值，发送失败立即回调失败结果
+  - 转发任务增加 30 秒超时，超时自动标记失败
+  - 改动文件：
+    - 修改：web-socket-handler.js
+    - 修改：task-manager.js
+
+- ✅ [2026-05-16] 修复显示端执行用户任务报 module is not defined
+  - 浏览器无 CommonJS 环境，执行前 strip module.exports 语句
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/display.html
+
+- ✅ [2026-05-16] 修复快捷运行时用户任务转发到显示端执行失败（files 为空）
+  - 转发时若 files 为空，自动从磁盘读取任务文件内容补上
+  - 新增 TaskIO.readTaskFiles() 读取任务目录文件为 base64
+  - 改动文件：
+    - 新增：task-io.js readTaskFiles 方法
+    - 修改：web-socket-handler.js 转发时自动补文件
+
+- ✅ [2026-05-16] 修复用户任务转发到显示端执行失败（缺少 entryFile 和 files）
+  - task:execute 转发负载补充 entryFile 和 files 字段
+  - 改动文件：
+    - 修改：web-socket-handler.js
+
+- ✅ [2026-05-16] 修复 run.log 日志顺序混乱问题
+  - _handleResult 中 Promise.all 并行写入改为顺序 await，保证日志按产生顺序落盘
+  - 改动文件：
+    - 修改：task-manager.js
+
+- ✅ [2026-05-16] 点击编辑切换到新建任务页签显示编辑视图
+  - _viewEdit 切到新建任务 tab 再渲染编辑表单，不影响三列列表布局
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-16] 编辑任务视图运行支持选择目标/环境/模式和设备
+  - 编辑视图执行配置区增加目标、环境、模式按钮组和设备选择器
+  - _runEditTask 读取 editTargetGroup/editEnvGroup/editModeGroup/editDeviceSelectorList
+  - 新增 _renderEditDeviceSelector() 复用 _renderDeviceSelector
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-16] 执行结果面板支持单独删除某条执行记录和重新执行
+  - 结果详情底部新增"重新执行"按钮，复用原 instanceId 覆盖执行记录
+  - 服务端 task:submit 支持可选 instanceId 参数
+  - index 存储 target/env/mode/displayId 字段，重新执行时读取原配置
+  - 改动文件：
+    - 修改：task-manager.js submit 支持 optional instanceId
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+  - 服务端新增 task:delete_instance WS 消息，删除实例目录和索引
+  - TaskIO.deleteInstance 删除实例目录、更新索引和 latest 符号链接
+  - TaskManager.deleteInstance 清理内存和子进程
+  - 前端结果历史侧栏每条加 hover 显示的 ✕ 删除按钮
+  - 前端结果详情底部加"删除此执行记录"按钮
+  - 新增 CSS .task-result-history-del 样式
+  - 改动文件：
+    - 新增：task-io.js deleteInstance 方法
+    - 新增：task-manager.js deleteInstance 方法
+    - 修改：web-socket-handler.js task:delete_instance 消息处理
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 修改：src/apps/web-mediacenter/ui/public/css/upload.css
+
+- ✅ [2026-05-16] 修复打开结果时大量重复 task:get_instance_logs 请求的死循环
+  - 根因：run.log 为空时日志数组为空，触发重复请求
+  - 在实例上标记 _logsLoaded，请求前检查避免重复
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-16] 修复控制端任务结果视图不显示日志的问题
+  - 新增 task:get_instance_logs WebSocket 消息类型，服务端读取 run.log 返回
+  - 新增 TaskIO.readInstanceLog() 方法读取磁盘日志文件
+  - 新增 TaskManager.getInstanceLog() 方法（内存回退+磁盘读取）
+  - 前端新增 _onInstanceLogs / _requestInstanceLogs，结果视图自动请求并解析日志
+  - 改动文件：
+    - 新增：task-io.js readInstanceLog 方法
+    - 修改：task-manager.js getInstanceLog 方法
+    - 修改：web-socket-handler.js task:get_instance_logs 消息处理
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
 ### 新功能
 
 - ✅ [2026-05-13] 远程任务系统：控制端上传 JS 代码，选择服务端/显示端/子显示端执行

@@ -3297,6 +3297,55 @@ input[type="range"]::-webkit-slider-thumb:active {
 
 .task-edit-file-actions { display: flex; gap: 4px; }
 
+
+/* ---- 三列布局 ---- */
+.task-three-col {
+  display: flex;
+  gap: 12px;
+  height: 100%;
+  min-height: 300px;
+}
+.task-list-col {
+  width: 240px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.task-list-col-header {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.task-list-col-header .task-search {
+  flex: 1;
+}
+.task-instances-col {
+  width: 200px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.task-instances-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+.task-result-col {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+.task-three-col-placeholder {
+  padding: 20px;
+  text-align: center;
+  color: #555;
+  font-size: 13px;
+}
+.task-card.selected {
+  border-color: rgba(0,210,255,0.4);
+  background: rgba(0,210,255,0.08);
+}
 /* ---- 结果视图 ---- */
 .task-result-layout {
   display: flex;
@@ -3316,15 +3365,31 @@ input[type="range"]::-webkit-slider-thumb:active {
   transition: all 0.2s;
   margin-bottom: 2px;
   color: #888;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .task-result-history-item:hover { background: rgba(255,255,255,0.05); color: #ccc; }
 .task-result-history-item.selected { background: rgba(0,210,255,0.1); color: #8cf; }
 
 .task-result-history-item .result-icon { margin-right: 4px; }
+
+.task-result-history-del {
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all 0.2s;
+}
+.task-result-history-item:hover .task-result-history-del { opacity: 1; }
+.task-result-history-del:hover { background: rgba(239,68,68,0.2); color: #ef4444; }
 
 .task-result-detail {
   flex: 1;
