@@ -32,11 +32,21 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           target: t.target || 'server',
           mode: t.mode || 'one-shot',
           widget: t.widget || null,
+          sidebar: t.sidebar || null,
           instances: []
         }));
       }
     } catch (e) { console.warn('[任务引擎] 内置任务不可用:', e.message); }
     return [];
+  }
+
+  // 获取侧边栏清单
+  function getSidebarManifest() {
+    try {
+      const registry = require('./builtin-tasks/registry');
+      if (registry.sidebarManifest) return registry.sidebarManifest;
+    } catch (e) { /* 忽略 */ }
+    return { groups: [], tabs: [] };
   }
 
   // ---------------------------------------------------------------
@@ -183,7 +193,15 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             ctx.ws.send(JSON.stringify({ type: 'task:list:result', payload: { tasks: getBuiltinTasks() } }));
           } else {
             const tasks = await taskManager.listTasks();
-            ctx.ws.send(JSON.stringify({ type: 'task:list:result', payload: { tasks: [...getBuiltinTasks(), ...tasks] } }));
+            const manifest = getSidebarManifest();
+            ctx.ws.send(JSON.stringify({
+              type: 'task:list:result',
+              payload: {
+                tasks: [...getBuiltinTasks(), ...tasks],
+                sidebarGroups: manifest.groups,
+                sidebarTabs: manifest.tabs
+              }
+            }));
           }
         } catch (err) {
           ctx.ws.send(JSON.stringify({ type: 'task:error', payload: { error: err.message } }));

@@ -3560,3 +3560,61 @@ input[type="range"]::-webkit-slider-thumb:active {
 .task-result-metrics-row span {
   color: #aaa;
 }
+
+/* ─── SidebarRegistry 动态面板 ─── */
+
+.sidebar-registry-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 8px 12px;
+}
+
+.sidebar-registry-tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.sidebar-registry-tab {
+  padding: 6px 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.6);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sidebar-registry-tab:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.sidebar-registry-tab.active {
+  background: rgba(79, 156, 247, 0.15);
+  border-color: #4f9cf7;
+  color: #4f9cf7;
+}
+
+.sidebar-registry-item {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.sidebar-registry-item-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  margin-bottom: 10px;
+}
+
+.sidebar-registry-widget {
+  /* widget 内容使用内联样式，此容器仅做占位 */
+}

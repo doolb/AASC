@@ -8,6 +8,7 @@ module.exports = {
   description: '定时播报当前时间（常驻服务）',
   target: 'server',
   mode: 'service',
+  sidebar: { group: 'voiceService', tab: 'announce', label: '整点报时', icon: '🔔', priority: 10 },
   params: [
     { name: 'enabled', type: 'toggle', required: false, default: true, label: '启用' },
     { name: 'interval', type: 'select', required: false, default: 15, options: [15, 30, 60], label: '报时间隔(分钟)' },

@@ -14,8 +14,17 @@ module.exports = {
       target: t.target || 'server',
       mode: t.mode || 'one-shot',
       params: t.params || [],
-      widget: t.widget || null
+      widget: t.widget || null,
+      sidebar: t.sidebar || null
     }));
+  },
+  sidebarManifest: {
+    groups: [
+      { id: 'voiceService', label: '语音服务', icon: '🔊', priority: 50 }
+    ],
+    tabs: [
+      { id: 'announce', group: 'voiceService', label: '播报类', icon: '📢', priority: 10 }
+    ]
   },
   async run(id, context) {
     const task = tasks[id];

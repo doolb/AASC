@@ -74,7 +74,9 @@
       this._send({ type: 'task:list', payload: { filter: 'all' } });
     },
 
-    _handleTaskList: function(tasks) {
+    _handleTaskList: function(payload) {
+      // 向后兼容：如果是数组直接当 tasks
+      var tasks = Array.isArray(payload) ? payload : (payload.tasks || []);
       // 合并同名条目：内置任务带 widget，磁盘任务带实例
       var merged = {};
       for (var t = 0; t < tasks.length; t++) {
@@ -117,6 +119,14 @@
             }
           }
         }
+      }
+      // 注册 sidebar 任务到 SidebarRegistry
+      if (window.SidebarRegistry) {
+        window.SidebarRegistry.registerManifest({
+          sidebarGroups: payload.sidebarGroups || [],
+          sidebarTabs: payload.sidebarTabs || [],
+          tasks: tasks
+        });
       }
       if (this.currentTab === 'list') this._renderTaskList();
     },
@@ -1046,7 +1056,7 @@
           }
         }
         if (data.type === 'task:list:result') {
-          self._handleTaskList(data.payload.tasks || []);
+          self._handleTaskList(data.payload);
         }
         if (data.type === 'task:submitted') {
           self._onSubmitted(data.payload);
@@ -1080,6 +1090,9 @@
         }
         if (data.type === 'task:widget_update') {
           self._onWidgetUpdate(data.payload);
+          if (window.SidebarRegistry) {
+            window.SidebarRegistry.onWidgetUpdate(data.payload);
+          }
         }
         if (data.type === 'task:run_result') {
           self._requestTaskList();
