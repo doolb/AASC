@@ -31,7 +31,6 @@ function stripMarkdown(text) {
 const tts = require('../../../external/tts/tts-service');
 const asr = require('../../../external/asr/asr-service');
 const timeListener = require('../../web-mediacenter/modules/time/time-listener-app-service');
-const timeAnnounce = require('../../web-mediacenter/modules/time/time-announce-app-service');
 const chat = require('../../../external/llm/llm-service');
 const reminder = require('../../web-mediacenter/modules/reminder/reminder-app-service');
 const voiceCommand = require('../../web-mediacenter/modules/voice/voice-command-app-service');
@@ -229,7 +228,6 @@ let pendingAsrRequestId = 0;
 
 tts.init(config.getTtsConfig());
 asr.init(config.get('asr', {}));
-timeAnnounce.init(config.get('timeAnnounce', { enabled: true, interval: 30 }));
 chat.init(config.get('chat', {}));
 reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
@@ -338,7 +336,6 @@ function startServer() {
         tui.setHeader(protocol, localIP, PORT);
 
         timeListener.start();
-        timeAnnounce.start(displayClients, sendToDisplay);
         reminder.start(displayClients, sendToDisplay);
         voiceCommand.setClients(displayClients, sendToDisplay, broadcastToControls);
         voiceCommand.setMediaLibrary(mediaLibraryManager);
@@ -529,7 +526,12 @@ function startServer() {
                 (msg) => broadcastToControls(msg),
                 (displayId, msg) => sendToDisplay(displayId, msg)
             );
+            taskManager.setSendToDisplay((displayId, msg) => sendToDisplay(displayId, msg));
+            taskManager.setBroadcastToDisplays((msg) => {
+              for (const [id] of displayClients) sendToDisplay(id, msg);
+            });
             log('任务引擎', '远程任务系统已初始化');
+            await taskManager.restoreAutoStartServices();
         } catch (error) {
             logError('WS', `系统初始化失败: ${error.message}`);
         }
@@ -1065,43 +1067,6 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
         const isQueueBusy = err.message.includes('ASR 忙');
         const statusCode = isQueueBusy ? 429 : 500;
         res.status(statusCode).json({ status: 'error', message: '语音识别失败: ' + err.message });
-    }
-});
-
-app.get('/api/timeAnnounce/config', (req, res) => {
-    res.json({ 
-        status: 'success', 
-        config: timeAnnounce.getConfig()
-    });
-});
-
-app.post('/api/timeAnnounce/config', (req, res) => {
-    try {
-        const { enabled, interval, repeatCount, repeatDelay } = req.body;
-        
-        timeAnnounce.setConfig({ enabled, interval, repeatCount, repeatDelay });
-        config.set('timeAnnounce', timeAnnounce.getConfig());
-        
-        res.json({ 
-            status: 'success', 
-            message: '整点报时配置已更新',
-            config: timeAnnounce.getConfig()
-        });
-    } catch (err) {
-        res.status(500).json({ status: 'error', message: '配置更新失败' });
-    }
-});
-
-app.post('/api/timeAnnounce/test', async (req, res) => {
-    try {
-        const result = await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
-        if (result) {
-            res.json({ status: 'success', message: '整点报时测试成功' });
-        } else {
-            res.json({ status: 'error', message: '整点报时测试失败' });
-        }
-    } catch (err) {
-        res.status(500).json({ status: 'error', message: '整点报时测试失败: ' + err.message });
     }
 });
 
@@ -2803,23 +2768,6 @@ async function handleControlMessageFallback(data, ws) {
                         config: voiceCommand.getAssistantConfig()
                     }));
                     return;
-                } else if (data.type === 'timeAnnounce') {
-                    if (data.action === 'enable') {
-                        timeAnnounce.setConfig({ enabled: true });
-                        config.set('timeAnnounce', timeAnnounce.getConfig());
-                    } else if (data.action === 'disable') {
-                        timeAnnounce.setConfig({ enabled: false });
-                        config.set('timeAnnounce', timeAnnounce.getConfig());
-                    } else if (data.action === 'announce') {
-                        (async () => {
-                            try {
-                                await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
-                            } catch (err) {
-                                logError('整点报时', `语音触发失败: ${err.message}`);
-                            }
-                        })();
-                    }
-                    return;
                 } else if (data.type === 'getReminders') {
                     (async () => {
                         const reminders = reminder.getReminders();
@@ -2999,15 +2947,6 @@ async function handleControlMessageFallback(data, ws) {
                             log('系统', `显示端不存在: ${id}`);
                         }
                     });
-                    return;
-                } else if (data.type === 'tts' && data.action === 'testTimeAnnounce') {
-                    (async () => {
-                        try {
-                            await timeAnnounce.checkAndAnnounce(displayClients, sendToDisplay, true);
-                        } catch (err) {
-                            logError('整点报时', `测试失败: ${err.message}`);
-                        }
-                    })();
                     return;
                 }
 

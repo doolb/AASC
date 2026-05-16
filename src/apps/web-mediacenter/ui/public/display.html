@@ -2159,39 +2159,103 @@
             }
         }
 
+        // Web Worker 隔离执行用户任务（不阻塞主线程）
+        var _taskWorkerUrl = null;
+        function _getTaskWorkerUrl() {
+            if (_taskWorkerUrl) return _taskWorkerUrl;
+            var blob = new Blob([_taskWorkerCode || (_taskWorkerCode = '\
+                self.onmessage = function(e) {\
+                    var d = e.data;\
+                    var entryCode = d.entryCode;\
+                    var files = d.files || [];\
+                    var context = d.context || {};\
+                    var fileStore = {};\
+                    for (var i = 0; i < files.length; i++) {\
+                        var f = files[i];\
+                        if (f.data) {\
+                            try {\
+                                var binary = atob(f.data);\
+                                var bytes = new Uint8Array(binary.length);\
+                                for (var j = 0; j < binary.length; j++) {\
+                                    bytes[j] = binary.charCodeAt(j);\
+                                }\
+                                fileStore[f.name] = bytes;\
+                            } catch(e) {}\
+                        }\
+                    }\
+                    var taskLogs = [];\
+                    var origLog = self.console.log;\
+                    var origErr = self.console.error;\
+                    var origWarn = self.console.warn;\
+                    self.console.log = function() {\
+                        taskLogs.push({ stream: "stdout", level: "info", message: Array.prototype.join.call(arguments, " ") });\
+                    };\
+                    self.console.error = function() {\
+                        taskLogs.push({ stream: "stderr", level: "error", message: Array.prototype.join.call(arguments, " ") });\
+                    };\
+                    self.console.warn = function() {\
+                        taskLogs.push({ stream: "stdout", level: "warn", message: Array.prototype.join.call(arguments, " ") });\
+                    };\
+                    context.files = fileStore;\
+                    try {\
+                        var fn = new Function("context", entryCode + "\\nreturn run(context);");\
+                        Promise.resolve(fn(context)).then(function(result) {\
+                            self.console.log = origLog; self.console.error = origErr; self.console.warn = origWarn;\
+                            var outputFiles = [];\
+                            if (result && result.outputFiles) {\
+                                for (var k = 0; k < result.outputFiles.length; k++) {\
+                                    var name = result.outputFiles[k];\
+                                    if (fileStore[name]) {\
+                                        var binStr = "";\
+                                        for (var j = 0; j < fileStore[name].length; j++) binStr += String.fromCharCode(fileStore[name][j]);\
+                                        outputFiles.push({ name: name, data: btoa(binStr) });\
+                                    }\
+                                }\
+                            }\
+                            self.postMessage({ success: true, result: result, outputFiles: outputFiles, logs: taskLogs });\
+                        }).catch(function(err) {\
+                            self.console.log = origLog; self.console.error = origErr; self.console.warn = origWarn;\
+                            self.postMessage({ success: false, error: err.message, logs: taskLogs });\
+                        });\
+                    } catch (err) {\
+                        self.console.log = origLog; self.console.error = origErr; self.console.warn = origWarn;\
+                        self.postMessage({ success: false, error: err.message, logs: taskLogs });\
+                    }\
+                };\
+            ')], { type: 'application/javascript' });
+            _taskWorkerUrl = URL.createObjectURL(blob);
+            return _taskWorkerUrl;
+        }
+
         function executeTask(payload) {
-            // 模型推理内置任务
+            // 模型推理内置任务（已在 GPU 线程异步执行）
             if (payload.builtinId === 'model.inference') {
                 console.log('[Model] 收到模型推理任务:', payload.instanceId, 'modelId:', payload.params ? payload.params.modelId : '?');
                 executeModelInference(payload);
                 return;
             }
 
-            // 原有用户任务执行逻辑
+            // 用户任务 — 用 Web Worker 隔离执行，不阻塞主线程
             var taskName = payload.taskName;
             var instanceId = payload.instanceId;
             var entryFile = payload.entryFile;
             var files = payload.files || [];
             var params = payload.params || {};
-            console.log('[Task] 收到任务: ' + taskName + '/' + instanceId);
+            console.log('[Task] 收到任务: ' + taskName + '/' + instanceId + '，使用 Web Worker');
 
-            var fileStore = {};
+            // 查找并解码入口文件（源码通常很小，主线程解码即可）
+            var entryFileData = null;
             for (var i = 0; i < files.length; i++) {
-                var f = files[i];
-                if (f.data) {
-                    try {
-                        var binary = atob(f.data);
-                        var bytes = new Uint8Array(binary.length);
-                        for (var j = 0; j < binary.length; j++) {
-                            bytes[j] = binary.charCodeAt(j);
-                        }
-                        fileStore[f.name] = bytes;
-                    } catch(e) {
-                        console.error('[Task] 文件加载失败: ' + f.name, e);
-                    }
-                }
+                if (files[i].name === entryFile) { entryFileData = files[i]; break; }
             }
+            if (!entryFileData || !entryFileData.data) {
+                sendTaskResult(taskName, instanceId, false, '入口文件不存在: ' + entryFile, null);
+                return;
+            }
+            var entryCode = atob(entryFileData.data);
+            entryCode = entryCode.replace(/module\.exports\s*=[\s\S]*?;\s*/g, '');
 
+            // 检查能力（需要 DOM 访问，在主线程做）
             var capabilities = {
                 cpu: true,
                 webgl: (function() { try {
@@ -2201,78 +2265,107 @@
                 webgpu: !!navigator.gpu
             };
 
-            var entryContent = fileStore[entryFile];
-            if (!entryContent) {
-                sendTaskResult(taskName, instanceId, false, '入口文件不存在: ' + entryFile, null);
-                return;
+            // 尝试创建 Worker，失败时回退到主线程执行
+            var worker = null;
+            try {
+                worker = new Worker(_getTaskWorkerUrl());
+            } catch(e) {
+                console.warn('[Task] Web Worker 创建失败，回退到主线程执行:', e.message);
             }
 
-            var decoder = new TextDecoder();
-            var entryCode = decoder.decode(entryContent);
+            if (worker) {
+                // Worker 路径：隔离执行，不阻塞主线程
+                var taskTimeout = setTimeout(function() {
+                    worker.terminate();
+                    sendTaskResult(taskName, instanceId, false, '执行超时', null, null, []);
+                }, 30000);
+                var settled = false;
 
-            // 浏览器环境没有 module，移除 CommonJS 导出语句
-            entryCode = entryCode.replace(/module\.exports\s*=[\s\S]*?;\s*/g, '');
+                worker.onmessage = function(e) {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(taskTimeout);
+                    var rd = e.data;
+                    worker.terminate();
+                    if (rd.success) {
+                        sendTaskResult(taskName, instanceId, true, null, rd.outputFiles || [], null, rd.logs || []);
+                    } else {
+                        sendTaskResult(taskName, instanceId, false, rd.error || '执行失败', null, null, rd.logs || []);
+                    }
+                };
+
+                worker.onerror = function(err) {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(taskTimeout);
+                    worker.terminate();
+                    sendTaskResult(taskName, instanceId, false, (err && err.message) || 'Worker 内部错误', null, null, []);
+                };
+
+                worker.postMessage({
+                    entryCode: entryCode,
+                    files: files,
+                    context: { capabilities: capabilities, params: params, workDir: '/workspace' }
+                });
+            } else {
+                // 回退路径：主线程执行（Worker 不可用时）
+                executeUserTaskMainThread(taskName, instanceId, entryCode, files, capabilities, params);
+            }
+        }
+
+        // 回退：主线程执行用户任务（当 Web Worker 不可用时）
+        function executeUserTaskMainThread(taskName, instanceId, entryCode, files, capabilities, params) {
+            var fileStore = {};
+            for (var i = 0; i < files.length; i++) {
+                var f = files[i];
+                if (f.data) {
+                    try {
+                        var binary = atob(f.data);
+                        var bytes = new Uint8Array(binary.length);
+                        for (var j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+                        fileStore[f.name] = bytes;
+                    } catch(e) {}
+                }
+            }
+
+            var taskLogs = [];
+            var origLog = console.log;
+            var origErr = console.error;
+            var origWarn = console.warn;
+            console.log = function() {
+                taskLogs.push({ stream: 'stdout', level: 'info', message: Array.prototype.join.call(arguments, ' ') });
+            };
+            console.error = function() {
+                taskLogs.push({ stream: 'stderr', level: 'error', message: Array.prototype.join.call(arguments, ' ') });
+            };
+            console.warn = function() {
+                taskLogs.push({ stream: 'stdout', level: 'warn', message: Array.prototype.join.call(arguments, ' ') });
+            };
 
             try {
-                // 拦截 console.log/error/warn 捕获任务日志
-                var taskLogs = [];
-                var origLog = console.log;
-                var origError = console.error;
-                var origWarn = console.warn;
-                console.log = function() {
-                    var msg = Array.prototype.join.call(arguments, ' ');
-                    taskLogs.push({ stream: 'stdout', level: 'info', message: msg });
-                    origLog.apply(console, arguments);
-                };
-                console.error = function() {
-                    var msg = Array.prototype.join.call(arguments, ' ');
-                    taskLogs.push({ stream: 'stderr', level: 'error', message: msg });
-                    origError.apply(console, arguments);
-                };
-                console.warn = function() {
-                    var msg = Array.prototype.join.call(arguments, ' ');
-                    taskLogs.push({ stream: 'stdout', level: 'warn', message: msg });
-                    origWarn.apply(console, arguments);
-                };
-
-                var context = {
-                    files: fileStore,
-                    capabilities: capabilities,
-                    params: params,
-                    workDir: '/workspace'
-                };
-
+                var ctx = { files: fileStore, capabilities: capabilities, params: params, workDir: '/workspace' };
                 var fn = new Function('context', entryCode + '\nreturn run(context);');
-                var resultPromise = fn(context);
-
-                Promise.resolve(resultPromise).then(function(result) {
-                    // 恢复原始 console
-                    console.log = origLog;
-                    console.error = origError;
-                    console.warn = origWarn;
+                Promise.resolve(fn(ctx)).then(function(result) {
+                    console.log = origLog; console.error = origErr; console.warn = origWarn;
                     var outputFiles = [];
                     if (result && result.outputFiles) {
                         for (var k = 0; k < result.outputFiles.length; k++) {
                             var name = result.outputFiles[k];
                             if (fileStore[name]) {
                                 var binStr = '';
-                                for (var j = 0; j < fileStore[name].length; j++) {
-                                  binStr += String.fromCharCode(fileStore[name][j]);
-                                }
-                                var data = btoa(binStr);
-                                outputFiles.push({ name: name, data: data });
+                                for (var j = 0; j < fileStore[name].length; j++) binStr += String.fromCharCode(fileStore[name][j]);
+                                outputFiles.push({ name: name, data: btoa(binStr) });
                             }
                         }
                     }
                     sendTaskResult(taskName, instanceId, true, null, outputFiles, null, taskLogs);
                 }).catch(function(err) {
-                    console.log = origLog;
-                    console.error = origError;
-                    console.warn = origWarn;
-                    sendTaskResult(taskName, instanceId, false, err.message, null, null, taskLogs);
+                    console.log = origLog; console.error = origErr; console.warn = origWarn;
+                    sendTaskResult(taskName, instanceId, false, err.message || '执行错误', null, null, taskLogs);
                 });
             } catch (err) {
-                sendTaskResult(taskName, instanceId, false, err.message, null);
+                console.log = origLog; console.error = origErr; console.warn = origWarn;
+                sendTaskResult(taskName, instanceId, false, err.message || '执行异常', null, null, taskLogs);
             }
         }
 

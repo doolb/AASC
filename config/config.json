@@ -222,5 +222,18 @@
     },
     "volume": 100,
     "playlist": []
+  },
+  "task": {
+    "autoStartServices": [
+      {
+        "taskName": "time.announce",
+        "taskType": "user",
+        "builtinId": null,
+        "entryFile": "service.js",
+        "target": "server",
+        "mode": "service",
+        "params": {}
+      }
+    ]
   }
 }

@@ -14,9 +14,9 @@
  * @param {Function} sendToDisplay — (displayId: string, msg: object) => void，向指定显示端发送
  */
 function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDisplay) {
-  const controlTypes = ['task:submit', 'task:stop', 'task:status', 'task:result',
+  const controlTypes = ['task:submit', 'task:run', 'task:stop', 'task:status', 'task:result',
                         'task:list', 'task:update', 'task:delete', 'task:get_instance_logs',
-                        'task:delete_instance'];
+                        'task:delete_instance', 'task:widget_action'];
 
   // 获取内置任务列表（格式化为前端所需结构）
   function getBuiltinTasks() {
@@ -29,6 +29,9 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           builtinId: t.id,
           name: t.name,
           params: t.params || [],
+          target: t.target || 'server',
+          mode: t.mode || 'one-shot',
+          widget: t.widget || null,
           instances: []
         }));
       }
@@ -96,6 +99,24 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           ctx.ws.send(JSON.stringify({
             type: 'task:error',
             payload: { taskName: payload.taskName, error: err.message },
+          }));
+        }
+        break;
+      }
+
+      // ---- 运行已创建的实例 ----
+      case 'task:run': {
+        console.log('[WS] >> task:run:', payload.taskName, payload.instanceId);
+        try {
+          const result = await taskManager.runInstance(payload.taskName, payload.instanceId);
+          ctx.ws.send(JSON.stringify({
+            type: 'task:run_result',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, ...result }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, error: err.message }
           }));
         }
         break;
@@ -232,6 +253,16 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
         break;
       }
 
+      case 'task:widget_action': {
+        console.log('[WS] >> task:widget_action:', payload.instanceId, payload.action);
+        const wResult = await taskManager.handleWidgetAction(payload.instanceId, payload.action, payload.params);
+        ctx.ws.send(JSON.stringify({
+          type: 'task:widget_action_result',
+          payload: { instanceId: payload.instanceId, action: payload.action, ...wResult }
+        }));
+        break;
+      }
+
       default:
         // 不做处理
         break;
@@ -271,6 +302,14 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
     sendToControl({
       type: 'task:log',
       payload: { taskName: inst ? inst.taskName : null, instanceId, stream, level, message, timestamp: Date.now() },
+    });
+  });
+
+  taskManager.on('widgetUpdate', (instanceId, data) => {
+    const inst = taskManager.getInstance(instanceId);
+    sendToControl({
+      type: 'task:widget_update',
+      payload: { instanceId, taskName: inst ? inst.taskName : null, data }
     });
   });
 }

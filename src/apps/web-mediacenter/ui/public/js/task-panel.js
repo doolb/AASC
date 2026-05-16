@@ -3,6 +3,8 @@
 
   var TaskPanel = {
     instances: new Map(),
+    _widgetData: {},
+    _widgetControllers: {},
     displayList: [],
     taskList: [],
     currentTab: 'list',
@@ -73,7 +75,49 @@
     },
 
     _handleTaskList: function(tasks) {
-      this.taskList = tasks;
+      // 合并同名条目：内置任务带 widget，磁盘任务带实例
+      var merged = {};
+      for (var t = 0; t < tasks.length; t++) {
+        var task = tasks[t];
+        var key = task.taskName;
+        if (merged[key]) {
+          // 合并实例、补全 widget 等字段
+          if (task.instances) merged[key].instances = (merged[key].instances || []).concat(task.instances);
+          if (task.widget && !merged[key].widget) merged[key].widget = task.widget;
+          if (task.mode && !merged[key].mode) merged[key].mode = task.mode;
+        } else {
+          merged[key] = Object.assign({}, task);
+        }
+      }
+      this.taskList = Object.values(merged);
+      // 从任务列表同步 running 实例到 this.instances（用于运行中页签）
+      for (var t = 0; t < this.taskList.length; t++) {
+        var instances = this.taskList[t].instances || [];
+        for (var i = 0; i < instances.length; i++) {
+          var inst = instances[i];
+          if (inst.status === 'running' || inst.status === 'pending_forward') {
+            if (!this.instances.has(inst.instanceId)) {
+              this.instances.set(inst.instanceId, inst);
+            }
+          }
+        }
+      }
+
+      // 请求运行中服务实例立即推送 widget 数据，避免等待定时更新
+      for (var t = 0; t < this.taskList.length; t++) {
+        var task = this.taskList[t];
+        if (task.widget && task.instances) {
+          for (var i = 0; i < task.instances.length; i++) {
+            var inst = task.instances[i];
+            if (inst.status === 'running') {
+              this._send({
+                type: 'task:widget_action',
+                payload: { instanceId: inst.instanceId, action: 'widgetRefresh' }
+              });
+            }
+          }
+        }
+      }
       if (this.currentTab === 'list') this._renderTaskList();
     },
 
@@ -137,6 +181,7 @@
         else if (latest.status === 'completed') { icon = '✅'; statusClass = 'completed'; statusText = '已完成'; }
         else if (latest.status === 'failed') { icon = '❌'; statusClass = 'failed'; statusText = '失败'; }
         else if (latest.status === 'stopped') { icon = '⏹'; statusClass = 'stopped'; statusText = '已停止'; }
+        else if (latest.status === 'created') { icon = '🆕'; statusClass = 'created'; statusText = '待运行'; }
         else if (latest.status === 'pending' || latest.status === 'pending_forward') { icon = '⏳'; statusClass = 'pending'; statusText = '排队中'; }
         latestProgress = (latest.progress != null && latest.status === 'running') ? latest.progress : null;
         if (latest.timestamp) latestTime = this._formatTime(latest.timestamp);
@@ -161,10 +206,10 @@
       var isSelected = this._selectedTaskName === task.taskName;
       var actionsHtml = '';
       if (isBuiltin) {
-        actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._runBuiltin(\'' + safeTaskName + '\')">运行</button>';
-        actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewBuiltinParams(\'' + safeTaskName + '\')">参数</button>';
+        actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._createBuiltinInstance(\'' + safeTaskName + '\')">创建实例</button>';
+        actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewBuiltinParams(\'' + safeTaskName + '\')">配置</button>';
       } else {
-        actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._runUserTask(\'' + safeTaskName + '\')">运行</button>';
+        actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._createUserInstance(\'' + safeTaskName + '\')">创建实例</button>';
         actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewEdit(\'' + safeTaskName + '\')">编辑</button>';
         actionsHtml += '<button class="task-card-btn danger" onclick="event.stopPropagation();TaskPanel._confirmDelete(\'' + safeTaskName + '\')">删除</button>';
       }
@@ -363,7 +408,7 @@
               '<label>模式</label>' +
               '<div class="task-btn-group" id="modeGroup">' +
                 '<button class="task-btn-option active" data-value="one-shot">一次性</button>' +
-                '<button class="task-btn-option" data-value="resident">常驻</button>' +
+                '<button class="task-btn-option" data-value="service">服务</button>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -834,6 +879,7 @@
       var targetEl = document.querySelector('#targetGroup .task-btn-option.active');
       var envEl = document.querySelector('#envGroup .task-btn-option.active');
       var modeEl = document.querySelector('#modeGroup .task-btn-option.active');
+      var mode = modeEl ? modeEl.dataset.value : 'one-shot';
       var typeEl = document.getElementById('taskTypeSelect');
       var deviceEl = document.querySelector('#deviceSelectorList .task-device-item.selected');
       var displayId = deviceEl && deviceEl.dataset.id ? deviceEl.dataset.id : null;
@@ -845,10 +891,10 @@
         payload: {
           taskName: taskName,
           taskType: typeEl ? typeEl.value : 'user',
-          entryFile: document.getElementById('entryFile') ? document.getElementById('entryFile').value.trim() : 'task.js',
+          entryFile: document.getElementById('entryFile') ? document.getElementById('entryFile').value.trim() : (mode === 'service' ? 'service.js' : 'task.js'),
           target: target,
           displayId: displayId,
-          mode: modeEl ? modeEl.dataset.value : 'one-shot',
+          mode: mode,
           env: envEl ? envEl.dataset.value : 'auto',
           files: files,
           params: params
@@ -892,6 +938,7 @@
       var targetEl = document.querySelector('#editTargetGroup .task-btn-option.active');
       var envEl = document.querySelector('#editEnvGroup .task-btn-option.active');
       var modeEl = document.querySelector('#editModeGroup .task-btn-option.active');
+      var mode = modeEl ? modeEl.dataset.value : 'one-shot';
       var deviceEl = document.querySelector('#editDeviceSelectorList .task-device-item.selected');
       var displayId = deviceEl && deviceEl.dataset.id ? deviceEl.dataset.id : null;
       var target = targetEl ? targetEl.dataset.value : 'server';
@@ -902,10 +949,10 @@
         payload: {
           taskName: taskName,
           taskType: 'user',
-          entryFile: (task && task.entryFile) || 'task.js',
+          entryFile: (task && task.entryFile) || (mode === 'service' ? 'service.js' : 'task.js'),
           target: target,
           displayId: displayId,
-          mode: modeEl ? modeEl.dataset.value : 'one-shot',
+          mode: mode,
           env: envEl ? envEl.dataset.value : 'auto',
           params: params,
           files: []
@@ -913,15 +960,43 @@
       });
     },
 
+    _createBuiltinInstance: function(taskName) {
+      // 有参数的任务打开配置页，无参数的直接创建实例
+      var task = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      if (task && task.params && task.params.length > 0) {
+        this._viewBuiltinParams(taskName);
+      } else {
+        this._send({ type: 'task:submit', payload: {
+          taskName: taskName, taskType: 'builtin', builtinId: taskName,
+          target: (task && task.target) || 'server',
+          mode: (task && task.mode) || 'one-shot',
+          autoRun: false, params: {}, files: []
+        }});
+      }
+    },
+
+    _createUserInstance: function(taskName) {
+      // 打开任务编辑/文件上传页
+      this._viewEdit(taskName);
+    },
+
     _runBuiltin: function(taskName) {
+      var task = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      var mode = (task && task.mode) || 'one-shot';
       this._send({
         type: 'task:submit',
         payload: {
           taskName: taskName,
           taskType: 'builtin',
           builtinId: taskName,
-          target: 'server',
-          mode: 'one-shot',
+          target: (task && task.target) || 'server',
+          mode: mode,
           env: 'auto',
           params: {},
           files: []
@@ -1002,6 +1077,12 @@
         }
         if (data.type === 'task:instance_deleted') {
           self._onInstanceDeleted(data.payload);
+        }
+        if (data.type === 'task:widget_update') {
+          self._onWidgetUpdate(data.payload);
+        }
+        if (data.type === 'task:run_result') {
+          self._requestTaskList();
         }
         if (orig) orig.call(ws, data);
       };
@@ -1152,7 +1233,7 @@
       if (!badge) return;
       var count = 0;
       this.instances.forEach(function(inst) {
-        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward') count++;
+        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'created') count++;
       });
       badge.classList.toggle('show', count > 0);
     },
@@ -1167,7 +1248,7 @@
       var done = [];
 
       this.instances.forEach(function(inst) {
-        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward') {
+        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'created') {
           active.push(inst);
         } else {
           done.push(inst);
@@ -1447,7 +1528,7 @@
               '<label>模式</label>' +
               '<div class="task-btn-group" id="editModeGroup">' +
                 '<button class="task-btn-option active" data-value="one-shot">一次性</button>' +
-                '<button class="task-btn-option" data-value="resident">常驻</button>' +
+                '<button class="task-btn-option" data-value="service">服务</button>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -1574,6 +1655,14 @@
       };
     },
 
+    _runCreatedInstance: function(taskName, instanceId) {
+      this._send({ type: 'task:run', payload: { taskName: taskName, instanceId: instanceId } });
+    },
+
+    _resumeService: function(taskName, instanceId) {
+      this._send({ type: 'task:submit', payload: { taskName: taskName, instanceId: instanceId, taskType: 'builtin', builtinId: taskName, target: 'server', mode: 'service', params: {}, files: [] } });
+    },
+
     _runTaskFromResult: function(taskName, instanceId) {
       var task = null;
       var inst = null;
@@ -1591,7 +1680,7 @@
           taskName: taskName,
           instanceId: instanceId,
           taskType: 'user',
-          entryFile: (task && task.entryFile) || 'task.js',
+          entryFile: (task && task.entryFile) || ((inst && inst.mode) === 'service' ? 'service.js' : 'task.js'),
           target: (inst && inst.target) || 'server',
           displayId: (inst && inst.displayId) || null,
           mode: (inst && inst.mode) || 'one-shot',
@@ -1754,7 +1843,13 @@
     },
 
     _resultDetailHTML: function(inst, taskName) {
-      var statusText = inst.status === 'completed' ? '完成' : inst.status === 'failed' ? '失败' : inst.status === 'stopped' ? '已停止' : '进行中';
+      var statusText = inst.status === 'completed' ? '完成' : inst.status === 'failed' ? '失败' : inst.status === 'stopped' ? '已停止' : inst.status === 'created' ? '已创建' : '进行中';
+
+      var widgetHtml = '';
+      if (inst.status === 'running' || inst.status === 'stopped') {
+        var widgetDef = this._getWidgetDef(taskName);
+        if (widgetDef) widgetHtml = this._renderWidget(widgetDef, inst.instanceId);
+      }
 
       var result = inst.result || {};
       var outputFiles = result.outputFiles || (result.data ? result.data.outputFiles : []) || [];
@@ -1786,7 +1881,8 @@
         ? Math.round((inst.completedAt - inst.timestamp) / 1000) + 's'
         : '-';
 
-      return '<div class="task-result-meta">' +
+      return (widgetHtml || '') +
+      '<div class="task-result-meta">' +
         '<div class="task-result-meta-item">状态: <strong>' + statusText + '</strong></div>' +
         '<div class="task-result-meta-item">耗时: <strong>' + duration + '</strong></div>' +
         '<div class="task-result-meta-item">实例: <strong style="font-family:monospace">#' + this._escapeHtml(inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</strong></div>' +
@@ -1807,9 +1903,189 @@
         '<div class="task-result-log-content">' + (logHtml || '<span style="color:#555">无日志</span>') + '</div>' +
       '</div>' +
       '<div style="margin-top:12px;display:flex;gap:8px">' +
-        '<button class="task-card-btn" onclick="TaskPanel._runTaskFromResult(\'' + taskName + '\',\'' + inst.instanceId + '\')">重新执行</button>' +
+        (inst.status === 'created'
+          ? '<button class="task-card-btn primary" onclick="TaskPanel._runCreatedInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">运行</button>'
+          : inst.mode === 'service' && inst.status === 'stopped'
+            ? '<button class="task-card-btn primary" onclick="TaskPanel._resumeService(\'' + taskName + '\',\'' + inst.instanceId + '\')">恢复服务</button>'
+            : '<button class="task-card-btn" onclick="TaskPanel._runTaskFromResult(\'' + taskName + '\',\'' + inst.instanceId + '\')">重新执行</button>') +
         '<button class="task-card-btn danger" onclick="TaskPanel._confirmDeleteInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">删除此执行记录</button>' +
       '</div>';
+    },
+
+    _getWidgetDef: function(taskName) {
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) return this.taskList[i].widget || null;
+      }
+      return null;
+    },
+
+    _onWidgetUpdate: function(payload) {
+      this._widgetData[payload.instanceId] = payload.data;
+      var ctrl = this._widgetControllers[payload.instanceId];
+      if (ctrl && ctrl.onUpdate) {
+        ctrl.onUpdate(payload.data);
+        return;
+      }
+      var widgetEl = document.getElementById('task-widget-' + payload.instanceId);
+      if (widgetEl) {
+        var taskName = payload.taskName;
+        var task = null;
+        for (var i = 0; i < this.taskList.length; i++) {
+          if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+        }
+        var wd = task && task.widget;
+        if (wd && wd.html) {
+          var html = wd.html;
+          html = html.replace(/\{\{instanceId\}\}/g, payload.instanceId);
+          html = html.replace(/\{\{(\w+)\}\}/g, function(match, key) {
+            var val = payload.data[key] !== undefined ? payload.data[key] : '--';
+            return typeof val === 'string' ? val : JSON.stringify(val);
+          });
+          widgetEl.innerHTML = html;
+        }
+      }
+    },
+
+    _renderWidget: function(widgetDef, instanceId) {
+      if (!widgetDef) return '';
+      var data = this._widgetData[instanceId] || {};
+      var self = this;
+
+      if (widgetDef.html) {
+        var html = widgetDef.html;
+        if (!widgetDef.script) {
+          html = html.replace(/\{\{instanceId\}\}/g, instanceId);
+          html = html.replace(/\{\{(\w+)\}\}/g, function(match, key) {
+            var val = data[key] !== undefined ? data[key] : '--';
+            return typeof val === 'string' ? val : JSON.stringify(val);
+          });
+        }
+        var containerId = 'task-widget-' + instanceId;
+        var result = '<div id="' + containerId + '" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:12px">' + html + '</div>';
+
+        if (widgetDef.script) {
+          setTimeout(function() {
+            self._initWidgetController(widgetDef.script, instanceId, containerId);
+          }, 0);
+        }
+
+        return result;
+      }
+
+      if (widgetDef.fields) {
+        fieldsHtml = widgetDef.fields.map(function(f) {
+          var val = data[f.name] !== undefined ? data[f.name] : f.default;
+          var label = '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:2px">' + this._escapeHtml(f.label || f.name) + '</div>';
+          if (f.type === 'toggle') {
+            var checked = val ? 'checked' : '';
+            return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:4px 0">' +
+              '<input type="checkbox" ' + checked + ' disabled style="accent-color:#4f9cf7">' +
+              this._escapeHtml(f.label || f.name) + '</label>';
+          } else if (f.type === 'select') {
+            var opts = (f.options || []).map(function(o) {
+              var sel = val == o ? 'selected' : '';
+              return '<option value="' + o + '" ' + sel + '>' + o + '</option>';
+            }).join('');
+            return '<div style="margin-bottom:8px">' + label +
+              '<select class="task-widget-field" data-field="' + f.name + '" style="width:100%;padding:6px 8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px">' + opts + '</select></div>';
+          } else if (f.type === 'number') {
+            return '<div style="margin-bottom:8px">' + label +
+              '<input type="number" class="task-widget-field" data-field="' + f.name +
+              '" value="' + (val !== undefined ? val : '') + '"' +
+              (f.min !== undefined ? ' min="' + f.min + '"' : '') +
+              (f.max !== undefined ? ' max="' + f.max + '"' : '') +
+              ' style="width:100%;padding:6px 8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box"></div>';
+          }
+          return '';
+        }, this).join('');
+      }
+
+      var displaysHtml = '';
+      if (widgetDef.displays) {
+        displaysHtml = widgetDef.displays.map(function(d) {
+          var val = data[d.id] !== undefined ? data[d.id] : '--';
+          return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.06)">' +
+            '<span style="color:rgba(255,255,255,0.5)">' + this._escapeHtml(d.label || d.id) + '</span>' +
+            '<span style="color:#4f9cf7;font-weight:500">' + this._escapeHtml(String(val)) + '</span></div>';
+        }, this).join('');
+      }
+
+      var actionsHtml = '';
+      if (widgetDef.actions) {
+        actionsHtml = '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+          widgetDef.actions.map(function(a) {
+            return '<button class="task-card-btn" onclick="TaskPanel._onWidgetAction(\'' +
+              instanceId + '\',\'' + a.id + '\')">' +
+              this._escapeHtml(a.label || a.id) + '</button>';
+          }, this).join('') +
+          '<button class="task-card-btn primary" onclick="TaskPanel._onWidgetSaveConfig(\'' +
+            instanceId + '\')">保存配置</button>' +
+        '</div>';
+      }
+
+      return '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:12px">' +
+        (fieldsHtml ? '<div style="margin-bottom:12px">' + fieldsHtml + '</div>' : '') +
+        (displaysHtml ? '<div style="margin-bottom:12px">' + displaysHtml + '</div>' : '') +
+        (actionsHtml || '') +
+      '</div>';
+    },
+
+    _onWidgetAction: function(instanceId, action) {
+      this._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: action } });
+    },
+
+    _onWidgetSaveConfig: function(instanceId) {
+      var taskName = this._selectedTaskName;
+      var els = document.querySelectorAll('.task-widget-field');
+      var params = {};
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
+        var name = el.getAttribute('data-field');
+        if (!name) continue;
+        if (el.tagName === 'SELECT') params[name] = parseInt(el.value);
+        else if (el.type === 'number') params[name] = parseInt(el.value) || 0;
+      }
+      this._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: 'updateConfig', params: params } });
+    },
+
+    _initWidgetController: function(scriptStr, instanceId, containerId) {
+      var oldCtrl = this._widgetControllers[instanceId];
+      if (oldCtrl && oldCtrl.onDestroy) try { oldCtrl.onDestroy(); } catch(e) {}
+      if (oldCtrl && oldCtrl._timer) clearInterval(oldCtrl._timer);
+
+      var container = document.getElementById(containerId);
+      if (!container) return;
+
+      var self = this;
+      var api = {
+        getContainer: function() { return container; },
+        getData: function() { return self._widgetData[instanceId] || {}; },
+        sendAction: function(action, params) {
+          self._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: action, params: params || {} } });
+        },
+        _onUpdate: null,
+        _onDestroy: null,
+        _timer: null,
+        onUpdate: function(fn) { this._onUpdate = fn; },
+        onDestroy: function(fn) { this._onDestroy = fn; },
+        setInterval: function(fn, ms) { this._timer = setInterval(fn, ms); }
+      };
+
+      try {
+        (new Function('api', scriptStr))(api);
+      } catch (e) {
+        console.error('[TaskPanel] widget script error:', e);
+      }
+
+      this._widgetControllers[instanceId] = {
+        onUpdate: api._onUpdate ? function(data) { api._onUpdate(data); } : null,
+        onDestroy: api._onDestroy ? function() { try { api._onDestroy(); } catch(e) {} } : null,
+        _timer: api._timer
+      };
+
+      if (api._onUpdate) {
+        try { api._onUpdate(self._widgetData[instanceId] || {}); } catch(e) { console.error('[TaskPanel] widget init update error:', e); }
+      }
     },
 
     _previewImage: function(url) {

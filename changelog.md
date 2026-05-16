@@ -12,6 +12,65 @@
     - 修改：src/apps/web-mediacenter/ui/public/display.html
     - 修改：docs/spec/websocket.md
 
+- ✅ [2026-05-16] 长任务阻塞：服务端异步派发 + 显示端 Web Worker 隔离
+  - 服务端：NodeJsRunner/PuppeteerRunner 改为异步派发，submit() 立即返回，结果通过事件广播
+  - 显示端：用户任务改用 Web Worker 隔离执行，主线程不再被用户代码阻塞
+  - 显示端：Web Worker 添加 30 秒超时保护，防止死循环任务永久挂起
+  - 改动文件：
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+    - 修改：src/apps/web-mediacenter/ui/public/display.html
+    - 修改：docs/spec/remote-task-system.md
+
+### 新功能
+
+- ✅ [2026-05-16] 服务任务生命周期 + 整点报时内置服务
+  - 新增 _runServiceTask() 在主进程运行服务任务，不 fork
+  - 支持内置服务（builtinRegistry.run）和用户上传服务（require）
+  - stopInstance() 检测服务控制器，调 controller.stop() 停止
+  - 用户上传服务清理 require 缓存，支持重新上传
+  - 常驻改名为服务，默认入口文件 service.js
+  - 新增整点报时内置服务 time.announce（mode: service）
+    - 主进程运行，监听 timeListener 分钟变化
+    - 到整点/半点/刻钟时生成 TTS，广播到所有显示端
+    - 支持间隔、重复次数、启用/禁用配置
+  - 内置任务列表增加 target / mode 字段
+  - 控制端服务任务卡片显示"启动"按钮
+  - 控制端服务任务显示"停止"按钮（自动适配 running 状态）
+  - 注入 sendToDisplay / broadcastToDisplays 到服务上下文
+  - 服务任务自动启动：启动的服务持久化到 config，服务器重启时自动恢复
+  - 服务停止时自动从自动启动列表移除
+
+- ✅ [2026-05-16] Widget 系统：服务任务控制端自定义 UI
+  - 内置任务可定义 widget（fields / displays / actions）
+  - task:widget_update 实时推送状态到控制端
+  - task:widget_action 控制端动作路由到服务处理器
+  - 控制端 widget 渲染引擎：toggle / select / number 字段 + 实时数据显示 + 动作按钮
+  - widget 支持自定义 script 控制器（new Function 沙箱执行）
+    - api.onUpdate(fn) — 数据驱动渲染，每次 widget_update 调用
+    - api.sendAction(action, params) — 发动作到服务端
+    - api.getContainer() / api.getData() — 访问 DOM 和数据
+    - api.setInterval(fn, ms) — 安全定时器，自动清理
+    - api.onDestroy(fn) — 清理回调
+  - 整点报时接入 widget：配置表单 + 上次/下次报时 + 测试报时按钮 + 保存配置
+  - 改动文件：
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+    - 修改：src/apps/server/modules/task-engine/web-socket-handler.js
+    - 修改：src/apps/server/modules/task-engine/builtin-tasks/time-announce.js
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 修改：docs/spec/remote-task-system.md
+  - 改动文件：
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+    - 修改：src/apps/server/modules/task-engine/web-socket-handler.js
+    - 新增：src/apps/server/modules/task-engine/builtin-tasks/time-announce.js
+    - 修改：src/apps/server/modules/task-engine/builtin-tasks/registry.js
+    - 修改：src/apps/server/boot/server-app.js
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 修改：docs/spec/remote-task-system.md
+    - 修改：docs/design/remote-task-system.md
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/display.html
+    - 修改：docs/spec/websocket.md
+
 ### 新功能
 
 - ✅ [2026-05-16] 任务列表界面重新设计为三列布局

@@ -1,6 +1,7 @@
 const tasks = {
   'image.resize': require('./image-resize'),
-  'model.inference': require('./model-inference')
+  'model.inference': require('./model-inference'),
+  'time.announce': require('./time-announce')
 };
 
 module.exports = {
@@ -10,7 +11,10 @@ module.exports = {
   listTasks() {
     return Object.values(tasks).map(t => ({
       id: t.id, name: t.name, description: t.description,
-      params: t.params || []
+      target: t.target || 'server',
+      mode: t.mode || 'one-shot',
+      params: t.params || [],
+      widget: t.widget || null
     }));
   },
   async run(id, context) {

@@ -125,7 +125,7 @@ module.exports = {
     entryFile: "task.js",         // 入口文件（taskType=user）
     target: "server",             // "server" | "display" | "subdisplay"
     displayId: null,              // 目标显示端/子显示端 ID
-    mode: "one-shot",             // "one-shot" | "resident"
+    mode: "one-shot",             // "one-shot" | "service"
     env: "auto",                  // "cpu" | "webgl" | "webgpu" | "auto"
     files: [                      // 文件列表（taskType=user）
       { name: "task.js", data: "<base64>" },        // 小文件 inline 上传
