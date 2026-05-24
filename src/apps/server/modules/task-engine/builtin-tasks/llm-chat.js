@@ -38,8 +38,10 @@ module.exports = {
       '</div>' +
       '<div style="display:flex;gap:6px;align-items:center">' +
         '<span style="font-size:11px;color:rgba(255,255,255,0.4);white-space:nowrap;min-width:36px">格式</span>' +
-        '<input class="task-widget-field" data-field="promptFormat" value="{{promptFormat}}" placeholder="openai/raw"' +
-        ' style="flex:1;padding:5px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px">' +
+        '<select class="task-widget-field" data-field="promptFormat" style="width:90px;padding:5px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px">' +
+          '<option value="openai" {{_selOpenai}}>OpenAI</option>' +
+          '<option value="raw" {{_selRaw}}>纯文本</option>' +
+        '</select>' +
       '</div>' +
       '<div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px">' +
         '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">消息</div>' +

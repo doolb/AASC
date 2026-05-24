@@ -13,34 +13,11 @@
     _timerInterval: null,
     _initDone: false,
 
-    _debug: {
-      init: false,
-      polling: false,
-      ws: false,
-      displayList: false,
-      message: false
-    },
-
-    _log: function(cat) {
-      if (this._debug[cat]) {
-        var args = Array.prototype.slice.call(arguments, 1);
-        console.log.apply(console, args);
-      }
-    },
-
     init: function() {
       if (this._initDone) return;
       this._initDone = true;
-      this._log('init', '[TaskPanel] init start, displayList:', this.displayList.length);
       this._render();
       this._setupWS();
-      var self = this;
-      setInterval(function() {
-        self._log('polling', '[TaskPanel] check displayList:', self.displayList.length, 'ws:', window.WebSocketManager ? 'exists' : 'null', 'hooked:', window.WebSocketManager ? window.WebSocketManager._taskPanelHooked : 'n/a');
-        if (self.displayList.length > 0) {
-          self._log('polling', '[TaskPanel] items:', JSON.stringify(self.displayList.map(function(d) { return d.id; })));
-        }
-      }, 3000);
       this._bindTabs();
       this._requestTaskList();
     },
@@ -116,6 +93,18 @@
             if (!this.instances.has(inst.instanceId)) {
               this.instances.set(inst.instanceId, inst);
             }
+          }
+        }
+      }
+
+      // 以服务端状态为准，纠正 this.instances 中的过期状态
+      for (var t = 0; t < this.taskList.length; t++) {
+        var instances = this.taskList[t].instances || [];
+        for (var i = 0; i < instances.length; i++) {
+          var inst = instances[i];
+          var memInst = this.instances.get(inst.instanceId);
+          if (memInst && inst.status !== 'running' && inst.status !== 'pending_forward') {
+            memInst.status = inst.status;
           }
         }
       }
@@ -286,7 +275,7 @@
       instances.forEach(function(inst) {
         var memInst = this.instances.get(inst.instanceId);
         if (memInst) {
-          inst.status = memInst.status;
+          if (memInst.status != null) inst.status = memInst.status;
           inst.stage = memInst.stage;
           inst.result = memInst.result;
           inst.logs = memInst.logs;
@@ -330,6 +319,7 @@
       // 重新渲染实例列表更新选中样式
       var instancesCol = document.getElementById('taskInstancesCol');
       if (instancesCol) instancesCol.innerHTML = this._renderInstancesCol(taskName);
+      this._requestTaskList();
     },
 
     _renderResultCol: function(taskName, instanceId) {
@@ -1243,23 +1233,18 @@
     _setupWS: function() {
       var self = this;
       var ws = window.WebSocketManager;
-      self._log('ws', '[TaskPanel] _setupWS: ws=', !!ws, 'hooked=', ws ? ws._taskPanelHooked : 'n/a');
       if (!ws) { setTimeout(function() { self._setupWS(); }, 500); return; }
       if (ws._taskPanelHooked) return;
       ws._taskPanelHooked = true;
-      self._log('ws', '[TaskPanel] handleMessage hooked');
       // Pull existing display list from DeviceList (sent before we hooked)
       if (window.DeviceList && window.DeviceList.list && window.DeviceList.list.length > 0) {
         self.displayList = window.DeviceList.list;
-        self._log('displayList', '[TaskPanel] 从 DeviceList 拉取显示端列表:', self.displayList.length);
         self._renderDeviceSelector();
       }
       var orig = ws.handleMessage;
       ws.handleMessage = function(data) {
-        self._log('message', '[TaskPanel] onmessage type:', data.type);
         if (data.type === 'displayList') {
           self.displayList = data.list || [];
-          self._log('displayList', '[TaskPanel] 显示端列表数:', self.displayList.length);
           if (document.getElementById('deviceSelectorList')) {
             self._renderDeviceSelector();
           }
@@ -1322,23 +1307,6 @@
           self._requestTaskList();
         }
         if (data.type === 'task:rerun_result') {
-          if (data.payload && data.payload.success !== false) {
-            var memInst = self.instances.get(data.payload.instanceId);
-            if (memInst) memInst.status = 'draft';
-            // 自动执行待运行的 rerun（如恢复服务）
-            if (self._pendingRunAfterRerun) {
-              var pr = self._pendingRunAfterRerun;
-              self._pendingRunAfterRerun = null;
-              self._send({ type: 'task:run', payload: { taskName: pr.taskName, instanceId: pr.instanceId } });
-            }
-            // 刷新结果详情列显示 draft 状态
-            if (self._selectedInstanceId === data.payload.instanceId) {
-              setTimeout(function() {
-                var col = document.getElementById('taskResultCol');
-                if (col) col.innerHTML = self._renderResultCol(self._selectedTaskName, self._selectedInstanceId);
-              }, 100);
-            }
-          }
           self._requestTaskList();
         }
         if (data.type === 'task:instance_logs_cleared') {
@@ -1451,9 +1419,10 @@
       var inst = this.instances.get(payload.instanceId);
       if (inst) {
         inst.status = 'stopped';
-        this._updateMonitorBadge();
-        if (this.currentTab === 'monitor') this._renderMonitor();
       }
+      this._updateMonitorBadge();
+      if (this.currentTab === 'monitor') this._renderMonitor();
+      this._requestTaskList();
     },
 
     _onDeleted: function(payload) {
@@ -1465,10 +1434,21 @@
     _onInstanceLogs: function(payload) {
       var inst = this.instances.get(payload.instanceId);
       if (!inst) {
+        var actualStatus = 'draft';
+        for (var t = 0; t < this.taskList.length; t++) {
+          var instances = this.taskList[t].instances || [];
+          for (var i = 0; i < instances.length; i++) {
+            if (instances[i].instanceId === payload.instanceId && instances[i].status) {
+              actualStatus = instances[i].status;
+              break;
+            }
+          }
+          if (actualStatus !== 'draft') break;
+        }
         this.instances.set(payload.instanceId, {
           instanceId: payload.instanceId,
           taskName: payload.taskName,
-          status: 'completed',
+          status: actualStatus,
           logs: []
         });
         inst = this.instances.get(payload.instanceId);
@@ -2135,7 +2115,7 @@
       instances.forEach(function(inst) {
         var memInst = this.instances.get(inst.instanceId);
         if (memInst) {
-          inst.status = memInst.status;
+          if (memInst.status != null) inst.status = memInst.status;
           inst.stage = memInst.stage;
           inst.result = memInst.result;
           inst.logs = memInst.logs;
@@ -2209,6 +2189,14 @@
           for (var p = 0; p < taskParams.length; p++) {
             if (wd[taskParams[p].name] === undefined && taskParams[p].default !== undefined)
               wd[taskParams[p].name] = taskParams[p].default;
+          }
+        }
+        // 为 select 字段生成 _sel<Val> 选中标记（如 promptFormat=openai → _selOpenai=selected）
+        var selectFields = ['promptFormat'];
+        for (var s = 0; s < selectFields.length; s++) {
+          var v = wd[selectFields[s]];
+          if (v && typeof v === 'string') {
+            wd['_sel' + v.charAt(0).toUpperCase() + v.slice(1)] = 'selected';
           }
         }
         this._widgetData[inst.instanceId] = wd;

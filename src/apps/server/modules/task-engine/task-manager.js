@@ -146,6 +146,12 @@ class TaskManager extends EventEmitter {
           return { taskName, instanceId, status: 'pending_forward' };
         }
 
+        const currentBuiltin = this.instances.get(instanceId);
+        if (!currentBuiltin || currentBuiltin.status === 'stopped') {
+          console.log('[TaskManager] 实例已停止，忽略内置任务结果:', instanceId);
+          return { taskName, instanceId, status: 'stopped' };
+        }
+
         await this._handleResult(task, instanceId, instance, result);
         return { taskName, instanceId, status: instance.status };
       }
@@ -371,7 +377,16 @@ class TaskManager extends EventEmitter {
 
   async stopInstance(taskName, instanceId) {
     const instance = this.instances.get(instanceId);
-    if (!instance) return { success: false, error: '实例不存在' };
+    if (!instance) {
+      const idx = await this.taskIO.getIndex(taskName).catch(() => []);
+      const entry = idx.find(e => e.instanceId === instanceId);
+      if (entry) {
+        this.emit('log', instanceId, 'system', 'info', '服务已停止');
+        await this.taskIO.updateIndex(taskName, { instanceId, status: 'stopped' });
+        return { success: true };
+      }
+      return { success: false, error: '实例不存在' };
+    }
 
     // 服务任务：调控制器的 stop()
     const svc = this._services.get(instanceId);

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### 修复
+
+- ✅ [2026-05-24] 修复控制端切换任务实例时状态错误显示为"已完成"
+  - _onInstanceLogs 创建新条目时不再硬编码 status:'completed'，改为从 taskList 查找实际状态
+  - _renderInstancesCol/_showResultsView 合并内存状态时增加 null 守卫，防止 undefined 覆盖真实状态
+  - _handleTaskList 增加服务端状态回写内存，确保每次刷新后非运行中实例状态以服务端为准
+  - _selectInstance 增加 _requestTaskList()，切换实例时主动拉取最新数据
+  - 移除所有调试打印（[RERUN] 日志、_debug/_log 系统、3s 轮询）
+  - 改动文件：task-panel.js
+
+- ✅ [2026-05-24] 修复 stopInstance 对内存中不存在的孤儿实例不更新 index.json
+  - stopInstance() 增加回退到 index.json 查找并更新状态的逻辑
+  - runInstance() 中内置任务执行后增加 stopped 状态检查，防止 _handleResult 覆盖 stop 状态
+  - task-panel.js _onStopped 增加 _requestTaskList() 刷新控制端任务列表显示
+  - 改动文件：task-manager.js、task-panel.js
+
 ### 新增
 
 - ✅ [2026-05-24] llm-chat 新增 promptFormat/contextCount/maxTokens/apiKey 参数，支持 raw 消息格式
@@ -13,6 +29,11 @@
   - 改动文件：llm-chat.js、res/tasks/llm.chat/results/index.json
 
 - ✅ [2026-05-24] llm-chat 重构：实例 params 存配置，全局配置通过 task:set_config 管理
+
+- ✅ [2026-05-24] 修复 rerun 无响应：前端乐观更新 + 服务端加打印
+  - 前端 _rerun_result 处理器改为无条件乐观更新实例状态为 draft 并立即重绘
+  - 服务端 web-socket-handler 增加 rerun_result/error 打印日志
+  - 改动文件：task-panel.js、web-socket-handler.js
 
 - ✅ [2026-05-24] 修复 llm-chat 重新执行无响应 — _renderResultCol 缺少 status 合并
   - _renderResultCol 内存状态合并新增 `if (memInst.status) inst.status = memInst.status`

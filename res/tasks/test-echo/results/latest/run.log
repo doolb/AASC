@@ -1,8 +1,24 @@
-[2026-05-24T04:23:16.710Z] [stdout][info] 输入参数: {
-  "message": "hello",
-  "count": 1
-}
-[2026-05-24T04:23:16.710Z] [stdout][info] === 测试用户任务开始执行 ===
-[2026-05-24T04:23:16.710Z] [stdout][info] 工作目录: /workspace
-[2026-05-24T04:23:16.710Z] [stdout][info] === 测试用户任务执行完成 ===
-[2026-05-24T04:23:16.710Z] [stdout][info] 引用文件: 无
+[2026-05-24T08:41:15.289Z] [stdout][info] === 测试用户任务开始执行 ===
+[2026-05-24T08:41:15.291Z] [stdout][info] 输入参数: {
+[2026-05-24T08:41:15.292Z] [stdout][info]   "message": "hello",
+[2026-05-24T08:41:15.293Z] [stdout][info]   "count": 2
+[2026-05-24T08:41:15.294Z] [stdout][info] }
+[2026-05-24T08:41:15.294Z] [stdout][info] 引用文件: 无
+[2026-05-24T08:41:15.295Z] [stdout][info] 工作目录: /mnt/AASC/res/tasks/test-echo
+[2026-05-24T08:41:15.296Z] [stdout][info] === 测试用户任务执行完成 ===
+[2026-05-24T08:41:20.278Z] [stdout][info] === 测试用户任务开始执行 ===
+[2026-05-24T08:41:20.280Z] [stdout][info] 输入参数: {
+[2026-05-24T08:41:20.282Z] [stdout][info]   "message": "hello",
+[2026-05-24T08:41:20.283Z] [stdout][info]   "count": 2
+[2026-05-24T08:41:20.284Z] [stdout][info] }
+[2026-05-24T08:41:20.284Z] [stdout][info] 引用文件: 无
+[2026-05-24T08:41:20.285Z] [stdout][info] 工作目录: /mnt/AASC/res/tasks/test-echo
+[2026-05-24T08:41:20.286Z] [stdout][info] === 测试用户任务执行完成 ===
+[2026-05-24T08:41:28.966Z] [stdout][info] === 测试用户任务开始执行 ===
+[2026-05-24T08:41:28.969Z] [stdout][info] 输入参数: {
+[2026-05-24T08:41:28.970Z] [stdout][info]   "message": "hello",
+[2026-05-24T08:41:28.972Z] [stdout][info]   "count": 3
+[2026-05-24T08:41:28.973Z] [stdout][info] }
+[2026-05-24T08:41:28.974Z] [stdout][info] 引用文件: 无
+[2026-05-24T08:41:28.975Z] [stdout][info] 工作目录: /mnt/AASC/res/tasks/test-echo
+[2026-05-24T08:41:28.976Z] [stdout][info] === 测试用户任务执行完成 ===

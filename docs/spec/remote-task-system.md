@@ -33,6 +33,7 @@
   +-- taskType=builtin --- 检查 builtinDef.mode
   |     +-- mode=service -> _runServiceTask() 内置服务路径
   |     +-- one-shot -> builtinRegistry.run() 一次性执行
+  |           +-- 执行后检查实例是否 stopped，是则跳过 _handleResult 防止覆盖
   +-- target=server -> _runServerTask() 异步派发，立即返回
   |     +-- env=cpu -> NodeJsRunner (child_process.fork 隔离)
   |     +-- env=webgl/webgpu -> PuppeteerRunner
@@ -52,6 +53,12 @@ submit() -> _runServiceTask() -> run() 返回 { type: 'service', stop() }
   -> task:stop -> stopInstance() -> controller.stop()
   -> 清理 _services, 更新 index.json status='stopped'
 ```
+
+### 停止孤儿实例
+
+服务器重启后，`mode=one-shot` 且 `status=running` 的实例不会被 `restoreAutoStartServices()` 恢复。
+`stopInstance()` 在 `this.instances` 中找不到实例时，回退到 index.json 查找并直接更新 `status='stopped'`，
+确保前端发起的停止操作不会因实例不在内存而失败。
 
 ## 草稿模式（Draft Mode）
 
@@ -84,8 +91,10 @@ class TaskManager extends EventEmitter {
   submit(task)         // 创建 draft 实例，返回 { taskName, instanceId, status: 'draft' }
                        // 自动检测内置任务：taskName 匹配内置注册表则修正 taskType='builtin'
   runInstance(taskName, instanceId)  // draft → running，执行完整生命周期
+                       // 注意：内置 task 执行后检查实例是否已 stopped，防止 _handleResult 覆盖
   rerunInstance(taskName, instanceId)  // completed/failed/stopped → draft
   stopInstance(taskName, instanceId)   // 停止指定实例
+                       // 实例不在内存时回退到 index.json 查找并更新 status='stopped'
   getInstance(instanceId)             // 按 instanceId 获取实例对象
   getInstanceStatus(taskName, instanceId?)  // 查询实例状态
   handleForwardResult(taskName, instanceId, result)  // 处理显示端/子显示端返回的结果

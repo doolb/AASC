@@ -3,7 +3,7 @@
     {
       "instanceId": "qwen3-web",
       "taskName": "llm.chat",
-      "status": "completed",
+      "status": "stopped",
       "timestamp": 1779017865744,
       "env": "auto",
       "mode": "one-shot",
@@ -22,7 +22,8 @@
       "taskType": "builtin",
       "builtinId": "llm.chat",
       "entryFile": "task.js",
-      "completedAt": 1779597520212
+      "completedAt": 1779597520212,
+      "error": "API 返回 500: {\"error\":{\"message\":\"getaddrinfo EAI_AGAIN chat2.qianwen.com\",\"type\":\"api_error\",\"param\":null,\"code\":null}}"
     },
     {
       "instanceId": "default",
@@ -37,20 +38,21 @@
         "modelId": "gpt-3.5-turbo",
         "temperature": 0.7,
         "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
-        "promptFormat": "openai",
-        "contextCount": 5,
-        "maxTokens": 1000,
-        "apiKey": ""
+        "promptFormat": "raw",
+        "contextCount": 10,
+        "maxTokens": 4096,
+        "apiKey": "",
+        "messages": "你是谁"
       },
       "taskType": "builtin",
       "builtinId": "llm.chat",
       "entryFile": "task.js",
-      "completedAt": null
+      "completedAt": 1779612240180
     },
     {
       "instanceId": "glm4.7-free",
       "taskName": "llm.chat",
-      "status": "failed",
+      "status": "draft",
       "timestamp": 1779598810000,
       "env": "auto",
       "mode": "one-shot",
@@ -58,7 +60,7 @@
       "params": {
         "apiUrl": "https://open.bigmodel.cn/api/paas/v4",
         "modelId": "glm-4.7-flash",
-        "temperature": "0.7",
+        "temperature": 0.7,
         "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
         "promptFormat": "openai",
         "contextCount": 10,
@@ -75,7 +77,7 @@
     {
       "instanceId": "qwen3.5",
       "taskName": "llm.chat",
-      "status": "completed",
+      "status": "draft",
       "timestamp": 1779598820000,
       "env": "auto",
       "mode": "one-shot",
@@ -83,17 +85,19 @@
       "params": {
         "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
         "modelId": "Qwen3.5-Plus",
-        "temperature": 0.7,
+        "temperature": "0.7",
         "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
         "promptFormat": "raw",
         "contextCount": 10,
         "maxTokens": 65536,
-        "apiKey": ""
+        "apiKey": "",
+        "messages": "你是什么名字"
       },
       "taskType": "builtin",
       "builtinId": "llm.chat",
       "entryFile": "task.js",
-      "completedAt": null
+      "completedAt": null,
+      "error": "API 返回 500: {\"error\":{\"message\":\"getaddrinfo EAI_AGAIN chat2.qianwen.com\",\"type\":\"api_error\",\"param\":null,\"code\":null}}"
     }
   ]
 }
