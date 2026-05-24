@@ -15,8 +15,12 @@ module.exports = {
     { name: 'apiUrl', type: 'string', required: false, default: 'http://192.168.1.12:8080/v1/chat/completions', label: 'API 地址' },
     { name: 'modelId', type: 'string', required: false, default: 'gpt-3.5-turbo', label: '模型' },
     { name: 'temperature', type: 'number', required: false, default: 0.7, min: 0, max: 2, step: 0.1, label: '温度' },
-    { name: 'defaultModel', type: 'string', required: false, default: 'gpt-3.5-turbo', label: '默认模型' },
-    { name: 'defaultTemperature', type: 'number', required: false, default: 0.7, min: 0, max: 2, step: 0.1, label: '默认温度' }
+    { name: 'messages', type: 'string', required: false, default: '', label: '消息' },
+    { name: 'systemPrompt', type: 'string', required: false, default: '你是一个友好的助手，请用简洁的语言回答问题。', label: '系统提示词' },
+    { name: 'promptFormat', type: 'string', required: false, default: 'openai', label: '消息格式' },
+    { name: 'contextCount', type: 'number', required: false, default: 10, min: 0, max: 200, label: '上下文条数' },
+    { name: 'maxTokens', type: 'number', required: false, default: 4096, min: 1, max: 131072, label: '最大 Tokens' },
+    { name: 'apiKey', type: 'string', required: false, default: '', label: 'API Key' }
   ],
   widget: {
     html: '<div style="display:flex;flex-direction:column;gap:10px">' +
@@ -32,52 +36,56 @@ module.exports = {
         '<span style="font-size:11px;color:rgba(255,255,255,0.4)">温度</span>' +
         '<input type="range" class="task-widget-field" data-field="temperature" min="0" max="2" step="0.1" value="{{temperature}}" style="flex:1">' +
       '</div>' +
+      '<div style="display:flex;gap:6px;align-items:center">' +
+        '<span style="font-size:11px;color:rgba(255,255,255,0.4);white-space:nowrap;min-width:36px">格式</span>' +
+        '<input class="task-widget-field" data-field="promptFormat" value="{{promptFormat}}" placeholder="openai/raw"' +
+        ' style="flex:1;padding:5px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px">' +
+      '</div>' +
       '<div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px">' +
         '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">消息</div>' +
         '<textarea class="task-widget-field" data-field="messages" rows="3" placeholder="输入消息..." style="width:100%;padding:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box">{{messages}}</textarea>' +
       '</div>' +
-      '<div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px">' +
-        '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">全局默认值</div>' +
-        '<div style="display:flex;gap:6px;align-items:center">' +
-          '<span style="font-size:11px;color:rgba(255,255,255,0.4);white-space:nowrap">默认模型</span>' +
-          '<input class="task-widget-field" data-field="defaultModel" value="{{defaultModel}}" style="flex:1;padding:4px 5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#aaa;font-size:11px">' +
-        '</div>' +
-      '</div>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-        '<button class="task-card-btn task-save-global">保存全局默认</button>' +
-      '</div>' +
-    '</div>',
-    script: [
-      'var c = api.getContainer();',
-      'var saveBtn = c.querySelector(".task-save-global");',
-      'if (saveBtn) saveBtn.onclick = function() {',
-      '  var config = {};',
-      '  var els = c.querySelectorAll(".task-widget-field");',
-      '  for (var i = 0; i < els.length; i++) {',
-      '    var name = els[i].getAttribute("data-field");',
-      '    if (!name || !name.startsWith("default")) continue;',
-      '    if (els[i].type === "number") config[name] = parseFloat(els[i].value) || 0;',
-      '    else config[name] = els[i].value;',
-      '  }',
-      '  api.sendAction("saveGlobalConfig", config);',
-      '};'
-    ].join('\n')
+    '</div>'
   },
 
   async run(context) {
     const { params, taskIO, taskName, postStream } = context;
 
-    // 合并全局 + 实例配置
+    // 合并全局 + 实例配置 (全局配置通过 task:set_config 持久化到 config.json)
     const globalConfig = taskIO ? await taskIO.getTaskConfig(taskName) : {};
 
     const config = {
       apiUrl: params.apiUrl || globalConfig.apiUrl || DEFAULT_API_URL,
-      modelId: params.modelId || globalConfig.defaultModel || DEFAULT_MODEL,
-      temperature: params.temperature !== undefined ? params.temperature : (globalConfig.defaultTemperature || 0.7)
+      modelId: params.modelId || globalConfig.modelId || DEFAULT_MODEL,
+      temperature: params.temperature ?? globalConfig.temperature ?? 0.7,
+      systemPrompt: params.systemPrompt || globalConfig.systemPrompt || '',
+      promptFormat: params.promptFormat || globalConfig.promptFormat || 'openai',
+      maxTokens: params.maxTokens || globalConfig.maxTokens || 4096,
+      apiKey: params.apiKey || globalConfig.apiKey || ''
     };
 
-    const messages = Array.isArray(params.messages) ? params.messages :
-      (params.messages ? [{ role: 'user', content: String(params.messages) }] : []);
+    let messages = [];
+    if (config.promptFormat === 'raw') {
+      let text = '';
+      if (config.systemPrompt) text += 'System: ' + config.systemPrompt + '\n';
+      if (params.messages) {
+        const userMsgs = Array.isArray(params.messages) ? params.messages :
+          [String(params.messages)];
+        for (const m of userMsgs) {
+          const content = typeof m === 'string' ? m : (m.content || '');
+          if (content) text += 'User: ' + content + '\n';
+        }
+      }
+      text += 'AI: ';
+      messages = [{ role: 'user', content: text }];
+    } else if (config.systemPrompt) {
+      messages.push({ role: 'system', content: config.systemPrompt });
+    }
+    if (params.messages && config.promptFormat !== 'raw') {
+      const userMessages = Array.isArray(params.messages) ? params.messages :
+        [{ role: 'user', content: String(params.messages) }];
+      messages.push(...userMessages);
+    }
     if (messages.length === 0) {
       return { success: true, data: { text: '' } };
     }
@@ -94,18 +102,24 @@ module.exports = {
           model: config.modelId,
           messages: messages,
           temperature: config.temperature,
+          max_tokens: config.maxTokens,
           stream: !!postStream
         });
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        };
+        if (config.apiKey) {
+          headers['Authorization'] = 'Bearer ' + config.apiKey;
+        }
 
         const options = {
           hostname: url.hostname,
           port: url.port || (isHttps ? 443 : 80),
           path: url.pathname + url.search,
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body)
-          }
+          headers
         };
 
         const req = transport.request(options, (res) => {

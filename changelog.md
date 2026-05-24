@@ -4,6 +4,16 @@
 
 ### 新增
 
+- ✅ [2026-05-24] llm-chat 新增 promptFormat/contextCount/maxTokens/apiKey 参数，支持 raw 消息格式
+  - params 扩展为 9 个字段（+promptFormat/contextCount/maxTokens/apiKey）
+  - widget 增加 promptFormat 输入框
+  - run() 支持 promptFormat=raw 纯文本格式（System:/User:/AI:）
+  - 请求体加入 max_tokens 字段，支持 apiKey 鉴权头
+  - 迁移 config.json 中 3 个 profile 为 llm-chat 实例（default/glm4.7-free/qwen3.5）
+  - 改动文件：llm-chat.js、res/tasks/llm.chat/results/index.json
+
+- ✅ [2026-05-24] llm-chat 重构：实例 params 存配置，全局配置通过 task:set_config 管理
+
 - ✅ [2026-05-24] 修复 llm-chat 重新执行无响应 — _renderResultCol 缺少 status 合并
   - _renderResultCol 内存状态合并新增 `if (memInst.status) inst.status = memInst.status`
   - 改动文件：task-panel.js

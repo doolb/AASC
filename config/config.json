@@ -163,14 +163,14 @@
     }
   },
   "chat": {
-    "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
-    "model": "Qwen3.5-Plus",
+    "apiUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "model": "glm-4.7-flash",
     "maxTokens": 65536,
     "temperature": 0.7,
-    "apiKey": "",
+    "apiKey": "b146170bfb04444da51eede1a4240ea0.2t4zdQvxjg71i84J",
     "contextCount": 10,
     "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
-    "activeProfile": "qwen3.5",
+    "activeProfile": "glm4.7-free",
     "llmProfiles": [
       {
         "name": "default",
@@ -202,7 +202,7 @@
         "promptFormat": "raw"
       }
     ],
-    "promptFormat": "raw"
+    "promptFormat": "openai"
   },
   "timeAnnounce": {
     "enabled": true,

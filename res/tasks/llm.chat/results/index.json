@@ -9,17 +9,91 @@
       "mode": "one-shot",
       "displayId": null,
       "params": {
-        "apiUrl": "http://192.168.1.12:8080/v1/chat/completions",
-        "modelId": "gpt-3.5-turbo",
-        "temperature": "0.7",
-        "defaultModel": "gpt-3.5-turbo",
-        "defaultTemperature": 0.7,
-        "messages": "你是什么名字"
+        "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+        "modelId": "Qwen3.5-Plus",
+        "temperature": 0.7,
+        "messages": "你是什么名字",
+        "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
+        "promptFormat": "raw",
+        "contextCount": 10,
+        "maxTokens": 65536,
+        "apiKey": ""
       },
       "taskType": "builtin",
       "builtinId": "llm.chat",
       "entryFile": "task.js",
-      "completedAt": 1779596474481
+      "completedAt": 1779597520212
+    },
+    {
+      "instanceId": "default",
+      "taskName": "llm.chat",
+      "status": "completed",
+      "timestamp": 1779598800000,
+      "env": "auto",
+      "mode": "one-shot",
+      "displayId": null,
+      "params": {
+        "apiUrl": "http://192.168.1.12:8080/v1/chat/completions",
+        "modelId": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
+        "promptFormat": "openai",
+        "contextCount": 5,
+        "maxTokens": 1000,
+        "apiKey": ""
+      },
+      "taskType": "builtin",
+      "builtinId": "llm.chat",
+      "entryFile": "task.js",
+      "completedAt": null
+    },
+    {
+      "instanceId": "glm4.7-free",
+      "taskName": "llm.chat",
+      "status": "failed",
+      "timestamp": 1779598810000,
+      "env": "auto",
+      "mode": "one-shot",
+      "displayId": null,
+      "params": {
+        "apiUrl": "https://open.bigmodel.cn/api/paas/v4",
+        "modelId": "glm-4.7-flash",
+        "temperature": "0.7",
+        "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
+        "promptFormat": "openai",
+        "contextCount": 10,
+        "maxTokens": 65536,
+        "apiKey": "b146170bfb04444da51eede1a4240ea0.2t4zdQvxjg71i84J",
+        "messages": "hello"
+      },
+      "taskType": "builtin",
+      "builtinId": "llm.chat",
+      "entryFile": "task.js",
+      "completedAt": null,
+      "error": "getaddrinfo EAI_AGAIN open.bigmodel.cn"
+    },
+    {
+      "instanceId": "qwen3.5",
+      "taskName": "llm.chat",
+      "status": "completed",
+      "timestamp": 1779598820000,
+      "env": "auto",
+      "mode": "one-shot",
+      "displayId": null,
+      "params": {
+        "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+        "modelId": "Qwen3.5-Plus",
+        "temperature": 0.7,
+        "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
+        "promptFormat": "raw",
+        "contextCount": 10,
+        "maxTokens": 65536,
+        "apiKey": ""
+      },
+      "taskType": "builtin",
+      "builtinId": "llm.chat",
+      "entryFile": "task.js",
+      "completedAt": null
     }
   ]
 }
