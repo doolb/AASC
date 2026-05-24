@@ -13,6 +13,8 @@
  * @param {Function} sendToControl — (msg: object) => void，向所有控制端广播
  * @param {Function} sendToDisplay — (displayId: string, msg: object) => void，向指定显示端发送
  */
+const path = require('path');
+
 function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDisplay) {
   const controlTypes = ['task:submit', 'task:run', 'task:rerun', 'task:stop', 'task:status', 'task:result',
                         'task:list', 'task:update', 'task:delete', 'task:get_instance_logs',
@@ -179,11 +181,22 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             ctx.ws.send(JSON.stringify({ type: 'task:list:result', payload: { tasks: getBuiltinTasks() } }));
           } else {
             const tasks = await taskManager.listTasks();
+            const tasksWithMeta = tasks.map(t => {
+              let params = [];
+              let widget = null;
+              try {
+                const entryPath = path.join(taskManager.taskIO.tasksDir, t.taskName, 'task.js');
+                const mod = require(entryPath);
+                if (mod.params && Array.isArray(mod.params)) params = mod.params;
+                if (mod.widget) widget = mod.widget;
+              } catch (e) { /* 无法 require 时降级 */ }
+              return { ...t, params, widget };
+            });
             const manifest = getSidebarManifest();
             ctx.ws.send(JSON.stringify({
               type: 'task:list:result',
               payload: {
-                tasks: [...getBuiltinTasks(), ...tasks],
+                tasks: [...getBuiltinTasks(), ...tasksWithMeta],
                 sidebarGroups: manifest.groups,
                 sidebarTabs: manifest.tabs
               }

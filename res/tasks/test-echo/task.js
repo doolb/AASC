@@ -25,4 +25,23 @@ async function run(context) {
   };
 }
 
-module.exports = { run };
+const PARAMS = [
+  { name: 'message', type: 'string', required: false, default: 'hello', label: '消息内容' },
+  { name: 'count', type: 'number', required: false, default: 1, min: 1, max: 100, label: '重复次数' }
+];
+
+const WIDGET = {
+  html: '<div style="display:flex;flex-direction:column;gap:10px">' +
+    '<div style="display:flex;gap:6px;align-items:center">' +
+      '<input class="task-widget-field" data-field="message" value="{{message}}" placeholder="输入消息..."' +
+      ' style="flex:1;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;font-size:13px">' +
+    '</div>' +
+    '<div style="display:flex;gap:6px;align-items:center">' +
+      '<span style="font-size:11px;color:rgba(255,255,255,0.4);white-space:nowrap;min-width:50px">重复</span>' +
+      '<input type="number" class="task-widget-field" data-field="count" value="{{count}}" min="1" max="100"' +
+      ' style="width:80px;padding:6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px">' +
+    '</div>' +
+  '</div>'
+};
+
+module.exports = { run, params: PARAMS, widget: WIDGET };

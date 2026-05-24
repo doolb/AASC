@@ -258,8 +258,14 @@
     _selectTask: function(taskName) {
       if (this._selectedTaskName === taskName) return;
       this._selectedTaskName = taskName;
-      this._selectedInstanceId = null;
-      // 请求任务列表刷新（确保实例数据最新）
+      // 默认选中最近的一条执行记录
+      var task = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      var instances = task ? (task.instances || []).slice() : [];
+      instances.sort(function(a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+      this._selectedInstanceId = instances.length > 0 ? instances[0].instanceId : null;
       this._requestTaskList();
     },
 
@@ -343,9 +349,11 @@
       // 合并内存状态
       var memInst = this.instances.get(inst.instanceId);
       if (memInst) {
+        if (memInst.status) inst.status = memInst.status;
         inst.logs = memInst.logs;
         inst.result = memInst.result;
         inst.completedAt = memInst.completedAt;
+        if (memInst.params) inst.params = memInst.params;
       }
 
       // 如果实例没有日志，请求加载
@@ -1304,6 +1312,12 @@
             window.SidebarRegistry.onStream(data.payload);
           }
         }
+        if (data.type === 'task:instance_params_updated') {
+          if (self._selectedInstanceId === data.payload.instanceId) {
+            var col = document.getElementById('taskResultCol');
+            if (col) col.innerHTML = self._renderResultCol(self._selectedTaskName, self._selectedInstanceId);
+          }
+        }
         if (data.type === 'task:run_result') {
           self._requestTaskList();
         }
@@ -2186,6 +2200,19 @@
       var instSafeId = this._escapeAttr(inst.instanceId);
 
       var widgetDef = this._getWidgetDef(taskName);
+      if (widgetDef) {
+        var wd = this._widgetData[inst.instanceId] || {};
+        if (inst.params) {
+          for (var k in inst.params) wd[k] = inst.params[k];
+        }
+        if (taskParams) {
+          for (var p = 0; p < taskParams.length; p++) {
+            if (wd[taskParams[p].name] === undefined && taskParams[p].default !== undefined)
+              wd[taskParams[p].name] = taskParams[p].default;
+          }
+        }
+        this._widgetData[inst.instanceId] = wd;
+      }
       var widgetHtml = widgetDef ? this._renderWidget(widgetDef, inst.instanceId, taskName, inst.status) : '';
 
       var result = inst.result || {};
@@ -2306,12 +2333,10 @@
         var html = widgetDef.html;
         html = html.replace(/\{\{instanceId\}\}/g, instanceId);
         html = html.replace(/\{\{taskName\}\}/g, taskName || '');
-        if (!widgetDef.script) {
-          html = html.replace(/\{\{(\w+)\}\}/g, function(match, key) {
-            var val = data[key] !== undefined ? data[key] : '--';
-            return typeof val === 'string' ? val : JSON.stringify(val);
-          });
-        }
+        html = html.replace(/\{\{(\w+)\}\}/g, function(match, key) {
+          var val = data[key] !== undefined ? data[key] : '--';
+          return typeof val === 'string' ? val : JSON.stringify(val);
+        });
         var containerId = 'task-widget-' + instanceId;
         var saveBtn = (status === 'draft')
           ? '<button class="task-card-btn primary task-widget-save" onclick="TaskPanel._saveWidgetParams(\'' + instanceId + '\',\'' + (taskName || '') + '\')" style="margin-top:8px;width:100%">保存参数</button>'
@@ -2399,6 +2424,20 @@
         else params[name] = el.value;
       }
       this._send({ type: 'task:update_instance_params', payload: { taskName: taskName, instanceId: instanceId, params: params } });
+      // 乐观更新本地数据，立即刷新 widget
+      var memInst = this.instances.get(instanceId);
+      if (memInst) memInst.params = params;
+      for (var t = 0; t < this.taskList.length; t++) {
+        if (this.taskList[t].taskName === taskName) {
+          var insts = this.taskList[t].instances || [];
+          for (var i = 0; i < insts.length; i++) {
+            if (insts[i].instanceId === instanceId) { insts[i].params = params; break; }
+          }
+          break;
+        }
+      }
+      var col = document.getElementById('taskResultCol');
+      if (col) col.innerHTML = this._renderResultCol(this._selectedTaskName, this._selectedInstanceId);
     },
 
     _onWidgetAction: function(instanceId, action) {

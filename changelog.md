@@ -4,6 +4,26 @@
 
 ### 新增
 
+- ✅ [2026-05-24] 修复 llm-chat 重新执行无响应 — _renderResultCol 缺少 status 合并
+  - _renderResultCol 内存状态合并新增 `if (memInst.status) inst.status = memInst.status`
+  - 改动文件：task-panel.js
+
+- ✅ [2026-05-24] llm-chat widget 也从 index.json 读取已保存参数
+  - llm-chat.js widget HTML 6 处硬编码 value 改为 {{var}} 占位符
+  - task-panel.js _renderWidget 移除 !widgetDef.script 条件，始终执行 {{var}} 替换
+  - 改动文件：llm-chat.js、task-panel.js
+
+- ✅ [2026-05-24] test-echo 用户任务增加 params/widget，widget 从 index.json 读取已保存参数（无需轮询）
+  - task.js widget HTML 使用 {{message}}/{{count}} 模板占位符替代硬编码 value
+  - task-panel.js _resultDetailHTML：合并 inst.params + PARAMS 默认值到 _widgetData
+  - task-panel.js _saveWidgetParams：乐观更新本地数据 + 立即重绘 widget
+  - task-panel.js _renderResultCol：合并 memInst.params 到 inst.params
+  - task-panel.js handleMessage：新增 task:instance_params_updated 触发 widget 重绘
+  - res/tasks/test-echo/task.js 增加 params（message、count）和 widget export
+  - web-socket-handler.js task:list 分支中 require task.js 获取 params + widget 注入返回
+  - 新增 docs/spec/test-echo.md 伪代码文档
+  - 改动文件：res/tasks/test-echo/task.js、src/apps/server/modules/task-engine/web-socket-handler.js、docs/spec/test-echo.md
+
 - ✅ [2026-05-23] 删除 tts.js 中整点报时死代码（loadTimeAnnounceConfig / saveTimeAnnounceConfig）— 报时已改为内置任务管理
   - 删除 timeAnnounceConfig 默认值、loadTimeAnnounceConfig、renderTimeAnnounceConfig、saveTimeAnnounceConfig
   - 删除对应的全局绑定 window.saveTimeAnnounceConfig

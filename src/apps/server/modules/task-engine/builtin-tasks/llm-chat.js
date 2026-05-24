@@ -22,25 +22,25 @@ module.exports = {
     html: '<div style="display:flex;flex-direction:column;gap:10px">' +
       '<div style="display:flex;gap:6px;align-items:center">' +
         '<span style="font-size:11px;color:rgba(255,255,255,0.4);white-space:nowrap">模型</span>' +
-        '<input class="task-widget-field" data-field="modelId" value="gpt-3.5-turbo" style="flex:1;padding:5px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px">' +
+        '<input class="task-widget-field" data-field="modelId" value="{{modelId}}" style="flex:1;padding:5px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px">' +
       '</div>' +
       '<div style="display:flex;gap:6px;align-items:center">' +
         '<span style="font-size:11px;color:rgba(255,255,255,0.4);white-space:nowrap">API</span>' +
-        '<input class="task-widget-field" data-field="apiUrl" value="http://192.168.1.12:8080/v1/chat/completions" style="flex:1;padding:5px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px">' +
+        '<input class="task-widget-field" data-field="apiUrl" value="{{apiUrl}}" style="flex:1;padding:5px 6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px">' +
       '</div>' +
       '<div style="display:flex;gap:6px;align-items:center">' +
         '<span style="font-size:11px;color:rgba(255,255,255,0.4)">温度</span>' +
-        '<input type="range" class="task-widget-field" data-field="temperature" min="0" max="2" step="0.1" value="0.7" style="flex:1">' +
+        '<input type="range" class="task-widget-field" data-field="temperature" min="0" max="2" step="0.1" value="{{temperature}}" style="flex:1">' +
       '</div>' +
       '<div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px">' +
         '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">消息</div>' +
-        '<textarea class="task-widget-field" data-field="messages" rows="3" placeholder="输入消息..." style="width:100%;padding:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>' +
+        '<textarea class="task-widget-field" data-field="messages" rows="3" placeholder="输入消息..." style="width:100%;padding:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#fff;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box">{{messages}}</textarea>' +
       '</div>' +
       '<div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px">' +
         '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">全局默认值</div>' +
         '<div style="display:flex;gap:6px;align-items:center">' +
           '<span style="font-size:11px;color:rgba(255,255,255,0.4);white-space:nowrap">默认模型</span>' +
-          '<input class="task-widget-field" data-field="defaultModel" value="gpt-3.5-turbo" style="flex:1;padding:4px 5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#aaa;font-size:11px">' +
+          '<input class="task-widget-field" data-field="defaultModel" value="{{defaultModel}}" style="flex:1;padding:4px 5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:3px;color:#aaa;font-size:11px">' +
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
