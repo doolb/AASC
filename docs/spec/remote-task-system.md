@@ -30,7 +30,9 @@
   |     +-- taskType=builtin -> builtinRegistry.run() 加载内置服务
   |     +-- taskType=user -> require(service.js) 加载用户服务
   |     +-- controller.stop() 用于 task:stop 停止服务
-  +-- taskType=builtin -> builtin-tasks/registry
+  +-- taskType=builtin --- 检查 builtinDef.mode
+  |     +-- mode=service -> _runServiceTask() 内置服务路径
+  |     +-- one-shot -> builtinRegistry.run() 一次性执行
   +-- target=server -> _runServerTask() 异步派发，立即返回
   |     +-- env=cpu -> NodeJsRunner (child_process.fork 隔离)
   |     +-- env=webgl/webgpu -> PuppeteerRunner
@@ -51,12 +53,39 @@ submit() -> _runServiceTask() -> run() 返回 { type: 'service', stop() }
   -> 清理 _services, 更新 index.json status='stopped'
 ```
 
+## 草稿模式（Draft Mode）
+
+所有实例从 `draft` 状态开始，`submit()` 只创建草稿不执行，`runInstance()` 显式触发执行。
+
+### 状态机
+
+```
+submit → draft (可编辑参数)
+          │ task:run
+          ▼
+       pending → preparing → running → completed/failed/stopped
+                                         │ task:rerun
+                                         ▼
+                                       draft (同实例重置)
+```
+
+### 核心规则
+
+1. `submit()` 始终返回 `status: 'draft'`
+2. `task:run` 将 draft → running
+3. `task:rerun` 将 completed/failed/stopped 重置回 draft（同实例、同目录）
+4. 仅 draft 状态允许编辑参数
+5. 服务重启时 `restoreAutoStartServices()` 通过 submit→runInstance 两步恢复
+
 ## TaskManager 接口
 
 ```
 class TaskManager extends EventEmitter {
-  submit(task)         // 提交任务，返回 { taskName, instanceId, status }
-  stopInstance(taskName, instanceId)  // 停止指定实例
+  submit(task)         // 创建 draft 实例，返回 { taskName, instanceId, status: 'draft' }
+                       // 自动检测内置任务：taskName 匹配内置注册表则修正 taskType='builtin'
+  runInstance(taskName, instanceId)  // draft → running，执行完整生命周期
+  rerunInstance(taskName, instanceId)  // completed/failed/stopped → draft
+  stopInstance(taskName, instanceId)   // 停止指定实例
   getInstance(instanceId)             // 按 instanceId 获取实例对象
   getInstanceStatus(taskName, instanceId?)  // 查询实例状态
   handleForwardResult(taskName, instanceId, result)  // 处理显示端/子显示端返回的结果
@@ -190,6 +219,24 @@ widget: {
 - 内置模型推理（model.inference）通过 WebGPU 异步执行，不受影响
 - Worker 任务有 30 秒超时保护
 
+## 控制端调试日志
+
+TaskPanel 内置分级调试日志系统，通过 `_debug` 对象控制各类日志开关：
+
+```js
+_debug: {
+  init: false,       // 初始化日志（init）
+  polling: false,    // 3 秒轮询日志
+  ws: false,         // WebSocket 挂载日志
+  displayList: false,// 显示端列表拉取日志
+  message: false     // 每条消息类型日志（最噪）
+}
+
+_log(cat, ...args)   // 统一日志入口，_debug[cat]=true 时输出
+```
+
+默认全部关闭。需要排查时在浏览器控制台执行 `TaskPanel._debug.message = true` 等单独开启。
+
 ## 注意事项
 
 1. 服务端 CPU 任务通过 child_process.fork 隔离执行
@@ -200,3 +247,8 @@ widget: {
 6. 转发到显示端/子显示端的任务，结果通过 task:result 回传
 7. 服务端根据 env 字段自动路由到 NodeJsRunner 或 PuppeteerRunner
 8. 控制端通过 taskName 关联事件和 UI
+9. 内置任务应通过 taskType='builtin' + builtinId 提交；若误传为 taskType='user'，服务端 submit() 自动检测修正
+10. 控制端 _runUserTask() 和 _runEditTask() 均检测 taskType，内置任务自动切换为内置提交路径
+11. 实例名在 UI 中显示完整字符串 + title 悬浮提示，不再截断
+12. one-shot 任务 Widget 使用硬编码默认值（不依赖 {{var}} 实时推送），未运行时参数面板始终可见
+13. one-shot 任务通过 TaskPanel._saveWidgetGlobalConfig() 保存全局配置（task:set_config）

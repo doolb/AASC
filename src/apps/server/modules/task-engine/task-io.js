@@ -98,12 +98,39 @@ class TaskIO extends EventEmitter {
     }
   }
 
+  async getTaskConfig(taskName) {
+    const configPath = path.join(this._taskPath(taskName), 'config.json');
+    try {
+      const content = await fs.promises.readFile(configPath, 'utf8');
+      return JSON.parse(content);
+    } catch (e) {
+      return {};
+    }
+  }
+
+  async setTaskConfig(taskName, config) {
+    const configPath = path.join(this._taskPath(taskName), 'config.json');
+    await fs.promises.mkdir(this._taskPath(taskName), { recursive: true });
+    await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+  }
+
   async writeInstanceLog(taskName, instanceId, stream, level, message) {
     const dir = this._instancePath(taskName, instanceId);
     await fs.promises.mkdir(dir, { recursive: true });
     const logPath = path.join(dir, 'run.log');
     const line = '[' + new Date().toISOString() + '] [' + stream + '][' + level + '] ' + message + '\n';
     await fs.promises.appendFile(logPath, line, 'utf8');
+  }
+
+  async clearInstanceLog(taskName, instanceId) {
+    const logPath = path.join(this._instancePath(taskName, instanceId), 'run.log');
+    try {
+      await fs.promises.unlink(logPath);
+      return { success: true };
+    } catch (e) {
+      if (e.code === 'ENOENT') return { success: true };
+      throw e;
+    }
   }
 
   async readInstanceLog(taskName, instanceId) {

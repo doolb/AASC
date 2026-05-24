@@ -4,7 +4,7 @@
       "instanceId": "728486a7",
       "taskName": "time.announce",
       "status": "running",
-      "timestamp": 1778945698075,
+      "timestamp": 1779592846389,
       "target": "server",
       "mode": "service",
       "params": {
@@ -14,7 +14,10 @@
         "repeatDelay": 3
       },
       "stage": "running",
-      "progress": 100
+      "progress": 100,
+      "taskType": "builtin",
+      "builtinId": "time.announce",
+      "entryFile": null
     }
   ]
 }

@@ -605,7 +605,14 @@ function createDisplayState() {
     };
 }
 
-app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public')));
+app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public'), {
+  maxAge: 0, etag: true,
+  setHeaders: function(res, path) {
+    if (path.endsWith('.html') || path.endsWith('.js') || path.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 app.use('/aasc', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'aasc')));
 app.use('/auto-brain', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'auto-brain')));
 app.use('/uploads', express.static(UPLOADS_DIR));

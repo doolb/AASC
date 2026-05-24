@@ -13,17 +13,32 @@
     _timerInterval: null,
     _initDone: false,
 
+    _debug: {
+      init: false,
+      polling: false,
+      ws: false,
+      displayList: false,
+      message: false
+    },
+
+    _log: function(cat) {
+      if (this._debug[cat]) {
+        var args = Array.prototype.slice.call(arguments, 1);
+        console.log.apply(console, args);
+      }
+    },
+
     init: function() {
       if (this._initDone) return;
       this._initDone = true;
-      console.log('[TaskPanel] init start, displayList:', this.displayList.length);
+      this._log('init', '[TaskPanel] init start, displayList:', this.displayList.length);
       this._render();
       this._setupWS();
       var self = this;
       setInterval(function() {
-        console.log('[TaskPanel] check displayList:', self.displayList.length, 'ws:', window.WebSocketManager ? 'exists' : 'null', 'hooked:', window.WebSocketManager ? window.WebSocketManager._taskPanelHooked : 'n/a');
+        self._log('polling', '[TaskPanel] check displayList:', self.displayList.length, 'ws:', window.WebSocketManager ? 'exists' : 'null', 'hooked:', window.WebSocketManager ? window.WebSocketManager._taskPanelHooked : 'n/a');
         if (self.displayList.length > 0) {
-          console.log('[TaskPanel] items:', JSON.stringify(self.displayList.map(function(d) { return d.id; })));
+          self._log('polling', '[TaskPanel] items:', JSON.stringify(self.displayList.map(function(d) { return d.id; })));
         }
       }, 3000);
       this._bindTabs();
@@ -191,7 +206,7 @@
         else if (latest.status === 'completed') { icon = '✅'; statusClass = 'completed'; statusText = '已完成'; }
         else if (latest.status === 'failed') { icon = '❌'; statusClass = 'failed'; statusText = '失败'; }
         else if (latest.status === 'stopped') { icon = '⏹'; statusClass = 'stopped'; statusText = '已停止'; }
-        else if (latest.status === 'created') { icon = '🆕'; statusClass = 'created'; statusText = '待运行'; }
+        else if (latest.status === 'draft' || latest.status === 'created') { icon = '📝'; statusClass = 'draft'; statusText = '草稿'; }
         else if (latest.status === 'pending' || latest.status === 'pending_forward') { icon = '⏳'; statusClass = 'pending'; statusText = '排队中'; }
         latestProgress = (latest.progress != null && latest.status === 'running') ? latest.progress : null;
         if (latest.timestamp) latestTime = this._formatTime(latest.timestamp);
@@ -218,6 +233,9 @@
       if (isBuiltin) {
         actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._createBuiltinInstance(\'' + safeTaskName + '\')">创建实例</button>';
         actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewBuiltinParams(\'' + safeTaskName + '\')">配置</button>';
+        if (task.params && task.params.length > 0) {
+          actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._showGlobalConfig(\'' + safeTaskName + '\')">全局配置</button>';
+        }
       } else {
         actionsHtml += '<button class="task-card-btn primary" onclick="event.stopPropagation();TaskPanel._createUserInstance(\'' + safeTaskName + '\')">创建实例</button>';
         actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewEdit(\'' + safeTaskName + '\')">编辑</button>';
@@ -282,14 +300,14 @@
       } else {
         for (var i = 0; i < instances.length; i++) {
           var inst = instances[i];
-          var icon = inst.status === 'completed' ? '✅' : inst.status === 'failed' ? '❌' : inst.status === 'stopped' ? '⏹' : inst.status === 'running' ? '🔄' : '⏳';
+          var icon = inst.status === 'completed' ? '✅' : inst.status === 'failed' ? '❌' : inst.status === 'stopped' ? '⏹' : inst.status === 'running' ? '🔄' : inst.status === 'draft' ? '📝' : '⏳';
           var sel = inst.instanceId === this._selectedInstanceId ? ' selected' : '';
           var time = inst.timestamp ? this._formatTime(inst.timestamp) : '';
-          var idShort = inst.instanceId ? inst.instanceId.substring(0, 6) : '';
           var safeId = this._escapeAttr(inst.instanceId);
+          var displayName = inst.instanceId ? inst.instanceId : '';
           html += '<div class="task-result-history-item' + sel + '" onclick="TaskPanel._selectInstance(\'' + safeTaskName + '\',\'' + safeId + '\')">' +
             '<span class="result-icon">' + icon + '</span>' +
-            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis">' + time + ' ' + this._escapeHtml(idShort) + '</span>' +
+            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis" title="' + this._escapeAttr(displayName) + '">' + time + ' ' + this._escapeHtml(displayName) + '</span>' +
             '<button class="task-result-history-del" onclick="event.stopPropagation();TaskPanel._confirmDeleteInstance(\'' + safeTaskName + '\',\'' + safeId + '\')">✕</button>' +
           '</div>';
         }
@@ -450,6 +468,16 @@
         '</div>' +
 
         '<div class="task-form-section">' +
+          '<div class="task-form-section-title">实例配置</div>' +
+          '<div class="task-form-row">' +
+            '<div class="task-form-field">' +
+              '<label>实例 ID（可选，留空自动生成）</label>' +
+              '<input type="text" id="taskInstanceId" placeholder="llm.chat.default">' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="task-form-section">' +
           '<div class="task-form-section-title">参数 (JSON)</div>' +
           '<textarea id="taskParams" rows="2" placeholder=\'{"width": 800}\'></textarea>' +
         '</div>' +
@@ -473,6 +501,12 @@
           if (ef) ef.style.display = isBuiltin ? 'none' : 'block';
           if (uf) uf.style.display = isBuiltin ? 'none' : 'block';
           if (bs) bs.style.display = isBuiltin ? 'block' : 'none';
+          // 内置任务时任务名称只读
+          var nameInput = document.getElementById('taskName');
+          if (nameInput) {
+            nameInput.readOnly = isBuiltin;
+            nameInput.style.opacity = isBuiltin ? '0.6' : '1';
+          }
           if (isBuiltin) self._loadBuiltinTasks();
         });
       }
@@ -481,6 +515,22 @@
       if (builtinSel) {
         builtinSel.addEventListener('change', function(e) {
           var builtinId = e.target.value;
+          // 自动填写任务名称
+          var nameInput = document.getElementById('taskName');
+          if (nameInput && builtinId) {
+            nameInput.value = builtinId;
+          }
+          // 自动选择执行模式（匹配内置任务定义）
+          if (builtinId) {
+            var task = this._getBuiltinTask(builtinId);
+            if (task && task.mode) {
+              var modeBtns = document.querySelectorAll('#modeGroup .task-btn-option');
+              for (var m = 0; m < modeBtns.length; m++) {
+                var matched = modeBtns[m].dataset.value === task.mode;
+                modeBtns[m].classList.toggle('active', matched);
+              }
+            }
+          }
           var container = document.getElementById('builtinParams');
           if (container && builtinId) {
             this._renderBuiltinParams(builtinId, container);
@@ -604,12 +654,42 @@
       }
     },
 
+    _getBuiltinTask: function(builtinId) {
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === builtinId) return this.taskList[i];
+      }
+      return null;
+    },
+
+    _renderGenericParam: function(param) {
+      var fieldId = 'param-' + param.name;
+      var label = this._escapeHtml(param.label || param.name);
+      if (param.type === 'select') {
+        var opts = (param.options || []).map(function(o) {
+          var sel = o === param.default ? 'selected' : '';
+          return '<option value="' + o + '" ' + sel + '>' + o + '</option>';
+        }).join('');
+        return '<div class="task-form-field"><label>' + label + '</label>' +
+          '<select id="' + fieldId + '" style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px">' + opts + '</select></div>';
+      } else if (param.type === 'number') {
+        return '<div class="task-form-field"><label>' + label + '</label>' +
+          '<input type="number" id="' + fieldId + '" value="' + (param.default !== undefined ? param.default : '') + '"' +
+          (param.min !== undefined ? ' min="' + param.min + '"' : '') +
+          (param.max !== undefined ? ' max="' + param.max + '"' : '') +
+          (param.step !== undefined ? ' step="' + param.step + '"' : '') +
+          ' style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box"></div>';
+      } else {
+        return '<div class="task-form-field"><label>' + label + '</label>' +
+          '<input type="text" id="' + fieldId + '" value="' + this._escapeAttr(param.default || '') + '"' +
+          ' placeholder="' + this._escapeAttr(param.placeholder || '') + '"' +
+          ' style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box"></div>';
+      }
+    },
+
     _renderBuiltinParams: function(builtinId, container) {
+      // model.inference 使用自定义表单（图片选择、显示端列表等）
       if (builtinId === 'model.inference') {
-        var modelTask = null;
-        for (var i = 0; i < this.taskList.length; i++) {
-          if (this.taskList[i].taskName === builtinId) { modelTask = this.taskList[i]; break; }
-        }
+        var modelTask = this._getBuiltinTask(builtinId);
         var params = modelTask ? modelTask.params || [] : [];
 
         var html = '';
@@ -648,7 +728,22 @@
         html += '<button class="task-submit-btn" id="miSubmitBtn">提交推理任务</button>';
         container.innerHTML = html;
         this._bindMiEvents();
+        return;
       }
+
+      // 其他内置任务：从 params 数组通用渲染
+      var task = this._getBuiltinTask(builtinId);
+      var params = task ? task.params || [] : [];
+      if (params.length === 0) {
+        container.innerHTML = '<div style="color:#666;font-size:12px;padding:8px">无参数</div>';
+        return;
+      }
+      var html = '<div style="display:flex;flex-direction:column;gap:8px">';
+      for (var p = 0; p < params.length; p++) {
+        html += this._renderGenericParam(params[p]);
+      }
+      html += '</div>';
+      container.innerHTML = html;
     },
 
     _bindMiEvents: function() {
@@ -896,11 +991,28 @@
       var target = targetEl ? targetEl.dataset.value : 'server';
       if (target === 'server') displayId = null;
 
+      // 自定义实例 ID
+      var instanceIdInput = document.getElementById('taskInstanceId');
+      var customInstanceId = instanceIdInput ? instanceIdInput.value.trim() : '';
+
+      // 读取通用参数表单字段（[id^="param-"]）
+      var paramFields = document.querySelectorAll('[id^="param-"]');
+      for (var pf = 0; pf < paramFields.length; pf++) {
+        var el = paramFields[pf];
+        var name = el.id.replace('param-', '');
+        if (name) {
+          if (el.type === 'number') params[name] = parseFloat(el.value) || 0;
+          else params[name] = el.value;
+        }
+      }
+
       var msg = {
         type: 'task:submit',
         payload: {
           taskName: taskName,
+          instanceId: customInstanceId || undefined,
           taskType: typeEl ? typeEl.value : 'user',
+          builtinId: (typeEl && typeEl.value === 'builtin') ? taskName : undefined,
           entryFile: document.getElementById('entryFile') ? document.getElementById('entryFile').value.trim() : (mode === 'service' ? 'service.js' : 'task.js'),
           target: target,
           displayId: displayId,
@@ -918,6 +1030,11 @@
       var task = null;
       for (var i = 0; i < this.taskList.length; i++) {
         if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
+      }
+      // 内置任务走内置执行路径
+      if (task && task.taskType === 'builtin') {
+        this._runBuiltin(taskName);
+        return;
       }
       this._send({
         type: 'task:submit',
@@ -954,12 +1071,14 @@
       var target = targetEl ? targetEl.dataset.value : 'server';
       if (target === 'server') displayId = null;
 
+      var isBuiltin = task && task.taskType === 'builtin';
       this._send({
         type: 'task:submit',
         payload: {
           taskName: taskName,
-          taskType: 'user',
-          entryFile: (task && task.entryFile) || (mode === 'service' ? 'service.js' : 'task.js'),
+          taskType: isBuiltin ? 'builtin' : 'user',
+          builtinId: isBuiltin ? taskName : undefined,
+          entryFile: isBuiltin ? undefined : ((task && task.entryFile) || (mode === 'service' ? 'service.js' : 'task.js')),
           target: target,
           displayId: displayId,
           mode: mode,
@@ -983,7 +1102,7 @@
           taskName: taskName, taskType: 'builtin', builtinId: taskName,
           target: (task && task.target) || 'server',
           mode: (task && task.mode) || 'one-shot',
-          autoRun: false, params: {}, files: []
+          params: {}, files: []
         }});
       }
     },
@@ -1023,31 +1142,116 @@
       if (builtinSel) { builtinSel.value = taskName; builtinSel.dispatchEvent(new Event('change')); }
     },
 
+    _showGlobalConfig: function(taskName) {
+      var self = this;
+      // 请求全局配置
+      this._send({ type: 'task:get_config', payload: { taskName: taskName } });
+
+      // 监听返回（一次性）
+      var handler = function(data) {
+        if (data.type === 'task:config_data' && data.payload.taskName === taskName) {
+          // 移除监听
+          var ws = window.WebSocketManager;
+          if (ws && ws._taskPanelHooked) {
+            ws.handleMessage = (function(orig) {
+              return function(data) {
+                if (orig) orig.call(ws, data);
+              };
+            })(ws.handleMessage);
+          }
+
+          var config = data.payload.config || {};
+
+          // 查找任务定义中的 params 作为表单字段定义
+          var task = null;
+          for (var i = 0; i < self.taskList.length; i++) {
+            if (self.taskList[i].taskName === taskName) { task = self.taskList[i]; break; }
+          }
+          var params = task ? task.params || [] : [];
+
+          // 构建表单 HTML
+          var fieldsHtml = '';
+          for (var p = 0; p < params.length; p++) {
+            var param = params[p];
+            var val = config[param.name] !== undefined ? config[param.name] : param.default;
+            var label = self._escapeHtml(param.label || param.name);
+
+            if (param.type === 'number') {
+              fieldsHtml += '<div style="margin-bottom:10px"><label style="font-size:12px;color:rgba(255,255,255,0.6);display:block;margin-bottom:4px">' + label + '</label>' +
+                '<input type="number" id="gc-' + param.name + '" value="' + (val !== undefined ? val : '') + '"' +
+                (param.min !== undefined ? ' min="' + param.min + '"' : '') +
+                (param.max !== undefined ? ' max="' + param.max + '"' : '') +
+                (param.step !== undefined ? ' step="' + param.step + '"' : '') +
+                ' style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box"></div>';
+            } else {
+              fieldsHtml += '<div style="margin-bottom:10px"><label style="font-size:12px;color:rgba(255,255,255,0.6);display:block;margin-bottom:4px">' + label + '</label>' +
+                '<input type="text" id="gc-' + param.name + '" value="' + self._escapeAttr(String(val !== undefined ? val : '')) + '"' +
+                ' style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box"></div>';
+            }
+          }
+
+          // 弹窗
+          var overlay = document.createElement('div');
+          overlay.className = 'task-confirm-overlay';
+          overlay.innerHTML =
+            '<div class="task-confirm-box" style="max-width:420px">' +
+              '<div class="task-confirm-title">全局配置 - ' + self._escapeHtml(taskName) + '</div>' +
+              '<div style="margin:12px 0;max-height:400px;overflow-y:auto">' + fieldsHtml + '</div>' +
+              '<div class="task-confirm-actions">' +
+                '<button class="task-confirm-btn cancel" id="gcCancel">取消</button>' +
+                '<button class="task-confirm-btn confirm" id="gcSave" style="background:rgba(0,210,255,0.15);color:#8cf">保存</button>' +
+              '</div>' +
+            '</div>';
+          document.body.appendChild(overlay);
+
+          document.getElementById('gcCancel').onclick = function() { document.body.removeChild(overlay); };
+          document.getElementById('gcSave').onclick = function() {
+            var newConfig = {};
+            for (var p = 0; p < params.length; p++) {
+              var el = document.getElementById('gc-' + params[p].name);
+              if (!el) continue;
+              if (params[p].type === 'number') newConfig[params[p].name] = parseFloat(el.value) || 0;
+              else newConfig[params[p].name] = el.value;
+            }
+            self._send({ type: 'task:set_config', payload: { taskName: taskName, config: newConfig } });
+            document.body.removeChild(overlay);
+          };
+        }
+      };
+
+      // 临时挂载一次消息处理
+      var ws = window.WebSocketManager;
+      if (ws && ws.ws) {
+        var origHandler = ws.handleMessage;
+        ws.handleMessage = function(data) {
+          handler(data);
+          if (origHandler) origHandler.call(ws, data);
+        };
+      }
+    },
+
     // ---- WebSocket ----
 
     _setupWS: function() {
       var self = this;
       var ws = window.WebSocketManager;
-      console.log('[TaskPanel] _setupWS: ws=', !!ws, 'hooked=', ws ? ws._taskPanelHooked : 'n/a');
+      self._log('ws', '[TaskPanel] _setupWS: ws=', !!ws, 'hooked=', ws ? ws._taskPanelHooked : 'n/a');
       if (!ws) { setTimeout(function() { self._setupWS(); }, 500); return; }
       if (ws._taskPanelHooked) return;
       ws._taskPanelHooked = true;
-      console.log('[TaskPanel] handleMessage hooked');
+      self._log('ws', '[TaskPanel] handleMessage hooked');
       // Pull existing display list from DeviceList (sent before we hooked)
       if (window.DeviceList && window.DeviceList.list && window.DeviceList.list.length > 0) {
         self.displayList = window.DeviceList.list;
-        console.log('[TaskPanel] 从 DeviceList 拉取显示端列表:', self.displayList.length);
+        self._log('displayList', '[TaskPanel] 从 DeviceList 拉取显示端列表:', self.displayList.length);
         self._renderDeviceSelector();
       }
       var orig = ws.handleMessage;
       ws.handleMessage = function(data) {
-        console.log('[TaskPanel] onmessage type:', data.type);
+        self._log('message', '[TaskPanel] onmessage type:', data.type);
         if (data.type === 'displayList') {
           self.displayList = data.list || [];
-          console.log('[TaskPanel] 显示端列表:', JSON.stringify(self.displayList.map(function(d) {
-            return { id: d.id, caps: d.capabilities, biFS: d.browserInfo ? (d.browserInfo.featureSupport ? d.browserInfo.featureSupport.length : 0) : -1,
-              webgpu: d.webgpu, hasWebgpu: self._hasWebgpu(d) };
-          })));
+          self._log('displayList', '[TaskPanel] 显示端列表数:', self.displayList.length);
           if (document.getElementById('deviceSelectorList')) {
             self._renderDeviceSelector();
           }
@@ -1094,8 +1298,45 @@
             window.SidebarRegistry.onWidgetUpdate(data.payload);
           }
         }
+        if (data.type === 'task:stream') {
+          self._onStream(data.payload);
+          if (window.SidebarRegistry) {
+            window.SidebarRegistry.onStream(data.payload);
+          }
+        }
         if (data.type === 'task:run_result') {
           self._requestTaskList();
+        }
+        if (data.type === 'task:rerun_result') {
+          if (data.payload && data.payload.success !== false) {
+            var memInst = self.instances.get(data.payload.instanceId);
+            if (memInst) memInst.status = 'draft';
+            // 自动执行待运行的 rerun（如恢复服务）
+            if (self._pendingRunAfterRerun) {
+              var pr = self._pendingRunAfterRerun;
+              self._pendingRunAfterRerun = null;
+              self._send({ type: 'task:run', payload: { taskName: pr.taskName, instanceId: pr.instanceId } });
+            }
+            // 刷新结果详情列显示 draft 状态
+            if (self._selectedInstanceId === data.payload.instanceId) {
+              setTimeout(function() {
+                var col = document.getElementById('taskResultCol');
+                if (col) col.innerHTML = self._renderResultCol(self._selectedTaskName, self._selectedInstanceId);
+              }, 100);
+            }
+          }
+          self._requestTaskList();
+        }
+        if (data.type === 'task:instance_logs_cleared') {
+          if (self._selectedInstanceId === data.payload.instanceId) {
+            var inst = self.instances.get(data.payload.instanceId);
+            if (inst) {
+              inst.logs = [];
+              inst._logsLoaded = true;
+            }
+            var col = document.getElementById('taskResultCol');
+            if (col) col.innerHTML = self._renderResultCol(self._selectedTaskName, self._selectedInstanceId);
+          }
         }
         if (orig) orig.call(ws, data);
       };
@@ -1150,6 +1391,28 @@
           message: payload.message,
           time: payload.timestamp || Date.now()
         });
+        if (this.currentTab === 'monitor') this._renderMonitor();
+      }
+    },
+
+    _onStream: function(payload) {
+      var inst = this.instances.get(payload.instanceId);
+      if (!inst) {
+        this.instances.set(payload.instanceId, {
+          instanceId: payload.instanceId,
+          taskName: payload.taskName,
+          status: 'running',
+          stage: 'running',
+          progress: 50,
+          timestamp: Date.now(),
+          logs: [],
+          _streamText: ''
+        });
+        inst = this.instances.get(payload.instanceId);
+      }
+      if (inst) {
+        if (!inst._streamText) inst._streamText = '';
+        inst._streamText += payload.chunk || '';
         if (this.currentTab === 'monitor') this._renderMonitor();
       }
     },
@@ -1246,7 +1509,7 @@
       if (!badge) return;
       var count = 0;
       this.instances.forEach(function(inst) {
-        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'created') count++;
+        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'draft' || inst.status === 'created') count++;
       });
       badge.classList.toggle('show', count > 0);
     },
@@ -1261,7 +1524,7 @@
       var done = [];
 
       this.instances.forEach(function(inst) {
-        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'created') {
+        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'draft' || inst.status === 'created') {
           active.push(inst);
         } else {
           done.push(inst);
@@ -1329,6 +1592,14 @@
           '</div>';
       }
 
+      var streamOutput = '';
+      if (inst._streamText) {
+        streamOutput = '<div class="task-monitor-stream">' +
+          '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px;padding:0 4px">输出</div>' +
+          '<div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:10px;font-size:13px;line-height:1.6;color:#e0e0e0;white-space:pre-wrap;word-break:break-word;margin-bottom:8px">' +
+          this._escapeHtml(inst._streamText) + '</div></div>';
+      }
+
       var safeId = this._escapeAttr(inst.instanceId);
       return '<div class="task-monitor-card" data-instance="' + safeId + '">' +
         '<div class="task-monitor-header">' +
@@ -1336,9 +1607,10 @@
           '<span class="task-monitor-timer">' + (inst.status === 'pending' ? '排队中' : duration) + '</span>' +
         '</div>' +
         '<div class="task-monitor-stage">阶段: ' + this._escapeHtml(inst.stage || inst.status) + '</div>' +
-        '<div class="task-monitor-target">执行于: ' + this._escapeHtml(inst.target || '服务端') + ' | ' + this._escapeHtml(inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</div>' +
+        '<div class="task-monitor-target" title="' + this._escapeAttr(inst.instanceId || '-') + '">执行于: ' + this._escapeHtml(inst.target || '服务端') + ' | ' + this._escapeHtml(inst.instanceId || '-') + '</div>' +
         progressBar +
         metricsHtml +
+        streamOutput +
         '<div class="task-monitor-log">' +
           '<div class="task-monitor-log-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">实时日志 (' + logs.length + ' 行)</div>' +
           '<div class="task-monitor-log-content">' + (logHtml || '<div style="color:#555">等待日志...</div>') + '</div>' +
@@ -1668,40 +1940,89 @@
       };
     },
 
+    _clearInstanceLogs: function(taskName, instanceId) {
+      this._send({ type: 'task:clear_instance_logs', payload: { taskName: taskName, instanceId: instanceId } });
+    },
+
     _runCreatedInstance: function(taskName, instanceId) {
       this._send({ type: 'task:run', payload: { taskName: taskName, instanceId: instanceId } });
     },
 
     _resumeService: function(taskName, instanceId) {
-      this._send({ type: 'task:submit', payload: { taskName: taskName, instanceId: instanceId, taskType: 'builtin', builtinId: taskName, target: 'server', mode: 'service', params: {}, files: [] } });
+      this._pendingRunAfterRerun = { taskName: taskName, instanceId: instanceId };
+      this._send({ type: 'task:rerun', payload: { taskName: taskName, instanceId: instanceId } });
     },
 
-    _runTaskFromResult: function(taskName, instanceId) {
+    _rerunInstance: function(taskName, instanceId) {
+      this._send({ type: 'task:rerun', payload: { taskName: taskName, instanceId: instanceId } });
+    },
+
+    _editInstanceParams: function(taskName, instanceId) {
+      var self = this;
       var task = null;
-      var inst = null;
       for (var i = 0; i < this.taskList.length; i++) {
         if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
       }
-      if (task && task.instances) {
-        for (var i = 0; i < task.instances.length; i++) {
-          if (task.instances[i].instanceId === instanceId) { inst = task.instances[i]; break; }
+      var taskParams = task ? task.params || [] : [];
+      if (taskParams.length === 0) return;
+
+      // 获取实例当前 params
+      var instances = task.instances || [];
+      var inst = null;
+      for (var i = 0; i < instances.length; i++) {
+        if (instances[i].instanceId === instanceId) { inst = instances[i]; break; }
+      }
+      var currentParams = (inst && inst.params) || {};
+
+      // 构建表单
+      var fieldsHtml = '';
+      for (var p = 0; p < taskParams.length; p++) {
+        var param = taskParams[p];
+        var val = currentParams[param.name] !== undefined ? currentParams[param.name] : param.default;
+        var label = self._escapeHtml(param.label || param.name);
+
+        if (param.type === 'number') {
+          fieldsHtml += '<div style="margin-bottom:10px"><label style="font-size:12px;color:rgba(255,255,255,0.6);display:block;margin-bottom:4px">' + label + '</label>' +
+            '<input type="number" id="eip-' + param.name + '" value="' + (val !== undefined ? val : '') + '"' +
+            (param.min !== undefined ? ' min="' + param.min + '"' : '') +
+            (param.max !== undefined ? ' max="' + param.max + '"' : '') +
+            (param.step !== undefined ? ' step="' + param.step + '"' : '') +
+            ' style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box"></div>';
+        } else {
+          fieldsHtml += '<div style="margin-bottom:10px"><label style="font-size:12px;color:rgba(255,255,255,0.6);display:block;margin-bottom:4px">' + label + '</label>' +
+            '<input type="text" id="eip-' + param.name + '" value="' + self._escapeAttr(String(val !== undefined ? val : '')) + '"' +
+            ' style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box"></div>';
         }
       }
-      this._send({
-        type: 'task:submit',
-        payload: {
-          taskName: taskName,
-          instanceId: instanceId,
-          taskType: 'user',
-          entryFile: (task && task.entryFile) || ((inst && inst.mode) === 'service' ? 'service.js' : 'task.js'),
-          target: (inst && inst.target) || 'server',
-          displayId: (inst && inst.displayId) || null,
-          mode: (inst && inst.mode) || 'one-shot',
-          env: (inst && inst.env) || 'auto',
-          params: (inst && inst.params) || {},
-          files: []
+
+      var overlay = document.createElement('div');
+      overlay.className = 'task-confirm-overlay';
+      overlay.innerHTML =
+        '<div class="task-confirm-box" style="max-width:420px">' +
+          '<div class="task-confirm-title">编辑实例参数 - ' + self._escapeHtml(instanceId.substring(0, 8)) + '</div>' +
+          '<div style="margin:12px 0;max-height:400px;overflow-y:auto">' + fieldsHtml + '</div>' +
+          '<div class="task-confirm-actions">' +
+            '<button class="task-confirm-btn cancel" id="eipCancel">取消</button>' +
+            '<button class="task-confirm-btn confirm" id="eipSave" style="background:rgba(0,210,255,0.15);color:#8cf">保存</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+
+      document.getElementById('eipCancel').onclick = function() { document.body.removeChild(overlay); };
+      document.getElementById('eipSave').onclick = function() {
+        var newParams = {};
+        for (var p = 0; p < taskParams.length; p++) {
+          var el = document.getElementById('eip-' + taskParams[p].name);
+          if (!el) continue;
+          if (taskParams[p].type === 'number') newParams[taskParams[p].name] = parseFloat(el.value) || 0;
+          else newParams[taskParams[p].name] = el.value;
         }
-      });
+        self._send({
+          type: 'task:update_instance_params',
+          payload: { taskName: taskName, instanceId: instanceId, params: newParams }
+        });
+        document.body.removeChild(overlay);
+      };
     },
 
     _onInstanceDeleted: function(payload) {
@@ -1856,13 +2177,16 @@
     },
 
     _resultDetailHTML: function(inst, taskName) {
-      var statusText = inst.status === 'completed' ? '完成' : inst.status === 'failed' ? '失败' : inst.status === 'stopped' ? '已停止' : inst.status === 'created' ? '已创建' : '进行中';
-
-      var widgetHtml = '';
-      if (inst.status === 'running' || inst.status === 'stopped') {
-        var widgetDef = this._getWidgetDef(taskName);
-        if (widgetDef) widgetHtml = this._renderWidget(widgetDef, inst.instanceId);
+      var statusText = inst.status === 'completed' ? '完成' : inst.status === 'failed' ? '失败' : inst.status === 'stopped' ? '已停止' : inst.status === 'draft' || inst.status === 'created' ? '草稿' : '进行中';
+      var taskParams = null;
+      for (var i = 0; i < this.taskList.length; i++) {
+        if (this.taskList[i].taskName === taskName) { taskParams = this.taskList[i].params || []; break; }
       }
+      var instSafeTaskName = this._escapeAttr(taskName);
+      var instSafeId = this._escapeAttr(inst.instanceId);
+
+      var widgetDef = this._getWidgetDef(taskName);
+      var widgetHtml = widgetDef ? this._renderWidget(widgetDef, inst.instanceId, taskName, inst.status) : '';
 
       var result = inst.result || {};
       var outputFiles = result.outputFiles || (result.data ? result.data.outputFiles : []) || [];
@@ -1894,11 +2218,19 @@
         ? Math.round((inst.completedAt - inst.timestamp) / 1000) + 's'
         : '-';
 
+      var outputText = '';
+      if (result.data && result.data.text) {
+        outputText = '<div class="task-result-text">' +
+          '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">输出</div>' +
+          '<div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:12px;font-size:13px;line-height:1.6;color:#e0e0e0;white-space:pre-wrap;word-break:break-word;margin-bottom:8px">' +
+          this._escapeHtml(result.data.text) + '</div></div>';
+      }
+
       return (widgetHtml || '') +
       '<div class="task-result-meta">' +
         '<div class="task-result-meta-item">状态: <strong>' + statusText + '</strong></div>' +
         '<div class="task-result-meta-item">耗时: <strong>' + duration + '</strong></div>' +
-        '<div class="task-result-meta-item">实例: <strong style="font-family:monospace">#' + this._escapeHtml(inst.instanceId ? inst.instanceId.substring(0, 8) : '-') + '</strong></div>' +
+        '<div class="task-result-meta-item">实例: <strong style="font-family:monospace" title="' + this._escapeAttr(inst.instanceId || '') + '">#' + this._escapeHtml(inst.instanceId || '-') + '</strong></div>' +
         '<div class="task-result-meta-item">环境: <strong>' + this._escapeHtml(inst.env || '-') + '</strong></div>' +
       (inst.result && inst.result.metrics ? '<div class="task-result-metrics">' +
         '<div class="task-result-metrics-title">推理性能</div>' +
@@ -1911,16 +2243,22 @@
       '</div>' +
       (result.error ? '<div style="color:#ef4444;font-size:13px;margin-bottom:12px">错误: ' + this._escapeHtml(result.error) + '</div>' : '') +
       (filesHtml ? '<div class="task-result-files"><div style="font-size:11px;color:#666;margin-bottom:4px">输出文件</div>' + filesHtml + '</div>' : '') +
+      outputText +
       '<div class="task-result-log">' +
-        '<div class="task-result-log-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">完整日志 (' + logs.length + ' 行)</div>' +
+        '<div class="task-result-log-header" onclick="this.nextElementSibling.classList.toggle(\'collapsed\')">完整日志 (' + logs.length + ' 行)' +
+          '<span class="task-clear-log" onclick="event.stopPropagation();TaskPanel._clearInstanceLogs(\'' + taskName + '\',\'' + inst.instanceId + '\')" style="float:right;font-size:11px;color:#ef4444;cursor:pointer;margin-left:8px">清空</span>' +
+        '</div>' +
         '<div class="task-result-log-content">' + (logHtml || '<span style="color:#555">无日志</span>') + '</div>' +
       '</div>' +
       '<div style="margin-top:12px;display:flex;gap:8px">' +
-        (inst.status === 'created'
+        (inst.status === 'draft'
           ? '<button class="task-card-btn primary" onclick="TaskPanel._runCreatedInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">运行</button>'
-          : inst.mode === 'service' && inst.status === 'stopped'
-            ? '<button class="task-card-btn primary" onclick="TaskPanel._resumeService(\'' + taskName + '\',\'' + inst.instanceId + '\')">恢复服务</button>'
-            : '<button class="task-card-btn" onclick="TaskPanel._runTaskFromResult(\'' + taskName + '\',\'' + inst.instanceId + '\')">重新执行</button>') +
+          : inst.status === 'completed' || inst.status === 'failed' || inst.status === 'stopped'
+            ? '<button class="task-card-btn primary" onclick="TaskPanel._rerunInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">重新运行</button>'
+            : '') +
+        (inst.status !== 'running' && taskParams && taskParams.length > 0
+          ? '<button class="task-card-btn" onclick="TaskPanel._editInstanceParams(\'' + instSafeTaskName + '\',\'' + instSafeId + '\')">编辑参数</button>'
+          : '') +
         '<button class="task-card-btn danger" onclick="TaskPanel._confirmDeleteInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">删除此执行记录</button>' +
       '</div>';
     },
@@ -1959,26 +2297,30 @@
       }
     },
 
-    _renderWidget: function(widgetDef, instanceId) {
+    _renderWidget: function(widgetDef, instanceId, taskName, status) {
       if (!widgetDef) return '';
       var data = this._widgetData[instanceId] || {};
       var self = this;
 
       if (widgetDef.html) {
         var html = widgetDef.html;
+        html = html.replace(/\{\{instanceId\}\}/g, instanceId);
+        html = html.replace(/\{\{taskName\}\}/g, taskName || '');
         if (!widgetDef.script) {
-          html = html.replace(/\{\{instanceId\}\}/g, instanceId);
           html = html.replace(/\{\{(\w+)\}\}/g, function(match, key) {
             var val = data[key] !== undefined ? data[key] : '--';
             return typeof val === 'string' ? val : JSON.stringify(val);
           });
         }
         var containerId = 'task-widget-' + instanceId;
-        var result = '<div id="' + containerId + '" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:12px">' + html + '</div>';
+        var saveBtn = (status === 'draft')
+          ? '<button class="task-card-btn primary task-widget-save" onclick="TaskPanel._saveWidgetParams(\'' + instanceId + '\',\'' + (taskName || '') + '\')" style="margin-top:8px;width:100%">保存参数</button>'
+          : '';
+        var result = '<div id="' + containerId + '" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:12px">' + html + saveBtn + '</div>';
 
         if (widgetDef.script) {
           setTimeout(function() {
-            self._initWidgetController(widgetDef.script, instanceId, containerId);
+            self._initWidgetController(widgetDef.script, instanceId, containerId, taskName);
           }, 0);
         }
 
@@ -2043,6 +2385,22 @@
       '</div>';
     },
 
+    _saveWidgetParams: function(instanceId, taskName) {
+      var container = document.getElementById('task-widget-' + instanceId);
+      if (!container) return;
+      var fields = container.querySelectorAll('.task-widget-field');
+      var params = {};
+      for (var i = 0; i < fields.length; i++) {
+        var el = fields[i];
+        var name = el.getAttribute('data-field');
+        if (!name) continue;
+        if (el.type === 'number') params[name] = parseFloat(el.value) || 0;
+        else if (el.type === 'checkbox') params[name] = el.checked;
+        else params[name] = el.value;
+      }
+      this._send({ type: 'task:update_instance_params', payload: { taskName: taskName, instanceId: instanceId, params: params } });
+    },
+
     _onWidgetAction: function(instanceId, action) {
       this._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: action } });
     },
@@ -2061,7 +2419,7 @@
       this._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: 'updateConfig', params: params } });
     },
 
-    _initWidgetController: function(scriptStr, instanceId, containerId) {
+    _initWidgetController: function(scriptStr, instanceId, containerId, taskName) {
       var oldCtrl = this._widgetControllers[instanceId];
       if (oldCtrl && oldCtrl.onDestroy) try { oldCtrl.onDestroy(); } catch(e) {}
       if (oldCtrl && oldCtrl._timer) clearInterval(oldCtrl._timer);
@@ -2071,10 +2429,30 @@
 
       var self = this;
       var api = {
+        taskName: taskName || '',
+        instanceId: instanceId || '',
         getContainer: function() { return container; },
         getData: function() { return self._widgetData[instanceId] || {}; },
         sendAction: function(action, params) {
           self._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: action, params: params || {} } });
+        },
+        submitTask: function(taskName, params) {
+          self._send({
+            type: 'task:submit',
+            payload: {
+              taskName: taskName,
+              taskType: 'builtin',
+              builtinId: taskName,
+              target: 'server',
+              mode: 'one-shot',
+              env: 'auto',
+              params: params || {},
+              files: []
+            }
+          });
+        },
+        saveInstanceParams: function(taskName, instanceId, params) {
+          self._send({ type: 'task:update_instance_params', payload: { taskName: taskName, instanceId: instanceId, params: params || {} } });
         },
         _onUpdate: null,
         _onDestroy: null,

@@ -42,7 +42,7 @@ class TaskManager extends EventEmitter {
 
   /**
    * 启动时恢复孤儿服务实例（上次崩溃/重启时 running 的实例）
-   * 只恢复状态为 running 的，已 stopped 的不动
+   * 先创建 draft，再 runInstance() 启动
    */
   async restoreAutoStartServices() {
     const taskList = await this.taskIO.listTasks().catch(() => []);
@@ -52,7 +52,6 @@ class TaskManager extends EventEmitter {
         if (entry.mode === 'service' && entry.status === 'running') {
           try {
             console.log('[TaskManager] 恢复服务实例:', entry.taskName, entry.instanceId);
-            // 补全类型字段：如果 taskName 匹配内置任务则按 builtin 恢复
             const isBuiltin = builtinRegistry && builtinRegistry.getTask(entry.taskName);
             await this.submit({
               ...entry, instanceId: entry.instanceId,
@@ -60,37 +59,187 @@ class TaskManager extends EventEmitter {
               builtinId: isBuiltin ? entry.taskName : null,
               entryFile: isBuiltin ? null : (entry.entryFile || 'service.js')
             });
+            await this.runInstance(entry.taskName, entry.instanceId);
           } catch (err) {
             console.error('[TaskManager] 服务恢复失败:', entry.taskName, err.message);
           }
-          break; // 每个任务只恢复最新一个 running 实例
+          break;
         }
       }
     }
     this._isRestoring = false;
   }
 
-  /** 执行已创建的实例 */
+  /** 执行 draft 实例（draft → pending → running → completed/failed） */
   async runInstance(taskName, instanceId) {
-    // 从 index 找实例
     const idx = await this.taskIO.getIndex(taskName).catch(() => []);
     const entry = idx.find(e => e.instanceId === instanceId);
     if (!entry) return { success: false, error: '实例不存在' };
-    if (entry.status !== 'created') return { success: false, error: '实例状态不是 created: ' + entry.status };
+    if (entry.status !== 'draft' && entry.status !== 'created') {
+      return { success: false, error: '实例状态必须是 draft: ' + entry.status };
+    }
 
-    // 用保存的配置重新提交执行
-    const result = await this.submit({
+    let instance = this.instances.get(instanceId);
+    if (!instance) {
+      instance = { taskName, instanceId, status: entry.status, timestamp: entry.timestamp || Date.now() };
+      this.instances.set(instanceId, instance);
+    }
+
+    // 从 index entry 重建 task 配置
+    const task = {
       taskName: entry.taskName,
-      instanceId: entry.instanceId,
+      instanceId,
       taskType: entry.taskType || 'user',
-      builtinId: entry.taskName,  // builtin tasks use taskName as id
+      builtinId: entry.builtinId || entry.taskName,
       target: entry.target || 'server',
-      mode: entry.mode || 'one-shot',
       env: entry.env || 'auto',
+      mode: entry.mode || 'one-shot',
+      displayId: entry.displayId || null,
+      entryFile: entry.entryFile || (entry.mode === 'service' ? 'service.js' : 'task.js'),
       params: entry.params || {},
-      files: []
-    });
-    return { success: result.status !== 'failed', instanceId, status: result.status };
+      refs: entry.refs || {}
+    };
+
+    instance.status = 'running';
+    this.emit('progress', instanceId, 'running', 30);
+    this.emit('log', instanceId, 'system', 'info', '开始执行, 目标: ' + task.target + ', 环境: ' + task.env);
+    await this.taskIO.updateIndex(taskName, { instanceId, status: 'running' });
+
+    const resolvedRefs = this.taskIO.resolveRefs(task.taskName, task.refs);
+    const context = {
+      params: task.params,
+      refs: resolvedRefs,
+      workDir: this.taskIO._taskPath(task.taskName)
+    };
+
+    try {
+      if (task.mode === 'service') {
+        for (const [sid, svc] of this._services) {
+          const sInst = this.instances.get(sid);
+          if (sInst && sInst.taskName === task.taskName && svc.status === 'running') {
+            console.log('[TaskManager] 停止旧服务实例:', sid, 'taskName:', task.taskName);
+            try { await svc.stop(); } catch (e) { }
+            this._services.delete(sid);
+            this._widgetActions.delete(sid);
+          }
+        }
+        this.emit('log', instanceId, 'system', 'info', '服务模式，在主进程运行');
+        this._runServiceTask(task, instanceId, instance, context);
+        return { taskName, instanceId, status: 'running' };
+      }
+
+      const usePuppeteer = (task.target === 'server' || !task.target) &&
+        (task.env === 'webgl' || task.env === 'webgpu');
+
+      if (task.taskType === 'builtin') {
+        if (!builtinRegistry) throw new Error('内置任务模块不可用');
+
+        const builtinCtx = { ...context, instanceId, taskName: task.taskName, taskIO: this.taskIO, postStream: (data) => this.emit('stream', instanceId, data) };
+        const result = await builtinRegistry.run(task.builtinId, builtinCtx);
+
+        if (result && result.forwardTo === 'display') {
+          instance.status = 'pending_forward';
+          instance.targetInfo = { displayId: task.displayId };
+          this.emit('progress', instanceId, 'forwarding', 50);
+          this.emit('log', instanceId, 'system', 'info', '正在转发到显示端...');
+          this._forwardToDisplay(task, instanceId, result.forwardParams);
+          return { taskName, instanceId, status: 'pending_forward' };
+        }
+
+        await this._handleResult(task, instanceId, instance, result);
+        return { taskName, instanceId, status: instance.status };
+      }
+
+      if (task.target === 'display' || task.target === 'subdisplay') {
+        instance.status = 'pending_forward';
+        instance.targetInfo = { displayId: task.displayId };
+        console.log('[TaskManager] 转发到显示端, instanceId:', instanceId, 'displayId:', task.displayId);
+        this._forwardToDisplay(task, instanceId, task.params);
+        instance._forwardTimeout = setTimeout(() => {
+          const inst = this.instances.get(instanceId);
+          if (inst && inst.status === 'pending_forward') {
+            inst.status = 'failed';
+            this.emit('log', instanceId, 'system', 'error', '转发超时: 显示端未响应');
+            this.emit('progress', instanceId, 'failed', 0);
+            this.emit('result', instanceId, { success: false, error: '显示端未响应' });
+            this.taskIO.writeInstanceLog(task.taskName, instanceId, 'system', 'error', '转发超时: 显示端未响应');
+            this.taskIO.updateIndex(task.taskName, { instanceId, status: 'failed', error: '显示端未响应' });
+          }
+        }, 30000);
+        return { taskName, instanceId, status: 'pending_forward' };
+      }
+
+      console.log('[TaskManager] 服务端执行, runner:', usePuppeteer ? 'puppeteer' : 'nodejs', 'instanceId:', instanceId);
+      const runner = usePuppeteer ? this.puppeteerRunner : this.nodeRunner;
+      this._runServerTask(task, instanceId, instance, runner, context);
+      return { taskName, instanceId, status: 'running' };
+
+    } catch (err) {
+      if (instance) instance.status = 'failed';
+      this.emit('log', instanceId, 'system', 'error', '执行异常: ' + err.message);
+      this.emit('progress', instanceId, 'failed', 0);
+      this.emit('result', instanceId, { success: false, error: err.message });
+      await this.taskIO.updateIndex(task.taskName, { instanceId, status: 'failed', error: err.message });
+      await this.taskIO.writeInstanceLog(task.taskName, instanceId, 'system', 'error', err.message);
+      return { taskName, instanceId, status: 'failed', error: err.message };
+    }
+  }
+
+  /** 重置已完成/失败/已停止的实例为 draft */
+  async rerunInstance(taskName, instanceId) {
+    const idx = await this.taskIO.getIndex(taskName).catch(() => []);
+    const entry = idx.find(e => e.instanceId === instanceId);
+    if (!entry) return { success: false, error: '实例不存在' };
+    if (entry.status === 'draft') return { success: false, error: '草稿无需重置' };
+    if (entry.status === 'pending' || entry.status === 'running' || entry.status === 'pending_forward') {
+      return { success: false, error: '实例正在运行，无法重置' };
+    }
+
+    await this.taskIO.updateIndex(taskName, { instanceId, status: 'draft' });
+
+    let instance = this.instances.get(instanceId);
+    if (!instance) {
+      instance = { taskName, instanceId, status: 'draft', timestamp: entry.timestamp || Date.now() };
+      this.instances.set(instanceId, instance);
+    } else {
+      instance.status = 'draft';
+    }
+
+    this.emit('log', instanceId, 'system', 'info', '实例已重置为草稿，可编辑参数后再运行');
+    return { taskName, instanceId, status: 'draft' };
+  }
+
+  /** 将任务转发到显示端执行 */
+  async _forwardToDisplay(task, instanceId, forwardParams) {
+    let forwardFiles = task.files || [];
+    if (forwardFiles.length === 0 && task.taskType === 'user' && task.entryFile) {
+      forwardFiles = await this.taskIO.readTaskFiles(task.taskName, task.entryFile);
+    }
+
+    const payload = {
+      type: 'task:execute',
+      payload: {
+        taskName: task.taskName,
+        instanceId,
+        builtinId: task.builtinId || null,
+        entryFile: task.entryFile,
+        files: forwardFiles,
+        params: forwardParams || task.params || {},
+        env: task.env || 'auto'
+      }
+    };
+
+    const displayId = task.displayId;
+    if (displayId && this._sendToDisplay) {
+      console.log('[TaskManager] 转发 task:execute 到显示端', displayId, 'builtinId:', payload.payload.builtinId);
+      const sent = this._sendToDisplay(displayId, payload);
+      if (!sent) {
+        console.error('[TaskManager] 转发失败: 显示端不在线', displayId);
+        this.handleForwardResult(task.taskName, instanceId, {
+          success: false, error: '显示端不在线或连接关闭: ' + displayId
+        });
+      }
+    }
   }
 
   /** 处理来自控制端的 widget 动作 */
@@ -110,6 +259,18 @@ class TaskManager extends EventEmitter {
     if (this.instances.size >= this.maxInstances) {
       throw new Error('超出最大实例数 (' + this.maxInstances + ')');
     }
+
+    // 自动检测内置任务：如果任务名匹配内置注册表，修正 taskType/builtinId
+    if (task.taskType !== 'builtin' && builtinRegistry) {
+      const builtinTask = builtinRegistry.getTask(task.taskName);
+      if (builtinTask) {
+        console.log('[TaskManager] 自动检测为内置任务:', task.taskName);
+        task.taskType = 'builtin';
+        task.builtinId = task.taskName;
+        delete task.entryFile;
+      }
+    }
+
     const instanceId = task.instanceId || this._generateId();
     const timestamp = Date.now();
 
@@ -120,7 +281,7 @@ class TaskManager extends EventEmitter {
       target: task.target || 'server',
       env: task.env || 'auto',
       mode: task.mode || 'one-shot',
-      status: 'pending',
+      status: 'draft',
       timestamp
     };
 
@@ -132,124 +293,18 @@ class TaskManager extends EventEmitter {
 
     await this.taskIO.saveTaskFiles(task.taskName, task.files || []);
     await this.taskIO.createInstanceDir(task.taskName, instanceId);
-    await this.taskIO.updateIndex(task.taskName, { instanceId, taskName: task.taskName, status: 'running', timestamp, target: task.target, env: task.env, mode: task.mode, displayId: task.displayId, params: task.params || {} });
+    await this.taskIO.updateIndex(task.taskName, {
+      instanceId, taskName: task.taskName, status: 'draft', timestamp,
+      target: task.target, env: task.env, mode: task.mode,
+      displayId: task.displayId, params: task.params || {},
+      taskType: task.taskType || 'user',
+      builtinId: task.builtinId || null,
+      entryFile: task.entryFile || null
+    });
 
-    // autoRun=false 只创建实例，不执行
-    if (task.autoRun === false) {
-      instance.status = 'created';
-      this.emit('log', instanceId, 'system', 'info', '实例已创建，等待运行');
-      await this.taskIO.updateIndex(task.taskName, { instanceId, status: 'created' });
-      return { taskName: task.taskName, instanceId, status: 'created' };
-    }
+    this.emit('log', instanceId, 'system', 'info', '草稿已创建，可编辑参数后再运行');
 
-    instance.status = 'running';
-    this.emit('progress', instanceId, 'running', 30);
-
-    const resolvedRefs = this.taskIO.resolveRefs(task.taskName, task.refs);
-    const context = {
-      params: task.params || {},
-      refs: resolvedRefs,
-      workDir: this.taskIO._taskPath(task.taskName)
-    };
-
-    try {
-      this.emit('log', instanceId, 'system', 'info', '目标: ' + task.target + ', 环境: ' + task.env);
-
-      // 服务任务：在主进程直接运行，不 fork
-      if (task.mode === 'service') {
-        // 如果同名服务已在运行，先停止旧实例避免重复注册
-        for (const [sid, svc] of this._services) {
-          const sInst = this.instances.get(sid);
-          if (sInst && sInst.taskName === task.taskName && svc.status === 'running') {
-            console.log('[TaskManager] 停止旧服务实例:', sid, 'taskName:', task.taskName);
-            try { await svc.stop(); } catch (e) { /* 忽略 */ }
-            this._services.delete(sid);
-            this._widgetActions.delete(sid);
-          }
-        }
-        this.emit('log', instanceId, 'system', 'info', '服务模式，在主进程运行');
-        this._runServiceTask(task, instanceId, instance, context);
-
-        return { taskName: task.taskName, instanceId, status: 'running' };
-      }
-
-      // 服务端执行时，GPU 环境走 Puppeteer
-      const usePuppeteer = (task.target === 'server' || !task.target) &&
-        (task.env === 'webgl' || task.env === 'webgpu');
-
-      if (task.taskType === 'builtin') {
-        if (!builtinRegistry) throw new Error('内置任务模块不可用');
-
-        // Convert files array to map for builtin tasks
-        if (task.files && task.files.length > 0) {
-          context.files = {};
-          for (const f of task.files) {
-            if (f.data) {
-              context.files[f.name] = Buffer.from(f.data, 'base64');
-            }
-          }
-        }
-
-        console.log('[TaskManager] 运行内置任务:', task.builtinId, 'instanceId:', instanceId);
-        const result = await builtinRegistry.run(task.builtinId, {
-          ...context,
-          instanceId,
-          taskName: task.taskName,
-          taskIO: this.taskIO
-        });
-
-        // builtin task can request forwarding to display
-        if (result && result.forwardTo === 'display') {
-          console.log('[TaskManager] 内置任务请求转发到显示端, instanceId:', instanceId);
-          instance.status = 'pending_forward';
-          instance.targetInfo = { displayId: task.displayId };
-          this.emit('progress', instanceId, 'forwarding', 50);
-          this.emit('log', instanceId, 'system', 'info', '正在转发到显示端...');
-          return {
-            taskName: task.taskName,
-            instanceId,
-            status: 'pending_forward',
-            forwardParams: result.forwardParams
-          };
-        }
-
-        await this._handleResult(task, instanceId, instance, result);
-      } else if (task.target === 'display' || task.target === 'subdisplay') {
-        instance.status = 'pending_forward';
-        instance.targetInfo = { displayId: task.displayId };
-        console.log('[TaskManager] 用户任务转发到显示端, instanceId:', instanceId, 'displayId:', task.displayId);
-        // 转发超时：30秒无结果自动标记失败
-        instance._forwardTimeout = setTimeout(() => {
-          const inst = this.instances.get(instanceId);
-          if (inst && inst.status === 'pending_forward') {
-            inst.status = 'failed';
-            this.emit('log', instanceId, 'system', 'error', '转发超时: 显示端未响应');
-            this.emit('progress', instanceId, 'failed', 0);
-            this.emit('result', instanceId, { success: false, error: '显示端未响应' });
-            this.taskIO.writeInstanceLog(task.taskName, instanceId, 'system', 'error', '转发超时: 显示端未响应');
-            this.taskIO.updateIndex(task.taskName, { instanceId, status: 'failed', error: '显示端未响应' });
-          }
-        }, 30000);
-        return { taskName: task.taskName, instanceId, status: 'pending_forward' };
-      } else {
-        console.log('[TaskManager] 服务端执行, runner:', usePuppeteer ? 'puppeteer' : 'nodejs', 'instanceId:', instanceId);
-        const runner = usePuppeteer ? this.puppeteerRunner : this.nodeRunner;
-        // 异步派发，不阻塞 WebSocket 消息处理
-        // 结果通过 TaskManager 事件（progress/log/result）广播到控制端
-        this._runServerTask(task, instanceId, instance, runner, context);
-        return { taskName: task.taskName, instanceId, status: 'running' };
-      }
-    } catch (err) {
-      // 同步阶段的错误（文件 IO、参数校验等），异步执行阶段的错误在 _runServerTask 中处理
-      // 注意：从这里 fall through 到下面的 catch 表示 submit 同步阶段失败
-      instance.status = 'failed';
-      this.emit('log', instanceId, 'system', 'error', '执行异常: ' + err.message);
-      this.emit('progress', instanceId, 'failed', 0);
-      this.emit('result', instanceId, { success: false, error: err.message });
-      await this.taskIO.updateIndex(task.taskName, { instanceId, status: 'failed', error: err.message });
-      await this.taskIO.writeInstanceLog(task.taskName, instanceId, 'system', 'error', err.message);
-      return { taskName: task.taskName, instanceId, status: 'failed', error: err.message };
-    }
+    return { taskName: task.taskName, instanceId, status: 'draft' };
   }
 
   async _handleResult(task, instanceId, instance, result) {
@@ -369,6 +424,7 @@ class TaskManager extends EventEmitter {
           sendToDisplay: this._sendToDisplay,
           broadcastToDisplays: this._broadcastToDisplays,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
+          postStream: (data) => this.emit('stream', instanceId, data),
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler)
         });
         if (!result || result.type !== 'service' || !result.stop) {
@@ -489,6 +545,13 @@ class TaskManager extends EventEmitter {
       return '';
     }
     return content;
+  }
+
+  async clearInstanceLogs(taskName, instanceId) {
+    await this.taskIO.clearInstanceLog(taskName, instanceId);
+    const inst = this.instances.get(instanceId);
+    if (inst) inst.logs = [];
+    return { success: true };
   }
 
   async deleteInstance(taskName, instanceId) {

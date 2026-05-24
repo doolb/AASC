@@ -14,9 +14,10 @@
  * @param {Function} sendToDisplay — (displayId: string, msg: object) => void，向指定显示端发送
  */
 function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDisplay) {
-  const controlTypes = ['task:submit', 'task:run', 'task:stop', 'task:status', 'task:result',
+  const controlTypes = ['task:submit', 'task:run', 'task:rerun', 'task:stop', 'task:status', 'task:result',
                         'task:list', 'task:update', 'task:delete', 'task:get_instance_logs',
-                        'task:delete_instance', 'task:widget_action'];
+                        'task:delete_instance', 'task:widget_action', 'task:update_instance_params',
+                        'task:get_config', 'task:set_config', 'task:clear_instance_logs'];
 
   // 获取内置任务列表（格式化为前端所需结构）
   function getBuiltinTasks() {
@@ -58,42 +59,9 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
     switch (data.type) {
       // ---- 提交 ----
       case 'task:submit': {
-        console.log('[WS] >> task:submit:', payload.taskName, 'type:', payload.taskType, 'builtin:', payload.builtinId, 'target:', payload.target);
+        console.log('[WS] >> task:submit:', payload.taskName, 'type:', payload.taskType, 'target:', payload.target);
         try {
           const result = await taskManager.submit(payload);
-
-          // 如果需要转发到显示端（例如由显示端本地执行），
-          // 构造 task:execute 消息发送给目标 display
-          if (result.status === 'pending_forward') {
-            // 如果 files 为空（快捷运行时），从磁盘读取任务文件
-            let forwardFiles = payload.files || [];
-            if (forwardFiles.length === 0 && payload.taskType === 'user' && payload.entryFile) {
-              forwardFiles = await taskManager.taskIO.readTaskFiles(payload.taskName, payload.entryFile);
-            }
-            const targetPayload = {
-              type: 'task:execute',
-              payload: {
-                taskName: payload.taskName,
-                instanceId: result.instanceId,
-                builtinId: payload.builtinId || null,
-                entryFile: payload.entryFile,
-                files: forwardFiles,
-                params: result.forwardParams || payload.params || {},
-                env: payload.env || 'auto'
-              },
-            };
-            const displayId = payload.displayId;
-            if (displayId && sendToDisplay) {
-              console.log('[WS] 转发 task:execute 到显示端', displayId, 'builtinId:', targetPayload.payload.builtinId);
-              var sent = sendToDisplay(displayId, targetPayload);
-              if (!sent) {
-                console.error('[WS] 转发失败: 显示端不在线或连接关闭', displayId);
-                taskManager.handleForwardResult(payload.taskName, result.instanceId, {
-                  success: false, error: '显示端不在线或连接关闭: ' + displayId
-                });
-              }
-            }
-          }
 
           console.log('[WS] << task:submitted:', result.instanceId, result.status);
           ctx.ws.send(JSON.stringify({
@@ -121,6 +89,24 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           const result = await taskManager.runInstance(payload.taskName, payload.instanceId);
           ctx.ws.send(JSON.stringify({
             type: 'task:run_result',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, ...result }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, error: err.message }
+          }));
+        }
+        break;
+      }
+
+      // ---- 重置实例为草稿 ----
+      case 'task:rerun': {
+        console.log('[WS] >> task:rerun:', payload.taskName, payload.instanceId);
+        try {
+          const result = await taskManager.rerunInstance(payload.taskName, payload.instanceId);
+          ctx.ws.send(JSON.stringify({
+            type: 'task:rerun_result',
             payload: { taskName: payload.taskName, instanceId: payload.instanceId, ...result }
           }));
         } catch (err) {
@@ -271,6 +257,23 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
         break;
       }
 
+      case 'task:clear_instance_logs': {
+        console.log('[WS] >> task:clear_instance_logs:', payload.taskName, payload.instanceId);
+        try {
+          const result = await taskManager.clearInstanceLogs(payload.taskName, payload.instanceId);
+          ctx.ws.send(JSON.stringify({
+            type: 'task:instance_logs_cleared',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, ...result }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, error: err.message }
+          }));
+        }
+        break;
+      }
+
       case 'task:widget_action': {
         console.log('[WS] >> task:widget_action:', payload.instanceId, payload.action);
         const wResult = await taskManager.handleWidgetAction(payload.instanceId, payload.action, payload.params);
@@ -278,6 +281,67 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           type: 'task:widget_action_result',
           payload: { instanceId: payload.instanceId, action: payload.action, ...wResult }
         }));
+        break;
+      }
+
+      case 'task:update_instance_params': {
+        try {
+          const idx = await taskManager.taskIO.getIndex(payload.taskName);
+          const entry = idx.find(e => e.instanceId === payload.instanceId);
+          if (!entry) {
+            ctx.ws.send(JSON.stringify({
+              type: 'task:error',
+              payload: { taskName: payload.taskName, instanceId: payload.instanceId, error: '实例不存在' }
+            }));
+            break;
+          }
+          const newParams = { ...(entry.params || {}), ...(payload.params || {}) };
+          await taskManager.taskIO.updateIndex(payload.taskName, {
+            instanceId: payload.instanceId,
+            params: newParams
+          });
+          ctx.ws.send(JSON.stringify({
+            type: 'task:instance_params_updated',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, success: true }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, instanceId: payload.instanceId, error: err.message }
+          }));
+        }
+        break;
+      }
+
+      case 'task:get_config': {
+        try {
+          const config = await taskManager.taskIO.getTaskConfig(payload.taskName);
+          ctx.ws.send(JSON.stringify({
+            type: 'task:config_data',
+            payload: { taskName: payload.taskName, config }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, error: err.message }
+          }));
+        }
+        break;
+      }
+
+      case 'task:set_config': {
+        try {
+          await taskManager.taskIO.setTaskConfig(payload.taskName, payload.config || {});
+          ctx.ws.send(JSON.stringify({
+            type: 'task:config_saved',
+            payload: { taskName: payload.taskName, success: true }
+          }));
+        } catch (err) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { taskName: payload.taskName, error: err.message }
+          }));
+        }
         break;
       }
 
@@ -328,6 +392,14 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
     sendToControl({
       type: 'task:widget_update',
       payload: { instanceId, taskName: inst ? inst.taskName : null, data }
+    });
+  });
+
+  taskManager.on('stream', (instanceId, { chunk, index, done }) => {
+    const inst = taskManager.getInstance(instanceId);
+    sendToControl({
+      type: 'task:stream',
+      payload: { instanceId, taskName: inst ? inst.taskName : null, chunk, index: index || 0, done: done || false }
     });
   });
 }

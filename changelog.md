@@ -2,7 +2,85 @@
 
 ## [Unreleased]
 
+### 新增
+
+- ✅ [2026-05-23] 删除 tts.js 中整点报时死代码（loadTimeAnnounceConfig / saveTimeAnnounceConfig）— 报时已改为内置任务管理
+  - 删除 timeAnnounceConfig 默认值、loadTimeAnnounceConfig、renderTimeAnnounceConfig、saveTimeAnnounceConfig
+  - 删除对应的全局绑定 window.saveTimeAnnounceConfig
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/tts.js
+
+- ✅ [2026-05-23] TaskPanel 控制端日志分级开关 — 7 处 console.log 改为 _log(cat, ...)，按种类分 5 个开关
+  - 新增 _debug 对象（init/polling/ws/displayList/message）
+  - 新增 _log(cat, ...) 统一日志入口
+  - 保留 3 处 console.error 不变
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/task-panel.js
+  - 文档：docs/spec/remote-task-system.md 新增"控制端调试日志"章节
+
+- ✅ [2026-05-17] 任务系统草稿模式 — 所有实例从 draft 开始，rerun 重置同实例
+  - submit() 始终返回 draft，不再检查 autoRun
+  - 新增 runInstance() 独立执行方法（draft → running → completed/failed）
+  - 新增 rerunInstance() 将 completed/failed/stopped 重置为 draft（同实例不克隆）
+  - 新增 task:rerun WebSocket 消息，移除 autoRun 概念
+  - 前端适配：draft 状态图标/文本、rerun 按钮替代重新执行
+  - 服务重启恢复：restoreAutoStartServices() 改为 submit → runInstance 两步
+  - 前置逻辑从 web-socket-handler 迁移到 task-manager 内部（_forwardToDisplay）
+  - 向后兼容：task:run 同时接受 draft 和 created 状态
+  - 改动文件：
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+    - 修改：src/apps/server/modules/task-engine/web-socket-handler.js
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 新增：docs/design/task-system-draft-mode.md
+    - 新增：docs/task/2026-05-17_task-system-draft-mode.md
+    - 修改：docs/spec/remote-task-system.md
+
+- ✅ [2026-05-17] llm.chat widget script 化，消息/保存逻辑内聚到 script 中
+  - widget 由 onclick 外联改为 script 模式，发送/保存按钮用 class 绑定
+  - task-panel.js 移除 _submitChatMessage / _saveWidgetGlobalConfig 任务特有代码
+  - _initWidgetController 增加 api.taskName + api.submitTask 通用能力
+  - _renderWidget 修复 template 替换（script 模式下也替换 {{instanceId}}/{{taskName}}）
+  - 改动文件：
+    - 修改：src/apps/server/modules/task-engine/builtin-tasks/llm-chat.js
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-17] llm.chat 消息输入框 + 流式输出支持
+
 ### 修复
+
+- ✅ [2026-05-17] completed 状态的实例在结果详情中显示配置面板 widget
+  - _resultDetailHTML 中增加 completed 状态渲染 widget
+  - _renderWidget 增加 taskName 参数和 {{taskName}} 模板变量
+  - _saveWidgetGlobalConfig 修复 DOM 选择器，同时覆盖任务面板和侧边栏
+  - llm-chat.js widget 按钮改为传 taskName（修复保存全局默认写入目标）
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - 修改：src/apps/server/modules/task-engine/builtin-tasks/llm-chat.js
+
+- ✅ [2026-05-17] llm.chat 改为 one-shot 任务，Widget 始终显示参数面板
+  - llm.chat 从 mode=service 改为 mode=one-shot，run() 直接接收 messages 参数调用 LLM API 返回结果
+  - 移除 service 专用逻辑（widget action 注册、postWidgetUpdate、postStream、停止按钮等）
+  - Widget HTML 改用硬编码默认值（不再依赖 {{var}} 实时推送），未运行时参数面板始终可见
+  - 新增 TaskPanel._saveWidgetGlobalConfig() 支持 one-shot 任务保存全局配置
+  - 已创建的实例（status=created）在结果详情中显示 widget 参数面板，可编辑后直接运行
+  - 前端内置任务选择时自动匹配执行模式
+  - 回滚 task-manager.js 中 builtin 分支的服务路由检测（llm.chat 已非服务）
+  - 改动文件：
+    - 修改：src/apps/server/modules/task-engine/builtin-tasks/llm-chat.js
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-17] 修复内置服务任务因 taskType 传错为 'user' 导致"入口文件不存在"错误
+  - 服务端 TaskManager.submit() 新增内置任务自动检测：当任务名匹配内置注册表时自动修正 taskType/builtinId
+  - 前端 _runUserTask() 检测内置任务后切换为 _runBuiltin 路径
+  - 前端 _runEditTask() 根据 taskType 发送正确的任务类型和 builtinId
+  - 改动文件：
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-05-17] 修复实例名字在 Web UI 中被截断显示不全
+  - 实例历史列表：从截断 6 字符改为显示完整实例名，添加 title 悬浮提示
+  - 结果详情视图：从截断 8 字符改为显示完整实例名，添加 title 悬浮提示
+  - 运行中监控卡：从截断 8 字符改为显示完整实例名，添加 title 悬浮提示
+  - 改动文件：
+    - 修改：src/apps/web-mediacenter/ui/public/js/task-panel.js
 
 - ✅ [2026-05-16] 显示端重连后 displayId 变导致任务结果记录引用失效
   - 浏览器显示端（display.html）改用 localStorage 持久化 displayId，重连时作为 URL 参数传递

@@ -2252,7 +2252,7 @@
                 sendTaskResult(taskName, instanceId, false, '入口文件不存在: ' + entryFile, null);
                 return;
             }
-            var entryCode = atob(entryFileData.data);
+            var entryCode = base64ToUtf8(entryFileData.data);
             entryCode = entryCode.replace(/module\.exports\s*=[\s\S]*?;\s*/g, '');
 
             // 检查能力（需要 DOM 访问，在主线程做）
@@ -2404,6 +2404,13 @@
                 hideTaskStatus(0);
                 sendTaskResult(taskName, instanceId, false, err.message, null);
             });
+        }
+
+        function base64ToUtf8(b64) {
+            var binary = atob(b64);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            try { return new TextDecoder().decode(bytes); } catch(e) { return binary; }
         }
 
         function sendTaskResult(taskName, instanceId, success, error, outputFiles, metrics, taskLogs) {

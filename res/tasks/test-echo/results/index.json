@@ -1,28 +1,18 @@
 {
   "instances": [
     {
-      "instanceId": "66b3732d",
+      "instanceId": "816ffac5",
       "taskName": "test-echo",
       "status": "completed",
-      "timestamp": 1778935672858,
-      "target": "server",
+      "timestamp": 1779546411482,
       "env": "auto",
       "mode": "one-shot",
-      "displayId": null,
-      "params": 111111111,
-      "completedAt": 1778935672999
-    },
-    {
-      "instanceId": "d41a23e5",
-      "taskName": "test-echo",
-      "status": "completed",
-      "timestamp": 1778935681345,
-      "target": "server",
-      "env": "auto",
-      "mode": "one-shot",
-      "params": {},
-      "completedAt": 1778935681466,
-      "displayId": null
+      "displayId": "display-7tksfnsw",
+      "params": 13123123123132,
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "completedAt": 1779593060921
     }
   ]
 }

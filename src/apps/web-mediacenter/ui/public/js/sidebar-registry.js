@@ -265,6 +265,20 @@
       var instanceId = activeInst ? activeInst.instanceId : taskName;
 
       widgetEl.innerHTML = this._renderWidgetHTML(item.widget.html, instanceId, payload.data);
+    },
+
+    // ─── WebSocket 流式输出 ───
+
+    onStream: function(payload) {
+      var taskName = payload.taskName;
+      if (!taskName) return;
+      var streamEl = document.getElementById('sidebar-stream-' + taskName);
+      if (!streamEl) return;
+      if (payload.done) {
+        streamEl.classList.add('done');
+        return;
+      }
+      streamEl.textContent += payload.chunk;
     }
   };
 })();
