@@ -848,18 +848,37 @@ const DeviceList = {
         `;
 
         const featureList = document.getElementById('featureList');
+        var features = [];
         if (bi.featureSupport && bi.featureSupport.length > 0) {
-            featureList.innerHTML = bi.featureSupport.map(f => `
-                <div class="feature-item">
-                    <div class="feature-name">
-                        <span>${f.name}</span>
-                        <span>${f.note}</span>
-                    </div>
-                    <span class="feature-badge ${f.supported ? 'supported' : 'unsupported'}">
-                        ${f.supported ? '支持' : '不支持'}
-                    </span>
-                </div>
-            `).join('');
+            for (var i = 0; i < bi.featureSupport.length; i++) {
+                var f = bi.featureSupport[i];
+                // WebGPU 改用 detectCapabilities 的真实结果
+                var supported = f.supported;
+                if (f.name === 'WebGPU') {
+                    supported = !!(display.capabilities && display.capabilities.webgpu);
+                }
+                features.push({ name: f.name, note: f.note, supported: supported });
+            }
+        }
+        // 如果 capabilities 有 webgpu 字段但 featureSupport 没有，补充一条
+        if (display.capabilities && display.capabilities.webgpu !== undefined) {
+            var hasWebgpuInFs = features.some(function(f) { return f.name === 'WebGPU'; });
+            if (!hasWebgpuInFs) {
+                features.push({ name: 'WebGPU', note: 'GPU加速计算（实时探测）', supported: !!display.capabilities.webgpu });
+            }
+        }
+        if (features.length > 0) {
+            featureList.innerHTML = features.map(function(f) { return (
+                '<div class="feature-item">' +
+                    '<div class="feature-name">' +
+                        '<span>' + f.name + '</span>' +
+                        '<span>' + f.note + '</span>' +
+                    '</div>' +
+                    '<span class="feature-badge ' + (f.supported ? 'supported' : 'unsupported') + '">' +
+                        (f.supported ? '支持' : '不支持') +
+                    '</span>' +
+                '</div>'
+            ); }).join('');
         } else {
             featureList.innerHTML = '<div style="text-align:center;color:#666;padding:20px;">暂无功能支持信息</div>';
         }

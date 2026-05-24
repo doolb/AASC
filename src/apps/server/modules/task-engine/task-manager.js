@@ -495,6 +495,16 @@ class TaskManager extends EventEmitter {
       data: result.outputFiles ? { outputFiles: result.outputFiles } : undefined,
       metrics: result.metrics
     });
+
+    // 持久化显示端返回的输出文件
+    if (result.outputFiles && Array.isArray(result.outputFiles) && result.outputFiles.length > 0) {
+      try {
+        await this.taskIO.saveOutputFiles(taskName, instanceId, result.outputFiles);
+      } catch (e) {
+        console.error('[TaskManager] 保存输出文件失败:', e.message);
+      }
+    }
+
     // 清除转发超时
     if (instance && instance._forwardTimeout) {
       clearTimeout(instance._forwardTimeout);

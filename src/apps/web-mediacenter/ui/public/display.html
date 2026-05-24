@@ -1287,7 +1287,18 @@
                         return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
                     } catch(e) { return false; }
                 })(),
-                webgpu: !!navigator.gpu
+                webgpu: !!navigator.gpu && await (async function () {
+                    try {
+                        var a = await navigator.gpu.requestAdapter();
+                        var path = 'default';
+                        if (!a) { a = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); path = 'high-performance'; }
+                        if (!a) { a = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' }); path = 'low-power'; }
+                        if (!a) { console.log('[能力] WebGPU API 存在但适配器不可用'); return false; }
+                        a.destroy();
+                        console.log('[能力] WebGPU 适配器可用, 路径: ' + path);
+                        return true;
+                    } catch (e) { console.log('[能力] WebGPU 探活异常:', e.message); return false; }
+                })()
             };
             
             try {
@@ -2265,6 +2276,21 @@
                 webgpu: !!navigator.gpu
             };
 
+            // WebGPU/WebGL 任务需要主线程访问 GPU API，跳过 Worker 直接在主线程执行
+            if (payload.env === 'webgpu' || payload.env === 'webgl') {
+                console.log('[Task] GPU 环境，主线程执行:', taskName, payload.env);
+                (async function() {
+                    var gpuAdapter = null;
+                    try {
+                        gpuAdapter = await navigator.gpu.requestAdapter();
+                        if (!gpuAdapter) gpuAdapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+                        if (!gpuAdapter) gpuAdapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+                    } catch(e) {}
+                    executeUserTaskMainThread(taskName, instanceId, entryCode, files, capabilities, params, gpuAdapter);
+                })();
+                return;
+            }
+
             // 尝试创建 Worker，失败时回退到主线程执行
             var worker = null;
             try {
@@ -2314,7 +2340,7 @@
         }
 
         // 回退：主线程执行用户任务（当 Web Worker 不可用时）
-        function executeUserTaskMainThread(taskName, instanceId, entryCode, files, capabilities, params) {
+        function executeUserTaskMainThread(taskName, instanceId, entryCode, files, capabilities, params, gpuAdapter) {
             var fileStore = {};
             for (var i = 0; i < files.length; i++) {
                 var f = files[i];
@@ -2343,7 +2369,7 @@
             };
 
             try {
-                var ctx = { files: fileStore, capabilities: capabilities, params: params, workDir: '/workspace' };
+                var ctx = { files: fileStore, capabilities: capabilities, params: params, workDir: '/workspace', gpuAdapter: gpuAdapter || null };
                 var fn = new Function('context', entryCode + '\nreturn run(context);');
                 Promise.resolve(fn(ctx)).then(function(result) {
                     console.log = origLog; console.error = origErr; console.warn = origWarn;

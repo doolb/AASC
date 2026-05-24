@@ -587,7 +587,7 @@
 
     _hasWebgpu: function(d) {
       if (!d) return false;
-      if (d.capabilities && d.capabilities.webgpu) return true;
+      if (d.capabilities && d.capabilities.webgpu !== undefined) return d.capabilities.webgpu;
       if (d.webgpu) return true;
       var fs = d.browserInfo && d.browserInfo.featureSupport;
       if (fs && Array.isArray(fs)) {
@@ -1245,6 +1245,10 @@
       ws.handleMessage = function(data) {
         if (data.type === 'displayList') {
           self.displayList = data.list || [];
+          console.log('[TaskPanel] displayList 收到, 共', self.displayList.length, '个');
+          for (var i = 0; i < self.displayList.length; i++) {
+            console.log('[TaskPanel]   ', self.displayList[i].id, 'capabilities:', JSON.stringify(self.displayList[i].capabilities || {}));
+          }
           if (document.getElementById('deviceSelectorList')) {
             self._renderDeviceSelector();
           }

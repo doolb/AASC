@@ -1,11 +1,10 @@
 {
   "instances": [
     {
-      "instanceId": "ff89f90d",
-      "taskName": "test-echo",
-      "status": "completed",
-      "timestamp": 1779612349526,
-      "target": "display",
+      "instanceId": "9aded841",
+      "taskName": "webgpu-render",
+      "status": "failed",
+      "timestamp": 1779614921199,
       "env": "auto",
       "mode": "one-shot",
       "displayId": "display-7tksfnsw",
@@ -13,7 +12,7 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "completedAt": 1779612466921
+      "error": "浏览器不支持 WebGPU"
     }
   ]
 }

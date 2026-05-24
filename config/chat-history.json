@@ -31,5 +31,27 @@
     "mode": "group",
     "target": null,
     "sessionId": "default"
+  },
+  {
+    "id": "17796142494624smi",
+    "timestamp": 1779614249462,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "查询Chengdu今天的天气",
+    "mode": "group",
+    "target": null,
+    "sessionId": "default"
+  },
+  {
+    "id": "1779614351673xevw",
+    "timestamp": 1779614351673,
+    "role": "control",
+    "name": "控制端",
+    "ip": "",
+    "content": "查询Chengdu明日的天气",
+    "mode": "group",
+    "target": null,
+    "sessionId": "default"
   }
 ]

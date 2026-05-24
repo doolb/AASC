@@ -2082,7 +2082,12 @@ function broadcastDisplayList() {
     if (displayListDebounceTimer) return;
     displayListDebounceTimer = setImmediate(() => {
         displayListDebounceTimer = null;
-        broadcastToControls({ type: 'displayList', list: getDisplayList() });
+        const list = getDisplayList();
+        // 调试：打印每个显示端的 webgpu 能力
+        for (const d of list) {
+            if (d.capabilities.webgpu !== undefined) log('能力', `广播 displayList: ${d.id} webgpu=${d.capabilities.webgpu ? '可用' : '不可用'}`);
+        }
+        broadcastToControls({ type: 'displayList', list });
     });
 }
 
@@ -2568,7 +2573,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             type: 'capabilitiesUpdated',
             capabilities: displayData.state.capabilities
         });
-        log('能力', `显示端 ${displayId} 声明能力`);
+        log('能力', `显示端 ${displayId} 声明能力: webgpu=${data.capabilities.webgpu ? '可用' : '不可用'}, webgl=${data.capabilities.webgl ? '可用' : '不可用'}`);
         broadcastDisplayList();
     } else if (data.type === 'commandAck' && displayData) {
         const ackCorrelationId = data.correlationId || generateCorrelationId('ack');

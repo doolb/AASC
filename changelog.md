@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### 新增
+
+- ✅ [2026-05-24] 新增 webgpu-render 用户任务：显示端 WebGPU 渲染全蓝图片并持久化到服务端
+  - 新建 res/tasks/webgpu-render/task.js：用户任务，包含 WebGPU 渲染逻辑 + params + widget
+  - display.html executeTask() 新增 env=webgpu/webgl 检测，GPU 任务跳过 Worker 直接主线程执行
+  - display.html 移除硬编码的 executeWebGpuRender() 及相关 builtin dispatch
+  - 删除 builtin-tasks/webgpu-render.js（改为用户任务方式）
+  - task-io.js 新增 saveOutputFiles() 方法持久化显示端输出文件
+  - task-manager.js handleForwardResult() 调用 saveOutputFiles() 写入实例目录
+  - 显示端不硬编码渲染逻辑，只提供 GPU 主线程执行环境
+  - 参数：width（640）、height（480）
+  - 改动文件：
+    - 新增：res/tasks/webgpu-render/task.js
+    - 新增：docs/spec/webgpu-render.md
+    - 删除：src/apps/server/modules/task-engine/builtin-tasks/webgpu-render.js
+    - 修改：src/apps/server/modules/task-engine/builtin-tasks/registry.js
+    - 修改：src/apps/web-mediacenter/ui/public/display.html
+    - 修改：src/apps/server/modules/task-engine/task-io.js
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+
 ### 修复
 
 - ✅ [2026-05-24] 修复控制端切换任务实例时状态错误显示为"已完成"

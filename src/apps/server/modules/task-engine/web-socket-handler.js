@@ -194,11 +194,6 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
               } catch (e) { /* 无法 require 时降级 */ }
               return { ...t, params, widget };
             });
-            // 调试：打印 llm.chat 实例状态
-            var _llmTask = tasksWithMeta.find(function(t) { return t.taskName === 'llm.chat'; });
-            if (_llmTask) {
-              console.log('[LIST] server llm.chat instances:', JSON.stringify((_llmTask.instances || []).map(function(i) { return { id: i.instanceId, status: i.status }; })));
-            }
             const manifest = getSidebarManifest();
             ctx.ws.send(JSON.stringify({
               type: 'task:list:result',

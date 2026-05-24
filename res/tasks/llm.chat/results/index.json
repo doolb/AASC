@@ -36,18 +36,18 @@
       "params": {
         "apiUrl": "http://192.168.1.12:8080/v1/chat/completions",
         "modelId": "gpt-3.5-turbo",
-        "temperature": 0.7,
+        "temperature": "0.7",
         "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
         "promptFormat": "raw",
         "contextCount": 10,
         "maxTokens": 4096,
         "apiKey": "",
-        "messages": "你是谁"
+        "messages": "你"
       },
       "taskType": "builtin",
       "builtinId": "llm.chat",
       "entryFile": "task.js",
-      "completedAt": 1779612240180
+      "completedAt": 1779612566371
     },
     {
       "instanceId": "glm4.7-free",

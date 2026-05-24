@@ -233,6 +233,18 @@ class TaskIO extends EventEmitter {
     }
   }
 
+  async saveOutputFiles(taskName, instanceId, files) {
+    if (!files || !Array.isArray(files) || files.length === 0) return;
+    const instanceDir = this._instancePath(taskName, instanceId);
+    await fs.promises.mkdir(instanceDir, { recursive: true });
+    for (const file of files) {
+      if (file.data) {
+        const filePath = this._validateSafePath(instanceDir, file.name);
+        await fs.promises.writeFile(filePath, Buffer.from(file.data, 'base64'));
+      }
+    }
+  }
+
   async deleteTaskFiles(taskName, fileNames) {
     const taskDir = this._validateSafePath(this.tasksDir, taskName);
     const results = [];
