@@ -1289,15 +1289,43 @@
                 })(),
                 webgpu: !!navigator.gpu && await (async function () {
                     try {
+                        var diag = [];
+                        try {
+                            var glCanvas = document.createElement('canvas');
+                            var gl = glCanvas.getContext('webgl2') || glCanvas.getContext('webgl');
+                            if (gl) {
+                                var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                                if (dbg) {
+                                    diag.push('GL_VENDOR=' + gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
+                                    diag.push('GL_RENDERER=' + gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL));
+                                }
+                            }
+                        } catch (e) {}
+                        diag.push('UA=' + (navigator.userAgent.match(/Chrome\/(\d+\.\d+)/) || ['?'])[1]);
+
                         var a = await navigator.gpu.requestAdapter();
                         var path = 'default';
                         if (!a) { a = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); path = 'high-performance'; }
                         if (!a) { a = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' }); path = 'low-power'; }
-                        if (!a) { console.log('[能力] WebGPU API 存在但适配器不可用'); return false; }
+                        if (!a) {
+                            diag.push('RESULT=三轮回退全部返回null');
+                            capabilities._webgpuDiag = diag.join(' | ');
+                            return false;
+                        }
+                        try {
+                            var info = await a.requestAdapterInfo();
+                            diag.push('VENDOR=' + (info.vendor || '?'));
+                            diag.push('ARCH=' + (info.architecture || '?'));
+                            diag.push('DEVICE=' + (info.device || '?'));
+                        } catch (e) {}
+                        diag.push('PREF=' + path);
+                        capabilities._webgpuDiag = diag.join(' | ');
                         a.destroy();
-                        console.log('[能力] WebGPU 适配器可用, 路径: ' + path);
                         return true;
-                    } catch (e) { console.log('[能力] WebGPU 探活异常:', e.message); return false; }
+                    } catch (e) {
+                        capabilities._webgpuDiag = 'EXCEPTION: ' + e.message;
+                        return false;
+                    }
                 })()
             };
             

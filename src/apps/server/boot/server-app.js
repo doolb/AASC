@@ -2573,7 +2573,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             type: 'capabilitiesUpdated',
             capabilities: displayData.state.capabilities
         });
-        log('能力', `显示端 ${displayId} 声明能力: webgpu=${data.capabilities.webgpu ? '可用' : '不可用'}, webgl=${data.capabilities.webgl ? '可用' : '不可用'}`);
+        var diag = data.capabilities._webgpuDiag ? ' [' + data.capabilities._webgpuDiag + ']' : '';
+        log('能力', '显示端 ' + displayId + ' webgpu=' + (data.capabilities.webgpu ? '可用' : '不可用') + ', webgl=' + (data.capabilities.webgl ? '可用' : '不可用') + diag);
         broadcastDisplayList();
     } else if (data.type === 'commandAck' && displayData) {
         const ackCorrelationId = data.correlationId || generateCorrelationId('ack');
