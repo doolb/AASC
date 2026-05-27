@@ -39,6 +39,7 @@
 | 远程任务系统 | [remote-task-system.md](spec/remote-task-system.md) | 远程 JS 代码执行、任务生命周期、三种运行时 |
 | test-echo 用户任务 | [test-echo.md](spec/test-echo.md) | 测试用户任务参数定义与读取流程 |
 | WebGPU 用户任务 | [webgpu-render.md](spec/webgpu-render.md) | 显示端 WebGPU 渲染图片并持久化到服务端 |
+| 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
 
 ## 核心模块
 

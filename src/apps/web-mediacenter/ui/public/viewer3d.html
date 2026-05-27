@@ -283,6 +283,9 @@
             mouse: new THREE.Vector2(),
             hoveredObject: null,
             updateInterval: null,
+            torusMeshes: new Set(),
+            buildingMap: new Map(),
+            actorMap: new Map(),
             
             async init() {
                 const container = document.getElementById('canvas-container');
@@ -539,6 +542,43 @@
                 }
             },
             
+            clearActorObjects() {
+                this.buildingMeshes.forEach((mesh) => {
+                    this.scene.remove(mesh);
+                    mesh.traverse(child => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => m.dispose());
+                            } else {
+                                child.material.dispose();
+                            }
+                        }
+                    });
+                });
+                this.buildingMeshes.clear();
+
+                this.actorMeshes.clear();
+
+                const remainingObjects = [];
+                this.objects.forEach(obj => {
+                    const isConnection = obj.geometry && obj.geometry.type === 'TubeGeometry';
+                    if (isConnection) {
+                        this.scene.remove(obj);
+                        if (obj.geometry) obj.geometry.dispose();
+                        if (obj.material) obj.material.dispose();
+                    } else {
+                        remainingObjects.push(obj);
+                    }
+                });
+                this.objects = remainingObjects;
+
+                this.actors = [];
+                this.torusMeshes.clear();
+                this.buildingMap.clear();
+                this.actorMap.clear();
+            },
+
             clearScene() {
                 this.objects.forEach(obj => {
                     this.scene.remove(obj);
@@ -584,6 +624,9 @@
                 });
                 this.actorMeshes.clear();
                 this.actors = [];
+                this.torusMeshes.clear();
+                this.buildingMap.clear();
+                this.actorMap.clear();
             },
             
             async loadPreset(preset) {
@@ -653,6 +696,8 @@
                     const data = await response.json();
                     
                     if (data.status === 'success' && data.actors) {
+                        this.clearActorObjects();
+                        
                         this.actors = data.actors.map(actor => ({
                             ...actor,
                             id: this.getActorId(actor.address)
@@ -700,6 +745,10 @@
                 });
                 
                 this.buildings = Array.from(buildingMap.values());
+                this.buildingMap = new Map();
+                this.buildings.forEach(b => this.buildingMap.set(b.id, b));
+                this.actorMap = new Map();
+                this.actors.forEach(a => this.actorMap.set(a.id, a));
             },
             
             getBuildingName(actor) {
@@ -914,6 +963,7 @@
                 ring.position.y = size * 0.5 + 0.1;
                 ring.rotation.x = Math.PI / 2;
                 group.add(ring);
+                this.torusMeshes.add(ring);
                 
                 group.position.set(x - parentGroup.position.x, 0, z - parentGroup.position.z);
                 parentGroup.add(group);
@@ -1151,35 +1201,32 @@
             animate() {
                 requestAnimationFrame(() => this.animate());
                 
+                if (document.hidden) {
+                    this.clock.getDelta();
+                    return;
+                }
+                
                 const delta = this.clock.getDelta();
                 const elapsed = this.clock.getElapsedTime();
                 
                 this.controls.update();
                 
                 this.buildingMeshes.forEach((mesh, id) => {
-                    const building = this.buildings.find(b => b.id === id);
+                    const building = this.buildingMap.get(id);
                     if (building && building.type === 'server') {
                         mesh.rotation.y = elapsed * 0.05;
                     }
-                    
-                    mesh.children.forEach(child => {
-                        if (child.geometry && child.geometry.type === 'TorusGeometry') {
-                            child.rotation.z = elapsed * 2;
-                        }
-                    });
                 });
                 
                 this.actorMeshes.forEach((mesh, id) => {
-                    const actor = this.actors.find(a => a.id === id);
+                    const actor = this.actorMap.get(id);
                     if (actor && actor.address?.role === 'server') {
                         mesh.rotation.y = elapsed * 0.3;
                     }
-                    
-                    mesh.children.forEach(child => {
-                        if (child.geometry && child.geometry.type === 'TorusGeometry') {
-                            child.rotation.z = elapsed * 2;
-                        }
-                    });
+                });
+                
+                this.torusMeshes.forEach(mesh => {
+                    mesh.rotation.z = elapsed * 2;
                 });
                 
                 this.renderer.render(this.scene, this.camera);

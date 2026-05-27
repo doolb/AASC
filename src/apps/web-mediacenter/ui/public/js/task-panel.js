@@ -1245,10 +1245,6 @@
       ws.handleMessage = function(data) {
         if (data.type === 'displayList') {
           self.displayList = data.list || [];
-          console.log('[TaskPanel] displayList 收到, 共', self.displayList.length, '个');
-          for (var i = 0; i < self.displayList.length; i++) {
-            console.log('[TaskPanel]   ', self.displayList[i].id, 'capabilities:', JSON.stringify(self.displayList[i].capabilities || {}));
-          }
           if (document.getElementById('deviceSelectorList')) {
             self._renderDeviceSelector();
           }
@@ -2496,7 +2492,7 @@
       try {
         (new Function('api', scriptStr))(api);
       } catch (e) {
-        console.error('[TaskPanel] widget script error:', e);
+        // console.error('[TaskPanel] widget script error:', e);
       }
 
       this._widgetControllers[instanceId] = {
@@ -2506,7 +2502,7 @@
       };
 
       if (api._onUpdate) {
-        try { api._onUpdate(self._widgetData[instanceId] || {}); } catch(e) { console.error('[TaskPanel] widget init update error:', e); }
+        try { api._onUpdate(self._widgetData[instanceId] || {}); } catch(e) { /* console.error('[TaskPanel] widget init update error:', e); */ }
       }
     },
 

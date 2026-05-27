@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 移除
+
+- ✅ [2026-05-27] 移除 TaskPanel 控制端 console.log/error 打印
+  - 删除 task-panel.js 中 2 处 `console.log('[TaskPanel] ...')`（displayList 接收日志）
+  - 注释掉 2 处 `console.error('[TaskPanel] ...')`（widget 脚本/初始化错误日志）
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/task-panel.js
+
 ### 新增
 
 - ✅ [2026-05-24] 新增 webgpu-render 用户任务：显示端 WebGPU 渲染全蓝图片并持久化到服务端
