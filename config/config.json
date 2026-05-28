@@ -180,6 +180,14 @@
       "onDisconnect": "晚安"
     }
   },
+  "logReportDisplay": {
+    "enabled": false,
+    "level": "error"
+  },
+  "logReportControl": {
+    "enabled": false,
+    "level": "error"
+  },
   "chat": {
     "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
     "model": "Qwen3.5-Plus",

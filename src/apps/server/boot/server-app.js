@@ -67,9 +67,9 @@ const logBrain = new LogBrain({
 
 // 日志上报配置存储
 const logReportStore = {
-    display: { enabled: false, level: 'error' },
+    display: config.get('logReportDisplay', { enabled: false, level: 'error' }),
     displayOverrides: new Map(),
-    control: { enabled: false, level: 'error' }
+    control: config.get('logReportControl', { enabled: false, level: 'error' })
 };
 const LOG_LEVEL_WEIGHT = { error: 4, warn: 3, info: 2, debug: 1 };
 function isLevelEnabled(configLevel, logLevel) {
@@ -482,27 +482,29 @@ function startServer() {
 
             // 日志上报控制 handler
             wsServer.registerHandler('setLogReport', (data, ctx) => {
-                const { targetType, targetId, config } = data;
-                if (!targetType || !config || typeof config.enabled !== 'boolean') return;
-                const level = ['error', 'warn', 'info', 'debug'].includes(config.level) ? config.level : 'error';
+                const { targetType, targetId, config: reportConfig } = data;
+                if (!targetType || !reportConfig || typeof reportConfig.enabled !== 'boolean') return;
+                const level = ['error', 'warn', 'info', 'debug'].includes(reportConfig.level) ? reportConfig.level : 'error';
                 if (targetType === 'display') {
                     if (targetId === 'all') {
-                        logReportStore.display = { enabled: config.enabled, level };
+                        logReportStore.display = { enabled: reportConfig.enabled, level };
+                        config.set('logReportDisplay', logReportStore.display);
                         sendLogReportConfigToAllDisplays();
                     } else {
-                        logReportStore.displayOverrides.set(targetId, { enabled: config.enabled, level });
-                        sendLogReportConfigToDisplay(targetId, { enabled: config.enabled, level });
+                        logReportStore.displayOverrides.set(targetId, { enabled: reportConfig.enabled, level });
+                        sendLogReportConfigToDisplay(targetId, { enabled: reportConfig.enabled, level });
                     }
                     // 广播给所有控制端更新UI
-                    broadcastToControls({ type: 'logReportConfig', target: 'display', enabled: config.enabled, level });
+                    broadcastToControls({ type: 'logReportConfig', target: 'display', enabled: reportConfig.enabled, level });
                 } else if (targetType === 'control') {
-                    logReportStore.control = { enabled: config.enabled, level };
+                    logReportStore.control = { enabled: reportConfig.enabled, level };
+                    config.set('logReportControl', logReportStore.control);
                 }
                 ctx.ws.send(JSON.stringify({
                     type: 'logReportConfigApplied',
                     targetType,
                     targetId: targetId || 'all',
-                    config: { enabled: config.enabled, level }
+                    config: { enabled: reportConfig.enabled, level }
                 }));
             });
             wsServer.registerHandler('clientLog', (data, ctx) => {

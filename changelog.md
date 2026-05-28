@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+### 修复
+
+- ✅ [2026-05-28] 修复控制端刷新后裁剪框显示位置与实际不一致
+  - 根因：displayState 在 display 面板隐藏时到达，updateBox 因 getBoundingClientRect 为 0 跳过
+  - 切换到 display 面板时未触发重新计算
+  - switchPanel('display') 增加 Crop.updateContainerSize() + Crop.recalculateSize(false)
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/main.js
+
+- ✅ [2026-05-28] 修复日志上传模式切换后未持久化到配置文件
+  - 根因：setLogReport handler 仅更新内存 logReportStore，未调用 config.set() 落盘
+  - config-app-service.js defaults 添加 logReportDisplay/logReportControl 默认值
+  - server-app.js: logReportStore 初始化从 config.get() 加载已保存值
+  - server-app.js: setLogReport handler 增加 config.set() 持久化调用
+  - 修复 config 变量名与 destructure 冲突
+  - 改动文件：
+    - src/apps/server/modules/config/config-app-service.js
+    - src/apps/server/boot/server-app.js
+
+- ✅ [2026-05-27] 修复 3D 视图页签隐藏时 rAF 持续运算导致控制端卡顿
+  - animate() 添加 document.hidden 检查，页签隐藏时跳过全量渲染
+  - 使用 clock.getDelta() 消耗累积时间防止切回时跳帧
+  - 修复 fetchAndDisplayActors() 未清理旧网格的内存泄漏
+  - 新增 clearActorObjects() 精细化清理
+  - 改动文件：src/apps/web-mediacenter/ui/public/viewer3d.html
+
+### 优化
+
+- ✅ [2026-05-27] 优化 3D 视图动画循环性能
+  - Array.find() O(n²) 改为 buildingMap/actorMap 的 O(1) Map 查询
+  - mesh.children.forEach 全遍历改为 torusMeshes Set 统一管理
+  - 消除 actorMeshes 中 torus 旋转的冗余处理
+
 ### 移除
 
 - ✅ [2026-05-27] 移除 TaskPanel 控制端 console.log/error 打印

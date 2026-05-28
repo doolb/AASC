@@ -45,6 +45,13 @@ const Sidebar = {
             App.initMapPanel();
         }
 
+        if (targetId === 'display' && window.Crop && window.Crop.currentMedia) {
+            setTimeout(() => {
+                window.Crop.updateContainerSize();
+                window.Crop.recalculateSize(false);
+            }, 100);
+        }
+
         if (targetId === 'brain' && window.LogBrainViewer) {
             window.LogBrainViewer.refreshSummary();
         }
