@@ -304,6 +304,14 @@ const WebSocketManager = {
                     window.showToast(`日志上报配置已应用 (${data.targetType})`, 'success');
                 }
             }
+        } else if (data.type === 'logBlocklist') {
+            if (window.LogViewer) {
+                window.LogViewer.loadBlocklist(data);
+            }
+        } else if (data.type === 'logBlocklistApplied') {
+            if (window.showToast) {
+                window.showToast('日志分类屏蔽已应用', 'success');
+            }
         }
     },
     

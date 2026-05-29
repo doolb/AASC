@@ -56,7 +56,11 @@ config.loadConfig();
 
 const logBuffer = new LogBuffer({ maxSize: 1000 });
 const logFileWriter = new LogFileWriter(path.join(__dirname, '../../../../logs'));
-logBuffer.onLogEntry(entry => logFileWriter.add(entry));
+let logBlocklist = config.get('logBlocklist', []);
+logBuffer.onLogEntry(entry => {
+    if (logBlocklist.includes(entry.category)) return;
+    logFileWriter.add(entry);
+});
 const systemMonitor = new SystemMonitor({ intervalMs: 5000 });
 const logBrain = new LogBrain({
     logSource: logBuffer,
@@ -508,6 +512,15 @@ function startServer() {
                     targetType,
                     targetId: targetId || 'all',
                     config: { enabled: reportConfig.enabled, level }
+                }));
+            });
+            wsServer.registerHandler('setLogBlocklist', (data, ctx) => {
+                const list = Array.isArray(data.categories) ? data.categories : [];
+                logBlocklist = list;
+                config.set('logBlocklist', list);
+                ctx.ws.send(JSON.stringify({
+                    type: 'logBlocklistApplied',
+                    categories: list
                 }));
             });
             wsServer.registerHandler('clientLog', (data, ctx) => {
@@ -2457,12 +2470,23 @@ wss.on('connection', (ws, req) => {
         // 发送日志上报配置（控制端需要显示端默认配置和控制端自身配置）
         ws.send(JSON.stringify({ type: 'logReportConfig', target: 'display', enabled: logReportStore.display.enabled, level: logReportStore.display.level }));
         ws.send(JSON.stringify({ type: 'logReportConfig', target: 'control', enabled: logReportStore.control.enabled, level: logReportStore.control.level }));
+        // 发送日志分类屏蔽配置
+        const allCats = new Set([
+            ...logBuffer.getCategories(),
+            ...Object.keys(LogBuffer.CATEGORY_DEVICE_MAP),
+            '控制端'
+        ]);
+        ws.send(JSON.stringify({
+            type: 'logBlocklist',
+            categories: logBlocklist,
+            allCategories: [...allCats].sort()
+        }));
 
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
 
-                if (data.type !== 'clientLog' && data.type !== 'setLogReport') {
+                if (data.type !== 'clientLog' && data.type !== 'setLogReport' && data.type !== 'setLogBlocklist') {
                     if (!data.correlationId && (data.displayId || data.type === 'mediaBatch' || data.type === 'tts')) {
                         data.correlationId = generateCorrelationId(data.type);
                     }

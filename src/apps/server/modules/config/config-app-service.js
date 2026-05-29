@@ -60,6 +60,7 @@ class Config extends DataSnapshot {
         deviceEvents: {},
         logReportDisplay: { enabled: false, level: 'error' },
         logReportControl: { enabled: false, level: 'error' },
+        logBlocklist: [],
         chat: {
             apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
             model: 'gpt-3.5-turbo',

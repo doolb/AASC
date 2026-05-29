@@ -158,3 +158,4 @@ class LogBuffer {
 }
 
 module.exports = LogBuffer;
+module.exports.CATEGORY_DEVICE_MAP = CATEGORY_DEVICE_MAP;

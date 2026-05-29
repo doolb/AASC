@@ -19,6 +19,24 @@
   - 新增文件：src/framework/observability/log-file-writer.js
   - 改动文件：src/apps/server/boot/server-app.js
 
+- ✅ [2026-05-28] 新增日志分类屏蔽配置，控制端可勾选不写入文件的分类
+  - 黑名单模式：默认全部记录，勾选的分类被屏蔽
+  - 新增 setLogBlocklist WS handler，服务端持久化到 config.json
+  - logBuffer.onLogEntry 增加黑名单检查，命中则跳过写入
+  - 服务端下发完整分类列表（合并 logBuffer 已有 + CATEGORY_DEVICE_MAP 全量）
+  - upload.html 新增分类屏蔽 UI（清除屏蔽/屏蔽全部 + 逐类 checkbox）
+  - log-viewer.js 新增 loadBlocklist / onBlocklistToggle / clearBlocklist / blockAll
+  - websocket.js 新增 logBlocklist / logBlocklistApplied 消息处理
+  - log-buffer.js 导出 CATEGORY_DEVICE_MAP 供服务端拼完整分类列表
+  - 改动文件：
+    - src/framework/observability/log-buffer.js
+    - src/apps/server/modules/config/config-app-service.js
+    - src/apps/server/boot/server-app.js
+    - src/apps/web-mediacenter/ui/public/upload.html
+    - src/apps/web-mediacenter/ui/public/css/upload.css
+    - src/apps/web-mediacenter/ui/public/js/log-viewer.js
+    - src/apps/web-mediacenter/ui/public/js/websocket.js
+
 ### 修复
 
 - ✅ [2026-05-28] 修复控制端刷新后裁剪框显示位置与实际不一致

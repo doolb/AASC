@@ -455,6 +455,18 @@
                         <option value="debug">全部</option>
                     </select>
                 </div>
+                <div class="log-report-section">
+                    <label style="display:block;font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:6px;">
+                        日志分类屏蔽（勾选=不写入文件）
+                    </label>
+                    <div class="log-category-filter" id="logCategoryFilter">
+                        <div class="log-filter-buttons">
+                            <button class="log-filter-control-btn" onclick="LogViewer.clearBlocklist()">清除屏蔽</button>
+                            <button class="log-filter-control-btn" onclick="LogViewer.blockAll()">屏蔽全部</button>
+                        </div>
+                        <div class="log-category-checkboxes" id="logCategoryCheckboxes"></div>
+                    </div>
+                </div>
             </div>
 
             <div class="section log-section">

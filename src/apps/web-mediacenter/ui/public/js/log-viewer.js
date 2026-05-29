@@ -457,7 +457,9 @@ const LogViewer = {
     },
 
     // ===== 日志上报控制 =====
-    logReportConfig: null,  // { enabled, level } 来自服务器
+    logReportConfig: null,
+    logBlocklist: [],
+    logAllCategories: [],
 
     handleLogReportConfig(config) {
         this.logReportConfig = config;
@@ -570,6 +572,61 @@ const LogViewer = {
         console.debug = this._originalConsole.debug;
         this._originalConsole = null;
         this._consoleInterceptInstalled = false;
+    },
+
+    // ===== 日志分类屏蔽 =====
+
+    loadBlocklist(data) {
+        this.logBlocklist = data.categories || [];
+        this.logAllCategories = data.allCategories || [];
+        this._renderBlocklistUI();
+    },
+
+    _renderBlocklistUI() {
+        const container = document.getElementById('logCategoryCheckboxes');
+        if (!container) return;
+        container.innerHTML = this.logAllCategories.map(cat => {
+            const blocked = this.logBlocklist.includes(cat);
+            return `<label><input type="checkbox" value="${cat}" ${blocked ? 'checked' : ''} onchange="LogViewer.onBlocklistToggle('${cat}', this.checked)">${cat}</label>`;
+        }).join('');
+    },
+
+    onBlocklistToggle(category, checked) {
+        if (checked) {
+            if (!this.logBlocklist.includes(category)) {
+                this.logBlocklist.push(category);
+            }
+        } else {
+            this.logBlocklist = this.logBlocklist.filter(c => c !== category);
+        }
+        if (window.WebSocketManager) {
+            window.WebSocketManager.send({
+                type: 'setLogBlocklist',
+                categories: this.logBlocklist
+            });
+        }
+    },
+
+    clearBlocklist() {
+        this.logBlocklist = [];
+        this._renderBlocklistUI();
+        if (window.WebSocketManager) {
+            window.WebSocketManager.send({
+                type: 'setLogBlocklist',
+                categories: []
+            });
+        }
+    },
+
+    blockAll() {
+        this.logBlocklist = [...this.logAllCategories];
+        this._renderBlocklistUI();
+        if (window.WebSocketManager) {
+            window.WebSocketManager.send({
+                type: 'setLogBlocklist',
+                categories: this.logAllCategories
+            });
+        }
     }
 };
 

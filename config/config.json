@@ -189,6 +189,9 @@
     "enabled": true,
     "level": "debug"
   },
+  "logBlocklist": [
+    "内存"
+  ],
   "chat": {
     "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
     "model": "Qwen3.5-Plus",
@@ -221,6 +224,7 @@
     ],
     "promptFormat": "raw"
   },
+  "logCategoryFilter": null,
   "timeAnnounce": {
     "enabled": true,
     "interval": 15,
