@@ -4,6 +4,18 @@
 
 ### 新增
 
+- ✅ [2026-05-30] 控制端裁剪框（crop.js）增加详细打印 + 修复刷新后裁剪框重置 Bug
+  - Bug：`showPreview()` 在媒体已缓存时，`onload` 事件和 `complete` 检查两条路径都会触发回调，
+    第二次回调因 `_onReadyCallback` 为 null 调用 `recalculateSize(false)`，覆盖了从 `displayState` 
+    恢复的裁剪数据（`savedCrop`），导致裁剪框刷新后显示全尺寸而非保存的裁剪状态
+  - 修复：引入 `_callbackExecuted` 标志位，`executeCallback()` 包装函数确保回调只执行一次
+  - 日志增强：`updateBox()` 打印 offset/百分比/像素值完整计算链；
+    `recalculateSize()` 打印 `displayCanvasSize`、`aspectRatio` 比较过程和结果；
+    `onMouseMove()` 打印拖拽/缩放的 delta/handle 映射/边界修正全过程；
+    `showPreview()` 打印具体触发的路径（`onload`/`complete`/`readyState`）；
+    `setData()` / `setRotation()` / `reset()` 分别添加入参和关键中间值日志
+  - 改动文件：`src/apps/web-mediacenter/ui/public/js/crop.js`
+
 - ✅ [2026-05-28] 日志上传到服务端时，控制端和显示端本地不输出到浏览器
   - 控制端：_installConsoleIntercept 中去掉 originalConsole.*.apply()，上传期间 DevTools 静默
   - 显示端：新增 applyLogReportConfig()，收到 logReportConfig 时覆盖 console.* 为空函数

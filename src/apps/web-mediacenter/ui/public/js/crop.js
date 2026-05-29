@@ -200,33 +200,33 @@ const Crop = {
     showPreview(url, mediaType, onReady) {
         this.currentMedia = url;
         this._onReadyCallback = onReady || null;
+        this._callbackExecuted = false;
+        this._loadComplete = false;
         console.log('[Crop] showPreview 开始, url:', url, 'mediaType:', mediaType, 'hasCallback:', !!onReady);
+
+        const executeCallback = () => {
+            if (this._callbackExecuted) return;
+            this._callbackExecuted = true;
+            this._loadComplete = true;
+            if (this._onReadyCallback) {
+                this._onReadyCallback();
+                this._onReadyCallback = null;
+            } else {
+                this.recalculateSize(false);
+            }
+        };
         
         if (mediaType === 'video') {
             this.previewVideo.style.display = 'block';
             this.previewImg.style.display = 'none';
             this.previewVideo.onloadedmetadata = () => {
                 console.log('[Crop] video onloadedmetadata 触发');
-                requestAnimationFrame(() => {
-                    if (this._onReadyCallback) {
-                        this._onReadyCallback();
-                        this._onReadyCallback = null;
-                    } else {
-                        this.recalculateSize(false);
-                    }
-                });
+                executeCallback();
             };
             this.previewVideo.src = url;
             if (this.previewVideo.readyState >= 1) {
                 console.log('[Crop] video readyState >= 1, 立即计算');
-                requestAnimationFrame(() => {
-                    if (this._onReadyCallback) {
-                        this._onReadyCallback();
-                        this._onReadyCallback = null;
-                    } else {
-                        this.recalculateSize(false);
-                    }
-                });
+                executeCallback();
             } else {
                 this._retryShowPreview(0);
             }
@@ -235,26 +235,12 @@ const Crop = {
             this.previewVideo.style.display = 'none';
             this.previewImg.onload = () => {
                 console.log('[Crop] img onload 触发');
-                requestAnimationFrame(() => {
-                    if (this._onReadyCallback) {
-                        this._onReadyCallback();
-                        this._onReadyCallback = null;
-                    } else {
-                        this.recalculateSize(false);
-                    }
-                });
+                executeCallback();
             };
             this.previewImg.src = url;
             if (this.previewImg.complete && this.previewImg.naturalWidth > 0) {
                 console.log('[Crop] img 已加载完成, 立即计算');
-                requestAnimationFrame(() => {
-                    if (this._onReadyCallback) {
-                        this._onReadyCallback();
-                        this._onReadyCallback = null;
-                    } else {
-                        this.recalculateSize(false);
-                    }
-                });
+                executeCallback();
             } else {
                 this._retryShowPreview(0);
             }
@@ -262,18 +248,20 @@ const Crop = {
     },
     
     _retryShowPreview(retryCount) {
-        if (retryCount >= 5) return;
+        if (retryCount >= 5 || this._callbackExecuted) return;
         setTimeout(() => {
             const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
             const mediaRect = media.getBoundingClientRect();
-            if (mediaRect.width > 0 && mediaRect.height > 0) {
+            if (mediaRect.width > 0 && mediaRect.height > 0 && !this._callbackExecuted) {
+                this._callbackExecuted = true;
+                this._loadComplete = true;
                 if (this._onReadyCallback) {
                     this._onReadyCallback();
                     this._onReadyCallback = null;
                 } else {
                     this.recalculateSize(false);
                 }
-            } else {
+            } else if (mediaRect.width === 0 || mediaRect.height === 0) {
                 this._retryShowPreview(retryCount + 1);
             }
         }, 200 * (retryCount + 1));
@@ -284,6 +272,7 @@ const Crop = {
         const mediaRect = media.getBoundingClientRect();
         
         if (mediaRect.width === 0 || mediaRect.height === 0) {
+            console.log('[Crop] reset: 媒体尺寸为0，跳过');
             return;
         }
         
@@ -330,12 +319,9 @@ const Crop = {
         let dx = ((e.clientX - this.dragStart.x) / mediaRect.width) * 100;
         let dy = ((e.clientY - this.dragStart.y) / mediaRect.height) * 100;
         
-        let adjustedDx = dx;
-        let adjustedDy = dy;
-        
         if (this.isDragging) {
-            this.data.x = Math.max(0, Math.min(100 - this.data.width, this.cropStart.x + adjustedDx));
-            this.data.y = Math.max(0, Math.min(100 - this.data.height, this.cropStart.y + adjustedDy));
+            this.data.x = Math.max(0, Math.min(100 - this.data.width, this.cropStart.x + dx));
+            this.data.y = Math.max(0, Math.min(100 - this.data.height, this.cropStart.y + dy));
         } else if (this.isResizing) {
             const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
             const aspectRatio = canvasSize.width / canvasSize.height;
