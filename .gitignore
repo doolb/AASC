@@ -5,3 +5,4 @@ res/temp/
 3rd/voice-display-cs/obj/
 3rd/voice-display-cs/bin/
 src/native/malloc-trim/build/
+logs/
