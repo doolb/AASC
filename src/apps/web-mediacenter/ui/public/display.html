@@ -84,6 +84,8 @@
         const VOICE_COOLDOWN_MS = 10000;
         let localAsrAvailable = false;
         let localAsrStreaming = false;
+        let logReportConfig = null;
+        let _originalConsole = null;
         
         let monitorTime = 0;
         let monitorAnalyser = null;
@@ -1114,6 +1116,35 @@
             return id;
         }
 
+        function applyLogReportConfig(data) {
+            logReportConfig = data;
+            if (data.enabled) {
+                if (!_originalConsole) {
+                    _originalConsole = {
+                        log: console.log,
+                        info: console.info,
+                        warn: console.warn,
+                        error: console.error,
+                        debug: console.debug
+                    };
+                    console.log = function() {};
+                    console.info = function() {};
+                    console.warn = function() {};
+                    console.error = function() {};
+                    console.debug = function() {};
+                }
+            } else {
+                if (_originalConsole) {
+                    console.log = _originalConsole.log;
+                    console.info = _originalConsole.info;
+                    console.warn = _originalConsole.warn;
+                    console.error = _originalConsole.error;
+                    console.debug = _originalConsole.debug;
+                    _originalConsole = null;
+                }
+            }
+        }
+
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const id = getPersistentDisplayId();
@@ -1176,6 +1207,11 @@
                                 localAsrStreaming = false;
                             }
                         }
+                        return;
+                    }
+
+                    if (data.type === 'logReportConfig') {
+                        applyLogReportConfig(data);
                         return;
                     }
 

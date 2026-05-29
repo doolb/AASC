@@ -8,6 +8,7 @@ const fs = require('fs');
 const { pipeline } = require('stream');
 const multer = require('multer');
 const config = require('../modules/config/config-app-service');
+const LogFileWriter = require('../../../framework/observability/log-file-writer');
 
 // 移除 Markdown 标记，用于 TTS 播报前的文本清洗
 function stripMarkdown(text) {
@@ -54,6 +55,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
 config.loadConfig();
 
 const logBuffer = new LogBuffer({ maxSize: 1000 });
+const logFileWriter = new LogFileWriter(path.join(__dirname, '../../../../logs'));
+logBuffer.onLogEntry(entry => logFileWriter.add(entry));
 const systemMonitor = new SystemMonitor({ intervalMs: 5000 });
 const logBrain = new LogBrain({
     logSource: logBuffer,

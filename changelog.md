@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### 新增
+
+- ✅ [2026-05-28] 日志上传到服务端时，控制端和显示端本地不输出到浏览器
+  - 控制端：_installConsoleIntercept 中去掉 originalConsole.*.apply()，上传期间 DevTools 静默
+  - 显示端：新增 applyLogReportConfig()，收到 logReportConfig 时覆盖 console.* 为空函数
+  - 上传关闭时双方均恢复原始 console
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/log-viewer.js
+    - src/apps/web-mediacenter/ui/public/display.html
+
+- ✅ [2026-05-28] 日志持久化到文件，保留最近 2 次启动记录
+  - 新增 LogFileWriter：每次启动轮换 server.jsonl → server.1.jsonl
+  - 订阅 logBuffer.onLogEntry，批量写入 JSON Lines 格式
+  - 服务端、控制端、显示端日志统一保存到 logs/server.jsonl
+  - 新增文件：src/framework/observability/log-file-writer.js
+  - 改动文件：src/apps/server/boot/server-app.js
+
 ### 修复
 
 - ✅ [2026-05-28] 修复控制端刷新后裁剪框显示位置与实际不一致

@@ -1,0 +1,376 @@
+{"id":"1780016112076-xjes8t","ts":1780016112076,"cat":"媒体库","lvl":"info","dev":"server","src":null,"msg":"媒体库初始化完成"}
+{"id":"1780016112080-7ludad","ts":1780016112080,"cat":"子显示端","lvl":"info","dev":"display","src":null,"msg":"配置已更新: https://192.168.1.39:8081"}
+{"id":"1780016112133-u3x4lw","ts":1780016112133,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"媒体中心服务器已启动"}
+{"id":"1780016112133-z1swms","ts":1780016112133,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"上传端地址: https://192.168.1.39:8081/upload"}
+{"id":"1780016112135-o0sllk","ts":1780016112135,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"显示端地址: https://192.168.1.39:8081/display"}
+{"id":"1780016112135-qf3sfs","ts":1780016112135,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"HTTPS 已启用，支持麦克风等安全特性"}
+{"id":"1780016112139-vdq8im","ts":1780016112139,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"ViewBind WS 系统初始化完成"}
+{"id":"1780016112146-85i9i0","ts":1780016112146,"cat":"任务引擎","lvl":"info","dev":"server","src":null,"msg":"远程任务系统已初始化"}
+{"id":"1780016112165-iphc4i","ts":1780016112165,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1780016112167-sr84b1","ts":1780016112167,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1780016112173-8uxyat","ts":1780016112173,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1780016112174-gqx17d","ts":1780016112174,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1780016112174-13arwn","ts":1780016112174,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1780016112176-jbckt1","ts":1780016112176,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1780016112179-s82q2x","ts":1780016112179,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1780016112340-kotbvq","ts":1780016112340,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
+{"id":"1780016112340-480cun","ts":1780016112340,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
+{"id":"1780016112352-w4jn1d","ts":1780016112352,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112370-p0zc8z","ts":1780016112370,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
+{"id":"1780016112371-ohyaz0","ts":1780016112371,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112402-intmy0","ts":1780016112402,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
+{"id":"1780016112403-qyerlc","ts":1780016112403,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112437-0tz79o","ts":1780016112437,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
+{"id":"1780016112438-3ke8em","ts":1780016112438,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112441-wjlyde","ts":1780016112441,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1780016112442-5hso1v","ts":1780016112442,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ logReportConfig"}
+{"id":"1780016112443-vvcbms","ts":1780016112443,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1780016112460-j2hm41","ts":1780016112460,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1780016112460-bvupts","ts":1780016112460,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
+{"id":"1780016112461-aq1xo9","ts":1780016112461,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1780016112649-qgirrk","ts":1780016112649,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-7tksfnsw"}
+{"id":"1780016112651-8ar2y8","ts":1780016112651,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-7tksfnsw 已断开，当前连接数: 0"}
+{"id":"1780016112651-lfd6r3","ts":1780016112651,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112686-5si8os","ts":1780016112686,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016112816-6pccwh","ts":1780016112816,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
+{"id":"1780016112818-1zui87","ts":1780016112818,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
+{"id":"1780016112819-r9oixd","ts":1780016112819,"cat":"设备","lvl":"info","dev":"display","src":null,"msg":"防抖跳过: 192.168.1.6 onConnect，距上次 0s"}
+{"id":"1780016112826-6h5ckq","ts":1780016112826,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112836-w1nlqn","ts":1780016112836,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
+{"id":"1780016112836-vfpx2x","ts":1780016112836,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112851-q5l0n6","ts":1780016112851,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
+{"id":"1780016112874-xb9qps","ts":1780016112874,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112893-ohomdm","ts":1780016112893,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
+{"id":"1780016112898-21nsqc","ts":1780016112898,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780016112911-t4ogkk","ts":1780016112911,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1780016112911-uhchkg","ts":1780016112911,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
+{"id":"1780016112912-zzcqd1","ts":1780016112912,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1780016142177-975njo","ts":1780016142177,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016152215-b1m7s3","ts":1780016152215,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
+{"id":"1780016152215-64h0hz","ts":1780016152215,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
+{"id":"1780016152219-2zofhg","ts":1780016152219,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"WebSocket 连接成功"}
+{"id":"1780016152220-00htde","ts":1780016152220,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
+{"id":"1780016152223-3f2xbk","ts":1780016152223,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
+{"id":"1780016152330-t5jvj0","ts":1780016152330,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
+{"id":"1780016152330-g7ysxg","ts":1780016152330,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
+{"id":"1780016152685-t4qauk","ts":1780016152685,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
+{"id":"1780016152685-ubrqyf","ts":1780016152685,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
+{"id":"1780016152692-wohvb1","ts":1780016152692,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
+{"id":"1780016152693-c050cp","ts":1780016152693,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
+{"id":"1780016152695-emt2ia","ts":1780016152695,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
+{"id":"1780016152703-zuv0rh","ts":1780016152703,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
+{"id":"1780016152703-oznfh4","ts":1780016152703,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
+{"id":"1780016152703-rffsh5","ts":1780016152703,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
+{"id":"1780016153219-q2nome","ts":1780016153219,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
+{"id":"1780016153267-ghv1od","ts":1780016153267,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
+{"id":"1780016153268-ykt90t","ts":1780016153268,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.0923309326171875 , 193.4418335736772 尺寸= 757.98291015625 x 371.09927352647367"}
+{"id":"1780016153312-l4bal8","ts":1780016153312,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
+{"id":"1780016153312-fazzf8","ts":1780016153312,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 757.98291015625 x 505.3266906738281 sendToDisplay= false"}
+{"id":"1780016153312-cxdjz9","ts":1780016153312,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
+{"id":"1780016153313-mlatxy","ts":1780016153313,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.0923309326171875 , 193.44357045491532 尺寸= 757.98291015625 x 371.0957997639975"}
+{"id":"1780016153475-bfk2pu","ts":1780016153475,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
+{"id":"1780016153475-krdk4z","ts":1780016153475,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1780016153515-quxwwk","ts":1780016153515,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1780016153516-ld6xwa","ts":1780016153516,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016153729-57cani","ts":1780016153729,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
+{"id":"1780016153996-u6871q","ts":1780016153996,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1780016154410-4x9xai","ts":1780016154410,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1780016154410-7ncjfr","ts":1780016154410,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016166817-i2cm5h","ts":1780016166817,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> asrDeviceChanged"}
+{"id":"1780016169612-wg31vv","ts":1780016169612,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> asrDeviceChanged"}
+{"id":"1780016170381-97ztim","ts":1780016170381,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> asrDeviceChanged"}
+{"id":"1780016170830-dm91kj","ts":1780016170830,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> asrDeviceChanged"}
+{"id":"1780016171908-8xrach","ts":1780016171908,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 126.3MB | Heap: 17.2MB/21.7MB | External: 3.6MB | ArrayBuffers: 1.2MB"}
+{"id":"1780016172178-p6i81t","ts":1780016172178,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016202195-0atdir","ts":1780016202195,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016231908-mlya6v","ts":1780016231908,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 126.3MB | Heap: 17.7MB/22.2MB | External: 3.6MB | ArrayBuffers: 1.2MB"}
+{"id":"1780016232202-mzlex4","ts":1780016232202,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016262202-rjdcny","ts":1780016262202,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016291908-xy22tw","ts":1780016291908,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.2MB | Heap: 16.3MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016292203-df7hsz","ts":1780016292203,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016322204-ij6194","ts":1780016322204,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016351908-kd2lt8","ts":1780016351908,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.4MB | Heap: 16.5MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016352204-igqfdf","ts":1780016352204,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016382206-c0bvej","ts":1780016382206,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016402406-ko9n6q","ts":1780016402406,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> tts action=playAudio \"现在时间是上午9点整\""}
+{"id":"1780016402416-s5arcy","ts":1780016402416,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1780016402418-gcd8gx","ts":1780016402418,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: tts ✓ playAudio"}
+{"id":"1780016402419-8lqg8y","ts":1780016402419,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1780016405407-lcz87m","ts":1780016405407,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> tts action=playAudio \"现在时间是上午9点整\""}
+{"id":"1780016405415-tv6oq8","ts":1780016405415,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1780016405416-gs03bu","ts":1780016405416,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: tts ✓ playAudio"}
+{"id":"1780016405416-b78azy","ts":1780016405416,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1780016408409-btv3s6","ts":1780016408409,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> tts action=playAudio \"现在时间是上午9点整\""}
+{"id":"1780016408409-fwbaum","ts":1780016408409,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016408418-opvbgf","ts":1780016408418,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1780016408418-5h6h7t","ts":1780016408418,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: tts ✓ playAudio"}
+{"id":"1780016408419-mcqr4u","ts":1780016408419,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1780016411911-c1swvy","ts":1780016411911,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.4MB | Heap: 16.8MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780016412206-psi6bh","ts":1780016412206,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016442206-f4fiim","ts":1780016442206,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016471912-fkim29","ts":1780016471912,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.6MB | Heap: 16.3MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016472208-m3z5mb","ts":1780016472208,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016502209-8jn998","ts":1780016502209,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016531913-k1ch1s","ts":1780016531913,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.9MB | Heap: 16.5MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016532210-iw8j5v","ts":1780016532210,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016562210-4j58pe","ts":1780016562210,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016591914-rqtf9z","ts":1780016591914,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.9MB | Heap: 16.7MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016592211-2d4em8","ts":1780016592211,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016622211-invhrf","ts":1780016622212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016651915-uu1uge","ts":1780016651915,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.9MB | Heap: 17.0MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016652211-1v83xf","ts":1780016652212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016682211-7evovt","ts":1780016682211,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016711915-xuouju","ts":1780016711915,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 109.9MB | Heap: 16.5MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016712211-6c5rou","ts":1780016712211,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016742211-uqg2q9","ts":1780016742212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016771916-8i3nzw","ts":1780016771916,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.0MB | Heap: 16.7MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016772212-j5i3jv","ts":1780016772212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016802212-u8kooe","ts":1780016802212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016831915-5vaqyc","ts":1780016831915,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.0MB | Heap: 16.9MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016832212-hgzci3","ts":1780016832212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016862212-56weop","ts":1780016862212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016891916-nyegsb","ts":1780016891916,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.0MB | Heap: 17.1MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016892212-fr8hqs","ts":1780016892212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016922192-t6pigu","ts":1780016922192,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
+{"id":"1780016922192-2z0ude","ts":1780016922192,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
+{"id":"1780016922212-b53z8c","ts":1780016922212,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016951917-zvm9xa","ts":1780016951917,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.5MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780016952213-huot75","ts":1780016952213,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780016982214-fgd81j","ts":1780016982214,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017011919-c2v7ig","ts":1780017011919,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.7MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017012215-8qraw9","ts":1780017012215,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017042215-hyzqjk","ts":1780017042215,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017071919-aqgbwf","ts":1780017071919,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.9MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017072216-tetfhb","ts":1780017072216,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017102216-uvsadu","ts":1780017102216,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017131919-a7shv2","ts":1780017131919,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.1MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017132216-2ud5ja","ts":1780017132216,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017162216-v9d2oe","ts":1780017162216,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017191919-syiyao","ts":1780017191919,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.5MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017192217-xjscnl","ts":1780017192217,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017222217-e2sm93","ts":1780017222217,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017251919-qmsj4y","ts":1780017251919,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.7MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017252218-k1wn3l","ts":1780017252218,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017282218-q8ogz0","ts":1780017282218,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017302355-v3w0qs","ts":1780017302355,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> tts action=playAudio \"现在时间是上午9点15分\""}
+{"id":"1780017302360-8l8pk3","ts":1780017302360,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-7tksfnsw"}
+{"id":"1780017302362-zhwf5y","ts":1780017302362,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-7tksfnsw 已断开，当前连接数: 0"}
+{"id":"1780017302362-o38sk3","ts":1780017302362,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1780017308355-fe9dto","ts":1780017308355,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017311920-xtdkx0","ts":1780017311920,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.1MB/18.0MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780017312219-dzz8h8","ts":1780017312219,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017342219-rw0zvr","ts":1780017342219,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017371920-m741bt","ts":1780017371920,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.5MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017372219-qdl6m5","ts":1780017372219,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017402220-i3n2nh","ts":1780017402220,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017431920-vj9lmf","ts":1780017431920,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.7MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017432219-qq3yim","ts":1780017432220,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017462220-5tf004","ts":1780017462220,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017491922-vxxkkv","ts":1780017491922,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017492220-8xheba","ts":1780017492220,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017522221-ho9oz8","ts":1780017522221,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017551923-18e5y6","ts":1780017551923,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017552222-ejlxdz","ts":1780017552222,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017582223-hdiyd5","ts":1780017582223,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017611924-casm3r","ts":1780017611924,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.5MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017612222-0dejfg","ts":1780017612222,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017642223-tva2v9","ts":1780017642223,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017671924-4gkh2c","ts":1780017671924,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017672222-1c4vig","ts":1780017672222,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017702224-9uchmh","ts":1780017702224,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017731924-o1hwwh","ts":1780017731924,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017732223-wyy9t0","ts":1780017732223,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017762223-1atw49","ts":1780017762223,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017791924-yfqd1n","ts":1780017791924,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017792224-z2tbhu","ts":1780017792224,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017822224-apt4zz","ts":1780017822224,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017851925-vpnluu","ts":1780017851925,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.4MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017852225-u5c35v","ts":1780017852225,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017882225-pgob16","ts":1780017882225,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017911924-isdhuu","ts":1780017911924,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017912226-vxz7bj","ts":1780017912226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017942226-bpgx47","ts":1780017942226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780017971924-o91pzb","ts":1780017971924,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780017972226-5guvbl","ts":1780017972226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018002226-qzetky","ts":1780018002226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018031924-i1u9b5","ts":1780018031924,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018032226-r4p7o4","ts":1780018032226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018062226-fjhj95","ts":1780018062226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018091925-xjrjob","ts":1780018091925,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.2MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018092226-rp0909","ts":1780018092226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018122226-cm8qgw","ts":1780018122226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018151926-3db10w","ts":1780018151926,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.5MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018152226-9cjhjh","ts":1780018152226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018182226-ajdqrz","ts":1780018182226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018208167-06zivz","ts":1780018208167,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018211926-m662ul","ts":1780018211926,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.9MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780018212227-0tsya9","ts":1780018212227,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018242228-oivk62","ts":1780018242228,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018271926-ru0gr9","ts":1780018271926,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.1MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780018272229-b391fb","ts":1780018272229,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018302229-mph65u","ts":1780018302229,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018331926-0qv01p","ts":1780018331926,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.4MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018332229-exgidn","ts":1780018332229,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018362230-tvnz2s","ts":1780018362230,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018391926-d2raap","ts":1780018391926,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018392230-jmzitp","ts":1780018392230,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018422231-htogoz","ts":1780018422231,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018451926-yu4y7k","ts":1780018451926,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018452232-f8ifyd","ts":1780018452232,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018482233-3zsx3v","ts":1780018482233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018511926-fuoll1","ts":1780018511926,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018512233-l4wr1e","ts":1780018512233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018542233-f4g85d","ts":1780018542233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018571927-3ksjfs","ts":1780018571927,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.2MB/18.0MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018572233-vm4yrg","ts":1780018572233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018602233-3k69xj","ts":1780018602233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018631928-4k1p5u","ts":1780018631928,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018632233-4guejh","ts":1780018632233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018662234-jik5w6","ts":1780018662234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018691929-ysx73x","ts":1780018691929,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018692234-d17dh4","ts":1780018692234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018722234-hryc7e","ts":1780018722234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018751930-v9ix0c","ts":1780018751930,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018752234-0ymgxw","ts":1780018752234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018782234-k7ux00","ts":1780018782234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018811930-5tt5er","ts":1780018811930,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.2MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018812234-44g8xx","ts":1780018812234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018842234-20pg4f","ts":1780018842234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018871930-aerxhn","ts":1780018871930,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018872234-8i9xl3","ts":1780018872234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018902234-c0jcoh","ts":1780018902234,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018931930-6tijcg","ts":1780018931930,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018932235-n95dmv","ts":1780018932235,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018962235-iyospy","ts":1780018962235,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780018991930-uutppw","ts":1780018991930,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780018992236-uhbm2g","ts":1780018992236,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019022236-9m962x","ts":1780019022236,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019051931-8qv7z6","ts":1780019051931,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.2MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019052238-bg7us9","ts":1780019052238,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019082238-xrsyp8","ts":1780019082238,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019108151-1ednjt","ts":1780019108151,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019111932-n3bibz","ts":1780019111932,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.7MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780019112238-mtyqp9","ts":1780019112239,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019142238-eu9oud","ts":1780019142238,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019171932-qv7ior","ts":1780019171932,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.9MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780019172238-ad6ges","ts":1780019172238,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019202238-72b0vo","ts":1780019202238,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019231932-fae5xz","ts":1780019231932,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.1MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780019232238-bhu3j0","ts":1780019232238,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019262238-gurre5","ts":1780019262238,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019291932-avp98t","ts":1780019291932,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.2MB/18.0MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780019292240-5eegs9","ts":1780019292240,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019322240-949roe","ts":1780019322240,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019351932-su4m71","ts":1780019351932,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019352240-98846l","ts":1780019352240,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019382241-771t7l","ts":1780019382241,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019411933-aiumf5","ts":1780019411933,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019412241-7xjxgb","ts":1780019412241,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019442242-voxu9c","ts":1780019442242,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019471933-q3vpq5","ts":1780019471933,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019472242-b6cx5o","ts":1780019472242,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019502242-bb6v4r","ts":1780019502242,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019531932-79dppa","ts":1780019531932,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.2MB/18.0MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019532242-01gxts","ts":1780019532242,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019562243-h16tz4","ts":1780019562243,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019591934-ns6oh1","ts":1780019591934,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019592247-zeb0x9","ts":1780019592247,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019622247-ad3e6m","ts":1780019622247,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019651935-d3tyoe","ts":1780019651935,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019652249-5ep58i","ts":1780019652249,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019682249-06dj7q","ts":1780019682249,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019711937-tx1dbs","ts":1780019711937,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019712249-zpocxv","ts":1780019712249,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019742250-4pvtbw","ts":1780019742250,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019771937-kigi33","ts":1780019771937,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.2MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019772251-fj3w8k","ts":1780019772251,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019802253-rkoka1","ts":1780019802253,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019831938-sgz7ii","ts":1780019831938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.6MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019832253-um1knn","ts":1780019832253,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019862254-k7o1rw","ts":1780019862254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019891937-b8ot5z","ts":1780019891938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.8MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019892254-1lu93s","ts":1780019892254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019922254-uqux91","ts":1780019922254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019951938-4joi8u","ts":1780019951938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.0MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780019952254-t4drw5","ts":1780019952254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780019982254-ofympt","ts":1780019982254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020007863-5ztohs","ts":1780020007863,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020011939-j3puay","ts":1780020011939,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.5MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020012254-h1v7o7","ts":1780020012254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020042254-0neczx","ts":1780020042254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020071938-twmngz","ts":1780020071938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.7MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020072254-wqkx0c","ts":1780020072254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020102254-oddr7h","ts":1780020102254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020131938-4e05tw","ts":1780020131938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.9MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020132254-m1clwd","ts":1780020132254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020162254-vhaln2","ts":1780020162254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020191938-istyi0","ts":1780020191938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.1MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020192254-2vqc0u","ts":1780020192254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020222254-juo96h","ts":1780020222254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020251938-vhy3z8","ts":1780020251938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.3MB/18.0MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020252256-k2sx43","ts":1780020252256,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020282256-ej4bwh","ts":1780020282256,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020311938-5tunhv","ts":1780020311938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.7MB/17.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020312256-zn7cmw","ts":1780020312256,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020342256-kg6zki","ts":1780020342256,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020371938-y4j7b0","ts":1780020371938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.9MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020372257-nshqin","ts":1780020372257,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020402257-j91ceb","ts":1780020402257,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020431938-b8f98r","ts":1780020431938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.1MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020432257-aasg3s","ts":1780020432257,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020462257-eiuhxq","ts":1780020462257,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020491938-d6f6rl","ts":1780020491938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 17.3MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020492258-itud67","ts":1780020492258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020522258-u31j4h","ts":1780020522258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020551938-i7o1dd","ts":1780020551938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.1MB | Heap: 16.7MB/18.3MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020552258-6906e1","ts":1780020552258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020582258-v8vw61","ts":1780020582258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020611938-i2bp35","ts":1780020611938,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.4MB | Heap: 16.9MB/18.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020612258-l202jv","ts":1780020612258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020642258-9ctn7n","ts":1780020642258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020671939-2ry41s","ts":1780020671939,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.5MB | Heap: 17.1MB/18.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020672258-oi8tlo","ts":1780020672258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020702258-2oqtcn","ts":1780020702258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020731940-zuu9pm","ts":1780020731940,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 17.3MB/19.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020732258-rkqp5g","ts":1780020732258,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020762259-ctip3b","ts":1780020762259,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020791941-wtbb1w","ts":1780020791941,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.7MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020792259-uatz6h","ts":1780020792259,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020822260-4yo8sm","ts":1780020822260,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020851942-k2jv9q","ts":1780020851942,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.9MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020852260-ha8wiv","ts":1780020852260,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020882260-zqb0fr","ts":1780020882260,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020907773-5yncyr","ts":1780020907773,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020911942-12ll0c","ts":1780020911942,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 17.2MB/18.0MB | External: 2.7MB | ArrayBuffers: 0.3MB"}
+{"id":"1780020912260-s943q1","ts":1780020912260,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020942260-ap9rnx","ts":1780020942260,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780020971943-zjyj1o","ts":1780020971943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.6MB/17.3MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780020972260-a6cjan","ts":1780020972260,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021002261-pcc46s","ts":1780021002261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021031944-q3rw5e","ts":1780021031944,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.8MB/17.5MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021032261-xsr9ke","ts":1780021032261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021062261-4cpij7","ts":1780021062261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021091943-s55tli","ts":1780021091943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 17.0MB/17.8MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021092261-p290bn","ts":1780021092261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021122261-sg3jah","ts":1780021122261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021151943-tr69hz","ts":1780021151943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 17.2MB/18.0MB | External: 2.7MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021152261-iohyxm","ts":1780021152261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021182261-99pm7o","ts":1780021182261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021211943-qn9ma5","ts":1780021211943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.7MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021212261-v9ebgb","ts":1780021212261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021242261-e7lw8j","ts":1780021242261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021271943-v6v4lp","ts":1780021271943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.9MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021272261-jsnbqk","ts":1780021272261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021302261-6kmuzu","ts":1780021302261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021331943-g80p1h","ts":1780021331943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 17.1MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021332261-yfzlux","ts":1780021332261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021362261-oywd6s","ts":1780021362261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021391943-2d6961","ts":1780021391943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 17.3MB/18.0MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021392261-vt0sd3","ts":1780021392261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021422261-d7aq3c","ts":1780021422261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021451943-jzfzzx","ts":1780021451943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.7MB/17.5MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021452261-hxpb9a","ts":1780021452261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021482261-7039fs","ts":1780021482261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021511943-9c80vj","ts":1780021511943,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 110.7MB | Heap: 16.9MB/17.8MB | External: 2.5MB | ArrayBuffers: 0.0MB"}
+{"id":"1780021512261-1i7k4u","ts":1780021512261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1780021542261-ghhfcz","ts":1780021542261,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}

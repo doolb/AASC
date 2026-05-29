@@ -542,23 +542,18 @@ const LogViewer = {
         }
 
         console.log = function(...args) {
-            originalConsole.log.apply(console, args);
             _sendClientLog('info', args);
         };
         console.info = function(...args) {
-            originalConsole.info.apply(console, args);
             _sendClientLog('info', args);
         };
         console.warn = function(...args) {
-            originalConsole.warn.apply(console, args);
             _sendClientLog('warn', args);
         };
         console.error = function(...args) {
-            originalConsole.error.apply(console, args);
             _sendClientLog('error', args);
         };
         console.debug = function(...args) {
-            originalConsole.debug.apply(console, args);
             _sendClientLog('debug', args);
         };
 
