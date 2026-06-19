@@ -1,393 +1,470 @@
-{"id":"1780073331550-97tuhy","ts":1780073331550,"cat":"媒体库","lvl":"info","dev":"server","src":null,"msg":"媒体库初始化完成"}
-{"id":"1780073331565-7mpw5y","ts":1780073331565,"cat":"子显示端","lvl":"info","dev":"display","src":null,"msg":"配置已更新: https://192.168.1.39:8081"}
-{"id":"1780073331637-x605mr","ts":1780073331637,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"媒体中心服务器已启动"}
-{"id":"1780073331637-w3kgde","ts":1780073331637,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"上传端地址: https://192.168.1.39:8081/upload"}
-{"id":"1780073331637-z4gc2w","ts":1780073331637,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"显示端地址: https://192.168.1.39:8081/display"}
-{"id":"1780073331639-ss2e7l","ts":1780073331639,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"HTTPS 已启用，支持麦克风等安全特性"}
-{"id":"1780073331645-asg0p2","ts":1780073331645,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"ViewBind WS 系统初始化完成"}
-{"id":"1780073331650-dhsj2k","ts":1780073331650,"cat":"任务引擎","lvl":"info","dev":"server","src":null,"msg":"远程任务系统已初始化"}
-{"id":"1780073331688-l5husy","ts":1780073331688,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
-{"id":"1780073331691-m9h9tb","ts":1780073331691,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073331697-r2c5df","ts":1780073331697,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073331701-iux6yv","ts":1780073331701,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
-{"id":"1780073331702-djbpd7","ts":1780073331702,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073331704-rv2v97","ts":1780073331704,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073331716-c4jioz","ts":1780073331716,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
-{"id":"1780073332206-3amji6","ts":1780073332206,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073332619-pfk032","ts":1780073332619,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
-{"id":"1780073332623-c4dn9c","ts":1780073332623,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
-{"id":"1780073332643-nead8z","ts":1780073332643,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073332652-bhgvi7","ts":1780073332652,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
-{"id":"1780073332656-w3cv18","ts":1780073332656,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073332701-lnbfzh","ts":1780073332701,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
-{"id":"1780073332704-4bdhzr","ts":1780073332704,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073332766-7764ks","ts":1780073332766,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
-{"id":"1780073332770-tf2kve","ts":1780073332770,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073332805-qzhrqe","ts":1780073332805,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073332814-hd7l9h","ts":1780073332814,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
-{"id":"1780073332814-ncxodg","ts":1780073332814,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073333149-fvcyr1","ts":1780073333149,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-7tksfnsw"}
-{"id":"1780073333151-o7knzj","ts":1780073333151,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-7tksfnsw 已断开，当前连接数: 0"}
-{"id":"1780073333159-dxdjtq","ts":1780073333159,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073333550-2nwpys","ts":1780073333550,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
-{"id":"1780073333558-qv1mx3","ts":1780073333558,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
-{"id":"1780073333560-ffnlyu","ts":1780073333560,"cat":"设备","lvl":"info","dev":"display","src":null,"msg":"防抖跳过: 192.168.1.6 onConnect，距上次 1s"}
-{"id":"1780073333567-83kxzw","ts":1780073333567,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073333572-wpgdo0","ts":1780073333572,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
-{"id":"1780073333582-nzrrp1","ts":1780073333582,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073333617-fo143f","ts":1780073333617,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
-{"id":"1780073333619-il2ig6","ts":1780073333619,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073333674-35l210","ts":1780073333674,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
-{"id":"1780073333677-kphfan","ts":1780073333677,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073333735-5uxg20","ts":1780073333735,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073333739-wqd11v","ts":1780073333739,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
-{"id":"1780073333739-zwou4w","ts":1780073333739,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073334536-wsehnl","ts":1780073334536,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073334536-l449ce","ts":1780073334536,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073334545-oomdvx","ts":1780073334545,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"WebSocket 连接成功"}
-{"id":"1780073334545-t13fn0","ts":1780073334545,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073334563-zln54w","ts":1780073334563,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073335088-8pryv8","ts":1780073335088,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073335099-wxl6n3","ts":1780073335099,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073338466-9dvcsi","ts":1780073338466,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073338466-2q1b1r","ts":1780073338466,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073338476-kq2pie","ts":1780073338476,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073338489-xnn8zf","ts":1780073338489,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073338502-mkvljh","ts":1780073338502,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073338553-vow9lu","ts":1780073338553,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073338553-z454kr","ts":1780073338553,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073338553-2qqtch","ts":1780073338553,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073338642-obzq57","ts":1780073338642,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073338715-hp36if","ts":1780073338715,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview 第1次, mediaRect: 505.3266906738281 x 757.98291015625 callbackExecuted: false"}
-{"id":"1780073338716-rsay6t","ts":1780073338716,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview: 执行回调"}
-{"id":"1780073338716-mrpvtr","ts":1780073338716,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setData: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073338716-ca9riq","ts":1780073338716,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setRotation: rotation=90"}
-{"id":"1780073338916-r5ytys","ts":1780073338916,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073338916-wxspes","ts":1780073338916,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073338953-qmtugq","ts":1780073338953,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073338953-lr6rro","ts":1780073338953,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview: callback 已执行过，跳过"}
-{"id":"1780073338956-k8kwin","ts":1780073338956,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073338958-l0i03i","ts":1780073338958,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073339072-5xfo0s","ts":1780073339072,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== updateBox 开始 ====="}
-{"id":"1780073339072-919rgg","ts":1780073339072,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 旋转角度: 90"}
-{"id":"1780073339072-3fbgjp","ts":1780073339072,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect: {\"left\":485.0923156738281,\"top\":868.7002563476562,\"width\":757.98291015625,\"height\":505.3266906738281}"}
-{"id":"1780073339072-hht51e","ts":1780073339072,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: containerRect: {\"left\":484.9999694824219,\"top\":742.3721313476562,\"width\":758.1817626953125,\"height\":757.9971313476562}"}
-{"id":"1780073339072-qe2j4a","ts":1780073339072,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073339074-30n1d7","ts":1780073339074,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetX = 485.0923156738281 - 484.9999694824219 = 0.09234619140625"}
-{"id":"1780073339075-9w5mdv","ts":1780073339075,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetY = 868.7002563476562 - 742.3721313476562 = 126.328125"}
-{"id":"1780073339075-fpehif","ts":1780073339075,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaWidth=757.98291015625, mediaHeight=505.3266906738281"}
-{"id":"1780073339075-bc6mck","ts":1780073339075,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data百分比: x=0.000, y=0.133, w=1.000, h=0.734"}
-{"id":"1780073339075-ponopf","ts":1780073339075,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxLeft = 0.09234619140625 + 0 * 757.98291015625 = 0.09234619140625"}
-{"id":"1780073339077-l37iui","ts":1780073339077,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxTop = 126.328125 + 0.13281595192492246 * 505.3266906738281 = 193.44357045491532"}
-{"id":"1780073339077-i6g6r5","ts":1780073339077,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxWidth = 1 * 757.98291015625 = 757.98291015625"}
-{"id":"1780073339077-b6dhu1","ts":1780073339077,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxHeight = 0.7343680961501551 * 505.3266906738281 = 371.0957997639975"}
-{"id":"1780073339077-b127an","ts":1780073339077,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 最终box样式: {\"left\":\"0.09234619140625px\",\"top\":\"193.44357045491532px\",\"width\":\"757.98291015625px\",\"height\":\"371.0957997639975px\"}"}
-{"id":"1780073339118-rx3c4m","ts":1780073339118,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073339417-55twyv","ts":1780073339417,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073339433-uu04d9","ts":1780073339433,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073339433-ud8wnu","ts":1780073339433,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073340505-g87at5","ts":1780073340505,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073340521-yo7w1p","ts":1780073340521,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=fit"}
-{"id":"1780073340528-spqhp5","ts":1780073340528,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073340530-kpetpz","ts":1780073340530,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ fit"}
-{"id":"1780073340530-m1svh4","ts":1780073340530,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073340547-9j0q9f","ts":1780073340547,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== updateBox 开始 ====="}
-{"id":"1780073340547-man33e","ts":1780073340547,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 旋转角度: 90"}
-{"id":"1780073340548-abv42w","ts":1780073340548,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect: {\"left\":485.0923156738281,\"top\":868.7002563476562,\"width\":757.98291015625,\"height\":505.3266906738281}"}
-{"id":"1780073340548-mlvod4","ts":1780073340548,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: containerRect: {\"left\":484.9999694824219,\"top\":742.3721313476562,\"width\":758.1817626953125,\"height\":757.9971313476562}"}
-{"id":"1780073340548-31tawx","ts":1780073340548,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073340555-ledl48","ts":1780073340555,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetX = 485.0923156738281 - 484.9999694824219 = 0.09234619140625"}
-{"id":"1780073340555-31lbpo","ts":1780073340555,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetY = 868.7002563476562 - 742.3721313476562 = 126.328125"}
-{"id":"1780073340557-9z3kv4","ts":1780073340557,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaWidth=757.98291015625, mediaHeight=505.3266906738281"}
-{"id":"1780073340558-tfxmmy","ts":1780073340558,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data百分比: x=0.000, y=0.133, w=1.000, h=0.734"}
-{"id":"1780073340558-qfpmz9","ts":1780073340558,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxLeft = 0.09234619140625 + 0 * 757.98291015625 = 0.09234619140625"}
-{"id":"1780073340558-rzsnuy","ts":1780073340558,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxTop = 126.328125 + 0.13281595192492246 * 505.3266906738281 = 193.44357045491532"}
-{"id":"1780073340558-9jxj6l","ts":1780073340558,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxWidth = 1 * 757.98291015625 = 757.98291015625"}
-{"id":"1780073340558-68oi5j","ts":1780073340558,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxHeight = 0.7343680961501551 * 505.3266906738281 = 371.0957997639975"}
-{"id":"1780073340558-z071s5","ts":1780073340558,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 最终box样式: {\"left\":\"0.09234619140625px\",\"top\":\"193.44357045491532px\",\"width\":\"757.98291015625px\",\"height\":\"371.0957997639975px\"}"}
-{"id":"1780073341050-wjxucy","ts":1780073341050,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073341059-qjhx8e","ts":1780073341059,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=fit"}
-{"id":"1780073341079-um47ap","ts":1780073341079,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073341079-ehtkrg","ts":1780073341079,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ fit"}
-{"id":"1780073341081-b19b9t","ts":1780073341081,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073341158-mopqpz","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== updateBox 开始 ====="}
-{"id":"1780073341158-4rxovv","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 旋转角度: 90"}
-{"id":"1780073341158-qtym80","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect: {\"left\":485.0923156738281,\"top\":868.7002563476562,\"width\":757.98291015625,\"height\":505.3266906738281}"}
-{"id":"1780073341158-qw65fe","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: containerRect: {\"left\":484.9999694824219,\"top\":742.3721313476562,\"width\":758.1817626953125,\"height\":757.9971313476562}"}
-{"id":"1780073341158-mrhke6","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073341158-eir00h","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetX = 485.0923156738281 - 484.9999694824219 = 0.09234619140625"}
-{"id":"1780073341158-d5xih9","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetY = 868.7002563476562 - 742.3721313476562 = 126.328125"}
-{"id":"1780073341158-fuprw1","ts":1780073341158,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaWidth=757.98291015625, mediaHeight=505.3266906738281"}
-{"id":"1780073341165-gr3cmm","ts":1780073341165,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data百分比: x=0.000, y=0.133, w=1.000, h=0.734"}
-{"id":"1780073341165-7o8jpj","ts":1780073341165,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxLeft = 0.09234619140625 + 0 * 757.98291015625 = 0.09234619140625"}
-{"id":"1780073341165-nr4epk","ts":1780073341165,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxTop = 126.328125 + 0.13281595192492246 * 505.3266906738281 = 193.44357045491532"}
-{"id":"1780073341165-u275xu","ts":1780073341165,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxWidth = 1 * 757.98291015625 = 757.98291015625"}
-{"id":"1780073341165-cyitye","ts":1780073341165,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxHeight = 0.7343680961501551 * 505.3266906738281 = 371.0957997639975"}
-{"id":"1780073341165-8u4org","ts":1780073341165,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 最终box样式: {\"left\":\"0.09234619140625px\",\"top\":\"193.44357045491532px\",\"width\":\"757.98291015625px\",\"height\":\"371.0957997639975px\"}"}
-{"id":"1780073341490-zqg54k","ts":1780073341490,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073341500-xy2uwa","ts":1780073341500,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=fit"}
-{"id":"1780073341511-2masnw","ts":1780073341511,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073341512-jljp77","ts":1780073341512,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ fit"}
-{"id":"1780073341513-w1qbqj","ts":1780073341513,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073341602-davlfj","ts":1780073341602,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== updateBox 开始 ====="}
-{"id":"1780073341602-f0y4hj","ts":1780073341602,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 旋转角度: 90"}
-{"id":"1780073341620-etxi4u","ts":1780073341620,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect: {\"left\":485.0923156738281,\"top\":868.7002563476562,\"width\":757.98291015625,\"height\":505.3266906738281}"}
-{"id":"1780073341621-6rw9y8","ts":1780073341621,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: containerRect: {\"left\":484.9999694824219,\"top\":742.3721313476562,\"width\":758.1817626953125,\"height\":757.9971313476562}"}
-{"id":"1780073341622-gy8h83","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073341622-cr5tdt","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetX = 485.0923156738281 - 484.9999694824219 = 0.09234619140625"}
-{"id":"1780073341622-duh2om","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetY = 868.7002563476562 - 742.3721313476562 = 126.328125"}
-{"id":"1780073341622-jhf2tm","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaWidth=757.98291015625, mediaHeight=505.3266906738281"}
-{"id":"1780073341622-0er0qs","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data百分比: x=0.000, y=0.133, w=1.000, h=0.734"}
-{"id":"1780073341622-2ez9nr","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxLeft = 0.09234619140625 + 0 * 757.98291015625 = 0.09234619140625"}
-{"id":"1780073341622-a50y8o","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxTop = 126.328125 + 0.13281595192492246 * 505.3266906738281 = 193.44357045491532"}
-{"id":"1780073341622-mh7l79","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxWidth = 1 * 757.98291015625 = 757.98291015625"}
-{"id":"1780073341622-u8a9dl","ts":1780073341622,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxHeight = 0.7343680961501551 * 505.3266906738281 = 371.0957997639975"}
-{"id":"1780073341625-0ysuqd","ts":1780073341625,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 最终box样式: {\"left\":\"0.09234619140625px\",\"top\":\"193.44357045491532px\",\"width\":\"757.98291015625px\",\"height\":\"371.0957997639975px\"}"}
-{"id":"1780073361705-mzbr7s","ts":1780073361705,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073391705-jro2kg","ts":1780073391705,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073392553-i8q1oc","ts":1780073392553,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073392553-cpmddw","ts":1780073392553,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073392921-8fm6dn","ts":1780073392921,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073392922-7bjgw3","ts":1780073392922,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073392958-u8y1pn","ts":1780073392958,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073392958-214jvj","ts":1780073392958,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073392959-rxtowv","ts":1780073392959,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073392967-m8cjum","ts":1780073392967,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073392967-n8hgpm","ts":1780073392967,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073392967-z31crp","ts":1780073392967,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073392977-tv8z88","ts":1780073392977,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073392977-n65b7d","ts":1780073392977,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview: 执行回调（恢复裁剪数据）"}
-{"id":"1780073392978-91wtmr","ts":1780073392978,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setData: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073392978-6u8kaq","ts":1780073392978,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setRotation: rotation=90"}
-{"id":"1780073393171-vgx3k2","ts":1780073393171,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview 第1次, mediaRect: 824.3593139648438 x 910.0689086914062 callbackExecuted: true"}
-{"id":"1780073393335-9s6xxz","ts":1780073393335,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== updateBox 开始 ====="}
-{"id":"1780073393335-raqs69","ts":1780073393335,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 旋转角度: 90"}
-{"id":"1780073393339-rfo1cs","ts":1780073393339,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect: {\"left\":485.0923156738281,\"top\":29.609373092651367,\"width\":757.98291015625,\"height\":505.3266906738281}"}
-{"id":"1780073393339-4boi6r","ts":1780073393339,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: containerRect: {\"left\":484.9999694824219,\"top\":-96.71875,\"width\":758.1817626953125,\"height\":757.9971313476562}"}
-{"id":"1780073393344-dmlf2b","ts":1780073393344,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073393344-4fhqm0","ts":1780073393344,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetX = 485.0923156738281 - 484.9999694824219 = 0.09234619140625"}
-{"id":"1780073393344-k8jvj7","ts":1780073393344,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: offsetY = 29.609373092651367 - -96.71875 = 126.32812309265137"}
-{"id":"1780073393344-kp3fq9","ts":1780073393344,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaWidth=757.98291015625, mediaHeight=505.3266906738281"}
-{"id":"1780073393349-51162i","ts":1780073393349,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: data百分比: x=0.000, y=0.133, w=1.000, h=0.734"}
-{"id":"1780073393349-thz901","ts":1780073393349,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxLeft = 0.09234619140625 + 0 * 757.98291015625 = 0.09234619140625"}
-{"id":"1780073393349-2k5v3b","ts":1780073393349,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxTop = 126.32812309265137 + 0.13281595192492246 * 505.3266906738281 = 193.44356854756668"}
-{"id":"1780073393349-oy5y5v","ts":1780073393349,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxWidth = 1 * 757.98291015625 = 757.98291015625"}
-{"id":"1780073393349-bcvw2j","ts":1780073393349,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: boxHeight = 0.7343680961501551 * 505.3266906738281 = 371.0957997639975"}
-{"id":"1780073393349-fz5etq","ts":1780073393349,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 最终box样式: {\"left\":\"0.09234619140625px\",\"top\":\"193.44356854756668px\",\"width\":\"757.98291015625px\",\"height\":\"371.0957997639975px\"}"}
-{"id":"1780073393403-h943kk","ts":1780073393403,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073393702-7zeor3","ts":1780073393702,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073393702-ken0t3","ts":1780073393702,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073393716-srla8d","ts":1780073393716,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073393719-cvt2yr","ts":1780073393719,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073393901-mfkwvc","ts":1780073393901,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073394205-rvp0qq","ts":1780073394205,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073394361-fc6z4x","ts":1780073394361,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073394361-2dycsd","ts":1780073394361,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073394818-4v5q3x","ts":1780073394818,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073394818-g4t0mq","ts":1780073394818,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073394823-1j9x9o","ts":1780073394823,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073394823-10gt05","ts":1780073394823,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073394826-05bndw","ts":1780073394826,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073394834-1hb8qf","ts":1780073394834,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073394834-s4zy2x","ts":1780073394834,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073394834-6mc3kg","ts":1780073394834,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073394844-xpblcq","ts":1780073394844,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073394847-t0babb","ts":1780073394848,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview: 执行回调（恢复裁剪数据）"}
-{"id":"1780073394848-90jd9g","ts":1780073394848,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setData: {\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073394849-2f6lyo","ts":1780073394849,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setRotation: rotation=90"}
-{"id":"1780073395036-jlo7o7","ts":1780073395036,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview 第1次, mediaRect: 630.96630859375 x 835.1563110351562 callbackExecuted: true"}
-{"id":"1780073395198-ljcq5q","ts":1780073395198,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073395199-ndj10z","ts":1780073395199,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.09234619140625 , 193.4435628255208 尺寸= 757.98291015625 x 371.0957997639975"}
-{"id":"1780073395204-yno4wu","ts":1780073395204,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073395502-akuvxk","ts":1780073395502,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073395502-ujvnsw","ts":1780073395502,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073395518-wtj1yy","ts":1780073395518,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073395519-ja0eee","ts":1780073395519,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073395705-ylwfhi","ts":1780073395705,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073395982-21iqq3","ts":1780073395982,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073395990-d4jgau","ts":1780073395990,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=rotate"}
-{"id":"1780073396007-olitzp","ts":1780073396007,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073396009-sjj2tb","ts":1780073396009,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073396009-7v7pnb","ts":1780073396009,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ rotate"}
-{"id":"1780073396013-rqgwqh","ts":1780073396013,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073396067-idyman","ts":1780073396067,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073396071-z9i0t9","ts":1780073396071,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073396417-6z8opc","ts":1780073396417,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== recalculateSize 开始 ====="}
-{"id":"1780073396417-2gbyor","ts":1780073396417,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 505.3266906738281 x 757.98291015625 sendToDisplay= true"}
-{"id":"1780073396417-tvpzlr","ts":1780073396417,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: displayCanvasSize= {\"width\":1920,\"height\":940}"}
-{"id":"1780073396418-0mkiji","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio=2.0426 (=1920/940)"}
-{"id":"1780073396418-775e6m","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaAspect=0.6667 (=505.3266906738281/757.98291015625)"}
-{"id":"1780073396418-eyvt69","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio > mediaAspect ? 2.0425531914893615 > 0.6666729340502683 = true"}
-{"id":"1780073396418-c5nwcv","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 走 width=100 分支, newH = 100 * 0.6666729340502683 / 2.0425531914893615 = 32.63919572954438"}
-{"id":"1780073396418-x0cdei","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 计算结果 → newW=100, newH=32.63919572954438, newX=0, newY=33.68040213522781"}
-{"id":"1780073396418-cvi7as","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 即将覆盖 this.data, 旧值={\"x\":0,\"y\":33.68040213522781,\"width\":100,\"height\":32.63919572954438}"}
-{"id":"1780073396418-soiocv","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 505.3266906738281 x 757.98291015625 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073396418-fpxj1c","ts":1780073396418,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 126.42044067382812 , 255.29169225692752 尺寸= 505.3266906738281 x 247.399525642395"}
-{"id":"1780073396424-7672r5","ts":1780073396424,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073396436-wl8glj","ts":1780073396436,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=crop"}
-{"id":"1780073396510-4jryl6","ts":1780073396510,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073396512-b18jyl","ts":1780073396512,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: crop ✓ 裁剪已应用"}
-{"id":"1780073396512-7fkes4","ts":1780073396512,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073396753-h2dvgu","ts":1780073396753,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073396757-od6nzc","ts":1780073396757,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073397844-5gziqb","ts":1780073397844,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073397844-wimyu8","ts":1780073397844,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073397853-3a67wj","ts":1780073397853,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073397853-khj4ch","ts":1780073397853,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073397859-ut6bf8","ts":1780073397859,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073397869-8upq3o","ts":1780073397869,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073397869-ljt0pr","ts":1780073397869,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073397869-jwjxu8","ts":1780073397869,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073397877-sq7cam","ts":1780073397877,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073397878-cos8bd","ts":1780073397878,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview: 执行回调（恢复裁剪数据）"}
-{"id":"1780073397878-fhrjof","ts":1780073397878,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setData: {\"x\":0,\"y\":33.68040213522781,\"width\":100,\"height\":32.63919572954438}"}
-{"id":"1780073398074-uw4s7v","ts":1780073398074,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview 第1次, mediaRect: 505.3266906738281 x 757.98291015625 callbackExecuted: true"}
-{"id":"1780073398347-ie6mry","ts":1780073398347,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 505.3266906738281 x 757.98291015625 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073398347-8z5712","ts":1780073398347,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 126.42044067382812 , 255.29169225692752 尺寸= 505.3266906738281 x 247.399525642395"}
-{"id":"1780073398354-o898m6","ts":1780073398354,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073398576-y5by84","ts":1780073398576,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073398578-n2nezb","ts":1780073398578,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073398598-lt5pnd","ts":1780073398598,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073398598-2q2gl0","ts":1780073398598,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073398778-ynznx7","ts":1780073398778,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073399084-gj7mr1","ts":1780073399084,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073399136-2z7dmd","ts":1780073399136,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073399138-junn7w","ts":1780073399138,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073399210-e4owrl","ts":1780073399210,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073399214-1ryzot","ts":1780073399214,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073400504-8nzy4g","ts":1780073400504,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073400506-61hcpz","ts":1780073400506,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073400509-dolexk","ts":1780073400509,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073400509-y90bv9","ts":1780073400509,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073400518-br12tj","ts":1780073400518,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073400530-jo7gua","ts":1780073400530,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073400531-vd0lx6","ts":1780073400531,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073400531-oef57g","ts":1780073400531,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073400537-2bdoyg","ts":1780073400537,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073400538-pilhqu","ts":1780073400538,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview: 执行回调（恢复裁剪数据）"}
-{"id":"1780073400538-p9qw7y","ts":1780073400538,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] setData: {\"x\":0,\"y\":33.68040213522781,\"width\":100,\"height\":32.63919572954438}"}
-{"id":"1780073400732-2ngqk5","ts":1780073400732,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview 第1次, mediaRect: 505.3266906738281 x 757.98291015625 callbackExecuted: true"}
-{"id":"1780073400763-tgttj4","ts":1780073400763,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073400891-me1dvq","ts":1780073400891,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 505.3266906738281 x 757.98291015625 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073400891-ttx03f","ts":1780073400891,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 126.42044067382812 , 255.29169225692752 尺寸= 505.3266906738281 x 247.399525642395"}
-{"id":"1780073401057-mpsokv","ts":1780073401057,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073401057-2657is","ts":1780073401057,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073401099-zfhe2q","ts":1780073401099,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073401100-43p1h1","ts":1780073401100,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073401259-7ihf50","ts":1780073401259,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073401679-s346yq","ts":1780073401679,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073402254-p3blgm","ts":1780073402254,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073402254-2lckxk","ts":1780073402254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073402387-arb0an","ts":1780073402387,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073402397-e5r1v4","ts":1780073402397,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=rotate"}
-{"id":"1780073402507-9r7v2k","ts":1780073402507,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073402507-kyk2we","ts":1780073402507,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ rotate"}
-{"id":"1780073402508-ht888l","ts":1780073402508,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073402663-1c47b6","ts":1780073402663,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== recalculateSize 开始 ====="}
-{"id":"1780073402663-xv04ra","ts":1780073402663,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 505.3266906738281 x 757.98291015625 sendToDisplay= true"}
-{"id":"1780073402663-uxnjoq","ts":1780073402663,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: displayCanvasSize= {\"width\":1920,\"height\":940}"}
-{"id":"1780073402663-nutb96","ts":1780073402663,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio=2.0426 (=1920/940)"}
-{"id":"1780073402663-wqz99o","ts":1780073402663,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaAspect=0.6667 (=505.3266906738281/757.98291015625)"}
-{"id":"1780073402664-b8ioia","ts":1780073402664,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio > mediaAspect ? 2.0425531914893615 > 0.6666729340502683 = true"}
-{"id":"1780073402664-yv2u8x","ts":1780073402664,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 走 width=100 分支, newH = 100 * 0.6666729340502683 / 2.0425531914893615 = 32.63919572954438"}
-{"id":"1780073402665-4dyo12","ts":1780073402665,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 计算结果 → newW=100, newH=32.63919572954438, newX=0, newY=33.68040213522781"}
-{"id":"1780073402665-x047pf","ts":1780073402665,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 即将覆盖 this.data, 旧值={\"x\":0,\"y\":33.68040213522781,\"width\":100,\"height\":32.63919572954438}"}
-{"id":"1780073402665-csn82p","ts":1780073402665,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 505.3266906738281 x 757.98291015625 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073402665-9m8ypn","ts":1780073402665,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 126.42044067382812 , 255.29169225692752 尺寸= 505.3266906738281 x 247.399525642395"}
-{"id":"1780073402665-a16mqy","ts":1780073402665,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073402672-qfohav","ts":1780073402672,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=crop"}
-{"id":"1780073402748-14z5hj","ts":1780073402748,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073402750-73yng5","ts":1780073402750,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: crop ✓ 裁剪已应用"}
-{"id":"1780073402750-3dg0ye","ts":1780073402750,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073404744-aus5kg","ts":1780073404744,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073404751-zrck56","ts":1780073404751,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=rotate"}
-{"id":"1780073404766-o8z8w4","ts":1780073404766,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073404766-wyadkp","ts":1780073404766,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ rotate"}
-{"id":"1780073404766-7o7jtx","ts":1780073404766,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073405102-2dimk9","ts":1780073405102,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== recalculateSize 开始 ====="}
-{"id":"1780073405102-no1z6m","ts":1780073405102,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 757.98291015625 x 505.3266906738281 sendToDisplay= true"}
-{"id":"1780073405102-5l1o76","ts":1780073405102,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: displayCanvasSize= {\"width\":1920,\"height\":940}"}
-{"id":"1780073405102-58rlux","ts":1780073405102,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio=2.0426 (=1920/940)"}
-{"id":"1780073405102-562x8a","ts":1780073405102,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaAspect=1.5000 (=757.98291015625/505.3266906738281)"}
-{"id":"1780073405102-9250kt","ts":1780073405102,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio > mediaAspect ? 2.0425531914893615 > 1.4999858985194654 = true"}
-{"id":"1780073405102-w6vtvg","ts":1780073405102,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 走 width=100 分支, newH = 100 * 1.4999858985194654 / 2.0425531914893615 = 73.4368096150155"}
-{"id":"1780073405103-exgw71","ts":1780073405103,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 计算结果 → newW=100, newH=73.4368096150155, newX=0, newY=13.281595192492247"}
-{"id":"1780073405104-gaogd3","ts":1780073405104,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 即将覆盖 this.data, 旧值={\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073405104-ot9pg7","ts":1780073405104,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073405104-e7m5z1","ts":1780073405104,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.09234619140625 , 193.4435628255208 尺寸= 757.98291015625 x 371.0957997639975"}
-{"id":"1780073405104-lttqv0","ts":1780073405104,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073405109-z0blq8","ts":1780073405109,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=crop"}
-{"id":"1780073405132-ztnoup","ts":1780073405132,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073405132-aqb8xw","ts":1780073405132,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: crop ✓ 裁剪已应用"}
-{"id":"1780073405132-l8rewi","ts":1780073405132,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073405744-mfcr6p","ts":1780073405744,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073405744-jzk6pg","ts":1780073405744,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073406956-5j7nfq","ts":1780073406956,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073406957-n0s7nx","ts":1780073406957,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073406959-k32hql","ts":1780073406959,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073406962-aeuqex","ts":1780073406962,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073407033-kqop5x","ts":1780073407033,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073407044-6kjkjo","ts":1780073407044,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073407045-gwxz9j","ts":1780073407045,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073407046-rzxxuo","ts":1780073407046,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073407060-024kgi","ts":1780073407060,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073407060-cef5gx","ts":1780073407060,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview: 执行回调（恢复裁剪数据）"}
-{"id":"1780073407248-otovbc","ts":1780073407248,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview 第1次, mediaRect: 505.461669921875 x 758.0729370117188 callbackExecuted: true"}
-{"id":"1780073407414-1tyle9","ts":1780073407414,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073407414-hto3aq","ts":1780073407414,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.09234619140625 , 193.44357045491532 尺寸= 757.98291015625 x 371.0957997639975"}
-{"id":"1780073407441-qabnmi","ts":1780073407441,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073407762-q8ohkc","ts":1780073407762,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073407763-ecij31","ts":1780073407763,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073407954-i6bvbq","ts":1780073407954,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073408223-ggc95k","ts":1780073408223,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073408223-xn44qq","ts":1780073408223,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073408237-8kt94p","ts":1780073408237,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073408257-rco1qa","ts":1780073408257,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073408257-bbtguu","ts":1780073408257,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073408393-lhldlb","ts":1780073408393,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073408400-cfezih","ts":1780073408400,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073409395-ia2xzk","ts":1780073409395,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073409395-8kk9m4","ts":1780073409395,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073409397-zzmq42","ts":1780073409397,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073409400-1rio7j","ts":1780073409400,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073409403-g5kzid","ts":1780073409403,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073409412-s1fq5u","ts":1780073409412,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073409412-ct5g2b","ts":1780073409412,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073409412-01e2ye","ts":1780073409412,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073409420-veyjgi","ts":1780073409420,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073409420-f4zrkn","ts":1780073409420,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview: 执行回调（恢复裁剪数据）"}
-{"id":"1780073409614-ccglnp","ts":1780073409614,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] _retryShowPreview 第1次, mediaRect: 786.482177734375 x 549.1760864257812 callbackExecuted: true"}
-{"id":"1780073409669-22wlqb","ts":1780073409669,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073409786-dmy12n","ts":1780073409786,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 794.9342651367188 x 562.6604614257812 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073409786-tcqwfc","ts":1780073409786,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= -18.383331298828125 , 172.3915473069883 尺寸= 794.9342651367188 x 413.19989183621874"}
-{"id":"1780073409965-cyxkww","ts":1780073409965,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073409965-0iv731","ts":1780073409965,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073409977-ebhpbs","ts":1780073409977,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073409978-6neal9","ts":1780073409978,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073410191-oawvgr","ts":1780073410191,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073410479-twkdbc","ts":1780073410479,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073410679-p3gsdo","ts":1780073410679,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073410681-pfhcjs","ts":1780073410681,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073411974-mtgfsr","ts":1780073411974,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073411982-4920ib","ts":1780073411982,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=rotate"}
-{"id":"1780073411997-7qjpo4","ts":1780073411997,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073411997-s94i4x","ts":1780073411997,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ rotate"}
-{"id":"1780073411997-otbbn8","ts":1780073411997,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073412334-m8wnhl","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] ===== recalculateSize 开始 ====="}
-{"id":"1780073412334-wn890r","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 757.98291015625 x 505.3266906738281 sendToDisplay= true"}
-{"id":"1780073412334-v2igp1","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: displayCanvasSize= {\"width\":1920,\"height\":940}"}
-{"id":"1780073412334-lulp4x","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio=2.0426 (=1920/940)"}
-{"id":"1780073412334-bnq2xu","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaAspect=1.5000 (=757.98291015625/505.3266906738281)"}
-{"id":"1780073412334-u234xt","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: aspectRatio > mediaAspect ? 2.0425531914893615 > 1.4999858985194654 = true"}
-{"id":"1780073412334-ynmg6b","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 走 width=100 分支, newH = 100 * 1.4999858985194654 / 2.0425531914893615 = 73.4368096150155"}
-{"id":"1780073412334-lbdmn1","ts":1780073412334,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 计算结果 → newW=100, newH=73.4368096150155, newX=0, newY=13.281595192492247"}
-{"id":"1780073412334-f0jgj5","ts":1780073412347,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 即将覆盖 this.data, 旧值={\"x\":0,\"y\":13.281595192492247,\"width\":100,\"height\":73.4368096150155}"}
-{"id":"1780073412348-6o353u","ts":1780073412348,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073412348-ofep8j","ts":1780073412348,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.09234619140625 , 193.44357045491532 尺寸= 757.98291015625 x 371.0957997639975"}
-{"id":"1780073412348-vq7k0o","ts":1780073412348,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
-{"id":"1780073412370-v1e3sw","ts":1780073412370,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=crop"}
-{"id":"1780073412381-u411jf","ts":1780073412381,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073412381-lbrulk","ts":1780073412381,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: crop ✓ 裁剪已应用"}
-{"id":"1780073412381-pzsjvb","ts":1780073412381,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073421705-eudrz7","ts":1780073421705,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073451705-bynlif","ts":1780073451705,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879266561-era6j7","ts":1781879266561,"cat":"媒体库","lvl":"info","dev":"server","src":null,"msg":"媒体库初始化完成"}
+{"id":"1781879266564-m8ld7g","ts":1781879266564,"cat":"子显示端","lvl":"info","dev":"display","src":null,"msg":"配置已更新: https://192.168.1.39:8081"}
+{"id":"1781879266579-68pr8s","ts":1781879266579,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"媒体中心服务器已启动"}
+{"id":"1781879266579-8yfyu3","ts":1781879266579,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"上传端地址: https://192.168.1.39:8081/upload"}
+{"id":"1781879266579-03wjbk","ts":1781879266579,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"显示端地址: https://192.168.1.39:8081/display"}
+{"id":"1781879266580-qqkhwz","ts":1781879266580,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"HTTPS 已启用，支持麦克风等安全特性"}
+{"id":"1781879266583-56zi1k","ts":1781879266583,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"ViewBind WS 系统初始化完成"}
+{"id":"1781879266585-ksxpcj","ts":1781879266585,"cat":"任务引擎","lvl":"info","dev":"server","src":null,"msg":"远程任务系统已初始化"}
+{"id":"1781879266738-g138i5","ts":1781879266738,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1781879266740-ifu280","ts":1781879266740,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879266810-pzjy6m","ts":1781879266810,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879266811-fon4ti","ts":1781879266811,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1781879266813-v6zuq1","ts":1781879266813,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879266815-3fevxh","ts":1781879266815,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879266821-by10p4","ts":1781879266821,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1781879267320-059b5a","ts":1781879267320,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879272179-vkharm","ts":1781879272179,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
+{"id":"1781879272180-nyzuq2","ts":1781879272180,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
+{"id":"1781879272208-ubevh0","ts":1781879272208,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
+{"id":"1781879272211-d7krzm","ts":1781879272211,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
+{"id":"1781879272358-4nxkt0","ts":1781879272358,"cat":"控制端","lvl":"error","dev":"control","src":"control","msg":"加载LLM配置失败: {}"}
+{"id":"1781879272361-tktrf9","ts":1781879272361,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
+{"id":"1781879272362-6ssbri","ts":1781879272362,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
+{"id":"1781879272804-jpgrxk","ts":1781879272804,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
+{"id":"1781879272805-34gdie","ts":1781879272805,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
+{"id":"1781879272831-e8kr1o","ts":1781879272831,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
+{"id":"1781879272831-5i53ht","ts":1781879272831,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
+{"id":"1781879273096-k4qw56","ts":1781879273096,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
+{"id":"1781879273396-hlndzn","ts":1781879273396,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
+{"id":"1781879273397-9rbd2k","ts":1781879273397,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1781879273426-rbizn8","ts":1781879273426,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1781879273427-fy20wn","ts":1781879273427,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879273596-6w4kzv","ts":1781879273596,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
+{"id":"1781879273898-kk8psp","ts":1781879273898,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1781879273925-8i2oq0","ts":1781879273925,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1781879273927-g96uk9","ts":1781879273927,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879296817-je8gzg","ts":1781879296817,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879326817-skl8ar","ts":1781879326817,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879356818-keskv8","ts":1781879356818,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879386818-18spr7","ts":1781879386818,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879408363-ksvnjt","ts":1781879408363,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879416818-n5jtsm","ts":1781879416818,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879446818-l7e2b5","ts":1781879446818,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879476818-qteq74","ts":1781879476818,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879478655-t6yslw","ts":1781879478655,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
+{"id":"1781879478656-17afz1","ts":1781879478656,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 2"}
+{"id":"1781879478681-g2hlxo","ts":1781879478681,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
+{"id":"1781879478682-irnpfg","ts":1781879478682,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
+{"id":"1781879479158-o7x4dq","ts":1781879479158,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
+{"id":"1781879479380-psqnaf","ts":1781879479380,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
+{"id":"1781879479382-qex9pu","ts":1781879479382,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1781879479428-c9h5e1","ts":1781879479428,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1781879479433-0ex1si","ts":1781879479433,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879480136-15b7uy","ts":1781879480136,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
+{"id":"1781879480145-29jaej","ts":1781879480145,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1781879480272-8xcj5k","ts":1781879480272,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1781879480273-fle89b","ts":1781879480273,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879483924-sd60zk","ts":1781879483924,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
+{"id":"1781879483926-82sfs2","ts":1781879483926,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
+{"id":"1781879483943-suziyq","ts":1781879483943,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879483946-n19zg9","ts":1781879483946,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
+{"id":"1781879483948-kqift1","ts":1781879483948,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
+{"id":"1781879483965-p7h4ax","ts":1781879483965,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879483973-iz2wt4","ts":1781879483973,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
+{"id":"1781879483973-sl831n","ts":1781879483973,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774541075724_27856_1.mp4 mediaType: video"}
+{"id":"1781879483974-8mkl25","ts":1781879483974,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774541075724_27856_1.mp4 mediaType: video hasCallback: true"}
+{"id":"1781879484033-ske7oj","ts":1781879484033,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
+{"id":"1781879484049-jxo8jf","ts":1781879484049,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879484075-9zcl2k","ts":1781879484075,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
+{"id":"1781879484086-lqzysn","ts":1781879484086,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879484124-rjhhi9","ts":1781879484124,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879484125-gih5m8","ts":1781879484125,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
+{"id":"1781879484126-g61h6d","ts":1781879484126,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879484205-4ywynk","ts":1781879484205,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-7tksfnsw"}
+{"id":"1781879484206-tlcf1r","ts":1781879484206,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-7tksfnsw 已断开，当前连接数: 0"}
+{"id":"1781879484222-elqttb","ts":1781879484222,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879484375-mnnhvn","ts":1781879484375,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
+{"id":"1781879484376-87d8jl","ts":1781879484376,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
+{"id":"1781879484378-vpjdpq","ts":1781879484378,"cat":"设备","lvl":"info","dev":"display","src":null,"msg":"防抖跳过: 192.168.1.6 onConnect，距上次 0s"}
+{"id":"1781879484420-t2nhql","ts":1781879484420,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879484437-gnzah7","ts":1781879484437,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
+{"id":"1781879484438-sm3dlv","ts":1781879484438,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
+{"id":"1781879484440-i8jkqh","ts":1781879484440,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
+{"id":"1781879484441-3l4yfg","ts":1781879484441,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879484443-1avufq","ts":1781879484443,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
+{"id":"1781879484443-3jjwr4","ts":1781879484443,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879484474-wxthgl","ts":1781879484474,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879484989-6w2qke","ts":1781879484989,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] video onloadedmetadata 触发"}
+{"id":"1781879485340-f888i6","ts":1781879485340,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 0 x 0 containerRect= 0 x 0"}
+{"id":"1781879485340-6rzkj2","ts":1781879485340,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 媒体尺寸为0，跳过"}
+{"id":"1781879494055-5p2ynz","ts":1781879494055,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879495021-qr35ge","ts":1781879495021,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879495023-fbji8n","ts":1781879495023,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879495025-d4ug31","ts":1781879495025,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879495027-hk13ju","ts":1781879495027,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879495170-cndsxz","ts":1781879495170,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879495171-5hqruk","ts":1781879495171,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879495171-cqgdd4","ts":1781879495171,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879506818-t7uudk","ts":1781879506818,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879511732-hqrriz","ts":1781879511732,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 758 x 341.09375 sendToDisplay= false"}
+{"id":"1781879511737-rqml7o","ts":1781879511737,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 758 x 341.09375 containerRect= 758 x 758"}
+{"id":"1781879511738-8dtlhd","ts":1781879511738,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 30.648936170212746 , 208.453125 尺寸= 696.7021276595746 x 341.09375"}
+{"id":"1781879517039-ij98ug","ts":1781879517039,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 758 x 341.09375 sendToDisplay= false"}
+{"id":"1781879517039-dv4nk8","ts":1781879517039,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 758 x 341.09375 containerRect= 758 x 758"}
+{"id":"1781879517040-z3p77e","ts":1781879517040,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 30.648936170212746 , 208.453125 尺寸= 696.7021276595746 x 341.09375"}
+{"id":"1781879520242-7wkg4s","ts":1781879520242,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520247-9lrjag","ts":1781879520247,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520279-k9cf37","ts":1781879520279,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520280-f54q6m","ts":1781879520280,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520281-55zx93","ts":1781879520281,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520462-ooitmu","ts":1781879520462,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520466-vow6z9","ts":1781879520466,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520497-w3s96c","ts":1781879520497,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520499-5kcuem","ts":1781879520499,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520501-70zhv3","ts":1781879520501,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520502-wjjslr","ts":1781879520502,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520504-6k2e24","ts":1781879520504,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520505-2xhx6j","ts":1781879520505,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520506-jhzqv0","ts":1781879520506,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520507-onh5hk","ts":1781879520507,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520508-b72v2q","ts":1781879520508,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520508-e2qitc","ts":1781879520508,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520566-59r006","ts":1781879520566,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520568-wtmb5i","ts":1781879520568,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520569-r46jdf","ts":1781879520569,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520570-hvrq6p","ts":1781879520570,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520572-0mslwz","ts":1781879520572,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520574-proigh","ts":1781879520574,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520575-k64ozr","ts":1781879520575,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520577-98do95","ts":1781879520577,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520578-3ydqa2","ts":1781879520578,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520580-y3xizw","ts":1781879520580,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520581-2k4uh1","ts":1781879520581,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520582-gwjj8r","ts":1781879520582,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520583-edk654","ts":1781879520583,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520584-81ol2g","ts":1781879520584,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520585-teyhtj","ts":1781879520585,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520586-5ksr2p","ts":1781879520586,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520677-t5jq9i","ts":1781879520677,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520678-ey9bxt","ts":1781879520678,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520680-a54jts","ts":1781879520680,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520681-rugrrd","ts":1781879520681,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520682-griovh","ts":1781879520682,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520684-i11z6i","ts":1781879520684,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520685-y171zh","ts":1781879520685,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520687-nclcs4","ts":1781879520687,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520688-ymrci6","ts":1781879520688,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520690-tez7r2","ts":1781879520690,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520692-owp617","ts":1781879520692,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520693-7qpthk","ts":1781879520693,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520695-19f2wg","ts":1781879520695,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520696-fwdr4m","ts":1781879520696,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520697-ymvqwx","ts":1781879520697,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520699-zap23y","ts":1781879520699,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520699-xytb7w","ts":1781879520699,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520700-92t9da","ts":1781879520700,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520701-bjqd2c","ts":1781879520701,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520703-zgzq7a","ts":1781879520703,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520704-g6fnj8","ts":1781879520704,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520705-kmnu6y","ts":1781879520705,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520706-a9br6q","ts":1781879520706,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520707-0p4bhq","ts":1781879520707,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520708-3gdnh3","ts":1781879520708,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520710-wf477b","ts":1781879520710,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520710-gozmwa","ts":1781879520710,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520860-8x0i9w","ts":1781879520860,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520862-4hx1jv","ts":1781879520862,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520863-6476r2","ts":1781879520863,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879520865-4zrune","ts":1781879520865,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879520867-l55zji","ts":1781879520867,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520868-xqe3zc","ts":1781879520868,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520869-9hkkj3","ts":1781879520869,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520870-xdih4y","ts":1781879520870,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520871-jvg17q","ts":1781879520871,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520872-hc1l7c","ts":1781879520872,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520873-y4dzko","ts":1781879520873,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520874-utsn31","ts":1781879520874,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520875-iyj3t7","ts":1781879520875,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520877-regv2m","ts":1781879520877,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520878-9h6piz","ts":1781879520878,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520879-yvustb","ts":1781879520879,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520880-80eood","ts":1781879520880,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520881-lshzsn","ts":1781879520881,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520882-8sk28r","ts":1781879520882,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520990-9ofea5","ts":1781879520990,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520991-1zznx6","ts":1781879520991,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520992-kggzaj","ts":1781879520992,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879520994-rflko9","ts":1781879520994,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879520995-ihfkuf","ts":1781879520995,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879520996-n4b2sa","ts":1781879520996,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879521209-nzi52t","ts":1781879521209,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879521213-oej8n3","ts":1781879521214,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879521241-2zdck7","ts":1781879521241,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879521242-ppebw3","ts":1781879521242,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879521243-pe6e3i","ts":1781879521243,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879521315-o240yh","ts":1781879521315,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879521320-4qm9mk","ts":1781879521320,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879521347-fiyhf8","ts":1781879521347,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879521349-8q0pi0","ts":1781879521349,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879521352-34a2rz","ts":1781879521352,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879521964-z9113v","ts":1781879521964,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879521971-ew8nls","ts":1781879521971,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522007-13a04k","ts":1781879522007,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522011-2z3yr0","ts":1781879522011,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522014-lql8ne","ts":1781879522014,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522018-qgedli","ts":1781879522018,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522021-jxa076","ts":1781879522021,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522022-cbcujp","ts":1781879522022,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522024-l4t7rc","ts":1781879522024,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522025-v90u3p","ts":1781879522025,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522027-gujpuv","ts":1781879522027,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522028-pts7bb","ts":1781879522028,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522093-66h4rp","ts":1781879522093,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522095-7rg7ju","ts":1781879522096,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522097-kk8nkl","ts":1781879522097,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522100-83btdz","ts":1781879522100,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522101-8y5c3t","ts":1781879522101,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522103-fzzllw","ts":1781879522103,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522104-uunwr1","ts":1781879522104,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522106-duysk5","ts":1781879522106,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522107-r5jyrs","ts":1781879522107,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522109-mvmfm6","ts":1781879522109,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522111-xy1kt6","ts":1781879522111,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522112-avss4m","ts":1781879522112,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522113-niygfx","ts":1781879522113,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522115-91hs47","ts":1781879522115,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522116-qtu89k","ts":1781879522116,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522117-9mvlzi","ts":1781879522117,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522217-cyjs6c","ts":1781879522217,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522219-z1dbbn","ts":1781879522219,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522221-he66zb","ts":1781879522221,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522223-lmveig","ts":1781879522223,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522224-tc1lw8","ts":1781879522224,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522226-lmc8rl","ts":1781879522226,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522227-w2ac87","ts":1781879522227,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522229-jru29l","ts":1781879522229,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522231-hya0u6","ts":1781879522231,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522233-yhdcp2","ts":1781879522233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=volume"}
+{"id":"1781879522236-qrahb7","ts":1781879522236,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522239-pybxq9","ts":1781879522239,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522242-cxl0tv","ts":1781879522242,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522244-czel62","ts":1781879522244,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522246-xjcbe0","ts":1781879522246,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522248-hyfsvm","ts":1781879522248,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522250-vmbx7w","ts":1781879522250,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522252-25r2d4","ts":1781879522252,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522254-vom52w","ts":1781879522254,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522256-sw3lkk","ts":1781879522256,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522258-66n28v","ts":1781879522258,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522260-2axmtj","ts":1781879522260,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522263-x2tgtd","ts":1781879522263,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522265-zw5fz6","ts":1781879522265,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522270-hvwxif","ts":1781879522270,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522455-xpjv64","ts":1781879522455,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522456-eqoh3q","ts":1781879522456,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522457-7tglk3","ts":1781879522457,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522459-jciia5","ts":1781879522459,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522460-y2kgyw","ts":1781879522460,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522461-04es55","ts":1781879522461,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522463-xqa96e","ts":1781879522463,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522464-365yo9","ts":1781879522464,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522465-psaxl7","ts":1781879522465,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522467-a7568v","ts":1781879522467,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522469-oseqbl","ts":1781879522469,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ volume"}
+{"id":"1781879522471-dxzlw6","ts":1781879522471,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879522896-lz9anz","ts":1781879522896,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879522901-83fk0d","ts":1781879522901,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=play"}
+{"id":"1781879522926-obhdxb","ts":1781879522926,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879522928-0np0qz","ts":1781879522928,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ play"}
+{"id":"1781879522930-ll8sk4","ts":1781879522930,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879523999-gmf306","ts":1781879523999,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879524005-780z1u","ts":1781879524005,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=play"}
+{"id":"1781879524033-c2hpis","ts":1781879524033,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879524035-m1sglk","ts":1781879524035,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ play"}
+{"id":"1781879524037-x1bezl","ts":1781879524037,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879524719-yqs6zg","ts":1781879524719,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879524724-l2day7","ts":1781879524724,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=play"}
+{"id":"1781879524757-aojjq9","ts":1781879524757,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879524759-ll6mhk","ts":1781879524759,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ play"}
+{"id":"1781879524761-9upcsp","ts":1781879524761,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879526015-um0wgx","ts":1781879526015,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879526021-9xxdef","ts":1781879526021,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=play"}
+{"id":"1781879526050-3m1b6l","ts":1781879526050,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879526052-p7odk8","ts":1781879526052,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ play"}
+{"id":"1781879526053-u8j68j","ts":1781879526053,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879536819-4qch1z","ts":1781879536819,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879566819-93l8pf","ts":1781879566819,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879571958-dldthx","ts":1781879571958,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879571965-vwt4bl","ts":1781879571965,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=rotate"}
+{"id":"1781879571999-rm5q8u","ts":1781879571999,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879572001-jdd0hn","ts":1781879572001,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ rotate"}
+{"id":"1781879572003-68giko","ts":1781879572003,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879572315-wzpdd3","ts":1781879572315,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 758 x 341.09375 sendToDisplay= true"}
+{"id":"1781879572316-ok7zz2","ts":1781879572316,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 758 x 341.09375 containerRect= 758 x 758"}
+{"id":"1781879572316-v2mbfr","ts":1781879572316,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 30.648936170212746 , 208.453125 尺寸= 696.7021276595746 x 341.09375"}
+{"id":"1781879572316-ykajhx","ts":1781879572316,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879572321-d9l3og","ts":1781879572321,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=crop"}
+{"id":"1781879572347-8s7lqc","ts":1781879572348,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879572349-dxk6qx","ts":1781879572349,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: crop ✓ 裁剪已应用"}
+{"id":"1781879572351-yvnqyn","ts":1781879572351,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879572947-4dbg4a","ts":1781879572947,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879572953-u1sfa3","ts":1781879572953,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=rotate"}
+{"id":"1781879572990-za9b0d","ts":1781879572990,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879572992-2egmtz","ts":1781879572992,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ rotate"}
+{"id":"1781879572993-4x9zhk","ts":1781879572993,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879573300-9gjo2o","ts":1781879573300,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 341.09375 x 758 sendToDisplay= true"}
+{"id":"1781879573300-vsh80n","ts":1781879573300,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 341.09375 x 758 containerRect= 758 x 758"}
+{"id":"1781879573301-avnjh4","ts":1781879573301,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 208.453125 , 295.5030924479167 尺寸= 341.09375 x 166.99381510416666"}
+{"id":"1781879573302-u3s4ez","ts":1781879573302,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879573308-e2w6s6","ts":1781879573308,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=crop"}
+{"id":"1781879573349-0vlnj7","ts":1781879573349,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879573350-w77d5b","ts":1781879573350,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: crop ✓ 裁剪已应用"}
+{"id":"1781879573352-ijy61a","ts":1781879573352,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879576052-zrszj8","ts":1781879576052,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879576057-yrl6gk","ts":1781879576057,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=fit"}
+{"id":"1781879576091-zevmwz","ts":1781879576091,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879576092-4j9vwb","ts":1781879576092,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ fit"}
+{"id":"1781879576094-rpmioj","ts":1781879576094,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879576153-q05728","ts":1781879576153,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 341.09375 x 758 containerRect= 758 x 758"}
+{"id":"1781879576153-naqsl2","ts":1781879576153,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 208.453125 , 295.5030924479167 尺寸= 341.09375 x 166.99381510416666"}
+{"id":"1781879576840-o4v6e4","ts":1781879576840,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< control displayId=display-7tksfnsw"}
+{"id":"1781879576845-vca4lb","ts":1781879576845,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> control action=fit"}
+{"id":"1781879576880-0lcwb3","ts":1781879576880,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879576882-cfie8o","ts":1781879576882,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: control ✓ fit"}
+{"id":"1781879576884-jwoi5m","ts":1781879576884,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879576948-7rptnb","ts":1781879576948,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 341.09375 x 758 containerRect= 758 x 758"}
+{"id":"1781879576949-vaa7lk","ts":1781879576949,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 208.453125 , 295.5030924479167 尺寸= 341.09375 x 166.99381510416666"}
+{"id":"1781879583516-5xei37","ts":1781879583516,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879584693-r142lw","ts":1781879584693,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879584696-35n827","ts":1781879584696,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879584700-phy59o","ts":1781879584700,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879584704-2g2lby","ts":1781879584704,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879584870-60b3gp","ts":1781879584870,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879584873-18j44r","ts":1781879584873,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879584874-inoljr","ts":1781879584874,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879586946-0g3fs3","ts":1781879586946,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879588306-3yoo7y","ts":1781879588306,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879588311-sy7uy6","ts":1781879588311,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879588314-00uh01","ts":1781879588314,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879588317-wtt9ff","ts":1781879588317,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879588507-xj5de9","ts":1781879588507,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879588510-8fkslf","ts":1781879588510,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879588513-0exf6t","ts":1781879588513,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879596819-gg12y3","ts":1781879596819,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879600265-zhnh7y","ts":1781879600265,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879600924-ddwps4","ts":1781879600924,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879600928-nl4135","ts":1781879600928,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879600932-bms2h3","ts":1781879600932,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879600936-4l8hna","ts":1781879600936,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879601021-lofo9a","ts":1781879601021,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879601023-9p17zp","ts":1781879601023,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879601024-mn570p","ts":1781879601024,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879626819-r1axgl","ts":1781879626819,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879627066-6jwcmw","ts":1781879627066,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879630315-lagyzb","ts":1781879630315,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879630321-0s3swp","ts":1781879630321,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879630330-zd6tqm","ts":1781879630330,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879630334-ncmuuk","ts":1781879630334,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879630623-mjfub2","ts":1781879630623,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879630626-aj8pt4","ts":1781879630626,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879630631-yyllqu","ts":1781879630631,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879635529-pnue1r","ts":1781879635529,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879636626-ozd2ck","ts":1781879636626,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879636631-dom1is","ts":1781879636631,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879636636-3p1imo","ts":1781879636636,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879636640-l42s95","ts":1781879636640,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879636741-hxyfo2","ts":1781879636741,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879636743-wtyrpo","ts":1781879636743,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879636745-uiwnrl","ts":1781879636745,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879645856-ev73bd","ts":1781879645856,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 0.75"}
+{"id":"1781879646663-4sgbxd","ts":1781879646663,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879646669-o4b50z","ts":1781879646669,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879646674-xj2p3h","ts":1781879646674,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879646679-tf95qv","ts":1781879646679,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879646781-gjk9h3","ts":1781879646781,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879646785-jj89ky","ts":1781879646785,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879646789-bdz8tc","ts":1781879646789,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879650589-g42ztu","ts":1781879650589,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879651658-4ab4j8","ts":1781879651658,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879651661-bsqce8","ts":1781879651661,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879651668-z2tsup","ts":1781879651668,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879651671-gb3vxz","ts":1781879651671,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879651818-jgh88y","ts":1781879651818,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879651823-6obs27","ts":1781879651823,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879651826-qqilcw","ts":1781879651826,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879656820-ud40qt","ts":1781879656820,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879657452-cj9iio","ts":1781879657452,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 0.6842105263157895"}
+{"id":"1781879658396-pmi7o4","ts":1781879658396,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879658399-isxvns","ts":1781879658399,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879658402-cmge68","ts":1781879658402,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879658409-gena6t","ts":1781879658409,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879658512-nw421c","ts":1781879658512,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879658514-d32i2q","ts":1781879658514,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879658516-bvwhsw","ts":1781879658516,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879668439-v4gtnu","ts":1781879668439,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 0.6842105263157895"}
+{"id":"1781879669311-1u20ye","ts":1781879669311,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879669315-3sj1t9","ts":1781879669315,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879669320-bl9dkq","ts":1781879669320,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879669326-c9kqso","ts":1781879669326,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879669431-iw1h4s","ts":1781879669431,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879669434-74isxz","ts":1781879669434,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879669436-vvnk85","ts":1781879669436,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879674172-vd6hv7","ts":1781879674172,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879675138-8rn29j","ts":1781879675138,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879675143-y9icb7","ts":1781879675143,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879675149-lg52xd","ts":1781879675149,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879675153-7ij9q9","ts":1781879675153,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879675244-ilb31j","ts":1781879675244,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879675248-37zb2a","ts":1781879675248,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879675253-9elrws","ts":1781879675253,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879686820-mxy000","ts":1781879686820,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879696385-4lwcp4","ts":1781879696385,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879697406-731t3m","ts":1781879697406,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879697409-u1oknb","ts":1781879697409,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879697411-t52ivy","ts":1781879697411,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879697414-ma2smf","ts":1781879697414,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879697530-0rbbac","ts":1781879697530,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879697536-qngx44","ts":1781879697536,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879697542-rq2zmh","ts":1781879697542,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879716820-eimu3g","ts":1781879716820,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879746830-23oinv","ts":1781879746830,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879776829-ns0l4q","ts":1781879776829,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879806829-b4uv23","ts":1781879806829,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879822665-qac7lc","ts":1781879822665,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774543864439_27363_1.jpeg mediaType: image hasCallback: false"}
+{"id":"1781879822665-svr8hh","ts":1781879822665,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img 已加载完成, 立即计算"}
+{"id":"1781879822666-fqbqmt","ts":1781879822666,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: mediaRect= 0 x 0 sendToDisplay= false"}
+{"id":"1781879822666-aj4djy","ts":1781879822666,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] recalculateSize: 媒体尺寸为0，跳过"}
+{"id":"1781879822667-06k6f1","ts":1781879822667,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
+{"id":"1781879822668-3jxn9q","ts":1781879822668,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 0.8071748878923767"}
+{"id":"1781879822668-8ecr5x","ts":1781879822668,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879822677-91362c","ts":1781879822677,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879822682-jmky0n","ts":1781879822682,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879822685-1614xx","ts":1781879822685,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> url url=https://192.168.1.39:8081/uploads/1774543864439_27363_1.jpeg"}
+{"id":"1781879822744-dv1tk8","ts":1781879822744,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879822747-vrizu2","ts":1781879822747,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ url"}
+{"id":"1781879822750-o0607j","ts":1781879822750,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879828366-nn7bcm","ts":1781879828366,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879829694-r02oxq","ts":1781879829694,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879829699-b6mwp4","ts":1781879829699,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879829705-ga9krb","ts":1781879829706,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879829711-c5lcri","ts":1781879829711,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879829865-sl9dxd","ts":1781879829865,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879829869-qr5zij","ts":1781879829869,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879829874-1ehowh","ts":1781879829874,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879834857-zafrec","ts":1781879834857,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 0.6842105263157895"}
+{"id":"1781879836062-7t5rxq","ts":1781879836062,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879836067-w6j4tq","ts":1781879836067,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879836074-z5h20f","ts":1781879836074,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879836080-k4zjqj","ts":1781879836080,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879836171-wuookv","ts":1781879836171,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879836177-fh3scc","ts":1781879836177,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879836181-oathdq","ts":1781879836181,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879836830-d939lk","ts":1781879836830,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879854183-za62p6","ts":1781879854183,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 0.5625"}
+{"id":"1781879855195-us6tek","ts":1781879855195,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879855213-q654xu","ts":1781879855213,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879855226-d4fcen","ts":1781879855226,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879855233-6e9pir","ts":1781879855233,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879855337-f0xy0x","ts":1781879855337,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879855340-f1ji80","ts":1781879855340,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879855343-yz8o28","ts":1781879855343,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879862734-u80vmq","ts":1781879862734,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[控制端] sendMedia displayIds: [\"display-7tksfnsw\"] mediaRatio: 1"}
+{"id":"1781879865295-8nwg8c","ts":1781879865295,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< mediaBatch"}
+{"id":"1781879865304-mv8fd1","ts":1781879865304,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"收到 mediaBatch, displayIds: display-7tksfnsw"}
+{"id":"1781879865314-ht92pn","ts":1781879865314,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"临时媒体发送到显示端: display-7tksfnsw"}
+{"id":"1781879865317-0knb6l","ts":1781879865317,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> base64"}
+{"id":"1781879865515-c1r7nz","ts":1781879865515,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879865522-qsvts9","ts":1781879865522,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ base64"}
+{"id":"1781879865527-syabum","ts":1781879865527,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879866831-nynejk","ts":1781879866831,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}

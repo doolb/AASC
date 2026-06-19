@@ -4,6 +4,21 @@
 
 ### 新增
 
+- ✅ [2026-06-19] 上传新增临时模式：base64 中转，文件不保存到服务器磁盘
+  - 控制端 upload.html 新增"临时模式"checkbox + 大小上限输入（默认 300MB）
+  - control端 upload.js 新增 fileToBase64/getMediaDimensions，临时模式走 base64 WebSocket 发送
+  - 服务端 WebSocket maxPayload 提升至 500MB，mediaBatch/media 处理增加 temp 标记跳过状态持久化
+  - 显示端复用已有 type:'base64' 渲染分支，无需改动
+  - 新增文档：docs/spec/upload.md
+  - 改动文件：
+    - src/apps/server/boot/server-app.js
+    - src/apps/web-mediacenter/ui/public/upload.html
+    - src/apps/web-mediacenter/ui/public/css/upload.css
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - docs/spec/upload.md
+
+- ✅ [2026-05-30] 控制端裁剪框（crop.js）增加详细打印 + 修复刷新后裁剪框重置 Bug
+
 - ✅ [2026-05-30] 控制端裁剪框（crop.js）增加详细打印 + 修复刷新后裁剪框重置 Bug
   - Bug：`showPreview()` 在媒体已缓存时，`onload` 事件和 `complete` 检查两条路径都会触发回调，
     第二次回调因 `_onReadyCallback` 为 null 调用 `recalculateSize(false)`，覆盖了从 `displayState` 

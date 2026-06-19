@@ -1036,7 +1036,8 @@
                 mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || '来自URL';
                 fileNameDisplay.textContent = mediaName;
             } else if (data.type === 'base64') {
-                const src = 'data:application/octet-stream;base64,' + data.data;
+                const mimeType = data.mimeType || 'application/octet-stream';
+                const src = 'data:' + mimeType + ';base64,' + data.data;
                 
                 if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';

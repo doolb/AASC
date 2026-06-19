@@ -37,6 +37,7 @@
 | 资源目录 | [resource-layout.md](spec/resource-layout.md) | 资源路径规范、目录整理、清理伪代码 |
 | 工程目录结构 | [project-structure.md](spec/project-structure.md) | 目录扫描、分类归位、文档索引同步伪代码 |
 | 远程任务系统 | [remote-task-system.md](spec/remote-task-system.md) | 远程 JS 代码执行、任务生命周期、三种运行时 |
+| 上传功能 | [upload.md](spec/upload.md) | 普通上传 + 临时模式 base64 中转 |
 | test-echo 用户任务 | [test-echo.md](spec/test-echo.md) | 测试用户任务参数定义与读取流程 |
 | WebGPU 用户任务 | [webgpu-render.md](spec/webgpu-render.md) | 显示端 WebGPU 渲染图片并持久化到服务端 |
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
@@ -74,7 +75,7 @@
 | 聊天界面 | src/apps/web-mediacenter/ui/public/js/chat.js | AI 聊天界面 |
 | 搜索界面 | src/apps/web-mediacenter/ui/public/js/search.js | 搜索历史管理、手动搜索 |
 | 主入口 | src/apps/web-mediacenter/ui/public/js/main.js | 初始化、导航切换 |
-| 上传功能 | src/apps/web-mediacenter/ui/public/js/upload.js | 文件上传处理 |
+| 上传功能 | [upload.md](spec/upload.md) | 普通上传 + 临时模式 base64 中转 |
 | 显示端列表 | src/apps/web-mediacenter/ui/public/js/device-list.js | 设备列表组件，支持列表/树形视图切换 |
 | TTS控制 | src/apps/web-mediacenter/ui/public/js/tts.js | TTS 前端控制 |
 | 本地ASR | src/apps/web-mediacenter/ui/public/js/sherpa-asr.js | sherpa-onnx-wasm 本地语音识别 |

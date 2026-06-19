@@ -1,94 +1,86 @@
-{"id":"1780073471051-woxq22","ts":1780073471051,"cat":"媒体库","lvl":"info","dev":"server","src":null,"msg":"媒体库初始化完成"}
-{"id":"1780073471057-hw7izi","ts":1780073471057,"cat":"子显示端","lvl":"info","dev":"display","src":null,"msg":"配置已更新: https://192.168.1.39:8081"}
-{"id":"1780073471112-0x1s0t","ts":1780073471112,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"媒体中心服务器已启动"}
-{"id":"1780073471112-4a8x5d","ts":1780073471112,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"上传端地址: https://192.168.1.39:8081/upload"}
-{"id":"1780073471113-sp1s7c","ts":1780073471113,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"显示端地址: https://192.168.1.39:8081/display"}
-{"id":"1780073471113-qly2jl","ts":1780073471113,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"HTTPS 已启用，支持麦克风等安全特性"}
-{"id":"1780073471117-uitlb6","ts":1780073471117,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"ViewBind WS 系统初始化完成"}
-{"id":"1780073471140-0fq5o2","ts":1780073471140,"cat":"任务引擎","lvl":"info","dev":"server","src":null,"msg":"远程任务系统已初始化"}
-{"id":"1780073471338-zlc5sq","ts":1780073471338,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
-{"id":"1780073471338-0mrz38","ts":1780073471338,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073471379-j3xfgo","ts":1780073471379,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073471379-a95cr5","ts":1780073471379,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073471390-grbafa","ts":1780073471390,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"WebSocket 连接成功"}
-{"id":"1780073471391-0ivn8r","ts":1780073471391,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073471398-0bxbxb","ts":1780073471398,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073471424-zzs9hf","ts":1780073471424,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073471428-5msbzi","ts":1780073471428,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
-{"id":"1780073471428-sbl4s7","ts":1780073471428,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073471432-i0jr2t","ts":1780073471432,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
-{"id":"1780073471440-l60y1t","ts":1780073471440,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
-{"id":"1780073471510-spypjn","ts":1780073471510,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073471510-27bi7k","ts":1780073471510,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073471889-0q4ac1","ts":1780073471889,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073471889-310v6r","ts":1780073471889,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073471895-d31bzl","ts":1780073471895,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073471895-famn3j","ts":1780073471895,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073471940-aieetc","ts":1780073471940,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073472371-e7vuhl","ts":1780073472371,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073472682-xtj7h7","ts":1780073472682,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073472682-hlt017","ts":1780073472682,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073472696-ixrf5q","ts":1780073472696,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073472697-u1a8s3","ts":1780073472697,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073472884-clqbn1","ts":1780073472884,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073473185-54uych","ts":1780073473185,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073473199-whn5md","ts":1780073473199,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073473199-icoozs","ts":1780073473199,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073473850-czv1qe","ts":1780073473850,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
-{"id":"1780073473853-a3ak5l","ts":1780073473853,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
-{"id":"1780073473856-n3fyw7","ts":1780073473856,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073473857-c9jt61","ts":1780073473857,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
-{"id":"1780073473858-fsetnd","ts":1780073473858,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073473858-qccx8t","ts":1780073473858,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073473859-2cwovu","ts":1780073473859,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073473859-vpg4qu","ts":1780073473859,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073473859-7wvvs7","ts":1780073473859,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073473875-qoo2wz","ts":1780073473875,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073473915-1sgpxq","ts":1780073473915,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
-{"id":"1780073473916-72r7aa","ts":1780073473916,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073473978-7rzvaa","ts":1780073473978,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
-{"id":"1780073473978-tlr1lv","ts":1780073473978,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073474047-lcuzjy","ts":1780073474047,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073474049-ybtlkw","ts":1780073474049,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
-{"id":"1780073474049-x30vb2","ts":1780073474049,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073474303-2ui1er","ts":1780073474303,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073474303-rh5g16","ts":1780073474303,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.09234619140625 , 193.44357045491532 尺寸= 757.98291015625 x 371.0957997639975"}
-{"id":"1780073474344-wvfi3p","ts":1780073474344,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-7tksfnsw"}
-{"id":"1780073474344-02wfh1","ts":1780073474344,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-7tksfnsw 已断开，当前连接数: 0"}
-{"id":"1780073474355-4nfpaw","ts":1780073474355,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073474654-j974ss","ts":1780073474654,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
-{"id":"1780073474654-sh288m","ts":1780073474654,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
-{"id":"1780073474662-cqljd4","ts":1780073474662,"cat":"设备","lvl":"info","dev":"display","src":null,"msg":"防抖跳过: 192.168.1.6 onConnect，距上次 1s"}
-{"id":"1780073474665-0kvpy0","ts":1780073474665,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073474668-t33403","ts":1780073474668,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
-{"id":"1780073474668-9svn4i","ts":1780073474668,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073474750-axl39r","ts":1780073474750,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
-{"id":"1780073474750-qzabp8","ts":1780073474750,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073474827-9jbjs3","ts":1780073474827,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
-{"id":"1780073474828-bok5hb","ts":1780073474828,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
-{"id":"1780073474893-vvslcp","ts":1780073474893,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
-{"id":"1780073474893-97pe2p","ts":1780073474893,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
-{"id":"1780073474893-m4bupd","ts":1780073474893,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
-{"id":"1780073480511-cfzdz3","ts":1780073480511,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
-{"id":"1780073480519-26zvaz","ts":1780073480519,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
-{"id":"1780073481446-g1kxhv","ts":1780073481446,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
-{"id":"1780073481449-zrmk2a","ts":1780073481449,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
-{"id":"1780073481454-8sl2p9","ts":1780073481454,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
-{"id":"1780073481456-e0qwqb","ts":1780073481456,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
-{"id":"1780073481463-f47fcb","ts":1780073481463,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
-{"id":"1780073481468-enuftl","ts":1780073481468,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
-{"id":"1780073481468-q5rgy2","ts":1780073481468,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image"}
-{"id":"1780073481468-u2vags","ts":1780073481468,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png mediaType: image hasCallback: true"}
-{"id":"1780073481479-ztuuc0","ts":1780073481479,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
-{"id":"1780073481819-xhgflq","ts":1780073481819,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
-{"id":"1780073481835-f336y0","ts":1780073481835,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 757.98291015625 x 505.3266906738281 containerRect= 758.1817626953125 x 757.9971313476562"}
-{"id":"1780073481835-0alee3","ts":1780073481835,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: box位置= 0.09234619140625 , 193.44357045491532 尺寸= 757.98291015625 x 371.0957997639975"}
-{"id":"1780073482123-9wkynv","ts":1780073482123,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
-{"id":"1780073482125-c0blr1","ts":1780073482125,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073482141-fq784n","ts":1780073482141,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073482143-ovgpfl","ts":1780073482143,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073482327-op8bwh","ts":1780073482327,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
-{"id":"1780073482634-jk719a","ts":1780073482634,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
-{"id":"1780073482761-dwkmr8","ts":1780073482761,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
-{"id":"1780073482762-krvhvv","ts":1780073482762,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
-{"id":"1780073501440-kuz604","ts":1780073501440,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879879619-74kcbw","ts":1781879879619,"cat":"媒体库","lvl":"info","dev":"server","src":null,"msg":"媒体库初始化完成"}
+{"id":"1781879879626-4cet6g","ts":1781879879626,"cat":"子显示端","lvl":"info","dev":"display","src":null,"msg":"配置已更新: https://192.168.1.39:8081"}
+{"id":"1781879879647-laclxx","ts":1781879879647,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"媒体中心服务器已启动"}
+{"id":"1781879879648-7fkwvm","ts":1781879879648,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"上传端地址: https://192.168.1.39:8081/upload"}
+{"id":"1781879879648-iba7px","ts":1781879879648,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"显示端地址: https://192.168.1.39:8081/display"}
+{"id":"1781879879649-7wikzw","ts":1781879879649,"cat":"系统","lvl":"info","dev":"server","src":null,"msg":"HTTPS 已启用，支持麦克风等安全特性"}
+{"id":"1781879879652-cu5apj","ts":1781879879652,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"ViewBind WS 系统初始化完成"}
+{"id":"1781879879654-rh5wew","ts":1781879879654,"cat":"任务引擎","lvl":"info","dev":"server","src":null,"msg":"远程任务系统已初始化"}
+{"id":"1781879879795-w6be1h","ts":1781879879795,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1781879879797-ski0ru","ts":1781879879797,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879879830-dq8boy","ts":1781879879830,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879879832-qh2bxt","ts":1781879879832,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1781879879833-xpeyx9","ts":1781879879833,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879879834-b7zn58","ts":1781879879834,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:log"}
+{"id":"1781879879838-gu7eod","ts":1781879879838,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:progress"}
+{"id":"1781879880310-epcq18","ts":1781879880310,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
+{"id":"1781879880311-y4qyvs","ts":1781879880311,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
+{"id":"1781879880327-38lgqq","ts":1781879880327,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880329-yf6ajt","ts":1781879880329,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
+{"id":"1781879880351-yzcsgf","ts":1781879880351,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880354-8rh3s0","ts":1781879880354,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879880375-5ccyr7","ts":1781879880375,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
+{"id":"1781879880387-1joeed","ts":1781879880388,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880396-nxv2ih","ts":1781879880396,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
+{"id":"1781879880402-efxejq","ts":1781879880402,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880413-sf32h7","ts":1781879880413,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879880414-wi3l04","ts":1781879880414,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
+{"id":"1781879880415-howvwy","ts":1781879880415,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879880524-ogw53w","ts":1781879880524,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-7tksfnsw"}
+{"id":"1781879880526-vd2jcq","ts":1781879880526,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-7tksfnsw 已断开，当前连接数: 0"}
+{"id":"1781879880535-lykcz6","ts":1781879880535,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880676-gahxc7","ts":1781879880676,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-7tksfnsw (192.168.1.6) 已连接，当前连接数: 1"}
+{"id":"1781879880677-hqe9oc","ts":1781879880677,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-7tksfnsw (192.168.1.6)"}
+{"id":"1781879880678-zgik3v","ts":1781879880678,"cat":"设备","lvl":"info","dev":"display","src":null,"msg":"防抖跳过: 192.168.1.6 onConnect，距上次 0s"}
+{"id":"1781879880687-kzmxyd","ts":1781879880687,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880693-nabskf","ts":1781879880693,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< canvasSize"}
+{"id":"1781879880716-br4mz6","ts":1781879880716,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880718-d14921","ts":1781879880718,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< browserInfo"}
+{"id":"1781879880802-fvzp72","ts":1781879880802,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879880806-24yp4l","ts":1781879880806,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< voiceStatus"}
+{"id":"1781879880807-i9m1nd","ts":1781879880807,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879880808-dxpsab","ts":1781879880808,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: restoreState ✓ state restored"}
+{"id":"1781879880808-77sgkj","ts":1781879880808,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879880824-fgz8eg","ts":1781879880824,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1781879882294-f4oqlq","ts":1781879882294,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
+{"id":"1781879882296-2mw8q9","ts":1781879882296,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
+{"id":"1781879882328-x1qjsc","ts":1781879882328,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"WebSocket 连接成功"}
+{"id":"1781879882330-bsnmny","ts":1781879882330,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
+{"id":"1781879882339-8vbuvn","ts":1781879882339,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
+{"id":"1781879882455-18ntd0","ts":1781879882455,"cat":"控制端","lvl":"error","dev":"control","src":"control","msg":"加载LLM配置失败: {}"}
+{"id":"1781879882462-hvues6","ts":1781879882462,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端断开"}
+{"id":"1781879882463-q7d6wm","ts":1781879882463,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"控制端已断开，当前连接数: 0"}
+{"id":"1781879882856-dk23jc","ts":1781879882856,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"控制端连接"}
+{"id":"1781879882857-7tbbsh","ts":1781879882857,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"控制端已连接，当前连接数: 1"}
+{"id":"1781879882871-bmwxqs","ts":1781879882871,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatSession"}
+{"id":"1781879882874-d9e8va","ts":1781879882874,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getChatCommands"}
+{"id":"1781879882876-mm9qfl","ts":1781879882876,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getState displayId=display-7tksfnsw"}
+{"id":"1781879882939-6ktthd","ts":1781879882939,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] displayState 收到, displayId: display-7tksfnsw currentDisplayId: display-7tksfnsw"}
+{"id":"1781879882940-p43kzt","ts":1781879882940,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[WS] 调用 showPreview, url: https://192.168.1.39:8081/uploads/1774543864439_27363_1.jpeg mediaType: image"}
+{"id":"1781879882942-na1ix0","ts":1781879882942,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] showPreview 开始, url: https://192.168.1.39:8081/uploads/1774543864439_27363_1.jpeg mediaType: image hasCallback: true"}
+{"id":"1781879882955-xnkc57","ts":1781879882955,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] img onload 触发"}
+{"id":"1781879883303-35rp67","ts":1781879883303,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: mediaRect= 0 x 0 containerRect= 0 x 0"}
+{"id":"1781879883303-gtjx9k","ts":1781879883303,"cat":"控制端","lvl":"info","dev":"control","src":"control","msg":"[Crop] updateBox: 媒体尺寸为0，跳过"}
+{"id":"1781879883316-f231se","ts":1781879883316,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getSearchHistory"}
+{"id":"1781879883614-wcp42f","ts":1781879883614,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< displayList"}
+{"id":"1781879883615-afn9nc","ts":1781879883615,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1781879883639-y2gumx","ts":1781879883639,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1781879883640-9x57nb","ts":1781879883640,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879883819-8yhp3q","ts":1781879883819,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< getCommandRouting"}
+{"id":"1781879884115-rt4zjg","ts":1781879884115,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:list"}
+{"id":"1781879884136-o014fw","ts":1781879884136,"cat":"WS","lvl":"info","dev":"server","src":"control","msg":"<< task:widget_action"}
+{"id":"1781879884137-b43buo","ts":1781879884137,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879889974-mezino","ts":1781879889974,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> url url=https://192.168.1.39:8081/uploads/1781879889972_ComfyUI_00141_.png"}
+{"id":"1781879890038-uy0ukl","ts":1781879890038,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879890040-5xcw5j","ts":1781879890040,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ url"}
+{"id":"1781879890042-nx3xkv","ts":1781879890042,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879902131-xzrxab","ts":1781879902131,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> url url=https://192.168.1.39:8081/uploads/1781879902129_ComfyUI_00009_.mp4"}
+{"id":"1781879902173-yp7pvq","ts":1781879902173,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879902173-dl7zsh","ts":1781879902173,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ url"}
+{"id":"1781879902174-748098","ts":1781879902174,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879906016-asczf4","ts":1781879906016,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> url url=https://192.168.1.39:8081/uploads/1781879906015_ComfyUI_00001_.mp4"}
+{"id":"1781879906054-h1g4ui","ts":1781879906054,"cat":"WS","lvl":"info","dev":"server","src":"display:display-7tksfnsw","msg":"<< commandAck"}
+{"id":"1781879906055-6rxzzg","ts":1781879906055,"cat":"WS","lvl":"info","dev":"server","src":"display-7tksfnsw","msg":"<< display-7tksfnsw ACK: media ✓ url"}
+{"id":"1781879906056-th97sc","ts":1781879906056,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> commandAck"}
+{"id":"1781879909836-02nf3n","ts":1781879909836,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1781879939836-v4uyh8","ts":1781879939836,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}

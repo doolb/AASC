@@ -84,6 +84,17 @@
                 </div>
                 <input type="file" id="imageInput" accept="image/*">
                 <input type="file" id="videoInput" accept="video/*">
+                <div class="temp-mode-row">
+                    <label class="temp-mode-label">
+                        <input type="checkbox" id="tempMode">
+                        <span>临时模式（仅中转，不保存文件）</span>
+                    </label>
+                    <label class="temp-size-label">
+                        <span>上限</span>
+                        <input type="number" id="tempMaxSize" value="300" min="1" class="temp-size-input">
+                        <span>MB</span>
+                    </label>
+                </div>
             </div>
             
             <div class="section">

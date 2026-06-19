@@ -5,13 +5,85 @@ const Upload = {
         if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
         return 'image';
     },
+
+    fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64 = reader.result.includes(',') ? reader.result.split(',')[1] : reader.result;
+                resolve(base64);
+            };
+            reader.onerror = () => reject(new Error('读取文件失败'));
+            reader.readAsDataURL(file);
+        });
+    },
+
+    getMediaDimensions(file, base64) {
+        const dataUrl = 'data:application/octet-stream;base64,' + base64;
+        const mediaType = this.detectMediaType(file.name);
+        return new Promise((resolve) => {
+            if (mediaType === 'video') {
+                const video = document.createElement('video');
+                video.onloadedmetadata = () => {
+                    resolve({ width: video.videoWidth, height: video.videoHeight });
+                    video.remove();
+                };
+                video.onerror = () => resolve(null);
+                video.preload = 'metadata';
+                video.src = dataUrl;
+            } else {
+                const img = new Image();
+                img.onload = () => {
+                    resolve({ width: img.naturalWidth, height: img.naturalHeight });
+                    img.remove();
+                };
+                img.onerror = () => resolve(null);
+                img.src = dataUrl;
+            }
+        });
+    },
     
     async uploadFile(file) {
         if (!window.currentDisplayId) {
             showToast('请先选择显示端', 'error');
             return;
         }
-        
+
+        const tempMode = document.getElementById('tempMode')?.checked;
+        if (tempMode) {
+            const maxSizeMB = parseInt(document.getElementById('tempMaxSize')?.value || '300') || 300;
+            const maxSizeBytes = maxSizeMB * 1024 * 1024;
+            if (file.size > maxSizeBytes) {
+                showToast(`临时模式文件大小不能超过 ${maxSizeMB}MB`, 'error');
+                return;
+            }
+
+            showToast('正在读取文件...', 'loading');
+
+            try {
+                const base64 = await this.fileToBase64(file);
+                const mediaType = this.detectMediaType(file.name);
+                const dims = await this.getMediaDimensions(file, base64);
+
+                if (window.WebSocketManager) {
+                    window.WebSocketManager.sendMedia({
+                        type: 'base64',
+                        data: base64,
+                        fileName: file.name,
+                        mediaType: mediaType,
+                        mimeType: file.type || undefined,
+                        temp: true,
+                        width: dims?.width,
+                        height: dims?.height
+                    });
+                }
+                showToast('已发送到显示端', 'success');
+            } catch (err) {
+                showToast('发送失败: ' + err.message, 'error');
+            }
+            return;
+        }
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('displayId', window.currentDisplayId);

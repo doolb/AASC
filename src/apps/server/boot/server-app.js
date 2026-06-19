@@ -209,7 +209,7 @@ if (fs.existsSync(sslKeyPath) && fs.existsSync(sslCertPath)) {
     useHttps = false;
 }
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server, maxPayload: 500 * 1024 * 1024 });
 
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -2981,12 +2981,12 @@ async function handleControlMessageFallback(data, ws) {
                     displayIds.forEach(id => {
                         const dd = displayClients.get(id);
                         if (dd) {
-                            dd.state.currentMedia = data.media;
-                            config.updateDisplayState(dd.ip, { currentMedia: data.media });
-                            log('系统', `发送媒体到显示端: ${id}`);
+                            if (!data.media.temp) {
+                                dd.state.currentMedia = data.media;
+                                config.updateDisplayState(dd.ip, { currentMedia: data.media });
+                            }
+                            log('系统', `${data.media.temp ? '临时媒体' : '媒体'}发送到显示端: ${id}`);
                             sendToDisplay(id, data.media);
-                        } else {
-                            log('系统', `显示端不存在: ${id}`);
                         }
                     });
                     return;
@@ -3006,8 +3006,10 @@ async function handleControlMessageFallback(data, ws) {
                         state: stateToSend
                     }));
                 } else if (data.type === 'media') {
-                    displayData.state.currentMedia = data.media;
-                    config.updateDisplayState(displayData.ip, { currentMedia: data.media });
+                    if (!data.media.temp) {
+                        displayData.state.currentMedia = data.media;
+                        config.updateDisplayState(displayData.ip, { currentMedia: data.media });
+                    }
                     sendToDisplay(displayId, data.media);
                 } else if (data.type === 'control') {
                     if (data.action === 'rotate') {
