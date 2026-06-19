@@ -7,6 +7,7 @@
 - ✅ [2026-06-19] 显示控制面板新增拖拽/粘贴上传，走临时模式
   - 裁剪预览区域 (#cropPreviewContainer) 支持拖入文件，display 面板可见时支持 Ctrl+V 粘贴（图片/视频）
   - upload.js 新增 sendTempFile() 复用 fileToBase64/getMediaDimensions/sendMedia 临时模式链路
+  - temp 模式上传后本地 data URL 同步更新裁剪预览（不依赖服务器状态）
   - drag-over 状态虚线高亮边框
   - 改动文件：
     - src/apps/web-mediacenter/ui/public/js/upload.js

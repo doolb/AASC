@@ -77,6 +77,12 @@ const Upload = {
                         height: dims?.height
                     });
                 }
+                const dataUrl = 'data:' + (file.type || 'application/octet-stream') + ';base64,' + base64;
+                if (window.Crop) {
+                    window.Crop.showPreview(dataUrl, mediaType, () => {
+                        window.Crop.updateBox();
+                    });
+                }
                 showToast('已发送到显示端', 'success');
             } catch (err) {
                 showToast('发送失败: ' + err.message, 'error');
@@ -134,6 +140,12 @@ const Upload = {
                     temp: true,
                     width: dims?.width,
                     height: dims?.height
+                });
+            }
+            const dataUrl = 'data:' + (file.type || 'application/octet-stream') + ';base64,' + base64;
+            if (window.Crop) {
+                window.Crop.showPreview(dataUrl, mediaType, () => {
+                    window.Crop.updateBox();
                 });
             }
             showToast('已发送到显示端', 'success');
