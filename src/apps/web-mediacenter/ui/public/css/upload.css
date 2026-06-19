@@ -718,6 +718,11 @@ input[type="range"]::-webkit-slider-thumb:active {
     transition: transform 0.3s ease;
 }
 
+.crop-preview-container.drag-over {
+    border: 3px dashed #4CAF50;
+    background: rgba(76, 175, 80, 0.08);
+}
+
 .crop-preview-media.rotate-90 {
     transform: rotate(90deg);
 }

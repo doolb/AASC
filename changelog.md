@@ -4,6 +4,14 @@
 
 ### 新增
 
+- ✅ [2026-06-19] 显示控制面板新增拖拽/粘贴上传，走临时模式
+  - 裁剪预览区域 (#cropPreviewContainer) 支持拖入文件，display 面板可见时支持 Ctrl+V 粘贴（图片/视频）
+  - upload.js 新增 sendTempFile() 复用 fileToBase64/getMediaDimensions/sendMedia 临时模式链路
+  - drag-over 状态虚线高亮边框
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - src/apps/web-mediacenter/ui/public/css/upload.css
+
 - ✅ [2026-06-19] 上传新增临时模式：base64 中转，文件不保存到服务器磁盘
   - 控制端 upload.html 新增"临时模式"checkbox + 大小上限输入（默认 300MB）
   - control端 upload.js 新增 fileToBase64/getMediaDimensions，临时模式走 base64 WebSocket 发送

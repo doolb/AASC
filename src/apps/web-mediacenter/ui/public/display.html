@@ -1014,6 +1014,9 @@
         }
         
         function showMedia(data) {
+            mediaVideo.pause();
+            mediaVideo.src = '';
+            mediaVideo.load();
             waitingMessage.style.display = 'none';
             
             let mediaName = '';

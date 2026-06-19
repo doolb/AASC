@@ -110,6 +110,38 @@ const Upload = {
         }
     },
     
+    async sendTempFile(file) {
+        const maxSizeBytes = 300 * 1024 * 1024;
+        if (file.size > maxSizeBytes) {
+            showToast('文件大小不能超过 300MB', 'error');
+            return;
+        }
+
+        showToast('正在读取文件...', 'loading');
+
+        try {
+            const base64 = await this.fileToBase64(file);
+            const mediaType = this.detectMediaType(file.name);
+            const dims = await this.getMediaDimensions(file, base64);
+
+            if (window.WebSocketManager) {
+                window.WebSocketManager.sendMedia({
+                    type: 'base64',
+                    data: base64,
+                    fileName: file.name,
+                    mediaType: mediaType,
+                    mimeType: file.type || undefined,
+                    temp: true,
+                    width: dims?.width,
+                    height: dims?.height
+                });
+            }
+            showToast('已发送到显示端', 'success');
+        } catch (err) {
+            showToast('发送失败: ' + err.message, 'error');
+        }
+    },
+
     uploadByUrl() {
         const urlInput = document.getElementById('urlInput');
         const url = urlInput.value.trim();
@@ -158,6 +190,43 @@ const Upload = {
                 if (e.key === 'Enter') this.uploadByUrl();
             });
         }
+
+        const previewContainer = document.getElementById('cropPreviewContainer');
+        if (previewContainer) {
+            previewContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                previewContainer.classList.add('drag-over');
+            });
+            previewContainer.addEventListener('dragleave', () => {
+                previewContainer.classList.remove('drag-over');
+            });
+            previewContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                previewContainer.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file) this.sendTempFile(file);
+            });
+        }
+
+        document.addEventListener('paste', (e) => {
+            const panel = document.getElementById('panel-display');
+            if (!panel || panel.style.display === 'none') return;
+            const file = e.clipboardData?.files?.[0];
+            if (file) { this.sendTempFile(file); return; }
+            for (const item of e.clipboardData?.items || []) {
+                if (item.type.startsWith('image/') || item.type.startsWith('video/')) {
+                    const blob = item.getAsFile();
+                    if (blob) {
+                        const ext = item.type.split('/')[1] || 'png';
+                        const named = new File([blob], `clipboard_${Date.now()}.${ext}`, { type: item.type });
+                        this.sendTempFile(named);
+                    }
+                    break;
+                }
+            }
+        });
     }
 };
 

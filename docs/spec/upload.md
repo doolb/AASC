@@ -158,10 +158,72 @@ else:
 - 文件大小受 `maxPayload` 和浏览器内存限制
 - base64 编码导致约 33% 体积膨胀
 
+## 显示面板拖拽/粘贴上传
+
+### 概述
+在显示控制面板的画面裁剪区域支持拖入文件或 Ctrl+V 粘贴，走临时模式（base64 中转，不存盘）。
+
+### 数据流
+```
+用户在裁剪预览区 (#cropPreviewContainer) 拖入/粘贴文件
+  → upload.js sendTempFile(file)
+  → fileToBase64 → getMediaDimensions
+  → WebSocketManager.sendMedia({type:'base64', data, fileName, mediaType, mimeType, temp:true, width, height})
+  → WS mediaBatch → 服务器 → 显示端（复用临时模式）
+```
+
+### 事件绑定 (upload.js init)
+```
+cropPreviewContainer.addEventListener('dragover'):
+    e.preventDefault(), 添加 drag-over class
+
+cropPreviewContainer.addEventListener('dragleave'):
+    移除 drag-over class
+
+cropPreviewContainer.addEventListener('drop'):
+    e.preventDefault(), 移除 drag-over
+    file = e.dataTransfer.files[0]
+    sendTempFile(file)
+
+document.addEventListener('paste'):
+    if 显示控制面板不可见: return
+    file = e.clipboardData.files[0]
+    if file: sendTempFile(file); return
+    遍历 clipboardData.items:
+        if type 以 image/ 或 video/ 开头:
+            blob = item.getAsFile()
+            new File([blob], 'clipboard_时间戳.ext', {type})
+            sendTempFile(namedFile)
+```
+
+### sendTempFile 实现 (upload.js)
+```
+async sendTempFile(file):
+    if file.size > 300 * 1024 * 1024: showToast error, return
+    
+    base64 = fileToBase64(file)
+    mediaType = detectMediaType(file.name)
+    dims = getMediaDimensions(file, base64)
+    
+    WebSocketManager.sendMedia({
+        type: 'base64',
+        data: base64,
+        fileName: file.name,
+        mediaType,
+        mimeType: file.type || undefined,
+        temp: true,
+        width: dims.width,
+        height: dims.height
+    })
+```
+
 ### 样式 (upload.css)
 
 ```
 .temp-mode-row: flex 行布局, 居中, gap 16px
 .temp-mode-label: inline-flex, checkbox + 文字
 .temp-size-input: 60px 宽度, 深色背景, 居中数字
+.crop-preview-container.drag-over:
+    border: 3px dashed #4CAF50
+    background: rgba(76, 175, 80, 0.08)
 ```

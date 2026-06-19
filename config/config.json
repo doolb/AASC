@@ -158,20 +158,40 @@
     "192.168.1.6": {
       "currentMedia": {
         "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/1774543864439_27363_1.jpeg",
-        "mediaType": "image"
+        "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
+        "mediaType": "video",
+        "correlationId": "url-1781882190209-i0rt"
       },
       "rotation": 90,
       "fit": "height",
       "crop": {
         "x": 0,
-        "y": 38.98457684009455,
+        "y": 34.1796875,
         "width": 100,
-        "height": 22.030846319810905
+        "height": 31.640625
       },
       "volume": 100,
       "playlist": [],
       "isPlaying": true
+    },
+    "192.168.1.33": {
+      "currentMedia": {
+        "type": "url",
+        "url": "https://192.168.1.39:8081/uploads/1774541075724_27856_1.mp4",
+        "mediaType": "video",
+        "correlationId": "url-1781881766012-88ri"
+      },
+      "rotation": 90,
+      "fit": "contain",
+      "crop": {
+        "x": 0,
+        "y": 10.954625947260237,
+        "width": 100,
+        "height": 63.051170269067924
+      },
+      "volume": 100,
+      "playlist": [],
+      "isPlaying": false
     }
   },
   "deviceEvents": {
