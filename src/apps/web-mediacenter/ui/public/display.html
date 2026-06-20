@@ -483,21 +483,26 @@
             if (_cropRafId) return;
             _cropRafId = requestAnimationFrame(() => {
                 _cropRafId = null;
-                const info = applyCrop();
+                const info = applyCrop(true);
                 if (_cropDebug) {
                     sendCommandAck('crop', true, '裁剪已应用', info);
                 }
             });
         }
 
-        function applyCrop() {
+        function applyCrop(isContinuous) {
             const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
-            
-            media.classList.remove('crop');
-            media.style.width = '';
-            media.style.height = '';
-            media.style.left = '';
-            media.style.top = '';
+
+            if (!isContinuous) {
+                media.style.transition = 'none';
+                media.classList.remove('crop');
+                media.style.width = '';
+                media.style.height = '';
+                media.style.left = '';
+                media.style.top = '';
+                void media.offsetHeight;
+                media.style.transition = 'left 0.16s ease-out, top 0.16s ease-out, width 0.16s ease-out, height 0.16s ease-out';
+            }
             
             const container = document.getElementById('mediaContainer');
             const containerWidth = container.clientWidth;
