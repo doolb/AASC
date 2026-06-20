@@ -2143,13 +2143,19 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
     });
 }
 
+// 裁剪调试日志开关
+let _cropDebugLog = false;
+
 function sendToDisplay(displayId, data) {
     const displayData = displayClients.get(displayId);
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
         if (!data.correlationId) {
             data.correlationId = generateCorrelationId(data.type || 'msg');
         }
-        log('WS', `>> ${data.type}${data.action ? ' action='+data.action : ''}${data.url ? ' url='+data.url.substring(0,80) : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: 'server', scope: 'single', targetId: displayId, correlationId: data.correlationId });
+        const shouldLogCrop = data.type !== 'control' || data.action !== 'crop' || _cropDebugLog;
+        if (shouldLogCrop) {
+            log('WS', `>> ${data.type}${data.action ? ' action='+data.action : ''}${data.url ? ' url='+data.url.substring(0,80) : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: 'server', scope: 'single', targetId: displayId, correlationId: data.correlationId });
+        }
         displayData.ws.send(JSON.stringify(data));
         return true;
     }
@@ -2492,7 +2498,10 @@ wss.on('connection', (ws, req) => {
                     }
                     const extra = { source: 'control', scope: 'single', targetId: data.displayId || null };
                     if (data.correlationId) extra.correlationId = data.correlationId;
-                    log('WS', `<< ${data.type}${data.displayId ? ' displayId='+data.displayId : ''}${data.text ? ' "'+data.text+'"' : ''}`, extra);
+                    const shouldLogCrop = data.type !== 'control' || data.action !== 'crop' || _cropDebugLog;
+                    if (shouldLogCrop) {
+                        log('WS', `<< ${data.type}${data.displayId ? ' displayId='+data.displayId : ''}${data.text ? ' "'+data.text+'"' : ''}`, extra);
+                    }
                 }
 
                 if (data.type === 'updateCapabilities') {
@@ -3027,6 +3036,8 @@ async function handleControlMessageFallback(data, ws) {
                     } else if (data.action === 'play') {
                         displayData.state.isPlaying = data.value;
                         config.updateDisplayState(displayData.ip, { isPlaying: data.value });
+                    } else if (data.action === 'cropDebug') {
+                        _cropDebugLog = !!data.value;
                     }
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {

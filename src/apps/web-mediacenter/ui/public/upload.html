@@ -914,6 +914,9 @@ document.addEventListener('DOMContentLoaded', () => {
         toggle.checked = window.Crop.debug;
         toggle.addEventListener('change', () => {
             window.Crop.debug = toggle.checked;
+            if (window.WebSocketManager) {
+                window.WebSocketManager.sendControl('cropDebug', toggle.checked);
+            }
         });
     }
 });

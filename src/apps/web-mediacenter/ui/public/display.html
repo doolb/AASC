@@ -475,11 +475,18 @@
         }
         
         let _cropRafId = null;
+        let _cropDebug = false;
+        function _cropLog(...args) {
+            if (_cropDebug) console.log(...args);
+        }
         function scheduleCropApply() {
             if (_cropRafId) return;
             _cropRafId = requestAnimationFrame(() => {
                 _cropRafId = null;
-                sendCommandAck('crop', true, '裁剪已应用', applyCrop());
+                const info = applyCrop();
+                if (_cropDebug) {
+                    sendCommandAck('crop', true, '裁剪已应用', info);
+                }
             });
         }
 
@@ -501,12 +508,12 @@
             
             const isRotated = currentRotation === 90 || currentRotation === 270;
             
-            console.log('[Crop] applyCrop 开始');
-            console.log('[Crop] 容器尺寸:', containerWidth, 'x', containerHeight);
-            console.log('[Crop] 媒体原始尺寸:', naturalWidth, 'x', naturalHeight);
-            console.log('[Crop] 当前旋转:', currentRotation, '是否旋转:', isRotated);
-            console.log('[Crop] 当前适配模式:', currentFit);
-            console.log('[Crop] 当前裁剪百分比:', JSON.stringify(currentCrop));
+            _cropLog('[Crop] applyCrop 开始');
+            _cropLog('[Crop] 容器尺寸:', containerWidth, 'x', containerHeight);
+            _cropLog('[Crop] 媒体原始尺寸:', naturalWidth, 'x', naturalHeight);
+            _cropLog('[Crop] 当前旋转:', currentRotation, '是否旋转:', isRotated);
+            _cropLog('[Crop] 当前适配模式:', currentFit);
+            _cropLog('[Crop] 当前裁剪百分比:', JSON.stringify(currentCrop));
             
             const baseInfo = {
                 容器尺寸: { width: containerWidth, height: containerHeight },
@@ -518,7 +525,7 @@
             };
             
             if (currentFit !== 'height' && currentFit !== 'width' && currentFit !== 'crop') {
-                console.log('[Crop] 非适配模式，跳过');
+                _cropLog('[Crop] 非适配模式，跳过');
                 return { ...baseInfo, 状态: '非适配模式' };
             }
             
@@ -624,10 +631,10 @@
             media.style.left = finalLeft + 'px';
             media.style.top = finalTop + 'px';
             
-            console.log('[Crop] 裁剪计算完成');
-            console.log('[Crop] 显示尺寸:', displayWidth, 'x', displayHeight);
-            console.log('[Crop] 裁剪像素值:', { cropX, cropY, cropWidth, cropHeight });
-            console.log('[Crop] 最终样式:', {
+            _cropLog('[Crop] 裁剪计算完成');
+            _cropLog('[Crop] 显示尺寸:', displayWidth, 'x', displayHeight);
+            _cropLog('[Crop] 裁剪像素值:', { cropX, cropY, cropWidth, cropHeight });
+            _cropLog('[Crop] 最终样式:', {
                 width: Math.round(finalWidth) + 'px',
                 height: Math.round(finalHeight) + 'px',
                 left: Math.round(finalLeft) + 'px',
@@ -1106,6 +1113,10 @@
                     mediaVideo.volume = data.value / 100;
                     break;
                     
+                case 'cropDebug':
+                    _cropDebug = !!data.value;
+                    break;
+
                 case 'crop':
                     currentCrop = data.value;
                     currentFit = 'crop';
