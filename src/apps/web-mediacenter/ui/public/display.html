@@ -474,6 +474,15 @@
             applyCrop();
         }
         
+        let _cropRafId = null;
+        function scheduleCropApply() {
+            if (_cropRafId) return;
+            _cropRafId = requestAnimationFrame(() => {
+                _cropRafId = null;
+                sendCommandAck('crop', true, '裁剪已应用', applyCrop());
+            });
+        }
+
         function applyCrop() {
             const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
             
@@ -1100,8 +1109,7 @@
                 case 'crop':
                     currentCrop = data.value;
                     currentFit = 'crop';
-                    const cropInfo = applyCrop();
-                    sendCommandAck('crop', true, '裁剪已应用', cropInfo);
+                    scheduleCropApply();
                     break;
                     
                 case 'customCrop':

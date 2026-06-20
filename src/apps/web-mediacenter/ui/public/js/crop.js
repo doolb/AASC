@@ -1,10 +1,19 @@
 const Crop = {
     currentMedia: null,
     data: { x: 0, y: 0, width: 100, height: 100 },
+    debug: false,
     rotation: 0,
+
+    _log(...args) {
+        if (this.debug) {
+            console.log(...args);
+        }
+    },
     isDragging: false,
     isResizing: false,
     resizeHandle: null,
+    _lastSendTime: 0,
+    _sendThrottleMs: 50,
     dragStart: { x: 0, y: 0 },
     cropStart: { x: 0, y: 0, width: 0, height: 0 },
     
@@ -67,7 +76,7 @@ const Crop = {
     
     updateBox() {
         if (!this.box || !this.container) {
-            console.log('[Crop] updateBox: box 或 container 不存在');
+            this._log('[Crop] updateBox: box 或 container 不存在');
             return;
         }
         
@@ -75,10 +84,10 @@ const Crop = {
         const mediaRect = media.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
         
-        console.log('[Crop] updateBox: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'containerRect=', containerRect.width, 'x', containerRect.height);
+        this._log('[Crop] updateBox: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'containerRect=', containerRect.width, 'x', containerRect.height);
         
         if (mediaRect.width === 0 || mediaRect.height === 0) {
-            console.log('[Crop] updateBox: 媒体尺寸为0，跳过');
+            this._log('[Crop] updateBox: 媒体尺寸为0，跳过');
             return;
         }
         
@@ -92,7 +101,7 @@ const Crop = {
         const boxWidth = (this.data.width / 100) * mediaWidth;
         const boxHeight = (this.data.height / 100) * mediaHeight;
         
-        console.log('[Crop] updateBox: box位置=', boxLeft, ',', boxTop, '尺寸=', boxWidth, 'x', boxHeight);
+        this._log('[Crop] updateBox: box位置=', boxLeft, ',', boxTop, '尺寸=', boxWidth, 'x', boxHeight);
         
         if (boxWidth > 0 && boxHeight > 0) {
             this.box.style.display = 'block';
@@ -165,10 +174,10 @@ const Crop = {
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
         const mediaRect = media.getBoundingClientRect();
         
-        console.log('[Crop] recalculateSize: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'sendToDisplay=', sendToDisplay);
+        this._log('[Crop] recalculateSize: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'sendToDisplay=', sendToDisplay);
         
         if (mediaRect.width === 0 || mediaRect.height === 0) {
-            console.log('[Crop] recalculateSize: 媒体尺寸为0，跳过');
+            this._log('[Crop] recalculateSize: 媒体尺寸为0，跳过');
             return;
         }
         
@@ -202,7 +211,7 @@ const Crop = {
         this._onReadyCallback = onReady || null;
         this._callbackExecuted = false;
         this._loadComplete = false;
-        console.log('[Crop] showPreview 开始, url:', url, 'mediaType:', mediaType, 'hasCallback:', !!onReady);
+        this._log('[Crop] showPreview 开始, url:', url, 'mediaType:', mediaType, 'hasCallback:', !!onReady);
 
         const executeCallback = () => {
             if (this._callbackExecuted) return;
@@ -220,12 +229,12 @@ const Crop = {
             this.previewVideo.style.display = 'block';
             this.previewImg.style.display = 'none';
             this.previewVideo.onloadedmetadata = () => {
-                console.log('[Crop] video onloadedmetadata 触发');
+                this._log('[Crop] video onloadedmetadata 触发');
                 executeCallback();
             };
             this.previewVideo.src = url;
             if (this.previewVideo.readyState >= 1) {
-                console.log('[Crop] video readyState >= 1, 立即计算');
+                this._log('[Crop] video readyState >= 1, 立即计算');
                 executeCallback();
             } else {
                 this._retryShowPreview(0);
@@ -234,12 +243,12 @@ const Crop = {
             this.previewImg.style.display = 'block';
             this.previewVideo.style.display = 'none';
             this.previewImg.onload = () => {
-                console.log('[Crop] img onload 触发');
+                this._log('[Crop] img onload 触发');
                 executeCallback();
             };
             this.previewImg.src = url;
             if (this.previewImg.complete && this.previewImg.naturalWidth > 0) {
-                console.log('[Crop] img 已加载完成, 立即计算');
+                this._log('[Crop] img 已加载完成, 立即计算');
                 executeCallback();
             } else {
                 this._retryShowPreview(0);
@@ -272,7 +281,7 @@ const Crop = {
         const mediaRect = media.getBoundingClientRect();
         
         if (mediaRect.width === 0 || mediaRect.height === 0) {
-            console.log('[Crop] reset: 媒体尺寸为0，跳过');
+            this._log('[Crop] reset: 媒体尺寸为0，跳过');
             return;
         }
         
@@ -412,15 +421,22 @@ const Crop = {
             this.data.width = newW;
             this.data.height = newH;
         }
-        
+
         this.updateBox();
-        this.sendData();
+
+        const now = Date.now();
+        if (now - this._lastSendTime >= this._sendThrottleMs) {
+            this._lastSendTime = now;
+            this.sendData();
+        }
     },
     
     onMouseUp() {
         this.isDragging = false;
         this.isResizing = false;
         this.resizeHandle = null;
+        this._lastSendTime = 0;
+        this.sendData();
     },
     
     onTouchStart(e) {
@@ -452,7 +468,7 @@ const Crop = {
             return;
         }
         
-        console.log('[Crop] init: 初始化成功');
+        this._log('[Crop] init: 初始化成功');
         
         this.box.addEventListener('mousedown', (e) => this.onMouseDown(e));
         document.addEventListener('mousemove', (e) => this.onMouseMove(e));

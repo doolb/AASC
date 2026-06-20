@@ -3715,3 +3715,54 @@ input[type="range"]::-webkit-slider-thumb:active {
 .sidebar-registry-widget {
   /* widget 内容使用内联样式，此容器仅做占位 */
 }
+
+/* 裁剪调试开关 */
+.crop-debug-toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  gap: 0;
+}
+
+.crop-debug-toggle input {
+  display: none;
+}
+
+.crop-debug-slider {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9px;
+  transition: background 0.2s;
+}
+
+.crop-debug-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.crop-debug-toggle input:checked + .crop-debug-slider {
+  background: rgba(0, 210, 255, 0.5);
+}
+
+.crop-debug-toggle input:checked + .crop-debug-slider::after {
+  left: 16px;
+  background: #00d2ff;
+}
+
+.crop-debug-toggle:hover .crop-debug-slider {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.crop-debug-toggle input:checked:hover + .crop-debug-slider {
+  background: rgba(0, 210, 255, 0.7);
+}

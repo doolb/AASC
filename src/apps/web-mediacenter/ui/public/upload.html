@@ -202,7 +202,14 @@
             </div>
 
             <div class="crop-control">
-                <label style="display:block;font-size:14px;color:#fff;margin-bottom:10px;font-weight:500;">画面裁剪区域</label>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <label style="font-size:14px;color:#fff;font-weight:500;">画面裁剪区域</label>
+                    <label class="crop-debug-toggle" title="开启后控制台显示裁剪调试日志">
+                        <input type="checkbox" id="cropDebugToggle">
+                        <span class="crop-debug-slider"></span>
+                        <span style="font-size:12px;color:rgba(255,255,255,0.5);margin-left:6px;">调试</span>
+                    </label>
+                </div>
                 <div class="crop-preview-container" id="cropPreviewContainer">
                     <img class="crop-preview-media" id="cropPreviewImg" style="display:none;">
                     <video class="crop-preview-media" id="cropPreviewVideo" style="display:none;" muted></video>
@@ -900,4 +907,15 @@
         </div>
     </div>
 </body>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const toggle = document.getElementById('cropDebugToggle');
+    if (toggle && window.Crop) {
+        toggle.checked = window.Crop.debug;
+        toggle.addEventListener('change', () => {
+            window.Crop.debug = toggle.checked;
+        });
+    }
+});
+</script>
 </html>
