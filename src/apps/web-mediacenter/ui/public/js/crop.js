@@ -13,7 +13,7 @@ const Crop = {
     isResizing: false,
     resizeHandle: null,
     _lastSendTime: 0,
-    _sendThrottleMs: 50,
+    _sendThrottleMs: 10,
     dragStart: { x: 0, y: 0 },
     cropStart: { x: 0, y: 0, width: 0, height: 0 },
     
