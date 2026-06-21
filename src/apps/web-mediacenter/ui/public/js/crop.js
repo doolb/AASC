@@ -115,6 +115,7 @@ const Crop = {
         this.updateInputFields();
     },
     
+
     setRotation(rotation) {
         this.rotation = rotation;
         document.querySelectorAll('[data-rotation]').forEach(btn => {
@@ -327,8 +328,9 @@ const Crop = {
         
         let dx = ((e.clientX - this.dragStart.x) / mediaRect.width) * 100;
         let dy = ((e.clientY - this.dragStart.y) / mediaRect.height) * 100;
-        
+
         if (this.isDragging) {
+            // updateBox 始终用 data.x→横向位置、data.y→纵向位置, 所以拖拽直接用原始 dx/dy
             this.data.x = Math.max(0, Math.min(100 - this.data.width, this.cropStart.x + dx));
             this.data.y = Math.max(0, Math.min(100 - this.data.height, this.cropStart.y + dy));
         } else if (this.isResizing) {
@@ -337,25 +339,12 @@ const Crop = {
             const mediaAspect = mediaRect.width / mediaRect.height;
             
             let delta;
-            let handle = this.resizeHandle;
-            
-            if (this.rotation === 90) {
-                if (handle === 'nw') handle = 'sw';
-                else if (handle === 'ne') handle = 'nw';
-                else if (handle === 'se') handle = 'ne';
-                else if (handle === 'sw') handle = 'se';
-            } else if (this.rotation === 180) {
-                if (handle === 'nw') handle = 'se';
-                else if (handle === 'ne') handle = 'sw';
-                else if (handle === 'se') handle = 'nw';
-                else if (handle === 'sw') handle = 'ne';
-            } else if (this.rotation === 270) {
-                if (handle === 'nw') handle = 'ne';
-                else if (handle === 'ne') handle = 'se';
-                else if (handle === 'se') handle = 'sw';
-                else if (handle === 'sw') handle = 'nw';
-            }
-            
+            const handle = this.resizeHandle;
+
+            // 手柄始终控制相同的视觉边缘(东=视觉横向width, 西=视觉横向width,
+            // 南=视觉纵向height, 北=视觉纵向height), 不因旋转而变。
+            // updateBox 始终用 data.x→视觉横向、data.y→视觉纵向,
+            // 所以东/西用 dx, 南/北用 dy, 无需旋转变换。
             if (aspectRatio > mediaAspect) {
                 delta = dx;
             } else {

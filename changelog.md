@@ -4,6 +4,17 @@
 
 ### 新增
 
+- ✅ [2026-06-21] 裁剪框旋转适配：修复旋转 90°/180°/270° 下拖拽和缩放的方向
+  - 修复：旋转后拖拽裁剪框"左右移动变上下"问题
+  - 修复：旋转后缩放手柄方向错误问题
+  - 修复：旋转后手柄光标未跟随变化
+  - 关键发现：updateBox 始终用 data.x→视觉横向、data.y→视觉纵向，
+    因此拖拽用原始 dx/dy、缩放用原始 dx(东/西) dy(南/北)，无需旋转变换，
+    手柄不随旋转重映射（始终控制相同视觉边缘）。
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/crop.js
+    - docs/spec/upload.md
+
 - ✅ [2026-06-19] 显示控制面板新增拖拽/粘贴上传，走临时模式
   - 裁剪预览区域 (#cropPreviewContainer) 支持拖入文件，display 面板可见时支持 Ctrl+V 粘贴（图片/视频）
   - upload.js 新增 sendTempFile() 复用 fileToBase64/getMediaDimensions/sendMedia 临时模式链路

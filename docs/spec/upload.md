@@ -1,5 +1,48 @@
 # 上传功能实现文档
 
+## 裁剪功能 (crop.js)
+
+### 裁剪框交互
+
+裁剪框支持通过四角手柄缩放和整体拖拽移动。
+
+**缩放手柄** (`onMouseMove` resize 分支):
+```
+四个手柄: nw, ne, se, sw
+每个手柄始终控制相同的视觉边缘, 不随旋转重映射:
+  nw(含 w): 调整视觉左边缘(data.x + width)
+  ne(含 e): 调整视觉右边缘(data.width)
+  sw(含 w): 调整视觉左边缘(data.x + width)
+  se(含 e): 调整视觉右边缘(data.width)
+  s(含 s):  调整视觉下边缘(data.height)
+  n(含 n):  调整视觉上边缘(data.y + height)
+
+东/西手柄用 dx(屏幕横向)作为 delta, 南/北手柄用 dy(屏幕纵向)。
+因为 updateBox 始终把 data.x→视觉横向、data.y→视觉纵向,
+数据坐标与视觉坐标的映射关系不随旋转改变。
+```
+
+其中 dx/dy 为屏幕空间位移占 getBoundingClientRect() 宽高的百分比。
+
+**缩放计算**:
+
+**拖拽移动**:
+```
+data.x += dx
+data.y += dy
+updateBox 始终用 data.x 推 boxLeft(横向)、data.y 推 boxTop(纵向),
+因此拖拽直接用原始屏幕 dx/dy, 不做旋转变换。
+```
+
+**手柄光标**:
+```
+根据旋转角度动态设置光标样式:
+0°:   nw→nw-resize, ne→ne-resize, se→se-resize, sw→sw-resize
+90°:  nw→sw-resize, ne→nw-resize, se→ne-resize, sw→se-resize
+180°: nw→se-resize, ne→sw-resize, se→nw-resize, sw→ne-resize
+270°: nw→ne-resize, ne→se-resize, se→sw-resize, sw→nw-resize
+```
+
 ## 普通上传
 
 ### POST /upload-file
