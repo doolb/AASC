@@ -218,6 +218,7 @@
                         <div class="crop-box-h2"></div>
                         <div class="crop-box-v1"></div>
                         <div class="crop-box-v2"></div>
+                        <div class="crop-box-center"></div>
                         <div class="crop-resize-handle nw" data-handle="nw"></div>
                         <div class="crop-resize-handle ne" data-handle="ne"></div>
                         <div class="crop-resize-handle sw" data-handle="sw"></div>
@@ -230,6 +231,7 @@
                     <button class="control-btn" data-rotation="180" onclick="setCropRotation(180)">180°</button>
                     <button class="control-btn" data-rotation="270" onclick="setCropRotation(270)">270°</button>
                     <button class="control-btn" onclick="resetCrop()">重置裁剪</button>
+                    <button class="control-btn" id="centerResizeBtn" onclick="toggleCenterResize()">中心缩放</button>
                 </div>
                 <div class="crop-manual-input">
                     <label style="display:block;font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:8px;">手动设置裁剪参数 (%)</label>

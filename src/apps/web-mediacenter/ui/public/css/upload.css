@@ -786,6 +786,34 @@ input[type="range"]::-webkit-slider-thumb:active {
 .crop-box-v1 { left: 33.33%; }
 .crop-box-v2 { left: 66.66%; }
 
+.crop-box-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+.crop-box-center::before,
+.crop-box-center::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.7);
+}
+.crop-box-center::before {
+    width: 1px;
+    height: 16px;
+    left: -0.5px;
+    top: -8px;
+}
+.crop-box-center::after {
+    width: 16px;
+    height: 1px;
+    left: -8px;
+    top: -0.5px;
+}
+
 .crop-resize-handle {
     position: absolute;
     width: 12px;

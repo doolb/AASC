@@ -16,6 +16,7 @@ const Crop = {
     _sendThrottleMs: 10,
     dragStart: { x: 0, y: 0 },
     cropStart: { x: 0, y: 0, width: 0, height: 0 },
+    centerResize: true,
     
     get box() {
         return document.getElementById('cropBox');
@@ -353,47 +354,63 @@ const Crop = {
             
             let newW, newH, newX, newY;
             
-            if (handle.includes('e')) {
-                newW = Math.max(10, Math.min(100 - this.cropStart.x, this.cropStart.width + delta));
-                newH = newW / aspectRatio * mediaAspect;
-                if (newH > 100) {
-                    newH = 100;
+            if (this.centerResize) {
+                // 中心缩放: 对称扩展/收缩
+                let outwardDelta;
+                if (handle.includes('e') || handle.includes('w')) {
+                    outwardDelta = handle.includes('e') ? delta : -delta;
+                    newW = Math.max(10, Math.min(100, this.cropStart.width + 2 * outwardDelta));
+                    newH = newW / aspectRatio * mediaAspect;
+                    if (newH > 100) { newH = 100; newW = newH * aspectRatio / mediaAspect; }
+                    newX = this.cropStart.x - outwardDelta;
+                    newY = this.cropStart.y - (newH - this.cropStart.height) / 2;
+                } else {
+                    outwardDelta = handle.includes('s') ? delta : -delta;
+                    newH = Math.max(10, Math.min(100, this.cropStart.height + 2 * outwardDelta));
                     newW = newH * aspectRatio / mediaAspect;
+                    if (newW > 100) { newW = 100; newH = newW * mediaAspect / aspectRatio; }
+                    newY = this.cropStart.y - outwardDelta;
+                    newX = this.cropStart.x - (newW - this.cropStart.width) / 2;
                 }
-                newX = this.cropStart.x;
-                newY = this.cropStart.y;
-            } else if (handle.includes('w')) {
-                newW = Math.max(10, this.cropStart.width - delta);
-                newH = newW / aspectRatio * mediaAspect;
-                if (newH > 100) {
-                    newH = 100;
-                    newW = newH * aspectRatio / mediaAspect;
-                }
-                newX = Math.max(0, this.cropStart.x + this.cropStart.width - newW);
-                newY = this.cropStart.y;
-            } else if (handle.includes('s')) {
-                newH = Math.max(10, Math.min(100 - this.cropStart.y, this.cropStart.height + delta));
-                newW = newH * aspectRatio / mediaAspect;
-                if (newW > 100) {
-                    newW = 100;
-                    newH = newW * mediaAspect / aspectRatio;
-                }
-                newX = this.cropStart.x;
-                newY = this.cropStart.y;
-            } else if (handle.includes('n')) {
-                newH = Math.max(10, this.cropStart.height - delta);
-                newW = newH * aspectRatio / mediaAspect;
-                if (newW > 100) {
-                    newW = 100;
-                    newH = newW * mediaAspect / aspectRatio;
-                }
-                newX = this.cropStart.x;
-                newY = Math.max(0, this.cropStart.y + this.cropStart.height - newH);
+                // 边界修正: 如果超出, 减少另一侧
+                if (newX < 0) { newX = 0; }
+                if (newY < 0) { newY = 0; }
+                if (newX + newW > 100) { newW = 100 - newX; newH = newW / aspectRatio * mediaAspect; }
+                if (newY + newH > 100) { newH = 100 - newY; newW = newH * aspectRatio / mediaAspect; }
+                if (newH > 100) { newH = 100; newW = newH * aspectRatio / mediaAspect; }
+                if (newW > 100) { newW = 100; newH = newW * mediaAspect / aspectRatio; }
             } else {
-                newX = this.cropStart.x;
-                newY = this.cropStart.y;
-                newW = this.cropStart.width;
-                newH = this.cropStart.height;
+                // 边缘缩放: 对边固定
+                if (handle.includes('e')) {
+                    newW = Math.max(10, Math.min(100 - this.cropStart.x, this.cropStart.width + delta));
+                    newH = newW / aspectRatio * mediaAspect;
+                    if (newH > 100) { newH = 100; newW = newH * aspectRatio / mediaAspect; }
+                    newX = this.cropStart.x;
+                    newY = this.cropStart.y;
+                } else if (handle.includes('w')) {
+                    newW = Math.max(10, this.cropStart.width - delta);
+                    newH = newW / aspectRatio * mediaAspect;
+                    if (newH > 100) { newH = 100; newW = newH * aspectRatio / mediaAspect; }
+                    newX = Math.max(0, this.cropStart.x + this.cropStart.width - newW);
+                    newY = this.cropStart.y;
+                } else if (handle.includes('s')) {
+                    newH = Math.max(10, Math.min(100 - this.cropStart.y, this.cropStart.height + delta));
+                    newW = newH * aspectRatio / mediaAspect;
+                    if (newW > 100) { newW = 100; newH = newW * mediaAspect / aspectRatio; }
+                    newX = this.cropStart.x;
+                    newY = this.cropStart.y;
+                } else if (handle.includes('n')) {
+                    newH = Math.max(10, this.cropStart.height - delta);
+                    newW = newH * aspectRatio / mediaAspect;
+                    if (newW > 100) { newW = 100; newH = newW * mediaAspect / aspectRatio; }
+                    newX = this.cropStart.x;
+                    newY = Math.max(0, this.cropStart.y + this.cropStart.height - newH);
+                } else {
+                    newX = this.cropStart.x;
+                    newY = this.cropStart.y;
+                    newW = this.cropStart.width;
+                    newH = this.cropStart.height;
+                }
             }
             
             if (newX + newW > 100) {
@@ -458,7 +475,11 @@ const Crop = {
         }
         
         this._log('[Crop] init: 初始化成功');
-        
+
+        // 同步中心缩放按钮状态（默认激活）
+        const btn = document.getElementById('centerResizeBtn');
+        if (btn) btn.classList.toggle('active', this.centerResize);
+
         this.box.addEventListener('mousedown', (e) => this.onMouseDown(e));
         document.addEventListener('mousemove', (e) => this.onMouseMove(e));
         document.addEventListener('mouseup', () => this.onMouseUp());
@@ -557,4 +578,9 @@ window.setCropManually = Crop.setCropManually.bind(Crop);
 window.applyManualCrop = Crop.applyManualCrop.bind(Crop);
 window.updateCustomPreview = Crop.updateCustomPreview.bind(Crop);
 window.applyCustomMode = Crop.applyCustomMode.bind(Crop);
+window.toggleCenterResize = () => {
+    Crop.centerResize = !Crop.centerResize;
+    const btn = document.getElementById('centerResizeBtn');
+    if (btn) btn.classList.toggle('active', Crop.centerResize);
+};
 window.Crop = Crop;
