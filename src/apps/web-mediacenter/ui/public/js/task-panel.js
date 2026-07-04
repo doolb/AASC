@@ -540,6 +540,8 @@
         group.addEventListener('click', function(e) {
           var btn = e.target.closest('.task-btn-option');
           if (!btn) return;
+          e.preventDefault();
+          e.stopPropagation();
           group.querySelectorAll('.task-btn-option').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           if (group.id === 'targetGroup') {
@@ -549,6 +551,17 @@
           }
         });
       });
+      // 模式按钮组显式绑定，防止事件冒泡冲突
+      var modeGroup = document.getElementById('modeGroup');
+      if (modeGroup) {
+        modeGroup.addEventListener('click', function(e) {
+          var btn = e.target.closest('.task-btn-option');
+          if (!btn) return;
+          e.stopPropagation();
+          modeGroup.querySelectorAll('.task-btn-option').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+        });
+      }
 
       var fileZone = document.getElementById('taskFileZone');
       var fileInput = document.getElementById('taskFiles');
@@ -1034,14 +1047,20 @@
         this._runBuiltin(taskName);
         return;
       }
+      // 从 task 元数据读取 target/mode，而非硬编码
+      var target = (task && task.target) || 'server';
+      var mode = (task && task.mode) || 'one-shot';
+      var entryFile = (task && task.entryFile) || (mode === 'service' ? 'service.js' : 'task.js');
+      var displayId = (task && task.displayId) || null;
       this._send({
         type: 'task:submit',
         payload: {
           taskName: taskName,
           taskType: 'user',
-          entryFile: (task && task.entryFile) || 'task.js',
-          target: 'server',
-          mode: 'one-shot',
+          entryFile: entryFile,
+          target: target,
+          displayId: displayId,
+          mode: mode,
           env: 'auto',
           params: {},
           files: []
@@ -1402,9 +1421,14 @@
     _onResult: function(payload) {
       var inst = this.instances.get(payload.instanceId);
       if (inst) {
-        inst.status = payload.success ? 'completed' : 'failed';
+        // 服务模式任务启动成功（data.serviceStarted），保持 running 状态
+        if (payload.data && payload.data.serviceStarted) {
+          inst.status = 'running';
+        } else {
+          inst.status = payload.success ? 'completed' : 'failed';
+          inst.completedAt = Date.now();
+        }
         inst.result = payload;
-        inst.completedAt = Date.now();
         this._updateMonitorBadge();
         if (this.currentTab === 'monitor') this._renderMonitor();
         this._requestTaskList();
@@ -1858,6 +1882,21 @@
         });
       }
 
+      // 编辑视图模式切换
+      function bindEditBtnGroup(id) {
+        var group = document.getElementById(id);
+        if (!group) return;
+        group.addEventListener('click', function(e) {
+          var btn = e.target.closest('.task-btn-option');
+          if (!btn) return;
+          e.stopPropagation();
+          group.querySelectorAll('.task-btn-option').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+        });
+      }
+      bindEditBtnGroup('editModeGroup');
+      bindEditBtnGroup('editEnvGroup');
+
       // 自动填充最后一次执行的参数
       if (task.instances && task.instances.length > 0) {
         var lastParams = task.instances[0].params;
@@ -1866,6 +1905,24 @@
           if (paramsEl) paramsEl.value = JSON.stringify(lastParams, null, 2);
         }
       }
+
+      // 根据 task 元数据预选 target/env/mode
+      function setActive(containerId, value) {
+        var group = document.getElementById(containerId);
+        if (!group) return;
+        group.querySelectorAll('.task-btn-option').forEach(function(b) {
+          b.classList.toggle('active', b.dataset.value === value);
+        });
+      }
+      setActive('editTargetGroup', task.target || 'server');
+      setActive('editEnvGroup', task.env || 'auto');
+      setActive('editModeGroup', task.mode || 'one-shot');
+
+      // 根据 target 显示/隐藏设备选择器
+      var targetVal = task.target || 'server';
+      var showDevice = targetVal === 'display' || targetVal === 'subdisplay';
+      var ds = document.getElementById('editDeviceSelectorSection');
+      if (ds) ds.style.display = showDevice ? 'block' : 'none';
 
       this._renderEditDeviceSelector();
     },
@@ -1949,6 +2006,64 @@
 
     _rerunInstance: function(taskName, instanceId) {
       this._send({ type: 'task:rerun', payload: { taskName: taskName, instanceId: instanceId } });
+    },
+
+    _linkInstance: function(sourceTaskName, sourceInstanceId) {
+      var self = this;
+      var overlay = document.createElement('div');
+      overlay.className = 'task-confirm-overlay';
+
+      // 收集所有其他任务的 running 实例作为候选目标
+      var targetOptions = '';
+      for (var i = 0; i < this.taskList.length; i++) {
+        var t = this.taskList[i];
+        var instances = t.instances || [];
+        for (var j = 0; j < instances.length; j++) {
+          var inst = instances[j];
+          if (inst.status === 'running' && inst.instanceId !== sourceInstanceId) {
+            targetOptions += '<div class="task-link-item" data-taskname="' + this._escapeAttr(t.taskName) +
+              '" data-instanceid="' + this._escapeAttr(inst.instanceId) + '">' +
+              '<span class="task-link-item-name">' + this._escapeHtml(t.name || t.taskName) + '</span>' +
+              '<span class="task-link-item-id">#' + this._escapeHtml(inst.instanceId.substring(0, 8)) + '</span>' +
+              '<button class="task-link-select-btn">选择</button></div>';
+          }
+        }
+      }
+
+      if (!targetOptions) {
+        targetOptions = '<div style="padding:20px;text-align:center;color:#666">没有其他运行中的实例可供链接</div>';
+      }
+
+      overlay.innerHTML =
+        '<div class="task-confirm-box" style="max-width:420px">' +
+          '<div class="task-confirm-title">选择目标实例</div>' +
+          '<div class="task-confirm-msg">将 <strong>' + this._escapeHtml(sourceInstanceId.substring(0, 12)) + '</strong> 的输出链接到：</div>' +
+          '<div class="task-link-list">' + targetOptions + '</div>' +
+          '<div class="task-confirm-actions" style="margin-top:12px">' +
+            '<button class="task-confirm-btn cancel" id="tlCancel">取消</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+
+      document.getElementById('tlCancel').onclick = function() { document.body.removeChild(overlay); };
+
+      // 点击选择按钮时执行链接
+      overlay.querySelectorAll('.task-link-select-btn').forEach(function(btn) {
+        btn.onclick = function() {
+          var item = this.closest('.task-link-item');
+          var targetTaskName = item.dataset.taskname;
+          var targetInstanceId = item.dataset.instanceid;
+          self._send({
+            type: 'task:link',
+            payload: {
+              sourceInstance: sourceInstanceId,
+              targetTask: targetTaskName,
+              targetInstance: targetInstanceId
+            }
+          });
+          document.body.removeChild(overlay);
+        };
+      });
     },
 
     _editInstanceParams: function(taskName, instanceId) {
@@ -2246,6 +2361,8 @@
         '<div class="task-result-meta-item">状态: <strong>' + statusText + '</strong></div>' +
         '<div class="task-result-meta-item">耗时: <strong>' + duration + '</strong></div>' +
         '<div class="task-result-meta-item">实例: <strong style="font-family:monospace" title="' + this._escapeAttr(inst.instanceId || '') + '">#' + this._escapeHtml(inst.instanceId || '-') + '</strong></div>' +
+        '<div class="task-result-meta-item">目标: <strong>' + this._escapeHtml(inst.target === 'display' ? '显示端' : inst.target === 'subdisplay' ? '子显示端' : inst.target || '服务端') + '</strong></div>' +
+        '<div class="task-result-meta-item">模式: <strong>' + this._escapeHtml(inst.mode === 'service' ? '服务' : '一次性') + '</strong></div>' +
         '<div class="task-result-meta-item">环境: <strong>' + this._escapeHtml(inst.env || '-') + '</strong></div>' +
       (inst.result && inst.result.metrics ? '<div class="task-result-metrics">' +
         '<div class="task-result-metrics-title">推理性能</div>' +
@@ -2273,6 +2390,12 @@
             : '') +
         (inst.status !== 'running' && taskParams && taskParams.length > 0
           ? '<button class="task-card-btn" onclick="TaskPanel._editInstanceParams(\'' + instSafeTaskName + '\',\'' + instSafeId + '\')">编辑参数</button>'
+          : '') +
+        (inst.status === 'running' || inst.status === 'pending_forward'
+          ? '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'' + instSafeId + '\')">停止</button>' +
+            (inst.status === 'running'
+              ? '<button class="task-card-btn" onclick="TaskPanel._linkInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">链接到...</button>'
+              : '')
           : '') +
         '<button class="task-card-btn danger" onclick="TaskPanel._confirmDeleteInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">删除此执行记录</button>' +
       '</div>';

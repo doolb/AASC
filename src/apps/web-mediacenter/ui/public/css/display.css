@@ -293,7 +293,17 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Task status overlay */
+.render-task-overlay {
+    position: fixed;
+    z-index: 500;
+    pointer-events: none;
+    animation: renderTaskFadeIn 0.4s ease;
+}
+
+@keyframes renderTaskFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
 .task-status-hidden { display: none; }
 .task-status-visible {
     position: fixed;

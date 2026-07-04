@@ -248,12 +248,12 @@ input[type="file"] {
 
 .toast {
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    padding: 16px 32px;
-    border-radius: 12px;
-    font-size: 16px;
+    top: 16px;
+    right: 16px;
+    transform: none;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 13px;
     font-weight: 500;
     z-index: 9999;
     animation: toastFade 2s ease forwards;
@@ -281,19 +281,19 @@ input[type="file"] {
 @keyframes toastFade {
     0% {
         opacity: 0;
-        transform: translate(-50%, -30%);
+        transform: translateY(10px);
     }
     15% {
         opacity: 1;
-        transform: translate(-50%, -50%);
+        transform: translateY(0);
     }
     70% {
         opacity: 1;
-        transform: translate(-50%, -50%);
+        transform: translateY(0);
     }
     100% {
         opacity: 0;
-        transform: translate(-50%, -70%);
+        transform: translateY(-10px);
     }
 }
 
@@ -3651,6 +3651,38 @@ input[type="range"]::-webkit-slider-thumb:active {
 
 .task-confirm-btn.confirm { background: rgba(239,68,68,0.15); color: #ef4444; }
 .task-confirm-btn.confirm:hover { background: rgba(239,68,68,0.25); }
+
+/* ---- 任务链接选择 ---- */
+.task-link-list {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+.task-link-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.task-link-item:hover { background: rgba(255,255,255,0.05); }
+.task-link-item-name { flex: 1; font-size: 13px; color: #ccc; overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.task-link-item-id { font-size: 11px; color: #666; font-family: monospace; }
+.task-link-select-btn {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(79,156,247,0.2);
+  color: #4f9cf7;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.task-link-select-btn:hover { background: rgba(79,156,247,0.35); }
 
 /* ---- 模型推理指标展示 ---- */
 .task-monitor-metrics {

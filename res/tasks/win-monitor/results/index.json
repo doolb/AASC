@@ -1,0 +1,36 @@
+{
+  "instances": [
+    {
+      "instanceId": "ce2c4a03",
+      "taskName": "win-monitor",
+      "status": "running",
+      "timestamp": 1783180937820,
+      "env": "auto",
+      "mode": "service",
+      "displayId": null,
+      "params": {},
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "stage": "running",
+      "progress": 100,
+      "target": "server"
+    },
+    {
+      "instanceId": "f9d6f3c1",
+      "taskName": "win-monitor",
+      "status": "running",
+      "timestamp": 1783181870594,
+      "target": "subdisplay",
+      "env": "auto",
+      "mode": "service",
+      "displayId": "voice-display-node-1",
+      "params": {},
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "stage": "running",
+      "progress": 100
+    }
+  ]
+}

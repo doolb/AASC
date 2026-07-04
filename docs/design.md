@@ -46,5 +46,6 @@
 | 日志大脑 | [log-brain.md](design/log-brain.md) | 类人脑日志摘要、模式提取、LLM诊断上下文 |
 | 资源目录 | [resource-layout.md](design/resource-layout.md) | res 目录分层、路径边界、统一资源规范 |
 | 工程目录结构 | [project-structure.md](design/project-structure.md) | 根目录分层、模块归位策略、文档同步规则 |
-| 远程任务系统 | [remote-task-system.md](design/remote-task-system.md) | 远程 JS 代码执行、任务生命周期、三种运行时 |
-| 显示端模型推理任务 | [model-inference-task.md](design/model-inference-task.md) | ModelManager 通用推理架构、LFM-VL 适配器、内置任务集成 |
+|| 远程任务系统 | [remote-task-system.md](design/remote-task-system.md) | 远程 JS 代码执行、任务生命周期、三种运行时 |
+|| 显示端模型推理任务 | [model-inference-task.md](design/model-inference-task.md) | ModelManager 通用推理架构、LFM-VL 适配器、内置任务集成 |
+|| 硬件监控系统 | [monitor-system.md](design/monitor-system.md) | 任务链采集→渲染、通用渲染任务协议 |

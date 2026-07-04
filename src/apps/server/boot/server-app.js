@@ -228,6 +228,7 @@ let muteState = {
 };
 
 let wsServer = null;
+let taskManager = null;
 const runtimeBridgeClients = new Map();
 
 const pendingDisplayAsrRequests = new Map();
@@ -539,7 +540,7 @@ function startServer() {
             bindRuntimeBridgeTransports();
 
             // 初始化远程任务引擎
-            const taskManager = new TaskManager({ maxInstances: 50 });
+            taskManager = new TaskManager({ maxInstances: 50 });
             registerTaskHandlers(wsServer, taskManager,
                 (msg) => broadcastToControls(msg),
                 (displayId, msg) => sendToDisplay(displayId, msg)
@@ -548,8 +549,24 @@ function startServer() {
             taskManager.setBroadcastToDisplays((msg) => {
               for (const [id] of displayClients) sendToDisplay(id, msg);
             });
+            await taskManager.init();
             log('任务引擎', '远程任务系统已初始化');
             await taskManager.restoreAutoStartServices();
+
+            // 注入报时任务控制函数（供语音命令"开启报时/关闭报时"使用）
+            voiceCommand.setTimeAnnounceToggle(async (enabled) => {
+                try {
+                    const tasks = await taskManager.listTasks();
+                    const announce = tasks.find(t => t.taskName === 'time.announce');
+                    if (announce && announce.instances && announce.instances.length > 0) {
+                        const inst = announce.instances[0];
+                        await taskManager.handleWidgetAction(inst.instanceId, 'updateConfig', { enabled });
+                        log('报时', (enabled ? '开启' : '关闭') + '报时（语音指令）');
+                    }
+                } catch (err) {
+                    console.error('[语音命令] 控制报时任务失败:', err.message);
+                }
+            });
         } catch (error) {
             logError('WS', `系统初始化失败: ${error.message}`);
         }
@@ -2081,7 +2098,7 @@ function sendToDisplaysWithCapability(capabilityName, message) {
 
 let displayListDebounceTimer = null;
 
-const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats']);
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
@@ -2152,7 +2169,9 @@ function sendToDisplay(displayId, data) {
         if (!data.correlationId) {
             data.correlationId = generateCorrelationId(data.type || 'msg');
         }
-        const shouldLogCrop = data.type !== 'control' || data.action !== 'crop' || _cropDebugLog;
+        // 高频更新消息（每 2s）不写日志
+        const isHighFreq = data.type === 'task:renderUpdate' || data.type === 'task:progress';
+        const shouldLogCrop = !isHighFreq && (data.type !== 'control' || data.action !== 'crop' || _cropDebugLog);
         if (shouldLogCrop) {
             log('WS', `>> ${data.type}${data.action ? ' action='+data.action : ''}${data.url ? ' url='+data.url.substring(0,80) : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: 'server', scope: 'single', targetId: displayId, correlationId: data.correlationId });
         }
@@ -2378,6 +2397,11 @@ wss.on('connection', (ws, req) => {
             localAsrEnabled: asrDevice === 'display'
         }));
 
+        // 显示端已连接，重试待转发的显示端服务
+        if (taskManager) {
+            taskManager.retryPendingDisplayServices(displayId);
+        }
+
         // 连接时发送服务器端保存的用户能力覆盖（如果有），让显示端启动时就知道限制
         if (!isSubDisplay && savedState?.userCapabilities) {
             const initialCaps = {
@@ -2411,7 +2435,7 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                if (data.type !== 'clientLog') {
+                if (data.type !== 'clientLog' && data.type !== 'task:progress') {
                     log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
@@ -3049,12 +3073,12 @@ async function handleControlMessageFallback(data, ws) {
                                 const cleanText = stripMarkdown(data.text);
                                 const sentences = chat.splitIntoSentences(cleanText);
                                 const targetDisplayIds = data.displayIds || (displayId ? [displayId] : []);
-                                
+
                                 for (const sentence of sentences) {
                                     const audioPath = await tts.generateTTS(sentence);
                                     const fileName = path.basename(audioPath);
                                     const audioUrl = `/uploads/tts/${fileName}`;
-                                    
+
                                     if (data.playOnControl) {
                                         ws.send(JSON.stringify({
                                             type: 'playOnControl',
@@ -3093,6 +3117,22 @@ async function handleControlMessageFallback(data, ws) {
                                 logError('TTS', `播放失败: ${err.message}`);
                             }
                         })();
+                    } else if (data.action === 'setAutoTts') {
+                        if (taskManager) {
+                            (async () => {
+                                try {
+                                    const tasks = await taskManager.listTasks();
+                                    const announce = tasks.find(t => t.taskName === 'time.announce');
+                                    if (announce && announce.instances && announce.instances.length > 0) {
+                                        const inst = announce.instances[0];
+                                        await taskManager.handleWidgetAction(inst.instanceId, 'updateConfig', { enabled: data.enabled === true });
+                                        log('报时', '自动播报: ' + (data.enabled ? '开启' : '关闭'));
+                                    }
+                                } catch (err) {
+                                    logError('TTS', 'setAutoTts 失败: ' + err.message);
+                                }
+                            })();
+                        }
                     } else {
                         sendToDisplay(displayId, data);
                     }

@@ -1,0 +1,126 @@
+# 硬件监控系统 — 实现文档
+
+## 模块
+
+### win-monitor (采集任务)
+
+| 文件 | 说明 |
+|------|------|
+| `res/tasks/win-monitor/task.js` | 采集任务，target=subdisplay 或 target=server，mode=service |
+
+### render-display (渲染任务)
+
+| 文件 | 说明 |
+|------|------|
+| `res/tasks/render-display/task.js` | 元数据注册，target=display |
+| `res/tasks/render-display/render.html` | Canvas 仪表盘 HTML 结构 |
+| `res/tasks/render-display/render.js` | 主线程渲染逻辑，返回 update(data) 函数 |
+
+### 任务系统增强
+
+| 文件 | 说明 |
+|------|------|
+| `task-manager.js` | 新增 taskLinks Map + linkTasks/unlinkTasks 方法 |
+| `web-socket-handler.js` | 新增 task:link/task:unlink handler；task:progress 触发 taskManager 事件（广播+路由） |
+
+### 显示端增强
+
+| 文件 | 说明 |
+|------|------|
+| `display.html` | 新增 executeRenderTask() + task:renderUpdate/hardwareStats 处理 + task:stop 清理覆盖层 |
+| `display.css` | 新增 .render-task-overlay 样式 |
+
+### 显示端旋转适配
+
+render-display 覆盖层（`#monitorOverlay`）跟随显示端旋转：
+
+- 旋转 90°/270° 时交换宽高，使用 CSS transform 旋转
+- 每次 `update()` 动态检测 `window.currentRotation` 变化
+- render.html 使用 `width:100%;height:100%`（非 fixed 定位），嵌入覆盖层自然旋转
+
+### 子显示端增强
+
+| 文件 | 说明 |
+|------|------|
+| `voice-display-node/main.js` | context 新增 sendProgress 函数；handleTaskExecute 支持服务模式（返回 {stop}）；静默忽略 task:renderUpdate |
+
+#### 服务任务结果处理
+
+服务模式（mode=service）任务在显示端启动成功后：
+1. 显示端检测到 `run()` 返回 `{ stop: fn }` → 注册到 `_serviceTasks`，发送 `task:result` 含 `data.serviceStarted=true`
+2. 服务端 `handleForwardResult` 识别为 displayService + success → 状态保持 `running`，不发 `result` 事件（避免被误解为任务完成）
+3. 控制端前端 `_onResult` 检测到 `data.serviceStarted` → 保持 `running` 状态而非改为 `completed`
+
+非服务任务（one-shot）在显示端执行完成后：
+1. 显示端发回 `task:result` 不含 `data.serviceStarted`
+2. 服务端 `_handleResult` 将状态设为 `completed`/`failed`，发出 `result` 事件
+3. 前端按 `success` 标志设为 `completed`/`failed`
+
+## 数据流
+
+```
+subdisplay: task.js 采集
+  └─ sendProgress({ cpuPercent, gpuPercent, memPercent, ... })
+       │
+       └─ task:progress → wsServer.registerHandler
+            │
+            └─ taskManager.emit('progress', instanceId, stage, data)
+                 │
+                 ├─ sendToControl (控制端面板)
+                 │
+                 └─ taskLinks 检测 → sendToDisplay(displayId, { type: 'task:renderUpdate', instanceId, data })
+                      │
+                      └─ display.html onmessage
+                           │
+                           └─ window._renderTaskUpdates[instanceId](data)
+                                │
+                                └─ Canvas 环形图 / 折线图 / 内存条
+```
+
+## 通用渲染任务协议
+
+### 任务文件约定
+
+files 中包含 `render.html` → display.html 自动识别为渲染任务
+
+| 文件名 | 必须 | 说明 |
+|--------|------|------|
+| `render.html` | 是 | HTML 结构，注入到覆盖层 |
+| `render.css` | 否 | 样式（可选） |
+| `render.js` | 否 | 返回 `update(data)` 函数的 JS 代码 |
+
+### render.js 接口
+
+```js
+// render.js 内容必须在 IIFE 中包裹，return update(data) 函数
+(function() {
+return function(api) {
+    // api.params — 任务参数
+    // api.container — 覆盖层 DOM 元素
+    // api.instanceId — 任务实例 ID
+
+    return function update(data) {
+        // 收到实时数据时调用
+        // data: { cpuPercent, gpuPercent, memPercent, ... }
+    };
+};
+})();
+```
+
+### 数据推送
+
+服务端通过 `sendToDisplay(displayId, { type: 'task:renderUpdate', instanceId, data })` 推送。
+
+display.html 收到后：
+1. 查找 `window._renderTaskUpdates[instanceId]`
+2. 如果存在，调用 `fn(data)`
+
+兼容方式：`type: 'hardwareStats'` 广播给所有活跃渲染任务。
+
+### 停止渲染任务
+
+控制端点击停止 → `stopInstance()` → 发送 `{type: 'task:stop', instanceId}` 到显示端。
+display.html 清理：
+1. 移除 `#renderTask-{instanceId}` DOM 覆盖层
+2. 移除 `#renderTaskStyle-{instanceId}` 样式
+3. 删除 `window._renderTaskUpdates[instanceId]`

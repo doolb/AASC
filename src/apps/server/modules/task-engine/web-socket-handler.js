@@ -19,7 +19,8 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
   const controlTypes = ['task:submit', 'task:run', 'task:rerun', 'task:stop', 'task:status', 'task:result',
                         'task:list', 'task:update', 'task:delete', 'task:get_instance_logs',
                         'task:delete_instance', 'task:widget_action', 'task:update_instance_params',
-                        'task:get_config', 'task:set_config', 'task:clear_instance_logs'];
+                        'task:get_config', 'task:set_config', 'task:clear_instance_logs',
+                        'task:link', 'task:unlink', 'task:progress'];
 
   // 获取内置任务列表（格式化为前端所需结构）
   function getBuiltinTasks() {
@@ -186,13 +187,19 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             const tasksWithMeta = tasks.map(t => {
               let params = [];
               let widget = null;
+              let mode = 'one-shot';
+              let target = 'server';
+              let entryFile = 'task.js';
               try {
                 const entryPath = path.join(taskManager.taskIO.tasksDir, t.taskName, 'task.js');
                 const mod = require(entryPath);
                 if (mod.params && Array.isArray(mod.params)) params = mod.params;
                 if (mod.widget) widget = mod.widget;
+                if (mod.mode) mode = mod.mode;
+                if (mod.target) target = mod.target;
+                if (mod.entryFile) entryFile = mod.entryFile;
               } catch (e) { /* 无法 require 时降级 */ }
-              return { ...t, params, widget };
+              return { ...t, params, widget, mode, target, entryFile };
             });
             const manifest = getSidebarManifest();
             ctx.ws.send(JSON.stringify({
@@ -360,6 +367,30 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
         break;
       }
 
+      case 'task:link': {
+        await taskManager.linkTasks(payload.sourceInstance, payload.targetTask, payload.targetInstance);
+        ctx.ws.send(JSON.stringify({
+          type: 'task:linked',
+          payload: { sourceInstance: payload.sourceInstance, targetTask: payload.targetTask, targetInstance: payload.targetInstance, success: true }
+        }));
+        break;
+      }
+
+      case 'task:unlink': {
+        await taskManager.unlinkTasks(payload.sourceInstance, payload.targetInstance);
+        ctx.ws.send(JSON.stringify({
+          type: 'task:unlinked',
+          payload: { sourceInstance: payload.sourceInstance, targetInstance: payload.targetInstance, success: true }
+        }));
+        break;
+      }
+
+      case 'task:progress': {
+        // 子显示端推送的 task:progress — 触发 taskManager 事件（广播到控制端 + 路由下游任务链）
+        taskManager.emit('progress', payload.instanceId, 'running', payload.data);
+        break;
+      }
+
       default:
         // 不做处理
         break;
@@ -377,11 +408,37 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
   taskManager.on('progress', (instanceId, stage, progress) => {
     const inst = taskManager.getInstance(instanceId);
-    console.log('[WS] << task:progress:', instanceId, stage, progress);
     sendToControl({
       type: 'task:progress',
       payload: { taskName: inst ? inst.taskName : null, instanceId, stage, progress },
     });
+
+    // 任务链路由：检查 source 实例是否有下游链，若有则转发到对应显示端
+    const links = taskManager.taskLinks.get(instanceId);
+    if (links && links.length > 0) {
+      for (const link of links) {
+        const targetInst = taskManager.getInstance(link.instanceId);
+        if (targetInst) {
+          const displayId = (targetInst.params && (targetInst.params.targetDisplay || targetInst.params._displayId))
+            || (targetInst.targetInfo && targetInst.targetInfo.displayId);
+          if (displayId && typeof sendToDisplay === 'function') {
+            const data = (progress && typeof progress === 'object' && progress.data) ? progress.data : progress;
+            sendToDisplay(displayId, {
+              type: 'task:renderUpdate',
+              instanceId: link.instanceId,
+              data: data
+            });
+          } else if (taskManager._broadcastToDisplays) {
+            const data = (progress && typeof progress === 'object' && progress.data) ? progress.data : progress;
+            taskManager._broadcastToDisplays({
+              type: 'task:renderUpdate',
+              instanceId: link.instanceId,
+              data: data
+            });
+          }
+        }
+      }
+    }
   });
 
   taskManager.on('result', (instanceId, result) => {

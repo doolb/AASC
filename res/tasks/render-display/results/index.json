@@ -1,0 +1,21 @@
+{
+  "instances": [
+    {
+      "instanceId": "5c960bf6",
+      "taskName": "render-display",
+      "status": "running",
+      "timestamp": 1783180937811,
+      "target": "display",
+      "env": "auto",
+      "mode": "service",
+      "displayId": "display-7tksfnsw",
+      "params": {},
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "stage": "running",
+      "progress": 100,
+      "error": "显示端不在线或连接关闭: display-7tksfnsw"
+    }
+  ]
+}

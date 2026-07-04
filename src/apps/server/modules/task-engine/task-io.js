@@ -28,6 +28,7 @@ class TaskIO extends EventEmitter {
   _instancePath(taskName, instanceId) { return path.join(this._resultsPath(taskName), instanceId); }
   _latestLink(taskName) { return path.join(this._resultsPath(taskName), 'latest'); }
   _indexPath(taskName) { return path.join(this._resultsPath(taskName), 'index.json'); }
+  _taskLinksPath() { return path.join(this.tasksDir, '.task-links.json'); }
 
   async readTaskFiles(taskName, entryFile) {
     const taskDir = this._taskPath(taskName);
@@ -230,6 +231,29 @@ class TaskIO extends EventEmitter {
       return { success: true };
     } catch (e) {
       throw new Error('删除任务失败: ' + e.message);
+    }
+  }
+
+  async saveTaskLinks(links) {
+    const data = {};
+    for (const [sourceId, targets] of links) {
+      data[sourceId] = targets;
+    }
+    await fs.promises.writeFile(this._taskLinksPath(), JSON.stringify(data, null, 2), 'utf8');
+  }
+
+  async loadTaskLinks() {
+    try {
+      const content = await fs.promises.readFile(this._taskLinksPath(), 'utf8');
+      const parsed = JSON.parse(content);
+      const map = new Map();
+      for (const [sourceId, targets] of Object.entries(parsed)) {
+        map.set(sourceId, targets);
+      }
+      return map;
+    } catch (e) {
+      if (e.code === 'ENOENT') return new Map();
+      throw e;
     }
   }
 

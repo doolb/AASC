@@ -24,6 +24,13 @@ class TaskManager extends EventEmitter {
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
     this._isRestoring = false;
     this.maxInstances = options.maxInstances || 50;
+    this.taskLinks = new Map();  // sourceInstanceId -> [{ taskName, instanceId }]
+    this._pendingDisplayServices = [];  // [{ taskName, instanceId, task, params }] 待显示端连接后转发
+  }
+
+  async init() {
+    this.taskLinks = await this.taskIO.loadTaskLinks();
+    console.log('[TaskManager] 已恢复 ' + this.taskLinks.size + ' 条任务链');
   }
 
   _generateId() {
@@ -123,6 +130,28 @@ class TaskManager extends EventEmitter {
             this._widgetActions.delete(sid);
           }
         }
+
+        // 显示端服务 → 转发到显示端执行
+        if (task.target === 'display' || task.target === 'subdisplay') {
+          instance.status = 'pending_forward';
+          instance.targetInfo = { displayId: task.displayId };
+          console.log('[TaskManager] 转发显示端服务, instanceId:', instanceId, 'displayId:', task.displayId);
+          this._forwardToDisplay(task, instanceId, task.params);
+          if (this._isRestoring) return { taskName, instanceId, status: 'pending_forward' };
+          instance._forwardTimeout = setTimeout(() => {
+            const inst = this.instances.get(instanceId);
+            if (inst && inst.status === 'pending_forward') {
+              inst.status = 'failed';
+              this.emit('log', instanceId, 'system', 'error', '转发超时: 显示端未响应');
+              this.emit('progress', instanceId, 'failed', 0);
+              this.emit('result', instanceId, { success: false, error: '显示端未响应' });
+              this.taskIO.writeInstanceLog(task.taskName, instanceId, 'system', 'error', '转发超时: 显示端未响应');
+              this.taskIO.updateIndex(task.taskName, { instanceId, status: 'failed', error: '显示端未响应' });
+            }
+          }, 30000);
+          return { taskName, instanceId, status: 'pending_forward' };
+        }
+
         this.emit('log', instanceId, 'system', 'info', '服务模式，在主进程运行');
         this._runServiceTask(task, instanceId, instance, context);
         return { taskName, instanceId, status: 'running' };
@@ -217,9 +246,10 @@ class TaskManager extends EventEmitter {
 
   /** 将任务转发到显示端执行 */
   async _forwardToDisplay(task, instanceId, forwardParams) {
+    const isRestoring = this._isRestoring;
     let forwardFiles = task.files || [];
     if (forwardFiles.length === 0 && task.taskType === 'user' && task.entryFile) {
-      forwardFiles = await this.taskIO.readTaskFiles(task.taskName, task.entryFile);
+      forwardFiles = await this.taskIO.readTaskFiles(task.taskName, null);
     }
 
     const payload = {
@@ -240,10 +270,29 @@ class TaskManager extends EventEmitter {
       console.log('[TaskManager] 转发 task:execute 到显示端', displayId, 'builtinId:', payload.payload.builtinId);
       const sent = this._sendToDisplay(displayId, payload);
       if (!sent) {
-        console.error('[TaskManager] 转发失败: 显示端不在线', displayId);
-        this.handleForwardResult(task.taskName, instanceId, {
-          success: false, error: '显示端不在线或连接关闭: ' + displayId
-        });
+        if (isRestoring) {
+          console.log('[TaskManager] 恢复期显示端未连接，加入待转发队列:', displayId, 'instanceId:', instanceId);
+          this._pendingDisplayServices.push({ taskName: task.taskName, instanceId, task, params: forwardParams || task.params || {} });
+          this.emit('log', instanceId, 'system', 'info', '显示端未连接，等待重试...');
+        } else {
+          console.error('[TaskManager] 转发失败: 显示端不在线', displayId);
+          this.handleForwardResult(task.taskName, instanceId, {
+            success: false, error: '显示端不在线或连接关闭: ' + displayId
+          });
+        }
+      }
+    }
+  }
+
+  retryPendingDisplayServices(displayId) {
+    const pending = this._pendingDisplayServices;
+    this._pendingDisplayServices = [];
+    for (const p of pending) {
+      if (p.task.displayId === displayId || !p.task.displayId) {
+        console.log('[TaskManager] 重试转发显示端服务:', p.instanceId, '->', displayId);
+        this._forwardToDisplay(p.task, p.instanceId, p.params);
+      } else {
+        this._pendingDisplayServices.push(p);
       }
     }
   }
@@ -440,7 +489,10 @@ class TaskManager extends EventEmitter {
           broadcastToDisplays: this._broadcastToDisplays,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           postStream: (data) => this.emit('stream', instanceId, data),
-          onWidgetAction: (action, handler) => actionHandlers.set(action, handler)
+          onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
+          sendProgress: (progressData) => {
+            this.emit('progress', instanceId, 'running', progressData);
+          }
         });
         if (!result || result.type !== 'service' || !result.stop) {
           throw new Error('内置任务未返回服务控制器 (type: service + stop())');
@@ -461,7 +513,10 @@ class TaskManager extends EventEmitter {
         const serviceContext = {
           params: task.params || {},
           workDir: this.taskIO._taskPath(task.taskName),
-          log: (msg) => this.emit('log', instanceId, 'service', 'info', msg)
+          log: (msg) => this.emit('log', instanceId, 'service', 'info', msg),
+          sendProgress: (progressData) => {
+            this.emit('progress', instanceId, 'running', progressData);
+          }
         };
         const result = await run(serviceContext);
         if (!result || typeof result.stop !== 'function') {
@@ -489,6 +544,41 @@ class TaskManager extends EventEmitter {
     const instance = this.instances.get(instanceId);
     if (!instance) return { success: false, error: '实例不存在' };
     const task = { taskName: instance.taskName };
+
+    // 显示端服务：转发成功代表服务已在显示端启动，保持 running 状态
+    const idx = await this.taskIO.getIndex(taskName).catch(() => []);
+    const entry = idx.find(e => e.instanceId === instanceId);
+    const isDisplayService = entry && entry.mode === 'service' &&
+      (entry.target === 'display' || entry.target === 'subdisplay');
+
+    // 服务已被 stopInstance 标记为 stopped，忽略后续 result
+    if (isDisplayService && entry.status === 'stopped') {
+      return { success: true };
+    }
+
+    if (isDisplayService && result.success !== false) {
+      instance.status = 'running';
+      instance.stage = 'running';
+      instance.progress = 100;
+      this.emit('progress', instanceId, 'running', 100);
+      this.emit('log', instanceId, 'system', 'info', '显示端服务已启动');
+      await this.taskIO.updateIndex(taskName, { instanceId, status: 'running' });
+
+      // 注册到 _services，使 stopInstance 能正常停止服务
+      this._services.set(instanceId, {
+        status: 'running',
+        stop: async () => {
+          if (this._sendToDisplay && instance.targetInfo && instance.targetInfo.displayId) {
+            this._sendToDisplay(instance.targetInfo.displayId, {
+              type: 'task:stop',
+              instanceId
+            });
+          }
+        }
+      });
+      return { success: true };
+    }
+
     await this._handleResult(task, instanceId, instance, {
       success: result.success,
       error: result.error,
@@ -608,6 +698,38 @@ class TaskManager extends EventEmitter {
       await this.taskIO.saveTaskFiles(taskName, toReplace);
     }
     return { success: true };
+  }
+
+  /**
+   * 任务链绑定：source 的输出（progress.data）自动路由到下游任务
+   */
+  async linkTasks(sourceInstanceId, targetTaskName, targetInstanceId) {
+    if (!this.taskLinks.has(sourceInstanceId)) {
+      this.taskLinks.set(sourceInstanceId, []);
+    }
+    this.taskLinks.get(sourceInstanceId).push({
+      taskName: targetTaskName,
+      instanceId: targetInstanceId
+    });
+    console.log('[TaskManager] 任务链绑定:', sourceInstanceId, '->', targetTaskName + '/' + targetInstanceId);
+    await this.taskIO.saveTaskLinks(this.taskLinks);
+  }
+
+  /**
+   * 解除任务链绑定
+   */
+  async unlinkTasks(sourceInstanceId, targetInstanceId) {
+    if (!this.taskLinks.has(sourceInstanceId)) return;
+    if (targetInstanceId) {
+      const list = this.taskLinks.get(sourceInstanceId);
+      this.taskLinks.set(sourceInstanceId, list.filter(l => l.instanceId !== targetInstanceId));
+      if (this.taskLinks.get(sourceInstanceId).length === 0) {
+        this.taskLinks.delete(sourceInstanceId);
+      }
+    } else {
+      this.taskLinks.delete(sourceInstanceId);
+    }
+    await this.taskIO.saveTaskLinks(this.taskLinks);
   }
 
   async destroy() {

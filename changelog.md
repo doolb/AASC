@@ -4,6 +4,121 @@
 
 ### 新增
 
+- ✅ [2026-07-04] 任务状态卡片增加停止按钮、执行目标和模式显示
+  - task-panel.js: _resultDetailHTML 添加目标(server/display/subdisplay)和模式(one-shot/service)显示
+  - task-panel.js: 运行中/转发中的实例状态卡片添加停止按钮
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+### 修复
+
+- ✅ [2026-07-04] 修复子显示端 task:progress 未触发任务链路由
+  - 根因：web-socket-handler task:progress 分支直接 sendToControl 绕过 taskManager 事件系统，任务链路由不触发
+  - 修复：改为 taskManager.emit('progress', ...)，由统一 handler 完成广播+路由
+  - 改动文件：
+    - src/apps/server/modules/task-engine/web-socket-handler.js
+
+- ✅ [2026-07-04] 修复子显示端收到未知消息类型 task:renderUpdate
+  - 修复：voice-display-node/main.js 添加静默忽略 case
+  - 改动文件：
+    - src/apps/voice-display-node/main.js
+
+- ✅ [2026-07-04] 修复子显示端服务模式任务启动后前端显示自动完成
+  - 根因：handleForwardResult 对显示端服务发出 result 事件（语义=任务完成），前端 _onResult 无条件将状态设为 completed
+  - 修复：task-manager.js: 服务启动成功时不 emit('result')，服务仍在运行不应发送"完成"信号
+  - 修复：task-panel.js: _onResult 检测 data.serviceStarted 标记，服务启动成功保持 running 状态
+  - 改动文件：
+    - src/apps/server/modules/task-engine/task-manager.js
+    - src/apps/web-mediacenter/ui/public/js/task-panel.js
+
+- ✅ [2026-06-24] 硬件监控系统 + 任务链机制
+  - 新增：display.css .render-task-overlay 覆盖层样式
+  - 文档：docs/design/monitor-system.md + docs/spec/monitor-system.md
+  - 改动文件：
+    - 新增：res/tasks/win-monitor/task.js
+    - 新增：res/tasks/render-display/task.js
+    - 新增：res/tasks/render-display/render.html
+    - 新增：res/tasks/render-display/render.js
+    - 修改：src/apps/server/modules/task-engine/task-manager.js
+    - 修改：src/apps/server/modules/task-engine/web-socket-handler.js
+    - 修改：src/apps/web-mediacenter/ui/public/display.html
+    - 修改：src/apps/web-mediacenter/ui/public/css/display.css
+    - 修改：src/apps/voice-display-node/main.js
+    - 新增：docs/design/monitor-system.md
+    - 新增：docs/spec/monitor-system.md
+
+- ✅ [2026-07-04] 任务面板增加任务链链接 UI
+  - 新增：实例详情底部"链接到..."按钮，运行中实例可用
+  - 新增：`_linkInstance()` 弹窗列出所有运行中实例，选择后发送 `task:link`
+  - 新增：upload.css `.task-link-list`/`.task-link-item` 链接选择列表样式
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - src/apps/web-mediacenter/ui/public/css/upload.css
+  - 使用方式：在 win-monitor 实例详情页点"链接到..."，选择 render-display 实例即可绑定
+
+- ✅ [2026-07-04] 任务链链接后数据未显示到 render-display
+  - 修复：user service 上下文缺少 `sendProgress`，win-monitor 调用 `context.sendProgress()` 时 undefined
+  - 修复：builtin service 上下文同样缺少 `sendProgress`
+  - 修复：web-socket-handler 任务链路由只查 `targetInst.params._displayId`，但 displayId 存在 `targetInst.targetInfo.displayId` 中
+  - 调整：render.html 黑底透明度 0.75→0.35
+  - 改动文件：
+    - src/apps/server/modules/task-engine/task-manager.js
+    - src/apps/server/modules/task-engine/web-socket-handler.js
+    - res/tasks/render-display/render.html
+
+### 修复
+
+- ✅ [2026-07-04] render-display 需要适配显示端画面旋转
+  - 新增：display.html `applyRotation()` 同步 `window.currentRotation`
+  - 新增：render.js 读取 `window.currentRotation`，对 `#monitorOverlay` 做 `rotate(Ndeg)`
+  - 调整：render.html 改为浮动面板（不再填满画面），仪表盘 180→260px，字体放大两倍
+  - 调整：render.js 仪表盘字体 40→80px，标签 14→24px，弧线 14→18px，折线图尺寸增大
+  - 调整：render.js 旋转适应改为 reposition + counter-rotate，各角度定位到对应角落
+  - 调整：render.html `#monitorOverlay` 添加 `position:fixed`，自管理定位
+  - 调整：display.css `.render-task-overlay` 移除 `top/right` 定位（由 overlay 自管理）
+  - 调整：display.html 移除 render 覆盖层旋转（交由 render.js 自行处理）
+  - 改动文件：
+    - res/tasks/render-display/render.html
+    - res/tasks/render-display/render.js
+    - src/apps/web-mediacenter/ui/public/display.html
+    - src/apps/web-mediacenter/ui/public/css/display.css
+  - 修复：runInstance 中 `mode === 'service'` 判断优先于 `target === 'display'`，导致 service+display 任务被当作服务端服务执行
+  - 修复：service 模式下先检查 target，若为 display/subdisplay 则转发到显示端而非在本进程运行
+  - 改动文件：
+    - src/apps/server/modules/task-engine/task-manager.js
+  - 修复：服务端 TTS handler 新增 `setAutoTts` 分支，路由到 TaskManager.handleWidgetAction 控制 time.announce 任务的 enabled 状态
+  - 改动文件：
+    - src/apps/server/boot/server-app.js
+    - docs/spec/voiceCommand.md
+
+- ✅ [2026-07-04] render-display 服务在控制端显示"已完成"（应显示"运行中"）
+  - 修复：handleForwardResult 检测显示端服务（mode=service + target=display），转发成功后保持 status='running'
+  - 新增：显示端服务注册到 _services，stop 时发送 {type:'task:stop', instanceId} 到显示端
+  - 新增：display.html task:stop 消息处理，清理渲染覆盖层 DOM + 样式 + _renderTaskUpdates
+  - 改动文件：
+    - src/apps/server/modules/task-engine/task-manager.js
+    - src/apps/web-mediacenter/ui/public/display.html
+    - docs/spec/remote-task-system.md
+    - docs/spec/monitor-system.md
+
+- ✅ [2026-07-04] 语音显示端忽略静音指令，报时任务静音无效
+  - 修复：voice-display-node `handleControl` 未处理 `volume` 动作，静音发送的 `{type:'control',action:'volume',value:0}` 被忽略
+  - 修复：voice-display-node `playAudioFromURL` 未检查 `_volume`，静音状态下仍播报音频
+  - 修复：语音命令"开启报时/关闭报时"仍走旧模块 `time-announce-app-service.setConfig`，无法控制 task 版报时的启用状态
+  - 修复：注入 `setTimeAnnounceToggle`，路由到 TaskManager.handleWidgetAction 更新报时任务配置
+  - 改动文件：
+    - src/apps/voice-display-node/main.js
+    - src/apps/server/boot/server-app.js
+    - src/apps/web-mediacenter/modules/voice/voice-command-app-service.js
+    - docs/spec/voice-display.md
+
+- ✅ [2026-06-24] 控制端任务面板无法选择一次性/服务模式
+  - 修复：_runUserTask 硬编码 mode='one-shot', target='server' → 改为从 task 元数据读取
+  - 修复：服务端 task:list 未解析 task.js 的 mode/target/entryFile → 新增解析并下发
+  - 修复：编辑视图的 target/env/mode 按钮未根据 task 元数据预选中 → 新增 setActive 逻辑
+  - 修复：新建任务面板模式按钮点击无效（事件冒泡冲突）→ 新增 stopPropagation + 独立 #modeGroup handler
+  - 修复：_forwardToDisplay 只传了 task.js 没传 render.html/render.js → 改为传目录下所有文件
+
 - ✅ [2026-06-21] 裁剪框旋转适配：修复旋转 90°/180°/270° 下拖拽和缩放的方向
   - 修复：旋转后拖拽裁剪框"左右移动变上下"问题
   - 修复：旋转后缩放手柄方向错误问题

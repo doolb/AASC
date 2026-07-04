@@ -5,7 +5,6 @@
       "taskName": "test-echo",
       "status": "completed",
       "timestamp": 1779612349526,
-      "target": "display",
       "env": "auto",
       "mode": "one-shot",
       "displayId": "display-7tksfnsw",
@@ -13,7 +12,7 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "completedAt": 1779612466921
+      "completedAt": 1783177681068
     }
   ]
 }

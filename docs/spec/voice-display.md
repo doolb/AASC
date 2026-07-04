@@ -369,6 +369,7 @@ class VoiceDisplay:
     reconnectAttempts: number
     heartbeatInterval: 定时器引用
     heartbeatIntervalMs: number (60000)
+    _volume: number (100, 0=静音)
 ```
 
 ### 连接流程
@@ -419,7 +420,13 @@ handleMessage(msgType, data):
         play -> 播报文本
         stop -> 停止播放
     "voiceInput": 记录确认
-    "control": 记录控制指令
+    "control":
+        如果 action == "setRecording":
+            enabled == true -> 恢复录音
+            enabled == false -> 暂停录音
+        如果 action == "volume":
+            value -> 更新 _volume（0 = 静音，100 = 满音量）
+        其余情况记录控制指令
     "media": 记录媒体指令（子显示端不支持媒体显示）
 ```
 
@@ -488,6 +495,7 @@ clearQueue():
 ```
 playFromURL(url):
     如果 stopRequested，跳过播放
+    如果 _volume == 0（静音），跳过播放
     下载音频到临时文件
     调用 playFile(tempFile)
     删除临时文件

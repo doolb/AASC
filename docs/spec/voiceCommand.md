@@ -212,10 +212,10 @@ handleUnmuteCommand(displayId):
 ```
 handleTimeAnnounceCommand(text, displayId):
     如果 text 包含 "关闭报时":
-        设置 timeAnnounce.enabled = false
+        调用 timeAnnounceToggle(false)  // 通过 TaskManager 关闭 time.announce 任务
         语音播放 "已关闭报时功能"
     否则如果 text 包含 "开启报时":
-        设置 timeAnnounce.enabled = true
+        调用 timeAnnounceToggle(true)   // 通过 TaskManager 开启 time.announce 任务
         语音播放 "已开启报时功能"
     否则:
         调用 timeAnnounce.generateTimeText() 生成时间文本
@@ -640,10 +640,15 @@ processVoiceCommand(text, displayId, callbacks):
 ### handleTimeAnnounceCommand(text, displayId)
 
 ```
+
 处理报时相关指令:
-    ├─ 包含"关闭报时" -> 关闭报时功能，播报提示
-    ├─ 包含"开启报时" -> 开启报时功能，播报提示
+    ├─ 包含"关闭报时" -> 通过 timeAnnounceToggle(false) 关闭报时任务，播报提示
+    ├─ 包含"开启报时" -> 通过 timeAnnounceToggle(true) 开启报时任务，播报提示
     └─ 其他（报时/现在几点） -> 播报当前时间
+
+注: timeAnnounceToggle 由 server-app.js 注入，内部通过 TaskManager.handleWidgetAction
+    向 time.announce 内置任务发送 updateConfig({enabled}), 任务实时的 shouldAnnounce()
+    检查 config.enabled 决定是否到点播报。
 ```
 
 ### 报时指令格式

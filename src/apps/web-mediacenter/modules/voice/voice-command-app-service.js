@@ -15,6 +15,7 @@ let broadcastToControls = null;
 let mediaLibraryManager = null;
 let muteAllDisplays = null;
 let unmuteAllDisplays = null;
+let timeAnnounceToggle = null;
 let voiceInputQueues = new Map();
 
 // 指令分级路由
@@ -132,6 +133,10 @@ function setClients(clients, sendFunc, broadcastFunc) {
 function setMuteFunctions(muteFunc, unmuteFunc) {
     muteAllDisplays = muteFunc;
     unmuteAllDisplays = unmuteFunc;
+}
+
+function setTimeAnnounceToggle(fn) {
+    timeAnnounceToggle = fn;
 }
 
 function setMediaLibrary(manager) {
@@ -467,13 +472,13 @@ function handleCancelCommand(text, displayId) {
 
 async function handleTimeAnnounceCommand(text, displayId) {
     if (text.includes('关闭报时')) {
-        timeAnnounce.setConfig({ enabled: false });
+        if (timeAnnounceToggle) await timeAnnounceToggle(false);
         const responseText = '已关闭报时功能';
-        
+
         try {
             const audioPath = await tts.generateTTS(responseText);
             const fileName = path.basename(audioPath);
-            
+
             sendToDisplay(displayId, {
                 type: 'voiceCommand',
                 action: 'response',
@@ -484,13 +489,13 @@ async function handleTimeAnnounceCommand(text, displayId) {
             console.error('[语音命令] 报时语音生成失败:', err.message);
         }
     } else if (text.includes('开启报时')) {
-        timeAnnounce.setConfig({ enabled: true });
+        if (timeAnnounceToggle) await timeAnnounceToggle(true);
         const responseText = '已开启报时功能';
-        
+
         try {
             const audioPath = await tts.generateTTS(responseText);
             const fileName = path.basename(audioPath);
-            
+
             sendToDisplay(displayId, {
                 type: 'voiceCommand',
                 action: 'response',
@@ -1532,6 +1537,7 @@ module.exports = {
     init,
     setClients,
     setMuteFunctions,
+    setTimeAnnounceToggle,
     setMediaLibrary,
     processVoiceCommand,
     enqueueVoiceInput,

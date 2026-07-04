@@ -128,6 +128,8 @@ class VoiceDisplay {
         this.aecProcessor = null;
         this.bargeInTriggered = false;
         this.logReportConfig = null; // { enabled, level } 由服务器推送
+        this._volume = 100;
+        this._serviceTasks = {}; // 长期运行的服务任务 { instanceId: { taskName, stop } }
     }
 
     updateTUIConnectionState() {
@@ -276,6 +278,18 @@ class VoiceDisplay {
             case 'task:execute':
                 this.handleTaskExecute(data.payload);
                 break;
+            case 'task:renderUpdate':
+                // 子显示端无需处理渲染更新，静默忽略
+                break;
+            case 'task:stop':
+                this.handleTaskStop(data);
+                break;
+            case 'capabilitiesUpdated':
+                this.handleCapabilitiesUpdated(data);
+                break;
+            case 'asrConfig':
+                this.handleAsrConfig(data);
+                break;
             default:
                 log('系统', `未知消息类型: ${msgType}`);
         }
@@ -290,7 +304,33 @@ class VoiceDisplay {
             } else {
                 this.disableRecording();
             }
+        } else if (data.action === 'volume') {
+            var vol = parseInt(data.value, 10);
+            this._volume = isNaN(vol) ? 100 : vol;
+            log('系统', '音量已设置为: ' + this._volume);
         }
+    }
+
+    handleCapabilitiesUpdated(data) {
+        if (!data.capabilities) return;
+        this._capabilities = data.capabilities;
+        log('能力', '能力已更新: ' + JSON.stringify(data.capabilities));
+
+        if (!data.capabilities.voicePlayback) {
+            if (this.audio) {
+                this.audio.stop();
+                this.audio.clearQueue();
+            }
+            log('TTS', '语音播放能力已关闭，停止播报');
+        }
+        if (!data.capabilities.voiceRecording) {
+            this.disableRecording();
+        }
+    }
+
+    handleAsrConfig(data) {
+        this._asrConfig = data;
+        log('ASR', 'ASR 配置: device=' + data.device + ' localEnabled=' + data.localAsrEnabled);
     }
 
     handleConfigUpdate(data) {
@@ -414,6 +454,21 @@ class VoiceDisplay {
         var entryFile = payload.entryFile;
         var files = payload.files || [];
         var params = payload.params || {};
+
+        // 若已有同 instanceId 的服务在运行，先停止
+        if (this._serviceTasks[instanceId]) {
+            log('任务', '发现已有服务运行，先停止旧服务: ' + instanceId);
+            try {
+                if (typeof this._serviceTasks[instanceId].stop === 'function') {
+                    this._serviceTasks[instanceId].stop();
+                }
+            } catch (_) {}
+            if (this._serviceTasks[instanceId].tmpDir) {
+                try { fs.rmSync(this._serviceTasks[instanceId].tmpDir, { recursive: true, force: true }); } catch (_) {}
+            }
+            delete this._serviceTasks[instanceId];
+        }
+
         log('任务', '收到任务: ' + taskName + '/' + instanceId + ' 入口: ' + entryFile);
 
         var tmpDir = path.join(os.tmpdir(), 'task-' + instanceId);
@@ -444,11 +499,19 @@ class VoiceDisplay {
             var context = {
                 files: fileStore,
                 params: params,
-                workDir: tmpDir
+                workDir: tmpDir,
+                // 持续推送函数：子显示端任务可调用 sendProgress(data) 发送实时数据
+                sendProgress: function(data) {
+                    this.sendJSON({
+                        type: 'task:progress',
+                        payload: { taskName: taskName, instanceId: instanceId, data: data }
+                    });
+                }.bind(this)
             };
 
             delete require.cache[require.resolve(entryPath)];
             var entry = require(entryPath);
+            log('任务', 'DEBUG entry=' + (typeof entry) + ' keys=' + (entry ? Object.keys(entry).join(',') : 'N/A') + ' runFn=' + (entry && typeof entry.run));
             var run = typeof entry === 'function' ? entry : entry.run;
 
             if (typeof run !== 'function') {
@@ -456,6 +519,24 @@ class VoiceDisplay {
             }
 
             var result = await run(context);
+            log('任务', 'DEBUG result=' + (typeof result) + ' stop=' + (result ? typeof result.stop : 'N/A') + ' isSvc=' + (result && typeof result.stop === 'function'));
+
+            // 服务任务：run() 返回 { stop: fn }，保持运行直到被停止
+            if (result && typeof result.stop === 'function') {
+                this._serviceTasks[instanceId] = {
+                    taskName: taskName,
+                    stop: result.stop,
+                    tmpDir: tmpDir
+                };
+                // 发送启动成功通知，使服务器将任务保持为 running 状态
+                this.sendJSON({
+                    type: 'task:result',
+                    payload: { taskName: taskName, instanceId: instanceId, success: true, data: { serviceStarted: true } }
+                });
+                log('任务', '服务已启动: ' + taskName + '/' + instanceId);
+                return; // 跳过 cleanup，保持资源直到 stop
+            }
+
             this.sendJSON({
                 type: 'task:result',
                 payload: { taskName: taskName, instanceId: instanceId, success: true, data: result || {} }
@@ -468,8 +549,43 @@ class VoiceDisplay {
                 payload: { taskName: taskName, instanceId: instanceId, success: false, error: err.message, stack: err.stack }
             });
         } finally {
-            fs.rmSync(tmpDir, { recursive: true, force: true });
+            // 服务任务的 cleanup 在 handleTaskStop 中处理
+            if (!this._serviceTasks[instanceId]) {
+                fs.rmSync(tmpDir, { recursive: true, force: true });
+            }
         }
+    }
+
+    handleTaskStop(msg) {
+        var instanceId = msg.instanceId;
+        var svc = this._serviceTasks[instanceId];
+        if (!svc) {
+            log('任务', '未找到运行中的服务: ' + instanceId);
+            return;
+        }
+
+        try {
+            if (typeof svc.stop === 'function') {
+                svc.stop();
+            }
+            log('任务', '服务已停止: ' + svc.taskName + '/' + instanceId);
+            this.sendJSON({
+                type: 'task:result',
+                payload: { taskName: svc.taskName, instanceId: instanceId, success: true }
+            });
+        } catch (err) {
+            logError('任务', '服务停止失败: ' + err.message);
+            this.sendJSON({
+                type: 'task:result',
+                payload: { taskName: svc.taskName, instanceId: instanceId, success: false, error: err.message }
+            });
+        }
+
+        // 清理临时文件
+        if (svc.tmpDir) {
+            try { fs.rmSync(svc.tmpDir, { recursive: true, force: true }); } catch (_) {}
+        }
+        delete this._serviceTasks[instanceId];
     }
 
     /**
@@ -479,6 +595,11 @@ class VoiceDisplay {
     async playAudioFromURL(audioUrl) {
         if (!this.audio) {
             log('TTS', '音频播放器未初始化');
+            return;
+        }
+
+        if (this._volume === 0) {
+            log('TTS', '已静音，跳过播放');
             return;
         }
 

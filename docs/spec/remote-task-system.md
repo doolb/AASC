@@ -52,6 +52,15 @@ submit() -> _runServiceTask() -> run() 返回 { type: 'service', stop() }
   -> 控制器存 _services Map
   -> task:stop -> stopInstance() -> controller.stop()
   -> 清理 _services, 更新 index.json status='stopped'
+
+显示端服务（target=display, mode=service）:
+  转发启动: runInstance() -> _forwardToDisplay() -> display executeTask()
+  -> 显示端 task:result(success=true) -> handleForwardResult()
+     -> 检测 isDisplayService, 保持 status='running'
+     -> 注册到 _services (stop 时发送 task:stop 到显示端)
+  停止: stopInstance() -> svc.stop() -> 发送 {type:'task:stop', instanceId} 到显示端
+  -> 显示端清理 DOM 覆盖层 + 注销 _renderTaskUpdates
+  -> 服务端清理 _services, 更新 status='stopped'
 ```
 
 ### 停止孤儿实例

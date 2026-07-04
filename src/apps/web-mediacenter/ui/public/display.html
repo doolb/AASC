@@ -52,6 +52,7 @@
         const taskStatusMetrics = document.getElementById('taskStatusMetrics');
         
         let currentRotation = 0;
+        window.currentRotation = 0;
         let currentFit = 'contain';
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let displayWs = null;
@@ -330,10 +331,52 @@
         }
         
         function applyRotation() {
-            const transform = `rotate(${currentRotation}deg)`;
-            mediaImage.style.transform = transform;
-            mediaVideo.style.transform = transform;
-            
+            window.currentRotation = currentRotation;
+            var rotTransform = 'rotate(' + currentRotation + 'deg)';
+            mediaImage.style.transform = rotTransform;
+            mediaVideo.style.transform = rotTransform;
+
+            // 立即更新所有活跃渲染任务覆盖层的旋转
+            var renderOverlays = document.querySelectorAll('.render-task-overlay');
+            for (var r = 0; r < renderOverlays.length; r++) {
+                var ovContainer = renderOverlays[r];
+                var ov = ovContainer.querySelector('#monitorOverlay');
+                if (!ov) continue;
+                ov.style.transform = '';
+                ov.style.top = '';
+                ov.style.right = '';
+                ov.style.bottom = '';
+                ov.style.left = '';
+                ov.style.transformOrigin = '';
+                if (currentRotation === 90) {
+                    ov.style.top = '24px';
+                    ov.style.left = '24px';
+                    ov.style.right = 'auto';
+                    ov.style.bottom = 'auto';
+                    ov.style.transform = 'rotate(90deg)';
+                    ov.style.transformOrigin = 'center center';
+                } else if (currentRotation === 180) {
+                    ov.style.top = '24px';
+                    ov.style.right = '24px';
+                    ov.style.bottom = 'auto';
+                    ov.style.left = 'auto';
+                    ov.style.transform = 'rotate(180deg)';
+                    ov.style.transformOrigin = 'center center';
+                } else if (currentRotation === 270) {
+                    ov.style.top = 'auto';
+                    ov.style.bottom = '24px';
+                    ov.style.right = '24px';
+                    ov.style.left = 'auto';
+                    ov.style.transform = 'rotate(-90deg)';
+                    ov.style.transformOrigin = 'center center';
+                } else {
+                    ov.style.top = 'auto';
+                    ov.style.right = 'auto';
+                    ov.style.bottom = '80px';
+                    ov.style.left = '24px';
+                }
+            }
+
             const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay, monitorWrapper];
             
             uiElements.forEach(el => {
@@ -1257,6 +1300,28 @@
                         sendCommandAck('voiceCommand', true, data.action);
                     } else if (data.type === 'task:execute') {
                         executeTask(data.payload);
+                    } else if (data.type === 'task:stop') {
+                        // 停止显示端渲染任务，清理覆盖层
+                        var stopInstanceId = data.instanceId;
+                        console.log('[显示端] 停止任务:', stopInstanceId);
+                        var overlayEl = document.getElementById('renderTask-' + stopInstanceId);
+                        if (overlayEl) overlayEl.remove();
+                        var styleEl = document.getElementById('renderTaskStyle-' + stopInstanceId);
+                        if (styleEl) styleEl.remove();
+                        if (window._renderTaskUpdates) {
+                            delete window._renderTaskUpdates[stopInstanceId];
+                        }
+                    } else if (data.type === 'task:renderUpdate') {
+                        // 渲染任务实时数据更新
+                        var fn = window._renderTaskUpdates && window._renderTaskUpdates[data.instanceId];
+                        if (fn) fn(data.data);
+                        sendCommandAck('renderUpdate', true, null);
+                    } else if (data.type === 'hardwareStats') {
+                        // 兼容 direct hardwareStats 消息（旧转发方式）
+                        for (var _rid in window._renderTaskUpdates) {
+                            window._renderTaskUpdates[_rid](data.data);
+                        }
+                        sendCommandAck('hardwareStats', true, null);
                     } else {
                         console.log('[显示端] 处理媒体消息，发送 media 确认');
                         showMedia(data);
@@ -2325,11 +2390,97 @@
             return _taskWorkerUrl;
         }
 
+        // ====== 通用渲染任务：从 files 加载 render.html/render.js 显示覆盖层 ======
+        function hasRenderFile(files) {
+            if (!files) return false;
+            for (var i = 0; i < files.length; i++) {
+                if (files[i].name === 'render.html') return true;
+            }
+            return false;
+        }
+
+        function executeRenderTask(payload) {
+            var files = payload.files || [];
+            var params = payload.params || {};
+            var taskName = payload.taskName;
+            var instanceId = payload.instanceId;
+            console.log('[Render] 渲染任务:', taskName + '/' + instanceId);
+
+            function getFile(name) {
+                for (var i = 0; i < files.length; i++) {
+                    if (files[i].name === name) return base64ToUtf8(files[i].data);
+                }
+                return null;
+            }
+
+            // 移除旧覆盖层（避免重连时重复创建）
+            var existingDiv = document.getElementById('renderTask-' + instanceId);
+            if (existingDiv) existingDiv.remove();
+            var existingStyle = document.getElementById('renderTaskStyle-' + instanceId);
+            if (existingStyle) existingStyle.remove();
+            if (window._renderTaskUpdates) {
+                delete window._renderTaskUpdates[instanceId];
+            }
+
+            // 隐藏媒体，渲染覆盖层不隐藏，z-index 在媒体之上
+            // 注入 HTML
+            var html = getFile('render.html');
+            if (html) {
+                var div = document.createElement('div');
+                div.id = 'renderTask-' + instanceId;
+                div.className = 'render-task-overlay';
+                div.innerHTML = html;
+                document.body.appendChild(div);
+            }
+
+            // 注入 CSS
+            var css = getFile('render.css');
+            if (css) {
+                var style = document.createElement('style');
+                style.id = 'renderTaskStyle-' + instanceId;
+                style.textContent = css;
+                document.head.appendChild(style);
+            }
+
+            // 执行 JS（主线程，可访问 Canvas/DOM）
+            var js = getFile('render.js');
+            if (js) {
+                var container = document.getElementById('renderTask-' + instanceId);
+                var api = {
+                    params: params,
+                    taskName: taskName,
+                    instanceId: instanceId,
+                    container: container,
+                    sendTaskResult: function(success, data, error) {
+                        sendTaskResult(taskName, instanceId, success, error, null, null, null);
+                    }
+                };
+                try {
+                    var updateFn = new Function('api', js)(api);
+                    if (typeof updateFn === 'function') {
+                        if (!window._renderTaskUpdates) window._renderTaskUpdates = {};
+                        window._renderTaskUpdates[instanceId] = updateFn;
+                    }
+                } catch (err) {
+                    console.error('[Render] 渲染代码执行失败:', err.message);
+                }
+            }
+
+            // 通知服务端任务启动成功
+            sendTaskResult(taskName, instanceId, true, null, null, null, null);
+        }
+
         function executeTask(payload) {
             // 模型推理内置任务（已在 GPU 线程异步执行）
             if (payload.builtinId === 'model.inference') {
                 console.log('[Model] 收到模型推理任务:', payload.instanceId, 'modelId:', payload.params ? payload.params.modelId : '?');
                 executeModelInference(payload);
+                return;
+            }
+
+            // render-display 内置任务：渲染监控仪表盘（主线程加载 render.html/render.js）
+            if (payload.builtinId === 'render-display' || hasRenderFile(payload.files)) {
+                executeRenderTask(payload);
                 return;
             }
 
