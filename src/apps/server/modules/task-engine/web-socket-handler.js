@@ -428,13 +428,23 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             sendToDisplay(displayId, {
               type: 'task:renderUpdate',
               instanceId: link.instanceId,
+              sourceInstanceId: instanceId,
               data: data
             });
+            // 通知显示端移除已停止/离线的源
+            if (stage === 'stopped' || (stage === 'display_offline' && progress && progress.status === 'display_offline')) {
+              sendToDisplay(displayId, {
+                type: 'task:renderUpdate',
+                instanceId: link.instanceId,
+                data: { _stop: true, _sourceInstanceId: instanceId }
+              });
+            }
           } else if (taskManager._broadcastToDisplays) {
             const data = (progress && typeof progress === 'object' && progress.data) ? progress.data : progress;
             taskManager._broadcastToDisplays({
               type: 'task:renderUpdate',
               instanceId: link.instanceId,
+              sourceInstanceId: instanceId,
               data: data
             });
           }
@@ -450,6 +460,25 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
       type: 'task:result',
       payload: { taskName: inst ? inst.taskName : null, instanceId, ...result },
     });
+
+    // 已完成/失败的一次性任务：通知下游显示端移除该源
+    const links = taskManager.taskLinks.get(instanceId);
+    if (links && links.length > 0) {
+      for (const link of links) {
+        const targetInst = taskManager.getInstance(link.instanceId);
+        if (targetInst) {
+          const displayId = (targetInst.params && (targetInst.params.targetDisplay || targetInst.params._displayId))
+            || (targetInst.targetInfo && targetInst.targetInfo.displayId);
+          if (displayId && typeof sendToDisplay === 'function') {
+            sendToDisplay(displayId, {
+              type: 'task:renderUpdate',
+              instanceId: link.instanceId,
+              data: { _stop: true, _sourceInstanceId: instanceId }
+            });
+          }
+        }
+      }
+    }
   });
 
   taskManager.on('log', (instanceId, stream, level, message) => {

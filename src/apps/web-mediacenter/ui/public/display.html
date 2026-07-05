@@ -1314,7 +1314,7 @@
                     } else if (data.type === 'task:renderUpdate') {
                         // 渲染任务实时数据更新
                         var fn = window._renderTaskUpdates && window._renderTaskUpdates[data.instanceId];
-                        if (fn) fn(data.data);
+                        if (fn) fn(data.data, data.sourceInstanceId);
                         sendCommandAck('renderUpdate', true, null);
                     } else if (data.type === 'hardwareStats') {
                         // 兼容 direct hardwareStats 消息（旧转发方式）

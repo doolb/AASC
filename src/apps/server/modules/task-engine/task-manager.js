@@ -443,6 +443,16 @@ class TaskManager extends EventEmitter {
       return { success: false, error: '实例不存在' };
     }
 
+    // display_offline：服务已断开，直接标记停止
+    if (instance.status === 'display_offline') {
+      instance.status = 'stopped';
+      instance.stage = 'stopped';
+      this.emit('log', instanceId, 'system', 'info', '服务已停止');
+      this.emit('progress', instanceId, 'stopped', 0);
+      await this.taskIO.updateIndex(taskName, { instanceId, status: 'stopped' });
+      return { success: true };
+    }
+
     // 服务任务：调控制器的 stop()
     const svc = this._services.get(instanceId);
     if (svc) {
@@ -749,25 +759,12 @@ class TaskManager extends EventEmitter {
    */
   async handleDisplayDisconnect(displayId) {
     const stopped = [];
+    // 第一遍同步收集孤儿任务信息（先设置 _orphanedTasks 避免重连竞争）
     const orphans = [];
     for (const [instanceId, instance] of this.instances) {
       if (instance.targetInfo && instance.targetInfo.displayId === displayId &&
           (instance.status === 'running' || instance.status === 'pending_forward')) {
-        // 清除转发超时
-        if (instance._forwardTimeout) {
-          clearTimeout(instance._forwardTimeout);
-          instance._forwardTimeout = null;
-        }
         if (instance.mode === 'service') {
-          // 服务任务：标记 display_offline，不发送 result（非终态），等待重连恢复
-          instance.status = 'display_offline';
-          instance.stage = 'display_offline';
-          this.emit('log', instanceId, 'system', 'warn', '显示端已断开，服务暂停，待重连后自动恢复');
-          this.emit('progress', instanceId, 'display_offline', { status: 'display_offline' });
-          this._services.delete(instanceId);
-          this._widgetActions.delete(instanceId);
-          await this.taskIO.updateIndex(instance.taskName, { instanceId, status: 'display_offline', error: '显示端已断开连接' });
-          await this.taskIO.writeInstanceLog(instance.taskName, instanceId, 'system', 'warn', '显示端已断开，服务暂停，待重连后自动恢复');
           orphans.push({
             taskName: instance.taskName,
             instanceId,
@@ -779,8 +776,31 @@ class TaskManager extends EventEmitter {
             env: instance.env || 'auto',
             entryFile: instance.entryFile || 'service.js'
           });
+        }
+      }
+    }
+    if (orphans.length > 0) {
+      this._orphanedTasks.set(displayId, orphans);
+      console.log('[TaskManager] 显示端断开，记录待恢复服务:', displayId, orphans.map(o => o.taskName).join(', '));
+    }
+    // 第二遍异步更新状态
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.targetInfo && instance.targetInfo.displayId === displayId &&
+          (instance.status === 'running' || instance.status === 'pending_forward')) {
+        if (instance._forwardTimeout) {
+          clearTimeout(instance._forwardTimeout);
+          instance._forwardTimeout = null;
+        }
+        if (instance.mode === 'service') {
+          instance.status = 'display_offline';
+          instance.stage = 'display_offline';
+          this.emit('log', instanceId, 'system', 'warn', '显示端已断开，服务暂停，待重连后自动恢复');
+          this.emit('progress', instanceId, 'display_offline', { status: 'display_offline' });
+          this._services.delete(instanceId);
+          this._widgetActions.delete(instanceId);
+          await this.taskIO.updateIndex(instance.taskName, { instanceId, status: 'display_offline', error: '显示端已断开连接' });
+          await this.taskIO.writeInstanceLog(instance.taskName, instanceId, 'system', 'warn', '显示端已断开，服务暂停，待重连后自动恢复');
         } else {
-          // 一次性任务：标记 failed（终态）
           instance.status = 'failed';
           instance.stage = 'failed';
           this.emit('log', instanceId, 'system', 'warn', '显示端已断开，任务终止');
@@ -793,10 +813,6 @@ class TaskManager extends EventEmitter {
         }
         stopped.push(instanceId);
       }
-    }
-    if (orphans.length > 0) {
-      this._orphanedTasks.set(displayId, orphans);
-      console.log('[TaskManager] 显示端断开，记录待恢复服务:', displayId, orphans.map(o => o.taskName).join(', '));
     }
     if (stopped.length > 0) {
       console.log('[TaskManager] 显示端断开清理:', displayId, '已停止实例:', stopped.join(', '));

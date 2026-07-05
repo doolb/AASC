@@ -46,6 +46,7 @@ applyRotationStyle(rotation);
 // 多源数据存储
 var sources = {};
 var gaugeMap = {};
+var sourceInstanceMap = {};  // sourceInstanceId -> hostname
 
 function pctColor(pct, baseR, baseG, baseB) {
     var t = Math.min(Math.max(pct, 0), 100) / 100;
@@ -172,8 +173,27 @@ function ensureGauges(hostname) {
     return entry;
 }
 
-function update(data) {
+function removeSource(hostname) {
+    delete sources[hostname];
+    for (var sid in sourceInstanceMap) {
+        if (sourceInstanceMap[sid] === hostname) delete sourceInstanceMap[sid];
+    }
+    var g = gaugeMap[hostname];
+    if (g && g.wrapper && g.wrapper.parentNode) {
+        g.wrapper.parentNode.removeChild(g.wrapper);
+    }
+    delete gaugeMap[hostname];
+}
+
+function update(data, sourceInstanceId) {
     if (!data) return;
+
+    // 源任务已停止，移除该源
+    if (data._stop) {
+        var sid = data._sourceInstanceId || sourceInstanceId;
+        if (sid && sourceInstanceMap[sid]) removeSource(sourceInstanceMap[sid]);
+        return;
+    }
 
     var curRot = window.currentRotation || 0;
     if (curRot !== rotation) {
@@ -185,6 +205,7 @@ function update(data) {
     var hostname = data.hostname || 'unknown';
     if (data.cpuPercent !== undefined || data.memPercent !== undefined) {
         sources[hostname] = data;
+        if (sourceInstanceId) sourceInstanceMap[sourceInstanceId] = hostname;
     } else if (!sources[hostname]) {
         return;  // 无数据且无历史源，跳过渲染
     }

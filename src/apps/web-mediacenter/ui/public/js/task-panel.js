@@ -1325,9 +1325,11 @@
         }
         if (data.type === 'task:run_result') {
           self._requestTaskList();
+          self._updateInstanceStatus(data.payload);
         }
         if (data.type === 'task:rerun_result') {
           self._requestTaskList();
+          self._updateInstanceStatus(data.payload);
         }
         if (data.type === 'task:instance_logs_cleared') {
           if (self._selectedInstanceId === data.payload.instanceId) {
@@ -1359,6 +1361,12 @@
       });
       this._updateMonitorBadge();
       if (this.currentTab === 'monitor') this._renderMonitor();
+      // 提交后切换到任务列表并选中任务
+      if (this.currentTab === 'new') {
+        this._selectedInstanceId = payload.instanceId;
+        this._selectTask(payload.taskName);
+        this._showView('list');
+      }
     },
 
     _updateProgress: function(payload) {
@@ -1636,7 +1644,7 @@
           '<div class="task-monitor-log-content">' + (logHtml || '<div style="color:#555">等待日志...</div>') + '</div>' +
         '</div>' +
         '<div class="task-monitor-actions">' +
-          (inst.status === 'running' ? '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'' + safeId + '\')">停止</button>' : '') +
+          (inst.status === 'running' || inst.status === 'display_offline' ? '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'' + safeId + '\')">停止</button>' : '') +
           (inst.status === 'running' ? '<button class="task-card-btn" onclick="TaskPanel._migrateInstance(\'' + safeId + '\')">迁移到...</button>' : '') +
         '</div>' +
       '</div>';
@@ -1997,6 +2005,27 @@
 
     _clearInstanceLogs: function(taskName, instanceId) {
       this._send({ type: 'task:clear_instance_logs', payload: { taskName: taskName, instanceId: instanceId } });
+    },
+
+    _updateInstanceStatus: function(payload) {
+      if (!payload || !payload.instanceId) return;
+      var inst = this.instances.get(payload.instanceId);
+      if (inst && payload.status) inst.status = payload.status;
+      // 同步更新 taskList 中对应实例的状态
+      for (var t = 0; t < this.taskList.length; t++) {
+        var instances = this.taskList[t].instances || [];
+        for (var i = 0; i < instances.length; i++) {
+          if (instances[i].instanceId === payload.instanceId) {
+            if (payload.status) instances[i].status = payload.status;
+            break;
+          }
+        }
+      }
+      // 立即刷新详情卡片
+      if (this._selectedTaskName && this._selectedInstanceId === payload.instanceId) {
+        var col = document.getElementById('taskResultCol');
+        if (col) col.innerHTML = this._renderResultCol(this._selectedTaskName, this._selectedInstanceId);
+      }
     },
 
     _runCreatedInstance: function(taskName, instanceId) {
@@ -2389,13 +2418,13 @@
       '<div style="margin-top:12px;display:flex;gap:8px">' +
         (inst.status === 'draft'
           ? '<button class="task-card-btn primary" onclick="TaskPanel._runCreatedInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">运行</button>'
-          : inst.status === 'completed' || inst.status === 'failed' || inst.status === 'stopped'
+          : inst.status === 'completed' || inst.status === 'failed' || inst.status === 'stopped' || inst.status === 'display_offline'
             ? '<button class="task-card-btn primary" onclick="TaskPanel._rerunInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">重新运行</button>'
             : '') +
         (inst.status !== 'running' && taskParams && taskParams.length > 0
           ? '<button class="task-card-btn" onclick="TaskPanel._editInstanceParams(\'' + instSafeTaskName + '\',\'' + instSafeId + '\')">编辑参数</button>'
           : '') +
-        (inst.status === 'running' || inst.status === 'pending_forward'
+        (inst.status === 'running' || inst.status === 'pending_forward' || inst.status === 'display_offline'
           ? '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'' + instSafeId + '\')">停止</button>' +
             (inst.status === 'running'
               ? '<button class="task-card-btn" onclick="TaskPanel._linkInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">链接到...</button>'
