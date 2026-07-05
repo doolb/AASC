@@ -143,7 +143,7 @@ function ensureGauges(hostname) {
     wrapper.appendChild(label);
 
     var row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:16px;align-items:center;justify-content:center';
+    row.style.cssText = 'display:flex;gap:16px;align-items:center;justify-content:flex-start;width:100%';
 
     var cpuCol = document.createElement('div');
     cpuCol.style.cssText = 'text-align:center';
@@ -201,6 +201,7 @@ function update(data) {
         var gpuMemTotal = parseFloat(d.gpuMemTotal) || 0;
         var gpuMemUsed = parseFloat(d.gpuMemUsed) || 0;
         var gpuVRAMPct = gpuMemTotal > 0 ? (gpuMemUsed / gpuMemTotal) * 100 : 0;
+        var gpuPowerTxt = (d.gpuPower && d.gpuPower !== 'N/A') ? d.gpuPower.replace(' W', '') + 'W' : '';
 
         g.gpuCol.style.display = hasGpu ? '' : 'none';
 
@@ -217,7 +218,7 @@ function update(data) {
         if (hasGpu) {
             drawDualGauge(g.gpuCtx, gpuPct, gpuVRAMPct, [206, 147, 216], [255, 112, 67], [
                 { text: Math.round(gpuPct) + '%', bold: true, color: '#fff' },
-                { text: (gpuMemTotal > 0 ? Math.round(gpuVRAMPct) + '%' : '--'), color: '#fff' },
+                { text: (gpuMemTotal > 0 ? Math.round(gpuVRAMPct) + '%' : '--') + (gpuPowerTxt ? '  |  ' + gpuPowerTxt : ''), color: '#fff' },
                 { text: gpuTempTxt, color: '#fff' }
             ]);
         }

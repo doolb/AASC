@@ -240,7 +240,7 @@ class TaskManager extends EventEmitter {
 
     let instance = this.instances.get(instanceId);
     if (!instance) {
-      instance = { taskName, instanceId, status: 'draft', timestamp: entry.timestamp || Date.now() };
+      instance = { taskName, instanceId, status: 'draft', timestamp: entry.timestamp || Date.now(), target: entry.target, mode: entry.mode, displayId: entry.displayId, env: entry.env, params: entry.params, entryFile: entry.entryFile };
       this.instances.set(instanceId, instance);
     } else {
       instance.status = 'draft';
@@ -356,7 +356,7 @@ class TaskManager extends EventEmitter {
     await this.taskIO.createInstanceDir(task.taskName, instanceId);
     await this.taskIO.updateIndex(task.taskName, {
       instanceId, taskName: task.taskName, status: 'draft', timestamp,
-      target: task.target, env: task.env, mode: task.mode,
+      target: task.target || 'server', env: task.env, mode: task.mode,
       displayId: task.displayId, params: task.params || {},
       taskType: task.taskType || 'user',
       builtinId: task.builtinId || null,

@@ -8,6 +8,36 @@
 |------|------|
 | `res/tasks/win-monitor/task.js` | 采集任务，target=subdisplay 或 target=server，mode=service |
 
+#### 采集数据
+
+```
+{
+  cpuPercent,          // CPU 使用率（%）
+  cpuTemp,             // CPU 温度（°C）
+  memPercent, memTotal, memUsed,  // 内存
+  hostname, timestamp,
+  gpuName, gpuPercent, gpuTemp,   // GPU 利用率/温度
+  gpuMemUsed, gpuMemTotal,        // GPU 显存
+  gpuClock, gpuFan,               // GPU 频率/风扇
+  gpuPower                          // GPU 功耗（nvidia-smi power.draw）
+}
+```
+
+#### CPU 温度采集
+
+| 平台 | 方式 |
+|------|------|
+| Windows | `systeminformation` 库的 `si.cpuTemperature()` |
+| Linux | `sensors -j` JSON 解析，取 Package id 0 或 Core 0 |
+
+#### GPU 数据采集
+
+nvidia-smi 查询字段：
+- utilization.gpu, temperature.gpu
+- memory.used, memory.total
+- clocks.current.graphics, fan.speed
+- **power.draw**（GPU 功耗）
+
 ### render-display (渲染任务)
 
 | 文件 | 说明 |

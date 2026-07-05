@@ -2,6 +2,8 @@ const os = require('os');
 const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
+let si = null;
+try { si = require('systeminformation'); } catch (_) {}
 
 let timer = null;
 let prevCpuStat = null;  // Linux /proc/stat 差值缓存
@@ -38,11 +40,11 @@ async function collectStats(isWin) {
         var gpuRaw = await execAsync(
             'nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,' +
             'memory.used,memory.total,clocks.current.graphics,' +
-            'fan.speed,name --format=csv,noheader',
+            'fan.speed,name,power.draw --format=csv,noheader',
             { timeout: 3000 }
         );
         var cols = gpuRaw.stdout.trim().split(', ');
-        if (cols.length >= 6) {
+        if (cols.length >= 7) {
             gpu = {
                 gpuName: cols[6],
                 gpuPercent: cols[0] ? cols[0].replace('%', '') : 'N/A',
@@ -50,7 +52,8 @@ async function collectStats(isWin) {
                 gpuMemUsed: cols[2] ? Math.round(parseInt(cols[2]) / 1024) : 0,
                 gpuMemTotal: cols[3] ? Math.round(parseInt(cols[3]) / 1024) : 0,
                 gpuClock: cols[4] || 'N/A',
-                gpuFan: cols[5] || 'N/A'
+                gpuFan: cols[5] || 'N/A',
+                gpuPower: cols[7] || 'N/A'
             };
         }
     } catch (_) { /* no GPU */ }
@@ -79,23 +82,33 @@ async function collectStats(isWin) {
         lastCpus = cpus;
         if (cpuPercent === 'N/A') cpuPercent = 0;
 
-        // Windows CPU 温度：尝试多种方式
-        try {
-            var tempRaw = await execAsync(
-                'wmic /namespace:\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature',
-                { timeout: 2000 }
-            );
-            var tMatch = tempRaw.stdout.match(/(\d{4,})/);
-            if (tMatch) cpuTemp = ((parseInt(tMatch[1]) / 10) - 273.15).toFixed(0);
-        } catch (_) {
+        // Windows CPU 温度：优先 systeminformation，降级 wmic
+        if (si) {
+            try {
+                var tempInfo = await si.cpuTemperature();
+                if (tempInfo.main !== null && tempInfo.main !== undefined && tempInfo.main > 0) {
+                    cpuTemp = '' + tempInfo.main;
+                }
+            } catch (_) {}
+        }
+        if (cpuTemp === 'N/A') {
             try {
                 var tempRaw = await execAsync(
-                    'wmic path Win32_PerfFormattedData_Counters_ThermalZoneInformation get Temperature',
+                    'wmic /namespace:\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature',
                     { timeout: 2000 }
                 );
                 var tMatch = tempRaw.stdout.match(/(\d{4,})/);
                 if (tMatch) cpuTemp = ((parseInt(tMatch[1]) / 10) - 273.15).toFixed(0);
-            } catch (_) {}
+            } catch (_) {
+                try {
+                    var tempRaw = await execAsync(
+                        'wmic path Win32_PerfFormattedData_Counters_ThermalZoneInformation get Temperature',
+                        { timeout: 2000 }
+                    );
+                    var tMatch = tempRaw.stdout.match(/(\d{4,})/);
+                    if (tMatch) cpuTemp = ((parseInt(tMatch[1]) / 10) - 273.15).toFixed(0);
+                } catch (_) {}
+            }
         }
     } else {
         // Linux：/proc/stat 差值法（含 iowait）

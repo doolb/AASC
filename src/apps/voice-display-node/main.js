@@ -471,7 +471,7 @@ class VoiceDisplay {
 
         log('任务', '收到任务: ' + taskName + '/' + instanceId + ' 入口: ' + entryFile);
 
-        var tmpDir = path.join(os.tmpdir(), 'task-' + instanceId);
+        var tmpDir = path.join(__dirname, 'run-task', 'task-' + instanceId);
         fs.mkdirSync(tmpDir, { recursive: true });
 
         var fileStore = {};
@@ -766,7 +766,7 @@ class VoiceDisplay {
         }
 
         this.reconnectAttempts++;
-        const delay = this.reconnectAttempts * 2000;
+        const delay = this.reconnectAttempts * 5000;
 
         log('重连', `第${this.reconnectAttempts}次尝试重连，${delay/1000}秒后...`);
 

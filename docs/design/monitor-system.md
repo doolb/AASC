@@ -24,8 +24,8 @@
 ```
 win-monitor (子显示端/服务器)
   │ setInterval 采集
-  │   ├── wmic / nvidia-smi (Windows)
-  │   └── /proc/stat / os 模块 (Linux)
+  │   ├── systeminformation / nvidia-smi (Windows)
+  │   └── sensors -j / /proc/stat / os 模块 (Linux)
   │
   ├── sendProgress({ cpuPercent, gpuPercent, memPercent, ... })
   │

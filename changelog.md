@@ -10,6 +10,20 @@
   - 改动文件：
     - res/tasks/win-monitor/task.js
 
+- ✅ [2026-07-05] Windows CPU 温度改用 systeminformation 库，GPU 采集增加功耗显示
+  - Windows CPU 温度从 wmic 切换为 `si.cpuTemperature()`，更稳定准确
+  - nvidia-smi 增加 power.draw 字段采集 GPU 功耗
+  - render-display 仪表盘 GPU 圆圈中间显示功耗值（显存同行）
+  - systeminformation require 失败时自动降级 wmic
+  - 子显示端任务目录从 os.tmpdir() 改为 voice-display-node/run-task/，使 node_modules 可解析
+  - 改动文件：
+    - res/tasks/win-monitor/task.js
+    - res/tasks/render-display/render.js
+    - src/apps/voice-display-node/main.js
+    - .gitignore
+    - docs/spec/monitor-system.md
+    - docs/design/monitor-system.md
+
 - ✅ [2026-07-04] 任务状态卡片增加停止按钮、执行目标和模式显示
   - task-panel.js: _resultDetailHTML 添加目标(server/display/subdisplay)和模式(one-shot/service)显示
   - task-panel.js: 运行中/转发中的实例状态卡片添加停止按钮

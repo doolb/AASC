@@ -6,3 +6,4 @@ res/temp/
 3rd/voice-display-cs/bin/
 src/native/malloc-trim/build/
 logs/
+src/apps/voice-display-node/run-task/

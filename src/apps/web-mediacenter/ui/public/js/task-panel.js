@@ -1627,7 +1627,7 @@
           '<span class="task-monitor-timer">' + (inst.status === 'pending' ? '排队中' : duration) + '</span>' +
         '</div>' +
         '<div class="task-monitor-stage">阶段: ' + this._escapeHtml(inst.stage || inst.status) + '</div>' +
-        '<div class="task-monitor-target" title="' + this._escapeAttr(inst.instanceId || '-') + '">执行于: ' + this._escapeHtml(inst.target || '服务端') + ' | ' + this._escapeHtml(inst.instanceId || '-') + '</div>' +
+        '<div class="task-monitor-target" title="' + this._escapeAttr(inst.instanceId || '-') + '">执行于: ' + this._escapeHtml(inst.target || '服务端') + (inst.displayId ? '(' + this._escapeHtml(inst.displayId) + ')' : '') + ' | ' + this._escapeHtml(inst.instanceId || '-') + '</div>' +
         progressBar +
         metricsHtml +
         streamOutput +
@@ -1686,12 +1686,12 @@
       var inst = this.instances.get(instanceId);
       if (!inst) return;
       var self = this;
-      this._showDevicePicker(function(deviceId) {
+      this._showDevicePicker(function(deviceId, deviceType) {
         self._send({ type: 'task:stop', payload: { taskName: inst.taskName, instanceId: instanceId } });
         self._send({ type: 'task:submit', payload: {
           taskName: inst.taskName,
           taskType: 'user',
-          target: deviceId ? 'display' : 'server',
+          target: deviceId ? (deviceType || 'display') : 'server',
           displayId: deviceId || null,
           mode: inst.mode || 'one-shot',
           env: inst.env || 'auto',
@@ -1705,13 +1705,14 @@
       var self = this;
       var overlay = document.createElement('div');
       overlay.className = 'task-confirm-overlay';
-      var listHtml = '<div class="task-device-item selected" data-id="">' +
+      var listHtml = '<div class="task-device-item selected" data-id="" data-type="">' +
         '<div class="task-device-radio"></div><div class="task-device-info"><div class="task-device-name">服务端 (当前)</div></div>' +
       '</div>';
       for (var i = 0; i < this.displayList.length; i++) {
         var d = this.displayList[i];
         var safeId = this._escapeAttr(d.id);
-        listHtml += '<div class="task-device-item" data-id="' + safeId + '">' +
+        var deviceType = d.isSubDisplay ? 'subdisplay' : 'display';
+        listHtml += '<div class="task-device-item" data-id="' + safeId + '" data-type="' + deviceType + '">' +
           '<div class="task-device-radio"></div>' +
           '<div class="task-device-info"><div class="task-device-name">' + this._escapeHtml(d.id) + '</div></div>' +
           '<span class="task-device-state online">在线</span>' +
@@ -1739,8 +1740,9 @@
       document.getElementById('pickerConfirm').onclick = function() {
         var selected = overlay.querySelector('.task-device-item.selected');
         var id = selected ? selected.dataset.id : '';
+        var type = selected ? selected.dataset.type : '';
         document.body.removeChild(overlay);
-        callback(id);
+        callback(id, type);
       };
     },
 
@@ -2363,7 +2365,7 @@
         '<div class="task-result-meta-item">状态: <strong>' + statusText + '</strong></div>' +
         '<div class="task-result-meta-item">耗时: <strong>' + duration + '</strong></div>' +
         '<div class="task-result-meta-item">实例: <strong style="font-family:monospace" title="' + this._escapeAttr(inst.instanceId || '') + '">#' + this._escapeHtml(inst.instanceId || '-') + '</strong></div>' +
-        '<div class="task-result-meta-item">目标: <strong>' + this._escapeHtml(inst.target === 'display' ? '显示端' : inst.target === 'subdisplay' ? '子显示端' : inst.target || '服务端') + '</strong></div>' +
+        '<div class="task-result-meta-item">目标: <strong>' + this._escapeHtml(inst.target === 'display' ? '显示端' : inst.target === 'subdisplay' ? '子显示端' : inst.target || '服务端') + (inst.displayId ? '(' + this._escapeHtml(inst.displayId) + ')' : '') + '</strong></div>' +
         '<div class="task-result-meta-item">模式: <strong>' + this._escapeHtml(inst.mode === 'service' ? '服务' : '一次性') + '</strong></div>' +
         '<div class="task-result-meta-item">环境: <strong>' + this._escapeHtml(inst.env || '-') + '</strong></div>' +
       (inst.result && inst.result.metrics ? '<div class="task-result-metrics">' +

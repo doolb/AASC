@@ -4,7 +4,7 @@
       "instanceId": "ce2c4a03",
       "taskName": "win-monitor",
       "status": "running",
-      "timestamp": 1783224294288,
+      "timestamp": 1783228268069,
       "env": "auto",
       "mode": "service",
       "displayId": null,
@@ -17,18 +17,21 @@
       "target": "server"
     },
     {
-      "instanceId": "ad6160d4",
+      "instanceId": "5b1d5b76",
       "taskName": "win-monitor",
-      "status": "pending_forward",
-      "timestamp": 1783224294299,
-      "target": "subdisplay",
+      "status": "running",
+      "timestamp": 1783228268141,
       "env": "auto",
       "mode": "service",
       "displayId": "voice-display-node-1",
       "params": {},
       "taskType": "user",
       "builtinId": null,
-      "entryFile": "task.js"
+      "entryFile": "task.js",
+      "error": "显示端已断开连接",
+      "target": "subdisplay",
+      "stage": "running",
+      "progress": 100
     }
   ]
 }
