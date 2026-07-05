@@ -19,8 +19,10 @@ function applyRotationStyle(rot) {
         overlay.style.bottom = '80px';
         overlay.style.left = '0';
     } else if (rot === 90) {
-        overlay.style.top = '0';
-        overlay.style.left = '0';
+        var w = overlay.offsetWidth;
+        var h = overlay.offsetHeight;
+        overlay.style.left = (-w/2 + h/2) + 'px';
+        overlay.style.top = (-h/2 + w/2) + 'px';
         overlay.style.right = 'auto';
         overlay.style.bottom = 'auto';
         overlay.style.transform = 'rotate(90deg)';
@@ -33,9 +35,11 @@ function applyRotationStyle(rot) {
         overlay.style.transform = 'rotate(180deg)';
         overlay.style.transformOrigin = 'center center';
     } else if (rot === 270) {
+        var w = overlay.offsetWidth;
+        var h = overlay.offsetHeight;
+        overlay.style.right = (h/2 - w/2) + 'px';
+        overlay.style.bottom = (w/2 - h/2) + 'px';
         overlay.style.top = 'auto';
-        overlay.style.bottom = '0';
-        overlay.style.right = '0';
         overlay.style.left = 'auto';
         overlay.style.transform = 'rotate(-90deg)';
         overlay.style.transformOrigin = 'center center';
@@ -139,7 +143,7 @@ function ensureGauges(hostname) {
     wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px';
 
     var label = document.createElement('div');
-    label.style.cssText = 'font-size:16px;color:rgba(255,255,255,0.5);letter-spacing:1px;text-align:center';
+    label.style.cssText = 'font-size:24px;color:#fff;letter-spacing:1px;text-align:center';
     label.textContent = hostname;
     wrapper.appendChild(label);
 
@@ -198,8 +202,8 @@ function update(data, sourceInstanceId) {
     var curRot = window.currentRotation || 0;
     if (curRot !== rotation) {
         rotation = curRot;
-        applyRotationStyle(rotation);
     }
+    applyRotationStyle(rotation);
 
     // 只添加有实际监控数据的源，跳过初始空数据
     var hostname = data.hostname || 'unknown';

@@ -64,9 +64,10 @@ nvidia-smi 查询字段：
 
 render-display 覆盖层（`#monitorOverlay`）跟随显示端旋转：
 
-- 旋转 90°/270° 时交换宽高，使用 CSS transform 旋转
-- 每次 `update()` 动态检测 `window.currentRotation` 变化
-- render.html 使用 `width:100%;height:100%`（非 fixed 定位），嵌入覆盖层自然旋转
+- 旋转 90°/270° 时使用 CSS transform 旋转，旋转中心为 center center
+- `applyRotationStyle()` 动态计算 `left/top`（90°）或 `right/bottom`（270°），保证旋转后视觉边缘距屏幕边缘 24px，适配多设备（3 台）时的高覆盖层
+- 每次 `update()` 都调用 `applyRotationStyle()`（不仅 rotation 变化时），确保设备增减后定位重新计算
+- render.html 使用 `position:fixed;display:flex;flex-direction:column`，覆盖层自然跟随旋转
 
 ### 子显示端增强
 

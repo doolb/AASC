@@ -32,6 +32,14 @@
 
 ### 修复
 
+- ✅ [2026-07-05] 修复 render-display 覆盖层 90°/270° 旋转时三设备显示位置偏移
+  - 根因：applyRotationStyle 使用固定 left:0/top:0（90°）和 right:0/bottom:0（270°），多设备时覆盖层过高，旋转后视觉左侧偏移屏幕外 / 左边间隔过大
+  - 修复：根据 overlay.offsetWidth/offsetHeight 动态计算 left/top（90°）或 right/bottom（270°），确保旋转后视觉边缘距屏幕边缘 24px；每次 update() 都重算位置
+  - 改动文件：
+    - res/tasks/render-display/render.js
+  - 文档更新：
+    - docs/spec/monitor-system.md
+
 - ✅ [2026-07-05] 服务任务断连改为 `display_offline` 状态，控制端显示"进行中(offline)"
   - 服务任务断开不再标记为 `failed`，改用 `display_offline`（可恢复态，非终态）
   - 控制端 UI 新增 `display_offline` 映射：状态显示"进行中(offline)"，橙色边框/标签
