@@ -162,14 +162,11 @@
                 
                 <div class="control-item">
                     <label>视频播放</label>
-                    <div class="control-buttons">
+                    <div class="control-buttons" style="display:flex;align-items:center;gap:12px">
                         <button class="control-btn paused" id="playPauseBtn" onclick="togglePlayPause()">播放</button>
+                        <span id="progressValue" style="font-size:13px;color:rgba(255,255,255,0.6);min-width:40px">0%</span>
                     </div>
-                </div>
-                
-                <div class="control-item">
-                    <label>播放进度: <span id="progressValue">0</span>%</label>
-                    <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="updateProgress(this.value)">
+                    <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="updateProgress(this.value)" style="margin-top:8px">
                 </div>
                 
                 <div class="control-item">

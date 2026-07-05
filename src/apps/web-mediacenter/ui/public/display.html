@@ -1088,6 +1088,16 @@
                     mediaVideo.load();
                     mediaVideo.play().catch(e => console.log('自动播放被阻止'));
                     mediaVideo.onloadedmetadata = () => applyCrop();
+                    mediaVideo.ontimeupdate = function() {
+                        if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+                        var d = mediaVideo.duration;
+                        if (!d) return;
+                        displayWs.send(JSON.stringify({
+                            type: 'videoProgress',
+                            currentTime: mediaVideo.currentTime,
+                            duration: d
+                        }));
+                    };
                 } else {
                     mediaVideo.style.display = 'none';
                     mediaImage.style.display = 'block';

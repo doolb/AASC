@@ -27,7 +27,7 @@ const Controls = {
     updateProgress(value) {
         const progressValue = document.getElementById('progressValue');
         if (progressValue) {
-            progressValue.textContent = value;
+            progressValue.textContent = value + '%';
         }
     },
     

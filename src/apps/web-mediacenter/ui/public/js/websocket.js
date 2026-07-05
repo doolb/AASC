@@ -143,6 +143,16 @@ const WebSocketManager = {
             } else {
                 console.log('[WS] displayState displayId 不匹配，跳过处理');
             }
+        } else if (data.type === 'videoProgress') {
+            // 只显示当前选中显示端的进度
+            if (data.displayId && data.displayId !== window.currentDisplayId) return;
+            var slider = document.getElementById('progressSlider');
+            var label = document.getElementById('progressValue');
+            if (slider && data.duration) {
+                var pct = Math.round((data.currentTime / data.duration) * 100);
+                slider.value = pct;
+                if (label) label.textContent = pct + '%';
+            }
         } else if (data.type === 'chatChunk') {
             if (window.Chat) {
                 window.Chat.handleChunk(data);
