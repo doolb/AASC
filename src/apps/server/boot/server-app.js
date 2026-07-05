@@ -365,6 +365,9 @@ function startServer() {
                 },
                 onDisplayDisconnect: (displayId) => {
                     log('WS', `显示端断开: ${displayId}`);
+                    if (taskManager) {
+                        taskManager.handleDisplayDisconnect(displayId);
+                    }
                 },
                 onControlConnect: (ws) => {
                     log('WS', '控制端连接');
@@ -2098,7 +2101,7 @@ function sendToDisplaysWithCapability(capabilityName, message) {
 
 let displayListDebounceTimer = null;
 
-const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress']);
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
@@ -2400,6 +2403,8 @@ wss.on('connection', (ws, req) => {
         // 显示端已连接，重试待转发的显示端服务
         if (taskManager) {
             taskManager.retryPendingDisplayServices(displayId);
+            taskManager.retryOrphanedTasks(displayId);
+            taskManager.reforwardStaleDisplayTasks(displayId);
         }
 
         // 连接时发送服务器端保存的用户能力覆盖（如果有），让显示端启动时就知道限制
@@ -2435,7 +2440,7 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                if (data.type !== 'clientLog' && data.type !== 'task:progress') {
+                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck') {
                     log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
@@ -2640,10 +2645,6 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         broadcastDisplayList();
     } else if (data.type === 'commandAck' && displayData) {
         const ackCorrelationId = data.correlationId || generateCorrelationId('ack');
-        log('WS', `<< ${displayId} ACK: ${data.commandType} ${data.success ? '✓' : '✗'} ${data.details || ''}`, {
-            displayId, source: displayId, targetId: 'server', scope: 'single',
-            correlationId: ackCorrelationId
-        });
         const ackMsg = {
             type: 'commandAck',
             displayId: displayId,

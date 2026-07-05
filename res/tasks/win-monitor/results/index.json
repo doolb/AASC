@@ -4,7 +4,7 @@
       "instanceId": "ce2c4a03",
       "taskName": "win-monitor",
       "status": "running",
-      "timestamp": 1783180937820,
+      "timestamp": 1783224294288,
       "env": "auto",
       "mode": "service",
       "displayId": null,
@@ -17,10 +17,10 @@
       "target": "server"
     },
     {
-      "instanceId": "f9d6f3c1",
+      "instanceId": "ad6160d4",
       "taskName": "win-monitor",
-      "status": "running",
-      "timestamp": 1783181870594,
+      "status": "pending_forward",
+      "timestamp": 1783224294299,
       "target": "subdisplay",
       "env": "auto",
       "mode": "service",
@@ -28,9 +28,7 @@
       "params": {},
       "taskType": "user",
       "builtinId": null,
-      "entryFile": "task.js",
-      "stage": "running",
-      "progress": 100
+      "entryFile": "task.js"
     }
   ]
 }

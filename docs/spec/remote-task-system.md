@@ -65,9 +65,35 @@ submit() -> _runServiceTask() -> run() 返回 { type: 'service', stop() }
 
 ### 停止孤儿实例
 
+#### 服务器重启孤儿
+
 服务器重启后，`mode=one-shot` 且 `status=running` 的实例不会被 `restoreAutoStartServices()` 恢复。
 `stopInstance()` 在 `this.instances` 中找不到实例时，回退到 index.json 查找并直接更新 `status='stopped'`，
 确保前端发起的停止操作不会因实例不在内存而失败。
+
+#### 显示端断连孤儿
+
+显示端的 WebSocket 断开时（浏览器刷新、网络断开），`server-app.js` 的 `onDisplayDisconnect` 回调调用
+`taskManager.handleDisplayDisconnect(displayId)` 清理孤儿任务：
+
+1. 遍历 `this.instances`，匹配 `targetInfo.displayId === displayId` 且状态为 `running`/`pending_forward`
+2. 清除转发超时 `_forwardTimeout`
+3. **服务任务**（`mode=service`）：状态改为 `display_offline`（非终态，等待重连恢复），通过 `progress` 事件（带 `status` 字段）通知控制端；
+   **一次性任务**：状态改为 `failed`（终态），通过 `result` 事件通知控制端
+4. 清除 `_services` 和 `_widgetActions` 中的条目
+5. 持久化状态到 index.json
+6. 服务任务同时记录到 `_orphanedTasks`，待显示端重连后自动恢复
+
+这样避免控制端仍显示"运行中"而实际任务已无法继续执行的歧义。`display_offline` 在控制端 UI 中显示为"进行中(offline)"（橙色标签），
+语义上区别于"失败"和"运行中"。
+
+如果实例是 `mode=service` 的服务任务，还会记录到 `_orphanedTasks` Map 中，
+待显示端重连后由 `retryOrphanedTasks(displayId)` 自动恢复：
+
+1. `handleDisplayDisconnect` 将服务任务的信息（taskName、params、target、entryFile 等）存入 `_orphanedTasks`
+2. `server-app.js` 的显示端连接处理（`onDisplayConnect`）在 `retryPendingDisplayServices` 后调用 `retryOrphanedTasks(displayId)`
+3. 遍历该显示端的孤儿任务列表，逐一调 `submit()` → `runInstance()` 重新创建并执行
+4. 新实例通过 `task:execute` 转发到显示端，状态流转：draft → running（pending_forward → running）
 
 ## 草稿模式（Draft Mode）
 
@@ -80,10 +106,22 @@ submit → draft (可编辑参数)
           │ task:run
           ▼
        pending → preparing → running → completed/failed/stopped
-                                         │ task:rerun
-                                         ▼
-                                       draft (同实例重置)
+          │         │            │
+          │         │      (显示端断开)
+          │         │            ▼
+          │         │     display_offline (非终态，待重连恢复)
+          │         │            │ rerunInstance + runInstance (显示端重连)
+          │         │            ▼
+          │         │         running (复用原 instanceId)
+          ▼         ▼
+       pending_forward
 ```
+
+### 状态说明
+
+- `display_offline`：仅用于 `mode=service` 的显示端任务，显示端断开时从 `running` 转入。
+  非终态，显示端重连后自动恢复为 `running`。控制端显示"进行中(offline)"。
+- `pending_forward`：任务已提交、等待显示端确认。30 秒超时后转为 `failed`。
 
 ### 核心规则
 
@@ -107,6 +145,7 @@ class TaskManager extends EventEmitter {
   getInstance(instanceId)             // 按 instanceId 获取实例对象
   getInstanceStatus(taskName, instanceId?)  // 查询实例状态
   handleForwardResult(taskName, instanceId, result)  // 处理显示端/子显示端返回的结果
+  handleDisplayDisconnect(displayId)  // 显示端断开时清理孤儿任务
   destroy()            // 清理资源、终止进程、关闭浏览器
 }
 ```

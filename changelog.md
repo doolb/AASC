@@ -4,6 +4,12 @@
 
 ### 新增
 
+- ✅ [2026-07-05] Linux CPU 温度采集改用 sensors 命令（替代 thermal_zone 文件读取）
+  - sensors -j 输出 JSON 更稳定，支持更多硬件平台
+  - 优先取 Package id 0 封装温度，兜底取 Core 0 核心温度
+  - 改动文件：
+    - res/tasks/win-monitor/task.js
+
 - ✅ [2026-07-04] 任务状态卡片增加停止按钮、执行目标和模式显示
   - task-panel.js: _resultDetailHTML 添加目标(server/display/subdisplay)和模式(one-shot/service)显示
   - task-panel.js: 运行中/转发中的实例状态卡片添加停止按钮
@@ -11,6 +17,32 @@
     - src/apps/web-mediacenter/ui/public/js/task-panel.js
 
 ### 修复
+
+- ✅ [2026-07-05] 服务任务断连改为 `display_offline` 状态，控制端显示"进行中(offline)"
+  - 服务任务断开不再标记为 `failed`，改用 `display_offline`（可恢复态，非终态）
+  - 控制端 UI 新增 `display_offline` 映射：状态显示"进行中(offline)"，橙色边框/标签
+  - 新增 CSS 样式 `.display-offline`
+  - 改动文件：
+    - src/apps/server/modules/task-engine/task-manager.js
+    - src/apps/server/modules/task-engine/web-socket-handler.js
+    - src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - src/apps/web-mediacenter/ui/public/css/upload.css
+    - docs/spec/remote-task-system.md
+
+- ✅ [2026-07-05] 修复显示端断连后控制端任务状态不同步（显示端重启后任务仍显示"运行中"）
+  - 根因：显示端 WebSocket 断开时 `onDisplayDisconnect` 仅记录日志，未清理该显示端上的运行中任务
+  - 修复：TaskManager 新增 `handleDisplayDisconnect(displayId)` 方法
+    - 遍历匹配 `targetInfo.displayId` 的 running/pending_forward 实例
+    - 更新状态为 `failed`（原因：显示端已断开连接）
+    - 通过 `result` 事件广播到控制端实时更新 UI
+  - 服务模式任务自动恢复：断开时记录到 `_orphanedTasks`，重连后 `retryOrphanedTasks()` 自动 rerunInstance + runInstance（复用原 instanceId，不创建新实例）
+  - 新增 `reforwardStaleDisplayTasks(displayId)` 显示端重连时扫描 `this.instances`，对修复前残留的 running/pending_forward 实例也重新转发
+  - 修复 `runInstance` 中三个显示端转发路径未将 `pending_forward` 状态写入 index
+    - 导致控制端早起连接时读到磁盘的旧 `running` 状态，显示"运行中"
+  - 改动文件：
+    - src/apps/server/modules/task-engine/task-manager.js
+    - src/apps/server/boot/server-app.js
+    - docs/spec/remote-task-system.md
 
 - ✅ [2026-07-04] 修复子显示端 task:progress 未触发任务链路由
   - 根因：web-socket-handler task:progress 分支直接 sendToControl 绕过 taskManager 事件系统，任务链路由不触发

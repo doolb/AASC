@@ -26,6 +26,7 @@ class TaskManager extends EventEmitter {
     this.maxInstances = options.maxInstances || 50;
     this.taskLinks = new Map();  // sourceInstanceId -> [{ taskName, instanceId }]
     this._pendingDisplayServices = [];  // [{ taskName, instanceId, task, params }] 待显示端连接后转发
+    this._orphanedTasks = new Map();     // displayId -> [{ taskName, params, entryFile, ... }] 显示端断连后待重连恢复
   }
 
   async init() {
@@ -70,7 +71,6 @@ class TaskManager extends EventEmitter {
           } catch (err) {
             console.error('[TaskManager] 服务恢复失败:', entry.taskName, err.message);
           }
-          break;
         }
       }
     }
@@ -108,6 +108,9 @@ class TaskManager extends EventEmitter {
     };
 
     instance.status = 'running';
+    instance.target = task.target;
+    instance.params = task.params;
+    instance.entryFile = task.entryFile;
     this.emit('progress', instanceId, 'running', 30);
     this.emit('log', instanceId, 'system', 'info', '开始执行, 目标: ' + task.target + ', 环境: ' + task.env);
     await this.taskIO.updateIndex(taskName, { instanceId, status: 'running' });
@@ -123,7 +126,7 @@ class TaskManager extends EventEmitter {
       if (task.mode === 'service') {
         for (const [sid, svc] of this._services) {
           const sInst = this.instances.get(sid);
-          if (sInst && sInst.taskName === task.taskName && svc.status === 'running') {
+          if (sInst && sInst.taskName === task.taskName && sInst.target === task.target && svc.status === 'running') {
             console.log('[TaskManager] 停止旧服务实例:', sid, 'taskName:', task.taskName);
             try { await svc.stop(); } catch (e) { }
             this._services.delete(sid);
@@ -137,6 +140,7 @@ class TaskManager extends EventEmitter {
           instance.targetInfo = { displayId: task.displayId };
           console.log('[TaskManager] 转发显示端服务, instanceId:', instanceId, 'displayId:', task.displayId);
           this._forwardToDisplay(task, instanceId, task.params);
+          await this.taskIO.updateIndex(taskName, { instanceId, status: 'pending_forward' });
           if (this._isRestoring) return { taskName, instanceId, status: 'pending_forward' };
           instance._forwardTimeout = setTimeout(() => {
             const inst = this.instances.get(instanceId);
@@ -172,6 +176,7 @@ class TaskManager extends EventEmitter {
           this.emit('progress', instanceId, 'forwarding', 50);
           this.emit('log', instanceId, 'system', 'info', '正在转发到显示端...');
           this._forwardToDisplay(task, instanceId, result.forwardParams);
+          await this.taskIO.updateIndex(taskName, { instanceId, status: 'pending_forward' });
           return { taskName, instanceId, status: 'pending_forward' };
         }
 
@@ -190,6 +195,7 @@ class TaskManager extends EventEmitter {
         instance.targetInfo = { displayId: task.displayId };
         console.log('[TaskManager] 转发到显示端, instanceId:', instanceId, 'displayId:', task.displayId);
         this._forwardToDisplay(task, instanceId, task.params);
+        await this.taskIO.updateIndex(taskName, { instanceId, status: 'pending_forward' });
         instance._forwardTimeout = setTimeout(() => {
           const inst = this.instances.get(instanceId);
           if (inst && inst.status === 'pending_forward') {
@@ -447,8 +453,11 @@ class TaskManager extends EventEmitter {
       }
       this._services.delete(instanceId);
       this._widgetActions.delete(instanceId);
+      instance.status = 'stopped';
+      instance.stage = 'stopped';
 
       this.emit('log', instanceId, 'system', 'info', '服务已停止');
+      this.emit('progress', instanceId, 'stopped', 0);
       await this.taskIO.updateIndex(taskName, { instanceId, status: 'stopped' });
       return { success: true };
     }
@@ -730,6 +739,129 @@ class TaskManager extends EventEmitter {
       this.taskLinks.delete(sourceInstanceId);
     }
     await this.taskIO.saveTaskLinks(this.taskLinks);
+  }
+
+  /**
+   * 显示端断开连接时，清理该显示端上运行中的任务
+   * 防止控制端显示"运行中"但实际已无法继续执行
+   * 服务模式任务标记为 display_offline（语义：待重连恢复）
+   * 一次性任务直接标记为 failed
+   */
+  async handleDisplayDisconnect(displayId) {
+    const stopped = [];
+    const orphans = [];
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.targetInfo && instance.targetInfo.displayId === displayId &&
+          (instance.status === 'running' || instance.status === 'pending_forward')) {
+        // 清除转发超时
+        if (instance._forwardTimeout) {
+          clearTimeout(instance._forwardTimeout);
+          instance._forwardTimeout = null;
+        }
+        if (instance.mode === 'service') {
+          // 服务任务：标记 display_offline，不发送 result（非终态），等待重连恢复
+          instance.status = 'display_offline';
+          instance.stage = 'display_offline';
+          this.emit('log', instanceId, 'system', 'warn', '显示端已断开，服务暂停，待重连后自动恢复');
+          this.emit('progress', instanceId, 'display_offline', { status: 'display_offline' });
+          this._services.delete(instanceId);
+          this._widgetActions.delete(instanceId);
+          await this.taskIO.updateIndex(instance.taskName, { instanceId, status: 'display_offline', error: '显示端已断开连接' });
+          await this.taskIO.writeInstanceLog(instance.taskName, instanceId, 'system', 'warn', '显示端已断开，服务暂停，待重连后自动恢复');
+          orphans.push({
+            taskName: instance.taskName,
+            instanceId,
+            taskType: instance.taskType || 'user',
+            mode: 'service',
+            target: instance.target || 'display',
+            displayId,
+            params: instance.params || {},
+            env: instance.env || 'auto',
+            entryFile: instance.entryFile || 'service.js'
+          });
+        } else {
+          // 一次性任务：标记 failed（终态）
+          instance.status = 'failed';
+          instance.stage = 'failed';
+          this.emit('log', instanceId, 'system', 'warn', '显示端已断开，任务终止');
+          this.emit('progress', instanceId, 'failed', 0);
+          this.emit('result', instanceId, { success: false, error: '显示端已断开连接' });
+          this._services.delete(instanceId);
+          this._widgetActions.delete(instanceId);
+          await this.taskIO.updateIndex(instance.taskName, { instanceId, status: 'failed', error: '显示端已断开连接' });
+          await this.taskIO.writeInstanceLog(instance.taskName, instanceId, 'system', 'warn', '显示端已断开，任务终止');
+        }
+        stopped.push(instanceId);
+      }
+    }
+    if (orphans.length > 0) {
+      this._orphanedTasks.set(displayId, orphans);
+      console.log('[TaskManager] 显示端断开，记录待恢复服务:', displayId, orphans.map(o => o.taskName).join(', '));
+    }
+    if (stopped.length > 0) {
+      console.log('[TaskManager] 显示端断开清理:', displayId, '已停止实例:', stopped.join(', '));
+    }
+    return stopped;
+  }
+
+  /**
+   * 显示端重连后，自动恢复之前因断连而中止的服务任务
+   * 复用原实例（rerunInstance → runInstance），保持 instanceId 不变
+   */
+  async retryOrphanedTasks(displayId) {
+    const orphans = this._orphanedTasks.get(displayId);
+    if (!orphans || orphans.length === 0) return [];
+    this._orphanedTasks.delete(displayId);
+    const restored = [];
+    for (const o of orphans) {
+      if (!o.instanceId) continue;
+      try {
+        console.log('[TaskManager] 恢复孤儿服务:', o.taskName, o.instanceId, '->', displayId);
+        await this.rerunInstance(o.taskName, o.instanceId);
+        await this.runInstance(o.taskName, o.instanceId);
+        restored.push({ taskName: o.taskName, instanceId: o.instanceId, status: 'restored' });
+      } catch (err) {
+        console.error('[TaskManager] 恢复孤儿服务失败:', o.taskName, err.message);
+      }
+    }
+    return restored;
+  }
+
+  /**
+   * 显示端重连后，扫描 this.instances 中残留的 running/pending_forward 实例
+   * 直接重新转发到显示端，不创建新实例
+   */
+  async reforwardStaleDisplayTasks(displayId) {
+    const refwd = [];
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.targetInfo && instance.targetInfo.displayId === displayId &&
+          (instance.status === 'running' || instance.status === 'pending_forward' || instance.status === 'display_offline')) {
+        try {
+          const payload = {
+            type: 'task:execute',
+            payload: {
+              taskName: instance.taskName,
+              instanceId,
+              builtinId: instance.builtinId || null,
+              entryFile: instance.entryFile || 'task.js',
+              files: await this.taskIO.readTaskFiles(instance.taskName, null),
+              params: instance.params || {},
+              env: instance.env || 'auto'
+            }
+          };
+          if (this._sendToDisplay) {
+            const sent = this._sendToDisplay(displayId, payload);
+            if (sent) {
+              console.log('[TaskManager] 重发残留实例到显示端:', instanceId, '->', displayId);
+              refwd.push(instanceId);
+            }
+          }
+        } catch (err) {
+          console.error('[TaskManager] 重发残留实例失败:', instanceId, err.message);
+        }
+      }
+    }
+    return refwd;
   }
 
   async destroy() {

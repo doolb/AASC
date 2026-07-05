@@ -127,18 +127,21 @@ async function collectStats(isWin) {
             cpuPercent = (os.loadavg()[0] * 10).toFixed(1);
         }
 
-        // Linux CPU 温度
+        // Linux CPU 温度：sensors -j 解析封装温度
         try {
-            var tempRaw = await execAsync(
-                "for f in /sys/class/thermal/thermal_zone*/temp; do " +
-                "  t=$(cat \"$f\" 2>/dev/null) && " +
-                "  [ \"$t\" -gt 0 ] 2>/dev/null && " +
-                "  echo \"$((t/1000))\" && break; " +
-                "done",
-                { timeout: 2000 }
-            );
-            var tVal = tempRaw.stdout.trim();
-            if (tVal) cpuTemp = tVal;
+            var tempRaw = await execAsync('sensors -j', { timeout: 2000 });
+            var sensorsData = JSON.parse(tempRaw.stdout);
+            for (var key in sensorsData) {
+                if (key.startsWith('coretemp')) {
+                    var chip = sensorsData[key];
+                    if (chip['Package id 0'] && chip['Package id 0'].temp1_input) {
+                        cpuTemp = '' + Math.round(chip['Package id 0'].temp1_input);
+                    } else if (chip['Core 0'] && chip['Core 0'].temp2_input) {
+                        cpuTemp = '' + Math.round(chip['Core 0'].temp2_input);
+                    }
+                    break;
+                }
+            }
         } catch (_) {}
     }
 

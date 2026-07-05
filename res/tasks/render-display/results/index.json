@@ -1,10 +1,10 @@
 {
   "instances": [
     {
-      "instanceId": "5c960bf6",
+      "instanceId": "bfac3135",
       "taskName": "render-display",
       "status": "running",
-      "timestamp": 1783180937811,
+      "timestamp": 1783224294242,
       "target": "display",
       "env": "auto",
       "mode": "service",
@@ -15,7 +15,7 @@
       "entryFile": "task.js",
       "stage": "running",
       "progress": 100,
-      "error": "显示端不在线或连接关闭: display-7tksfnsw"
+      "error": "显示端已断开连接"
     }
   ]
 }

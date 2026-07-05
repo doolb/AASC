@@ -2956,6 +2956,7 @@ input[type="range"]::-webkit-slider-thumb:active {
 .task-card.running { border-color: rgba(0,210,255,0.3); animation: taskCardPulse 2s ease-in-out infinite; }
 .task-card.completed { border-color: rgba(34,197,94,0.2); }
 .task-card.failed { border-color: rgba(239,68,68,0.2); }
+.task-card.display-offline { border-color: rgba(255,165,0,0.4); }
 
 @keyframes taskCardPulse {
   0%, 100% { border-color: rgba(0,210,255,0.2); }
@@ -2993,6 +2994,7 @@ input[type="range"]::-webkit-slider-thumb:active {
 .task-card-status.failed { background: rgba(239,68,68,0.15); color: #ef4444; }
 .task-card-status.stopped { background: rgba(255,165,0,0.15); color: #ffa500; }
 .task-card-status.pending { background: rgba(255,255,0,0.1); color: #eab308; }
+.task-card-status.display-offline { background: rgba(255,165,0,0.15); color: #ffa500; }
 
 .task-card-meta {
   font-size: 12px;

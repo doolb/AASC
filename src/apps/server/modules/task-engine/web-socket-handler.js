@@ -408,10 +408,12 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
   taskManager.on('progress', (instanceId, stage, progress) => {
     const inst = taskManager.getInstance(instanceId);
-    sendToControl({
-      type: 'task:progress',
-      payload: { taskName: inst ? inst.taskName : null, instanceId, stage, progress },
-    });
+    const payload = { taskName: inst ? inst.taskName : null, instanceId, stage, progress };
+    // 当 progress 是对象且包含 status 字段时，传递到控制端用于状态更新
+    if (progress && typeof progress === 'object' && progress.status) {
+      payload.status = progress.status;
+    }
+    sendToControl({ type: 'task:progress', payload });
 
     // 任务链路由：检查 source 实例是否有下游链，若有则转发到对应显示端
     const links = taskManager.taskLinks.get(instanceId);

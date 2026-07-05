@@ -89,7 +89,7 @@
         var instances = this.taskList[t].instances || [];
         for (var i = 0; i < instances.length; i++) {
           var inst = instances[i];
-          if (inst.status === 'running' || inst.status === 'pending_forward') {
+          if (inst.status === 'running' || inst.status === 'pending_forward' || inst.status === 'display_offline') {
             if (!this.instances.has(inst.instanceId)) {
               this.instances.set(inst.instanceId, inst);
             }
@@ -197,7 +197,8 @@
         else if (latest.status === 'stopped') { icon = '⏹'; statusClass = 'stopped'; statusText = '已停止'; }
         else if (latest.status === 'draft' || latest.status === 'created') { icon = '📝'; statusClass = 'draft'; statusText = '草稿'; }
         else if (latest.status === 'pending' || latest.status === 'pending_forward') { icon = '⏳'; statusClass = 'pending'; statusText = '排队中'; }
-        latestProgress = (latest.progress != null && latest.status === 'running') ? latest.progress : null;
+        else if (latest.status === 'display_offline') { icon = '⚠️'; statusClass = 'display-offline'; statusText = '进行中(offline)'; }
+        latestProgress = (latest.progress != null && (latest.status === 'running' || latest.status === 'display_offline')) ? latest.progress : null;
         if (latest.timestamp) latestTime = this._formatTime(latest.timestamp);
       }
 
@@ -1363,6 +1364,7 @@
     _updateProgress: function(payload) {
       var inst = this.instances.get(payload.instanceId);
       if (inst) {
+        if (payload.status) inst.status = payload.status;
         inst.stage = payload.stage || inst.stage;
         inst.progress = payload.progress != null ? payload.progress : inst.progress;
         if (payload.target) inst.target = payload.target;
@@ -1542,7 +1544,7 @@
       var done = [];
 
       this.instances.forEach(function(inst) {
-        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'draft' || inst.status === 'created') {
+        if (inst.status === 'running' || inst.status === 'pending' || inst.status === 'pending_forward' || inst.status === 'draft' || inst.status === 'created' || inst.status === 'display_offline') {
           active.push(inst);
         } else {
           done.push(inst);
@@ -2286,7 +2288,7 @@
     },
 
     _resultDetailHTML: function(inst, taskName) {
-      var statusText = inst.status === 'completed' ? '完成' : inst.status === 'failed' ? '失败' : inst.status === 'stopped' ? '已停止' : inst.status === 'draft' || inst.status === 'created' ? '草稿' : '进行中';
+      var statusText = inst.status === 'completed' ? '完成' : inst.status === 'failed' ? '失败' : inst.status === 'stopped' ? '已停止' : inst.status === 'draft' || inst.status === 'created' ? '草稿' : inst.status === 'display_offline' ? '进行中(offline)' : '进行中';
       var taskParams = null;
       for (var i = 0; i < this.taskList.length; i++) {
         if (this.taskList[i].taskName === taskName) { taskParams = this.taskList[i].params || []; break; }
