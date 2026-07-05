@@ -337,45 +337,7 @@
             mediaVideo.style.transform = rotTransform;
 
             // 立即更新所有活跃渲染任务覆盖层的旋转
-            var renderOverlays = document.querySelectorAll('.render-task-overlay');
-            for (var r = 0; r < renderOverlays.length; r++) {
-                var ovContainer = renderOverlays[r];
-                var ov = ovContainer.querySelector('#monitorOverlay');
-                if (!ov) continue;
-                ov.style.transform = '';
-                ov.style.top = '';
-                ov.style.right = '';
-                ov.style.bottom = '';
-                ov.style.left = '';
-                ov.style.transformOrigin = '';
-                if (currentRotation === 90) {
-                    ov.style.top = '24px';
-                    ov.style.left = '24px';
-                    ov.style.right = 'auto';
-                    ov.style.bottom = 'auto';
-                    ov.style.transform = 'rotate(90deg)';
-                    ov.style.transformOrigin = 'center center';
-                } else if (currentRotation === 180) {
-                    ov.style.top = '24px';
-                    ov.style.right = '24px';
-                    ov.style.bottom = 'auto';
-                    ov.style.left = 'auto';
-                    ov.style.transform = 'rotate(180deg)';
-                    ov.style.transformOrigin = 'center center';
-                } else if (currentRotation === 270) {
-                    ov.style.top = 'auto';
-                    ov.style.bottom = '24px';
-                    ov.style.right = '24px';
-                    ov.style.left = 'auto';
-                    ov.style.transform = 'rotate(-90deg)';
-                    ov.style.transformOrigin = 'center center';
-                } else {
-                    ov.style.top = 'auto';
-                    ov.style.right = 'auto';
-                    ov.style.bottom = '80px';
-                    ov.style.left = '24px';
-                }
-            }
+            // render 任务覆盖层的旋转定位由 render.js 的 applyRotationStyle 管理
 
             const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay, monitorWrapper];
             

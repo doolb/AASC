@@ -2387,7 +2387,6 @@ wss.on('connection', (ws, req) => {
                 type: 'configUpdate',
                 config: {
                     serverUrl: `${protocol}://${localIP}:${PORT}`,
-                    displayId: displayId,
                     vadThreshold: 0.01
                 }
             }));

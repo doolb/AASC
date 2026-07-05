@@ -338,9 +338,12 @@ class VoiceDisplay {
         try {
             const configPath = path.join(__dirname, 'config.json');
             const currentConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            const newConfig = { ...currentConfig, ...data.config };
+            // 不持久化 displayId：每台机器用 hostname 自动生成
+            const cfg = { ...data.config };
+            delete cfg.displayId;
+            const newConfig = { ...currentConfig, ...cfg };
             fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
-            log('配置', `配置已更新: serverUrl=${newConfig.serverUrl}, displayId=${newConfig.displayId}`);
+            log('配置', `配置已更新: serverUrl=${newConfig.serverUrl}`);
         } catch (err) {
             logError('配置', `配置更新失败: ${err.message}`);
         }
@@ -1157,7 +1160,7 @@ class VoiceDisplay {
 function loadConfig(configPath) {
     const defaultConfig = {
         serverUrl: 'http://localhost:3000',
-        displayId: 'voice-display-node-1',
+        displayId: 'voice-display-node-' + os.hostname(),
         vadThreshold: 0.01,
         maxReconnectAttempts: 5,
         recordingMode: 'mute'
@@ -1166,6 +1169,8 @@ function loadConfig(configPath) {
     try {
         const configData = fs.readFileSync(configPath, 'utf8');
         const config = JSON.parse(configData);
+        // displayId 始终用 hostname 自动生成，不使用配置文件中的值
+        delete config.displayId;
         return { ...defaultConfig, ...config };
     } catch (error) {
         logError('配置', `加载配置文件失败，使用默认配置: ${error.message}`);
