@@ -36,7 +36,7 @@
     {
       "instanceId": "28d32243",
       "taskName": "win-monitor",
-      "status": "running",
+      "status": "display_offline",
       "timestamp": 1783237310507,
       "target": "subdisplay",
       "env": "auto",
@@ -46,7 +46,7 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "stage": "running",
+      "stage": "display_offline",
       "progress": 100,
       "error": "显示端已断开连接"
     }

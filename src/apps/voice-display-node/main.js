@@ -27,6 +27,19 @@ const { installConsoleRedirect } = require('../../framework/observability/consol
 const useTUI = !process.argv.includes('--no-tui');
 const tui = new SubDisplayTUI({ enabled: useTUI });
 
+// 将所有 console.* 输出重定向到 TUI，防止各模块的打印破坏 TUI 布局
+installConsoleRedirect({
+    enabled: useTUI,
+    writeLog: (level, message) => {
+        tui.addLog('控制台', `[${level}] ${message}`);
+        try {
+            if (isClientLogEnabled(level)) {
+                sendClientLog(level, '控制台', message);
+            }
+        } catch (e) { /* 不影响主流程 */ }
+    }
+});
+
 // 日志上报模块级状态
 const LOG_LEVEL_WEIGHT = { error: 4, warn: 3, info: 2, debug: 1 };
 let activeDisplayInstance = null;

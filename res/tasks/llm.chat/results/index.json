@@ -3,7 +3,7 @@
     {
       "instanceId": "qwen3-web",
       "taskName": "llm.chat",
-      "status": "stopped",
+      "status": "completed",
       "timestamp": 1779017865744,
       "env": "auto",
       "mode": "one-shot",
@@ -22,8 +22,9 @@
       "taskType": "builtin",
       "builtinId": "llm.chat",
       "entryFile": "task.js",
-      "completedAt": 1779597520212,
-      "error": "API 返回 500: {\"error\":{\"message\":\"getaddrinfo EAI_AGAIN chat2.qianwen.com\",\"type\":\"api_error\",\"param\":null,\"code\":null}}"
+      "completedAt": 1783256400244,
+      "error": "API 返回 500: {\"error\":{\"message\":\"getaddrinfo EAI_AGAIN chat2.qianwen.com\",\"type\":\"api_error\",\"param\":null,\"code\":null}}",
+      "target": "server"
     },
     {
       "instanceId": "default",

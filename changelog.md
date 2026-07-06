@@ -32,6 +32,13 @@
 
 ### 修复
 
+- ✅ [2026-07-06] 修复复合指令（chat-commands.json）天气查询携带完整历史记录
+  - 根因：`executeCommands` 路径中 `onChat` 回调未传递 `skipHistory` 参数，导致复合指令展开的天气子查询走 `handleChatMessage` 时 `skipHistory=false`，把完整历史送入了 LLM 请求
+  - 修复：`callbacks.onChat` 调用及 3 处 `onChat` 回调加上 `skipHistory` 参数并传入 `handleChatMessage`
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/voice/voice-command-app-service.js
+    - src/apps/server/boot/server-app.js
+
 - ✅ [2026-07-05] 修复 render-display 覆盖层 90°/270° 旋转时三设备显示位置偏移
   - 根因：applyRotationStyle 使用固定 left:0/top:0（90°）和 right:0/bottom:0（270°），多设备时覆盖层过高，旋转后视觉左侧偏移屏幕外 / 左边间隔过大
   - 修复：根据 overlay.offsetWidth/offsetHeight 动态计算 left/top（90°）或 right/bottom（270°），确保旋转后视觉边缘距屏幕边缘 24px；每次 update() 都重算位置

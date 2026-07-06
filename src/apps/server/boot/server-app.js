@@ -2765,12 +2765,13 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                             } else if (result.type === 'commands') {
                                 await voiceCommand.executeCommands(result.actions, targetDisplayId, {
-                                    onChat: async (message, systemPrompt) => {
+                                    onChat: async (message, systemPrompt, skipHistory) => {
                                         await handleChatMessage({
                                             content: message,
                                             displayId: targetDisplayId,
                                             playOnControl: playOnControl,
                                             systemPrompt: systemPrompt,
+                                            skipHistory: skipHistory || false,
                                             sendToControl: sendToControl
                                         });
                                     },
@@ -3233,12 +3234,13 @@ async function handleControlMessageFallback(data, ws) {
                     (async () => {
                         try {
                             await voiceCommand.executeCommands(data.actions, data.displayId, {
-                                onChat: async (message, systemPrompt) => {
+                                onChat: async (message, systemPrompt, skipHistory) => {
                                     await handleChatMessage({
                                         content: message,
                                         displayId: data.displayId,
                                         playOnControl: data.playOnControl,
                                         systemPrompt: systemPrompt,
+                                        skipHistory: skipHistory || false,
                                         sendToControl: (msg) => {
                                             ws.send(JSON.stringify(msg));
                                         }
@@ -3498,11 +3500,12 @@ async function executeDeviceEvent(ip, eventType, displayId) {
             sendToControl({ type: 'showHelp' });
         } else if (result.type === 'commands') {
             await voiceCommand.executeCommands(result.actions, targetDisplayId, {
-                onChat: async (message, systemPrompt) => {
+                onChat: async (message, systemPrompt, skipHistory) => {
                     await handleChatMessage({
                         content: message,
                         displayId: targetDisplayId,
                         systemPrompt: systemPrompt,
+                        skipHistory: skipHistory || false,
                         sendToControl: sendToControl
                     });
                 },

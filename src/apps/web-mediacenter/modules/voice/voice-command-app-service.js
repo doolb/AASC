@@ -1515,7 +1515,7 @@ async function executeCommands(actions, displayId, callbacks, depth = 0) {
             await executeCommands(result.actions, displayId, callbacks, depth + 1);
         } else if (result.type === 'chat') {
             if (callbacks && callbacks.onChat) {
-                callbacks.onChat(result.message, result.systemPrompt);
+                callbacks.onChat(result.message, result.systemPrompt, result.skipHistory);
             }
         } else if (result.type === 'showHelp') {
             if (callbacks && callbacks.onShowHelp) {
