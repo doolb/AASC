@@ -2501,6 +2501,16 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
+        // 推送各显示端当前临时媒体信息（控制端刷新后预览数据丢失时显示占位提示）
+        displayClients.forEach((dd, id) => {
+            if (dd.state.lastTempMedia) {
+                ws.send(JSON.stringify({
+                    type: 'tempMediaInfo',
+                    displayId: id,
+                    ...dd.state.lastTempMedia
+                }));
+            }
+        });
         ws.send(JSON.stringify({
             type: 'logHistory',
             entries: logBuffer.getEntries({ limit: 200 }),
@@ -3069,7 +3079,16 @@ async function handleControlMessageFallback(data, ws) {
                                 dd.state.currentPlaylist = null;
                                 config.updateDisplayState(dd.ip, { currentPlaylist: null });
                             }
-                            if (!data.media.temp) {
+                            if (data.media.temp) {
+                                // 记录临时媒体信息：控制端刷新后用于裁剪预览区占位提示
+                                dd.state.lastTempMedia = {
+                                    fileName: data.media.fileName,
+                                    mediaType: data.media.mediaType,
+                                    width: data.media.width,
+                                    height: data.media.height
+                                };
+                            } else {
+                                dd.state.lastTempMedia = null;
                                 dd.state.currentMedia = data.media;
                                 config.updateDisplayState(dd.ip, { currentMedia: data.media });
                             }
@@ -3111,6 +3130,8 @@ async function handleControlMessageFallback(data, ws) {
                             displayIds.forEach(id => {
                                 const dd = displayClients.get(id);
                                 if (!dd) return;
+                                // 批量临时播放开始，清除单文件临时媒体记录（避免陈旧占位）
+                                if (data.temp) dd.state.lastTempMedia = null;
                                 if (!data.temp) {
                                     dd.state.currentPlaylist = { startData, index: 0, state: 'playing' };
                                     config.updateDisplayState(dd.ip, { currentPlaylist: dd.state.currentPlaylist });
@@ -3156,7 +3177,16 @@ async function handleControlMessageFallback(data, ws) {
                         displayData.state.currentPlaylist = null;
                         config.updateDisplayState(displayData.ip, { currentPlaylist: null });
                     }
-                    if (!data.media.temp) {
+                    if (data.media.temp) {
+                        // 记录临时媒体信息：控制端刷新后用于裁剪预览区占位提示
+                        displayData.state.lastTempMedia = {
+                            fileName: data.media.fileName,
+                            mediaType: data.media.mediaType,
+                            width: data.media.width,
+                            height: data.media.height
+                        };
+                    } else {
+                        displayData.state.lastTempMedia = null;
                         displayData.state.currentMedia = data.media;
                         config.updateDisplayState(displayData.ip, { currentMedia: data.media });
                     }
