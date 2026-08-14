@@ -264,16 +264,20 @@ showBatchPlayDialog(folderPath):
     - 工具栏「批量播放当前文件夹」按钮 -> showBatchPlayDialog(MediaLibrary.currentPath)（支持根目录）
 
 ensurePlaylistPanel():
-    动态创建进度面板（无则建）
+    动态创建媒体库进度面板（无则建）
     （插入到 mediaLibraryContent 之前）
 
 renderPlaylistPanel(info):
-    stopped/finished -> 隐藏面板
+    同步更新三处:
+        renderMediaLibraryPanel: 媒体库进度面板（动态创建）
+        renderDisplayControlPanel: 显示控制界面 #displayPlaylistStatus
+        renderFloatingControlPanel: 快捷控制面板 #floatingPlaylistStatus
+    每处: stopped/finished -> 隐藏
     否则显示: "第 x/y 项 · 文件名 · 播放中/已暂停"
-    切换暂停/继续按钮文案
+    切换暂停/继续按钮文案（dataset.action 记录 pause/resume）
 
-controlPlaylist(action):
-    toggle -> 根据按钮状态转 pause/resume
+controlPlaylist(action, btn):
+    toggle -> 根据按钮 dataset.action 转 pause/resume
     sendPlaylistControl(displayIds, action)
 ```
 

@@ -420,7 +420,7 @@ const MediaLibrary = {
         panel.innerHTML = `
             <span id="plProgressText" class="pl-progress-text"></span>
             <span class="pl-controls">
-                <button id="plToggleBtn" onclick="MediaLibrary.controlPlaylist('toggle')">暂停</button>
+                <button id="plToggleBtn" onclick="MediaLibrary.controlPlaylist('toggle', this)">暂停</button>
                 <button onclick="MediaLibrary.controlPlaylist('prev')">上一个</button>
                 <button onclick="MediaLibrary.controlPlaylist('next')">下一个</button>
                 <button onclick="MediaLibrary.controlPlaylist('stop')">停止</button>
@@ -431,7 +431,14 @@ const MediaLibrary = {
         return panel;
     },
 
+    // 批量播放进度：同步更新 媒体库面板/显示控制界面/快捷控制面板
     renderPlaylistPanel(info) {
+        this.renderMediaLibraryPanel(info);
+        this.renderDisplayControlPanel(info);
+        this.renderFloatingControlPanel(info);
+    },
+
+    renderMediaLibraryPanel(info) {
         const panel = this.ensurePlaylistPanel();
         if (!info || info.state === 'stopped' || info.state === 'finished') {
             panel.style.display = 'none';
@@ -446,15 +453,48 @@ const MediaLibrary = {
         toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
     },
 
-    controlPlaylist(action) {
+    // 显示控制界面的批量播放状态
+    renderDisplayControlPanel(info) {
+        const panel = document.getElementById('displayPlaylistStatus');
+        if (!panel) return;
+        if (!info || info.state === 'stopped' || info.state === 'finished') {
+            panel.style.display = 'none';
+            return;
+        }
+        panel.style.display = '';
+        const stateText = { playing: '▶ 播放中', paused: '⏸ 已暂停' }[info.state] || info.state;
+        document.getElementById('displayPlText').textContent =
+            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''} · ${stateText}`;
+        const toggleBtn = document.getElementById('displayPlToggleBtn');
+        toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
+        toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
+    },
+
+    // 快捷控制面板的批量播放状态
+    renderFloatingControlPanel(info) {
+        const panel = document.getElementById('floatingPlaylistStatus');
+        if (!panel) return;
+        if (!info || info.state === 'stopped' || info.state === 'finished') {
+            panel.style.display = 'none';
+            return;
+        }
+        panel.style.display = '';
+        const stateText = { playing: '▶ 播放中', paused: '⏸ 已暂停' }[info.state] || info.state;
+        document.getElementById('floatingPlText').textContent =
+            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''} · ${stateText}`;
+        const toggleBtn = document.getElementById('floatingPlToggleBtn');
+        toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
+        toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
+    },
+
+    controlPlaylist(action, btn) {
         const displayIds = window.DisplayList ? window.DisplayList.getSelectedDisplayIds() : [];
         if (displayIds.length === 0) {
             showToast('请先选择显示端', 'error');
             return;
         }
         if (action === 'toggle') {
-            const toggleBtn = document.getElementById('plToggleBtn');
-            action = toggleBtn && toggleBtn.dataset.action === 'resume' ? 'resume' : 'pause';
+            action = btn && btn.dataset.action === 'resume' ? 'resume' : 'pause';
         }
         window.WebSocketManager.sendPlaylistControl(displayIds, action);
     },
