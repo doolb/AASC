@@ -259,6 +259,10 @@ showBatchPlayDialog(folderPath):
     显示设置框
     确认 -> sendPlaylistRequest({libraryId, path: folderPath, ...settings})
 
+入口（upload.html）:
+    - 文件夹项右侧「批量播放」按钮 -> showBatchPlayDialog(item.path)
+    - 工具栏「批量播放当前文件夹」按钮 -> showBatchPlayDialog(MediaLibrary.currentPath)（支持根目录）
+
 ensurePlaylistPanel():
     动态创建进度面板（无则建）
     （插入到 mediaLibraryContent 之前）

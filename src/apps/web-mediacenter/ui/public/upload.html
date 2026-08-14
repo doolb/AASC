@@ -126,6 +126,7 @@
                                 上传文件夹
                                 <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" onchange="MediaLibrary.uploadFolder(this.files)">
                             </label>
+                            <button class="btn-batch" onclick="MediaLibrary.showBatchPlayDialog(MediaLibrary.currentPath)">批量播放当前文件夹</button>
                             <button onclick="MediaLibrary.showCreateFolderDialog()">新建文件夹</button>
                             <button onclick="MediaLibrary.loadContent(MediaLibrary.currentPath)">刷新</button>
                         </div>
