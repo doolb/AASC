@@ -1,0 +1,306 @@
+# 批量播放模式实现文档
+
+## 概述
+
+批量播放模式实现"文件夹级播放列表 + 显示端本地自循环"：服务端生成完整播放列表一次性下发，显示端按序播放（图片按间隔、视频播完+间隔、支持循环），上报进度并接受控制端干预。临时模式通过 base64 中转同样支持批量。
+
+## 1. PlaylistManager 模块
+
+### playlist-app-service.js
+
+```
+常量 MEDIA_TYPES = ['image', 'video', 'gif']
+
+类 PlaylistManager:
+    属性:
+        manager: 媒体库管理器（注入）
+
+    方法:
+        _sortPlaylist(items, mode, sortBy, direction):
+            如果 mode === 'random':
+                返回 _shuffle(items)
+            dir = direction === 'desc' ? -1 : 1
+            返回 items 排序:
+                如果 sortBy === 'time':
+                    cmp = modifiedTime 差值
+                否则:
+                    cmp = name.localeCompare
+                返回 cmp * dir
+
+        _shuffle(arr):
+            Fisher-Yates 洗牌，返回新数组
+
+        async buildFromLibrary(libraryId, path, {recursive, mode, sortBy, direction}):
+            all = []
+            queue = [path]
+            循环直到 queue 空:
+                dir = queue.shift()
+                items = await manager.list(libraryId, dir)
+                遍历 items:
+                    如果 type === 'folder':
+                        如果 recursive: queue.push(item.path)
+                    否则如果 mediaType ∈ MEDIA_TYPES:
+                        all.push(item)
+            sorted = _sortPlaylist(all, ...)
+            返回 sorted 映射为 {url, fileName: name, mediaType}
+
+        buildFromTemp(files, {mode, sortBy, direction}):
+            sorted = _sortPlaylist(files, ...)
+            返回 sorted 映射为 {data, fileName: name, mediaType, mimeType}
+```
+
+## 2. 服务端消息处理 (server-app.js)
+
+### 初始化
+
+```
+const { PlaylistManager } = require('../../web-mediacenter/modules/media/playlist-app-service');
+const playlistManager = new PlaylistManager(mediaLibraryManager);
+```
+
+### playlistRequest（控制端 → 服务端）
+
+```
+处理 'playlistRequest':
+    异步执行:
+        displayIds = data.displayIds
+        如果空: 回复 playlistError '没有可用的显示端'
+        如果 data.temp:
+            playlist = playlistManager.buildFromTemp(data.files, {mode, sortBy, direction})
+        否则:
+            playlist = await playlistManager.buildFromLibrary(libraryId, path, {recursive, mode, sortBy, direction})
+        如果 playlist 空: 回复 playlistError '没有可播放的媒体文件'
+        listId = 'pl-' + 时间戳 + 随机
+        startData = {listId, playlist, interval, loop, announceName}
+        遍历 displayIds:
+            dd = displayClients.get(id)
+            如果 dd 存在:
+                如果非 temp:
+                    dd.state.currentPlaylist = {startData, index: 0, state: 'playing'}
+                    config.updateDisplayState(ip, {currentPlaylist})
+                sendToDisplay(id, {type: 'playlistStart', ...startData, temp})
+        ws.send(playlistStarted)
+    异常: logError + 回复 playlistError
+```
+
+### playlistControl（控制端 → 服务端 → 显示端）
+
+```
+处理 'playlistControl':
+    遍历 displayIds:
+        sendToDisplay(id, {type: 'playlistControl', action, index})
+        如果 action === 'stop' 且 dd.state.currentPlaylist:
+            dd.state.currentPlaylist = null
+            config.updateDisplayState(ip, {currentPlaylist: null})
+```
+
+### playlistProgress（显示端 → 服务端）
+
+```
+处理 'playlistProgress':
+    如果 displayData.state.currentPlaylist:
+        更新 index/state
+        如果 state ∈ {finished, stopped}:
+            currentPlaylist = null，config 同步清除
+        否则:
+            config.updateDisplayState(ip, {currentPlaylist})
+    broadcastToControls({displayId, type:'playlistProgress', listId, index, total, state, fileName})
+```
+
+### 单媒体打断
+
+```
+mediaBatch / media 分支发送前:
+    如果 dd.state.currentPlaylist:
+        dd.state.currentPlaylist = null
+        config.updateDisplayState(ip, {currentPlaylist: null})
+```
+
+### 重连恢复
+
+```
+显示端重连时:
+    如果 savedState.currentPlaylist:
+        ws.send(playlistStart, ...startData, resumeIndex: currentPlaylist.index)
+    否则如果 savedState.currentMedia:
+        ws.send(restoreState)
+```
+
+## 3. 显示端批量播放循环 (display.html)
+
+### 状态
+
+```
+playlistState = null   // {listId, playlist, interval(ms), loop, index, timer, videoEndedHandler, active}
+savedAutoTts = null    // 原始 autoTtsEnabled 备份
+```
+
+### 函数
+
+```
+stopPlaylist():
+    如果 playlistState 为空: 返回（幂等）
+    active = false
+    清除 timer
+    移除 video ended 监听
+    如果 savedAutoTts 非空: autoTtsEnabled = savedAutoTts
+    playlistState = null
+
+handlePlaylistStart(data):
+    stopPlaylist()
+    savedAutoTts = autoTtsEnabled
+    autoTtsEnabled = data.announceName
+    如果 playlist 空: stopPlaylist 返回
+    resumeIndex = 夹取到 [0, len-1]
+    playlistState = {...}
+    playCurrentItem()
+
+playCurrentItem():
+    如果非 active: 返回
+    item = playlist[index]
+    构建 mediaData (url 或 base64 类型)
+    showMedia(mediaData)
+    如果 mediaType === 'video':
+        mediaVideo.loop = false
+        添加一次性 ended 监听: 移除监听 -> timer = setTimeout(next, interval)
+        设置 onerror: 加载失败 -> 等间隔后 next
+    否则:
+        mediaImage.onerror: 加载失败 -> 等间隔后 next
+        timer = setTimeout(next, interval)
+    发送 progress(playing)
+
+playlistNext():
+    如果非 active: 返回
+    如果 index+1 >= length:
+        如果 loop: index = 0, playCurrentItem()
+        否则: finishPlaylist()
+    否则: index++, playCurrentItem()
+
+playlistPrev():
+    index = index-1 < 0 ? (loop ? length-1 : 0) : index-1
+    playCurrentItem()
+
+playlistJump(index):
+    越界返回
+    index 赋值, playCurrentItem()
+
+playlistPause():
+    清除 timer
+    如果 videoEndedHandler 存在: 移除监听 + mediaVideo.pause()
+    发送 progress(paused)
+
+playlistResume():
+    如果视频正在播放状态 (timer/handler 均空): mediaVideo.play + 重建 ended 监听
+    否则: timer = setTimeout(next, interval)   // 图片或间隔等待
+    发送 progress(playing)
+
+finishPlaylist():
+    记录 info
+    清理 timer/ended 监听/恢复 autoTtsEnabled
+    playlistState = null
+    发送 progress(finished)
+
+handlePlaylistControl(data):
+    如果 playlistState 为空: 返回
+    switch action:
+        pause -> playlistPause
+        resume -> playlistResume
+        next -> playlistNext
+        prev -> playlistPrev
+        jump -> playlistJump(data.index)
+        stop -> 记录 info, stopPlaylist(), 发送 progress(stopped)
+```
+
+### 消息接入
+
+```
+WS onmessage:
+    'playlistStart' -> handlePlaylistStart + ack
+    'playlistControl' -> handlePlaylistControl + ack
+    else（单媒体）-> stopPlaylist() + showMedia(data) + ack
+```
+
+## 4. 控制端 (websocket.js / media-library.js / upload.js)
+
+### websocket.js
+
+```
+sendPlaylistRequest(payload):
+    displayIds = DisplayList.getSelectedDisplayIds()
+    如果空: toast 提示，返回 false
+    发送 {type: 'playlistRequest', ...payload, displayIds}
+    返回 true
+
+sendPlaylistControl(displayIds, action, index):
+    发送 {type: 'playlistControl', displayIds, action, index}
+
+handleMessage:
+    'playlistProgress' -> MediaLibrary.renderPlaylistPanel(data)
+    'playlistError' -> toast 错误
+    'playlistStarted' -> toast 已发送
+```
+
+### media-library.js
+
+```
+showPlaylistSettingsDialog({title, hideRecursive, onConfirm}):
+    创建模态框:
+        扫描范围 radio（hideRecursive 时隐藏）
+        间隔时间 number（默认 5）
+        播放模式 radio: 顺序/随机（默认顺序）
+        排序方式 radio: 按文件名（默认）/按时间
+        播放方向 radio: 正序/反序
+        循环播放 checkbox（默认勾选）
+        播报文件名 checkbox（默认不勾选）
+    随机模式选中时排序/方向行置灰禁用
+    确认 -> 收集 settings 传给 onConfirm
+
+showBatchPlayDialog(folderPath):
+    显示设置框
+    确认 -> sendPlaylistRequest({libraryId, path: folderPath, ...settings})
+
+ensurePlaylistPanel():
+    动态创建进度面板（无则建）
+    （插入到 mediaLibraryContent 之前）
+
+renderPlaylistPanel(info):
+    stopped/finished -> 隐藏面板
+    否则显示: "第 x/y 项 · 文件名 · 播放中/已暂停"
+    切换暂停/继续按钮文案
+
+controlPlaylist(action):
+    toggle -> 根据按钮状态转 pause/resume
+    sendPlaylistControl(displayIds, action)
+```
+
+### upload.js（临时模式批量）
+
+```
+handleDroppedFiles(dataTransfer):
+    entries = webkitGetAsEntry 列表
+    如果含目录: 递归收集所有文件（collectDir/collectFile）
+    否则: 收集 dataTransfer.files
+    单文件 -> sendTempFile（原有）
+    多文件 -> showBatchTempUpload
+
+prepareTempFiles(files):
+    总大小 > 350MB -> toast 提示，返回 null
+    逐文件: fileToBase64 + getMediaDimensions
+    返回 [{name, data, mediaType, mimeType, modifiedTime, width, height}]
+
+showBatchTempUpload(files):
+    MediaLibrary.showPlaylistSettingsDialog({hideRecursive: true})
+    确认 -> sendPlaylistRequest({temp: true, files: items, ...settings})
+```
+
+## 5. 持久化结构
+
+```
+config 中每显示端状态:
+    currentPlaylist: {
+        startData: {listId, playlist, interval, loop, announceName},
+        index: 当前索引,
+        state: 'playing' | 'paused'
+    }
+    仅非临时列表持久化；临时列表随连接消失
+```

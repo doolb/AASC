@@ -3,3 +3,22 @@
 ## 功能完善
 
 - 重构ai开发流程
+
+## 批量播放模式
+
+- ✅已完成 [2026-08-14][2026-08-14] 批量播放模式：媒体库文件夹级批量播放
+  - 文件夹「批量播放」按钮 → 模式设置框（递归/间隔/顺序随机/排序/方向/循环/播报文件名）
+  - 服务端 PlaylistManager 扫描生成列表一次性下发，显示端本地自循环播放
+  - 进度回传 + 暂停/继续/上一个/下一个/停止干预，单文件播放打断批量
+  - 临时模式裁剪区多文件/文件夹批量上传
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/media/playlist-app-service.js (新增)
+    - tests/playlist-app-service.test.js (新增)
+    - src/apps/server/boot/server-app.js
+    - src/apps/web-mediacenter/ui/public/display.html
+    - src/apps/web-mediacenter/ui/public/js/websocket.js
+    - src/apps/web-mediacenter/ui/public/js/media-library.js
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - src/apps/web-mediacenter/ui/public/css/upload.css
+    - docs/design/batch-playlist.md (新增)
+    - docs/spec/batch-playlist.md (新增)

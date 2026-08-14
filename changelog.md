@@ -4,6 +4,24 @@
 
 ### 新增
 
+- ✅ [2026-08-14] 批量播放模式：媒体库文件夹级批量播放 + 临时模式批量上传
+  - 媒体库文件夹项「批量播放」按钮 → 模式设置框（扫描范围递归/单层、间隔时间、顺序/随机、按文件名/按时间排序、正/反序、循环播放默认开、播报文件名默认关）
+  - 服务端 PlaylistManager 扫描文件夹生成完整播放列表（Fisher-Yates 洗牌），一次性 playlistStart 下发显示端
+  - 显示端本地自循环：图片按间隔切换、视频播完+间隔，循环回绕；上报 playlistProgress 进度，支持暂停/继续/上一个/下一个/停止/跳转干预
+  - 单文件播放自动打断批量；非临时列表持久化到 config，显示端重连断点续播（resumeIndex）
+  - 临时模式（base64 不落盘）裁剪区支持多文件/文件夹拖入，弹共用设置框后批量上传播放（总量 350MB 上限）
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/media/playlist-app-service.js (新增)
+    - tests/playlist-app-service.test.js (新增)
+    - src/apps/server/boot/server-app.js
+    - src/apps/web-mediacenter/ui/public/display.html
+    - src/apps/web-mediacenter/ui/public/js/websocket.js
+    - src/apps/web-mediacenter/ui/public/js/media-library.js
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - src/apps/web-mediacenter/ui/public/css/upload.css
+    - docs/design/batch-playlist.md (新增)
+    - docs/spec/batch-playlist.md (新增)
+
 - ✅ [2026-07-05] Linux CPU 温度采集改用 sensors 命令（替代 thermal_zone 文件读取）
   - sensors -j 输出 JSON 更稳定，支持更多硬件平台
   - 优先取 Package id 0 封装温度，兜底取 Core 0 核心温度
