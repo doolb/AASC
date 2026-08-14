@@ -474,8 +474,10 @@
             } else if (fit === 'crop') {
                 mediaImage.classList.add('height');
                 mediaVideo.classList.add('height');
+            } else if (fit === 'contain') {
+                // 铺满方向（高度/宽度）由 applyCrop 根据旋转角度/容器比例/媒体比例自动计算
             }
-            
+
             applyCrop();
         }
         
@@ -503,6 +505,8 @@
             media.style.height = '';
             media.style.left = '';
             media.style.top = '';
+            media.style.maxWidth = '';
+            media.style.maxHeight = '';
             
             const container = document.getElementById('mediaContainer');
             const containerWidth = container.clientWidth;
@@ -512,14 +516,14 @@
             const naturalHeight = media.naturalHeight || media.videoHeight || containerHeight;
             
             const isRotated = currentRotation === 90 || currentRotation === 270;
-            
+
             _cropLog('[Crop] applyCrop 开始');
             _cropLog('[Crop] 容器尺寸:', containerWidth, 'x', containerHeight);
             _cropLog('[Crop] 媒体原始尺寸:', naturalWidth, 'x', naturalHeight);
             _cropLog('[Crop] 当前旋转:', currentRotation, '是否旋转:', isRotated);
             _cropLog('[Crop] 当前适配模式:', currentFit);
             _cropLog('[Crop] 当前裁剪百分比:', JSON.stringify(currentCrop));
-            
+
             const baseInfo = {
                 容器尺寸: { width: containerWidth, height: containerHeight },
                 媒体原始尺寸: { width: naturalWidth, height: naturalHeight },
@@ -528,14 +532,44 @@
                 当前适配模式: currentFit,
                 当前裁剪百分比: currentCrop
             };
-            
+
+            // 适应模式：根据旋转角度/容器比例/媒体比例自动计算铺满尺寸
+            if (currentFit === 'contain') {
+                if (naturalWidth > 0 && naturalHeight > 0 && containerWidth > 0 && containerHeight > 0) {
+                    // 旋转后媒体的有效宽高比（宽/高互换）
+                    const effectiveRatio = isRotated ? naturalHeight / naturalWidth : naturalWidth / naturalHeight;
+                    const containerRatio = containerWidth / containerHeight;
+                    let viewW, viewH;
+                    if (effectiveRatio > containerRatio) {
+                        // 媒体更宽：宽度铺满容器宽，高度按比例
+                        viewW = containerWidth;
+                        viewH = containerWidth / effectiveRatio;
+                    } else {
+                        // 媒体更高：高度铺满容器高，宽度按比例
+                        viewH = containerHeight;
+                        viewW = containerHeight * effectiveRatio;
+                    }
+                    if (isRotated) {
+                        // 旋转 90/270 后布局宽高与视觉互换
+                        media.style.width = viewH + 'px';
+                        media.style.height = viewW + 'px';
+                    } else {
+                        media.style.width = viewW + 'px';
+                        media.style.height = viewH + 'px';
+                    }
+                    media.style.maxWidth = 'none';
+                    media.style.maxHeight = 'none';
+                }
+                return { ...baseInfo, 状态: '适应模式' };
+            }
+
             if (currentFit !== 'height' && currentFit !== 'width' && currentFit !== 'crop') {
                 _cropLog('[Crop] 非适配模式，跳过');
                 return { ...baseInfo, 状态: '非适配模式' };
             }
-            
+
             const mediaRatio = naturalWidth / naturalHeight;
-            
+
             if (currentFit === 'height') {
                 if (isRotated) {
                     const displayHeight = containerWidth;
