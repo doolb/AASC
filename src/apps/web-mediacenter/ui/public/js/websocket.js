@@ -59,6 +59,14 @@ const WebSocketManager = {
             if (window.AsrDevice) {
                 window.AsrDevice.updateUI();
             }
+        } else if (data.type === 'playlistProgress') {
+            if (window.MediaLibrary) {
+                window.MediaLibrary.renderPlaylistPanel(data);
+            }
+        } else if (data.type === 'playlistError') {
+            showToast(data.message || '批量播放失败', 'error');
+        } else if (data.type === 'playlistStarted') {
+            showToast(`播放列表已发送（共 ${data.total} 项）`, 'success');
         } else if (data.type === 'deviceEventExecuted') {
             const eventLabel = data.eventType === 'onConnect' ? '连线' : '掉线';
             if (window.showToast) {
@@ -374,6 +382,30 @@ const WebSocketManager = {
         }
     },
     
+    sendPlaylistRequest(payload) {
+        if (!window.DisplayList) {
+            showToast('显示端列表未初始化', 'error');
+            return false;
+        }
+        const displayIds = window.DisplayList.getSelectedDisplayIds();
+        if (displayIds.length === 0) {
+            showToast('请先选择显示端', 'error');
+            return false;
+        }
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'playlistRequest', ...payload, displayIds }));
+            return true;
+        }
+        showToast('WebSocket 未连接', 'error');
+        return false;
+    },
+
+    sendPlaylistControl(displayIds, action, index) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'playlistControl', displayIds, action, index }));
+        }
+    },
+
     async getMediaRatio(mediaData) {
         if (mediaData.width && mediaData.height) {
             return mediaData.width / mediaData.height;

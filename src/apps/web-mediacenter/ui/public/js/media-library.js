@@ -306,6 +306,159 @@ const MediaLibrary = {
         this.setCurrentMedia(url);
     },
     
+    // 批量播放模式设置框（媒体库与临时模式共用）
+    showPlaylistSettingsDialog(options = {}) {
+        const { title = '批量播放设置', hideRecursive = false, onConfirm } = options;
+        const mask = document.createElement('div');
+        mask.className = 'modal-mask';
+        mask.innerHTML = `
+            <div class="playlist-settings-dialog">
+                <div class="dialog-title">${title}</div>
+                <div class="dialog-body">
+                    ${hideRecursive ? '' : `
+                    <div class="settings-row">
+                        <span class="settings-label">扫描范围</span>
+                        <label><input type="radio" name="plRecursive" value="false" checked> 当前文件夹</label>
+                        <label><input type="radio" name="plRecursive" value="true"> 递归子文件夹</label>
+                    </div>`}
+                    <div class="settings-row">
+                        <span class="settings-label">间隔时间</span>
+                        <input type="number" id="plInterval" value="5" min="1" class="settings-input"> 秒
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">播放模式</span>
+                        <label><input type="radio" name="plMode" value="sequence" checked> 顺序</label>
+                        <label><input type="radio" name="plMode" value="random"> 随机</label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">排序方式</span>
+                        <label><input type="radio" name="plSortBy" value="name" checked> 按文件名</label>
+                        <label><input type="radio" name="plSortBy" value="time"> 按时间</label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">播放方向</span>
+                        <label><input type="radio" name="plDirection" value="asc" checked> 正序</label>
+                        <label><input type="radio" name="plDirection" value="desc"> 反序</label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">循环播放</span>
+                        <input type="checkbox" id="plLoop" checked>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">播报文件名</span>
+                        <input type="checkbox" id="plAnnounceName">
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" id="plCancelBtn">取消</button>
+                    <button class="btn-confirm" id="plConfirmBtn">开始播放</button>
+                </div>
+            </div>`;
+        document.body.appendChild(mask);
+
+        // 随机模式下排序/方向置灰
+        const onModeChange = () => {
+            const random = mask.querySelector('input[name="plMode"]:checked').value === 'random';
+            const rows = mask.querySelectorAll('.settings-row');
+            rows.forEach(row => {
+                const label = row.querySelector('.settings-label');
+                if (label && (label.textContent === '排序方式' || label.textContent === '播放方向')) {
+                    const inputs = row.querySelectorAll('input');
+                    inputs.forEach(inp => { inp.disabled = random; });
+                    row.style.opacity = random ? '0.4' : '1';
+                }
+            });
+        };
+        mask.querySelectorAll('input[name="plMode"]').forEach(r => r.addEventListener('change', onModeChange));
+
+        mask.querySelector('#plCancelBtn').addEventListener('click', () => mask.remove());
+        mask.querySelector('#plConfirmBtn').addEventListener('click', () => {
+            const settings = {
+                recursive: mask.querySelector('input[name="plRecursive"]:checked')?.value === 'true',
+                interval: parseInt(mask.querySelector('#plInterval').value) || 5,
+                mode: mask.querySelector('input[name="plMode"]:checked').value,
+                sortBy: mask.querySelector('input[name="plSortBy"]:checked').value,
+                direction: mask.querySelector('input[name="plDirection"]:checked').value,
+                loop: mask.querySelector('#plLoop').checked,
+                announceName: mask.querySelector('#plAnnounceName').checked
+            };
+            mask.remove();
+            if (typeof onConfirm === 'function') {
+                onConfirm(settings);
+            }
+        });
+    },
+
+    // 媒体库文件夹批量播放入口
+    showBatchPlayDialog(folderPath) {
+        if (!this.currentLibrary) {
+            showToast('请先选择媒体库', 'error');
+            return;
+        }
+        this.showPlaylistSettingsDialog({
+            onConfirm: (settings) => {
+                const ok = window.WebSocketManager.sendPlaylistRequest({
+                    libraryId: this.currentLibrary.id,
+                    path: folderPath,
+                    ...settings
+                });
+                if (ok) {
+                    showToast('批量播放请求已发送', 'success');
+                }
+            }
+        });
+    },
+
+    // 批量播放进度面板（动态创建）
+    ensurePlaylistPanel() {
+        let panel = document.getElementById('playlistProgressPanel');
+        if (panel) return panel;
+        panel = document.createElement('div');
+        panel.id = 'playlistProgressPanel';
+        panel.className = 'playlist-progress-panel';
+        panel.style.display = 'none';
+        panel.innerHTML = `
+            <span id="plProgressText" class="pl-progress-text"></span>
+            <span class="pl-controls">
+                <button id="plToggleBtn" onclick="MediaLibrary.controlPlaylist('toggle')">暂停</button>
+                <button onclick="MediaLibrary.controlPlaylist('prev')">上一个</button>
+                <button onclick="MediaLibrary.controlPlaylist('next')">下一个</button>
+                <button onclick="MediaLibrary.controlPlaylist('stop')">停止</button>
+            </span>`;
+        const content = document.getElementById('mediaLibraryContent');
+        const parent = content ? content.parentElement : document.body;
+        parent.insertBefore(panel, content || null);
+        return panel;
+    },
+
+    renderPlaylistPanel(info) {
+        const panel = this.ensurePlaylistPanel();
+        if (!info || info.state === 'stopped' || info.state === 'finished') {
+            panel.style.display = 'none';
+            return;
+        }
+        panel.style.display = 'flex';
+        const stateText = { playing: '▶ 播放中', paused: '⏸ 已暂停' }[info.state] || info.state;
+        document.getElementById('plProgressText').textContent =
+            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''} · ${stateText}`;
+        const toggleBtn = document.getElementById('plToggleBtn');
+        toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
+        toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
+    },
+
+    controlPlaylist(action) {
+        const displayIds = window.DisplayList ? window.DisplayList.getSelectedDisplayIds() : [];
+        if (displayIds.length === 0) {
+            showToast('请先选择显示端', 'error');
+            return;
+        }
+        if (action === 'toggle') {
+            const toggleBtn = document.getElementById('plToggleBtn');
+            action = toggleBtn && toggleBtn.dataset.action === 'resume' ? 'resume' : 'pause';
+        }
+        window.WebSocketManager.sendPlaylistControl(displayIds, action);
+    },
+
     setCurrentMedia(url) {
         this.currentMediaUrl = url;
         
@@ -393,6 +546,7 @@ const MediaLibrary = {
                         <div class="folder-icon">📁</div>
                         <div class="item-name">${item.name}</div>
                         <div class="item-actions">
+                            <button class="btn-batch" onclick="event.stopPropagation(); MediaLibrary.showBatchPlayDialog('${item.path}')">批量播放</button>
                             <button class="btn-delete" onclick="event.stopPropagation(); MediaLibrary.deleteItem('${item.path}', true)">删除</button>
                         </div>
                     </div>
