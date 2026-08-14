@@ -2105,7 +2105,7 @@ function sendToDisplaysWithCapability(capabilityName, message) {
 
 let displayListDebounceTimer = null;
 
-const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress']);
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress', 'playlistProgress']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
@@ -2449,7 +2449,7 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress') {
+                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'playlistProgress') {
                     log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
