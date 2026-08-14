@@ -381,7 +381,7 @@ function startServer() {
             });
 
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
-            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'playlistProgress'];
+            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'playlistProgress', 'tempMediaInfo'];
             for (const type of displayTypes) {
                 wsServer.registerHandler(type, (data, ctx) => {
                     handleDisplayMessageFallback(ctx.displayId, data, ctx.ws);
@@ -2641,6 +2641,15 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             state: data.state,
             fileName: data.fileName,
             url: data.url,
+            mediaType: data.mediaType,
+            width: data.width,
+            height: data.height
+        });
+    } else if (data.type === 'tempMediaInfo') {
+        broadcastToControls({
+            displayId: displayId,
+            type: 'tempMediaInfo',
+            fileName: data.fileName,
             mediaType: data.mediaType,
             width: data.width,
             height: data.height

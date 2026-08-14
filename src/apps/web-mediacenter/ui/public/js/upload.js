@@ -77,6 +77,9 @@ const Upload = {
                         height: dims?.height
                     });
                 }
+                if (window.MediaLibrary) {
+                    window.MediaLibrary.lastTempFileSent = { name: file.name };
+                }
                 const dataUrl = 'data:' + (file.type || 'application/octet-stream') + ';base64,' + base64;
                 if (window.Crop) {
                     window.Crop.showPreview(dataUrl, mediaType, () => {
@@ -141,6 +144,9 @@ const Upload = {
                     width: dims?.width,
                     height: dims?.height
                 });
+            }
+            if (window.MediaLibrary) {
+                window.MediaLibrary.lastTempFileSent = { name: file.name };
             }
             const dataUrl = 'data:' + (file.type || 'application/octet-stream') + ';base64,' + base64;
             if (window.Crop) {
@@ -256,6 +262,7 @@ const Upload = {
                 // 缓存文件数据供裁剪预览区跟随批量播放当前项
                 window.MediaLibrary.tempPlaylistFiles = items;
                 window.MediaLibrary._lastCropPreviewUrl = null;
+                window.MediaLibrary.lastTempFileSent = null;
                 if (window.WebSocketManager) {
                     window.WebSocketManager.sendPlaylistRequest({
                         temp: true,

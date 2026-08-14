@@ -469,19 +469,31 @@ const MediaLibrary = {
         this.showTempPreviewPlaceholder(info);
     },
 
-    // 临时模式数据不可用时在裁剪预览区显示占位提示
+    // 临时模式数据不可用时在裁剪预览区显示占位提示（批量/单文件共用）
     showTempPreviewPlaceholder(info) {
         const container = document.getElementById('cropPreviewContainer');
         if (!container) return;
-        const key = 'placeholder:' + (info.index || 0);
+        const key = 'placeholder:' + (info.fileName || info.index || 0);
         if (this._lastCropPreviewUrl === key) return;
         this._lastCropPreviewUrl = key;
         this.removeTempPreviewPlaceholder();
         const dim = info.width && info.height ? ` · ${info.width}x${info.height}` : '';
+        const pos = info.total ? `第 ${(info.index || 0) + 1}/${info.total} 项 · ` : '';
         const div = document.createElement('div');
         div.className = 'temp-preview-placeholder';
-        div.textContent = `临时模式数据不可预览（控制端刷新后缓存丢失）\n第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''}${dim}`;
+        div.textContent = `临时模式数据不可预览（控制端刷新后缓存丢失）\n${pos}${info.fileName || ''}${dim}`;
         container.appendChild(div);
+    },
+
+    // 单文件临时媒体：控制端刷新后本地无预览数据，显示占位提示
+    handleTempMediaInfo(info) {
+        const sent = this.lastTempFileSent;
+        if (sent && sent.name === info.fileName) {
+            // 未刷新，本地已有预览
+            this.removeTempPreviewPlaceholder();
+            return;
+        }
+        this.showTempPreviewPlaceholder(info);
     },
 
     removeTempPreviewPlaceholder() {

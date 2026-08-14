@@ -1405,8 +1405,38 @@
                     playTTS(displayName);
                 }
             }
+
+            if (data.temp) {
+                // 临时媒体上报信息：控制端刷新后本地无数据，用于裁剪预览区占位提示
+                const sendTempInfo = () => {
+                    if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+                    const w = data.mediaType === 'video' ? mediaVideo.videoWidth : mediaImage.naturalWidth;
+                    const h = data.mediaType === 'video' ? mediaVideo.videoHeight : mediaImage.naturalHeight;
+                    displayWs.send(JSON.stringify({
+                        type: 'tempMediaInfo',
+                        fileName: data.fileName || mediaName || '',
+                        mediaType: data.mediaType,
+                        width: w || undefined,
+                        height: h || undefined
+                    }));
+                };
+                if (data.mediaType === 'video') {
+                    if (mediaVideo.readyState >= 1) {
+                        sendTempInfo();
+                    } else {
+                        mediaVideo.addEventListener('loadedmetadata', sendTempInfo, { once: true });
+                    }
+                } else {
+                    if (mediaImage.complete && mediaImage.naturalWidth > 0) {
+                        sendTempInfo();
+                    } else {
+                        mediaImage.addEventListener('load', sendTempInfo, { once: true });
+                    }
+                }
+                sendTempInfo();
+            }
         }
-        
+
         function handleControl(data) {
             switch (data.action) {
                 case 'rotate':

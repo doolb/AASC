@@ -63,6 +63,10 @@ const WebSocketManager = {
             if (window.MediaLibrary) {
                 window.MediaLibrary.renderPlaylistPanel(data);
             }
+        } else if (data.type === 'tempMediaInfo') {
+            if (window.MediaLibrary) {
+                window.MediaLibrary.handleTempMediaInfo(data);
+            }
         } else if (data.type === 'playlistError') {
             showToast(data.message || '批量播放失败', 'error');
         } else if (data.type === 'playlistStarted') {
