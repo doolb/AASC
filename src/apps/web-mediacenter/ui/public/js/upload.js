@@ -253,6 +253,9 @@ const Upload = {
             onConfirm: async (settings) => {
                 const items = await this.prepareTempFiles(files);
                 if (!items || items.length === 0) return;
+                // 缓存文件数据供裁剪预览区跟随批量播放当前项
+                window.MediaLibrary.tempPlaylistFiles = items;
+                window.MediaLibrary._lastCropPreviewUrl = null;
                 if (window.WebSocketManager) {
                     window.WebSocketManager.sendPlaylistRequest({
                         temp: true,

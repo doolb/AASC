@@ -397,6 +397,8 @@ const MediaLibrary = {
         }
         this.showPlaylistSettingsDialog({
             onConfirm: (settings) => {
+                this._lastCropPreviewUrl = null;
+                this.tempPlaylistFiles = null;
                 const ok = window.WebSocketManager.sendPlaylistRequest({
                     libraryId: this.currentLibrary.id,
                     path: folderPath,
@@ -431,11 +433,29 @@ const MediaLibrary = {
         return panel;
     },
 
-    // 批量播放进度：同步更新 媒体库面板/显示控制界面/快捷控制面板
+    // 批量播放进度：同步更新 媒体库面板/显示控制界面/快捷控制面板/裁剪预览区
     renderPlaylistPanel(info) {
         this.renderMediaLibraryPanel(info);
         this.renderDisplayControlPanel(info);
         this.renderFloatingControlPanel(info);
+        this.updateCropPreview(info);
+    },
+
+    // 画面裁剪预览区跟随批量播放的当前项
+    updateCropPreview(info) {
+        if (!window.Crop) return;
+        if (!info || info.state === 'stopped' || info.state === 'finished') return;
+        let url = info.url;
+        if (!url && this.tempPlaylistFiles) {
+            // 临时模式：base64 数据缓存在控制端内存
+            const item = this.tempPlaylistFiles[info.index || 0];
+            if (item && item.data) {
+                url = 'data:' + (item.mimeType || 'application/octet-stream') + ';base64,' + item.data;
+            }
+        }
+        if (!url || url === this._lastCropPreviewUrl) return;
+        this._lastCropPreviewUrl = url;
+        window.Crop.showPreview(url, info.mediaType || 'image');
     },
 
     renderMediaLibraryPanel(info) {

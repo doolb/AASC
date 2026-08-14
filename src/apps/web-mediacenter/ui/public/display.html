@@ -1059,13 +1059,16 @@
         function sendPlaylistProgress(state) {
             if (!playlistState || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
             const ps = playlistState;
+            const item = ps.playlist[ps.index];
             displayWs.send(JSON.stringify({
                 type: 'playlistProgress',
                 listId: ps.listId,
                 index: ps.index,
                 total: ps.playlist.length,
                 state: state,
-                fileName: ps.playlist[ps.index] ? ps.playlist[ps.index].fileName : ''
+                fileName: item ? item.fileName : '',
+                url: item ? item.url : undefined,
+                mediaType: item ? item.mediaType : undefined
             }));
         }
 

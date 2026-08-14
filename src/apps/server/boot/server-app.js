@@ -2639,7 +2639,9 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             index: data.index,
             total: data.total,
             state: data.state,
-            fileName: data.fileName
+            fileName: data.fileName,
+            url: data.url,
+            mediaType: data.mediaType
         });
     } else if (data.type === 'voiceInput' && displayData) {
         broadcastToControls({
