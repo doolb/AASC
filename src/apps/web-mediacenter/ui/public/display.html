@@ -1034,6 +1034,232 @@
             }
         }
         
+        <!-- 批量播放模式：本地自循环播放列表 -->
+        let playlistState = null;
+        let savedAutoTts = null;
+
+        function stopPlaylist() {
+            if (!playlistState) return;
+            playlistState.active = false;
+            if (playlistState.timer) {
+                clearTimeout(playlistState.timer);
+                playlistState.timer = null;
+            }
+            if (playlistState.videoEndedHandler) {
+                mediaVideo.removeEventListener('ended', playlistState.videoEndedHandler);
+                playlistState.videoEndedHandler = null;
+            }
+            if (savedAutoTts !== null) {
+                autoTtsEnabled = savedAutoTts;
+                savedAutoTts = null;
+            }
+            playlistState = null;
+        }
+
+        function sendPlaylistProgress(state) {
+            if (!playlistState || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            const ps = playlistState;
+            displayWs.send(JSON.stringify({
+                type: 'playlistProgress',
+                listId: ps.listId,
+                index: ps.index,
+                total: ps.playlist.length,
+                state: state,
+                fileName: ps.playlist[ps.index] ? ps.playlist[ps.index].fileName : ''
+            }));
+        }
+
+        function handlePlaylistStart(data) {
+            stopPlaylist();
+            savedAutoTts = autoTtsEnabled;
+            autoTtsEnabled = !!data.announceName;
+            const playlist = data.playlist || [];
+            if (playlist.length === 0) {
+                stopPlaylist();
+                return;
+            }
+            const resumeIndex = Math.max(Math.min(data.resumeIndex || 0, playlist.length - 1), 0);
+            playlistState = {
+                listId: data.listId,
+                playlist: playlist,
+                interval: (data.interval || 0) * 1000,
+                loop: !!data.loop,
+                index: resumeIndex,
+                timer: null,
+                videoEndedHandler: null,
+                active: true
+            };
+            playCurrentItem();
+        }
+
+        function playCurrentItem() {
+            if (!playlistState || !playlistState.active) return;
+            const ps = playlistState;
+            const item = ps.playlist[ps.index];
+            if (!item) {
+                finishPlaylist();
+                return;
+            }
+            const mediaData = item.url
+                ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType }
+                : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType };
+            showMedia(mediaData);
+            if (item.mediaType === 'video') {
+                // 视频用自己的时长播放，播完后再等间隔
+                mediaVideo.loop = false;
+                ps.videoEndedHandler = function() {
+                    mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
+                    ps.videoEndedHandler = null;
+                    ps.timer = setTimeout(playlistNext, ps.interval);
+                };
+                mediaVideo.addEventListener('ended', ps.videoEndedHandler);
+                mediaVideo.onerror = function() {
+                    // 视频加载失败：等间隔后播下一个，不卡死循环
+                    mediaVideo.onerror = null;
+                    if (ps.videoEndedHandler) {
+                        mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
+                        ps.videoEndedHandler = null;
+                    }
+                    ps.timer = setTimeout(playlistNext, ps.interval);
+                };
+            } else {
+                // 图片按间隔时间切换
+                mediaImage.onerror = function() {
+                    // 图片加载失败：等间隔后播下一个，不卡死循环
+                    mediaImage.onerror = null;
+                    ps.timer = setTimeout(playlistNext, ps.interval);
+                };
+                ps.timer = setTimeout(playlistNext, ps.interval);
+            }
+            sendPlaylistProgress('playing');
+        }
+
+        function playlistNext() {
+            if (!playlistState || !playlistState.active) return;
+            const ps = playlistState;
+            if (ps.index + 1 >= ps.playlist.length) {
+                if (ps.loop) {
+                    ps.index = 0;
+                    playCurrentItem();
+                } else {
+                    finishPlaylist();
+                }
+            } else {
+                ps.index++;
+                playCurrentItem();
+            }
+        }
+
+        function playlistPrev() {
+            if (!playlistState || !playlistState.active) return;
+            const ps = playlistState;
+            ps.index = ps.index - 1 < 0 ? (ps.loop ? ps.playlist.length - 1 : 0) : ps.index - 1;
+            playCurrentItem();
+        }
+
+        function playlistJump(index) {
+            if (!playlistState || !playlistState.active) return;
+            const ps = playlistState;
+            if (index < 0 || index >= ps.playlist.length) return;
+            ps.index = index;
+            playCurrentItem();
+        }
+
+        function playlistPause() {
+            if (!playlistState || !playlistState.active) return;
+            const ps = playlistState;
+            if (ps.timer) {
+                clearTimeout(ps.timer);
+                ps.timer = null;
+            }
+            if (ps.videoEndedHandler) {
+                mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
+                ps.videoEndedHandler = null;
+                mediaVideo.pause();
+            }
+            sendPlaylistProgress('paused');
+        }
+
+        function playlistResume() {
+            if (!playlistState || !playlistState.active) return;
+            const ps = playlistState;
+            const item = ps.playlist[ps.index];
+            if (item && item.mediaType === 'video' && !ps.timer && !ps.videoEndedHandler) {
+                // 暂停时视频正在播放 → 继续播放视频
+                mediaVideo.play().catch(e => console.log('播放被阻止'));
+                ps.videoEndedHandler = function() {
+                    mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
+                    ps.videoEndedHandler = null;
+                    ps.timer = setTimeout(playlistNext, ps.interval);
+                };
+                mediaVideo.addEventListener('ended', ps.videoEndedHandler);
+            } else {
+                // 图片或间隔等待中 → 重新计时
+                ps.timer = setTimeout(playlistNext, ps.interval);
+            }
+            sendPlaylistProgress('playing');
+        }
+
+        function finishPlaylist() {
+            if (!playlistState) return;
+            const info = {
+                listId: playlistState.listId,
+                index: playlistState.index,
+                total: playlistState.playlist.length,
+                state: 'finished'
+            };
+            playlistState.active = false;
+            if (playlistState.timer) {
+                clearTimeout(playlistState.timer);
+                playlistState.timer = null;
+            }
+            if (playlistState.videoEndedHandler) {
+                mediaVideo.removeEventListener('ended', playlistState.videoEndedHandler);
+                playlistState.videoEndedHandler = null;
+            }
+            if (savedAutoTts !== null) {
+                autoTtsEnabled = savedAutoTts;
+                savedAutoTts = null;
+            }
+            playlistState = null;
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({ type: 'playlistProgress', ...info }));
+            }
+        }
+
+        function handlePlaylistControl(data) {
+            if (!playlistState) return;
+            switch (data.action) {
+                case 'pause':
+                    playlistPause();
+                    break;
+                case 'resume':
+                    playlistResume();
+                    break;
+                case 'next':
+                    playlistNext();
+                    break;
+                case 'prev':
+                    playlistPrev();
+                    break;
+                case 'jump':
+                    playlistJump(data.index);
+                    break;
+                case 'stop':
+                    const info = {
+                        listId: playlistState.listId,
+                        index: playlistState.index,
+                        total: playlistState.playlist.length,
+                        state: 'stopped'
+                    };
+                    stopPlaylist();
+                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                        displayWs.send(JSON.stringify({ type: 'playlistProgress', ...info }));
+                    }
+                    break;
+            }
+        }
+
         function showMedia(data) {
             mediaVideo.pause();
             mediaVideo.src = '';
@@ -1294,8 +1520,15 @@
                             window._renderTaskUpdates[_rid](data.data);
                         }
                         sendCommandAck('hardwareStats', true, null);
+                    } else if (data.type === 'playlistStart') {
+                        handlePlaylistStart(data);
+                        sendCommandAck('playlistStart', true, data.listId);
+                    } else if (data.type === 'playlistControl') {
+                        handlePlaylistControl(data);
+                        sendCommandAck('playlistControl', true, data.action);
                     } else {
                         console.log('[显示端] 处理媒体消息，发送 media 确认');
+                        stopPlaylist();
                         showMedia(data);
                         sendCommandAck('media', true, data.type);
                     }
