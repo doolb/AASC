@@ -1060,6 +1060,17 @@
             if (!playlistState || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
             const ps = playlistState;
             const item = ps.playlist[ps.index];
+            let width, height;
+            if (item) {
+                // 回传实际播放尺寸（临时模式控制端无数据，依赖此尺寸做裁剪预览）
+                if (item.mediaType === 'video') {
+                    width = mediaVideo.videoWidth || undefined;
+                    height = mediaVideo.videoHeight || undefined;
+                } else {
+                    width = mediaImage.naturalWidth || undefined;
+                    height = mediaImage.naturalHeight || undefined;
+                }
+            }
             displayWs.send(JSON.stringify({
                 type: 'playlistProgress',
                 listId: ps.listId,
@@ -1068,7 +1079,9 @@
                 state: state,
                 fileName: item ? item.fileName : '',
                 url: item ? item.url : undefined,
-                mediaType: item ? item.mediaType : undefined
+                mediaType: item ? item.mediaType : undefined,
+                width: width,
+                height: height
             }));
         }
 
@@ -1108,6 +1121,19 @@
                 ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType }
                 : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType };
             showMedia(mediaData);
+            // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
+            const reportSizeOnce = () => {
+                if (playlistState && playlistState.paused) {
+                    sendPlaylistProgress('paused');
+                } else {
+                    sendPlaylistProgress('playing');
+                }
+            };
+            if (item.mediaType === 'video') {
+                mediaVideo.addEventListener('loadedmetadata', reportSizeOnce, { once: true });
+            } else {
+                mediaImage.addEventListener('load', reportSizeOnce, { once: true });
+            }
             if (item.mediaType === 'video') {
                 // 视频用自己的时长播放，播完后再等间隔
                 mediaVideo.loop = false;

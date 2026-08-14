@@ -446,16 +446,47 @@ const MediaLibrary = {
         if (!window.Crop) return;
         if (!info || info.state === 'stopped' || info.state === 'finished') return;
         let url = info.url;
-        if (!url && this.tempPlaylistFiles) {
-            // 临时模式：base64 数据缓存在控制端内存
+        if (url) {
+            if (url === this._lastCropPreviewUrl) return;
+            this._lastCropPreviewUrl = url;
+            window.Crop.showPreview(url, info.mediaType || 'image');
+            this.removeTempPreviewPlaceholder();
+            return;
+        }
+        // 临时模式：优先用控制端缓存数据
+        if (this.tempPlaylistFiles) {
             const item = this.tempPlaylistFiles[info.index || 0];
             if (item && item.data) {
-                url = 'data:' + (item.mimeType || 'application/octet-stream') + ';base64,' + item.data;
+                const dataUrl = 'data:' + (item.mimeType || 'application/octet-stream') + ';base64,' + item.data;
+                if (dataUrl === this._lastCropPreviewUrl) return;
+                this._lastCropPreviewUrl = dataUrl;
+                window.Crop.showPreview(dataUrl, item.mediaType || 'image');
+                this.removeTempPreviewPlaceholder();
+                return;
             }
         }
-        if (!url || url === this._lastCropPreviewUrl) return;
-        this._lastCropPreviewUrl = url;
-        window.Crop.showPreview(url, info.mediaType || 'image');
+        // 控制端刷新后缓存丢失：显示占位提示（尺寸用显示端回传）
+        this.showTempPreviewPlaceholder(info);
+    },
+
+    // 临时模式数据不可用时在裁剪预览区显示占位提示
+    showTempPreviewPlaceholder(info) {
+        const container = document.getElementById('cropPreviewContainer');
+        if (!container) return;
+        const key = 'placeholder:' + (info.index || 0);
+        if (this._lastCropPreviewUrl === key) return;
+        this._lastCropPreviewUrl = key;
+        this.removeTempPreviewPlaceholder();
+        const dim = info.width && info.height ? ` · ${info.width}x${info.height}` : '';
+        const div = document.createElement('div');
+        div.className = 'temp-preview-placeholder';
+        div.textContent = `临时模式数据不可预览（控制端刷新后缓存丢失）\n第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''}${dim}`;
+        container.appendChild(div);
+    },
+
+    removeTempPreviewPlaceholder() {
+        const old = document.querySelector('.temp-preview-placeholder');
+        if (old) old.remove();
     },
 
     renderMediaLibraryPanel(info) {

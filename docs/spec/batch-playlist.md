@@ -104,7 +104,11 @@ const playlistManager = new PlaylistManager(mediaLibraryManager);
             currentPlaylist = null，config 同步清除
         否则:
             config.updateDisplayState(ip, {currentPlaylist})
-    broadcastToControls({displayId, type:'playlistProgress', listId, index, total, state, fileName})
+    broadcastToControls({displayId, type:'playlistProgress', listId, index, total, state,
+        fileName, url, mediaType, width, height})
+    说明: url/mediaType 供控制端裁剪预览区跟随；width/height 为显示端实际播放
+          尺寸（临时模式控制端无数据时依赖此尺寸），媒体加载完成后
+          loadedmetadata/load 补报一次带尺寸进度，暂停期间补报保持 paused
 ```
 
 ### 单媒体打断
@@ -236,6 +240,12 @@ sendPlaylistControl(displayIds, action, index):
 
 handleMessage:
     'playlistProgress' -> MediaLibrary.renderPlaylistPanel(data)
+        renderPlaylistPanel 内同步: 媒体库面板/显示控制界面/快捷面板 + updateCropPreview
+        updateCropPreview:
+            媒体库模式（有 url）: Crop.showPreview(url, mediaType)
+            临时模式: 优先用控制端缓存 base64（tempPlaylistFiles[index]）dataURL 预览
+            控制端刷新缓存丢失: 显示占位提示（第 x/y 项 · 文件名 · 显示端回传宽x高）
+            去重: _lastCropPreviewUrl 相同则不更新
     'playlistError' -> toast 错误
     'playlistStarted' -> toast 已发送
 ```

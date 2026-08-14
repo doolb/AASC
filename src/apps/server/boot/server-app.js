@@ -2641,7 +2641,9 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             state: data.state,
             fileName: data.fileName,
             url: data.url,
-            mediaType: data.mediaType
+            mediaType: data.mediaType,
+            width: data.width,
+            height: data.height
         });
     } else if (data.type === 'voiceInput' && displayData) {
         broadcastToControls({
