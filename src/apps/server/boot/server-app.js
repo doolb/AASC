@@ -302,6 +302,9 @@ const mediaLibraryManager = new MediaLibraryManager({
     isHttps: () => useHttps
 });
 
+const { PlaylistManager } = require('../../web-mediacenter/modules/media/playlist-app-service');
+const playlistManager = new PlaylistManager(mediaLibraryManager);
+
 const subServerManager = new SubServerManager();
 
 const subServerConfig = config.get('subServers');
@@ -2418,8 +2421,14 @@ wss.on('connection', (ws, req) => {
             }));
         }
 
-        if (savedState && savedState.currentMedia) {
-            ws.send(JSON.stringify({ 
+        if (savedState?.currentPlaylist) {
+            ws.send(JSON.stringify({
+                type: 'playlistStart',
+                ...savedState.currentPlaylist.startData,
+                resumeIndex: savedState.currentPlaylist.index
+            }));
+        } else if (savedState && savedState.currentMedia) {
+            ws.send(JSON.stringify({
                 type: 'restoreState',
                 state: savedState
             }));
@@ -2610,6 +2619,26 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             type: 'videoProgress',
             currentTime: data.currentTime,
             duration: data.duration
+        });
+    } else if (data.type === 'playlistProgress') {
+        if (displayData && displayData.state.currentPlaylist) {
+            displayData.state.currentPlaylist.index = data.index;
+            displayData.state.currentPlaylist.state = data.state;
+            if (data.state === 'finished' || data.state === 'stopped') {
+                displayData.state.currentPlaylist = null;
+                config.updateDisplayState(displayData.ip, { currentPlaylist: null });
+            } else {
+                config.updateDisplayState(displayData.ip, { currentPlaylist: displayData.state.currentPlaylist });
+            }
+        }
+        broadcastToControls({
+            displayId: displayId,
+            type: 'playlistProgress',
+            listId: data.listId,
+            index: data.index,
+            total: data.total,
+            state: data.state,
+            fileName: data.fileName
         });
     } else if (data.type === 'voiceInput' && displayData) {
         broadcastToControls({
@@ -3022,12 +3051,74 @@ async function handleControlMessageFallback(data, ws) {
                     displayIds.forEach(id => {
                         const dd = displayClients.get(id);
                         if (dd) {
+                            if (dd.state.currentPlaylist) {
+                                dd.state.currentPlaylist = null;
+                                config.updateDisplayState(dd.ip, { currentPlaylist: null });
+                            }
                             if (!data.media.temp) {
                                 dd.state.currentMedia = data.media;
                                 config.updateDisplayState(dd.ip, { currentMedia: data.media });
                             }
                             log('系统', `${data.media.temp ? '临时媒体' : '媒体'}发送到显示端: ${id}`);
                             sendToDisplay(id, data.media);
+                        }
+                    });
+                    return;
+                } else if (data.type === 'playlistRequest') {
+                    (async () => {
+                        try {
+                            const displayIds = data.displayIds || [];
+                            if (displayIds.length === 0) {
+                                ws.send(JSON.stringify({ type: 'playlistError', message: '没有可用的显示端' }));
+                                return;
+                            }
+                            let playlist;
+                            if (data.temp) {
+                                playlist = playlistManager.buildFromTemp(data.files || [], {
+                                    mode: data.mode, sortBy: data.sortBy, direction: data.direction
+                                });
+                            } else {
+                                playlist = await playlistManager.buildFromLibrary(data.libraryId, data.path, {
+                                    recursive: data.recursive, mode: data.mode, sortBy: data.sortBy, direction: data.direction
+                                });
+                            }
+                            if (!playlist || playlist.length === 0) {
+                                ws.send(JSON.stringify({ type: 'playlistError', message: '没有可播放的媒体文件' }));
+                                return;
+                            }
+                            const listId = 'pl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                            const startData = {
+                                listId, playlist,
+                                interval: data.interval || 0,
+                                loop: !!data.loop,
+                                announceName: !!data.announceName
+                            };
+                            const sentIds = [];
+                            displayIds.forEach(id => {
+                                const dd = displayClients.get(id);
+                                if (!dd) return;
+                                if (!data.temp) {
+                                    dd.state.currentPlaylist = { startData, index: 0, state: 'playing' };
+                                    config.updateDisplayState(dd.ip, { currentPlaylist: dd.state.currentPlaylist });
+                                }
+                                sendToDisplay(id, { type: 'playlistStart', ...startData, temp: !!data.temp });
+                                sentIds.push(id);
+                            });
+                            ws.send(JSON.stringify({ type: 'playlistStarted', listId, total: playlist.length, displayIds: sentIds }));
+                        } catch (err) {
+                            logError('批量播放', `生成列表失败: ${err.message}`);
+                            ws.send(JSON.stringify({ type: 'playlistError', message: '生成播放列表失败: ' + err.message }));
+                        }
+                    })();
+                    return;
+                } else if (data.type === 'playlistControl') {
+                    (data.displayIds || []).forEach(id => {
+                        const dd = displayClients.get(id);
+                        if (!dd) return;
+                        sendToDisplay(id, { type: 'playlistControl', action: data.action, index: data.index });
+                        if (data.action === 'stop' && dd.state.currentPlaylist) {
+                            dd.state.currentPlaylist = null;
+                            config.updateDisplayState(dd.ip, { currentPlaylist: null });
                         }
                     });
                     return;
@@ -3047,6 +3138,10 @@ async function handleControlMessageFallback(data, ws) {
                         state: stateToSend
                     }));
                 } else if (data.type === 'media') {
+                    if (displayData.state.currentPlaylist) {
+                        displayData.state.currentPlaylist = null;
+                        config.updateDisplayState(displayData.ip, { currentPlaylist: null });
+                    }
                     if (!data.media.temp) {
                         displayData.state.currentMedia = data.media;
                         config.updateDisplayState(displayData.ip, { currentMedia: data.media });
