@@ -1117,6 +1117,18 @@
                 finishPlaylist();
                 return;
             }
+            // 清除上一项残留的定时器/ended 监听/加载失败回调，
+            // 防止切换时重复触发 next 跳过媒体项
+            if (ps.timer) {
+                clearTimeout(ps.timer);
+                ps.timer = null;
+            }
+            if (ps.videoEndedHandler) {
+                mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
+                ps.videoEndedHandler = null;
+            }
+            mediaVideo.onerror = null;
+            mediaImage.onerror = null;
             const mediaData = item.url
                 ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType }
                 : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType };
