@@ -154,6 +154,117 @@ const Upload = {
         }
     },
 
+    // 处理拖入/粘贴的多文件（含文件夹递归收集）
+    async handleDroppedFiles(dataTransfer) {
+        const files = [];
+        const entries = Array.from(dataTransfer.items || [])
+            .map(i => (i.webkitGetAsEntry && i.webkitGetAsEntry()) || null);
+        const hasDir = entries.some(e => e && e.isDirectory);
+        if (hasDir) {
+            // 含文件夹：递归收集
+            for (const entry of entries) {
+                if (!entry) continue;
+                if (entry.isDirectory) {
+                    await this.collectDir(entry, files);
+                } else if (entry.isFile) {
+                    await this.collectFile(entry, files);
+                }
+            }
+        } else {
+            for (const f of dataTransfer.files) files.push(f);
+        }
+        if (files.length === 0) return;
+        if (files.length === 1) {
+            this.sendTempFile(files[0]);
+        } else {
+            this.showBatchTempUpload(files);
+        }
+    },
+
+    collectFile(entry, out) {
+        return new Promise(resolve => {
+            entry.file(f => { out.push(f); resolve(); }, () => resolve());
+        });
+    },
+
+    async collectDir(entry, out) {
+        const reader = entry.createReader();
+        const readAll = () => new Promise(resolve => {
+            reader.readEntries(async (entries) => {
+                if (entries.length === 0) { resolve(); return; }
+                for (const e of entries) {
+                    if (e.isDirectory) {
+                        await this.collectDir(e, out);
+                    } else if (e.isFile) {
+                        await this.collectFile(e, out);
+                    }
+                }
+                await readAll();
+                resolve();
+            }, () => resolve());
+        });
+        await readAll();
+    },
+
+    // 批量临时文件转为 base64 数组
+    async prepareTempFiles(files) {
+        const totalBytes = files.reduce((s, f) => s + f.size, 0);
+        // base64 膨胀约 33%，预留 500MB maxPayload 余量
+        if (totalBytes > 350 * 1024 * 1024) {
+            showToast('批量临时文件总大小不能超过 350MB', 'error');
+            return null;
+        }
+        for (const f of files) {
+            if (f.size > 300 * 1024 * 1024) {
+                showToast(`${f.name} 超过 300MB，已跳过`, 'error');
+            }
+        }
+        showToast('正在读取文件...', 'loading');
+        const items = [];
+        for (const f of files) {
+            try {
+                const base64 = await this.fileToBase64(f);
+                const dims = await this.getMediaDimensions(f, base64);
+                items.push({
+                    name: f.name,
+                    data: base64,
+                    mediaType: this.detectMediaType(f.name),
+                    mimeType: f.type || undefined,
+                    modifiedTime: f.lastModified,
+                    width: dims?.width,
+                    height: dims?.height
+                });
+            } catch (err) {
+                showToast(`读取 ${f.name} 失败: ${err.message}`, 'error');
+            }
+        }
+        return items;
+    },
+
+    // 弹出共用设置框，确认后批量发送
+    showBatchTempUpload(files) {
+        if (!window.MediaLibrary) {
+            showToast('媒体库模块未初始化', 'error');
+            return;
+        }
+        window.MediaLibrary.showPlaylistSettingsDialog({
+            title: '临时模式批量播放设置',
+            hideRecursive: true,
+            onConfirm: async (settings) => {
+                const items = await this.prepareTempFiles(files);
+                if (!items || items.length === 0) return;
+                if (window.WebSocketManager) {
+                    window.WebSocketManager.sendPlaylistRequest({
+                        temp: true,
+                        files: items,
+                        ...settings
+                    });
+                    showToast('批量播放请求已发送', 'success');
+                }
+            }
+        });
+    },
+
     uploadByUrl() {
         const urlInput = document.getElementById('urlInput');
         const url = urlInput.value.trim();
@@ -217,8 +328,7 @@ const Upload = {
                 e.preventDefault();
                 e.stopPropagation();
                 previewContainer.classList.remove('drag-over');
-                const file = e.dataTransfer.files[0];
-                if (file) this.sendTempFile(file);
+                this.handleDroppedFiles(e.dataTransfer);
             });
         }
 
