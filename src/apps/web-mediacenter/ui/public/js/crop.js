@@ -209,6 +209,14 @@ const Crop = {
     },
     
     showPreview(url, mediaType, onReady) {
+        // 新预览开始时移除临时模式数据丢失占位提示（并重置占位 key）
+        if (window.MediaLibrary && window.MediaLibrary.removeTempPreviewPlaceholder) {
+            window.MediaLibrary.removeTempPreviewPlaceholder();
+        } else {
+            const placeholder = document.querySelector('.temp-preview-placeholder');
+            if (placeholder) placeholder.remove();
+        }
+
         this.currentMedia = url;
         this._onReadyCallback = onReady || null;
         this._callbackExecuted = false;

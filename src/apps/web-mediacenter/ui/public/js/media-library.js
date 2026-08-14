@@ -499,6 +499,10 @@ const MediaLibrary = {
     removeTempPreviewPlaceholder() {
         const old = document.querySelector('.temp-preview-placeholder');
         if (old) old.remove();
+        // 重置占位 key，允许后续同名文件重新显示占位
+        if (this._lastCropPreviewUrl && this._lastCropPreviewUrl.startsWith('placeholder:')) {
+            this._lastCropPreviewUrl = null;
+        }
     },
 
     renderMediaLibraryPanel(info) {
