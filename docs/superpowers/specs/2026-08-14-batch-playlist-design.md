@@ -4,15 +4,15 @@
 
 ## 功能概述
 
-控制端媒体库支持文件夹级别批量播放：选择文件夹后弹出模式设置框（扫描范围、间隔时间、播放模式、排序方式、方向、播报文件名），服务端扫描文件夹生成完整播放列表一次性下发给显示端，显示端本地自循环播放（图片按间隔、视频播完+间隔），并上报播放进度、接受控制端干预（暂停/继续/上一个/下一个/停止）。临时模式（base64 中转不落盘）同样支持批量：在显示控制面板的画面裁剪区域多选文件，弹出同一模式设置框，控制端一次性上传文件 base64，服务端生成列表下发。批量播放可被单文件播放打断。
+控制端媒体库支持文件夹级别批量播放：选择文件夹后弹出模式设置框（扫描范围、间隔时间、播放模式、排序方式、方向、循环播放、播报文件名），服务端扫描文件夹生成完整播放列表一次性下发给显示端，显示端本地自循环播放（图片按间隔、视频播完+间隔，支持列表循环），并上报播放进度、接受控制端干预（暂停/继续/上一个/下一个/停止）。临时模式（base64 中转不落盘）同样支持批量：在显示控制面板的画面裁剪区域多选文件，弹出同一模式设置框，控制端一次性上传文件 base64，服务端生成列表下发。批量播放可被单文件播放打断。
 
 ## 架构与数据流
 
 ```
 控制端 (upload.html)
   批量播放请求（两个来源，统一 playlistRequest 消息）：
-  ① 媒体库文件夹：{libraryId, path, recursive, interval, mode, sortBy, direction, displayIds}
-  ② 临时模式多选：{files:[{name, base64, mediaType, width, height}...], interval, mode, sortBy, direction, displayIds, temp:true}
+  ① 媒体库文件夹：{libraryId, path, recursive, interval, mode, sortBy, direction, loop, announceName, displayIds}
+  ② 临时模式多选：{files:[{name, base64, mediaType, width, height}...], interval, mode, sortBy, direction, loop, announceName, displayIds, temp:true}
       ▼
 服务端 (server-app.js + PlaylistManager)
   ① 媒体库：扫描文件夹（递归/单层）→ 过滤媒体 → 排序/洗牌 → 列表项 {url,...}
@@ -37,7 +37,7 @@
 ```json
 { "type": "playlistRequest", "libraryId": "local_uploads", "path": "/相册",
   "recursive": true, "interval": 5, "mode": "sequence",
-  "sortBy": "time", "direction": "desc", "announceName": false,
+  "sortBy": "time", "direction": "desc", "loop": true, "announceName": false,
   "displayIds": ["display-xxx"] }
 ```
 
@@ -45,7 +45,7 @@
 ```json
 { "type": "playlistRequest", "temp": true,
   "files": [{ "name": "a.jpg", "base64": "...", "mediaType": "image", "width": 1920, "height": 1080 }],
-  "interval": 5, "mode": "random", "announceName": false,
+  "interval": 5, "mode": "random", "loop": true, "announceName": false,
   "displayIds": ["display-xxx"] }
 ```
 
@@ -55,7 +55,7 @@
 ```json
 { "type": "playlistStart", "listId": "pl-xxxx",
   "playlist": [{ "url": "http://.../uploads/xxx.jpg", "fileName": "a.jpg", "mediaType": "image" }],
-  "interval": 5, "announceName": false, "temp": false }
+  "interval": 5, "loop": true, "announceName": false, "temp": false }
 ```
 临时模式 `temp:true`，列表项含 `data`（base64）而非 `url`。
 
@@ -101,7 +101,7 @@
         映射为列表项: {data: base64, fileName, mediaType, width, height}
         返回 playlist
 
-    savePlaylist(displayId, playlistData) -> 持久化（仅非临时）
+    savePlaylist(displayId, playlistData) -> 持久化（仅非临时，含 loop）
     loadPlaylist(displayId) -> 重连恢复
     clearPlaylist(displayId) -> 停止/打断/播完时清除
 ```
@@ -120,7 +120,7 @@
         持久化 currentPlaylist 到 config（每个目标显示端）
     listId = 时间戳+随机数生成唯一ID
     对每个显示端:
-        sendToDisplay(id, {type:'playlistStart', listId, playlist, interval, announceName, temp})
+        sendToDisplay(id, {type:'playlistStart', listId, playlist, interval, loop, announceName, temp})
 
 'playlistControl' 处理:
     对每个 displayIds:
@@ -176,10 +176,12 @@ playCurrentItem():
     发送 progress (index, playing)
 
 next() / prev() / jump(index):
-    index 增减/跳转，越界处理（超出末尾 -> finish）
+    index 增减/跳转
+    loop 模式: index 越界时回绕（最后一项 next -> 第 0 项，第一项 prev -> 最后一项）
+    非 loop 模式: 超出末尾 -> finish()
     发送 progress (index, playing)
 
-finish():
+finish() [仅非循环模式]:
     active = false
     恢复 autoTtsEnabled 原值
     发送 progress (state: finished)
@@ -231,6 +233,7 @@ stop:    stopPlaylist(), 发送 progress(stopped)
 │  播放模式: (•) 顺序  ( ) 随机              │
 │  排序方式: (•) 按文件名  ( ) 按时间  [仅顺序] │
 │  播放方向: (•) 正序  ( ) 反序              │
+│  循环播放: [✓] 默认开启                    │
 │  播报文件名: [ ] 默认关闭                    │
 │                [取消]  [开始播放]            │
 └────────────────────────────────────────┘
@@ -270,13 +273,14 @@ stop:    stopPlaylist(), 发送 progress(stopped)
 1. 媒体库文件夹批量播放：递归/单层各测，图片间隔切换、视频播完+间隔
 2. 顺序+按文件名正/反序、按时间正/反序，验证列表顺序
 3. 随机模式洗牌：列表不重复、顺序随机
-4. 播报文件名开关：开→每项 TTS 播报；关→不播报；结束后恢复原 autoTtsEnabled
-5. 干预：暂停/继续/上一个/下一个/停止，视频暂停可恢复
-6. 打断：批量播放中发送单文件 → 批量停止、单文件正常播放
-7. 空文件夹：提示无媒体
-8. 临时模式多选：裁剪区拖入多文件 → 弹设置框 → 播放正常
-9. 重连恢复：非临时列表播放中断线重连 → 从断点续播
-10. 兼容性：现有单文件播放、视频进度条、裁剪功能不回归
+4. 循环模式：播完最后一项回到第 0 项继续；非循环模式播完结束停在最后一项
+5. 播报文件名开关：开→每项 TTS 播报；关→不播报；结束后恢复原 autoTtsEnabled
+6. 干预：暂停/继续/上一个/下一个/停止，视频暂停可恢复；循环模式 next/prev 回绕
+7. 打断：批量播放中发送单文件 → 批量停止、单文件正常播放
+8. 空文件夹：提示无媒体
+9. 临时模式多选：裁剪区拖入多文件 → 弹设置框 → 播放正常
+10. 重连恢复：非临时列表播放中断线重连 → 从断点续播
+11. 兼容性：现有单文件播放、视频进度条、裁剪功能不回归
 
 ## 影响的功能模块
 
