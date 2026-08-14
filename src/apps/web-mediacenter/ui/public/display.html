@@ -1087,13 +1087,14 @@
                 index: resumeIndex,
                 timer: null,
                 videoEndedHandler: null,
-                active: true
+                active: true,
+                paused: false
             };
             playCurrentItem();
         }
 
         function playCurrentItem() {
-            if (!playlistState || !playlistState.active) return;
+            if (!playlistState || !playlistState.active || playlistState.paused) return;
             const ps = playlistState;
             const item = ps.playlist[ps.index];
             if (!item) {
@@ -1116,6 +1117,7 @@
                 mediaVideo.onerror = function() {
                     // 视频加载失败：等间隔后播下一个，不卡死循环
                     mediaVideo.onerror = null;
+                    if (ps.paused) return;
                     if (ps.videoEndedHandler) {
                         mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
                         ps.videoEndedHandler = null;
@@ -1127,6 +1129,7 @@
                 mediaImage.onerror = function() {
                     // 图片加载失败：等间隔后播下一个，不卡死循环
                     mediaImage.onerror = null;
+                    if (ps.paused) return;
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
                 ps.timer = setTimeout(playlistNext, ps.interval);
@@ -1168,6 +1171,7 @@
         function playlistPause() {
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
+            ps.paused = true;
             if (ps.timer) {
                 clearTimeout(ps.timer);
                 ps.timer = null;
@@ -1177,12 +1181,16 @@
                 ps.videoEndedHandler = null;
                 mediaVideo.pause();
             }
+            // 清除加载失败回调，防止 pause 后 error 事件重新设置定时器自动播下一项
+            mediaVideo.onerror = null;
+            mediaImage.onerror = null;
             sendPlaylistProgress('paused');
         }
 
         function playlistResume() {
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
+            ps.paused = false;
             const item = ps.playlist[ps.index];
             if (item && item.mediaType === 'video' && !ps.timer && !ps.videoEndedHandler) {
                 // 暂停时视频正在播放 → 继续播放视频
