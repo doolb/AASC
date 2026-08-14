@@ -438,11 +438,15 @@ const Crop = {
     },
     
     onMouseUp() {
+        const wasActive = this.isDragging || this.isResizing;
         this.isDragging = false;
         this.isResizing = false;
         this.resizeHandle = null;
         this._lastSendTime = 0;
-        this.sendData();
+        // 只有真正拖拽/缩放过裁剪框才发送裁剪指令，防止空白处点击误发
+        if (wasActive) {
+            this.sendData();
+        }
     },
     
     onTouchStart(e) {
