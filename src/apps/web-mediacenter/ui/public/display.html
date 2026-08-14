@@ -476,6 +476,8 @@
                 mediaVideo.classList.add('height');
             } else if (fit === 'contain') {
                 // 铺满方向（高度/宽度）由 applyCrop 根据旋转角度/容器比例/媒体比例自动计算
+            } else if (fit === 'cover') {
+                // 覆盖铺满方向（高度/宽度）由 applyCrop 自动计算，超出部分居中裁切
             }
 
             applyCrop();
@@ -532,6 +534,36 @@
                 当前适配模式: currentFit,
                 当前裁剪百分比: currentCrop
             };
+
+            // 铺满模式：媒体等比放大覆盖整个容器（超出部分居中裁切）
+            if (currentFit === 'cover') {
+                if (naturalWidth > 0 && naturalHeight > 0 && containerWidth > 0 && containerHeight > 0) {
+                    // 旋转后媒体的有效宽高比（宽/高互换）
+                    const effectiveRatio = isRotated ? naturalHeight / naturalWidth : naturalWidth / naturalHeight;
+                    const containerRatio = containerWidth / containerHeight;
+                    let viewW, viewH;
+                    if (effectiveRatio > containerRatio) {
+                        // 媒体更宽：高度铺满容器高，宽度超出裁切
+                        viewH = containerHeight;
+                        viewW = containerHeight * effectiveRatio;
+                    } else {
+                        // 媒体更高：宽度铺满容器宽，高度超出裁切
+                        viewW = containerWidth;
+                        viewH = containerWidth / effectiveRatio;
+                    }
+                    if (isRotated) {
+                        // 旋转 90/270 后布局宽高与视觉互换
+                        media.style.width = viewH + 'px';
+                        media.style.height = viewW + 'px';
+                    } else {
+                        media.style.width = viewW + 'px';
+                        media.style.height = viewH + 'px';
+                    }
+                    media.style.maxWidth = 'none';
+                    media.style.maxHeight = 'none';
+                }
+                return { ...baseInfo, 状态: '铺满模式' };
+            }
 
             // 适应模式：根据旋转角度/容器比例/媒体比例自动计算铺满尺寸
             if (currentFit === 'contain') {

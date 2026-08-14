@@ -4,6 +4,11 @@
 
 ### 新增
 
+- ✅ [2026-08-15] 显示端画面填充新增「铺满」模式（cover）
+  - 媒体等比放大覆盖整个屏幕，超出部分居中裁切（旋转时自动计算方向）
+  - 控制端显示控制/快捷控制面板新增「铺满」按钮
+  - 改动文件：src/apps/web-mediacenter/ui/public/display.html、display.css、upload.html、docs/design/display.md
+
 - ✅ [2026-08-14] 批量播放模式：媒体库文件夹级批量播放 + 临时模式批量上传
   - 媒体库文件夹项「批量播放」按钮 → 模式设置框（扫描范围递归/单层、间隔时间、顺序/随机、按文件名/按时间排序、正/反序、循环播放默认开、播报文件名默认关）
   - 服务端 PlaylistManager 扫描文件夹生成完整播放列表（Fisher-Yates 洗牌），一次性 playlistStart 下发显示端
