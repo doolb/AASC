@@ -176,17 +176,14 @@
                 </div>
             </div>
 
-            <div class="control-item" id="displayPlaylistStatus" style="display:none;margin-top:15px;">
-                <label>批量播放</label>
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                    <span id="displayPlText" style="font-size:13px;color:rgba(255,255,255,0.7);"></span>
-                    <span class="control-buttons" style="display:flex;gap:8px;">
-                        <button class="control-btn" id="displayPlToggleBtn" onclick="MediaLibrary.controlPlaylist('toggle', this)">暂停</button>
-                        <button class="control-btn" onclick="MediaLibrary.controlPlaylist('prev')">上一个</button>
-                        <button class="control-btn" onclick="MediaLibrary.controlPlaylist('next')">下一个</button>
-                        <button class="control-btn" onclick="MediaLibrary.controlPlaylist('stop')">停止</button>
-                    </span>
-                </div>
+            <div class="playlist-progress-panel" id="displayPlaylistStatus" style="display:none;margin-top:15px;">
+                <span id="displayPlText" class="pl-progress-text"></span>
+                <span class="pl-controls">
+                    <button id="displayPlToggleBtn" onclick="MediaLibrary.controlPlaylist('toggle', this)">暂停</button>
+                    <button onclick="MediaLibrary.controlPlaylist('prev')">上一个</button>
+                    <button onclick="MediaLibrary.controlPlaylist('next')">下一个</button>
+                    <button onclick="MediaLibrary.controlPlaylist('stop')">停止</button>
+                </span>
             </div>
 
             <div class="control-item">

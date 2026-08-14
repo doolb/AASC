@@ -461,7 +461,7 @@ const MediaLibrary = {
             panel.style.display = 'none';
             return;
         }
-        panel.style.display = '';
+        panel.style.display = 'flex';
         const stateText = { playing: '▶ 播放中', paused: '⏸ 已暂停' }[info.state] || info.state;
         document.getElementById('displayPlText').textContent =
             `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''} · ${stateText}`;
