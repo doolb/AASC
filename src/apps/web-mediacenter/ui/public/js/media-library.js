@@ -414,77 +414,22 @@ const MediaLibrary = {
         });
     },
 
-    // 工具栏「发送 HTML」：粘贴代码 + 滚动设置 + 去向（临时/保存到媒体库）
-    showSendHtmlDialog() {
-        const mask = document.createElement('div');
-        mask.className = 'modal-mask';
-        mask.innerHTML = `
-            <div class="playlist-settings-dialog">
-                <div class="dialog-title">发送 HTML</div>
-                <div class="dialog-body">
-                    <div class="settings-row">
-                        <span class="settings-label">HTML 代码</span>
-                        <textarea id="sendHtmlCodeInput" rows="10" placeholder="粘贴 HTML 代码（建议内联所有资源，如 data: 图片）"
-                            style="width:100%;font-family:monospace;background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:6px;padding:8px;box-sizing:border-box;"></textarea>
-                    </div>
-                    <div class="settings-row">
-                        <span class="settings-label">滚动方式</span>
-                        <label><input type="radio" name="sendHtmlMode" value="page" checked> 分页式</label>
-                        <label><input type="radio" name="sendHtmlMode" value="smooth"> 平滑</label>
-                        <label><input type="radio" name="sendHtmlMode" value="loop"> 循环</label>
-                    </div>
-                    <div class="settings-row" id="sendHtmlPageIntervalRow">
-                        <span class="settings-label">每屏停留</span>
-                        <label><input type="radio" name="sendHtmlPageInterval" value="3"> 3秒</label>
-                        <label><input type="radio" name="sendHtmlPageInterval" value="5" checked> 5秒</label>
-                        <label><input type="radio" name="sendHtmlPageInterval" value="8"> 8秒</label>
-                    </div>
-                    <div class="settings-row" id="sendHtmlSpeedRow" style="display:none">
-                        <span class="settings-label">滚动速度</span>
-                        <label><input type="radio" name="sendHtmlSpeed" value="slow"> 慢</label>
-                        <label><input type="radio" name="sendHtmlSpeed" value="medium" checked> 中</label>
-                        <label><input type="radio" name="sendHtmlSpeed" value="fast"> 快</label>
-                    </div>
-                    <div class="settings-row">
-                        <span class="settings-label">去向</span>
-                        <label><input type="checkbox" id="sendHtmlSaveToLibrary"> 同时保存到媒体库（当前目录）</label>
-                    </div>
-                </div>
-                <div class="dialog-footer">
-                    <button class="btn-cancel" id="sendHtmlCancelBtn">取消</button>
-                    <button class="btn-confirm" id="sendHtmlConfirmBtn">发送</button>
-                </div>
-            </div>`;
-        const modeRow = (mode) => {
-            mask.querySelector('#sendHtmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
-            mask.querySelector('#sendHtmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
-        };
-        mask.querySelectorAll('input[name="sendHtmlMode"]').forEach(r =>
-            r.addEventListener('change', (e) => modeRow(e.target.value)));
-        mask.querySelector('#sendHtmlCancelBtn').addEventListener('click', () => mask.remove());
-        mask.querySelector('#sendHtmlConfirmBtn').addEventListener('click', () => {
-            const code = mask.querySelector('#sendHtmlCodeInput').value.trim();
-            if (!code) {
-                showToast('请输入 HTML 代码', 'error');
-                return;
-            }
-            const mode = mask.querySelector('input[name="sendHtmlMode"]:checked').value;
-            const htmlScroll = { mode };
-            if (mode === 'page') {
-                htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="sendHtmlPageInterval"]:checked').value) || 5;
-            } else {
-                htmlScroll.speed = mask.querySelector('input[name="sendHtmlSpeed"]:checked').value;
-            }
-            const saveToLibrary = mask.querySelector('#sendHtmlSaveToLibrary').checked;
-            mask.remove();
-            this._sendHtmlCode(code, htmlScroll, saveToLibrary);
-        });
-        document.body.appendChild(mask);
-        mask.querySelector('#sendHtmlCodeInput').focus();
-    },
-
-    // 发送粘贴的 HTML 代码：临时发送或保存到媒体库后按 url 发送
-    async _sendHtmlCode(code, htmlScroll, saveToLibrary) {
+    // 媒体面板「发送 HTML」：选择本地 .html 文件 → 滚动设置 + 去向 → 发送
+    async sendHtmlFile(file) {
+        if (!file) {
+            showToast('请选择 .html 文件', 'error');
+            return;
+        }
+        if (!/\.(html|htm)$/i.test(file.name)) {
+            showToast('请选择 .html/.htm 文件', 'error');
+            return;
+        }
+        const result = await this._showHtmlFileDialog(file);
+        if (!result) {
+            showToast('已取消发送', 'warning');
+            return;
+        }
+        const { htmlScroll, saveToLibrary } = result;
         if (saveToLibrary) {
             if (!this.currentLibrary) {
                 showToast('请先选择媒体库', 'error');
@@ -494,13 +439,12 @@ const MediaLibrary = {
                 showToast('只读媒体库，无法保存', 'error');
                 return;
             }
-            const file = new File([code], `粘贴代码_${Date.now()}.html`, { type: 'text/html' });
-            const result = await this.uploadFile(file, this.currentPath);
-            if (!result.success) {
-                showToast('保存到媒体库失败: ' + result.error, 'error');
+            const up = await this.uploadFile(file, this.currentPath);
+            if (!up.success) {
+                showToast('保存到媒体库失败: ' + up.error, 'error');
                 return;
             }
-            const url = result.data.file.url;
+            const url = up.data.file.url;
             if (window.Crop) {
                 window.Crop.hideForHtml();
             }
@@ -517,20 +461,93 @@ const MediaLibrary = {
             return;
         }
         // 临时发送：base64 直传
-        const blob = new Blob([code], { type: 'text/html' });
-        const base64 = await window.Upload.fileToBase64(blob);
+        const base64 = await window.Upload.fileToBase64(file);
         if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
             window.WebSocketManager.sendMedia({
                 type: 'base64',
                 data: base64,
-                fileName: '粘贴代码.html',
+                fileName: file.name,
                 mediaType: 'html',
-                mimeType: 'text/html',
+                mimeType: file.type || 'text/html',
                 temp: true,
                 htmlScroll
             });
         }
         showToast('已发送到显示端', 'success');
+    },
+
+    // 发送 HTML 文件对话框：文件信息 + 滚动设置 + 去向，返回 Promise<{htmlScroll, saveToLibrary}|null>
+    _showHtmlFileDialog(file) {
+        return new Promise((resolve) => {
+            const sizeText = file.size > 1024 ? (file.size / 1024).toFixed(1) + ' KB' : file.size + ' B';
+            const mask = document.createElement('div');
+            mask.className = 'modal-mask';
+            mask.innerHTML = `
+                <div class="playlist-settings-dialog">
+                    <div class="dialog-title">发送 HTML</div>
+                    <div class="dialog-body">
+                        <div class="settings-row">
+                            <span class="settings-label">文件</span>
+                            <span style="color:#4f9cf7;font-weight:500;word-break:break-all;">${this._escapeHtml(file.name)}（${sizeText}）</span>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">滚动方式</span>
+                            <label><input type="radio" name="sendHtmlMode" value="page" checked> 分页式</label>
+                            <label><input type="radio" name="sendHtmlMode" value="smooth"> 平滑</label>
+                            <label><input type="radio" name="sendHtmlMode" value="loop"> 循环</label>
+                        </div>
+                        <div class="settings-row" id="sendHtmlPageIntervalRow">
+                            <span class="settings-label">每屏停留</span>
+                            <label><input type="radio" name="sendHtmlPageInterval" value="3"> 3秒</label>
+                            <label><input type="radio" name="sendHtmlPageInterval" value="5" checked> 5秒</label>
+                            <label><input type="radio" name="sendHtmlPageInterval" value="8"> 8秒</label>
+                        </div>
+                        <div class="settings-row" id="sendHtmlSpeedRow" style="display:none">
+                            <span class="settings-label">滚动速度</span>
+                            <label><input type="radio" name="sendHtmlSpeed" value="slow"> 慢</label>
+                            <label><input type="radio" name="sendHtmlSpeed" value="medium" checked> 中</label>
+                            <label><input type="radio" name="sendHtmlSpeed" value="fast"> 快</label>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">去向</span>
+                            <label><input type="checkbox" id="sendHtmlSaveToLibrary"> 同时保存到媒体库（当前目录）</label>
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn-cancel" id="sendHtmlCancelBtn">取消</button>
+                        <button class="btn-confirm" id="sendHtmlConfirmBtn">发送</button>
+                    </div>
+                </div>`;
+            const modeRow = (mode) => {
+                mask.querySelector('#sendHtmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
+                mask.querySelector('#sendHtmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
+            };
+            mask.querySelectorAll('input[name="sendHtmlMode"]').forEach(r =>
+                r.addEventListener('change', (e) => modeRow(e.target.value)));
+            mask.querySelector('#sendHtmlCancelBtn').addEventListener('click', () => {
+                mask.remove();
+                resolve(null);
+            });
+            mask.querySelector('#sendHtmlConfirmBtn').addEventListener('click', () => {
+                const mode = mask.querySelector('input[name="sendHtmlMode"]:checked').value;
+                const htmlScroll = { mode };
+                if (mode === 'page') {
+                    htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="sendHtmlPageInterval"]:checked').value) || 5;
+                } else {
+                    htmlScroll.speed = mask.querySelector('input[name="sendHtmlSpeed"]:checked').value;
+                }
+                const saveToLibrary = mask.querySelector('#sendHtmlSaveToLibrary').checked;
+                mask.remove();
+                resolve({ htmlScroll, saveToLibrary });
+            });
+            document.body.appendChild(mask);
+        });
+    },
+
+    _escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
     },
 
     // HTML 滚动设置对话框（媒体库文件/裁剪框拖拽共用），返回 Promise<htmlScroll|null>

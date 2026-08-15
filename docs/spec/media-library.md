@@ -398,6 +398,14 @@ GET /api/media-libraries/:id/proxy/*
             返回
         调用 Crop.showPreview(url, mediaType)
         调用 WebSocketManager.sendMedia({type, url, mediaType})
+
+    sendHtmlFile(file):
+        校验扩展名 .html/.htm
+        弹「发送 HTML 文件」对话框（文件信息 + 滚动设置 + 去向 checkbox）
+        如果勾选保存到媒体库:
+            uploadFile(file, currentPath) → 按返回 url 发送
+        否则:
+            Upload.fileToBase64(file) → 临时 base64 发送（temp:true）
     
     render():
         渲染媒体库列表

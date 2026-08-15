@@ -85,7 +85,10 @@
                 <input type="file" id="imageInput" accept="image/*,.html,.htm">
                 <input type="file" id="videoInput" accept="video/*">
                 <div style="margin-top:8px;">
-                    <button class="btn-batch" onclick="MediaLibrary.showSendHtmlDialog()">发送 HTML</button>
+                    <label class="upload-btn">
+                        发送 HTML
+                        <input type="file" id="htmlSendInput" accept=".html,.htm" style="display:none" onchange="MediaLibrary.sendHtmlFile(this.files[0]); this.value='';">
+                    </label>
                 </div>
                 <div class="temp-mode-row">
                     <label class="temp-mode-label">
