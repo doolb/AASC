@@ -82,14 +82,20 @@ const Crop = {
         }
         
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
-        const mediaRect = media.getBoundingClientRect();
+        let mediaRect = media.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
-        
+
         this._log('[Crop] updateBox: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'containerRect=', containerRect.width, 'x', containerRect.height);
-        
+
         if (mediaRect.width === 0 || mediaRect.height === 0) {
-            this._log('[Crop] updateBox: 媒体尺寸为0，跳过');
-            return;
+            // 无媒体（临时模式占位提示等场景）：以容器为媒体区域，裁剪框仍可拖动
+            this._log('[Crop] updateBox: 媒体尺寸为0，以容器为媒体区域');
+            mediaRect = {
+                left: containerRect.left,
+                top: containerRect.top,
+                width: containerRect.width,
+                height: containerRect.height
+            };
         }
         
         const offsetX = mediaRect.left - containerRect.left;
@@ -333,8 +339,12 @@ const Crop = {
         if (!this.isDragging && !this.isResizing) return;
         
         const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
-        const mediaRect = media.getBoundingClientRect();
-        
+        let mediaRect = media.getBoundingClientRect();
+        if (mediaRect.width === 0 || mediaRect.height === 0) {
+            // 无媒体（临时模式占位提示等场景）：以容器为拖动区域
+            mediaRect = this.container.getBoundingClientRect();
+        }
+
         let dx = ((e.clientX - this.dragStart.x) / mediaRect.width) * 100;
         let dy = ((e.clientY - this.dragStart.y) / mediaRect.height) * 100;
 

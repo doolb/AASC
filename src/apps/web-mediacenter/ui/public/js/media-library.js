@@ -483,6 +483,11 @@ const MediaLibrary = {
         div.className = 'temp-preview-placeholder';
         div.textContent = `临时模式数据不可预览（控制端刷新后缓存丢失）\n${pos}${info.fileName || ''}${dim}`;
         container.appendChild(div);
+        // 无媒体数据时也显示裁剪框，允许拖动/缩放发送裁剪指令到显示端
+        if (window.Crop) {
+            window.Crop.box.style.display = 'block';
+            window.Crop.updateBox();
+        }
     },
 
     // 单文件临时媒体：控制端刷新后本地无预览数据，显示占位提示

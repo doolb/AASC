@@ -147,8 +147,14 @@ const WebSocketManager = {
                     }
                 } else if (!data.state.currentMediaUrl) {
                     console.log('[WS] currentMediaUrl 不存在，跳过 showPreview');
+                    // 无媒体预览（如临时模式占位）时也恢复裁剪框，允许拖动发送裁剪指令
+                    if (window.Crop && data.state.crop) {
+                        window.Crop.setData({ ...data.state.crop });
+                        window.Crop.box.style.display = 'block';
+                        setTimeout(() => window.Crop.updateBox(), 100);
+                    }
                 }
-                
+
                 if (data.state.currentMediaUrl && window.MediaLibrary) {
                     window.MediaLibrary.setCurrentMedia(data.state.currentMediaUrl);
                 }
