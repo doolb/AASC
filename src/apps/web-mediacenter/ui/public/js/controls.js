@@ -38,11 +38,31 @@ const Controls = {
         }
     },
     
+    setHtmlScrollMode(mode) {
+        document.querySelectorAll('[data-htmlscroll]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.htmlscroll === mode);
+        });
+        this._sendHtmlScroll();
+    },
+
+    setHtmlScrollLoop(checked) {
+        this._sendHtmlScroll();
+    },
+
+    _sendHtmlScroll() {
+        const modeBtn = document.querySelector('[data-htmlscroll].active');
+        const mode = modeBtn ? modeBtn.dataset.htmlscroll : 'page';
+        const loop = document.getElementById('htmlScrollLoopCtl') ? document.getElementById('htmlScrollLoopCtl').checked : false;
+        if (window.WebSocketManager) {
+            window.WebSocketManager.sendControl('htmlScroll', { mode: mode, loop: loop });
+        }
+    },
+
     sendFitMode(fit) {
         document.querySelectorAll('[data-fit]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.fit === fit);
         });
-        
+
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('fit', fit);
             if (fit === 'crop') {

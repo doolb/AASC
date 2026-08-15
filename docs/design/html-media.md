@@ -81,6 +81,11 @@ mediaData（WebSocket 消息 media 字段）:
     pageInterval: number,     // page 模式：每屏停留秒数（3/5/8）
     speed: 'slow' | 'medium' | 'fast'  // smooth 模式：滚动速度
   }
+  // htmlScroll 可缺省/null：显示端沿用当前生效模式（currentHtmlScroll 记忆）
+
+控制端显示面板「HTML 播放模式」入口:
+    滚动方式（分页式/平滑）+ 循环开关 → sendControl('htmlScroll', {mode, loop})
+    显示端 handleControl htmlScroll: 更新记忆 + 若 html 显示中立即重启滚动
 }
 ```
 

@@ -181,6 +181,18 @@
                     <label>音量: <span id="volumeValue">100</span>%</label>
                     <input type="range" id="volumeSlider" min="0" max="100" value="100" oninput="updateVolume(this.value)">
                 </div>
+
+                <div class="control-item">
+                    <label>HTML 播放模式</label>
+                    <div class="control-buttons">
+                        <button class="control-btn active" data-htmlscroll="page" onclick="Controls.setHtmlScrollMode('page')">分页式</button>
+                        <button class="control-btn" data-htmlscroll="smooth" onclick="Controls.setHtmlScrollMode('smooth')">平滑</button>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.8);cursor:pointer">
+                            <input type="checkbox" id="htmlScrollLoopCtl" onchange="Controls.setHtmlScrollLoop(this.checked)"> 循环
+                        </label>
+                    </div>
+                    <div style="margin-top:4px;font-size:12px;color:rgba(255,255,255,0.4);">作用于当前播放的 html；发送时未指定模式则沿用此设置</div>
+                </div>
             </div>
 
             <div class="playlist-progress-panel" id="displayPlaylistStatus" style="display:none;margin-top:15px;">

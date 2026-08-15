@@ -12,6 +12,7 @@
   - 显示端旋转适配：iframe 跟随 rotate()，90°/270° 宽高互换（100vh × 100vw）+ translate(50vw,50vh) translate(-50%,-50%) 先旋转再平移到视口中心，铺满无边缘偏移（puppeteer 实测 4 角度全铺满）
   - 切换回图片/视频时停止滚动并隐藏 iframe（清空 src/srcdoc）
   - 支持裁剪框设置：裁剪框区域等比放大铺满（可叠加旋转）；上传端不预览 html 内容，仅显示裁剪框（默认全屏，拖拽实时生效）
+  - 控制端显示面板「HTML 播放模式」入口：滚动方式（分页/平滑）+ 循环开关实时切换当前 html；发送对话框可「沿用显示端」模式（显示端 currentHtmlScroll 记忆）
   - 批量播放 html 项按间隔切换（默认分页 5 秒），暂停冻结滚动、恢复继续
   - 改动文件：
     - src/apps/web-mediacenter/modules/media/media-library-app-service.js

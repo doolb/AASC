@@ -1524,6 +1524,8 @@
 
         // HTML 媒体滚动控制器：分页式 / 平滑 / 循环
         let htmlScrollState = null;
+        // 当前生效的 html 播放模式（发送未指定时沿用；控制端可实时切换）
+        let currentHtmlScroll = null;
 
         function stopHtmlScroll() {
             if (htmlScrollState) {
@@ -1646,7 +1648,9 @@
                 mediaVideo.load();
                 mediaVideo.style.display = 'none';
                 mediaHtml.style.display = 'block';
-                mediaHtml.onload = () => startHtmlScroll(mediaHtml, data.htmlScroll);
+                // 发送未指定模式时沿用显示端当前模式；指定则更新记忆
+                if (data.htmlScroll) currentHtmlScroll = data.htmlScroll;
+                mediaHtml.onload = () => startHtmlScroll(mediaHtml, data.htmlScroll || currentHtmlScroll);
                 let mediaName = data.fileName || 'HTML内容';
                 if (data.type === 'url') {
                     mediaHtml.srcdoc = '';
@@ -1746,6 +1750,14 @@
                     
                 case 'fit':
                     applyFit(data.value);
+                    break;
+
+                case 'htmlScroll':
+                    // 控制端切换当前 html 播放模式（未指定模式时记忆沿用）
+                    if (data.value) currentHtmlScroll = data.value;
+                    if (mediaHtml.style.display !== 'none') {
+                        startHtmlScroll(mediaHtml, currentHtmlScroll);
+                    }
                     break;
                     
                 case 'play':

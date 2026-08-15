@@ -190,7 +190,12 @@ applyCrop 的 html 分支（applyHtmlCrop）:
         url 其他: iframe.src = url
         base64: 解码 -> iframe.srcdoc
     onload -> startHtmlScroll(iframe, htmlScroll)（分页/平滑 + 循环开关）
+    htmlScroll 缺省/null 时沿用 currentHtmlScroll 记忆；指定则更新记忆
     temp 上报不含宽高
+
+handleControl 'htmlScroll'（控制端显示面板实时切换）:
+    currentHtmlScroll = data.value
+    如果 html 显示中: startHtmlScroll(mediaHtml, currentHtmlScroll) 立即重启滚动
 
 startHtmlScroll(iframe, htmlScroll):
     opts = htmlScroll || {}; mode = opts.mode === 'loop' ? 'smooth' : (opts.mode || 'page')

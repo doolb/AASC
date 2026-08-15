@@ -312,11 +312,13 @@ const MediaLibrary = {
 
     // HTML 媒体：弹滚动设置后直接发送（跳过裁剪预览）
     async sendHtmlMedia(url) {
-        const htmlScroll = await this.showHtmlScrollSettingsDialog();
-        if (!htmlScroll) {
+        const result = await this.showHtmlScrollSettingsDialog();
+        if (!result) {
             showToast('已取消发送', 'warning');
             return;
         }
+        // 沿用显示端模式时 htmlScroll 为 null，显示端沿用当前设置
+        const htmlScroll = result.inherit ? null : result;
         if (window.Crop) {
             window.Crop.showPreview(url, 'html');
         }
@@ -497,6 +499,7 @@ const MediaLibrary = {
                             <span class="settings-label">滚动方式</span>
                             <label><input type="radio" name="sendHtmlMode" value="page" checked> 分页式</label>
                             <label><input type="radio" name="sendHtmlMode" value="smooth"> 平滑</label>
+                            <label><input type="radio" name="sendHtmlMode" value="inherit"> 沿用显示端</label>
                         </div>
                         <div class="settings-row" id="sendHtmlPageIntervalRow">
                             <span class="settings-label">每屏停留</span>
@@ -510,7 +513,7 @@ const MediaLibrary = {
                             <label><input type="radio" name="sendHtmlSpeed" value="medium" checked> 中</label>
                             <label><input type="radio" name="sendHtmlSpeed" value="fast"> 快</label>
                         </div>
-                        <div class="settings-row">
+                        <div class="settings-row" id="sendHtmlLoopRow">
                             <span class="settings-label">循环播放</span>
                             <label><input type="checkbox" id="sendHtmlLoop" checked> 滚到底后从头循环</label>
                         </div>
@@ -527,6 +530,7 @@ const MediaLibrary = {
             const modeRow = (mode) => {
                 mask.querySelector('#sendHtmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
                 mask.querySelector('#sendHtmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
+                mask.querySelector('#sendHtmlLoopRow').style.display = mode === 'inherit' ? 'none' : '';
             };
             mask.querySelectorAll('input[name="sendHtmlMode"]').forEach(r =>
                 r.addEventListener('change', (e) => modeRow(e.target.value)));
@@ -536,6 +540,12 @@ const MediaLibrary = {
             });
             mask.querySelector('#sendHtmlConfirmBtn').addEventListener('click', () => {
                 const mode = mask.querySelector('input[name="sendHtmlMode"]:checked').value;
+                const saveToLibrary = mask.querySelector('#sendHtmlSaveToLibrary').checked;
+                if (mode === 'inherit') {
+                    mask.remove();
+                    resolve({ htmlScroll: null, saveToLibrary });
+                    return;
+                }
                 const htmlScroll = {
                     mode: mode,
                     loop: mask.querySelector('#sendHtmlLoop').checked
@@ -545,7 +555,6 @@ const MediaLibrary = {
                 } else {
                     htmlScroll.speed = mask.querySelector('input[name="sendHtmlSpeed"]:checked').value;
                 }
-                const saveToLibrary = mask.querySelector('#sendHtmlSaveToLibrary').checked;
                 mask.remove();
                 resolve({ htmlScroll, saveToLibrary });
             });
@@ -572,6 +581,7 @@ const MediaLibrary = {
                             <span class="settings-label">滚动方式</span>
                             <label><input type="radio" name="htmlScrollMode" value="page" checked> 分页式</label>
                             <label><input type="radio" name="htmlScrollMode" value="smooth"> 平滑</label>
+                            <label><input type="radio" name="htmlScrollMode" value="inherit"> 沿用显示端</label>
                         </div>
                         <div class="settings-row" id="htmlPageIntervalRow">
                             <span class="settings-label">每屏停留</span>
@@ -585,7 +595,7 @@ const MediaLibrary = {
                             <label><input type="radio" name="htmlSpeed" value="medium" checked> 中</label>
                             <label><input type="radio" name="htmlSpeed" value="fast"> 快</label>
                         </div>
-                        <div class="settings-row">
+                        <div class="settings-row" id="htmlScrollLoopRow">
                             <span class="settings-label">循环播放</span>
                             <label><input type="checkbox" id="htmlScrollLoop" checked> 滚到底后从头循环</label>
                         </div>
@@ -595,10 +605,11 @@ const MediaLibrary = {
                         <button class="btn-confirm" id="htmlScrollConfirmBtn">确认发送</button>
                     </div>
                 </div>`;
-            // 滚动方式切换时显隐对应参数行
+            // 滚动方式切换时显隐对应参数行；沿用显示端时参数行禁用
             const modeRow = (mode) => {
                 mask.querySelector('#htmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
                 mask.querySelector('#htmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
+                mask.querySelector('#htmlScrollLoopRow').style.display = mode === 'inherit' ? 'none' : '';
             };
             mask.querySelectorAll('input[name="htmlScrollMode"]').forEach(r =>
                 r.addEventListener('change', (e) => modeRow(e.target.value)));
@@ -608,6 +619,11 @@ const MediaLibrary = {
             });
             mask.querySelector('#htmlScrollConfirmBtn').addEventListener('click', () => {
                 const mode = mask.querySelector('input[name="htmlScrollMode"]:checked').value;
+                if (mode === 'inherit') {
+                    mask.remove();
+                    resolve({ inherit: true });
+                    return;
+                }
                 const htmlScroll = {
                     mode: mode,
                     loop: mask.querySelector('#htmlScrollLoop').checked
