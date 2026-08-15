@@ -3087,6 +3087,9 @@ async function handleControlMessageFallback(data, ws) {
                                     width: data.media.width,
                                     height: data.media.height
                                 };
+                                // 临时媒体也更新当前媒体（仅内存不持久化），
+                                // 避免 displayState 恢复旧媒体顶掉刷新后的占位提示
+                                dd.state.currentMedia = data.media;
                             } else {
                                 dd.state.lastTempMedia = null;
                                 dd.state.currentMedia = data.media;
@@ -3185,6 +3188,9 @@ async function handleControlMessageFallback(data, ws) {
                             width: data.media.width,
                             height: data.media.height
                         };
+                        // 临时媒体也更新当前媒体（仅内存不持久化），
+                        // 避免 displayState 恢复旧媒体顶掉刷新后的占位提示
+                        displayData.state.currentMedia = data.media;
                     } else {
                         displayData.state.lastTempMedia = null;
                         displayData.state.currentMedia = data.media;
