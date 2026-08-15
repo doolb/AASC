@@ -10,14 +10,27 @@
     - src/apps/web-mediacenter/ui/public/js/crop.js
 
 - ✅ [2026-08-15] 暂时屏蔽显示端浏览器原生截图（getDisplayMedia），保留代码
-
-- ✅ [2026-08-15] 暂时屏蔽显示端浏览器原生截图（getDisplayMedia），保留代码
   - 控制模式截图降级链跳过 getDisplayMedia：display.html 的 shotWithGdm() 开头新增 GDM_ENABLED 常量开关（false），命中直接返回 null 走兜底 html-to-image → none
   - 函数体与 gdmStream/gdmVideo 等状态变量全部保留，恢复时改回 GDM_ENABLED = true 即可
   - 改动文件：
     - src/apps/web-mediacenter/ui/public/display.html
 
 ### 新增
+
+- ✅ [2026-08-15] Android APK 显示端（跨域控制增强）
+  - APK（Kotlin/Gradle, src/apps/android-display/）：WebView 加载服务器 /display 页 + JavascriptInterface 原生桥
+  - 原生桥（window.NativeDisplay）：WebView 位图截图（真实像素，跨域/外站图片可截，无授权弹窗）+ 无障碍真实触摸注入 + WebView 真实按键（跨域 iframe 同样生效）+ 中文剪贴板粘贴
+  - display.html：桥探测后截图链 native 优先（mode='native'）、输入派发走桥（未映射键回退 JS 合成）
+  - 能力声明：crossOriginControl / crossOriginControlDegraded；控制端开关旁能力标识 + 按能力区分的降级提示
+  - 浏览器显示端无桥行为不变
+  - 改动文件：
+    - src/apps/android-display/（新增，APK 工程：Gradle + Kotlin + Manifest + 原生桥/截图/按键/无障碍触摸）
+    - src/apps/web-mediacenter/ui/public/display.html
+    - src/apps/web-mediacenter/ui/public/js/crop.js
+    - src/apps/web-mediacenter/ui/public/upload.html
+    - tests/display-native-bridge.test.js（新增）
+    - docs/design/android-display.md（新增）
+    - docs/spec/android-display.md（新增）
 
 - ✅ [2026-08-15] 任务回传携带来源显示端 displayId + 控制端媒体回传按选中显示端过滤
   - 服务端转发 task:progress/task:log/task:result/task:widget_update/task:stream 到控制端时从实例补 displayId（inst.displayId || inst.targetInfo.displayId），标识回传来源显示端
