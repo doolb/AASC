@@ -509,7 +509,7 @@ const MediaLibrary = {
                         </div>
                         <div class="settings-row">
                             <span class="settings-label">循环播放</span>
-                            <label><input type="checkbox" id="sendHtmlLoop"> 滚到底后从头循环</label>
+                            <label><input type="checkbox" id="sendHtmlLoop" checked> 滚到底后从头循环</label>
                         </div>
                         <div class="settings-row">
                             <span class="settings-label">去向</span>
@@ -584,7 +584,7 @@ const MediaLibrary = {
                         </div>
                         <div class="settings-row">
                             <span class="settings-label">循环播放</span>
-                            <label><input type="checkbox" id="htmlScrollLoop"> 滚到底后从头循环</label>
+                            <label><input type="checkbox" id="htmlScrollLoop" checked> 滚到底后从头循环</label>
                         </div>
                     </div>
                     <div class="dialog-footer">
