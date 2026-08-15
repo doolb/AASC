@@ -731,8 +731,8 @@ input[type="range"]::-webkit-slider-thumb:active {
     left: 50%;
     width: 100%;
     height: 56.25%;
-    border: 2px dashed rgba(255, 255, 255, 0.55);
-    background: rgba(255, 255, 255, 0.1);
+    border: 2px dashed rgba(255, 255, 255, 0.65);
+    background: rgba(255, 255, 255, 0.2);
     border-radius: 8px;
     box-sizing: border-box;
     pointer-events: none;
