@@ -185,6 +185,12 @@ const WebSocketManager = {
                     label.textContent = scaleText + '滚动 ' + (data.scrollProgress || 0) + '%';
                 }
             }
+        } else if (data.type === 'controlScreenshot') {
+            // 控制模式截图回传：更新裁剪面板底图
+            if (data.displayId && data.displayId !== window.currentDisplayId) return;
+            if (window.Crop && window.Crop.showControlScreenshot) {
+                window.Crop.showControlScreenshot(data);
+            }
         } else if (data.type === 'chatChunk') {
             if (window.Chat) {
                 window.Chat.handleChunk(data);

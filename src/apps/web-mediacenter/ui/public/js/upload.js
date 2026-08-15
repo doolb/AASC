@@ -341,6 +341,9 @@ const Upload = {
     },
     
     init() {
+        if (window.Crop && Crop.initControlMode) {
+            Crop.initControlMode();
+        }
         const imageInput = document.getElementById('imageInput');
         const videoInput = document.getElementById('videoInput');
         const urlInput = document.getElementById('urlInput');

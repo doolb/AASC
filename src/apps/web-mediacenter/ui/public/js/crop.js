@@ -617,8 +617,174 @@ const Crop = {
         
         const customBtn = document.querySelector('[data-fit="custom"]');
         if (customBtn) customBtn.classList.add('active');
+    },
+
+    // ===== 控制模式：转发输入到显示端 + 显示回传截图 =====
+    controlModeOn: false,
+    _controlWheelTime: 0,
+
+    // 初始化控制模式 UI 与事件绑定（upload.js init 调用）
+    initControlMode() {
+        const toggle = document.getElementById('controlModeToggle');
+        if (!toggle) return;
+        toggle.addEventListener('change', () => {
+            this.setControlMode(toggle.checked);
+        });
+        const sendBtn = document.getElementById('controlTextSendBtn');
+        const textInput = document.getElementById('controlTextInput');
+        if (sendBtn && textInput) {
+            sendBtn.addEventListener('click', () => {
+                this.sendTextToDisplay(textInput.value);
+                textInput.value = '';
+            });
+            textInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    this.sendTextToDisplay(textInput.value);
+                    textInput.value = '';
+                }
+                e.stopPropagation(); // 防止被控制模式全局键盘捕获转发
+            });
+        }
+        const container = this.container;
+        if (container) {
+            container.addEventListener('mousedown', (e) => this.onContainerMouse(e, 'mousedown'));
+            container.addEventListener('mouseup', (e) => this.onContainerMouse(e, 'mouseup'));
+            container.addEventListener('click', (e) => this.onContainerMouse(e, 'click'));
+            container.addEventListener('contextmenu', (e) => this.onContainerMouse(e, 'contextmenu'));
+            container.addEventListener('wheel', (e) => this.onContainerWheel(e), { passive: true });
+        }
+        document.addEventListener('keydown', (e) => this.onDocKey(e, 'keydown'), true);
+        document.addEventListener('keyup', (e) => this.onDocKey(e, 'keyup'), true);
+    },
+
+    // 开启/关闭控制模式
+    setControlMode(on) {
+        this.controlModeOn = !!on;
+        const toggle = document.getElementById('controlModeToggle');
+        if (toggle) toggle.checked = this.controlModeOn;
+        const textRow = document.getElementById('controlTextRow');
+        if (textRow) textRow.style.display = this.controlModeOn ? '' : 'none';
+        if (!this.controlModeOn) {
+            // 关闭：隐藏截图底图，恢复 html 占位框
+            this.previewImg.style.display = 'none';
+            this.previewImg.removeAttribute('src');
+            if (this.placeholder) {
+                this.placeholder.style.display = 'block';
+                const t = this.placeholder.querySelector('.crop-preview-placeholder-text');
+                if (t) t.textContent = 'HTML 页面区域（iframe）';
+            }
+        }
+        if (window.WebSocketManager) {
+            window.WebSocketManager.sendControl('controlMode', this.controlModeOn);
+        }
+    },
+
+    // 容器内鼠标事件 → 裁剪框内百分比坐标 → 转发
+    onContainerMouse(e, evtName) {
+        if (!this.controlModeOn || !this.box) return;
+        const boxRect = this.box.getBoundingClientRect();
+        if (boxRect.width === 0 || boxRect.height === 0) return;
+        // 裁剪框内相对百分比
+        const px = ((e.clientX - boxRect.left) / boxRect.width) * 100;
+        const py = ((e.clientY - boxRect.top) / boxRect.height) * 100;
+        if (evtName === 'contextmenu') {
+            e.preventDefault();
+        }
+        this.sendControlInput({
+            event: evtName,
+            x: px,
+            y: py,
+            button: e.button
+        });
+    },
+
+    onContainerWheel(e) {
+        if (!this.controlModeOn) return;
+        // 50ms 节流，避免高频刷屏
+        const now = Date.now();
+        if (now - this._controlWheelTime < 50) return;
+        this._controlWheelTime = now;
+        this.sendControlInput({
+            event: 'wheel',
+            deltaX: e.deltaX || 0,
+            deltaY: e.deltaY || 0
+        });
+    },
+
+    // 文档级键盘捕获（捕获阶段，阻止控制端页面自身响应）
+    onDocKey(e, evtName) {
+        if (!this.controlModeOn) return;
+        // 控制模式开启后所有按键转发（含 Tab/Enter/方向键）
+        e.preventDefault();
+        e.stopPropagation();
+        const msg = {
+            event: evtName,
+            key: e.key,
+            code: e.code,
+            keyCode: e.keyCode || e.which || 0,
+            altKey: e.altKey,
+            ctrlKey: e.ctrlKey,
+            shiftKey: e.shiftKey,
+            metaKey: e.metaKey
+        };
+        // 单字符（无 Ctrl/Alt/Meta）附带 char 供显示端 insertText
+        if (evtName === 'keydown' && msg.key && msg.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            msg.char = msg.key;
+        }
+        this.sendControlInput(msg);
+    },
+
+    // 文本注入消息（中文粘贴等）
+    sendTextToDisplay(text) {
+        if (!text || !this.controlModeOn) return;
+        this.sendControlInput({ event: 'text', text: text });
+    },
+
+    // 发送输入消息（静默，不走 sendControl 的 toast）
+    sendControlInput(msg) {
+        if (!window.WebSocketManager || !window.currentDisplayId) return;
+        const ws = window.WebSocketManager.ws;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'control',
+                displayId: window.currentDisplayId,
+                action: 'controlInput',
+                ...msg
+            }));
+        }
+    },
+
+    // 显示端回传截图：作为预览底图显示，裁剪框保持可拖拽
+    showControlScreenshot(data) {
+        if (!this.controlModeOn) return;
+        const img = this.previewImg;
+        if (!img) return;
+        if (!data.dataUrl || data.mode === 'none') {
+            img.style.display = 'none';
+            img.removeAttribute('src');
+            if (this.placeholder) {
+                this.placeholder.style.display = 'block';
+                const t = this.placeholder.querySelector('.crop-preview-placeholder-text');
+                if (t) t.textContent = data.mode === 'none' ? '跨域未授权，操作仍生效（无画面）' : 'HTML 页面区域（iframe）';
+            }
+            return;
+        }
+        img.src = data.dataUrl;
+        img.style.display = 'block';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'contain';
+        if (this.placeholder) this.placeholder.style.display = 'none';
     }
 };
+
+window.setCropRotation = Crop.applyRotation.bind(Crop);
+window.resetCrop = Crop.reset.bind(Crop);
+window.setCropManually = Crop.setCropManually.bind(Crop);
+window.applyManualCrop = Crop.applyManualCrop.bind(Crop);
+window.updateCustomPreview = Crop.updateCustomPreview.bind(Crop);
+window.applyCustomMode = Crop.applyCustomMode.bind(Crop);
+window.showControlScreenshot = Crop.showControlScreenshot.bind(Crop);
 
 window.setCropRotation = Crop.applyRotation.bind(Crop);
 window.resetCrop = Crop.reset.bind(Crop);
