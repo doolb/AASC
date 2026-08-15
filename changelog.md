@@ -83,7 +83,35 @@
   - 改动文件：
     - src/apps/web-mediacenter/ui/public/js/task-panel.js
 
+### 新增
+
+- ✅ [2026-08-15] 控制模式：控制端远程操作显示端网页（鼠标/滚轮/键盘 + 720p 截图回传）
+  - 裁剪面板新增「控制」开关，开启后转发控制端鼠标点击/滚轮/键盘到显示端 html 网页
+  - 显示端每秒回传 720p 截图（JPEG q0.7），作为控制端裁剪面板预览底图
+  - 截图降级链：同源/srcdoc → html-to-image（库引入，SVG foreignObject 渲染准确）；跨域 URL → getDisplayMedia 整屏捕获（8s 授权超时防挂起）；授权失败 → 兜底 html-to-image → 全部失败降级"跨域未授权，操作仍生效"
+  - 输入合成：坐标按裁剪框内百分比换算（与 CSS 缩放无关）；合成事件补原生行为（mousedown 手动 focus、滚轮手动 scrollBy、键盘单字符 insertText 注入）；中文通过粘贴框文本注入
+  - 控制模式与自动滚动互斥：开启暂停自动滚动，关闭恢复；显示端断连自动清理定时器与捕获流
+  - 修复既有 bug：外部 URL 播放时 srcdoc 属性残留导致网页永不加载（显示空白）；跨域 html 播放时 htmlProgress 每秒抛 SecurityError
+  - 验证：puppeteer E2E 9/9（同源截图/点击/键盘/中文注入/滚轮/关闭停止）+ 跨域降级链 + 控制端 UI 8/8 + 单元测试 4/4
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/html-to-image.min.js (新增)
+    - src/apps/web-mediacenter/ui/public/js/control-mode-utils.js (新增)
+    - tests/control-mode-utils.test.js (新增)
+    - src/apps/web-mediacenter/ui/public/display.html
+    - src/apps/web-mediacenter/ui/public/upload.html
+    - src/apps/web-mediacenter/ui/public/js/crop.js
+    - src/apps/web-mediacenter/ui/public/js/websocket.js
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - src/apps/server/boot/server-app.js
+    - docs/design/control-mode.md (新增)
+    - docs/spec/control-mode.md (新增)
+    - docs/task/20260815_控制模式.md (新增)
+
 ### 修复
+
+- ✅ [2026-08-15] htmlProgress 高频日志静默（每秒上报刷屏）
+  - 显示端上行日志、广播到控制端的日志不再打印 htmlProgress（与 videoProgress/playlistProgress 一致）
+  - 改动文件：src/apps/server/boot/server-app.js
 
 - ✅ [2026-08-15] 修复 .mhtml 黑屏（显示端转换方案）
   - 根因：Chromium 内核（Chrome/Edge）对 .mhtml 渲染支持差，直接导航都 ERR_ABORTED，iframe 加载必然黑屏（Content-Type 修复无效）

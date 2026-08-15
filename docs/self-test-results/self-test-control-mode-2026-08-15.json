@@ -1,0 +1,178 @@
+{
+  "testResults": {
+    "passed": 21,
+    "failed": 0,
+    "skipped": 0,
+    "total": 21
+  },
+  "results": [
+    {
+      "id": "unit_contentPointFromCropBox",
+      "name": "单元测试：裁剪框内百分比转内容百分比",
+      "category": "控制模式-单元测试",
+      "success": true,
+      "message": "3 组坐标换算全通过",
+      "timestamp": "2026-08-15T14:20:00.000Z"
+    },
+    {
+      "id": "unit_contentPixelFromPercent",
+      "name": "单元测试：内容百分比转像素",
+      "category": "控制模式-单元测试",
+      "success": true,
+      "message": "1920x1080 内容坐标换算正确",
+      "timestamp": "2026-08-15T14:20:00.000Z"
+    },
+    {
+      "id": "unit_fitSizeTo720p",
+      "name": "单元测试：720p 等比缩放",
+      "category": "控制模式-单元测试",
+      "success": true,
+      "message": "横屏/竖屏/小图不放大/恰好 720p 全通过",
+      "timestamp": "2026-08-15T14:20:00.000Z"
+    },
+    {
+      "id": "unit_clamp",
+      "name": "单元测试：clamp 限幅",
+      "category": "控制模式-单元测试",
+      "success": true,
+      "message": "上下限与区间内全通过",
+      "timestamp": "2026-08-15T14:20:00.000Z"
+    },
+    {
+      "id": "ws_controlInput_forward",
+      "name": "WS 往返：controlInput 控制端→显示端转发",
+      "category": "控制模式-服务端",
+      "success": true,
+      "message": "wheel 事件带 deltaY=120 完整转发",
+      "timestamp": "2026-08-15T14:21:00.000Z"
+    },
+    {
+      "id": "ws_controlScreenshot_broadcast",
+      "name": "WS 往返：controlScreenshot 显示端→控制端广播",
+      "category": "控制模式-服务端",
+      "success": true,
+      "message": "白名单注册 + broadcastToControls 生效",
+      "timestamp": "2026-08-15T14:21:00.000Z"
+    },
+    {
+      "id": "e2e_html_play",
+      "name": "E2E：显示端播放同源 html（srcdoc）",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "iframe 正常显示",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_screenshot_on",
+      "name": "E2E：开启控制模式收到截图",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "mode=html-to-image 800x600",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_screenshot_mode",
+      "name": "E2E：同源截图模式 html-to-image",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "降级链首选分支生效",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_screenshot_720p",
+      "name": "E2E：截图尺寸 ≤720p",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "800x600 未超限",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_screenshot_dataurl",
+      "name": "E2E：截图 dataUrl 有效 JPEG",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "data:image/jpeg 前缀正确",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_click_forward",
+      "name": "E2E：点击转发触发按钮 onclick",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "坐标映射正确，按钮 JS 生效",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_keyboard_input",
+      "name": "E2E：键盘 + 中文文本注入",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "输入框 value = a你好世界",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_wheel_scroll",
+      "name": "E2E：滚轮转发 iframe 滚动",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "scrollY=600（手动 scrollBy 补原生行为）",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_close_stop",
+      "name": "E2E：关闭控制模式截图停止",
+      "category": "控制模式-显示端",
+      "success": true,
+      "message": "关闭后 3s 无新帧",
+      "timestamp": "2026-08-15T14:22:00.000Z"
+    },
+    {
+      "id": "e2e_cross_origin_fallback",
+      "name": "E2E：跨域降级链到 none",
+      "category": "控制模式-降级链",
+      "success": true,
+      "message": "本地跨域源加载成功 → GDM 8s 授权超时 → 兜底 html-to-image 失败 → mode:none",
+      "timestamp": "2026-08-15T14:23:00.000Z"
+    },
+    {
+      "id": "ui_toggle_exists",
+      "name": "UI：控制模式开关存在",
+      "category": "控制模式-控制端",
+      "success": true,
+      "message": "裁剪面板显示控制开关",
+      "timestamp": "2026-08-15T14:24:00.000Z"
+    },
+    {
+      "id": "ui_toggle_on_send",
+      "name": "UI：点击开关发送 controlMode on",
+      "category": "控制模式-控制端",
+      "success": true,
+      "message": "value=true 消息发出",
+      "timestamp": "2026-08-15T14:24:00.000Z"
+    },
+    {
+      "id": "ui_screenshot_display",
+      "name": "UI：截图显示为预览底图 + 占位框隐藏",
+      "category": "控制模式-控制端",
+      "success": true,
+      "message": "previewImg block 显示",
+      "timestamp": "2026-08-15T14:24:00.000Z"
+    },
+    {
+      "id": "ui_none_hint",
+      "name": "UI：none 模式显示跨域降级提示",
+      "category": "控制模式-控制端",
+      "success": true,
+      "message": "占位文本更新为跨域未授权提示",
+      "timestamp": "2026-08-15T14:24:00.000Z"
+    },
+    {
+      "id": "ui_toggle_off_send",
+      "name": "UI：关闭开关发送 controlMode off + 恢复占位框",
+      "category": "控制模式-控制端",
+      "success": true,
+      "message": "value=false 消息发出，底图隐藏",
+      "timestamp": "2026-08-15T14:24:00.000Z"
+    }
+  ]
+}
