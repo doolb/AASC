@@ -29,7 +29,7 @@
         ext = name 的后缀
         if ext in ['gif']: return 'gif'
         if ext in ['mp4','webm','mov','avi','mkv']: return 'video'
-        if ext in ['html','htm']: return 'html'      // 新增
+        if ext in ['html','htm','mhtml']: return 'html'   // mhtml 为单文件网页，iframe 可直接渲染
         return 'image'
 ```
 

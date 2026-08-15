@@ -78,6 +78,16 @@
 
 ### 修复
 
+- ✅ [2026-08-15] 修复 .mhtml 文件被识别为图片导致无法显示
+  - 根因：`detectMediaType` 只识别 html/htm，.mhtml（单文件网页）被归为 image，点击后走图片流程，显示端 iframe 从未显示（保持 display:none）
+  - 修复：服务端与上传端 detectMediaType 增加 mhtml → html（iframe 原生支持渲染 .mhtml）
+  - 验证：新增 mhtml 识别测试，10/10 通过
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/media/media-library-app-service.js
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - tests/media-library-app-service.test.js
+    - docs/spec/media-library.md
+
 - ✅ [2026-08-15] 修复子目录媒体文件 404（html 显示白屏）
   - 根因：`LocalProvider.getPublicUrl` 用 `encodeURIComponent` 编码整个路径，`/` 被编成 `%2F`，express.static 不解码 encoded slash 返回 404；html 文件位于 uploads/html/ 子目录故白屏（图片/视频在子目录同样受影响）
   - 修复：路径按 `/` 分段编码（每段 encodeURIComponent，保留分隔符），uploads 与 /media/{id} 两个分支统一处理

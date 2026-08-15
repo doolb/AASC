@@ -3,7 +3,7 @@ const Upload = {
         const ext = name.toLowerCase().split('.').pop().split('?')[0];
         if (['gif'].includes(ext)) return 'gif';
         if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
-        if (['html', 'htm'].includes(ext)) return 'html';
+        if (['html', 'htm', 'mhtml'].includes(ext)) return 'html';
         return 'image';
     },
 

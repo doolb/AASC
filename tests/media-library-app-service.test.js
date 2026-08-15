@@ -6,10 +6,12 @@ const { MediaLibraryProvider, LocalProvider } = require('../src/apps/web-mediace
 
 const provider = new MediaLibraryProvider({});
 
-test('detectMediaType 识别 html/htm 文件', () => {
+test('detectMediaType 识别 html/htm/mhtml 文件', () => {
     assert.strictEqual(provider.detectMediaType('page.html'), 'html');
     assert.strictEqual(provider.detectMediaType('page.HTM'), 'html');
     assert.strictEqual(provider.detectMediaType('page.htm?t=123'), 'html');
+    assert.strictEqual(provider.detectMediaType('page.mhtml'), 'html');
+    assert.strictEqual(provider.detectMediaType('page.MHTML'), 'html');
 });
 
 test('detectMediaType 保持原有类型识别', () => {
