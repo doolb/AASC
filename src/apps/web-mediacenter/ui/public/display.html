@@ -1639,6 +1639,12 @@
                 return;
             }
 
+            // 非 html 媒体：取消滚动并隐藏 iframe（html 切回图片/视频时清理）
+            stopHtmlScroll();
+            mediaHtml.style.display = 'none';
+            mediaHtml.removeAttribute('src');
+            mediaHtml.srcdoc = '';
+
             let mediaName = '';
 
             if (data.type === 'url') {
