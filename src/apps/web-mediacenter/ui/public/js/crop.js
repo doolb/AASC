@@ -359,8 +359,12 @@ const Crop = {
         const media = this._currentMedia();
         let mediaRect = media.getBoundingClientRect();
         if (mediaRect.width === 0 || mediaRect.height === 0) {
-            // 无媒体（临时模式占位提示等场景）：以容器为拖动区域
-            mediaRect = this.container.getBoundingClientRect();
+            // 无媒体：html 以占位框为拖动区域（与 updateBox 基准一致），其他以容器
+            if (this.placeholder && this.placeholder.style.display !== 'none') {
+                mediaRect = this.placeholder.getBoundingClientRect();
+            } else {
+                mediaRect = this.container.getBoundingClientRect();
+            }
         }
 
         let dx = ((e.clientX - this.dragStart.x) / mediaRect.width) * 100;
