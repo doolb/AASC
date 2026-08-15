@@ -180,9 +180,9 @@ applyCrop 的 html 分支（applyHtmlCrop）:
     旋转 90/270 时宽高互换（100vh × 100vw）
 
 上传端裁剪预览（crop.js）:
-    cropPreviewHtml iframe 元素；_currentMedia() 选择当前预览元素（html 优先）
-    showPreview html 分支: 显示 iframe 预览 + recalculateSize 初始化裁剪框（可拖拽调整）
-    旋转类（rotate-90/180/270）同样作用于 iframe 预览
+    showPreview html 分支: 不预览 html 内容（无 iframe），仅初始化裁剪框为全屏
+        （data={x:0,y:0,width:100,height:100} + updateBox），拖拽实时缩放显示端
+    裁剪框拖拽/缩放基于容器区域（媒体不可见时 fallback 容器 rect）
     mediaType === 'html':
         url 且扩展名 .mhtml:
             // Chromium 无法直接渲染 mhtml（导航 ERR_ABORTED），需转换

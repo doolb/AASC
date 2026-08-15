@@ -34,13 +34,9 @@ const Crop = {
         return document.getElementById('cropPreviewVideo');
     },
 
-    get previewHtml() {
-        return document.getElementById('cropPreviewHtml');
-    },
 
-    // 当前显示的预览媒体元素（html 优先，其次 img/video）
+    // 当前显示的预览媒体元素
     _currentMedia() {
-        if (this.previewHtml.style.display !== 'none') return this.previewHtml;
         return this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
     },
 
@@ -141,20 +137,16 @@ const Crop = {
         
         this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
         this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
-        this.previewHtml.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
 
         if (rotation === 90) {
             this.previewImg.classList.add('rotate-90');
             this.previewVideo.classList.add('rotate-90');
-            this.previewHtml.classList.add('rotate-90');
         } else if (rotation === 180) {
             this.previewImg.classList.add('rotate-180');
             this.previewVideo.classList.add('rotate-180');
-            this.previewHtml.classList.add('rotate-180');
         } else if (rotation === 270) {
             this.previewImg.classList.add('rotate-270');
             this.previewVideo.classList.add('rotate-270');
-            this.previewHtml.classList.add('rotate-270');
         }
     },
 
@@ -171,20 +163,16 @@ const Crop = {
         
         this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
         this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
-        this.previewHtml.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
 
         if (rotation === 90) {
             this.previewImg.classList.add('rotate-90');
             this.previewVideo.classList.add('rotate-90');
-            this.previewHtml.classList.add('rotate-90');
         } else if (rotation === 180) {
             this.previewImg.classList.add('rotate-180');
             this.previewVideo.classList.add('rotate-180');
-            this.previewHtml.classList.add('rotate-180');
         } else if (rotation === 270) {
             this.previewImg.classList.add('rotate-270');
             this.previewVideo.classList.add('rotate-270');
-            this.previewHtml.classList.add('rotate-270');
         }
 
         if (window.WebSocketManager) {
@@ -234,15 +222,13 @@ const Crop = {
     
     showPreview(url, mediaType, onReady) {
         if (mediaType === 'html') {
-            // HTML 媒体：iframe 预览 + 裁剪框（放大裁切区域）
+            // HTML 媒体：不显示预览内容，仅初始化裁剪框（拖拽实时缩放显示端）
             this.currentMedia = url;
             this.previewImg.style.display = 'none';
-            this.previewImg.removeAttribute('src');
             this.previewVideo.style.display = 'none';
-            this.previewVideo.removeAttribute('src');
-            this.previewHtml.style.display = 'block';
-            this.previewHtml.src = url;
-            this.recalculateSize(false);
+            this.data = { x: 0, y: 0, width: 100, height: 100 };
+            this.box.style.display = 'block';
+            this.updateBox();
             return;
         }
         // 新预览开始时移除临时模式数据丢失占位提示（并重置占位 key）
