@@ -732,7 +732,7 @@ input[type="range"]::-webkit-slider-thumb:active {
     width: 100%;
     height: 56.25%;
     border: 2px dashed rgba(255, 255, 255, 0.65);
-    background: rgba(128, 128, 128, 0.45);
+    background: rgba(128, 128, 128, 0.8);
     border-radius: 8px;
     box-sizing: border-box;
     pointer-events: none;
