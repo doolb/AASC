@@ -130,6 +130,10 @@ Upload.sendTempFile(file) / uploadFile(file) 临时模式分支:
     临时发送: base64 直接发送
     保存到媒体库: new File([code], '时间戳.html') → MediaLibrary.uploadFile → 按 url 发送
 
+批量临时拖入（多文件）含 html 文件:
+    不弹设置框，自动使用默认滚动参数（分页式 5 秒）
+    prepareTempFiles 中 detectMediaType 识别 html → playlist 项带 mediaType='html'
+
 WebSocketManager.getMediaRatio(mediaData):
     if mediaData.mediaType === 'html': return 1    // 不创建 img 探测
 ```
