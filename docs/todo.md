@@ -11,6 +11,11 @@
     - 无障碍真实触摸注入生效（InputDispatcher Delivering touch to WebView）
     - 能力声明 crossOriginControl:true 正常上报
     - 原生桥截图改同步返回（回调式在 WebView 不可靠）
+- ✅已完成 [2026-08-16][2026-08-16] html 模式持久化 + 显示端自动刷新 + 控制端主动刷新/重载服务端 + 视频自动播放
+  - html 滚动模式持久化到服务器，显示端重启后恢复
+  - 显示端每 8 秒轮询 /api/display-version 自动 reload（无需重启 APK）
+  - 控制端「刷新」按钮主动刷新显示端；系统设置「重载代码」按钮重启服务端
+  - 视频自动播放 muted 绕过拦截（真机视觉待用户确认）
 - 重构ai开发流程
 
 ## 批量播放模式

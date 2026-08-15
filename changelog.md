@@ -4,6 +4,22 @@
 
 ### 优化
 
+- ✅ [2026-08-16] html 模式持久化 + 显示端自动刷新 + 控制端主动刷新/重载服务端 + 视频自动播放
+  - 服务端 createDisplayState 加 currentHtmlScroll，htmlScroll 控制持久化到 config.json，显示端重启/刷新后自动恢复 html 滚动模式（滚动方式/循环/速度）
+  - 服务端 GET /api/display-version 返回前端文件 mtime；显示端启动后每 8 秒轮询，检测到代码更新自动 reload（无需重启 APK/重新编译）
+  - 修复 /api/restart 自重启：原 server.close 回调因残留 keep-alive 连接可能永不触发导致 spawn 未执行；改为直接 spawn 新进程（AASC_RELOAD_DELAY=2500 延迟监听）+ 500ms 定时退出释放端口，无缝接管
+  - display.html 视频自动播放：muted 播放绕过浏览器 autoplay 拦截，成功后取消静音（音量跟随 state.volume）
+  - display.html handleControl 加 reload case；applyState 恢复 currentHtmlScroll
+  - 控制端裁剪面板「刷新」按钮主动刷新显示端（发 control reload）；系统设置页「重载代码」按钮调 POST /api/restart
+  - 真机验证：控制端 reload 指令触发盒子页面重新初始化；/api/restart 重启后盒子自动重连
+  - 改动文件：
+    - src/apps/server/boot/server-app.js
+    - src/apps/web-mediacenter/ui/public/display.html
+    - src/apps/web-mediacenter/ui/public/js/crop.js
+    - src/apps/web-mediacenter/ui/public/upload.html
+
+- ✅ [2026-08-15] APK 显示端体验优化 + npm 构建上传命令
+
 - ✅ [2026-08-15] 控制端控制模式滚轮不再带动外层页面滚动
   - crop.js 裁剪容器 wheel 监听器由 passive:true 改为 passive:false，onContainerWheel 控制模式开启时先 preventDefault 再节流转发（节流跳过的滚轮也阻止外层滚动）
   - 改动文件：
