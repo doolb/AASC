@@ -1550,11 +1550,20 @@
         let controlShotCanvas = null;
         let controlShotCtx = null;
 
-        // 截图降级链：同源 html-to-image → 跨域 getDisplayMedia → 兜底 html-to-image → none
+        // APK 原生桥探测（Android APK 显示端注入：真实像素截图 + 跨域输入注入）
+        const nativeBridge = window.NativeDisplay || null;
+
+        // 截图降级链：APK 原生截图 → 同源 html-to-image → 跨域 getDisplayMedia → 兜底 html-to-image → none
         async function captureHtmlShot() {
             if (mediaHtml.style.display === 'none') {
                 sendControlScreenshot('none', null, 0, 0);
                 return;
+            }
+            // APK 原生截图优先：真实像素，跨域 iframe / 外站图片均可截
+            if (nativeBridge && nativeBridge.takeScreenshot) {
+                const shot = await shotWithNativeBridge();
+                if (shot) return;
+                // 原生失败（如视频位图空白）回退现有降级链
             }
             // 同源检测：能读 contentDocument 即同源（srcdoc / 服务器同源 URL）
             let sameOrigin = false;
@@ -1573,8 +1582,17 @@
                 } catch (e) {
                     console.log('[控制模式] html-to-image 失败:', e.message);
                 }
+                // 同源内容失败属瞬时异常（如渲染变换期间）：跳过本帧，下一帧重试，
+                // 不降级 none（避免误导"跨域未授权"提示）
+                return;
             }
-            // 跨域或同源失败：尝试 getDisplayMedia（整屏，不裁剪）
+            // 检测失败：可能 iframe 导航中瞬时不可读，先试 html-to-image 区分
+            // （恢复则正常截图；真跨域会抛 SecurityError）
+            try {
+                const shotTry = await shotWithHtmlToImage();
+                if (shotTry) return;
+            } catch (e) { /* 真跨域或持续不可读，走降级 */ }
+            // 跨域：尝试 getDisplayMedia（整屏，不裁剪）
             const shot = await shotWithGdm();
             if (shot) return;
             // getDisplayMedia 失败：兜底再试 html-to-image（跨域通常仍失败，成本极低）
@@ -1583,6 +1601,24 @@
                 if (shot2) return;
             } catch (e) { /* 忽略，降级 none */ }
             sendControlScreenshot('none', null, 0, 0);
+        }
+
+        // NativeDisplay.takeScreenshot：APK WebView 位图真实像素，回调式
+        function shotWithNativeBridge() {
+            return new Promise((resolve) => {
+                try {
+                    nativeBridge.takeScreenshot(function(dataUrl, width, height) {
+                        if (dataUrl) {
+                            sendControlScreenshot('native', dataUrl, width || 0, height || 0);
+                            resolve(dataUrl);
+                        } else {
+                            resolve(null);
+                        }
+                    });
+                } catch (e) {
+                    resolve(null);
+                }
+            });
         }
 
         // html-to-image 截 iframe 可见视口，缩至 720p
@@ -1611,7 +1647,10 @@
         }
 
         // getDisplayMedia 整屏截图（不裁剪），缩至 720p
+        // 临时屏蔽浏览器原生截图（GDM_ENABLED = false）：保留代码与状态变量，恢复时改回 true
+        const GDM_ENABLED = false;
         async function shotWithGdm() {
+            if (!GDM_ENABLED) return null;
             if (gdmFailed || gdmPending) return null;
             if (!gdmStream) {
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
@@ -1662,6 +1701,8 @@
         }
 
         function sendControlScreenshot(mode, dataUrl, width, height) {
+            // 关闭控制模式后丢弃在途帧（busy 中完成的截图不再发送）
+            if (!controlModeEnabled) return;
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
             displayWs.send(JSON.stringify({
                 type: 'controlScreenshot',
@@ -1700,16 +1741,27 @@
             gdmVideo = null;
         }
 
-        // 控制模式开关：开启暂停自动滚动，关闭恢复
+        // 控制模式开关：开启暂停自动滚动 + 还原裁剪放大（截图需完整网页），关闭恢复
         function setControlMode(on) {
             controlModeEnabled = !!on;
             if (on) {
                 stopHtmlScroll();
                 startControlScreenshot();
+                // 还原裁剪放大（屏幕显示完整网页，截图才能反映全量内容），保留旋转基准
+                if (mediaHtml.style.display !== 'none' && currentCrop) {
+                    const c = currentCrop;
+                    const isFullCrop = c.width >= 99.9 && c.height >= 99.9 && c.x <= 0.1 && c.y <= 0.1;
+                    if (!isFullCrop) {
+                        currentHtmlScale = 1;
+                        applyRotation();
+                    }
+                }
             } else {
                 stopControlScreenshot();
                 if (mediaHtml.style.display !== 'none') {
                     startHtmlScroll(mediaHtml, currentHtmlScroll);
+                    // 恢复裁剪放大
+                    applyCrop();
                 }
             }
             console.log('[控制模式] 状态:', controlModeEnabled ? '开启' : '关闭');
