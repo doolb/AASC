@@ -30,6 +30,7 @@
         </div>
         <img id="mediaImage">
         <video id="mediaVideo" autoplay loop playsinline></video>
+        <iframe id="mediaHtml" style="display:none;"></iframe>
     </div>
     
     <audio id="ttsAudio" style="display:none;"></audio>
@@ -45,6 +46,7 @@
         const waitingMessage = document.getElementById('waitingMessage');
         const mediaImage = document.getElementById('mediaImage');
         const mediaVideo = document.getElementById('mediaVideo');
+        const mediaHtml = document.getElementById('mediaHtml');
         const ttsAudio = document.getElementById('ttsAudio');
         const taskStatusDisplay = document.getElementById('taskStatusDisplay');
         const taskStatusModel = document.getElementById('taskStatusModel');
@@ -1107,6 +1109,7 @@
         function stopPlaylist() {
             if (!playlistState) return;
             playlistState.active = false;
+            stopHtmlScroll();
             if (playlistState.timer) {
                 clearTimeout(playlistState.timer);
                 playlistState.timer = null;
@@ -1209,6 +1212,8 @@
             };
             if (item.mediaType === 'video') {
                 mediaVideo.addEventListener('loadedmetadata', reportSizeOnce, { once: true });
+            } else if (item.mediaType === 'html') {
+                mediaHtml.addEventListener('load', reportSizeOnce, { once: true });
             } else {
                 mediaImage.addEventListener('load', reportSizeOnce, { once: true });
             }
@@ -1279,6 +1284,7 @@
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
             ps.paused = true;
+            stopHtmlScroll();
             if (ps.timer) {
                 clearTimeout(ps.timer);
                 ps.timer = null;
@@ -1311,6 +1317,10 @@
             } else {
                 // 图片或间隔等待中 → 重新计时
                 ps.timer = setTimeout(playlistNext, ps.interval);
+                // html 项暂停时滚动已冻结，恢复时继续滚动
+                if (item && item.mediaType === 'html') {
+                    startHtmlScroll(mediaHtml, item.htmlScroll || null);
+                }
             }
             sendPlaylistProgress('playing');
         }
@@ -1324,6 +1334,7 @@
                 state: 'finished'
             };
             playlistState.active = false;
+            stopHtmlScroll();
             if (playlistState.timer) {
                 clearTimeout(playlistState.timer);
                 playlistState.timer = null;
@@ -1375,14 +1386,144 @@
             }
         }
 
+        // HTML 媒体滚动控制器：分页式 / 平滑 / 循环
+        let htmlScrollState = null;
+
+        function stopHtmlScroll() {
+            if (htmlScrollState) {
+                if (htmlScrollState.timer) clearInterval(htmlScrollState.timer);
+                if (htmlScrollState.rafId) cancelAnimationFrame(htmlScrollState.rafId);
+                htmlScrollState = null;
+            }
+        }
+
+        function startHtmlScroll(iframe, htmlScroll) {
+            stopHtmlScroll();
+            const win = iframe.contentWindow;
+            if (!win) return;
+            const opts = htmlScroll || {};
+            const mode = opts.mode || 'page';
+            const pageInterval = opts.pageInterval || 5;
+            const speedPx = { slow: 60, medium: 120, fast: 240 }[opts.speed || 'medium'];
+
+            const scrollHeight = Math.max(
+                (win.document.documentElement && win.document.documentElement.scrollHeight) || 0,
+                (win.document.body && win.document.body.scrollHeight) || 0
+            );
+            const clientHeight = win.innerHeight || iframe.clientHeight;
+            // 内容不溢出时无需滚动
+            if (scrollHeight <= clientHeight + 1) return;
+
+            if (mode === 'page') {
+                // 分页式：每 pageInterval 秒滚一屏，到底停止
+                htmlScrollState = {
+                    timer: setInterval(() => {
+                        if (!htmlScrollState) return;
+                        if (win.scrollY + clientHeight >= scrollHeight - 2) {
+                            stopHtmlScroll();
+                            return;
+                        }
+                        win.scrollBy(0, clientHeight);
+                    }, pageInterval * 1000)
+                };
+            } else {
+                // 平滑：匀速滚动；loop 模式滚到底回顶循环
+                let last = performance.now();
+                const step = (now) => {
+                    if (!htmlScrollState) return;
+                    const dt = (now - last) / 1000;
+                    last = now;
+                    if (win.scrollY + clientHeight >= scrollHeight - 2) {
+                        if (mode === 'loop') {
+                            win.scrollTo(0, 0);
+                        } else {
+                            stopHtmlScroll();
+                            return;
+                        }
+                    }
+                    win.scrollBy(0, speedPx * dt);
+                    htmlScrollState.rafId = requestAnimationFrame(step);
+                };
+                htmlScrollState = { rafId: requestAnimationFrame(step) };
+            }
+        }
+
+        // TTS 播报 + 临时媒体信息上报（各媒体类型共用）
+        function announceAndReport(mediaName, data) {
+            if (autoTtsEnabled && mediaName) {
+                const displayName = extractFileName(mediaName);
+                if (displayName) {
+                    playTTS(displayName);
+                }
+            }
+
+            if (!data.temp) return;
+            const sendTempInfo = () => {
+                if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+                let w, h;
+                if (data.mediaType === 'video') {
+                    w = mediaVideo.videoWidth;
+                    h = mediaVideo.videoHeight;
+                } else if (data.mediaType !== 'html') {
+                    w = mediaImage.naturalWidth;
+                    h = mediaImage.naturalHeight;
+                }
+                displayWs.send(JSON.stringify({
+                    type: 'tempMediaInfo',
+                    fileName: data.fileName || mediaName || '',
+                    mediaType: data.mediaType,
+                    width: w || undefined,
+                    height: h || undefined
+                }));
+            };
+            const readyTarget = data.mediaType === 'video' ? mediaVideo : (data.mediaType === 'html' ? mediaHtml : mediaImage);
+            const readyEvent = data.mediaType === 'video' ? 'loadedmetadata' : 'load';
+            if (data.mediaType === 'html') {
+                // html 无固有尺寸，加载完成即上报（不含宽高）
+                readyTarget.addEventListener(readyEvent, sendTempInfo, { once: true });
+            } else if (readyTarget.readyState >= 1 || (readyTarget.complete && readyTarget.naturalWidth > 0)) {
+                sendTempInfo();
+            } else {
+                readyTarget.addEventListener(readyEvent, sendTempInfo, { once: true });
+            }
+        }
+
         function showMedia(data) {
             mediaVideo.pause();
             mediaVideo.src = '';
             mediaVideo.load();
             waitingMessage.style.display = 'none';
-            
+
+            if (data.mediaType === 'html') {
+                // HTML 媒体：iframe 铺满纯展示，跳过 img/video 与裁剪
+                stopHtmlScroll();
+                mediaImage.style.display = 'none';
+                mediaImage.removeAttribute('src');
+                mediaVideo.pause();
+                mediaVideo.src = '';
+                mediaVideo.load();
+                mediaVideo.style.display = 'none';
+                mediaHtml.style.display = 'block';
+                mediaHtml.onload = () => startHtmlScroll(mediaHtml, data.htmlScroll);
+                let mediaName = data.fileName || 'HTML内容';
+                if (data.type === 'url') {
+                    mediaHtml.srcdoc = '';
+                    mediaHtml.src = data.url;
+                    const urlParts = data.url.split('/');
+                    mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || mediaName;
+                } else {
+                    const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
+                    const html = new TextDecoder().decode(bytes);
+                    mediaHtml.src = '';
+                    mediaHtml.srcdoc = html;
+                }
+                fileNameDisplay.textContent = mediaName;
+                announceAndReport(mediaName, data);
+                return;
+            }
+
             let mediaName = '';
-            
+
             if (data.type === 'url') {
                 if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';
@@ -1430,43 +1571,8 @@
                 mediaName = data.fileName || '未知文件';
                 fileNameDisplay.textContent = mediaName;
             }
-            
-            if (autoTtsEnabled && mediaName) {
-                const displayName = extractFileName(mediaName);
-                if (displayName) {
-                    playTTS(displayName);
-                }
-            }
 
-            if (data.temp) {
-                // 临时媒体上报信息：控制端刷新后本地无数据，用于裁剪预览区占位提示
-                const sendTempInfo = () => {
-                    if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
-                    const w = data.mediaType === 'video' ? mediaVideo.videoWidth : mediaImage.naturalWidth;
-                    const h = data.mediaType === 'video' ? mediaVideo.videoHeight : mediaImage.naturalHeight;
-                    displayWs.send(JSON.stringify({
-                        type: 'tempMediaInfo',
-                        fileName: data.fileName || mediaName || '',
-                        mediaType: data.mediaType,
-                        width: w || undefined,
-                        height: h || undefined
-                    }));
-                };
-                if (data.mediaType === 'video') {
-                    if (mediaVideo.readyState >= 1) {
-                        sendTempInfo();
-                    } else {
-                        mediaVideo.addEventListener('loadedmetadata', sendTempInfo, { once: true });
-                    }
-                } else {
-                    if (mediaImage.complete && mediaImage.naturalWidth > 0) {
-                        sendTempInfo();
-                    } else {
-                        mediaImage.addEventListener('load', sendTempInfo, { once: true });
-                    }
-                }
-                sendTempInfo();
-            }
+            announceAndReport(mediaName, data);
         }
 
         function handleControl(data) {
