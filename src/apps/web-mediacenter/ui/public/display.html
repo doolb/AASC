@@ -1603,22 +1603,16 @@
             sendControlScreenshot('none', null, 0, 0);
         }
 
-        // NativeDisplay.takeScreenshot：APK WebView 位图真实像素，回调式
+        // NativeDisplay.takeScreenshot：APK WebView 位图真实像素，同步返回 JSON {dataUrl,width,height}
         function shotWithNativeBridge() {
-            return new Promise((resolve) => {
-                try {
-                    nativeBridge.takeScreenshot(function(dataUrl, width, height) {
-                        if (dataUrl) {
-                            sendControlScreenshot('native', dataUrl, width || 0, height || 0);
-                            resolve(dataUrl);
-                        } else {
-                            resolve(null);
-                        }
-                    });
-                } catch (e) {
-                    resolve(null);
+            try {
+                const res = JSON.parse(nativeBridge.takeScreenshot());
+                if (res && res.dataUrl) {
+                    sendControlScreenshot('native', res.dataUrl, res.width || 0, res.height || 0);
+                    return Promise.resolve(res.dataUrl);
                 }
-            });
+            } catch (e) { /* 桥截图失败，回退现有降级链 */ }
+            return Promise.resolve(null);
         }
 
         // html-to-image 截 iframe 可见视口，缩至 720p
@@ -2560,10 +2554,16 @@
                         } catch (e) {}
                         diag.push('UA=' + (navigator.userAgent.match(/Chrome\/(\d+\.\d+)/) || ['?'])[1]);
 
-                        var a = await navigator.gpu.requestAdapter();
+                        // requestAdapter 在部分设备（如旧 WebView 无 WebGPU）会永久挂起，
+                        // 加超时保护避免 detectCapabilities 卡死导致能力不上报
+                        const adapterWithTimeout = (promise, ms) => Promise.race([
+                            promise,
+                            new Promise(resolve => setTimeout(() => resolve(null), ms))
+                        ]);
+                        var a = await adapterWithTimeout(navigator.gpu.requestAdapter(), 3000);
                         var path = 'default';
-                        if (!a) { a = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); path = 'high-performance'; }
-                        if (!a) { a = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' }); path = 'low-power'; }
+                        if (!a) { a = await adapterWithTimeout(navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }), 3000); path = 'high-performance'; }
+                        if (!a) { a = await adapterWithTimeout(navigator.gpu.requestAdapter({ powerPreference: 'low-power' }), 3000); path = 'low-power'; }
                         if (!a) {
                             diag.push('RESULT=三轮回退全部返回null');
                             capabilities._webgpuDiag = diag.join(' | ');
@@ -2590,9 +2590,15 @@
             };
             
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                capabilities.voiceRecording = true;
-                stream.getTracks().forEach(track => track.stop());
+                // getUserMedia 授权弹窗无人值守时会永久挂起：3 秒超时视为不可用
+                const stream = await Promise.race([
+                    navigator.mediaDevices.getUserMedia({ audio: true }),
+                    new Promise(resolve => setTimeout(() => resolve(null), 3000))
+                ]);
+                if (stream) {
+                    capabilities.voiceRecording = true;
+                    stream.getTracks().forEach(track => track.stop());
+                }
             } catch (e) {
                 capabilities.voiceRecording = false;
             }
@@ -2615,16 +2621,43 @@
         }
         
         async function declareCapabilities() {
+            console.log('[能力] 入口: 开始声明');
             try {
-                const capabilities = await detectCapabilities();
-                currentCapabilities = capabilities;
+                // 同步构造基础能力立即上报（不依赖可能挂起的异步检测），
+                // 确保原生桥能力（crossOriginControl）第一时间生效
+                const baseCaps = {
+                    mediaRendering: true,
+                    voicePlayback: true,
+                    displayText: true,
+                    webgl: (function() {
+                        try {
+                            const c = document.createElement('canvas');
+                            return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+                        } catch(e) { return false; }
+                    })(),
+                    crossOriginControl: !!(nativeBridge && nativeBridge.injectTouch),
+                    crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch)
+                };
+                currentCapabilities = baseCaps;
                 if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                     displayWs.send(JSON.stringify({
                         type: 'capabilities',
-                        capabilities: capabilities
+                        capabilities: baseCaps
                     }));
-                    console.log('[能力] 已声明能力:', capabilities);
                 }
+                console.log('[能力] 已声明基础能力:', baseCaps);
+                // 异步补全能力（voiceRecording/webgpu 等）：挂起不影响基础能力
+                detectCapabilities().then(full => {
+                    if (!full) return;
+                    currentCapabilities = full;
+                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                        displayWs.send(JSON.stringify({
+                            type: 'capabilities',
+                            capabilities: full
+                        }));
+                    }
+                    console.log('[能力] 已声明完整能力:', full);
+                }).catch(e => console.error('[能力] 完整能力声明失败:', e));
             } catch (e) {
                 console.error('[能力] 声明失败:', e);
             }

@@ -39,9 +39,9 @@ const FAKE_JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
       window.__bridgeCalls = [];
       window.NativeDisplay = {
         isAvailable: () => true,
-        takeScreenshot: (cb) => {
+        takeScreenshot: () => {
           window.__bridgeCalls.push(['takeScreenshot']);
-          setTimeout(() => cb(fakeJpeg, 1280, 720), 50);
+          return JSON.stringify({ dataUrl: fakeJpeg, width: 1280, height: 720 });
         },
         injectTouch: (x, y, a) => { window.__bridgeCalls.push(['injectTouch', x, y, a]); return true; },
         injectWheel: (x, y, d) => { window.__bridgeCalls.push(['injectWheel', x, y, d]); return true; },
