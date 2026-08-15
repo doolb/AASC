@@ -381,7 +381,7 @@ function startServer() {
             });
 
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
-            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress'];
+            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot'];
             for (const type of displayTypes) {
                 wsServer.registerHandler(type, (data, ctx) => {
                     handleDisplayMessageFallback(ctx.displayId, data, ctx.ws);
@@ -2117,7 +2117,7 @@ function sendToDisplaysWithCapability(capabilityName, message) {
 
 let displayListDebounceTimer = null;
 
-const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress', 'playlistProgress']);
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress', 'playlistProgress', 'htmlProgress']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
@@ -2461,7 +2461,7 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'playlistProgress') {
+                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress') {
                     log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
@@ -2558,7 +2558,7 @@ wss.on('connection', (ws, req) => {
                     }
                     const extra = { source: 'control', scope: 'single', targetId: data.displayId || null };
                     if (data.correlationId) extra.correlationId = data.correlationId;
-                    const shouldLogCrop = data.type !== 'control' || data.action !== 'crop' || _cropDebugLog;
+                    const shouldLogCrop = data.type !== 'control' || (data.action !== 'crop' && data.action !== 'controlInput') || _cropDebugLog;
                     if (shouldLogCrop) {
                         log('WS', `<< ${data.type}${data.displayId ? ' displayId='+data.displayId : ''}${data.text ? ' "'+data.text+'"' : ''}`, extra);
                     }
@@ -2652,6 +2652,16 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             scale: data.scale,
             mode: data.mode,
             loop: data.loop
+        });
+    } else if (data.type === 'controlScreenshot') {
+        // 控制模式截图（html-to-image / getDisplayMedia / none）转发到控制端
+        broadcastToControls({
+            displayId: displayId,
+            type: 'controlScreenshot',
+            mode: data.mode,
+            dataUrl: data.dataUrl,
+            width: data.width,
+            height: data.height
         });
     } else if (data.type === 'playlistProgress') {
         if (displayData && displayData.state.currentPlaylist) {
@@ -3237,6 +3247,8 @@ async function handleControlMessageFallback(data, ws) {
                         config.updateDisplayState(displayData.ip, { isPlaying: data.value });
                     } else if (data.action === 'cropDebug') {
                         _cropDebugLog = !!data.value;
+                    } else if (data.action === 'controlMode' || data.action === 'controlInput') {
+                        // 控制模式开关与输入转发：不更新 state，原样转发显示端
                     }
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {
