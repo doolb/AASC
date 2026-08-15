@@ -2583,7 +2583,10 @@
                         capabilities._webgpuDiag = 'EXCEPTION: ' + e.message;
                         return false;
                     }
-                })()
+                })(),
+                // APK 原生桥能力：真实像素截图 + 跨域输入注入
+                crossOriginControl: !!(nativeBridge && nativeBridge.injectTouch),
+                crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch)
             };
             
             try {

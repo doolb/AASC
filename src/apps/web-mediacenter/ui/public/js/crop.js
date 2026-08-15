@@ -651,7 +651,7 @@ const Crop = {
             container.addEventListener('mouseup', (e) => this.onContainerMouse(e, 'mouseup'));
             container.addEventListener('click', (e) => this.onContainerMouse(e, 'click'));
             container.addEventListener('contextmenu', (e) => this.onContainerMouse(e, 'contextmenu'));
-            container.addEventListener('wheel', (e) => this.onContainerWheel(e), { passive: true });
+            container.addEventListener('wheel', (e) => this.onContainerWheel(e), { passive: false });
         }
         document.addEventListener('keydown', (e) => this.onDocKey(e, 'keydown'), true);
         document.addEventListener('keyup', (e) => this.onDocKey(e, 'keyup'), true);
@@ -664,7 +664,11 @@ const Crop = {
         if (toggle) toggle.checked = this.controlModeOn;
         const textRow = document.getElementById('controlTextRow');
         if (textRow) textRow.style.display = this.controlModeOn ? '' : 'none';
-        if (!this.controlModeOn) {
+        this._updateControlCapabilityHint();
+        if (this.controlModeOn) {
+            // 开启：立即隐藏裁剪框，容器跟随显示端比例（不等截图回来）
+            this._applyControlModeContainer();
+        } else {
             // 关闭：隐藏截图底图，恢复 html 占位框与裁剪框、容器正方形
             this.previewImg.style.display = 'none';
             this.previewImg.removeAttribute('src');
@@ -677,6 +681,15 @@ const Crop = {
         }
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('controlMode', this.controlModeOn);
+        }
+    },
+
+    // 控制模式容器：隐藏裁剪框 + 跟随显示端 canvasSize 比例（不旋转）
+    _applyControlModeContainer() {
+        if (this.box) this.box.style.display = 'none';
+        const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
+        if (canvasSize.width > 0 && canvasSize.height > 0) {
+            this.container.style.aspectRatio = canvasSize.width + ' / ' + canvasSize.height;
         }
     },
 
@@ -703,6 +716,8 @@ const Crop = {
 
     onContainerWheel(e) {
         if (!this.controlModeOn) return;
+        // 阻止滚轮冒泡，外层页面不跟随滚动
+        if (e.cancelable) e.preventDefault();
         // 50ms 节流，避免高频刷屏
         const now = Date.now();
         if (now - this._controlWheelTime < 50) return;
@@ -763,13 +778,24 @@ const Crop = {
         const img = this.previewImg;
         if (!img) return;
         if (!data.dataUrl || data.mode === 'none') {
+            // 控制模式中：裁剪框保持隐藏（setControlMode 已处理），仅切换占位提示
             img.style.display = 'none';
             img.removeAttribute('src');
-            this._restoreContainer();
             if (this.placeholder) {
                 this.placeholder.style.display = 'block';
                 const t = this.placeholder.querySelector('.crop-preview-placeholder-text');
-                if (t) t.textContent = data.mode === 'none' ? '跨域未授权，操作仍生效（无画面）' : 'HTML 页面区域（iframe）';
+                if (t) {
+                    const caps = this._currentDisplayCapabilities();
+                    if (data.mode === 'none' && caps.crossOriginControl) {
+                        t.textContent = '原生截图失败，无画面（操作仍生效）';
+                    } else if (data.mode === 'none' && caps.crossOriginControlDegraded) {
+                        t.textContent = '跨域控制降级：仅同源页面可操作';
+                    } else if (data.mode === 'none') {
+                        t.textContent = '此显示端不支持跨域控制，无画面（操作仍生效）';
+                    } else {
+                        t.textContent = 'HTML 页面区域（iframe）';
+                    }
+                }
             }
             return;
         }
@@ -779,13 +805,6 @@ const Crop = {
         img.style.height = '100%';
         img.style.objectFit = 'contain';
         if (this.placeholder) this.placeholder.style.display = 'none';
-        // 隐藏裁剪框（控制模式全量显示截图，不裁剪）
-        if (this.box) this.box.style.display = 'none';
-        // 容器跟随显示端 canvasSize 比例（不旋转）
-        const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
-        if (canvasSize.width > 0 && canvasSize.height > 0) {
-            this.container.style.aspectRatio = canvasSize.width + ' / ' + canvasSize.height;
-        }
     },
 
     // 恢复默认容器：正方形 + 显示裁剪框
@@ -795,6 +814,35 @@ const Crop = {
         }
         if (this.box) {
             this.box.style.display = 'block';
+        }
+    },
+
+    // 当前选中显示端能力（displayList → capabilities）
+    _currentDisplayCapabilities() {
+        try {
+            const list = window.DeviceList && window.DeviceList.getDisplays
+                ? window.DeviceList.getDisplays() : [];
+            const item = list.find(d => d.id === window.currentDisplayId) || {};
+            return item.capabilities || {};
+        } catch (e) {
+            return {};
+        }
+    },
+
+    // 控制开关旁的能力标识："跨域控制"可用 / 不可用 / 降级
+    _updateControlCapabilityHint() {
+        const hint = document.getElementById('controlCapabilityHint');
+        if (!hint) return;
+        const caps = this._currentDisplayCapabilities();
+        if (caps.crossOriginControl) {
+            hint.textContent = '跨域控制';
+            hint.style.color = '#4caf50';
+        } else if (caps.crossOriginControlDegraded) {
+            hint.textContent = '跨域控制降级';
+            hint.style.color = '#ff9800';
+        } else {
+            hint.textContent = '不支持跨域控制';
+            hint.style.color = 'rgba(255,255,255,0.4)';
         }
     }
 };
