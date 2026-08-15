@@ -1539,12 +1539,311 @@
         let currentHtmlScale = 1;
         let htmlProgressTimer = null;
 
+        // ===== 控制模式：转发控制端输入 + 每秒回传 720p 截图 =====
+        let controlModeEnabled = false;
+        let controlShotTimer = null;
+        let controlShotBusy = false;
+        let gdmStream = null;        // getDisplayMedia 捕获流（会话内复用）
+        let gdmVideo = null;         // 取帧用隐藏 video
+        let gdmPending = false;      // 授权请求进行中（防止重复弹框）
+        let gdmFailed = false;       // 本会话授权失败，不再重试
+        let controlShotCanvas = null;
+        let controlShotCtx = null;
+
+        // 截图降级链：同源 html-to-image → 跨域 getDisplayMedia → 兜底 html-to-image → none
+        async function captureHtmlShot() {
+            if (mediaHtml.style.display === 'none') {
+                sendControlScreenshot('none', null, 0, 0);
+                return;
+            }
+            // 同源检测：能读 contentDocument 即同源（srcdoc / 服务器同源 URL）
+            let sameOrigin = false;
+            try {
+                if (mediaHtml.contentDocument && mediaHtml.contentDocument.body) {
+                    sameOrigin = true;
+                }
+            } catch (e) {
+                sameOrigin = false;
+            }
+            if (sameOrigin) {
+                // 优先 html-to-image 截 iframe 可见区域
+                try {
+                    const shot = await shotWithHtmlToImage();
+                    if (shot) return;
+                } catch (e) {
+                    console.log('[控制模式] html-to-image 失败:', e.message);
+                }
+            }
+            // 跨域或同源失败：尝试 getDisplayMedia（整屏，不裁剪）
+            const shot = await shotWithGdm();
+            if (shot) return;
+            // getDisplayMedia 失败：兜底再试 html-to-image（跨域通常仍失败，成本极低）
+            try {
+                const shot2 = await shotWithHtmlToImage();
+                if (shot2) return;
+            } catch (e) { /* 忽略，降级 none */ }
+            sendControlScreenshot('none', null, 0, 0);
+        }
+
+        // html-to-image 截 iframe 可见视口，缩至 720p
+        async function shotWithHtmlToImage() {
+            const doc = mediaHtml.contentDocument;
+            const body = doc && doc.body;
+            if (!body) return null;
+            const clientW = mediaHtml.clientWidth || 800;
+            const clientH = mediaHtml.clientHeight || 600;
+            const canvas = await htmlToImage.toCanvas(body, {
+                width: clientW,
+                height: clientH,
+                backgroundColor: '#ffffff'
+            });
+            const fit = ControlModeUtils.fitSizeTo720p(canvas.width, canvas.height);
+            if (!controlShotCanvas) {
+                controlShotCanvas = document.createElement('canvas');
+                controlShotCtx = controlShotCanvas.getContext('2d');
+            }
+            controlShotCanvas.width = fit.width;
+            controlShotCanvas.height = fit.height;
+            controlShotCtx.drawImage(canvas, 0, 0, fit.width, fit.height);
+            const dataUrl = controlShotCanvas.toDataURL('image/jpeg', 0.7);
+            sendControlScreenshot('html-to-image', dataUrl, fit.width, fit.height);
+            return dataUrl;
+        }
+
+        // getDisplayMedia 整屏截图（不裁剪），缩至 720p
+        async function shotWithGdm() {
+            if (gdmFailed || gdmPending) return null;
+            if (!gdmStream) {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+                    gdmFailed = true;
+                    return null;
+                }
+                gdmPending = true;
+                try {
+                    // 授权弹窗无人值守时会一直挂起：8 秒超时视为失败，走降级链
+                    gdmStream = await Promise.race([
+                        navigator.mediaDevices.getDisplayMedia({ video: true }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('授权超时')), 8000))
+                    ]);
+                    gdmVideo = document.createElement('video');
+                    gdmVideo.srcObject = gdmStream;
+                    gdmVideo.muted = true;
+                    await gdmVideo.play();
+                    // 用户停止共享时清理，会话内重新申请
+                    gdmStream.getVideoTracks()[0].addEventListener('ended', () => {
+                        gdmStream = null;
+                        gdmVideo = null;
+                        gdmFailed = false;
+                    });
+                } catch (e) {
+                    // 用户拒绝授权或浏览器不支持
+                    console.log('[控制模式] getDisplayMedia 授权失败:', e.message);
+                    gdmStream = null;
+                    gdmFailed = true;
+                    return null;
+                } finally {
+                    gdmPending = false;
+                }
+            }
+            if (!gdmVideo || gdmVideo.videoWidth === 0) return null;
+            const vw = gdmVideo.videoWidth;
+            const vh = gdmVideo.videoHeight;
+            const fit = ControlModeUtils.fitSizeTo720p(vw, vh);
+            if (!controlShotCanvas) {
+                controlShotCanvas = document.createElement('canvas');
+                controlShotCtx = controlShotCanvas.getContext('2d');
+            }
+            controlShotCanvas.width = fit.width;
+            controlShotCanvas.height = fit.height;
+            controlShotCtx.drawImage(gdmVideo, 0, 0, fit.width, fit.height);
+            const dataUrl = controlShotCanvas.toDataURL('image/jpeg', 0.7);
+            sendControlScreenshot('gdm', dataUrl, fit.width, fit.height);
+            return dataUrl;
+        }
+
+        function sendControlScreenshot(mode, dataUrl, width, height) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'controlScreenshot',
+                mode: mode,
+                dataUrl: dataUrl || null,
+                width: width || 0,
+                height: height || 0
+            }));
+        }
+
+        // 截图定时器：1 秒 1 帧；上一帧未完成跳过（防堆积）
+        function startControlScreenshot() {
+            stopControlScreenshot();
+            controlShotTimer = setInterval(async () => {
+                if (controlShotBusy) return;
+                controlShotBusy = true;
+                try {
+                    await captureHtmlShot();
+                } catch (e) {
+                    console.log('[控制模式] 截图失败:', e.message);
+                } finally {
+                    controlShotBusy = false;
+                }
+            }, 1000);
+        }
+
+        function stopControlScreenshot() {
+            if (controlShotTimer) {
+                clearInterval(controlShotTimer);
+                controlShotTimer = null;
+            }
+            if (gdmStream) {
+                gdmStream.getTracks().forEach(t => t.stop());
+                gdmStream = null;
+            }
+            gdmVideo = null;
+        }
+
+        // 控制模式开关：开启暂停自动滚动，关闭恢复
+        function setControlMode(on) {
+            controlModeEnabled = !!on;
+            if (on) {
+                stopHtmlScroll();
+                startControlScreenshot();
+            } else {
+                stopControlScreenshot();
+                if (mediaHtml.style.display !== 'none') {
+                    startHtmlScroll(mediaHtml, currentHtmlScroll);
+                }
+            }
+            console.log('[控制模式] 状态:', controlModeEnabled ? '开启' : '关闭');
+        }
+
+        // 输入合成：把控制端输入派发到 iframe 内容
+        function dispatchControlInput(data) {
+            if (mediaHtml.style.display === 'none') return;
+            let win = null;
+            let doc = null;
+            try {
+                win = mediaHtml.contentWindow;
+                doc = mediaHtml.contentDocument;
+            } catch (e) {
+                // 跨域 iframe：无法读取内容，忽略输入（防御分支）
+                return;
+            }
+            if (!win || !doc) return;
+            const evt = data.event;
+            if (evt === 'text') {
+                // 文本注入（中文粘贴）：直接插入活动输入框
+                injectText(doc, data.text || '');
+                return;
+            }
+            if (evt === 'mousedown' || evt === 'mouseup' || evt === 'click' || evt === 'contextmenu') {
+                // 裁剪框内百分比 → 内容百分比 → 内容像素
+                const crop = currentCrop || { x: 0, y: 0, width: 100, height: 100 };
+                const pct = ControlModeUtils.contentPointFromCropBox(crop, data.x || 0, data.y || 0);
+                const px = ControlModeUtils.contentPixelFromPercent(
+                    mediaHtml.clientWidth, mediaHtml.clientHeight, pct
+                );
+                const target = doc.elementFromPoint(px.x, px.y) || doc.body;
+                // 合成 mousedown 不触发原生 focus：手动聚焦可聚焦元素（输入框等）
+                if (evt === 'mousedown' && typeof target.focus === 'function') {
+                    try { target.focus(); } catch (e) { /* 不可聚焦元素忽略 */ }
+                }
+                const opts = {
+                    bubbles: true,
+                    cancelable: true,
+                    view: win,
+                    clientX: px.x,
+                    clientY: px.y,
+                    button: data.button !== undefined ? data.button : 0
+                };
+                if (evt === 'mousedown') target.dispatchEvent(new MouseEvent('mousedown', opts));
+                if (evt === 'mouseup') target.dispatchEvent(new MouseEvent('mouseup', opts));
+                if (evt === 'click') target.dispatchEvent(new MouseEvent('click', opts));
+                if (evt === 'contextmenu') target.dispatchEvent(new MouseEvent('contextmenu', opts));
+            } else if (evt === 'wheel') {
+                const target = doc.activeElement || doc.body;
+                const wheelOpts = {
+                    bubbles: true,
+                    cancelable: true,
+                    view: win,
+                    deltaX: data.deltaX || 0,
+                    deltaY: data.deltaY || 0,
+                    deltaMode: 0 // 像素
+                };
+                target.dispatchEvent(new WheelEvent('wheel', wheelOpts));
+                // 合成 WheelEvent 不触发浏览器原生滚动，需手动滚动 iframe 窗口
+                try { win.scrollBy(data.deltaX || 0, data.deltaY || 0); } catch (e) { /* 忽略 */ }
+            } else if (evt === 'keydown' || evt === 'keyup') {
+                const target = doc.activeElement || doc.body;
+                const keyOpts = {
+                    bubbles: true,
+                    cancelable: true,
+                    view: win,
+                    key: data.key || '',
+                    code: data.code || '',
+                    keyCode: data.keyCode || 0,
+                    which: data.keyCode || 0,
+                    altKey: !!data.altKey,
+                    ctrlKey: !!data.ctrlKey,
+                    shiftKey: !!data.shiftKey,
+                    metaKey: !!data.metaKey
+                };
+                target.dispatchEvent(new KeyboardEvent(evt, keyOpts));
+                // 单字符文本注入：合成 KeyboardEvent 不会触发输入框默认行为，
+                // 需手动 insertText（仅无 Ctrl/Alt/Meta 时）
+                if (evt === 'keydown' && data.char && !data.ctrlKey && !data.altKey && !data.metaKey) {
+                    injectText(doc, data.char);
+                }
+            }
+        }
+
+        // 文本注入：对 input/textarea/contentEditable 生效
+        function injectText(doc, text) {
+            if (!text) return;
+            const el = doc.activeElement;
+            if (!el) return;
+            const tag = (el.tagName || '').toLowerCase();
+            const editable = tag === 'input' || tag === 'textarea' || el.isContentEditable;
+            if (!editable) return;
+            // 先把光标定位到末尾（保证 execCommand 插入位置正确）
+            if (tag === 'input' || tag === 'textarea') {
+                try {
+                    el.focus();
+                    const end = el.value ? el.value.length : 0;
+                    el.setSelectionRange(end, end);
+                } catch (e) { /* 定位失败继续尝试 */ }
+            }
+            try {
+                el.focus();
+                if (doc.execCommand && doc.execCommand('insertText', false, text)) return;
+            } catch (e) { /* 降级到 input 事件 */ }
+            // 兜底：手动修改值 + 派发 input 事件
+            if (tag === 'textarea' || (tag === 'input' && (el.type === 'text' || el.type === 'search' || el.type === 'email' || el.type === 'url' || el.type === 'password'))) {
+                const start = el.selectionStart || 0;
+                const end = el.selectionEnd || 0;
+                el.value = el.value.slice(0, start) + text + el.value.slice(end);
+                const pos = start + text.length;
+                el.setSelectionRange(pos, pos);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
         // html 播放进度上报：滚动比例 + 缩放倍数（控制端进度条显示）
         function reportHtmlProgress() {
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
-            const win = mediaHtml.contentWindow;
-            if (!win || !win.document) return;
-            const doc = win.document;
+            let win = null;
+            try {
+                win = mediaHtml.contentWindow;
+            } catch (e) {
+                // 跨域 iframe：无法读取内容，跳过进度上报
+                return;
+            }
+            if (!win) return;
+            let doc = null;
+            try {
+                doc = win.document;
+            } catch (e) {
+                // 跨域 iframe：跳过进度上报
+                return;
+            }
             const scrollHeight = Math.max(
                 (doc.documentElement && doc.documentElement.scrollHeight) || 0,
                 (doc.body && doc.body.scrollHeight) || 0
@@ -1701,7 +2000,8 @@
                 }
                 let mediaName = data.fileName || 'HTML内容';
                 if (data.type === 'url') {
-                    mediaHtml.srcdoc = '';
+                    // 关键：必须移除 srcdoc 属性，否则 src 导航被 srcdoc（优先）占位，外部网页永远显示空白
+                    mediaHtml.removeAttribute('srcdoc');
                     if (/\.mhtml?$/i.test(data.url)) {
                         // .mhtml 浏览器无法直接渲染：fetch 后转纯 HTML 用 srcdoc 显示
                         fetch(data.url, { credentials: 'same-origin' })
@@ -1823,7 +2123,17 @@
                         }
                     }
                     break;
-                    
+
+                case 'controlMode':
+                    // 控制模式开关：开启暂停自动滚动并开始截图，关闭恢复
+                    setControlMode(data.value === true);
+                    break;
+
+                case 'controlInput':
+                    // 控制端输入转发：鼠标/滚轮/键盘/文本
+                    dispatchControlInput(data);
+                    break;
+
                 case 'play':
                     if (data.value === true) {
                         if (mediaHtml.style.display !== 'none') {
@@ -2036,6 +2346,8 @@
             };
             
             displayWs.onclose = function() {
+                stopControlScreenshot();
+                controlModeEnabled = false;
                 setConnectionStatus('disconnected', '已断开');
                 setTimeout(connectWebSocket, 3000);
             };
