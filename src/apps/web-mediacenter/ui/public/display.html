@@ -1139,6 +1139,10 @@
             }
             
             if (state.currentMedia) {
+                // 恢复 html 滚动模式（服务器持久化，刷新/重启后沿用）
+                if (state.currentHtmlScroll) {
+                    currentHtmlScroll = state.currentHtmlScroll;
+                }
                 showMedia(state.currentMedia);
             }
         }
@@ -2088,6 +2092,15 @@
             }
         }
 
+        // 视频自动播放：浏览器/WebView autoplay 策略拦截有声视频（无用户手势），
+        // 先 muted 播放绕过拦截，成功后取消静音（音量跟随显示端 volume）
+        function playVideoAuto(video) {
+            video.muted = true;
+            video.play().then(() => {
+                video.muted = false;
+            }).catch(e => console.log('自动播放被阻止'));
+        }
+
         function showMedia(data) {
             mediaVideo.pause();
             mediaVideo.src = '';
@@ -2156,7 +2169,7 @@
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = data.url;
                     mediaVideo.load();
-                    mediaVideo.play().catch(e => console.log('自动播放被阻止'));
+                    playVideoAuto(mediaVideo);
                     mediaVideo.onloadedmetadata = () => applyCrop();
                     mediaVideo.ontimeupdate = function() {
                         if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
@@ -2186,7 +2199,7 @@
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = src;
                     mediaVideo.load();
-                    mediaVideo.play().catch(e => console.log('自动播放被阻止'));
+                    playVideoAuto(mediaVideo);
                     mediaVideo.onloadedmetadata = () => applyCrop();
                 } else {
                     mediaVideo.style.display = 'none';
@@ -2211,6 +2224,12 @@
                     
                 case 'fit':
                     applyFit(data.value);
+                    break;
+
+                case 'reload':
+                    // 控制端主动刷新显示端页面（重新加载最新代码并恢复持久化状态）
+                    console.log('[显示端] 收到控制端刷新指令，reload...');
+                    location.reload();
                     break;
 
                 case 'htmlScroll':
@@ -2478,7 +2497,26 @@
         
         applyRotation();
         connectWebSocket();
-        
+
+        // 显示端代码自动刷新：轮询服务器文件版本，mtime 变化即 reload（无需重启 APK）
+        // APK 已禁用 HTTP 缓存 + URL 带时间戳，reload 即加载最新代码
+        let lastDisplayVersion = 0;
+        (function watchDisplayVersion() {
+            fetch('/api/display-version', { cache: 'no-store' })
+                .then(r => r.json())
+                .then(d => {
+                    if (lastDisplayVersion === 0) {
+                        lastDisplayVersion = d.version;
+                    } else if (d.version !== lastDisplayVersion) {
+                        console.log('[显示端] 检测到代码更新，自动刷新...');
+                        location.reload();
+                        return;
+                    }
+                    setTimeout(watchDisplayVersion, 8000);
+                })
+                .catch(() => setTimeout(watchDisplayVersion, 8000));
+        })();
+
         initVoiceRecognition();
         updateVoiceStatusDisplay();
         
@@ -3870,3 +3908,7 @@
     </script>
 </body>
 </html>
+
+
+
+

@@ -655,6 +655,16 @@ const Crop = {
         }
         document.addEventListener('keydown', (e) => this.onDocKey(e, 'keydown'), true);
         document.addEventListener('keyup', (e) => this.onDocKey(e, 'keyup'), true);
+
+        // 控制端主动刷新显示端（重新加载代码并恢复持久化状态）
+        const refreshBtn = document.getElementById('refreshDisplayBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                if (window.WebSocketManager) {
+                    window.WebSocketManager.sendControl('reload', Date.now());
+                }
+            });
+        }
     },
 
     // 开启/关闭控制模式

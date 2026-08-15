@@ -328,7 +328,13 @@ mediaLibraryManager.init().then(() => {
     startServer();
 });
 
-function startServer() {
+async function startServer() {
+    // 服务端自重启：新进程延迟监听，避免与旧进程端口冲突（AASC_RELOAD_DELAY 毫秒）
+    const reloadDelay = parseInt(process.env.AASC_RELOAD_DELAY || '0', 10);
+    if (reloadDelay > 0) {
+        await new Promise(r => setTimeout(r, reloadDelay));
+    }
+
     const localIP = getLocalIP();
     const protocol = useHttps ? 'https' : 'http';
 
@@ -636,6 +642,7 @@ const SUB_DISPLAY_CAPABILITIES = {
 function createDisplayState() {
     return {
         currentMedia: null,
+        currentHtmlScroll: null,
         rotation: 0,
         fit: 'contain',
         crop: { x: 0, y: 0, width: 100, height: 100 },
@@ -1944,6 +1951,20 @@ app.delete('/api/device-events/:ip', (req, res) => {
     }
 });
 
+// 显示端代码版本检测：前端轮询此端点，display.html 等文件 mtime 变化即自动 reload（无需重启 APK）
+app.get('/api/display-version', (req, res) => {
+    const files = ['display.html', 'css/display.css', 'js/websocket.js', 'js/crop.js', 'js/controls.js', 'js/media-library.js', 'js/upload.js'];
+    let maxMtime = 0;
+    for (const f of files) {
+        const p = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public', f);
+        try {
+            const m = fs.statSync(p).mtimeMs;
+            if (m > maxMtime) maxMtime = m;
+        } catch (e) { /* 文件不存在跳过 */ }
+    }
+    res.json({ version: maxMtime });
+});
+
 app.get('/api/device-settings/:displayId', (req, res) => {
     try {
         const { displayId } = req.params;
@@ -2035,32 +2056,28 @@ app.post('/api/unmute', (req, res) => {
 
 app.post('/api/restart', (req, res) => {
     res.json({ status: 'success', message: '服务器正在重启...' });
-    
+
     log('系统', '收到重启请求，正在关闭服务器...');
-    
+
+    // 不依赖 server.close 回调（残留 keep-alive 连接可能导致永不回调）：
+    // 直接 spawn 新进程（延迟 2.5s 监听），旧进程 500ms 后退出释放端口，无缝接管
     setTimeout(() => {
         wss.clients.forEach(client => {
             client.close();
         });
-        
-        server.close(() => {
-            log('系统', '服务器已关闭，正在重启...');
-            
-            const { spawn } = require('child_process');
-            const args = process.argv.slice(1);
-            
-            spawn(process.execPath, args, {
-                detached: true,
-                stdio: 'inherit',
-                cwd: process.cwd()
-            });
-            
-            process.exit(0);
-        });
-        
+
+        const { spawn } = require('child_process');
+        const args = process.argv.slice(1);
+
+        spawn(process.execPath, args, {
+            detached: true,
+            stdio: 'ignore',
+            env: { ...process.env, AASC_RELOAD_DELAY: '2500' }
+        }).unref();
+
         setTimeout(() => {
             process.exit(0);
-        }, 3000);
+        }, 500);
     }, 100);
 });
 
@@ -3245,6 +3262,10 @@ async function handleControlMessageFallback(data, ws) {
                     } else if (data.action === 'play') {
                         displayData.state.isPlaying = data.value;
                         config.updateDisplayState(displayData.ip, { isPlaying: data.value });
+                    } else if (data.action === 'htmlScroll') {
+                        // html 滚动模式持久化：显示端重启/刷新后恢复
+                        displayData.state.currentHtmlScroll = data.value;
+                        config.updateDisplayState(displayData.ip, { currentHtmlScroll: data.value });
                     } else if (data.action === 'cropDebug') {
                         _cropDebugLog = !!data.value;
                     } else if (data.action === 'controlMode' || data.action === 'controlInput') {

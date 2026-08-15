@@ -231,6 +231,8 @@
                         <span class="crop-debug-slider"></span>
                         <span style="font-size:12px;color:rgba(255,255,255,0.5);margin-left:6px;">控制</span>
                     </label>
+                    <button id="refreshDisplayBtn" title="主动刷新显示端页面（重新加载代码并恢复状态）"
+                        style="font-size:12px;color:rgba(255,255,255,0.6);background:none;border:1px solid rgba(255,255,255,0.3);border-radius:4px;padding:2px 8px;cursor:pointer;margin-left:6px;">刷新</button>
                 </div>
                 <div class="crop-preview-container" id="cropPreviewContainer">
                     <img class="crop-preview-media" id="cropPreviewImg" style="display:none;">
@@ -631,6 +633,18 @@
                     </div>
                 </div>
             </div>
+            <div class="section" style="margin-top: 24px;">
+                <h2>服务端</h2>
+                <div class="control-item" style="margin-top: 12px;">
+                    <label>重载服务端代码</label>
+                    <div class="control-buttons">
+                        <button class="control-btn" onclick="Settings.reloadServer()">重载代码</button>
+                    </div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 6px;">
+                        重启服务端进程加载最新代码，显示端/控制端会短暂断连后自动恢复
+                    </div>
+                </div>
+            </div>
         </section>
         <section class="panel" id="panel-task" style="display:none;">
         </section>
@@ -882,6 +896,14 @@
                     routing: update
                 });
             }
+        },
+
+        reloadServer() {
+            if (!confirm('确认重载服务端代码？显示端/控制端会短暂断连后自动重连。')) return;
+            fetch('/api/restart', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => { showToast(d.message || '服务器正在重启...', 'success'); })
+                .catch(e => showToast('重载失败: ' + e.message, 'error'));
         }
     };
 
