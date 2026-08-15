@@ -318,7 +318,7 @@ mediaLibraryManager.init().then(() => {
     
     const localRoutes = mediaLibraryManager.getLocalLibraryRoutes();
     localRoutes.forEach(route => {
-        app.use(route.routePrefix, express.static(route.basePath));
+        app.use(route.routePrefix, staticWithMhtmlMime(route.basePath));
         log('媒体库', `静态路由: ${route.routePrefix} -> ${route.basePath}`);
     });
     
@@ -657,7 +657,19 @@ app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter',
 }));
 app.use('/aasc', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'aasc')));
 app.use('/auto-brain', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'auto-brain')));
-app.use('/uploads', express.static(UPLOADS_DIR));
+// .mhtml 是单文件网页（MIME 打包），默认 octet-stream 会被浏览器当下载不渲染；
+// 统一设为 message/rfc822（Chrome/Edge 渲染 mhtml 的标准 MIME）
+function staticWithMhtmlMime(dir) {
+  return express.static(dir, {
+    setHeaders: (res, filePath) => {
+      if (filePath.toLowerCase().endsWith('.mhtml')) {
+        res.setHeader('Content-Type', 'message/rfc822');
+      }
+    }
+  });
+}
+
+app.use('/uploads', staticWithMhtmlMime(UPLOADS_DIR));
 app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
 app.use('/js/lib', express.static(path.join(PROJECT_ROOT, 'node_modules', 'onnxruntime-web', 'dist')));
@@ -1459,7 +1471,7 @@ app.post('/api/media-libraries', async (req, res) => {
                 const isUploadsDir = library.provider.isUploadsDir;
                 
                 if (!isUploadsDir) {
-                    app.use(routePrefix, express.static(basePath));
+                    app.use(routePrefix, staticWithMhtmlMime(basePath));
                     log('媒体库', `动态添加静态路由: ${routePrefix} -> ${basePath}`);
                 }
             }

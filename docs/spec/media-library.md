@@ -282,7 +282,9 @@ POST /api/media-libraries
         调用 mediaLibraryManager.addLibrary(config)
         如果是本地媒体库:
             获取 provider 的路由前缀和基础路径
-            动态注册静态路由: app.use(routePrefix, express.static(basePath))
+            动态注册静态路由: app.use(routePrefix, staticWithMhtmlMime(basePath))
+                // staticWithMhtmlMime: express.static + setHeaders
+                //   .mhtml → Content-Type: message/rfc822（默认 octet-stream 浏览器不渲染）
         保存配置
     返回: { status: "success", library: config }
 

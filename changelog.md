@@ -78,6 +78,14 @@
 
 ### 修复
 
+- ✅ [2026-08-15] 修复 .mhtml 黑屏（Content-Type 为 octet-stream 浏览器不渲染）
+  - 根因：express.static 对 .mhtml 返回 application/octet-stream，浏览器当二进制下载处理，iframe 黑屏
+  - 修复：新增 staticWithMhtmlMime 静态路由 helper（.mhtml → Content-Type: message/rfc822），应用于 /uploads、媒体库静态路由、动态注册路由三处
+  - 验证：MIME 逻辑模拟验证通过；浏览器实测需重启服务端
+  - 改动文件：
+    - src/apps/server/boot/server-app.js
+    - docs/spec/media-library.md
+
 - ✅ [2026-08-15] 修复 .mhtml 文件被识别为图片导致无法显示
   - 根因：`detectMediaType` 只识别 html/htm，.mhtml（单文件网页）被归为 image，点击后走图片流程，显示端 iframe 从未显示（保持 display:none）
   - 修复：服务端与上传端 detectMediaType 增加 mhtml → html（iframe 原生支持渲染 .mhtml）
