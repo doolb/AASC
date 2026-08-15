@@ -65,7 +65,7 @@ const Upload = {
                 const base64 = await this.fileToBase64(file);
                 const mediaType = this.detectMediaType(file.name);
                 if (mediaType === 'html') {
-                    // HTML 媒体：跳过尺寸探测与裁剪预览，弹滚动设置后临时发送
+                    // HTML 媒体：跳过尺寸探测，弹滚动设置后临时发送（iframe 预览 + 裁剪框）
                     const htmlScroll = await window.MediaLibrary.showHtmlScrollSettingsDialog();
                     if (!htmlScroll) {
                         showToast('已取消发送', 'warning');
@@ -84,6 +84,9 @@ const Upload = {
                     }
                     if (window.MediaLibrary) {
                         window.MediaLibrary.lastTempFileSent = { name: file.name };
+                    }
+                    if (window.Crop) {
+                        window.Crop.showPreview('data:text/html;base64,' + base64, 'html');
                     }
                     showToast('已发送到显示端', 'success');
                     return;
@@ -157,7 +160,7 @@ const Upload = {
             const base64 = await this.fileToBase64(file);
             const mediaType = this.detectMediaType(file.name);
             if (mediaType === 'html') {
-                // HTML 媒体：跳过尺寸探测与裁剪预览，弹滚动设置后临时发送
+                // HTML 媒体：跳过尺寸探测，弹滚动设置后临时发送（iframe 预览 + 裁剪框）
                 const htmlScroll = await window.MediaLibrary.showHtmlScrollSettingsDialog();
                 if (!htmlScroll) {
                     showToast('已取消发送', 'warning');
@@ -176,6 +179,9 @@ const Upload = {
                 }
                 if (window.MediaLibrary) {
                     window.MediaLibrary.lastTempFileSent = { name: file.name };
+                }
+                if (window.Crop) {
+                    window.Crop.showPreview('data:text/html;base64,' + base64, 'html');
                 }
                 showToast('已发送到显示端', 'success');
                 return;

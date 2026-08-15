@@ -171,6 +171,18 @@ showMedia 的 html 媒体分支（display.html）:
         top/left 保持 0（清除会让元素回到 flex 静态位置）+ 
         translate(50vw,50vh) translate(-50%,-50%) rotate(deg) 先旋转后平移到视口中心
     非 html 媒体分支: stopHtmlScroll + 隐藏 iframe（清空 src/srcdoc），html 切回图片/视频时清理
+
+applyCrop 的 html 分支（applyHtmlCrop）:
+    默认全屏（crop≈100%×100% 且 x/y≈0）: 恢复 applyRotation 基准变换
+    否则: scale = max(100/width, 100/height)
+        transform = [居中平移] rotate(deg) translate(-cx%,-cy%) scale(s) translate(cx%,cy%)
+        （cx,cy 为裁剪框中心；裁剪框区域放大后覆盖铺满屏幕）
+    旋转 90/270 时宽高互换（100vh × 100vw）
+
+上传端裁剪预览（crop.js）:
+    cropPreviewHtml iframe 元素；_currentMedia() 选择当前预览元素（html 优先）
+    showPreview html 分支: 显示 iframe 预览 + recalculateSize 初始化裁剪框（可拖拽调整）
+    旋转类（rotate-90/180/270）同样作用于 iframe 预览
     mediaType === 'html':
         url 且扩展名 .mhtml:
             // Chromium 无法直接渲染 mhtml（导航 ERR_ABORTED），需转换

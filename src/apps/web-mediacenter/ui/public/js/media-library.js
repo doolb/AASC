@@ -318,7 +318,7 @@ const MediaLibrary = {
             return;
         }
         if (window.Crop) {
-            window.Crop.hideForHtml();
+            window.Crop.showPreview(url, 'html');
         }
         if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
             window.WebSocketManager.sendMedia({
@@ -330,7 +330,7 @@ const MediaLibrary = {
         }
         this.setCurrentMedia(url);
     },
-    
+
     // 批量播放模式设置框（媒体库与临时模式共用）
     showPlaylistSettingsDialog(options = {}) {
         const { title = '批量播放设置', hideRecursive = false, onConfirm } = options;
@@ -446,7 +446,7 @@ const MediaLibrary = {
             }
             const url = up.data.file.url;
             if (window.Crop) {
-                window.Crop.hideForHtml();
+                window.Crop.showPreview(url, 'html');
             }
             if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
                 window.WebSocketManager.sendMedia({
@@ -472,6 +472,9 @@ const MediaLibrary = {
                 temp: true,
                 htmlScroll
             });
+        }
+        if (window.Crop) {
+            window.Crop.showPreview('data:text/html;base64,' + base64, 'html');
         }
         showToast('已发送到显示端', 'success');
     },

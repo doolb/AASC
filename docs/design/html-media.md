@@ -26,7 +26,8 @@
 
 ### 4. 显示端渲染
 - iframe 铺满整个屏幕，`pointer-events: none` 纯展示，不可交互
-- 裁剪不适用于 html（HTML 无固有宽高比），发送时跳过裁剪
+- 支持裁剪框设置（放大裁切）：裁剪框选中区域等比放大铺满屏幕，可叠加旋转（translate(cx,cy) → scale → 还原 → rotate → 居中）
+- 上传端裁剪预览区用 iframe 预览 html（cropPreviewHtml），裁剪框可拖拽调整
 
 ### 5. 播放行为
 - 单文件发送：一直显示，直到手动切换

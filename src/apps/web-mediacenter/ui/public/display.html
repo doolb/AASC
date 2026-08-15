@@ -516,9 +516,41 @@
             });
         }
 
+        // html 媒体裁剪：裁剪框区域等比放大铺满屏幕（可叠加旋转）
+        function applyHtmlCrop() {
+            const crop = currentCrop;
+            if (!crop) return;
+            // 默认全屏（无裁剪）时恢复旋转基准变换
+            if (crop.width >= 99.9 && crop.height >= 99.9 && crop.x <= 0.1 && crop.y <= 0.1) {
+                applyRotation();
+                return;
+            }
+            const cx = crop.x + crop.width / 2;
+            const cy = crop.y + crop.height / 2;
+            const scale = Math.max(100 / crop.width, 100 / crop.height);
+            const isRotated = currentRotation === 90 || currentRotation === 270;
+            mediaHtml.style.top = '0';
+            mediaHtml.style.left = '0';
+            // 点变换从右到左：原点移到裁剪框中心 → 等比放大 → 移回 → 旋转 → 平移到视口中心
+            const cropTransform = 'translate(-' + cx + '%, -' + cy + '%) scale(' + scale + ') translate(' + cx + '%, ' + cy + '%)';
+            if (isRotated) {
+                mediaHtml.style.width = '100vh';
+                mediaHtml.style.height = '100vw';
+                mediaHtml.style.transform = 'translate(50vw, 50vh) translate(-50%, -50%) rotate(' + currentRotation + 'deg)' + cropTransform;
+            } else {
+                mediaHtml.style.width = '100%';
+                mediaHtml.style.height = '100%';
+                mediaHtml.style.transform = 'rotate(0deg)' + cropTransform;
+            }
+        }
+
         function applyCrop() {
+            if (mediaHtml.style.display !== 'none') {
+                applyHtmlCrop();
+                return;
+            }
             const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
-            
+
             media.classList.remove('crop');
             media.style.width = '';
             media.style.height = '';

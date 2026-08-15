@@ -11,6 +11,7 @@
   - 滚动设置发送时选择：滚动方式（分页式每屏停 3/5/8 秒 / 平滑慢中快匀速）+ 循环播放独立开关（滚到底回顶继续，分页/平滑均可循环）；内容不足一屏不滚动
   - 显示端旋转适配：iframe 跟随 rotate()，90°/270° 宽高互换（100vh × 100vw）+ translate(50vw,50vh) translate(-50%,-50%) 先旋转再平移到视口中心，铺满无边缘偏移（puppeteer 实测 4 角度全铺满）
   - 切换回图片/视频时停止滚动并隐藏 iframe（清空 src/srcdoc）
+  - 支持裁剪框设置：裁剪框区域等比放大铺满（可叠加旋转）；上传端裁剪预览区 iframe 预览 + 裁剪框拖拽（cropPreviewHtml、_currentMedia）
   - 批量播放 html 项按间隔切换（默认分页 5 秒），暂停冻结滚动、恢复继续
   - 改动文件：
     - src/apps/web-mediacenter/modules/media/media-library-app-service.js

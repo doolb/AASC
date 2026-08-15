@@ -33,7 +33,17 @@ const Crop = {
     get previewVideo() {
         return document.getElementById('cropPreviewVideo');
     },
-    
+
+    get previewHtml() {
+        return document.getElementById('cropPreviewHtml');
+    },
+
+    // 当前显示的预览媒体元素（html 优先，其次 img/video）
+    _currentMedia() {
+        if (this.previewHtml.style.display !== 'none') return this.previewHtml;
+        return this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+    },
+
     convertToOriginal(visualCrop, rotation) {
         if (rotation === 0) {
             return { ...visualCrop };
@@ -81,7 +91,7 @@ const Crop = {
             return;
         }
         
-        const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+        const media = this._currentMedia();
         let mediaRect = media.getBoundingClientRect();
         const containerRect = this.container.getBoundingClientRect();
 
@@ -131,19 +141,23 @@ const Crop = {
         
         this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
         this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
-        
+        this.previewHtml.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+
         if (rotation === 90) {
             this.previewImg.classList.add('rotate-90');
             this.previewVideo.classList.add('rotate-90');
+            this.previewHtml.classList.add('rotate-90');
         } else if (rotation === 180) {
             this.previewImg.classList.add('rotate-180');
             this.previewVideo.classList.add('rotate-180');
+            this.previewHtml.classList.add('rotate-180');
         } else if (rotation === 270) {
             this.previewImg.classList.add('rotate-270');
             this.previewVideo.classList.add('rotate-270');
+            this.previewHtml.classList.add('rotate-270');
         }
     },
-    
+
     setData(data) {
         this.data = { ...data };
     },
@@ -157,18 +171,22 @@ const Crop = {
         
         this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
         this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
-        
+        this.previewHtml.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+
         if (rotation === 90) {
             this.previewImg.classList.add('rotate-90');
             this.previewVideo.classList.add('rotate-90');
+            this.previewHtml.classList.add('rotate-90');
         } else if (rotation === 180) {
             this.previewImg.classList.add('rotate-180');
             this.previewVideo.classList.add('rotate-180');
+            this.previewHtml.classList.add('rotate-180');
         } else if (rotation === 270) {
             this.previewImg.classList.add('rotate-270');
             this.previewVideo.classList.add('rotate-270');
+            this.previewHtml.classList.add('rotate-270');
         }
-        
+
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('rotate', rotation);
         }
@@ -179,7 +197,7 @@ const Crop = {
     },
     
     recalculateSize(sendToDisplay = true) {
-        const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+        const media = this._currentMedia();
         const mediaRect = media.getBoundingClientRect();
         
         this._log('[Crop] recalculateSize: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'sendToDisplay=', sendToDisplay);
@@ -216,9 +234,15 @@ const Crop = {
     
     showPreview(url, mediaType, onReady) {
         if (mediaType === 'html') {
-            // HTML 媒体铺满显示且不可裁剪，跳过图片/视频预览
+            // HTML 媒体：iframe 预览 + 裁剪框（放大裁切区域）
             this.currentMedia = url;
-            this.hideForHtml();
+            this.previewImg.style.display = 'none';
+            this.previewImg.removeAttribute('src');
+            this.previewVideo.style.display = 'none';
+            this.previewVideo.removeAttribute('src');
+            this.previewHtml.style.display = 'block';
+            this.previewHtml.src = url;
+            this.recalculateSize(false);
             return;
         }
         // 新预览开始时移除临时模式数据丢失占位提示（并重置占位 key）
@@ -278,22 +302,10 @@ const Crop = {
         }
     },
 
-    hideForHtml() {
-        // 隐藏裁剪框与预览元素（HTML 媒体不支持裁剪）
-        this.box.style.display = 'none';
-        this.previewImg.style.display = 'none';
-        this.previewImg.removeAttribute('src');
-        this.previewVideo.style.display = 'none';
-        this.previewVideo.removeAttribute('src');
-        if (window.MediaLibrary && window.MediaLibrary.removeTempPreviewPlaceholder) {
-            window.MediaLibrary.removeTempPreviewPlaceholder();
-        }
-    },
-
     _retryShowPreview(retryCount) {
         if (retryCount >= 5 || this._callbackExecuted) return;
         setTimeout(() => {
-            const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+            const media = this._currentMedia();
             const mediaRect = media.getBoundingClientRect();
             if (mediaRect.width > 0 && mediaRect.height > 0 && !this._callbackExecuted) {
                 this._callbackExecuted = true;
@@ -311,7 +323,7 @@ const Crop = {
     },
     
     reset() {
-        const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+        const media = this._currentMedia();
         const mediaRect = media.getBoundingClientRect();
         
         if (mediaRect.width === 0 || mediaRect.height === 0) {
@@ -356,7 +368,7 @@ const Crop = {
     onMouseMove(e) {
         if (!this.isDragging && !this.isResizing) return;
         
-        const media = this.previewImg.style.display !== 'none' ? this.previewImg : this.previewVideo;
+        const media = this._currentMedia();
         let mediaRect = media.getBoundingClientRect();
         if (mediaRect.width === 0 || mediaRect.height === 0) {
             // 无媒体（临时模式占位提示等场景）：以容器为拖动区域
