@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### 优化
+
+- ✅ [2026-08-15] 控制端控制模式滚轮不再带动外层页面滚动
+  - crop.js 裁剪容器 wheel 监听器由 passive:true 改为 passive:false，onContainerWheel 控制模式开启时先 preventDefault 再节流转发（节流跳过的滚轮也阻止外层滚动）
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/crop.js
+
+- ✅ [2026-08-15] 暂时屏蔽显示端浏览器原生截图（getDisplayMedia），保留代码
+
+- ✅ [2026-08-15] 暂时屏蔽显示端浏览器原生截图（getDisplayMedia），保留代码
+  - 控制模式截图降级链跳过 getDisplayMedia：display.html 的 shotWithGdm() 开头新增 GDM_ENABLED 常量开关（false），命中直接返回 null 走兜底 html-to-image → none
+  - 函数体与 gdmStream/gdmVideo 等状态变量全部保留，恢复时改回 GDM_ENABLED = true 即可
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/display.html
+
 ### 新增
 
 - ✅ [2026-08-15] 任务回传携带来源显示端 displayId + 控制端媒体回传按选中显示端过滤

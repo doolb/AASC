@@ -2,6 +2,9 @@
 
 ## 功能完善
 
+- 🚧 [2026-08-15] Android APK 显示端（跨域控制增强）：WebView 包装 + 原生桥（真实像素截图 + 跨域输入注入），浏览器显示端保留并声明无跨域控制能力
+  - 设计文档：docs/design/android-display.md
+  - 实施计划：docs/task/2026-08-15_android-apk显示端.md
 - 重构ai开发流程
 
 ## 批量播放模式
