@@ -723,17 +723,30 @@ input[type="range"]::-webkit-slider-thumb:active {
     background: rgba(76, 175, 80, 0.08);
 }
 
-/* html 媒体裁剪框的占位区域（表示 iframe 铺满屏幕的范围） */
+/* html 媒体裁剪框的占位区域（模拟 iframe 网页区域，表示铺满屏幕的范围） */
 .crop-preview-placeholder {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    border: 2px dashed rgba(255, 255, 255, 0.35);
+    border: 2px dashed rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     box-sizing: border-box;
     pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.crop-preview-placeholder-text {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 1px;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 6px 14px;
+    border-radius: 6px;
 }
 
 .crop-preview-media.rotate-90 {
