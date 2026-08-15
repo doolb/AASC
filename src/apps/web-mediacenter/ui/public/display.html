@@ -1735,12 +1735,21 @@
                 return;
             }
             if (evt === 'mousedown' || evt === 'mouseup' || evt === 'click' || evt === 'contextmenu') {
-                // 裁剪框内百分比 → 内容百分比 → 内容像素
-                const crop = currentCrop || { x: 0, y: 0, width: 100, height: 100 };
-                const pct = ControlModeUtils.contentPointFromCropBox(crop, data.x || 0, data.y || 0);
-                const px = ControlModeUtils.contentPixelFromPercent(
-                    mediaHtml.clientWidth, mediaHtml.clientHeight, pct
-                );
+                let px;
+                if (controlModeEnabled) {
+                    // 控制模式：截图即 iframe 可见视口，坐标直接映射视口像素（不经裁剪框换算）
+                    px = {
+                        x: Math.round((mediaHtml.clientWidth * (data.x || 0)) / 100),
+                        y: Math.round((mediaHtml.clientHeight * (data.y || 0)) / 100)
+                    };
+                } else {
+                    // 裁剪框内百分比 → 内容百分比 → 内容像素
+                    const crop = currentCrop || { x: 0, y: 0, width: 100, height: 100 };
+                    const pct = ControlModeUtils.contentPointFromCropBox(crop, data.x || 0, data.y || 0);
+                    px = ControlModeUtils.contentPixelFromPercent(
+                        mediaHtml.clientWidth, mediaHtml.clientHeight, pct
+                    );
+                }
                 const target = doc.elementFromPoint(px.x, px.y) || doc.body;
                 // 合成 mousedown 不触发原生 focus：手动聚焦可聚焦元素（输入框等）
                 if (evt === 'mousedown' && typeof target.focus === 'function') {

@@ -665,7 +665,7 @@ const Crop = {
         const textRow = document.getElementById('controlTextRow');
         if (textRow) textRow.style.display = this.controlModeOn ? '' : 'none';
         if (!this.controlModeOn) {
-            // 关闭：隐藏截图底图，恢复 html 占位框
+            // 关闭：隐藏截图底图，恢复 html 占位框与裁剪框、容器正方形
             this.previewImg.style.display = 'none';
             this.previewImg.removeAttribute('src');
             if (this.placeholder) {
@@ -673,20 +673,23 @@ const Crop = {
                 const t = this.placeholder.querySelector('.crop-preview-placeholder-text');
                 if (t) t.textContent = 'HTML 页面区域（iframe）';
             }
+            this._restoreContainer();
         }
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('controlMode', this.controlModeOn);
         }
     },
 
-    // 容器内鼠标事件 → 裁剪框内百分比坐标 → 转发
+    // 容器内鼠标事件 → 百分比坐标 → 转发
+    // 控制模式：截图铺满容器（裁剪框隐藏），以容器（截图区域）为坐标系
     onContainerMouse(e, evtName) {
-        if (!this.controlModeOn || !this.box) return;
-        const boxRect = this.box.getBoundingClientRect();
-        if (boxRect.width === 0 || boxRect.height === 0) return;
-        // 裁剪框内相对百分比
-        const px = ((e.clientX - boxRect.left) / boxRect.width) * 100;
-        const py = ((e.clientY - boxRect.top) / boxRect.height) * 100;
+        if (!this.controlModeOn) return;
+        const area = this.box && this.box.style.display !== 'none' ? this.box : this.container;
+        const areaRect = area.getBoundingClientRect();
+        if (areaRect.width === 0 || areaRect.height === 0) return;
+        // 区域内相对百分比
+        const px = ((e.clientX - areaRect.left) / areaRect.width) * 100;
+        const py = ((e.clientY - areaRect.top) / areaRect.height) * 100;
         if (evtName === 'contextmenu') {
             e.preventDefault();
         }
@@ -754,7 +757,7 @@ const Crop = {
         }
     },
 
-    // 显示端回传截图：作为预览底图显示，裁剪框保持可拖拽
+    // 显示端回传截图：作为预览底图全量显示（跟随显示端比例、不旋转），隐藏裁剪框
     showControlScreenshot(data) {
         if (!this.controlModeOn) return;
         const img = this.previewImg;
@@ -762,6 +765,7 @@ const Crop = {
         if (!data.dataUrl || data.mode === 'none') {
             img.style.display = 'none';
             img.removeAttribute('src');
+            this._restoreContainer();
             if (this.placeholder) {
                 this.placeholder.style.display = 'block';
                 const t = this.placeholder.querySelector('.crop-preview-placeholder-text');
@@ -775,6 +779,23 @@ const Crop = {
         img.style.height = '100%';
         img.style.objectFit = 'contain';
         if (this.placeholder) this.placeholder.style.display = 'none';
+        // 隐藏裁剪框（控制模式全量显示截图，不裁剪）
+        if (this.box) this.box.style.display = 'none';
+        // 容器跟随显示端 canvasSize 比例（不旋转）
+        const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
+        if (canvasSize.width > 0 && canvasSize.height > 0) {
+            this.container.style.aspectRatio = canvasSize.width + ' / ' + canvasSize.height;
+        }
+    },
+
+    // 恢复默认容器：正方形 + 显示裁剪框
+    _restoreContainer() {
+        if (this.container) {
+            this.container.style.aspectRatio = '1 / 1';
+        }
+        if (this.box) {
+            this.box.style.display = 'block';
+        }
     }
 };
 
