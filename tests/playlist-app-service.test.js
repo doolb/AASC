@@ -26,6 +26,26 @@ const fakeManager = {
     }
 };
 
+const htmlTree = {
+    '/': [
+        { name: 'index.html', path: '/index.html', type: 'file', mediaType: 'html', modifiedTime: new Date('2026-01-02'), url: '/media/1/index.html' },
+        { name: 'a.jpg', path: '/a.jpg', type: 'file', mediaType: 'image', modifiedTime: new Date('2026-01-01'), url: '/media/1/a.jpg' }
+    ]
+};
+
+const htmlFakeManager = {
+    async list(libraryId, path) {
+        return htmlTree[path] || [];
+    }
+};
+
+test('buildFromLibrary 收集 html 媒体文件', async () => {
+    const pm = new PlaylistManager(htmlFakeManager);
+    const list = await pm.buildFromLibrary('lib1', '/', { recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc' });
+    assert.deepStrictEqual(list.map(i => i.fileName), ['a.jpg', 'index.html']);
+    assert.strictEqual(list[1].mediaType, 'html');
+});
+
 test('buildFromLibrary 单层只收集当前层媒体并过滤非媒体', async () => {
     const pm = new PlaylistManager(fakeManager);
     const list = await pm.buildFromLibrary('lib1', '/', { recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc' });

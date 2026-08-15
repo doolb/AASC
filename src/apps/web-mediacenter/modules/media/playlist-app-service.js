@@ -1,6 +1,6 @@
 'use strict';
 
-const MEDIA_TYPES = ['image', 'video', 'gif'];
+const MEDIA_TYPES = ['image', 'video', 'gif', 'html'];
 
 class PlaylistManager {
     constructor(mediaLibraryManager) {
