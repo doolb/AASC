@@ -522,12 +522,14 @@
             if (!crop) return;
             // 默认全屏（无裁剪）时恢复旋转基准变换
             if (crop.width >= 99.9 && crop.height >= 99.9 && crop.x <= 0.1 && crop.y <= 0.1) {
+                currentHtmlScale = 1;
                 applyRotation();
                 return;
             }
             const cx = crop.x + crop.width / 2;
             const cy = crop.y + crop.height / 2;
             const scale = Math.max(100 / crop.width, 100 / crop.height);
+            currentHtmlScale = scale;
             const isRotated = currentRotation === 90 || currentRotation === 270;
             mediaHtml.style.top = '0';
             mediaHtml.style.left = '0';
@@ -1531,12 +1533,43 @@
         let htmlScrollState = null;
         // 当前生效的 html 播放模式（发送未指定时沿用；控制端可实时切换）
         let currentHtmlScroll = null;
+        // 当前 html 裁剪缩放倍数（无裁剪=1）；进度上报用
+        let currentHtmlScale = 1;
+        let htmlProgressTimer = null;
+
+        // html 播放进度上报：滚动比例 + 缩放倍数（控制端进度条显示）
+        function reportHtmlProgress() {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            const win = mediaHtml.contentWindow;
+            if (!win || !win.document) return;
+            const doc = win.document;
+            const scrollHeight = Math.max(
+                (doc.documentElement && doc.documentElement.scrollHeight) || 0,
+                (doc.body && doc.body.scrollHeight) || 0
+            );
+            const clientHeight = win.innerHeight || mediaHtml.clientHeight;
+            let scrollProgress = 0;
+            if (scrollHeight > clientHeight) {
+                scrollProgress = Math.min(100, Math.round((win.scrollY / (scrollHeight - clientHeight)) * 100));
+            }
+            displayWs.send(JSON.stringify({
+                type: 'htmlProgress',
+                scrollProgress: scrollProgress,
+                scale: currentHtmlScale,
+                mode: currentHtmlScroll ? currentHtmlScroll.mode : 'page',
+                loop: currentHtmlScroll ? !!currentHtmlScroll.loop : false
+            }));
+        }
 
         function stopHtmlScroll() {
             if (htmlScrollState) {
                 if (htmlScrollState.timer) clearInterval(htmlScrollState.timer);
                 if (htmlScrollState.rafId) cancelAnimationFrame(htmlScrollState.rafId);
                 htmlScrollState = null;
+            }
+            if (htmlProgressTimer) {
+                clearInterval(htmlProgressTimer);
+                htmlProgressTimer = null;
             }
         }
 
@@ -1656,6 +1689,10 @@
                 // 发送未指定模式时沿用显示端当前模式；指定则更新记忆
                 if (data.htmlScroll) currentHtmlScroll = data.htmlScroll;
                 mediaHtml.onload = () => startHtmlScroll(mediaHtml, data.htmlScroll || currentHtmlScroll);
+                // html 播放进度上报（滚动比例 + 缩放倍数）
+                if (!htmlProgressTimer) {
+                    htmlProgressTimer = setInterval(reportHtmlProgress, 1000);
+                }
                 let mediaName = data.fileName || 'HTML内容';
                 if (data.type === 'url') {
                     mediaHtml.srcdoc = '';

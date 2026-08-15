@@ -202,6 +202,11 @@ handleControl 'htmlScroll'（控制端显示面板实时切换）:
 控制端发送 html 不弹滚动设置（显示面板「HTML 模式」按钮弹面板设置，
     见 controls.js showHtmlModePanel）; htmlScroll 缺省 → 显示端沿用记忆
 
+html 播放进度上报（display.html reportHtmlProgress，每 1s）:
+    htmlProgress { scrollProgress(0-100), scale(裁剪缩放倍数), mode, loop }
+    控制端: 进度条显示滚动比例，文本显示「缩放 Nx · 滚动 N%」
+    currentHtmlScale 在 applyHtmlCrop 更新（无裁剪=1）
+
 startHtmlScroll(iframe, htmlScroll):
     opts = htmlScroll || {}; mode = opts.mode === 'loop' ? 'smooth' : (opts.mode || 'page')
     loop = opts.loop || opts.mode === 'loop'   // 兼容旧消息

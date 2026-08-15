@@ -171,6 +171,17 @@ const WebSocketManager = {
                 slider.value = pct;
                 if (label) label.textContent = pct + '%';
             }
+        } else if (data.type === 'htmlProgress') {
+            // html 播放进度：进度条显示滚动比例，文本显示缩放倍数 + 滚动比例
+            var slider = document.getElementById('progressSlider');
+            var label = document.getElementById('progressValue');
+            if (slider) {
+                slider.value = data.scrollProgress || 0;
+                if (label) {
+                    var scaleText = data.scale && data.scale > 1 ? '缩放 ' + data.scale.toFixed(1) + 'x · ' : '';
+                    label.textContent = scaleText + '滚动 ' + (data.scrollProgress || 0) + '%';
+                }
+            }
         } else if (data.type === 'chatChunk') {
             if (window.Chat) {
                 window.Chat.handleChunk(data);
