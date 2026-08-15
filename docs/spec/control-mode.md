@@ -53,7 +53,8 @@ captureHtmlShot() 截图降级链:
             授权失败/超时 → 兜底 htmlToImage → 再失败 → 回传 mode:'none'
 
 dispatchControlInput(data) 输入合成:
-    鼠标: contentPointFromCropBox(crop, x%, y%) → elementFromPoint
+    鼠标: 控制模式开启 → (x%, y%) 直接映射视口像素
+          关闭 → contentPointFromCropBox(crop, x%, y%) → elementFromPoint
           → mousedown 时手动 focus（合成事件不触发原生 focus）→ dispatch MouseEvent
     滚轮: dispatch WheelEvent(deltaX, deltaY, deltaMode=0) + win.scrollBy
           （合成事件不触发原生滚动）
@@ -98,6 +99,11 @@ setControlMode(on):                    # 开关切换
 
 controlScreenshot 接收:
     displayId 不匹配 → 忽略
-    mode='none' → 占位提示"跨域未授权，操作仍生效"
-    否则 → previewImg 显示底图（object-fit: contain），裁剪框 overlay 保持可拖拽
+    mode='none' → 占位提示"跨域未授权，操作仍生效"；恢复裁剪框与正方形容器
+    否则 → previewImg 显示底图（object-fit: contain 铺满）
+          → 隐藏裁剪框（点击区域 = 截图区域 = 容器）
+          → 容器 aspect-ratio 跟随显示端 canvasSize（不旋转）
+
+鼠标坐标（控制模式）:
+    容器内百分比 → 显示端直接映射 iframe 视口像素（截图即视口内容，跳过裁剪框换算）
 ```

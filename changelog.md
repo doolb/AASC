@@ -90,6 +90,7 @@
   - 显示端每秒回传 720p 截图（JPEG q0.7），作为控制端裁剪面板预览底图
   - 截图降级链：同源/srcdoc → html-to-image（库引入，SVG foreignObject 渲染准确）；跨域 URL → getDisplayMedia 整屏捕获（8s 授权超时防挂起）；授权失败 → 兜底 html-to-image → 全部失败降级"跨域未授权，操作仍生效"
   - 输入合成：坐标按裁剪框内百分比换算（与 CSS 缩放无关）；合成事件补原生行为（mousedown 手动 focus、滚轮手动 scrollBy、键盘单字符 insertText 注入）；中文通过粘贴框文本注入
+  - 截图全量显示：控制模式下隐藏裁剪框（点击区域=截图区域），容器跟随显示端 canvasSize 比例且不旋转，关闭/降级时恢复裁剪框与正方形容器
   - 控制模式与自动滚动互斥：开启暂停自动滚动，关闭恢复；显示端断连自动清理定时器与捕获流
   - 修复既有 bug：外部 URL 播放时 srcdoc 属性残留导致网页永不加载（显示空白）；跨域 html 播放时 htmlProgress 每秒抛 SecurityError
   - 验证：puppeteer E2E 9/9（同源截图/点击/键盘/中文注入/滚轮/关闭停止）+ 跨域降级链 + 控制端 UI 8/8 + 单元测试 4/4
