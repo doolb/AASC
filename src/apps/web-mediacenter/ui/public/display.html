@@ -1770,6 +1770,10 @@
         // 输入合成：把控制端输入派发到 iframe 内容
         function dispatchControlInput(data) {
             if (mediaHtml.style.display === 'none') return;
+            // APK 原生注入优先：真实触摸/按键，跨域 iframe 内容同样生效
+            if (nativeBridge && nativeBridge.injectTouch && dispatchControlInputNative(data)) {
+                return;
+            }
             let win = null;
             let doc = null;
             try {
@@ -1854,6 +1858,59 @@
                     injectText(doc, data.char);
                 }
             }
+        }
+
+        // 原生输入注入：iframe 可见区域 → 屏幕像素（跨域内容同样可用）
+        function dispatchControlInputNative(data) {
+            const evt = data.event;
+            if (evt === 'text') {
+                nativeBridge.injectText(data.text || '');
+                return true;
+            }
+            const rect = mediaHtml.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return false;
+            const sx = Math.round(rect.left + rect.width * (data.x || 0) / 100);
+            const sy = Math.round(rect.top + rect.height * (data.y || 0) / 100);
+            if (evt === 'mousedown' || evt === 'mouseup' || evt === 'click' || evt === 'contextmenu') {
+                const action = evt === 'mouseup' ? 'up'
+                    : evt === 'click' ? 'click'
+                    : evt === 'contextmenu' ? 'contextmenu'
+                    : 'down';
+                return nativeBridge.injectTouch(sx, sy, action) !== false;
+            }
+            if (evt === 'wheel') {
+                return nativeBridge.injectWheel(sx, sy, data.deltaY || 0) !== false;
+            }
+            if (evt === 'keydown' || evt === 'keyup') {
+                const keyCode = domKeyToAndroidKeyCode(data.keyCode);
+                if (keyCode === 0) return false;   // 未映射键回退 JS 合成
+                const meta = domMetaToAndroidMeta(data);
+                return nativeBridge.injectKey(keyCode, meta) !== false;
+            }
+            return false;
+        }
+
+        // DOM keyCode → Android keyCode 映射（与 APK KeyInjector 约定一致）
+        const DOM_KEY_TO_ANDROID = {
+            13: 66, 9: 61, 8: 67, 46: 112, 27: 111, 32: 62,
+            37: 21, 38: 19, 39: 22, 40: 20, 33: 92, 34: 93, 35: 123, 36: 122, 45: 124,
+            112: 131, 113: 132, 114: 133, 115: 134, 116: 135, 117: 136, 118: 137,
+            119: 138, 120: 139, 121: 140, 122: 141, 123: 142,
+            48: 7, 49: 8, 50: 9, 51: 10, 52: 11, 53: 12, 54: 13, 55: 14, 56: 15, 57: 16,
+            65: 29, 66: 30, 67: 31, 68: 32, 69: 33, 70: 34, 71: 35, 72: 36, 73: 37, 74: 38,
+            75: 39, 76: 40, 77: 41, 78: 42, 79: 43, 80: 44, 81: 45, 82: 46, 83: 47, 84: 48,
+            85: 49, 86: 50, 87: 51, 88: 52, 89: 53, 90: 54
+        };
+        function domKeyToAndroidKeyCode(domKeyCode) {
+            return DOM_KEY_TO_ANDROID[domKeyCode] || 0;
+        }
+        function domMetaToAndroidMeta(data) {
+            let m = 0;
+            if (data.ctrlKey) m |= 4096;   // KeyEvent.META_CTRL_ON
+            if (data.altKey) m |= 2;       // KeyEvent.META_ALT_ON
+            if (data.shiftKey) m |= 1;     // KeyEvent.META_SHIFT_ON
+            if (data.metaKey) m |= 65536;  // KeyEvent.META_META_ON
+            return m;
         }
 
         // 文本注入：对 input/textarea/contentEditable 生效
