@@ -215,6 +215,12 @@ const Crop = {
     },
     
     showPreview(url, mediaType, onReady) {
+        if (mediaType === 'html') {
+            // HTML 媒体铺满显示且不可裁剪，跳过图片/视频预览
+            this.currentMedia = url;
+            this.hideForHtml();
+            return;
+        }
         // 新预览开始时移除临时模式数据丢失占位提示（并重置占位 key）
         if (window.MediaLibrary && window.MediaLibrary.removeTempPreviewPlaceholder) {
             window.MediaLibrary.removeTempPreviewPlaceholder();
@@ -271,7 +277,19 @@ const Crop = {
             }
         }
     },
-    
+
+    hideForHtml() {
+        // 隐藏裁剪框与预览元素（HTML 媒体不支持裁剪）
+        this.box.style.display = 'none';
+        this.previewImg.style.display = 'none';
+        this.previewImg.removeAttribute('src');
+        this.previewVideo.style.display = 'none';
+        this.previewVideo.removeAttribute('src');
+        if (window.MediaLibrary && window.MediaLibrary.removeTempPreviewPlaceholder) {
+            window.MediaLibrary.removeTempPreviewPlaceholder();
+        }
+    },
+
     _retryShowPreview(retryCount) {
         if (retryCount >= 5 || this._callbackExecuted) return;
         setTimeout(() => {
