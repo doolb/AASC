@@ -78,6 +78,14 @@
 
 ### 修复
 
+- ✅ [2026-08-15] 修复整点报时「启用」开关设置后不生效
+  - 根因：`TaskPanel._onWidgetSaveConfig` 收集 widget 字段时只处理 select/number，漏掉 checkbox，`enabled` 从不发送到服务端
+  - 修复：补充 checkbox 收集（el.checked），并限定在 `#task-widget-{instanceId}` 容器内收集，避免多实例字段互相污染
+  - 影响：time.announce 及所有自定义 widget 的 toggle 字段保存配置
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - docs/spec/remote-task-system.md
+
 - ✅ [2026-07-06] 修复复合指令（chat-commands.json）天气查询携带完整历史记录
   - 根因：`executeCommands` 路径中 `onChat` 回调未传递 `skipHistory` 参数，导致复合指令展开的天气子查询走 `handleChatMessage` 时 `skipHistory=false`，把完整历史送入了 LLM 请求
   - 修复：`callbacks.onChat` 调用及 3 处 `onChat` 回调加上 `skipHistory` 参数并传入 `handleChatMessage`

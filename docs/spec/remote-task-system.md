@@ -187,6 +187,7 @@ widget: {
     '<button onclick="TaskPanel._onWidgetAction(\'{{instanceId}}\',\'test\')">测试</button>' +
     '<button class="task-card-btn primary" onclick="TaskPanel._onWidgetSaveConfig(\'{{instanceId}}\')">保存</button>',
   // 字段必须带 class="task-widget-field" data-field="name" 供保存配置遍历
+  // checkbox 用 type="checkbox" data-field="name"（保存配置会收集 checked 值）
 }
 ```
 
@@ -252,6 +253,15 @@ widget: {
   -> task:widget_action { instanceId, action: 'test' }
   -> web-socket-handler -> taskManager.handleWidgetAction()
   -> 服务 onWidgetAction('test', handler)
+
+控制端点击"保存配置"（_onWidgetSaveConfig）
+  仅收集当前实例容器 #task-widget-{instanceId} 内 .task-widget-field 字段:
+    checkbox -> el.checked（布尔值）
+    number   -> parseInt(el.value) || 0
+    select   -> parseInt(el.value)
+  -> task:widget_action { instanceId, action: 'updateConfig', params }
+  -> taskManager.handleWidgetAction() -> 服务 onWidgetAction('updateConfig', params)
+  更新运行配置（config.enabled 等）并持久化到任务索引（taskIO.updateIndex）
 ```
 
 ## 消息类型

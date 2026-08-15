@@ -2589,15 +2589,18 @@
     },
 
     _onWidgetSaveConfig: function(instanceId) {
-      var taskName = this._selectedTaskName;
-      var els = document.querySelectorAll('.task-widget-field');
+      // 限定当前实例容器，避免收集到其他 widget 的字段
+      var container = document.getElementById('task-widget-' + instanceId);
+      if (!container) return;
+      var els = container.querySelectorAll('.task-widget-field');
       var params = {};
       for (var i = 0; i < els.length; i++) {
         var el = els[i];
         var name = el.getAttribute('data-field');
         if (!name) continue;
-        if (el.tagName === 'SELECT') params[name] = parseInt(el.value);
+        if (el.type === 'checkbox') params[name] = el.checked;
         else if (el.type === 'number') params[name] = parseInt(el.value) || 0;
+        else params[name] = parseInt(el.value);
       }
       this._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: 'updateConfig', params: params } });
     },
