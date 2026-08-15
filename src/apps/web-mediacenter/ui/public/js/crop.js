@@ -227,6 +227,10 @@ const Crop = {
             this.data = { x: 0, y: 0, width: 100, height: 100 };
             this.box.style.display = 'block';
             this.updateBox();
+            // 控制端刷新同步显示端裁剪范围：回调恢复保存的裁剪数据
+            if (typeof onReady === 'function') {
+                onReady();
+            }
             return;
         }
         // 非 html 媒体：隐藏 html 占位框
