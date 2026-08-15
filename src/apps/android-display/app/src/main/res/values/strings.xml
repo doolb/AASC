@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">AASC 显示端</string>
+    <string name="accessibility_desc">AASC 显示端跨域控制：将控制端的触摸/滚轮注入到网页内容</string>
+    <string name="server_hint">服务器地址，如 192.168.1.39:8081</string>
+    <string name="connect">连接</string>
+    <string name="ssl_warn">已信任自签名证书（本设备专属）</string>
+</resources>
