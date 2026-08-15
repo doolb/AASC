@@ -1805,6 +1805,22 @@
                         startHtmlScroll(mediaHtml, currentHtmlScroll);
                     }
                     break;
+
+                case 'htmlScrollTo':
+                    // 控制端拖动进度条：同步滚动到对应位置（0-100）
+                    if (mediaHtml.style.display !== 'none') {
+                        const win = mediaHtml.contentWindow;
+                        if (win && win.document) {
+                            const doc = win.document;
+                            const scrollHeight = Math.max(
+                                (doc.documentElement && doc.documentElement.scrollHeight) || 0,
+                                (doc.body && doc.body.scrollHeight) || 0
+                            );
+                            const clientHeight = win.innerHeight || mediaHtml.clientHeight;
+                            win.scrollTo(0, (data.value / 100) * (scrollHeight - clientHeight));
+                        }
+                    }
+                    break;
                     
                 case 'play':
                     if (data.value === true) {

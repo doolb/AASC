@@ -214,6 +214,11 @@ html 播放进度上报（display.html reportHtmlProgress，每 1s）:
     htmlProgress { scrollProgress(0-100), scale(裁剪缩放倍数), mode, loop }
     控制端: 进度条显示滚动比例，文本显示「缩放 Nx · 滚动 N%」
     currentHtmlScale 在 applyHtmlCrop 更新（无裁剪=1）
+    控制端标记 window.currentHtmlPlaying（htmlProgress=true / videoProgress=false）
+
+进度条拖动同步（控制端拖动 → 显示端滚动）:
+    控制端 updateProgress: currentHtmlPlaying 时 sendControl('htmlScrollTo', 0-100)
+    显示端 handleControl 'htmlScrollTo': html 显示中 scrollTo(0, value% × (scrollHeight-clientHeight))
 
 startHtmlScroll(iframe, htmlScroll):
     opts = htmlScroll || {}; mode = opts.mode === 'loop' ? 'smooth' : (opts.mode || 'page')

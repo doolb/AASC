@@ -29,6 +29,10 @@ const Controls = {
         if (progressValue) {
             progressValue.textContent = value + '%';
         }
+        // html 播放时拖动进度条：同步显示端滚动位置
+        if (window.WebSocketManager && window.currentHtmlPlaying) {
+            window.WebSocketManager.sendControl('htmlScrollTo', parseInt(value) || 0);
+        }
     },
     
     updateVolume(value) {

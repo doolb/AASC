@@ -163,6 +163,7 @@ const WebSocketManager = {
             }
         } else if (data.type === 'videoProgress') {
             // 只显示当前选中显示端的进度
+            window.currentHtmlPlaying = false;
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
             var slider = document.getElementById('progressSlider');
             var label = document.getElementById('progressValue');
@@ -173,6 +174,7 @@ const WebSocketManager = {
             }
         } else if (data.type === 'htmlProgress') {
             // html 播放进度：进度条显示滚动比例，文本显示缩放倍数 + 滚动比例
+            window.currentHtmlPlaying = true;
             var slider = document.getElementById('progressSlider');
             var label = document.getElementById('progressValue');
             if (slider) {

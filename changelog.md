@@ -15,6 +15,7 @@
   - 控制端「视频播放」区域「HTML 模式」按钮弹出设置面板（滚动方式 + 参数 + 循环），实时切换当前 html；发送 html 不再弹滚动设置窗口（沿用显示面板模式，显示端 currentHtmlScroll 记忆）
   - html 播放进度：进度条显示滚动比例（0-100%），文本显示「缩放 Nx · 滚动 N%」（显示端每秒上报 htmlProgress）
   - 播放/暂停按钮控制 html 滚动：暂停停止滚动（位置保留），恢复从当前位置继续；进度上报随暂停/恢复启停
+  - 进度条拖动同步 html 滚动位置（htmlScrollTo 指令），拖动后显示值与显示端一致
   - 批量播放 html 项按间隔切换（默认分页 5 秒），暂停冻结滚动、恢复继续
   - 改动文件：
     - src/apps/web-mediacenter/modules/media/media-library-app-service.js
