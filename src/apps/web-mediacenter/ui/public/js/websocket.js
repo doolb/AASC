@@ -174,6 +174,7 @@ const WebSocketManager = {
             }
         } else if (data.type === 'htmlProgress') {
             // html 播放进度：进度条显示滚动比例，文本显示缩放倍数 + 滚动比例
+            console.log('[WS] << htmlProgress scrollProgress:', data.scrollProgress, 'scale:', data.scale, 'mode:', data.mode);
             window.currentHtmlPlaying = true;
             var slider = document.getElementById('progressSlider');
             var label = document.getElementById('progressValue');
