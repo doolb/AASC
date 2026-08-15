@@ -9,7 +9,7 @@
 ### playlist-app-service.js
 
 ```
-常量 MEDIA_TYPES = ['image', 'video', 'gif']
+常量 MEDIA_TYPES = ['image', 'video', 'gif', 'html']
 
 类 PlaylistManager:
     属性:

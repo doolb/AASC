@@ -25,7 +25,12 @@
         deleteFolder(path) -> 删除文件夹
         getFileStream(path) -> 获取文件流
         getPublicUrl(path) -> 获取公开访问URL
-        detectMediaType(name) -> 检测媒体类型
+        detectMediaType(name):
+        ext = name 的后缀
+        if ext in ['gif']: return 'gif'
+        if ext in ['mp4','webm','mov','avi','mkv']: return 'video'
+        if ext in ['html','htm']: return 'html'      // 新增
+        return 'image'
 ```
 
 ### 2. 本地存储提供者 (LocalProvider)
