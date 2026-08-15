@@ -18,10 +18,11 @@
   - 保存到媒体库：走现有上传 API 存到当前目录，再按 URL 发送
 - **裁剪框拖拽**：把 `.html` 文件拖入裁剪预览区（或文件选择器选择），识别为 html 后弹「HTML 发送设置」对话框，以临时模式 base64 发送
 
-### 3. 滚动模式（发送时选择）
-- **分页式（page）**：每屏停留 N 秒（3/5/8 秒可选）滚一屏，滚到底部停止
-- **平滑（smooth）**：按速度（慢/中/快，约 60/120/240 px/s）匀速滚动，滚到底部停止
-- **循环（loop）**：平滑滚动，滚到底部后回顶重新开始
+### 3. 滚动设置（发送时选择）
+- **滚动方式**（二选一）：
+  - **分页式（page）**：每屏停留 N 秒（3/5/8 秒可选）滚一屏
+  - **平滑（smooth）**：按速度（慢/中/快，约 60/120/240 px/s）匀速滚动
+- **循环播放**（独立开关）：滚到底部后回顶重新开始（分页式/平滑均可循环）；不勾选则到底停止
 
 ### 4. 显示端渲染
 - iframe 铺满整个屏幕，`pointer-events: none` 纯展示，不可交互
@@ -74,9 +75,10 @@ mediaData（WebSocket 消息 media 字段）:
   fileName: string,
   temp: bool,               // 临时模式
   htmlScroll: {
-    mode: 'page' | 'smooth' | 'loop',
-    pageInterval: number,   // page 模式：每屏停留秒数（3/5/8）
-    speed: 'slow' | 'medium' | 'fast'  // smooth/loop 模式：滚动速度
+    mode: 'page' | 'smooth',  // 滚动方式（兼容旧消息 mode='loop' = 平滑+循环）
+    loop: boolean,            // 循环播放开关：滚到底回顶继续
+    pageInterval: number,     // page 模式：每屏停留秒数（3/5/8）
+    speed: 'slow' | 'medium' | 'fast'  // smooth 模式：滚动速度
   }
 }
 ```

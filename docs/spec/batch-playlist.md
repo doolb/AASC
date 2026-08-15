@@ -173,8 +173,15 @@ showMedia 的 html 媒体分支（display.html）:
             fetch(url) -> mhtmlToHtml() -> iframe.srcdoc = 转换后 HTML
         url 其他: iframe.src = url
         base64: 解码 -> iframe.srcdoc
-    onload -> startHtmlScroll(iframe, htmlScroll)（分页/平滑/循环滚动）
+    onload -> startHtmlScroll(iframe, htmlScroll)（分页/平滑 + 循环开关）
     temp 上报不含宽高
+
+startHtmlScroll(iframe, htmlScroll):
+    opts = htmlScroll || {}; mode = opts.mode === 'loop' ? 'smooth' : (opts.mode || 'page')
+    loop = opts.loop || opts.mode === 'loop'   // 兼容旧消息
+    内容不溢出（scrollHeight <= clientHeight）: 不滚动
+    mode === 'page': 每 pageInterval 秒 scrollBy(0, 视口高); 到底时 loop ? 回顶继续 : 停止
+    mode === 'smooth': rAF 匀速 scrollBy; 到底时 loop ? 回顶继续 : 停止
 
 mhtmlToHtml(text):
     解析 multipart/related boundary

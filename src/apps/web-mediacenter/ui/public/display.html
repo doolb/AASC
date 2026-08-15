@@ -1491,7 +1491,9 @@
             const win = iframe.contentWindow;
             if (!win) return;
             const opts = htmlScroll || {};
-            const mode = opts.mode || 'page';
+            // 兼容旧消息：mode='loop' 视为平滑+循环
+            const mode = opts.mode === 'loop' ? 'smooth' : (opts.mode || 'page');
+            const loop = !!opts.loop || opts.mode === 'loop';
             const pageInterval = opts.pageInterval || 5;
             const speedPx = { slow: 60, medium: 120, fast: 240 }[opts.speed || 'medium'];
 
@@ -1504,11 +1506,15 @@
             if (scrollHeight <= clientHeight + 1) return;
 
             if (mode === 'page') {
-                // 分页式：每 pageInterval 秒滚一屏，到底停止
+                // 分页式：每 pageInterval 秒滚一屏；循环时到底回顶继续
                 htmlScrollState = {
                     timer: setInterval(() => {
                         if (!htmlScrollState) return;
                         if (win.scrollY + clientHeight >= scrollHeight - 2) {
+                            if (loop) {
+                                win.scrollTo(0, 0);
+                                return;
+                            }
                             stopHtmlScroll();
                             return;
                         }
@@ -1516,14 +1522,14 @@
                     }, pageInterval * 1000)
                 };
             } else {
-                // 平滑：匀速滚动；loop 模式滚到底回顶循环
+                // 平滑：匀速滚动；循环时滚到底回顶继续
                 let last = performance.now();
                 const step = (now) => {
                     if (!htmlScrollState) return;
                     const dt = (now - last) / 1000;
                     last = now;
                     if (win.scrollY + clientHeight >= scrollHeight - 2) {
-                        if (mode === 'loop') {
+                        if (loop) {
                             win.scrollTo(0, 0);
                         } else {
                             stopHtmlScroll();

@@ -494,7 +494,6 @@ const MediaLibrary = {
                             <span class="settings-label">滚动方式</span>
                             <label><input type="radio" name="sendHtmlMode" value="page" checked> 分页式</label>
                             <label><input type="radio" name="sendHtmlMode" value="smooth"> 平滑</label>
-                            <label><input type="radio" name="sendHtmlMode" value="loop"> 循环</label>
                         </div>
                         <div class="settings-row" id="sendHtmlPageIntervalRow">
                             <span class="settings-label">每屏停留</span>
@@ -507,6 +506,10 @@ const MediaLibrary = {
                             <label><input type="radio" name="sendHtmlSpeed" value="slow"> 慢</label>
                             <label><input type="radio" name="sendHtmlSpeed" value="medium" checked> 中</label>
                             <label><input type="radio" name="sendHtmlSpeed" value="fast"> 快</label>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">循环播放</span>
+                            <label><input type="checkbox" id="sendHtmlLoop"> 滚到底后从头循环</label>
                         </div>
                         <div class="settings-row">
                             <span class="settings-label">去向</span>
@@ -530,7 +533,10 @@ const MediaLibrary = {
             });
             mask.querySelector('#sendHtmlConfirmBtn').addEventListener('click', () => {
                 const mode = mask.querySelector('input[name="sendHtmlMode"]:checked').value;
-                const htmlScroll = { mode };
+                const htmlScroll = {
+                    mode: mode,
+                    loop: mask.querySelector('#sendHtmlLoop').checked
+                };
                 if (mode === 'page') {
                     htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="sendHtmlPageInterval"]:checked').value) || 5;
                 } else {
@@ -563,7 +569,6 @@ const MediaLibrary = {
                             <span class="settings-label">滚动方式</span>
                             <label><input type="radio" name="htmlScrollMode" value="page" checked> 分页式</label>
                             <label><input type="radio" name="htmlScrollMode" value="smooth"> 平滑</label>
-                            <label><input type="radio" name="htmlScrollMode" value="loop"> 循环</label>
                         </div>
                         <div class="settings-row" id="htmlPageIntervalRow">
                             <span class="settings-label">每屏停留</span>
@@ -576,6 +581,10 @@ const MediaLibrary = {
                             <label><input type="radio" name="htmlSpeed" value="slow"> 慢</label>
                             <label><input type="radio" name="htmlSpeed" value="medium" checked> 中</label>
                             <label><input type="radio" name="htmlSpeed" value="fast"> 快</label>
+                        </div>
+                        <div class="settings-row">
+                            <span class="settings-label">循环播放</span>
+                            <label><input type="checkbox" id="htmlScrollLoop"> 滚到底后从头循环</label>
                         </div>
                     </div>
                     <div class="dialog-footer">
@@ -596,7 +605,10 @@ const MediaLibrary = {
             });
             mask.querySelector('#htmlScrollConfirmBtn').addEventListener('click', () => {
                 const mode = mask.querySelector('input[name="htmlScrollMode"]:checked').value;
-                const htmlScroll = { mode };
+                const htmlScroll = {
+                    mode: mode,
+                    loop: mask.querySelector('#htmlScrollLoop').checked
+                };
                 if (mode === 'page') {
                     htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="htmlPageInterval"]:checked').value) || 5;
                 } else {
