@@ -337,14 +337,19 @@
             var rotTransform = 'rotate(' + currentRotation + 'deg)';
             mediaImage.style.transform = rotTransform;
             mediaVideo.style.transform = rotTransform;
-            mediaHtml.style.transform = rotTransform;
             if (currentRotation === 90 || currentRotation === 270) {
-                // 旋转 90/270 后宽高互换，保持铺满屏幕
+                // 旋转 90/270：宽高互换，先平移至视口中心再旋转，避免边缘偏移
                 mediaHtml.style.width = '100vh';
                 mediaHtml.style.height = '100vw';
+                mediaHtml.style.top = '50%';
+                mediaHtml.style.left = '50%';
+                mediaHtml.style.transform = 'rotate(' + currentRotation + 'deg) translate(-50%, -50%)';
             } else {
                 mediaHtml.style.width = '100%';
                 mediaHtml.style.height = '100%';
+                mediaHtml.style.top = '';
+                mediaHtml.style.left = '';
+                mediaHtml.style.transform = rotTransform;
             }
 
             // 立即更新所有活跃渲染任务覆盖层的旋转

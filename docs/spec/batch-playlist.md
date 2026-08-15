@@ -167,7 +167,8 @@ playCurrentItem():
 
 showMedia 的 html 媒体分支（display.html）:
     隐藏 img/video，显示 iframe#mediaHtml（铺满、pointer-events:none）
-    旋转适配: transform 跟随 rotate(); 90/270° 时宽高互换（100vh × 100vw）保持铺满
+    旋转适配: transform 跟随 rotate(); 90/270° 时宽高互换（100vh × 100vw）并
+        left/top:50% + rotate(deg) translate(-50%,-50%) 居中后再旋转，避免边缘偏移
     非 html 媒体分支: stopHtmlScroll + 隐藏 iframe（清空 src/srcdoc），html 切回图片/视频时清理
     mediaType === 'html':
         url 且扩展名 .mhtml:
