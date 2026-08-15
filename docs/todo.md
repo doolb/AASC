@@ -6,7 +6,11 @@
   - 设计文档：docs/design/android-display.md
   - 实施计划：docs/task/2026-08-15_android-apk显示端.md
   - 实现：src/apps/android-display/（APK 工程）+ display.html 桥截图/输入链 + 能力声明 + 控制端提示
-  - 待真机验证：目标盒子（三星 Note 8 / Android 9）系统 WebView 71 过旧无法运行 display.html 现代语法，Play Store 损坏无法更新，需解决 WebView 升级或换设备
+  - 真机验证（三星 Note 8 / Android 9，WebView 升级到 132 后）：
+    - 跨域 html（example.com）原生截图稳定回传（1280x623，mode=native）
+    - 无障碍真实触摸注入生效（InputDispatcher Delivering touch to WebView）
+    - 能力声明 crossOriginControl:true 正常上报
+    - 原生桥截图改同步返回（回调式在 WebView 不可靠）
 - 重构ai开发流程
 
 ## 批量播放模式

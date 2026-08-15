@@ -20,9 +20,12 @@
 - ✅ [2026-08-15] Android APK 显示端（跨域控制增强）
   - APK（Kotlin/Gradle, src/apps/android-display/）：WebView 加载服务器 /display 页 + JavascriptInterface 原生桥
   - 原生桥（window.NativeDisplay）：WebView 位图截图（真实像素，跨域/外站图片可截，无授权弹窗）+ 无障碍真实触摸注入 + WebView 真实按键（跨域 iframe 同样生效）+ 中文剪贴板粘贴
+  - 截图改同步返回（JS 函数传 String 参数在 WebView 不可靠，CountDownLatch 等主线程完成返回 JSON）
   - display.html：桥探测后截图链 native 优先（mode='native'）、输入派发走桥（未映射键回退 JS 合成）
   - 能力声明：crossOriginControl / crossOriginControlDegraded；控制端开关旁能力标识 + 按能力区分的降级提示
+  - 能力检测含 webgpu/getUserMedia/fetch 多个 await，部分设备永久挂起 → declareCapabilities 先同步上报基础能力（含 crossOriginControl），异步补全完整能力
   - 浏览器显示端无桥行为不变
+  - 真机验证（三星 Note 8 / Android 9 + WebView 132）：跨域 html 原生截图稳定回传、无障碍真实触摸注入生效
   - 改动文件：
     - src/apps/android-display/（新增，APK 工程：Gradle + Kotlin + Manifest + 原生桥/截图/按键/无障碍触摸）
     - src/apps/web-mediacenter/ui/public/display.html

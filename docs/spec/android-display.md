@@ -6,13 +6,18 @@ APK 通过 `addJavascriptInterface(NativeBridge, "NativeDisplay")` 注入，disp
 
 ```
 isAvailable() -> boolean                          # 桥存在即 true
-takeScreenshot(cb(dataUrl, width, height))        # 主线程 WebView.draw → 720p JPEG q0.7
+takeScreenshot() -> String JSON                   # 同步返回 {dataUrl,width,height}；失败 "null"
+                                                  # 内部 CountDownLatch 等主线程 WebView.draw → 720p JPEG q0.7
 injectTouch(x, y, action) -> boolean              # 无障碍 dispatchGesture；down/up/click/contextmenu
 injectWheel(x, y, deltaY) -> boolean              # 垂直滑动，deltaY>0 手指上滑
 injectKey(keyCode, meta) -> boolean               # WebView.dispatchKeyEvent
 injectText(text) -> boolean                       # ASCII 按键；中文剪贴板 + Ctrl+V
-getScreenSize() -> {width, height}                # 屏幕像素
+getScreenSize() -> String JSON                    # {width, height} 屏幕像素
 ```
+
+> 截图回调机制：JS 函数传 @JavascriptInterface String 参数在 WebView 不可靠
+> （回调函数 toString 后无法保留闭包，且部分版本转出 "undefined" 导致
+> `(undefined)(...)` 报错）。改用同步返回 JSON，经 CountDownLatch 等待主线程完成。
 
 ## display.html 集成
 
@@ -23,7 +28,7 @@ getScreenSize() -> {width, height}                # 屏幕像素
 截图链(captureHtmlShot):
     if mediaHtml 隐藏 -> mode='none'
     if nativeBridge 可用:
-        shot = await shotWithNativeBridge()       # mode='native'
+        shot = await shotWithNativeBridge()       # 同步 takeScreenshot() 解析 JSON, mode='native'
         if shot: return
     # 否则走现有 html-to-image → gdm → 兜底
 
