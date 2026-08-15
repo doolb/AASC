@@ -1386,6 +1386,95 @@
             }
         }
 
+        // .mhtml（MIME 打包网页）转纯 HTML：提取主文档，内嵌资源转为 data: URI。
+        // Chromium 对 .mhtml 渲染支持差（直接导航都会 ERR_ABORTED），必须转换后用 srcdoc 渲染
+        // quoted-printable 解码为字节数组（=XX 十六进制、行尾 = 软换行）
+        function qpToBytes(str) {
+            const decoded = str.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+            return Uint8Array.from(decoded, c => c.charCodeAt(0));
+        }
+
+        function decodePartBody(body, encoding, charset) {
+            if (encoding === 'base64') {
+                const bytes = Uint8Array.from(atob(body.replace(/\s/g, '')), c => c.charCodeAt(0));
+                return new TextDecoder(charset === 'gbk' || charset === 'gb2312' ? 'gbk' : 'utf-8').decode(bytes);
+            }
+            if (encoding === 'quoted-printable') {
+                const bytes = qpToBytes(body);
+                return new TextDecoder(charset === 'gbk' || charset === 'gb2312' ? 'gbk' : 'utf-8').decode(bytes);
+            }
+            return body;
+        }
+
+        function mhtmlToHtml(text) {
+            const boundaryMatch = text.match(/^--([^\r\n]+)/m);
+            if (!boundaryMatch) return null;
+            const boundary = boundaryMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const parts = text.split(new RegExp('--' + boundary));
+            if (parts.length < 2) return null;
+
+            let main = null;
+            const resources = new Map();
+
+            for (let i = 1; i < parts.length; i++) {
+                const part = parts[i];
+                if (!part || part.trim() === '' || part.trim() === '--') continue;
+                const headerEnd = part.indexOf('\r\n\r\n');
+                const bodyStart = headerEnd === -1 ? part.indexOf('\n\n') : headerEnd;
+                if (bodyStart === -1) continue;
+                const headersText = part.slice(0, bodyStart);
+                const body = part.slice(bodyStart + (headerEnd === -1 ? 2 : 4)).replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
+                const headers = {};
+                headersText.split(/\r?\n/).forEach(line => {
+                    const idx = line.indexOf(':');
+                    if (idx > 0) headers[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim();
+                });
+                const ctype = headers['content-type'] || 'text/html';
+                const encoding = (headers['content-transfer-encoding'] || '').toLowerCase();
+                const charsetMatch = ctype.match(/charset=([^;]+)/i);
+                const charset = charsetMatch ? charsetMatch[1].trim() : 'utf-8';
+
+                if (ctype.startsWith('text/html')) {
+                    main = decodePartBody(body, encoding, charset);
+                } else {
+                    const loc = headers['content-location'] || headers['content-id'] || '';
+                    if (loc) {
+                        const clean = loc.replace(/^cid:/i, '').replace(/^<|>$/g, '').split('/').pop();
+                        const mime = ctype.split(';')[0].trim();
+                        let data;
+                        if (encoding === 'quoted-printable') {
+                            // QP 解码后转回 base64（data URI 用）
+                            const bytes = qpToBytes(body);
+                            let bin = '';
+                            bytes.forEach(b => { bin += String.fromCharCode(b); });
+                            data = btoa(bin);
+                        } else if (encoding === 'base64') {
+                            data = body.replace(/\s/g, '');
+                        } else {
+                            data = btoa(unescape(encodeURIComponent(body)));
+                        }
+                        resources.set(clean, { mime: mime, data: data });
+                    }
+                }
+            }
+            if (main === null) return null;
+
+            // 重写资源引用为 data: URI（src/href/style url()，支持 cid: 引用）
+            const findResource = (loc) => {
+                const clean = loc.replace(/^cid:/i, '').replace(/^<|>$/g, '').split('?')[0].split('/').pop();
+                return resources.get(clean) || resources.get(loc);
+            };
+            main = main.replace(/(src|href)=["']([^"']+)["']/gi, (m, attr, loc) => {
+                const r = findResource(loc);
+                return r ? attr + '="data:' + r.mime + ';base64,' + r.data + '"' : m;
+            });
+            main = main.replace(/url\(["']?([^"')]+)["']?\)/gi, (m, loc) => {
+                const r = findResource(loc);
+                return r ? 'url("data:' + r.mime + ';base64,' + r.data + '")' : m;
+            });
+            return main;
+        }
+
         // HTML 媒体滚动控制器：分页式 / 平滑 / 循环
         let htmlScrollState = null;
 
@@ -1508,7 +1597,20 @@
                 let mediaName = data.fileName || 'HTML内容';
                 if (data.type === 'url') {
                     mediaHtml.srcdoc = '';
-                    mediaHtml.src = data.url;
+                    if (/\.mhtml?$/i.test(data.url)) {
+                        // .mhtml 浏览器无法直接渲染：fetch 后转纯 HTML 用 srcdoc 显示
+                        fetch(data.url, { credentials: 'same-origin' })
+                            .then(r => r.text())
+                            .then(text => {
+                                const html = mhtmlToHtml(text);
+                                mediaHtml.srcdoc = html || '<p style="color:#fff;padding:20px">无法解析该 .mhtml 文件</p>';
+                            })
+                            .catch(() => {
+                                mediaHtml.srcdoc = '<p style="color:#fff;padding:20px">加载 .mhtml 失败</p>';
+                            });
+                    } else {
+                        mediaHtml.src = data.url;
+                    }
                     const urlParts = data.url.split('/');
                     mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || mediaName;
                 } else {

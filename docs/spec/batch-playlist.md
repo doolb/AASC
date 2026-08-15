@@ -164,6 +164,25 @@ playCurrentItem():
     item = playlist[index]
     构建 mediaData (url 或 base64 类型)
     showMedia(mediaData)
+
+showMedia 的 html 媒体分支（display.html）:
+    隐藏 img/video，显示 iframe#mediaHtml（铺满、pointer-events:none）
+    mediaType === 'html':
+        url 且扩展名 .mhtml:
+            // Chromium 无法直接渲染 mhtml（导航 ERR_ABORTED），需转换
+            fetch(url) -> mhtmlToHtml() -> iframe.srcdoc = 转换后 HTML
+        url 其他: iframe.src = url
+        base64: 解码 -> iframe.srcdoc
+    onload -> startHtmlScroll(iframe, htmlScroll)（分页/平滑/循环滚动）
+    temp 上报不含宽高
+
+mhtmlToHtml(text):
+    解析 multipart/related boundary
+    各 part:
+        content-type text/html -> 主文档（base64/quoted-printable 解码，charset 支持 utf-8/gbk）
+        其他 part（Content-Location/Content-ID）-> 资源表:
+            解码后转 base64 data URI
+    主文档引用重写: src/href/url() 与资源表匹配（支持 cid: 前缀）-> data: URI
     如果 mediaType === 'video':
         mediaVideo.loop = false
         添加一次性 ended 监听: 移除监听 -> timer = setTimeout(next, interval)

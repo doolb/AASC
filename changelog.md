@@ -78,6 +78,14 @@
 
 ### 修复
 
+- ✅ [2026-08-15] 修复 .mhtml 黑屏（显示端转换方案）
+  - 根因：Chromium 内核（Chrome/Edge）对 .mhtml 渲染支持差，直接导航都 ERR_ABORTED，iframe 加载必然黑屏（Content-Type 修复无效）
+  - 修复：显示端 html 分支检测 .mhtml URL → fetch 内容 → 前端 mhtmlToHtml 解析（multipart/related 分 part、base64/quoted-printable 解码、charset utf-8/gbk、资源引用重写为 data: URI，支持 cid: 引用）→ srcdoc 渲染
+  - 验证：puppeteer 实测 — 标题正确、31/31 图片加载、scrollHeight 4008 可滚动
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/display.html
+    - docs/spec/batch-playlist.md
+
 - ✅ [2026-08-15] 修复 .mhtml 黑屏（Content-Type 为 octet-stream 浏览器不渲染）
   - 根因：express.static 对 .mhtml 返回 application/octet-stream，浏览器当二进制下载处理，iframe 黑屏
   - 修复：新增 staticWithMhtmlMime 静态路由 helper（.mhtml → Content-Type: message/rfc822），应用于 /uploads、媒体库静态路由、动态注册路由三处
