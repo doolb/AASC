@@ -214,15 +214,21 @@ class LocalProvider extends MediaLibraryProvider {
         return fs.createReadStream(fullPath);
     }
 
+    // 路径分段编码：encodeURIComponent 会把 / 编成 %2F，express.static 不解码导致子目录 404
+    _encodePath(filePath) {
+        return filePath.split('/').map(seg => encodeURIComponent(seg)).join('/');
+    }
+
     getPublicUrl(filePath) {
         const localIP = this.getLocalIP();
         const port = this.getPort();
         const protocol = this.isHttps() ? 'https' : 'http';
         const cleanPath = filePath.replace(/^\//, '');
+        const encoded = this._encodePath(cleanPath);
         if (this.isUploadsDir) {
-            return `${protocol}://${localIP}:${port}/uploads/${encodeURIComponent(cleanPath)}`;
+            return `${protocol}://${localIP}:${port}/uploads/${encoded}`;
         }
-        return `${protocol}://${localIP}:${port}${this.routePrefix}/${encodeURIComponent(cleanPath)}`;
+        return `${protocol}://${localIP}:${port}${this.routePrefix}/${encoded}`;
     }
     
     getRoutePrefix() {

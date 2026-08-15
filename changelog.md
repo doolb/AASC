@@ -78,6 +78,15 @@
 
 ### 修复
 
+- ✅ [2026-08-15] 修复子目录媒体文件 404（html 显示白屏）
+  - 根因：`LocalProvider.getPublicUrl` 用 `encodeURIComponent` 编码整个路径，`/` 被编成 `%2F`，express.static 不解码 encoded slash 返回 404；html 文件位于 uploads/html/ 子目录故白屏（图片/视频在子目录同样受影响）
+  - 修复：路径按 `/` 分段编码（每段 encodeURIComponent，保留分隔符），uploads 与 /media/{id} 两个分支统一处理
+  - 验证：新增 getPublicUrl 单测（断言不含 %2F），curl 实测 404 → 200
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/media/media-library-app-service.js
+    - tests/media-library-app-service.test.js
+    - docs/spec/media-library.md
+
 - ✅ [2026-08-15] 修复整点报时「启用」开关设置后不生效
   - 根因：`TaskPanel._onWidgetSaveConfig` 收集 widget 字段时只处理 select/number，漏掉 checkbox，`enabled` 从不发送到服务端
   - 修复：补充 checkbox 收集（el.checked），并限定在容器内收集，避免多实例字段互相污染

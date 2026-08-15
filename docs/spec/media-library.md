@@ -77,11 +77,16 @@
         如果目录存在:
             递归删除目录
     
+    _encodePath(filePath):
+        按 / 分段，每段 encodeURIComponent，再以 / 拼接
+        （不可对整段路径编码：/ 会变成 %2F，express.static 不解码导致子目录 404）
+
     getPublicUrl(filePath):
+        encoded = _encodePath(filePath 去掉开头的 /)
         如果 basePath === uploads 目录:
-            返回 "http://{本地IP}:{端口}/uploads/{filePath}"
+            返回 "http://{本地IP}:{端口}/uploads/{encoded}"
         否则:
-            返回 "http://{本地IP}:{端口}/media/{id}/{filePath}"
+            返回 "http://{本地IP}:{端口}/media/{id}/{encoded}"
     
     getRoutePrefix():
         返回 "/media/{id}"
