@@ -17,6 +17,25 @@
 
 ### 新增
 
+- ✅ [2026-08-15] APK 显示端体验优化 + npm 构建上传命令
+  - MainActivity：启动即全屏（hideSystemUi 移到 onCreate）+ onWindowFocusChanged / 系统 UI 变化监听保持沉浸，系统栏弹出后自动收回
+  - DisplayWebView：textZoom=100 + useWideViewPort=false + loadWithOverviewMode=false 归一化渲染，浮动文字大小与浏览器一致（WebView 默认渲染偏大）
+  - display.css：mediaHtml iframe 白底，透明 body 的 mhtml 内容不再黑底（自带背景页面不受影响）
+  - display.html mhtmlToHtml 修复：资源 key 剥离查询串（与 findResource 一致），带 `?ulf` 的 CSS/图片资源此前匹配不上未被内嵌 → 外部 CSS 加载失败，页面样式不渲染
+  - package.json 新增：build:apk（gradlew 构建）、upload:apk（构建 + 上传服务器 res/uploads + adb 安装到已连接设备）
+  - src/scripts/apk-deploy.js（新增）：上传 + 多设备 adb 安装
+  - Gradle wrapper 提交 + android-display .gitignore
+  - 真机验证：mhtml 原生截图背景白（非黑）、论坛 CSS 正常渲染
+  - 改动文件：
+    - src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt
+    - src/apps/android-display/app/src/main/java/com/aasc/display/DisplayWebView.kt
+    - src/apps/web-mediacenter/ui/public/css/display.css
+    - src/apps/web-mediacenter/ui/public/display.html
+    - package.json
+    - src/scripts/apk-deploy.js（新增）
+    - src/apps/android-display/gradle/ + gradlew（新增）
+    - .gitignore
+
 - ✅ [2026-08-15] Android APK 显示端（跨域控制增强）
   - APK（Kotlin/Gradle, src/apps/android-display/）：WebView 加载服务器 /display 页 + JavascriptInterface 原生桥
   - 原生桥（window.NativeDisplay）：WebView 位图截图（真实像素，跨域/外站图片可截，无授权弹窗）+ 无障碍真实触摸注入 + WebView 真实按键（跨域 iframe 同样生效）+ 中文剪贴板粘贴
