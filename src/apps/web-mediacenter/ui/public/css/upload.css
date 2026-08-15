@@ -723,13 +723,14 @@ input[type="range"]::-webkit-slider-thumb:active {
     background: rgba(76, 175, 80, 0.08);
 }
 
-/* html 媒体裁剪框的占位区域（模拟 iframe 网页区域，表示铺满屏幕的范围） */
+/* html 媒体裁剪框的占位区域（模拟 16:9 屏幕/iframe 形状，居中显示）
+   旋转 90/270° 时切换为 9:16 竖矩形并旋转，与显示端 iframe 宽高互换一致 */
 .crop-preview-placeholder {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: 50%;
+    left: 50%;
     width: 100%;
-    height: 100%;
+    height: 56.25%;
     border: 2px dashed rgba(255, 255, 255, 0.55);
     background: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
@@ -738,6 +739,23 @@ input[type="range"]::-webkit-slider-thumb:active {
     display: flex;
     align-items: center;
     justify-content: center;
+    transform: translate(-50%, -50%);
+}
+
+.crop-preview-placeholder.rotate-90 {
+    width: 56.25%;
+    height: 100%;
+    transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.crop-preview-placeholder.rotate-180 {
+    transform: translate(-50%, -50%) rotate(180deg);
+}
+
+.crop-preview-placeholder.rotate-270 {
+    width: 56.25%;
+    height: 100%;
+    transform: translate(-50%, -50%) rotate(270deg);
 }
 
 .crop-preview-placeholder-text {
@@ -747,6 +765,7 @@ input[type="range"]::-webkit-slider-thumb:active {
     background: rgba(0, 0, 0, 0.35);
     padding: 6px 14px;
     border-radius: 6px;
+    white-space: nowrap;
 }
 
 .crop-preview-media.rotate-90 {

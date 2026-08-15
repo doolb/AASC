@@ -181,10 +181,12 @@ applyCrop 的 html 分支（applyHtmlCrop）:
     旋转 90/270 时宽高互换（100vh × 100vw）
 
 上传端裁剪预览（crop.js）:
-    showPreview html 分支: 不预览 html 内容，显示虚线占位框（#cropPreviewPlaceholder，
-        表示 iframe 铺满范围）+ 初始化裁剪框为全屏（data={x:0,y:0,width:100,height:100}），
-        拖拽实时缩放显示端；非 html 媒体时隐藏占位框
-    裁剪框拖拽/缩放基于容器区域（媒体不可见时 fallback 容器 rect）
+    showPreview html 分支: 不预览 html 内容，显示占位框（#cropPreviewPlaceholder，
+        16:9 矩形模拟屏幕；90/270° 切换 9:16 竖矩形并 rotate，与显示端宽高互换一致）
+        + 初始化裁剪框为全屏（data={x:0,y:0,width:100,height:100}），拖拽实时缩放显示端
+    _applyRotationClass: 旋转类统一作用于 img/video/占位框
+    裁剪框拖拽/缩放: html 时基于占位框 rect（媒体不可见且占位框显示时 fallback 占位框），
+        其他情况 fallback 容器 rect
     mediaType === 'html':
         url 且扩展名 .mhtml:
             // Chromium 无法直接渲染 mhtml（导航 ERR_ABORTED），需转换

@@ -98,14 +98,19 @@ const Crop = {
         this._log('[Crop] updateBox: mediaRect=', mediaRect.width, 'x', mediaRect.height, 'containerRect=', containerRect.width, 'x', containerRect.height);
 
         if (mediaRect.width === 0 || mediaRect.height === 0) {
-            // 无媒体（临时模式占位提示等场景）：以容器为媒体区域，裁剪框仍可拖动
-            this._log('[Crop] updateBox: 媒体尺寸为0，以容器为媒体区域');
-            mediaRect = {
-                left: containerRect.left,
-                top: containerRect.top,
-                width: containerRect.width,
-                height: containerRect.height
-            };
+            // 无媒体（临时模式占位提示等场景）：html 以占位框为媒体区域（适配旋转），
+            // 其他情况以容器为媒体区域，裁剪框仍可拖动
+            this._log('[Crop] updateBox: 媒体尺寸为0，以' + (this.placeholder && this.placeholder.style.display !== 'none' ? '占位框' : '容器') + '为媒体区域');
+            if (this.placeholder && this.placeholder.style.display !== 'none') {
+                mediaRect = this.placeholder.getBoundingClientRect();
+            } else {
+                mediaRect = {
+                    left: containerRect.left,
+                    top: containerRect.top,
+                    width: containerRect.width,
+                    height: containerRect.height
+                };
+            }
         }
         
         const offsetX = mediaRect.left - containerRect.left;
@@ -138,20 +143,20 @@ const Crop = {
         document.querySelectorAll('[data-rotation]').forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.rotation) === rotation);
         });
-        
-        this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
-        this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
 
-        if (rotation === 90) {
-            this.previewImg.classList.add('rotate-90');
-            this.previewVideo.classList.add('rotate-90');
-        } else if (rotation === 180) {
-            this.previewImg.classList.add('rotate-180');
-            this.previewVideo.classList.add('rotate-180');
-        } else if (rotation === 270) {
-            this.previewImg.classList.add('rotate-270');
-            this.previewVideo.classList.add('rotate-270');
-        }
+        this._applyRotationClass(rotation);
+    },
+
+    // 旋转类统一应用于预览媒体与 html 占位框
+    _applyRotationClass(rotation) {
+        const els = [this.previewImg, this.previewVideo];
+        if (this.placeholder) els.push(this.placeholder);
+        els.forEach(el => {
+            el.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+            if (rotation === 90) el.classList.add('rotate-90');
+            else if (rotation === 180) el.classList.add('rotate-180');
+            else if (rotation === 270) el.classList.add('rotate-270');
+        });
     },
 
     setData(data) {
@@ -160,29 +165,17 @@ const Crop = {
     
     applyRotation(rotation) {
         this.rotation = rotation;
-        
+
         document.querySelectorAll('[data-rotation]').forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.rotation) === rotation);
         });
-        
-        this.previewImg.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
-        this.previewVideo.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
 
-        if (rotation === 90) {
-            this.previewImg.classList.add('rotate-90');
-            this.previewVideo.classList.add('rotate-90');
-        } else if (rotation === 180) {
-            this.previewImg.classList.add('rotate-180');
-            this.previewVideo.classList.add('rotate-180');
-        } else if (rotation === 270) {
-            this.previewImg.classList.add('rotate-270');
-            this.previewVideo.classList.add('rotate-270');
-        }
+        this._applyRotationClass(rotation);
 
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('rotate', rotation);
         }
-        
+
         setTimeout(() => {
             this.recalculateSize();
         }, 350);
