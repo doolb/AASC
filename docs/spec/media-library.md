@@ -392,6 +392,10 @@ GET /api/media-libraries/:id/proxy/*
         调用 loadContent(parentPath)
     
     playMedia(url, mediaType):
+        如果 mediaType === 'html':
+            弹「HTML 发送设置」对话框（滚动方式 + 参数）
+            确认后跳过 Crop.showPreview，直接 sendMedia({type:'url', url, mediaType:'html', htmlScroll})
+            返回
         调用 Crop.showPreview(url, mediaType)
         调用 WebSocketManager.sendMedia({type, url, mediaType})
     
