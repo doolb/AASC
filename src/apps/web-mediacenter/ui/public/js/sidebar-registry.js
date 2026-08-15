@@ -226,7 +226,7 @@
             var data = this._widgetData[item.taskName] || {};
 
             if (item.widget.html) {
-              wc.innerHTML = this._renderWidgetHTML(item.widget.html, instanceId, data);
+              wc.innerHTML = this._renderWidgetHTML(item.widget.html, instanceId, data, wc.id);
             }
             section.appendChild(wc);
           }
@@ -238,13 +238,19 @@
 
     // ─── Widget 渲染 ───
 
-    _renderWidgetHTML: function(html, instanceId, data) {
+    _renderWidgetHTML: function(html, instanceId, data, containerId) {
       var result = html;
       result = result.replace(/\{\{instanceId\}\}/g, instanceId);
       result = result.replace(/\{\{(\w+)\}\}/g, function(match, key) {
         var val = data[key] !== undefined ? data[key] : '--';
         return typeof val === 'string' ? val : JSON.stringify(val);
       });
+      // 独立面板的保存配置按钮带上当前容器 id，
+      // 避免与任务面板同时存在时收集到任务面板的字段
+      if (containerId) {
+        result = result.replace(/TaskPanel\._onWidgetSaveConfig\('([^']*)'\)/g,
+          "TaskPanel._onWidgetSaveConfig('$1','" + containerId + "')");
+      }
       return result;
     },
 
@@ -264,7 +270,7 @@
       var activeInst = this._activeInstances.get(taskName);
       var instanceId = activeInst ? activeInst.instanceId : taskName;
 
-      widgetEl.innerHTML = this._renderWidgetHTML(item.widget.html, instanceId, payload.data);
+      widgetEl.innerHTML = this._renderWidgetHTML(item.widget.html, instanceId, payload.data, widgetEl.id);
     },
 
     // ─── WebSocket 流式输出 ───

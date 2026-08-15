@@ -80,10 +80,12 @@
 
 - ✅ [2026-08-15] 修复整点报时「启用」开关设置后不生效
   - 根因：`TaskPanel._onWidgetSaveConfig` 收集 widget 字段时只处理 select/number，漏掉 checkbox，`enabled` 从不发送到服务端
-  - 修复：补充 checkbox 收集（el.checked），并限定在 `#task-widget-{instanceId}` 容器内收集，避免多实例字段互相污染
-  - 影响：time.announce 及所有自定义 widget 的 toggle 字段保存配置
+  - 修复：补充 checkbox 收集（el.checked），并限定在容器内收集，避免多实例字段互相污染
+  - 独立侧边栏面板（voiceService > 整点报时）：widget 渲染在 `#sidebar-widget-{taskName}` 容器，保存按钮渲染时替换为携带容器 id 的调用，任务面板与独立面板同时存在时各收集各的字段，互不干扰
+  - 影响：time.announce 及所有自定义 widget 的 toggle 字段保存配置（任务面板 + 独立面板）
   - 改动文件：
     - src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - src/apps/web-mediacenter/ui/public/js/sidebar-registry.js
     - docs/spec/remote-task-system.md
 
 - ✅ [2026-07-06] 修复复合指令（chat-commands.json）天气查询携带完整历史记录

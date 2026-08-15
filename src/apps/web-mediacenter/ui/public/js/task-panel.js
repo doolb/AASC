@@ -2588,9 +2588,16 @@
       this._send({ type: 'task:widget_action', payload: { instanceId: instanceId, action: action } });
     },
 
-    _onWidgetSaveConfig: function(instanceId) {
-      // 限定当前实例容器，避免收集到其他 widget 的字段
-      var container = document.getElementById('task-widget-' + instanceId);
+    _onWidgetSaveConfig: function(instanceId, containerId) {
+      // 优先使用调用方指定的容器（独立侧边栏面板），否则按 instanceId 查找任务面板容器，
+      // 再回退到 sidebar-widget-{taskName}（无活跃实例时 instanceId 即 taskName）
+      var container = containerId ? document.getElementById(containerId) : null;
+      if (!container) container = document.getElementById('task-widget-' + instanceId);
+      if (!container) {
+        var inst = this.instances.get(instanceId);
+        var taskName = inst && inst.taskName;
+        if (taskName) container = document.getElementById('sidebar-widget-' + taskName);
+      }
       if (!container) return;
       var els = container.querySelectorAll('.task-widget-field');
       var params = {};

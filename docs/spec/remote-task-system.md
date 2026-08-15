@@ -254,14 +254,23 @@ widget: {
   -> web-socket-handler -> taskManager.handleWidgetAction()
   -> 服务 onWidgetAction('test', handler)
 
-控制端点击"保存配置"（_onWidgetSaveConfig）
-  仅收集当前实例容器 #task-widget-{instanceId} 内 .task-widget-field 字段:
+控制端点击"保存配置"（_onWidgetSaveConfig(instanceId, containerId?)）
+  容器解析顺序:
+    1. 调用方指定容器（独立侧边栏面板渲染时按钮已替换为
+       _onWidgetSaveConfig(instanceId, 'sidebar-widget-{taskName}')）
+    2. #task-widget-{instanceId}（任务面板）
+    3. #sidebar-widget-{taskName}（instances 映射回退）
+  仅收集命中容器内 .task-widget-field 字段:
     checkbox -> el.checked（布尔值）
     number   -> parseInt(el.value) || 0
     select   -> parseInt(el.value)
   -> task:widget_action { instanceId, action: 'updateConfig', params }
   -> taskManager.handleWidgetAction() -> 服务 onWidgetAction('updateConfig', params)
   更新运行配置（config.enabled 等）并持久化到任务索引（taskIO.updateIndex）
+
+独立侧边栏面板（sidebar-registry 渲染 widget 到 #sidebar-widget-{taskName}）:
+  渲染时把保存按钮替换为 _onWidgetSaveConfig(instanceId, 容器id)，
+  使任务面板与独立面板同时存在时各收集各的字段，互不干扰
 ```
 
 ## 消息类型
