@@ -4,6 +4,29 @@
 
 ### 新增
 
+- ✅ [2026-08-15] 新增 HTML 媒体类型
+  - 媒体库识别 .html/.htm 文件为 html 类型；批量播放支持扫描 html 文件
+  - 三个发送入口：媒体库文件点击（弹滚动设置）、工具栏「发送 HTML」粘贴代码（临时发送或保存到媒体库）、裁剪框拖入 html 文件临时发送
+  - 显示端 iframe 全屏纯展示（pointer-events: none，无裁剪），同源控制滚动
+  - 滚动模式发送时选择：分页式（每屏停 3/5/8 秒到底停止）/ 平滑（慢/中/快匀速到底停止）/ 循环（平滑滚到底回顶循环）；内容不足一屏不滚动
+  - 批量播放 html 项按间隔切换（默认分页 5 秒），暂停冻结滚动、恢复继续
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/media/media-library-app-service.js
+    - src/apps/web-mediacenter/modules/media/playlist-app-service.js
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - src/apps/web-mediacenter/ui/public/js/media-library.js
+    - src/apps/web-mediacenter/ui/public/js/websocket.js
+    - src/apps/web-mediacenter/ui/public/js/crop.js
+    - src/apps/web-mediacenter/ui/public/display.html
+    - src/apps/web-mediacenter/ui/public/css/display.css
+    - src/apps/web-mediacenter/ui/public/upload.html
+    - tests/media-library-app-service.test.js (新增)
+    - tests/playlist-app-service.test.js
+    - docs/design/html-media.md (新增)
+    - docs/spec/media-library.md
+    - docs/spec/batch-playlist.md
+    - docs/task/2026-08-15_HTML媒体类型.md (新增)
+
 - ✅ [2026-08-15] 显示端画面填充新增「铺满」模式（cover）
   - 媒体等比放大覆盖整个屏幕，超出部分居中裁切（旋转时自动计算方向）
   - 控制端显示控制/快捷控制面板新增「铺满」按钮
