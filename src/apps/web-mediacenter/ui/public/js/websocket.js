@@ -60,10 +60,14 @@ const WebSocketManager = {
                 window.AsrDevice.updateUI();
             }
         } else if (data.type === 'playlistProgress') {
+            // 只处理当前选中显示端的播放列表进度
+            if (data.displayId && data.displayId !== window.currentDisplayId) return;
             if (window.MediaLibrary) {
                 window.MediaLibrary.renderPlaylistPanel(data);
             }
         } else if (data.type === 'tempMediaInfo') {
+            // 只处理当前选中显示端的临时媒体信息
+            if (data.displayId && data.displayId !== window.currentDisplayId) return;
             if (window.MediaLibrary) {
                 window.MediaLibrary.handleTempMediaInfo(data);
             }
@@ -173,6 +177,8 @@ const WebSocketManager = {
                 if (label) label.textContent = pct + '%';
             }
         } else if (data.type === 'htmlProgress') {
+            // 只处理当前选中显示端的 html 播放进度
+            if (data.displayId && data.displayId !== window.currentDisplayId) return;
             // html 播放进度：进度条显示滚动比例，文本显示缩放倍数 + 滚动比例
             console.log('[WS] << htmlProgress scrollProgress:', data.scrollProgress, 'scale:', data.scale, 'mode:', data.mode);
             window.currentHtmlPlaying = true;

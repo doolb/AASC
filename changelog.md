@@ -4,6 +4,16 @@
 
 ### 新增
 
+- ✅ [2026-08-15] 任务回传携带来源显示端 displayId + 控制端媒体回传按选中显示端过滤
+  - 服务端转发 task:progress/task:log/task:result/task:widget_update/task:stream 到控制端时从实例补 displayId（inst.displayId || inst.targetInfo.displayId），标识回传来源显示端
+  - 控制端任务面板 _updateProgress/_onLog/_onStream/_onResult 将 payload.displayId 记录到实例（inst.displayId），仅作来源标记，任务更新仍按 instanceId 全局处理，与选中显示端无感
+  - 控制端 websocket.js 补齐 htmlProgress/playlistProgress/tempMediaInfo 的 displayId 过滤（只处理当前选中显示端，与 videoProgress/controlScreenshot 对齐）
+  - 改动文件：
+    - src/apps/server/modules/task-engine/web-socket-handler.js
+    - src/apps/web-mediacenter/ui/public/js/task-panel.js
+    - src/apps/web-mediacenter/ui/public/js/websocket.js
+    - docs/spec/remote-task-system.md
+
 - ✅ [2026-08-15] 新增 HTML 媒体类型
   - 媒体库识别 .html/.htm 文件为 html 类型；批量播放支持扫描 html 文件
   - 三个发送入口：媒体库文件点击（弹滚动设置）、媒体面板「发送 HTML」选择本地 .html 文件（临时发送或保存到媒体库）、裁剪框拖入 html 文件临时发送

@@ -1376,6 +1376,7 @@
         inst.stage = payload.stage || inst.stage;
         inst.progress = payload.progress != null ? payload.progress : inst.progress;
         if (payload.target) inst.target = payload.target;
+        if (payload.displayId) inst.displayId = payload.displayId;
         if (this.currentTab === 'monitor') this._renderMonitor();
       }
     },
@@ -1390,11 +1391,13 @@
           stage: 'running',
           progress: 0,
           timestamp: Date.now(),
-          logs: []
+          logs: [],
+          displayId: payload.displayId || null
         });
         inst = this.instances.get(payload.instanceId);
       }
       if (inst) {
+        if (payload.displayId) inst.displayId = payload.displayId;
         if (!inst.logs) inst.logs = [];
         inst.logs.push({
           stream: payload.stream || 'stdout',
@@ -1417,11 +1420,13 @@
           progress: 50,
           timestamp: Date.now(),
           logs: [],
-          _streamText: ''
+          _streamText: '',
+          displayId: payload.displayId || null
         });
         inst = this.instances.get(payload.instanceId);
       }
       if (inst) {
+        if (payload.displayId) inst.displayId = payload.displayId;
         if (!inst._streamText) inst._streamText = '';
         inst._streamText += payload.chunk || '';
         if (this.currentTab === 'monitor') this._renderMonitor();
@@ -1438,6 +1443,7 @@
           inst.status = payload.success ? 'completed' : 'failed';
           inst.completedAt = Date.now();
         }
+        if (payload.displayId) inst.displayId = payload.displayId;
         inst.result = payload;
         this._updateMonitorBadge();
         if (this.currentTab === 'monitor') this._renderMonitor();

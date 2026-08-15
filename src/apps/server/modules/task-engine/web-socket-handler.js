@@ -408,7 +408,8 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
   taskManager.on('progress', (instanceId, stage, progress) => {
     const inst = taskManager.getInstance(instanceId);
-    const payload = { taskName: inst ? inst.taskName : null, instanceId, stage, progress };
+    const displayId = inst ? (inst.displayId || (inst.targetInfo && inst.targetInfo.displayId)) : null;
+    const payload = { taskName: inst ? inst.taskName : null, instanceId, stage, progress, displayId };
     // 当 progress 是对象且包含 status 字段时，传递到控制端用于状态更新
     if (progress && typeof progress === 'object' && progress.status) {
       payload.status = progress.status;
@@ -456,9 +457,10 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
   taskManager.on('result', (instanceId, result) => {
     const inst = taskManager.getInstance(instanceId);
     console.log('[WS] << task:result:', instanceId, result.success ? 'success' : 'fail');
+    const displayId = inst ? (inst.displayId || (inst.targetInfo && inst.targetInfo.displayId)) : null;
     sendToControl({
       type: 'task:result',
-      payload: { taskName: inst ? inst.taskName : null, instanceId, ...result },
+      payload: { taskName: inst ? inst.taskName : null, instanceId, ...result, displayId },
     });
 
     // 已完成/失败的一次性任务：通知下游显示端移除该源
@@ -484,25 +486,28 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
   taskManager.on('log', (instanceId, stream, level, message) => {
     const inst = taskManager.getInstance(instanceId);
     console.log('[WS] << task:log:', instanceId, stream, level, message.substring(0, 80));
+    const displayId = inst ? (inst.displayId || (inst.targetInfo && inst.targetInfo.displayId)) : null;
     sendToControl({
       type: 'task:log',
-      payload: { taskName: inst ? inst.taskName : null, instanceId, stream, level, message, timestamp: Date.now() },
+      payload: { taskName: inst ? inst.taskName : null, instanceId, stream, level, message, timestamp: Date.now(), displayId },
     });
   });
 
   taskManager.on('widgetUpdate', (instanceId, data) => {
     const inst = taskManager.getInstance(instanceId);
+    const displayId = inst ? (inst.displayId || (inst.targetInfo && inst.targetInfo.displayId)) : null;
     sendToControl({
       type: 'task:widget_update',
-      payload: { instanceId, taskName: inst ? inst.taskName : null, data }
+      payload: { instanceId, taskName: inst ? inst.taskName : null, data, displayId }
     });
   });
 
   taskManager.on('stream', (instanceId, { chunk, index, done }) => {
     const inst = taskManager.getInstance(instanceId);
+    const displayId = inst ? (inst.displayId || (inst.targetInfo && inst.targetInfo.displayId)) : null;
     sendToControl({
       type: 'task:stream',
-      payload: { instanceId, taskName: inst ? inst.taskName : null, chunk, index: index || 0, done: done || false }
+      payload: { instanceId, taskName: inst ? inst.taskName : null, chunk, index: index || 0, done: done || false, displayId }
     });
   });
 }

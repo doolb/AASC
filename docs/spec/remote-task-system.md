@@ -165,11 +165,13 @@ TaskManager 继承 EventEmitter，主要事件：
 web-socket-handler 将上述事件桥接到控制端：
 
 ```
-progress     -> task:progress       { taskName, instanceId, stage, progress }
-log          -> task:log            { taskName, instanceId, stream, level, message, timestamp }
-result       -> task:result         { taskName, instanceId, success, data/error }
-widgetUpdate -> task:widget_update  { instanceId, data }
+progress     -> task:progress       { taskName, instanceId, stage, progress, displayId }
+log          -> task:log            { taskName, instanceId, stream, level, message, timestamp, displayId }
+result       -> task:result         { taskName, instanceId, success, data/error, displayId }
+widgetUpdate -> task:widget_update  { instanceId, data, displayId }
 ```
+
+桥接时统一从实例补 `displayId`（`inst.displayId || inst.targetInfo.displayId`），标识回传来源显示端；控制端仅作来源标记，任务更新按 instanceId 全局处理，与选中显示端无感。
 
 ## Widget 系统
 
