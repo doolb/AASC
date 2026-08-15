@@ -7,3 +7,10 @@ res/temp/
 src/native/malloc-trim/build/
 logs/
 src/apps/voice-display-node/run-task/
+
+# Android APK 显示端构建产物
+src/apps/android-display/.gradle/
+src/apps/android-display/build/
+src/apps/android-display/app/build/
+src/apps/android-display/local.properties
+src/apps/android-display/.kotlin/

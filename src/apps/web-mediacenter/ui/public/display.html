@@ -1495,7 +1495,8 @@
                 } else {
                     const loc = headers['content-location'] || headers['content-id'] || '';
                     if (loc) {
-                        const clean = loc.replace(/^cid:/i, '').replace(/^<|>$/g, '').split('/').pop();
+                        // 与 findResource 一致：剥离查询串（?xxx），否则带 ?ulf 的 CSS/图片资源 key 对不上
+                        const clean = loc.replace(/^cid:/i, '').replace(/^<|>$/g, '').split('?')[0].split('/').pop();
                         const mime = ctype.split(';')[0].trim();
                         let data;
                         if (encoding === 'quoted-printable') {

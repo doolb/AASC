@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node --openssl-legacy-provider --expose-gc src/apps/server/boot/server-app.js",
     "test:log-brain": "node src/scripts/run-log-brain-tests.js",
-    "stress:tts": "node src/scripts/tts-stress-test.js"
+    "stress:tts": "node src/scripts/tts-stress-test.js",
+    "build:apk": "cd src/apps/android-display && ANDROID_HOME=${ANDROID_HOME:-/opt/android-sdk} ./gradlew :app:assembleDebug",
+    "upload:apk": "npm run build:apk && node src/scripts/apk-deploy.js"
   },
   "dependencies": {
     "@marsaud/smb2": "^0.18.0",

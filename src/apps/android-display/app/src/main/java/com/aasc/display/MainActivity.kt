@@ -28,6 +28,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // 启动即全屏（不等连接）；系统栏弹出时自动收回
+        hideSystemUi()
+        window.decorView.setOnSystemUiVisibilityChangeListener { hideSystemUi() }
+
         configBar = findViewById(R.id.configBar)
         serverInput = findViewById(R.id.serverInput)
         webContainer = findViewById(R.id.webContainer)
@@ -43,6 +47,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 焦点回归时重贴全屏（沉浸式在交互后系统栏可能重新出现）
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemUi()
+    }
+
     private fun connect() {
         val input = serverInput.text.toString().trim()
         if (input.isEmpty()) {
@@ -50,7 +60,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val base = if (input.startsWith("http://") || input.startsWith("https://")) input else "https://$input"
-        val url = if (base.endsWith("/display")) base else "$base/display"
+        val displayPath = if (base.endsWith("/display")) base else "$base/display"
+        // 时间戳参数强制绕过 WebView HTTP 缓存（display.html 更新后 APK 重启即加载最新版）
+        val url = displayPath + (if (displayPath.contains("?")) "&" else "?") + "v=" + System.currentTimeMillis()
         getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", input).apply()
 
         hideSystemUi()

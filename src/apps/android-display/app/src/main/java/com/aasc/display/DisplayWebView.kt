@@ -14,6 +14,13 @@ class DisplayWebView(context: Context) : WebView(context) {
         settings.domStorageEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        // 禁用 HTTP 缓存：display.html 更新后 APK 重启即加载最新版（避免缓存旧版导致能力缺失）
+        settings.cacheMode = WebSettings.LOAD_NO_CACHE
+        // 文字/视口归一化：与浏览器渲染一致（WebView 默认 textZoom/wideViewPort 会使文字偏大）
+        settings.textZoom = 100
+        settings.useWideViewPort = false
+        settings.loadWithOverviewMode = false
+        settings.setSupportZoom(false)
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()
