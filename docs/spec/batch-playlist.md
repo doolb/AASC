@@ -197,6 +197,12 @@ applyCrop 的 html 分支（applyHtmlCrop）:
     htmlScroll 缺省/null 时沿用 currentHtmlScroll 记忆；指定则更新记忆
     temp 上报不含宽高
 
+handleControl 'play'（播放/暂停按钮）:
+    html 显示中: value=true → startHtmlScroll 恢复滚动（当前位置继续）;
+              value=false → stopHtmlScroll 暂停滚动（滚动位置保留）
+    其他: 视频 play/pause 照常
+进度上报定时器在 startHtmlScroll 启动 / stopHtmlScroll 清理（暂停时停止上报，恢复继续）
+
 handleControl 'htmlScroll'（控制端显示面板实时切换）:
     currentHtmlScroll = data.value
     如果 html 显示中: startHtmlScroll(mediaHtml, currentHtmlScroll) 立即重启滚动

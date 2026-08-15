@@ -1575,6 +1575,10 @@
 
         function startHtmlScroll(iframe, htmlScroll) {
             stopHtmlScroll();
+            // 进度上报定时器（暂停/恢复/切换统一管理）
+            if (!htmlProgressTimer) {
+                htmlProgressTimer = setInterval(reportHtmlProgress, 1000);
+            }
             const win = iframe.contentWindow;
             if (!win) return;
             const opts = htmlScroll || {};
@@ -1804,9 +1808,19 @@
                     
                 case 'play':
                     if (data.value === true) {
-                        mediaVideo.play().catch(e => console.log('播放被阻止'));
+                        if (mediaHtml.style.display !== 'none') {
+                            // html 模式：恢复滚动播放（从当前滚动位置继续）
+                            startHtmlScroll(mediaHtml, currentHtmlScroll);
+                        } else {
+                            mediaVideo.play().catch(e => console.log('播放被阻止'));
+                        }
                     } else {
-                        mediaVideo.pause();
+                        if (mediaHtml.style.display !== 'none') {
+                            // html 模式：暂停滚动（滚动位置保留）
+                            stopHtmlScroll();
+                        } else {
+                            mediaVideo.pause();
+                        }
                     }
                     break;
                     
