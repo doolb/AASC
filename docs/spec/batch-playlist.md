@@ -173,6 +173,7 @@ showMedia 的 html 媒体分支（display.html）:
     非 html 媒体分支: stopHtmlScroll + 隐藏 iframe（清空 src/srcdoc），html 切回图片/视频时清理
 
 applyCrop 的 html 分支（applyHtmlCrop）:
+    仅 currentFit === 'crop' 时生效；其他适配方式（contain/cover/height/width）还原 applyRotation 默认铺满
     默认全屏（crop≈100%×100% 且 x/y≈0）: 恢复 applyRotation 基准变换
     否则: scale = max(100/width, 100/height)
         transform = [居中平移] rotate(deg) translate(-cx%,-cy%) scale(s) translate(cx%,cy%)
@@ -180,8 +181,9 @@ applyCrop 的 html 分支（applyHtmlCrop）:
     旋转 90/270 时宽高互换（100vh × 100vw）
 
 上传端裁剪预览（crop.js）:
-    showPreview html 分支: 不预览 html 内容（无 iframe），仅初始化裁剪框为全屏
-        （data={x:0,y:0,width:100,height:100} + updateBox），拖拽实时缩放显示端
+    showPreview html 分支: 不预览 html 内容，显示虚线占位框（#cropPreviewPlaceholder，
+        表示 iframe 铺满范围）+ 初始化裁剪框为全屏（data={x:0,y:0,width:100,height:100}），
+        拖拽实时缩放显示端；非 html 媒体时隐藏占位框
     裁剪框拖拽/缩放基于容器区域（媒体不可见时 fallback 容器 rect）
     mediaType === 'html':
         url 且扩展名 .mhtml:

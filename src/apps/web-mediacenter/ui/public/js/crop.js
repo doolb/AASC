@@ -34,6 +34,10 @@ const Crop = {
         return document.getElementById('cropPreviewVideo');
     },
 
+    get placeholder() {
+        return document.getElementById('cropPreviewPlaceholder');
+    },
+
 
     // 当前显示的预览媒体元素
     _currentMedia() {
@@ -222,14 +226,19 @@ const Crop = {
     
     showPreview(url, mediaType, onReady) {
         if (mediaType === 'html') {
-            // HTML 媒体：不显示预览内容，仅初始化裁剪框（拖拽实时缩放显示端）
+            // HTML 媒体：占位框表示 iframe 区域，初始化裁剪框（拖拽实时缩放显示端）
             this.currentMedia = url;
             this.previewImg.style.display = 'none';
             this.previewVideo.style.display = 'none';
+            this.placeholder.style.display = 'block';
             this.data = { x: 0, y: 0, width: 100, height: 100 };
             this.box.style.display = 'block';
             this.updateBox();
             return;
+        }
+        // 非 html 媒体：隐藏 html 占位框
+        if (this.placeholder) {
+            this.placeholder.style.display = 'none';
         }
         // 新预览开始时移除临时模式数据丢失占位提示（并重置占位 key）
         if (window.MediaLibrary && window.MediaLibrary.removeTempPreviewPlaceholder) {

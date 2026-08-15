@@ -546,7 +546,12 @@
 
         function applyCrop() {
             if (mediaHtml.style.display !== 'none') {
-                applyHtmlCrop();
+                // html 裁剪只在 crop 适配模式下生效，其他适配方式还原默认铺满
+                if (currentFit === 'crop') {
+                    applyHtmlCrop();
+                } else {
+                    applyRotation();
+                }
                 return;
             }
             const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
