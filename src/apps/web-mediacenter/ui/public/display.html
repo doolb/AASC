@@ -337,6 +337,15 @@
             var rotTransform = 'rotate(' + currentRotation + 'deg)';
             mediaImage.style.transform = rotTransform;
             mediaVideo.style.transform = rotTransform;
+            mediaHtml.style.transform = rotTransform;
+            if (currentRotation === 90 || currentRotation === 270) {
+                // 旋转 90/270 后宽高互换，保持铺满屏幕
+                mediaHtml.style.width = '100vh';
+                mediaHtml.style.height = '100vw';
+            } else {
+                mediaHtml.style.width = '100%';
+                mediaHtml.style.height = '100%';
+            }
 
             // 立即更新所有活跃渲染任务覆盖层的旋转
             // render 任务覆盖层的旋转定位由 render.js 的 applyRotationStyle 管理

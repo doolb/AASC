@@ -167,6 +167,7 @@ playCurrentItem():
 
 showMedia 的 html 媒体分支（display.html）:
     隐藏 img/video，显示 iframe#mediaHtml（铺满、pointer-events:none）
+    旋转适配: transform 跟随 rotate(); 90/270° 时宽高互换（100vh × 100vw）保持铺满
     mediaType === 'html':
         url 且扩展名 .mhtml:
             // Chromium 无法直接渲染 mhtml（导航 ERR_ABORTED），需转换
