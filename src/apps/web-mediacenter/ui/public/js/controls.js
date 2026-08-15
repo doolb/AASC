@@ -38,24 +38,66 @@ const Controls = {
         }
     },
     
-    setHtmlScrollMode(mode) {
-        document.querySelectorAll('[data-htmlscroll]').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.htmlscroll === mode);
+    // 「视频播放」里的 HTML 模式按钮：弹出 html 播放模式设置面板，确认后应用到显示端
+    showHtmlModePanel() {
+        const mask = document.createElement('div');
+        mask.className = 'modal-mask';
+        mask.innerHTML = `
+            <div class="playlist-settings-dialog">
+                <div class="dialog-title">HTML 播放模式</div>
+                <div class="dialog-body">
+                    <div class="settings-row">
+                        <span class="settings-label">滚动方式</span>
+                        <label><input type="radio" name="htmlModePanelScroll" value="page" checked> 分页式</label>
+                        <label><input type="radio" name="htmlModePanelScroll" value="smooth"> 平滑</label>
+                    </div>
+                    <div class="settings-row" id="htmlModePanelPageRow">
+                        <span class="settings-label">每屏停留</span>
+                        <label><input type="radio" name="htmlModePanelInterval" value="3"> 3秒</label>
+                        <label><input type="radio" name="htmlModePanelInterval" value="5" checked> 5秒</label>
+                        <label><input type="radio" name="htmlModePanelInterval" value="8"> 8秒</label>
+                    </div>
+                    <div class="settings-row" id="htmlModePanelSpeedRow" style="display:none">
+                        <span class="settings-label">滚动速度</span>
+                        <label><input type="radio" name="htmlModePanelSpeed" value="slow"> 慢</label>
+                        <label><input type="radio" name="htmlModePanelSpeed" value="medium" checked> 中</label>
+                        <label><input type="radio" name="htmlModePanelSpeed" value="fast"> 快</label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">循环播放</span>
+                        <label><input type="checkbox" id="htmlModePanelLoop" checked> 滚到底后从头循环</label>
+                    </div>
+                    <div style="font-size:12px;color:rgba(255,255,255,0.4);">发送 html 播放时将沿用此设置</div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" id="htmlModePanelCancelBtn">取消</button>
+                    <button class="btn-confirm" id="htmlModePanelConfirmBtn">应用</button>
+                </div>
+            </div>`;
+        const modeRow = (mode) => {
+            mask.querySelector('#htmlModePanelPageRow').style.display = mode === 'page' ? '' : 'none';
+            mask.querySelector('#htmlModePanelSpeedRow').style.display = mode === 'page' ? 'none' : '';
+        };
+        mask.querySelectorAll('input[name="htmlModePanelScroll"]').forEach(r =>
+            r.addEventListener('change', (e) => modeRow(e.target.value)));
+        mask.querySelector('#htmlModePanelCancelBtn').addEventListener('click', () => mask.remove());
+        mask.querySelector('#htmlModePanelConfirmBtn').addEventListener('click', () => {
+            const mode = mask.querySelector('input[name="htmlModePanelScroll"]:checked').value;
+            const htmlScroll = {
+                mode: mode,
+                loop: mask.querySelector('#htmlModePanelLoop').checked
+            };
+            if (mode === 'page') {
+                htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="htmlModePanelInterval"]:checked').value) || 5;
+            } else {
+                htmlScroll.speed = mask.querySelector('input[name="htmlModePanelSpeed"]:checked').value;
+            }
+            mask.remove();
+            if (window.WebSocketManager) {
+                window.WebSocketManager.sendControl('htmlScroll', htmlScroll);
+            }
         });
-        this._sendHtmlScroll();
-    },
-
-    setHtmlScrollLoop(checked) {
-        this._sendHtmlScroll();
-    },
-
-    _sendHtmlScroll() {
-        const modeBtn = document.querySelector('[data-htmlscroll].active');
-        const mode = modeBtn ? modeBtn.dataset.htmlscroll : 'page';
-        const loop = document.getElementById('htmlScrollLoopCtl') ? document.getElementById('htmlScrollLoopCtl').checked : false;
-        if (window.WebSocketManager) {
-            window.WebSocketManager.sendControl('htmlScroll', { mode: mode, loop: loop });
-        }
+        document.body.appendChild(mask);
     },
 
     sendFitMode(fit) {

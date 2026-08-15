@@ -310,15 +310,8 @@ const MediaLibrary = {
         this.setCurrentMedia(url);
     },
 
-    // HTML 媒体：弹滚动设置后直接发送（跳过裁剪预览）
-    async sendHtmlMedia(url) {
-        const result = await this.showHtmlScrollSettingsDialog();
-        if (!result) {
-            showToast('已取消发送', 'warning');
-            return;
-        }
-        // 沿用显示端模式时 htmlScroll 为 null，显示端沿用当前设置
-        const htmlScroll = result.inherit ? null : result;
+    // HTML 媒体：不弹滚动设置（沿用显示面板「HTML 播放模式」），直接发送
+    sendHtmlMedia(url) {
         if (window.Crop) {
             window.Crop.showPreview(url, 'html');
         }
@@ -326,8 +319,7 @@ const MediaLibrary = {
             window.WebSocketManager.sendMedia({
                 type: 'url',
                 url: url,
-                mediaType: 'html',
-                htmlScroll
+                mediaType: 'html'
             });
         }
         this.setCurrentMedia(url);
@@ -431,7 +423,7 @@ const MediaLibrary = {
             showToast('已取消发送', 'warning');
             return;
         }
-        const { htmlScroll, saveToLibrary } = result;
+        const { saveToLibrary } = result;
         if (saveToLibrary) {
             if (!this.currentLibrary) {
                 showToast('请先选择媒体库', 'error');
@@ -454,8 +446,7 @@ const MediaLibrary = {
                 window.WebSocketManager.sendMedia({
                     type: 'url',
                     url: url,
-                    mediaType: 'html',
-                    htmlScroll
+                    mediaType: 'html'
                 });
             }
             this.setCurrentMedia(url);
@@ -471,8 +462,7 @@ const MediaLibrary = {
                 fileName: file.name,
                 mediaType: 'html',
                 mimeType: file.type || 'text/html',
-                temp: true,
-                htmlScroll
+                temp: true
             });
         }
         if (window.Crop) {
@@ -481,7 +471,8 @@ const MediaLibrary = {
         showToast('已发送到显示端', 'success');
     },
 
-    // 发送 HTML 文件对话框：文件信息 + 滚动设置 + 去向，返回 Promise<{htmlScroll, saveToLibrary}|null>
+    // 发送 HTML 文件对话框：文件信息 + 去向，返回 Promise<{saveToLibrary}|null>
+    // 滚动模式不在此设置（沿用显示面板「HTML 播放模式」）
     _showHtmlFileDialog(file) {
         return new Promise((resolve) => {
             const sizeText = file.size > 1024 ? (file.size / 1024).toFixed(1) + ' KB' : file.size + ' B';
@@ -496,28 +487,6 @@ const MediaLibrary = {
                             <span style="color:#4f9cf7;font-weight:500;word-break:break-all;">${this._escapeHtml(file.name)}（${sizeText}）</span>
                         </div>
                         <div class="settings-row">
-                            <span class="settings-label">滚动方式</span>
-                            <label><input type="radio" name="sendHtmlMode" value="page" checked> 分页式</label>
-                            <label><input type="radio" name="sendHtmlMode" value="smooth"> 平滑</label>
-                            <label><input type="radio" name="sendHtmlMode" value="inherit"> 沿用显示端</label>
-                        </div>
-                        <div class="settings-row" id="sendHtmlPageIntervalRow">
-                            <span class="settings-label">每屏停留</span>
-                            <label><input type="radio" name="sendHtmlPageInterval" value="3"> 3秒</label>
-                            <label><input type="radio" name="sendHtmlPageInterval" value="5" checked> 5秒</label>
-                            <label><input type="radio" name="sendHtmlPageInterval" value="8"> 8秒</label>
-                        </div>
-                        <div class="settings-row" id="sendHtmlSpeedRow" style="display:none">
-                            <span class="settings-label">滚动速度</span>
-                            <label><input type="radio" name="sendHtmlSpeed" value="slow"> 慢</label>
-                            <label><input type="radio" name="sendHtmlSpeed" value="medium" checked> 中</label>
-                            <label><input type="radio" name="sendHtmlSpeed" value="fast"> 快</label>
-                        </div>
-                        <div class="settings-row" id="sendHtmlLoopRow">
-                            <span class="settings-label">循环播放</span>
-                            <label><input type="checkbox" id="sendHtmlLoop" checked> 滚到底后从头循环</label>
-                        </div>
-                        <div class="settings-row">
                             <span class="settings-label">去向</span>
                             <label><input type="checkbox" id="sendHtmlSaveToLibrary"> 同时保存到媒体库（当前目录）</label>
                         </div>
@@ -527,36 +496,14 @@ const MediaLibrary = {
                         <button class="btn-confirm" id="sendHtmlConfirmBtn">发送</button>
                     </div>
                 </div>`;
-            const modeRow = (mode) => {
-                mask.querySelector('#sendHtmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
-                mask.querySelector('#sendHtmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
-                mask.querySelector('#sendHtmlLoopRow').style.display = mode === 'inherit' ? 'none' : '';
-            };
-            mask.querySelectorAll('input[name="sendHtmlMode"]').forEach(r =>
-                r.addEventListener('change', (e) => modeRow(e.target.value)));
             mask.querySelector('#sendHtmlCancelBtn').addEventListener('click', () => {
                 mask.remove();
                 resolve(null);
             });
             mask.querySelector('#sendHtmlConfirmBtn').addEventListener('click', () => {
-                const mode = mask.querySelector('input[name="sendHtmlMode"]:checked').value;
                 const saveToLibrary = mask.querySelector('#sendHtmlSaveToLibrary').checked;
-                if (mode === 'inherit') {
-                    mask.remove();
-                    resolve({ htmlScroll: null, saveToLibrary });
-                    return;
-                }
-                const htmlScroll = {
-                    mode: mode,
-                    loop: mask.querySelector('#sendHtmlLoop').checked
-                };
-                if (mode === 'page') {
-                    htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="sendHtmlPageInterval"]:checked').value) || 5;
-                } else {
-                    htmlScroll.speed = mask.querySelector('input[name="sendHtmlSpeed"]:checked').value;
-                }
                 mask.remove();
-                resolve({ htmlScroll, saveToLibrary });
+                resolve({ saveToLibrary });
             });
             document.body.appendChild(mask);
         });
@@ -566,78 +513,6 @@ const MediaLibrary = {
         return String(str).replace(/[&<>"']/g, c => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         }[c]));
-    },
-
-    // HTML 滚动设置对话框（媒体库文件/裁剪框拖拽共用），返回 Promise<htmlScroll|null>
-    showHtmlScrollSettingsDialog() {
-        return new Promise((resolve) => {
-            const mask = document.createElement('div');
-            mask.className = 'modal-mask';
-            mask.innerHTML = `
-                <div class="playlist-settings-dialog">
-                    <div class="dialog-title">HTML 发送设置</div>
-                    <div class="dialog-body">
-                        <div class="settings-row">
-                            <span class="settings-label">滚动方式</span>
-                            <label><input type="radio" name="htmlScrollMode" value="page" checked> 分页式</label>
-                            <label><input type="radio" name="htmlScrollMode" value="smooth"> 平滑</label>
-                            <label><input type="radio" name="htmlScrollMode" value="inherit"> 沿用显示端</label>
-                        </div>
-                        <div class="settings-row" id="htmlPageIntervalRow">
-                            <span class="settings-label">每屏停留</span>
-                            <label><input type="radio" name="htmlPageInterval" value="3"> 3秒</label>
-                            <label><input type="radio" name="htmlPageInterval" value="5" checked> 5秒</label>
-                            <label><input type="radio" name="htmlPageInterval" value="8"> 8秒</label>
-                        </div>
-                        <div class="settings-row" id="htmlSpeedRow" style="display:none">
-                            <span class="settings-label">滚动速度</span>
-                            <label><input type="radio" name="htmlSpeed" value="slow"> 慢</label>
-                            <label><input type="radio" name="htmlSpeed" value="medium" checked> 中</label>
-                            <label><input type="radio" name="htmlSpeed" value="fast"> 快</label>
-                        </div>
-                        <div class="settings-row" id="htmlScrollLoopRow">
-                            <span class="settings-label">循环播放</span>
-                            <label><input type="checkbox" id="htmlScrollLoop" checked> 滚到底后从头循环</label>
-                        </div>
-                    </div>
-                    <div class="dialog-footer">
-                        <button class="btn-cancel" id="htmlScrollCancelBtn">取消</button>
-                        <button class="btn-confirm" id="htmlScrollConfirmBtn">确认发送</button>
-                    </div>
-                </div>`;
-            // 滚动方式切换时显隐对应参数行；沿用显示端时参数行禁用
-            const modeRow = (mode) => {
-                mask.querySelector('#htmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
-                mask.querySelector('#htmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
-                mask.querySelector('#htmlScrollLoopRow').style.display = mode === 'inherit' ? 'none' : '';
-            };
-            mask.querySelectorAll('input[name="htmlScrollMode"]').forEach(r =>
-                r.addEventListener('change', (e) => modeRow(e.target.value)));
-            mask.querySelector('#htmlScrollCancelBtn').addEventListener('click', () => {
-                mask.remove();
-                resolve(null);
-            });
-            mask.querySelector('#htmlScrollConfirmBtn').addEventListener('click', () => {
-                const mode = mask.querySelector('input[name="htmlScrollMode"]:checked').value;
-                if (mode === 'inherit') {
-                    mask.remove();
-                    resolve({ inherit: true });
-                    return;
-                }
-                const htmlScroll = {
-                    mode: mode,
-                    loop: mask.querySelector('#htmlScrollLoop').checked
-                };
-                if (mode === 'page') {
-                    htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="htmlPageInterval"]:checked').value) || 5;
-                } else {
-                    htmlScroll.speed = mask.querySelector('input[name="htmlSpeed"]:checked').value;
-                }
-                mask.remove();
-                resolve(htmlScroll);
-            });
-            document.body.appendChild(mask);
-        });
     },
 
     // 媒体库文件夹批量播放入口

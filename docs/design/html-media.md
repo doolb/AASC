@@ -85,8 +85,11 @@ mediaData（WebSocket 消息 media 字段）:
   // htmlScroll 可缺省/null：显示端沿用当前生效模式（currentHtmlScroll 记忆）
 
 控制端显示面板「HTML 播放模式」入口:
-    滚动方式（分页式/平滑）+ 循环开关 → sendControl('htmlScroll', {mode, loop})
+    「视频播放」区域的「HTML 模式」按钮 → 弹出设置面板（滚动方式 + 参数 + 循环）
+    → sendControl('htmlScroll', {mode, loop, pageInterval?, speed?})
     显示端 handleControl htmlScroll: 更新记忆 + 若 html 显示中立即重启滚动
+
+发送 html 不弹滚动设置窗口（沿用显示面板「HTML 播放模式」），发送时 htmlScroll 缺省
 }
 ```
 

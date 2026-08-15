@@ -199,6 +199,9 @@ handleControl 'htmlScroll'（控制端显示面板实时切换）:
     currentHtmlScroll = data.value
     如果 html 显示中: startHtmlScroll(mediaHtml, currentHtmlScroll) 立即重启滚动
 
+控制端发送 html 不弹滚动设置（显示面板「HTML 模式」按钮弹面板设置，
+    见 controls.js showHtmlModePanel）; htmlScroll 缺省 → 显示端沿用记忆
+
 startHtmlScroll(iframe, htmlScroll):
     opts = htmlScroll || {}; mode = opts.mode === 'loop' ? 'smooth' : (opts.mode || 'page')
     loop = opts.loop || opts.mode === 'loop'   // 兼容旧消息

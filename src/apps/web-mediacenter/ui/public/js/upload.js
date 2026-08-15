@@ -65,14 +65,7 @@ const Upload = {
                 const base64 = await this.fileToBase64(file);
                 const mediaType = this.detectMediaType(file.name);
                 if (mediaType === 'html') {
-                    // HTML 媒体：跳过尺寸探测，弹滚动设置后临时发送（iframe 预览 + 裁剪框）
-                    const result = await window.MediaLibrary.showHtmlScrollSettingsDialog();
-                    if (!result) {
-                        showToast('已取消发送', 'warning');
-                        return;
-                    }
-                    // 沿用显示端模式时 htmlScroll 为 null
-                    const htmlScroll = result.inherit ? null : result;
+                    // HTML 媒体：跳过尺寸探测，不弹设置（沿用显示面板模式）临时发送
                     if (window.WebSocketManager) {
                         window.WebSocketManager.sendMedia({
                             type: 'base64',
@@ -80,8 +73,7 @@ const Upload = {
                             fileName: file.name,
                             mediaType: 'html',
                             mimeType: file.type || 'text/html',
-                            temp: true,
-                            htmlScroll
+                            temp: true
                         });
                     }
                     if (window.MediaLibrary) {
@@ -162,14 +154,7 @@ const Upload = {
             const base64 = await this.fileToBase64(file);
             const mediaType = this.detectMediaType(file.name);
             if (mediaType === 'html') {
-                // HTML 媒体：跳过尺寸探测，弹滚动设置后临时发送（iframe 预览 + 裁剪框）
-                const result = await window.MediaLibrary.showHtmlScrollSettingsDialog();
-                if (!result) {
-                    showToast('已取消发送', 'warning');
-                    return;
-                }
-                // 沿用显示端模式时 htmlScroll 为 null
-                const htmlScroll = result.inherit ? null : result;
+                // HTML 媒体：跳过尺寸探测，不弹设置（沿用显示面板模式）临时发送
                 if (window.WebSocketManager) {
                     window.WebSocketManager.sendMedia({
                         type: 'base64',
@@ -177,8 +162,7 @@ const Upload = {
                         fileName: file.name,
                         mediaType: 'html',
                         mimeType: file.type || 'text/html',
-                        temp: true,
-                        htmlScroll
+                        temp: true
                     });
                 }
                 if (window.MediaLibrary) {
