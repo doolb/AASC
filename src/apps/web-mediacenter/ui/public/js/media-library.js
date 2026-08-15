@@ -291,10 +291,14 @@ const MediaLibrary = {
     },
     
     playMedia(url, mediaType) {
+        if (mediaType === 'html') {
+            this.sendHtmlMedia(url);
+            return;
+        }
         if (window.Crop) {
             window.Crop.showPreview(url, mediaType);
         }
-        
+
         if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
             window.WebSocketManager.sendMedia({
                 type: 'url',
@@ -302,7 +306,28 @@ const MediaLibrary = {
                 mediaType: mediaType
             });
         }
-        
+
+        this.setCurrentMedia(url);
+    },
+
+    // HTML 媒体：弹滚动设置后直接发送（跳过裁剪预览）
+    async sendHtmlMedia(url) {
+        const htmlScroll = await this.showHtmlScrollSettingsDialog();
+        if (!htmlScroll) {
+            showToast('已取消发送', 'warning');
+            return;
+        }
+        if (window.Crop) {
+            window.Crop.hideForHtml();
+        }
+        if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
+            window.WebSocketManager.sendMedia({
+                type: 'url',
+                url: url,
+                mediaType: 'html',
+                htmlScroll
+            });
+        }
         this.setCurrentMedia(url);
     },
     
@@ -386,6 +411,184 @@ const MediaLibrary = {
             if (typeof onConfirm === 'function') {
                 onConfirm(settings);
             }
+        });
+    },
+
+    // 工具栏「发送 HTML」：粘贴代码 + 滚动设置 + 去向（临时/保存到媒体库）
+    showSendHtmlDialog() {
+        const mask = document.createElement('div');
+        mask.className = 'modal-mask';
+        mask.innerHTML = `
+            <div class="playlist-settings-dialog">
+                <div class="dialog-title">发送 HTML</div>
+                <div class="dialog-body">
+                    <div class="settings-row">
+                        <span class="settings-label">HTML 代码</span>
+                        <textarea id="sendHtmlCodeInput" rows="10" placeholder="粘贴 HTML 代码（建议内联所有资源，如 data: 图片）"
+                            style="width:100%;font-family:monospace;background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:6px;padding:8px;box-sizing:border-box;"></textarea>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">滚动方式</span>
+                        <label><input type="radio" name="sendHtmlMode" value="page" checked> 分页式</label>
+                        <label><input type="radio" name="sendHtmlMode" value="smooth"> 平滑</label>
+                        <label><input type="radio" name="sendHtmlMode" value="loop"> 循环</label>
+                    </div>
+                    <div class="settings-row" id="sendHtmlPageIntervalRow">
+                        <span class="settings-label">每屏停留</span>
+                        <label><input type="radio" name="sendHtmlPageInterval" value="3"> 3秒</label>
+                        <label><input type="radio" name="sendHtmlPageInterval" value="5" checked> 5秒</label>
+                        <label><input type="radio" name="sendHtmlPageInterval" value="8"> 8秒</label>
+                    </div>
+                    <div class="settings-row" id="sendHtmlSpeedRow" style="display:none">
+                        <span class="settings-label">滚动速度</span>
+                        <label><input type="radio" name="sendHtmlSpeed" value="slow"> 慢</label>
+                        <label><input type="radio" name="sendHtmlSpeed" value="medium" checked> 中</label>
+                        <label><input type="radio" name="sendHtmlSpeed" value="fast"> 快</label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">去向</span>
+                        <label><input type="checkbox" id="sendHtmlSaveToLibrary"> 同时保存到媒体库（当前目录）</label>
+                    </div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" id="sendHtmlCancelBtn">取消</button>
+                    <button class="btn-confirm" id="sendHtmlConfirmBtn">发送</button>
+                </div>
+            </div>`;
+        const modeRow = (mode) => {
+            mask.querySelector('#sendHtmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
+            mask.querySelector('#sendHtmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
+        };
+        mask.querySelectorAll('input[name="sendHtmlMode"]').forEach(r =>
+            r.addEventListener('change', (e) => modeRow(e.target.value)));
+        mask.querySelector('#sendHtmlCancelBtn').addEventListener('click', () => mask.remove());
+        mask.querySelector('#sendHtmlConfirmBtn').addEventListener('click', () => {
+            const code = mask.querySelector('#sendHtmlCodeInput').value.trim();
+            if (!code) {
+                showToast('请输入 HTML 代码', 'error');
+                return;
+            }
+            const mode = mask.querySelector('input[name="sendHtmlMode"]:checked').value;
+            const htmlScroll = { mode };
+            if (mode === 'page') {
+                htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="sendHtmlPageInterval"]:checked').value) || 5;
+            } else {
+                htmlScroll.speed = mask.querySelector('input[name="sendHtmlSpeed"]:checked').value;
+            }
+            const saveToLibrary = mask.querySelector('#sendHtmlSaveToLibrary').checked;
+            mask.remove();
+            this._sendHtmlCode(code, htmlScroll, saveToLibrary);
+        });
+        document.body.appendChild(mask);
+        mask.querySelector('#sendHtmlCodeInput').focus();
+    },
+
+    // 发送粘贴的 HTML 代码：临时发送或保存到媒体库后按 url 发送
+    async _sendHtmlCode(code, htmlScroll, saveToLibrary) {
+        if (saveToLibrary) {
+            if (!this.currentLibrary) {
+                showToast('请先选择媒体库', 'error');
+                return;
+            }
+            if (this.currentLibrary.readonly) {
+                showToast('只读媒体库，无法保存', 'error');
+                return;
+            }
+            const file = new File([code], `粘贴代码_${Date.now()}.html`, { type: 'text/html' });
+            const result = await this.uploadFile(file, this.currentPath);
+            if (!result.success) {
+                showToast('保存到媒体库失败: ' + result.error, 'error');
+                return;
+            }
+            const url = result.data.file.url;
+            if (window.Crop) {
+                window.Crop.hideForHtml();
+            }
+            if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
+                window.WebSocketManager.sendMedia({
+                    type: 'url',
+                    url: url,
+                    mediaType: 'html',
+                    htmlScroll
+                });
+            }
+            this.setCurrentMedia(url);
+            showToast('已保存到媒体库并发送', 'success');
+            return;
+        }
+        // 临时发送：base64 直传
+        const blob = new Blob([code], { type: 'text/html' });
+        const base64 = await window.Upload.fileToBase64(blob);
+        if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
+            window.WebSocketManager.sendMedia({
+                type: 'base64',
+                data: base64,
+                fileName: '粘贴代码.html',
+                mediaType: 'html',
+                mimeType: 'text/html',
+                temp: true,
+                htmlScroll
+            });
+        }
+        showToast('已发送到显示端', 'success');
+    },
+
+    // HTML 滚动设置对话框（媒体库文件/裁剪框拖拽共用），返回 Promise<htmlScroll|null>
+    showHtmlScrollSettingsDialog() {
+        return new Promise((resolve) => {
+            const mask = document.createElement('div');
+            mask.className = 'modal-mask';
+            mask.innerHTML = `
+                <div class="playlist-settings-dialog">
+                    <div class="dialog-title">HTML 发送设置</div>
+                    <div class="dialog-body">
+                        <div class="settings-row">
+                            <span class="settings-label">滚动方式</span>
+                            <label><input type="radio" name="htmlScrollMode" value="page" checked> 分页式</label>
+                            <label><input type="radio" name="htmlScrollMode" value="smooth"> 平滑</label>
+                            <label><input type="radio" name="htmlScrollMode" value="loop"> 循环</label>
+                        </div>
+                        <div class="settings-row" id="htmlPageIntervalRow">
+                            <span class="settings-label">每屏停留</span>
+                            <label><input type="radio" name="htmlPageInterval" value="3"> 3秒</label>
+                            <label><input type="radio" name="htmlPageInterval" value="5" checked> 5秒</label>
+                            <label><input type="radio" name="htmlPageInterval" value="8"> 8秒</label>
+                        </div>
+                        <div class="settings-row" id="htmlSpeedRow" style="display:none">
+                            <span class="settings-label">滚动速度</span>
+                            <label><input type="radio" name="htmlSpeed" value="slow"> 慢</label>
+                            <label><input type="radio" name="htmlSpeed" value="medium" checked> 中</label>
+                            <label><input type="radio" name="htmlSpeed" value="fast"> 快</label>
+                        </div>
+                    </div>
+                    <div class="dialog-footer">
+                        <button class="btn-cancel" id="htmlScrollCancelBtn">取消</button>
+                        <button class="btn-confirm" id="htmlScrollConfirmBtn">确认发送</button>
+                    </div>
+                </div>`;
+            // 滚动方式切换时显隐对应参数行
+            const modeRow = (mode) => {
+                mask.querySelector('#htmlPageIntervalRow').style.display = mode === 'page' ? '' : 'none';
+                mask.querySelector('#htmlSpeedRow').style.display = mode === 'page' ? 'none' : '';
+            };
+            mask.querySelectorAll('input[name="htmlScrollMode"]').forEach(r =>
+                r.addEventListener('change', (e) => modeRow(e.target.value)));
+            mask.querySelector('#htmlScrollCancelBtn').addEventListener('click', () => {
+                mask.remove();
+                resolve(null);
+            });
+            mask.querySelector('#htmlScrollConfirmBtn').addEventListener('click', () => {
+                const mode = mask.querySelector('input[name="htmlScrollMode"]:checked').value;
+                const htmlScroll = { mode };
+                if (mode === 'page') {
+                    htmlScroll.pageInterval = parseInt(mask.querySelector('input[name="htmlPageInterval"]:checked').value) || 5;
+                } else {
+                    htmlScroll.speed = mask.querySelector('input[name="htmlSpeed"]:checked').value;
+                }
+                mask.remove();
+                resolve(htmlScroll);
+            });
+            document.body.appendChild(mask);
         });
     },
 

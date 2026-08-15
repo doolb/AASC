@@ -3,6 +3,7 @@ const Upload = {
         const ext = name.toLowerCase().split('.').pop().split('?')[0];
         if (['gif'].includes(ext)) return 'gif';
         if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+        if (['html', 'htm'].includes(ext)) return 'html';
         return 'image';
     },
 
@@ -63,6 +64,30 @@ const Upload = {
             try {
                 const base64 = await this.fileToBase64(file);
                 const mediaType = this.detectMediaType(file.name);
+                if (mediaType === 'html') {
+                    // HTML 媒体：跳过尺寸探测与裁剪预览，弹滚动设置后临时发送
+                    const htmlScroll = await window.MediaLibrary.showHtmlScrollSettingsDialog();
+                    if (!htmlScroll) {
+                        showToast('已取消发送', 'warning');
+                        return;
+                    }
+                    if (window.WebSocketManager) {
+                        window.WebSocketManager.sendMedia({
+                            type: 'base64',
+                            data: base64,
+                            fileName: file.name,
+                            mediaType: 'html',
+                            mimeType: file.type || 'text/html',
+                            temp: true,
+                            htmlScroll
+                        });
+                    }
+                    if (window.MediaLibrary) {
+                        window.MediaLibrary.lastTempFileSent = { name: file.name };
+                    }
+                    showToast('已发送到显示端', 'success');
+                    return;
+                }
                 const dims = await this.getMediaDimensions(file, base64);
 
                 if (window.WebSocketManager) {
@@ -131,6 +156,30 @@ const Upload = {
         try {
             const base64 = await this.fileToBase64(file);
             const mediaType = this.detectMediaType(file.name);
+            if (mediaType === 'html') {
+                // HTML 媒体：跳过尺寸探测与裁剪预览，弹滚动设置后临时发送
+                const htmlScroll = await window.MediaLibrary.showHtmlScrollSettingsDialog();
+                if (!htmlScroll) {
+                    showToast('已取消发送', 'warning');
+                    return;
+                }
+                if (window.WebSocketManager) {
+                    window.WebSocketManager.sendMedia({
+                        type: 'base64',
+                        data: base64,
+                        fileName: file.name,
+                        mediaType: 'html',
+                        mimeType: file.type || 'text/html',
+                        temp: true,
+                        htmlScroll
+                    });
+                }
+                if (window.MediaLibrary) {
+                    window.MediaLibrary.lastTempFileSent = { name: file.name };
+                }
+                showToast('已发送到显示端', 'success');
+                return;
+            }
             const dims = await this.getMediaDimensions(file, base64);
 
             if (window.WebSocketManager) {

@@ -82,8 +82,11 @@
                     <label class="file-label image" for="imageInput">选择图片/GIF</label>
                     <label class="file-label video" for="videoInput">选择视频</label>
                 </div>
-                <input type="file" id="imageInput" accept="image/*">
+                <input type="file" id="imageInput" accept="image/*,.html,.htm">
                 <input type="file" id="videoInput" accept="video/*">
+                <div style="margin-top:8px;">
+                    <button class="btn-batch" onclick="MediaLibrary.showSendHtmlDialog()">发送 HTML</button>
+                </div>
                 <div class="temp-mode-row">
                     <label class="temp-mode-label">
                         <input type="checkbox" id="tempMode">
@@ -120,7 +123,7 @@
                         <div class="media-library-actions">
                             <label class="upload-btn">
                                 上传文件
-                                <input type="file" id="batchFileInput" multiple accept="image/*,video/*" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
+                                <input type="file" id="batchFileInput" multiple accept="image/*,video/*,.html,.htm" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
                             </label>
                             <label class="upload-btn">
                                 上传文件夹
