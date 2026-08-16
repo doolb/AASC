@@ -139,6 +139,12 @@
   - 有 GPU 的来源改两行：第一行 CPU/MEM，第二行等宽占位对齐 + GPU 利用率条 + 独立显存条
   - 改动文件：res/tasks/render-display/render.js、res/tasks/render-display/render.smoke.js（新增结构冒烟测试）、docs/spec/monitor-system.md
 
+- ✅ [2026-08-16] render-display MEM 条标签缩写为 M，进一步缩短行宽
+  - 改动文件：res/tasks/render-display/render.js、docs/spec/monitor-system.md、docs/design/render-display-inline-text.md
+
+- ✅ [2026-08-16] render-display 条内文字加大到 40px（可高出条身）+ 进度条总长度灰底增强到 0.18
+  - 改动文件：res/tasks/render-display/render.js、docs/spec/monitor-system.md、docs/design/render-display-inline-text.md
+
 ### 新增
 
 - ✅ [2026-08-15] APK 显示端体验优化 + npm 构建上传命令
