@@ -138,10 +138,12 @@ function removeSource(hostname) {
 function update(data) {
     if (!data) return;
 
+    // 兼容 display.html 以第二参数传入 sourceInstanceId 的调用方式（fn(data.data, data.sourceInstanceId)）
+    var srcSid = data._sourceInstanceId || (arguments.length > 1 ? arguments[1] : null);
+
     // 源任务已停止，移除该源
     if (data._stop) {
-        var sid = data._sourceInstanceId;
-        if (sid && sourceInstanceMap[sid]) removeSource(sourceInstanceMap[sid]);
+        if (srcSid && sourceInstanceMap[srcSid]) removeSource(sourceInstanceMap[srcSid]);
         return;
     }
 
@@ -154,7 +156,7 @@ function update(data) {
         sources[hostname] = sources[hostname] || {};
         // 保留 _row 引用，其余数据字段覆盖更新
         for (var k in data) if (k !== '_row') sources[hostname][k] = data[k];
-        if (data._sourceInstanceId) sourceInstanceMap[data._sourceInstanceId] = hostname;
+        if (srcSid) sourceInstanceMap[srcSid] = hostname;
     } else if (!sources[hostname]) {
         return;  // 无数据且无历史源，跳过渲染
     }
@@ -180,7 +182,7 @@ function update(data) {
             var gpuPct = parseFloat(d.gpuPercent) || 0;
             var gpuSuffix = '';
             if (d.gpuTemp && d.gpuTemp !== 'N/A') gpuSuffix += d.gpuTemp + '°C ';
-            if (d.gpuMemUsed !== undefined && d.gpuMemTotal !== undefined) {
+            if (d.gpuMemUsed !== undefined && d.gpuMemTotal !== undefined && d.gpuMemUsed !== 'N/A' && d.gpuMemTotal !== 'N/A') {
                 var vramPct = parseFloat(d.gpuMemTotal) > 0 ? (parseFloat(d.gpuMemUsed) / parseFloat(d.gpuMemTotal)) * 100 : 0;
                 gpuSuffix += Math.round(vramPct) + '%VRAM';
             }
@@ -193,9 +195,11 @@ function update(data) {
 // APK 本地来源轮询：检测 NativeDisplay 存在则每 800ms 拉取自身 CPU/内存
 if (window.NativeDisplay && window.NativeDisplay.isAvailable) {
     var instanceId = api.instanceId;
+    var localUpdate = update;  // 本次执行的 update 引用，识别定时器是否已过期
     localTimer = setInterval(function () {
-        // 覆盖层已被 task:stop 移除则停止轮询，避免泄漏
-        if (!window._renderTaskUpdates || !window._renderTaskUpdates[instanceId]) {
+        // 覆盖层已移除（key 被删除）或已被新执行的渲染任务覆盖（key 指向新函数）→ 停止轮询
+        var cur = window._renderTaskUpdates && window._renderTaskUpdates[instanceId];
+        if (!cur || cur !== localUpdate) {
             clearInterval(localTimer);
             return;
         }
