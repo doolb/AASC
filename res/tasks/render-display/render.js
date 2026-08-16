@@ -80,25 +80,24 @@ function getLayout() {
     for (var h in sources) count++;
     var compact = (rotation === 90 || rotation === 270) || count >= 3;
     return {
-        barGap: compact ? 12 : 18,   // 条内元素间距
-        lblW: 96,                    // 标签固定宽
-        trackW: compact ? 280 : 360, // 填充条宽
-        trackH: compact ? 30 : 36,   // 填充条高
-        valMin: compact ? 70 : 90,   // 数值文字最小宽
-        nameMin: compact ? 190 : 220,// 来源名最小宽
-        nameMax: compact ? 320 : 380,// 来源名最大宽
-        rowGap: compact ? 20 : 32,   // 行内 metrics 间距
-        rowPad: compact ? 4 : 6      // 行垂直内边距
+        barGap: compact ? 12 : 18,        // 条内元素间距
+        deviceNameW: compact ? 150 : 170, // CPU 条标签位（设备名）宽
+        lblW: 96,                         // 其余指标（MEM/GPU）标签宽
+        trackW: compact ? 280 : 360,      // 填充条宽
+        trackH: compact ? 30 : 36,        // 填充条高
+        valMin: compact ? 70 : 90,        // 数值文字最小宽
+        rowGap: compact ? 20 : 32,        // 行内 metrics 间距
+        rowPad: compact ? 4 : 6           // 行垂直内边距
     };
 }
 
-// 构建单个指标条（标签 + 填充条 + 数值文字）
-function makeBar(label, pct, color, suffix, L) {
+// 构建单个指标条（标签 + 填充条 + 数值文字）；lblW 覆盖标签宽（缺省 L.lblW，设备名用 L.deviceNameW）
+function makeBar(label, pct, color, suffix, L, lblW) {
     var bar = document.createElement('div');
     bar.style.cssText = 'display:flex;align-items:center;gap:' + L.barGap + 'px;font-size:45px;white-space:nowrap';
 
     var lbl = document.createElement('span');
-    lbl.style.cssText = 'width:' + L.lblW + 'px;color:rgba(255,255,255,0.7);text-align:right';
+    lbl.style.cssText = 'width:' + (lblW || L.lblW) + 'px;color:rgba(255,255,255,0.7);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
     lbl.textContent = label;
 
     var track = document.createElement('div');
@@ -120,30 +119,24 @@ function makeBar(label, pct, color, suffix, L) {
     return bar;
 }
 
-// 单个来源单行：来源名 + 各指标条（布局随旋转/来源数动态，已有行每帧刷新行级样式）
+// 单个来源单行：设备名（CPU 条标签位）+ 各指标条（布局随旋转/来源数动态，已有行每帧刷新行级样式）
 function ensureSourceRow(hostname, L) {
     if (sources[hostname] && sources[hostname]._row) {
         var cached = sources[hostname]._row;
         cached.row.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
-        cached.name.style.cssText = 'min-width:' + L.nameMin + 'px;max-width:' + L.nameMax + 'px;overflow:hidden;text-overflow:ellipsis;font-size:45px;color:#fff';
         return cached;
     }
 
     var row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
 
-    var name = document.createElement('span');
-    name.style.cssText = 'min-width:' + L.nameMin + 'px;max-width:' + L.nameMax + 'px;overflow:hidden;text-overflow:ellipsis;font-size:45px;color:#fff';
-    name.textContent = hostname;
-
     var metrics = document.createElement('div');
     metrics.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px';
-    row.appendChild(name);
     row.appendChild(metrics);
 
     gaugeContainer.appendChild(row);
     if (!sources[hostname]) sources[hostname] = {};
-    sources[hostname]._row = { row: row, name: name, metrics: metrics };
+    sources[hostname]._row = { row: row, metrics: metrics };
     return sources[hostname]._row;
 }
 
@@ -196,7 +189,8 @@ function update(data) {
 
         var cpuSuffix = '';
         if (d.cpuTemp && d.cpuTemp !== 'N/A') cpuSuffix = d.cpuTemp + '°C';
-        entry.metrics.appendChild(makeBar('CPU', cpuPct, pctColor(cpuPct, 76, 175, 80), cpuSuffix, L));
+        // CPU 条标签位显示设备名（替代 "CPU" 文字），宽度用 deviceNameW
+        entry.metrics.appendChild(makeBar(h, cpuPct, pctColor(cpuPct, 76, 175, 80), cpuSuffix, L, L.deviceNameW));
 
         var memSuffix = fmtGb(d.memUsed) + '/' + fmtGb(d.memTotal) + 'G';
         entry.metrics.appendChild(makeBar('MEM', memPct, pctColor(memPct, 63, 81, 181), memSuffix, L));
