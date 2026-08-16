@@ -41,6 +41,7 @@
 | test-echo 用户任务 | [test-echo.md](spec/test-echo.md) | 测试用户任务参数定义与读取流程 |
 | WebGPU 用户任务 | [webgpu-render.md](spec/webgpu-render.md) | 显示端 WebGPU 渲染图片并持久化到服务端 |
 | Android GPU Compute 桥 | [android-compute-bridge.md](spec/android-compute-bridge.md) | 离屏 EGL 3.1 compute、SSBO/image2D 读回、NativeCompute JS 封装 |
+| Android 原生语音识别 | [android-native-asr.md](spec/android-native-asr.md) | sherpa-onnx AAR 原生推理、模型按需下载、服务器中转接入 |
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
 
 ## 核心模块

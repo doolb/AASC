@@ -23,6 +23,32 @@
     - src/apps/web-mediacenter/ui/public/display.html（引入 native-compute.js）
   - 文档：docs/design/android-compute-bridge.md、docs/spec/android-compute-bridge.md、docs/task/2026-08-16_android-gpu-compute桥.md
 
+- ✅ [2026-08-16] Android 原生语音识别（sherpa-onnx AAR）实现完成
+  - APK 集成 sherpa-onnx Android AAR，原生运行 SenseVoice int8（234MB）识别，替代 WASM（推理慢/内存高）
+  - AsrModelManager 模型按需下载/校验/加载状态机：磁盘完整则重启不重下；损坏/下载失败清 .tmp 残件；加载前内存检查防 OOM
+  - AsrEngine 封装 OfflineRecognizer（配置对齐服务器 asr-service.js），load/recognize 加同步锁防并发 use-after-free
+  - AsrPcm s16le↔Float32 纯逻辑 + JVM 单测（空输入/奇数长度/越界 clamp）
+  - NativeBridge 桥方法 asrStatus/asrEnsureModel/asrRecognize + onNativeAsrModel 回调（模型下载进度上屏）
+  - 服务器 GET /api/asr/model/<file> 模型下载接口：白名单防路径穿越、流式返回 + Content-Length、断开清理
+  - display.html 原生 ASR 路径：能力探测/跳过 WASM/WebAudio 解码 webm→16k mono PCM/进度上屏
+  - APK 录音权限 RECORD_AUDIO + onPermissionRequest 授权，getUserMedia 可用（JS 录音逻辑零改动）
+  - 识别路径统一服务器中转（asr.device='display' 时 asrAudio 回本机原生识别，服务器协议零改动）
+  - 改动文件：
+    - src/apps/android-display/app/build.gradle.kts + app/libs/sherpa-onnx-1.12.35.aar（新增依赖）
+    - src/apps/android-display/app/src/main/AndroidManifest.xml（RECORD_AUDIO）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt（运行时权限）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/DisplayWebView.kt（onPermissionRequest 授权）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt（asrStatus/asrEnsureModel/asrRecognize）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/AsrPcm.kt（新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/AsrModelFiles.kt（新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/AsrModelManager.kt（新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/AsrEngine.kt（新增）
+    - src/apps/android-display/app/src/test/java/com/aasc/display/AsrPcmTest.kt（新增）
+    - src/apps/android-display/app/src/test/java/com/aasc/display/AsrModelFilesTest.kt（新增）
+    - src/apps/server/boot/server-app.js（GET /api/asr/model/<file>）
+    - src/apps/web-mediacenter/ui/public/display.html
+  - 文档：docs/design/android-native-asr.md、docs/spec/android-native-asr.md、docs/superpowers/plans/2026-08-16-android-native-asr.md
+
 ### 修复
 
 - ✅ [2026-08-16] 控制端切换角度时显示端画面未按适配模式（图片旋转但尺寸没适配）修复
