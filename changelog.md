@@ -4,7 +4,12 @@
 
 ### 优化
 
-- ✅ [2026-08-16] render-display 覆盖层整体加半透明黑底（`background:rgba(0,0,0,0.5)`），底下内容隐约可见且文字清晰
+- ✅ [2026-08-16] 修复 APK 自身 CPU 使用率永远 0%
+  - 根因：本机 Android 14 ROM 的 SELinux 拒绝 app 读取 /proc/stat → readCpuPercent 每次异常返回 0
+  - 修复：CPU 读取改回退链——优先 /proc/stat 整体 CPU，被拒时回退 /proc/self/stat 进程自身 CPU（utime+stime，按 10ms/jiffy 与真实时间间隔换算）
+  - 改动文件：src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt
+
+- ✅ [2026-08-16] render-display 覆盖层整体半透明黑底（`background:rgba(0,0,0,0.5)`），后淡一半为 0.25，底下内容隐约可见且文字清晰
   - 改动文件：res/tasks/render-display/render.html、docs/spec/monitor-system.md
 
 - ✅ [2026-08-16] 控制模式截图预览二次旋转 + 切换角度误进裁剪模式修复

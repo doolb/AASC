@@ -14,7 +14,10 @@ injectKey(keyCode, meta) -> boolean               # WebView.dispatchKeyEvent
 injectText(text) -> boolean                       # ASCII 按键；中文剪贴板 + Ctrl+V
 getScreenSize() -> String JSON                    # {width, height} 屏幕像素
 getSystemStats() -> String JSON                   # 同步返回 APK 自身资源：{hostname, cpuPercent, memPercent, memTotal, memUsed}
-                                                  # hostname=Build.MODEL，CPU 读 /proc/stat 两次采样差值，内存读 ActivityManager.getMemoryInfo()，GB 1 位小数
+                                                  # hostname=Build.MODEL；内存读 ActivityManager.getMemoryInfo()，GB 1 位小数
+                                                  # CPU 回退链：优先 /proc/stat 整体 CPU 两次采样差值；
+                                                  #   SELinux 拒读时（部分 Android 14+ ROM）回退 /proc/self/stat 进程自身 CPU
+                                                  #   （utime+stime，按 10ms/jiffy 与真实时间间隔换算百分比）
 ```
 
 > 截图回调机制：JS 函数传 @JavascriptInterface String 参数在 WebView 不可靠
