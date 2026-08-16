@@ -103,7 +103,7 @@ window.onNativeAsrModel({state:'error', error:'...'})
 - `DisplayWebView` 的 `WebChromeClient` 覆写 `onPermissionRequest`：对 `RESOURCE_AUDIO_CAPTURE` 直接 `grant()`
 - 效果：现有 `getUserMedia`/`MediaRecorder` 录音代码在 APK 内原样可用，JS 录音逻辑零改动
 
-### 5. display.html 接入点（3 处改造）
+### 5. display.html 接入点（5 处改造）
 
 **5.1 能力探测 `detectCapabilities`**
 - `voiceRecording`：现有 getUserMedia 探测不变（APK 补权限后自然通过）
