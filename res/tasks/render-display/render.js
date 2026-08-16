@@ -90,7 +90,8 @@ function makeBar(label, pct, color, suffix) {
     track.appendChild(fill);
 
     var val = document.createElement('span');
-    var valText = Math.round(pct || 0) + '%';
+    var clamped = Math.min(100, Math.max(0, parseFloat(pct) || 0));
+    var valText = Math.round(clamped) + '%';
     if (suffix) valText += '  ' + suffix;
     val.style.cssText = 'color:#fff;min-width:30px';
     val.textContent = valText;
