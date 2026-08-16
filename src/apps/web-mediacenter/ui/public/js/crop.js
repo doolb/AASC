@@ -149,7 +149,12 @@ const Crop = {
 
     // 旋转类统一应用于预览媒体与 html 占位框
     _applyRotationClass(rotation) {
-        const els = [this.previewImg, this.previewVideo];
+        const els = [];
+        // 控制模式：截图已是网页原方向（显示端已反旋转成原方向），
+        // 不给截图预览加旋转 CSS，否则预览被二次旋转
+        if (!this.controlModeOn) {
+            els.push(this.previewImg, this.previewVideo);
+        }
         if (this.placeholder) els.push(this.placeholder);
         els.forEach(el => {
             el.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
@@ -210,6 +215,8 @@ const Crop = {
         this.data.x = (100 - newW) / 2;
         this.data.y = (100 - newH) / 2;
         
+        // 控制模式：不显示裁剪框也不发 crop（截图强制全屏，坐标按截图比例）
+        if (this.controlModeOn) return;
         this.box.style.display = 'block';
         this.updateBox();
         if (sendToDisplay) {
