@@ -134,6 +134,11 @@
   - 改动文件：
     - src/apps/web-mediacenter/ui/public/display.html
 
+- ✅ [2026-08-16] render-display 覆盖层文字内嵌 + GPU/显存第二行
+  - 利用率/温度/显存/功耗文字从条右侧独立文字改为进度条内部水平垂直居中叠加（字号 34px + text-shadow 描边），去掉条右侧 val 最小宽，水平占位显著缩短
+  - 有 GPU 的来源改两行：第一行 CPU/MEM，第二行等宽占位对齐 + GPU 利用率条 + 独立显存条
+  - 改动文件：res/tasks/render-display/render.js、res/tasks/render-display/render.smoke.js（新增结构冒烟测试）、docs/spec/monitor-system.md
+
 ### 新增
 
 - ✅ [2026-08-15] APK 显示端体验优化 + npm 构建上传命令

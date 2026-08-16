@@ -21,6 +21,11 @@
   - 显示端每 8 秒轮询 /api/display-version 自动 reload（无需重启 APK）
   - 控制端「刷新」按钮主动刷新显示端；系统设置「重载代码」按钮重启服务端
   - 视频自动播放 muted 绕过拦截（真机视觉待用户确认）
+- ✅已完成 [2026-08-16][2026-08-16] render-display 覆盖层文字内嵌 + GPU/显存第二行
+  - 设计文档：docs/design/render-display-inline-text.md
+  - 实施计划：docs/task/2026-08-16_render-display-文字内嵌与GPU显存第二行.md
+  - 实现：res/tasks/render-display/render.js（条内居中浮层文字、第二行 GPU/VRAM 占位对齐）
+  - 验证：node render.smoke.js（结构校验）+ node --check
 - 重构ai开发流程
 
 ## 批量播放模式

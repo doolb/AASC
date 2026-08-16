@@ -46,19 +46,29 @@ nvidia-smi 查询字段：
 | `res/tasks/render-display/render.html` | 覆盖层 HTML 结构（单行横条容器，纯 DOM/CSS 无 canvas） |
 | `res/tasks/render-display/render.js` | 主线程渲染逻辑，返回 update(data) 函数 |
 
-#### 横条渲染（单行内联）
+#### 横条渲染（单行内联 + 两行 GPU/VRAM）
 
-每个来源一行，纯 DOM/CSS（无 canvas）。设备名占 CPU 条标签位（替代 "CPU" 文字），MEM/GPU 标签保留：
+每个来源按数据分行，纯 DOM/CSS（无 canvas）。设备名占 CPU 条标签位（替代 "CPU" 文字），MEM/GPU/VRAM 标签保留：
+
+第一行（所有来源）：
 
 ```
-Pixel 6   ▓▓▓▓▓▓░░░░ 62%        MEM ▓▓▓░░░░░░░ 38%  3.1/8.0G
-PC-1      ▓▓▓░░░░░░░ 34%  45°C  MEM ▓▓░░░░░░░░ 21%  6.4/32G  GPU ▓▓░░ 12%
+Pixel 6   ▓▓▓▓▓▓[62%]                MEM ▓▓▓░░[38% 3.1/8G]
+PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32G]
 ```
 
-- 指标条 = 标签（设备名/短标签）+ 填充条（`pctColor()` 渐变）+ 百分比文字；字号 45px（放大 3 倍适配大屏）；GPU 条在 MEM 条后，仅在有 GPU 数据时出现
-- 布局参数由 `getLayout()` 动态计算：旋转 90°/270° 或来源数 ≥3 时进入紧凑模式（条宽 280px/条高 30px/间距收紧），否则常规模式（条宽 360px/条高 36px）；`update()` 每帧按当前 `rotation` 与来源数刷新行级样式
+第二行（仅来源有 GPU 数据时，前部等宽占位对齐 MEM 条标签起点）：
+
+```
+PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32G]
+          GPU ▓▓░░[12% 52°C 180W]    VRAM ▓░░[23% 6/24G]
+```
+
+- 利用率/温度/显存/功耗文字叠加在**进度条内部水平垂直居中**（`left:50%` + `translate(-50%,-50%)`），字号 34px（标签 45px），白色 + `text-shadow` 深色描边，不受进度条裁切
+- 填充段由 fillWrap（`overflow:hidden` + 圆角）裁出与现状一致的圆角填充；文字与 fillWrap 平级
+- 布局参数由 `getLayout()` 动态计算：旋转 90°/270° 或来源数 ≥3 时紧凑模式（条宽 280px/条高 30px/间距收紧），否则常规模式（条宽 360px/条高 36px）；`update()` 每帧按当前 `rotation` 与来源数刷新行级样式
 - 覆盖层整体半透明黑底 `background:rgba(0,0,0,0.25)`，底下内容隐约可见且文字清晰
-- 温度/显存/功耗为小字后缀，有数据才显示；内存文字格式：`memUsed/memTotal G`
+- 内存/显存文字格式：`memUsed/memTotal G`；CPU 温度、GPU 温度/功耗仅在字段有效时并入条内文字
 
 #### APK 本地来源轮询
 
