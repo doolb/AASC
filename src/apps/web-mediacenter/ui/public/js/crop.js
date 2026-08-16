@@ -3,6 +3,9 @@ const Crop = {
     data: { x: 0, y: 0, width: 100, height: 100 },
     debug: false,
     rotation: 0,
+    // 当前适配模式（与显示端 currentFit 同步；contain 默认）：
+    // recalculateSize 据此决定切换角度时是否发送 crop——非 crop 模式误发会把显示端强制切成裁剪放大
+    currentFit: 'contain',
 
     _log(...args) {
         if (this.debug) {
@@ -215,6 +218,11 @@ const Crop = {
         this.data.x = (100 - newW) / 2;
         this.data.y = (100 - newH) / 2;
         
+        // 非裁剪模式：只重算裁剪框 UI，不发 crop（显示端保持原适配模式，切换角度不误进裁剪放大）
+        if (this.currentFit !== 'crop') {
+            this.updateBox();
+            return;
+        }
         // 控制模式：不显示裁剪框也不发 crop（截图强制全屏，坐标按截图比例）
         if (this.controlModeOn) return;
         this.box.style.display = 'block';

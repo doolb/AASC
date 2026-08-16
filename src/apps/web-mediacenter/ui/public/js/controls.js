@@ -109,6 +109,11 @@ const Controls = {
             btn.classList.toggle('active', btn.dataset.fit === fit);
         });
 
+        // 同步裁剪逻辑的适配模式：切换角度时据此决定是否发 crop（非 crop 模式误发会把显示端强制切成裁剪放大）
+        if (window.Crop) {
+            window.Crop.currentFit = fit;
+        }
+
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('fit', fit);
             if (fit === 'crop') {
@@ -126,6 +131,10 @@ const Controls = {
         document.querySelectorAll('[data-fit]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.fit === fit);
         });
+        // 同步裁剪逻辑的适配模式（页面刷新后从显示端恢复 fit 状态时）
+        if (window.Crop) {
+            window.Crop.currentFit = fit;
+        }
     },
     
     init() {

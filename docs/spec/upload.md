@@ -43,6 +43,30 @@ updateBox 始终用 data.x 推 boxLeft(横向)、data.y 推 boxTop(纵向),
 270°: nw→ne-resize, ne→se-resize, se→sw-resize, sw→nw-resize
 ```
 
+### 角度切换 (applyRotation / recalculateSize)
+
+控制端切换角度按钮 → `sendControl('rotate', 角度)`，显示端 `applyRotation` + `applyCrop` 重新适配画面。
+
+**recalculateSize**（角度切换 350ms 后重算裁剪框与数据）:
+```
+recalculateSize(sendToDisplay = true):
+    mediaRect = currentMedia().getBoundingClientRect()
+    mediaRect 尺寸为 0 → return（无媒体）
+    aspectRatio = canvasSize.width / canvasSize.height
+    mediaAspect = mediaRect.width / mediaRect.height
+    等比计算 newW/newH（居中），写回 data.{x,y,width,height}
+    非裁剪模式(currentFit ≠ crop) → updateBox; return
+      # 只重算裁剪框 UI，不发 crop——否则显示端收到 crop 会被强制切成裁剪放大
+      # （bug 修复：切换角度误进裁剪模式）
+    控制模式(controlModeOn) → return
+      # 不发 crop（截图强制全屏，坐标按截图比例）
+    box.display = block; updateBox
+    sendToDisplay → sendData()    # 仅裁剪模式发 crop，显示端保持裁剪
+```
+
+**适配模式同步**: 控制端 `Controls.sendFitMode/setFitMode` 把当前适配模式记录到
+`Crop.currentFit`（默认 contain，与显示端一致），供 recalculateSize 判断是否发 crop。
+
 ## 普通上传
 
 ### POST /upload-file

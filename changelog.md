@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 修复
+
+- ✅ [2026-08-16] 控制端切换角度时显示端画面未按适配模式（图片旋转但尺寸没适配）修复
+  - 根因：控制端 crop.js `recalculateSize` 无条件 sendData 发 crop → 显示端 `handleControl` 的 crop 分支强制 `currentFit='crop'` → 非裁剪模式（contain/cover/height/width）画面被裁剪放大
+  - 修复：crop.js 新增 `Crop.currentFit`（默认 contain，与显示端一致）；`recalculateSize` 非裁剪模式只重算裁剪框 UI 不发 crop；`controls.js sendFitMode/setFitMode` 同步记录 currentFit（含页面刷新后从显示端恢复）
+  - 行为：非裁剪模式切角度只发 rotate，显示端保持原适配；裁剪模式切角度仍发 rotate+crop，裁剪行为保留；控制模式不受影响（已有屏蔽）
+  - 测试：puppeteer 三场景（contain 非控制不发 crop / crop 非控制发 crop / crop 控制模式不发 crop）+ 显示端端到端验证（含 recalculateSize 350ms 窗口后 fit 不被篡改）
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/crop.js、src/apps/web-mediacenter/ui/public/js/controls.js、docs/spec/upload.md
+
 ### 优化
 
 - ✅ [2026-08-16] 修复 APK 自身 CPU 使用率永远 0%
