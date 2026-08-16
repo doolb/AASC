@@ -34,6 +34,7 @@
     </div>
     
     <audio id="ttsAudio" style="display:none;"></audio>
+    <div id="sleepOverlay" style="display:none;position:fixed;inset:0;background:#000;z-index:999999;"></div>
     <script src="js/html-to-image.min.js"></script>
     <script src="js/control-mode-utils.js"></script>
     <script src="js/sherpa-asr.js"></script>
@@ -1169,6 +1170,17 @@
                 }
                 showMedia(state.currentMedia);
             }
+
+            if (state.sleep !== undefined) {
+                sleepSettings = {
+                    enabled: !!state.sleep.enabled,
+                    startHour: clampHour(state.sleep.startHour),
+                    endHour: clampHour(state.sleep.endHour),
+                    deepStartHour: clampHour(state.sleep.deepStartHour),
+                    deepEndHour: clampHour(state.sleep.deepEndHour)
+                };
+                checkSleepMode();
+            }
         }
         
         function extractFileName(url) {
@@ -2161,6 +2173,8 @@
         }
 
         function showMedia(data) {
+            // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）
+            activateTemporarily();
             mediaVideo.pause();
             mediaVideo.src = '';
             mediaVideo.load();
@@ -2367,9 +2381,104 @@
                     applyCustomCrop(data.value);
                     sendCommandAck('customCrop', true, '自定义裁剪已应用');
                     break;
+
+                case 'sleepSettings':
+                    // 应用控制端下发的睡眠设置（合法化小时值），立即判定并应用
+                    {
+                        const s = data.value || {};
+                        sleepSettings = {
+                            enabled: !!s.enabled,
+                            startHour: clampHour(s.startHour),
+                            endHour: clampHour(s.endHour),
+                            deepStartHour: clampHour(s.deepStartHour),
+                            deepEndHour: clampHour(s.deepEndHour)
+                        };
+                        checkSleepMode();
+                    }
+                    break;
+
+                case 'sleepActivate':
+                    activateTemporarily();
+                    break;
             }
         }
-        
+
+        // ===== 睡眠模式：按时段自动隐藏媒体/UI，降低夜间干扰 =====
+        // 时间在显示端本地判断（各设备用自己时区），每 10 秒检查一次。
+        // 优先级：临时激活 > 深度睡眠 > 睡眠 > 正常。
+        const sleepOverlay = document.getElementById('sleepOverlay');
+        const mediaContainer = document.getElementById('mediaContainer');
+        let sleepSettings = { enabled: false, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
+        let sleepState = 'normal';   // 'normal' | 'sleep' | 'deep' | 'active'
+        let activationUntil = 0;     // 临时激活截止时间戳
+
+        // 跨天时段判定：startHour > endHour 时跨天（23-8），否则非跨天（1-6）
+        function inSleepWindow(hour, start, end) {
+            if (start > end) return hour >= start || hour < end;
+            return hour >= start && hour < end;
+        }
+
+        // 小时值合法化：clamp 到 0-23
+        function clampHour(h) {
+            h = parseInt(h, 10);
+            if (isNaN(h)) return 0;
+            return Math.max(0, Math.min(23, h));
+        }
+
+        // 暂停媒体：视频暂停 + html 滚动暂停（图片无需处理）
+        function pauseSleepMedia() {
+            mediaVideo.pause();
+            if (mediaHtml.style.display !== 'none') stopHtmlScroll();
+        }
+
+        // 恢复媒体：html 续滚动，视频续播（拦截自动播放限制）
+        function resumeSleepMedia() {
+            if (mediaHtml.style.display !== 'none') {
+                startHtmlScroll(mediaHtml, currentHtmlScroll);
+            } else if (mediaVideo.src) {
+                mediaVideo.play().catch(e => console.log('恢复播放被阻止'));
+            }
+        }
+
+        // 应用睡眠状态：深度全黑（遮罩盖全部覆盖层），睡眠隐藏媒体保 UI，正常/激活显示
+        function applySleepState(state) {
+            const prev = sleepState;
+            sleepState = state;
+            const isHidden = (state === 'sleep' || state === 'deep');
+            sleepOverlay.style.display = (state === 'deep') ? 'block' : 'none';
+            mediaContainer.style.display = isHidden ? 'none' : 'flex';
+            if (isHidden) {
+                pauseSleepMedia();
+            } else if (prev === 'sleep' || prev === 'deep') {
+                // 仅从隐藏态恢复时续播，避免重复 play
+                resumeSleepMedia();
+            }
+        }
+
+        // 10 秒定时检查：按优先级计算目标状态，状态变化才应用（避免每 10 秒重复 DOM 操作）
+        function checkSleepMode() {
+            let target = 'normal';
+            if (sleepSettings.enabled) {
+                const hour = new Date().getHours();
+                if (Date.now() < activationUntil) {
+                    target = 'active';
+                } else if (inSleepWindow(hour, sleepSettings.deepStartHour, sleepSettings.deepEndHour)) {
+                    target = 'deep';
+                } else if (inSleepWindow(hour, sleepSettings.startHour, sleepSettings.endHour)) {
+                    target = 'sleep';
+                }
+            }
+            if (target !== sleepState) {
+                applySleepState(target);
+            }
+        }
+
+        // 临时激活：强制显示 60 秒，之后下一次检查恢复按时段隐藏
+        function activateTemporarily() {
+            activationUntil = Date.now() + 60000;
+            applySleepState('active');
+        }
+
         function getPersistentDisplayId() {
             let id = localStorage.getItem('displayId');
             if (!id) {
@@ -2492,7 +2601,12 @@
                     if (data.type === 'control') {
                         handleControl(data);
                         if (data.action !== 'crop') {
-                            sendCommandAck('control', true, data.action);
+                            // 睡眠设置/激活回传当前 sleepState，供控制端状态显示
+                            let ackExtra = null;
+                            if (data.action === 'sleepSettings' || data.action === 'sleepActivate') {
+                                ackExtra = { sleepState: sleepState };
+                            }
+                            sendCommandAck('control', true, data.action, ackExtra);
                         }
                     } else if (data.type === 'tts') {
                         handleTTS(data);
@@ -2567,6 +2681,8 @@
         
         applyRotation();
         connectWebSocket();
+        checkSleepMode();
+        setInterval(checkSleepMode, 10000);
 
         // 显示端代码自动刷新：轮询服务器文件版本，mtime 变化即 reload（无需重启 APK）
         // APK 已禁用 HTTP 缓存 + URL 带时间戳，reload 即加载最新代码
