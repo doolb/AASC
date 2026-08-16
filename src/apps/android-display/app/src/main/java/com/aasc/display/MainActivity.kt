@@ -1,6 +1,8 @@
 package com.aasc.display
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -22,6 +24,27 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webContainer: FrameLayout
     private var webView: DisplayWebView? = null
     private var trustedSsl = false
+
+    private val REQ_AUDIO_PERMISSION = 1001
+
+    private fun requestAudioPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 23 &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO_PERMISSION)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_AUDIO_PERMISSION && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            // 授权成功即重载页面，让 display.html 的 getUserMedia 能力探测通过
+            webView?.reload()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +68,8 @@ class MainActivity : AppCompatActivity() {
         if (!saved.isNullOrEmpty()) {
             connect()
         }
+
+        requestAudioPermissionIfNeeded()
     }
 
     // 焦点回归时重贴全屏（沉浸式在交互后系统栏可能重新出现）；

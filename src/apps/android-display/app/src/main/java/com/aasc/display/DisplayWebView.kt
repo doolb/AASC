@@ -2,6 +2,8 @@ package com.aasc.display
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.webkit.PermissionRequest
+import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 
@@ -24,5 +26,17 @@ class DisplayWebView(context: Context) : WebView(context) {
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()
+
+        // getUserMedia 音频采集：APK 内直接授予，无需弹窗（无人值守的显示端）
+        webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest) {
+                val granted = request.resources.filter { it == PermissionRequest.RESOURCE_AUDIO_CAPTURE }
+                if (granted.isNotEmpty()) {
+                    request.grant(granted.toTypedArray())
+                } else {
+                    request.deny()
+                }
+            }
+        }
     }
 }
