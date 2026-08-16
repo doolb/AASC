@@ -4,6 +4,9 @@
 
 ### 优化
 
+- ✅ [2026-08-16] render-display 横条布局放大 3 倍（字号 15→45px，条宽/间距等比放大适配大屏）
+  - 改动文件：res/tasks/render-display/render.js、render.html、docs/spec/monitor-system.md
+
 - ✅ [2026-08-16] 临时媒体持久化（reload 后恢复最近网页）+ 控制模式 ESC 退出 + URL 输入按网页处理 + 显示端黑屏缓解 + 指定屏幕启动
   - server-app.js：temp 媒体分支也持久化 currentMedia，显示端 reload 后恢复最近发的临时网页，不再回退旧正式媒体
   - crop.js：控制模式 ESC 拦截（不转发网页，直接退出控制模式）；控制模式开启时 capture 阶段拦截预览容器拖放，模拟拖动不再误发临时文件
