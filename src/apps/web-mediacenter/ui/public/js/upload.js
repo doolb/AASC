@@ -321,14 +321,17 @@ const Upload = {
     uploadByUrl() {
         const urlInput = document.getElementById('urlInput');
         const url = urlInput.value.trim();
-        
+
         if (!url) {
             showToast('请输入URL', 'error');
             return;
         }
-        
-        const mediaType = this.detectMediaType(url);
-        
+
+        // URL 输入：detectMediaType 对无扩展名 URL 默认判 image，
+        // 自定义网页地址（如 https://example.com）常不带 .html —— 无已知媒体扩展名时按网页处理
+        let mediaType = this.detectMediaType(url);
+        if (mediaType === 'image') mediaType = 'html';
+
         if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
             window.WebSocketManager.sendMedia({
                 type: 'url',
@@ -336,7 +339,7 @@ const Upload = {
                 mediaType: mediaType
             });
         }
-        
+
         urlInput.value = '';
     },
     

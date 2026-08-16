@@ -675,6 +675,7 @@ const Crop = {
         const textRow = document.getElementById('controlTextRow');
         if (textRow) textRow.style.display = this.controlModeOn ? '' : 'none';
         this._updateControlCapabilityHint();
+        this._setControlModeDragGuard(on);
         if (this.controlModeOn) {
             // 开启：立即隐藏裁剪框，容器跟随显示端比例（不等截图回来）
             this._applyControlModeContainer();
@@ -691,6 +692,23 @@ const Crop = {
         }
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('controlMode', this.controlModeOn);
+        }
+    },
+
+    // 控制模式禁用拖放：模拟拖动（操作网页）会触发原生 HTML5 drag → 预览容器 drop 误发临时文件
+    _setControlModeDragGuard(on) {
+        const container = document.getElementById('cropPreviewContainer');
+        if (!container) return;
+        const types = ['dragover', 'drop', 'dragenter', 'dragleave'];
+        if (on && !this._controlDragGuard) {
+            this._controlDragGuard = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            };
+            types.forEach(t => container.addEventListener(t, this._controlDragGuard, true));
+        } else if (!on && this._controlDragGuard) {
+            types.forEach(t => container.removeEventListener(t, this._controlDragGuard, true));
+            this._controlDragGuard = null;
         }
     },
 

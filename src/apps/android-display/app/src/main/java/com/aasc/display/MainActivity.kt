@@ -47,10 +47,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 焦点回归时重贴全屏（沉浸式在交互后系统栏可能重新出现）
+    // 焦点回归时重贴全屏（沉浸式在交互后系统栏可能重新出现）；
+    // 三星 Note 8 等老设备 WebView 偶发 GPU surface 黑屏（内部渲染正常但屏幕不合成），
+    // 聚焦时重建 surface 缓解（visibility 切换触发重新合成）
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemUi()
+        if (hasFocus) {
+            hideSystemUi()
+            webView?.let {
+                it.visibility = View.INVISIBLE
+                it.postDelayed({ it.visibility = View.VISIBLE }, 60)
+            }
+        }
     }
 
     private fun connect() {
