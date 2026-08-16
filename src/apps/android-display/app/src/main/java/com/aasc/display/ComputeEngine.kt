@@ -57,7 +57,7 @@ object ComputeEngine {
         )
         val configs = arrayOfNulls<EGLConfig>(1)
         val numConfigs = IntArray(1)
-        if (!EGL14.eglChooseConfig(display, configAttribs, 0, configs, 0, 1, numConfigs, 0))
+        if (!EGL14.eglChooseConfig(display, configAttribs, 0, configs, 0, 1, numConfigs, 0) || numConfigs[0] == 0)
             throw ComputeException("EGL 选择 config 失败")
 
         // 用 EGL_KHR_create_context 的 MAJOR/MINOR 显式请求 GLES 3.1（EGL_CONTEXT_CLIENT_VERSION 只能到 3.0）
@@ -200,7 +200,7 @@ object ComputeEngine {
         return out
     }
 
-    // 读回 image2D 为 PNG dataUrl（经 FBO glReadPixels → 原始格式 → 统一转 RGBA8 → Bitmap）
+    // 读回 image2D 为 PNG dataUrl（经 FBO glReadPixels → 原始格式 → ComputePixels 转 ARGB → Bitmap）
     private fun readBackImage(im: ComputeImage, texId: Int): String {
         val fbo = IntArray(1)
         GLES31.glGenFramebuffers(1, fbo, 0)
@@ -215,49 +215,13 @@ object ComputeEngine {
         GLES31.glBindFramebuffer(GLES31.GL_FRAMEBUFFER, 0)
         GLES31.glDeleteFramebuffers(1, fbo, 0)
 
-        val bytes = toRgba8(raw, im)
+        // ComputePixels.toArgb 已做行翻转 + 各格式归一化，返回自顶向下 0xAARRGGBB 像素
+        val argb = ComputePixels.toArgb(raw, im.format, im.width, im.height)
         val bitmap = Bitmap.createBitmap(im.width, im.height, Bitmap.Config.ARGB_8888)
-        bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bytes))
+        bitmap.setPixels(argb, 0, im.width, 0, 0, im.width, im.height)
         val out = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
         return "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-    }
-
-    // 根据格式把 glReadPixels 原始数据转成 RGBA8 字节（含 float 缩放 / 整型转换 / 单通道复制）
-    private fun toRgba8(raw: ByteBuffer, im: ComputeImage): ByteArray {
-        val px = im.width * im.height
-        val out = ByteArray(px * 4)
-        raw.rewind()
-        when (im.format) {
-            ImageFormat.RGBA8, ImageFormat.RGBA8UI -> raw.get(out)  // 整型/归一化字节通道与 rgba8 一致
-            ImageFormat.RGBA32F, ImageFormat.RGBA16F -> {
-                val floats = FloatArray(px * 4)
-                raw.asFloatBuffer().get(floats)
-                for (i in 0 until px) {
-                    for (c in 0 until 4) {
-                        out[i * 4 + c] = (floats[i * 4 + c].coerceIn(0f, 1f) * 255f).toInt().toByte()
-                    }
-                }
-            }
-            ImageFormat.R32F -> {
-                val floats = FloatArray(px)
-                raw.asFloatBuffer().get(floats)
-                for (i in 0 until px) {
-                    val v = (floats[i].coerceIn(0f, 1f) * 255f).toInt().toByte()
-                    out[i * 4] = v; out[i * 4 + 1] = v; out[i * 4 + 2] = v; out[i * 4 + 3] = -1
-                }
-            }
-            ImageFormat.RGBA32UI -> {
-                val ints = IntArray(px * 4)
-                raw.asIntBuffer().get(ints)
-                for (i in 0 until px) {
-                    for (c in 0 until 4) {
-                        out[i * 4 + c] = (ints[i * 4 + c] and 0xFF).toByte()
-                    }
-                }
-            }
-        }
-        return out
     }
 
     // FloatArray → 直接缓冲（用于 glBufferData 上传）
