@@ -21,7 +21,7 @@ function makeEl() {
         _innerHTML: '',
         set innerHTML(v) { this._innerHTML = v; this.children = []; },
         get innerHTML() { return this._innerHTML; },
-        appendChild(c) { this.children.push(c); return c; },
+        appendChild(c) { this.children.push(c); c.parentNode = this; return c; },
         removeChild(c) {
             const i = this.children.indexOf(c);
             if (i >= 0) this.children.splice(i, 1);
@@ -91,5 +91,14 @@ update({
 });
 const row3 = gauge.children[2];
 assert.strictEqual(row3.children[1].children[0].style.width, '442px', '紧凑模式占位宽=150+12+280');
+
+// GPU 数据消失（gpuPercent='N/A'）：第二行移除，来源恢复单行
+update({
+    hostname: 'PC-1', cpuPercent: 30, cpuTemp: '45',
+    memPercent: 20, memUsed: 6.0, memTotal: 32,
+    gpuPercent: 'N/A'
+});
+const rowAfter = gauge.children[0];
+assert.strictEqual(rowAfter.children.length, 1, 'GPU 消失后应移除第二行');
 
 console.log('render.smoke.js OK：条内文字 + 两行 GPU/VRAM 结构校验通过');

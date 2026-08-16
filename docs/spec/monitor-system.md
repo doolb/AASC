@@ -43,7 +43,7 @@ nvidia-smi 查询字段：
 | 文件 | 说明 |
 |------|------|
 | `res/tasks/render-display/task.js` | 元数据注册，target=display |
-| `res/tasks/render-display/render.html` | 覆盖层 HTML 结构（单行横条容器，纯 DOM/CSS 无 canvas） |
+| `res/tasks/render-display/render.html` | 覆盖层 HTML 结构（横条容器，纯 DOM/CSS 无 canvas） |
 | `res/tasks/render-display/render.js` | 主线程渲染逻辑，返回 update(data) 函数 |
 
 #### 横条渲染（单行内联 + 两行 GPU/VRAM）
@@ -53,15 +53,15 @@ nvidia-smi 查询字段：
 第一行（所有来源）：
 
 ```
-Pixel 6   ▓▓▓▓▓▓[62%]                MEM ▓▓▓░░[38% 3.1/8G]
-PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32G]
+Pixel 6   ▓▓▓▓▓▓[62%]                MEM ▓▓▓░░[38% 3.1/8.0G]
+PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32.0G]
 ```
 
 第二行（仅来源有 GPU 数据时，前部等宽占位对齐 MEM 条标签起点）：
 
 ```
-PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32G]
-          GPU ▓▓░░[12% 52°C 180W]    VRAM ▓░░[23% 6/24G]
+PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32.0G]
+          GPU ▓▓░░[12% 52°C 180W]    VRAM ▓░░[23% 6.0/24.0G]
 ```
 
 - 利用率/温度/显存/功耗文字叠加在**进度条内部水平垂直居中**（`left:50%` + `translate(-50%,-50%)`），字号 34px（标签 45px），白色 + `text-shadow` 深色描边，不受进度条裁切
