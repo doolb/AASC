@@ -7,6 +7,16 @@
 - ✅ [2026-08-16] render-display 覆盖层整体加半透明黑底（`background:rgba(0,0,0,0.5)`），底下内容隐约可见且文字清晰
   - 改动文件：res/tasks/render-display/render.html、docs/spec/monitor-system.md
 
+- ✅ [2026-08-16] 控制模式旋转场景坐标修复（截图反旋转 + 强制全屏 + 视口映射）
+  - 根因：旋转 90/270 时 iframe transform 叠加裁剪 scale（残留 crop），getBoundingClientRect 返回远超视口的边界框，坐标映射错；且控制端预览显示"旋转后画面"与网页原方向不一致
+  - display.html：
+    - rotateShotToOriginal：WebView 位图按 currentRotation 逆时针反旋转成网页原方向，控制端预览显示网页原方向（不旋转只变大小）
+    - nativeScreenPoint：坐标按视口 + rotation 旋转映射（90/180/270），不再用 getBoundingClientRect
+    - setControlMode 强制全屏：保存 currentCrop 关闭恢复，清除残留 crop scale
+  - 新增 click-test.html 坐标测试页（网格 + 5 按钮 + 点击红点标记）
+  - 实测验证：90°/270° 点击测试页按钮全部命中（原水平镜像消除），0° 未回归
+  - 改动文件：src/apps/web-mediacenter/ui/public/display.html、click-test.html（新增）
+
 - ✅ [2026-08-16] 控制端点击坐标修复（截图比例 vs canvasSize 不一致导致垂直偏移）
   - 根因：控制端容器按 canvasSize（1920x1080 1.778）设 aspectRatio，但截图实际 1280x623（2.055，WebView 可用高度被系统栏压缩）——截图 contain 显示有垂直黑边，坐标按容器算导致垂直偏移
   - crop.js：_controlShotArea() 按截图宽高比计算 objectFit contain 实际绘制区域（去 letterbox）；showControlScreenshot 记录截图尺寸并刷新容器比例；onContainerMouse 坐标基于截图实际区域
