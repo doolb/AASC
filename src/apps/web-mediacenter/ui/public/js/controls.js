@@ -104,6 +104,88 @@ const Controls = {
         document.body.appendChild(mask);
     },
 
+    // 睡眠模式设置弹窗：按时段隐藏媒体/UI，降低夜间干扰；设置按当前选中显示端生效
+    showSleepModePanel() {
+        const displayId = window.currentDisplayId;
+        if (!displayId) {
+            if (window.showToast) window.showToast('未选中显示端', 'warning');
+            return;
+        }
+        const hourOptions = () => {
+            let html = '';
+            for (let i = 0; i <= 23; i++) html += `<option value="${i}">${i} 时</option>`;
+            return html;
+        };
+        const mask = document.createElement('div');
+        mask.className = 'modal-mask';
+        mask.innerHTML = `
+            <div class="playlist-settings-dialog">
+                <div class="dialog-title">睡眠模式</div>
+                <div class="dialog-body">
+                    <div class="settings-row">
+                        <label><input type="checkbox" id="sleepPanelEnabled"> 启用睡眠模式</label>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">睡眠时段</span>
+                        <select id="sleepPanelStart">${hourOptions()}</select>
+                        <span>至</span>
+                        <select id="sleepPanelEnd">${hourOptions()}</select>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">深度睡眠时段</span>
+                        <select id="sleepPanelDeepStart">${hourOptions()}</select>
+                        <span>至</span>
+                        <select id="sleepPanelDeepEnd">${hourOptions()}</select>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">临时激活</span>
+                        <button class="btn-confirm" id="sleepPanelActivateBtn">激活 60 秒</button>
+                    </div>
+                    <div id="sleepPanelStatus" style="font-size:12px;color:rgba(255,255,255,0.5);">当前: 正常</div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" id="sleepPanelCancelBtn">取消</button>
+                    <button class="btn-confirm" id="sleepPanelSaveBtn">保存</button>
+                </div>
+            </div>`;
+        mask.querySelector('#sleepPanelCancelBtn').addEventListener('click', () => mask.remove());
+        mask.querySelector('#sleepPanelActivateBtn').addEventListener('click', () => {
+            if (window.WebSocketManager) window.WebSocketManager.sendControl('sleepActivate');
+        });
+        mask.querySelector('#sleepPanelSaveBtn').addEventListener('click', () => {
+            const settings = {
+                enabled: mask.querySelector('#sleepPanelEnabled').checked,
+                startHour: parseInt(mask.querySelector('#sleepPanelStart').value, 10),
+                endHour: parseInt(mask.querySelector('#sleepPanelEnd').value, 10),
+                deepStartHour: parseInt(mask.querySelector('#sleepPanelDeepStart').value, 10),
+                deepEndHour: parseInt(mask.querySelector('#sleepPanelDeepEnd').value, 10)
+            };
+            mask.remove();
+            if (window.WebSocketManager) window.WebSocketManager.sendControl('sleepSettings', settings);
+        });
+        document.body.appendChild(mask);
+        // 填充当前选中显示端的已存设置（无则用默认值）
+        fetch('/api/device-settings/' + displayId)
+            .then(r => r.json())
+            .then(d => {
+                const s = (d.settings && d.settings.sleep) || { enabled: false, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
+                mask.querySelector('#sleepPanelEnabled').checked = !!s.enabled;
+                mask.querySelector('#sleepPanelStart').value = s.startHour;
+                mask.querySelector('#sleepPanelEnd').value = s.endHour;
+                mask.querySelector('#sleepPanelDeepStart').value = s.deepStartHour;
+                mask.querySelector('#sleepPanelDeepEnd').value = s.deepEndHour;
+            })
+            .catch(() => {});
+    },
+
+    // 显示端回传当前睡眠状态，更新弹窗状态行（弹窗未打开时为空操作）
+    updateSleepStatus(state) {
+        const el = document.getElementById('sleepPanelStatus');
+        if (!el) return;
+        const names = { normal: '正常', sleep: '睡眠中', deep: '深度睡眠中', active: '临时激活中' };
+        el.textContent = '当前: ' + (names[state] || state);
+    },
+
     sendFitMode(fit) {
         document.querySelectorAll('[data-fit]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.fit === fit);

@@ -300,6 +300,9 @@ const WebSocketManager = {
             if (data.commandType === 'crop' && data.extraData) {
                 updateCropDisplayInfo(data.extraData);
             }
+            if (data.commandType === 'control' && data.extraData && data.extraData.sleepState && window.Controls) {
+                window.Controls.updateSleepStatus(data.extraData.sleepState);
+            }
             if (window.SelfTest) {
                 window.SelfTest.handleAck(data);
             }
