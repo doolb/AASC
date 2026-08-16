@@ -30,4 +30,8 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
+    testImplementation("junit:junit:4.13.2")
+    // JVM 单元测试中 android.jar 的 org.json 是 stub（抛 "not mocked"），
+    // 引入真实实现以覆盖 android.jar 的桩实现
+    testImplementation("org.json:json:20240303")
 }
