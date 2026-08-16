@@ -77,23 +77,23 @@ function fmtGb(v) {
 // 构建单个指标条（标签 + 填充条 + 数值文字）
 function makeBar(label, pct, color, suffix) {
     var bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:15px;white-space:nowrap';
+    bar.style.cssText = 'display:flex;align-items:center;gap:18px;font-size:45px;white-space:nowrap';
 
     var lbl = document.createElement('span');
-    lbl.style.cssText = 'width:38px;color:rgba(255,255,255,0.7);text-align:right';
+    lbl.style.cssText = 'width:114px;color:rgba(255,255,255,0.7);text-align:right';
     lbl.textContent = label;
 
     var track = document.createElement('div');
-    track.style.cssText = 'width:120px;height:12px;border-radius:6px;background:rgba(255,255,255,0.08);overflow:hidden';
+    track.style.cssText = 'width:360px;height:36px;border-radius:18px;background:rgba(255,255,255,0.08);overflow:hidden';
     var fill = document.createElement('div');
-    fill.style.cssText = 'height:100%;width:' + Math.min(100, Math.max(0, pct || 0)) + '%;border-radius:6px;background:' + color;
+    fill.style.cssText = 'height:100%;width:' + Math.min(100, Math.max(0, pct || 0)) + '%;border-radius:18px;background:' + color;
     track.appendChild(fill);
 
     var val = document.createElement('span');
     var clamped = Math.min(100, Math.max(0, parseFloat(pct) || 0));
     var valText = Math.round(clamped) + '%';
     if (suffix) valText += '  ' + suffix;
-    val.style.cssText = 'color:#fff;min-width:30px';
+    val.style.cssText = 'color:#fff;min-width:90px';
     val.textContent = valText;
 
     bar.appendChild(lbl);
@@ -107,14 +107,14 @@ function ensureSourceRow(hostname) {
     if (sources[hostname] && sources[hostname]._row) return sources[hostname]._row;
 
     var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:3px 0;white-space:nowrap';
+    row.style.cssText = 'display:flex;align-items:center;gap:42px;padding:9px 0;white-space:nowrap';
 
     var name = document.createElement('span');
-    name.style.cssText = 'min-width:110px;max-width:180px;overflow:hidden;text-overflow:ellipsis;font-size:15px;color:#fff';
+    name.style.cssText = 'min-width:330px;max-width:540px;overflow:hidden;text-overflow:ellipsis;font-size:45px;color:#fff';
     name.textContent = hostname;
 
     var metrics = document.createElement('div');
-    metrics.style.cssText = 'display:flex;align-items:center;gap:14px';
+    metrics.style.cssText = 'display:flex;align-items:center;gap:42px';
     row.appendChild(name);
     row.appendChild(metrics);
 
