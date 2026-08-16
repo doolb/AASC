@@ -4,6 +4,20 @@
 
 ### 优化
 
+- ✅ [2026-08-16] 临时媒体持久化（reload 后恢复最近网页）+ 控制模式 ESC 退出 + URL 输入按网页处理 + 显示端黑屏缓解 + 指定屏幕启动
+  - server-app.js：temp 媒体分支也持久化 currentMedia，显示端 reload 后恢复最近发的临时网页，不再回退旧正式媒体
+  - crop.js：控制模式 ESC 拦截（不转发网页，直接退出控制模式）；控制模式开启时 capture 阶段拦截预览容器拖放，模拟拖动不再误发临时文件
+  - MainActivity：聚焦时 WebView visibility 切换重建 surface，缓解三星 Note 8 + WebView 132 GPU surface 黑屏
+  - upload.js：URL 输入无已知扩展名时默认按网页处理（此前误判图片，https://bing.com 发不出去）
+  - apk-start.js：npm start:apk:display 默认 display 2 并强制全屏（--windowingMode 1）
+  - 改动文件：
+    - src/apps/server/boot/server-app.js
+    - src/apps/web-mediacenter/ui/public/js/crop.js
+    - src/apps/web-mediacenter/ui/public/js/upload.js
+    - src/apps/web-mediacenter/ui/public/upload.html
+    - src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt
+    - src/scripts/apk-start.js
+
 - ✅ [2026-08-16] APK 自身资源监控 + render-display 横条化
   - NativeBridge.kt 新增 getSystemStats()：同步返回 APK 设备自身资源 {hostname, cpuPercent, memPercent, memTotal, memUsed}；hostname=Build.MODEL，CPU 读 /proc/stat 两次采样差值（1 位小数，首次调用无基线返回 0），内存读 ActivityManager.getMemoryInfo()（GB 1 位小数）
   - render.js 渲染改为单行内联横条（纯 DOM/CSS，无 canvas）：每个来源一行，指标条 = 小标签 + 120px 填充条（pctColor 渐变）+ 百分比文字；温度/显存/功耗为小字后缀有数据才显示，GPU 条仅在有 GPU 数据时出现；内存文字格式 memUsed/memTotal G
