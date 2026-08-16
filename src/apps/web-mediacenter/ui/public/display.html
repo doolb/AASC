@@ -1609,17 +1609,55 @@
         }
 
         // NativeDisplay.takeScreenshot：APK WebView 位图真实像素，同步返回 JSON {dataUrl,width,height}
+        // 截图反旋转：WebView 位图 = 屏幕画面（横屏 1280x720，内容随 rotation 换方向），
+        // 反旋转成页面直立（阅读方向）：90/270 输出宽高互换成竖图，内容转回可读方向
+        function rotateShotToOriginal(dataUrl, width, height, rotation) {
+            return new Promise((resolve) => {
+                if (!rotation) { resolve({ dataUrl, width, height }); return; }
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const swap = (rotation === 90 || rotation === 270);
+                        const outW = swap ? height : width;
+                        const outH = swap ? width : height;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = outW;
+                        canvas.height = outH;
+                        const ctx = canvas.getContext('2d');
+                        ctx.translate(outW / 2, outH / 2);
+                        // 位图内容已顺时针 rotate(rotation)，反旋转用 -rotation 转回直立
+                        ctx.rotate(-rotation * Math.PI / 180);
+                        ctx.drawImage(img, -width / 2, -height / 2);
+                        const fit = ControlModeUtils.fitSizeTo720p(outW, outH);
+                        const out = document.createElement('canvas');
+                        out.width = fit.width;
+                        out.height = fit.height;
+                        out.getContext('2d').drawImage(canvas, 0, 0, fit.width, fit.height);
+                        resolve({ dataUrl: out.toDataURL('image/jpeg', 0.7), width: fit.width, height: fit.height });
+                    } catch (e) {
+                        resolve({ dataUrl, width, height });
+                    }
+                };
+                img.onerror = () => resolve({ dataUrl, width, height });
+                img.src = dataUrl;
+            });
+        }
+
         function shotWithNativeBridge() {
-            try {
-                const res = JSON.parse(nativeBridge.takeScreenshot());
-                if (res && res.dataUrl) {
-                    // 直接上报屏幕画面（不反旋转）：控制端预览 = 屏幕所见（WYSIWYG），
-                    // 预览始终横屏，点击坐标直接映射屏幕
-                    sendControlScreenshot('native', res.dataUrl, res.width || 0, res.height || 0);
-                    return Promise.resolve(res.dataUrl);
-                }
-            } catch (e) { /* 桥截图失败，回退现有降级链 */ }
-            return Promise.resolve(null);
+            return new Promise((resolve) => {
+                try {
+                    const res = JSON.parse(nativeBridge.takeScreenshot());
+                    if (res && res.dataUrl) {
+                        // 反旋转成页面直立：控制端预览随显示端旋转，阅读方向正确
+                        rotateShotToOriginal(res.dataUrl, res.width || 0, res.height || 0, currentRotation).then(rot => {
+                            sendControlScreenshot('native', rot.dataUrl, rot.width || 0, rot.height || 0);
+                            resolve(rot.dataUrl);
+                        });
+                        return;
+                    }
+                } catch (e) { /* 桥截图失败，回退现有降级链 */ }
+                resolve(null);
+            });
         }
 
         // html-to-image 截 iframe 可见视口，缩至 720p
