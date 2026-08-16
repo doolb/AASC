@@ -4,6 +4,9 @@
 
 ### 优化
 
+- ✅ [2026-08-16] render-display 覆盖层整体加半透明黑底（`background:rgba(0,0,0,0.5)`），底下内容隐约可见且文字清晰
+  - 改动文件：res/tasks/render-display/render.html、docs/spec/monitor-system.md
+
 - ✅ [2026-08-16] 控制端点击坐标修复（截图比例 vs canvasSize 不一致导致垂直偏移）
   - 根因：控制端容器按 canvasSize（1920x1080 1.778）设 aspectRatio，但截图实际 1280x623（2.055，WebView 可用高度被系统栏压缩）——截图 contain 显示有垂直黑边，坐标按容器算导致垂直偏移
   - crop.js：_controlShotArea() 按截图宽高比计算 objectFit contain 实际绘制区域（去 letterbox）；showControlScreenshot 记录截图尺寸并刷新容器比例；onContainerMouse 坐标基于截图实际区域
