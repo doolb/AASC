@@ -4,6 +4,12 @@
 
 ### 优化
 
+- ✅ [2026-08-16] 控制端点击坐标修复（截图比例 vs canvasSize 不一致导致垂直偏移）
+  - 根因：控制端容器按 canvasSize（1920x1080 1.778）设 aspectRatio，但截图实际 1280x623（2.055，WebView 可用高度被系统栏压缩）——截图 contain 显示有垂直黑边，坐标按容器算导致垂直偏移
+  - crop.js：_controlShotArea() 按截图宽高比计算 objectFit contain 实际绘制区域（去 letterbox）；showControlScreenshot 记录截图尺寸并刷新容器比例；onContainerMouse 坐标基于截图实际区域
+  - puppeteer 验证：容器 4:3 截图 2.055 场景，点击顶部黑边区正确剔除（旧逻辑 25% vs 修复后 11.5%）
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/crop.js
+
 - ✅ [2026-08-16] 控制端点击坐标修复：改用截图图片实际显示区域计算百分比
   - onContainerMouse 坐标基准从容器改为截图图片（previewImg）：objectFit contain 时容器可能有 letterbox 黑边，原按整个容器算百分比，截图未铺满部分被误算进坐标导致点击偏移
   - puppeteer 验证：容器 4:3 图片 16:9 场景，点击黑边内 → 旧逻辑 16.67% vs 修复后 5.56%（正确）
