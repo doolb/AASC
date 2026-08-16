@@ -21,47 +21,53 @@ object AsrEngine {
     val isLoaded: Boolean get() = recognizer != null
 
     // 加载模型，失败返回 false 不抛异常（由调用方做损坏清理）
-    // context 用于取 AssetManager（AAR 构造必须），内部只持有 applicationContext 防泄漏
+    // context 仅构造时取 AssetManager（AAR 构造必须），不持有引用防泄漏
+    // synchronized 与 recognize 互斥：避免并发时 load 释放原生 recognizer 导致 recognize 读已释放句柄（use-after-free）
     fun load(context: Context, modelFile: File, tokensFile: File): Boolean {
-        return try {
-            val appContext = context.applicationContext
-            val config = OfflineRecognizerConfig(
-                featConfig = FeatureConfig(sampleRate = 16000),
-                modelConfig = OfflineModelConfig(
-                    senseVoice = OfflineSenseVoiceModelConfig(
-                        model = modelFile.absolutePath,
-                        language = "auto",
-                        useInverseTextNormalization = true
-                    ),
-                    tokens = tokensFile.absolutePath,
-                    numThreads = 1,
-                    debug = false,
-                    provider = "cpu"
+        synchronized(this) {
+            return try {
+                val appContext = context.applicationContext
+                val config = OfflineRecognizerConfig(
+                    featConfig = FeatureConfig(sampleRate = 16000),
+                    modelConfig = OfflineModelConfig(
+                        senseVoice = OfflineSenseVoiceModelConfig(
+                            model = modelFile.absolutePath,
+                            language = "auto",
+                            useInverseTextNormalization = true
+                        ),
+                        tokens = tokensFile.absolutePath,
+                        numThreads = 1,
+                        debug = false,
+                        provider = "cpu"
+                    )
                 )
-            )
-            // 重载时释放旧引擎占用的原生内存
-            recognizer?.release()
-            recognizer = OfflineRecognizer(appContext.assets, config)
-            true
-        } catch (e: Exception) {
-            recognizer = null
-            false
+                // 重载时释放旧引擎占用的原生内存
+                recognizer?.release()
+                recognizer = OfflineRecognizer(appContext.assets, config)
+                true
+            } catch (e: Exception) {
+                recognizer = null
+                false
+            }
         }
     }
 
     // 一次性识别：输入 16kHz mono Float32 样本，输出文本（空输入/未加载抛异常）
+    // synchronized 与 load 互斥：保证整个识别过程期间 recognizer 不被并发 release
     @Throws(Exception::class)
     fun recognize(samples: FloatArray): String {
-        val rec = recognizer ?: throw IllegalStateException("ASR 引擎未加载")
-        if (samples.isEmpty()) throw IllegalArgumentException("音频数据为空")
-        val stream = rec.createStream()
-        try {
-            stream.acceptWaveform(samples, 16000)
-            rec.decode(stream)
-            return rec.getResult(stream).text.trim()
-        } finally {
-            // OfflineStream 有原生内存，识别完显式 release（比依赖 recognizer/finalize 可靠）
-            stream.release()
+        synchronized(this) {
+            val rec = recognizer ?: throw IllegalStateException("ASR 引擎未加载")
+            if (samples.isEmpty()) throw IllegalArgumentException("音频数据为空")
+            val stream = rec.createStream()
+            try {
+                stream.acceptWaveform(samples, 16000)
+                rec.decode(stream)
+                return rec.getResult(stream).text.trim()
+            } finally {
+                // OfflineStream 有原生内存，识别完显式 release（比依赖 recognizer/finalize 可靠）
+                stream.release()
+            }
         }
     }
 }
