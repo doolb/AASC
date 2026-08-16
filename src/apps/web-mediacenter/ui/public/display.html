@@ -89,7 +89,30 @@
         const MAX_CONSECUTIVE_IGNORES = 3;
         const VOICE_COOLDOWN_MS = 10000;
         let localAsrAvailable = false;
+        // APK 原生 ASR 引擎（sherpa-onnx AAR）：检测到桥方法即认为可用，不再加载 WASM
+        const nativeAsrAvailable = !!(window.NativeDisplay && window.NativeDisplay.asrStatus);
+        let nativeAsrReady = false;
         let localAsrStreaming = false;
+        // 原生 ASR 模型下载/加载事件（由 NativeBridge evaluateJavascript 触发）
+        window.onNativeAsrModel = function(payload) {
+            if (!payload) return;
+            if (payload.state === 'downloading') {
+                updateVoiceTextDisplay('语音模型下载中 ' + (payload.progress || 0) + '%', false);
+            } else if (payload.state === 'ready') {
+                nativeAsrReady = true;
+                updateVoiceTextDisplay('语音识别已就绪', true);
+                setTimeout(() => updateVoiceTextDisplay('', true), 2000);
+                // 模型就绪后重新上报能力，让服务器 findDisplayWithAsr 能选中本机
+                if (displayWs && displayWs.readyState === WebSocket.OPEN && currentCapabilities) {
+                    currentCapabilities.voiceRecognition = true;
+                    displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+                }
+            } else if (payload.state === 'error') {
+                nativeAsrReady = false;
+                updateVoiceTextDisplay('语音模型下载失败: ' + (payload.error || '未知错误'), true);
+                setTimeout(() => updateVoiceTextDisplay('', true), 4000);
+            }
+        };
         let logReportConfig = null;
         let _originalConsole = null;
         
@@ -2439,6 +2462,17 @@
                     }
 
                     if (data.type === 'asrConfig') {
+                        if (nativeAsrAvailable) {
+                            // APK 原生引擎：localAsrEnabled 关闭时把能力声明置 false
+                            if (!data.localAsrEnabled && nativeAsrReady) {
+                                nativeAsrReady = false;
+                                if (displayWs && displayWs.readyState === WebSocket.OPEN && currentCapabilities) {
+                                    currentCapabilities.voiceRecognition = false;
+                                    displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+                                }
+                            }
+                            return;
+                        }
                         if (data.localAsrEnabled && !localAsrAvailable) {
                             forceInitLocalAsr();
                         } else if (!data.localAsrEnabled && localAsrAvailable) {
@@ -2678,7 +2712,19 @@
                 capabilities.voiceRecording = false;
             }
             
-            if (localAsrAvailable || voiceSupported) {
+            if (nativeAsrAvailable) {
+                // APK 原生识别引擎：按模型就绪状态声明能力，未就绪时触发下载
+                try {
+                    const st = JSON.parse(nativeBridge.asrStatus());
+                    nativeAsrReady = (st.state === 'ready');
+                    capabilities.voiceRecognition = nativeAsrReady;
+                    if (st.state === 'not_ready' || st.state === 'error') {
+                        nativeBridge.asrEnsureModel();
+                    }
+                } catch (e) {
+                    capabilities.voiceRecognition = false;
+                }
+            } else if (localAsrAvailable || voiceSupported) {
                 capabilities.voiceRecognition = true;
             } else {
                 try {
@@ -2811,6 +2857,47 @@
         }
         
         async function handleAsrAudio(data) {
+            // APK 原生识别路径：webm/wav base64 → WebAudio 解码重采样 16k mono → 裸 PCM → 原生引擎
+            if (nativeAsrAvailable) {
+                if (!nativeAsrReady) {
+                    const st = JSON.parse(nativeBridge.asrStatus());
+                    if (st.state === 'not_ready' || st.state === 'error') {
+                        nativeBridge.asrEnsureModel();
+                    }
+                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                        displayWs.send(JSON.stringify({
+                            type: 'asrResult',
+                            requestId: data.requestId,
+                            error: '模型下载中',
+                            text: ''
+                        }));
+                    }
+                    return;
+                }
+                try {
+                    const pcmBase64 = await decodeAudioToPcmBase64(data.audioData);
+                    const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
+                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                        displayWs.send(JSON.stringify({
+                            type: 'asrResult',
+                            requestId: data.requestId,
+                            text: res.text || '',
+                            error: res.error || ''
+                        }));
+                    }
+                } catch (e) {
+                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                        displayWs.send(JSON.stringify({
+                            type: 'asrResult',
+                            requestId: data.requestId,
+                            error: e.message,
+                            text: ''
+                        }));
+                    }
+                }
+                return;
+            }
+
             if (!SherpaASR || !SherpaASR.isLoaded) {
                 console.log('[显示端] 收到ASR音频但本地ASR未初始化');
                 if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -2848,11 +2935,38 @@
             }
         }
 
+        // webm/wav base64 → 16kHz mono 裸 PCM s16le 的 base64（原生引擎输入契约）
+        async function decodeAudioToPcmBase64(base64Audio) {
+            const binary = atob(base64Audio);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const decodeCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1, 44100);
+            const audioBuffer = await decodeCtx.decodeAudioData(bytes.buffer.slice(0));
+            const length = Math.ceil(audioBuffer.duration * 16000);
+            const resampleCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, length, 16000);
+            const src = resampleCtx.createBufferSource();
+            src.buffer = audioBuffer;
+            src.connect(resampleCtx.destination);
+            src.start();
+            const rendered = await resampleCtx.startRendering();
+            const samples = rendered.getChannelData(0);
+            const pcm = new Uint8Array(samples.length * 2);
+            const dv = new DataView(pcm.buffer);
+            for (let i = 0; i < samples.length; i++) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                dv.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+            }
+            let bin = '';
+            for (let i = 0; i < pcm.length; i++) bin += String.fromCharCode(pcm[i]);
+            return btoa(bin);
+        }
+
         function initVoiceRecognition() {
             checkAsrStatus();
         }
         
         async function forceInitLocalAsr() {
+            if (nativeAsrAvailable) return false;  // 原生引擎负责识别，不加载 WASM
             try {
                 if (!SherpaASR) return false;
                 if (SherpaASR.isLoaded) return true;
@@ -2897,6 +3011,10 @@
         }
 
                 async function checkAsrStatus() {
+            if (nativeAsrAvailable) {
+                console.log('显示端原生 ASR 引擎可用');
+                return;  // 原生引擎由 asrEnsureModel 下载模型，就绪后 onNativeAsrModel 重新上报能力
+            }
             try {
                 const localAsrReady = await initLocalAsr();
                 if (localAsrReady) {
@@ -2926,6 +3044,7 @@
         }
         
         async function initLocalAsr() {
+            if (nativeAsrAvailable) return false;  // 原生引擎负责识别，不加载 WASM
             try {
                 if (!window.SherpaASR) return false;
                 
