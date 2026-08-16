@@ -229,7 +229,9 @@ const assert = require('assert');
   console.log('PASS: 未启用睡眠时始终正常显示');
 
   // ---- 6. handleControl('sleepSettings') 接线 + ack 携带 sleepState ----
+  // 先清零 activationUntil（步骤 4 的激活窗口未过期会覆盖成 active，干扰 deep 断言）
   await page.evaluate(() => {
+    activationUntil = 0;
     const ws = window.__wsInstance;
     const h = new Date().getHours();
     ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
@@ -267,7 +269,9 @@ const assert = require('assert');
   console.log('PASS: handleControl(sleepActivate) 临时激活');
 
   // ---- 8. handleRestoreState(state.sleep) 恢复 ----
+  // 先清零 activationUntil（步骤 7 的激活窗口未过期会覆盖成 active，干扰 deep 断言）
   await page.evaluate(() => {
+    activationUntil = 0;
     const ws = window.__wsInstance;
     const h = new Date().getHours();
     ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
@@ -557,6 +561,8 @@ function activateTemporarily():     # 控制端按钮 / showMedia 触发
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |
 ```
+
+（注意：以上 ` ```markdown ` 与结尾 ` ``` ` 之间的内容为写入文件的全部内容，**结尾的 ` ``` ` 本身不写入文件**。）
 
 - [ ] **Step 7: Commit**
 

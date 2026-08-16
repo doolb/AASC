@@ -86,4 +86,3 @@ function activateTemporarily():     # 控制端按钮 / showMedia 触发
 | `control` / `sleepActivate` | 无 | `activateTemporarily()` + ack(`extraData.sleepState`) |
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |
-```
