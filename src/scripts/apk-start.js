@@ -1,10 +1,11 @@
 // APK 显示端启动到指定屏幕：adb am start --display <id>
-// 用法：npm run start:apk:display -- 5        （启动到 HDMI 屏）
+// 用法：npm run start:apk:display -- 2        （启动到 Desktop 屏，默认）
+//       npm run start:apk:display -- 5        （HDMI 屏）
 //       npm run start:apk:display -- 0        （内置屏）
-// 不带参数默认 5（HDMI 屏）
+// 不带参数默认 2（Desktop 屏）
 const { execSync } = require('child_process');
 
-let displayId = process.argv[2] || '5';
+let displayId = process.argv[2] || '2';
 // npm 传参会有 `--` 前缀剥掉，取最后一个数字参数
 const numeric = process.argv.slice(2).map(Number).filter(n => Number.isInteger(n));
 if (numeric.length) displayId = String(numeric[numeric.length - 1]);
@@ -23,6 +24,7 @@ if (!device) {
     process.exit(1);
 }
 
-console.log(`启动 ${device} 到 display ${displayId}`);
-execSync(`adb -s ${device} shell am start --display ${displayId} -n com.aasc.display/.MainActivity`, { stdio: 'inherit' });
+console.log(`启动 ${device} 到 display ${displayId}（全屏）`);
+// --windowingMode 1 强制全屏：桌面模式（DeX/虚拟屏）下 Activity 默认自由窗口小尺寸，需全屏铺满
+execSync(`adb -s ${device} shell am start --display ${displayId} --windowingMode 1 -n com.aasc.display/.MainActivity`, { stdio: 'inherit' });
 console.log('已启动（若屏幕仍黑，检查该 display 是否 ON）');
