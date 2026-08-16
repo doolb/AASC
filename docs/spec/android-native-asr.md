@@ -35,7 +35,7 @@ ensureModel(baseUrl, onModelEvent):
   置 downloading → 后台线程:
     validOnDisk = !needsDownload(model, tokens)     # 磁盘已有完整模型则跳过下载（重启不重下 234MB）
     okTokens = validOnDisk || 下载 tokens.txt
-    okModel  = validOnDisk || 下载 model.int8.onnx(进度经 onNativeAsrModel 上报)
+    okModel  = okTokens && (validOnDisk || 下载 model.int8.onnx(进度经 onNativeAsrModel 上报))  # okTokens 短路：tokens 失败不再拉 234MB 大模型
     loadOk = okModel && hasEnoughMemory(availMem>400MB) && AsrEngine.load(context, model, tokens)
     成功 → ready
     失败 → error；三分支：
