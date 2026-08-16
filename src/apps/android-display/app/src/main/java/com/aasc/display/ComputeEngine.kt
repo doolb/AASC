@@ -5,6 +5,7 @@ import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
 import android.opengl.EGLDisplay
+import android.opengl.EGLExt
 import android.opengl.GLES31
 import android.os.Handler
 import android.os.HandlerThread
@@ -33,7 +34,7 @@ object ComputeEngine {
         var result = """{"error":"compute 超时"}"""
         glHandler.post {
             result = runCatching { run(request) }
-                .getOrElse { """{"error":"${it.message}"}""" }
+                .getOrElse { JSONObject().put("error", it.message ?: it.javaClass.simpleName).toString() }
             latch.countDown()
         }
         latch.await(5, TimeUnit.SECONDS)
@@ -59,7 +60,12 @@ object ComputeEngine {
         if (!EGL14.eglChooseConfig(display, configAttribs, 0, configs, 0, 1, numConfigs, 0))
             throw ComputeException("EGL 选择 config 失败")
 
-        val ctxAttribs = intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE)
+        // 用 EGL_KHR_create_context 的 MAJOR/MINOR 显式请求 GLES 3.1（EGL_CONTEXT_CLIENT_VERSION 只能到 3.0）
+        val ctxAttribs = intArrayOf(
+            EGLExt.EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
+            EGLExt.EGL_CONTEXT_MINOR_VERSION_KHR, 1,
+            EGL14.EGL_NONE
+        )
         context = EGL14.eglCreateContext(display, configs[0], EGL14.EGL_NO_CONTEXT, ctxAttribs, 0)
         if (context == EGL14.EGL_NO_CONTEXT) throw ComputeException("EGL 创建 GLES 3.1 上下文失败")
 
