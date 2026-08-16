@@ -725,7 +725,10 @@ const Crop = {
     // 控制模式：截图铺满容器（裁剪框隐藏），以容器（截图区域）为坐标系
     onContainerMouse(e, evtName) {
         if (!this.controlModeOn) return;
-        const area = this.box && this.box.style.display !== 'none' ? this.box : this.container;
+        // 坐标基准 = 实际显示的截图图片区域，而非容器（objectFit contain 时容器可能有黑边 letterbox，
+        // 若按整个容器算百分比，截图未铺满部分会被误算进坐标，导致点击偏移）
+        const img = this.previewImg;
+        const area = (img && img.style.display !== 'none') ? img : this.container;
         const areaRect = area.getBoundingClientRect();
         if (areaRect.width === 0 || areaRect.height === 0) return;
         // 区域内相对百分比
