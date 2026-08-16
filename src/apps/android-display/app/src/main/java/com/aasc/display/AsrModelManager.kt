@@ -8,8 +8,16 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSession
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 // 原生 ASR 模型管理：下载/校验/加载/状态机
 // 状态：not_ready → downloading → ready | error（error 或损坏后再次 ensureModel 会重新下载）
@@ -55,12 +63,14 @@ class AsrModelManager(
                 val validOnDisk = !AsrModelFiles.needsDownload(modelFile, tokensFile)
                 // 需要下载时：先下载 tokens（小文件），再下载模型（大文件，进度上屏）
                 val okTokens = validOnDisk || downloadFile(tokensUrl, tokensFile) { /* tokens 很小，不细分进度 */ }
-                val okModel = validOnDisk || downloadFile(modelUrl, modelFile) { p ->
+                // okTokens 短路：tokens 下载失败时不再拉取 234MB 大模型（避免无谓流量浪费）
+                val okModel = okTokens && (validOnDisk || downloadFile(modelUrl, modelFile) { p ->
                     progress = p
                     postModelEvent(JSONObject().put("state", "downloading").put("progress", p), onModelEvent)
-                }
+                })
                 // 内存不足时不硬加载防 OOM（234MB 模型在低端机可能 OOM，设计文档风险项）
-                val loadOk = okModel && hasEnoughMemory() && AsrEngine.load(context, modelFile, tokensFile)
+                val memOk = hasEnoughMemory()
+                val loadOk = okModel && memOk && AsrEngine.load(context, modelFile, tokensFile)
                 if (loadOk) {
                     state = "ready"
                     postModelEvent(JSONObject().put("state", "ready"), onModelEvent)
@@ -68,14 +78,14 @@ class AsrModelManager(
                     state = "error"
                     lastError = when {
                         !okModel -> "模型下载失败"
-                        !hasEnoughMemory() -> "设备内存不足，无法加载语音模型"
+                        !memOk -> "设备内存不足，无法加载语音模型"
                         else -> "模型加载自检失败"
                     }
                     when {
                         // 下载失败：模型/tokens 缺失或损坏，全部清掉（含 .tmp 残件）
                         !okModel -> AsrModelFiles.purge(modelFile, tokensFile)
                         // 内存不足：保留已下载文件（内存释放后可重试加载），仅清理 .tmp 残件
-                        !hasEnoughMemory() -> {
+                        !memOk -> {
                             File(modelFile.parentFile, modelFile.name + ".tmp").delete()
                             File(tokensFile.parentFile, tokensFile.name + ".tmp").delete()
                         }
@@ -110,12 +120,27 @@ class AsrModelManager(
     }
 
     // 下载到 .tmp 后原子改名（整文件重下，不做断点续传）；失败返回 false
+    // HTTPS 自签名证书信任：服务器默认 8081 端口部署自签名证书，HttpURLConnection 走系统信任库
+    // 会握手失败（SSLHandshakeException），这里显式 trust-all 与 MainActivity.onReceivedSslError
+    // 的 WebView 放行保持同一安全姿态（WebView 已信任该证书，原生下载也应一致）。
     private fun downloadFile(urlStr: String, dest: File, onProgress: (Int) -> Unit): Boolean {
-        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 10000
-            readTimeout = 60000
-        }
+        var conn: HttpURLConnection? = null
         return try {
+            val raw = URL(urlStr).openConnection()
+            conn = if (urlStr.startsWith("https://")) {
+                val https = raw as HttpsURLConnection
+                val tm = arrayOf<TrustManager>(object : X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                })
+                val sc = SSLContext.getInstance("TLS")
+                sc.init(null, tm, SecureRandom())
+                https.sslSocketFactory = sc.socketFactory
+                https.hostnameVerifier = HostnameVerifier { _: String?, _: SSLSession? -> true }
+                https
+            } else raw as HttpURLConnection
+            conn.apply { connectTimeout = 10000; readTimeout = 60000 }
             val total = conn.contentLengthLong
             val tmp = File(dest.parentFile, dest.name + ".tmp")
             conn.inputStream.use { input ->
@@ -137,10 +162,12 @@ class AsrModelManager(
                 tmp.delete()
             }
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // 记录失败原因（自签名证书/网络/服务器 404 等），便于设备端定位
+            android.util.Log.e("AsrModelManager", "模型下载失败: ${urlStr} ${e.message}")
             false
         } finally {
-            conn.disconnect()
+            conn?.disconnect()
         }
     }
 }

@@ -31,6 +31,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     // sherpa-onnx Android AAR：官方不上传 Maven Central，改用 GitHub release 产物 vendored 到 libs/
+    // 来源: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.35/sherpa-onnx-1.12.35.aar
+    // SHA-256: 43cfb818461da559016bd10647c95192f4683c02792b9d9116aba30e2324858e
     implementation(files("libs/sherpa-onnx-1.12.35.aar"))
     testImplementation("junit:junit:4.13.2")
     // JVM 单元测试中 android.jar 的 org.json 是 stub（抛 "not mocked"），

@@ -8,7 +8,7 @@ class AsrPcmTest {
 
     @Test
     fun decodeS16_标准样本转Float32() {
-        // 两个 s16le 样本：32767 → 1.0（近似），-32768 → -1.0，0 → 0.0
+        // 三个 s16le 样本：32767 → 1.0（近似），-32768 → -1.0，0 → 0.0
         val bytes = byteArrayOf(
             0xFF.toByte(), 0x7F.toByte(),  // 32767
             0x00.toByte(), 0x80.toByte(),  // -32768

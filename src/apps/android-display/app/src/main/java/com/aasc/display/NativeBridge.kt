@@ -239,8 +239,11 @@ class NativeBridge(
     private fun serverBaseUrl(): String {
         return try {
             val u = android.net.Uri.parse(webView.url)
+            // webView.url 可能为 null → Uri.scheme/host 为 null，避免拼出 "null://null"
+            val scheme = u.scheme ?: return ""
+            val host = u.host ?: return ""
             val port = if (u.port != -1) ":${u.port}" else ""
-            "${u.scheme}://${u.host}$port"
+            "$scheme://$host$port"
         } catch (e: Exception) {
             ""
         }
