@@ -51,9 +51,11 @@ class AsrModelManager(
                 modelDir.mkdirs()
                 val modelUrl = "$baseUrl/api/asr/model/model.int8.onnx"
                 val tokensUrl = "$baseUrl/api/asr/model/tokens.txt"
-                // 先下载 tokens（小文件），再下载模型（大文件，进度上屏）
-                val okTokens = downloadFile(tokensUrl, tokensFile) { /* tokens 很小，不细分进度 */ }
-                val okModel = okTokens && downloadFile(modelUrl, modelFile) { p ->
+                // 磁盘已有完整模型则跳过下载（下载一次即可，重启不重复拉取 234MB）
+                val validOnDisk = !AsrModelFiles.needsDownload(modelFile, tokensFile)
+                // 需要下载时：先下载 tokens（小文件），再下载模型（大文件，进度上屏）
+                val okTokens = validOnDisk || downloadFile(tokensUrl, tokensFile) { /* tokens 很小，不细分进度 */ }
+                val okModel = validOnDisk || downloadFile(modelUrl, modelFile) { p ->
                     progress = p
                     postModelEvent(JSONObject().put("state", "downloading").put("progress", p), onModelEvent)
                 }
@@ -69,9 +71,16 @@ class AsrModelManager(
                         !hasEnoughMemory() -> "设备内存不足，无法加载语音模型"
                         else -> "模型加载自检失败"
                     }
-                    // 内存不足时保留已下载文件（内存可能释放后可重试加载），其余情况清掉损坏文件
-                    if (okModel && hasEnoughMemory()) {
-                        AsrModelFiles.purge(modelFile, tokensFile)
+                    when {
+                        // 下载失败：模型/tokens 缺失或损坏，全部清掉（含 .tmp 残件）
+                        !okModel -> AsrModelFiles.purge(modelFile, tokensFile)
+                        // 内存不足：保留已下载文件（内存释放后可重试加载），仅清理 .tmp 残件
+                        !hasEnoughMemory() -> {
+                            File(modelFile.parentFile, modelFile.name + ".tmp").delete()
+                            File(tokensFile.parentFile, tokensFile.name + ".tmp").delete()
+                        }
+                        // 加载自检失败：清掉损坏文件（含 .tmp 残件）
+                        else -> AsrModelFiles.purge(modelFile, tokensFile)
                     }
                     postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
                 }
