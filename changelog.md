@@ -12,11 +12,12 @@
 - ✅ [2026-08-16] render-display 覆盖层整体半透明黑底（`background:rgba(0,0,0,0.5)`），后淡一半为 0.25，底下内容隐约可见且文字清晰
   - 改动文件：res/tasks/render-display/render.html、docs/spec/monitor-system.md
 
-- ✅ [2026-08-16] 控制模式触摸改 JS 合成（DeX 多屏触摸无法定位）
-  - 根因：盒子 DeX 模式 APK 在 display 2（HDMI），无障碍手势/input tap 固定打 display 0（内置屏），物理触摸跨屏无法定位；Android 9 的 input 命令也不支持 --display
-  - display.html：鼠标/滚轮改走 JS 合成（0° 同源准确，跨域 iframe 不可读时静默跳过）；键盘/文本保留走桥（dispatchKeyEvent 真实按键不需要屏幕坐标，跨域聚焦元素可接收）
-  - 移除 nativeScreenPoint/rotateShotToOriginal（不再物理注入屏幕坐标）
-  - 实测验证：0° 同源 JS 合成 5 按钮全部命中（TL/TR/中心/BL/BR）
+- ✅ [2026-08-16] 控制模式预览随旋转直立（阅读方向）+ JS 合成点击全角度命中
+  - 恢复截图反旋转 rotateShotToOriginal：WebView 位图按 currentRotation 反旋转成页面直立，rotate90/270 输出竖图，预览随显示端旋转、阅读方向正确
+  - 鼠标/滚轮走 JS 合成（不用 adb/无障碍）：合成事件在 iframe contentDocument 坐标系，用 clientWidth/clientHeight（随旋转为页面方向尺寸）映射页面百分比，同源内容 0°/90°/270° 点击命中
+  - 键盘/文本仍走桥（WebView dispatchKeyEvent，跨域可用）
+  - 实测：rot0/rot90 点中心按钮均命中；rot90 预览竖屏直立
+  - 背景：盒子必须 DeX（display 2）+ 无 root，无障碍/桥触摸只能到 display 0，跨域触摸不可用（接受限制）
   - 改动文件：src/apps/web-mediacenter/ui/public/display.html
 
 - ✅ [2026-08-16] 控制模式截图预览二次旋转 + 切换角度误进裁剪模式修复
