@@ -133,3 +133,12 @@
    - 子显示端自动声明为纯语音能力（无媒体渲染、无文本显示）
    - 设计文档：docs/design/display-capability.md
    - 实现文档：docs/spec/display-capability.md
+
+## 显示端代码自动刷新
+ - ✅已完成 [2026-08-17][2026-08-17] 显示端代码更新自动 reload（无需重启 APK）
+   - 功能：显示端页面（display.html）每 8 秒轮询 `/api/display-version`，返回的 version 变化即执行 `location.reload()` 加载最新代码
+   - 前提：APK 已禁用 HTTP 缓存 + URL 带时间戳，reload 即取到最新文件
+   - version 计算：服务端取 public 目录下所有文件的 mtime 最大值
+   - 本次增强：版本检测由写死的 7 个文件列表改为递归扫描整个 public 目录（含 css/、js/、js/map/** 等子目录），新增任意前端文件都会触发自动刷新，无需手动维护文件清单
+   - 改动文件：src/apps/server/boot/server-app.js（/api/display-version 接口）、public/display.html（前端轮询，未改动）
+   - 实现文档：docs/spec/api.md

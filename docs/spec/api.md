@@ -364,6 +364,26 @@
 退出当前进程
 ```
 
+### GET /api/display-version
+显示端代码版本检测接口。前端每 8 秒轮询，返回 `version` 变化即自动 reload 加载最新代码（无需重启 APK）。
+
+**响应**:
+```json
+{ "version": 1712016000000 }
+```
+
+**实现**:
+```
+publicDir = PROJECT_ROOT + '/src/apps/web-mediacenter/ui/public'
+函数 getDisplayVersion():
+    maxMtime = 0
+    递归遍历 publicDir 下所有文件（含子目录）:
+        statSync 取 mtimeMs
+        mtimeMs > maxMtime 则更新 maxMtime
+    return maxMtime
+返回 { version: getDisplayVersion() }
+```
+
 ## 地图位置 API
 
 ### GET /api/map-positions

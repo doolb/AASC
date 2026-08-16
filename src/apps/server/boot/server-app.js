@@ -1951,18 +1951,29 @@ app.delete('/api/device-events/:ip', (req, res) => {
     }
 });
 
-// 显示端代码版本检测：前端轮询此端点，display.html 等文件 mtime 变化即自动 reload（无需重启 APK）
-app.get('/api/display-version', (req, res) => {
-    const files = ['display.html', 'css/display.css', 'js/websocket.js', 'js/crop.js', 'js/controls.js', 'js/media-library.js', 'js/upload.js'];
+// 显示端代码版本检测：前端轮询此端点，public 目录下任一文件 mtime 变化即自动 reload（无需重启 APK）
+// 递归扫描整个 public 目录，避免新增 js/css 文件时漏检
+function getDisplayVersion() {
+    const publicDir = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public');
     let maxMtime = 0;
-    for (const f of files) {
-        const p = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public', f);
-        try {
-            const m = fs.statSync(p).mtimeMs;
-            if (m > maxMtime) maxMtime = m;
-        } catch (e) { /* 文件不存在跳过 */ }
-    }
-    res.json({ version: maxMtime });
+    const walk = (dir) => {
+        for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+            const p = path.join(dir, ent.name);
+            if (ent.isDirectory()) {
+                walk(p);
+            } else {
+                try {
+                    const m = fs.statSync(p).mtimeMs;
+                    if (m > maxMtime) maxMtime = m;
+                } catch (e) { /* 文件被并发删除时跳过 */ }
+            }
+        }
+    };
+    walk(publicDir);
+    return maxMtime;
+}
+app.get('/api/display-version', (req, res) => {
+    res.json({ version: getDisplayVersion() });
 });
 
 app.get('/api/device-settings/:displayId', (req, res) => {

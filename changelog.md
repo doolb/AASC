@@ -34,6 +34,11 @@
 
 ### 优化
 
+- ✅ [2026-08-17] `/api/display-version` 版本检测由写死的 7 个文件列表改为递归扫描整个 public 目录（含子目录）
+  - 原实现只监控 display.html + 6 个 css/js，新增文件（如 js/native-compute.js、js/map/**）改动不会触发显示端自动刷新
+  - 修复：递归遍历 public 目录所有文件取最大 mtimeMs 作为 version，新增/修改任意前端文件都会触发显示端 reload 加载最新代码
+  - 改动文件：src/apps/server/boot/server-app.js、docs/spec/api.md
+
 - ✅ [2026-08-16] 修复 APK 自身 CPU 使用率永远 0%
   - 根因：本机 Android 14 ROM 的 SELinux 拒绝 app 读取 /proc/stat → readCpuPercent 每次异常返回 0
   - 修复：CPU 读取改回退链——优先 /proc/stat 整体 CPU，被拒时回退 /proc/self/stat 进程自身 CPU（utime+stime，按 10ms/jiffy 与真实时间间隔换算）
