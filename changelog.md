@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### 新增
+
+- ✅ [2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）实现完成
+  - 在 NativeBridge 新增 compute() 桥方法，离屏 EGL 3.1 上下文执行 GLES compute shader，为 threejs 提供协作/归约类真 compute 能力
+  - 接口对齐 threejs WebGPU compute（workgroupSize/count/dispatchSize/instanceIndex→gl_GlobalInvocationID）
+  - 结果两种回传：数值（数组）/ 图像（dataUrl 做纹理，多格式 rgba32f/rgba16f/r32f/rgba8/rgba8ui/rgba32ui）
+  - 真机验证（三星 Note 8 / Android 9 / display 2）：
+    - 数值翻倍 Float32Array[1,2,3,4] → [2,4,6,8] ✅（含 TypedArray 归一化）
+    - 坏 shader → 合法 JSON {"error":...} ✅（JSONObject 序列化 + JSON.parse try-catch）
+    - 图像读回 y=0 蓝 / 底部红 → PNG top=红 bottom=蓝 ✅（行翻转 + R/B 通道修正）
+  - 改动文件：
+    - src/apps/android-display/app/src/main/java/com/aasc/display/ComputeProtocol.kt（协议解析，新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/ComputeEngine.kt（离屏 EGL 3.1 执行，新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/ComputePixels.kt（像素行翻转/通道归一化，新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt（compute() 桥方法）
+    - src/apps/android-display/app/src/test/java/com/aasc/display/ComputeProtocolTest.kt（8 用例，新增）
+    - src/apps/android-display/app/src/test/java/com/aasc/display/ComputePixelsTest.kt（5 用例，新增）
+    - src/apps/web-mediacenter/ui/public/js/native-compute.js（JS 封装，新增）
+    - src/apps/web-mediacenter/ui/public/display.html（引入 native-compute.js）
+  - 文档：docs/design/android-compute-bridge.md、docs/spec/android-compute-bridge.md、docs/task/2026-08-16_android-gpu-compute桥.md
+
 ### 修复
 
 - ✅ [2026-08-16] 控制端切换角度时显示端画面未按适配模式（图片旋转但尺寸没适配）修复

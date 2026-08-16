@@ -2,6 +2,11 @@
 
 ## 功能完善
 
+- ✅已完成 [2026-08-16][2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）
+  - 设计文档：docs/design/android-compute-bridge.md
+  - 实施计划：docs/task/2026-08-16_android-gpu-compute桥.md
+  - 实现：ComputeEngine.kt（离屏 EGL 3.1）+ ComputePixels.kt（像素翻转/通道）+ NativeBridge.compute() + JS NativeCompute 封装
+  - 真机验证（三星 Note 8 / Android 9 / display 2）：数值翻倍 [2,4,6,8]、坏 shader 合法 JSON 错误、Float32Array 归一化、图像上下/红蓝正确
 - ✅已完成 [2026-08-15][2026-08-15] Android APK 显示端（跨域控制增强）：WebView 包装 + 原生桥（真实像素截图 + 跨域输入注入），浏览器显示端保留并声明无跨域控制能力
   - 设计文档：docs/design/android-display.md
   - 实施计划：docs/task/2026-08-15_android-apk显示端.md

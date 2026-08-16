@@ -50,3 +50,4 @@
 || 显示端模型推理任务 | [model-inference-task.md](design/model-inference-task.md) | ModelManager 通用推理架构、LFM-VL 适配器、内置任务集成 |
 || 硬件监控系统 | [monitor-system.md](design/monitor-system.md) | 任务链采集→渲染、通用渲染任务协议 |
 | Android显示端监控 | [android-display-stats.md](design/android-display-stats.md) | APK 自身资源监控 + render-display 横条化 |
+| Android显示端 GPU Compute | [android-compute-bridge.md](design/android-compute-bridge.md) | 离屏 EGL 3.1 compute 桥、SSBO/image2D 数值与图像读回 |
