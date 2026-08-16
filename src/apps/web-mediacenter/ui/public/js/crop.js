@@ -712,28 +712,52 @@ const Crop = {
         }
     },
 
-    // 控制模式容器：隐藏裁剪框 + 跟随显示端 canvasSize 比例（不旋转）
+    // 控制模式容器：隐藏裁剪框 + 跟随截图实际比例（不旋转）
+    // 截图比例可能 ≠ canvasSize（WebView 可用高度被系统栏压缩），用截图尺寸确保无黑边铺满
     _applyControlModeContainer() {
         if (this.box) this.box.style.display = 'none';
+        const shot = this._controlShotSize;
         const canvasSize = window.displayCanvasSize || { width: 1920, height: 1080 };
-        if (canvasSize.width > 0 && canvasSize.height > 0) {
-            this.container.style.aspectRatio = canvasSize.width + ' / ' + canvasSize.height;
+        const w = shot && shot.width > 0 ? shot.width : canvasSize.width;
+        const h = shot && shot.height > 0 ? shot.height : canvasSize.height;
+        if (w > 0 && h > 0) {
+            this.container.style.aspectRatio = w + ' / ' + h;
         }
     },
 
-    // 容器内鼠标事件 → 百分比坐标 → 转发
-    // 控制模式：截图铺满容器（裁剪框隐藏），以容器（截图区域）为坐标系
+    // 截图 actual content 区域：容器内 objectFit:contain 实际绘制区域（图片盒=容器全尺寸，需按比例算）
+    _controlShotArea() {
+        const c = this.container.getBoundingClientRect();
+        if (c.width === 0 || c.height === 0) return null;
+        const shot = this._controlShotSize;
+        const ratio = shot && shot.width > 0 && shot.height > 0
+            ? shot.width / shot.height
+            : 16 / 9;   // 兜底
+        const cRatio = c.width / c.height;
+        const area = { left: c.left, top: c.top, width: c.width, height: c.height };
+        if (ratio > cRatio) {
+            // 截图更宽：左右铺满，上下留黑边
+            area.height = c.width / ratio;
+            area.top = c.top + (c.height - area.height) / 2;
+        } else {
+            // 截图更高：上下铺满，左右留黑边
+            area.width = c.height * ratio;
+            area.left = c.left + (c.width - area.width) / 2;
+        }
+        return area;
+    },
+
+    // 容器内鼠标事件 → 截图区域百分比 → 转发
+    // 控制模式：以截图实际显示区域（去 letterbox）为坐标系，避免容器黑边被误算进坐标
     onContainerMouse(e, evtName) {
         if (!this.controlModeOn) return;
-        // 坐标基准 = 实际显示的截图图片区域，而非容器（objectFit contain 时容器可能有黑边 letterbox，
-        // 若按整个容器算百分比，截图未铺满部分会被误算进坐标，导致点击偏移）
-        const img = this.previewImg;
-        const area = (img && img.style.display !== 'none') ? img : this.container;
-        const areaRect = area.getBoundingClientRect();
-        if (areaRect.width === 0 || areaRect.height === 0) return;
+        // 坐标基准 = 截图实际显示区域（objectFit contain 去 letterbox 黑边），
+        // 容器比例可能 ≠ 截图比例（canvasSize 1920x1080 vs 截图 1280x623），按容器算会垂直偏移
+        const area = this._controlShotArea();
+        if (!area) return;
         // 区域内相对百分比
-        const px = ((e.clientX - areaRect.left) / areaRect.width) * 100;
-        const py = ((e.clientY - areaRect.top) / areaRect.height) * 100;
+        const px = ((e.clientX - area.left) / area.width) * 100;
+        const py = ((e.clientY - area.top) / area.height) * 100;
         if (evtName === 'contextmenu') {
             e.preventDefault();
         }
@@ -844,6 +868,9 @@ const Crop = {
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.objectFit = 'contain';
+        // 记录截图实际尺寸：坐标换算用（截图比例可能 ≠ canvasSize，容器需按截图比例无黑边铺满）
+        this._controlShotSize = { width: data.width, height: data.height };
+        this._applyControlModeContainer();
         if (this.placeholder) this.placeholder.style.display = 'none';
     },
 
