@@ -12,6 +12,13 @@
 - ✅ [2026-08-16] render-display 覆盖层整体半透明黑底（`background:rgba(0,0,0,0.5)`），后淡一半为 0.25，底下内容隐约可见且文字清晰
   - 改动文件：res/tasks/render-display/render.html、docs/spec/monitor-system.md
 
+- ✅ [2026-08-16] 控制模式触摸改 JS 合成（DeX 多屏触摸无法定位）
+  - 根因：盒子 DeX 模式 APK 在 display 2（HDMI），无障碍手势/input tap 固定打 display 0（内置屏），物理触摸跨屏无法定位；Android 9 的 input 命令也不支持 --display
+  - display.html：鼠标/滚轮改走 JS 合成（0° 同源准确，跨域 iframe 不可读时静默跳过）；键盘/文本保留走桥（dispatchKeyEvent 真实按键不需要屏幕坐标，跨域聚焦元素可接收）
+  - 移除 nativeScreenPoint/rotateShotToOriginal（不再物理注入屏幕坐标）
+  - 实测验证：0° 同源 JS 合成 5 按钮全部命中（TL/TR/中心/BL/BR）
+  - 改动文件：src/apps/web-mediacenter/ui/public/display.html
+
 - ✅ [2026-08-16] 控制模式截图预览二次旋转 + 切换角度误进裁剪模式修复
   - 根因：显示端已将截图反旋转成网页原方向，控制端 _applyRotationClass 又给截图预览加 rotate CSS 类 → 预览被二次旋转
   - 根因：applyRotation → recalculateSize 强制 box.display=block 且发送 crop → 控制模式切换角度误进裁剪模式
