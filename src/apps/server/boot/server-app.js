@@ -1064,7 +1064,17 @@ app.get('/api/asr/model/:filename', (req, res) => {
     }
     res.setHeader('Content-Type', filename.endsWith('.txt') ? 'text/plain; charset=utf-8' : 'application/octet-stream');
     res.setHeader('Content-Length', fs.statSync(filePath).size);
-    fs.createReadStream(filePath).pipe(res);
+    const stream = fs.createReadStream(filePath);
+    // 读流出错或客户端中途断开时销毁流，避免未处理的 'error' 事件崩溃整个服务器进程
+    stream.on('error', () => {
+        if (!res.headersSent) {
+            res.status(500).json({ status: 'error', message: '模型文件读取失败' });
+        } else {
+            res.end();
+        }
+    });
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
 });
 
 app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
