@@ -2579,6 +2579,20 @@
                                     currentCapabilities.voiceRecognition = false;
                                     displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
                                 }
+                            } else if (data.localAsrEnabled && !nativeAsrReady) {
+                                // 重新启用原生 ASR：模型已就绪则恢复能力上报（未就绪保持原状，等 onNativeAsrModel ready 回调）
+                                try {
+                                    const st = JSON.parse(nativeBridge.asrStatus());
+                                    if (st.state === 'ready') {
+                                        nativeAsrReady = true;
+                                        if (displayWs && displayWs.readyState === WebSocket.OPEN && currentCapabilities) {
+                                            currentCapabilities.voiceRecognition = true;
+                                            displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.warn('[ASR] asrStatus 解析失败:', e);
+                                }
                             }
                             return;
                         }
@@ -2976,8 +2990,17 @@
             // APK 原生识别路径：webm/wav base64 → WebAudio 解码重采样 16k mono → 裸 PCM → 原生引擎
             if (nativeAsrAvailable) {
                 if (!nativeAsrReady) {
-                    const st = JSON.parse(nativeBridge.asrStatus());
-                    if (st.state === 'not_ready' || st.state === 'error') {
+                    // asrStatus 解析容错：桥异常/返回非 JSON 时也按未就绪处理并触发下载，
+                    // 始终回 asrResult{error:'模型下载中'}，避免异常挂住服务器 30s 超时
+                    let triggerEnsure = false;
+                    try {
+                        const st = JSON.parse(nativeBridge.asrStatus());
+                        triggerEnsure = (st.state === 'not_ready' || st.state === 'error');
+                    } catch (e) {
+                        console.warn('[ASR] asrStatus 解析失败:', e);
+                        triggerEnsure = true;
+                    }
+                    if (triggerEnsure) {
                         nativeBridge.asrEnsureModel();
                     }
                     if (displayWs && displayWs.readyState === WebSocket.OPEN) {

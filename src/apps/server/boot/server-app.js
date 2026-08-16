@@ -1074,6 +1074,8 @@ app.get('/api/asr/model/:filename', (req, res) => {
         }
     });
     res.on('close', () => stream.destroy());
+    // 响应对象出错（如连接被 RST 中断）时同样销毁读流，避免悬空连接
+    res.on('error', () => stream.destroy());
     stream.pipe(res);
 });
 
