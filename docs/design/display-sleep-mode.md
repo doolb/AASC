@@ -49,7 +49,7 @@
   ├─ handleControl('sleepActivate') → activateTemporarily()
   ├─ showMedia()（控制端下发媒体）→ activateTemporarily()；显示端内部调用（restore 恢复/播放列表切播）不激活
   ├─ setInterval(checkSleepMode, 10000)  → 本地时钟判断 → 应用/解除隐藏
-  └─ #sleepOverlay 全屏黑幕遮罩（z-index 最高）
+  └─ #sleepOverlay 全屏黑幕遮罩（z-index 999999，盖全部覆盖层）
 ```
 
 ## 状态模型与判定
