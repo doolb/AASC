@@ -3310,6 +3310,10 @@ async function handleControlMessageFallback(data, ws) {
                         _cropDebugLog = !!data.value;
                     } else if (data.action === 'controlMode' || data.action === 'controlInput') {
                         // 控制模式开关与输入转发：不更新 state，原样转发显示端
+                    } else if (data.action === 'sleepSettings') {
+                        // 睡眠设置持久化：显示端刷新/重启后 restoreState 恢复
+                        displayData.state.sleep = data.value;
+                        config.updateDisplayState(displayData.ip, { sleep: data.value });
                     }
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {
