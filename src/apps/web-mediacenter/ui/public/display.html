@@ -1168,16 +1168,18 @@
                 if (state.currentHtmlScroll) {
                     currentHtmlScroll = state.currentHtmlScroll;
                 }
-                showMedia(state.currentMedia);
+                showMedia(state.currentMedia, true);  // restore 恢复不激活，避免睡眠时段重启闪烁
             }
 
             if (state.sleep !== undefined) {
+                // 容错：state.sleep 可能为 null/非对象（服务端持久化异常），按空值降级，避免 TypeError
+                const s = state.sleep || {};
                 sleepSettings = {
-                    enabled: !!state.sleep.enabled,
-                    startHour: clampHour(state.sleep.startHour),
-                    endHour: clampHour(state.sleep.endHour),
-                    deepStartHour: clampHour(state.sleep.deepStartHour),
-                    deepEndHour: clampHour(state.sleep.deepEndHour)
+                    enabled: !!s.enabled,
+                    startHour: clampHour(s.startHour),
+                    endHour: clampHour(s.endHour),
+                    deepStartHour: clampHour(s.deepStartHour),
+                    deepEndHour: clampHour(s.deepEndHour)
                 };
                 checkSleepMode();
             }
@@ -1297,7 +1299,7 @@
             const mediaData = item.url
                 ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType }
                 : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType };
-            showMedia(mediaData);
+            showMedia(mediaData, true);  // 播放列表自动切播不激活（显示端内部行为）
             // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
             const reportSizeOnce = () => {
                 if (playlistState && playlistState.paused) {
@@ -2172,9 +2174,9 @@
             }).catch(e => console.log('自动播放被阻止'));
         }
 
-        function showMedia(data) {
-            // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）
-            activateTemporarily();
+        function showMedia(data, noActivate) {
+            // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
+            if (!noActivate) activateTemporarily();
             mediaVideo.pause();
             mediaVideo.src = '';
             mediaVideo.load();

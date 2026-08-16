@@ -47,7 +47,7 @@
 显示端 display.html
   ├─ handleControl('sleepSettings') → 应用设置 + 回传状态 → 服务端 updateDisplayState 持久化
   ├─ handleControl('sleepActivate') → activateTemporarily()
-  ├─ showMedia()（媒体到达）→ activateTemporarily()
+  ├─ showMedia()（控制端下发媒体）→ activateTemporarily()；显示端内部调用（restore 恢复/播放列表切播）不激活
   ├─ setInterval(checkSleepMode, 10000)  → 本地时钟判断 → 应用/解除隐藏
   └─ #sleepOverlay 全屏黑幕遮罩（z-index 最高）
 ```
@@ -138,7 +138,7 @@ function activateTemporarily():
 
 ### handleControl 扩展
 
-- `case 'sleepSettings'`：`sleepSettings = data.value`（合法化），应用一次，回传服务端持久化。
+- `case 'sleepSettings'`：`sleepSettings = data.value`（合法化），应用一次并立即判定（服务端已在其 control 处理器持久化）。
 - `case 'sleepActivate'`：`activateTemporarily()`。
 
 ### handleRestoreState 扩展
@@ -149,7 +149,7 @@ function activateTemporarily():
 
 ### showMedia 扩展
 
-`showMedia(data)` 入口处调用 `activateTemporarily()`（控制端下发媒体自动进入激活窗口）。
+`showMedia(data, noActivate)` 入口处仅当非显示端内部调用时调用 `activateTemporarily()`（控制端下发媒体自动进入激活窗口）；显示端内部调用（restoreState 恢复持久化媒体、播放列表自动切播）传 `noActivate=true`，不触发 60 秒激活窗口，仅在睡眠时段静默隐藏，避免重启/维护时睡眠模式被击穿。
 
 ## 服务端（config）
 
@@ -170,7 +170,7 @@ sleep: { enabled:false, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 
 在「显示控制」控件区（如「画面填充」控件后）加入口按钮：
 
 ```html
-<button class="control-btn" onclick="SleepPanel.open()">睡眠模式</button>
+<button class="control-btn" onclick="Controls.showSleepModePanel()">睡眠模式</button>
 ```
 
 ### 弹窗设置框（SleepPanel）
@@ -190,10 +190,9 @@ sleep: { enabled:false, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 
 ```
 控制端 SleepPanel 保存
   → sendControl('sleepSettings', {enabled,startHour,endHour,deepStartHour,deepEndHour})
-  → 服务端转发 control → 显示端 handleControl
-  → 显示端应用 + 回传 state（含 sleep）
-  → 服务端 updateDisplayState(ip, {sleep}) → config.json 持久化
-  → 显示端刷新后 handleRestoreState(state.sleep) 恢复
+  → 服务端 control 处理器收到 action==='sleepSettings' → updateDisplayState(ip, {sleep: data.value}) → config.json 持久化
+  → 转发 control → 显示端 handleControl('sleepSettings') 应用设置 + checkSleepMode() 立即判定
+  → 显示端刷新/重启后 restoreState(state.sleep) 恢复
 ```
 
 ```

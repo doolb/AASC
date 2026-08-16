@@ -38,6 +38,11 @@ const assert = require('assert');
   await page.waitForFunction(() => typeof window.checkSleepMode === 'function', { timeout: 15000 });
   await page.waitForFunction(() => window.__wsInstance && window.__wsInstance.readyState === 1, { timeout: 15000 });
 
+  // ---- 0. 页面加载不应自动打开激活窗口（restore/恢复持久化媒体不激活）----
+  const loadState = await page.evaluate(() => ({ state: sleepState, until: activationUntil }));
+  assert.strictEqual(loadState.state, 'normal', '页面加载不应自动进入激活状态');
+  assert.strictEqual(loadState.until, 0, '页面加载恢复持久化媒体不应打开 60 秒激活窗口');
+
   // ---- 1. inSleepWindow 跨天 / 非跨天判定 ----
   const w = await page.evaluate(() => ({
     crossIn: inSleepWindow(23, 23, 8),
@@ -55,7 +60,6 @@ const assert = require('assert');
 
   // ---- 2. 睡眠时段：隐藏媒体容器、保留 UI（无黑幕）----
   await page.evaluate(() => {
-    activationUntil = 0;   // 清零页面加载时 showMedia 触发的 60 秒激活窗口
     const h = new Date().getHours();
     sleepSettings = { enabled: true, startHour: h, endHour: h + 1, deepStartHour: -1, deepEndHour: -1 };
     checkSleepMode();
@@ -72,7 +76,6 @@ const assert = require('assert');
 
   // ---- 3. 深度睡眠：全屏黑幕 + 隐藏媒体 ----
   await page.evaluate(() => {
-    activationUntil = 0;   // 清零页面加载时 showMedia 触发的 60 秒激活窗口
     const h = new Date().getHours();
     sleepSettings = { enabled: true, startHour: 0, endHour: 24, deepStartHour: h, deepEndHour: h + 1 };
     checkSleepMode();
@@ -80,11 +83,13 @@ const assert = require('assert');
   const deep = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display
+    overlay: document.getElementById('sleepOverlay').style.display,
+    zIndex: document.getElementById('sleepOverlay').style.zIndex
   }));
   assert.strictEqual(deep.state, 'deep', '深度时段应优先于睡眠时段');
   assert.strictEqual(deep.media, 'none', '深度睡眠应隐藏媒体容器');
   assert.strictEqual(deep.overlay, 'block', '深度睡眠应显示全屏黑幕');
+  assert.strictEqual(deep.zIndex, '999999', '深度睡眠黑幕 z-index 应为 999999');
   console.log('PASS: 深度睡眠全屏黑幕（优先于睡眠）');
 
   // ---- 4. 临时激活：强制显示，黑幕移除 ----
@@ -158,7 +163,22 @@ const assert = require('assert');
   assert.strictEqual(act.media, 'flex', '激活应显示媒体容器');
   console.log('PASS: handleControl(sleepActivate) 临时激活');
 
-  // ---- 8. handleRestoreState(state.sleep) 恢复 ----
+  // ---- 8. 临时激活过期：60 秒后自动恢复按时段隐藏 ----
+  // 步骤 6/7 留下的 sleepSettings 为 { enabled:true, startHour:h, endHour:h+1, deepStartHour:h, deepEndHour:h+1 }，
+  // 激活窗口过期后 checkSleepMode() 应恢复为 'deep'（黑幕重新显示）
+  await page.evaluate(() => {
+    activationUntil = Date.now() - 1;   // 模拟激活窗口已过期
+    checkSleepMode();
+  });
+  const expired = await page.evaluate(() => ({
+    state: sleepState,
+    overlay: document.getElementById('sleepOverlay').style.display
+  }));
+  assert.strictEqual(expired.state, 'deep', '激活窗口过期后应恢复深度睡眠');
+  assert.strictEqual(expired.overlay, 'block', '过期恢复后应重新显示黑幕');
+  console.log('PASS: 临时激活 60 秒后自动恢复深度睡眠');
+
+  // ---- 9. handleRestoreState(state.sleep) 恢复 ----
   // 先清零 activationUntil（步骤 7 的激活窗口未过期会覆盖成 active，干扰 deep 断言）
   await page.evaluate(() => {
     activationUntil = 0;

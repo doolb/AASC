@@ -44,7 +44,7 @@ function checkSleepMode():          # 每 10 秒，setInterval
         否则若 inSleepWindow(hour, startHour, endHour):         target = 'sleep'
     若 target != sleepState:  applySleepState(target)     # 状态变化才操作 DOM
 
-function activateTemporarily():     # 控制端按钮 / showMedia 触发
+function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（showMedia noActivate=false）触发
     activationUntil = now + 60000
     applySleepState('active')
 ```
@@ -59,8 +59,11 @@ function activateTemporarily():     # 控制端按钮 / showMedia 触发
   → ack 携带 extraData.sleepState → 控制端更新弹窗状态行
 
 控制端「临时激活」/ 下发媒体
-  → sendControl('sleepActivate') / 显示端 showMedia() 入口 activateTemporarily()
+  → sendControl('sleepActivate') / 显示端 showMedia(data)（noActivate=false）入口 activateTemporarily()
   → 60 秒激活窗口强制显示，之后 checkSleepMode() 恢复按时段隐藏
+
+显示端内部调用（restoreState 恢复持久化媒体、播放列表自动切播）
+  → showMedia(data, noActivate=true) → 不触发激活窗口，仅在睡眠时段静默隐藏
 
 显示端刷新/重启
   → 服务端 restoreState(state) → handleRestoreState 读 state.sleep → checkSleepMode() 立即应用
