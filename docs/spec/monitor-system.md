@@ -43,7 +43,7 @@ nvidia-smi 查询字段：
 | 文件 | 说明 |
 |------|------|
 | `res/tasks/render-display/task.js` | 元数据注册，target=display |
-| `res/tasks/render-display/render.html` | Canvas 仪表盘 HTML 结构 |
+| `res/tasks/render-display/render.html` | 覆盖层 HTML 结构（单行横条容器，纯 DOM/CSS 无 canvas） |
 | `res/tasks/render-display/render.js` | 主线程渲染逻辑，返回 update(data) 函数 |
 
 #### 横条渲染（单行内联）
