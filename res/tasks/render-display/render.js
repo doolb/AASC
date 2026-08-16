@@ -74,26 +74,44 @@ function fmtGb(v) {
     return Number(v).toFixed(1);
 }
 
+// 布局参数：随旋转角度与来源数量动态调整，旋转（90°/270°）或多设备（>=3）时更紧凑
+function getLayout() {
+    var count = 0;
+    for (var h in sources) count++;
+    var compact = (rotation === 90 || rotation === 270) || count >= 3;
+    return {
+        barGap: compact ? 12 : 18,   // 条内元素间距
+        lblW: 96,                    // 标签固定宽
+        trackW: compact ? 280 : 360, // 填充条宽
+        trackH: compact ? 30 : 36,   // 填充条高
+        valMin: compact ? 70 : 90,   // 数值文字最小宽
+        nameMin: compact ? 190 : 220,// 来源名最小宽
+        nameMax: compact ? 320 : 380,// 来源名最大宽
+        rowGap: compact ? 20 : 32,   // 行内 metrics 间距
+        rowPad: compact ? 4 : 6      // 行垂直内边距
+    };
+}
+
 // 构建单个指标条（标签 + 填充条 + 数值文字）
-function makeBar(label, pct, color, suffix) {
+function makeBar(label, pct, color, suffix, L) {
     var bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;align-items:center;gap:18px;font-size:45px;white-space:nowrap';
+    bar.style.cssText = 'display:flex;align-items:center;gap:' + L.barGap + 'px;font-size:45px;white-space:nowrap';
 
     var lbl = document.createElement('span');
-    lbl.style.cssText = 'width:114px;color:rgba(255,255,255,0.7);text-align:right';
+    lbl.style.cssText = 'width:' + L.lblW + 'px;color:rgba(255,255,255,0.7);text-align:right';
     lbl.textContent = label;
 
     var track = document.createElement('div');
-    track.style.cssText = 'width:360px;height:36px;border-radius:18px;background:rgba(255,255,255,0.08);overflow:hidden';
+    track.style.cssText = 'width:' + L.trackW + 'px;height:' + L.trackH + 'px;border-radius:' + (L.trackH / 2) + 'px;background:rgba(255,255,255,0.08);overflow:hidden';
     var fill = document.createElement('div');
-    fill.style.cssText = 'height:100%;width:' + Math.min(100, Math.max(0, pct || 0)) + '%;border-radius:18px;background:' + color;
+    fill.style.cssText = 'height:100%;width:' + Math.min(100, Math.max(0, pct || 0)) + '%;border-radius:' + (L.trackH / 2) + 'px;background:' + color;
     track.appendChild(fill);
 
     var val = document.createElement('span');
     var clamped = Math.min(100, Math.max(0, parseFloat(pct) || 0));
     var valText = Math.round(clamped) + '%';
     if (suffix) valText += '  ' + suffix;
-    val.style.cssText = 'color:#fff;min-width:90px';
+    val.style.cssText = 'color:#fff;min-width:' + L.valMin + 'px';
     val.textContent = valText;
 
     bar.appendChild(lbl);
@@ -102,25 +120,30 @@ function makeBar(label, pct, color, suffix) {
     return bar;
 }
 
-// 单个来源单行：来源名 + 各指标条
-function ensureSourceRow(hostname) {
-    if (sources[hostname] && sources[hostname]._row) return sources[hostname]._row;
+// 单个来源单行：来源名 + 各指标条（布局随旋转/来源数动态，已有行每帧刷新行级样式）
+function ensureSourceRow(hostname, L) {
+    if (sources[hostname] && sources[hostname]._row) {
+        var cached = sources[hostname]._row;
+        cached.row.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
+        cached.name.style.cssText = 'min-width:' + L.nameMin + 'px;max-width:' + L.nameMax + 'px;overflow:hidden;text-overflow:ellipsis;font-size:45px;color:#fff';
+        return cached;
+    }
 
     var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:42px;padding:9px 0;white-space:nowrap';
+    row.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
 
     var name = document.createElement('span');
-    name.style.cssText = 'min-width:330px;max-width:540px;overflow:hidden;text-overflow:ellipsis;font-size:45px;color:#fff';
+    name.style.cssText = 'min-width:' + L.nameMin + 'px;max-width:' + L.nameMax + 'px;overflow:hidden;text-overflow:ellipsis;font-size:45px;color:#fff';
     name.textContent = hostname;
 
     var metrics = document.createElement('div');
-    metrics.style.cssText = 'display:flex;align-items:center;gap:42px';
+    metrics.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px';
     row.appendChild(name);
     row.appendChild(metrics);
 
     gaugeContainer.appendChild(row);
     if (!sources[hostname]) sources[hostname] = {};
-    sources[hostname]._row = { row: row, metrics: metrics };
+    sources[hostname]._row = { row: row, name: name, metrics: metrics };
     return sources[hostname]._row;
 }
 
@@ -161,10 +184,11 @@ function update(data) {
         return;  // 无数据且无历史源，跳过渲染
     }
 
-    // 重新渲染所有源为单行横条
+    // 重新渲染所有源为单行横条（布局随旋转/来源数动态）
+    var L = getLayout();
     for (var h in sources) {
         var d = sources[h];
-        var entry = ensureSourceRow(h);  // 获取或创建该来源的行
+        var entry = ensureSourceRow(h, L);  // 获取或创建该来源的行
         entry.metrics.innerHTML = '';
 
         var cpuPct = parseFloat(d.cpuPercent) || 0;
@@ -172,10 +196,10 @@ function update(data) {
 
         var cpuSuffix = '';
         if (d.cpuTemp && d.cpuTemp !== 'N/A') cpuSuffix = d.cpuTemp + '°C';
-        entry.metrics.appendChild(makeBar('CPU', cpuPct, pctColor(cpuPct, 76, 175, 80), cpuSuffix));
+        entry.metrics.appendChild(makeBar('CPU', cpuPct, pctColor(cpuPct, 76, 175, 80), cpuSuffix, L));
 
         var memSuffix = fmtGb(d.memUsed) + '/' + fmtGb(d.memTotal) + 'G';
-        entry.metrics.appendChild(makeBar('MEM', memPct, pctColor(memPct, 63, 81, 181), memSuffix));
+        entry.metrics.appendChild(makeBar('MEM', memPct, pctColor(memPct, 63, 81, 181), memSuffix, L));
 
         var hasGpu = d.gpuPercent !== undefined && d.gpuPercent !== null && d.gpuPercent !== 'N/A';
         if (hasGpu) {
@@ -187,7 +211,7 @@ function update(data) {
                 gpuSuffix += Math.round(vramPct) + '%VRAM';
             }
             if (d.gpuPower && d.gpuPower !== 'N/A') gpuSuffix += ' ' + String(d.gpuPower).replace(' W', '') + 'W';
-            entry.metrics.appendChild(makeBar('GPU', gpuPct, pctColor(gpuPct, 206, 147, 216), gpuSuffix));
+            entry.metrics.appendChild(makeBar('GPU', gpuPct, pctColor(gpuPct, 206, 147, 216), gpuSuffix, L));
         }
     }
 }
