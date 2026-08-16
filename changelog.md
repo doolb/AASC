@@ -4,6 +4,21 @@
 
 ### 新增
 
+- ✅ [2026-08-17] 显示端睡眠模式实现完成
+  - 显示端按时段自动隐藏媒体（睡眠：隐藏媒体、视频暂停，保留 UI）或整屏黑幕（深度睡眠：全屏遮罩 z-index 最高，媒体与 UI 全隐藏），每 10 秒本地判定，支持跨天时段
+  - 60 秒临时激活：控制端「临时激活」按钮 / 下发媒体自动触发，激活窗口结束恢复按时段隐藏
+  - 控制端显示控制面板新增「睡眠模式」入口与设置弹窗（启用开关 + 睡眠/深度睡眠时段 + 临时激活 + 状态行），按当前选中显示端配置并持久化到服务端 displayStates[ip].sleep
+  - 优先级：临时激活 > 深度睡眠 > 睡眠 > 正常
+  - 改动文件：
+    - display.html
+    - upload.html
+    - js/controls.js
+    - js/websocket.js
+    - config-app-service.js
+    - server-app.js
+    - docs/spec/display-sleep-mode.md
+    - tests/display-sleep-mode.test.js
+
 - ✅ [2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）实现完成
   - 在 NativeBridge 新增 compute() 桥方法，离屏 EGL 3.1 上下文执行 GLES compute shader，为 threejs 提供协作/归约类真 compute 能力
   - 接口对齐 threejs WebGPU compute（workgroupSize/count/dispatchSize/instanceIndex→gl_GlobalInvocationID）

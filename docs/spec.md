@@ -43,6 +43,7 @@
 | Android GPU Compute 桥 | [android-compute-bridge.md](spec/android-compute-bridge.md) | 离屏 EGL 3.1 compute、SSBO/image2D 读回、NativeCompute JS 封装 |
 | Android 原生语音识别 | [android-native-asr.md](spec/android-native-asr.md) | sherpa-onnx AAR 原生推理、模型按需下载、服务器中转接入 |
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
+| 显示端睡眠模式 | [display-sleep-mode.md](spec/display-sleep-mode.md) | 时段判定/深度黑幕/临时激活/控制端配置 |
 
 ## 核心模块
 
