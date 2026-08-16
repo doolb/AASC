@@ -4,6 +4,11 @@
 
 ### 优化
 
+- ✅ [2026-08-16] 控制端点击坐标修复：改用截图图片实际显示区域计算百分比
+  - onContainerMouse 坐标基准从容器改为截图图片（previewImg）：objectFit contain 时容器可能有 letterbox 黑边，原按整个容器算百分比，截图未铺满部分被误算进坐标导致点击偏移
+  - puppeteer 验证：容器 4:3 图片 16:9 场景，点击黑边内 → 旧逻辑 16.67% vs 修复后 5.56%（正确）
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/crop.js
+
 - ✅ [2026-08-16] render-display 布局参数化：间距整体收紧，旋转 90°/270° 或多设备（≥3）时自动切换紧凑模式
   - 新增 getLayout() 按 rotation 与来源数返回布局参数，update() 每帧刷新行级样式
   - 改动文件：res/tasks/render-display/render.js、render.html、docs/spec/monitor-system.md
