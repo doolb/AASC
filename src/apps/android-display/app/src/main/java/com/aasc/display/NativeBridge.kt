@@ -174,4 +174,18 @@ class NativeBridge(
             .put("memUsed", (Math.round(memUsedGb * 10) / 10.0))
             .toString()
     }
+
+    // GPU compute：JS 传请求 JSON（shader/buffers/images/dispatch），同步返回结果 JSON
+    // 解析/验证在 ComputeProtocol（纯逻辑），执行在 ComputeEngine（离屏 EGL 3.1）
+    @JavascriptInterface
+    fun compute(requestJson: String): String {
+        return try {
+            val request = ComputeProtocol.parse(requestJson)
+            ComputeEngine.execute(request)
+        } catch (e: ComputeException) {
+            JSONObject().put("error", e.message ?: "compute 参数错误").toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", "compute 异常: ${e.message}").toString()
+        }
+    }
 }
