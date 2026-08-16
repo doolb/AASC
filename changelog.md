@@ -4,7 +4,8 @@
 
 ### 优化
 
-- ✅ [2026-08-16] render-display 横条布局放大 3 倍（字号 15→45px，条宽/间距等比放大适配大屏）
+- ✅ [2026-08-16] render-display 布局参数化：间距整体收紧，旋转 90°/270° 或多设备（≥3）时自动切换紧凑模式
+  - 新增 getLayout() 按 rotation 与来源数返回布局参数，update() 每帧刷新行级样式
   - 改动文件：res/tasks/render-display/render.js、render.html、docs/spec/monitor-system.md
 
 - ✅ [2026-08-16] 临时媒体持久化（reload 后恢复最近网页）+ 控制模式 ESC 退出 + URL 输入按网页处理 + 显示端黑屏缓解 + 指定屏幕启动
