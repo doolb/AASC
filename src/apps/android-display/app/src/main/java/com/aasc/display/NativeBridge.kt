@@ -2,6 +2,7 @@ package com.aasc.display
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import org.json.JSONObject
@@ -10,6 +11,7 @@ import android.os.Build
 import android.os.SystemClock
 import java.io.RandomAccessFile
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 // display.html 的原生桥：截图（真实像素）+ 输入注入（真实触摸/按键，跨域内容可用）
@@ -109,6 +111,11 @@ class NativeBridge(
             .toString()
     }
 
+    // ---- ASR 原生识别桥（sherpa-onnx，模型按需下载）----
+    private val asrModelManager = AsrModelManager(webView.context)
+    // 识别串行化：单线程执行器避免并发识别（与服务器单请求语义一致），future.get 带超时
+    private val asrExecutor = Executors.newSingleThreadExecutor()
+
     // 同步截图：JS 侧调用即阻塞等待主线程完成 WebView.draw，返回 JSON
     // （JS 函数传 String 参数的回调方式在 WebView 里不可靠，改用同步返回）
     @JavascriptInterface
@@ -186,6 +193,56 @@ class NativeBridge(
             JSONObject().put("error", e.message ?: "compute 参数错误").toString()
         } catch (e: Exception) {
             JSONObject().put("error", "compute 异常: ${e.message}").toString()
+        }
+    }
+
+    // 查询原生 ASR 引擎状态：{"state":"ready|downloading|not_ready|error","progress":0-100,"error":"..."}
+    @JavascriptInterface
+    fun asrStatus(): String {
+        return asrModelManager.statusJson().toString()
+    }
+
+    // 触发模型下载+加载（幂等）。就绪返回 "ready"，下载中/刚触发返回 "downloading"
+    // 进度与结果通过 window.onNativeAsrModel 回调（主线程 evaluateJavascript）
+    @JavascriptInterface
+    fun asrEnsureModel(): String {
+        val baseUrl = serverBaseUrl()
+        if (baseUrl.isEmpty()) return JSONObject().put("error", "无法确定服务器地址").toString()
+        return asrModelManager.ensureModel(baseUrl) { event ->
+            val js = "window.onNativeAsrModel && window.onNativeAsrModel(${event.toString()});"
+            webView.evaluateJavascript(js, null)
+        }
+    }
+
+    // 一次性识别：输入裸 PCM（16kHz mono s16le）的 base64，同步返回 {"text":"..."} 或 {"error":"..."}
+    // 识别在工作线程串行执行（asrExecutor），桥调用阻塞最多 20s（同 takeScreenshot 阻塞先例）
+    @JavascriptInterface
+    fun asrRecognize(pcmBase64: String): String {
+        return try {
+            if (!asrModelManager.isReady) {
+                return JSONObject().put("error", "模型未就绪").toString()
+            }
+            val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
+            val samples = AsrPcm.decodeS16(bytes)
+            val text = asrExecutor.submit {
+                AsrEngine.recognize(samples)
+            }.get(20, TimeUnit.SECONDS)
+            JSONObject().put("text", text).toString()
+        } catch (e: java.util.concurrent.TimeoutException) {
+            JSONObject().put("error", "识别超时").toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "识别失败").toString()
+        }
+    }
+
+    // 从 WebView 当前 URL 推导服务器 origin（模型下载地址基准）
+    private fun serverBaseUrl(): String {
+        return try {
+            val u = android.net.Uri.parse(webView.url)
+            val port = if (u.port != -1) ":${u.port}" else ""
+            "${u.scheme}://${u.host}$port"
+        } catch (e: Exception) {
+            ""
         }
     }
 }
