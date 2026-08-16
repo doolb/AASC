@@ -3237,9 +3237,10 @@ async function handleControlMessageFallback(data, ws) {
                             width: data.media.width,
                             height: data.media.height
                         };
-                        // 临时媒体也更新当前媒体（仅内存不持久化），
-                        // 避免 displayState 恢复旧媒体顶掉刷新后的占位提示
+                        // 临时媒体也持久化为当前媒体：
+                        // 显示端 reload 后 restoreState 恢复最近发的临时网页/媒体，不回退到旧的正式媒体
                         displayData.state.currentMedia = data.media;
+                        config.updateDisplayState(displayData.ip, { currentMedia: data.media });
                     } else {
                         displayData.state.lastTempMedia = null;
                         displayData.state.currentMedia = data.media;

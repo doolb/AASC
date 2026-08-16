@@ -760,7 +760,16 @@ const Crop = {
     // 文档级键盘捕获（捕获阶段，阻止控制端页面自身响应）
     onDocKey(e, evtName) {
         if (!this.controlModeOn) return;
-        // 控制模式开启后所有按键转发（含 Tab/Enter/方向键）
+        // ESC：不转发网页，直接退出控制模式（用户想中断远程操作）
+        if (e.key === 'Escape') {
+            if (evtName === 'keydown') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.setControlMode(false);
+            }
+            return;
+        }
+        // 控制模式开启后其他按键全部转发（含 Tab/Enter/方向键）
         e.preventDefault();
         e.stopPropagation();
         const msg = {
