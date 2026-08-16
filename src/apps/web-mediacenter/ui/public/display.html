@@ -1609,55 +1609,17 @@
         }
 
         // NativeDisplay.takeScreenshot：APK WebView 位图真实像素，同步返回 JSON {dataUrl,width,height}
-        // 截图反旋转：WebView 位图 = 屏幕实际画面（含显示端旋转），
-        // 控制端预览要求"网页原方向不旋转"，按 currentRotation 反旋转成网页原方向再上报
-        function rotateShotToOriginal(dataUrl, width, height, rotation) {
-            return new Promise((resolve) => {
-                if (!rotation) { resolve({ dataUrl, width, height }); return; }
-                const img = new Image();
-                img.onload = () => {
-                    try {
-                        const swap = (rotation === 90 || rotation === 270);
-                        const outW = swap ? height : width;
-                        const outH = swap ? width : height;
-                        const canvas = document.createElement('canvas');
-                        canvas.width = outW;
-                        canvas.height = outH;
-                        const ctx = canvas.getContext('2d');
-                        ctx.translate(outW / 2, outH / 2);
-                        // WebView 位图 = 屏幕画面（网页已顺时针 rotate(rotation)），
-                        // 反旋转需逆时针 -rotation 才转回网页原方向
-                        ctx.rotate(-rotation * Math.PI / 180);
-                        ctx.drawImage(img, -width / 2, -height / 2);
-                        const fit = ControlModeUtils.fitSizeTo720p(outW, outH);
-                        const out = document.createElement('canvas');
-                        out.width = fit.width;
-                        out.height = fit.height;
-                        out.getContext('2d').drawImage(canvas, 0, 0, fit.width, fit.height);
-                        resolve({ dataUrl: out.toDataURL('image/jpeg', 0.7), width: fit.width, height: fit.height });
-                    } catch (e) {
-                        resolve({ dataUrl, width, height });
-                    }
-                };
-                img.onerror = () => resolve({ dataUrl, width, height });
-                img.src = dataUrl;
-            });
-        }
-
         function shotWithNativeBridge() {
-            return new Promise((resolve) => {
-                try {
-                    const res = JSON.parse(nativeBridge.takeScreenshot());
-                    if (res && res.dataUrl) {
-                        rotateShotToOriginal(res.dataUrl, res.width || 0, res.height || 0, currentRotation).then(rot => {
-                            sendControlScreenshot('native', rot.dataUrl, rot.width || 0, rot.height || 0);
-                            resolve(rot.dataUrl);
-                        });
-                        return;
-                    }
-                } catch (e) { /* 桥截图失败，回退现有降级链 */ }
-                resolve(null);
-            });
+            try {
+                const res = JSON.parse(nativeBridge.takeScreenshot());
+                if (res && res.dataUrl) {
+                    // 直接上报屏幕画面（不反旋转）：控制端预览 = 屏幕所见（WYSIWYG），
+                    // 预览始终横屏，点击坐标直接映射屏幕
+                    sendControlScreenshot('native', res.dataUrl, res.width || 0, res.height || 0);
+                    return Promise.resolve(res.dataUrl);
+                }
+            } catch (e) { /* 桥截图失败，回退现有降级链 */ }
+            return Promise.resolve(null);
         }
 
         // html-to-image 截 iframe 可见视口，缩至 720p
@@ -1813,9 +1775,13 @@
         // 输入合成：把控制端输入派发到 iframe 内容
         function dispatchControlInput(data) {
             if (mediaHtml.style.display === 'none') return;
-            // APK 原生注入优先：真实触摸/按键，跨域 iframe 内容同样生效
-            if (nativeBridge && nativeBridge.injectTouch && dispatchControlInputNative(data)) {
-                return;
+            const evt0 = data.event;
+            // 键盘/文本走桥（WebView dispatchKeyEvent 真实按键，不需要屏幕坐标，跨域 iframe 聚焦元素可接收）；
+            // 鼠标/滚轮走 JS 合成（0° 同源准确；跨域 iframe 读不到 contentDocument 静默跳过）
+            if (nativeBridge && (evt0 === 'keydown' || evt0 === 'keyup' || evt0 === 'text')) {
+                if (dispatchControlInputNative(data)) {
+                    return;
+                }
             }
             let win = null;
             let doc = null;
@@ -1903,42 +1869,13 @@
             }
         }
 
-        // 原生输入注入：iframe 可见区域 → 屏幕像素（跨域内容同样可用）
-        // 原生输入注入：控制端预览 = 网页原方向截图（已反旋转），
-        // 屏幕坐标按 currentRotation 映射（视口为基准，不用被 crop/rotate 污染的 iframe rect）
-        function nativeScreenPoint(xPct, yPct) {
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
-            const x = xPct || 0, y = yPct || 0;
-            switch (currentRotation) {
-                case 90:
-                    return { x: Math.round(vw * (100 - y) / 100), y: Math.round(vh * x / 100) };
-                case 180:
-                    return { x: Math.round(vw * (100 - x) / 100), y: Math.round(vh * (100 - y) / 100) };
-                case 270:
-                    return { x: Math.round(vw * y / 100), y: Math.round(vh * (100 - x) / 100) };
-                default:
-                    return { x: Math.round(vw * x / 100), y: Math.round(vh * y / 100) };
-            }
-        }
-
+        // 原生输入注入：仅键盘/文本走桥（WebView dispatchKeyEvent 真实按键，不需要屏幕坐标，
+        // 跨域 iframe 聚焦元素可接收；鼠标/滚轮因盒子 DeX 多屏触摸无法定位，走 JS 合成）
         function dispatchControlInputNative(data) {
             const evt = data.event;
             if (evt === 'text') {
                 nativeBridge.injectText(data.text || '');
                 return true;
-            }
-            if (evt === 'mousedown' || evt === 'mouseup' || evt === 'click' || evt === 'contextmenu') {
-                const p = nativeScreenPoint(data.x, data.y);
-                const action = evt === 'mouseup' ? 'up'
-                    : evt === 'click' ? 'click'
-                    : evt === 'contextmenu' ? 'contextmenu'
-                    : 'down';
-                return nativeBridge.injectTouch(p.x, p.y, action) !== false;
-            }
-            if (evt === 'wheel') {
-                const p = nativeScreenPoint(data.x, data.y);
-                return nativeBridge.injectWheel(p.x, p.y, data.deltaY || 0) !== false;
             }
             if (evt === 'keydown' || evt === 'keyup') {
                 const keyCode = domKeyToAndroidKeyCode(data.keyCode);
