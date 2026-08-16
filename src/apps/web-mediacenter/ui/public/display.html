@@ -1609,15 +1609,55 @@
         }
 
         // NativeDisplay.takeScreenshot：APK WebView 位图真实像素，同步返回 JSON {dataUrl,width,height}
+        // 截图反旋转：WebView 位图 = 屏幕实际画面（含显示端旋转），
+        // 控制端预览要求"网页原方向不旋转"，按 currentRotation 反旋转成网页原方向再上报
+        function rotateShotToOriginal(dataUrl, width, height, rotation) {
+            return new Promise((resolve) => {
+                if (!rotation) { resolve({ dataUrl, width, height }); return; }
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const swap = (rotation === 90 || rotation === 270);
+                        const outW = swap ? height : width;
+                        const outH = swap ? width : height;
+                        const canvas = document.createElement('canvas');
+                        canvas.width = outW;
+                        canvas.height = outH;
+                        const ctx = canvas.getContext('2d');
+                        ctx.translate(outW / 2, outH / 2);
+                        // WebView 位图 = 屏幕画面（网页已顺时针 rotate(rotation)），
+                        // 反旋转需逆时针 -rotation 才转回网页原方向
+                        ctx.rotate(-rotation * Math.PI / 180);
+                        ctx.drawImage(img, -width / 2, -height / 2);
+                        const fit = ControlModeUtils.fitSizeTo720p(outW, outH);
+                        const out = document.createElement('canvas');
+                        out.width = fit.width;
+                        out.height = fit.height;
+                        out.getContext('2d').drawImage(canvas, 0, 0, fit.width, fit.height);
+                        resolve({ dataUrl: out.toDataURL('image/jpeg', 0.7), width: fit.width, height: fit.height });
+                    } catch (e) {
+                        resolve({ dataUrl, width, height });
+                    }
+                };
+                img.onerror = () => resolve({ dataUrl, width, height });
+                img.src = dataUrl;
+            });
+        }
+
         function shotWithNativeBridge() {
-            try {
-                const res = JSON.parse(nativeBridge.takeScreenshot());
-                if (res && res.dataUrl) {
-                    sendControlScreenshot('native', res.dataUrl, res.width || 0, res.height || 0);
-                    return Promise.resolve(res.dataUrl);
-                }
-            } catch (e) { /* 桥截图失败，回退现有降级链 */ }
-            return Promise.resolve(null);
+            return new Promise((resolve) => {
+                try {
+                    const res = JSON.parse(nativeBridge.takeScreenshot());
+                    if (res && res.dataUrl) {
+                        rotateShotToOriginal(res.dataUrl, res.width || 0, res.height || 0, currentRotation).then(rot => {
+                            sendControlScreenshot('native', rot.dataUrl, rot.width || 0, rot.height || 0);
+                            resolve(rot.dataUrl);
+                        });
+                        return;
+                    }
+                } catch (e) { /* 桥截图失败，回退现有降级链 */ }
+                resolve(null);
+            });
         }
 
         // html-to-image 截 iframe 可见视口，缩至 720p
@@ -1740,26 +1780,30 @@
             gdmVideo = null;
         }
 
-        // 控制模式开关：开启暂停自动滚动 + 还原裁剪放大（截图需完整网页），关闭恢复
+        // 控制模式开关：开启暂停自动滚动 + 强制全屏（截图完整网页、坐标按视口+rotation 纯映射），关闭恢复
+        let controlSavedCrop = null;
         function setControlMode(on) {
             controlModeEnabled = !!on;
             if (on) {
                 stopHtmlScroll();
                 startControlScreenshot();
-                // 还原裁剪放大（屏幕显示完整网页，截图才能反映全量内容），保留旋转基准
-                if (mediaHtml.style.display !== 'none' && currentCrop) {
-                    const c = currentCrop;
-                    const isFullCrop = c.width >= 99.9 && c.height >= 99.9 && c.x <= 0.1 && c.y <= 0.1;
-                    if (!isFullCrop) {
-                        currentHtmlScale = 1;
-                        applyRotation();
-                    }
+                // 强制全屏：清除裁剪放大（残留 crop 的 scale 会放大 iframe 内容，截图/坐标映射都会错），
+                // 保存 crop 供关闭时恢复
+                if (mediaHtml.style.display !== 'none') {
+                    controlSavedCrop = currentCrop ? { ...currentCrop } : null;
+                    currentCrop = { x: 0, y: 0, width: 100, height: 100 };
+                    currentHtmlScale = 1;
+                    applyRotation();
                 }
             } else {
                 stopControlScreenshot();
                 if (mediaHtml.style.display !== 'none') {
                     startHtmlScroll(mediaHtml, currentHtmlScroll);
                     // 恢复裁剪放大
+                    if (controlSavedCrop) {
+                        currentCrop = controlSavedCrop;
+                        controlSavedCrop = null;
+                    }
                     applyCrop();
                 }
             }
@@ -1860,25 +1904,41 @@
         }
 
         // 原生输入注入：iframe 可见区域 → 屏幕像素（跨域内容同样可用）
+        // 原生输入注入：控制端预览 = 网页原方向截图（已反旋转），
+        // 屏幕坐标按 currentRotation 映射（视口为基准，不用被 crop/rotate 污染的 iframe rect）
+        function nativeScreenPoint(xPct, yPct) {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const x = xPct || 0, y = yPct || 0;
+            switch (currentRotation) {
+                case 90:
+                    return { x: Math.round(vw * (100 - y) / 100), y: Math.round(vh * x / 100) };
+                case 180:
+                    return { x: Math.round(vw * (100 - x) / 100), y: Math.round(vh * (100 - y) / 100) };
+                case 270:
+                    return { x: Math.round(vw * y / 100), y: Math.round(vh * (100 - x) / 100) };
+                default:
+                    return { x: Math.round(vw * x / 100), y: Math.round(vh * y / 100) };
+            }
+        }
+
         function dispatchControlInputNative(data) {
             const evt = data.event;
             if (evt === 'text') {
                 nativeBridge.injectText(data.text || '');
                 return true;
             }
-            const rect = mediaHtml.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) return false;
-            const sx = Math.round(rect.left + rect.width * (data.x || 0) / 100);
-            const sy = Math.round(rect.top + rect.height * (data.y || 0) / 100);
             if (evt === 'mousedown' || evt === 'mouseup' || evt === 'click' || evt === 'contextmenu') {
+                const p = nativeScreenPoint(data.x, data.y);
                 const action = evt === 'mouseup' ? 'up'
                     : evt === 'click' ? 'click'
                     : evt === 'contextmenu' ? 'contextmenu'
                     : 'down';
-                return nativeBridge.injectTouch(sx, sy, action) !== false;
+                return nativeBridge.injectTouch(p.x, p.y, action) !== false;
             }
             if (evt === 'wheel') {
-                return nativeBridge.injectWheel(sx, sy, data.deltaY || 0) !== false;
+                const p = nativeScreenPoint(data.x, data.y);
+                return nativeBridge.injectWheel(p.x, p.y, data.deltaY || 0) !== false;
             }
             if (evt === 'keydown' || evt === 'keyup') {
                 const keyCode = domKeyToAndroidKeyCode(data.keyCode);

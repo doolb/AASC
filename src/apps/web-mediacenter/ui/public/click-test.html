@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>点击坐标测试</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: monospace;
+    background: #f5f5f5;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+/* 网格 */
+.grid-h { position: absolute; left: 0; right: 0; height: 1px; background: #ccc; }
+.grid-v { position: absolute; top: 0; bottom: 0; width: 1px; background: #ccc; }
+/* 四角 + 中心测试按钮 */
+.btn {
+    position: absolute;
+    width: 120px; height: 90px;
+    background: #4a90d9;
+    color: #fff; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; cursor: pointer;
+    border: none;
+}
+.btn.hit { background: #2ecc71; }
+#info {
+    position: fixed; bottom: 8px; left: 8px; right: 8px;
+    background: rgba(0,0,0,0.85); color: #0f0;
+    font-size: 20px; padding: 10px 14px;
+    border-radius: 6px; z-index: 999;
+    white-space: pre-wrap;
+}
+/* 点击标记 */
+.click-mark {
+    position: fixed; width: 26px; height: 26px;
+    border: 3px solid #ff0000; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 998;
+}
+.click-mark::after {
+    content: ''; position: absolute;
+    width: 6px; height: 6px; background: #f00;
+    border-radius: 50%; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+}
+.hint {
+    position: fixed; top: 8px; left: 8px;
+    color: #333; font-size: 14px; background: rgba(255,255,255,0.85);
+    padding: 4px 8px; border-radius: 4px;
+}
+</style>
+</head>
+<body>
+<div class="hint">点击网页任意位置，红点显示命中坐标</div>
+<div id="info">等待点击...</div>
+
+<button class="btn" id="bTL" style="left:24px;top:24px;">左上角</button>
+<button class="btn" id="bTR" style="right:24px;top:24px;">右上角</button>
+<button class="btn" id="bBL" style="left:24px;bottom:80px;">左下角</button>
+<button class="btn" id="bBR" style="right:24px;bottom:80px;">右下角</button>
+<button class="btn" id="bC" style="left:50%;top:50%;transform:translate(-50%,-50%);">中心</button>
+
+<script>
+// 网格 25% 步进
+for (let i = 1; i < 4; i++) {
+    const h = document.createElement('div');
+    h.className = 'grid-h'; h.style.top = (i * 25) + '%';
+    document.body.appendChild(h);
+    const v = document.createElement('div');
+    v.className = 'grid-v'; v.style.left = (i * 25) + '%';
+    document.body.appendChild(v);
+}
+
+const info = document.getElementById('info');
+let lastMark = null;
+
+function mark(x, y, source) {
+    if (lastMark) lastMark.remove();
+    const m = document.createElement('div');
+    m.className = 'click-mark';
+    m.style.left = x + 'px';
+    m.style.top = y + 'px';
+    document.body.appendChild(m);
+    lastMark = m;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    info.textContent =
+        source + '\n点击: (' + Math.round(x) + ', ' + Math.round(y) + ')' +
+        '\n视口: ' + vw + 'x' + vh +
+        '\n百分比: ' + (x / vw * 100).toFixed(1) + '%, ' + (y / vh * 100).toFixed(1) + '%';
+}
+
+function onHit(btn, x, y) {
+    btn.classList.add('hit');
+    mark(x, y, '命中按钮: ' + btn.textContent);
+}
+
+// 监听真实触摸/点击
+window.addEventListener('click', (e) => {
+    mark(e.clientX, e.clientY, 'click');
+    hitTest(e.clientX, e.clientY);
+}, true);
+
+window.addEventListener('touchend', (e) => {
+    if (e.changedTouches.length) {
+        const t = e.changedTouches[0];
+        mark(t.clientX, t.clientY, 'touch');
+        hitTest(t.clientX, t.clientY);
+    }
+}, true);
+
+window.addEventListener('mousedown', (e) => {
+    mark(e.clientX, e.clientY, 'mousedown');
+}, true);
+
+function hitTest(x, y) {
+    document.querySelectorAll('.btn').forEach(b => {
+        const r = b.getBoundingClientRect();
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+            b.classList.add('hit');
+            info.textContent = '✓ 命中按钮: ' + b.textContent + ' @(' + Math.round(x) + ',' + Math.round(y) + ')';
+        }
+    });
+}
+</script>
+</body>
+</html>
