@@ -46,6 +46,29 @@ nvidia-smi 查询字段：
 | `res/tasks/render-display/render.html` | Canvas 仪表盘 HTML 结构 |
 | `res/tasks/render-display/render.js` | 主线程渲染逻辑，返回 update(data) 函数 |
 
+#### 横条渲染（单行内联）
+
+每个来源一行，纯 DOM/CSS（无 canvas）：
+
+```
+[Pixel 6]   CPU ▓▓▓▓▓▓░░░░ 62%        MEM ▓▓▓░░░░░░░ 38%  3.1/8.0G
+[PC-1]      CPU ▓▓▓░░░░░░░ 34%  45°C  MEM ▓▓░░░░░░░░ 21%  6.4/32G  GPU ▓▓░░ 12%
+```
+
+- 指标条 = 小标签 + 120px 填充条（`pctColor()` 渐变）+ 百分比文字
+- 温度/显存/功耗为小字后缀，有数据才显示；GPU 条仅在有 GPU 数据时出现
+- 内存文字格式：`memUsed/memTotal G`
+
+#### APK 本地来源轮询
+
+```
+render.js 检测 window.NativeDisplay 存在
+  → setInterval(800ms) 轮询 NativeDisplay.getSystemStats()
+    → JSON.parse → update(stats)（_sourceInstanceId = 'local-' + instanceId）
+  → 每次触发先检查 _renderTaskUpdates[instanceId] 是否存在
+    → 不存在 clearInterval 退出（覆盖层移除时防泄漏）
+```
+
 ### 任务系统增强
 
 | 文件 | 说明 |

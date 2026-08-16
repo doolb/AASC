@@ -4,6 +4,17 @@
 
 ### 优化
 
+- ✅ [2026-08-16] APK 自身资源监控 + render-display 横条化
+  - NativeBridge.kt 新增 getSystemStats()：同步返回 APK 设备自身资源 {hostname, cpuPercent, memPercent, memTotal, memUsed}；hostname=Build.MODEL，CPU 读 /proc/stat 两次采样差值（1 位小数，首次调用无基线返回 0），内存读 ActivityManager.getMemoryInfo()（GB 1 位小数）
+  - render.js 渲染改为单行内联横条（纯 DOM/CSS，无 canvas）：每个来源一行，指标条 = 小标签 + 120px 填充条（pctColor 渐变）+ 百分比文字；温度/显存/功耗为小字后缀有数据才显示，GPU 条仅在有 GPU 数据时出现；内存文字格式 memUsed/memTotal G
+  - render.js 本地来源轮询：检测 window.NativeDisplay 存在 → setInterval(800ms) 轮询 getSystemStats() → JSON.parse 走 update() 作为独立来源（_sourceInstanceId = 'local-' + instanceId）；每次触发先检查 _renderTaskUpdates[instanceId] 存在，不存在 clearInterval 退出（覆盖层移除时防泄漏）
+  - render.html 覆盖层内边距/间距适配横条（gaugeContainer 容器 ID 结构不变）
+  - 浏览器显示端（无桥）不轮询，仅布局变化，行为不受影响
+  - 改动文件：
+    - src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt
+    - res/tasks/render-display/render.js
+    - res/tasks/render-display/render.html
+
 - ✅ [2026-08-16] html 模式持久化 + 显示端自动刷新 + 控制端主动刷新/重载服务端 + 视频自动播放
   - 服务端 createDisplayState 加 currentHtmlScroll，htmlScroll 控制持久化到 config.json，显示端重启/刷新后自动恢复 html 滚动模式（滚动方式/循环/速度）
   - 服务端 GET /api/display-version 返回前端文件 mtime；显示端启动后每 8 秒轮询，检测到代码更新自动 reload（无需重启 APK/重新编译）

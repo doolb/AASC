@@ -13,6 +13,8 @@ injectWheel(x, y, deltaY) -> boolean              # 垂直滑动，deltaY>0 手�
 injectKey(keyCode, meta) -> boolean               # WebView.dispatchKeyEvent
 injectText(text) -> boolean                       # ASCII 按键；中文剪贴板 + Ctrl+V
 getScreenSize() -> String JSON                    # {width, height} 屏幕像素
+getSystemStats() -> String JSON                   # 同步返回 APK 自身资源：{hostname, cpuPercent, memPercent, memTotal, memUsed}
+                                                  # hostname=Build.MODEL，CPU 读 /proc/stat 两次采样差值，内存读 ActivityManager.getMemoryInfo()，GB 1 位小数
 ```
 
 > 截图回调机制：JS 函数传 @JavascriptInterface String 参数在 WebView 不可靠
