@@ -7,6 +7,7 @@ import android.webkit.WebView
 import org.json.JSONObject
 import android.app.ActivityManager
 import android.os.Build
+import android.os.SystemClock
 import java.io.RandomAccessFile
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -19,39 +20,81 @@ class NativeBridge(
 
     private var lastCpuIdle: Long = -1
     private var lastCpuTotal: Long = -1
+    // 回退路径（/proc/self/stat 进程自身 CPU）：utime+stime（jiffy）与采样时刻（elapsedRealtime ms）
+    private var lastSelfCpuTime: Long = -1
+    private var lastSelfSampleMs: Long = 0
 
-    // 读取 /proc/stat cpu 行两次采样差值，计算 CPU 使用率（%），1 位小数
-    private fun readCpuPercent(): Double {
-        var idle = 0L
-        var total = 0L
-        try {
+    // 采样整体 CPU（/proc/stat）：返回 (idle, total)，读取失败返回 null
+    private fun readOverallCpu(): Pair<Long, Long>? {
+        return try {
             RandomAccessFile("/proc/stat", "r").use { raf ->
-                val line = raf.readLine() ?: return 0.0
+                val line = raf.readLine() ?: return null
                 // "cpu  user nice system idle iowait irq softirq steal ..."
                 val parts = line.trim().split(Regex("\\s+"))
-                if (parts.size < 5 || parts[0] != "cpu") return 0.0
+                if (parts.size < 5 || parts[0] != "cpu") return null
                 var sum = 0L
                 for (i in 1 until parts.size) {
-                    val v = parts[i].toLongOrNull() ?: 0L
-                    sum += v
+                    sum += parts[i].toLongOrNull() ?: 0L
                 }
-                idle = parts[4].toLongOrNull() ?: 0L
-                total = sum
+                Pair(parts[4].toLongOrNull() ?: 0L, sum)
             }
         } catch (_: Exception) {
-            return 0.0
+            null
         }
-        if (lastCpuTotal < 0 || lastCpuIdle < 0) {
+    }
+
+    // 采样进程自身 CPU（/proc/self/stat）：解析 "pid (comm) state ... utime stime ..." 返回 utime+stime（jiffy），失败返回 null
+    private fun readSelfCpu(): Long? {
+        return try {
+            RandomAccessFile("/proc/self/stat", "r").use { raf ->
+                val line = raf.readLine() ?: return null
+                // comm 可含空格/括号，定位最后一个 ')' 后从 state（字段3）开始
+                val closeIdx = line.lastIndexOf(')')
+                if (closeIdx < 0) return null
+                val rest = line.substring(closeIdx + 1).trim().split(Regex("\\s+"))
+                // 字段偏移：rest[0]=字段3(state)，utime=字段14→rest[11]，stime=字段15→rest[12]
+                if (rest.size < 13) return null
+                val utime = rest[11].toLongOrNull() ?: return null
+                val stime = rest[12].toLongOrNull() ?: return null
+                utime + stime
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // 读取 CPU 使用率（%），1 位小数；优先整体 CPU（/proc/stat），SELinux 拒读时回退进程自身（/proc/self/stat）
+    private fun readCpuPercent(): Double {
+        val overall = readOverallCpu()
+        if (overall != null) {
+            val idle = overall.first
+            val total = overall.second
+            if (lastCpuTotal < 0 || lastCpuIdle < 0) {
+                lastCpuTotal = total
+                lastCpuIdle = idle
+                return 0.0 // 首次采样建立基线，返回 0
+            }
+            val dTotal = total - lastCpuTotal
+            val dIdle = idle - lastCpuIdle
             lastCpuTotal = total
             lastCpuIdle = idle
-            return 0.0 // 首次采样建立基线，返回 0
+            if (dTotal <= 0) return 0.0
+            return (dTotal - dIdle).toDouble() * 100.0 / dTotal
         }
-        val dTotal = total - lastCpuTotal
-        val dIdle = idle - lastCpuIdle
-        lastCpuTotal = total
-        lastCpuIdle = idle
-        if (dTotal <= 0) return 0.0
-        return (dTotal - dIdle).toDouble() * 100.0 / dTotal
+        // 回退：进程自身 CPU 时间（jiffy，Android CLK_TCK=100 → 10ms/jiffy），用真实时间间隔换算百分比
+        val nowMs = SystemClock.elapsedRealtime()
+        val self = readSelfCpu() ?: return 0.0
+        if (lastSelfCpuTime < 0 || lastSelfSampleMs <= 0) {
+            lastSelfCpuTime = self
+            lastSelfSampleMs = nowMs
+            return 0.0 // 首次采样建立基线
+        }
+        val dSelf = self - lastSelfCpuTime
+        val dMs = nowMs - lastSelfSampleMs
+        lastSelfCpuTime = self
+        lastSelfSampleMs = nowMs
+        if (dSelf < 0 || dMs <= 0) return 0.0
+        return (dSelf * 10.0 * 100.0) / dMs
     }
 
     @JavascriptInterface
