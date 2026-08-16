@@ -1049,6 +1049,24 @@ app.get('/api/asr/status', (req, res) => {
     });
 });
 
+// ASR 模型文件下载（Android 原生识别引擎按需拉取；filename 白名单防路径穿越）
+const ASR_MODEL_DIR = path.join(RES_DIR, 'models', 'sensevoice');
+const ASR_MODEL_FILES = ['model.int8.onnx', 'tokens.txt'];
+
+app.get('/api/asr/model/:filename', (req, res) => {
+    const filename = req.params.filename;
+    if (!ASR_MODEL_FILES.includes(filename)) {
+        return res.status(400).json({ status: 'error', message: '非法文件名' });
+    }
+    const filePath = path.join(ASR_MODEL_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ status: 'error', message: '模型文件不存在' });
+    }
+    res.setHeader('Content-Type', filename.endsWith('.txt') ? 'text/plain; charset=utf-8' : 'application/octet-stream');
+    res.setHeader('Content-Length', fs.statSync(filePath).size);
+    fs.createReadStream(filePath).pipe(res);
+});
+
 app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
     try {
         if (!req.file) {
