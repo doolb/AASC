@@ -80,19 +80,20 @@ function getLayout() {
     for (var h in sources) count++;
     var compact = (rotation === 90 || rotation === 270) || count >= 3;
     return {
-        barGap: compact ? 12 : 18,        // 条内元素间距
+        barGap: compact ? 12 : 18,        // 条内元素间距（标签-进度条）
         deviceNameW: compact ? 150 : 170, // CPU 条标签位（设备名）宽
-        lblW: 96,                         // 其余指标（MEM/GPU）标签宽
-        trackW: compact ? 280 : 360,      // 填充条宽
-        trackH: compact ? 30 : 36,        // 填充条高
-        valMin: compact ? 70 : 90,        // 数值文字最小宽
-        rowGap: compact ? 20 : 32,        // 行内 metrics 间距
-        rowPad: compact ? 4 : 6           // 行垂直内边距
+        lblW: 96,                         // 其余指标（MEM/GPU/VRAM）标签宽
+        trackW: compact ? 280 : 360,      // 进度条宽
+        trackH: compact ? 30 : 36,        // 进度条高
+        rowGap: compact ? 20 : 32,        // 行内条间距
+        rowPad: compact ? 4 : 6,          // 行垂直内边距
+        subRowGap: 2                      // 第一/第二行间垂直间距
     };
 }
 
-// 构建单个指标条（标签 + 填充条 + 数值文字）；lblW 覆盖标签宽（缺省 L.lblW，设备名用 L.deviceNameW）
-function makeBar(label, pct, color, suffix, L, lblW) {
+// 构建单个指标条（标签 + 进度条，文字叠加在条内水平垂直居中）
+// text 为完整条内文字（如 "34%  45°C"）；lblW 覆盖标签宽（缺省 L.lblW，设备名用 L.deviceNameW）
+function makeBar(label, pct, color, text, L, lblW) {
     var bar = document.createElement('div');
     bar.style.cssText = 'display:flex;align-items:center;gap:' + L.barGap + 'px;font-size:45px;white-space:nowrap';
 
@@ -101,42 +102,47 @@ function makeBar(label, pct, color, suffix, L, lblW) {
     lbl.textContent = label;
 
     var track = document.createElement('div');
-    track.style.cssText = 'width:' + L.trackW + 'px;height:' + L.trackH + 'px;border-radius:' + (L.trackH / 2) + 'px;background:rgba(255,255,255,0.08);overflow:hidden';
+    track.style.cssText = 'position:relative;width:' + L.trackW + 'px;height:' + L.trackH + 'px;border-radius:' + (L.trackH / 2) + 'px;background:rgba(255,255,255,0.08)';
+
+    // 填充段由 fillWrap 裁出圆角（与现状一致的填充外观），文字与 fillWrap 平级、不受裁切
+    var fillWrap = document.createElement('div');
+    fillWrap.style.cssText = 'position:absolute;top:0;left:0;height:100%;width:' + Math.min(100, Math.max(0, pct || 0)) + '%;overflow:hidden;border-radius:' + (L.trackH / 2) + 'px';
     var fill = document.createElement('div');
-    fill.style.cssText = 'height:100%;width:' + Math.min(100, Math.max(0, pct || 0)) + '%;border-radius:' + (L.trackH / 2) + 'px;background:' + color;
-    track.appendChild(fill);
+    fill.style.cssText = 'height:100%;width:100%;background:' + color;
+    fillWrap.appendChild(fill);
+    track.appendChild(fillWrap);
 
     var val = document.createElement('span');
-    var clamped = Math.min(100, Math.max(0, parseFloat(pct) || 0));
-    var valText = Math.round(clamped) + '%';
-    if (suffix) valText += '  ' + suffix;
-    val.style.cssText = 'color:#fff;min-width:' + L.valMin + 'px';
-    val.textContent = valText;
+    val.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:34px;white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.9),0 0 2px rgba(0,0,0,0.9)';
+    val.textContent = text;
+    track.appendChild(val);
 
     bar.appendChild(lbl);
     bar.appendChild(track);
-    bar.appendChild(val);
     return bar;
 }
 
-// 单个来源单行：设备名（CPU 条标签位）+ 各指标条（布局随旋转/来源数动态，已有行每帧刷新行级样式）
+// 单个来源行：第一行 CPU/MEM，第二行 GPU/VRAM（有 GPU 数据时，前部等宽占位对齐 MEM 条标签起点）
+// 行级样式每帧刷新，布局随旋转/来源数动态调整
 function ensureSourceRow(hostname, L) {
     if (sources[hostname] && sources[hostname]._row) {
         var cached = sources[hostname]._row;
-        cached.row.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
+        cached.row.style.cssText = 'display:flex;flex-direction:column;gap:' + L.subRowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
+        cached.line1.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px';
+        if (cached.line2) cached.line2.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px';
         return cached;
     }
 
     var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
+    row.style.cssText = 'display:flex;flex-direction:column;gap:' + L.subRowGap + 'px;padding:' + L.rowPad + 'px 0;white-space:nowrap';
 
-    var metrics = document.createElement('div');
-    metrics.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px';
-    row.appendChild(metrics);
+    var line1 = document.createElement('div');
+    line1.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px';
+    row.appendChild(line1);
 
     gaugeContainer.appendChild(row);
     if (!sources[hostname]) sources[hostname] = {};
-    sources[hostname]._row = { row: row, metrics: metrics };
+    sources[hostname]._row = { row: row, line1: line1, line2: null };
     return sources[hostname]._row;
 }
 
@@ -177,35 +183,54 @@ function update(data) {
         return;  // 无数据且无历史源，跳过渲染
     }
 
-    // 重新渲染所有源为单行横条（布局随旋转/来源数动态）
+    // 重新渲染所有源：第一行 CPU/MEM，第二行 GPU/VRAM（布局随旋转/来源数动态）
     var L = getLayout();
     for (var h in sources) {
         var d = sources[h];
         var entry = ensureSourceRow(h, L);  // 获取或创建该来源的行
-        entry.metrics.innerHTML = '';
+        entry.line1.innerHTML = '';
 
         var cpuPct = parseFloat(d.cpuPercent) || 0;
         var memPct = parseFloat(d.memPercent) || 0;
 
-        var cpuSuffix = '';
-        if (d.cpuTemp && d.cpuTemp !== 'N/A') cpuSuffix = d.cpuTemp + '°C';
+        var cpuText = Math.round(cpuPct) + '%';
+        if (d.cpuTemp && d.cpuTemp !== 'N/A') cpuText += '  ' + d.cpuTemp + '°C';
         // CPU 条标签位显示设备名（替代 "CPU" 文字），宽度用 deviceNameW
-        entry.metrics.appendChild(makeBar(h, cpuPct, pctColor(cpuPct, 76, 175, 80), cpuSuffix, L, L.deviceNameW));
+        entry.line1.appendChild(makeBar(h, cpuPct, pctColor(cpuPct, 76, 175, 80), cpuText, L, L.deviceNameW));
 
-        var memSuffix = fmtGb(d.memUsed) + '/' + fmtGb(d.memTotal) + 'G';
-        entry.metrics.appendChild(makeBar('MEM', memPct, pctColor(memPct, 63, 81, 181), memSuffix, L));
+        var memText = Math.round(memPct) + '%  ' + fmtGb(d.memUsed) + '/' + fmtGb(d.memTotal) + 'G';
+        entry.line1.appendChild(makeBar('MEM', memPct, pctColor(memPct, 63, 81, 181), memText, L));
 
         var hasGpu = d.gpuPercent !== undefined && d.gpuPercent !== null && d.gpuPercent !== 'N/A';
         if (hasGpu) {
-            var gpuPct = parseFloat(d.gpuPercent) || 0;
-            var gpuSuffix = '';
-            if (d.gpuTemp && d.gpuTemp !== 'N/A') gpuSuffix += d.gpuTemp + '°C ';
-            if (d.gpuMemUsed !== undefined && d.gpuMemTotal !== undefined && d.gpuMemUsed !== 'N/A' && d.gpuMemTotal !== 'N/A') {
-                var vramPct = parseFloat(d.gpuMemTotal) > 0 ? (parseFloat(d.gpuMemUsed) / parseFloat(d.gpuMemTotal)) * 100 : 0;
-                gpuSuffix += Math.round(vramPct) + '%VRAM';
+            if (!entry.line2) {
+                entry.line2 = document.createElement('div');
+                entry.line2.style.cssText = 'display:flex;align-items:center;gap:' + L.rowGap + 'px';
+                entry.row.appendChild(entry.line2);
             }
-            if (d.gpuPower && d.gpuPower !== 'N/A') gpuSuffix += ' ' + String(d.gpuPower).replace(' W', '') + 'W';
-            entry.metrics.appendChild(makeBar('GPU', gpuPct, pctColor(gpuPct, 206, 147, 216), gpuSuffix, L));
+            entry.line2.innerHTML = '';
+
+            // 等宽占位：使第二行 GPU/VRAM 条标签起点与第一行 MEM 条标签起点对齐
+            var spacer = document.createElement('span');
+            spacer.style.cssText = 'display:inline-block;width:' + (L.deviceNameW + L.barGap + L.trackW) + 'px';
+            entry.line2.appendChild(spacer);
+
+            var gpuPct = parseFloat(d.gpuPercent) || 0;
+            var gpuText = Math.round(gpuPct) + '%';
+            if (d.gpuTemp && d.gpuTemp !== 'N/A') gpuText += '  ' + d.gpuTemp + '°C';
+            if (d.gpuPower && d.gpuPower !== 'N/A') gpuText += '  ' + String(d.gpuPower).replace(' W', '') + 'W';
+            entry.line2.appendChild(makeBar('GPU', gpuPct, pctColor(gpuPct, 206, 147, 216), gpuText, L));
+
+            var hasVram = d.gpuMemUsed !== undefined && d.gpuMemTotal !== undefined && d.gpuMemUsed !== 'N/A' && d.gpuMemTotal !== 'N/A' && parseFloat(d.gpuMemTotal) > 0;
+            if (hasVram) {
+                var vramPct = (parseFloat(d.gpuMemUsed) / parseFloat(d.gpuMemTotal)) * 100;
+                var vramText = Math.round(vramPct) + '%  ' + fmtGb(d.gpuMemUsed) + '/' + fmtGb(d.gpuMemTotal) + 'G';
+                entry.line2.appendChild(makeBar('VRAM', vramPct, pctColor(vramPct, 206, 147, 216), vramText, L));
+            }
+        } else if (entry.line2) {
+            // 来源 GPU 数据消失时移除第二行，避免残留
+            if (entry.line2.parentNode) entry.line2.parentNode.removeChild(entry.line2);
+            entry.line2 = null;
         }
     }
 }
