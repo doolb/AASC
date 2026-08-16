@@ -7,6 +7,13 @@
 - ✅ [2026-08-16] render-display 覆盖层整体加半透明黑底（`background:rgba(0,0,0,0.5)`），底下内容隐约可见且文字清晰
   - 改动文件：res/tasks/render-display/render.html、docs/spec/monitor-system.md
 
+- ✅ [2026-08-16] 控制模式截图预览二次旋转 + 切换角度误进裁剪模式修复
+  - 根因：显示端已将截图反旋转成网页原方向，控制端 _applyRotationClass 又给截图预览加 rotate CSS 类 → 预览被二次旋转
+  - 根因：applyRotation → recalculateSize 强制 box.display=block 且发送 crop → 控制模式切换角度误进裁剪模式
+  - crop.js：控制模式开启时 _applyRotationClass 不加旋转类、recalculateSize 直接 return（不显裁剪框不发 crop）
+  - puppeteer 验证：控制模式+rotate90 → 无旋转类+裁剪框隐藏；非控制模式恢复正常
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/crop.js
+
 - ✅ [2026-08-16] 控制模式旋转场景坐标修复（截图反旋转 + 强制全屏 + 视口映射）
   - 根因：旋转 90/270 时 iframe transform 叠加裁剪 scale（残留 crop），getBoundingClientRect 返回远超视口的边界框，坐标映射错；且控制端预览显示"旋转后画面"与网页原方向不一致
   - display.html：
