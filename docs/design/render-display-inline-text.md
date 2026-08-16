@@ -49,7 +49,7 @@ PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32
           GPU ▓▓░░[12% 52°C 180W]    VRAM ▓░░[23% 6/24G]
 ```
 
-- 第二行前面放**等宽占位**（宽 = `deviceNameW + barGap + trackW + rowGap`），使 GPU/VRAM 条与第一行 MEM 条起始位置对齐。
+- 第二行前面放**等宽占位**（宽 = `deviceNameW + barGap + trackW`；行内 flex `gap:rowGap` 使 GPU 条起点 = 占位宽 + rowGap = `deviceNameW + barGap + trackW + rowGap`，恰与第一行 MEM 条标签起点对齐），使 GPU/VRAM 条与第一行 MEM 条起始位置对齐。
 - GPU 条：填充 = `gpuPercent`，条内文字 = 利用率 + 温度 + 功耗。
 - VRAM 条：填充 = `gpuMemUsed / gpuMemTotal * 100`，条内文字 = 已用百分比 + `已用GB/总量GB`；仅在显存字段有效且总量 > 0 时渲染。
 - 来源行从单行改为 flex 纵向两段（第一段 CPU/MEM，第二段 GPU/VRAM），行内纵向间距用小值（约 2px）。
@@ -62,9 +62,10 @@ PC-1      ▓▓▓▓▓▓[62% 45°C]           MEM ▓▓▓░░[38% 6.4/32
 
 ## 条内浮层文字
 
-- 进度条 track 改 `position:relative`；填充条 fill 改绝对定位（top/left 0，height 100%，width pct%）；文字 span 绝对定位水平垂直居中。
-- 文字样式：白色、`white-space:nowrap`、加 `text-shadow` 深色描边，保证填充颜色深浅变化时文字清晰。
-- 字号与现有 `font-size:45px` 保持一致（放大 3 倍适配大屏），条宽足够容纳（常规 360px / 紧凑 280px）。
+- 进度条 track 改 `position:relative`；填充段包一层 **fillWrap**（绝对定位 top/left 0，height 100%，width pct%，`overflow:hidden` + `border-radius:trackH/2`）裁出与现状一致的圆角填充段；fill 本身 `height/width 100%`。文字 span 与 fillWrap 平级，绝对定位水平垂直居中（`left:50%`+`translate(-50%,-50%)`），**不受 track 裁切**。
+- 文字样式：白色、`white-space:nowrap`、加 `text-shadow` 深色描边（如 `0 0 4px rgba(0,0,0,0.9)`），保证填充颜色深浅变化时文字清晰。
+- 文字字号 **34px**（标签仍为 45px），保证最长文案（如 `12% 52°C 180W` ≈ 13 字符 ≈ 220px）在紧凑模式 280px 条宽内不裁切。
+- 填充段右缘圆角与现状一致（fillWrap 裁切，非方形）。
 
 ## 数据字段合并规则
 
