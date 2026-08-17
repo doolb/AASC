@@ -193,6 +193,7 @@ const RES_DIR = path.join(PROJECT_ROOT, 'res');
 const UPLOADS_DIR = path.join(RES_DIR, 'uploads');
 const ASR_TEMP_DIR = path.join(RES_DIR, 'temp', 'asr');
 const HTTP_UPLOAD_TEMP_DIR = path.join(RES_DIR, 'temp', 'uploads');
+const VOICEPRINT_TEMP_DIR = path.join(RES_DIR, 'temp', 'voiceprint');
 
 const sslKeyPath = path.join(RES_DIR, 'certs', 'key.pem');
 const sslCertPath = path.join(RES_DIR, 'certs', 'cert.pem');
@@ -220,6 +221,10 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 if (!fs.existsSync(ASR_TEMP_DIR)) {
     fs.mkdirSync(ASR_TEMP_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(VOICEPRINT_TEMP_DIR)) {
+    fs.mkdirSync(VOICEPRINT_TEMP_DIR, { recursive: true });
 }
 
 let displayClients = new Map();
@@ -1167,6 +1172,65 @@ app.post('/api/voiceprint/remove', (req, res) => {
         return res.status(404).json({ status: 'error', message: '声纹不存在' });
     }
     res.json({ status: 'success', message: '已删除' });
+});
+
+// 声纹注册：控制端上传 audio+name；按 voiceprint.extraction 分派 server 本地提取 / display 中转 APK
+const voiceprintUpload = multer({ dest: VOICEPRINT_TEMP_DIR });
+const voiceprintService = require('../modules/voiceprint/voiceprint-service');
+let pendingVoiceprintExtracts = new Map();   // requestId -> {resolve, reject, timer}
+let pendingVoiceprintRequestId = 0;
+
+app.post('/api/voiceprint/register', voiceprintUpload.single('audio'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ status: 'error', message: '未收到音频文件' });
+        const name = (req.body && req.body.name || '').trim();
+        if (!name) {
+            cleanupTempFile(req.file.path);
+            return res.status(400).json({ status: 'error', message: '缺少名字' });
+        }
+        const extraction = config.get('voiceprint.extraction', 'server');
+        let embedding;
+        if (extraction === 'server') {
+            // server 模式：本地懒加载 SpeakerEmbeddingExtractor 提取
+            try {
+                embedding = await voiceprintService.extractEmbedding(req.file.path);
+            } catch (e) {
+                cleanupTempFile(req.file.path);
+                return res.status(500).json({ status: 'error', message: '声纹提取失败: ' + e.message });
+            }
+        } else {
+            // display 模式：中转在线 APK 提取（WS 下行 voiceprintExtract，回传由 Task 5 处理）
+            const display = findDisplayWithVoiceprint();
+            if (!display) {
+                cleanupTempFile(req.file.path);
+                return res.status(503).json({ status: 'error', message: '没有支持声纹的显示端在线' });
+            }
+            const audioBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
+            cleanupTempFile(req.file.path);
+            const requestId = 'vp-' + Date.now() + '-' + (++pendingVoiceprintRequestId);
+            embedding = await new Promise((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    pendingVoiceprintExtracts.delete(requestId);
+                    reject(new Error('显示端声纹提取超时'));
+                }, 30000);
+                pendingVoiceprintExtracts.set(requestId, { resolve, reject, timer });
+                try {
+                    sendToDisplay(display.id, { type: 'voiceprintExtract', requestId, audioBase64 });
+                } catch (err) {
+                    clearTimeout(timer);
+                    pendingVoiceprintExtracts.delete(requestId);
+                    reject(new Error('发送提取请求失败: ' + err.message));
+                }
+            });
+        }
+        // 无论 server/display 模式，提取完成后都清理上传的临时音频（display 模式已提前清理，这里重复调用无害）
+        cleanupTempFile(req.file.path);
+        voiceprintStore.add(name, embedding);
+        res.json({ status: 'success', message: `已注册 ${name} 的声纹`, name, dim: embedding.length });
+    } catch (e) {
+        if (req.file && req.file.path) cleanupTempFile(req.file.path);
+        res.status(500).json({ status: 'error', message: '注册失败: ' + e.message });
+    }
 });
 
 app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
@@ -2304,6 +2368,17 @@ function findDisplayWithAsr() {
     for (const [displayId, displayData] of displayClients) {
         const caps = displayData.state?.capabilities;
         if (caps && caps.voiceRecognition) {
+            return { id: displayId, ws: displayData.ws };
+        }
+    }
+    return null;
+}
+
+// 查找支持本地声纹提取（voiceprintAvailable）的显示端，用于 voiceprint.extraction='display' 时中转
+function findDisplayWithVoiceprint() {
+    for (const [displayId, displayData] of displayClients) {
+        const caps = displayData.state?.capabilities;
+        if (caps && caps.voiceprintAvailable) {
             return { id: displayId, ws: displayData.ws };
         }
     }

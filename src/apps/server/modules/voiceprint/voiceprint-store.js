@@ -5,7 +5,11 @@ const path = require('path');
 // 从 src/apps/server/modules/voiceprint 上溯 5 级到达项目根目录 /mnt/AASC，
 // 再进入 res/voiceprint/db.json（真实 res 在根目录，不在 src 下）。
 const DB_PATH = path.join(__dirname, '../../../../../res/voiceprint/db.json');
-const VOICEPRINT_DIM = 192;
+// 声纹维度：必须与 embedding 模型实际输出维度一致。
+// 3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx 真实输出为 512 维
+//（onnxruntime 检查 output Gemmembedding_dim_0=512；sherpa-onnx SpeakerEmbeddingExtractor.dim 亦返回 512）。
+// 注意：早期设计文档误记为 192 维，实际模型为 512，APK 端 SpeakerEmbeddingManager(dim) 必须用 512。
+const VOICEPRINT_DIM = 512;
 const SAVE_DEBOUNCE_MS = 500;
 
 class VoiceprintStore {

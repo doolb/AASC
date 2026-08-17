@@ -11,6 +11,99 @@ try {
     console.log('[ASR] sherpa-onnx-node 未安装，请运行: npm install sherpa-onnx-node');
 }
 
+// --- 无状态音频读取工具（不加载 ASR 模型）---
+// 说明：readWavFile/convertAudioFile 只依赖输入文件，不依赖实例(this)状态；
+// 提取为模块级函数便于 voiceprint-service 复用，避免为了读一个 wav 而加载整个 234MB ASR 模型。
+// 函数声明会提升，readWavFileFromPath 引用后文定义的 convertAudioFile 没有问题。
+function readWavFileFromPath(filePath) {
+    const buffer = fs.readFileSync(filePath);
+
+    if (buffer.toString('ascii', 0, 4) !== 'RIFF') {
+        return convertAudioFile(filePath);
+    }
+
+    let dataOffset = 12;
+    let sampleRate = 16000;
+    let dataSize = 0;
+    let bitsPerSample = 16;
+
+    while (dataOffset < buffer.length - 8) {
+        const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
+        const chunkSize = buffer.readUInt32LE(dataOffset + 4);
+
+        if (chunkId === 'fmt ') {
+            sampleRate = buffer.readUInt32LE(dataOffset + 12);
+            bitsPerSample = buffer.readUInt16LE(dataOffset + 22);
+        } else if (chunkId === 'data') {
+            dataSize = chunkSize;
+            dataOffset += 8;
+            break;
+        }
+        dataOffset += 8 + chunkSize;
+    }
+
+    if (dataSize === 0) {
+        return { samples: new Float32Array(0), sampleRate: 16000 };
+    }
+
+    const sampleCount = bitsPerSample === 16 ? dataSize / 2 : dataSize / 4;
+    const samples = new Float32Array(sampleCount);
+
+    if (bitsPerSample === 16) {
+        const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
+        for (let i = 0; i < sampleCount; i++) {
+            samples[i] = int16View[i] / 32768.0;
+        }
+    } else if (bitsPerSample === 32) {
+        const float32View = new Float32Array(buffer.buffer, dataOffset, sampleCount);
+        for (let i = 0; i < sampleCount; i++) {
+            samples[i] = float32View[i];
+        }
+    }
+
+    return { samples, sampleRate };
+}
+
+function convertAudioFile(filePath) {
+    const { execSync } = require('child_process');
+    const outputPath = filePath + '.converted.wav';
+
+    try {
+        execSync(`ffmpeg -y -i "${filePath}" -ar 16000 -ac 1 -f wav "${outputPath}"`, { stdio: 'pipe' });
+        const buffer = fs.readFileSync(outputPath);
+        fs.unlinkSync(outputPath);
+
+        let dataOffset = 12;
+        let sampleRate = 16000;
+        let dataSize = 0;
+
+        while (dataOffset < buffer.length - 8) {
+            const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
+            const chunkSize = buffer.readUInt32LE(dataOffset + 4);
+
+            if (chunkId === 'fmt ') {
+                sampleRate = buffer.readUInt32LE(dataOffset + 12);
+            } else if (chunkId === 'data') {
+                dataSize = chunkSize;
+                dataOffset += 8;
+                break;
+            }
+            dataOffset += 8 + chunkSize;
+        }
+
+        const sampleCount = dataSize / 2;
+        const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
+        const samples = new Float32Array(sampleCount);
+        for (let i = 0; i < sampleCount; i++) {
+            samples[i] = int16View[i] / 32768.0;
+        }
+
+        return { samples, sampleRate };
+    } catch (e) {
+        return { samples: new Float32Array(0), sampleRate: 16000 };
+    }
+}
+
 class SherpaOnnxASR {
     constructor(options = {}) {
         const preferredModelDir = path.join(__dirname, '../../../res/models/sensevoice');
@@ -197,92 +290,13 @@ class SherpaOnnxASR {
     }
 
     readWavFile(filePath) {
-        const buffer = fs.readFileSync(filePath);
-
-        if (buffer.toString('ascii', 0, 4) !== 'RIFF') {
-            return this.convertAudioFile(filePath);
-        }
-
-        let dataOffset = 12;
-        let sampleRate = 16000;
-        let dataSize = 0;
-        let bitsPerSample = 16;
-
-        while (dataOffset < buffer.length - 8) {
-            const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
-            const chunkSize = buffer.readUInt32LE(dataOffset + 4);
-
-            if (chunkId === 'fmt ') {
-                sampleRate = buffer.readUInt32LE(dataOffset + 12);
-                bitsPerSample = buffer.readUInt16LE(dataOffset + 22);
-            } else if (chunkId === 'data') {
-                dataSize = chunkSize;
-                dataOffset += 8;
-                break;
-            }
-            dataOffset += 8 + chunkSize;
-        }
-
-        if (dataSize === 0) {
-            return { samples: new Float32Array(0), sampleRate: 16000 };
-        }
-
-        const sampleCount = bitsPerSample === 16 ? dataSize / 2 : dataSize / 4;
-        const samples = new Float32Array(sampleCount);
-
-        if (bitsPerSample === 16) {
-            const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
-            for (let i = 0; i < sampleCount; i++) {
-                samples[i] = int16View[i] / 32768.0;
-            }
-        } else if (bitsPerSample === 32) {
-            const float32View = new Float32Array(buffer.buffer, dataOffset, sampleCount);
-            for (let i = 0; i < sampleCount; i++) {
-                samples[i] = float32View[i];
-            }
-        }
-
-        return { samples, sampleRate };
+        // 委托给模块级无状态函数（不加载 ASR 模型即可读取音频）
+        return readWavFileFromPath(filePath);
     }
-    
+
     convertAudioFile(filePath) {
-        const { execSync } = require('child_process');
-        const outputPath = filePath + '.converted.wav';
-
-        try {
-            execSync(`ffmpeg -y -i "${filePath}" -ar 16000 -ac 1 -f wav "${outputPath}"`, { stdio: 'pipe' });
-            const buffer = fs.readFileSync(outputPath);
-            fs.unlinkSync(outputPath);
-
-            let dataOffset = 12;
-            let sampleRate = 16000;
-            let dataSize = 0;
-
-            while (dataOffset < buffer.length - 8) {
-                const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
-                const chunkSize = buffer.readUInt32LE(dataOffset + 4);
-
-                if (chunkId === 'fmt ') {
-                    sampleRate = buffer.readUInt32LE(dataOffset + 12);
-                } else if (chunkId === 'data') {
-                    dataSize = chunkSize;
-                    dataOffset += 8;
-                    break;
-                }
-                dataOffset += 8 + chunkSize;
-            }
-
-            const sampleCount = dataSize / 2;
-            const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
-            const samples = new Float32Array(sampleCount);
-            for (let i = 0; i < sampleCount; i++) {
-                samples[i] = int16View[i] / 32768.0;
-            }
-
-            return { samples, sampleRate };
-        } catch (e) {
-            return { samples: new Float32Array(0), sampleRate: 16000 };
-        }
+        // 委托给模块级无状态函数；同名模块函数是独立绑定，非递归
+        return convertAudioFile(filePath);
     }
 }
 
@@ -455,5 +469,6 @@ module.exports = {
     reset,
     getMode,
     recognize,
-    isReady
+    isReady,
+    readWavFileFromPath
 };
