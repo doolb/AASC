@@ -519,3 +519,20 @@ test('回归：副角色待修改任务由原 agent 重做，任务文件不含 
     assert.strictEqual(task.status, '已完成', '副角色待修改任务应被重做完成');
     assert.strictEqual(task._fromRework, undefined, '任务文件不应含 _fromRework 内部标记');
 });
+
+test('端到端：main 模式进程持续存活（有保活句柄，不因事件循环空而退出）', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    // 子进程启动 main 模式，观察其是否在 800ms 内退出（修复前事件循环空→立即退出）
+    const script = `const { start } = require(${JSON.stringify(path.join(__dirname, '..', 'tools', 'poll.js'))}); start({ root: ${JSON.stringify(root)}, mode: 'main', name: 'mainCoord' });`;
+    const { spawn } = require('node:child_process');
+    const child = spawn(process.execPath, ['-e', script], { stdio: 'ignore' });
+    let exited = false;
+    child.on('exit', () => { exited = true; });
+    await new Promise((r) => setTimeout(r, 800));
+    assert.strictEqual(exited, false, 'main 模式进程应持续存活（有保活句柄）');
+    child.kill('SIGTERM');
+    await new Promise((r) => setTimeout(r, 200));
+    assert.ok(!fs.existsSync(p.mainLockFile), 'SIGTERM 后 cleanup 应删除 main lock');
+});

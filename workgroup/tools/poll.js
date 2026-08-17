@@ -55,15 +55,19 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
     name = String(name || '').trim();
     const p = paths(root);
 
-    // main 协调者模式：只写 main lock，不进入子 agent 轮询
+    // main 协调者模式：只写 main lock，不进入子 agent 轮询。
+    // 必须保活：无活动句柄时 main() 返回后事件循环空 → 进程立即正常退出，
+    // cleanup（SIGINT/SIGTERM）不触发，lock 残留死 PID，空角色误判"无 main"。
     if (mode === 'main') {
         ensureDir(path.join(p.membersDir, 'main'));
         writeText(p.mainLockFile, `${process.pid} ${Date.now()}`);
         const cleanup = () => { fs.rmSync(p.mainLockFile, { force: true }); process.exit(0); };
         process.once('SIGINT', cleanup);
         process.once('SIGTERM', cleanup);
+        // 保活：约 17 天触发一次的空定时器，平时只保持事件循环活跃
+        const keepalive = setInterval(() => {}, 1 << 30);
         console.log(`[workgroup] 启动 main 协调者（PID ${process.pid}）`);
-        return { stop: () => {}, mode: 'main' };
+        return { stop: () => { clearInterval(keepalive); }, mode: 'main' };
     }
 
     // 空角色模式：无主角色起步，只认 assignedTo 自己的任务
