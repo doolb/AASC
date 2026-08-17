@@ -1079,6 +1079,37 @@ app.get('/api/asr/model/:filename', (req, res) => {
     stream.pipe(res);
 });
 
+// 声纹模型文件下载（Android 原生声纹识别按需拉取；filename 白名单防路径穿越）
+const VOICEPRINT_MODEL_DIR = path.join(RES_DIR, 'models', 'voiceprint');
+const VOICEPRINT_MODEL_FILES = [
+    '3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx',
+    'pyannote_segmentation_3_0_int8.onnx'
+];
+
+app.get('/api/voiceprint/model/:filename', (req, res) => {
+    const filename = req.params.filename;
+    if (!VOICEPRINT_MODEL_FILES.includes(filename)) {
+        return res.status(400).json({ status: 'error', message: '非法文件名' });
+    }
+    const filePath = path.join(VOICEPRINT_MODEL_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ status: 'error', message: '声纹模型文件不存在' });
+    }
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', fs.statSync(filePath).size);
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', () => {
+        if (!res.headersSent) {
+            res.status(500).json({ status: 'error', message: '模型文件读取失败' });
+        } else {
+            res.end();
+        }
+    });
+    res.on('close', () => stream.destroy());
+    res.on('error', () => stream.destroy());
+    stream.pipe(res);
+});
+
 app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
     try {
         if (!req.file) {
