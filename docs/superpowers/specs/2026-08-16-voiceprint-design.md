@@ -210,7 +210,7 @@ POST /api/voiceprint/remove              # 删除某人声纹
 | `.../NativeBridge.kt` | voiceprintMatch/voiceprintDiarize/voiceprintStatus/voiceprintSyncDb 4 桥方法 + onVoiceprintDb |
 | `src/apps/web-mediacenter/ui/public/display.html` | 声纹接入（能力/分派/回调/提示） |
 | `src/apps/server/boot/server-app.js` | /api/voiceprint/* 接口 + register 双模式 + /api/asr/recognize 升级 + voiceInput speaker 校验 |
-| `.../asr-service.js`（或独立 voiceprint-service） | server 模式特征提取 |
+| `src/external/asr/asr-service.js` | 扩展：server 模式注册时加载 embedding 模型提取声纹（复用现有 ASR 进程，懒加载，提取后释放） |
 | `src/apps/web-mediacenter/ui/public/upload.html` + js | 控制端声纹管理面板（输入名字+录音+列表/删除） |
 | `config/config.json` | voiceprint.enabled / extraction / threshold / multiSpeaker |
 | `docs/spec/voiceprint.md`（新增） | 实现伪代码文档 |
