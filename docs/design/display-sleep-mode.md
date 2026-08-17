@@ -116,7 +116,7 @@ HTML 末尾追加（`display.html` body 内）：
 ### 状态变量与函数
 
 ```
-sleepSettings   = { enabled:false, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
+sleepSettings   = { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 sleepState      = 'normal'   // 'normal' | 'sleep' | 'deep' | 'active'
 activationUntil = 0          // 临时激活截止时间戳
 manualSleepMode = null       // 手动覆盖枚举：null | 'sleep' | 'deep'
@@ -173,7 +173,7 @@ function activateTemporarily():
 `src/apps/server/modules/config/config-app-service.js` 的 `defaultDisplayState` 追加：
 
 ```
-sleep: { enabled:false, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
+sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 ```
 
 沿用现有 `updateDisplayState(ip, partialState)` 持久化——显示端回传时带上 `sleep` 字段即自动合并保存。
@@ -199,7 +199,7 @@ sleep: { enabled:false, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 
 - **立即切换** 按钮组：「立即睡眠」「立即深度睡眠」「恢复正常」→ `sendControl('sleepOverride', value)`
 - 保存按钮 → `sendControl('sleepSettings', settings)`；打开时 `fetch('/api/device-settings/' + displayId)` 查询当前选中显示端的 `settings.sleep` 填充（无则用默认值）
 
-当前选中显示端的睡眠状态显示：控制端根据该显示端最近一次回传的状态（显示端收到 sleepSettings 后回传 ack 含当前 sleepState）或设备在线状态展示「当前: 睡眠中/深度睡眠/正常/激活中」。
+当前选中显示端的睡眠状态显示：显示端**连接成功即上报**当前 `sleepState`，之后每次状态变化（睡眠/深度/激活/正常切换、手动覆盖、激活过期回落）自动上报。服务端存 `displayData.state.sleepState` 并广播控制端；控制端睡眠卡片按钮文字实时显示当前状态（设置/睡眠中/深度睡眠中/临时激活中），切换显示端时通过 getState 响应（`displayState.state.sleepState`）刷新或回落「设置」。操作后 ack（`extraData.sleepState`）也即时更新。
 
 ## 数据流
 
@@ -223,6 +223,14 @@ sleep: { enabled:false, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 
 控制端下发媒体（sendMedia 等）
   → 显示端 showMedia()
   → activateTemporarily()（60s 强制显示，覆盖手动覆盖；过期后回落手动）
+```
+
+```
+显示端连接成功 / 睡眠状态变化（applySleepState 末尾）
+  → displayWs.send({ type: 'sleepStateReport', sleepState })
+  → 服务端 displayData.state.sleepState = sleepState（不持久化）+ broadcastToControls
+  → 控制端 sleepStateReport 分支（匹配当前选中显示端）→ 更新睡眠卡片按钮文字
+  → 控制端切换显示端发 getState → displayState.state.sleepState → 更新按钮 / 未上报回落「设置」
 ```
 
 ## 边界情况与降级
@@ -257,9 +265,10 @@ sleep: { enabled:false, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 
 
 | 文件 | 改动 |
 |------|------|
-| `src/apps/web-mediacenter/ui/public/display.html` | `#sleepOverlay` 遮罩 + `checkSleepMode`/`applySleepState`/`activateTemporarily` + `handleControl` 新增 `sleepSettings`/`sleepActivate`/`sleepOverride` + `handleRestoreState` 恢复 + `showMedia` 触发激活 |
-| `src/apps/web-mediacenter/ui/public/upload.html` | 显示控制面板「睡眠模式」入口按钮 + 弹窗设置框（SleepPanel） |
-| `src/apps/web-mediacenter/ui/public/js/controls.js` | SleepPanel 逻辑（打开/填充/保存/临时激活/立即切换/状态显示） |
+| `src/apps/web-mediacenter/ui/public/display.html` | `#sleepOverlay` 遮罩 + `checkSleepMode`/`applySleepState`/`activateTemporarily`/`reportSleepState` + `handleControl` 新增 `sleepSettings`/`sleepActivate`/`sleepOverride` + `handleRestoreState` 恢复 + `showMedia` 触发激活 + 连接/状态变化上报（默认开启） |
+| `src/apps/web-mediacenter/ui/public/upload.html` | 显示控制面板「睡眠模式」入口按钮（`#sleepSettingsBtn` 文字随状态变化）+ 弹窗设置框（SleepPanel） |
+| `src/apps/web-mediacenter/ui/public/js/controls.js` | SleepPanel 逻辑（打开/填充/保存/临时激活/立即切换/状态显示）+ `updateSleepStatus` 更新按钮文字 |
+| `src/apps/server/boot/server-app.js` | 显示端上行 `sleepStateReport`：存 `displayData.state.sleepState` + 转发控制端 |
 | `src/apps/server/modules/config/config-app-service.js` | `defaultDisplayState` 追加 `sleep` 字段 |
 | `docs/spec/config.md` | `defaultDisplayState` 伪代码补 `sleep` 字段 |
 | `docs/spec/monitor-system.md` 或新增 spec | 睡眠模式伪代码（据实现位置定） |

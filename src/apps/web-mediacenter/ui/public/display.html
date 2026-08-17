@@ -1207,7 +1207,8 @@
                 // 容错：state.sleep 可能为 null/非对象（服务端持久化异常），按空值降级，避免 TypeError
                 const s = state.sleep || {};
                 sleepSettings = {
-                    enabled: !!s.enabled,
+                    // 默认开启：持久化数据缺 enabled 字段（旧数据/从未配置过）时按开启处理
+                    enabled: s.enabled === undefined ? true : !!s.enabled,
                     startHour: clampHour(s.startHour),
                     endHour: clampHour(s.endHour),
                     deepStartHour: clampHour(s.deepStartHour),
@@ -2448,7 +2449,7 @@
         // 优先级：临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常。
         const sleepOverlay = document.getElementById('sleepOverlay');
         const mediaContainer = document.getElementById('mediaContainer');
-        let sleepSettings = { enabled: false, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
+        let sleepSettings = { enabled: true, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
         let sleepState = 'normal';   // 'normal' | 'sleep' | 'deep' | 'active'
         let activationUntil = 0;     // 临时激活截止时间戳
         let manualSleepMode = null;  // 手动覆盖枚举：null | 'sleep' | 'deep'，控制端显式进入睡眠/深度睡眠，直到再次下发
@@ -2493,6 +2494,15 @@
             } else if (prev === 'sleep' || prev === 'deep') {
                 // 仅从隐藏态恢复时续播，避免重复 play
                 resumeSleepMedia();
+            }
+            // 状态变化时上报，供控制端按钮实时显示
+            reportSleepState();
+        }
+
+        // 上报当前睡眠状态到服务端（连接成功 + 每次状态变化）：服务端存 displayData.state.sleepState 并转发控制端
+        function reportSleepState() {
+            if (displayWs && displayWs.readyState === 1) {
+                displayWs.send(JSON.stringify({ type: 'sleepStateReport', sleepState: sleepState }));
             }
         }
 
@@ -2574,6 +2584,7 @@
                 sendBrowserInfo();
                 declareCapabilities();
                 sendVoiceStatus();
+                reportSleepState();
                 
                 if (!isAlwaysListening) {
                     pendingAutoStart = true;

@@ -2972,6 +2972,14 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             width: data.width,
             height: data.height
         });
+    } else if (data.type === 'sleepStateReport' && displayData) {
+        // 睡眠状态上报：存到 state（getState/device-settings 可返回）并转发控制端，供睡眠卡片按钮显示
+        displayData.state.sleepState = data.sleepState;
+        broadcastToControls({
+            displayId: displayId,
+            type: 'sleepStateReport',
+            sleepState: data.sleepState
+        });
     } else if (data.type === 'voiceInput' && displayData) {
         // 只处理声纹语音：声明了 speaker 但为 null（未注册/未匹配）的语音丢弃，不触发命令
         if (data.speaker !== undefined && data.speaker === null) {

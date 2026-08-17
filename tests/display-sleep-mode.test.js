@@ -38,10 +38,22 @@ const assert = require('assert');
   await page.waitForFunction(() => typeof window.checkSleepMode === 'function', { timeout: 15000 });
   await page.waitForFunction(() => window.__wsInstance && window.__wsInstance.readyState === 1, { timeout: 15000 });
 
-  // ---- 0. 页面加载不应自动打开激活窗口（restore/恢复持久化媒体不激活）----
-  const loadState = await page.evaluate(() => ({ state: sleepState, until: activationUntil }));
-  assert.strictEqual(loadState.state, 'normal', '页面加载不应自动进入激活状态');
+  // ---- 0. 默认开启 + 页面加载不自动打开激活窗口 ----
+  const loadState = await page.evaluate(() => ({ enabled: sleepSettings.enabled, until: activationUntil }));
+  assert.strictEqual(loadState.enabled, true, '睡眠模式默认开启');
   assert.strictEqual(loadState.until, 0, '页面加载恢复持久化媒体不应打开 60 秒激活窗口');
+  // 关闭睡眠开关，保证后续「正常」断言不受默认时段影响（默认开启下夜间加载可能判定为 sleep/deep）
+  await page.evaluate(() => { sleepSettings = { ...sleepSettings, enabled: false }; checkSleepMode(); });
+  const normalState = await page.evaluate(() => ({ state: sleepState }));
+  assert.strictEqual(normalState.state, 'normal', '关闭睡眠后应回到 normal');
+  console.log('PASS: 睡眠默认开启 + 加载不激活');
+
+  // ---- 0.5 连接即上报 sleepState ----
+  const reports = await page.evaluate(() => window.__wsSends
+    .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
+    .filter(m => m && m.type === 'sleepStateReport'));
+  assert.ok(reports.length > 0, '连接成功后应上报 sleepState');
+  console.log('PASS: 连接即上报 sleepState');
 
   // ---- 1. inSleepWindow 跨天 / 非跨天判定 ----
   const w = await page.evaluate(() => ({
@@ -290,6 +302,19 @@ const assert = require('assert');
   assert.strictEqual(ovrNormal.media, 'flex', '正常应显示媒体容器');
   assert.strictEqual(ovrNormal.overlay, 'none', '正常不应有黑幕');
   console.log('PASS: handleControl(sleepOverride=normal) 恢复正常');
+
+  // ---- 15. 状态变化后上报匹配当前 sleepState ----
+  await page.evaluate(() => { activateTemporarily(); });
+  await new Promise(r => setTimeout(r, 200));
+  const lastReport = await page.evaluate(() => {
+    const rs = window.__wsSends
+      .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
+      .filter(m => m && m.type === 'sleepStateReport');
+    const last = rs[rs.length - 1];
+    return { reported: last ? last.sleepState : null, state: sleepState };
+  });
+  assert.strictEqual(lastReport.reported, lastReport.state, '状态变化后上报应匹配当前 sleepState');
+  console.log('PASS: 状态变化后上报 sleepState');
 
   await browser.close();
   console.log('ALL PASS: 显示端睡眠模式');

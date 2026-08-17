@@ -52,6 +52,20 @@
     - docs/spec/display-sleep-mode.md、docs/design/display-sleep-mode.md
     - tests/display-sleep-mode.test.js（+5 手动覆盖断言，共 14 步全绿）
 
+- ✅ [2026-08-17] 睡眠模式状态上报 + 默认开启
+  - 显示端连接成功即上报 sleepState（sleepStateReport），之后每次状态变化（睡眠/深度/激活/正常切换、手动覆盖、激活过期回落）自动上报；服务端存 displayData.state.sleepState（getState/device-settings 可返回）并广播控制端
+  - 控制端睡眠卡片按钮文字实时显示当前状态（设置/睡眠中/深度睡眠中/临时激活中），切换显示端时经 displayState.state.sleepState 刷新或回落「设置」；弹窗状态行同步更新
+  - 睡眠模式开关默认开启（服务端 defaultDisplayState + 显示端 sleepSettings + restoreState 缺 enabled 字段按开启处理，兼容旧数据）
+  - 改动文件：
+    - display.html（reportSleepState + 默认开启）
+    - server-app.js（sleepStateReport 分支：存 displayData.state.sleepState + 转发控制端）
+    - js/controls.js（updateSleepStatus 双更新按钮+弹窗状态行）
+    - js/websocket.js（displayState 填充 + sleepStateReport 分支）
+    - upload.html（睡眠按钮 id=sleepSettingsBtn）
+    - config-app-service.js（defaultDisplayState sleep.enabled=true）
+    - docs/spec/display-sleep-mode.md、docs/design/display-sleep-mode.md
+    - tests/display-sleep-mode.test.js（默认开启 + 连接上报 + 状态变化上报断言，共 17 步全绿）
+
 - ✅ [2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）实现完成
   - 在 NativeBridge 新增 compute() 桥方法，离屏 EGL 3.1 上下文执行 GLES compute shader，为 threejs 提供协作/归约类真 compute 能力
   - 接口对齐 threejs WebGPU compute（workgroupSize/count/dispatchSize/instanceIndex→gl_GlobalInvocationID）

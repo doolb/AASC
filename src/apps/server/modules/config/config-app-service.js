@@ -10,7 +10,7 @@ const defaultDisplayState = {
     crop: { x: 0, y: 0, width: 100, height: 100 },
     volume: 100,
     playlist: [],
-    sleep: { enabled: false, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 }
+    sleep: { enabled: true, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 }
 };
 
 class Config extends DataSnapshot {

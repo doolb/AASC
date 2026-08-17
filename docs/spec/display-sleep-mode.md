@@ -49,6 +49,11 @@ function checkSleepMode():          # 每 10 秒，setInterval
 function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（showMedia noActivate=false）触发
     activationUntil = now + 60000
     applySleepState('active')       # 覆盖手动与时段；60 秒过期后下次检查回落到手动覆盖或时段判定
+
+function reportSleepState():        # 上报当前睡眠状态给服务端（连接成功 + 每次状态变化）
+    displayWs.send({ type: 'sleepStateReport', sleepState })
+    # 服务端：存 displayData.state.sleepState（getState/device-settings 可返回）+ broadcastToControls
+    # 控制端：收到 sleepStateReport / displayState 更新睡眠卡片按钮文字
 ```
 
 ## 触发链路
@@ -74,6 +79,12 @@ function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（
 
 显示端刷新/重启
   → 服务端 restoreState(state) → handleRestoreState 读 state.sleep → checkSleepMode() 立即应用
+  → 状态变化触发 reportSleepState()
+
+显示端连接成功 / 每次睡眠状态变化
+  → displayWs.send({ type: 'sleepStateReport', sleepState })
+  → 服务端 displayData.state.sleepState = sleepState（不持久化，连接即上报）
+  → broadcastToControls 转发 → 控制端更新睡眠卡片按钮文字（匹配当前选中显示端）
 ```
 
 ## 手动覆盖（sleepOverride）
@@ -102,5 +113,6 @@ function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（
 | `control` / `sleepSettings` | `{enabled,startHour,endHour,deepStartHour,deepEndHour}` | 应用设置 + checkSleepMode + ack(`extraData.sleepState`) |
 | `control` / `sleepActivate` | 无 | `activateTemporarily()` + ack(`extraData.sleepState`) |
 | `control` / `sleepOverride` | `'sleep'` \| `'deep'` \| `'normal'` | `manualSleepMode` 赋值（`normal`→null）+ checkSleepMode + ack(`extraData.sleepState`) |
+| `sleepStateReport`（显示端上行） | `sleepState` | 服务端存 `displayData.state.sleepState` + broadcastToControls → 控制端更新按钮 |
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |

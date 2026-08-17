@@ -184,7 +184,7 @@ const Controls = {
         fetch('/api/device-settings/' + displayId)
             .then(r => r.json())
             .then(d => {
-                const s = (d.settings && d.settings.sleep) || { enabled: false, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
+                const s = (d.settings && d.settings.sleep) || { enabled: true, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
                 mask.querySelector('#sleepPanelEnabled').checked = !!s.enabled;
                 mask.querySelector('#sleepPanelStart').value = s.startHour;
                 mask.querySelector('#sleepPanelEnd').value = s.endHour;
@@ -194,12 +194,18 @@ const Controls = {
             .catch(() => {});
     },
 
-    // 显示端回传当前睡眠状态，更新弹窗状态行（弹窗未打开时为空操作）
+    // 显示端回传当前睡眠状态，更新睡眠卡片按钮文字 + 弹窗状态行（弹窗未打开时只更新按钮）
     updateSleepStatus(state) {
+        // 卡片按钮：normal/未知保持入口语义「设置」，其余显示当前状态
+        const btn = document.getElementById('sleepSettingsBtn');
+        if (btn) {
+            const btnNames = { normal: '设置', sleep: '睡眠中', deep: '深度睡眠中', active: '临时激活中' };
+            btn.textContent = btnNames[state] || '设置';
+        }
         const el = document.getElementById('sleepPanelStatus');
         if (!el) return;
         const names = { normal: '正常', sleep: '睡眠中', deep: '深度睡眠中', active: '临时激活中' };
-        el.textContent = '当前: ' + (names[state] || state);
+        el.textContent = '当前: ' + (names[state] || '正常');
     },
 
     sendFitMode(fit) {

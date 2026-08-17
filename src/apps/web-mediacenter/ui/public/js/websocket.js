@@ -96,6 +96,11 @@ const WebSocketManager = {
             }
             
             if (data.displayId === window.currentDisplayId) {
+                // 睡眠状态（切换显示端/getState 响应）：有值显示真实状态，未上报过则按钮回落「设置」
+                if (window.Controls) {
+                    window.Controls.updateSleepStatus(data.state.sleepState);
+                }
+
                 if (window.Crop) {
                     window.displayCanvasSize = data.state.canvasSize;
                 }
@@ -164,6 +169,11 @@ const WebSocketManager = {
                 }
             } else {
                 console.log('[WS] displayState displayId 不匹配，跳过处理');
+            }
+        } else if (data.type === 'sleepStateReport') {
+            // 显示端睡眠状态上报：匹配当前选中显示端才更新按钮
+            if (data.displayId === window.currentDisplayId && window.Controls) {
+                window.Controls.updateSleepStatus(data.sleepState);
             }
         } else if (data.type === 'videoProgress') {
             // 只显示当前选中显示端的进度
