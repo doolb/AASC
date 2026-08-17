@@ -119,3 +119,10 @@ test('spawnClaude child 可被 kill（取消用）', async () => {
     const res = await done;
     assert.strictEqual(res.code, null, '被 kill 后 code 应为 null');
 });
+
+test('MAIN_SYSTEM_PROMPT 提供 main 协调者指令', () => {
+    const { MAIN_SYSTEM_PROMPT } = require('../tools/wg-fs.js');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('main'), '应包含 main 角色');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('roles/main.md'), '应提示读 main 角色定义');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('tasks/pending'), '应提示投递任务');
+});

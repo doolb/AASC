@@ -123,4 +123,17 @@ function spawnClaude({ command, args, cwd, resultFile }) {
     return { child, done };
 }
 
-module.exports = { paths, ensureDir, readJson, writeJson, readText, writeText, listDirs, listFiles, atomicClaim, isAlive, spawnClaude };
+// main 协调者指令：注入 spawn 的 main claude TUI，让它知道自己扮演 main
+// 职责：读 roles/main.md、按 L4-L7 等级路由拆任务、投递到 tasks/pending/、验收时扫描已验收/打回
+const MAIN_SYSTEM_PROMPT = `你是 workgroup 的 main 协调者。
+
+你的职责：
+1. 读 workgroup/roles/main.md 了解 main 角色职责。
+2. 用户提需求 → 用 analyze-requirement-level 定级（L4-L7）→ 拆解成多角色任务，带 depends 依赖链。
+3. 投递任务到 workgroup/tasks/pending/<id>.json（status 空，role/requirement/depends/assignedTo 按需）。
+4. 定期扫描 workgroup/tasks/claimed/*/ 找 status='已完成' 的任务，读 workgroup/results/<id>.json 呈现给用户验收（通过→status=已验收 / 提修改→小改动写 reviewComment+待修改、大改动投 role=review 任务）。
+5. 空角色/离线成员可指派：任务带 assignedTo=<成员名>，agent 自动切换主角色认领。
+
+任务文件规范见 workgroup/docs/design.md「任务文件格式」。`;
+
+module.exports = { paths, ensureDir, readJson, writeJson, readText, writeText, listDirs, listFiles, atomicClaim, isAlive, spawnClaude, MAIN_SYSTEM_PROMPT };
