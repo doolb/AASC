@@ -26,13 +26,14 @@ class VoiceprintStore {
             if (!fs.existsSync(DB_PATH)) return;
             const raw = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
             if (raw && raw.speakers) {
-                // 防御性归一化：即使持久化文件里混入类对象数据（如 {0:1,1:2}），也转回普通数组；
-                // 对已是普通数组的值 Array.from 只是复制一份，无副作用。
-                const normalized = {};
+                // 防御性归一化：跳过原型链危险键（__proto__/constructor/prototype）防止原型污染，
+                // 其余值即使持久化文件里混入类对象数据（如 {0:1,1:2}）也转回普通数组。
+                const safe = {};
                 for (const k of Object.keys(raw.speakers)) {
-                    normalized[k] = Array.from(raw.speakers[k]);
+                    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+                    safe[k] = Array.from(raw.speakers[k] || []);
                 }
-                this.speakers = normalized;
+                this.speakers = safe;
                 this.version = (raw.version || 1) + 1;
             }
         } catch (e) {

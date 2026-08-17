@@ -37,6 +37,7 @@ class Config extends DataSnapshot {
                 autoRestart: true
             }
         },
+        voiceprint: { enabled: true, extraction: 'server', threshold: 0.5, multiSpeaker: true },
         voiceCommand: {
             defaultWeatherCity: '',
             weatherCities: [

@@ -1263,7 +1263,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
 
                 // 多人分割：只处理识别到声纹的段，逐段下发
                 if (result.segments && result.segments.length) {
-                    const segs = result.segments.filter(s => s.speaker);
+                    const segs = result.segments.filter(s => s.speaker && hasValidContent((s.text || '').trim()));
                     if (segs.length === 0) {
                         return res.json({ status: 'ignored', reason: '未识别到已注册声纹', segments: [] });
                     }
@@ -2664,6 +2664,15 @@ wss.on('connection', (ws, req) => {
             localAsrEnabled: asrDevice === 'display'
         }));
 
+        // 显示端连接时推送声纹配置，避免新连接 APK 默认关闭声纹
+        ws.send(JSON.stringify({
+            type: 'voiceprintConfig',
+            enabled: config.get('voiceprint.enabled', true),
+            extraction: config.get('voiceprint.extraction', 'server'),
+            threshold: config.get('voiceprint.threshold', 0.5),
+            multiSpeaker: config.get('voiceprint.multiSpeaker', true)
+        }));
+
         // 显示端已连接，重试待转发的显示端服务
         if (taskManager) {
             taskManager.retryPendingDisplayServices(displayId);
@@ -2983,7 +2992,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             handleControlMessageFallback({
                 type: 'voiceCommand',
                 text: data.text.trim(),
-                displayId
+                displayId,
+                ...(data.speaker !== undefined ? { speaker: data.speaker } : {})
             }, ws);
         }
     } else if (data.type === 'voiceStatus' && displayData) {
