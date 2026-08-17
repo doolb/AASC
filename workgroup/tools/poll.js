@@ -137,7 +137,29 @@ async function executeTask({ p, root, role, name, activeRole, mine, command, bui
     const summary = buildSummary(readText(p.roleHistoryFile(name, mine.role || '')));
     const prompt = buildPrompt({ role: mine.role, name: agentDir, summary, taskFile, resultFile, reviewComment: mine.reviewComment });
     const args = buildArgs ? buildArgs(prompt, taskFile, resultFile) : ['--print', '--permission-mode', 'bypassPermissions', prompt];
-    await spawnClaude({ command, args, cwd: root, resultFile }).done; // 等待子进程结束（Task 5 加取消轮询）
+    // 启动子进程（不 await）：{ child, done }——child 立即可 kill，done 在 close 时 resolve
+    const { child, done } = spawnClaude({ command, args, cwd: root, resultFile });
+    const cancelSignal = path.join(p.cancelDir, mine.id);
+    let cancelled = false;
+    while (true) {
+        if (fs.existsSync(cancelSignal)) {
+            cancelled = true;
+            if (child.pid) { try { process.kill(child.pid, 'SIGTERM'); } catch (_) {} }
+            break;
+        }
+        // 每 500ms 检查取消信号，同时检测子进程是否已结束
+        if (await Promise.race([done.then(() => true), sleep(500).then(() => false)])) break;
+    }
+    await done; // 确保 done 已 resolve（子进程正常结束或被 kill）
+    fs.rmSync(cancelSignal, { force: true });
+    if (cancelled) {
+        const cur = readJson(taskFile) || mine;
+        writeJson(taskFile, { ...cur, status: '已取消' });
+        fs.rmSync(p.roleBusyFile(name, activeRole || ''), { force: true });
+        fs.rmSync(p.roleCurrentTaskFile(name, activeRole || ''), { force: true });
+        console.log(`[workgroup] 任务 ${mine.id} 已取消`);
+        return;
+    }
 
     // 结果容错：非法/缺失则标记 failed
     let res = readJson(resultFile);

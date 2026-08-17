@@ -364,3 +364,30 @@ test('端到端：depends 依赖未验收的任务不被认领，依赖验收后
 
     assert.ok(fs.existsSync(p.claimedTaskFile('alice-frontend', 'tA')), '依赖验收后 tA 应被认领');
 });
+
+test('端到端：执行中写取消信号 → 任务 status=已取消', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir, p.cancelDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端');
+    writeJson(p.taskFile('tC'), { id: 'tC', title: '任务C', role: 'frontend', requirement: '做C', priority: 'high', createdAt: 1, references: [], status: '', depends: [], level: 'L4' });
+
+    // 假 claude：sleep 5 秒（模拟长任务），期间可取消
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, primary: 'frontend', name: 'alice', command: process.execPath,
+        buildArgs: () => ['-e', 'setTimeout(()=>{}, 5000)'],
+        pollIntervalMs: 50
+    });
+    // 等任务被认领（busy 出现）
+    await waitFor(() => fs.existsSync(p.roleBusyFile('alice', 'frontend')), 5000);
+    // 写取消信号
+    writeText(path.join(p.cancelDir, 'tC'), '');
+    // 等任务被取消（busy 清 + 任务已取消）
+    await waitFor(() => !fs.existsSync(p.roleBusyFile('alice', 'frontend')), 5000);
+    app.stop();
+
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice-frontend', 'tC'), 'utf8'));
+    assert.strictEqual(task.status, '已取消', '任务应标记为已取消');
+    assert.ok(!fs.existsSync(path.join(p.cancelDir, 'tC')), '取消信号应被删除');
+});
