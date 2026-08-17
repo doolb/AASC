@@ -267,6 +267,8 @@ class NativeBridge(
             if (!voiceprintEnabled) return JSONObject().put("ok", true).toString()
             val baseUrl = serverBaseUrl()
             if (baseUrl.isEmpty()) return JSONObject().put("error", "无法确定服务器地址").toString()
+            // 模型已就绪时 ensureModel 不会回调事件（短路），需立即应用配置
+            val alreadyReady = voiceprintModelManager.isReady
             voiceprintModelManager.ensureModel(baseUrl, voiceprintMultiSpeaker) { event ->
                 if (event.optString("state") == "ready") {
                     val loaded = VoiceprintEngine.load(
@@ -276,6 +278,15 @@ class NativeBridge(
                     event.put("engineReady", loaded)
                 }
                 val js = "window.onVoiceprintModel && window.onVoiceprintModel(${event.toString()});"
+                webView.evaluateJavascript(js, null)
+            }
+            if (alreadyReady) {
+                // 应用配置 + 确保 multiSpeaker 时 segmentation 模型已下载
+                val loaded = VoiceprintEngine.load(
+                    webView.context, voiceprintModelManager.embeddingModelPath,
+                    if (voiceprintMultiSpeaker) voiceprintModelManager.segmentationModelPath else null,
+                    voiceprintThreshold, voiceprintMultiSpeaker)
+                val js = "window.onVoiceprintModel && window.onVoiceprintModel(${JSONObject().put("state","ready").put("engineReady",loaded)});"
                 webView.evaluateJavascript(js, null)
             }
             JSONObject().put("ok", true).toString()

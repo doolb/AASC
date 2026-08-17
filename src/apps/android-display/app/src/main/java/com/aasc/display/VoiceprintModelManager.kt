@@ -33,7 +33,12 @@ class VoiceprintModelManager(
     // 幂等触发：ready→"ready"；downloading→"downloading"；否则下载（embedding 必下，segmentation 按 needSegmentation）
     fun ensureModel(baseUrl: String, needSegmentation: Boolean, onModelEvent: (JSONObject) -> Unit): String {
         synchronized(lock) {
-            if (state == "ready") return "ready"
+            if (state == "ready") {
+                // 若本次需要分割但分割模型缺失（首次 multiSpeaker=false 后来开启），仍需补下载
+                if (!needSegmentation || (segmentationFile.isFile && segmentationFile.length() > 500 * 1024)) {
+                    return "ready"
+                }
+            }
             if (state == "downloading") return "downloading"
             state = "downloading"; progress = 0; lastError = ""
         }
