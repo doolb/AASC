@@ -37,14 +37,17 @@ function getExtractor() {
 async function extractEmbedding(audioPath) {
     // 用无状态 readWavFileFromPath 读取 16k mono Float32 样本，
     // 避免为提取一次声纹而加载整个 ASR 模型（234MB）
-    const { samples } = asr.readWavFileFromPath(audioPath);
+    const { samples, sampleRate } = asr.readWavFileFromPath(audioPath);
     if (!samples || samples.length === 0) {
         throw new Error('音频数据为空');
     }
     const ex = getExtractor();
     const stream = ex.createStream();
     try {
-        stream.acceptWaveform({ samples, sampleRate: 16000 });
+        // 用实际采样率喂给模型（sherpa-onnx 内部重采样到模型期望的 16k）。
+        // 若硬编码 16000，48k/44.1k 的 RIFF wav 会绕过 ffmpeg 重采样，
+        // 模型收到被误标的样本 → 无声纹提取错误但特征为垃圾
+        stream.acceptWaveform({ samples, sampleRate: sampleRate || 16000 });
         const emb = ex.compute(stream);
         return Array.from(emb);
     } finally {

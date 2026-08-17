@@ -1215,7 +1215,14 @@ app.post('/api/voiceprint/register', voiceprintUpload.single('audio'), async (re
                 }, 30000);
                 pendingVoiceprintExtracts.set(requestId, { resolve, reject, timer });
                 try {
-                    sendToDisplay(display.id, { type: 'voiceprintExtract', requestId, audioBase64 });
+                    const sent = sendToDisplay(display.id, { type: 'voiceprintExtract', requestId, audioBase64 });
+                    // sendToDisplay 返回 false 表示 ws 未 OPEN（显示端在 find 与 send 之间已断开），
+                    // 立即失败，避免白白等满 30s 超时
+                    if (!sent) {
+                        clearTimeout(timer);
+                        pendingVoiceprintExtracts.delete(requestId);
+                        reject(new Error('显示端已离线，声纹提取失败'));
+                    }
                 } catch (err) {
                     clearTimeout(timer);
                     pendingVoiceprintExtracts.delete(requestId);
