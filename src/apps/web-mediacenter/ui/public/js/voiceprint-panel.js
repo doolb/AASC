@@ -1,6 +1,12 @@
 // 控制端声纹管理面板：注册/列表/删除/配置切换
 (function() {
     'use strict';
+    // 用户可控的说话人名字渲染进 innerHTML 前必须 HTML 转义（防存储型 XSS）
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
     const panel = {
         recording: false,
         mediaRecorder: null,
@@ -107,12 +113,13 @@
                     list.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,0.4);">暂无已注册声纹</span>';
                     return;
                 }
-                list.innerHTML = names.map(n =>
-                    '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);">' +
-                    '<span>' + n + '</span>' +
-                    '<button class="control-btn" onclick="VoiceprintPanel.remove(\'' + n.replace(/'/g, "\\'") + '\')">删除</button>' +
-                    '</div>'
-                ).join('');
+                list.innerHTML = names.map(n => {
+                    const safe = escapeHtml(n);
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);">' +
+                        '<span>' + safe + '</span>' +
+                        '<button class="control-btn" onclick="VoiceprintPanel.remove(\'' + safe.replace(/'/g, "\\'") + '\')">删除</button>' +
+                        '</div>';
+                }).join('');
             } catch (e) { console.warn('加载声纹列表失败:', e); }
         },
 
