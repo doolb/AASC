@@ -362,7 +362,8 @@ class NativeBridge(
     // 重建本地声纹库（幂等）：display.html 已用 fetch 拉取权威库 JSON（WebView 信任自签名证书），
     // Kotlin 侧只负责解析+重建；结果触发 window.onVoiceprintDb。
     // @JavascriptInterface 方法在 JavaBridge 后台线程执行，evaluateJavascript 必须在 UI 线程调用，
-    // 故成功/失败两路回调都经 mainHandler.post 投递到主线程；speakers 名称为用户可控，用 JSONObject.quote 转义防 JS 注入。
+    // 故成功/失败两路回调都经 mainHandler.post 投递到主线程；回调传入对象字面量，JSONObject 已按 JSON 规则转义所有字符串，
+    // 对 JS 注入安全（speakers 名称为用户可控）。
     @JavascriptInterface
     fun voiceprintSyncDb(dbJson: String): String {
         return try {
@@ -370,12 +371,12 @@ class NativeBridge(
             val speakers = VoiceprintDbCodec.speakersFromDb(db)
             VoiceprintEngine.setDb(speakers)
             val msg = JSONObject().put("state", "ready").put("speakers", speakers.keys.toList())
-            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${JSONObject.quote(msg.toString())});"
+            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${msg.toString()});"
             mainHandler.post { webView.evaluateJavascript(js, null) }
             JSONObject().put("ok", true).toString()
         } catch (e: Exception) {
             val msg = JSONObject().put("state", "error").put("error", e.message ?: "声纹库同步失败")
-            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${JSONObject.quote(msg.toString())});"
+            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${msg.toString()});"
             mainHandler.post { webView.evaluateJavascript(js, null) }
             JSONObject().put("error", e.message ?: "声纹库同步失败").toString()
         }
