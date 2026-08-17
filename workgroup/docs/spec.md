@@ -85,9 +85,11 @@ function main() {
         // 方式一：带参数启动 → 子 agent（主角色 args.role，副角色 args.secondary 可选）
         启动流程({ primary: args.role, secondary: args.secondary || [], name: args.name })
     } else if (无 main：members/main/lock 不存在或 PID 已死) {
-        // 方式二：无 --role 且无 main → 成为 main 协调者
+        // 方式二：无 --role 且无 main → 成为 main 协调者（TUI 交互）
         写 members/main/lock
-        进入 main 循环（等待用户需求，不做子 agent 轮询）
+        spawn claude 交互模式（stdio inherit 透传 TTY，cwd = 项目根）
+        --append-system-prompt 注入 main 协调者指令
+        claude 退出 → 删 members/main/lock → 进程退出
     } else {
         // 方式二：无 --role 且有 main → 空角色（无主角色，只认 assignedTo）
         name = 选择成员名()

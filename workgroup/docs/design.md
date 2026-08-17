@@ -161,9 +161,14 @@ node poll.js
 **启动身份判定**：
 
 1. 检查 `members/main/lock`：
-   - **无 main**（无 lock / PID 已死）→ 成为 **main 协调者**（写 `members/main/lock`，标记 main 在线）
+   - **无 main**（无 lock / PID 已死）→ 成为 **main 协调者**：
+     1. 写 `members/main/lock`（PID + 时间），标记 main 在线
+     2. `spawn claude`（交互模式，stdio inherit 透传 TTY，cwd = 项目根）
+     3. 用 `--append-system-prompt` 注入 main 协调者指令（扮演 main：读 `roles/main.md`、按 L4-L7 等级路由拆任务、投递到 `tasks/pending/`、验收时扫描已验收/打回）
+     4. 用户在 main 的 claude TUI 里直接对话说需求
    - **有 main**（lock 存活）→ 进入 **空角色**：无主角色起步，只认 `assignedTo` 自己的任务
-2. 空角色交互向导：选成员名 → 以空角色启动
+2. **main 退出**：claude TUI 退出（/exit 或 Ctrl+C）→ poll.js 捕获子进程退出事件 → 删 `members/main/lock` → poll.js 进程退出（整个 main 会话结束）
+3. 空角色交互向导：选成员名 → 以空角色启动
 
 两种方式最终都走到同一个启动流程（见下）。
 
