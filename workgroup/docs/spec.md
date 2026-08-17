@@ -43,6 +43,18 @@ idle ──认领成功──▶ busy ──任务完成──▶ idle
 | 空闲 | members/<name>/busy | 不存在 = 空闲 |
 | 忙碌 | members/<name>/busy | 存在 = 忙碌 |
 
+## 任务状态机
+
+任务状态存于任务文件内（`status` 字段，空/缺失 = 未开始）：
+
+| status | 含义 | 设置者 |
+|--------|------|--------|
+| （空） | 未开始 | main 投递 |
+| 进行中 | 已认领干活 | poll.js 认领后 |
+| 已完成 | 干完、结果已写 | poll.js 完成后 |
+| 待修改 | 验收打回需改 | main 打回时 |
+| 已验收 | 用户确认通过 | main 验收时 |
+
 ## poll.js 伪代码
 
 ```
@@ -74,20 +86,42 @@ function 启动流程(role, name) {
     write(lock, PID + 启动时间)
 
     while (true) {
-        任务 = 扫描 pending/*.json 中 role 匹配且未被认领的任务
+        // 1) 新任务：pending 里 role 匹配（status 空）
+        任务 = 扫描 pending/*.json 中 role 匹配且 status 空
+        // 2) 待修改：自己 claimed/<name>/ 里 status=待修改（打回小改动）
+        if (无任务) 任务 = 扫描 claimed/<name>/*.json 中 status=待修改
         if (无任务) { sleep(5s); continue }
         try {
-            rename(pending/<id>.json → claimed/<name>/<id>.json)
+            if (来自 pending) rename(pending/<id>.json → claimed/<name>/<id>.json)
         } catch (ENOENT) { continue }  // 被其他 agent 抢走
         write(busy)
         write(current-task, id)
-        执行 claude --print（prompt 注入总结，读任务文件，结果写 results/<id>.json）
+        任务文件 status = 进行中
+        // prompt 注入总结；若是待修改任务，附 reviewComment 作为修改要求
+        执行 claude --print（读任务文件，结果写 results/<id>.json）
+        任务文件 status = 已完成
         读 results/<id>.json 的 summary/tags/learnings，更新 history.md
         删除 busy, current-task
     }
 }
 
 // 正常退出：删除 lock
+```
+
+## main 验收伪代码
+
+```
+function accept(任务) {
+    扫描 claimed/*/ 找 status=已完成 → 读 results/<id>.json 呈现给用户
+    if 用户选「通过」:
+        任务文件 status = 已验收
+    if 用户提修改:
+        写 reviewComment = 修改意见
+        if 小改动: 任务文件 status = 待修改   // 留在 claimed/<原agent>/
+        if 大改动: 写 role=review 子任务到 pending → review 角色审查
+                  review pass → 原任务 status=已验收
+                  review fail → 继续打回
+}
 ```
 
 ## 交互向导细节

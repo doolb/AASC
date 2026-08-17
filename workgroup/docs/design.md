@@ -20,6 +20,7 @@
 workgroup/                          # 工作组根（git 提交 roles/ 和结果，运行时状态 gitignore）
 ├── roles/                          # 角色定义（静态，只读）
 │   ├── main.md                     # 主 agent 角色：拆需求、投递任务、回收结果
+│   ├── review.md                   # 审查角色：验收打回时把关
 │   ├── frontend.md                 # 前端：UI/交互
 │   ├── backend.md                  # 后端：服务端逻辑
 │   ├── tester.md                   # 测试：用例/验证
@@ -55,15 +56,55 @@ workgroup/                          # 工作组根（git 提交 roles/ 和结果
   "title": "实现 XX 功能",
   "role": "frontend",
   "requirement": "需求描述，claude --print 直接据此干活",
+  "status": "",
   "priority": "high",
   "createdAt": 1723876200000,
-  "references": ["docs/design/xx.md"]
+  "references": ["docs/design/xx.md"],
+  "reviewComment": ""
 }
 ```
 
 - `role`：poll.js 路由依据（子 agent 只认领 role == 自己角色 的任务）
 - `requirement`：子 agent 的工作内容
+- `status`：任务生命周期状态（空/缺失 = 未开始；值见下方状态机）
+- `reviewComment`：验收打回时的修改意见（小改动由原 agent 改）
 - `id` 生成规则：`YYYYMMDD-HHMM-序号`
+
+## 任务状态机与验收打回
+
+任务状态存于**任务文件内**（随文件流动，不新增目录）：
+
+| status 值 | 含义 | 设置者 |
+|-----------|------|--------|
+| （空/缺失） | 未开始 | main 投递时 |
+| 进行中 | 已认领，子 agent 干活 | poll.js 认领后 |
+| 已完成 | 干完活、结果已写 | poll.js 完成后 |
+| 待修改 | 验收被打回，需修改 | main 打回时 |
+| 已验收 | 用户确认通过 | main 验收时 |
+
+```
+（空）未开始 → 进行中 → 已完成 → 已验收
+                    ↑          │
+                    │   用户验收提修改
+                    │          │
+                    │     ┌────┴────────────┐
+                    │    小改动            大改动
+                    │    原 agent 改       review 角色审查把关
+                    └──────────────────────────┘
+```
+
+**main 验收流程**（人工把关）：
+
+1. main 扫描 `tasks/claimed/*/` 找 `status === '已完成'` 的任务
+2. 读 `results/<id>.json` 呈现结果给用户
+3. 用户选择：
+   - **通过** → 任务文件 `status = '已验收'`
+   - **提修改**（写 `reviewComment` + 判定大小）：
+     - **小改动** → 任务留在 `claimed/<原agent>/`，`status = '待修改'`；poll.js 轮询时扫描自己 claimed/ 里待修改任务，标记进行中、spawn claude（prompt 带 reviewComment）改，改完 `status = '已完成'`
+     - **大改动** → main 产生一个 role=`review` 的 review 子任务：review 角色子 agent 审查原任务结果与修改 → verdict pass/fail → pass 转已验收、fail 继续打回
+4. 小/大判定：main 按修改意见复杂度判断
+
+**结果文件** `results/<id>.json` 的 `status: completed/failed` 保持不变（那是完成质量，不是生命周期状态）。
 
 ## 启动方式与交互向导
 
@@ -98,12 +139,15 @@ node poll.js
  ├─ 崩溃残留检查：lock 若存在，读 PID → 进程已死才覆盖
  └─ 写 lock（内容 = PID + 启动时间）
 循环
- ├─ 扫描 tasks/pending/*.json，找 role 匹配且未认领的
+ ├─ 扫描 tasks/pending/*.json，找 role 匹配且未认领的（status 空）
+ ├─ 若无，扫描自己 claimed/<name>/ 里 status=待修改 的任务（打回小改动）
  ├─ 原子认领：fs.rename(pending/<id>.json → claimed/<name>/<id>.json)
  │   （两个 agent 同时抢同一任务，只有一个成功，另一个 ENOENT 跳过）
- ├─ 写 busy + current-task=<id>   ← 进入忙碌状态
+ ├─ 写 busy + current-task=<id>，任务文件 status=进行中   ← 进入忙碌状态
  ├─ spawn `claude --print "读 claimed/<name>/<id>.json 完成任务，结果写 results/<id>.json"`
+ │   （prompt 注入总结；若是待修改任务，注入 reviewComment）
  ├─ 等待完成（含失败，结果文件标记 status）
+ ├─ 任务文件 status=已完成
  ├─ 读 results/<id>.json 的 summary/tags/learnings，更新 history.md   ← 历史累积
  └─ 删除 busy + current-task      ← 回到空闲
 退出（Ctrl+C/正常结束）
@@ -191,7 +235,7 @@ poll.js 每次启动校验 lock 内 PID 是否存活：已死则覆盖（防止 
 1. 用户对 main 说需求 → 读 `roles/*.md` 和 `members/*/` 了解成员与能力
 2. 状态判定（见上表）→ 确定谁在线、谁空闲
 3. 拆解需求 → 选择合适且空闲的成员 → 写任务文件到 `tasks/pending/`
-4. 定期查看 `results/` 回收结果 → 汇总汇报给用户
+4. 定期扫描 `tasks/claimed/*/` 找 `status='已完成'` 任务 → 读 `results/` 呈现 → 用户验收（通过→已验收 / 提修改→按大小打回）
 
 ## git 策略
 
@@ -233,3 +277,6 @@ poll.js 每次启动校验 lock 内 PID 是否存活：已死则覆盖（防止 
 6. **重启历史保留**：同名 agent 重启 → history.md 原样保留、仅追加新任务
 7. **启动总结注入**：spawn claude 前 prompt 含专长画像 + 经验约定，不含最近记录
 8. **防膨胀**：最近记录超 N 条删最旧、经验约定超 M 条删最旧
+9. **任务状态流转**：认领后 status=进行中、完成后 status=已完成、main 验收后=已验收
+10. **打回小改动**：任务 status=待修改 + reviewComment → 原 agent 轮询到并带 comment 再改 → status=已完成
+11. **打回大改动**：main 产生 role=review 子任务 → review 角色审查 → pass 转已验收
