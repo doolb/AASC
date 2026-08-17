@@ -28,13 +28,28 @@ function resumeSleepMedia():
     若 mediaHtml 显示中: startHtmlScroll(mediaHtml, currentHtmlScroll)
     否则若 mediaVideo.src 非空: mediaVideo.play().catch(...)
 
+function isSleepPaused():
+    返回 sleepState == 'sleep' || sleepState == 'deep'    # 睡眠/深度睡眠期间暂停语音
+
+function pauseSleepTts():       # 睡眠暂停 TTS：暂停当前语音、清空待播队列、隐藏语音文本
+    ttsAudio.pause()            # 保留 currentTime，唤醒后 play() 续播当前 utterance
+    ttsQueue = []               # 睡眠期间新 TTS 已丢弃，队列残留一并清空（只续播当前）
+    hideTtsText()
+
+function resumeSleepTts():      # 恢复（normal/active）时续播睡眠前被暂停的那条
+    若 isPlayingTts 且 ttsAudio.paused:  ttsAudio.play().catch(...)
+
 function applySleepState(state):
     prev = sleepState;  sleepState = state
     isHidden = (state == 'sleep' || state == 'deep')
     #sleepOverlay.display = (state == 'deep') ? 'block' : 'none'
     #mediaContainer.display = isHidden ? 'none' : 'flex'
-    若 isHidden: pauseSleepMedia()
-    否则若 prev 为 'sleep'/'deep': resumeSleepMedia()   # 仅隐藏态恢复时续播
+    若 isHidden:
+        pauseSleepMedia()
+        pauseSleepTts()             # 睡眠/深度睡眠暂停语音播放
+    否则若 prev 为 'sleep'/'deep':
+        resumeSleepMedia()          # 仅隐藏态恢复时续播
+        resumeSleepTts()            # 续播睡眠前暂停的语音
 
 function checkSleepMode():          # 每 10 秒，setInterval
     target = 'normal'
@@ -94,13 +109,20 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 - 与「启用睡眠」开关无关：`sleepSettings.enabled=false` 时手动覆盖仍生效。
 - 不随时间流逝/时段切换自动退出，需再下发 `sleepOverride('normal')` 或切到另一状态才改变；刷新/重启即重置（临时、不持久化）。
 
-## 媒体暂停/恢复
+## 媒体/语音 暂停与恢复
 
 | 模式 | 睡眠/深度睡眠 | 恢复（normal/active） |
 |------|--------------|----------------------|
 | 视频 | `mediaVideo.pause()` | `mediaVideo.play().catch(...)` |
 | html（iframe 滚动） | `stopHtmlScroll()` | `startHtmlScroll(mediaHtml, currentHtmlScroll)` |
 | 图片 | 无需处理 | 无需处理 |
+| TTS 语音 | `ttsAudio.pause()`（保留进度）+ 清空队列 + 隐藏文本 | 当前 utterance `play()` 续播（睡眠中新 TTS 已丢弃，不重放） |
+
+## 睡眠期间新 TTS 丢弃
+
+- `queueTts(item)` 入口：若 `isSleepPaused()` 返回 true，直接 return（不入队、不播放）——睡眠期间新到的 TTS（整点报时、语音响应、提醒等）全部丢弃，避免夜间积压整晚内容。
+- `playTTS(text)`（媒体名播报）同样在睡眠期间丢弃。
+- `playNextTts()` 入口守卫：防止 `ended`/`error` 回调在睡眠态被误触发继续播放。
 
 ## 遮罩层
 

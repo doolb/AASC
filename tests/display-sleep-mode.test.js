@@ -399,6 +399,56 @@ const assert = require('assert');
   assert.strictEqual(playTrue.reported, true, '控制端播放应上报 isPlaying=true');
   console.log('PASS: 控制端 play 命令上报 playStateReport');
 
+  // ---- 19. 睡眠暂停 TTS + 丢弃睡眠中新 TTS ----
+  await page.evaluate(() => {
+    activationUntil = 0;
+    // 模拟当前正在播放一条 TTS
+    isPlayingTts = true;
+    ttsAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+    // 监视 ttsAudio 的 pause/play 调用
+    window.__ttsPauseCalls = 0;
+    window.__ttsPlayCalls = 0;
+    const origPause = ttsAudio.pause.bind(ttsAudio);
+    const origPlay = ttsAudio.play.bind(ttsAudio);
+    ttsAudio.pause = () => { window.__ttsPauseCalls++; return origPause(); };
+    ttsAudio.play = () => { window.__ttsPlayCalls++; return origPlay(); };
+    ttsQueue = [{ text: '待播' }];
+    // 进入深度睡眠（覆盖当前小时）
+    const h = new Date().getHours();
+    sleepSettings = { enabled: true, startHour: h, endHour: h + 1, deepStartHour: h, deepEndHour: h + 1 };
+    checkSleepMode();
+    // 睡眠期间新 TTS 应被丢弃（队列不增长）
+    queueTts({ text: '睡眠中新消息' });
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const ttsSleep = await page.evaluate(() => ({
+    state: sleepState,
+    queueLen: ttsQueue.length,
+    pauseCalls: window.__ttsPauseCalls,
+    paused: ttsAudio.paused,
+    textClass: document.getElementById('voiceTextDisplay').className
+  }));
+  assert.strictEqual(ttsSleep.state, 'deep', '应进入深度睡眠');
+  assert.strictEqual(ttsSleep.pauseCalls, 1, '进入睡眠应暂停当前 TTS');
+  assert.strictEqual(ttsSleep.paused, true, '睡眠后 ttsAudio 应处于暂停态');
+  assert.strictEqual(ttsSleep.queueLen, 0, '睡眠期间新 TTS 应被丢弃（队列为空）');
+  assert.strictEqual(ttsSleep.textClass, 'voice-text-hidden', '睡眠应隐藏语音文本');
+  console.log('PASS: 睡眠暂停 TTS + 丢弃新 TTS');
+
+  // ---- 20. 唤醒续播睡眠前暂停的当前 TTS ----
+  await page.evaluate(() => {
+    sleepSettings = { enabled: false, startHour: 0, endHour: 24, deepStartHour: 0, deepEndHour: 24 };
+    checkSleepMode();   // deep → normal，触发 resumeSleepTts
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const ttsResume = await page.evaluate(() => ({
+    state: sleepState,
+    playCalls: window.__ttsPlayCalls
+  }));
+  assert.strictEqual(ttsResume.state, 'normal', '关闭睡眠应回到 normal');
+  assert.strictEqual(ttsResume.playCalls, 1, '唤醒应续播睡眠前暂停的当前 TTS');
+  console.log('PASS: 唤醒续播当前 TTS');
+
   await browser.close();
   console.log('ALL PASS: 显示端睡眠模式');
 })().catch(e => { console.error('FAIL:', e.message); process.exit(1); });

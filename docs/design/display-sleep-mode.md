@@ -4,8 +4,8 @@
 
 为显示端（`display.html`）增加**睡眠模式**与**深度睡眠模式**，按时间段自动隐藏媒体/UI，降低夜间干扰。支持：
 
-1. **睡眠模式（默认 23:00-8:00，跨天）**：隐藏媒体（图片/视频/iframe），视频暂停，保留 UI 覆盖层（时钟/文件名/语音状态等）。
-2. **深度睡眠模式（默认 1:00-6:00）**：全屏黑幕遮罩，媒体与 UI 全部隐藏（含连接状态/语音状态/监控层等所有覆盖层）。
+1. **睡眠模式（默认 23:00-8:00，跨天）**：隐藏媒体（图片/视频/iframe），视频暂停，TTS 语音暂停，保留 UI 覆盖层（时钟/文件名/语音状态等）。
+2. **深度睡眠模式（默认 1:00-6:00）**：全屏黑幕遮罩，媒体与 UI 全部隐藏（含连接状态/语音状态/监控层等所有覆盖层），TTS 语音暂停。
 3. **临时激活（60 秒）**：手动按钮或控制端下发媒体自动触发，期间强制显示媒体+UI，60 秒后回落（手动覆盖优先于时段判定）。
 4. **手动覆盖**：控制端「立即切换」显式进入睡眠/深度睡眠/恢复正常，不随时段/开关自动切换，直到再下发才改变（刷新即重置，临时）。
 5. **控制端配置**：显示控制面板新增「睡眠模式」入口 → 弹窗设置框（启用开关 + 可配时段 + 临时激活按钮 + 立即切换按钮 + 当前状态），按当前选中显示端生效并持久化到服务端。
@@ -138,9 +138,9 @@ function checkSleepMode():
 
 function applySleepState(state):
     记录状态到 sleepState
-    'normal'/'active': 隐藏 #sleepOverlay，显示 #mediaContainer，恢复视频
-    'sleep':           隐藏 #sleepOverlay（保 UI），隐藏 #mediaContainer，暂停视频
-    'deep':            显示 #sleepOverlay（全黑），隐藏 #mediaContainer，暂停视频
+    'normal'/'active': 隐藏 #sleepOverlay，显示 #mediaContainer，恢复视频，续播语音
+    'sleep':           隐藏 #sleepOverlay（保 UI），隐藏 #mediaContainer，暂停视频，暂停语音
+    'deep':            显示 #sleepOverlay（全黑），隐藏 #mediaContainer，暂停视频，暂停语音
 
 function activateTemporarily():
     activationUntil = Date.now() + 60000
@@ -148,6 +148,7 @@ function activateTemporarily():
 ```
 
 - 视频暂停/恢复：`mediaVideo.pause()` / `mediaVideo.play().catch(...)`；html 模式（iframe 滚动）暂停/恢复滚动播放；图片无需暂停。
+- TTS 语音：睡眠/深度睡眠时 `ttsAudio.pause()`（保留进度）+ 清空待播队列 + 隐藏语音文本；恢复时当前 utterance `play()` 续播。睡眠期间新到的 TTS（`queueTts`/`playTTS` 入口守卫）直接丢弃，不重放整晚内容。
 - 启动时 `checkSleepMode()` 立即执行一次 + `setInterval(checkSleepMode, 10000)`。
 
 ### handleControl 扩展
@@ -244,6 +245,8 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 | 睡眠中下发媒体 | showMedia 触发 60s 临时激活，媒体可见 |
 | 临时激活结束后仍处睡眠时段 | 恢复隐藏（视频暂停） |
 | 睡眠中视频播放 | `mediaVideo.pause()`；恢复时 `play()` 续播（catch 拦截自动播放限制） |
+| 睡眠中 TTS 播放 | `ttsAudio.pause()`（保留进度）+ 清空队列 + 隐藏语音文本；恢复时当前 utterance 续播 |
+| 睡眠中新到的 TTS | `queueTts`/`playTTS` 入口守卫直接丢弃（整点报时、语音响应、提醒等），不积压重放 |
 | html 模式（iframe 滚动）睡眠 | 暂停滚动（`stopHtmlScroll`），恢复时 `startHtmlScroll` |
 | 未启用睡眠模式 | 全部判定返回正常，遮罩永不显示 |
 | 深度睡眠黑幕盖过监控层 | `#sleepOverlay` z-index 高于 `#monitorOverlay`（render-display）等全部覆盖层 |
@@ -260,6 +263,8 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 7. **手动覆盖**：立即睡眠/立即深度睡眠/恢复正常即时生效；`enabled=false` 时手动仍生效；激活覆盖手动、过期回落手动
 8. **跨天**：startHour > endHour（如 23-8）在当前时间判定正确
 9. **视频恢复**：睡眠隐藏暂停后，恢复时视频继续播放
+10. **TTS 暂停/恢复**：睡眠中播放 TTS → 暂停；恢复后当前 utterance 续播
+11. **睡眠中新 TTS 丢弃**：睡眠期间新到的 TTS 不入队不播放，唤醒不重放
 
 ## 改动文件
 

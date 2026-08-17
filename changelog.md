@@ -78,6 +78,15 @@
     - docs/spec/websocket.md、docs/spec/display-sleep-mode.md、docs/design/display-sleep-mode.md
     - tests/display-sleep-mode.test.js（+4 断言：restore 暂停/播放上报、play 命令上报，共 20 步全绿）
 
+- ✅ [2026-08-17] 睡眠模式暂停 TTS 语音播放
+  - 睡眠/深度睡眠进入时暂停当前 TTS（ttsAudio.pause 保留进度）+ 清空待播队列 + 隐藏语音文本；唤醒（normal/active）时当前 utterance 续播
+  - 睡眠期间新到的 TTS（整点报时、语音响应、提醒、媒体名播报）在 queueTts/playTTS 入口直接丢弃，不入队不播放，避免夜间积压整晚内容
+  - playNextTts 入口加守卫，防止 ended/error 回调在睡眠态误触发播放
+  - 改动文件：
+    - display.html（isSleepPaused/pauseSleepTts/resumeSleepTts + applySleepState 接线 + queueTts/playTTS/playNextTts 守卫）
+    - docs/spec/display-sleep-mode.md、docs/design/display-sleep-mode.md
+    - tests/display-sleep-mode.test.js（+2 步：睡眠暂停+丢弃、唤醒续播，共 22 步全绿）
+
 - ✅ [2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）实现完成
   - 在 NativeBridge 新增 compute() 桥方法，离屏 EGL 3.1 上下文执行 GLES compute shader，为 threejs 提供协作/归约类真 compute 能力
   - 接口对齐 threejs WebGPU compute（workgroupSize/count/dispatchSize/instanceIndex→gl_GlobalInvocationID）
