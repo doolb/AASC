@@ -54,28 +54,52 @@ idle ──认领成功──▶ busy ──任务完成──▶ idle
 | 已完成 | 干完、结果已写 | poll.js 完成后 |
 | 待修改 | 验收打回需改 | main 打回时 |
 | 已验收 | 用户确认通过 | main 验收时 |
+| 已取消 | 被 main 取消 | poll.js 检测到取消信号后 |
+
+## 角色模型与切换
+
+- 成员目录按角色隔离：`members/<名>-<角色>/`
+- `role.md` 存主角色 + 副角色列表（`primary` / `secondary: []`）
+- 匹配顺序：主角色 → 指派(assignedTo) → 待修改 → 副角色 → 空闲自动切换
+- 切换动作：删旧目录 lock → 写新目录 lock + role.md → 主角色 = 新角色（切了不回）
+- 防撞车：目标角色已有在线 agent 不切
+- 空角色：只认 `assignedTo` 自己的任务
+
+### review 审查子任务（kind/reviewOf）
+
+大改动验收打回时，main 投递 role=`review` 的审查子任务，任务文件带额外字段：
+
+- `kind: "review"`：标记为审查子任务（普通任务不设该字段）
+- `reviewOf: <原任务id>`：被审查原任务 id
+
+poll.js 的状态写入用展开保留全部字段（`{ ...mine, status: '进行中' }`、`{ ...cur, status: '已完成' }`），kind/reviewOf 天然不被丢弃。
+main 验收扫描 `tasks/claimed/*/` 时用 `isReviewTask(task)`（`task.kind === 'review'`，poll.js 导出）区分：
+review 审查子任务呈现 verdict（results/<id>.json 的 output）与被审查原任务 id（reviewOf），而非普通待验收任务；verdict=pass → 原任务已验收，fail → 继续打回。
 
 ## poll.js 伪代码
 
 ```
 function main() {
     args = parseArgv()
-    if (args.role && args.name) {
-        // 方式一：带参数启动，直接进入
-        启动流程(args.role, args.name)
+    if (args.role) {
+        // 方式一：带参数启动 → 子 agent（主角色 args.role，副角色 args.secondary 可选）
+        启动流程({ primary: args.role, secondary: args.secondary || [], name: args.name })
+    } else if (无 main：members/main/lock 不存在或 PID 已死) {
+        // 方式二：无 --role 且无 main → 成为 main 协调者
+        写 members/main/lock
+        进入 main 循环（等待用户需求，不做子 agent 轮询）
     } else {
-        // 方式二：无命令启动 → 交互向导
-        role = 选择角色()   // 编号菜单列出 roles/*.md；或输入新名 → 生成模板
-        name = 选择成员名() // 编号菜单列出 members/；有则选择复用，或输入新名
-        启动流程(role, name)
+        // 方式二：无 --role 且有 main → 空角色（无主角色，只认 assignedTo）
+        name = 选择成员名()
+        启动流程({ primary: null, secondary: [], name })
     }
 }
 
-function 启动流程(role, name) {
-    memberDir = workgroup/members/<name>
-    ensureDir(memberDir)           // 存在则保留现有文件
-    write(role.md, role)           // 覆盖
-    // history.md 存在则原样保留，绝不覆盖（重启保留历史）
+function 启动流程({ primary, secondary, name }) {
+    roleDir = workgroup/members/<name>-<primary|空>   // 每角色独立目录
+    ensureDir(roleDir)
+    write(role.md, { primary, secondary })
+    // history.md 存在则原样保留（重启保留历史）
 
     // 崩溃残留检查
     if (lock 存在) {
@@ -86,23 +110,44 @@ function 启动流程(role, name) {
     write(lock, PID + 启动时间)
 
     while (true) {
-        // 1) 新任务：pending 里 role 匹配（status 空）
-        任务 = 扫描 pending/*.json 中 role 匹配且 status 空
-        // 2) 待修改：自己 claimed/<name>/ 里 status=待修改（打回小改动）
-        if (无任务) 任务 = 扫描 claimed/<name>/*.json 中 status=待修改
+        // ① 主角色新任务：pending 里 role==primary 且 status 空、depends 依赖全已验收
+        任务 = 扫描 pending 中 primary 匹配且 status 空且依赖已验收
+        // ② 指派：pending 里 assignedTo == name（空角色/被 main 指派）
+        if (无任务) 任务 = 扫描 pending 中 assignedTo == name
+        // 任务 role 与主角色不符 → 切换主角色到任务 role
+        if (任务 && 任务.role != primary) 切换主角色(任务.role)
+        // ③ 待修改：自己 claimed/<name>-<role>/ 里 status=待修改
+        if (无任务) 任务 = 扫描 claimed/<name>-<primary>/ 中 status=待修改
+        // ④ 副角色：主/副都没活 → pending 里 secondary 匹配
+        if (无任务) 任务 = 扫描 pending 中 secondary 匹配且依赖已验收
+        // ⑤ 空闲自动切换：都没活 → pending 有积压角色 → 该角色无在线 agent → 切主角色
+        if (无任务) 任务 = 空闲自动切换()
         if (无任务) { sleep(5s); continue }
         try {
-            if (来自 pending) rename(pending/<id>.json → claimed/<name>/<id>.json)
+            if (来自 pending) rename(pending/<id>.json → claimed/<name>-<role>/<id>.json)
         } catch (ENOENT) { continue }  // 被其他 agent 抢走
         write(busy)
         write(current-task, id)
         任务文件 status = 进行中
-        // prompt 注入总结；若是待修改任务，附 reviewComment 作为修改要求
-        执行 claude --print（读任务文件，结果写 results/<id>.json）
-        任务文件 status = 已完成
+        执行 claude --print（stdio inherit 实时输出；读任务文件，结果写 results/<id>.json）
+        // 执行期间轮询检测 tasks/cancel/<id>：发现则 kill 子进程 → status=已取消
+        任务文件 status = 已完成（或已取消）
         读 results/<id>.json 的 summary/tags/learnings，更新 history.md
         删除 busy, current-task
     }
+}
+
+function 切换主角色(newRole) {
+    删 members/<name>-<primary>/lock       // 旧身份下线
+    写 members/<name>-<newRole>/lock + role.md   // 新身份上线
+    primary = newRole                      // 切了不回
+}
+
+function 空闲自动切换() {
+    for pending 里每个有积压任务的角色 role:
+        if 该角色无在线 agent（无 lock 或 lock PID 已死）:
+            return { role, task }   // 切主角色到 role 后认领
+    return null
 }
 
 // 正常退出：删除 lock
@@ -111,16 +156,24 @@ function 启动流程(role, name) {
 ## main 验收伪代码
 
 ```
+isReviewTask(task) = (task.kind === 'review')   // poll.js 导出的纯函数
+
 function accept(任务) {
-    扫描 claimed/*/ 找 status=已完成 → 读 results/<id>.json 呈现给用户
-    if 用户选「通过」:
-        任务文件 status = 已验收
-    if 用户提修改:
-        写 reviewComment = 修改意见
-        if 小改动: 任务文件 status = 待修改   // 留在 claimed/<原agent>/
-        if 大改动: 写 role=review 子任务到 pending → review 角色审查
-                  review pass → 原任务 status=已验收
-                  review fail → 继续打回
+    扫描 claimed/*/ 找 status=已完成
+    for 每个已完成任务:
+        if isReviewTask(任务):
+            // review 审查子任务：呈现 verdict 与被审查原任务 id（reviewOf），不当作普通待验收任务
+            读 results/<id>.json output 的 verdict
+            if verdict=pass: 原任务(reviewOf) status = 已验收
+            if verdict=fail: 原任务(reviewOf) 继续打回（写 reviewComment + 待修改）
+            continue
+        读 results/<id>.json 呈现给用户
+        if 用户选「通过」:
+            任务文件 status = 已验收
+        if 用户提修改:
+            写 reviewComment = 修改意见
+            if 小改动: 任务文件 status = 待修改   // 留在 claimed/<原agent>/
+            if 大改动: 写 role=review 子任务（kind:'review' + reviewOf: 原任务 id）到 pending → review 角色审查
 }
 ```
 
