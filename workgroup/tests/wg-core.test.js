@@ -172,3 +172,18 @@ test('buildPrompt 不带 reviewComment 时不注入修改要求段', () => {
     });
     assert.ok(!p.includes('【修改要求（上次验收打回）】'));
 });
+
+const { serializeRole, parseRole } = require('../tools/wg-core.js');
+
+test('serializeRole/parseRole 往返', () => {
+    const text = serializeRole({ primary: 'frontend', secondary: ['backend-media', 'tester'] });
+    const r = parseRole(text);
+    assert.strictEqual(r.primary, 'frontend');
+    assert.deepStrictEqual(r.secondary, ['backend-media', 'tester']);
+});
+
+test('parseRole 空文本返回空主角色', () => {
+    const r = parseRole('');
+    assert.strictEqual(r.primary, '');
+    assert.deepStrictEqual(r.secondary, []);
+});

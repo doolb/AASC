@@ -139,4 +139,24 @@ function buildSummary(text) {
     return parts.join('\n');
 }
 
-module.exports = { genId, validateName, roleTemplate, buildPrompt, parseHistory, updateHistory, buildSummary, MAX_LEARNINGS, MAX_RECORDS };
+// role.md 序列化：primary: <角色> \n secondary: <逗号分隔>
+function serializeRole({ primary = '', secondary = [] }) {
+    return `primary: ${primary}\nsecondary: ${(secondary || []).join(',')}`;
+}
+
+// role.md 解析
+function parseRole(text) {
+    const out = { primary: '', secondary: [] };
+    if (!text) return out;
+    for (const line of text.split('\n')) {
+        const m = line.trim().match(/^primary:\s*(.*)$/);
+        if (m) { out.primary = m[1].trim(); continue; }
+        const m2 = line.trim().match(/^secondary:\s*(.*)$/);
+        if (m2) {
+            out.secondary = m2[1].split(',').map((s) => s.trim()).filter(Boolean);
+        }
+    }
+    return out;
+}
+
+module.exports = { genId, validateName, roleTemplate, buildPrompt, parseHistory, updateHistory, buildSummary, serializeRole, parseRole, MAX_LEARNINGS, MAX_RECORDS };
