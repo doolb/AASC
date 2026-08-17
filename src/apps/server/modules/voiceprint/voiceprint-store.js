@@ -2,7 +2,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '../../../../res/voiceprint/db.json');
+// 从 src/apps/server/modules/voiceprint 上溯 5 级到达项目根目录 /mnt/AASC，
+// 再进入 res/voiceprint/db.json（真实 res 在根目录，不在 src 下）。
+const DB_PATH = path.join(__dirname, '../../../../../res/voiceprint/db.json');
 const VOICEPRINT_DIM = 192;
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -20,7 +22,13 @@ class VoiceprintStore {
             if (!fs.existsSync(DB_PATH)) return;
             const raw = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
             if (raw && raw.speakers) {
-                this.speakers = raw.speakers;
+                // 防御性归一化：即使持久化文件里混入类对象数据（如 {0:1,1:2}），也转回普通数组；
+                // 对已是普通数组的值 Array.from 只是复制一份，无副作用。
+                const normalized = {};
+                for (const k of Object.keys(raw.speakers)) {
+                    normalized[k] = Array.from(raw.speakers[k]);
+                }
+                this.speakers = normalized;
                 this.version = (raw.version || 1) + 1;
             }
         } catch (e) {
@@ -37,14 +45,19 @@ class VoiceprintStore {
     }
 
     add(name, embeddingArray) {
-        this.speakers[name] = embeddingArray;
+        // 拒绝原型链危险名，防止 __proto__/constructor/prototype 污染 speakers 容器
+        if (name === '__proto__' || name === 'constructor' || name === 'prototype') return false;
+        // 归一化为普通数组：Float32Array 经 JSON.stringify 会变成对象 {0:1,1:2,...} 而非数组，
+        // 破坏 [192 floats] 数组契约（影响 getDb 载荷与 APK 同步）；Array.from 对普通数组只是复制。
+        this.speakers[name] = Array.from(embeddingArray);
         this.version++;
         this._scheduleSave();
         this._notify();
     }
 
     remove(name) {
-        if (!(name in this.speakers)) return false;
+        // 用 hasOwnProperty 判断自身属性，避免 'toString' 等原型方法被误判为已存在
+        if (!Object.prototype.hasOwnProperty.call(this.speakers, name)) return false;
         delete this.speakers[name];
         this.version++;
         this._scheduleSave();
