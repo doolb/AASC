@@ -5,19 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.HttpsURLConnection
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLSession
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 // 原生 ASR 模型管理：下载/校验/加载/状态机
 // 状态：not_ready → downloading → ready | error（error 或损坏后再次 ensureModel 会重新下载）
@@ -119,55 +108,7 @@ class AsrModelManager(
         }
     }
 
-    // 下载到 .tmp 后原子改名（整文件重下，不做断点续传）；失败返回 false
-    // HTTPS 自签名证书信任：服务器默认 8081 端口部署自签名证书，HttpURLConnection 走系统信任库
-    // 会握手失败（SSLHandshakeException），这里显式 trust-all 与 MainActivity.onReceivedSslError
-    // 的 WebView 放行保持同一安全姿态（WebView 已信任该证书，原生下载也应一致）。
-    private fun downloadFile(urlStr: String, dest: File, onProgress: (Int) -> Unit): Boolean {
-        var conn: HttpURLConnection? = null
-        return try {
-            val raw = URL(urlStr).openConnection()
-            conn = if (urlStr.startsWith("https://")) {
-                val https = raw as HttpsURLConnection
-                val tm = arrayOf<TrustManager>(object : X509TrustManager {
-                    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-                })
-                val sc = SSLContext.getInstance("TLS")
-                sc.init(null, tm, SecureRandom())
-                https.sslSocketFactory = sc.socketFactory
-                https.hostnameVerifier = HostnameVerifier { _: String?, _: SSLSession? -> true }
-                https
-            } else raw as HttpURLConnection
-            conn.apply { connectTimeout = 10000; readTimeout = 60000 }
-            val total = conn.contentLengthLong
-            val tmp = File(dest.parentFile, dest.name + ".tmp")
-            conn.inputStream.use { input ->
-                FileOutputStream(tmp).use { output ->
-                    val buf = ByteArray(64 * 1024)
-                    var downloaded = 0L
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        output.write(buf, 0, n)
-                        downloaded += n
-                        if (total > 0) onProgress((downloaded * 100 / total).toInt())
-                    }
-                }
-            }
-            if (conn.responseCode !in 200..299) return false
-            if (!tmp.renameTo(dest)) {
-                tmp.copyTo(dest, overwrite = true)
-                tmp.delete()
-            }
-            true
-        } catch (e: Exception) {
-            // 记录失败原因（自签名证书/网络/服务器 404 等），便于设备端定位
-            android.util.Log.e("AsrModelManager", "模型下载失败: ${urlStr} ${e.message}")
-            false
-        } finally {
-            conn?.disconnect()
-        }
-    }
+    // 下载委托共享 ModelDownloader（SSL-trust 自签名证书 + .tmp 原子改名逻辑已抽离，见 ModelDownloader.kt）
+    private fun downloadFile(urlStr: String, dest: File, onProgress: (Int) -> Unit): Boolean =
+        ModelDownloader.download(urlStr, dest, onProgress)
 }
