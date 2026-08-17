@@ -241,7 +241,7 @@ class NativeBridge(
         }
     }
 
-    // 查询声纹引擎状态：{"ready":true|false,"dim":192,"speakers":["妲己"]}
+    // 查询声纹引擎状态：{"ready":true|false,"dim":512,"speakers":["妲己"]}（dim 由模型决定，eres2net 为 512）
     @JavascriptInterface
     fun voiceprintStatus(): String {
         return try {
@@ -304,10 +304,11 @@ class NativeBridge(
     }
 
     // 多人分割+逐段识别：裸 PCM base64 → {"segments":[{start,end,text,speaker}]} 或 {"error":"..."}
+    // 逐段转写依赖 AsrEngine.recognize，故前置校验还需 asrModelManager.isReady
     @JavascriptInterface
     fun voiceprintDiarize(pcmBase64: String): String {
         return try {
-            if (!voiceprintEnabled || !voiceprintModelManager.isReady || !VoiceprintEngine.ready) {
+            if (!voiceprintEnabled || !voiceprintModelManager.isReady || !VoiceprintEngine.ready || !asrModelManager.isReady) {
                 return JSONObject().put("error", "模型未就绪").toString()
             }
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
@@ -338,7 +339,7 @@ class NativeBridge(
         }
     }
 
-    // 声纹特征提取（register display 模式中转用）：裸 PCM base64 → {"dim":192,"embedding":[...]} 或 {"error":"..."}
+    // 声纹特征提取（register display 模式中转用）：裸 PCM base64 → {"dim":512,"embedding":[...]} 或 {"error":"..."}（dim 由模型决定，eres2net 为 512）
     @JavascriptInterface
     fun voiceprintExtract(pcmBase64: String): String {
         return try {
@@ -351,13 +352,17 @@ class NativeBridge(
             val arr = org.json.JSONArray()
             for (v in embedding) arr.put(v.toDouble())
             JSONObject().put("dim", embedding.size).put("embedding", arr).toString()
+        } catch (e: java.util.concurrent.TimeoutException) {
+            JSONObject().put("error", "声纹提取超时").toString()
         } catch (e: Exception) {
             JSONObject().put("error", e.message ?: "声纹提取失败").toString()
         }
     }
 
     // 重建本地声纹库（幂等）：display.html 已用 fetch 拉取权威库 JSON（WebView 信任自签名证书），
-    // Kotlin 侧只负责解析+重建；结果触发 window.onVoiceprintDb
+    // Kotlin 侧只负责解析+重建；结果触发 window.onVoiceprintDb。
+    // @JavascriptInterface 方法在 JavaBridge 后台线程执行，evaluateJavascript 必须在 UI 线程调用，
+    // 故成功/失败两路回调都经 mainHandler.post 投递到主线程；speakers 名称为用户可控，用 JSONObject.quote 转义防 JS 注入。
     @JavascriptInterface
     fun voiceprintSyncDb(dbJson: String): String {
         return try {
@@ -365,13 +370,13 @@ class NativeBridge(
             val speakers = VoiceprintDbCodec.speakersFromDb(db)
             VoiceprintEngine.setDb(speakers)
             val msg = JSONObject().put("state", "ready").put("speakers", speakers.keys.toList())
-            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${msg.toString()});"
-            webView.evaluateJavascript(js, null)
+            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${JSONObject.quote(msg.toString())});"
+            mainHandler.post { webView.evaluateJavascript(js, null) }
             JSONObject().put("ok", true).toString()
         } catch (e: Exception) {
             val msg = JSONObject().put("state", "error").put("error", e.message ?: "声纹库同步失败")
-            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${msg.toString()});"
-            webView.evaluateJavascript(js, null)
+            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${JSONObject.quote(msg.toString())});"
+            mainHandler.post { webView.evaluateJavascript(js, null) }
             JSONObject().put("error", e.message ?: "声纹库同步失败").toString()
         }
     }
