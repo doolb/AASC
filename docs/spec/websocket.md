@@ -30,6 +30,8 @@ wss.on('connection', (ws, req)):
         
         如果 savedState 存在且有 currentMedia:
             发送 { type: 'restoreState', state: savedState }
+            // 显示端恢复媒体后按 state.isPlaying 应用播放/暂停：
+            // isPlaying === false → 暂停视频 / 停止 html 滚动，避免控制端暂停的视频重连后自动播放
         
         广播显示端列表到控制端
         
@@ -245,6 +247,7 @@ wss.on('connection', (ws, req)):
 | voiceInput | 语音输入 | `{ type, text, isFinal, fullText }` |
 | voiceStatus | 语音识别状态 | `{ type, supported, listening }` |
 | commandAck | 命令确认 | `{ type, commandType, success, details, timestamp }` |
+| playStateReport | 播放状态上报 | `{ type, isPlaying }`（显示端上报真实播放状态：播放/暂停命令、显示新媒体、重连恢复后；服务端存 displayData.state.isPlaying 并持久化 + 转发控制端） |
 
 ### 控制端 -> 服务端
 

@@ -395,7 +395,7 @@ async function startServer() {
             });
 
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
-            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot'];
+            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport'];
             for (const type of displayTypes) {
                 wsServer.registerHandler(type, (data, ctx) => {
                     handleDisplayMessageFallback(ctx.displayId, data, ctx.ws);
@@ -2979,6 +2979,16 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             displayId: displayId,
             type: 'sleepStateReport',
             sleepState: data.sleepState
+        });
+    } else if (data.type === 'playStateReport' && displayData) {
+        // 播放状态上报：显示端上报真实 isPlaying（播放/暂停命令、显示新媒体、重连恢复后），
+        // 持久化后重连 restoreState 据此恢复，避免控制端暂停的视频重连后自动播放
+        displayData.state.isPlaying = data.isPlaying;
+        config.updateDisplayState(displayData.ip, { isPlaying: data.isPlaying });
+        broadcastToControls({
+            displayId: displayId,
+            type: 'playStateReport',
+            isPlaying: data.isPlaying
         });
     } else if (data.type === 'voiceInput' && displayData) {
         // 只处理声纹语音：声明了 speaker 但为 null（未注册/未匹配）的语音丢弃，不触发命令

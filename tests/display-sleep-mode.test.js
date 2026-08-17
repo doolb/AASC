@@ -316,6 +316,89 @@ const assert = require('assert');
   assert.strictEqual(lastReport.reported, lastReport.state, '状态变化后上报应匹配当前 sleepState');
   console.log('PASS: 状态变化后上报 sleepState');
 
+  // ---- 16. restoreState isPlaying=false：控制端暂停的视频重连后保持暂停（不自动播放）----
+  // 关闭睡眠，避免 sleep/deep 状态隐藏媒体容器干扰视频判定
+  await page.evaluate(() => {
+    activationUntil = 0;
+    sleepSettings = { enabled: false, startHour: 0, endHour: 24, deepStartHour: 0, deepEndHour: 24 };
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'restoreState',
+      state: {
+        currentMedia: { type: 'base64', mediaType: 'video', data: '', fileName: 'test.mp4', mimeType: 'video/mp4' },
+        isPlaying: false
+      }
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 500));
+  const pausedRestore = await page.evaluate(() => {
+    const pr = window.__wsSends
+      .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
+      .filter(m => m && m.type === 'playStateReport');
+    const last = pr[pr.length - 1];
+    return { paused: mediaVideo.paused, display: mediaVideo.style.display, reported: last ? last.isPlaying : null };
+  });
+  assert.strictEqual(pausedRestore.paused, true, 'restoreState isPlaying=false 应保持暂停（不自动播放）');
+  assert.strictEqual(pausedRestore.display, 'block', '暂停恢复也应显示视频容器');
+  assert.strictEqual(pausedRestore.reported, false, '恢复暂停后应上报 playStateReport isPlaying=false');
+  console.log('PASS: restoreState isPlaying=false 恢复暂停');
+
+  // ---- 17. restoreState isPlaying=true：视频恢复应播放并上报 true ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'restoreState',
+      state: {
+        currentMedia: { type: 'base64', mediaType: 'video', data: '', fileName: 'test.mp4', mimeType: 'video/mp4' },
+        isPlaying: true
+      }
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 300));
+  const playingRestore = await page.evaluate(() => {
+    const pr = window.__wsSends
+      .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
+      .filter(m => m && m.type === 'playStateReport');
+    const last = pr[pr.length - 1];
+    return { reported: last ? last.isPlaying : null };
+  });
+  assert.strictEqual(playingRestore.reported, true, 'restoreState isPlaying=true 应上报 playStateReport isPlaying=true');
+  console.log('PASS: restoreState isPlaying=true 恢复播放上报');
+
+  // ---- 18. 控制端 play 命令触发 playStateReport 上报 ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'control', action: 'play', value: false
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const playFalse = await page.evaluate(() => {
+    const pr = window.__wsSends
+      .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
+      .filter(m => m && m.type === 'playStateReport');
+    const last = pr[pr.length - 1];
+    return { reported: last ? last.isPlaying : null, paused: mediaVideo.paused };
+  });
+  assert.strictEqual(playFalse.reported, false, '控制端暂停应上报 isPlaying=false');
+  assert.strictEqual(playFalse.paused, true, '控制端暂停应暂停视频');
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'control', action: 'play', value: true
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const playTrue = await page.evaluate(() => {
+    const pr = window.__wsSends
+      .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
+      .filter(m => m && m.type === 'playStateReport');
+    const last = pr[pr.length - 1];
+    return { reported: last ? last.isPlaying : null };
+  });
+  assert.strictEqual(playTrue.reported, true, '控制端播放应上报 isPlaying=true');
+  console.log('PASS: 控制端 play 命令上报 playStateReport');
+
   await browser.close();
   console.log('ALL PASS: 显示端睡眠模式');
 })().catch(e => { console.error('FAIL:', e.message); process.exit(1); });

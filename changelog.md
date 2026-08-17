@@ -66,6 +66,18 @@
     - docs/spec/display-sleep-mode.md、docs/design/display-sleep-mode.md
     - tests/display-sleep-mode.test.js（默认开启 + 连接上报 + 状态变化上报断言，共 17 步全绿）
 
+- ✅ [2026-08-17] 修复：控制端暂停视频后显示端重连自动播放
+  - 根因：restoreState 恢复 currentMedia 后 showMedia() 无条件 playVideoAuto() 自动播放 / html 自动滚动，忽略持久化的 isPlaying
+  - 显示端 showMedia 增加 paused 参数：恢复且 isPlaying=false 时视频 pause()、html 不自动滚动；新增 reportPlayState() 上报真实播放状态（播放/暂停命令、显示新媒体、恢复后），解决「暂停后发新视频被陈旧 isPlaying=false 误暂停」
+  - 服务端 playStateReport 分支：存 displayData.state.isPlaying + 持久化 + 转发控制端；控制端接收后同步播放按钮
+  - 同时修复上报分支未触达问题：sleepStateReport/playStateReport 注册到 server-app 的 displayTypes 注册表（此前未注册走 viewbind 同步，不落 displayClients.state，导致睡眠按钮状态上报与控制端广播实际未生效）
+  - 改动文件：
+    - display.html（showMedia paused 参数 + reportPlayState + restoreState 应用 isPlaying + play 命令上报）
+    - server-app.js（playStateReport 分支 + displayTypes 注册 sleepStateReport/playStateReport）
+    - js/websocket.js（控制端 playStateReport 分支同步播放按钮）
+    - docs/spec/websocket.md、docs/spec/display-sleep-mode.md、docs/design/display-sleep-mode.md
+    - tests/display-sleep-mode.test.js（+4 断言：restore 暂停/播放上报、play 命令上报，共 20 步全绿）
+
 - ✅ [2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）实现完成
   - 在 NativeBridge 新增 compute() 桥方法，离屏 EGL 3.1 上下文执行 GLES compute shader，为 threejs 提供协作/归约类真 compute 能力
   - 接口对齐 threejs WebGPU compute（workgroupSize/count/dispatchSize/instanceIndex→gl_GlobalInvocationID）

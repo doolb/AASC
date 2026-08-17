@@ -113,6 +113,6 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 | `control` / `sleepSettings` | `{enabled,startHour,endHour,deepStartHour,deepEndHour}` | 应用设置 + checkSleepMode + ack(`extraData.sleepState`) |
 | `control` / `sleepActivate` | 无 | `activateTemporarily()` + ack(`extraData.sleepState`) |
 | `control` / `sleepOverride` | `'sleep'` \| `'deep'` \| `'normal'` | `manualSleepMode` 赋值（`normal`→null）+ checkSleepMode + ack(`extraData.sleepState`) |
-| `sleepStateReport`（显示端上行） | `sleepState` | 服务端存 `displayData.state.sleepState` + broadcastToControls → 控制端更新按钮 |
+| `sleepStateReport`（显示端上行） | `sleepState` | 服务端存 `displayData.state.sleepState` + broadcastToControls → 控制端更新按钮（需在 server-app 的 `displayTypes` 注册表注册，否则走 viewbind 同步不落 `displayClients.state`） |
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |

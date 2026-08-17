@@ -164,7 +164,7 @@ function activateTemporarily():
 
 ### showMedia 扩展
 
-`showMedia(data, noActivate)` 入口处仅当非显示端内部调用时调用 `activateTemporarily()`（控制端下发媒体自动进入激活窗口）；显示端内部调用（restoreState 恢复持久化媒体、播放列表自动切播）传 `noActivate=true`，不触发 60 秒激活窗口，仅在睡眠时段静默隐藏，避免重启/维护时睡眠模式被击穿。
+`showMedia(data, noActivate, paused)` 入口处仅当非显示端内部调用时调用 `activateTemporarily()`（控制端下发媒体自动进入激活窗口）；显示端内部调用（restoreState 恢复持久化媒体、播放列表自动切播）传 `noActivate=true`，不触发 60 秒激活窗口，仅在睡眠时段静默隐藏，避免重启/维护时睡眠模式被击穿。`paused=true` 时（restoreState 恢复且 `state.isPlaying === false`）视频 `pause()` 不自动播放、html 不自动滚动，避免控制端暂停的视频重连后自动播放；`showMedia` 末尾 `reportPlayState(!paused)` 上报真实播放状态。
 
 ## 服务端（config）
 

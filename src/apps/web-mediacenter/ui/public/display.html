@@ -1200,7 +1200,7 @@
                 if (state.currentHtmlScroll) {
                     currentHtmlScroll = state.currentHtmlScroll;
                 }
-                showMedia(state.currentMedia, true);  // restore 恢复不激活，避免睡眠时段重启闪烁
+                showMedia(state.currentMedia, true, state.isPlaying === false);  // 恢复不激活；isPlaying=false（控制端暂停）时恢复暂停，避免重连自动播放
             }
 
             if (state.sleep !== undefined) {
@@ -2207,7 +2207,7 @@
             }).catch(e => console.log('自动播放被阻止'));
         }
 
-        function showMedia(data, noActivate) {
+        function showMedia(data, noActivate, paused) {
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
             mediaVideo.pause();
@@ -2227,7 +2227,14 @@
                 mediaHtml.style.display = 'block';
                 // 发送未指定模式时沿用显示端当前模式；指定则更新记忆
                 if (data.htmlScroll) currentHtmlScroll = data.htmlScroll;
-                mediaHtml.onload = () => startHtmlScroll(mediaHtml, data.htmlScroll || currentHtmlScroll);
+                mediaHtml.onload = () => {
+                    // 重连恢复且为暂停状态时不自动滚动（控制端暂停的页面重连后保持冻结）
+                    if (paused) {
+                        stopHtmlScroll();
+                    } else {
+                        startHtmlScroll(mediaHtml, data.htmlScroll || currentHtmlScroll);
+                    }
+                };
                 // html 播放进度上报（滚动比例 + 缩放倍数）
                 if (!htmlProgressTimer) {
                     htmlProgressTimer = setInterval(reportHtmlProgress, 1000);
@@ -2277,7 +2284,12 @@
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = data.url;
                     mediaVideo.load();
-                    playVideoAuto(mediaVideo);
+                    // 重连恢复且为暂停状态时不自动播放（控制端暂停的视频重连后保持暂停）
+                    if (paused) {
+                        mediaVideo.pause();
+                    } else {
+                        playVideoAuto(mediaVideo);
+                    }
                     mediaVideo.onloadedmetadata = () => applyCrop();
                     mediaVideo.ontimeupdate = function() {
                         if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
@@ -2307,7 +2319,12 @@
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = src;
                     mediaVideo.load();
-                    playVideoAuto(mediaVideo);
+                    // 重连恢复且为暂停状态时不自动播放
+                    if (paused) {
+                        mediaVideo.pause();
+                    } else {
+                        playVideoAuto(mediaVideo);
+                    }
                     mediaVideo.onloadedmetadata = () => applyCrop();
                 } else {
                     mediaVideo.style.display = 'none';
@@ -2320,6 +2337,15 @@
             }
 
             announceAndReport(mediaName, data);
+            // 新媒体显示即播放（或按恢复的暂停状态），上报真实播放状态，避免服务端残留陈旧的 isPlaying=false 导致重连误暂停
+            reportPlayState(!paused);
+        }
+
+        // 上报播放状态到服务端：控制端暂停/播放、显示新媒体、重连恢复后，供服务端持久化 isPlaying 并在重连时恢复
+        function reportPlayState(playing) {
+            if (displayWs && displayWs.readyState === 1) {
+                displayWs.send(JSON.stringify({ type: 'playStateReport', isPlaying: !!playing }));
+            }
         }
 
         function handleControl(data) {
@@ -2390,6 +2416,8 @@
                             mediaVideo.pause();
                         }
                     }
+                    // 上报真实播放状态：暂停后重连/刷新时服务端据此恢复，避免自动播放
+                    reportPlayState(data.value === true);
                     break;
                     
                 case 'seek':

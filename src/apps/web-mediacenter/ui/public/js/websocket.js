@@ -175,6 +175,11 @@ const WebSocketManager = {
             if (data.displayId === window.currentDisplayId && window.Controls) {
                 window.Controls.updateSleepStatus(data.sleepState);
             }
+        } else if (data.type === 'playStateReport') {
+            // 显示端播放状态上报：同步当前选中显示端的播放/暂停按钮
+            if (data.displayId === window.currentDisplayId && window.Controls) {
+                window.Controls.setPlayingState(!!data.isPlaying);
+            }
         } else if (data.type === 'videoProgress') {
             // 只显示当前选中显示端的进度
             window.currentHtmlPlaying = false;
