@@ -244,14 +244,32 @@ const Chat = {
             
             const data = await response.json();
             
-            if (data.status === 'success' && data.text) {
+            if (data.status === 'success') {
+                // 多人分割：逐段处理（每段可能是一条聊天或普通文本）
+                if (data.segments && data.segments.length) {
+                    for (const seg of data.segments) {
+                        const segText = (seg.text || '').trim();
+                        if (!segText) continue;
+                        console.log('分段识别:', segText, '->', seg.speaker);
+                        if (segText.startsWith('聊天')) {
+                            const message = segText.substring(2).trim();
+                            if (message) {
+                                setTimeout(() => { this.sendVoiceMessage(message); }, 300);
+                            }
+                        } else {
+                            this.handleAsrCommand(segText, seg.speaker);
+                        }
+                    }
+                    return;
+                }
+                if (!data.text) return;
                 const recognizedText = data.text.trim();
                 console.log('识别结果:', recognizedText);
-                
+
                 if (input) {
                     input.value = recognizedText;
                 }
-                
+
                 if (recognizedText.startsWith('聊天')) {
                     const message = recognizedText.substring(2).trim();
                     if (message) {
@@ -259,6 +277,8 @@ const Chat = {
                             this.sendVoiceMessage(message);
                         }, 300);
                     }
+                } else {
+                    this.handleAsrCommand(recognizedText, data.speaker);
                 }
             } else if (data.status === 'ignored') {
                 console.log('无效语音输入，已忽略:', data.text);
@@ -284,6 +304,16 @@ const Chat = {
         }
     },
     
+    // 处理非"聊天"开头的识别结果（普通文本/语音命令），带 speaker 归属
+    handleAsrCommand(text, speaker) {
+        // 非"聊天"文本沿用原有行为：填充输入框；speaker 归属仅记入日志
+        const input = document.getElementById('chatInput');
+        if (input) {
+            input.value = text;
+        }
+        console.log('[语音输入]', text, speaker ? '（' + speaker + '）' : '');
+    },
+
     updateVoiceButton() {
         const btn = document.getElementById('voiceInputBtn');
         if (btn) {

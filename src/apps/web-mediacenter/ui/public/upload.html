@@ -62,6 +62,10 @@
                 <span class="nav-icon">⚡</span>
                 <span class="nav-text">任务</span>
             </button>
+            <button class="nav-item" data-target="voiceprint" title="声纹管理">
+                <span class="nav-icon">🔊</span>
+                <span class="nav-text">声纹</span>
+            </button>
         </div>
     </nav>
     
@@ -655,6 +659,38 @@
         </section>
         <section class="panel" id="panel-task" style="display:none;">
         </section>
+        <section class="panel" id="panel-voiceprint" style="display:none;">
+            <h1 class="page-title">声纹管理</h1>
+            <div class="control-item">
+                <label>注册声纹</label>
+                <input type="text" id="vpNameInput" placeholder="输入名字（如：妲己）"
+                    style="width:100%;padding:8px;margin-bottom:8px;box-sizing:border-box;">
+                <div class="control-buttons">
+                    <button class="control-btn" id="vpRecordBtn" onclick="VoiceprintPanel.toggleRecord()">🎤 录音注册</button>
+                    <button class="control-btn" id="vpStopBtn" onclick="VoiceprintPanel.stopRecord()" style="display:none;">停止</button>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
+                    <span id="vpRecordStatus">输入名字后录音 3-10 秒</span>
+                </div>
+            </div>
+            <div class="control-item">
+                <label>已注册声纹</label>
+                <div id="vpSpeakerList"></div>
+            </div>
+            <div class="control-item">
+                <label>声纹识别设置</label>
+                <div style="margin-top:6px;font-size:13px;">
+                    <label><input type="checkbox" id="vpEnabledCheck"> 启用声纹识别（只处理识别到声纹的语音）</label><br>
+                    <label style="margin-top:4px;display:inline-block;"><input type="checkbox" id="vpMultiCheck"> 多人分割（一句话多个说话人逐段归属）</label>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
+                    声纹提取位置：<select id="vpExtractionSel">
+                        <option value="server">服务器</option>
+                        <option value="display">显示端</option>
+                    </select>
+                </div>
+            </div>
+        </section>
     </main>
     
     <div class="modal-overlay" id="featureModal">
@@ -848,6 +884,7 @@
     <script src="js/main.js"></script>
     <script src="js/task-panel.js"></script>
     <script src="js/sidebar-registry.js"></script>
+    <script src="js/voiceprint-panel.js"></script>
 
     <script>
     const Settings = {
