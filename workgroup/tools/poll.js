@@ -11,7 +11,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // depends 依赖全部已验收才可认领（多角色协调）。
 // 遍历 task.depends：在 tasks/claimed/ 各角色子目录（<名>-<角色>/）的 json 里找
-// id==depId 且 status==已验收；找不到再容错检查结果文件 results/<depId>.json 是否存在。
+// id==depId 且 status==已验收；只认已验收，results 存在但未验收不算满足（避免绕过验收门控）。
 function depsMet(p, task) {
     const deps = Array.isArray(task.depends) ? task.depends : [];
     if (!deps.length) return true;
@@ -26,8 +26,8 @@ function depsMet(p, task) {
             });
             if (found) break;
         }
-        // 容错：claimed 里可能没有，但 results 有
-        if (!found && !fs.existsSync(p.resultFile(depId))) return false;
+        // 只认 claimed/ 里 status=已验收 的依赖；results 文件存在但未验收不算满足
+        if (!found) return false;
     }
     return true;
 }
@@ -99,9 +99,10 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
         }
     }
 
-    // 正常退出/中断时删除 lock
+    // 正常退出/中断时删除 lock：用可变 primary（切换后追踪当前角色），
+    // 避免捕获启动时 activeRole 导致切换后只删旧 lock、留新角色死 PID lock。
     const cleanup = () => {
-        fs.rmSync(p.roleLockFile(name, activeRole || ''), { force: true });
+        fs.rmSync(p.roleLockFile(name, primary || ''), { force: true });
         process.exit(0);
     };
     process.once('SIGINT', cleanup);
@@ -134,7 +135,7 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 const mineDir = path.join(p.claimedDir, `${name}-${primary}`);
                 const rework = listFiles(mineDir, '.json')
                     .map((f) => readJson(path.join(mineDir, f)))
-                    .find((t) => t && t.status === '待修改' && t.role === primary);
+                    .find((t) => t && t.status === '待修改' && (t.role === primary || secondary.includes(t.role)));
                 if (rework) mine = { ...rework, _fromRework: true };
             }
             if (!mine && !isEmpty) {
@@ -142,8 +143,10 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 mine = pending.find((t) => secondary.includes(t.role) && (!t.status || t.status === '') && depsMet(p, t));
             }
             if (mine) {
-                // 待修改任务已在 claimed/ 内（非 pending），无需再原子认领；新任务走 atomicClaim
-                const ok = mine._fromRework ? true : (isEmpty ? atomicClaim(p, name, mine.id) : atomicClaim(p, `${name}-${primary}`, mine.id));
+                // 待修改任务已在 claimed/ 内（非 pending），无需再原子认领；新任务走 atomicClaim。
+                // 认领目标目录始终用当前 primary：指派/空闲切换已把 primary 切到任务 role，
+                // 空角色切换后也走 <名>-<角色>，避免残留 claimed/<名>/ 无角色副本。
+                const ok = mine._fromRework ? true : atomicClaim(p, `${name}-${primary}`, mine.id);
                 if (ok) {
                     await executeTask({ p, root, role: mine.role, name, activeRole: primary, mine, command, buildArgs, secondary });
                     if (onTaskDone) await onTaskDone();
@@ -180,8 +183,10 @@ async function executeTask({ p, root, role, name, activeRole, mine, command, bui
     writeText(p.roleCurrentTaskFile(name, activeRole || ''), mine.id);
     const taskFile = p.claimedTaskFile(agentDir, mine.id);
     const resultFile = p.resultFile(mine.id);
+    // 剥掉 _fromRework 内部标记（仅 runLoop 内部用，不残留进任务文件）
+    const { _fromRework, ...clean } = mine;
     // 落盘状态=进行中
-    writeJson(taskFile, { ...mine, status: '进行中' });
+    writeJson(taskFile, { ...clean, status: '进行中' });
     const summary = buildSummary(readText(p.roleHistoryFile(name, mine.role || '')));
     const prompt = buildPrompt({ role: mine.role, name: agentDir, summary, taskFile, resultFile, reviewComment: mine.reviewComment });
     const args = buildArgs ? buildArgs(prompt, taskFile, resultFile) : ['--print', '--permission-mode', 'bypassPermissions', prompt];
@@ -201,7 +206,7 @@ async function executeTask({ p, root, role, name, activeRole, mine, command, bui
     await done; // 确保 done 已 resolve（子进程正常结束或被 kill）
     fs.rmSync(cancelSignal, { force: true });
     if (cancelled) {
-        const cur = readJson(taskFile) || mine;
+        const cur = readJson(taskFile) || clean;
         writeJson(taskFile, { ...cur, status: '已取消' });
         fs.rmSync(p.roleBusyFile(name, activeRole || ''), { force: true });
         fs.rmSync(p.roleCurrentTaskFile(name, activeRole || ''), { force: true });
@@ -225,7 +230,7 @@ async function executeTask({ p, root, role, name, activeRole, mine, command, bui
     writeText(p.roleHistoryFile(name, mine.role || ''), newHistory);
 
     // 完成后状态 = 已完成
-    const cur = readJson(taskFile) || mine;
+    const cur = readJson(taskFile) || clean;
     writeJson(taskFile, { ...cur, status: '已完成' });
 
     fs.rmSync(p.roleBusyFile(name, activeRole || ''), { force: true });

@@ -60,7 +60,7 @@ idle ──认领成功──▶ busy ──任务完成──▶ idle
 
 - 成员目录按角色隔离：`members/<名>-<角色>/`
 - `role.md` 存主角色 + 副角色列表（`primary` / `secondary: []`）
-- 匹配顺序：主角色 → 指派(assignedTo) → 待修改 → 副角色 → 空闲自动切换
+- 匹配顺序：指派(assignedTo) → 主角色 → 待修改 → 副角色 → 空闲自动切换
 - 切换动作：删旧目录 lock → 写新目录 lock + role.md → 主角色 = 新角色（切了不回）
 - 防撞车：目标角色已有在线 agent 不切
 - 空角色：只认 `assignedTo` 自己的任务
@@ -110,13 +110,13 @@ function 启动流程({ primary, secondary, name }) {
     write(lock, PID + 启动时间)
 
     while (true) {
-        // ① 主角色新任务：pending 里 role==primary 且 status 空、depends 依赖全已验收
-        任务 = 扫描 pending 中 primary 匹配且 status 空且依赖已验收
-        // ② 指派：pending 里 assignedTo == name（空角色/被 main 指派）
-        if (无任务) 任务 = 扫描 pending 中 assignedTo == name
+        // ① 指派：pending 里 assignedTo == name（空角色/被 main 指派），依赖已验收
+        任务 = 扫描 pending 中 assignedTo == name 且依赖已验收
         // 任务 role 与主角色不符 → 切换主角色到任务 role
         if (任务 && 任务.role != primary) 切换主角色(任务.role)
-        // ③ 待修改：自己 claimed/<name>-<role>/ 里 status=待修改
+        // ② 主角色新任务：pending 里 role==primary 且 status 空、depends 依赖全已验收（仅非空角色）
+        if (无任务) 任务 = 扫描 pending 中 primary 匹配且 status 空且依赖已验收
+        // ③ 待修改：自己 claimed/<name>-<role>/ 里 status=待修改（主角色或副角色任务）
         if (无任务) 任务 = 扫描 claimed/<name>-<primary>/ 中 status=待修改
         // ④ 副角色：主/副都没活 → pending 里 secondary 匹配
         if (无任务) 任务 = 扫描 pending 中 secondary 匹配且依赖已验收

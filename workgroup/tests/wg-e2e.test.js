@@ -440,3 +440,82 @@ test('端到端：空角色只认 assignedTo 自己的任务并切换主角色�
 
     assert.ok(fs.existsSync(p.claimedTaskFile('alice-backend-media', 't12')), '空角色应切主角色到 backend-media 并认领');
 });
+
+test('回归：空角色指派切换后认领目录为 <名>-<角色>，不残留 claimed/<名>/ 副本', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('backend-media'), '# 后端媒体');
+    // main 指派给 alice（空角色）一个 backend-media 任务
+    writeJson(p.taskFile('tr1'), { id: 'tr1', title: '任务1', role: 'backend-media', requirement: '做后端媒体', priority: 'high', createdAt: 1, references: [], status: '', depends: [], level: 'L4', assignedTo: 'alice' });
+
+    const resultFile = p.resultFile('tr1');
+    const fakeResult = JSON.stringify({ status: 'completed', summary: 'ok', tags: [], learnings: [], output: 'x' });
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, mode: 'empty', name: 'alice', command: process.execPath,
+        buildArgs: () => ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify(fakeResult)})`],
+        pollIntervalMs: 50
+    });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.roleBusyFile('alice', 'backend-media')), 5000);
+    app.stop();
+
+    // 认领应落在 claimed/alice-backend-media/，且 claimed/alice/ 无无角色残留副本
+    assert.ok(fs.existsSync(p.claimedTaskFile('alice-backend-media', 'tr1')), '任务应在 claimed/alice-backend-media/');
+    assert.ok(!fs.existsSync(path.join(p.claimedDir, 'alice')), '不应残留 claimed/alice/ 无角色副本');
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice-backend-media', 'tr1'), 'utf8'));
+    assert.strictEqual(task.status, '已完成', '任务完成后状态应为已完成');
+    assert.strictEqual(task._fromRework, undefined, '任务文件不应含 _fromRework 内部标记');
+});
+
+test('回归：depends 依赖已完成但未验收（results 存在）时不满足门控，不被认领', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端');
+    // 任务 A 依赖 D；D 已完成但仅 status=已完成（未验收），且 results/D.json 存在
+    writeJson(p.taskFile('tA2'), { id: 'tA2', title: '任务A', role: 'frontend', requirement: '做A', priority: 'high', createdAt: 1, references: [], status: '', depends: ['tD2'], level: 'L5' });
+    ensureDir(path.join(p.claimedDir, 'alice-frontend'));
+    writeJson(p.claimedTaskFile('alice-frontend', 'tD2'), { id: 'tD2', role: 'frontend', status: '已完成' });
+    writeJson(p.resultFile('tD2'), { status: 'completed', summary: '完成' });
+
+    const { start } = require('../tools/poll.js');
+    const app = start({ root, primary: 'frontend', name: 'alice', command: process.execPath, buildArgs: () => ['-e', '/* no-op */'], pollIntervalMs: 50 });
+    // 跑几轮：tA2 依赖未验收，不应被认领（results 存在但不作数）
+    await new Promise((r) => setTimeout(r, 300));
+    app.stop();
+
+    assert.ok(fs.existsSync(p.taskFile('tA2')), '依赖已完成但未验收的任务应留在 pending');
+    assert.ok(!fs.existsSync(p.claimedTaskFile('alice-frontend', 'tA2')), '不应被认领');
+});
+
+test('回归：副角色待修改任务由原 agent 重做，任务文件不含 _fromRework', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端');
+    writeText(p.roleFile('backend-media'), '# 后端媒体');
+    // 副角色 backend-media 任务已认领在 claimed/alice-frontend/（当时主角色 frontend），被打回待修改
+    ensureDir(path.join(p.claimedDir, 'alice-frontend'));
+    writeJson(p.claimedTaskFile('alice-frontend', 'tR'), { id: 'tR', title: '任务R', role: 'backend-media', requirement: '做后端媒体', priority: 'high', createdAt: 1, references: [], status: '待修改', reviewComment: '改样式' });
+
+    const resultFile = p.resultFile('tR');
+    const fakeResult = JSON.stringify({ status: 'completed', summary: '改完', tags: [], learnings: [], output: 'ok' });
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, primary: 'frontend', secondary: ['backend-media'], name: 'alice', command: process.execPath,
+        buildArgs: () => ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify(fakeResult)})`],
+        pollIntervalMs: 50
+    });
+    try {
+        await waitFor(() => fs.existsSync(resultFile), 5000);
+        await waitFor(() => !fs.existsSync(p.roleBusyFile('alice', 'frontend')), 5000);
+    } finally {
+        app.stop();
+    }
+
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice-frontend', 'tR'), 'utf8'));
+    assert.strictEqual(task.status, '已完成', '副角色待修改任务应被重做完成');
+    assert.strictEqual(task._fromRework, undefined, '任务文件不应含 _fromRework 内部标记');
+});

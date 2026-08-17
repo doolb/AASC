@@ -221,10 +221,10 @@ node poll.js
  ├─ 崩溃残留检查：lock 若存在，读 PID → 进程已死才覆盖
  └─ 写 lock（内容 = PID + 启动时间）
 循环
- ├─ ① 新任务：扫描 pending，找主角色匹配且 status 空、depends 依赖全已验收 的任务
- ├─ ② 指派：扫描 pending，找 assignedTo == 自己名字 的任务（空角色/被 main 指派）
+ ├─ ① 指派：扫描 pending，找 assignedTo == 自己名字 的任务（空角色/被 main 指派）
  │     任务 role 与主角色不符 → 自动切换主角色 → 认领
- ├─ ③ 待修改：扫描自己 claimed/<名>-<角色>/ 里 status=待修改 的任务（打回小改动）
+ ├─ ② 主角色新任务：扫描 pending，找主角色匹配且 status 空、depends 依赖全已验收 的任务（仅非空角色）
+ ├─ ③ 待修改：扫描自己 claimed/<名>-<角色>/ 里 status=待修改 的任务（打回小改动，主角色或副角色）
  ├─ ④ 副角色：主/副角色都没活 → 扫描 pending 里副角色匹配的任务
  ├─ ⑤ 空闲自动切换：都没活 → 探测 pending 有积压的角色 → 该角色无在线 agent → 切主角色
  ├─ 原子认领：fs.rename(pending/<id>.json → claimed/<名>-<角色>/<id>.json)
