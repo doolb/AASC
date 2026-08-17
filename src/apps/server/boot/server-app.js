@@ -1258,27 +1258,39 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                 const audioBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
                 const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
         
-                const text = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId);
+                const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId);
                 cleanupTempFile(req.file.path);
-        
-                if (!text || !text.trim()) {
-                    return res.json({ 
-                        status: 'ignored', 
-                        message: '显示端未识别到有效语音',
-                        text: ''
+
+                // 多人分割：只处理识别到声纹的段，逐段下发
+                if (result.segments && result.segments.length) {
+                    const segs = result.segments.filter(s => s.speaker);
+                    if (segs.length === 0) {
+                        return res.json({ status: 'ignored', reason: '未识别到已注册声纹', segments: [] });
+                    }
+                    return res.json({
+                        status: 'success',
+                        segments: segs.map(s => ({ text: (s.text || '').trim(), speaker: s.speaker }))
                     });
                 }
-        
+
+                const text = (result.text || '').trim();
+                if (!text) {
+                    return res.json({ status: 'ignored', reason: '显示端未识别到有效语音', text: '' });
+                }
                 if (!hasValidContent(text)) {
                     log('语音', `忽略无效语音输入: ${text}`);
-                    return res.json({ 
-                        status: 'ignored', 
-                        message: '未检测到有效内容',
-                        text: text
-                    });
+                    return res.json({ status: 'ignored', reason: '未检测到有效内容', text });
                 }
-        
-                return res.json({ status: 'success', text: text.trim() });
+
+                // speaker 语义：字段存在但为 null（声纹可用未匹配）→ 拦截；缺省 → 放行
+                if (result.speaker !== undefined) {
+                    if (!result.speaker) {
+                        log('语音', `忽略未识别到声纹的语音: ${text}`);
+                        return res.json({ status: 'ignored', reason: '未识别到已注册声纹', text });
+                    }
+                    return res.json({ status: 'success', text, speaker: result.speaker });
+                }
+                return res.json({ status: 'success', text });
             } catch (err) {
                 cleanupTempFile(req.file.path);
                 logError('语音', `显示端 ASR 失败: ${err.message}`);
@@ -2707,10 +2719,28 @@ wss.on('connection', (ws, req) => {
                     if (pending) {
                         pendingDisplayAsrRequests.delete(data.requestId);
                         clearTimeout(pending.timer);
-                        if (data.text) {
-                            pending.resolve(data.text);
+                        if (data.text || (data.segments && data.segments.length)) {
+                            pending.resolve({
+                                text: data.text || '',
+                                speaker: data.speaker,       // undefined | null | 人名
+                                segments: data.segments      // undefined | [{text,speaker,start,end}]
+                            });
                         } else {
                             pending.reject(new Error(data.error || '显示端 ASR 识别失败'));
+                        }
+                    }
+                    return;
+                }
+
+                if (data.type === 'voiceprintExtracted') {
+                    const pending = pendingVoiceprintExtracts.get(data.requestId);
+                    if (pending) {
+                        pendingVoiceprintExtracts.delete(data.requestId);
+                        clearTimeout(pending.timer);
+                        if (data.embedding && Array.isArray(data.embedding) && data.embedding.length > 0) {
+                            pending.resolve(data.embedding);
+                        } else {
+                            pending.reject(new Error(data.error || '显示端声纹提取失败'));
                         }
                     }
                     return;
@@ -2934,12 +2964,18 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             height: data.height
         });
     } else if (data.type === 'voiceInput' && displayData) {
+        // 只处理声纹语音：声明了 speaker 但为 null（未注册/未匹配）的语音丢弃，不触发命令
+        if (data.speaker !== undefined && data.speaker === null) {
+            log('语音', `丢弃未识别到声纹的语音: "${data.text}"`);
+            return;
+        }
         broadcastToControls({
             type: 'voiceInput',
             displayId: displayId,
             text: data.text,
             isFinal: data.isFinal,
-            fullText: data.fullText
+            fullText: data.fullText,
+            ...(data.speaker !== undefined ? { speaker: data.speaker } : {})
         });
 
         // 构造 voiceCommand 消息转发到控制端处理链路，复用 LLM/命令解析/执行逻辑
