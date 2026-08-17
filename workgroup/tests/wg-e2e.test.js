@@ -313,3 +313,54 @@ test('端到端：无 main 时启动为 main 协调者，有 main 时空角色',
     mainApp.stop();
     assert.ok(true, 'main 模式 start 应正常返回');
 });
+
+test('端到端：depends 依赖未验收的任务不被认领，依赖验收后可认领', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端');
+
+    // 任务 A 依赖任务 D（未验收）
+    writeJson(p.taskFile('tA'), { id: 'tA', title: '任务A', role: 'frontend', requirement: '做A', priority: 'high', createdAt: 1, references: [], status: '', depends: ['tD'], level: 'L5' });
+    // 先投递依赖任务 tD
+    writeJson(p.taskFile('tD'), { id: 'tD', title: '依赖D', role: 'frontend', requirement: '做D', priority: 'high', createdAt: 1, references: [], status: '', depends: [], level: 'L4' });
+
+    const resultD = p.resultFile('tD');
+    const resultA = p.resultFile('tA');
+    const { start } = require('../tools/poll.js');
+
+    // 第一轮：只有 tD 可认领（tA 依赖 tD 未验收）
+    // 让 agent 只处理 tD（buildArgs 根据任务文件写对应结果）
+    const app = start({
+        root, primary: 'frontend', name: 'alice', command: process.execPath,
+        buildArgs: (prompt, taskFile) => {
+            const task = JSON.parse(fs.readFileSync(taskFile, 'utf8'));
+            const rf = p.resultFile(task.id);
+            const res = JSON.stringify({ status: 'completed', summary: '完成', tags: [task.role], learnings: [], output: 'ok' });
+            return ['-e', `require('fs').writeFileSync(${JSON.stringify(rf)}, ${JSON.stringify(res)})`];
+        },
+        pollIntervalMs: 50
+    });
+    // 等 tD 完成
+    await waitFor(() => fs.existsSync(resultD), 5000);
+    // 此时 tA 应仍在 pending（依赖未验收）
+    assert.ok(fs.existsSync(p.taskFile('tA')), 'tA 依赖未验收不应被认领');
+    app.stop();
+
+    // app.stop() 只停轮询不删 lock（SIGINT/SIGTERM 清理才删）；重启同名单须先删残留 lock，模拟正常下线
+    fs.rmSync(p.roleLockFile('alice', 'frontend'), { force: true });
+
+    // 验收 tD（人工模拟 main）
+    writeJson(p.claimedTaskFile('alice-frontend', 'tD'), { id: 'tD', role: 'frontend', status: '已验收' });
+    // 第二：重新启动 agent，tA 依赖已验收可认领
+    const app2 = start({ root, primary: 'frontend', name: 'alice', command: process.execPath, buildArgs: (prompt, taskFile) => {
+        const task = JSON.parse(fs.readFileSync(taskFile, 'utf8'));
+        const rf = p.resultFile(task.id);
+        const res = JSON.stringify({ status: 'completed', summary: '完成', tags: [], learnings: [], output: 'ok' });
+        return ['-e', `require('fs').writeFileSync(${JSON.stringify(rf)}, ${JSON.stringify(res)})`];
+    }, pollIntervalMs: 50 });
+    await waitFor(() => fs.existsSync(resultA), 5000);
+    app2.stop();
+
+    assert.ok(fs.existsSync(p.claimedTaskFile('alice-frontend', 'tA')), '依赖验收后 tA 应被认领');
+});

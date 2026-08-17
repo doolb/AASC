@@ -9,6 +9,29 @@ const ROOT = path.resolve(__dirname, '..'); // workgroup/ 根（tools/ 上一级
 const DEFAULT_POLL_MS = 5000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// depends 依赖全部已验收才可认领（多角色协调）。
+// 遍历 task.depends：在 tasks/claimed/ 各角色子目录（<名>-<角色>/）的 json 里找
+// id==depId 且 status==已验收；找不到再容错检查结果文件 results/<depId>.json 是否存在。
+function depsMet(p, task) {
+    const deps = Array.isArray(task.depends) ? task.depends : [];
+    if (!deps.length) return true;
+    for (const depId of deps) {
+        // claimed/ 下每角色一个子目录，逐子目录扫 json
+        let found = false;
+        for (const agentDir of listDirs(p.claimedDir)) {
+            const dir = path.join(p.claimedDir, agentDir);
+            found = listFiles(dir, '.json').some((f) => {
+                const t = readJson(path.join(dir, f));
+                return t && t.id === depId && t.status === '已验收';
+            });
+            if (found) break;
+        }
+        // 容错：claimed 里可能没有，但 results 有
+        if (!found && !fs.existsSync(p.resultFile(depId))) return false;
+    }
+    return true;
+}
+
 // 启动子 agent（或 main/空角色）：创建成员、lock、进入轮询循环
 function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent', command = 'claude', buildArgs, pollIntervalMs = DEFAULT_POLL_MS, onTaskDone }) {
     primary = String(primary || '').trim();
@@ -74,7 +97,7 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
             const pending = listFiles(p.pendingDir, '.json')
                 .map((f) => readJson(path.join(p.pendingDir, f)))
                 .filter(Boolean);
-            let mine = primary ? pending.find((t) => t.role === primary && (!t.status || t.status === '')) : null;
+            let mine = primary ? pending.find((t) => t.role === primary && (!t.status || t.status === '') && depsMet(p, t)) : null;
             if (!mine && !isEmpty) {
                 // ③ 待修改：自己 claimed/ 里 status=待修改 且 role 匹配
                 const mineDir = path.join(p.claimedDir, `${name}-${primary}`);
@@ -85,7 +108,7 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
             }
             if (!mine && !isEmpty) {
                 // ④ 副角色：pending 里 secondary 匹配
-                mine = pending.find((t) => secondary.includes(t.role) && (!t.status || t.status === ''));
+                mine = pending.find((t) => secondary.includes(t.role) && (!t.status || t.status === '') && depsMet(p, t));
             }
             if (mine) {
                 // 待修改任务已在 claimed/ 内（非 pending），无需再原子认领；新任务走 atomicClaim
