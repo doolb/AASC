@@ -62,6 +62,9 @@ test('端到端：role 不匹配的任务不被认领', async () => {
     for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
     writeText(p.roleFile('backend'), '# 后端');
     writeJson(p.taskFile('t2'), { id: 't2', title: '后端任务', role: 'backend', requirement: '做后端', priority: 'high', createdAt: 1, references: [] });
+    // 已有 backend 角色的在线 agent（carol，用测试进程 PID 模拟存活 lock）：
+    // 防撞车——bob 空闲也不会自动切换到已有在线 agent 的角色，t2 保持无人认领
+    writeText(p.roleLockFile('carol', 'backend'), `${process.pid} 1`);
 
     const { start } = require('../tools/poll.js');
     const app = start({ root, primary: 'frontend', name: 'bob', pollIntervalMs: 50 });
@@ -390,4 +393,28 @@ test('端到端：执行中写取消信号 → 任务 status=已取消', async (
     const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice-frontend', 'tC'), 'utf8'));
     assert.strictEqual(task.status, '已取消', '任务应标记为已取消');
     assert.ok(!fs.existsSync(path.join(p.cancelDir, 'tC')), '取消信号应被删除');
+});
+
+test('端到端：主/副角色无活时自动切到有积压任务且无在线 agent 的角色', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端');
+    writeText(p.roleFile('backend-media'), '# 后端媒体');
+    // frontend 无任务，backend-media 有积压任务
+    writeJson(p.taskFile('t11'), { id: 't11', title: '任务11', role: 'backend-media', requirement: '做后端媒体', priority: 'high', createdAt: 1, references: [], status: '', depends: [], level: 'L4' });
+
+    const resultFile = p.resultFile('t11');
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, primary: 'frontend', name: 'alice', command: process.execPath,
+        buildArgs: () => ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify({ status: 'completed', summary: 'ok', tags: [], learnings: [], output: 'x' })})`],
+        pollIntervalMs: 50
+    });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.roleBusyFile('alice', 'backend-media')), 5000);
+    app.stop();
+
+    assert.ok(fs.existsSync(p.claimedTaskFile('alice-backend-media', 't11')), '应切到 backend-media 并认领任务');
+    assert.ok(fs.existsSync(p.roleLockFile('alice', 'backend-media')), '新主角色目录应有 lock');
 });

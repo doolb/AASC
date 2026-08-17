@@ -32,6 +32,23 @@ function depsMet(p, task) {
     return true;
 }
 
+// 某角色是否有在线 agent：members/<名>-<角色>/lock 存在且 PID 存活。
+// 只统计成员目录（<名>-<角色>），排除 main 协调者目录（main 不是任务执行 agent）。
+// 空闲自动切换用它防撞车：该角色已有在线 agent（lock 未清且 PID 活着）时，不把主角色切过去。
+function roleHasOnlineAgent(p, role) {
+    const suffix = '-' + role;
+    for (const dir of listDirs(p.membersDir)) {
+        if (dir === 'main') continue;          // main 是协调者，非任务执行 agent
+        if (!dir.endsWith(suffix)) continue;   // 只看该角色的成员目录
+        const lockText = readText(path.join(p.membersDir, dir, 'lock'));
+        if (lockText) {
+            const pid = parseInt(lockText.split(' ')[0], 10);
+            if (isAlive(pid)) return true;
+        }
+    }
+    return false;
+}
+
 // 启动子 agent（或 main/空角色）：创建成员、lock、进入轮询循环
 function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent', command = 'claude', buildArgs, pollIntervalMs = DEFAULT_POLL_MS, onTaskDone }) {
     primary = String(primary || '').trim();
@@ -116,6 +133,23 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 if (ok) {
                     await executeTask({ p, root, role: mine.role, name, activeRole: primary, mine, command, buildArgs, secondary });
                     if (onTaskDone) await onTaskDone();
+                }
+            }
+            if (!mine && !isEmpty) {
+                // ⑤ 空闲自动切换：主/副/待修改/指派都无活 → 探测 pending 有积压角色且无在线 agent → 切主角色
+                const target = pending.find((t) =>
+                    (!t.status || t.status === '') &&
+                    t.role !== primary && !secondary.includes(t.role) &&
+                    !roleHasOnlineAgent(p, t.role)
+                );
+                if (target) {
+                    console.log(`[workgroup] 空闲自动切换：主角色 ${primary || '空'} → ${target.role}`);
+                    // 切换：删旧 lock、写新 lock + role.md
+                    if (primary) fs.rmSync(p.roleLockFile(name, primary), { force: true });
+                    primary = target.role;
+                    ensureDir(p.roleDir(name, primary));
+                    writeText(p.roleMemberRoleFile(name, primary), serializeRole({ primary, secondary }));
+                    writeText(p.roleLockFile(name, primary), `${process.pid} ${Date.now()}`);
                 }
             }
             await sleep(pollIntervalMs);
