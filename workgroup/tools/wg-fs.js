@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-// 返回工作区各关键路径
+// 返回工作区各关键路径（角色目录按 <名>-<角色> 隔离）
 function paths(root) {
     return {
         rolesDir: path.join(root, 'roles'),
@@ -11,11 +11,21 @@ function paths(root) {
         pendingDir: path.join(root, 'tasks', 'pending'),
         claimedDir: path.join(root, 'tasks', 'claimed'),
         resultsDir: path.join(root, 'results'),
-        memberDir: (name) => path.join(root, 'members', name),
+        cancelDir: path.join(root, 'tasks', 'cancel'),
+        mainLockFile: path.join(root, 'members', 'main', 'lock'),
+        // 角色目录：members/<名>-<角色>/
+        roleDir: (name, role) => path.join(root, 'members', role ? `${name}-${role}` : name),
+        roleLockFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'lock'),
+        roleBusyFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'busy'),
+        roleHistoryFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'history.md'),
+        roleMemberRoleFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'role.md'),
+        roleCurrentTaskFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'current-task'),
         roleFile: (name) => path.join(root, 'roles', `${name}.md`),
         taskFile: (id) => path.join(root, 'tasks', 'pending', `${id}.json`),
         claimedTaskFile: (agent, id) => path.join(root, 'tasks', 'claimed', agent, `${id}.json`),
         resultFile: (id) => path.join(root, 'results', `${id}.json`),
+        // 旧签名保留向后兼容（Task 2 重构 poll.js 后迁移新 role* 函数）
+        memberDir: (name) => path.join(root, 'members', name),
         historyFile: (name) => path.join(root, 'members', name, 'history.md'),
         lockFile: (name) => path.join(root, 'members', name, 'lock'),
         busyFile: (name) => path.join(root, 'members', name, 'busy'),
@@ -101,20 +111,16 @@ function isAlive(pid) {
     }
 }
 
-// 执行子 agent（默认 claude --print），等待结束并检查结果文件是否写入
+// 执行子 agent（默认 claude --print），stdio inherit 实时输出到 poll 终端。
+// 返回 { child, done }：child 立即可 kill（取消用），done 是 close/error 的 promise。
 function spawnClaude({ command, args, cwd, resultFile }) {
-    return new Promise((resolve) => {
-        // stdio 全部 ignore：poll.js 只看结果文件，不读子进程输出。
-        // 若用默认 'pipe' 且不消费 stdout/stderr，子进程写满 ~64KB OS 管道缓冲后
-        // 阻塞退出，'close' 事件永不触发 → await 永久挂起（子 agent 卡死）。
-        const child = spawn(command, args, { cwd, stdio: ['ignore', 'ignore', 'ignore'] });
-        child.on('close', (code) => {
-            resolve({ code, resultWritten: fs.existsSync(resultFile) });
-        });
-        child.on('error', (err) => {
-            resolve({ code: -1, error: err.message, resultWritten: false });
-        });
+    // stdio 用 'inherit'：子进程输出直接打到 poll.js 所在终端，无管道缓冲、不会死锁。
+    const child = spawn(command, args, { cwd, stdio: ['inherit', 'inherit', 'inherit'] });
+    const done = new Promise((resolve) => {
+        child.on('close', (code) => resolve({ code, resultWritten: fs.existsSync(resultFile) }));
+        child.on('error', (err) => resolve({ code: -1, error: err.message, resultWritten: false }));
     });
+    return { child, done };
 }
 
 module.exports = { paths, ensureDir, readJson, writeJson, readText, writeText, listDirs, listFiles, atomicClaim, isAlive, spawnClaude };

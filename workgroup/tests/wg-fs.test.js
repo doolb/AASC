@@ -70,12 +70,52 @@ test('isAlive 判断进程存活', () => {
 test('spawnClaude 执行后返回 code 与 resultWritten', async () => {
     const root = tmpRoot();
     const resultFile = path.join(root, 'r.json');
-    const { code, resultWritten } = await spawnClaude({
+    const { child, done } = spawnClaude({
         command: process.execPath,
         args: ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, '{}')`],
         cwd: root,
         resultFile
     });
-    assert.strictEqual(code, 0);
-    assert.strictEqual(resultWritten, true);
+    assert.ok(child, '应返回 child 句柄');
+    const res = await done;
+    assert.strictEqual(res.code, 0);
+    assert.strictEqual(res.resultWritten, true);
+});
+
+test('paths 提供角色目录与取消目录', () => {
+    const p = paths('/wg');
+    assert.strictEqual(p.cancelDir, path.join('/wg', 'tasks', 'cancel'));
+    assert.strictEqual(p.roleDir('alice', 'frontend'), path.join('/wg', 'members', 'alice-frontend'));
+    assert.strictEqual(p.roleLockFile('alice', 'frontend'), path.join('/wg', 'members', 'alice-frontend', 'lock'));
+    assert.strictEqual(p.roleHistoryFile('alice', 'frontend'), path.join('/wg', 'members', 'alice-frontend', 'history.md'));
+    assert.strictEqual(p.mainLockFile, path.join('/wg', 'members', 'main', 'lock'));
+});
+
+test('spawnClaude 返回 child 句柄且结果文件写入', async () => {
+    const root = tmpRoot();
+    const resultFile = path.join(root, 'r.json');
+    const { child, done } = spawnClaude({
+        command: process.execPath,
+        args: ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, '{}')`],
+        cwd: root,
+        resultFile
+    });
+    assert.ok(child, '应返回 child 句柄');
+    const res = await done;
+    assert.strictEqual(res.resultWritten, true);
+});
+
+test('spawnClaude child 可被 kill（取消用）', async () => {
+    const root = tmpRoot();
+    const resultFile = path.join(root, 'r.json');
+    const { child, done } = spawnClaude({
+        command: process.execPath,
+        args: ['-e', 'setTimeout(()=>{}, 5000)'],
+        cwd: root,
+        resultFile
+    });
+    assert.ok(child.pid, 'child 应有 pid');
+    try { process.kill(child.pid, 'SIGTERM'); } catch (_) {}
+    const res = await done;
+    assert.strictEqual(res.code, null, '被 kill 后 code 应为 null');
 });
