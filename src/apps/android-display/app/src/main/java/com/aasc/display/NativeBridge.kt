@@ -116,6 +116,12 @@ class NativeBridge(
     // 识别串行化：单线程执行器避免并发识别（与服务器单请求语义一致），future.get 带超时
     private val asrExecutor = Executors.newSingleThreadExecutor()
 
+    // ---- 声纹识别桥（speaker identification / 多人分割）----
+    private val voiceprintModelManager = VoiceprintModelManager(webView.context)
+    private var voiceprintEnabled = false
+    private var voiceprintThreshold = 0.5f
+    private var voiceprintMultiSpeaker = false
+
     // 同步截图：JS 侧调用即阻塞等待主线程完成 WebView.draw，返回 JSON
     // （JS 函数传 String 参数的回调方式在 WebView 里不可靠，改用同步返回）
     @JavascriptInterface
@@ -232,6 +238,141 @@ class NativeBridge(
             JSONObject().put("error", "识别超时").toString()
         } catch (e: Exception) {
             JSONObject().put("error", e.message ?: "识别失败").toString()
+        }
+    }
+
+    // 查询声纹引擎状态：{"ready":true|false,"dim":192,"speakers":["妲己"]}
+    @JavascriptInterface
+    fun voiceprintStatus(): String {
+        return try {
+            JSONObject()
+                .put("ready", VoiceprintEngine.ready)
+                .put("dim", VoiceprintEngine.dim)
+                .put("speakers", VoiceprintEngine.speakers)
+                .toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "声纹状态异常").toString()
+        }
+    }
+
+    // 配置声纹引擎：{"enabled":bool,"threshold":0.5,"multiSpeaker":bool}；触发模型下载+引擎加载
+    // 结果经 window.onVoiceprintModel 回调（downloading/ready/error）
+    @JavascriptInterface
+    fun voiceprintConfigure(configJson: String): String {
+        return try {
+            val cfg = org.json.JSONObject(configJson)
+            voiceprintEnabled = cfg.optBoolean("enabled", true)
+            voiceprintThreshold = cfg.optDouble("threshold", 0.5).toFloat()
+            voiceprintMultiSpeaker = cfg.optBoolean("multiSpeaker", true)
+            if (!voiceprintEnabled) return JSONObject().put("ok", true).toString()
+            val baseUrl = serverBaseUrl()
+            if (baseUrl.isEmpty()) return JSONObject().put("error", "无法确定服务器地址").toString()
+            voiceprintModelManager.ensureModel(baseUrl, voiceprintMultiSpeaker) { event ->
+                if (event.optString("state") == "ready") {
+                    val loaded = VoiceprintEngine.load(
+                        webView.context, voiceprintModelManager.embeddingModelPath,
+                        if (voiceprintMultiSpeaker) voiceprintModelManager.segmentationModelPath else null,
+                        voiceprintThreshold, voiceprintMultiSpeaker)
+                    event.put("engineReady", loaded)
+                }
+                val js = "window.onVoiceprintModel && window.onVoiceprintModel(${event.toString()});"
+                webView.evaluateJavascript(js, null)
+            }
+            JSONObject().put("ok", true).toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "声纹配置异常").toString()
+        }
+    }
+
+    // 单段声纹匹配：裸 PCM base64 → {"speaker":人名|null} 或 {"error":"..."}
+    @JavascriptInterface
+    fun voiceprintMatch(pcmBase64: String): String {
+        return try {
+            if (!voiceprintEnabled || !voiceprintModelManager.isReady || !VoiceprintEngine.ready) {
+                return JSONObject().put("error", "模型未就绪").toString()
+            }
+            val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
+            val samples = AsrPcm.decodeS16(bytes)
+            val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(20, TimeUnit.SECONDS)
+            val speaker = VoiceprintEngine.match(embedding)
+            JSONObject().put("speaker", speaker ?: JSONObject.NULL).put("dim", VoiceprintEngine.dim).toString()
+        } catch (e: java.util.concurrent.TimeoutException) {
+            JSONObject().put("error", "声纹识别超时").toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "声纹识别失败").toString()
+        }
+    }
+
+    // 多人分割+逐段识别：裸 PCM base64 → {"segments":[{start,end,text,speaker}]} 或 {"error":"..."}
+    @JavascriptInterface
+    fun voiceprintDiarize(pcmBase64: String): String {
+        return try {
+            if (!voiceprintEnabled || !voiceprintModelManager.isReady || !VoiceprintEngine.ready) {
+                return JSONObject().put("error", "模型未就绪").toString()
+            }
+            val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
+            val samples = AsrPcm.decodeS16(bytes)
+            val segJson = asrExecutor.submit<org.json.JSONArray> {
+                val segments = VoiceprintEngine.diarize(samples)
+                val arr = org.json.JSONArray()
+                for (seg in segments) {
+                    val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
+                    val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
+                    val segSamples = samples.copyOfRange(startIdx, endIdx)
+                    val text = if (segSamples.size >= 1600) AsrEngine.recognize(segSamples) else ""
+                    val emb = VoiceprintEngine.extract(segSamples)
+                    val speaker = VoiceprintEngine.match(emb)
+                    arr.put(org.json.JSONObject()
+                        .put("start", seg.start.toDouble())
+                        .put("end", seg.end.toDouble())
+                        .put("text", text)
+                        .put("speaker", speaker ?: JSONObject.NULL))
+                }
+                arr
+            }.get(30, TimeUnit.SECONDS)
+            JSONObject().put("segments", segJson).toString()
+        } catch (e: java.util.concurrent.TimeoutException) {
+            JSONObject().put("error", "多人分割超时").toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "多人分割失败").toString()
+        }
+    }
+
+    // 声纹特征提取（register display 模式中转用）：裸 PCM base64 → {"dim":192,"embedding":[...]} 或 {"error":"..."}
+    @JavascriptInterface
+    fun voiceprintExtract(pcmBase64: String): String {
+        return try {
+            if (!voiceprintModelManager.isReady || !VoiceprintEngine.ready) {
+                return JSONObject().put("error", "模型未就绪").toString()
+            }
+            val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
+            val samples = AsrPcm.decodeS16(bytes)
+            val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(20, TimeUnit.SECONDS)
+            val arr = org.json.JSONArray()
+            for (v in embedding) arr.put(v.toDouble())
+            JSONObject().put("dim", embedding.size).put("embedding", arr).toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "声纹提取失败").toString()
+        }
+    }
+
+    // 重建本地声纹库（幂等）：display.html 已用 fetch 拉取权威库 JSON（WebView 信任自签名证书），
+    // Kotlin 侧只负责解析+重建；结果触发 window.onVoiceprintDb
+    @JavascriptInterface
+    fun voiceprintSyncDb(dbJson: String): String {
+        return try {
+            val db = org.json.JSONObject(dbJson)
+            val speakers = VoiceprintDbCodec.speakersFromDb(db)
+            VoiceprintEngine.setDb(speakers)
+            val msg = JSONObject().put("state", "ready").put("speakers", speakers.keys.toList())
+            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${msg.toString()});"
+            webView.evaluateJavascript(js, null)
+            JSONObject().put("ok", true).toString()
+        } catch (e: Exception) {
+            val msg = JSONObject().put("state", "error").put("error", e.message ?: "声纹库同步失败")
+            val js = "window.onVoiceprintDb && window.onVoiceprintDb(${msg.toString()});"
+            webView.evaluateJavascript(js, null)
+            JSONObject().put("error", e.message ?: "声纹库同步失败").toString()
         }
     }
 
