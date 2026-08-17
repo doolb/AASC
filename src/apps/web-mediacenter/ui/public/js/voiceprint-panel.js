@@ -22,6 +22,22 @@
             document.getElementById('vpExtractionSel').addEventListener('change', () => this.saveConfig());
             this.loadConfig();
             this.refreshList();
+            this.bindRemoveDelegation();
+        },
+
+        // 委托点击：读取 data-name 删除（避免内联 onclick 的用户输入注入）
+        bindRemoveDelegation() {
+            const list = document.getElementById('vpSpeakerList');
+            if (list && !list.dataset.vpBound) {
+                list.dataset.vpBound = '1';
+                list.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.vp-remove-btn');
+                    if (btn) {
+                        const name = btn.getAttribute('data-name');
+                        if (name) this.remove(name);
+                    }
+                });
+            }
         },
 
         async loadConfig() {
@@ -113,13 +129,12 @@
                     list.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,0.4);">暂无已注册声纹</span>';
                     return;
                 }
-                list.innerHTML = names.map(n => {
-                    const safe = escapeHtml(n);
-                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);">' +
-                        '<span>' + safe + '</span>' +
-                        '<button class="control-btn" onclick="VoiceprintPanel.remove(\'' + safe.replace(/'/g, "\\'") + '\')">删除</button>' +
-                        '</div>';
-                }).join('');
+                list.innerHTML = names.map(n =>
+                    '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08);">' +
+                    '<span>' + escapeHtml(n) + '</span>' +
+                    '<button class="control-btn vp-remove-btn" data-name="' + escapeHtml(n) + '">删除</button>' +
+                    '</div>'
+                ).join('');
             } catch (e) { console.warn('加载声纹列表失败:', e); }
         },
 
