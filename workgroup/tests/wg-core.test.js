@@ -110,3 +110,23 @@ test('buildSummary 提取专长画像与经验约定，不含最近记录', () =
     assert.ok(!s.includes('最近记录'));
     assert.ok(!s.includes('旧任务'));
 });
+
+test('buildPrompt 带 reviewComment 时注入修改要求段', () => {
+    const p = buildPrompt({
+        role: 'frontend', name: 'alice',
+        summary: '擅长UI',
+        taskFile: '/t.json', resultFile: '/r.json',
+        reviewComment: '按钮颜色改蓝色'
+    });
+    assert.ok(p.includes('【修改要求（上次验收打回）】'));
+    assert.ok(p.includes('按钮颜色改蓝色'));
+});
+
+test('buildPrompt 不带 reviewComment 时不注入修改要求段', () => {
+    const p = buildPrompt({
+        role: 'frontend', name: 'alice',
+        summary: '擅长UI',
+        taskFile: '/t.json', resultFile: '/r.json'
+    });
+    assert.ok(!p.includes('【修改要求（上次验收打回）】'));
+});

@@ -39,13 +39,14 @@ function roleTemplate(name) {
 `;
 }
 
-// 子 agent 执行任务的 prompt：注入角色总结，指示读任务/写结果
-function buildPrompt({ role, name, summary, taskFile, resultFile }) {
+// 子 agent 执行任务的 prompt：注入角色总结，指示读任务/写结果；可选注入验收打回修改要求
+function buildPrompt({ role, name, summary, taskFile, resultFile, reviewComment }) {
+    const review = reviewComment ? `\n【修改要求（上次验收打回）】\n${reviewComment}\n` : '';
     return `你是 workgroup 的「${role}」角色成员「${name}」。
 
 【角色总结】
 ${summary || '（暂无总结）'}
-
+${review}
 【任务】
 读取任务文件：${taskFile}
 按任务文件中的 requirement 完成任务。
