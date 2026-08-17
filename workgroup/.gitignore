@@ -5,3 +5,9 @@ members/*/current-task
 
 # 待认领队列（运行时状态）
 tasks/pending/
+
+# main 协调者身份（运行时）
+members/main/
+
+# 取消信号（运行时）
+tasks/cancel/
