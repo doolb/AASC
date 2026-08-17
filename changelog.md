@@ -4,6 +4,22 @@
 
 ### 新增
 
+- ✅ [2026-08-17] workgroup 大增量：角色拆分/切换/依赖门控/取消/原始输出
+  - 按项目架构拆分 21 角色文件（前端 3：ui/media/task；后台 5：aasc/media/task/general/server-app；专项 8：display/3d/observability/chat/auto-brain/asr/tts/voice-capture；平台 android；框架 framework；测试 tester；协调 main/review），删旧 frontend/voice
+  - 主/副角色 + 每角色独立目录（members/<名>-<角色>/，历史按角色隔离）；role.md 存 primary/secondary
+  - 启动模式：无 --role 检测 members/main/lock → 无 main 成为 main 协调者 / 有 main 成为空角色（只认 assignedTo）；带 --role 为子 agent
+  - 匹配顺序：指派(assignedTo) → 主角色 → 待修改 → 副角色 → 空闲自动切换（有积压角色且无在线 agent 防撞车，切了不回）
+  - depends 依赖门控：依赖全已验收才可认领（多角色协调）
+  - 任务取消：tasks/cancel/<id> 信号 → kill 子进程 → status=已取消
+  - claude 原始输出：spawnClaude stdio inherit，实时打到 poll 终端
+  - 等级路由：main 用 analyze-requirement-level 定级（L4-L7）选路由策略
+  - 改动文件：
+    - workgroup/tools/wg-fs.js（角色目录路径 + spawnClaude {child,done} + stdio inherit）
+    - workgroup/tools/wg-core.js（role.md 序列化/解析）
+    - workgroup/tools/poll.js（角色模型/切换/指派/依赖门控/取消）
+    - workgroup/roles/*.md（21 角色定义，删 frontend/voice）
+    - workgroup/README.md、.gitignore、docs/design.md、docs/spec.md、docs/plan-2026-08-17-roles-cancel-output.md
+    - workgroup/tests/（46 测试全绿：core 16 + fs 11 + e2e 19）
 - ✅ [2026-08-17] workgroup 任务状态 + 验收打回
   - 任务文件加 status 字段（空=未开始 / 进行中 / 已完成 / 待修改 / 已验收），认领后写进行中、完成后写已完成
   - 验收打回：小改动写 reviewComment + 待修改，原 agent 重做；大改动投 role=review 任务，review 角色审查
