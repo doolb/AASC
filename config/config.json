@@ -50,7 +50,7 @@
     "reminderTemplatePrefix": "",
     "reminderTemplateSuffix": "",
     "routing": {
-      "weather": "llm",
+      "weather": "system",
       "search": "llm"
     }
   },
@@ -158,62 +158,104 @@
     "192.168.1.6": {
       "currentMedia": {
         "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
+        "url": "https://192.168.1.39:8081/uploads/1774668209326_%E7%8E%8B%E8%80%85%E8%8D%A3%E8%80%80%E7%91%B6%E6%97%B6%E4%B9%8B%E7%A5%88%E6%84%BF.mp4",
         "mediaType": "video",
-        "correlationId": "url-1781882190209-i0rt"
+        "correlationId": "url-1786885598650-opvv"
       },
       "rotation": 90,
-      "fit": "height",
+      "fit": "cover",
       "crop": {
-        "x": 6.444065034675735,
-        "y": 12.868369129216726,
-        "width": 92.76437823709207,
-        "height": 68.12313812671995
+        "x": 0,
+        "y": 31.249823729836205,
+        "width": 100,
+        "height": 37.50035254032759
       },
-      "volume": 100,
+      "volume": 8,
       "playlist": [],
-      "isPlaying": true
+      "isPlaying": false,
+      "currentPlaylist": null,
+      "currentHtmlScroll": {
+        "mode": "smooth",
+        "loop": true,
+        "speed": "slow"
+      }
     },
     "192.168.1.33": {
       "currentMedia": {
         "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/1774541075724_27856_1.mp4",
-        "mediaType": "video",
-        "correlationId": "url-1781881766012-88ri"
+        "url": "https://192.168.1.39:8081/uploads/html/%5BVAM_3D%5D%E6%97%A0%E9%99%90%E6%9A%96%E6%9A%96%E8%9C%98%E8%9B%9B%E5%A5%97-%E8%90%9D%E8%8E%89%E8%8A%AD%E8%95%BE%E8%A3%99%E8%BD%AE%E5%A5%B8%20-%20%E6%97%A0%E9%99%90%E5%88%B6%E8%B5%84%E6%BA%90%E5%8C%BA%20-%20Sperte%E3%81%AE%E6%AC%A1%E5%85%83%E8%8C%B6%E9%A6%86.mhtml",
+        "mediaType": "html",
+        "correlationId": "url-1786776643852-nw84"
       },
-      "rotation": 90,
-      "fit": "contain",
+      "rotation": 0,
+      "fit": "crop",
       "crop": {
         "x": 0,
-        "y": 10.954625947260237,
-        "width": 100,
-        "height": 63.051170269067924
+        "y": 0,
+        "width": 55.99078341013825,
+        "height": 100
       },
       "volume": 100,
       "playlist": [],
-      "isPlaying": false
+      "isPlaying": false,
+      "capabilities": {
+        "mediaRendering": false,
+        "voicePlayback": true,
+        "voiceRecording": false,
+        "voiceRecognition": true,
+        "displayText": false
+      },
+      "userCapabilities": {
+        "mediaRendering": false,
+        "voicePlayback": true,
+        "voiceRecording": false,
+        "voiceRecognition": true,
+        "displayText": false
+      },
+      "currentPlaylist": null
+    },
+    "127.0.0.1": {
+      "currentMedia": {
+        "type": "media",
+        "mediaType": "html",
+        "fileName": "e2e-test.html",
+        "data": "PGh0bWw+PGJvZHkgc3R5bGU9Im1hcmdpbjowIj48ZGl2IHN0eWxlPSJoZWlnaHQ6MzAwMHB4O2JhY2tncm91bmQ6bGluZWFyLWdyYWRpZW50KCM0NDQsIzg4OCkiPjxpbnB1dCBpZD0idCIgcGxhY2Vob2xkZXI9Iua1i+ivlei+k+WFpeahhiI+PGJ1dHRvbiBpZD0iYiIgb25jbGljaz0id2luZG93Ll9fY2xpY2tlZD0xIj7ngrnmiJE8L2J1dHRvbj48cD5zY3JvbGwgdGVzdCBjb250ZW50PC9wPjwvZGl2PjwvYm9keT48L2h0bWw+",
+        "correlationId": "media-1786777511717-ifwt"
+      },
+      "rotation": 0,
+      "fit": "contain",
+      "crop": {
+        "x": 25,
+        "y": 25,
+        "width": 50,
+        "height": 50
+      },
+      "volume": 100,
+      "playlist": []
     }
   },
   "deviceEvents": {
     "192.168.1.101": {
       "onConnect": "早上好",
       "onDisconnect": "晚安"
+    },
+    "192.168.1.33": {
+      "onConnect": "早上好",
+      "onDisconnect": "晚安"
     }
   },
   "logReportDisplay": {
-    "enabled": true,
+    "enabled": false,
     "level": "debug"
   },
   "logReportControl": {
     "enabled": true,
     "level": "debug"
   },
-  "logBlocklist": [
-    "内存"
-  ],
+  "logBlocklist": [],
   "chat": {
     "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
-    "model": "Qwen3.5-Plus",
+    "model": "Qwen3.6-Flash",
     "maxTokens": 65536,
     "temperature": 0.7,
     "apiKey": "",
@@ -233,7 +275,7 @@
       {
         "name": "qwen3.5",
         "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
-        "model": "Qwen3.5-Plus",
+        "model": "Qwen3.6-Flash",
         "maxTokens": 65536,
         "temperature": 0.7,
         "contextCount": 10,
@@ -242,6 +284,12 @@
       }
     ],
     "promptFormat": "raw"
+  },
+  "voiceprint": {
+    "enabled": true,
+    "extraction": "server",
+    "threshold": 0.5,
+    "multiSpeaker": true
   },
   "logCategoryFilter": null,
   "timeAnnounce": {
@@ -261,7 +309,14 @@
       "height": 100
     },
     "volume": 100,
-    "playlist": []
+    "playlist": [],
+    "sleep": {
+      "enabled": false,
+      "startHour": 23,
+      "endHour": 8,
+      "deepStartHour": 1,
+      "deepEndHour": 6
+    }
   },
   "task": {
     "autoStartServices": [

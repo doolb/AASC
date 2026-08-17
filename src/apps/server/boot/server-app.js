@@ -1110,6 +1110,43 @@ app.get('/api/voiceprint/model/:filename', (req, res) => {
     stream.pipe(res);
 });
 
+// 声纹识别配置（GET 返回当前配置；POST 更新配置并广播给所有显示端）
+app.get('/api/voiceprint/config', (req, res) => {
+    res.json({
+        status: 'success',
+        enabled: config.get('voiceprint.enabled', true),
+        extraction: config.get('voiceprint.extraction', 'server'),
+        threshold: config.get('voiceprint.threshold', 0.5),
+        multiSpeaker: config.get('voiceprint.multiSpeaker', true)
+    });
+});
+
+app.post('/api/voiceprint/config', (req, res) => {
+    const { enabled, extraction, threshold, multiSpeaker } = req.body || {};
+    if (extraction !== undefined && !['server', 'display'].includes(extraction)) {
+        return res.status(400).json({ status: 'error', message: 'extraction 只能是 server 或 display' });
+    }
+    if (threshold !== undefined && (typeof threshold !== 'number' || threshold <= 0 || threshold > 1)) {
+        return res.status(400).json({ status: 'error', message: 'threshold 必须是 (0,1] 的数值' });
+    }
+    if (enabled !== undefined) config.set('voiceprint.enabled', !!enabled);
+    if (extraction !== undefined) config.set('voiceprint.extraction', extraction);
+    if (threshold !== undefined) config.set('voiceprint.threshold', threshold);
+    if (multiSpeaker !== undefined) config.set('voiceprint.multiSpeaker', !!multiSpeaker);
+    config.saveConfig();
+    // 广播给所有显示端，display.html 收到后 nativeBridge.voiceprintConfigure 重载引擎
+    displayClients.forEach((displayData, displayId) => {
+        sendToDisplay(displayId, {
+            type: 'voiceprintConfig',
+            enabled: config.get('voiceprint.enabled', true),
+            extraction: config.get('voiceprint.extraction', 'server'),
+            threshold: config.get('voiceprint.threshold', 0.5),
+            multiSpeaker: config.get('voiceprint.multiSpeaker', true)
+        });
+    });
+    res.json({ status: 'success', message: '声纹配置已更新' });
+});
+
 app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
     try {
         if (!req.file) {
