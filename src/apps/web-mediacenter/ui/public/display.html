@@ -93,6 +93,38 @@
         // APK 原生 ASR 引擎（sherpa-onnx AAR）：检测到桥方法即认为可用，不再加载 WASM
         const nativeAsrAvailable = !!(window.NativeDisplay && window.NativeDisplay.asrStatus);
         let nativeAsrReady = false;
+        // APK 原生声纹引擎：检测到桥方法即认为可用
+        const nativeVoiceprintAvailable = !!(window.NativeDisplay && window.NativeDisplay.voiceprintMatch);
+        let voiceprintEnabled = false;
+        let voiceprintReady = false;
+        let voiceprintMultiSpeaker = true;
+
+        // 声纹模型下载/引擎加载事件（NativeBridge voiceprintConfigure 触发）
+        window.onVoiceprintModel = function(payload) {
+            if (!payload) return;
+            if (payload.state === 'ready' && payload.engineReady) {
+                voiceprintReady = true;
+                updateVoiceTextDisplay('声纹引擎已就绪', true);
+                setTimeout(() => updateVoiceTextDisplay('', true), 2000);
+            } else if (payload.state === 'error') {
+                voiceprintReady = false;
+                updateVoiceTextDisplay('声纹模型下载失败: ' + (payload.error || '未知错误'), true);
+                setTimeout(() => updateVoiceTextDisplay('', true), 4000);
+            }
+        };
+
+        // 声纹库同步结果（NativeBridge voiceprintSyncDb 触发）
+        window.onVoiceprintDb = function(payload) {
+            if (!payload) return;
+            if (payload.state === 'ready') {
+                voiceprintReady = true;
+                const n = (payload.speakers || []).length;
+                console.log('[声纹] 声纹库已同步', n, '人');
+            } else if (payload.state === 'error') {
+                voiceprintReady = false;
+                console.warn('[声纹] 声纹库同步失败:', payload.error);
+            }
+        };
         let localAsrStreaming = false;
         // 原生 ASR 模型下载/加载事件（由 NativeBridge evaluateJavascript 触发）
         window.onNativeAsrModel = function(payload) {
@@ -2572,6 +2604,73 @@
                         return;
                     }
 
+                    if (data.type === 'voiceprintConfig') {
+                        voiceprintEnabled = !!data.enabled;
+                        voiceprintMultiSpeaker = !!data.multiSpeaker;
+                        if (nativeVoiceprintAvailable) {
+                            nativeBridge.voiceprintConfigure(JSON.stringify({
+                                enabled: voiceprintEnabled,
+                                threshold: data.threshold || 0.5,
+                                multiSpeaker: voiceprintMultiSpeaker
+                            }));
+                            if (voiceprintEnabled) {
+                                // 拉取权威库重建本地声纹库（WebView 信任自签名证书，走 fetch）
+                                fetch('/api/voiceprint/db')
+                                    .then(r => r.json())
+                                    .then(db => nativeBridge.voiceprintSyncDb(JSON.stringify(db)))
+                                    .catch(e => console.warn('[声纹] 拉取声纹库失败:', e));
+                            }
+                        }
+                        return;
+                    }
+
+                    if (data.type === 'speakerDbUpdated') {
+                        // 声纹库变更 → 重拉重建（静默，不打扰）
+                        if (nativeVoiceprintAvailable && voiceprintEnabled) {
+                            fetch('/api/voiceprint/db')
+                                .then(r => r.json())
+                                .then(db => nativeBridge.voiceprintSyncDb(JSON.stringify(db)))
+                                .catch(e => console.warn('[声纹] 重拉声纹库失败:', e));
+                        }
+                        return;
+                    }
+
+                    if (data.type === 'voiceprintExtract') {
+                        // register display 模式：中转提取 → 回传 embedding
+                        if (nativeVoiceprintAvailable) {
+                            try {
+                                const res = JSON.parse(nativeBridge.voiceprintExtract(data.audioBase64));
+                                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                                    displayWs.send(JSON.stringify({
+                                        type: 'voiceprintExtracted',
+                                        requestId: data.requestId,
+                                        embedding: res.embedding || [],
+                                        error: res.error || ''
+                                    }));
+                                }
+                            } catch (e) {
+                                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                                    displayWs.send(JSON.stringify({
+                                        type: 'voiceprintExtracted',
+                                        requestId: data.requestId,
+                                        embedding: [],
+                                        error: e.message
+                                    }));
+                                }
+                            }
+                        } else {
+                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                                displayWs.send(JSON.stringify({
+                                    type: 'voiceprintExtracted',
+                                    requestId: data.requestId,
+                                    embedding: [],
+                                    error: '声纹桥不可用'
+                                }));
+                            }
+                        }
+                        return;
+                    }
+
                     if (data.type === 'asrConfig') {
                         if (nativeAsrAvailable) {
                             // APK 原生引擎：localAsrEnabled 关闭时把能力声明置 false
@@ -2827,7 +2926,8 @@
                 })(),
                 // APK 原生桥能力：真实像素截图 + 跨域输入注入
                 crossOriginControl: !!(nativeBridge && nativeBridge.injectTouch),
-                crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch)
+                crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch),
+                voiceprintAvailable: nativeVoiceprintAvailable
             };
             
             try {
@@ -3017,14 +3117,43 @@
                 }
                 try {
                     const pcmBase64 = await decodeAudioToPcmBase64(data.audioData);
-                    const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
-                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                        displayWs.send(JSON.stringify({
-                            type: 'asrResult',
-                            requestId: data.requestId,
-                            text: res.text || '',
-                            error: res.error || ''
-                        }));
+                    // 声纹分派：enabled+ready → 按 multiSpeaker 走单段匹配或多人分割；否则纯 ASR（speaker 缺省放行）
+                    if (nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady) {
+                        if (voiceprintMultiSpeaker) {
+                            const res = JSON.parse(nativeBridge.voiceprintDiarize(pcmBase64));
+                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                                displayWs.send(JSON.stringify({
+                                    type: 'asrResult',
+                                    requestId: data.requestId,
+                                    segments: res.segments || [],
+                                    error: res.error || ''
+                                }));
+                            }
+                        } else {
+                            const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
+                            const vp = JSON.parse(nativeBridge.voiceprintMatch(pcmBase64));
+                            const msg = {
+                                type: 'asrResult',
+                                requestId: data.requestId,
+                                text: res.text || '',
+                                error: res.error || vp.error || ''
+                            };
+                            // speaker 语义：vp.error → 声纹未就绪/不可用 → 不带 speaker（放行）；vp.speaker null → 可用但未匹配 → speaker:null（拦截）
+                            if (!vp.error) msg.speaker = vp.speaker || null;
+                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                                displayWs.send(JSON.stringify(msg));
+                            }
+                        }
+                    } else {
+                        const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
+                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                            displayWs.send(JSON.stringify({
+                                type: 'asrResult',
+                                requestId: data.requestId,
+                                text: res.text || '',
+                                error: res.error || ''
+                            }));
+                        }
                     }
                 } catch (e) {
                     if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -3434,23 +3563,44 @@
                 
                 const data = await response.json();
                 
-                if (data.status === 'success' && data.text) {
+                if (data.status === 'success') {
+                    // 多人分割：逐段独立触发命令（只含已识别声纹的段）
+                    if (data.segments && data.segments.length) {
+                        for (const seg of data.segments) {
+                            const segText = (seg.text || '').trim();
+                            if (!segText) continue;
+                            console.log('显示端分段识别:', segText, '->', seg.speaker);
+                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                                displayWs.send(JSON.stringify({
+                                    type: 'voiceInput',
+                                    text: segText,
+                                    isFinal: true,
+                                    fullText: segText,
+                                    speaker: seg.speaker
+                                }));
+                            }
+                        }
+                        return;
+                    }
+                    if (!data.text) return;
                     const recognizedText = data.text.trim();
                     console.log('显示端识别结果:', recognizedText);
-                    
+
                     consecutiveIgnoreCount = 0;
-                    
+
                     updateVoiceTextDisplay(recognizedText, true);
-                    
+
                     if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                        displayWs.send(JSON.stringify({
+                        const msg = {
                             type: 'voiceInput',
                             text: recognizedText,
                             isFinal: true,
                             fullText: recognizedText
-                        }));
+                        };
+                        if (data.speaker !== undefined) msg.speaker = data.speaker;
+                        displayWs.send(JSON.stringify(msg));
                     }
-                    
+
                     setTimeout(() => {
                         updateVoiceTextDisplay('', true);
                     }, 3000);
