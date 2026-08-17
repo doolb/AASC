@@ -57,4 +57,67 @@ ${summary || '（暂无总结）'}
 `;
 }
 
-module.exports = { genId, validateName, roleTemplate, buildPrompt, MAX_LEARNINGS, MAX_RECORDS };
+// 解析 history.md 三段内容
+function parseHistory(text) {
+    const profile = {};
+    const learnings = [];
+    const records = [];
+    if (!text) return { profile, learnings, records };
+    // 按标题分割：# 专长画像 / ## 经验约定 / ## 最近记录
+    const sections = text.split(/^(?=#)/m);
+    for (const sec of sections) {
+        if (sec.startsWith('# 专长画像')) {
+            const json = sec.replace(/^# 专长画像\s*/, '').trim();
+            try { Object.assign(profile, JSON.parse(json || '{}')); } catch (_) { /* 容错 */ }
+        } else if (sec.startsWith('## 经验约定')) {
+            const body = sec.replace(/^## 经验约定\s*/, '');
+            for (const line of body.split('\n')) {
+                const m = line.trim().match(/^-\s*(.+)$/);
+                if (m) learnings.push(m[1]);
+            }
+        } else if (sec.startsWith('## 最近记录')) {
+            const body = sec.replace(/^## 最近记录\s*/, '');
+            for (const line of body.split('\n')) {
+                const m = line.trim().match(/^-\s*(.+)$/);
+                if (m) {
+                    try { records.push(JSON.parse(m[1])); } catch (_) { /* 容错 */ }
+                }
+            }
+        }
+    }
+    return { profile, learnings, records };
+}
+
+// 序列化 history.md（保持三段格式）
+function serializeHistory({ profile, learnings, records }) {
+    const learnLines = learnings.map((l) => `- ${l}`).join('\n');
+    const recLines = records.map((r) => `- ${JSON.stringify(r)}`).join('\n');
+    return `# 专长画像\n${JSON.stringify(profile)}\n\n## 经验约定\n${learnLines}\n\n## 最近记录\n${recLines}\n`;
+}
+
+// 增量更新：专长累加、经验约定去重追加、最近记录追加，超限删最旧
+function updateHistory(oldText, { tags = [], learnings = [], record = null }) {
+    const h = parseHistory(oldText);
+    for (const tag of tags) {
+        if (tag) h.profile[tag] = (h.profile[tag] || 0) + 1;
+    }
+    for (const l of learnings) {
+        if (l && !h.learnings.includes(l)) h.learnings.push(l);
+    }
+    while (h.learnings.length > MAX_LEARNINGS) h.learnings.shift();
+    if (record) h.records.push(record);
+    while (h.records.length > MAX_RECORDS) h.records.shift();
+    return serializeHistory(h);
+}
+
+// 启动总结：提取专长画像与经验约定，不含最近记录（避免旧任务解法带偏）
+function buildSummary(text) {
+    const h = parseHistory(text);
+    const parts = [];
+    const profileLine = JSON.stringify(h.profile);
+    if (profileLine && profileLine !== '{}') parts.push(`专长画像：${profileLine}`);
+    if (h.learnings.length) parts.push(`经验约定：\n- ${h.learnings.join('\n- ')}`);
+    return parts.join('\n');
+}
+
+module.exports = { genId, validateName, roleTemplate, buildPrompt, parseHistory, updateHistory, buildSummary, MAX_LEARNINGS, MAX_RECORDS };
