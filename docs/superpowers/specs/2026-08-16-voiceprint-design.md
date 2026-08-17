@@ -80,7 +80,7 @@
 ### 4. 原生桥（NativeBridge 新增）
 
 ```kotlin
-// 单段声纹匹配：裸 PCM(16k mono s16le) base64，同步返回 {"speaker":"妲己"|null,"dim":192} 或 {"error":"..."}
+// 单段声纹匹配：裸 PCM(16k mono s16le) base64，同步返回 {"speaker":"妲己"|null,"dim":512} 或 {"error":"..."}
 // 特征提取在工作线程串行（复用 asrExecutor），future.get(20s)
 @JavascriptInterface fun voiceprintMatch(pcmBase64: String): String
 
@@ -88,7 +88,7 @@
 // 内部 diarization → 分段 → 每段 ASR+声纹匹配（multiSpeaker=true 时 display.html 优先调用这个）
 @JavascriptInterface fun voiceprintDiarize(pcmBase64: String): String
 
-// 查询声纹引擎状态：{"ready":true|false,"enabled":true|false,"dim":192,"speakers":["妲己","控制端"]}
+// 查询声纹引擎状态：{"ready":true|false,"enabled":true|false,"dim":512,"speakers":["妲己","控制端"]}
 // ready = embedding 模型已加载 + 库已同步；enabled = config voiceprint.enabled
 @JavascriptInterface fun voiceprintStatus(): String
 
@@ -184,7 +184,7 @@ POST /api/voiceprint/remove              # 删除某人声纹
 
 ## 性能与模型成本
 
-- embedding 模型 ~4MB（eres2net 系，192 维），每台 APK 必下（识别是本机做的）
+- embedding 模型 ~4MB（eres2net 系，512 维），每台 APK 必下（识别是本机做的）
 - segmentation 模型额外 ~几十MB，仅 `multiSpeaker=true` 时下载
 - 单人模式识别延迟 ≈ max(ASR, 声纹)；多人模式 ≈ diarization + 逐段 ASR+声纹（明显上升，低频可接受）
 

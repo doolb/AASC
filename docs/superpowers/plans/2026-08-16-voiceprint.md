@@ -4,13 +4,13 @@
 
 **Goal:** 在 android-display APK 的原生 sherpa-onnx 栈上叠加声纹识别：每段语音识别出说话人（`speaker`），支持一句对话多人说话时逐段归属（diarization）；服务器只处理识别到声纹的语音（`speaker` 匹配到声纹库才触发命令，未识别静默忽略）；控制端输入名字+录音注册，`voiceprint.extraction` 可配置服务器或中转 APK 提取；多台显示端经服务器权威库共享声纹。
 
-**Architecture:** 服务器权威库（`res/voiceprint/db.json` 持久化 + `speakerDbUpdated` 广播），APK 缓存全量库重建本地 `SpeakerEmbeddingManager` 做本机零 RTT 匹配，三端加载同一 embedding 模型（`3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx`，192 维）保证特征可比。识别沿现有 `asrAudio`/`asrResult` 中转协议扩展：`asrResult` 从 `{text}` 升级为 `{text, speaker}`（单段）或 `{segments:[{text,speaker,start,end}]}`（多人），服务器据此返回/忽略。关键语义：`speaker` 字段**缺省**（声纹未启用/模型未就绪）→ 放行；`speaker:null`（声纹启用但未匹配）→ 拦截。
+**Architecture:** 服务器权威库（`res/voiceprint/db.json` 持久化 + `speakerDbUpdated` 广播），APK 缓存全量库重建本地 `SpeakerEmbeddingManager` 做本机零 RTT 匹配，三端加载同一 embedding 模型（`3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx`，512 维）保证特征可比。识别沿现有 `asrAudio`/`asrResult` 中转协议扩展：`asrResult` 从 `{text}` 升级为 `{text, speaker}`（单段）或 `{segments:[{text,speaker,start,end}]}`（多人），服务器据此返回/忽略。关键语义：`speaker` 字段**缺省**（声纹未启用/模型未就绪）→ 放行；`speaker:null`（声纹启用但未匹配）→ 拦截。
 
 **Tech Stack:** Kotlin / sherpa-onnx AAR（SpeakerEmbeddingExtractor、SpeakerEmbeddingManager、OfflineSpeakerDiarization）、Node.js Express、WebSocket、原生 JavaScript。
 
 ## Global Constraints
 
-- 三端同模型：APK（AAR）与服务器（sherpa-onnx-node）加载同一 embedding 模型 `3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx`（192 维）；segmentation 模型 `pyannote_segmentation_3_0_int8.onnx`
+- 三端同模型：APK（AAR）与服务器（sherpa-onnx-node）加载同一 embedding 模型 `3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx`（512 维）；segmentation 模型 `pyannote_segmentation_3_0_int8.onnx`
 - 模型按需下载沿用现有 SSL-trust 逻辑（自签名证书 trust-all，镜像 MainActivity.onReceivedSslError 姿态）
 - 桥接口契约沿用现有同步 JSON 先例；音频输入均为裸 PCM(16k mono s16le) base64
 - `speaker` 语义三态：**缺省**（声纹不可用→放行）/ **null**（可用但未匹配→拦截）/ **人名**（匹配→放行+归属）；"只处理声纹语音"只约束能拿到 speaker 的语音，浏览器/旧 APK（无 speaker 字段）保持现有行为
@@ -211,7 +211,7 @@ git commit -m "feat(server): voiceprint 配置 + GET/POST /api/voiceprint/config
 - Modify: `src/apps/server/boot/server-app.js`
 
 **Interfaces:**
-- Consumes: `config.get('voiceprint.dim')` 缺省 192（embedding 模型维度）
+- Consumes: `config.get('voiceprint.dim')` 缺省 512（embedding 模型维度）
 - Produces: `voiceprintStore`（`{ load() , getDb(), getSpeakers(), add(name, embedding), remove(name), getVersion(), onChange(cb) }`，变更时持久化 + 触发回调）— Task 4/5/10 消费
 
 - [ ] **Step 1: 写 voiceprint-store 模块**
@@ -224,7 +224,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = path.join(__dirname, '../../../../res/voiceprint/db.json');
-const VOICEPRINT_DIM = 192;
+const VOICEPRINT_DIM = 512;
 const SAVE_DEBOUNCE_MS = 500;
 
 class VoiceprintStore {
@@ -350,7 +350,7 @@ voiceprintStore.onChange(() => broadcastVoiceprintDbUpdated());
 ```bash
 node --check src/apps/server/boot/server-app.js
 curl -sk -X POST https://localhost:8081/api/restart   # 轮询恢复
-curl -sk https://localhost:8081/api/voiceprint/db   # {status:success, version:1, dim:192, speakers:{}}
+curl -sk https://localhost:8081/api/voiceprint/db   # {status:success, version:1, dim:512, speakers:{}}
 curl -sk -X POST https://localhost:8081/api/voiceprint/remove -H "Content-Type: application/json" -d '{"name":"x"}'   # 404 声纹不存在
 ```
 
@@ -541,8 +541,8 @@ node --check src/apps/server/boot/server-app.js && node --check src/apps/server/
 curl -sk -X POST https://localhost:8081/api/restart   # 轮询恢复
 # 用现有测试音频注册（res/models/sensevoice/zh.wav 是 wav）
 curl -sk -X POST https://localhost:8081/api/voiceprint/register -F "name=测试人" -F "audio=@res/models/sensevoice/zh.wav"
-#   → {status:success, name:"测试人", dim:192}
-curl -sk https://localhost:8081/api/voiceprint/db   # speakers:{"测试人":[192个数]}
+#   → {status:success, name:"测试人", dim:512}
+curl -sk https://localhost:8081/api/voiceprint/db   # speakers:{"测试人":[512个数]}
 curl -sk -X POST https://localhost:8081/api/voiceprint/remove -H "Content-Type: application/json" -d '{"name":"测试人"}'
 ```
 
@@ -797,7 +797,7 @@ package com.aasc.display
 import org.json.JSONArray
 import org.json.JSONObject
 
-// 声纹库编解码（纯逻辑，JVM 单测）：{version, dim, speakers:{name:[192 个浮点]}}
+// 声纹库编解码（纯逻辑，JVM 单测）：{version, dim, speakers:{name:[512 个浮点]}}
 object VoiceprintDbCodec {
 
     // 解析服务器 /api/voiceprint/db 响应里的 speakers 对象 → name -> embedding
@@ -825,7 +825,7 @@ object VoiceprintDbCodec {
             speakersObj.put(name, arr)
         }
         obj.put("version", 1)
-        obj.put("dim", 192)
+        obj.put("dim", 512)
         obj.put("speakers", speakersObj)
         return obj
     }
@@ -850,7 +850,7 @@ class VoiceprintDbCodecTest {
     @Test
     fun speakersFromDb_解析多说话人() {
         val db = JSONObject("""
-            {"version":2,"dim":192,"speakers":{"妲己":[0.5,0.25,-0.125],"控制端":[1.0,-1.0,0.0]}}
+            {"version":2,"dim":512,"speakers":{"妲己":[0.5,0.25,-0.125],"控制端":[1.0,-1.0,0.0]}}
         """.trimIndent())
         val speakers = VoiceprintDbCodec.speakersFromDb(db)
         assertEquals(2, speakers.size)
@@ -860,7 +860,7 @@ class VoiceprintDbCodecTest {
 
     @Test
     fun speakersFromDb_空库返回空map() {
-        val db = JSONObject("""{"version":1,"dim":192,"speakers":{}}""")
+        val db = JSONObject("""{"version":1,"dim":512,"speakers":{}}""")
         assertTrue(VoiceprintDbCodec.speakersFromDb(db).isEmpty())
     }
 
@@ -1146,7 +1146,7 @@ git commit -m "feat(android): VoiceprintEngine 特征提取/库匹配/多人分�
 在 `asrRecognize` 方法（约 236 行）之后追加：
 
 ```kotlin
-    // 查询声纹引擎状态：{"ready":true|false,"dim":192,"speakers":["妲己"]}
+    // 查询声纹引擎状态：{"ready":true|false,"dim":512,"speakers":["妲己"]}
     @JavascriptInterface
     fun voiceprintStatus(): String {
         return try {
@@ -1243,7 +1243,7 @@ git commit -m "feat(android): VoiceprintEngine 特征提取/库匹配/多人分�
         }
     }
 
-    // 声纹特征提取（register display 模式中转用）：裸 PCM base64 → {"dim":192,"embedding":[...]} 或 {"error":"..."}
+    // 声纹特征提取（register display 模式中转用）：裸 PCM base64 → {"dim":512,"embedding":[...]} 或 {"error":"..."}
     @JavascriptInterface
     fun voiceprintExtract(pcmBase64: String): String {
         return try {
@@ -1853,11 +1853,11 @@ git commit -m "feat(control): 声纹管理面板（注册/列表/删除/配置�
 ## 桥接口（window.NativeDisplay）
 
 ```
-voiceprintStatus() -> String JSON          # {"ready":bool,"dim":192,"speakers":["妲己"]}
+voiceprintStatus() -> String JSON          # {"ready":bool,"dim":512,"speakers":["妲己"]}
 voiceprintConfigure(configJson) -> String  # {"enabled":bool,"threshold":0.5,"multiSpeaker":bool}；触发模型下载+引擎加载；异步经 onVoiceprintModel 回调
 voiceprintMatch(pcmBase64) -> String JSON  # 单段匹配：{"speaker":人名|null} 或 {"error":""}；同步阻塞≤20s
 voiceprintDiarize(pcmBase64) -> String JSON# 多人分割：{"segments":[{start,end,text,speaker}]} 或 {"error":""}；同步阻塞≤30s
-voiceprintExtract(pcmBase64) -> String JSON# 注册中转：{"dim":192,"embedding":[...]} 或 {"error":""}
+voiceprintExtract(pcmBase64) -> String JSON# 注册中转：{"dim":512,"embedding":[...]} 或 {"error":""}
 voiceprintSyncDb(dbJson) -> String         # 接收 display.html 拉取的权威库 JSON，重建本地库；结果经 onVoiceprintDb 回调
 window.onVoiceprintModel({state,progress,error,engineReady})  # 模型下载/引擎加载
 window.onVoiceprintDb({state:'ready'|'error', speakers, error})  # 声纹库同步结果
@@ -1873,7 +1873,7 @@ toJson(speakers) -> JSONObject                    # 序列化
 ## VoiceprintModelManager（Kotlin）
 
 ```
-模型: embedding 3dspeaker eres2net(192维, 必下) + segmentation pyannote int8(multiSpeaker 才下)
+模型: embedding 3dspeaker eres2net(512维, 必下) + segmentation pyannote int8(multiSpeaker 才下)
 ensureModel(baseUrl, needSegmentation, onEvent):
   ready/downloading 短路；后台线程 ModelDownloader.download（SSL-trust）→ ready|error
 ```
@@ -1941,7 +1941,7 @@ voiceInput: speaker===null → 丢弃（防御性）；否则转发（带 speake
 ## voiceprint-service（服务器，extraction='server' 注册用）
 
 ```
-懒加载 SpeakerEmbeddingExtractor(3dspeaker eres2net) → extractEmbedding(audioPath) → Array(192)
+懒加载 SpeakerEmbeddingExtractor(3dspeaker eres2net) → extractEmbedding(audioPath) → Array(512)
 ```
 
 ## 控制端（upload.html + voiceprint-panel.js）
@@ -1982,7 +1982,7 @@ chat.js: sendAudioForRecognition → data.segments 逐段 / data.speaker 归属
 ## [2026-08-16] Android 原生声纹识别（说话人识别 + 多人分割）
 - 新增：APK VoiceprintEngine（embedding 提取/库匹配/OfflineSpeakerDiarization 多人分割）
 - 新增：NativeBridge 6 声纹桥方法 + onVoiceprintModel/onVoiceprintDb 回调
-- 新增：VoiceprintModelManager 模型按需下载（embedding 3d-speaker eres2net 192维 / pyannote int8）
+- 新增：VoiceprintModelManager 模型按需下载（embedding 3d-speaker eres2net 512维 / pyannote int8）
 - 新增：ModelDownloader 抽取共享（SSL-trust 自签名证书下载）
 - 新增：服务器 voiceprint 权威库（持久化 db.json + speakerDbUpdated 广播）+ 注册/配置/模型下载接口
 - 新增：voiceprint.extraction 可配置（server 提取 / display 中转 APK 提取）

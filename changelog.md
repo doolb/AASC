@@ -64,6 +64,35 @@
     - src/apps/web-mediacenter/ui/public/display.html
   - 文档：docs/design/android-native-asr.md、docs/spec/android-native-asr.md、docs/superpowers/plans/2026-08-16-android-native-asr.md
 
+- ✅ [2026-08-16] Android 原生声纹识别（说话人识别 + 多人分割）实现完成
+  - APK VoiceprintEngine（embedding 提取/库匹配/OfflineSpeakerDiarization 多人分割）
+  - NativeBridge 6 声纹桥方法 + onVoiceprintModel/onVoiceprintDb 回调
+  - VoiceprintModelManager 模型按需下载（embedding 3d-speaker eres2net 512维 / pyannote int8）
+  - ModelDownloader 抽取共享（SSL-trust 自签名证书下载）
+  - 服务器 voiceprint 权威库（持久化 db.json + speakerDbUpdated 广播）+ 注册/配置/模型下载接口
+  - voiceprint.extraction 可配置（server 提取 / display 中转 APK 提取）
+  - /api/asr/recognize 返回 speaker/segments 升级 + voiceInput 声纹门控（只处理声纹语音）
+  - 控制端声纹管理面板（注册/列表/删除/配置）+ chat.js 语音带 speaker/逐段命令
+  - 识别链路：asrResult{text,speaker} / {segments:[{text,speaker,start,end}]}；speaker 缺省放行、null 拦截
+  - 改动文件：
+    - src/apps/android-display/app/src/main/java/com/aasc/display/VoiceprintEngine.kt（新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/VoiceprintModelManager.kt（新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/VoiceprintDbCodec.kt（新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/ModelDownloader.kt（新增）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/AsrModelManager.kt（downloadFile 委托 ModelDownloader）
+    - src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt（6 声纹桥方法）
+    - src/apps/web-mediacenter/ui/public/display.html（声纹接入）
+    - src/apps/web-mediacenter/ui/public/upload.html + js/voiceprint-panel.js（控制端面板）
+    - src/apps/web-mediacenter/ui/public/js/chat.js（语音带 speaker/逐段）
+    - src/apps/server/boot/server-app.js（voiceprint 接口 + asrResult 升级 + 门控）
+    - src/apps/server/modules/voiceprint/voiceprint-store.js（新增）
+    - src/apps/server/modules/voiceprint/voiceprint-service.js（新增）
+    - src/external/asr/asr-service.js（导出 readWavFile）
+    - res/models/voiceprint/（embedding + segmentation 模型）
+    - config/config.json（voiceprint 配置）
+    - docs/spec/voiceprint.md（新增）
+  - 文档：docs/spec/voiceprint.md、docs/superpowers/specs/2026-08-16-voiceprint-design.md、docs/superpowers/plans/2026-08-16-voiceprint.md
+
 ### 修复
 
 - ✅ [2026-08-16] 控制端切换角度时显示端画面未按适配模式（图片旋转但尺寸没适配）修复
