@@ -26,7 +26,11 @@
   - 实施计划：docs/task/2026-08-16_render-display-文字内嵌与GPU显存第二行.md
   - 实现：res/tasks/render-display/render.js（条内居中浮层文字、第二行 GPU/VRAM 占位对齐）
   - 验证：node render.smoke.js（结构校验）+ node --check
-- 重构ai开发流程
+- ✅已完成 [2026-08-17][2026-08-17] 重构 ai 开发流程：文件驱动多 Agent 工作组（workgroup）
+  - 设计文档：workgroup/docs/design.md
+  - 实现文档：workgroup/docs/spec.md
+  - 实现：workgroup/tools/（wg-core.js 纯函数 / wg-fs.js 文件系统 / poll.js 主入口）
+  - 多独立 Claude 进程通过文件系统组队：main 分发、子 agent 自治轮询、history 历史画像
 
 ## 批量播放模式
 

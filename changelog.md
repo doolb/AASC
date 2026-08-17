@@ -4,6 +4,20 @@
 
 ### 新增
 
+- ✅ [2026-08-17] 文件驱动多 Agent 工作组（workgroup）—— ai 开发流程重构落地
+  - 多个独立 Claude 进程通过纯文件系统组成 AI 开发团队：main 收需求、按成员在线/空闲状态分发任务，子 agent 自治轮询认领、干活、写回结果，文件即协议、可审计、无 server 依赖
+  - 成员状态：lock 文件（在线）+ busy 文件（忙碌）叠加判定；原子认领（renameSync）防并发
+  - 历史画像：history.md 三段（专长画像聚合 + 经验约定 ≤30 + 最近记录 ≤100），增量维护防膨胀；子 agent 每次 spawn 前注入「专长画像 + 经验约定」总结（不含最近记录，避免误导）
+  - 启动方式：`node tools/poll.js` 交互向导（选/创新角色、选/新建成员，需 TTY）；或 `--role/--name` 参数非交互
+  - 子 agent 执行 `claude --print --permission-mode bypassPermissions`，结果文件缺失自动补 failed
+  - 改动文件：
+    - workgroup/tools/wg-core.js（纯函数：id/校验/模板/prompt/history 维护）
+    - workgroup/tools/wg-fs.js（文件系统：路径/原子认领/存活检测/spawn）
+    - workgroup/tools/poll.js（主入口：交互向导/启动/轮询循环）
+    - workgroup/roles/main.md、frontend.md（角色定义）
+    - workgroup/.gitignore、workgroup/README.md
+    - workgroup/docs/design.md、spec.md、plan-2026-08-17.md、task-2026-08-17.md
+    - workgroup/tests/wg-core.test.js、wg-fs.test.js、wg-e2e.test.js（22 测试全绿）
 - ✅ [2026-08-17] 显示端睡眠模式实现完成
   - 显示端按时段自动隐藏媒体（睡眠：隐藏媒体、视频暂停，保留 UI）或整屏黑幕（深度睡眠：全屏遮罩 z-index 999999，媒体与 UI 全隐藏），每 10 秒本地判定，支持跨天时段
   - 60 秒临时激活：控制端「临时激活」按钮 / 下发媒体自动触发，激活窗口结束恢复按时段隐藏
