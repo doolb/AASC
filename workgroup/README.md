@@ -43,10 +43,24 @@ results/<id>.json      完成结果
   "role": "frontend",
   "requirement": "需求描述",
   "priority": "high",
+  "status": "",
+  "reviewComment": "",
   "createdAt": 1723876200000,
   "references": []
 }
 ```
+
+## 任务状态
+
+| status | 含义 |
+|--------|------|
+| （空） | 未开始（main 投递） |
+| 进行中 | 已认领，子 agent 干活 |
+| 已完成 | 干完、结果已写，待 main 验收 |
+| 待修改 | 验收打回（小改动，原 agent 重做） |
+| 已验收 | 用户确认通过 |
+
+验收：main 扫描 status=已完成 任务呈现结果 → 用户通过（已验收）或提修改（写 reviewComment；小改动原 agent 改，大改动投 role=review 任务审查）。
 
 ## 文档
 

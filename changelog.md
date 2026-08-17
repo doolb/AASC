@@ -4,6 +4,16 @@
 
 ### 新增
 
+- ✅ [2026-08-17] workgroup 任务状态 + 验收打回
+  - 任务文件加 status 字段（空=未开始 / 进行中 / 已完成 / 待修改 / 已验收），认领后写进行中、完成后写已完成
+  - 验收打回：小改动写 reviewComment + 待修改，原 agent 重做；大改动投 role=review 任务，review 角色审查
+  - buildPrompt 支持 reviewComment 注入；roles/review.md 审查角色
+  - 改动文件：
+    - workgroup/tools/poll.js（状态写入 + 待修改扫描）
+    - workgroup/tools/wg-core.js（buildPrompt reviewComment）
+    - workgroup/roles/review.md（新增）
+    - workgroup/tests/wg-e2e.test.js、wg-core.test.js（+5 测试）
+    - workgroup/README.md
 - ✅ [2026-08-17] 文件驱动多 Agent 工作组（workgroup）—— ai 开发流程重构落地
   - 多个独立 Claude 进程通过纯文件系统组成 AI 开发团队：main 收需求、按成员在线/空闲状态分发任务，子 agent 自治轮询认领、干活、写回结果，文件即协议、可审计、无 server 依赖
   - 成员状态：lock 文件（在线）+ busy 文件（忙碌）叠加判定；原子认领（renameSync）防并发
