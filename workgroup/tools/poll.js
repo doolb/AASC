@@ -11,6 +11,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 启动子 agent：创建成员、lock、进入轮询循环
 function start({ root = ROOT, role, name, command = 'claude', buildArgs, pollIntervalMs = DEFAULT_POLL_MS, onTaskDone }) {
+    // 统一 trim：交互向导已 trim，--role/--name 参数路径也在此 trim，保证目录名干净
+    role = String(role || '').trim();
+    name = String(name || '').trim();
     const p = paths(root);
     const memberDir = p.memberDir(name);
     ensureDir(memberDir);
@@ -29,6 +32,11 @@ function start({ root = ROOT, role, name, command = 'claude', buildArgs, pollInt
         console.warn(`[workgroup] 覆盖残留 lock（PID ${pid} 已死）`);
     }
     writeText(p.lockFile(name), `${process.pid} ${Date.now()}`);
+
+    // 崩溃残留清理：agent 崩溃可能留下 busy / current-task，main 会误判该成员永久忙碌。
+    // 进程重新上线后清掉，回到空闲状态。
+    fs.rmSync(p.busyFile(name), { force: true });
+    fs.rmSync(p.currentTaskFile(name), { force: true });
 
     // 正常退出/中断时删除 lock
     const cleanup = () => {
@@ -80,7 +88,7 @@ async function executeTask({ p, root, role, name, mine, command, buildArgs }) {
     const learnings = Array.isArray(res.learnings) ? res.learnings : [];
     const newHistory = updateHistory(readText(p.historyFile(name)), {
         tags, learnings,
-        record: { id: mine.id, title: mine.title || '', tags, at: Date.now() }
+        record: { id: mine.id, title: mine.title || '', summary: res.summary || '', tags, at: Date.now() }
     });
     writeText(p.historyFile(name), newHistory);
 

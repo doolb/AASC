@@ -15,10 +15,12 @@ function genId(now, seq) {
     return `${d}-${t}-${pad(seq, 3)}`;
 }
 
-// 成员/角色名合法性校验；返回错误信息或 null
+// 成员/角色名合法性校验；返回错误信息或 null（合法）
 function validateName(name) {
     if (!name || !name.trim()) return '名字不能为空';
     if (/[\/\\]/.test(name)) return '名字不能包含路径分隔符';
+    // 拒绝 . / ..：无斜杠但会被 memberDir() 解析成上级目录，把文件写到错误位置
+    if (/^\.\.?$/.test(name.trim())) return '名字不能是 . 或 ..';
     return null;
 }
 

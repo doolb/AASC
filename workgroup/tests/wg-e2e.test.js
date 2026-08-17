@@ -86,3 +86,37 @@ test('端到端：已有在线 lock（同 PID）启动应拒绝', async () => {
     process.exit = oldExit;
     assert.strictEqual(exited, true, 'lock 冲突时应退出');
 });
+
+test('端到端：子 agent 未写结果文件 → poll.js 补写 failed', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端角色\n\n## 职责\n前端开发');
+
+    // 投递一个 role=frontend 的任务
+    writeJson(p.taskFile('t3'), { id: 't3', title: '任务3', role: 'frontend', requirement: '做前端', priority: 'high', createdAt: 1, references: [] });
+
+    // 假 claude：no-op，什么都不写 → 模拟子 agent 崩溃/未写结果文件
+    const resultFile = p.resultFile('t3');
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, role: 'frontend', name: 'alice',
+        command: process.execPath,
+        buildArgs: () => ['-e', '/* no-op: 不写结果文件 */'],
+        pollIntervalMs: 50
+    });
+
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.busyFile('alice')), 5000);
+    app.stop();
+
+    // 断言：结果文件存在且 status=failed，history 不崩，busy 已清
+    const res = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+    assert.strictEqual(res.status, 'failed', '结果文件应由 poll.js 补写 failed');
+    assert.strictEqual(res.summary, '子 agent 未返回有效结果');
+    const history = readText(p.historyFile('alice'));
+    assert.ok(history.includes('最近记录'), 'history 最近记录段应存在');
+    assert.ok(history.includes('"id":"t3"'), 'history 最近记录应含任务 id');
+    assert.ok(!fs.existsSync(p.busyFile('alice')), '忙碌标记应已删除');
+    assert.ok(!fs.existsSync(p.currentTaskFile('alice')), 'current-task 应已删除');
+});

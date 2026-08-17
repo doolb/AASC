@@ -104,7 +104,10 @@ function isAlive(pid) {
 // 执行子 agent（默认 claude --print），等待结束并检查结果文件是否写入
 function spawnClaude({ command, args, cwd, resultFile }) {
     return new Promise((resolve) => {
-        const child = spawn(command, args, { cwd });
+        // stdio 全部 ignore：poll.js 只看结果文件，不读子进程输出。
+        // 若用默认 'pipe' 且不消费 stdout/stderr，子进程写满 ~64KB OS 管道缓冲后
+        // 阻塞退出，'close' 事件永不触发 → await 永久挂起（子 agent 卡死）。
+        const child = spawn(command, args, { cwd, stdio: ['ignore', 'ignore', 'ignore'] });
         child.on('close', (code) => {
             resolve({ code, resultWritten: fs.existsSync(resultFile) });
         });
