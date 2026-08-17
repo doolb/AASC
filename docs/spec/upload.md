@@ -67,6 +67,26 @@ recalculateSize(sendToDisplay = true):
 **适配模式同步**: 控制端 `Controls.sendFitMode/setFitMode` 把当前适配模式记录到
 `Crop.currentFit`（默认 contain，与显示端一致），供 recalculateSize 判断是否发 crop。
 
+### sendData（裁剪下发统一出口，非裁剪模式自动切裁剪）
+
+拖拽/缩放/重置裁剪框都走 `sendData()` 下发 `crop`。当 `currentFit ≠ crop` 时（画面填充仍是
+contain/cover 等），裁剪框操作应同时把适配模式切为裁剪，否则显示端虽被 `case 'crop'` 强制裁剪，
+但控制端按钮不高亮、服务端持久化 `fit` 仍是旧值，刷新/重连后 restoreState 恢复旧 fit，
+`applyCrop` 里 `currentFit ≠ crop` 直接跳过 → 裁剪区域视觉丢失。
+
+```
+sendData():
+    若 currentFit ≠ 'crop' 且 window.Controls 存在:
+        Controls.sendFitMode('crop')   # 高亮裁剪按钮 + currentFit='crop' + 下发 fit='crop'（内部已带 crop 数据）
+        return                          # 避免重复发 crop
+    否则:
+        WebSocketManager.sendControl('crop', this.data)
+```
+
+- 首次操作裁剪框时 guard 触发一次切为裁剪模式，之后 `currentFit === 'crop'` 走正常 crop 下发。
+- `recalculateSize` 非裁剪模式早退逻辑不变，切换角度不误发。
+- 重置裁剪（`Crop.reset`）在非裁剪模式下同样经 guard 切为裁剪模式，保证重置后立即生效。
+
 ## 普通上传
 
 ### POST /upload-file

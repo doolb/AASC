@@ -76,6 +76,14 @@ const Crop = {
     },
     
     sendData() {
+        // 非裁剪模式下操作裁剪框（拖拽/缩放/重置）自动切为裁剪模式：
+        // sendFitMode 同步按钮高亮 + currentFit + 下发 fit='crop'（其内部已带 crop 数据）。
+        // 否则显示端被 case 'crop' 强制裁剪但服务端持久化 fit 仍是旧值，
+        // 刷新/重连后 restoreState 恢复旧 fit，applyCrop 因 currentFit≠crop 跳过 → 裁剪丢失。
+        if (this.currentFit !== 'crop' && window.Controls) {
+            window.Controls.sendFitMode('crop');
+            return;
+        }
         if (window.WebSocketManager) {
             window.WebSocketManager.sendControl('crop', this.data);
         }

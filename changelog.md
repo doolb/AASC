@@ -179,6 +179,12 @@
 
 ### 修复
 
+- ✅ [2026-08-17] 控制端裁剪框操作未同步画面填充为裁剪模式
+  - 根因：裁剪框拖拽/缩放/重置路径 `Crop.sendData()` 只发 `sendControl('crop')` 不同步 fit → 显示端被 `case 'crop'` 强制裁剪但服务端持久化 `fit` 仍是旧值（控制端按钮不高亮），显示端刷新/重连后 restoreState 恢复旧 fit，`applyCrop` 因 `currentFit≠crop` 跳过 → 裁剪区域视觉丢失
+  - 修复：`Crop.sendData()` 增加非裁剪模式自动切裁剪——`currentFit ≠ 'crop'` 时调用 `Controls.sendFitMode('crop')`（高亮按钮 + currentFit='crop' + 下发 fit='crop'，其内部已带 crop 数据）并 return，避免重复发 crop；重置裁剪（`Crop.reset`）同样经 guard 切为裁剪模式
+  - 行为：首次操作裁剪框自动切为裁剪模式，之后走正常 crop 节流下发；`recalculateSize` 非裁剪模式早退不变，切换角度不误进裁剪
+  - 改动文件：src/apps/web-mediacenter/ui/public/js/crop.js、docs/spec/upload.md、docs/design/control.md、docs/task/2026-08-17_裁剪框操作同步画面填充为裁剪.md、tests/crop-senddata-sync.test.js（新增）
+
 - ✅ [2026-08-16] 控制端切换角度时显示端画面未按适配模式（图片旋转但尺寸没适配）修复
   - 根因：控制端 crop.js `recalculateSize` 无条件 sendData 发 crop → 显示端 `handleControl` 的 crop 分支强制 `currentFit='crop'` → 非裁剪模式（contain/cover/height/width）画面被裁剪放大
   - 修复：crop.js 新增 `Crop.currentFit`（默认 contain，与显示端一致）；`recalculateSize` 非裁剪模式只重算裁剪框 UI 不发 crop；`controls.js sendFitMode/setFitMode` 同步记录 currentFit（含页面刷新后从显示端恢复）
