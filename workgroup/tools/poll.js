@@ -110,11 +110,25 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
     let running = true;
     const runLoop = async () => {
         while (running) {
-            // ① 主角色新任务：pending 里 role==primary 且 status 空
             const pending = listFiles(p.pendingDir, '.json')
                 .map((f) => readJson(path.join(p.pendingDir, f)))
                 .filter(Boolean);
-            let mine = primary ? pending.find((t) => t.role === primary && (!t.status || t.status === '') && depsMet(p, t)) : null;
+            // ② 指派：pending 里 assignedTo == name（main 指派给空角色或非空角色）
+            let mine = pending.find((t) => t.assignedTo === name && (!t.status || t.status === '') && depsMet(p, t));
+            if (mine) {
+                // 任务 role 与主角色不符 → 切换主角色到任务 role
+                if (mine.role !== primary) {
+                    console.log(`[workgroup] main 指派：主角色 ${primary || '空'} → ${mine.role}`);
+                    if (primary) fs.rmSync(p.roleLockFile(name, primary), { force: true });
+                    primary = mine.role;
+                    ensureDir(p.roleDir(name, primary));
+                    writeText(p.roleMemberRoleFile(name, primary), serializeRole({ primary, secondary }));
+                    writeText(p.roleLockFile(name, primary), `${process.pid} ${Date.now()}`);
+                }
+            } else if (primary) {
+                // ① 主角色新任务（仅非空角色）
+                mine = pending.find((t) => t.role === primary && (!t.status || t.status === '') && depsMet(p, t));
+            }
             if (!mine && !isEmpty) {
                 // ③ 待修改：自己 claimed/ 里 status=待修改 且 role 匹配
                 const mineDir = path.join(p.claimedDir, `${name}-${primary}`);

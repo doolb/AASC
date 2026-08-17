@@ -418,3 +418,25 @@ test('端到端：主/副角色无活时自动切到有积压任务且无在线 
     assert.ok(fs.existsSync(p.claimedTaskFile('alice-backend-media', 't11')), '应切到 backend-media 并认领任务');
     assert.ok(fs.existsSync(p.roleLockFile('alice', 'backend-media')), '新主角色目录应有 lock');
 });
+
+test('端到端：空角色只认 assignedTo 自己的任务并切换主角色认领', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('backend-media'), '# 后端媒体');
+    // main 指派给 alice（空角色）一个 backend-media 任务
+    writeJson(p.taskFile('t12'), { id: 't12', title: '任务12', role: 'backend-media', requirement: '做后端媒体', priority: 'high', createdAt: 1, references: [], status: '', depends: [], level: 'L4', assignedTo: 'alice' });
+
+    const resultFile = p.resultFile('t12');
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, mode: 'empty', name: 'alice', command: process.execPath,
+        buildArgs: () => ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify({ status: 'completed', summary: 'ok', tags: [], learnings: [], output: 'x' })})`],
+        pollIntervalMs: 50
+    });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.roleBusyFile('alice', 'backend-media')), 5000);
+    app.stop();
+
+    assert.ok(fs.existsSync(p.claimedTaskFile('alice-backend-media', 't12')), '空角色应切主角色到 backend-media 并认领');
+});
