@@ -538,11 +538,21 @@ test('端到端：main 模式 spawn 子进程（默认 claude TUI）并在子进
     const marker = path.join(root, 'main-spawned');
     const fakeMain = process.execPath;
     const fakeMainArgs = ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ok')`];
-    const { start } = require('../tools/poll.js');
-    const app = start({ root, mode: 'main', name: 'mainCoord', mainCommand: fakeMain, mainArgs: fakeMainArgs, mainPollMs: 30 });
-    // 等待假 main 执行 + poll.js 退出清理
-    await waitFor(() => !fs.existsSync(p.mainLockFile), 5000);
-    app.stop();
-    assert.ok(fs.existsSync(marker), 'main 子进程应被执行');
-    assert.ok(!fs.existsSync(p.mainLockFile), 'main 子进程退出后应删 main lock');
+    // 拦截 process.exit：main 子进程退出时 poll.js 会 process.exit(0)，不拦截会终止整个测试进程
+    // （断言不执行、套件汇总被截断）。拦截期间捕获退出码，结束后恢复。
+    const oldExit = process.exit;
+    let exitCode = null;
+    process.exit = (code) => { exitCode = code; };
+    try {
+        const { start } = require('../tools/poll.js');
+        const app = start({ root, mode: 'main', name: 'mainCoord', mainCommand: fakeMain, mainArgs: fakeMainArgs, mainPollMs: 30 });
+        // 等待假 main 执行 + poll.js 退出清理
+        await waitFor(() => !fs.existsSync(p.mainLockFile), 5000);
+        app.stop();
+        assert.ok(fs.existsSync(marker), 'main 子进程应被执行');
+        assert.ok(!fs.existsSync(p.mainLockFile), 'main 子进程退出后应删 main lock');
+        assert.strictEqual(exitCode, 0, 'main 子进程退出后 poll.js 应以 0 退出');
+    } finally {
+        process.exit = oldExit;
+    }
 });
