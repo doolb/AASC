@@ -9,6 +9,9 @@ const { pipeline } = require('stream');
 const multer = require('multer');
 const config = require('../modules/config/config-app-service');
 const LogFileWriter = require('../../../framework/observability/log-file-writer');
+const voiceprintStore = require('../modules/voiceprint/voiceprint-store');
+// 声纹权威库变更时广播：让所有显示端重拉权威库重建本地 SpeakerEmbeddingManager
+voiceprintStore.onChange(() => broadcastVoiceprintDbUpdated());
 
 // 移除 Markdown 标记，用于 TTS 播报前的文本清洗
 function stripMarkdown(text) {
@@ -1147,6 +1150,25 @@ app.post('/api/voiceprint/config', (req, res) => {
     res.json({ status: 'success', message: '声纹配置已更新' });
 });
 
+// 声纹库：读取权威库（APK 同步用）
+app.get('/api/voiceprint/db', (req, res) => {
+    const db = voiceprintStore.getDb();
+    res.json({ status: 'success', ...db });
+});
+
+// 声纹库：删除某人声纹
+app.post('/api/voiceprint/remove', (req, res) => {
+    const name = req.body && req.body.name;
+    if (!name || typeof name !== 'string') {
+        return res.status(400).json({ status: 'error', message: '缺少 name' });
+    }
+    const removed = voiceprintStore.remove(name);
+    if (!removed) {
+        return res.status(404).json({ status: 'error', message: '声纹不存在' });
+    }
+    res.json({ status: 'success', message: '已删除' });
+});
+
 app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
     try {
         if (!req.file) {
@@ -2255,6 +2277,13 @@ function broadcastToControls(data) {
         if (client.readyState === WebSocket.OPEN) {
             client.send(message);
         }
+    });
+}
+
+// 声纹库变更广播：让所有显示端重拉权威库重建本地 SpeakerEmbeddingManager
+function broadcastVoiceprintDbUpdated() {
+    displayClients.forEach((displayData, displayId) => {
+        sendToDisplay(displayId, { type: 'speakerDbUpdated' });
     });
 }
 
