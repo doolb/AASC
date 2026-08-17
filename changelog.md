@@ -42,6 +42,15 @@
     - server-app.js
     - docs/spec/display-sleep-mode.md
     - tests/display-sleep-mode.test.js
+- ✅ [2026-08-17] 显示端睡眠模式手动覆盖（立即切换）
+  - 睡眠弹窗新增「立即切换」按钮组：立即睡眠 / 立即深度睡眠 / 恢复正常 → sendControl('sleepOverride', 'sleep'|'deep'|'normal')
+  - 显示端新增 manualSleepMode 枚举（null|'sleep'|'deep'），优先级 临时激活 > 手动覆盖 > 时段判定；与启用开关无关，不随时段/开关自动切换，直到再次下发；刷新即重置（不持久化）
+  - 60 秒临时激活改为与启用开关无关（显式激活始终生效），激活覆盖手动，过期回落手动或时段
+  - 改动文件：
+    - display.html（manualSleepMode 枚举 + handleControl sleepOverride 分支 + checkSleepMode 优先级）
+    - js/controls.js（立即切换按钮组）
+    - docs/spec/display-sleep-mode.md、docs/design/display-sleep-mode.md
+    - tests/display-sleep-mode.test.js（+5 手动覆盖断言，共 14 步全绿）
 
 - ✅ [2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）实现完成
   - 在 NativeBridge 新增 compute() 桥方法，离屏 EGL 3.1 上下文执行 GLES compute shader，为 threejs 提供协作/归约类真 compute 能力

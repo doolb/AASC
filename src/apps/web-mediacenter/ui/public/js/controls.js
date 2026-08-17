@@ -141,6 +141,12 @@ const Controls = {
                         <span class="settings-label">临时激活</span>
                         <button class="btn-confirm" id="sleepPanelActivateBtn">激活 60 秒</button>
                     </div>
+                    <div class="settings-row">
+                        <span class="settings-label">立即切换</span>
+                        <button class="btn-confirm" id="sleepPanelSleepBtn">立即睡眠</button>
+                        <button class="btn-confirm" id="sleepPanelDeepBtn">立即深度睡眠</button>
+                        <button class="btn-confirm" id="sleepPanelNormalBtn">恢复正常</button>
+                    </div>
                     <div id="sleepPanelStatus" style="font-size:12px;color:rgba(255,255,255,0.5);">当前: 正常</div>
                 </div>
                 <div class="dialog-footer">
@@ -151,6 +157,16 @@ const Controls = {
         mask.querySelector('#sleepPanelCancelBtn').addEventListener('click', () => mask.remove());
         mask.querySelector('#sleepPanelActivateBtn').addEventListener('click', () => {
             if (window.WebSocketManager) window.WebSocketManager.sendControl('sleepActivate');
+        });
+        // 立即切换：显式进入睡眠/深度睡眠（或恢复正常），不随时段/开关自动切换，直到再次下发
+        mask.querySelector('#sleepPanelSleepBtn').addEventListener('click', () => {
+            if (window.WebSocketManager) window.WebSocketManager.sendControl('sleepOverride', 'sleep');
+        });
+        mask.querySelector('#sleepPanelDeepBtn').addEventListener('click', () => {
+            if (window.WebSocketManager) window.WebSocketManager.sendControl('sleepOverride', 'deep');
+        });
+        mask.querySelector('#sleepPanelNormalBtn').addEventListener('click', () => {
+            if (window.WebSocketManager) window.WebSocketManager.sendControl('sleepOverride', 'normal');
         });
         mask.querySelector('#sleepPanelSaveBtn').addEventListener('click', () => {
             const settings = {

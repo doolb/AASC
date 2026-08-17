@@ -2434,17 +2434,24 @@
                 case 'sleepActivate':
                     activateTemporarily();
                     break;
+
+                case 'sleepOverride':
+                    // 手动覆盖：显式进入睡眠/深度睡眠（或恢复正常），不随时段/开关自动切换，直到再次下发
+                    manualSleepMode = (data.value === 'sleep' || data.value === 'deep') ? data.value : null;
+                    checkSleepMode();
+                    break;
             }
         }
 
         // ===== 睡眠模式：按时段自动隐藏媒体/UI，降低夜间干扰 =====
         // 时间在显示端本地判断（各设备用自己时区），每 10 秒检查一次。
-        // 优先级：临时激活 > 深度睡眠 > 睡眠 > 正常。
+        // 优先级：临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常。
         const sleepOverlay = document.getElementById('sleepOverlay');
         const mediaContainer = document.getElementById('mediaContainer');
         let sleepSettings = { enabled: false, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
         let sleepState = 'normal';   // 'normal' | 'sleep' | 'deep' | 'active'
         let activationUntil = 0;     // 临时激活截止时间戳
+        let manualSleepMode = null;  // 手动覆盖枚举：null | 'sleep' | 'deep'，控制端显式进入睡眠/深度睡眠，直到再次下发
 
         // 跨天时段判定：startHour > endHour 时跨天（23-8），否则非跨天（1-6）
         function inSleepWindow(hour, start, end) {
@@ -2492,11 +2499,14 @@
         // 10 秒定时检查：按优先级计算目标状态，状态变化才应用（避免每 10 秒重复 DOM 操作）
         function checkSleepMode() {
             let target = 'normal';
-            if (sleepSettings.enabled) {
+            // 临时激活最高优先（与启用开关/手动覆盖无关）；手动覆盖次之，优先于时段判定
+            if (Date.now() < activationUntil) {
+                target = 'active';
+            } else if (manualSleepMode === 'deep' || manualSleepMode === 'sleep') {
+                target = manualSleepMode;
+            } else if (sleepSettings.enabled) {
                 const hour = new Date().getHours();
-                if (Date.now() < activationUntil) {
-                    target = 'active';
-                } else if (inSleepWindow(hour, sleepSettings.deepStartHour, sleepSettings.deepEndHour)) {
+                if (inSleepWindow(hour, sleepSettings.deepStartHour, sleepSettings.deepEndHour)) {
                     target = 'deep';
                 } else if (inSleepWindow(hour, sleepSettings.startHour, sleepSettings.endHour)) {
                     target = 'sleep';
@@ -2716,9 +2726,9 @@
                     if (data.type === 'control') {
                         handleControl(data);
                         if (data.action !== 'crop') {
-                            // 睡眠设置/激活回传当前 sleepState，供控制端状态显示
+                            // 睡眠设置/激活/手动覆盖回传当前 sleepState，供控制端状态显示
                             let ackExtra = null;
-                            if (data.action === 'sleepSettings' || data.action === 'sleepActivate') {
+                            if (data.action === 'sleepSettings' || data.action === 'sleepActivate' || data.action === 'sleepOverride') {
                                 ackExtra = { sleepState: sleepState };
                             }
                             sendCommandAck('control', true, data.action, ackExtra);

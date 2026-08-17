@@ -2,14 +2,15 @@
 
 ## 概述
 
-显示端（`display.html`）按本地时段自动隐藏媒体（睡眠）或整屏黑幕（深度睡眠），降低夜间干扰。时间判断在显示端本地，每 10 秒检查一次；优先级 临时激活 > 深度睡眠 > 睡眠 > 正常。
+显示端（`display.html`）按本地时段自动隐藏媒体（睡眠）或整屏黑幕（深度睡眠），降低夜间干扰。时间判断在显示端本地，每 10 秒检查一次；优先级 临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常。
 
 ## 状态模型
 
 ```
-sleepSettings = { enabled, startHour, endHour, deepStartHour, deepEndHour }
-sleepState    = 'normal' | 'sleep' | 'deep' | 'active'
+sleepSettings   = { enabled, startHour, endHour, deepStartHour, deepEndHour }
+sleepState      = 'normal' | 'sleep' | 'deep' | 'active'
 activationUntil = 临时激活截止时间戳
+manualSleepMode = null | 'sleep' | 'deep'   # 手动覆盖：控制端显式进入睡眠/深度睡眠，直到再下发恢复/切换
 
 function inSleepWindow(hour, start, end):
     若 start > end:  return hour >= start || hour < end    # 跨天（23-8）
@@ -37,16 +38,17 @@ function applySleepState(state):
 
 function checkSleepMode():          # 每 10 秒，setInterval
     target = 'normal'
-    若 sleepSettings.enabled:
+    若 Date.now() < activationUntil:  target = 'active'      # 临时激活最高优先，且与开关/手动无关
+    否则若 manualSleepMode 为 'deep'/'sleep':  target = manualSleepMode   # 手动覆盖，不随时段/开关，直到恢复
+    否则若 sleepSettings.enabled:
         hour = now.getHours()
-        若 now < activationUntil:  target = 'active'
-        否则若 inSleepWindow(hour, deepStartHour, deepEndHour): target = 'deep'
-        否则若 inSleepWindow(hour, startHour, endHour):         target = 'sleep'
+        若 inSleepWindow(hour, deepStartHour, deepEndHour): target = 'deep'
+        否则若 inSleepWindow(hour, startHour, endHour):     target = 'sleep'
     若 target != sleepState:  applySleepState(target)     # 状态变化才操作 DOM
 
 function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（showMedia noActivate=false）触发
     activationUntil = now + 60000
-    applySleepState('active')
+    applySleepState('active')       # 覆盖手动与时段；60 秒过期后下次检查回落到手动覆盖或时段判定
 ```
 
 ## 触发链路
@@ -60,7 +62,12 @@ function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（
 
 控制端「临时激活」/ 下发媒体
   → sendControl('sleepActivate') / 显示端 showMedia(data)（noActivate=false）入口 activateTemporarily()
-  → 60 秒激活窗口强制显示，之后 checkSleepMode() 恢复按时段隐藏
+  → 60 秒激活窗口强制显示，之后 checkSleepMode() 回落（手动覆盖优先于时段）
+
+控制端「立即切换」（睡眠/深度睡眠/恢复正常）
+  → sendControl('sleepOverride', 'sleep' | 'deep' | 'normal')
+  → 显示端 handleControl('sleepOverride') → manualSleepMode = value 合法化 → checkSleepMode() 立即应用
+  → 手动覆盖不随时段/开关自动切换，直到再下发 sleepOverride 才改变；刷新/重启即重置（不持久化）
 
 显示端内部调用（restoreState 恢复持久化媒体、播放列表自动切播）
   → showMedia(data, noActivate=true) → 不触发激活窗口，仅在睡眠时段静默隐藏
@@ -68,6 +75,13 @@ function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（
 显示端刷新/重启
   → 服务端 restoreState(state) → handleRestoreState 读 state.sleep → checkSleepMode() 立即应用
 ```
+
+## 手动覆盖（sleepOverride）
+
+- `manualSleepMode = null | 'sleep' | 'deep'`，控制端显式进入睡眠/深度睡眠的枚举变量。
+- 优先级介于 60 秒临时激活 与 时段判定 之间：激活窗口覆盖手动，激活过期后回落手动；手动覆盖覆盖时段判定。
+- 与「启用睡眠」开关无关：`sleepSettings.enabled=false` 时手动覆盖仍生效。
+- 不随时间流逝/时段切换自动退出，需再下发 `sleepOverride('normal')` 或切到另一状态才改变；刷新/重启即重置（临时、不持久化）。
 
 ## 媒体暂停/恢复
 
@@ -87,5 +101,6 @@ function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（
 |------|----|------|
 | `control` / `sleepSettings` | `{enabled,startHour,endHour,deepStartHour,deepEndHour}` | 应用设置 + checkSleepMode + ack(`extraData.sleepState`) |
 | `control` / `sleepActivate` | 无 | `activateTemporarily()` + ack(`extraData.sleepState`) |
+| `control` / `sleepOverride` | `'sleep'` \| `'deep'` \| `'normal'` | `manualSleepMode` 赋值（`normal`→null）+ checkSleepMode + ack(`extraData.sleepState`) |
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |

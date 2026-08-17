@@ -1,5 +1,5 @@
 // 显示端睡眠模式集成测试：inSleepWindow 跨天判定 / checkSleepMode 状态机 /
-// applySleepState DOM 操作 / handleControl('sleepSettings'|'sleepActivate') / handleRestoreState
+// applySleepState DOM 操作 / handleControl('sleepSettings'|'sleepActivate'|'sleepOverride') / handleRestoreState
 // 运行：node tests/display-sleep-mode.test.js （需服务端运行在 127.0.0.1:8081）
 const puppeteer = require('/mnt/AASC/node_modules/puppeteer');
 const assert = require('assert');
@@ -109,7 +109,9 @@ const assert = require('assert');
   console.log('PASS: 临时激活强制显示');
 
   // ---- 5. 未启用：强制回到 normal ----
+  // 先清零 activationUntil（步骤 4 的激活窗口未过期会覆盖成 active——激活与启用开关无关）
   await page.evaluate(() => {
+    activationUntil = 0;
     sleepSettings = { enabled: false, startHour: 0, endHour: 24, deepStartHour: 0, deepEndHour: 24 };
     checkSleepMode();
   });
@@ -198,6 +200,96 @@ const assert = require('assert');
   assert.strictEqual(restored.state, 'deep', 'restoreState 应恢复睡眠设置并立即判定');
   assert.strictEqual(restored.overlay, 'block', '恢复后应显示黑幕');
   console.log('PASS: handleRestoreState(state.sleep) 恢复设置');
+
+  // ---- 10. handleControl('sleepOverride', 'sleep') 手动睡眠 + ack ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'control', action: 'sleepOverride', value: 'sleep'
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 300));
+  const ovrSleep = await page.evaluate(() => {
+    const acks = window.__wsSends
+      .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
+      .filter(m => m && m.type === 'commandAck' && m.commandType === 'control' && m.details === 'sleepOverride');
+    const last = acks[acks.length - 1];
+    return { state: sleepState, media: document.getElementById('mediaContainer').style.display, overlay: document.getElementById('sleepOverlay').style.display, ackExtra: last && last.extraData ? last.extraData.sleepState : null };
+  });
+  assert.strictEqual(ovrSleep.state, 'sleep', 'sleepOverride=sleep 应进入睡眠状态');
+  assert.strictEqual(ovrSleep.media, 'none', '手动睡眠应隐藏媒体容器');
+  assert.strictEqual(ovrSleep.overlay, 'none', '手动睡眠不应显示黑幕');
+  assert.strictEqual(ovrSleep.ackExtra, 'sleep', 'sleepOverride ack 应携带当前 sleepState');
+  console.log('PASS: handleControl(sleepOverride=sleep) 手动睡眠 + ack');
+
+  // ---- 11. handleControl('sleepOverride', 'deep') 手动深度睡眠 ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'control', action: 'sleepOverride', value: 'deep'
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 300));
+  const ovrDeep = await page.evaluate(() => ({
+    state: sleepState,
+    media: document.getElementById('mediaContainer').style.display,
+    overlay: document.getElementById('sleepOverlay').style.display
+  }));
+  assert.strictEqual(ovrDeep.state, 'deep', 'sleepOverride=deep 应进入深度睡眠');
+  assert.strictEqual(ovrDeep.media, 'none', '手动深度应隐藏媒体容器');
+  assert.strictEqual(ovrDeep.overlay, 'block', '手动深度应显示黑幕');
+  console.log('PASS: handleControl(sleepOverride=deep) 手动深度睡眠');
+
+  // ---- 12. 手动覆盖与启用开关无关：enabled=false 仍保持手动深度 ----
+  await page.evaluate(() => {
+    sleepSettings = { enabled: false, startHour: 0, endHour: 24, deepStartHour: 0, deepEndHour: 24 };
+    checkSleepMode();
+  });
+  const manualIndependent = await page.evaluate(() => ({
+    state: sleepState,
+    overlay: document.getElementById('sleepOverlay').style.display
+  }));
+  assert.strictEqual(manualIndependent.state, 'deep', 'enabled=false 时手动覆盖仍生效');
+  assert.strictEqual(manualIndependent.overlay, 'block', '手动深度黑幕应保持显示');
+  console.log('PASS: 手动覆盖不依赖启用开关');
+
+  // ---- 13. 临时激活覆盖手动，过期后回落手动 ----
+  await page.evaluate(() => { activateTemporarily(); });
+  const ovrActive = await page.evaluate(() => ({
+    state: sleepState,
+    overlay: document.getElementById('sleepOverlay').style.display
+  }));
+  assert.strictEqual(ovrActive.state, 'active', '临时激活应覆盖手动深度睡眠');
+  assert.strictEqual(ovrActive.overlay, 'none', '激活应移除黑幕');
+  await page.evaluate(() => {
+    activationUntil = Date.now() - 1;   // 模拟激活窗口过期
+    checkSleepMode();
+  });
+  const ovrBack = await page.evaluate(() => ({
+    state: sleepState,
+    overlay: document.getElementById('sleepOverlay').style.display
+  }));
+  assert.strictEqual(ovrBack.state, 'deep', '激活过期后应回落手动深度睡眠');
+  assert.strictEqual(ovrBack.overlay, 'block', '回落手动后黑幕重新显示');
+  console.log('PASS: 临时激活覆盖手动、过期回落手动');
+
+  // ---- 14. handleControl('sleepOverride', 'normal') 恢复正常 ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'control', action: 'sleepOverride', value: 'normal'
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 300));
+  const ovrNormal = await page.evaluate(() => ({
+    state: sleepState,
+    media: document.getElementById('mediaContainer').style.display,
+    overlay: document.getElementById('sleepOverlay').style.display
+  }));
+  assert.strictEqual(ovrNormal.state, 'normal', 'sleepOverride=normal 应恢复正常显示');
+  assert.strictEqual(ovrNormal.media, 'flex', '正常应显示媒体容器');
+  assert.strictEqual(ovrNormal.overlay, 'none', '正常不应有黑幕');
+  console.log('PASS: handleControl(sleepOverride=normal) 恢复正常');
 
   await browser.close();
   console.log('ALL PASS: 显示端睡眠模式');
