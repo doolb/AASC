@@ -4,6 +4,24 @@
 
 ### 新增
 
+- ✅ [2026-08-18] workgroup main 协调者 TUI 交互
+  - `node poll.js` 无 --role 且无 main 时，不再是保活空转，而是 spawn 交互式 claude TUI（stdio inherit 透传 TTY，cwd = 项目根），注入 main 协调者指令（MAIN_SYSTEM_PROMPT：读 roles/main.md、按 L4-L7 等级路由拆任务、投递 tasks/pending/、验收打回），用户在 TUI 里直接对话说需求
+  - claude TUI 退出（/exit 或 Ctrl+C）→ poll.js 捕获子进程退出 → 删 members/main/lock → 进程退出
+  - 修复：main 模式无保活句柄导致进程立即退出（keepalive 定时器 + spawn claude 双重保活）
+  - 改动文件：
+    - workgroup/tools/wg-fs.js（MAIN_SYSTEM_PROMPT 常量）
+    - workgroup/tools/poll.js（main 分支 spawn claude TUI + 退出清理 + keepalive）
+    - workgroup/tests/wg-fs.test.js、wg-e2e.test.js（48 测试全绿：core 16 + fs 12 + e2e 20）
+    - workgroup/docs/design.md、spec.md、plan-2026-08-17-main-tui.md
+- ✅ [2026-08-18] 修复：下发媒体取消手动覆盖（临时激活优先级高于 override）
+  - 问题：手动覆盖 sleep/deep 后下发媒体，`activateTemporarily()` 只临时压过覆盖 60 秒，激活过期后回落手动覆盖——下发媒体没有真正取消覆盖状态
+  - 修复：`activateTemporarily()`（下发媒体/临时激活入口）同时 `manualSleepMode = null` 取消手动覆盖，媒体正常显示，激活窗口过期后按正常时段判定（不再回落手动覆盖）
+  - checkSleepMode 优先级不变：临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常（覆盖被取消后两者不会同时有效）
+  - 验证：集成测试 27 步全绿（步骤 13 改为「下发媒体取消手动覆盖，过期不再回落」）
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/display.html（activateTemporarily 清 manualSleepMode + 优先级注释）
+    - tests/display-sleep-mode.test.js（步骤 13 断言更新）
+    - docs/spec/display-sleep-mode.md、docs/design/display.md
 - ✅ [2026-08-17] 私人运行数据迁移到 ~/.config/aasc-user/（脱离 git 跟踪与分享面）
   - 背景：config/ 目录混存静态配置与私人运行数据，其中 config.json 的 displayStates 曾暴露敏感 URL 残留、聊天记录/媒体库含内网 IP 与用户内容，分享/备份项目会连带泄露
   - 迁移内容：
@@ -21,6 +39,59 @@
     - src/apps/server/boot/server-app.js（mapPositionsPath + media-libraries configPath）
     - docs/spec/config.md、docs/spec/chat-system.md、docs/spec/api.md、docs/spec.md
     - docs/design/private-chat-sessions.md、docs/design/reminder.md、docs/design/media-library.md
+- ✅ [2026-08-17] 修复：睡眠模式视频未暂停（播放路径缺睡眠守卫）
+  - 问题：进入睡眠只 `pause()` 一次，但视频播放/恢复路径没有 `isSleepPaused()` 守卫，睡眠中视频仍会播放
+  - 根因：
+    - `document click` 监听：`display:block && paused` 时任何点击页面都 `mediaVideo.play()`（无人值守盒子睡眠中点击遮罩/系统 UI 即恢复视频，puppeteer 实测确证）
+    - `keydown` 空格：睡眠中空格切换播放/暂停
+    - `handleControl('play', value=true)`：睡眠中控制端发播放命令 resume 视频
+    - `playCurrentItem()`（播放列表）：`ended`/`error`/`timer` 触发自动切播，睡眠中视频持续切播
+  - 修复：四处统一加 `isSleepPaused()` 守卫（click/空格直接忽略；play 命令睡眠中拒绝、暂停命令仍生效并上报；playCurrentItem 睡眠中 return 不切播，唤醒恢复当前项）
+  - 验证：puppeteer 实测进入睡眠后 click/空格/play 命令均保持 `paused=true`；集成测试 27 步全绿（+3 步：click 不恢复 / play 拒绝 / 播放列表不切播）
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/display.html（click/空格/handleControl play/playCurrentItem 加睡眠守卫）
+    - tests/display-sleep-mode.test.js（+3 步）
+    - docs/spec/display-sleep-mode.md、docs/design/display.md
+- ✅ [2026-08-17] 修复：自动播报开关关闭后媒体文件名仍会语音播报 + 开关持久化
+  - 根因：服务端 `setAutoTts` 分支只更新 time.announce（整点报时）任务 enabled，未转发到显示端 → 显示端 `autoTtsEnabled` 恒为默认 true，播放媒体时 `announceAndReport` 照常 playTTS(文件名)
+  - 修复：
+    - 服务端 `setAutoTts` 分支补 `sendToDisplay(displayId, data)` 转发显示端（控制端开关立即生效）
+    - 持久化 `displayData.state.autoTts` + `config.updateDisplayState(ip, { autoTts })`，显示端刷新/重启后 restoreState 恢复开关状态
+    - 显示端 `handleRestoreState` 按 `state.autoTts` 恢复（旧数据缺字段则保持当前值，降级安全）
+  - 验证：WS 实测 setAutoTts=false/true → 日志 `>> tts action=setAutoTts`（转发）+ 报时更新 + config 持久化 autoTts=True；集成测试 24 步全绿（新增 setAutoTts 同步 + restoreState 恢复 + 旧数据降级 2 步）
+  - 附带修复：display-sleep-mode 测试时间敏感 bug——`endHour: h+1` 在 23 点时 24 被 `clampHour` 压成 23，`inSleepWindow(hour,23,23)` 恒 false 导致 sleepSettings 判定失败；改用跨天窗口 `(h+23)%24`，任意小时可跑
+  - 改动文件：
+    - src/apps/server/boot/server-app.js（setAutoTts 持久化 + 转发）
+    - src/apps/web-mediacenter/ui/public/display.html（handleRestoreState 恢复 autoTts）
+    - tests/display-sleep-mode.test.js（+2 步 + 修 h+1 边界）
+    - docs/spec/websocket.md、docs/design/display.md
+- ✅ [2026-08-17] http 媒体库支持获取文件大小 + 批量播放视频 seek
+  - 现状：HttpProvider.list/getFile 不返回 size（fancy-index 列表只有人类可读大小），控制端媒体库不显示真实大小；库代理端点 Range 解析依赖 size 恒回落 200 全量，批量播放视频拖动进度条会重新全量下载
+  - 修复：
+    - HttpProvider 新增 _fetchHead：HEAD 请求取 Content-Length / Last-Modified，8s 超时，失败回落 null
+    - HttpProvider.getFile 填 size + modifiedTime；_fetchList 对媒体文件（image/video/gif/html）小并发池（6）补 size，文件夹不 HEAD，失败回落 0 不阻塞浏览
+    - MediaLibraryManager 补 getFile(libraryId, filePath) 委托（proxy 端点此前调 mediaLibraryManager.getFile 抛错被 catch 静默吞掉，Range 恒 null）
+  - 验证：mnt 库 list 60 文件 56 个真实 size（0.36s）；库代理 Range 端到端 206 + Content-Range；播放列表 60 项全部同源代理 URL；11 个单测全绿
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/media/media-library-app-service.js（_fetchHead/_fillSizes/getFile/list + manager.getFile）
+    - tests/media-library-app-service.test.js（+3 测试：getFile HEAD size / list 补 size / HEAD 失败回落）
+    - docs/spec/media-library.md、docs/design/media-library.md
+- ✅ [2026-08-17] 修复：HTTP 路径媒体无法播放（手动输入 http 地址 / http 媒体库被混合内容拦截）
+  - 根因：服务器启用 HTTPS 后，显示端页面（https://...:8081/display）加载 http:// 媒体子资源被浏览器/WebView 混合内容策略拦截；HttpProvider.getPublicUrl 仍返回 http:// 原始地址（Local/Smb 已支持 isHttps，Http 遗漏）
+  - 修复：
+    - sendToDisplay 统一出口重写 http:// 媒体 URL → 同源 /api/media-proxy?url=（覆盖手动 URL 输入/restore 恢复/单文件播放）
+    - 新增通用代理 GET /api/media-proxy?url=：流式转发 + Range 透传（relay 上游 206/200）+ 15s 超时 + SSRF 基础防护（禁本机/回环/云元数据，内网媒体放行）
+    - HttpProvider.getPublicUrl 改同源 HTTPS 库代理 URL（与 SmbProvider 一致），mnt/mnt2 媒体库控制端预览/播放不再被拦
+    - 库代理端点 /api/media-libraries/:id/proxy/* 支持 Range（本地/SMB 视频可 seek）+ 修 HttpProvider 文件 URL 尾斜杠 404
+    - HttpProvider._fetchHtml/getFileStream 加 8s 超时：修 192.168.1.101 不可达时服务器 init 挂死（此前卡 SYN-SENT 2-3 分钟，8081 不监听）
+    - _parseHtml 过滤 fancy-index 表头排序链接垃圾条目（Name/Last modified/Description/Parent Directory 误当媒体）
+  - 验证：Apache 访问日志 206 全量下载 + 分段续传（视频实际播放）；Range 透传 206；SSRF 403；垃圾条目 4→0；init 2.5s 内完成；8 个单测全绿
+  - 改动文件：
+    - src/apps/web-mediacenter/modules/media/media-library-app-service.js（parseRange + 三 Provider Range 流 + HttpProvider 代理 URL/超时/尾斜杠/垃圾过滤）
+    - src/apps/server/boot/server-app.js（rewriteMediaUrl + sendToDisplay 重写 + /api/media-proxy + 库代理 Range）
+    - tests/media-library-app-service.test.js（+5 测试：parseRange / HttpProvider 代理 URL / getFileStream Range 与超时 / Local Range）
+    - docs/spec/media-library.md（伪代码同步）
+    - docs/design/media-library.md（本文档）
 - ✅ [2026-08-17] workgroup 大增量：角色拆分/切换/依赖门控/取消/原始输出
   - 按项目架构拆分 21 角色文件（前端 3：ui/media/task；后台 5：aasc/media/task/general/server-app；专项 8：display/3d/observability/chat/auto-brain/asr/tts/voice-capture；平台 android；框架 framework；测试 tester；协调 main/review），删旧 frontend/voice
   - 主/副角色 + 每角色独立目录（members/<名>-<角色>/，历史按角色隔离）；role.md 存 primary/secondary
