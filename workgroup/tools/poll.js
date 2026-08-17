@@ -49,14 +49,25 @@ function start({ root = ROOT, role, name, command = 'claude', buildArgs, pollInt
     let running = true;
     const runLoop = async () => {
         while (running) {
-            const tasks = listFiles(p.pendingDir, '.json')
+            // 1) 新任务：pending 里 role 匹配（status 空/缺失）
+            const pending = listFiles(p.pendingDir, '.json')
                 .map((f) => readJson(path.join(p.pendingDir, f)))
                 .filter(Boolean);
-            const mine = tasks.find((t) => t.role === role);
+            const mine = pending.find((t) => t.role === role);
             if (mine) {
                 const ok = atomicClaim(p, name, mine.id);
                 if (ok) {
                     await executeTask({ p, root, role, name, mine, command, buildArgs });
+                    if (onTaskDone) await onTaskDone();
+                }
+            } else {
+                // 2) 待修改：自己 claimed/<name>/ 里 status=待修改（验收打回小改动，原 agent 重做）
+                const mineDir = path.join(p.claimedDir, name);
+                const rework = listFiles(mineDir, '.json')
+                    .map((f) => readJson(path.join(mineDir, f)))
+                    .find((t) => t && t.status === '待修改');
+                if (rework) {
+                    await executeTask({ p, root, role, name, mine: rework, command, buildArgs });
                     if (onTaskDone) await onTaskDone();
                 }
             }
@@ -67,14 +78,16 @@ function start({ root = ROOT, role, name, command = 'claude', buildArgs, pollInt
     return { stop: () => { running = false; }, done: loopPromise };
 }
 
-// 执行单个任务：busy 标记 → 注入总结 → spawn claude → 更新 history → 回到空闲
+// 执行单个任务：busy 标记 → 任务状态进行中 → 注入总结/修改要求 → spawn claude → 更新 history → 状态已完成 → 回到空闲
 async function executeTask({ p, root, role, name, mine, command, buildArgs }) {
     writeText(p.busyFile(name), '');
     writeText(p.currentTaskFile(name), mine.id);
     const taskFile = p.claimedTaskFile(name, mine.id);
     const resultFile = p.resultFile(mine.id);
+    // 落盘状态=进行中（pending 新任务 rename 后、待修改任务就地更新）
+    writeJson(taskFile, { ...mine, status: '进行中' });
     const summary = buildSummary(readText(p.historyFile(name)));
-    const prompt = buildPrompt({ role, name, summary, taskFile, resultFile });
+    const prompt = buildPrompt({ role, name, summary, taskFile, resultFile, reviewComment: mine.reviewComment });
     const args = buildArgs ? buildArgs(prompt, taskFile, resultFile) : ['--print', '--permission-mode', 'bypassPermissions', prompt];
     await spawnClaude({ command, args, cwd: root, resultFile });
 
@@ -91,6 +104,10 @@ async function executeTask({ p, root, role, name, mine, command, buildArgs }) {
         record: { id: mine.id, title: mine.title || '', summary: res.summary || '', tags, at: Date.now() }
     });
     writeText(p.historyFile(name), newHistory);
+
+    // 完成后状态 = 已完成
+    const cur = readJson(taskFile) || mine;
+    writeJson(taskFile, { ...cur, status: '已完成' });
 
     fs.rmSync(p.busyFile(name), { force: true });
     fs.rmSync(p.currentTaskFile(name), { force: true });

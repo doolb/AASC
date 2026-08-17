@@ -120,3 +120,76 @@ test('端到端：子 agent 未写结果文件 → poll.js 补写 failed', async
     assert.ok(!fs.existsSync(p.busyFile('alice')), '忙碌标记应已删除');
     assert.ok(!fs.existsSync(p.currentTaskFile('alice')), 'current-task 应已删除');
 });
+
+test('端到端：任务状态流转 进行中→已完成', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端角色');
+    writeJson(p.taskFile('t4'), { id: 't4', title: '任务4', role: 'frontend', requirement: '做前端', priority: 'high', createdAt: 1, references: [], status: '' });
+
+    const resultFile = p.resultFile('t4');
+    const fakeResult = JSON.stringify({ status: 'completed', summary: '完成', tags: ['UI'], learnings: [], output: 'ok' });
+    const fakeScript = `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify(fakeResult)})`;
+
+    const { start } = require('../tools/poll.js');
+    const app = start({ root, role: 'frontend', name: 'alice', command: process.execPath, buildArgs: () => ['-e', fakeScript], pollIntervalMs: 50 });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.busyFile('alice')), 5000);
+    app.stop();
+
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice', 't4'), 'utf8'));
+    assert.strictEqual(task.status, '已完成', '完成后任务状态应为已完成');
+    assert.ok(fs.existsSync(p.claimedTaskFile('alice', 't4')), '任务应在 claimed/alice/');
+});
+
+test('端到端：待修改任务由原 agent 重做，prompt 注入 reviewComment，完成后回到已完成', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端角色');
+    // 直接构造一个已认领但被打回的待修改任务
+    ensureDir(path.join(p.claimedDir, 'alice'));
+    writeJson(p.claimedTaskFile('alice', 't5'), { id: 't5', title: '任务5', role: 'frontend', requirement: '做前端', priority: 'high', createdAt: 1, references: [], status: '待修改', reviewComment: '按钮颜色改蓝色' });
+
+    const resultFile = p.resultFile('t5');
+    const fakeResult = JSON.stringify({ status: 'completed', summary: '改完', tags: ['UI'], learnings: [], output: 'ok' });
+    const fakeScript = `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify(fakeResult)})`;
+
+    let capturedPrompt = '';
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, role: 'frontend', name: 'alice',
+        command: process.execPath,
+        buildArgs: (prompt) => { capturedPrompt = prompt; return ['-e', fakeScript]; },
+        pollIntervalMs: 50
+    });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.busyFile('alice')), 5000);
+    app.stop();
+
+    assert.ok(capturedPrompt.includes('按钮颜色改蓝色'), 'prompt 应注入 reviewComment');
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice', 't5'), 'utf8'));
+    assert.strictEqual(task.status, '已完成', '重做完成后状态应为已完成');
+});
+
+test('端到端：role=review 任务被 review 角色认领执行', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('review'), '# 审查角色');
+    writeJson(p.taskFile('t6'), { id: 't6', title: '审查任务', role: 'review', requirement: '审查原任务', priority: 'high', createdAt: 1, references: [], status: '' });
+
+    const resultFile = p.resultFile('t6');
+    const fakeResult = JSON.stringify({ status: 'completed', summary: 'pass', tags: ['review'], learnings: [], output: 'verdict: pass' });
+    const fakeScript = `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify(fakeResult)})`;
+
+    const { start } = require('../tools/poll.js');
+    const app = start({ root, role: 'review', name: 'charlie', command: process.execPath, buildArgs: () => ['-e', fakeScript], pollIntervalMs: 50 });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.busyFile('charlie')), 5000);
+    app.stop();
+
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('charlie', 't6'), 'utf8'));
+    assert.strictEqual(task.status, '已完成', 'review 任务完成后状态应为已完成');
+});
