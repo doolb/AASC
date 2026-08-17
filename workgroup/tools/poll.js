@@ -2,7 +2,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createInterface } = require('node:readline');
-const { paths, ensureDir, readJson, writeJson, readText, writeText, listDirs, listFiles, atomicClaim, isAlive, spawnClaude } = require('./wg-fs.js');
+const { spawn } = require('node:child_process');
+const { paths, ensureDir, readJson, writeJson, readText, writeText, listDirs, listFiles, atomicClaim, isAlive, spawnClaude, MAIN_SYSTEM_PROMPT } = require('./wg-fs.js');
 const { validateName, roleTemplate, parseHistory, updateHistory, buildSummary, buildPrompt, serializeRole } = require('./wg-core.js');
 
 const ROOT = path.resolve(__dirname, '..'); // workgroup/ 根（tools/ 上一级）
@@ -50,24 +51,37 @@ function roleHasOnlineAgent(p, role) {
 }
 
 // 启动子 agent（或 main/空角色）：创建成员、lock、进入轮询循环
-function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent', command = 'claude', buildArgs, pollIntervalMs = DEFAULT_POLL_MS, onTaskDone }) {
+function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent', command = 'claude', buildArgs, pollIntervalMs = DEFAULT_POLL_MS, onTaskDone, mainCommand, mainArgs }) {
     primary = String(primary || '').trim();
     name = String(name || '').trim();
     const p = paths(root);
 
-    // main 协调者模式：只写 main lock，不进入子 agent 轮询。
-    // 必须保活：无活动句柄时 main() 返回后事件循环空 → 进程立即正常退出，
-    // cleanup（SIGINT/SIGTERM）不触发，lock 残留死 PID，空角色误判"无 main"。
+    // main 协调者模式：spawn claude TUI（stdio inherit 透传 TTY），注入 main 指令。
+    // claude 退出（/exit 或 Ctrl+C）→ 删 main lock → poll.js 进程退出（整个 main 会话结束）。
+    // mainCommand/mainArgs 可注入假命令供测试（默认 claude --append-system-prompt <MAIN_SYSTEM_PROMPT>）。
     if (mode === 'main') {
         ensureDir(path.join(p.membersDir, 'main'));
         writeText(p.mainLockFile, `${process.pid} ${Date.now()}`);
         const cleanup = () => { fs.rmSync(p.mainLockFile, { force: true }); process.exit(0); };
         process.once('SIGINT', cleanup);
         process.once('SIGTERM', cleanup);
-        // 保活：约 17 天触发一次的空定时器，平时只保持事件循环活跃
-        const keepalive = setInterval(() => {}, 1 << 30);
-        console.log(`[workgroup] 启动 main 协调者（PID ${process.pid}）`);
-        return { stop: () => { clearInterval(keepalive); }, mode: 'main' };
+        const cmd = mainCommand || 'claude';
+        const args = mainArgs || ['--append-system-prompt', MAIN_SYSTEM_PROMPT];
+        // cwd = 项目根（workgroup/ 上一级），main claude 既能读项目代码拆需求、又能用 workgroup/ 相对路径投递验收
+        const projectRoot = path.resolve(root, '..');
+        const child = spawn(cmd, args, { stdio: 'inherit', cwd: projectRoot });
+        console.log(`[workgroup] 启动 main 协调者 TUI（PID ${process.pid}，spawn ${cmd}）`);
+        child.on('exit', (code) => {
+            console.log(`[workgroup] main TUI 退出（code ${code}），清理 main lock`);
+            fs.rmSync(p.mainLockFile, { force: true });
+            process.exit(0);
+        });
+        child.on('error', (err) => {
+            console.error(`[workgroup] 启动 main TUI 失败：${err.message}`);
+            fs.rmSync(p.mainLockFile, { force: true });
+            process.exit(1);
+        });
+        return { stop: () => { try { child.kill(); } catch (_) {} }, mode: 'main' };
     }
 
     // 空角色模式：无主角色起步，只认 assignedTo 自己的任务

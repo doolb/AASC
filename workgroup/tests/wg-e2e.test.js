@@ -310,11 +310,21 @@ test('端到端：无 main 时启动为 main 协调者，有 main 时空角色',
     for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
     const { start } = require('../tools/poll.js');
 
-    // 无 main：启动为 main（模式 'main'，直接由调用方指定，不写 main lock 由测试断言）
-    const mainApp = start({ root, mode: 'main', name: 'mainCoord', pollIntervalMs: 50 });
-    // main 模式不进入子 agent 轮询，start 应正常返回
+    // 无 main：注入假 main 命令（写 marker 后退出）验证 start 正常返回 + spawn + 退出清理。
+    // 真实场景 process.exit(0) 由独立 poll.js 进程承载；测试内拦截 process.exit 避免结束测试进程，
+    // 拦截期间捕获退出码做断言。
+    const marker = path.join(root, 'main-coord-start');
+    const fakeMainArgs = ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ok')`];
+    let exitCode = null;
+    const oldExit = process.exit;
+    process.exit = (code) => { exitCode = code; };
+    const mainApp = start({ root, mode: 'main', name: 'mainCoord', mainCommand: process.execPath, mainArgs: fakeMainArgs });
+    await waitFor(() => exitCode !== null, 5000);
+    process.exit = oldExit;
     mainApp.stop();
-    assert.ok(true, 'main 模式 start 应正常返回');
+    assert.strictEqual(exitCode, 0, 'main 子进程退出后 poll.js 应请求退出（0）');
+    assert.ok(fs.existsSync(marker), 'main 子进程应被执行');
+    assert.ok(!fs.existsSync(p.mainLockFile), 'main 子进程退出后应删 main lock');
 });
 
 test('端到端：depends 依赖未验收的任务不被认领，依赖验收后可认领', async () => {
@@ -520,19 +530,19 @@ test('回归：副角色待修改任务由原 agent 重做，任务文件不含 
     assert.strictEqual(task._fromRework, undefined, '任务文件不应含 _fromRework 内部标记');
 });
 
-test('端到端：main 模式进程持续存活（有保活句柄，不因事件循环空而退出）', async () => {
+test('端到端：main 模式 spawn 子进程（默认 claude TUI）并在子进程退出后清理 main lock', async () => {
     const root = tmpRoot();
     const p = paths(root);
     for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
-    // 子进程启动 main 模式，观察其是否在 800ms 内退出（修复前事件循环空→立即退出）
-    const script = `const { start } = require(${JSON.stringify(path.join(__dirname, '..', 'tools', 'poll.js'))}); start({ root: ${JSON.stringify(root)}, mode: 'main', name: 'mainCoord' });`;
-    const { spawn } = require('node:child_process');
-    const child = spawn(process.execPath, ['-e', script], { stdio: 'ignore' });
-    let exited = false;
-    child.on('exit', () => { exited = true; });
-    await new Promise((r) => setTimeout(r, 800));
-    assert.strictEqual(exited, false, 'main 模式进程应持续存活（有保活句柄）');
-    child.kill('SIGTERM');
-    await new Promise((r) => setTimeout(r, 200));
-    assert.ok(!fs.existsSync(p.mainLockFile), 'SIGTERM 后 cleanup 应删除 main lock');
+    // 假 main 命令：写一个 marker 文件然后退出（模拟 claude TUI 短暂运行后 /exit）
+    const marker = path.join(root, 'main-spawned');
+    const fakeMain = process.execPath;
+    const fakeMainArgs = ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ok')`];
+    const { start } = require('../tools/poll.js');
+    const app = start({ root, mode: 'main', name: 'mainCoord', mainCommand: fakeMain, mainArgs: fakeMainArgs, mainPollMs: 30 });
+    // 等待假 main 执行 + poll.js 退出清理
+    await waitFor(() => !fs.existsSync(p.mainLockFile), 5000);
+    app.stop();
+    assert.ok(fs.existsSync(marker), 'main 子进程应被执行');
+    assert.ok(!fs.existsSync(p.mainLockFile), 'main 子进程退出后应删 main lock');
 });
