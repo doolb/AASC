@@ -8,6 +8,7 @@ const fs = require('fs');
 const { pipeline } = require('stream');
 const multer = require('multer');
 const config = require('../modules/config/config-app-service');
+const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
 const LogFileWriter = require('../../../framework/observability/log-file-writer');
 const voiceprintStore = require('../modules/voiceprint/voiceprint-store');
 // 声纹权威库变更时广播：让所有显示端重拉权威库重建本地 SpeakerEmbeddingManager
@@ -304,7 +305,7 @@ function hasValidContent(text) {
 }
 
 const mediaLibraryManager = new MediaLibraryManager({
-    configPath: path.join(PROJECT_ROOT, 'config', 'media-libraries.json'),
+    configPath: path.join(USER_CONFIG_DIR, 'media-libraries.json'),
     getPort: () => PORT,
     getLocalIP: getLocalIP,
     isHttps: () => useHttps
@@ -2048,7 +2049,7 @@ app.post('/api/time/parse', (req, res) => {
     }
 });
 
-const mapPositionsPath = path.join(PROJECT_ROOT, 'config', 'map-positions.json');
+const mapPositionsPath = path.join(USER_CONFIG_DIR, 'map-positions.json');
 
 function loadMapPositions() {
     try {
@@ -2064,6 +2065,10 @@ function loadMapPositions() {
 
 function saveMapPositions(positions) {
     try {
+        const dir = path.dirname(mapPositionsPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         fs.writeFileSync(mapPositionsPath, JSON.stringify(positions, null, 2), 'utf8');
         return true;
     } catch (error) {

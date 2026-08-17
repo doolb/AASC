@@ -4,10 +4,20 @@
 
 | 文件 | 说明 |
 |------|------|
-| config/config.json | 主配置文件 |
-| config/chat-history.json | 聊天历史 |
-| config/media-libraries.json | 媒体库配置 |
-| config/reminders.json | 提醒配置 |
+| config/config.json | 主配置文件（纯静态配置，可随项目 git 跟踪/分享） |
+| ~/.config/aasc-user/userconfig.json | 私人运行状态（displayStates 显示端播放状态、deviceEvents 设备语音事件），位于 home 目录，脱离 git 跟踪 |
+| ~/.config/aasc-user/chat-history.json | 聊天历史 |
+| ~/.config/aasc-user/chat-history-<角色>.json | 私聊历史（按角色命名） |
+| ~/.config/aasc-user/chat-session.json | 聊天会话模式 |
+| ~/.config/aasc-user/chat-commands.json | 语音命令 |
+| ~/.config/aasc-user/chat-templates.json | 角色模板 |
+| ~/.config/aasc-user/important-records.json | 重要记录 |
+| ~/.config/aasc-user/reminders.json | 提醒配置 |
+| ~/.config/aasc-user/search-history.json | 搜索历史 |
+| ~/.config/aasc-user/map-positions.json | 设备地图位置 |
+| ~/.config/aasc-user/media-libraries.json | 媒体库配置 |
+
+> **私人数据分离**:所有私人运行数据存放在 `~/.config/aasc-user/`（路径常量见 `src/apps/server/modules/config/user-config-paths.js` 的 `USER_CONFIG_DIR`），首次启动自动从旧 `config/` 目录迁移。`config/config.json` 仅保留静态配置，可安全提交与分享。
 
 ## 默认配置
 

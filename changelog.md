@@ -4,6 +4,23 @@
 
 ### 新增
 
+- ✅ [2026-08-17] 私人运行数据迁移到 ~/.config/aasc-user/（脱离 git 跟踪与分享面）
+  - 背景：config/ 目录混存静态配置与私人运行数据，其中 config.json 的 displayStates 曾暴露敏感 URL 残留、聊天记录/媒体库含内网 IP 与用户内容，分享/备份项目会连带泄露
+  - 迁移内容：
+    - config.json 内嵌 displayStates/deviceEvents → 新增 UserConfig DataSnapshot，落盘 userconfig.json（Config.defaults 移除这两项）
+    - chat-history*.json、chat-session.json、chat-commands.json、chat-templates.json、important-records.json、reminders.json、search-history.json、map-positions.json、media-libraries.json → 平铺复制到 ~/.config/aasc-user/
+  - 实现：新增 user-config-paths.js 统一目录常量；llm-service/reminder/voice-command/server-app 各路径改指 USER_CONFIG_DIR（写入前补 mkdirSync）；外部 API 签名不变，调用方零改动
+  - 迁移幂等：仅"旧存在且新不存在"时复制，复制成功校验非空后才删除旧文件，异常可从 git 历史找回
+  - 验证：node --check 全过；media-library 测试 11 项全绿；4 个迁移模块加载成功；userconfig.json 含全部 7 个 IP 的 displayStates + deviceEvents
+  - 改动文件：
+    - src/apps/server/modules/config/user-config-paths.js（新增）
+    - src/apps/server/modules/config/config-app-service.js（UserConfig + 迁移 + 方法改指 userConfig）
+    - src/external/llm/llm-service.js（5 个路径常量 + saveHistory mkdir）
+    - src/apps/web-mediacenter/modules/reminder/reminder-app-service.js（REMINDERS_FILE）
+    - src/apps/web-mediacenter/modules/voice/voice-command-app-service.js（SEARCH_HISTORY_FILE）
+    - src/apps/server/boot/server-app.js（mapPositionsPath + media-libraries configPath）
+    - docs/spec/config.md、docs/spec/chat-system.md、docs/spec/api.md、docs/spec.md
+    - docs/design/private-chat-sessions.md、docs/design/reminder.md、docs/design/media-library.md
 - ✅ [2026-08-17] workgroup 大增量：角色拆分/切换/依赖门控/取消/原始输出
   - 按项目架构拆分 21 角色文件（前端 3：ui/media/task；后台 5：aasc/media/task/general/server-app；专项 8：display/3d/observability/chat/auto-brain/asr/tts/voice-capture；平台 android；框架 framework；测试 tester；协调 main/review），删旧 frontend/voice
   - 主/副角色 + 每角色独立目录（members/<名>-<角色>/，历史按角色隔离）；role.md 存 primary/secondary

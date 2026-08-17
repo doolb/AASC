@@ -1,7 +1,10 @@
 const path = require('path');
+const fs = require('fs');
 const DataSnapshot = require('../../../../core/data-snapshot');
+const { USER_CONFIG_DIR } = require('./user-config-paths');
 
 const CONFIG_FILE = path.join(__dirname, '../../../../../config/config.json');
+const USER_CONFIG_FILE = path.join(USER_CONFIG_DIR, 'userconfig.json');
 
 const defaultDisplayState = {
     currentMedia: null,
@@ -58,8 +61,6 @@ class Config extends DataSnapshot {
             memoryWarningThreshold: 85,
             defaultTimeRange: '10m'
         },
-        displayStates: {},
-        deviceEvents: {},
         logReportDisplay: { enabled: false, level: 'error' },
         logReportControl: { enabled: false, level: 'error' },
         logBlocklist: [],
@@ -146,6 +147,39 @@ class Config extends DataSnapshot {
             maxErrorBytes: this.get('tts.maxErrorBytes', 65536)
         };
     }
+}
+
+class UserConfig extends DataSnapshot {
+    static defaults = {
+        displayStates: {},
+        deviceEvents: {}
+    };
+
+    get(key, defaultValue) {
+        const keys = key.split('.');
+        let value = this._data;
+        for (const k of keys) {
+            if (value && typeof value === 'object' && k in value) {
+                value = value[k];
+            } else {
+                return defaultValue;
+            }
+        }
+        return value;
+    }
+
+    set(key, value) {
+        const keys = key.split('.');
+        let obj = this._data;
+        for (let i = 0; i < keys.length - 1; i++) {
+            if (!(keys[i] in obj)) {
+                obj[keys[i]] = {};
+            }
+            obj = obj[keys[i]];
+        }
+        obj[keys[keys.length - 1]] = value;
+        this._save();
+    }
 
     getDisplayState(ip) {
         const states = this.get('displayStates', {});
@@ -227,6 +261,74 @@ class Config extends DataSnapshot {
 }
 
 const config = new Config(CONFIG_FILE);
+const userConfig = new UserConfig(USER_CONFIG_FILE);
+
+// 迁移:将旧 config/config.json 中的 displayStates/deviceEvents 及 config/ 下的私人文件迁移到 ~/.config/aasc-user/
+function migrateLegacyUserData() {
+    const legacyDir = path.dirname(CONFIG_FILE);
+    if (!fs.existsSync(USER_CONFIG_DIR)) {
+        fs.mkdirSync(USER_CONFIG_DIR, { recursive: true });
+    }
+
+    // 1. config.json 内嵌的 displayStates / deviceEvents
+    const configData = config._data;
+    if (configData.displayStates && Object.keys(configData.displayStates).length > 0) {
+        const states = userConfig.get('displayStates', {});
+        Object.assign(states, configData.displayStates);
+        userConfig.set('displayStates', states);
+        delete configData.displayStates;
+        config._save();
+        console.log('[配置] 已迁移 displayStates 到 ~/.config/aasc-user/userconfig.json');
+    }
+    if (configData.deviceEvents && Object.keys(configData.deviceEvents).length > 0) {
+        const events = userConfig.get('deviceEvents', {});
+        Object.assign(events, configData.deviceEvents);
+        userConfig.set('deviceEvents', events);
+        delete configData.deviceEvents;
+        config._save();
+        console.log('[配置] 已迁移 deviceEvents 到 ~/.config/aasc-user/userconfig.json');
+    }
+
+    // 2. config/ 下按文件名平铺的私人数据文件
+    const LEGACY_FILES = [
+        'chat-session.json',
+        'chat-commands.json',
+        'chat-templates.json',
+        'important-records.json',
+        'reminders.json',
+        'search-history.json',
+        'map-positions.json',
+        'media-libraries.json'
+    ];
+    let legacyFiles = LEGACY_FILES.slice();
+    try {
+        const chatHistoryFiles = fs.readdirSync(legacyDir)
+            .filter(f => f.startsWith('chat-history') && f.endsWith('.json'));
+        legacyFiles = [...legacyFiles, ...chatHistoryFiles];
+    } catch (err) {
+        // 目录不可读时跳过 chat-history 扫描,其余文件仍按名称尝试
+    }
+    for (const name of legacyFiles) {
+        const oldPath = path.join(legacyDir, name);
+        const newPath = path.join(USER_CONFIG_DIR, name);
+        if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+            try {
+                fs.copyFileSync(oldPath, newPath);
+                const stat = fs.statSync(newPath);
+                if (stat.size > 0) {
+                    fs.unlinkSync(oldPath);
+                    console.log(`[配置] 已迁移 ${name} 到 ~/.config/aasc-user/`);
+                } else {
+                    console.error(`[配置] 迁移 ${name} 失败:目标文件为空,保留原文件`);
+                }
+            } catch (err) {
+                console.error(`[配置] 迁移 ${name} 失败:${err.message},保留原文件`);
+            }
+        }
+    }
+}
+
+migrateLegacyUserData();
 
 module.exports = config;
 module.exports.defaultDisplayState = defaultDisplayState;
@@ -237,15 +339,16 @@ module.exports.get = (key, defaultValue) => config.get(key, defaultValue);
 module.exports.set = (key, value) => config.set(key, value);
 module.exports.setTtsConfig = (ttsConfig) => config.setTtsConfig(ttsConfig);
 module.exports.getTtsConfig = () => config.getTtsConfig();
-module.exports.getDisplayState = (ip) => config.getDisplayState(ip);
-module.exports.setDisplayState = (ip, state) => config.setDisplayState(ip, state);
-module.exports.updateDisplayState = (ip, partialState) => config.updateDisplayState(ip, partialState);
-module.exports.addToPlaylist = (ip, media) => config.addToPlaylist(ip, media);
-module.exports.removeFromPlaylist = (ip, index) => config.removeFromPlaylist(ip, index);
-module.exports.clearPlaylist = (ip) => config.clearPlaylist(ip);
-module.exports.getPlaylist = (ip) => config.getPlaylist(ip);
-module.exports.getAllDisplayStates = () => config.getAllDisplayStates();
-module.exports.getDeviceEvents = () => config.getDeviceEvents();
-module.exports.getDeviceEvent = (ip) => config.getDeviceEvent(ip);
-module.exports.setDeviceEvent = (ip, eventConfig) => config.setDeviceEvent(ip, eventConfig);
-module.exports.removeDeviceEvent = (ip) => config.removeDeviceEvent(ip);
+module.exports.getDisplayState = (ip) => userConfig.getDisplayState(ip);
+module.exports.setDisplayState = (ip, state) => userConfig.setDisplayState(ip, state);
+module.exports.updateDisplayState = (ip, partialState) => userConfig.updateDisplayState(ip, partialState);
+module.exports.addToPlaylist = (ip, media) => userConfig.addToPlaylist(ip, media);
+module.exports.removeFromPlaylist = (ip, index) => userConfig.removeFromPlaylist(ip, index);
+module.exports.clearPlaylist = (ip) => userConfig.clearPlaylist(ip);
+module.exports.getPlaylist = (ip) => userConfig.getPlaylist(ip);
+module.exports.getAllDisplayStates = () => userConfig.getAllDisplayStates();
+module.exports.getDeviceEvents = () => userConfig.getDeviceEvents();
+module.exports.getDeviceEvent = (ip) => userConfig.getDeviceEvent(ip);
+module.exports.setDeviceEvent = (ip, eventConfig) => userConfig.setDeviceEvent(ip, eventConfig);
+module.exports.removeDeviceEvent = (ip) => userConfig.removeDeviceEvent(ip);
+module.exports.getUserConfigDir = () => USER_CONFIG_DIR;

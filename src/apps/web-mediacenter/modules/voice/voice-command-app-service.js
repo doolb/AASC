@@ -5,7 +5,9 @@ const timeAnnounce = require('../time/time-announce-app-service');
 const chat = require('../../../../external/llm/llm-service');
 const timeParser = require('../../../../core/utils/time-parser');
 
-const SEARCH_HISTORY_FILE = path.join(__dirname, '../../../../../config/search-history.json');
+const { USER_CONFIG_DIR } = require('../../../server/modules/config/user-config-paths');
+
+const SEARCH_HISTORY_FILE = path.join(USER_CONFIG_DIR, 'search-history.json');
 
 let searchHistory = [];
 let pendingConfirmations = new Map();

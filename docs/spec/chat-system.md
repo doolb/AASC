@@ -87,10 +87,10 @@
 
 ```
 常量:
-    HISTORY_DIR: '../config'
+    HISTORY_DIR: ~/.config/aasc-user  (USER_CONFIG_DIR)
     HISTORY_FILE_BASE: 'chat-history'
-    SESSION_FILE: '../config/chat-session.json'
-    COMMANDS_FILE: '../config/chat-commands.json'
+    SESSION_FILE: ~/.config/aasc-user/chat-session.json
+    COMMANDS_FILE: ~/.config/aasc-user/chat-commands.json
     MAX_HISTORY_PER_SESSION: 100
 
 变量:
@@ -1447,6 +1447,6 @@ POST /api/chat/profiles/switch:
 | public/upload.html | 控制端页面 |
 | public/display.html | 显示端页面 |
 | server.js | 服务端 |
-| config/chat-history.json | 聊天历史 |
-| config/chat-session.json | 会话状态 |
-| config/chat-commands.json | 自定义指令 |
+| ~/.config/aasc-user/chat-history.json | 聊天历史 |
+| ~/.config/aasc-user/chat-session.json | 会话状态 |
+| ~/.config/aasc-user/chat-commands.json | 自定义指令 |

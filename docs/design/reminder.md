@@ -37,7 +37,7 @@
 |------|------|
 | src/apps/web-mediacenter/modules/reminder/reminder-app-service.js | 服务端提醒逻辑 |
 | public/js/reminder.js | 控制端提醒界面 |
-| config/reminders.json | 提醒数据存储 |
+| ~/.config/aasc-user/reminders.json | 提醒数据存储 |
 
 ---
 

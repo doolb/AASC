@@ -258,5 +258,5 @@ privateSessionSwitched:
 | public/js/chat.js | 修改 | 新增会话选择器 UI 和相关函数 |
 | public/js/websocket.js | 修改 | 新增 session 相关消息处理 |
 | public/css/chat.css | 修改 | 新增会话选择器样式 |
-| config/chat-session.json | 变更 | 新增 privateSessionId 和 sessions 字段 |
+| ~/.config/aasc-user/chat-session.json | 变更 | 新增 privateSessionId 和 sessions 字段 |
 | docs/spec/chat-system.md | 修改 | 更新实现文档 |

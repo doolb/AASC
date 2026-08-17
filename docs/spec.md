@@ -91,10 +91,11 @@
 
 | 文件 | 说明 |
 |------|------|
-| config/config.json | 主配置文件 (服务器端口、TTS、显示端状态) |
-| config/chat-history.json | 聊天历史记录 |
-| config/media-libraries.json | 媒体库配置 |
-| config/reminders.json | 提醒数据 |
+| config/config.json | 主配置文件 (服务器端口、TTS 等静态配置) |
+| ~/.config/aasc-user/userconfig.json | 私人运行状态 (显示端播放状态、设备语音事件) |
+| ~/.config/aasc-user/chat-history.json | 聊天历史记录 |
+| ~/.config/aasc-user/media-libraries.json | 媒体库配置 |
+| ~/.config/aasc-user/reminders.json | 提醒数据 |
 
 ## 数据流
 

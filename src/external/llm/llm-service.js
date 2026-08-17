@@ -3,12 +3,14 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const HISTORY_DIR = path.join(__dirname, '../../../config');
+const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
+
+const HISTORY_DIR = USER_CONFIG_DIR;
 const HISTORY_FILE_BASE = 'chat-history';
-const SESSION_FILE = path.join(__dirname, '../../../config/chat-session.json');
-const COMMANDS_FILE = path.join(__dirname, '../../../config/chat-commands.json');
-const IMPORTANT_FILE = path.join(__dirname, '../../../config/important-records.json');
-const TEMPLATES_FILE = path.join(__dirname, '../../../config/chat-templates.json');
+const SESSION_FILE = path.join(USER_CONFIG_DIR, 'chat-session.json');
+const COMMANDS_FILE = path.join(USER_CONFIG_DIR, 'chat-commands.json');
+const IMPORTANT_FILE = path.join(USER_CONFIG_DIR, 'important-records.json');
+const TEMPLATES_FILE = path.join(USER_CONFIG_DIR, 'chat-templates.json');
 const MAX_MESSAGE_LENGTH = 51200;
 
 const DEFAULT_TEMPLATES = [
@@ -89,6 +91,9 @@ function saveHistory() {
     }
     historySaveTimer = setTimeout(() => {
         try {
+            if (!fs.existsSync(HISTORY_DIR)) {
+                fs.mkdirSync(HISTORY_DIR, { recursive: true });
+            }
             const groupedByFile = {};
             const expectedFiles = new Set();
 

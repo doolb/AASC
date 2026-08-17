@@ -75,7 +75,7 @@
 | 媒体库核心 | src/apps/web-mediacenter/modules/media/media-library-app-service.js | 提供者接口、管理器、三种实现 |
 | 媒体库前端 | public/js/media-library.js | UI交互、文件操作 |
 | 媒体库样式 | public/css/media-library.css | 界面样式 |
-| 媒体库配置 | config/media-libraries.json | 媒体库配置存储 |
+| 媒体库配置 | ~/.config/aasc-user/media-libraries.json | 媒体库配置存储 |
 
 ## 用户界面设计
 
@@ -142,7 +142,7 @@
 - server.js (修改：添加 API 路由)
 - public/upload.html (修改：集成媒体库 UI)
 - public/js/main.js (修改：初始化媒体库)
-- config/media-libraries.json (更新配置结构)
+- ~/.config/aasc-user/media-libraries.json (更新配置结构)
 
 ### 2026-03-28 批量上传和文件夹上传
 

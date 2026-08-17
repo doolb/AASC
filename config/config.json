@@ -22,6 +22,12 @@
     },
     "device": "server"
   },
+  "voiceprint": {
+    "enabled": true,
+    "extraction": "server",
+    "threshold": 0.5,
+    "multiSpeaker": true
+  },
   "voiceCommand": {
     "defaultWeatherCity": "Chengdu",
     "weatherCities": [
@@ -59,190 +65,6 @@
     "warnThreshold": 20,
     "memoryWarningThreshold": 85,
     "defaultTimeRange": "10m"
-  },
-  "displayStates": {
-    "192.168.1.12": {
-      "currentMedia": {
-        "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/1774668184339_1762512702015.png_image.png",
-        "mediaType": "image"
-      },
-      "rotation": 90,
-      "fit": "crop",
-      "crop": {
-        "x": 0,
-        "y": 13.281595192492247,
-        "width": 100,
-        "height": 73.4368096150155
-      },
-      "playlist": [],
-      "volume": 0,
-      "isPlaying": true,
-      "capabilities": {
-        "mediaRendering": true,
-        "voicePlayback": true,
-        "voiceRecording": false,
-        "voiceRecognition": true,
-        "displayText": true
-      },
-      "userCapabilities": {
-        "mediaRendering": true,
-        "voicePlayback": true,
-        "voiceRecording": false,
-        "voiceRecognition": true,
-        "displayText": true
-      }
-    },
-    "192.168.1.39": {
-      "currentMedia": {
-        "type": "url",
-        "url": "http://192.168.1.39:8081/uploads/1774713544470_%E9%95%BF%E5%8A%A8%E6%80%81%20%E5%B4%A9%E5%9D%8F-%E8%8A%B1%E7%81%AB(%E9%85%8D).mp4",
-        "mediaType": "video"
-      },
-      "rotation": 0,
-      "fit": "crop",
-      "crop": {
-        "x": 5.277044854881266,
-        "y": 35.58707124010553,
-        "width": 46.56356295895985,
-        "height": 64.41292875989447
-      },
-      "playlist": [],
-      "isPlaying": false
-    },
-    "192.168.1.101": {
-      "currentMedia": {
-        "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/1774541285690_1625570714_1OGR1ioGbqS35QNew_Source.mp4",
-        "mediaType": "video"
-      },
-      "rotation": 90,
-      "fit": "crop",
-      "crop": {
-        "x": 0,
-        "y": 71.6446754572982,
-        "width": 100,
-        "height": 28.355324542701787
-      },
-      "volume": 6,
-      "playlist": [],
-      "isPlaying": false,
-      "capabilities": {
-        "mediaRendering": false,
-        "voicePlayback": true,
-        "voiceRecording": true,
-        "voiceRecognition": false,
-        "displayText": false
-      },
-      "userCapabilities": {
-        "mediaRendering": false,
-        "voicePlayback": true,
-        "voiceRecording": true,
-        "voiceRecognition": false,
-        "displayText": false
-      }
-    },
-    "192.168.1.19": {
-      "currentMedia": null,
-      "rotation": 0,
-      "fit": "contain",
-      "crop": {
-        "x": 0,
-        "y": 0,
-        "width": 100,
-        "height": 100
-      },
-      "volume": 100,
-      "playlist": []
-    },
-    "192.168.1.6": {
-      "currentMedia": {
-        "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/1774668209326_%E7%8E%8B%E8%80%85%E8%8D%A3%E8%80%80%E7%91%B6%E6%97%B6%E4%B9%8B%E7%A5%88%E6%84%BF.mp4",
-        "mediaType": "video",
-        "correlationId": "url-1786885598650-opvv"
-      },
-      "rotation": 90,
-      "fit": "cover",
-      "crop": {
-        "x": 0,
-        "y": 31.249823729836205,
-        "width": 100,
-        "height": 37.50035254032759
-      },
-      "volume": 8,
-      "playlist": [],
-      "isPlaying": false,
-      "currentPlaylist": null,
-      "currentHtmlScroll": {
-        "mode": "smooth",
-        "loop": true,
-        "speed": "slow"
-      }
-    },
-    "192.168.1.33": {
-      "currentMedia": {
-        "type": "url",
-        "url": "https://192.168.1.39:8081/uploads/html/%5BVAM_3D%5D%E6%97%A0%E9%99%90%E6%9A%96%E6%9A%96%E8%9C%98%E8%9B%9B%E5%A5%97-%E8%90%9D%E8%8E%89%E8%8A%AD%E8%95%BE%E8%A3%99%E8%BD%AE%E5%A5%B8%20-%20%E6%97%A0%E9%99%90%E5%88%B6%E8%B5%84%E6%BA%90%E5%8C%BA%20-%20Sperte%E3%81%AE%E6%AC%A1%E5%85%83%E8%8C%B6%E9%A6%86.mhtml",
-        "mediaType": "html",
-        "correlationId": "url-1786776643852-nw84"
-      },
-      "rotation": 0,
-      "fit": "crop",
-      "crop": {
-        "x": 0,
-        "y": 0,
-        "width": 55.99078341013825,
-        "height": 100
-      },
-      "volume": 100,
-      "playlist": [],
-      "isPlaying": false,
-      "capabilities": {
-        "mediaRendering": false,
-        "voicePlayback": true,
-        "voiceRecording": false,
-        "voiceRecognition": true,
-        "displayText": false
-      },
-      "userCapabilities": {
-        "mediaRendering": false,
-        "voicePlayback": true,
-        "voiceRecording": false,
-        "voiceRecognition": true,
-        "displayText": false
-      },
-      "currentPlaylist": null
-    },
-    "127.0.0.1": {
-      "currentMedia": {
-        "type": "media",
-        "mediaType": "html",
-        "fileName": "e2e-test.html",
-        "data": "PGh0bWw+PGJvZHkgc3R5bGU9Im1hcmdpbjowIj48ZGl2IHN0eWxlPSJoZWlnaHQ6MzAwMHB4O2JhY2tncm91bmQ6bGluZWFyLWdyYWRpZW50KCM0NDQsIzg4OCkiPjxpbnB1dCBpZD0idCIgcGxhY2Vob2xkZXI9Iua1i+ivlei+k+WFpeahhiI+PGJ1dHRvbiBpZD0iYiIgb25jbGljaz0id2luZG93Ll9fY2xpY2tlZD0xIj7ngrnmiJE8L2J1dHRvbj48cD5zY3JvbGwgdGVzdCBjb250ZW50PC9wPjwvZGl2PjwvYm9keT48L2h0bWw+",
-        "correlationId": "media-1786777511717-ifwt"
-      },
-      "rotation": 0,
-      "fit": "contain",
-      "crop": {
-        "x": 25,
-        "y": 25,
-        "width": 50,
-        "height": 50
-      },
-      "volume": 100,
-      "playlist": []
-    }
-  },
-  "deviceEvents": {
-    "192.168.1.101": {
-      "onConnect": "早上好",
-      "onDisconnect": "晚安"
-    },
-    "192.168.1.33": {
-      "onConnect": "早上好",
-      "onDisconnect": "晚安"
-    }
   },
   "logReportDisplay": {
     "enabled": false,
@@ -285,12 +107,6 @@
     ],
     "promptFormat": "raw"
   },
-  "voiceprint": {
-    "enabled": true,
-    "extraction": "server",
-    "threshold": 0.5,
-    "multiSpeaker": true
-  },
   "logCategoryFilter": null,
   "timeAnnounce": {
     "enabled": true,
@@ -311,7 +127,7 @@
     "volume": 100,
     "playlist": [],
     "sleep": {
-      "enabled": false,
+      "enabled": true,
       "startHour": 23,
       "endHour": 8,
       "deepStartHour": 1,

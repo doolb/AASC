@@ -404,7 +404,7 @@ publicDir = PROJECT_ROOT + '/src/apps/web-mediacenter/ui/public'
 
 **实现**:
 ```
-读取 config/map-positions.json
+读取 ~/.config/aasc-user/map-positions.json
 如果文件不存在，返回空对象
 ```
 
@@ -431,7 +431,7 @@ publicDir = PROJECT_ROOT + '/src/apps/web-mediacenter/ui/public'
 验证位置数据 (x, y 必须是数字)
 读取现有位置数据
 更新指定建筑的位置
-写入 config/map-positions.json
+写入 ~/.config/aasc-user/map-positions.json
 ```
 
 ## 媒体类型检测

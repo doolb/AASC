@@ -3,7 +3,9 @@ const path = require('path');
 const tts = require('../../../../external/tts/tts-service');
 const timeListener = require('../time/time-listener-app-service');
 
-const REMINDERS_FILE = path.join(__dirname, '../../../../../config/reminders.json');
+const { USER_CONFIG_DIR } = require('../../../server/modules/config/user-config-paths');
+
+const REMINDERS_FILE = path.join(USER_CONFIG_DIR, 'reminders.json');
 
 let reminders = [];
 let displayClients = null;
