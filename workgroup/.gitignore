@@ -1,0 +1,7 @@
+# 运行时信号（在线/忙碌/当前任务）
+members/*/lock
+members/*/busy
+members/*/current-task
+
+# 待认领队列（运行时状态）
+tasks/pending/
