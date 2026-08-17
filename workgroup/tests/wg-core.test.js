@@ -98,6 +98,48 @@ test('updateHistory records 超限删最旧', () => {
     assert.strictEqual(h.records[0].id, 'r2'); // r0、r1 被删
 });
 
+test('updateHistory 同 id rework：记录替换不新增、专长不双计', () => {
+    let text = updateHistory('', {
+        tags: ['frontend'],
+        learnings: [],
+        record: { id: 'a', title: '任务A', summary: '第一次完成', tags: ['frontend'], at: 100 }
+    });
+    let h = parseHistory(text);
+    assert.strictEqual(h.records.length, 1);
+    assert.strictEqual(h.profile.frontend, 1);
+
+    // 同 id 再完成（验收打回 rework）：records 长度不增、专长仍只计 1 次
+    text = updateHistory(text, {
+        tags: ['frontend'],
+        learnings: [],
+        record: { id: 'a', title: '任务A', summary: '改完第二次', tags: ['frontend'], at: 200 }
+    });
+    h = parseHistory(text);
+    assert.strictEqual(h.records.length, 1, 'rework 后 records 长度不应增加');
+    assert.strictEqual(h.profile.frontend, 1, 'rework 后专长画像 tag 不应双计');
+    assert.strictEqual(h.records[0].summary, '改完第二次', 'rework 应更新 summary');
+    assert.strictEqual(h.records[0].at, 100, 'rework 应保留原 at');
+});
+
+test('updateHistory 新 id：正常追加记录并累加专长', () => {
+    let text = updateHistory('', {
+        tags: ['frontend'],
+        learnings: [],
+        record: { id: 'a', title: '任务A', summary: '第一次', tags: ['frontend'], at: 100 }
+    });
+    text = updateHistory(text, {
+        tags: ['UI'],
+        learnings: [],
+        record: { id: 'b', title: '任务B', summary: '新任务', tags: ['UI'], at: 200 }
+    });
+    const h = parseHistory(text);
+    assert.strictEqual(h.records.length, 2, '新 id 应正常追加记录');
+    assert.strictEqual(h.records[0].id, 'a');
+    assert.strictEqual(h.records[1].id, 'b');
+    assert.strictEqual(h.profile.frontend, 1, '新 id tag 应累加专长');
+    assert.strictEqual(h.profile.UI, 1, '新 id tag 应累加专长');
+});
+
 test('buildSummary 提取专长画像与经验约定，不含最近记录', () => {
     const text = [
         '# 专长画像', '{"frontend": 3}',

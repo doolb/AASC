@@ -37,6 +37,18 @@ function start({ root = ROOT, role, name, command = 'claude', buildArgs, pollInt
     // 进程重新上线后清掉，回到空闲状态。
     fs.rmSync(p.busyFile(name), { force: true });
     fs.rmSync(p.currentTaskFile(name), { force: true });
+    // 崩溃残留：任务可能停在 status=进行中（写完进行中、未写已完成即崩溃）。
+    // 该状态不匹配 pending 扫描（要 status 空）也不匹配 rework 扫描（要 status=待修改），
+    // 会静默不可见 → 重启后把 claimed/<name>/ 里 进行中 任务重置为 待修改，
+    // 重新进入 rework 路径被原 agent 拾取重做。
+    const crashDir = path.join(p.claimedDir, name);
+    for (const f of listFiles(crashDir, '.json')) {
+        const t = readJson(path.join(crashDir, f));
+        if (t && t.status === '进行中') {
+            writeJson(path.join(crashDir, f), { ...t, status: '待修改' });
+            console.warn(`[workgroup] 崩溃残留：任务 ${t.id} 由「进行中」重置为「待修改」，等待重做`);
+        }
+    }
 
     // 正常退出/中断时删除 lock
     const cleanup = () => {
@@ -49,11 +61,11 @@ function start({ root = ROOT, role, name, command = 'claude', buildArgs, pollInt
     let running = true;
     const runLoop = async () => {
         while (running) {
-            // 1) 新任务：pending 里 role 匹配（status 空/缺失）
+            // 1) 新任务：pending 里 role 匹配且 status 空（空/缺失 = 未开始）
             const pending = listFiles(p.pendingDir, '.json')
                 .map((f) => readJson(path.join(p.pendingDir, f)))
                 .filter(Boolean);
-            const mine = pending.find((t) => t.role === role);
+            const mine = pending.find((t) => t.role === role && (!t.status || t.status === ''));
             if (mine) {
                 const ok = atomicClaim(p, name, mine.id);
                 if (ok) {
@@ -61,11 +73,11 @@ function start({ root = ROOT, role, name, command = 'claude', buildArgs, pollInt
                     if (onTaskDone) await onTaskDone();
                 }
             } else {
-                // 2) 待修改：自己 claimed/<name>/ 里 status=待修改（验收打回小改动，原 agent 重做）
+                // 2) 待修改：自己 claimed/<name>/ 里 status=待修改 且 role 匹配（验收打回小改动，原 agent 重做）
                 const mineDir = path.join(p.claimedDir, name);
                 const rework = listFiles(mineDir, '.json')
                     .map((f) => readJson(path.join(mineDir, f)))
-                    .find((t) => t && t.status === '待修改');
+                    .find((t) => t && t.status === '待修改' && t.role === role);
                 if (rework) {
                     await executeTask({ p, root, role, name, mine: rework, command, buildArgs });
                     if (onTaskDone) await onTaskDone();

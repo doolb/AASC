@@ -98,17 +98,33 @@ function serializeHistory({ profile, learnings, records }) {
     return `# 专长画像\n${JSON.stringify(profile)}\n\n## 经验约定\n${learnLines}\n\n## 最近记录\n${recLines}\n`;
 }
 
-// 增量更新：专长累加、经验约定去重追加、最近记录追加，超限删最旧
+// 增量更新 history.md 三段（# 专长画像 / ## 经验约定 / ## 最近记录）：
+// 新任务 → 专长画像 tag 累加 + 最近记录追加；经验约定去重追加；超限删最旧。
+// rework（同一 id 任务被验收打回、原 agent 重做后再次完成）→ 该 id 最近记录已存在，
+// 原地替换（保持原 at，更新 title/summary/tags），且该记录 tags 不重复累加专长画像
+// （只在首次完成计一次专长，避免 rework 双计扭曲 main 按专长打分）。
 function updateHistory(oldText, { tags = [], learnings = [], record = null }) {
     const h = parseHistory(oldText);
-    for (const tag of tags) {
-        if (tag) h.profile[tag] = (h.profile[tag] || 0) + 1;
+    // 同 id 最近记录是否已存在（rework 再完成）
+    const idx = record ? h.records.findIndex((r) => r.id === record.id) : -1;
+    if (idx < 0) {
+        // 新任务：专长画像按 tag 累加（rework 不重复累加）
+        for (const tag of tags) {
+            if (tag) h.profile[tag] = (h.profile[tag] || 0) + 1;
+        }
     }
     for (const l of learnings) {
         if (l && !h.learnings.includes(l)) h.learnings.push(l);
     }
     while (h.learnings.length > MAX_LEARNINGS) h.learnings.shift();
-    if (record) h.records.push(record);
+    if (record) {
+        if (idx >= 0) {
+            // rework：替换记录，保持原 at，用新 title/summary/tags
+            h.records[idx] = { ...h.records[idx], ...record, at: h.records[idx].at };
+        } else {
+            h.records.push(record);
+        }
+    }
     while (h.records.length > MAX_RECORDS) h.records.shift();
     return serializeHistory(h);
 }

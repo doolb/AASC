@@ -193,3 +193,31 @@ test('端到端：role=review 任务被 review 角色认领执行', async () => 
     const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('charlie', 't6'), 'utf8'));
     assert.strictEqual(task.status, '已完成', 'review 任务完成后状态应为已完成');
 });
+
+test('端到端：崩溃残留 status=进行中 任务重启后重置待修改并重做完成', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('frontend'), '# 前端角色');
+    // 预置一个 status=进行中 的任务在 claimed/alice/（模拟 agent 写完进行中、未写已完成即崩溃）
+    ensureDir(path.join(p.claimedDir, 'alice'));
+    writeJson(p.claimedTaskFile('alice', 't7'), { id: 't7', title: '任务7', role: 'frontend', requirement: '做前端', priority: 'high', createdAt: 1, references: [], status: '进行中' });
+
+    const resultFile = p.resultFile('t7');
+    const fakeResult = JSON.stringify({ status: 'completed', summary: '完成', tags: ['UI'], learnings: [], output: 'ok' });
+    const fakeScript = `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify(fakeResult)})`;
+
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, role: 'frontend', name: 'alice',
+        command: process.execPath,
+        buildArgs: () => ['-e', fakeScript],
+        pollIntervalMs: 50
+    });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.busyFile('alice')), 5000);
+    app.stop();
+
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice', 't7'), 'utf8'));
+    assert.strictEqual(task.status, '已完成', '进行中 崩溃残留任务重启后应被重置待修改并重做完成');
+});
