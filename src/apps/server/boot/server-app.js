@@ -3698,6 +3698,8 @@ async function handleControlMessageFallback(data, ws) {
                             }
                         })();
                     } else if (data.action === 'setAutoTts') {
+                        // 自动播报开关：既控制整点报时（time.announce 任务），也控制显示端媒体文件名播报。
+                        // 持久化到 displayData.state.autoTts（显示端刷新/重启后 restoreState 恢复）+ 转发显示端
                         if (taskManager) {
                             (async () => {
                                 try {
@@ -3713,6 +3715,12 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                             })();
                         }
+                        if (displayData) {
+                            const enabled = data.enabled === true;
+                            displayData.state.autoTts = enabled;
+                            config.updateDisplayState(displayData.ip, { autoTts: enabled });
+                        }
+                        sendToDisplay(displayId, data);
                     } else {
                         sendToDisplay(displayId, data);
                     }

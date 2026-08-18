@@ -137,4 +137,6 @@ test('MAIN_SYSTEM_PROMPT 提供 main 协调者指令', () => {
     assert.ok(MAIN_SYSTEM_PROMPT.includes('analyze-requirement-level'), '应声明需求分析也下发给子 agent');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('查找问题'), '应声明查找问题也下发给子 agent');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('闲聊'), '应声明闲聊例外可直接回复');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('主动轮询'), '应声明 main 主动轮询任务');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('不打扰用户'), '应声明无进展不打扰用户');
 });
