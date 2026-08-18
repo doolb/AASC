@@ -10,6 +10,13 @@ const ROOT = path.resolve(__dirname, '..'); // workgroup/ 根（tools/ 上一级
 const DEFAULT_POLL_MS = 5000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// main claude TUI 的默认启动参数：交互模式 + 注入 main 指令 + bypassPermissions 全自动
+// （main 在 TUI 里读成员/写任务/验收改状态不被权限提示打断，同子 agent 策略）。
+// 独立函数便于测试断言默认参数。
+function defaultMainArgs() {
+    return ['--append-system-prompt', MAIN_SYSTEM_PROMPT, '--permission-mode', 'bypassPermissions'];
+}
+
 // depends 依赖全部已验收才可认领（多角色协调）。
 // 遍历 task.depends：在 tasks/claimed/ 各角色子目录（<名>-<角色>/）的 json 里找
 // id==depId 且 status==已验收；只认已验收，results 存在但未验收不算满足（避免绕过验收门控）。
@@ -66,7 +73,7 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
         process.once('SIGINT', cleanup);
         process.once('SIGTERM', cleanup);
         const cmd = mainCommand || 'claude';
-        const args = mainArgs || ['--append-system-prompt', MAIN_SYSTEM_PROMPT];
+        const args = mainArgs || defaultMainArgs();
         // cwd = 项目根（workgroup/ 上一级），main claude 既能读项目代码拆需求、又能用 workgroup/ 相对路径投递验收
         const projectRoot = path.resolve(root, '..');
         const child = spawn(cmd, args, { stdio: 'inherit', cwd: projectRoot });
@@ -368,4 +375,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { start, isReviewTask };
+module.exports = { start, isReviewTask, defaultMainArgs };

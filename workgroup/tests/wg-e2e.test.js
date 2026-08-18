@@ -556,3 +556,10 @@ test('端到端：main 模式 spawn 子进程（默认 claude TUI）并在子进
         process.exit = oldExit;
     }
 });
+
+test('main TUI 默认参数含 bypassPermissions（全自动）', () => {
+    const { defaultMainArgs } = require('../tools/poll.js');
+    const args = defaultMainArgs();
+    assert.ok(args.includes('--append-system-prompt'), '应注入 main 指令');
+    assert.ok(args.includes('--permission-mode') && args.includes('bypassPermissions'), '应含 bypassPermissions 全自动权限');
+});
