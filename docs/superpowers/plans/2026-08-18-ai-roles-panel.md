@@ -636,7 +636,7 @@ class ClaudeBridge {
         return true;
     }
 
-    // 回收：SIGTERM → 2s 未退 → SIGKILL（claude + 守卫），FIFO 由调用方删目录时一并清除
+    // 回收：SIGTERM → 2s 未退 → SIGKILL（claude + 守卫），并删除 FIFO（测试断言 stop 后 FIFO 清除）
     stop() {
         for (const file of [this.claudePidFile, this.keeperPidFile]) {
             const pid = this._readPid(file);
@@ -648,6 +648,7 @@ class ClaudeBridge {
                 if (isAlive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch (_) {} }
             }
         }, 2000);
+        for (const f of [this.inFifo, this.outFifo]) { try { fs.unlinkSync(f); } catch (_) {} }
         if (this.reader) { try { this.reader.destroy(); } catch (_) {} }
         this.reader = null;
     }
