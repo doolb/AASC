@@ -136,6 +136,7 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
     let running = true;
     const runLoop = async () => {
         while (running) {
+            let claimedThisRound = false; // 本轮是否认领到任务（认领失败/空闲时打印）
             const pending = listFiles(p.pendingDir, '.json')
                 .map((f) => readJson(path.join(p.pendingDir, f)))
                 .filter(Boolean);
@@ -183,8 +184,12 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 // 空角色切换后也走 <名>-<角色>，避免残留 claimed/<名>/ 无角色副本。
                 const ok = mine._fromRework ? true : atomicClaim(p, `${name}-${primary}`, mine.id);
                 if (ok) {
+                    claimedThisRound = true;
+                    console.log(`[workgroup] 认领任务 ${mine.id}（${mine._fromRework ? '重做待修改' : '新任务'}，角色 ${mine.role}）→ 状态=进行中`);
                     await executeTask({ p, root, role: mine.role, name, activeRole: primary, mine, command, buildArgs, secondary });
                     if (onTaskDone) await onTaskDone();
+                } else {
+                    console.warn(`[workgroup] 认领失败 ${mine.id}（可能被其他 agent 抢走）`);
                 }
             }
             if (!mine && !isEmpty) {
@@ -203,6 +208,11 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                     writeText(p.roleMemberRoleFile(name, primary), serializeRole({ primary, secondary }));
                     writeText(p.roleLockFile(name, primary), `${process.pid} ${Date.now()}`);
                 }
+            }
+            // 本轮无任务（空闲）：打印当前主角色与状态，便于用户观察轮询是否在跑。
+            // 只在本轮未认领到任务时打印，避免任务忙碌时刷屏。
+            if (!claimedThisRound) {
+                console.log(`[workgroup] 空闲轮询：主角色 ${primary || '空'}，无任务`);
             }
             await sleep(pollIntervalMs);
         }
