@@ -140,4 +140,5 @@ test('MAIN_SYSTEM_PROMPT 提供 main 协调者指令', () => {
     assert.ok(MAIN_SYSTEM_PROMPT.includes('主动轮询'), '应声明 main 主动轮询任务');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('每 3 分钟'), '应声明轮询间隔为 3 分钟');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('不打扰用户'), '应声明无进展不打扰用户');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('会话启动必做'), '应指示会话启动时自动建立轮询定时任务');
 });
