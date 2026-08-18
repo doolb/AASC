@@ -9,6 +9,14 @@
   - src/apps/server/modules/ai-roles/*.js、src/apps/server/boot/server-app.js、chat.js、websocket.js、chat.css
   - 角色与历史持久化到 ~/.config/aasc-user/ai-roles/，claude 进程 detached 服务器重启不中断
 
+- ✅ [2026-08-18] 修复：服务器重启后 display_offline 显示端服务实例不自动恢复
+  - 问题：`restoreAutoStartServices()` 只恢复 `mode=service && status=running` 实例；`display_offline` 已持久化到各任务 `results/index.json`，但恢复逻辑只认内存（`_orphanedTasks` / `this.instances`），服务器重启清空内存后显示端重连的 `retryOrphanedTasks` / `reforwardStaleDisplayTasks` 均找不到该实例 → 永不自动恢复
+  - 修复：`restoreAutoStartServices()` 新增对 `mode=service && status=display_offline` 实例的处理——按 `displayId` 分组回填 `_orphanedTasks`（复用 `handleDisplayDisconnect` 的孤儿结构，同 instanceId 去重，缺 displayId 跳过），显示端重连时由 `retryOrphanedTasks(displayId)` 自然接管，使磁盘上的 `display_offline` 与内存孤儿表在重启后重新对齐
+  - 改动文件：
+    - src/apps/server/modules/task-engine/task-manager.js（restoreAutoStartServices + 新增 _collectOfflineOrphan）
+    - tests/task-engine-restore.test.js（新增，5 单测：回填孤儿表/幂等去重/缺 displayId 跳过/显示端重连接管恢复/running 旧路径不回归）
+    - docs/spec/remote-task-system.md（服务器重启孤儿 + 断连孤儿重连恢复段补充 display_offline 回填路径）
+  - 验证：新增 5 单测全绿；现有 26 个单测回归全绿；真实 44fbce2d 实例只读冒烟收集成功（服务器活跃使用中未重启，新代码下次重启生效）
 - ✅ [2026-08-18] 修复：workgroup 空角色重启/切换后待修改任务不被重做
   - 问题：rework 扫描只查 `${name}-${primary}` 目录（当前主角色），但空角色重启后 primary 归空、切换后任务归档在认领时的角色目录（如 claimed/<名>-display/）→ 待修改任务永远不被扫描
   - 修复：rework 扫描遍历本成员所有 `claimed/<名>-<角色>/` 子目录（`name` 或 `name-` 前缀）找待修改任务；executeTask 用任务实际所在目录（`_claimedAgent`）写回状态，不依赖当前 primary

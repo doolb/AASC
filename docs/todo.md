@@ -2,6 +2,11 @@
 
 ## 功能完善
 
+- ✅已完成 [2026-08-18][2026-08-18] 服务器重启后 display_offline 显示端服务自动恢复
+  - 改动：TaskManager 启动时按 displayId 回填 _orphanedTasks，显示端重连后统一由 retryOrphanedTasks 接管；同实例去重，缺 displayId 跳过
+  - 改动文件：src/apps/server/modules/task-engine/task-manager.js、tests/task-engine-restore.test.js、docs/design/remote-task-system.md、docs/spec/remote-task-system.md、changelog.md
+  - 验证：5 项回归测试、26 项现有单测、node --check
+
 - ✅已完成 [2026-08-18][2026-08-18] 退出睡眠时视频检查控制端播放/暂停设置
   - 根因：resumeSleepMedia 无条件 mediaVideo.play()，忽略控制端暂停（单媒体无本地 isPlaying 跟踪，播放列表忽略 ps.paused）
   - 实现：新增 mediaIsPlaying（showMedia/handleControl play 同步）+ shouldPlayMedia（播放列表读 ps.paused）+ resumeSleepMedia 守卫
