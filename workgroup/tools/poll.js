@@ -156,8 +156,10 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 // ① 主角色新任务（仅非空角色）
                 mine = pending.find((t) => t.role === primary && (!t.status || t.status === '') && depsMet(p, t));
             }
-            if (!mine && !isEmpty) {
+            if (!mine) {
                 // ③ 待修改：自己 claimed/ 里 status=待修改 且 role 匹配
+                // 空角色也需重做自己认领过、被打回的任务：空角色切主角色后 primary 非空，
+                // claimed/<名>-<角色>/ 里的待修改任务应被扫描；未切换前 primary='' 目录无任务，安全跳过。
                 const mineDir = path.join(p.claimedDir, `${name}-${primary}`);
                 const rework = listFiles(mineDir, '.json')
                     .map((f) => readJson(path.join(mineDir, f)))
