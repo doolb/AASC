@@ -4,6 +4,10 @@
 
 ### 新增
 
+- ✅ [2026-08-18] 修复：workgroup 空角色重启/切换后待修改任务不被重做
+  - 问题：rework 扫描只查 `${name}-${primary}` 目录（当前主角色），但空角色重启后 primary 归空、切换后任务归档在认领时的角色目录（如 claimed/<名>-display/）→ 待修改任务永远不被扫描
+  - 修复：rework 扫描遍历本成员所有 `claimed/<名>-<角色>/` 子目录（`name` 或 `name-` 前缀）找待修改任务；executeTask 用任务实际所在目录（`_claimedAgent`）写回状态，不依赖当前 primary
+  - 改动：workgroup/tools/poll.js（rework 扫描遍历 + executeTask _claimedAgent）、wg-e2e.test.js（+空角色重启重做回归测试）
 - ✅ [2026-08-18] 修复：workgroup 角色切换后旧 lock 残留（空角色切到新角色后旧空角色 lock 未删，同 PID 死 lock 重复）
   - 问题：指派/空闲自动切换删旧 lock 用 `if (primary)` 守卫，空角色 primary='' 为假 → 跳过删除，旧 `members/<名>/lock`（空角色）残留，与新角色 lock 指向同一存活 PID
   - 修复：两处切换去掉守卫，统一 `fs.rmSync(p.roleLockFile(name, primary || ''))`（空角色也删 `members/<名>/lock`）；Exit 清理本就正确
