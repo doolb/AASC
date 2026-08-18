@@ -14,6 +14,3 @@ src/apps/android-display/build/
 src/apps/android-display/app/build/
 src/apps/android-display/local.properties
 src/apps/android-display/.kotlin/
-
-# AI 角色面板运行时状态（pid/fifo/对话历史）
-ai-roles/

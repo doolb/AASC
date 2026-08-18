@@ -68,7 +68,7 @@ ai-roles-service.js（聚合）
 
 ### 6.1 role-store.js（持久化）
 
-- 存储目录：`ai-roles/`（服务器工作目录下，gitignore）
+- 存储目录：`~/.config/aasc-user/ai-roles/`（`USER_CONFIG_DIR`，与聊天历史等既有运行数据同目录，位于用户 home，脱离 git 跟踪）
 - 每角色一个子目录：`ai-roles/<名>/`
   - `role.json`：`{name, createdAt}`
   - `history.json`：对话历史数组（`{role, content, timestamp}`），每轮完成追加
