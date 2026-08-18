@@ -563,3 +563,26 @@ test('main TUI 默认参数含 bypassPermissions（全自动）', () => {
     assert.ok(args.includes('--append-system-prompt'), '应注入 main 指令');
     assert.ok(args.includes('--permission-mode') && args.includes('bypassPermissions'), '应含 bypassPermissions 全自动权限');
 });
+
+test('回归：空角色切到任务角色后旧空角色 lock 被删除（不残留同 PID 死 lock）', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('backend-media'), '# 后端媒体');
+    // main 指派给 alice（空角色）一个 backend-media 任务
+    writeJson(p.taskFile('tL'), { id: 'tL', title: '任务L', role: 'backend-media', requirement: '做后端媒体', priority: 'high', createdAt: 1, references: [], status: '', depends: [], level: 'L4', assignedTo: 'alice' });
+
+    const resultFile = p.resultFile('tL');
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, mode: 'empty', name: 'alice', command: process.execPath,
+        buildArgs: () => ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify({ status: 'completed', summary: 'ok', tags: [], learnings: [], output: 'x' })})`],
+        pollIntervalMs: 50
+    });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.roleBusyFile('alice', 'backend-media')), 5000);
+    app.stop();
+
+    assert.ok(fs.existsSync(p.roleLockFile('alice', 'backend-media')), '新主角色 backend-media 应有 lock');
+    assert.ok(!fs.existsSync(p.roleLockFile('alice', '')), '旧空角色 lock（members/alice/lock）应在切换后删除');
+});

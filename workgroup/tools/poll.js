@@ -145,7 +145,8 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 // 任务 role 与主角色不符 → 切换主角色到任务 role
                 if (mine.role !== primary) {
                     console.log(`[workgroup] main 指派：主角色 ${primary || '空'} → ${mine.role}`);
-                    if (primary) fs.rmSync(p.roleLockFile(name, primary), { force: true });
+                    // 删旧 lock（空角色 primary='' 也删 members/<名>/lock，避免同 PID 死 lock 残留）
+                    fs.rmSync(p.roleLockFile(name, primary || ''), { force: true });
                     primary = mine.role;
                     ensureDir(p.roleDir(name, primary));
                     writeText(p.roleMemberRoleFile(name, primary), serializeRole({ primary, secondary }));
@@ -186,8 +187,8 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 );
                 if (target) {
                     console.log(`[workgroup] 空闲自动切换：主角色 ${primary || '空'} → ${target.role}`);
-                    // 切换：删旧 lock、写新 lock + role.md
-                    if (primary) fs.rmSync(p.roleLockFile(name, primary), { force: true });
+                    // 切换：删旧 lock（空角色 primary='' 也删 members/<名>/lock）、写新 lock + role.md
+                    fs.rmSync(p.roleLockFile(name, primary || ''), { force: true });
                     primary = target.role;
                     ensureDir(p.roleDir(name, primary));
                     writeText(p.roleMemberRoleFile(name, primary), serializeRole({ primary, secondary }));
