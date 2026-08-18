@@ -157,14 +157,21 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
                 mine = pending.find((t) => t.role === primary && (!t.status || t.status === '') && depsMet(p, t));
             }
             if (!mine) {
-                // ③ 待修改：自己 claimed/ 里 status=待修改 且 role 匹配
-                // 空角色也需重做自己认领过、被打回的任务：空角色切主角色后 primary 非空，
-                // claimed/<名>-<角色>/ 里的待修改任务应被扫描；未切换前 primary='' 目录无任务，安全跳过。
-                const mineDir = path.join(p.claimedDir, `${name}-${primary}`);
-                const rework = listFiles(mineDir, '.json')
-                    .map((f) => readJson(path.join(mineDir, f)))
-                    .find((t) => t && t.status === '待修改' && (t.role === primary || secondary.includes(t.role)));
-                if (rework) mine = { ...rework, _fromRework: true };
+                // ③ 待修改：扫描本成员所有 claimed/<名>-<角色>/ 子目录里的 status=待修改 任务
+                // 不依赖当前 primary 目录：空角色切换后重启 primary 归空，但任务归档在认领时的角色目录，
+                // 只扫 ${name}-${primary} 会漏（如 claimed/<名>-display/ 里待修改，primary 已空）。
+                // 空角色、主角色、副角色、切换后的待修改任务都能被原成员身份拾取重做。
+                const myClaimed = listDirs(p.claimedDir).filter((d) => d === name || d.startsWith(`${name}-`));
+                // 在本成员所有 claimed/<名>-<角色>/ 子目录里找待修改任务，并记录它所在目录
+                // （认领时的角色目录，不依赖当前 primary——空角色重启后 primary 归空，但任务归档在切换前的角色目录）
+                let rework = null;
+                let reworkAgent = null;
+                for (const agentDir of myClaimed) {
+                    const dir = path.join(p.claimedDir, agentDir);
+                    const t = listFiles(dir, '.json').map((f) => readJson(path.join(dir, f))).find((x) => x && x.status === '待修改');
+                    if (t) { rework = t; reworkAgent = agentDir; break; }
+                }
+                if (rework) mine = { ...rework, _fromRework: true, _claimedAgent: reworkAgent };
             }
             if (!mine && !isEmpty) {
                 // ④ 副角色：pending 里 secondary 匹配
@@ -206,13 +213,15 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
 
 // 执行单个任务：busy 标记 → 任务状态进行中 → 注入总结/修改要求 → spawn claude → 更新 history → 状态已完成 → 回到空闲
 async function executeTask({ p, root, role, name, activeRole, mine, command, buildArgs, secondary }) {
-    const agentDir = name + (activeRole ? '-' + activeRole : '');
+    // rework 任务用其实际所在目录（_claimedAgent）写回，不依赖当前 primary；
+    // 新任务用当前 primary 角色目录。
+    const agentDir = mine._claimedAgent || (name + (activeRole ? '-' + activeRole : ''));
     writeText(p.roleBusyFile(name, activeRole || ''), '');
     writeText(p.roleCurrentTaskFile(name, activeRole || ''), mine.id);
     const taskFile = p.claimedTaskFile(agentDir, mine.id);
     const resultFile = p.resultFile(mine.id);
-    // 剥掉 _fromRework 内部标记（仅 runLoop 内部用，不残留进任务文件）
-    const { _fromRework, ...clean } = mine;
+    // 剥掉 _fromRework/_claimedAgent 内部标记（仅 runLoop 内部用，不残留进任务文件）
+    const { _fromRework, _claimedAgent, ...clean } = mine;
     // 落盘状态=进行中
     writeJson(taskFile, { ...clean, status: '进行中' });
     const summary = buildSummary(readText(p.roleHistoryFile(name, mine.role || '')));

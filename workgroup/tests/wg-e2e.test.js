@@ -614,3 +614,28 @@ test('端到端：空角色指派认领后，待修改任务被重做（isEmpty 
 
     assert.ok(doneCount >= 2, '空角色指派认领后待修改任务应被重做（doneCount>=2）');
 });
+
+test('回归：空角色重启后 primary 归空，仍能重做切换前认领的待修改任务（扫描本成员所有 claimed 子目录）', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    writeText(p.roleFile('backend-media'), '# 后端媒体');
+    // 模拟：空角色 alice 之前被指派切到 backend-media 认领、干完被打回待修改，
+    // 随后重启（primary 归空），任务留在 claimed/alice-backend-media/。
+    ensureDir(path.join(p.claimedDir, 'alice-backend-media'));
+    writeJson(p.claimedTaskFile('alice-backend-media', 'tR2'), { id: 'tR2', title: '任务R2', role: 'backend-media', requirement: '做后端媒体', priority: 'high', createdAt: 1, references: [], status: '待修改', depends: [], level: 'L4', reviewComment: '请修改' });
+
+    const resultFile = p.resultFile('tR2');
+    const { start } = require('../tools/poll.js');
+    const app = start({
+        root, mode: 'empty', name: 'alice', command: process.execPath,
+        buildArgs: () => ['-e', `require('fs').writeFileSync(${JSON.stringify(resultFile)}, ${JSON.stringify({ status: 'completed', summary: 'ok', tags: [], learnings: [], output: 'x' })})`],
+        pollIntervalMs: 50
+    });
+    await waitFor(() => fs.existsSync(resultFile), 5000);
+    await waitFor(() => !fs.existsSync(p.roleBusyFile('alice', '')), 5000);
+    app.stop();
+
+    const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice-backend-media', 'tR2'), 'utf8'));
+    assert.strictEqual(task.status, '已完成', '空角色重启后应重做切换前认领的待修改任务');
+});
