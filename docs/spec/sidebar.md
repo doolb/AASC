@@ -111,6 +111,75 @@ body {
 }
 ```
 
+### 导航高度约束
+
+```
+初始化侧边栏布局:
+    侧边栏固定覆盖视口高度
+    侧边栏导航区域占用头部之外的剩余高度
+    允许导航区域收缩到剩余高度
+    当导航项总高度超过可视高度时，仅导航区域出现垂直滚动
+    导航区域滚动不影响右侧内容区域和当前面板状态
+```
+
+对应 CSS 约束：
+
+```css
+.sidebar-nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.sidebar-nav {
+    cursor: grab;
+    user-select: none;
+}
+
+.sidebar-nav.is-dragging {
+    cursor: grabbing;
+}
+```
+
+### 导航拖动滚动
+
+```
+初始化侧边栏:
+    获取 .sidebar-nav
+    监听 pointerdown:
+        记录按下位置和当前 scrollTop
+        调用 setPointerCapture(pointerId)
+    监听 pointermove:
+        若指针已移动超过阈值:
+            scrollTop = 按下时 scrollTop - 垂直位移
+            标记正在拖动
+            阻止本次拖动产生误点击
+    监听 pointerup/pointercancel:
+        释放指针捕获
+        清理拖动状态
+```
+
+拖动只改变左侧导航的 `scrollTop`，不改变当前页签和右侧面板；未超过移动阈值的点击仍按原有导航逻辑执行。
+
+### 右侧内容区拖动滚动
+
+```
+初始化右侧内容区:
+    获取 .content
+    仅当 pointerdown 目标就是 .content 空白背景时开始拖动
+    pointermove 根据垂直位移更新 window.scrollY
+    pointerup/pointercancel 清理拖动状态
+    .panel、.section 和所有表单/媒体/链接控件不启动拖动
+```
+
+右侧拖动只改变页面纵向滚动位置，不改变当前面板、按钮状态或表单输入内容。
+
 ### 导航项
 ```css
 .nav-item {

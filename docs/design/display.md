@@ -176,13 +176,31 @@
  - ✅已完成 [2026-08-18][2026-08-18] 下发媒体取消手动覆盖（临时激活优先级高于 override）
    - 问题：手动覆盖 sleep/deep 后下发媒体，`activateTemporarily()` 只临时压过覆盖 60 秒，激活过期后回落手动覆盖——覆盖状态没有真正被下发媒体取消
    - 修复：`activateTemporarily()`（下发媒体/临时激活入口）同时 `manualSleepMode = null` 取消手动覆盖，媒体正常显示，激活窗口过期后按正常时段判定（不再回落手动覆盖）
-   - checkSleepMode 优先级不变：临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常（覆盖被取消后两者不会同时有效）
+   - activateTemporarily 会清理 manualSleepMode，因此下发媒体时两者不会同时有效；当前同时收到立即切换指令时的优先级见下方修复记录。
    - 验证：集成测试 27 步全绿（步骤 13 改为「下发媒体取消手动覆盖，过期不再回落」）
    - 改动文件：
      - src/apps/web-mediacenter/ui/public/display.html（activateTemporarily 清 manualSleepMode + 优先级注释）
      - tests/display-sleep-mode.test.js（步骤 13 断言更新）
      - docs/spec/display-sleep-mode.md（触发流程 + 手动覆盖小节）
    - 实现文档：docs/spec/display-sleep-mode.md
+
+ - ✅已完成 [2026-08-18][2026-08-18] 立即切换指令优先于临时激活窗口
+   - 问题：临时激活 60 秒期间执行立即睡眠/深度睡眠/恢复正常，checkSleepMode() 先判断 activationUntil，立即指令无法生效。
+   - 修复：sleepOverride 处理时清零 activationUntil；checkSleepMode() 先判断 manualSleepMode，再判断临时激活。
+   - 结果：立即手动覆盖 > 临时激活 > 时段判定；临时激活仍会取消手动覆盖并正常触发 60 秒显示。
+   - 验证：新增优先级静态回归测试，并在显示端集成测试增加 sleep/deep/normal 三种立即指令场景。
+   - 改动文件：
+     - src/apps/web-mediacenter/ui/public/display.html
+     - tests/display-sleep-priority.test.js
+     - tests/display-sleep-mode.test.js
+     - docs/spec/display-sleep-mode.md
+   - 实现文档：docs/spec/display-sleep-mode.md
+
+## 控制端左侧导航样式
+ - ✅已完成 [2026-08-18][2026-08-18] 隐藏左侧导航滚动条但保留滚动能力
+   - .sidebar-nav 保留原生垂直滚动，在 Firefox、旧版 Edge、WebKit/Chromium 分别隐藏滚动条视觉元素。
+   - 入口数量少时布局不变，入口超出视口时仍可通过滚轮、触控板或触摸滚动访问。
+   - 验证：tests/sidebar-layout.test.js 通过。
 
 ## 睡眠恢复检查控制端播放/暂停状态
  - ✅已完成 [2026-08-18][2026-08-18] 退出睡眠时视频检查控制端播放/暂停设置

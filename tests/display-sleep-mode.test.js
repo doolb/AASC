@@ -614,6 +614,31 @@ const assert = require('assert');
   assert.strictEqual(plPausedRestore.paused, true, '睡眠前暂停的播放列表退出睡眠后应保持暂停');
   console.log('PASS: 睡眠前暂停的播放列表退出睡眠保持暂停');
 
+  // ---- 29. 立即切换指令优先于临时激活窗口 ----
+  const overridePriority = await page.evaluate(() => {
+    sleepSettings = { ...sleepSettings, enabled: false };
+
+    activateTemporarily();
+    const activeUntilBeforeSleep = activationUntil > Date.now();
+    handleControl({ action: 'sleepOverride', value: 'sleep' });
+    const sleepResult = { state: sleepState, activationCleared: activationUntil === 0 };
+
+    activateTemporarily();
+    handleControl({ action: 'sleepOverride', value: 'deep' });
+    const deepResult = { state: sleepState, activationCleared: activationUntil === 0 };
+
+    activateTemporarily();
+    handleControl({ action: 'sleepOverride', value: 'normal' });
+    const normalResult = { state: sleepState, activationCleared: activationUntil === 0 };
+
+    return { activeUntilBeforeSleep, sleepResult, deepResult, normalResult };
+  });
+  assert.strictEqual(overridePriority.activeUntilBeforeSleep, true, '测试前应存在未过期临时激活');
+  assert.deepStrictEqual(overridePriority.sleepResult, { state: 'sleep', activationCleared: true }, '立即睡眠应覆盖临时激活');
+  assert.deepStrictEqual(overridePriority.deepResult, { state: 'deep', activationCleared: true }, '立即深度睡眠应覆盖临时激活');
+  assert.deepStrictEqual(overridePriority.normalResult, { state: 'normal', activationCleared: true }, '恢复正常应清除临时激活');
+  console.log('PASS: 立即切换指令优先于临时激活窗口');
+
   // 恢复 normal，清理测试状态
   await page.evaluate(() => { applySleepState('normal'); playlistState = null; });
 

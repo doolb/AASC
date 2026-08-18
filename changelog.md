@@ -4,6 +4,27 @@
 
 ### 修复
 
+- ✅ [2026-08-18] 控制端右侧内容区空白背景支持拖动页面滚动
+  - `main.js` 仅在 `.content` 自身作为 pointerdown 目标时，根据垂直位移更新 `window.scrollY`。
+  - `.panel`、`.section` 及按钮、表单、图片、视频、iframe 等内部元素不启动拖动，避免影响原有交互。
+  - 验证：`tests/sidebar-layout.test.js`、`node --check src/apps/web-mediacenter/ui/public/js/main.js` 通过。
+
+- ✅ [2026-08-18] 控制端左侧导航支持按住鼠标拖动滚动，并修复拖动后页签无法点击
+  - `main.js` 使用 Pointer Events 更新 `.sidebar-nav.scrollTop`，移动超过 6px 才进入拖动状态，并抑制拖动后的误点击。
+  - 修复普通点击被 `setPointerCapture` 提前截获的问题：仅在确认进入拖动状态后捕获指针。
+  - `upload.css` 增加 grab/grabbing 光标、拖动过程禁止文字选择和触摸拖动约束。
+  - 验证：`tests/sidebar-layout.test.js`、`node --check src/apps/web-mediacenter/ui/public/js/main.js` 通过；真实浏览器拖动由用户进行手动确认。
+
+- ✅ [2026-08-18] 修复立即睡眠指令被临时激活 60 秒窗口拦截，并隐藏控制端左侧导航滚动条
+  - sleepOverride 处理时清零 activationUntil，checkSleepMode() 优先判断 manualSleepMode，立即睡眠/深度睡眠/恢复正常均可覆盖未过期临时激活。
+  - .sidebar-nav 保留原生滚动能力，增加 Firefox、旧版 Edge、WebKit/Chromium 滚动条隐藏样式。
+  - 验证：tests/display-sleep-priority.test.js、tests/sidebar-layout.test.js 通过；显示端集成测试新增三种立即切换场景。
+
+- ✅ [2026-08-18] 修复控制端左侧页签入口过多时超出屏幕的问题
+  - 根因：固定侧栏内的 `.sidebar-nav` 未设置 flex 子项收缩和垂直滚动约束，入口数量增加后内容溢出底部。
+  - 修复：`src/apps/web-mediacenter/ui/public/css/upload.css` 的导航区域增加 `min-height: 0` 和 `overflow-y: auto`，仅左侧导航区域滚动。
+  - 验证：新增 `tests/sidebar-layout.test.js`，`node --test tests/sidebar-layout.test.js` 通过。
+
 - ✅ [2026-08-18] AI 角色聊天请求追踪与角色存储恢复修复
   - 删除角色后清理 removed 标记，允许同名角色立即重建并继续聊天；非数组 history.json 按损坏文件备份并从空历史恢复。
   - server role chat 的成功/失败回包统一携带原 requestId，前端严格过滤缺失或不匹配 requestId 的迟到响应。

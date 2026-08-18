@@ -4,6 +4,7 @@ window.displayCanvasSize = { width: 1920, height: 1080 };
 const Sidebar = {
     init() {
         const navItems = document.querySelectorAll('.nav-item');
+        const sidebarNav = document.querySelector('.sidebar-nav');
         
         navItems.forEach(item => {
             item.addEventListener('click', () => {
@@ -16,8 +17,123 @@ const Sidebar = {
                 this.saveLastPanel(target);
             });
         });
+
+        if (sidebarNav) {
+            this.initDragScroll(sidebarNav);
+        }
+
+        const content = document.querySelector('.content');
+        if (content) {
+            this.initContentDragScroll(content);
+        }
         
         this.loadLastPanel();
+    },
+
+    initDragScroll(sidebarNav) {
+        const dragThreshold = 6;
+        let dragState = null;
+        let suppressClickUntil = 0;
+
+        sidebarNav.addEventListener('pointerdown', (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            if (event.isPrimary === false) return;
+
+            dragState = {
+                pointerId: event.pointerId,
+                startY: event.clientY,
+                startScrollTop: sidebarNav.scrollTop,
+                moved: false,
+                captured: false
+            };
+        });
+
+        sidebarNav.addEventListener('pointermove', (event) => {
+            if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+            const deltaY = event.clientY - dragState.startY;
+            if (!dragState.moved && Math.abs(deltaY) < dragThreshold) return;
+
+            dragState.moved = true;
+            if (!dragState.captured) {
+                sidebarNav.setPointerCapture(event.pointerId);
+                dragState.captured = true;
+            }
+            sidebarNav.classList.add('is-dragging');
+            sidebarNav.scrollTop = dragState.startScrollTop - deltaY;
+            event.preventDefault();
+        });
+
+        const endDrag = (event) => {
+            if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+            if (dragState.moved) {
+                suppressClickUntil = Date.now() + 200;
+            }
+            if (dragState.captured && sidebarNav.hasPointerCapture(event.pointerId)) {
+                sidebarNav.releasePointerCapture(event.pointerId);
+            }
+            sidebarNav.classList.remove('is-dragging');
+            dragState = null;
+        };
+
+        sidebarNav.addEventListener('pointerup', endDrag);
+        sidebarNav.addEventListener('pointercancel', endDrag);
+        sidebarNav.addEventListener('click', (event) => {
+            if (Date.now() > suppressClickUntil) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            suppressClickUntil = 0;
+        }, true);
+    },
+
+    initContentDragScroll(content) {
+        const dragThreshold = 6;
+        let dragState = null;
+
+        content.addEventListener('pointerdown', (event) => {
+            if (event.target !== content) return;
+            if (event.button !== undefined && event.button !== 0) return;
+            if (event.isPrimary === false) return;
+
+            dragState = {
+                pointerId: event.pointerId,
+                startY: event.clientY,
+                startScrollTop: window.scrollY,
+                moved: false,
+                captured: false
+            };
+        });
+
+        content.addEventListener('pointermove', (event) => {
+            if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+            const deltaY = event.clientY - dragState.startY;
+            if (!dragState.moved && Math.abs(deltaY) < dragThreshold) return;
+
+            dragState.moved = true;
+            if (!dragState.captured) {
+                content.setPointerCapture(event.pointerId);
+                dragState.captured = true;
+            }
+            content.classList.add('is-dragging');
+            window.scrollTo(0, Math.max(0, dragState.startScrollTop - deltaY));
+            event.preventDefault();
+        });
+
+        const endDrag = (event) => {
+            if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+            if (dragState.captured && content.hasPointerCapture(event.pointerId)) {
+                content.releasePointerCapture(event.pointerId);
+            }
+            content.classList.remove('is-dragging');
+            dragState = null;
+        };
+
+        content.addEventListener('pointerup', endDrag);
+        content.addEventListener('pointercancel', endDrag);
     },
     
     switchPanel(targetId) {

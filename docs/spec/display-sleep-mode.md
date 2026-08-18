@@ -2,7 +2,7 @@
 
 ## 概述
 
-显示端（`display.html`）按本地时段自动隐藏媒体（睡眠）或整屏黑幕（深度睡眠），降低夜间干扰。时间判断在显示端本地，每 10 秒检查一次；优先级 临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常。
+显示端（`display.html`）按本地时段自动隐藏媒体（睡眠）或整屏黑幕（深度睡眠），降低夜间干扰。时间判断在显示端本地，每 10 秒检查一次；优先级 立即手动覆盖 > 临时激活 > 深度睡眠 > 睡眠 > 正常。
 
 ## 状态模型
 
@@ -53,8 +53,8 @@ function applySleepState(state):
 
 function checkSleepMode():          # 每 10 秒，setInterval
     target = 'normal'
-    若 Date.now() < activationUntil:  target = 'active'      # 临时激活最高优先，且与开关/手动无关
-    否则若 manualSleepMode 为 'deep'/'sleep':  target = manualSleepMode   # 手动覆盖，不随时段/开关，直到恢复
+    若 manualSleepMode 为 'deep'/'sleep':  target = manualSleepMode   # 立即切换优先，直到恢复或再次切换
+    否则若 Date.now() < activationUntil:  target = 'active'      # 临时激活高于时段判定，与开关无关
     否则若 sleepSettings.enabled:
         hour = now.getHours()
         若 inSleepWindow(hour, deepStartHour, deepEndHour): target = 'deep'
@@ -63,7 +63,7 @@ function checkSleepMode():          # 每 10 秒，setInterval
 
 function activateTemporarily():     # 控制端按钮 / 控制端下发媒体（showMedia noActivate=false）触发
     activationUntil = now + 60000
-    applySleepState('active')       # 覆盖手动与时段；60 秒过期后下次检查回落到手动覆盖或时段判定
+    applySleepState('active')       # 覆盖时段判定；60 秒过期后下次检查按手动覆盖或时段判定
 
 function reportSleepState():        # 上报当前睡眠状态给服务端（连接成功 + 每次状态变化）
     displayWs.send({ type: 'sleepStateReport', sleepState })
@@ -87,7 +87,7 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 
 控制端「立即切换」（睡眠/深度睡眠/恢复正常）
   → sendControl('sleepOverride', 'sleep' | 'deep' | 'normal')
-  → 显示端 handleControl('sleepOverride') → manualSleepMode = value 合法化 → checkSleepMode() 立即应用
+  → 显示端 handleControl('sleepOverride') → activationUntil = 0 + manualSleepMode = value 合法化 → checkSleepMode() 立即应用
   → 手动覆盖不随时段/开关自动切换，直到再下发 sleepOverride 才改变；刷新/重启即重置（不持久化）
 
 显示端内部调用（restoreState 恢复持久化媒体、播放列表自动切播）
@@ -106,8 +106,9 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 ## 手动覆盖（sleepOverride）
 
 - `manualSleepMode = null | 'sleep' | 'deep'`，控制端显式进入睡眠/深度睡眠的枚举变量。
-- 优先级高于 60 秒临时激活窗口（checkSleepMode 先判 manualSleepMode 再判 activationUntil）。
-- 但临时激活/下发媒体会**取消手动覆盖**：`activateTemporarily()` 把 `manualSleepMode` 置 null——下发媒体即退出覆盖、显示媒体，之后按正常时段判定（覆盖不会被激活窗口压过 60 秒后又回来）。
+- 优先级高于 60 秒临时激活窗口（`checkSleepMode()` 先判 `manualSleepMode` 再判 `activationUntil`）。
+- 立即切换指令会清除已有临时激活窗口：处理 `sleepOverride` 时将 `activationUntil` 置零，保证立即睡眠、立即深度睡眠、恢复正常都立即生效。
+- 临时激活/下发媒体会**取消手动覆盖**：`activateTemporarily()` 把 `manualSleepMode` 置 null——下发媒体即退出覆盖、显示媒体，之后按正常时段判定。
 - 与「启用睡眠」开关无关：`sleepSettings.enabled=false` 时手动覆盖仍生效。
 - 不随时间流逝/时段切换自动退出，需再下发 `sleepOverride('normal')` 或切到另一状态才改变；刷新/重启即重置（临时、不持久化）。
 

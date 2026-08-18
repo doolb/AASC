@@ -44,6 +44,21 @@ body {
 .sidebar-nav {
     flex: 1;
     padding: 10px 0;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.sidebar-nav.is-dragging {
+    cursor: grabbing;
 }
 
 .nav-item {
@@ -85,6 +100,11 @@ body {
     margin-left: 60px;
     padding: 20px;
     max-width: calc(100% - 60px);
+}
+
+.content.is-dragging {
+    cursor: grabbing;
+    user-select: none;
 }
 
 .panel {

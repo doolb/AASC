@@ -2478,7 +2478,8 @@
                     break;
 
                 case 'sleepOverride':
-                    // 手动覆盖：显式进入睡眠/深度睡眠（或恢复正常），不随时段/开关自动切换，直到再次下发
+                    // 立即切换优先于临时激活：先清除 60 秒窗口，再应用手动睡眠/恢复正常
+                    activationUntil = 0;
                     manualSleepMode = (data.value === 'sleep' || data.value === 'deep') ? data.value : null;
                     checkSleepMode();
                     break;
@@ -2487,7 +2488,7 @@
 
         // ===== 睡眠模式：按时段自动隐藏媒体/UI，降低夜间干扰 =====
         // 时间在显示端本地判断（各设备用自己时区），每 10 秒检查一次。
-        // 优先级：临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常。
+        // 优先级：立即手动覆盖 > 临时激活 > 深度睡眠 > 睡眠 > 正常。
         // 下发媒体/临时激活（activateTemporarily）会同时取消手动覆盖（manualSleepMode=null），
         // 因此手动覆盖与激活窗口不会同时有效：覆盖被取消后按正常时段判定。
         const sleepOverlay = document.getElementById('sleepOverlay');
@@ -2581,11 +2582,11 @@
         // 10 秒定时检查：按优先级计算目标状态，状态变化才应用（避免每 10 秒重复 DOM 操作）
         function checkSleepMode() {
             let target = 'normal';
-            // 临时激活最高优先（与启用开关/手动覆盖无关）；手动覆盖次之，优先于时段判定
-            if (Date.now() < activationUntil) {
-                target = 'active';
-            } else if (manualSleepMode === 'deep' || manualSleepMode === 'sleep') {
+            // 立即切换优先于临时激活；临时激活只覆盖时段判定
+            if (manualSleepMode === 'deep' || manualSleepMode === 'sleep') {
                 target = manualSleepMode;
+            } else if (Date.now() < activationUntil) {
+                target = 'active';
             } else if (sleepSettings.enabled) {
                 const hour = new Date().getHours();
                 if (inSleepWindow(hour, sleepSettings.deepStartHour, sleepSettings.deepEndHour)) {
@@ -4453,7 +4454,6 @@
     </script>
 </body>
 </html>
-
 
 
 
