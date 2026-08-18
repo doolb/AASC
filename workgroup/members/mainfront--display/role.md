@@ -1,2 +1,2 @@
-primary: display
+primary: 
 secondary: 

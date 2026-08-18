@@ -145,7 +145,7 @@ const assert = require('assert');
     const h = new Date().getHours();
     ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
       type: 'control', action: 'sleepSettings',
-      value: { enabled: true, startHour: h, endHour: h + 1, deepStartHour: h, deepEndHour: h + 1 }
+      value: { enabled: true, startHour: h, endHour: (h + 23) % 24, deepStartHour: h, deepEndHour: (h + 23) % 24 }
     }) }));
   });
   await new Promise(r => setTimeout(r, 300));
@@ -200,7 +200,7 @@ const assert = require('assert');
     const h = new Date().getHours();
     ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
       type: 'restoreState',
-      state: { sleep: { enabled: true, startHour: h, endHour: h + 1, deepStartHour: h, deepEndHour: h + 1 } }
+      state: { sleep: { enabled: true, startHour: h, endHour: (h + 23) % 24, deepStartHour: h, deepEndHour: (h + 23) % 24 } }
     }) }));
   });
   await new Promise(r => setTimeout(r, 300));
@@ -265,14 +265,16 @@ const assert = require('assert');
   assert.strictEqual(manualIndependent.overlay, 'block', '手动深度黑幕应保持显示');
   console.log('PASS: 手动覆盖不依赖启用开关');
 
-  // ---- 13. 临时激活覆盖手动，过期后回落手动 ----
+  // ---- 13. 下发媒体/临时激活取消手动覆盖（activateTemporarily 清 manualSleepMode）----
   await page.evaluate(() => { activateTemporarily(); });
   const ovrActive = await page.evaluate(() => ({
     state: sleepState,
-    overlay: document.getElementById('sleepOverlay').style.display
+    overlay: document.getElementById('sleepOverlay').style.display,
+    manual: manualSleepMode
   }));
-  assert.strictEqual(ovrActive.state, 'active', '临时激活应覆盖手动深度睡眠');
+  assert.strictEqual(ovrActive.state, 'active', '临时激活应进入激活状态');
   assert.strictEqual(ovrActive.overlay, 'none', '激活应移除黑幕');
+  assert.strictEqual(ovrActive.manual, null, '临时激活应取消手动覆盖（manualSleepMode=null）');
   await page.evaluate(() => {
     activationUntil = Date.now() - 1;   // 模拟激活窗口过期
     checkSleepMode();
@@ -281,9 +283,9 @@ const assert = require('assert');
     state: sleepState,
     overlay: document.getElementById('sleepOverlay').style.display
   }));
-  assert.strictEqual(ovrBack.state, 'deep', '激活过期后应回落手动深度睡眠');
-  assert.strictEqual(ovrBack.overlay, 'block', '回落手动后黑幕重新显示');
-  console.log('PASS: 临时激活覆盖手动、过期回落手动');
+  assert.strictEqual(ovrBack.state, 'normal', '激活过期后不再回落手动覆盖（已取消），enabled=false 按 normal');
+  assert.strictEqual(ovrBack.overlay, 'none', '取消覆盖后正常态无黑幕');
+  console.log('PASS: 下发媒体取消手动覆盖，过期不再回落');
 
   // ---- 14. handleControl('sleepOverride', 'normal') 恢复正常 ----
   await page.evaluate(() => {
@@ -448,6 +450,172 @@ const assert = require('assert');
   assert.strictEqual(ttsResume.state, 'normal', '关闭睡眠应回到 normal');
   assert.strictEqual(ttsResume.playCalls, 1, '唤醒应续播睡眠前暂停的当前 TTS');
   console.log('PASS: 唤醒续播当前 TTS');
+
+  // ---- 21. handleTTS('setAutoTts') 同步 autoTtsEnabled ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'tts', action: 'setAutoTts', enabled: false
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const ttsOff = await page.evaluate(() => ({ autoTts: autoTtsEnabled }));
+  assert.strictEqual(ttsOff.autoTts, false, 'setAutoTts false 应关闭自动播报');
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'tts', action: 'setAutoTts', enabled: true
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const ttsOn = await page.evaluate(() => ({ autoTts: autoTtsEnabled }));
+  assert.strictEqual(ttsOn.autoTts, true, 'setAutoTts true 应开启自动播报');
+  console.log('PASS: handleTTS(setAutoTts) 同步 autoTtsEnabled');
+
+  // ---- 22. restoreState 恢复 autoTts（持久化开关）+ 旧数据缺字段保持默认 ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'restoreState', state: { autoTts: false }
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const restoredFalse = await page.evaluate(() => ({ autoTts: autoTtsEnabled }));
+  assert.strictEqual(restoredFalse.autoTts, false, 'restoreState autoTts=false 应恢复关闭');
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'restoreState', state: { autoTts: true }
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const restoredTrue = await page.evaluate(() => ({ autoTts: autoTtsEnabled }));
+  assert.strictEqual(restoredTrue.autoTts, true, 'restoreState autoTts=true 应恢复开启');
+  // 旧数据无 autoTts 字段：不改变当前值（降级安全）
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'restoreState', state: { rotation: 90 }
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const restoredUndef = await page.evaluate(() => ({ autoTts: autoTtsEnabled }));
+  assert.strictEqual(restoredUndef.autoTts, true, 'restoreState 无 autoTts 字段应保持当前值');
+  console.log('PASS: restoreState 恢复 autoTts + 旧数据降级');
+
+  // ---- 23. 睡眠中 document click 不恢复视频（此前 click 监听无守卫，display:block && paused 时任何点击都 play）----
+  const videoUrl = 'https://127.0.0.1:8081/api/media-libraries/lib_1774720230592/proxy/mnt%2F145842476_p0-%E5%8A%A8%E5%9B%BE.mp4';
+  await page.evaluate((u) => {
+    mediaVideo.style.display = 'block';
+    mediaVideo.src = u;
+    mediaVideo.load();
+    playVideoAuto(mediaVideo);
+  }, videoUrl);
+  await page.waitForFunction(() => mediaVideo.readyState >= 2, { timeout: 30000 });
+  await new Promise(r => setTimeout(r, 800));
+  const vPlaying = await page.evaluate(() => ({ paused: mediaVideo.paused, display: mediaVideo.style.display }));
+  assert.strictEqual(vPlaying.paused, false, '视频应正在播放');
+  assert.strictEqual(vPlaying.display, 'block', 'video display 应为 block（click 监听条件成立）');
+  // 进入睡眠
+  await page.evaluate(() => applySleepState('sleep'));
+  const vSlept = await page.evaluate(() => mediaVideo.paused);
+  assert.strictEqual(vSlept, true, '睡眠应暂停视频');
+  // 睡眠中 click
+  await page.evaluate(() => document.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await new Promise(r => setTimeout(r, 300));
+  const vAfterClick = await page.evaluate(() => mediaVideo.paused);
+  assert.strictEqual(vAfterClick, true, '睡眠中 click 不应恢复视频（守卫生效）');
+  console.log('PASS: 睡眠中 click 不恢复视频');
+
+  // ---- 24. 睡眠中 handleControl('play', true) 拒绝播放 ----
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'control', action: 'play', value: true
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 300));
+  const vAfterPlayCmd = await page.evaluate(() => mediaVideo.paused);
+  assert.strictEqual(vAfterPlayCmd, true, '睡眠中 play 命令应被拒绝（视频保持暂停）');
+  console.log('PASS: 睡眠中 play 命令拒绝');
+
+  // ---- 25. 播放列表在睡眠中不切播（playCurrentItem 守卫）----
+  await page.evaluate(() => {
+    applySleepState('sleep');
+    // 哨兵 src：若 playCurrentItem 未守卫，会被播放列表项 URL 覆盖
+    mediaVideo.src = 'https://example.com/sentinel.mp4';
+    mediaVideo.pause();
+    playlistState = {
+      listId: 'pl-sleep-test', index: 0, active: true, paused: false, interval: 0,
+      timer: null, videoEndedHandler: null,
+      playlist: [{ url: 'https://example.com/playlist-item.mp4', fileName: 'x', mediaType: 'video' }]
+    };
+    playCurrentItem();
+    return { src: mediaVideo.src };
+  });
+  await new Promise(r => setTimeout(r, 200));
+  const plState = await page.evaluate(() => ({ src: mediaVideo.src, index: playlistState.index }));
+  assert.strictEqual(plState.src, 'https://example.com/sentinel.mp4', '睡眠中 playCurrentItem 不应加载播放列表项');
+  assert.strictEqual(plState.index, 0, '睡眠中播放列表 index 不应推进');
+  console.log('PASS: 播放列表睡眠中不切播');
+
+  // ---- 26. 睡眠前单媒体暂停 → 退出睡眠保持暂停（resumeSleepMedia 检查 mediaIsPlaying）----
+  const vUrl2 = 'https://127.0.0.1:8081/api/media-libraries/lib_1774720230592/proxy/mnt%2F145842476_p0-%E5%8A%A8%E5%9B%BE.mp4';
+  await page.evaluate((u) => {
+    applySleepState('normal');
+    playlistState = null;             // 清除步骤 25 残留的播放列表，回到单媒体场景
+    mediaIsPlaying = false;           // 模拟控制端暂停（handleControl play false 已同步）
+    mediaVideo.style.display = 'block';
+    mediaVideo.src = u;
+    mediaVideo.load();
+    mediaVideo.pause();
+  }, vUrl2);
+  await page.waitForFunction(() => mediaVideo.readyState >= 2, { timeout: 30000 });
+  await new Promise(r => setTimeout(r, 500));
+  // 进入睡眠再退出：resumeSleepMedia 应因 mediaIsPlaying=false 保持暂停
+  await page.evaluate(() => { applySleepState('sleep'); applySleepState('normal'); });
+  await new Promise(r => setTimeout(r, 300));
+  const pausedRestore2 = await page.evaluate(() => mediaVideo.paused);
+  assert.strictEqual(pausedRestore2, true, '睡眠前暂停的单媒体退出睡眠后应保持暂停');
+  console.log('PASS: 睡眠前暂停的单媒体退出睡眠保持暂停');
+
+  // ---- 27. 睡眠前单媒体播放中 → 退出睡眠恢复播放（mediaIsPlaying=true）----
+  await page.evaluate(() => {
+    mediaIsPlaying = true;            // 模拟控制端播放
+    mediaVideo.play().catch(() => {});
+  });
+  await new Promise(r => setTimeout(r, 300));
+  const vPlaying2 = await page.evaluate(() => mediaVideo.paused);
+  assert.strictEqual(vPlaying2, false, '播放中单媒体应处于播放态');
+  await page.evaluate(() => { applySleepState('sleep'); applySleepState('normal'); });
+  await new Promise(r => setTimeout(r, 300));
+  const vResumed = await page.evaluate(() => mediaVideo.paused);
+  assert.strictEqual(vResumed, false, '睡眠前播放中的单媒体退出睡眠后应恢复播放');
+  console.log('PASS: 睡眠前播放中的单媒体退出睡眠恢复播放');
+
+  // ---- 28. 睡眠前播放列表暂停 → 退出睡眠保持暂停（shouldPlayMedia 读 ps.paused）----
+  await page.evaluate((u) => {
+    applySleepState('normal');
+    mediaVideo.style.display = 'block';
+    mediaVideo.src = u;
+    mediaVideo.load();
+    mediaVideo.play().catch(() => {});
+    playlistState = {
+      listId: 'pl-resume-test', index: 0, active: true, paused: true, interval: 0,
+      timer: null, videoEndedHandler: null,
+      playlist: [{ url: u, fileName: 'x', mediaType: 'video' }]
+    };
+    applySleepState('sleep');
+    applySleepState('normal');        // resumeSleepMedia 读 ps.paused=true → 保持暂停
+  }, vUrl2);
+  await new Promise(r => setTimeout(r, 300));
+  const plPausedRestore = await page.evaluate(() => ({ paused: mediaVideo.paused, psPaused: playlistState.paused }));
+  assert.strictEqual(plPausedRestore.psPaused, true, '播放列表应处于暂停态');
+  assert.strictEqual(plPausedRestore.paused, true, '睡眠前暂停的播放列表退出睡眠后应保持暂停');
+  console.log('PASS: 睡眠前暂停的播放列表退出睡眠保持暂停');
+
+  // 恢复 normal，清理测试状态
+  await page.evaluate(() => { applySleepState('normal'); playlistState = null; });
 
   await browser.close();
   console.log('ALL PASS: 显示端睡眠模式');

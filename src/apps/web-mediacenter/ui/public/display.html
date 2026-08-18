@@ -1225,7 +1225,7 @@
                 autoTtsEnabled = !!state.autoTts;
             }
         }
-
+        
         function extractFileName(url) {
             try {
                 const urlParts = url.split('/');
@@ -1319,6 +1319,7 @@
 
         function playCurrentItem() {
             if (!playlistState || !playlistState.active || playlistState.paused) return;
+            if (isSleepPaused()) return;  // 睡眠/深度睡眠中不切播（ended/error/timer 触达时跳过，唤醒后恢复当前项）
             const ps = playlistState;
             const item = ps.playlist[ps.index];
             if (!item) {
@@ -2345,7 +2346,8 @@
             }
 
             announceAndReport(mediaName, data);
-            // 新媒体显示即播放（或按恢复的暂停状态），上报真实播放状态，避免服务端残留陈旧的 isPlaying=false 导致重连误暂停
+            // 新媒体显示即播放（或按恢复的暂停状态），同步本地播放状态 + 上报真实播放状态，避免服务端残留陈旧的 isPlaying=false 导致重连误暂停
+            mediaIsPlaying = !paused;
             reportPlayState(!paused);
         }
 
@@ -2409,6 +2411,9 @@
                     break;
 
                 case 'play':
+                    // 睡眠/深度睡眠中拒绝播放命令（暂停命令仍生效并上报）
+                    if (data.value === true && isSleepPaused()) break;
+                    mediaIsPlaying = data.value === true;  // 同步本地播放状态（退出睡眠恢复时检查）
                     if (data.value === true) {
                         if (mediaHtml.style.display !== 'none') {
                             // html 模式：恢复滚动播放（从当前滚动位置继续）
@@ -2483,12 +2488,15 @@
         // ===== 睡眠模式：按时段自动隐藏媒体/UI，降低夜间干扰 =====
         // 时间在显示端本地判断（各设备用自己时区），每 10 秒检查一次。
         // 优先级：临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常。
+        // 下发媒体/临时激活（activateTemporarily）会同时取消手动覆盖（manualSleepMode=null），
+        // 因此手动覆盖与激活窗口不会同时有效：覆盖被取消后按正常时段判定。
         const sleepOverlay = document.getElementById('sleepOverlay');
         const mediaContainer = document.getElementById('mediaContainer');
         let sleepSettings = { enabled: true, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
         let sleepState = 'normal';   // 'normal' | 'sleep' | 'deep' | 'active'
         let activationUntil = 0;     // 临时激活截止时间戳
         let manualSleepMode = null;  // 手动覆盖枚举：null | 'sleep' | 'deep'，控制端显式进入睡眠/深度睡眠，直到再次下发
+        let mediaIsPlaying = false;  // 单媒体控制端播放/暂停设置：showMedia 末尾与 handleControl('play') 同步更新；退出睡眠恢复时检查，暂停则保持暂停
 
         // 跨天时段判定：startHour > endHour 时跨天（23-8），否则非跨天（1-6）
         function inSleepWindow(hour, start, end) {
@@ -2509,8 +2517,15 @@
             if (mediaHtml.style.display !== 'none') stopHtmlScroll();
         }
 
-        // 恢复媒体：html 续滚动，视频续播（拦截自动播放限制）
+        // 当前媒体该不该播放：播放列表读 ps.paused（睡眠前控制端暂停播放列表则保持暂停），单媒体读 mediaIsPlaying（控制端播放/暂停设置）
+        function shouldPlayMedia() {
+            if (playlistState && playlistState.active) return !playlistState.paused;
+            return mediaIsPlaying !== false;
+        }
+
+        // 恢复媒体：html 续滚动，视频续播（拦截自动播放限制）；控制端暂停的媒体保持暂停，不自动播放
         function resumeSleepMedia() {
+            if (!shouldPlayMedia()) return;
             if (mediaHtml.style.display !== 'none') {
                 startHtmlScroll(mediaHtml, currentHtmlScroll);
             } else if (mediaVideo.src) {
@@ -2584,8 +2599,10 @@
             }
         }
 
-        // 临时激活：强制显示 60 秒，之后下一次检查恢复按时段隐藏
+        // 临时激活：强制显示 60 秒。下发媒体/临时激活同时取消手动覆盖（manualSleepMode 置 null），
+        // 覆盖解除后不再回落手动，改按时段判定
         function activateTemporarily() {
+            manualSleepMode = null;
             activationUntil = Date.now() + 60000;
             applySleepState('active');
         }
@@ -3712,11 +3729,13 @@
         }
         
         document.addEventListener('click', function() {
+            // 睡眠/深度睡眠中点击页面不恢复视频（睡眠期间媒体容器已隐藏，点击遮罩/系统 UI 不应触发播放）
+            if (isSleepPaused()) return;
             if (mediaVideo.style.display === 'block' && mediaVideo.paused) {
                 mediaVideo.play().catch(e => console.log('播放被阻止'));
             }
         });
-        
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'f' || e.key === 'F') {
                 if (document.fullscreenElement) {
@@ -3727,6 +3746,8 @@
             }
 
             if (e.key === ' ') {
+                // 睡眠中忽略空格播放/暂停切换
+                if (isSleepPaused()) return;
                 if (mediaVideo.paused) {
                     mediaVideo.play();
                 } else {

@@ -2930,3 +2930,124 @@
 {"id":"1787020127136-kkhfpn","ts":1787020127136,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
 {"id":"1787020153838-6kpnp8","ts":1787020153838,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 126.7MB | Heap: 22.4MB/27.6MB | External: 5.2MB | ArrayBuffers: 2.8MB"}
 {"id":"1787020157152-b8v8cz","ts":1787020157152,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020187153-dprtzc","ts":1787020187153,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020202184-hjvtrv","ts":1787020202184,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> tts action=playAudio \"现在时间是上午10点30分\""}
+{"id":"1787020205184-1dwtfk","ts":1787020205185,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> tts action=playAudio \"现在时间是上午10点30分\""}
+{"id":"1787020208186-af3l53","ts":1787020208186,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> tts action=playAudio \"现在时间是上午10点30分\""}
+{"id":"1787020208186-enm06b","ts":1787020208186,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020213839-7zu5ud","ts":1787020213839,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 126.7MB | Heap: 23.0MB/27.9MB | External: 3.8MB | ArrayBuffers: 1.4MB"}
+{"id":"1787020217154-z5oclb","ts":1787020217154,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020247155-29s4ys","ts":1787020247155,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020273840-2310jf","ts":1787020273840,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 127.2MB | Heap: 22.9MB/27.9MB | External: 4.0MB | ArrayBuffers: 1.5MB"}
+{"id":"1787020277156-olmld3","ts":1787020277156,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020307157-81j1ly","ts":1787020307157,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020333839-i4ljla","ts":1787020333839,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 127.8MB | Heap: 22.1MB/28.1MB | External: 3.9MB | ArrayBuffers: 1.5MB"}
+{"id":"1787020337156-hxkt6l","ts":1787020337156,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020367159-3gyhdt","ts":1787020367159,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020393840-z6an8t","ts":1787020393840,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 127.8MB | Heap: 22.1MB/27.9MB | External: 4.3MB | ArrayBuffers: 1.9MB"}
+{"id":"1787020397160-zfjbbs","ts":1787020397160,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020427161-1q0p6n","ts":1787020427161,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020453840-oorwmi","ts":1787020453840,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 127.8MB | Heap: 22.0MB/27.6MB | External: 4.8MB | ArrayBuffers: 2.4MB"}
+{"id":"1787020457164-kjbjwo","ts":1787020457164,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020487165-dhoetl","ts":1787020487165,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020513842-1el8ci","ts":1787020513842,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 128.1MB | Heap: 22.7MB/28.1MB | External: 5.3MB | ArrayBuffers: 2.9MB"}
+{"id":"1787020517167-tafmkk","ts":1787020517167,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020547168-y7ly7w","ts":1787020547168,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020573842-3wlwvh","ts":1787020573842,"cat":"内存","lvl":"debug","dev":"server","src":null,"msg":"RSS: 128.1MB | Heap: 22.9MB/28.1MB | External: 5.3MB | ArrayBuffers: 2.9MB"}
+{"id":"1787020577172-hn4w09","ts":1787020577174,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> task:widget_update"}
+{"id":"1787020578349-aavij3","ts":1787020578349,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-txri9ftz"}
+{"id":"1787020578349-9ywfgg","ts":1787020578349,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-txri9ftz 已断开，当前连接数: 0"}
+{"id":"1787020578350-kcaocc","ts":1787020578350,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020578874-edov26","ts":1787020578874,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-txri9ftz (192.168.1.6) 已连接，当前连接数: 1"}
+{"id":"1787020578875-fx48nc","ts":1787020578875,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-txri9ftz (192.168.1.6)"}
+{"id":"1787020578875-nesyhm","ts":1787020578875,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020578886-idjjnv","ts":1787020578886,"cat":"WS","lvl":"info","dev":"server","src":"display:display-txri9ftz","msg":"<< canvasSize"}
+{"id":"1787020578886-6xzq1d","ts":1787020578886,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020578946-cuyt43","ts":1787020578946,"cat":"WS","lvl":"info","dev":"server","src":"display:display-txri9ftz","msg":"<< browserInfo"}
+{"id":"1787020578946-3tnwik","ts":1787020578946,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020578976-0noanr","ts":1787020578976,"cat":"WS","lvl":"info","dev":"server","src":"display:display-txri9ftz","msg":"<< capabilities"}
+{"id":"1787020578976-ma8ful","ts":1787020578976,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> capabilitiesUpdated"}
+{"id":"1787020578977-xt73sx","ts":1787020578977,"cat":"能力","lvl":"info","dev":"display","src":null,"msg":"显示端 display-txri9ftz webgpu=不可用, webgl=可用"}
+{"id":"1787020578977-xo3qv9","ts":1787020578977,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020579070-uyxt39","ts":1787020579070,"cat":"WS","lvl":"info","dev":"server","src":"display:display-txri9ftz","msg":"<< voiceStatus"}
+{"id":"1787020579075-aebt9f","ts":1787020579075,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020579077-wagj35","ts":1787020579077,"cat":"WS","lvl":"info","dev":"server","src":"display:display-txri9ftz","msg":"<< sleepStateReport"}
+{"id":"1787020579078-digync","ts":1787020579078,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020579139-mbe6kc","ts":1787020579139,"cat":"WS","lvl":"info","dev":"server","src":"display:display-txri9ftz","msg":"<< playStateReport"}
+{"id":"1787020579140-yvjta1","ts":1787020579140,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> playStateReport"}
+{"id":"1787020584230-a7sf1h","ts":1787020584230,"cat":"连接","lvl":"info","dev":"server","src":null,"msg":"显示端 display-cwd0i0vs (127.0.0.1) 已连接，当前连接数: 2"}
+{"id":"1787020584231-uo0ejz","ts":1787020584231,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端连接: display-cwd0i0vs (127.0.0.1)"}
+{"id":"1787020584232-yei4mv","ts":1787020584232,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020584265-iwe9op","ts":1787020584265,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< canvasSize"}
+{"id":"1787020584266-9qwkrr","ts":1787020584266,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020584304-pwhyk0","ts":1787020584304,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< browserInfo"}
+{"id":"1787020584305-f0mtdm","ts":1787020584305,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020584322-p4gz60","ts":1787020584322,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< capabilities"}
+{"id":"1787020584322-ls4c1j","ts":1787020584322,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> capabilitiesUpdated"}
+{"id":"1787020584323-d4n37p","ts":1787020584323,"cat":"能力","lvl":"info","dev":"display","src":null,"msg":"显示端 display-cwd0i0vs webgpu=不可用, webgl=可用"}
+{"id":"1787020584326-9eri32","ts":1787020584326,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020584368-81cedf","ts":1787020584368,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< voiceStatus"}
+{"id":"1787020584368-4catqx","ts":1787020584368,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020584368-0wl7gn","ts":1787020584368,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020584368-nr28em","ts":1787020584368,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
+{"id":"1787020584827-t8xcer","ts":1787020584827,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020584827-r9csvg","ts":1787020584827,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020584833-wkx4vg","ts":1787020584833,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020584833-cekkv5","ts":1787020584833,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020584850-el1986","ts":1787020584850,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020584850-8opspi","ts":1787020584850,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020584875-b6fov9","ts":1787020584875,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020584875-n9dhds","ts":1787020584875,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020584905-5x8182","ts":1787020584905,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020584906-jdvgb1","ts":1787020584906,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020585282-y89z2z","ts":1787020585282,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020585282-2hebme","ts":1787020585282,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020585585-mernca","ts":1787020585585,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020585586-du5flb","ts":1787020585586,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020585917-1bkk16","ts":1787020585917,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020585917-2qsx7c","ts":1787020585917,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020586249-ks9n95","ts":1787020586249,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020586249-lxl8d0","ts":1787020586249,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020586570-vdiaen","ts":1787020586570,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020586570-a9jnsc","ts":1787020586570,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020586592-1sh3ys","ts":1787020586592,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020586599-j72kx3","ts":1787020586599,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020586932-fy14x0","ts":1787020586932,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020586935-ryi32n","ts":1787020586935,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020587196-nks9i7","ts":1787020587196,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< playStateReport"}
+{"id":"1787020587206-qdbotq","ts":1787020587206,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> playStateReport"}
+{"id":"1787020587797-a8y9b4","ts":1787020587797,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< playStateReport"}
+{"id":"1787020587799-nxzdez","ts":1787020587799,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> playStateReport"}
+{"id":"1787020588165-z0lmya","ts":1787020588165,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< playStateReport"}
+{"id":"1787020588166-lve71t","ts":1787020588166,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> playStateReport"}
+{"id":"1787020588397-jbzo88","ts":1787020588397,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< playStateReport"}
+{"id":"1787020588397-ws14i4","ts":1787020588397,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> playStateReport"}
+{"id":"1787020588625-lu3ltw","ts":1787020588625,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020588625-ypxjtj","ts":1787020588625,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020588878-xfsaia","ts":1787020588878,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020588878-baovbw","ts":1787020588878,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020591480-vzpmw4","ts":1787020591480,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020591483-x6679g","ts":1787020591483,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020592114-dyy4bi","ts":1787020592114,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020592114-1sft5r","ts":1787020592114,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020592329-2i67pf","ts":1787020592329,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020592330-d6kac0","ts":1787020592330,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020592908-mm9sbe","ts":1787020592908,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020592908-x0dfv2","ts":1787020592908,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020592908-z41m8b","ts":1787020592908,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020592908-i5uxvn","ts":1787020592908,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020593534-uhuuak","ts":1787020593534,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020593534-9n10hf","ts":1787020593534,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020593540-f8rbq2","ts":1787020593540,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020593540-8cpsdp","ts":1787020593540,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020593843-9ww9wf","ts":1787020593843,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020593846-jvjk24","ts":1787020593846,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020593853-eio9ji","ts":1787020593853,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020593858-pzsgja","ts":1787020593858,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020593858-nlv5ys","ts":1787020593858,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020593858-eihxue","ts":1787020593858,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020594191-t8tfce","ts":1787020594191,"cat":"WS","lvl":"info","dev":"server","src":"display:display-cwd0i0vs","msg":"<< sleepStateReport"}
+{"id":"1787020594191-k27pwt","ts":1787020594191,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> sleepStateReport"}
+{"id":"1787020594277-930973","ts":1787020594277,"cat":"WS","lvl":"info","dev":"server","src":null,"msg":"显示端断开: display-cwd0i0vs"}
+{"id":"1787020594277-m8ltqc","ts":1787020594277,"cat":"断开","lvl":"warn","dev":"server","src":null,"msg":"显示端 display-cwd0i0vs 已断开，当前连接数: 1"}
+{"id":"1787020594302-a9ptqt","ts":1787020594302,"cat":"WS","lvl":"info","dev":"server","src":"server","msg":">> displayList"}
