@@ -83,13 +83,18 @@ ai-roles-service.js（聚合）
 - **懒启动**：首次发消息才 spawn。命令：
   `claude --input-format stream-json --output-format stream-json --permission-mode bypassPermissions --append-system-prompt <角色提示词>`
   cwd=项目根；`detached: true`（不受 server 退出影响）；stdin→in.fifo、stdout→out.fifo
+
+- **FIFO 通信机制（关键：保证服务器重启不中断）**：
+  - claude 通过 shell 重定向打开 FIFO 路径：`claude ... > out.fifo < in.fifo`。shell 打开 FIFO 后 exec claude，claude 自己持有这两个 fd（不继承服务器 fd）。
+  - **管道守卫（pipe-keeper）**：每角色另 spawn 一个 detached 微型进程，持有 in.fifo 的**写端**。作用：服务器死亡时服务器侧的写端关闭，若无人持有写端，claude 的 stdin 读到 EOF 会退出；守卫持有写端 → claude stdin 永不 EOF → 进程不中断。
+  - **stdout 阻塞自愈**：服务器死亡时 out.fifo 的读端关闭，claude 写 out.fifo 会阻塞（内核缓冲满后）；服务器重启后重新打开 out.fifo 读端，claude 的阻塞写自动恢复继续。因此服务器重启期间 claude 最多暂停输出，不会死。
+  - **读超时保护**：异步读 out.fifo，60s 无输出判定超时（可能 claude 静默）→ 广播状态提示，不 kill。
+
 - **提示词来源**：`workgroup/roles/<名>.md` 存在则用其内容；否则默认「你是<名>，一个专注<名>相关工作的助手」
-- **通信**：
-  - 发消息：写 `{"type":"user","message":{"role":"user","content":<content>}}\n` 到 in.fifo
-  - 接收：异步读 out.fifo 的行，解析 stream-json event
-    - `content_block_delta` → `onChunk(delta.text)` 转发
-    - `assistant` / 一轮结束 → `onComplete(fullMessage)`
-    - `error` → `onError`
+- **消息格式**：发消息写 `{"type":"user","message":{"role":"user","content":<content>}}\n` 到 in.fifo；接收解析 out.fifo 的 stream-json event：
+  - `content_block_delta` → `onChunk(delta.text)` 转发
+  - `assistant` / 一轮结束 → `onComplete(fullMessage)`
+  - `error` → `onError`
 - **存活检测**：读 pid + `process.kill(pid, 0)`，EPERM=存活、ESRCH=已死
 - **崩溃自愈**：server 轮询（30s）检测；发现退出 → 清理残留 FIFO/pid，标记"已停止"，下次发消息重建
 - **回收**：`stop()` → 写关闭信号（或直接 kill）→ SIGTERM → 2s 未退 → SIGKILL → 删 pid/FIFO/history/role.json
@@ -123,10 +128,11 @@ ai-roles-service.js（聚合）
 | 场景 | 处理 |
 |------|------|
 | claude 进程崩溃 | server 轮询检测 → 清理残留 + 标记停止；下次发消息重建 |
-| FIFO 阻塞/无进程写 | 异步读取 + 读超时保护（如 60s 无输出）→ 广播错误 |
+| 服务器重启（进程不中断） | pipe-keeper 持有 in.fifo 写端防 stdin EOF；claude 写 out.fifo 阻塞在重启重连后自愈 |
+| FIFO 阻塞/无进程写 | 异步读取 + 60s 读超时保护 → 广播状态提示 |
 | 重名/空名角色 | 前端 + 后端双重校验，返回错误提示 |
 | 多控制端 | 广播所有 control 客户端 |
-| 服务器重启 | restoreAll 存活检测重连/清理 |
+| 删除角色 | 桥 stop()：SIGTERM → 2s 未退 → SIGKILL → 清 pid/FIFO/history/role.json + 守卫进程 |
 
 ## 9. 测试
 
@@ -149,7 +155,8 @@ ai-roles-service.js（聚合）
 
 | 风险 | 缓解 |
 |------|------|
-| detached 进程成为野进程 | pid 文件 + kill(pid,0) 存活检测 + 删除时双信号回收 |
-| FIFO 阻塞导致 server 卡死 | 异步读取 + 超时保护 |
+| detached 进程成为野进程 | pid 文件 + kill(pid,0) 存活检测 + 删除时双信号回收 + 守卫进程一并回收 |
+| 服务器重启 claude stdin EOF / stdout 阻塞 | pipe-keeper 持有 in.fifo 写端；out.fifo 阻塞写在重连后自愈 |
+| FIFO 阻塞导致 server 卡死 | 异步读取 + 60s 读超时保护 |
 | 并发发消息乱序 | 每角色消息队列串行（进行中拒绝新消息，前端提示"正在处理"） |
 | 与 workgroup 同名角色提示词冲突 | 角色名唯一校验（前端+后端） |
