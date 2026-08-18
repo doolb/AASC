@@ -71,14 +71,6 @@ submit() -> _runServiceTask() -> run() 返回 { type: 'service', stop() }
 `stopInstance()` 在 `this.instances` 中找不到实例时，回退到 index.json 查找并直接更新 `status='stopped'`，
 确保前端发起的停止操作不会因实例不在内存而失败。
 
-`restoreAutoStartServices()` 启动恢复分两条路径：
-
-1. **`mode=service && status=running`**：立即 `submit()` → `runInstance()` 重新启动；显示端服务若显示端未连，
-   在恢复期由 `_forwardToDisplay()` 转入 `_pendingDisplayServices`，待显示端连接后 `retryPendingDisplayServices()` 重发。
-2. **`mode=service && status=display_offline`**：不立即执行（显示端可能不在线），按 `displayId` 分组回填 `_orphanedTasks`，
-   与 `handleDisplayDisconnect()` 的孤儿结构一致（同 instanceId 去重，缺 displayId 跳过），
-   待显示端重连时由 `retryOrphanedTasks(displayId)` 自然接管（rereinstance → runInstance → 转发）。
-
 #### 显示端断连孤儿
 
 显示端的 WebSocket 断开时（浏览器刷新、网络断开），`server-app.js` 的 `onDisplayDisconnect` 回调调用
@@ -102,11 +94,6 @@ submit() -> _runServiceTask() -> run() 返回 { type: 'service', stop() }
 2. `server-app.js` 的显示端连接处理（`onDisplayConnect`）在 `retryPendingDisplayServices` 后调用 `retryOrphanedTasks(displayId)`
 3. 遍历该显示端的孤儿任务列表，逐一调 `submit()` → `runInstance()` 重新创建并执行
 4. 新实例通过 `task:execute` 转发到显示端，状态流转：draft → running（pending_forward → running）
-
-**服务器重启后（内存清空）**：`_orphanedTasks` / `this.instances` 已空，但 `display_offline` 状态已持久化到
-各任务 `results/index.json`。`restoreAutoStartServices()` 会把这些实例按 `displayId` 回填 `_orphanedTasks`
-（仅回填孤儿表、不占内存不转发），显示端重连时走与断连恢复完全相同的 `retryOrphanedTasks(displayId)` 路径，
-使磁盘上的 `display_offline` 与内存中的孤儿表在重启后重新对齐。
 
 ## 草稿模式（Draft Mode）
 
@@ -142,8 +129,7 @@ submit → draft (可编辑参数)
 2. `task:run` 将 draft → running
 3. `task:rerun` 将 completed/failed/stopped 重置回 draft（同实例、同目录）
 4. 仅 draft 状态允许编辑参数
-5. 服务重启时 `restoreAutoStartServices()` 通过 submit→runInstance 两步恢复 `running` 服务；
-   `display_offline` 服务则回填 `_orphanedTasks`，等显示端重连后由 `retryOrphanedTasks` 恢复
+5. 服务重启时 `restoreAutoStartServices()` 通过 submit→runInstance 两步恢复
 
 ## TaskManager 接口
 
