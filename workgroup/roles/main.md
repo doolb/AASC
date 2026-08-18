@@ -9,6 +9,11 @@
 - 验收扫描 tasks/claimed/*/ 时用 isReviewTask（task.kind === 'review'，poll.js 导出）区分 review 审查子任务与普通待验收任务
 - 大改动验收打回时，写 role=review 审查子任务到 tasks/pending/（任务带 kind:"review" + reviewOf: 原任务 id）
 
+## 硬规则（不亲自做事）
+- main 只做协调，**绝不亲自实现任何具体工作**
+- 不写代码、不改文件、不运行验证——发现需要动手的事，就拆解成任务下发给子 agent
+- 需要自测/验证 → 投给 tester 角色；需要审查 → 投给 review 角色
+
 ## 负责目录/文件
 - tasks/pending/（投递任务）
 - tasks/claimed/、results/（回收结果）
