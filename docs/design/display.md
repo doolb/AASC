@@ -140,5 +140,61 @@
    - 前提：APK 已禁用 HTTP 缓存 + URL 带时间戳，reload 即取到最新文件
    - version 计算：服务端取 public 目录下所有文件的 mtime 最大值
    - 本次增强：版本检测由写死的 7 个文件列表改为递归扫描整个 public 目录（含 css/、js/、js/map/** 等子目录），新增任意前端文件都会触发自动刷新，无需手动维护文件清单
-   - 改动文件：src/apps/server/boot/server-app.js（/api/display-version 接口）、public/display.html（前端轮询，未改动）
-   - 实现文档：docs/spec/api.md
+
+## 自动播报开关（媒体文件名 TTS）
+ - ✅已完成 [2026-08-17][2026-08-17] 自动播报开关持久化 + 转发修复
+   - 问题：控制端「自动播报」关闭后媒体文件名仍会语音播报
+   - 根因：服务端 `setAutoTts` 分支只更新 time.announce（整点报时）任务 enabled，未转发显示端 → 显示端 `autoTtsEnabled` 恒为默认 true，播报照常触发
+   - 修复：
+     - 服务端 `setAutoTts` 分支补 `sendToDisplay(displayId, data)` 转发到显示端（控制端开关立即生效）
+     - 同时持久化 `displayData.state.autoTts = enabled` + `config.updateDisplayState(ip, { autoTts })`，显示端刷新/重启后 restoreState 恢复
+     - 显示端 `handleRestoreState` 按 `state.autoTts` 恢复（旧数据缺字段则保持当前值，降级安全）
+   - 协议/批量联动：`autoTtsEnabled` 仍由批量播放 `announceName` 临时覆盖、结束后恢复（batch-playlist 既有逻辑）
+   - 改动文件：
+     - src/apps/server/boot/server-app.js（setAutoTts 持久化 + 转发）
+     - src/apps/web-mediacenter/ui/public/display.html（handleRestoreState 恢复 autoTts）
+     - tests/display-sleep-mode.test.js（+2 步：setAutoTts 同步 / restoreState 恢复 + 旧数据降级；并修时间敏感的 h+1=24 clamp 边界 bug）
+     - docs/spec/websocket.md（显示端状态 autoTts + setAutoTts 持久化转发）
+
+## 睡眠模式视频播放守卫
+ - ✅已完成 [2026-08-17][2026-08-17] 睡眠模式视频未暂停修复（播放路径缺睡眠守卫）
+   - 问题：睡眠模式下视频仍会播放（单视频被点击恢复、批量播放自动切播）
+   - 根因：进入睡眠只 `pause()` 一次，但视频播放/恢复路径没有 `isSleepPaused()` 守卫：
+     - `document click` 监听：`display:block && paused` 时任何点击页面都 `mediaVideo.play()`（无人值守盒子睡眠中点击遮罩/系统 UI 即恢复，已 puppeteer 实测确证）
+     - `keydown` 空格：睡眠中空格切换播放/暂停
+     - `handleControl('play', value=true)`：睡眠中控制端发播放命令 resume
+     - `playCurrentItem()`（播放列表）：`ended`/`error`/`timer` 触发切播，睡眠中视频持续切播
+   - 修复：四处统一加 `isSleepPaused()` 守卫（click/空格直接忽略；play 命令睡眠中拒绝、暂停命令仍生效并上报；playCurrentItem 睡眠中 return 不切播，唤醒恢复当前项）
+   - 验证：puppeteer 实测——进入睡眠后 click/空格/play 命令均保持 `paused=true`；集成测试 27 步全绿（+3 步：click 不恢复 / play 拒绝 / 播放列表不切播）
+   - 改动文件：
+     - src/apps/web-mediacenter/ui/public/display.html（click/空格/handleControl play/playCurrentItem 加睡眠守卫）
+     - tests/display-sleep-mode.test.js（+3 步）
+     - docs/spec/display-sleep-mode.md（「睡眠期间视频播放路径守卫」小节）
+   - 实现文档：docs/spec/display-sleep-mode.md
+
+## 睡眠模式优先级与下发媒体
+ - ✅已完成 [2026-08-18][2026-08-18] 下发媒体取消手动覆盖（临时激活优先级高于 override）
+   - 问题：手动覆盖 sleep/deep 后下发媒体，`activateTemporarily()` 只临时压过覆盖 60 秒，激活过期后回落手动覆盖——覆盖状态没有真正被下发媒体取消
+   - 修复：`activateTemporarily()`（下发媒体/临时激活入口）同时 `manualSleepMode = null` 取消手动覆盖，媒体正常显示，激活窗口过期后按正常时段判定（不再回落手动覆盖）
+   - checkSleepMode 优先级不变：临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常（覆盖被取消后两者不会同时有效）
+   - 验证：集成测试 27 步全绿（步骤 13 改为「下发媒体取消手动覆盖，过期不再回落」）
+   - 改动文件：
+     - src/apps/web-mediacenter/ui/public/display.html（activateTemporarily 清 manualSleepMode + 优先级注释）
+     - tests/display-sleep-mode.test.js（步骤 13 断言更新）
+     - docs/spec/display-sleep-mode.md（触发流程 + 手动覆盖小节）
+   - 实现文档：docs/spec/display-sleep-mode.md
+
+## 睡眠恢复检查控制端播放/暂停状态
+ - ✅已完成 [2026-08-18][2026-08-18] 退出睡眠时视频检查控制端播放/暂停设置
+   - 问题：`resumeSleepMedia()` 无条件 `mediaVideo.play()`，睡眠前控制端暂停的视频退出睡眠后自动播放（单媒体 + 播放列表均受影响）
+   - 根因：显示端无本地 `mediaIsPlaying` 变量跟踪控制端播放/暂停；`resumeSleepMedia` 只判断媒体元素存在即 play，忽略 `playlistState.paused`
+   - 修复：
+     - 新增 `mediaIsPlaying` 本地变量：`showMedia` 末尾（`= !paused`）与 `handleControl('play')`（`= value===true`）同步更新；restoreState 恢复 isPlaying 时由 showMedia 一并写入
+     - 新增 `shouldPlayMedia()`：播放列表激活时读 `playlistState.paused`，否则读单媒体 `mediaIsPlaying`
+     - `resumeSleepMedia()` 开头 `if (!shouldPlayMedia()) return`：控制端暂停的媒体退出睡眠保持暂停
+   - 验证：集成测试 30 步全绿（+3 步：睡眠前暂停单媒体/播放列表退出保持暂停、播放中单媒体退出恢复播放，均用真实 mp4）
+   - 改动文件：
+     - src/apps/web-mediacenter/ui/public/display.html（mediaIsPlaying + shouldPlayMedia + resumeSleepMedia 守卫）
+     - tests/display-sleep-mode.test.js（+3 步）
+     - docs/spec/display-sleep-mode.md（恢复时检查播放状态小节）
+   - 实现文档：docs/spec/display-sleep-mode.md

@@ -82,7 +82,8 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 
 控制端「临时激活」/ 下发媒体
   → sendControl('sleepActivate') / 显示端 showMedia(data)（noActivate=false）入口 activateTemporarily()
-  → 60 秒激活窗口强制显示，之后 checkSleepMode() 回落（手动覆盖优先于时段）
+  → 取消手动覆盖（manualSleepMode=null）+ 60 秒激活窗口强制显示
+  → 激活窗口过期后 checkSleepMode() 按时段判定（不再回落手动覆盖）
 
 控制端「立即切换」（睡眠/深度睡眠/恢复正常）
   → sendControl('sleepOverride', 'sleep' | 'deep' | 'normal')
@@ -105,7 +106,8 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 ## 手动覆盖（sleepOverride）
 
 - `manualSleepMode = null | 'sleep' | 'deep'`，控制端显式进入睡眠/深度睡眠的枚举变量。
-- 优先级介于 60 秒临时激活 与 时段判定 之间：激活窗口覆盖手动，激活过期后回落手动；手动覆盖覆盖时段判定。
+- 优先级高于 60 秒临时激活窗口（checkSleepMode 先判 manualSleepMode 再判 activationUntil）。
+- 但临时激活/下发媒体会**取消手动覆盖**：`activateTemporarily()` 把 `manualSleepMode` 置 null——下发媒体即退出覆盖、显示媒体，之后按正常时段判定（覆盖不会被激活窗口压过 60 秒后又回来）。
 - 与「启用睡眠」开关无关：`sleepSettings.enabled=false` 时手动覆盖仍生效。
 - 不随时间流逝/时段切换自动退出，需再下发 `sleepOverride('normal')` 或切到另一状态才改变；刷新/重启即重置（临时、不持久化）。
 
@@ -113,16 +115,43 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 
 | 模式 | 睡眠/深度睡眠 | 恢复（normal/active） |
 |------|--------------|----------------------|
-| 视频 | `mediaVideo.pause()` | `mediaVideo.play().catch(...)` |
-| html（iframe 滚动） | `stopHtmlScroll()` | `startHtmlScroll(mediaHtml, currentHtmlScroll)` |
+| 视频 | `mediaVideo.pause()` | 检查控制端播放/暂停状态后决定：单媒体 `mediaIsPlaying` 或播放列表 `ps.paused` 为暂停 → 保持暂停；否则 `mediaVideo.play().catch(...)` |
+| html（iframe 滚动） | `stopHtmlScroll()` | 同上：暂停状态 → 保持停滚；否则 `startHtmlScroll(mediaHtml, currentHtmlScroll)` |
 | 图片 | 无需处理 | 无需处理 |
 | TTS 语音 | `ttsAudio.pause()`（保留进度）+ 清空队列 + 隐藏文本 | 当前 utterance `play()` 续播（睡眠中新 TTS 已丢弃，不重放） |
+
+### 恢复时检查控制端播放/暂停状态
+
+`resumeSleepMedia()` 恢复媒体前先判断当前媒体该不该播放：
+
+- `mediaIsPlaying`：显示端本地跟踪的控制端播放/暂停设置（`showMedia` 末尾与 `handleControl('play')` 同步更新；restoreState 恢复 `isPlaying` 时由 showMedia 一并写入）
+- `shouldPlayMedia()`：播放列表激活时读 `playlistState.paused`（睡眠前控制端暂停播放列表则保持暂停），否则读单媒体 `mediaIsPlaying`
+
+```
+shouldPlayMedia():
+    若 playlistState 激活: 返回 !playlistState.paused
+    返回 mediaIsPlaying !== false
+
+resumeSleepMedia():
+    若 !shouldPlayMedia(): return      # 控制端暂停的媒体 → 睡眠恢复保持暂停
+    html 显示: startHtmlScroll(...)
+    else 若 mediaVideo.src: mediaVideo.play().catch(...)
+```
 
 ## 睡眠期间新 TTS 丢弃
 
 - `queueTts(item)` 入口：若 `isSleepPaused()` 返回 true，直接 return（不入队、不播放）——睡眠期间新到的 TTS（整点报时、语音响应、提醒等）全部丢弃，避免夜间积压整晚内容。
 - `playTTS(text)`（媒体名播报）同样在睡眠期间丢弃。
 - `playNextTts()` 入口守卫：防止 `ended`/`error` 回调在睡眠态被误触发继续播放。
+
+## 睡眠期间视频播放路径守卫
+
+进入睡眠只 `pause()` 一次不够——睡眠中还有多处路径会把视频重新播起来（此前缺陷：单视频被点击恢复、批量播放自动切播）。所有视频播放/恢复入口统一加 `isSleepPaused()` 守卫：
+
+- `document click` 监听：睡眠中点击页面不 `mediaVideo.play()`（此前 `display:block && paused` 时任何点击都恢复视频，无人值守盒子睡眠中点击遮罩/UI 即恢复）
+- `keydown` 空格（播放/暂停切换）：睡眠中忽略
+- `handleControl('play', value=true)`：睡眠中拒绝播放命令（`value=false` 暂停仍生效并上报）
+- `playCurrentItem()`（播放列表切播）：睡眠中不切播下一项（`ended`/`error`/`timer` 触达时直接跳过），唤醒后恢复当前项
 
 ## 遮罩层
 

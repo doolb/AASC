@@ -1,0 +1,11 @@
+{
+  "id": "20260817-demo-001",
+  "title": "分析 poll.js 任务状态流转",
+  "role": "frontend",
+  "requirement": "阅读 workgroup/tools/poll.js，说明任务生命周期状态（未开始/进行中/已完成/待修改/已验收）在哪里被写入、如何流转，以及待修改任务如何被原 agent 重做。只读代码，不要修改任何文件，把分析结果写入结果文件。",
+  "status": "已验收",
+  "priority": "medium",
+  "createdAt": 1723876200000,
+  "references": [],
+  "reviewComment": "请补充：待修改分支的触发条件——即 main 在验收打回小改动时写 reviewComment 并置 status=待修改的入口判断（小改动与大改动的区分），让状态流转分析更完整。"
+}

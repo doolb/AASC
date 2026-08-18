@@ -2,6 +2,34 @@
 
 ## 功能完善
 
+- ✅已完成 [2026-08-18][2026-08-18] 退出睡眠时视频检查控制端播放/暂停设置
+  - 根因：resumeSleepMedia 无条件 mediaVideo.play()，忽略控制端暂停（单媒体无本地 isPlaying 跟踪，播放列表忽略 ps.paused）
+  - 实现：新增 mediaIsPlaying（showMedia/handleControl play 同步）+ shouldPlayMedia（播放列表读 ps.paused）+ resumeSleepMedia 守卫
+  - 验证：集成测试 30 步全绿（+3 步，真实 mp4）
+  - 文档：docs/spec/display-sleep-mode.md、docs/design/display.md、docs/task/2026-08-18_睡眠恢复检查播放状态.md
+- ✅已完成 [2026-08-18][2026-08-18] 下发媒体取消手动覆盖（临时激活优先级高于 override）
+  - 根因：activateTemporarily 只临时压过覆盖 60 秒，激活过期回落手动覆盖，下发媒体未真正取消覆盖
+  - 实现：activateTemporarily 同时 manualSleepMode=null，媒体正常显示，过期按时段判定
+  - 验证：集成测试 27 步全绿（步骤 13 改断言）
+  - 文档：docs/spec/display-sleep-mode.md、docs/design/display.md、docs/task/2026-08-18_下发媒体取消覆盖.md
+- ✅已完成 [2026-08-17][2026-08-17] 睡眠模式视频未暂停修复（播放路径缺睡眠守卫）
+  - 根因：document click 监听无守卫（display:block && paused 时点击即恢复视频）+ 空格/handleControl play/播放列表切播均无 isSleepPaused 守卫
+  - 实现：display.html 四处统一加 isSleepPaused() 守卫（click/空格忽略、play 命令拒绝、playCurrentItem 不切播）
+  - 验证：puppeteer 实测 click/空格/play 均保持 paused=true；集成测试 27 步全绿（+3 步）
+  - 文档：docs/spec/display-sleep-mode.md、docs/design/display.md、docs/task/2026-08-17_睡眠模式视频守卫.md
+- ✅已完成 [2026-08-17][2026-08-17] 自动播报开关关闭后仍播报修复 + 开关持久化
+  - 根因：服务端 setAutoTts 分支未转发显示端（只更新 time.announce），显示端 autoTtsEnabled 恒为 true
+  - 实现：setAutoTts 补 sendToDisplay 转发 + 持久化 state.autoTts/updateDisplayState + 显示端 handleRestoreState 恢复
+  - 验证：WS 实测转发日志 + config autoTts=True 持久化；集成测试 24 步全绿（+2 步）；附带修 display-sleep-mode 测试 h+1=24 clamp 时间敏感 bug
+  - 文档：docs/spec/websocket.md、docs/design/display.md、docs/task/2026-08-17_自动播报开关修复.md
+- ✅已完成 [2026-08-17][2026-08-17] http 媒体库支持获取文件大小 + 批量播放视频 seek
+  - 实现：HttpProvider._fetchHead（HEAD 取 Content-Length/Last-Modified）+ getFile 填 size + list 并发补 size（小并发池 6）+ MediaLibraryManager.getFile 委托（修 proxy 端点 Range 恒回落 200 的静默 bug）
+  - 验证：mnt 库 list 60 文件 56 个真实 size（0.36s）；库代理 Range 端到端 206 + Content-Range；播放列表 60 项全部同源代理 URL；11 个单测全绿
+- ✅已完成 [2026-08-17][2026-08-17] HTTP 路径媒体无法播放修复（手动输入 http 地址 / http 媒体库被混合内容拦截）
+  - 设计文档：docs/design/media-library.md（HTTP 媒体混合内容修复 + Range 流）
+  - 实施计划：docs/task/2026-08-17_HTTP媒体混合内容修复.md
+  - 实现：sendToDisplay 统一重写 http→/api/media-proxy（覆盖手动 URL/restore/单文件）+ 通用代理（流式+Range 透传+超时+SSRF 防护）+ HttpProvider 同源 HTTPS 库代理 URL + 库代理 Range + _fetchHtml 8s 超时（修 101 挂死）+ _parseHtml 垃圾条目过滤
+  - 验证：Apache 日志 206 全量下载+分段续传（视频实际播放）；Range 透传 206；SSRF 403；垃圾条目 4→0；init 2.5s 内完成；8 个单测全绿
 - ✅已完成 [2026-08-16][2026-08-16] Android 显示端 GPU Compute 桥（GLES 3.1 离屏计算）
   - 设计文档：docs/design/android-compute-bridge.md
   - 实施计划：docs/task/2026-08-16_android-gpu-compute桥.md

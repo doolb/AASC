@@ -1,14 +1,14 @@
 {
   "instances": [
     {
-      "instanceId": "bfac3135",
+      "instanceId": "44fbce2d",
       "taskName": "render-display",
-      "status": "running",
-      "timestamp": 1783237310441,
+      "status": "display_offline",
+      "timestamp": 1786975265817,
       "target": "display",
       "env": "auto",
       "mode": "service",
-      "displayId": "display-7tksfnsw",
+      "displayId": "display-txri9ftz",
       "params": {},
       "taskType": "user",
       "builtinId": null,

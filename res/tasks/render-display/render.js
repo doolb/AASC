@@ -102,7 +102,7 @@ function makeBar(label, pct, color, text, L, lblW) {
     lbl.textContent = label;
 
     var track = document.createElement('div');
-    track.style.cssText = 'position:relative;width:' + L.trackW + 'px;height:' + L.trackH + 'px;border-radius:' + (L.trackH / 2) + 'px;background:rgba(255,255,255,0.08)';
+    track.style.cssText = 'position:relative;width:' + L.trackW + 'px;height:' + L.trackH + 'px;border-radius:' + (L.trackH / 2) + 'px;background:rgba(255,255,255,0.18)';
 
     // 填充段由 fillWrap 裁出圆角（与现状一致的填充外观），文字与 fillWrap 平级、不受裁切
     var fillWrap = document.createElement('div');
@@ -113,7 +113,7 @@ function makeBar(label, pct, color, text, L, lblW) {
     track.appendChild(fillWrap);
 
     var val = document.createElement('span');
-    val.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:34px;white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.9),0 0 2px rgba(0,0,0,0.9)';
+    val.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:40px;white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.9),0 0 2px rgba(0,0,0,0.9)';
     val.textContent = text;
     track.appendChild(val);
 
@@ -199,7 +199,7 @@ function update(data) {
         entry.line1.appendChild(makeBar(h, cpuPct, pctColor(cpuPct, 76, 175, 80), cpuText, L, L.deviceNameW));
 
         var memText = Math.round(memPct) + '%  ' + fmtGb(d.memUsed) + '/' + fmtGb(d.memTotal) + 'G';
-        entry.line1.appendChild(makeBar('MEM', memPct, pctColor(memPct, 63, 81, 181), memText, L));
+        entry.line1.appendChild(makeBar('M', memPct, pctColor(memPct, 63, 81, 181), memText, L));
 
         var hasGpu = d.gpuPercent !== undefined && d.gpuPercent !== null && d.gpuPercent !== 'N/A';
         if (hasGpu) {

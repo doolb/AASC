@@ -4,7 +4,7 @@
       "instanceId": "ce2c4a03",
       "taskName": "win-monitor",
       "status": "running",
-      "timestamp": 1783237310456,
+      "timestamp": 1786983975508,
       "env": "auto",
       "mode": "service",
       "displayId": null,
@@ -19,8 +19,8 @@
     {
       "instanceId": "3ed3e09e",
       "taskName": "win-monitor",
-      "status": "running",
-      "timestamp": 1783237310502,
+      "status": "display_offline",
+      "timestamp": 1783343588528,
       "target": "subdisplay",
       "env": "auto",
       "mode": "service",
@@ -29,14 +29,14 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "stage": "running",
+      "stage": "display_offline",
       "progress": 100,
       "error": "显示端已断开连接"
     },
     {
       "instanceId": "28d32243",
       "taskName": "win-monitor",
-      "status": "display_offline",
+      "status": "failed",
       "timestamp": 1783237310507,
       "target": "subdisplay",
       "env": "auto",
@@ -46,9 +46,7 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "stage": "display_offline",
-      "progress": 100,
-      "error": "显示端已断开连接"
+      "error": "显示端不在线或连接关闭: voice-display-node-winblueg2"
     }
   ]
 }

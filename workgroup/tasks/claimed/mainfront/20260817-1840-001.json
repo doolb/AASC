@@ -1,0 +1,15 @@
+{
+  "id": "20260817-1840-001",
+  "title": "区分 review 子任务与普通任务（kind 字段 + main 验收呈现）",
+  "role": "frontend",
+  "requirement": "改进 workgroup 任务系统：大改动验收打回时 main 投递的 role=review 审查子任务，完成后 status=已完成，与普通任务完成无法区分，main 的验收扫描会把它当普通待验收任务呈现，且无法关联到被审查的原任务。请实现：\n\n1. 任务文件新增可选字段 `kind`：值为 \"review\" 的标记为审查子任务，并增加 `reviewOf`（被审查原任务 id）；普通任务不设 kind。\n2. 检查 workgroup/tools/poll.js 的 executeTask 状态写入逻辑，确保 kind/reviewOf 字段在 status 更新（进行中/已完成）时被保留（现在用 {...mine} 和 {...cur} 展开，应天然保留，验证即可）。\n3. 在 workgroup/tools/poll.js 或其依赖处增加一个纯函数 `isReviewTask(task)`（task.kind === 'review'），供 main 区分；并补充中文注释说明 main 验收扫描时如何用它区分 review 任务（review 任务呈现 verdict 与被审查原任务 id，而非普通待验收任务）。\n4. 更新 workgroup/docs/design.md 的「任务状态机与验收打回」章节和 workgroup/docs/spec.md 的「任务状态机」章节：说明 review 子任务带 kind/reviewOf 字段、main 验收时用 isReviewTask 区分。\n5. 在 workgroup/tests/wg-e2e.test.js 追加一个端到端测试：投递一个带 kind:review + reviewOf 的 role=review 任务，子 agent 认领完成后，断言任务文件仍保留 kind/reviewOf 字段且 status=已完成。\n\n只改 workgroup 目录内文件，不要碰项目其他模块。结果文件写：做了什么、改动文件与行、测试命令与输出。",
+  "status": "已完成",
+  "priority": "medium",
+  "createdAt": 1786966200000,
+  "references": [
+    "workgroup/docs/design.md",
+    "workgroup/docs/spec.md",
+    "workgroup/docs/plan-2026-08-17-task-status.md"
+  ],
+  "reviewComment": ""
+}

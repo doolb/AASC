@@ -1,0 +1,21 @@
+{
+  "id": "20260818-0934-001",
+  "title": "排查：显示端重连后 render-display 任务不自动恢复",
+  "role": "display",
+  "requirement": "## 背景\n项目显示端（web-mediacenter 的 display.html）通过 WebSocket 连接 server。用户反馈：显示端重连时，render-display 渲染任务没有自动恢复，需要手动停止再启动。\n\n## 任务内容（只排查，不改代码）\n1. 定位 render-display 任务的启动/管理机制：读 res/tasks/render-display/ 相关代码与运行结果、docs/spec/render-display-inline-text.md、docs/spec/display-sleep-mode.md、docs/spec/websocket.md，弄清这个任务由谁创建、怎么运行、生命周期谁管理。\n2. 定位显示端重连流程：显示端与 server 的连接断开/重连在哪里处理（WebSocket 事件、重连回调），重连后有哪些恢复逻辑。\n3. 找出断点：重连后 render-display 为什么没有自动恢复？可能方向：缺少重连触发的恢复逻辑 / 恢复逻辑有 bug（状态判断错误、任务标识丢失）/ 任务被清理但没重建。\n4. 关联最近改动：检查 docs/task/2026-08-18_睡眠恢复检查播放状态.md、docs/task/2026-08-17_自动播报开关修复.md、docs/task/2026-08-17_睡眠模式视频守护.md，判断是否与最近改动引入的回归有关。\n5. 输出：根因分析（附文件:行号证据）、修复方案建议（涉及哪些文件、改什么、怎么改）、风险点。\n\n## 输出\n结果写 workgroup/results/<任务id>.json，summary 包含根因结论与修复方案。本次只排查不改代码，不写 spec/changelog。",
+  "status": "已完成",
+  "priority": "high",
+  "level": "L5",
+  "createdAt": 1787016856,
+  "references": [
+    "res/tasks/render-display/",
+    "docs/spec/websocket.md",
+    "docs/spec/display-sleep-mode.md",
+    "docs/task/2026-08-18_睡眠恢复检查播放状态.md"
+  ],
+  "depends": [],
+  "assignedTo": "mainfront-",
+  "reviewComment": "",
+  "kind": "",
+  "reviewOf": ""
+}

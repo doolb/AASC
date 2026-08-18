@@ -32,6 +32,8 @@ wss.on('connection', (ws, req)):
             发送 { type: 'restoreState', state: savedState }
             // 显示端恢复媒体后按 state.isPlaying 应用播放/暂停：
             // isPlaying === false → 暂停视频 / 停止 html 滚动，避免控制端暂停的视频重连后自动播放
+            // 显示端 handleRestoreState 同时按 state.autoTts 恢复自动播报开关：
+            // undefined（旧数据）→ 保持默认开；true/false → 恢复持久化的开关状态
         
         广播显示端列表到控制端
         
@@ -181,6 +183,13 @@ wss.on('connection', (ws, req)):
             
             如果 type === 'tts':
                 处理 TTS 相关操作
+                action === 'stop': 停播 TTS
+                action === 'play' / 'playAudio': 生成并下发语音
+                action === 'setAutoTts':  // 控制端「自动播报」开关
+                    更新 time.announce 任务的 enabled（整点报时）
+                    displayData.state.autoTts = (data.enabled === true)
+                    config.updateDisplayState(displayData.ip, { autoTts })   // 持久化：显示端刷新/重启后 restoreState 恢复
+                    转发 sendToDisplay(displayId, data) 到显示端   // 显示端 autoTtsEnabled 同步（媒体文件名播报开关）
             
             如果 type === 'chat':
                 处理聊天相关操作
@@ -201,6 +210,7 @@ wss.on('connection', (ws, req)):
     crop: { x: 0, y: 0, width: 100, height: 100 },  // 裁剪区域
     volume: 100,                 // 音量 (0-100)
     isPlaying: false,            // 播放状态
+    autoTts: true,               // 自动播报开关（媒体文件名语音播报；默认开，控制端 setAutoTts 持久化）
     canvasSize: { width: 1920, height: 1080 },  // 画布尺寸
     browserInfo: null,           // 浏览器信息
     voiceSupported: false,       // 是否支持语音识别
