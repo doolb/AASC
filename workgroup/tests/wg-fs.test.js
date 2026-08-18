@@ -123,9 +123,10 @@ test('spawnClaude child 可被 kill（取消用）', async () => {
 test('MAIN_SYSTEM_PROMPT 提供 main 协调者指令', () => {
     const { MAIN_SYSTEM_PROMPT } = require('../tools/wg-fs.js');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('main'), '应包含 main 角色');
-    assert.ok(MAIN_SYSTEM_PROMPT.includes('roles/main.md'), '应提示读 main 角色定义');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('tasks/pending'), '应提示投递任务');
-    assert.ok(MAIN_SYSTEM_PROMPT.includes('绝不亲自实现'), '应声明 main 不亲自做事');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('绝不亲自处理'), '应声明 main 不亲自做事');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('保持最小上下文'), '应声明 main 保持最小上下文');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('analyze-requirement-level'), '应声明需求分析也下发给子 agent');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('查找问题'), '应声明查找问题也下发给子 agent');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('闲聊'), '应声明闲聊例外可直接回复');
 });
