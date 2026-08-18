@@ -4,6 +4,10 @@
 
 ### 新增
 
+- ✅ [2026-08-18] 修复：workgroup 空角色任务永不认领（目录尾横线导致 assignedTo 不匹配）
+  - 问题：空角色（无主角色）启动时 lock 落在 `members/<名>-/`（尾横线），main 扫 members/ 误以为成员名含横线、填 `assignedTo: '<名>-'`，空角色进程 `name='<名>'` 不匹配 → 任务永久留在 pending 不被认领
+  - 修复：wg-fs.js role* 路径函数对空 role 统一产出 `members/<名>/`（无尾横线），与 roleDir 一致
+  - 改动：workgroup/tools/wg-fs.js（roleLockFile/roleBusyFile/roleHistoryFile/roleMemberRoleFile/roleCurrentTaskFile）、wg-fs.test.js（+空角色路径断言）、清理旧 `members/mainfront-/` 运行时信号
 - ✅ [2026-08-18] workgroup main 协调者 TUI 交互
   - `node poll.js` 无 --role 且无 main 时，不再是保活空转，而是 spawn 交互式 claude TUI（stdio inherit 透传 TTY，cwd = 项目根），注入 main 协调者指令（MAIN_SYSTEM_PROMPT：读 roles/main.md、按 L4-L7 等级路由拆任务、投递 tasks/pending/、验收打回），用户在 TUI 里直接对话说需求
   - claude TUI 退出（/exit 或 Ctrl+C）→ poll.js 捕获子进程退出 → 删 members/main/lock → 进程退出
@@ -13,6 +17,17 @@
     - workgroup/tools/poll.js（main 分支 spawn claude TUI + 退出清理 + keepalive）
     - workgroup/tests/wg-fs.test.js、wg-e2e.test.js（48 测试全绿：core 16 + fs 12 + e2e 20）
     - workgroup/docs/design.md、spec.md、plan-2026-08-17-main-tui.md
+- ✅ [2026-08-18] 修复：退出睡眠时视频直接播放（不检查控制端播放/暂停设置）
+  - 问题：`resumeSleepMedia()` 无条件 `mediaVideo.play()`，睡眠前控制端暂停的视频退出睡眠后自动播放（单媒体 + 播放列表均受影响）
+  - 修复：
+    - 新增 `mediaIsPlaying` 本地变量跟踪控制端播放/暂停：`showMedia` 末尾（`= !paused`）与 `handleControl('play')`（`= value===true`）同步更新
+    - 新增 `shouldPlayMedia()`：播放列表激活时读 `playlistState.paused`，否则读单媒体 `mediaIsPlaying`
+    - `resumeSleepMedia()` 开头 `if (!shouldPlayMedia()) return`：控制端暂停的媒体退出睡眠保持暂停
+  - 验证：集成测试 30 步全绿（+3 步：睡眠前暂停单媒体/播放列表退出保持暂停、播放中单媒体退出恢复播放，均用真实 mp4）
+  - 改动文件：
+    - src/apps/web-mediacenter/ui/public/display.html（mediaIsPlaying + shouldPlayMedia + resumeSleepMedia 守卫）
+    - tests/display-sleep-mode.test.js（+3 步）
+    - docs/spec/display-sleep-mode.md、docs/design/display.md
 - ✅ [2026-08-18] 修复：下发媒体取消手动覆盖（临时激活优先级高于 override）
   - 问题：手动覆盖 sleep/deep 后下发媒体，`activateTemporarily()` 只临时压过覆盖 60 秒，激活过期后回落手动覆盖——下发媒体没有真正取消覆盖状态
   - 修复：`activateTemporarily()`（下发媒体/临时激活入口）同时 `manualSleepMode = null` 取消手动覆盖，媒体正常显示，激活窗口过期后按正常时段判定（不再回落手动覆盖）
