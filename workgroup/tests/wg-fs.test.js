@@ -126,4 +126,6 @@ test('MAIN_SYSTEM_PROMPT 提供 main 协调者指令', () => {
     assert.ok(MAIN_SYSTEM_PROMPT.includes('roles/main.md'), '应提示读 main 角色定义');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('tasks/pending'), '应提示投递任务');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('绝不亲自实现'), '应声明 main 不亲自做事');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('查找问题'), '应声明查找问题也下发给子 agent');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('闲聊'), '应声明闲聊例外可直接回复');
 });
