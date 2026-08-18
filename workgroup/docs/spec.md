@@ -88,7 +88,7 @@ function main() {
         // 方式二：无 --role 且无 main → 成为 main 协调者（TUI 交互）
         写 members/main/lock
         spawn claude 交互模式（stdio inherit 透传 TTY，cwd = 项目根）
-        --append-system-prompt 注入 main 协调者指令
+        --append-system-prompt 注入 main 协调者指令 + --permission-mode bypassPermissions
         claude 退出 → 删 members/main/lock → 进程退出
     } else {
         // 方式二：无 --role 且有 main → 空角色（无主角色，只认 assignedTo）
