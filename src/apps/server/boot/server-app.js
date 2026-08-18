@@ -1819,11 +1819,11 @@ app.post('/api/media-libraries/:id/set-default', (req, res) => {
 app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
     try {
         const filePath = decodeURIComponent(req.params[0]);
-        
+
         if (!filePath) {
             return res.status(400).json({ status: 'error', message: '文件路径不能为空' });
         }
-        
+
         const ext = filePath.toLowerCase().split('.').pop();
         const mimeTypes = {
             'jpg': 'image/jpeg',
@@ -1837,30 +1837,42 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
             'avi': 'video/x-msvideo',
             'mkv': 'video/x-matroska'
         };
-        
+
         const contentType = mimeTypes[ext] || 'application/octet-stream';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Accept-Ranges', 'bytes');
-        
+
+        // 用文件大小解析 Range（本地/SMB 有精确 size → 支持视频 seek；http 库 size 未知时回落全量）
+        let range = null;
         try {
             const fileInfo = await mediaLibraryManager.getFile(req.params.id, filePath);
             if (fileInfo && fileInfo.size) {
-                res.setHeader('Content-Length', fileInfo.size);
+                const library = mediaLibraryManager.getLibrary(req.params.id);
+                const provider = library ? library.provider : null;
+                range = provider ? provider.parseRange(req.headers.range, fileInfo.size) : null;
             }
         } catch (e) {
         }
-        
-        const stream = await mediaLibraryManager.getFileStream(req.params.id, filePath);
-        
-        stream.pipe(res);
-        
+
+        const result = await mediaLibraryManager.getFileStream(req.params.id, filePath, range);
+
+        res.status(result.statusCode);
+        // provider 明确给出的响应头覆盖 mimeTypes 兜底（http 库带上游 content-type 等）
+        if (result.headers) {
+            for (const h of Object.keys(result.headers)) {
+                res.setHeader(h, result.headers[h]);
+            }
+        }
+
+        result.stream.pipe(res);
+
         req.on('close', () => {
-            if (stream && typeof stream.destroy === 'function') {
-                stream.destroy();
+            if (result.stream && typeof result.stream.destroy === 'function') {
+                result.stream.destroy();
             }
         });
-        
-        stream.on('error', (err) => {
+
+        result.stream.on('error', (err) => {
             if (!res.headersSent) {
                 res.status(500).json({ status: 'error', message: err.message });
             } else {
@@ -1870,6 +1882,61 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
     } catch (err) {
         res.status(500).json({ status: 'error', message: err.message });
     }
+});
+
+// 通用 HTTPS 媒体代理：服务器 HTTPS 时，控制端手动输入的 http:// 媒体 URL 由
+// sendToDisplay 重写为同源 /api/media-proxy，绕开浏览器/WebView 混合内容拦截。
+// 流式转发 + Range 透传（relay 上游 206/200），支持视频 seek。
+app.get('/api/media-proxy', (req, res) => {
+    const target = typeof req.query.url === 'string' ? req.query.url : '';
+
+    if (!target || !/^https?:\/\//i.test(target)) {
+        return res.status(400).json({ status: 'error', message: '无效的URL' });
+    }
+
+    // SSRF 基础防护：屏蔽本机回环/链路本地/云元数据地址；内网媒体（192.168.x 等）放行，
+    // 因为本系统媒体库本身即内网资源（威胁模型是已认证控制端，非匿名外网）
+    try {
+        const u = new URL(target);
+        const host = u.hostname.toLowerCase();
+        const isLocalOnly = host === 'localhost' || host === '127.0.0.1' || host === '::1' ||
+            host === '0.0.0.0' || host === '169.254.169.254' ||
+            /^127\./.test(host) || /^169\.254\./.test(host) || /^fe80:/.test(host) || host.endsWith('.local');
+        if (isLocalOnly) {
+            return res.status(403).json({ status: 'error', message: '不允许代理访问该地址' });
+        }
+    } catch (e) {
+        return res.status(400).json({ status: 'error', message: '无效的URL' });
+    }
+
+    const client = target.startsWith('https') ? https : http;
+    const upstreamOptions = { headers: {} };
+    if (req.headers.range) {
+        upstreamOptions.headers.Range = req.headers.range;
+    }
+
+    const upstream = client.get(target, upstreamOptions, (upRes) => {
+        if (upRes.statusCode !== 200 && upRes.statusCode !== 206) {
+            res.status(502).json({ status: 'error', message: '上游错误: ' + upRes.statusCode });
+            upRes.resume();
+            return;
+        }
+        res.status(upRes.statusCode);
+        for (const h of ['content-type', 'content-range', 'accept-ranges', 'content-length', 'content-disposition']) {
+            if (upRes.headers[h]) res.setHeader(h, upRes.headers[h]);
+        }
+        upRes.pipe(res);
+        req.on('close', () => upRes.destroy());
+    });
+
+    upstream.setTimeout(15000, () => upstream.destroy(new Error('代理请求超时')));
+    upstream.on('error', (err) => {
+        if (!res.headersSent) {
+            res.status(504).json({ status: 'error', message: '代理请求失败: ' + err.message });
+        } else {
+            res.end();
+        }
+    });
 });
 
 app.get('/api/status', (req, res) => {
@@ -2436,7 +2503,18 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
 // 裁剪调试日志开关
 let _cropDebugLog = false;
 
+// 服务器 HTTPS 时，把 http:// 媒体 URL 重写为同源 /api/media-proxy（绕开浏览器/WebView 混合内容拦截）
+function rewriteMediaUrl(url) {
+    if (!useHttps || typeof url !== 'string') return url;
+    if (/^http:\/\//i.test(url)) {
+        return '/api/media-proxy?url=' + encodeURIComponent(url);
+    }
+    return url;
+}
+
 function sendToDisplay(displayId, data) {
+    // 统一出口重写 http 媒体 URL：手动 URL 输入、restore 恢复、单文件播放等所有下发路径一次覆盖
+    if (data.url) data.url = rewriteMediaUrl(data.url);
     const displayData = displayClients.get(displayId);
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
         if (!data.correlationId) {

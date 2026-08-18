@@ -57,6 +57,27 @@ class MediaLibraryProvider {
         if (['html', 'htm', 'mhtml'].includes(ext)) return 'html';
         return 'image';
     }
+
+    // 解析 HTTP Range: bytes=start-end / bytes=start- / bytes=-suffix
+    // 非法或越界返回 null，由调用方回退为 200 整流
+    parseRange(rangeHeader, totalSize) {
+        if (!rangeHeader || typeof totalSize !== 'number' || totalSize <= 0) return null;
+        const m = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+        if (!m) return null;
+        let start = m[1] === '' ? null : parseInt(m[1], 10);
+        let end = m[2] === '' ? null : parseInt(m[2], 10);
+        if (start === null && end === null) return null;
+        if (start === null) {
+            // 末尾后缀段 bytes=-N：取最后 N 字节
+            start = Math.max(0, totalSize - end);
+            end = totalSize - 1;
+        } else if (end === null) {
+            end = totalSize - 1;
+        }
+        if (start > end || start >= totalSize) return null;
+        if (end >= totalSize) end = totalSize - 1;
+        return { start, end };
+    }
 }
 
 class LocalProvider extends MediaLibraryProvider {
@@ -204,14 +225,33 @@ class LocalProvider extends MediaLibraryProvider {
         return true;
     }
 
-    async getFileStream(filePath) {
+    async getFileStream(filePath, range) {
         const fullPath = this._resolvePath(filePath);
-        
+
         if (!fs.existsSync(fullPath)) {
             throw new Error('文件不存在');
         }
-        
-        return fs.createReadStream(fullPath);
+
+        const stat = fs.statSync(fullPath);
+        if (!range) {
+            return {
+                stream: fs.createReadStream(fullPath),
+                statusCode: 200,
+                headers: {
+                    'Content-Length': String(stat.size),
+                    'Accept-Ranges': 'bytes'
+                }
+            };
+        }
+        return {
+            stream: fs.createReadStream(fullPath, { start: range.start, end: range.end }),
+            statusCode: 206,
+            headers: {
+                'Content-Length': String(range.end - range.start + 1),
+                'Content-Range': `bytes ${range.start}-${range.end}/${stat.size}`,
+                'Accept-Ranges': 'bytes'
+            }
+        };
     }
 
     // 路径分段编码：encodeURIComponent 会把 / 编成 %2F，express.static 不解码导致子目录 404
@@ -260,8 +300,10 @@ class HttpProvider extends MediaLibraryProvider {
         this.password = config.password;
         this.cache = new Map();
         this.cacheTimeout = config.cacheTimeout || 60000;
+        this.requestTimeout = config.requestTimeout || 8000;
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
+        this.isHttps = options.isHttps || (() => false);
     }
 
     async connect() {
@@ -299,13 +341,16 @@ class HttpProvider extends MediaLibraryProvider {
     }
 
     async getFile(filePath) {
-        const url = this._buildUrl(filePath);
-        
+        // HEAD 获取真实大小/修改时间（fancy-index 列表只有人类可读大小，无法还原精确字节）
+        const sizeInfo = await this._fetchHead(this._buildUrl(filePath).replace(/\/$/, ''));
+
         return {
             name: path.basename(filePath),
             path: filePath,
             type: 'file',
             mediaType: this.detectMediaType(filePath),
+            size: (sizeInfo && sizeInfo.size) || 0,
+            modifiedTime: (sizeInfo && sizeInfo.modifiedTime) || null,
             url: this.getPublicUrl(filePath)
         };
     }
@@ -326,46 +371,122 @@ class HttpProvider extends MediaLibraryProvider {
         throw new Error('HTTP媒体库不支持删除文件夹');
     }
 
-    async getFileStream(filePath) {
-        const url = this._buildUrl(filePath);
+    async getFileStream(filePath, range) {
+        // 文件 URL 去掉 _buildUrl 追加的尾斜杠（Apache 对文件尾斜杠返回 404）
+        const url = this._buildUrl(filePath).replace(/\/$/, '');
         const client = url.startsWith('https') ? https : http;
-        
+        const reqHeaders = {};
+        if (this.username && this.password) {
+            reqHeaders.auth = `${this.username}:${this.password}`;
+        }
+        if (range) {
+            reqHeaders.headers = { Range: `bytes=${range.start}-${range.end}` };
+        }
+
         return new Promise((resolve, reject) => {
-            const req = client.get(url, {
-                auth: this.username && this.password 
-                    ? `${this.username}:${this.password}` 
-                    : undefined
-            }, (res) => {
-                if (res.statusCode !== 200) {
+            const req = client.get(url, reqHeaders, (res) => {
+                if (res.statusCode !== 200 && res.statusCode !== 206) {
                     reject(new Error(`HTTP错误: ${res.statusCode}`));
                     return;
                 }
-                resolve(res);
+                const headers = {};
+                // 统一为规范头名（Content-Type / Content-Range / Accept-Ranges / Content-Length），
+                // 与 Local/SmbProvider 返回格式一致，供 proxy 端点 setHeader 使用
+                const HEADER_MAP = {
+                    'content-type': 'Content-Type',
+                    'content-range': 'Content-Range',
+                    'accept-ranges': 'Accept-Ranges',
+                    'content-length': 'Content-Length'
+                };
+                for (const h of Object.keys(HEADER_MAP)) {
+                    if (res.headers[h]) headers[HEADER_MAP[h]] = res.headers[h];
+                }
+                resolve({ stream: res, statusCode: res.statusCode, headers });
             });
-            
+
             req.on('error', reject);
+            req.setTimeout(this.requestTimeout, () => req.destroy(new Error('请求超时')));
         });
     }
 
     getPublicUrl(filePath) {
-        return this._buildUrl(filePath).replace(/\/$/, '');
+        // 同源 HTTPS 代理 URL：服务器 HTTPS 时显示端页面的 http:// 媒体被混合内容拦截，
+        // 统一走 /api/media-libraries/{id}/proxy 保证可播放（与 SmbProvider 一致）
+        const localIP = this.getLocalIP();
+        const port = this.getPort();
+        const protocol = this.isHttps() ? 'https' : 'http';
+        const cleanPath = filePath.replace(/^\//, '');
+        return `${protocol}://${localIP}:${port}/api/media-libraries/${this.config.id}/proxy/${encodeURIComponent(cleanPath)}`;
     }
 
     async _fetchList(dirPath) {
         const cacheKey = `list:${dirPath}`;
         const cached = this.cache.get(cacheKey);
-        
+
         if (cached && Date.now() - cached.time < this.cacheTimeout) {
             return cached.data;
         }
-        
+
         const url = this._buildUrl(dirPath);
         const html = await this._fetchHtml(url);
         const items = this._parseHtml(html, dirPath);
-        
+
+        // 对媒体文件并发 HEAD 补精确 size / modifiedTime（fancy-index 列表只有人类可读大小），
+        // 供控制端展示真实大小 + 库代理端点 Range 解析（视频 seek 依赖 size）
+        const mediaTypes = ['image', 'video', 'gif', 'html'];
+        const mediaFiles = items.filter(i => i.type === 'file' && mediaTypes.includes(i.mediaType));
+        await this._fillSizes(mediaFiles);
+
         this.cache.set(cacheKey, { data: items, time: Date.now() });
-        
+
         return items;
+    }
+
+    // 小并发池对文件列表发 HEAD 补 size，单个失败/超时回落 0（不阻塞列表浏览）
+    async _fillSizes(files) {
+        const LIMIT = 6;
+        let i = 0;
+        const workers = Array.from({ length: Math.min(LIMIT, files.length) }, async () => {
+            while (i < files.length) {
+                const item = files[i++];
+                const info = await this._fetchHead(this._buildUrl(item.path).replace(/\/$/, ''));
+                if (info) {
+                    item.size = info.size;
+                    item.modifiedTime = info.modifiedTime;
+                }
+            }
+        });
+        await Promise.all(workers);
+    }
+
+    // HEAD 请求获取 Content-Length / Last-Modified；失败或超时返回 null（调用方回落 0）
+    async _fetchHead(url) {
+        const client = url.startsWith('https') ? https : http;
+        const reqOptions = { method: 'HEAD' };
+        if (this.username && this.password) {
+            reqOptions.auth = `${this.username}:${this.password}`;
+        }
+
+        return new Promise((resolve) => {
+            const req = client.request(url, reqOptions, (res) => {
+                res.resume();
+                if (res.statusCode !== 200) {
+                    resolve(null);
+                    return;
+                }
+                const rawSize = res.headers['content-length'];
+                const size = rawSize ? parseInt(rawSize, 10) : NaN;
+                const rawModified = res.headers['last-modified'];
+                const modifiedTime = rawModified ? new Date(rawModified) : null;
+                resolve({
+                    size: Number.isFinite(size) ? size : 0,
+                    modifiedTime: modifiedTime && !isNaN(modifiedTime.getTime()) ? modifiedTime : null
+                });
+            });
+            req.on('error', () => resolve(null));
+            req.setTimeout(this.requestTimeout, () => { req.destroy(); resolve(null); });
+            req.end();
+        });
     }
 
     _buildUrl(dirPath) {
@@ -376,13 +497,13 @@ class HttpProvider extends MediaLibraryProvider {
 
     async _fetchHtml(url) {
         const client = url.startsWith('https') ? https : http;
-        
+        const reqOptions = {};
+        if (this.username && this.password) {
+            reqOptions.auth = `${this.username}:${this.password}`;
+        }
+
         return new Promise((resolve, reject) => {
-            const req = client.get(url, {
-                auth: this.username && this.password 
-                    ? `${this.username}:${this.password}` 
-                    : undefined
-            }, (res) => {
+            const req = client.get(url, reqOptions, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
@@ -393,8 +514,10 @@ class HttpProvider extends MediaLibraryProvider {
                     resolve(data);
                 });
             });
-            
+
             req.on('error', reject);
+            // 不可达服务器 8s 内快速失败，避免媒体库 init 挂死（如 192.168.1.101 失联）
+            req.setTimeout(this.requestTimeout, () => req.destroy(new Error('请求超时')));
         });
     }
 
@@ -402,21 +525,25 @@ class HttpProvider extends MediaLibraryProvider {
         const items = [];
         const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi;
         let match;
-        
+        // fancy-index 目录列表的表头排序链接（?C=N;O=D 等）与 Parent Directory 不应成为媒体项
+        const JUNK_NAMES = new Set(['Name', 'Last modified', 'Size', 'Description', 'Parent Directory']);
+
         while ((match = linkRegex.exec(html)) !== null) {
             const href = match[1];
             const name = match[2].trim();
-            
+
             if (name === '..' || name === '../' || name === '.') continue;
-            
+            if (JUNK_NAMES.has(name) && /^\?C=/.test(href)) continue;
+            if (name === 'Parent Directory') continue;
+
             const isFolder = href.endsWith('/');
             const cleanName = name.replace(/\/$/, '');
-            
+
             if (cleanName) {
-                const itemPath = dirPath === '/' 
-                    ? '/' + cleanName 
+                const itemPath = dirPath === '/'
+                    ? '/' + cleanName
                     : dirPath + '/' + cleanName;
-                
+
                 items.push({
                     name: cleanName,
                     path: itemPath,
@@ -428,7 +555,7 @@ class HttpProvider extends MediaLibraryProvider {
                 });
             }
         }
-        
+
         return items.sort((a, b) => {
             if (a.type === 'folder' && b.type !== 'folder') return -1;
             if (a.type !== 'folder' && b.type === 'folder') return 1;
@@ -566,16 +693,18 @@ class SmbProvider extends MediaLibraryProvider {
         throw new Error('SMB媒体库暂不支持删除文件夹');
     }
 
-    async getFileStream(filePath) {
+    async getFileStream(filePath, range) {
         const cleanPath = filePath.replace(/^\//, '');
         const buffer = await this._readFile(cleanPath);
-        
+
         const { Readable } = require('stream');
         const CHUNK_SIZE = 256 * 1024;
+        // range 时只发送切片段：stream 从切片 buffer 开头读，读完整段即 range 内容
+        const slice = range ? buffer.slice(range.start, range.end + 1) : buffer;
         let offset = 0;
-        let bufferRef = buffer;
+        let bufferRef = slice;
         let consumed = false;
-        
+
         const stream = new Readable({
             read() {
                 if (!bufferRef || consumed) {
@@ -592,26 +721,44 @@ class SmbProvider extends MediaLibraryProvider {
                 const chunk = Buffer.from(bufferRef.slice(offset, end));
                 offset = end;
                 this.push(chunk);
-                
+
                 if (offset >= bufferRef.length) {
                     consumed = true;
                     bufferRef = null;
                 }
             }
         });
-        
+
         const cleanup = () => {
             if (!consumed) {
                 consumed = true;
             }
             bufferRef = null;
         };
-        
+
         stream.on('end', cleanup);
         stream.on('close', cleanup);
         stream.on('error', cleanup);
-        
-        return stream;
+
+        if (range) {
+            return {
+                stream,
+                statusCode: 206,
+                headers: {
+                    'Content-Length': String(range.end - range.start + 1),
+                    'Content-Range': `bytes ${range.start}-${range.end}/${buffer.length}`,
+                    'Accept-Ranges': 'bytes'
+                }
+            };
+        }
+        return {
+            stream,
+            statusCode: 200,
+            headers: {
+                'Content-Length': String(buffer.length),
+                'Accept-Ranges': 'bytes'
+            }
+        };
     }
 
     getPublicUrl(filePath) {
@@ -851,14 +998,24 @@ class MediaLibraryManager {
         return library.provider.deleteFolder(folderPath);
     }
 
-    async getFileStream(libraryId, filePath) {
+    async getFile(libraryId, filePath) {
         const library = this.libraries.get(libraryId);
-        
+
         if (!library) {
             throw new Error('媒体库不存在');
         }
-        
-        return library.provider.getFileStream(filePath);
+
+        return library.provider.getFile(filePath);
+    }
+
+    async getFileStream(libraryId, filePath, range) {
+        const library = this.libraries.get(libraryId);
+
+        if (!library) {
+            throw new Error('媒体库不存在');
+        }
+
+        return library.provider.getFileStream(filePath, range);
     }
 
     _loadConfig() {

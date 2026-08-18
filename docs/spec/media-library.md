@@ -23,8 +23,13 @@
         deleteFile(path) -> 删除文件
         createFolder(path) -> 创建文件夹
         deleteFolder(path) -> 删除文件夹
-        getFileStream(path) -> 获取文件流
+        getFileStream(path, range?) -> 获取文件流（range: {start, end} 可选，支持分段）
         getPublicUrl(path) -> 获取公开访问URL
+
+    parseRange(rangeHeader, totalSize) -> {start, end} | null   // 工具函数
+        // 解析 HTTP Range: bytes=start-end 或 bytes=start- 或 bytes=-suffix
+        // 非法返回 null，由调用方回退为 200 整流
+
         detectMediaType(name):
         ext = name 的后缀
         if ext in ['gif']: return 'gif'
@@ -32,6 +37,13 @@
         if ext in ['html','htm','mhtml']: return 'html'   // mhtml 为单文件网页，iframe 可直接渲染
         return 'image'
 ```
+
+### Range 流返回约定
+
+各 Provider 的 getFileStream(path, range) 统一返回 `{ stream, statusCode, headers }`：
+- 无 range：statusCode=200，headers 含 Content-Length=totalSize（本地可精确）
+- 有 range：statusCode=206，headers 含 Content-Range: bytes {start}-{end}/{totalSize} + Content-Length={end-start+1}
+- 服务器 proxy 端点据 statusCode 决定响应状态码，实现视频 seek
 
 ### 2. 本地存储提供者 (LocalProvider)
 
@@ -56,6 +68,17 @@
             - size: 文件大小
             - modifiedTime: 修改时间
             - url: 公开访问URL
+    
+    getFileStream(filePath, range?):
+        fullPath = 解析路径(filePath)
+        如果文件不存在: 抛出错误("文件不存在")
+        totalSize = stat(fullPath).size
+        如果 range:
+            stream = createReadStream(fullPath, {start: range.start, end: range.end})
+            返回 { stream, statusCode: 206, headers: {Content-Length: range.end-range.start+1, Content-Range: "bytes {start}-{end}/{totalSize}"} }
+        否则:
+            stream = createReadStream(fullPath)
+            返回 { stream, statusCode: 200, headers: {Content-Length: totalSize} }
     
     uploadFile(dirPath, file):
         fullPath = 解析路径(dirPath)
@@ -108,26 +131,66 @@
     属性:
         baseUrl: 远程服务器基础URL
         readonly: true（只读）
+        requestTimeout: 8s（请求超时，防止不可达服务器挂死 init / 播放）
     
     connect():
         设置 connected = true
         无需实际连接
     
     list(dirPath):
-        url = baseUrl + dirPath
-        response = HTTP GET(url)
-        html = response.text
-        返回 解析HTML目录列表(html, dirPath)
+        url = _buildUrl(dirPath)
+        html = HTTP GET(url, {超时: requestTimeout, auth: username/password})
+        items = _parseHtml(html, dirPath)
+        对每个 type 为 file 且 mediaType 属于 image/video/gif/html 的项:
+            并发（小并发池 6）HEAD 请求补 size / modifiedTime
+            HEAD 失败或超时保持 size=0（不阻塞列表浏览）
+        返回 items
+
+    getFile(filePath):
+        sizeInfo = _fetchHead(_buildUrl(filePath))    // HEAD 取 Content-Length + Last-Modified
+        返回 {
+            name: basename(filePath),
+            path: filePath,
+            type: 'file',
+            mediaType: detectMediaType(filePath),
+            size: sizeInfo?.size || 0,
+            modifiedTime: sizeInfo?.modifiedTime || null,
+            url: getPublicUrl(filePath)
+        }
+
+    _fetchHead(url):
+        HTTP HEAD(url, {超时: requestTimeout})
+        返回 { size: Content-Length 转数字, modifiedTime: Last-Modified }
+        失败/超时返回 null（size 回落 0，不抛错）
+
+    _buildUrl(dirPath):
+        baseUrl 去掉末尾 / + "/" + dirPath 去掉开头 /
+        文件路径不追加末尾 /（否则 Apache 对文件 404）
     
-    getFileStream(filePath):
-        url = baseUrl + filePath
-        response = HTTP GET(url)
-        返回 response.body（流）
+    _fetchHtml(url):
+        HTTP GET(url, {超时: requestTimeout})
+        超时或非 200 抛错（不可达 8s 内快速失败，不再无限挂起）
+    
+    getFileStream(filePath, range?):
+        url = _buildUrl(filePath)
+        reqHeaders = {auth: username/password}
+        如果 range: reqHeaders.Range = "bytes={start}-{end}"
+        response = HTTP GET(url, {超时: requestTimeout, headers: reqHeaders})
+        如果响应状态不是 200/206: 抛错
+        返回 {
+            stream: response,
+            statusCode: response.statusCode,        // relay 远端 206/200
+            headers: {Content-Type, Content-Range, Accept-Ranges, Content-Length}（取自远端）
+        }
     
     getPublicUrl(filePath):
-        返回 baseUrl + filePath（直接使用原始HTTP路径）
+        // 同源 HTTPS 代理 URL（与 SmbProvider 一致）：服务器 HTTPS 时媒体库 URL 必须走同源 https，
+        // 否则显示端 https 页面加载 http 媒体被混合内容拦截
+        返回 "{协议}://{本地IP}:{端口}/api/media-libraries/{id}/proxy/{encodeURIComponent(filePath 去掉开头 /)}"
     
-    _parseHtmlListing(html, basePath):
+    _parseHtml(html, dirPath):
+        过滤 fancy-index 表头排序链接（?C=N;O=D 等）与 Parent Directory
+        跳过 ../ ./ 链接
         items = []
         使用正则匹配 <a href="..."> 链接
         对于每个匹配:
@@ -173,12 +236,14 @@
             client.readdir(dirPath, callback)
             返回文件列表映射为统一格式
     
-    getFileStream(filePath):
+    getFileStream(filePath, range?):
         使用 Promise 包装:
-            client.readFile(filePath, callback)
-            创建延迟读取的 Readable stream:
-                read() 时 push buffer 并立即释放引用
-            返回 stream
+            client.readFile(filePath, callback)   // 整文件读入 buffer（SMB 无流式读）
+            如果 range:
+                从 buffer 切出 {start, end} 段
+                返回 { stream: 延迟读出的 Readable(切片), statusCode: 206, headers: {Content-Length: 切片长度, Content-Range: "bytes {start}-{end}/{total}"} }
+            否则:
+                返回 { stream: 延迟读出的 Readable(整buffer), statusCode: 200, headers: {Content-Length: buffer.length} }
     
     uploadFile(dirPath, file):
         使用 Promise 包装:
@@ -249,9 +314,13 @@
         检查 readonly
         调用 provider.deleteFolder(folderPath)
     
-    getFileStream(libraryId, filePath):
+    getFile(libraryId, filePath):
         获取 library
-        调用 provider.getFileStream(filePath)
+        调用 provider.getFile(filePath)          // 委托（proxy 端点据此拿 size 解析 Range）
+
+    getFileStream(libraryId, filePath, range?):
+        获取 library
+        调用 provider.getFileStream(filePath, range)
     
     saveConfig():
         遍历 libraries 构建配置对象:
@@ -337,10 +406,29 @@ DELETE /api/media-libraries/:id/folder?path=xxx
     返回: { status: "success", message: "文件夹已删除" }
 
 GET /api/media-libraries/:id/proxy/*
+    请求头: 可选 Range: bytes=start-end
     处理:
-        提取文件路径
-        调用 mediaLibraryManager.getFileStream(id, path)
-        流式返回文件内容
+        filePath = decodeURIComponent(req.params[0])    // express 通配符已解码 %2F
+        range = parseRange(req.headers.range, 未知size时先由 provider 计算)
+        调用 mediaLibraryManager.getFileStream(id, path, range)
+        result = { stream, statusCode, headers }
+        设置响应状态码 statusCode
+        按 headers 设置 Content-Type / Content-Length / Content-Range / Accept-Ranges
+        stream.pipe(res)     // 流式返回，支持视频 seek
+        req close / stream error 时清理
+
+GET /api/media-proxy?url=<编码后的http地址>
+    通用 HTTPS 媒体代理：服务器 HTTPS 时，控制端手动输入的 http:// 媒体 URL
+    由 sendToDisplay 统一重写为同源 /api/media-proxy，绕开浏览器混合内容拦截
+    请求头: 可选 Range: bytes=start-end
+    校验:
+        url 必须以 http:// 或 https:// 开头
+        禁止重定向到本机 localhost/回环/私有地址等（SSRF 防护，简单校验目标 host）
+    处理:
+        upstream = HTTP(S) GET(url, {headers: Range 透传, 超时: 15s})
+        relay 远端状态码 206/200 与响应头 Content-Type/Content-Range/Accept-Ranges/Content-Length
+        stream.pipe(res)
+        超时/错误时响应 502/504，客户端断开时中断上游请求
 ```
 
 ## 前端模块实现

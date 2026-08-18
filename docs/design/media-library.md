@@ -109,6 +109,7 @@
 3. **密码加密**：SMB 密码加密存储
 4. **文件类型验证**：限制上传文件类型
 5. **访问代理**：HTTP/SMB 资源通过服务器代理，避免暴露凭证
+6. **混合内容规避**：服务器 HTTPS 时，http:// 媒体 URL 统一重写为同源 /api/media-proxy，绕开浏览器/WebView 混合内容拦截；代理做 SSRF 基础防护（禁本机/回环/云元数据，内网媒体放行）
 
 ## 实现优先级
 
@@ -203,3 +204,40 @@
 - public/js/main.js (移除 MediaList.load() 调用)
 - public/js/websocket.js (MediaList → MediaLibrary)
 - public/js/upload.js (MediaList.load → MediaLibrary.loadContent)
+
+### 2026-08-17 HTTP 媒体混合内容修复 + Range 流
+
+**背景：** 服务器启用 HTTPS（res/certs）后，显示端页面为 https://...:8081/display，加载 http:// 媒体子资源被浏览器/WebView 混合内容策略拦截——手动输入 http:// 媒体地址无法播放，HttpProvider 媒体库（mnt/mnt2）同理。
+
+**方案：**
+1. **sendToDisplay 统一出口重写**：服务器 HTTPS 时，把下发媒体的 http:// URL 重写为同源 `/api/media-proxy?url=<编码>`，覆盖手动 URL 输入 / restore 恢复 / 单文件播放全部路径，显示端零改动
+2. **通用代理端点 `GET /api/media-proxy?url=`**：流式转发上游 + Range 透传（relay 206/200 + Content-Range）+ 15s 超时 + SSRF 基础防护（禁本机/回环/云元数据，内网媒体放行，因媒体库本身即内网资源）
+3. **HttpProvider.getPublicUrl** 改同源 HTTPS 库代理 URL（`/api/media-libraries/{id}/proxy/{path}`，与 SmbProvider 一致），媒体库控制端预览/播放不再被拦
+4. **库代理端点支持 Range**：本地/SMB 有精确 size → 解析 Range 走 206；http 库 size 未知回落全量（不回归）
+5. **超时**：HttpProvider._fetchHtml/getFileStream 加 8s 超时，修 192.168.1.101 不可达时 init 挂死（此前卡 SYN-SENT 2-3 分钟、8081 不监听）
+6. **_parseHtml 垃圾过滤**：剔除 fancy-index 表头排序链接（Name/Last modified/Description/Parent Directory）误当媒体项
+
+**范围约定：** 各 Provider getFileStream(path, range) 统一返回 `{ stream, statusCode, headers }`（无 range 200 整流 / 有 range 206 切片），供 proxy 端点 setHeader。
+
+**改动文件：**
+- src/apps/web-mediacenter/modules/media/media-library-app-service.js
+- src/apps/server/boot/server-app.js
+- tests/media-library-app-service.test.js
+- docs/spec/media-library.md
+
+### 2026-08-17 http 媒体库获取文件大小 + 批量播放视频 seek
+
+**背景：** HttpProvider 的 list/getFile 不返回 size（fancy-index 目录列表只有人类可读大小如 `531M`，无法精确还原字节），控制端媒体库不显示真实文件大小；库代理端点 Range 解析依赖 `getFile().size`，size 未知时恒回落 200 全量，批量播放视频拖动进度条会重新全量下载。
+
+**方案：**
+1. **HttpProvider._fetchHead(url)**：HEAD 请求取 `Content-Length` + `Last-Modified`，8s 超时，失败/非 200 返回 null（回落 0，不阻塞）
+2. **HttpProvider.getFile**：调 _fetchHead 填 size + modifiedTime
+3. **HttpProvider._fetchList**：收集媒体文件（image/video/gif/html）后小并发池（6）发 HEAD 补 size，文件夹不 HEAD；单文件失败回落 0
+4. **MediaLibraryManager.getFile(libraryId, filePath)** 委托：修复 proxy 端点此前调 `mediaLibraryManager.getFile` 抛错被 `catch(e){}` 静默吞掉、Range 恒 null 的隐藏 bug
+
+**效果：** 控制端显示真实大小；库代理端点 Range 可解析 → 批量播放视频 seek 返回 206 分段，不再全量重下。
+
+**改动文件：**
+- src/apps/web-mediacenter/modules/media/media-library-app-service.js
+- tests/media-library-app-service.test.js（+3 测试）
+- docs/spec/media-library.md
