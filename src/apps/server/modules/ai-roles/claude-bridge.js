@@ -21,13 +21,14 @@ const READ_TIMEOUT_MS = 60000;
 // 进程 detached + pipe-keeper 持有 in.fifo 写端 + stdout 走 out.fifo（无读者时阻塞、重连后自愈），
 // 实现「服务器重启 claude 进程不中断」。
 class ClaudeBridge {
-    constructor({ dir, name, command = 'claude', promptFile = null, cwd, keeperPath }) {
+    constructor({ dir, name, command = 'claude', promptFile = null, cwd, keeperPath, readTimeoutMs = READ_TIMEOUT_MS }) {
         this.dir = dir;                 // 角色目录（FIFO/pid/prompt 都在这）
         this.name = name;
         this.command = command;         // claude 基础命令（不含重定向/提示词参数）
         this.promptFile = promptFile;   // --append-system-prompt-file 指向的文件
         this.cwd = cwd;                 // spawn 工作目录（项目根）
         this.keeperPath = keeperPath;   // pipe-keeper.js 绝对路径
+        this.readTimeoutMs = readTimeoutMs; // 读超时（测试注入短值；默认 60s）
         this.claudePidFile = path.join(dir, 'claude.pid');
         this.keeperPidFile = path.join(dir, 'keeper.pid');
         this.inFifo = path.join(dir, 'in.fifo');
@@ -65,7 +66,12 @@ class ClaudeBridge {
 
     // 懒启动：确保守卫 + claude + out.fifo 读端就绪（可重复调用）
     async ensureStarted() {
-        if (this.isAlive() && this.reader) return;
+        // 进程存活但读端丢失（如服务器重启后新进程）：重开读端，绝不 SIGKILL 存活 claude
+        if (this.isAlive()) {
+            if (!this.reader) this._startReader();
+            if (this._readerReady) await this._readerReady; // 读端真正 open 后再返回，防 EPIPE
+            return;
+        }
         this.cleanup();
         fs.mkdirSync(this.dir, { recursive: true });
         try { execFileSync('mkfifo', [this.inFifo, this.outFifo]); } catch (_) { /* 已存在忽略 */ }
@@ -88,11 +94,19 @@ class ClaudeBridge {
         child.unref();
 
         this._startReader();
+        if (this._readerReady) await this._readerReady; // 等 claude 打开 out.fifo 写端、读端 open 完成
     }
 
     // 读 out.fifo（claude stdout）：按行解析 stream-json 事件
     _startReader() {
         this.reader = createReadStream(this.outFifo);
+        // 记录读端就绪 Promise：open 完成前绝不向 in.fifo 写。
+        // 否则本轮结束 destroy 读端后、新读端 open（线程池异步）完成前，claude 写 out.fifo 会因
+        // 「无读者」触发 EPIPE 崩溃（冷启动因 claude 启动慢掩盖了此竞态，重开路径必现）。
+        this._readerReady = new Promise((resolve, reject) => {
+            this.reader.once('open', resolve);
+            this.reader.once('error', reject);
+        });
         let buf = '';
         this.reader.on('data', (chunk) => {
             buf += chunk.toString('utf8');
@@ -113,8 +127,11 @@ class ClaudeBridge {
     _resetTimeout() {
         if (this._timeout) clearTimeout(this._timeout);
         this._timeout = setTimeout(() => {
-            this._failTurn('等待 claude 响应超时（60s 无输出）');
-        }, READ_TIMEOUT_MS);
+            // 超时先整组清理（SIGKILL claude+守卫、删 FIFO、毁读端）：杜绝 claude 慢响应迟到后
+            // 被解析进下一轮返回错误内容；下一轮 chat 的 ensureStarted 会懒重建整条链路。
+            this.cleanup();
+            this._failTurn(`等待 claude 响应超时（${this.readTimeoutMs}ms 无输出）`);
+        }, this.readTimeoutMs);
     }
 
     _failTurn(error) {
@@ -123,6 +140,7 @@ class ClaudeBridge {
         if (this._timeout) clearTimeout(this._timeout);
         this._timeout = null;
         this._turn = null;
+        this._fullMessage = ''; // 清跨轮残留，防旧 turn 内容串入新一轮
         if (turn.onError) turn.onError(error);
         turn.resolve({ success: false, error });
     }
@@ -160,6 +178,8 @@ class ClaudeBridge {
                 if (turn.onError) turn.onError(err);
                 turn.resolve({ success: false, error: err });
             }
+            // 一轮结束即关读端释放线程池线程；下一轮 chat 的 ensureStarted 会重开
+            if (this.reader) { this.reader.destroy(); this.reader = null; }
             return;
         }
         // system / assistant / 其他 stream_event 忽略

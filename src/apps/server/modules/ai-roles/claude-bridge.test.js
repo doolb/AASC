@@ -28,6 +28,20 @@ rl.on('line', (line) => {
 });
 `;
 
+// 假 claude（慢）：对内容为 'a' 的消息不响应（触发读超时），其余正常回显
+const FAKE_SCRIPT_SLOW = `
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+  let req;
+  try { req = JSON.parse(line); } catch (e) { return; }
+  const c = req.message && req.message.content ? req.message.content : '';
+  if (c === 'a') return; // a 不响应，模拟 claude 卡死
+  const text = 'echo:' + c;
+  process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', result: text }) + '\\n');
+});
+`;
+
 function makeBridge(dir, overrides = {}) {
     const fakePath = path.join(dir, 'fake-claude.js');
     fs.writeFileSync(fakePath, FAKE_SCRIPT);
@@ -143,4 +157,49 @@ test('reconnect()：存活返回 true 并重开读端；已死清理返回 false
     const end = Date.now() + 3000;
     while (bridge2.isAlive() && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
     assert.strictEqual(bridge2.reconnect(), false);
+});
+
+test('服务器重启后新实例不杀存活 claude，chat 直接续用原进程', async () => {
+    const dir = tmpDir();
+    const bridge = makeBridge(dir);
+    await bridge.chat('a', {});
+    const pidBefore = parseInt(fs.readFileSync(path.join(dir, 'claude.pid'), 'utf8').trim(), 10);
+
+    // 模拟服务器重启：同一 dir 新建 bridge（reader=null，_turn=null），claude 进程仍在（detached）
+    const bridge2 = makeBridge(dir);
+    assert.ok(bridge2.isAlive(), '重启后应检测到存活 claude');
+    const r2 = await bridge2.chat('b', {});
+    const pidAfter = parseInt(fs.readFileSync(path.join(dir, 'claude.pid'), 'utf8').trim(), 10);
+    assert.strictEqual(r2.message, 'echo:b');
+    assert.strictEqual(pidBefore, pidAfter, '不应重生进程，应复用原 claude');
+    assert.ok(bridge2.isAlive());
+});
+
+test('60s 超时后杀 claude 防旧响应串入下一轮，下轮重建', async () => {
+    const dir = tmpDir();
+    const fakePath = path.join(dir, 'fake-slow.js');
+    fs.writeFileSync(fakePath, FAKE_SCRIPT_SLOW);
+    const bridge = new ClaudeBridge({ dir, name: '慢角色', command: `${process.execPath} ${fakePath}`, promptFile: path.join(dir, 'prompt.txt'), cwd: dir, keeperPath: KEEPER, readTimeoutMs: 150 });
+    _bridges.push(bridge);
+
+    const r1 = await bridge.chat('a', { onChunk: () => {} }); // 触发超时
+    assert.strictEqual(r1.success, false);
+    assert.ok(r1.error && r1.error.includes('超时'), `应报超时: ${r1.error}`);
+    const end = Date.now() + 3000;
+    while (bridge.isAlive() && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+    assert.ok(!bridge.isAlive(), '超时应杀 claude');
+    // 重建后正常（慢脚本对 a 不响应，但 b 响应）
+    const r2 = await bridge.chat('b', {});
+    assert.strictEqual(r2.message, 'echo:b');
+    assert.ok(bridge.isAlive());
+});
+
+test('一轮结束后关读端释放线程池，下轮 chat 重开', async () => {
+    const dir = tmpDir();
+    const bridge = makeBridge(dir);
+    await bridge.chat('a', {});
+    assert.strictEqual(bridge.reader, null, '空闲时读端应关闭（释放线程池线程）');
+    const r2 = await bridge.chat('b', {});
+    assert.strictEqual(r2.message, 'echo:b');
+    assert.strictEqual(bridge.reader, null);
 });
