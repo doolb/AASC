@@ -48,7 +48,8 @@ function makeBridge(dir, overrides = {}) {
     const bridge = new ClaudeBridge({
         dir,
         name: '测试角色',
-        command: `${process.execPath} ${fakePath}`,
+        commandPath: process.execPath,
+        commandArgs: [fakePath],
         promptFile: path.join(dir, 'prompt.txt'),
         cwd: dir,
         keeperPath: KEEPER,
@@ -64,6 +65,25 @@ function makeBridge(dir, overrides = {}) {
 // 2) claude 进程退出 → out.fifo 写端关闭 → 阻塞读端读到 EOF 释放 fd/线程，测试进程才能退出。
 afterEach(() => { for (const b of _bridges) b.stop(); });
 
+test('命令参数 shell 元字符不会执行外部 marker，真实 FIFO 仍可通信', async () => {
+    const dir = tmpDir();
+    const marker = path.join(dir, 'marker');
+    const fakePath = path.join(dir, 'fake-claude.js');
+    fs.writeFileSync(fakePath, FAKE_SCRIPT);
+    const bridge = new ClaudeBridge({
+        dir,
+        name: '角色"$(touch ' + marker + ');',
+        commandPath: process.execPath,
+        commandArgs: [fakePath, '$(touch ' + marker + ')', ';'],
+        promptFile: path.join(dir, 'prompt.txt'),
+        cwd: dir,
+        keeperPath: KEEPER
+    });
+    _bridges.push(bridge);
+    const result = await bridge.chat('fifo', {});
+    assert.strictEqual(result.message, 'echo:fifo');
+    assert.ok(!fs.existsSync(marker), '命令参数不应经 shell 执行');
+});
 test('懒启动 + 发消息 + 流式转发 + 完成回包', async () => {
     const dir = tmpDir();
     fs.writeFileSync(path.join(dir, 'prompt.txt'), '你是测试角色');
@@ -82,6 +102,7 @@ test('懒启动 + 发消息 + 流式转发 + 完成回包', async () => {
     assert.strictEqual(chunks.join(''), 'echo:你好');
     assert.ok(bridge.isAlive(), '聊天后进程存活');
 });
+
 
 test('多轮持久：同一进程，上下文连续', async () => {
     const dir = tmpDir();
@@ -179,7 +200,7 @@ test('60s 超时后杀 claude 防旧响应串入下一轮，下轮重建', async
     const dir = tmpDir();
     const fakePath = path.join(dir, 'fake-slow.js');
     fs.writeFileSync(fakePath, FAKE_SCRIPT_SLOW);
-    const bridge = new ClaudeBridge({ dir, name: '慢角色', command: `${process.execPath} ${fakePath}`, promptFile: path.join(dir, 'prompt.txt'), cwd: dir, keeperPath: KEEPER, readTimeoutMs: 150 });
+    const bridge = new ClaudeBridge({ dir, name: '慢角色', commandPath: process.execPath, commandArgs: [fakePath], promptFile: path.join(dir, 'prompt.txt'), cwd: dir, keeperPath: KEEPER, readTimeoutMs: 150 });
     _bridges.push(bridge);
 
     const r1 = await bridge.chat('a', { onChunk: () => {} }); // 触发超时

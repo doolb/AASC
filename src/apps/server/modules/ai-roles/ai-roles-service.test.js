@@ -38,7 +38,8 @@ function makeService(dir, baseDir) {
     const svc = new AiRolesService({
         baseDir,
         projectRoot: dir,
-        command: `${process.execPath} ${fakePath}`,
+        commandPath: process.execPath,
+        commandArgs: [fakePath],
         keeperPath: KEEPER
     });
     _services.push(svc);

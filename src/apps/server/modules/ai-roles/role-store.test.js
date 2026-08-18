@@ -10,6 +10,25 @@ function tmpBase() {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'role-store-'));
 }
 
+test('list 跳过不安全目录名以及 role.json.name 不匹配的目录并告警', () => {
+    const base = tmpBase();
+    const store = new RoleStore(base);
+    fs.mkdirSync(path.join(base, '安全'), { recursive: true });
+    fs.writeFileSync(path.join(base, '安全', 'role.json'), JSON.stringify({ name: '安全' }));
+    fs.mkdirSync(path.join(base, 'bad/name'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'bad/name', 'role.json'), JSON.stringify({ name: 'bad/name' }));
+    fs.mkdirSync(path.join(base, '伪装'), { recursive: true });
+    fs.writeFileSync(path.join(base, '伪装', 'role.json'), JSON.stringify({ name: '另一个' }));
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (message) => warnings.push(message);
+    try {
+        assert.deepStrictEqual(store.list().map((role) => role.name), ['安全']);
+    } finally {
+        console.warn = originalWarn;
+    }
+    assert.ok(warnings.length >= 2);
+});
 test('add/list/exists/remove 往返', () => {
     const store = new RoleStore(tmpBase());
     const role = store.add('后端助手');
@@ -21,6 +40,7 @@ test('add/list/exists/remove 往返', () => {
     assert.ok(!store.exists('后端助手'));
     assert.deepStrictEqual(store.list(), []);
 });
+
 
 test('重名/空名抛错', () => {
     const store = new RoleStore(tmpBase());

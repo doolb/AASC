@@ -6,7 +6,9 @@
 
 角色数据与历史持久化到 `~/.config/aasc-user/ai-roles/<角色名>/`，服务器重启后角色列表和历史仍可恢复。Claude 进程采用 detached 方式运行，服务器重启时不主动终止存活进程；服务启动后重新连接其输出管道。删除角色时回收对应 Claude 进程、管道守卫和历史目录。
 
-## 模块职责
+- 角色 tab 必须使用 DOM 节点、`textContent`、`dataset` 和事件监听器渲染，角色名不得进入 HTML 或 inline handler。
+- 角色消息带唯一 `requestId`；流式响应按请求上下文归属，切换 tab 后迟到响应不得污染当前角色。
+
 
 ### role-store
 

@@ -45,12 +45,24 @@ class RoleStore {
         } catch (_) { /* 保留失败则维持现状 */ }
     }
 
-    // 列出所有角色（跳过残留的非法目录）
     list() {
         try {
-            return fs.readdirSync(this.baseDir, { withFileTypes: true })
-                .filter((d) => d.isDirectory() && this._readRole(d.name))
-                .map((d) => this._readRole(d.name));
+            const roles = [];
+            for (const entry of fs.readdirSync(this.baseDir, { withFileTypes: true })) {
+                if (!entry.isDirectory()) continue;
+                try {
+                    this._assertSafeName(entry.name);
+                    const role = this._readRole(entry.name);
+                    if (!role || role.name !== entry.name) {
+                        console.warn(`[ai-roles] 跳过无效角色目录「${entry.name}」`);
+                        continue;
+                    }
+                    roles.push(role);
+                } catch (err) {
+                    console.warn(`[ai-roles] 跳过无效角色目录「${entry.name}」: ${err.message}`);
+                }
+            }
+            return roles;
         } catch (_) { return []; }
     }
 

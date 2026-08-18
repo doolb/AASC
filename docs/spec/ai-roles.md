@@ -16,7 +16,7 @@ USER_CONFIG_DIR/ai-roles/<name>/
 
 ```text
 RoleStore
-  list() -> 遍历角色目录，只返回能读取 role.json 的目录
+  list() -> 遍历角色目录；目录名必须安全且 role.json.name 必须与目录名完全一致，否则 console.warn 并跳过
   add(name) -> 校验安全名称；若已存在则报错；创建目录和 role.json
   remove(name) -> 校验安全名称；递归删除角色目录
   loadHistory(name) -> 读取 history.json；缺失或损坏时返回空数组并保留损坏文件
@@ -31,14 +31,14 @@ RoleStore
   { type: 'roleAdd', name }
   { type: 'roleDelete', role }
   { type: 'roleHistory', role }
-  { type: 'chatMessage', mode: 'role', role, content }
+  { type: 'chatMessage', mode: 'role', role, content, requestId }
 
 服务端 -> 控制端:
   { type: 'roleList', roles: [{ name, createdAt, running }] }
   { type: 'roleHistory', role, history }
   { type: 'roleError', message }
-  { type: 'chatChunk', chunk, message }
-  { type: 'chatResponse', success, message, history }
+  { type: 'chatChunk', requestId, chunk, message }
+  { type: 'chatResponse', requestId, success, message, history }
   { type: 'chatResponse', success: false, error }
 ```
 

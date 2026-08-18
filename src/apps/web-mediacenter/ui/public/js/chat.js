@@ -27,6 +27,8 @@ const Chat = {
     searchHistory: [],
     isLoading: false,
     currentStreamingMessage: '',
+    activeRequestId: null,
+    requestCounter: 0,
     currentUserMessage: '',
     isListening: false,
     mediaRecorder: null,
@@ -645,18 +647,16 @@ const Chat = {
         const container = document.getElementById('chatContainer');
         if (!container) return;
         
-        let tabsHtml = '<div class="chat-tabs"><div class="chat-tab' + (this.session.mode === 'group' ? ' active' : '') + '" onclick="Chat.setMode(\'group\', null)">群聊</div>';
+        let tabsHtml = '<div class="chat-tabs"><div class="chat-tab' + (this.session.mode === 'group' ? ' active' : '') + '" data-chat-tab="group">群聊</div>';
         this.templates.forEach(t => {
             const isActive = this.session.mode === 'private' && this.session.privateTarget === t.name;
             tabsHtml += `<div class="chat-tab${isActive ? ' active' : ''}" onclick="Chat.setMode('private', '${this.escapeHtml(t.name)}')">${this.escapeHtml(t.name)}</div>`;
         });
-        // 角色 tab：点击进入角色对话，带 × 删除按钮；stopPropagation 避免误触进入
         this.aiRoles.forEach(r => {
-            const isActive = this.session.mode === 'role' && this.session.roleTarget === r.name;
-            tabsHtml += `<div class="chat-tab${isActive ? ' active' : ''}" onclick="Chat.setRoleMode('${this.escapeHtml(r.name)}')">${this.escapeHtml(r.name)}<span class="chat-tab-del" title="删除角色" onclick="event.stopPropagation();Chat.deleteRole('${this.escapeHtml(r.name)}')">×</span></div>`;
+            const active = this.session.mode === 'role' && this.session.roleTarget === r.name;
+            tabsHtml += `<div class="chat-tab${active ? ' active' : ''}" data-role-tab="${this.escapeHtml(r.name)}"></div>`;
         });
-        // 「+」添加按钮：弹窗创建新角色
-        tabsHtml += '<div class="chat-tab chat-tab-add" title="添加工作 AI 角色" onclick="Chat.showAddRole()">+</div>';
+        tabsHtml += '<div class="chat-tab chat-tab-add" data-add-role="true">+</div>';
         tabsHtml += '</div>';
         
         container.innerHTML = `
@@ -695,6 +695,15 @@ const Chat = {
             </div>
         `;
         
+        const tabs = container.querySelector('.chat-tabs');
+        tabs.querySelectorAll('[data-role-tab]').forEach((tab) => {
+            const name = tab.dataset.roleTab;
+            tab.textContent = name;
+            tab.addEventListener('click', () => this.setRoleMode(name));
+            const del = document.createElement('span'); del.className = 'chat-tab-del'; del.textContent = '×'; del.title = '删除角色';
+            del.addEventListener('click', (event) => { event.stopPropagation(); this.deleteRole(name); }); tab.appendChild(del);
+        });
+        const add = tabs.querySelector('[data-add-role]'); if (add) { add.addEventListener('click', () => this.showAddRole()); }
         this.renderHistory();
         this.renderModeIndicator();
         this.renderPlayOnControlToggle();
@@ -943,6 +952,8 @@ const Chat = {
             }
         }
         
+        const requestId = `${Date.now()}-${++this.requestCounter}`;
+        this.activeRequestId = requestId;
         this.isLoading = true;
         this.currentStreamingMessage = '';
         this.currentUserMessage = displayMessage;
@@ -968,6 +979,7 @@ const Chat = {
             const selectionMode = window.DisplayList ? window.DisplayList.selectionMode : 'single';
             const chatMessage = {
                 type: 'chatMessage',
+                requestId,
                 content: sendMessage,
                 displayContent: displayMessage,
                 mode: mode,
@@ -1212,6 +1224,7 @@ const Chat = {
     },
     
     handleChunk(data) {
+        if (data.requestId && data.requestId !== this.activeRequestId) return;
         this.currentStreamingMessage = data.message;
         
         const streamingContent = document.getElementById('streamingContent');
@@ -1226,6 +1239,7 @@ const Chat = {
     },
     
     handleResponse(data) {
+        if (data.requestId && data.requestId !== this.activeRequestId) return;
         this.isLoading = false;
         this.updateSendButton();
         

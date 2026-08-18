@@ -21,10 +21,12 @@ const READ_TIMEOUT_MS = 60000;
 // 进程 detached + pipe-keeper 持有 in.fifo 写端 + stdout 走 out.fifo（无读者时阻塞、重连后自愈），
 // 实现「服务器重启 claude 进程不中断」。
 class ClaudeBridge {
-    constructor({ dir, name, command = 'claude', promptFile = null, cwd, keeperPath, readTimeoutMs = READ_TIMEOUT_MS, readOpenTimeoutMs = 5000 }) {
+    constructor({ dir, name, command = 'claude', commandPath = null, commandArgs = [], promptFile = null, cwd, keeperPath, readTimeoutMs = READ_TIMEOUT_MS, readOpenTimeoutMs = 5000 }) {
         this.dir = dir;                 // 角色目录（FIFO/pid/prompt 都在这）
         this.name = name;
-        this.command = command;         // claude 基础命令（不含重定向/提示词参数）
+        this.command = command;
+        this.commandPath = commandPath || command;
+        this.commandArgs = [...commandArgs];
         this.promptFile = promptFile;   // --append-system-prompt-file 指向的文件
         this.cwd = cwd;                 // spawn 工作目录（项目根）
         this.keeperPath = keeperPath;   // pipe-keeper.js 绝对路径
@@ -39,6 +41,7 @@ class ClaudeBridge {
         this._turn = null;              // 当前待处理一轮 { onChunk, onComplete, onError, resolve }
         this._fullMessage = '';
         this._timeout = null;
+        this._generation = 0;
     }
 
     isAlive() {
@@ -111,11 +114,18 @@ class ClaudeBridge {
         }
         if (!fs.existsSync(this.keeperPidFile)) throw new Error('管道守卫启动超时');
 
-        // 2) claude：sh -c 'exec <cmd> ... < in.fifo > out.fifo'。exec 让 sh 变为 claude → child.pid 即 claude pid。
-        //    提示词走 --append-system-prompt-file（避免 argv 超长），重定向由 sh 完成，claude 自持 fd 不依赖服务器。
-        const promptArg = this.promptFile ? ` --append-system-prompt-file "${this.promptFile}"` : '';
-        const shellCmd = `exec ${this.command}${promptArg} < "${this.inFifo}" > "${this.outFifo}" 2> "${this.errLog}"`;
-        const child = spawn('sh', ['-c', shellCmd], { detached: true, cwd: this.cwd, stdio: 'ignore' });
+        const inFd = fs.openSync(this.inFifo, 'r+');
+        const outFd = fs.openSync(this.outFifo, 'r+');
+        const errFd = fs.openSync(this.errLog, 'a');
+        const args = [...this.commandArgs, ...(this.promptFile ? ['--append-system-prompt-file', this.promptFile] : [])];
+        const child = spawn(this.commandPath, args, {
+            detached: true,
+            cwd: this.cwd,
+            stdio: [inFd, outFd, errFd]
+        });
+        fs.closeSync(inFd);
+        fs.closeSync(outFd);
+        fs.closeSync(errFd);
         this._writePid(this.claudePidFile, child.pid);
         child.unref();
 
@@ -224,6 +234,7 @@ class ClaudeBridge {
 
     // 发消息给 claude（流式回调 + 返回 Promise）。调用方需串行化。
     chat(content, { onChunk, onComplete, onError } = {}) {
+        if (this._turn) return Promise.resolve({ success: false, error: '当前角色仍在处理上一条消息' });
         return new Promise((resolve) => {
             this.ensureStarted().then(() => {
                 this._turn = { onChunk, onComplete, onError, resolve };
@@ -250,13 +261,15 @@ class ClaudeBridge {
 
     // 回收：SIGTERM → 2s 未退 → SIGKILL（claude + 守卫），并删除 FIFO（测试断言 stop 后 FIFO 清除）
     stop() {
-        for (const file of [this.claudePidFile, this.keeperPidFile]) {
-            const pid = this._readPid(file);
+        const generation = ++this._generation;
+        this._failTurn('角色已停止');
+        const pids = [this.claudePidFile, this.keeperPidFile].map((file) => this._readPid(file));
+        for (const pid of pids) {
             if (isAlive(pid)) { try { process.kill(pid, 'SIGTERM'); } catch (_) {} }
         }
         setTimeout(() => {
-            for (const file of [this.claudePidFile, this.keeperPidFile]) {
-                const pid = this._readPid(file);
+            if (generation !== this._generation) return;
+            for (const pid of pids) {
                 if (isAlive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch (_) {} }
             }
         }, 2000);

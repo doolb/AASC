@@ -3788,7 +3788,11 @@ async function handleControlMessageFallback(data, ws) {
                         }
                     })();
                 } else if (data.type === 'roleList') {
-                    ws.send(JSON.stringify({ type: 'roleList', roles: aiRoles.list() }));
+                    try {
+                        ws.send(JSON.stringify({ type: 'roleList', roles: aiRoles.list() }));
+                    } catch (err) {
+                        ws.send(JSON.stringify({ type: 'roleError', message: err.message }));
+                    }
                 } else if (data.type === 'roleAdd') {
                     // 重名/空名/非法名由 role-store 抛错，捕获后回 roleError，避免进程崩溃
                     try {
@@ -3798,19 +3802,26 @@ async function handleControlMessageFallback(data, ws) {
                         ws.send(JSON.stringify({ type: 'roleError', message: err.message }));
                     }
                 } else if (data.type === 'roleDelete') {
-                    // 角色名来自前端用户输入：先确认存在，避免对孤儿目录静默空操作
-                    if (!aiRoles.list().some(r => r.name === data.role)) {
-                        ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
-                        return;
+                    try {
+                        if (!aiRoles.list().some(r => r.name === data.role)) {
+                            ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
+                            return;
+                        }
+                        aiRoles.remove(data.role);
+                        broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
+                    } catch (err) {
+                        ws.send(JSON.stringify({ type: 'roleError', message: err.message }));
                     }
-                    aiRoles.remove(data.role);
-                    broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
                 } else if (data.type === 'roleHistory') {
-                    if (!aiRoles.list().some(r => r.name === data.role)) {
-                        ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
-                        return;
+                    try {
+                        if (!aiRoles.list().some(r => r.name === data.role)) {
+                            ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
+                            return;
+                        }
+                        ws.send(JSON.stringify({ type: 'roleHistory', role: data.role, history: aiRoles.history(data.role) }));
+                    } catch (err) {
+                        ws.send(JSON.stringify({ type: 'roleError', message: err.message }));
                     }
-                    ws.send(JSON.stringify({ type: 'roleHistory', role: data.role, history: aiRoles.history(data.role) }));
                 } else if (data.type === 'chatMessage') {
                     (async () => {
                         try {
@@ -3822,9 +3833,9 @@ async function handleControlMessageFallback(data, ws) {
                                     return;
                                 }
                                 await aiRoles.chat(data.role, data.content, {
-                                    onChunk: (chunk, message) => ws.send(JSON.stringify({ type: 'chatChunk', chunk, message })),
-                                    onComplete: (message, history) => ws.send(JSON.stringify({ type: 'chatResponse', success: true, message, history })),
-                                    onError: (error) => ws.send(JSON.stringify({ type: 'chatResponse', success: false, error }))
+                                    onChunk: (chunk, message) => ws.send(JSON.stringify({ type: 'chatChunk', requestId: data.requestId, chunk, message })),
+                                    onComplete: (message, history) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: data.requestId, success: true, message, history })),
+                                    onError: (error) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: data.requestId, success: false, error: error instanceof Error ? error.message : error }))
                                 });
                                 return;
                             }
