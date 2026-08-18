@@ -3,7 +3,7 @@
     {
       "instanceId": "44fbce2d",
       "taskName": "render-display",
-      "status": "display_offline",
+      "status": "running",
       "timestamp": 1786975265817,
       "target": "display",
       "env": "auto",

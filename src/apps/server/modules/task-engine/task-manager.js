@@ -51,6 +51,9 @@ class TaskManager extends EventEmitter {
   /**
    * 启动时恢复孤儿服务实例（上次崩溃/重启时 running 的实例）
    * 先创建 draft，再 runInstance() 启动
+   * running 实例：立即 submit + runInstance 恢复
+   * display_offline 实例：内存态（_orphanedTasks/this.instances）已随重启清空，
+   *   按 displayId 回填孤儿表，等显示端重连后由 retryOrphanedTasks(displayId) 自动接管
    */
   async restoreAutoStartServices() {
     const taskList = await this.taskIO.listTasks().catch(() => []);
@@ -71,10 +74,43 @@ class TaskManager extends EventEmitter {
           } catch (err) {
             console.error('[TaskManager] 服务恢复失败:', entry.taskName, err.message);
           }
+        } else if (entry.mode === 'service' && entry.status === 'display_offline') {
+          this._collectOfflineOrphan(entry);
         }
       }
     }
     this._isRestoring = false;
+  }
+
+  /**
+   * 把磁盘上 display_offline 的服务实例回填进 _orphanedTasks（按 displayId 分组）
+   * 与 handleDisplayDisconnect 的孤儿结构保持一致；同一 instanceId 去重，避免重连后重复恢复
+   */
+  _collectOfflineOrphan(entry) {
+    if (!entry || entry.mode !== 'service' || entry.status !== 'display_offline') return;
+    if (!entry.displayId) {
+      console.warn('[TaskManager] display_offline 实例缺少 displayId，跳过恢复:', entry.taskName, entry.instanceId);
+      return;
+    }
+    const orphan = {
+      taskName: entry.taskName,
+      instanceId: entry.instanceId,
+      taskType: entry.taskType || 'user',
+      mode: 'service',
+      target: entry.target || 'display',
+      displayId: entry.displayId,
+      params: entry.params || {},
+      env: entry.env || 'auto',
+      entryFile: entry.entryFile || 'service.js'
+    };
+    const orphans = this._orphanedTasks.get(entry.displayId) || [];
+    if (orphans.some(o => o.instanceId === entry.instanceId)) {
+      console.log('[TaskManager] display_offline 实例已在孤儿表，跳过:', entry.taskName, entry.instanceId);
+      return;
+    }
+    orphans.push(orphan);
+    this._orphanedTasks.set(entry.displayId, orphans);
+    console.log('[TaskManager] 恢复 display_offline 服务实例到孤儿表:', entry.taskName, entry.instanceId, 'displayId:', entry.displayId);
   }
 
   /** 执行 draft 实例（draft → pending → running → completed/failed） */

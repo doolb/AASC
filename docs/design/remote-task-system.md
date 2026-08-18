@@ -311,6 +311,16 @@ async function run(context) {
 }
 ```
 
+## 服务器重启后的显示端服务恢复
+
+显示端常驻服务断连时，实例状态会持久化为 `display_offline`，等待显示端重连。服务器重启会清空 `this.instances` 与 `_orphanedTasks` 等内存状态，因此启动恢复按状态分流：
+
+- `mode=service && status=running`：按既有流程重新提交并运行；显示端暂不可用时进入待转发队列。
+- `mode=service && status=display_offline`：不立即执行，按 `displayId` 回填 `_orphanedTasks`；同一 `instanceId` 去重，缺失 `displayId` 的实例跳过并记录警告。
+- 显示端重连后统一调用 `retryOrphanedTasks(displayId)`，将回填的实例恢复为 draft，再运行并转发到显示端；孤儿分组消费后删除，重复重连不会重复恢复。
+
+这样持久化索引中的 `display_offline` 状态能够重新连接到内存恢复队列，同时避免服务器启动时在显示端尚未连接的情况下提前执行服务。
+
 ## 任务状态机
 
 ```
