@@ -70,6 +70,7 @@ class AiRolesService {
 
     add(name) {
         const role = this.store.add(name);
+        this.removed.delete(role.name);
         // 建角色即落盘提示词：让 prompt.txt 在 add 后立即可用（懒启动注入的 promptFile 已就位），
         // 且角色提示词来源 workgroup/roles/<名>.md 的变更在新建时即时生效
         this._ensurePromptFile(name);
@@ -100,11 +101,11 @@ class AiRolesService {
             bridge.promptFile = this._ensurePromptFile(name);
             this.store.appendHistory(name, { role: 'control', name: '用户', content, mode: 'role', target: name });
             return bridge.chat(content, {
-                onChunk: callbacks.onChunk,
+                onChunk: (chunk, message) => callbacks.onChunk && callbacks.onChunk(chunk, message, callbacks.requestId),
                 onComplete: (message) => {
                     if (this.removed.has(name) || !this.store.list().some((role) => role.name === name)) return;
                     this.store.appendHistory(name, { role: 'assistant', name, content: message, mode: 'role', target: name });
-                    if (callbacks.onComplete) callbacks.onComplete(message, this.store.loadHistory(name));
+                    if (callbacks.onComplete) callbacks.onComplete(message, this.store.loadHistory(name), callbacks.requestId);
                 },
                 onError: callbacks.onError
             });

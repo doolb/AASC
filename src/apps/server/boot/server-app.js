@@ -3782,6 +3782,7 @@ async function handleControlMessageFallback(data, ws) {
                             logError('Chat', `处理失败: ${err.message}`);
                             ws.send(JSON.stringify({
                                 type: 'chatResponse',
+                                requestId: data.requestId,
                                 success: false,
                                 error: err.message
                             }));
@@ -3833,8 +3834,9 @@ async function handleControlMessageFallback(data, ws) {
                                     return;
                                 }
                                 await aiRoles.chat(data.role, data.content, {
-                                    onChunk: (chunk, message) => ws.send(JSON.stringify({ type: 'chatChunk', requestId: data.requestId, chunk, message })),
-                                    onComplete: (message, history) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: data.requestId, success: true, message, history })),
+                                    requestId: data.requestId,
+                                    onChunk: (chunk, message, requestId) => ws.send(JSON.stringify({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message })),
+                                    onComplete: (message, history, requestId) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history })),
                                     onError: (error) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: data.requestId, success: false, error: error instanceof Error ? error.message : error }))
                                 });
                                 return;
@@ -3861,6 +3863,7 @@ async function handleControlMessageFallback(data, ws) {
                             logError('Chat', `处理失败: ${err.message}`);
                             ws.send(JSON.stringify({
                                 type: 'chatResponse',
+                                requestId: data.requestId,
                                 success: false,
                                 error: err.message
                             }));

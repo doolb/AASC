@@ -1224,7 +1224,7 @@ const Chat = {
     },
     
     handleChunk(data) {
-        if (data.requestId && data.requestId !== this.activeRequestId) return;
+        if (data.requestId !== this.activeRequestId) return;
         this.currentStreamingMessage = data.message;
         
         const streamingContent = document.getElementById('streamingContent');
@@ -1239,7 +1239,7 @@ const Chat = {
     },
     
     handleResponse(data) {
-        if (data.requestId && data.requestId !== this.activeRequestId) return;
+        if (data.requestId !== this.activeRequestId) return;
         this.isLoading = false;
         this.updateSendButton();
         

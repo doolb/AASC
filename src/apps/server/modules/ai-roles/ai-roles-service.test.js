@@ -62,6 +62,16 @@ test('add/list 往返，running 状态', async () => {
     assert.deepStrictEqual(svc.list(), []);
 });
 
+test('删除后同名角色可重建并继续聊天', async () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const svc = makeService(dir, base);
+    svc.add('后端');
+    svc.remove('后端');
+    svc.add('后端');
+    const result = await svc.chat('后端', '重建后消息', {});
+    assert.ok(result.success, `重建后的角色应可聊天: ${result.error}`);
+});
 test('chat 走 claude，历史写入并随响应返回', async () => {
     const dir = tmpDir();
     const base = path.join(dir, 'roles');
@@ -84,16 +94,26 @@ test('chat 走 claude，历史写入并随响应返回', async () => {
     assert.strictEqual(svc.list()[0].running, true, '对话后进程运行');
 });
 
+test('chat 回调透传 requestId', async () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const svc = makeService(dir, base);
+    svc.add('后端');
+    const chunks = [];
+    await svc.chat('后端', '带请求号', { requestId: 'role-req-1', onChunk: (chunk) => chunks.push(chunk) });
+    assert.strictEqual(chunks.join(''), 'echo:带请求号');
+});
+
 test('提示词复用 workgroup/roles/<名>.md', async () => {
     const dir = tmpDir();
     const base = path.join(dir, 'roles');
     const svc = makeService(dir, base);
     svc.add('后端');
-    // prompt 文件内容应来自 roles/后端.md
     const promptFile = path.join(base, '后端', 'prompt.txt');
     assert.ok(fs.existsSync(promptFile));
     assert.strictEqual(fs.readFileSync(promptFile, 'utf8'), '你是后端角色，负责接口。');
 });
+
 
 test('restoreAll：角色存活则重连，删除后 remove 回收', async () => {
     const dir = tmpDir();

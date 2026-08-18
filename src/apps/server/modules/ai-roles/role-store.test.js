@@ -67,6 +67,18 @@ test('不存在角色 history 返回空数组', () => {
     assert.deepStrictEqual(store.loadHistory('nobody'), []);
 });
 
+test('非数组 history.json 按损坏处理并保留备份', () => {
+    const base = tmpBase();
+    const store = new RoleStore(base);
+    store.add('前端');
+    const file = path.join(base, '前端', 'history.json');
+    fs.writeFileSync(file, JSON.stringify({ role: 'assistant' }));
+    assert.deepStrictEqual(store.loadHistory('前端'), []);
+    assert.strictEqual(fs.readdirSync(path.dirname(file)).filter((name) => name.startsWith('history.json.corrupt-')).length, 1);
+    assert.ok(!fs.existsSync(file));
+});
+
+
 test('roleDir 返回角色目录绝对路径', () => {
     const base = tmpBase();
     const store = new RoleStore(base);
@@ -94,6 +106,18 @@ test('角色名拒绝路径穿越与嵌套（add/remove/exists/loadHistory/appen
 });
 
 // 损坏的 history.json 不能被静默覆盖——应改名保留（可恢复），下次写入重新创建
+test('删除后可用同名角色重建并正常写入历史', () => {
+    const base = tmpBase();
+    const store = new RoleStore(base);
+    store.add('前端');
+    store.remove('前端');
+    const recreated = store.add('前端');
+    assert.strictEqual(recreated.name, '前端');
+    assert.deepStrictEqual(store.loadHistory('前端'), []);
+    store.appendHistory('前端', { role: 'user', name: '用户', content: '重建后消息' });
+    assert.strictEqual(store.loadHistory('前端')[0].content, '重建后消息');
+});
+
 test('损坏 history.json 改名保留后重新写入，不覆盖丢数据', () => {
     const base = tmpBase();
     const store = new RoleStore(base);

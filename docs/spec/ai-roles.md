@@ -19,7 +19,7 @@ RoleStore
   list() -> 遍历角色目录；目录名必须安全且 role.json.name 必须与目录名完全一致，否则 console.warn 并跳过
   add(name) -> 校验安全名称；若已存在则报错；创建目录和 role.json
   remove(name) -> 校验安全名称；递归删除角色目录
-  loadHistory(name) -> 读取 history.json；缺失或损坏时返回空数组并保留损坏文件
+  loadHistory(name) -> 读取 history.json；缺失、损坏或内容非数组时返回空数组并保留损坏文件
   appendHistory(name, message) -> 读取、追加 timestamp、写回 history.json
 ```
 
@@ -39,7 +39,7 @@ RoleStore
   { type: 'roleError', message }
   { type: 'chatChunk', requestId, chunk, message }
   { type: 'chatResponse', requestId, success, message, history }
-  { type: 'chatResponse', success: false, error }
+  { type: 'chatResponse', requestId, success: false, error }
 ```
 
 所有角色管理请求先由服务端使用 `aiRoles.list()` 验证角色存在；非法名称、重名、删除或历史读取异常通过 `roleError` 返回，不让 WebSocket 处理流程抛出未处理异常。
@@ -150,7 +150,7 @@ render():
   '×' -> confirm 后发送 roleDelete(role)
 
 发送角色消息:
-  chatMessage { mode:'role', role: roleTarget, content }
-  chatChunk -> 更新流式占位消息
+  chatMessage { mode:'role', role: roleTarget, content, requestId }
+  // chatChunk/chatResponse 必须携带同一 requestId；控制端只接受等于 activeRequestId 的响应
   chatResponse -> 完成消息并使用返回 history 更新显示
 ```

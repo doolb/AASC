@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 修复
+
+- ✅ [2026-08-18] AI 角色聊天请求追踪与角色存储恢复修复
+  - 删除角色后清理 removed 标记，允许同名角色立即重建并继续聊天；非数组 history.json 按损坏文件备份并从空历史恢复。
+  - server role chat 的成功/失败回包统一携带原 requestId，前端严格过滤缺失或不匹配 requestId 的迟到响应。
+  - 覆盖 role-store、ai-roles-service 回归测试；相关 spec 已同步。
+
 ### 新增
 
 # AI 角色面板

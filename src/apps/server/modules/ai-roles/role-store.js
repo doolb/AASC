@@ -90,7 +90,9 @@ class RoleStore {
         this._assertSafeName(name);
         const file = this._historyFile(name);
         try {
-            return JSON.parse(fs.readFileSync(file, 'utf8')) || [];
+            const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (!Array.isArray(parsed)) throw new Error('history 必须是数组');
+            return parsed;
         } catch (err) {
             if (err.code !== 'ENOENT') this._preserveCorrupt(file);
             return [];

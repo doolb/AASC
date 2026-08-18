@@ -1,6 +1,8 @@
 # Web MediaCenter - 未完成任务列表
 
-## 功能完善
+- ✅已完成 [2026-08-18][2026-08-18] AI 角色请求追踪与角色存储恢复修复
+  - 改动：同名角色删除后可重建；非数组 history.json 备份并恢复空数组；server role chat 统一 requestId；前端严格 requestId 过滤
+  - 测试：角色模块回归 16 项通过；全量测试中 74 项通过，2 个既有环境/集成失败
 
 - ✅已完成 [2026-08-18][2026-08-18] AI 角色最终审查修复
   - 改动：AI roles shell-free FIFO、角色安全校验、队列/删除/stop 竞态、前端 XSS 与 requestId；26 项测试全绿
