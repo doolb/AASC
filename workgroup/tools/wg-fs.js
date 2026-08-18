@@ -13,13 +13,14 @@ function paths(root) {
         resultsDir: path.join(root, 'results'),
         cancelDir: path.join(root, 'tasks', 'cancel'),
         mainLockFile: path.join(root, 'members', 'main', 'lock'),
-        // 角色目录：members/<名>-<角色>/
+        // 角色目录：members/<名>-<角色>/；空 role（空角色）→ members/<名>/（无尾横线）
+        // 空 role 若带尾横线（members/<名>-/），main 扫目录会误以为成员名含横线、assignedTo 填错、空角色永不认领。
         roleDir: (name, role) => path.join(root, 'members', role ? `${name}-${role}` : name),
-        roleLockFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'lock'),
-        roleBusyFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'busy'),
-        roleHistoryFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'history.md'),
-        roleMemberRoleFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'role.md'),
-        roleCurrentTaskFile: (name, role) => path.join(root, 'members', `${name}-${role}`, 'current-task'),
+        roleLockFile: (name, role) => path.join(root, 'members', role ? `${name}-${role}` : name, 'lock'),
+        roleBusyFile: (name, role) => path.join(root, 'members', role ? `${name}-${role}` : name, 'busy'),
+        roleHistoryFile: (name, role) => path.join(root, 'members', role ? `${name}-${role}` : name, 'history.md'),
+        roleMemberRoleFile: (name, role) => path.join(root, 'members', role ? `${name}-${role}` : name, 'role.md'),
+        roleCurrentTaskFile: (name, role) => path.join(root, 'members', role ? `${name}-${role}` : name, 'current-task'),
         roleFile: (name) => path.join(root, 'roles', `${name}.md`),
         taskFile: (id) => path.join(root, 'tasks', 'pending', `${id}.json`),
         claimedTaskFile: (agent, id) => path.join(root, 'tasks', 'claimed', agent, `${id}.json`),

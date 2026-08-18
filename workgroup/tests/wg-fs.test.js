@@ -89,6 +89,14 @@ test('paths 提供角色目录与取消目录', () => {
     assert.strictEqual(p.roleLockFile('alice', 'frontend'), path.join('/wg', 'members', 'alice-frontend', 'lock'));
     assert.strictEqual(p.roleHistoryFile('alice', 'frontend'), path.join('/wg', 'members', 'alice-frontend', 'history.md'));
     assert.strictEqual(p.mainLockFile, path.join('/wg', 'members', 'main', 'lock'));
+    // 空角色（role 空串）：目录应无尾横线 members/<name>/，与 roleDir 一致。
+    // 否则空角色 lock 落在 members/<name>-/，main 误以为成员名带横线、assignedTo 填错、任务永不认领。
+    assert.strictEqual(p.roleDir('bob', ''), path.join('/wg', 'members', 'bob'));
+    assert.strictEqual(p.roleLockFile('bob', ''), path.join('/wg', 'members', 'bob', 'lock'));
+    assert.strictEqual(p.roleBusyFile('bob', ''), path.join('/wg', 'members', 'bob', 'busy'));
+    assert.strictEqual(p.roleHistoryFile('bob', ''), path.join('/wg', 'members', 'bob', 'history.md'));
+    assert.strictEqual(p.roleMemberRoleFile('bob', ''), path.join('/wg', 'members', 'bob', 'role.md'));
+    assert.strictEqual(p.roleCurrentTaskFile('bob', ''), path.join('/wg', 'members', 'bob', 'current-task'));
 });
 
 test('spawnClaude 返回 child 句柄且结果文件写入', async () => {
