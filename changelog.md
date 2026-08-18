@@ -4,6 +4,10 @@
 
 ### 新增
 
+- ✅ [2026-08-18] 修复：workgroup 角色切换后旧 lock 残留（空角色切到新角色后旧空角色 lock 未删，同 PID 死 lock 重复）
+  - 问题：指派/空闲自动切换删旧 lock 用 `if (primary)` 守卫，空角色 primary='' 为假 → 跳过删除，旧 `members/<名>/lock`（空角色）残留，与新角色 lock 指向同一存活 PID
+  - 修复：两处切换去掉守卫，统一 `fs.rmSync(p.roleLockFile(name, primary || ''))`（空角色也删 `members/<名>/lock`）；Exit 清理本就正确
+  - 改动：workgroup/tools/poll.js（指派 + 空闲自动切换两处）、wg-e2e.test.js（+空角色切换删旧 lock 回归测试）；清理残留 `members/mainfront-/lock` 重复锁
 - ✅ [2026-08-18] 修复：workgroup 空角色任务永不认领（目录尾横线导致 assignedTo 不匹配）
   - 问题：空角色（无主角色）启动时 lock 落在 `members/<名>-/`（尾横线），main 扫 members/ 误以为成员名含横线、填 `assignedTo: '<名>-'`，空角色进程 `name='<名>'` 不匹配 → 任务永久留在 pending 不被认领
   - 修复：wg-fs.js role* 路径函数对空 role 统一产出 `members/<名>/`（无尾横线），与 roleDir 一致
