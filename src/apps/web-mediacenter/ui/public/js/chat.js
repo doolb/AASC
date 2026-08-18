@@ -599,7 +599,9 @@ const Chat = {
     // 删除角色：确认后发 roleDelete（服务端回收 claude 进程并清历史）
     deleteRole(name) {
         if (!window.confirm(`删除角色「${name}」将关闭其 claude 进程并清除对话历史，确定？`)) return;
-        window.WebSocketManager.send({ type: 'roleDelete', name });
+        // 协议字段对齐：后端 roleDelete 分支读 data.role（server-app.js L3806 aiRoles.remove(data.role)），
+        // 与 roleList/roleHistory/roleError 一致都用 role 字段，发送 name 会因 data.role 为 undefined 而误报「角色不存在」
+        window.WebSocketManager.send({ type: 'roleDelete', role: name });
     },
 
     // 进入角色对话：切 mode='role'，拉取该角色历史
@@ -1270,7 +1272,13 @@ const Chat = {
                 playBtn.className = 'chat-play-btn';
                 playBtn.textContent = '🔊';
                 playBtn.title = '播放语音';
-                playBtn.onclick = () => this.playMessage(this.history.length - 1);
+                // 角色模式：播放按钮取该角色独立历史最后一条（历史已写入 roleHistories），
+                // 仍读 this.history 会播放群聊最后一条，造成播错消息
+                if (this.session.mode === 'role' && this.session.roleTarget && this.roleHistories[this.session.roleTarget]) {
+                    playBtn.onclick = () => this.playMessage(this.roleHistories[this.session.roleTarget].length - 1);
+                } else {
+                    playBtn.onclick = () => this.playMessage(this.history.length - 1);
+                }
                 streamingAssistant.appendChild(playBtn);
             }
         } else if (data.success) {
@@ -1299,7 +1307,15 @@ const Chat = {
             displayId = indexOrData.displayId;
             playOnControl = indexOrData.playOnControl;
         } else {
-            const item = this.history[indexOrData];
+            // 按当前模式取历史数组：角色模式读该角色独立历史（renderHistory 的下标来自 roleHistories），
+            // 其余模式读群聊历史，避免下标错位播错消息
+            let history;
+            if (this.session.mode === 'role' && this.session.roleTarget) {
+                history = this.roleHistories[this.session.roleTarget] || [];
+            } else {
+                history = this.history;
+            }
+            const item = history[indexOrData];
             if (!item) return;
             content = item.content || item.assistant || item.user;
             displayId = window.currentDisplayId;
@@ -1902,6 +1918,11 @@ const Chat = {
             this.renderSessionSelector();
             if (this.session.mode === 'private' && this.session.privateTarget) {
                 this.loadSessions(this.session.privateTarget);
+            }
+            // 刷新恢复 role 模式：会话回包后 session 才可靠填充（onWebSocketOpen 时尚未就绪），
+            // 在此补发角色历史请求，否则恢复后的角色 tab 显示「暂无聊天记录」
+            if (this.session.mode === 'role' && this.session.roleTarget) {
+                window.WebSocketManager.send({ type: 'roleHistory', role: this.session.roleTarget });
             }
         }
     },
