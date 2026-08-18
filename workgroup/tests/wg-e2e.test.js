@@ -639,3 +639,38 @@ test('回归：空角色重启后 primary 归空，仍能重做切换前认领�
     const task = JSON.parse(fs.readFileSync(p.claimedTaskFile('alice-backend-media', 'tR2'), 'utf8'));
     assert.strictEqual(task.status, '已完成', '空角色重启后应重做切换前认领的待修改任务');
 });
+
+test('端到端：main 模式扫描到已完成任务时打印待验收提示（poll.js 承担轮询）', async () => {
+    const root = tmpRoot();
+    const p = paths(root);
+    for (const dir of [p.rolesDir, p.membersDir, p.pendingDir, p.claimedDir, p.resultsDir]) ensureDir(dir);
+    // 预置一个已完成任务
+    ensureDir(path.join(p.claimedDir, 'alice-frontend'));
+    writeJson(p.claimedTaskFile('alice-frontend', 'tDone'), { id: 'tDone', title: '已完成任务', role: 'frontend', requirement: 'x', status: '已完成' });
+
+    // 假 main 命令：长命进程（不退出），避免 child exit 触发 process.exit(0) 杀掉测试进程
+    const fakeMain = process.execPath;
+    const fakeMainArgs = ['-e', 'setInterval(()=>{}, 100000)'];
+
+    // 拦截 console.log 收集输出 + 拦截 process.exit
+    const logs = [];
+    const origLog = console.log;
+    const oldExit = process.exit;
+    let exitCode = null;
+    console.log = (...a) => logs.push(a.join(' '));
+    process.exit = (code) => { exitCode = code; };
+    try {
+        const { start } = require('../tools/poll.js');
+        const app = start({ root, mode: 'main', name: 'mainCoord', mainCommand: fakeMain, mainArgs: fakeMainArgs, mainPollMs: 30 });
+        await waitFor(() => logs.some((l) => l.includes('发现待验收任务 tDone')), 5000);
+        app.stop();
+        // 等 child.kill 触发的 'exit' 在 process.exit 仍被拦截的窗口内处理完，
+        // 否则 finally 恢复 process.exit 后 child exit 会真 exit(0) 杀掉测试进程、吞掉汇总
+        await new Promise((r) => setTimeout(r, 100));
+        assert.ok(logs.some((l) => l.includes('发现待验收任务 tDone')), 'main 扫描应打印待验收提示');
+        assert.ok(logs.some((l) => l.includes('role frontend')), '提示应含任务角色');
+    } finally {
+        console.log = origLog;
+        process.exit = oldExit;
+    }
+});

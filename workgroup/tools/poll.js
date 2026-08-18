@@ -8,6 +8,7 @@ const { validateName, roleTemplate, parseHistory, updateHistory, buildSummary, b
 
 const ROOT = path.resolve(__dirname, '..'); // workgroup/ 根（tools/ 上一级）
 const DEFAULT_POLL_MS = 5000;
+const DEFAULT_MAIN_POLL_MS = 180000; // main 待验收扫描间隔：3 分钟
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // main claude TUI 的默认启动参数：交互模式 + 注入 main 指令 + bypassPermissions 全自动
@@ -58,7 +59,7 @@ function roleHasOnlineAgent(p, role) {
 }
 
 // 启动子 agent（或 main/空角色）：创建成员、lock、进入轮询循环
-function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent', command = 'claude', buildArgs, pollIntervalMs = DEFAULT_POLL_MS, onTaskDone, mainCommand, mainArgs }) {
+function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent', command = 'claude', buildArgs, pollIntervalMs = DEFAULT_POLL_MS, onTaskDone, mainCommand, mainArgs, mainPollMs = DEFAULT_MAIN_POLL_MS }) {
     primary = String(primary || '').trim();
     name = String(name || '').trim();
     const p = paths(root);
@@ -88,7 +89,28 @@ function start({ root = ROOT, primary = '', secondary = [], name, mode = 'agent'
             fs.rmSync(p.mainLockFile, { force: true });
             process.exit(1);
         });
-        return { stop: () => { try { child.kill(); } catch (_) {} }, mode: 'main' };
+
+        // main 待验收扫描：每 mainPollMs 扫 claimed/*/ 找 status='已完成' 的任务，
+        // 发现新待验收任务 → 打印醒目提示到 main TUI 终端（用户看到后让 main claude 验收）。
+        // 不注入 claude stdin（会破坏 TUI 交互），不消耗 main claude 上下文（它不主动读文件，只在用户触发时验收）。
+        // announced Set 防重复提示（内存态，重启 main 后可能对未验收的已完成任务重复提示一次，可接受幂等）。
+        // 用 setInterval + clearInterval：stop 时能立即清掉，不残留长 sleep 定时器（否则测试进程挂起）。
+        const announced = new Set();
+        const mainScan = () => {
+            for (const agentDir of listDirs(p.claimedDir)) {
+                const dir = path.join(p.claimedDir, agentDir);
+                for (const f of listFiles(dir, '.json')) {
+                    const t = readJson(path.join(dir, f));
+                    if (t && t.status === '已完成' && !announced.has(t.id)) {
+                        announced.add(t.id);
+                        console.log(`\n【main】发现待验收任务 ${t.id}（role ${t.role}），请让 main 呈现并验收\n`);
+                    }
+                }
+            }
+        };
+        mainScan(); // 启动时立即扫一次
+        const scanTimer = setInterval(mainScan, mainPollMs);
+        return { stop: () => { clearInterval(scanTimer); try { child.kill(); } catch (_) {} }, mode: 'main' };
     }
 
     // 空角色模式：无主角色起步，只认 assignedTo 自己的任务

@@ -137,8 +137,7 @@ test('MAIN_SYSTEM_PROMPT 提供 main 协调者指令', () => {
     assert.ok(MAIN_SYSTEM_PROMPT.includes('analyze-requirement-level'), '应声明需求分析也下发给子 agent');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('查找问题'), '应声明查找问题也下发给子 agent');
     assert.ok(MAIN_SYSTEM_PROMPT.includes('闲聊'), '应声明闲聊例外可直接回复');
-    assert.ok(MAIN_SYSTEM_PROMPT.includes('主动轮询'), '应声明 main 主动轮询任务');
-    assert.ok(MAIN_SYSTEM_PROMPT.includes('每 3 分钟'), '应声明轮询间隔为 3 分钟');
-    assert.ok(MAIN_SYSTEM_PROMPT.includes('不打扰用户'), '应声明无进展不打扰用户');
-    assert.ok(MAIN_SYSTEM_PROMPT.includes('会话启动必做'), '应指示会话启动时自动建立轮询定时任务');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('不主动轮询文件系统'), '应声明 main 不主动轮询（由 poll.js 承担）');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('终端打印'), '应声明 poll.js 在终端打印待验收提示');
+    assert.ok(MAIN_SYSTEM_PROMPT.includes('每 3 分钟'), '应声明 poll.js 扫描间隔 3 分钟');
 });

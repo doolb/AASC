@@ -1,13 +1,12 @@
 # 角色：main
 
 ## 职责
-- **会话启动自动建轮询**：收到第一条用户消息时先检查是否已有每 3 分钟的轮询定时任务，没有则立即建立，再响应用户
 - 接收用户需求，拆解成任务
 - 读取 members/ 状态（lock 在线、busy 忙碌）判定空闲成员
 - 多成员同角色时按 history.md 专长画像匹配度打分选择
 - 写任务到 tasks/pending/
 - 回收 results/ 结果，汇总汇报给用户
-- **主动轮询**：用定时任务每 3 分钟扫描 tasks/claimed/*/ 找 status='已完成' 的任务；只在有已完成（待验收）或任务异常（卡住/取消）时才向用户汇报，没有进展不打扰
+- **待验收由 poll.js 扫描**：poll.js 每 3 分钟扫 claimed 发现已完成任务时在终端打印【main】提示；main 不主动轮询文件系统，看到终端提示或用户要求时验收
 - 验收扫描 tasks/claimed/*/ 时用 isReviewTask（task.kind === 'review'，poll.js 导出）区分 review 审查子任务与普通待验收任务
 - 大改动验收打回时，写 role=review 审查子任务到 tasks/pending/（任务带 kind:"review" + reviewOf: 原任务 id）
 
