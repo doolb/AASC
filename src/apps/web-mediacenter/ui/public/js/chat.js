@@ -13,11 +13,14 @@ const Chat = {
     session: {
         mode: 'group',
         privateTarget: null,
+        roleTarget: null,
         privateSessionId: 'default',
         playOnControl: false,
         commandMode: true,
         sessions: {}
     },
+    aiRoles: [],          // 工作 AI 角色列表 [{name, createdAt, running}]
+    roleHistories: {},    // 每个角色的独立对话历史
     commands: {
         commands: {}
     },
@@ -53,14 +56,16 @@ const Chat = {
         this.loadAssistantConfig();
         this.loadSearchHistory();
         this.loadSession();
+        this.loadAiRoles();
         this.loadCommands();
         this.initVoiceRecognition();
         this.render();
     },
-    
+
     onWebSocketOpen() {
         this.loadHistory();
         this.loadSession();
+        this.loadAiRoles();
         this.loadCommands();
         this.loadProfiles();
     },
@@ -562,6 +567,8 @@ const Chat = {
     setMode(mode, target = null) {
         this.session.mode = mode;
         this.session.privateTarget = target;
+        // 切回群聊/私聊时清空角色状态，避免残留影响角色历史渲染
+        this.session.roleTarget = null;
         this.session.privateSessionId = 'default';
         this.saveSession();
         this.render();
@@ -569,7 +576,42 @@ const Chat = {
             this.loadSessions(target);
         }
     },
-    
+
+    // 加载角色列表（WS roleList）
+    loadAiRoles() {
+        if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({ type: 'roleList' }));
+        }
+    },
+
+    // 添加角色：弹窗输入名字，校验非空/不与模板重名
+    showAddRole() {
+        const name = window.prompt('输入工作 AI 角色名：');
+        if (!name || !name.trim()) return;
+        const clean = name.trim();
+        if (this.templates.some(t => t.name === clean)) {
+            window.showToast('该名字与聊天模板冲突', 'error');
+            return;
+        }
+        window.WebSocketManager.send({ type: 'roleAdd', name: clean });
+    },
+
+    // 删除角色：确认后发 roleDelete（服务端回收 claude 进程并清历史）
+    deleteRole(name) {
+        if (!window.confirm(`删除角色「${name}」将关闭其 claude 进程并清除对话历史，确定？`)) return;
+        window.WebSocketManager.send({ type: 'roleDelete', name });
+    },
+
+    // 进入角色对话：切 mode='role'，拉取该角色历史
+    setRoleMode(name) {
+        this.session.mode = 'role';
+        this.session.roleTarget = name;
+        this.session.privateTarget = null;
+        this.saveSession();
+        this.render();
+        window.WebSocketManager.send({ type: 'roleHistory', role: name });
+    },
+
     togglePlayOnControl() {
         this.session.playOnControl = !this.session.playOnControl;
         this.saveSession();
@@ -606,6 +648,13 @@ const Chat = {
             const isActive = this.session.mode === 'private' && this.session.privateTarget === t.name;
             tabsHtml += `<div class="chat-tab${isActive ? ' active' : ''}" onclick="Chat.setMode('private', '${this.escapeHtml(t.name)}')">${this.escapeHtml(t.name)}</div>`;
         });
+        // 角色 tab：点击进入角色对话，带 × 删除按钮；stopPropagation 避免误触进入
+        this.aiRoles.forEach(r => {
+            const isActive = this.session.mode === 'role' && this.session.roleTarget === r.name;
+            tabsHtml += `<div class="chat-tab${isActive ? ' active' : ''}" onclick="Chat.setRoleMode('${this.escapeHtml(r.name)}')">${this.escapeHtml(r.name)}<span class="chat-tab-del" title="删除角色" onclick="event.stopPropagation();Chat.deleteRole('${this.escapeHtml(r.name)}')">×</span></div>`;
+        });
+        // 「+」添加按钮：弹窗创建新角色
+        tabsHtml += '<div class="chat-tab chat-tab-add" title="添加工作 AI 角色" onclick="Chat.showAddRole()">+</div>';
         tabsHtml += '</div>';
         
         container.innerHTML = `
@@ -659,7 +708,13 @@ const Chat = {
         if (this.session.commandMode) {
             html += '<span class="mode-badge command">指令模式</span>';
         }
-        if (this.session.mode === 'private') {
+        // 角色模式：显示当前角色名 + 退出按钮（回到群聊）
+        if (this.session.mode === 'role') {
+            html += `
+                <span class="mode-badge role">角色: ${this.escapeHtml(this.session.roleTarget)}</span>
+                <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出角色</button>
+            `;
+        } else if (this.session.mode === 'private') {
             html += `
                 <span class="mode-badge private">私聊: ${this.escapeHtml(this.session.privateTarget)}</span>
                 <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出私聊</button>
@@ -724,16 +779,22 @@ const Chat = {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
         
-        let indexedHistory = this.history.map((item, index) => ({ item, originalIndex: index }));
-        if (this.session.mode === 'private' && this.session.privateTarget) {
-            indexedHistory = indexedHistory.filter(({ item }) =>
-                item.mode === 'private' && item.target === this.session.privateTarget
-                && (item.sessionId || 'default') === (this.session.privateSessionId || 'default')
-            );
+        let indexedHistory = [];
+        if (this.session.mode === 'role' && this.session.roleTarget) {
+            // 角色模式：渲染该角色独立历史，与群聊/私聊隔离
+            indexedHistory = (this.roleHistories[this.session.roleTarget] || []).map((item, index) => ({ item, originalIndex: index }));
         } else {
-            indexedHistory = indexedHistory.filter(({ item }) =>
-                item.mode !== 'private'
-            );
+            indexedHistory = this.history.map((item, index) => ({ item, originalIndex: index }));
+            if (this.session.mode === 'private' && this.session.privateTarget) {
+                indexedHistory = indexedHistory.filter(({ item }) =>
+                    item.mode === 'private' && item.target === this.session.privateTarget
+                    && (item.sessionId || 'default') === (this.session.privateSessionId || 'default')
+                );
+            } else {
+                indexedHistory = indexedHistory.filter(({ item }) =>
+                    item.mode !== 'private' && item.mode !== 'role'
+                );
+            }
         }
         
         if (indexedHistory.length === 0) {
@@ -750,7 +811,8 @@ const Chat = {
                 roleClass = 'user';
                 name = '用户';
             } else if (item.role === 'assistant') {
-                if (item.mode === 'private' && item.target) {
+                // 私聊/角色模式：助手名字用目标名（模板名/角色名）展示
+                if ((item.mode === 'private' || item.mode === 'role') && item.target) {
                     name = item.target;
                 } else {
                     name = item.name || '助手';
@@ -891,6 +953,9 @@ const Chat = {
         let assistantName = '助手';
         if (mode === 'private' && target) {
             assistantName = target;
+        } else if (mode === 'role' && this.session.roleTarget) {
+            // 角色模式：流式消息以角色名作为助手名
+            assistantName = this.session.roleTarget;
         } else if (templateTarget) {
             assistantName = templateTarget;
         }
@@ -905,6 +970,8 @@ const Chat = {
                 displayContent: displayMessage,
                 mode: mode,
                 target: target,
+                // 角色模式才带 role 字段；templateTarget 保留以维持群聊模板选中
+                role: mode === 'role' ? this.session.roleTarget : undefined,
                 templateTarget: templateTarget,
                 sessionId: this.session.privateSessionId || 'default',
                 playOnControl: this.session.playOnControl
@@ -1176,7 +1243,12 @@ const Chat = {
         const streamingAssistant = document.getElementById('streamingAssistant');
         
         if (data.success) {
-            this.history = data.history;
+            // 角色模式：历史写入该角色独立历史，避免污染群聊/私聊
+            if (this.session.mode === 'role' && this.session.roleTarget) {
+                this.roleHistories[this.session.roleTarget] = data.history;
+            } else {
+                this.history = data.history;
+            }
         } else {
             window.showToast('聊天失败: ' + data.error, 'error');
         }

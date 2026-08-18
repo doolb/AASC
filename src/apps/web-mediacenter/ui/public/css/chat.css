@@ -875,3 +875,23 @@
     color: rgba(255, 255, 255, 0.9);
     background: rgba(255, 255, 255, 0.1);
 }
+
+/* 工作 AI 角色 tab：删除按钮与添加按钮 */
+.chat-tab-del {
+    margin-left: 4px;
+    color: #999;
+    cursor: pointer;
+    font-weight: bold;
+}
+.chat-tab-del:hover {
+    color: #e55;
+}
+.chat-tab-add {
+    cursor: pointer;
+    color: #888;
+    font-weight: bold;
+}
+.mode-badge.role {
+    background: #e8f0fe;
+    color: #1a56db;
+}

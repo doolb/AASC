@@ -384,6 +384,21 @@ const WebSocketManager = {
             if (window.showToast) {
                 window.showToast('日志分类屏蔽已应用', 'success');
             }
+        } else if (data.type === 'roleList') {
+            if (window.Chat) {
+                window.Chat.aiRoles = data.roles || [];
+                window.Chat.render();
+            }
+        } else if (data.type === 'roleHistory') {
+            if (window.Chat && data.role) {
+                window.Chat.roleHistories[data.role] = data.history || [];
+                // 仅当正在查看该角色时刷新历史，避免打断其他模式
+                if (window.Chat.session.mode === 'role' && window.Chat.session.roleTarget === data.role) {
+                    window.Chat.renderHistory();
+                }
+            }
+        } else if (data.type === 'roleError') {
+            window.showToast(data.message || '操作失败', 'error');
         }
     },
     
