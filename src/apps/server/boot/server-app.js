@@ -48,6 +48,7 @@ const LogBrain = require('../../../framework/observability/log-brain');
 const { registerLogBrainApi } = require('../api/log-brain-api');
 const TaskManager = require('../modules/task-engine/task-manager');
 const { registerTaskHandlers } = require('../modules/task-engine/web-socket-handler');
+const AiRolesService = require('../modules/ai-roles/ai-roles-service');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
 
@@ -238,6 +239,9 @@ let muteState = {
 
 let wsServer = null;
 let taskManager = null;
+// AI 角色面板：每角色一个 detached claude 进程。声明在模块级——handleControlMessageFallback
+// 在模块作用域引用 aiRoles，若只声明在 server.listen 回调里会出作用域（ReferenceError）。
+const aiRoles = new AiRolesService({ projectRoot: PROJECT_ROOT });
 const runtimeBridgeClients = new Map();
 
 const pendingDisplayAsrRequests = new Map();
@@ -455,7 +459,8 @@ async function startServer() {
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting',
-                'playlistRequest', 'playlistControl'
+                'playlistRequest', 'playlistControl',
+                'roleList', 'roleAdd', 'roleDelete', 'roleHistory'
             ];
             for (const type of controlTypes) {
                 wsServer.registerHandler(type, async (data, ctx) => {
@@ -567,6 +572,8 @@ async function startServer() {
                 (msg) => broadcastToControls(msg),
                 (displayId, msg) => sendToDisplay(displayId, msg)
             );
+            // AI 角色：启动时恢复——claude 存活则重连 FIFO（进程不中断），已死清残留待下次发消息重建
+            aiRoles.restoreAll();
             taskManager.setSendToDisplay((displayId, msg) => sendToDisplay(displayId, msg));
             taskManager.setBroadcastToDisplays((msg) => {
               for (const [id] of displayClients) sendToDisplay(id, msg);
@@ -3780,9 +3787,47 @@ async function handleControlMessageFallback(data, ws) {
                             }));
                         }
                     })();
+                } else if (data.type === 'roleList') {
+                    ws.send(JSON.stringify({ type: 'roleList', roles: aiRoles.list() }));
+                } else if (data.type === 'roleAdd') {
+                    // 重名/空名/非法名由 role-store 抛错，捕获后回 roleError，避免进程崩溃
+                    try {
+                        aiRoles.add(data.name);
+                        broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
+                    } catch (err) {
+                        ws.send(JSON.stringify({ type: 'roleError', message: err.message }));
+                    }
+                } else if (data.type === 'roleDelete') {
+                    // 角色名来自前端用户输入：先确认存在，避免对孤儿目录静默空操作
+                    if (!aiRoles.list().some(r => r.name === data.role)) {
+                        ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
+                        return;
+                    }
+                    aiRoles.remove(data.role);
+                    broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
+                } else if (data.type === 'roleHistory') {
+                    if (!aiRoles.list().some(r => r.name === data.role)) {
+                        ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
+                        return;
+                    }
+                    ws.send(JSON.stringify({ type: 'roleHistory', role: data.role, history: aiRoles.history(data.role) }));
                 } else if (data.type === 'chatMessage') {
                     (async () => {
                         try {
+                            // AI 角色对话：mode==='role' 走 ai-roles 桥，返回标准 chatChunk/chatResponse
+                            if (data.mode === 'role' && data.role) {
+                                // 角色名来自前端输入：先确认存在，避免对不存在的角色静默建孤儿目录
+                                if (!aiRoles.list().some(r => r.name === data.role)) {
+                                    ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
+                                    return;
+                                }
+                                await aiRoles.chat(data.role, data.content, {
+                                    onChunk: (chunk, message) => ws.send(JSON.stringify({ type: 'chatChunk', chunk, message })),
+                                    onComplete: (message, history) => ws.send(JSON.stringify({ type: 'chatResponse', success: true, message, history })),
+                                    onError: (error) => ws.send(JSON.stringify({ type: 'chatResponse', success: false, error }))
+                                });
+                                return;
+                            }
                             const session = chat.getSession();
                             const targetDisplayId = data.displayId || displayId;
                             const targetDisplayIds = data.displayIds || [];
