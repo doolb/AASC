@@ -13,8 +13,36 @@ class RoleStore {
     _roleFile(name) { return path.join(this.roleDir(name), 'role.json'); }
     _historyFile(name) { return path.join(this.roleDir(name), 'history.json'); }
 
+    // 校验角色名：拒绝空名、含路径分隔符（/ 或 \）的名字、以及 . / .. 等穿越名。
+    // 角色名来自前端用户输入，必须防御目录逃逸——尤其 remove 会递归删除，
+    // 若放行 '..' 会直接删掉 baseDir 的父目录。所有触碰路径的入口都要调用。
+    _assertSafeName(name) {
+        if (typeof name !== 'string' || !name.trim()) throw new Error('角色名不合法');
+        const clean = name.trim();
+        if (clean.includes('/') || clean.includes('\\')) throw new Error('角色名不合法');
+        // 匹配 . / .. / ... 等纯点号名字，防止 path.join(baseDir, '..') 逃逸到父目录
+        if (/^\.+$/.test(clean)) throw new Error('角色名不合法');
+    }
+
+    // 读取角色文件：只吞 ENOENT（文件不存在返回 null）；
+    // 其余错误（如 JSON.parse 失败、文件损坏）不吞，改名保留原文件后再返回 null，
+    // 避免损坏文件被下一次写入整体覆盖、可恢复数据永久丢失。
     _readRole(name) {
-        try { return JSON.parse(fs.readFileSync(this._roleFile(name), 'utf8')); } catch (_) { return null; }
+        const file = this._roleFile(name);
+        try {
+            return JSON.parse(fs.readFileSync(file, 'utf8'));
+        } catch (err) {
+            if (err.code !== 'ENOENT') this._preserveCorrupt(file);
+            return null;
+        }
+    }
+
+    // 文件存在但读/解析失败（损坏）：改名成 <basename>.corrupt-<时间戳> 保留备份。
+    // 加时间戳避免重复损坏时互相覆盖。改名失败不阻断主流程。
+    _preserveCorrupt(file) {
+        try {
+            fs.renameSync(file, `${file}.corrupt-${Date.now()}`);
+        } catch (_) { /* 保留失败则维持现状 */ }
     }
 
     // 列出所有角色（跳过残留的非法目录）
@@ -26,11 +54,15 @@ class RoleStore {
         } catch (_) { return []; }
     }
 
-    exists(name) { return !!this._readRole(name); }
+    exists(name) {
+        this._assertSafeName(name);
+        return !!this._readRole(name);
+    }
 
     add(name, createdAt = Date.now()) {
         if (!name || typeof name !== 'string' || !name.trim()) throw new Error('角色名不能为空');
         const clean = name.trim();
+        this._assertSafeName(clean);
         if (this.exists(clean)) throw new Error(`角色「${clean}」已存在`);
         fs.mkdirSync(this.roleDir(clean), { recursive: true });
         fs.writeFileSync(this._roleFile(clean), JSON.stringify({ name: clean, createdAt }, null, 2));
@@ -38,14 +70,23 @@ class RoleStore {
     }
 
     remove(name) {
+        this._assertSafeName(name);
         fs.rmSync(this.roleDir(name), { recursive: true, force: true });
     }
 
     loadHistory(name) {
-        try { return JSON.parse(fs.readFileSync(this._historyFile(name), 'utf8')) || []; } catch (_) { return []; }
+        this._assertSafeName(name);
+        const file = this._historyFile(name);
+        try {
+            return JSON.parse(fs.readFileSync(file, 'utf8')) || [];
+        } catch (err) {
+            if (err.code !== 'ENOENT') this._preserveCorrupt(file);
+            return [];
+        }
     }
 
     appendHistory(name, msg) {
+        this._assertSafeName(name);
         const history = this.loadHistory(name);
         history.push({ ...msg, timestamp: msg.timestamp || Date.now() });
         fs.mkdirSync(this.roleDir(name), { recursive: true });
