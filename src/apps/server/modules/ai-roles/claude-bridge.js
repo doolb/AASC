@@ -21,7 +21,7 @@ const READ_TIMEOUT_MS = 60000;
 // 进程 detached + pipe-keeper 持有 in.fifo 写端 + stdout 走 out.fifo（无读者时阻塞、重连后自愈），
 // 实现「服务器重启 claude 进程不中断」。
 class ClaudeBridge {
-    constructor({ dir, name, command = 'claude', promptFile = null, cwd, keeperPath, readTimeoutMs = READ_TIMEOUT_MS }) {
+    constructor({ dir, name, command = 'claude', promptFile = null, cwd, keeperPath, readTimeoutMs = READ_TIMEOUT_MS, readOpenTimeoutMs = 5000 }) {
         this.dir = dir;                 // 角色目录（FIFO/pid/prompt 都在这）
         this.name = name;
         this.command = command;         // claude 基础命令（不含重定向/提示词参数）
@@ -29,6 +29,7 @@ class ClaudeBridge {
         this.cwd = cwd;                 // spawn 工作目录（项目根）
         this.keeperPath = keeperPath;   // pipe-keeper.js 绝对路径
         this.readTimeoutMs = readTimeoutMs; // 读超时（测试注入短值；默认 60s）
+        this.readOpenTimeoutMs = readOpenTimeoutMs; // 读端 open 超时（测试注入短值；默认 5s）
         this.claudePidFile = path.join(dir, 'claude.pid');
         this.keeperPidFile = path.join(dir, 'keeper.pid');
         this.inFifo = path.join(dir, 'in.fifo');
@@ -64,12 +65,37 @@ class ClaudeBridge {
         this.reader = null;
     }
 
+    // 等待读端 open，带超时；超时按 open 失败处理（ensureStarted 的 catch 里 cleanup + 抛错，chat 捕获后返回错误）。
+    // 无超时时，若 out.fifo 的 open 永不完成（如 PID 复用指向无关进程、或 claude 存活但已关闭 stdout），
+    // ensureStarted 会永久挂起、轮次超时也因 open 未完成而永不被武装 → chat 无限等，故必须限定等待上限。
+    _awaitReader(timeoutMs = this.readOpenTimeoutMs) {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+                settled = true;
+                reject(new Error('读端打开超时'));
+            }, timeoutMs);
+            // 读端正常 open 由 _startReader 的 once('open') resolve；open 失败由 once('error') reject。
+            // 任一先到即清除计时器：避免已正常成功路径残留无用计时器拖住事件循环/线程池。
+            this._readerReady.then(
+                () => { if (!settled) { settled = true; clearTimeout(timer); resolve(); } },
+                (err) => { if (!settled) { settled = true; clearTimeout(timer); reject(err); } }
+            );
+        });
+    }
+
     // 懒启动：确保守卫 + claude + out.fifo 读端就绪（可重复调用）
     async ensureStarted() {
         // 进程存活但读端丢失（如服务器重启后新进程）：重开读端，绝不 SIGKILL 存活 claude
         if (this.isAlive()) {
             if (!this.reader) this._startReader();
-            if (this._readerReady) await this._readerReady; // 读端真正 open 后再返回，防 EPIPE
+            try {
+                await this._awaitReader(); // 读端真正 open 后再返回，防 EPIPE；带超时防无界挂起
+            } catch (err) {
+                // open 超时/失败按整组不可用处理：cleanup 杀掉进程并把 reader 置 null，下轮 chat 懒重建
+                this.cleanup();
+                throw err;
+            }
             return;
         }
         this.cleanup();
@@ -94,19 +120,30 @@ class ClaudeBridge {
         child.unref();
 
         this._startReader();
-        if (this._readerReady) await this._readerReady; // 等 claude 打开 out.fifo 写端、读端 open 完成
+        try {
+            await this._awaitReader(); // 等 claude 打开 out.fifo 写端、读端 open 完成；超时则整组清理重建
+        } catch (err) {
+            this.cleanup();
+            throw err;
+        }
     }
 
     // 读 out.fifo（claude stdout）：按行解析 stream-json 事件
     _startReader() {
-        this.reader = createReadStream(this.outFifo);
+        const rs = createReadStream(this.outFifo);
+        this.reader = rs;
         // 记录读端就绪 Promise：open 完成前绝不向 in.fifo 写。
         // 否则本轮结束 destroy 读端后、新读端 open（线程池异步）完成前，claude 写 out.fifo 会因
         // 「无读者」触发 EPIPE 崩溃（冷启动因 claude 启动慢掩盖了此竞态，重开路径必现）。
+        // open 失败时置空 reader 并 reject：不置空则 reader 恒非 null，下次 alive 路径会跳过重开、
+        // 反复 await 同一个已 reject 的 _readerReady → 每次 chat 立即失败且永不重建（粘滞坏状态）；
+        // 置空后下次 alive 路径 `if (!this.reader) _startReader()` 会重开新读端（自愈）。
         this._readerReady = new Promise((resolve, reject) => {
-            this.reader.once('open', resolve);
-            this.reader.once('error', reject);
+            rs.once('open', () => resolve());
+            rs.once('error', (err) => { if (this.reader === rs) this.reader = null; reject(err); });
         });
+        // 防 unhandled rejection：reconnect() 等无人 await _readerReady 的路径，open 失败时不会被吞
+        this._readerReady.catch(() => {});
         let buf = '';
         this.reader.on('data', (chunk) => {
             buf += chunk.toString('utf8');

@@ -203,3 +203,55 @@ test('一轮结束后关读端释放线程池，下轮 chat 重开', async () =>
     assert.strictEqual(r2.message, 'echo:b');
     assert.strictEqual(bridge.reader, null);
 });
+
+test('读端 open 超时后 chat 返回错误而非无限挂起，下轮重建自愈', async () => {
+    const dir = tmpDir();
+    const bridge = makeBridge(dir, { readOpenTimeoutMs: 300 });
+    // 先真实启动一次：claude 进程存活，为 alive 路径提供有效 pid（否则走不到读端复用分支）
+    await bridge.chat('x', {});
+    assert.ok(bridge.isAlive());
+    // 伪造「读端 open 永不完成」的挂起态：reader 非 null 让 alive 路径跳过重开，
+    // _readerReady 永不 settle → 只能靠 _awaitReader 的超时兜底，否则 chat 无限挂起
+    bridge.reader = {};
+    bridge._readerReady = new Promise(() => {});
+    const t0 = Date.now();
+    const result = await bridge.chat('y', {});
+    const elapsed = Date.now() - t0;
+    assert.strictEqual(result.success, false);
+    assert.ok(result.error && result.error.includes('超时'), `应报超时: ${result.error}`);
+    assert.ok(elapsed < 5000, `应在超时阈值附近返回而非无限挂起（实际 ${elapsed}ms）`);
+    // 超时已 cleanup：杀 claude + reader 置 null。cleanup 用 SIGKILL 杀的 detached/unref 子进程在
+    // 被 reap 前是瞬时僵尸，process.kill(pid,0) 对僵尸仍返回 true → 等真正退出再重建（同超时测试的轮询模式）。
+    const end = Date.now() + 3000;
+    while (bridge.isAlive() && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+    assert.ok(!bridge.isAlive(), 'cleanup 后 claude 应已退出');
+    assert.strictEqual(bridge.reader, null);
+    // 下轮走冷启动重建成功
+    const r2 = await bridge.chat('z', {});
+    assert.strictEqual(r2.message, 'echo:z');
+});
+
+test('读端 open 失败留下的粘滞坏状态可自愈重建', async () => {
+    const dir = tmpDir();
+    const bridge = makeBridge(dir, { readOpenTimeoutMs: 300 });
+    await bridge.chat('x', {});
+    assert.ok(bridge.isAlive());
+    // 伪造粘滞态：reader 非 null（alive 路径跳过重开）但 _readerReady 已 reject（上次 open 失败残留）。
+    // 旧实现会反复 await 同一个已 reject 的 Promise → 每次 chat 立即失败且永不重建。
+    bridge.reader = {};
+    bridge._readerReady = Promise.reject(new Error('open 失败残留'));
+    bridge._readerReady.catch(() => {}); // 防未处理 rejection
+    // 第一次：alive 路径命中粘滞态 → 立即失败，且 cleanup 把 reader 置 null
+    const r1 = await bridge.chat('y', {});
+    assert.strictEqual(r1.success, false);
+    assert.ok(r1.error && r1.error.includes('open 失败残留'), `应带上上次失败原因: ${r1.error}`);
+    assert.strictEqual(bridge.reader, null);
+    // cleanup 杀的 claude 在被 reap 前是瞬时僵尸，isAlive 可能仍为 true → 等真正退出再重建
+    const end = Date.now() + 3000;
+    while (bridge.isAlive() && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+    assert.ok(!bridge.isAlive(), 'cleanup 后 claude 应已退出');
+    // 第二次：reader 已置 null + 进程已死 → 走冷启动重建成功（旧实现会因粘滞态再次立即失败）
+    const r2 = await bridge.chat('z', {});
+    assert.strictEqual(r2.message, 'echo:z');
+    assert.ok(bridge.isAlive());
+});
