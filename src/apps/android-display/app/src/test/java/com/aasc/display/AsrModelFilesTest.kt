@@ -20,14 +20,14 @@ class AsrModelFilesTest {
 
     @Test
     fun needsDownload_模型和tokens都齐全且模型够大返回false() {
-        val model = writeFile("model.int8.onnx", 200L * 1024 * 1024)
+        val model = writeFile("model.int8.onnx", AsrModelFiles.MIN_MODEL_SIZE_BYTES + 1)
         val tokens = writeFile("tokens.txt", 100)
         assertFalse(AsrModelFiles.needsDownload(model, tokens))
     }
 
     @Test
     fun needsDownload_缺tokens返回true() {
-        val model = writeFile("model.int8.onnx", 200L * 1024 * 1024)
+        val model = writeFile("model.int8.onnx", AsrModelFiles.MIN_MODEL_SIZE_BYTES + 1)
         // 不创建 tokens.txt
         assertTrue(AsrModelFiles.needsDownload(model, File(tmp.root, "tokens.txt")))
     }

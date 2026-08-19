@@ -110,8 +110,21 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String) {
         val wv = DisplayWebView(this)
-        wv.addJavascriptInterface(NativeBridge(wv), "NativeDisplay")
+        val bridge = NativeBridge(wv)
+        bridge.updateServerOrigin(url)
+        wv.addJavascriptInterface(bridge, "NativeDisplay")
         wv.webViewClient = object : WebViewClient() {
+            // WebViewClient 回调运行在主线程，在这里缓存 URL，供 JavaScript bridge 线程安全读取。
+            override fun onPageStarted(view: WebView, pageUrl: String, favicon: android.graphics.Bitmap?) {
+                bridge.updateServerOrigin(pageUrl)
+                super.onPageStarted(view, pageUrl, favicon)
+            }
+
+            override fun onPageFinished(view: WebView, pageUrl: String) {
+                bridge.updateServerOrigin(pageUrl)
+                super.onPageFinished(view, pageUrl)
+            }
+
             // 自签名证书：本设备专属信任（首次提示，不持久化）
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
                 if (!trustedSsl) {

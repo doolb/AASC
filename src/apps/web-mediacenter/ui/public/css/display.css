@@ -22,10 +22,29 @@ body {
     width: 100%;
     height: 100%;
     display: flex;
+    position: relative;
     align-items: center;
     justify-content: center;
     overflow: hidden;
     z-index: 1;
+}
+
+/* 睡眠遮罩只改变可见性，不改变媒体节点的布局尺寸，避免填充模式重新计算时得到 0 尺寸。 */
+.sleep-overlay {
+    display: none;
+    background: #000;
+}
+
+.sleep-overlay-media {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+}
+
+.sleep-overlay-ui {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
 }
 
 #mediaImage {

@@ -70,7 +70,7 @@ const assert = require('assert');
   assert.strictEqual(w.normalOut, false, '9:00 不应在 1-6 内');
   console.log('PASS: inSleepWindow 跨天/非跨天判定');
 
-  // ---- 2. 睡眠时段：隐藏媒体容器、保留 UI（无黑幕）----
+  // ---- 2. 睡眠时段：只遮住媒体，保留 UI 与媒体容器布局 ----
   await page.evaluate(() => {
     const h = new Date().getHours();
     sleepSettings = { enabled: true, startHour: h, endHour: h + 1, deepStartHour: -1, deepEndHour: -1 };
@@ -79,14 +79,18 @@ const assert = require('assert');
   const sleep = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display,
+    mediaSize: [document.getElementById('mediaContainer').clientWidth, document.getElementById('mediaContainer').clientHeight]
   }));
   assert.strictEqual(sleep.state, 'sleep', '当前时段应在睡眠状态');
-  assert.strictEqual(sleep.media, 'none', '睡眠应隐藏媒体容器');
-  assert.strictEqual(sleep.overlay, 'none', '睡眠不应显示黑幕');
-  console.log('PASS: 睡眠模式隐藏媒体保留 UI');
+  assert.notStrictEqual(sleep.media, 'none', '睡眠不应隐藏媒体容器');
+  assert.strictEqual(sleep.mediaOverlay, 'block', '睡眠应显示媒体区域遮罩');
+  assert.strictEqual(sleep.uiOverlay, 'none', '睡眠不应显示 UI 全屏遮罩');
+  assert.ok(sleep.mediaSize[0] > 0 && sleep.mediaSize[1] > 0, '睡眠期间媒体容器应保持有效尺寸');
+  console.log('PASS: 睡眠模式只遮媒体并保持布局');
 
-  // ---- 3. 深度睡眠：全屏黑幕 + 隐藏媒体 ----
+  // ---- 3. 深度睡眠：只显示 UI 全屏遮罩，媒体容器仍保持布局 ----
   await page.evaluate(() => {
     const h = new Date().getHours();
     sleepSettings = { enabled: true, startHour: 0, endHour: 24, deepStartHour: h, deepEndHour: h + 1 };
@@ -95,28 +99,34 @@ const assert = require('assert');
   const deep = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display,
-    zIndex: document.getElementById('sleepOverlay').style.zIndex
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display,
+    zIndex: getComputedStyle(document.getElementById('uiSleepOverlay')).zIndex,
+    mediaSize: [document.getElementById('mediaContainer').clientWidth, document.getElementById('mediaContainer').clientHeight]
   }));
   assert.strictEqual(deep.state, 'deep', '深度时段应优先于睡眠时段');
-  assert.strictEqual(deep.media, 'none', '深度睡眠应隐藏媒体容器');
-  assert.strictEqual(deep.overlay, 'block', '深度睡眠应显示全屏黑幕');
-  assert.strictEqual(deep.zIndex, '999999', '深度睡眠黑幕 z-index 应为 999999');
-  console.log('PASS: 深度睡眠全屏黑幕（优先于睡眠）');
+  assert.notStrictEqual(deep.media, 'none', '深度睡眠不应隐藏媒体容器');
+  assert.strictEqual(deep.mediaOverlay, 'none', '深度睡眠不应重复显示媒体遮罩');
+  assert.strictEqual(deep.uiOverlay, 'block', '深度睡眠应显示 UI 全屏遮罩');
+  assert.strictEqual(deep.zIndex, '999999', '深度睡眠 UI 遮罩 z-index 应为 999999');
+  assert.ok(deep.mediaSize[0] > 0 && deep.mediaSize[1] > 0, '深度睡眠期间媒体容器应保持有效尺寸');
+  console.log('PASS: 深度睡眠只显示 UI 全屏遮罩');
 
-  // ---- 4. 临时激活：强制显示，黑幕移除 ----
+  // ---- 4. 临时激活：强制显示，移除两个遮罩 ----
   await page.evaluate(() => {
     activateTemporarily();
   });
   const active = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display,
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display,
     until: activationUntil > Date.now()
   }));
   assert.strictEqual(active.state, 'active', '临时激活应进入激活状态');
-  assert.strictEqual(active.media, 'flex', '激活应显示媒体容器');
-  assert.strictEqual(active.overlay, 'none', '激活应移除黑幕');
+  assert.notStrictEqual(active.media, 'none', '激活应保持媒体容器显示');
+  assert.strictEqual(active.mediaOverlay, 'none', '激活应移除媒体遮罩');
+  assert.strictEqual(active.uiOverlay, 'none', '激活应移除 UI 遮罩');
   assert.strictEqual(active.until, true, 'activationUntil 应为未来时间');
   console.log('PASS: 临时激活强制显示');
 
@@ -130,11 +140,13 @@ const assert = require('assert');
   const disabled = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(disabled.state, 'normal', '未启用应回到 normal');
-  assert.strictEqual(disabled.media, 'flex', 'normal 应显示媒体容器');
-  assert.strictEqual(disabled.overlay, 'none', 'normal 不应有黑幕');
+  assert.notStrictEqual(disabled.media, 'none', 'normal 应保持媒体容器显示');
+  assert.strictEqual(disabled.mediaOverlay, 'none', 'normal 不应显示媒体遮罩');
+  assert.strictEqual(disabled.uiOverlay, 'none', 'normal 不应显示 UI 遮罩');
   console.log('PASS: 未启用睡眠时始终正常显示');
 
   // ---- 6. handleControl('sleepSettings') 接线 + ack 携带 sleepState ----
@@ -171,25 +183,30 @@ const assert = require('assert');
   const act = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(act.state, 'active', 'sleepActivate 应进入激活状态');
-  assert.strictEqual(act.media, 'flex', '激活应显示媒体容器');
+  assert.notStrictEqual(act.media, 'none', '激活应保持媒体容器显示');
+  assert.strictEqual(act.mediaOverlay, 'none', '激活应移除媒体遮罩');
+  assert.strictEqual(act.uiOverlay, 'none', '激活应移除 UI 遮罩');
   console.log('PASS: handleControl(sleepActivate) 临时激活');
 
   // ---- 8. 临时激活过期：60 秒后自动恢复按时段隐藏 ----
   // 步骤 6/7 留下的 sleepSettings 为 { enabled:true, startHour:h, endHour:h+1, deepStartHour:h, deepEndHour:h+1 }，
-  // 激活窗口过期后 checkSleepMode() 应恢复为 'deep'（黑幕重新显示）
+  // 激活窗口过期后 checkSleepMode() 应恢复为 'deep'（UI 遮罩重新显示）
   await page.evaluate(() => {
     activationUntil = Date.now() - 1;   // 模拟激活窗口已过期
     checkSleepMode();
   });
   const expired = await page.evaluate(() => ({
     state: sleepState,
-    overlay: document.getElementById('sleepOverlay').style.display
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(expired.state, 'deep', '激活窗口过期后应恢复深度睡眠');
-  assert.strictEqual(expired.overlay, 'block', '过期恢复后应重新显示黑幕');
+  assert.strictEqual(expired.mediaOverlay, 'none', '过期恢复后不应显示媒体遮罩');
+  assert.strictEqual(expired.uiOverlay, 'block', '过期恢复后应重新显示 UI 遮罩');
   console.log('PASS: 临时激活 60 秒后自动恢复深度睡眠');
 
   // ---- 9. handleRestoreState(state.sleep) 恢复 ----
@@ -207,10 +224,12 @@ const assert = require('assert');
   const restored = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(restored.state, 'deep', 'restoreState 应恢复睡眠设置并立即判定');
-  assert.strictEqual(restored.overlay, 'block', '恢复后应显示黑幕');
+  assert.strictEqual(restored.mediaOverlay, 'none', '恢复深度睡眠后不应显示媒体遮罩');
+  assert.strictEqual(restored.uiOverlay, 'block', '恢复深度睡眠后应显示 UI 遮罩');
   console.log('PASS: handleRestoreState(state.sleep) 恢复设置');
 
   // ---- 10. handleControl('sleepOverride', 'sleep') 手动睡眠 + ack ----
@@ -226,11 +245,12 @@ const assert = require('assert');
       .map(s => { try { return JSON.parse(s); } catch (e) { return null; } })
       .filter(m => m && m.type === 'commandAck' && m.commandType === 'control' && m.details === 'sleepOverride');
     const last = acks[acks.length - 1];
-    return { state: sleepState, media: document.getElementById('mediaContainer').style.display, overlay: document.getElementById('sleepOverlay').style.display, ackExtra: last && last.extraData ? last.extraData.sleepState : null };
+    return { state: sleepState, media: document.getElementById('mediaContainer').style.display, mediaOverlay: document.getElementById('mediaSleepOverlay').style.display, uiOverlay: document.getElementById('uiSleepOverlay').style.display, ackExtra: last && last.extraData ? last.extraData.sleepState : null };
   });
   assert.strictEqual(ovrSleep.state, 'sleep', 'sleepOverride=sleep 应进入睡眠状态');
-  assert.strictEqual(ovrSleep.media, 'none', '手动睡眠应隐藏媒体容器');
-  assert.strictEqual(ovrSleep.overlay, 'none', '手动睡眠不应显示黑幕');
+  assert.notStrictEqual(ovrSleep.media, 'none', '手动睡眠不应隐藏媒体容器');
+  assert.strictEqual(ovrSleep.mediaOverlay, 'block', '手动睡眠应显示媒体遮罩');
+  assert.strictEqual(ovrSleep.uiOverlay, 'none', '手动睡眠不应显示 UI 遮罩');
   assert.strictEqual(ovrSleep.ackExtra, 'sleep', 'sleepOverride ack 应携带当前 sleepState');
   console.log('PASS: handleControl(sleepOverride=sleep) 手动睡眠 + ack');
 
@@ -245,11 +265,13 @@ const assert = require('assert');
   const ovrDeep = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(ovrDeep.state, 'deep', 'sleepOverride=deep 应进入深度睡眠');
-  assert.strictEqual(ovrDeep.media, 'none', '手动深度应隐藏媒体容器');
-  assert.strictEqual(ovrDeep.overlay, 'block', '手动深度应显示黑幕');
+  assert.notStrictEqual(ovrDeep.media, 'none', '手动深度不应隐藏媒体容器');
+  assert.strictEqual(ovrDeep.mediaOverlay, 'none', '手动深度不应显示媒体遮罩');
+  assert.strictEqual(ovrDeep.uiOverlay, 'block', '手动深度应显示 UI 遮罩');
   console.log('PASS: handleControl(sleepOverride=deep) 手动深度睡眠');
 
   // ---- 12. 手动覆盖与启用开关无关：enabled=false 仍保持手动深度 ----
@@ -259,21 +281,23 @@ const assert = require('assert');
   });
   const manualIndependent = await page.evaluate(() => ({
     state: sleepState,
-    overlay: document.getElementById('sleepOverlay').style.display
+    overlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(manualIndependent.state, 'deep', 'enabled=false 时手动覆盖仍生效');
-  assert.strictEqual(manualIndependent.overlay, 'block', '手动深度黑幕应保持显示');
+  assert.strictEqual(manualIndependent.overlay, 'block', '手动深度 UI 遮罩应保持显示');
   console.log('PASS: 手动覆盖不依赖启用开关');
 
   // ---- 13. 下发媒体/临时激活取消手动覆盖（activateTemporarily 清 manualSleepMode）----
   await page.evaluate(() => { activateTemporarily(); });
   const ovrActive = await page.evaluate(() => ({
     state: sleepState,
-    overlay: document.getElementById('sleepOverlay').style.display,
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display,
     manual: manualSleepMode
   }));
   assert.strictEqual(ovrActive.state, 'active', '临时激活应进入激活状态');
-  assert.strictEqual(ovrActive.overlay, 'none', '激活应移除黑幕');
+  assert.strictEqual(ovrActive.mediaOverlay, 'none', '激活应移除媒体遮罩');
+  assert.strictEqual(ovrActive.uiOverlay, 'none', '激活应移除 UI 遮罩');
   assert.strictEqual(ovrActive.manual, null, '临时激活应取消手动覆盖（manualSleepMode=null）');
   await page.evaluate(() => {
     activationUntil = Date.now() - 1;   // 模拟激活窗口过期
@@ -281,10 +305,10 @@ const assert = require('assert');
   });
   const ovrBack = await page.evaluate(() => ({
     state: sleepState,
-    overlay: document.getElementById('sleepOverlay').style.display
+    overlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(ovrBack.state, 'normal', '激活过期后不再回落手动覆盖（已取消），enabled=false 按 normal');
-  assert.strictEqual(ovrBack.overlay, 'none', '取消覆盖后正常态无黑幕');
+  assert.strictEqual(ovrBack.overlay, 'none', '取消覆盖后正常态无 UI 遮罩');
   console.log('PASS: 下发媒体取消手动覆盖，过期不再回落');
 
   // ---- 14. handleControl('sleepOverride', 'normal') 恢复正常 ----
@@ -298,11 +322,13 @@ const assert = require('assert');
   const ovrNormal = await page.evaluate(() => ({
     state: sleepState,
     media: document.getElementById('mediaContainer').style.display,
-    overlay: document.getElementById('sleepOverlay').style.display
+    mediaOverlay: document.getElementById('mediaSleepOverlay').style.display,
+    uiOverlay: document.getElementById('uiSleepOverlay').style.display
   }));
   assert.strictEqual(ovrNormal.state, 'normal', 'sleepOverride=normal 应恢复正常显示');
-  assert.strictEqual(ovrNormal.media, 'flex', '正常应显示媒体容器');
-  assert.strictEqual(ovrNormal.overlay, 'none', '正常不应有黑幕');
+  assert.notStrictEqual(ovrNormal.media, 'none', '正常应保持媒体容器显示');
+  assert.strictEqual(ovrNormal.mediaOverlay, 'none', '正常不应显示媒体遮罩');
+  assert.strictEqual(ovrNormal.uiOverlay, 'none', '正常不应显示 UI 遮罩');
   console.log('PASS: handleControl(sleepOverride=normal) 恢复正常');
 
   // ---- 15. 状态变化后上报匹配当前 sleepState ----
@@ -319,7 +345,7 @@ const assert = require('assert');
   console.log('PASS: 状态变化后上报 sleepState');
 
   // ---- 16. restoreState isPlaying=false：控制端暂停的视频重连后保持暂停（不自动播放）----
-  // 关闭睡眠，避免 sleep/deep 状态隐藏媒体容器干扰视频判定
+  // 关闭睡眠，避免 sleep/deep 遮罩状态干扰视频判定
   await page.evaluate(() => {
     activationUntil = 0;
     sleepSettings = { enabled: false, startHour: 0, endHour: 24, deepStartHour: 0, deepEndHour: 24 };

@@ -15,6 +15,7 @@ import com.k2fsa.sherpa.onnx.SpeakerEmbeddingManager
 //   1) SpeakerEmbeddingManager 构造参数是 dim，必须用 extractor.dim() 实测值（3dspeaker eres2net 输出 512），不能写死
 //   2) SpeakerEmbeddingManager.search 未命中返回空串（非 null），Kotlin match() 映射 空串→null
 //   3) 各 Config 具名参数（segmentation/embedding/clustering/minDurationOn/minDurationOff）与 AAR 一致
+//   4) 外部私有目录模型必须传 null AssetManager，不能按 APK assets 读取
 object VoiceprintEngine {
     private var extractor: SpeakerEmbeddingExtractor? = null
     private var manager: SpeakerEmbeddingManager? = null
@@ -30,12 +31,13 @@ object VoiceprintEngine {
 
     // 加载引擎；segmentationModel 为 null 或 multiSpeaker=false 时不建 diarization
     // synchronized 与 extract/match/diarize 互斥：避免并发时 release 原生引擎导致读已释放句柄
+    @Suppress("UNUSED_PARAMETER")
     fun load(context: Context, embeddingModel: String, segmentationModel: String?, threshold: Float, multiSpeaker: Boolean): Boolean {
         synchronized(this) {
             return try {
-                val appContext = context.applicationContext
                 extractor?.release()
-                extractor = SpeakerEmbeddingExtractor(appContext.assets, SpeakerEmbeddingExtractorConfig(
+                // embeddingModel 是 APK 私有目录绝对路径，必须让 AAR 走文件系统加载分支。
+                extractor = SpeakerEmbeddingExtractor(null, SpeakerEmbeddingExtractorConfig(
                     model = embeddingModel, numThreads = 1, debug = false, provider = "cpu"))
                 // dim 以 extractor 实测为准（3dspeaker eres2net 输出 512），禁止写死
                 dim = extractor!!.dim()
@@ -43,7 +45,8 @@ object VoiceprintEngine {
                 manager = SpeakerEmbeddingManager(dim)
                 if (multiSpeaker && segmentationModel != null) {
                     diarization?.release()
-                    diarization = OfflineSpeakerDiarization(appContext.assets, OfflineSpeakerDiarizationConfig(
+                    // segmentationModel 与 embeddingModel 同样是外部绝对路径，AssetManager 必须为 null。
+                    diarization = OfflineSpeakerDiarization(null, OfflineSpeakerDiarizationConfig(
                         segmentation = OfflineSpeakerSegmentationModelConfig(
                             pyannote = OfflineSpeakerSegmentationPyannoteModelConfig(segmentationModel),
                             numThreads = 1, debug = false, provider = "cpu"),

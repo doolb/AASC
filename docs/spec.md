@@ -44,7 +44,7 @@
 | Android 原生语音识别 | [android-native-asr.md](spec/android-native-asr.md) | sherpa-onnx AAR 原生推理、模型按需下载、服务器中转接入 |
 | Android 原生声纹识别 | [voiceprint.md](spec/voiceprint.md) | 说话人识别、多人分割、服务器权威库、声纹门控 |
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
-| 显示端睡眠模式 | [display-sleep-mode.md](spec/display-sleep-mode.md) | 时段判定/深度黑幕/临时激活/控制端配置 |
+| 显示端睡眠模式 | [display-sleep-mode.md](spec/display-sleep-mode.md) | 时段判定/媒体遮罩/深度 UI 遮罩/临时激活/控制端配置 |
 
 ## 核心模块
 

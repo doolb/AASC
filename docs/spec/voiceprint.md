@@ -32,7 +32,9 @@ ensureModel(baseUrl, needSegmentation, onEvent):
 
 ```
 load(context, embeddingModel, segmentationModel?, threshold, multiSpeaker) -> Boolean
-  # SpeakerEmbeddingExtractor + SpeakerEmbeddingManager(dim) + 可选 OfflineSpeakerDiarization
+  # embeddingModel/segmentationModel 是 APK 私有目录绝对路径
+  # SpeakerEmbeddingExtractor(null, config) + SpeakerEmbeddingManager(dim) + 可选 OfflineSpeakerDiarization(null, config)
+  # 外部文件不能传非空 AssetManager，否则 sherpa-onnx 会按 APK assets 读取并加载失败
 setDb(speakers: Map<String,FloatArray>)  # 全量重建 manager
 extract(samples) -> FloatArray           # createStream → acceptWaveform(16000) → inputFinished → compute → stream.release
 match(embedding) -> String?              # manager.search(embedding, threshold)；低于 threshold → null
@@ -45,7 +47,7 @@ diarize(samples) -> [{start,end,speakerIndex}]  # OfflineSpeakerDiarization.proc
 voiceprintStatus()            → VoiceprintEngine.ready/dim/speakers
 voiceprintConfigure(json)     → 存 enabled/threshold/multiSpeaker → voiceprintModelManager.ensureModel{ ready 时 VoiceprintEngine.load }
 voiceprintMatch(pcm)          → 未就绪回 error；Base64.decode→AsrPcm.decodeS16→extract→match → {speaker|null,dim}
-voiceprintDiarize(pcm)        → diarize→每段切片(≥1600样本)→AsrEngine.recognize+extract+match → {segments:[{start,end,text,speaker}]}
+voiceprintDiarize(pcm)        → diarize→按 speakerIndex 合并原始 PCM→extract/match→按同名 speaker 合并原始 PCM→AsrEngine.recognize → {segments:[{start,end,text,speaker}]}
 voiceprintExtract(pcm)        → extract → {dim, embedding:[]}
 voiceprintSyncDb(dbJson)      → VoiceprintDbCodec.speakersFromDb→VoiceprintEngine.setDb→onVoiceprintDb
 ```
@@ -86,6 +88,32 @@ asrResult resolve 升级: {text, speaker?, segments?}
   segments → 过滤 speaker null 段 → 空 ignored / 有则 {status:'success', segments:[{text,speaker}]}
   speaker 字段存在且 null → ignored('未识别到已注册声纹')；非 null → success{text,speaker}；缺省 → success{text}
 voiceInput: speaker===null → 丢弃（防御性）；否则转发（带 speaker）
+```
+
+## VoiceprintSegmentMerger（Android 纯逻辑）
+
+```
+merge(classifiedSegments):
+  按 diarization 原顺序遍历 {start,end,speakerIndex}
+  speakerIndex 相同且相邻 → 合并原始 start/end 区间
+  speakerIndex 不同 → 创建新的原始音频区间
+voiceprintDiarize:
+  diarize → VoiceprintSegmentMerger.merge
+  每个 index 合并区间从原始 PCM 切片 → extract/match 一次
+  再按相同的 speaker 名合并原始区间；短于 1 秒的未匹配间隔视为分段边界，可合并；较长未知区间阻断合并
+  最终合并区间 → AsrEngine.recognize 一次
+  返回重识别后的 {start,end,text,speaker}
+```
+
+## 真机验证记录（2026-08-19）
+
+```text
+注册：POST /api/voiceprint/register，audio=3rd/ttslive/models/sensevoice/zh.wav，name=测试声纹 → success，dim=512
+识别：POST /api/asr/recognize，audio=同一个 zh.wav
+结果：success，segments[0].text="开饭时间早上9点至下午5点。"，segments[0].speaker="测试声纹"
+混合测试：串接 zh.wav + en.wav → 仅返回一段完整 zh 文本“开放时间早上9点至下午5点。”，en 片段未返回
+重叠混音：zh.wav 与 en.wav 同时叠加 → ignored("未识别到已注册声纹")，segments=[]
+原始片段合并复测：zh.wav → 单段“开饭时间早上9点至下午5点。”；zh.wav + en.wav → 单段“开放时间早上9点至下午5点。”，speaker 均为“测试声纹”
 ```
 
 ## voiceprint-service（服务器，extraction='server' 注册用）

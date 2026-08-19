@@ -1067,7 +1067,12 @@ app.get('/api/asr/status', (req, res) => {
 
 // ASR 模型文件下载（Android 原生识别引擎按需拉取；filename 白名单防路径穿越）
 const ASR_MODEL_DIR = path.join(RES_DIR, 'models', 'sensevoice');
-const ASR_MODEL_FILES = ['model.int8.onnx', 'tokens.txt'];
+const ASR_MODEL_FILES = [
+    'model.int8.onnx',
+    'model.int8.onnx.sha256',
+    'tokens.txt',
+    'tokens.txt.sha256'
+];
 
 app.get('/api/asr/model/:filename', (req, res) => {
     const filename = req.params.filename;
@@ -1078,7 +1083,12 @@ app.get('/api/asr/model/:filename', (req, res) => {
     if (!fs.existsSync(filePath)) {
         return res.status(404).json({ status: 'error', message: '模型文件不存在' });
     }
-    res.setHeader('Content-Type', filename.endsWith('.txt') ? 'text/plain; charset=utf-8' : 'application/octet-stream');
+    res.setHeader(
+        'Content-Type',
+        filename.endsWith('.txt') || filename.endsWith('.sha256')
+            ? 'text/plain; charset=utf-8'
+            : 'application/octet-stream'
+    );
     res.setHeader('Content-Length', fs.statSync(filePath).size);
     const stream = fs.createReadStream(filePath);
     // 读流出错或客户端中途断开时销毁流，避免未处理的 'error' 事件崩溃整个服务器进程

@@ -4,6 +4,53 @@
 
 ### 修复
 
+- ✅ [2026-08-19] 增加 APK 语音识别模型 SHA-256 校验与启动 hash 缓存
+  - 服务端新增 `model.int8.onnx.sha256`、`tokens.txt.sha256`，APK 下载完成后校验 `.tmp` 文件，成功后才原子改名并保存本地 hash。
+  - APK 后续启动只比较本地保存 hash 与服务器 hash，不重新读取 234MB 模型计算 hash；服务器暂时不可达时沿用已有本地已验证模型。
+  - `AsrModelFilesTest` 改用阈值边界小文件，避免测试每次向 `/tmp` 写入 200MB。
+  - 验证：Android 全量 JVM 单测 26 项通过；服务端 hash 与实际模型文件一致。
+  - 真机验证：使用 SenseVoice 的 `zh/en/ja/ko/yue.wav` 测试 APK，模型始终未进入 ready，5 个文件均未得到识别文本；该问题待修复。
+  - 初步诊断：设备可直接访问 hash 接口，但 APK 未创建模型目录且未出现 `ModelDownloader` 日志，问题位于 `serverBaseUrl()`/下载入口，尚未进入实际模型下载。
+
+- 🔧 [2026-08-19] 修复 APK sherpa-onnx 外部模型加载参数
+  - 外部私有目录模型使用绝对路径加载时，`AsrEngine` 改为向 `OfflineRecognizer` 传入空 `AssetManager`，避免 `tokens.txt` 被 AAR 按 Asset 读取。
+  - 验证：重新构建并安装 APK 后，已使用已下载缓存启动，模型直接进入 `ready` 且未重复下载。
+  - 未完成：`zh/en/ja/ko/yue.wav` 识别结果均为空，需继续诊断 AAR 的 SenseVoice 输出。
+
+- ✅ [2026-08-19] 修复 APK sherpa-onnx 外部声纹模型加载参数
+  - `VoiceprintEngine` 的 embedding 提取器和多人分割器改为使用空 `AssetManager` 加载 APK 私有目录绝对路径模型。
+  - 验证：使用 `zh.wav` 注册“测试声纹”，再用同一个 WAV 识别，返回“开饭时间早上9点至下午5点。”，speaker 为“测试声纹”。
+  - 混合验证：串接 `zh.wav + en.wav` 模拟轮流说话，只返回 zh 片段，en 片段被过滤。
+  - 重叠验证：两路 WAV 同时混音后未匹配到已注册声纹，返回 ignored，避免输出不可靠文本。
+
+- ✅ [2026-08-19] 修复声纹分段边界导致的 ASR 内容丢失
+  - APK 先按 pyannote `speakerIndex` 聚合原始 PCM，再按匹配到的同名 speaker 二次聚合；短未知间隔允许合并，长未知语音阻断。
+  - 合并后的原始音频重新执行一次 ASR，不再拼接旧文本。
+  - 验证：`zh.wav` 和 `zh.wav + en.wav` 串接测试均只返回一段完整 zh 内容，en 未注册声纹片段被过滤。
+
+- ✅ [2026-08-19] 修复睡眠/临时激活期间画面填充模式偶发丢失
+  - 根因：睡眠状态将 `#mediaContainer` 设置为 `display:none`，导致尺寸变为 0，`applyCrop()` 清除媒体尺寸样式后激活未重新计算。
+  - 修复：普通睡眠使用媒体区域遮罩，深度睡眠只使用 UI 全屏遮罩；睡眠状态不再修改媒体容器布局。
+  - 验证：`node tests/display-sleep-mode.test.js` 通过（全部睡眠、遮罩、播放/TTS、激活优先级场景）。
+  - 改动文件：
+    - `src/apps/web-mediacenter/ui/public/display.html`
+    - `src/apps/web-mediacenter/ui/public/css/display.css`
+    - `tests/display-sleep-mode.test.js`
+    - `docs/design/display-sleep-mode.md`
+    - `docs/spec/display-sleep-mode.md`
+    - `docs/task/2026-08-19_睡眠模式双遮罩保持画面填充.md`
+
+- ✅ [2026-08-19] 修复 APK 下载语音识别模型启动阶段界面没有提示
+  - 根因：`AsrModelManager` 进入 `downloading` 后直接启动后台下载，首次进度回调要等模型响应首个数据块；显示端能力探测也未处理已有的 `downloading` 状态。
+  - 修复：进入下载状态立即上报 0%，显示端统一显示并校验 0-100% 进度，能力探测发现下载中时立即恢复提示。
+  - 验证：`tests/android-asr-download-prompt.test.js` 通过。
+
+- ✅ [2026-08-19] 修复 APK 语音模型下载入口跨线程读取 WebView URL
+  - 根因：`NativeBridge.serverBaseUrl()` 在 JavaBridge 线程访问 `webView.url`，导致模型下载入口无法稳定得到服务器地址，页面却继续显示“模型下载中”。
+  - 修复：`MainActivity` 主线程缓存页面 origin，`NativeBridge` 只读取缓存；新增 `ServerOrigin` 解析器和单测。
+  - 验证：`ServerOriginTest` 先失败后通过；真机模型 `.tmp` 下载、原子改名和两个 hash 文件保存成功。
+  - 后续阻塞：sherpa-onnx 加载外部 `tokens.txt` 时传入非空 AssetManager，导致 APK 进程退出，识别仍待修复。
+
 - ✅ [2026-08-18] 控制端右侧内容区空白背景支持拖动页面滚动
   - `main.js` 仅在 `.content` 自身作为 pointerdown 目标时，根据垂直位移更新 `window.scrollY`。
   - `.panel`、`.section` 及按钮、表单、图片、视频、iframe 等内部元素不启动拖动，避免影响原有交互。

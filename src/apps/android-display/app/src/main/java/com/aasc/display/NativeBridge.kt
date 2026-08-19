@@ -20,6 +20,14 @@ class NativeBridge(
     private val mainHandler: Handler = Handler(Looper.getMainLooper())
 ) {
 
+    // 由 MainActivity 主线程的页面回调更新；JavaScript bridge 线程只读取该缓存。
+    @Volatile
+    private var serverOrigin: String = ""
+
+    fun updateServerOrigin(url: String?) {
+        serverOrigin = ServerOrigin.fromUrl(url)
+    }
+
     private var lastCpuIdle: Long = -1
     private var lastCpuTotal: Long = -1
     // 回退路径（/proc/self/stat 进程自身 CPU）：utime+stime（jiffy）与采样时刻（elapsedRealtime ms）
@@ -314,8 +322,8 @@ class NativeBridge(
         }
     }
 
-    // 多人分割+逐段识别：裸 PCM base64 → {"segments":[{start,end,text,speaker}]} 或 {"error":"..."}
-    // 逐段转写依赖 AsrEngine.recognize，故前置校验还需 asrModelManager.isReady
+    // 多人分割+声纹匹配+合并原始音频后识别：裸 PCM base64 → {"segments":[{start,end,text,speaker}]} 或 {"error":"..."}
+    // 先按 speakerIndex 合并再匹配声纹名，最后按相邻同名 speaker 再合并原始 PCM，避免短片段边界截断 ASR 文本。
     @JavascriptInterface
     fun voiceprintDiarize(pcmBase64: String): String {
         return try {
@@ -324,21 +332,34 @@ class NativeBridge(
             }
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
             val samples = AsrPcm.decodeS16(bytes)
+            if (samples.isEmpty()) {
+                return JSONObject().put("error", "音频数据为空").toString()
+            }
             val segJson = asrExecutor.submit<org.json.JSONArray> {
                 val segments = VoiceprintEngine.diarize(samples)
-                val arr = org.json.JSONArray()
-                for (seg in segments) {
+                val indexMergedSegments = VoiceprintSegmentMerger.merge(segments.map { seg ->
+                    VoiceprintSegmentMerger.DiarizedSegment(seg.start, seg.end, seg.speakerIndex)
+                })
+                val matchedSegments = indexMergedSegments.map { seg ->
                     val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
                     val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
-                    val segSamples = samples.copyOfRange(startIdx, endIdx)
-                    val text = if (segSamples.size >= 1600) AsrEngine.recognize(segSamples) else ""
-                    val emb = VoiceprintEngine.extract(segSamples)
-                    val speaker = VoiceprintEngine.match(emb)
+                    val segmentSamples = samples.copyOfRange(startIdx, endIdx)
+                    val embedding = VoiceprintEngine.extract(segmentSamples)
+                    val speaker = VoiceprintEngine.match(embedding)
+                    VoiceprintSegmentMerger.MatchedSegment(seg.start, seg.end, speaker)
+                }
+                val mergedSegments = VoiceprintSegmentMerger.mergeMatched(matchedSegments)
+                val arr = org.json.JSONArray()
+                for (seg in mergedSegments) {
+                    val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
+                    val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
+                    val mergedSamples = samples.copyOfRange(startIdx, endIdx)
+                    val text = if (mergedSamples.size >= 1600) AsrEngine.recognize(mergedSamples) else ""
                     arr.put(org.json.JSONObject()
                         .put("start", seg.start.toDouble())
                         .put("end", seg.end.toDouble())
                         .put("text", text)
-                        .put("speaker", speaker ?: JSONObject.NULL))
+                        .put("speaker", seg.speaker))
                 }
                 arr
             }.get(30, TimeUnit.SECONDS)
@@ -393,17 +414,9 @@ class NativeBridge(
         }
     }
 
-    // 从 WebView 当前 URL 推导服务器 origin（模型下载地址基准）
+    // 返回主线程缓存的服务器 origin（模型下载地址基准）。
+    // 不能在 JavaBridge 线程读取 webView.url，否则会触发 WebView 跨线程访问并可能得到空地址。
     private fun serverBaseUrl(): String {
-        return try {
-            val u = android.net.Uri.parse(webView.url)
-            // webView.url 可能为 null → Uri.scheme/host 为 null，避免拼出 "null://null"
-            val scheme = u.scheme ?: return ""
-            val host = u.host ?: return ""
-            val port = if (u.port != -1) ":${u.port}" else ""
-            "$scheme://$host$port"
-        } catch (e: Exception) {
-            ""
-        }
+        return serverOrigin
     }
 }

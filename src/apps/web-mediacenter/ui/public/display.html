@@ -31,10 +31,11 @@
         <img id="mediaImage">
         <video id="mediaVideo" autoplay loop playsinline></video>
         <iframe id="mediaHtml" style="display:none;"></iframe>
+        <div id="mediaSleepOverlay" class="sleep-overlay sleep-overlay-media"></div>
     </div>
     
     <audio id="ttsAudio" style="display:none;"></audio>
-    <div id="sleepOverlay" style="display:none;position:fixed;inset:0;background:#000;z-index:999999;"></div>
+    <div id="uiSleepOverlay" class="sleep-overlay sleep-overlay-ui"></div>
     <script src="js/html-to-image.min.js"></script>
     <script src="js/control-mode-utils.js"></script>
     <script src="js/sherpa-asr.js"></script>
@@ -130,7 +131,7 @@
         window.onNativeAsrModel = function(payload) {
             if (!payload) return;
             if (payload.state === 'downloading') {
-                updateVoiceTextDisplay('语音模型下载中 ' + (payload.progress || 0) + '%', false);
+                showNativeAsrDownloadProgress(payload.progress);
             } else if (payload.state === 'ready') {
                 nativeAsrReady = true;
                 updateVoiceTextDisplay('语音识别已就绪', true);
@@ -146,6 +147,15 @@
                 setTimeout(() => updateVoiceTextDisplay('', true), 4000);
             }
         };
+
+        // 统一显示原生 ASR 下载进度；回调或状态查询缺少进度时也明确显示 0%，避免用户误以为下载未启动。
+        function showNativeAsrDownloadProgress(progress) {
+            const numericProgress = Number(progress);
+            const safeProgress = Number.isFinite(numericProgress)
+                ? Math.max(0, Math.min(100, Math.floor(numericProgress)))
+                : 0;
+            updateVoiceTextDisplay('语音模型下载中 ' + safeProgress + '%', false);
+        }
         let logReportConfig = null;
         let _originalConsole = null;
         
@@ -2486,13 +2496,13 @@
             }
         }
 
-        // ===== 睡眠模式：按时段自动隐藏媒体/UI，降低夜间干扰 =====
+        // ===== 睡眠模式：按时段使用媒体/UI 遮罩，降低夜间干扰 =====
         // 时间在显示端本地判断（各设备用自己时区），每 10 秒检查一次。
         // 优先级：立即手动覆盖 > 临时激活 > 深度睡眠 > 睡眠 > 正常。
         // 下发媒体/临时激活（activateTemporarily）会同时取消手动覆盖（manualSleepMode=null），
         // 因此手动覆盖与激活窗口不会同时有效：覆盖被取消后按正常时段判定。
-        const sleepOverlay = document.getElementById('sleepOverlay');
-        const mediaContainer = document.getElementById('mediaContainer');
+        const mediaSleepOverlay = document.getElementById('mediaSleepOverlay');
+        const uiSleepOverlay = document.getElementById('uiSleepOverlay');
         let sleepSettings = { enabled: true, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 };
         let sleepState = 'normal';   // 'normal' | 'sleep' | 'deep' | 'active'
         let activationUntil = 0;     // 临时激活截止时间戳
@@ -2553,14 +2563,13 @@
             }
         }
 
-        // 应用睡眠状态：深度全黑（遮罩盖全部覆盖层），睡眠隐藏媒体保 UI，正常/激活显示
+        // 应用睡眠状态：普通睡眠只遮媒体，深度睡眠只显示全屏 UI 遮罩；媒体容器始终保持布局
         function applySleepState(state) {
             const prev = sleepState;
             sleepState = state;
-            const isHidden = (state === 'sleep' || state === 'deep');
-            sleepOverlay.style.display = (state === 'deep') ? 'block' : 'none';
-            mediaContainer.style.display = isHidden ? 'none' : 'flex';
-            if (isHidden) {
+            mediaSleepOverlay.style.display = state === 'sleep' ? 'block' : 'none';
+            uiSleepOverlay.style.display = state === 'deep' ? 'block' : 'none';
+            if (state === 'sleep' || state === 'deep') {
                 pauseSleepMedia();
                 pauseSleepTts();
             } else if (prev === 'sleep' || prev === 'deep') {
@@ -3046,7 +3055,9 @@
                     const st = JSON.parse(nativeBridge.asrStatus());
                     nativeAsrReady = (st.state === 'ready');
                     capabilities.voiceRecognition = nativeAsrReady;
-                    if (st.state === 'not_ready' || st.state === 'error') {
+                    if (st.state === 'downloading') {
+                        showNativeAsrDownloadProgress(st.progress);
+                    } else if (st.state === 'not_ready' || st.state === 'error') {
                         nativeBridge.asrEnsureModel();
                     }
                 } catch (e) {
@@ -4454,6 +4465,3 @@
     </script>
 </body>
 </html>
-
-
-

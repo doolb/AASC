@@ -2,10 +2,10 @@
 
 ## 概述
 
-为显示端（`display.html`）增加**睡眠模式**与**深度睡眠模式**，按时间段自动隐藏媒体/UI，降低夜间干扰。支持：
+为显示端（`display.html`）增加**睡眠模式**与**深度睡眠模式**，按时间段使用媒体区域遮罩或全屏 UI 遮罩降低夜间干扰。遮罩不修改媒体容器的布局显示属性，避免画面填充计算因容器尺寸变为 0 而丢失。支持：
 
-1. **睡眠模式（默认 23:00-8:00，跨天）**：隐藏媒体（图片/视频/iframe），视频暂停，TTS 语音暂停，保留 UI 覆盖层（时钟/文件名/语音状态等）。
-2. **深度睡眠模式（默认 1:00-6:00）**：全屏黑幕遮罩，媒体与 UI 全部隐藏（含连接状态/语音状态/监控层等所有覆盖层），TTS 语音暂停。
+1. **睡眠模式（默认 23:00-8:00，跨天）**：显示媒体区域黑色遮罩，视频暂停，TTS 语音暂停，保留 UI 覆盖层（时钟/文件名/语音状态等）。
+2. **深度睡眠模式（默认 1:00-6:00）**：只显示全屏 UI 黑幕遮罩覆盖整个页面，媒体节点保持布局，TTS 语音暂停。
 3. **临时激活（60 秒）**：手动按钮或控制端下发媒体自动触发，期间强制显示媒体+UI，60 秒后回落（手动覆盖优先于时段判定）。
 4. **手动覆盖**：控制端「立即切换」显式进入睡眠/深度睡眠/恢复正常，不随时段/开关自动切换，直到再下发才改变（刷新即重置，临时）。
 5. **控制端配置**：显示控制面板新增「睡眠模式」入口 → 弹窗设置框（启用开关 + 可配时段 + 临时激活按钮 + 立即切换按钮 + 当前状态），按当前选中显示端生效并持久化到服务端。
@@ -18,7 +18,7 @@
 
 ### 目标
 
-- 夜间按时段自动隐藏媒体（睡眠）或整屏熄灭（深度睡眠），视频暂停避免持续播放。
+- 夜间按时段遮住媒体（睡眠）或整屏熄灭（深度睡眠），视频暂停避免持续播放。
 - 用户需要看画面时可手动临时激活 60 秒；控制端下发媒体时自动临时激活，保证操作即时可见。
 - 时段/开关可在控制端按显示端独立配置并持久化，刷新/重启后沿用。
 
@@ -27,7 +27,7 @@
 - 时间判断在**显示端本地**（各设备用自己的本地时区），每 10 秒检查一次。
 - 设置按**当前选中显示端**生效，持久化到服务端 `displayStates[ip].sleep`（沿用现有 rotation/fit/volume 状态流）。
 - 优先级：**临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常**。
-- 深度睡眠用全屏黑幕遮罩实现（不逐元素枚举隐藏），保证新增 UI 元素也能被完整覆盖。
+- 睡眠使用媒体区域遮罩，深度睡眠使用全屏 UI 遮罩；两种遮罩均不通过 `display:none` 隐藏媒体容器，保证新增 UI 元素和媒体填充计算稳定。
 - 视频睡眠时**暂停（画面+音频）**，恢复后继续播放。
 - 不产生一大段 if-else-else if 链（AASC 规则）。
 
@@ -52,7 +52,8 @@
   ├─ handleControl('sleepOverride') → manualSleepMode 枚举赋值 → checkSleepMode() 立即应用
   ├─ showMedia()（控制端下发媒体）→ activateTemporarily()；显示端内部调用（restore 恢复/播放列表切播）不激活
   ├─ setInterval(checkSleepMode, 10000)  → 本地时钟判断 → 应用/解除隐藏
-  └─ #sleepOverlay 全屏黑幕遮罩（z-index 999999，盖全部覆盖层）
+  ├─ #mediaSleepOverlay 媒体区域遮罩（只覆盖 #mediaContainer 内媒体）
+  └─ #uiSleepOverlay 全屏 UI 遮罩（z-index 999999，深度睡眠时覆盖全部页面）
 ```
 
 ## 状态模型与判定
@@ -60,7 +61,7 @@
 ### 优先级
 
 ```
-正常(显示) < 睡眠(隐藏媒体, 保留 UI) < 深度睡眠(全黑) < 手动覆盖(显式进入睡眠/深度) < 临时激活(强制显示)
+正常(显示) < 睡眠(媒体遮罩, 保留 UI) < 深度睡眠(UI 全屏遮罩) < 手动覆盖(显式进入睡眠/深度) < 临时激活(强制显示)
 ```
 
 ### 时段判定（跨天）
@@ -77,9 +78,9 @@
 当前状态 = 
   若 activationUntil > now         → 临时激活（强制显示，覆盖手动与时段）
   若 manualSleepMode = 'deep'       → 手动深度睡眠（全黑）
-  若 manualSleepMode = 'sleep'      → 手动睡眠（隐藏媒体，保留 UI）
+  若 manualSleepMode = 'sleep'      → 手动睡眠（媒体遮罩，保留 UI）
   若 深度睡眠启用 且 当前在深度时段  → 深度睡眠（全黑）
-  若 睡眠启用 且 当前在睡眠时段      → 睡眠（隐藏媒体，保留 UI）
+  若 睡眠启用 且 当前在睡眠时段      → 睡眠（媒体遮罩，保留 UI）
   否则                              → 正常（显示）
 ```
 
@@ -100,18 +101,19 @@
 
 ## 显示端实现（display.html）
 
-### 遮罩层
+### 双遮罩层
 
 HTML 末尾追加（`display.html` body 内）：
 
 ```html
-<div id="sleepOverlay" style="display:none;position:fixed;inset:0;background:#000;z-index:999999;"></div>
+<div id="mediaSleepOverlay" class="sleep-overlay sleep-overlay-media"></div>
+<div id="uiSleepOverlay" class="sleep-overlay sleep-overlay-ui"></div>
 ```
 
 - `z-index:999999` 高于现有所有覆盖层（render-display 监控层 `#monitorOverlay`、任务状态、语音状态等）。
-- 深度睡眠：`#sleepOverlay` 显示（黑屏全遮），媒体容器隐藏，视频暂停。
-- 睡眠：`#sleepOverlay` 隐藏（保留 UI），`#mediaContainer` 隐藏，视频暂停。
-- 正常/临时激活：`#sleepOverlay` 隐藏，`#mediaContainer` 显示，视频恢复。
+- 深度睡眠：只显示 `#uiSleepOverlay`，覆盖 UI 和媒体，媒体容器不隐藏，视频暂停。
+- 睡眠：只显示 `#mediaSleepOverlay`，覆盖媒体区域并保留 UI，视频暂停。
+- 正常/临时激活：两个遮罩都隐藏，媒体节点保持原有布局，按播放状态恢复媒体。
 
 ### 状态变量与函数
 
@@ -138,9 +140,9 @@ function checkSleepMode():
 
 function applySleepState(state):
     记录状态到 sleepState
-    'normal'/'active': 隐藏 #sleepOverlay，显示 #mediaContainer，恢复视频，续播语音
-    'sleep':           隐藏 #sleepOverlay（保 UI），隐藏 #mediaContainer，暂停视频，暂停语音
-    'deep':            显示 #sleepOverlay（全黑），隐藏 #mediaContainer，暂停视频，暂停语音
+    'normal'/'active': 隐藏 #mediaSleepOverlay 和 #uiSleepOverlay，恢复视频，续播语音
+    'sleep':           显示 #mediaSleepOverlay（保 UI），保持 #mediaContainer 布局，暂停视频，暂停语音
+    'deep':            隐藏 #mediaSleepOverlay，显示 #uiSleepOverlay（全黑），保持 #mediaContainer 布局，暂停视频，暂停语音
 
 function activateTemporarily():
     activationUntil = Date.now() + 60000
@@ -243,21 +245,21 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 | 手动深度睡眠中下发媒体 | 60s 临时激活覆盖手动强制显示，过期后回落手动深度睡眠 |
 | 跨天时段（23-8 / 1-6） | `startHour > endHour` 时 `h >= start \|\| h < end` 判定 |
 | 睡眠中下发媒体 | showMedia 触发 60s 临时激活，媒体可见 |
-| 临时激活结束后仍处睡眠时段 | 恢复隐藏（视频暂停） |
+| 临时激活结束后仍处睡眠时段 | 恢复对应遮罩（视频暂停） |
 | 睡眠中视频播放 | `mediaVideo.pause()`；恢复时 `play()` 续播（catch 拦截自动播放限制） |
 | 睡眠中 TTS 播放 | `ttsAudio.pause()`（保留进度）+ 清空队列 + 隐藏语音文本；恢复时当前 utterance 续播 |
 | 睡眠中新到的 TTS | `queueTts`/`playTTS` 入口守卫直接丢弃（整点报时、语音响应、提醒等），不积压重放 |
 | html 模式（iframe 滚动）睡眠 | 暂停滚动（`stopHtmlScroll`），恢复时 `startHtmlScroll` |
 | 未启用睡眠模式 | 全部判定返回正常，遮罩永不显示 |
-| 深度睡眠黑幕盖过监控层 | `#sleepOverlay` z-index 高于 `#monitorOverlay`（render-display）等全部覆盖层 |
+| 深度睡眠黑幕盖过监控层 | `#uiSleepOverlay` z-index 高于 `#monitorOverlay`（render-display）等全部覆盖层 |
 | 设置合法化 | hour 值 clamp 到 0-23；`enabled` 布尔化 |
 
 ## 测试计划
 
-1. **睡眠模式（23-8 模拟）**：将睡眠时段调成覆盖当前时间，确认媒体隐藏、UI（时钟/文件名）保留、视频暂停
+1. **睡眠模式（23-8 模拟）**：将睡眠时段调成覆盖当前时间，确认媒体区域被遮罩、UI（时钟/文件名）保留、视频暂停且媒体容器尺寸不变
 2. **深度睡眠（1-6 模拟）**：将深度时段调成覆盖当前时间，确认整屏全黑（含连接状态/监控层）、视频暂停
 3. **临时激活**：深度睡眠中点击「临时激活」→ 强制显示；60 秒后恢复全黑
-4. **媒体自动激活**：睡眠中控制端下发媒体 → 显示 60 秒，之后恢复隐藏
+4. **媒体自动激活**：睡眠中控制端下发媒体 → 显示 60 秒，之后恢复媒体区域遮罩
 5. **设置持久化**：配置睡眠时段 → 显示端刷新 → 设置恢复并立即生效
 6. **优先级**：深度时段与睡眠时段重叠时按深度睡眠；临时激活覆盖两者；手动覆盖优先于时段
 7. **手动覆盖**：立即睡眠/立即深度睡眠/恢复正常即时生效；`enabled=false` 时手动仍生效；激活覆盖手动、过期回落手动
@@ -270,7 +272,8 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 
 | 文件 | 改动 |
 |------|------|
-| `src/apps/web-mediacenter/ui/public/display.html` | `#sleepOverlay` 遮罩 + `checkSleepMode`/`applySleepState`/`activateTemporarily`/`reportSleepState` + `handleControl` 新增 `sleepSettings`/`sleepActivate`/`sleepOverride` + `handleRestoreState` 恢复 + `showMedia` 触发激活 + 连接/状态变化上报（默认开启） |
+| `src/apps/web-mediacenter/ui/public/display.html` | `#mediaSleepOverlay`/`#uiSleepOverlay` 双遮罩 + `checkSleepMode`/`applySleepState`/`activateTemporarily`/`reportSleepState` + `handleControl` 新增 `sleepSettings`/`sleepActivate`/`sleepOverride` + `handleRestoreState` 恢复 + `showMedia` 触发激活 + 连接/状态变化上报（默认开启） |
+| `src/apps/web-mediacenter/ui/public/css/display.css` | 双遮罩定位、层级与媒体容器相对定位；睡眠状态不改变媒体布局 |
 | `src/apps/web-mediacenter/ui/public/upload.html` | 显示控制面板「睡眠模式」入口按钮（`#sleepSettingsBtn` 文字随状态变化）+ 弹窗设置框（SleepPanel） |
 | `src/apps/web-mediacenter/ui/public/js/controls.js` | SleepPanel 逻辑（打开/填充/保存/临时激活/立即切换/状态显示）+ `updateSleepStatus` 更新按钮文字 |
 | `src/apps/server/boot/server-app.js` | 显示端上行 `sleepStateReport`：存 `displayData.state.sleepState` + 转发控制端 |

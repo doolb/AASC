@@ -56,7 +56,7 @@
 模型文件的下载、校验、加载与状态管理。
 
 - **存储**：`filesDir/models/sensevoice/{model.int8.onnx, tokens.txt}`
-- **下载**：`GET /api/asr/model/<filename>` 拉取，写 `.tmp` 后原子改名；整文件重下，不做断点续传
+- **下载**：先读取服务器同名 `.sha256` 文件；模型拉取到 `.tmp` 后计算 SHA-256，与服务器 hash 一致才原子改名，并把已验证 hash 保存到 APK 本地
 - **校验**：文件大小检查 + 加载自检（sherpa-onnx 初始化成功即认为完整）；损坏则删除本地文件回 `not_ready`
 - **状态机**：`not_ready → downloading → ready / error`；`error` 或损坏后下次需要时重新触发
 - **OOM 防护**：加载前 `ActivityManager.getMemoryInfo` 检查可用内存，不足直接报 `error` 不硬加载
@@ -72,6 +72,8 @@ sherpa-onnx `OfflineRecognizer` 的封装。
 - 内存：模型 mmap，APK 内存占用增加约 300-400MB
 
 ### 3. NativeBridge 增量方法（3 个，JSON 约定同现有）
+
+服务器 origin 由 `MainActivity` 在主线程的 `onPageStarted`/`onPageFinished` 回调中缓存到 `NativeBridge`；JavaScript bridge 线程只读取缓存，不直接访问 `WebView.url`，避免 WebView 跨线程访问导致模型下载入口提前返回。
 
 ```kotlin
 // 查询引擎状态
@@ -127,16 +129,18 @@ window.onNativeAsrModel({state:'error', error:'...'})
   └─ 非 APK → 现有 SherpaASR.recognizeBuffer WASM 路径（不动）
 ```
 
-**5.4 下载进度上屏**：`onNativeAsrModel` 回调复用 `updateVoiceTextDisplay`：`downloading` 显示"语音模型下载中 N%"，`ready` 显示"语音识别已就绪"，`error` 显示失败原因。
+**5.4 下载进度上屏**：`onNativeAsrModel` 回调复用 `updateVoiceTextDisplay`：`downloading` 显示"语音模型下载中 N%"，`ready` 显示"语音识别已就绪"，`error` 显示失败原因。`AsrModelManager` 将状态切换为 `downloading` 后立即回调 0%，避免 tokens 下载、网络建立或首个模型数据块到达前界面没有提示；`detectCapabilities` 读到已有 `downloading` 状态时也立即恢复当前进度提示，覆盖 WebView 回调时序不确定的情况。
 
 **5.5 `asrConfig` 开关映射**：服务器推送 `localAsrEnabled` 时，APK 下映射为原生引擎启用/停用（停用时 `voiceRecognition` 报 false）；浏览器仍控制 WASM。
+
+**5.6 模型 hash 校验与缓存**：服务器在 `res/models/sensevoice/` 为每个模型保存同名 `.sha256` 文件。APK 首次下载时将模型写入 `.tmp`，下载完成后计算 SHA-256，与服务器 hash 文件比较；比较成功后才改名，并保存本地 `.sha256` 文件。后续启动不重新计算模型 hash，只读取本地保存的 hash 和服务器 hash 比较；模型文件、本地 hash 均存在且与服务器一致时直接加载。服务器 hash 暂时不可访问时，已有模型与本地 hash 均存在则沿用上次已验证结果；没有本地已验证文件时不启动无 hash 校验的下载。
 
 ### 6. 服务器改动（server-app.js，仅 1 个新接口）
 
 ```
-GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens.txt
+GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens.txt / 对应 .sha256
   - 从 res/models/sensevoice/ 读取，fs.createReadStream 流式返回（不读进内存）
-  - 带 Content-Length 便于 APK 计算下载进度
+  - 模型文件带 Content-Length 便于 APK 计算下载进度；.sha256 文件返回纯文本
   - 路径穿越防护：filename 严格白名单匹配，不拼接任意路径
 ```
 
@@ -156,7 +160,8 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 | 场景 | 行为 |
 |------|------|
 | 模型下载中收到 `asrAudio` | 回 `asrResult{error:'模型下载中'}`；服务器按失败响应调用方，用户重试即可 |
-| 下载失败（断网/服务器不可达） | `onNativeAsrModel{error}`；状态回 `not_ready`，下次需要时重新触发整文件下载 |
+| 下载失败（断网/服务器不可达） | 已有本地 hash 与模型时沿用已验证模型；没有本地已验证文件或 hash 校验失败时回 `onNativeAsrModel{error}`，下次需要时重新触发下载 |
+| 模型 hash 不匹配 | 删除 `.tmp`、模型和本地 hash 文件，回 `onNativeAsrModel{error}`，下次重新下载 |
 | 模型文件损坏 | 加载自检失败 → 删除本地文件 → `not_ready` → 下次自动重下 |
 | 识别中收到新 `asrAudio` | 引擎单例加锁串行处理（与服务器单请求语义一致） |
 | 用户拒绝 RECORD_AUDIO 权限 | `voiceRecording=false` 上报，语音 UI 沿用现有"能力关闭"路径 |
@@ -179,13 +184,28 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 ## 自测方案
 
 1. **Kotlin 单测**：`AsrModelManager` 状态机（下载→就绪→损坏重下）、PCM base64 边界（空输入/奇数长度）
-2. **接口自测**：`curl /api/asr/model/model.int8.onnx` 校验 Content-Length 与文件一致；非法文件名返回 400
+2. **接口自测**：`curl /api/asr/model/model.int8.onnx` 校验 Content-Length 与文件一致；读取对应 `.sha256` 并与本地 `sha256sum` 比较；非法文件名返回 400
 3. **真机链路自测**：
    - 装 APK → 开启语音能力 → 观察模型下载进度上屏 → 就绪后 `voiceRecognition=true` 上报
    - 服务器 `asr.device=display`，APK 端按住说话 → "录音→上传→中转回本机→原生识别"全链路，结果与服务器端 SenseVoice 比对一致性
    - 浏览器控制端 chat.js 说话 → 音频中转 APK 识别 → 验证跨端中转
    - 下载中断网→恢复后重下成功
    - 识别耗时对比（原生 vs WASM）
+   - 首次下载模型时，在开始下载到首个进度回调前仍显示"语音模型下载中 0%"，随后进度持续更新
+   - 下载完成后篡改临时文件内容，验证 hash 不匹配时不会改名加载
+   - 重启 APK，验证只比较本地 hash 与服务器 hash，不重新读取模型计算 hash
+
+### 端到端测试记录（2026-08-19）
+
+- 使用 `3rd/ttslive/models/sensevoice/{zh,en,ja,ko,yue}.wav` 通过 `/api/asr/recognize` 调用 APK 显示端。
+- 服务器 hash 接口正常返回，APK 设备 `192.168.1.6:5555` 已连接；但 APK 持续返回“模型下载中”，未上报 `ready`，5 个 WAV 均未获得识别文本。
+- 设备日志显示 `asrEnsureModel()` 反复触发，并伴随 `serverBaseUrl()` 在 JavaBridge 线程读取 WebView URL 的线程告警；该问题需修复后重新进行真机识别验证。
+- 进一步复现：连续 3 次请求均重复进入 `asrEnsureModel()`，`files/models/sensevoice` 仍未创建，且无 `ModelDownloader` 日志；设备侧 `curl` 可正常访问 hash 接口。因此问题位于 APK 下载入口/服务器地址解析，不是服务器模型文件或设备网络不可达。
+- 修复：新增 `ServerOrigin` 纯逻辑解析器；`MainActivity` 主线程缓存页面 origin；`NativeBridge.serverBaseUrl()` 改为只读缓存。
+- 修复后真机验证：`.tmp` 模型文件从约 56MB 增长到 228MB，完成原子改名，并保存两个本地 hash 文件，确认下载与校验流程已恢复。
+- 修复：`AsrEngine.load()` 加载 APK 私有目录中的绝对路径模型时向 sherpa-onnx 传入空 `AssetManager`，避免 AAR 将外部文件误当作 Asset 读取。
+- 真机复测：保留已通过 hash 校验的模型缓存后，APK 已直接进入 `ready`，没有重复下载。
+- 最终验证：`zh.wav` 返回“开饭时间早上9点至下午5点。”；串接 `zh.wav + en.wav` 返回一段完整 zh 文本“开放时间早上9点至下午5点。”，未注册的 en 片段被过滤。
 
 ## 改动文件清单
 
@@ -195,6 +215,8 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 | `src/apps/android-display/app/src/main/AndroidManifest.xml` | 新增 `RECORD_AUDIO` 权限 |
 | `.../MainActivity.kt` | 运行时权限请求；`onPermissionRequest` 授予音频采集 |
 | `.../NativeBridge.kt` | 新增 `asrStatus`/`asrEnsureModel`/`asrRecognize` 3 个桥方法 |
+| `.../ServerOrigin.kt` | 解析页面 URL 的 HTTP/HTTPS origin，供主线程缓存服务器地址 |
+| `.../MainActivity.kt` | 在 WebView 页面回调中更新 NativeBridge 的服务器 origin 缓存 |
 | `.../AsrModelManager.kt`（新增） | 模型下载/校验/加载/状态机 |
 | `.../NativeAsrEngine.kt`（新增） | sherpa-onnx OfflineRecognizer 封装 |
 | `src/apps/web-mediacenter/ui/public/display.html` | 能力探测/跳过 WASM/handleAsrAudio 原生路径/进度上屏 |

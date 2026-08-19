@@ -2,7 +2,7 @@
 
 ## 概述
 
-显示端（`display.html`）按本地时段自动隐藏媒体（睡眠）或整屏黑幕（深度睡眠），降低夜间干扰。时间判断在显示端本地，每 10 秒检查一次；优先级 立即手动覆盖 > 临时激活 > 深度睡眠 > 睡眠 > 正常。
+显示端（`display.html`）按本地时段使用媒体区域遮罩（睡眠）或全屏 UI 遮罩（深度睡眠），降低夜间干扰。遮罩不隐藏媒体容器，保证 `clientWidth/clientHeight` 和画面填充模式稳定。时间判断在显示端本地，每 10 秒检查一次；优先级 立即手动覆盖 > 临时激活 > 深度睡眠 > 睡眠 > 正常。
 
 ## 状态模型
 
@@ -41,10 +41,10 @@ function resumeSleepTts():      # 恢复（normal/active）时续播睡眠前被
 
 function applySleepState(state):
     prev = sleepState;  sleepState = state
-    isHidden = (state == 'sleep' || state == 'deep')
-    #sleepOverlay.display = (state == 'deep') ? 'block' : 'none'
-    #mediaContainer.display = isHidden ? 'none' : 'flex'
-    若 isHidden:
+    #mediaSleepOverlay.display = (state == 'sleep') ? 'block' : 'none'
+    #uiSleepOverlay.display = (state == 'deep') ? 'block' : 'none'
+    #mediaContainer.display 保持原值，不因睡眠状态改变
+    若 state 为 'sleep'/'deep':
         pauseSleepMedia()
         pauseSleepTts()             # 睡眠/深度睡眠暂停语音播放
     否则若 prev 为 'sleep'/'deep':
@@ -154,9 +154,9 @@ resumeSleepMedia():
 - `handleControl('play', value=true)`：睡眠中拒绝播放命令（`value=false` 暂停仍生效并上报）
 - `playCurrentItem()`（播放列表切播）：睡眠中不切播下一项（`ended`/`error`/`timer` 触达时直接跳过），唤醒后恢复当前项
 
-## 遮罩层
+## 双遮罩层
 
-`#sleepOverlay`（`position:fixed;inset:0;background:#000;z-index:999999`）：深度睡眠时 `display:block` 全屏黑幕，z-index 高于 `#monitorOverlay`（render-display 监控层）等全部覆盖层；睡眠/正常/激活时 `display:none`。
+`#mediaSleepOverlay` 位于 `#mediaContainer` 内，只在普通睡眠时显示，遮住媒体并保留 UI；`#uiSleepOverlay` 为 `position:fixed;inset:0;background:#000;z-index:999999` 的全屏遮罩，只在深度睡眠时显示，覆盖 UI 和媒体。睡眠状态切换不得修改 `#mediaContainer.style.display`，避免媒体容器尺寸变为 0、触发 `applyCrop()` 清除填充样式。
 
 ## 消息协议
 
