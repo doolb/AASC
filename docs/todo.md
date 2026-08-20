@@ -75,6 +75,10 @@
   - 实现：workgroup/tools/（wg-core.js 纯函数 / wg-fs.js 文件系统 / poll.js 主入口）
   - 多独立 Claude 进程通过文件系统组队：main 分发、子 agent 自治轮询、history 历史画像
 
+## Android APK
+
+- [ ] 真机验证系统媒体播放器抢占音频焦点期间的 video/audio 暂停恢复，以及控制端手动暂停和睡眠模式拦截
+
 ## 批量播放模式
 
 - ✅已完成 [2026-08-14][2026-08-14] 批量播放模式：媒体库文件夹级批量播放
