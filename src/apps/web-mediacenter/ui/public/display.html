@@ -2328,6 +2328,7 @@
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
             pauseExpected = true;
+            mediaAudioFocusInterrupted = false;
             mediaRecoveryAttempts = 0;
             if (mediaRecoveryTimer) {
                 clearTimeout(mediaRecoveryTimer);
@@ -2699,6 +2700,7 @@
         // 暂停媒体：视频暂停 + html 滚动暂停（图片无需处理）
         function pauseSleepMedia() {
             pauseExpected = true;
+            mediaAudioFocusInterrupted = false;
             abandonNativeAudioFocus();
             mediaVideo.pause();
             mediaAudio.pause();
@@ -2787,7 +2789,10 @@
             const reason = arguments[0] || 'pause';
             const media = getExpectedMediaElement();
             if (!media || !media.src || !isMediaPlaybackExpected() || pauseExpected) return;
-            if (media.ended && !(playlistState && playlistState.active)) return;
+            if (media.ended || mediaAudioFocusInterrupted) {
+                reportPlayState(true);
+                return;
+            }
 
             reportPlayState(true);
             if (!media.paused) return;
@@ -2828,12 +2833,16 @@
                     }
                 });
                 media.addEventListener('error', () => {
-                    if (media === getExpectedMediaElement()) recoverUnexpectedMediaPause('error');
+                    // 批量媒体的 error 由当前项处理器安排下一项；单媒体才交给恢复逻辑重试。
+                    if (media === getExpectedMediaElement() && !(playlistState && playlistState.active)) {
+                        recoverUnexpectedMediaPause('error');
+                    }
                 });
             });
             setInterval(() => {
                 const media = getExpectedMediaElement();
-                if (media && media.src && media.paused && isMediaPlaybackExpected() && !pauseExpected) {
+                if (media && media.src && media.paused && !media.ended && !mediaAudioFocusInterrupted
+                    && isMediaPlaybackExpected() && !pauseExpected) {
                     recoverUnexpectedMediaPause('watchdog');
                 }
             }, 1000);
@@ -2844,7 +2853,8 @@
             const code = Number(change);
             if (code < 0) {
                 mediaAudioFocusInterrupted = true;
-                recoverUnexpectedMediaPause('audioFocusLoss');
+                // 焦点丢失期间不与系统媒体反复争抢；服务器仍保留控制端期望的播放状态。
+                if (isMediaPlaybackExpected()) reportPlayState(true);
                 return;
             }
             if (mediaAudioFocusInterrupted) {

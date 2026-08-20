@@ -15,13 +15,17 @@ test('显示端检测非预期媒体暂停并按期望播放状态恢复', () =>
     assert.match(source, /addEventListener\('pause'/);
     assert.match(source, /function recoverUnexpectedMediaPause\(\)/);
     assert.match(source, /mediaIsPlaying && !pauseExpected/);
+    assert.match(source, /media\.ended \|\| mediaAudioFocusInterrupted/);
+    assert.match(source, /!media\.ended && !mediaAudioFocusInterrupted/);
     assert.match(source, /playStateReport/);
 });
 
 test('显示端接收 APK 音频焦点恢复通知', () => {
     const source = fs.readFileSync(DISPLAY, 'utf8');
     assert.match(source, /onNativeAudioFocusChanged/);
-    assert.match(source, /recoverUnexpectedMediaPause\(.*audioFocus/s);
+    assert.match(source, /mediaAudioFocusInterrupted = true/);
+    assert.match(source, /recoverUnexpectedMediaPause\('audioFocusGain'\)/);
+    assert.match(source, /焦点丢失期间不与系统媒体反复争抢/);
 });
 
 test('APK 注册 AudioFocus 并把焦点变化通知 WebView', () => {
