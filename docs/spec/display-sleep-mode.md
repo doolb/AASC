@@ -155,6 +155,8 @@ resumeSleepMedia():
 - `handleControl('play', value=true)`：睡眠中拒绝播放命令（`value=false` 暂停仍生效并上报）
 - `playCurrentItem()`（播放列表切播）：睡眠中不切播下一项（`ended`/`error`/`timer` 触达时直接跳过），唤醒后恢复当前项
 - `playlistNext()`（自动 timer/ended 入口）：睡眠中提前返回，确保索引不推进、不排队；控制端手动 next 先临时激活后再调用
+- 媒体 `play` 事件：睡眠已生效后若 WebView/原生层延迟触发播放，立即调用 `pauseSleepMedia()`，拦截延迟续播并清理恢复计时器
+- 媒体 watchdog：每秒检查当前 video/audio；睡眠/深度睡眠中发现媒体正在播放时再次暂停，作为 Android/WebView 延迟播放的兜底
 
 ## 双遮罩层
 

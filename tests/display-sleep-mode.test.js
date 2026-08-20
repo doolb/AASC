@@ -565,7 +565,17 @@ const assert = require('assert');
   assert.strictEqual(vAfterPlayCmd, true, '睡眠中 play 命令应被拒绝（视频保持暂停）');
   console.log('PASS: 睡眠中 play 命令拒绝');
 
-  // ---- 25. 播放列表在睡眠中不切播（playCurrentItem 守卫）----
+  // ---- 25. 睡眠状态下延迟自动播放仍必须被拦截 ----
+  await page.evaluate(() => {
+    // 模拟 WebView/原生焦点回调在睡眠状态稳定后才触发的延迟续播。
+    playVideoAuto(mediaVideo);
+  });
+  await new Promise(r => setTimeout(r, 500));
+  const vAfterDelayedPlay = await page.evaluate(() => mediaVideo.paused);
+  assert.strictEqual(vAfterDelayedPlay, true, '睡眠状态下延迟 play 不应恢复视频');
+  console.log('PASS: 睡眠状态拦截延迟自动播放');
+
+  // ---- 26. 播放列表在睡眠中不切播（playCurrentItem 守卫）----
   await page.evaluate(() => {
     applySleepState('sleep');
     // 哨兵 src：若 playCurrentItem 未守卫，会被播放列表项 URL 覆盖
@@ -585,7 +595,7 @@ const assert = require('assert');
   assert.strictEqual(plState.index, 0, '睡眠中播放列表 index 不应推进');
   console.log('PASS: 播放列表睡眠中不切播');
 
-  // ---- 26. 睡眠前单媒体暂停 → 退出睡眠保持暂停（resumeSleepMedia 检查 mediaIsPlaying）----
+  // ---- 27. 睡眠前单媒体暂停 → 退出睡眠保持暂停（resumeSleepMedia 检查 mediaIsPlaying）----
   const vUrl2 = 'https://127.0.0.1:8081/api/media-libraries/lib_1774720230592/proxy/mnt%2F145842476_p0-%E5%8A%A8%E5%9B%BE.mp4';
   await page.evaluate((u) => {
     applySleepState('normal');
@@ -605,7 +615,7 @@ const assert = require('assert');
   assert.strictEqual(pausedRestore2, true, '睡眠前暂停的单媒体退出睡眠后应保持暂停');
   console.log('PASS: 睡眠前暂停的单媒体退出睡眠保持暂停');
 
-  // ---- 27. 睡眠前单媒体播放中 → 退出睡眠恢复播放（mediaIsPlaying=true）----
+  // ---- 28. 睡眠前单媒体播放中 → 退出睡眠恢复播放（mediaIsPlaying=true）----
   await page.evaluate(() => {
     mediaIsPlaying = true;            // 模拟控制端播放
     mediaVideo.play().catch(() => {});
@@ -619,7 +629,7 @@ const assert = require('assert');
   assert.strictEqual(vResumed, false, '睡眠前播放中的单媒体退出睡眠后应恢复播放');
   console.log('PASS: 睡眠前播放中的单媒体退出睡眠恢复播放');
 
-  // ---- 28. 睡眠前播放列表暂停 → 退出睡眠保持暂停（shouldPlayMedia 读 ps.paused）----
+  // ---- 29. 睡眠前播放列表暂停 → 退出睡眠保持暂停（shouldPlayMedia 读 ps.paused）----
   await page.evaluate((u) => {
     applySleepState('normal');
     mediaVideo.style.display = 'block';
@@ -640,7 +650,7 @@ const assert = require('assert');
   assert.strictEqual(plPausedRestore.paused, true, '睡眠前暂停的播放列表退出睡眠后应保持暂停');
   console.log('PASS: 睡眠前暂停的播放列表退出睡眠保持暂停');
 
-  // ---- 29. 立即切换指令优先于临时激活窗口 ----
+  // ---- 30. 立即切换指令优先于临时激活窗口 ----
   const overridePriority = await page.evaluate(() => {
     sleepSettings = { ...sleepSettings, enabled: false };
 

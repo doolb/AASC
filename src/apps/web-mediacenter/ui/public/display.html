@@ -2702,6 +2702,11 @@
             pauseExpected = true;
             mediaAudioFocusInterrupted = false;
             abandonNativeAudioFocus();
+            mediaRecoveryAttempts = 0;
+            if (mediaRecoveryTimer) {
+                clearTimeout(mediaRecoveryTimer);
+                mediaRecoveryTimer = null;
+            }
             mediaVideo.pause();
             mediaAudio.pause();
             if (mediaHtml.style.display !== 'none') stopHtmlScroll();
@@ -2823,6 +2828,11 @@
                     if (media === getExpectedMediaElement()) recoverUnexpectedMediaPause('pause');
                 });
                 media.addEventListener('play', () => {
+                    if (isSleepPaused()) {
+                        // WebView/原生焦点回调可能在睡眠已生效后延迟触发 play，必须立即拦截。
+                        pauseSleepMedia();
+                        return;
+                    }
                     if (media === getExpectedMediaElement() && isMediaPlaybackExpected() && !pauseExpected) {
                         mediaRecoveryAttempts = 0;
                         if (mediaRecoveryTimer) {
@@ -2841,6 +2851,10 @@
             });
             setInterval(() => {
                 const media = getExpectedMediaElement();
+                if (isSleepPaused()) {
+                    if (media && media.src && !media.paused) pauseSleepMedia();
+                    return;
+                }
                 if (media && media.src && media.paused && !media.ended && !mediaAudioFocusInterrupted
                     && isMediaPlaybackExpected() && !pauseExpected) {
                     recoverUnexpectedMediaPause('watchdog');

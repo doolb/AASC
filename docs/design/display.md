@@ -164,8 +164,8 @@
      - `keydown` 空格：睡眠中空格切换播放/暂停
      - `handleControl('play', value=true)`：睡眠中控制端发播放命令 resume
      - `playCurrentItem()`（播放列表）：`ended`/`error`/`timer` 触发切播，睡眠中视频持续切播
-   - 修复：四处统一加 `isSleepPaused()` 守卫（click/空格直接忽略；play 命令睡眠中拒绝、暂停命令仍生效并上报；playCurrentItem 睡眠中 return 不切播，唤醒恢复当前项）
-   - 验证：puppeteer 实测——进入睡眠后 click/空格/play 命令均保持 `paused=true`；集成测试 27 步全绿（+3 步：click 不恢复 / play 拒绝 / 播放列表不切播）
+   - 修复：播放入口统一加 `isSleepPaused()` 守卫；媒体 `play` 事件和低频 watchdog 再次拦截 WebView/原生层延迟续播，睡眠中保持 `paused=true`
+   - 验证：puppeteer 实测——进入睡眠后 click/空格/play 命令和延迟 `playVideoAuto()` 均保持 `paused=true`；集成测试 31 步全绿
    - 改动文件：
      - src/apps/web-mediacenter/ui/public/display.html（click/空格/handleControl play/playCurrentItem 加睡眠守卫）
      - tests/display-sleep-mode.test.js（+3 步）

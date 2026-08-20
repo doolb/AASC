@@ -4,6 +4,11 @@
 
 ### 修复
 
+- ✅ [2026-08-20] 修复睡眠状态下 Android/WebView 延迟播放导致视频重新播放
+  - 根因：睡眠状态已生效后，延迟的 `play` 事件没有再次检查 `isSleepPaused()`，可能绕过进入睡眠时的一次 `pause()`。
+  - 修复：媒体 `play` 事件立即调用睡眠暂停逻辑；watchdog 每秒兜底暂停仍在播放的 video/audio，并清理恢复定时器。
+  - 验证：睡眠集成测试新增延迟自动播放场景，完整睡眠测试通过。
+
 - ✅ [2026-08-20] 修复 APK 显示端被系统媒体播放器抢占后视频/音频暂停且播放状态不同步
   - APK 新增 `AudioFocusController`，通过 `NativeBridge` 将 Android 音频焦点变化通知显示端。
   - 显示端监听 video/audio 的 pause、play、error 事件，并用低频 watchdog 检测系统导致的非预期暂停；按控制端期望状态有限重试恢复播放。

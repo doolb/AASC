@@ -63,6 +63,12 @@ dispatchControlInputNative:
         失败 -> 保留 desiredPlaying=true，继续等待 native audio focus 恢复通知或低频 watchdog 重试
     控制端 play=false、睡眠、播放列表 pause:
         标记 pauseExpected，禁止自动恢复
+    media 触发 play 且当前处于 sleep/deep:
+        立即 pause media
+        释放 native audio focus
+        清理媒体恢复定时器
+    watchdog:
+        sleep/deep 且 media 正在播放 -> pause media
     NativeDisplay.onAudioFocusChanged(LOSS/GAIN):
         LOSS -> 标记系统焦点中断，保留 desiredPlaying
         GAIN -> 若 desiredPlaying 且媒体已暂停，重新调用 media.play()
