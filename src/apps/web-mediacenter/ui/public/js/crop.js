@@ -240,13 +240,28 @@ const Crop = {
         }
     },
     
-    showPreview(url, mediaType, onReady) {
+    showPreview(url, mediaType, onReady, displayName) {
+        if (mediaType === 'audio') {
+            // 音频没有可裁剪的画面，使用占位区域保持控制端裁剪布局与发送能力稳定。
+            this.currentMedia = url;
+            this.previewImg.style.display = 'none';
+            this.previewVideo.style.display = 'none';
+            this.placeholder.style.display = 'block';
+            const fileName = displayName || this._extractPreviewFileName(url) || '音频媒体';
+            this.placeholder.textContent = fileName;
+            this.data = { x: 0, y: 0, width: 100, height: 100 };
+            this.box.style.display = 'block';
+            this.updateBox();
+            if (typeof onReady === 'function') onReady();
+            return;
+        }
         if (mediaType === 'html') {
             // HTML 媒体：占位框表示 iframe 区域，初始化裁剪框（拖拽实时缩放显示端）
             this.currentMedia = url;
             this.previewImg.style.display = 'none';
             this.previewVideo.style.display = 'none';
             this.placeholder.style.display = 'block';
+            this.placeholder.textContent = 'HTML 页面区域（iframe）';
             this.data = { x: 0, y: 0, width: 100, height: 100 };
             this.box.style.display = 'block';
             this.updateBox();
@@ -314,6 +329,18 @@ const Crop = {
             } else {
                 this._retryShowPreview(0);
             }
+        }
+    },
+
+    _extractPreviewFileName(url) {
+        if (!url || /^data:/i.test(url)) return '';
+        try {
+            const rawName = String(url).split('/').pop().split('?')[0];
+            // 代理 URL 可能把原始目录分隔符编码为 %2F，解码后再次取末段，避免占位框显示完整路径。
+            return decodeURIComponent(rawName).split('/').pop();
+        } catch (error) {
+            console.warn('[Crop] 音频文件名解析失败:', error.message);
+            return '';
         }
     },
 

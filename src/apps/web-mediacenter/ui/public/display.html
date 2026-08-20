@@ -30,6 +30,7 @@
         </div>
         <img id="mediaImage">
         <video id="mediaVideo" autoplay loop playsinline></video>
+        <audio id="mediaAudio" preload="auto" style="display:none;"></audio>
         <iframe id="mediaHtml" style="display:none;"></iframe>
         <div id="mediaSleepOverlay" class="sleep-overlay sleep-overlay-media"></div>
     </div>
@@ -51,6 +52,7 @@
         const waitingMessage = document.getElementById('waitingMessage');
         const mediaImage = document.getElementById('mediaImage');
         const mediaVideo = document.getElementById('mediaVideo');
+        const mediaAudio = document.getElementById('mediaAudio');
         const mediaHtml = document.getElementById('mediaHtml');
         const ttsAudio = document.getElementById('ttsAudio');
         const taskStatusDisplay = document.getElementById('taskStatusDisplay');
@@ -62,6 +64,7 @@
         window.currentRotation = 0;
         let currentFit = 'contain';
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
+        let currentMediaType = 'image';
         let displayWs = null;
         let autoTtsEnabled = true;
         let ttsQueue = [];
@@ -1267,6 +1270,10 @@
                 mediaVideo.removeEventListener('ended', playlistState.videoEndedHandler);
                 playlistState.videoEndedHandler = null;
             }
+            if (playlistState.audioEndedHandler) {
+                mediaAudio.removeEventListener('ended', playlistState.audioEndedHandler);
+                playlistState.audioEndedHandler = null;
+            }
             if (savedAutoTts !== null) {
                 autoTtsEnabled = savedAutoTts;
                 savedAutoTts = null;
@@ -1321,6 +1328,7 @@
                 index: resumeIndex,
                 timer: null,
                 videoEndedHandler: null,
+                audioEndedHandler: null,
                 active: true,
                 paused: false
             };
@@ -1346,7 +1354,12 @@
                 mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
                 ps.videoEndedHandler = null;
             }
+            if (ps.audioEndedHandler) {
+                mediaAudio.removeEventListener('ended', ps.audioEndedHandler);
+                ps.audioEndedHandler = null;
+            }
             mediaVideo.onerror = null;
+            mediaAudio.onerror = null;
             mediaImage.onerror = null;
             const mediaData = item.url
                 ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType }
@@ -1362,6 +1375,8 @@
             };
             if (item.mediaType === 'video') {
                 mediaVideo.addEventListener('loadedmetadata', reportSizeOnce, { once: true });
+            } else if (item.mediaType === 'audio') {
+                mediaAudio.addEventListener('loadedmetadata', reportSizeOnce, { once: true });
             } else if (item.mediaType === 'html') {
                 mediaHtml.addEventListener('load', reportSizeOnce, { once: true });
             } else {
@@ -1386,6 +1401,25 @@
                     }
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
+            } else if (item.mediaType === 'audio') {
+                // 音频按自然时长播放，结束后等待间隔再切换，和视频批量语义一致。
+                mediaAudio.loop = false;
+                ps.audioEndedHandler = function() {
+                    mediaAudio.removeEventListener('ended', ps.audioEndedHandler);
+                    ps.audioEndedHandler = null;
+                    ps.timer = setTimeout(playlistNext, ps.interval);
+                };
+                mediaAudio.addEventListener('ended', ps.audioEndedHandler);
+                mediaAudio.onerror = function() {
+                    // 音频加载失败：等待间隔后播下一个，避免单项错误卡住列表。
+                    mediaAudio.onerror = null;
+                    if (ps.paused) return;
+                    if (ps.audioEndedHandler) {
+                        mediaAudio.removeEventListener('ended', ps.audioEndedHandler);
+                        ps.audioEndedHandler = null;
+                    }
+                    ps.timer = setTimeout(playlistNext, ps.interval);
+                };
             } else {
                 // 图片按间隔时间切换
                 mediaImage.onerror = function() {
@@ -1402,6 +1436,12 @@
         function playlistNext() {
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
+            // 定时器已经触发，先清除句柄，避免睡眠拦截后唤醒逻辑误判仍在等待。
+            if (ps.timer) clearTimeout(ps.timer);
+            ps.timer = null;
+            // 自动 timer/ended 在睡眠期间只保留当前项，不推进索引、不排队下一项；
+            // 控制端手动 next 会先临时激活，再进入此函数执行切换。
+            if (isSleepPaused()) return;
             if (ps.index + 1 >= ps.playlist.length) {
                 if (ps.loop) {
                     ps.index = 0;
@@ -1444,8 +1484,14 @@
                 ps.videoEndedHandler = null;
                 mediaVideo.pause();
             }
+            if (ps.audioEndedHandler) {
+                mediaAudio.removeEventListener('ended', ps.audioEndedHandler);
+                ps.audioEndedHandler = null;
+                mediaAudio.pause();
+            }
             // 清除加载失败回调，防止 pause 后 error 事件重新设置定时器自动播下一项
             mediaVideo.onerror = null;
+            mediaAudio.onerror = null;
             mediaImage.onerror = null;
             sendPlaylistProgress('paused');
         }
@@ -1464,6 +1510,15 @@
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
                 mediaVideo.addEventListener('ended', ps.videoEndedHandler);
+            } else if (item && item.mediaType === 'audio' && !ps.timer && !ps.audioEndedHandler) {
+                // 暂停时音频正在播放 → 继续播放并重新绑定 ended。
+                playAudioAuto(mediaAudio);
+                ps.audioEndedHandler = function() {
+                    mediaAudio.removeEventListener('ended', ps.audioEndedHandler);
+                    ps.audioEndedHandler = null;
+                    ps.timer = setTimeout(playlistNext, ps.interval);
+                };
+                mediaAudio.addEventListener('ended', ps.audioEndedHandler);
             } else {
                 // 图片或间隔等待中 → 重新计时
                 ps.timer = setTimeout(playlistNext, ps.interval);
@@ -1493,6 +1548,10 @@
                 mediaVideo.removeEventListener('ended', playlistState.videoEndedHandler);
                 playlistState.videoEndedHandler = null;
             }
+            if (playlistState.audioEndedHandler) {
+                mediaAudio.removeEventListener('ended', playlistState.audioEndedHandler);
+                playlistState.audioEndedHandler = null;
+            }
             if (savedAutoTts !== null) {
                 autoTtsEnabled = savedAutoTts;
                 savedAutoTts = null;
@@ -1513,6 +1572,8 @@
                     playlistResume();
                     break;
                 case 'next':
+                    // 手动 next 是用户主动唤醒操作；自动 timer/ended 不经过此分支，睡眠拦截保持不变。
+                    activateTemporarily();
                     playlistNext();
                     break;
                 case 'prev':
@@ -2193,7 +2254,7 @@
                 if (data.mediaType === 'video') {
                     w = mediaVideo.videoWidth;
                     h = mediaVideo.videoHeight;
-                } else if (data.mediaType !== 'html') {
+                } else if (data.mediaType !== 'html' && data.mediaType !== 'audio') {
                     w = mediaImage.naturalWidth;
                     h = mediaImage.naturalHeight;
                 }
@@ -2205,8 +2266,10 @@
                     height: h || undefined
                 }));
             };
-            const readyTarget = data.mediaType === 'video' ? mediaVideo : (data.mediaType === 'html' ? mediaHtml : mediaImage);
-            const readyEvent = data.mediaType === 'video' ? 'loadedmetadata' : 'load';
+            const readyTarget = data.mediaType === 'video'
+                ? mediaVideo
+                : (data.mediaType === 'audio' ? mediaAudio : (data.mediaType === 'html' ? mediaHtml : mediaImage));
+            const readyEvent = data.mediaType === 'video' || data.mediaType === 'audio' ? 'loadedmetadata' : 'load';
             if (data.mediaType === 'html') {
                 // html 无固有尺寸，加载完成即上报（不含宽高）
                 readyTarget.addEventListener(readyEvent, sendTempInfo, { once: true });
@@ -2226,12 +2289,36 @@
             }).catch(e => console.log('自动播放被阻止'));
         }
 
+        // 音频自动播放沿用统一的 Promise 捕获，避免浏览器策略阻止时产生未处理 rejection。
+        function playAudioAuto(audio) {
+            // WebSocket 下发不属于用户手势，先静音播放绕过 Chromium/WebView 自动播放限制，
+            // 播放成功后恢复当前音量；失败时捕获 Promise，交给控制端播放按钮再次触发。
+            audio.muted = true;
+            audio.play().then(() => {
+                audio.muted = false;
+            }).catch(e => {
+                audio.muted = false;
+                console.log('音频自动播放被阻止');
+            });
+        }
+
+        function getCurrentPlayableMedia() {
+            if (currentMediaType === 'audio') return mediaAudio;
+            if (currentMediaType === 'video') return mediaVideo;
+            return null;
+        }
+
         function showMedia(data, noActivate, paused) {
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
+            currentMediaType = data.mediaType || 'image';
             mediaVideo.pause();
             mediaVideo.src = '';
             mediaVideo.load();
+            mediaAudio.pause();
+            mediaAudio.src = '';
+            mediaAudio.load();
+            mediaAudio.ontimeupdate = null;
             waitingMessage.style.display = 'none';
 
             if (data.mediaType === 'html') {
@@ -2243,6 +2330,7 @@
                 mediaVideo.src = '';
                 mediaVideo.load();
                 mediaVideo.style.display = 'none';
+                mediaAudio.style.display = 'none';
                 mediaHtml.style.display = 'block';
                 // 发送未指定模式时沿用显示端当前模式；指定则更新记忆
                 if (data.htmlScroll) currentHtmlScroll = data.htmlScroll;
@@ -2294,11 +2382,32 @@
             mediaHtml.style.display = 'none';
             mediaHtml.removeAttribute('src');
             mediaHtml.srcdoc = '';
+            mediaAudio.style.display = 'none';
 
             let mediaName = '';
 
             if (data.type === 'url') {
-                if (data.mediaType === 'video') {
+                if (data.mediaType === 'audio') {
+                    mediaImage.style.display = 'none';
+                    mediaVideo.style.display = 'none';
+                    mediaAudio.src = data.url;
+                    mediaAudio.loop = true;
+                    mediaAudio.load();
+                    if (paused) {
+                        mediaAudio.pause();
+                    } else {
+                        playAudioAuto(mediaAudio);
+                    }
+                    mediaAudio.ontimeupdate = function() {
+                        if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+                        if (!mediaAudio.duration) return;
+                        displayWs.send(JSON.stringify({
+                            type: 'audioProgress',
+                            currentTime: mediaAudio.currentTime,
+                            duration: mediaAudio.duration
+                        }));
+                    };
+                } else if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = data.url;
@@ -2333,7 +2442,27 @@
                 const mimeType = data.mimeType || 'application/octet-stream';
                 const src = 'data:' + mimeType + ';base64,' + data.data;
                 
-                if (data.mediaType === 'video') {
+                if (data.mediaType === 'audio') {
+                    mediaImage.style.display = 'none';
+                    mediaVideo.style.display = 'none';
+                    mediaAudio.src = src;
+                    mediaAudio.loop = true;
+                    mediaAudio.load();
+                    if (paused) {
+                        mediaAudio.pause();
+                    } else {
+                        playAudioAuto(mediaAudio);
+                    }
+                    mediaAudio.ontimeupdate = function() {
+                        if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+                        if (!mediaAudio.duration) return;
+                        displayWs.send(JSON.stringify({
+                            type: 'audioProgress',
+                            currentTime: mediaAudio.currentTime,
+                            duration: mediaAudio.duration
+                        }));
+                    };
+                } else if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = src;
@@ -2428,6 +2557,8 @@
                         if (mediaHtml.style.display !== 'none') {
                             // html 模式：恢复滚动播放（从当前滚动位置继续）
                             startHtmlScroll(mediaHtml, currentHtmlScroll);
+                        } else if (currentMediaType === 'audio') {
+                            playAudioAuto(mediaAudio);
                         } else {
                             mediaVideo.play().catch(e => console.log('播放被阻止'));
                         }
@@ -2435,6 +2566,8 @@
                         if (mediaHtml.style.display !== 'none') {
                             // html 模式：暂停滚动（滚动位置保留）
                             stopHtmlScroll();
+                        } else if (currentMediaType === 'audio') {
+                            mediaAudio.pause();
                         } else {
                             mediaVideo.pause();
                         }
@@ -2444,13 +2577,19 @@
                     break;
                     
                 case 'seek':
-                    if (mediaVideo.duration) {
-                        mediaVideo.currentTime = (data.value / 100) * mediaVideo.duration;
+                    {
+                        const media = getCurrentPlayableMedia();
+                        if (media && media.duration) {
+                            media.currentTime = (data.value / 100) * media.duration;
+                        }
                     }
                     break;
                     
                 case 'volume':
-                    mediaVideo.volume = data.value / 100;
+                    {
+                        const media = getCurrentPlayableMedia();
+                        if (media) media.volume = data.value / 100;
+                    }
                     break;
                     
                 case 'cropDebug':
@@ -2525,6 +2664,7 @@
         // 暂停媒体：视频暂停 + html 滚动暂停（图片无需处理）
         function pauseSleepMedia() {
             mediaVideo.pause();
+            mediaAudio.pause();
             if (mediaHtml.style.display !== 'none') stopHtmlScroll();
         }
 
@@ -2534,11 +2674,37 @@
             return mediaIsPlaying !== false;
         }
 
-        // 恢复媒体：html 续滚动，视频续播（拦截自动播放限制）；控制端暂停的媒体保持暂停，不自动播放
+        // 睡眠期间 ended/timer 可能已经清掉当前项监听；唤醒时恢复当前项的批量生命周期。
+        function resumePlaylistAfterSleep() {
+            const ps = playlistState;
+            if (!ps || !ps.active || ps.paused || ps.timer) return;
+            const item = ps.playlist[ps.index];
+            if (!item) return;
+            if (item.mediaType === 'video' && !ps.videoEndedHandler) {
+                playCurrentItem();
+                return;
+            }
+            if (item.mediaType === 'audio' && !ps.audioEndedHandler) {
+                playCurrentItem();
+                return;
+            }
+            if (item.mediaType !== 'video' && item.mediaType !== 'audio') {
+                ps.timer = setTimeout(playlistNext, ps.interval);
+            }
+        }
+
+        // 恢复媒体：html 续滚动，视频/音频续播（拦截自动播放限制）；控制端暂停的媒体保持暂停，不自动播放
         function resumeSleepMedia() {
             if (!shouldPlayMedia()) return;
+            resumePlaylistAfterSleep();
+            if (playlistState && playlistState.active) {
+                const item = playlistState.playlist[playlistState.index];
+                if (item && (item.mediaType === 'video' || item.mediaType === 'audio')) return;
+            }
             if (mediaHtml.style.display !== 'none') {
                 startHtmlScroll(mediaHtml, currentHtmlScroll);
+            } else if (currentMediaType === 'audio' && mediaAudio.src) {
+                playAudioAuto(mediaAudio);
             } else if (mediaVideo.src) {
                 mediaVideo.play().catch(e => console.log('恢复播放被阻止'));
             }

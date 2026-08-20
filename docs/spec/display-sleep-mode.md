@@ -136,6 +136,7 @@ shouldPlayMedia():
 resumeSleepMedia():
     若 !shouldPlayMedia(): return      # 控制端暂停的媒体 → 睡眠恢复保持暂停
     html 显示: startHtmlScroll(...)
+    else 若 currentMediaType == audio 且 mediaAudio.src: playAudioAuto(mediaAudio)
     else 若 mediaVideo.src: mediaVideo.play().catch(...)
 ```
 
@@ -153,6 +154,7 @@ resumeSleepMedia():
 - `keydown` 空格（播放/暂停切换）：睡眠中忽略
 - `handleControl('play', value=true)`：睡眠中拒绝播放命令（`value=false` 暂停仍生效并上报）
 - `playCurrentItem()`（播放列表切播）：睡眠中不切播下一项（`ended`/`error`/`timer` 触达时直接跳过），唤醒后恢复当前项
+- `playlistNext()`（自动 timer/ended 入口）：睡眠中提前返回，确保索引不推进、不排队；控制端手动 next 先临时激活后再调用
 
 ## 双遮罩层
 
@@ -168,3 +170,15 @@ resumeSleepMedia():
 | `sleepStateReport`（显示端上行） | `sleepState` | 服务端存 `displayData.state.sleepState` + broadcastToControls → 控制端更新按钮（需在 server-app 的 `displayTypes` 注册表注册，否则走 viewbind 同步不落 `displayClients.state`） |
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |
+
+## 批量播放手动 next
+
+```text
+收到 playlistControl(action='next'):
+    activateTemporarily()       // 用户主动操作，退出 sleep/deep，进入 60 秒 active
+    playlistNext()               // 立即执行下一项
+
+自动 timer/ended 调用 playlistNext:
+    保持 playCurrentItem 的 isSleepPaused 守卫
+    睡眠期间不推进 index、不排队
+```

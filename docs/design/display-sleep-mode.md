@@ -267,6 +267,7 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 9. **视频恢复**：睡眠隐藏暂停后，恢复时视频继续播放
 10. **TTS 暂停/恢复**：睡眠中播放 TTS → 暂停；恢复后当前 utterance 续播
 11. **睡眠中新 TTS 丢弃**：睡眠期间新到的 TTS 不入队不播放，唤醒不重放
+12. **批量手动 next**：睡眠期间自动 timer/ended 不推进批量索引；控制端手动点击“下一个”先临时激活 60 秒，再立即切换当前项
 
 ## 改动文件
 
@@ -281,6 +282,10 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 | `docs/spec/config.md` | `defaultDisplayState` 伪代码补 `sleep` 字段 |
 | `docs/spec/monitor-system.md` 或新增 spec | 睡眠模式伪代码（据实现位置定） |
 | `docs/todo.md` / `changelog.md` / `docs/design.md` / `docs/task/*.md` | 按项目规范更新 |
+
+## 批量播放手动 next
+
+播放列表的自动 timer/ended 回调在睡眠或深度睡眠期间不得推进索引；控制端手动点击“下一个”属于主动操作，显示端先执行 `activateTemporarily()` 进入 60 秒 `active` 状态，再执行 `playlistNext()`，因此可以立即切换下一项。
 
 ## 预计工时
 

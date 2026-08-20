@@ -33,6 +33,19 @@ const htmlTree = {
     ]
 };
 
+const audioTree = {
+    '/': [
+        { name: 'voice.mp3', path: '/voice.mp3', type: 'file', mediaType: 'audio', modifiedTime: new Date('2026-01-01'), url: '/media/1/voice.mp3' },
+        { name: 'sound.ogg', path: '/sound.ogg', type: 'file', mediaType: 'audio', modifiedTime: new Date('2026-01-02'), url: '/media/1/sound.ogg' }
+    ]
+};
+
+const audioFakeManager = {
+    async list(libraryId, path) {
+        return audioTree[path] || [];
+    }
+};
+
 const htmlFakeManager = {
     async list(libraryId, path) {
         return htmlTree[path] || [];
@@ -44,6 +57,13 @@ test('buildFromLibrary 收集 html 媒体文件', async () => {
     const list = await pm.buildFromLibrary('lib1', '/', { recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc' });
     assert.deepStrictEqual(list.map(i => i.fileName), ['a.jpg', 'index.html']);
     assert.strictEqual(list[1].mediaType, 'html');
+});
+
+test('buildFromLibrary 收集 audio 媒体文件', async () => {
+    const pm = new PlaylistManager(audioFakeManager);
+    const list = await pm.buildFromLibrary('lib1', '/', { recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc' });
+    assert.deepStrictEqual(list.map(i => i.fileName), ['sound.ogg', 'voice.mp3']);
+    assert.deepStrictEqual(list.map(i => i.mediaType), ['audio', 'audio']);
 });
 
 test('buildFromLibrary 单层只收集当前层媒体并过滤非媒体', async () => {

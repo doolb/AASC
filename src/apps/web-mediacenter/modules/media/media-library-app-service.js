@@ -54,6 +54,7 @@ class MediaLibraryProvider {
         const ext = name.toLowerCase().split('.').pop().split('?')[0];
         if (['gif'].includes(ext)) return 'gif';
         if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+        if (['wav', 'ogg', 'mp3'].includes(ext)) return 'audio';
         if (['html', 'htm', 'mhtml'].includes(ext)) return 'html';
         return 'image';
     }
@@ -433,7 +434,7 @@ class HttpProvider extends MediaLibraryProvider {
 
         // 对媒体文件并发 HEAD 补精确 size / modifiedTime（fancy-index 列表只有人类可读大小），
         // 供控制端展示真实大小 + 库代理端点 Range 解析（视频 seek 依赖 size）
-        const mediaTypes = ['image', 'video', 'gif', 'html'];
+        const mediaTypes = ['image', 'video', 'gif', 'html', 'audio'];
         const mediaFiles = items.filter(i => i.type === 'file' && mediaTypes.includes(i.mediaType));
         await this._fillSizes(mediaFiles);
 

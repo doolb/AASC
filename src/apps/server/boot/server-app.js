@@ -400,7 +400,7 @@ async function startServer() {
             });
 
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
-            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport'];
+            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport'];
             for (const type of displayTypes) {
                 wsServer.registerHandler(type, (data, ctx) => {
                     handleDisplayMessageFallback(ctx.displayId, data, ctx.ws);
@@ -1852,7 +1852,10 @@ app.get('/api/media-libraries/:id/proxy/*', async (req, res) => {
             'webm': 'video/webm',
             'mov': 'video/quicktime',
             'avi': 'video/x-msvideo',
-            'mkv': 'video/x-matroska'
+            'mkv': 'video/x-matroska',
+            'wav': 'audio/wav',
+            'ogg': 'audio/ogg',
+            'mp3': 'audio/mpeg'
         };
 
         const contentType = mimeTypes[ext] || 'application/octet-stream';
@@ -2388,6 +2391,7 @@ function detectMediaType(name) {
     const ext = name.toLowerCase().split('.').pop().split('?')[0];
     if (['gif'].includes(ext)) return 'gif';
     if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+    if (['wav', 'ogg', 'mp3'].includes(ext)) return 'audio';
     return 'image';
 }
 
@@ -2437,7 +2441,7 @@ function sendToDisplaysWithCapability(capabilityName, message) {
 
 let displayListDebounceTimer = null;
 
-const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress', 'playlistProgress', 'htmlProgress']);
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'htmlProgress']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
@@ -2819,7 +2823,7 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress') {
+                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress') {
                     log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
@@ -3019,6 +3023,14 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             currentTime: data.currentTime,
             duration: data.duration
         });
+    } else if (data.type === 'audioProgress') {
+        // 音频进度与视频进度分开命名，避免控制端误把音频当作视频媒体处理。
+        broadcastToControls({
+            displayId: displayId,
+            type: 'audioProgress',
+            currentTime: data.currentTime,
+            duration: data.duration
+        });
     } else if (data.type === 'htmlProgress') {
         // html 播放进度（滚动比例 + 缩放倍数）转发到控制端
         broadcastToControls({
@@ -3046,7 +3058,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             if (data.state === 'finished' || data.state === 'stopped') {
                 displayData.state.currentPlaylist = null;
                 config.updateDisplayState(displayData.ip, { currentPlaylist: null });
-            } else {
+            } else if (!displayData.state.currentPlaylist.temp) {
                 config.updateDisplayState(displayData.ip, { currentPlaylist: displayData.state.currentPlaylist });
             }
         }
@@ -3562,14 +3574,38 @@ async function handleControlMessageFallback(data, ws) {
                                 loop: !!data.loop,
                                 announceName: !!data.announceName
                             };
+                            // 控制端刷新只需要恢复当前项文件名和预览元数据；临时列表不把 base64 放入状态，
+                            // 避免 getState/配置同步携带整批音频内容。
+                            const currentPlaylist = {
+                                startData: data.temp ? {
+                                    ...startData,
+                                    temp: true,
+                                    playlist: playlist.map(item => ({
+                                        url: item.url,
+                                        fileName: item.fileName,
+                                        mediaType: item.mediaType,
+                                        width: item.width,
+                                        height: item.height
+                                    }))
+                                } : startData,
+                                index: 0,
+                                state: 'playing',
+                                temp: !!data.temp
+                            };
                             const sentIds = [];
                             displayIds.forEach(id => {
                                 const dd = displayClients.get(id);
                                 if (!dd) return;
                                 // 批量临时播放开始，清除单文件临时媒体记录（避免陈旧占位）
-                                if (data.temp) dd.state.lastTempMedia = null;
-                                if (!data.temp) {
-                                    dd.state.currentPlaylist = { startData, index: 0, state: 'playing' };
+                                if (data.temp) {
+                                    dd.state.lastTempMedia = null;
+                                    if (dd.state.currentPlaylist) {
+                                        dd.state.currentPlaylist = null;
+                                        config.updateDisplayState(dd.ip, { currentPlaylist: null });
+                                    }
+                                    dd.state.currentPlaylist = { ...currentPlaylist };
+                                } else {
+                                    dd.state.currentPlaylist = { ...currentPlaylist };
                                     config.updateDisplayState(dd.ip, { currentPlaylist: dd.state.currentPlaylist });
                                 }
                                 sendToDisplay(id, { type: 'playlistStart', ...startData, temp: !!data.temp });
