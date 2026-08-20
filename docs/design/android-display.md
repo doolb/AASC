@@ -166,6 +166,13 @@ android-display/
 | 无障碍服务中途被关 | 桥触摸方法返回 false → display.html 探测回退并上报能力降级 |
 | WebView 页面刷新 | localStorage 持久化 displayId（现有机制），桥重新注入 |
 
+## 外部系统媒体抢占与播放状态一致性
+
+- Android 系统媒体播放器抢占音频焦点时，WebView 内的 video/audio 可能触发 `pause`，但控制端原有 `isPlaying` 仍为播放状态，形成状态断裂。
+- 显示端维护控制端期望播放状态和媒体元素实际播放状态；仅控制端明确暂停、睡眠或播放列表暂停时允许保持暂停。
+- 非预期暂停时显示端短间隔重试播放，并向服务器保持或恢复 `playStateReport(isPlaying=true)`；重试失败时仍保留控制端期望播放状态，等待原生音频焦点恢复回调或 watchdog 再次尝试，避免系统抢占被误记为控制端手动暂停。
+- APK 原生层监听 `AudioManager` 音频焦点变化，通过 `NativeDisplay.onAudioFocusChanged(...)` 通知显示端；失去焦点期间不覆盖控制端手动暂停，焦点恢复后按期望状态恢复。
+
 ## 测试计划
 
 1. 真机/模拟器（Android 7+）：APK 打开服务器显示页 → 显示端列表出现且能力标识"跨域控制"
@@ -177,6 +184,7 @@ android-display/
 7. 旋转 90°/270° 场景：截图方向与点击坐标正确
 8. `npm run upload:apk` 安装后以 Intent 注入默认服务器地址，APK 自动保存并加载 `/display`
 9. 卸载重装后重新执行部署命令，服务器地址仍由部署命令恢复；自定义 `AASC_DISPLAY_SERVER_URL` 地址生效
+10. 系统媒体播放/停止期间，APK 显示端 video/audio 按控制端期望状态自动恢复，服务器播放状态与实际恢复结果一致；控制端手动暂停不被拉起
 
 ## 文档与任务
 

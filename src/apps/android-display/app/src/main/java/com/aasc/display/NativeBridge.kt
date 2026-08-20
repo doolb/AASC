@@ -20,6 +20,16 @@ class NativeBridge(
     private val mainHandler: Handler = Handler(Looper.getMainLooper())
 ) {
 
+    // 音频焦点变化回调必须切回 WebView 主线程，避免从 AudioManager 回调线程直接执行 JS。
+    private val audioFocusController = AudioFocusController(webView.context) { change ->
+        mainHandler.post {
+            webView.evaluateJavascript(
+                "window.onNativeAudioFocusChanged && window.onNativeAudioFocusChanged($change);",
+                null
+            )
+        }
+    }
+
     // 由 MainActivity 主线程的页面回调更新；JavaScript bridge 线程只读取该缓存。
     @Volatile
     private var serverOrigin: String = ""
@@ -109,6 +119,16 @@ class NativeBridge(
 
     @JavascriptInterface
     fun isAvailable(): Boolean = true
+
+    /** 显示端开始播放视频/音频时申请媒体音频焦点。 */
+    @JavascriptInterface
+    fun requestAudioFocus(): Boolean = audioFocusController.request()
+
+    /** 显示端进入暂停、睡眠或切换媒体时释放媒体音频焦点。 */
+    @JavascriptInterface
+    fun abandonAudioFocus() {
+        audioFocusController.abandon()
+    }
 
     @JavascriptInterface
     fun getScreenSize(): String {

@@ -18,6 +18,7 @@ getSystemStats() -> String JSON                   # 同步返回 APK 自身资�
                                                   # CPU 回退链：优先 /proc/stat 整体 CPU 两次采样差值；
                                                   #   SELinux 拒读时（部分 Android 14+ ROM）回退 /proc/self/stat 进程自身 CPU
                                                   #   （utime+stime，按 10ms/jiffy 与真实时间间隔换算百分比）
+onAudioFocusChanged(change: int)                  # 原生 AudioManager 音频焦点变化通知 WebView
 ```
 
 > 截图回调机制：JS 函数传 @JavascriptInterface String 参数在 WebView 不可靠
@@ -51,6 +52,20 @@ dispatchControlInputNative:
 能力声明(capabilities):
     crossOriginControl          = nativeBridge 存在且 injectTouch 可用
     crossOriginControlDegraded  = 桥存在但触摸不可用
+
+媒体播放状态检测:
+    desiredPlaying = 控制端 play 命令/恢复状态/播放列表状态
+    media = currentMediaType == audio ? mediaAudio : mediaVideo
+    监听 media 的 play/pause/ended/error
+    如果 media 非预期 pause 且 desiredPlaying 且未处于 sleep/playlistPause:
+        短间隔调用 media.play()
+        成功 -> playStateReport(isPlaying=true)
+        失败 -> 保留 desiredPlaying=true，继续等待 native audio focus 恢复通知或低频 watchdog 重试
+    控制端 play=false、睡眠、播放列表 pause:
+        标记 pauseExpected，禁止自动恢复
+    NativeDisplay.onAudioFocusChanged(LOSS/GAIN):
+        LOSS -> 标记系统焦点中断，保留 desiredPlaying
+        GAIN -> 若 desiredPlaying 且媒体已暂停，重新调用 media.play()
 ```
 
 ## APK 实现（Kotlin, src/apps/android-display/）
