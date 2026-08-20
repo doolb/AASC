@@ -179,6 +179,10 @@ h1 {
     background: linear-gradient(135deg, #ee0979, #ff6a00);
 }
 
+.file-label.audio {
+    background: linear-gradient(135deg, #4776e6, #8e54e9);
+}
+
 .file-label:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
