@@ -20,6 +20,12 @@ test('detectMediaType 保持原有类型识别', () => {
     assert.strictEqual(provider.detectMediaType('a.jpg'), 'image');
 });
 
+test('detectMediaType 识别 wav/ogg/mp3 音频文件', () => {
+    assert.strictEqual(provider.detectMediaType('voice.wav'), 'audio');
+    assert.strictEqual(provider.detectMediaType('voice.OGG?download=1'), 'audio');
+    assert.strictEqual(provider.detectMediaType('voice.MP3'), 'audio');
+});
+
 test('getPublicUrl 保留路径分隔符（/ 不编码为 %2F）', () => {
     // uploads 目录分支（子目录文件：/ 必须保留，否则 express.static 404）
     const uploadsDir = path.resolve(process.cwd(), 'res', 'uploads');

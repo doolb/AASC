@@ -575,7 +575,7 @@ const MediaLibrary = {
         if (url) {
             if (url === this._lastCropPreviewUrl) return;
             this._lastCropPreviewUrl = url;
-            window.Crop.showPreview(url, info.mediaType || 'image');
+            window.Crop.showPreview(url, info.mediaType || 'image', undefined, info.fileName);
             this.removeTempPreviewPlaceholder();
             return;
         }
@@ -586,7 +586,7 @@ const MediaLibrary = {
                 const dataUrl = 'data:' + (item.mimeType || 'application/octet-stream') + ';base64,' + item.data;
                 if (dataUrl === this._lastCropPreviewUrl) return;
                 this._lastCropPreviewUrl = dataUrl;
-                window.Crop.showPreview(dataUrl, item.mediaType || 'image');
+                window.Crop.showPreview(dataUrl, item.mediaType || 'image', undefined, item.fileName);
                 this.removeTempPreviewPlaceholder();
                 return;
             }
@@ -795,6 +795,9 @@ const MediaLibrary = {
                 
                 if (item.mediaType === 'video') {
                     thumbHtml = `<video class="media-thumb" src="${item.url}" muted preload="metadata" onloadeddata="this.currentTime=0.1"></video>`;
+                } else if (item.mediaType === 'audio') {
+                    // 音频没有画面，使用稳定的占位图标，避免 img 请求音频导致破图。
+                    thumbHtml = '<div class="media-thumb audio-thumb" aria-label="音频">🎵</div>';
                 } else {
                     thumbHtml = `<img class="media-thumb" src="${item.url}" loading="lazy">`;
                 }

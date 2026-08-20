@@ -74,6 +74,13 @@
 - `playlistStarted`：{listId, total, displayIds}
 - `playlistError`：{message}
 
+## 音频与睡眠手动切换补充
+
+- `audio` 与 image/video/gif/html 一样纳入播放列表；音频自然结束后等待 interval 再切换。
+- 自动定时器或媒体 ended 回调在睡眠态触达 `playCurrentItem()` 时继续拦截，不推进索引、不排队。
+- 控制端手动发送 `playlistControl(next)` 时，显示端先 `activateTemporarily()` 进入 60 秒 active，再执行 `playlistNext()`。
+- 显示端实时回传当前 `fileName`；控制端刷新后从 `displayState.currentPlaylist` 恢复当前项，临时批量只保留轻量元数据并显示文件名占位。
+
 ## 打断规则
 
 - 服务端：mediaBatch/media 发送单媒体前清除目标显示端 currentPlaylist（config 同步）

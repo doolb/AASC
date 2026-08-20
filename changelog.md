@@ -9,6 +9,14 @@
   - APK 支持冷启动和 `singleTask` 新 Intent，自动保存 `server_url` 并连接显示端。
   - 支持通过 `AASC_DISPLAY_SERVER_URL` 覆盖默认地址；新增部署配置与 Android 单元测试。
 
+- ✅ [2026-08-20] 新增 WAV/OGG/MP3 音频媒体播放，并修复睡眠期间控制端手动切换批量下一项
+  - 媒体库、临时上传、服务端代理、显示端和控制端统一支持独立 `audio` 类型
+  - 新增 audio 播放、播放/暂停、seek、音量、进度上报和批量自然结束切换
+  - 睡眠期间自动定时器/ended 回调继续拦截；控制端手动点击“下一个”先进入 60 秒临时激活，再立即切换
+  - 显示端实时上报当前批量文件名；控制端刷新后从 `displayState.currentPlaylist` 恢复文件名，临时批量仅保留轻量元数据
+  - 音频自动播放增加静音启动兼容，并修复睡眠中结束后唤醒时批量生命周期未恢复
+  - 文档：docs/design/audio-media.md、docs/spec/audio-media.md、docs/task/2026-08-20_音频媒体播放与睡眠批量手动切换.md
+
 - ✅ [2026-08-19] 增加 APK 语音识别模型 SHA-256 校验与启动 hash 缓存
   - 服务端新增 `model.int8.onnx.sha256`、`tokens.txt.sha256`，APK 下载完成后校验 `.tmp` 文件，成功后才原子改名并保存本地 hash。
   - APK 后续启动只比较本地保存 hash 与服务器 hash，不重新读取 234MB 模型计算 hash；服务器暂时不可达时沿用已有本地已验证模型。

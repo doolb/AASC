@@ -390,5 +390,30 @@ config 中每显示端状态:
         index: 当前索引,
         state: 'playing' | 'paused'
     }
-    仅非临时列表持久化；临时列表随连接消失
+    仅非临时列表持久化；临时列表仅在显示端连接对应的服务端内存中保留轻量元数据
+```
+
+控制端刷新恢复:
+    displayState.currentPlaylist 存在时
+    item = currentPlaylist.startData.playlist[currentPlaylist.index]
+    MediaLibrary.renderPlaylistPanel({listId, index, total, state, ...item})
+    临时列表只读取 fileName/mediaType/url/尺寸元数据，不读取或传输 base64
+
+## 6. 音频与睡眠手动 next
+
+```text
+MEDIA_TYPES = image/video/gif/html/audio
+
+playCurrentItem():
+    若 isSleepPaused(): return
+    audio 项绑定 mediaAudio.ended
+    ended 后 timer = setTimeout(playlistNext, interval)
+
+handlePlaylistControl({action: 'next'}):
+    activateTemporarily()       // 只有用户手动 next 触发主动唤醒
+    playlistNext()
+
+自动 timer/ended 在睡眠态:
+    仍由 playCurrentItem 的 sleep 守卫拦截
+    不修改 playlistState.index，不产生待执行队列
 ```

@@ -42,7 +42,7 @@ const Controls = {
         }
     },
     
-    // 「视频播放」里的 HTML 模式按钮：弹出 html 播放模式设置面板，确认后应用到显示端
+    // 「媒体播放」里的 HTML 模式按钮：弹出 html 播放模式设置面板，确认后应用到显示端
     showHtmlModePanel() {
         const mask = document.createElement('div');
         mask.className = 'modal-mask';

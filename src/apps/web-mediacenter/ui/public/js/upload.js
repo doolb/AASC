@@ -3,6 +3,7 @@ const Upload = {
         const ext = name.toLowerCase().split('.').pop().split('?')[0];
         if (['gif'].includes(ext)) return 'gif';
         if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+        if (['wav', 'ogg', 'mp3'].includes(ext)) return 'audio';
         if (['html', 'htm', 'mhtml'].includes(ext)) return 'html';
         return 'image';
     },
@@ -23,6 +24,11 @@ const Upload = {
         const dataUrl = 'data:application/octet-stream;base64,' + base64;
         const mediaType = this.detectMediaType(file.name);
         return new Promise((resolve) => {
+            if (mediaType === 'audio') {
+                // 音频没有可用于裁剪的宽高，直接返回空尺寸，避免误创建 Image 等待加载失败。
+                resolve(null);
+                return;
+            }
             if (mediaType === 'video') {
                 const video = document.createElement('video');
                 video.onloadedmetadata = () => {
@@ -106,7 +112,7 @@ const Upload = {
                 if (window.Crop) {
                     window.Crop.showPreview(dataUrl, mediaType, () => {
                         window.Crop.updateBox();
-                    });
+                    }, file.name);
                 }
                 showToast('已发送到显示端', 'success');
             } catch (err) {
@@ -195,7 +201,7 @@ const Upload = {
             if (window.Crop) {
                 window.Crop.showPreview(dataUrl, mediaType, () => {
                     window.Crop.updateBox();
-                });
+                }, file.name);
             }
             showToast('已发送到显示端', 'success');
         } catch (err) {
@@ -349,6 +355,7 @@ const Upload = {
         }
         const imageInput = document.getElementById('imageInput');
         const videoInput = document.getElementById('videoInput');
+        const audioInput = document.getElementById('audioInput');
         const urlInput = document.getElementById('urlInput');
         
         if (imageInput) {
@@ -361,6 +368,14 @@ const Upload = {
         
         if (videoInput) {
             videoInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) this.uploadFile(file);
+                e.target.value = '';
+            });
+        }
+
+        if (audioInput) {
+            audioInput.addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (file) this.uploadFile(file);
                 e.target.value = '';

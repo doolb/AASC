@@ -167,6 +167,28 @@ const WebSocketManager = {
                 if (data.state.currentMediaUrl && window.MediaLibrary) {
                     window.MediaLibrary.setCurrentMedia(data.state.currentMediaUrl);
                 }
+
+                // 控制端刷新后，服务端通过 displayState 返回当前播放列表及索引；
+                // 立即重绘当前项，恢复文件名、媒体类型和批量预览，不等待下一条实时进度。
+                const currentPlaylist = data.state.currentPlaylist;
+                if (currentPlaylist && currentPlaylist.startData && window.MediaLibrary) {
+                    const playlist = currentPlaylist.startData.playlist || [];
+                    const item = playlist[currentPlaylist.index || 0];
+                    if (item) {
+                        window.MediaLibrary.renderPlaylistPanel({
+                            displayId: data.displayId,
+                            listId: currentPlaylist.startData.listId,
+                            index: currentPlaylist.index || 0,
+                            total: playlist.length,
+                            state: currentPlaylist.state || 'playing',
+                            fileName: item.fileName,
+                            url: item.url,
+                            mediaType: item.mediaType,
+                            width: item.width,
+                            height: item.height
+                        });
+                    }
+                }
             } else {
                 console.log('[WS] displayState displayId 不匹配，跳过处理');
             }
@@ -188,6 +210,17 @@ const WebSocketManager = {
             var label = document.getElementById('progressValue');
             if (slider && data.duration) {
                 var pct = Math.round((data.currentTime / data.duration) * 100);
+                slider.value = pct;
+                if (label) label.textContent = pct + '%';
+            }
+        } else if (data.type === 'audioProgress') {
+            // 音频与视频共用控制端进度条，但单独标记当前不是 html 滚动媒体。
+            window.currentHtmlPlaying = false;
+            if (data.displayId && data.displayId !== window.currentDisplayId) return;
+            const slider = document.getElementById('progressSlider');
+            const label = document.getElementById('progressValue');
+            if (slider && data.duration) {
+                const pct = Math.round((data.currentTime / data.duration) * 100);
                 slider.value = pct;
                 if (label) label.textContent = pct + '%';
             }
@@ -477,7 +510,7 @@ const WebSocketManager = {
 
     async getMediaRatio(mediaData) {
         // HTML 无固有宽高比且铺满显示，不创建 img 探测
-        if (mediaData.mediaType === 'html') {
+        if (mediaData.mediaType === 'html' || mediaData.mediaType === 'audio') {
             return 1;
         }
         if (mediaData.width && mediaData.height) {

@@ -85,9 +85,11 @@
                 <div class="file-input-wrapper">
                     <label class="file-label image" for="imageInput">选择图片/GIF</label>
                     <label class="file-label video" for="videoInput">选择视频</label>
+                    <label class="file-label audio" for="audioInput">选择音频</label>
                 </div>
                 <input type="file" id="imageInput" accept="image/*,.html,.htm">
                 <input type="file" id="videoInput" accept="video/*">
+                <input type="file" id="audioInput" accept="audio/*,.wav,.ogg,.mp3">
                 <div style="margin-top:8px;">
                     <label class="upload-btn">
                         发送 HTML
@@ -130,7 +132,7 @@
                         <div class="media-library-actions">
                             <label class="upload-btn">
                                 上传文件
-                                <input type="file" id="batchFileInput" multiple accept="image/*,video/*,.html,.htm" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
+                                <input type="file" id="batchFileInput" multiple accept="image/*,video/*,audio/*,.wav,.ogg,.mp3,.html,.htm" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
                             </label>
                             <label class="upload-btn">
                                 上传文件夹
@@ -180,7 +182,7 @@
                 </div>
 
                 <div class="control-item">
-                    <label>视频播放</label>
+                    <label>媒体播放</label>
                     <div class="control-buttons" style="display:flex;align-items:center;gap:12px">
                         <button class="control-btn paused" id="playPauseBtn" onclick="togglePlayPause()">播放</button>
                         <span id="progressValue" style="font-size:13px;color:rgba(255,255,255,0.6);min-width:40px">0%</span>

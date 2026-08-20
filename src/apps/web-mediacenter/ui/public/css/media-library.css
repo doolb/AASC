@@ -187,6 +187,15 @@
     object-fit: cover;
 }
 
+.audio-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ed8ff;
+    font-size: 28px;
+    background: linear-gradient(135deg, rgba(0, 210, 255, 0.18), rgba(118, 75, 162, 0.35));
+}
+
 .playing-badge {
     position: absolute;
     bottom: 8px;
