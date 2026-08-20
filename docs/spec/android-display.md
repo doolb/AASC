@@ -67,6 +67,35 @@ TouchInjector          触摸注入入口，服务未开启返回 false
 
 权限：仅 INTERNET + 无障碍服务（BIND_ACCESSIBILITY_SERVICE）。不用 MediaProjection。
 
+## 部署命令自动恢复服务器地址
+
+```
+部署脚本启动:
+    serverUrl = 环境变量 AASC_DISPLAY_SERVER_URL 非空 ? 该值 : "https://192.168.1.39:8081"
+    对每个 adb 设备:
+        安装 app-debug.apk（保留已有应用数据）
+        启动 MainActivity，并传入 Intent extra server_url=serverUrl
+
+MainActivity 启动:
+    intentServerUrl = Intent extra server_url
+    savedServerUrl = SharedPreferences("aasc_display").server_url
+    serverInput.text = intentServerUrl 非空 ? intentServerUrl : savedServerUrl
+    如果 intentServerUrl 非空 或 savedServerUrl 非空:
+        调用 connect()
+
+MainActivity 接收 singleTask 新 Intent:
+    如果 Intent extra server_url 非空:
+        更新输入框
+        调用 connect()
+
+connect():
+    将输入地址保存到 SharedPreferences("aasc_display").server_url
+    将地址补全为 /display
+    WebView 加载显示页面
+```
+
+约束：部署脚本不直接写 APK 私有目录 XML，避免依赖 debug `run-as` 权限和 Android SharedPreferences 文件格式；服务器地址通过 Intent 显式传递，脚本使用参数数组调用 adb，避免 shell 字符串注入。
+
 ## 控制端提示（crop.js）
 
 ```

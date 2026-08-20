@@ -44,6 +44,10 @@
   - 设计文档：docs/design/android-display.md
   - 实施计划：docs/task/2026-08-15_android-apk显示端.md
   - 实现：src/apps/android-display/（APK 工程）+ display.html 桥截图/输入链 + 能力声明 + 控制端提示
+- ✅已完成 [2026-08-20][2026-08-20] APK 上传命令自动恢复服务器地址
+  - `upload:apk` 安装后通过 Intent 注入 `https://192.168.1.39:8081`，APK 保存配置并自动连接。
+  - 支持 `AASC_DISPLAY_SERVER_URL` 覆盖默认地址；覆盖冷启动和 `singleTask` 新 Intent。
+  - 改动：`src/scripts/apk-deploy.js`、`src/scripts/apk-deploy-config.js`、`MainActivity.kt`、`ServerConfig.kt` 及对应测试/文档。
   - 真机验证（三星 Note 8 / Android 9，WebView 升级到 132 后）：
     - 跨域 html（example.com）原生截图稳定回传（1280x623，mode=native）
     - 无障碍真实触摸注入生效（InputDispatcher Delivering touch to WebView）

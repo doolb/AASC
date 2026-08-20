@@ -135,6 +135,8 @@ android-display/
 ### 配置
 
 - MainActivity 启动时提供服务器地址输入（默认读取持久化值），WebView 加载 `https://<server>/display`（自签名证书处理：WebViewClient 信任一次并提示）
+- APK 部署脚本默认通过启动 Intent 注入 `https://192.168.1.39:8081`；MainActivity 接收后覆盖输入框、保存 `server_url` 并立即连接，解决卸载重装后配置丢失问题
+- 部署脚本可通过 `AASC_DISPLAY_SERVER_URL` 环境变量覆盖默认服务器地址；未注入地址时沿用手动输入和已保存地址逻辑
 - displayId 持久化复用 display.html 的 localStorage 机制
 
 ## 服务器改动
@@ -173,6 +175,8 @@ android-display/
 5. 无障碍服务关闭：同源仍可控、跨域降级提示正确
 6. 浏览器显示端回归：行为与现在完全一致，能力声明为不可用
 7. 旋转 90°/270° 场景：截图方向与点击坐标正确
+8. `npm run upload:apk` 安装后以 Intent 注入默认服务器地址，APK 自动保存并加载 `/display`
+9. 卸载重装后重新执行部署命令，服务器地址仍由部署命令恢复；自定义 `AASC_DISPLAY_SERVER_URL` 地址生效
 
 ## 文档与任务
 

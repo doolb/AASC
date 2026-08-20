@@ -4,6 +4,11 @@
 
 ### 修复
 
+- ✅ [2026-08-20] APK 上传命令自动恢复服务器地址
+  - `upload:apk` 安装后通过 Intent 注入默认地址 `https://192.168.1.39:8081` 并启动 APK。
+  - APK 支持冷启动和 `singleTask` 新 Intent，自动保存 `server_url` 并连接显示端。
+  - 支持通过 `AASC_DISPLAY_SERVER_URL` 覆盖默认地址；新增部署配置与 Android 单元测试。
+
 - ✅ [2026-08-19] 增加 APK 语音识别模型 SHA-256 校验与启动 hash 缓存
   - 服务端新增 `model.int8.onnx.sha256`、`tokens.txt.sha256`，APK 下载完成后校验 `.tmp` 文件，成功后才原子改名并保存本地 hash。
   - APK 后续启动只比较本地保存 hash 与服务器 hash，不重新读取 234MB 模型计算 hash；服务器暂时不可达时沿用已有本地已验证模型。

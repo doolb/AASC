@@ -2,6 +2,7 @@ package com.aasc.display
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -18,6 +19,10 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        private const val EXTRA_SERVER_URL = "server_url"
+    }
 
     private lateinit var configBar: View
     private lateinit var serverInput: EditText
@@ -61,15 +66,26 @@ class MainActivity : AppCompatActivity() {
         val connectBtn = findViewById<Button>(R.id.connectBtn)
 
         val saved = getSharedPreferences("aasc_display", MODE_PRIVATE).getString("server_url", "")
-        serverInput.setText(saved)
+        val selectedServerUrl = ServerConfig.chooseUrl(intent?.getStringExtra(EXTRA_SERVER_URL), saved)
+        serverInput.setText(selectedServerUrl)
         connectBtn.setOnClickListener { connect() }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
 
-        if (!saved.isNullOrEmpty()) {
+        if (selectedServerUrl.isNotEmpty()) {
             connect()
         }
 
         requestAudioPermissionIfNeeded()
+    }
+
+    // singleTask Activity 被部署脚本再次启动时不会重新执行 onCreate，需要在新 Intent 中恢复配置。
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val injectedServerUrl = intent?.getStringExtra(EXTRA_SERVER_URL)?.trim().orEmpty()
+        if (injectedServerUrl.isEmpty()) return
+        serverInput.setText(injectedServerUrl)
+        connect()
     }
 
     // 焦点回归时重贴全屏（沉浸式在交互后系统栏可能重新出现）；

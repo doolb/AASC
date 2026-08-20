@@ -1,13 +1,15 @@
 // APK 部署：上传到服务器 res/uploads + adb 安装到所有已连接设备
 // 用法：npm run upload:apk（先 build:apk）
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { buildStartArgs, resolveServerUrl } = require('./apk-deploy-config');
 
 const ROOT = path.resolve(__dirname, '../..');
 const APK = path.join(ROOT, 'src/apps/android-display/app/build/outputs/apk/debug/app-debug.apk');
 const UPLOAD_DIR = path.join(ROOT, 'res', 'uploads');
 const UPLOAD_NAME = 'aasc-display.apk';
+const SERVER_URL = resolveServerUrl();
 
 if (!fs.existsSync(APK)) {
     console.error('未找到 APK，请先运行 npm run build:apk');
@@ -38,6 +40,8 @@ if (devices.length === 0) {
         try {
             execSync(`adb -s ${dev} install -r "${APK}"`, { stdio: 'inherit' });
             console.log('已安装到:', dev);
+            execFileSync('adb', buildStartArgs(dev, SERVER_URL), { stdio: 'inherit' });
+            console.log('已向设备注入服务器地址并启动:', SERVER_URL);
         } catch (e) {
             console.error('安装到', dev, '失败:', e.message);
         }
