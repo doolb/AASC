@@ -6,6 +6,11 @@
   - 改动：支持 WAV/OGG/MP3；贯通控制端、服务器、显示端与批量播放；控制端手动“下一个”触发临时激活，自动定时器睡眠拦截保持不变；实时同步当前文件名，控制端刷新后恢复批量文件名
   - 文档：docs/design/audio-media.md、docs/spec/audio-media.md、docs/task/2026-08-20_音频媒体播放与睡眠批量手动切换.md
 
+## AI 角色
+
+- [ ] Claude Code 本机代理恢复后，验证工作 AI 角色真实回复链路
+  - 当前非交互 stream-json 启动已修复；验证时本机模型代理返回 HTTP 502，需代理恢复后复测
+
 - ✅已完成 [2026-08-18][2026-08-18] 退出睡眠时视频检查控制端播放/暂停设置
   - 根因：resumeSleepMedia 无条件 mediaVideo.play()，忽略控制端暂停（单媒体无本地 isPlaying 跟踪，播放列表忽略 ps.paused）
   - 实现：新增 mediaIsPlaying（showMedia/handleControl play 同步）+ shouldPlayMedia（播放列表读 ps.paused）+ resumeSleepMedia 守卫

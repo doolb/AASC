@@ -107,9 +107,15 @@ ensureStarted():
   mkfifo in.fifo, out.fifo           // 已存在可继续
   detached spawn node pipe-keeper.js in.fifo keeper.pid
   等待 keeper.pid 出现，超时则失败
-  detached spawn sh -c:
-    exec <command> --append-system-prompt-file <prompt>
-         < in.fifo > out.fifo 2> err.log
+  detached spawn:
+    exec <command>
+      --print --verbose
+      --input-format stream-json
+      --output-format stream-json
+      --include-partial-messages
+      --permission-mode bypassPermissions
+      --append-system-prompt-file <prompt>
+      < in.fifo > out.fifo 2> err.log
   保存 child.pid 到 claude.pid
   _startReader()
   等待 reader open（有超时）
@@ -117,6 +123,8 @@ ensureStarted():
 ```
 
 守卫使用 `fs.openSync(inFifo, 'r+')` 持有 FIFO；Claude 标准输入输出由 shell 重定向到 FIFO，因此服务器重启不影响 detached Claude 的进程和输入端。
+
+默认命令参数必须保持非空；若调用方传入 `commandArgs`，则使用调用方参数以支持测试替身和自定义 Claude 命令。默认参数缺失会使 Claude 进入交互模式，无法消费 `stream-json` 输入，因此必须由回归测试锁定。
 
 ## `_startReader` 与 `_onLine`
 

@@ -65,6 +65,26 @@ function makeBridge(dir, overrides = {}) {
 // 2) claude 进程退出 → out.fifo 写端关闭 → 阻塞读端读到 EOF 释放 fd/线程，测试进程才能退出。
 afterEach(() => { for (const b of _bridges) b.stop(); });
 
+test('默认使用 Claude Code 非交互 stream-json 参数', () => {
+    const dir = tmpDir();
+    const bridge = new ClaudeBridge({
+        dir,
+        name: '默认参数角色',
+        commandPath: 'claude',
+        promptFile: path.join(dir, 'prompt.txt'),
+        cwd: dir,
+        keeperPath: KEEPER
+    });
+    assert.deepStrictEqual(bridge.commandArgs, [
+        '--print',
+        '--verbose',
+        '--input-format', 'stream-json',
+        '--output-format', 'stream-json',
+        '--include-partial-messages',
+        '--permission-mode', 'bypassPermissions'
+    ]);
+});
+
 test('命令参数 shell 元字符不会执行外部 marker，真实 FIFO 仍可通信', async () => {
     const dir = tmpDir();
     const marker = path.join(dir, 'marker');

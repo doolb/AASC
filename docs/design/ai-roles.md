@@ -24,6 +24,7 @@
 ### claude-bridge
 
 - 按需创建输入/输出 FIFO、管道守卫和 detached Claude 进程。
+- 默认以 Claude Code 非交互 stream-json 模式启动（`--print`、`--input-format stream-json`、`--output-format stream-json`），保证角色消息可以从 FIFO 输入并收到流式输出。
 - 通过 `--append-system-prompt-file` 注入角色提示词。
 - 读取 Claude 的 stream-json 输出，转发文本增量和完成/错误事件。
 - 对读端打开、响应输出和进程退出设置超时或失败处理，失败后清理整组资源，下一轮可重建。

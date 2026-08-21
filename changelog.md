@@ -4,6 +4,12 @@
 
 ### 修复
 
+- ✅ [2026-08-21] 修复工作 AI 角色发送消息后无回复
+  - 根因：ClaudeBridge 启动 Claude Code 时缺少 `--print` 和 `stream-json` 输入/输出参数，CLI 默认进入交互模式，角色进程退出后只留下用户历史。
+  - 修复：默认补齐 `--print --verbose --input-format stream-json --output-format stream-json --include-partial-messages --permission-mode bypassPermissions`；传入非空 `commandArgs` 时继续使用自定义参数。
+  - 验证：ClaudeBridge 测试 13 项通过；真实 CLI 已确认进入非交互 stream-json 模式。当前模型代理返回 HTTP 502，真实助手内容待代理恢复后再验证。
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_工作AI角色消息无回复修复.md。
+
 - ✅ [2026-08-21] 修复控制端聊天添加工作 AI 角色无响应
   - 根因：角色消息只依赖通用控制消息回退分支注册；当前 WebSocket handler 表未包含 `roleList`、`roleAdd`、`roleDelete`、`roleHistory` 时，请求会被静默忽略。
   - 修复：新增独立 AI 角色 WebSocket handler 注册模块，统一处理角色列表、添加、删除、历史和 `roleError` 回包；添加/删除成功后广播最新角色列表。

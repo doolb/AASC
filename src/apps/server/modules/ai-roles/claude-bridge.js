@@ -16,17 +16,28 @@ function isAlive(pid) {
 }
 
 const READ_TIMEOUT_MS = 60000;
+const DEFAULT_COMMAND_ARGS = Object.freeze([
+    '--print',
+    '--verbose',
+    '--input-format', 'stream-json',
+    '--output-format', 'stream-json',
+    '--include-partial-messages',
+    '--permission-mode', 'bypassPermissions'
+]);
 
 // 每角色一个 claude 进程桥：懒启动 → detached claude（stdin/stdout 接命名管道）→ 流式转发 → 回收。
 // 进程 detached + pipe-keeper 持有 in.fifo 写端 + stdout 走 out.fifo（无读者时阻塞、重连后自愈），
 // 实现「服务器重启 claude 进程不中断」。
 class ClaudeBridge {
-    constructor({ dir, name, command = 'claude', commandPath = null, commandArgs = [], promptFile = null, cwd, keeperPath, readTimeoutMs = READ_TIMEOUT_MS, readOpenTimeoutMs = 5000 }) {
+    constructor({ dir, name, command = 'claude', commandPath = null, commandArgs = null, promptFile = null, cwd, keeperPath, readTimeoutMs = READ_TIMEOUT_MS, readOpenTimeoutMs = 5000 }) {
         this.dir = dir;                 // 角色目录（FIFO/pid/prompt 都在这）
         this.name = name;
         this.command = command;
         this.commandPath = commandPath || command;
-        this.commandArgs = [...commandArgs];
+        // 默认必须显式进入 Claude Code 非交互 stream-json 模式；否则 CLI 会启动交互界面，
+        // 既不会消费 FIFO 中的 JSON 消息，也不会输出桥接层能解析的 stream-json 事件。
+        // 传入非空 commandArgs 时保留调用方参数，方便测试替身和自定义命令接入。
+        this.commandArgs = commandArgs && commandArgs.length > 0 ? [...commandArgs] : [...DEFAULT_COMMAND_ARGS];
         this.promptFile = promptFile;   // --append-system-prompt-file 指向的文件
         this.cwd = cwd;                 // spawn 工作目录（项目根）
         this.keeperPath = keeperPath;   // pipe-keeper.js 绝对路径
