@@ -57,3 +57,6 @@
 | Android原生声纹识别 | [voiceprint.md](design/voiceprint.md) | 外部声纹模型加载、说话人匹配与 APK 端声纹门控 |
 | 显示端睡眠模式 | [display-sleep-mode.md](design/display-sleep-mode.md) | 按时段媒体遮罩/深度 UI 全屏遮罩/60s 临时激活，控制端可配 |
 | 音频媒体播放 | [audio-media.md](design/audio-media.md) | WAV/OGG/MP3 普通播放、批量播放、控制端进度与睡眠手动切换 |
+| AI 执行规则 | [ai-rules.md](design/ai-rules.md) | 工作 AI 重启服务器时仅允许使用控制端接口 |
+| 服务器重启命令 | [server-restart-script.md](design/server-restart-script.md) | 通过控制端接口重启服务器，绕过 HTTPS 代理 |
+| 工作 AI 角色 | [ai-roles.md](design/ai-roles.md) | 控制端 AI 角色、角色定义自管理与任务历史 |

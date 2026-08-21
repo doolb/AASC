@@ -331,6 +331,11 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleProfileSwitched(data);
             }
+        } else if (data.type === 'chatConfigChanged') {
+            if (window.Chat && data.config) {
+                window.Chat.config.agentBackend = data.config.agentBackend || 'codex';
+                window.Chat.renderModeIndicator();
+            }
         } else if (data.type === 'commandRouting') {
             if (window.Settings) {
                 window.Settings.handleRoutingUpdate(data.routing);

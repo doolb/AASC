@@ -652,6 +652,7 @@
                     <label>重载服务端代码</label>
                     <div class="control-buttons">
                         <button class="control-btn" onclick="Settings.reloadServer()">重载代码</button>
+                        <button class="control-btn" onclick="Settings.stopAllAgents()">关闭所有 Agent</button>
                     </div>
                     <div style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 6px;">
                         重启服务端进程加载最新代码，显示端/控制端会短暂断连后自动恢复
@@ -735,6 +736,14 @@
                     <label for="chatSystemPrompt">系统提示词 (System Prompt)</label>
                     <textarea id="chatSystemPrompt" placeholder="设置 AI 的角色和行为方式..."></textarea>
                     <p class="chat-config-hint">系统提示词用于定义 AI 助手的角色、行为方式和回答风格。</p>
+                </div>
+                <div class="chat-config-item">
+                    <label for="chatAgentBackend">Agent 后端</label>
+                    <select id="chatAgentBackend" style="width:100%;padding:8px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
+                        <option value="codex">Codex（默认）</option>
+                        <option value="claude">Claude</option>
+                    </select>
+                    <p class="chat-config-hint">仅影响新建或进程退出后重建的工作 AI 角色；运行中的角色继续使用原后端。</p>
                 </div>
                 <div class="chat-config-item">
                     <label>LLM 服务器配置</label>
@@ -950,6 +959,17 @@
                 .then(r => r.json())
                 .then(d => { showToast(d.message || '服务器正在重启...', 'success'); })
                 .catch(e => showToast('重载失败: ' + e.message, 'error'));
+        },
+
+        stopAllAgents() {
+            if (!confirm('确认关闭所有 Agent 进程？角色、历史和角色文件不会删除。')) return;
+            fetch('/api/ai-roles/stop-all', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.status === 'success') showToast(d.message || '所有 Agent 已关闭', 'success');
+                    else showToast(d.message || '关闭 Agent 失败', 'error');
+                })
+                .catch(e => showToast('关闭 Agent 失败: ' + e.message, 'error'));
         }
     };
 

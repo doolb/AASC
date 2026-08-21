@@ -74,6 +74,20 @@
     transform: scale(1.1);
 }
 
+.chat-role-status {
+    margin-left: 6px;
+    font-size: 11px;
+    opacity: 0.9;
+}
+
+.chat-role-status.online {
+    color: #7ee787;
+}
+
+.chat-role-status.offline {
+    color: rgba(255, 255, 255, 0.55);
+}
+
 .chat-header {
     display: flex;
     justify-content: space-between;

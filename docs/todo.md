@@ -1,12 +1,38 @@
 # Web MediaCenter - 未完成任务列表
 
+## 聊天系统
+
+- ✅已完成 [2026-08-21][2026-08-21] 修复控制端普通 LLM 流式消息不及时显示
+  - 根因：普通 LLM 的 `chatChunk`/`chatResponse` 缺少 `requestId`，被控制端过滤
+  - 改动：普通 `chatMessage` 将请求号传入 `handleChatMessage`，增量/成功/失败回包统一透传
+  - 验证：流式请求号回归测试通过；AI 角色 service、handler、ClaudeBridge、role-store 测试通过；pipe-keeper 测试受沙箱 `mkfifo EPERM` 限制未能执行
+  - 文档：docs/design/chat-system.md、docs/spec/chat-system.md、docs/task/2026-08-21_控制端LLM流式消息及时显示修复.md
+
+## 开发工具
+
+- ✅已完成 [2026-08-21][2026-08-21] 新增绕过 HTTPS 代理的服务器重启 npm 命令
+  - 改动：Node 原生 HTTP/HTTPS 请求调用 `/api/restart`，默认地址可通过环境变量或命令行覆盖
+  - 文档：docs/design/server-restart-script.md、docs/spec/server-restart-script.md、docs/task/2026-08-21_服务器重启命令脚本.md
+
 ## 媒体播放
 
 - ✅已完成 [2026-08-20][2026-08-20] 音频媒体播放与睡眠批量手动切换
   - 改动：支持 WAV/OGG/MP3；贯通控制端、服务器、显示端与批量播放；控制端手动“下一个”触发临时激活，自动定时器睡眠拦截保持不变；实时同步当前文件名，控制端刷新后恢复批量文件名
   - 文档：docs/design/audio-media.md、docs/spec/audio-media.md、docs/task/2026-08-20_音频媒体播放与睡眠批量手动切换.md
 
+- ✅已完成 [2026-08-21][2026-08-21] 媒体重连恢复播放进度
+  - 改动：缓存并恢复 video/audio 单媒体进度；批量恢复当前索引、当前 video/audio 项进度及暂停状态；进度持久化增加节流与暂停/切项强制同步
+  - 文档：docs/design/display.md、docs/design/audio-media.md、docs/design/batch-playlist.md、docs/spec/audio-media.md、docs/spec/batch-playlist.md、docs/task/2026-08-21_媒体重连恢复播放进度.md
+
 ## AI 角色
+
+- ✅已完成 [2026-08-21][2026-08-21] 控制端关闭所有 Agent 与角色在线状态显示
+  - 改动：系统设置新增关闭所有 Agent；服务端停止并清空 bridge、广播 roleList；角色 tab 显示在线/离线；不删除角色文件
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端关闭所有Agent与在线状态.md
+
+- ✅已完成 [2026-08-21][2026-08-21] 控制端 AI 角色 Claude/Codex Agent 后端选择
+  - 改动：聊天设置全局选择、默认 Codex、角色实际后端持久化、Codex app-server 持久 thread、Agent/LLM 消息区分；控制端 Agent 不进入 poll.js 任务队列
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端AI角色Agent后端选择.md
 
 - [ ] Claude Code 本机代理恢复后，验证工作 AI 角色真实回复链路
   - 当前非交互 stream-json 启动已修复；验证时本机模型代理返回 HTTP 502，需代理恢复后复测

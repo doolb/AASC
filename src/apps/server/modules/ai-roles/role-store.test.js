@@ -85,6 +85,15 @@ test('roleDir 返回角色目录绝对路径', () => {
     assert.strictEqual(store.roleDir('a'), path.join(base, 'a'));
 });
 
+test('角色后端标记可持久化并随列表读取', () => {
+    const store = new RoleStore(tmpBase());
+    store.add('代理角色');
+    assert.strictEqual(store.getBackend('代理角色'), null);
+    assert.deepStrictEqual(store.setBackend('代理角色', 'codex'), { name: '代理角色', backend: 'codex' });
+    assert.strictEqual(store.getBackend('代理角色'), 'codex');
+    assert.strictEqual(store.list()[0].backend, 'codex');
+});
+
 // 角色名来自前端用户输入，必须拒绝路径穿越/嵌套名，防止目录逃逸与递归删除父目录
 test('角色名拒绝路径穿越与嵌套（add/remove/exists/loadHistory/appendHistory）', () => {
     const base = tmpBase();

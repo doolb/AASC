@@ -8,6 +8,7 @@ const USER_CONFIG_FILE = path.join(USER_CONFIG_DIR, 'userconfig.json');
 
 const defaultDisplayState = {
     currentMedia: null,
+    currentMediaProgress: null,
     rotation: 0,
     fit: 'contain',
     crop: { x: 0, y: 0, width: 100, height: 100 },
@@ -65,6 +66,7 @@ class Config extends DataSnapshot {
         logReportControl: { enabled: false, level: 'error' },
         logBlocklist: [],
         chat: {
+            agentBackend: 'codex',
             apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
             model: 'gpt-3.5-turbo',
             maxTokens: 1000,

@@ -4,6 +4,53 @@
 
 ### 修复
 
+- ✅ [2026-08-21] 增加控制端关闭所有 Agent 和在线状态显示
+  - 系统设置中“关闭所有 Agent”按钮紧跟“重载代码”按钮，只停止 Claude/Codex 进程，不删除角色、历史或 role.md/history.md。
+  - 新增 `POST /api/ai-roles/stop-all`，停止后广播角色列表；聊天角色 tab 显示 Agent 在线/离线状态。
+  - 已排队的角色消息在全部停止后不会自动重新拉起 Agent，用户再次发送消息才会启动。
+  - 验证：AI 角色 service 10 项、控制端按钮/接口状态测试 2 项通过。
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端关闭所有Agent与在线状态.md
+
+- ✅ [2026-08-21] 控制端 AI 角色支持 Claude/Codex Agent 后端选择
+  - 聊天设置新增全局 Agent 后端，默认 Codex；运行中的角色不因切换设置而重启，新建或退出后重建使用最新后端。
+  - Codex 通过 `app-server --stdio` 为每个角色保持独立 `threadId` 上下文，并只注入 `HTTPS_PROXY=http://127.0.0.1:7899`。
+  - 控制端消息增加 `assistantType=agent/llm`；旧 `mode=role` 继续兼容，Agent 角色不进入 poll.js 任务队列。
+  - 角色保存实际后端，控制端刷新后显示当前 Agent 后端；普通 LLM 配置保持原有流程。
+  - 验证：Codex/角色/配置/控制端协议测试通过；AI 角色套件串行 41 项通过；未启动真实 Codex 模型会话。
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端AI角色Agent后端选择.md
+
+- ✅ [2026-08-21] 新增绕过 HTTPS 代理的服务器重启 npm 命令
+  - 新增 `npm run restart:server`，通过控制端 `POST /api/restart` 重启服务器。
+  - 使用 Node 原生 HTTP/HTTPS 请求，不读取代理环境变量、不设置代理 Agent，兼容自签名 HTTPS 证书。
+  - 支持 `AASC_SERVER_URL` 环境变量和命令行地址覆盖。
+  - 文档：docs/design/server-restart-script.md、docs/spec/server-restart-script.md、docs/task/2026-08-21_服务器重启命令脚本.md
+
+- ✅ [2026-08-21] 修复控制端普通 LLM 流式消息不及时显示
+  - 根因：普通 LLM 的 `chatChunk`/`chatResponse` 未携带控制端请求号，前端按 `activeRequestId` 过滤后丢弃实时回包，刷新页面才从历史显示。
+  - 修复：`chatMessage` 将 `requestId` 传入普通聊天处理函数，增量、成功完成和失败回包统一透传请求号。
+  - 验证：流式请求号回归测试通过；AI 角色相关测试 5 项通过；`pipe-keeper.test.js` 因沙箱禁止 `mkfifo`（EPERM）未能执行。
+  - 文档：docs/design/chat-system.md、docs/spec/chat-system.md、docs/task/2026-08-21_控制端LLM流式消息及时显示修复.md
+
+- ✅ [2026-08-21] 支持控制端 AI 角色自管理 role.md/history.md
+  - Claude 进程启动时将当前角色定义、控制端角色 history.md 和自管理规则注入系统提示词
+  - 当前角色可以维护自己的职责定义与重要任务经验，不使用 workgroup 任务队列
+  - 同一 Claude 进程复用启动提示词快照，不在每条消息前重新读取 role.md/history.md
+  - 验证：控制端 AI 角色测试 8 项通过
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端AI角色自管理role和history.md
+
+- ✅ [2026-08-21] 修复显示端媒体重连后播放进度归零
+  - 服务端缓存并节流持久化单媒体 `currentMediaProgress`，暂停/播放状态恢复时携带当前播放位置。
+  - 批量列表持久化当前项 `currentTime`/`duration`，重连补发 `resumeTime`/`resumeState`，视频和音频在 `loadedmetadata` 后恢复位置。
+  - 旧配置缺少进度字段时从 0 秒兼容恢复；图片批量继续按当前索引恢复，HTML 滚动位置保持原有语义。
+  - 验证：新增恢复回归 3 项通过；音频、批量、媒体焦点相关测试通过；全量 Node 测试中其余 5 项因沙箱禁止本地监听/Chromium 启动而失败。
+  - 文档：docs/design/display.md、docs/design/audio-media.md、docs/design/batch-playlist.md、docs/spec/audio-media.md、docs/spec/batch-playlist.md、docs/task/2026-08-21_媒体重连恢复播放进度.md
+
+- ✅ [2026-08-21] 增加 AI 修改代码后的服务器重启规则
+  - 工作 AI、workgroup 子 agent 和控制端 AI 角色只能通过控制端重启/重载接口操作服务器
+  - 禁止直接查找/操作服务器 PID、发送终止信号、执行 kill/pkill/killall 或直接启动/停止/重启 server-app.js
+  - 用户手动启动的服务器不得由 AI 终止、替换或接管
+  - 文档：CLAUDE.md、docs/aiskill.md、workgroup/roles/main.md、docs/design/ai-rules.md、docs/spec/ai-rules.md
+
 - ✅ [2026-08-21] 修复工作 AI 角色发送消息后无回复
   - 根因：ClaudeBridge 启动 Claude Code 时缺少 `--print` 和 `stream-json` 输入/输出参数，CLI 默认进入交互模式，角色进程退出后只留下用户历史。
   - 修复：默认补齐 `--print --verbose --input-format stream-json --output-format stream-json --include-partial-messages --permission-mode bypassPermissions`；传入非空 `commandArgs` 时继续使用自定义参数。

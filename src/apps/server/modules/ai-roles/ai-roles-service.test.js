@@ -40,7 +40,8 @@ function makeService(dir, baseDir) {
         projectRoot: dir,
         commandPath: process.execPath,
         commandArgs: [fakePath],
-        keeperPath: KEEPER
+        keeperPath: KEEPER,
+        getAgentBackend: () => 'claude'
     });
     _services.push(svc);
     return svc;
@@ -111,7 +112,45 @@ test('提示词复用 workgroup/roles/<名>.md', async () => {
     svc.add('后端');
     const promptFile = path.join(base, '后端', 'prompt.txt');
     assert.ok(fs.existsSync(promptFile));
-    assert.strictEqual(fs.readFileSync(promptFile, 'utf8'), '你是后端角色，负责接口。');
+    const prompt = fs.readFileSync(promptFile, 'utf8');
+    assert.ok(prompt.includes('你是后端角色，负责接口。'));
+    assert.ok(prompt.includes('当前角色自管理'));
+});
+
+test('启动提示词注入当前角色 history.md 和自管理路径', () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const historyDir = path.join(dir, 'workgroup', 'members', 'control-后端');
+    fs.mkdirSync(historyDir, { recursive: true });
+    fs.writeFileSync(path.join(historyDir, 'history.md'), [
+        '# 专长画像', '{"接口": 2}', '',
+        '## 经验约定', '- 接口变更要同步 spec', '',
+        '## 最近记录', '- {"id":"task-1","title":"接口任务"}'
+    ].join('\n'));
+    const svc = makeService(dir, base);
+    svc.add('后端');
+
+    const prompt = fs.readFileSync(path.join(base, '后端', 'prompt.txt'), 'utf8');
+    assert.ok(prompt.includes('接口变更要同步 spec'));
+    assert.ok(prompt.includes('接口任务'));
+    assert.ok(prompt.includes(path.join(dir, 'workgroup', 'roles', '后端.md')));
+    assert.ok(prompt.includes(path.join(dir, 'workgroup', 'members', 'control-后端', 'history.md')));
+    assert.ok(prompt.includes('只能修改当前角色自己的'));
+});
+
+test('Claude 进程存活期间不在每条消息前重新读取 role.md', async () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const svc = makeService(dir, base);
+    svc.add('后端');
+    await svc.chat('后端', '第一条任务', {});
+    const promptFile = path.join(base, '后端', 'prompt.txt');
+    const initialPrompt = fs.readFileSync(promptFile, 'utf8');
+
+    fs.writeFileSync(path.join(dir, 'workgroup', 'roles', '后端.md'), '角色定义已经更新');
+    await svc.chat('后端', '第二条任务', {});
+
+    assert.strictEqual(fs.readFileSync(promptFile, 'utf8'), initialPrompt);
 });
 
 
@@ -128,4 +167,80 @@ test('restoreAll：角色存活则重连，删除后 remove 回收', async () =>
     svc.remove('后端');
     assert.deepStrictEqual(svc.list(), []);
     assert.ok(!fs.existsSync(path.join(base, '后端')), '角色目录应删除');
+});
+
+test('全局后端变化不替换运行中的角色，退出后重建使用最新后端', () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    let globalBackend = 'codex';
+    const created = [];
+    const svc = new AiRolesService({
+        baseDir: base,
+        projectRoot: dir,
+        getAgentBackend: () => globalBackend,
+        bridgeFactory: (options) => {
+            const bridge = {
+                backend: options.backend,
+                promptFile: null,
+                alive: true,
+                isAlive() { return this.alive; },
+                reconnect() { return this.alive; },
+                stop() { this.alive = false; },
+                async chat() { return { success: true, message: 'ok' }; }
+            };
+            created.push(bridge);
+            return bridge;
+        }
+    });
+    svc.add('后端');
+    const first = svc._bridge('后端');
+    globalBackend = 'claude';
+    assert.strictEqual(svc._bridge('后端'), first);
+    first.alive = false;
+    const rebuilt = svc._bridge('后端');
+    assert.notStrictEqual(rebuilt, first);
+    assert.strictEqual(rebuilt.backend, 'claude');
+    assert.deepStrictEqual(created.map((bridge) => bridge.backend), ['codex', 'claude']);
+    assert.strictEqual(svc.store.list()[0].backend, 'claude');
+});
+
+test('stopAll 关闭所有 Agent 但保留角色文件和角色记录', () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const bridges = [];
+    const svc = new AiRolesService({
+        baseDir: base,
+        projectRoot: dir,
+        getAgentBackend: () => 'codex',
+        bridgeFactory: () => {
+            const bridge = {
+                alive: true,
+                isAlive() { return this.alive; },
+                stop() { this.alive = false; this.stopped = true; },
+                reconnect() { return this.alive; },
+                async chat() { return { success: true, message: 'ok' }; }
+            };
+            bridges.push(bridge);
+            return bridge;
+        }
+    });
+    svc.add('角色一');
+    svc.add('角色二');
+    const roleDefinition = path.join(dir, 'workgroup', 'roles', '角色一.md');
+    fs.mkdirSync(path.dirname(roleDefinition), { recursive: true });
+    fs.writeFileSync(roleDefinition, '角色定义');
+    const roleHistory = path.join(dir, 'workgroup', 'members', 'control-角色一', 'history.md');
+    assert.ok(fs.existsSync(roleHistory));
+    svc._bridge('角色一');
+    svc._bridge('角色二');
+
+    const stopped = svc.stopAll();
+    assert.strictEqual(stopped, 2);
+    assert.strictEqual(svc.bridges.size, 0);
+    assert.ok(bridges.every((bridge) => bridge.stopped));
+    assert.deepStrictEqual(svc.store.list().map((role) => role.name).sort(), ['角色一', '角色二']);
+    assert.ok(fs.existsSync(path.join(base, '角色一', 'role.json')));
+    assert.ok(fs.existsSync(path.join(base, '角色二', 'role.json')));
+    assert.ok(fs.existsSync(roleDefinition));
+    assert.ok(fs.existsSync(roleHistory));
 });

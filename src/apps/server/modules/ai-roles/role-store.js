@@ -13,6 +13,10 @@ class RoleStore {
     _roleFile(name) { return path.join(this.roleDir(name), 'role.json'); }
     _historyFile(name) { return path.join(this.roleDir(name), 'history.json'); }
 
+    _writeRole(role) {
+        fs.writeFileSync(this._roleFile(role.name), JSON.stringify(role, null, 2));
+    }
+
     // 校验角色名：拒绝空名、含路径分隔符（/ 或 \）的名字、以及 . / .. 等穿越名。
     // 角色名来自前端用户输入，必须防御目录逃逸——尤其 remove 会递归删除，
     // 若放行 '..' 会直接删掉 baseDir 的父目录。所有触碰路径的入口都要调用。
@@ -69,6 +73,22 @@ class RoleStore {
     exists(name) {
         this._assertSafeName(name);
         return !!this._readRole(name);
+    }
+
+    getBackend(name) {
+        this._assertSafeName(name);
+        const role = this._readRole(name);
+        return role && (role.backend === 'codex' || role.backend === 'claude') ? role.backend : null;
+    }
+
+    setBackend(name, backend) {
+        this._assertSafeName(name);
+        if (backend !== 'codex' && backend !== 'claude') throw new Error('Agent 后端不合法');
+        const role = this._readRole(name);
+        if (!role || role.name !== name) throw new Error('角色不存在');
+        const updated = { ...role, backend };
+        this._writeRole(updated);
+        return { name, backend };
     }
 
     add(name, createdAt = Date.now()) {

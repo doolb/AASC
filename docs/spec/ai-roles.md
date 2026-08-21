@@ -4,7 +4,7 @@
 
 ```text
 USER_CONFIG_DIR/ai-roles/<name>/
-  role.json       // { name, createdAt }
+  role.json       // { name, createdAt, backend? }；backend 为实际运行后端
   history.json    // 角色独立聊天历史数组
   prompt.txt      // 角色提示词
   in.fifo         // Claude 输入管道
@@ -12,6 +12,7 @@ USER_CONFIG_DIR/ai-roles/<name>/
   claude.pid
   keeper.pid
   err.log
+  codex.pid        // Codex app-server 进程（使用 Codex 时）
 ```
 
 ```text
@@ -31,10 +32,10 @@ RoleStore
   { type: 'roleAdd', name }
   { type: 'roleDelete', role }
   { type: 'roleHistory', role }
-  { type: 'chatMessage', mode: 'role', role, content, requestId }
+  { type: 'chatMessage', assistantType: 'agent', mode: 'role', role, content, requestId }
 
 服务端 -> 控制端:
-  { type: 'roleList', roles: [{ name, createdAt, running }] }
+  { type: 'roleList', roles: [{ name, createdAt, backend, running }] }
   { type: 'roleHistory', role, history }
   { type: 'roleError', message }
   { type: 'chatChunk', requestId, chunk, message }
@@ -43,6 +44,33 @@ RoleStore
 ```
 
 所有角色管理请求先由服务端使用 `aiRoles.list()` 验证角色存在；非法名称、重名、删除或历史读取异常通过 `roleError` 返回，不让 WebSocket 处理流程抛出未处理异常。
+
+消息类型判断：
+
+```text
+assistantType='agent' 或（assistantType 缺失且 mode='role'）:
+  校验 role -> aiRoles.chat() -> 返回 chatChunk/chatResponse
+assistantType='llm' 或 assistantType 缺失且不是 mode='role':
+  进入原有普通 LLM handler
+assistantType='agent' 但缺少 role:
+  返回 roleError，不进入普通 LLM
+```
+
+聊天配置：
+
+```text
+GET /api/chat/config -> 返回 chat.agentBackend，旧配置缺失时返回 'codex'
+POST /api/chat/config({ agentBackend })
+  只接受 'codex' 或 'claude'
+  持久化全局默认后端
+  不停止已有 AiRolesService bridge
+
+POST /api/ai-roles/stop-all:
+  AiRolesService.stopAll()
+  广播 { type:'roleList', roles: aiRoles.list() }
+  返回 { status:'success', stopped:数量 }
+  只停止进程，不删除角色目录、role.json、history.json、role.md 或 history.md
+```
 
 ## 角色 WebSocket handler 注册
 
@@ -91,6 +119,41 @@ chat(name, content, callbacks):
 ```
 
 `_promptFor(name)` 优先读取 `projectRoot/workgroup/roles/<name>.md`，没有有效内容时使用默认提示词；`_ensurePromptFile` 创建角色目录并写入 `prompt.txt`。
+
+## 控制端角色上下文与自管理
+
+```text
+AiRolesService._ensurePromptFile(name):
+  roleFile = projectRoot/workgroup/roles/<name>.md
+  historyFile = projectRoot/workgroup/members/control-<name>/history.md
+  roleText = 读取 roleFile；不存在时使用默认角色提示词
+  historyText = 读取 historyFile；不存在时使用空历史
+  prompt = 角色定义
+         + 角色经验摘要/最近记录
+         + 当前角色自管理规则
+         + roleFile 和 historyFile 的绝对路径
+  写入 ~/.config/aasc-user/ai-roles/<name>/prompt.txt
+  返回 promptFile
+```
+
+角色自管理规则：
+
+```text
+当前 Claude 角色可以直接更新自己的 roleFile 和 historyFile
+只允许更新当前角色对应的两个文件
+稳定的职责/能力/边界变化写入 roleFile
+重要任务经验和最近记录写入 historyFile
+普通消息不强制写入 historyFile
+禁止修改其他角色、CLAUDE.md、服务器控制规则和安全规则
+```
+
+提示词加载时机：
+
+```text
+角色添加或 Agent 进程首次启动：生成 prompt.txt
+Agent 进程存活期间：后续消息复用同一 prompt.txt，不重新读取 roleFile/historyFile
+Agent 进程重新创建：重新生成 prompt.txt，加载最新 roleFile/historyFile
+```
 
 ## `ClaudeBridge.ensureStarted`
 
@@ -171,6 +234,56 @@ stop():
 
 `AiRolesService.restoreAll()` 遍历 `RoleStore.list()`，为每个角色准备提示词文件并调用 `reconnect()`；重连失败只记录警告，角色仍保留，下一次聊天重新懒启动。
 
+## `AiRolesService.stopAll`
+
+```text
+stopAll():
+  stopped = 0
+  遍历内存 bridges:
+    如果 bridge.isAlive(): stopped += 1
+    bridge.stop()
+  清空 bridges
+  返回 stopped
+```
+
+停止后 `aiRoles.list()` 仍返回全部角色，但 `running=false`；角色定义、控制端 history.md 和聊天历史不受影响。
+
+## Agent 后端与持久上下文
+
+```text
+AiRolesService._bridge(name):
+  如果内存中已有 bridge:
+    返回原 bridge（全局设置变化不替换运行中进程）
+  backend = role.json.backend
+  如果 backend 缺失且 legacy claude.pid 存活:
+    backend = 'claude'
+  如果 backend 缺失或对应进程已退出:
+    backend = getGlobalAgentBackend() 或 'codex'
+  创建对应 ClaudeBridge/CodexBridge
+  保存 role.json.backend=backend
+  返回 bridge
+
+CodexBridge.ensureStarted():
+  如果 codex app-server 已存活:
+    返回
+  spawn('codex', ['app-server', '--stdio'], env={...
+        process.env, HTTPS_PROXY:'http://127.0.0.1:7899'})
+  发送 initialize(clientInfo)
+  发送 initialized 通知
+  发送 thread/start({ cwd, approvalPolicy:'never' })
+  保存返回的 threadId
+
+CodexBridge.chat(content, callbacks):
+  确保 app-server 与 threadId 存活
+  发送 turn/start({ threadId, input:[{ type:'text', text:content }],
+                    approvalPolicy:'never', sandboxPolicy:工作区策略 })
+  item/agentMessage/delta -> callbacks.onChunk(delta)
+  turn/completed -> callbacks.onComplete(累积文本)
+  JSON-RPC error/进程退出/超时 -> callbacks.onError(error)，清理后允许重建
+```
+
+Codex 的 `threadId` 由当前服务器进程持有；同一角色后续消息继续使用该 thread。由于 stdio 句柄不能跨服务器进程接管，服务器重启后由角色历史和最新提示词恢复，下一条消息重新创建 Codex thread。
+
 ## 控制端渲染
 
 ```text
@@ -181,6 +294,7 @@ stop():
 render():
   输出群聊 tab、既有模板 tab、每个工作角色 tab 和 '+' 添加按钮
   角色 tab 点击 -> mode='role', roleTarget=name, 请求 roleHistory
+  角色 tab 状态 -> running=true 显示“在线”，running=false 显示“离线”
   '+' -> 输入名称并发送 roleAdd
   '×' -> confirm 后发送 roleDelete(role)
 
@@ -188,4 +302,9 @@ render():
   chatMessage { mode:'role', role: roleTarget, content, requestId }
   // chatChunk/chatResponse 必须携带同一 requestId；控制端只接受等于 activeRequestId 的响应
   chatResponse -> 完成消息并使用返回 history 更新显示
+
+系统设置关闭 Agent:
+  点击“关闭所有 Agent” -> POST /api/ai-roles/stop-all
+  成功 -> 服务端广播 roleList -> 所有角色状态更新为离线
+  角色数据和文件不删除
 ```

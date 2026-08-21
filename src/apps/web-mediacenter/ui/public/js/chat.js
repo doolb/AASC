@@ -2,7 +2,8 @@ const Chat = {
     history: [],
     templates: [],
     config: {
-        systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。'
+        systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
+        agentBackend: 'codex'
     },
     assistantConfig: {
         defaultName: '小爱',
@@ -370,6 +371,7 @@ const Chat = {
                     if (data.config.systemPrompt) {
                         this.config.systemPrompt = data.config.systemPrompt;
                     }
+                    this.config.agentBackend = data.config.agentBackend || 'codex';
                 }
             })
             .catch(err => console.error('加载聊天配置失败:', err));
@@ -627,6 +629,8 @@ const Chat = {
         if (systemPromptInput) {
             this.config.systemPrompt = systemPromptInput.value.trim() || '你是一个友好的助手，请用简洁的语言回答问题。';
         }
+        const agentBackendInput = document.getElementById('chatAgentBackend');
+        if (agentBackendInput) this.config.agentBackend = agentBackendInput.value === 'claude' ? 'claude' : 'codex';
 
         fetch('/api/chat/config', {
             method: 'POST',
@@ -698,7 +702,13 @@ const Chat = {
         const tabs = container.querySelector('.chat-tabs');
         tabs.querySelectorAll('[data-role-tab]').forEach((tab) => {
             const name = tab.dataset.roleTab;
+            const role = this.aiRoles.find((item) => item.name === name);
             tab.textContent = name;
+            const status = document.createElement('span');
+            status.className = `chat-role-status ${role && role.running ? 'online' : 'offline'}`;
+            status.textContent = role && role.running ? '在线' : '离线';
+            status.title = role && role.backend ? `Agent 后端：${role.backend}` : 'Agent 未运行';
+            tab.appendChild(status);
             tab.addEventListener('click', () => this.setRoleMode(name));
             const del = document.createElement('span'); del.className = 'chat-tab-del'; del.textContent = '×'; del.title = '删除角色';
             del.addEventListener('click', (event) => { event.stopPropagation(); this.deleteRole(name); }); tab.appendChild(del);
@@ -721,8 +731,11 @@ const Chat = {
         }
         // 角色模式：显示当前角色名 + 退出按钮（回到群聊）
         if (this.session.mode === 'role') {
+            const role = this.aiRoles.find((item) => item.name === this.session.roleTarget);
+            const backend = role && role.backend ? role.backend : this.config.agentBackend;
+            const online = role && role.running;
             html += `
-                <span class="mode-badge role">角色: ${this.escapeHtml(this.session.roleTarget)}</span>
+                <span class="mode-badge role">Agent · ${this.escapeHtml(backend)} · ${this.escapeHtml(this.session.roleTarget)} · ${online ? '在线' : '离线'}</span>
                 <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出角色</button>
             `;
         } else if (this.session.mode === 'private') {
@@ -983,6 +996,7 @@ const Chat = {
                 content: sendMessage,
                 displayContent: displayMessage,
                 mode: mode,
+                assistantType: mode === 'role' ? 'agent' : 'llm',
                 target: target,
                 // 角色模式才带 role 字段；templateTarget 保留以维持群聊模板选中
                 role: mode === 'role' ? this.session.roleTarget : undefined,
@@ -1464,6 +1478,8 @@ const Chat = {
             if (textarea) {
                 textarea.value = this.config.systemPrompt;
             }
+            const agentBackend = document.getElementById('chatAgentBackend');
+            if (agentBackend) agentBackend.value = this.config.agentBackend || 'codex';
             this.loadProfiles();
         }
     },

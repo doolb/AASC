@@ -240,9 +240,13 @@ let muteState = {
 
 let wsServer = null;
 let taskManager = null;
-// AI 角色面板：每角色一个 detached claude 进程。声明在模块级——handleControlMessageFallback
+// AI 角色面板：每角色一个 Claude 或 Codex Agent 进程。声明在模块级——handleControlMessageFallback
 // 在模块作用域引用 aiRoles，若只声明在 server.listen 回调里会出作用域（ReferenceError）。
-const aiRoles = new AiRolesService({ projectRoot: PROJECT_ROOT });
+const aiRoles = new AiRolesService({
+    projectRoot: PROJECT_ROOT,
+    // 全局设置只作为新建/重建角色的默认后端；AiRolesService 内存中的 bridge 不会因设置变化被替换。
+    getAgentBackend: () => chat.getConfig().agentBackend || 'codex'
+});
 const runtimeBridgeClients = new Map();
 
 const pendingDisplayAsrRequests = new Map();
@@ -1380,6 +1384,7 @@ app.post('/api/chat/config', (req, res) => {
     try {
         const newConfig = chat.setConfig(req.body);
         config.set('chat', newConfig);
+        broadcastToControls({ type: 'chatConfigChanged', config: newConfig });
         res.json({
             status: 'success',
             message: '聊天配置已更新',
@@ -3875,8 +3880,14 @@ async function handleControlMessageFallback(data, ws) {
                 } else if (data.type === 'chatMessage') {
                     (async () => {
                         try {
-                            // AI 角色对话：mode==='role' 走 ai-roles 桥，返回标准 chatChunk/chatResponse
-                            if (data.mode === 'role' && data.role) {
+                            // Agent 消息显式使用 assistantType；旧控制端只发 mode=role 时继续兼容。
+                            const isAgentMessage = data.assistantType === 'agent' ||
+                                (!data.assistantType && data.mode === 'role');
+                            if (isAgentMessage) {
+                                if (!data.role) {
+                                    ws.send(JSON.stringify({ type: 'roleError', message: 'Agent 消息缺少角色' }));
+                                    return;
+                                }
                                 // 角色名来自前端输入：先确认存在，避免对不存在的角色静默建孤儿目录
                                 if (!aiRoles.list().some(r => r.name === data.role)) {
                                     ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
@@ -3895,6 +3906,7 @@ async function handleControlMessageFallback(data, ws) {
                             const targetDisplayIds = data.displayIds || [];
                             
                             await handleChatMessage({
+                                requestId: data.requestId,
                                 content: data.content,
                                 displayContent: data.displayContent || data.content,
                                 displayId: targetDisplayId,
@@ -3996,6 +4008,7 @@ function getLocalIP() {
 
 async function handleChatMessage(options) {
     const {
+        requestId,
         content,
         displayContent,
         displayId,
@@ -4060,7 +4073,7 @@ async function handleChatMessage(options) {
         target: messageTarget
     }, {
         onChunk: (chunk, fullMessage) => {
-            sendToControl({ type: 'chatChunk', chunk, message: fullMessage });
+            sendToControl({ type: 'chatChunk', requestId, chunk, message: fullMessage });
         },
         onSentence: async (sentence, fullMessage) => {
             if (!tts) return;
@@ -4103,10 +4116,10 @@ async function handleChatMessage(options) {
                 target: messageTarget
             });
             
-            sendToControl({ type: 'chatResponse', success: true, message: fullMessage, history: chat.getHistory() });
+            sendToControl({ type: 'chatResponse', requestId, success: true, message: fullMessage, history: chat.getHistory() });
         },
         onError: (error) => {
-            sendToControl({ type: 'chatResponse', success: false, error });
+            sendToControl({ type: 'chatResponse', requestId, success: false, error });
         }
     });
 }

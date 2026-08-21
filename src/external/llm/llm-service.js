@@ -23,6 +23,7 @@ const DEFAULT_TEMPLATES = [
 ];
 
 let chatConfig = {
+    agentBackend: 'codex',
     apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
     model: 'gpt-3.5-turbo',
     maxTokens: 1000,
@@ -144,6 +145,7 @@ function trimHistory() {
 }
 
 function init(config = {}) {
+    if (config.agentBackend === 'codex' || config.agentBackend === 'claude') chatConfig.agentBackend = config.agentBackend;
     if (config.apiUrl) chatConfig.apiUrl = config.apiUrl;
     if (config.model) chatConfig.model = config.model;
     if (config.maxTokens) chatConfig.maxTokens = config.maxTokens;
@@ -309,6 +311,12 @@ function getConfig() {
 }
 
 function setConfig(newConfig) {
+    if (newConfig.agentBackend !== undefined) {
+        if (newConfig.agentBackend !== 'codex' && newConfig.agentBackend !== 'claude') {
+            throw new Error('Agent 后端不合法');
+        }
+        chatConfig.agentBackend = newConfig.agentBackend;
+    }
     if (newConfig.apiUrl !== undefined) chatConfig.apiUrl = newConfig.apiUrl;
     if (newConfig.model !== undefined) chatConfig.model = newConfig.model;
     if (newConfig.maxTokens !== undefined) chatConfig.maxTokens = newConfig.maxTokens;
