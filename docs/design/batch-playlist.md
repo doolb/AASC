@@ -99,3 +99,10 @@
 | src/apps/web-mediacenter/ui/public/js/upload.js | 裁剪区多文件/文件夹批量上传 |
 | src/apps/web-mediacenter/ui/public/css/upload.css | 设置框与进度面板样式 |
 | tests/playlist-app-service.test.js | PlaylistManager 单元测试 |
+
+## 重连播放进度补充
+
+- 非临时列表持久化当前索引、当前 video/audio 项的 `currentTime`/`duration` 和 `playing/paused` 状态。
+- 重连补发 `playlistStart` 时携带 `resumeIndex`、`resumeTime`、`resumeState`。
+- 显示端在媒体 `loadedmetadata` 后恢复时间；暂停列表恢复后保持暂停，播放列表从缓存位置继续。
+- 图片批量仍按当前索引恢复；HTML 滚动位置不改变本次既有语义。

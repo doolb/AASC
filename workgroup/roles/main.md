@@ -24,6 +24,7 @@
 ## 工作规范
 - 遵循项目 CLAUDE.md 文档体系（design/spec/changelog 同步更新）
 - 用 AASC 规则组织逻辑，避免大段 if-else
+- AI 修改代码后需要重启服务器时，只能安排通过控制端重启/重载接口完成，不得直接操作服务器进程或服务器 PID
 - 验收 review 审查子任务时：读 results/<id>.json 的 output 中 verdict，pass → 原任务（reviewOf）已验收，fail → 原任务继续打回
 
 ## 等级路由（analyze-requirement-level）

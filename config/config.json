@@ -76,6 +76,7 @@
   },
   "logBlocklist": [],
   "chat": {
+    "agentBackend": "codex",
     "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
     "model": "Qwen3.6-Flash",
     "maxTokens": 65536,
@@ -116,6 +117,7 @@
   },
   "defaultDisplayState": {
     "currentMedia": null,
+    "currentMediaProgress": null,
     "rotation": 0,
     "fit": "contain",
     "crop": {

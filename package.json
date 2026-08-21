@@ -5,6 +5,7 @@
   "main": "src/apps/server/boot/server-app.js",
   "scripts": {
     "start": "node --openssl-legacy-provider --expose-gc src/apps/server/boot/server-app.js",
+    "restart:server": "node src/scripts/restart-server.js",
     "test:log-brain": "node src/scripts/run-log-brain-tests.js",
     "stress:tts": "node src/scripts/tts-stress-test.js",
     "build:apk": "cd src/apps/android-display && ANDROID_HOME=${ANDROID_HOME:-/opt/android-sdk} ./gradlew :app:assembleDebug",

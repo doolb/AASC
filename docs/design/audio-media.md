@@ -56,3 +56,9 @@
 
 - image/video/gif/html 的识别、播放、批量切换和进度逻辑保持原行为。
 - 旧状态缺少 `audio` 时按现有媒体类型恢复，不改变已有持久化字段结构。
+
+## 重连播放进度补充
+
+- `audioProgress` 除了实时转发控制端，还更新服务端的 `currentMediaProgress` 缓存。
+- 音频重连恢复时在 `loadedmetadata` 后跳转到缓存的 `currentTime`，再按持久化播放状态决定暂停或播放。
+- 批量音频进度通过 `playlistProgress.currentTime/duration` 保存，重连恢复当前项音频位置和列表暂停状态。

@@ -1216,7 +1216,12 @@
                 if (state.currentHtmlScroll) {
                     currentHtmlScroll = state.currentHtmlScroll;
                 }
-                showMedia(state.currentMedia, true, state.isPlaying === false);  // 恢复不激活；isPlaying=false（控制端暂停）时恢复暂停，避免重连自动播放
+                showMedia(
+                    state.currentMedia,
+                    true,
+                    state.isPlaying === false,
+                    state.currentMediaProgress ? state.currentMediaProgress.currentTime : 0
+                );  // 恢复不激活；暂停状态保持暂停，并跳回上次播放位置
             }
 
             if (state.sleep !== undefined) {
@@ -1288,15 +1293,27 @@
             const ps = playlistState;
             const item = ps.playlist[ps.index];
             let width, height;
+            let currentTime = 0;
+            let duration = 0;
             if (item) {
                 // 回传实际播放尺寸（临时模式控制端无数据，依赖此尺寸做裁剪预览）
                 if (item.mediaType === 'video') {
                     width = mediaVideo.videoWidth || undefined;
                     height = mediaVideo.videoHeight || undefined;
+                    currentTime = Number.isFinite(mediaVideo.currentTime) ? mediaVideo.currentTime : 0;
+                    duration = Number.isFinite(mediaVideo.duration) ? mediaVideo.duration : 0;
                 } else {
                     width = mediaImage.naturalWidth || undefined;
                     height = mediaImage.naturalHeight || undefined;
+                    if (item.mediaType === 'audio') {
+                        currentTime = Number.isFinite(mediaAudio.currentTime) ? mediaAudio.currentTime : 0;
+                        duration = Number.isFinite(mediaAudio.duration) ? mediaAudio.duration : 0;
+                    }
                 }
+            }
+            // 重连恢复的媒体在 loadedmetadata 前 currentTime 仍可能是 0，先用待恢复值回传一次。
+            if (currentTime === 0 && Number.isFinite(ps.resumeTime) && ps.resumeTime > 0) {
+                currentTime = ps.resumeTime;
             }
             displayWs.send(JSON.stringify({
                 type: 'playlistProgress',
@@ -1308,7 +1325,9 @@
                 url: item ? item.url : undefined,
                 mediaType: item ? item.mediaType : undefined,
                 width: width,
-                height: height
+                height: height,
+                currentTime: currentTime,
+                duration: duration
             }));
         }
 
@@ -1321,7 +1340,8 @@
                 stopPlaylist();
                 return;
             }
-            const resumeIndex = Math.max(Math.min(data.resumeIndex || 0, playlist.length - 1), 0);
+            const resumeIndex = Math.max(Math.min(Number.isFinite(data.resumeIndex) ? data.resumeIndex : 0, playlist.length - 1), 0);
+            const resumeTime = Number.isFinite(data.resumeTime) && data.resumeTime > 0 ? data.resumeTime : 0;
             playlistState = {
                 listId: data.listId,
                 playlist: playlist,
@@ -1332,14 +1352,18 @@
                 videoEndedHandler: null,
                 audioEndedHandler: null,
                 active: true,
-                paused: false
+                paused: data.resumeState === 'paused',
+                resumeTime: resumeTime
             };
-            playCurrentItem();
+            playCurrentItem({ allowPausedLoad: true, resumeTime: resumeTime });
         }
 
-        function playCurrentItem() {
-            if (!playlistState || !playlistState.active || playlistState.paused) return;
-            if (isSleepPaused()) return;  // 睡眠/深度睡眠中不切播（ended/error/timer 触达时跳过，唤醒后恢复当前项）
+        function playCurrentItem(options = {}) {
+            if (!playlistState || !playlistState.active) return;
+            if (playlistState.paused && !options.allowPausedLoad) return;
+            if (isSleepPaused() && !(playlistState.paused && options.allowPausedLoad)) {
+                return;  // 睡眠/深度睡眠中不自动切播；暂停重连仍允许加载当前项，唤醒后可继续
+            }
             const ps = playlistState;
             const item = ps.playlist[ps.index];
             if (!item) {
@@ -1366,7 +1390,8 @@
             const mediaData = item.url
                 ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType }
                 : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType };
-            showMedia(mediaData, true);  // 播放列表自动切播不激活（显示端内部行为）
+            const resumeTime = Number.isFinite(options.resumeTime) ? options.resumeTime : ps.resumeTime;
+            showMedia(mediaData, true, ps.paused, resumeTime);  // 播放列表自动切播不激活（显示端内部行为）
             // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
             const reportSizeOnce = () => {
                 if (playlistState && playlistState.paused) {
@@ -1374,6 +1399,7 @@
                 } else {
                     sendPlaylistProgress('playing');
                 }
+                if (playlistState) playlistState.resumeTime = null;
             };
             if (item.mediaType === 'video') {
                 mediaVideo.addEventListener('loadedmetadata', reportSizeOnce, { once: true });
@@ -1387,12 +1413,14 @@
             if (item.mediaType === 'video') {
                 // 视频用自己的时长播放，播完后再等间隔
                 mediaVideo.loop = false;
-                ps.videoEndedHandler = function() {
-                    mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
-                    ps.videoEndedHandler = null;
-                    ps.timer = setTimeout(playlistNext, ps.interval);
-                };
-                mediaVideo.addEventListener('ended', ps.videoEndedHandler);
+                if (!ps.paused) {
+                    ps.videoEndedHandler = function() {
+                        mediaVideo.removeEventListener('ended', ps.videoEndedHandler);
+                        ps.videoEndedHandler = null;
+                        ps.timer = setTimeout(playlistNext, ps.interval);
+                    };
+                    mediaVideo.addEventListener('ended', ps.videoEndedHandler);
+                }
                 mediaVideo.onerror = function() {
                     // 视频加载失败：等间隔后播下一个，不卡死循环
                     mediaVideo.onerror = null;
@@ -1406,12 +1434,14 @@
             } else if (item.mediaType === 'audio') {
                 // 音频按自然时长播放，结束后等待间隔再切换，和视频批量语义一致。
                 mediaAudio.loop = false;
-                ps.audioEndedHandler = function() {
-                    mediaAudio.removeEventListener('ended', ps.audioEndedHandler);
-                    ps.audioEndedHandler = null;
-                    ps.timer = setTimeout(playlistNext, ps.interval);
-                };
-                mediaAudio.addEventListener('ended', ps.audioEndedHandler);
+                if (!ps.paused) {
+                    ps.audioEndedHandler = function() {
+                        mediaAudio.removeEventListener('ended', ps.audioEndedHandler);
+                        ps.audioEndedHandler = null;
+                        ps.timer = setTimeout(playlistNext, ps.interval);
+                    };
+                    mediaAudio.addEventListener('ended', ps.audioEndedHandler);
+                }
                 mediaAudio.onerror = function() {
                     // 音频加载失败：等待间隔后播下一个，避免单项错误卡住列表。
                     mediaAudio.onerror = null;
@@ -1430,14 +1460,15 @@
                     if (ps.paused) return;
                     ps.timer = setTimeout(playlistNext, ps.interval);
                 };
-                ps.timer = setTimeout(playlistNext, ps.interval);
+                if (!ps.paused) ps.timer = setTimeout(playlistNext, ps.interval);
             }
-            sendPlaylistProgress('playing');
+            sendPlaylistProgress(ps.paused ? 'paused' : 'playing');
         }
 
         function playlistNext() {
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
+            ps.resumeTime = null;
             // 定时器已经触发，先清除句柄，避免睡眠拦截后唤醒逻辑误判仍在等待。
             if (ps.timer) clearTimeout(ps.timer);
             ps.timer = null;
@@ -1460,6 +1491,7 @@
         function playlistPrev() {
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
+            ps.resumeTime = null;
             ps.index = ps.index - 1 < 0 ? (ps.loop ? ps.playlist.length - 1 : 0) : ps.index - 1;
             playCurrentItem();
         }
@@ -1468,6 +1500,7 @@
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
             if (index < 0 || index >= ps.playlist.length) return;
+            ps.resumeTime = null;
             ps.index = index;
             playCurrentItem();
         }
@@ -2324,7 +2357,15 @@
             return null;
         }
 
-        function showMedia(data, noActivate, paused) {
+        // 媒体元数据加载后才能安全设置 currentTime；旧状态没有进度时保持 0 秒。
+        function applyResumeTime(media, resumeTime) {
+            const time = Number(resumeTime);
+            if (!Number.isFinite(time) || time <= 0 || !Number.isFinite(media.duration) || media.duration <= 0) return;
+            const maxTime = Math.max(media.duration - 0.05, 0);
+            media.currentTime = Math.min(Math.max(time, 0), maxTime);
+        }
+
+        function showMedia(data, noActivate, paused, resumeTime = 0) {
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
             pauseExpected = true;
@@ -2343,6 +2384,8 @@
             mediaAudio.src = '';
             mediaAudio.load();
             mediaAudio.ontimeupdate = null;
+            mediaVideo.onloadedmetadata = null;
+            mediaAudio.onloadedmetadata = null;
             waitingMessage.style.display = 'none';
 
             if (data.mediaType === 'html') {
@@ -2418,6 +2461,7 @@
                     mediaVideo.style.display = 'none';
                     mediaAudio.src = data.url;
                     mediaAudio.loop = true;
+                    mediaAudio.onloadedmetadata = () => applyResumeTime(mediaAudio, resumeTime);
                     mediaAudio.load();
                     if (paused) {
                         mediaAudio.pause();
@@ -2437,6 +2481,10 @@
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = data.url;
+                    mediaVideo.onloadedmetadata = () => {
+                        applyResumeTime(mediaVideo, resumeTime);
+                        applyCrop();
+                    };
                     mediaVideo.load();
                     // 重连恢复且为暂停状态时不自动播放（控制端暂停的视频重连后保持暂停）
                     if (paused) {
@@ -2444,7 +2492,6 @@
                     } else {
                         playVideoAuto(mediaVideo);
                     }
-                    mediaVideo.onloadedmetadata = () => applyCrop();
                     mediaVideo.ontimeupdate = function() {
                         if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
                         var d = mediaVideo.duration;
@@ -2473,6 +2520,7 @@
                     mediaVideo.style.display = 'none';
                     mediaAudio.src = src;
                     mediaAudio.loop = true;
+                    mediaAudio.onloadedmetadata = () => applyResumeTime(mediaAudio, resumeTime);
                     mediaAudio.load();
                     if (paused) {
                         mediaAudio.pause();
@@ -2492,6 +2540,10 @@
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = src;
+                    mediaVideo.onloadedmetadata = () => {
+                        applyResumeTime(mediaVideo, resumeTime);
+                        applyCrop();
+                    };
                     mediaVideo.load();
                     // 重连恢复且为暂停状态时不自动播放
                     if (paused) {
@@ -2499,7 +2551,6 @@
                     } else {
                         playVideoAuto(mediaVideo);
                     }
-                    mediaVideo.onloadedmetadata = () => applyCrop();
                 } else {
                     mediaVideo.style.display = 'none';
                     mediaImage.style.display = 'block';
@@ -2514,13 +2565,23 @@
             // 新媒体显示即播放（或按恢复的暂停状态），同步本地播放状态 + 上报真实播放状态，避免服务端残留陈旧的 isPlaying=false 导致重连误暂停
             mediaIsPlaying = !paused;
             pauseExpected = !!paused;
-            reportPlayState(!paused);
+            reportPlayState(!paused, resumeTime);
         }
 
         // 上报播放状态到服务端：控制端暂停/播放、显示新媒体、重连恢复后，供服务端持久化 isPlaying 并在重连时恢复
-        function reportPlayState(playing) {
+        function reportPlayState(playing, resumeTime) {
             if (displayWs && displayWs.readyState === 1) {
-                displayWs.send(JSON.stringify({ type: 'playStateReport', isPlaying: !!playing }));
+                const media = getCurrentPlayableMedia();
+                const currentTime = Number.isFinite(resumeTime)
+                    ? resumeTime
+                    : (media && Number.isFinite(media.currentTime) ? media.currentTime : 0);
+                const duration = media && Number.isFinite(media.duration) ? media.duration : 0;
+                displayWs.send(JSON.stringify({
+                    type: 'playStateReport',
+                    isPlaying: !!playing,
+                    currentTime: currentTime,
+                    duration: duration
+                }));
             }
         }
 

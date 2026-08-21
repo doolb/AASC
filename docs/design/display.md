@@ -196,6 +196,14 @@
      - docs/spec/display-sleep-mode.md
    - 实现文档：docs/spec/display-sleep-mode.md
 
+## 媒体重连恢复播放进度
+
+ - ✅已确认 [2026-08-21] 暂停媒体重连后恢复上次播放位置
+   - 问题：显示端重连恢复 `currentMedia` 时重新加载 video/audio，虽然能恢复暂停状态，但媒体元素的 `currentTime` 被重置为 0；批量播放只恢复当前索引，未恢复当前视频/音频项的时间。
+   - 设计：服务端为单媒体保存 `currentMediaProgress`，为非临时批量列表保存当前项 `currentTime`/`duration`；显示端恢复媒体元数据后先 seek 到缓存位置，再按 `isPlaying` 或批量 `state` 决定暂停/播放。
+   - 兼容：旧状态缺少进度字段时按 0 秒恢复；图片批量只恢复当前索引；本次不改变 HTML 滚动位置恢复语义。
+   - 持久化：进度消息先更新内存状态，按时间节流写入配置；暂停、媒体切换和批量切项时强制写入最新进度，避免高频 `timeupdate` 放大配置文件写入。
+
 ## 控制端左侧导航样式
  - ✅已完成 [2026-08-18][2026-08-18] 隐藏左侧导航滚动条但保留滚动能力
    - .sidebar-nav 保留原生垂直滚动，在 Firefox、旧版 Edge、WebKit/Chromium 分别隐藏滚动条视觉元素。

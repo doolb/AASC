@@ -359,6 +359,35 @@ renderPlaylistPanel(info):
 controlPlaylist(action, btn):
     toggle -> 根据按钮 dataset.action 转 pause/resume
     sendPlaylistControl(displayIds, action)
+
+### 重连播放进度
+
+```
+config 中每显示端非临时 currentPlaylist:
+    startData: 原播放列表配置
+    index: 当前索引
+    state: playing | paused
+    currentTime: 当前项 video/audio 播放秒数
+    duration: 当前项 video/audio 总秒数
+
+显示端重连:
+    如果 savedState.currentPlaylist:
+        ws.send(playlistStart, ...startData,
+            resumeIndex: currentPlaylist.index,
+            resumeTime: currentPlaylist.currentTime,
+            resumeState: currentPlaylist.state)
+
+显示端 handlePlaylistStart(data):
+    resumeIndex = 夹取到合法索引
+    resumeTime = 非负有限数，否则 0
+    paused = data.resumeState === paused
+    playlistState = {..., index: resumeIndex, paused, resumeTime}
+    playCurrentItem({allowPausedLoad: true, resumeTime})
+
+显示端 playCurrentItem(options):
+    showMedia(currentItem, true, playlistState.paused, options.resumeTime)
+    video/audio loadedmetadata 后设置 currentTime 并上报实际 duration
+playlistProgress 携带 currentTime/duration
 ```
 
 ### upload.js（临时模式批量）
@@ -388,7 +417,9 @@ config 中每显示端状态:
     currentPlaylist: {
         startData: {listId, playlist, interval, loop, announceName},
         index: 当前索引,
-        state: 'playing' | 'paused'
+        state: 'playing' | 'paused',
+        currentTime: 当前项 video/audio 播放秒数,
+        duration: 当前项 video/audio 总秒数
     }
     仅非临时列表持久化；临时列表仅在显示端连接对应的服务端内存中保留轻量元数据
 ```

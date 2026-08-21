@@ -70,6 +70,8 @@ mediaLibraryProxy:
 
 displayTypes 注册 audioProgress
 display 消息 audioProgress:
+    更新 displayState.currentMediaProgress = {currentTime, duration}
+    节流持久化 currentMediaProgress
     broadcastToControls({displayId, type, currentTime, duration})
 
 control WebSocket:
@@ -82,13 +84,14 @@ control WebSocket:
 DOM:
     mediaAudio = #mediaAudio
 
-showMedia(data, noActivate, paused):
+showMedia(data, noActivate, paused, resumeTime):
     如果 data.mediaType == audio:
         停止 html 滚动
         隐藏 image/video/html
         设置 mediaAudio.src 或 data URL
         mediaAudio.loop = true
         load()
+        loadedmetadata 后将 currentTime 设置为 resumeTime（越界时夹取到有效范围）
         paused 时 pause，否则 playAudioAuto()
         绑定 timeupdate → audioProgress
     否则沿用已有媒体分支

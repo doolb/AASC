@@ -351,7 +351,32 @@ chatStream(userMessage, options, callbacks):
     完成后:
         若 pendingText 还有剩余内容，发出（调用 onSentence）
         调用 addMessage()
-        调用 callbacks.onComplete()
+    调用 callbacks.onComplete()
+
+### 普通 LLM WebSocket 流式回包
+
+```text
+控制端 sendMessage():
+    requestId = 生成本次请求唯一标识
+    发送 chatMessage(requestId, content, mode, target)
+    创建 streamingContent 临时节点
+
+服务端 handleChatMessage(options):
+    读取 requestId = options.requestId
+    调用 chat.chatStream(content, ...):
+        onChunk(chunk, fullMessage):
+            sendToControl({ type: 'chatChunk', requestId, chunk, message: fullMessage })
+        onComplete(fullMessage, history):
+            保存助手历史
+            sendToControl({ type: 'chatResponse', requestId, success: true, message: fullMessage, history })
+        onError(error):
+            sendToControl({ type: 'chatResponse', requestId, success: false, error })
+
+控制端 WebSocket:
+    收到 chatChunk/chatResponse
+    仅当 data.requestId === Chat.activeRequestId 时更新当前流式节点
+    请求号匹配时立即更新文本和滚动位置，不依赖刷新页面重新加载历史
+```
 
 onSentence 外部使用注意事项:
     onSentence 内部调用 tts.generateTTS() 是异步的
