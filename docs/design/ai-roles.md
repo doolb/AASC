@@ -11,6 +11,10 @@
 - 聊天设置提供全局 Agent 后端选择（`codex`/`claude`），默认使用 `codex`；该设置只影响新建或已退出后重建的角色。
 - 普通 LLM 与工作 Agent 使用显式 `assistantType` 区分；保留 `mode='role'` 作为旧控制端兼容字段。
 - 系统设置提供“关闭所有 Agent”操作，只停止 Claude/Codex 进程，不删除角色、历史或角色定义文件。
+- Agent 首次启动成功后立即广播在线状态；启动失败或停止后广播离线状态，控制端不等待回复完成才刷新。
+- 关闭 Agent 接口和控制端按钮必须区分 HTTP 错误与 JSON 业务错误，向用户显示服务端返回的实际原因。
+- Claude/Codex 当前均配置为自动通过权限审批；该行为必须明确提示为高权限执行，不宣称为安全沙箱。
+- 聊天回复当前按纯文本显示，Markdown 解析不纳入本次状态修复范围。
 
 
 ### role-store
@@ -79,7 +83,13 @@
 
 角色 handler 只负责协议适配和错误边界，角色持久化与进程生命周期继续由 `AiRolesService` 负责。添加或删除成功后广播最新 `roleList`，使多个控制端保持一致。
 
-角色 tab 使用 `roleList.roles[].running` 显示 Agent 在线状态；“关闭所有 Agent”成功后广播新的 `roleList`，所有角色立即显示离线，下一次发送消息再懒启动。
+角色 tab 使用 `roleList.roles[].running` 显示 Agent 在线状态；首次消息确认 Agent 启动后立即广播新的 `roleList`，关闭所有 Agent 后也广播新的 `roleList`，所有角色立即显示离线，下一次发送消息再懒启动。
+
+### 权限和回复格式
+
+- Claude 使用 `--permission-mode bypassPermissions`，Codex 使用 `approvalPolicy: 'never'` 与 `dangerFullAccess`；权限请求不会等待用户点击确认。
+- 该权限策略只适合用户明确授权的本机工作区 Agent，控制端需要把高权限行为作为运行前提展示给用户。
+- 聊天消息目前使用 HTML 转义后写入文本区域，Markdown 标记不会转换为标题、列表、代码块或链接。
 
 ## 控制端角色自管理
 

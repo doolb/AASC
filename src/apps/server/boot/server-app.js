@@ -1395,6 +1395,16 @@ app.post('/api/chat/config', (req, res) => {
     }
 });
 
+app.post('/api/ai-roles/stop-all', (req, res) => {
+    try {
+        const stopped = aiRoles.stopAll();
+        broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
+        res.json({ status: 'success', message: `已关闭 ${stopped} 个 Agent`, stopped });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: `关闭 Agent 失败: ${err.message}` });
+    }
+});
+
 app.get('/api/chat/profiles', (req, res) => {
     res.json({
         status: 'success',
@@ -3895,6 +3905,9 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                                 await aiRoles.chat(data.role, data.content, {
                                     requestId: data.requestId,
+                                    onStatus: () => {
+                                        broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
+                                    },
                                     onChunk: (chunk, message, requestId) => ws.send(JSON.stringify({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message })),
                                     onComplete: (message, history, requestId) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history })),
                                     onError: (error) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: data.requestId, success: false, error: error instanceof Error ? error.message : error }))

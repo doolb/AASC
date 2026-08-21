@@ -105,6 +105,36 @@ test('chat 回调透传 requestId', async () => {
     assert.strictEqual(chunks.join(''), 'echo:带请求号');
 });
 
+test('chat 确认 Agent 启动后先回调在线状态', async () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    let status;
+    const svc = new AiRolesService({
+        baseDir: base,
+        projectRoot: dir,
+        getAgentBackend: () => 'codex',
+        bridgeFactory: (options) => ({
+            backend: options.backend,
+            promptFile: null,
+            alive: false,
+            isAlive() { return this.alive; },
+            async ensureStarted() { this.alive = true; },
+            stop() { this.alive = false; },
+            async chat() {
+                assert.deepStrictEqual(status, { name: '后端', running: true, backend: 'codex' });
+                return { success: true, message: '已完成' };
+            }
+        })
+    });
+    svc.add('后端');
+
+    await svc.chat('后端', '启动任务', {
+        onStatus: (value) => { status = value; }
+    });
+
+    assert.deepStrictEqual(status, { name: '后端', running: true, backend: 'codex' });
+});
+
 test('提示词复用 workgroup/roles/<名>.md', async () => {
     const dir = tmpDir();
     const base = path.join(dir, 'roles');
@@ -243,4 +273,30 @@ test('stopAll 关闭所有 Agent 但保留角色文件和角色记录', () => {
     assert.ok(fs.existsSync(path.join(base, '角色二', 'role.json')));
     assert.ok(fs.existsSync(roleDefinition));
     assert.ok(fs.existsSync(roleHistory));
+});
+
+test('stopAll 后读取角色状态不会重新创建 Agent bridge', () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    let created = 0;
+    const svc = new AiRolesService({
+        baseDir: base,
+        projectRoot: dir,
+        getAgentBackend: () => 'codex',
+        bridgeFactory: () => {
+            created += 1;
+            return {
+                alive: true,
+                isAlive() { return this.alive; },
+                stop() { this.alive = false; },
+                reconnect() { return this.alive; }
+            };
+        }
+    });
+    svc.add('后端');
+    svc._bridge('后端');
+    svc.stopAll();
+
+    assert.strictEqual(svc.list()[0].running, false);
+    assert.strictEqual(created, 1, '查询停止后的状态不得重新创建 bridge');
 });

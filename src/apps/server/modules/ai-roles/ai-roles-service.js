@@ -147,7 +147,11 @@ class AiRolesService {
     }
 
     list() {
-        return this.store.list().map((r) => ({ ...r, running: this._bridge(r.name).isAlive() }));
+        return this.store.list().map((r) => {
+            const bridge = this.bridges.get(r.name);
+            const running = bridge ? bridge.isAlive() : this._storedBackendIsRunning(r.name, r.backend);
+            return { ...r, running };
+        });
     }
 
     add(name) {
@@ -205,6 +209,27 @@ class AiRolesService {
                     bridge.setPrompt(fs.readFileSync(bridge.promptFile, 'utf8'));
                 }
             }
+            // 先确认 Agent 已完成启动，再通知控制端刷新在线状态；不能等整轮回复完成后才广播。
+            try {
+                if (typeof bridge.ensureStarted === 'function') await bridge.ensureStarted();
+                if (callbacks.onStatus) {
+                    callbacks.onStatus({
+                        name,
+                        running: bridge.isAlive(),
+                        backend: bridge.backend || this.store.getBackend(name) || this.getAgentBackend()
+                    });
+                }
+            } catch (error) {
+                if (callbacks.onStatus) {
+                    callbacks.onStatus({
+                        name,
+                        running: false,
+                        backend: bridge.backend || this.store.getBackend(name) || this.getAgentBackend()
+                    });
+                }
+                if (callbacks.onError) callbacks.onError(error);
+                return { success: false, error: error.message };
+            }
             this.store.appendHistory(name, { role: 'control', name: '用户', content, mode: 'role', target: name });
             return bridge.chat(content, {
                 onChunk: (chunk, message) => callbacks.onChunk && callbacks.onChunk(chunk, message, callbacks.requestId),
@@ -213,7 +238,16 @@ class AiRolesService {
                     this.store.appendHistory(name, { role: 'assistant', name, content: message, mode: 'role', target: name });
                     if (callbacks.onComplete) callbacks.onComplete(message, this.store.loadHistory(name), callbacks.requestId);
                 },
-                onError: callbacks.onError
+                onError: (error) => {
+                    if (!bridge.isAlive() && callbacks.onStatus) {
+                        callbacks.onStatus({
+                            name,
+                            running: false,
+                            backend: bridge.backend || this.store.getBackend(name) || this.getAgentBackend()
+                        });
+                    }
+                    if (callbacks.onError) callbacks.onError(error);
+                }
             });
         });
         this.queues.set(name, run);

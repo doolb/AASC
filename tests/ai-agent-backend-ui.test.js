@@ -29,4 +29,6 @@ test('系统设置提供关闭所有 Agent 按钮，角色列表显示在线状�
     assert.match(chat, /在线|离线/u);
     assert.match(server, /api\/ai-roles\/stop-all/u);
     assert.match(server, /aiRoles\.stopAll\(\)/u);
+    assert.match(upload, /!r\.ok|response\.ok|res\.ok/u);
+    assert.match(server, /onStatus/u);
 });

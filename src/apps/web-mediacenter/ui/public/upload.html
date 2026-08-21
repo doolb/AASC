@@ -964,7 +964,12 @@
         stopAllAgents() {
             if (!confirm('确认关闭所有 Agent 进程？角色、历史和角色文件不会删除。')) return;
             fetch('/api/ai-roles/stop-all', { method: 'POST' })
-                .then(r => r.json())
+                .then(async (response) => {
+                    let data = {};
+                    try { data = await response.json(); } catch (_) { /* 非 JSON 响应由 HTTP 状态统一处理 */ }
+                    if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+                    return data;
+                })
                 .then(d => {
                     if (d.status === 'success') showToast(d.message || '所有 Agent 已关闭', 'success');
                     else showToast(d.message || '关闭 Agent 失败', 'error');

@@ -4,6 +4,13 @@
 
 ### 修复
 
+- ✅ [2026-08-21] 修复控制端 Agent 启动状态刷新和关闭按钮错误处理
+  - Agent 确认启动后立即广播在线状态，控制端无需等待回复完成或手动刷新。
+  - 停止所有 Agent 后读取角色列表不再重新创建 bridge。
+  - 关闭按钮检查 HTTP 状态并兼容非 JSON 错误，显示服务端真实失败原因。
+  - 明确 Claude/Codex 当前自动通过权限审批并使用高权限执行；聊天回复继续按纯文本显示 Markdown。
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端Agent在线状态与关闭错误修复.md
+
 - ✅ [2026-08-21] 增加控制端关闭所有 Agent 和在线状态显示
   - 系统设置中“关闭所有 Agent”按钮紧跟“重载代码”按钮，只停止 Claude/Codex 进程，不删除角色、历史或 role.md/history.md。
   - 新增 `POST /api/ai-roles/stop-all`，停止后广播角色列表；聊天角色 tab 显示 Agent 在线/离线状态。

@@ -26,6 +26,11 @@
 
 ## AI 角色
 
+- ✅已完成 [2026-08-21][2026-08-21] 修复控制端 Agent 启动状态刷新和关闭按钮错误处理
+  - 改动：Agent 启动成功立即广播在线状态；stop-all 状态查询不重新创建 bridge；前端检查 HTTP 响应并显示真实错误
+  - 说明：Claude/Codex 当前自动通过权限审批并以高权限运行；聊天回复当前按纯文本显示 Markdown
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端Agent在线状态与关闭错误修复.md
+
 - ✅已完成 [2026-08-21][2026-08-21] 控制端关闭所有 Agent 与角色在线状态显示
   - 改动：系统设置新增关闭所有 Agent；服务端停止并清空 bridge、广播 roleList；角色 tab 显示在线/离线；不删除角色文件
   - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端关闭所有Agent与在线状态.md

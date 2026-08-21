@@ -69,6 +69,7 @@ POST /api/ai-roles/stop-all:
   AiRolesService.stopAll()
   广播 { type:'roleList', roles: aiRoles.list() }
   返回 { status:'success', stopped:数量 }
+  aiRoles.list() 只读取已有 bridge 或持久化 PID 状态，不创建新的 bridge
   只停止进程，不删除角色目录、role.json、history.json、role.md 或 history.md
 ```
 
@@ -302,9 +303,39 @@ render():
   chatMessage { mode:'role', role: roleTarget, content, requestId }
   // chatChunk/chatResponse 必须携带同一 requestId；控制端只接受等于 activeRequestId 的响应
   chatResponse -> 完成消息并使用返回 history 更新显示
+  Agent 启动成功后先广播 roleList，running=true，再继续发送 chatChunk/chatResponse
 
 系统设置关闭 Agent:
   点击“关闭所有 Agent” -> POST /api/ai-roles/stop-all
   成功 -> 服务端广播 roleList -> 所有角色状态更新为离线
   角色数据和文件不删除
+```
+
+## `aiRoles.chat` 状态回调
+
+```text
+chat(name, content, callbacks):
+  bridge = _bridge(name)
+  bridge.promptFile = _ensurePromptFile(name)
+  如果 bridge 有 ensureStarted:
+    await bridge.ensureStarted()
+  成功后 callbacks.onStatus({ name, running: bridge.isAlive(), backend })
+  store.appendHistory(user)
+  bridge.chat(...)
+  onError(error):
+    如果 bridge 已不存活则 callbacks.onStatus({ name, running:false, backend })
+    callbacks.onError(error)
+```
+
+## 权限和回复格式
+
+```text
+Claude 启动参数包含 --permission-mode bypassPermissions
+Codex thread/start 与 turn/start 使用 approvalPolicy='never'
+Codex turn 使用 sandboxPolicy={ type:'dangerFullAccess' }
+权限请求不等待控制端审批，Agent 以高权限执行
+
+控制端聊天回复:
+  先 HTML 转义，再写入聊天内容区域
+  Markdown 当前按纯文本显示，不解析标题、列表、代码块或链接
 ```
