@@ -6,13 +6,6 @@
   - 改动：支持 WAV/OGG/MP3；贯通控制端、服务器、显示端与批量播放；控制端手动“下一个”触发临时激活，自动定时器睡眠拦截保持不变；实时同步当前文件名，控制端刷新后恢复批量文件名
   - 文档：docs/design/audio-media.md、docs/spec/audio-media.md、docs/task/2026-08-20_音频媒体播放与睡眠批量手动切换.md
 
-- ✅已完成 [2026-08-18][2026-08-18] AI 角色请求追踪与角色存储恢复修复
-  - 改动：同名角色删除后可重建；非数组 history.json 备份并恢复空数组；server role chat 统一 requestId；前端严格 requestId 过滤
-  - 测试：角色模块回归 16 项通过；全量测试中 74 项通过，2 个既有环境/集成失败
-
-- ✅已完成 [2026-08-18][2026-08-18] AI 角色最终审查修复
-  - 改动：AI roles shell-free FIFO、角色安全校验、队列/删除/stop 竞态、前端 XSS 与 requestId；26 项测试全绿
-
 - ✅已完成 [2026-08-18][2026-08-18] 退出睡眠时视频检查控制端播放/暂停设置
   - 根因：resumeSleepMedia 无条件 mediaVideo.play()，忽略控制端暂停（单媒体无本地 isPlaying 跟踪，播放列表忽略 ps.paused）
   - 实现：新增 mediaIsPlaying（showMedia/handleControl play 同步）+ shouldPlayMedia（播放列表读 ps.paused）+ resumeSleepMedia 守卫

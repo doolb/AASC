@@ -49,6 +49,7 @@ const { registerLogBrainApi } = require('../api/log-brain-api');
 const TaskManager = require('../modules/task-engine/task-manager');
 const { registerTaskHandlers } = require('../modules/task-engine/web-socket-handler');
 const AiRolesService = require('../modules/ai-roles/ai-roles-service');
+const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
 
@@ -459,14 +460,16 @@ async function startServer() {
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting',
-                'playlistRequest', 'playlistControl',
-                'roleList', 'roleAdd', 'roleDelete', 'roleHistory'
+                'playlistRequest', 'playlistControl'
             ];
             for (const type of controlTypes) {
                 wsServer.registerHandler(type, async (data, ctx) => {
                     await handleControlMessageFallback(data, ctx.ws);
                 });
             }
+
+            // 角色管理消息单独注册，避免通用控制消息回退分支缺失时静默丢弃。
+            registerAiRoleHandlers(wsServer, { aiRoles, broadcastToControls });
 
             // 聊天式日志系统：ViewBind 绑定 // 节流推送日志到控制端
             const logViewBind = new (require('../../../core/viewbind/ViewBind'))({

@@ -44,6 +44,33 @@ RoleStore
 
 所有角色管理请求先由服务端使用 `aiRoles.list()` 验证角色存在；非法名称、重名、删除或历史读取异常通过 `roleError` 返回，不让 WebSocket 处理流程抛出未处理异常。
 
+## 角色 WebSocket handler 注册
+
+```text
+server 启动:
+  registerAiRoleHandlers(wsServer, { aiRoles, broadcastToControls })
+    注册 roleList:
+      try -> ws.send({ type: 'roleList', roles: aiRoles.list() })
+      catch -> ws.send({ type: 'roleError', message })
+    注册 roleAdd:
+      try -> aiRoles.add(data.name)
+             broadcastToControls({ type: 'roleList', roles: aiRoles.list() })
+      catch -> ws.send({ type: 'roleError', message })
+    注册 roleDelete:
+      try -> 校验角色存在 -> aiRoles.remove(data.role)
+             broadcastToControls({ type: 'roleList', roles: aiRoles.list() })
+      catch -> ws.send({ type: 'roleError', message })
+    注册 roleHistory:
+      try -> 校验角色存在 -> ws.send({ type: 'roleHistory', role, history })
+      catch -> ws.send({ type: 'roleError', message })
+
+控制端消息处理:
+  已注册的 role* 消息直接调用对应 handler
+  未注册的普通控制消息继续走通用回退处理
+```
+
+角色 handler 注册不得只依赖回退函数中的 `else if` 分支；测试必须验证四种 `role*` 消息均能被 `WSViewBindServer` 分发，并验证添加成功会广播最新列表、失败会返回 `roleError`。
+
 ## `aiRoles.chat` 流程
 
 ```text

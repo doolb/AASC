@@ -4,6 +4,12 @@
 
 ### 修复
 
+- ✅ [2026-08-21] 修复控制端聊天添加工作 AI 角色无响应
+  - 根因：角色消息只依赖通用控制消息回退分支注册；当前 WebSocket handler 表未包含 `roleList`、`roleAdd`、`roleDelete`、`roleHistory` 时，请求会被静默忽略。
+  - 修复：新增独立 AI 角色 WebSocket handler 注册模块，统一处理角色列表、添加、删除、历史和 `roleError` 回包；添加/删除成功后广播最新角色列表。
+  - 验证：AI 角色模块 33 项测试通过；真实 `/control` WebSocket 完成列表、添加、历史、删除链路验证。
+  - 改动：`src/apps/server/modules/ai-roles/ai-roles-ws-handler.js`、对应测试、`server-app.js`、AI 角色 design/spec/task 文档。
+
 - ✅ [2026-08-20] 修复睡眠状态下 Android/WebView 延迟播放导致视频重新播放
   - 根因：睡眠状态已生效后，延迟的 `play` 事件没有再次检查 `isSleepPaused()`，可能绕过进入睡眠时的一次 `pause()`。
   - 修复：媒体 `play` 事件立即调用睡眠暂停逻辑；watchdog 每秒兜底暂停仍在播放的 video/audio，并清理恢复定时器。
