@@ -28,17 +28,6 @@ function resumeSleepMedia():
     若 mediaHtml 显示中: startHtmlScroll(mediaHtml, currentHtmlScroll)
     否则若 mediaVideo.src 非空: mediaVideo.play().catch(...)
 
-function isSleepPaused():
-    返回 sleepState == 'sleep' || sleepState == 'deep'    # 睡眠/深度睡眠期间暂停语音
-
-function pauseSleepTts():       # 睡眠暂停 TTS：暂停当前语音、清空待播队列、隐藏语音文本
-    ttsAudio.pause()            # 保留 currentTime，唤醒后 play() 续播当前 utterance
-    ttsQueue = []               # 睡眠期间新 TTS 已丢弃，队列残留一并清空（只续播当前）
-    hideTtsText()
-
-function resumeSleepTts():      # 恢复（normal/active）时续播睡眠前被暂停的那条
-    若 isPlayingTts 且 ttsAudio.paused:  ttsAudio.play().catch(...)
-
 function applySleepState(state):
     prev = sleepState;  sleepState = state
     #mediaSleepOverlay.display = (state == 'sleep') ? 'block' : 'none'
@@ -46,10 +35,8 @@ function applySleepState(state):
     #mediaContainer.display 保持原值，不因睡眠状态改变
     若 state 为 'sleep'/'deep':
         pauseSleepMedia()
-        pauseSleepTts()             # 睡眠/深度睡眠暂停语音播放
     否则若 prev 为 'sleep'/'deep':
-        resumeSleepMedia()          # 仅隐藏态恢复时续播
-        resumeSleepTts()            # 续播睡眠前暂停的语音
+        resumeSleepMedia()          # 仅隐藏态恢复时续播媒体
 
 function checkSleepMode():          # 每 10 秒，setInterval
     target = 'normal'
@@ -140,11 +127,21 @@ resumeSleepMedia():
     else 若 mediaVideo.src: mediaVideo.play().catch(...)
 ```
 
-## 睡眠期间新 TTS 丢弃
+## TTS 睡眠检查由服务端调用方指定
 
-- `queueTts(item)` 入口：若 `isSleepPaused()` 返回 true，直接 return（不入队、不播放）——睡眠期间新到的 TTS（整点报时、语音响应、提醒等）全部丢弃，避免夜间积压整晚内容。
-- `playTTS(text)`（媒体名播报）同样在睡眠期间丢弃。
-- `playNextTts()` 入口守卫：防止 `ended`/`error` 回调在睡眠态被误触发继续播放。
+```text
+sendToDisplay(displayId, message, options={}):
+    if options.checkSleep == true:
+        display = displayClients.get(displayId)
+        if display.state.sleepState in ['sleep', 'deep']:
+            return false
+    正常发送 message
+    return true
+```
+
+- `checkSleep` 缺省为 `false`，聊天 Agent、普通 LLM、手动 TTS、提醒和语音指令不受睡眠影响。
+- `time.announce` 的每次广播使用 `checkSleep=true`，逐个目标显示端判断并跳过睡眠/深度睡眠设备。
+- `tts.generateTTS()` 只负责生成音频，不读取显示端状态；睡眠检查发生在服务器向目标显示端发送音频时。
 
 ## 睡眠期间视频播放路径守卫
 
@@ -172,6 +169,7 @@ resumeSleepMedia():
 | `sleepStateReport`（显示端上行） | `sleepState` | 服务端存 `displayData.state.sleepState` + broadcastToControls → 控制端更新按钮（需在 server-app 的 `displayTypes` 注册表注册，否则走 viewbind 同步不落 `displayClients.state`） |
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |
+| TTS 显示端下发 | `{ checkSleep: boolean }`（服务端调用参数） | true 时按目标显示端 `sleepState` 过滤；缺省/false 正常下发 |
 
 ## 批量播放手动 next
 

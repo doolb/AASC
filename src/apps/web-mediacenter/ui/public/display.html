@@ -903,7 +903,6 @@
         }
         
         function playTTS(text) {
-            if (isSleepPaused()) return;  // 睡眠/深度睡眠期间丢弃媒体名播报，不播放
             fetch('/api/tts/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -921,7 +920,6 @@
         
         function playNextTts() {
             console.log('[显示端] playNextTts: isPlayingTts=', isPlayingTts, 'queue=', ttsQueue.length);
-            if (isSleepPaused()) return;  // 睡眠/深度睡眠期间不播放（ended/error 回调等触达时直接跳过）
             if (isPlayingTts) {
                 return;
             }
@@ -983,7 +981,6 @@
         }
         
         function queueTts(item) {
-            if (isSleepPaused()) return;  // 睡眠/深度睡眠期间丢弃新 TTS（不入队不播放），唤醒不重放整晚内容
             ttsQueue.push(item);
             playNextTts();
         }
@@ -2945,23 +2942,9 @@
 
         installMediaPlaybackStateMonitor();
 
-        // 睡眠/深度睡眠期间为 true：暂停语音播放、丢弃新 TTS
+        // 睡眠/深度睡眠期间为 true，仅用于媒体播放守卫；TTS 是否检查睡眠由服务器调用方决定
         function isSleepPaused() {
             return sleepState === 'sleep' || sleepState === 'deep';
-        }
-
-        // 睡眠暂停 TTS：暂停当前语音（保留进度）、清空待播队列、隐藏语音文本
-        function pauseSleepTts() {
-            ttsAudio.pause();
-            ttsQueue = [];
-            hideTtsText();
-        }
-
-        // 恢复（normal/active）时续播睡眠前被暂停的那条 utterance
-        function resumeSleepTts() {
-            if (isPlayingTts && ttsAudio.paused) {
-                ttsAudio.play().catch(e => console.log('恢复TTS播放被阻止'));
-            }
         }
 
         // 应用睡眠状态：普通睡眠只遮媒体，深度睡眠只显示全屏 UI 遮罩；媒体容器始终保持布局
@@ -2972,11 +2955,9 @@
             uiSleepOverlay.style.display = state === 'deep' ? 'block' : 'none';
             if (state === 'sleep' || state === 'deep') {
                 pauseSleepMedia();
-                pauseSleepTts();
             } else if (prev === 'sleep' || prev === 'deep') {
-                // 仅从隐藏态恢复时续播，避免重复 play
+                // 仅从隐藏态恢复时续播媒体，TTS 始终由自身队列控制
                 resumeSleepMedia();
-                resumeSleepTts();
             }
             // 状态变化时上报，供控制端按钮实时显示
             reportSleepState();

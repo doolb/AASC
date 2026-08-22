@@ -2,6 +2,12 @@
 
 ## 聊天系统
 
+- ✅已完成 [2026-08-22][2026-08-22] 服务器 TTS 按调用方检查显示端睡眠
+  - 普通聊天、Agent、手动 TTS、提醒和语音指令不受睡眠模式影响；整点报时通过 `checkSleep=true` 按目标显示端状态跳过睡眠/深度睡眠设备
+  - 改动：服务器 `sendToDisplay` 增加睡眠检查选项，任务引擎/旧报时路径传递检查参数，显示端移除通用 TTS 睡眠暂停和丢弃逻辑
+  - 验证：TTS 睡眠策略 3 项、控制端协议 5 项、显示端睡眠集成 31 步通过
+  - 文档：docs/design/display-sleep-mode.md、docs/spec/display-sleep-mode.md、docs/design/tts.md、docs/spec/tts.md、docs/task/2026-08-22_服务器TTS按调用方检查显示端睡眠.md
+
 - ✅已完成 [2026-08-22][2026-08-22] 控制端聊天消息支持 Markdown 解析显示
   - 用户消息、普通 LLM、群聊、私聊和工作 AI 角色消息统一使用安全 Markdown 渲染器；输入框保持纯文本
   - 改动：`src/apps/web-mediacenter/ui/public/js/chat-markdown.js`、`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/css/chat.css`、`src/apps/web-mediacenter/ui/public/upload.html`

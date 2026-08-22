@@ -19,6 +19,28 @@ tts:
 
 ## 核心流程伪代码
 
+### 显示端 TTS 下发睡眠检查
+
+```text
+sendToDisplay(displayId, message, options={}):
+    if options.checkSleep == true:
+        display = displayClients.get(displayId)
+        if display.state.sleepState 为 sleep/deep:
+            return false
+    发送 message
+    return true
+
+time.announce:
+    生成一次音频
+    对每个 displayId:
+        sendToDisplay(displayId, message, { checkSleep: true })
+
+聊天/Agent/其他 TTS:
+    sendToDisplay(displayId, message, { checkSleep: false })
+```
+
+`tts.generateTTS()` 不负责睡眠判断；睡眠策略属于目标显示端的服务器发送接口。
+
 ### generateTTS
 
 ```

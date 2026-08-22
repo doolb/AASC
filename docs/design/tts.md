@@ -8,6 +8,13 @@
 
 ## 设计方案
 
+### 0. 显示端睡眠检查由调用方指定
+
+- `tts.generateTTS()` 只负责调用外部服务生成音频，不读取显示端睡眠状态。
+- 服务器向显示端发送 TTS 音频时支持 `checkSleep` 选项，默认 `false`。
+- 只有 `time.announce` 使用 `checkSleep=true`；聊天 Agent、普通 LLM、手动 TTS、提醒和语音指令不受显示端睡眠影响。
+- 多显示端广播按目标显示端分别检查 `sleepState`，一个显示端睡眠不影响其他显示端。
+
 ### 1. 请求超时保护
 
 - 在 `tts` 配置增加 `requestTimeoutMs`，默认 20000ms

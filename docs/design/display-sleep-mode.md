@@ -4,8 +4,8 @@
 
 为显示端（`display.html`）增加**睡眠模式**与**深度睡眠模式**，按时间段使用媒体区域遮罩或全屏 UI 遮罩降低夜间干扰。遮罩不修改媒体容器的布局显示属性，避免画面填充计算因容器尺寸变为 0 而丢失。支持：
 
-1. **睡眠模式（默认 23:00-8:00，跨天）**：显示媒体区域黑色遮罩，视频暂停，TTS 语音暂停，保留 UI 覆盖层（时钟/文件名/语音状态等）。
-2. **深度睡眠模式（默认 1:00-6:00）**：只显示全屏 UI 黑幕遮罩覆盖整个页面，媒体节点保持布局，TTS 语音暂停。
+1. **睡眠模式（默认 23:00-8:00，跨天）**：显示媒体区域黑色遮罩，视频暂停，保留 UI 覆盖层（时钟/文件名/语音状态等）；TTS 默认不受影响。
+2. **深度睡眠模式（默认 1:00-6:00）**：只显示全屏 UI 黑幕遮罩覆盖整个页面，媒体节点保持布局；TTS 默认不受影响。
 3. **临时激活（60 秒）**：手动按钮或控制端下发媒体自动触发，期间强制显示媒体+UI，60 秒后回落（手动覆盖优先于时段判定）。
 4. **手动覆盖**：控制端「立即切换」显式进入睡眠/深度睡眠/恢复正常，不随时段/开关自动切换，直到再下发才改变（刷新即重置，临时）。
 5. **控制端配置**：显示控制面板新增「睡眠模式」入口 → 弹窗设置框（启用开关 + 可配时段 + 临时激活按钮 + 立即切换按钮 + 当前状态），按当前选中显示端生效并持久化到服务端。
@@ -29,6 +29,7 @@
 - 优先级：**临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常**。
 - 睡眠使用媒体区域遮罩，深度睡眠使用全屏 UI 遮罩；两种遮罩均不通过 `display:none` 隐藏媒体容器，保证新增 UI 元素和媒体填充计算稳定。
 - 视频睡眠时**暂停（画面+音频）**，恢复后继续播放。
+- TTS 是否检查显示端睡眠由服务端下发接口按消息调用方显式指定；默认不检查，只有整点报时调用 `checkSleep=true`。
 - 不产生一大段 if-else-else if 链（AASC 规则）。
 
 ## 核心架构
@@ -54,6 +55,14 @@
   ├─ setInterval(checkSleepMode, 10000)  → 本地时钟判断 → 应用/解除隐藏
   ├─ #mediaSleepOverlay 媒体区域遮罩（只覆盖 #mediaContainer 内媒体）
   └─ #uiSleepOverlay 全屏 UI 遮罩（z-index 999999，深度睡眠时覆盖全部页面）
+```
+
+服务器 TTS 下发接口：
+
+```text
+sendToDisplay(displayId, message, { checkSleep })
+  ├─ checkSleep=true 且目标 displayData.state.sleepState 为 sleep/deep → 跳过下发
+  └─ checkSleep=false/缺省 → 正常下发
 ```
 
 ## 状态模型与判定
@@ -140,9 +149,9 @@ function checkSleepMode():
 
 function applySleepState(state):
     记录状态到 sleepState
-    'normal'/'active': 隐藏 #mediaSleepOverlay 和 #uiSleepOverlay，恢复视频，续播语音
-    'sleep':           显示 #mediaSleepOverlay（保 UI），保持 #mediaContainer 布局，暂停视频，暂停语音
-    'deep':            隐藏 #mediaSleepOverlay，显示 #uiSleepOverlay（全黑），保持 #mediaContainer 布局，暂停视频，暂停语音
+    'normal'/'active': 隐藏 #mediaSleepOverlay 和 #uiSleepOverlay，恢复视频
+    'sleep':           显示 #mediaSleepOverlay（保 UI），保持 #mediaContainer 布局，暂停视频
+    'deep':            隐藏 #mediaSleepOverlay，显示 #uiSleepOverlay（全黑），保持 #mediaContainer 布局，暂停视频
 
 function activateTemporarily():
     activationUntil = Date.now() + 60000
@@ -150,7 +159,7 @@ function activateTemporarily():
 ```
 
 - 视频暂停/恢复：`mediaVideo.pause()` / `mediaVideo.play().catch(...)`；html 模式（iframe 滚动）暂停/恢复滚动播放；图片无需暂停。
-- TTS 语音：睡眠/深度睡眠时 `ttsAudio.pause()`（保留进度）+ 清空待播队列 + 隐藏语音文本；恢复时当前 utterance `play()` 续播。睡眠期间新到的 TTS（`queueTts`/`playTTS` 入口守卫）直接丢弃，不重放整晚内容。
+- TTS 语音：显示端不再按睡眠状态暂停或清空通用 TTS 队列；聊天、Agent、手动 TTS、提醒和语音指令正常播放。定时报时是否跳过由服务器发送接口的 `checkSleep=true` 决定。
 - 启动时 `checkSleepMode()` 立即执行一次 + `setInterval(checkSleepMode, 10000)`。
 
 ### handleControl 扩展
@@ -236,6 +245,13 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
   → 控制端切换显示端发 getState → displayState.state.sleepState → 更新按钮 / 未上报回落「设置」
 ```
 
+```
+服务端产生 TTS 音频
+  → 普通聊天/Agent/手动/提醒/语音指令：sendToDisplay(..., { checkSleep:false })
+  → time.announce：sendToDisplay(..., { checkSleep:true })
+  → checkSleep=true 时按每个目标显示端的 sleepState 独立过滤
+```
+
 ## 边界情况与降级
 
 | 场景 | 处理 |
@@ -247,8 +263,8 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 | 睡眠中下发媒体 | showMedia 触发 60s 临时激活，媒体可见 |
 | 临时激活结束后仍处睡眠时段 | 恢复对应遮罩（视频暂停） |
 | 睡眠中视频播放 | `mediaVideo.pause()`；恢复时 `play()` 续播（catch 拦截自动播放限制） |
-| 睡眠中 TTS 播放 | `ttsAudio.pause()`（保留进度）+ 清空队列 + 隐藏语音文本；恢复时当前 utterance 续播 |
-| 睡眠中新到的 TTS | `queueTts`/`playTTS` 入口守卫直接丢弃（整点报时、语音响应、提醒等），不积压重放 |
+| 睡眠中普通 TTS 播放 | 不暂停、不清空队列，聊天/Agent/手动/提醒/语音指令继续播放 |
+| 睡眠中整点报时 | 服务器 `checkSleep=true` 检查目标显示端状态，睡眠/深度睡眠时跳过该显示端 |
 | html 模式（iframe 滚动）睡眠 | 暂停滚动（`stopHtmlScroll`），恢复时 `startHtmlScroll` |
 | 未启用睡眠模式 | 全部判定返回正常，遮罩永不显示 |
 | 深度睡眠黑幕盖过监控层 | `#uiSleepOverlay` z-index 高于 `#monitorOverlay`（render-display）等全部覆盖层 |
@@ -265,8 +281,8 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 7. **手动覆盖**：立即睡眠/立即深度睡眠/恢复正常即时生效；`enabled=false` 时手动仍生效；激活覆盖手动、过期回落手动
 8. **跨天**：startHour > endHour（如 23-8）在当前时间判定正确
 9. **视频恢复**：睡眠隐藏暂停后，恢复时视频继续播放
-10. **TTS 暂停/恢复**：睡眠中播放 TTS → 暂停；恢复后当前 utterance 续播
-11. **睡眠中新 TTS 丢弃**：睡眠期间新到的 TTS 不入队不播放，唤醒不重放
+10. **普通 TTS 不受睡眠影响**：睡眠中播放聊天/Agent/手动/提醒 TTS → 不暂停、不清空队列
+11. **定时报时检查睡眠**：服务器 `checkSleep=true` 时，睡眠/深度睡眠显示端不接收定时报时，正常显示端继续接收
 12. **批量手动 next**：睡眠期间自动 timer/ended 不推进批量索引；控制端手动点击“下一个”先临时激活 60 秒，再立即切换当前项
 
 ## 改动文件

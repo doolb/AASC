@@ -160,7 +160,7 @@ module.exports = {
         };
 
         for (let i = 0; i < config.repeatCount; i++) {
-          broadcastToDisplays(announceData);
+          broadcastToDisplays(announceData, { checkSleep: true });
           if (i < config.repeatCount - 1) {
             await new Promise(resolve => setTimeout(resolve, config.repeatDelay));
           }

@@ -130,7 +130,7 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
         for (let i = 0; i < repeatCount; i++) {
             clients.forEach((displayData, displayId) => {
                 console.log(`[整点报时] 发送到显示端: ${displayId}`);
-                send(displayId, announceData);
+                send(displayId, announceData, { checkSleep: true });
             });
             
             if (i < repeatCount - 1) {

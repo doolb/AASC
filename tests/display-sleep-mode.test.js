@@ -427,7 +427,7 @@ const assert = require('assert');
   assert.strictEqual(playTrue.reported, true, '控制端播放应上报 isPlaying=true');
   console.log('PASS: 控制端 play 命令上报 playStateReport');
 
-  // ---- 19. 睡眠暂停 TTS + 丢弃睡眠中新 TTS ----
+  // ---- 19. 睡眠不影响普通 TTS ----
   await page.evaluate(() => {
     activationUntil = 0;
     // 模拟当前正在播放一条 TTS
@@ -445,7 +445,7 @@ const assert = require('assert');
     const h = new Date().getHours();
     sleepSettings = { enabled: true, startHour: h, endHour: h + 1, deepStartHour: h, deepEndHour: h + 1 };
     checkSleepMode();
-    // 睡眠期间新 TTS 应被丢弃（队列不增长）
+    // 普通 TTS 在睡眠期间仍应入队并播放
     queueTts({ text: '睡眠中新消息' });
   });
   await new Promise(r => setTimeout(r, 200));
@@ -457,16 +457,14 @@ const assert = require('assert');
     textClass: document.getElementById('voiceTextDisplay').className
   }));
   assert.strictEqual(ttsSleep.state, 'deep', '应进入深度睡眠');
-  assert.strictEqual(ttsSleep.pauseCalls, 1, '进入睡眠应暂停当前 TTS');
-  assert.strictEqual(ttsSleep.paused, true, '睡眠后 ttsAudio 应处于暂停态');
-  assert.strictEqual(ttsSleep.queueLen, 0, '睡眠期间新 TTS 应被丢弃（队列为空）');
-  assert.strictEqual(ttsSleep.textClass, 'voice-text-hidden', '睡眠应隐藏语音文本');
-  console.log('PASS: 睡眠暂停 TTS + 丢弃新 TTS');
+  assert.strictEqual(ttsSleep.pauseCalls, 0, '进入睡眠不应暂停普通 TTS');
+  assert.strictEqual(ttsSleep.queueLen, 2, '普通 TTS 应保留在队列，不应被睡眠丢弃');
+  console.log('PASS: 睡眠不影响普通 TTS');
 
-  // ---- 20. 唤醒续播睡眠前暂停的当前 TTS ----
+  // ---- 20. 唤醒不需要恢复普通 TTS ----
   await page.evaluate(() => {
     sleepSettings = { enabled: false, startHour: 0, endHour: 24, deepStartHour: 0, deepEndHour: 24 };
-    checkSleepMode();   // deep → normal，触发 resumeSleepTts
+    checkSleepMode();   // deep → normal，只恢复媒体
   });
   await new Promise(r => setTimeout(r, 200));
   const ttsResume = await page.evaluate(() => ({
@@ -474,8 +472,8 @@ const assert = require('assert');
     playCalls: window.__ttsPlayCalls
   }));
   assert.strictEqual(ttsResume.state, 'normal', '关闭睡眠应回到 normal');
-  assert.strictEqual(ttsResume.playCalls, 1, '唤醒应续播睡眠前暂停的当前 TTS');
-  console.log('PASS: 唤醒续播当前 TTS');
+  assert.strictEqual(ttsResume.playCalls, 0, '普通 TTS 未被暂停，不需要唤醒续播');
+  console.log('PASS: 唤醒不需要恢复普通 TTS');
 
   // ---- 21. handleTTS('setAutoTts') 同步 autoTtsEnabled ----
   await page.evaluate(() => {

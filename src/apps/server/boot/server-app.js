@@ -51,6 +51,7 @@ const { registerTaskHandlers } = require('../modules/task-engine/web-socket-hand
 const AiRolesService = require('../modules/ai-roles/ai-roles-service');
 const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
+const { shouldSkipDisplayTts } = require('../modules/tts/display-tts-policy');
 const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
@@ -589,8 +590,8 @@ async function startServer() {
                 (displayId, msg) => sendToDisplay(displayId, msg)
             );
             taskManager.setSendToDisplay((displayId, msg) => sendToDisplay(displayId, msg));
-            taskManager.setBroadcastToDisplays((msg) => {
-              for (const [id] of displayClients) sendToDisplay(id, msg);
+            taskManager.setBroadcastToDisplays((msg, options) => {
+              for (const [id] of displayClients) sendToDisplay(id, msg, options);
             });
             await taskManager.init();
             log('任务引擎', '远程任务系统已初始化');
@@ -2584,10 +2585,18 @@ function rewriteMediaUrl(url) {
     return url;
 }
 
-function sendToDisplay(displayId, data) {
+function sendToDisplay(displayId, data, options = {}) {
     // 统一出口重写 http 媒体 URL：手动 URL 输入、restore 恢复、单文件播放等所有下发路径一次覆盖
     if (data.url) data.url = rewriteMediaUrl(data.url);
     const displayData = displayClients.get(displayId);
+    if (shouldSkipDisplayTts(displayData, options)) {
+        log('TTS', `跳过睡眠显示端播报: ${displayId}`, {
+            displayId,
+            sleepState: displayData?.state?.sleepState,
+            checkSleep: true
+        });
+        return false;
+    }
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
         if (!data.correlationId) {
             data.correlationId = generateCorrelationId(data.type || 'msg');

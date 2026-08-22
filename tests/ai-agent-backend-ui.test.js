@@ -47,3 +47,14 @@ test('Agent 流式回复和 TTS 沿用 LLM 的 chunk、句子队列和完成冲�
     assert.match(server, /agentTtsStream\.onChunk\(chunk\)/u);
     assert.match(server, /void agentTtsStream\.onComplete\(message\)/u);
 });
+
+test('服务器 TTS 下发支持按调用方选择是否检查显示端睡眠', () => {
+    const server = fs.readFileSync(serverFile, 'utf8');
+    const timeAnnounce = fs.readFileSync(
+        path.join(root, 'src/apps/server/modules/task-engine/builtin-tasks/time-announce.js'),
+        'utf8'
+    );
+    assert.match(server, /sendToDisplay\(displayId, data, options\s*=\s*\{\s*\}\)/u);
+    assert.match(server, /shouldSkipDisplayTts\(displayData, options\)/u);
+    assert.match(timeAnnounce, /broadcastToDisplays\(announceData,\s*\{\s*checkSleep:\s*true\s*\}\)/u);
+});

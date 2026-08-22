@@ -4,6 +4,13 @@
 
 ### 修复
 
+- ✅ [2026-08-22] 服务器 TTS 按调用方检查显示端睡眠
+  - 服务器 `sendToDisplay` 增加 `checkSleep` 选项，按目标显示端 `sleepState` 独立判断；缺省或 false 时正常下发。
+  - 普通聊天、Agent、手动 TTS、提醒和语音指令不再受睡眠模式影响；整点报时使用 `checkSleep=true`，只跳过睡眠/深度睡眠显示端。
+  - 显示端睡眠继续暂停视频和 HTML 媒体，但不再暂停或清空通用 TTS 队列。
+  - 验证：TTS 睡眠策略 3 项、控制端协议 5 项、显示端睡眠集成 31 步通过。
+  - 文档：docs/design/display-sleep-mode.md、docs/spec/display-sleep-mode.md、docs/design/tts.md、docs/spec/tts.md、docs/task/2026-08-22_服务器TTS按调用方检查显示端睡眠.md
+
 - ✅ [2026-08-22] 修复控制端 Agent 流式消息显示并按普通 LLM 语义播报 TTS
   - Agent 启动状态广播 `roleList` 时，聊天请求进行中只更新角色在线状态，不再重建聊天消息区域；用户消息立即保留，`chatChunk` 持续更新回复。
   - Agent TTS 继续复用完整句子串行队列，完整句子立即播报，完成事件冲刷尾句，并沿用普通 LLM 的控制端/显示端路由。
@@ -4731,3 +4738,21 @@
 
 ### CSS 文件拆分
 - display.html CSS 拆分到 `public/css/display.css`
+# 2026-08-22
+
+## 修复显示端同 ID 重连残留连接
+
+- 修复浏览器显示端复用 `displayId` 重连时，旧 WebSocket 的延迟关闭事件误删新连接的问题。
+- 新连接接管前关闭旧连接；服务端 close 回调和 ViewBind 层均校验 WebSocket 身份。
+- 同一 `displayId` 在 ViewBind 显示端列表中只保留一条记录。
+- 关闭遗留 Puppeteer Agent 测试浏览器后，服务端连接列表恢复正常。
+
+改动文件：
+
+- `src/apps/server/boot/server-app.js`
+- `src/core/viewbind/WSViewBindServer.js`
+- `src/core/viewbind/WSViewBindServer.test.js`
+- `docs/design/websocket.md`
+- `docs/design/display.md`
+- `docs/spec/websocket.md`
+- `docs/task/2026-08-22_显示端同ID重连清理.md`
