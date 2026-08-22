@@ -41,6 +41,7 @@ RoleStore
   { type: 'chatChunk', requestId, chunk, message }
   { type: 'chatResponse', requestId, success, message, history }
   { type: 'chatResponse', requestId, success: false, error }
+  { type: 'playOnControl', audioUrl, text }       // Agent 回复的控制端播报
 ```
 
 所有角色管理请求先由服务端使用 `aiRoles.list()` 验证角色存在；非法名称、重名、删除或历史读取异常通过 `roleError` 返回，不让 WebSocket 处理流程抛出未处理异常。
@@ -50,6 +51,8 @@ RoleStore
 ```text
 assistantType='agent' 或（assistantType 缺失且 mode='role'）:
   校验 role -> aiRoles.chat() -> 返回 chatChunk/chatResponse
+  Agent chatChunk -> 累积并按句生成 TTS -> 按 playOnControl/displayId/displayIds 路由语音
+  Agent 完成回复 -> 冲刷最后尾句
 assistantType='llm' 或 assistantType 缺失且不是 mode='role':
   进入原有普通 LLM handler
 assistantType='agent' 但缺少 role:
@@ -120,6 +123,38 @@ chat(name, content, callbacks):
 ```
 
 `_promptFor(name)` 优先读取 `projectRoot/workgroup/roles/<name>.md`，没有有效内容时使用默认提示词；`_ensurePromptFile` 创建角色目录并写入 `prompt.txt`。
+
+## Agent 回复自动播报
+
+```text
+server-app 收到 chatMessage 且 assistantType === 'agent':
+  读取 data.playOnControl、data.displayId、data.displayIds
+  调用 aiRoles.chat(name, content, callbacks)
+
+callbacks.onComplete(message, history):
+  先发送 chatResponse，保持 Agent 文字流和历史协议不变
+  Agent 流式增量到达时:
+    pendingText += chunk
+    sentences = chat.splitIntoSentences(pendingText)
+    保留最后一个可能未结束的片段到 pendingText
+    其余完整句子进入 TTS 串行队列
+  Agent 回复完成时:
+    将 pendingText 或完整 message 的尾句进入 TTS 串行队列
+    先发送 chatResponse，不阻塞文字回复
+  TTS 串行队列处理每个句子:
+    cleanText = stripMarkdown(sentence)
+    audioPath = tts.generateTTS(cleanText)
+    audioUrl = /uploads/tts/{basename(audioPath)}
+    如果 playOnControl === true:
+      sendToControl({ type: 'playOnControl', audioUrl, text: sentence })
+    否则如果 displayIds 非空:
+      对每个 displayId 发送 { type: 'tts', action: 'playAudio', audioUrl, text: sentence }
+    否则如果 displayId 存在:
+      发送 { type: 'tts', action: 'playAudio', audioUrl, text: sentence }
+    TTS 失败只记录日志，并继续处理后续句子
+```
+
+控制端收到 `playOnControl` 后复用既有音频队列播放；关闭控制端播放且未选择显示端时不额外播报，行为与普通 LLM 一致。
 
 ## 控制端角色上下文与自管理
 
@@ -278,8 +313,9 @@ CodexBridge.chat(content, callbacks):
   确保 app-server 与 threadId 存活
   发送 turn/start({ threadId, input:[{ type:'text', text:content }],
                     approvalPolicy:'never', sandboxPolicy:工作区策略 })
-  item/agentMessage/delta -> callbacks.onChunk(delta)
+  item/agentMessage/delta -> 重置无活动超时计时器 -> callbacks.onChunk(delta)
   turn/completed -> callbacks.onComplete(累积文本)
+  连续 10 分钟没有任何 Agent 活动 -> 返回超时错误并停止 Codex bridge
   JSON-RPC error/进程退出/超时 -> callbacks.onError(error)，清理后允许重建
 ```
 

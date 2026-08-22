@@ -49,6 +49,7 @@ const { registerLogBrainApi } = require('../api/log-brain-api');
 const TaskManager = require('../modules/task-engine/task-manager');
 const { registerTaskHandlers } = require('../modules/task-engine/web-socket-handler');
 const AiRolesService = require('../modules/ai-roles/ai-roles-service');
+const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
@@ -3973,6 +3974,21 @@ async function handleControlMessageFallback(data, ws) {
                             const isAgentMessage = data.assistantType === 'agent' ||
                                 (!data.assistantType && data.mode === 'role');
                             if (isAgentMessage) {
+                                const session = chat.getSession();
+                                const targetDisplayId = data.displayId || displayId;
+                                const targetDisplayIds = data.displayIds || [];
+                                const playOnControl = data.playOnControl || session.playOnControl;
+                                const agentTtsStream = createAgentTtsStream({
+                                    playOnControl,
+                                    displayId: targetDisplayId,
+                                    displayIds: targetDisplayIds,
+                                    splitIntoSentences: chat.splitIntoSentences,
+                                    stripMarkdown,
+                                    generateTTS: (text) => tts.generateTTS(text),
+                                    sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
+                                    sendToDisplay,
+                                    onError: (error) => logError('Chat', `Agent TTS生成失败: ${error.message}`)
+                                });
                                 if (!data.role) {
                                     ws.send(JSON.stringify({ type: 'roleError', message: 'Agent 消息缺少角色' }));
                                     return;
@@ -3987,8 +4003,14 @@ async function handleControlMessageFallback(data, ws) {
                                     onStatus: () => {
                                         broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
                                     },
-                                    onChunk: (chunk, message, requestId) => ws.send(JSON.stringify({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message })),
-                                    onComplete: (message, history, requestId) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history })),
+                                    onChunk: (chunk, message, requestId) => {
+                                        ws.send(JSON.stringify({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message }));
+                                        agentTtsStream.onChunk(chunk);
+                                    },
+                                    onComplete: (message, history, requestId) => {
+                                        ws.send(JSON.stringify({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history }));
+                                        void agentTtsStream.onComplete(message);
+                                    },
                                     onError: (error) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: data.requestId, success: false, error: error instanceof Error ? error.message : error }))
                                 });
                                 return;

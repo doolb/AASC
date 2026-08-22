@@ -5,7 +5,8 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const DEFAULT_PROXY = 'http://127.0.0.1:7899';
-const DEFAULT_TIMEOUT_MS = 60000;
+// Codex 可能执行较长的代码任务；超时按“连续无活动”计算，而不是整轮固定时长。
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 // Codex app-server 的 stdio JSON-RPC 桥。
 // 每个角色只创建一个桥实例，桥实例内部只启动一个 app-server，
@@ -91,6 +92,7 @@ class CodexBridge {
 
         const params = message.params || {};
         if (message.method === 'item/agentMessage/delta' && this.activeTurn) {
+            this._resetTurnTimeout();
             const delta = typeof params.delta === 'string' ? params.delta : '';
             if (!delta) return;
             this.activeTurn.message += delta;
@@ -128,6 +130,16 @@ class CodexBridge {
         }
         if (turn.callbacks.onComplete) turn.callbacks.onComplete(turn.message);
         turn.resolve({ success: true, message: turn.message });
+    }
+
+    // 只要 Agent 仍在持续输出，就延长当前轮次的等待时间；真正连续无活动才判定超时。
+    _resetTurnTimeout() {
+        if (!this.activeTurn) return;
+        if (this.activeTurn.timer) clearTimeout(this.activeTurn.timer);
+        this.activeTurn.timer = setTimeout(() => {
+            this._finishTurn(new Error(`Codex 响应超时（${this.readTimeoutMs}ms 无活动）`));
+            this.stop();
+        }, this.readTimeoutMs);
     }
 
     _handleExit(error) {
@@ -216,10 +228,7 @@ class CodexBridge {
             active.reject = reject;
         });
         this.activeTurn = active;
-        active.timer = setTimeout(() => {
-            this._finishTurn(new Error(`Codex 响应超时（${this.readTimeoutMs}ms）`));
-            this.stop();
-        }, this.readTimeoutMs);
+        this._resetTurnTimeout();
         try {
             await this._request('turn/start', {
                 threadId: this.threadId,

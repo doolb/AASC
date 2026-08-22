@@ -40,10 +40,37 @@ rl.on('line', (line) => {
 });
 `;
 
-function makeBridge(dir) {
+// 模拟较慢但持续有活动的 Codex 回包：首个增量晚于短测试超时，完成事件随后到达。
+const SLOW_FAKE_SERVER = `
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+  let req;
+  try { req = JSON.parse(line); } catch (_) { return; }
+  if (req.method === 'initialize') {
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: {} }) + '\\n');
+    return;
+  }
+  if (req.method === 'thread/start') {
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { thread: { id: 'thread-slow' } } }) + '\\n');
+    return;
+  }
+  if (req.method === 'turn/start') {
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { turn: { id: 'turn-slow' } } }) + '\\n');
+    setTimeout(() => {
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: '慢响应' } }) + '\\n');
+    }, 60);
+    setTimeout(() => {
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method: 'turn/completed', params: { turn: { id: 'turn-slow', status: 'completed' } } }) + '\\n');
+    }, 140);
+  }
+});
+`;
+
+function makeBridge(dir, { serverScript = FAKE_SERVER, readTimeoutMs = 1000 } = {}) {
     const script = path.join(dir, 'fake-codex.js');
     const logFile = path.join(dir, 'requests.jsonl');
-    fs.writeFileSync(script, FAKE_SERVER);
+    fs.writeFileSync(script, serverScript);
     const bridge = new CodexBridge({
         dir,
         name: '测试角色',
@@ -51,7 +78,7 @@ function makeBridge(dir) {
         commandArgs: [script],
         cwd: dir,
         env: { CODEX_TEST_LOG: logFile },
-        readTimeoutMs: 1000
+        readTimeoutMs
     });
     bridges.push(bridge);
     return { bridge, logFile };
@@ -76,6 +103,17 @@ test('Codex app-server 通过 JSON-RPC 保持 thread 上下文并流式回复', 
     const turns = requests.filter((item) => item.request.method === 'turn/start');
     assert.strictEqual(turns[0].request.params.threadId, 'thread-test-1');
     assert.strictEqual(turns[1].request.params.threadId, 'thread-test-1');
+});
+
+test('Codex 有持续流式活动时超过初始超时仍可正常完成', async () => {
+    const dir = tmpDir();
+    const { bridge } = makeBridge(dir, { serverScript: SLOW_FAKE_SERVER, readTimeoutMs: 100 });
+
+    await assert.doesNotReject(async () => {
+        const result = await bridge.chat('慢任务', {});
+        assert.strictEqual(result.message, '慢响应');
+    });
+    assert.ok(bridge.isAlive(), '正常完成的 Codex Agent 应保持在线');
 });
 
 test('Codex 子进程使用专用 HTTPS_PROXY', async () => {

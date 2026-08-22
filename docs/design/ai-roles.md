@@ -15,6 +15,8 @@
 - 关闭 Agent 接口和控制端按钮必须区分 HTTP 错误与 JSON 业务错误，向用户显示服务端返回的实际原因。
 - Claude/Codex 当前均配置为自动通过权限审批；该行为必须明确提示为高权限执行，不宣称为安全沙箱。
 - 聊天消息由控制端共享 Markdown 渲染器显示；输入框仍保持纯文本输入。该能力覆盖普通 LLM、私聊和工作 AI 角色消息。
+- Codex 响应超时采用“无活动超时”策略，默认 10 分钟；持续收到流式增量时自动续期，正常完成后保持在线。
+- 工作 AI 角色沿用普通 LLM 的流式 TTS 路由：完整句子到达时立即进入串行 TTS 队列，控制端播放开关开启时回传 `playOnControl`，否则按当前显示端选择下发 `tts/playAudio`，完成事件冲刷最后的不完整片段。
 
 
 ### role-store
@@ -72,6 +74,9 @@
        -> ClaudeBridge FIFO 或 CodexBridge JSON-RPC
        -> stream-json / app-server notifications
        -> chatChunk / chatResponse
+       -> Agent 流式增量按句分割并串行生成 TTS
+          -> playOnControl（控制端播放）或 tts/playAudio（显示端播放）
+       -> Agent 完成事件冲刷尾句并发送 chatResponse
        -> 控制端流式渲染并更新角色历史
 ```
 
