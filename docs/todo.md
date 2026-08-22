@@ -2,6 +2,12 @@
 
 ## 聊天系统
 
+- ✅已完成 [2026-08-22][2026-08-22] 控制端聊天消息支持 Markdown 解析显示
+  - 用户消息、普通 LLM、群聊、私聊和工作 AI 角色消息统一使用安全 Markdown 渲染器；输入框保持纯文本
+  - 改动：`src/apps/web-mediacenter/ui/public/js/chat-markdown.js`、`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/css/chat.css`、`src/apps/web-mediacenter/ui/public/upload.html`
+  - 验证：Markdown 格式、原始 HTML 转义、危险链接过滤和前端加载顺序测试通过
+  - 文档：docs/design/chat-system.md、docs/spec/chat-system.md、docs/task/2026-08-22_控制端聊天消息Markdown解析显示.md
+
 - ✅已完成 [2026-08-21][2026-08-21] 修复控制端普通 LLM 流式消息不及时显示
   - 根因：普通 LLM 的 `chatChunk`/`chatResponse` 缺少 `requestId`，被控制端过滤
   - 改动：普通 `chatMessage` 将请求号传入 `handleChatMessage`，增量/成功/失败回包统一透传
@@ -28,7 +34,7 @@
 
 - ✅已完成 [2026-08-21][2026-08-21] 修复控制端 Agent 启动状态刷新和关闭按钮错误处理
   - 改动：Agent 启动成功立即广播在线状态；stop-all 状态查询不重新创建 bridge；前端检查 HTTP 响应并显示真实错误
-  - 说明：Claude/Codex 当前自动通过权限审批并以高权限运行；聊天回复当前按纯文本显示 Markdown
+  - 说明：Claude/Codex 当前自动通过权限审批并以高权限运行；聊天消息现由控制端共享 Markdown 渲染器显示
   - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-21_控制端Agent在线状态与关闭错误修复.md
 
 - ✅已完成 [2026-08-21][2026-08-21] 控制端关闭所有 Agent 与角色在线状态显示

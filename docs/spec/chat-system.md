@@ -378,6 +378,47 @@ chatStream(userMessage, options, callbacks):
     请求号匹配时立即更新文本和滚动位置，不依赖刷新页面重新加载历史
 ```
 
+### 控制端 Markdown 渲染
+
+```text
+ChatMarkdown.render(markdown):
+    将输入转换为字符串并统一换行符
+    按空行和块级标记解析:
+        标题 -> h1-h6
+        无序/有序列表 -> ul/ol/li
+        引用 -> blockquote
+        表格 -> table/thead/tbody
+        三个反引号代码块 -> pre/code
+        分隔线 -> hr
+        其他连续文本 -> p
+    行内解析:
+        代码行 -> code
+        粗体/斜体/删除线 -> strong/em/del
+        链接 -> 先校验协议，再生成带 noopener noreferrer 的 a
+        其他文本 -> HTML 转义
+    返回只包含渲染器白名单标签的 HTML 字符串
+
+控制端 Chat.renderHistory():
+    读取历史消息 content/user/assistant 字段
+    调用 ChatMarkdown.render(content)
+    将结果写入聊天气泡
+
+控制端 Chat.showStreamingMessage(userMessage):
+    调用 ChatMarkdown.render(userMessage) 渲染用户临时消息
+
+控制端 Chat.handleChunk(data):
+    校验 requestId 匹配当前请求
+    调用 ChatMarkdown.render(data.message) 更新助手流式消息
+    追加流式光标
+
+控制端 Chat.handleResponse(data):
+    校验 requestId 匹配当前请求
+    调用 ChatMarkdown.render(data.message) 固化助手最终消息
+    保留原有历史写入、语音播放和失败提示逻辑
+```
+
+`src/apps/web-mediacenter/ui/public/js/chat-markdown.js` 使用原生 JavaScript 实现，避免控制端依赖 CDN 或前端构建流程；`upload.html` 必须在 `chat.js` 之前加载该渲染器。
+
 onSentence 外部使用注意事项:
     onSentence 内部调用 tts.generateTTS() 是异步的
     必须用 ttsQueue 链式调用保证 TTS 生成与音频发送顺序

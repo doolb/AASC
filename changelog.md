@@ -4,6 +4,13 @@
 
 ### 修复
 
+- ✅ [2026-08-22] 控制端聊天消息支持 Markdown 解析显示
+  - 用户消息、普通 LLM、群聊、私聊和工作 AI 角色消息统一支持标题、列表、表格、代码块、引用、链接等常用 Markdown。
+  - 输入框继续保持纯文本；流式消息与历史消息使用同一渲染路径。
+  - 原始 HTML 自动转义，危险链接协议拒绝渲染，外链增加 `noopener noreferrer`。
+  - 新增 `src/apps/web-mediacenter/ui/public/js/chat-markdown.js`，并补充聊天气泡 Markdown 样式和回归测试。
+  - 文档：docs/design/chat-system.md、docs/spec/chat-system.md、docs/spec/ai-roles.md、docs/task/2026-08-22_控制端聊天消息Markdown解析显示.md
+
 - ✅ [2026-08-21] 修复控制端 Agent 启动状态刷新和关闭按钮错误处理
   - Agent 确认启动后立即广播在线状态，控制端无需等待回复完成或手动刷新。
   - 停止所有 Agent 后读取角色列表不再重新创建 bridge。

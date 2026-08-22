@@ -336,6 +336,8 @@ Codex turn 使用 sandboxPolicy={ type:'dangerFullAccess' }
 权限请求不等待控制端审批，Agent 以高权限执行
 
 控制端聊天回复:
-  先 HTML 转义，再写入聊天内容区域
-  Markdown 当前按纯文本显示，不解析标题、列表、代码块或链接
+  调用控制端 ChatMarkdown.render(content)
+  用户消息和 Agent 回复均按 Markdown 显示
+  输入框仍使用纯文本输入
+  原始 HTML 转义为文本，危险链接协议不生成 a 标签
 ```

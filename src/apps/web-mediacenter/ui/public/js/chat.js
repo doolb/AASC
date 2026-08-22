@@ -854,7 +854,7 @@ const Chat = {
             return `
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
-                    <div class="chat-message-content">${this.escapeHtml(content)}</div>
+                    <div class="chat-message-content">${ChatMarkdown.render(content)}</div>
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                 </div>
             `;
@@ -1220,7 +1220,7 @@ const Chat = {
         group.id = 'streamingGroup';
         group.innerHTML = `
             <div class="chat-message-header">用户</div>
-            <div class="chat-message-content">${this.escapeHtml(userMessage)}</div>
+            <div class="chat-message-content">${ChatMarkdown.render(userMessage)}</div>
         `;
         
         messagesContainer.appendChild(group);
@@ -1243,7 +1243,7 @@ const Chat = {
         
         const streamingContent = document.getElementById('streamingContent');
         if (streamingContent) {
-            streamingContent.innerHTML = this.escapeHtml(data.message) + '<span class="chat-cursor">|</span>';
+            streamingContent.innerHTML = ChatMarkdown.render(data.message) + '<span class="chat-cursor">|</span>';
             
             const messagesContainer = document.getElementById('chatMessages');
             if (messagesContainer) {
@@ -1284,7 +1284,7 @@ const Chat = {
         }
         
         if (streamingContent) {
-            streamingContent.innerHTML = this.escapeHtml(data.message);
+            streamingContent.innerHTML = ChatMarkdown.render(data.message);
             streamingContent.removeAttribute('id');
         }
         
