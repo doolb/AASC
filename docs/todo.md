@@ -32,6 +32,12 @@
 
 ## AI 角色
 
+- ✅已完成 [2026-08-22][2026-08-22] 修复控制端 Agent 流式消息显示并按普通 LLM 语义播报 TTS
+  - 根因：Agent 启动状态广播 `roleList` 时重建整个聊天面板，移除了已创建的用户消息和流式回复节点，导致文字与用户消息等到完成回包才出现
+  - 改动：聊天请求进行中只更新角色在线状态；Agent 的 `chatChunk` 继续实时更新回复，并沿用完整句子串行 TTS 队列及完成时尾句冲刷
+  - 验证：AI Agent 控制端测试 4 项；AI 角色、Agent 后端、TTS、聊天流式相关测试串行 65 项全部通过
+  - 文档：`docs/design/ai-roles.md`、`docs/spec/ai-roles.md`、`docs/task/2026-08-22_控制端Agent流式消息显示与LLM同构TTS.md`
+
 - ✅已完成 [2026-08-22][2026-08-22] Agent 后端独立于服务器进程，修复服务器重启后控制端 Agent 离线
   - 新增 detached `agent-backend-host` 和 Unix Socket JSON Lines IPC；服务器仅保留 `AgentBackendClient`，不再直接持有生产 Agent 的 stdio/FIFO。
   - 服务器重启时复用后端宿主中的 Claude/Codex bridge、PID 和 Codex thread；Socket/宿主失效时自动拉起并允许下一次消息懒重建。

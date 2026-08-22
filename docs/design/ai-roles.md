@@ -15,6 +15,7 @@ Agent 后端宿主是服务器之外的长期进程，负责持有 Claude FIFO�
 - Agent 的 `ensureStarted`、`chat`、`status`、`stopRole` 和 `stopAll` 使用带请求号的 JSON Lines IPC；流式增量和完成/错误事件复用同一请求号。
 - 服务器重启只会断开 IPC 客户端，不会触发后端宿主的 Agent `stop`；后端宿主内存中的 bridge 和 thread/FIFO 继续存活。
 - 后端宿主重启或 Agent 自身退出时，服务器将角色显示为离线；下一次聊天按角色实际后端懒启动，避免把后端故障误认为服务器故障。
+- Agent 对话在控制端保持普通 LLM 的交互语义：用户消息立即保留，`chatChunk` 持续更新回复，流式句子进入同一套串行 TTS 队列；角色在线状态更新不得重建聊天消息区域。
 
 - 角色 tab 必须使用 DOM 节点、`textContent`、`dataset` 和事件监听器渲染，角色名不得进入 HTML 或 inline handler。
 - 角色消息带唯一 `requestId`；流式响应按请求上下文归属，切换 tab 后迟到响应不得污染当前角色。

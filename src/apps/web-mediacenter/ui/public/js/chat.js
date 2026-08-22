@@ -720,6 +720,30 @@ const Chat = {
         this.renderSessionSelector();
         this.renderSearchHistory();
     },
+
+    /**
+     * 仅更新角色标签的在线状态，避免聊天请求进行中重建消息区域。
+     * Agent 后端启动或退出时服务端会广播 roleList；此时必须保留用户消息
+     * 和正在接收的流式回复节点，才能让 chatChunk 持续显示在原位置。
+     */
+    updateRoleStatuses() {
+        const roleMap = new Map(this.aiRoles.map((role) => [role.name, role]));
+        const tabs = document.querySelectorAll('[data-role-tab]');
+
+        tabs.forEach((tab) => {
+            const role = roleMap.get(tab.dataset.roleTab);
+            const status = tab.querySelector('.chat-role-status');
+            if (!status || !role) return;
+
+            const online = role.running === true;
+            status.classList.toggle('online', online);
+            status.classList.toggle('offline', !online);
+            status.textContent = online ? '在线' : '离线';
+            status.title = role.backend ? `Agent 后端：${role.backend}` : 'Agent 未运行';
+        });
+
+        this.renderModeIndicator();
+    },
     
     renderModeIndicator() {
         const indicator = document.getElementById('chatModeIndicator');

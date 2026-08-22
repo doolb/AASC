@@ -425,7 +425,11 @@ const WebSocketManager = {
         } else if (data.type === 'roleList') {
             if (window.Chat) {
                 window.Chat.aiRoles = data.roles || [];
-                window.Chat.render();
+                if (window.Chat.isLoading) {
+                    window.Chat.updateRoleStatuses();
+                } else {
+                    window.Chat.render();
+                }
             }
         } else if (data.type === 'roleHistory') {
             if (window.Chat && data.role) {

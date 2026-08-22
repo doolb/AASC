@@ -383,7 +383,12 @@ Codex 的 `threadId` 和 stdio 句柄由独立 Agent 后端宿主持有；同一
 ## 控制端渲染
 
 ```text
-收到 roleList -> Chat.aiRoles=data.roles -> render()
+收到 roleList:
+  Chat.aiRoles=data.roles
+  如果当前没有未完成聊天请求:
+    render()                         // 角色增删时重建完整面板
+  否则:
+    updateRoleStatuses()              // 只更新角色 tab/模式指示器，保留用户消息和 streaming DOM
 收到 roleHistory -> Chat.roleHistories[role]=history；当前角色则 renderHistory()
 收到 roleError -> showToast(message, error)
 

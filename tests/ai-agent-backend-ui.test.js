@@ -32,3 +32,18 @@ test('系统设置提供关闭所有 Agent 按钮，角色列表显示在线状�
     assert.match(upload, /!r\.ok|response\.ok|res\.ok/u);
     assert.match(server, /onStatus/u);
 });
+
+test('Agent 请求进行中收到 roleList 只更新在线状态，不重建聊天 DOM', () => {
+    const chat = fs.readFileSync(chatFile, 'utf8');
+    const websocket = fs.readFileSync(path.join(root, 'src/apps/web-mediacenter/ui/public/js/websocket.js'), 'utf8');
+    assert.match(chat, /updateRoleStatuses\s*\(\s*\)/u);
+    assert.match(websocket, /Chat\.isLoading[\s\S]{0,180}updateRoleStatuses/u);
+    assert.match(websocket, /Chat\.isLoading[\s\S]{0,180}Chat\.render\s*\(\s*\)/u);
+});
+
+test('Agent 流式回复和 TTS 沿用 LLM 的 chunk、句子队列和完成冲刷链路', () => {
+    const server = fs.readFileSync(serverFile, 'utf8');
+    assert.match(server, /createAgentTtsStream/u);
+    assert.match(server, /agentTtsStream\.onChunk\(chunk\)/u);
+    assert.match(server, /void agentTtsStream\.onComplete\(message\)/u);
+});
