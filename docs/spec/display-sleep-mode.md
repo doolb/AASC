@@ -63,7 +63,7 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
 ```
 控制端 SleepPanel 保存
   → sendControl('sleepSettings', settings)
-  → 服务端 control 处理器持久化 displayStates[ip].sleep
+  → 服务端 control 处理器持久化 displayStates[displayId].sleep（IP 只用于旧数据迁移和设备事件）
   → 显示端 handleControl('sleepSettings') → 应用设置 + checkSleepMode()
   → ack 携带 extraData.sleepState → 控制端更新弹窗状态行
 

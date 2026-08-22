@@ -4,6 +4,13 @@
 
 ### 修复
 
+- ✅ [2026-08-22] 修复显示端重连身份混用和控制端批量列表残留
+  - 显示端状态、设置和批量播放进度改用稳定 `displayId` 持久化，旧版 IP 状态首次连接时自动迁移；控制端显示稳定 ID 与 IP，`agent-local` 等本机 Agent 不再与真实显示端混淆。
+  - 批量播放重连同时恢复通用显示设置和列表断点；控制端切换显示端时清理旧批量面板，无列表目标自动隐藏，有列表目标按当前项恢复。
+  - 控制端持久化选择模式、列表视图和最近显示端选择，显示端重连后可恢复目标选择。
+  - 验证：新增显示端身份/批量恢复测试 5 项；相关回归 40 项中 39 项通过，另 1 项为既有原生触摸注入环境失败。
+  - 文档：docs/design/display.md、docs/design/batch-playlist.md、docs/spec/config.md、docs/spec/batch-playlist.md、docs/spec/display-selection.md、docs/task/2026-08-22_显示端身份与批量状态恢复.md
+
 - ✅ [2026-08-22] 服务器 TTS 按调用方检查显示端睡眠
   - 服务器 `sendToDisplay` 增加 `checkSleep` 选项，按目标显示端 `sleepState` 独立判断；缺省或 false 时正常下发。
   - 普通聊天、Agent、手动 TTS、提醒和语音指令不再受睡眠模式影响；整点报时使用 `checkSleep=true`，只跳过睡眠/深度睡眠显示端。

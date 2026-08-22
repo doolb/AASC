@@ -189,6 +189,35 @@ class UserConfig extends DataSnapshot {
         return states[key] || { ...defaultDisplayState };
     }
 
+    // 按稳定 displayId 读取显示端状态；legacyIp 仅用于兼容一次旧版 IP 键。
+    getDisplayStateById(displayId, legacyIp) {
+        const states = this.get('displayStates', {});
+        const key = displayId || legacyIp || 'default';
+        const currentState = states[key];
+        if (currentState) {
+            if (displayId && currentState.displayId !== displayId) {
+                const boundState = { ...currentState, displayId };
+                states[displayId] = boundState;
+                this.set('displayStates', states);
+                return boundState;
+            }
+            return currentState;
+        }
+
+        const legacyState = legacyIp ? states[legacyIp] : null;
+        if (displayId && legacyState && (!legacyState.displayId || legacyState.displayId === displayId)) {
+            const migratedState = { ...legacyState, displayId };
+            states[displayId] = migratedState;
+            if (legacyIp !== displayId) {
+                delete states[legacyIp];
+            }
+            this.set('displayStates', states);
+            return migratedState;
+        }
+
+        return { ...defaultDisplayState, ...(displayId ? { displayId } : {}) };
+    }
+
     setDisplayState(ip, state) {
         const states = this.get('displayStates', {});
         const key = ip || 'default';
@@ -200,6 +229,20 @@ class UserConfig extends DataSnapshot {
         const currentState = this.getDisplayState(ip);
         const newState = { ...currentState, ...partialState };
         this.setDisplayState(ip, newState);
+        return newState;
+    }
+
+    // 按 displayId 更新显示端状态，保证同一 IP 上的多个显示端互不覆盖。
+    updateDisplayStateById(displayId, legacyIp, partialState) {
+        const currentState = this.getDisplayStateById(displayId, legacyIp);
+        const newState = {
+            ...currentState,
+            ...partialState,
+            ...(displayId ? { displayId } : {})
+        };
+        const states = this.get('displayStates', {});
+        states[displayId || legacyIp || 'default'] = newState;
+        this.set('displayStates', states);
         return newState;
     }
 
@@ -342,8 +385,10 @@ module.exports.set = (key, value) => config.set(key, value);
 module.exports.setTtsConfig = (ttsConfig) => config.setTtsConfig(ttsConfig);
 module.exports.getTtsConfig = () => config.getTtsConfig();
 module.exports.getDisplayState = (ip) => userConfig.getDisplayState(ip);
+module.exports.getDisplayStateById = (displayId, legacyIp) => userConfig.getDisplayStateById(displayId, legacyIp);
 module.exports.setDisplayState = (ip, state) => userConfig.setDisplayState(ip, state);
 module.exports.updateDisplayState = (ip, partialState) => userConfig.updateDisplayState(ip, partialState);
+module.exports.updateDisplayStateById = (displayId, legacyIp, partialState) => userConfig.updateDisplayStateById(displayId, legacyIp, partialState);
 module.exports.addToPlaylist = (ip, media) => userConfig.addToPlaylist(ip, media);
 module.exports.removeFromPlaylist = (ip, index) => userConfig.removeFromPlaylist(ip, index);
 module.exports.clearPlaylist = (ip) => userConfig.clearPlaylist(ip);

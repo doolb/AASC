@@ -481,7 +481,7 @@ class MediaControlAgent extends BaseAgent {
         }
 
         displayClient.state.currentMedia = media;
-        config.updateDisplayState(displayClient.ip, { currentMedia: media });
+        config.updateDisplayStateById(displayId, displayClient.ip, { currentMedia: media });
         context.sendToDisplay(displayId, media);
 
         return { success: true, displayId };
@@ -496,7 +496,7 @@ class MediaControlAgent extends BaseAgent {
                 const displayClient = context.stateManager?.getDisplayClient(displayId);
                 if (displayClient) {
                     displayClient.state.currentMedia = media;
-                    config.updateDisplayState(displayClient.ip, { currentMedia: media });
+                    config.updateDisplayStateById(displayId, displayClient.ip, { currentMedia: media });
                     context.sendToDisplay(displayId, media);
                     results.push({ displayId, success: true });
                 } else {
@@ -520,19 +520,19 @@ class MediaControlAgent extends BaseAgent {
 
         if (action === 'rotate') {
             displayClient.state.rotation = value;
-            config.updateDisplayState(displayClient.ip, { rotation: value });
+            config.updateDisplayStateById(displayId, displayClient.ip, { rotation: value });
         } else if (action === 'fit') {
             displayClient.state.fit = value;
-            config.updateDisplayState(displayClient.ip, { fit: value });
+            config.updateDisplayStateById(displayId, displayClient.ip, { fit: value });
         } else if (action === 'crop') {
             displayClient.state.crop = value;
-            config.updateDisplayState(displayClient.ip, { crop: value });
+            config.updateDisplayStateById(displayId, displayClient.ip, { crop: value });
         } else if (action === 'volume') {
             displayClient.state.volume = value;
-            config.updateDisplayState(displayClient.ip, { volume: value });
+            config.updateDisplayStateById(displayId, displayClient.ip, { volume: value });
         } else if (action === 'play') {
             displayClient.state.isPlaying = value;
-            config.updateDisplayState(displayClient.ip, { isPlaying: value });
+            config.updateDisplayStateById(displayId, displayClient.ip, { isPlaying: value });
         }
 
         context.sendToDisplay(displayId, { type: 'control', action, value });

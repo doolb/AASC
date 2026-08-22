@@ -36,6 +36,13 @@
   - 改动：缓存并恢复 video/audio 单媒体进度；批量恢复当前索引、当前 video/audio 项进度及暂停状态；进度持久化增加节流与暂停/切项强制同步
   - 文档：docs/design/display.md、docs/design/audio-media.md、docs/design/batch-playlist.md、docs/spec/audio-media.md、docs/spec/batch-playlist.md、docs/task/2026-08-21_媒体重连恢复播放进度.md
 
+- ✅已完成 [2026-08-22][2026-08-22] 显示端身份隔离与批量状态恢复
+  - 服务器以稳定 `displayId` 持久化显示端设置和批量进度，旧 IP 状态首次连接时兼容迁移；Agent/测试端可用 `agent-local` 与真实显示端区分，控制端同时展示 ID 和 IP
+  - 批量重连先恢复通用显示设置，再恢复列表索引、播放时间和暂停状态；控制端切换显示端时清空旧批量面板并按新显示端状态恢复
+  - 控制端保存显示端选择模式、显示列表视图和最近选择的显示端 ID，显示端短暂断线重连后可恢复目标选择
+  - 验证：新增回归 5 项；批量/音频/播放恢复/Agent/TTS 相关回归 40 项中 39 项通过，既有 display-native-bridge 原生触摸注入环境用例失败未涉及本次代码
+  - 文档：docs/design/display.md、docs/design/batch-playlist.md、docs/spec/config.md、docs/spec/batch-playlist.md、docs/spec/display-selection.md、docs/task/2026-08-22_显示端身份与批量状态恢复.md
+
 ## AI 角色
 
 - ✅已完成 [2026-08-22][2026-08-22] 修复控制端 Agent 流式消息显示并按普通 LLM 语义播报 TTS

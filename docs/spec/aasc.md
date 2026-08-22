@@ -1105,23 +1105,23 @@ MediaControlAgent
 ├── sendMedia(params, context)       # 发送媒体到显示端
 │   ├── 获取 displayClient
 │   ├── 更新 displayClient.state.currentMedia
-│   ├── 调用 config.updateDisplayState(ip, { currentMedia }) # 持久化状态
+│   ├── 调用 config.updateDisplayStateById(displayId, ip, { currentMedia }) # 按显示端身份持久化状态
 │   └── 调用 context.sendToDisplay(displayId, media)
 │
 ├── sendMediaBatch(params, context)  # 批量发送媒体
 │   └── 遍历 displayIds:
 │       ├── 更新 displayClient.state.currentMedia
-│       ├── 调用 config.updateDisplayState(ip, { currentMedia }) # 持久化状态
+│       ├── 调用 config.updateDisplayStateById(displayId, ip, { currentMedia }) # 按显示端身份持久化状态
 │       └── 调用 context.sendToDisplay(displayId, media)
 │
 ├── sendControl(params, context)     # 发送控制指令
 │   ├── 获取 displayClient
 │   ├── 根据 action 更新状态:
-│   │   ├── 'rotate' -> state.rotation = value, config.updateDisplayState(ip, { rotation })
-│   │   ├── 'fit' -> state.fit = value, config.updateDisplayState(ip, { fit })
-│   │   ├── 'crop' -> state.crop = value, config.updateDisplayState(ip, { crop })
-│   │   ├── 'volume' -> state.volume = value, config.updateDisplayState(ip, { volume })
-│   │   └── 'play' -> state.isPlaying = value, config.updateDisplayState(ip, { isPlaying })
+│   │   ├── 'rotate' -> state.rotation = value, config.updateDisplayStateById(displayId, ip, { rotation })
+│   │   ├── 'fit' -> state.fit = value, config.updateDisplayStateById(displayId, ip, { fit })
+│   │   ├── 'crop' -> state.crop = value, config.updateDisplayStateById(displayId, ip, { crop })
+│   │   ├── 'volume' -> state.volume = value, config.updateDisplayStateById(displayId, ip, { volume })
+│   │   └── 'play' -> state.isPlaying = value, config.updateDisplayStateById(displayId, ip, { isPlaying })
 │   └── 调用 context.sendToDisplay(displayId, { type: 'control', action, value })
 │
 └── getState(params, context)        # 获取显示端状态

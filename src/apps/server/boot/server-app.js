@@ -691,14 +691,20 @@ function updateDisplayPlaybackProgress(displayData, partialState, forcePersist =
     if (!displayData || !partialState) return;
 
     Object.assign(displayData.state, partialState);
-    const progressKey = displayData.ip || displayData.displayId;
+    const progressKey = displayData.displayId || displayData.ip;
     const now = Date.now();
     const lastPersistAt = displayProgressPersistAt.get(progressKey) || 0;
     const shouldPersist = forcePersist || now - lastPersistAt >= PLAYBACK_PROGRESS_PERSIST_INTERVAL_MS;
     if (!shouldPersist) return;
 
     displayProgressPersistAt.set(progressKey, now);
-    config.updateDisplayState(displayData.ip, partialState);
+    persistDisplayState(displayData, partialState);
+}
+
+// 显示端状态以 displayId 持久化，IP 只作为旧数据迁移和日志展示字段。
+function persistDisplayState(displayData, partialState) {
+    if (!displayData) return null;
+    return config.updateDisplayStateById(displayData.displayId, displayData.ip, partialState);
 }
 
 function normalizePlaybackProgress(currentTime, duration) {
@@ -2347,7 +2353,7 @@ app.get('/api/device-settings/:displayId', (req, res) => {
             if (savedIp) {
                 res.json({
                     status: 'success',
-                    settings: config.getDisplayState(savedIp),
+                    settings: config.getDisplayStateById(displayId, savedIp),
                     online: false
                 });
             } else {
@@ -2371,7 +2377,7 @@ app.put('/api/device-settings/:displayId', (req, res) => {
             for (const [key, value] of Object.entries(updates)) {
                 if (validActions.includes(key)) {
                     displayData.state[key] = value;
-                    config.updateDisplayState(displayData.ip, { [key]: value });
+                    persistDisplayState(displayData, { [key]: value });
                     
                     sendToDisplay(displayId, {
                         type: 'control',
@@ -2776,9 +2782,13 @@ wss.on('connection', (ws, req) => {
         const customDisplayId = urlParams.searchParams.get('displayId');
         const displayId = customDisplayId || generateId();
         const clientIP = getClientIP(req);
-        const savedState = config.getDisplayState(clientIP);
+        const savedState = config.getDisplayStateById(displayId, clientIP);
+
+        // 浏览器刷新或重连可能复用 displayId；新连接接管前先关闭旧连接。
+
         displayClients.set(displayId, {
             ws: ws,
+            displayId: displayId,
             ip: clientIP,
             isSubDisplay: isSubDisplay,
             lastSeen: Date.now(),
@@ -2856,6 +2866,17 @@ wss.on('connection', (ws, req) => {
             }));
         }
 
+        // 批量播放也必须先恢复通用显示设置；批量消息只负责恢复播放列表和断点。
+        if (savedState) {
+            const restoreState = savedState.currentPlaylist
+                ? { ...savedState, currentMedia: null, currentMediaProgress: null }
+                : savedState;
+            ws.send(JSON.stringify({
+                type: 'restoreState',
+                state: restoreState
+            }));
+        }
+
         if (savedState?.currentPlaylist) {
             ws.send(JSON.stringify({
                 type: 'playlistStart',
@@ -2863,11 +2884,6 @@ wss.on('connection', (ws, req) => {
                 resumeIndex: savedState.currentPlaylist.index,
                 resumeTime: savedState.currentPlaylist.currentTime || 0,
                 resumeState: savedState.currentPlaylist.state || 'playing'
-            }));
-        } else if (savedState && savedState.currentMedia) {
-            ws.send(JSON.stringify({
-                type: 'restoreState',
-                state: savedState
             }));
         }
         
@@ -3021,7 +3037,7 @@ wss.on('connection', (ws, req) => {
                             capabilities: targetDisplayData.state.capabilities
                         });
                         if (config) {
-                            config.updateDisplayState(targetDisplayData.ip, {
+                            persistDisplayState(targetDisplayData, {
                                 capabilities: targetDisplayData.state.capabilities,
                                 userCapabilities: { ...data.capabilities }
                             });
@@ -3136,7 +3152,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             }
             if (data.state === 'finished' || data.state === 'stopped') {
                 displayData.state.currentPlaylist = null;
-                config.updateDisplayState(displayData.ip, { currentPlaylist: null });
+                persistDisplayState(displayData, { currentPlaylist: null });
             } else if (!displayData.state.currentPlaylist.temp) {
                 updateDisplayPlaybackProgress(displayData, {
                     currentPlaylist: displayData.state.currentPlaylist
@@ -3179,7 +3195,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         // 播放状态上报：显示端上报真实 isPlaying（播放/暂停命令、显示新媒体、重连恢复后），
         // 持久化后重连 restoreState 据此恢复，避免控制端暂停的视频重连后自动播放
         displayData.state.isPlaying = data.isPlaying;
-        config.updateDisplayState(displayData.ip, { isPlaying: data.isPlaying });
+        persistDisplayState(displayData, { isPlaying: data.isPlaying });
         const progress = normalizePlaybackProgress(data.currentTime, data.duration);
         if (progress && !displayData.state.currentPlaylist) {
             updateDisplayPlaybackProgress(
@@ -3613,7 +3629,7 @@ async function handleControlMessageFallback(data, ws) {
                         if (dd) {
                             if (dd.state.currentPlaylist) {
                                 dd.state.currentPlaylist = null;
-                                config.updateDisplayState(dd.ip, { currentPlaylist: null });
+                                persistDisplayState(dd, { currentPlaylist: null });
                             }
                             if (data.media.temp) {
                                 // 记录临时媒体信息：控制端刷新后用于裁剪预览区占位提示
@@ -3631,7 +3647,7 @@ async function handleControlMessageFallback(data, ws) {
                                 dd.state.lastTempMedia = null;
                                 dd.state.currentMedia = data.media;
                                 dd.state.currentMediaProgress = null;
-                                config.updateDisplayState(dd.ip, {
+                                persistDisplayState(dd, {
                                     currentMedia: data.media,
                                     currentMediaProgress: null
                                 });
@@ -3699,14 +3715,14 @@ async function handleControlMessageFallback(data, ws) {
                                     dd.state.lastTempMedia = null;
                                     if (dd.state.currentPlaylist) {
                                         dd.state.currentPlaylist = null;
-                                        config.updateDisplayState(dd.ip, { currentPlaylist: null });
+                                        persistDisplayState(dd, { currentPlaylist: null });
                                     }
                                     dd.state.currentPlaylist = { ...currentPlaylist };
                                     dd.state.currentMediaProgress = null;
                                 } else {
                                     dd.state.currentPlaylist = { ...currentPlaylist };
                                     dd.state.currentMediaProgress = null;
-                                    config.updateDisplayState(dd.ip, {
+                                    persistDisplayState(dd, {
                                         currentPlaylist: dd.state.currentPlaylist,
                                         currentMediaProgress: null
                                     });
@@ -3728,7 +3744,7 @@ async function handleControlMessageFallback(data, ws) {
                         sendToDisplay(id, { type: 'playlistControl', action: data.action, index: data.index });
                         if (data.action === 'stop' && dd.state.currentPlaylist) {
                             dd.state.currentPlaylist = null;
-                            config.updateDisplayState(dd.ip, { currentPlaylist: null });
+                            persistDisplayState(dd, { currentPlaylist: null });
                         }
                     });
                     return;
@@ -3750,7 +3766,7 @@ async function handleControlMessageFallback(data, ws) {
                 } else if (data.type === 'media') {
                     if (displayData.state.currentPlaylist) {
                         displayData.state.currentPlaylist = null;
-                        config.updateDisplayState(displayData.ip, { currentPlaylist: null });
+                        persistDisplayState(displayData, { currentPlaylist: null });
                     }
                     if (data.media.temp) {
                         // 记录临时媒体信息：控制端刷新后用于裁剪预览区占位提示
@@ -3764,7 +3780,7 @@ async function handleControlMessageFallback(data, ws) {
                         // 显示端 reload 后 restoreState 恢复最近发的临时网页/媒体，不回退到旧的正式媒体
                         displayData.state.currentMedia = data.media;
                         displayData.state.currentMediaProgress = null;
-                        config.updateDisplayState(displayData.ip, {
+                        persistDisplayState(displayData, {
                             currentMedia: data.media,
                             currentMediaProgress: null
                         });
@@ -3772,7 +3788,7 @@ async function handleControlMessageFallback(data, ws) {
                         displayData.state.lastTempMedia = null;
                         displayData.state.currentMedia = data.media;
                         displayData.state.currentMediaProgress = null;
-                        config.updateDisplayState(displayData.ip, {
+                        persistDisplayState(displayData, {
                             currentMedia: data.media,
                             currentMediaProgress: null
                         });
@@ -3781,23 +3797,23 @@ async function handleControlMessageFallback(data, ws) {
                 } else if (data.type === 'control') {
                     if (data.action === 'rotate') {
                         displayData.state.rotation = data.value;
-                        config.updateDisplayState(displayData.ip, { rotation: data.value });
+                        persistDisplayState(displayData, { rotation: data.value });
                     } else if (data.action === 'fit') {
                         displayData.state.fit = data.value;
-                        config.updateDisplayState(displayData.ip, { fit: data.value });
+                        persistDisplayState(displayData, { fit: data.value });
                     } else if (data.action === 'crop') {
                         displayData.state.crop = data.value;
-                        config.updateDisplayState(displayData.ip, { crop: data.value });
+                        persistDisplayState(displayData, { crop: data.value });
                     } else if (data.action === 'volume') {
                         displayData.state.volume = data.value;
-                        config.updateDisplayState(displayData.ip, { volume: data.value });
+                        persistDisplayState(displayData, { volume: data.value });
                     } else if (data.action === 'play') {
                         displayData.state.isPlaying = data.value;
-                        config.updateDisplayState(displayData.ip, { isPlaying: data.value });
+                        persistDisplayState(displayData, { isPlaying: data.value });
                     } else if (data.action === 'htmlScroll') {
                         // html 滚动模式持久化：显示端重启/刷新后恢复
                         displayData.state.currentHtmlScroll = data.value;
-                        config.updateDisplayState(displayData.ip, { currentHtmlScroll: data.value });
+                        persistDisplayState(displayData, { currentHtmlScroll: data.value });
                     } else if (data.action === 'cropDebug') {
                         _cropDebugLog = !!data.value;
                     } else if (data.action === 'controlMode' || data.action === 'controlInput') {
@@ -3805,7 +3821,7 @@ async function handleControlMessageFallback(data, ws) {
                     } else if (data.action === 'sleepSettings') {
                         // 睡眠设置持久化：显示端刷新/重启后 restoreState 恢复
                         displayData.state.sleep = data.value;
-                        config.updateDisplayState(displayData.ip, { sleep: data.value });
+                        persistDisplayState(displayData, { sleep: data.value });
                     }
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {
@@ -3882,7 +3898,7 @@ async function handleControlMessageFallback(data, ws) {
                         if (displayData) {
                             const enabled = data.enabled === true;
                             displayData.state.autoTts = enabled;
-                            config.updateDisplayState(displayData.ip, { autoTts: enabled });
+                            persistDisplayState(displayData, { autoTts: enabled });
                         }
                         sendToDisplay(displayId, data);
                     } else {

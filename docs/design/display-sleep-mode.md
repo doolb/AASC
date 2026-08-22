@@ -25,7 +25,7 @@
 ### 约束
 
 - 时间判断在**显示端本地**（各设备用自己的本地时区），每 10 秒检查一次。
-- 设置按**当前选中显示端**生效，持久化到服务端 `displayStates[ip].sleep`（沿用现有 rotation/fit/volume 状态流）。
+- 设置按**当前选中显示端**生效，持久化到服务端 `displayStates[displayId].sleep`（IP 只用于旧数据迁移和设备事件）。
 - 优先级：**临时激活 > 手动覆盖 > 深度睡眠 > 睡眠 > 正常**。
 - 睡眠使用媒体区域遮罩，深度睡眠使用全屏 UI 遮罩；两种遮罩均不通过 `display:none` 隐藏媒体容器，保证新增 UI 元素和媒体填充计算稳定。
 - 视频睡眠时**暂停（画面+音频）**，恢复后继续播放。
@@ -180,7 +180,7 @@ function activateTemporarily():
 
 ## 服务端（config）
 
-### displayStates[ip].sleep 默认值
+### displayStates[displayId].sleep 默认值
 
 `src/apps/server/modules/config/config-app-service.js` 的 `defaultDisplayState` 追加：
 
@@ -188,7 +188,7 @@ function activateTemporarily():
 sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 ```
 
-沿用现有 `updateDisplayState(ip, partialState)` 持久化——显示端回传时带上 `sleep` 字段即自动合并保存。
+沿用现有状态合并逻辑，通过 `updateDisplayStateById(displayId, ip, partialState)` 持久化——显示端回传时带上 `sleep` 字段即自动合并保存。
 
 ## 控制端实现
 
@@ -218,7 +218,7 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
 ```
 控制端 SleepPanel 保存
   → sendControl('sleepSettings', {enabled,startHour,endHour,deepStartHour,deepEndHour})
-  → 服务端 control 处理器收到 action==='sleepSettings' → updateDisplayState(ip, {sleep: data.value}) → config.json 持久化
+  → 服务端 control 处理器收到 action==='sleepSettings' → updateDisplayStateById(displayId, ip, {sleep: data.value}) → userconfig.json 持久化
   → 转发 control → 显示端 handleControl('sleepSettings') 应用设置 + checkSleepMode() 立即判定
   → 显示端刷新/重启后 restoreState(state.sleep) 恢复
 ```

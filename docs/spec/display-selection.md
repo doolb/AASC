@@ -376,3 +376,23 @@ ws.on('message', (message) => {
 | public/js/websocket.js | WebSocket 管理，修改 sendMedia 方法 |
 | public/css/upload.css | 选择模式按钮样式 |
 | server.js | 服务端，新增批量发送消息类型 |
+
+## 目标显示端批量状态隔离
+
+```text
+select(displayId):
+    currentDisplayId = displayId
+    清理 MediaLibrary 的批量面板、浮动面板、显示控制面板和临时预览缓存
+    发送 getState(displayId)
+
+收到 playlistProgress:
+    如果 message.displayId != currentDisplayId:
+        丢弃
+    否则更新当前批量面板
+
+收到 displayState:
+    如果 state.currentPlaylist 存在:
+        恢复该显示端当前批量项
+    否则:
+        隐藏批量面板
+```

@@ -77,7 +77,7 @@ const playlistManager = new PlaylistManager(mediaLibraryManager);
             如果 dd 存在:
                 如果非 temp:
                     dd.state.currentPlaylist = {startData, index: 0, state: 'playing'}
-                    config.updateDisplayState(ip, {currentPlaylist})
+                    config.updateDisplayStateById(displayId, ip, {currentPlaylist})
                 sendToDisplay(id, {type: 'playlistStart', ...startData, temp})
         ws.send(playlistStarted)
     异常: logError + 回复 playlistError
@@ -91,7 +91,7 @@ const playlistManager = new PlaylistManager(mediaLibraryManager);
         sendToDisplay(id, {type: 'playlistControl', action, index})
         如果 action === 'stop' 且 dd.state.currentPlaylist:
             dd.state.currentPlaylist = null
-            config.updateDisplayState(ip, {currentPlaylist: null})
+            config.updateDisplayStateById(displayId, ip, {currentPlaylist: null})
 ```
 
 ### playlistProgress（显示端 → 服务端）
@@ -103,7 +103,7 @@ const playlistManager = new PlaylistManager(mediaLibraryManager);
         如果 state ∈ {finished, stopped}:
             currentPlaylist = null，config 同步清除
         否则:
-            config.updateDisplayState(ip, {currentPlaylist})
+            config.updateDisplayStateById(displayId, ip, {currentPlaylist})
     broadcastToControls({displayId, type:'playlistProgress', listId, index, total, state,
         fileName, url, mediaType, width, height})
     说明: url/mediaType 供控制端裁剪预览区跟随；width/height 为显示端实际播放
@@ -117,17 +117,32 @@ const playlistManager = new PlaylistManager(mediaLibraryManager);
 mediaBatch / media 分支发送前:
     如果 dd.state.currentPlaylist:
         dd.state.currentPlaylist = null
-        config.updateDisplayState(ip, {currentPlaylist: null})
+        config.updateDisplayStateById(displayId, ip, {currentPlaylist: null})
 ```
 
 ### 重连恢复
 
 ```
 显示端重连时:
-    如果 savedState.currentPlaylist:
-        ws.send(playlistStart, ...startData, resumeIndex: currentPlaylist.index)
-    否则如果 savedState.currentMedia:
+    如果 savedState 存在:
         ws.send(restoreState)
+    如果 savedState.currentPlaylist 存在:
+        ws.send(playlistStart, ...startData,
+            resumeIndex: currentPlaylist.index,
+            resumeTime: currentPlaylist.currentTime,
+            resumeState: currentPlaylist.state)
+
+状态键规则:
+    以稳定 displayId 读写 displayStates
+    clientIP 只用于旧状态一次性迁移、日志和设备事件
+
+控制端切换显示端:
+    清理旧批量面板和预览缓存
+    发送 getState(newDisplayId)
+    如果 state.currentPlaylist 存在:
+        按新显示端当前项绘制批量面板
+    否则:
+        隐藏全部批量面板
 ```
 
 ## 3. 显示端批量播放循环 (display.html)

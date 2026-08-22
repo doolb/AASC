@@ -50,12 +50,6 @@ const WebSocketManager = {
                 window.DeviceList.setDisplayList(data.list);
             }
             
-            if (!window.currentDisplayId && data.list && data.list.length > 0) {
-                console.log('[WS] displayList: 自动选择第一个显示端并发送 getState');
-                window.currentDisplayId = data.list[0].id;
-                this.send({ type: 'getState', displayId: data.list[0].id });
-            }
-
             if (window.AsrDevice) {
                 window.AsrDevice.updateUI();
             }
@@ -187,7 +181,12 @@ const WebSocketManager = {
                             width: item.width,
                             height: item.height
                         });
+                    } else {
+                        window.MediaLibrary.clearPlaylistPanel();
                     }
+                } else if (window.MediaLibrary) {
+                    // 切换到没有批量播放的显示端时，不能保留上一个显示端的列表。
+                    window.MediaLibrary.clearPlaylistPanel();
                 }
             } else {
                 console.log('[WS] displayState displayId 不匹配，跳过处理');

@@ -16,9 +16,18 @@ const DeviceList = {
             return;
         }
         this.selectionMode = mode;
+        try {
+            localStorage.setItem('deviceListSelectionMode', mode);
+        } catch (e) {
+            console.warn('[DeviceList] 保存选择模式失败:', e.message);
+        }
         this.render();
         if (mode === 'single' && !window.currentDisplayId && this.list.length > 0) {
-            this.select(this.list[0].id);
+            const storedId = this.getStoredSelection();
+            const preferred = this.list.find((display) => display.id === storedId);
+            if (preferred || !storedId) {
+                this.select(preferred ? preferred.id : this.list[0].id);
+            }
         }
     },
 
@@ -60,6 +69,13 @@ const DeviceList = {
         return isLandscape;
     },
 
+    // 显示稳定身份和连接地址，避免本机 Agent 的 127.0.0.1 与真实显示端混淆。
+    getDisplayLabel(display) {
+        const identity = display.id || 'unknown-display';
+        const address = display.ip || 'unknown-ip';
+        return identity === address ? identity : `${identity} · ${address}`;
+    },
+
     setViewMode(mode) {
         if (mode !== 'tree' && mode !== 'list') {
             return;
@@ -67,6 +83,14 @@ const DeviceList = {
         this.viewMode = mode;
         try { localStorage.setItem('deviceListViewMode', mode); } catch (e) {}
         this.render();
+    },
+
+    getStoredSelection() {
+        try {
+            return localStorage.getItem('selectedDisplayId');
+        } catch (e) {
+            return null;
+        }
     },
 
     toggleViewMode() {
@@ -80,6 +104,11 @@ const DeviceList = {
             const savedViewMode = localStorage.getItem('deviceListViewMode');
             if (savedViewMode === 'tree' || savedViewMode === 'list') {
                 this.viewMode = savedViewMode;
+            }
+
+            const savedSelectionMode = localStorage.getItem('deviceListSelectionMode');
+            if (savedSelectionMode === 'single' || savedSelectionMode === 'all' || savedSelectionMode === 'adaptive') {
+                this.selectionMode = savedSelectionMode;
             }
 
             const savedExpandedNodes = localStorage.getItem('deviceListExpandedNodes');
@@ -146,7 +175,11 @@ const DeviceList = {
             window.FloatingControl.updateDisplayList();
         }
         if (this.selectionMode === 'single' && !window.currentDisplayId && this.list.length > 0) {
-            this.select(this.list[0].id);
+            const storedId = this.getStoredSelection();
+            const preferred = this.list.find((display) => display.id === storedId);
+            if (preferred || !storedId) {
+                this.select(preferred ? preferred.id : this.list[0].id);
+            }
         }
     },
 
@@ -275,7 +308,7 @@ const DeviceList = {
                 <div class="display-item ${isActive ? 'active' : ''} ${d.isSubDisplay ? 'sub-display' : ''}" onclick="DeviceList.select('${d.id}')">
                     <div class="display-item-content">
                         <div class="display-item-header">
-                            <span class="display-item-id">${d.ip || 'unknown'}${d.isSubDisplay ? ' <span class="sub-display-tag">子显示端</span>' : ''}</span>
+                            <span class="display-item-id">${this.getDisplayLabel(d)}${d.isSubDisplay ? ' <span class="sub-display-tag">子显示端</span>' : ''}</span>
                             <div class="display-item-actions">
                                 ${subDisplayIndicator}
                                 ${capabilityIcons}
@@ -309,7 +342,7 @@ const DeviceList = {
 
             const displayNode = {
                 id: display.id,
-                label: display.ip || 'unknown',
+                label: this.getDisplayLabel(display),
                 icon: isSubDisplay ? '🎤' : '🖥️',
                 status: 'online',
                 selected: isSelected,
@@ -730,8 +763,16 @@ const DeviceList = {
     },
 
     select(id) {
+        if (window.MediaLibrary && typeof window.MediaLibrary.clearPlaylistPanel === 'function') {
+            window.MediaLibrary.clearPlaylistPanel();
+        }
         this.selectedNodeId = id;
         window.currentDisplayId = id;
+        try {
+            localStorage.setItem('selectedDisplayId', id);
+        } catch (e) {
+            console.warn('[DeviceList] 保存显示端选择失败:', e.message);
+        }
         this.render();
 
         if (window.FloatingControl) {
@@ -979,6 +1020,11 @@ const DeviceList = {
 
     setDisplayList(list) {
         this.list = list || [];
+        const selectedStillOnline = this.list.some((display) => display.id === window.currentDisplayId);
+        if (!selectedStillOnline) {
+            window.currentDisplayId = null;
+            this.selectedNodeId = null;
+        }
         this.render();
     }
 };

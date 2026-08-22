@@ -559,8 +559,22 @@ const MediaLibrary = {
         return panel;
     },
 
+    // 切换显示端或收到无批量状态时，清理上一个显示端遗留的批量 UI 和临时预览标记。
+    clearPlaylistPanel() {
+        ['playlistProgressPanel', 'displayPlaylistStatus', 'floatingPlaylistStatus'].forEach((id) => {
+            const panel = document.getElementById(id);
+            if (panel) panel.style.display = 'none';
+        });
+        this._lastCropPreviewUrl = null;
+        this.removeTempPreviewPlaceholder();
+    },
+
     // 批量播放进度：同步更新 媒体库面板/显示控制界面/快捷控制面板/裁剪预览区
     renderPlaylistPanel(info) {
+        if (!info || info.state === 'stopped' || info.state === 'finished') {
+            this.clearPlaylistPanel();
+            return;
+        }
         this.renderMediaLibraryPanel(info);
         this.renderDisplayControlPanel(info);
         this.renderFloatingControlPanel(info);

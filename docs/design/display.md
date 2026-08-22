@@ -147,7 +147,7 @@
    - 根因：服务端 `setAutoTts` 分支只更新 time.announce（整点报时）任务 enabled，未转发显示端 → 显示端 `autoTtsEnabled` 恒为默认 true，播报照常触发
    - 修复：
      - 服务端 `setAutoTts` 分支补 `sendToDisplay(displayId, data)` 转发到显示端（控制端开关立即生效）
-     - 同时持久化 `displayData.state.autoTts = enabled` + `config.updateDisplayState(ip, { autoTts })`，显示端刷新/重启后 restoreState 恢复
+     - 同时持久化 `displayData.state.autoTts = enabled` + `config.updateDisplayStateById(displayId, ip, { autoTts })`，显示端刷新/重启后 restoreState 恢复
      - 显示端 `handleRestoreState` 按 `state.autoTts` 恢复（旧数据缺字段则保持当前值，降级安全）
    - 协议/批量联动：`autoTtsEnabled` 仍由批量播放 `announceName` 临时覆盖、结束后恢复（batch-playlist 既有逻辑）
    - 改动文件：
@@ -224,3 +224,11 @@
      - tests/display-sleep-mode.test.js（+3 步）
      - docs/spec/display-sleep-mode.md（恢复时检查播放状态小节）
    - 实现文档：docs/spec/display-sleep-mode.md
+
+## 显示端身份与批量状态隔离
+
+- 显示端在线连接使用持久化 `displayId` 作为唯一身份，连接 IP 只用于日志、设备事件和控制端展示。
+- 服务器状态持久化改为 `displayStates[displayId]`；旧版按 IP 保存的数据仅在首次带 `displayId` 连接时迁移，迁移后不再以 IP 作为新状态键。
+- Agent/测试显示端必须显式使用独立 `displayId`（例如 `agent-local`），真实显示端使用自己的持久 ID；非媒体显示 Agent 不连接 `/display`。
+- 显示端批量播放重连时先恢复通用设置，再恢复批量播放列表和断点，确保旋转、适配、裁剪、音量、睡眠和自动播报设置不因批量分支被跳过。
+- 控制端切换显示端时清理旧批量面板和临时预览，收到新显示端状态后仅绘制该显示端的批量列表；没有列表时保持隐藏。

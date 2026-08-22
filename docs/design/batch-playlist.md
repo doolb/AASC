@@ -106,3 +106,9 @@
 - 重连补发 `playlistStart` 时携带 `resumeIndex`、`resumeTime`、`resumeState`。
 - 显示端在媒体 `loadedmetadata` 后恢复时间；暂停列表恢复后保持暂停，播放列表从缓存位置继续。
 - 图片批量仍按当前索引恢复；HTML 滚动位置不改变本次既有语义。
+
+## 显示端身份与控制端切换隔离
+
+- `currentPlaylist` 持久化以稳定 `displayId` 为键，IP 只作为旧数据迁移线索，避免 `127.0.0.1` Agent 与真实显示端状态混用。
+- 显示端重连时先发送 `restoreState` 恢复通用显示设置，再发送 `playlistStart` 恢复列表断点。
+- 控制端切换显示端时先清理旧批量 UI；新显示端 `currentPlaylist` 存在时重绘，不存在时隐藏批量面板。

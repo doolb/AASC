@@ -176,7 +176,7 @@ config.get('logBrain.defaultTimeRange', '10m');
 获取显示端状态。
 
 ```
-从 displayStates 获取指定 IP 的状态
+从 displayStates 获取指定 displayId 的状态；旧版 IP 仅作为一次性迁移线索
 如果不存在，返回默认状态
 ```
 
@@ -288,3 +288,26 @@ module.exports = {
 | src/apps/server/modules/config/config-app-service.js | 配置管理模块 |
 | src/apps/server/boot/server-app.js | 配置初始化和使用 |
 | config/config.json | 配置存储文件 |
+
+## 显示端身份状态 API
+
+```text
+getDisplayStateById(displayId, legacyIp):
+    states = displayStates
+    如果 states[displayId] 存在:
+        返回 states[displayId]
+    如果 states[legacyIp] 存在且未绑定其他 displayId:
+        state = 合并旧状态与 {displayId}
+        写入 states[displayId]
+        删除旧 IP 键
+        返回 state
+    返回默认显示端状态（包含 displayId）
+
+updateDisplayStateById(displayId, legacyIp, partialState):
+    state = getDisplayStateById(displayId, legacyIp)
+    state = 合并 state 与 partialState 与 {displayId}
+    写回 states[displayId]
+    返回 state
+```
+
+新的显示端状态不得以 IP 作为主键；`legacyIp` 只允许用于一次性兼容迁移。
