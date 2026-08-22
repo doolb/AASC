@@ -49,6 +49,7 @@ const { registerLogBrainApi } = require('../api/log-brain-api');
 const TaskManager = require('../modules/task-engine/task-manager');
 const { registerTaskHandlers } = require('../modules/task-engine/web-socket-handler');
 const AiRolesService = require('../modules/ai-roles/ai-roles-service');
+const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
@@ -243,12 +244,14 @@ let muteState = {
 
 let wsServer = null;
 let taskManager = null;
-// AI 角色面板：每角色一个 Claude 或 Codex Agent 进程。声明在模块级——handleControlMessageFallback
-// 在模块作用域引用 aiRoles，若只声明在 server.listen 回调里会出作用域（ReferenceError）。
+// AI 角色面板：服务器只持有共享 IPC 客户端，实际 Claude/Codex Agent 由独立后端宿主进程管理。
+// 声明在模块级——handleControlMessageFallback 在模块作用域引用 aiRoles，若只声明在 server.listen 回调里会出作用域。
 const aiRoles = new AiRolesService({
     projectRoot: PROJECT_ROOT,
     // 全局设置只作为新建/重建角色的默认后端；AiRolesService 内存中的 bridge 不会因设置变化被替换。
-    getAgentBackend: () => chat.getConfig().agentBackend || 'codex'
+    getAgentBackend: () => chat.getConfig().agentBackend || 'codex',
+    // Agent 的实际进程和 stdio 由独立后端宿主持有，服务器只保留 Unix Socket 客户端。
+    agentBackendClient: new AgentBackendClient()
 });
 const runtimeBridgeClients = new Map();
 
@@ -360,6 +363,9 @@ async function startServer() {
     const protocol = useHttps ? 'https' : 'http';
 
     updateVoiceDisplayConfig(localIP, PORT, protocol);
+
+    // 先恢复独立 Agent 后端，再开始监听控制端，避免首个 roleList 请求看到短暂的离线状态。
+    await aiRoles.restoreAll();
 
     server.listen(PORT, '0.0.0.0', async () => {
         log('系统', '媒体中心服务器已启动');
@@ -582,8 +588,6 @@ async function startServer() {
                 (msg) => broadcastToControls(msg),
                 (displayId, msg) => sendToDisplay(displayId, msg)
             );
-            // AI 角色：启动时恢复——claude 存活则重连 FIFO（进程不中断），已死清残留待下次发消息重建
-            aiRoles.restoreAll();
             taskManager.setSendToDisplay((displayId, msg) => sendToDisplay(displayId, msg));
             taskManager.setBroadcastToDisplays((msg) => {
               for (const [id] of displayClients) sendToDisplay(id, msg);
@@ -1424,9 +1428,9 @@ app.post('/api/chat/config', (req, res) => {
     }
 });
 
-app.post('/api/ai-roles/stop-all', (req, res) => {
+app.post('/api/ai-roles/stop-all', async (req, res) => {
     try {
-        const stopped = aiRoles.stopAll();
+        const stopped = await aiRoles.stopAll();
         broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
         res.json({ status: 'success', message: `已关闭 ${stopped} 个 Agent`, stopped });
     } catch (err) {
@@ -3952,7 +3956,7 @@ async function handleControlMessageFallback(data, ws) {
                             ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
                             return;
                         }
-                        aiRoles.remove(data.role);
+                        await aiRoles.remove(data.role);
                         broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
                     } catch (err) {
                         ws.send(JSON.stringify({ type: 'roleError', message: err.message }));

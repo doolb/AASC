@@ -4,6 +4,13 @@
 
 ### 修复
 
+- ✅ [2026-08-22] Agent 后端独立于服务器进程，修复服务器重启后控制端 Agent 离线
+  - 新增 detached `agent-backend-host`，由独立进程持有 Claude FIFO、Codex app-server stdio、PID 和会话上下文。
+  - `server-app` 通过用户目录下权限为 0600 的 Unix Socket IPC 连接后端；服务器重启只重建客户端，不终止存活 Agent。
+  - 支持后端 Socket 失效时自动拉起、流式事件转发、角色状态恢复、删除角色和关闭全部 Agent 的异步停止。
+  - 验证：IPC 4 项、真实 Codex PID/thread 重连、AI 角色服务 14 项、Claude/Codex/role-store/WS 相关 35 项及聊天/TTS/UI 回归通过。
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-22_Agent后端独立于服务器进程.md
+
 - ✅ [2026-08-22] 修复控制端 Agent 回复不会自动语言播报
   - Agent 流式回复按完整句子生成 TTS，完成事件冲刷尾句，沿用普通 LLM 的控制端、单显示端和多显示端路由。
   - TTS 单句失败只记录日志，不影响文字回复和后续句子播报。

@@ -25,9 +25,9 @@ const ROLE_SELF_MANAGEMENT_PROMPT = `
 5. 需要重启或重载服务器时，只能使用控制端接口，不能直接操作服务器进程。
 角色文件变更会在下一次 Claude 进程启动时作为系统提示词重新加载。`;
 
-// 聚合：角色持久化 + 每角色 claude 进程桥 + 提示词来源 + 消息路由
+// 聚合：角色持久化 + 每角色后端 bridge + 提示词来源 + 消息路由
 class AiRolesService {
-    constructor({ baseDir = DEFAULT_BASE, projectRoot, command = 'claude', commandPath = null, commandArgs = [], keeperPath = KEEPER_PATH, getAgentBackend = () => 'codex', bridgeFactory = null } = {}) {
+    constructor({ baseDir = DEFAULT_BASE, projectRoot, command = 'claude', commandPath = null, commandArgs = [], keeperPath = KEEPER_PATH, getAgentBackend = () => 'codex', bridgeFactory = null, agentBackendClient = null } = {}) {
         this.store = new RoleStore(baseDir);
         this.projectRoot = projectRoot;
         this.command = command;
@@ -36,7 +36,8 @@ class AiRolesService {
         this.keeperPath = keeperPath;
         this.getAgentBackend = getAgentBackend;
         this.bridgeFactory = bridgeFactory;
-        this.bridges = new Map(); // name -> ClaudeBridge
+        this.agentBackendClient = agentBackendClient;
+        this.bridges = new Map(); // name -> AgentBackendClientBridge 或测试注入的 bridge
         this.queues = new Map();
         this.removed = new Set();
         this.stopGeneration = 0;
@@ -74,6 +75,7 @@ class AiRolesService {
             keeperPath: this.keeperPath
         };
         if (this.bridgeFactory) return this.bridgeFactory(options);
+        if (this.agentBackendClient) return this.agentBackendClient.createBridge(options);
         if (backend === 'codex') {
             return new CodexBridge({
                 dir: options.dir,
@@ -89,17 +91,23 @@ class AiRolesService {
         const current = this.bridges.get(name);
         if (current && current.isAlive()) return current;
         if (current) {
-            current.stop();
+            try {
+                const stopping = current.stop();
+                if (stopping && typeof stopping.catch === 'function') stopping.catch(() => {});
+            } catch (_) { /* 旧 bridge 已失效时，清理引用优先于阻断新 bridge 创建 */ }
             this.bridges.delete(name);
         }
 
         let storedBackend = this.store.getBackend(name);
         // 兼容旧角色：早期 role.json 没有 backend 字段，但存活的 claude.pid 仍应继续使用 Claude。
         if (!storedBackend && this._storedBackendIsRunning(name, 'claude')) storedBackend = 'claude';
-        // Codex 当前使用 stdio，无法从新服务器进程接管旧句柄，因此只在内存 bridge 存活时复用。
-        const backend = storedBackend === 'claude' && this._storedBackendIsRunning(name, 'claude')
-            ? 'claude'
-            : this.getAgentBackend();
+        // 独立后端宿主中的 bridge 不在当前服务器内存中，必须先按 role.json.backend 查询宿主，
+        // 防止全局设置改变后把仍存活的旧 Agent 误判为离线并启动第二个后端。
+        const backend = this.agentBackendClient && storedBackend
+            ? storedBackend
+            : (storedBackend === 'claude' && this._storedBackendIsRunning(name, 'claude')
+                ? 'claude'
+                : this.getAgentBackend());
         if (backend !== 'codex' && backend !== 'claude') throw new Error('Agent 后端不合法');
         const bridge = this._createBridge(name, backend);
         this.store.setBackend(name, backend);
@@ -163,22 +171,25 @@ class AiRolesService {
         return { ...role, running: false };
     }
 
-    remove(name) {
+    async remove(name) {
         this._assertExists(name);
         this.removed.add(name);
         const b = this.bridges.get(name);
-        if (b) { b.stop(); this.bridges.delete(name); }
+        if (b) {
+            await b.stop();
+            this.bridges.delete(name);
+        }
         this.store.remove(name);
     }
 
     // 只停止当前 Agent 进程并清空运行时 bridge；角色数据、聊天历史和角色定义全部保留。
     // generation 用来阻止 stopAll 调用前已经排队、但尚未启动的消息在停止后重新拉起 Agent。
-    stopAll() {
+    async stopAll() {
         this.stopGeneration += 1;
         let stopped = 0;
         for (const bridge of this.bridges.values()) {
             if (bridge.isAlive()) stopped += 1;
-            try { bridge.stop(); } catch (error) {
+            try { await bridge.stop(); } catch (error) {
                 console.warn(`[ai-roles] 停止 Agent 失败: ${error.message}`);
             }
         }
@@ -256,16 +267,29 @@ class AiRolesService {
         }
     }
 
-    // 服务器启动：Claude 存活则重连 FIFO；Codex stdio 不能跨父进程接管，等待下一次消息重建。
-    restoreAll() {
-        for (const role of this.store.list()) {
-            const b = this._bridge(role.name);
-            b.promptFile = this._ensurePromptFile(role.name);
-            if (typeof b.setPrompt === 'function') b.setPrompt(fs.readFileSync(b.promptFile, 'utf8'));
-            if (!b.reconnect()) {
-                console.warn(`[ai-roles] 角色「${role.name}」Agent 进程未连接，下次发消息重建`);
+    // 服务器启动：通过独立后端查询已存活 Agent；IPC 客户端重建不会停止宿主内 bridge。
+    async restoreAll() {
+        const restores = this.store.list().map(async (role) => {
+            try {
+                const b = this._bridge(role.name);
+                b.promptFile = this._ensurePromptFile(role.name);
+                if (typeof b.setPrompt === 'function') b.setPrompt(fs.readFileSync(b.promptFile, 'utf8'));
+                const running = typeof b.reconnect === 'function' ? await b.reconnect() : b.isAlive();
+                if (!running) {
+                    if (this.agentBackendClient) {
+                        const latestBackend = this.getAgentBackend();
+                        if (latestBackend === 'codex' || latestBackend === 'claude') {
+                            this.store.setBackend(role.name, latestBackend);
+                        }
+                    }
+                    console.warn(`[ai-roles] 角色「${role.name}」Agent 进程未连接，下次发消息重建`);
+                }
+            } catch (error) {
+                console.warn(`[ai-roles] 恢复角色「${role.name}」失败: ${error.message}`);
             }
-        }
+        });
+        await Promise.all(restores);
+        return this.list();
     }
 }
 module.exports = AiRolesService;

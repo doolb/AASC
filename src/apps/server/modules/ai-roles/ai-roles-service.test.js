@@ -59,7 +59,7 @@ test('add/list 往返，running 状态', async () => {
     assert.strictEqual(list[0].name, '后端');
     assert.strictEqual(list[0].running, false, '未对话不启动');
     assert.throws(() => svc.add('后端'), /已存在/);
-    svc.remove('后端');
+    await svc.remove('后端');
     assert.deepStrictEqual(svc.list(), []);
 });
 
@@ -190,13 +190,74 @@ test('restoreAll：角色存活则重连，删除后 remove 回收', async () =>
     const svc = makeService(dir, base);
     svc.add('后端');
     await svc.chat('后端', 'hi', {});
-    svc.restoreAll();
+    await svc.restoreAll();
     assert.strictEqual(svc.list()[0].running, true, '存活角色应重连保持 running');
 
     // 删除回收：claude + 守卫进程与目录都清除
-    svc.remove('后端');
+    await svc.remove('后端');
     assert.deepStrictEqual(svc.list(), []);
     assert.ok(!fs.existsSync(path.join(base, '后端')), '角色目录应删除');
+});
+
+test('restoreAll 通过共享独立后端客户端恢复角色在线状态', async () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    let createCount = 0;
+    const svc = new AiRolesService({
+        baseDir: base,
+        projectRoot: dir,
+        getAgentBackend: () => 'codex',
+        agentBackendClient: {
+            createBridge(options) {
+                createCount += 1;
+                return {
+                    backend: options.backend,
+                    promptFile: null,
+                    isAlive: () => true,
+                    async reconnect() { return true; },
+                    async stop() {},
+                    async ensureStarted() {},
+                    async chat() { return { success: true, message: 'ok' }; }
+                };
+            }
+        }
+    });
+    svc.add('后端');
+    svc.store.setBackend('后端', 'codex');
+
+    await svc.restoreAll();
+
+    assert.strictEqual(createCount, 1);
+    assert.strictEqual(svc.list()[0].running, true);
+});
+
+test('独立后端宿主存活时不因全局后端设置变化而切换角色后端', async () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const svc = new AiRolesService({
+        baseDir: base,
+        projectRoot: dir,
+        getAgentBackend: () => 'claude',
+        agentBackendClient: {
+            createBridge(options) {
+                return {
+                    backend: options.backend,
+                    isAlive: () => true,
+                    async reconnect() { return true; },
+                    async stop() {},
+                    async ensureStarted() {},
+                    async chat() { return { success: true, message: 'ok' }; }
+                };
+            }
+        }
+    });
+    svc.add('后端');
+    svc.store.setBackend('后端', 'codex');
+
+    await svc.restoreAll();
+
+    assert.strictEqual(svc.list()[0].backend, 'codex');
+    assert.strictEqual(svc.list()[0].running, true);
 });
 
 test('全局后端变化不替换运行中的角色，退出后重建使用最新后端', () => {
@@ -234,7 +295,7 @@ test('全局后端变化不替换运行中的角色，退出后重建使用最�
     assert.strictEqual(svc.store.list()[0].backend, 'claude');
 });
 
-test('stopAll 关闭所有 Agent 但保留角色文件和角色记录', () => {
+test('stopAll 关闭所有 Agent 但保留角色文件和角色记录', async () => {
     const dir = tmpDir();
     const base = path.join(dir, 'roles');
     const bridges = [];
@@ -264,7 +325,7 @@ test('stopAll 关闭所有 Agent 但保留角色文件和角色记录', () => {
     svc._bridge('角色一');
     svc._bridge('角色二');
 
-    const stopped = svc.stopAll();
+    const stopped = await svc.stopAll();
     assert.strictEqual(stopped, 2);
     assert.strictEqual(svc.bridges.size, 0);
     assert.ok(bridges.every((bridge) => bridge.stopped));

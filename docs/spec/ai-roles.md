@@ -16,6 +16,13 @@ USER_CONFIG_DIR/ai-roles/<name>/
 ```
 
 ```text
+USER_CONFIG_DIR/ai-roles/
+  backend.sock     // Agent 后端宿主 Unix Socket（全局共享）
+  backend.pid      // Agent 后端宿主 PID（全局共享）
+  backend.err.log  // Agent 后端宿主 stderr（全局共享）
+```
+
+```text
 RoleStore
   list() -> 遍历角色目录；目录名必须安全且 role.json.name 必须与目录名完全一致，否则 console.warn 并跳过
   add(name) -> 校验安全名称；若已存在则报错；创建目录和 role.json
@@ -69,7 +76,7 @@ POST /api/chat/config({ agentBackend })
   不停止已有 AiRolesService bridge
 
 POST /api/ai-roles/stop-all:
-  AiRolesService.stopAll()
+  await AiRolesService.stopAll()
   广播 { type:'roleList', roles: aiRoles.list() }
   返回 { status:'success', stopped:数量 }
   aiRoles.list() 只读取已有 bridge 或持久化 PID 状态，不创建新的 bridge
@@ -89,7 +96,7 @@ server 启动:
              broadcastToControls({ type: 'roleList', roles: aiRoles.list() })
       catch -> ws.send({ type: 'roleError', message })
     注册 roleDelete:
-      try -> 校验角色存在 -> aiRoles.remove(data.role)
+      try -> 校验角色存在 -> await aiRoles.remove(data.role)
              broadcastToControls({ type: 'roleList', roles: aiRoles.list() })
       catch -> ws.send({ type: 'roleError', message })
     注册 roleHistory:
@@ -268,21 +275,73 @@ stop():
   destroy reader，置空 reader
 ```
 
-`AiRolesService.restoreAll()` 遍历 `RoleStore.list()`，为每个角色准备提示词文件并调用 `reconnect()`；重连失败只记录警告，角色仍保留，下一次聊天重新懒启动。
+`AiRolesService.restoreAll()` 异步遍历 `RoleStore.list()`，为每个角色准备提示词文件并通过 IPC 调用 `reconnect()`；重连失败只记录警告，角色仍保留，下一次聊天重新懒启动。服务器开始监听前等待该恢复过程完成，确保首个 `roleList` 已使用后端实际状态。
 
 ## `AiRolesService.stopAll`
 
 ```text
-stopAll():
+async stopAll():
   stopped = 0
   遍历内存 bridges:
     如果 bridge.isAlive(): stopped += 1
-    bridge.stop()
+    await bridge.stop()
   清空 bridges
   返回 stopped
 ```
 
 停止后 `aiRoles.list()` 仍返回全部角色，但 `running=false`；角色定义、控制端 history.md 和聊天历史不受影响。
+
+## agent-backend-host
+
+```text
+启动:
+  创建 USER_CONFIG_DIR/ai-roles 目录
+  若 backend.sock 存在但无法连接 -> 删除失效 socket
+  在 backend.sock 上监听 JSON Lines
+  写入 backend.pid，并把 socket 权限限制为当前用户可读写
+
+收到请求 { id, op, role, options }:
+  status:
+    读取内存中的 role bridge；不存在时按 options 创建但不主动冷启动
+    如果 bridge 支持 reconnect，查询已有 Agent 是否存活
+    返回 { id, ok:true, result:{ running, backend } }
+  ensureStarted:
+    按 role/backend 获取 bridge
+    设置 prompt 快照
+    await bridge.ensureStarted()
+    返回 running 和 backend
+  chat:
+    通过 bridge.chat 发起一轮请求
+    onChunk/onComplete/onError -> 向请求连接发送 { id, event, payload }
+    返回本轮结果
+  stopRole:
+    bridge.stop()；删除内存 bridge；返回停止状态
+  stopAll:
+    停止所有角色 bridge；保留后端宿主和 Unix Socket
+```
+
+后端宿主的子进程与 IPC 客户端完全解耦：IPC 客户端断开不触发 bridge.stop；Agent 继续运行，下一次服务器启动可通过 `status` 重新获取在线状态。后端宿主进程退出时，服务器下一次请求负责重新拉起宿主。
+
+## agent-backend-client
+
+```text
+ensureReady():
+  尝试连接已有 backend.sock
+  连接失败 -> 确认 socket 无监听 -> detached spawn agent-backend-host
+  等待 socket 出现并重新连接
+
+request(message, onEvent):
+  确保 Socket 已连接
+  写入 JSON 行并等待相同 id 的响应
+  事件消息按 id 调用 onEvent，不缓存完整回复
+
+AgentBackendClientBridge:
+  isAlive() -> 最近一次 IPC 状态
+  ensureStarted() -> request({ op:'ensureStarted', ... })
+  reconnect() -> request({ op:'status', ... })
+  chat() -> request({ op:'chat', ... }) 并映射 chunk/complete/error 回调
+  stop() -> request({ op:'stopRole', ... })
+```
 
 ## Agent 后端与持久上下文
 
@@ -295,7 +354,7 @@ AiRolesService._bridge(name):
     backend = 'claude'
   如果 backend 缺失或对应进程已退出:
     backend = getGlobalAgentBackend() 或 'codex'
-  创建对应 ClaudeBridge/CodexBridge
+  生产环境创建 AgentBackendClientBridge；测试可注入直接 bridgeFactory
   保存 role.json.backend=backend
   返回 bridge
 
@@ -319,7 +378,7 @@ CodexBridge.chat(content, callbacks):
   JSON-RPC error/进程退出/超时 -> callbacks.onError(error)，清理后允许重建
 ```
 
-Codex 的 `threadId` 由当前服务器进程持有；同一角色后续消息继续使用该 thread。由于 stdio 句柄不能跨服务器进程接管，服务器重启后由角色历史和最新提示词恢复，下一条消息重新创建 Codex thread。
+Codex 的 `threadId` 和 stdio 句柄由独立 Agent 后端宿主持有；同一角色后续消息继续使用该 thread。服务器重启后只重建 Unix Socket 客户端，通过 `status` 重新获取同一角色的 running 状态和上下文。
 
 ## 控制端渲染
 

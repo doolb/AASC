@@ -4,7 +4,17 @@
 
 控制端聊天面板支持工作 AI 角色的动态管理。用户可以添加或删除角色，并在同一个聊天界面中通过角色 tab 切换对话。每个角色拥有独立的 Agent 进程、提示词和聊天历史，角色之间互不共享上下文。
 
-角色数据与历史持久化到 `~/.config/aasc-user/ai-roles/<角色名>/`，服务器重启后角色列表和历史仍可恢复。Claude 进程采用 detached 方式运行，服务器重启时不主动终止存活进程；服务启动后重新连接其输出管道。删除角色时回收对应 Claude 进程、管道守卫和历史目录。
+角色数据与历史持久化到 `~/.config/aasc-user/ai-roles/<角色名>/`，服务器重启后角色列表和历史仍可恢复。Agent 后端由独立的 detached 后端宿主进程持有，服务器只通过 Unix Socket 发送控制请求和接收流式事件；服务器重启时不主动终止存活 Agent，后端宿主可被新服务器重新连接。删除角色时由后端宿主回收对应 Agent，再删除角色目录。
+
+### 独立 Agent 后端进程
+
+Agent 后端宿主是服务器之外的长期进程，负责持有 Claude FIFO、Codex app-server stdio 和每个角色的会话上下文。服务器进程只负责角色配置、聊天历史、控制端 WebSocket 和 TTS 路由，不直接持有 Agent 子进程的 stdin/stdout。
+
+- 后端宿主使用固定 Unix Socket 接收本机服务器连接，Socket 文件放在用户配置目录并限制为当前用户可读写。
+- 服务器启动时优先连接已有宿主；Socket 不存在或失效时才 detached 启动新的宿主并重试连接。
+- Agent 的 `ensureStarted`、`chat`、`status`、`stopRole` 和 `stopAll` 使用带请求号的 JSON Lines IPC；流式增量和完成/错误事件复用同一请求号。
+- 服务器重启只会断开 IPC 客户端，不会触发后端宿主的 Agent `stop`；后端宿主内存中的 bridge 和 thread/FIFO 继续存活。
+- 后端宿主重启或 Agent 自身退出时，服务器将角色显示为离线；下一次聊天按角色实际后端懒启动，避免把后端故障误认为服务器故障。
 
 - 角色 tab 必须使用 DOM 节点、`textContent`、`dataset` 和事件监听器渲染，角色名不得进入 HTML 或 inline handler。
 - 角色消息带唯一 `requestId`；流式响应按请求上下文归属，切换 tab 后迟到响应不得污染当前角色。
@@ -45,20 +55,21 @@
 - 首次连接执行 `initialize`、`thread/start`，随后每条消息使用同一个 `threadId` 执行 `turn/start`，保留 Agent 上下文。
 - 读取 `item/agentMessage/delta` 转发流式文本，在 `turn/completed` 完成当前请求；协议错误、进程退出和超时均结束当前请求并允许下一次重建。
 - Codex 子进程只增加 `HTTPS_PROXY=http://127.0.0.1:7899`，其余环境变量继承服务器环境；不改变服务器自身代理或进程控制规则。
-- 角色目录保存实际后端标记。后端设置变更不杀正在运行的桥；角色进程死亡后，下一次消息使用最新全局后端。Codex 当前使用 stdio 传输，服务器重启后由历史和提示词恢复角色，但不会接管旧 stdio 句柄。
+- 角色目录保存实际后端标记。后端设置变更不杀正在运行的桥；角色进程死亡后，下一次消息使用最新全局后端。Codex 的 stdio 只由独立 Agent 后端宿主持有，服务器重启时由新服务器通过 Unix Socket 重新查询和使用同一个 thread。
 
 ### ai-roles-service
 
-聚合角色存储与进程桥：为每个角色懒创建 `ClaudeBridge` 或 `CodexBridge`，从 `workgroup/roles/<name>.md` 读取提示词（不存在时使用默认提示词），保存用户和助手历史，并在服务启动时调用 `restoreAll()` 恢复角色连接。控制端 Agent 角色直接处理当前对话，不进入 `poll.js` 任务队列；`poll.js` 只继续服务 workgroup 成员。`stopAll()` 统一停止当前已连接的 Agent bridge，并保留角色数据。
+聚合角色存储与后端客户端桥：为每个角色懒创建 `AgentBackendClientBridge`，从 `workgroup/roles/<name>.md` 读取提示词（不存在时使用默认提示词），保存用户和助手历史，并在服务启动时调用异步 `restoreAll()` 通过 IPC 恢复角色连接。控制端 Agent 角色直接处理当前对话，不进入 `poll.js` 任务队列；`poll.js` 只继续服务 workgroup 成员。`stopAll()` 通过 IPC 停止后端宿主中的 Agent，但保留角色数据。
 
 ## 生命周期
 
 1. **添加**：控制端发送 `roleAdd`，服务端校验并创建角色目录，同时写入提示词文件；不立即启动 Claude。
-2. **懒启动**：首次发送角色消息时，服务根据角色实际后端创建 Claude FIFO 桥或 Codex JSON-RPC 桥；后续消息复用该角色桥。
-3. **服务器重启**：服务启动遍历已持久化角色；存活的 Claude 重新连接 FIFO，Codex stdio 会话随服务器退出结束，角色保留并在下一次消息按最新全局后端重建。
-4. **断开与自愈**：管道打开超时、输出异常或响应超时会清理资源；下一次聊天重新建立完整链路。
-5. **删除**：控制端确认后发送 `roleDelete`，服务停止对应 Claude/守卫并删除角色目录，历史随角色一并清除。
-6. **全部停止**：系统设置发送 `POST /api/ai-roles/stop-all`，服务停止所有已连接 Agent，广播最新 `roleList`；角色保持离线，下一次发消息时懒启动。
+2. **懒启动**：首次发送角色消息时，服务端通过 Unix Socket 请求独立后端宿主按角色实际后端创建 Claude FIFO 桥或 Codex JSON-RPC 桥；后续消息复用宿主内的角色 bridge。
+3. **服务器重启**：服务端只断开 IPC 客户端，独立后端宿主和 Agent 不退出；新服务启动后连接已有 Socket，查询角色状态并广播在线列表。
+4. **后端故障**：Socket 或宿主失效时，服务端拉起新的 detached 宿主；已有 bridge 状态显示离线，下一次消息再按角色配置懒重建。
+5. **断开与自愈**：管道打开超时、输出异常或响应超时会清理资源；下一次聊天重新建立完整链路。
+6. **删除**：控制端确认后发送 `roleDelete`，服务停止对应 Agent 并删除角色目录，历史随角色一并清除。
+7. **全部停止**：系统设置发送 `POST /api/ai-roles/stop-all`，服务停止所有已连接 Agent，广播最新 `roleList`；角色保持离线，下一次发消息时懒启动。
 
 ## 数据流
 
@@ -71,6 +82,9 @@
   └─ chatMessage(mode=role)
        -> server-app 校验角色
        -> aiRoles.chat()
+       -> AgentBackendClientBridge
+       -> Unix Socket JSON Lines
+       -> 独立 agent-backend-host
        -> ClaudeBridge FIFO 或 CodexBridge JSON-RPC
        -> stream-json / app-server notifications
        -> chatChunk / chatResponse

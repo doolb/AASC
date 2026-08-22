@@ -32,6 +32,13 @@
 
 ## AI 角色
 
+- ✅已完成 [2026-08-22][2026-08-22] Agent 后端独立于服务器进程，修复服务器重启后控制端 Agent 离线
+  - 新增 detached `agent-backend-host` 和 Unix Socket JSON Lines IPC；服务器仅保留 `AgentBackendClient`，不再直接持有生产 Agent 的 stdio/FIFO。
+  - 服务器重启时复用后端宿主中的 Claude/Codex bridge、PID 和 Codex thread；Socket/宿主失效时自动拉起并允许下一次消息懒重建。
+  - 验证：IPC 4 项、真实 Codex 进程重连、AI 角色服务 14 项、Claude/Codex/role-store/WS 相关 35 项及聊天/TTS/UI 回归通过。
+  - 改动：`src/apps/server/modules/ai-roles/agent-backend-host.js`、`agent-backend-client.js`、AiRolesService、server-app、WS handler 及测试。
+  - 文档：`docs/design/ai-roles.md`、`docs/spec/ai-roles.md`、`docs/task/2026-08-22_Agent后端独立于服务器进程.md`
+
 - ✅已完成 [2026-08-22][2026-08-22] 修复 Codex 响应超时导致 Agent 离线
   - 改动：默认超时调整为 10 分钟；收到流式增量时重置无活动超时计时器；正常完成保持在线
   - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-22_Codex响应无活动超时修复.md

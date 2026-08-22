@@ -40,7 +40,7 @@ function registerAiRoleHandlers(wsServer, { aiRoles, broadcastToControls }) {
                 sendError(ws, new Error('角色不存在'));
                 return;
             }
-            aiRoles.remove(data.role);
+            await aiRoles.remove(data.role);
             broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
         } catch (error) {
             sendError(ws, error);
