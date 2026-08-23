@@ -648,14 +648,6 @@ function buildMessages(userMessage, options = {}) {
     return messages;
 }
 
-function isSentenceEnd(text) {
-    if (!text || text.length === 0) return false;
-    const lastChar = text[text.length - 1];
-    if (lastChar === '\n') return true;
-    const endChars = ['.', '!', '?', '~', '～', '\u3002', '\uFF01', '\uFF1F', '\uFF1B', ';', '\u2026'];
-    return endChars.includes(lastChar);
-}
-
 // 在 pendingText 中从右向左扫描最后一个完整句子边界
 // 中文句号/问号/感叹号直接分句，英文句点需后跟空白/换行（避免缩写和数字）
 function findLastSentenceBoundary(text) {
