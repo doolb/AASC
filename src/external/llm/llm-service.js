@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { isSentenceEnd, splitIntoSentences } = require('../../core/utils/sentence-splitter');
 
 const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
 
@@ -668,52 +669,6 @@ function findLastSentenceBoundary(text) {
         }
     }
     return -1;
-}
-
-function splitIntoSentences(text) {
-    if (!text || typeof text !== 'string') {
-        return [];
-    }
-
-    const sentences = [];
-    let current = '';
-    let commaCount = 0;
-
-    for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        current += ch;
-
-        if (ch === '，' || ch === ',') {
-            commaCount++;
-        }
-
-        if (isSentenceEnd(current)) {
-                    // 英文句点需后跟空格/换行/结尾（避免切分小数点和缩写）
-                    if (ch === '.' && i + 1 < text.length && text[i + 1] !== ' ' && text[i + 1] !== '\n') {
-                        // 不是真正的句子边界，继续积累
-                    } else {
-                        const trimmed = current.trim();
-                        if (trimmed.length > 0) {
-                            sentences.push(trimmed);
-                        }
-                        current = '';
-                        commaCount = 0;
-                    }
-                } else if (commaCount >= 4) {
-            const trimmed = current.trim();
-            if (trimmed.length > 0) {
-                sentences.push(trimmed);
-            }
-            current = '';
-            commaCount = 0;
-        }
-    }
-
-    if (current.trim().length > 0) {
-        sentences.push(current.trim());
-    }
-
-    return sentences;
 }
 
 async function chat(userMessage, options = {}) {

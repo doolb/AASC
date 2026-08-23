@@ -717,6 +717,12 @@ function normalizePlaybackProgress(currentTime, duration) {
     };
 }
 
+app.get('/js/sentence-splitter.js', (req, res) => {
+    res.type('application/javascript').sendFile(
+        path.join(PROJECT_ROOT, 'src', 'core', 'utils', 'sentence-splitter.js')
+    );
+});
+
 app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public'), {
   maxAge: 0, etag: true,
   setHeaders: function(res, path) {
