@@ -45,3 +45,11 @@ test('播放进度更新有节流持久化并在暂停时强制同步', () => {
     assert.match(server, /Date\.now\(\)/);
     assert.match(server, /force[\s\S]*config\.updateDisplayState/);
 });
+
+test('文本恢复先应用样式并恢复页码进度', () => {
+    const display = read(DISPLAY);
+
+    assert.match(display, /state\.textStyle[\s\S]*applyStyle/);
+    assert.match(display, /state\.currentMediaProgress[\s\S]*pageIndex/);
+    assert.match(display, /TextMediaPlayer\.load/);
+});

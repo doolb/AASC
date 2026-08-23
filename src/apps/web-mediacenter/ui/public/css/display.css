@@ -126,6 +126,68 @@ body {
     background: #fff;
 }
 
+/* 文本媒体层独立于图片/视频/HTML，避免文本样式和分页测量影响既有媒体布局。 */
+#mediaText {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: #FFF4B8;
+    color: #333333;
+    font-size: 32px;
+    line-height: 1.6;
+    z-index: 2;
+    transform-origin: center center;
+}
+
+#mediaTextContent {
+    height: calc(100% - 40px);
+    overflow: hidden;
+    word-break: break-word;
+}
+
+#mediaTextContent p,
+#mediaTextContent ul,
+#mediaTextContent ol,
+#mediaTextContent blockquote,
+#mediaTextContent pre {
+    margin: 0 0 0.8em;
+}
+
+#mediaTextContent pre,
+.text-media-plain {
+    font: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+#mediaTextContent code,
+#mediaTextContent pre,
+#mediaTextContent blockquote {
+    background: rgba(51, 51, 51, 0.10);
+    border-radius: 6px;
+}
+
+#mediaTextContent a {
+    color: #173F7A;
+}
+
+#mediaTextStatus {
+    position: absolute;
+    right: 24px;
+    bottom: 16px;
+    color: rgba(51, 51, 51, 0.72);
+    font-size: 0.5em;
+}
+
+/* 隐藏测量节点必须保留排版属性，才能准确评估分页高度。 */
+.text-media-measure {
+    position: fixed;
+    visibility: hidden;
+    pointer-events: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 #timeDisplay {
     position: fixed;
     font-size: 48px;
