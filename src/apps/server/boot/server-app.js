@@ -53,6 +53,7 @@ const AiRolesService = require('../modules/ai-roles/ai-roles-service');
 const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const { shouldSkipDisplayTts } = require('../modules/tts/display-tts-policy');
+const { createTextMediaTtsService } = require('../modules/media/text-media-tts-service');
 const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
@@ -265,6 +266,12 @@ asr.init(config.get('asr', {}));
 chat.init(config.get('chat', {}));
 reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
+// 文本分页播放单独逐句合成，不能复用通用 TTS 的整段队列，避免播放定位标签丢失。
+const textMediaTtsService = createTextMediaTtsService({
+    generateTTS: (text) => tts.generateTTS(text),
+    sendToDisplay,
+    logError
+});
 // 加载指令分级路由配置
 const savedRouting = config.get('voiceCommand.routing');
 if (savedRouting) {
@@ -416,7 +423,12 @@ async function startServer() {
             });
 
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
-            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport'];
+
+            // 分句请求由独立服务串行处理；生成失败会转换为协议错误，不能冒泡中断 WebSocket 循环。
+            wsServer.registerHandler('textSentenceTts', async (data, ctx) => {
+                await textMediaTtsService.handleSentenceRequest(ctx.displayId, data);
+            });
+            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'];
             for (const type of displayTypes) {
                 wsServer.registerHandler(type, (data, ctx) => {
                     handleDisplayMessageFallback(ctx.displayId, data, ctx.ws);
@@ -689,6 +701,9 @@ function normalizeDynamicFitConfig(value) {
     };
 }
 
+        // 仅保存可恢复的文本播放样式与进度，不保存临时播放列表中的 base64 文本内容。
+        textStyle: null,
+        currentTextProgress: null,
 function createDisplayState() {
     return {
         currentMedia: null,
@@ -2923,7 +2938,7 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress') {
+                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress' && data.type !== 'textProgress') {
                     log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
@@ -3147,6 +3162,24 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         }
         broadcastToControls({
             displayId: displayId,
+    } else if (data.type === 'textProgress' && displayData) {
+        // 只提取文本播放恢复所需的标量字段，避免临时播放列表的 base64 文本进入持久化配置。
+        const textProgress = {
+            playbackId: data.playbackId,
+            pageIndex: data.pageIndex,
+            pageTotal: data.pageTotal,
+            sentenceIndex: data.sentenceIndex,
+            sentenceTotal: data.sentenceTotal,
+            state: data.state,
+            format: data.format
+        };
+        displayData.state.currentTextProgress = textProgress;
+        persistDisplayState(displayData, { currentTextProgress: textProgress });
+        broadcastToControls({
+            displayId,
+            type: 'textProgress',
+            ...textProgress
+        });
             type: 'audioProgress',
             currentTime: data.currentTime,
             duration: data.duration
@@ -3821,6 +3854,17 @@ async function handleControlMessageFallback(data, ws) {
                     } else {
                         displayData.state.lastTempMedia = null;
                         displayData.state.currentMedia = data.media;
+                    } else if (data.action === 'textStyle') {
+                        // 文本样式与显示端恢复状态一起保存；文本内容本身由当前媒体或播放列表负责恢复。
+                        displayData.state.textStyle = data.value;
+                        persistDisplayState(displayData, { textStyle: data.value });
+                    } else if (data.action === 'textPlayback') {
+                        const playbackAction = data.value?.action;
+                        const playbackId = data.value?.playbackId || displayData.state.currentTextProgress?.playbackId;
+                        // 暂停、翻页和停止后，旧句音频都不能在异步合成完成时重新开始播放。
+                        if (['pause', 'prev', 'next', 'stop'].includes(playbackAction) && playbackId) {
+                            textMediaTtsService.cancel(displayId, playbackId);
+                        }
                         displayData.state.currentMediaProgress = null;
                         persistDisplayState(displayData, {
                             currentMedia: data.media,
