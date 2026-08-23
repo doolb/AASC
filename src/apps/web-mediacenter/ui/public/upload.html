@@ -50,10 +50,6 @@
                 <span class="nav-icon">📋</span>
                 <span class="nav-text">日志</span>
             </button>
-            <button class="nav-item" data-target="brain" title="日志大脑">
-                <span class="nav-icon">🧠</span>
-                <span class="nav-text">大脑</span>
-            </button>
             <button class="nav-item" data-target="settings" title="设置">
                 <span class="nav-icon">⚙️</span>
                 <span class="nav-text">设置</span>
@@ -541,86 +537,6 @@
             </div>
         </section>
 
-        <section class="panel" id="panel-brain" style="display:none;">
-            <h1 class="page-title">日志大脑</h1>
-
-            <div class="section">
-                <h2>摘要卡片</h2>
-                <div class="brain-summary-grid" id="brainSummaryCards">
-                    <div class="brain-card">
-                        <div class="brain-card-label">错误数</div>
-                        <div class="brain-card-value" id="brainErrorCount">--</div>
-                    </div>
-                    <div class="brain-card">
-                        <div class="brain-card-label">告警数</div>
-                        <div class="brain-card-value" id="brainWarnCount">--</div>
-                    </div>
-                    <div class="brain-card">
-                        <div class="brain-card-label">模式数</div>
-                        <div class="brain-card-value" id="brainPatternCount">--</div>
-                    </div>
-                    <div class="brain-card">
-                        <div class="brain-card-label">风险级别</div>
-                        <div class="brain-card-value" id="brainRiskLevel">--</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>时间线</h2>
-                <div class="brain-toolbar">
-                    <select id="brainTimeRange" class="brain-select">
-                        <option value="10m">最近10分钟</option>
-                        <option value="30m">最近30分钟</option>
-                        <option value="1h">最近1小时</option>
-                        <option value="6h">最近6小时</option>
-                        <option value="24h">最近24小时</option>
-                        <option value="all">全部</option>
-                    </select>
-                    <label class="brain-auto-refresh">
-                        <input type="checkbox" id="brainAutoRefresh">
-                        自动刷新
-                    </label>
-                    <select id="brainRefreshInterval" class="brain-select brain-select-small">
-                        <option value="5000">5秒</option>
-                        <option value="15000" selected>15秒</option>
-                        <option value="30000">30秒</option>
-                    </select>
-                    <span class="brain-auto-status" id="brainAutoRefreshStatus">自动刷新: 关闭</span>
-                    <button class="control-btn" onclick="LogBrainViewer.refreshSummary()">刷新摘要</button>
-                </div>
-                <div class="brain-timeline" id="brainTimeline">
-                    <div class="log-empty">暂无时间线数据</div>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>一键诊断</h2>
-                <div class="brain-diagnose-form">
-                    <input type="text" id="brainQuestion" placeholder="输入诊断问题，例如：为什么显示端频繁断连？">
-                    <button class="control-btn" id="brainDiagnoseBtn" onclick="LogBrainViewer.runDiagnose()">开始诊断</button>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>诊断结果</h2>
-                <div class="brain-result-panel" id="brainDiagnosisResult">
-                    <div class="brain-result-empty">点击“开始诊断”生成结果</div>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>诊断历史</h2>
-                <div class="brain-history-toolbar">
-                    <span class="brain-result-empty">本地缓存最近 20 条诊断</span>
-                    <button class="control-btn" onclick="LogBrainViewer.clearHistory()">清空历史</button>
-                </div>
-                <div class="brain-history-list" id="brainDiagnosisHistory">
-                    <div class="brain-result-empty">暂无诊断历史</div>
-                </div>
-            </div>
-        </section>
-
         <section class="panel" id="panel-settings" style="display:none;">
             <h1 class="page-title">系统设置</h1>
 
@@ -891,7 +807,6 @@
     <script src="js/floating-control.js"></script>
     <script src="js/self-test.js"></script>
     <script src="js/log-viewer.js"></script>
-    <script src="js/log-brain-viewer.js"></script>
     <script type="module" src="js/map/map-panel.js"></script>
     <script src="js/main.js"></script>
     <script src="js/task-panel.js"></script>

@@ -334,6 +334,10 @@ WebSocketManager.on('displayList', (list) => {
 
 ## 与现有模块的集成
 
+### 显示端同 ID 重连
+
+显示端连接使用持久化 `displayId` 时，`WSViewBindServer` 以 WebSocket 对象作为当前连接身份。同 ID 新连接会替换旧 ViewBind；旧 WebSocket 的延迟断开事件必须被忽略，只有当前 WebSocket 断开才移除列表记录并触发生命周期回调。
+
 | 模块 | 用途 | 改造方式 |
 |------|------|----------|
 | display-list.js | 显示端列表 | 使用 ViewBindList 管理显示端列表 |

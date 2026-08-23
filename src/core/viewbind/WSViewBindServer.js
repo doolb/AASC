@@ -32,6 +32,17 @@ class WSViewBindServer {
 
     // 处理显示端连接
     handleDisplayConnect(displayId, clientIP, ws, savedState = null) {
+        // 同一 displayId 重连时先移除旧 ViewBind，避免列表重复登记。
+        const previous = this._displayMap.get(displayId);
+        if (previous) {
+            const previousIndex = this._findDisplayIndex(displayId);
+            if (previousIndex !== -1) {
+                this.displayClients.remove(previousIndex);
+            }
+            previous.disconnect();
+            this._displayMap.delete(displayId);
+        }
+
         const displayData = {
             displayId,
             ws,
@@ -96,8 +107,13 @@ class WSViewBindServer {
     }
 
     // 处理显示端断连
-    handleDisplayDisconnect(displayId) {
+    handleDisplayDisconnect(displayId, ws = null) {
         const vbind = this._displayMap.get(displayId);
+        // 旧 WebSocket 的异步 close 事件不能清理已经接管的新连接。
+        if (ws && (!vbind || vbind.data.ws !== ws)) {
+            return false;
+        }
+
         if (vbind) {
             vbind.disconnect();
             this._displayMap.delete(displayId);
@@ -112,6 +128,8 @@ class WSViewBindServer {
         if (this.lifecycleCallbacks.onDisplayDisconnect) {
             this.lifecycleCallbacks.onDisplayDisconnect(displayId);
         }
+
+        return true;
     }
 
     // 处理控制端连接

@@ -13,6 +13,11 @@ wss.on('connection', (ws, req)):
         // 子显示端（voice-display-node）从配置文件传入固定 displayId
         clientIP = getClientIP(req)
         savedState = config.getDisplayState(clientIP)
+
+        previous = displayClients.get(displayId)
+        如果 previous 存在且 previous.ws !== ws:
+            关闭 previous.ws
+
         
         displayClients.set(displayId, {
             ws: ws,
@@ -50,10 +55,36 @@ wss.on('connection', (ws, req)):
                 调用 handleDisplayMessageFallback(displayId, data, ws)
         
         监听关闭:
-            从 displayClients 删除
-            如果 aascSystem 存在:
-                调用 aascSystem.handleDisplayDisconnect(displayId)
-            广播显示端列表
+            current = displayClients.get(displayId)
+            如果 current 不存在或 current.ws !== ws:
+                仅释放旧连接监听，不执行显示端删除和断开回调
+            否则:
+                从 displayClients 删除 displayId
+                如果 aascSystem 存在:
+                    调用 aascSystem.handleDisplayDisconnect(displayId, ws)
+                广播显示端列表
+
+### 同 displayId 重连登记
+
+```text
+handleDisplayConnect(displayId, clientIP, ws, savedState):
+    previous = _displayMap.get(displayId)
+    如果 previous 存在:
+        从 displayClients 移除 previous 对应记录
+        previous.disconnect()
+        _displayMap.delete(displayId)
+
+    创建 displayData { displayId, ws, ip, state }
+    _displayMap.set(displayId, ViewBind(displayData))
+    displayClients.push(displayData)
+
+handleDisplayDisconnect(displayId, ws):
+    current = _displayMap.get(displayId)
+    如果 ws 存在且 current.data.ws !== ws:
+        返回 false
+    移除当前 ViewBind 和 displayClients 记录
+    返回 true
+```
 ```
 
 ### 子显示端心跳检测

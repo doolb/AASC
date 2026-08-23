@@ -2785,6 +2785,12 @@ wss.on('connection', (ws, req) => {
         const savedState = config.getDisplayStateById(displayId, clientIP);
 
         // 浏览器刷新或重连可能复用 displayId；新连接接管前先关闭旧连接。
+        const previousDisplay = displayClients.get(displayId);
+        const previousState = previousDisplay?.ws?.readyState;
+        if (previousDisplay && previousDisplay.ws !== ws &&
+            (previousState === WebSocket.OPEN || previousState === WebSocket.CONNECTING)) {
+            previousDisplay.ws.close(4001, 'replaced by newer display connection');
+        }
 
         displayClients.set(displayId, {
             ws: ws,
@@ -2952,11 +2958,23 @@ wss.on('connection', (ws, req) => {
 
         ws.on('close', () => {
             const disconnectedIP = clientIP;
+            const currentDisplay = displayClients.get(displayId);
+
+            // 旧连接的 close 事件可能晚于新连接到达，不能误删当前连接。
+            if (!currentDisplay || currentDisplay.ws !== ws) {
+                if (wsServer) {
+                    wsServer.handleDisplayDisconnect(displayId, ws);
+                }
+                ws.removeAllListeners();
+                log('断开', `忽略过期显示端连接: ${displayId}`);
+                return;
+            }
+
             muteState.previousVolumes.delete(displayId);
             displayClients.delete(displayId);
             ws.removeAllListeners();
             if (wsServer) {
-                wsServer.handleDisplayDisconnect(displayId);
+                wsServer.handleDisplayDisconnect(displayId, ws);
             }
             log('断开', `显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
             broadcastDisplayList();

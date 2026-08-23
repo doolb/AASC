@@ -153,10 +153,6 @@ const Sidebar = {
             panel.style.display = panel.id === `panel-${targetId}` ? 'block' : 'none';
         });
 
-        if (window.LogBrainViewer) {
-            window.LogBrainViewer.setActive(targetId === 'brain');
-        }
-        
         if (targetId === 'map') {
             App.initMapPanel();
         }
@@ -168,9 +164,6 @@ const Sidebar = {
             }, 100);
         }
 
-        if (targetId === 'brain' && window.LogBrainViewer) {
-            window.LogBrainViewer.refreshSummary();
-        }
     },
     
     saveLastPanel(panelId) {
@@ -201,6 +194,12 @@ const Sidebar = {
                 window.SidebarRegistry.navigate(groupId);
             }
             return;
+        }
+
+        // 兼容已移除页签（例如旧版本保存的 brain），避免刷新后没有任何可见面板。
+        if (!document.getElementById(`panel-${lastPanel}`)) {
+            lastPanel = 'media';
+            this.saveLastPanel(lastPanel);
         }
 
         this.switchPanel(lastPanel);
@@ -279,9 +278,6 @@ const App = {
             window.LogViewer.init();
         }
 
-        if (window.LogBrainViewer) {
-            window.LogBrainViewer.init();
-        }
     },
     
     async initMapPanel() {

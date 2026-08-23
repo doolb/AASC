@@ -553,3 +553,25 @@ displayConfig.displays.push({ id: 'display-2', ip: '192.168.1.101' });
 
 - 设计文档：[design/viewbind.md](../design/viewbind.md)
 - DataSnapshot 实现文档：[data-snapshot.md](data-snapshot.md)
+
+## 显示端同 ID 重连清理
+
+```text
+handleDisplayConnect(displayId, clientIP, ws, savedState):
+    previous = _displayMap.get(displayId)
+    如果 previous 存在:
+        移除 previous 对应的 displayClients 记录
+        previous.disconnect()
+        删除 _displayMap[displayId]
+    创建并登记新的 ViewBind(displayId, ws)
+
+handleDisplayDisconnect(displayId, ws):
+    current = _displayMap.get(displayId)
+    如果 ws 存在且 (current 不存在 或 current.data.ws !== ws):
+        返回 false
+    移除 current 和列表记录
+    执行 onDisplayDisconnect
+    返回 true
+```
+
+该规则保证页面刷新、网络重连和 Agent 测试浏览器复用 `displayId` 时不会产生重复显示端或误删新连接。

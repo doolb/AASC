@@ -87,48 +87,33 @@ POST /api/logs/brain-diagnose:
     返回 { diagnosis, context }
 ```
 
-## 5. 控制端页面伪代码
+## 5. 控制端页签移除伪代码
 
 ```text
-过程 InitLogBrainViewer():
-    绑定 timeRange change -> RefreshSummary
-    绑定 diagnose click -> RunDiagnose
+过程 InitControlPage():
+    加载现有控制端页签和面板
+    不注册 data-target="brain"
+    不创建 panel-brain
+    不加载 LogBrainViewer 脚本
 
-过程 RefreshSummary():
-    GET /api/logs/brain-summary
-    渲染摘要卡片
-    渲染时间线
+    若 localStorage.lastPanel 对应的面板不存在:
+        将 lastPanel 回退为 "media"
+        保存回退后的页签
 
-过程 RunDiagnose():
-    POST /api/logs/brain-diagnose
-    渲染风险级别
-    渲染可能原因、证据日志、排查步骤
+过程 SwitchPanel(targetId):
+    只允许切换当前页面实际存在的面板
+    brain 不再是有效控制端目标
 ```
 
-## 6. 自动刷新与历史缓存伪代码
+## 6. 服务端能力保留伪代码
 
 ```text
-过程 SetBrainPanelActive(active):
-    isPanelActive = active
-    若 active 为 true:
-        RefreshSummary()
-        StartAutoRefreshIfEnabled()
-    否则:
-        StopAutoRefresh()
+过程 InitServerLogBrain():
+    LogBuffer 持续接收结构化日志
+    LogBrain.ingest(entry)
+    注册 /api/logs/brain-summary
+    注册 /api/logs/brain-judge
+    注册 /api/logs/brain-diagnose
 
-过程 StartAutoRefreshIfEnabled():
-    若 autoRefreshEnabled 为 false:
-        返回
-    清理旧 timer
-    timer = setInterval(RefreshSummary, autoRefreshIntervalMs)
-
-过程 AppendDiagnosisHistory(question, diagnosis):
-    item = { timestamp, question, riskLevel, topCause }
-    history.unshift(item)
-    history = history.slice(0, 20)
-    localStorage.setItem(history)
-
-过程 RenderDiagnosisHistory():
-    从 history 渲染列表
-    点击“载入”时回填 question 输入框
+控制端页面是否存在日志大脑面板，不影响上述服务端流程
 ```

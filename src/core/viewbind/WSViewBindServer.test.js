@@ -60,6 +60,25 @@ test('添加多个显示端', () => {
     assert.strictEqual(server.displayClients.count, 3);
 });
 
+test('同一 displayId 重连只保留新 WebSocket，旧连接断开不删除新连接', () => {
+    const server = new WSViewBindServer();
+    const oldWs = { readyState: 1, send() {} };
+    const newWs = { readyState: 1, send() {} };
+
+    server.handleDisplayConnect('display-1', '127.0.0.1', oldWs);
+    server.handleDisplayConnect('display-1', '127.0.0.1', newWs);
+
+    assert.strictEqual(server.displayClients.count, 1, '同 ID 重连不能产生重复显示端');
+    assert.strictEqual(server._displayMap.get('display-1').data.ws, newWs, 'Map 必须指向新 WebSocket');
+
+    server.handleDisplayDisconnect('display-1', oldWs);
+    assert.strictEqual(server.displayClients.count, 1, '旧连接断开不能删除新连接');
+    assert.strictEqual(server._displayMap.get('display-1').data.ws, newWs, '旧连接断开后新连接仍应存在');
+
+    server.handleDisplayDisconnect('display-1', newWs);
+    assert.strictEqual(server.displayClients.count, 0, '当前连接断开后才移除显示端');
+});
+
 test('handleDisplayDisconnect 移除显示端', () => {
     const server = new WSViewBindServer();
     server.handleDisplayConnect('display-1', '192.168.1.100', { readyState: 1, send() {} });

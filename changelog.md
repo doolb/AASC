@@ -4,6 +4,11 @@
 
 ### 修复
 
+- ✅ [2026-08-23] 移除控制端“大脑”页签
+  - 删除控制端日志大脑导航入口、面板、查看器脚本、切换初始化逻辑和专用样式。
+  - 保留服务器端 `LogBrain`、`/api/logs/brain-*` 接口和相关测试；不新增 Agent 日志读取规则。
+  - 文档：docs/design/log-brain.md、docs/spec/log-brain.md、docs/design/sidebar-registry.md、docs/spec/sidebar.md、docs/task/2026-08-23_移除控制端大脑页签.md
+
 - ✅ [2026-08-22] 修复显示端重连身份混用和控制端批量列表残留
   - 显示端状态、设置和批量播放进度改用稳定 `displayId` 持久化，旧版 IP 状态首次连接时自动迁移；控制端显示稳定 ID 与 IP，`agent-local` 等本机 Agent 不再与真实显示端混淆。
   - 批量播放重连同时恢复通用显示设置和列表断点；控制端切换显示端时清理旧批量面板，无列表目标自动隐藏，有列表目标按当前项恢复。

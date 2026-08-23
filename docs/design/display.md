@@ -72,6 +72,10 @@
 | public/css/display.css | 显示端样式 |
 | public/js/display-list.js | 显示端列表管理 |
 
+## WebSocket 重连清理
+
+显示端复用本地持久化的 `displayId` 重连时，服务端按 WebSocket 对象身份维护当前连接。新连接接管旧连接并关闭旧 WebSocket；旧连接延迟触发 `close` 时只释放自身监听，不删除当前连接。显示端列表对同一 `displayId` 保持单条记录，避免 Agent 测试浏览器或页面刷新产生长期残留连接。
+
 ---
 
 # 已完成功能

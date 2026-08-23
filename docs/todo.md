@@ -45,6 +45,11 @@
 
 ## AI 角色
 
+- ✅已完成 [2026-08-23][2026-08-23] 移除控制端大脑页签
+  - 删除控制端“大脑”导航入口、日志大脑面板、查看器脚本、初始化钩子和专用样式；保留服务器端 LogBrain、日志 API 和测试
+  - 不新增 Agent 日志读取规则，Agent 继续按现有后端能力读取项目日志文件
+  - 文档：`docs/design/log-brain.md`、`docs/spec/log-brain.md`、`docs/design/sidebar-registry.md`、`docs/spec/sidebar.md`、`docs/task/2026-08-23_移除控制端大脑页签.md`
+
 - ✅已完成 [2026-08-22][2026-08-22] 修复控制端 Agent 流式消息显示并按普通 LLM 语义播报 TTS
   - 根因：Agent 启动状态广播 `roleList` 时重建整个聊天面板，移除了已创建的用户消息和流式回复节点，导致文字与用户消息等到完成回包才出现
   - 改动：聊天请求进行中只更新角色在线状态；Agent 的 `chatChunk` 继续实时更新回复，并沿用完整句子串行 TTS 队列及完成时尾句冲刷

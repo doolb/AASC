@@ -16,6 +16,22 @@
       "stage": "running",
       "progress": 100,
       "error": "显示端已断开连接"
+    },
+    {
+      "instanceId": "683907f2",
+      "taskName": "render-display",
+      "status": "stopped",
+      "timestamp": 1787416176663,
+      "target": "display",
+      "env": "auto",
+      "mode": "service",
+      "displayId": "display-izhstb6o",
+      "params": {},
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "stage": "stopped",
+      "progress": 100
     }
   ]
 }
