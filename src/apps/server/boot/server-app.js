@@ -40,6 +40,7 @@ const chat = require('../../../external/llm/llm-service');
 const reminder = require('../../web-mediacenter/modules/reminder/reminder-app-service');
 const voiceCommand = require('../../web-mediacenter/modules/voice/voice-command-app-service');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
+const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
 const { WSViewBindServer } = require('../../../core/viewbind');
 const LogBuffer = require('../../../framework/observability/log-buffer');
@@ -877,7 +878,6 @@ app.post('/upload-file', uploadMiddleware.single('file'), async (req, res) => {
             return res.status(400).json({ status: 'error', message: '没有选择显示端' });
         }
         
-        const detectedType = detectMediaType(file.originalname);
         const uniqueName = `${Date.now()}_${file.originalname}`;
         const filePath = path.join(UPLOADS_DIR, uniqueName);
         
@@ -887,13 +887,11 @@ app.post('/upload-file', uploadMiddleware.single('file'), async (req, res) => {
         const protocol = useHttps ? 'https' : 'http';
         const fileUrl = `${protocol}://${localIP}:${PORT}/uploads/${encodeURIComponent(uniqueName)}`;
         
-        const mediaData = {
-            type: 'url',
+        const mediaData = createUploadedMediaData({
             url: fileUrl,
             fileName: file.originalname,
-            mediaType: detectedType,
             timestamp: Date.now()
-        };
+        });
         
         currentMedia = mediaData;
         const displayData = displayClients.get(displayId);
@@ -914,10 +912,6 @@ app.post('/upload-file', uploadMiddleware.single('file'), async (req, res) => {
 app.get('/media-list', (req, res) => {
     try {
         const files = fs.readdirSync(UPLOADS_DIR);
-            ...(detectedType === 'text' ? {
-                format: detectTextFormat(file.originalname),
-                mimeType: getTextMimeType(file.originalname)
-            } : {}),
         const localIP = getLocalIP();
         const protocol = useHttps ? 'https' : 'http';
         
@@ -2474,14 +2468,6 @@ app.post('/api/restart', (req, res) => {
     }, 100);
 });
 
-function detectMediaType(name) {
-    const ext = name.toLowerCase().split('.').pop().split('?')[0];
-    if (['gif'].includes(ext)) return 'gif';
-    if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
-    if (['wav', 'ogg', 'mp3'].includes(ext)) return 'audio';
-    return 'image';
-}
-
 function getDisplayList() {
     const list = [];
     displayClients.forEach((data, id) => {
@@ -2522,21 +2508,9 @@ function sendToDisplaysWithCapability(capabilityName, message) {
     const displays = getDisplaysWithCapability(capabilityName);
     for (const display of displays) {
         sendToDisplay(display.id, message);
-    if (['txt', 'md'].includes(ext)) return 'text';
     }
     return displays.length;
 }
-function detectTextFormat(name) {
-    const ext = name.toLowerCase().split('.').pop().split('?')[0];
-    if (ext === 'md') return 'markdown';
-    if (ext === 'txt') return 'plain';
-    return undefined;
-}
-
-function getTextMimeType(name) {
-    return detectTextFormat(name) === 'markdown' ? 'text/markdown' : 'text/plain';
-}
-
 
 let displayListDebounceTimer = null;
 

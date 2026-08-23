@@ -7,6 +7,12 @@ const os = require('os');
 const path = require('path');
 const { MediaLibraryProvider, LocalProvider } = require('../src/apps/web-mediacenter/modules/media/media-library-app-service.js');
 const { PlaylistManager } = require('../src/apps/web-mediacenter/modules/media/playlist-app-service.js');
+let createUploadedMediaData;
+try {
+    ({ createUploadedMediaData } = require('../src/apps/server/modules/media/upload-media-metadata.js'));
+} catch (error) {
+    createUploadedMediaData = null;
+}
 
 const provider = new MediaLibraryProvider({});
 const fakeManager = {
@@ -73,15 +79,35 @@ test('temporary text playlist keeps format and MIME metadata', () => {
     });
 });
 
-test('普通上传为 txt 和 md 发送 text format 与 MIME 元数据', () => {
-    const server = fs.readFileSync(path.resolve(__dirname, '../src/apps/server/boot/server-app.js'), 'utf8');
-    const uploadStart = server.indexOf("app.post('/upload-file'");
-    const uploadEnd = server.indexOf("app.get('/media-list'", uploadStart);
-    const uploadHandler = server.slice(uploadStart, uploadEnd);
+test('普通上传构造 text format/MIME 且不污染非文本 mediaData', () => {
+    assert.equal(typeof createUploadedMediaData, 'function');
+    const base = { url: 'http://localhost/uploads/file', timestamp: 123 };
 
-    assert.match(server, /function detectTextFormat\(name\)/);
-    assert.match(server, /if \(\['txt', 'md'\]\.includes\(ext\)\) return 'text';/);
-    assert.match(uploadHandler, /detectedType === 'text' \? \{[\s\S]*format: detectTextFormat\(file\.originalname\),[\s\S]*mimeType: getTextMimeType\(file\.originalname\)/);
+    assert.deepEqual(createUploadedMediaData({ ...base, fileName: 'guide.md' }), {
+        type: 'url',
+        url: base.url,
+        fileName: 'guide.md',
+        mediaType: 'text',
+        format: 'markdown',
+        mimeType: 'text/markdown',
+        timestamp: base.timestamp
+    });
+    assert.deepEqual(createUploadedMediaData({ ...base, fileName: 'note.txt' }), {
+        type: 'url',
+        url: base.url,
+        fileName: 'note.txt',
+        mediaType: 'text',
+        format: 'plain',
+        mimeType: 'text/plain',
+        timestamp: base.timestamp
+    });
+    assert.deepEqual(createUploadedMediaData({ ...base, fileName: 'photo.jpg' }), {
+        type: 'url',
+        url: base.url,
+        fileName: 'photo.jpg',
+        mediaType: 'image',
+        timestamp: base.timestamp
+    });
 });
 
 test('playlistStart 切换 URL 和临时 text 项时将 format 传给 showMedia', () => {
