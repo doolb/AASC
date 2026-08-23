@@ -55,6 +55,8 @@
         let activeAudio = null;
         let currentSentences = [];
         let requestPending = false;
+        let loadToken = 0;
+        let loadAbortController = null;
 
         const nextPlaybackId = () => `text-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const getAudio = () => options.audio || (root.document && root.document.getElementById('ttsAudio'));
@@ -345,6 +347,19 @@
             clearAudio();
         }
 
+        function invalidateLoad() {
+            loadToken += 1;
+            if (loadAbortController) {
+                loadAbortController.abort();
+                loadAbortController = null;
+            }
+            return loadToken;
+        }
+
+        function isCurrentLoad(token) {
+            return token === loadToken && state !== 'stopped';
+        }
+
         function requestNextSentence() {
             if (state !== 'playing' || requestPending) return;
             if (sentenceIndex >= currentSentences.length) {
@@ -406,11 +421,13 @@
                 && Number(data.sentenceIndex) === sentenceIndex;
         }
 
-        async function decodeText(data) {
+        async function decodeText(data, signal, isActive) {
             if (data.type === 'url') {
-                const response = await (options.fetch || root.fetch)(data.url);
+                const response = await (options.fetch || root.fetch)(data.url, signal ? { signal } : undefined);
+                if (!isActive()) return null;
                 if (!response.ok && response.ok !== undefined) throw new Error(`文本加载失败: ${response.status}`);
-                return response.text();
+                const text = await response.text();
+                return isActive() ? text : null;
             }
             const binary = root.atob ? root.atob(data.data || '') : Buffer.from(data.data || '', 'base64').toString('binary');
             const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -419,11 +436,17 @@
 
         async function load(data, loadOptions = {}) {
             invalidatePlayback();
+            const token = invalidateLoad();
+            const AbortControllerClass = root.AbortController || (typeof AbortController !== 'undefined' && AbortController);
+            const controller = AbortControllerClass ? new AbortControllerClass() : null;
+            loadAbortController = controller;
             source = data;
             format = data.format === 'markdown' ? 'markdown' : 'plain';
             state = 'loading';
             try {
-                rawText = await decodeText(data);
+                const decodedText = await decodeText(data, controller && controller.signal, () => isCurrentLoad(token));
+                if (!isCurrentLoad(token) || decodedText === null) return;
+                rawText = decodedText;
                 pages = format === 'markdown' ? buildMarkdownPages(rawText) : buildPlainPages(rawText);
                 pageIndex = Math.min(Math.max(Number(loadOptions.pageIndex) || 0, 0), Math.max(pages.length - 1, 0));
                 renderCurrentPage();
@@ -437,12 +460,15 @@
                 state = 'playing';
                 requestPageSentences();
             } catch (error) {
+                if (!isCurrentLoad(token)) return;
                 state = 'failed';
                 pages = [{ html: '', speakText: '', plainText: `文本加载失败：${error.message}` }];
                 pageIndex = 0;
                 renderCurrentPage();
                 emitProgress();
                 console.error('文本媒体加载失败', error);
+            } finally {
+                if (token === loadToken) loadAbortController = null;
             }
         }
 
@@ -461,6 +487,10 @@
             const control = typeof action === 'string' ? action : action && action.action;
             const actions = {
                 play() {
+                    if (state === 'paused' && !pages.length && source) {
+                        load(source, { pageIndex, paused: false });
+                        return;
+                    }
                     if (state === 'paused' && activeAudio) {
                         state = 'playing';
                         activeAudio.play().catch((error) => console.warn('恢复文本 TTS 失败', error));
@@ -474,6 +504,12 @@
                     }
                 },
                 pause() {
+                    if (state === 'loading') {
+                        invalidateLoad();
+                        state = 'paused';
+                        emitProgress();
+                        return;
+                    }
                     if (state !== 'playing') return;
                     state = 'paused';
                     if (activeAudio) {
@@ -501,6 +537,7 @@
                     requestPageSentences();
                 },
                 stop() {
+                    invalidateLoad();
                     invalidatePlayback();
                     state = 'stopped';
                     emitProgress();
@@ -549,6 +586,7 @@
             load,
             // 纯函数测试入口：与真实 load 共用分页逻辑，避免测试维护第二套播放器实现。
             async loadText(text, nextFormat = 'plain') {
+                invalidateLoad();
                 rawText = String(text || '');
                 format = nextFormat === 'markdown' ? 'markdown' : 'plain';
                 pages = format === 'markdown' ? buildMarkdownPages(rawText) : buildPlainPages(rawText);
