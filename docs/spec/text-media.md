@@ -210,6 +210,34 @@ pageIndex, pageTotal, sentenceIndex, sentenceTotal, format
 
 服务端持久化非临时列表时保存当前 `index/state/currentTextPage`；重连后恢复文本项和页码，语音从当前页第一句重新开始。
 
+### Task 5 混合播放列表伪代码
+
+```text
+playCurrentItem():
+    清除旧的 TextMediaPlayer playlistContext 与句子播放标识
+    item.mediaType == text:
+        TextMediaPlayer.attachPlaylist({ listId, index, total })
+        TextMediaPlayer.load(url 或 base64, { paused, pageIndex: resumeTextPage })
+        文本最终页完成回调校验 listId/index 后调用 playlistNext()
+        返回
+    否则沿用 image/video/gif/html/audio 生命周期
+
+sendPlaylistProgress(state):
+    保留 currentTime/duration/width/height
+    当前 item == text:
+        读取 TextMediaPlayer.getProgress()
+        附加 pageIndex/pageTotal/sentenceIndex/sentenceTotal/format
+
+server.handlePlaylistProgress(data):
+    当前 item == text:
+        非临时列表保存 currentTextPage/currentTextPageTotal/currentTextSentence/currentTextSentenceTotal/currentTextFormat
+    广播原有媒体字段与文本字段
+
+server.restorePlaylist():
+    非临时列表发送 resumeIndex/resumeTime/resumeTextPage/resumeState
+    临时列表不持久化 base64 data
+```
+
 ## 7. 控制端动作
 
 ```text

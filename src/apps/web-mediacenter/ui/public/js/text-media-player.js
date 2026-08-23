@@ -361,11 +361,15 @@
             });
         }
 
-        function requestPageSentences() {
+        function preparePageSentences() {
             const page = pages[pageIndex];
             currentSentences = page ? getSplitter(options)(page.speakText) : [];
             sentenceIndex = 0;
-            if (currentSentences.length === 0) {
+            return currentSentences.length > 0;
+        }
+
+        function requestPageSentences() {
+            if (!preparePageSentences()) {
                 finishPage();
                 return;
             }
@@ -424,6 +428,8 @@
                 pageIndex = Math.min(Math.max(Number(loadOptions.pageIndex) || 0, 0), Math.max(pages.length - 1, 0));
                 renderCurrentPage();
                 if (loadOptions.paused) {
+                    // 重连恢复的暂停列表也需先计算当前页句子；恢复时从本页第一句请求，不能空队列跳页。
+                    preparePageSentences();
                     state = 'paused';
                     emitProgress();
                     return;

@@ -182,6 +182,11 @@ const WebSocketManager = {
                             fileName: item.fileName,
                             url: item.url,
                             mediaType: item.mediaType,
+                            format: currentPlaylist.currentTextFormat || item.format,
+                            pageIndex: currentPlaylist.currentTextPage,
+                            pageTotal: currentPlaylist.currentTextPageTotal,
+                            sentenceIndex: currentPlaylist.currentTextSentence,
+                            sentenceTotal: currentPlaylist.currentTextSentenceTotal,
                             width: item.width,
                             height: item.height
                         });

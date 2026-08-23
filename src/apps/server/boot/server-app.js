@@ -2919,6 +2919,7 @@ wss.on('connection', (ws, req) => {
                 ...savedState.currentPlaylist.startData,
                 resumeIndex: savedState.currentPlaylist.index,
                 resumeTime: savedState.currentPlaylist.currentTime || 0,
+                resumeTextPage: savedState.currentPlaylist.currentTextPage || 0,
                 resumeState: savedState.currentPlaylist.state || 'playing'
             }));
         }
@@ -3198,6 +3199,14 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             const previousIndex = displayData.state.currentPlaylist.index;
             displayData.state.currentPlaylist.index = data.index;
             displayData.state.currentPlaylist.state = data.state;
+            // 文本列表不使用媒体秒数，按页面和句子断点恢复；字段缺失时保留旧版本兼容语义。
+            if (data.mediaType === 'text') {
+                displayData.state.currentPlaylist.currentTextPage = Number.isFinite(data.pageIndex) ? data.pageIndex : 0;
+                displayData.state.currentPlaylist.currentTextPageTotal = Number.isFinite(data.pageTotal) ? data.pageTotal : 0;
+                displayData.state.currentPlaylist.currentTextSentence = Number.isFinite(data.sentenceIndex) ? data.sentenceIndex : 0;
+                displayData.state.currentPlaylist.currentTextSentenceTotal = Number.isFinite(data.sentenceTotal) ? data.sentenceTotal : 0;
+                displayData.state.currentPlaylist.currentTextFormat = data.format || null;
+            }
             const progress = normalizePlaybackProgress(data.currentTime, data.duration);
             if (progress) {
                 displayData.state.currentPlaylist.currentTime = progress.currentTime;
@@ -3228,7 +3237,12 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             width: data.width,
             height: data.height,
             currentTime: data.currentTime,
-            duration: data.duration
+            duration: data.duration,
+            pageIndex: data.pageIndex,
+            pageTotal: data.pageTotal,
+            sentenceIndex: data.sentenceIndex,
+            sentenceTotal: data.sentenceTotal,
+            format: data.format
         });
     } else if (data.type === 'tempMediaInfo') {
         broadcastToControls({
@@ -3752,6 +3766,7 @@ async function handleControlMessageFallback(data, ws) {
                                         url: item.url,
                                         fileName: item.fileName,
                                         mediaType: item.mediaType,
+                                        format: item.format,
                                         width: item.width,
                                         height: item.height
                                     }))
@@ -3760,6 +3775,11 @@ async function handleControlMessageFallback(data, ws) {
                                 state: 'playing',
                                 currentTime: 0,
                                 duration: 0,
+                                currentTextPage: 0,
+                                currentTextPageTotal: 0,
+                                currentTextSentence: 0,
+                                currentTextSentenceTotal: 0,
+                                currentTextFormat: null,
                                 temp: !!data.temp
                             };
                             const sentIds = [];

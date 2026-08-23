@@ -92,6 +92,18 @@
                 if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                     displayWs.send(JSON.stringify(message));
                 }
+            },
+            // 文本播放器逐页/逐句变化时，同步到播放列表进度；非列表文本仍只上报 textProgress。
+            onProgress(progress) {
+                if (!playlistState || !playlistState.active) return;
+                if (progress.state !== 'playing' && progress.state !== 'paused') return;
+                sendPlaylistProgress(progress.state);
+            },
+            // 文本播放器只会在最后一页结束后触发完成回调，不能把单页结束误当作列表切项。
+            onFinished(context) {
+                if (!playlistState || !playlistState.active || !context) return;
+                if (context.listId !== playlistState.listId || context.index !== playlistState.index) return;
+                playlistNext();
             }
         });
         let autoTtsEnabled = true;
@@ -1402,6 +1414,9 @@
         function stopPlaylist() {
             if (!playlistState) return;
             playlistState.active = false;
+            // 先解绑列表上下文再停止，过期 TTS 回包不会再推进已经停止的列表。
+            TextMediaPlayer.attachPlaylist(null);
+            TextMediaPlayer.stop();
             pauseExpected = true;
             abandonNativeAudioFocus();
             stopHtmlScroll();
@@ -1431,6 +1446,7 @@
             let width, height;
             let currentTime = 0;
             let duration = 0;
+            const textProgress = item && item.mediaType === 'text' ? TextMediaPlayer.getProgress() : null;
             if (item) {
                 // 回传实际播放尺寸（临时模式控制端无数据，依赖此尺寸做裁剪预览）
                 if (item.mediaType === 'video') {
@@ -1463,7 +1479,12 @@
                 width: width,
                 height: height,
                 currentTime: currentTime,
-                duration: duration
+                duration: duration,
+                pageIndex: textProgress ? textProgress.pageIndex : undefined,
+                pageTotal: textProgress ? textProgress.pageTotal : undefined,
+                sentenceIndex: textProgress ? textProgress.sentenceIndex : undefined,
+                sentenceTotal: textProgress ? textProgress.sentenceTotal : undefined,
+                format: textProgress ? textProgress.format : item && item.format
             }));
         }
 
@@ -1489,7 +1510,8 @@
                 audioEndedHandler: null,
                 active: true,
                 paused: data.resumeState === 'paused',
-                resumeTime: resumeTime
+                resumeTime: resumeTime,
+                resumeTextPage: Number.isFinite(data.resumeTextPage) ? data.resumeTextPage : 0
             };
             playCurrentItem({ allowPausedLoad: true, resumeTime: resumeTime });
         }
@@ -1523,10 +1545,28 @@
             mediaVideo.onerror = null;
             mediaAudio.onerror = null;
             mediaImage.onerror = null;
+            // 每次切项均取消旧文本句子的播放标识，避免旧回包覆盖新媒体。
+            TextMediaPlayer.attachPlaylist(null);
+            TextMediaPlayer.stop();
             const mediaData = item.url
                 ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format } : {}) }
                 : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType, ...(item.mediaType === 'text' ? { format: item.format } : {}) };
             const resumeTime = Number.isFinite(options.resumeTime) ? options.resumeTime : ps.resumeTime;
+            if (item.mediaType === 'text') {
+                currentMediaType = 'text';
+                mediaImage.style.display = 'none';
+                mediaVideo.style.display = 'none';
+                mediaAudio.style.display = 'none';
+                mediaHtml.style.display = 'none';
+                TextMediaPlayer.attachPlaylist({ listId: ps.listId, index: ps.index, total: ps.playlist.length });
+                TextMediaPlayer.load(mediaData, {
+                    paused: ps.paused,
+                    pageIndex: Number.isFinite(ps.resumeTextPage) ? ps.resumeTextPage : 0
+                });
+                ps.resumeTextPage = 0;
+                sendPlaylistProgress(ps.paused ? 'paused' : 'playing');
+                return;
+            }
             showMedia(mediaData, true, ps.paused, resumeTime);  // 播放列表自动切播不激活（显示端内部行为）
             // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
             const reportSizeOnce = () => {
@@ -1605,6 +1645,7 @@
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
             ps.resumeTime = null;
+            ps.resumeTextPage = 0;
             // 定时器已经触发，先清除句柄，避免睡眠拦截后唤醒逻辑误判仍在等待。
             if (ps.timer) clearTimeout(ps.timer);
             ps.timer = null;
@@ -1628,6 +1669,7 @@
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
             ps.resumeTime = null;
+            ps.resumeTextPage = 0;
             ps.index = ps.index - 1 < 0 ? (ps.loop ? ps.playlist.length - 1 : 0) : ps.index - 1;
             playCurrentItem();
         }
@@ -1637,6 +1679,7 @@
             const ps = playlistState;
             if (index < 0 || index >= ps.playlist.length) return;
             ps.resumeTime = null;
+            ps.resumeTextPage = 0;
             ps.index = index;
             playCurrentItem();
         }
@@ -1645,6 +1688,9 @@
             if (!playlistState || !playlistState.active) return;
             const ps = playlistState;
             ps.paused = true;
+            if (ps.playlist[ps.index] && ps.playlist[ps.index].mediaType === 'text') {
+                TextMediaPlayer.handleControl('pause');
+            }
             pauseExpected = true;
             abandonNativeAudioFocus();
             stopHtmlScroll();
@@ -1675,7 +1721,9 @@
             ps.paused = false;
             pauseExpected = false;
             const item = ps.playlist[ps.index];
-            if (item && item.mediaType === 'video' && !ps.timer && !ps.videoEndedHandler) {
+            if (item && item.mediaType === 'text') {
+                TextMediaPlayer.handleControl('play');
+            } else if (item && item.mediaType === 'video' && !ps.timer && !ps.videoEndedHandler) {
                 // 暂停时视频正在播放 → 继续播放视频
                 playVideoAuto(mediaVideo);
                 ps.videoEndedHandler = function() {
@@ -1715,6 +1763,8 @@
                 state: 'finished'
             };
             playlistState.active = false;
+            TextMediaPlayer.attachPlaylist(null);
+            TextMediaPlayer.stop();
             stopHtmlScroll();
             if (playlistState.timer) {
                 clearTimeout(playlistState.timer);

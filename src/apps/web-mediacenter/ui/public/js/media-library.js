@@ -664,8 +664,11 @@ const MediaLibrary = {
         }
         panel.style.display = 'flex';
         const stateText = { playing: '▶ 播放中', paused: '⏸ 已暂停' }[info.state] || info.state;
+        const textProgress = info.mediaType === 'text' && Number.isFinite(info.pageTotal)
+            ? ` · 文档第 ${(info.pageIndex || 0) + 1}/${info.pageTotal} 页`
+            : '';
         document.getElementById('plProgressText').textContent =
-            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''} · ${stateText}`;
+            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''}${textProgress} · ${stateText}`;
         const toggleBtn = document.getElementById('plToggleBtn');
         toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
         toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
@@ -681,8 +684,11 @@ const MediaLibrary = {
         }
         panel.style.display = 'flex';
         const stateText = { playing: '▶ 播放中', paused: '⏸ 已暂停' }[info.state] || info.state;
+        const textProgress = info.mediaType === 'text' && Number.isFinite(info.pageTotal)
+            ? ` · 文档第 ${(info.pageIndex || 0) + 1}/${info.pageTotal} 页`
+            : '';
         document.getElementById('displayPlText').textContent =
-            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''} · ${stateText}`;
+            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''}${textProgress} · ${stateText}`;
         const toggleBtn = document.getElementById('displayPlToggleBtn');
         toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
         toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
@@ -698,8 +704,11 @@ const MediaLibrary = {
         }
         panel.style.display = '';
         const stateText = { playing: '▶ 播放中', paused: '⏸ 已暂停' }[info.state] || info.state;
+        const textProgress = info.mediaType === 'text' && Number.isFinite(info.pageTotal)
+            ? ` · 文档第 ${(info.pageIndex || 0) + 1}/${info.pageTotal} 页`
+            : '';
         document.getElementById('floatingPlText').textContent =
-            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''} · ${stateText}`;
+            `第 ${(info.index || 0) + 1}/${info.total} 项 · ${info.fileName || ''}${textProgress} · ${stateText}`;
         const toggleBtn = document.getElementById('floatingPlToggleBtn');
         toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
         toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';

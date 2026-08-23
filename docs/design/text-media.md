@@ -70,6 +70,13 @@
 - 批量循环开启时，最后一个文本项结束后回到第一个列表项；关闭时发送 finished。
 - 文本批量重连恢复当前列表项、页码和暂停状态；页码优先读取专用 `currentTextProgress`，兼容旧的 `currentMediaProgress`；语音从当前页的第一句重新生成，避免持久化音频文件状态。
 
+### Task 5 已实现的混合列表衔接
+
+- 显示端在文本项开始前清理上一轮文本句子并调用 `TextMediaPlayer.attachPlaylist({ listId, index, total })`；仅其最后一页完成回调才调用既有 `playlistNext()`。
+- `playlistControl` 的 pause、resume、prev、next、jump、stop 继续沿用原协议；文本项分别暂停/恢复或失效旧句子，避免迟到的 TTS 回包推进新项。
+- `playlistProgress` 除原媒体时间字段外，携带 `pageIndex/pageTotal/sentenceIndex/sentenceTotal/format`；服务端只持久化非临时列表的标量进度。
+- 临时 base64 列表仅保留文件名、媒体类型、尺寸和文本格式的展示元数据，绝不写入可恢复状态。
+
 ## 控制端设计
 
 - 媒体库文件列表识别 `.txt/.md` 并使用文本占位缩略图。
