@@ -895,6 +895,10 @@ app.post('/upload-file', uploadMiddleware.single('file'), async (req, res) => {
 app.get('/media-list', (req, res) => {
     try {
         const files = fs.readdirSync(UPLOADS_DIR);
+            ...(detectedType === 'text' ? {
+                format: detectTextFormat(file.originalname),
+                mimeType: getTextMimeType(file.originalname)
+            } : {}),
         const localIP = getLocalIP();
         const protocol = useHttps ? 'https' : 'http';
         
@@ -2499,9 +2503,21 @@ function sendToDisplaysWithCapability(capabilityName, message) {
     const displays = getDisplaysWithCapability(capabilityName);
     for (const display of displays) {
         sendToDisplay(display.id, message);
+    if (['txt', 'md'].includes(ext)) return 'text';
     }
     return displays.length;
 }
+function detectTextFormat(name) {
+    const ext = name.toLowerCase().split('.').pop().split('?')[0];
+    if (ext === 'md') return 'markdown';
+    if (ext === 'txt') return 'plain';
+    return undefined;
+}
+
+function getTextMimeType(name) {
+    return detectTextFormat(name) === 'markdown' ? 'text/markdown' : 'text/plain';
+}
+
 
 let displayListDebounceTimer = null;
 

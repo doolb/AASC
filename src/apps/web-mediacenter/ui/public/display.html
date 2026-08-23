@@ -1385,8 +1385,8 @@
             mediaAudio.onerror = null;
             mediaImage.onerror = null;
             const mediaData = item.url
-                ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType }
-                : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType };
+                ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format } : {}) }
+                : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType, ...(item.mediaType === 'text' ? { format: item.format } : {}) };
             const resumeTime = Number.isFinite(options.resumeTime) ? options.resumeTime : ps.resumeTime;
             showMedia(mediaData, true, ps.paused, resumeTime);  // 播放列表自动切播不激活（显示端内部行为）
             // 媒体加载完成后补报一次进度（带实际尺寸，供控制端裁剪预览）
