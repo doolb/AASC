@@ -98,6 +98,12 @@ const FloatingControl = {
         }
     },
 
+    // 浮动入口复用主面板的文本样式弹窗，避免两处默认值和控制协议出现分歧。
+    showTextModePanel() {
+        if (!window.Controls) return;
+        window.Controls.showTextModePanel();
+    },
+
     // 浮动面板与主面板共用文本播放协议，但保持独立按钮状态，避免误操作播放列表。
     sendTextPlayback(action) {
         if (!window.WebSocketManager) return;

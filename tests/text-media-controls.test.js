@@ -21,6 +21,15 @@ test('控制页面同时提供主面板和浮动面板的文本模式设置与�
     assert.match(html, /floatingTextPlaybackStopBtn/u);
 });
 
+test('浮动文本模式入口复用主面板的完整 textStyle 设置协议', () => {
+    const html = readPublicFile('upload.html');
+    const floating = readPublicFile('js/floating-control.js');
+
+    assert.match(html, /floatingTextModeSettingsBtn/u);
+    assert.match(html, /FloatingControl\.showTextModePanel\(\)/u);
+    assert.match(floating, /showTextModePanel\(\)\s*\{[\s\S]*?window\.Controls\.showTextModePanel\(\)/u);
+});
+
 test('文本模式默认黄底深灰字并向当前显示端发送完整 textStyle', () => {
     const controls = readPublicFile('js/controls.js');
 

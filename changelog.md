@@ -20,6 +20,12 @@
 
 ### 修复
 
+- ✅ [2026-08-23] 修复浮动快捷控制缺少文本模式设置入口
+  - 浮动“文本分页”新增“文本模式”按钮，并委托主面板的设置弹窗，统一固定主题和完整 `textStyle` 协议。
+  - 浮动入口可发送 `background`、`color`、`fontSize`、`lineHeight`、`pageMargin`；播放、playlist、HTML、audio 和 chat 行为未改动。
+  - 验证：文本控制 focused 测试 5/5、相关脚本语法检查和差异空白检查通过。
+  - 文档：docs/design/text-media.md、docs/spec/text-media.md、.superpowers/sdd/2026-08-23-text-media/task-6-fix-report.md
+
 - ✅ [2026-08-23] 修复纯文本分页 TTS 的恢复、回包、Markdown 分页与旋转回归
   - 文本恢复优先读取 `currentTextProgress`，兼容旧的 `currentMediaProgress`；暂停发生在 TTS 回包前时废弃旧 `playbackId`，恢复后重发当前句。
   - Markdown 分页以 `ChatMarkdown` 渲染后的实际块布局及内容区真实可用宽高为准；连续段落、列表、引用和代码块不会被内容区裁切。

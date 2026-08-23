@@ -274,6 +274,14 @@ Controls.showTextModePanel():
             background, color, fontSize, lineHeight, pageMargin
         })
 
+FloatingControl.showTextModePanel():
+    调用 Controls.showTextModePanel()
+    不复制文本样式表单、默认值或 sendControl 协议
+
+upload.html 浮动文本分页区域:
+    提供 floatingTextModeSettingsBtn
+    点击后调用 FloatingControl.showTextModePanel()
+
 显示端 handleControl(textStyle):
     合并 textStyle 到 currentTextStyle
     应用背景、文字、字体、行距和页边距
