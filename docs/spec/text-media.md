@@ -312,6 +312,28 @@ currentTextStyle = {
 
 `textStyle` 保存到当前显示端状态，显示端重连恢复时先恢复样式再执行文本分页；页码优先从 `currentTextProgress` 恢复，旧状态缺少该字段时回退 `currentMediaProgress`。
 
+## 9. 错误处理与资源清理
+
+```text
+stopCurrentPlayback():
+    playbackId = 新值
+    清空 textSentenceQueue
+    暂停并重置 ttsAudio
+    移除 ended/error 监听
+    清理未完成的 fetch/请求标记
+
+过期回包:
+    playbackId/pageIndex/sentenceIndex 任一不匹配 → 直接丢弃
+
+文本解析失败:
+    显示错误提示页并上报 textProgress(state=failed)
+
+TTS 单句失败:
+    记录日志
+    跳过当前句
+    继续下一句
+```
+
 ## 10. 最终跨端协议约束
 
 ```text
@@ -334,25 +356,3 @@ currentTextStyle = {
 ```
 
 该约束由 `tests/text-media-integration.test.js` 对显示端、服务端与控制端入口做最终静态回归；功能行为仍分别由文本播放器、TTS 服务、播放列表和控制端测试覆盖。
-
-## 9. 错误处理与资源清理
-
-```text
-stopCurrentPlayback():
-    playbackId = 新值
-    清空 textSentenceQueue
-    暂停并重置 ttsAudio
-    移除 ended/error 监听
-    清理未完成的 fetch/请求标记
-
-过期回包:
-    playbackId/pageIndex/sentenceIndex 任一不匹配 → 直接丢弃
-
-文本解析失败:
-    显示错误提示页并上报 textProgress(state=failed)
-
-TTS 单句失败:
-    记录日志
-    跳过当前句
-    继续下一句
-```

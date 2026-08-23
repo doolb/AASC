@@ -10,7 +10,7 @@
   - 文本模式固定主题为 `#FFF4B8` / `#333333`，并完整下发 `fontSize`、`lineHeight`、`pageMargin`；浮动入口复用主面板。
   - 新增 `tests/text-media-integration.test.js`，跨端静态协议测试 3/3 通过；完整相关回归 61 项中 59 项通过。
   - 已知环境限制：Puppeteer 浏览器进程无法启动，且临时目录写入返回 `Unknown system error -122`，导致睡眠测试和一项文本元数据测试无法执行到业务断言；最小复现确认均为环境问题。
-  - Task 7 改动：`tests/text-media-integration.test.js`、`docs/design/text-media.md`、`docs/spec/text-media.md`、`docs/task/2026-08-23_纯文本分页TTS播放.md`、`changelog.md`、`.superpowers/sdd/2026-08-23-text-media/task-7-report.md`；未修改功能代码。
+  - Task 7 改动：`tests/text-media-integration.test.js`、`docs/design/text-media.md`、`docs/spec/text-media.md`、`docs/task/2026-08-23_纯文本分页TTS播放.md`、`changelog.md`；未修改功能代码。
 
 - ✅ [2026-08-23] 混合播放列表支持文本媒体
   - 显示端把 text 项接入 `TextMediaPlayer.attachPlaylist`，仅在最后一页完成时切换下一项；批量暂停、跳转和停止会失效旧句子回包。

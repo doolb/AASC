@@ -50,3 +50,17 @@ test('控制端文本面板发送完整 textStyle，并以 textPlayback 控制�
     assert.match(floating, /showTextModePanel\(\)[\s\S]*?Controls\.showTextModePanel\(\)/u);
     assert.match(floating, /sendControl\('textPlayback', \{ action \}\)/u);
 });
+
+// 防止实现文档章节倒序或把未提交的忽略报告写入 Task 7 的提交改动清单。
+test('Task 7 文档保持章节顺序与提交清单可追溯', () => {
+    const spec = readFile('docs/spec/text-media.md');
+    const task = readFile('docs/task/2026-08-23_纯文本分页TTS播放.md');
+    const changelog = readFile('changelog.md');
+
+    assert.ok(
+        spec.indexOf('## 9. 错误处理与资源清理') < spec.indexOf('## 10. 最终跨端协议约束'),
+        '错误处理章节必须位于最终跨端协议约束之前'
+    );
+    assert.doesNotMatch(task, /task-7-report\.md/u);
+    assert.doesNotMatch(changelog, /task-7-report\.md/u);
+});
