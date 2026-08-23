@@ -119,3 +119,11 @@
 - 不执行 Markdown 中的脚本、原始 HTML 或自动下载外部资源。
 - 不新增独立的 TTS 服务配置；沿用现有服务器 TTS 配置、超时和错误处理。
 - 不改变图片、GIF、视频、音频和 HTML 媒体既有播放语义。
+
+## 最终集成与验证状态
+
+- 显示端已加载共享分句器，并由 `TextMediaPlayer` 发送带 `playbackId/pageIndex/sentenceIndex` 的 `textSentenceTts`；仅带 `textPlayback: true` 的 TTS 回包进入文本播放器，定位一致的失败回包跳过当前句。
+- 服务端启动时通过 `registerTextMediaDisplayHandlers` 注册分句协议，`TextMediaTtsService` 串行合成并回传定位标签；`textStyle` 与 `textPlayback` 继续由文本媒体集成层持久化、取消过期请求并转发。
+- 主控制面板和浮动控制面板均复用 `Controls.showTextModePanel()`；最终主题固定为背景 `#FFF4B8`、文字 `#333333`，并完整发送 `fontSize`、`lineHeight`、`pageMargin`。
+- Task 7 新增跨端静态协议回归，覆盖显示端、服务器和控制端的连接点。逐页行为、TTS 服务、混合播放列表和控制面板行为继续由各自的 focused 测试覆盖。
+- 本次完整相关回归有两项环境阻塞：Puppeteer 浏览器进程无法启动，以及系统临时目录写入返回 `Unknown system error -122`；两者均在最小复现中重现，未发现文本协议断言或功能代码缺口。

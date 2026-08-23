@@ -4,19 +4,18 @@
 
 ### 已完成
 
+- ✅ [2026-08-23] 完成纯文本分页 TTS 播放及最终跨端协议验证
+  - `.txt/.md` 以 `text/plain|markdown` 媒体元数据进入显示端分页、共享分句和单句 TTS；最后一页完成后按单文档或混合播放列表语义结束/切项。
+  - 最终协议确认：显示端发送 `textSentenceTts`；服务器注册专用路由并回传 `textPlayback: true`、`playbackId/pageIndex/sentenceIndex`；控制端发送 `textStyle` 和 `textPlayback`。
+  - 文本模式固定主题为 `#FFF4B8` / `#333333`，并完整下发 `fontSize`、`lineHeight`、`pageMargin`；浮动入口复用主面板。
+  - 新增 `tests/text-media-integration.test.js`，跨端静态协议测试 3/3 通过；完整相关回归 61 项中 59 项通过。
+  - 已知环境限制：Puppeteer 浏览器进程无法启动，且临时目录写入返回 `Unknown system error -122`，导致睡眠测试和一项文本元数据测试无法执行到业务断言；最小复现确认均为环境问题。
+  - Task 7 改动：`tests/text-media-integration.test.js`、`docs/design/text-media.md`、`docs/spec/text-media.md`、`docs/task/2026-08-23_纯文本分页TTS播放.md`、`changelog.md`、`.superpowers/sdd/2026-08-23-text-media/task-7-report.md`；未修改功能代码。
+
 - ✅ [2026-08-23] 混合播放列表支持文本媒体
   - 显示端把 text 项接入 `TextMediaPlayer.attachPlaylist`，仅在最后一页完成时切换下一项；批量暂停、跳转和停止会失效旧句子回包。
   - 播放列表进度新增页码、句子和格式字段；服务端持久化非临时文本断点并在重连时恢复页码与暂停状态，临时 base64 未持久化。
   - 控制端三个批量状态面板显示“文档第 X/Y 页”；新增文本混合列表回归测试。
-
-### 设计中
-
-- 📝 [2026-08-23] 设计纯文本分页 TTS 播放
-  - `.txt` 按原文显示，`.md` 使用安全 Markdown 渲染；显示端按实际屏幕分页并按现有规则逐句请求服务器 TTS。
-  - 纯文本纳入现有批量播放，批量项显示文档进度与页码；上一页、下一页、暂停、停止通过控制端操作。
-  - 文本页默认使用浅黄色背景 `#FFF4B8` 与深灰色文字 `#333333`，响应式字体和行距按显示端尺寸分页测量。
-  - 控制端规划“文本模式”设置面板，支持字体大小、行间距和页边距，并在应用后触发显示端重新分页。
-  - 设计文档：docs/design/text-media.md、docs/spec/text-media.md、docs/task/2026-08-23_纯文本分页TTS播放.md
 
 ### 修复
 
@@ -28,12 +27,55 @@
 
 - ✅ [2026-08-23] 修复纯文本分页 TTS 的恢复、回包、Markdown 分页与旋转回归
   - 文本恢复优先读取 `currentTextProgress`，兼容旧的 `currentMediaProgress`；暂停发生在 TTS 回包前时废弃旧 `playbackId`，恢复后重发当前句。
-  - Markdown 分页以 `ChatMarkdown` 渲染后的实际块布局及内容区真实可用宽高为准；连续段落、列表、引用和代码块不会被内容区裁切。
-  - 90°/270° 仅在显示层交换尺寸，旋转完成后按文本锚点重新分页。
-  - 验证：Task 4 focused 回归、真实 DOM 分页回归、语法和差异检查通过。
-  - 文档：docs/design/text-media.md、docs/spec/text-media.md、.superpowers/sdd/2026-08-23-text-media/task-4-fix-report.md、.superpowers/sdd/2026-08-23-text-media/task-4-fix2-report.md
+  - Markdown 长段、连续列表和代码块按可量测行分页，不再因无空行导致裁切；90°/270° 仅在显示层交换尺寸，旋转完成后按文本锚点重新分页。
+  - 验证：Task 4 focused 回归测试 14/14 通过，语法和差异检查通过。
+  - 文档：docs/design/text-media.md、docs/spec/text-media.md、.superpowers/sdd/2026-08-23-text-media/task-4-fix-report.md
 
-### 修复
+- ✅ [2026-08-23] 修复动态画面填充直接跳变、没有过渡过程
+  - 根因：动态阶段清空并重写宽高，导致 CSS transition 没有可插值的旧尺寸。
+  - 修复：先提交 transition 并刷新布局，再保留当前尺寸在下一帧写入目标宽高。
+  - 验证：真实 display.html + Puppeteer 回归确认过渡中尺寸处于适应和铺满之间。
+  - 文档：docs/design/dynamic-fit-mode.md、docs/spec/dynamic-fit-mode.md、docs/task/2026-08-23_修复动态画面填充过渡.md
+
+- ✅ [2026-08-23] 修复 Pi Agent 与高级搜索/天气命令重复处理
+  - 仅在高级指令路由为 `llm` 且当前 profile 为 Pi Agent 时跳过旧天气/搜索处理器。
+  - `system` 路由、普通 LLM profile 和持久化路由设置保持不变。
+  - 验证：Pi Agent UI 路由回归测试 5/5 通过。
+
+- ✅ [2026-08-23] 调整 Pi Agent 默认请求超时
+  - PiRuntimeManager 默认 RPC 请求超时从 120 秒调整为 600 秒；显式注入的短超时仍用于快速失败清理和测试。
+  - 验证：Pi Runtime 单元测试 5/5 通过。
+
+- ✅ [2026-08-23] 修复 Pi Agent 本地空 Key 无回复并调整 Claude 默认超时
+  - Claude 默认无输出响应超时从 60 秒调整为 600 秒。
+  - Pi 自定义 OpenAI provider 在 profile 未配置 API Key 时使用本地占位 Key，避免在请求本地 LLM 前被 Pi 拒绝。
+  - 验证：ClaudeBridge、AI 角色、Pi 策略和真实 Pi 空 Key 流式链路通过。
+
+- ✅ [2026-08-23] 修复 Claude 超时重建回归测试误判
+  - 首轮短超时继续验证卡死进程会被清理；重建后的新进程使用正常响应窗口，避免冷启动耗时被误判为第二轮响应超时。
+  - Claude 默认响应超时现为 600 秒，重建测试使用独立的冷启动响应窗口。
+  - 验证：ClaudeBridge 13/13、AI 角色模块 51/51 通过。
+
+- ✅ [2026-08-23] 修复 Agent 测试污染私聊模板导致重启后聊天入口消失
+  - 测试模板支持 `persist:false` 只更新内存，不再写入真实用户配置。
+  - 恢复小爱、妲己私聊模板入口；原有 `chat-history-*.json` 和会话记录保留。
+  - 验证：模板隔离、Agent 路由和私聊历史读取测试通过。
+
+### 新增
+
+- ✅ [2026-08-23] 新增动态画面填充模式
+  - 控制端新增“动态”模式和两个时间设置：默认过渡 3 秒、停留 2 秒。
+  - 显示端按“适应停留 → 过渡铺满 → 铺满停留 → 过渡适应”循环，切换模式或媒体时清理旧定时器。
+  - 动态参数按显示端持久化，兼容旧状态并保留 contain/cover/height/width/crop 原有行为。
+  - 验证：动态控制器、显示端恢复、旋转裁剪、媒体播放和显示端身份定向测试共 20 项通过。
+  - 文档：docs/design/dynamic-fit-mode.md、docs/spec/dynamic-fit-mode.md、docs/task/2026-08-23_动态画面填充模式.md
+
+- ✅ [2026-08-23] LLM profile 增加 Pi Agent 模式与服务器托管只读执行
+  - 每个 profile 可选择直接 LLM 或 Pi Agent；Agent 使用 profile 的 LLM 服务器地址、模型和 Key，通过服务器拥有的 Pi RPC 子进程执行，不回退到普通 LLM HTTP。
+  - 聊天模板绑定 `readonly` 权限策略，固定允许文件读取/搜索和受限 GET 网络查询，禁止 bash/edit/write；聊天历史按 profile/template 隔离并传给 Agent。
+  - 控制端增加 profile 模式、Pi 后端和模板权限配置；普通内置命令继续优先确定性识别，未识别聊天统一按 profile 分流。
+  - 验证：策略、只读网络工具、Pi RPC 生命周期、Agent 路由、UI、普通 LLM、聊天流式 requestId、TTS 回归测试通过；真实 Pi RPC 加载扩展并完成本地模拟流式回包。
+  - 文档：docs/design/llm-agent-mode.md、docs/spec/llm-agent-mode.md、docs/task/2026-08-23_LLM配置Agent模式与Pi只读执行.md、docs/design/chat-system.md、docs/spec/chat-system.md
 
 - ✅ [2026-08-23] 移除控制端“大脑”页签
   - 删除控制端日志大脑导航入口、面板、查看器脚本、切换初始化逻辑和专用样式。

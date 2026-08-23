@@ -312,6 +312,29 @@ currentTextStyle = {
 
 `textStyle` 保存到当前显示端状态，显示端重连恢复时先恢复样式再执行文本分页；页码优先从 `currentTextProgress` 恢复，旧状态缺少该字段时回退 `currentMediaProgress`。
 
+## 10. 最终跨端协议约束
+
+```text
+显示端:
+    加载 /js/sentence-splitter.js 与 TextMediaPlayer
+    当前句发送 textSentenceTts(playbackId, pageIndex, sentenceIndex, text)
+    仅将 textPlayback=true 的 tts/playAudio 回包交给 TextMediaPlayer
+    收到 textSentenceTtsError 后跳过同一定位标签对应的句子
+
+服务端:
+    server-app 注册 textSentenceTts 显示端 handler
+    handler 委托 TextMediaTtsService 逐句合成
+    textStyle 与 textPlayback 控制消息由文本媒体集成层持久化/取消过期请求后转发
+
+控制端:
+    Controls.showTextModePanel 发送 textStyle
+    textStyle 固定 background="#FFF4B8"、color="#333333"
+    textStyle 同时包含 fontSize/lineHeight/pageMargin
+    文本翻页与启停发送 textPlayback(action)，不得改用 playlistControl
+```
+
+该约束由 `tests/text-media-integration.test.js` 对显示端、服务端与控制端入口做最终静态回归；功能行为仍分别由文本播放器、TTS 服务、播放列表和控制端测试覆盖。
+
 ## 9. 错误处理与资源清理
 
 ```text
