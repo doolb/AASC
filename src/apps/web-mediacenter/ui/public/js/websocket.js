@@ -59,6 +59,11 @@ const WebSocketManager = {
             if (window.MediaLibrary) {
                 window.MediaLibrary.renderPlaylistPanel(data);
             }
+            // 批量播放中的文本项也要同步文本分页按钮，但不改变列表级别的控制按钮。
+            if (data.mediaType === 'text' || data.pageTotal !== undefined) {
+                if (window.Controls) window.Controls.updateTextPlaybackStatus(data);
+                if (window.FloatingControl) window.FloatingControl.updateTextPlaybackStatus(data);
+            }
         } else if (data.type === 'tempMediaInfo') {
             // 只处理当前选中显示端的临时媒体信息
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
@@ -128,6 +133,11 @@ const WebSocketManager = {
                 
                 if (data.state.isPlaying !== undefined && window.FloatingControl) {
                     window.FloatingControl.setPlayingState(data.state.isPlaying);
+                }
+
+                if (data.state.currentTextProgress) {
+                    if (window.Controls) window.Controls.updateTextPlaybackStatus(data.state.currentTextProgress);
+                    if (window.FloatingControl) window.FloatingControl.updateTextPlaybackStatus(data.state.currentTextProgress);
                 }
                 
                 if (data.state.currentMediaUrl && window.Crop) {
@@ -210,6 +220,11 @@ const WebSocketManager = {
             if (data.displayId === window.currentDisplayId && window.Controls) {
                 window.Controls.setPlayingState(!!data.isPlaying);
             }
+        } else if (data.type === 'textProgress') {
+            // 文本分页状态只能更新当前选中显示端，防止多个显示端之间串页码和按钮状态。
+            if (data.displayId !== window.currentDisplayId) return;
+            if (window.Controls) window.Controls.updateTextPlaybackStatus(data);
+            if (window.FloatingControl) window.FloatingControl.updateTextPlaybackStatus(data);
         } else if (data.type === 'videoProgress') {
             // 只显示当前选中显示端的进度
             window.currentHtmlPlaying = false;

@@ -653,6 +653,13 @@ input[type="file"] {
     flex-wrap: wrap;
 }
 
+/* 文本分页状态位于独立控件组内，避免与媒体进度条及播放列表状态混用。 */
+.text-playback-status {
+    margin-top: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+}
+
 .control-btn {
     padding: 10px 16px;
     border: none;
@@ -1439,6 +1446,12 @@ input[type="range"]::-webkit-slider-thumb:active {
 
 .floating-btn.active {
     background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+}
+
+.control-btn:disabled,
+.floating-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
 }
 
 .floating-control-item input[type="range"] {

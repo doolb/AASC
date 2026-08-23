@@ -1,5 +1,6 @@
 const Controls = {
     isPlaying: false,
+    textPlaybackState: 'stopped',
     
     togglePlayPause() {
         this.isPlaying = !this.isPlaying;
@@ -102,6 +103,110 @@ const Controls = {
             }
         });
         document.body.appendChild(mask);
+    },
+
+    // 文本模式设置：固定使用阅读友好的浅黄色背景和深灰文字，其余排版选项由显示端重新分页。
+    showTextModePanel() {
+        const mask = document.createElement('div');
+        mask.className = 'modal-mask';
+        mask.innerHTML = `
+            <div class="playlist-settings-dialog">
+                <div class="dialog-title">文本模式</div>
+                <div class="dialog-body">
+                    <div class="settings-row">
+                        <span class="settings-label">字体大小</span>
+                        <select id="textModePanelFontSize">
+                            <option value="auto">自动</option>
+                            <option value="small">小</option>
+                            <option value="medium">中</option>
+                            <option value="large">大</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">行间距</span>
+                        <select id="textModePanelLineHeight">
+                            <option value="compact">紧凑</option>
+                            <option value="normal">标准</option>
+                            <option value="loose">宽松</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">页边距</span>
+                        <select id="textModePanelPageMargin">
+                            <option value="small">小</option>
+                            <option value="normal">标准</option>
+                            <option value="large">大</option>
+                        </select>
+                    </div>
+                    <div style="font-size:12px;color:rgba(255,255,255,0.4);">背景固定为浅黄，文字固定为深灰</div>
+                </div>
+                <div class="dialog-footer">
+                    <button class="btn-cancel" id="textModePanelCancelBtn">取消</button>
+                    <button class="btn-confirm" id="textModePanelConfirmBtn">应用</button>
+                </div>
+            </div>`;
+        const style = this.currentTextStyle || {};
+        mask.querySelector('#textModePanelFontSize').value = style.fontSize || 'auto';
+        mask.querySelector('#textModePanelLineHeight').value = style.lineHeight || 'normal';
+        mask.querySelector('#textModePanelPageMargin').value = style.pageMargin || 'normal';
+        mask.querySelector('#textModePanelCancelBtn').addEventListener('click', () => mask.remove());
+        mask.querySelector('#textModePanelConfirmBtn').addEventListener('click', () => {
+            const textStyle = {
+                background: '#FFF4B8',
+                color: '#333333',
+                fontSize: mask.querySelector('#textModePanelFontSize').value,
+                lineHeight: mask.querySelector('#textModePanelLineHeight').value,
+                pageMargin: mask.querySelector('#textModePanelPageMargin').value
+            };
+            this.currentTextStyle = textStyle;
+            mask.remove();
+            if (window.WebSocketManager) {
+                window.WebSocketManager.sendControl('textStyle', textStyle);
+            }
+        });
+        document.body.appendChild(mask);
+    },
+
+    // 文本翻页与朗读控制使用独立协议，避免与批量播放列表的上一项、下一项混淆。
+    sendTextPlayback(action) {
+        if (!window.WebSocketManager) return;
+        window.WebSocketManager.sendControl('textPlayback', { action });
+    },
+
+    toggleTextPlayback() {
+        const action = this.textPlaybackState === 'playing' ? 'pause' : 'play';
+        this.sendTextPlayback(action);
+    },
+
+    // 同步主控制面板文本页码、播放状态和不可执行的边界按钮。
+    updateTextPlaybackStatus(progress) {
+        const pageIndex = Number(progress.pageIndex) || 0;
+        const pageTotal = Number(progress.pageTotal) || 0;
+        const sentenceIndex = Number(progress.sentenceIndex) || 0;
+        const sentenceTotal = Number(progress.sentenceTotal) || 0;
+        const state = progress.state || 'stopped';
+        const isPlaying = state === 'playing';
+        const canNavigate = pageTotal > 0;
+        this.textPlaybackState = state;
+
+        const status = document.getElementById('textPlaybackStatus');
+        if (status) {
+            status.textContent = canNavigate
+                ? `第 ${pageIndex + 1}/${pageTotal} 页 · 第 ${sentenceIndex + 1}/${sentenceTotal || 1} 句`
+                : '未播放文本';
+        }
+        const toggleBtn = document.getElementById('textPlaybackToggleBtn');
+        if (toggleBtn) {
+            toggleBtn.textContent = isPlaying ? '暂停' : '播放';
+            toggleBtn.classList.toggle('playing', isPlaying);
+            toggleBtn.classList.toggle('paused', !isPlaying);
+        }
+        const prevBtn = document.getElementById('textPlaybackPrevBtn');
+        const nextBtn = document.getElementById('textPlaybackNextBtn');
+        const stopBtn = document.getElementById('textPlaybackStopBtn');
+        if (prevBtn) prevBtn.disabled = !canNavigate || pageIndex <= 0;
+        if (nextBtn) nextBtn.disabled = !canNavigate || pageIndex >= pageTotal - 1;
+        if (stopBtn) stopBtn.disabled = !canNavigate || ['stopped', 'finished', 'idle'].includes(state);
     },
 
     // 睡眠模式设置弹窗：按时段隐藏媒体/UI，降低夜间干扰；设置按当前选中显示端生效

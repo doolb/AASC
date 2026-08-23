@@ -194,6 +194,18 @@
                     </div>
                     <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="updateProgress(this.value)" style="margin-top:8px">
                 </div>
+
+                <div class="control-item">
+                    <label>文本模式</label>
+                    <div class="control-buttons">
+                        <button class="control-btn" id="textModeSettingsBtn" onclick="Controls.showTextModePanel()" title="设置文本字体、行间距和页边距">文本模式</button>
+                        <button class="control-btn paused" id="textPlaybackToggleBtn" onclick="Controls.toggleTextPlayback()">播放</button>
+                        <button class="control-btn" id="textPlaybackPrevBtn" onclick="Controls.sendTextPlayback('prev')" disabled>上一页</button>
+                        <button class="control-btn" id="textPlaybackNextBtn" onclick="Controls.sendTextPlayback('next')" disabled>下一页</button>
+                        <button class="control-btn" id="textPlaybackStopBtn" onclick="Controls.sendTextPlayback('stop')" disabled>停止</button>
+                    </div>
+                    <div class="text-playback-status" id="textPlaybackStatus">未播放文本</div>
+                </div>
                 
                 <div class="control-item">
                     <label>音量: <span id="volumeValue">100</span>%</label>
@@ -943,6 +955,16 @@
                     <label>播放控制</label>
                     <div class="floating-control-buttons">
                         <button class="floating-btn" id="floatingPlayPauseBtn" onclick="FloatingControl.togglePlay()">播放</button>
+                    </div>
+                </div>
+                <div class="floating-control-item">
+                    <label>文本分页</label>
+                    <div class="text-playback-status" id="floatingTextPlaybackStatus">未播放文本</div>
+                    <div class="floating-control-buttons">
+                        <button class="floating-btn" id="floatingTextPlaybackToggleBtn" onclick="FloatingControl.toggleTextPlayback()">播放</button>
+                        <button class="floating-btn" id="floatingTextPlaybackPrevBtn" onclick="FloatingControl.sendTextPlayback('prev')" disabled>上一页</button>
+                        <button class="floating-btn" id="floatingTextPlaybackNextBtn" onclick="FloatingControl.sendTextPlayback('next')" disabled>下一页</button>
+                        <button class="floating-btn" id="floatingTextPlaybackStopBtn" onclick="FloatingControl.sendTextPlayback('stop')" disabled>停止</button>
                     </div>
                 </div>
                 <div class="floating-control-item">

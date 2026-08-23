@@ -97,6 +97,40 @@ const FloatingControl = {
             btn.classList.toggle('active', this.isPlaying);
         }
     },
+
+    // 浮动面板与主面板共用文本播放协议，但保持独立按钮状态，避免误操作播放列表。
+    sendTextPlayback(action) {
+        if (!window.WebSocketManager) return;
+        window.WebSocketManager.sendControl('textPlayback', { action });
+    },
+
+    toggleTextPlayback() {
+        const action = this.textPlaybackState === 'playing' ? 'pause' : 'play';
+        this.sendTextPlayback(action);
+    },
+
+    updateTextPlaybackStatus(progress) {
+        const pageIndex = Number(progress.pageIndex) || 0;
+        const pageTotal = Number(progress.pageTotal) || 0;
+        const state = progress.state || 'stopped';
+        const isPlaying = state === 'playing';
+        const canNavigate = pageTotal > 0;
+        this.textPlaybackState = state;
+
+        const status = document.getElementById('floatingTextPlaybackStatus');
+        if (status) status.textContent = canNavigate ? `第 ${pageIndex + 1}/${pageTotal} 页` : '未播放文本';
+        const toggleBtn = document.getElementById('floatingTextPlaybackToggleBtn');
+        if (toggleBtn) {
+            toggleBtn.textContent = isPlaying ? '暂停' : '播放';
+            toggleBtn.classList.toggle('active', isPlaying);
+        }
+        const prevBtn = document.getElementById('floatingTextPlaybackPrevBtn');
+        const nextBtn = document.getElementById('floatingTextPlaybackNextBtn');
+        const stopBtn = document.getElementById('floatingTextPlaybackStopBtn');
+        if (prevBtn) prevBtn.disabled = !canNavigate || pageIndex <= 0;
+        if (nextBtn) nextBtn.disabled = !canNavigate || pageIndex >= pageTotal - 1;
+        if (stopBtn) stopBtn.disabled = !canNavigate || ['stopped', 'finished', 'idle'].includes(state);
+    },
     
     setVolume(value) {
         const volumeValue = document.getElementById('floatingVolumeValue');
