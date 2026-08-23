@@ -5,7 +5,19 @@ const Upload = {
         if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
         if (['wav', 'ogg', 'mp3'].includes(ext)) return 'audio';
         if (['html', 'htm', 'mhtml'].includes(ext)) return 'html';
+        if (['txt', 'md'].includes(ext)) return 'text';
         return 'image';
+    },
+
+    detectTextFormat(name) {
+        const ext = name.toLowerCase().split('.').pop().split('?')[0];
+        if (ext === 'md') return 'markdown';
+        if (ext === 'txt') return 'plain';
+        return undefined;
+    },
+
+    getTextMimeType(format) {
+        return format === 'markdown' ? 'text/markdown' : 'text/plain';
     },
 
     fileToBase64(file) {
@@ -24,8 +36,8 @@ const Upload = {
         const dataUrl = 'data:application/octet-stream;base64,' + base64;
         const mediaType = this.detectMediaType(file.name);
         return new Promise((resolve) => {
-            if (mediaType === 'audio') {
-                // 音频没有可用于裁剪的宽高，直接返回空尺寸，避免误创建 Image 等待加载失败。
+            if (mediaType === 'audio' || mediaType === 'text') {
+                // 音频和文本都没有可用于裁剪的画面，直接返回空尺寸，避免误创建 Image 等待加载失败。
                 resolve(null);
                 return;
             }
@@ -70,6 +82,7 @@ const Upload = {
             try {
                 const base64 = await this.fileToBase64(file);
                 const mediaType = this.detectMediaType(file.name);
+                const format = this.detectTextFormat(file.name);
                 if (mediaType === 'html') {
                     // HTML 媒体：跳过尺寸探测，不弹设置（沿用显示面板模式）临时发送
                     if (window.WebSocketManager) {
@@ -87,6 +100,27 @@ const Upload = {
                     }
                     if (window.Crop) {
                         window.Crop.showPreview('data:text/html;base64,' + base64, 'html');
+                    }
+                    showToast('已发送到显示端', 'success');
+                    return;
+                }
+                if (mediaType === 'text') {
+                    if (window.WebSocketManager) {
+                        window.WebSocketManager.sendMedia({
+                            type: 'base64',
+                            data: base64,
+                            fileName: file.name,
+                            mediaType,
+                            format,
+                            mimeType: file.type || this.getTextMimeType(format),
+                            temp: true
+                        });
+                    }
+                    if (window.MediaLibrary) {
+                        window.MediaLibrary.lastTempFileSent = { name: file.name };
+                    }
+                    if (window.Crop) {
+                        window.Crop.showPreview('', mediaType, undefined, file.name);
                     }
                     showToast('已发送到显示端', 'success');
                     return;
@@ -159,6 +193,7 @@ const Upload = {
         try {
             const base64 = await this.fileToBase64(file);
             const mediaType = this.detectMediaType(file.name);
+            const format = this.detectTextFormat(file.name);
             if (mediaType === 'html') {
                 // HTML 媒体：跳过尺寸探测，不弹设置（沿用显示面板模式）临时发送
                 if (window.WebSocketManager) {
@@ -176,6 +211,27 @@ const Upload = {
                 }
                 if (window.Crop) {
                     window.Crop.showPreview('data:text/html;base64,' + base64, 'html');
+                }
+                showToast('已发送到显示端', 'success');
+                return;
+            }
+            if (mediaType === 'text') {
+                if (window.WebSocketManager) {
+                    window.WebSocketManager.sendMedia({
+                        type: 'base64',
+                        data: base64,
+                        fileName: file.name,
+                        mediaType,
+                        format,
+                        mimeType: file.type || this.getTextMimeType(format),
+                        temp: true
+                    });
+                }
+                if (window.MediaLibrary) {
+                    window.MediaLibrary.lastTempFileSent = { name: file.name };
+                }
+                if (window.Crop) {
+                    window.Crop.showPreview('', mediaType, undefined, file.name);
                 }
                 showToast('已发送到显示端', 'success');
                 return;
@@ -279,12 +335,15 @@ const Upload = {
         for (const f of files) {
             try {
                 const base64 = await this.fileToBase64(f);
+                const mediaType = this.detectMediaType(f.name);
+                const format = this.detectTextFormat(f.name);
                 const dims = await this.getMediaDimensions(f, base64);
                 items.push({
                     name: f.name,
                     data: base64,
-                    mediaType: this.detectMediaType(f.name),
-                    mimeType: f.type || undefined,
+                    mediaType,
+                    mimeType: f.type || (mediaType === 'text' ? this.getTextMimeType(format) : undefined),
+                    ...(mediaType === 'text' ? { format } : {}),
                     modifiedTime: f.lastModified,
                     width: dims?.width,
                     height: dims?.height

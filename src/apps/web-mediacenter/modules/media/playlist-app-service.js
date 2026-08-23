@@ -1,6 +1,6 @@
 'use strict';
 
-const MEDIA_TYPES = ['image', 'video', 'gif', 'html', 'audio'];
+const MEDIA_TYPES = ['image', 'video', 'gif', 'html', 'audio', 'text'];
 
 class PlaylistManager {
     constructor(mediaLibraryManager) {
@@ -54,7 +54,8 @@ class PlaylistManager {
         return sorted.map(item => ({
             url: item.url,
             fileName: item.name,
-            mediaType: item.mediaType
+            mediaType: item.mediaType,
+            ...(item.mediaType === 'text' ? { format: item.format } : {})
         }));
     }
 
@@ -62,12 +63,16 @@ class PlaylistManager {
     buildFromTemp(files, options = {}) {
         const { mode = 'sequence', sortBy = 'name', direction = 'asc' } = options;
         const sorted = this._sortPlaylist(files || [], mode, sortBy, direction);
-        return sorted.map(f => ({
-            data: f.data,
-            fileName: f.name,
-            mediaType: f.mediaType || 'image',
-            mimeType: f.mimeType
-        }));
+        return sorted.map(f => {
+            const mediaType = f.mediaType || 'image';
+            return {
+                data: f.data,
+                fileName: f.name,
+                mediaType,
+                mimeType: f.mimeType,
+                ...(mediaType === 'text' ? { format: f.format } : {})
+            };
+        });
     }
 }
 

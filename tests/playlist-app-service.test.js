@@ -7,7 +7,7 @@ const { PlaylistManager } = require('../src/apps/web-mediacenter/modules/media/p
 const tree = {
     '/': [
         { name: 'b.mp4', path: '/b.mp4', type: 'file', mediaType: 'video', modifiedTime: new Date('2026-01-02'), url: '/media/1/b.mp4' },
-        { name: 'readme.txt', path: '/readme.txt', type: 'file', mediaType: 'text', modifiedTime: new Date('2026-01-02'), url: '/media/1/readme.txt' },
+        { name: 'readme.txt', path: '/readme.txt', type: 'file', mediaType: 'text', format: 'plain', modifiedTime: new Date('2026-01-02'), url: '/media/1/readme.txt' },
         { name: '相册', path: '/相册', type: 'folder', mediaType: 'folder' }
     ],
     '/相册': [
@@ -66,17 +66,18 @@ test('buildFromLibrary 收集 audio 媒体文件', async () => {
     assert.deepStrictEqual(list.map(i => i.mediaType), ['audio', 'audio']);
 });
 
-test('buildFromLibrary 单层只收集当前层媒体并过滤非媒体', async () => {
+test('buildFromLibrary 单层收集当前层全部媒体并过滤文件夹', async () => {
     const pm = new PlaylistManager(fakeManager);
     const list = await pm.buildFromLibrary('lib1', '/', { recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc' });
-    assert.deepStrictEqual(list.map(i => i.fileName), ['b.mp4']);
+    assert.deepStrictEqual(list.map(i => i.fileName), ['b.mp4', 'readme.txt']);
     assert.strictEqual(list[0].url, '/media/1/b.mp4');
+    assert.strictEqual(list[1].format, 'plain');
 });
 
 test('buildFromLibrary 递归收集全部层级媒体', async () => {
     const pm = new PlaylistManager(fakeManager);
     const list = await pm.buildFromLibrary('lib1', '/', { recursive: true, mode: 'sequence', sortBy: 'name', direction: 'asc' });
-    assert.deepStrictEqual(list.map(i => i.fileName), ['a.jpg', 'b.mp4', 'c.gif', 'd.jpg']);
+    assert.deepStrictEqual(list.map(i => i.fileName), ['a.jpg', 'b.mp4', 'c.gif', 'd.jpg', 'readme.txt']);
 });
 
 test('buildFromLibrary 按时间正序', async () => {

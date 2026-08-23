@@ -83,7 +83,7 @@
                     <label class="file-label video" for="videoInput">选择视频</label>
                     <label class="file-label audio" for="audioInput">选择音频</label>
                 </div>
-                <input type="file" id="imageInput" accept="image/*,.html,.htm">
+                <input type="file" id="imageInput" accept="image/*,.html,.htm,.txt,.md">
                 <input type="file" id="videoInput" accept="video/*">
                 <input type="file" id="audioInput" accept="audio/*,.wav,.ogg,.mp3">
                 <div style="margin-top:8px;">
@@ -128,7 +128,7 @@
                         <div class="media-library-actions">
                             <label class="upload-btn">
                                 上传文件
-                                <input type="file" id="batchFileInput" multiple accept="image/*,video/*,audio/*,.wav,.ogg,.mp3,.html,.htm" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
+                                <input type="file" id="batchFileInput" multiple accept="image/*,video/*,audio/*,.wav,.ogg,.mp3,.html,.htm,.txt,.md" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
                             </label>
                             <label class="upload-btn">
                                 上传文件夹

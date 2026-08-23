@@ -241,14 +241,16 @@ const Crop = {
     },
     
     showPreview(url, mediaType, onReady, displayName) {
-        if (mediaType === 'audio') {
-            // 音频没有可裁剪的画面，使用占位区域保持控制端裁剪布局与发送能力稳定。
+        if (mediaType === 'audio' || mediaType === 'text') {
+            // 音频和文本没有可裁剪的画面，使用占位区域保持控制端裁剪布局与发送能力稳定。
             this.currentMedia = url;
             this.previewImg.style.display = 'none';
             this.previewVideo.style.display = 'none';
             this.placeholder.style.display = 'block';
-            const fileName = displayName || this._extractPreviewFileName(url) || '音频媒体';
+            const fileName = displayName || this._extractPreviewFileName(url) || (mediaType === 'text' ? '文本媒体' : '音频媒体');
             this.placeholder.textContent = fileName;
+            this.placeholder.style.background = mediaType === 'text' ? '#f4d35e' : '';
+            this.placeholder.style.color = mediaType === 'text' ? '#3d3d3d' : '';
             this.data = { x: 0, y: 0, width: 100, height: 100 };
             this.box.style.display = 'block';
             this.updateBox();

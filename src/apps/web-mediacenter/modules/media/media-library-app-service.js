@@ -56,7 +56,15 @@ class MediaLibraryProvider {
         if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
         if (['wav', 'ogg', 'mp3'].includes(ext)) return 'audio';
         if (['html', 'htm', 'mhtml'].includes(ext)) return 'html';
+        if (['txt', 'md'].includes(ext)) return 'text';
         return 'image';
+    }
+
+    detectTextFormat(name) {
+        const ext = name.toLowerCase().split('.').pop().split('?')[0];
+        if (ext === 'md') return 'markdown';
+        if (ext === 'txt') return 'plain';
+        return undefined;
     }
 
     // 解析 HTTP Range: bytes=start-end / bytes=start- / bytes=-suffix
@@ -132,11 +140,13 @@ class LocalProvider extends MediaLibraryProvider {
                     
                     const relativePath = path.join(dirPath, name).replace(/\\/g, '/');
                     
+                    const mediaType = stat.isDirectory() ? 'folder' : this.detectMediaType(name);
                     return {
                         name: name,
                         path: relativePath,
                         type: stat.isDirectory() ? 'folder' : 'file',
-                        mediaType: stat.isDirectory() ? 'folder' : this.detectMediaType(name),
+                        mediaType,
+                        ...(mediaType === 'text' ? { format: this.detectTextFormat(name) } : {}),
                         size: stat.size,
                         modifiedTime: stat.mtime,
                         url: this.getPublicUrl(relativePath)
@@ -162,11 +172,13 @@ class LocalProvider extends MediaLibraryProvider {
         
         const stat = fs.statSync(fullPath);
         
+        const mediaType = this.detectMediaType(filePath);
         return {
             name: path.basename(filePath),
             path: filePath,
             type: 'file',
-            mediaType: this.detectMediaType(filePath),
+            mediaType,
+            ...(mediaType === 'text' ? { format: this.detectTextFormat(filePath) } : {}),
             size: stat.size,
             modifiedTime: stat.mtime,
             url: this.getPublicUrl(filePath)
@@ -345,11 +357,13 @@ class HttpProvider extends MediaLibraryProvider {
         // HEAD 获取真实大小/修改时间（fancy-index 列表只有人类可读大小，无法还原精确字节）
         const sizeInfo = await this._fetchHead(this._buildUrl(filePath).replace(/\/$/, ''));
 
+        const mediaType = this.detectMediaType(filePath);
         return {
             name: path.basename(filePath),
             path: filePath,
             type: 'file',
-            mediaType: this.detectMediaType(filePath),
+            mediaType,
+            ...(mediaType === 'text' ? { format: this.detectTextFormat(filePath) } : {}),
             size: (sizeInfo && sizeInfo.size) || 0,
             modifiedTime: (sizeInfo && sizeInfo.modifiedTime) || null,
             url: this.getPublicUrl(filePath)
@@ -545,11 +559,13 @@ class HttpProvider extends MediaLibraryProvider {
                     ? '/' + cleanName
                     : dirPath + '/' + cleanName;
 
+                const mediaType = isFolder ? 'folder' : this.detectMediaType(cleanName);
                 items.push({
                     name: cleanName,
                     path: itemPath,
                     type: isFolder ? 'folder' : 'file',
-                    mediaType: isFolder ? 'folder' : this.detectMediaType(cleanName),
+                    mediaType,
+                    ...(mediaType === 'text' ? { format: this.detectTextFormat(cleanName) } : {}),
                     size: 0,
                     modifiedTime: null,
                     url: this.getPublicUrl(itemPath)
@@ -647,11 +663,13 @@ class SmbProvider extends MediaLibraryProvider {
         return files.map(file => {
             const itemPath = dirPath === '/' ? '/' + file.name : dirPath + '/' + file.name;
             
+            const mediaType = file.isDirectory ? 'folder' : this.detectMediaType(file.name);
             return {
                 name: file.name,
                 path: itemPath,
                 type: file.isDirectory ? 'folder' : 'file',
-                mediaType: file.isDirectory ? 'folder' : this.detectMediaType(file.name),
+                mediaType,
+                ...(mediaType === 'text' ? { format: this.detectTextFormat(file.name) } : {}),
                 size: file.size || 0,
                 modifiedTime: file.modifiedTime || null,
                 url: this.getPublicUrl(itemPath)
@@ -667,11 +685,13 @@ class SmbProvider extends MediaLibraryProvider {
         const cleanPath = filePath.replace(/^\//, '');
         const stat = await this._stat(cleanPath);
         
+        const mediaType = this.detectMediaType(filePath);
         return {
             name: path.basename(filePath),
             path: filePath,
             type: 'file',
-            mediaType: this.detectMediaType(filePath),
+            mediaType,
+            ...(mediaType === 'text' ? { format: this.detectTextFormat(filePath) } : {}),
             size: stat.size || 0,
             modifiedTime: stat.modifiedTime || null,
             url: this.getPublicUrl(filePath)

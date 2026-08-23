@@ -518,7 +518,7 @@ const WebSocketManager = {
 
     async getMediaRatio(mediaData) {
         // HTML 无固有宽高比且铺满显示，不创建 img 探测
-        if (mediaData.mediaType === 'html' || mediaData.mediaType === 'audio') {
+        if (mediaData.mediaType === 'html' || mediaData.mediaType === 'audio' || mediaData.mediaType === 'text') {
             return 1;
         }
         if (mediaData.width && mediaData.height) {
