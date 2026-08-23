@@ -54,6 +54,11 @@ const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const { shouldSkipDisplayTts } = require('../modules/tts/display-tts-policy');
 const { createTextMediaTtsService } = require('../modules/media/text-media-tts-service');
+const {
+    registerTextMediaDisplayHandlers,
+    handleTextMediaDisplayMessage,
+    handleTextMediaControlMessage
+} = require('../modules/media/text-media-ws-integration');
 const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
@@ -423,17 +428,11 @@ async function startServer() {
             });
 
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
-
-            // 分句请求由独立服务串行处理；生成失败会转换为协议错误，不能冒泡中断 WebSocket 循环。
-            wsServer.registerHandler('textSentenceTts', async (data, ctx) => {
-                await textMediaTtsService.handleSentenceRequest(ctx.displayId, data);
-            });
-            const displayTypes = ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'];
-            for (const type of displayTypes) {
-                wsServer.registerHandler(type, (data, ctx) => {
-                    handleDisplayMessageFallback(ctx.displayId, data, ctx.ws);
-                });
-            }
+            registerTextMediaDisplayHandlers({
+                wsServer,
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'capabilities', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                handleDisplayMessage: handleDisplayMessageFallback
+            }, textMediaTtsService);
 
             // audioChunk handler：显示端→服务端的音频流识别 // 分片累积后调 asr.recognize
             const audioChunkSessions = new Map();
@@ -701,9 +700,6 @@ function normalizeDynamicFitConfig(value) {
     };
 }
 
-        // 仅保存可恢复的文本播放样式与进度，不保存临时播放列表中的 base64 文本内容。
-        textStyle: null,
-        currentTextProgress: null,
 function createDisplayState() {
     return {
         currentMedia: null,
@@ -715,6 +711,9 @@ function createDisplayState() {
         crop: { x: 0, y: 0, width: 100, height: 100 },
         volume: 100,
         isPlaying: false,
+        // 仅保存可恢复的文本播放样式与进度，不保存临时播放列表中的 base64 文本内容。
+        textStyle: null,
+        currentTextProgress: null,
         canvasSize: { width: 1920, height: 1080 },
         browserInfo: null,
         capabilities: null
@@ -3124,6 +3123,14 @@ wss.on('connection', (ws, req) => {
 
 function handleDisplayMessageFallback(displayId, data, ws) {
     const displayData = displayClients.get(displayId);
+
+    if (handleTextMediaDisplayMessage({
+        displayId,
+        data,
+        displayData,
+        persistDisplayState,
+        broadcastToControls
+    })) return;
     
     if (data.type === 'heartbeat') {
         return;
@@ -3162,24 +3169,6 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         }
         broadcastToControls({
             displayId: displayId,
-    } else if (data.type === 'textProgress' && displayData) {
-        // 只提取文本播放恢复所需的标量字段，避免临时播放列表的 base64 文本进入持久化配置。
-        const textProgress = {
-            playbackId: data.playbackId,
-            pageIndex: data.pageIndex,
-            pageTotal: data.pageTotal,
-            sentenceIndex: data.sentenceIndex,
-            sentenceTotal: data.sentenceTotal,
-            state: data.state,
-            format: data.format
-        };
-        displayData.state.currentTextProgress = textProgress;
-        persistDisplayState(displayData, { currentTextProgress: textProgress });
-        broadcastToControls({
-            displayId,
-            type: 'textProgress',
-            ...textProgress
-        });
             type: 'audioProgress',
             currentTime: data.currentTime,
             duration: data.duration
@@ -3854,17 +3843,6 @@ async function handleControlMessageFallback(data, ws) {
                     } else {
                         displayData.state.lastTempMedia = null;
                         displayData.state.currentMedia = data.media;
-                    } else if (data.action === 'textStyle') {
-                        // 文本样式与显示端恢复状态一起保存；文本内容本身由当前媒体或播放列表负责恢复。
-                        displayData.state.textStyle = data.value;
-                        persistDisplayState(displayData, { textStyle: data.value });
-                    } else if (data.action === 'textPlayback') {
-                        const playbackAction = data.value?.action;
-                        const playbackId = data.value?.playbackId || displayData.state.currentTextProgress?.playbackId;
-                        // 暂停、翻页和停止后，旧句音频都不能在异步合成完成时重新开始播放。
-                        if (['pause', 'prev', 'next', 'stop'].includes(playbackAction) && playbackId) {
-                            textMediaTtsService.cancel(displayId, playbackId);
-                        }
                         displayData.state.currentMediaProgress = null;
                         persistDisplayState(displayData, {
                             currentMedia: data.media,
@@ -3873,6 +3851,14 @@ async function handleControlMessageFallback(data, ws) {
                     }
                     sendToDisplay(displayId, data.media);
                 } else if (data.type === 'control') {
+                    if (handleTextMediaControlMessage({
+                        displayId,
+                        data,
+                        displayData,
+                        persistDisplayState,
+                        sendToDisplay,
+                        textMediaTtsService
+                    })) return;
                     if (data.action === 'rotate') {
                         displayData.state.rotation = data.value;
                         persistDisplayState(displayData, { rotation: data.value });
