@@ -1347,8 +1347,10 @@
                 if (state.currentHtmlScroll) {
                     currentHtmlScroll = state.currentHtmlScroll;
                 }
-                if (state.currentMedia.mediaType === 'text' && state.currentMediaProgress) {
-                    state.currentMedia.textProgress = state.currentMediaProgress;
+                if (state.currentMedia.mediaType === 'text') {
+                    // 文本播放使用专用进度；旧持久化状态才回退到通用媒体进度。
+                    const textProgress = state.currentTextProgress || state.currentMediaProgress;
+                    if (textProgress) state.currentMedia.textProgress = textProgress;
                 }
                 showMedia(
                     state.currentMedia,
@@ -2757,6 +2759,9 @@
                     currentRotation = data.value !== undefined ? data.value : data.rotation;
                     applyRotation();
                     applyCrop();
+                    if (currentMediaType === 'text') {
+                        requestAnimationFrame(() => TextMediaPlayer.applyStyle({}));
+                    }
                     break;
                     
                 case 'fit':

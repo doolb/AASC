@@ -46,10 +46,17 @@ test('播放进度更新有节流持久化并在暂停时强制同步', () => {
     assert.match(server, /force[\s\S]*config\.updateDisplayState/);
 });
 
-test('文本恢复先应用样式并恢复页码进度', () => {
+test('文本恢复优先应用文本进度并兼容旧媒体进度', () => {
     const display = read(DISPLAY);
 
     assert.match(display, /state\.textStyle[\s\S]*applyStyle/);
-    assert.match(display, /state\.currentMediaProgress[\s\S]*pageIndex/);
+    assert.match(display, /state\.currentTextProgress[\s\S]*state\.currentMediaProgress/);
+    assert.match(display, /textProgress[\s\S]*pageIndex/);
     assert.match(display, /TextMediaPlayer\.load/);
+});
+
+test('旋转文本媒体后重新分页并保持当前文本锚点', () => {
+    const display = read(DISPLAY);
+
+    assert.match(display, /case 'rotate':[\s\S]*applyRotation\(\)[\s\S]*TextMediaPlayer\.applyStyle\(\{\}\)/);
 });

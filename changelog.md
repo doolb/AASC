@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### 设计中
+
+- 📝 [2026-08-23] 设计纯文本分页 TTS 播放
+  - `.txt` 按原文显示，`.md` 使用安全 Markdown 渲染；显示端按实际屏幕分页并按现有规则逐句请求服务器 TTS。
+  - 纯文本纳入现有批量播放，批量项显示文档进度与页码；上一页、下一页、暂停、停止通过控制端操作。
+  - 文本页默认使用浅黄色背景 `#FFF4B8` 与深灰色文字 `#333333`，响应式字体和行距按显示端尺寸分页测量。
+  - 控制端规划“文本模式”设置面板，支持字体大小、行间距和页边距，并在应用后触发显示端重新分页。
+  - 设计文档：docs/design/text-media.md、docs/spec/text-media.md、docs/task/2026-08-23_纯文本分页TTS播放.md
+
+### 修复
+
+- ✅ [2026-08-23] 修复纯文本分页 TTS 的恢复、回包、Markdown 分页与旋转回归
+  - 文本恢复优先读取 `currentTextProgress`，兼容旧的 `currentMediaProgress`；暂停发生在 TTS 回包前时废弃旧 `playbackId`，恢复后重发当前句。
+  - Markdown 分页以 `ChatMarkdown` 渲染后的实际块布局及内容区真实可用宽高为准；连续段落、列表、引用和代码块不会被内容区裁切。
+  - 90°/270° 仅在显示层交换尺寸，旋转完成后按文本锚点重新分页。
+  - 验证：Task 4 focused 回归、真实 DOM 分页回归、语法和差异检查通过。
+  - 文档：docs/design/text-media.md、docs/spec/text-media.md、.superpowers/sdd/2026-08-23-text-media/task-4-fix-report.md、.superpowers/sdd/2026-08-23-text-media/task-4-fix2-report.md
+
 ### 修复
 
 - ✅ [2026-08-23] 移除控制端“大脑”页签

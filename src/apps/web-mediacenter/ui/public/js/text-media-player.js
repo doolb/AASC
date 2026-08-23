@@ -77,28 +77,58 @@
             return PAGE_MARGIN_MAP[style.pageMargin];
         }
 
+        function updateTextLayout(pageTotal = 1) {
+            const container = getContainer();
+            const status = getStatus();
+            if (!container) return;
+            container.style.display = 'block';
+            container.style.background = style.background;
+            container.style.color = style.color;
+            container.style.fontSize = `${getFontPixels()}px`;
+            container.style.lineHeight = String(getLineHeight());
+            container.style.setProperty('--text-media-page-margin', `${getPageMargin()}px`);
+            if (!status) return;
+            status.textContent = `第 ${Math.max(pageIndex + 1, 1)} / ${Math.max(pageTotal, 1)} 页`;
+            const statusStyle = root.getComputedStyle && root.getComputedStyle(status);
+            const statusBottom = statusStyle ? Number.parseFloat(statusStyle.bottom) || 0 : getPageMargin();
+            const statusHeight = status.getBoundingClientRect ? status.getBoundingClientRect().height : getFontPixels() * 0.5;
+            container.style.setProperty('--text-media-status-reserve', `${Math.ceil(statusBottom + statusHeight)}px`);
+        }
+
+        function getAvailableTextArea() {
+            updateTextLayout(pages.length || 1);
+            const content = getContent();
+            if (content && content.clientWidth && content.clientHeight) {
+                return { width: content.clientWidth, height: content.clientHeight };
+            }
+            const size = getEffectiveSize();
+            return {
+                width: Math.max(size.width - getPageMargin() * 2, 1),
+                height: Math.max(size.height - getPageMargin() * 2 - getFontPixels() * 0.5, 1)
+            };
+        }
+
         function getEffectiveSize() {
             const container = getContainer();
             const width = options.width || (container && container.clientWidth) || 800;
             const height = options.height || (container && container.clientHeight) || 600;
-            const rotation = Number(options.getRotation ? options.getRotation() : options.rotation || 0) % 360;
-            return rotation === 90 || rotation === 270 ? { width: height, height: width } : { width, height };
+            // #mediaText 在显示层处理旋转并已交换 90°/270° 的布局尺寸；此处直接量测容器，避免二次交换。
+            return { width, height };
         }
 
         // 以隐藏克隆的实际高度为准；无 DOM 的纯单元测试使用同一行高参数进行确定性估算。
         function measureTextHeight(text) {
             if (!root.document || !root.document.createElement) {
-                const size = getEffectiveSize();
-                const usableWidth = Math.max(size.width - getPageMargin() * 2, getFontPixels());
+                const area = getAvailableTextArea();
+                const usableWidth = Math.max(area.width, getFontPixels());
                 const charsPerLine = Math.max(Math.floor(usableWidth / getFontPixels()), 1);
                 const visualLines = text.split('\n').reduce((total, line) => total + Math.max(Math.ceil(line.length / charsPerLine), 1), 0);
                 return visualLines * getFontPixels() * getLineHeight();
             }
             const clone = root.document.createElement('pre');
-            const size = getEffectiveSize();
             clone.className = 'text-media-measure';
             clone.textContent = text;
-            clone.style.width = `${Math.max(size.width - getPageMargin() * 2, 1)}px`;
+            clone.style.width = `${getAvailableTextArea().width}px`;
             clone.style.fontSize = `${getFontPixels()}px`;
             clone.style.lineHeight = String(getLineHeight());
             root.document.body.appendChild(clone);
@@ -108,8 +138,7 @@
         }
 
         function buildPlainPages(text) {
-            const size = getEffectiveSize();
-            const maxHeight = Math.max(size.height - getPageMargin() * 2, 1);
+            const maxHeight = getAvailableTextArea().height;
             const lines = text.replace(/\r\n?/g, '\n').split('\n');
             const measuredLines = [];
             for (const line of lines) {
@@ -145,30 +174,117 @@
             return result.map((pageText) => ({ html: '', speakText: pageText, plainText: pageText }));
         }
 
-        function buildMarkdownPages(text) {
-            const renderer = options.renderMarkdown || (root.ChatMarkdown && root.ChatMarkdown.render);
-            const html = renderer ? renderer(text) : '';
-            // Markdown 页按源文本块切分，语音始终读取未带标记的可读文本，避免标签进入 TTS。
-            const blocks = text.replace(/\r\n?/g, '\n').split(/\n{2,}/).filter(Boolean);
-            const size = getEffectiveSize();
-            const maxHeight = Math.max(size.height - getPageMargin() * 2, 1);
-            const result = [];
-            let currentBlocks = [];
-            for (const block of blocks.length ? blocks : ['']) {
-                const candidate = [...currentBlocks, block];
-                if (currentBlocks.length > 0 && measureTextHeight(candidate.join('\n\n')) > maxHeight) {
-                    result.push(currentBlocks.join('\n\n'));
-                    currentBlocks = [block];
+        function measureMarkdownHeight(html) {
+            if (!root.document || !root.document.createElement) return measureTextHeight(html.replace(/<[^>]*>/gu, ''));
+            const clone = root.document.createElement('div');
+            clone.className = 'text-media-measure';
+            clone.style.width = `${getAvailableTextArea().width}px`;
+            clone.style.fontSize = `${getFontPixels()}px`;
+            clone.style.lineHeight = String(getLineHeight());
+            clone.innerHTML = html;
+            root.document.body.appendChild(clone);
+            const height = clone.scrollHeight;
+            clone.remove();
+            return height;
+        }
+
+        function splitMarkdownUnit(renderText, plainText, renderer, maxHeight) {
+            const html = renderer ? renderer(renderText) : '';
+            if (measureMarkdownHeight(html) <= maxHeight || plainText.length === 0) return [{ renderText, plainText }];
+            const prefixMatch = renderText.match(/^(\s*(?:[-+*]|\d+[.)])\s+|\s*>\s?)/u);
+            const prefix = prefixMatch ? prefixMatch[0] : '';
+            const body = prefix ? renderText.slice(prefix.length) : renderText;
+            const parts = [];
+            let chunk = '';
+            for (const character of body) {
+                const candidate = chunk + character;
+                if (chunk && measureMarkdownHeight(renderer ? renderer(prefix + candidate) : '') > maxHeight) {
+                    // 渲染续页需要保留列表/引用标记，但逻辑原文只能在首片保留一次，供 TTS 与锚点恢复使用。
+                    parts.push({ renderText: prefix + chunk, plainText: parts.length === 0 ? `${prefix}${chunk}` : chunk });
+                    chunk = character;
                 } else {
-                    currentBlocks = candidate;
+                    chunk = candidate;
                 }
             }
-            if (currentBlocks.length > 0 || result.length === 0) result.push(currentBlocks.join('\n\n'));
-            return result.map((pageText, index) => ({
-                html: index === 0 && result.length === 1 ? html : (renderer ? renderer(pageText) : ''),
-                speakText: pageText.replace(/```[\s\S]*?```/g, '').replace(/^\s*(?:[-+*]|\d+[.)])\s+/gm, '').replace(/^\s*#{1,6}\s+/gm, ''),
-                plainText: pageText
-            }));
+            if (chunk) parts.push({ renderText: prefix + chunk, plainText: parts.length === 0 ? `${prefix}${chunk}` : chunk });
+            return parts.length ? parts : [{ renderText, plainText }];
+        }
+
+        function createMarkdownUnits(text, renderer, maxHeight) {
+            const lines = text.replace(/\r\n?/g, '\n').split('\n');
+            const units = [];
+            for (let index = 0; index < lines.length; index += 1) {
+                const line = lines[index];
+                const fence = line.match(/^\s*```([\w-]*)\s*$/u);
+                if (!fence) {
+                    units.push(...splitMarkdownUnit(line, line, renderer, maxHeight));
+                    continue;
+                }
+                const language = fence[1];
+                const codeLines = [];
+                const openingFence = line;
+                index += 1;
+                while (index < lines.length && !/^\s*```\s*$/u.test(lines[index])) {
+                    codeLines.push(lines[index]);
+                    index += 1;
+                }
+                const closingFence = index < lines.length ? lines[index] : '';
+                const codeSource = codeLines.length ? codeLines : [''];
+                codeSource.forEach((codeLine, codeIndex) => {
+                    const renderCode = (value) => `\`\`\`${language}\n${value}\n\`\`\``;
+                    const chunks = [];
+                    let chunk = '';
+                    for (const character of codeLine) {
+                        const candidate = chunk + character;
+                        if (chunk && measureMarkdownHeight(renderer ? renderer(renderCode(candidate)) : '') > maxHeight) {
+                            chunks.push({ renderText: renderCode(chunk), plainText: chunk });
+                            chunk = character;
+                        } else {
+                            chunk = candidate;
+                        }
+                    }
+                    if (chunk || codeLine.length === 0) chunks.push({ renderText: renderCode(chunk), plainText: chunk });
+                    chunks.forEach((chunk, chunkIndex) => {
+                        const isFirst = codeIndex === 0 && chunkIndex === 0;
+                        const isLast = codeIndex === codeSource.length - 1 && chunkIndex === chunks.length - 1;
+                        units.push({
+                            renderText: chunk.renderText,
+                            plainText: `${isFirst ? `${openingFence}\n` : ''}${chunk.plainText}${isLast ? `\n${closingFence}` : ''}`
+                        });
+                    });
+                });
+            }
+            return units;
+        }
+
+        function buildMarkdownPages(text) {
+            const renderer = options.renderMarkdown || (root.ChatMarkdown && root.ChatMarkdown.render);
+            const maxHeight = getAvailableTextArea().height;
+            // 以与 #mediaTextContent 同宽高的容器量测 ChatMarkdown 实际生成的块和子节点；
+            // 无法整块容纳的段落、列表项、引用和代码行继续按渲染结果贪心拆分。
+            const units = createMarkdownUnits(text, renderer, maxHeight);
+            const result = [];
+            let currentUnits = [];
+            for (const unit of units) {
+                const candidate = [...currentUnits, unit];
+                const candidateRenderText = candidate.map((item) => item.renderText).join('\n');
+                if (currentUnits.length > 0 && measureMarkdownHeight(renderer ? renderer(candidateRenderText) : '') > maxHeight) {
+                    result.push(currentUnits);
+                    currentUnits = [unit];
+                } else {
+                    currentUnits = candidate;
+                }
+            }
+            if (currentUnits.length > 0 || result.length === 0) result.push(currentUnits);
+            return result.map((pageUnits) => {
+                const renderText = pageUnits.map((item) => item.renderText).join('\n');
+                const plainText = pageUnits.map((item) => item.plainText).join('\n');
+                return {
+                    html: renderer ? renderer(renderText) : '',
+                    speakText: plainText.replace(/```[\s\S]*?```/g, '').replace(/^\s*(?:[-+*]|\d+[.)])\s+/gm, '').replace(/^\s*#{1,6}\s+/gm, ''),
+                    plainText
+                };
+            });
         }
 
         function renderCurrentPage() {
@@ -177,14 +293,7 @@
             const status = getStatus();
             const page = pages[pageIndex];
             if (!page) return;
-            if (container) {
-                container.style.display = 'block';
-                container.style.background = style.background;
-                container.style.color = style.color;
-                container.style.padding = `${getPageMargin()}px`;
-                container.style.fontSize = `${getFontPixels()}px`;
-                container.style.lineHeight = String(getLineHeight());
-            }
+            if (container) updateTextLayout(pages.length);
             if (content) {
                 content.replaceChildren();
                 if (format === 'markdown') {
@@ -361,7 +470,12 @@
                 pause() {
                     if (state !== 'playing') return;
                     state = 'paused';
-                    if (activeAudio) activeAudio.pause();
+                    if (activeAudio) {
+                        activeAudio.pause();
+                    } else if (requestPending) {
+                        // 服务端会取消旧请求；恢复时必须使用新 playbackId 重发当前句，不能被 pending 卡住。
+                        invalidatePlayback();
+                    }
                     emitProgress();
                 },
                 prev() {

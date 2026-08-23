@@ -137,10 +137,16 @@ body {
     line-height: 1.6;
     z-index: 2;
     transform-origin: center center;
+    --text-media-page-margin: 48px;
+    --text-media-status-reserve: 32px;
 }
 
 #mediaTextContent {
-    height: calc(100% - 40px);
+    position: absolute;
+    top: var(--text-media-page-margin);
+    right: var(--text-media-page-margin);
+    bottom: calc(var(--text-media-page-margin) + var(--text-media-status-reserve));
+    left: var(--text-media-page-margin);
     overflow: hidden;
     word-break: break-word;
 }
@@ -149,12 +155,41 @@ body {
 #mediaTextContent ul,
 #mediaTextContent ol,
 #mediaTextContent blockquote,
-#mediaTextContent pre {
+#mediaTextContent pre,
+#mediaTextContent h1,
+#mediaTextContent h2,
+#mediaTextContent h3,
+#mediaTextContent h4,
+#mediaTextContent h5,
+#mediaTextContent h6,
+.text-media-measure p,
+.text-media-measure ul,
+.text-media-measure ol,
+.text-media-measure blockquote,
+.text-media-measure pre,
+.text-media-measure h1,
+.text-media-measure h2,
+.text-media-measure h3,
+.text-media-measure h4,
+.text-media-measure h5,
+.text-media-measure h6 {
     margin: 0 0 0.8em;
 }
 
+/* 最后一个块不需要为下一块预留间距；量测容器与显示内容区必须完全一致。 */
+#mediaTextContent > :last-child,
+.text-media-measure > :last-child {
+    margin-bottom: 0;
+}
+
+#mediaTextContent blockquote > :last-child,
+.text-media-measure blockquote > :last-child {
+    margin-bottom: 0;
+}
+
 #mediaTextContent pre,
-.text-media-plain {
+.text-media-plain,
+.text-media-measure pre {
     font: inherit;
     white-space: pre-wrap;
     word-break: break-word;
@@ -173,8 +208,8 @@ body {
 
 #mediaTextStatus {
     position: absolute;
-    right: 24px;
-    bottom: 16px;
+    right: var(--text-media-page-margin);
+    bottom: var(--text-media-page-margin);
     color: rgba(51, 51, 51, 0.72);
     font-size: 0.5em;
 }
