@@ -98,6 +98,10 @@ const WebSocketManager = {
                 if (window.Crop) {
                     window.displayCanvasSize = data.state.canvasSize;
                 }
+
+                if (data.state.dynamicFitConfig !== undefined && window.Controls) {
+                    window.Controls.setDynamicFitConfig(data.state.dynamicFitConfig);
+                }
                 
                 if (data.state.fit !== undefined && window.Controls) {
                     window.Controls.setFitMode(data.state.fit);

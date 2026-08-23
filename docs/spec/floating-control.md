@@ -197,9 +197,10 @@ playByName():
             <!-- 画面填充 -->
             <div class="floating-control-item">
                 <label>填充</label>
-                <button onclick="FloatingControl.setFit('contain')">适应</button>
-                <button onclick="FloatingControl.setFit('cover')">填充</button>
-                <button onclick="FloatingControl.setFit('fill')">拉伸</button>
+        <button onclick="FloatingControl.setFit('contain')">适应</button>
+        <button onclick="FloatingControl.setFit('cover')">填充</button>
+        <button onclick="FloatingControl.setFit('dynamic')">动态</button>
+        <button onclick="FloatingControl.setFit('fill')">拉伸</button>
             </div>
             
             <!-- 快速播放 -->

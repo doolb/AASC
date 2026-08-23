@@ -145,6 +145,8 @@ const DeviceTree = {
             inputType: 'select',
             options: [
                 { value: 'contain', label: '适应' },
+                { value: 'cover', label: '铺满' },
+                { value: 'dynamic', label: '动态' },
                 { value: 'height', label: '高度铺满' },
                 { value: 'width', label: '宽度铺满' },
                 { value: 'crop', label: '裁剪' }

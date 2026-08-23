@@ -39,6 +39,7 @@
     <div id="uiSleepOverlay" class="sleep-overlay sleep-overlay-ui"></div>
     <script src="js/html-to-image.min.js"></script>
     <script src="js/control-mode-utils.js"></script>
+    <script src="js/dynamic-fit-controller.js"></script>
     <script src="js/sherpa-asr.js"></script>
     <script src="/js/lib/ort.min.js"></script>
     <script src="js/native-compute.js"></script>
@@ -63,6 +64,9 @@
         let currentRotation = 0;
         window.currentRotation = 0;
         let currentFit = 'contain';
+        let dynamicFitConfig = { transitionSeconds: 3, holdSeconds: 2 };
+        let dynamicFitController = null;
+        let dynamicGeometryMode = 'contain';
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let currentMediaType = 'image';
         let displayWs = null;
@@ -549,7 +553,80 @@
             }
         }
         
+        function normalizeDynamicFitConfig(config = {}) {
+            const readSeconds = (value, fallback) => {
+                const number = Number(value);
+                if (!Number.isFinite(number) || number <= 0) return fallback;
+                return Math.round(Math.min(number, 300) * 10) / 10;
+            };
+            return {
+                transitionSeconds: readSeconds(config.transitionSeconds, 3),
+                holdSeconds: readSeconds(config.holdSeconds, 2)
+            };
+        }
+
+        function getVisibleMediaElement() {
+            return mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
+        }
+
+        function stopDynamicFit() {
+            if (dynamicFitController) {
+                dynamicFitController.stop();
+                dynamicFitController = null;
+            }
+            const media = getVisibleMediaElement();
+            media.style.transition = '';
+        }
+
+        function applyDynamicPhase(phase) {
+            dynamicGeometryMode = phase.mode;
+            const media = getVisibleMediaElement();
+            const transitionMs = Number(phase.transitionMs) || 0;
+            media.style.transition = transitionMs > 0
+                ? `transform 0.3s ease, object-fit 0.3s ease, width ${transitionMs}ms ease, height ${transitionMs}ms ease`
+                : '';
+            if (transitionMs <= 0) {
+                applyCrop();
+                return;
+            }
+
+            // 先让浏览器提交 transition 样式，再在下一帧写入目标宽高；否则本次宽高变化不会触发 CSS 过渡。
+            void media.offsetWidth;
+            requestAnimationFrame(() => {
+                if (currentFit !== 'dynamic' || dynamicGeometryMode !== phase.mode || !dynamicFitController) return;
+                applyCrop({ preserveMediaSize: true });
+            });
+        }
+
+        function startDynamicFit() {
+            stopDynamicFit();
+            dynamicFitController = new DynamicFitController({
+                transitionMs: dynamicFitConfig.transitionSeconds * 1000,
+                holdMs: dynamicFitConfig.holdSeconds * 1000,
+                onPhase: applyDynamicPhase
+            });
+            dynamicFitController.start();
+        }
+
+        function restartDynamicFitAfterMediaLoad() {
+            if (currentFit === 'dynamic') {
+                startDynamicFit();
+            } else {
+                applyCrop();
+            }
+        }
+
+        function setDynamicFitConfig(config) {
+            dynamicFitConfig = normalizeDynamicFitConfig(config);
+            if (currentFit === 'dynamic') {
+                startDynamicFit();
+            }
+        }
+
         function applyFit(fit) {
+            if (fit !== 'dynamic') {
+                stopDynamicFit();
+            }
             currentFit = fit;
             mediaImage.classList.remove('height', 'width', 'crop');
             mediaVideo.classList.remove('height', 'width', 'crop');
@@ -569,6 +646,10 @@
                 // 覆盖铺满方向（高度/宽度）由 applyCrop 自动计算，超出部分居中裁切
             }
 
+            if (fit === 'dynamic') {
+                startDynamicFit();
+                return;
+            }
             applyCrop();
         }
         
@@ -618,7 +699,7 @@
             }
         }
 
-        function applyCrop() {
+        function applyCrop(options = {}) {
             if (mediaHtml.style.display !== 'none') {
                 // html 裁剪只在 crop 适配模式下生效，其他适配方式还原默认铺满
                 if (currentFit === 'crop') {
@@ -631,8 +712,10 @@
             const media = mediaImage.style.display !== 'none' ? mediaImage : mediaVideo;
 
             media.classList.remove('crop');
-            media.style.width = '';
-            media.style.height = '';
+            if (!options.preserveMediaSize) {
+                media.style.width = '';
+                media.style.height = '';
+            }
             media.style.left = '';
             media.style.top = '';
             media.style.maxWidth = '';
@@ -663,8 +746,10 @@
                 当前裁剪百分比: currentCrop
             };
 
+            const geometryMode = currentFit === 'dynamic' ? dynamicGeometryMode : currentFit;
+
             // 铺满模式：媒体等比放大覆盖整个容器（超出部分居中裁切）
-            if (currentFit === 'cover') {
+            if (geometryMode === 'cover') {
                 if (naturalWidth > 0 && naturalHeight > 0 && containerWidth > 0 && containerHeight > 0) {
                     // 旋转后媒体的有效宽高比（宽/高互换）
                     const effectiveRatio = isRotated ? naturalHeight / naturalWidth : naturalWidth / naturalHeight;
@@ -694,7 +779,7 @@
             }
 
             // 适应模式：根据旋转角度/容器比例/媒体比例自动计算铺满尺寸
-            if (currentFit === 'contain') {
+            if (geometryMode === 'contain') {
                 if (naturalWidth > 0 && naturalHeight > 0 && containerWidth > 0 && containerHeight > 0) {
                     // 旋转后媒体的有效宽高比（宽/高互换）
                     const effectiveRatio = isRotated ? naturalHeight / naturalWidth : naturalWidth / naturalHeight;
@@ -723,14 +808,14 @@
                 return { ...baseInfo, 状态: '适应模式' };
             }
 
-            if (currentFit !== 'height' && currentFit !== 'width' && currentFit !== 'crop') {
+            if (geometryMode !== 'height' && geometryMode !== 'width' && geometryMode !== 'crop') {
                 _cropLog('[Crop] 非适配模式，跳过');
                 return { ...baseInfo, 状态: '非适配模式' };
             }
 
             const mediaRatio = naturalWidth / naturalHeight;
 
-            if (currentFit === 'height') {
+            if (geometryMode === 'height') {
                 if (isRotated) {
                     const displayHeight = containerWidth;
                     const displayWidth = containerWidth * mediaRatio;
@@ -742,7 +827,7 @@
                 return { ...baseInfo, 状态: '高度适配模式' };
             }
             
-            if (currentFit === 'width') {
+            if (geometryMode === 'width') {
                 if (isRotated) {
                     const displayWidth = containerHeight;
                     const displayHeight = containerHeight / mediaRatio;
@@ -754,7 +839,7 @@
                 return { ...baseInfo, 状态: '宽度适配模式' };
             }
             
-            if (currentFit !== 'crop') {
+            if (geometryMode !== 'crop') {
                 return { ...baseInfo, 状态: '非裁剪模式' };
             }
             
@@ -1189,6 +1274,10 @@
         
         function handleRestoreState(state) {
             if (!state) return;
+
+            if (state.dynamicFitConfig !== undefined) {
+                dynamicFitConfig = normalizeDynamicFitConfig(state.dynamicFitConfig);
+            }
             
             if (state.rotation !== undefined) {
                 currentRotation = state.rotation;
@@ -2387,6 +2476,7 @@
 
             if (data.mediaType === 'html') {
                 // HTML 媒体：iframe 铺满纯展示，跳过 img/video 与裁剪
+                stopDynamicFit();
                 stopHtmlScroll();
                 mediaImage.style.display = 'none';
                 mediaImage.removeAttribute('src');
@@ -2480,7 +2570,7 @@
                     mediaVideo.src = data.url;
                     mediaVideo.onloadedmetadata = () => {
                         applyResumeTime(mediaVideo, resumeTime);
-                        applyCrop();
+                        restartDynamicFitAfterMediaLoad();
                     };
                     mediaVideo.load();
                     // 重连恢复且为暂停状态时不自动播放（控制端暂停的视频重连后保持暂停）
@@ -2503,7 +2593,7 @@
                     mediaVideo.style.display = 'none';
                     mediaImage.style.display = 'block';
                     mediaImage.src = data.url;
-                    mediaImage.onload = () => applyCrop();
+                    mediaImage.onload = restartDynamicFitAfterMediaLoad;
                 }
                 const urlParts = data.url.split('/');
                 mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || '来自URL';
@@ -2539,7 +2629,7 @@
                     mediaVideo.src = src;
                     mediaVideo.onloadedmetadata = () => {
                         applyResumeTime(mediaVideo, resumeTime);
-                        applyCrop();
+                        restartDynamicFitAfterMediaLoad();
                     };
                     mediaVideo.load();
                     // 重连恢复且为暂停状态时不自动播放
@@ -2552,7 +2642,7 @@
                     mediaVideo.style.display = 'none';
                     mediaImage.style.display = 'block';
                     mediaImage.src = src;
-                    mediaImage.onload = () => applyCrop();
+                    mediaImage.onload = restartDynamicFitAfterMediaLoad;
                 }
                 mediaName = data.fileName || '未知文件';
                 fileNameDisplay.textContent = mediaName;
@@ -2592,6 +2682,10 @@
                     
                 case 'fit':
                     applyFit(data.value);
+                    break;
+
+                case 'dynamicFitConfig':
+                    setDynamicFitConfig(data.value);
                     break;
 
                 case 'reload':

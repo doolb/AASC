@@ -287,7 +287,7 @@ async fetch PUT /api/device-events/${encodeURIComponent(ip)}
     { id: `${display.id}-fit`, label: '填充', type: 'setting-item',
       settingKey: 'fit', value: display.fit || 'contain',
       editable: true, inputType: 'select',
-      options: [{ value: 'contain', label: '适应' }, { value: 'height', label: '高度铺满' }, { value: 'width', label: '宽度铺满' }, { value: 'crop', label: '裁剪' }] },
+      options: [{ value: 'contain', label: '适应' }, { value: 'cover', label: '铺满' }, { value: 'dynamic', label: '动态' }, { value: 'height', label: '高度铺满' }, { value: 'width', label: '宽度铺满' }, { value: 'crop', label: '裁剪' }] },
     { id: `${display.id}-volume`, label: '音量', type: 'setting-item',
       settingKey: 'volume', value: display.volume !== undefined ? display.volume : 100,
       editable: true, inputType: 'range', min: 0, max: 100 },

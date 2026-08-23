@@ -208,6 +208,41 @@ const Controls = {
         el.textContent = '当前: ' + (names[state] || '正常');
     },
 
+    normalizeDynamicFitConfig(config = {}) {
+        const readSeconds = (value, fallback) => {
+            const number = Number(value);
+            if (!Number.isFinite(number) || number <= 0) return fallback;
+            return Math.round(Math.min(number, 300) * 10) / 10;
+        };
+        return {
+            transitionSeconds: readSeconds(config.transitionSeconds, 3),
+            holdSeconds: readSeconds(config.holdSeconds, 2)
+        };
+    },
+
+    getDynamicFitConfig() {
+        return this.normalizeDynamicFitConfig({
+            transitionSeconds: document.getElementById('dynamicFitTransitionSeconds')?.value,
+            holdSeconds: document.getElementById('dynamicFitHoldSeconds')?.value
+        });
+    },
+
+    setDynamicFitConfig(config) {
+        const normalized = this.normalizeDynamicFitConfig(config);
+        const transitionInput = document.getElementById('dynamicFitTransitionSeconds');
+        const holdInput = document.getElementById('dynamicFitHoldSeconds');
+        if (transitionInput) transitionInput.value = normalized.transitionSeconds;
+        if (holdInput) holdInput.value = normalized.holdSeconds;
+    },
+
+    sendDynamicFitConfig(config = this.getDynamicFitConfig()) {
+        const normalized = this.normalizeDynamicFitConfig(config);
+        this.setDynamicFitConfig(normalized);
+        if (window.WebSocketManager) {
+            window.WebSocketManager.sendControl('dynamicFitConfig', normalized);
+        }
+    },
+
     sendFitMode(fit) {
         document.querySelectorAll('[data-fit]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.fit === fit);
@@ -219,6 +254,9 @@ const Controls = {
         }
 
         if (window.WebSocketManager) {
+            if (fit === 'dynamic') {
+                this.sendDynamicFitConfig();
+            }
             window.WebSocketManager.sendControl('fit', fit);
             if (fit === 'crop') {
                 window.WebSocketManager.sendControl('crop', window.Crop ? window.Crop.data : { x: 0, y: 0, width: 100, height: 100 });

@@ -237,7 +237,11 @@ handleDisplayDisconnect(displayId, ws):
 {
     currentMedia: null,          // 当前媒体
     rotation: 0,                 // 旋转角度 (0, 90, 180, 270)
-    fit: 'contain',              // 填充模式 (contain, height, width, crop)
+    fit: 'contain',              // 填充模式 (contain, cover, height, width, crop, dynamic)
+    dynamicFitConfig: {          // 动态填充配置，单位为秒
+        transitionSeconds: 3,
+        holdSeconds: 2
+    },
     crop: { x: 0, y: 0, width: 100, height: 100 },  // 裁剪区域
     volume: 100,                 // 音量 (0-100)
     isPlaying: false,            // 播放状态

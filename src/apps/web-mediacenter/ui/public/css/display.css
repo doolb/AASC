@@ -55,6 +55,12 @@ body {
     transition: transform 0.3s ease, object-fit 0.3s ease;
 }
 
+/* 动态填充由显示端脚本按当前配置写入 width/height 过渡时长。 */
+#mediaImage,
+#mediaVideo {
+    transform-origin: center center;
+}
+
 #mediaImage.height {
     height: 100%;
     width: auto;

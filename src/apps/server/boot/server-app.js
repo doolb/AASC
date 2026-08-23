@@ -670,6 +670,24 @@ const SUB_DISPLAY_CAPABILITIES = {
     displayText: false
 };
 
+const DEFAULT_DYNAMIC_FIT_CONFIG = Object.freeze({
+    transitionSeconds: 3,
+    holdSeconds: 2
+});
+
+function normalizeDynamicFitConfig(value) {
+    const source = value && typeof value === 'object' ? value : {};
+    const normalizeSeconds = (candidate, fallback) => {
+        const number = Number(candidate);
+        if (!Number.isFinite(number) || number <= 0) return fallback;
+        return Math.round(Math.min(number, 300) * 10) / 10;
+    };
+    return {
+        transitionSeconds: normalizeSeconds(source.transitionSeconds, DEFAULT_DYNAMIC_FIT_CONFIG.transitionSeconds),
+        holdSeconds: normalizeSeconds(source.holdSeconds, DEFAULT_DYNAMIC_FIT_CONFIG.holdSeconds)
+    };
+}
+
 function createDisplayState() {
     return {
         currentMedia: null,
@@ -677,6 +695,7 @@ function createDisplayState() {
         currentHtmlScroll: null,
         rotation: 0,
         fit: 'contain',
+        dynamicFitConfig: { ...DEFAULT_DYNAMIC_FIT_CONFIG },
         crop: { x: 0, y: 0, width: 100, height: 100 },
         volume: 100,
         isPlaying: false,
@@ -2823,6 +2842,7 @@ wss.on('connection', (ws, req) => {
             state: {
                 ...createDisplayState(),
                 ...savedState,
+                dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
                 isSubDisplay: isSubDisplay,
                 capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : null
             }
@@ -3841,6 +3861,11 @@ async function handleControlMessageFallback(data, ws) {
                     } else if (data.action === 'fit') {
                         displayData.state.fit = data.value;
                         persistDisplayState(displayData, { fit: data.value });
+                    } else if (data.action === 'dynamicFitConfig') {
+                        const dynamicFitConfig = normalizeDynamicFitConfig(data.value);
+                        displayData.state.dynamicFitConfig = dynamicFitConfig;
+                        persistDisplayState(displayData, { dynamicFitConfig });
+                        data.value = dynamicFitConfig;
                     } else if (data.action === 'crop') {
                         displayData.state.crop = data.value;
                         persistDisplayState(displayData, { crop: data.value });

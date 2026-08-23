@@ -164,9 +164,17 @@
                     <div class="control-buttons">
                         <button class="control-btn" data-fit="contain" onclick="sendFitMode('contain')">适应</button>
                         <button class="control-btn" data-fit="cover" onclick="sendFitMode('cover')">铺满</button>
+                        <button class="control-btn" data-fit="dynamic" onclick="sendFitMode('dynamic')">动态</button>
                         <button class="control-btn" data-fit="height" onclick="sendFitMode('height')">高度铺满</button>
                         <button class="control-btn" data-fit="width" onclick="sendFitMode('width')">宽度铺满</button>
                         <button class="control-btn" data-fit="crop" onclick="sendFitMode('crop')">裁剪</button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px;color:rgba(255,255,255,0.65);">
+                        <span>动态过渡</span>
+                        <input id="dynamicFitTransitionSeconds" type="number" min="0.1" max="300" step="0.1" value="3" oninput="Controls.sendDynamicFitConfig()" style="width:58px;padding:4px 6px;border:0;border-radius:4px;background:rgba(255,255,255,0.1);color:#fff;text-align:center;">
+                        <span>秒，停留</span>
+                        <input id="dynamicFitHoldSeconds" type="number" min="0.1" max="300" step="0.1" value="2" oninput="Controls.sendDynamicFitConfig()" style="width:58px;padding:4px 6px;border:0;border-radius:4px;background:rgba(255,255,255,0.1);color:#fff;text-align:center;">
+                        <span>秒</span>
                     </div>
                 </div>
 
@@ -635,6 +643,10 @@
                     <h4>添加新模板</h4>
                     <input type="text" id="newTemplateName" placeholder="模板名称">
                     <textarea id="newTemplateContent" placeholder="模板内容"></textarea>
+                    <label for="templatePermissionProfile">Agent 权限策略</label>
+                    <select id="templatePermissionProfile" class="chat-template-permission">
+                        <option value="readonly">只读（文件搜索、网络查询）</option>
+                    </select>
                     <button class="chat-add-btn" onclick="Chat.addTemplate()">添加模板</button>
                 </div>
             </div>
@@ -669,6 +681,12 @@
                 <div class="chat-config-item" id="profileEditor" style="display:none; border:1px solid var(--border-color); border-radius:8px; padding:12px; margin-bottom:12px;">
                     <label>配置名称</label>
                     <input type="text" id="profileEditName" placeholder="例如: 本地模型">
+                    <label style="margin-top:8px;display:block" for="profileEditMode">调用模式</label>
+                    <select id="profileEditMode" style="width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
+                        <option value="llm">普通 LLM（直接调用接口）</option>
+                        <option value="agent">Pi Agent（服务器托管，只读）</option>
+                    </select>
+                    <p class="chat-config-hint">Pi Agent 由服务器启动和管理，只允许文件搜索及受限网络查询，不能修改文件。</p>
                     <label style="margin-top:8px;display:block">API URL</label>
                     <input type="text" id="profileEditApiUrl" placeholder="http://192.168.1.12:8080/v1/chat/completions">
                     <label style="margin-top:8px;display:block">模型</label>
@@ -936,6 +954,7 @@
                     <div class="floating-control-buttons">
                         <button class="floating-btn" data-fit="contain" onclick="FloatingControl.setFit('contain')">适应</button>
                         <button class="floating-btn" data-fit="cover" onclick="FloatingControl.setFit('cover')">铺满</button>
+                        <button class="floating-btn" data-fit="dynamic" onclick="FloatingControl.setFit('dynamic')">动态</button>
                         <button class="floating-btn" data-fit="crop" onclick="FloatingControl.setFit('crop')">裁剪</button>
                     </div>
                 </div>
