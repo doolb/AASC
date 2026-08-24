@@ -58,6 +58,8 @@
         let voiceRoute = null;
         let loadToken = 0;
         let loadAbortController = null;
+        let prefetchSlot = null;
+        let remoteActiveSentence = null;
 
         const nextPlaybackId = () => `text-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const getAudio = () => options.audio || (root.document && root.document.getElementById('ttsAudio'));
@@ -342,9 +344,15 @@
             }
         }
 
+        function clearPrefetchSlot() {
+            prefetchSlot = null;
+            remoteActiveSentence = null;
+        }
+
         function invalidatePlayback() {
             playbackId = nextPlaybackId();
             requestPending = false;
+            clearPrefetchSlot();
             clearAudio();
         }
 
@@ -377,21 +385,112 @@
             return token === loadToken && state !== 'stopped';
         }
 
-        function requestNextSentence() {
-            if (state !== 'playing' || requestPending) return;
-            if (sentenceIndex >= currentSentences.length) {
-                finishPage();
-                return;
-            }
-            requestPending = true;
+        function isSameSentenceLocation(data, targetPageIndex = pageIndex, targetSentenceIndex = sentenceIndex) {
+            return !!data
+                && data.playbackId === playbackId
+                && Number(data.pageIndex) === targetPageIndex
+                && Number(data.sentenceIndex) === targetSentenceIndex;
+        }
+
+        function isPrefetchSlotFor(data) {
+            return !!prefetchSlot && isSameSentenceLocation(data, prefetchSlot.pageIndex, prefetchSlot.sentenceIndex);
+        }
+
+        function isCurrentRemoteSentence() {
+            return !!remoteActiveSentence && isSameSentenceLocation(remoteActiveSentence);
+        }
+
+        function getCurrentDisplayId() {
+            if (typeof options.getDisplayId === 'function') return options.getDisplayId();
+            return typeof options.displayId === 'string' ? options.displayId : null;
+        }
+
+        function isRemoteVoiceRoute() {
+            const currentDisplayId = getCurrentDisplayId();
+            return !!voiceRoute?.voiceTargetDisplayId
+                && !!currentDisplayId
+                && voiceRoute.voiceTargetDisplayId !== currentDisplayId;
+        }
+
+        function sendSentenceRequest(targetSentenceIndex, prefetch = false) {
             send({
                 type: 'textSentenceTts',
                 playbackId,
                 pageIndex,
-                sentenceIndex,
-                text: currentSentences[sentenceIndex],
+                sentenceIndex: targetSentenceIndex,
+                text: currentSentences[targetSentenceIndex],
+                ...(prefetch ? { prefetch: true } : {}),
                 ...(voiceRoute ? { route: voiceRoute } : {})
             });
+        }
+
+        function requestPrefetchSentence() {
+            if (state !== 'playing') return;
+            const nextSentenceIndex = sentenceIndex + 1;
+            if (nextSentenceIndex >= currentSentences.length) return;
+            if (prefetchSlot) return;
+            prefetchSlot = {
+                playbackId,
+                pageIndex,
+                sentenceIndex: nextSentenceIndex,
+                text: currentSentences[nextSentenceIndex],
+                status: 'pending'
+            };
+            sendSentenceRequest(nextSentenceIndex, true);
+        }
+
+        function playTtsAudio(data) {
+            const audio = getAudio();
+            if (!audio) {
+                finishCurrentSentence();
+                return;
+            }
+            activeAudio = audio;
+            audio.src = data.audioUrl;
+            audio.onended = finishCurrentSentence;
+            audio.onerror = finishCurrentSentence;
+            const playResult = audio.play();
+            requestPrefetchSentence();
+            playResult.catch((error) => {
+                console.warn('文本 TTS 播放失败，跳过当前句', error);
+                finishCurrentSentence();
+            });
+        }
+
+        function consumePrefetchedSentence() {
+            if (!prefetchSlot || prefetchSlot.status !== 'ready' || !isSameSentenceLocation(prefetchSlot)) return false;
+            const cached = prefetchSlot;
+            prefetchSlot = null;
+            requestPending = false;
+            if (cached.audioUrl) {
+                playTtsAudio(cached);
+                return true;
+            }
+            remoteActiveSentence = {
+                playbackId: cached.playbackId,
+                pageIndex: cached.pageIndex,
+                sentenceIndex: cached.sentenceIndex
+            };
+            requestPrefetchSentence();
+            emitProgress('playing');
+            return true;
+        }
+
+        function requestNextSentence() {
+            if (state !== 'playing' || requestPending || isCurrentRemoteSentence()) return;
+            if (sentenceIndex >= currentSentences.length) {
+                finishPage();
+                return;
+            }
+            if (consumePrefetchedSentence()) return;
+            if (prefetchSlot && isSameSentenceLocation(prefetchSlot)) {
+                if (prefetchSlot.status === 'pending') requestPending = true;
+                if (prefetchSlot.status === 'failed') prefetchSlot = null;
+                if (requestPending) return;
+            }
+            requestPending = true;
+            sendSentenceRequest(sentenceIndex, false);
+            if (isRemoteVoiceRoute()) requestPrefetchSentence();
         }
 
         function preparePageSentences() {
@@ -412,6 +511,7 @@
 
         function finishPage() {
             requestPending = false;
+            clearPrefetchSlot();
             emitProgress('playing');
             if (pageIndex + 1 < pages.length) {
                 pageIndex += 1;
@@ -428,15 +528,13 @@
             if (state !== 'playing') return;
             requestPending = false;
             activeAudio = null;
+            remoteActiveSentence = null;
             sentenceIndex += 1;
             requestNextSentence();
         }
 
         function isCurrentResponse(data) {
-            return !!data
-                && data.playbackId === playbackId
-                && Number(data.pageIndex) === pageIndex
-                && Number(data.sentenceIndex) === sentenceIndex;
+            return isSameSentenceLocation(data);
         }
 
         async function decodeText(data, signal, isActive) {
@@ -566,32 +664,55 @@
         }
 
         function handleTtsAudio(data) {
-            if (!isCurrentResponse(data) || state !== 'playing') return;
-            requestPending = false;
-            const audio = getAudio();
-            if (!audio) {
-                finishCurrentSentence();
+            if (data?.prefetch) {
+                if (!isPrefetchSlotFor(data)) return;
+                prefetchSlot = {
+                    ...prefetchSlot,
+                    audioUrl: data.audioUrl,
+                    text: data.text,
+                    status: 'ready'
+                };
+                if (state === 'playing' && requestPending && isCurrentResponse(data)) {
+                    consumePrefetchedSentence();
+                }
                 return;
             }
-            activeAudio = audio;
-            audio.src = data.audioUrl;
-            audio.onended = finishCurrentSentence;
-            audio.onerror = finishCurrentSentence;
-            audio.play().catch((error) => {
-                console.warn('文本 TTS 播放失败，跳过当前句', error);
-                finishCurrentSentence();
-            });
+            if (!isCurrentResponse(data) || state !== 'playing') return;
+            requestPending = false;
+            playTtsAudio(data);
         }
 
         function handleTtsError(data) {
+            if (data?.prefetch) {
+                if (!isPrefetchSlotFor(data)) return;
+                prefetchSlot = null;
+                if (state === 'playing' && requestPending && isCurrentResponse(data)) {
+                    requestPending = false;
+                    requestNextSentence();
+                }
+                return;
+            }
             if (!isCurrentResponse(data)) return;
             requestPending = false;
             finishCurrentSentence();
         }
 
+        function handleTtsReady(data) {
+            if (!data?.prefetch || !isPrefetchSlotFor(data)) return;
+            prefetchSlot = {
+                ...prefetchSlot,
+                text: data.text || prefetchSlot.text,
+                status: 'ready'
+            };
+            if (state === 'playing' && requestPending && isCurrentResponse(data)) {
+                consumePrefetchedSentence();
+            }
+        }
+
         function handleTtsFinished(data) {
             if (!isCurrentResponse(data)) return;
             requestPending = false;
+            remoteActiveSentence = null;
             finishCurrentSentence();
         }
 
@@ -624,6 +745,7 @@
             handleControl,
             handleTtsAudio,
             handleTtsError,
+            handleTtsReady,
             handleTtsFinished,
             applyStyle,
             loadRoute(route) { voiceRoute = normalizeRoute(route); },

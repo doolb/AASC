@@ -178,3 +178,115 @@ test('远程文本播放完成回执按当前句定位推进下一句', () => {
     assert.equal(sent[1].sentenceIndex, 1);
     assert.equal(sent[1].text, '第二句。');
 });
+
+test('当前句音频开始播放后只预取一次下一句', () => {
+    const sent = [];
+    const audio = {
+        paused: true,
+        play: () => Promise.resolve(),
+        pause() {},
+        addEventListener() {},
+        removeEventListener() {}
+    };
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一句。第二句。'],
+        audio
+    });
+
+    player.start();
+    player.handleTtsAudio({ ...sent[0], audioUrl: '/tts/first.wav' });
+    player.handleTtsAudio({ ...sent[0], audioUrl: '/tts/first-duplicate.wav' });
+
+    const prefetchRequests = sent.filter((message) => message.prefetch === true);
+    assert.equal(prefetchRequests.length, 1);
+    assert.equal(prefetchRequests[0].sentenceIndex, 1);
+    assert.equal(prefetchRequests[0].text, '第二句。');
+});
+
+test('预取音频先缓存，当前句结束后消费缓存且不重复普通请求', () => {
+    const sent = [];
+    const played = [];
+    const audio = {
+        paused: true,
+        set src(value) { played.push(value); },
+        get src() { return played.at(-1); },
+        play: () => Promise.resolve(),
+        pause() {},
+        addEventListener() {},
+        removeEventListener() {}
+    };
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一句。第二句。'],
+        audio
+    });
+
+    player.start();
+    player.handleTtsAudio({ ...sent[0], audioUrl: '/tts/first.wav' });
+    player.handleTtsAudio({ ...sent[1], audioUrl: '/tts/second-prefetch.wav', prefetch: true });
+
+    assert.deepEqual(played, ['/tts/first.wav']);
+    player.finishCurrentSentence();
+
+    assert.deepEqual(played, ['/tts/first.wav', '/tts/second-prefetch.wav']);
+    assert.equal(sent.filter((message) => message.sentenceIndex === 1 && !message.prefetch).length, 0);
+});
+
+test('当前句结束时等待未完成预取，预取失败后回退普通请求', () => {
+    const sent = [];
+    const audio = {
+        paused: true,
+        play: () => Promise.resolve(),
+        pause() {},
+        addEventListener() {},
+        removeEventListener() {}
+    };
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一句。第二句。'],
+        audio
+    });
+
+    player.start();
+    player.handleTtsAudio({ ...sent[0], audioUrl: '/tts/first.wav' });
+    player.finishCurrentSentence();
+
+    assert.equal(sent.length, 2);
+    player.handleTtsError({ ...sent[1], prefetch: true, message: '预取失败' });
+
+    assert.equal(sent.length, 3);
+    assert.equal(sent[2].sentenceIndex, 1);
+    assert.equal(sent[2].prefetch, undefined);
+    assert.equal(sent[2].text, '第二句。');
+});
+
+test('切换播放标识后忽略旧预取回包', () => {
+    const sent = [];
+    const played = [];
+    const audio = {
+        paused: true,
+        set src(value) { played.push(value); },
+        get src() { return played.at(-1); },
+        play: () => Promise.resolve(),
+        pause() {},
+        addEventListener() {},
+        removeEventListener() {},
+        removeAttribute() {}
+    };
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一页第一句。第二句。', '第二页第一句。'],
+        audio
+    });
+
+    player.start();
+    player.handleTtsAudio({ ...sent[0], audioUrl: '/tts/page1-first.wav' });
+    const stalePrefetch = { ...sent[1], audioUrl: '/tts/stale-prefetch.wav', prefetch: true };
+    player.handleControl('next');
+    player.handleTtsAudio(stalePrefetch);
+
+    assert.deepEqual(played, ['/tts/page1-first.wav']);
+    assert.equal(sent.at(-1).pageIndex, 1);
+    assert.equal(sent.at(-1).sentenceIndex, 0);
+});

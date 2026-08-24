@@ -68,6 +68,39 @@ test('服务器注册远程文本播放回执路由并调用文本 TTS 服务', 
     }]);
 });
 
+test('服务器注册远程文本预取 ready 路由并调用文本 TTS 服务', () => {
+    const handlers = new Map();
+    const readyMessages = [];
+    const wsServer = {
+        registerHandler(type, handler) {
+            handlers.set(type, handler);
+        }
+    };
+    const textMediaTtsService = {
+        async handleSentenceRequest() {},
+        handleSentenceFinished() {},
+        handleSentenceReady(displayId, data) {
+            readyMessages.push({ displayId, data });
+        }
+    };
+
+    registerTextMediaDisplayHandlers({
+        wsServer,
+        displayTypes: [],
+        handleDisplayMessage: () => {}
+    }, textMediaTtsService);
+
+    assert.equal(typeof handlers.get('textSentenceTtsReady'), 'function');
+    handlers.get('textSentenceTtsReady')(
+        { originDisplayId: 'source', playbackId: 'p-1', pageIndex: 0, sentenceIndex: 1, prefetch: true },
+        { displayId: 'speaker' }
+    );
+    assert.deepEqual(readyMessages, [{
+        displayId: 'speaker',
+        data: { originDisplayId: 'source', playbackId: 'p-1', pageIndex: 0, sentenceIndex: 1, prefetch: true }
+    }]);
+});
+
 test('文本进度仅持久化恢复字段并转发给控制端', () => {
     const displayData = { state: {} };
     const persisted = [];

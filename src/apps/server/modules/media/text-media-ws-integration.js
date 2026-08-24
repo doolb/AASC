@@ -24,6 +24,12 @@ function registerTextMediaDisplayHandlers({ wsServer, displayTypes, handleDispla
     wsServer.registerHandler('textSentenceTtsFinished', (data, ctx) => {
         textMediaTtsService.handleSentenceFinished(ctx.displayId, data);
     });
+
+    wsServer.registerHandler('textSentenceTtsReady', (data, ctx) => {
+        if (typeof textMediaTtsService.handleSentenceReady === 'function') {
+            textMediaTtsService.handleSentenceReady(ctx.displayId, data);
+        }
+    });
 }
 
 /**

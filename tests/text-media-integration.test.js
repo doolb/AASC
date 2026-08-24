@@ -19,9 +19,14 @@ test('显示端保留逐句 TTS 请求、定位回包和失败跳过协议', () 
     assert.match(display, /src="\/js\/sentence-splitter\.js"/u);
     assert.match(display, /data\.textPlayback[\s\S]*?TextMediaPlayer\.handleTtsAudio\(data\)/u);
     assert.match(display, /data\.textPlaybackRemote[\s\S]*?handleRemoteTextPlayback\(data\)/u);
+    assert.match(display, /data\.type === 'textSentenceTtsReady'[\s\S]*?TextMediaPlayer\.handleTtsReady\(data\)/u);
     assert.match(display, /textSentenceTtsFinished/u);
+    assert.match(display, /remotePrefetchedTextPlayback/u);
+    assert.match(display, /data\.prefetch[\s\S]*?remotePrefetchedTextPlayback/u);
     assert.match(display, /data\.type === 'textSentenceTtsError'[\s\S]*?TextMediaPlayer\.handleTtsError\(data\)/u);
     assert.match(player, /type:\s*'textSentenceTts'/u);
+    assert.match(player, /prefetch:\s*true/u);
+    assert.match(player, /handleTtsReady/u);
     assert.match(player, /playbackId,[\s\S]*?pageIndex,[\s\S]*?sentenceIndex,[\s\S]*?text:[\s\S]*?route/u);
 });
 

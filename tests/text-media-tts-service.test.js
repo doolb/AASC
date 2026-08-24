@@ -301,3 +301,140 @@ test('远程目标取消后旧上下文失效，不再接受迟到回执', () =>
 
     assert.deepEqual(messages, []);
 });
+
+test('本地预取回包带 prefetch 定位且重复预取只占一个生成槽', async () => {
+    let releasePrefetch;
+    const generated = [];
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async (text) => {
+            generated.push(text);
+            if (generated.length === 1) {
+                await new Promise((resolve) => { releasePrefetch = resolve; });
+            }
+            return '/tmp/prefetch.wav';
+        },
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {}
+    });
+
+    const first = service.handleSentenceRequest('source', {
+        playbackId: 'p-prefetch',
+        pageIndex: 0,
+        sentenceIndex: 1,
+        text: '预取句。',
+        prefetch: true
+    });
+    const duplicate = service.handleSentenceRequest('source', {
+        playbackId: 'p-prefetch',
+        pageIndex: 0,
+        sentenceIndex: 1,
+        text: '预取句。',
+        prefetch: true
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(generated, ['预取句。']);
+    releasePrefetch();
+    await first;
+    await new Promise((resolve) => setImmediate(resolve));
+    await duplicate;
+
+    assert.deepEqual(messages, [{
+        displayId: 'source',
+        message: {
+            type: 'tts',
+            action: 'playAudio',
+            textPlayback: true,
+            prefetch: true,
+            playbackId: 'p-prefetch',
+            pageIndex: 0,
+            sentenceIndex: 1,
+            audioUrl: '/uploads/tts/prefetch.wav',
+            text: '预取句。'
+        }
+    }]);
+});
+
+test('远程预取下发到目标缓存并向源端发送可定位 ready', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/remote-prefetch.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: () => ({ voicePlayback: true })
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-remote-prefetch',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-remote-prefetch',
+        pageIndex: 0,
+        sentenceIndex: 1,
+        text: '远程预取句。',
+        prefetch: true
+    });
+
+    assert.deepEqual(messages, [{
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'playAudio',
+            textPlaybackRemote: true,
+            prefetch: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-remote-prefetch',
+            pageIndex: 0,
+            sentenceIndex: 1,
+            audioUrl: '/uploads/tts/remote-prefetch.wav',
+            text: '远程预取句。'
+        }
+    }, {
+        displayId: 'source',
+        message: {
+            type: 'textSentenceTtsReady',
+            prefetch: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-remote-prefetch',
+            pageIndex: 0,
+            sentenceIndex: 1,
+            text: '远程预取句。'
+        }
+    }]);
+});
+
+test('预取生成失败带 prefetch 标志且不影响当前句定位', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => {
+            throw new Error('预取生成失败');
+        },
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {}
+    });
+
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-prefetch-error',
+        pageIndex: 2,
+        sentenceIndex: 3,
+        text: '失败句。',
+        prefetch: true
+    });
+
+    assert.deepEqual(messages, [{
+        displayId: 'source',
+        message: {
+            type: 'textSentenceTtsError',
+            playbackId: 'p-prefetch-error',
+            pageIndex: 2,
+            sentenceIndex: 3,
+            prefetch: true,
+            message: '预取生成失败'
+        }
+    }]);
+});

@@ -34,6 +34,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             playbackId: data?.playbackId,
             pageIndex: data?.pageIndex,
             sentenceIndex: data?.sentenceIndex,
+            ...(data?.prefetch ? { prefetch: true } : {}),
             message
         });
     }
@@ -130,7 +131,8 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             token: Symbol(data.playbackId),
             ...normalizeRoute(originDisplayId, route),
             explicitRoute,
-            pendingRemoteSentences: new Map()
+            pendingRemoteSentences: new Map(),
+            prefetchSlot: null
         };
     }
 
@@ -191,8 +193,39 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             token: samePlayback ? previous.token : Symbol(context.playbackId),
             ...normalizeRoute(originDisplayId, context),
             explicitRoute: context.explicitRoute !== false,
-            pendingRemoteSentences: samePlayback ? previous.pendingRemoteSentences : new Map()
+            pendingRemoteSentences: samePlayback ? previous.pendingRemoteSentences : new Map(),
+            prefetchSlot: samePlayback ? previous.prefetchSlot : null
         });
+    }
+
+    function isSameSentence(left, right) {
+        return !!left && !!right
+            && left.playbackId === right.playbackId
+            && Number(left.pageIndex) === Number(right.pageIndex)
+            && Number(left.sentenceIndex) === Number(right.sentenceIndex);
+    }
+
+    function beginPrefetch(playbackContext, data) {
+        if (!data?.prefetch) return true;
+        const slot = playbackContext.prefetchSlot;
+        if (slot) return false;
+        playbackContext.prefetchSlot = {
+            playbackId: data.playbackId,
+            pageIndex: data.pageIndex,
+            sentenceIndex: data.sentenceIndex,
+            text: data.text,
+            status: 'pending'
+        };
+        return true;
+    }
+
+    function finishPrefetch(playbackContext, data, status) {
+        if (!data?.prefetch || !isSameSentence(playbackContext.prefetchSlot, data)) return;
+        if (status === 'ready') {
+            playbackContext.prefetchSlot = { ...playbackContext.prefetchSlot, status: 'ready' };
+            return;
+        }
+        playbackContext.prefetchSlot = null;
     }
 
     /**
@@ -305,6 +338,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             sendError(displayId, data, routeResult.message);
             return;
         }
+        if (!beginPrefetch(playbackContext, data)) return;
         const requestToken = playbackContext.token;
         const targetDisplayId = routeResult.targetDisplayId;
 
@@ -319,6 +353,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
                     playbackId: data.playbackId,
                     pageIndex: data.pageIndex,
                     sentenceIndex: data.sentenceIndex,
+                    ...(data.prefetch ? { prefetch: true } : {}),
                     audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
                     text: data.text
                 };
@@ -327,6 +362,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
                         ...baseMessage,
                         textPlayback: true
                     });
+                    finishPrefetch(playbackContext, data, 'clear');
                     return;
                 }
                 sendToDisplay(targetDisplayId, {
@@ -336,9 +372,23 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
                     voiceTargetDisplayId: targetDisplayId
                 });
                 registerPendingRemoteSentence(playbackContext, targetDisplayId, data);
+                if (data.prefetch) {
+                    finishPrefetch(playbackContext, data, 'ready');
+                    sendToDisplay(displayId, {
+                        type: 'textSentenceTtsReady',
+                        prefetch: true,
+                        originDisplayId: displayId,
+                        voiceTargetDisplayId: targetDisplayId,
+                        playbackId: data.playbackId,
+                        pageIndex: data.pageIndex,
+                        sentenceIndex: data.sentenceIndex,
+                        text: data.text
+                    });
+                }
             } catch (error) {
                 // 已取消的旧请求不再发送失败提示，避免显示端误跳过新播放的句子。
                 if (!isPlaybackActive(displayId, data.playbackId, requestToken)) return;
+                finishPrefetch(playbackContext, data, 'clear');
 
                 const message = error?.message || 'TTS 生成失败';
                 logError('TextMediaTTS', `显示端 ${displayId} 分句合成失败: ${message}`);
@@ -366,6 +416,9 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             && hasVoicePlayback(targetDisplayId, false);
         if (!isValidContext) return;
         if (!consumePendingRemoteSentence(context, targetDisplayId, data)) return;
+        if (context.prefetchSlot && !isSameSentence(context.prefetchSlot, data)) {
+            context.prefetchSlot = null;
+        }
 
         sendToDisplay(originDisplayId, {
             type: 'textSentenceTtsFinished',
@@ -390,9 +443,14 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
         }
     }
 
+    function handleSentenceReady() {
+        // 当前 ready 由服务端生成并下发给源显示端；保留入口仅用于兼容未来远程端主动 ready 上报。
+    }
+
     return {
         handleSentenceRequest,
         handleSentenceFinished,
+        handleSentenceReady,
         setDisplayRoute,
         clearDisplayRoute,
         setPlaybackContext,

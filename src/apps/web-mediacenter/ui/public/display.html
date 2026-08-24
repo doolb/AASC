@@ -88,6 +88,7 @@
             status: mediaTextStatus,
             audio: ttsAudio,
             getRotation: () => currentRotation,
+            getDisplayId: () => (typeof displayId === 'string' ? displayId : null),
             send(message) {
                 if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                     displayWs.send(JSON.stringify(message));
@@ -109,6 +110,8 @@
         let autoTtsEnabled = true;
         let ttsQueue = [];
         let isPlayingTts = false;
+        let remoteTextPlayback = null;
+        let remotePrefetchedTextPlayback = null;
         let voiceSupported = false;
         let isListening = false;
         let mediaRecorder = null;
@@ -1160,6 +1163,7 @@
                 queueTts({ audioUrl: data.audioUrl, text: data.text });
             } else if (data.action === 'stop') {
                 ttsQueue = [];
+                clearRemoteTextPlayback();
                 ttsAudio.pause();
                 ttsAudio.currentTime = 0;
                 isPlayingTts = false;
@@ -1181,25 +1185,44 @@
             }));
         }
 
-        function handleRemoteTextPlayback(data) {
+        function isSameRemoteTextPlayback(left, right) {
+            return !!left && !!right
+                && left.originDisplayId === right.originDisplayId
+                && left.voiceTargetDisplayId === right.voiceTargetDisplayId
+                && left.playbackId === right.playbackId;
+        }
+
+        function clearRemoteTextPlayback() {
+            remoteTextPlayback = null;
+            remotePrefetchedTextPlayback = null;
+        }
+
+        function playRemoteTextPlayback(data) {
             const audio = ttsAudio;
             if (!audio || !data.audioUrl) {
                 sendTextSentenceTtsFinished(data, 'failed');
                 return;
             }
+            remoteTextPlayback = data;
             // 远程文本播报只负责发声，不改变本机文本分页状态；结束/失败后由源显示端推进句子。
             const cleanup = () => {
                 audio.removeEventListener('ended', onEnded);
                 audio.removeEventListener('error', onError);
             };
-            const onEnded = () => {
+            const finishRemoteSentence = (status) => {
+                const finishedData = remoteTextPlayback;
                 cleanup();
-                sendTextSentenceTtsFinished(data, 'ended');
+                if (finishedData) sendTextSentenceTtsFinished(finishedData, status);
+                if (remotePrefetchedTextPlayback && isSameRemoteTextPlayback(finishedData, remotePrefetchedTextPlayback)) {
+                    const cached = remotePrefetchedTextPlayback;
+                    remotePrefetchedTextPlayback = null;
+                    playRemoteTextPlayback(cached);
+                    return;
+                }
+                remoteTextPlayback = null;
             };
-            const onError = () => {
-                cleanup();
-                sendTextSentenceTtsFinished(data, 'failed');
-            };
+            const onEnded = () => finishRemoteSentence('ended');
+            const onError = () => finishRemoteSentence('failed');
             audio.addEventListener('ended', onEnded, { once: true });
             audio.addEventListener('error', onError, { once: true });
             audio.src = data.audioUrl;
@@ -1207,6 +1230,18 @@
                 console.warn('远程文本 TTS 播放失败', error);
                 onError();
             });
+        }
+
+        function handleRemoteTextPlayback(data) {
+            if (data.prefetch) {
+                if (remotePrefetchedTextPlayback) return;
+                remotePrefetchedTextPlayback = data;
+                return;
+            }
+            if (!isSameRemoteTextPlayback(remoteTextPlayback, data)) {
+                remotePrefetchedTextPlayback = null;
+            }
+            playRemoteTextPlayback(data);
         }
         
         function handleReminder(data) {
@@ -3507,6 +3542,9 @@
                     } else if (data.type === 'textSentenceTtsError') {
                         TextMediaPlayer.handleTtsError(data);
                         sendCommandAck('textSentenceTtsError', true, 'skip sentence');
+                    } else if (data.type === 'textSentenceTtsReady') {
+                        TextMediaPlayer.handleTtsReady(data);
+                        sendCommandAck('textSentenceTtsReady', true, 'prefetch ready');
                     } else if (data.type === 'textSentenceTtsFinished') {
                         TextMediaPlayer.handleTtsFinished(data);
                         sendCommandAck('textSentenceTtsFinished', true, data.status || 'ended');
@@ -3822,6 +3860,7 @@
                 // 语音播放能力关闭 → 停止 TTS，清空队列
                 if (!data.capabilities.voicePlayback) {
                     ttsQueue = [];
+                    clearRemoteTextPlayback();
                     ttsAudio.pause();
                     ttsAudio.currentTime = 0;
                     isPlayingTts = false;
