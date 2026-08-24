@@ -124,3 +124,109 @@ test('无效分句请求返回带定位标签的错误消息且不进入 TTS', a
         message: 'text 不能为空'
     }]);
 });
+
+test('文本路由目标为远程显示端时仅向选中且在线启用语音的设备下发远程音频', async () => {
+    const messages = [];
+    const online = new Map([
+        ['source', { voicePlayback: false }],
+        ['speaker', { voicePlayback: true }],
+        ['unselected', { voicePlayback: true }]
+    ]);
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/remote.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: (displayId) => online.get(displayId) || null
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-remote',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-remote',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        text: '远程播报。',
+        route: { voiceTargetDisplayId: 'unselected' }
+    });
+
+    assert.deepEqual(messages, [{
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'playAudio',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-remote',
+            pageIndex: 0,
+            sentenceIndex: 0,
+            audioUrl: '/uploads/tts/remote.wav',
+            text: '远程播报。'
+        }
+    }]);
+});
+
+test('远程播放结束回执校验通过后转发给源显示端推进句子', () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/unused.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: () => ({ voicePlayback: true })
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-finished',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    service.handleSentenceFinished('speaker', {
+        originDisplayId: 'source',
+        playbackId: 'p-finished',
+        pageIndex: 1,
+        sentenceIndex: 2,
+        status: 'ended'
+    });
+
+    assert.deepEqual(messages, [{
+        displayId: 'source',
+        message: {
+            type: 'textSentenceTtsFinished',
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-finished',
+            pageIndex: 1,
+            sentenceIndex: 2,
+            status: 'ended'
+        }
+    }]);
+});
+
+test('远程目标取消后旧上下文失效，不再接受迟到回执', () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/unused.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: () => ({ voicePlayback: true })
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-cancel',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    service.cancel('source', 'p-cancel');
+    service.handleSentenceFinished('speaker', {
+        originDisplayId: 'source',
+        playbackId: 'p-cancel',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        status: 'ended'
+    });
+
+    assert.deepEqual(messages, []);
+});

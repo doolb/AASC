@@ -275,7 +275,8 @@ voiceCommand.init(config.get('voiceCommand', {}));
 const textMediaTtsService = createTextMediaTtsService({
     generateTTS: (text) => tts.generateTTS(text),
     sendToDisplay,
-    logError
+    logError,
+    getDisplayCapabilities
 });
 // 加载指令分级路由配置
 const savedRouting = config.get('voiceCommand.routing');
@@ -2507,6 +2508,77 @@ function getDisplayCapabilities(displayId) {
     return displayData.state.capabilities || DEFAULT_CAPABILITIES;
 }
 
+function normalizeDisplayIdList(displayIds) {
+    if (!Array.isArray(displayIds)) return [];
+    const seen = new Set();
+    const normalized = [];
+    for (const displayId of displayIds) {
+        if (typeof displayId !== 'string' || !displayId || seen.has(displayId)) continue;
+        seen.add(displayId);
+        normalized.push(displayId);
+    }
+    return normalized;
+}
+
+function getOnlineSelectedDisplayIds(displayIds) {
+    return normalizeDisplayIdList(displayIds).filter((displayId) => displayClients.has(displayId));
+}
+
+function hasManualVoicePlayback(displayId) {
+    const capabilities = getDisplayCapabilities(displayId);
+    return capabilities?.voicePlayback === true;
+}
+
+function getSelectedVoiceDisplayIds(displayIds) {
+    return getOnlineSelectedDisplayIds(displayIds).filter((displayId) => hasManualVoicePlayback(displayId));
+}
+
+function resolveTextVoiceTarget(originDisplayId, selectedDisplayIds) {
+    const onlineSelectedIds = getOnlineSelectedDisplayIds(selectedDisplayIds);
+    if (onlineSelectedIds.includes(originDisplayId) && hasManualVoicePlayback(originDisplayId)) {
+        return originDisplayId;
+    }
+    return onlineSelectedIds.find((displayId) => hasManualVoicePlayback(displayId)) || null;
+}
+
+function buildTextVoiceRoute(originDisplayId, selectedDisplayIds) {
+    const normalizedSelectedIds = normalizeDisplayIdList(selectedDisplayIds);
+    const selectedVoiceDisplayIds = getSelectedVoiceDisplayIds(normalizedSelectedIds);
+    return {
+        selectedDisplayIds: normalizedSelectedIds,
+        selectedVoiceDisplayIds,
+        voiceTargetDisplayId: resolveTextVoiceTarget(originDisplayId, normalizedSelectedIds)
+    };
+}
+
+function applyTextMediaRoute(media, originDisplayId, selectedDisplayIds) {
+    if (!media || media.mediaType !== 'text') return media;
+    const route = buildTextVoiceRoute(originDisplayId, selectedDisplayIds);
+    return {
+        ...media,
+        ...route,
+        route
+    };
+}
+
+function buildTextPlaylistVoiceRoutes(selectedDisplayIds) {
+    const normalizedSelectedIds = normalizeDisplayIdList(selectedDisplayIds);
+    const selectedVoiceDisplayIds = getSelectedVoiceDisplayIds(normalizedSelectedIds);
+    const voiceRouteByDisplayId = {};
+    for (const originDisplayId of normalizedSelectedIds) {
+        voiceRouteByDisplayId[originDisplayId] = {
+            selectedDisplayIds: normalizedSelectedIds,
+            selectedVoiceDisplayIds,
+            voiceTargetDisplayId: resolveTextVoiceTarget(originDisplayId, normalizedSelectedIds)
+        };
+    }
+    return {
+        selectedDisplayIds: normalizedSelectedIds,
+        selectedVoiceDisplayIds,
+        voiceRouteByDisplayId
+    };
+}
+
 function getDisplaysWithCapability(capabilityName) {
     const result = [];
     displayClients.forEach((data, id) => {
@@ -3195,8 +3267,10 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             height: data.height
         });
     } else if (data.type === 'playlistProgress') {
+        let currentPlaylistItems = [];
         if (displayData && displayData.state.currentPlaylist) {
             const previousIndex = displayData.state.currentPlaylist.index;
+            currentPlaylistItems = displayData.state.currentPlaylist.startData?.playlist || [];
             displayData.state.currentPlaylist.index = data.index;
             displayData.state.currentPlaylist.state = data.state;
             // 文本列表不使用媒体秒数，按页面和句子断点恢复；字段缺失时保留旧版本兼容语义。
@@ -3234,6 +3308,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             fileName: data.fileName,
             url: data.url,
             mediaType: data.mediaType,
+            tempPreviewKey: currentPlaylistItems[data.index || 0]?.tempPreviewKey,
             width: data.width,
             height: data.height,
             currentTime: data.currentTime,
@@ -3697,33 +3772,34 @@ async function handleControlMessageFallback(data, ws) {
                     displayIds.forEach(id => {
                         const dd = displayClients.get(id);
                         if (dd) {
+                            const mediaForDisplay = applyTextMediaRoute(data.media, id, displayIds);
                             if (dd.state.currentPlaylist) {
                                 dd.state.currentPlaylist = null;
                                 persistDisplayState(dd, { currentPlaylist: null });
                             }
-                            if (data.media.temp) {
+                            if (mediaForDisplay.temp) {
                                 // 记录临时媒体信息：控制端刷新后用于裁剪预览区占位提示
                                 dd.state.lastTempMedia = {
-                                    fileName: data.media.fileName,
-                                    mediaType: data.media.mediaType,
-                                    width: data.media.width,
-                                    height: data.media.height
+                                    fileName: mediaForDisplay.fileName,
+                                    mediaType: mediaForDisplay.mediaType,
+                                    width: mediaForDisplay.width,
+                                    height: mediaForDisplay.height
                                 };
                                 // 临时媒体也更新当前媒体（仅内存不持久化），
                                 // 避免 displayState 恢复旧媒体顶掉刷新后的占位提示
-                                dd.state.currentMedia = data.media;
+                                dd.state.currentMedia = mediaForDisplay;
                                 dd.state.currentMediaProgress = null;
                             } else {
                                 dd.state.lastTempMedia = null;
-                                dd.state.currentMedia = data.media;
+                                dd.state.currentMedia = mediaForDisplay;
                                 dd.state.currentMediaProgress = null;
                                 persistDisplayState(dd, {
-                                    currentMedia: data.media,
+                                    currentMedia: mediaForDisplay,
                                     currentMediaProgress: null
                                 });
                             }
-                            log('系统', `${data.media.temp ? '临时媒体' : '媒体'}发送到显示端: ${id}`);
-                            sendToDisplay(id, data.media);
+                            log('系统', `${mediaForDisplay.temp ? '临时媒体' : '媒体'}发送到显示端: ${id}`);
+                            sendToDisplay(id, mediaForDisplay);
                         }
                     });
                     return;
@@ -3750,42 +3826,68 @@ async function handleControlMessageFallback(data, ws) {
                                 return;
                             }
                             const listId = 'pl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                            const voiceRouteByDisplayId = buildTextPlaylistVoiceRoutes(displayIds);
                             const startData = {
                                 listId, playlist,
                                 interval: data.interval || 0,
                                 loop: !!data.loop,
-                                announceName: !!data.announceName
+                                announceName: !!data.announceName,
+                                selectedDisplayIds: voiceRouteByDisplayId.selectedDisplayIds,
+                                selectedVoiceDisplayIds: voiceRouteByDisplayId.selectedVoiceDisplayIds,
+                                voiceRouteByDisplayId: voiceRouteByDisplayId.voiceRouteByDisplayId
                             };
-                            // 控制端刷新只需要恢复当前项文件名和预览元数据；临时列表不把 base64 放入状态，
-                            // 避免 getState/配置同步携带整批音频内容。
-                            const currentPlaylist = {
-                                startData: data.temp ? {
+                            const buildStartDataForDisplay = (id, playlistForDisplay) => {
+                                const route = voiceRouteByDisplayId.voiceRouteByDisplayId[id] || buildTextVoiceRoute(id, displayIds);
+                                return {
                                     ...startData,
-                                    temp: true,
-                                    playlist: playlist.map(item => ({
-                                        url: item.url,
-                                        fileName: item.fileName,
-                                        mediaType: item.mediaType,
-                                        format: item.format,
-                                        width: item.width,
-                                        height: item.height
-                                    }))
-                                } : startData,
-                                index: 0,
-                                state: 'playing',
-                                currentTime: 0,
-                                duration: 0,
-                                currentTextPage: 0,
-                                currentTextPageTotal: 0,
-                                currentTextSentence: 0,
-                                currentTextSentenceTotal: 0,
-                                currentTextFormat: null,
-                                temp: !!data.temp
+                                    playlist: playlistForDisplay || playlist,
+                                    selectedDisplayIds: route.selectedDisplayIds,
+                                    selectedVoiceDisplayIds: route.selectedVoiceDisplayIds,
+                                    voiceTargetDisplayId: route.voiceTargetDisplayId,
+                                    voiceRouteByDisplayId: voiceRouteByDisplayId.voiceRouteByDisplayId
+                                };
                             };
+                            const tempPlaylistMetadata = data.temp ? playlist.map(item => ({
+                                fileName: item.fileName,
+                                mediaType: item.mediaType,
+                                mimeType: item.mimeType,
+                                format: item.format,
+                                width: item.width,
+                                height: item.height,
+                                tempPreviewKey: item.tempPreviewKey
+                            })) : null;
                             const sentIds = [];
                             displayIds.forEach(id => {
                                 const dd = displayClients.get(id);
                                 if (!dd) return;
+                                const statePlaylist = data.temp ? tempPlaylistMetadata.map(item => ({
+                                    fileName: item.fileName,
+                                    mediaType: item.mediaType,
+                                    mimeType: item.mimeType,
+                                    format: item.format,
+                                    width: item.width,
+                                    height: item.height,
+                                    tempPreviewKey: item.tempPreviewKey
+                                })) : playlist;
+                                const stateStartData = {
+                                    ...buildStartDataForDisplay(id, statePlaylist),
+                                    temp: !!data.temp
+                                };
+                                // 控制端刷新只需要恢复当前项文件名和预览元数据；临时列表不把 base64 放入状态，
+                                // 避免 getState/配置同步携带整批音频内容；语音路由字段仍需保留以支持重连恢复。
+                                const currentPlaylist = {
+                                    startData: stateStartData,
+                                    index: 0,
+                                    state: 'playing',
+                                    currentTime: 0,
+                                    duration: 0,
+                                    currentTextPage: 0,
+                                    currentTextPageTotal: 0,
+                                    currentTextSentence: 0,
+                                    currentTextSentenceTotal: 0,
+                                    currentTextFormat: null,
+                                    temp: !!data.temp
+                                };
                                 // 批量临时播放开始，清除单文件临时媒体记录（避免陈旧占位）
                                 if (data.temp) {
                                     dd.state.lastTempMedia = null;
@@ -3803,10 +3905,21 @@ async function handleControlMessageFallback(data, ws) {
                                         currentMediaProgress: null
                                     });
                                 }
-                                sendToDisplay(id, { type: 'playlistStart', ...startData, temp: !!data.temp });
+                                sendToDisplay(id, {
+                                    type: 'playlistStart',
+                                    ...buildStartDataForDisplay(id, playlist),
+                                    temp: !!data.temp
+                                });
                                 sentIds.push(id);
                             });
-                            ws.send(JSON.stringify({ type: 'playlistStarted', listId, total: playlist.length, displayIds: sentIds }));
+                            ws.send(JSON.stringify({
+                                type: 'playlistStarted',
+                                listId,
+                                total: playlist.length,
+                                displayIds: sentIds,
+                                temp: !!data.temp,
+                                ...(tempPlaylistMetadata ? { playlist: tempPlaylistMetadata } : {})
+                            }));
                         } catch (err) {
                             logError('批量播放', `生成列表失败: ${err.message}`);
                             ws.send(JSON.stringify({ type: 'playlistError', message: '生成播放列表失败: ' + err.message }));

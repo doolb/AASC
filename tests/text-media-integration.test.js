@@ -18,9 +18,11 @@ test('显示端保留逐句 TTS 请求、定位回包和失败跳过协议', () 
 
     assert.match(display, /src="\/js\/sentence-splitter\.js"/u);
     assert.match(display, /data\.textPlayback[\s\S]*?TextMediaPlayer\.handleTtsAudio\(data\)/u);
+    assert.match(display, /data\.textPlaybackRemote[\s\S]*?handleRemoteTextPlayback\(data\)/u);
+    assert.match(display, /textSentenceTtsFinished/u);
     assert.match(display, /data\.type === 'textSentenceTtsError'[\s\S]*?TextMediaPlayer\.handleTtsError\(data\)/u);
     assert.match(player, /type:\s*'textSentenceTts'/u);
-    assert.match(player, /playbackId,[\s\S]*?pageIndex,[\s\S]*?sentenceIndex,[\s\S]*?text:/u);
+    assert.match(player, /playbackId,[\s\S]*?pageIndex,[\s\S]*?sentenceIndex,[\s\S]*?text:[\s\S]*?route/u);
 });
 
 // 防止服务器启动时遗漏文本协议路由，致使显示端请求落入通用回退或无响应。
@@ -31,9 +33,30 @@ test('服务器启动注册 textSentenceTts 路由并接入文本媒体服务', 
     assert.match(server, /createTextMediaTtsService/u);
     assert.match(server, /registerTextMediaDisplayHandlers\([\s\S]*?textMediaTtsService/u);
     assert.match(integration, /wsServer\.registerHandler\('textSentenceTts'/u);
+    assert.match(integration, /wsServer\.registerHandler\('textSentenceTtsFinished'/u);
     assert.match(integration, /handleSentenceRequest\(ctx\.displayId, data\)/u);
+    assert.match(integration, /handleSentenceFinished\(ctx\.displayId, data\)/u);
     assert.match(integration, /data\.action === 'textStyle'/u);
     assert.match(integration, /data\.action === 'textPlayback'/u);
+});
+
+test('控制端能力编辑器说明 voicePlayback 是手动语音路由开关', () => {
+    const displayList = readFile('src/apps/web-mediacenter/ui/public/js/display-list.js');
+    const deviceList = readFile('src/apps/web-mediacenter/ui/public/js/device-list.js');
+
+    assert.match(displayList, /语音播放为手动路由开关/u);
+    assert.match(deviceList, /语音播放为手动路由开关/u);
+});
+
+test('服务器文本媒体和播放列表协议下发并持久化选中语音目标', () => {
+    const server = readFile('src/apps/server/boot/server-app.js');
+
+    assert.match(server, /resolveTextVoiceTarget/u);
+    assert.match(server, /selectedVoiceDisplayIds/u);
+    assert.match(server, /voiceTargetDisplayId/u);
+    assert.match(server, /mediaBatch[\s\S]*?applyTextMediaRoute/u);
+    assert.match(server, /playlistStart[\s\S]*?voiceRouteByDisplayId/u);
+    assert.match(server, /persistDisplayState[\s\S]*?currentPlaylist/u);
 });
 
 // 防止任一控制面板改用播放列表命令或丢失固定主题色与排版字段。

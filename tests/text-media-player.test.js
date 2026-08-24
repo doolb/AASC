@@ -141,3 +141,40 @@ test('tagged audio only advances the matching sentence after audio ends', () => 
     assert.equal(sent[1].sentenceIndex, 1);
     assert.equal(sent[1].text, '第二句。');
 });
+
+test('textSentenceTts 请求携带服务端下发的语音路由目标', () => {
+    const sent = [];
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['需要远程播报。']
+    });
+
+    player.loadRoute({
+        selectedDisplayIds: ['source', 'speaker'],
+        selectedVoiceDisplayIds: ['speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    player.start();
+
+    assert.equal(sent[0].type, 'textSentenceTts');
+    assert.deepEqual(sent[0].route, {
+        selectedDisplayIds: ['source', 'speaker'],
+        selectedVoiceDisplayIds: ['speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+});
+
+test('远程文本播放完成回执按当前句定位推进下一句', () => {
+    const sent = [];
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一句。第二句。']
+    });
+
+    player.start();
+    player.handleTtsFinished({ ...sent[0], status: 'ended' });
+
+    assert.equal(sent.length, 2);
+    assert.equal(sent[1].sentenceIndex, 1);
+    assert.equal(sent[1].text, '第二句。');
+});

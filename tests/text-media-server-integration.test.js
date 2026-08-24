@@ -36,6 +36,38 @@ test('服务器为分句 TTS 注册专用路由并调用服务', async () => {
     }]);
 });
 
+test('服务器注册远程文本播放回执路由并调用文本 TTS 服务', () => {
+    const handlers = new Map();
+    const finished = [];
+    const wsServer = {
+        registerHandler(type, handler) {
+            handlers.set(type, handler);
+        }
+    };
+    const textMediaTtsService = {
+        async handleSentenceRequest() {},
+        handleSentenceFinished(displayId, data) {
+            finished.push({ displayId, data });
+        }
+    };
+
+    registerTextMediaDisplayHandlers({
+        wsServer,
+        displayTypes: [],
+        handleDisplayMessage: () => {}
+    }, textMediaTtsService);
+
+    assert.equal(typeof handlers.get('textSentenceTtsFinished'), 'function');
+    handlers.get('textSentenceTtsFinished')(
+        { originDisplayId: 'source', playbackId: 'p-1', pageIndex: 0, sentenceIndex: 0, status: 'ended' },
+        { displayId: 'speaker' }
+    );
+    assert.deepEqual(finished, [{
+        displayId: 'speaker',
+        data: { originDisplayId: 'source', playbackId: 'p-1', pageIndex: 0, sentenceIndex: 0, status: 'ended' }
+    }]);
+});
+
 test('文本进度仅持久化恢复字段并转发给控制端', () => {
     const displayData = { state: {} };
     const persisted = [];
@@ -91,4 +123,24 @@ test('文本样式持久化，暂停播放取消旧音频并仍转发控制消�
         { displayId: 'display-1', message: { type: 'control', action: 'textStyle', value: { fontSize: 32 } } },
         { displayId: 'display-1', message: { type: 'control', action: 'textPlayback', value: { action: 'pause' } } }
     ]);
+});
+
+test('文本播放停止时按源显示端和播放标识取消远程路由上下文', () => {
+    const cancelled = [];
+    const sent = [];
+
+    const handled = handleTextMediaControlMessage({
+        displayId: 'source',
+        data: { type: 'control', action: 'textPlayback', value: { action: 'stop', playbackId: 'p-stop' } },
+        displayData: { state: { currentTextProgress: { playbackId: 'fallback' } } },
+        persistDisplayState: () => {},
+        sendToDisplay: (displayId, message) => sent.push({ displayId, message }),
+        textMediaTtsService: {
+            cancel: (displayId, playbackId) => cancelled.push({ displayId, playbackId })
+        }
+    });
+
+    assert.equal(handled, true);
+    assert.deepEqual(cancelled, [{ displayId: 'source', playbackId: 'p-stop' }]);
+    assert.equal(sent.length, 1);
 });

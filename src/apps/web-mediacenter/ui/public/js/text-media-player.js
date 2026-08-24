@@ -55,6 +55,7 @@
         let activeAudio = null;
         let currentSentences = [];
         let requestPending = false;
+        let voiceRoute = null;
         let loadToken = 0;
         let loadAbortController = null;
 
@@ -347,6 +348,22 @@
             clearAudio();
         }
 
+        function normalizeRoute(route) {
+            if (!route || typeof route !== 'object') return null;
+            const selectedDisplayIds = Array.isArray(route.selectedDisplayIds)
+                ? route.selectedDisplayIds.filter((displayId) => typeof displayId === 'string' && displayId)
+                : [];
+            const selectedVoiceDisplayIds = Array.isArray(route.selectedVoiceDisplayIds)
+                ? route.selectedVoiceDisplayIds.filter((displayId) => typeof displayId === 'string' && displayId)
+                : [];
+            const hasTarget = Object.prototype.hasOwnProperty.call(route, 'voiceTargetDisplayId');
+            return {
+                selectedDisplayIds,
+                selectedVoiceDisplayIds,
+                voiceTargetDisplayId: hasTarget ? (route.voiceTargetDisplayId || null) : null
+            };
+        }
+
         function invalidateLoad() {
             loadToken += 1;
             if (loadAbortController) {
@@ -372,7 +389,8 @@
                 playbackId,
                 pageIndex,
                 sentenceIndex,
-                text: currentSentences[sentenceIndex]
+                text: currentSentences[sentenceIndex],
+                ...(voiceRoute ? { route: voiceRoute } : {})
             });
         }
 
@@ -441,6 +459,7 @@
             const controller = AbortControllerClass ? new AbortControllerClass() : null;
             loadAbortController = controller;
             source = data;
+            voiceRoute = normalizeRoute(data.route || data);
             format = data.format === 'markdown' ? 'markdown' : 'plain';
             state = 'loading';
             try {
@@ -570,6 +589,12 @@
             finishCurrentSentence();
         }
 
+        function handleTtsFinished(data) {
+            if (!isCurrentResponse(data)) return;
+            requestPending = false;
+            finishCurrentSentence();
+        }
+
         function applyStyle(nextStyle) {
             const anchor = pages[pageIndex] && pages[pageIndex].plainText;
             style = normalizeStyle({ ...style, ...(nextStyle || {}) });
@@ -599,7 +624,9 @@
             handleControl,
             handleTtsAudio,
             handleTtsError,
+            handleTtsFinished,
             applyStyle,
+            loadRoute(route) { voiceRoute = normalizeRoute(route); },
             attachPlaylist(context) { playlistContext = context || null; },
             getProgress,
             getPageText(index) { return pages[index] ? pages[index].plainText : ''; },

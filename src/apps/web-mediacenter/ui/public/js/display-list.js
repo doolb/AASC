@@ -305,7 +305,7 @@ const DisplayList = {
                     <label class="capability-item">
                         <input type="checkbox" ${caps.voicePlayback ? 'checked' : ''} data-cap="voicePlayback">
                         <span>🔊 语音播放</span>
-                        <span class="capability-desc">能播放TTS音频</span>
+                        <span class="capability-desc">语音播放为手动路由开关，开启后可作为文本TTS播报设备</span>
                     </label>
                     <label class="capability-item">
                         <input type="checkbox" ${caps.voiceRecording ? 'checked' : ''} data-cap="voiceRecording">

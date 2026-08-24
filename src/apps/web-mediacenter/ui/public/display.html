@@ -1146,6 +1146,10 @@
         
         function handleTTS(data) {
             console.log('[显示端] 收到TTS消息:', data.action, data.audioUrl || data.text);
+            if (data.textPlaybackRemote) {
+                handleRemoteTextPlayback(data);
+                return;
+            }
             if (data.textPlayback) {
                 TextMediaPlayer.handleTtsAudio(data);
                 return;
@@ -1162,6 +1166,47 @@
             } else if (data.action === 'setAutoTts') {
                 autoTtsEnabled = data.enabled;
             }
+        }
+
+        function sendTextSentenceTtsFinished(data, status) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'textSentenceTtsFinished',
+                originDisplayId: data.originDisplayId,
+                voiceTargetDisplayId: data.voiceTargetDisplayId,
+                playbackId: data.playbackId,
+                pageIndex: data.pageIndex,
+                sentenceIndex: data.sentenceIndex,
+                status
+            }));
+        }
+
+        function handleRemoteTextPlayback(data) {
+            const audio = ttsAudio;
+            if (!audio || !data.audioUrl) {
+                sendTextSentenceTtsFinished(data, 'failed');
+                return;
+            }
+            // 远程文本播报只负责发声，不改变本机文本分页状态；结束/失败后由源显示端推进句子。
+            const cleanup = () => {
+                audio.removeEventListener('ended', onEnded);
+                audio.removeEventListener('error', onError);
+            };
+            const onEnded = () => {
+                cleanup();
+                sendTextSentenceTtsFinished(data, 'ended');
+            };
+            const onError = () => {
+                cleanup();
+                sendTextSentenceTtsFinished(data, 'failed');
+            };
+            audio.addEventListener('ended', onEnded, { once: true });
+            audio.addEventListener('error', onError, { once: true });
+            audio.src = data.audioUrl;
+            audio.play().catch((error) => {
+                console.warn('远程文本 TTS 播放失败', error);
+                onError();
+            });
         }
         
         function handleReminder(data) {
@@ -1511,9 +1556,27 @@
                 active: true,
                 paused: data.resumeState === 'paused',
                 resumeTime: resumeTime,
-                resumeTextPage: Number.isFinite(data.resumeTextPage) ? data.resumeTextPage : 0
+                resumeTextPage: Number.isFinite(data.resumeTextPage) ? data.resumeTextPage : 0,
+                selectedDisplayIds: data.selectedDisplayIds || [],
+                selectedVoiceDisplayIds: data.selectedVoiceDisplayIds || [],
+                voiceTargetDisplayId: data.voiceTargetDisplayId || null,
+                voiceRouteByDisplayId: data.voiceRouteByDisplayId || null
             };
             playCurrentItem({ allowPausedLoad: true, resumeTime: resumeTime });
+        }
+
+        function getPlaylistTextRoute(ps) {
+            if (!ps) return null;
+            const routeByDisplay = ps.voiceRouteByDisplayId || {};
+            const currentDisplayId = typeof displayId === 'string' ? displayId : null;
+            const route = currentDisplayId ? routeByDisplay[currentDisplayId] || null : null;
+            if (route) return route;
+            if (!ps.selectedDisplayIds.length && !ps.selectedVoiceDisplayIds.length && !ps.voiceTargetDisplayId) return null;
+            return {
+                selectedDisplayIds: ps.selectedDisplayIds,
+                selectedVoiceDisplayIds: ps.selectedVoiceDisplayIds,
+                voiceTargetDisplayId: ps.voiceTargetDisplayId
+            };
         }
 
         function playCurrentItem(options = {}) {
@@ -1549,8 +1612,8 @@
             TextMediaPlayer.attachPlaylist(null);
             TextMediaPlayer.stop();
             const mediaData = item.url
-                ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format } : {}) }
-                : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType, ...(item.mediaType === 'text' ? { format: item.format } : {}) };
+                ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}) }
+                : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}) };
             const resumeTime = Number.isFinite(options.resumeTime) ? options.resumeTime : ps.resumeTime;
             if (item.mediaType === 'text') {
                 currentMediaType = 'text';
@@ -3444,6 +3507,9 @@
                     } else if (data.type === 'textSentenceTtsError') {
                         TextMediaPlayer.handleTtsError(data);
                         sendCommandAck('textSentenceTtsError', true, 'skip sentence');
+                    } else if (data.type === 'textSentenceTtsFinished') {
+                        TextMediaPlayer.handleTtsFinished(data);
+                        sendCommandAck('textSentenceTtsFinished', true, data.status || 'ended');
                     } else if (data.type === 'reminder') {
                         handleReminder(data);
                         sendCommandAck('reminder', true, data.action);

@@ -8,7 +8,7 @@
  * @param {object} dependencies.wsServer ViewBind WebSocket 服务
  * @param {string[]} dependencies.displayTypes 通用显示端消息类型
  * @param {Function} dependencies.handleDisplayMessage 既有显示端回退处理
- * @param {{handleSentenceRequest: Function}} textMediaTtsService 文本媒体 TTS 服务
+ * @param {{handleSentenceRequest: Function, handleSentenceFinished: Function}} textMediaTtsService 文本媒体 TTS 服务
  */
 function registerTextMediaDisplayHandlers({ wsServer, displayTypes, handleDisplayMessage }, textMediaTtsService) {
     for (const type of displayTypes) {
@@ -19,6 +19,10 @@ function registerTextMediaDisplayHandlers({ wsServer, displayTypes, handleDispla
 
     wsServer.registerHandler('textSentenceTts', async (data, ctx) => {
         await textMediaTtsService.handleSentenceRequest(ctx.displayId, data);
+    });
+
+    wsServer.registerHandler('textSentenceTtsFinished', (data, ctx) => {
+        textMediaTtsService.handleSentenceFinished(ctx.displayId, data);
     });
 }
 

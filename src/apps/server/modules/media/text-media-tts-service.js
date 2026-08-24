@@ -13,9 +13,10 @@ const path = require('path');
  * @param {Function} dependencies.generateTTS 文本转音频文件路径的方法
  * @param {Function} dependencies.sendToDisplay 向指定显示端发送协议消息的方法
  * @param {Function} dependencies.logError 记录服务端错误的方法
+ * @param {Function} [dependencies.getDisplayCapabilities] 读取显示端当前能力的方法；返回空值视为离线
  * @returns {{handleSentenceRequest: Function, cancel: Function}} 单句请求与取消接口
  */
-function createTextMediaTtsService({ generateTTS, sendToDisplay, logError }) {
+function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDisplayCapabilities }) {
     const displayQueues = new Map();
     const activePlaybacks = new Map();
 
@@ -50,6 +51,133 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError }) {
         if (!Number.isFinite(data.sentenceIndex)) return 'sentenceIndex 必须为数字';
         if (typeof data.text !== 'string' || !data.text.trim()) return 'text 不能为空';
         return null;
+    }
+
+    /**
+     * 规范化显示端 ID 列表。播放路由依赖控制端本次选择顺序，因此这里仅去重，
+     * 不重新排序，避免语音目标选择和控制端选择顺序不一致。
+     *
+     * @param {unknown} displayIds 原始显示端 ID 列表
+     * @returns {string[]} 去重后的显示端 ID
+     */
+    function normalizeDisplayIds(displayIds) {
+        if (!Array.isArray(displayIds)) return [];
+        const seen = new Set();
+        const normalized = [];
+        for (const displayId of displayIds) {
+            if (typeof displayId !== 'string' || !displayId || seen.has(displayId)) continue;
+            seen.add(displayId);
+            normalized.push(displayId);
+        }
+        return normalized;
+    }
+
+    /**
+     * 判断显示端是否仍在线且手动允许语音播放。旧客户端路径没有能力读取依赖时，
+     * 仅允许源端兼容播放；远程路由必须拿到明确的在线能力。
+     *
+     * @param {string} displayId 显示端 ID
+     * @param {boolean} allowUnknown 是否允许缺少能力读取结果时继续
+     * @returns {boolean} 是否可作为语音播放设备
+     */
+    function hasVoicePlayback(displayId, allowUnknown = false) {
+        if (typeof getDisplayCapabilities !== 'function') return allowUnknown;
+        const capabilities = getDisplayCapabilities(displayId);
+        if (!capabilities) return allowUnknown;
+        return capabilities.voicePlayback === true;
+    }
+
+    /**
+     * 从显式路由字段构造播放上下文。route 缺失表示旧协议，安全回落到源显示端；
+     * route 存在但目标为空表示服务器已判定本次选中设备里没有语音目标。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     * @param {object} data 分句请求
+     * @returns {object} 播放上下文
+     */
+    function buildPlaybackContext(originDisplayId, data) {
+        const explicitRoute = data.route && typeof data.route === 'object';
+        const route = explicitRoute ? data.route : {};
+        const selectedDisplayIds = normalizeDisplayIds(route.selectedDisplayIds);
+        const selected = selectedDisplayIds.length ? selectedDisplayIds : [originDisplayId];
+        const selectedVoiceDisplayIds = normalizeDisplayIds(route.selectedVoiceDisplayIds)
+            .filter((displayId) => selected.includes(displayId));
+        const hasTargetField = Object.prototype.hasOwnProperty.call(route, 'voiceTargetDisplayId');
+        const voiceTargetDisplayId = hasTargetField
+            ? (typeof route.voiceTargetDisplayId === 'string' && route.voiceTargetDisplayId ? route.voiceTargetDisplayId : null)
+            : originDisplayId;
+
+        return {
+            playbackId: data.playbackId,
+            token: Symbol(data.playbackId),
+            selectedDisplayIds: selected,
+            selectedVoiceDisplayIds,
+            voiceTargetDisplayId,
+            explicitRoute
+        };
+    }
+
+    /**
+     * 写入服务器已知的播放上下文。测试和 server-app 均可复用该入口；
+     * 同一 playbackId 下只刷新路由字段，保留既有 token，避免误复活已取消请求。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     * @param {object} context 路由上下文
+     */
+    function setPlaybackContext(originDisplayId, context) {
+        if (!originDisplayId || !context?.playbackId) return;
+        const previous = activePlaybacks.get(originDisplayId);
+        activePlaybacks.set(originDisplayId, {
+            playbackId: context.playbackId,
+            token: previous?.playbackId === context.playbackId ? previous.token : Symbol(context.playbackId),
+            selectedDisplayIds: normalizeDisplayIds(context.selectedDisplayIds).length
+                ? normalizeDisplayIds(context.selectedDisplayIds)
+                : [originDisplayId],
+            selectedVoiceDisplayIds: normalizeDisplayIds(context.selectedVoiceDisplayIds),
+            voiceTargetDisplayId: context.voiceTargetDisplayId || null,
+            explicitRoute: context.explicitRoute !== false
+        });
+    }
+
+    /**
+     * 取得本次请求要使用的播放上下文。旧 playbackId 或首次请求会创建新上下文；
+     * 已存在上下文时以服务器保存值为准，防止客户端临时把 route 改到未选设备。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     * @param {object} data 分句请求
+     * @returns {object} 播放上下文
+     */
+    function getOrCreatePlaybackContext(originDisplayId, data) {
+        const activePlayback = activePlaybacks.get(originDisplayId);
+        if (activePlayback?.playbackId === data.playbackId) return activePlayback;
+        const context = buildPlaybackContext(originDisplayId, data);
+        activePlaybacks.set(originDisplayId, context);
+        return context;
+    }
+
+    /**
+     * 校验并返回本句实际语音目标。显式 route 不能扩展到未选设备；
+     * 旧协议没有 route 时保持源端播放兼容。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     * @param {object} context 播放上下文
+     * @returns {{targetDisplayId?: string, message?: string}} 校验结果
+     */
+    function resolveRequestTarget(originDisplayId, context) {
+        const targetDisplayId = context.voiceTargetDisplayId;
+        if (!targetDisplayId) return { message: '没有可用的语音播放显示端' };
+        if (!context.selectedDisplayIds.includes(targetDisplayId)) {
+            return { message: '语音播放目标不在本次选中的显示端中' };
+        }
+        if (targetDisplayId === originDisplayId) {
+            return hasVoicePlayback(originDisplayId, !context.explicitRoute)
+                ? { targetDisplayId }
+                : { message: '源显示端未启用语音播放' };
+        }
+        if (!hasVoicePlayback(targetDisplayId, false)) {
+            return { message: '语音播放目标离线或未启用语音播放' };
+        }
+        return { targetDisplayId };
     }
 
     /**
@@ -101,30 +229,42 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError }) {
             return;
         }
 
-        const activePlayback = activePlaybacks.get(displayId);
         // 同一 playbackId 的连续分句共用令牌；取消后再次开始即使复用 ID 也会获得新令牌。
-        if (activePlayback?.playbackId !== data.playbackId) {
-            activePlaybacks.set(displayId, {
-                playbackId: data.playbackId,
-                token: Symbol(data.playbackId)
-            });
+        const playbackContext = getOrCreatePlaybackContext(displayId, data);
+        const routeResult = resolveRequestTarget(displayId, playbackContext);
+        if (routeResult.message) {
+            sendError(displayId, data, routeResult.message);
+            return;
         }
-        const requestToken = activePlaybacks.get(displayId).token;
+        const requestToken = playbackContext.token;
+        const targetDisplayId = routeResult.targetDisplayId;
 
         await enqueue(displayId, async () => {
             try {
                 const audioPath = await generateTTS(data.text);
                 if (!isPlaybackActive(displayId, data.playbackId, requestToken)) return;
 
-                sendToDisplay(displayId, {
+                const baseMessage = {
                     type: 'tts',
                     action: 'playAudio',
-                    textPlayback: true,
                     playbackId: data.playbackId,
                     pageIndex: data.pageIndex,
                     sentenceIndex: data.sentenceIndex,
                     audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
                     text: data.text
+                };
+                if (targetDisplayId === displayId) {
+                    sendToDisplay(displayId, {
+                        ...baseMessage,
+                        textPlayback: true
+                    });
+                    return;
+                }
+                sendToDisplay(targetDisplayId, {
+                    ...baseMessage,
+                    textPlaybackRemote: true,
+                    originDisplayId: displayId,
+                    voiceTargetDisplayId: targetDisplayId
                 });
             } catch (error) {
                 // 已取消的旧请求不再发送失败提示，避免显示端误跳过新播放的句子。
@@ -134,6 +274,36 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError }) {
                 logError('TextMediaTTS', `显示端 ${displayId} 分句合成失败: ${message}`);
                 sendError(displayId, data, message);
             }
+        });
+    }
+
+    /**
+     * 处理远程语音显示端的播放结束/失败回执。只接受当前播放上下文中的目标设备，
+     * 校验通过后转发给源文本显示端，让源端按“当前句已结束”推进下一句。
+     *
+     * @param {string} targetDisplayId 回执来源显示端
+     * @param {object} data 回执数据
+     */
+    function handleSentenceFinished(targetDisplayId, data) {
+        const originDisplayId = data?.originDisplayId;
+        const playbackId = data?.playbackId;
+        if (typeof originDisplayId !== 'string' || typeof playbackId !== 'string') return;
+        const context = activePlaybacks.get(originDisplayId);
+        const status = data.status === 'failed' ? 'failed' : 'ended';
+        const isValidContext = context?.playbackId === playbackId
+            && context.voiceTargetDisplayId === targetDisplayId
+            && context.selectedDisplayIds.includes(targetDisplayId)
+            && hasVoicePlayback(targetDisplayId, false);
+        if (!isValidContext) return;
+
+        sendToDisplay(originDisplayId, {
+            type: 'textSentenceTtsFinished',
+            originDisplayId,
+            voiceTargetDisplayId: targetDisplayId,
+            playbackId,
+            pageIndex: data.pageIndex,
+            sentenceIndex: data.sentenceIndex,
+            status
         });
     }
 
@@ -149,7 +319,12 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError }) {
         }
     }
 
-    return { handleSentenceRequest, cancel };
+    return {
+        handleSentenceRequest,
+        handleSentenceFinished,
+        setPlaybackContext,
+        cancel
+    };
 }
 
 module.exports = { createTextMediaTtsService };
