@@ -112,6 +112,7 @@
         let isPlayingTts = false;
         let remoteTextPlayback = null;
         let remotePrefetchedTextPlayback = null;
+        let remoteTextPlaybackToken = 0;
         let voiceSupported = false;
         let isListening = false;
         let mediaRecorder = null;
@@ -1192,9 +1193,36 @@
                 && left.playbackId === right.playbackId;
         }
 
-        function clearRemoteTextPlayback() {
+        function isSameRemoteSentence(left, right) {
+            return isSameRemoteTextPlayback(left, right)
+                && Number(left.pageIndex) === Number(right.pageIndex)
+                && Number(left.sentenceIndex) === Number(right.sentenceIndex);
+        }
+
+        function isNextRemoteTextPlayback(finished, candidate) {
+            return isSameRemoteTextPlayback(finished, candidate)
+                && Number(candidate.pageIndex) === Number(finished.pageIndex)
+                && Number(candidate.sentenceIndex) === Number(finished.sentenceIndex) + 1;
+        }
+
+        function hasRemoteTextPlaybackContext(data) {
+            return isSameRemoteTextPlayback(remoteTextPlayback, data)
+                || isSameRemoteTextPlayback(remotePrefetchedTextPlayback, data);
+        }
+
+        function clearRemoteTextPlayback(data) {
+            if (data && !hasRemoteTextPlaybackContext(data)) return false;
+            remoteTextPlaybackToken += 1;
             remoteTextPlayback = null;
             remotePrefetchedTextPlayback = null;
+            return true;
+        }
+
+        function stopRemoteTextAudio(data) {
+            if (!clearRemoteTextPlayback(data)) return;
+            ttsAudio.pause();
+            ttsAudio.currentTime = 0;
+            isPlayingTts = false;
         }
 
         function playRemoteTextPlayback(data) {
@@ -1203,6 +1231,8 @@
                 sendTextSentenceTtsFinished(data, 'failed');
                 return;
             }
+            remoteTextPlaybackToken += 1;
+            const playbackToken = remoteTextPlaybackToken;
             remoteTextPlayback = data;
             // 远程文本播报只负责发声，不改变本机文本分页状态；结束/失败后由源显示端推进句子。
             const cleanup = () => {
@@ -1210,10 +1240,11 @@
                 audio.removeEventListener('error', onError);
             };
             const finishRemoteSentence = (status) => {
-                const finishedData = remoteTextPlayback;
                 cleanup();
+                if (playbackToken !== remoteTextPlaybackToken) return;
+                const finishedData = remoteTextPlayback;
                 if (finishedData) sendTextSentenceTtsFinished(finishedData, status);
-                if (remotePrefetchedTextPlayback && isSameRemoteTextPlayback(finishedData, remotePrefetchedTextPlayback)) {
+                if (remotePrefetchedTextPlayback && isNextRemoteTextPlayback(finishedData, remotePrefetchedTextPlayback)) {
                     const cached = remotePrefetchedTextPlayback;
                     remotePrefetchedTextPlayback = null;
                     playRemoteTextPlayback(cached);
@@ -1233,8 +1264,16 @@
         }
 
         function handleRemoteTextPlayback(data) {
+            if (data.action === 'stop') {
+                stopRemoteTextAudio(data);
+                return;
+            }
+            if ((remoteTextPlayback && !isSameRemoteTextPlayback(remoteTextPlayback, data))
+                || (remotePrefetchedTextPlayback && !isSameRemoteTextPlayback(remotePrefetchedTextPlayback, data))) {
+                stopRemoteTextAudio();
+            }
             if (data.prefetch) {
-                if (remotePrefetchedTextPlayback) return;
+                if (remotePrefetchedTextPlayback && isSameRemoteSentence(remotePrefetchedTextPlayback, data)) return;
                 remotePrefetchedTextPlayback = data;
                 return;
             }

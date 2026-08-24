@@ -276,7 +276,7 @@ test('远程播放结束回执必须匹配服务器已下发的句子定位', as
     }]);
 });
 
-test('远程目标取消后旧上下文失效，不再接受迟到回执', () => {
+test('远程目标取消后旧上下文失效，不再接受迟到回执转发', () => {
     const messages = [];
     const service = createTextMediaTtsService({
         generateTTS: async () => '/tmp/unused.wav',
@@ -299,7 +299,148 @@ test('远程目标取消后旧上下文失效，不再接受迟到回执', () =>
         status: 'ended'
     });
 
+    assert.deepEqual(messages, [{
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'stop',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-cancel'
+        }
+    }]);
+});
+
+test('远程目标取消时先向语音设备下发可定位 stop 并失效旧上下文', () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/unused.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: () => ({ voicePlayback: true })
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-remote-cancel',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    service.cancel('source', 'p-remote-cancel');
+    service.handleSentenceFinished('speaker', {
+        originDisplayId: 'source',
+        playbackId: 'p-remote-cancel',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        status: 'ended'
+    });
+
+    assert.deepEqual(messages, [{
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'stop',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-remote-cancel'
+        }
+    }]);
+});
+
+test('本地目标取消不会下发远程 stop 消息', () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/unused.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: () => ({ voicePlayback: true })
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-local-cancel',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: 'source'
+    });
+    service.cancel('source', 'p-local-cancel');
+
     assert.deepEqual(messages, []);
+});
+
+test('远程 route replacement、clear 和新 playbackId 会停止旧远程上下文', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/new.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: () => ({ voicePlayback: true })
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-replace',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    service.setDisplayRoute('source', {
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: 'source'
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-clear',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    service.clearDisplayRoute('source');
+
+    service.setDisplayRoute('source', {
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-old',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        text: '旧句。'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-new',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        text: '新句。'
+    });
+
+    assert.deepEqual(messages.filter(({ message }) => message.action === 'stop'), [{
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'stop',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-replace'
+        }
+    }, {
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'stop',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-clear'
+        }
+    }, {
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'stop',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-old'
+        }
+    }]);
 });
 
 test('本地预取回包带 prefetch 定位且重复预取只占一个生成槽', async () => {

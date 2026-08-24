@@ -154,6 +154,32 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
         return key ? context.pendingRemoteSentences.delete(key) : false;
     }
 
+    function getRemoteTarget(originDisplayId, context) {
+        const targetDisplayId = context?.voiceTargetDisplayId;
+        if (typeof targetDisplayId !== 'string' || !targetDisplayId) return null;
+        return targetDisplayId === originDisplayId ? null : targetDisplayId;
+    }
+
+    /**
+     * 远程语音目标有自己的音频缓存，源端取消或上下文替换时必须显式通知目标停止；
+     * 本地语音目标仍保持原有 textPlayback 控制路径，不发送远程 stop。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     * @param {object} context 当前播放上下文
+     */
+    function sendRemoteStop(originDisplayId, context) {
+        const targetDisplayId = getRemoteTarget(originDisplayId, context);
+        if (!targetDisplayId || typeof context?.playbackId !== 'string' || !context.playbackId) return;
+        sendToDisplay(targetDisplayId, {
+            type: 'tts',
+            action: 'stop',
+            textPlaybackRemote: true,
+            originDisplayId,
+            voiceTargetDisplayId: targetDisplayId,
+            playbackId: context.playbackId
+        });
+    }
+
     /**
      * 注册服务器计算出的文本语音路由。该路由是新播放首个 textSentenceTts
      * 的权威上下文；新媒体或新播放列表覆盖旧 route，并使旧 activePlayback 失效。
@@ -163,6 +189,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      */
     function setDisplayRoute(originDisplayId, trustedRoute) {
         if (!originDisplayId || !trustedRoute || typeof trustedRoute !== 'object') return;
+        sendRemoteStop(originDisplayId, activePlaybacks.get(originDisplayId));
         displayRoutes.set(originDisplayId, normalizeRoute(originDisplayId, trustedRoute));
         activePlaybacks.delete(originDisplayId);
     }
@@ -173,6 +200,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      * @param {string} originDisplayId 源文本显示端
      */
     function clearDisplayRoute(originDisplayId) {
+        sendRemoteStop(originDisplayId, activePlaybacks.get(originDisplayId));
         displayRoutes.delete(originDisplayId);
         activePlaybacks.delete(originDisplayId);
     }
@@ -188,6 +216,9 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
         if (!originDisplayId || !context?.playbackId) return;
         const previous = activePlaybacks.get(originDisplayId);
         const samePlayback = previous?.playbackId === context.playbackId;
+        if (previous && !samePlayback) {
+            sendRemoteStop(originDisplayId, previous);
+        }
         activePlaybacks.set(originDisplayId, {
             playbackId: context.playbackId,
             token: samePlayback ? previous.token : Symbol(context.playbackId),
@@ -248,6 +279,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
         const context = trustedRoute
             ? buildPlaybackContext(originDisplayId, data, trustedRoute, true)
             : buildPlaybackContext(originDisplayId, data, {}, false);
+        sendRemoteStop(originDisplayId, activePlayback);
         activePlaybacks.set(originDisplayId, context);
         return { context };
     }
@@ -438,7 +470,9 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      * @param {string} playbackId 需要取消的播放标识
      */
     function cancel(displayId, playbackId) {
-        if (activePlaybacks.get(displayId)?.playbackId === playbackId) {
+        const context = activePlaybacks.get(displayId);
+        if (context?.playbackId === playbackId) {
+            sendRemoteStop(displayId, context);
             activePlaybacks.delete(displayId);
         }
     }

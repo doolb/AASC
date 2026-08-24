@@ -23,6 +23,9 @@ test('显示端保留逐句 TTS 请求、定位回包和失败跳过协议', () 
     assert.match(display, /textSentenceTtsFinished/u);
     assert.match(display, /remotePrefetchedTextPlayback/u);
     assert.match(display, /data\.prefetch[\s\S]*?remotePrefetchedTextPlayback/u);
+    assert.match(display, /data\.action === 'stop'[\s\S]*?clearRemoteTextPlayback\(data\)/u);
+    assert.match(display, /isNextRemoteTextPlayback/u);
+    assert.match(display, /Number\(candidate\.pageIndex\) === Number\(finished\.pageIndex\)[\s\S]*?Number\(candidate\.sentenceIndex\) === Number\(finished\.sentenceIndex\) \+ 1/u);
     assert.match(display, /data\.type === 'textSentenceTtsError'[\s\S]*?TextMediaPlayer\.handleTtsError\(data\)/u);
     assert.match(player, /type:\s*'textSentenceTts'/u);
     assert.match(player, /prefetch:\s*true/u);
