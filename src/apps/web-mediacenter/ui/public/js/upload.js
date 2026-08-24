@@ -338,7 +338,7 @@ const Upload = {
                 const mediaType = this.detectMediaType(f.name);
                 const format = this.detectTextFormat(f.name);
                 const dims = await this.getMediaDimensions(f, base64);
-                items.push({
+                const tempItem = {
                     name: f.name,
                     data: base64,
                     mediaType,
@@ -347,7 +347,13 @@ const Upload = {
                     modifiedTime: f.lastModified,
                     width: dims?.width,
                     height: dims?.height
-                });
+                };
+
+                if (window.TempPlaylistPreview) {
+                    tempItem.tempPreviewKey = window.TempPlaylistPreview.createKey(tempItem, i);
+                }
+
+                items.push(tempItem);
             } catch (err) {
                 showToast(`读取 ${f.name} 失败: ${err.message}`, 'error');
             }
@@ -367,8 +373,8 @@ const Upload = {
             onConfirm: async (settings) => {
                 const items = await this.prepareTempFiles(files);
                 if (!items || items.length === 0) return;
-                // 缓存文件数据供裁剪预览区跟随批量播放当前项
-                window.MediaLibrary.tempPlaylistFiles = items;
+                // 先缓存原始临时文件数据，待服务端回传最终播放顺序后再按 tempPreviewKey 重建预览队列。
+                window.MediaLibrary.setPendingTempPlaylistFiles(items);
                 window.MediaLibrary._lastCropPreviewUrl = null;
                 window.MediaLibrary.lastTempFileSent = null;
                 if (window.WebSocketManager) {

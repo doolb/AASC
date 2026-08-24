@@ -180,13 +180,47 @@ test('buildFromTemp 按 mediaTypes 筛选并保留 text MIME/format', () => {
             fileName: 'note.txt',
             mediaType: 'text',
             mimeType: 'text/plain',
+            tempPreviewKey: undefined,
+            width: undefined,
+            height: undefined,
             format: 'plain'
         },
         {
             data: 'HTML',
             fileName: 'page.html',
             mediaType: 'html',
-            mimeType: 'text/html'
+            mimeType: 'text/html',
+            tempPreviewKey: undefined,
+            width: undefined,
+            height: undefined
         }
     ]);
+});
+
+test('buildFromTemp 保留 tempPreviewKey 和预览元数据，供服务端回传最终 temp 播放列表顺序', () => {
+    const pm = new PlaylistManager(fakeManager);
+    const list = pm.buildFromTemp([{
+        name: 'voice.mp3',
+        data: 'AUDIO',
+        mediaType: 'audio',
+        mimeType: 'audio/mpeg',
+        tempPreviewKey: 'temp-key-1',
+        width: 320,
+        height: 180
+    }], {
+        mode: 'sequence',
+        sortBy: 'name',
+        direction: 'asc',
+        mediaTypes: ['audio']
+    });
+
+    assert.deepStrictEqual(list[0], {
+        data: 'AUDIO',
+        fileName: 'voice.mp3',
+        mediaType: 'audio',
+        mimeType: 'audio/mpeg',
+        tempPreviewKey: 'temp-key-1',
+        width: 320,
+        height: 180
+    });
 });

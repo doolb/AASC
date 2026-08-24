@@ -3,6 +3,7 @@ const MediaLibrary = {
     currentLibrary: null,
     currentPath: '/',
     currentMediaUrl: null,
+    tempPlaylistFiles: null,
     
     async init() {
         await this.loadLibraries();
@@ -596,6 +597,23 @@ const MediaLibrary = {
         this.updateCropPreview(info);
     },
 
+    setPendingTempPlaylistFiles(files) {
+        this.tempPlaylistFiles = Array.isArray(files) ? files : null;
+    },
+
+    handleTempPlaylistStarted(playlist) {
+        if (!Array.isArray(playlist) || playlist.length === 0) {
+            return;
+        }
+
+        if (window.TempPlaylistPreview) {
+            this.tempPlaylistFiles = window.TempPlaylistPreview.buildServerOrderedFiles(playlist, this.tempPlaylistFiles);
+        } else {
+            this.tempPlaylistFiles = playlist;
+        }
+        this._lastCropPreviewUrl = null;
+    },
+
     // 画面裁剪预览区跟随批量播放的当前项
     updateCropPreview(info) {
         if (!window.Crop) return;
@@ -610,7 +628,9 @@ const MediaLibrary = {
         }
         // 临时模式：优先用控制端缓存数据
         if (this.tempPlaylistFiles) {
-            const item = this.tempPlaylistFiles[info.index || 0];
+            const item = window.TempPlaylistPreview
+                ? window.TempPlaylistPreview.findCachedFile(this.tempPlaylistFiles, info)
+                : this.tempPlaylistFiles[info.index || 0];
             if (item && item.data) {
                 const dataUrl = 'data:' + (item.mimeType || 'application/octet-stream') + ';base64,' + item.data;
                 if (dataUrl === this._lastCropPreviewUrl) return;

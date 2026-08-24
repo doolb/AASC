@@ -73,6 +73,9 @@ const WebSocketManager = {
         } else if (data.type === 'playlistError') {
             showToast(data.message || '批量播放失败', 'error');
         } else if (data.type === 'playlistStarted') {
+            if (data.temp && Array.isArray(data.playlist) && window.MediaLibrary) {
+                window.MediaLibrary.handleTempPlaylistStarted(data.playlist);
+            }
             showToast(`播放列表已发送（共 ${data.total} 项）`, 'success');
         } else if (data.type === 'deviceEventExecuted') {
             const eventLabel = data.eventType === 'onConnect' ? '连线' : '掉线';
@@ -192,6 +195,7 @@ const WebSocketManager = {
                             fileName: item.fileName,
                             url: item.url,
                             mediaType: item.mediaType,
+                            tempPreviewKey: item.tempPreviewKey,
                             format: currentPlaylist.currentTextFormat || item.format,
                             pageIndex: currentPlaylist.currentTextPage,
                             pageTotal: currentPlaylist.currentTextPageTotal,

@@ -106,6 +106,9 @@ class PlaylistManager {
                 fileName: f.name,
                 mediaType,
                 mimeType: f.mimeType,
+                tempPreviewKey: f.tempPreviewKey,
+                width: f.width,
+                height: f.height,
                 ...(mediaType === 'text' ? { format: f.format } : {})
             };
         });
