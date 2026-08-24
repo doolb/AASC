@@ -4,9 +4,72 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+const uploadSource = read('src/apps/web-mediacenter/ui/public/js/upload.js');
+
+function loadUpload(overrides = {}) {
+    const toasts = [];
+    const playlistRequests = [];
+    const pendingFiles = [];
+    const settingsCalls = [];
+    let confirmPromise = null;
+    const sandbox = {
+        console,
+        showToast: (msg, type) => {
+            toasts.push({ msg, type });
+        },
+        window: {
+            TempPlaylistPreview: {
+                createKey: (item, index) => `${item.name}:${index}`
+            },
+            MediaLibrary: {
+                showPlaylistSettingsDialog: (options) => {
+                    settingsCalls.push(options);
+                    confirmPromise = options.onConfirm({
+                        interval: 5,
+                        loop: false
+                    });
+                    return confirmPromise;
+                },
+                setPendingTempPlaylistFiles: (items) => {
+                    pendingFiles.push(items);
+                },
+                _lastCropPreviewUrl: null,
+                lastTempFileSent: null
+            },
+            WebSocketManager: {
+                sendPlaylistRequest: (payload) => {
+                    playlistRequests.push(payload);
+                }
+            }
+        },
+        document: {
+            getElementById: () => null,
+            addEventListener: () => {}
+        },
+        File: function File() {},
+        FileReader: function FileReader() {},
+        Image: function Image() {}
+    };
+
+    vm.runInNewContext(uploadSource, sandbox, { filename: 'upload.js' });
+    const upload = sandbox.window.Upload;
+    Object.assign(upload, overrides);
+    return {
+        upload,
+        toasts,
+        playlistRequests,
+        pendingFiles,
+        settingsCalls,
+        waitForConfirm: async () => {
+            await confirmPromise;
+        },
+        window: sandbox.window
+    };
+}
 
 test('批量设置弹窗提供五类 mediaTypes 复选框且默认全选', () => {
     const mediaLibrary = read('src/apps/web-mediacenter/ui/public/js/media-library.js');
@@ -54,4 +117,34 @@ test('临时批量播放由服务端回传最终 playlist 元数据，并按 tem
     assert.match(tempPreviewHelper, /tempPreviewKey/);
     assert.match(tempPreviewHelper, /buildServerOrderedFiles/);
     assert.match(tempPreviewHelper, /findCachedFile/);
+});
+
+test('prepareTempFiles 为每个临时文件使用当前循环索引生成 tempPreviewKey，批量入口可发送请求', async () => {
+    const { upload, playlistRequests, pendingFiles, settingsCalls, waitForConfirm } = loadUpload({
+        async fileToBase64(file) {
+            return `base64:${file.name}`;
+        },
+        async getMediaDimensions() {
+            return { width: 1920, height: 1080 };
+        }
+    });
+    const files = [
+        { name: 'a.jpg', size: 1, type: 'image/jpeg', lastModified: 100 },
+        { name: 'b.jpg', size: 1, type: 'image/jpeg', lastModified: 200 }
+    ];
+
+    upload.showBatchTempUpload(files);
+    await waitForConfirm();
+
+    assert.equal(settingsCalls.length, 1);
+    assert.equal(playlistRequests.length, 1);
+    assert.equal(pendingFiles.length, 1);
+    assert.deepEqual(
+        playlistRequests[0].files.map((item) => item.tempPreviewKey),
+        ['a.jpg:0', 'b.jpg:1']
+    );
+    assert.deepEqual(
+        pendingFiles[0].map((item) => item.tempPreviewKey),
+        ['a.jpg:0', 'b.jpg:1']
+    );
 });

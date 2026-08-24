@@ -75,6 +75,9 @@ test('temporary text playlist keeps format and MIME metadata', () => {
         fileName: 'guide.md',
         mediaType: 'text',
         mimeType: 'text/markdown',
+        tempPreviewKey: undefined,
+        width: undefined,
+        height: undefined,
         format: 'markdown'
     });
 });
@@ -116,6 +119,6 @@ test('playlistStart 切换 URL 和临时 text 项时将 format 传给 showMedia'
     const showMediaCall = display.indexOf('            showMedia(mediaData, true, ps.paused, resumeTime);', playCurrentStart);
     const playCurrentItem = display.slice(playCurrentStart, showMediaCall);
 
-    assert.match(playCurrentItem, /url: item\.url, fileName: item\.fileName, mediaType: item\.mediaType, \.\.\.\(item\.mediaType === 'text' \? \{ format: item\.format \} : \{\}\)/);
-    assert.match(playCurrentItem, /data: item\.data, fileName: item\.fileName, mediaType: item\.mediaType, mimeType: item\.mimeType, \.\.\.\(item\.mediaType === 'text' \? \{ format: item\.format \} : \{\}\)/);
+    assert.match(playCurrentItem, /url: item\.url, fileName: item\.fileName, mediaType: item\.mediaType, \.\.\.\(item\.mediaType === 'text' \? \{ format: item\.format, route: getPlaylistTextRoute\(ps\) \} : \{\}\)/);
+    assert.match(playCurrentItem, /data: item\.data, fileName: item\.fileName, mediaType: item\.mediaType, mimeType: item\.mimeType, \.\.\.\(item\.mediaType === 'text' \? \{ format: item\.format, route: getPlaylistTextRoute\(ps\) \} : \{\}\)/);
 });
