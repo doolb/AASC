@@ -3738,11 +3738,11 @@ async function handleControlMessageFallback(data, ws) {
                             let playlist;
                             if (data.temp) {
                                 playlist = playlistManager.buildFromTemp(data.files || [], {
-                                    mode: data.mode, sortBy: data.sortBy, direction: data.direction
+                                    mode: data.mode, sortBy: data.sortBy, direction: data.direction, mediaTypes: data.mediaTypes
                                 });
                             } else {
                                 playlist = await playlistManager.buildFromLibrary(data.libraryId, data.path, {
-                                    recursive: data.recursive, mode: data.mode, sortBy: data.sortBy, direction: data.direction
+                                    recursive: data.recursive, mode: data.mode, sortBy: data.sortBy, direction: data.direction, mediaTypes: data.mediaTypes
                                 });
                             }
                             if (!playlist || playlist.length === 0) {

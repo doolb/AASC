@@ -4,6 +4,17 @@
 
 ### 已完成
 
+- ✅ [2026-08-24] 完成 Task 1：批量媒体类型协议与服务器筛选
+  - 控制端批量设置弹窗新增 `text/audio/image/video/web` 五类复选框，默认全部选中；确认后只上报 `mediaTypes`，不在浏览器本地筛选媒体库结果或临时文件。
+  - `PlaylistManager` 统一对媒体库扫描和临时文件两条路径执行 `mediaTypes` 规范化筛选：`web -> html`、`image` 同时包含 `gif`，缺失/空数组/未知值时兼容旧客户端按全部类型处理。
+  - `server-app` 在 `playlistRequest` 中透传 `mediaTypes`，保持控制层不复制服务端筛选规则。
+  - 新增/更新 focused tests：`tests/playlist-app-service.test.js`、`tests/text-media-routing-task1.test.js`。
+
+- 🚧 [2026-08-24] 设计批量媒体类型筛选与文本 TTS 路由预生成
+  - 控制端仅上报 `mediaTypes`，服务器负责文本/音频/图片/视频/网页筛选。
+  - 规划手动 `voicePlayback` 能力路由、远程播放结束回执和下一句预生成缓存。
+  - 文档：docs/design/text-media-routing.md、docs/spec/text-media-routing.md、docs/task/2026-08-24_批量媒体筛选与文本TTS路由预生成.md
+
 - ✅ [2026-08-23] 完成纯文本分页 TTS 播放及最终跨端协议验证
   - `.txt/.md` 以 `text/plain|markdown` 媒体元数据进入显示端分页、共享分句和单句 TTS；最后一页完成后按单文档或混合播放列表语义结束/切项。
   - 最终协议确认：显示端发送 `textSentenceTts`；服务器注册专用路由并回传 `textPlayback: true`、`playbackId/pageIndex/sentenceIndex`；控制端发送 `textStyle` 和 `textPlayback`。

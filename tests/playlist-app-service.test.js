@@ -110,3 +110,83 @@ test('buildFromTemp 按文件名排序并保留 data', () => {
     assert.strictEqual(list[0].data, 'AAA');
     assert.strictEqual(list[0].mimeType, 'image/png');
 });
+
+test('buildFromLibrary 按 mediaTypes 筛选并兼容 web/image 映射', async () => {
+    const pm = new PlaylistManager(fakeManager);
+    const list = await pm.buildFromLibrary('lib1', '/', {
+        recursive: true,
+        mode: 'sequence',
+        sortBy: 'name',
+        direction: 'asc',
+        mediaTypes: ['web', 'image']
+    });
+
+    assert.deepStrictEqual(list.map(i => [i.fileName, i.mediaType]), [
+        ['a.jpg', 'image'],
+        ['c.gif', 'gif'],
+        ['d.jpg', 'image']
+    ]);
+});
+
+test('buildFromLibrary mediaTypes 缺失、空数组或未知值时兼容旧客户端为全部类型', async () => {
+    const pm = new PlaylistManager(fakeManager);
+
+    const noTypes = await pm.buildFromLibrary('lib1', '/', {
+        recursive: true,
+        mode: 'sequence',
+        sortBy: 'name',
+        direction: 'asc'
+    });
+    const emptyTypes = await pm.buildFromLibrary('lib1', '/', {
+        recursive: true,
+        mode: 'sequence',
+        sortBy: 'name',
+        direction: 'asc',
+        mediaTypes: []
+    });
+    const unknownTypes = await pm.buildFromLibrary('lib1', '/', {
+        recursive: true,
+        mode: 'sequence',
+        sortBy: 'name',
+        direction: 'asc',
+        mediaTypes: ['unknown']
+    });
+
+    const expected = ['a.jpg', 'b.mp4', 'c.gif', 'd.jpg', 'readme.txt'];
+    assert.deepStrictEqual(noTypes.map(i => i.fileName), expected);
+    assert.deepStrictEqual(emptyTypes.map(i => i.fileName), expected);
+    assert.deepStrictEqual(unknownTypes.map(i => i.fileName), expected);
+});
+
+test('buildFromTemp 按 mediaTypes 筛选并保留 text MIME/format', () => {
+    const pm = new PlaylistManager(fakeManager);
+    const files = [
+        { name: 'page.html', data: 'HTML', mediaType: 'html', mimeType: 'text/html' },
+        { name: 'photo.jpg', data: 'IMG', mediaType: 'image', mimeType: 'image/jpeg' },
+        { name: 'anim.gif', data: 'GIF', mediaType: 'gif', mimeType: 'image/gif' },
+        { name: 'note.txt', data: 'TXT', mediaType: 'text', mimeType: 'text/plain', format: 'plain' }
+    ];
+
+    const list = pm.buildFromTemp(files, {
+        mode: 'sequence',
+        sortBy: 'name',
+        direction: 'asc',
+        mediaTypes: ['web', 'text']
+    });
+
+    assert.deepStrictEqual(list, [
+        {
+            data: 'TXT',
+            fileName: 'note.txt',
+            mediaType: 'text',
+            mimeType: 'text/plain',
+            format: 'plain'
+        },
+        {
+            data: 'HTML',
+            fileName: 'page.html',
+            mediaType: 'html',
+            mimeType: 'text/html'
+        }
+    ]);
+});

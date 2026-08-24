@@ -1,10 +1,40 @@
 'use strict';
 
 const MEDIA_TYPES = ['image', 'video', 'gif', 'html', 'audio', 'text'];
+const MEDIA_TYPE_ALIAS_MAP = {
+    image: ['image', 'gif'],
+    gif: ['gif'],
+    video: ['video'],
+    audio: ['audio'],
+    text: ['text'],
+    web: ['html'],
+    html: ['html']
+};
 
 class PlaylistManager {
     constructor(mediaLibraryManager) {
         this.manager = mediaLibraryManager;
+    }
+
+    // 统一在服务端规范化媒体类型，确保媒体库与临时文件两条路径使用同一套筛选语义。
+    // 兼容旧控制端：未传、空数组或全部未知值时都回退为“全部类型”。
+    _normalizeMediaTypes(mediaTypes) {
+        if (!Array.isArray(mediaTypes) || mediaTypes.length === 0) {
+            return new Set(MEDIA_TYPES);
+        }
+
+        const normalized = new Set();
+        mediaTypes.forEach((mediaType) => {
+            const typeKey = String(mediaType || '').trim().toLowerCase();
+            const mappedTypes = MEDIA_TYPE_ALIAS_MAP[typeKey] || [];
+            mappedTypes.forEach((mappedType) => normalized.add(mappedType));
+        });
+
+        if (normalized.size === 0) {
+            return new Set(MEDIA_TYPES);
+        }
+
+        return normalized;
     }
 
     // 按模式排序或洗牌
@@ -36,7 +66,8 @@ class PlaylistManager {
 
     // 从媒体库文件夹构建播放列表（递归或单层）
     async buildFromLibrary(libraryId, path, options = {}) {
-        const { recursive = false, mode = 'sequence', sortBy = 'name', direction = 'asc' } = options;
+        const { recursive = false, mode = 'sequence', sortBy = 'name', direction = 'asc', mediaTypes } = options;
+        const allowedMediaTypes = this._normalizeMediaTypes(mediaTypes);
         const all = [];
         const queue = [path || '/'];
         while (queue.length > 0) {
@@ -45,7 +76,7 @@ class PlaylistManager {
             for (const item of items) {
                 if (item.type === 'folder') {
                     if (recursive) queue.push(item.path);
-                } else if (MEDIA_TYPES.includes(item.mediaType)) {
+                } else if (MEDIA_TYPES.includes(item.mediaType) && allowedMediaTypes.has(item.mediaType)) {
                     all.push(item);
                 }
             }
@@ -61,8 +92,13 @@ class PlaylistManager {
 
     // 从控制端上传的 base64 文件构建播放列表
     buildFromTemp(files, options = {}) {
-        const { mode = 'sequence', sortBy = 'name', direction = 'asc' } = options;
-        const sorted = this._sortPlaylist(files || [], mode, sortBy, direction);
+        const { mode = 'sequence', sortBy = 'name', direction = 'asc', mediaTypes } = options;
+        const allowedMediaTypes = this._normalizeMediaTypes(mediaTypes);
+        const filteredFiles = (files || []).filter((file) => {
+            const mediaType = file.mediaType || 'image';
+            return MEDIA_TYPES.includes(mediaType) && allowedMediaTypes.has(mediaType);
+        });
+        const sorted = this._sortPlaylist(filteredFiles, mode, sortBy, direction);
         return sorted.map(f => {
             const mediaType = f.mediaType || 'image';
             return {

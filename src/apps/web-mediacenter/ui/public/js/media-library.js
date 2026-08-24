@@ -366,6 +366,14 @@ const MediaLibrary = {
                         <label><input type="radio" name="plDirection" value="desc"> 反序</label>
                     </div>
                     <div class="settings-row">
+                        <span class="settings-label">媒体类型</span>
+                        <label><input type="checkbox" name="plMediaType" value="text" checked> 文本</label>
+                        <label><input type="checkbox" name="plMediaType" value="audio" checked> 音频</label>
+                        <label><input type="checkbox" name="plMediaType" value="image" checked> 图片</label>
+                        <label><input type="checkbox" name="plMediaType" value="video" checked> 视频</label>
+                        <label><input type="checkbox" name="plMediaType" value="web" checked> 网页</label>
+                    </div>
+                    <div class="settings-row">
                         <span class="settings-label">循环播放</span>
                         <input type="checkbox" id="plLoop" checked>
                     </div>
@@ -404,6 +412,7 @@ const MediaLibrary = {
                 mode: mask.querySelector('input[name="plMode"]:checked').value,
                 sortBy: mask.querySelector('input[name="plSortBy"]:checked').value,
                 direction: mask.querySelector('input[name="plDirection"]:checked').value,
+                mediaTypes: Array.from(mask.querySelectorAll('input[name="plMediaType"]:checked')).map((input) => input.value),
                 loop: mask.querySelector('#plLoop').checked,
                 announceName: mask.querySelector('#plAnnounceName').checked
             };
