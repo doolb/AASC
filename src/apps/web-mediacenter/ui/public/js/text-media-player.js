@@ -631,8 +631,9 @@
                     state = 'paused';
                     if (activeAudio) {
                         activeAudio.pause();
-                    } else if (requestPending) {
-                        // 服务端会取消旧请求；恢复时必须使用新 playbackId 重发当前句，不能被 pending 卡住。
+                    } else if (requestPending || remoteActiveSentence) {
+                        // 服务端会取消旧请求；远程当前句没有本地 activeAudio，仍必须失效 playbackId，
+                        // 恢复时使用新 playbackId 重发被 stop 的当前句，不能被 remoteActiveSentence 卡住。
                         invalidatePlayback();
                     }
                     emitProgress();

@@ -45,6 +45,140 @@ test('取消播放后不会下发正在生成的过期音频', async () => {
     assert.equal(messages.length, 0);
 });
 
+test('批量控制取消远程上下文时即使没有 playbackId 也会下发可定位 stop', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/remote.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: (displayId) => displayId === 'speaker' ? { voicePlayback: true } : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'batch-pause',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'batch-pause', pageIndex: 0, sentenceIndex: 0, text: '批量暂停。'
+    });
+
+    service.cancel('source');
+
+    assert.deepEqual(messages.at(-1), {
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'stop',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'batch-pause'
+        }
+    });
+});
+
+test('远程语音目标超时后向源端发送可定位错误并清理上下文', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/remote.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        remoteSentenceTimeoutMs: 10,
+        getDisplayCapabilities: (displayId) => displayId === 'speaker' ? { voicePlayback: true } : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'remote-timeout',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'remote-timeout', pageIndex: 1, sentenceIndex: 2, text: '等待远程回执。'
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    assert.deepEqual(messages.at(-1), {
+        displayId: 'source',
+        message: {
+            type: 'textSentenceTtsError',
+            playbackId: 'remote-timeout',
+            pageIndex: 1,
+            sentenceIndex: 2,
+            message: '远程语音设备未在规定时间内完成播放'
+        }
+    });
+    await service.handleSentenceFinished('speaker', {
+        originDisplayId: 'source', playbackId: 'remote-timeout', pageIndex: 1, sentenceIndex: 2
+    });
+    assert.equal(messages.filter(({ message }) => message.type === 'textSentenceTtsFinished').length, 0);
+});
+
+test('当前句超时后迟到的远程预取生成结果不会再次下发', async () => {
+    let releasePrefetch;
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async (text) => {
+            if (text === '迟到预取。') {
+                return new Promise((resolve) => { releasePrefetch = resolve; });
+            }
+            return '/tmp/current-timeout.wav';
+        },
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        remoteSentenceTimeoutMs: 10,
+        getDisplayCapabilities: (displayId) => displayId === 'speaker' ? { voicePlayback: true } : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'timeout-prefetch-race',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'timeout-prefetch-race', pageIndex: 0, sentenceIndex: 0, text: '当前句。'
+    });
+    const prefetchRequest = service.handleSentenceRequest('source', {
+        playbackId: 'timeout-prefetch-race', pageIndex: 0, sentenceIndex: 1, text: '迟到预取。', prefetch: true
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    releasePrefetch('/tmp/late-prefetch.wav');
+    await prefetchRequest;
+
+    assert.equal(messages.some(({ message }) => message.prefetch === true), false);
+    assert.equal(messages.filter(({ message }) => message.text === '迟到预取。').length, 0);
+});
+
+test('远程语音目标断连后立即结束当前句和预取句', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/remote.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        remoteSentenceTimeoutMs: 1000,
+        getDisplayCapabilities: (displayId) => displayId === 'speaker' ? { voicePlayback: true } : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'remote-disconnect',
+        selectedDisplayIds: ['source', 'speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'remote-disconnect', pageIndex: 0, sentenceIndex: 0, text: '当前句。'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'remote-disconnect', pageIndex: 0, sentenceIndex: 1, text: '预取句。', prefetch: true
+    });
+    service.handleDisplayDisconnect('speaker');
+
+    const errors = messages.filter(({ message }) => message.type === 'textSentenceTtsError');
+    assert.deepEqual(errors.map(({ message }) => [message.pageIndex, message.sentenceIndex, message.prefetch]), [
+        [0, 0, undefined],
+        [0, 1, true]
+    ]);
+});
+
 test('取消后恢复相同 playbackId 时仍会丢弃取消前的旧音频', async () => {
     let resolveFirst;
     const messages = [];

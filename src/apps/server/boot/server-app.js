@@ -52,13 +52,14 @@ const { registerTaskHandlers } = require('../modules/task-engine/web-socket-hand
 const AiRolesService = require('../modules/ai-roles/ai-roles-service');
 const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
-const { shouldSkipDisplayTts } = require('../modules/tts/display-tts-policy');
 const { createTextMediaTtsService } = require('../modules/media/text-media-tts-service');
 const {
     registerTextMediaDisplayHandlers,
     handleTextMediaDisplayMessage,
     handleTextMediaControlMessage
 } = require('../modules/media/text-media-ws-integration');
+const { PiRuntimeManager } = require('../modules/chat/pi-runtime-manager');
+const { shouldSkipDisplayTts } = require('../modules/tts/display-tts-policy');
 const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
@@ -261,6 +262,8 @@ const aiRoles = new AiRolesService({
     // Agent 的实际进程和 stdio 由独立后端宿主持有，服务器只保留 Unix Socket 客户端。
     agentBackendClient: new AgentBackendClient()
 });
+// 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
+const piRuntimeManager = new PiRuntimeManager({ projectRoot: PROJECT_ROOT });
 const runtimeBridgeClients = new Map();
 
 const pendingDisplayAsrRequests = new Map();
@@ -268,7 +271,7 @@ let pendingAsrRequestId = 0;
 
 tts.init(config.getTtsConfig());
 asr.init(config.get('asr', {}));
-chat.init(config.get('chat', {}));
+chat.init(config.get('chat', {}), { piRuntimeManager });
 reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
 // 文本分页播放单独逐句合成，不能复用通用 TTS 的整段队列，避免播放定位标签丢失。
@@ -1506,7 +1509,7 @@ app.post('/api/chat/profiles', (req, res) => {
             activeProfile: chat.getActiveProfile()
         });
     } catch (err) {
-        res.status(500).json({ status: 'error', message: '配置更新失败' });
+        res.status(400).json({ status: 'error', message: `配置更新失败: ${err.message}` });
     }
 });
 
@@ -1616,7 +1619,7 @@ app.post('/api/chat/templates', (req, res) => {
             templates: templates
         });
     } catch (err) {
-        res.status(500).json({ status: 'error', message: '模板更新失败' });
+        res.status(400).json({ status: 'error', message: `模板更新失败: ${err.message}` });
     }
 });
 
@@ -1628,7 +1631,7 @@ app.post('/api/chat/templates/add', (req, res) => {
             templates: templates
         });
     } catch (err) {
-        res.status(500).json({ status: 'error', message: '模板添加失败' });
+        res.status(400).json({ status: 'error', message: `模板添加失败: ${err.message}` });
     }
 });
 
@@ -2477,10 +2480,31 @@ app.post('/api/restart', (req, res) => {
             env: { ...process.env, AASC_RELOAD_DELAY: '2500' }
         }).unref();
 
-        setTimeout(() => {
+        setTimeout(async () => {
+            await chat.shutdown();
             process.exit(0);
         }, 500);
     }, 100);
+});
+
+let processShutdownStarted = false;
+async function shutdownManagedRuntimes(exitCode) {
+    if (processShutdownStarted) return;
+    processShutdownStarted = true;
+    try {
+        await chat.shutdown();
+    } catch (error) {
+        logError('Chat', `Pi Runtime关闭失败: ${error.message}`);
+    } finally {
+        process.exit(exitCode);
+    }
+}
+
+process.once('SIGTERM', () => {
+    void shutdownManagedRuntimes(143);
+});
+process.once('SIGINT', () => {
+    void shutdownManagedRuntimes(130);
 });
 
 function getDisplayList() {
@@ -2577,6 +2601,45 @@ function buildTextPlaylistVoiceRoutes(selectedDisplayIds) {
         selectedVoiceDisplayIds,
         voiceRouteByDisplayId
     };
+}
+
+function getSavedTextRoute(displayId, savedState) {
+    const currentPlaylist = savedState?.currentPlaylist;
+    if (currentPlaylist) {
+        const startData = currentPlaylist.startData || {};
+        const currentItem = startData.playlist?.[currentPlaylist.index];
+        if (currentItem?.mediaType !== 'text') return null;
+        return startData.voiceRouteByDisplayId?.[displayId] || {
+            selectedDisplayIds: startData.selectedDisplayIds,
+            selectedVoiceDisplayIds: startData.selectedVoiceDisplayIds,
+            voiceTargetDisplayId: startData.voiceTargetDisplayId
+        };
+    }
+    if (savedState?.currentMedia?.mediaType !== 'text') return null;
+    return savedState.currentMedia.route || savedState.currentMedia;
+}
+
+function restoreTextMediaRoute(displayId, savedState) {
+    const savedRoute = getSavedTextRoute(displayId, savedState);
+    if (!savedRoute) {
+        textMediaTtsService.clearDisplayRoute(displayId);
+        return;
+    }
+
+    const route = buildTextVoiceRoute(displayId, savedRoute.selectedDisplayIds || [displayId]);
+    const savedTarget = savedRoute.voiceTargetDisplayId;
+    const savedSelectedVoices = normalizeDisplayIdList(savedRoute.selectedVoiceDisplayIds);
+    // 目标当前离线时保留服务器此前选中的可信目标，等请求时再由 TTS 服务检查在线状态；
+    // 目标已在线但手动能力被关闭时，不恢复旧目标，避免绕过当前控制端设置。
+    if (!route.voiceTargetDisplayId
+        && typeof savedTarget === 'string'
+        && route.selectedDisplayIds.includes(savedTarget)
+        && savedSelectedVoices.includes(savedTarget)
+        && !displayClients.has(savedTarget)) {
+        route.voiceTargetDisplayId = savedTarget;
+        route.selectedVoiceDisplayIds = savedSelectedVoices;
+    }
+    textMediaTtsService.setDisplayRoute(displayId, route);
 }
 
 function getDisplaysWithCapability(capabilityName) {
@@ -2912,6 +2975,10 @@ wss.on('connection', (ws, req) => {
             const entry = displayClients.get(displayId);
             if (entry) {
                 entry.state.userCapabilities = { ...savedState.userCapabilities };
+                entry.state.capabilities = {
+                    ...DEFAULT_CAPABILITIES,
+                    ...savedState.userCapabilities
+                };
             }
         }
         log('连接', `显示端 ${displayId} (${clientIP})${isSubDisplay ? ' [子显示端]' : ''} 已连接，当前连接数: ${displayClients.size}`);
@@ -2976,6 +3043,7 @@ wss.on('connection', (ws, req) => {
 
         // 批量播放也必须先恢复通用显示设置；批量消息只负责恢复播放列表和断点。
         if (savedState) {
+            restoreTextMediaRoute(displayId, savedState);
             const restoreState = savedState.currentPlaylist
                 ? { ...savedState, currentMedia: null, currentMediaProgress: null }
                 : savedState;
@@ -3079,6 +3147,7 @@ wss.on('connection', (ws, req) => {
             if (wsServer) {
                 wsServer.handleDisplayDisconnect(displayId, ws);
             }
+            textMediaTtsService.handleDisplayDisconnect(displayId);
             log('断开', `显示端 ${displayId} 已断开，当前连接数: ${displayClients.size}`);
             broadcastDisplayList();
             executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
@@ -3941,6 +4010,10 @@ async function handleControlMessageFallback(data, ws) {
                         const dd = displayClients.get(id);
                         if (!dd) return;
                         sendToDisplay(id, { type: 'playlistControl', action: data.action, index: data.index });
+                        if (['pause', 'prev', 'next', 'jump'].includes(data.action)) {
+                            // 批量控制不会携带文本 playbackId；按源显示端当前上下文取消，保留 route 供恢复后新句使用。
+                            textMediaTtsService.cancel(id);
+                        }
                         if (data.action === 'stop' && dd.state.currentPlaylist) {
                             textMediaTtsService.clearDisplayRoute(id);
                             dd.state.currentPlaylist = null;
@@ -4388,7 +4461,8 @@ async function handleChatMessage(options) {
         content: displayContent || content,
         mode: messageMode,
         target: messageTarget,
-        sessionId: sessionId
+        sessionId: sessionId,
+        templateId: templateTarget || 'default'
     });
     
     let systemPrompt = null;
@@ -4426,7 +4500,9 @@ async function handleChatMessage(options) {
         includeHistory: includeHistory,
         contextCount: contextCount,
         mode: messageMode,
-        target: messageTarget
+        target: messageTarget,
+        templateTarget: templateTarget,
+        sessionId: sessionId
     }, {
         onChunk: (chunk, fullMessage) => {
             sendToControl({ type: 'chatChunk', requestId, chunk, message: fullMessage });
@@ -4469,7 +4545,9 @@ async function handleChatMessage(options) {
                 name: templateTarget || '助手',
                 content: fullMessage,
                 mode: messageMode,
-                target: messageTarget
+                target: messageTarget,
+                sessionId: sessionId,
+                templateId: templateTarget || 'default'
             });
             
             sendToControl({ type: 'chatResponse', requestId, success: true, message: fullMessage, history: chat.getHistory() });

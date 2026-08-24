@@ -2,11 +2,18 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
     registerTextMediaDisplayHandlers,
     handleTextMediaDisplayMessage,
     handleTextMediaControlMessage
 } = require('../src/apps/server/modules/media/text-media-ws-integration');
+
+const serverAppSource = fs.readFileSync(
+    path.join(__dirname, '../src/apps/server/boot/server-app.js'),
+    'utf8'
+);
 
 test('服务器为分句 TTS 注册专用路由并调用服务', async () => {
     const handlers = new Map();
@@ -176,4 +183,15 @@ test('文本播放停止时按源显示端和播放标识取消远程路由上�
     assert.equal(handled, true);
     assert.deepEqual(cancelled, [{ displayId: 'source', playbackId: 'p-stop' }]);
     assert.equal(sent.length, 1);
+});
+
+test('批量文本控制动作会取消服务端远程语音上下文但保留播放列表路由', () => {
+    assert.match(serverAppSource, /\['pause', 'prev', 'next', 'jump'\]\.includes\(data\.action\)/);
+    assert.match(serverAppSource, /textMediaTtsService\.cancel\(id\);/);
+    assert.match(serverAppSource, /textMediaTtsService\.clearDisplayRoute\(id\);/);
+});
+
+test('显示端重连恢复文本媒体前会重新注册服务器权威语音路由', () => {
+    assert.match(serverAppSource, /restoreTextMediaRoute\(displayId, savedState\);/);
+    assert.match(serverAppSource, /if \(savedState\) \{[\s\S]*?restoreTextMediaRoute\(displayId, savedState\);[\s\S]*?type: 'restoreState'/);
 });

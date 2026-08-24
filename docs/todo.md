@@ -2,8 +2,40 @@
 
 ## 文本媒体
 
-- [ ] 手动语音设备路由与下一句 TTS 预生成
-  - Task 1（批量媒体类型服务器筛选）已于 2026-08-24 完成，剩余 Task 2/3 待实现。
+- ✅已完成 [2026-08-24][2026-08-24] 修复最终审查发现的远程 TTS 生命周期边界
+  - 批量 pause/prev/next/jump 取消远程上下文并保留 route；远程目标断连/超时回传可定位错误并清理预取；服务重启恢复文本 route；远程预取句暂停后恢复重新请求当前句；超时后迟到预取不再下发。
+  - 明确 `mediaTypes` 混合未知值规则：保留合法类型，全部无效才回退全选。
+  - 测试：核心相关回归 55/55 通过。
+
+- ✅已完成 [2026-08-24][2026-08-24] 完成 Task 4：文档、回归与交付检查
+  - 复核 `docs/design/text-media-routing.md`、`docs/spec/text-media-routing.md`、任务文档与当前实现，确认 Task 1/2/3 的服务器权威 `mediaTypes`、手动 `voicePlayback` 路由、远程回执、单句预取与 stop/cancel 失效语义一致。
+  - 执行指定 Node 测试集合 90 项，90 项全部通过；此前的环境写盘错误和过时断言已重新验证。
+  - 验证：相关 `node --check`、`git diff --check`，以及 `.superpowers/sdd/2026-08-24-text-media-routing/task-4-implementation-report.md`。
+  - 最终复核：完整相关测试集合 98/98 通过，最终只读审查 CLEAN。
+  - 文档：docs/design/text-media-routing.md、docs/spec/text-media-routing.md、docs/task/2026-08-24_批量媒体筛选与文本TTS路由预生成.md、changelog.md、.superpowers/sdd/2026-08-24-text-media-routing/task-4-implementation-report.md
+
+- ✅已完成 [2026-08-24][2026-08-24] 完成 Task 3：下一句 TTS 预生成与显示端缓存
+  - `text-media-player.js` 在当前句音频开始后单次请求下一句 `prefetch:true`，预取回包只缓存不抢播。
+  - 当前句结束优先消费缓存；预取未完成时等待，预取失败后回退普通请求，不跳过当前句。
+  - 暂停、翻页、停止和新 `playbackId` 清理本地预取槽并忽略旧回包。
+  - `text-media-tts-service.js` 识别/透传 `prefetch`，每个播放上下文最多一个预取槽；本地、远程和错误回包均保留定位字段。
+  - `display.html` 兼容远程 `prefetch` 单槽缓存和 `textSentenceTtsReady`，不改变旧无 `prefetch` 客户端行为。
+  - Task 3 review-fix：源端取消、路由覆盖、清理 route 或新 `playbackId` 会向远程语音目标发送可定位 `textPlaybackRemote/action:stop`，远程端清理当前音频和预取槽，旧回调不能再消费缓存。
+  - 测试：`tests/text-media-player.test.js`、`tests/text-media-tts-service.test.js`、`tests/text-media-server-integration.test.js`、`tests/text-media-integration.test.js`。
+  - 文档：docs/design/text-media-routing.md、docs/spec/text-media-routing.md、docs/task/2026-08-24_批量媒体筛选与文本TTS路由预生成.md、.superpowers/sdd/2026-08-24-text-media-routing/task-3-implementation-report.md、.superpowers/sdd/2026-08-24-text-media-routing/task-3-fix-report.md
+
+- ✅已完成 [2026-08-24][2026-08-24] 完成 Task 2：手动语音设备路由与远程播放回执
+  - `display-list.js`、`device-list.js` 复用能力编辑器并明确 `voicePlayback` 是“语音播放为手动路由开关”，未新增自动无扬声器上报。
+  - `server-app.js` 在 `mediaBatch` 和 `playlistRequest` 中为文本媒体计算并持久化 `selectedDisplayIds`、`selectedVoiceDisplayIds`、`voiceTargetDisplayId`、`voiceRouteByDisplayId`。
+  - `text-media-tts-service.js`、`text-media-ws-integration.js`、`text-media-player.js`、`display.html` 支持远程 `textPlaybackRemote`、`textSentenceTtsFinished` 回执校验和取消后上下文失效。
+  - Task 2 reviewer fix：`server-app.js` 注册服务器计算 route 为 TTS 权威上下文；`text-media-tts-service.js` 使用 pendingRemoteSentences 校验远程句子定位后再转发回执。
+  - 测试：`tests/text-media-tts-service.test.js`、`tests/text-media-server-integration.test.js`、`tests/text-media-player.test.js`、`tests/text-media-integration.test.js`。
+  - 文档：docs/design/text-media-routing.md、docs/spec/text-media-routing.md、.superpowers/sdd/2026-08-24-text-media-routing/task-2-implementation-report.md
+
+- ✅已完成 [2026-08-24][2026-08-24] 修复 Task 1 reviewer fix 引入的临时批量上传索引回归
+  - `src/apps/web-mediacenter/ui/public/js/upload.js` 恢复使用当前循环索引生成 `tempPreviewKey`，避免 `prepareTempFiles()` 引用未定义 `i` 后整批临时播放请求不发出。
+  - `tests/text-media-routing-task1.test.js` 新增最小执行型回归，覆盖 `prepareTempFiles()` 和 `showBatchTempUpload()` 的批量入口链路。
+  - 文档：docs/design/text-media-routing.md、docs/spec/text-media-routing.md、.superpowers/sdd/2026-08-24-text-media-routing/task-1-fix2-report.md
 
 - ✅已完成 [2026-08-23][2026-08-23] 混合播放列表文本接入
   - `display.html` 绑定 TextMediaPlayer 列表上下文，文本末页才推进列表，并清理旧句子播放。
@@ -11,6 +43,22 @@
   - 控制端批量进度面板显示文本文件页码；新增 mixed playlist focused tests。
 
 ## 聊天系统
+
+- ✅已完成 [2026-08-23][2026-08-23] Pi Agent 在 LLM 高级指令路由下跳过旧命令识别
+  - `llm + Pi Agent` 跳过天气/搜索旧多处理器；`system` 路由和普通 LLM 行为保持不变
+  - 文档：docs/design/llm-agent-mode.md、docs/design/chat-system.md、docs/spec/llm-agent-mode.md、docs/spec/chat-system.md、docs/task/2026-08-23_Pi-Agent跳过LLM路由旧命令识别.md
+
+- ✅已完成 [2026-08-23][2026-08-23] Pi Agent 默认请求超时调整为 600 秒
+  - PiRuntimeManager 默认 RPC 请求超时从 120 秒调整为 600 秒；保留测试注入短超时和超时清理逻辑
+  - 文档：docs/design/llm-agent-mode.md、docs/spec/llm-agent-mode.md、docs/task/2026-08-23_Pi-Agent默认超时调整为600秒.md
+
+- ✅已完成 [2026-08-23][2026-08-23] 修复 Pi Agent 空 Key 无回复与 Claude 默认超时
+  - Claude 默认无输出超时调整为 600 秒；Pi 本地兼容接口空 Key 使用占位 Key，通过 provider 校验并正常请求
+  - 文档：docs/design/llm-agent-mode.md、docs/spec/llm-agent-mode.md、docs/task/2026-08-23_修复Claude超时与Pi空Key.md
+
+- ✅已完成 [2026-08-23][2026-08-23] 修复 Agent 测试清空私聊模板导致重启后历史不可见
+  - 测试模板改为只更新内存；恢复小爱、妲己私聊模板入口，保留原有历史文件和会话
+  - 文档：docs/design/chat-system.md、docs/spec/chat-system.md、docs/task/2026-08-23_修复测试污染私聊模板.md
 
 - ✅已完成 [2026-08-22][2026-08-22] 服务器 TTS 按调用方检查显示端睡眠
   - 普通聊天、Agent、手动 TTS、提醒和语音指令不受睡眠模式影响；整点报时通过 `checkSleep=true` 按目标显示端状态跳过睡眠/深度睡眠设备
@@ -38,6 +86,17 @@
 
 ## 媒体播放
 
+- ✅已完成 [2026-08-23][2026-08-23] 修复动态画面填充无过渡直接跳变
+  - 根因：动态阶段写入 transition 的同时清空并重写宽高，浏览器没有可插值的旧尺寸。
+  - 修复：布局刷新后保留当前宽高，在下一帧写入目标尺寸；真实显示页回归测试验证过渡中尺寸。
+  - 文档：docs/design/dynamic-fit-mode.md、docs/spec/dynamic-fit-mode.md、docs/task/2026-08-23_修复动态画面填充过渡.md
+
+- ✅已完成 [2026-08-23][2026-08-23] 新增动态画面填充模式
+  - 显示端在适应与铺满之间循环，默认过渡 3 秒、停留 2 秒；控制端可按显示端设置并持久化两个时间。
+  - 改动：动态阶段控制器、显示端宽高动画、服务端状态协议、控制端/设备列表/浮动控制入口。
+  - 验证：动态控制器、显示端恢复、旋转裁剪、媒体播放和显示端身份定向测试共 20 项通过。
+  - 文档：docs/design/dynamic-fit-mode.md、docs/spec/dynamic-fit-mode.md、docs/task/2026-08-23_动态画面填充模式.md
+
 - ✅已完成 [2026-08-20][2026-08-20] 音频媒体播放与睡眠批量手动切换
   - 改动：支持 WAV/OGG/MP3；贯通控制端、服务器、显示端与批量播放；控制端手动“下一个”触发临时激活，自动定时器睡眠拦截保持不变；实时同步当前文件名，控制端刷新后恢复批量文件名
   - 文档：docs/design/audio-media.md、docs/spec/audio-media.md、docs/task/2026-08-20_音频媒体播放与睡眠批量手动切换.md
@@ -54,6 +113,11 @@
   - 文档：docs/design/display.md、docs/design/batch-playlist.md、docs/spec/config.md、docs/spec/batch-playlist.md、docs/spec/display-selection.md、docs/task/2026-08-22_显示端身份与批量状态恢复.md
 
 ## AI 角色
+
+- ✅已完成 [2026-08-23][2026-08-23] 修复 Claude 超时重建测试误判
+  - 首轮保留短超时验证进程清理，重建后的第二轮恢复正常响应窗口，避免冷启动耗时误判为响应失败
+  - ClaudeBridge 13 项、AI 角色模块 51 项测试通过
+  - 文档：docs/design/ai-roles.md、docs/spec/ai-roles.md、docs/task/2026-08-23_修复Claude超时重建测试误判.md
 
 - ✅已完成 [2026-08-23][2026-08-23] 移除控制端大脑页签
   - 删除控制端“大脑”导航入口、日志大脑面板、查看器脚本、初始化钩子和专用样式；保留服务器端 LogBrain、日志 API 和测试

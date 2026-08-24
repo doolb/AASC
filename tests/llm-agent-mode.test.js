@@ -1,0 +1,92 @@
+'use strict';
+
+const { test, afterEach } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const chat = require('../src/external/llm/llm-service');
+
+const originalTemplates = chat.getTemplates();
+
+function createAgentChatHarness() {
+    const calls = [];
+    const runtime = {
+        async chatStream(profile, template, prompt, callbacks) {
+            calls.push({ profile, template, prompt });
+            callbacks.onChunk?.('Pi回复', 'Pi回复');
+            callbacks.onComplete?.('Pi回复');
+            return { success: true, message: 'Pi回复' };
+        },
+        async stopAll() {}
+    };
+    chat.init({
+        systemPrompt: '默认助手',
+        activeProfile: 'agent',
+        llmProfiles: [{
+            name: 'agent',
+            mode: 'agent',
+            backend: 'pi',
+            apiUrl: 'http://127.0.0.1:9/v1/chat/completions',
+            model: 'qwen',
+            maxTokens: 1000,
+            temperature: 0.7,
+            contextCount: 10,
+            apiKey: ''
+        }]
+    }, { piRuntimeManager: runtime });
+    chat.setTemplates([{
+        id: 'researcher',
+        name: 'researcher',
+        content: '只读助手',
+        permissionProfile: 'readonly'
+    }], { persist: false });
+    return { calls };
+}
+
+afterEach(() => {
+    chat.setTemplates(originalTemplates, { persist: false });
+});
+
+test('测试模板可只更新内存而不写入用户配置', () => {
+    const originalWriteFileSync = fs.writeFileSync;
+    let persisted = false;
+    fs.writeFileSync = (...args) => {
+        persisted = true;
+        throw new Error('测试不应写入用户模板配置');
+    };
+
+    try {
+        assert.doesNotThrow(() => chat.setTemplates([
+            { id: 'test-only', name: 'test-only', content: '测试模板' }
+        ], { persist: false }));
+    } finally {
+        fs.writeFileSync = originalWriteFileSync;
+    }
+
+    assert.equal(persisted, false);
+});
+
+test('Agent profile 使用 Pi，不调用普通 LLM HTTP', async () => {
+    const { calls } = createAgentChatHarness();
+    const result = await chat.chatStream('查找文件', {
+        templateTarget: 'researcher',
+        mode: 'group',
+        includeHistory: true,
+        contextCount: 10
+    }, {});
+    assert.equal(result.success, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].profile.name, 'agent');
+    assert.equal(calls[0].template.permissionProfile, 'readonly');
+    assert.match(calls[0].prompt, /查找文件/u);
+});
+
+test('模板权限来自服务端模板，不能由请求 tools 字段覆盖', async () => {
+    const { calls } = createAgentChatHarness();
+    await chat.chatStream('搜索资料', {
+        templateTarget: 'researcher',
+        mode: 'group',
+        tools: ['bash']
+    }, {});
+    assert.equal(calls[0].template.permissionProfile, 'readonly');
+    assert.equal('tools' in calls[0].template, false);
+});

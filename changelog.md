@@ -4,13 +4,34 @@
 
 ### 已完成
 
+- ✅ [2026-08-24] 完成 Task 4：文档、回归与交付检查
+  - 复核 `docs/design/text-media-routing.md`、`docs/spec/text-media-routing.md` 与任务文档，确认 Task 1/2/3 的服务器权威 `mediaTypes`、手动 `voicePlayback` 路由、远程 `textSentenceTtsFinished` 回执、单句 `prefetch` 与 stop/cancel 失效描述和当前实现一致。
+  - 修正任务文档中过时的“Task 2 未实现”记录，并把文本媒体任务状态同步到 `docs/todo.md`。
+  - 验证：指定 Node 测试集合 90 项全部通过；详细记录见 `.superpowers/sdd/2026-08-24-text-media-routing/task-4-implementation-report.md`。
+  - 最终复核：扩展后的完整相关测试集合 98/98 通过，最终只读审查 CLEAN。
+
+- ✅ [2026-08-24] 完成 Task 3：下一句 TTS 预生成与显示端缓存
+  - `TextMediaPlayer` 在当前句音频开始后单次请求下一句 `prefetch:true`；预取回包缓存定位和 `audioUrl`，不立即播放。
+  - 当前句结束后优先消费缓存；预取尚未完成时等待，预取失败后回退普通请求，不跳过当前句。
+  - 暂停、翻页、停止和新播放标识会清理本地预取槽并忽略旧回包。
+  - `TextMediaTtsService` 识别/透传 `prefetch`，每个播放上下文最多一个预取槽；本地、远程和错误回包均保留完整定位字段。
+  - 远程路径保持协议兼容：服务端发送 `textSentenceTtsReady(prefetch=true)`，显示端对远程 `prefetch` 只做单槽缓存，不抢占当前音频。
+  - 验证：`tests/text-media-player.test.js`、`tests/text-media-tts-service.test.js`、`tests/text-media-server-integration.test.js`、`tests/text-media-integration.test.js` 聚焦测试通过。
+
+- ✅ [2026-08-24] 完成 Task 2：手动语音设备路由与远程播放回执
+  - 控制端显示端能力编辑器明确 `voicePlayback` 是“语音播放为手动路由开关”，服务器继续以 `userCapabilities.voicePlayback` 覆盖显示端自动能力上报。
+  - `mediaBatch` 和 `playlistRequest` 为文本媒体按本次选中的 `displayIds` 计算 `voiceTargetDisplayId`：源端优先，否则只在本次选中的在线手动语音设备中按顺序选择；不扩展到未选设备。
+  - 文本单媒体和播放列表下发并持久化 `selectedDisplayIds`、`selectedVoiceDisplayIds`、`voiceTargetDisplayId` 和 `voiceRouteByDisplayId`，重连恢复保留路由。
+  - `textSentenceTts` 支持显式 route 校验；远程目标收到 `textPlaybackRemote` 后以 `textSentenceTtsFinished` 回报，服务器校验上下文后转发源显示端推进当前句；取消/停止后迟到远程回执失效。
+  - 新增/更新 focused tests：`tests/text-media-tts-service.test.js`、`tests/text-media-server-integration.test.js`、`tests/text-media-player.test.js`、`tests/text-media-integration.test.js`。
+
 - ✅ [2026-08-24] 完成 Task 1：批量媒体类型协议与服务器筛选
   - 控制端批量设置弹窗新增 `text/audio/image/video/web` 五类复选框，默认全部选中；确认后只上报 `mediaTypes`，不在浏览器本地筛选媒体库结果或临时文件。
   - `PlaylistManager` 统一对媒体库扫描和临时文件两条路径执行 `mediaTypes` 规范化筛选：`web -> html`、`image` 同时包含 `gif`，缺失/空数组/未知值时兼容旧客户端按全部类型处理。
   - `server-app` 在 `playlistRequest` 中透传 `mediaTypes`，保持控制层不复制服务端筛选规则。
   - 新增/更新 focused tests：`tests/playlist-app-service.test.js`、`tests/text-media-routing-task1.test.js`。
 
-- 🚧 [2026-08-24] 设计批量媒体类型筛选与文本 TTS 路由预生成
+- ✅ [2026-08-24] 完成批量媒体类型筛选与文本 TTS 路由预生成
   - 控制端仅上报 `mediaTypes`，服务器负责文本/音频/图片/视频/网页筛选。
   - 规划手动 `voicePlayback` 能力路由、远程播放结束回执和下一句预生成缓存。
   - 文档：docs/design/text-media-routing.md、docs/spec/text-media-routing.md、docs/task/2026-08-24_批量媒体筛选与文本TTS路由预生成.md
@@ -29,6 +50,29 @@
   - 控制端三个批量状态面板显示“文档第 X/Y 页”；新增文本混合列表回归测试。
 
 ### 修复
+
+- ✅ [2026-08-24] 修复文本 TTS 路由生命周期边界
+  - 批量 pause/prev/next/jump 不携带 playbackId 时，服务端仍取消当前远程上下文并保留 route；停止/切换媒体继续清理 route。
+  - 远程语音目标断连或句子完成超时会向源端发送带定位错误，清理当前句和预取句，并停止远程缓存；超时先失效旧 playback context，迟到的预取生成结果不会再次下发，避免文本播放永久等待或旧语音泄漏。
+  - 显示端重连时从持久化文本媒体/播放列表状态重新注册服务器权威 route；远程预取句消费后暂停，恢复会使用新 playbackId 重发当前句。
+  - 明确 `mediaTypes` 混合未知值仅保留合法类型，全部无效才按全选兼容。
+  - 验证：新增边界回归后核心相关测试 55/55 通过。
+
+- ✅ [2026-08-24] 修复 Task 3 review 中远程预取缓存取消后继续播放
+  - `TextMediaTtsService` 在源端 `cancel`、route replacement、`clearDisplayRoute` 和新 `playbackId` 覆盖旧上下文时，先向远程 `voiceTargetDisplayId` 下发 `textPlaybackRemote:true/action:'stop'`，再失效 active/pending/prefetch 上下文；本地语音目标不发送远程 stop。
+  - `display.html` 收到明确远程 stop 后暂停当前远程文本音频并清理当前/预取槽；旧 `ended/error` 回调用 token 失效，不能再自动消费旧缓存。
+  - 远程预取消费增加 origin/target/playback 与下一句定位校验，收到不同上下文的新远程播放消息时清理旧缓存。
+  - 验证：focused Node tests、相关 JS 语法检查和差异空白检查通过；按要求未运行长浏览器测试。
+
+- ✅ [2026-08-24] 修复 Task 2 review 中的文本语音路由权威性与远程回执定位校验
+  - `server-app` 在 `mediaBatch` 和 `playlistRequest` 下发时注册服务器计算的文本语音 route，`textSentenceTts` 首包不再信任显示端伪造 route；停止或切到非文本媒体时清理注册 route。
+  - `TextMediaTtsService` 下发远程句子时登记 pending 定位，`textSentenceTtsFinished` 必须匹配 origin/target/playbackId/pageIndex/sentenceIndex 后才转发，成功回执后删除 pending 记录。
+  - 验证：聚焦 service/server 集成测试、相关 JS 语法检查和差异空白检查通过；未运行已知可能卡住的全套 text-media 测试。
+
+- ✅ [2026-08-24] 修复 Task 1 reviewer fix 引入的临时批量上传索引回归
+  - `upload.js` 的 `prepareTempFiles()` 改为使用当前循环索引生成 `tempPreviewKey`，不再引用未定义 `i`，保持原有文件读取顺序和批量入口逻辑不变。
+  - 新增最小执行型回归测试，直接跑通 `prepareTempFiles()` 与 `showBatchTempUpload()`，确保控制端批量入口可生成 `tempPreviewKey` 并发出 `playlistRequest`。
+  - 文档：docs/design/text-media-routing.md、docs/spec/text-media-routing.md、.superpowers/sdd/2026-08-24-text-media-routing/task-1-fix2-report.md
 
 - ✅ [2026-08-23] 修复浮动快捷控制缺少文本模式设置入口
   - 浮动“文本分页”新增“文本模式”按钮，并委托主面板的设置弹窗，统一固定主题和完整 `textStyle` 协议。

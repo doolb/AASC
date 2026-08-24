@@ -50,6 +50,7 @@ const Chat = {
     noInterruptMode: true,
     profiles: [],
     activeProfile: '',
+    editingTemplateName: null,
 
     init() {
         this.loadHistory();
@@ -897,7 +898,7 @@ const Chat = {
     checkMultiHandlerKeywords(message) {
         const keywords = [];
         
-        if (message.includes('天气')) {
+        if (message.includes('天气') && !this.shouldLetPiAgentHandle('weather')) {
             keywords.push('weather');
         }
         if (message.includes('提醒')) {
@@ -906,7 +907,7 @@ const Chat = {
         if (message.includes('报时') || message.includes('现在几点')) {
             keywords.push('time');
         }
-        if (message.includes('搜索')) {
+        if (message.includes('搜索') && !this.shouldLetPiAgentHandle('search')) {
             keywords.push('search');
         }
         
@@ -917,6 +918,14 @@ const Chat = {
         }
         
         return keywords;
+    },
+
+    shouldLetPiAgentHandle(commandType) {
+        const activeProfile = this.profiles.find(profile => profile.name === this.activeProfile);
+        const route = window.Settings?.routing?.[commandType];
+        // 只有控制端明确选择 LLM，且当前 profile 确实由 Pi Agent 执行时，
+        // 才跳过旧的天气/搜索处理器；system 路由和普通 LLM 行为保持不变。
+        return route === 'llm' && activeProfile?.mode === 'agent' && activeProfile?.backend === 'pi';
     },
     
     executeMultiHandlers(message, keywords) {
@@ -1525,6 +1534,7 @@ const Chat = {
                     <div class="profile-info" onclick="Chat.switchProfile('${this.escapeHtml(p.name)}')" style="cursor:pointer;flex:1">
                         <span class="profile-name">${this.escapeHtml(p.name)}</span>
                         <span class="profile-model">${this.escapeHtml(p.model)}</span>
+                        <span class="profile-mode">${p.mode === 'agent' ? 'Pi Agent · 只读' : '直接 LLM'}</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;">
                         <span class="profile-status">${isActive ? '✓ 当前' : '切换'}</span>
@@ -1540,6 +1550,7 @@ const Chat = {
 
     showAddProfile() {
         document.getElementById('profileEditName').value = '';
+        document.getElementById('profileEditMode').value = 'llm';
         document.getElementById('profileEditApiUrl').value = '';
         document.getElementById('profileEditModel').value = '';
         document.getElementById('profileEditMaxTokens').value = '';
@@ -1553,6 +1564,7 @@ const Chat = {
         const profile = this.profiles.find(p => p.name === name);
         if (!profile) return;
         document.getElementById('profileEditName').value = profile.name || '';
+        document.getElementById('profileEditMode').value = profile.mode || 'llm';
         document.getElementById('profileEditApiUrl').value = profile.apiUrl || '';
         document.getElementById('profileEditModel').value = profile.model || '';
         document.getElementById('profileEditMaxTokens').value = profile.maxTokens || '';
@@ -1575,6 +1587,7 @@ const Chat = {
         const temperature = parseFloat(document.getElementById('profileEditTemperature').value) || 0.7;
         const contextCount = parseInt(document.getElementById('profileEditContextCount').value) || 0;
         const apiKey = document.getElementById('profileEditApiKey').value.trim();
+        const mode = document.getElementById('profileEditMode').value;
 
         if (!name) {
             window.showToast('请输入配置名称', 'error');
@@ -1591,7 +1604,9 @@ const Chat = {
 
         const existingIdx = this.profiles.findIndex(p => p.name === name);
         const promptFormat = document.getElementById('profileEditPromptFormat').value;
-        const profile = { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat };
+        const profile = mode === 'agent'
+            ? { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode: mode, backend: 'pi' }
+            : { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode: mode };
 
         if (existingIdx >= 0) {
             this.profiles[existingIdx] = profile;
@@ -1688,7 +1703,9 @@ const Chat = {
                 <div class="chat-template-info">
                     <div class="chat-template-name">${this.escapeHtml(t.name)}</div>
                     <div class="chat-template-content">${this.escapeHtml(t.content)}</div>
+                    <div class="chat-template-permission-label">权限：${t.permissionProfile === 'readonly' ? '只读' : '未知'}</div>
                 </div>
+                <button class="chat-template-edit" onclick="Chat.editTemplate(\`${this.escapeHtml(t.name)}\`)">编辑</button>
                 <button class="chat-template-delete" onclick="Chat.deleteTemplate(\`${this.escapeHtml(t.name)}\`)">删除</button>
             </div>
         `).join('');
@@ -1700,6 +1717,7 @@ const Chat = {
         
         const name = nameInput.value.trim();
         const content = contentInput.value.trim();
+        const permissionProfile = document.getElementById('templatePermissionProfile').value || 'readonly';
         
         if (!name || !content) {
             window.showToast('请填写模板名称和内容', 'error');
@@ -1709,7 +1727,7 @@ const Chat = {
         fetch('/api/chat/templates/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, content })
+            body: JSON.stringify({ name, content, permissionProfile: permissionProfile })
         })
         .then(res => res.json())
         .then(data => {
@@ -1719,10 +1737,25 @@ const Chat = {
                 this.renderTemplateList();
                 nameInput.value = '';
                 contentInput.value = '';
-                window.showToast('模板添加成功', 'success');
+                document.getElementById('templatePermissionProfile').value = 'readonly';
+                this.editingTemplateName = null;
+                const button = document.querySelector('.chat-add-template .chat-add-btn');
+                if (button) button.textContent = '添加模板';
+                window.showToast('模板保存成功', 'success');
             }
         })
         .catch(err => window.showToast('添加失败', 'error'));
+    },
+
+    editTemplate(name) {
+        const template = this.templates.find(item => item.name === name);
+        if (!template) return;
+        this.editingTemplateName = name;
+        document.getElementById('newTemplateName').value = template.name || '';
+        document.getElementById('newTemplateContent').value = template.content || '';
+        document.getElementById('templatePermissionProfile').value = template.permissionProfile || 'readonly';
+        const button = document.querySelector('.chat-add-template .chat-add-btn');
+        if (button) button.textContent = '保存模板';
     },
     
     deleteTemplate(name) {

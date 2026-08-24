@@ -15,7 +15,7 @@ function isAlive(pid) {
     }
 }
 
-const READ_TIMEOUT_MS = 60000;
+const READ_TIMEOUT_MS = 600000;
 const DEFAULT_COMMAND_ARGS = Object.freeze([
     '--print',
     '--verbose',
@@ -41,7 +41,7 @@ class ClaudeBridge {
         this.promptFile = promptFile;   // --append-system-prompt-file 指向的文件
         this.cwd = cwd;                 // spawn 工作目录（项目根）
         this.keeperPath = keeperPath;   // pipe-keeper.js 绝对路径
-        this.readTimeoutMs = readTimeoutMs; // 读超时（测试注入短值；默认 60s）
+        this.readTimeoutMs = readTimeoutMs; // 读超时（测试注入短值；默认 600s）
         this.readOpenTimeoutMs = readOpenTimeoutMs; // 读端 open 超时（测试注入短值；默认 5s）
         this.claudePidFile = path.join(dir, 'claude.pid');
         this.keeperPidFile = path.join(dir, 'keeper.pid');

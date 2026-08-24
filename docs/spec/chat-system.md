@@ -907,13 +907,13 @@ const Chat = {
     checkMultiHandlerKeywords(message):
         检查消息是否包含多处理器关键词:
         
-        如果 message 包含 '天气':
+        如果 message 包含 '天气' 且不是 (routing.weather == 'llm' 且 activeProfile.mode == 'agent' 且 activeProfile.backend == 'pi'):
             添加 'weather' 到关键词列表
         如果 message 包含 '提醒':
             添加 'reminder' 到关键词列表
         如果 message 包含 '报时' 或 '现在几点':
             添加 'time' 到关键词列表
-        如果 message 包含 '搜索':
+        如果 message 包含 '搜索' 且不是 (routing.search == 'llm' 且 activeProfile.mode == 'agent' 且 activeProfile.backend == 'pi'):
             添加 'search' 到关键词列表
         遍历自定义指令关键词:
             如果 message 包含关键词:
@@ -1516,3 +1516,48 @@ POST /api/chat/profiles/switch:
 | ~/.config/aasc-user/chat-history.json | 聊天历史 |
 | ~/.config/aasc-user/chat-session.json | 会话状态 |
 | ~/.config/aasc-user/chat-commands.json | 自定义指令 |
+
+## LLM Agent 实现伪代码
+
+```text
+handleChatMessage(message):
+    先执行控制端/服务端已有的确定性内置命令识别
+    如果命令已识别:
+        执行已注册服务器命令并返回
+    否则:
+        调用 chat.chatStream(message, templateTarget, sessionId)
+
+chat.chatStream(message, options, callbacks):
+    profile = normalizeProfile(activeProfile)
+    如果 profile.mode == 'agent':
+        template = 从服务端模板表读取 templateTarget
+        policy = resolvePermissionPolicy(template.permissionProfile)
+        prompt = 当前 profile/template 历史 + 当前系统提示词 + 当前消息
+        PiRuntimeManager.chatStream(profile, template, prompt, callbacks)
+        Pi 失败时返回失败，不回退到普通 LLM HTTP
+    否则:
+        沿用现有 OpenAI 兼容 SSE 请求
+```
+
+`PiRuntimeManager` 为 `(profileName, templateId, permissionProfile)` 维护服务器拥有的 RPC 子进程，并在服务器重启、SIGTERM/SIGINT 或单次异常时清理进程。模板请求中的任意 `tools` 字段不参与策略计算；高权限策略暂由控制端配置，服务器仍执行固定策略校验。
+
+## 模板持久化隔离伪代码
+
+```text
+setTemplates(templates, options):
+    chatTemplates = normalize(templates)
+    如果 options.persist 不是 false:
+        saveTemplates()  // 生产控制端默认持久化
+    返回 chatTemplates
+
+Agent 测试:
+    setTemplates(testTemplates, { persist: false })
+    测试结束恢复内存模板
+    不写入 ~/.config/aasc-user/chat-templates.json
+
+服务器启动:
+    加载 chat-templates.json
+    加载 chat-history-*.json
+    控制端根据模板生成私聊入口
+    模板入口缺失时，历史文件仍保留，不删除历史消息
+```

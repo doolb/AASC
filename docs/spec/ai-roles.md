@@ -256,7 +256,9 @@ _onLine(line):
   其他 system/assistant 事件忽略
 ```
 
-响应无输出达到 `readTimeoutMs` 时先 `cleanup()` 再失败当前 turn，防止迟到输出污染下一轮。
+响应无输出达到 `readTimeoutMs` 时先 `cleanup()` 再失败当前 turn，防止迟到输出污染下一轮。Claude 生产默认 `readTimeoutMs=600000`（600 秒），测试可注入更短值。
+
+回归测试在超时轮次使用短 `readTimeoutMs`，确认旧进程被杀掉；确认进程退出后，下一轮恢复正常响应超时窗口再启动新进程，验证重建后的消息能够正常返回。冷启动耗时不作为 Claude 响应无活动超时的断言对象。
 
 ## `stop` 与 `reconnect`
 

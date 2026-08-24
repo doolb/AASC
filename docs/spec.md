@@ -47,9 +47,13 @@
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
 | 显示端睡眠模式 | [display-sleep-mode.md](spec/display-sleep-mode.md) | 时段判定/媒体遮罩/深度 UI 遮罩/临时激活/控制端配置 |
 | 音频媒体播放 | [audio-media.md](spec/audio-media.md) | audio 类型识别、服务器 MIME/WS、显示端播放与批量控制 |
+| 纯文本分页 TTS 播放 | [text-media.md](spec/text-media.md) | txt/md 分页、显示端分句、单句 TTS 协议与批量控制伪代码 |
+| 文本 TTS 路由与批量类型筛选 | [text-media-routing.md](spec/text-media-routing.md) | 批量类型上报、服务器筛选、手动语音路由和预生成伪代码 |
 | AI 执行规则 | [ai-rules.md](spec/ai-rules.md) | 工作 AI 重启服务器时仅允许使用控制端接口 |
 | 服务器重启命令 | [server-restart-script.md](spec/server-restart-script.md) | 原生 HTTP/HTTPS 调用控制端重启接口 |
 | 工作 AI 角色 | [ai-roles.md](spec/ai-roles.md) | 控制端 AI 角色、角色定义自管理与任务历史 |
+| LLM 配置 Agent 模式 | [llm-agent-mode.md](spec/llm-agent-mode.md) | 普通 LLM profile 的 Pi RPC 分流、历史隔离与只读权限伪代码 |
+| 动态画面填充模式 | [dynamic-fit-mode.md](spec/dynamic-fit-mode.md) | 动态阶段控制器、显示端动画与控制协议伪代码 |
 
 ## 核心模块
 

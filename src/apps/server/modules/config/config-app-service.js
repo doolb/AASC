@@ -78,6 +78,7 @@ class Config extends DataSnapshot {
             llmProfiles: [
                 {
                     name: 'default',
+                    mode: 'llm',
                     apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
                     model: 'gpt-3.5-turbo',
                     maxTokens: 1000,

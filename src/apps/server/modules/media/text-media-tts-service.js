@@ -16,7 +16,13 @@ const path = require('path');
  * @param {Function} [dependencies.getDisplayCapabilities] 读取显示端当前能力的方法；返回空值视为离线
  * @returns {{handleSentenceRequest: Function, cancel: Function}} 单句请求与取消接口
  */
-function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDisplayCapabilities }) {
+function createTextMediaTtsService({
+    generateTTS,
+    sendToDisplay,
+    logError,
+    getDisplayCapabilities,
+    remoteSentenceTimeoutMs = 10000
+}) {
     const displayQueues = new Map();
     const activePlaybacks = new Map();
     const displayRoutes = new Map();
@@ -127,6 +133,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      */
     function buildPlaybackContext(originDisplayId, data, route, explicitRoute) {
         return {
+            originDisplayId,
             playbackId: data.playbackId,
             token: Symbol(data.playbackId),
             ...normalizeRoute(originDisplayId, route),
@@ -146,12 +153,50 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
     function registerPendingRemoteSentence(context, targetDisplayId, data) {
         const key = makeRemoteSentenceKey(targetDisplayId, data);
         if (!key) return;
-        context.pendingRemoteSentences.set(key, Symbol(key));
+        const pending = {
+            data: { ...data },
+            timer: null
+        };
+        context.pendingRemoteSentences.set(key, pending);
+        if (!data.prefetch) armPendingRemoteSentence(context, key, pending, '远程语音设备未在规定时间内完成播放');
+    }
+
+    function armPendingRemoteSentence(context, key, pending, message) {
+        if (pending.timer) return;
+        pending.timer = setTimeout(() => {
+            const activeContext = activePlaybacks.get(context.originDisplayId);
+            if (activeContext !== context || context.pendingRemoteSentences.get(key) !== pending) return;
+            activePlaybacks.delete(context.originDisplayId);
+            sendRemoteStop(context.originDisplayId, context);
+            failPendingRemoteSentences(context.originDisplayId, context, message);
+        }, remoteSentenceTimeoutMs);
+        pending.timer.unref?.();
     }
 
     function consumePendingRemoteSentence(context, targetDisplayId, data) {
         const key = makeRemoteSentenceKey(targetDisplayId, data);
-        return key ? context.pendingRemoteSentences.delete(key) : false;
+        if (!key) return false;
+        const pending = context.pendingRemoteSentences.get(key);
+        if (!pending) return false;
+        clearTimeout(pending.timer);
+        context.pendingRemoteSentences.delete(key);
+        return true;
+    }
+
+    function clearPendingRemoteSentences(context) {
+        for (const pending of context?.pendingRemoteSentences?.values() || []) {
+            clearTimeout(pending.timer);
+        }
+        context?.pendingRemoteSentences?.clear();
+    }
+
+    function failPendingRemoteSentences(originDisplayId, context, message) {
+        const pending = [...(context?.pendingRemoteSentences?.values() || [])];
+        clearPendingRemoteSentences(context);
+        context.prefetchSlot = null;
+        for (const entry of pending) {
+            sendError(originDisplayId, entry.data, message);
+        }
     }
 
     function getRemoteTarget(originDisplayId, context) {
@@ -189,7 +234,9 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      */
     function setDisplayRoute(originDisplayId, trustedRoute) {
         if (!originDisplayId || !trustedRoute || typeof trustedRoute !== 'object') return;
-        sendRemoteStop(originDisplayId, activePlaybacks.get(originDisplayId));
+        const previous = activePlaybacks.get(originDisplayId);
+        sendRemoteStop(originDisplayId, previous);
+        clearPendingRemoteSentences(previous);
         displayRoutes.set(originDisplayId, normalizeRoute(originDisplayId, trustedRoute));
         activePlaybacks.delete(originDisplayId);
     }
@@ -200,7 +247,9 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      * @param {string} originDisplayId 源文本显示端
      */
     function clearDisplayRoute(originDisplayId) {
-        sendRemoteStop(originDisplayId, activePlaybacks.get(originDisplayId));
+        const previous = activePlaybacks.get(originDisplayId);
+        sendRemoteStop(originDisplayId, previous);
+        clearPendingRemoteSentences(previous);
         displayRoutes.delete(originDisplayId);
         activePlaybacks.delete(originDisplayId);
     }
@@ -218,8 +267,10 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
         const samePlayback = previous?.playbackId === context.playbackId;
         if (previous && !samePlayback) {
             sendRemoteStop(originDisplayId, previous);
+            clearPendingRemoteSentences(previous);
         }
         activePlaybacks.set(originDisplayId, {
+            originDisplayId,
             playbackId: context.playbackId,
             token: samePlayback ? previous.token : Symbol(context.playbackId),
             ...normalizeRoute(originDisplayId, context),
@@ -280,6 +331,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             ? buildPlaybackContext(originDisplayId, data, trustedRoute, true)
             : buildPlaybackContext(originDisplayId, data, {}, false);
         sendRemoteStop(originDisplayId, activePlayback);
+        clearPendingRemoteSentences(activePlayback);
         activePlaybacks.set(originDisplayId, context);
         return { context };
     }
@@ -448,6 +500,9 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             && hasVoicePlayback(targetDisplayId, false);
         if (!isValidContext) return;
         if (!consumePendingRemoteSentence(context, targetDisplayId, data)) return;
+        for (const [key, pending] of context.pendingRemoteSentences.entries()) {
+            armPendingRemoteSentence(context, key, pending, '远程语音设备未在规定时间内完成播放');
+        }
         if (context.prefetchSlot && !isSameSentence(context.prefetchSlot, data)) {
             context.prefetchSlot = null;
         }
@@ -469,11 +524,32 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      * @param {string} displayId 显示端标识
      * @param {string} playbackId 需要取消的播放标识
      */
-    function cancel(displayId, playbackId) {
+    function cancel(displayId, playbackId = null) {
         const context = activePlaybacks.get(displayId);
-        if (context?.playbackId === playbackId) {
+        if (context && (playbackId === null || context.playbackId === playbackId)) {
             sendRemoteStop(displayId, context);
+            clearPendingRemoteSentences(context);
             activePlaybacks.delete(displayId);
+        }
+    }
+
+    /**
+     * 显示端断连时立即失败其远程语音上下文，避免源端等待永远不会到达的回执。
+     * 断连的目标可能稍后重连，保留 displayRoutes，让后续新句请求继续按原选择重新校验。
+     *
+     * @param {string} disconnectedDisplayId 断连显示端标识
+     */
+    function handleDisplayDisconnect(disconnectedDisplayId) {
+        for (const [originDisplayId, context] of activePlaybacks.entries()) {
+            if (originDisplayId === disconnectedDisplayId) {
+                clearPendingRemoteSentences(context);
+                activePlaybacks.delete(originDisplayId);
+                continue;
+            }
+            if (context.voiceTargetDisplayId !== disconnectedDisplayId) continue;
+
+            failPendingRemoteSentences(originDisplayId, context, '远程语音设备已断开连接');
+            activePlaybacks.delete(originDisplayId);
         }
     }
 
@@ -488,7 +564,8 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
         setDisplayRoute,
         clearDisplayRoute,
         setPlaybackContext,
-        cancel
+        cancel,
+        handleDisplayDisconnect
     };
 }
 

@@ -5,6 +5,11 @@ const path = require('path');
 const { isSentenceEnd, splitIntoSentences } = require('../../core/utils/sentence-splitter');
 
 const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-config-paths');
+const {
+    normalizeAgentProfile,
+    normalizeChatTemplate,
+    buildChatSessionKey
+} = require('../../apps/server/modules/chat/pi-runtime-policy');
 
 const HISTORY_DIR = USER_CONFIG_DIR;
 const HISTORY_FILE_BASE = 'chat-history';
@@ -37,12 +42,19 @@ let chatConfig = {
 
 let llmProfiles = [];
 let activeProfile = 'default';
+let piRuntimeManager = null;
 
 let chatHistories = {};
 const MAX_HISTORY_PER_SESSION = 100;
 
-function sessionKey(mode, target, sessionId) {
-    return mode === 'private' && target ? `private:${target}:${sessionId || 'default'}` : 'group';
+function sessionKey(mode, target, sessionId, profileName = activeProfile, templateId = 'default') {
+    return buildChatSessionKey({
+        profileName,
+        templateId,
+        mode: mode || 'group',
+        target,
+        sessionId
+    });
 }
 let chatTemplates = [];
 let chatSession = {
@@ -71,9 +83,17 @@ function loadHistory() {
             const data = fs.readFileSync(path.join(HISTORY_DIR, file), 'utf8');
             const messages = JSON.parse(data);
             for (const msg of messages) {
-                // 旧消息无 sessionId → 默认 'default'
+                // 旧消息没有 profile/template 时归入启动时的当前 profile/default 模板。
                 if (!msg.sessionId) msg.sessionId = 'default';
-                const key = sessionKey(msg.mode, msg.target, msg.sessionId);
+                if (!msg.profileName) msg.profileName = activeProfile;
+                if (!msg.templateId) msg.templateId = 'default';
+                const key = sessionKey(
+                    msg.mode,
+                    msg.target,
+                    msg.sessionId,
+                    msg.profileName,
+                    msg.templateId
+                );
                 if (!chatHistories[key]) chatHistories[key] = [];
                 chatHistories[key].push(msg);
             }
@@ -99,18 +119,13 @@ function saveHistory() {
             const groupedByFile = {};
             const expectedFiles = new Set();
 
-            for (const [key, messages] of Object.entries(chatHistories)) {
+            for (const messages of Object.values(chatHistories)) {
                 if (messages.length === 0) continue;
 
-                let fileName;
-                if (key === 'group') {
-                    fileName = `${HISTORY_FILE_BASE}.json`;
-                } else {
-                    // key = 'private:小爱:default' → 提取 target = '小爱'
-                    const parts = key.split(':');
-                    const target = parts[1];
-                    fileName = `${HISTORY_FILE_BASE}-${target}.json`;
-                }
+                const firstMessage = messages[0];
+                const fileName = firstMessage.mode === 'private' && firstMessage.target
+                    ? `${HISTORY_FILE_BASE}-${firstMessage.target}.json`
+                    : `${HISTORY_FILE_BASE}.json`;
 
                 if (!groupedByFile[fileName]) groupedByFile[fileName] = [];
                 groupedByFile[fileName].push(...messages);
@@ -145,7 +160,10 @@ function trimHistory() {
     }
 }
 
-function init(config = {}) {
+function init(config = {}, options = {}) {
+    if (options.piRuntimeManager !== undefined) {
+        piRuntimeManager = options.piRuntimeManager;
+    }
     if (config.agentBackend === 'codex' || config.agentBackend === 'claude') chatConfig.agentBackend = config.agentBackend;
     if (config.apiUrl) chatConfig.apiUrl = config.apiUrl;
     if (config.model) chatConfig.model = config.model;
@@ -153,9 +171,9 @@ function init(config = {}) {
     if (config.temperature) chatConfig.temperature = config.temperature;
     if (config.systemPrompt) chatConfig.systemPrompt = config.systemPrompt;
     if (config.llmProfiles) {
-        llmProfiles = config.llmProfiles;
+        llmProfiles = config.llmProfiles.map(normalizeAgentProfile);
     } else {
-        llmProfiles = [{
+        llmProfiles = [normalizeAgentProfile({
             name: 'default',
             apiUrl: chatConfig.apiUrl,
             model: chatConfig.model,
@@ -163,8 +181,9 @@ function init(config = {}) {
             temperature: chatConfig.temperature,
             apiKey: chatConfig.apiKey,
             contextCount: chatConfig.contextCount,
-            promptFormat: chatConfig.promptFormat
-        }];
+            promptFormat: chatConfig.promptFormat,
+            mode: 'llm'
+        })];
     }
     if (config.activeProfile && llmProfiles.some(p => p.name === config.activeProfile)) {
         activeProfile = config.activeProfile;
@@ -191,6 +210,8 @@ function applyProfile(name) {
         if (profile.temperature !== undefined) chatConfig.temperature = profile.temperature;
         if (profile.contextCount !== undefined) chatConfig.contextCount = profile.contextCount;
         if (profile.promptFormat !== undefined) chatConfig.promptFormat = profile.promptFormat;
+        chatConfig.mode = profile.mode || 'llm';
+        chatConfig.backend = profile.backend || null;
         activeProfile = profile.name;
     }
 }
@@ -199,16 +220,16 @@ function loadTemplates() {
     try {
         if (fs.existsSync(TEMPLATES_FILE)) {
             const data = fs.readFileSync(TEMPLATES_FILE, 'utf8');
-            chatTemplates = JSON.parse(data);
+            chatTemplates = JSON.parse(data).map(normalizeChatTemplate);
             console.log(`[Chat] 已加载 ${chatTemplates.length} 个模板`);
         } else {
-            chatTemplates = DEFAULT_TEMPLATES;
+            chatTemplates = DEFAULT_TEMPLATES.map(normalizeChatTemplate);
             saveTemplates();
             console.log(`[Chat] 已创建默认模板`);
         }
     } catch (err) {
         console.error('[Chat] 加载模板失败:', err.message);
-        chatTemplates = DEFAULT_TEMPLATES;
+        chatTemplates = DEFAULT_TEMPLATES.map(normalizeChatTemplate);
     }
 }
 
@@ -327,7 +348,7 @@ function setConfig(newConfig) {
     if (newConfig.systemPrompt !== undefined) chatConfig.systemPrompt = newConfig.systemPrompt;
     if (newConfig.promptFormat !== undefined) chatConfig.promptFormat = newConfig.promptFormat;
     if (newConfig.llmProfiles !== undefined) {
-        llmProfiles = newConfig.llmProfiles;
+        llmProfiles = newConfig.llmProfiles.map(normalizeAgentProfile);
     }
     if (newConfig.activeProfile !== undefined) {
         activeProfile = newConfig.activeProfile;
@@ -341,7 +362,7 @@ function getProfiles() {
 }
 
 function setProfiles(profiles) {
-    llmProfiles = profiles || [];
+    llmProfiles = (profiles || []).map(normalizeAgentProfile);
     if (!llmProfiles.some(p => p.name === activeProfile)) {
         activeProfile = llmProfiles[0] ? llmProfiles[0].name : 'default';
     }
@@ -370,22 +391,27 @@ function getTemplates() {
     return [...chatTemplates];
 }
 
-function setTemplates(templates) {
-    chatTemplates = templates || [];
-    saveTemplates();
+function setTemplates(templates, options = {}) {
+    chatTemplates = (templates || []).map(normalizeChatTemplate);
+    if (options.persist !== false) {
+        saveTemplates();
+    }
     return getTemplates();
 }
 
 function addTemplate(template) {
-    const existing = chatTemplates.find(t => t.name === template.name);
+    const normalized = normalizeChatTemplate(template);
+    const existing = chatTemplates.find(t => t.name === normalized.name);
     if (existing) {
-        existing.content = template.content;
+        existing.content = normalized.content;
+        existing.permissionProfile = normalized.permissionProfile;
         existing.updatedAt = Date.now();
     } else {
         chatTemplates.push({
-            id: template.name,
-            name: template.name,
-            content: template.content,
+            id: normalized.id || normalized.name,
+            name: normalized.name,
+            content: normalized.content,
+            permissionProfile: normalized.permissionProfile,
             createdAt: Date.now()
         });
     }
@@ -400,34 +426,32 @@ function removeTemplate(name) {
 }
 
 function getTemplateByName(name) {
-    return chatTemplates.find(t => t.name === name);
+    return chatTemplates.find(t => t.name === name || t.id === name);
 }
 
 function getHistory() {
     const all = [];
     for (const messages of Object.values(chatHistories)) {
-        all.push(...messages);
+        all.push(...messages.filter(message => (
+            !message.profileName || message.profileName === activeProfile
+        )));
     }
     all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     return all;
 }
 
 function clearHistory(options = {}) {
-    if (options.mode === 'private' && options.target) {
-        if (options.sessionId) {
-            delete chatHistories[sessionKey(options.mode, options.target, options.sessionId)];
-        } else {
-            // 兼容旧行为：删除该目标所有会话
-            for (const key of Object.keys(chatHistories)) {
-                if (key.startsWith(`private:${options.target}:`)) {
-                    delete chatHistories[key];
-                }
-            }
-        }
-    } else if (options.mode === 'group') {
-        delete chatHistories.group;
-    } else {
-        chatHistories = {};
+    const mode = options.mode || null;
+    const target = options.target || null;
+    const sessionId = options.sessionId || null;
+    for (const key of Object.keys(chatHistories)) {
+        chatHistories[key] = chatHistories[key].filter(message => {
+            if (mode && message.mode !== mode) return true;
+            if (target && message.target !== target) return true;
+            if (sessionId && message.sessionId !== sessionId) return true;
+            return false;
+        });
+        if (chatHistories[key].length === 0) delete chatHistories[key];
     }
     saveHistory();
     return getHistory();
@@ -513,10 +537,18 @@ function addMessage(message) {
         content: content,
         mode: message.mode || chatSession.mode,
         target: message.target || chatSession.privateTarget,
-        sessionId: message.sessionId || chatSession.privateSessionId || 'default'
+        sessionId: message.sessionId || chatSession.privateSessionId || 'default',
+        profileName: message.profileName || activeProfile,
+        templateId: message.templateId || 'default'
     };
 
-    const key = sessionKey(msg.mode, msg.target, msg.sessionId);
+    const key = sessionKey(
+        msg.mode,
+        msg.target,
+        msg.sessionId,
+        msg.profileName,
+        msg.templateId
+    );
     if (!chatHistories[key]) chatHistories[key] = [];
     chatHistories[key].push(msg);
     trimHistory();
@@ -555,96 +587,99 @@ function trimHistoryToBudget(recentHistory, budget) {
     return trimmed;
 }
 
-function buildMessages(userMessage, options = {}) {
-    const { useTemplate = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
+function findTemplate(templateId) {
+    if (!templateId) return null;
+    return chatTemplates.find(template => (
+        template.id === templateId || template.name === templateId
+    )) || null;
+}
 
+function getHistoryForOptions(options = {}) {
+    const profileName = options.profileName || activeProfile;
+    const templateId = options.templateId || 'default';
+    const key = sessionKey(
+        options.mode,
+        options.target,
+        options.sessionId || chatSession.privateSessionId,
+        profileName,
+        templateId
+    );
+    return chatHistories[key] || [];
+}
+
+function buildMessages(userMessage, options = {}) {
+    const {
+        useTemplate = null,
+        templateTarget = null,
+        systemPrompt = null,
+        includeHistory = false,
+        contextCount = 0,
+        mode = null,
+        target = null,
+        sessionId = null,
+        profileName = activeProfile
+    } = options;
+    const templateId = templateTarget || useTemplate || 'default';
     const format = chatConfig.promptFormat || 'openai';
     const sysPrompt = systemPrompt || chatConfig.systemPrompt;
-
-    // 历史可用 token 预算 = maxTokens（作为上下文上限）- 固定部分
+    const selectedTemplate = findTemplate(templateId);
+    // 服务器聊天路由可能已经把模板内容作为 systemPrompt 传入，避免 Agent/LLM 收到重复模板。
+    const template = selectedTemplate && selectedTemplate.content !== sysPrompt ? selectedTemplate : null;
     const inputBudget = chatConfig.maxTokens || 4096;
+    const sessionHistory = getHistoryForOptions({
+        mode,
+        target,
+        sessionId,
+        profileName,
+        templateId
+    });
+    let recentHistory = sessionHistory.slice(-contextCount);
+
+    if (recentHistory.length > 0) {
+        const last = recentHistory[recentHistory.length - 1];
+        if (last.role === 'user' || last.role === 'control') {
+            recentHistory = recentHistory.slice(0, -1);
+        }
+    }
 
     if (format === 'raw') {
+        const fixedText = `System:${sysPrompt}\n${template ? `User:${template.content}\n` : ''}User:${userMessage}`;
+        const historyBudget = inputBudget - estimateTokens(fixedText);
+        recentHistory = includeHistory && contextCount > 0 && historyBudget > 0
+            ? trimHistoryToBudget(recentHistory, historyBudget)
+            : [];
         let raw = `System:${sysPrompt}\n`;
-        if (useTemplate && chatTemplates.length > 0) {
-            const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
-            if (template) raw += `User:${template.content}\n`;
+        for (const item of recentHistory) {
+            if (item.content) raw += `${item.role === 'assistant' ? 'AI' : 'User'}:${item.content}\n`;
+            if (item.user && item.assistant) raw += `User:${item.user}\nAI:${item.assistant}\n`;
         }
+        if (template) raw += `User:${template.content}\n`;
         raw += `User:${userMessage}`;
-        const fixedTokens = estimateTokens(raw);
-        const historyBudget = inputBudget - fixedTokens;
-
-        if (includeHistory && contextCount > 0 && historyBudget > 0) {
-            const key = sessionKey(mode, target, chatSession.privateSessionId);
-            const sessionHistory = chatHistories[key] || [];
-            let recentHistory = sessionHistory.slice(-contextCount);
-            if (recentHistory.length > 0) {
-                const last = recentHistory[recentHistory.length - 1];
-                if (last.role === 'user' || last.role === 'control') {
-                    recentHistory = recentHistory.slice(0, -1);
-                }
-            }
-            recentHistory = trimHistoryToBudget(recentHistory, historyBudget);
-            // 重建 raw, 在 fixed 部分前插入历史
-            raw = `System:${sysPrompt}\n`;
-            for (const item of recentHistory) {
-                if (item.content) {
-                    raw += `${item.role === 'assistant' ? 'AI' : 'User'}:${item.content}\n`;
-                } else if (item.user && item.assistant) {
-                    raw += `User:${item.user}\nAI:${item.assistant}\n`;
-                }
-            }
-            if (useTemplate && chatTemplates.length > 0) {
-                const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
-                if (template) raw += `User:${template.content}\n`;
-            }
-            raw += `User:${userMessage}`;
-        }
         return [{ role: 'user', content: raw }];
     }
 
-    // 标准 messages 格式
-    const messages = [
-        { role: 'system', content: sysPrompt }
-    ];
-
-    // 固定部分: system + template + 当前用户消息
+    const messages = [{ role: 'system', content: sysPrompt }];
     let fixedTokens = tokenCount({ content: sysPrompt }) + 20;
-    if (useTemplate && chatTemplates.length > 0) {
-        const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
-        if (template) fixedTokens += tokenCount({ content: template.content }) + 10;
-    }
+    if (template) fixedTokens += tokenCount({ content: template.content }) + 10;
     fixedTokens += tokenCount({ content: userMessage }) + 10;
     const historyBudget = inputBudget - fixedTokens;
-
     if (includeHistory && contextCount > 0 && historyBudget > 0) {
-        const key = sessionKey(mode, target, chatSession.privateSessionId);
-        const sessionHistory = chatHistories[key] || [];
-        let recentHistory = sessionHistory.slice(-contextCount);
-        if (recentHistory.length > 0) {
-            const last = recentHistory[recentHistory.length - 1];
-            if (last.role === 'user' || last.role === 'control') {
-                recentHistory = recentHistory.slice(0, -1);
-            }
-        }
         recentHistory = trimHistoryToBudget(recentHistory, historyBudget);
-        recentHistory.forEach(item => {
+        for (const item of recentHistory) {
             if (item.content) {
-                messages.push({ role: item.role === 'assistant' ? 'assistant' : 'user', content: item.content });
-            } else if (item.user && item.assistant) {
+                messages.push({
+                    role: item.role === 'assistant' ? 'assistant' : 'user',
+                    content: item.content
+                });
+            }
+            if (item.user && item.assistant) {
                 messages.push({ role: 'user', content: item.user });
                 messages.push({ role: 'assistant', content: item.assistant });
             }
-        });
+        }
     }
-
-    if (useTemplate && chatTemplates.length > 0) {
-        const template = chatTemplates.find(t => t.id === useTemplate) || chatTemplates[0];
-        if (template) messages.push({ role: 'user', content: template.content });
-    }
-
+    if (template) messages.push({ role: 'user', content: template.content });
     messages.push({ role: 'user', content: userMessage });
-
     return messages;
 }
 
@@ -664,10 +699,14 @@ function findLastSentenceBoundary(text) {
 }
 
 async function chat(userMessage, options = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
+    const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
+    if (activeProfileConfig?.mode === 'agent') {
+        return chatStream(userMessage, options, {});
+    }
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null } = options;
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount, mode, target });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId });
         
         const requestBody = {
             model: chatConfig.model,
@@ -689,14 +728,20 @@ async function chat(userMessage, options = {}) {
         if (data.choices && data.choices[0] && data.choices[0].message) {
             const assistantMessage = data.choices[0].message.content;
             
-            const groupKey = 'group';
-            if (!chatHistories[groupKey]) chatHistories[groupKey] = [];
-            chatHistories[groupKey].push({
+            const templateId = templateTarget || useTemplate || 'default';
+            const historyKey = sessionKey(mode, target, sessionId || chatSession.privateSessionId, activeProfile, templateId);
+            if (!chatHistories[historyKey]) chatHistories[historyKey] = [];
+            chatHistories[historyKey].push({
                 id: Date.now().toString(),
                 user: userMessage.substring(0, MAX_MESSAGE_LENGTH),
                 assistant: assistantMessage.substring(0, MAX_MESSAGE_LENGTH),
                 timestamp: Date.now(),
-                displayId: displayId
+                displayId: displayId,
+                mode: mode || chatSession.mode,
+                target: target || chatSession.privateTarget,
+                sessionId: sessionId || chatSession.privateSessionId || 'default',
+                profileName: activeProfile,
+                templateId
             });
             
             trimHistory();
@@ -720,15 +765,114 @@ async function chat(userMessage, options = {}) {
     }
 }
 
-async function chatStream(userMessage, options = {}, callbacks = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null } = options;
+function buildAgentPrompt(messages) {
+    return messages.map((message) => {
+        const roleName = message.role === 'system'
+            ? '系统'
+            : message.role === 'assistant' ? '助手' : '用户';
+        return `${roleName}：\n${message.content}`;
+    }).join('\n\n');
+}
+
+async function chatStreamWithPi(userMessage, options, callbacks, profile) {
+    const {
+        useTemplate = null,
+        templateTarget = null,
+        systemPrompt = null,
+        includeHistory = false,
+        contextCount = 0,
+        mode = null,
+        target = null,
+        sessionId = null
+    } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
+    const template = normalizeChatTemplate(
+        getTemplateByName(templateTarget || useTemplate) || {
+            id: 'default',
+            name: 'default',
+            content: '',
+            permissionProfile: 'readonly'
+        }
+    );
+    let fullMessage = '';
+    let pendingText = '';
+    let reportedError = false;
+
+    try {
+        if (!piRuntimeManager) throw new Error('Pi Runtime 未初始化');
+        const messages = buildMessages(userMessage, {
+            useTemplate,
+            templateTarget,
+            systemPrompt,
+            includeHistory,
+            contextCount,
+            mode,
+            target,
+            sessionId,
+            profileName: profile.name
+        });
+        const prompt = buildAgentPrompt(messages);
+        const result = await piRuntimeManager.chatStream(profile, template, prompt, {
+            onChunk: (chunk, currentMessage) => {
+                fullMessage = currentMessage || `${fullMessage}${chunk}`;
+                pendingText += chunk;
+                onChunk?.(chunk, fullMessage);
+                const sentences = splitIntoSentences(pendingText);
+                if (sentences.length >= 2) {
+                    for (const sentence of sentences.slice(0, -1)) onSentence?.(sentence, fullMessage);
+                    pendingText = sentences[sentences.length - 1];
+                }
+            },
+            onComplete: (message) => {
+                fullMessage = message || fullMessage;
+                if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage);
+                onComplete?.(fullMessage, getHistory());
+            },
+            onError: (error) => {
+                reportedError = true;
+                onError?.(error);
+            }
+        });
+        return {
+            success: true,
+            message: result.message || fullMessage,
+            history: getHistory()
+        };
+    } catch (error) {
+        console.error('[Chat] Pi Agent调用失败:', error.message);
+        if (!reportedError) onError?.(error.message);
+        return {
+            success: false,
+            error: error.message,
+            history: getHistory()
+        };
+    }
+}
+
+async function chatStream(userMessage, options = {}, callbacks = {}) {
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null } = options;
+    const { onChunk, onSentence, onComplete, onError } = callbacks;
+
+    const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
+    if (activeProfileConfig?.mode === 'agent') {
+        return chatStreamWithPi(userMessage, {
+            ...options,
+            useTemplate,
+            templateTarget,
+            systemPrompt,
+            includeHistory,
+            contextCount,
+            mode,
+            target,
+            sessionId
+        }, callbacks, activeProfileConfig);
+    }
 
     let fullMessage = '';
     let pendingText = '';
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, systemPrompt, includeHistory, contextCount, mode, target });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId });
         
         const requestBody = {
             model: chatConfig.model,
@@ -845,6 +989,11 @@ function makeRequest(url, options) {
     });
 }
 
+async function shutdown() {
+    if (!piRuntimeManager?.stopAll) return;
+    await piRuntimeManager.stopAll();
+}
+
 function makeStreamRequest(url, options, onLine) {
     return new Promise((resolve, reject) => {
         const urlObj = new URL(url);
@@ -933,8 +1082,13 @@ function deleteSession(target, sessionId) {
 
     chatSession.sessions[target] = chatSession.sessions[target].filter(s => s.id !== sessionId);
 
-    // 删除对应历史
-    delete chatHistories[`private:${target}:${sessionId}`];
+    // 删除该目标和会话下所有 profile/template 隔离分区的历史。
+    for (const key of Object.keys(chatHistories)) {
+        chatHistories[key] = chatHistories[key].filter(message => (
+            !(message.mode === 'private' && message.target === target && message.sessionId === sessionId)
+        ));
+        if (chatHistories[key].length === 0) delete chatHistories[key];
+    }
     saveHistory();
 
     // 如果当前会话被删除，切回 default
@@ -958,11 +1112,20 @@ function switchSession(target, sessionId) {
 }
 
 function getSessionHistory(target, sessionId) {
-    return chatHistories[`private:${target}:${sessionId || 'default'}`] || [];
+    const requestedSessionId = sessionId || 'default';
+    return Object.values(chatHistories)
+        .flat()
+        .filter(message => (
+            message.profileName === activeProfile
+            && message.mode === 'private'
+            && message.target === target
+            && message.sessionId === requestedSessionId
+        ));
 }
 
 module.exports = {
     init,
+    shutdown,
     getConfig,
     setConfig,
     getProfiles,

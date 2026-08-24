@@ -158,6 +158,16 @@ test('buildFromLibrary mediaTypes 缺失、空数组或未知值时兼容旧客�
     assert.deepStrictEqual(unknownTypes.map(i => i.fileName), expected);
 });
 
+test('buildFromLibrary mediaTypes 混合未知值时仅保留合法类型', async () => {
+    const list = await new PlaylistManager(fakeManager).buildFromLibrary('library-1', '/', {
+        sortBy: 'name',
+        direction: 'asc',
+        mediaTypes: ['text', 'unknown']
+    });
+
+    assert.deepStrictEqual(list.map(item => item.fileName), ['readme.txt']);
+});
+
 test('buildFromTemp 按 mediaTypes 筛选并保留 text MIME/format', () => {
     const pm = new PlaylistManager(fakeManager);
     const files = [

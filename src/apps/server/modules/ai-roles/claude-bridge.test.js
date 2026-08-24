@@ -85,6 +85,19 @@ test('默认使用 Claude Code 非交互 stream-json 参数', () => {
     ]);
 });
 
+test('Claude 默认响应超时为 600 秒', () => {
+    const dir = tmpDir();
+    const bridge = new ClaudeBridge({
+        dir,
+        name: '默认超时角色',
+        commandPath: 'claude',
+        promptFile: path.join(dir, 'prompt.txt'),
+        cwd: dir,
+        keeperPath: KEEPER
+    });
+    assert.strictEqual(bridge.readTimeoutMs, 600000);
+});
+
 test('命令参数 shell 元字符不会执行外部 marker，真实 FIFO 仍可通信', async () => {
     const dir = tmpDir();
     const marker = path.join(dir, 'marker');
@@ -230,6 +243,8 @@ test('60s 超时后杀 claude 防旧响应串入下一轮，下轮重建', async
     while (bridge.isAlive() && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
     assert.ok(!bridge.isAlive(), '超时应杀 claude');
     // 重建后正常（慢脚本对 a 不响应，但 b 响应）
+    // 冷启动新进程的耗时不属于响应超时，第二轮恢复正常测试窗口，避免把进程启动耗时误判为响应失败。
+    bridge.readTimeoutMs = 1000;
     const r2 = await bridge.chat('b', {});
     assert.strictEqual(r2.message, 'echo:b');
     assert.ok(bridge.isAlive());

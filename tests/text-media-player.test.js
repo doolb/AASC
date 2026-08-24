@@ -179,6 +179,32 @@ test('远程文本播放完成回执按当前句定位推进下一句', () => {
     assert.equal(sent[1].text, '第二句。');
 });
 
+test('远程预取句开始后暂停再恢复会使用新 playbackId 重发当前句', () => {
+    const sent = [];
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一句。第二句。']
+    });
+
+    player.loadRoute({
+        selectedDisplayIds: ['source', 'speaker'],
+        selectedVoiceDisplayIds: ['speaker'],
+        voiceTargetDisplayId: 'speaker'
+    });
+    player.start();
+    player.handleTtsReady({ ...sent[0], sentenceIndex: 1, prefetch: true });
+    player.finishCurrentSentence();
+    const active = sent.at(-1);
+    player.handleControl('pause');
+    player.handleControl('play');
+
+    const replay = sent.filter((message) => message.type === 'textSentenceTts').at(-1);
+    assert.equal(replay.type, 'textSentenceTts');
+    assert.notEqual(replay.playbackId, active.playbackId);
+    assert.equal(replay.sentenceIndex, 1);
+    assert.equal(replay.text, '第二句。');
+});
+
 test('当前句音频开始播放后只预取一次下一句', () => {
     const sent = [];
     const audio = {
