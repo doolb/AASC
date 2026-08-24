@@ -81,6 +81,11 @@
 - 控制端手动发送 `playlistControl(next)` 时，显示端先 `activateTemporarily()` 进入 60 秒 active，再执行 `playlistNext()`。
 - 显示端实时回传当前 `fileName`；控制端刷新后从 `displayState.currentPlaylist` 恢复当前项，临时批量只保留轻量元数据并显示文件名占位。
 
+## 视频循环边界
+
+- 批量播放 video 项时 `playCurrentItem()` 设置 `mediaVideo.loop=false`，由 `ended` 等间隔切换下一项。
+- 单媒体或重连恢复入口 `showMedia()` 在 URL/base64 video 分支设置 `mediaVideo.loop=true`，保证批量播放结束后恢复单视频循环。
+
 ## 打断规则
 
 - 服务端：mediaBatch/media 发送单媒体前清除目标显示端 currentPlaylist（config 同步）

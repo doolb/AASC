@@ -2828,6 +2828,8 @@
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = data.url;
+                    // 单媒体/重连恢复始终循环；批量播放切项时会再改为 false
+                    mediaVideo.loop = true;
                     mediaVideo.onloadedmetadata = () => {
                         applyResumeTime(mediaVideo, resumeTime);
                         restartDynamicFitAfterMediaLoad();
@@ -2887,6 +2889,7 @@
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
                     mediaVideo.src = src;
+                    mediaVideo.loop = true;
                     mediaVideo.onloadedmetadata = () => {
                         applyResumeTime(mediaVideo, resumeTime);
                         restartDynamicFitAfterMediaLoad();

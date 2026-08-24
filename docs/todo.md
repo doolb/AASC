@@ -86,6 +86,12 @@
 
 ## 媒体播放
 
+- ✅已完成 [2026-08-24][2026-08-24] 修复显示端单个视频循环播放
+  - 根因：批量播放 `playCurrentItem()` 设置 `mediaVideo.loop=false` 后，单视频/重连恢复没有恢复 `true`，导致单个视频播放完不循环。
+  - 修复：`showMedia()` URL/base64 视频分支统一设置 `mediaVideo.loop=true`；批量分支保持 `false`，继续 ended 切下一项。
+  - 验证：新增静态回归 `tests/display-video-loop.test.js`，播放恢复回归通过。
+  - 文档：docs/design/display.md、docs/design/batch-playlist.md、docs/spec/audio-media.md、docs/spec/batch-playlist.md、docs/task/2026-08-24_修复显示端单个视频循环播放.md
+
 - ✅已完成 [2026-08-23][2026-08-23] 修复动态画面填充无过渡直接跳变
   - 根因：动态阶段写入 transition 的同时清空并重写宽高，浏览器没有可插值的旧尺寸。
   - 修复：布局刷新后保留当前宽高，在下一帧写入目标尺寸；真实显示页回归测试验证过渡中尺寸。

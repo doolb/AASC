@@ -51,6 +51,12 @@
 
 ### 修复
 
+- ✅ [2026-08-24] 修复显示端单个视频播放完后不循环
+  - 根因：批量播放 `playCurrentItem()` 将 `mediaVideo.loop` 设为 false，单视频/重连恢复入口未恢复 true，导致批量播放后单视频不再循环。
+  - 修复：`showMedia()` URL 与 base64 两个 video 分支在加载前统一 `mediaVideo.loop = true`；批量视频分支继续保持 false，依赖 ended 切换下一项。
+  - 验证：新增 `tests/display-video-loop.test.js` 2/2 通过；相关重连恢复回归通过。
+  - 文档：docs/design/display.md、docs/design/batch-playlist.md、docs/spec/audio-media.md、docs/spec/batch-playlist.md、docs/task/2026-08-24_修复显示端单个视频循环播放.md
+
 - ✅ [2026-08-24] 修复文本 TTS 路由生命周期边界
   - 批量 pause/prev/next/jump 不携带 playbackId 时，服务端仍取消当前远程上下文并保留 route；停止/切换媒体继续清理 route。
   - 远程语音目标断连或句子完成超时会向源端发送带定位错误，清理当前句和预取句，并停止远程缓存；超时先失效旧 playback context，迟到的预取生成结果不会再次下发，避免文本播放永久等待或旧语音泄漏。

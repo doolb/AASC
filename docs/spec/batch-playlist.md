@@ -250,7 +250,7 @@ mhtmlToHtml(text):
             解码后转 base64 data URI
     主文档引用重写: src/href/url() 与资源表匹配（支持 cid: 前缀）-> data: URI
     如果 mediaType === 'video':
-        mediaVideo.loop = false
+        mediaVideo.loop = false      // 批量不循环当前项；单媒体入口 showMedia 会恢复 true
         添加一次性 ended 监听: 移除监听 -> timer = setTimeout(next, interval)
         设置 onerror: 加载失败 -> 等间隔后 next
     否则:

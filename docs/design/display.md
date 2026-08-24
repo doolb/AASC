@@ -211,6 +211,16 @@
    - 兼容：旧状态缺少进度字段时按 0 秒恢复；图片批量只恢复当前索引；本次不改变 HTML 滚动位置恢复语义。
    - 持久化：进度消息先更新内存状态，按时间节流写入配置；暂停、媒体切换和批量切项时强制写入最新进度，避免高频 `timeupdate` 放大配置文件写入。
 
+## 单个视频循环播放
+
+ - ✅已完成 [2026-08-24][2026-08-24] 修复显示端单个视频播放完后不循环
+   - 问题：单个视频播放完后不再循环。
+   - 根因：批量播放 `playCurrentItem()` 为推进列表设置 `mediaVideo.loop = false`；`showMedia()` 的单视频和重连恢复分支没有恢复 `loop = true`，因此批量播放后再下发单个视频或重连恢复时继续沿用 false。
+   - 修复：`showMedia()` 的 URL/base64 video 分支在 `load()` 前设置 `mediaVideo.loop = true`；批量播放分支继续显式设置 false，依靠 `ended` 切下一项。
+   - 验证：新增 `tests/display-video-loop.test.js` 2/2 通过；`tests/display-playback-resume.test.js` 相关回归通过。
+   - 任务文档：docs/task/2026-08-24_修复显示端单个视频循环播放.md
+   - 实现文档：docs/spec/audio-media.md、docs/spec/batch-playlist.md
+
 ## 控制端左侧导航样式
  - ✅已完成 [2026-08-18][2026-08-18] 隐藏左侧导航滚动条但保留滚动能力
    - .sidebar-nav 保留原生垂直滚动，在 Firefox、旧版 Edge、WebKit/Chromium 分别隐藏滚动条视觉元素。

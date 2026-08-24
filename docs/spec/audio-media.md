@@ -94,6 +94,11 @@ showMedia(data, noActivate, paused, resumeTime):
         loadedmetadata 后将 currentTime 设置为 resumeTime（越界时夹取到有效范围）
         paused 时 pause，否则 playAudioAuto()
         绑定 timeupdate → audioProgress
+    如果 data.mediaType == video:
+        mediaVideo.loop = true          // 单媒体/重连恢复始终循环
+        load()
+        loadedmetadata 后将 currentTime 设置为 resumeTime（越界时夹取到有效范围）
+        paused 时 pause，否则 playVideoAuto()
     否则沿用已有媒体分支
 
 handleControl(play):
