@@ -332,7 +332,7 @@ const Upload = {
         }
         showToast('正在读取文件...', 'loading');
         const items = [];
-        for (const f of files) {
+        for (const [i, f] of files.entries()) {
             try {
                 const base64 = await this.fileToBase64(f);
                 const mediaType = this.detectMediaType(f.name);
