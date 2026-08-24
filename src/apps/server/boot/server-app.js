@@ -3773,6 +3773,11 @@ async function handleControlMessageFallback(data, ws) {
                         const dd = displayClients.get(id);
                         if (dd) {
                             const mediaForDisplay = applyTextMediaRoute(data.media, id, displayIds);
+                            if (mediaForDisplay?.mediaType === 'text') {
+                                textMediaTtsService.setDisplayRoute(id, mediaForDisplay.route);
+                            } else {
+                                textMediaTtsService.clearDisplayRoute(id);
+                            }
                             if (dd.state.currentPlaylist) {
                                 dd.state.currentPlaylist = null;
                                 persistDisplayState(dd, { currentPlaylist: null });
@@ -3873,6 +3878,11 @@ async function handleControlMessageFallback(data, ws) {
                                     ...buildStartDataForDisplay(id, statePlaylist),
                                     temp: !!data.temp
                                 };
+                                textMediaTtsService.setDisplayRoute(id, {
+                                    selectedDisplayIds: stateStartData.selectedDisplayIds,
+                                    selectedVoiceDisplayIds: stateStartData.selectedVoiceDisplayIds,
+                                    voiceTargetDisplayId: stateStartData.voiceTargetDisplayId
+                                });
                                 // 控制端刷新只需要恢复当前项文件名和预览元数据；临时列表不把 base64 放入状态，
                                 // 避免 getState/配置同步携带整批音频内容；语音路由字段仍需保留以支持重连恢复。
                                 const currentPlaylist = {
@@ -3932,6 +3942,7 @@ async function handleControlMessageFallback(data, ws) {
                         if (!dd) return;
                         sendToDisplay(id, { type: 'playlistControl', action: data.action, index: data.index });
                         if (data.action === 'stop' && dd.state.currentPlaylist) {
+                            textMediaTtsService.clearDisplayRoute(id);
                             dd.state.currentPlaylist = null;
                             persistDisplayState(dd, { currentPlaylist: null });
                         }

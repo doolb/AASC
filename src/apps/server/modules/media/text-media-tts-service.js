@@ -19,6 +19,7 @@ const path = require('path');
 function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDisplayCapabilities }) {
     const displayQueues = new Map();
     const activePlaybacks = new Map();
+    const displayRoutes = new Map();
 
     /**
      * 向显示端返回当前请求对应的错误，保持显示端能够依据页码和句子序号跳过失败句。
@@ -95,9 +96,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      * @param {object} data 分句请求
      * @returns {object} 播放上下文
      */
-    function buildPlaybackContext(originDisplayId, data) {
-        const explicitRoute = data.route && typeof data.route === 'object';
-        const route = explicitRoute ? data.route : {};
+    function normalizeRoute(originDisplayId, route) {
         const selectedDisplayIds = normalizeDisplayIds(route.selectedDisplayIds);
         const selected = selectedDisplayIds.length ? selectedDisplayIds : [originDisplayId];
         const selectedVoiceDisplayIds = normalizeDisplayIds(route.selectedVoiceDisplayIds)
@@ -108,13 +107,72 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             : originDisplayId;
 
         return {
-            playbackId: data.playbackId,
-            token: Symbol(data.playbackId),
             selectedDisplayIds: selected,
             selectedVoiceDisplayIds,
-            voiceTargetDisplayId,
-            explicitRoute
+            voiceTargetDisplayId
         };
+    }
+
+    /**
+     * 从服务器可信路由或旧协议默认值构造播放上下文。可信路由由 server-app
+     * 在下发媒体/播放列表时注册；显示端请求里的 route 只用于兼容已有活跃上下文，
+     * 不能作为首次远程路由的权威来源。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     * @param {object} data 分句请求
+     * @param {object} route 服务器注册 route 或旧协议空 route
+     * @param {boolean} explicitRoute 是否为服务器显式路由
+     * @returns {object} 播放上下文
+     */
+    function buildPlaybackContext(originDisplayId, data, route, explicitRoute) {
+        return {
+            playbackId: data.playbackId,
+            token: Symbol(data.playbackId),
+            ...normalizeRoute(originDisplayId, route),
+            explicitRoute,
+            pendingRemoteSentences: new Map()
+        };
+    }
+
+    function makeRemoteSentenceKey(targetDisplayId, data) {
+        if (typeof targetDisplayId !== 'string' || !targetDisplayId) return null;
+        if (typeof data?.playbackId !== 'string' || !data.playbackId) return null;
+        if (!Number.isFinite(data.pageIndex) || !Number.isFinite(data.sentenceIndex)) return null;
+        return [targetDisplayId, data.playbackId, data.pageIndex, data.sentenceIndex].join('\u0000');
+    }
+
+    function registerPendingRemoteSentence(context, targetDisplayId, data) {
+        const key = makeRemoteSentenceKey(targetDisplayId, data);
+        if (!key) return;
+        context.pendingRemoteSentences.set(key, Symbol(key));
+    }
+
+    function consumePendingRemoteSentence(context, targetDisplayId, data) {
+        const key = makeRemoteSentenceKey(targetDisplayId, data);
+        return key ? context.pendingRemoteSentences.delete(key) : false;
+    }
+
+    /**
+     * 注册服务器计算出的文本语音路由。该路由是新播放首个 textSentenceTts
+     * 的权威上下文；新媒体或新播放列表覆盖旧 route，并使旧 activePlayback 失效。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     * @param {object} trustedRoute server-app 根据本次选中显示端计算出的 route
+     */
+    function setDisplayRoute(originDisplayId, trustedRoute) {
+        if (!originDisplayId || !trustedRoute || typeof trustedRoute !== 'object') return;
+        displayRoutes.set(originDisplayId, normalizeRoute(originDisplayId, trustedRoute));
+        activePlaybacks.delete(originDisplayId);
+    }
+
+    /**
+     * 清理源显示端的服务器注册 route 和当前播放上下文。用于切到非文本媒体或停止播放。
+     *
+     * @param {string} originDisplayId 源文本显示端
+     */
+    function clearDisplayRoute(originDisplayId) {
+        displayRoutes.delete(originDisplayId);
+        activePlaybacks.delete(originDisplayId);
     }
 
     /**
@@ -127,15 +185,13 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
     function setPlaybackContext(originDisplayId, context) {
         if (!originDisplayId || !context?.playbackId) return;
         const previous = activePlaybacks.get(originDisplayId);
+        const samePlayback = previous?.playbackId === context.playbackId;
         activePlaybacks.set(originDisplayId, {
             playbackId: context.playbackId,
-            token: previous?.playbackId === context.playbackId ? previous.token : Symbol(context.playbackId),
-            selectedDisplayIds: normalizeDisplayIds(context.selectedDisplayIds).length
-                ? normalizeDisplayIds(context.selectedDisplayIds)
-                : [originDisplayId],
-            selectedVoiceDisplayIds: normalizeDisplayIds(context.selectedVoiceDisplayIds),
-            voiceTargetDisplayId: context.voiceTargetDisplayId || null,
-            explicitRoute: context.explicitRoute !== false
+            token: samePlayback ? previous.token : Symbol(context.playbackId),
+            ...normalizeRoute(originDisplayId, context),
+            explicitRoute: context.explicitRoute !== false,
+            pendingRemoteSentences: samePlayback ? previous.pendingRemoteSentences : new Map()
         });
     }
 
@@ -149,10 +205,18 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
      */
     function getOrCreatePlaybackContext(originDisplayId, data) {
         const activePlayback = activePlaybacks.get(originDisplayId);
-        if (activePlayback?.playbackId === data.playbackId) return activePlayback;
-        const context = buildPlaybackContext(originDisplayId, data);
+        if (activePlayback?.playbackId === data.playbackId) return { context: activePlayback };
+
+        const trustedRoute = displayRoutes.get(originDisplayId);
+        if (!trustedRoute && data.route && typeof data.route === 'object') {
+            return { message: '未注册服务器语音路由' };
+        }
+
+        const context = trustedRoute
+            ? buildPlaybackContext(originDisplayId, data, trustedRoute, true)
+            : buildPlaybackContext(originDisplayId, data, {}, false);
         activePlaybacks.set(originDisplayId, context);
-        return context;
+        return { context };
     }
 
     /**
@@ -230,7 +294,12 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
         }
 
         // 同一 playbackId 的连续分句共用令牌；取消后再次开始即使复用 ID 也会获得新令牌。
-        const playbackContext = getOrCreatePlaybackContext(displayId, data);
+        const contextResult = getOrCreatePlaybackContext(displayId, data);
+        if (contextResult.message) {
+            sendError(displayId, data, contextResult.message);
+            return;
+        }
+        const playbackContext = contextResult.context;
         const routeResult = resolveRequestTarget(displayId, playbackContext);
         if (routeResult.message) {
             sendError(displayId, data, routeResult.message);
@@ -266,6 +335,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
                     originDisplayId: displayId,
                     voiceTargetDisplayId: targetDisplayId
                 });
+                registerPendingRemoteSentence(playbackContext, targetDisplayId, data);
             } catch (error) {
                 // 已取消的旧请求不再发送失败提示，避免显示端误跳过新播放的句子。
                 if (!isPlaybackActive(displayId, data.playbackId, requestToken)) return;
@@ -295,6 +365,7 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
             && context.selectedDisplayIds.includes(targetDisplayId)
             && hasVoicePlayback(targetDisplayId, false);
         if (!isValidContext) return;
+        if (!consumePendingRemoteSentence(context, targetDisplayId, data)) return;
 
         sendToDisplay(originDisplayId, {
             type: 'textSentenceTtsFinished',
@@ -322,6 +393,8 @@ function createTextMediaTtsService({ generateTTS, sendToDisplay, logError, getDi
     return {
         handleSentenceRequest,
         handleSentenceFinished,
+        setDisplayRoute,
+        clearDisplayRoute,
         setPlaybackContext,
         cancel
     };

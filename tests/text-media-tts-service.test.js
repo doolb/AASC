@@ -169,10 +169,51 @@ test('文本路由目标为远程显示端时仅向选中且在线启用语音�
     }]);
 });
 
-test('远程播放结束回执校验通过后转发给源显示端推进句子', () => {
+test('首次分句请求不能信任显示端伪造的远程 route', async () => {
+    const messages = [];
+    let generated = false;
+    const service = createTextMediaTtsService({
+        generateTTS: async () => {
+            generated = true;
+            return '/tmp/forged.wav';
+        },
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: (displayId) => ({
+            source: { voicePlayback: false },
+            speaker: { voicePlayback: true }
+        })[displayId] || null
+    });
+
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-forged',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        text: '伪造远程播报。',
+        route: {
+            selectedDisplayIds: ['source', 'speaker'],
+            selectedVoiceDisplayIds: ['speaker'],
+            voiceTargetDisplayId: 'speaker'
+        }
+    });
+
+    assert.equal(generated, false);
+    assert.deepEqual(messages, [{
+        displayId: 'source',
+        message: {
+            type: 'textSentenceTtsError',
+            playbackId: 'p-forged',
+            pageIndex: 0,
+            sentenceIndex: 0,
+            message: '未注册服务器语音路由'
+        }
+    }]);
+});
+
+test('远程播放结束回执必须匹配服务器已下发的句子定位', async () => {
     const messages = [];
     const service = createTextMediaTtsService({
-        generateTTS: async () => '/tmp/unused.wav',
+        generateTTS: async () => '/tmp/remote.wav',
         sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
         logError: () => {},
         getDisplayCapabilities: () => ({ voicePlayback: true })
@@ -183,6 +224,22 @@ test('远程播放结束回执校验通过后转发给源显示端推进句子',
         selectedDisplayIds: ['source', 'speaker'],
         voiceTargetDisplayId: 'speaker'
     });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-finished',
+        pageIndex: 1,
+        sentenceIndex: 2,
+        text: '远程句子。'
+    });
+
+    service.handleSentenceFinished('speaker', {
+        originDisplayId: 'source',
+        playbackId: 'p-finished',
+        pageIndex: 1,
+        sentenceIndex: 3,
+        status: 'ended'
+    });
+    assert.equal(messages.filter(({ displayId }) => displayId === 'source').length, 0);
+
     service.handleSentenceFinished('speaker', {
         originDisplayId: 'source',
         playbackId: 'p-finished',
@@ -192,6 +249,20 @@ test('远程播放结束回执校验通过后转发给源显示端推进句子',
     });
 
     assert.deepEqual(messages, [{
+        displayId: 'speaker',
+        message: {
+            type: 'tts',
+            action: 'playAudio',
+            textPlaybackRemote: true,
+            originDisplayId: 'source',
+            voiceTargetDisplayId: 'speaker',
+            playbackId: 'p-finished',
+            pageIndex: 1,
+            sentenceIndex: 2,
+            audioUrl: '/uploads/tts/remote.wav',
+            text: '远程句子。'
+        }
+    }, {
         displayId: 'source',
         message: {
             type: 'textSentenceTtsFinished',

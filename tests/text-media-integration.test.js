@@ -59,6 +59,14 @@ test('服务器文本媒体和播放列表协议下发并持久化选中语音�
     assert.match(server, /persistDisplayState[\s\S]*?currentPlaylist/u);
 });
 
+test('服务器把计算出的文本语音 route 注册为 TTS 服务权威上下文', () => {
+    const server = readFile('src/apps/server/boot/server-app.js');
+
+    assert.match(server, /mediaBatch[\s\S]*?textMediaTtsService\.setDisplayRoute\(id,\s*mediaForDisplay\.route\)/u);
+    assert.match(server, /playlistRequest[\s\S]*?textMediaTtsService\.setDisplayRoute\(id,\s*\{[\s\S]*?voiceTargetDisplayId:\s*stateStartData\.voiceTargetDisplayId/u);
+    assert.match(server, /playlistControl[\s\S]*?data\.action === 'stop'[\s\S]*?textMediaTtsService\.clearDisplayRoute\(id\)/u);
+});
+
 // 防止任一控制面板改用播放列表命令或丢失固定主题色与排版字段。
 test('控制端文本面板发送完整 textStyle，并以 textPlayback 控制分页', () => {
     const controls = readFile('src/apps/web-mediacenter/ui/public/js/controls.js');

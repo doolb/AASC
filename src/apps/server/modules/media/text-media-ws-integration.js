@@ -79,6 +79,9 @@ function handleTextMediaControlMessage({
         if (['pause', 'prev', 'next', 'stop'].includes(playbackAction) && playbackId) {
             textMediaTtsService.cancel(displayId, playbackId);
         }
+        if (playbackAction === 'stop') {
+            textMediaTtsService.clearDisplayRoute?.(displayId);
+        }
     } else {
         return false;
     }
