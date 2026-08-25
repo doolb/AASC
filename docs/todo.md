@@ -2,8 +2,9 @@
 
 ## TTS
 
-- ⏳待处理 [2026-08-25] 调查 `3rd/tts-server` Wine TTS 100 字长稳压测中的 RSS 增长
-  - 当前 100 次 HTTP 压测：ready 约 270MB、峰值约 522MB、结束约 430MB；需评估 Embedded Speech SDK synthesizer/句柄复用。
+- ✅已完成 [2026-08-25][2026-08-25] 调查 `3rd/tts-server` Wine TTS 100 字长稳压测中的 RSS 增长
+  - 确认常驻 synthesizer 复用会加剧 SDK native RSS；Wine worker 默认每 10 个 S 请求在当前 HTTP 任务完成后重启，避免请求队列/旧任务竞态。
+  - 残余首次合成 footprint 与详细数据记录在 `3rd/tts-server/docs/task/2026-08-25_tts-wine-rss-stability.md`。
 
 ## 文本媒体
 

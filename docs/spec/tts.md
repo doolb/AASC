@@ -127,6 +127,8 @@ onResponse(res):
 
 `3rd/tts-server/docs/spec/tts-wine-queue-stability.md` 描述 Wine worker 显式派发、FIFO 队列、断连/排队超时和 100 字稳定性测试伪代码。
 
+`3rd/tts-server/docs/spec/tts-wine-rss-stability.md` 描述 Embedded Speech SDK synthesizer 的每请求释放、worker 请求数上限回收和 RSS 回归测试伪代码。
+
 ## TTS 压测脚本 (src/scripts/tts-stress-test.js)
 
 ```

@@ -56,4 +56,4 @@
 
 - Wine TTS 使用常驻 worker 和 FIFO 队列；任务由调度器显式绑定 worker。
 - 排队任务支持断连移除、排队超时和队列上限；100 字压测需同时观察请求延迟与进程树 RSS。
-- 当前 100 次 HTTP 压测发现 RSS 持续增长，SDK 句柄生命周期仍是后续专项风险。
+- Embedded Speech SDK 的 synthesizer 复用实验会加剧 RSS；Wine worker 默认每处理 10 个 S 请求后在任务完成边界重启，限制 native footprint 累积。首次合成常驻内存仍需按运行环境监控。

@@ -28,6 +28,11 @@ const WORKER_COUNT = Math.max(1, parseInt(process.env.TTS_WINE_WORKERS, 10) || 3
 const REQUEST_TIMEOUT_MS = Number(process.env.TTS_WINE_TIMEOUT_MS || 300000);
 const MAX_QUEUE_LENGTH = Math.max(1, parseInt(process.env.TTS_WINE_MAX_QUEUE, 10) || 100);
 const QUEUE_TIMEOUT_MS = Number(process.env.TTS_WINE_QUEUE_TIMEOUT_MS || 300000);
+// Embedded Speech SDK 的 native allocator 不保证在句柄释放后立即归还 RSS；按请求数回收进程可硬隔离其增长。
+const configuredMaxRequests = Number.parseInt(process.env.TTS_WINE_MAX_REQUESTS, 10);
+const MAX_REQUESTS_PER_WORKER = Number.isFinite(configuredMaxRequests)
+  ? Math.max(0, configuredMaxRequests)
+  : 10;
 // ======================
 
 const requestQueue = [];
@@ -66,6 +71,9 @@ class WineWorker {
     this.restartTimer = null;
     this.child = null;
     this.rl = null;
+    this.completedRequests = 0;
+    this.recycleAfterTask = false;
+    this.runActive = false;
     this.spawn();
   }
 
@@ -82,6 +90,9 @@ class WineWorker {
 
     this.ready = false;
     this.busy = false;
+    this.completedRequests = 0;
+    this.recycleAfterTask = false;
+    this.runActive = false;
 
     const child = spawn(WINE_BIN, args, {
       cwd: WORKER_DIR,
@@ -142,12 +153,20 @@ class WineWorker {
     this.pending.delete(parts[1]);
     if (pending.timer) clearTimeout(pending.timer);
     this.busy = false;
+    const shouldRecycle = parts[0] === 'S' && MAX_REQUESTS_PER_WORKER > 0 &&
+      this.completedRequests + 1 >= MAX_REQUESTS_PER_WORKER;
+    if (parts[0] === 'S') this.completedRequests += 1;
 
     const ok = parts[2] === '1';
     if (ok) pending.resolve({ data: parts[3] || '', error: parts[4] || '' });
     else pending.reject(new Error(unbase64(parts[4] || 'aW52YWxpZCBlcnJvcg==')));
 
-    drain();
+    // 在下一项任务派发前回收 worker，避免 native RSS 增长跨请求累积。
+    if (shouldRecycle) {
+      // 先阻止新任务派发，等当前 HTTP 任务 finally 完成后再终止子进程。
+      this.ready = false;
+      this.recycleAfterTask = true;
+    }
   }
 
   send(kind, fields) {
@@ -225,8 +244,15 @@ class WineWorker {
   }
 
   async run(task) {
-    if (task.type === 'voices') return handleVoices(this, task);
-    return handleTts(this, task);
+    try {
+      if (task.type === 'voices') return await handleVoices(this, task);
+      return await handleTts(this, task);
+    } finally {
+      if (this.recycleAfterTask) {
+        this.recycleAfterTask = false;
+        this.kill(`request-limit-${MAX_REQUESTS_PER_WORKER}`);
+      }
+    }
   }
 
   close() {
@@ -237,7 +263,7 @@ class WineWorker {
 }
 
 function pickIdleWorker() {
-  return workers.find(worker => worker.ready && !worker.busy) || null;
+  return workers.find(worker => worker.ready && !worker.busy && !worker.runActive) || null;
 }
 
 function drain() {
@@ -251,11 +277,13 @@ function drain() {
     }
     task.started = true;
     worker.busy = true;
+    worker.runActive = true;
     worker.run(task).catch(err => {
       if (task.res && !task.res.destroyed) {
         sendJsonError(task.res, 500, 'TTS 失败', err.message);
       }
     }).finally(() => {
+      worker.runActive = false;
       worker.busy = false;
       drain();
     });
@@ -351,7 +379,10 @@ app.get('/api/tts/status', (req, res) => {
       name: w.name,
       ready: w.ready,
       busy: w.busy,
-      pending: w.pending.size
+      pending: w.pending.size,
+      runActive: w.runActive,
+      completedRequests: w.completedRequests,
+      maxRequests: MAX_REQUESTS_PER_WORKER
     }))
   });
 });

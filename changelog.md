@@ -4,6 +4,13 @@
 
 ### 已完成
 
+- ✅ [2026-08-25] 处理 Wine/Embedded Speech SDK 100 字长稳压测 RSS 增长
+  - 新增 `3rd/tts-server/wine/worker-memory.test.js`，固定 100 字请求覆盖 worker RSS 回归；修复 worker 回收与 HTTP 任务完成之间的并发竞态。
+  - `tts-wine.js` 新增 `TTS_WINE_MAX_REQUESTS`（默认 10），worker 达到上限后在 `runActive` 任务完成边界重启，避免 native SDK 状态跨大量请求累积；`/api/tts/status` 暴露回收计数与上限。
+  - 实测常驻 synthesizer 复用 30 次 RSS 增长约 78MB，劣于每请求释放；100 次 HTTP（100/100）TPS 0.541、平均 5510ms、P95 7201ms，ready 269752KB、peak 504620KB、final 418040KB。
+  - 测试：worker RSS 回归 1/1、Wine TTS 集成 3/3、100 次 HTTP 压测 100/100；SDK 首次合成 footprint 作为残余运行风险记录。
+  - 文档：`3rd/tts-server/docs/design/tts-wine-rss-stability.md`、`3rd/tts-server/docs/spec/tts-wine-rss-stability.md`、`3rd/tts-server/docs/task/2026-08-25_tts-wine-rss-stability.md`。
+
 - ✅ [2026-08-25] 修复 3rd/tts-server Wine TTS worker 调度并补充 100 字队列稳定性测试
   - `tts-wine.js` 参考 `tts.js` 使用显式 worker 派发、FIFO 队列、断连清理、排队超时和队列上限；新增 `/api/tts/status` 队列边界字段。
   - 新增 `3rd/tts-server/tts-wine.test.js` 与 `tts-wine-benchmark.js`，固定 100 字文本覆盖 WAV、并发队列和断连恢复。
