@@ -48,12 +48,15 @@ const LONG_TEXTS = [
   '这是一条用于测试TTS长文本生成性能的示例文本。在真实场景中，天气预报、新闻播报、日程提醒等内容往往包含较多文字信息，需要TTS引擎能够快速稳定地完成语音合成。如果文本过长，可能会导致合成时间增加或请求超时。',
 ];
 
+const HUNDRED_TEXT_SEED = '离线Wine语音合成稳定性测试文本，用于验证请求响应、FIFO队列、断连恢复以及常驻内存变化。';
+const HUNDRED_TEXT = [...HUNDRED_TEXT_SEED.repeat(Math.ceil(100 / [...HUNDRED_TEXT_SEED].length))].slice(0, 100).join('');
+
 function parseArgs(argv) {
   const args = {
     url: 'http://127.0.0.1:3000',
     concurrency: 3,
     total: 30,
-    text: 'mix',
+    text: 'hundred',
     abortRate: 0,
     abortDelay: 50,
     mode: 'stress',
@@ -75,6 +78,7 @@ function parseArgs(argv) {
 }
 
 function pickText(type) {
+  if (type === 'hundred') return HUNDRED_TEXT;
   if (type === 'short') return SHORT_TEXTS[Math.floor(Math.random() * SHORT_TEXTS.length)];
   if (type === 'long')  return LONG_TEXTS[Math.floor(Math.random() * LONG_TEXTS.length)];
   // mix: 70% short + 30% long
@@ -206,23 +210,23 @@ async function runVerifyMode() {
 
   console.log('[场景 1] 请求入队后断连，队列不应卡死');
   await test('快速断连请求不阻塞队列', async () => {
-    await sendAndDisconnect('验证队列卡死问题。', 50);
-    const r = await requestTTSsimple('队列正常测试', 10000);
+    await sendAndDisconnect(HUNDRED_TEXT, 50);
+    const r = await requestTTSsimple(HUNDRED_TEXT, 10000);
     if (r.statusCode !== 200) throw new Error(`正常请求失败: HTTP ${r.statusCode}`);
   });
 
   console.log('\n[场景 2] 连续发送多个断连请求');
   await test('连续 5 个断连后队列仍正常', async () => {
-    for (let i = 0; i < 5; i++) await sendAndDisconnect(`断连测试请求 ${i + 1}`, 30 + i * 10);
-    const r = await requestTTSsimple('连续断连后队列正常测试', 10000);
+    for (let i = 0; i < 5; i++) await sendAndDisconnect(HUNDRED_TEXT, 30 + i * 10);
+    const r = await requestTTSsimple(HUNDRED_TEXT, 10000);
     if (r.statusCode !== 200) throw new Error(`正常请求失败: HTTP ${r.statusCode}`);
   });
 
   console.log('\n[场景 3] balcon 正在处理时客户端断连');
   await test('处理中断连后队列不卡死', async () => {
-    await sendAndDisconnect('这是一个较长的测试文本。'.repeat(20), 100);
+    await sendAndDisconnect(HUNDRED_TEXT, 100);
     await new Promise(r => setTimeout(r, 500));
-    const r = await requestTTSsimple('处理中断连后队列正常', 15000);
+    const r = await requestTTSsimple(HUNDRED_TEXT, 15000);
     if (r.statusCode !== 200) throw new Error(`正常请求失败: HTTP ${r.statusCode}`);
   });
 
@@ -230,20 +234,20 @@ async function runVerifyMode() {
   await test('混压下所有正常请求成功', async () => {
     const tasks = [];
     for (let i = 0; i < 10; i++) {
-      if (i % 3 === 0) tasks.push(sendAndDisconnect(`混压断连请求 ${i}`, 20));
-      else tasks.push(requestTTSsimple(`混压正常请求 ${i}`, 15000));
+      if (i % 3 === 0) tasks.push(sendAndDisconnect(HUNDRED_TEXT, 20));
+      else tasks.push(requestTTSsimple(HUNDRED_TEXT, 15000));
     }
     await Promise.all(tasks);
-    const r = await requestTTSsimple('混压结束确认', 10000);
+    const r = await requestTTSsimple(HUNDRED_TEXT, 10000);
     if (r.statusCode !== 200) throw new Error(`确认请求失败: HTTP ${r.statusCode}`);
   });
 
   console.log('\n[场景 5] 队列空闲时断连，恢复后正常');
   await test('空闲队列断连后正常工作', async () => {
     await new Promise(r => setTimeout(r, 200));
-    await sendAndDisconnect('空闲时断连', 10);
+    await sendAndDisconnect(HUNDRED_TEXT, 10);
     await new Promise(r => setTimeout(r, 100));
-    const r = await requestTTSsimple('空闲断连后测试', 10000);
+    const r = await requestTTSsimple(HUNDRED_TEXT, 10000);
     if (r.statusCode !== 200) throw new Error(`正常请求失败: HTTP ${r.statusCode}`);
   });
 

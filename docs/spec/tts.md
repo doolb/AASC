@@ -123,6 +123,10 @@ onResponse(res):
 - 失败路径删除半成品音频文件
 - 错误响应体读取做字节上限控制
 
+## Wine TTS 队列实现索引
+
+`3rd/tts-server/docs/spec/tts-wine-queue-stability.md` 描述 Wine worker 显式派发、FIFO 队列、断连/排队超时和 100 字稳定性测试伪代码。
+
 ## TTS 压测脚本 (src/scripts/tts-stress-test.js)
 
 ```

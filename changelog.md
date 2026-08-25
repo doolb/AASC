@@ -4,6 +4,12 @@
 
 ### 已完成
 
+- ✅ [2026-08-25] 修复 3rd/tts-server Wine TTS worker 调度并补充 100 字队列稳定性测试
+  - `tts-wine.js` 参考 `tts.js` 使用显式 worker 派发、FIFO 队列、断连清理、排队超时和队列上限；新增 `/api/tts/status` 队列边界字段。
+  - 新增 `3rd/tts-server/tts-wine.test.js` 与 `tts-wine-benchmark.js`，固定 100 字文本覆盖 WAV、并发队列和断连恢复。
+  - 验证：集成测试 3/3、断连验证 5/5、100 次 HTTP 压测 100/100 成功；RSS 从约 270MB 增至约 430MB，后续 SDK 内存专项已加入 `docs/todo.md`。
+  - 文档：`3rd/tts-server/docs/design/tts-wine-queue-stability.md`、`3rd/tts-server/docs/spec/tts-wine-queue-stability.md`、`3rd/tts-server/docs/task/2026-08-25_tts-wine-队列与100字稳定性.md`。
+
 - ✅ [2026-08-24] 完成 Task 4：文档、回归与交付检查
   - 复核 `docs/design/text-media-routing.md`、`docs/spec/text-media-routing.md` 与任务文档，确认 Task 1/2/3 的服务器权威 `mediaTypes`、手动 `voicePlayback` 路由、远程 `textSentenceTtsFinished` 回执、单句 `prefetch` 与 stop/cancel 失效描述和当前实现一致。
   - 修正任务文档中过时的“Task 2 未实现”记录，并把文本媒体任务状态同步到 `docs/todo.md`。

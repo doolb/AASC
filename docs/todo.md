@@ -1,5 +1,10 @@
 # Web MediaCenter - 未完成任务列表
 
+## TTS
+
+- ⏳待处理 [2026-08-25] 调查 `3rd/tts-server` Wine TTS 100 字长稳压测中的 RSS 增长
+  - 当前 100 次 HTTP 压测：ready 约 270MB、峰值约 522MB、结束约 430MB；需评估 Embedded Speech SDK synthesizer/句柄复用。
+
 ## 文本媒体
 
 - ✅已完成 [2026-08-24][2026-08-24] 修复最终审查发现的远程 TTS 生命周期边界
