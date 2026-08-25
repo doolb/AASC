@@ -68,3 +68,5 @@
 - 把任务从todo文档中移除，更新todo文档
 - 更新design文档，描述已完成的功能模块
 - 把任务记录到changelog.md
+
+请优先检查 `package.json`，并尽量通过 `npm run` 中已有的 scripts 完成所有操作；只有没有对应 script 时才使用其他命令。
