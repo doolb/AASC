@@ -1,3 +1,10 @@
 ttslive/outputs/
 ttslive/models/sensevoice/
+
+# Wine TTS 运行时临时目录和压测产物
+wine/.tmp/
+wine/*.wav
+wine/*.headers
+wine/*.log
+wine/*.out
 ttslive/node_modules/
