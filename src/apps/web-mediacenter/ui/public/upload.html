@@ -233,6 +233,17 @@
                     <span id="asrDeviceStatus">加载中...</span>
                 </div>
             </div>
+
+            <div class="control-item">
+                <label>语音生成设备</label>
+                <div class="control-buttons">
+                    <button class="control-btn" id="ttsDeviceServerBtn" data-tts="server" onclick="setTtsDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
+                    <button class="control-btn" id="ttsDeviceDisplayBtn" data-tts="display" onclick="setTtsDevice('display')">显示端</button>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
+                    <span id="ttsDeviceStatus">加载中...</span>
+                </div>
+            </div>
             
             <div class="control-item" style="margin-top: 15px;">
                 <label>语音播报 (TTS)</label>

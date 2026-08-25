@@ -1,0 +1,58 @@
+[
+  {
+    "name": "2052.INI",
+    "sha256": "a110f06a2bf4457e743b103ad60ae95c10271296851e04282583c41412b60687"
+  },
+  {
+    "name": "MSTTSLocEnUS.dat",
+    "sha256": "f4ca3b16a041174c5b7b6cce52b8948c1dd2d29886e7efb94e5fce8d2fdca05e"
+  },
+  {
+    "name": "MSTTSLocZhCN.dat",
+    "sha256": "6d93e1561dad178c44eba7219aaa648fb409d2da6a6556a6466e1036f0d61576"
+  },
+  {
+    "name": "MSTTSLocZhCN.ini",
+    "sha256": "d73dd679c4ef9c18742507f46e6b307004985ddcdfba2af7ac3414f3a8d1df75"
+  },
+  {
+    "name": "Tokens.xml",
+    "sha256": "0192911b34ed86e411c0458f31052ac98d7ac09c2bdeefc72ca30f90e711ac43"
+  },
+  {
+    "name": "ZhCN.address.dat",
+    "sha256": "3407daaea9a47ea941d5dc07ff1940a4f647c62e67438c3f16a221b35b9fad0b"
+  },
+  {
+    "name": "ZhCN.message.dat",
+    "sha256": "80fb9364e6fc925905a5b4b4aeacd510f4a9b6bc9b6a7a8b33e5cb84bc9a17ba"
+  },
+  {
+    "name": "ZhCN.mixlingual.dat",
+    "sha256": "bee3aaaa4a9d266af1c527aee0aaa5b453c9b68d594477bf119a139a03e8792c"
+  },
+  {
+    "name": "ZhCN.name.dat",
+    "sha256": "0493257482241047c89f86b23ea7230b65df4b2bc477ae34aa40a98949eb7389"
+  },
+  {
+    "name": "am_v5_decoder.bin",
+    "sha256": "ac3d2eae82d2c603be6cc9e6171787f3e010b0652ad28e228dc2404a9a5a4e92"
+  },
+  {
+    "name": "am_v5_encoder.bin",
+    "sha256": "7e00ef52038bae14e1144d088ec946b0717a823ddd535e3c24c5241c06ecf9ef"
+  },
+  {
+    "name": "device_vocoder_v6_streaming.bin",
+    "sha256": "2da606cb180ad0d9d235ae6c3a471f668cd0ba83e34692194266d6520f112d05"
+  },
+  {
+    "name": "phones.txt",
+    "sha256": "fedc8f55f396a183e69d6a47f1af7ed1368c3ee10adbebff2542064f0292ef3b"
+  },
+  {
+    "name": "punc.txt",
+    "sha256": "560272f2c8abf8a09b0c0f591fe3150822719fcba297d18bdd596253f13320f7"
+  }
+]

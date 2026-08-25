@@ -276,7 +276,7 @@ reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
 // 文本分页播放单独逐句合成，不能复用通用 TTS 的整段队列，避免播放定位标签丢失。
 const textMediaTtsService = createTextMediaTtsService({
-    generateTTS: (text) => tts.generateTTS(text),
+    generateTTS: (text) => generateTtsWithFallback(text),
     sendToDisplay,
     logError,
     getDisplayCapabilities
@@ -675,7 +675,8 @@ const DEFAULT_CAPABILITIES = {
     voicePlayback: true,
     voiceRecording: true,
     voiceRecognition: false,
-    displayText: true
+    displayText: true,
+    ttsGeneration: false
 };
 
 const SUB_DISPLAY_CAPABILITIES = {
@@ -683,7 +684,8 @@ const SUB_DISPLAY_CAPABILITIES = {
     voicePlayback: true,
     voiceRecording: true,
     voiceRecognition: true,
-    displayText: false
+    displayText: false,
+    ttsGeneration: false
 };
 
 const DEFAULT_DYNAMIC_FIT_CONFIG = Object.freeze({
@@ -977,7 +979,7 @@ app.post('/api/tts/generate', async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'text 不能为空' });
         }
         
-        const audioPath = await tts.generateTTS(text, voice, speed);
+        const audioPath = await generateTtsWithFallback(text, voice, speed);
         const fileName = path.basename(audioPath);
         res.json({ 
             status: 'success', 
@@ -1056,6 +1058,39 @@ app.post('/api/config/asrDevice', (req, res) => {
         broadcastToControls({
             type: 'asrDeviceChanged',
             device: device
+        });
+
+        res.json({ status: 'success', device });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+// TTS 生成设备配置（server=服务端生成，display=显示端离线生成；显示端离线时回退服务端）
+app.get('/api/config/ttsDevice', (req, res) => {
+    const device = config.get('tts.device', 'server');
+    res.json({ status: 'success', device });
+});
+
+app.post('/api/config/ttsDevice', (req, res) => {
+    try {
+        const { device } = req.body;
+        if (device !== 'server' && device !== 'display') {
+            return res.status(400).json({ status: 'error', message: 'device 必须是 server 或 display' });
+        }
+        config.set('tts.device', device);
+
+        broadcastToControls({
+            type: 'ttsDeviceChanged',
+            device: device
+        });
+
+        displayClients.forEach((displayData, displayId) => {
+            sendToDisplay(displayId, {
+                type: 'ttsConfig',
+                device: device,
+                localTtsEnabled: device === 'display'
+            });
         });
 
         res.json({ status: 'success', device });
@@ -1215,6 +1250,51 @@ app.get('/api/voiceprint/model/:filename', (req, res) => {
     stream.on('error', () => {
         if (!res.headersSent) {
             res.status(500).json({ status: 'error', message: '模型文件读取失败' });
+        } else {
+            res.end();
+        }
+    });
+    res.on('close', () => stream.destroy());
+    res.on('error', () => stream.destroy());
+    stream.pipe(res);
+});
+
+// TTS 嵌入式模型文件下载（Android 原生离线语音合成按需拉取；filename 白名单防路径穿越）
+const TTS_MODEL_DIR = path.join(RES_DIR, 'models', 'tts');
+const TTS_MODEL_FILES = [
+    '2052.INI', 'MSTTSLocEnUS.dat', 'MSTTSLocZhCN.dat', 'MSTTSLocZhCN.ini',
+    'Tokens.xml', 'ZhCN.address.dat', 'ZhCN.message.dat', 'ZhCN.mixlingual.dat',
+    'ZhCN.name.dat', 'am_v5_decoder.bin', 'am_v5_encoder.bin',
+    'device_vocoder_v6_streaming.bin', 'phones.txt', 'punc.txt', 'manifest.json'
+];
+
+// 模型清单（APK 按此清单逐文件下载并校验 SHA-256）
+app.get('/api/tts/model-manifest', (req, res) => {
+    const manifestPath = path.join(TTS_MODEL_DIR, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) {
+        return res.status(404).json({ status: 'error', message: '模型清单不存在' });
+    }
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Length', fs.statSync(manifestPath).size);
+    fs.createReadStream(manifestPath).pipe(res);
+});
+
+app.get('/api/tts/model/:filename', (req, res) => {
+    const filename = req.params.filename;
+    if (!TTS_MODEL_FILES.includes(filename)) {
+        return res.status(400).json({ status: 'error', message: '非法文件名' });
+    }
+    const filePath = path.join(TTS_MODEL_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ status: 'error', message: 'TTS 模型文件不存在' });
+    }
+    const isJson = filename.endsWith('.json') || filename.endsWith('.xml') || filename.endsWith('.ini') || filename.endsWith('.txt');
+    res.setHeader('Content-Type', isJson ? 'application/json; charset=utf-8' : 'application/octet-stream');
+    res.setHeader('Content-Length', fs.statSync(filePath).size);
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', () => {
+        if (!res.headersSent) {
+            res.status(500).json({ status: 'error', message: '文件读取失败' });
         } else {
             res.end();
         }
@@ -2132,10 +2212,13 @@ app.get('/api/map-data', (req, res) => {
             if (caps.voiceRecording) {
                 capabilities.push({ id: 'voice-recording', name: '语音录音', category: 'professional', level: 2 });
             }
-            if (caps.voiceRecognition) {
-                capabilities.push({ id: 'voice-recognition', name: '语音识别', category: 'professional', level: 3 });
+           if (caps.voiceRecognition) {
+               capabilities.push({ id: 'voice-recognition', name: '语音识别', category: 'professional', level: 3 });
+           }
+            if (caps.ttsGeneration) {
+                capabilities.push({ id: 'voice-generation', name: '语音生成', category: 'professional', level: 3 });
             }
-            if (caps.displayText) {
+           if (caps.displayText) {
                 capabilities.push({ id: 'display-text', name: '文本显示', category: 'basic', level: 2 });
             }
             actors.push({
@@ -2198,6 +2281,9 @@ app.get('/api/actors', (req, res) => {
             }
             if (caps.voicePlayback) {
                 capabilities.push({ id: 'voice-broadcast', name: '语音播报', category: 'professional', level: 3 });
+            }
+            if (caps.ttsGeneration) {
+                capabilities.push({ id: 'voice-generation', name: '语音生成', category: 'professional', level: 3 });
             }
             actors.push({
                 address: { ip: state.state?.browserInfo?.ip || state.ip || 'unknown', role: 'display', name: displayId },
@@ -2743,6 +2829,73 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
     });
 }
 
+// 查找支持本地 TTS 生成（ttsGeneration）的显示端，用于 tts.device='display' 路由
+function findDisplayWithTts() {
+    for (const [displayId, displayData] of displayClients) {
+        const caps = displayData.state?.capabilities;
+        if (caps && caps.ttsGeneration) {
+            return { id: displayId, ws: displayData.ws };
+        }
+    }
+    return null;
+}
+
+const pendingDisplayTtsRequests = new Map();
+let pendingDisplayTtsRequestId = 0;
+
+// 向显示端发送 TTS 生成请求，等待 base64 WAV 回包；超时 60s
+function sendTtsGenerateToDisplay(display, text, requestId) {
+    return new Promise((resolve, reject) => {
+        const timeoutMs = 60000;
+        const timer = setTimeout(() => {
+            pendingDisplayTtsRequests.delete(requestId);
+            reject(new Error('显示端 TTS 生成超时'));
+        }, timeoutMs);
+
+        pendingDisplayTtsRequests.set(requestId, { resolve, reject, timer });
+
+        try {
+            sendToDisplay(display.id, {
+                type: 'ttsGenerate',
+                text: text,
+                requestId: requestId
+            });
+        } catch (err) {
+            clearTimeout(timer);
+            pendingDisplayTtsRequests.delete(requestId);
+            reject(new Error('发送 TTS 请求到显示端失败: ' + err.message));
+        }
+    });
+}
+
+// 带 fallback 的 TTS 生成：tts.device='display' 时优先用显示端离线合成，
+// 显示端离线/错误/超时则回退服务端 tts.generateTTS；server 模式直接走服务端
+async function generateTtsWithFallback(text, voice, speed) {
+    const ttsDevice = config.get('tts.device', 'server');
+    if (ttsDevice === 'display') {
+        const display = findDisplayWithTts();
+        if (display) {
+            const requestId = 'tts-' + Date.now() + '-' + (++pendingDisplayTtsRequestId);
+            try {
+                const result = await sendTtsGenerateToDisplay(display, text, requestId);
+                // 显示端返回 base64 WAV → 写入临时文件供播放
+                const buffer = Buffer.from(result.audioData, 'base64');
+                const ttsDir = path.join(RES_DIR, 'uploads', 'tts');
+                if (!fs.existsSync(ttsDir)) fs.mkdirSync(ttsDir, { recursive: true });
+                const outPath = path.join(ttsDir, 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8) + '.wav');
+                fs.writeFileSync(outPath, buffer);
+                log('TTS', '显示端生成成功 (displayId=' + display.id + ' bytes=' + buffer.length + ')');
+                return outPath;
+            } catch (err) {
+                log('TTS', '显示端生成失败，回退服务端: ' + err.message);
+            }
+        } else {
+            log('TTS', '无在线支持 TTS 的显示端，回退服务端');
+        }
+    }
+    return tts.generateTTS(text, voice, speed);
+}
+
 // 裁剪调试日志开关
 let _cropDebugLog = false;
 
@@ -3013,6 +3166,13 @@ wss.on('connection', (ws, req) => {
             localAsrEnabled: asrDevice === 'display'
         }));
 
+        const ttsDevice = config.get('tts.device', 'server');
+        ws.send(JSON.stringify({
+            type: 'ttsConfig',
+            device: ttsDevice,
+            localTtsEnabled: ttsDevice === 'display'
+        }));
+
         // 显示端连接时推送声纹配置，避免新连接 APK 默认关闭声纹
         ws.send(JSON.stringify({
             type: 'voiceprintConfig',
@@ -3109,6 +3269,21 @@ wss.on('connection', (ws, req) => {
                             pending.resolve(data.embedding);
                         } else {
                             pending.reject(new Error(data.error || '显示端声纹提取失败'));
+                        }
+                    }
+                    return;
+                }
+
+                // 显示端 TTS 生成回包：base64 WAV 或 error
+                if (data.type === 'ttsResult') {
+                    const pending = pendingDisplayTtsRequests.get(data.requestId);
+                    if (pending) {
+                        pendingDisplayTtsRequests.delete(data.requestId);
+                        clearTimeout(pending.timer);
+                        if (data.audioData) {
+                            pending.resolve({ audioData: data.audioData });
+                        } else {
+                            pending.reject(new Error(data.error || '显示端 TTS 生成失败'));
                         }
                     }
                     return;
@@ -3503,7 +3678,7 @@ async function handleControlMessageFallback(data, ws) {
                             const callbacks = playOnControl ? {
                                 onResult: async (text) => {
                                     try {
-                                        const audioPath = await tts.generateTTS(text);
+                                        const audioPath = await generateTtsWithFallback(text);
                                         const fileName = path.basename(audioPath);
                                         sendToControl({
                                             type: 'playOnControl',
@@ -3516,7 +3691,7 @@ async function handleControlMessageFallback(data, ws) {
                                 },
                                 onError: async (text) => {
                                     try {
-                                        const audioPath = await tts.generateTTS(text);
+                                        const audioPath = await generateTtsWithFallback(text);
                                         const fileName = path.basename(audioPath);
                                         sendToControl({
                                             type: 'playOnControl',
@@ -4208,7 +4383,7 @@ async function handleControlMessageFallback(data, ws) {
                                 onSentence: async (sentence, fullMessage) => {
                                     ttsQueue = ttsQueue.then(async () => {
                                         const cleanText = stripMarkdown(sentence);
-                                        const audioPath = await tts.generateTTS(cleanText);
+                                        const audioPath = await generateTtsWithFallback(cleanText);
                                         const fileName = path.basename(audioPath);
                                         sendToDisplay(displayId, {
                                             type: 'tts',
@@ -4299,7 +4474,7 @@ async function handleControlMessageFallback(data, ws) {
                                     displayIds: targetDisplayIds,
                                     splitIntoSentences: chat.splitIntoSentences,
                                     stripMarkdown,
-                                    generateTTS: (text) => tts.generateTTS(text),
+                                    generateTTS: (text) => generateTtsWithFallback(text),
                                     sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
                                     sendToDisplay,
                                     onError: (error) => logError('Chat', `Agent TTS生成失败: ${error.message}`)
@@ -4511,7 +4686,7 @@ async function handleChatMessage(options) {
             if (!tts) return;
             ttsQueue = ttsQueue.then(async () => {
                 const cleanText = stripMarkdown(sentence);
-                const audioPath = await tts.generateTTS(cleanText);
+                const audioPath = await generateTtsWithFallback(cleanText);
                 const fileName = path.basename(audioPath);
                 const audioUrl = `/uploads/tts/${fileName}`;
 

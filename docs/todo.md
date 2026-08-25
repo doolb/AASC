@@ -233,6 +233,15 @@
 
 ## Android APK
 
+- ✅已完成 [2026-08-25][2026-08-25] Android 原生语音生成（TTS）
+  - 参考 3rd/NaturalVoiceSAPIAdapter 嵌入 Microsoft Embedded Speech SDK，离线合成 Xiaoxiao，模型从服务器按需下载。
+  - 显示端能力新增 `ttsGeneration`；控制端新增“语音生成设备”选项，可选服务器/显示端，显示端离线时临时回退服务器。
+  - 改动：Android 新增 `TtsEngine.kt`、`TtsModelFiles.kt`、`TtsModelManager.kt`；服务器新增模型下载与 `ttsDevice` 配置及回退；显示端 display.html 与能力展示组件接入。
+  - 真机验证：SM-N9500 完成模型下载、Xiaoxiao 声线加载、`voice-generation` 能力上报、`/api/tts/generate` 显示端合成 170446B WAV。
+  - 构建修正：azure-core 1.58.1 要求 D8 minSdk≥26，`build.gradle.kts` 的 `minSdk` 调整为 26。
+  - 文档：docs/design/android-native-tts.md、docs/spec/android-native-tts.md、docs/task/2026-08-25_android-native-tts.md
+  - 复核：SM-N9500 真机 8 次生成 8 次成功；离线回退成功；完整加载后静置 PSS 约 355--360MB、Native Heap 约 149.7MB；Android unit tests 36/36 通过（使用工作区临时目录）。
+
 - [ ] 真机验证系统媒体播放器抢占音频焦点期间的 video/audio 暂停恢复，以及控制端手动暂停和睡眠模式拦截
 
 ## 批量播放模式

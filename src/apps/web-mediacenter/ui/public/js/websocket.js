@@ -53,6 +53,9 @@ const WebSocketManager = {
             if (window.AsrDevice) {
                 window.AsrDevice.updateUI();
             }
+            if (window.TtsDevice) {
+                window.TtsDevice.updateUI();
+            }
         } else if (data.type === 'playlistProgress') {
             // 只处理当前选中显示端的播放列表进度
             if (data.displayId && data.displayId !== window.currentDisplayId) return;
@@ -85,6 +88,10 @@ const WebSocketManager = {
         } else if (data.type === 'asrDeviceChanged') {
             if (window.AsrDevice) {
                 window.AsrDevice.handleDeviceChanged(data.device);
+            }
+        } else if (data.type === 'ttsDeviceChanged') {
+            if (window.TtsDevice) {
+                window.TtsDevice.handleDeviceChanged(data.device);
             }
         } else if (data.type === 'displayState') {
             console.log('[WS] displayState 收到, displayId:', data.displayId, 'currentDisplayId:', window.currentDisplayId);

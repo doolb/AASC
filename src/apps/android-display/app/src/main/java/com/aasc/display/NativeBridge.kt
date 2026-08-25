@@ -10,6 +10,7 @@ import android.app.ActivityManager
 import android.os.Build
 import android.os.SystemClock
 import java.io.RandomAccessFile
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -145,9 +146,13 @@ class NativeBridge(
     private val asrExecutor = Executors.newSingleThreadExecutor()
 
     // ---- 声纹识别桥（speaker identification / 多人分割）----
-    private val voiceprintModelManager = VoiceprintModelManager(webView.context)
-    private var voiceprintEnabled = false
-    private var voiceprintThreshold = 0.5f
+   private val voiceprintModelManager = VoiceprintModelManager(webView.context)
+   private var voiceprintEnabled = false
+   private var voiceprintThreshold = 0.5f
+    // ---- TTS 嵌入式语音合成桥（Microsoft Embedded Speech SDK，模型按需下载）----
+    private val ttsModelManager = TtsModelManager(webView.context)
+    // 合成串行化：单线程执行器避免并发调用底层 SDK
+    private val ttsExecutor = Executors.newSingleThreadExecutor()
     private var voiceprintMultiSpeaker = false
 
     // 同步截图：JS 侧调用即阻塞等待主线程完成 WebView.draw，返回 JSON
@@ -266,12 +271,51 @@ class NativeBridge(
             JSONObject().put("error", "识别超时").toString()
         } catch (e: Exception) {
             JSONObject().put("error", e.message ?: "识别失败").toString()
+       }
+   }
+
+   // 查询声纹引擎状态：{"ready":true|false,"dim":512,"speakers":["妲己"]}（dim 由模型决定，eres2net 为 512）
+    // ---- TTS 嵌入式语音合成桥接口 ----
+
+    // 查询原生 TTS 引擎状态：{"state":"ready|downloading|not_ready|error","progress":0-100,"error":"..."}
+    @JavascriptInterface
+    fun ttsStatus(): String {
+        return ttsModelManager.statusJson().toString()
+    }
+
+    // 触发 TTS 模型下载+加载（幂等）。就绪返回 "ready"，下载中/刚触发返回 "downloading"
+    // 进度与结果通过 window.onNativeTtsModel 回调（主线程 evaluateJavascript）
+    @JavascriptInterface
+    fun ttsEnsureModel(): String {
+        val baseUrl = serverBaseUrl()
+        if (baseUrl.isEmpty()) return JSONObject().put("error", "无法确定服务器地址").toString()
+        return ttsModelManager.ensureModel(baseUrl) { event ->
+            val js = "window.onNativeTtsModel && window.onNativeTtsModel(${event.toString()});"
+            webView.evaluateJavascript(js, null)
         }
     }
 
-    // 查询声纹引擎状态：{"ready":true|false,"dim":512,"speakers":["妲己"]}（dim 由模型决定，eres2net 为 512）
+    // 离线合成文本为 WAV：输入文本，同步返回 {"audio":"<base64 wav>"} 或 {"error":"..."}
+    // 合成在工作线程串行执行（ttsExecutor），桥调用阻塞最多 30s
     @JavascriptInterface
-    fun voiceprintStatus(): String {
+    fun ttsSynthesize(text: String): String {
+        return try {
+            if (!ttsModelManager.isReady) {
+                return JSONObject().put("error", "模型未就绪").toString()
+            }
+            val audio = ttsExecutor.submit(Callable<ByteArray> {
+                TtsEngine.synthesize(text)
+            }).get(30, TimeUnit.SECONDS)
+            JSONObject().put("audio", Base64.encodeToString(audio, Base64.NO_WRAP)).toString()
+        } catch (e: java.util.concurrent.TimeoutException) {
+            JSONObject().put("error", "合成超时").toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "合成失败").toString()
+        }
+    }
+
+   @JavascriptInterface
+   fun voiceprintStatus(): String {
         return try {
             JSONObject()
                 .put("ready", VoiceprintEngine.ready)

@@ -261,6 +261,10 @@ const App = {
         if (window.AsrDevice) {
             window.AsrDevice.init();
         }
+
+        if (window.TtsDevice) {
+            window.TtsDevice.init();
+        }
         
         if (window.Reminder) {
             window.Reminder.load();

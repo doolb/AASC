@@ -43,6 +43,7 @@
 | Android GPU Compute 桥 | [android-compute-bridge.md](spec/android-compute-bridge.md) | 离屏 EGL 3.1 compute、SSBO/image2D 读回、NativeCompute JS 封装 |
 | Android 显示端 | [android-display.md](spec/android-display.md) | APK WebView 显示端、Intent 注入服务器地址与自动连接 |
 | Android 原生语音识别 | [android-native-asr.md](spec/android-native-asr.md) | sherpa-onnx AAR 原生推理、模型按需下载、服务器中转接入 |
+| Android 原生语音生成 | [android-native-tts.md](spec/android-native-tts.md) | Embedded Speech 离线合成 Xiaoxiao、模型按需下载、显示端生成与回退伪代码 |
 | Android 原生声纹识别 | [voiceprint.md](spec/voiceprint.md) | 说话人识别、多人分割、服务器权威库、声纹门控 |
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
 | 显示端睡眠模式 | [display-sleep-mode.md](spec/display-sleep-mode.md) | 时段判定/媒体遮罩/深度 UI 遮罩/临时激活/控制端配置 |

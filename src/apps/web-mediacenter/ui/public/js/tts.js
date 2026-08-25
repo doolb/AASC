@@ -139,6 +139,78 @@ const AsrDevice = {
 window.AsrDevice = AsrDevice;
 window.setAsrDevice = AsrDevice.setDevice.bind(AsrDevice);
 
+const TtsDevice = {
+    currentDevice: 'server',
+
+    async init() {
+        try {
+            const res = await fetch('/api/config/ttsDevice');
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.currentDevice = data.device || 'server';
+                this.updateUI();
+            }
+        } catch (err) {
+            console.error('[TTS] 加载语音生成设备配置失败:', err);
+        }
+    },
+
+    async setDevice(device) {
+        if (device !== 'server' && device !== 'display') return;
+
+        try {
+            const res = await fetch('/api/config/ttsDevice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.currentDevice = device;
+                this.updateUI();
+                showToast(`语音生成设备已切换为: ${device === 'server' ? '服务端' : '显示端'}`, 'success');
+            } else {
+                showToast('切换失败: ' + data.message, 'error');
+            }
+        } catch (err) {
+            showToast('切换失败: ' + err.message, 'error');
+        }
+    },
+
+    updateUI() {
+        const serverBtn = document.getElementById('ttsDeviceServerBtn');
+        const displayBtn = document.getElementById('ttsDeviceDisplayBtn');
+        const statusEl = document.getElementById('ttsDeviceStatus');
+
+        if (serverBtn) {
+            serverBtn.style.background = this.currentDevice === 'server'
+                ? 'linear-gradient(135deg, #4CAF50, #45a049)'
+                : '';
+        }
+        if (displayBtn) {
+            displayBtn.style.background = this.currentDevice === 'display'
+                ? 'linear-gradient(135deg, #4CAF50, #45a049)'
+                : '';
+        }
+        if (statusEl) {
+            const available = window.DeviceList ? window.DeviceList.getDisplays().filter(d => {
+                const caps = d.capabilities;
+                return caps && caps.ttsGeneration;
+            }).length : 0;
+            const displayName = this.currentDevice === 'server' ? '服务端 (网络合成)' : '显示端 (离线合成)';
+            statusEl.textContent = `当前: ${displayName}` + (this.currentDevice === 'display' ? ` | 可用显示端: ${available}` : '');
+        }
+    },
+
+    handleDeviceChanged(device) {
+        this.currentDevice = device;
+        this.updateUI();
+    }
+};
+
+window.TtsDevice = TtsDevice;
+window.setTtsDevice = TtsDevice.setDevice.bind(TtsDevice);
+
 window.Tts = Tts;
 window.toggleAutoTts = Tts.toggleAutoTts.bind(Tts);
 window.stopTts = Tts.stop.bind(Tts);

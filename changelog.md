@@ -4,6 +4,13 @@
 
 ### 已完成
 
+- ✅ [2026-08-25] 完成 APK TTS 真机生成与内存稳定性复核
+  - SM-N9500（Android 9 / arm64-v8a）连续 8 次原生 TTS 生成全部成功，WAV 核验为 24kHz/16bit/单声道 PCM；显示端能力恢复为 `voice-generation`。
+  - 停止语音生成显示端后服务端请求仍成功，日志确认自动回退服务端；APK 重启后模型缓存、Xiaoxiao 声线和能力上报恢复正常。
+  - 压测期间 PSS 约 396.9MB → 404.2MB、Native Heap 约 156.2MB → 157.6MB；静置 30 秒后 Native Heap 约 156.6MB。重启并完成模型加载后追加 30 秒静置采样，PSS 约 355--360MB、Native Heap 约 149.7MB，未见 OOM/崩溃。
+  - `assembleDebug` 成功；Android unit tests 在切换工作区临时目录后 36/36 通过。浏览器桥已有 `injectTouch` 断言失败，与 TTS 无关；工作区 `/tmp` 配额问题已记录。
+  - 文档：`docs/design/android-native-tts.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-25_android-native-tts.md`。
+
 - ✅ [2026-08-25] 处理 Wine/Embedded Speech SDK 100 字长稳压测 RSS 增长
   - 新增 `3rd/tts-server/wine/worker-memory.test.js`，固定 100 字请求覆盖 worker RSS 回归；修复 worker 回收与 HTTP 任务完成之间的并发竞态。
   - `tts-wine.js` 新增 `TTS_WINE_MAX_REQUESTS`（默认 10），worker 达到上限后在 `runActive` 任务完成边界重启，避免 native SDK 状态跨大量请求累积；`/api/tts/status` 暴露回收计数与上限。
@@ -16,6 +23,16 @@
   - 新增 `3rd/tts-server/tts-wine.test.js` 与 `tts-wine-benchmark.js`，固定 100 字文本覆盖 WAV、并发队列和断连恢复。
   - 验证：集成测试 3/3、断连验证 5/5、100 次 HTTP 压测 100/100 成功；RSS 从约 270MB 增至约 430MB，后续 SDK 内存专项已加入 `docs/todo.md`。
   - 文档：`3rd/tts-server/docs/design/tts-wine-queue-stability.md`、`3rd/tts-server/docs/spec/tts-wine-queue-stability.md`、`3rd/tts-server/docs/task/2026-08-25_tts-wine-队列与100字稳定性.md`。
+
+- ✅ [2026-08-25] 完成 Android 原生语音生成（TTS）
+  - 参考 `3rd/NaturalVoiceSAPIAdapter` 在 APK 内集成 Microsoft Embedded Speech SDK，离线合成 `zh-CN-XiaoxiaoNeural`；模型从服务器按需下载，暂时只支持 xiaoxiao。
+  - Android 新增 `TtsEngine.kt`、`TtsModelFiles.kt`、`TtsModelManager.kt` 与 `ttsStatus`/`ttsEnsureModel`/`ttsSynthesize` 原生桥；`build.gradle.kts` 增加 Embedded SDK AAR 与 `azure-core`，仅打包 `arm64-v8a`。
+  - 服务器新增 `GET /api/tts/model-manifest`、`GET /api/tts/model/:filename`、`GET/POST /api/config/ttsDevice`；`generateTtsWithFallback()` 在显示端离线/错误/超时时回退服务端 TTS。
+  - 显示端能力新增 `ttsGeneration`；控制端新增“语音生成设备”选项（服务器/显示端），`upload.html`、`tts.js`、`websocket.js`、`main.js` 及三个设备能力列表接入。
+  - 模型资源 `res/models/tts/` 放置 Xiaoxiao 嵌入式模型 14 个文件及 `manifest.json`。
+  - 真机验证（SM-N9500 / Android 9 / arm64）：模型下载、Xiaoxiao 声线加载、`voice-generation` 能力上报、`/api/tts/generate` 显示端合成 170446B WAV 成功。
+  - 构建修正：azure-core 1.58.1 使用 `MethodHandle`，`minSdk` 由 24 调整为 26；新 APK 使用原 debug keystore 重签名后覆盖安装。
+  - 文档：`docs/design/android-native-tts.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-25_android-native-tts.md`、`docs/design.md`、`docs/spec.md`、`docs/todo.md`。
 
 - ✅ [2026-08-24] 完成 Task 4：文档、回归与交付检查
   - 复核 `docs/design/text-media-routing.md`、`docs/spec/text-media-routing.md` 与任务文档，确认 Task 1/2/3 的服务器权威 `mediaTypes`、手动 `voicePlayback` 路由、远程 `textSentenceTtsFinished` 回执、单句 `prefetch` 与 stop/cancel 失效描述和当前实现一致。

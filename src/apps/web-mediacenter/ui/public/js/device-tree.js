@@ -235,6 +235,7 @@ const DeviceTree = {
             voicePlayback: true,
             voiceRecording: true,
             voiceRecognition: false,
+            ttsGeneration: false,
             displayText: true
         };
 
@@ -243,6 +244,7 @@ const DeviceTree = {
             { key: 'voicePlayback', label: '语音播放', icon: '🔊' },
             { key: 'voiceRecording', label: '语音录音', icon: '🎙️' },
             { key: 'voiceRecognition', label: '语音识别', icon: '🧠' },
+            { key: 'ttsGeneration', label: '语音生成', icon: '🗣️' },
             { key: 'displayText', label: '文本显示', icon: '📝' }
         ];
 
@@ -585,6 +587,7 @@ const DeviceTree = {
             voicePlayback: true,
             voiceRecording: true,
             voiceRecognition: false,
+            ttsGeneration: false,
             displayText: true
         };
 
@@ -606,6 +609,7 @@ const DeviceTree = {
                 voicePlayback: '语音播放',
                 voiceRecording: '语音录音',
                 voiceRecognition: '语音识别',
+                ttsGeneration: '语音生成',
                 displayText: '文本显示'
             };
             window.showToast(`${labelMap[key] || key} 已${value ? '启用' : '禁用'}`, 'success');

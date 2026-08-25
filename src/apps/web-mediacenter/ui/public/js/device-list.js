@@ -300,6 +300,7 @@ const DeviceList = {
                     <span class="cap-icon ${caps.voicePlayback ? 'active' : 'inactive'}" title="语音播放${caps.voicePlayback ? '' : '（不可用）'}">🔊</span>
                     <span class="cap-icon ${caps.voiceRecording ? 'active' : 'inactive'}" title="语音录音${caps.voiceRecording ? '' : '（不可用）'}">🎙️</span>
                     <span class="cap-icon ${caps.voiceRecognition ? 'active' : 'inactive'}" title="语音识别${caps.voiceRecognition ? '' : '（不可用）'}">🧠</span>
+                    <span class="cap-icon ${caps.ttsGeneration ? 'active' : 'inactive'}" title="语音生成${caps.ttsGeneration ? '' : '（不可用）'}">🗣️</span>
                     <span class="cap-icon ${caps.displayText ? 'active' : 'inactive'}" title="文本显示${caps.displayText ? '' : '（不可用）'}">📝</span>
                 `;
             }
@@ -514,6 +515,7 @@ const DeviceList = {
             voicePlayback: true,
             voiceRecording: true,
             voiceRecognition: false,
+            ttsGeneration: false,
             displayText: true
         };
 
@@ -522,6 +524,7 @@ const DeviceList = {
             { key: 'voicePlayback', label: '语音播放', icon: '🔊' },
             { key: 'voiceRecording', label: '语音录音', icon: '🎙️' },
             { key: 'voiceRecognition', label: '语音识别', icon: '🧠' },
+            { key: 'ttsGeneration', label: '语音生成', icon: '🗣️' },
             { key: 'displayText', label: '文本显示', icon: '📝' }
         ];
 
@@ -829,6 +832,7 @@ const DeviceList = {
             voicePlayback: true,
             voiceRecording: true,
             voiceRecognition: false,
+            ttsGeneration: false,
             displayText: true
         };
 
@@ -850,6 +854,7 @@ const DeviceList = {
                 voicePlayback: '语音播放',
                 voiceRecording: '语音录音',
                 voiceRecognition: '语音识别',
+                ttsGeneration: '语音生成',
                 displayText: '文本显示'
             };
             window.showToast(`${labelMap[key] || key} 已${value ? '启用' : '禁用'}`, 'success');
@@ -942,6 +947,7 @@ const DeviceList = {
             voicePlayback: true,
             voiceRecording: true,
             voiceRecognition: false,
+            ttsGeneration: false,
             displayText: true
         };
 
@@ -974,6 +980,11 @@ const DeviceList = {
                         <input type="checkbox" ${caps.voiceRecognition ? 'checked' : ''} data-cap="voiceRecognition">
                         <span>🧠 语音识别</span>
                         <span class="capability-desc">能进行语音识别</span>
+                    </label>
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.ttsGeneration ? 'checked' : ''} data-cap="ttsGeneration">
+                        <span>🗣️ 语音生成</span>
+                        <span class="capability-desc">能在显示端离线合成语音</span>
                     </label>
                     <label class="capability-item">
                         <input type="checkbox" ${caps.displayText ? 'checked' : ''} data-cap="displayText">

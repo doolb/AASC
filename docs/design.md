@@ -54,6 +54,7 @@
 | render-display 文字内嵌 | [render-display-inline-text.md](design/render-display-inline-text.md) | 条内居中浮层文字、GPU/显存第二行占位对齐 |
 | Android显示端 GPU Compute | [android-compute-bridge.md](design/android-compute-bridge.md) | 离屏 EGL 3.1 compute 桥、SSBO/image2D 数值与图像读回 |
 | Android原生语音识别 | [android-native-asr.md](design/android-native-asr.md) | sherpa-onnx AAR 原生加载 SenseVoice、模型按需下载、服务器中转接入 |
+| Android原生语音生成 | [android-native-tts.md](design/android-native-tts.md) | Microsoft Embedded Speech 离线合成 Xiaoxiao、模型按需下载、显示端生成与服务端回退 |
 | Android原生声纹识别 | [voiceprint.md](design/voiceprint.md) | 外部声纹模型加载、说话人匹配与 APK 端声纹门控 |
 | 显示端睡眠模式 | [display-sleep-mode.md](design/display-sleep-mode.md) | 按时段媒体遮罩/深度 UI 全屏遮罩/60s 临时激活，控制端可配 |
 | 音频媒体播放 | [audio-media.md](design/audio-media.md) | WAV/OGG/MP3 普通播放、批量播放、控制端进度与睡眠手动切换 |

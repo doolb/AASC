@@ -22,14 +22,15 @@ class Config extends DataSnapshot {
         server: {
             port: 8081
         },
-        tts: {
-            serviceUrl: 'http://192.168.1.16:3000/api/tts',
-            defaultVoice: 'Microsoft Xiaoxiao',
-            defaultSpeed: 0,
-            requestTimeoutMs: 20000,
-            extraTimeoutPerPending: 10000,
-            maxErrorBytes: 65536
-        },
+       tts: {
+           serviceUrl: 'http://192.168.1.16:3000/api/tts',
+           defaultVoice: 'Microsoft Xiaoxiao',
+           defaultSpeed: 0,
+           requestTimeoutMs: 20000,
+           extraTimeoutPerPending: 10000,
+            maxErrorBytes: 65536,
+            device: 'server'
+       },
         asr: {
             mode: 'isolated',
             maxQueueLength: 8,

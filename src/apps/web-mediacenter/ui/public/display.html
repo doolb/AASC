@@ -141,6 +141,11 @@
         // APK 原生 ASR 引擎（sherpa-onnx AAR）：检测到桥方法即认为可用，不再加载 WASM
         const nativeAsrAvailable = !!(window.NativeDisplay && window.NativeDisplay.asrStatus);
         let nativeAsrReady = false;
+        // APK 原生 TTS 引擎：检测到桥方法即认为可用，模型就绪后上报 ttsGeneration 能力
+        const nativeTtsAvailable = !!(window.NativeDisplay && window.NativeDisplay.ttsStatus);
+        let nativeTtsReady = false;
+        let ttsDevice = 'server';
+        let localTtsEnabled = false;
         // APK 原生声纹引擎：检测到桥方法即认为可用
         const nativeVoiceprintAvailable = !!(window.NativeDisplay && window.NativeDisplay.voiceprintMatch);
         let voiceprintEnabled = false;
@@ -192,6 +197,45 @@
                 nativeAsrReady = false;
                 updateVoiceTextDisplay('语音模型下载失败: ' + (payload.error || '未知错误'), true);
                 setTimeout(() => updateVoiceTextDisplay('', true), 4000);
+            }
+        };
+
+        function reportNativeTtsCapability(ready) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN || !currentCapabilities) return;
+            currentCapabilities.ttsGeneration = ready;
+            displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+        }
+
+        // 查询原生 TTS 状态；未就绪且服务端选择显示端生成时触发模型下载（幂等）
+        function ensureNativeTtsModel() {
+            if (!nativeTtsAvailable) return;
+            try {
+                const st = JSON.parse(nativeBridge.ttsStatus());
+                if (st.state === 'ready') {
+                    nativeTtsReady = true;
+                    reportNativeTtsCapability(true);
+                } else if (st.state === 'downloading') {
+                    console.log('[TTS] 模型下载中', st.progress);
+                } else if (st.state === 'not_ready' || st.state === 'error') {
+                    nativeBridge.ttsEnsureModel();
+                }
+            } catch (e) {
+                console.warn('[TTS] ttsStatus 解析失败:', e);
+            }
+        }
+
+        // 原生 TTS 模型下载/加载事件（由 NativeBridge evaluateJavascript 触发）
+        window.onNativeTtsModel = function(payload) {
+            if (!payload) return;
+            if (payload.state === 'downloading') {
+                console.log('[TTS] 模型下载中', payload.progress);
+            } else if (payload.state === 'ready') {
+                nativeTtsReady = true;
+                reportNativeTtsCapability(true);
+            } else if (payload.state === 'error') {
+                nativeTtsReady = false;
+                reportNativeTtsCapability(false);
+                console.warn('[TTS] 模型下载失败:', payload.error);
             }
         };
 
@@ -1170,6 +1214,40 @@
                 isPlayingTts = false;
             } else if (data.action === 'setAutoTts') {
                 autoTtsEnabled = data.enabled;
+            }
+        }
+
+        // 显示端 TTS 生成回包：base64 WAV 或错误信息
+        function sendTtsResult(requestId, payload) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify(Object.assign({
+                type: 'ttsResult',
+                requestId: requestId
+            }, payload)));
+        }
+
+        // 服务端 tts.device='display' 时下发离线合成请求；模型未就绪先触下载并快速回错由服务端回退
+        function handleTtsGenerate(data) {
+            if (!nativeTtsAvailable) {
+                sendTtsResult(data.requestId, { error: '原生 TTS 不可用' });
+                return;
+            }
+            if (!nativeTtsReady) {
+                if (localTtsEnabled) {
+                    ensureNativeTtsModel();
+                }
+                sendTtsResult(data.requestId, { error: '模型下载中' });
+                return;
+            }
+            try {
+                const res = JSON.parse(nativeBridge.ttsSynthesize(data.text || ''));
+                if (res && res.audio) {
+                    sendTtsResult(data.requestId, { audioData: res.audio });
+                } else {
+                    sendTtsResult(data.requestId, { error: (res && res.error) || '语音合成失败' });
+                }
+            } catch (e) {
+                sendTtsResult(data.requestId, { error: e.message || '语音合成异常' });
             }
         }
 
@@ -3563,6 +3641,28 @@
                         return;
                     }
 
+                    if (data.type === 'ttsConfig') {
+                        ttsDevice = data.device || (data.localTtsEnabled ? 'display' : 'server');
+                        localTtsEnabled = !!data.localTtsEnabled;
+                        if (localTtsEnabled && nativeTtsAvailable) {
+                            // 服务端选择显示端生成：模型未就绪时幂等触发下载，就绪后立即上报能力
+                            if (nativeTtsReady) {
+                                reportNativeTtsCapability(true);
+                            } else {
+                                ensureNativeTtsModel();
+                            }
+                        } else if (!localTtsEnabled && nativeTtsReady) {
+                            nativeTtsReady = false;
+                            reportNativeTtsCapability(false);
+                        }
+                        return;
+                    }
+
+                    if (data.type === 'ttsGenerate') {
+                        handleTtsGenerate(data);
+                        return;
+                    }
+
                     if (data.type === 'logReportConfig') {
                         applyLogReportConfig(data);
                         return;
@@ -3735,6 +3835,7 @@
                 voicePlayback: true,
                 voiceRecording: false,
                 voiceRecognition: false,
+                ttsGeneration: false,
                 displayText: true,
                 webgl: (function() {
                     try {
@@ -3833,6 +3934,22 @@
                     }
                 } catch (e) {
                     capabilities.voiceRecognition = false;
+                }
+            }
+
+            // APK 原生 TTS 引擎：按模型就绪状态声明能力；服务端选择显示端且未就绪时触发下载
+            if (nativeTtsAvailable) {
+                try {
+                    const st = JSON.parse(nativeBridge.ttsStatus());
+                    nativeTtsReady = (st.state === 'ready');
+                    capabilities.ttsGeneration = nativeTtsReady;
+                    if (localTtsEnabled && (st.state === 'not_ready' || st.state === 'error')) {
+                        nativeBridge.ttsEnsureModel();
+                    }
+                } catch (e) {
+                    nativeTtsReady = false;
+                    capabilities.ttsGeneration = false;
+                    console.warn('[TTS] ttsStatus 解析失败:', e);
                 }
             }
             
