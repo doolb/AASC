@@ -2,7 +2,7 @@
 
 ## 任务描述
 
-参考 `3rd/tts-server/tts-wine.js`，将 `NaturalVoiceSAPIAdapter` Linux TTS PoC 形成独立的 `tts-linux` HTTP 服务，并为后续删除 `3rd/NaturalVoiceSAPIAdapter` 保留独立运行时边界。
+参考 `3rd/tts-server/tts-wine.js`，将旧 Linux TTS PoC 形成独立的 `tts-linux` HTTP 服务，并完成旧适配器目录删除。
 
 ## Design 需求
 
@@ -79,3 +79,4 @@
 - 2026-08-25：脚本 TDD 回归 2/2；真实临时运行时验证 Linux SDK 下载/编译/WAV 通过，Wine 四个 NuGet SDK 下载、prefix 生成、worker 编译/WAV 通过；临时运行时未覆盖正式目录。
 - 2026-08-25：补充 `WINE_BIN_DIR`，将本次下载的四个 Wine x64 DLL 部署后再测试；使用全新 DLL 目录重新验证 Linux/Wine WAV 均通过。
 - 2026-08-25：按普通 Git 归档要求，将 Linux SDK tar.gz 与四个 Wine nupkg 保存到 `3rd/tts-server/sdk-archives`，补充 SHA256SUMS；脚本优先复用归档包，不在构建结束时删除。
+- 2026-08-25：确认 Android 使用独立 AAR 与 `TtsEngine`，删除 `3rd/NaturalVoiceSAPIAdapter` gitlink；旧目录不再参与 Linux/Wine/APK 构建。

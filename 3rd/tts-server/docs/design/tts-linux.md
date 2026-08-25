@@ -17,9 +17,9 @@
 - `GET /api/voices`：返回配置的语音列表。
 - `GET /api/tts/status`：返回队列、并发、路径和超时状态。
 
-## 迁移边界
+## 迁移边界（已完成）
 
-删除 `NaturalVoiceSAPIAdapter` 前，把独立 CLI、模型、SDK 运行库和 Wine prefix 迁移到新路径；服务代码不再拼接旧子模块路径。Wine prefix 使用 `wine/runtime/prefix`，旧 prefix 暂时保留作回滚副本。
+独立 CLI、模型、SDK 运行库和 Wine prefix 已迁移到新路径；服务代码不再拼接旧子模块路径。Wine prefix 使用 `wine/runtime/prefix`。
 
 运行时由 `scripts/prepare-runtime.sh` 自动准备：SDK 从 `sdk-archives` 中复用原始压缩包；归档缺失时从 Microsoft 官方 Linux 下载入口和 NuGet 下载入口下载并保存。Wine prefix 使用 `wineboot --init` 生成，不复制旧 prefix。
 

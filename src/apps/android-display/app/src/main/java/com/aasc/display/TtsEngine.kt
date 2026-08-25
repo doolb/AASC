@@ -12,7 +12,7 @@ import com.microsoft.cognitiveservices.speech.VoiceInfo
 import java.io.File
 
 // Microsoft Embedded Speech SDK 封装：离线 TTS 合成（zh-CN Xiaoxiao，Riff24Khz16BitMonoPcm）
-// 参考 nvsapi-linux-poc/android-test MainActivity：EmbeddedSpeechConfig.fromPath + SpeakText
+// 使用 EmbeddedSpeechConfig.fromPath 和 SpeakText 完成离线语音合成
 object TtsEngine {
 
     // 嵌入式语音授权密钥（与参考 POC 一致，模型内置授权）

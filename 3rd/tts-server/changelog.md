@@ -12,6 +12,7 @@
 - 自动化：新增 `scripts/prepare-runtime.sh`，下载 Microsoft SDK、生成 Wine prefix、编译并测试 Linux/Wine TTS。
 - Wine 运行时：准备脚本支持 `WINE_BIN_DIR`，部署本次下载的 x64 DLL 后再执行测试。
 - SDK 归档：Linux SDK tar.gz 与四个 Wine nupkg 保存在 `sdk-archives`，补充 `SHA256SUMS`，使用普通 Git 提交，不使用 Git LFS；构建结束不删除原始压缩包。
+- 删除旧适配器：独立 Linux/Wine 运行时迁移完成，`3rd/NaturalVoiceSAPIAdapter` 不再是服务构建或运行依赖。
 
 - 修复：`tts-wine.js` 将队列任务绑定到 `drain()` 已预留的 Wine worker，恢复 `/api/tts` 与 `/api/voices` 正常请求。
 - 优化：参考 `tts.js` 增加 FIFO 队列的断连清理、排队超时、队列上限和状态字段。

@@ -1,6 +1,6 @@
 # Linux Embedded Speech TTS
 
-这里是独立的 Linux TTS CLI 构建入口，不依赖 `NaturalVoiceSAPIAdapter` 源码目录。
+这里是独立的 Linux TTS CLI 构建入口，不依赖旧适配器源码目录。
 
 ## 自动准备 SDK、prefix 和测试
 
@@ -46,4 +46,4 @@ node ../tts-linux.js
 
 默认接口与 Wine TTS 一致：`POST /api/tts`、`GET /api/voices`、`GET /api/tts/status`。
 
-删除 `3rd/NaturalVoiceSAPIAdapter` 前，只需确认以上二进制、模型和 SDK 路径以及 `../wine/runtime/prefix` 已迁移到独立目录。旧目录当前保留，不作为正式运行时依赖。
+Linux TTS 已使用以上独立二进制、模型、SDK 路径和 `../wine/runtime/prefix`，不依赖旧适配器目录。

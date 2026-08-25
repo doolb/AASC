@@ -15,6 +15,7 @@
   - 自动化：新增 `3rd/tts-server/scripts/prepare-runtime.sh`，从 Microsoft 官方入口下载 SDK、用 `wineboot --init` 生成 prefix，并支持 Linux/Wine 双端真实 WAV 测试；临时运行时实测两端通过。
   - Wine 运行时：脚本将下载包中的四个 x64 DLL 部署到 `WINE_BIN_DIR`，测试不再依赖旧 DLL。
   - SDK 归档：Linux SDK tar.gz 与四个 Wine nupkg 保存在 `3rd/tts-server/sdk-archives`，补充 `SHA256SUMS`，使用普通 Git 提交，不使用 Git LFS；脚本优先复用已归档压缩包。
+  - 删除旧适配器：确认 APK 使用独立 `client-sdk-embedded-1.51.2.aar` 与 `TtsEngine` 后，删除 `3rd/NaturalVoiceSAPIAdapter` gitlink；Android 仅保留历史实现说明，不再依赖旧目录。
 
 - ✅ [2026-08-25] 完成 APK TTS 真机生成与内存稳定性复核
   - SM-N9500（Android 9 / arm64-v8a）连续 8 次原生 TTS 生成全部成功，WAV 核验为 24kHz/16bit/单声道 PCM；显示端能力恢复为 `voice-generation`。

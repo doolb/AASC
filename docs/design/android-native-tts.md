@@ -2,7 +2,7 @@
 
 ## 概述
 
-在现有 `android-display` APK 中集成 **Microsoft Cognitive Services Speech SDK（Embedded）** 的离线语音合成能力，参考 `3rd/NaturalVoiceSAPIAdapter` 提供的 Android 参考工程嵌入方式，让 APK 可以在不依赖外网 TTS 服务的情况下本地合成语音。
+在现有 `android-display` APK 中集成 **Microsoft Cognitive Services Speech SDK（Embedded）** 的离线语音合成能力，让 APK 可以在不依赖外网 TTS 服务的情况下本地合成语音。
 
 本次只支持一个内置声线：`zh-CN-XiaoxiaoNeural`（xiaoxiao）。模型从服务器按需下载，APK 安装包保持小体积。控制端新增“语音生成设备”选项，可选服务端或显示端；当选择显示端但显示端离线、能力未就绪或合成出错时，服务器临时回退到服务端 TTS，保证语音播报不中断。
 

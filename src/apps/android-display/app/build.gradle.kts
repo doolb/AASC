@@ -40,7 +40,7 @@ dependencies {
     // SHA-256: 43cfb818461da559016bd10647c95192f4683c02792b9d9116aba30e2324858e
    implementation(files("libs/sherpa-onnx-1.12.35.aar"))
     // Microsoft Cognitive Services Speech SDK（嵌入式离线 TTS）：vendored AAR
-    // 来源: nvsapi-linux-poc/android-test/app/libs/client-sdk-embedded-1.51.2.aar
+    // 来源：Microsoft Cognitive Services Speech Embedded SDK 1.51.2，AAR 已归档到 app/libs/
     implementation(files("libs/client-sdk-embedded-1.51.2.aar"))
     // SDK 依赖 azure-core（仅传输层，不传递其他 azure 依赖以减小体积）
     implementation("com.azure:azure-core:1.58.1")

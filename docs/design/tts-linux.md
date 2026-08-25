@@ -28,11 +28,11 @@ Linux TTS CLI 子进程
 - 每个 HTTP 请求使用独立 CLI 子进程，完成后删除临时 WAV；通过进程边界限制 native SDK 内存累积。
 - 二进制、模型目录和 SDK 动态库路径支持环境变量配置；Linux TTS 与 Wine TTS 使用同一授权串硬编码，避免部署时出现授权配置漂移。Linux/Wine SDK 原始压缩包保存在 `3rd/tts-server/sdk-archives`，使用普通 Git 提交；解压后的 SDK 目录只作为构建运行目录。
 - CMake 禁止将构建机上的 SDK 绝对路径写入可执行文件；`cmake --install --prefix 3rd/tts-server/linux` 将 CLI 放入 `bin`、x64 SDK 动态库放入相邻 `lib`，也可通过 `TTS_LINUX_SDK_DIR` 指向外部运行库。
-- `NaturalVoiceSAPIAdapter/nvsapi-linux-poc` 只作为迁移和验证参考，不作为正式运行时依赖。
+- Linux TTS 运行时已完成独立迁移，不再需要旧适配器目录作为参考或构建输入。
 
 ## 删除 NaturalVoiceSAPIAdapter 的兼容边界
 
-删除该目录前，需要把 Linux TTS 二进制、模型目录和 SDK 运行库部署到 `tts-server/linux` 或通过环境变量指向其他独立目录。完成后 `tts-linux.js` 不读取该子模块路径，删除不会影响服务启动和请求路由。
+旧适配器目录已从运行时依赖中移除；Linux TTS 二进制、模型目录和 SDK 运行库位于独立路径，`tts-linux.js` 不读取旧目录。
 
 ## 运行时自动准备
 
