@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">离线 TTS</string>
+    <string name="input_hint">请输入要生成的文本</string>
+    <string name="generate">生成</string>
+    <string name="loading_model">正在加载内置语音模型…</string>
+    <string name="model_ready">模型已就绪</string>
+    <string name="model_load_failed">模型加载失败：%1$s</string>
+    <string name="generating">正在生成语音…</string>
+    <string name="generation_failed">生成失败：%1$s</string>
+    <string name="playback_failed">播放失败：%1$s</string>
+    <string name="cpu_mode_label">CPU 模式</string>
+    <string-array name="cpu_mode_entries">
+        <item>自动</item>
+        <item>大核</item>
+        <item>小核</item>
+    </string-array>
+</resources>

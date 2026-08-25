@@ -29,6 +29,8 @@
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
 | 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求超时、pipeline 写盘、失败文件回收 |
+| 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/spec/android-offline-tts-apk.md) | 内置模型离线合成、WAV 播放和耗时显示伪代码 |
+| Android TTS CPU 核心模式 | [android-tts-cpu-affinity.md](../3rd/tts-server/docs/spec/android-tts-cpu-affinity.md) | CPU 核心识别、JNI affinity、回退和状态显示伪代码 |
 | 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
 | 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、旋转重力方向调整、设备事件防抖 |
 | 显示端分布式能力 | [display-capability.md](spec/display-capability.md) | 显示端能力声明、能力路由、能力编辑 |

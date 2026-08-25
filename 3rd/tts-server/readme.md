@@ -13,6 +13,16 @@
 - **API 接口**：提供标准的 RESTful API，方便其他程序调用。
 - **低依赖**：仅需 Node.js 和 Balabolka Console，无需复杂的运行环境。
 
+## Android 离线 TTS APK
+
+`android-tts/` 是独立的 Android TTS 应用，内置 Xiaoxiao 模型，不依赖本服务和网络。构建 debug APK：
+
+```bash
+npm run build:android-tts
+```
+
+产物位于 `android-tts/app/build/outputs/apk/debug/app-debug.apk`，仅支持 arm64-v8a、Android 8.0+。
+
 ## 环境要求
 
 - **操作系统**: Microsoft Windows 7/8/10/11
@@ -31,4 +41,3 @@
 1. 将项目代码下载到本地。
 2. 在项目根目录下打开命令行，安装依赖：
 
-   

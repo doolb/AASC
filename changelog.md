@@ -4,6 +4,15 @@
 
 ### 已完成
 
+- ✅ [2026-08-25] Android TTS APK 增加自动/大核/小核 CPU 模式
+  - 新增 CPU 模式选择和持久化；通过 JNI 动态识别核心并绑定 TTS 工作线程，失败时回退自动。
+  - 状态栏显示实际核心或回退原因；`npm --prefix 3rd/tts-server run build:android-tts`、完整 Android JVM 测试通过。
+
+- ✅ [2026-08-25] 新增 `3rd/tts-server/android-tts` 独立 Android 离线 TTS APK
+  - 内置 Xiaoxiao 模型，不申请网络权限；提供文本框、生成按钮和自动播放。
+  - `SpeechSynthesizer` 显式使用 `(config, null)`，只返回 WAV 数据，避免默认扬声器重复播放。
+  - 生成完成显示 SDK 合成耗时；`npm --prefix 3rd/tts-server run build:android-tts` 和 Android JVM 单元测试通过。
+
 - ✅ [2026-08-25] 完成 Linux TTS 服务化与 NaturalVoice 运行时解耦
   - 新增 `3rd/tts-server/tts-linux.js`，兼容 Wine TTS HTTP 接口，支持 FIFO 队列、队列上限、单并发、超时、断连清理和临时 WAV 清理。
   - 新增 `3rd/tts-server/linux/` 独立 CMake/CLI；构建产物使用 `$ORIGIN/../lib`，不绑定构建机或 `NaturalVoiceSAPIAdapter` 绝对路径。

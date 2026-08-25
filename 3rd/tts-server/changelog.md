@@ -2,6 +2,17 @@
 
 ## 2026-08-25
 
+- 新增：独立 Android TTS APK 增加“自动/大核/小核”CPU 模式选择，默认自动并持久化。
+- 新增：通过 JNI 动态识别 CPU capacity/最大频率并绑定 TTS 工作线程；无法识别或绑定失败时自动回退系统调度。
+- 新增：模型加载和每次合成前应用 CPU 模式，状态栏显示实际核心集合或回退原因。
+- 测试：CMake/NDK 生成并打包 `arm64-v8a` CPU affinity 库，完整 Android JVM 测试和 debug APK 构建通过。
+
+- 新增：`android-tts/` 独立 Android 离线 TTS APK，内置 Xiaoxiao 模型，不申请网络权限。
+- 新增：APK 提供多行文本框和生成按钮，使用 `SpeechSynthesizer(config, null)` 只生成 WAV 数据，再由 `MediaPlayer` 播放。
+- 新增：生成完成后显示 SDK 合成阶段耗时，格式为“生成完成，用时 X.XX 秒”；模型加载和播放时间不计入该耗时。
+- 构建：增加 `npm run build:android-tts`，模型从 `models/extracted` 构建复制，限定 `arm64-v8a` 和 Android 8.0+。
+- 测试：Android JVM 单元测试和 debug APK 构建通过，APK 资源包含 14 个模型文件，Manifest 不包含 `INTERNET` 权限。
+
 - 新增：`tts-linux.js` 及 `linux/` 独立构建入口，提供 Linux Embedded Speech TTS HTTP 服务。
 - 兼容：接口与 `tts-wine.js` 保持一致，支持 FIFO 队列、队列上限、单并发、超时、临时文件清理和状态查询。
 - 解耦：默认运行时路径不再依赖 `NaturalVoiceSAPIAdapter`；CMake 使用可迁移的 `$ORIGIN/../lib` 运行库路径。

@@ -8,3 +8,9 @@ wine/*.headers
 wine/*.log
 wine/*.out
 ttslive/node_modules/
+
+# 独立 Android TTS APK 的 Gradle 缓存与构建产物
+android-tts/.gradle/
+android-tts/build/
+android-tts/app/build/
+android-tts/app/.cxx/

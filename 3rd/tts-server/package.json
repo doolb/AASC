@@ -2,6 +2,9 @@
   "name": "node-bal-tts",
   "version": "1.0.0",
   "main": "tts.js",
+  "scripts": {
+    "build:android-tts": "../../src/apps/android-display/gradlew -p android-tts :app:assembleDebug"
+  },
   "dependencies": {
     "express": "^4.17.1"
   }
