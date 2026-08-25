@@ -4,6 +4,18 @@
 
 ### 已完成
 
+- ✅ [2026-08-25] 完成 Linux TTS 服务化与 NaturalVoice 运行时解耦
+  - 新增 `3rd/tts-server/tts-linux.js`，兼容 Wine TTS HTTP 接口，支持 FIFO 队列、队列上限、单并发、超时、断连清理和临时 WAV 清理。
+  - 新增 `3rd/tts-server/linux/` 独立 CMake/CLI；构建产物使用 `$ORIGIN/../lib`，不绑定构建机或 `NaturalVoiceSAPIAdapter` 绝对路径。
+  - 测试：Linux TTS HTTP/队列回归 5/5，CMake 配置与编译通过；真实合成受当前主机 AVX 指令集限制，以 exit 132 失败，已记录环境限制。
+  - 文档：`docs/design/tts-linux.md`、`docs/spec/tts-linux.md`、`docs/task/2026-08-25_Linux-TTS服务化与NaturalVoice解耦.md` 及 `3rd/tts-server/docs/` 对应文档。
+  - SDK/运行时迁移：Linux Embedded SDK → `3rd/tts-server/linux/sdk`；Wine 编译 SDK → `3rd/tts-server/wine/runtime/sdk-win41`；Wine prefix → `3rd/tts-server/wine/runtime/prefix`；旧源目录暂保留。
+  - 授权统一：`tts-linux.js`、`tts-wine.js` 与 APK 使用同一硬编码授权串；Linux 服务不再接受 `TTS_LINUX_LICENSE/MS_TTS_KEY` 覆盖。
+  - 构建：Linux CMake 增加 install 布局，将 CLI 安装到 `linux/bin`、x64 SDK 动态库安装到 `linux/lib`，与 `$ORIGIN/../lib` 运行路径一致。
+  - 自动化：新增 `3rd/tts-server/scripts/prepare-runtime.sh`，从 Microsoft 官方入口下载 SDK、用 `wineboot --init` 生成 prefix，并支持 Linux/Wine 双端真实 WAV 测试；临时运行时实测两端通过。
+  - Wine 运行时：脚本将下载包中的四个 x64 DLL 部署到 `WINE_BIN_DIR`，测试不再依赖旧 DLL。
+  - SDK 归档：Linux SDK tar.gz 与四个 Wine nupkg 保存在 `3rd/tts-server/sdk-archives`，补充 `SHA256SUMS`，使用普通 Git 提交，不使用 Git LFS；脚本优先复用已归档压缩包。
+
 - ✅ [2026-08-25] 完成 APK TTS 真机生成与内存稳定性复核
   - SM-N9500（Android 9 / arm64-v8a）连续 8 次原生 TTS 生成全部成功，WAV 核验为 24kHz/16bit/单声道 PCM；显示端能力恢复为 `voice-generation`。
   - 停止语音生成显示端后服务端请求仍成功，日志确认自动回退服务端；APK 重启后模型缓存、Xiaoxiao 声线和能力上报恢复正常。
