@@ -33,9 +33,34 @@
 | 旋转角度 | 重力方向(相对0度) | 文字方向 |
 |----------|-------------------|----------|
 | 0度 | 向下 | 水平，从左到右 |
-| 90度 | 向右 | 竖向，从上到下（writingMode: vertical-rl） |
+| 90度 | 向右 | 整体 rotate(90deg)，汉字字形随画面顺时针旋转 |
 | 180度 | 向上 | 水平，翻转180度 |
-| 270度 | 向左 | 竖向，从下到上（writingMode: vertical-rl + rotate(180deg)） |
+| 270度 | 向左 | 整体 rotate(270deg)，汉字字形随画面逆时针旋转 |
+
+### 播报文本字号与旋转
+
+`voiceTextDisplay` 同时承载 TTS 播报文本、语音识别结果和语音模型状态提示，必须复用显示端旋转状态：
+
+- 0°：水平，从左到右；
+- 90°：整体 `rotate(90deg)`，汉字字形随显示器顺时针旋转；
+- 180°：水平并 `rotate(180deg)`；
+- 270°：整体 `rotate(270deg)`，汉字字形随显示器逆时针旋转；
+- 基础字号从 24px 增加 50% 到 36px；移动端从 18px 增加 50% 到 27px。
+- 旋转时同步调整长文本最大宽度，避免放大字号后覆盖整个显示区；不使用 `text-orientation: mixed`，避免汉字保持正立而未随画面旋转。
+- 播报文本淡入动画只改变透明度，不写入 `transform`，避免覆盖旋转分支设置的方向变换。
+
+### 旋转后逻辑画布布局
+
+90°/270°不能继续直接使用未旋转视口的物理宽高定位文本元素。显示端先生成旋转后的逻辑画布尺寸，再使用该尺寸计算文本的最大可用区域和边距：
+
+- 0°/180°：`layoutWidth = viewportWidth`，`layoutHeight = viewportHeight`；
+- 90°/270°：`layoutWidth = viewportHeight`，`layoutHeight = viewportWidth`；
+- 文本元素的位置基于旋转后的逻辑画布重新映射到物理四角；
+- 90°/270°的文本可用宽度不超过 `layoutWidth - 2 * margin`，可用高度不超过 `layoutHeight - 2 * margin`；
+- 旋转变换和逻辑画布位置必须同时更新，不能只设置 `transform` 而保留旧的物理边缘坐标。
+- 设置约束后读取每个可见文本元素的 `getBoundingClientRect()`；按照当前固定定位的 `left/right/top/bottom` 锚点，将旋转后的实际包围盒对应边缘对齐到物理视口边距，避免只满足“不越界”却向屏幕内部偏移。
+- 连接状态、媒体名或播报文本异步更新后由 `MutationObserver` 触发下一帧重算；窗口 resize 同样重新执行旋转布局。
+- 固定文本的 CSS transition 不包含尺寸、位置和 transform，避免布局校正期间产生越界中间态。
 
 ## 伪代码
 
@@ -45,11 +70,21 @@
     mediaImage.transform = rotate(currentRotation deg)
     mediaVideo.transform = rotate(currentRotation deg)
 
+    viewportWidth = 读取视口宽度
+    viewportHeight = 读取视口高度
+    如果 currentRotation === 90 或 270:
+        layoutWidth = viewportHeight
+        layoutHeight = viewportWidth
+    否则:
+        layoutWidth = viewportWidth
+        layoutHeight = viewportHeight
+    设置所有旋转文本元素的逻辑可用宽度和高度约束
+
     // 2. 重置所有UI元素样式
     对于每个 uiElement 在 [connectionStatus, timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay, monitorWrapper]:
         重置 transform, transformOrigin, left, top, right, bottom, maxWidth, writingMode, textOrientation
 
-    // 3. 根据旋转角度设置UI位置和文字方向
+    // 3. 根据旋转角度设置UI位置和整体文字旋转
     如果 currentRotation === 0:
         // 连接状态 - 左上
         connectionStatus: top=20px, left=20px
@@ -64,18 +99,18 @@
         voiceTextDisplay: bottom=140px, right=20px
 
     否则如果 currentRotation === 90:
-        // 重力向右，文字竖向从上到下（writingMode: vertical-rl，字符顶部朝左=物理上方）
+        // 重力向右，固定文本整体顺时针旋转90°，汉字字形不单独保持正立
         // 连接状态 - 0度左上 → 90度右上
-        connectionStatus: top=20px, right=20px, writingMode=vertical-rl
+        connectionStatus: top=20px, right=20px, transform=rotate(90deg)
         // 时间 - 0度右上 → 90度右下
-        timeDisplay: bottom=20px, right=20px, writingMode=vertical-rl
+        timeDisplay: bottom=20px, right=20px, transform=rotate(90deg)
         // 文件名 - 0度左下 → 90度左上
-        fileNameDisplay: top=20px, left=20px, writingMode=vertical-rl
+        fileNameDisplay: top=20px, left=20px, transform=rotate(90deg)
         // 音频可视化 - 0度右下 → 90度左下
         monitorWrapper: bottom=20px, left=20px
         // 语音状态 - 0度右下 → 90度左下
-        voiceStatus: bottom=80px, left=20px
-        voiceTextDisplay: bottom=140px, left=20px, maxWidth=50vh
+        voiceStatus: bottom=80px, left=20px, transform=rotate(90deg)
+        voiceTextDisplay: bottom=140px, left=20px, transform=rotate(90deg)
 
     否则如果 currentRotation === 180:
         // 重力向上，文字翻转180度
@@ -88,22 +123,38 @@
         // 音频可视化 - 0度右下 → 180度左上
         monitorWrapper: top=20px, left=20px
         // 语音状态 - 0度右下 → 180度左上
-        voiceStatus: top=80px, left=20px
-        voiceTextDisplay: top=140px, left=20px
+        voiceStatus: top=80px, left=20px, transform=rotate(180deg)
+        voiceTextDisplay: top=140px, left=20px, transform=rotate(180deg)
 
     否则如果 currentRotation === 270:
-        // 重力向左，文字竖向从下到上（writingMode: vertical-rl + rotate(180deg)，字符顶部朝右=物理上方）
+        // 重力向左，固定文本整体逆时针旋转90°，汉字字形随画面旋转
         // 连接状态 - 0度左上 → 270度左下
-        connectionStatus: bottom=20px, left=20px, writingMode=vertical-rl, transform=rotate(180deg)
+        connectionStatus: bottom=20px, left=20px, transform=rotate(270deg)
         // 时间 - 0度右上 → 270度左上
-        timeDisplay: top=20px, left=20px, writingMode=vertical-rl, transform=rotate(180deg)
+        timeDisplay: top=20px, left=20px, transform=rotate(270deg)
         // 文件名 - 0度左下 → 270度右下
-        fileNameDisplay: bottom=20px, right=20px, writingMode=vertical-rl, transform=rotate(180deg)
+        fileNameDisplay: bottom=20px, right=20px, transform=rotate(270deg)
         // 音频可视化 - 0度右下 → 270度右上
         monitorWrapper: top=20px, right=20px
         // 语音状态 - 0度右下 → 270度右上
-        voiceStatus: top=80px, right=20px
-        voiceTextDisplay: top=140px, right=20px, maxWidth=50vh
+        voiceStatus: top=80px, right=20px, transform=rotate(270deg)
+        voiceTextDisplay: top=140px, right=20px, transform=rotate(270deg)
+
+    // 4. 以实际变换后的包围盒对齐固定定位锚点
+    对于每个可见旋转文本元素:
+        rect = element.getBoundingClientRect()
+        如果 element 使用 left:
+            沿 x 轴移动 margin - rect.left
+        如果 element 使用 right:
+            沿 x 轴移动 viewportWidth - margin - rect.right
+        如果 element 使用 top:
+            沿 y 轴移动 margin - rect.top
+        如果 element 使用 bottom:
+            沿 y 轴移动 viewportHeight - margin - rect.bottom
+
+    // 5. 内容或视口变化后重新适配
+    监听文本元素的 MutationObserver，在下一帧重新执行包围盒校正
+    监听 window.resize，重新执行 applyRotation()
 ```
 
 ## 设备连线指令TTS防抖

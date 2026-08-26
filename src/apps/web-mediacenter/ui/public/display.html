@@ -517,7 +517,105 @@
             }
         }
         
+        // 计算旋转后的逻辑画布尺寸：90°/270°时，原视口的宽高互换。
+        // 文本节点虽然不属于媒体容器，但其最大可用区域和四角边距必须使用同一套尺寸。
+        function getRotationLayout() {
+            const viewportWidth = Math.max(
+                document.documentElement.clientWidth || window.innerWidth || 1,
+                1
+            );
+            const viewportHeight = Math.max(
+                document.documentElement.clientHeight || window.innerHeight || 1,
+                1
+            );
+            const isQuarterTurn = currentRotation === 90 || currentRotation === 270;
+            const layoutWidth = isQuarterTurn ? viewportHeight : viewportWidth;
+            const layoutHeight = isQuarterTurn ? viewportWidth : viewportHeight;
+            return {
+                viewportWidth,
+                viewportHeight,
+                layoutWidth,
+                layoutHeight,
+                margin: 20
+            };
+        }
+
+        function getRotationTextElements() {
+            return [
+                connectionStatus,
+                timeDisplay,
+                fileNameDisplay,
+                voiceStatus,
+                voiceTextDisplay
+            ];
+        }
+
+        // 根据变换后的实际包围盒修正固定定位边缘，确保旋转文本仍留在物理视口内。
+        function shiftFixedTextElement(element, axis, delta) {
+            if (!delta) return;
+            const startProperty = axis === 'x' ? 'left' : 'top';
+            const endProperty = axis === 'x' ? 'right' : 'bottom';
+            if (element.style[startProperty]) {
+                const current = Number.parseFloat(element.style[startProperty]) || 0;
+                element.style[startProperty] = `${current + delta}px`;
+                return;
+            }
+            if (element.style[endProperty]) {
+                const current = Number.parseFloat(element.style[endProperty]) || 0;
+                element.style[endProperty] = `${current - delta}px`;
+            }
+        }
+
+        function repositionRotationTextElement(element, layout) {
+            if (!element || element.offsetWidth === 0 || element.offsetHeight === 0) return;
+            const rect = element.getBoundingClientRect();
+            const minX = layout.margin;
+            const maxX = layout.viewportWidth - layout.margin;
+            const minY = layout.margin;
+            const maxY = layout.viewportHeight - layout.margin;
+            // 旋转会改变元素包围盒相对 transform-origin 的位置，必须按原有固定锚点对齐对应边缘。
+            // 这样既能避免越界，也能避免文本虽然在屏幕内却向屏幕中心偏移。
+            const deltaX = element.style.left
+                ? minX - rect.left
+                : element.style.right
+                    ? maxX - rect.right
+                    : 0;
+            const deltaY = element.style.top
+                ? minY - rect.top
+                : element.style.bottom
+                    ? maxY - rect.bottom
+                    : 0;
+            shiftFixedTextElement(element, 'x', deltaX);
+            shiftFixedTextElement(element, 'y', deltaY);
+        }
+
+        // 使用旋转后的逻辑画布重新限制并定位所有固定文本，防止长中文在旋转后越出屏幕。
+        function applyRotationTextLayout(layout) {
+            const textElements = getRotationTextElements();
+            const maxWidth = Math.max(layout.layoutWidth - layout.margin * 2, 1);
+            const maxHeight = Math.max(layout.layoutHeight - layout.margin * 2, 1);
+            textElements.forEach((element) => {
+                if (!element) return;
+                element.style.maxWidth = `${maxWidth}px`;
+                element.style.maxHeight = `${maxHeight}px`;
+            });
+            textElements.forEach((element) => repositionRotationTextElement(element, layout));
+        }
+
+        let rotationTextLayoutRaf = null;
+        function scheduleRotationTextLayout() {
+            if (rotationTextLayoutRaf !== null) return;
+            rotationTextLayoutRaf = requestAnimationFrame(() => {
+                rotationTextLayoutRaf = null;
+                applyRotationTextLayout(getRotationLayout());
+            });
+        }
+
         function applyRotation() {
+            const rotationLayout = getRotationLayout();
+            const edgeOffset = `${rotationLayout.margin}px`;
+            const voiceStatusOffset = `${rotationLayout.margin * 4}px`;
+            const voiceTextOffset = `${rotationLayout.margin * 7}px`;
             window.currentRotation = currentRotation;
             const rotTransform = 'rotate(' + currentRotation + 'deg)';
             mediaImage.style.transform = rotTransform;
@@ -562,116 +660,118 @@
                 el.style.right = '';
                 el.style.bottom = '';
                 el.style.maxWidth = '';
+                el.style.maxHeight = '';
                 el.style.writingMode = '';
                 el.style.textOrientation = '';
                 el.style.flexDirection = '';
             });
             
             if (currentRotation === 0) {
-                connectionStatus.style.top = '20px';
-                connectionStatus.style.left = '20px';
-                timeDisplay.style.top = '20px';
-                timeDisplay.style.right = '20px';
-                fileNameDisplay.style.bottom = '20px';
-                fileNameDisplay.style.left = '20px';
-                monitorWrapper.style.bottom = '20px';
-                monitorWrapper.style.right = '20px';
-                voiceStatus.style.bottom = '80px';
-                voiceStatus.style.right = '20px';
+                connectionStatus.style.top = edgeOffset;
+                connectionStatus.style.left = edgeOffset;
+                timeDisplay.style.top = edgeOffset;
+                timeDisplay.style.right = edgeOffset;
+                fileNameDisplay.style.bottom = edgeOffset;
+                fileNameDisplay.style.left = edgeOffset;
+                monitorWrapper.style.bottom = edgeOffset;
+                monitorWrapper.style.right = edgeOffset;
+                voiceStatus.style.bottom = voiceStatusOffset;
+                voiceStatus.style.right = edgeOffset;
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.bottom = '140px';
-                    voiceTextDisplay.style.right = '20px';
+                    voiceTextDisplay.style.bottom = voiceTextOffset;
+                    voiceTextDisplay.style.right = edgeOffset;
                 }
             } else if (currentRotation === 90) {
-                connectionStatus.style.top = '20px';
-                connectionStatus.style.right = '20px';
-                connectionStatus.style.writingMode = 'vertical-rl';
-                connectionStatus.style.textOrientation = 'mixed';
+                connectionStatus.style.top = edgeOffset;
+                connectionStatus.style.right = edgeOffset;
+                connectionStatus.style.transform = 'rotate(90deg)';
                 
-                timeDisplay.style.bottom = '20px';
-                timeDisplay.style.right = '20px';
-                timeDisplay.style.writingMode = 'vertical-rl';
-                timeDisplay.style.textOrientation = 'mixed';
+                timeDisplay.style.bottom = edgeOffset;
+                timeDisplay.style.right = edgeOffset;
+                timeDisplay.style.transform = 'rotate(90deg)';
                 
-                fileNameDisplay.style.top = '20px';
-                fileNameDisplay.style.left = '20px';
-                fileNameDisplay.style.writingMode = 'vertical-rl';
-                fileNameDisplay.style.textOrientation = 'mixed';
+                fileNameDisplay.style.top = edgeOffset;
+                fileNameDisplay.style.left = edgeOffset;
+                fileNameDisplay.style.transform = 'rotate(90deg)';
                 
-                monitorWrapper.style.bottom = '20px';
-                monitorWrapper.style.left = '20px';
+                monitorWrapper.style.bottom = edgeOffset;
+                monitorWrapper.style.left = edgeOffset;
                 monitorWrapper.style.flexDirection = 'column-reverse';
                 
-                voiceStatus.style.bottom = '80px';
-                voiceStatus.style.left = '20px';
+                voiceStatus.style.bottom = voiceStatusOffset;
+                voiceStatus.style.left = edgeOffset;
+                voiceStatus.style.transform = 'rotate(90deg)';
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.bottom = '140px';
-                    voiceTextDisplay.style.left = '20px';
-                    voiceTextDisplay.style.maxWidth = '50vh';
+                    voiceTextDisplay.style.bottom = voiceTextOffset;
+                    voiceTextDisplay.style.left = edgeOffset;
                     voiceTextDisplay.style.transform = 'rotate(90deg)';
                 }
-                [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
-                    if (el) el.style.maxWidth = '50vh';
-                });
             } else if (currentRotation === 180) {
-                connectionStatus.style.bottom = '20px';
-                connectionStatus.style.right = '20px';
+                connectionStatus.style.bottom = edgeOffset;
+                connectionStatus.style.right = edgeOffset;
                 connectionStatus.style.transform = 'rotate(180deg)';
                 
-                timeDisplay.style.bottom = '20px';
-                timeDisplay.style.left = '20px';
+                timeDisplay.style.bottom = edgeOffset;
+                timeDisplay.style.left = edgeOffset;
                 timeDisplay.style.transform = 'rotate(180deg)';
                 
-                fileNameDisplay.style.top = '20px';
-                fileNameDisplay.style.right = '20px';
+                fileNameDisplay.style.top = edgeOffset;
+                fileNameDisplay.style.right = edgeOffset;
                 fileNameDisplay.style.transform = 'rotate(180deg)';
                 
-                monitorWrapper.style.top = '20px';
-                monitorWrapper.style.left = '20px';
+                monitorWrapper.style.top = edgeOffset;
+                monitorWrapper.style.left = edgeOffset;
                 
-                voiceStatus.style.top = '80px';
-                voiceStatus.style.left = '20px';
+                voiceStatus.style.top = voiceStatusOffset;
+                voiceStatus.style.left = edgeOffset;
                 voiceStatus.style.transform = 'rotate(180deg)';
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.top = '140px';
-                    voiceTextDisplay.style.left = '20px';
+                    voiceTextDisplay.style.top = voiceTextOffset;
+                    voiceTextDisplay.style.left = edgeOffset;
                     voiceTextDisplay.style.transform = 'rotate(180deg)';
                 }
             } else if (currentRotation === 270) {
-                connectionStatus.style.bottom = '20px';
-                connectionStatus.style.left = '20px';
-                connectionStatus.style.writingMode = 'vertical-rl';
-                connectionStatus.style.textOrientation = 'mixed';
-                connectionStatus.style.transform = 'rotate(180deg)';
+                connectionStatus.style.bottom = edgeOffset;
+                connectionStatus.style.left = edgeOffset;
+                connectionStatus.style.transform = 'rotate(270deg)';
                 
-                timeDisplay.style.top = '20px';
-                timeDisplay.style.left = '20px';
-                timeDisplay.style.writingMode = 'vertical-rl';
-                timeDisplay.style.textOrientation = 'mixed';
-                timeDisplay.style.transform = 'rotate(180deg)';
+                timeDisplay.style.top = edgeOffset;
+                timeDisplay.style.left = edgeOffset;
+                timeDisplay.style.transform = 'rotate(270deg)';
                 
-                fileNameDisplay.style.bottom = '20px';
-                fileNameDisplay.style.right = '20px';
-                fileNameDisplay.style.writingMode = 'vertical-rl';
-                fileNameDisplay.style.textOrientation = 'mixed';
-                fileNameDisplay.style.transform = 'rotate(180deg)';
+                fileNameDisplay.style.bottom = edgeOffset;
+                fileNameDisplay.style.right = edgeOffset;
+                fileNameDisplay.style.transform = 'rotate(270deg)';
                 
-                monitorWrapper.style.top = '20px';
-                monitorWrapper.style.right = '20px';
+                monitorWrapper.style.top = edgeOffset;
+                monitorWrapper.style.right = edgeOffset;
                 monitorWrapper.style.flexDirection = 'column-reverse';
                 
-                voiceStatus.style.top = '80px';
-                voiceStatus.style.right = '20px';
+                voiceStatus.style.top = voiceStatusOffset;
+                voiceStatus.style.right = edgeOffset;
+                voiceStatus.style.transform = 'rotate(270deg)';
                 if (voiceTextDisplay) {
-                    voiceTextDisplay.style.top = '140px';
-                    voiceTextDisplay.style.right = '20px';
-                    voiceTextDisplay.style.maxWidth = '50vh';
+                    voiceTextDisplay.style.top = voiceTextOffset;
+                    voiceTextDisplay.style.right = edgeOffset;
                     voiceTextDisplay.style.transform = 'rotate(270deg)';
                 }
-                [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
-                    if (el) el.style.maxWidth = '50vh';
-                });
             }
+            applyRotationTextLayout(rotationLayout);
+        }
+
+        // 媒体名、连接状态和播报文本可能在旋转完成后才更新；内容变化后下一帧重新校正包围盒。
+        if (typeof MutationObserver === 'function') {
+            const rotationTextObserver = new MutationObserver(scheduleRotationTextLayout);
+            getRotationTextElements().forEach((element) => {
+                if (!element) return;
+                rotationTextObserver.observe(element, {
+                    childList: true,
+                    characterData: true,
+                    attributes: true,
+                    attributeFilter: ['class'],
+                    subtree: true
+                });
+            });
         }
         
         function normalizeDynamicFitConfig(config = {}) {
@@ -3918,6 +4018,7 @@
         });
         
         window.addEventListener('resize', function() {
+            applyRotation();
             applyCrop();
             sendCanvasSize();
         });

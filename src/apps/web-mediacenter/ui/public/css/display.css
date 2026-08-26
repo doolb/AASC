@@ -251,7 +251,11 @@ body {
     padding: 8px 16px;
     border-radius: 20px;
     z-index: 100;
-    transition: all 0.3s ease;
+    /* 只过渡颜色，避免旋转布局的宽高、位置和 transform 在校正期间产生越界中间态。 */
+    transition: background-color 0.3s ease, color 0.3s ease;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .connected {
@@ -373,9 +377,12 @@ body {
     background: rgba(0, 0, 0, 0.6);
     color: #fff;
     z-index: 1000;
-    transition: all 0.3s ease;
+    /* 只过渡可见状态，布局属性必须立即应用，才能保证旋转后文本不越界。 */
+    transition: opacity 0.3s ease, background-color 0.3s ease;
     text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .voice-status-hidden {
@@ -397,8 +404,8 @@ body {
 }
 
 @keyframes voice-pulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(76, 175, 80, 0.4); }
-    50% { transform: scale(1.1); box-shadow: 0 0 25px rgba(76, 175, 80, 0.7); }
+    0%, 100% { box-shadow: 0 0 10px rgba(76, 175, 80, 0.4); }
+    50% { box-shadow: 0 0 25px rgba(76, 175, 80, 0.7); }
 }
 
 #voiceTextDisplay {
@@ -410,8 +417,10 @@ body {
     color: #fff;
     z-index: 1000;
     max-width: 400px;
+    overflow: hidden;
     word-wrap: break-word;
-    transition: all 0.3s ease;
+    /* 只过渡透明度，避免 max-width、定位和旋转变换出现越界动画。 */
+    transition: opacity 0.3s ease;
     text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
 }
 
