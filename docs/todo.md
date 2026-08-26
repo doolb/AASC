@@ -301,6 +301,14 @@
   - 实施计划：docs/task/2026-08-16_render-display-文字内嵌与GPU显存第二行.md
   - 实现：res/tasks/render-display/render.js（条内居中浮层文字、第二行 GPU/VRAM 占位对齐）
   - 验证：node render.smoke.js（结构校验）+ node --check
+- ✅已完成 [2026-08-26][2026-08-26] render-display 旋转覆盖层位置修正
+  - 实施计划：docs/task/2026-08-26_render-display旋转位置修正.md
+  - 实现：res/tasks/render-display/render.js（来源重建后重新定位、90°/270°媒体名避让）
+  - 验证：旋转位置回归 1/1、显示端相关回归 41/41、集成回归 9/9、render.smoke.js + node --check
+- ✅已完成 [2026-08-26][2026-08-26] render-display 180°覆盖层位置修正
+  - 实施计划：docs/task/2026-08-26_render-display180度位置修正.md
+  - 实现：res/tasks/render-display/render.js（180°覆盖层避让媒体名并保持视口边界）
+  - 验证：旋转位置回归 1/1、显示端相关回归 41/41、集成回归 9/9、render.smoke.js + node --check
 - ✅已完成 [2026-08-17][2026-08-17] 重构 ai 开发流程：文件驱动多 Agent 工作组（workgroup）
   - 设计文档：workgroup/docs/design.md
   - 实现文档：workgroup/docs/spec.md

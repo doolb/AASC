@@ -4,6 +4,24 @@
 
 ### 已完成
 
+- ✅ [2026-08-26] 媒体名字号放大一倍
+  - `fileNameDisplay` 桌面端字号从 24px 调整为 48px，移动端从 16px 调整为 32px。
+  - 通过实际包围盒重新适配覆盖层：0°保持在媒体名上侧，90°/180°/270°分别从右侧/下侧/左侧避让，避免字号放大后发生越界或重叠。
+  - 测试：显示端旋转回归 8/8、render-display 旋转位置回归 1/1、显示端相关回归 42/42、显示端集成回归 9/9 通过。
+  - 文档：`docs/design/display.md`、`docs/spec/display-ui-rotation.md`、`docs/task/2026-08-26_媒体名字号放大一倍.md`。
+
+- ✅ [2026-08-26] 修正 render-display 180°覆盖层位置
+  - 180°旋转时根据覆盖层和媒体名的实际包围盒，将覆盖层调整到媒体名下侧并保留 24px 间距，避免两者重叠。
+  - 覆盖层高度随来源数量变化时继续限制在视口范围内，不改变监控数据和 WebSocket 协议。
+  - 测试：render-display 旋转位置回归 1/1、显示端相关回归 41/41、显示端集成回归 9/9、`render.smoke.js` 和 `node --check` 通过。
+  - 文档：`docs/design/android-display-stats.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-26_render-display180度位置修正.md`。
+
+- ✅ [2026-08-26] 修正 render-display 90°/270° 覆盖层位置
+  - 来源条目重建完成后使用最新覆盖层尺寸重新执行旋转定位，避免使用旧尺寸导致上下位置偏低。
+  - 按旋转后的实际包围盒避让媒体名：90°放在媒体名右侧、270°放在媒体名左侧，保留 24px 间距并限制视口边界。
+  - 测试：render-display 旋转位置回归 1/1、显示端相关回归 41/41、显示端集成回归 9/9、`render.smoke.js` 和 `node --check` 通过。
+  - 文档：`docs/design/android-display-stats.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-26_render-display旋转位置修正.md`。
+
 - ✅ [2026-08-26] 修正 90°/270° 旋转文本四角位置偏移
   - 按固定定位的 `top`/`bottom`/`left`/`right` 锚点对齐旋转后的实际包围盒，避免文本虽未越界却向屏幕中心偏移。
   - 连接状态、媒体名、时间、语音状态和播报文本统一校正，90°/270°四角锚点误差控制在 1.5px 内。

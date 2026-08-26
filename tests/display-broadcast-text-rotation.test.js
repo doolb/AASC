@@ -94,6 +94,19 @@ test('播报文本字号按约定放大50%', () => {
     assert.doesNotMatch(DISPLAY_CSS, /@keyframes voice-text-fade-in\s*\{[^}]*transform:/u);
 });
 
+test('媒体名字号按约定放大一倍', () => {
+    assert.match(
+        DISPLAY_CSS,
+        /\n\s*#fileNameDisplay\s*\{[\s\S]*?font-size:\s*48px/u,
+        '未找到媒体名桌面端 48px 样式'
+    );
+    assert.match(
+        DISPLAY_CSS,
+        /@media \(max-width: 768px\)[\s\S]*?#fileNameDisplay\s*\{[\s\S]*?font-size:\s*32px/u,
+        '未找到媒体名移动端 32px 样式'
+    );
+});
+
 test('90°和270°旋转使用交换后的逻辑画布重新适配文本位置', () => {
     assert.match(
         DISPLAY_HTML,

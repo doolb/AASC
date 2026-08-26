@@ -99,7 +99,8 @@ render.js 检测 window.NativeDisplay 存在
 render-display 覆盖层（`#monitorOverlay`）跟随显示端旋转：
 
 - 旋转 90°/270° 时使用 CSS transform 旋转，旋转中心为 center center
-- `applyRotationStyle()` 动态计算 `left/top`（90°）或 `right/bottom`（270°），保证旋转后视觉边缘距屏幕边缘 24px，适配多设备（3 台）时的高覆盖层
+- `update()` 完成来源条目重建后再调用 `applyRotationStyle()`，避免用旧覆盖层尺寸计算位置。
+- `applyRotationStyle()` 根据旋转后的实际包围盒限制上下视口边距，并避让 `fileNameDisplay`：90°放在媒体名右侧、180°放在媒体名下侧、270°放在媒体名左侧，保持 0°时覆盖层位于媒体名上侧的相对关系。
 - 每次 `update()` 都调用 `applyRotationStyle()`（不仅 rotation 变化时），确保设备增减后定位重新计算
 - render.html 使用 `position:fixed;display:flex;flex-direction:column`，覆盖层自然跟随旋转
 

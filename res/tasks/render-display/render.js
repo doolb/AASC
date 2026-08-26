@@ -4,6 +4,57 @@ var rotation = window.currentRotation || 0;
 var overlay = container.querySelector('#monitorOverlay');
 var gaugeContainer = overlay.querySelector('#gaugeContainer');
 
+function shiftOverlay(axis, delta) {
+    if (!delta) return;
+    var startProperty = axis === 'x' ? 'left' : 'top';
+    var endProperty = axis === 'x' ? 'right' : 'bottom';
+    if (overlay.style[startProperty] && overlay.style[startProperty] !== 'auto') {
+        var startValue = parseFloat(overlay.style[startProperty]) || 0;
+        overlay.style[startProperty] = (startValue + delta) + 'px';
+        return;
+    }
+    if (overlay.style[endProperty] && overlay.style[endProperty] !== 'auto') {
+        var endValue = parseFloat(overlay.style[endProperty]) || 0;
+        overlay.style[endProperty] = (endValue - delta) + 'px';
+    }
+}
+
+// 旋转后覆盖层与媒体名共用角落，按实际包围盒保留 0°时的上侧相对层级。
+function avoidFileNameOverlap(rot) {
+    if (!overlay || (rot !== 0 && rot !== 90 && rot !== 180 && rot !== 270) || overlay.offsetWidth === 0 || overlay.offsetHeight === 0) return;
+    if (typeof document.getElementById !== 'function') return;
+    var fileName = document.getElementById('fileNameDisplay');
+    if (!fileName || fileName.offsetWidth === 0 || fileName.offsetHeight === 0) return;
+
+    var overlayRect = overlay.getBoundingClientRect();
+    var fileNameRect = fileName.getBoundingClientRect();
+    var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    var viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    var gap = 24;
+
+    // 90°时把 0°的“上侧”关系转换为媒体名右侧，270°转换为媒体名左侧。
+    if (rot !== 0 && rot !== 180) {
+        var minLeft = gap;
+        var maxLeft = Math.max(minLeft, viewportWidth - gap - overlayRect.width);
+        var targetLeft = rot === 90
+            ? fileNameRect.right + gap
+            : fileNameRect.left - gap - overlayRect.width;
+        targetLeft = Math.min(maxLeft, Math.max(minLeft, targetLeft));
+        shiftOverlay('x', targetLeft - overlayRect.left);
+    }
+
+    // 覆盖层高度随来源数量变化，始终把旋转后的上下包围盒限制在视口内。
+    var minTop = gap;
+    var maxTop = Math.max(minTop, viewportHeight - gap - overlayRect.height);
+    var targetTop = rot === 0
+        ? fileNameRect.top - gap - overlayRect.height
+        : rot === 180
+            ? fileNameRect.bottom + gap
+            : overlayRect.top;
+    targetTop = Math.min(maxTop, Math.max(minTop, targetTop));
+    shiftOverlay('y', targetTop - overlayRect.top);
+}
+
 function applyRotationStyle(rot) {
     if (!overlay) return;
     overlay.style.transform = '';
@@ -44,6 +95,7 @@ function applyRotationStyle(rot) {
         overlay.style.transform = 'rotate(-90deg)';
         overlay.style.transformOrigin = 'center center';
     }
+    avoidFileNameOverlap(rot);
 }
 applyRotationStyle(rotation);
 
@@ -233,6 +285,9 @@ function update(data) {
             entry.line2 = null;
         }
     }
+
+    // 来源条目重建后覆盖层尺寸才稳定，此时重新计算旋转位置，避免使用旧尺寸导致上下偏移。
+    applyRotationStyle(rotation);
 }
 
 // APK 本地来源轮询：检测 NativeDisplay 存在则每 800ms 拉取自身 CPU/内存
