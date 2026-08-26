@@ -15,7 +15,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-// APK 内置的极简局域网测试服务，只暴露健康检查和音频识别两个固定接口。
+// APK 内置的极简局域网服务，根路径提供普通网页，页面内部使用识别接口。
 class AsrHttpServer(
     private val engine: AsrEngine,
     private val coordinator: AsrCoordinator,
@@ -81,6 +81,8 @@ class AsrHttpServer(
                     return
                 }
                 when {
+                    request.method == "GET" && (request.path == "/" || request.path == "/index.html") ->
+                        respondHtml(socket.getOutputStream(), 200, AsrWebPage.HTML)
                     request.method == "GET" && request.path == "/health" ->
                         respond(socket.getOutputStream(), 200, HttpJson.health(engine.isLoaded, running, cpuModeProvider()))
                     request.method == "POST" && request.path == "/api/asr" -> handleRecognition(socket.getOutputStream(), request)
@@ -158,6 +160,14 @@ class AsrHttpServer(
     }
 
     private fun respond(output: OutputStream, status: Int, body: String) {
+        respondBody(output, status, "application/json; charset=utf-8", body)
+    }
+
+    private fun respondHtml(output: OutputStream, status: Int, body: String) {
+        respondBody(output, status, "text/html; charset=utf-8", body)
+    }
+
+    private fun respondBody(output: OutputStream, status: Int, contentType: String, body: String) {
         val bytes = body.toByteArray(StandardCharsets.UTF_8)
         val reason = when (status) {
             200 -> "OK"
@@ -170,7 +180,7 @@ class AsrHttpServer(
             504 -> "Gateway Timeout"
             else -> "Internal Server Error"
         }
-        output.write("HTTP/1.1 $status $reason\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.US_ASCII))
+        output.write("HTTP/1.1 $status $reason\r\nContent-Type: $contentType\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.US_ASCII))
         output.write(bytes)
         output.flush()
     }

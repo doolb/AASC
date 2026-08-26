@@ -9,7 +9,7 @@
 - 新增 `3rd/tts-server/android-asr/` 独立工程。
 - 内置 `res/models/sensevoice/model.int8.onnx` 与 `tokens.txt`。
 - 统一输入为 16kHz 单声道 Float32，支持录音和文件输入。
-- HTTP 提供 `/health` 和 `/api/asr`，默认 `0.0.0.0:18080`，单请求串行，最长 60 秒。
+- HTTP 默认 `0.0.0.0:18080`，根路径提供普通网页；页面内部使用 `/health` 和 `/api/asr`，单请求串行，最长 60 秒。
 - CPU 模式支持自动、大核、小核，native 失败自动回退。
 
 ## spec 设计
@@ -64,3 +64,8 @@
 - ✅ 已完成：新增自动/大核/小核 CPU affinity 选择，native 绑定失败时自动回退。
 - ✅ 已完成：新增 `GET /health`、`POST /api/asr` HTTP 服务，默认端口 `18080`，单识别串行。
 - ✅ 验证：Android JVM 单测通过，静态验收 3/3 通过，debug APK 构建成功，APK 包含模型和 `arm64-v8a` native 库，adb 安装成功。
+
+## 行为调整
+
+- ✅ 已完成：HTTP 根路径提供内置普通网页，用户访问设备地址即可选择 WAV 或浏览器录音，点击识别并查看文本与耗时；API 仅作为网页内部通信实现。
+- ✅ 已完成：浏览器端把麦克风 PCM 转成 16kHz 单声道 WAV；不满足安全上下文或权限被拒绝时显示明确提示。

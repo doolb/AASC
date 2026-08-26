@@ -31,14 +31,15 @@ npm run build:android-tts
 npm run build:android-asr
 ```
 
-产物位于 `android-asr/app/build/outputs/apk/debug/app-debug.apk`。启动应用后可显式开启 HTTP 服务，默认监听 `0.0.0.0:18080`：
+产物位于 `android-asr/app/build/outputs/apk/debug/app-debug.apk`。启动应用后可显式开启 HTTP 服务，默认监听 `0.0.0.0:18080`，浏览器访问根路径即可使用普通网页：
 
 ```bash
+浏览器打开 http://设备IP:18080/
 curl -X POST -H 'Content-Type: audio/wav' --data-binary @sample.wav http://设备IP:18080/api/asr
 curl http://设备IP:18080/health
 ```
 
-HTTP 服务仅用于受信任局域网测试，APK 仅支持 arm64-v8a、Android 8.0+。
+网页支持选择 WAV、浏览器录音和显示识别耗时；浏览器录音需要 HTTPS 或 localhost 安全上下文。HTTP 服务仅用于受信任局域网测试，APK 仅支持 arm64-v8a、Android 8.0+。
 
 ## 环境要求
 

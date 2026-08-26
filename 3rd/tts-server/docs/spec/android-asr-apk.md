@@ -65,6 +65,13 @@ startHttp(port):
         socket = server.accept()
         dispatch socket on httpExecutor
 
+GET /:
+    return embedded HTML page
+    page shows file picker, record button, recognize button, result text and elapsed time
+    browser recording requests microphone permission
+    recording PCM is downmixed/resampled and encoded to 16kHz mono WAV in browser
+    page fetches /health and submits selected WAV bytes to /api/asr
+
 GET /health:
     return JSON(modelState, httpRunning, cpuModeStatus)
 

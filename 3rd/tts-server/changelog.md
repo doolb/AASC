@@ -3,7 +3,7 @@
 ## 2026-08-25
 
 - 新增：`android-asr/` 独立 Android 离线语音识别 APK，内置 SenseVoice int8 模型，支持录音、音频选择和识别耗时显示。
-- 新增：APK 支持自动/大核/小核 CPU 模式，并内置 `0.0.0.0:18080` 的 `/health`、`/api/asr` HTTP 测试服务。
+- 新增：APK 的 `0.0.0.0:18080` 根路径提供普通网页，支持 WAV 选择、网页录音和识别结果显示；页面内部使用 `/health`、`/api/asr`。
 - 构建：增加 `npm run build:android-asr`，APK 包含 `arm64-v8a` affinity 库、`model.int8.onnx` 和 `tokens.txt`。
 - 测试：Android JVM 测试、静态接口测试、debug APK 构建、模型资源检查和 adb 安装通过。
 

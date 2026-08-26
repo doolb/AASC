@@ -25,6 +25,7 @@ test('android ASR package declares required offline model and HTTP permissions',
 test('android ASR UI and HTTP endpoints are present', () => {
   const layout = read('3rd/tts-server/android-asr/app/src/main/res/layout/activity_main.xml');
   const server = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrHttpServer.kt');
+  const page = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrWebPage.kt');
   assert.match(layout, /recordButton/);
   assert.match(layout, /selectAudioButton/);
   assert.match(layout, /recognizeButton/);
@@ -32,5 +33,11 @@ test('android ASR UI and HTTP endpoints are present', () => {
   assert.match(layout, /cpuModeSpinner/);
   assert.match(server, /"\/health"/);
   assert.match(server, /"\/api\/asr"/);
+  assert.match(server, /request\.path == "\/"/);
   assert.match(server, /18080/);
+  assert.match(page, /fetch\('\/api\/asr'/);
+  assert.match(page, /type="file"/);
+  assert.match(page, /getUserMedia/);
+  assert.match(page, /AudioContext/);
+  assert.match(page, /录音/);
 });
