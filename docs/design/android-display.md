@@ -97,6 +97,17 @@ JS 侧异步取值：`takeScreenshot` 用回调；其余同步返回。
 
 无障碍服务未开启时，控制端显示"跨域控制降级（仅同源可用）"。
 
+### 5. CPU 并发配置消费
+
+显示端收到服务端 `cpuConfig` 消息时，不改变现有 ASR/TTS 路由选择，只把配置在 APK 原生桥存在且支持 `cpuConfigure` 时透传给原生层。
+
+约束：
+
+- `window.NativeDisplay` 不存在时直接忽略，保证浏览器显示端和旧 APK 无报错。
+- 旧 APK 只有部分桥方法、缺少 `cpuConfigure` 时也直接忽略，不能影响 `asrConfig`、`ttsConfig`、`voiceprintConfig`、TTS 生成和 ASR 回调。
+- 新 APK 调用 `NativeDisplay.cpuConfigure(JSON.stringify({ asr, tts }))`；返回 `{ error }` 只记录日志，不中断页面消息流。
+- `cpuConfig` 既会在显示端首连初始化时到达，也会在控制端修改后再次广播到显示端。
+
 ## APK 实现
 
 ### 工程结构（Gradle + Kotlin，`src/apps/android-display/`）
@@ -138,6 +149,11 @@ android-display/
 - APK 部署脚本默认通过启动 Intent 注入 `https://192.168.1.39:8081`；MainActivity 接收后覆盖输入框、保存 `server_url` 并立即连接，解决卸载重装后配置丢失问题
 - 部署脚本可通过 `AASC_DISPLAY_SERVER_URL` 环境变量覆盖默认服务器地址；未注入地址时沿用手动输入和已保存地址逻辑
 - displayId 持久化复用 display.html 的 localStorage 机制
+- Samsung DeX 启动时通过 `com.samsung.android.dex.launchwidth=0` 和 `com.samsung.android.dex.launchheight=0` 请求全屏窗口；Android 原生系统栏隐藏仍由 MainActivity 的沉浸式标志负责
+
+### 全屏启动边界
+
+`minSdk` 仅决定 APK 的最低 Android 安装/运行版本；TTS 接入将其从 24 提升到 26，但 SM-N9500 的 Android 9/API 28 不受此限制。DeX 的 `freeform` 窗口尺寸由 Samsung 启动器决定，不能只依赖 `SYSTEM_UI_FLAG_FULLSCREEN` 隐藏系统栏，因此需要额外声明 DeX 启动窗口元数据。
 
 ## 服务器改动
 

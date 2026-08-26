@@ -30,6 +30,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     // AGP 9 内置 Kotlin：jvmTarget 跟随 compileOptions（默认对齐），无需额外配置
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
 }
 
 dependencies {

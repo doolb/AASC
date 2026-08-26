@@ -80,6 +80,9 @@
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let currentMediaType = 'image';
         let displayWs = null;
+        // 显示端重连必须单飞：原生 ASR/TTS 同步阻塞 WebView 时，旧 close 回调不能再创建第二个连接。
+        let displayReconnectTimer = null;
+        let displayPageActive = true;
         // 文本播放器独立管理分页和逐句 TTS；显示页只提供 DOM、WebSocket 与旋转状态。
         const TextMediaPlayer = window.TextMediaPlayer;
         TextMediaPlayer.configure({
@@ -198,6 +201,28 @@
                 updateVoiceTextDisplay('语音模型下载失败: ' + (payload.error || '未知错误'), true);
                 setTimeout(() => updateVoiceTextDisplay('', true), 4000);
             }
+        };
+
+        function sendAsrResult(requestId, payload) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify(Object.assign({
+                type: 'asrResult',
+                requestId: requestId
+            }, payload)));
+        }
+
+        // 新版 APK 原生 ASR 完成回调；旧 APK 不会注册该回调，继续走同步兼容路径。
+        window.onNativeAsrResult = function(payload) {
+            if (!payload || !payload.requestId) return;
+            const result = {
+                text: payload.text || '',
+                error: payload.error || ''
+            };
+            if (Array.isArray(payload.segments)) result.segments = payload.segments;
+            if (Object.prototype.hasOwnProperty.call(payload, 'speaker')) {
+                result.speaker = payload.speaker;
+            }
+            sendAsrResult(payload.requestId, result);
         };
 
         function reportNativeTtsCapability(ready) {
@@ -1226,6 +1251,25 @@
             }, payload)));
         }
 
+        // 服务端要求先收到开始生成回执；该回执只表示任务已被 APK 接受，不代表音频已完成。
+        function sendTtsGenerating(requestId) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'ttsGenerating',
+                requestId: requestId
+            }));
+        }
+
+        // 新版 APK 原生 TTS 完成回调；生成完成后只回传 WAV，不在此处直接播放。
+        window.onNativeTtsResult = function(payload) {
+            if (!payload || !payload.requestId) return;
+            if (payload.audio) {
+                sendTtsResult(payload.requestId, { audioData: payload.audio });
+            } else {
+                sendTtsResult(payload.requestId, { error: payload.error || '语音合成失败' });
+            }
+        };
+
         // 服务端 tts.device='display' 时下发离线合成请求；模型未就绪先触下载并快速回错由服务端回退
         function handleTtsGenerate(data) {
             if (!nativeTtsAvailable) {
@@ -1239,6 +1283,22 @@
                 sendTtsResult(data.requestId, { error: '模型下载中' });
                 return;
             }
+            if (typeof nativeBridge.ttsSynthesizeAsync === 'function') {
+                try {
+                    const accepted = JSON.parse(nativeBridge.ttsSynthesizeAsync(data.requestId, data.text || ''));
+                    if (!accepted.accepted) {
+                        sendTtsResult(data.requestId, { error: accepted.error || '语音合成任务提交失败' });
+                    } else {
+                        sendTtsGenerating(data.requestId);
+                    }
+                } catch (e) {
+                    sendTtsResult(data.requestId, { error: e.message || '语音合成任务提交异常' });
+                }
+                return;
+            }
+
+            // 旧 APK 没有异步桥方法时保留同步回退，避免服务器页面升级后旧包完全失去 TTS。
+            sendTtsGenerating(data.requestId);
             try {
                 const res = JSON.parse(nativeBridge.ttsSynthesize(data.text || ''));
                 if (res && res.audio) {
@@ -2149,6 +2209,27 @@
 
         // APK 原生桥探测（Android APK 显示端注入：真实像素截图 + 跨域输入注入）
         const nativeBridge = window.NativeDisplay || null;
+
+        // CPU 并发配置只透传给支持 cpuConfigure 的新 APK；浏览器显示端和旧桥直接忽略。
+        function applyCpuConfig(config) {
+            if (!config) return;
+            if (!nativeBridge || typeof nativeBridge.cpuConfigure !== 'function') {
+                return;
+            }
+            try {
+                const resultText = nativeBridge.cpuConfigure(JSON.stringify({
+                    asr: config.asr || {},
+                    tts: config.tts || {}
+                }));
+                if (!resultText) return;
+                const result = JSON.parse(resultText);
+                if (result && result.error) {
+                    console.warn('[CPU] 原生配置失败:', result.error);
+                }
+            } catch (error) {
+                console.warn('[CPU] 原生配置异常:', error);
+            }
+        }
 
         // 截图降级链：APK 原生截图 → 同源 html-to-image → 跨域 getDisplayMedia → 兜底 html-to-image → none
         async function captureHtmlShot() {
@@ -3483,14 +3564,48 @@
             }
         }
 
+        function clearDisplayReconnectTimer() {
+            if (displayReconnectTimer === null) return;
+            clearTimeout(displayReconnectTimer);
+            displayReconnectTimer = null;
+        }
+
+        function scheduleDisplayReconnect() {
+            if (!displayPageActive || displayReconnectTimer !== null) return;
+            if (displayWs && (displayWs.readyState === WebSocket.CONNECTING || displayWs.readyState === WebSocket.OPEN)) return;
+
+            displayReconnectTimer = setTimeout(() => {
+                displayReconnectTimer = null;
+                if (displayPageActive) connectWebSocket();
+            }, 3000);
+        }
+
+        function isCurrentDisplaySocket(socket) {
+            return displayPageActive && displayWs === socket;
+        }
+
         function connectWebSocket() {
+            if (!displayPageActive) return;
+            if (displayWs && (displayWs.readyState === WebSocket.CONNECTING || displayWs.readyState === WebSocket.OPEN)) return;
+            clearDisplayReconnectTimer();
+
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const id = getPersistentDisplayId();
             const wsUrl = `${protocol}//${window.location.host}/display?displayId=${id}`;
-            
-            displayWs = new WebSocket(wsUrl);
-            
-            displayWs.onopen = function() {
+
+            let socket = null;
+            try {
+                socket = new WebSocket(wsUrl);
+            } catch (error) {
+                console.error('创建 WebSocket 失败:', error);
+                scheduleDisplayReconnect();
+                return;
+            }
+            displayWs = socket;
+
+            socket.onopen = function() {
+                if (!isCurrentDisplaySocket(socket)) return;
+                clearDisplayReconnectTimer();
                 setConnectionStatus('connected', '已连接');
                 sendCanvasSize();
                 sendBrowserInfo();
@@ -3505,7 +3620,8 @@
                 }
             };
             
-            displayWs.onmessage = function(event) {
+            socket.onmessage = function(event) {
+                if (!isCurrentDisplaySocket(socket)) return;
                 try {
                     const data = JSON.parse(event.data);
                     console.log('[显示端] 收到消息:', data.type, data);
@@ -3623,6 +3739,9 @@
                                             currentCapabilities.voiceRecognition = true;
                                             displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
                                         }
+                                    } else if (st.state === 'not_ready' || st.state === 'error') {
+                                        // 模型未下载或上次加载失败时，重新启用配置应再次触发幂等下载。
+                                        nativeBridge.asrEnsureModel();
                                     }
                                 } catch (e) {
                                     console.warn('[ASR] asrStatus 解析失败:', e);
@@ -3655,6 +3774,14 @@
                             nativeTtsReady = false;
                             reportNativeTtsCapability(false);
                         }
+                        return;
+                    }
+
+                    if (data.type === 'cpuConfig') {
+                        applyCpuConfig({
+                            asr: data.asr,
+                            tts: data.tts
+                        });
                         return;
                     }
 
@@ -3740,18 +3867,34 @@
                 }
             };
             
-            displayWs.onclose = function() {
+            socket.onclose = function() {
+                if (!isCurrentDisplaySocket(socket)) return;
+                displayWs = null;
                 stopControlScreenshot();
                 controlModeEnabled = false;
                 setConnectionStatus('disconnected', '已断开');
-                setTimeout(connectWebSocket, 3000);
+                scheduleDisplayReconnect();
             };
-            
-            displayWs.onerror = function(error) {
+
+            socket.onerror = function(error) {
+                if (!isCurrentDisplaySocket(socket)) return;
                 console.error('WebSocket错误:', error);
                 setConnectionStatus('disconnected', '连接错误');
             };
         }
+
+        window.addEventListener('pagehide', function() {
+            displayPageActive = false;
+            clearDisplayReconnectTimer();
+            const socket = displayWs;
+            displayWs = null;
+            if (!socket || socket.readyState === WebSocket.CLOSED) return;
+            try {
+                socket.close(1000, 'page hidden');
+            } catch (error) {
+                console.warn('页面离开时关闭 WebSocket 失败:', error);
+            }
+        });
         
         window.addEventListener('resize', function() {
             applyCrop();
@@ -3830,6 +3973,9 @@
         let currentCapabilities = null;
         
         async function detectCapabilities() {
+            // WebGPU 探测在 capabilities 对象构造完成前可能异步执行，先独立保存诊断信息，
+            // 避免异步闭包提前访问仍处于暂时性死区的 capabilities。
+            let webgpuDiag = '';
             const capabilities = {
                 mediaRendering: true,
                 voicePlayback: true,
@@ -3871,7 +4017,7 @@
                         if (!a) { a = await adapterWithTimeout(navigator.gpu.requestAdapter({ powerPreference: 'low-power' }), 3000); path = 'low-power'; }
                         if (!a) {
                             diag.push('RESULT=三轮回退全部返回null');
-                            capabilities._webgpuDiag = diag.join(' | ');
+                            webgpuDiag = diag.join(' | ');
                             return false;
                         }
                         try {
@@ -3881,11 +4027,11 @@
                             diag.push('DEVICE=' + (info.device || '?'));
                         } catch (e) {}
                         diag.push('PREF=' + path);
-                        capabilities._webgpuDiag = diag.join(' | ');
+                        webgpuDiag = diag.join(' | ');
                         a.destroy();
                         return true;
                     } catch (e) {
-                        capabilities._webgpuDiag = 'EXCEPTION: ' + e.message;
+                        webgpuDiag = 'EXCEPTION: ' + e.message;
                         return false;
                     }
                 })(),
@@ -3894,6 +4040,10 @@
                 crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch),
                 voiceprintAvailable: nativeVoiceprintAvailable
             };
+
+            if (webgpuDiag) {
+                capabilities._webgpuDiag = webgpuDiag;
+            }
             
             try {
                 // getUserMedia 授权弹窗无人值守时会永久挂起：3 秒超时视为不可用
@@ -4072,6 +4222,38 @@
             }
         }
         
+        // 旧 APK 没有异步 ASR 桥方法时保留原有同步实现，保证页面与旧安装包兼容。
+        function handleLegacyNativeAsr(data, pcmBase64) {
+            const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
+            if (useVoiceprint && voiceprintMultiSpeaker) {
+                const res = JSON.parse(nativeBridge.voiceprintDiarize(pcmBase64));
+                sendAsrResult(data.requestId, {
+                    segments: res.segments || [],
+                    error: res.error || ''
+                });
+                return;
+            }
+
+            const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
+            if (!useVoiceprint) {
+                sendAsrResult(data.requestId, {
+                    text: res.text || '',
+                    error: res.error || ''
+                });
+                return;
+            }
+
+            const vp = JSON.parse(nativeBridge.voiceprintMatch(pcmBase64));
+            const result = {
+                text: res.text || '',
+                error: res.error || vp.error || ''
+            };
+            // vp.error 表示声纹不可用，省略 speaker 让服务端放行；
+            // speaker:null 表示声纹可用但没有匹配对象，交给服务端按声纹策略拦截。
+            if (!vp.error) result.speaker = vp.speaker || null;
+            sendAsrResult(data.requestId, result);
+        }
+
         async function handleAsrAudio(data) {
             // APK 原生识别路径：webm/wav base64 → WebAudio 解码重采样 16k mono → 裸 PCM → 原生引擎
             if (nativeAsrAvailable) {
@@ -4101,53 +4283,25 @@
                 }
                 try {
                     const pcmBase64 = await decodeAudioToPcmBase64(data.audioData);
-                    // 声纹分派：enabled+ready → 按 multiSpeaker 走单段匹配或多人分割；否则纯 ASR（speaker 缺省放行）
-                    if (nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady) {
-                        if (voiceprintMultiSpeaker) {
-                            const res = JSON.parse(nativeBridge.voiceprintDiarize(pcmBase64));
-                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                                displayWs.send(JSON.stringify({
-                                    type: 'asrResult',
-                                    requestId: data.requestId,
-                                    segments: res.segments || [],
-                                    error: res.error || ''
-                                }));
-                            }
-                        } else {
-                            const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
-                            const vp = JSON.parse(nativeBridge.voiceprintMatch(pcmBase64));
-                            const msg = {
-                                type: 'asrResult',
-                                requestId: data.requestId,
-                                text: res.text || '',
-                                error: res.error || vp.error || ''
-                            };
-                            // speaker 语义：vp.error → 声纹未就绪/不可用 → 不带 speaker（放行）；vp.speaker null → 可用但未匹配 → speaker:null（拦截）
-                            if (!vp.error) msg.speaker = vp.speaker || null;
-                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                                displayWs.send(JSON.stringify(msg));
-                            }
+                    const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
+                    if (typeof nativeBridge.asrRecognizeAsync === 'function') {
+                        const accepted = JSON.parse(nativeBridge.asrRecognizeAsync(
+                            data.requestId,
+                            pcmBase64,
+                            useVoiceprint,
+                            voiceprintMultiSpeaker
+                        ));
+                        if (!accepted.accepted) {
+                            sendAsrResult(data.requestId, {
+                                text: '',
+                                error: accepted.error || '识别任务提交失败'
+                            });
                         }
                     } else {
-                        const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
-                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                            displayWs.send(JSON.stringify({
-                                type: 'asrResult',
-                                requestId: data.requestId,
-                                text: res.text || '',
-                                error: res.error || ''
-                            }));
-                        }
+                        handleLegacyNativeAsr(data, pcmBase64);
                     }
                 } catch (e) {
-                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                        displayWs.send(JSON.stringify({
-                            type: 'asrResult',
-                            requestId: data.requestId,
-                            error: e.message,
-                            text: ''
-                        }));
-                    }
+                    sendAsrResult(data.requestId, { error: e.message, text: '' });
                 }
                 return;
             }

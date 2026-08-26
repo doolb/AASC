@@ -4,6 +4,76 @@
 
 ### 已完成
 
+- ✅ [2026-08-26] 完成 APK 大小核并发配置集成验证（Task 6）
+  - Node focused integration 22/22 通过；Android JVM 单测、`assembleDebug`、`npm run upload:apk` 和 display2 启动均成功。
+  - 默认 ASR/TTS `1 大核 + 1 小核` 下，真机同时提交 3 个 TTS 请求均收到 `ttsGenerating` 与 `ttsResult`，未出现失败、超时或重复播放错误。
+  - APK 进程在 `192.168.1.6:5555` 存活，display2 窗口存在，设备允许 CPU 0--7；本轮未重新采集 PSS/native heap 或 affinity syscall 成功率。
+  - 详细结果：`.superpowers/sdd/2026-08-26-apk-cpu-cluster-concurrency/task-6-report.md`。
+
+- ✅ [2026-08-26] 修复 APK CPU affinity Display/Control UI review：保存按钮重复绑定
+  - `upload.html` 移除 `cpuAffinitySaveBtn` 的内联 `onclick`，保留 `tts.js` 中 `CpuAffinitySettings.init()` 的单一 click listener，避免一次点击触发两次 `POST /api/config/cpuAffinity`、重复广播和重复 toast。
+  - `tests/apk-cpu-affinity-display.test.js` 新增 `Tts.init() + button.click()` 集成回归，覆盖一次点击只发一次 POST、重复 `init()` 不重复绑定，并确认初始化阶段仍会执行 `loadConfig()`。
+  - 结果记录于 `.superpowers/sdd/2026-08-26-apk-cpu-cluster-concurrency/task-5-fix-report.md`。
+
+- ✅ [2026-08-26] 完成 APK CPU affinity Display/Control UI（Task 5）
+  - `display.html` 新增 `cpuConfig` 消费，只在 `NativeDisplay.cpuConfigure` 可用时把 `{asr, tts}` 透传给 APK；浏览器显示端和旧桥安全忽略，不打断现有 `asrConfig`、`ttsConfig`、`ttsGenerate` 与旧 APK fallback。
+  - `upload.html` 新增 ASR/TTS 大核/小核数量输入、保存按钮和状态文案；`tts.js` 新增 `CpuAffinitySettings`，负责 `GET/POST /api/config/cpuAffinity`、非负整数规范化、任一引擎至少一个槽位兜底和广播回填。
+  - `websocket.js` 接入 `cpuAffinityChanged`，控制端多页面可同步服务器最新 CPU 并发配置；新增 focused Node 回归 `tests/apk-cpu-affinity-display.test.js` 覆盖显示端桥兼容、控制页默认值、读取/保存/广播更新。
+  - 文档与报告同步更新：`docs/design/control.md`、`docs/spec/upload.md`、`docs/design/android-display.md`、`docs/spec/android-display.md`、`docs/task/2026-08-25_APK大小核并发配置.md`、`.superpowers/sdd/2026-08-26-apk-cpu-cluster-concurrency/task-5-report.md`。
+
+- ✅ [2026-08-26] 修复 APK TTS Task 4 final fix：NativeBridge 严格有界准入
+  - 新增 `TtsBridgeDispatcher`，按当前 TTS policy 的 `max(1, totalCoreCount)` 创建固定 worker 和同等容量 `ArrayBlockingQueue`；提交时溢出立即拒绝，不创建无限桥线程。
+  - 同步 `ttsSynthesize` 溢出返回普通 error JSON；异步 `ttsSynthesizeAsync` 返回 `accepted:false`，不提交后再回调错误；保留 60 秒 timeout/cancel 和 TtsEnginePool Semaphore 双层保护。
+  - `cpuConfigure` 在 TTS policy 成功应用后与提交共用锁换代 dispatcher；旧 executor 使用 `shutdown()` 排空已提交任务，不打断活动 TTS 工作；新增 dispatcher JVM 测试和桥侧静态契约断言。
+  - 最终精确验证结果记录于 `.superpowers/sdd/2026-08-26-apk-cpu-cluster-concurrency/task-4-final-fix-report.md`。
+
+- ✅ [2026-08-26] 修复 APK TTS Task 4 review：有限准入与声线探测资源释放
+  - `TtsEnginePool` 使用公平 `Semaphore(slotCount * 2)`，在等待 `idleSlots` 前非阻塞准入；超限抛出 `RejectedExecutionException("TTS 请求过多，请稍后重试")`，已准入请求始终在 `finally` 释放 permit。
+  - 保留 retired pool 对已 retain/admitted 请求的服务语义，旧 slot 仅在所有 retained caller 完成后释放；新增/更新 overflow admission bound 行为测试。
+  - `TtsEngine.probeVoice()` 在 finally 中关闭 `SynthesisVoicesResult` 和 probe `SpeechSynthesizer`，继续使用 `SpeechSynthesizer(config, null)`。
+  - 本轮精确验证结果记录于 `.superpowers/sdd/2026-08-26-apk-cpu-cluster-concurrency/task-4-fix-report.md`。
+
+- ✅ [2026-08-26] 完成 APK TTS 并发引擎池（Task 4）
+  - 新增 `TtsEnginePool`，按 TTS `CpuPolicy.totalCoreCount` 建立 `max(1, totalCoreCount)` 个独立 Microsoft Embedded Speech SDK synthesizer slot，每个 slot 拥有单线程 worker。
+  - `TtsEngine` 保持旧公开 API，内部改为 pool 安全替换；模型加载或 TTS CPU policy 变更先构造新池，旧池 retire 后等待 in-flight/queued retained caller 完成再释放 synthesizer。
+  - `NativeBridge.cpuConfigure()` 同时应用并返回 ASR/TTS policy；同步和异步 TTS 桥路径都进入 TTS pool，桥任务执行器允许并发提交，真实并发由 pool slot 队列限制。
+  - 保留 `SpeechSynthesizer(config, null)` 静音构造，生成阶段只返回 WAV，不触发本机扬声器；60 秒超时、`window.onNativeTtsResult` 回调和旧 APK 同步 fallback 保持不变。
+  - 新增 focused JVM 测试 `TtsEnginePoolTest`，覆盖两槽并发上限、第三个请求排队、WAV 返回、静音构造契约、affinity false 非致命和 retired 旧池继续服务已排队请求。
+  - 验证：Task 4 RED/green TDD、相关 Android focused tests、相关 Node/static tests 和 `npm run build:apk` 均通过。
+
+- ✅ [2026-08-26] 完成 APK ASR 并发引擎池（Task 3）
+  - 新增 `AsrEnginePool`，按 ASR `CpuPolicy.totalCoreCount` 建立 `max(1, totalCoreCount)` 个独立 sherpa-onnx recognizer slot，每个 slot 的 `numThreads=1`。
+  - `AsrEngine` 改为安全替换 pool：模型加载或 ASR CPU policy 变更先构造新池，旧池 retire 后等待 in-flight slot 归还再释放，避免识别中释放 native recognizer。
+  - `NativeBridge` 的同步和异步 ASR 路径进入 ASR pool；ASR 桥任务执行器允许并发提交，60 秒超时和 `window.onNativeAsrResult` 回调协议保持不变。
+  - 新增 focused JVM 测试 `AsrEnginePoolTest`，覆盖两槽并发上限、第三个请求排队、affinity 返回 false 不导致识别失败、slot 归还。
+  - 验证：ASR pool RED/green TDD 和相关 ASR/CPU JVM focused tests 通过；`npm run build:apk` 因紧急收尾手动中断，未取得完成结果。
+
+- ✅ [2026-08-26] 修复 Task 3 review：ASR pool retire 生命周期
+  - `AsrEnginePool` retired 后不再立即丢弃完成 slot；只要旧 pool 还有 retained caller，就把 slot 放回 idle queue 服务已排队旧请求，最后一个 retained 调用退出后再统一释放 idle slot。
+  - `Slot.release()` 保持原子保护，避免重复 release；slot executor 最终随 release shutdown，规避 queued caller 死锁和 executor 泄漏。
+  - `AsrEnginePoolTest` 补充 safe retire 回归，覆盖旧池单槽时一个请求执行、一个请求等待、retire 后等待请求仍完成。
+  - 修复 `tests/android-asr-native-load.test.js` 的 stale scan，新结构下扫描 `AsrEngine.kt` 与 `AsrEnginePool.kt`，继续约束 `OfflineRecognizer(null, config)`。
+  - 更新 `NativeBridge` ASR 同步入口注释为 cached bridge executor、pool-bounded execution、60 秒超时。
+  - 验证：focused ASR pool/CPU/PCM/model-file JVM tests 通过，ASR native load/static async bridge Node tests 通过，`npm run build:apk` 完成。
+
+- ✅ [2026-08-26] 完成 APK CPU topology 与 JNI affinity 原语（Task 2）
+  - 新增 `CpuCluster.detect(reader)`、`CpuTopology.policy()` 和 `CpuAffinity.applyCurrentThread()`，支持注入 reader、按 `cpuinfo_max_freq` 动态识别 big/little 集群、数量裁剪、fallback 状态和 CPU mask 输出。
+  - 修复 Task 2 review：Kotlin/JNI 统一 signed Long 安全 mask 边界为 CPU ID `0..62`；CPU 63 和更高 ID 会从 policy/mask 中排除，存在受支持 CPU 时回退到确定性 CPU，否则返回空 fallback policy 和 `cpuMask=0`。
+  - 新增 JNI `cpu_affinity` 原生库，通过当前 native 线程调用 `sched_setaffinity`；native 库缺失、空 mask、权限或 syscall 失败均返回 false 并记录日志。
+  - `app/build.gradle.kts` 接入 CMake，新增 focused JVM 单测 `CpuClusterTest`；边界测试覆盖 CPU 62、CPU 63 和超出 Long/CPU_SETSIZE 域的 CPU ID。本阶段不接入 ASR/TTS 池和显示端 UI。
+  - 验证：Task 2 红绿 TDD focused test 通过，`npm run build:apk` 成功编译并打包 native library。
+
+- ✅ [2026-08-25] 修复 Task 1 review：CPU affinity 必须对 ASR/TTS 各自保留至少一个槽位
+  - `POST /api/config/cpuAffinity` 现在对 `asr 0/0` 或 `tts 0/0` 返回 400，不保存、不广播。
+  - `normalizeCpuAffinityConfig()` 与 `createCpuConfigMessage()` 会把存量残缺或持久化 `0/0` 引擎回退为该引擎默认 `1 大核 + 1 小核`，避免向显示端重新发出不可运行配置。
+  - focused Node 回归补充了 per-engine-zero 拒绝和 `cpuConfig` 不重发 `0/0` 的断言，并同步更新 design/spec/task 文档。
+
+- ✅ [2026-08-25] 完成 APK ASR/TTS CPU affinity 服务器配置契约（Task 1）
+  - 服务器新增 `GET/POST /api/config/cpuAffinity`，默认配置为 ASR/TTS 各 `1 大核 + 1 小核`；缺失字段回填默认值，负数、小数和非法结构返回 400。
+  - 配置保存后向控制端广播 `cpuAffinityChanged`，向显示端广播 `cpuConfig`；显示端首次连接初始化路径也会收到同一份 `cpuConfig`。
+  - 新增 focused Node 回归 `tests/apk-cpu-affinity-config.test.js`，覆盖默认值、规范化、非法输入拒绝、广播和初始化下发。
+  - 文档：`docs/design/android-native-tts.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-25_APK大小核并发配置.md`。
+
 - ✅ [2026-08-25] Android TTS APK 增加自动/大核/小核 CPU 模式
   - 新增 CPU 模式选择和持久化；通过 JNI 动态识别核心并绑定 TTS 工作线程，失败时回退自动。
   - 状态栏显示实际核心或回退原因；`npm --prefix 3rd/tts-server run build:android-tts`、完整 Android JVM 测试通过。
@@ -12,6 +82,54 @@
   - 内置 Xiaoxiao 模型，不申请网络权限；提供文本框、生成按钮和自动播放。
   - `SpeechSynthesizer` 显式使用 `(config, null)`，只返回 WAV 数据，避免默认扬声器重复播放。
   - 生成完成显示 SDK 合成耗时；`npm --prefix 3rd/tts-server run build:android-tts` 和 Android JVM 单元测试通过。
+
+- ✅ [2026-08-25] 修复 APK 原生 TTS 重复播放问题
+  - 根因：`SpeechSynthesizer(config)` 默认绑定设备扬声器，APK 合成时播放一次；服务器收到 WAV 后再通过 `playAudio` 播放一次。
+  - 修复：主合成器和声线探测器显式使用空 `AudioConfig`，只生成回传 WAV；TTS 仍由 `ttsExecutor` 单线程后台执行。
+  - 新增 `TtsEngineAudioOutputTest` 防止恢复默认扬声器构造；Android unit tests、`assembleDebug`、`npm run upload:apk` 通过，APK 已在 display2 运行并成功返回 24kHz/16bit/mono WAV。
+  - 当前 APK 100 字文本串行压测 10 次全部成功，平均单次 3562.5ms，最大 4620ms，总耗时 35687ms。
+
+- ✅ [2026-08-25] 增加显示端 TTS 开始生成回执
+  - 显示端收到 `ttsGenerate` 后先回 `ttsGenerating`；服务端 3 秒未收到即判定失败并回退服务器。
+  - 收到开始回执后才接受最终 `ttsResult`；显示端断开立即结束 pending 请求，整体生成超时仍为 60 秒。
+  - 新增 `tests/tts-display-routing.test.js` 回归断言并同步更新 TTS 协议文档。
+
+- ✅ [2026-08-25] 所有服务端 TTS 生成统一显示端优先路由
+  - API、聊天、Agent、文本媒体、语音指令、提醒和整点报时均统一调用 `generateTtsWithFallback()`。
+  - 显示端不可用、失败或超时时自动回退服务器；底层 `tts.generateTTS()` 仅保留在统一 fallback 分支。
+  - TaskManager 向内置任务注入统一 TTS 路由，整点报时不再绕过显示端生成。
+  - 新增 `tests/tts-display-routing.test.js`，同步更新 Android TTS design/spec/task 文档。
+
+- ✅ [2026-08-25] APK 原生 ASR/TTS 改为异步桥接
+  - `NativeBridge` 新增异步 ASR/TTS 任务入口，立即返回 accepted，推理完成、异常或超时通过主线程 JS 回调返回，避免阻塞 WebView 的 WebSocket 和页面事件。
+  - `display.html` 新 APK 优先调用异步桥；旧 APK 保留同步兼容回退，非 APK 行为不变。
+  - ASR/TTS 原生桥以及服务端显示端等待器超时统一为 60 秒。
+  - TTS 生成回调只返回 WAV 数据，不在生成阶段直接播放；播放仍由现有 TTS 播放流程决定。
+  - 新增 `tests/android-native-async-bridge.test.js`，并补充对应 design/spec/task 文档。
+
+- ✅ [2026-08-25] 修复 Samsung DeX 下 APK 启动非全屏
+  - 根因：设备窗口处于 `freeform`，原有沉浸式标志只隐藏状态栏/导航栏，未指定 DeX 启动窗口尺寸。
+  - Manifest 增加 `com.samsung.android.dex.launchwidth=0`、`com.samsung.android.dex.launchheight=0`，启动时请求全屏。
+  - 版本核对：TTS 接入仅将 `minSdk` 从 24 升到 26；`targetSdk=34` 未变化，当前 Android 9/API 28 设备仍兼容。
+  - 验证：Manifest 静态测试 5/5、`assembleDebug`、Android unit tests 通过；真机安装因旧 APK 签名不一致被 Android 拒绝，未卸载旧包。
+  - 文档：`docs/design/android-display.md`、`docs/spec/android-display.md`、`docs/task/2026-08-25_APK启动全屏窗口.md`。
+
+- ✅ [2026-08-25] 修复 APK 语音识别期间显示端 WebSocket 重连风暴
+  - 显示端 WebSocket 增加单重连定时器、当前 socket 身份校验和页面离开清理，避免原生 ASR/TTS 同步阻塞或旧连接 close 回调造成重复连接。
+  - 本次不改变 ASR/TTS 原生桥接口；ASR 仍是可能放大问题的负载因素，但现有日志未证明它是初始重连根因。
+  - 测试：新增 `tests/display-websocket-reconnect.test.js`，2/2 通过；ASR/显示端相关静态回归通过。
+  - 环境限制：两个既有 Puppeteer 用例因当前环境浏览器进程无法启动而失败。
+  - 文档：`docs/design/display.md`、`docs/spec/websocket.md`、`docs/task/2026-08-25_APK语音识别期间显示端重连保护.md`。
+
+- ✅ [2026-08-25] 修复 APK 原生 ASR 自动下载触发链路
+  - 修复 display.html WebGPU 异步探测在 capabilities 初始化完成前写入诊断字段，导致能力检测抛出 ReferenceError 并提前退出的问题。
+  - 修复服务器动态发送 localAsrEnabled=true 时，原生 ASR 状态为 not_ready/error 未触发 asrEnsureModel() 的问题。
+  - 新增两项自动下载触发回归断言，聚焦测试 4/4 通过。
+  - 文档：docs/design/android-native-asr.md、docs/spec/android-native-asr.md、docs/task/2026-08-25_APK原生ASR自动下载触发修复.md。
+
+- ⚠️ [2026-08-25] 真机 ASR 压测发现原生识别结果链路问题
+  - SM-N9500 已完成 SenseVoice 模型自动下载、校验、加载和能力上报验证。
+  - 5 次串行请求均已路由到 APK，但 `NativeDisplay.asrRecognize()` 返回 `{}`，全部识别失败；调试声纹匹配路径另发现 native 崩溃，已加入 `docs/todo.md` 待处理。
 
 - ✅ [2026-08-25] 完成 Linux TTS 服务化与 NaturalVoice 运行时解耦
   - 新增 `3rd/tts-server/tts-linux.js`，兼容 Wine TTS HTTP 接口，支持 FIFO 队列、队列上限、单并发、超时、断连清理和临时 WAV 清理。

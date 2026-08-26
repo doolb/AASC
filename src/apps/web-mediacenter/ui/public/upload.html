@@ -244,6 +244,32 @@
                     <span id="ttsDeviceStatus">加载中...</span>
                 </div>
             </div>
+
+            <div class="control-item">
+                <label>APK 大小核并发</label>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <span style="font-size:13px;color:rgba(255,255,255,0.75);min-width:36px;">ASR</span>
+                        <span style="font-size:12px;color:rgba(255,255,255,0.55);">大核</span>
+                        <input type="number" id="asrBigCoreCountInput" min="0" step="1" value="1" style="width:64px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;">
+                        <span style="font-size:12px;color:rgba(255,255,255,0.55);">小核</span>
+                        <input type="number" id="asrLittleCoreCountInput" min="0" step="1" value="1" style="width:64px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <span style="font-size:13px;color:rgba(255,255,255,0.75);min-width:36px;">TTS</span>
+                        <span style="font-size:12px;color:rgba(255,255,255,0.55);">大核</span>
+                        <input type="number" id="ttsBigCoreCountInput" min="0" step="1" value="1" style="width:64px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;">
+                        <span style="font-size:12px;color:rgba(255,255,255,0.55);">小核</span>
+                        <input type="number" id="ttsLittleCoreCountInput" min="0" step="1" value="1" style="width:64px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;">
+                    </div>
+                </div>
+                <div class="control-buttons" style="margin-top:10px;">
+                    <button class="control-btn" id="cpuAffinitySaveBtn">保存并发配置</button>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
+                    <span id="cpuAffinityStatus">加载中...</span>
+                </div>
+            </div>
             
             <div class="control-item" style="margin-top: 15px;">
                 <label>语音播报 (TTS)</label>

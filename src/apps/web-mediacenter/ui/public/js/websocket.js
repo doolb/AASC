@@ -93,6 +93,10 @@ const WebSocketManager = {
             if (window.TtsDevice) {
                 window.TtsDevice.handleDeviceChanged(data.device);
             }
+        } else if (data.type === 'cpuAffinityChanged') {
+            if (window.CpuAffinitySettings) {
+                window.CpuAffinitySettings.handleConfigChanged(data.cpuAffinity);
+            }
         } else if (data.type === 'displayState') {
             console.log('[WS] displayState 收到, displayId:', data.displayId, 'currentDisplayId:', window.currentDisplayId);
             

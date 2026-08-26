@@ -25,6 +25,7 @@
 3. 显示端能力记录到 `ttsGeneration`（语音生成）
 4. 控制端新增“语音生成设备”选项，可选服务端或显示端
 5. 显示端离线 / 模型未就绪 / 合成失败时临时回退服务端 TTS
+6. 所有服务端 TTS 生成入口统一经过 `generateTtsWithFallback()`，包括 API、聊天、Agent、文本媒体、语音指令、提醒和整点报时
 
 ### 约束
 
@@ -45,21 +46,26 @@
 【控制端】                  【服务器】                【显示端 display.html】
   语音生成设备(server/display) → ttsConfig → 检测/下载模型 → ttsGeneration 能力
                                     │  ttsGenerate（base64 WAV）
+                                    ├─ ttsGenerating（3s 内确认）
                                     └─ ttsResult ─► 写临时 wav → 播放
                                     回退：显示端失败 → 服务端 generateTTS
 ```
 
 ## 组件设计
 
-### 1. TtsEngine（新增 Kotlin 单例）
+### 1. TtsEngine / TtsEnginePool（Kotlin 单例 + 并发池）
 
 Embedded Speech SDK 的 `SpeechSynthesizer` 封装。
 
 - 加载：`EmbeddedSpeechConfig.fromPath(modelDir)`，输出格式 `Riff24Khz16BitMonoPcm`
 - 声线：`probeVoice()` 从模型声线列表中优先选择包含 `Xiaoxiao` 的声线，找不到则取第一个
 - 授权：嵌入式语音密钥与参考 POC 一致，模型内置授权
-- 合成：`SpeakText(text)` 返回 WAV 字节；`synchronized(this)` 串行，防止与重载并发
-- 释放：`release()` 关闭合成器并置 `ready=false`
+- 并发：`TtsEnginePool` 按 `max(1, CpuPolicy.totalCoreCount)` 创建槽位；每个槽拥有独立 `SpeechSynthesizer` 和单线程 worker，并额外使用公平 `Semaphore(slotCount * 2)` 做显式有限准入（`slotCount` 活跃 + `slotCount` 排队），超限请求立即抛出明确的 `RejectedExecutionException`，而不是无限阻塞线程
+- 绑定：每个槽在自己的 worker 线程调用 `CpuAffinity.applyCurrentThread(cpuMask)`；失败只降级为 Android 默认调度，不让合成失败
+- 合成：`SpeakText(text)` 返回 WAV 字节；构造主合成器和声线探测器时均显式传入空 `AudioConfig`，禁止 Embedded Speech SDK 自动连接默认扬声器；`probeVoice()` 同时关闭 `SynthesisVoicesResult` 和探测 synthesizer，避免 SDK 结果对象泄漏
+- 重配：模型加载或 TTS CPU policy 变更时先构造新 pool，替换成功后旧 pool 进入 retire；已经 retain、in-flight 或等待旧 slot 的请求继续完成，最后一个旧 caller 退出后再释放 slot
+- 播放职责：APK 原生层只负责生成并回传 WAV，服务器收到后统一通过现有 `playAudio` 流程播放，避免生成阶段和服务器播放阶段各播一次
+- 释放：`release()` 置 `ready=false` 并 retire 当前 pool；不直接释放正在执行的合成器
 
 ### 2. TtsModelFiles（新增纯逻辑）
 
@@ -84,10 +90,32 @@ Embedded Speech SDK 的 `SpeechSynthesizer` 封装。
 ```kotlin
 ttsStatus(): String JSON   # {"state":"ready|downloading|not_ready|error","progress":0-100,"error":"..."}
 ttsEnsureModel(): String   # 触发下载/加载（幂等）；异步经 onNativeTtsModel 回调
-ttsSynthesize(text): String # 同步合成，返回 {"audio":"<base64 wav>"} 或 {"error":"..."}，阻塞最多 30s
+ttsSynthesizeAsync(requestId, text): String # 成功提交返回 accepted:true；桥侧满载返回 accepted:false；完成后仅对已提交任务回调
+ttsSynthesize(text): String # 旧 APK 兼容同步入口，返回 {"audio":"<base64 wav>"} 或 {"error":"..."}
+window.onNativeTtsResult({requestId,audio,error}) # 原生异步 WAV 结果
 ```
 
 `serverBaseUrl()` 复用主线程缓存的服务器 origin，避免 JavaBridge 线程跨线程访问 `WebView.url`。
+
+TTS 合成任务由 `NativeBridge.ttsExecutor` 的 `TtsBridgeDispatcher` 提交到 `TtsEnginePool`；桥侧 worker 数为当前 `slotCount = max(1, policy.totalCoreCount)`，有界队列容量同为 `slotCount`。提交时即完成有限准入，队列满时同步入口返回普通错误 JSON，异步入口返回 `accepted:false`，不会先提交再通过回调报告拒绝。桥侧与 pool 内公平 Semaphore 形成双层保护，JavaScript bridge 线程只提交任务（异步入口）或等待兼容入口结果，不负责音频播放。
+
+`cpuConfigure()` 在 TTS policy 成功应用后与提交共用锁换代 dispatcher；旧 executor 使用 `shutdown()` 排空已提交任务，不打断 active TTS 工作，也不接受换代后的新任务。
+
+### 4.0 TtsBridgeDispatcher（桥侧有界调度）
+
+- `workerCount = max(1, currentTtsPolicy.totalCoreCount)`，固定 worker 数；`queueCapacity = workerCount`，使用 `ArrayBlockingQueue`。
+- `submit()`、`reconfigure()` 与 NativeBridge 的 TTS 提交流程共用锁，避免 policy 换代期间出现提交到错误 executor 或非确定性接受结果。
+- `RejectedExecutionException` 在 API 边界映射为同步 `{error:'TTS 请求过多，请稍后重试'}` 或异步 `{accepted:false,error:'TTS 请求过多，请稍后重试'}`，被拒绝异步请求不注册超时任务、不发送 `onNativeTtsResult`。
+- `reconfigure()` 先切换新 executor，再对旧 executor 调用 `shutdown()`；已提交任务允许完成，旧队列排空后线程退出。
+
+### 4.1 CPU 集群识别、affinity 原语与 TTS pool（Task 2 / Task 4）
+
+APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自根据服务器下发的配置构造独立 pool。Task 4 已接入 TTS pool；控制端 UI 仍属于后续任务。
+
+- `CpuCluster.detect(reader)` 读取 `/sys/devices/system/cpu/possible`、`online` 和每个在线 CPU 的 `cpufreq/cpuinfo_max_freq`，按最大频率确定 big/little 集群；`reader` 可注入，JVM 单测不访问 Android sysfs。
+- `CpuTopology.policy(bigCoreCount, littleCoreCount)` 对请求数量做非负裁剪，按 CPU 编号稳定选择大核/小核，输出实际 CPU 列表、bit mask、有效数量和 fallback 原因；Kotlin/JNI 统一只支持 CPU ID `0..62`，CPU 63 和更高 ID 不进入 policy/mask。合法配置请求至少一个槽位且存在受支持 CPU 时返回确定性回退 CPU；如果设备只暴露不受支持的 CPU ID，则返回空 fallback policy 和 `cpuMask=0`，避免产生无法应用的非空策略。
+- `CpuAffinity.applyCurrentThread(cpuMask)` 通过 JNI 对当前 native 线程调用 `sched_setaffinity`；`cpuMask` 必须是 `0..62` 生成的正 Long mask。native 库加载失败、权限拒绝、系统调用失败或空 mask 都只记录日志并返回 `false`，不得让 TTS 请求失败。
+- `NativeBridge.cpuConfigure()` 同时应用 ASR/TTS policy，返回 `{ok, asr, tts, topology}`；TTS 模型未加载时只缓存 policy，模型加载后按最新 policy 创建 pool。
 
 ### 5. display.html 接入点
 
@@ -102,7 +130,8 @@ ttsSynthesize(text): String # 同步合成，返回 {"audio":"<base64 wav>"} 或
 
 **5.3 ttsGenerate 处理**
 - 原生桥不可用或模型未就绪 → 回 `ttsResult{error}`（服务器据此回退）
-- 就绪 → `ttsSynthesize(text)` → 回 `ttsResult{audioData:base64}`
+- 新 APK 就绪 → `ttsSynthesizeAsync(requestId,text)` → `onNativeTtsResult` → 回 `ttsResult{audioData:base64}`
+- 旧 APK 没有异步方法 → 回退 `ttsSynthesize(text)`
 
 **5.4 onNativeTtsModel 回调**
 - `downloading` 记录进度；`ready` 置 `nativeTtsReady=true` 并上报能力；
@@ -112,11 +141,18 @@ ttsSynthesize(text): String # 同步合成，返回 {"audio":"<base64 wav>"} 或
 
 - 配置：`tts.device`（`server` / `display`），默认 `server`
 - API：`GET/POST /api/config/ttsDevice`
+- 配置：`cpuAffinity`（`asr/tts` 各自的 `bigCoreCount/littleCoreCount`），默认均为 `1/1`
+- API：`GET/POST /api/config/cpuAffinity`
 - 模型下载：`GET /api/tts/model-manifest`、`GET /api/tts/model/:filename`（白名单防路径穿越）
 - 路由：`findDisplayWithTts()` 找到在线且有 `ttsGeneration` 的显示端
 - 生成：`sendTtsGenerateToDisplay()` 等待 `ttsResult`，60s 超时
+- 开始确认：显示端接受任务后先回 `ttsGenerating`；服务端 3s 未收到则判定失败并回退
+- 路由：所有服务端 TTS 入口统一调用 `generateTtsWithFallback()`；仅该函数的最终回退分支允许调用 `tts.generateTTS()`
 - 回退：`generateTtsWithFallback()` 显示端失败 / 离线 / 错误时回退 `tts.generateTTS()`
+- 注入：TaskManager 将统一生成函数注入内置任务，整点报时不再直接依赖底层 TTS 服务
 - 能力：显示端 actor 与地图 actor 新增 `voice-generation`（语音生成）
+- CPU 契约：`GET /api/config/cpuAffinity` 返回规范化配置；`POST /api/config/cpuAffinity` 只接受非负整数，且 `asr/tts` 每个引擎自身都至少保留 1 个槽位；缺失字段回填默认值，保存后广播 `cpuAffinityChanged` 给控制端、广播 `cpuConfig` 给显示端
+- 初始化：显示端首次连接时同步收到 `cpuConfig`；旧版 APK/浏览器忽略未知消息，不影响现有 TTS/ASR 流程
 
 ### 7. 控制端改动
 
@@ -131,9 +167,10 @@ ttsSynthesize(text): String # 同步合成，返回 {"audio":"<base64 wav>"} 或
 1. 控制端选择“显示端” → `POST /api/config/ttsDevice{device:'display'}`
 2. 服务器广播 `ttsDeviceChanged` 给控制端，下发 `ttsConfig{localTtsEnabled:true}` 给显示端
 3. 显示端检测 / 下载模型，就绪后上报 `ttsGeneration=true`
-4. 控制端发起播报，服务器 `generateTtsWithFallback()` 选中有 `ttsGeneration` 的显示端
-5. 服务器发 `ttsGenerate{text, requestId}` → 显示端合成 base64 WAV → 回 `ttsResult`
-6. 服务器把 WAV 写入 `res/uploads/tts/*.wav`，返回音频 URL 播放
+4. 任一服务端 TTS 入口发起生成，服务器 `generateTtsWithFallback()` 选中有 `ttsGeneration` 的显示端
+5. 服务器发 `ttsGenerate{text, requestId}` → 显示端 3s 内回 `ttsGenerating`
+6. 显示端异步合成 base64 WAV → 回 `ttsResult`
+7. 服务器把 WAV 写入 `res/uploads/tts/*.wav`，返回音频 URL 播放
 
 ## 错误处理
 
@@ -142,9 +179,12 @@ ttsSynthesize(text): String # 同步合成，返回 {"audio":"<base64 wav>"} 或
 | 无在线且启用语音生成的显示端 | 回退服务端 `tts.generateTTS()` |
 | 显示端模型下载中 / 合成失败 | 回 `ttsResult{error}`，服务器回退服务端 |
 | 显示端离线或 60s 超时 | 回退服务端 |
+| 3s 内未收到 `ttsGenerating` | 判定显示端未接受任务，回退服务端 |
 | 模型 hash 不匹配 / 文件损坏 | 删除损坏文件，重新下载 |
 | 低端机内存不足 | 返回 `error`，不硬加载防 OOM |
 | `tts.device=server` | 直接走服务端 TTS，显示端合成引擎闲置 |
+| `cpuAffinity` 含负数、小数、非法类型或任一引擎为 `0/0` | 服务器 `POST /api/config/cpuAffinity` 返回 400，不保存旧配置 |
+| `cpuAffinity` 缺失字段、旧配置残缺或任一引擎存量为 `0/0` | 服务器按该引擎默认 `1 大核 + 1 小核` 规范化后返回/广播 |
 
 ## 兼容性
 
@@ -179,6 +219,22 @@ ttsSynthesize(text): String # 同步合成，返回 {"audio":"<base64 wav>"} 或
 - 能力：`/api/actors` 中显示端 `display-ec4p3r2z` 上报 `voice-generation`
 - 生成：`POST /api/tts/generate` 路由到显示端，服务器日志 `显示端生成成功 (displayId=display-ec4p3r2z bytes=170446)`；WAV 为 24kHz/16bit/单声道 PCM
 
+## 2026-08-25 重复播放修复验证
+
+- 根因确认：SDK 单参数 `SpeechSynthesizer(config)` 会调用默认扬声器输出，`getAudioData()` 又把同一段 WAV 回传服务器，形成两次播放。
+- 修复：主合成器和声线探测器均使用 `SpeechSynthesizer(config, null)`，原生生成阶段不播放，只返回音频数据。
+- 线程确认：Task 4 final fix 后 `NativeBridge.ttsExecutor` 为按当前 TTS policy 派生的 `TtsBridgeDispatcher`，固定 `slotCount` worker 和同等容量队列；TtsEnginePool 公平 Semaphore 作为额外保护，异步入口仅对成功提交任务立即返回，60 秒监控由独立调度器处理。
+- 验证：Android unit tests、`assembleDebug`、`npm run upload:apk` 均成功；APK 已安装并运行在 `192.168.1.6:5555` 的 display2；端到端 TTS 成功返回 24kHz/16bit/mono WAV。
+- 100 字串行压测：当前 APK 连续生成 10 次，成功 10/10；平均单次 3562.5ms，最大 4620ms，总耗时 35687ms；10 个返回音频 URL 均唯一，未发生超时。
+
+## 2026-08-26 TTS 并发池验证
+
+- `TtsEnginePool` 按 TTS `CpuPolicy.totalCoreCount` 建立 `max(1, totalCoreCount)` 个独立 silent synthesizer slot，并用公平 `Semaphore(slotCount * 2)` 显式限制 `slotCount` 个活跃 + `slotCount` 个排队请求；超额请求抛出 `RejectedExecutionException("TTS 请求过多，请稍后重试")`，准入 permit 在 `finally` 中释放。
+- `NativeBridge` 增加 `TtsBridgeDispatcher`，固定 `max(1, policy.totalCoreCount)` 个桥 worker 和同等容量有界队列；同步/异步入口在提交时确定溢出结果，TTS policy 成功配置后在锁内换代，旧 executor `shutdown()` 排空而不打断已提交任务。
+- `TtsEngine` 保持 `load/synthesize/release/ready` 公开接口，内部用 pool 安全替换；旧 pool retire 后继续服务已 retain 的 in-flight/queued 请求。
+- `NativeBridge.cpuConfigure()` 同时返回并应用 `asr` 与 `tts` policy；同步和异步 TTS 桥路径都通过 pool，60 秒超时和旧 APK 同步 fallback 保持不变。
+- focused JVM 测试覆盖两槽并发上限、显式 overflow 拒绝、WAV 返回、静音构造契约、`probeVoice()` 资源关闭约束、affinity false 非致命、retired 旧池继续服务已排队请求；`npm run build:apk` 完成。
+
 ## 2026-08-25 TTS 生成与内存稳定性复核
 
 - 真机端到端：SM-N9500（Android 9 / API 28 / arm64-v8a）连续 8 次 `POST /api/tts/generate` 全部成功，单次耗时约 3--4 秒；每次均收到 `ttsGenerate` 并生成 WAV。
@@ -188,17 +244,25 @@ ttsSynthesize(text): String # 同步合成，返回 {"audio":"<base64 wav>"} 或
 - 内存：压测期间应用 PSS 约从 396.9MB 上升到 404.2MB，Native Heap 约从 156.2MB 上升到 157.6MB；静置 30 秒后稳定在 PSS 约 402--403MB、Native Heap 约 156.6MB。重启后的完整加载阶段稳定在 PSS 约 355--360MB、Native Heap 约 149.7MB，未见 OOM 或进程重启。
 - 环境限制：Android 单元测试首次执行因 `/tmp` 临时目录配额失败，切换 `JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/mnt/AASC/tmp` 后 36 项全部通过；APK `assembleDebug` 单独执行成功。浏览器原生桥回归需同样切换临时目录，桥截图与无桥回归通过，但既有 `injectTouch` 断言仍失败，与 TTS 无关。
 
+## 2026-08-26 集成验证记录（Task 6）
+
+- Node 集成回归 22/22 通过；Android JVM 单测、`assembleDebug`、`npm run upload:apk` 均通过。
+- APK 已安装并运行在 `192.168.1.6:5555` 的 display2；进程 PID 9959 存活，设备拓扑为 CPU 0--3 little、CPU 4--7 big。
+- 默认 TTS `1 大核 + 1 小核` 下，3 个同时提交的真机请求均收到 `ttsGenerating` 和 `ttsResult`，未出现失败、超时或重复播放错误；两个请求可并行，额外请求由有界队列承接。
+- 本轮未重新采集 PSS/native heap；此前 100 字压测的内存结果继续作为基线。logcat 未输出显式 `cpuConfig` 应用日志，不能据此宣称 affinity syscall 已成功。
+
 ## 改动文件清单
 
 | 文件 | 改动 |
 |------|------|
 | `src/apps/android-display/app/build.gradle.kts` | 新增 Embedded Speech SDK AAR、`azure-core`、`arm64-v8a`、`minSdk=26` |
-| `.../TtsEngine.kt`（新增） | Embedded Speech SDK 合成封装（Xiaoxiao） |
+| `.../TtsEngine.kt`（新增） | Embedded Speech SDK 合成封装（Xiaoxiao），当前通过 TTS pool 管理加载、合成和释放 |
+| `.../TtsEnginePool.kt`（新增） | TTS 大小核并发池，单槽独立 silent synthesizer + 单线程 worker |
 | `.../TtsModelFiles.kt`（新增） | 模型文件清单与完整性校验 |
 | `.../TtsModelManager.kt`（新增） | 模型下载/校验/加载/状态机 |
 | `.../NativeBridge.kt` | 新增 `ttsStatus`/`ttsEnsureModel`/`ttsSynthesize` |
 | `src/apps/server/boot/server-app.js` | 模型下载接口、ttsDevice 配置、显示端生成与回退、能力 |
-| `src/apps/server/modules/config/config-app-service.js` | 默认 `tts.device='server'` |
+| `src/apps/server/modules/config/config-app-service.js` | 默认 `tts.device='server'`，并提供 CPU affinity 默认值、规范化、校验和广播消息构造 |
 | `src/apps/web-mediacenter/ui/public/display.html` | ttsConfig/ttsGenerate 处理、能力上报、模型下载 |
 | `.../js/tts.js` | 新增 `TtsDevice` |
 | `.../upload.html` | 语音生成设备按钮组 |

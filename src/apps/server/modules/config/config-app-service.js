@@ -17,6 +17,137 @@ const defaultDisplayState = {
     sleep: { enabled: true, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 }
 };
 
+const CPU_AFFINITY_ENGINES = ['asr', 'tts'];
+const CPU_AFFINITY_FIELDS = ['bigCoreCount', 'littleCoreCount'];
+const DEFAULT_CPU_AFFINITY = {
+    asr: { bigCoreCount: 1, littleCoreCount: 1 },
+    tts: { bigCoreCount: 1, littleCoreCount: 1 }
+};
+
+function isNonNegativeInteger(value) {
+    return Number.isInteger(value) && value >= 0;
+}
+
+function cloneCpuAffinityConfig(cpuAffinity = DEFAULT_CPU_AFFINITY) {
+    return {
+        asr: { ...cpuAffinity.asr },
+        tts: { ...cpuAffinity.tts }
+    };
+}
+
+function getCpuAffinityEngineSlotCount(engineConfig) {
+    return (engineConfig?.bigCoreCount || 0) + (engineConfig?.littleCoreCount || 0);
+}
+
+function normalizeCpuAffinityEngine(engine, rawConfig, fallbackConfig) {
+    const normalizedEngine = { ...fallbackConfig[engine] };
+
+    CPU_AFFINITY_FIELDS.forEach((field) => {
+        const value = rawConfig?.[engine]?.[field];
+        if (isNonNegativeInteger(value)) {
+            normalizedEngine[field] = value;
+        }
+    });
+
+    // 持久化配置或缺省输入如果把单个引擎变成 0/0，则回退该引擎默认值，避免向下游发出不可运行配置。
+    if (getCpuAffinityEngineSlotCount(normalizedEngine) <= 0) {
+        return { ...fallbackConfig[engine] };
+    }
+
+    return normalizedEngine;
+}
+
+// 对存量配置做宽容读取：缺失或旧值损坏时回退默认值，避免旧配置把新协议读坏。
+function normalizeCpuAffinityConfig(rawConfig, fallbackConfig = DEFAULT_CPU_AFFINITY) {
+    const normalizedFallback = cloneCpuAffinityConfig(fallbackConfig);
+    const normalized = {};
+
+    CPU_AFFINITY_ENGINES.forEach((engine) => {
+        normalized[engine] = normalizeCpuAffinityEngine(engine, rawConfig, normalizedFallback);
+    });
+
+    return normalized;
+}
+
+function validateCpuAffinityPayload(payload, fallbackConfig = DEFAULT_CPU_AFFINITY) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return { ok: false, message: 'cpuAffinity 配置必须是对象' };
+    }
+
+    const normalized = cloneCpuAffinityConfig(fallbackConfig);
+
+    for (const engine of CPU_AFFINITY_ENGINES) {
+        const engineConfig = payload[engine];
+        if (engineConfig === undefined) {
+            continue;
+        }
+        if (!engineConfig || typeof engineConfig !== 'object' || Array.isArray(engineConfig)) {
+            return { ok: false, message: `${engine} 配置必须是对象` };
+        }
+
+        for (const field of CPU_AFFINITY_FIELDS) {
+            const value = engineConfig[field];
+            if (value === undefined) {
+                continue;
+            }
+            if (!isNonNegativeInteger(value)) {
+                return { ok: false, message: `${engine}.${field} 必须是非负整数` };
+            }
+            normalized[engine][field] = value;
+        }
+
+        if (getCpuAffinityEngineSlotCount(normalized[engine]) <= 0) {
+            return { ok: false, message: `${engine} 至少保留一个 CPU 槽位` };
+        }
+    }
+
+    return { ok: true, value: normalized };
+}
+
+function createCpuAffinityChangedMessage(cpuAffinity) {
+    return {
+        type: 'cpuAffinityChanged',
+        cpuAffinity: normalizeCpuAffinityConfig(cpuAffinity)
+    };
+}
+
+function createCpuConfigMessage(cpuAffinity) {
+    const normalized = normalizeCpuAffinityConfig(cpuAffinity);
+    return {
+        type: 'cpuConfig',
+        asr: normalized.asr,
+        tts: normalized.tts
+    };
+}
+
+function applyCpuAffinityConfigUpdate({
+    body,
+    setConfig = (key, value) => config.set(key, value),
+    broadcastToControls = () => {},
+    broadcastCpuConfig = () => {},
+    fallbackConfig = DEFAULT_CPU_AFFINITY
+}) {
+    const result = validateCpuAffinityPayload(body, fallbackConfig);
+    if (!result.ok) {
+        return {
+            statusCode: 400,
+            body: { status: 'error', message: result.message }
+        };
+    }
+
+    setConfig('cpuAffinity', result.value);
+    broadcastToControls(createCpuAffinityChangedMessage(result.value));
+    broadcastCpuConfig(createCpuConfigMessage(result.value));
+
+    return {
+        statusCode: 200,
+        body: {
+            status: 'success',
+            cpuAffinity: result.value
+        }
+    };
+}
+
 class Config extends DataSnapshot {
     static defaults = {
         server: {
@@ -42,6 +173,7 @@ class Config extends DataSnapshot {
                 autoRestart: true
             }
         },
+        cpuAffinity: cloneCpuAffinityConfig(),
         voiceprint: { enabled: true, extraction: 'server', threshold: 0.5, multiSpeaker: true },
         voiceCommand: {
             defaultWeatherCity: '',
@@ -386,6 +518,12 @@ module.exports.get = (key, defaultValue) => config.get(key, defaultValue);
 module.exports.set = (key, value) => config.set(key, value);
 module.exports.setTtsConfig = (ttsConfig) => config.setTtsConfig(ttsConfig);
 module.exports.getTtsConfig = () => config.getTtsConfig();
+module.exports.normalizeCpuAffinityConfig = (rawConfig, fallbackConfig) => normalizeCpuAffinityConfig(rawConfig, fallbackConfig);
+module.exports.validateCpuAffinityPayload = (payload, fallbackConfig) => validateCpuAffinityPayload(payload, fallbackConfig);
+module.exports.getCpuAffinityConfig = () => normalizeCpuAffinityConfig(config.get('cpuAffinity'));
+module.exports.createCpuAffinityChangedMessage = (cpuAffinity) => createCpuAffinityChangedMessage(cpuAffinity);
+module.exports.createCpuConfigMessage = (cpuAffinity) => createCpuConfigMessage(cpuAffinity);
+module.exports.applyCpuAffinityConfigUpdate = (options) => applyCpuAffinityConfigUpdate(options);
 module.exports.getDisplayState = (ip) => userConfig.getDisplayState(ip);
 module.exports.getDisplayStateById = (displayId, legacyIp) => userConfig.getDisplayStateById(displayId, legacyIp);
 module.exports.setDisplayState = (ip, state) => userConfig.setDisplayState(ip, state);

@@ -315,6 +315,43 @@ handleDisplayDisconnect(displayId, ws):
 
 ## 前端 WebSocket 客户端
 
+### 显示端客户端重连保护
+
+```
+状态:
+    displayWs = 当前 WebSocket 或 null
+    displayReconnectTimer = 当前重连定时器或 null
+    displayPageActive = 页面仍可连接
+
+scheduleDisplayReconnect():
+    如果页面不活跃 → 返回
+    如果 displayReconnectTimer 已存在 → 返回
+    如果 displayWs 状态为 CONNECTING 或 OPEN → 返回
+    displayReconnectTimer = setTimeout:
+        displayReconnectTimer = null
+        如果页面仍活跃 → connectWebSocket()
+
+connectWebSocket():
+    如果页面不活跃 → 返回
+    如果 displayWs 状态为 CONNECTING 或 OPEN → 返回
+    清理当前重连定时器
+    socket = new WebSocket(wsUrl)
+    displayWs = socket
+    socket.onopen/onmessage/onerror/onclose:
+        如果 displayWs !== socket → 忽略过期 socket 事件
+        按当前 socket 执行业务逻辑
+    socket.onclose:
+        仅当前 socket 执行显示端断开清理
+        scheduleDisplayReconnect()
+
+pagehide:
+    displayPageActive = false
+    清理 displayReconnectTimer
+    socket = displayWs
+    displayWs = null
+    如果 socket 存在且未关闭 → socket.close()
+```
+
 **public/js/websocket.js**:
 
 ```

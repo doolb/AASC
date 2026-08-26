@@ -44,8 +44,8 @@
 │   OfflineRecognizer)     │  ③ asr.device='display' 时 WS asrAudio 回本机  │ MediaRecorder（不变）   │
 │  recognize(pcm)→text     │ ◄──────────────────────────────┐             │ handleAsrAudio()       │
 │                          │  ④ JS 解码 webm→PCM 后调桥      │             │  改调原生桥            │
-│  asrRecognize() ◄────────┼───────────────────────────────│─────────────│                        │
-│  同步返回 text           │  ⑤ WS asrResult 回传服务器 ────►│────────────►│ voiceCommand（不变）   │
+│  asrRecognizeAsync() ◄───┼───────────────────────────────│─────────────│                        │
+│  异步回调 text            │  ⑤ WS asrResult 回传服务器 ────►│────────────►│ voiceCommand（不变）   │
 └──────────────────────────┘                                 └─────────────┴────────────────────────┘
 ```
 
@@ -71,7 +71,7 @@ sherpa-onnx `OfflineRecognizer` 的封装。
 - 识别 API 同步语义：输入 16kHz mono Float32 样本，输出文本；单例加锁串行处理并发请求
 - 内存：模型 mmap，APK 内存占用增加约 300-400MB
 
-### 3. NativeBridge 增量方法（3 个，JSON 约定同现有）
+### 3. NativeBridge 增量方法（异步识别，兼容旧同步桥）
 
 服务器 origin 由 `MainActivity` 在主线程的 `onPageStarted`/`onPageFinished` 回调中缓存到 `NativeBridge`；JavaScript bridge 线程只读取缓存，不直接访问 `WebView.url`，避免 WebView 跨线程访问导致模型下载入口提前返回。
 
@@ -83,9 +83,11 @@ fun asrStatus(): String
 // 触发模型下载+加载（幂等）。就绪返回 ready；下载中返回 downloading
 fun asrEnsureModel(): String
 
-// 一次性识别。输入：裸 PCM（16kHz mono s16le）的 base64
-// 同步返回 {"text":"..."} 或 {"error":"..."}
-// 实现：工作线程识别 + CountDownLatch 阻塞（同 takeScreenshot/compute 先例）
+// 一次性异步识别。输入：requestId、裸 PCM（16kHz mono s16le）的 base64、声纹模式
+// 立即返回 accepted；完成后由主线程回调 window.onNativeAsrResult
+fun asrRecognizeAsync(requestId: String, pcmBase64: String, useVoiceprint: Boolean, multiSpeaker: Boolean): String
+
+// 旧 APK 兼容入口：同步返回 {"text":"..."} 或 {"error":"..."}
 fun asrRecognize(pcmBase64: String): String
 ```
 
@@ -96,7 +98,25 @@ fun asrRecognize(pcmBase64: String): String
 window.onNativeAsrModel({state:'downloading', progress:42})
 window.onNativeAsrModel({state:'ready'})
 window.onNativeAsrModel({state:'error', error:'...'})
+window.onNativeAsrResult({requestId, text, error, speaker, segments})
 ```
+
+### 3.1 CPU 集群识别与 affinity 原语（Task 2）
+
+APK 新增共享的 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，供 ASR/TTS 并发池绑定工作槽使用；ASR pool 已接入同步与异步识别路径。
+
+- `CpuCluster.detect(reader)` 读取 `/sys/devices/system/cpu/possible`、`online` 和每个在线 CPU 的 `cpufreq/cpuinfo_max_freq`，按最大频率确定 big/little 集群；`reader` 可注入，JVM 单测不访问 Android sysfs。
+- `CpuTopology.policy(bigCoreCount, littleCoreCount)` 对请求数量做非负裁剪，按 CPU 编号稳定选择大核/小核，输出实际 CPU 列表、bit mask、有效数量和 fallback 原因；Kotlin/JNI 统一只支持 CPU ID `0..62`，CPU 63 和更高 ID 不进入 policy/mask。合法配置请求至少一个槽位且存在受支持 CPU 时返回确定性回退 CPU；如果设备只暴露不受支持的 CPU ID，则返回空 fallback policy 和 `cpuMask=0`，避免产生无法应用的非空策略。
+- `CpuAffinity.applyCurrentThread(cpuMask)` 通过 JNI 对当前 native 线程调用 `sched_setaffinity`；`cpuMask` 必须是 `0..62` 生成的正 Long mask。native 库加载失败、权限拒绝、系统调用失败或空 mask 都只记录日志并返回 `false`，不得让 ASR 请求失败。
+
+### 3.2 ASR 并发引擎池（Task 3）
+
+ASR 从单个全局 `OfflineRecognizer` 改为 `AsrEnginePool`。池大小等于服务器下发 ASR 大核数与小核数在 APK 拓扑中得到的 `policy.totalCoreCount`，但至少为 1；当 topology 或 mask 不可用时仍保留 1 个自动调度槽位。
+
+- 每个池槽拥有独立 sherpa-onnx `OfflineRecognizer` 和单线程 worker，`OfflineRecognizerConfig.modelConfig.numThreads=1`，避免“请求并发数 × 推理线程数”过量占核。
+- 每次识别先从池里获取空闲槽；超过槽位数量的请求在池内排队，不创建额外 recognizer。槽 worker 在线程内调用 `CpuAffinity.applyCurrentThread(slot.cpuMask)` 后再识别；affinity 返回 `false` 时只回退 Android 默认调度，不让请求失败。
+- 模型重载或 ASR CPU 配置变更时先构造新池，构造成功后原子替换当前池；旧池进入 retired 状态后仍继续服务已经 retain 的旧请求，包括已经阻塞等待空闲槽的请求。最后一个 retained 调用结束后再释放所有空闲槽，避免 in-flight/queued 识别读到已释放的 native recognizer 或永久等待。
+- Task 3 已接入 ASR pool；TTS pool、控制端大小核 UI 和 display.html 的 `cpuConfig` 消费分别在后续 Task 4/5 完成。
 
 ### 4. 录音权限补全（APK）
 
@@ -123,17 +143,34 @@ window.onNativeAsrModel({state:'error', error:'...'})
 收到 asrAudio(data.audioData = base64 webm/wav)
   ├─ 原生 ASR 可用 → base64 解码 → AudioContext.decodeAudioData
   │    → OfflineAudioContext 重采样 16kHz mono → s16le base64
-  │    → NativeDisplay.asrRecognize(pcm) → 回 asrResult{text}
+  │    → 新 APK 调 NativeDisplay.asrRecognizeAsync(requestId, pcm, voiceprint)
+  │    → ASR pool 按槽位并发识别 → window.onNativeAsrResult → 回 asrResult{text}
+  │    → 旧 APK 无异步入口时回退 NativeDisplay.asrRecognize(pcm)
   │    （模型未就绪：先 asrEnsureModel()，回 asrResult{error:'模型下载中'}，
-  │      服务器 30s 超时按失败处理，下次请求时模型可能已就绪）
+  │      服务器 60s 超时按失败处理，下次请求时模型可能已就绪）
   └─ 非 APK → 现有 SherpaASR.recognizeBuffer WASM 路径（不动）
 ```
+
+异步桥只在 JS bridge 线程提交任务并立即返回，识别最长 60 秒；超时或异常均通过
+`window.onNativeAsrResult` 回传；这样原生推理不会阻塞 WebView 的 WebSocket、媒体和页面事件循环。
 
 **5.4 下载进度上屏**：`onNativeAsrModel` 回调复用 `updateVoiceTextDisplay`：`downloading` 显示"语音模型下载中 N%"，`ready` 显示"语音识别已就绪"，`error` 显示失败原因。`AsrModelManager` 将状态切换为 `downloading` 后立即回调 0%，避免 tokens 下载、网络建立或首个模型数据块到达前界面没有提示；`detectCapabilities` 读到已有 `downloading` 状态时也立即恢复当前进度提示，覆盖 WebView 回调时序不确定的情况。
 
 **5.5 `asrConfig` 开关映射**：服务器推送 `localAsrEnabled` 时，APK 下映射为原生引擎启用/停用（停用时 `voiceRecognition` 报 false）；浏览器仍控制 WASM。
 
 **5.6 模型 hash 校验与缓存**：服务器在 `res/models/sensevoice/` 为每个模型保存同名 `.sha256` 文件。APK 首次下载时将模型写入 `.tmp`，下载完成后计算 SHA-256，与服务器 hash 文件比较；比较成功后才改名，并保存本地 `.sha256` 文件。后续启动不重新计算模型 hash，只读取本地保存的 hash 和服务器 hash 比较；模型文件、本地 hash 均存在且与服务器一致时直接加载。服务器 hash 暂时不可访问时，已有模型与本地 hash 均存在则沿用上次已验证结果；没有本地已验证文件时不启动无 hash 校验的下载。
+
+### 5.5.1 自动下载触发修复
+
+- detectCapabilities 的 WebGPU 异步诊断使用独立变量缓存，待 capabilities 对象初始化完成后再写入诊断字段，避免 JavaScript 暂时性死区异常中断能力检测。
+- 收到 localAsrEnabled=true 时，如果原生模型状态为 not_ready 或 error，主动调用幂等的 asrEnsureModel()；状态为 ready 时直接恢复 voiceRecognition 能力。
+- 以上修复保证首次连接和服务器动态切换两条路径都能触发模型下载。
+
+### 5.5.2 真机压测发现的后续问题
+
+- SM-N9500 真机已验证模型自动下载、hash 校验、加载和 `voiceRecognition=true` 能力上报。
+- 通过服务器路由的 5 次串行 `zh.wav` 请求均到达 APK，但 `NativeDisplay.asrRecognize()` 返回空 JSON `{}`，正式速度压测需待原生桥结果链路修复。
+- 声纹匹配 native 路径出现 `VoiceprintEngine.match` 崩溃，需与 ASR 识别链路分开定位。
 
 ### 6. 服务器改动（server-app.js，仅 1 个新接口）
 
@@ -163,7 +200,7 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 | 下载失败（断网/服务器不可达） | 已有本地 hash 与模型时沿用已验证模型；没有本地已验证文件或 hash 校验失败时回 `onNativeAsrModel{error}`，下次需要时重新触发下载 |
 | 模型 hash 不匹配 | 删除 `.tmp`、模型和本地 hash 文件，回 `onNativeAsrModel{error}`，下次重新下载 |
 | 模型文件损坏 | 加载自检失败 → 删除本地文件 → `not_ready` → 下次自动重下 |
-| 识别中收到新 `asrAudio` | 引擎单例加锁串行处理（与服务器单请求语义一致） |
+| 识别中收到新 `asrAudio` | 进入 ASR pool；每个 slot 独立 recognizer，单槽 worker 使用 `numThreads=1`，并发上限由配置核心总数决定 |
 | 用户拒绝 RECORD_AUDIO 权限 | `voiceRecording=false` 上报，语音 UI 沿用现有"能力关闭"路径 |
 | `asr.device=server` | APK 收不到 `asrAudio`，原生引擎闲置不耗资源 |
 | 低端机内存不足 | 加载前内存检查失败 → 报 `error`，不硬加载防 OOM |
@@ -206,6 +243,13 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 - 修复：`AsrEngine.load()` 加载 APK 私有目录中的绝对路径模型时向 sherpa-onnx 传入空 `AssetManager`，避免 AAR 将外部文件误当作 Asset 读取。
 - 真机复测：保留已通过 hash 校验的模型缓存后，APK 已直接进入 `ready`，没有重复下载。
 - 最终验证：`zh.wav` 返回“开饭时间早上9点至下午5点。”；串接 `zh.wav + en.wav` 返回一段完整 zh 文本“开放时间早上9点至下午5点。”，未注册的 en 片段被过滤。
+
+## 2026-08-26 集成验证记录（Task 6）
+
+- Node 集成回归 22/22 通过；Android JVM 单测与 `assembleDebug` 通过。
+- `npm run upload:apk` 和 `npm run start:apk:display -- 2` 成功；设备 `192.168.1.6:5555` 的 APK 进程存活，WindowManager 可见 display2 窗口。
+- 服务器默认 ASR 配置为 `1 大核 + 1 小核`，设备 CPU 0--3 为 little、CPU 4--7 为 big；进程允许 CPU 0--7。
+- 本轮未重新测量 ASR PSS/native heap，也未把 affinity syscall 成功率作为已验证结论；失败时仍按设计回退系统默认调度。
 
 ## 改动文件清单
 

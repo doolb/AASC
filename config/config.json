@@ -8,7 +8,8 @@
     "defaultSpeed": 0,
     "requestTimeoutMs": 20000,
     "extraTimeoutPerPending": 10000,
-    "maxErrorBytes": 65536
+    "maxErrorBytes": 65536,
+    "device": "display"
   },
   "asr": {
     "mode": "isolated",
@@ -20,7 +21,17 @@
       "requestTimeoutMs": 60000,
       "autoRestart": true
     },
-    "device": "server"
+    "device": "display"
+  },
+  "cpuAffinity": {
+    "asr": {
+      "bigCoreCount": 1,
+      "littleCoreCount": 1
+    },
+    "tts": {
+      "bigCoreCount": 1,
+      "littleCoreCount": 1
+    }
   },
   "voiceprint": {
     "enabled": true,

@@ -13,13 +13,21 @@ import java.io.RandomAccessFile
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 // display.html 的原生桥：截图（真实像素）+ 输入注入（真实触摸/按键，跨域内容可用）
 class NativeBridge(
     private val webView: WebView,
     private val mainHandler: Handler = Handler(Looper.getMainLooper())
 ) {
+
+    private companion object {
+        // ASR/TTS 统一允许最长 60 秒，保证原生桥、声纹分支和服务端等待边界一致。
+        const val ASR_TIMEOUT_SECONDS = 60L
+        const val TTS_TIMEOUT_SECONDS = 60L
+    }
 
     // 音频焦点变化回调必须切回 WebView 主线程，避免从 AudioManager 回调线程直接执行 JS。
     private val audioFocusController = AudioFocusController(webView.context) { change ->
@@ -142,8 +150,8 @@ class NativeBridge(
 
     // ---- ASR 原生识别桥（sherpa-onnx，模型按需下载）----
     private val asrModelManager = AsrModelManager(webView.context)
-    // 识别串行化：单线程执行器避免并发识别（与服务器单请求语义一致），future.get 带超时
-    private val asrExecutor = Executors.newSingleThreadExecutor()
+    // ASR 桥任务允许并发进入 AsrEnginePool；真实并发上限由 pool slot 队列控制，超额任务在池内排队。
+    private val asrExecutor = Executors.newCachedThreadPool()
 
     // ---- 声纹识别桥（speaker identification / 多人分割）----
    private val voiceprintModelManager = VoiceprintModelManager(webView.context)
@@ -151,8 +159,12 @@ class NativeBridge(
    private var voiceprintThreshold = 0.5f
     // ---- TTS 嵌入式语音合成桥（Microsoft Embedded Speech SDK，模型按需下载）----
     private val ttsModelManager = TtsModelManager(webView.context)
-    // 合成串行化：单线程执行器避免并发调用底层 SDK
-    private val ttsExecutor = Executors.newSingleThreadExecutor()
+    // TTS 桥侧自身即完成有限准入：worker 数和队列容量都等于当前 policy 的 slotCount。
+    // TtsEnginePool 的公平 Semaphore 仍保留，作为进入真实 synthesizer 槽位前的第二层保护。
+    private val ttsExecutor = TtsBridgeDispatcher(TtsEngine.currentPolicySlotCount())
+    private val ttsExecutorLock = Any()
+    // 异步桥超时监控不占用 ASR/TTS 推理线程，避免 JavaScript bridge 线程等待 Future。
+    private val asyncTimeoutExecutor = Executors.newSingleThreadScheduledExecutor()
     private var voiceprintMultiSpeaker = false
 
     // 同步截图：JS 侧调用即阻塞等待主线程完成 WebView.draw，返回 JSON
@@ -253,10 +265,47 @@ class NativeBridge(
         }
     }
 
-    // 一次性识别：输入裸 PCM（16kHz mono s16le）的 base64，同步返回 {"text":"..."} 或 {"error":"..."}
-    // 识别在工作线程串行执行（asrExecutor），桥调用阻塞最多 20s（同 takeScreenshot 阻塞先例）
+    // 应用服务器下发的 CPU affinity 配置。ASR/TTS 各自使用独立 policy 和独立 pool。
     @JavascriptInterface
-    fun asrRecognize(pcmBase64: String): String {
+    fun cpuConfigure(configJson: String): String {
+        return try {
+            val config = JSONObject(configJson)
+            val topology = CpuCluster.detect()
+            val asrConfig = config.optJSONObject("asr")
+            val ttsConfig = config.optJSONObject("tts")
+            val asrPolicy = topology.policy(
+                bigCoreCount = readCoreCount(asrConfig, "bigCoreCount"),
+                littleCoreCount = readCoreCount(asrConfig, "littleCoreCount")
+            )
+            val ttsPolicy = topology.policy(
+                bigCoreCount = readCoreCount(ttsConfig, "bigCoreCount"),
+                littleCoreCount = readCoreCount(ttsConfig, "littleCoreCount")
+            )
+            if (!AsrEngine.configurePolicy(asrPolicy)) {
+                return JSONObject().put("error", "ASR CPU 配置应用失败").toString()
+            }
+            synchronized(ttsExecutorLock) {
+                if (!TtsEngine.configurePolicy(ttsPolicy)) {
+                    return JSONObject().put("error", "TTS CPU 配置应用失败").toString()
+                }
+                // 只在 TTS policy 成功应用后换代；旧桥任务由旧执行器自然排空，不中断活动合成。
+                ttsExecutor.reconfigure(maxOf(1, ttsPolicy.totalCoreCount))
+            }
+            JSONObject()
+                .put("ok", true)
+                .put("asr", cpuPolicyJson(asrPolicy))
+                .put("tts", cpuPolicyJson(ttsPolicy))
+                .put("topology", cpuTopologyJson(topology))
+                .toString()
+        } catch (e: Exception) {
+            JSONObject().put("error", e.message ?: "CPU 配置异常").toString()
+        }
+    }
+
+    // 一次性识别：输入裸 PCM（16kHz mono s16le）的 base64，同步返回 {"text":"..."} 或 {"error":"..."}
+    // ASR 桥任务可并发提交到 cached executor，真实推理并发由 AsrEnginePool 槽位限制；桥调用最多等待 60 秒。
+    @JavascriptInterface
+   fun asrRecognize(pcmBase64: String): String {
         return try {
             if (!asrModelManager.isReady) {
                 return JSONObject().put("error", "模型未就绪").toString()
@@ -265,7 +314,7 @@ class NativeBridge(
             val samples = AsrPcm.decodeS16(bytes)
             val text = asrExecutor.submit {
                 AsrEngine.recognize(samples)
-            }.get(20, TimeUnit.SECONDS)
+            }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             JSONObject().put("text", text).toString()
         } catch (e: java.util.concurrent.TimeoutException) {
             JSONObject().put("error", "识别超时").toString()
@@ -273,6 +322,133 @@ class NativeBridge(
             JSONObject().put("error", e.message ?: "识别失败").toString()
        }
    }
+
+    // 异步 ASR：JavaScript bridge 线程只负责入队，识别结果通过主线程回调 window.onNativeAsrResult。
+    @JavascriptInterface
+    fun asrRecognizeAsync(
+        requestId: String,
+        pcmBase64: String,
+        useVoiceprint: Boolean,
+        multiSpeaker: Boolean
+    ): String {
+        if (!asrModelManager.isReady) {
+            return JSONObject().put("accepted", false).put("error", "模型未就绪").toString()
+        }
+
+        val completed = AtomicBoolean(false)
+        try {
+            lateinit var future: Future<*>
+            future = asrExecutor.submit {
+                val result = try {
+                    val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
+                    val samples = AsrPcm.decodeS16(bytes)
+                    recognizeAsyncPayload(samples, useVoiceprint, multiSpeaker)
+                } catch (e: Exception) {
+                    JSONObject().put("error", e.message ?: "识别失败")
+                }
+                if (completed.compareAndSet(false, true)) {
+                    postNativeAsrResult(requestId, result)
+                }
+            }
+            asyncTimeoutExecutor.schedule({
+                if (completed.compareAndSet(false, true)) {
+                    future.cancel(true)
+                    postNativeAsrResult(requestId, JSONObject().put("error", "识别超时"))
+                }
+            }, ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            return JSONObject().put("accepted", true).toString()
+        } catch (e: Exception) {
+            return JSONObject().put("accepted", false).put("error", e.message ?: "识别任务提交失败").toString()
+        }
+    }
+
+    // 原生 ASR/声纹统一结果，避免 display.html 为声纹分支重新同步调用多个桥方法。
+    private fun recognizeAsyncPayload(samples: FloatArray, useVoiceprint: Boolean, multiSpeaker: Boolean): JSONObject {
+        if (!useVoiceprint || !voiceprintEnabled || !voiceprintModelManager.isReady || !VoiceprintEngine.ready) {
+            return JSONObject().put("text", AsrEngine.recognize(samples))
+        }
+        if (multiSpeaker) {
+            if (samples.isEmpty()) return JSONObject().put("error", "音频数据为空")
+            val segments = VoiceprintEngine.diarize(samples)
+            val indexMergedSegments = VoiceprintSegmentMerger.merge(segments.map { seg ->
+                VoiceprintSegmentMerger.DiarizedSegment(seg.start, seg.end, seg.speakerIndex)
+            })
+            val matchedSegments = indexMergedSegments.map { seg ->
+                val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
+                val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
+                val embedding = VoiceprintEngine.extract(samples.copyOfRange(startIdx, endIdx))
+                VoiceprintSegmentMerger.MatchedSegment(seg.start, seg.end, VoiceprintEngine.match(embedding))
+            }
+            val mergedSegments = VoiceprintSegmentMerger.mergeMatched(matchedSegments)
+            val arr = org.json.JSONArray()
+            for (seg in mergedSegments) {
+                val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
+                val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
+                val mergedSamples = samples.copyOfRange(startIdx, endIdx)
+                val text = if (mergedSamples.size >= 1600) AsrEngine.recognize(mergedSamples) else ""
+                arr.put(JSONObject()
+                    .put("start", seg.start.toDouble())
+                    .put("end", seg.end.toDouble())
+                    .put("text", text)
+                    .put("speaker", seg.speaker ?: JSONObject.NULL))
+            }
+            return JSONObject().put("segments", arr)
+        }
+        val text = AsrEngine.recognize(samples)
+        val embedding = VoiceprintEngine.extract(samples)
+        val speaker = VoiceprintEngine.match(embedding)
+        return JSONObject()
+            .put("text", text)
+            .put("speaker", speaker ?: JSONObject.NULL)
+            .put("dim", VoiceprintEngine.dim)
+    }
+
+    private fun postNativeAsrResult(requestId: String, result: JSONObject) {
+        result.put("requestId", requestId)
+        val js = "window.onNativeAsrResult && window.onNativeAsrResult(${result.toString()});"
+        mainHandler.post {
+            try {
+                webView.evaluateJavascript(js, null)
+            } catch (_: Exception) {
+                // 页面销毁或重载期间回调可能失效，不能让原生工作线程因此崩溃。
+            }
+        }
+    }
+
+    private fun readCoreCount(config: JSONObject?, fieldName: String): Int {
+        val raw = config?.opt(fieldName)
+        return when (raw) {
+            is Number -> raw.toInt().coerceAtLeast(0)
+            else -> 1
+        }
+    }
+
+    private fun cpuPolicyJson(policy: CpuPolicy): JSONObject {
+        return JSONObject()
+            .put("bigCpus", intListJson(policy.bigCpus))
+            .put("littleCpus", intListJson(policy.littleCpus))
+            .put("selectedCpus", intListJson(policy.selectedCpus))
+            .put("cpuMask", policy.cpuMask)
+            .put("effectiveBigCoreCount", policy.effectiveBigCoreCount)
+            .put("effectiveLittleCoreCount", policy.effectiveLittleCoreCount)
+            .put("totalCoreCount", policy.totalCoreCount)
+            .put("fallback", policy.fallback)
+            .put("fallbackReason", policy.fallbackReason ?: JSONObject.NULL)
+    }
+
+    private fun cpuTopologyJson(topology: CpuTopology): JSONObject {
+        return JSONObject()
+            .put("bigCpus", intListJson(topology.bigCpus))
+            .put("littleCpus", intListJson(topology.littleCpus))
+            .put("fallback", topology.fallback)
+            .put("fallbackReason", topology.fallbackReason ?: JSONObject.NULL)
+    }
+
+    private fun intListJson(values: List<Int>): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        for (value in values) arr.put(value)
+        return arr
+    }
 
    // 查询声纹引擎状态：{"ready":true|false,"dim":512,"speakers":["妲己"]}（dim 由模型决定，eres2net 为 512）
     // ---- TTS 嵌入式语音合成桥接口 ----
@@ -296,21 +472,75 @@ class NativeBridge(
     }
 
     // 离线合成文本为 WAV：输入文本，同步返回 {"audio":"<base64 wav>"} 或 {"error":"..."}
-    // 合成在工作线程串行执行（ttsExecutor），桥调用阻塞最多 30s
+    // TTS 桥任务提交到有界 executor，真实推理由 TtsEnginePool 槽位限制；桥调用最多等待 60 秒。
     @JavascriptInterface
     fun ttsSynthesize(text: String): String {
+        var future: Future<ByteArray>? = null
         return try {
             if (!ttsModelManager.isReady) {
                 return JSONObject().put("error", "模型未就绪").toString()
             }
-            val audio = ttsExecutor.submit(Callable<ByteArray> {
-                TtsEngine.synthesize(text)
-            }).get(30, TimeUnit.SECONDS)
+            future = synchronized(ttsExecutorLock) {
+                ttsExecutor.submit(Callable<ByteArray> {
+                    TtsEngine.synthesize(text)
+                })
+            }
+            val audio = future.get(TTS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             JSONObject().put("audio", Base64.encodeToString(audio, Base64.NO_WRAP)).toString()
         } catch (e: java.util.concurrent.TimeoutException) {
+            // 超时后尽量中断仍停留在 admission/idle slot 等待中的桥任务，避免无意义占用。
+            // 已进入原生合成的 slot 会自行等到底层调用完成后再归还，不会并发复用 synthesizer。
+            future?.cancel(true)
             JSONObject().put("error", "合成超时").toString()
         } catch (e: Exception) {
             JSONObject().put("error", e.message ?: "合成失败").toString()
+        }
+    }
+
+    // 异步 TTS：JavaScript bridge 线程立即返回，生成结果通过主线程回调 window.onNativeTtsResult。
+    @JavascriptInterface
+    fun ttsSynthesizeAsync(requestId: String, text: String): String {
+        if (!ttsModelManager.isReady) {
+            return JSONObject().put("accepted", false).put("error", "模型未就绪").toString()
+        }
+
+        val completed = AtomicBoolean(false)
+        try {
+            lateinit var future: Future<*>
+            future = synchronized(ttsExecutorLock) {
+                ttsExecutor.submit(Callable {
+                    val result = try {
+                        val audio = TtsEngine.synthesize(text)
+                        JSONObject().put("audio", Base64.encodeToString(audio, Base64.NO_WRAP))
+                    } catch (e: Exception) {
+                        JSONObject().put("error", e.message ?: "合成失败")
+                    }
+                    if (completed.compareAndSet(false, true)) {
+                        postNativeTtsResult(requestId, result)
+                    }
+                })
+            }
+            asyncTimeoutExecutor.schedule({
+                if (completed.compareAndSet(false, true)) {
+                    future.cancel(true)
+                    postNativeTtsResult(requestId, JSONObject().put("error", "合成超时"))
+                }
+            }, TTS_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            return JSONObject().put("accepted", true).toString()
+        } catch (e: Exception) {
+            return JSONObject().put("accepted", false).put("error", e.message ?: "合成任务提交失败").toString()
+        }
+    }
+
+    private fun postNativeTtsResult(requestId: String, result: JSONObject) {
+        result.put("requestId", requestId)
+        val js = "window.onNativeTtsResult && window.onNativeTtsResult(${result.toString()});"
+        mainHandler.post {
+            try {
+                webView.evaluateJavascript(js, null)
+            } catch (_: Exception) {
+                // 页面销毁或重载期间回调可能失效，不能让原生工作线程因此崩溃。
+            }
         }
     }
 
@@ -376,7 +606,7 @@ class NativeBridge(
             }
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
             val samples = AsrPcm.decodeS16(bytes)
-            val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(20, TimeUnit.SECONDS)
+            val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             val speaker = VoiceprintEngine.match(embedding)
             JSONObject().put("speaker", speaker ?: JSONObject.NULL).put("dim", VoiceprintEngine.dim).toString()
         } catch (e: java.util.concurrent.TimeoutException) {
@@ -426,7 +656,7 @@ class NativeBridge(
                         .put("speaker", seg.speaker))
                 }
                 arr
-            }.get(30, TimeUnit.SECONDS)
+            }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             JSONObject().put("segments", segJson).toString()
         } catch (e: java.util.concurrent.TimeoutException) {
             JSONObject().put("error", "多人分割超时").toString()
@@ -444,7 +674,7 @@ class NativeBridge(
             }
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
             val samples = AsrPcm.decodeS16(bytes)
-            val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(20, TimeUnit.SECONDS)
+            val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             val arr = org.json.JSONArray()
             for (v in embedding) arr.put(v.toDouble())
             JSONObject().put("dim", embedding.size).put("embedding", arr).toString()

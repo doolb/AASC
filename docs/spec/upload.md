@@ -259,6 +259,52 @@ else:
   → WS mediaBatch → 服务器 → 显示端（复用临时模式）
 ```
 
+## APK CPU 并发控制
+
+控制端把 APK 大小核并发配置放在现有显示控制面板内，沿用 `tts.js` 作为 ASR/TTS 配置辅助逻辑，`websocket.js` 只负责广播消息分发。
+
+```text
+CpuAffinitySettings.normalizeCoreCount(raw):
+  parsed = Number.parseInt(raw, 10)
+  parsed 非有限数 -> 0
+  parsed < 0 -> 0
+  return parsed
+
+CpuAffinitySettings.normalizeEngineConfig(engine):
+  big = normalizeCoreCount(engine.bigCoreCount)
+  little = normalizeCoreCount(engine.littleCoreCount)
+  if big + little <= 0:
+    little = 1
+  return { bigCoreCount: big, littleCoreCount: little }
+
+CpuAffinitySettings.normalizeConfig(raw):
+  asr = normalizeEngineConfig(raw.asr)
+  tts = normalizeEngineConfig(raw.tts)
+  return { asr, tts }
+
+CpuAffinitySettings.loadConfig():
+  GET /api/config/cpuAffinity
+  data.status == 'success' -> applyConfig(data.cpuAffinity)
+  否则保持输入框当前值并显示错误 toast
+
+CpuAffinitySettings.readConfigFromInputs():
+  读取 asrBigCoreCountInput / asrLittleCoreCountInput / ttsBigCoreCountInput / ttsLittleCoreCountInput
+  return normalizeConfig({ asr, tts })
+
+CpuAffinitySettings.saveConfig():
+  payload = readConfigFromInputs()
+  POST /api/config/cpuAffinity with JSON payload
+  data.status == 'success' -> applyConfig(data.cpuAffinity), 更新状态文案
+  失败 -> toast(error)
+
+CpuAffinitySettings.handleConfigChanged(cpuAffinity):
+  applyConfig(cpuAffinity)
+  更新状态文案为“已同步服务器配置”
+
+WebSocketManager.handleMessage(data):
+  data.type == 'cpuAffinityChanged' -> CpuAffinitySettings.handleConfigChanged(data.cpuAffinity)
+```
+
 ### 事件绑定 (upload.js init)
 ```
 cropPreviewContainer.addEventListener('dragover'):

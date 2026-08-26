@@ -53,6 +53,17 @@ dispatchControlInputNative:
     crossOriginControl          = nativeBridge 存在且 injectTouch 可用
     crossOriginControlDegraded  = 桥存在但触摸不可用
 
+CPU 配置消费(applyCpuConfig):
+    config = { asr: data.asr, tts: data.tts }
+    nativeBridge 不存在 -> return
+    nativeBridge.cpuConfigure 不是函数 -> return
+    result = JSON.parse(nativeBridge.cpuConfigure(JSON.stringify(config)))
+    result.error -> 仅 console.warn，不抛异常
+
+display websocket onmessage:
+    data.type == 'cpuConfig' -> applyCpuConfig({ asr: data.asr, tts: data.tts })
+    继续保留 asrConfig / ttsConfig / voiceprintConfig / ttsGenerate 原有顺序与 fallback
+
 媒体播放状态检测:
     desiredPlaying = 控制端 play 命令/恢复状态/播放列表状态
     media = currentMediaType == audio ? mediaAudio : mediaVideo
@@ -85,6 +96,24 @@ KeyInjector            dispatchKeyEvent 真实按键；ASCII 逐字符；中文�
 DisplayAccessibilityService   dispatchGesture 真实触摸/滚轮
 TouchInjector          触摸注入入口，服务未开启返回 false
 ```
+
+## Samsung DeX 全屏启动
+
+```
+APK Manifest.application:
+    声明 com.samsung.android.dex.launchwidth = 0
+    声明 com.samsung.android.dex.launchheight = 0
+
+MainActivity.onCreate:
+    继续设置 KEEP_SCREEN_ON
+    继续调用 hideSystemUi() 隐藏状态栏和导航栏
+
+窗口启动:
+    普通 Android 窗口 → 由沉浸式系统栏标志铺满内容区域
+    Samsung DeX freeform 窗口 → 由 launchwidth/launchheight=0 请求启动即全屏
+```
+
+`minSdk=26` 只限制最低运行系统，不参与 DeX 窗口尺寸决策；`targetSdk=34` 在 TTS 接入前后保持不变。
 
 权限：仅 INTERNET + 无障碍服务（BIND_ACCESSIBILITY_SERVICE）。不用 MediaProjection。
 

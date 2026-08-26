@@ -41,6 +41,7 @@
 | 子服务器 | [sub-server.md](design/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | 服务端语音识别 | [sherpa-asr.md](design/sherpa-asr.md) | ASR 串行识别、native 资源释放、临时文件清理 |
 | 服务端 TTS | [tts.md](design/tts.md) | 外部 TTS 调用超时、流式写盘、失败清理与内存保护 |
+| Linux TTS 服务 | [tts-linux.md](design/tts-linux.md) | Embedded Speech Linux TTS HTTP 服务与 NaturalVoice 运行时解耦 |
 | 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/design/android-offline-tts-apk.md) | 内置 Xiaoxiao 模型、离线生成、播放和耗时显示 |
 | Android TTS CPU 核心模式 | [android-tts-cpu-affinity.md](../3rd/tts-server/docs/design/android-tts-cpu-affinity.md) | 自动/大核/小核选择、JNI affinity 和自动回退 |
 | 显示端分布式能力 | [display-capability.md](design/display-capability.md) | 显示端能力声明、能力路由、分布式协调 |

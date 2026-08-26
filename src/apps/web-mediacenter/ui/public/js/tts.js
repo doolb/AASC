@@ -2,6 +2,9 @@ const Tts = {
     autoTtsEnabled: true,
     
     init() {
+        if (window.CpuAffinitySettings) {
+            window.CpuAffinitySettings.init();
+        }
     },
     
     toggleAutoTts() {
@@ -211,6 +214,153 @@ const TtsDevice = {
 window.TtsDevice = TtsDevice;
 window.setTtsDevice = TtsDevice.setDevice.bind(TtsDevice);
 
+const CpuAffinitySettings = {
+    currentConfig: {
+        asr: { bigCoreCount: 1, littleCoreCount: 1 },
+        tts: { bigCoreCount: 1, littleCoreCount: 1 }
+    },
+
+    init() {
+        const saveBtn = document.getElementById('cpuAffinitySaveBtn');
+        if (saveBtn && !saveBtn.dataset.bound) {
+            saveBtn.dataset.bound = '1';
+            saveBtn.addEventListener('click', () => {
+                this.saveConfig();
+            });
+        }
+        this.applyConfig(this.currentConfig, '加载中...');
+        this.loadConfig();
+    },
+
+    normalizeCoreCount(raw, fallbackValue) {
+        if (raw === undefined || raw === null || raw === '') {
+            return fallbackValue;
+        }
+        const parsed = Number.parseInt(raw, 10);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return fallbackValue;
+        }
+        return parsed;
+    },
+
+    normalizeEngineConfig(engine, fallbackFieldValue) {
+        const source = engine || {};
+        const normalized = {
+            bigCoreCount: this.normalizeCoreCount(source.bigCoreCount, fallbackFieldValue),
+            littleCoreCount: this.normalizeCoreCount(source.littleCoreCount, fallbackFieldValue)
+        };
+        if (normalized.bigCoreCount + normalized.littleCoreCount <= 0) {
+            normalized.littleCoreCount = 1;
+        }
+        return normalized;
+    },
+
+    normalizeConfig(config, fallbackFieldValue) {
+        const source = config || {};
+        return {
+            asr: this.normalizeEngineConfig(source.asr, fallbackFieldValue),
+            tts: this.normalizeEngineConfig(source.tts, fallbackFieldValue)
+        };
+    },
+
+    getInputs() {
+        return {
+            asrBig: document.getElementById('asrBigCoreCountInput'),
+            asrLittle: document.getElementById('asrLittleCoreCountInput'),
+            ttsBig: document.getElementById('ttsBigCoreCountInput'),
+            ttsLittle: document.getElementById('ttsLittleCoreCountInput'),
+            status: document.getElementById('cpuAffinityStatus')
+        };
+    },
+
+    updateStatus(text) {
+        const { status } = this.getInputs();
+        if (status) {
+            status.textContent = text;
+        }
+    },
+
+    formatStatus(config, prefix) {
+        const normalized = this.normalizeConfig(config, 1);
+        return `${prefix} ASR 大${normalized.asr.bigCoreCount}/小${normalized.asr.littleCoreCount} | TTS 大${normalized.tts.bigCoreCount}/小${normalized.tts.littleCoreCount}`;
+    },
+
+    applyConfig(config, statusText) {
+        const normalized = this.normalizeConfig(config, 1);
+        const inputs = this.getInputs();
+
+        this.currentConfig = normalized;
+        if (inputs.asrBig) inputs.asrBig.value = String(normalized.asr.bigCoreCount);
+        if (inputs.asrLittle) inputs.asrLittle.value = String(normalized.asr.littleCoreCount);
+        if (inputs.ttsBig) inputs.ttsBig.value = String(normalized.tts.bigCoreCount);
+        if (inputs.ttsLittle) inputs.ttsLittle.value = String(normalized.tts.littleCoreCount);
+
+        this.updateStatus(statusText || this.formatStatus(normalized, '当前配置:'));
+        return normalized;
+    },
+
+    readConfigFromInputs() {
+        const inputs = this.getInputs();
+        return this.normalizeConfig({
+            asr: {
+                bigCoreCount: inputs.asrBig ? inputs.asrBig.value : 1,
+                littleCoreCount: inputs.asrLittle ? inputs.asrLittle.value : 1
+            },
+            tts: {
+                bigCoreCount: inputs.ttsBig ? inputs.ttsBig.value : 1,
+                littleCoreCount: inputs.ttsLittle ? inputs.ttsLittle.value : 1
+            }
+        }, 0);
+    },
+
+    async loadConfig() {
+        try {
+            const res = await fetch('/api/config/cpuAffinity');
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.applyConfig(data.cpuAffinity, '已同步服务器配置');
+                return;
+            }
+            this.updateStatus('加载失败');
+            showToast('加载 CPU 并发配置失败', 'error');
+        } catch (err) {
+            console.error('[CPU] 加载配置失败:', err);
+            this.updateStatus('加载失败');
+            showToast('加载 CPU 并发配置失败: ' + err.message, 'error');
+        }
+    },
+
+    async saveConfig() {
+        const payload = this.readConfigFromInputs();
+        this.applyConfig(payload, '保存中...');
+
+        try {
+            const res = await fetch('/api/config/cpuAffinity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.applyConfig(data.cpuAffinity, '已保存服务器配置');
+                showToast('CPU 并发配置已保存', 'success');
+                return;
+            }
+            this.updateStatus('保存失败');
+            showToast('保存 CPU 并发配置失败: ' + (data.message || '未知错误'), 'error');
+        } catch (err) {
+            console.error('[CPU] 保存配置失败:', err);
+            this.updateStatus('保存失败');
+            showToast('保存 CPU 并发配置失败: ' + err.message, 'error');
+        }
+    },
+
+    handleConfigChanged(config) {
+        this.applyConfig(config, '已同步服务器配置');
+    }
+};
+
+window.CpuAffinitySettings = CpuAffinitySettings;
 window.Tts = Tts;
 window.toggleAutoTts = Tts.toggleAutoTts.bind(Tts);
 window.stopTts = Tts.stop.bind(Tts);

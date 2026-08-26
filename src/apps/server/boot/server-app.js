@@ -117,6 +117,20 @@ function sendLogReportConfigToAllDisplays() {
     });
 }
 
+function sendCpuConfigToDisplay(displayId, cpuConfigMessage = null) {
+    const displayData = displayClients.get(displayId);
+    if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
+        const message = cpuConfigMessage || config.createCpuConfigMessage(config.getCpuAffinityConfig());
+        displayData.ws.send(JSON.stringify(message));
+    }
+}
+
+function sendCpuConfigToAllDisplays(cpuConfigMessage = null) {
+    displayClients.forEach((_, displayId) => {
+        sendCpuConfigToDisplay(displayId, cpuConfigMessage);
+    });
+}
+
 function log(category, message, extra) {
     const timestamp = new Date().toTimeString().split(' ')[0];
     const entry = logBuffer.add(category, message, extra);
@@ -601,6 +615,7 @@ async function startServer() {
 
             // 初始化远程任务引擎
             taskManager = new TaskManager({ maxInstances: 50 });
+            taskManager.setGenerateTts((text, voice, speed) => generateTtsWithFallback(text, voice, speed));
             registerTaskHandlers(wsServer, taskManager,
                 (msg) => broadcastToControls(msg),
                 (displayId, msg) => sendToDisplay(displayId, msg)
@@ -1096,6 +1111,27 @@ app.post('/api/config/ttsDevice', (req, res) => {
         res.json({ status: 'success', device });
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+// APK ASR/TTS CPU 大小核并发配置：服务器只保存大核/小核数量并广播，旧客户端忽略未知 cpuConfig。
+app.get('/api/config/cpuAffinity', (req, res) => {
+    res.json({
+        status: 'success',
+        cpuAffinity: config.getCpuAffinityConfig()
+    });
+});
+
+app.post('/api/config/cpuAffinity', (req, res) => {
+    try {
+        const result = config.applyCpuAffinityConfigUpdate({
+            body: req.body,
+            broadcastToControls,
+            broadcastCpuConfig: sendCpuConfigToAllDisplays
+        });
+        res.status(result.statusCode).json(result.body);
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: 'CPU 配置更新失败' });
     }
 });
 
@@ -2807,7 +2843,7 @@ function findDisplayWithVoiceprint() {
 
 function sendAudioToDisplayAsr(display, audioBase64, requestId) {
     return new Promise((resolve, reject) => {
-        const timeoutMs = 30000;
+        const timeoutMs = 60000;
         const timer = setTimeout(() => {
             pendingDisplayAsrRequests.delete(requestId);
             reject(new Error('显示端 ASR 响应超时'));
@@ -2842,26 +2878,50 @@ function findDisplayWithTts() {
 
 const pendingDisplayTtsRequests = new Map();
 let pendingDisplayTtsRequestId = 0;
+const TTS_START_ACK_TIMEOUT_MS = 3000;
+const TTS_GENERATION_TIMEOUT_MS = 60000;
 
 // 向显示端发送 TTS 生成请求，等待 base64 WAV 回包；超时 60s
 function sendTtsGenerateToDisplay(display, text, requestId) {
     return new Promise((resolve, reject) => {
-        const timeoutMs = 60000;
-        const timer = setTimeout(() => {
+        const pending = {
+            displayId: display.id,
+            resolve,
+            reject,
+            timer: null,
+            startTimer: null,
+            started: false
+        };
+        pending.timer = setTimeout(() => {
+            if (pendingDisplayTtsRequests.get(requestId) !== pending) return;
             pendingDisplayTtsRequests.delete(requestId);
+            clearTimeout(pending.startTimer);
             reject(new Error('显示端 TTS 生成超时'));
-        }, timeoutMs);
+        }, TTS_GENERATION_TIMEOUT_MS);
+        pending.startTimer = setTimeout(() => {
+            if (pendingDisplayTtsRequests.get(requestId) !== pending || pending.started) return;
+            pendingDisplayTtsRequests.delete(requestId);
+            clearTimeout(pending.timer);
+            reject(new Error('显示端未收到 TTS 开始生成回执'));
+        }, TTS_START_ACK_TIMEOUT_MS);
 
-        pendingDisplayTtsRequests.set(requestId, { resolve, reject, timer });
+        pendingDisplayTtsRequests.set(requestId, pending);
 
         try {
-            sendToDisplay(display.id, {
+            const sent = sendToDisplay(display.id, {
                 type: 'ttsGenerate',
                 text: text,
                 requestId: requestId
             });
+            if (!sent) {
+                clearTimeout(pending.timer);
+                clearTimeout(pending.startTimer);
+                pendingDisplayTtsRequests.delete(requestId);
+                reject(new Error('显示端已离线，无法开始 TTS 生成'));
+            }
         } catch (err) {
-            clearTimeout(timer);
+            clearTimeout(pending.timer);
+            clearTimeout(pending.startTimer);
             pendingDisplayTtsRequests.delete(requestId);
             reject(new Error('发送 TTS 请求到显示端失败: ' + err.message));
         }
@@ -3173,6 +3233,10 @@ wss.on('connection', (ws, req) => {
             localTtsEnabled: ttsDevice === 'display'
         }));
 
+        ws.send(JSON.stringify(
+            config.createCpuConfigMessage(config.getCpuAffinityConfig())
+        ));
+
         // 显示端连接时推送声纹配置，避免新连接 APK 默认关闭声纹
         ws.send(JSON.stringify({
             type: 'voiceprintConfig',
@@ -3274,13 +3338,26 @@ wss.on('connection', (ws, req) => {
                     return;
                 }
 
+                // 显示端 TTS 开始生成回执：必须先于最终 ttsResult 到达。
+                if (data.type === 'ttsGenerating') {
+                    const pending = pendingDisplayTtsRequests.get(data.requestId);
+                    if (pending) {
+                        pending.started = true;
+                        clearTimeout(pending.startTimer);
+                    }
+                    return;
+                }
+
                 // 显示端 TTS 生成回包：base64 WAV 或 error
                 if (data.type === 'ttsResult') {
                     const pending = pendingDisplayTtsRequests.get(data.requestId);
                     if (pending) {
                         pendingDisplayTtsRequests.delete(data.requestId);
                         clearTimeout(pending.timer);
-                        if (data.audioData) {
+                        clearTimeout(pending.startTimer);
+                        if (!pending.started) {
+                            pending.reject(new Error('显示端未先回报 TTS 开始生成'));
+                        } else if (data.audioData) {
                             pending.resolve({ audioData: data.audioData });
                         } else {
                             pending.reject(new Error(data.error || '显示端 TTS 生成失败'));
@@ -3318,6 +3395,13 @@ wss.on('connection', (ws, req) => {
 
             muteState.previousVolumes.delete(displayId);
             displayClients.delete(displayId);
+            for (const [requestId, pending] of pendingDisplayTtsRequests) {
+                if (pending.displayId !== displayId) continue;
+                pendingDisplayTtsRequests.delete(requestId);
+                clearTimeout(pending.timer);
+                clearTimeout(pending.startTimer);
+                pending.reject(new Error('显示端已离线，TTS 生成失败'));
+            }
             ws.removeAllListeners();
             if (wsServer) {
                 wsServer.handleDisplayDisconnect(displayId, ws);
@@ -3717,7 +3801,7 @@ async function handleControlMessageFallback(data, ws) {
                                     const helpTTS = '系统指令帮助：说系统显示此帮助。说私聊加助手名字进入私聊模式。说退出私聊退出私聊模式。说提醒加时间和内容设置提醒。说今日提醒或今天提醒查看今日提醒。说明日提醒或明天提醒查看明日提醒。说报时或现在几点播报当前时间。说开启报时或关闭报时控制报时功能。说静音或全部静音静音所有显示端。说取消静音或恢复音量取消静音。说天气加城市查询天气。说播放加文件名搜索并播放媒体。说搜索加关键词搜索信息。说拒绝或取消取消待确认操作。';
                                     (async () => {
                                         try {
-                                            const audioPath = await tts.generateTTS(helpTTS);
+                                            const audioPath = await generateTtsWithFallback(helpTTS);
                                             const fileName = path.basename(audioPath);
                                             sendToDisplay(targetDisplayId, {
                                                 type: 'voiceCommand',
@@ -3744,7 +3828,7 @@ async function handleControlMessageFallback(data, ws) {
                                 if (targetDisplayId && sendToDisplay) {
                                     (async () => {
                                         try {
-                                            const audioPath = await tts.generateTTS(modeText);
+                                            const audioPath = await generateTtsWithFallback(modeText);
                                             const fileName = path.basename(audioPath);
                                             sendToDisplay(targetDisplayId, {
                                                 type: 'voiceCommand',
@@ -3857,7 +3941,7 @@ async function handleControlMessageFallback(data, ws) {
                         if (todayReminders.length > 0 && displayId) {
                             const text = todayReminders.map(r => `${r.time} ${r.content}`).join('，');
                             try {
-                                const audioPath = await tts.generateTTS(`今日提醒：${text}`);
+                                const audioPath = await generateTtsWithFallback(`今日提醒：${text}`);
                                 const fileName = path.basename(audioPath);
                                 sendToDisplay(displayId, {
                                     type: 'tts',
@@ -3870,7 +3954,7 @@ async function handleControlMessageFallback(data, ws) {
                             }
                         } else if (displayId) {
                             try {
-                                const audioPath = await tts.generateTTS('今天没有提醒');
+                                const audioPath = await generateTtsWithFallback('今天没有提醒');
                                 const fileName = path.basename(audioPath);
                                 sendToDisplay(displayId, {
                                     type: 'tts',
@@ -4296,7 +4380,7 @@ async function handleControlMessageFallback(data, ws) {
                                 const targetDisplayIds = data.displayIds || (displayId ? [displayId] : []);
 
                                 for (const sentence of sentences) {
-                                    const audioPath = await tts.generateTTS(sentence);
+                                    const audioPath = await generateTtsWithFallback(sentence);
                                     const fileName = path.basename(audioPath);
                                     const audioUrl = `/uploads/tts/${fileName}`;
 
