@@ -293,7 +293,9 @@ const textMediaTtsService = createTextMediaTtsService({
     generateTTS: (text) => generateTtsWithFallback(text),
     sendToDisplay,
     logError,
-    getDisplayCapabilities
+    getDisplayCapabilities,
+    // 文本 TTS 每个实际句子都要重新扫描全部可用语音设备，不能复用媒体开始时的选中列表。
+    getVoicePlaybackDisplayIds: () => getOnlineVoicePlaybackDisplayIds()
 });
 // 加载指令分级路由配置
 const savedRouting = config.get('voiceCommand.routing');
@@ -2773,6 +2775,18 @@ function getDisplaysWithCapability(capabilityName) {
         }
     });
     return result;
+}
+
+/**
+ * 获取当前真正处于 OPEN 状态且允许语音播放的显示端，供文本 TTS 在每句播放前动态选择。
+ * 通用能力查询还服务于控制端展示，因此不直接改变 getDisplaysWithCapability 的既有语义。
+ *
+ * @returns {string[]} 可作为当前 TTS 目标的显示端 ID
+ */
+function getOnlineVoicePlaybackDisplayIds() {
+    return getDisplaysWithCapability('voicePlayback')
+        .filter(({ data }) => data.ws?.readyState === WebSocket.OPEN)
+        .map(({ id }) => id);
 }
 
 function sendToDisplaysWithCapability(capabilityName, message) {

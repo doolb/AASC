@@ -259,7 +259,7 @@ test('无效分句请求返回带定位标签的错误消息且不进入 TTS', a
     }]);
 });
 
-test('文本路由目标为远程显示端时仅向选中且在线启用语音的设备下发远程音频', async () => {
+test('文本路由目标为远程显示端时仅向服务器确认的在线语音设备下发远程音频', async () => {
     const messages = [];
     const online = new Map([
         ['source', { voicePlayback: false }],
@@ -301,6 +301,248 @@ test('文本路由目标为远程显示端时仅向选中且在线启用语音�
             text: '远程播报。'
         }
     }]);
+});
+
+test('源端不能播放声音时允许从未选中的在线语音设备选择目标', async () => {
+    const messages = [];
+    const availableVoiceDisplays = ['speaker-unselected'];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/unselected-speaker.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => availableVoiceDisplays,
+        getDisplayCapabilities: (displayId) => availableVoiceDisplays.includes(displayId)
+            ? { voicePlayback: true }
+            : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-all-displays',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: null
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-all-displays',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        text: '未选中的设备也应播报。'
+    });
+
+    assert.equal(messages[0].displayId, 'speaker-unselected');
+    assert.equal(messages[0].message.textPlaybackRemote, true);
+    assert.equal(messages[0].message.voiceTargetDisplayId, 'speaker-unselected');
+});
+
+test('连续实际句子播放前重新检查设备并允许切换语音目标', async () => {
+    const messages = [];
+    let availableVoiceDisplays = ['speaker-a'];
+    const service = createTextMediaTtsService({
+        generateTTS: async (text) => `/tmp/${text}.wav`,
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => availableVoiceDisplays,
+        getDisplayCapabilities: (displayId) => availableVoiceDisplays.includes(displayId)
+            ? { voicePlayback: true }
+            : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-refresh-device',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: null
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-refresh-device', pageIndex: 0, sentenceIndex: 0, text: '第一句。'
+    });
+
+    availableVoiceDisplays = ['speaker-b'];
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-refresh-device', pageIndex: 0, sentenceIndex: 1, text: '第二句。'
+    });
+
+    assert.deepEqual(
+        messages.filter(({ message }) => message.textPlaybackRemote).map(({ displayId }) => displayId),
+        ['speaker-a', 'speaker-b']
+    );
+});
+
+test('当前句的远程预取沿用当前实际语音目标', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async (text) => `/tmp/${text}.wav`,
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => ['speaker-a', 'speaker-b'],
+        getDisplayCapabilities: (displayId) => ({
+            'speaker-a': { voicePlayback: true },
+            'speaker-b': { voicePlayback: true }
+        })[displayId] || { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-prefetch-target',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: null
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-prefetch-target', pageIndex: 0, sentenceIndex: 0, text: '当前句。'
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-prefetch-target', pageIndex: 0, sentenceIndex: 1, text: '预取句。', prefetch: true
+    });
+
+    assert.deepEqual(
+        messages.filter(({ message }) => message.textPlaybackRemote).map(({ displayId, message }) => [displayId, message.prefetch]),
+        [['speaker-a', undefined], ['speaker-a', true]]
+    );
+});
+
+test('当前句目标失效时取消预取，不把缓存改投到另一台设备', async () => {
+    const messages = [];
+    let availableVoiceDisplays = ['speaker-a', 'speaker-b'];
+    const service = createTextMediaTtsService({
+        generateTTS: async (text) => `/tmp/${text}.wav`,
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => availableVoiceDisplays,
+        getDisplayCapabilities: (displayId) => availableVoiceDisplays.includes(displayId)
+            ? { voicePlayback: true }
+            : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-prefetch-target-lost',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: null
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-prefetch-target-lost', pageIndex: 0, sentenceIndex: 0, text: '当前句。'
+    });
+    availableVoiceDisplays = ['speaker-b'];
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-prefetch-target-lost', pageIndex: 0, sentenceIndex: 1, text: '失效预取。', prefetch: true
+    });
+
+    assert.deepEqual(messages.at(-1), {
+        displayId: 'source',
+        message: {
+            type: 'textSentenceTtsError',
+            playbackId: 'p-prefetch-target-lost',
+            pageIndex: 0,
+            sentenceIndex: 1,
+            prefetch: true,
+            message: '当前语音设备不可用，取消预取'
+        }
+    });
+    assert.equal(messages.some(({ displayId, message }) => displayId === 'speaker-b' && message.prefetch), false);
+});
+
+test('句子排队等待时语音设备失效，真正发送前改用最新可用设备', async () => {
+    const messages = [];
+    let releaseFirst;
+    let availableVoiceDisplays = ['speaker-a'];
+    const service = createTextMediaTtsService({
+        generateTTS: async (text) => {
+            if (text === '第一句。') await new Promise((resolve) => { releaseFirst = resolve; });
+            return `/tmp/${text}.wav`;
+        },
+        sendToDisplay: (displayId, message) => {
+            messages.push({ displayId, message });
+            if (message.sentenceIndex === 0 && message.textPlaybackRemote) {
+                availableVoiceDisplays = ['speaker-b'];
+            }
+        },
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => availableVoiceDisplays,
+        getDisplayCapabilities: (displayId) => availableVoiceDisplays.includes(displayId)
+            ? { voicePlayback: true }
+            : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-queued-refresh',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: null
+    });
+    const first = service.handleSentenceRequest('source', {
+        playbackId: 'p-queued-refresh', pageIndex: 0, sentenceIndex: 0, text: '第一句。'
+    });
+    const second = service.handleSentenceRequest('source', {
+        playbackId: 'p-queued-refresh', pageIndex: 0, sentenceIndex: 1, text: '第二句。'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    assert.deepEqual(
+        messages.filter(({ message }) => message.textPlaybackRemote).map(({ displayId }) => displayId),
+        ['speaker-a', 'speaker-b']
+    );
+});
+
+test('语音设备在合成期间失效，音频发送前重新选择设备', async () => {
+    const messages = [];
+    let releaseAudio;
+    let availableVoiceDisplays = ['speaker-a'];
+    const service = createTextMediaTtsService({
+        generateTTS: () => new Promise((resolve) => { releaseAudio = resolve; }),
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => availableVoiceDisplays,
+        getDisplayCapabilities: (displayId) => availableVoiceDisplays.includes(displayId)
+            ? { voicePlayback: true }
+            : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-generation-refresh',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: null
+    });
+    const request = service.handleSentenceRequest('source', {
+        playbackId: 'p-generation-refresh', pageIndex: 0, sentenceIndex: 0, text: '合成期间切换。'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    availableVoiceDisplays = ['speaker-b'];
+    releaseAudio('/tmp/generation-refresh.wav');
+    await request;
+
+    assert.equal(messages[0].displayId, 'speaker-b');
+    assert.equal(messages[0].message.voiceTargetDisplayId, 'speaker-b');
+});
+
+test('远程音频已下发后设备能力关闭，仍接受该句的合法完成回执', async () => {
+    const messages = [];
+    let availableVoiceDisplays = ['speaker-a'];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/already-sent.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => availableVoiceDisplays,
+        getDisplayCapabilities: (displayId) => availableVoiceDisplays.includes(displayId)
+            ? { voicePlayback: true }
+            : { voicePlayback: false }
+    });
+
+    service.setPlaybackContext('source', {
+        playbackId: 'p-finished-after-disable',
+        selectedDisplayIds: ['source'],
+        voiceTargetDisplayId: null
+    });
+    await service.handleSentenceRequest('source', {
+        playbackId: 'p-finished-after-disable', pageIndex: 0, sentenceIndex: 0, text: '已下发句子。'
+    });
+    availableVoiceDisplays = [];
+    service.handleSentenceFinished('speaker-a', {
+        originDisplayId: 'source',
+        playbackId: 'p-finished-after-disable',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        status: 'ended'
+    });
+
+    assert.equal(messages.at(-1).displayId, 'source');
+    assert.equal(messages.at(-1).message.type, 'textSentenceTtsFinished');
 });
 
 test('首次分句请求不能信任显示端伪造的远程 route', async () => {

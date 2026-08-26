@@ -14,6 +14,7 @@ const path = require('path');
  * @param {Function} dependencies.sendToDisplay 向指定显示端发送协议消息的方法
  * @param {Function} dependencies.logError 记录服务端错误的方法
  * @param {Function} [dependencies.getDisplayCapabilities] 读取显示端当前能力的方法；返回空值视为离线
+ * @param {Function} [dependencies.getVoicePlaybackDisplayIds] 读取当前全部在线语音显示端 ID 的方法，结果顺序用于目标选择
  * @returns {{handleSentenceRequest: Function, cancel: Function}} 单句请求与取消接口
  */
 function createTextMediaTtsService({
@@ -21,6 +22,7 @@ function createTextMediaTtsService({
     sendToDisplay,
     logError,
     getDisplayCapabilities,
+    getVoicePlaybackDisplayIds,
     remoteSentenceTimeoutMs = 10000
 }) {
     const displayQueues = new Map();
@@ -96,8 +98,43 @@ function createTextMediaTtsService({
     }
 
     /**
+     * 获取当前仍在线且允许语音播放的全部显示端。
+     *
+     * 文本媒体开始时保存的 route 可能已经过期：设备可能在播放过程中断开，
+     * 也可能由控制端关闭或重新开启语音播放。因此每个实际句子都必须重新读取
+     * 这份列表，而不能只依赖播放开始时的 selectedDisplayIds 和 voiceTargetDisplayId。
+     *
+     * @returns {string[]} 当前可作为 TTS 目标的显示端 ID
+     */
+    function getAvailableVoiceDisplayIds() {
+        if (typeof getVoicePlaybackDisplayIds !== 'function') return [];
+        try {
+            return normalizeDisplayIds(getVoicePlaybackDisplayIds())
+                .filter((displayId) => typeof getDisplayCapabilities !== 'function'
+                    || hasVoicePlayback(displayId, false));
+        } catch (error) {
+            logError('TextMediaTTS', `读取语音显示端失败: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * 判断设备是否仍可接收语音回执。动态查询由服务器提供完整的在线语音设备列表，
+     * 旧调用方则继续通过单设备能力查询兼容判断。
+     *
+     * @param {string} displayId 显示端标识
+     * @returns {boolean} 当前是否允许接收语音播放
+     */
+    function isVoicePlaybackAvailable(displayId) {
+        if (typeof getVoicePlaybackDisplayIds === 'function') {
+            return getAvailableVoiceDisplayIds().includes(displayId);
+        }
+        return hasVoicePlayback(displayId, false);
+    }
+
+    /**
      * 从显式路由字段构造播放上下文。route 缺失表示旧协议，安全回落到源显示端；
-     * route 存在但目标为空表示服务器已判定本次选中设备里没有语音目标。
+     * route 存在但目标为空表示媒体开始时没有计算出初始语音目标，后续动态请求仍可重新选择。
      *
      * @param {string} originDisplayId 源文本显示端
      * @param {object} data 分句请求
@@ -139,7 +176,8 @@ function createTextMediaTtsService({
             ...normalizeRoute(originDisplayId, route),
             explicitRoute,
             pendingRemoteSentences: new Map(),
-            prefetchSlot: null
+            prefetchSlot: null,
+            remoteTargetDisplayIds: new Set()
         };
     }
 
@@ -155,9 +193,11 @@ function createTextMediaTtsService({
         if (!key) return;
         const pending = {
             data: { ...data },
+            targetDisplayId,
             timer: null
         };
         context.pendingRemoteSentences.set(key, pending);
+        context.remoteTargetDisplayIds.add(targetDisplayId);
         if (!data.prefetch) armPendingRemoteSentence(context, key, pending, '远程语音设备未在规定时间内完成播放');
     }
 
@@ -190,6 +230,18 @@ function createTextMediaTtsService({
         context?.pendingRemoteSentences?.clear();
     }
 
+    /**
+     * 检查指定远程设备是否仍有未完成的句子，避免动态换目标后误清理无关播放上下文。
+     *
+     * @param {object} context 播放上下文
+     * @param {string} displayId 断开的显示端 ID
+     * @returns {boolean} 是否存在该设备对应的未完成句子
+     */
+    function hasPendingRemoteTarget(context, displayId) {
+        return [...(context?.pendingRemoteSentences?.values() || [])]
+            .some((pending) => pending.targetDisplayId === displayId);
+    }
+
     function failPendingRemoteSentences(originDisplayId, context, message) {
         const pending = [...(context?.pendingRemoteSentences?.values() || [])];
         clearPendingRemoteSentences(context);
@@ -201,8 +253,11 @@ function createTextMediaTtsService({
 
     function getRemoteTarget(originDisplayId, context) {
         const targetDisplayId = context?.voiceTargetDisplayId;
-        if (typeof targetDisplayId !== 'string' || !targetDisplayId) return null;
-        return targetDisplayId === originDisplayId ? null : targetDisplayId;
+        const targetDisplayIds = new Set(context?.remoteTargetDisplayIds || []);
+        if (typeof targetDisplayId === 'string' && targetDisplayId) {
+            targetDisplayIds.add(targetDisplayId);
+        }
+        return [...targetDisplayIds].filter((displayId) => displayId !== originDisplayId);
     }
 
     /**
@@ -213,21 +268,23 @@ function createTextMediaTtsService({
      * @param {object} context 当前播放上下文
      */
     function sendRemoteStop(originDisplayId, context) {
-        const targetDisplayId = getRemoteTarget(originDisplayId, context);
-        if (!targetDisplayId || typeof context?.playbackId !== 'string' || !context.playbackId) return;
-        sendToDisplay(targetDisplayId, {
-            type: 'tts',
-            action: 'stop',
-            textPlaybackRemote: true,
-            originDisplayId,
-            voiceTargetDisplayId: targetDisplayId,
-            playbackId: context.playbackId
-        });
+        const targetDisplayIds = getRemoteTarget(originDisplayId, context);
+        if (!targetDisplayIds.length || typeof context?.playbackId !== 'string' || !context.playbackId) return;
+        for (const targetDisplayId of targetDisplayIds) {
+            sendToDisplay(targetDisplayId, {
+                type: 'tts',
+                action: 'stop',
+                textPlaybackRemote: true,
+                originDisplayId,
+                voiceTargetDisplayId: targetDisplayId,
+                playbackId: context.playbackId
+            });
+        }
     }
 
     /**
-     * 注册服务器计算出的文本语音路由。该路由是新播放首个 textSentenceTts
-     * 的权威上下文；新媒体或新播放列表覆盖旧 route，并使旧 activePlayback 失效。
+     * 注册服务器计算出的文本语音初始路由。新媒体或新播放列表覆盖旧 route，
+     * 并使旧 activePlayback 失效；后续每个实际句子仍会重新读取全部可用设备。
      *
      * @param {string} originDisplayId 源文本显示端
      * @param {object} trustedRoute server-app 根据本次选中显示端计算出的 route
@@ -276,7 +333,10 @@ function createTextMediaTtsService({
             ...normalizeRoute(originDisplayId, context),
             explicitRoute: context.explicitRoute !== false,
             pendingRemoteSentences: samePlayback ? previous.pendingRemoteSentences : new Map(),
-            prefetchSlot: samePlayback ? previous.prefetchSlot : null
+            prefetchSlot: samePlayback ? previous.prefetchSlot : null,
+            remoteTargetDisplayIds: samePlayback
+                ? previous.remoteTargetDisplayIds
+                : new Set()
         });
     }
 
@@ -312,7 +372,7 @@ function createTextMediaTtsService({
 
     /**
      * 取得本次请求要使用的播放上下文。旧 playbackId 或首次请求会创建新上下文；
-     * 已存在上下文时以服务器保存值为准，防止客户端临时把 route 改到未选设备。
+     * 已存在上下文时以服务器保存的播放标识和令牌为准，语音目标由当前请求动态计算。
      *
      * @param {string} originDisplayId 源文本显示端
      * @param {object} data 分句请求
@@ -337,14 +397,35 @@ function createTextMediaTtsService({
     }
 
     /**
-     * 校验并返回本句实际语音目标。显式 route 不能扩展到未选设备；
-     * 旧协议没有 route 时保持源端播放兼容。
+     * 校验并返回本句实际语音目标。启用动态设备查询时，每个请求重新扫描全部
+     * 当前可用设备；预取句必须沿用当前句目标，目标失效时取消预取，
+     * 保证远程设备的预取缓存仍能串接播放，并让实际下一句重新选择目标。
+     * 没有动态查询依赖时保留旧 route 校验，兼容独立使用本服务的旧调用方和测试。
      *
      * @param {string} originDisplayId 源文本显示端
      * @param {object} context 播放上下文
+     * @param {boolean} isPrefetch 本次是否为预取请求
      * @returns {{targetDisplayId?: string, message?: string}} 校验结果
      */
-    function resolveRequestTarget(originDisplayId, context) {
+    function resolveRequestTarget(originDisplayId, context, isPrefetch = false) {
+        if (typeof getVoicePlaybackDisplayIds === 'function') {
+            const availableDisplayIds = getAvailableVoiceDisplayIds();
+            const currentTarget = context.voiceTargetDisplayId;
+            if (isPrefetch && !availableDisplayIds.includes(currentTarget)) {
+                return { message: '当前语音设备不可用，取消预取' };
+            }
+            const targetDisplayId = isPrefetch
+                ? currentTarget
+                : (availableDisplayIds.includes(originDisplayId)
+                    ? originDisplayId
+                    : availableDisplayIds[0]);
+            if (!targetDisplayId) return { message: '没有可用的语音播放显示端' };
+            // 实际句子在这里刷新上下文目标；预取句也记录最终使用的目标，
+            // 这样远程结束回执和取消操作都能找到本句真正的语音设备。
+            context.voiceTargetDisplayId = targetDisplayId;
+            return { targetDisplayId };
+        }
+
         const targetDisplayId = context.voiceTargetDisplayId;
         if (!targetDisplayId) return { message: '没有可用的语音播放显示端' };
         if (!context.selectedDisplayIds.includes(targetDisplayId)) {
@@ -417,19 +498,29 @@ function createTextMediaTtsService({
             return;
         }
         const playbackContext = contextResult.context;
-        const routeResult = resolveRequestTarget(displayId, playbackContext);
-        if (routeResult.message) {
-            sendError(displayId, data, routeResult.message);
-            return;
-        }
         if (!beginPrefetch(playbackContext, data)) return;
         const requestToken = playbackContext.token;
-        const targetDisplayId = routeResult.targetDisplayId;
 
         await enqueue(displayId, async () => {
             try {
+                if (!isPlaybackActive(displayId, data.playbackId, requestToken)) return;
+                let routeResult = resolveRequestTarget(displayId, playbackContext, data.prefetch === true);
+                if (routeResult.message) {
+                    finishPrefetch(playbackContext, data, 'clear');
+                    sendError(displayId, data, routeResult.message);
+                    return;
+                }
                 const audioPath = await generateTTS(data.text);
                 if (!isPlaybackActive(displayId, data.playbackId, requestToken)) return;
+
+                // 合成可能持续较长时间，发送前再次读取设备状态，避免把音频发给已失效目标。
+                routeResult = resolveRequestTarget(displayId, playbackContext, data.prefetch === true);
+                if (routeResult.message) {
+                    finishPrefetch(playbackContext, data, 'clear');
+                    sendError(displayId, data, routeResult.message);
+                    return;
+                }
+                const targetDisplayId = routeResult.targetDisplayId;
 
                 const baseMessage = {
                     type: 'tts',
@@ -482,7 +573,7 @@ function createTextMediaTtsService({
     }
 
     /**
-     * 处理远程语音显示端的播放结束/失败回执。只接受当前播放上下文中的目标设备，
+     * 处理远程语音显示端的播放结束/失败回执。按本句发送时登记的目标设备和定位校验，
      * 校验通过后转发给源文本显示端，让源端按“当前句已结束”推进下一句。
      *
      * @param {string} targetDisplayId 回执来源显示端
@@ -494,11 +585,12 @@ function createTextMediaTtsService({
         if (typeof originDisplayId !== 'string' || typeof playbackId !== 'string') return;
         const context = activePlaybacks.get(originDisplayId);
         const status = data.status === 'failed' ? 'failed' : 'ended';
+        const pendingKey = makeRemoteSentenceKey(targetDisplayId, data);
         const isValidContext = context?.playbackId === playbackId
-            && context.voiceTargetDisplayId === targetDisplayId
-            && context.selectedDisplayIds.includes(targetDisplayId)
-            && hasVoicePlayback(targetDisplayId, false);
+            && (typeof getVoicePlaybackDisplayIds === 'function'
+                || isVoicePlaybackAvailable(targetDisplayId));
         if (!isValidContext) return;
+        if (!pendingKey || !context.pendingRemoteSentences.has(pendingKey)) return;
         if (!consumePendingRemoteSentence(context, targetDisplayId, data)) return;
         for (const [key, pending] of context.pendingRemoteSentences.entries()) {
             armPendingRemoteSentence(context, key, pending, '远程语音设备未在规定时间内完成播放');
@@ -546,7 +638,8 @@ function createTextMediaTtsService({
                 activePlaybacks.delete(originDisplayId);
                 continue;
             }
-            if (context.voiceTargetDisplayId !== disconnectedDisplayId) continue;
+            if (context.voiceTargetDisplayId !== disconnectedDisplayId
+                && !hasPendingRemoteTarget(context, disconnectedDisplayId)) continue;
 
             failPendingRemoteSentences(originDisplayId, context, '远程语音设备已断开连接');
             activePlaybacks.delete(originDisplayId);

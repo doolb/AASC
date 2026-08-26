@@ -62,6 +62,8 @@ test('服务器文本媒体和播放列表协议下发并持久化选中语音�
     assert.match(server, /resolveTextVoiceTarget/u);
     assert.match(server, /selectedVoiceDisplayIds/u);
     assert.match(server, /voiceTargetDisplayId/u);
+    assert.match(server, /getVoicePlaybackDisplayIds:[\s\S]*?getOnlineVoicePlaybackDisplayIds\(\)/u);
+    assert.match(server, /function getOnlineVoicePlaybackDisplayIds\(\)[\s\S]*?readyState === WebSocket\.OPEN/u);
     assert.match(server, /mediaBatch[\s\S]*?applyTextMediaRoute/u);
     assert.match(server, /playlistStart[\s\S]*?voiceRouteByDisplayId/u);
     assert.match(server, /persistDisplayState[\s\S]*?currentPlaylist/u);

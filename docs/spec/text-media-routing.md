@@ -43,29 +43,51 @@ server-app 处理 playlistRequest:
 ## 语音目标伪代码
 
 ```text
-resolveTextVoiceTarget(originDisplayId, selectedDisplayIds):
-    selected = 去重并只保留当前在线显示端
-    if originDisplayId 在 selected 且 origin.voicePlayback 为 true:
+resolveTextVoiceTarget(originDisplayId, selectedDisplayIds, currentTarget = null, isPrefetch = false):
+    available = 读取全部当前在线且 voicePlayback=true 的显示端，保持稳定顺序
+    if isPrefetch:
+        if currentTarget 不在 available:
+            返回“当前语音设备不可用，取消预取”
+        return currentTarget
+    if originDisplayId 在 available:
         return originDisplayId
-    return selected 中第一个 voicePlayback 为 true 的显示端
+    return available 中第一个显示端
 
 处理媒体/playlistRequest:
-    route = resolveTextVoiceTarget(当前显示端, selectedDisplayIds)
-    把 route 和 selectedDisplayIds 随文本媒体/playlistStart 下发并持久化
+    initialRoute = resolveTextVoiceTarget(当前显示端, selectedDisplayIds)
+    把 initialRoute 和 selectedDisplayIds 随文本媒体/playlistStart 下发并持久化
 
 处理 textSentenceTts(origin, data):
     校验 playbackId/page/sentence/text
-    校验 voiceTargetDisplayId 属于该播放上下文的 selectedDisplayIds
+    在串行队列执行开始时读取全部当前 OPEN 且 voicePlayback=true 的显示端
+    if data.prefetch:
+        target = resolveTextVoiceTarget(origin, selectedDisplayIds, 当前句实际目标, true)
+        如果目标失效:
+            返回带 prefetch=true 的可定位错误，实际下一句重新选择目标
+    else:
+        target = resolveTextVoiceTarget(origin, selectedDisplayIds, 当前句实际目标, false)
+    更新当前播放上下文的 voiceTargetDisplayId = target
+    按本次请求实际 target 记录句子目标
     生成或读取句子音频
-    if route == origin:
+    如果生成成功且请求仍有效:
+        再次读取全部当前 OPEN 且 voicePlayback=true 的显示端
+        如果是预取:
+            如果当前句目标已失效:
+                返回带 prefetch=true 的可定位错误，取消本次预取
+            否则沿用当前句目标
+        否则按源端优先规则重新选择 target
+        没有 target 时回 origin 发送可定位 textSentenceTtsError
+    if target == origin:
         发送 textPlayback 音频给 origin
-    else if route 在线且可语音播放:
-        发送 textPlaybackRemote 音频给 route，附 originDisplayId
+    else if target 在线且可语音播放:
+        发送 textPlaybackRemote 音频给 target，附 originDisplayId
     else:
         回 origin 发送可定位 textSentenceTtsError
 
 处理 textSentenceTtsFinished(target, data):
+    按 playbackId/pageIndex/sentenceIndex 查找本句登记的实际 target
     校验 target、origin、playbackId 和句子定位
+    动态路由下不重新检查 target 当前 voicePlayback，已登记的合法回执继续生效
     将结束或失败消息转发给 origin
 
 取消文本播放上下文:
@@ -277,19 +299,18 @@ TextMediaTtsService:
             兼容旧协议，按源显示端 textPlayback 回包
         如果不存在服务器注册 route 但请求携带 route:
             拒绝请求并回源端 textSentenceTtsError
-        校验 voiceTargetDisplayId 属于 selectedDisplayIds
+        在队列执行开始和音频发送前按动态规则重新选择 target
         如果目标是源端:
-            校验源端 voicePlayback=true 后发送 textPlayback
+            发送 textPlayback
         如果目标是远程:
-            校验目标在线且 voicePlayback=true 后发送 textPlaybackRemote(originDisplayId)
+            确认目标在发送前仍在线且 voicePlayback=true 后发送 textPlaybackRemote(originDisplayId)
             pendingRemoteSentences 写入 playbackId/pageIndex/sentenceIndex/targetDisplayId 对应 token
         目标不存在或不可用:
             回源端 textSentenceTtsError
     收到 textSentenceTtsFinished:
-        校验来源显示端等于上下文 voiceTargetDisplayId
-        校验 playbackId 和 selectedDisplayIds
-        校验远程目标仍在线且 voicePlayback=true
+        校验来源显示端、playbackId 和句子定位
         校验 pendingRemoteSentences 存在相同 targetDisplayId/playbackId/pageIndex/sentenceIndex
+        动态路由下不因目标设备当前 voicePlayback 状态变化拒绝已登记回执
         校验通过后删除 pendingRemoteSentences 对应 token
         转发 textSentenceTtsFinished 给 originDisplayId
     cancel(originDisplayId, playbackId):
