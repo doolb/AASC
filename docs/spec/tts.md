@@ -19,6 +19,35 @@ tts:
 
 ## 核心流程伪代码
 
+### 所有服务端 TTS 统一路由
+
+```text
+generateTtsWithFallback(text, voice, speed):
+    if config.tts.device == display:
+        display = findDisplayWithTts()
+        if display 存在:
+            下发 ttsGenerate
+            3 秒内未收到 ttsGenerating → 判定失败并回退
+            收到 ttsGenerating 后等待 WAV
+            成功 → 保存 WAV 并返回路径
+            失败/超时 → 继续服务端生成
+    return generateTTS(text, voice, speed)
+
+服务端入口:
+    API / 聊天 / Agent / 文本媒体 / 语音指令 / 提醒 / 整点报时
+    → generateTtsWithFallback
+
+TTS 显示端回包:
+    ttsGenerating(requestId) → 表示显示端已接受生成任务
+    ttsResult(requestId,audioData) → 成功
+    ttsResult(requestId,error) → 失败
+    未收到 ttsGenerating(3 秒) → 失败
+
+TaskManager:
+    注入 generateTtsWithFallback 到内置任务上下文
+    time.announce 使用 context.generateTTS
+```
+
 ### 显示端 TTS 下发睡眠检查
 
 ```text
@@ -128,6 +157,10 @@ onResponse(res):
 `3rd/tts-server/docs/spec/tts-wine-queue-stability.md` 描述 Wine worker 显式派发、FIFO 队列、断连/排队超时和 100 字稳定性测试伪代码。
 
 `3rd/tts-server/docs/spec/tts-wine-rss-stability.md` 描述 Embedded Speech SDK synthesizer 的每请求释放、worker 请求数上限回收和 RSS 回归测试伪代码。
+
+## Linux TTS 服务
+
+Linux TTS 的 HTTP、队列、CLI 和运行时路径伪代码见 `docs/spec/tts-linux.md`。
 
 ## TTS 压测脚本 (src/scripts/tts-stress-test.js)
 

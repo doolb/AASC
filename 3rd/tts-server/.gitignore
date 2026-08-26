@@ -3,6 +3,8 @@ ttslive/models/sensevoice/
 
 # Wine TTS 运行时临时目录和压测产物
 wine/.tmp/
+wine/runtime/
+.cache/
 wine/*.wav
 wine/*.headers
 wine/*.log

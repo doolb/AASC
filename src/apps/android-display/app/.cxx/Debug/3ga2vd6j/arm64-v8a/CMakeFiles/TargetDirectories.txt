@@ -1,0 +1,3 @@
+/mnt/AASC/src/apps/android-display/app/.cxx/Debug/3ga2vd6j/arm64-v8a/CMakeFiles/cpu_affinity.dir
+/mnt/AASC/src/apps/android-display/app/.cxx/Debug/3ga2vd6j/arm64-v8a/CMakeFiles/edit_cache.dir
+/mnt/AASC/src/apps/android-display/app/.cxx/Debug/3ga2vd6j/arm64-v8a/CMakeFiles/rebuild_cache.dir

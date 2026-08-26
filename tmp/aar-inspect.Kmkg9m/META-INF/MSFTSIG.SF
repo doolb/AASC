@@ -1,0 +1,180 @@
+Signature-Version: 1.0
+SHA-256-Digest-Manifest-Main-Attributes: u753HJxN1Eto/mAwQLtMdk4wN0BtT
+ FhFqfTAVgfQLdE=
+SHA-256-Digest-Manifest: 4IBzxpW59lcec44fOu0L78/oBTPFV3N0Zu9KMVureXQ=
+Created-By: 1.8.0_112 (Oracle Corporation)
+
+Name: ThirdPartyNotices.md
+SHA-256-Digest: kgQt9R8jtqYO6PVIK8HEX92TXtwlJVG3TBrYIdQB8o8=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.em
+ bedded.sr.so
+SHA-256-Digest: 8dM8N2ptW0VOeEyj4jW/b5cLrXyglGfFEDEKecVsJ+4=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.java.bindi
+ ngs.so
+SHA-256-Digest: KCiwyUdmNkaDBVvPl+Ao6GlX939JLlbAPnzSmeKnuKI=
+
+Name: AndroidManifest.xml
+SHA-256-Digest: NA1JBOuBdtt9PX3SFjexvR+FVlMjXPoQ8e+626B96y4=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.em
+ bedded.tts.so
+SHA-256-Digest: CFqdX7t1eNe4Ippi004I2F32XA5sAgFLLU6esW9D1iw=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ embedded.sr.so
+SHA-256-Digest: SEESNMyM02Hyb7Aj1nIF1mrUpMzOjjiLbS8kXxZPsPE=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ embedded.sr.runtime.so
+SHA-256-Digest: yYK+EOHy6VO//jRQthWqUkjN/o3gzeEK8OafQhB35pY=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.co
+ dec.so
+SHA-256-Digest: WW1qjJ/llTfMTXEIh4IjWe/TAbTPq+B6BlRLWPLjYVE=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.embed
+ ded.tts.runtime.so
+SHA-256-Digest: /92KrmezqR+1YYnuJXO55gwNHriHGhLcdMdxuzq4efM=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.onnxr
+ untime.so
+SHA-256-Digest: L8F06ROm60W47yotKTvjhR7uLAi59akEwvKOZ9L9OgM=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.on
+ nxruntime.so
+SHA-256-Digest: 2CrB356p0S0ZZgFMKnyEZGKKNr/IoUbu1SWJR+4L2xM=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.embed
+ ded.sr.runtime.so
+SHA-256-Digest: xsS4s4SYoP5g86OwP3Laqes8L1kLqJHxDK/Z2ZFLPC8=
+
+Name: R.txt
+SHA-256-Digest: s0iHkywfIk6t0M8f/V3tITmE4JGpmlnQuUbMg/ofOlA=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ kws.ort.so
+SHA-256-Digest: 6fFLrPjWJmeBmITONACUHq1sS/UFh4IPxCe3RJ8TAyo=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ embedded.tts.runtime.so
+SHA-256-Digest: wQdjj2Lb1bBRLQA+daxWu/ncVdPp1uyKT9A1k3LwRU4=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.embed
+ ded.sr.so
+SHA-256-Digest: FDZZxwBMlEzdJS2D9g+yqyzIOu4dtZwg3zk1YkGZ/so=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.kws.o
+ rt.so
+SHA-256-Digest: v1vJ/lwQZ9Vi9XQ8w56N5+gjrN88ZZjSYO1XDeedQ78=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.telem
+ etry.so
+SHA-256-Digest: Y0ftgm1h+LjUfRZJIfqag22mJ/a3Yhydg5GgLvqL15E=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.kw
+ s.so
+SHA-256-Digest: yoWlwsWbjfBZBRqD7yonhSiOiWJRJDXwN8TNVu50RaE=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ kws.so
+SHA-256-Digest: s616dnc+sRdt4TpIf/kdqjY1/YAxWF7XfQx7ajgljPk=
+
+Name: REDIST.txt
+SHA-256-Digest: h/WnAyN32HRTkssYb5Gx/+DsErPG4tPH1DA4OAwUsOg=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.core.so
+SHA-256-Digest: mYi4+fWttlos6b0Y+mdhbXJpi7S8SBoHLjRkBZTkZdU=
+
+Name: LICENSE.md
+SHA-256-Digest: 79tk9A/tSgPRF7sHA2VLQRwqs/W52pFgDvosZH1EUL4=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ audio.sys.so
+SHA-256-Digest: tKg1C9gEZY8bcP5K+4vHAUH09boAlchBr2TcvsoUsvc=
+
+Name: classes.jar
+SHA-256-Digest: fmf4mIC8Qikq/SKv6mUMEe+dfxrt/6Sr6EN+CXuOmHE=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.te
+ lemetry.so
+SHA-256-Digest: zeqd627c5Ea6sjIlK2BN68m9La1/o1MouebLEFiASJw=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.silk_
+ codec.so
+SHA-256-Digest: khD3QY9rJaouWF00QmuhLtJbJ1EQyCqGNKX81VKESPE=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.em
+ bedded.tts.runtime.so
+SHA-256-Digest: Qh+kKztJZEtFuZDmSBuW3mefTmJ7+ldNLP1XJEkj5Ms=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ silk_codec.so
+SHA-256-Digest: irMOcVRtdXKKhJmbHx6JYG8B1Ez/YbXpNGH23Q8pEow=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.kws.s
+ o
+SHA-256-Digest: dHpGW2SJE/ViAJHU+j3+bHxBVDmKVhiLbH2cvu3TddI=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.java.bindings.s
+ o
+SHA-256-Digest: HRE7O71xuae/0nK9JssbT65ig6Et1jwsd490bVZJssI=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.core.so
+SHA-256-Digest: UYPIVAg/1sOsPWRuoeDaScQ0yzplfw7dTvZsrPnDykU=
+
+Name: proguard.txt
+SHA-256-Digest: b3v1JFQ+qgGbUjAPlPRc1flGXjfM/Zimvl5/RfVft9M=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.em
+ bedded.sr.runtime.so
+SHA-256-Digest: a71S8d6urgiUceDky/7tg30cRXq3BU3M0lvbtrIkykU=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ codec.so
+SHA-256-Digest: ub3iZuMTMdTeMAunF0S4dMBSEMV7wPQ4BWpyxsVun3I=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.java.binding
+ s.so
+SHA-256-Digest: r4/Iv1MHpfIGNaK57/Z1SApyNHBJ9z0/UBrwAQjAtUw=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ telemetry.so
+SHA-256-Digest: QrBizcycwbenla+FMpFEvlcwsZF+1gpj9rI5ZxoeSKc=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.si
+ lk_codec.so
+SHA-256-Digest: pu2iZLVLCbQtvI7gSLZO5zDmnpvBwaJDaJI6Y+RxVJ4=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.au
+ dio.sys.so
+SHA-256-Digest: TswbReduyErZGytGkI+JlwzPD4V8JznxOxxsRzLG8us=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ onnxruntime.so
+SHA-256-Digest: azlPQB392qmYSTAqsX7mOnS87yVmBno9usi7uByalag=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.embed
+ ded.tts.so
+SHA-256-Digest: fQ9F5j56Vsj4HolrVyrs083+06HtoCBXNDuXqdDXzMA=
+
+Name: jni/armeabi-v7a/libMicrosoft.CognitiveServices.Speech.extension.
+ embedded.tts.so
+SHA-256-Digest: ukRkxtwswh/fsb8z7TfAgsLks9quomgxxmlU2ikA3V8=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.codec
+ .so
+SHA-256-Digest: 2jvI2OmrW5T55uNRYTEpqpSElMkZMYd/HQnTJg7NJpw=
+
+Name: jni/arm64-v8a/libMicrosoft.CognitiveServices.Speech.extension.kw
+ s.ort.so
+SHA-256-Digest: pR20lnwrsQzgUTB5MIWK5esQLIZZRyp8B/YJYnU/V5Q=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.core.so
+SHA-256-Digest: mbtBTtPcohC4UO4ObwyKMdCQHG2tXw/VqdjSvPTGTvg=
+
+Name: jni/x86_64/libMicrosoft.CognitiveServices.Speech.extension.audio
+ .sys.so
+SHA-256-Digest: 2EdNoJUJA3jPMJpAAUVyZVEOe1QUVf/RMYUvqXHNNPo=
+

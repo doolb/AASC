@@ -1,0 +1,1088 @@
+Signature-Version: 1.0
+SHA-256-Digest-Manifest-Main-Attributes: YQ1A3LXeEW2fAa7PDiEF1XMBD/zXL
+ JANjbN79Ltula8=
+SHA-256-Digest-Manifest: 1swVi/n6fSFYtdLDg8znB48Fpg+IYoNaanDZjvnrX6I=
+Created-By: 1.8.0_112 (Oracle Corporation)
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$4.c
+ lass
+SHA-256-Digest: /v/Je02hn1rptmakCMPzN24V8p7TYiq8t/S8M7TYbHI=
+
+Name: com/microsoft/cognitiveservices/speech/AutoDetectSourceLanguageR
+ esult.class
+SHA-256-Digest: wo8C1raHNtzUVdrYX5QHCzBeW9JdiPDAPWil1pOplG4=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$8.class
+SHA-256-Digest: BfqtRJevftV47yf2rblne9NSIoLXnfd8sqd/zeFyvH4=
+
+Name: com/microsoft/cognitiveservices/speech/ConnectionMessage.class
+SHA-256-Digest: Qnd7Kk7B7wvzyt2NsEnptj21fzPsT4CNeYkQewOvArk=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$3$1.cla
+ ss
+SHA-256-Digest: aS3BokshLSRm5832jQX/sBKrxgJ0psNe3o8XiKx81fk=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$13.class
+SHA-256-Digest: 5aWuYOxEJ6r5boWVdTVkvpdOZMCAln6Kt9LRwQj3U/w=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/FileL
+ ogger.class
+SHA-256-Digest: EpxDnUljgEWqKJuUeC1CZVRc1cuLgTLDi4hCmNHrz48=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognitionResult.class
+SHA-256-Digest: GuR3hkx7A/5u694eLrnZhSo+DSJnT2FkRmvFwX/oItY=
+
+Name: com/microsoft/cognitiveservices/speech/RecognitionEventArgs.clas
+ s
+SHA-256-Digest: cduqQEz/vkI1Ai6bv+e4k7s+50idOhPQJ7spV9+YHF0=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriptionCanceledEventArgs.class
+SHA-256-Digest: QlqTLi+yFXwvSyt/Gnt76o5Q9tA62oJE7V2O7I/q3T4=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$10.class
+SHA-256-Digest: dm5b2MYzfQWYUQAnAtTOilpCJSBdTw4LKSSWQrVtinE=
+
+Name: com/microsoft/cognitiveservices/speech/audio/MicrophoneArrayGeom
+ etry.class
+SHA-256-Digest: lButJ3xc4ZuQenzyOqgX8H5lU/kKbLDRwDEgOBS4Exc=
+
+Name: com/microsoft/cognitiveservices/speech/Recognizer.class
+SHA-256-Digest: D9h8gsndM87Old5/x3CkB0CD7X6WT4ZvU3O+oiA8R4E=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$12.class
+SHA-256-Digest: NVmym68ayBSDfa6+DnlWe4VeYJ+YwWWnEg8R6NvkDIY=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber.class
+SHA-256-Digest: 5t9JKt2dN06zUzQGeZr/930UQzRL0/xD3l6naN1IoTc=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$1$1.class
+SHA-256-Digest: CrVF4aQB1/VQ3GJTSdagmSUPL5rUAClS7ZeTPcfkdbU=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$3$1.class
+SHA-256-Digest: 7I3BSdRYNSDlWlr5WLfLf8et/02UtIK0ny0XvZOqnAQ=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$5.class
+SHA-256-Digest: O1ZmN/0/Q7b/Y1vAp+D1NVjhBKzvGmu+ZkDdCrqPktw=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$4.class
+SHA-256-Digest: LS04SwPmEqHsxo89y5eNy6TGB/eea2B6Fq/4qw7dDfM=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$13.
+ class
+SHA-256-Digest: wiJ4qslUb7jICbx9Xh4eCqebcm4WDO39GS61YRRU9Gk=
+
+Name: com/microsoft/cognitiveservices/speech/AudioDataStream$1.class
+SHA-256-Digest: x9ASlmI3m8S28cydvyYG+jxbYRONX+bVMrvLptReaDM=
+
+Name: com/microsoft/cognitiveservices/speech/OutputFormat.class
+SHA-256-Digest: WZFRf9F2MUr5MZWk5zdXc8DHbu6PRbXaMowFek+HWrA=
+
+Name: com/microsoft/cognitiveservices/speech/util/Contracts.class
+SHA-256-Digest: nHMT6SENZZPVuivJpZyBM/sYVwuha60KdcXkUbMlHOo=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognizer$4.class
+SHA-256-Digest: UrpADhCQLi2ovsBoql8TVegaIiNRs9NRHWIQcupx0aY=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/Memor
+ yLogger.class
+SHA-256-Digest: 4ms460qyKdsctlCttQw3Un8jYQDr+hcyQzYvkzVWxhA=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$8.class
+SHA-256-Digest: xeV1hh0+7U5nUWPTc53PXb6Le0xyohQW1liEM/vsN5A=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor.class
+SHA-256-Digest: LOYeK7mp6BX2PHuoi1kjHe/wGzzNpdqvJyN2ZVKmGGk=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$15$
+ 1.class
+SHA-256-Digest: c8fipmeyR4arbppW/VWA+3daq2dLDHoYT9/Tx8j5Gkw=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$10.clas
+ s
+SHA-256-Digest: aUEPo0SoWaRfVZKMB5juLHHx1PV5vMNqnsub5cFHGSg=
+
+Name: com/microsoft/cognitiveservices/speech/PhonemeLevelTimingResult.
+ class
+SHA-256-Digest: rDqy+0+2XxUfcGleKF1+v7trQhKIeLGQzvjvk0MKGi8=
+
+Name: com/microsoft/cognitiveservices/speech/util/StringRef.class
+SHA-256-Digest: dEEVHWMZlezKTX0zxi1O/VIZRnihffQBy+GmwxGBdic=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$16.clas
+ s
+SHA-256-Digest: l5v7N+oYb/FS5U98/34OfZhXd4i1ZUBiaCQXHGcMXt8=
+
+Name: com/microsoft/cognitiveservices/speech/util/Request.class
+SHA-256-Digest: GTsLEuPXbhN3exuD8vdnS4VBUnc7X/O+A3jfHmRXUa4=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognitionCanceledEventArgs.class
+SHA-256-Digest: 0xs7TyVnRNmJhKOQczq316uI6C7QyUktE4MWFwxei24=
+
+Name: com/microsoft/cognitiveservices/speech/ConnectionMessageEventArg
+ s.class
+SHA-256-Digest: 1vTBJP7JQQWstIjVzrNNFrHtStfDHIq1DRXAi72gyGk=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$9.c
+ lass
+SHA-256-Digest: bPDxNC8e87MsglAstayfvglRnjVN8bMTdZThFAny85U=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$3.class
+SHA-256-Digest: LgEZnIbM+0BkJatRwoBo4Jc2eg0YopLa7gvXREVP9EI=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$3.class
+SHA-256-Digest: 0KIJFNE96XlwlfnPmKmlJDFIsJFpxClwi1aQa4iEnOk=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$12.
+ class
+SHA-256-Digest: p0eCYGad1d2muuq5cIA+v6ZscgNDjuQh/T5QRWEDQBU=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechTranslationModel.cl
+ ass
+SHA-256-Digest: SP6G7Wr4X4/ik4Q1rM6dLRkFXro7REm/jBWGY8z6w10=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$5$1
+ .class
+SHA-256-Digest: vWn0HP5ZZr5aSqrf7rJk9MDpkSfF7Y0qo4U7i/gjJ2Y=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriptionCanceledEventArgs.class
+SHA-256-Digest: yZmdTs+VL6pAprJuR/ecOkt6j1dhovmEqLvMKmc686M=
+
+Name: com/microsoft/cognitiveservices/speech/audio/PullAudioInputStrea
+ m.class
+SHA-256-Digest: 4O83cuFre6wOuW9h/XhlBr9RMoJV1K45JKR1VQa1Pmg=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$3$1.clas
+ s
+SHA-256-Digest: mw53N7Lhof+jQdmKWjZDHk0wk3i3J2pUvmZYM0hsVCY=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$12$
+ 1.class
+SHA-256-Digest: Bjrw3Y0y20dpOoNbfCjYy8rP1lXcQLq8Ew/OLqxNGz4=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$6$1.cla
+ ss
+SHA-256-Digest: E17SnvXurgG64nfj8FDHhkvZ1+yQVf1o5V/yoa8ZJw0=
+
+Name: com/microsoft/cognitiveservices/speech/SynthesisVoiceType.class
+SHA-256-Digest: vbSTQhyuYVGovb7L3nMJQgJ+sCt390JgqfdK+wcdBFc=
+
+Name: com/microsoft/cognitiveservices/speech/util/JsonValueJNI.class
+SHA-256-Digest: Q4p5yHMqNN+9Rclp1YIx92BJrGZJ8X5YSMeUqu8am8o=
+
+Name: com/microsoft/cognitiveservices/speech/Connection.class
+SHA-256-Digest: WndY49baxETBPj2UuUU6O8e9ztiKegVwYybZICwRRX0=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognitionResult.c
+ lass
+SHA-256-Digest: BzY4TGmpjdXdNX6XZ0GJbRXEcFYRTe+kX2oHRG23E7g=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$9.class
+SHA-256-Digest: TD59N1v5D3abHMOi3iv8hDxilKVa4+cABIB19SxgS1c=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioStreamWaveForm
+ at.class
+SHA-256-Digest: Xpxy0DmaWsHTKkz+DL9HnPIlNYyvkCEA/KuYZqFqr2g=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$11.clas
+ s
+SHA-256-Digest: tEx1QJqgM4cCNKCQIU8XcPzehoXRlAsnB8zQchR2Rg8=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$11.class
+SHA-256-Digest: CMBtivlFmo1Sf9Q7dbD1qD43TObeZKESG0rh2kvZPok=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$2.class
+SHA-256-Digest: jMKT1TmQFFyrw5AWchWFq2DFzWNEnkTesgqsbcjdu/g=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$13.class
+SHA-256-Digest: O4rCEURQzh1f365lVaA4T0tCTMtm/Ub4s1Km0o2Akr4=
+
+Name: com/microsoft/cognitiveservices/speech/util/JsonValue.class
+SHA-256-Digest: IkfoUIk9WSaaOpSLFVIKFguD/b3tp4y/xAb36PP3/vg=
+
+Name: com/microsoft/cognitiveservices/speech/Connection$4.class
+SHA-256-Digest: kxWIak3f1FyF5OOYRByIKHsTZ/npTxAoHSLB/KuDduM=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognitionEventAr
+ gs.class
+SHA-256-Digest: f2qWY03xGfpJgwlAGRABlNZffk72aYsnuh/4aB2XcSs=
+
+Name: com/microsoft/cognitiveservices/speech/CancellationReason.class
+SHA-256-Digest: nPS3iyLB9QgWbYl1aiaOTO5jPzQYydDiLd92/awJIOM=
+
+Name: com/microsoft/cognitiveservices/speech/translation/SpeechTransla
+ tionConfig.class
+SHA-256-Digest: UBr5Cto2WRj0+LSWYU+wCjGR7NigjLeNlY+No0+eT4Q=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/TurnStatusReceived
+ EventArgs.class
+SHA-256-Digest: pp7xg0MgJFXsQVAPb/ftQzmTXt12FtQvzxumhlJm+Vc=
+
+Name: com/microsoft/cognitiveservices/speech/util/TelemetryManager.cla
+ ss
+SHA-256-Digest: oxQYebmccBCA0ArddBAg5n95uHYivCrSiu9al9ao15A=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioStreamFormat.c
+ lass
+SHA-256-Digest: 7vKCNFlaU1egW4gcAk7rzo84JCsk1BxFmYA6IcHcMtE=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$3.c
+ lass
+SHA-256-Digest: 4zOUz+CzpHyH+8XMIoxHpraEZaH7LYPovb6SnPXdYUE=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisResult.cla
+ ss
+SHA-256-Digest: /CxUz5SFXayaxy4WQKGIAITep3UZA67fNSgTuKoSeeg=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$9.class
+SHA-256-Digest: OhYTIzbSSW5H6P3dRppqoMuBNMQ7InfiVNef+fzuFJI=
+
+Name: com/microsoft/cognitiveservices/speech/audio/MicrophoneCoordinat
+ es.class
+SHA-256-Digest: 7C1+taSaIDamS7QyepOhQLjRDMp3C7Mu6Qf46XyeSRs=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$1$1.cla
+ ss
+SHA-256-Digest: s07puIU4267s6z95UhXMAVyK+2Yi35queAlw0iSEJVE=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$8$1
+ .class
+SHA-256-Digest: CUMGau9FWEZqjIjjl3PYCIw0INbFnyy14wjHiL3dc+U=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$4.class
+SHA-256-Digest: wEsinyz0wDO9W1TygO0366UV0b1Dei1g+Oplx2zybLY=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$5.class
+SHA-256-Digest: nIFnKnNVlEOEf0cS+i9k2KmqMBt62O+SWW13gOT7S+g=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Participant
+ .class
+SHA-256-Digest: C3SfN2o9NQ6TXoVeCoc3IrBLzHxCmpNrt9cjZgGtpDA=
+
+Name: com/microsoft/cognitiveservices/speech/VoiceInfo.class
+SHA-256-Digest: ij6Zpt32Zh06grLBcXp9gSDpiC89hARFkDmSCpwRv1E=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioConfig.class
+SHA-256-Digest: qlBK84PLHV2qBSDiEiRBLDl5icNb0JC3cvzp3kUMl2s=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$9.class
+SHA-256-Digest: OoOg2V1dlKJWbGqLp9l7t2yXjus3mDNdY/g0nWLcX84=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$17.
+ class
+SHA-256-Digest: 1LSbG8NJVWaLeyfKlEfCx2sBOUuRZYivlkOsMnWT7fQ=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$8.class
+SHA-256-Digest: 1v8+N6F+KwNE1Vt5wH/NuBPOh8DhICMEahXrAlRKu1U=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$7.class
+SHA-256-Digest: oDodpYVpXtxMcVuW8PFXoU3qaqbAkuPlhoO4sGAMEAs=
+
+Name: com/microsoft/cognitiveservices/speech/PropertyCollection.class
+SHA-256-Digest: PYh+rrRYOZBUpfMrh6lDtcKkU5JlHl8pU6hyES3ynko=
+
+Name: com/microsoft/cognitiveservices/speech/EmbeddedSpeechConfig.clas
+ s
+SHA-256-Digest: YMiZo1F8nCsAwbcK1ivg7s03Aqu8USjs9chMCdb7VCI=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Participant
+ ChangedReason.class
+SHA-256-Digest: jyYjTP1c70TdNHekePxGsyT/xHdpHbngoEI3ekESWyQ=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriptionEventArgs.class
+SHA-256-Digest: WwS9z9Xo0de+PllQTWf27xf9wE2OcCBVAHckdSrMtnI=
+
+Name: com/microsoft/cognitiveservices/speech/SourceLanguageConfig.clas
+ s
+SHA-256-Digest: xMERKT6+d+jKVMniPIHGXU2T+wSbDTvImm354SykKn8=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$13$
+ 1.class
+SHA-256-Digest: KO4Cm4cxSgcFz3T05aRCOmsAKk8TI6ieV8TBLdVeipA=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$7.class
+SHA-256-Digest: USabp6Thy3vA+qUextfj9rYTISLht79DuAl0POCMkWs=
+
+Name: com/microsoft/cognitiveservices/speech/SynthesisVoiceGender.clas
+ s
+SHA-256-Digest: rHVQiZnbex7xQ9a5WV6mfO7k9D0iyE3a0cBSr2HjAVA=
+
+Name: com/microsoft/cognitiveservices/speech/audio/PushAudioOutputStre
+ am.class
+SHA-256-Digest: yBoBCX5FI+kPtAFtIsUdFaIAhK3OEPFkUpnr6nXWBw8=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$4.class
+SHA-256-Digest: oTbnZzDhy6pvA0ROn7//yqdFAl3UgedlUI7bcnO2les=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConfi
+ g.class
+SHA-256-Digest: osiES/q3VsZ4Yj9jLIhwSAh6US5ES9SQVQ+3rqQKHLI=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisRequest.cl
+ ass
+SHA-256-Digest: k2a0Mqh6TACqz1NtaCzJNZpDOjRDZljQ1uanIgI2R64=
+
+Name: com/microsoft/cognitiveservices/speech/util/KeyedItemHashMap.cla
+ ss
+SHA-256-Digest: G2INKddSegtlqs5cLkNDSwD/nFibRwDWH9k5h2MkgYM=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$12.class
+SHA-256-Digest: 3tzRZbazNf3WUs09RCX8U3VEqd52TGqrzok4u3P177c=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$4.class
+SHA-256-Digest: c9GRmCx73lAiBVWbe58NZvdesLWuRP5mfR7PLJ6y9pc=
+
+Name: com/microsoft/cognitiveservices/speech/util/ContextHolder.class
+SHA-256-Digest: q/7zp8R7yPmi4ls72bzoxZe81D+si2K/4AnMyRV5M3k=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationSy
+ nthesisEventArgs.class
+SHA-256-Digest: WSyAan/pLUjRlzgubM8jyYmsAZq4zFqd426bpmnZm2A=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$7.class
+SHA-256-Digest: F9C4wUG6UeshkNkhUbH7e8bhKbsrfm/OjZyTut+8NUg=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisOutputForm
+ at.class
+SHA-256-Digest: rZqYufa98I9x871lVxvM7e3FOZNYah3CmCi1cHj3kYM=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioProcessingCons
+ tants.class
+SHA-256-Digest: 5TOd9YK4qxmQsQnPdYlRF4YgAyrJ3il95wvT5amy9OA=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$4.class
+SHA-256-Digest: eG5edcjhqW4cjmiMz5MWhSbDk90vnV4/TCI1W4DEuAw=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$DialogSpeechRecognitionResult.class
+SHA-256-Digest: SUuJGbiAJ1VJXVVCj8BTOiDYCyiwgYyqU4zP8pDHlqE=
+
+Name: com/microsoft/cognitiveservices/speech/util/IntRef.class
+SHA-256-Digest: /criGdRS16Hm3P9HXUesNNFWELkHrz1avNYJemq7uI8=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognitionModel.c
+ lass
+SHA-256-Digest: A9TSnmWHmiCmDVFNdN5h6mPh2x8ICrCPaF2y5g+hJ/w=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$10.class
+SHA-256-Digest: IRK0GG4quh+wUTWYHGo+G8laOGcoJBP47itNwhWS1Lw=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$1$1.class
+SHA-256-Digest: TnCKy1Zb6CBS44ciMS1vBaHgo/ZsTO5TxObh6WMdZu8=
+
+Name: com/microsoft/cognitiveservices/speech/Diagnostics.class
+SHA-256-Digest: OftiVaWDO8PRF80eUB3IvpBpTP1HBRopXMRMUJtLAIk=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$1.class
+SHA-256-Digest: 4XSzv1a054EFjob8450+d6T2PpWuheNQg+6fH5zMUaU=
+
+Name: com/microsoft/cognitiveservices/speech/util/AsyncThreadService.c
+ lass
+SHA-256-Digest: oDTf1wylqIk3/dJQ32b76FJ7Y/cN3QAeJ8eKpVk27cE=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$11.class
+SHA-256-Digest: nGbx9wtDKmr+iIN9gLc308EZgvfX9Kz9+34NbuPZvqM=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/User.class
+SHA-256-Digest: beKwkOgnjbca7UORCgkLRtuvrBCV6hc/Tkm1Lk5mV4w=
+
+Name: com/microsoft/cognitiveservices/speech/AudioDataStream.class
+SHA-256-Digest: lQh08VTByL04LD/ySFvo4/x1iEQ+mfS1rxqlUhlGBdc=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$5$1.clas
+ s
+SHA-256-Digest: qFt+/8ZcbsjX3uarSjELZcR10R7H4TYyj/UOV/NLH5A=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$2.class
+SHA-256-Digest: xjtJtQQfTrSNOiVv3qK3/TWu+/77HP4s5QSWhcy+6Nc=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$10.class
+SHA-256-Digest: xVJ2kH4nGXda1s/qPURB146iYTnU6kbid4Ln9V552Zw=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$6.class
+SHA-256-Digest: ESeTKzwl//Rs747u0+tWoRGzst9j4+gOOjXnJZtmJOQ=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$4$1.cla
+ ss
+SHA-256-Digest: mtFtHTkj25jfwJGzPnr6TgDhSlSyMA/8gPVuYbAB6i0=
+
+Name: com/microsoft/cognitiveservices/speech/SynthesisVoicesResult.cla
+ ss
+SHA-256-Digest: jO7+tN5vM1UajUY/zaJPAm2AwA+AqjClGKp7H2iNGyg=
+
+Name: com/microsoft/cognitiveservices/speech/SynthesisVoiceStatus.clas
+ s
+SHA-256-Digest: n2Svq3ZOIpNTTxIHXJaX0QTOaWa49tz8syssaJhcUW4=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$10$
+ 1.class
+SHA-256-Digest: vp5vjHNOTvbqEXYXtHirPtHIqlI+eSZsp+20UcWX3bw=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$5.class
+SHA-256-Digest: HIwnUdVAo0h26OcCNUknvQVTHilwncEWz2TO+LR2+uw=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/Event
+ Logger.class
+SHA-256-Digest: 5eyusW5UesU66Clf4SKrnHFrWXj4AitgGF/eUSlI6MI=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$6.class
+SHA-256-Digest: N4Fikydi9pcqxVUwy++RU8DwcoTWfgCQDbgbGLmrjHU=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting.cla
+ ss
+SHA-256-Digest: bEYFrV1YvdS4B/BWtw1N16yU0zkTXuSPNkEFe/xbGRY=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer.class
+SHA-256-Digest: GDfkJLwj7FGydmpsV0USuYU32Mn9u6IX7yTtwLEA6OE=
+
+Name: com/microsoft/cognitiveservices/speech/audio/PullAudioInputStrea
+ mCallback.class
+SHA-256-Digest: uP31/Rc0ghl+lbZ5nF9CXqGDzsf/o8RTLyq5lmDOquo=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$3$1
+ .class
+SHA-256-Digest: w9sMg4n9NjL1+zF/e1chZugW+JPv2Xokz6l8K/0VJEw=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$6.class
+SHA-256-Digest: vlN4bxUcJS98txo0fArboZwCVgE0KueHocWnqvsJ7Rs=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$2$1.class
+SHA-256-Digest: faItNnVWJi9aPQ6tnkf7rpSV4bdpOyxoEz6M5ZJhYTY=
+
+Name: com/microsoft/cognitiveservices/speech/NoMatchReason.class
+SHA-256-Digest: qaU+Yj7APHR0npZBNfhiG6sHTo4MeiNQssKZc3JqOT8=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechConfig.class
+SHA-256-Digest: i1P6c+lficB7J2XEhA5cOTHWLohbhVCIbsvfUa51j4o=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$15.
+ class
+SHA-256-Digest: HLV01V4UjjDs6Sz+19ithwQ1oroH77NSpbBI6ITO8p0=
+
+Name: com/microsoft/cognitiveservices/speech/Connection$1.class
+SHA-256-Digest: 5/Es28gZ3109jH7AJ8vwVyZCvQnEUu7apvOVJlOyAoM=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$5.class
+SHA-256-Digest: SBiMW+MLHm1IBTqoB1CFxgIfbrzPHOCBy8DckX/SrHk=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisVisemeEven
+ tArgs.class
+SHA-256-Digest: 4OjvsMt5FLEEmENK7ARm3WrLTaWYMvUJFeAONWbEafw=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioInputStream.cl
+ ass
+SHA-256-Digest: fD4Wgnzp08eVY3/brPtYfQzodAcAUMyAy6hAzGE62/Y=
+
+Name: com/microsoft/cognitiveservices/speech/PhraseListGrammar.class
+SHA-256-Digest: FqPReV/F+GaYW/M0niRbWh1Fn2mnVuB86O9z3fMICh0=
+
+Name: com/microsoft/cognitiveservices/speech/GrammarList.class
+SHA-256-Digest: ESHc9Xz0VPAANylm+5p12JPvdGU2AdtuB7Uo3HZmW5Y=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$3.class
+SHA-256-Digest: bzCewe5s1mY+nljwhttlb2qG87rvA60PN5iu/3yH0ro=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer.class
+SHA-256-Digest: yM7DdMpdS8WabbkzUIOErWzGTyCA7jQ+4zod9EtrhK0=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$6.class
+SHA-256-Digest: p7cPE74sq4+9iIap0ok/RFSvFaaq8IEhzPyNOtRId+s=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer.class
+SHA-256-Digest: FhH0T9E/vNGw+QG8M2qTp9mixZE2sudEtxsou7SNfY4=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$14.
+ class
+SHA-256-Digest: d+H8vFrFk6aVWtGtDfqkRnTLWm2TuheD37nbgKGCGO0=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisWordBounda
+ ryEventArgs.class
+SHA-256-Digest: p8KViE0pzhs8yc8B6ZU1dGWhVMCRTqvtt6+eiXEKZ0g=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/SpxTr
+ ace.class
+SHA-256-Digest: AUJ9UycX9QreOH6rf1soZJZnuTP+bJBXDS3PDHro714=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$1$1.class
+SHA-256-Digest: D1yBoGh6Zo+4N/FDfvuQLzSHWSmjyDDDbFV/NzlentY=
+
+Name: com/microsoft/cognitiveservices/speech/NoMatchDetails.class
+SHA-256-Digest: vlw4cGZGCSmCLN8jdvERBkmzBu07nVnzXHhCz/LtpH8=
+
+Name: com/microsoft/cognitiveservices/speech/WordLevelTimingResult.cla
+ ss
+SHA-256-Digest: BJUrdAKRLAqeL53LuLfPbIc+b4cJXrDJiHNwiAM/SMc=
+
+Name: com/microsoft/cognitiveservices/speech/util/HttpClient$FutureShi
+ m.class
+SHA-256-Digest: h/1eV+oipr3BhnVZTH4rs3zGaq3x4iqPTeqxzzGh21w=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$7.c
+ lass
+SHA-256-Digest: RWBweoSnuHFzXfEuKkoXmveyCvxfRyDimaKyBSgWMOE=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$1.c
+ lass
+SHA-256-Digest: 1lDKPrifUe+8OmgLAyuOPLg/mU2xdwwVtSYU6P0qPXY=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$10.
+ class
+SHA-256-Digest: oYVS4yt3bd4PV8BmJG1cGTFRBQmT7oJR+d1pf7pPsgI=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$5.class
+SHA-256-Digest: UGRin+UBA4/bfg9P6cNEfAZ695jHLi4LROlpMn+KJ3M=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$7$1.cla
+ ss
+SHA-256-Digest: DwCeBo6M/0SCBUEbEGu67wibjcCkIro3x55szw5+rHQ=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$1.class
+SHA-256-Digest: exwq+NsGrfOKAxKM8D0PoTwlf7WmeLB5wSM6QLD1MBM=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$2$1.clas
+ s
+SHA-256-Digest: EEbDN3bzL+mFLTTE8lqFkxTtmpTQnynyFFXekZdlL3w=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$11$
+ 1.class
+SHA-256-Digest: aBdw5coo5xGSbadTt6T5lpCAyGLZ+XasIB4farvlf1M=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$15.class
+SHA-256-Digest: 14YSDQLeL8ZYw/b/rPqWewyCp4uHTc8wWpM1jX2LBAg=
+
+Name: com/microsoft/cognitiveservices/speech/PersonalVoiceSynthesisReq
+ uest.class
+SHA-256-Digest: dRMR9HpSipZj/ll0XVwgyWFRCF2qIe5LIfXTEXJwx8k=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$10.class
+SHA-256-Digest: e/6q9XxL2LQIDAmaldKoCFog8v93x2hgiStSh37FgYk=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$10.class
+SHA-256-Digest: KL2OLLwG/bkZStLYEO2xufEerXk4wtcmtFEL8wnqRAM=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$13.clas
+ s
+SHA-256-Digest: M9igJ4cG/AM15Cng4jeFeU/UO8TVcBuG16SBE/q4E6s=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognizer$2.class
+SHA-256-Digest: drWSR6wQQ/fcduVCPNUCl7TybY0e07f8rvU4IRtKl7k=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$3.class
+SHA-256-Digest: 1qqMkb6KdAz8dp9ac8Sd3afBq+U62jToWYndYYWlpZE=
+
+Name: com/microsoft/cognitiveservices/speech/CancellationErrorCode.cla
+ ss
+SHA-256-Digest: X3UHc8L1nCJXOaAH59R5+SumptcFB4z0kd3SYej5K4E=
+
+Name: com/microsoft/cognitiveservices/speech/Grammar.class
+SHA-256-Digest: b07xGVP6bEowW6SPf6qGocfsjvQ+ObrAyQbyotNuNjE=
+
+Name: com/microsoft/cognitiveservices/speech/util/ConnectivityCallback
+ .class
+SHA-256-Digest: Qfuk1KEyrrInFWrqsmV/h6imjTGZRicMGDcZ7ProKjQ=
+
+Name: com/microsoft/cognitiveservices/speech/util/StringMapRef.class
+SHA-256-Digest: VuVG8Ub/ieLAWLP9m4dxvpmHS4sJdpehrBcaMAUOqAI=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$16.
+ class
+SHA-256-Digest: tzc8qUNUMH1QLOfWgrKVW5wEjMKYK+z7detwYz6tOhM=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$2.class
+SHA-256-Digest: u+k7x2u4hPMg8KUXnTqz4k8Psdki8yx7Vz7aRAPxc2M=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$7.class
+SHA-256-Digest: k5zgHwqeljHQ9hSzwzzGQiMRKYmVgo0ONTwcVxdRk1w=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$6$1
+ .class
+SHA-256-Digest: dj3oAQ/yrPj7cUBZ+jV3qG886hfvq5bfcFY7vIbiyHc=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/BotFrameworkConfig
+ .class
+SHA-256-Digest: 5xyAlUJCcMJz4w2Lo4DP9yaCynhMFu9XSuGnCtnFryU=
+
+Name: com/microsoft/cognitiveservices/speech/util/JsonBuilderJNI.class
+SHA-256-Digest: lIOtIIxWX6ojD89E3OKXP4gsPRevduibkNH89WOaGDc=
+
+Name: com/microsoft/cognitiveservices/speech/Connection$2.class
+SHA-256-Digest: BMF/aunTOLKc5WgoVYkmfKjKV9bgk7GN8gcDwBzHH4M=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognizer.class
+SHA-256-Digest: 5tIQVrAqhtuyxE/AwCu1MQ47R81u5/4PMqn4/ZxXDuM=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$11.class
+SHA-256-Digest: 59lX6YpfZscFqf5BqnVxDSqPrBELGlTn1Eft2BgHjP8=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$2$1.cla
+ ss
+SHA-256-Digest: ZvQ8KJnD+8Z9uriYepXtgoKFm8GWarzoyyHP9YFDt88=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/Event
+ Logger$EventHandler.class
+SHA-256-Digest: vdblRlQ5YX0M9h3fOfWAUTMWLEUMtGW3lJSkzfaRegg=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/Logge
+ r.class
+SHA-256-Digest: GNJ2ORWemrqPRE1nER2HOvyASEcFHeEdW4TzS+A34oI=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$8.class
+SHA-256-Digest: /Y6i6uAmhjcVifnR6si00OF2OcVtvI4DySjv9i7u+p4=
+
+Name: com/microsoft/cognitiveservices/speech/AudioDataStream$1$1.class
+SHA-256-Digest: 5R62XjlRrXFLbq+yUrlyWL7AFdT7mvYsBbVpqUrvOpE=
+
+Name: com/microsoft/cognitiveservices/speech/ConnectionEventArgs.class
+SHA-256-Digest: hREzfyGMGjV4TsdQq//R3+/sXsHzsM6jlQRMC0+vlzs=
+
+Name: com/microsoft/cognitiveservices/speech/util/HttpClient.class
+SHA-256-Digest: qGKimAg/bpPbndbV2KkM85yl8OfH8I8oTnTAA8SgCrI=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$9$1
+ .class
+SHA-256-Digest: ZRBMjfhmZCTdnN0a0RnlNqx2B/U/Po9/G9XVXWthIXA=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$12.class
+SHA-256-Digest: Co+rzbBTJXg5uxPGmjQy+q0xJGfkypbRO7nnR8k+Zdc=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognizer$1.class
+SHA-256-Digest: JS73/oIqXkAZo6JbTAyucRM1o8peX0aey4FgoWLm4HM=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$2.c
+ lass
+SHA-256-Digest: EDb9bkil93Vi8D/jDqvb7u+medAwUHSunqA6XHH32G8=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$2.class
+SHA-256-Digest: ebBTdwppxK2w5xKkCxsek5F81T1x+mAP6IGdqxEZlN4=
+
+Name: com/microsoft/cognitiveservices/speech/util/CloseGuard.class
+SHA-256-Digest: flZruTgz06kZGTf0UC4t1kX/J55dX+J1BVvIG5d7RjY=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisBookmarkEv
+ entArgs.class
+SHA-256-Digest: TjR3txZ97sdQ8v0CWJGFjVg4SlXXJBVX693bTXRjf2c=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$4$1.class
+SHA-256-Digest: DahUAqdonShRxheiis32Y/oQHHT0YmXs+mDnMcFI6wI=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$8.class
+SHA-256-Digest: Xk63XbwV0U8Ucrfgt8VBi6NNagOpevEd7ePYM5v0aNE=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$1.class
+SHA-256-Digest: pnBjpjLcriNdiSCJKg9jRR1OxK0kORPZqkGlUwBRT1Y=
+
+Name: com/microsoft/cognitiveservices/speech/Connection$3.class
+SHA-256-Digest: JZAGW/ZhQEn4OctJUfJ3tjYh9cht+p3vFcbX8V3ggMA=
+
+Name: com/microsoft/cognitiveservices/speech/PronunciationAssessmentGr
+ adingSystem.class
+SHA-256-Digest: KyzkKfynLuuCiuSjrkerPyEQIPwfyXBiuliSuSQhl2I=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$12.clas
+ s
+SHA-256-Digest: XSaIvD2l5uS1vmS9AqE5/eVBxihOUN20hIUnorj3nac=
+
+Name: com/microsoft/cognitiveservices/speech/audio/SpeakerReferenceCha
+ nnel.class
+SHA-256-Digest: d+ApnmvKSlWwulL0PSh30yL0CwAMsdwyJD5n1oe0u/8=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$9.class
+SHA-256-Digest: +RvTEzInoIdZtuVZpSvcm7VIPD+aB3xmyMWH0HMYZGQ=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$5.class
+SHA-256-Digest: Up6KBaiYQCbfsuQe6Cu5tTSjuN504pDge8Hw6eAoZD8=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognitionEventArgs.class
+SHA-256-Digest: zaoSD4WIgdlfeY3SF/m5lXN1ZnYp5Hr7SArYACTLimI=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$16$
+ 1.class
+SHA-256-Digest: zRG+sk2kmll9QMcfQ30zjE1HwAtZcAOMQLPaOb9zzpc=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$9.class
+SHA-256-Digest: bfn7qRnXQvmBDTIvW4No8dHu4fKG0KBeCyWB3cy0gzA=
+
+Name: com/microsoft/cognitiveservices/speech/HybridSpeechConfig.class
+SHA-256-Digest: oS0nErjJN4AJOgKMR2N+ionrTDRoBTvZ3nYL0UdKJbE=
+
+Name: com/microsoft/cognitiveservices/speech/util/InternalContentProvi
+ der.class
+SHA-256-Digest: gMCSVQgTUWt1KHh1Rs5aT7m0tPv8HTUAkd2gbWf29T8=
+
+Name: com/microsoft/cognitiveservices/speech/util/SafeHandle.class
+SHA-256-Digest: efRXiKS+hKUMyabPvjih8DvZZvqyPOlb+6A1GGYMzHA=
+
+Name: com/microsoft/cognitiveservices/speech/PronunciationAssessmentGr
+ anularity.class
+SHA-256-Digest: lHf6VmSx+X4ie6bEj5egiaLRaB67w1zRLSOI/h71DhY=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber.class
+SHA-256-Digest: 9C0gf1xI6+zQITIbFXR/hZ02/i/2SKiSIIsiVHlcwXI=
+
+Name: com/microsoft/cognitiveservices/speech/util/SafeHandleType.class
+SHA-256-Digest: WHJNjYSXL7gihtkNwfvGfQfjLOWP07IhyPhR05OUkgU=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$6.class
+SHA-256-Digest: CCqYWRa8uJCsF+4OHgqyM78uoGr8aoLXEd+RF0HPQxQ=
+
+Name: com/microsoft/cognitiveservices/speech/audio/PullAudioOutputStre
+ am.class
+SHA-256-Digest: ep81oCoyguSRLAJPJpT6mk7k7S13tZ8aeEBeJNqT54Y=
+
+Name: com/microsoft/cognitiveservices/speech/util/JsonBuilder.class
+SHA-256-Digest: U3h9OJc4s46zPBbnYgOFXzdKT/VYpJjmYEgkPRojObE=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$2.class
+SHA-256-Digest: 8AdPlUutvUzkpWsmFdu839g8yLPPq2U8BIEvP2cu/XQ=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriptionResult.class
+SHA-256-Digest: 39qWRJtTxT08aifqhpXR3iFZuAqiUurjztt7sjO4Jk8=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$11.
+ class
+SHA-256-Digest: AA1K6LVgKefiXlMuBbCup0jULZgyViS06Dtv1NPpK7o=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$7.class
+SHA-256-Digest: mQPEyHZQHRA3/YfYmuFWgmvC2MyUQ8nqR+MlJY9ZqEY=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$8.class
+SHA-256-Digest: lRWSGlV3LTtfxBJffflANsbSm127/MaoOXMBiu5jTeo=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$3.class
+SHA-256-Digest: KGqA74WZgaYa0Iy8SMxHOPsn2wKu9iDlwvubvaTxs8Q=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognitionResult.
+ class
+SHA-256-Digest: A1M0m3aW3NFqVZCPS7Lua43M60LT0j8XmG2+W1kUwhg=
+
+Name: com/microsoft/cognitiveservices/speech/NBestPhoneme.class
+SHA-256-Digest: IKFCbJpsjD1Y2CtMX1kMroHoOh6Ph3kqFE0hC4k1KkM=
+
+Name: com/microsoft/cognitiveservices/speech/audio/PushAudioInputStrea
+ m.class
+SHA-256-Digest: AoeGHcheJGKLdSAjuAKRT/brWmeH5EeWzdCJb4MSVg4=
+
+Name: com/microsoft/cognitiveservices/speech/ClassLanguageModel.class
+SHA-256-Digest: 4qATHGlvqbWNrY/qm/Su64gA0UR9rQkNgxKN5VFDh8M=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$1.class
+SHA-256-Digest: Zb3ZreDK9aUjDXQawHjwh7WoqlvBRI75g+fgvtwzLeU=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$14.clas
+ s
+SHA-256-Digest: 1AeukcwPu4M6qQkbYv1zhKNwoEp9LIQdzCsW19GhehM=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/ActivityReceivedEv
+ entArgs.class
+SHA-256-Digest: i1aPdhKXAiHVTxpJMBCWrXWg0fpW9w7Uykg+RG3lkLw=
+
+Name: com/microsoft/cognitiveservices/speech/PropertyId.class
+SHA-256-Digest: zNkMs5Q1cQt0ZzSeF/BXoU6CwqjnUIQDPz2NiaBqu1U=
+
+Name: com/microsoft/cognitiveservices/speech/audio/PushAudioOutputStre
+ amCallback.class
+SHA-256-Digest: GMif+1IxzjqMvQ4RfwiOUCyp8tCDrhF9kORFVKoQcrU=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioProcessingOpti
+ ons.class
+SHA-256-Digest: GhhxSNx5AFMdLm+bKRah1gYyeFyJpL5S4r5WenmMfx0=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$7.class
+SHA-256-Digest: 1zntGJMbg/v6j+kirAbXOo539JS3A6TqXOx+430xjRQ=
+
+Name: com/microsoft/cognitiveservices/speech/SyllableLevelTimingResult
+ .class
+SHA-256-Digest: ItOyWzqxz82iYXVPO2XiDJqxr4l+Ea5E9lfkBtFGVjM=
+
+Name: com/microsoft/cognitiveservices/speech/PronunciationAssessmentRe
+ sult.class
+SHA-256-Digest: sSrEjhNqiYcmChRg31m/uuA0I3hYgS7U0Z3BJZfsfys=
+
+Name: com/microsoft/cognitiveservices/speech/ResultReason.class
+SHA-256-Digest: ybkzgNRQhF0uljrXd3julrhuMHKwr8hXOEDv3BohbJw=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$1.class
+SHA-256-Digest: 0HUvK6YcXeF+lp4xODlir0QOBm3HqrbJM/R/gP9KVY8=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$4$1
+ .class
+SHA-256-Digest: WcgvScadNYItrKtNi636TGx5Jj4+FrRIj/QFKcoR1pE=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriptionEventArgs.class
+SHA-256-Digest: EdUlxU5Dm9PVrgcWo6nM0fiqs0TnYhcZvvF4qXjoWDs=
+
+Name: com/microsoft/cognitiveservices/speech/ServicePropertyChannel.cl
+ ass
+SHA-256-Digest: jmHUKzMeZd2HGS+OHZdpheiqyIIfbTxWkto96wWA1/k=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisEventArgs.
+ class
+SHA-256-Digest: BKviQS4JB2sx93V6YTZ+ug9RHfr/6WPPfSrnZMQJGFU=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$3$1.class
+SHA-256-Digest: AOcc3MzFi80pjx3VhinZQSQPsDpXged1d/DGkcZHK4g=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$5$1.cla
+ ss
+SHA-256-Digest: NbSw56I0KBmnkFC0CV9jdhWvXm7ivv1DeRzCXsahX1Q=
+
+Name: com/microsoft/cognitiveservices/speech/audio/PresetMicrophoneArr
+ ayGeometry.class
+SHA-256-Digest: edJ601PG7iuT+9wdLsCQVxFKF6vUoxiJPQVbR3Ixanw=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/Logge
+ r$Type.class
+SHA-256-Digest: nAkJ2mttbxpWo3y0VPtsUSZ841gwQlg2wFJ//D/+JhM=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$3.class
+SHA-256-Digest: 5GABzXtuukxV8FwHtHrGiDURUXqKvVztUzjKHP2t8Ek=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$4$1.clas
+ s
+SHA-256-Digest: YvIOyA+szCfbHXXgq6twF4sRlsBOOJDdGlV2AnRb7yQ=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$6.class
+SHA-256-Digest: fTh6KIQEhPa2w0M+2CRzAkKBsaEvisHAhwvTKB5b5HA=
+
+Name: com/microsoft/cognitiveservices/speech/Connection$1$1.class
+SHA-256-Digest: P4GXpIJs9X5NQ+K9eT/4HSAjn12MCqzjZlXY4eQj0GE=
+
+Name: com/microsoft/cognitiveservices/speech/TimingResult.class
+SHA-256-Digest: qBxbrTYVQYA4FhaU/nYCQTgtGVv+C4UHqbSWmiAth9U=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$17$
+ 1.class
+SHA-256-Digest: 0NjtR0jVWyaWr36flfor6QJ8woPspLmWvW4OVDg9zro=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$2.class
+SHA-256-Digest: 7Nq5VIc94bsN5prvDz4YfH9uQsCqPD5icLbgXvHUaGM=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$5.c
+ lass
+SHA-256-Digest: 0Lu3YcNjBcNG4yPvzuQv/+rdA6dIjl5WpDJXEXVZDIk=
+
+Name: com/microsoft/cognitiveservices/speech/AutoDetectSourceLanguageC
+ onfig.class
+SHA-256-Digest: 2pPloEZITbrZmbwEbOq/jEcJKP1gE4HFZUOEGEMPSxc=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$14.class
+SHA-256-Digest: tiVqMBVsSPbCnZvi77M+qfPanu4f1rVRovvvWV+/HVQ=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioOutputStream.c
+ lass
+SHA-256-Digest: qJ5gz94UGXx74oY+o07BoEc7tLSDqdA/U6i7tBbbuS0=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisRequest$Sp
+ eechSynthesisRequestInputType.class
+SHA-256-Digest: xf7KfcNm5Q4tSdcP62aZExYqfnRromV7jVJl9vB0X+4=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisCancellati
+ onDetails.class
+SHA-256-Digest: MAB9mjcOsLERRgxYjp8DyVoeb+ByVI9VV6AEyc2ql/Q=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisBoundaryTy
+ pe.class
+SHA-256-Digest: w7P+jR+Mn0g109CGlmY8DW2fW7jL2VxbVCDruqewlY0=
+
+Name: com/microsoft/cognitiveservices/speech/StreamStatus.class
+SHA-256-Digest: 1ebtteNM5k+6Ye4ykvntZT+xXZMaXbCgUJd78bMiYcs=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/Level
+ .class
+SHA-256-Digest: kVjprY7+SPosMtuCw7uIOsL/ANLTCnNLAMFyWWXMF5Q=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$8.c
+ lass
+SHA-256-Digest: 9qvgV7eXdof9AVw7RZMConlDBKLpa6F82HNwvWtm0xA=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$17.class
+SHA-256-Digest: z0wUbtYqDzeP+B+IUyeeB+WrPpb/ATsQDtCrlSHfzyY=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$9.class
+SHA-256-Digest: WJSvKyH5NHe7HHIeMzolH6Ifkqhyk0EZtf2sOdipuvI=
+
+Name: com/microsoft/cognitiveservices/speech/util/EventHandlerImpl.cla
+ ss
+SHA-256-Digest: 8ZO7WXUJkUKryeCl+pGFGn3+9l9JL40tTgs/LxUjWbU=
+
+Name: com/microsoft/cognitiveservices/speech/audio/MicrophoneArrayType
+ .class
+SHA-256-Digest: O40ScKB8jqLX0inWzFli93UPi7F9rRISThFsWivvKo8=
+
+Name: com/microsoft/cognitiveservices/speech/util/KeyedItem.class
+SHA-256-Digest: 2T5cVj1Gf+SP1esd+aNV6QKKnhmprjEZL6HsFPrDFe8=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$1.class
+SHA-256-Digest: QzI8O1tp3cmljb/P1Rnf0KSgzfoxeEU12KdqXqz+B/0=
+
+Name: com/microsoft/cognitiveservices/speech/RecognitionResult.class
+SHA-256-Digest: OAATkNGNlGjoHB5AbzFYCyNGrw9fJBFAYHDOGozRi8o=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/MeetingTran
+ scriber$11.class
+SHA-256-Digest: er69+s6kaKXVBWjup6GjVzOPikxxLNSgHgY4e9ryCTE=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$6.c
+ lass
+SHA-256-Digest: VAvo8Yce/CaLgUs28KC9aX8OWYm2AyAexKgfZLI0Alc=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$4.class
+SHA-256-Digest: vMov2yTMIL3RlBavY90o9wEDfIW6HMD/KNCtNxf7y8o=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriber$2$1.class
+SHA-256-Digest: LrpqeA9XM6nkcVM242KzA0ou+TkuGrJoVwVskqf4VZQ=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesisRequest$Sp
+ eechSynthesisInputStream.class
+SHA-256-Digest: hKMWPkhqGueMMAWcqidaKH5EV3zL59FAFQElX7n6kRU=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$8$1.cla
+ ss
+SHA-256-Digest: 8U8v8ULIAkd5lYGkh5POHT3pff4Vqo3Fu2vq4JY5GE0=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognitionEventArg
+ s.class
+SHA-256-Digest: ODBNSKOS0P5nwbietIOcDHrvi+7n7jY5RSjKOXeGPqA=
+
+Name: com/microsoft/cognitiveservices/speech/util/JsonValueJNI$ValueKi
+ nd.class
+SHA-256-Digest: qTHxrd8KIYKBHSIAIzeiLaYusYASqlaEhbGCjhKfMyQ=
+
+Name: com/microsoft/cognitiveservices/speech/diagnostics/logging/SpxTr
+ ace$CallerInfo.class
+SHA-256-Digest: 7BMZ1ZXCFF1b7vSirk/SAKMnhIhjGlozhd9NWlZaock=
+
+Name: com/microsoft/cognitiveservices/speech/audio/AudioStreamContaine
+ rFormat.class
+SHA-256-Digest: fWct5Bt3m9I1IdBEv4OCBXoFL/kHxJUDQXVLD63tDRI=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/DialogServiceConne
+ ctor$16.class
+SHA-256-Digest: +dsCFJcdDUWe7wph85KkFrHvuEe/8vDLrslRsofJCCU=
+
+Name: com/microsoft/cognitiveservices/speech/PronunciationAssessmentCo
+ nfig.class
+SHA-256-Digest: z7LD8r+Ht3fgvfTiPv66Do/6XGo52sqt2cAWWra+mmI=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$14$
+ 1.class
+SHA-256-Digest: OVELq0H5IwtfNZtUA4NwzRYKxQqSyxTyyDdmG/ILrsw=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationRe
+ cognizer$2$1.class
+SHA-256-Digest: sNvMi0Ie9ao7uen7GouL0pKsPYZhfT6g/hJk1m7iU2I=
+
+Name: com/microsoft/cognitiveservices/speech/CancellationDetails.class
+SHA-256-Digest: +y0LyIuGzQ/MqrZsjHyiCJH7GFZNb/bzslBmlYQ55a4=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognizer$1$1.clas
+ s
+SHA-256-Digest: ZyJFRfpyIcmd0HQpo1b82nBv+CG06knMvcv6gJpp9oM=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechSynthesizer$15.clas
+ s
+SHA-256-Digest: 51BfxFgq6zCuhwHInFtvfPKJMEWGc//OJstEO4gsqss=
+
+Name: com/microsoft/cognitiveservices/speech/translation/TranslationSy
+ nthesisResult.class
+SHA-256-Digest: BEZDPCZ3FUFPDi5viXup6l+IvaWnLIKkwzjXh/VBudw=
+
+Name: com/microsoft/cognitiveservices/speech/util/EventHandler.class
+SHA-256-Digest: yu6HRboLbVUyrp4gL4RZVoFTyWohpw4YZS4klfrZ3Gw=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognitionCanceled
+ EventArgs.class
+SHA-256-Digest: FUfGuCnxtAceQHqPOe0m8t62Pd0sqGqasCKtDSfxFWk=
+
+Name: com/microsoft/cognitiveservices/speech/SpeechRecognitionModel.cl
+ ass
+SHA-256-Digest: KQBDuX6RiLr4OWlOa7+JOyPOwpjWM2A8MS6JyAPauic=
+
+Name: com/microsoft/cognitiveservices/speech/ProfanityOption.class
+SHA-256-Digest: 8uLWJgjPwMl4MgjZDu6Q+q5Zxy+0JWfEox7WcPsb1/M=
+
+Name: com/microsoft/cognitiveservices/speech/SessionEventArgs.class
+SHA-256-Digest: Vq20cxS3C4HJySyKlkmqDeSN8/EFE/tbD4iJZo6UUQA=
+
+Name: com/microsoft/cognitiveservices/speech/dialog/CustomCommandsConf
+ ig.class
+SHA-256-Digest: yALOn+/J7K36sajEydBwvIeIlxWkblMXkvWB3T9IZ/s=
+
+Name: com/microsoft/cognitiveservices/speech/KeywordRecognizer$3.class
+SHA-256-Digest: ul9iMSZBpXnNuVU63Gt7n9FPWCtUranu0Afok5iLNyg=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Conversatio
+ nTranscriptionResult.class
+SHA-256-Digest: weV3VHcIeB7sH3KEWhZwZsDWxmoaL41f1cpzd1+KsSk=
+
+Name: com/microsoft/cognitiveservices/speech/transcription/Meeting$7$1
+ .class
+SHA-256-Digest: SV2LO2nCG7/b20jVQdo/cqn09ahilA+Mhd6PdS6SFV8=
+

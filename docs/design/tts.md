@@ -8,6 +8,14 @@
 
 ## 设计方案
 
+### 统一显示端优先生成路由
+
+- `tts.device=display` 时，所有服务端 TTS 生成入口统一经过 `generateTtsWithFallback()`。
+- 显示端在线且具备 `ttsGeneration` 能力时优先生成；显示端失败、离线或超时自动回退服务端。
+- 显示端收到 `ttsGenerate` 后必须在 3 秒内回 `ttsGenerating`；未确认接受任务即回退服务端，确认后总生成超时仍为 60 秒。
+- API、聊天、Agent、文本媒体、语音指令、提醒和整点报时不再各自直接调用底层 `tts.generateTTS()`。
+- 底层 `tts.generateTTS()` 只保留在统一 fallback 函数的最终服务器分支；生成设备与播放目标仍然分离。
+
 ### 0. 显示端睡眠检查由调用方指定
 
 - `tts.generateTTS()` 只负责调用外部服务生成音频，不读取显示端睡眠状态。
@@ -57,3 +65,10 @@
 - Wine TTS 使用常驻 worker 和 FIFO 队列；任务由调度器显式绑定 worker。
 - 排队任务支持断连移除、排队超时和队列上限；100 字压测需同时观察请求延迟与进程树 RSS。
 - Embedded Speech SDK 的 synthesizer 复用实验会加剧 RSS；Wine worker 默认每处理 10 个 S 请求后在任务完成边界重启，限制 native footprint 累积。首次合成常驻内存仍需按运行环境监控。
+
+## 3rd/tts-server Linux TTS
+
+- Linux TTS 服务设计见 `docs/design/tts-linux.md`。
+- `tts-linux.js` 与 Wine TTS 保持 HTTP 接口兼容，但默认通过独立 Linux CLI 子进程执行合成。
+- 正式运行时资源放在 `3rd/tts-server/linux` 或由环境变量指定，不依赖 `NaturalVoiceSAPIAdapter`。
+- Linux/Wine/APK 使用同一硬编码授权串；Wine 默认 prefix 位于 `3rd/tts-server/wine/runtime/prefix`。

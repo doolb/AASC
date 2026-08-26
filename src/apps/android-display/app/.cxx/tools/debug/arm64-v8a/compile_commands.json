@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/mnt/AASC/src/apps/android-display/app/.cxx/Debug/3ga2vd6j/arm64-v8a",
+  "command": "/opt/android-sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=aarch64-none-linux-android26 --sysroot=/opt/android-sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot -Dcpu_affinity_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -o CMakeFiles/cpu_affinity.dir/cpu_affinity.cpp.o -c /mnt/AASC/src/apps/android-display/app/src/main/cpp/cpu_affinity.cpp",
+  "file": "/mnt/AASC/src/apps/android-display/app/src/main/cpp/cpu_affinity.cpp"
+}
+]

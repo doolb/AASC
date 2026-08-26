@@ -1,0 +1,27 @@
+{
+  "buildFiles": [
+    "/mnt/AASC/src/apps/android-display/app/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/opt/android-sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/mnt/AASC/src/apps/android-display/app/.cxx/Debug/3ga2vd6j/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/opt/android-sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/mnt/AASC/src/apps/android-display/app/.cxx/Debug/3ga2vd6j/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "cpu_affinity::@6890427a1f51a3e7e1df": {
+      "artifactName": "cpu_affinity",
+      "abi": "arm64-v8a",
+      "output": "/mnt/AASC/src/apps/android-display/app/build/intermediates/cxx/Debug/3ga2vd6j/obj/arm64-v8a/libcpu_affinity.so",
+      "runtimeFiles": []
+    }
+  }
+}

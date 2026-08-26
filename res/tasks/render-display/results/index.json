@@ -1,23 +1,6 @@
 {
   "instances": [
     {
-      "instanceId": "8db6c9bc",
-      "taskName": "render-display",
-      "status": "running",
-      "timestamp": 1787318556538,
-      "target": "display",
-      "env": "auto",
-      "mode": "service",
-      "displayId": "display-ec4p3r2z",
-      "params": {},
-      "taskType": "user",
-      "builtinId": null,
-      "entryFile": "task.js",
-      "stage": "running",
-      "progress": 100,
-      "error": "显示端已断开连接"
-    },
-    {
       "instanceId": "683907f2",
       "taskName": "render-display",
       "status": "stopped",
@@ -32,6 +15,23 @@
       "entryFile": "task.js",
       "stage": "stopped",
       "progress": 100
+    },
+    {
+      "instanceId": "fc67ce52",
+      "taskName": "render-display",
+      "status": "running",
+      "timestamp": 1787664990865,
+      "target": "display",
+      "env": "auto",
+      "mode": "service",
+      "displayId": "display-n2wpk2v5",
+      "params": {},
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "stage": "running",
+      "progress": 100,
+      "error": "显示端已断开连接"
     }
   ]
 }

@@ -9,21 +9,13 @@ const app = express();
 // ======= 配置区 =======
 const PORT = Number(process.env.PORT || 3001);
 const WINE_BIN = process.env.WINE_BIN || 'wine';
-const DEFAULT_WINE_PREFIX = path.join(
-  __dirname,
-  '..',
-  'NaturalVoiceSAPIAdapter',
-  'nvsapi-linux-poc',
-  'tmp',
-  'wine-probe',
-  'prefix'
-);
+const DEFAULT_WINE_PREFIX = path.join(__dirname, 'wine', 'runtime', 'prefix');
 const WINEPREFIX = process.env.WINEPREFIX || DEFAULT_WINE_PREFIX;
-const WORKER_DIR = path.join(__dirname, 'wine', 'bin');
+const WORKER_DIR = process.env.WINE_BIN_DIR || path.join(__dirname, 'wine', 'bin');
 const WORKER_EXE = path.join(WORKER_DIR, 'worker_tts_windows.exe');
 const MODEL_DIR = path.join(__dirname, 'models', 'extracted');
 const DEFAULT_VOICE = process.env.TTS_DEFAULT_VOICE || 'Microsoft Xiaoxiao';
-const DEFAULT_LICENSE = process.env.MS_TTS_KEY || 'Key:ZCjZ7nHDSLvf4gpELteM4AnzaWUjTpn7UkV7D@vvksl0w1SNgon6d1905WANbktDc9S39oaA4r29HJNayXvTq8fJsq';
+const DEFAULT_LICENSE = 'Key:ZCjZ7nHDSLvf4gpELteM4AnzaWUjTpn7UkV7D@vvksl0w1SNgon6d1905WANbktDc9S39oaA4r29HJNayXvTq8fJsq';
 const WORKER_COUNT = Math.max(1, parseInt(process.env.TTS_WINE_WORKERS, 10) || 3);
 const REQUEST_TIMEOUT_MS = Number(process.env.TTS_WINE_TIMEOUT_MS || 300000);
 const MAX_QUEUE_LENGTH = Math.max(1, parseInt(process.env.TTS_WINE_MAX_QUEUE, 10) || 100);

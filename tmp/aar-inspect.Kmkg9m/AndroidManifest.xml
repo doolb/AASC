@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.microsoft.cognitiveservices.speech"
+    android:versionCode="1001510299"
+    android:versionName="1.51.2" >
+
+    <uses-sdk
+        android:minSdkVersion="21"
+        android:targetSdkVersion="27" />
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application>
+        <provider
+            android:authorities="${applicationId}.MicrosoftCognitiveServicesSpeech.InternalContentProvider"
+            android:name=".util.InternalContentProvider"
+            android:exported="false" />
+    </application>
+
+</manifest>

@@ -1,0 +1,4 @@
+-keep public class com.microsoft.cognitiveservices.** {
+   public protected *;
+   *** *Callback(long);
+}

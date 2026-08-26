@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "main": "tts.js",
   "scripts": {
+    "prepare:runtime": "bash scripts/prepare-runtime.sh",
+    "prepare:runtime:prepare": "bash scripts/prepare-runtime.sh --prepare-only",
+    "prepare:runtime:build": "bash scripts/prepare-runtime.sh --build-only",
+    "prepare:runtime:test": "bash scripts/prepare-runtime.sh --test-only",
+    "start:linux": "node tts-linux.js",
+    "start:wine": "node tts-wine.js",
     "build:android-tts": "../../src/apps/android-display/gradlew -p android-tts :app:assembleDebug",
     "build:android-asr": "../../src/apps/android-display/gradlew -p android-asr :app:assembleDebug"
   },

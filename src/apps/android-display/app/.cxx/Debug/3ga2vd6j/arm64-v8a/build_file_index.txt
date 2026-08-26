@@ -1,0 +1,1 @@
+/mnt/AASC/src/apps/android-display/app/src/main/cpp/CMakeLists.txt

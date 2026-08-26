@@ -18,6 +18,8 @@
 - 构建：增加 `npm run build:android-tts`，模型从 `models/extracted` 构建复制，限定 `arm64-v8a` 和 Android 8.0+。
 - 测试：Android JVM 单元测试和 debug APK 构建通过，APK 资源包含 14 个模型文件，Manifest 不包含 `INTERNET` 权限。
 
+## 2026-08-25
+
 - 新增：`tts-linux.js` 及 `linux/` 独立构建入口，提供 Linux Embedded Speech TTS HTTP 服务。
 - 兼容：接口与 `tts-wine.js` 保持一致，支持 FIFO 队列、队列上限、单并发、超时、临时文件清理和状态查询。
 - 解耦：默认运行时路径不再依赖 `NaturalVoiceSAPIAdapter`；CMake 使用可迁移的 `$ORIGIN/../lib` 运行库路径。
