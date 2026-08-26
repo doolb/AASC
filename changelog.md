@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- ✅ [2026-08-26] 新增独立 Android 离线语音识别 APK
+  - 内置 SenseVoice int8 模型，支持录音、选择音频、识别文本、识别耗时和自动/大核/小核 CPU 模式。
+  - 内置局域网 HTTP 服务：`GET /health`、`POST /api/asr`，默认端口 `18080`，支持 WAV/原始 PCM。
+  - `npm --prefix 3rd/tts-server run build:android-asr`、Android JVM 测试、HTTP socket 测试和 adb 安装通过。
+
 - ✅ [2026-08-26] 完成 APK 大小核并发配置集成验证（Task 6）
   - Node focused integration 22/22 通过；Android JVM 单测、`assembleDebug`、`npm run upload:apk` 和 display2 启动均成功。
   - 默认 ASR/TTS `1 大核 + 1 小核` 下，真机同时提交 3 个 TTS 请求均收到 `ttsGenerating` 与 `ttsResult`，未出现失败、超时或重复播放错误。

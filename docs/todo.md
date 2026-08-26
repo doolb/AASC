@@ -1,5 +1,12 @@
 # Web MediaCenter - 未完成任务列表
 
+## Android ASR APK
+
+- ✅已完成 [2026-08-26][2026-08-26] 新增独立 Android 离线语音识别 APK
+  - 内置 SenseVoice int8 模型，支持录音、选择音频、识别文本、识别耗时和自动/大核/小核 CPU 模式。
+  - 提供 `0.0.0.0:18080` 的 `/health`、`/api/asr` HTTP 测试服务。
+  - 文档：`3rd/tts-server/docs/design/android-asr-apk.md`、`3rd/tts-server/docs/spec/android-asr-apk.md`、`3rd/tts-server/docs/task/2026-08-26_独立Android离线语音识别APK.md`
+
 ## TTS
 
 - ✅已完成 [2026-08-26][2026-08-26] 完成 APK 大小核并发配置集成验证（Task 6）

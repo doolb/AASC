@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">离线语音识别</string>
+    <string name="loading_model">正在加载内置语音模型…</string>
+    <string name="model_ready">模型已就绪</string>
+    <string name="model_load_failed">模型加载失败：%1$s</string>
+    <string name="record_start">开始录音</string>
+    <string name="record_stop">停止录音</string>
+    <string name="select_audio">选择音频</string>
+    <string name="no_audio">尚未选择音频</string>
+    <string name="recognize">开始识别</string>
+    <string name="recognizing">识别中…</string>
+    <string name="recognition_result">识别文本将显示在这里</string>
+    <string name="http_stopped">HTTP 服务未启动</string>
+    <string name="http_start">启动 HTTP 服务</string>
+    <string name="http_stop">停止 HTTP 服务</string>
+    <string name="http_port_hint">HTTP 端口</string>
+</resources>

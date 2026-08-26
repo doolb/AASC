@@ -14,3 +14,7 @@ android-tts/.gradle/
 android-tts/build/
 android-tts/app/build/
 android-tts/app/.cxx/
+android-asr/.gradle/
+android-asr/build/
+android-asr/app/build/
+android-asr/app/.cxx/

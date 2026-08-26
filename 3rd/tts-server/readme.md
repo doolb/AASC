@@ -23,6 +23,23 @@ npm run build:android-tts
 
 产物位于 `android-tts/app/build/outputs/apk/debug/app-debug.apk`，仅支持 arm64-v8a、Android 8.0+。
 
+## Android 离线语音识别 APK
+
+`android-asr/` 是独立的 SenseVoice 离线语音识别应用，内置模型，支持录音、选择音频、识别耗时和自动/大核/小核 CPU 模式：
+
+```bash
+npm run build:android-asr
+```
+
+产物位于 `android-asr/app/build/outputs/apk/debug/app-debug.apk`。启动应用后可显式开启 HTTP 服务，默认监听 `0.0.0.0:18080`：
+
+```bash
+curl -X POST -H 'Content-Type: audio/wav' --data-binary @sample.wav http://设备IP:18080/api/asr
+curl http://设备IP:18080/health
+```
+
+HTTP 服务仅用于受信任局域网测试，APK 仅支持 arm64-v8a、Android 8.0+。
+
 ## 环境要求
 
 - **操作系统**: Microsoft Windows 7/8/10/11
