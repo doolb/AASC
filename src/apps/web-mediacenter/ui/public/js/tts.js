@@ -216,8 +216,8 @@ window.setTtsDevice = TtsDevice.setDevice.bind(TtsDevice);
 
 const CpuAffinitySettings = {
     currentConfig: {
-        asr: { bigCoreCount: 1, littleCoreCount: 1 },
-        tts: { bigCoreCount: 1, littleCoreCount: 1 }
+        asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
+        tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false }
     },
 
     init() {
@@ -247,7 +247,8 @@ const CpuAffinitySettings = {
         const source = engine || {};
         const normalized = {
             bigCoreCount: this.normalizeCoreCount(source.bigCoreCount, fallbackFieldValue),
-            littleCoreCount: this.normalizeCoreCount(source.littleCoreCount, fallbackFieldValue)
+            littleCoreCount: this.normalizeCoreCount(source.littleCoreCount, fallbackFieldValue),
+            preferBigCores: source.preferBigCores === true
         };
         if (normalized.bigCoreCount + normalized.littleCoreCount <= 0) {
             normalized.littleCoreCount = 1;
@@ -267,8 +268,10 @@ const CpuAffinitySettings = {
         return {
             asrBig: document.getElementById('asrBigCoreCountInput'),
             asrLittle: document.getElementById('asrLittleCoreCountInput'),
+            asrPreferBig: document.getElementById('asrPreferBigCoreInput'),
             ttsBig: document.getElementById('ttsBigCoreCountInput'),
             ttsLittle: document.getElementById('ttsLittleCoreCountInput'),
+            ttsPreferBig: document.getElementById('ttsPreferBigCoreInput'),
             status: document.getElementById('cpuAffinityStatus')
         };
     },
@@ -292,8 +295,10 @@ const CpuAffinitySettings = {
         this.currentConfig = normalized;
         if (inputs.asrBig) inputs.asrBig.value = String(normalized.asr.bigCoreCount);
         if (inputs.asrLittle) inputs.asrLittle.value = String(normalized.asr.littleCoreCount);
+        if (inputs.asrPreferBig) inputs.asrPreferBig.checked = normalized.asr.preferBigCores;
         if (inputs.ttsBig) inputs.ttsBig.value = String(normalized.tts.bigCoreCount);
         if (inputs.ttsLittle) inputs.ttsLittle.value = String(normalized.tts.littleCoreCount);
+        if (inputs.ttsPreferBig) inputs.ttsPreferBig.checked = normalized.tts.preferBigCores;
 
         this.updateStatus(statusText || this.formatStatus(normalized, '当前配置:'));
         return normalized;
@@ -304,11 +309,13 @@ const CpuAffinitySettings = {
         return this.normalizeConfig({
             asr: {
                 bigCoreCount: inputs.asrBig ? inputs.asrBig.value : 1,
-                littleCoreCount: inputs.asrLittle ? inputs.asrLittle.value : 1
+                littleCoreCount: inputs.asrLittle ? inputs.asrLittle.value : 1,
+                preferBigCores: inputs.asrPreferBig ? inputs.asrPreferBig.checked : false
             },
             tts: {
                 bigCoreCount: inputs.ttsBig ? inputs.ttsBig.value : 1,
-                littleCoreCount: inputs.ttsLittle ? inputs.ttsLittle.value : 1
+                littleCoreCount: inputs.ttsLittle ? inputs.ttsLittle.value : 1,
+                preferBigCores: inputs.ttsPreferBig ? inputs.ttsPreferBig.checked : false
             }
         }, 0);
     },

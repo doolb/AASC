@@ -99,7 +99,7 @@ window.onNativeTtsResult({requestId,audio,error}) # 原生异步 WAV 结果
 
 TTS 合成任务由 `NativeBridge.ttsExecutor` 的 `TtsBridgeDispatcher` 提交到 `TtsEnginePool`；桥侧 worker 数为当前 `slotCount = max(1, policy.totalCoreCount)`，有界队列容量同为 `slotCount`。提交时即完成有限准入，队列满时同步入口返回普通错误 JSON，异步入口返回 `accepted:false`，不会先提交再通过回调报告拒绝。桥侧与 pool 内公平 Semaphore 形成双层保护，JavaScript bridge 线程只提交任务（异步入口）或等待兼容入口结果，不负责音频播放。
 
-`cpuConfigure()` 在 TTS policy 成功应用后与提交共用锁换代 dispatcher；旧 executor 使用 `shutdown()` 排空已提交任务，不打断 active TTS 工作，也不接受换代后的新任务。
+`cpuConfigure()` 在 TTS policy 成功应用且 slot 数变化后与提交共用锁换代 dispatcher；旧 executor 使用 `shutdown()` 排空已提交任务，不打断 active TTS 工作，也不接受换代后的新任务。异步页面入口使用 `cpuConfigureAsync()`，相同配置不重复应用。
 
 ### 4.0 TtsBridgeDispatcher（桥侧有界调度）
 
@@ -110,12 +110,12 @@ TTS 合成任务由 `NativeBridge.ttsExecutor` 的 `TtsBridgeDispatcher` 提交�
 
 ### 4.1 CPU 集群识别、affinity 原语与 TTS pool（Task 2 / Task 4）
 
-APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自根据服务器下发的配置构造独立 pool。Task 4 已接入 TTS pool；控制端 UI 仍属于后续任务。
+APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自根据服务器下发的配置构造独立 pool。ASR/TTS 的 `preferBigCores` 分别控制对应 policy 的集群选择顺序，不改变 pool 总槽位数；控制端 UI 已接入两个独立开关。
 
 - `CpuCluster.detect(reader)` 读取 `/sys/devices/system/cpu/possible`、`online` 和每个在线 CPU 的 `cpufreq/cpuinfo_max_freq`，按最大频率确定 big/little 集群；`reader` 可注入，JVM 单测不访问 Android sysfs。
-- `CpuTopology.policy(bigCoreCount, littleCoreCount)` 对请求数量做非负裁剪，按 CPU 编号稳定选择大核/小核，输出实际 CPU 列表、bit mask、有效数量和 fallback 原因；Kotlin/JNI 统一只支持 CPU ID `0..62`，CPU 63 和更高 ID 不进入 policy/mask。合法配置请求至少一个槽位且存在受支持 CPU 时返回确定性回退 CPU；如果设备只暴露不受支持的 CPU ID，则返回空 fallback policy 和 `cpuMask=0`，避免产生无法应用的非空策略。
+- `CpuTopology.policy(bigCoreCount, littleCoreCount, preferBigCores)` 对请求数量做非负裁剪，按 CPU 编号稳定选择大核/小核，输出实际 CPU 列表、bit mask、有效数量和 fallback 原因；开启 `preferBigCores` 时以大核数与小核数之和作为总槽位，优先填充大核，再用小核补齐；关闭时按两类数量精确分配。Kotlin/JNI 统一只支持 CPU ID `0..62`，CPU 63 和更高 ID 不进入 policy/mask。合法配置请求至少一个槽位且存在受支持 CPU 时返回确定性回退 CPU；如果设备只暴露不受支持的 CPU ID，则返回空 fallback policy 和 `cpuMask=0`，避免产生无法应用的非空策略。
 - `CpuAffinity.applyCurrentThread(cpuMask)` 通过 JNI 对当前 native 线程调用 `sched_setaffinity`；`cpuMask` 必须是 `0..62` 生成的正 Long mask。native 库加载失败、权限拒绝、系统调用失败或空 mask 都只记录日志并返回 `false`，不得让 TTS 请求失败。
-- `NativeBridge.cpuConfigure()` 同时应用 ASR/TTS policy，返回 `{ok, asr, tts, topology}`；TTS 模型未加载时只缓存 policy，模型加载后按最新 policy 创建 pool。
+- `NativeBridge.cpuConfigure()` 同时应用 ASR/TTS policy，分别读取 `asr.preferBigCores` 与 `tts.preferBigCores`，返回 `{ok, asr, tts, topology}`；`cpuConfigureAsync()` 在后台合并最新请求并立即返回；TTS 模型未加载时只缓存 policy，模型加载后按最新 policy 创建 pool。
 
 ### 5. display.html 接入点
 
@@ -141,7 +141,7 @@ APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自�
 
 - 配置：`tts.device`（`server` / `display`），默认 `server`
 - API：`GET/POST /api/config/ttsDevice`
-- 配置：`cpuAffinity`（`asr/tts` 各自的 `bigCoreCount/littleCoreCount`），默认均为 `1/1`
+- 配置：`cpuAffinity`（`asr/tts` 各自的 `bigCoreCount/littleCoreCount/preferBigCores`），默认数量均为 `1/1`、开关均为 `false`
 - API：`GET/POST /api/config/cpuAffinity`
 - 模型下载：`GET /api/tts/model-manifest`、`GET /api/tts/model/:filename`（白名单防路径穿越）
 - 路由：`findDisplayWithTts()` 找到在线且有 `ttsGeneration` 的显示端
@@ -234,6 +234,29 @@ APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自�
 - `TtsEngine` 保持 `load/synthesize/release/ready` 公开接口，内部用 pool 安全替换；旧 pool retire 后继续服务已 retain 的 in-flight/queued 请求。
 - `NativeBridge.cpuConfigure()` 同时返回并应用 `asr` 与 `tts` policy；同步和异步 TTS 桥路径都通过 pool，60 秒超时和旧 APK 同步 fallback 保持不变。
 - focused JVM 测试覆盖两槽并发上限、显式 overflow 拒绝、WAV 返回、静音构造契约、`probeVoice()` 资源关闭约束、affinity false 非致命、retired 旧池继续服务已排队请求；`npm run build:apk` 完成。
+
+## 2026-08-26 APK TTS 生成页面卡顿修复
+
+### ADB 证据与根因
+
+- `logcat` 未发现 `ANR` 或显示进程崩溃，但显示 WebView 持续收到 `ttsGenerate` 和重复 `cpuConfig`，说明问题是主线程长时间阻塞与请求堆积，而不是立即崩溃。
+- 显示端原先在 WebSocket 消息处理函数中同步调用 `NativeDisplay.cpuConfigure()`；原生桥随后同步探测拓扑、应用 ASR/TTS policy 并重建 pool。
+- 日志采样期间 APK 出现多个 `aasc-tts-slot-*` 线程且进程 RSS 明显上涨。重复相同 policy 也会重新创建 `SpeechSynthesizer`/recognizer pool，放大 TTS 生成期间的资源压力。
+- `voiceprintConfigure()` 的模型回调从后台线程直接调用 `WebView.evaluateJavascript()`，同时存在 WebView thread warning，需要一并修正。
+
+### 修复目标与边界
+
+1. `display.html` 的 `cpuConfig` 消费只调用立即返回的 `cpuConfigureAsync()`，不再在 WebSocket 主线程中等待 CPU 配置。
+2. 页面按规范化 `{asr, tts}` 配置去重；原生侧串行应用并只保留最新待处理配置，避免广播风暴形成配置任务队列。
+3. ASR/TTS policy 与当前 policy 相等时直接复用现有 pool，不重新创建 native slot。
+4. 所有声纹模型完成回调统一通过 `mainHandler.post` 调用 WebView；不改变 TTS `ttsGenerating`/`ttsResult` 协议。
+5. 浏览器显示端和不具备新异步桥的旧 APK 安全忽略 CPU 配置，不回退到同步 CPU 配置调用。
+
+### 部署验证
+
+- APK 使用 `/home/as/.config/.android/debug.keystore` 重新签名后，通过 `adb push` + `pm install -r` 覆盖安装，保留应用数据。
+- 设备 `192.168.1.6:5555` 的 `com.aasc.display` 进程 PID `18703` 存活，`MainActivity` 已在 display 2 前台运行；启动日志持续收到 `task:renderUpdate`，未出现启动崩溃。
+- 当前运行配置已调整为 ASR `2 大核 + 0 小核`、TTS `2 大核 + 0 小核`；服务器 API 返回该配置，显示端通过 `cpuConfig` 后台应用。
 
 ## 2026-08-25 TTS 生成与内存稳定性复核
 

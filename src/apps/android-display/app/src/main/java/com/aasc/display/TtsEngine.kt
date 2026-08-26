@@ -57,10 +57,13 @@ object TtsEngine {
         val modelSnapshot: File
         val voiceSnapshot: String
         synchronized(lock) {
-            currentPolicy = policy
+            if (currentPolicy == policy) {
+                return true
+            }
             val loadedModel = currentModelDir
             val loadedVoice = currentVoiceName
             if (currentPool == null || loadedModel == null || loadedVoice == null) {
+                currentPolicy = policy
                 return true
             }
             modelSnapshot = loadedModel

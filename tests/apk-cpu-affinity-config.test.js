@@ -10,8 +10,8 @@ const configService = require('../src/apps/server/modules/config/config-app-serv
 const SERVER = path.resolve(__dirname, '../src/apps/server/boot/server-app.js');
 
 const DEFAULT_CPU_AFFINITY = {
-    asr: { bigCoreCount: 1, littleCoreCount: 1 },
-    tts: { bigCoreCount: 1, littleCoreCount: 1 }
+    asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
+    tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false }
 };
 
 function read(filePath) {
@@ -26,18 +26,18 @@ test('CPU 配置默认值为 ASR/TTS 各 1 大核 1 小核，并对缺失字段�
             tts: { littleCoreCount: 3 }
         }),
         {
-            asr: { bigCoreCount: 2, littleCoreCount: 1 },
-            tts: { bigCoreCount: 1, littleCoreCount: 3 }
+            asr: { bigCoreCount: 2, littleCoreCount: 1, preferBigCores: false },
+            tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false }
         }
     );
     assert.deepEqual(
         configService.normalizeCpuAffinityConfig({
             asr: { bigCoreCount: 0, littleCoreCount: 0 },
-            tts: { bigCoreCount: 0, littleCoreCount: 2 }
+            tts: { bigCoreCount: 0, littleCoreCount: 2, preferBigCores: false }
         }),
         {
             asr: DEFAULT_CPU_AFFINITY.asr,
-            tts: { bigCoreCount: 0, littleCoreCount: 2 }
+            tts: { bigCoreCount: 0, littleCoreCount: 2, preferBigCores: false }
         }
     );
 });
@@ -72,6 +72,25 @@ test('CPU 配置接口拒绝负数和小数，且不产生持久化或广播副�
     assert.equal(writes.length, 0);
     assert.equal(controlBroadcasts.length, 0);
     assert.equal(displayBroadcasts.length, 0);
+});
+
+test('CPU 配置接口拒绝非布尔的优先大核开关，且不产生副作用', () => {
+    const writes = [];
+    const broadcasts = [];
+    const result = configService.applyCpuAffinityConfigUpdate({
+        body: {
+            asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: 'true' },
+            tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false }
+        },
+        setConfig: (key, value) => writes.push({ key, value }),
+        broadcastToControls: (message) => broadcasts.push(message),
+        broadcastCpuConfig: (message) => broadcasts.push(message)
+    });
+
+    assert.equal(result.statusCode, 400);
+    assert.match(result.body.message, /preferBigCores/);
+    assert.equal(writes.length, 0);
+    assert.equal(broadcasts.length, 0);
 });
 
 test('CPU 配置接口拒绝任一引擎为 0/0，且不产生持久化或广播副作用', () => {
@@ -124,8 +143,8 @@ test('CPU 配置接口对缺失字段回填默认值，并广播规范化配置'
     });
 
     const expected = {
-        asr: { bigCoreCount: 2, littleCoreCount: 1 },
-        tts: { bigCoreCount: 1, littleCoreCount: 3 }
+        asr: { bigCoreCount: 2, littleCoreCount: 1, preferBigCores: false },
+        tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false }
     };
 
     assert.equal(result.statusCode, 200);
@@ -162,12 +181,12 @@ test('cpuConfig 消息不会把任一引擎重新发成 0/0', () => {
     assert.deepEqual(
         configService.createCpuConfigMessage({
             asr: { bigCoreCount: 0, littleCoreCount: 0 },
-            tts: { bigCoreCount: 2, littleCoreCount: 0 }
+            tts: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: false }
         }),
         {
             type: 'cpuConfig',
             asr: DEFAULT_CPU_AFFINITY.asr,
-            tts: { bigCoreCount: 2, littleCoreCount: 0 }
+            tts: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: false }
         }
     );
 });

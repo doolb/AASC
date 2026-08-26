@@ -49,7 +49,9 @@ test('TTS 原生桥在提交边界按 policy slotCount 有界并同步换代', (
     const dispatcher = read(path.resolve(__dirname, '../src/apps/android-display/app/src/main/java/com/aasc/display/TtsBridgeDispatcher.kt'));
 
     assert.match(bridge, /private val ttsExecutor = TtsBridgeDispatcher\(TtsEngine\.currentPolicySlotCount\(\)\)/);
-    assert.match(bridge, /ttsExecutor\.reconfigure\(maxOf\(1, ttsPolicy\.totalCoreCount\)\)/);
+    assert.match(bridge, /val slotCount = maxOf\(1, ttsPolicy\.totalCoreCount\)/);
+    assert.match(bridge, /if \(ttsExecutorSlotCount != slotCount\)/);
+    assert.match(bridge, /ttsExecutor\.reconfigure\(slotCount\)/);
     assert.match(bridge, /synchronized\(ttsExecutorLock\)/);
     assert.match(bridge, /JSONObject\(\)\.put\("accepted", false\)/);
     assert.match(dispatcher, /ArrayBlockingQueue\(queueCapacity\)/);

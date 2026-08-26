@@ -261,7 +261,7 @@ else:
 
 ## APK CPU 并发控制
 
-控制端把 APK 大小核并发配置放在现有显示控制面板内，沿用 `tts.js` 作为 ASR/TTS 配置辅助逻辑，`websocket.js` 只负责广播消息分发。
+控制端把 APK 大小核并发配置放在现有显示控制面板内，沿用 `tts.js` 作为 ASR/TTS 配置辅助逻辑，`websocket.js` 只负责广播消息分发。ASR、TTS 各有独立的 `preferBigCores` 开关。
 
 ```text
 CpuAffinitySettings.normalizeCoreCount(raw):
@@ -273,9 +273,10 @@ CpuAffinitySettings.normalizeCoreCount(raw):
 CpuAffinitySettings.normalizeEngineConfig(engine):
   big = normalizeCoreCount(engine.bigCoreCount)
   little = normalizeCoreCount(engine.littleCoreCount)
+  preferBigCores = engine.preferBigCores === true
   if big + little <= 0:
     little = 1
-  return { bigCoreCount: big, littleCoreCount: little }
+  return { bigCoreCount: big, littleCoreCount: little, preferBigCores }
 
 CpuAffinitySettings.normalizeConfig(raw):
   asr = normalizeEngineConfig(raw.asr)
@@ -288,7 +289,7 @@ CpuAffinitySettings.loadConfig():
   否则保持输入框当前值并显示错误 toast
 
 CpuAffinitySettings.readConfigFromInputs():
-  读取 asrBigCoreCountInput / asrLittleCoreCountInput / ttsBigCoreCountInput / ttsLittleCoreCountInput
+  读取 4 个数量输入框和 asrPreferBigCoreInput / ttsPreferBigCoreInput
   return normalizeConfig({ asr, tts })
 
 CpuAffinitySettings.saveConfig():

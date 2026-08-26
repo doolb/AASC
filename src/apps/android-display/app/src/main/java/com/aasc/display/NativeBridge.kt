@@ -163,9 +163,18 @@ class NativeBridge(
     // TtsEnginePool 的公平 Semaphore 仍保留，作为进入真实 synthesizer 槽位前的第二层保护。
     private val ttsExecutor = TtsBridgeDispatcher(TtsEngine.currentPolicySlotCount())
     private val ttsExecutorLock = Any()
+    private var ttsExecutorSlotCount = TtsEngine.currentPolicySlotCount()
     // 异步桥超时监控不占用 ASR/TTS 推理线程，避免 JavaScript bridge 线程等待 Future。
     private val asyncTimeoutExecutor = Executors.newSingleThreadScheduledExecutor()
+    // CPU 配置应用可能触发 ASR/TTS native pool 换代，必须脱离 WebView JavaBridge 线程执行。
+    private val cpuConfigExecutor = Executors.newSingleThreadExecutor()
+    private val cpuConfigLock = Any()
+    private var cpuConfigPending: CpuConfigRequest? = null
+    private var cpuConfigRunning = false
+    private var cpuConfigLastAppliedKey: String? = null
     private var voiceprintMultiSpeaker = false
+
+    private data class CpuConfigRequest(val key: String, val configJson: String)
 
     // 同步截图：JS 侧调用即阻塞等待主线程完成 WebView.draw，返回 JSON
     // （JS 函数传 String 参数的回调方式在 WebView 里不可靠，改用同步返回）
@@ -269,37 +278,96 @@ class NativeBridge(
     @JavascriptInterface
     fun cpuConfigure(configJson: String): String {
         return try {
-            val config = JSONObject(configJson)
-            val topology = CpuCluster.detect()
-            val asrConfig = config.optJSONObject("asr")
-            val ttsConfig = config.optJSONObject("tts")
-            val asrPolicy = topology.policy(
-                bigCoreCount = readCoreCount(asrConfig, "bigCoreCount"),
-                littleCoreCount = readCoreCount(asrConfig, "littleCoreCount")
-            )
-            val ttsPolicy = topology.policy(
-                bigCoreCount = readCoreCount(ttsConfig, "bigCoreCount"),
-                littleCoreCount = readCoreCount(ttsConfig, "littleCoreCount")
-            )
-            if (!AsrEngine.configurePolicy(asrPolicy)) {
-                return JSONObject().put("error", "ASR CPU 配置应用失败").toString()
-            }
-            synchronized(ttsExecutorLock) {
-                if (!TtsEngine.configurePolicy(ttsPolicy)) {
-                    return JSONObject().put("error", "TTS CPU 配置应用失败").toString()
-                }
-                // 只在 TTS policy 成功应用后换代；旧桥任务由旧执行器自然排空，不中断活动合成。
-                ttsExecutor.reconfigure(maxOf(1, ttsPolicy.totalCoreCount))
-            }
-            JSONObject()
-                .put("ok", true)
-                .put("asr", cpuPolicyJson(asrPolicy))
-                .put("tts", cpuPolicyJson(ttsPolicy))
-                .put("topology", cpuTopologyJson(topology))
-                .toString()
+            applyCpuConfig(configJson)
         } catch (e: Exception) {
             JSONObject().put("error", e.message ?: "CPU 配置异常").toString()
         }
+    }
+
+    // 异步应用服务器 CPU affinity 配置：只入队并立即返回，避免阻塞 display.html 的 WebView 主线程。
+    // 相同配置直接合并；多个不同配置同时到达时只保留最新待处理配置，后台按顺序安全换代。
+    @JavascriptInterface
+    fun cpuConfigureAsync(configJson: String): String {
+        val key = configJson.trim()
+        synchronized(cpuConfigLock) {
+            if (key == cpuConfigLastAppliedKey || key == cpuConfigPending?.key) {
+                return JSONObject().put("accepted", true).put("coalesced", true).toString()
+            }
+            cpuConfigPending = CpuConfigRequest(key, configJson)
+            if (!cpuConfigRunning) {
+                cpuConfigRunning = true
+                cpuConfigExecutor.execute { drainCpuConfigQueue() }
+            }
+        }
+        return JSONObject().put("accepted", true).toString()
+    }
+
+    // CPU 配置的实际应用主体运行在专用后台线程；退出临界区后再执行耗时的 native pool 构造。
+    private fun drainCpuConfigQueue() {
+        while (true) {
+            val request = synchronized(cpuConfigLock) {
+                val next = cpuConfigPending
+                cpuConfigPending = null
+                if (next == null) cpuConfigRunning = false
+                next
+            } ?: return
+
+            val result = try {
+                applyCpuConfig(request.configJson)
+            } catch (e: Exception) {
+                JSONObject().put("error", e.message ?: "CPU 配置异常").toString()
+            }
+            try {
+                val resultJson = JSONObject(result)
+                if (resultJson.optBoolean("ok", false)) {
+                    synchronized(cpuConfigLock) {
+                        cpuConfigLastAppliedKey = request.key
+                    }
+                } else {
+                    android.util.Log.w("NativeBridge", "异步 CPU 配置失败: ${resultJson.optString("error")}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("NativeBridge", "异步 CPU 配置结果解析失败: ${e.message}")
+            }
+        }
+    }
+
+    // CPU 配置的同步执行主体，仅由兼容同步接口或后台异步 worker 调用。
+    private fun applyCpuConfig(configJson: String): String {
+        val config = JSONObject(configJson)
+        val topology = CpuCluster.detect()
+        val asrConfig = config.optJSONObject("asr")
+        val ttsConfig = config.optJSONObject("tts")
+        val asrPolicy = topology.policy(
+            bigCoreCount = readCoreCount(asrConfig, "bigCoreCount"),
+            littleCoreCount = readCoreCount(asrConfig, "littleCoreCount"),
+            preferBigCores = readPreferBigCores(asrConfig)
+        )
+        val ttsPolicy = topology.policy(
+            bigCoreCount = readCoreCount(ttsConfig, "bigCoreCount"),
+            littleCoreCount = readCoreCount(ttsConfig, "littleCoreCount"),
+            preferBigCores = readPreferBigCores(ttsConfig)
+        )
+        if (!AsrEngine.configurePolicy(asrPolicy)) {
+            return JSONObject().put("error", "ASR CPU 配置应用失败").toString()
+        }
+        synchronized(ttsExecutorLock) {
+            if (!TtsEngine.configurePolicy(ttsPolicy)) {
+                return JSONObject().put("error", "TTS CPU 配置应用失败").toString()
+            }
+            val slotCount = maxOf(1, ttsPolicy.totalCoreCount)
+            if (ttsExecutorSlotCount != slotCount) {
+                // 只在 TTS slot 数变化且 policy 成功应用后换代；旧桥任务由旧执行器自然排空。
+                ttsExecutor.reconfigure(slotCount)
+                ttsExecutorSlotCount = slotCount
+            }
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("asr", cpuPolicyJson(asrPolicy))
+            .put("tts", cpuPolicyJson(ttsPolicy))
+            .put("topology", cpuTopologyJson(topology))
+            .toString()
     }
 
     // 一次性识别：输入裸 PCM（16kHz mono s16le）的 base64，同步返回 {"text":"..."} 或 {"error":"..."}
@@ -421,6 +489,10 @@ class NativeBridge(
             is Number -> raw.toInt().coerceAtLeast(0)
             else -> 1
         }
+    }
+
+    private fun readPreferBigCores(config: JSONObject?): Boolean {
+        return config?.optBoolean("preferBigCores", false) ?: false
     }
 
     private fun cpuPolicyJson(policy: CpuPolicy): JSONObject {
@@ -580,7 +652,13 @@ class NativeBridge(
                     event.put("engineReady", loaded)
                 }
                 val js = "window.onVoiceprintModel && window.onVoiceprintModel(${event.toString()});"
-                webView.evaluateJavascript(js, null)
+                mainHandler.post {
+                    try {
+                        webView.evaluateJavascript(js, null)
+                    } catch (_: Exception) {
+                        // 页面销毁或重载期间回调可能失效，不能让模型任务线程崩溃。
+                    }
+                }
             }
             if (ensureResult == "ready") {
                 // 应用配置（threshold/multiSpeaker），此时 embedding 与 segmentation 均已就绪
@@ -589,7 +667,13 @@ class NativeBridge(
                     if (voiceprintMultiSpeaker) voiceprintModelManager.segmentationModelPath else null,
                     voiceprintThreshold, voiceprintMultiSpeaker)
                 val js = "window.onVoiceprintModel && window.onVoiceprintModel(${JSONObject().put("state","ready").put("engineReady",loaded)});"
-                webView.evaluateJavascript(js, null)
+                mainHandler.post {
+                    try {
+                        webView.evaluateJavascript(js, null)
+                    } catch (_: Exception) {
+                        // 页面销毁或重载期间回调可能失效，不能让 JavaBridge 线程崩溃。
+                    }
+                }
             }
             JSONObject().put("ok", true).toString()
         } catch (e: Exception) {

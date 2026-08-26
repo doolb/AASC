@@ -9,6 +9,14 @@
         android:hardwareAccelerated="true"
         android:theme="@style/Theme.AppCompat.NoActionBar">
 
+        <!-- Samsung DeX 下 0dp 启动尺寸表示启动即全屏，避免进入 freeform 小窗口。 -->
+        <meta-data
+            android:name="com.samsung.android.dex.launchwidth"
+            android:value="0" />
+        <meta-data
+            android:name="com.samsung.android.dex.launchheight"
+            android:value="0" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

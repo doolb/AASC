@@ -47,7 +47,7 @@ statusJson(): {"state","progress","error"}
 ## TtsEngine（Kotlin 单例，Embedded Speech SDK + TTS 并发池）
 
 ```
-当前 TTS CpuPolicy = 已配置 policy 或 CpuCluster.detect().policy(1, 1)
+当前 TTS CpuPolicy = 已配置 policy 或 CpuCluster.detect().policy(1, 1, false)
 当前 modelDir = 最近一次加载成功的 TTS 模型目录
 当前 pool = 最近一次构造成功的 TtsEnginePool
 
@@ -146,13 +146,53 @@ ttsStatus()           → ttsModelManager.statusJson()
 ttsEnsureModel()      → serverBaseUrl=主线程缓存 origin；ttsModelManager.ensureModel{ 主线程 evaluateJavascript onNativeTtsModel }
 cpuConfigure(configJson):
   topology = CpuCluster.detect()
-  asrPolicy = topology.policy(config.asr.bigCoreCount, config.asr.littleCoreCount)
-  ttsPolicy = topology.policy(config.tts.bigCoreCount, config.tts.littleCoreCount)
+  asrPolicy = topology.policy(config.asr.bigCoreCount, config.asr.littleCoreCount, config.asr.preferBigCores)
+  ttsPolicy = topology.policy(config.tts.bigCoreCount, config.tts.littleCoreCount, config.tts.preferBigCores)
   AsrEngine.configurePolicy(asrPolicy) 失败 → 返回 error
   synchronized(ttsSubmitLock):
     TtsEngine.configurePolicy(ttsPolicy) 失败 → 返回 error
     ttsBridgeDispatcher.reconfigure(max(1, ttsPolicy.totalCoreCount))
   返回 {ok:true, asr:policyJson, tts:policyJson, topology:topologyJson}
+
+cpuConfigureAsync(configJson):
+  key = configJson 的稳定配置 key
+  synchronized(cpuConfigLock):
+    如果 key == lastAppliedKey 或 key == pending.key:
+      立即返回 {accepted:true, coalesced:true}
+    pending = {key, configJson}                 # 新配置覆盖旧待处理配置
+    如果后台 worker 未运行:
+      标记 running=true
+      cpuConfigExecutor.execute(drainCpuConfigQueue)
+  立即返回 {accepted:true}                      # JavaScript bridge 线程不等待引擎重建
+
+drainCpuConfigQueue():
+  循环:
+    synchronized(cpuConfigLock):
+      request = pending
+      pending = null
+      request 为空 -> running=false; 返回
+    result = applyCpuConfig(request.configJson)  # 后台串行执行原 cpuConfigure 主体
+    synchronized(cpuConfigLock):
+      result 成功 -> lastAppliedKey=request.key
+
+AsrEngine.configurePolicy(policy):
+  synchronized(lock):
+    如果 currentPolicy == policy:
+      直接返回 true                           # 不重建 recognizer pool
+    currentPolicy = policy
+  构造新 pool，成功后安全替换旧 pool
+
+TtsEngine.configurePolicy(policy):
+  synchronized(lock):
+    如果 currentPolicy == policy:
+      直接返回 true                           # 不重建 SpeechSynthesizer pool
+    currentPolicy = policy
+  构造新 pool，成功后安全替换旧 pool
+
+voiceprintConfigure 回调:
+  后台模型任务得到 event
+  mainHandler.post:
+    webView.evaluateJavascript(window.onVoiceprintModel(event))
 
 TtsBridgeDispatcher(workerCount):
   workerCount = max(1, workerCount)
@@ -198,21 +238,26 @@ CpuTopology(cpuInfos):
   littleCpus = 存在多个频率层级 ? 非最高频组 cpuId 升序 : 全部 cpuId 升序
   fallback = cpuInfos 为空 或 只有一个频率层级
 
-CpuTopology.policy(bigCoreCount, littleCoreCount):
+CpuTopology.policy(bigCoreCount, littleCoreCount, preferBigCores=false):
   requestedBig = max(0, bigCoreCount)
   requestedLittle = max(0, littleCoreCount)
   supportedCpuIds = 0..62
   # Long 是有符号类型，bit63 会变成负数；Kotlin/JNI 统一不生成 CPU 63 或更高 ID 的 mask
   supportedBig = bigCpus.filter(id in supportedCpuIds)
   supportedLittle = littleCpus.filter(id in supportedCpuIds)
-  selectedBig = supportedBig.take(requestedBig)
-  selectedLittle = supportedLittle.take(requestedLittle)
+  requestedTotal = requestedBig + requestedLittle
+  如果 preferBigCores:
+    selectedBig = supportedBig.take(requestedTotal)
+    selectedLittle = supportedLittle.take(max(0, requestedTotal - selectedBig.size))
+  否则:
+    selectedBig = supportedBig.take(requestedBig)
+    selectedLittle = supportedLittle.take(requestedLittle)
   如果 selectedBig+selectedLittle 为空 且 requestedBig+requestedLittle > 0:
     fallbackPool = cpus.filter(id in supportedCpuIds) 按 maxFreq 降序、cpuId 升序
     selectedLittle = fallbackPool.take(1).cpuId
   selected 仍为空 -> 返回空 CpuPolicy(cpuMask=0, fallback=true, reason="clamped")
   mask = selectedBig + selectedLittle 按 cpuId 升序转换为正 Long bit mask
-  fallback = topology.fallback 或 selected 数量小于 requested 数量 或请求包含不支持的 CPU 63+
+  fallback = topology.fallback 或 selected 数量小于 requestedTotal 或（未开启优先大核时大/小核分别不足）或请求包含不支持的 CPU 63+
   返回 CpuPolicy(bigCpus, littleCpus, cpuMask, effectiveBigCount, effectiveLittleCount, fallback, reason)
 
 CpuAffinity.applyCurrentThread(cpuMask):
@@ -231,7 +276,7 @@ ttsExecutor = TtsBridgeDispatcher(max(1, currentTtsPolicy.totalCoreCount))
 桥侧 worker 数 = slotCount；桥侧 queue capacity = slotCount
 异步入口 → 在 ttsSubmitLock 内提交；满载时立即返回 accepted:false，不注册回调/超时
 同步兼容入口 → 在 ttsSubmitLock 内提交并等待 Future；满载时立即返回普通 error JSON
-cpuConfigure 成功应用 TTS policy → 在 ttsSubmitLock 内 swap dispatcher；旧 executor shutdown() 排空已提交任务
+cpuConfigure 成功应用 TTS policy 且 slotCount 变化 → 在 ttsSubmitLock 内 swap dispatcher；旧 executor shutdown() 排空已提交任务
 真实 TTS 并发上限由 TtsEnginePool 的 max(1, CpuPolicy.totalCoreCount) 控制；pool 公平 Semaphore(slotCount * 2) 是额外安全层
 每个 TTS slot 使用自己的单线程 worker 和独立 SpeechSynthesizer
 SpeechSynthesizer(config, null AudioConfig) → 生成 WAV，不输出到默认扬声器
@@ -368,6 +413,17 @@ display WS 初始化:
   连接建立后先发送 serverStartTime / displayId / logReportConfig
   然后发送 asrConfig / ttsConfig / cpuConfig
   旧客户端忽略未知的 cpuConfig，不影响 restoreState / playlistStart
+
+部署验证:
+  构建 APK -> 使用设备匹配的 debug keystore 签名
+  adb push 到设备 -> pm install -r                  # 保留应用数据
+  启动 display 2 -> pidof/dumpsys activity 确认 MainActivity 前台
+  logcat 未出现 FATAL EXCEPTION/ANR，持续收到 renderUpdate
+
+当前设备运行参数:
+  asr.bigCoreCount=2, asr.littleCoreCount=0
+  tts.bigCoreCount=2, tts.littleCoreCount=0
+  通过 POST /api/config/cpuAffinity 下发，显示端不重启即可异步切换
 
 能力:
   DEFAULT_CAPABILITIES / SUB_DISPLAY_CAPABILITIES 增加 ttsGeneration:false

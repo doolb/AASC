@@ -64,17 +64,26 @@ class CpuTopology(
         cpus.map { it.cpuId }
     }
 
-    fun policy(bigCoreCount: Int, littleCoreCount: Int): CpuPolicy {
+    fun policy(bigCoreCount: Int, littleCoreCount: Int, preferBigCores: Boolean = false): CpuPolicy {
         val requestedBig = bigCoreCount.coerceAtLeast(0)
         val requestedLittle = littleCoreCount.coerceAtLeast(0)
         val supportedBigCpus = bigCpus.filter(::isSupportedCpuId)
         val supportedLittleCpus = littleCpus.filter(::isSupportedCpuId)
-        val selectedBig = supportedBigCpus.take(requestedBig)
-        val selectedLittle = supportedLittleCpus.take(requestedLittle).toMutableList()
         val requestedTotal = requestedBig + requestedLittle
+        val selectedBig: List<Int>
+        val selectedLittle: MutableList<Int>
+        if (preferBigCores) {
+            selectedBig = supportedBigCpus.take(requestedTotal)
+            selectedLittle = supportedLittleCpus
+                .take((requestedTotal - selectedBig.size).coerceAtLeast(0))
+                .toMutableList()
+        } else {
+            selectedBig = supportedBigCpus.take(requestedBig)
+            selectedLittle = supportedLittleCpus.take(requestedLittle).toMutableList()
+        }
         val selectedBeforeFallback = selectedBig + selectedLittle
-        val bigClamped = selectedBig.size < requestedBig
-        val littleClamped = selectedLittle.size < requestedLittle
+        val bigClamped = !preferBigCores && selectedBig.size < requestedBig
+        val littleClamped = !preferBigCores && selectedLittle.size < requestedLittle
 
         // 合法配置至少请求一个槽位；当设备只有单频集群或大核不足时，从可用 CPU 中补一个确定性的回退槽。
         if (requestedTotal > 0 && selectedBeforeFallback.isEmpty()) {

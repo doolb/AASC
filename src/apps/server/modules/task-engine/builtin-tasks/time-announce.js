@@ -1,5 +1,4 @@
 const path = require('path');
-const tts = require('../../../../../external/tts/tts-service');
 const timeListener = require('../../../../web-mediacenter/modules/time/time-listener-app-service');
 
 module.exports = {
@@ -64,7 +63,7 @@ module.exports = {
     ]
   },
   async run(context) {
-    const { params, broadcastToDisplays, postWidgetUpdate, onWidgetAction, taskIO, taskName, instanceId } = context;
+    const { params, broadcastToDisplays, generateTTS, postWidgetUpdate, onWidgetAction, taskIO, taskName, instanceId } = context;
     const config = {
       enabled: params.enabled !== undefined ? params.enabled : true,
       interval: params.interval || 15,
@@ -150,7 +149,10 @@ module.exports = {
       }
 
       try {
-        const audioPath = await tts.generateTTS(timeText);
+        if (typeof generateTTS !== 'function') {
+          throw new Error('统一 TTS 路由未注入');
+        }
+        const audioPath = await generateTTS(timeText);
         const fileName = path.basename(audioPath);
         const announceData = {
           type: 'tts',

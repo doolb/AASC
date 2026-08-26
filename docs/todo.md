@@ -9,6 +9,20 @@
 
 ## TTS
 
+- ✅已完成 [2026-08-26][2026-08-26] 增加 ASR/TTS 独立优先大核开关
+  - `cpuAffinity` 为 ASR、TTS 分别增加 `preferBigCores`；开启时保持并发槽位总数并优先填充大核，不足时小核补齐。
+  - `upload.html` / `tts.js` 增加两个独立开关，服务端 API、WebSocket 广播和 APK `CpuTopology` 全链路透传。
+  - Node 25/25、Android JVM、APK 构建、匹配签名安装和 display2 启动验证通过；当前设备两个开关均已开启。
+  - 文档：`docs/design/android-native-tts.md`、`docs/design/android-display.md`、`docs/design/control.md`、`docs/spec/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/upload.md`、`docs/task/2026-08-26_ASR与TTS优先大核开关.md`。
+
+- ✅已完成 [2026-08-26][2026-08-26] 修复 APK 生成 TTS 时页面卡顿
+  - `display.html` 的 `cpuConfig` 改为去重后调用异步 `cpuConfigureAsync`；浏览器和旧 APK 缺少异步桥时安全忽略，不再同步阻塞 WebView。
+  - `NativeBridge` 后台合并最新 CPU 配置；ASR/TTS policy 不变时复用现有 pool；声纹模型回调统一切回 WebView 主线程。
+  - 回归验证：新增 TTS 页面卡顿契约 3/3、相关 Node 测试 21/21、Android JVM 单测和 `npm run build:apk` 均通过。
+  - 部署验证：使用匹配 debug keystore 通过 `adb push` + `pm install -r` 安装到 `192.168.1.6:5555`，display 2 前台运行，PID 18703 存活。
+  - 运行参数：ASR/TTS 均调整为 `2 大核 + 0 小核`，服务器配置接口返回成功。
+  - 文档：`docs/design/android-native-tts.md`、`docs/design/android-display.md`、`docs/spec/android-native-tts.md`、`docs/spec/android-display.md`、`docs/task/2026-08-26_APK生成TTS页面卡顿修复.md`。
+
 - ✅已完成 [2026-08-26][2026-08-26] 完成 APK 大小核并发配置集成验证（Task 6）
   - Node 集成回归 22/22、Android JVM 单测和 assembleDebug、npm APK 安装、display2 启动均通过。
   - 默认 ASR/TTS `1 大核 + 1 小核` 下，真机同时提交 3 个 TTS 请求均收到 `ttsGenerating`/`ttsResult`，无失败、超时或重复播放错误。

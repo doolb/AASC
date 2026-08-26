@@ -519,7 +519,7 @@
         
         function applyRotation() {
             window.currentRotation = currentRotation;
-            var rotTransform = 'rotate(' + currentRotation + 'deg)';
+            const rotTransform = 'rotate(' + currentRotation + 'deg)';
             mediaImage.style.transform = rotTransform;
             mediaVideo.style.transform = rotTransform;
             if (currentRotation === 90 || currentRotation === 270) {
@@ -608,6 +608,7 @@
                     voiceTextDisplay.style.bottom = '140px';
                     voiceTextDisplay.style.left = '20px';
                     voiceTextDisplay.style.maxWidth = '50vh';
+                    voiceTextDisplay.style.transform = 'rotate(90deg)';
                 }
                 [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
                     if (el) el.style.maxWidth = '50vh';
@@ -665,6 +666,7 @@
                     voiceTextDisplay.style.top = '140px';
                     voiceTextDisplay.style.right = '20px';
                     voiceTextDisplay.style.maxWidth = '50vh';
+                    voiceTextDisplay.style.transform = 'rotate(270deg)';
                 }
                 [timeDisplay, fileNameDisplay, voiceTextDisplay].forEach(el => {
                     if (el) el.style.maxWidth = '50vh';
@@ -2210,23 +2212,42 @@
         // APK 原生桥探测（Android APK 显示端注入：真实像素截图 + 跨域输入注入）
         const nativeBridge = window.NativeDisplay || null;
 
-        // CPU 并发配置只透传给支持 cpuConfigure 的新 APK；浏览器显示端和旧桥直接忽略。
+        // CPU 配置只交给异步原生桥；重复广播去重，避免 WebView 消息线程等待 native pool 换代。
+        let lastAppliedCpuConfigKey = '';
+        let pendingCpuConfigKey = '';
+
         function applyCpuConfig(config) {
             if (!config) return;
-            if (!nativeBridge || typeof nativeBridge.cpuConfigure !== 'function') {
+            const payload = {
+                asr: config.asr || {},
+                tts: config.tts || {}
+            };
+            const key = JSON.stringify(payload);
+            if (key === lastAppliedCpuConfigKey || key === pendingCpuConfigKey) {
                 return;
             }
+            if (!nativeBridge || typeof nativeBridge.cpuConfigureAsync !== 'function') {
+                return;
+            }
+            pendingCpuConfigKey = key;
             try {
-                const resultText = nativeBridge.cpuConfigure(JSON.stringify({
-                    asr: config.asr || {},
-                    tts: config.tts || {}
-                }));
-                if (!resultText) return;
+                const resultText = nativeBridge.cpuConfigureAsync(JSON.stringify(payload));
+                if (!resultText) {
+                    pendingCpuConfigKey = '';
+                    return;
+                }
                 const result = JSON.parse(resultText);
+                if (!result || result.accepted !== true) {
+                    pendingCpuConfigKey = '';
+                } else {
+                    lastAppliedCpuConfigKey = key;
+                    pendingCpuConfigKey = '';
+                }
                 if (result && result.error) {
                     console.warn('[CPU] 原生配置失败:', result.error);
                 }
             } catch (error) {
+                pendingCpuConfigKey = '';
                 console.warn('[CPU] 原生配置异常:', error);
             }
         }

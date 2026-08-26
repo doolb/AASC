@@ -18,7 +18,7 @@
 - 视频播放/暂停控制
 - 播放进度控制
 - 音量控制
-- APK 原生 ASR/TTS 大小核并发数量设置
+- APK 原生 ASR/TTS 大小核并发数量设置与独立“优先大核”开关
 
 ### 裁剪预览
 - 实时预览裁剪效果
@@ -42,7 +42,8 @@
 交互要求：
 
 - ASR、TTS 各自提供 `bigCoreCount` 和 `littleCoreCount` 两个数字输入框，默认显示 `1`。
-- 页面初始化时调用 `GET /api/config/cpuAffinity`，把服务器规范化后的配置回填到 4 个输入框。
+- ASR、TTS 各自提供 `preferBigCores` 复选开关，默认关闭；开关只影响对应引擎的 CPU 选择顺序。
+- 页面初始化时调用 `GET /api/config/cpuAffinity`，把服务器规范化后的配置回填到 4 个输入框和 2 个开关。
 - 用户保存时对输入做前端规范化：仅发送非负整数；任一引擎如果被清成 `0/0`，前端自动补成至少 1 个槽位，避免请求被服务端拒绝。
 - 控件保存走 `POST /api/config/cpuAffinity`，成功后更新状态文案；服务端广播 `cpuAffinityChanged` 后，控制端也要同步刷新输入框，避免多个控制页配置漂移。
 - UI 风格沿用现有 `control-item`、`control-buttons`、状态文案和 toast，不额外引入独立面板或重复的设备路由按钮。

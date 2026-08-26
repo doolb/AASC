@@ -19,9 +19,10 @@ const defaultDisplayState = {
 
 const CPU_AFFINITY_ENGINES = ['asr', 'tts'];
 const CPU_AFFINITY_FIELDS = ['bigCoreCount', 'littleCoreCount'];
+const CPU_AFFINITY_BOOLEAN_FIELDS = ['preferBigCores'];
 const DEFAULT_CPU_AFFINITY = {
-    asr: { bigCoreCount: 1, littleCoreCount: 1 },
-    tts: { bigCoreCount: 1, littleCoreCount: 1 }
+    asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
+    tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false }
 };
 
 function isNonNegativeInteger(value) {
@@ -46,6 +47,11 @@ function normalizeCpuAffinityEngine(engine, rawConfig, fallbackConfig) {
         const value = rawConfig?.[engine]?.[field];
         if (isNonNegativeInteger(value)) {
             normalizedEngine[field] = value;
+        }
+    });
+    CPU_AFFINITY_BOOLEAN_FIELDS.forEach((field) => {
+        if (typeof rawConfig?.[engine]?.[field] === 'boolean') {
+            normalizedEngine[field] = rawConfig[engine][field];
         }
     });
 
@@ -92,6 +98,17 @@ function validateCpuAffinityPayload(payload, fallbackConfig = DEFAULT_CPU_AFFINI
             }
             if (!isNonNegativeInteger(value)) {
                 return { ok: false, message: `${engine}.${field} 必须是非负整数` };
+            }
+            normalized[engine][field] = value;
+        }
+
+        for (const field of CPU_AFFINITY_BOOLEAN_FIELDS) {
+            const value = engineConfig[field];
+            if (value === undefined) {
+                continue;
+            }
+            if (typeof value !== 'boolean') {
+                return { ok: false, message: `${engine}.${field} 必须是布尔值` };
             }
             normalized[engine][field] = value;
         }

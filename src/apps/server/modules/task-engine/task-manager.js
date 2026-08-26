@@ -21,6 +21,7 @@ class TaskManager extends EventEmitter {
     this.instances = new Map();
     this._services = new Map();  // instanceId -> { stop, status }
     this._sendToDisplay = null;  // 由 setSendToDisplay() 注入
+    this._generateTts = null;  // 由 server-app 注入统一的显示端优先 TTS 路由
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
     this._isRestoring = false;
     this.maxInstances = options.maxInstances || 50;
@@ -46,6 +47,9 @@ class TaskManager extends EventEmitter {
   }
   setBroadcastToDisplays(fn) {
     this._broadcastToDisplays = fn;
+  }
+  setGenerateTts(fn) {
+    this._generateTts = fn;
   }
 
   /**
@@ -203,7 +207,14 @@ class TaskManager extends EventEmitter {
       if (task.taskType === 'builtin') {
         if (!builtinRegistry) throw new Error('内置任务模块不可用');
 
-        const builtinCtx = { ...context, instanceId, taskName: task.taskName, taskIO: this.taskIO, postStream: (data) => this.emit('stream', instanceId, data) };
+        const builtinCtx = {
+          ...context,
+          instanceId,
+          taskName: task.taskName,
+          taskIO: this.taskIO,
+          generateTTS: this._generateTts,
+          postStream: (data) => this.emit('stream', instanceId, data)
+        };
         const result = await builtinRegistry.run(task.builtinId, builtinCtx);
 
         if (result && result.forwardTo === 'display') {
@@ -542,6 +553,7 @@ class TaskManager extends EventEmitter {
           ...context, instanceId, taskName: task.taskName, taskIO: this.taskIO,
           sendToDisplay: this._sendToDisplay,
           broadcastToDisplays: this._broadcastToDisplays,
+          generateTTS: this._generateTts,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           postStream: (data) => this.emit('stream', instanceId, data),
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler),

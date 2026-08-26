@@ -54,14 +54,29 @@ dispatchControlInputNative:
     crossOriginControlDegraded  = 桥存在但触摸不可用
 
 CPU 配置消费(applyCpuConfig):
-    config = { asr: data.asr, tts: data.tts }
+    config = { asr: data.asr || {}, tts: data.tts || {} }
+    # 每个引擎额外透传 preferBigCores；缺失时由服务端/APK按 false 兼容处理
+    key = 稳定序列化(config)
+    key == lastAppliedCpuConfigKey 或 key == pendingCpuConfigKey -> return
     nativeBridge 不存在 -> return
-    nativeBridge.cpuConfigure 不是函数 -> return
-    result = JSON.parse(nativeBridge.cpuConfigure(JSON.stringify(config)))
-    result.error -> 仅 console.warn，不抛异常
+    nativeBridge.cpuConfigureAsync 不是函数 -> return
+    pendingCpuConfigKey = key
+    result = JSON.parse(nativeBridge.cpuConfigureAsync(JSON.stringify(config)))
+    result.accepted == true -> lastAppliedCpuConfigKey = key; pendingCpuConfigKey = ''
+    result.error 或调用异常 -> pendingCpuConfigKey = ''; 仅 console.warn
+    # 不调用同步 cpuConfigure，不阻塞 WebSocket/UI 主线程
+
+NativeBridge.cpuConfigureAsync(configJson):
+    只在 cpuConfigLock 中覆盖 pending 配置并唤醒单线程后台 worker
+    立即返回 accepted JSON
+    worker 后台调用原 cpuConfigure 的配置应用主体
+
+NativeBridge.voiceprintConfigure:
+    模型回调 event -> mainHandler.post -> WebView.evaluateJavascript
 
 display websocket onmessage:
     data.type == 'cpuConfig' -> applyCpuConfig({ asr: data.asr, tts: data.tts })
+    # asr.preferBigCores 与 tts.preferBigCores 独立生效，不改变槽位总数
     继续保留 asrConfig / ttsConfig / voiceprintConfig / ttsGenerate 原有顺序与 fallback
 
 媒体播放状态检测:

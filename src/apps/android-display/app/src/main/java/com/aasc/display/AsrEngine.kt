@@ -37,10 +37,13 @@ object AsrEngine {
         val modelSnapshot: File
         val tokensSnapshot: File
         synchronized(lock) {
-            currentPolicy = policy
+            if (currentPolicy == policy) {
+                return true
+            }
             val loadedModel = currentModelFile
             val loadedTokens = currentTokensFile
             if (currentPool == null || loadedModel == null || loadedTokens == null) {
+                currentPolicy = policy
                 return true
             }
             modelSnapshot = loadedModel

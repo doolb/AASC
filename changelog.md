@@ -4,6 +4,34 @@
 
 ### 已完成
 
+- ✅ [2026-08-26] 增加 ASR/TTS 独立优先大核开关
+  - `cpuAffinity` 为 ASR、TTS 分别增加 `preferBigCores`，缺失默认关闭，非法布尔值拒绝；控制页提供两个独立开关并支持广播同步。
+  - APK `CpuTopology.policy()` 开启时以大核数 + 小核数为总槽位，优先选择大核，不足时用小核补齐；关闭时保持原有精确分配。
+  - 验证：Node focused 25/25、Android JVM 单测、`npm run build:apk`、匹配签名 adb 安装和 display2 启动均通过；当前 ASR/TTS 均为 `2 大核 + 0 小核 + 优先大核`。
+  - 文档：`docs/design/android-native-tts.md`、`docs/design/android-display.md`、`docs/design/control.md`、`docs/spec/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/upload.md`、`docs/task/2026-08-26_ASR与TTS优先大核开关.md`。
+
+- ✅ [2026-08-26] 修正播报文本汉字字形未随显示器角度旋转
+  - 上一版使用 `writingMode: vertical-rl`，汉字保持正立，只改变了排版方向，与显示器画面方向不一致。
+  - 90°/180°/270°分别对 `voiceTextDisplay` 使用 `rotate(90deg)`/`rotate(180deg)`/`rotate(270deg)`，并保留 36px/27px 字号调整。
+  - 测试：播报文本旋转回归 3/3、相关静态与逻辑回归 37/37、显示端集成回归 9/9 通过。
+  - 文档：`docs/design/display.md`、`docs/spec/display-ui-rotation.md`、`docs/task/2026-08-26_显示器播报文本汉字旋转修正.md`。
+
+- ✅ [2026-08-26] 修复显示端播报文本旋转适配并放大字号
+  - 根因：`voiceTextDisplay` 在 90°/270°旋转分支中只调整位置，未设置竖排文字方向；播报文本字号仍为桌面 24px、移动端 18px。
+  - 修复：90°/270°补充 `writingMode: vertical-rl` 与 `textOrientation: mixed`，270°增加 `rotate(180deg)`；字号调整为桌面 36px、移动端 27px。
+  - 淡入动画改为只改变透明度，避免动画 `transform` 覆盖旋转方向。
+  - 测试：新增 `tests/display-broadcast-text-rotation.test.js`；聚焦回归 3/3、相关静态与逻辑回归 37/37、显示端集成回归 9/9 通过。
+  - 文档：`docs/design/display.md`、`docs/spec/display-ui-rotation.md`、`docs/task/2026-08-26_显示器播报文本旋转与字号适配.md`。
+
+- ✅ [2026-08-26] 修复 APK 生成 TTS 时页面卡顿
+  - 根因是 display WebView 在处理 `cpuConfig` 时同步调用 `NativeDisplay.cpuConfigure()`，重复配置会同步重建 ASR/TTS native pool；ADB 未见 ANR，但观察到重复 TTS slot 线程和高 RSS。
+  - `display.html` 改用去重后的 `cpuConfigureAsync()`；`NativeBridge` 在单线程后台合并最新配置；ASR/TTS policy 不变时跳过 pool 重建。
+  - 修复 `voiceprintConfigure()` 从 JavaBridge 线程直接调用 `WebView.evaluateJavascript()` 的问题，统一切回主线程。
+  - 新增 `tests/apk-tts-page-freeze.test.js`；相关 Node 回归 21/21、Android JVM 单测和 `npm run build:apk` 通过。
+  - 使用设备匹配 debug keystore 通过 `adb push` + `pm install -r` 成功覆盖安装到 `192.168.1.6:5555`，并启动到 display 2；进程存活且无启动崩溃。
+  - 当前设备运行配置调整为 ASR/TTS 均 `2 大核 + 0 小核`，通过 `/api/config/cpuAffinity` 下发成功。
+  - 文档：`docs/design/android-native-tts.md`、`docs/design/android-display.md`、`docs/spec/android-native-tts.md`、`docs/spec/android-display.md`、`docs/task/2026-08-26_APK生成TTS页面卡顿修复.md`。
+
 - ✅ [2026-08-26] 新增独立 Android 离线语音识别 APK
   - 内置 SenseVoice int8 模型，支持录音、选择音频、识别文本、识别耗时和自动/大核/小核 CPU 模式。
   - 内置局域网普通网页，默认端口 `18080`，支持选择 WAV、网页录音、识别文本和耗时显示；页面内部使用 `GET /health`、`POST /api/asr`。

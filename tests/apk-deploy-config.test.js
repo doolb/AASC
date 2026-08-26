@@ -1,11 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
     DEFAULT_SERVER_URL,
     buildStartArgs,
     resolveServerUrl
 } = require('../src/scripts/apk-deploy-config');
+
+const MANIFEST = path.resolve(__dirname, '../src/apps/android-display/app/src/main/AndroidManifest.xml');
 
 test('部署命令默认使用显示端服务器地址', () => {
     assert.equal(DEFAULT_SERVER_URL, 'https://192.168.1.39:8081');
@@ -39,4 +43,13 @@ test('启动参数使用独立参数传递服务器地址', () => {
             DEFAULT_SERVER_URL
         ]
     );
+});
+
+test('Samsung DeX 启动 APK 时使用全屏窗口', () => {
+    const manifest = fs.readFileSync(MANIFEST, 'utf8');
+
+    assert.match(manifest, /com\.samsung\.android\.dex\.launchwidth/);
+    assert.match(manifest, /com\.samsung\.android\.dex\.launchheight/);
+    assert.match(manifest, /launchwidth[\s\S]*android:value="0"/);
+    assert.match(manifest, /launchheight[\s\S]*android:value="0"/);
 });

@@ -99,14 +99,23 @@ JS 侧异步取值：`takeScreenshot` 用回调；其余同步返回。
 
 ### 5. CPU 并发配置消费
 
-显示端收到服务端 `cpuConfig` 消息时，不改变现有 ASR/TTS 路由选择，只把配置在 APK 原生桥存在且支持 `cpuConfigure` 时透传给原生层。
+显示端收到服务端 `cpuConfig` 消息时，不改变现有 ASR/TTS 路由选择，只把配置在 APK 原生桥存在且支持 `cpuConfigureAsync` 时异步透传给原生层。
 
 约束：
 
 - `window.NativeDisplay` 不存在时直接忽略，保证浏览器显示端和旧 APK 无报错。
-- 旧 APK 只有部分桥方法、缺少 `cpuConfigure` 时也直接忽略，不能影响 `asrConfig`、`ttsConfig`、`voiceprintConfig`、TTS 生成和 ASR 回调。
-- 新 APK 调用 `NativeDisplay.cpuConfigure(JSON.stringify({ asr, tts }))`；返回 `{ error }` 只记录日志，不中断页面消息流。
+- 旧 APK 只有部分桥方法、缺少 `cpuConfigureAsync` 时也直接忽略，不能影响 `asrConfig`、`ttsConfig`、`voiceprintConfig`、TTS 生成和 ASR 回调。
+- 新 APK 调用 `NativeDisplay.cpuConfigureAsync(JSON.stringify({ asr, tts }))`；调用只入队并立即返回，返回 `{ error }` 只记录日志，不中断页面消息流。
+- 页面按规范化配置 key 去重；原生侧后台队列只保留最新待处理配置。同步 `cpuConfigure` 仅保留原生兼容接口，不由 WebSocket 消息处理路径调用。
 - `cpuConfig` 既会在显示端首连初始化时到达，也会在控制端修改后再次广播到显示端。
+- 控制端在 ASR、TTS 行分别提供“优先大核”开关；开关状态随对应引擎配置广播到 APK，两个引擎互不影响。
+- 开关开启时保留该引擎配置的并发槽位总数（大核数 + 小核数），先填充可用大核，不足部分再用小核补齐；关闭时继续按大核数/小核数精确分配。
+
+### 6. ASR/TTS 独立优先大核开关
+
+CPU affinity 控制项除了大核/小核数量，还保存两个独立的布尔字段：`asr.preferBigCores` 和 `tts.preferBigCores`。默认值为 `false`，兼容没有该字段的旧配置；当前设备配置可分别开启。
+
+开关只改变槽位到 CPU 集群的分配顺序，不改变并发总数，也不改变 ASR/TTS 的设备路由。服务器规范化、控制端输入、WebSocket 广播和 APK 原生 `CpuTopology.policy()` 全链路透传同一字段。
 
 ## APK 实现
 
@@ -209,3 +218,13 @@ android-display/
 - docs/spec/ 增补对应实现文档（伪代码）
 - docs/todo.md 增加 APK 显示端任务
 - changelog.md 记录完成项
+
+## 2026-08-26 CPU 配置导致 TTS 页面卡顿修复
+
+### 现象与处理
+
+ADB 未观察到 ANR/崩溃，但显示端在 TTS 请求期间反复接收 `cpuConfig`，进程中出现累积的 TTS slot 线程和较高 RSS。原因为 WebView WebSocket 消息处理同步进入 `NativeBridge.cpuConfigure()`，而该方法会执行 CPU 拓扑探测、ASR/TTS pool 换代；相同配置重复下发还会重复构造 native synthesizer。
+
+显示端 `applyCpuConfig()` 改为只调用 `NativeDisplay.cpuConfigureAsync()`，按 `{asr,tts}` 配置 key 去重，缺少异步桥时直接忽略。原生桥异步方法只负责将最新配置放入单线程后台队列并立即返回，后台串行应用配置；ASR/TTS policy 未改变时复用当前 pool。同步 `cpuConfigure()` 保留用于兼容已有原生调用，但不再由页面 WebSocket 路径调用。
+
+声纹模型回调也必须经 `mainHandler.post` 执行 `WebView.evaluateJavascript()`，消除 JavaBridge 线程调用 WebView 的警告。

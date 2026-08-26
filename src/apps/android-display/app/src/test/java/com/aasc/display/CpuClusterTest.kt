@@ -23,6 +23,38 @@ class CpuClusterTest {
     }
 
     @Test
+    fun policy开启优先大核时按总槽位优先选择大核() {
+        val topology = CpuTopology(
+            listOf(
+                0 to 1900800L,
+                1 to 1900800L,
+                2 to 2361600L,
+                3 to 2361600L
+            )
+        )
+
+        val policy = topology.policy(1, 1, preferBigCores = true)
+
+        assertEquals(listOf(2, 3), policy.bigCpus)
+        assertEquals(emptyList<Int>(), policy.littleCpus)
+        assertEquals(2, policy.totalCoreCount)
+    }
+
+    @Test
+    fun policy优先大核但大核不足时使用小核补齐总槽位() {
+        val topology = CpuTopology(
+            listOf(0 to 1900800L, 1 to 2361600L)
+        )
+
+        val policy = topology.policy(1, 2, preferBigCores = true)
+
+        assertEquals(listOf(1), policy.bigCpus)
+        assertEquals(listOf(0), policy.littleCpus)
+        assertEquals(2, policy.totalCoreCount)
+        assertTrue(policy.fallback)
+    }
+
+    @Test
     fun policy数量超过可用核心时裁剪并标记回退() {
         val topology = CpuTopology(
             listOf(
