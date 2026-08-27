@@ -8,7 +8,7 @@ object AsrWebPage {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>离线语音识别</title>
+  <title>离线语音识别与 Sherpa 声纹测试</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
     body { max-width: 720px; margin: 0 auto; padding: 24px; line-height: 1.5; }
@@ -19,6 +19,7 @@ object AsrWebPage {
     #result { white-space: pre-wrap; min-height: 96px; padding: 12px; background: #8882; border-radius: 6px; }
     .muted { opacity: .75; }
     .error { color: #d33; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
@@ -37,6 +38,26 @@ object AsrWebPage {
     <div id="result">等待识别</div>
     <p id="elapsed" class="muted"></p>
   </section>
+  <section>
+    <h2>Sherpa 声纹测试</h2>
+    <p id="voiceprintStatus" class="muted">正在检查声纹模型状态…</p>
+    <p class="muted">先在上方选择 WAV，填写名称并注册；随后选择待测 WAV，运行单段或多段流程。</p>
+    <label for="speakerName">注册名称</label><br>
+    <input id="speakerName" type="text" placeholder="例如 ZH 或 EN">
+    <br>
+    <button id="registerSpeaker" type="button">注册当前音频</button>
+    <button id="testSingle" type="button">Sherpa 单段</button>
+    <button id="testMulti" type="button">Sherpa 多段</button>
+    <pre id="voiceprintResult">等待声纹测试</pre>
+  </section>
+  <section>
+    <h2>Sherpa 流式 ASR</h2>
+    <p class="muted">通过浏览器麦克风实时发送 16 kHz PCM，服务端返回增量文本。</p>
+    <button id="streamStart" type="button">开始流式识别</button>
+    <button id="streamFile" type="button">流式发送当前 WAV</button>
+    <button id="streamStop" type="button" disabled>停止并获取最终结果</button>
+    <pre id="streamResult">等待流式识别</pre>
+  </section>
   <script>
     const audio = document.getElementById('audio');
     const record = document.getElementById('record');
@@ -45,6 +66,16 @@ object AsrWebPage {
     const fileStatus = document.getElementById('fileStatus');
     const result = document.getElementById('result');
     const elapsed = document.getElementById('elapsed');
+    const voiceprintStatus = document.getElementById('voiceprintStatus');
+    const speakerName = document.getElementById('speakerName');
+    const registerSpeaker = document.getElementById('registerSpeaker');
+    const testSingle = document.getElementById('testSingle');
+    const testMulti = document.getElementById('testMulti');
+    const voiceprintResult = document.getElementById('voiceprintResult');
+    const streamStart = document.getElementById('streamStart');
+    const streamFile = document.getElementById('streamFile');
+    const streamStop = document.getElementById('streamStop');
+    const streamResult = document.getElementById('streamResult');
     let selectedAudio = null;
     let selectedAudioName = '';
     let recording = false;
@@ -55,6 +86,13 @@ object AsrWebPage {
     let silentGain = null;
     let recordingChunks = [];
     let recordingSampleRate = 0;
+    let streamSocket = null;
+    let streamMediaStream = null;
+    let streamAudioContext = null;
+    let streamSource = null;
+    let streamProcessor = null;
+    let streamSilentGain = null;
+    let streaming = false;
 
     function mergeChunks(chunks) {
       const length = chunks.reduce((total, chunk) => total + chunk.length, 0);
@@ -102,6 +140,16 @@ object AsrWebPage {
       samples.forEach((sample, index) => {
         const clipped = Math.max(-1, Math.min(1, sample));
         view.setInt16(44 + index * 2, clipped < 0 ? clipped * 32768 : clipped * 32767, true);
+      });
+      return buffer;
+    }
+
+    function encodePcm16(samples) {
+      const buffer = new ArrayBuffer(samples.length * 2);
+      const view = new DataView(buffer);
+      samples.forEach((sample, index) => {
+        const clipped = Math.max(-1, Math.min(1, sample));
+        view.setInt16(index * 2, clipped < 0 ? clipped * 32768 : clipped * 32767, true);
       });
       return buffer;
     }
@@ -155,14 +203,136 @@ object AsrWebPage {
       releaseRecorder();
     }
 
+    function releaseStreamingRecorder() {
+      if (streamProcessor) streamProcessor.disconnect();
+      if (streamSource) streamSource.disconnect();
+      if (streamSilentGain) streamSilentGain.disconnect();
+      if (streamMediaStream) streamMediaStream.getTracks().forEach((track) => track.stop());
+      if (streamAudioContext) streamAudioContext.close();
+      streamProcessor = null;
+      streamSource = null;
+      streamSilentGain = null;
+      streamMediaStream = null;
+      streamAudioContext = null;
+    }
+
+    function connectStreamingSocket() {
+      const WebSocketClass = window.WebSocket;
+      if (!WebSocketClass) throw new Error('浏览器不支持 WebSocket');
+      streamResult.textContent = '连接流式 ASR…';
+      const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+      streamSocket = new WebSocketClass(protocol + location.host + '/api/asr/stream');
+      streamSocket.binaryType = 'arraybuffer';
+      streamSocket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'partial') streamResult.textContent = data.text || '（等待文本）';
+          if (data.type === 'final') {
+            streamResult.textContent = data.text || '（未识别到文本）';
+            stopStreaming(false);
+          }
+          if (data.type === 'error') streamResult.textContent = '流式识别失败：' + data.error;
+        } catch (error) {
+          streamResult.textContent = '流式响应格式错误：' + error.message;
+        }
+      };
+      return new Promise((resolve, reject) => {
+        streamSocket.addEventListener('open', resolve, { once: true });
+        streamSocket.addEventListener('error', () => reject(new Error('WebSocket 连接失败')), { once: true });
+      });
+    }
+
+    async function startStreaming() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('浏览器录音需要 HTTPS 或 localhost 安全页面；也可以使用“流式发送当前 WAV”');
+      }
+      const WebSocketClass = window.WebSocket;
+      await connectStreamingSocket();
+      streamMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) throw new Error('浏览器不支持 AudioContext');
+      streamAudioContext = new AudioContextClass();
+      streamSource = streamAudioContext.createMediaStreamSource(streamMediaStream);
+      streamProcessor = streamAudioContext.createScriptProcessor(4096, 1, 1);
+      streamSilentGain = streamAudioContext.createGain();
+      streamSilentGain.gain.value = 0;
+      streamProcessor.onaudioprocess = (event) => {
+        if (!streamSocket || streamSocket.readyState !== WebSocketClass.OPEN) return;
+        const input = new Float32Array(event.inputBuffer.getChannelData(0));
+        const pcm = encodePcm16(resample(input, streamAudioContext.sampleRate, 16000));
+        streamSocket.send(pcm);
+      };
+      streamSource.connect(streamProcessor);
+      streamProcessor.connect(streamSilentGain);
+      streamSilentGain.connect(streamAudioContext.destination);
+      streaming = true;
+      streamStart.disabled = true;
+      streamFile.disabled = true;
+      streamStop.disabled = false;
+      streamResult.textContent = '流式识别中…';
+    }
+
+    async function startStreamingFile() {
+      if (!selectedAudio) throw new Error('请先选择 WAV 音频');
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) throw new Error('浏览器不支持 AudioContext');
+      const decodeContext = new AudioContextClass();
+      try {
+        const audioBuffer = await decodeContext.decodeAudioData(await selectedAudio.arrayBuffer());
+        const channelCount = audioBuffer.numberOfChannels;
+        const channelData = Array.from({ length: channelCount }, (_, index) => audioBuffer.getChannelData(index));
+        const mono = new Float32Array(audioBuffer.length);
+        for (let index = 0; index < mono.length; index += 1) {
+          mono[index] = channelData.reduce((total, channel) => total + channel[index], 0) / channelCount;
+        }
+        const samples = resample(mono, audioBuffer.sampleRate, 16000);
+        await connectStreamingSocket();
+        streaming = true;
+        streamStart.disabled = true;
+        streamFile.disabled = true;
+        streamStop.disabled = false;
+        streamResult.textContent = 'WAV 流式发送中…';
+        for (let offset = 0; offset < samples.length; offset += 3200) {
+          if (!streamSocket || streamSocket.readyState !== WebSocket.OPEN) throw new Error('WebSocket 已断开');
+          streamSocket.send(encodePcm16(samples.slice(offset, offset + 3200)));
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        stopStreaming(true);
+      } finally {
+        await decodeContext.close();
+      }
+    }
+
+    function stopStreaming(sendEnd = true) {
+      const socket = streamSocket;
+      streaming = false;
+      streamStart.disabled = false;
+      streamFile.disabled = false;
+      streamStop.disabled = true;
+      releaseStreamingRecorder();
+      if (sendEnd && socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'end' }));
+        streamResult.textContent = '正在整理最终结果…';
+        return;
+      }
+      if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+      streamSocket = null;
+    }
+
     async function loadHealth() {
       try {
         const response = await fetch('/health');
         const data = await response.json();
         health.textContent = data.modelReady
-          ? '模型已就绪｜CPU：' + (data.cpuMode || 'AUTO')
+          ? '模型已就绪｜流式 ASR：' + (data.streamingReady ? '已就绪' : '未就绪') + '｜CPU：' + (data.cpuMode || 'AUTO')
           : '模型尚未就绪';
         health.classList.toggle('error', !data.modelReady);
+        const voiceprintResponse = await fetch('/api/voiceprint/status');
+        const voiceprint = await voiceprintResponse.json();
+        voiceprintStatus.textContent = voiceprint.modelReady
+          ? 'Sherpa 声纹模型已就绪｜维度：' + voiceprint.embeddingDim + '｜已注册：' + voiceprint.speakers.join(', ')
+          : 'Sherpa 声纹模型尚未就绪';
+        voiceprintStatus.classList.toggle('error', !voiceprint.modelReady);
       } catch (error) {
         health.textContent = '状态检查失败：' + error.message;
         health.classList.add('error');
@@ -217,6 +387,79 @@ object AsrWebPage {
         recognize.disabled = false;
       }
     });
+
+    registerSpeaker.addEventListener('click', async () => {
+      if (!selectedAudio) {
+        voiceprintResult.textContent = '请先选择注册 WAV';
+        return;
+      }
+      if (!speakerName.value.trim()) {
+        voiceprintResult.textContent = '请填写注册名称';
+        return;
+      }
+      registerSpeaker.disabled = true;
+      voiceprintResult.textContent = '注册中…';
+      try {
+        const response = await fetch('/api/voiceprint/register?name=' + encodeURIComponent(speakerName.value.trim()), {
+          method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: selectedAudio
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || '注册失败');
+        voiceprintResult.textContent = '已注册：' + data.name + '（embedding 维度：' + data.embeddingDim + '）';
+        loadHealth();
+      } catch (error) {
+        voiceprintResult.textContent = '注册失败：' + error.message;
+      } finally {
+        registerSpeaker.disabled = false;
+      }
+    });
+
+    async function testVoiceprint(mode, button) {
+      if (!selectedAudio) {
+        voiceprintResult.textContent = '请先选择待测 WAV';
+        return;
+      }
+      button.disabled = true;
+      testSingle.disabled = true;
+      testMulti.disabled = true;
+      voiceprintResult.textContent = '测试中…';
+      try {
+        const response = await fetch('/api/voiceprint/test?mode=' + mode, {
+          method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: selectedAudio
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || '测试失败');
+        voiceprintResult.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        voiceprintResult.textContent = '测试失败：' + error.message;
+      } finally {
+        testSingle.disabled = false;
+        testMulti.disabled = false;
+      }
+    }
+
+    testSingle.addEventListener('click', () => testVoiceprint('SHERPA_SINGLE', testSingle));
+    testMulti.addEventListener('click', () => testVoiceprint('SHERPA_MULTI', testMulti));
+
+    streamStart.addEventListener('click', async () => {
+      if (streaming) return;
+      try {
+        await startStreaming();
+      } catch (error) {
+        stopStreaming(false);
+        streamResult.textContent = '流式启动失败：' + error.message;
+      }
+    });
+    streamFile.addEventListener('click', async () => {
+      if (streaming) return;
+      try {
+        await startStreamingFile();
+      } catch (error) {
+        stopStreaming(false);
+        streamResult.textContent = 'WAV 流式启动失败：' + error.message;
+      }
+    });
+    streamStop.addEventListener('click', () => stopStreaming(true));
 
     loadHealth();
   </script>

@@ -13,4 +13,13 @@ class HttpJsonTest {
     fun errorJsonEscapesMessage() {
         assertEquals("{\"success\":false,\"error\":\"音频\\\"无效\",\"elapsedMs\":0}", HttpJson.error("音频\"无效"))
     }
+
+    @Test
+    fun voiceprintStatusListsSherpaModesOnly() {
+        val json = HttpJson.voiceprintStatus(false, 512, emptyList())
+        assertEquals(
+            "{\"modelReady\":false,\"embeddingDim\":512,\"registeredSpeakers\":0,\"speakers\":[],\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\"]}",
+            json
+        )
+    }
 }

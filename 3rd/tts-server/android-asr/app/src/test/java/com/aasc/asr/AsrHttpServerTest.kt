@@ -11,7 +11,9 @@ class AsrHttpServerTest {
     fun rootEndpointServesBrowserPage() {
         val engine = AsrEngine()
         val coordinator = AsrCoordinator(engine)
-        val server = AsrHttpServer(engine, coordinator) { CpuMode.AUTO }
+        val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
+        val streamingEngine = StreamingAsrEngine()
+        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
         try {
             val port = server.start(0).getOrThrow()
             val connection = URL("http://127.0.0.1:$port/").openConnection() as HttpURLConnection
@@ -22,9 +24,13 @@ class AsrHttpServerTest {
             val body = connection.inputStream.bufferedReader().use { it.readText() }
             assertTrue(body.contains("离线语音识别"))
             assertTrue(body.contains("/api/asr"))
+            assertTrue(body.contains("SHERPA_SINGLE"))
+            assertTrue(body.contains("SHERPA_MULTI"))
         } finally {
             server.stop()
             coordinator.shutdown()
+            voiceprintCoordinator.shutdown()
+            streamingEngine.release()
         }
     }
 
@@ -32,7 +38,9 @@ class AsrHttpServerTest {
     fun healthEndpointReportsModelAndServiceState() {
         val engine = AsrEngine()
         val coordinator = AsrCoordinator(engine)
-        val server = AsrHttpServer(engine, coordinator) { CpuMode.AUTO }
+        val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
+        val streamingEngine = StreamingAsrEngine()
+        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
         try {
             val port = server.start(0).getOrThrow()
             val connection = URL("http://127.0.0.1:$port/health").openConnection() as HttpURLConnection
@@ -45,6 +53,30 @@ class AsrHttpServerTest {
         } finally {
             server.stop()
             coordinator.shutdown()
+            voiceprintCoordinator.shutdown()
+            streamingEngine.release()
+        }
+    }
+
+    @Test
+    fun voiceprintStatusEndpointListsSherpaModesOnly() {
+        val engine = AsrEngine()
+        val coordinator = AsrCoordinator(engine)
+        val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
+        val streamingEngine = StreamingAsrEngine()
+        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
+        try {
+            val port = server.start(0).getOrThrow()
+            val connection = URL("http://127.0.0.1:$port/api/voiceprint/status").openConnection() as HttpURLConnection
+            assertEquals(200, connection.responseCode)
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            assertTrue(body.contains("SHERPA_SINGLE"))
+            assertTrue(body.contains("SHERPA_MULTI"))
+        } finally {
+            server.stop()
+            coordinator.shutdown()
+            voiceprintCoordinator.shutdown()
+            streamingEngine.release()
         }
     }
 }

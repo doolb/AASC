@@ -10,15 +10,20 @@ import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.charset.StandardCharsets
+import java.net.URLDecoder
 import java.util.Collections
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
 
 // APK 内置的极简局域网服务，根路径提供普通网页，页面内部使用识别接口。
 class AsrHttpServer(
     private val engine: AsrEngine,
     private val coordinator: AsrCoordinator,
+    private val voiceprintCoordinator: VoiceprintTestCoordinator,
+    private val streamingEngine: StreamingAsrEngine,
+    private val tlsContext: SSLContext? = null,
     private val cpuModeProvider: () -> CpuMode
 ) {
     private var clientExecutor: ExecutorService = Executors.newFixedThreadPool(2)
@@ -30,7 +35,7 @@ class AsrHttpServer(
     fun start(requestedPort: Int): Result<Int> {
         if (running) return Result.success(port)
         return try {
-            val socket = ServerSocket()
+            val socket = tlsContext?.serverSocketFactory?.createServerSocket() ?: ServerSocket()
             if (clientExecutor.isShutdown) clientExecutor = Executors.newFixedThreadPool(2)
             socket.reuseAddress = true
             socket.bind(InetSocketAddress("0.0.0.0", requestedPort))
@@ -57,7 +62,7 @@ class AsrHttpServer(
 
     fun isRunning(): Boolean = running
 
-    fun addressText(): String = "http://${localAddress()}:$port"
+    fun addressText(): String = "${if (tlsContext == null) "http" else "https"}://${localAddress()}:$port"
 
     private fun acceptLoop() {
         while (running) {
@@ -80,12 +85,27 @@ class AsrHttpServer(
                     respond(socket.getOutputStream(), 400, HttpJson.error("HTTP 请求无效"))
                     return
                 }
+                val route = request.path.substringBefore('?')
+                if (request.method == "GET" && route == "/api/asr/stream" && isWebSocketUpgrade(request)) {
+                    handleStreamingWebSocket(socket, request)
+                    return
+                }
                 when {
-                    request.method == "GET" && (request.path == "/" || request.path == "/index.html") ->
+                    request.method == "GET" && (route == "/" || route == "/index.html") ->
                         respondHtml(socket.getOutputStream(), 200, AsrWebPage.HTML)
-                    request.method == "GET" && request.path == "/health" ->
-                        respond(socket.getOutputStream(), 200, HttpJson.health(engine.isLoaded, running, cpuModeProvider()))
-                    request.method == "POST" && request.path == "/api/asr" -> handleRecognition(socket.getOutputStream(), request)
+                    request.method == "GET" && route == "/health" ->
+                        respond(socket.getOutputStream(), 200, HttpJson.health(engine.isLoaded, running, cpuModeProvider(), streamingEngine.isLoaded))
+                    request.method == "GET" && route == "/api/voiceprint/status" ->
+                        respond(socket.getOutputStream(), 200, HttpJson.voiceprintStatus(
+                            voiceprintCoordinator.isReady(),
+                            voiceprintCoordinator.embeddingDim(),
+                            voiceprintCoordinator.registeredSpeakers()
+                        ))
+                    request.method == "POST" && route == "/api/asr" -> handleRecognition(socket.getOutputStream(), request)
+                    request.method == "POST" && route == "/api/voiceprint/register" ->
+                        handleVoiceprintRegister(socket.getOutputStream(), request)
+                    request.method == "POST" && route == "/api/voiceprint/test" ->
+                        handleVoiceprintTest(socket.getOutputStream(), request)
                     request.method != "GET" && request.method != "POST" ->
                         respond(socket.getOutputStream(), 405, HttpJson.error("不支持的 HTTP 方法"))
                     else -> respond(socket.getOutputStream(), 404, HttpJson.error("接口不存在"))
@@ -93,6 +113,77 @@ class AsrHttpServer(
             } catch (error: Exception) {
                 try { respond(socket.getOutputStream(), 500, HttpJson.error(error.message ?: "HTTP 服务异常")) } catch (_: Exception) { /* socket 已断开 */ }
             }
+        }
+    }
+
+    private fun isWebSocketUpgrade(request: HttpRequest): Boolean =
+        request.headers["upgrade"]?.equals("websocket", ignoreCase = true) == true &&
+            request.headers["connection"]?.split(',')?.any { it.trim().equals("upgrade", ignoreCase = true) } == true
+
+    private fun handleStreamingWebSocket(socket: Socket, request: HttpRequest) {
+        if (!streamingEngine.isLoaded) {
+            respond(socket.getOutputStream(), 503, HttpJson.error("流式 ASR 模型尚未就绪"))
+            return
+        }
+        val key = request.headers["sec-websocket-key"]
+        if (key.isNullOrBlank()) {
+            respond(socket.getOutputStream(), 400, HttpJson.error("缺少 Sec-WebSocket-Key"))
+            return
+        }
+        val output = socket.getOutputStream()
+        val accept = WebSocketHandshake.acceptKey(key)
+        output.write(
+            ("HTTP/1.1 101 Switching Protocols\r\n" +
+                "Upgrade: websocket\r\n" +
+                "Connection: Upgrade\r\n" +
+                "Sec-WebSocket-Accept: $accept\r\n\r\n").toByteArray(StandardCharsets.US_ASCII)
+        )
+        output.flush()
+
+        var session: StreamingAsrSession? = null
+        try {
+            session = streamingEngine.createSession()
+            val input = socket.getInputStream()
+            while (true) {
+                val frame = WebSocketFrameCodec.read(input) ?: break
+                require(frame.fin) { "暂不支持分片 WebSocket 消息" }
+                when (frame.opcode) {
+                    WebSocketOpcode.BINARY -> {
+                        val samples = AsrPcm.decodeS16(frame.payload)
+                        AsrCoordinator.validateSamples(samples)
+                        output.write(WebSocketFrameCodec.encodeText(HttpJson.streamingPartial(session.accept(samples))))
+                        output.flush()
+                    }
+                    WebSocketOpcode.TEXT -> {
+                        val command = StreamingCommand.parse(frame.payload.toString(StandardCharsets.UTF_8))
+                        require(command == StreamingCommand.END) { "只支持 {\"type\":\"end\"} 结束命令" }
+                        output.write(WebSocketFrameCodec.encodeText(HttpJson.streamingFinal(session.finish())))
+                        output.write(WebSocketFrameCodec.encodeClose())
+                        output.flush()
+                        break
+                    }
+                    WebSocketOpcode.PING -> {
+                        output.write(WebSocketFrameCodec.encodePong(frame.payload))
+                        output.flush()
+                    }
+                    WebSocketOpcode.CLOSE -> {
+                        output.write(WebSocketFrameCodec.encodeClose())
+                        output.flush()
+                        break
+                    }
+                    WebSocketOpcode.CONTINUATION, WebSocketOpcode.PONG -> Unit
+                }
+            }
+        } catch (error: Exception) {
+            try {
+                output.write(WebSocketFrameCodec.encodeText(HttpJson.streamingError(error.message ?: "流式识别失败")))
+                output.write(WebSocketFrameCodec.encodeClose())
+                output.flush()
+            } catch (_: Exception) {
+                // 客户端主动断开时无需重复写回错误。
+            }
+        } finally {
+            session?.close()
         }
     }
 
@@ -126,6 +217,59 @@ class AsrHttpServer(
         } catch (error: Exception) {
             val cause = error.cause ?: error
             respond(output, 400, HttpJson.error(cause.message ?: "音频无效"))
+        }
+    }
+
+    private fun handleVoiceprintRegister(output: OutputStream, request: HttpRequest) {
+        if (!voiceprintCoordinator.isReady()) {
+            respond(output, 503, HttpJson.error("Sherpa 声纹模型尚未就绪"))
+            return
+        }
+        val name = request.queryValue("name")
+        if (name.isNullOrBlank()) {
+            respond(output, 400, HttpJson.error("缺少 name 参数"))
+            return
+        }
+        try {
+            val samples = decodeAudio(request)
+            val result = voiceprintCoordinator.register(name, samples, cpuModeProvider()).get(60, TimeUnit.SECONDS)
+            respond(output, 200, HttpJson.voiceprintRegistration(result))
+        } catch (error: java.util.concurrent.TimeoutException) {
+            respond(output, 504, HttpJson.error("声纹注册超时"))
+        } catch (error: Exception) {
+            val cause = error.cause ?: error
+            respond(output, if (cause is AsrBusyException) 409 else 400, HttpJson.error(cause.message ?: "声纹注册失败"))
+        }
+    }
+
+    private fun handleVoiceprintTest(output: OutputStream, request: HttpRequest) {
+        if (!engine.isLoaded || !voiceprintCoordinator.isReady()) {
+            respond(output, 503, HttpJson.error("ASR 或 Sherpa 声纹模型尚未就绪"))
+            return
+        }
+        val mode = VoiceprintMode.parse(request.queryValue("mode"))
+        if (mode == null) {
+            respond(output, 400, HttpJson.error("mode 必须是 SHERPA_SINGLE 或 SHERPA_MULTI"))
+            return
+        }
+        try {
+            val samples = decodeAudio(request)
+            val result = voiceprintCoordinator.test(mode, samples, cpuModeProvider()).get(60, TimeUnit.SECONDS)
+            respond(output, 200, HttpJson.voiceprintResult(result))
+        } catch (error: java.util.concurrent.TimeoutException) {
+            respond(output, 504, HttpJson.error("声纹测试超时"))
+        } catch (error: Exception) {
+            val cause = error.cause ?: error
+            respond(output, if (cause is AsrBusyException) 409 else 400, HttpJson.error(cause.message ?: "声纹测试失败"))
+        }
+    }
+
+    private fun decodeAudio(request: HttpRequest): FloatArray {
+        val contentType = request.headers["content-type"]?.substringBefore(';')?.trim()?.lowercase()
+        return when (contentType) {
+            "audio/wav" -> AudioResampler.toMono16k(WavAudio.decode(request.body))
+            "application/octet-stream" -> AsrPcm.decodeS16(request.body)
+            else -> throw IllegalArgumentException("Content-Type 必须是 audio/wav 或 application/octet-stream")
         }
     }
 
@@ -196,7 +340,16 @@ class AsrHttpServer(
         }
     }
 
-    private data class HttpRequest(val method: String, val path: String, val headers: Map<String, String>, val body: ByteArray)
+    private data class HttpRequest(val method: String, val path: String, val headers: Map<String, String>, val body: ByteArray) {
+        fun queryValue(key: String): String? = path.substringAfter('?', "").split('&')
+            .asSequence()
+            .mapNotNull { item ->
+                val separator = item.indexOf('=')
+                if (separator <= 0 || item.substring(0, separator) != key) null
+                else URLDecoder.decode(item.substring(separator + 1), StandardCharsets.UTF_8.name())
+            }
+            .firstOrNull()
+    }
 
     companion object {
         const val DEFAULT_PORT = 18080

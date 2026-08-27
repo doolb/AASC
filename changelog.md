@@ -4,12 +4,48 @@
 
 ### 已完成
 
+- ✅ [2026-08-27] 完成 Sherpa 单段/多段真机速度复测
+  - 在 SM-N9500、CPU `BIG` 模式下使用 `zh.wav`、`en.wav`、`zh-en.wav`、`zh-en-mix.wav` 完成单段/多段共 8 次 HTTPS 测试，全部返回成功。
+  - 单段耗时为 `5745/7290/14335/8097ms`；多段耗时为 `5553/7050/31683/14249ms`，对应四个输入文件顺序。
+  - 单语音频因只形成一个分段，多段耗时与单段接近；中英串接和混合音频多段约慢 `2.21` 倍和 `1.76` 倍。
+  - 详细结果：`docs/task/2026-08-27_Sherpa单段多段速度复测.md`。
+
+- ✅ [2026-08-27] 独立声纹测试 APK 增加 Sherpa 流式 ASR
+  - 内置官方小型双语 Zipformer int8 模型，使用 `OnlineRecognizer` 处理 16 kHz 单声道 PCM16 WebSocket 分片。
+  - 新增 `/api/asr/stream`，返回 `partial`/`final` 文本，支持 ping/pong、结束命令、异常 JSON 和 native stream 释放。
+  - 浏览器页面新增麦克风流式识别区和当前 WAV 分片流式测试；普通 HTTP 页面无法调用麦克风时仍可验证 WebSocket 流程，原有离线/声纹流程保持不变。
+  - 验证：Android JVM 单测通过，Debug APK 构建并安装到 SM-N9500；`/health` 返回 `streamingReady:true`，`zh.wav` WebSocket 分片收到 partial/final，离线 `/api/asr` 返回正常文本。
+  - 文件：`3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/StreamingAsrEngine.kt`、`WebSocketFrameCodec.kt`、`WebSocketHandshake.kt`、`StreamingAsrModelFiles.kt`、`AsrHttpServer.kt`、`AsrWebPage.kt`。
+
+- ✅ [2026-08-27] 独立声纹测试 APK 增加 HTTPS/WSS
+  - 新增独立测试 TLS 证书和 `TlsMaterial`，使用内存 KeyStore 创建 `SSLContext`，APK 默认以 `SSLServerSocket` 提供 HTTPS。
+  - 网页根据协议自动选择 `wss://`；现有 HTTP 路由和 WAV 流式测试逻辑保持不变。
+  - 证书 SAN 包含 `192.168.1.6`、`localhost` 和 `127.0.0.1`，不复用 display APK 签名证书；私钥仅用于测试 APK，不能作为生产凭据。
+  - 验证：28 项 Android JVM 单测、Debug APK 构建和真机安装通过；`/health` 返回 `streamingReady:true`，HTTPS 与 WSS 握手及 final 回包正常。
+
+- ✅ [2026-08-27] 完成流式 ASR 中文/英文 WSS 复测
+  - `zh.wav` 收到 28 个 partial，final 为“太放九鼎鼎”；`en.wav` 收到 36 个 partial，final 为英文但存在明显识别错误。
+  - 两段音频均完成 WSS 握手、PCM16 分片、partial/final 回包；当前模型准确率偏低，需后续单独评估模型替换或调优。
+
 - ✅ [2026-08-27] 修复无播放设备时文本媒体快速翻页
   - 根因是无可用 `voicePlayback` 设备时，分句错误被显示端立即跳过，导致页面连续切换。
   - `text-media-tts-service.js` 对无设备错误增加 `errorCode: noVoicePlaybackDevice`；`text-media-player.js` 按每秒 3 个有效字符延时推进当前句。
   - 暂停、停止、手动翻页、媒体切换和新播放标识都会清理回退计时器；TTS 合成失败等其他错误保持原有语义。
   - 测试：文本媒体相关回归 84/84 通过，`node --check` 与 `git diff --check` 通过。
   - 文档：`docs/design/text-media-routing.md`、`docs/spec/text-media-routing.md`、`docs/task/2026-08-27_无播放设备文本媒体按字数翻页.md`。
+
+- ✅ [2026-08-27] 独立声纹测试 APK 收敛为 Sherpa 两种流程
+  - 删除 WeSpeaker 测试入口、模型资源、运行时和网页模式，仅保留 `SHERPA_SINGLE`、`SHERPA_MULTI`。
+  - 新增 Sherpa embedding/pyannote 模型打包、进程内声纹注册库、HTTP 注册/测试/状态接口及浏览器测试面板。
+  - 单段与多段均与 SenseVoice ASR 串行执行，多段先合并同 cluster 相邻区间，并保留分段错误信息。
+  - 单元测试通过；SM-N9500 真机四个 WAV 的 Sherpa 单段 4/4、多段 4/4；非法 mode、错误 Content-Type 和网页模式检查通过。
+  - 改动：`3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/`、`app/build.gradle.kts`、`app/src/test/`；设计/spec/task 文档已同步，任务记录见 `docs/task/2026-08-27_独立APK仅保留Sherpa声纹测试.md`。
+
+- ✅ [2026-08-27] 完成 WeSpeaker/Sherpa 四流程真机对照测试
+  - 在 SM-N9500（Android 9，arm64-v8a）使用 `zh.wav`、`en.wav`、`zh-en.wav` 串接音频和 `zh-en-mix.wav` 混合音频完成测试；注册库为 `zh.wav → ZH`、`en.wav → EN`。
+  - WeSpeaker 单段 4/4 成功，四个音频均返回文字和匹配名称；Sherpa 单段 4/4、Sherpa 多段 4/4 成功。
+  - WeSpeaker 多段 0/4：四个音频均在重复滑窗 embedding 阶段触发 `OutOfMemoryError`，去掉 ASR 模型后仍复现；暂不接入 APK。
+  - 详细结果：`docs/design/android-voiceprint-test-apk.md`、`docs/spec/android-voiceprint-test-apk.md`、`docs/task/2026-08-26_独立APK声纹四路对比测试.md`。
 
 - ✅ [2026-08-26] 媒体名字号放大一倍
   - `fileNameDisplay` 桌面端字号从 24px 调整为 48px，移动端从 16px 调整为 32px。

@@ -5,12 +5,39 @@ plugins {
 }
 
 val bundledAsrModelFiles = listOf("model.int8.onnx", "tokens.txt")
+val bundledVoiceprintModelFiles = listOf(
+    "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+    "pyannote_segmentation_3_0_int8.onnx"
+)
+val bundledStreamingAsrModelFiles = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
+val bundledTlsFiles = listOf("android-asr-cert.pem", "android-asr-key.pem")
 
 val prepareBundledAsrModel = tasks.register<Copy>("prepareBundledAsrModel") {
     from(rootProject.file("../../../res/models/sensevoice")) {
         include(bundledAsrModelFiles)
     }
     into(layout.buildDirectory.dir("generated/assets/asr"))
+}
+
+val prepareBundledVoiceprintModels = tasks.register<Copy>("prepareBundledVoiceprintModels") {
+    from(rootProject.file("../../../res/models/voiceprint")) {
+        include(bundledVoiceprintModelFiles)
+    }
+    into(layout.buildDirectory.dir("generated/assets/voiceprint"))
+}
+
+val prepareBundledStreamingAsrModel = tasks.register<Copy>("prepareBundledStreamingAsrModel") {
+    from(rootProject.file("../../../res/models/streaming-zipformer")) {
+        include(bundledStreamingAsrModelFiles)
+    }
+    into(layout.buildDirectory.dir("generated/assets/streaming"))
+}
+
+val prepareBundledTls = tasks.register<Copy>("prepareBundledTls") {
+    from(rootProject.file("../../../res/certs")) {
+        include(bundledTlsFiles)
+    }
+    into(layout.buildDirectory.dir("generated/assets/tls"))
 }
 
 android {
@@ -54,6 +81,9 @@ android {
 
 tasks.named("preBuild") {
     dependsOn(prepareBundledAsrModel)
+    dependsOn(prepareBundledVoiceprintModels)
+    dependsOn(prepareBundledStreamingAsrModel)
+    dependsOn(prepareBundledTls)
 }
 
 dependencies {

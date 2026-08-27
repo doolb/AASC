@@ -2,6 +2,26 @@
 
 ## Android ASR APK
 
+- ✅已完成 [2026-08-27][2026-08-27] Sherpa 单段/多段真机速度复测
+  - 在 SM-N9500 上完成四个 WAV 的两种流程共 8 次 HTTPS 测试；单段 `5.745–14.335s`，多段 `5.553–31.683s`。
+  - 单语音频多段只有一个分段，速度接近单段；中英串接/混合多段约慢 `2.21/1.76` 倍。
+  - 详细结果：`docs/task/2026-08-27_Sherpa单段多段速度复测.md`。
+
+- ✅已完成 [2026-08-27][2026-08-27] 独立 ASR APK 增加 Sherpa 流式 ASR
+  - 内置官方小型双语 Zipformer int8 模型，新增 `OnlineRecognizer`、WebSocket `/api/asr/stream` 和浏览器麦克风实时 partial/final 文本显示。
+  - 真机 `192.168.1.6:5555` 返回 `streamingReady:true`；使用 `zh.wav` 分片发送收到 29 个流式文本帧并正常 final，离线 `/api/asr` 回归正常。
+  - Android JVM 单测、Debug APK 构建、APK 安装和 WebSocket 握手/PCM 分片验证通过。
+  - 文档：`docs/design/android-voiceprint-test-apk.md`、`docs/spec/android-voiceprint-test-apk.md`、`docs/task/2026-08-27_独立APK仅保留Sherpa声纹测试.md`
+
+- ✅已完成 [2026-08-27][2026-08-27] 独立 ASR APK 增加 HTTPS/WSS
+  - 使用独立测试 TLS 证书（SAN：`192.168.1.6`、`localhost`），不复用 display APK Android 签名证书；APK 默认通过 HTTPS 提供网页，流式 ASR 自动使用 WSS。
+  - 真机界面显示“HTTPS 证书已就绪”；`curl -k https://192.168.1.6:18080/health` 和加密 WebSocket partial/final 验证通过。
+  - 文档：`docs/design/android-voiceprint-test-apk.md`、`docs/spec/android-voiceprint-test-apk.md`、`docs/task/2026-08-27_独立APK仅保留Sherpa声纹测试.md`
+
+- ✅已完成 [2026-08-27][2026-08-27] 复测 HTTPS/WSS 流式 ASR 中文和英文音频
+  - `zh.wav` 返回 28 个 partial 和 final；`en.wav` 返回 36 个 partial 和 final，WSS 链路正常。
+  - 当前双语 Zipformer 文本准确率偏低，记录为后续模型优化事项。
+
 - ✅已完成 [2026-08-26][2026-08-26] 新增独立 Android 离线语音识别 APK
   - 内置 SenseVoice int8 模型，支持录音、选择音频、识别文本、识别耗时和自动/大核/小核 CPU 模式。
   - 提供 `0.0.0.0:18080` 的普通网页，支持选择 WAV、网页录音和识别耗时；页面内部使用 `/health`、`/api/asr`。
@@ -383,7 +403,9 @@
 
 - ⏳待处理 [2026-08-25] 修复 APK 原生 ASR 识别结果为空及声纹 native 崩溃
   - 真机 `NativeDisplay.asrRecognize()` 对有效 PCM 返回 `{}`，`/api/asr/recognize` 连续 5 次全部失败；调试声纹匹配时 `VoiceprintEngine.match` native 崩溃导致 APK 进程退出。
-  - 需要补充原生桥异常/结果日志与回归测试，修复后再完成速度、P95 和长稳内存压测。
+  - 2026-08-27 对照测试：WeSpeaker 单段和 Sherpa 两种流程均可返回文字/声纹；WeSpeaker 多段滑窗 embedding 在四个音频上均触发 OOM，即使不加载 ASR 模型仍复现。
+  - 2026-08-27 独立测试 APK 已移除 WeSpeaker 测试，当前验收范围仅保留 Sherpa 单段/多段；WeSpeaker 多次 embedding 的 OOM 不再阻塞该 APK。
+  - 仍需继续定位生产显示端原生桥异常/结果日志，修复后再完成速度、P95 和长稳内存压测。
 
 - ✅已完成 [2026-08-25][2026-08-25] Android 原生语音生成（TTS）
   - 基于 Microsoft Embedded Speech SDK，离线合成 Xiaoxiao，模型从服务器按需下载。

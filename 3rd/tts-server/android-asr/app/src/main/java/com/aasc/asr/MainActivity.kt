@@ -14,11 +14,15 @@ import androidx.core.content.ContextCompat
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import javax.net.ssl.SSLContext
 
 // 独立 ASR 主界面：模型、文件和识别操作放后台线程，所有视图更新回到主线程。
 class MainActivity : AppCompatActivity() {
     private val engine = AsrEngine()
+    private val voiceprintEngine = SherpaVoiceprintEngine()
+    private val streamingEngine = StreamingAsrEngine()
     private lateinit var coordinator: AsrCoordinator
+    private lateinit var voiceprintCoordinator: VoiceprintTestCoordinator
     private lateinit var recorder: AudioRecorder
     private lateinit var modelStatus: TextView
     private lateinit var audioStatus: TextView
@@ -35,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private var selectedCpuMode = CpuMode.AUTO
     private var modelReady = false
     private var httpServer: AsrHttpServer? = null
+    private var tlsContext: SSLContext? = null
 
     private val requestRecordPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startRecording() else audioStatus.text = "麦克风权限被拒绝"
@@ -63,6 +68,7 @@ class MainActivity : AppCompatActivity() {
         setupCpuMode()
         recorder = AudioRecorder()
         coordinator = AsrCoordinator(engine)
+        voiceprintCoordinator = VoiceprintTestCoordinator(engine, voiceprintEngine)
         loadModel()
     }
 
@@ -106,13 +112,35 @@ class MainActivity : AppCompatActivity() {
                 AsrModelFiles.ensureCopied(assets, modelDir)
                 val status = CpuAffinity.apply(selectedCpuMode)
                 val loaded = engine.load(File(modelDir, "model.int8.onnx"), File(modelDir, "tokens.txt"))
+                val voiceprintDir = File(filesDir, "models/voiceprint")
+                VoiceprintModelFiles.ensureCopied(assets, voiceprintDir)
+                val voiceprintLoaded = voiceprintEngine.load(
+                    File(voiceprintDir, VoiceprintModelFiles.FILE_NAMES[0]),
+                    File(voiceprintDir, VoiceprintModelFiles.FILE_NAMES[1])
+                )
+                val streamingDir = File(filesDir, "models/streaming")
+                StreamingAsrModelFiles.ensureCopied(assets, streamingDir)
+                val streamingLoaded = streamingEngine.load(
+                    File(streamingDir, StreamingAsrModelFiles.FILE_NAMES[0]),
+                    File(streamingDir, StreamingAsrModelFiles.FILE_NAMES[1]),
+                    File(streamingDir, StreamingAsrModelFiles.FILE_NAMES[2]),
+                    File(streamingDir, StreamingAsrModelFiles.FILE_NAMES[3])
+                )
+                tlsContext = TlsMaterial.load(assets)
                 modelReady = loaded
                 runOnUiThread {
-                    modelStatus.text = if (loaded) getString(R.string.model_ready) + "\nCPU 模式：$status"
-                    else getString(R.string.model_load_failed, "请检查内置模型")
+                    modelStatus.text = when {
+                        loaded && voiceprintLoaded && streamingLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\n流式 ASR 模型已就绪\nHTTPS 证书已就绪\nCPU 模式：$status"
+                        loaded && voiceprintLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\n流式 ASR 模型加载失败\nCPU 模式：$status"
+                        loaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型加载失败\nCPU 模式：$status"
+                        else -> getString(R.string.model_load_failed, "请检查内置模型")
+                    }
                 }
             } catch (error: Exception) {
                 modelReady = false
+                voiceprintEngine.release()
+                streamingEngine.release()
+                tlsContext = null
                 runOnUiThread { modelStatus.text = getString(R.string.model_load_failed, error.message ?: "未知错误") }
             }
         }
@@ -174,7 +202,7 @@ class MainActivity : AppCompatActivity() {
         val port = httpPortInput.text.toString().toIntOrNull()
         if (port == null || port !in 1024..65535) { httpStatus.text = "HTTP 端口必须是 1024-65535"; return }
         background.execute {
-            val server = AsrHttpServer(engine, coordinator, { selectedCpuMode })
+            val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, tlsContext) { selectedCpuMode }
             val started = server.start(port)
             runOnUiThread {
                 if (started.isSuccess) {
@@ -189,6 +217,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         httpServer?.stop()
         coordinator.shutdown()
+        voiceprintCoordinator.shutdown()
+        streamingEngine.release()
         background.shutdownNow()
         super.onDestroy()
     }
