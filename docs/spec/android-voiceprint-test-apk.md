@@ -6,9 +6,11 @@
 VoiceprintTestMode:
   SHERPA_SINGLE
   SHERPA_MULTI
+  SHERPA_MULTI_FAST
 
 VoiceprintTestRequest:
   mode: VoiceprintTestMode
+  speakerCount: AUTO 或 1..5，可选
   audioWav: 二进制 WAV
   registeredAudioWav: 可选的注册音频列表
   speakerName: 可选的人名
@@ -46,7 +48,7 @@ VoiceprintTestResult:
 
 开始测试:
   页面选择 mode 和 audio
-  POST /api/voiceprint/test?mode=SHERPA_SINGLE|SHERPA_MULTI
+  POST /api/voiceprint/test?mode=SHERPA_SINGLE|SHERPA_MULTI|SHERPA_MULTI_FAST
   body = WAV 二进制
   页面渲染 VoiceprintTestResult
 ```
@@ -94,7 +96,7 @@ SherpaMultiEngine.test(samples, db):
 
 ```text
 GET /api/voiceprint/status:
-  返回两种 Sherpa 模式的模型是否 ready、embeddingDim、threshold
+  返回三种 Sherpa 模式的模型是否 ready、embeddingDim、threshold
 
 POST /api/voiceprint/register:
   接收 name + audio
@@ -104,10 +106,30 @@ POST /api/voiceprint/register:
   返回 {success, name, embeddingDim}
 
 POST /api/voiceprint/test:
-  接收 mode 查询参数 + audio，使用进程内注册库
+  接收 mode、可选 speakerCount 查询参数 + audio，使用进程内注册库
+  speakerCount 缺失、空白或 AUTO -> 动态聚类
+  speakerCount 为 1..5 -> 已知人数聚类
+  speakerCount 其他值 -> 返回 400
   调用 VoiceprintTestCoordinator.test
   成功返回 {success, mode, embeddingDim, matchedSpeaker, text, segments, elapsedMs, diarizationMs, embeddingMs, asrMs}
   失败返回 {success:false, error}
+```
+
+## Sherpa 快速多人
+
+```text
+SherpaFastMultiEngine.test(samples, db, speakerCount):
+  diarized = OfflineSpeakerDiarization.process(samples)
+  speakerCount 为 AUTO -> clustering.numClusters = 0
+  speakerCount 为 1..5 -> clustering.numClusters = speakerCount
+  merged = VoiceprintSegmentMerger.merge(diarized)
+  每个 cluster 选择持续时间最长的 merged segment
+  对代表 segment 执行一次 embedding + SpeakerEmbeddingManager.search
+  遍历全部 merged segment:
+    使用 cluster -> speaker 映射
+    对当前 segment 执行一次 ASR
+    失败时保留当前分段并写入 error
+  返回所有分段、匹配人名、ASR 文本和阶段耗时
 ```
 
 ## 流式 ASR
@@ -199,7 +221,7 @@ Sherpa 多段:
 
 SHERPA_SINGLE: 4/4 成功，四个文件均返回 ASR 文本和匹配 speaker。
 SHERPA_MULTI: 4/4 成功，单语音频各返回一个匹配分段；串接音频分出 ZH/EN；混合音频返回重叠分段。
-异常回归: 非法 mode 返回 400；错误 Content-Type 返回 400；网页只出现两种 SHERPA 模式。
+异常回归: 非法 mode 返回 400；错误 Content-Type 返回 400；网页提供三种 SHERPA 模式。
 ```
 
 ## 本次流式 ASR 验收（2026-08-27）
@@ -286,4 +308,16 @@ APK 内部 elapsedMs:
   多段先 diarization，再对每个合并分段分别 embedding + ASR。
   单语音频只有一个分段，耗时与单段接近；多语音频约为单段 1.76-2.21 倍。
   HTTP wall time 比 elapsedMs 多约几十毫秒，主要是请求传输和 TLS 开销。
+```
+
+## Sherpa 快速多人复测（2026-08-27）
+
+```text
+输入: zh-en.wav，注册 zh.wav -> ZH、en.wav -> EN，排除 zh-en-mix.wav
+通用 SHERPA_MULTI: elapsedMs=35268，diarizationMs=19226，embeddingMs=5977，asrMs=10053，segments=6
+快速 SHERPA_MULTI_FAST speakerCount=2:
+  elapsedMs=33113，diarizationMs=19224，embeddingMs=3883，asrMs=9998，segments=6
+快速 SHERPA_MULTI_FAST speakerCount=AUTO:
+  elapsedMs=33113，diarizationMs=19273，embeddingMs=3847，asrMs=9986，segments=6
+结论: 快速模式本轮约快 6.1%，收益主要来自减少重复 embedding；diarization 和逐段 ASR 仍是主要耗时。
 ```

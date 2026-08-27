@@ -26,6 +26,8 @@ class AsrHttpServerTest {
             assertTrue(body.contains("/api/asr"))
             assertTrue(body.contains("SHERPA_SINGLE"))
             assertTrue(body.contains("SHERPA_MULTI"))
+            assertTrue(body.contains("SHERPA_MULTI_FAST"))
+            assertTrue(body.contains("speakerCount"))
         } finally {
             server.stop()
             coordinator.shutdown()
@@ -72,6 +74,31 @@ class AsrHttpServerTest {
             val body = connection.inputStream.bufferedReader().use { it.readText() }
             assertTrue(body.contains("SHERPA_SINGLE"))
             assertTrue(body.contains("SHERPA_MULTI"))
+            assertTrue(body.contains("SHERPA_MULTI_FAST"))
+        } finally {
+            server.stop()
+            coordinator.shutdown()
+            voiceprintCoordinator.shutdown()
+            streamingEngine.release()
+        }
+    }
+
+    @Test
+    fun invalidFastSpeakerCountReturnsBadRequestBeforeModelInference() {
+        val engine = AsrEngine()
+        val coordinator = AsrCoordinator(engine)
+        val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
+        val streamingEngine = StreamingAsrEngine()
+        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
+        try {
+            val port = server.start(0).getOrThrow()
+            val connection = URL("http://127.0.0.1:$port/api/voiceprint/test?mode=SHERPA_MULTI_FAST&speakerCount=6")
+                .openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "audio/wav")
+            connection.outputStream.use { it.write(byteArrayOf()) }
+            assertEquals(400, connection.responseCode)
         } finally {
             server.stop()
             coordinator.shutdown()

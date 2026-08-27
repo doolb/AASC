@@ -18,7 +18,7 @@ class HttpJsonTest {
     fun voiceprintStatusListsSherpaModesOnly() {
         val json = HttpJson.voiceprintStatus(false, 512, emptyList())
         assertEquals(
-            "{\"modelReady\":false,\"embeddingDim\":512,\"registeredSpeakers\":0,\"speakers\":[],\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\"]}",
+            "{\"modelReady\":false,\"embeddingDim\":512,\"registeredSpeakers\":0,\"speakers\":[],\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\",\"SHERPA_MULTI_FAST\"]}",
             json
         )
     }

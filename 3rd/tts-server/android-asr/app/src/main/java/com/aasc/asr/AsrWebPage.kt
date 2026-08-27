@@ -48,6 +48,16 @@ object AsrWebPage {
     <button id="registerSpeaker" type="button">注册当前音频</button>
     <button id="testSingle" type="button">Sherpa 单段</button>
     <button id="testMulti" type="button">Sherpa 多段</button>
+    <button id="testMultiFast" type="button">Sherpa 快速多段</button>
+    <label for="speakerCount">快速模式实际人数</label>
+    <select id="speakerCount">
+      <option value="AUTO">自动</option>
+      <option value="1">1 人</option>
+      <option value="2">2 人</option>
+      <option value="3">3 人</option>
+      <option value="4">4 人</option>
+      <option value="5">5 人</option>
+    </select>
     <pre id="voiceprintResult">等待声纹测试</pre>
   </section>
   <section>
@@ -71,6 +81,8 @@ object AsrWebPage {
     const registerSpeaker = document.getElementById('registerSpeaker');
     const testSingle = document.getElementById('testSingle');
     const testMulti = document.getElementById('testMulti');
+    const testMultiFast = document.getElementById('testMultiFast');
+    const speakerCount = document.getElementById('speakerCount');
     const voiceprintResult = document.getElementById('voiceprintResult');
     const streamStart = document.getElementById('streamStart');
     const streamFile = document.getElementById('streamFile');
@@ -422,9 +434,12 @@ object AsrWebPage {
       button.disabled = true;
       testSingle.disabled = true;
       testMulti.disabled = true;
+      testMultiFast.disabled = true;
       voiceprintResult.textContent = '测试中…';
       try {
-        const response = await fetch('/api/voiceprint/test?mode=' + mode, {
+        const query = new URLSearchParams({ mode });
+        if (mode === 'SHERPA_MULTI_FAST') query.set('speakerCount', speakerCount.value);
+        const response = await fetch('/api/voiceprint/test?' + query.toString(), {
           method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: selectedAudio
         });
         const data = await response.json();
@@ -435,11 +450,13 @@ object AsrWebPage {
       } finally {
         testSingle.disabled = false;
         testMulti.disabled = false;
+        testMultiFast.disabled = false;
       }
     }
 
     testSingle.addEventListener('click', () => testVoiceprint('SHERPA_SINGLE', testSingle));
     testMulti.addEventListener('click', () => testVoiceprint('SHERPA_MULTI', testMulti));
+    testMultiFast.addEventListener('click', () => testVoiceprint('SHERPA_MULTI_FAST', testMultiFast));
 
     streamStart.addEventListener('click', async () => {
       if (streaming) return;

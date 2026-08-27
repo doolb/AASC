@@ -20,7 +20,7 @@ object HttpJson {
 
     fun voiceprintStatus(ready: Boolean, embeddingDim: Int, speakers: List<String>): String {
         val names = speakers.joinToString(",") { "\"${escape(it)}\"" }
-        return "{\"modelReady\":$ready,\"embeddingDim\":$embeddingDim,\"registeredSpeakers\":${speakers.size},\"speakers\":[$names],\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\"]}"
+        return "{\"modelReady\":$ready,\"embeddingDim\":$embeddingDim,\"registeredSpeakers\":${speakers.size},\"speakers\":[$names],\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\",\"SHERPA_MULTI_FAST\"]}"
     }
 
     fun voiceprintRegistration(result: VoiceprintRegistrationResult): String =

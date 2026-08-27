@@ -60,7 +60,12 @@ class VoiceprintTestCoordinator(
             VoiceprintRegistrationResult(normalizedName, voiceprintEngine.embeddingDim)
         }
 
-    fun test(mode: VoiceprintMode, samples: FloatArray, cpuMode: CpuMode): Future<VoiceprintTestResult> =
+    fun test(
+        mode: VoiceprintMode,
+        samples: FloatArray,
+        cpuMode: CpuMode,
+        speakerCount: Int = VoiceprintSpeakerCount.AUTO
+    ): Future<VoiceprintTestResult> =
         submit {
             AsrCoordinator.validateSamples(samples)
             check(asrEngine.isLoaded) { "ASR 模型尚未就绪" }
@@ -69,6 +74,7 @@ class VoiceprintTestCoordinator(
             when (mode) {
                 VoiceprintMode.SHERPA_SINGLE -> testSingle(samples)
                 VoiceprintMode.SHERPA_MULTI -> testMulti(samples)
+                VoiceprintMode.SHERPA_MULTI_FAST -> testFastMulti(samples, speakerCount)
             }
         }
 
@@ -135,6 +141,73 @@ class VoiceprintTestCoordinator(
         }
         return VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_MULTI,
+            embeddingDim = voiceprintEngine.embeddingDim,
+            matchedSpeaker = null,
+            text = results.mapNotNull { it.text.takeIf(String::isNotEmpty) }.joinToString(" "),
+            segments = results,
+            elapsedMs = elapsedMs(started),
+            diarizationMs = diarizationMs,
+            embeddingMs = embeddingMs,
+            asrMs = asrMs
+        )
+    }
+
+    private fun testFastMulti(samples: FloatArray, speakerCount: Int): VoiceprintTestResult {
+        require(speakerCount in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
+            "speakerCount 必须是 AUTO 或 1-5"
+        }
+        val started = System.nanoTime()
+        val diarizationStarted = System.nanoTime()
+        val diarized = voiceprintEngine.diarize(samples, speakerCount)
+        val diarizationMs = elapsedMs(diarizationStarted)
+        val merged = VoiceprintSegmentMerger.merge(diarized)
+        var embeddingMs = 0L
+        val speakerByCluster = mutableMapOf<Int, String?>()
+        val embeddingErrorByCluster = mutableMapOf<Int, String>()
+
+        merged.groupBy { it.speakerIndex }.values
+            .mapNotNull { segments -> segments.maxByOrNull { it.end - it.start } }
+            .forEach { representative ->
+                val segmentSamples = slice(samples, representative.start, representative.end)
+                try {
+                    val embeddingStarted = System.nanoTime()
+                    val embedding = voiceprintEngine.extract(segmentSamples)
+                    embeddingMs += elapsedMs(embeddingStarted)
+                    speakerByCluster[representative.speakerIndex] = voiceprintEngine.match(embedding)
+                } catch (error: Exception) {
+                    speakerByCluster[representative.speakerIndex] = null
+                    embeddingErrorByCluster[representative.speakerIndex] = error.message ?: "声纹提取失败"
+                }
+            }
+
+        var asrMs = 0L
+        val results = merged.map { segment ->
+            val segmentSamples = slice(samples, segment.start, segment.end)
+            try {
+                val asrStarted = System.nanoTime()
+                val text = asrEngine.recognize(segmentSamples)
+                asrMs += elapsedMs(asrStarted)
+                VoiceprintSegmentResult(
+                    start = segment.start,
+                    end = segment.end,
+                    clusterId = segment.speakerIndex,
+                    speaker = speakerByCluster[segment.speakerIndex],
+                    text = text,
+                    error = embeddingErrorByCluster[segment.speakerIndex]
+                )
+            } catch (error: Exception) {
+                VoiceprintSegmentResult(
+                    start = segment.start,
+                    end = segment.end,
+                    clusterId = segment.speakerIndex,
+                    speaker = speakerByCluster[segment.speakerIndex],
+                    text = "",
+                    error = error.message ?: "分段 ASR 失败"
+                )
+            }
+        }
+        return VoiceprintTestResult(
+            mode = VoiceprintMode.SHERPA_MULTI_FAST,
             embeddingDim = voiceprintEngine.embeddingDim,
             matchedSpeaker = null,
             text = results.mapNotNull { it.text.takeIf(String::isNotEmpty) }.joinToString(" "),

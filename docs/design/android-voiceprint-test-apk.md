@@ -4,10 +4,11 @@
 
 在 `3rd/tts-server/android-asr` 独立 APK 中增加声纹对比测试能力，保留现有原生 ASR 页面，并通过 APK 内置 HTTPS 服务向电脑或手机浏览器提供测试网页。
 
-本次测试只保留两条 Sherpa 链路：
+本次测试保留两条 Sherpa 基础链路和一个针对已知人数的快速入口：
 
 1. Sherpa 单段 `SpeakerEmbeddingExtractor + SpeakerEmbeddingManager` 匹配。
 2. Sherpa `OfflineSpeakerDiarization` 多人分段匹配。
+3. Sherpa 快速多人 `SHERPA_MULTI_FAST`，按已知人数和 cluster 复用 embedding。
 
 WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前的 WeSpeaker 真机结果只作为历史记录保留。
 
@@ -16,7 +17,7 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 - 第一版支持本地 WAV 选择和网页录音。
 - 测试音频在 APK 本地执行，不经过主项目服务器，不依赖 WebSocket。
 - 网页通过 `https://APK_IP:端口/` 访问；APK 不自动打开内部 WebView。
-- 两条链路统一使用 16 kHz、单声道、Float32 PCM 输入。
+- 三个入口统一使用 16 kHz、单声道、Float32 PCM 输入。
 - 每次测试返回文本 JSON，包含模式、模型状态、耗时、匹配结果、分段和错误信息。
 - 不改变主项目 `src/apps/android-display` 的生产 APK 和服务器声纹链路。
 
@@ -28,7 +29,7 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 
 每次请求返回：
 
-- `mode`：`SHERPA_SINGLE` 或 `SHERPA_MULTI`；
+- `mode`：`SHERPA_SINGLE`、`SHERPA_MULTI` 或 `SHERPA_MULTI_FAST`；
 - `embeddingDim`：embedding 维度；
 - `matchedSpeaker`：单段模式的匹配人名或 null；
 - `segments`：多人模式的起止时间、聚类编号、匹配人名；
@@ -62,8 +63,8 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 
 ## Sherpa-only APK 实现验收（2026-08-27）
 
-- 独立 APK 已内置 Sherpa embedding 模型和 pyannote 分割模型，HTTPS 页面仅保留 `SHERPA_SINGLE`、`SHERPA_MULTI`。
-- `zh.wav`、`en.wav`、中文后串接英文、中文与英文混合四个 WAV 均完成两种流程测试；注册 `ZH/EN` 成功，embedding 维度为 512。
+- 独立 APK 已内置 Sherpa embedding 模型和 pyannote 分割模型，HTTPS 页面提供 `SHERPA_SINGLE`、`SHERPA_MULTI`、`SHERPA_MULTI_FAST`。
+- `zh.wav`、`en.wav`、中文后串接英文、中文与英文混合四个 WAV 均完成基础两种流程测试；注册 `ZH/EN` 成功，embedding 维度为 512。
 - 单段四个文件均返回文字和匹配名称；多段四个文件均返回成功，串接音频分出 ZH/EN，混合音频保留重叠分段。
 - 非法模式和错误音频类型均返回明确 400 JSON；原有 `/api/asr` 和 `/health` 路由保留。
 
@@ -103,3 +104,18 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 - 多段在四个 WAV 上的 APK 内部总耗时分别为：`zh.wav 5553ms`、`en.wav 7050ms`、`zh-en.wav 31683ms`、`zh-en-mix.wav 14249ms`。
 - 单语音频被多段流程合并为一个分段，因此与单段耗时接近；中英串接和混合音频产生多个分段，多段流程额外执行 diarization，并按分段重复 embedding 和 ASR，耗时约为单段的 `1.76–2.21` 倍。
 - 当前速度瓶颈在多段的 diarization 和分段 ASR；阶段耗时已通过 `diarizationMs`、`embeddingMs`、`asrMs` 返回，后续优化应优先减少分段数量或避免过短分段。
+
+## Sherpa 快速多段人数上限（2026-08-27）
+
+- 在通用 `SHERPA_MULTI` 之外增加 `SHERPA_MULTI_FAST`，人数参数支持 `AUTO` 或实际人数 `1–5`。
+- `AUTO` 使用 Sherpa 动态聚类；明确人数时设置 `FastClusteringConfig.numClusters`，适用于已知本段实际说话人数的场景。注册库人数不自动等同于音频中的实际人数。
+- 快速模式在 diarization 后按 cluster 选择最长代表片段，每个 cluster 只执行一次 embedding 和匹配；每个输出时间段仍单独执行 ASR，保持文本分段信息。
+- 网页默认使用 `AUTO`，人数超过 5 或格式非法由 HTTP 接口返回 400；通用模式继续作为混合、未知人数音频的兼容路径。
+
+## Sherpa 快速多段真机复测（2026-08-27）
+
+- 设备：SM-N9500，Android 9，arm64-v8a；注册 `ZH/EN`，输入 `zh-en.wav`，排除 `zh-en-mix.wav`。
+- 通用 `SHERPA_MULTI`：`elapsedMs=35268`，其中 diarization `19226ms`、embedding `5977ms`、ASR `10053ms`，6 个分段。
+- 快速 `SHERPA_MULTI_FAST&speakerCount=2`：`elapsedMs=33113`，其中 diarization `19224ms`、embedding `3883ms`、ASR `9998ms`，6 个分段，匹配结果为 ZH/EN 交替。
+- 快速模式总耗时约降低 `6.1%`；主要减少 embedding，当前最大瓶颈仍是 diarization 和逐段 ASR。
+- `speakerCount=AUTO` 本轮同样为 `33113ms`；人数参数主要影响聚类约束，不能单独消除分割模型推理成本。

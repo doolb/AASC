@@ -2,12 +2,12 @@
 
 ## 任务描述
 
-删除独立 `3rd/tts-server/android-asr` APK 中的 WeSpeaker 测试范围，只保留 Sherpa 单段和 Sherpa 多段声纹匹配，并通过 APK HTTP 网页执行注册与四个 WAV 回归测试。
+删除独立 `3rd/tts-server/android-asr` APK 中的 WeSpeaker 测试范围，保留 Sherpa 单段、通用多段和快速多段声纹匹配，并通过 APK HTTP 网页执行注册与四个 WAV 回归测试。
 
 ## Design 需求
 
 - 保留原有 SenseVoice ASR、`/api/asr`、`/health` 和浏览器入口。
-- 只提供 `SHERPA_SINGLE`、`SHERPA_MULTI` 两种声纹模式。
+- 提供 `SHERPA_SINGLE`、`SHERPA_MULTI`、`SHERPA_MULTI_FAST` 三种声纹模式；快速模式支持 `AUTO` 或实际人数 1–5。
 - 内置 Sherpa embedding 和 pyannote segmentation 模型。
 - 注册接口接收 WAV 二进制和 URL speaker 名称，声纹库只保存在 APK 进程内存。
 - 多段流程合并相邻同 cluster 分段，逐段执行声纹匹配和 ASR，并保留分段错误。
@@ -21,7 +21,7 @@
 ## Spec 设计
 
 - `SherpaVoiceprintEngine`：加载模型、提取 embedding、manager 匹配、diarization。
-- `VoiceprintTestCoordinator`：串行化注册/测试任务，分派两种 Sherpa 流程。
+- `VoiceprintTestCoordinator`：串行化注册/测试任务，分派三种 Sherpa 流程。
 - `AsrHttpServer`：新增 `/api/voiceprint/status`、`/api/voiceprint/register`、`/api/voiceprint/test`。
 - `AsrWebPage`：新增注册、Sherpa 单段、多段测试按钮和 JSON 结果面板。
 
@@ -51,7 +51,7 @@
 
 - 模型只加载一次，声纹任务单线程串行。
 - 返回 `diarizationMs`、`embeddingMs`、`asrMs` 和总耗时。
-- 四个 WAV 的两种流程均在 120 秒 HTTP 超时内完成。
+- 四个 WAV 的基础两种流程均在 120 秒 HTTP 超时内完成；快速模式另以 `zh-en.wav` 做已知 2 人对比。
 
 ## 风险评估
 
@@ -87,3 +87,8 @@
   - `zh.wav`：28 个 partial，final“太放九鼎鼎”，端到端约 1.26 秒。
   - `en.wav`：36 个 partial，final“The drive them god for the boy and presented him that fifty pieces of good”，端到端约 1.65 秒。
   - WSS 握手、PCM16 分片、partial/final 回包均正常；当前流式模型识别准确率偏低，后续需更换或调优模型。
+
+- ✅ [2026-08-27][2026-08-27] 增加 Sherpa 快速多人模式并支持最多 5 人。
+  - 页面和状态接口增加 `SHERPA_MULTI_FAST`；`speakerCount` 支持 `AUTO` 或 `1–5`，非法值返回 400。
+  - 快速模式按 cluster 选择最长代表片段，只做一次 embedding 匹配；每个分段仍保留独立 ASR 文本。
+  - 真机 `zh-en.wav`：通用多段 35268ms，快速 2 人 33113ms，约快 6.1%；embedding 5977ms 降至 3883ms。

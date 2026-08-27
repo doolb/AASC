@@ -4,6 +4,12 @@
 
 ### 已完成
 
+- ✅ [2026-08-27] 增加 Sherpa 快速多人模式并支持最多 5 人
+  - 新增 `SHERPA_MULTI_FAST` 和 `speakerCount=AUTO|1..5`，明确人数时配置 Sherpa `numClusters`；非法人数返回 400。
+  - 快速模式按 cluster 复用最长代表片段的 embedding，保留每个时间段的 ASR 文本；原 `SHERPA_MULTI` 保持兼容。
+  - 真机 `zh-en.wav` 对比：通用多段 `35268ms`，快速 2 人 `33113ms`，约快 `6.1%`；最大瓶颈仍为 diarization 和逐段 ASR。
+  - 文档：`docs/design/android-voiceprint-test-apk.md`、`docs/spec/android-voiceprint-test-apk.md`、`docs/task/2026-08-27_Sherpa快速多段人数上限5.md`。
+
 - ✅ [2026-08-27] 完成 Sherpa 单段/多段真机速度复测
   - 在 SM-N9500、CPU `BIG` 模式下使用 `zh.wav`、`en.wav`、`zh-en.wav`、`zh-en-mix.wav` 完成单段/多段共 8 次 HTTPS 测试，全部返回成功。
   - 单段耗时为 `5745/7290/14335/8097ms`；多段耗时为 `5553/7050/31683/14249ms`，对应四个输入文件顺序。

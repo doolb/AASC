@@ -104,8 +104,23 @@ class SherpaVoiceprintEngine {
     }
 
     @Synchronized
-    fun diarize(samples: FloatArray): List<VoiceprintSegmentMerger.DiarizedSegment> {
+    fun diarize(
+        samples: FloatArray,
+        speakerCount: Int = VoiceprintSpeakerCount.AUTO
+    ): List<VoiceprintSegmentMerger.DiarizedSegment> {
         val currentDiarization = diarization ?: throw IllegalStateException("声纹分割模型未加载")
+        require(speakerCount in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
+            "speakerCount 必须是 AUTO 或 1-5"
+        }
+        val currentConfig = currentDiarization.config
+        currentDiarization.setConfig(
+            currentConfig.copy(
+                clustering = FastClusteringConfig(
+                    numClusters = speakerCount,
+                    threshold = currentConfig.clustering.threshold
+                )
+            )
+        )
         return currentDiarization.process(samples).map {
             VoiceprintSegmentMerger.DiarizedSegment(it.start, it.end, it.speaker)
         }

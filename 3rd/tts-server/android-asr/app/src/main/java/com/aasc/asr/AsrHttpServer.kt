@@ -243,18 +243,23 @@ class AsrHttpServer(
     }
 
     private fun handleVoiceprintTest(output: OutputStream, request: HttpRequest) {
+        val mode = VoiceprintMode.parse(request.queryValue("mode"))
+        if (mode == null) {
+            respond(output, 400, HttpJson.error("mode 必须是 SHERPA_SINGLE、SHERPA_MULTI 或 SHERPA_MULTI_FAST"))
+            return
+        }
+        val speakerCount = VoiceprintSpeakerCount.parse(request.queryValue("speakerCount"))
+        if (speakerCount == null) {
+            respond(output, 400, HttpJson.error("speakerCount 必须是 AUTO 或 1-5"))
+            return
+        }
         if (!engine.isLoaded || !voiceprintCoordinator.isReady()) {
             respond(output, 503, HttpJson.error("ASR 或 Sherpa 声纹模型尚未就绪"))
             return
         }
-        val mode = VoiceprintMode.parse(request.queryValue("mode"))
-        if (mode == null) {
-            respond(output, 400, HttpJson.error("mode 必须是 SHERPA_SINGLE 或 SHERPA_MULTI"))
-            return
-        }
         try {
             val samples = decodeAudio(request)
-            val result = voiceprintCoordinator.test(mode, samples, cpuModeProvider()).get(60, TimeUnit.SECONDS)
+            val result = voiceprintCoordinator.test(mode, samples, cpuModeProvider(), speakerCount).get(60, TimeUnit.SECONDS)
             respond(output, 200, HttpJson.voiceprintResult(result))
         } catch (error: java.util.concurrent.TimeoutException) {
             respond(output, 504, HttpJson.error("声纹测试超时"))
