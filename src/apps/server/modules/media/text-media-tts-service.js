@@ -35,14 +35,16 @@ function createTextMediaTtsService({
      * @param {string} displayId 显示端标识
      * @param {object} data 原始分句请求
      * @param {string} message 面向显示端的错误说明
+     * @param {string|null} errorCode 可选的机器可读错误码
      */
-    function sendError(displayId, data, message) {
+    function sendError(displayId, data, message, errorCode = null) {
         sendToDisplay(displayId, {
             type: 'textSentenceTtsError',
             playbackId: data?.playbackId,
             pageIndex: data?.pageIndex,
             sentenceIndex: data?.sentenceIndex,
             ...(data?.prefetch ? { prefetch: true } : {}),
+            ...(errorCode ? { errorCode } : {}),
             message
         });
     }
@@ -419,7 +421,12 @@ function createTextMediaTtsService({
                 : (availableDisplayIds.includes(originDisplayId)
                     ? originDisplayId
                     : availableDisplayIds[0]);
-            if (!targetDisplayId) return { message: '没有可用的语音播放显示端' };
+            if (!targetDisplayId) {
+                return {
+                    message: '没有可用的语音播放显示端',
+                    errorCode: 'noVoicePlaybackDevice'
+                };
+            }
             // 实际句子在这里刷新上下文目标；预取句也记录最终使用的目标，
             // 这样远程结束回执和取消操作都能找到本句真正的语音设备。
             context.voiceTargetDisplayId = targetDisplayId;
@@ -427,7 +434,12 @@ function createTextMediaTtsService({
         }
 
         const targetDisplayId = context.voiceTargetDisplayId;
-        if (!targetDisplayId) return { message: '没有可用的语音播放显示端' };
+        if (!targetDisplayId) {
+            return {
+                message: '没有可用的语音播放显示端',
+                errorCode: 'noVoicePlaybackDevice'
+            };
+        }
         if (!context.selectedDisplayIds.includes(targetDisplayId)) {
             return { message: '语音播放目标不在本次选中的显示端中' };
         }
@@ -507,7 +519,7 @@ function createTextMediaTtsService({
                 let routeResult = resolveRequestTarget(displayId, playbackContext, data.prefetch === true);
                 if (routeResult.message) {
                     finishPrefetch(playbackContext, data, 'clear');
-                    sendError(displayId, data, routeResult.message);
+                    sendError(displayId, data, routeResult.message, routeResult.errorCode);
                     return;
                 }
                 const audioPath = await generateTTS(data.text);
@@ -517,7 +529,7 @@ function createTextMediaTtsService({
                 routeResult = resolveRequestTarget(displayId, playbackContext, data.prefetch === true);
                 if (routeResult.message) {
                     finishPrefetch(playbackContext, data, 'clear');
-                    sendError(displayId, data, routeResult.message);
+                    sendError(displayId, data, routeResult.message, routeResult.errorCode);
                     return;
                 }
                 const targetDisplayId = routeResult.targetDisplayId;

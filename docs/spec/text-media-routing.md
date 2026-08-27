@@ -184,6 +184,34 @@ pause/prev/next/stop/新 playbackId:
         清理当前远程上下文
 ```
 
+## 无语音设备时按字数推进
+
+```text
+服务端 resolveRequestTarget:
+    如果当前没有可用 voicePlayback 设备:
+        返回 { message, errorCode: "noVoicePlaybackDevice" }
+
+服务端 textSentenceTtsError:
+    原样携带 playbackId/pageIndex/sentenceIndex
+    如果错误来自无语音设备:
+        追加 errorCode = "noVoicePlaybackDevice"
+
+显示端 TextMediaPlayer.handleTtsError(data):
+    如果 data.prefetch:
+        清理预取槽并按原逻辑回退普通请求
+    否则如果 data.errorCode == "noVoicePlaybackDevice":
+        清理当前回退计时器
+        requestPending = false
+        按当前句去除空白后的字符数计算等待时间
+        等待时间 = max(有效字符数 / 3 * 1000, 1)
+        计时器结束后仅在 playbackId、页码、句号仍匹配时推进当前句
+    否则:
+        沿用原有 finishCurrentSentence() 逻辑
+
+暂停、停止、上一页、下一页、新 playbackId:
+    清理无语音设备回退计时器
+```
+
 ## 手动能力伪代码
 
 ```text

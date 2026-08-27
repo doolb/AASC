@@ -4,6 +4,13 @@
 
 ### 已完成
 
+- ✅ [2026-08-27] 修复无播放设备时文本媒体快速翻页
+  - 根因是无可用 `voicePlayback` 设备时，分句错误被显示端立即跳过，导致页面连续切换。
+  - `text-media-tts-service.js` 对无设备错误增加 `errorCode: noVoicePlaybackDevice`；`text-media-player.js` 按每秒 3 个有效字符延时推进当前句。
+  - 暂停、停止、手动翻页、媒体切换和新播放标识都会清理回退计时器；TTS 合成失败等其他错误保持原有语义。
+  - 测试：文本媒体相关回归 84/84 通过，`node --check` 与 `git diff --check` 通过。
+  - 文档：`docs/design/text-media-routing.md`、`docs/spec/text-media-routing.md`、`docs/task/2026-08-27_无播放设备文本媒体按字数翻页.md`。
+
 - ✅ [2026-08-26] 媒体名字号放大一倍
   - `fileNameDisplay` 桌面端字号从 24px 调整为 48px，移动端从 16px 调整为 32px。
   - 通过实际包围盒重新适配覆盖层：0°保持在媒体名上侧，90°/180°/270°分别从右侧/下侧/左侧避让，避免字号放大后发生越界或重叠。

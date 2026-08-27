@@ -19,6 +19,7 @@
     const FONT_SIZE_MAP = Object.freeze({ small: 24, medium: 32, large: 40, auto: 32 });
     const LINE_HEIGHT_MAP = Object.freeze({ compact: 1.35, normal: 1.6, loose: 1.9 });
     const PAGE_MARGIN_MAP = Object.freeze({ small: 24, normal: 48, large: 80 });
+    const DEFAULT_READING_CHARS_PER_SECOND = 3;
 
     function getSplitter(options) {
         if (options.splitIntoSentences) return options.splitIntoSentences;
@@ -60,6 +61,7 @@
         let loadAbortController = null;
         let prefetchSlot = null;
         let remoteActiveSentence = null;
+        let noVoiceFallbackTimer = null;
 
         const nextPlaybackId = () => `text-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const getAudio = () => options.audio || (root.document && root.document.getElementById('ttsAudio'));
@@ -80,6 +82,42 @@
 
         function getPageMargin() {
             return PAGE_MARGIN_MAP[style.pageMargin];
+        }
+
+        function getReadingCharsPerSecond() {
+            const configuredRate = Number(options.readingCharsPerSecond);
+            return Number.isFinite(configuredRate) && configuredRate > 0
+                ? configuredRate
+                : DEFAULT_READING_CHARS_PER_SECOND;
+        }
+
+        function clearNoVoiceFallbackTimer() {
+            if (noVoiceFallbackTimer !== null) {
+                clearTimeout(noVoiceFallbackTimer);
+                noVoiceFallbackTimer = null;
+            }
+        }
+
+        function getReadingFallbackDelay(text) {
+            const effectiveCharCount = Array.from(String(text || ''))
+                .filter((character) => !/\s/u.test(character))
+                .length;
+            return Math.max(Math.ceil(effectiveCharCount / getReadingCharsPerSecond() * 1000), 1);
+        }
+
+        function scheduleNoVoiceFallback(data) {
+            clearNoVoiceFallbackTimer();
+            const expectedPlaybackId = playbackId;
+            const expectedPageIndex = pageIndex;
+            const expectedSentenceIndex = sentenceIndex;
+            noVoiceFallbackTimer = setTimeout(() => {
+                noVoiceFallbackTimer = null;
+                if (state !== 'playing'
+                    || playbackId !== expectedPlaybackId
+                    || pageIndex !== expectedPageIndex
+                    || sentenceIndex !== expectedSentenceIndex) return;
+                finishCurrentSentence();
+            }, getReadingFallbackDelay(data?.text));
         }
 
         function updateTextLayout(pageTotal = 1) {
@@ -350,6 +388,7 @@
         }
 
         function invalidatePlayback() {
+            clearNoVoiceFallbackTimer();
             playbackId = nextPlaybackId();
             requestPending = false;
             clearPrefetchSlot();
@@ -373,6 +412,7 @@
         }
 
         function invalidateLoad() {
+            clearNoVoiceFallbackTimer();
             loadToken += 1;
             if (loadAbortController) {
                 loadAbortController.abort();
@@ -621,6 +661,7 @@
                     }
                 },
                 pause() {
+                    clearNoVoiceFallbackTimer();
                     if (state === 'loading') {
                         invalidateLoad();
                         state = 'paused';
@@ -695,6 +736,10 @@
             }
             if (!isCurrentResponse(data)) return;
             requestPending = false;
+            if (data.errorCode === 'noVoicePlaybackDevice') {
+                scheduleNoVoiceFallback(data);
+                return;
+            }
             finishCurrentSentence();
         }
 
@@ -718,6 +763,7 @@
         }
 
         function applyStyle(nextStyle) {
+            clearNoVoiceFallbackTimer();
             const anchor = pages[pageIndex] && pages[pageIndex].plainText;
             style = normalizeStyle({ ...style, ...(nextStyle || {}) });
             if (!rawText) return;

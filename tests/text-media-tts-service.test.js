@@ -259,6 +259,30 @@ test('无效分句请求返回带定位标签的错误消息且不进入 TTS', a
     }]);
 });
 
+test('没有可用语音播放设备时返回专用错误码', async () => {
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/should-not-generate.wav',
+        sendToDisplay: (_, message) => messages.push(message),
+        logError: () => {},
+        getVoicePlaybackDisplayIds: () => [],
+        getDisplayCapabilities: () => null
+    });
+
+    await service.handleSentenceRequest('display-1', {
+        playbackId: 'no-voice', pageIndex: 0, sentenceIndex: 0, text: '无设备时等待阅读。'
+    });
+
+    assert.deepEqual(messages, [{
+        type: 'textSentenceTtsError',
+        playbackId: 'no-voice',
+        pageIndex: 0,
+        sentenceIndex: 0,
+        message: '没有可用的语音播放显示端',
+        errorCode: 'noVoicePlaybackDevice'
+    }]);
+});
+
 test('文本路由目标为远程显示端时仅向服务器确认的在线语音设备下发远程音频', async () => {
     const messages = [];
     const online = new Map([

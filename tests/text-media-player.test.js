@@ -69,6 +69,62 @@ test('pause before TTS audio arrives invalidates the pending request and play re
     assert.equal(sentenceRequests[1].text, initialRequest.text);
 });
 
+test('无语音播放设备时按每秒三字等待后再推进文本页面', async () => {
+    const sent = [];
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['甲', '乙']
+    });
+
+    player.start();
+    player.handleTtsError({ ...sent[0], errorCode: 'noVoicePlaybackDevice' });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(sent.length, 1);
+
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const sentenceRequests = sent.filter((message) => message.type === 'textSentenceTts');
+    assert.equal(sentenceRequests.length, 2);
+    assert.equal(sentenceRequests[1].pageIndex, 1);
+    assert.equal(sentenceRequests[1].sentenceIndex, 0);
+});
+
+test('手动翻页后无语音设备回退计时器不能推进新页面', async () => {
+    const sent = [];
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一页。', '第二页。', '第三页。'],
+        readingCharsPerSecond: 10
+    });
+
+    player.start();
+    player.handleTtsError({ ...sent[0], errorCode: 'noVoicePlaybackDevice' });
+    player.handleControl('next');
+    const nextPageRequest = sent.at(-1);
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(sent.filter((message) => message.type === 'textSentenceTts').length, 2);
+    assert.equal(nextPageRequest.pageIndex, 1);
+});
+
+test('暂停后恢复会取消旧的无语音设备回退计时器', async () => {
+    const sent = [];
+    const player = createTextPlayerForTest({
+        send: (message) => sent.push(message),
+        pageTexts: ['第一页。', '第二页。'],
+        readingCharsPerSecond: 10
+    });
+
+    player.start();
+    player.handleTtsError({ ...sent[0], errorCode: 'noVoicePlaybackDevice' });
+    player.handleControl('pause');
+    player.handleControl('play');
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(sent.filter((message) => message.type === 'textSentenceTts').length, 2);
+    assert.equal(player.getProgress().pageIndex, 0);
+});
+
 test('long Markdown paragraphs and lists without blank lines paginate without dropping source text', async () => {
     const paragraph = '这是没有空行分隔的超长 Markdown 段落。'.repeat(24);
     const list = Array.from({ length: 30 }, (_, index) => `- 列表项目 ${index + 1}：内容需要继续分页。`).join('\n');
