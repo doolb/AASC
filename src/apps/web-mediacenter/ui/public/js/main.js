@@ -216,6 +216,10 @@ const App = {
     mapPanel: null,
     
     init() {
+        if (window.UiTheme) {
+            window.UiTheme.init();
+        }
+
         Sidebar.init();
         
         if (window.DeviceList) {

@@ -1,0 +1,311 @@
+/* 控制端主题变量和 UI 语义样式。默认值保持原有深色界面观感。 */
+:root {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-surface: rgba(255, 255, 255, 0.05);
+    --bg-surface-strong: rgba(255, 255, 255, 0.1);
+    --card-background: rgba(255, 255, 255, 0.05);
+    --content-background: rgba(0, 0, 0, 0.2);
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --text-muted: rgba(255, 255, 255, 0.6);
+    --border-color: rgba(255, 255, 255, 0.1);
+    --input-background: rgba(255, 255, 255, 0.1);
+    --accent-color: #00d2ff;
+    --accent-secondary: #3a7bd5;
+    --success-color: #38ef7d;
+    --danger-color: #ef4444;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="light"] {
+    --bg-primary: #f4f7fb;
+    --bg-secondary: #e7edf6;
+    --bg-surface: rgba(255, 255, 255, 0.86);
+    --bg-surface-strong: #eaf4ff;
+    --card-background: #eaf4ff;
+    --content-background: #f2f8ff;
+    --text-primary: #1f2937;
+    --text-secondary: #526174;
+    --text-muted: #68778a;
+    --border-color: rgba(55, 72, 96, 0.18);
+    --input-background: #ffffff;
+    --accent-color: #087ea4;
+    --accent-secondary: #315db4;
+    --success-color: #16834a;
+    --danger-color: #c93434;
+    --shadow-color: rgba(41, 55, 75, 0.16);
+}
+
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+
+:root[data-theme="light"] body {
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    color: var(--text-primary);
+}
+
+:root[data-theme="light"] .sidebar {
+    background: rgba(255, 255, 255, 0.72);
+    border-color: var(--border-color);
+}
+
+:root[data-theme="light"] .sidebar-header,
+:root[data-theme="light"] .section,
+:root[data-theme="light"] .device-item,
+:root[data-theme="light"] .display-item,
+:root[data-theme="light"] .media-library-container,
+:root[data-theme="light"] .chat-container,
+:root[data-theme="light"] .task-card,
+:root[data-theme="light"] .control-item {
+    border-color: var(--border-color);
+}
+
+:root[data-theme="light"] .section,
+:root[data-theme="light"] .control-item,
+:root[data-theme="light"] .media-library-container,
+:root[data-theme="light"] .task-card,
+:root[data-theme="light"] .chat-container,
+:root[data-theme="light"] .device-item,
+:root[data-theme="light"] .display-item,
+:root[data-theme="light"] .task-form-section,
+:root[data-theme="light"] .media-library-item {
+    background: var(--card-background);
+    color: var(--text-primary);
+}
+
+:root[data-theme="light"] .device-list,
+:root[data-theme="light"] .chat-messages,
+:root[data-theme="light"] .chat-search-history,
+:root[data-theme="light"] .log-entries {
+    background: var(--content-background) !important;
+    color: var(--text-primary);
+}
+
+:root[data-theme="light"] .nav-item,
+:root[data-theme="light"] .section h2,
+:root[data-theme="light"] label,
+:root[data-theme="light"] [data-ui-type="text"],
+:root[data-theme="light"] [data-ui-type="tip"],
+:root[data-theme="light"] .stat-label,
+:root[data-theme="light"] .stat-value {
+    color: var(--text-secondary) !important;
+}
+
+:root[data-theme="light"] .nav-item:hover,
+:root[data-theme="light"] .nav-item.active,
+:root[data-theme="light"] .display-item:hover {
+    background: rgba(49, 93, 180, 0.1);
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] input:not([type="file"]),
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+    background: var(--input-background) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder {
+    color: var(--text-muted) !important;
+}
+
+:root[data-theme="light"] button:not(.file-label),
+:root[data-theme="light"] .control-btn,
+:root[data-theme="light"] .floating-btn,
+:root[data-theme="light"] .chat-add-btn,
+:root[data-theme="light"] .task-card-btn,
+:root[data-theme="light"] .task-submit-btn,
+:root[data-theme="light"] .log-action-btn,
+:root[data-theme="light"] .log-filter-control-btn {
+    background: linear-gradient(135deg, #315db4, #087ea4) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+}
+
+:root[data-theme="light"] .btn-cancel,
+:root[data-theme="light"] .task-confirm-btn.cancel {
+    background: #718096 !important;
+}
+
+:root[data-theme="light"] .toast-success { background: var(--success-color) !important; }
+:root[data-theme="light"] .toast-error,
+:root[data-theme="light"] .restart-btn,
+:root[data-theme="light"] .task-card-btn.danger { background: var(--danger-color) !important; }
+
+:root[data-theme="light"] .modal-overlay,
+:root[data-theme="light"] .chat-modal-overlay,
+:root[data-theme="light"] .modal-mask,
+:root[data-theme="light"] .library-modal,
+:root[data-theme="light"] .self-test-modal,
+:root[data-theme="light"] .task-confirm-overlay,
+:root[data-theme="light"] .task-overlay {
+    background: rgba(22, 33, 62, 0.38);
+}
+
+:root[data-theme="light"] .modal-content,
+:root[data-theme="light"] .chat-modal-content,
+:root[data-theme="light"] .playlist-settings-dialog,
+:root[data-theme="light"] .library-modal-content,
+:root[data-theme="light"] .self-test-modal-content,
+:root[data-theme="light"] .task-dialog,
+:root[data-theme="light"] .task-confirm-box {
+    background: var(--bg-surface-strong);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+    box-shadow: 0 16px 50px var(--shadow-color);
+}
+
+/*
+ * 兼容旧组件的深色硬编码文字。
+ * 主题样式加载在组件样式之后，但部分标题、弹窗内容和动态 HTML 使用了
+ * 更具体的选择器或内联 color，因此需要在浅色主题下显式覆盖，避免白底白字。
+ * 按钮不纳入内联覆盖，确保有色按钮仍使用白色文字保持对比度。
+ */
+:root[data-theme="light"] .task-card-title,
+:root[data-theme="light"] .task-monitor-name,
+:root[data-theme="light"] .task-breadcrumb .current,
+:root[data-theme="light"] .task-confirm-title,
+:root[data-theme="light"] .dialog-title,
+:root[data-theme="light"] .library-modal-header h3,
+:root[data-theme="light"] .chat-modal-header h3,
+:root[data-theme="light"] .self-test-status {
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .settings-label,
+:root[data-theme="light"] .task-confirm-msg,
+:root[data-theme="light"] .task-card-meta,
+:root[data-theme="light"] .task-form-field label,
+:root[data-theme="light"] .item-meta,
+:root[data-theme="light"] .empty-list,
+:root[data-theme="light"] .chat-empty,
+:root[data-theme="light"] .chat-template-permission,
+:root[data-theme="light"] .chat-template-permission-label {
+    color: var(--text-secondary) !important;
+}
+
+:root[data-theme="light"] .task-form-field select option,
+:root[data-theme="light"] .form-group select option,
+:root[data-theme="light"] .chat-template-select option {
+    background: var(--bg-surface-strong) !important;
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .library-name,
+:root[data-theme="light"] .item-name,
+:root[data-theme="light"] .command-keyword,
+:root[data-theme="light"] .chat-template-name {
+    color: var(--text-primary) !important;
+}
+
+/* 显示端/设备列表：覆盖原组件的白色设备名，保留状态色。 */
+:root[data-theme="light"] .display-item-id,
+:root[data-theme="light"] .task-device-name {
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .display-item-size,
+:root[data-theme="light"] .browser-info,
+:root[data-theme="light"] .voice-status {
+    color: var(--text-secondary) !important;
+}
+
+/* 聊天区域：助手消息使用浅蓝气泡，用户消息继续使用有色渐变和白字。 */
+:root[data-theme="light"] .chat-tabs {
+    background: var(--card-background) !important;
+}
+
+:root[data-theme="light"] .chat-tab {
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color);
+}
+
+:root[data-theme="light"] .chat-tab.active {
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .chat-header h3,
+:root[data-theme="light"] .search-history-header h4,
+:root[data-theme="light"] .search-history-item .keyword,
+:root[data-theme="light"] .profile-name,
+:root[data-theme="light"] .command-actions,
+:root[data-theme="light"] .chat-template-content {
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .chat-message.assistant .chat-message-content {
+    background: var(--card-background) !important;
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .chat-message.assistant .chat-message-content blockquote,
+:root[data-theme="light"] .chat-message.assistant .chat-message-content code,
+:root[data-theme="light"] .chat-message.assistant .chat-message-content pre,
+:root[data-theme="light"] .chat-message.assistant .chat-message-content th,
+:root[data-theme="light"] .chat-message.assistant .chat-message-content td {
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .chat-message.system .chat-message-content {
+    color: #664d03 !important;
+}
+
+:root[data-theme="light"] .profile-model,
+:root[data-theme="light"] .profile-status,
+:root[data-theme="light"] .search-history-item .time,
+:root[data-theme="light"] .search-history-item .result {
+    color: var(--text-secondary) !important;
+}
+
+/* 日志区域：内容底色与卡片区区分，普通文字使用主题色，级别颜色保留语义。 */
+:root[data-theme="light"] .log-count,
+:root[data-theme="light"] .log-filter-label,
+:root[data-theme="light"] .log-filter-hint,
+:root[data-theme="light"] .log-time,
+:root[data-theme="light"] .log-category,
+:root[data-theme="light"] .log-device,
+:root[data-theme="light"] .log-arrow-sym,
+:root[data-theme="light"] .log-ack-badge,
+:root[data-theme="light"] .log-empty {
+    color: var(--text-secondary) !important;
+}
+
+:root[data-theme="light"] .log-message {
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] .log-level-error .log-message {
+    color: #b42318 !important;
+}
+
+:root[data-theme="light"] .log-level-warn .log-message {
+    color: #9a6700 !important;
+}
+
+:root[data-theme="light"] .log-entries mark {
+    background: rgba(8, 126, 164, 0.22);
+    color: var(--text-primary) !important;
+}
+
+/* 兼容 upload.html、提醒列表和动态任务面板中的内联白色文字。 */
+:root[data-theme="light"] [style*="color: #fff"]:not(button),
+:root[data-theme="light"] [style*="color:#fff"]:not(button),
+:root[data-theme="light"] [style*="color: #ffffff"]:not(button),
+:root[data-theme="light"] [style*="color:#ffffff"]:not(button) {
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme="light"] [style*="color: rgba(255,255,255"]:not(button),
+:root[data-theme="light"] [style*="color:rgba(255,255,255"]:not(button),
+:root[data-theme="light"] [style*="color: rgba(255, 255, 255"]:not(button),
+:root[data-theme="light"] [style*="color:rgba(255, 255, 255"]:not(button) {
+    color: var(--text-secondary) !important;
+}
+
+[data-ui-type="title"] { color: var(--text-primary); }
+[data-ui-type="tip"] { color: var(--text-muted); }
+[data-ui-type="slider"] { accent-color: var(--accent-color); }
+[data-ui-type="status"] { border-color: var(--border-color); }

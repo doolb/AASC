@@ -5,6 +5,7 @@ const Toast = {
         
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
+        toast.dataset.uiType = 'toast';
         toast.textContent = message;
         document.body.appendChild(toast);
         

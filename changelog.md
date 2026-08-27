@@ -4,6 +4,31 @@
 
 ### 已完成
 
+- ✅ [2026-08-27] 修复控制端浅色主题设备名、聊天消息和日志对比度
+  - 新增 `--content-background`，为设备列表、聊天消息列表、聊天历史和日志内容区提供浅色背景。
+  - 显示设备名、助手消息和普通日志文字改用主题深色文字；用户消息、错误/警告状态和按钮颜色保持语义。
+  - 测试：主题回归 9/9 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-27_控制端主题切换与UI控件分类.md`。
+
+- ✅ [2026-08-27] 优化控制端浅色主题卡片和弹窗背景
+  - 新增独立 `--card-background` 主题变量，浅色主题卡片使用 `#eaf4ff` 浅蓝色。
+  - 浅色主题的 `--bg-surface-strong` 同步使用 `#eaf4ff`，任务、媒体库、聊天等弹窗统一为浅蓝背景。
+  - 测试：主题回归 8/8 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-27_控制端主题切换与UI控件分类.md`。
+
+- ✅ [2026-08-27] 修复控制端浅色主题白底白字
+  - 根因：浅色主题容器改为浅色背景后，旧组件高优先级选择器和动态 HTML 内联样式仍保留 `#fff` 文字。
+  - `theme.css` 增加任务确认、媒体库/聊天弹窗、任务文字、下拉选项和动态内联白字的浅色覆盖；有色按钮仍保留白字。
+  - 测试：主题回归 7/7、脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-27_控制端主题切换与UI控件分类.md`。
+
+- ✅ [2026-08-27] 控制端支持主题切换与 UI 控件分类
+  - 新增深色/浅色主题切换，主题保存到浏览器 `localStorage`，默认保持现有深色主题。
+  - 新增 `UiTheme` 管理器，为静态和动态按钮、输入、选择、滑条、标题、Tip、弹窗、状态和 Toast 添加 `data-ui-type` 语义标记。
+  - 新增统一主题变量和浅色主题覆盖样式，不修改 WebSocket、服务器配置和业务事件。
+  - 测试：主题回归 6/6、控制端相关回归 16/16、脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-27_控制端主题切换与UI控件分类.md`。
+
 - ✅ [2026-08-27] 增加 Sherpa 快速多人模式并支持最多 5 人
   - 新增 `SHERPA_MULTI_FAST` 和 `speakerCount=AUTO|1..5`，明确人数时配置 Sherpa `numClusters`；非法人数返回 400。
   - 快速模式按 cluster 复用最长代表片段的 embedding，保留每个时间段的 ASR 文本；原 `SHERPA_MULTI` 保持兼容。

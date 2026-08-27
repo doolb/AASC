@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="css/chat.css">
     <link rel="stylesheet" href="css/media-library.css">
     <link rel="stylesheet" href="css/map.css">
+    <link rel="stylesheet" href="css/theme.css">
     <script type="importmap">
     {
         "imports": {
@@ -599,6 +600,18 @@
         <section class="panel" id="panel-settings" style="display:none;">
             <h1 class="page-title">系统设置</h1>
 
+            <div class="section" data-ui-type="section">
+                <h2 data-ui-type="title">界面主题</h2>
+                <div class="control-item">
+                    <label for="themeSelect">控制端主题</label>
+                    <select id="themeSelect" data-ui-type="select">
+                        <option value="dark">深色</option>
+                        <option value="light">浅色</option>
+                    </select>
+                    <div class="routing-hint" data-ui-type="tip">主题只保存在当前浏览器，不影响显示端。</div>
+                </div>
+            </div>
+
             <div class="section">
                 <h2>高级指令路由</h2>
                 <div class="routing-hint" style="font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 15px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">
@@ -878,6 +891,7 @@
     <script src="js/self-test.js"></script>
     <script src="js/log-viewer.js"></script>
     <script type="module" src="js/map/map-panel.js"></script>
+    <script src="js/ui-theme.js"></script>
     <script src="js/main.js"></script>
     <script src="js/task-panel.js"></script>
     <script src="js/sidebar-registry.js"></script>
