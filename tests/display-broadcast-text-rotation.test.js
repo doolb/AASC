@@ -126,6 +126,27 @@ test('90°和270°旋转使用交换后的逻辑画布重新适配文本位置',
     assert.match(DISPLAY_HTML, /window\.addEventListener\('resize',[\s\S]*?applyRotation\(\);/u);
 });
 
+test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限制尺寸', () => {
+    assert.match(DISPLAY_HTML, /data\.action === 'weatherResult'[\s\S]*showVoiceResponsePopup\(data\.text\)/u);
+    assert.match(
+        DISPLAY_HTML,
+        /function getRotationPopupElements\(\)[\s\S]*voice-response-popup[\s\S]*voice-confirm-popup[\s\S]*reminder-popup/u,
+        '旋转布局必须包含天气响应及同类动态弹窗'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /function applyRotationPopupLayout\(layout\)[\s\S]*layout\.layoutWidth[\s\S]*layout\.layoutHeight[\s\S]*currentRotation/u,
+        '动态弹窗必须按旋转后的逻辑宽高和当前角度布局'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /document\.body\.appendChild\(popup\);[\s\S]*applyRotationPopupLayout\(getRotationLayout\(\)\)/u,
+        '动态弹窗创建后必须立即应用当前旋转'
+    );
+    assert.match(DISPLAY_CSS, /--popup-rotation/u);
+    assert.match(DISPLAY_CSS, /popupPulse[\s\S]*var\(--popup-rotation\)/u);
+});
+
 test('实际旋转后的长中文固定文本包围盒保持在视口内', async () => {
     const page = await browser.newPage();
     await page.setViewport({ width: 1200, height: 800 });

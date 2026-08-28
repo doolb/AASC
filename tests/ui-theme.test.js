@@ -34,7 +34,7 @@ function createElement(tagName, type = '', classNames = []) {
     };
 }
 
-function loadThemeManager(elements = []) {
+function loadThemeManager(elements = [], options = {}) {
     assert.ok(fs.existsSync(themeScriptPath), '主题管理脚本必须存在');
 
     const selector = {
@@ -63,6 +63,7 @@ function loadThemeManager(elements = []) {
             storage.set(key, String(value));
         }
     } };
+    if (options.fetch) window.fetch = options.fetch;
     const sandbox = { window, document, console };
     vm.runInNewContext(fs.readFileSync(themeScriptPath, 'utf8'), sandbox, { filename: themeScriptPath });
     return { manager: sandbox.window.UiTheme, document, selector, storage };
@@ -77,6 +78,48 @@ test('主题管理器应保存主题并同步根元素和选择框', () => {
     assert.equal(document.documentElement.dataset.theme, 'light');
     assert.equal(selector.value, 'light');
     assert.equal(storage.get('controlTheme'), 'light');
+});
+
+test('主题管理器应优先读取服务端全局主题，并在切换后保存到服务端', async () => {
+    const requests = [];
+    const { manager, document, selector, storage } = loadThemeManager([], {
+        fetch: async (url, options = {}) => {
+            requests.push({ url, options });
+            if (!options.method) {
+                return { ok: true, json: async () => ({ status: 'success', theme: 'ocean' }) };
+            }
+            return { ok: true, json: async () => ({ status: 'success', theme: 'girl-pink' }) };
+        }
+    });
+
+    storage.set('controlTheme', 'warm');
+    await manager.init();
+
+    assert.equal(document.documentElement.dataset.theme, 'ocean');
+    assert.equal(selector.value, 'ocean');
+    assert.equal(storage.get('controlTheme'), 'ocean');
+
+    manager.apply('girl-pink');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(document.documentElement.dataset.theme, 'girl-pink');
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].url, '/api/config/controlTheme');
+    assert.equal(requests[1].options.method, 'POST');
+    assert.match(requests[1].options.body, /girl-pink/u);
+});
+
+test('服务端主题读取失败时应保留本地主题', async () => {
+    const { manager, document, storage } = loadThemeManager([], {
+        fetch: async () => {
+            throw new Error('server unavailable');
+        }
+    });
+
+    storage.set('controlTheme', 'warm');
+    manager.init();
+    await manager.ready;
+
+    assert.equal(document.documentElement.dataset.theme, 'warm');
 });
 
 test('非法主题配置应回退为深色主题', () => {

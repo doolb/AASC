@@ -550,6 +550,29 @@
             ];
         }
 
+        // 天气响应、语音确认、搜索结果等动态弹窗脱离媒体容器，必须单独纳入显示端旋转布局。
+        function getRotationPopupElements() {
+            return document.querySelectorAll(
+                '.voice-response-popup, .voice-confirm-popup, .search-result-popup, .play-choices-popup, .reminder-popup'
+            );
+        }
+
+        function applyRotationPopupLayout(layout) {
+            const maxWidth = Math.max(layout.layoutWidth - layout.margin * 2, 1);
+            const maxHeight = Math.max(layout.layoutHeight - layout.margin * 2, 1);
+            getRotationPopupElements().forEach((popup) => {
+                popup.style.setProperty('--popup-rotation', `${currentRotation}deg`);
+                popup.style.maxWidth = `${maxWidth}px`;
+                popup.style.maxHeight = `${maxHeight}px`;
+                popup.style.overflowY = 'auto';
+            });
+        }
+
+        function appendRotationPopup(popup) {
+            document.body.appendChild(popup);
+            applyRotationPopupLayout(getRotationLayout());
+        }
+
         // 根据变换后的实际包围盒修正固定定位边缘，确保旋转文本仍留在物理视口内。
         function shiftFixedTextElement(element, axis, delta) {
             if (!delta) return;
@@ -600,6 +623,7 @@
                 element.style.maxHeight = `${maxHeight}px`;
             });
             textElements.forEach((element) => repositionRotationTextElement(element, layout));
+            applyRotationPopupLayout(layout);
         }
 
         let rotationTextLayoutRaf = null;
@@ -1573,7 +1597,7 @@
                 <div class="voice-confirm-content">${text}</div>
                 <div class="voice-confirm-hint">5秒内无回复将自动确认</div>
             `;
-            document.body.appendChild(popup);
+            appendRotationPopup(popup);
             
             setTimeout(() => {
                 if (popup.parentElement) {
@@ -1591,7 +1615,7 @@
             const popup = document.createElement('div');
             popup.className = 'voice-response-popup';
             popup.innerHTML = `<div class="voice-response-content">${text}</div>`;
-            document.body.appendChild(popup);
+            appendRotationPopup(popup);
             
             setTimeout(() => {
                 if (popup.parentElement) {
@@ -1624,7 +1648,7 @@
                 <div class="search-result-query">搜索: ${query}</div>
                 <div class="search-result-body">${contentHtml}</div>
             `;
-            document.body.appendChild(popup);
+            appendRotationPopup(popup);
             
             setTimeout(() => {
                 if (popup.parentElement) {
@@ -1652,7 +1676,7 @@
                 <div class="play-choices-text">${text}</div>
                 <div class="play-choices-list">${listHtml}</div>
             `;
-            document.body.appendChild(popup);
+            appendRotationPopup(popup);
             
             setTimeout(() => {
                 if (popup.parentElement) {
@@ -1674,7 +1698,7 @@
                 <div class="time">${time}</div>
                 <div class="content">${content}</div>
             `;
-            document.body.appendChild(popup);
+            appendRotationPopup(popup);
             
             setTimeout(() => {
                 if (popup.parentElement) {

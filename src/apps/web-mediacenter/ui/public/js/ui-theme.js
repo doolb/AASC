@@ -1,6 +1,6 @@
 'use strict';
 
-// 控制端主题与 UI 语义管理器：只管理浏览器端表现，不参与业务消息和服务器配置。
+// 控制端主题与 UI 语义管理器：主题由服务端全局保存，浏览器缓存用于离线和旧版本兼容。
 (function createUiTheme(windowObject, documentObject) {
     const themes = [
         'dark', 'light', 'warm', 'pink', 'lavender-yellow', 'red-blue', 'gold',
@@ -8,6 +8,7 @@
         'rose-gold', 'new-year-red'
     ];
     const storageKey = 'controlTheme';
+    const serverEndpoint = '/api/config/controlTheme';
     const classificationSelector = [
         'button', 'input', 'select', 'textarea', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         '.routing-hint', '.chat-config-hint', '.placeholder-hint', '.log-filter-hint',
@@ -58,13 +59,16 @@
         storageKey,
         selector: null,
         observer: null,
+        ready: Promise.resolve(),
 
         init() {
             this.selector = documentObject.getElementById('themeSelect');
-            this.apply(this.readTheme());
+            this.apply(this.readTheme(), false);
             this.bindSelector();
             this.classify(documentObject);
             this.observeDynamicNodes();
+            this.ready = this.loadServerTheme();
+            return this.ready;
         },
 
         normalize(theme) {
@@ -80,7 +84,21 @@
             }
         },
 
-        apply(theme) {
+        async loadServerTheme() {
+            if (typeof windowObject.fetch !== 'function') return;
+            try {
+                const response = await windowObject.fetch(serverEndpoint);
+                if (!response || response.ok === false) return;
+                const payload = await response.json();
+                if (payload && payload.status === 'success' && themes.includes(payload.theme)) {
+                    this.apply(payload.theme, false);
+                }
+            } catch (error) {
+                console.warn('读取服务端控制端主题失败，保留本地主题:', error);
+            }
+        },
+
+        apply(theme, persistServer = true) {
             const normalizedTheme = this.normalize(theme);
             documentObject.documentElement.dataset.theme = normalizedTheme;
             documentObject.documentElement.dataset.themeMode = normalizedTheme === 'dark' ? 'dark' : 'light';
@@ -90,7 +108,26 @@
             } catch (error) {
                 console.warn('保存控制端主题失败:', error);
             }
+            if (persistServer) {
+                void this.persistServerTheme(normalizedTheme);
+            }
             return normalizedTheme;
+        },
+
+        async persistServerTheme(theme) {
+            if (typeof windowObject.fetch !== 'function') return;
+            try {
+                const response = await windowObject.fetch(serverEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ theme })
+                });
+                if (!response || response.ok === false) {
+                    console.warn('保存服务端控制端主题失败，保留当前页面主题');
+                }
+            } catch (error) {
+                console.warn('保存服务端控制端主题失败，保留当前页面主题:', error);
+            }
         },
 
         bindSelector() {

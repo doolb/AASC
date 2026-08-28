@@ -2,6 +2,11 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-28][2026-08-28] 主题服务端持久化与天气响应弹窗旋转适配
+  - 服务端保存控制端全局主题，控制端保留本地缓存回退；显示端天气响应弹窗随 0/90/180/270 度旋转并按逻辑画布限制尺寸。
+  - 改动：`src/apps/server/modules/config/control-theme-config.js`、`src/apps/server/modules/config/config-app-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/ui-theme.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/display.html`、`src/apps/web-mediacenter/ui/public/css/display.css`。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_主题服务端持久化与天气弹窗旋转适配.md`。
+
 - ✅已完成 [2026-08-28][2026-08-28] 扩展控制端主题配色
   - 新增薄荷青、海洋蓝、森林绿、极简灰、藻盐、少女粉、玫瑰金和新年红，控制端共支持 15 种主题；藻盐采用盐白与藻绿配色，少女粉使用更明亮的粉红层级。
   - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_控制端多主题配色.md`。

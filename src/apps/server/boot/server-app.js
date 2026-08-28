@@ -8,6 +8,7 @@ const fs = require('fs');
 const { pipeline } = require('stream');
 const multer = require('multer');
 const config = require('../modules/config/config-app-service');
+const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
 const LogFileWriter = require('../../../framework/observability/log-file-writer');
 const voiceprintStore = require('../modules/voiceprint/voiceprint-store');
@@ -1056,6 +1057,28 @@ app.post('/api/config/localAsr', (req, res) => {
         res.json({ status: 'success', enabled: !!enabled });
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });
+    }
+});
+
+// 控制端主题是服务端全局配置，控制端通过该专用接口同步，不向显示端广播主题。
+app.get('/api/config/controlTheme', (req, res) => {
+    const theme = normalizeControlTheme(config.get('ui.controlTheme', 'dark'));
+    res.json({ status: 'success', theme });
+});
+
+app.post('/api/config/controlTheme', (req, res) => {
+    try {
+        const theme = req.body?.theme;
+        if (!isControlTheme(theme)) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'theme 必须是已注册的控制端主题'
+            });
+        }
+        config.set('ui.controlTheme', theme);
+        res.json({ status: 'success', theme });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: '主题配置保存失败' });
     }
 });
 

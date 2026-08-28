@@ -6,13 +6,17 @@
 UiTheme:
     themes = [dark, light, warm, pink, lavender-yellow, red-blue, gold, mint, ocean, forest, slate, algae-salt, girl-pink, rose-gold, new-year-red]
     storageKey = controlTheme
+    serverEndpoint = /api/config/controlTheme
+    ready = Promise.resolve()
 
     init():
         theme = readTheme()
-        apply(theme)
+        apply(theme, persistServer = false)
         bindThemeSelector()
         classify(document)
         observeDynamicNodes()
+        ready = loadServerTheme()
+        return ready
 
     readTheme():
         try:
@@ -23,18 +27,32 @@ UiTheme:
             记录警告
         return dark
 
-    apply(theme):
+    loadServerTheme():
+        try:
+            response = await fetch(serverEndpoint)
+            payload = await response.json()
+            if response.ok 且 payload.status == success 且 payload.theme 在 themes 中:
+                apply(payload.theme, persistServer = false)
+        catch:
+            保留本地已应用主题，不阻断控制端初始化
+
+    apply(theme, persistServer = true):
         normalized = theme 在 themes 中 ? theme : dark
         document.documentElement.dataset.theme = normalized
         document.documentElement.dataset.themeMode = normalized == dark ? dark : light
         themeSelector.value = normalized
-        try:
-            localStorage.setItem(storageKey, normalized)
-        catch:
-            记录警告但不阻断页面
+        save localStorage as compatibility cache
+        if persistServer:
+            persistServerTheme(normalized)
+
+    persistServerTheme(theme):
+        if fetch 不可用:
+            return
+        asynchronously POST { theme } to serverEndpoint
+        request failure only records warning, does not rollback visible theme
 
     bindThemeSelector():
-        themeSelector.change -> apply(themeSelector.value)
+        themeSelector.change -> apply(themeSelector.value, persistServer = true)
 ```
 
 ## 控件分类伪代码
@@ -80,6 +98,21 @@ MutationObserver:
 动态弹窗、任务面板、媒体库、聊天和 Toast:
     使用继承的主题变量
     不改变既有交互回调和业务数据
+
+显示端临时响应弹窗旋转:
+    popupSelector = voice-response-popup, voice-confirm-popup, search-result-popup, play-choices-popup, reminder-popup
+    getRotationPopupElements() -> querySelectorAll(popupSelector)
+    applyRotationPopupLayout(layout):
+        maxWidth = max(layout.layoutWidth - layout.margin * 2, 1)
+        maxHeight = max(layout.layoutHeight - layout.margin * 2, 1)
+        popup.maxWidth = maxWidth
+        popup.maxHeight = maxHeight
+        popup.transform = translate(-50%, -50%) rotate(currentRotation deg)
+    applyRotation():
+        applyRotationPopupLayout(getRotationLayout())
+    show popup:
+        append popup
+        applyRotationPopupLayout(getRotationLayout())
 
 浅色主题兼容旧文字:
     为任务确认标题、任务名称、媒体库/聊天弹窗标题等高优先级文字设置 text-primary

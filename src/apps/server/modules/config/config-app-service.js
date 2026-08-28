@@ -190,6 +190,9 @@ class Config extends DataSnapshot {
                 autoRestart: true
             }
         },
+        ui: {
+            controlTheme: 'dark'
+        },
         cpuAffinity: cloneCpuAffinityConfig(),
         voiceprint: { enabled: true, extraction: 'server', threshold: 0.5, multiSpeaker: true },
         voiceCommand: {
