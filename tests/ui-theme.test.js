@@ -132,13 +132,14 @@ test('控制端页面应提供主题选择、主题脚本和主题变量', () =>
     assert.match(css, /\.playlist-settings-dialog/u);
 });
 
-test('控制端应提供完整的 13 种主题配色', () => {
+test('控制端应提供完整的 15 种主题配色', () => {
     const html = fs.readFileSync(uploadHtmlPath, 'utf8');
     const css = fs.readFileSync(themeCssPath, 'utf8');
     const { manager } = loadThemeManager();
     const expectedThemes = [
         'dark', 'light', 'warm', 'pink', 'lavender-yellow', 'red-blue', 'gold',
-        'mint', 'ocean', 'forest', 'slate', 'algae-salt', 'girl-pink'
+        'mint', 'ocean', 'forest', 'slate', 'algae-salt', 'girl-pink',
+        'rose-gold', 'new-year-red'
     ];
 
     assert.deepEqual(Array.from(manager.themes), expectedThemes);
