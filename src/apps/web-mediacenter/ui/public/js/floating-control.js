@@ -129,6 +129,8 @@ const FloatingControl = {
         if (toggleBtn) {
             toggleBtn.textContent = isPlaying ? '暂停' : '播放';
             toggleBtn.classList.toggle('active', isPlaying);
+            toggleBtn.classList.toggle('playing', isPlaying);
+            toggleBtn.classList.toggle('paused', !isPlaying);
         }
         const prevBtn = document.getElementById('floatingTextPlaybackPrevBtn');
         const nextBtn = document.getElementById('floatingTextPlaybackNextBtn');

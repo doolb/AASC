@@ -227,7 +227,7 @@
             <div class="control-item">
                 <label>语音识别设备</label>
                 <div class="control-buttons">
-                    <button class="control-btn" id="asrDeviceServerBtn" data-asr="server" onclick="setAsrDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
+                    <button class="control-btn active" id="asrDeviceServerBtn" data-asr="server" onclick="setAsrDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
                     <button class="control-btn" id="asrDeviceDisplayBtn" data-asr="display" onclick="setAsrDevice('display')">显示端</button>
                 </div>
                 <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
@@ -238,7 +238,7 @@
             <div class="control-item">
                 <label>语音生成设备</label>
                 <div class="control-buttons">
-                    <button class="control-btn" id="ttsDeviceServerBtn" data-tts="server" onclick="setTtsDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
+                    <button class="control-btn active" id="ttsDeviceServerBtn" data-tts="server" onclick="setTtsDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
                     <button class="control-btn" id="ttsDeviceDisplayBtn" data-tts="display" onclick="setTtsDevice('display')">显示端</button>
                 </div>
                 <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
@@ -277,7 +277,7 @@
             <div class="control-item" style="margin-top: 15px;">
                 <label>语音播报 (TTS)</label>
                 <div class="control-buttons">
-                    <button class="control-btn" id="autoTtsBtn" onclick="toggleAutoTts()">自动播报: 开</button>
+                    <button class="control-btn active" id="autoTtsBtn" onclick="toggleAutoTts()">自动播报: 开</button>
                     <button class="control-btn" onclick="stopTts()">停止播报</button>
                 </div>
                 <div style="margin-top: 10px;">
@@ -943,6 +943,9 @@
                 const llmBtn = document.getElementById(`routing${type.charAt(0).toUpperCase() + type.slice(1)}Llm`);
                 const sysBtn = document.getElementById(`routing${type.charAt(0).toUpperCase() + type.slice(1)}System`);
                 if (llmBtn && sysBtn) {
+                    // 选中状态同时写入 class，浅色主题通过 class 区分按钮，避免两枚按钮都被通用渐变覆盖。
+                    llmBtn.classList.toggle('active', value === 'llm');
+                    sysBtn.classList.toggle('active', value === 'system');
                     llmBtn.style.background = value === 'llm'
                         ? 'linear-gradient(135deg, #4CAF50, #45a049)'
                         : 'rgba(255,255,255,0.1)';

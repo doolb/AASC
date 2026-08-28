@@ -721,6 +721,8 @@ const MediaLibrary = {
         const toggleBtn = document.getElementById('displayPlToggleBtn');
         toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
         toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
+        toggleBtn.classList.toggle('playing', info.state === 'playing');
+        toggleBtn.classList.toggle('paused', info.state === 'paused');
     },
 
     // 快捷控制面板的批量播放状态
@@ -741,6 +743,8 @@ const MediaLibrary = {
         const toggleBtn = document.getElementById('floatingPlToggleBtn');
         toggleBtn.textContent = info.state === 'paused' ? '继续' : '暂停';
         toggleBtn.dataset.action = info.state === 'paused' ? 'resume' : 'pause';
+        toggleBtn.classList.toggle('playing', info.state === 'playing');
+        toggleBtn.classList.toggle('paused', info.state === 'paused');
     },
 
     controlPlaylist(action, btn) {

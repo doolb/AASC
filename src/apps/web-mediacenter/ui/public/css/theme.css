@@ -372,6 +372,179 @@
     border-color: transparent !important;
 }
 
+/* 原生复选框/单选框使用主题强调色，确保浅色背景下的勾选状态清晰可见。 */
+:root[data-theme-mode="light"] input[type="checkbox"],
+:root[data-theme-mode="light"] input[type="radio"] {
+    accent-color: var(--accent-color);
+}
+
+/* 自定义开关：关闭状态用浅灰轨道和边框，打开状态用主题强调色轨道与白色滑块。 */
+:root[data-theme-mode="light"] .crop-debug-slider {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    box-sizing: border-box;
+}
+
+:root[data-theme-mode="light"] .crop-debug-slider::after {
+    background: var(--text-muted);
+}
+
+:root[data-theme-mode="light"] .crop-debug-toggle input:checked + .crop-debug-slider {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+:root[data-theme-mode="light"] .crop-debug-toggle input:checked + .crop-debug-slider::after {
+    background: #fff;
+}
+
+:root[data-theme-mode="light"] .crop-debug-toggle:hover .crop-debug-slider {
+    background: var(--bg-surface-strong);
+}
+
+:root[data-theme-mode="light"] .crop-debug-toggle input:checked:hover + .crop-debug-slider {
+    background: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+}
+
+/* 设置页 LLM/系统路由按钮原来依赖内联背景色；浅色主题按 active 状态强制区分选中项。 */
+:root[data-theme-mode="light"] .routing-grid .control-btn:not(.active) {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+
+:root[data-theme-mode="light"] .routing-grid .control-btn.active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
+
+/* 显示控制主面板的互斥按钮：未选中项保持中性，选中项使用强调色和外框。 */
+:root[data-theme-mode="light"] #panel-display .control-btn[data-fit]:not(.active),
+:root[data-theme-mode="light"] #panel-display .control-btn[data-rotation]:not(.active),
+:root[data-theme-mode="light"] #panel-display #centerResizeBtn:not(.active) {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+
+:root[data-theme-mode="light"] #panel-display .control-btn[data-fit].active,
+:root[data-theme-mode="light"] #panel-display .control-btn[data-rotation].active,
+:root[data-theme-mode="light"] #panel-display #centerResizeBtn.active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
+
+/* 播放状态使用语义色，避免播放/暂停按钮在浅色主题中看起来完全相同。 */
+:root[data-theme-mode="light"] #panel-display #playPauseBtn.playing {
+    background: linear-gradient(135deg, var(--success-color), var(--accent-color)) !important;
+    color: #fff !important;
+}
+
+:root[data-theme-mode="light"] #panel-display #playPauseBtn.paused {
+    background: linear-gradient(135deg, var(--danger-color), var(--accent-secondary)) !important;
+    color: #fff !important;
+}
+
+/* 浮动控制面板复用主面板的填充选中态和播放选中态规则。 */
+:root[data-theme-mode="light"] .floating-control-panel .floating-btn[data-fit]:not(.active) {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+
+:root[data-theme-mode="light"] .floating-control-panel .floating-btn[data-fit].active,
+:root[data-theme-mode="light"] .floating-control-panel .floating-btn.active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
+
+/* 语音识别/生成设备选择：保留 data-asr/data-tts 语义，并用 active 表示当前设备。 */
+:root[data-theme-mode="light"] #panel-display [data-asr]:not(.active),
+:root[data-theme-mode="light"] #panel-display [data-tts]:not(.active) {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+
+:root[data-theme-mode="light"] #panel-display [data-asr].active,
+:root[data-theme-mode="light"] #panel-display [data-tts].active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
+
+/* 自动播报和主面板文本播放：关闭/暂停使用中性或危险色，开启/播放使用强调或成功色。 */
+:root[data-theme-mode="light"] #panel-display #autoTtsBtn:not(.active),
+:root[data-theme-mode="light"] #panel-display #textPlaybackToggleBtn.paused {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+
+:root[data-theme-mode="light"] #panel-display #autoTtsBtn.active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
+
+:root[data-theme-mode="light"] #panel-display #textPlaybackToggleBtn.playing {
+    background: linear-gradient(135deg, var(--success-color), var(--accent-color)) !important;
+    color: #fff !important;
+}
+
+/* 文本/批量播放的主面板与浮动面板状态按钮。 */
+:root[data-theme-mode="light"] #panel-display #displayPlaylistStatus .pl-controls button.playing,
+:root[data-theme-mode="light"] #panel-display #textPlaybackToggleBtn.playing,
+:root[data-theme-mode="light"] .floating-control-panel #floatingTextPlaybackToggleBtn.playing,
+:root[data-theme-mode="light"] .floating-control-panel #floatingPlToggleBtn.playing {
+    background: linear-gradient(135deg, var(--success-color), var(--accent-color)) !important;
+    color: #fff !important;
+}
+
+:root[data-theme-mode="light"] #panel-display #displayPlaylistStatus .pl-controls button.paused,
+:root[data-theme-mode="light"] .floating-control-panel #floatingTextPlaybackToggleBtn.paused,
+:root[data-theme-mode="light"] .floating-control-panel #floatingPlToggleBtn.paused {
+    background: linear-gradient(135deg, var(--danger-color), var(--accent-secondary)) !important;
+    color: #fff !important;
+}
+
+/* 选择模式、日志筛选和任务选项属于互斥/多选状态按钮，统一提供清晰的未选中态。 */
+:root[data-theme-mode="light"] .selection-mode-btn:not(.active),
+:root[data-theme-mode="light"] .tree-selection-btn:not(.active),
+:root[data-theme-mode="light"] .log-filter-btn:not(.active),
+:root[data-theme-mode="light"] .task-btn-option:not(.active),
+:root[data-theme-mode="light"] #logAutoScrollBtn:not(.active) {
+    background: var(--bg-secondary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+
+:root[data-theme-mode="light"] .selection-mode-btn.active,
+:root[data-theme-mode="light"] .tree-selection-btn.active,
+:root[data-theme-mode="light"] .log-filter-btn.active,
+:root[data-theme-mode="light"] .task-btn-option.active,
+:root[data-theme-mode="light"] #logAutoScrollBtn.active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
+    color: #fff !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 2px var(--accent-color) !important;
+}
+
 :root[data-theme-mode="light"] .btn-cancel,
 :root[data-theme-mode="light"] .task-confirm-btn.cancel {
     background: #718096 !important;

@@ -10,6 +10,10 @@ const publicRoot = path.join(__dirname, '../src/apps/web-mediacenter/ui/public')
 const themeScriptPath = path.join(publicRoot, 'js/ui-theme.js');
 const uploadHtmlPath = path.join(publicRoot, 'upload.html');
 const themeCssPath = path.join(publicRoot, 'css/theme.css');
+const ttsScriptPath = path.join(publicRoot, 'js/tts.js');
+const controlsScriptPath = path.join(publicRoot, 'js/controls.js');
+const floatingControlScriptPath = path.join(publicRoot, 'js/floating-control.js');
+const mediaLibraryScriptPath = path.join(publicRoot, 'js/media-library.js');
 
 function createElement(tagName, type = '', classNames = []) {
     return {
@@ -187,4 +191,75 @@ test('浅色主题应适配显示设备名、聊天消息和日志文字', () =>
     assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.chat-message\.assistant \.chat-message-content[\s\S]*background:\s*var\(--card-background\)/u);
     assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.log-entries[\s\S]*background:\s*var\(--content-background\)/u);
     assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.log-message[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
+});
+
+test('浅色主题的自定义 toggle 应明确区分未选中和选中状态', () => {
+    const css = fs.readFileSync(themeCssPath, 'utf8');
+
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.crop-debug-slider[\s\S]*background:\s*var\(--bg-secondary\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.crop-debug-slider[\s\S]*border:\s*1px\s+solid\s+var\(--border-color\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.crop-debug-slider::after[\s\S]*background:\s*var\(--text-muted\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.crop-debug-toggle input:checked \+ \.crop-debug-slider[\s\S]*background:\s*var\(--accent-color\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.crop-debug-toggle input:checked \+ \.crop-debug-slider::after[\s\S]*background:\s*#fff/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*input\[type="checkbox"\][\s\S]*accent-color:\s*var\(--accent-color\)/u);
+});
+
+test('设置页 LLM/系统路由按钮应通过 active 状态区分浅色主题选中项', () => {
+    const html = fs.readFileSync(uploadHtmlPath, 'utf8');
+    const css = fs.readFileSync(themeCssPath, 'utf8');
+
+    assert.match(html, /id="routingWeatherLlm"[^>]*data-routing="weather"[^>]*data-value="llm"/u);
+    assert.match(html, /id="routingWeatherSystem"[^>]*data-routing="weather"[^>]*data-value="system"/u);
+    assert.match(html, /id="routingSearchLlm"[^>]*data-routing="search"[^>]*data-value="llm"/u);
+    assert.match(html, /id="routingSearchSystem"[^>]*data-routing="search"[^>]*data-value="system"/u);
+    assert.match(html, /classList\.toggle\('active', value === 'llm'\)/u);
+    assert.match(html, /classList\.toggle\('active', value === 'system'\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.routing-grid \.control-btn:not\(\.active\)[\s\S]*background:\s*var\(--bg-secondary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.routing-grid \.control-btn\.active[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--accent-secondary\),\s*var\(--accent-color\)\)\s*!important/u);
+});
+
+test('显示控制的填充、旋转、中心缩放和播放状态应区分浅色选中态', () => {
+    const html = fs.readFileSync(uploadHtmlPath, 'utf8');
+    const css = fs.readFileSync(themeCssPath, 'utf8');
+
+    assert.match(html, /id="panel-display"[\s\S]*data-fit="contain"/u);
+    assert.match(html, /id="panel-display"[\s\S]*data-rotation="0"/u);
+    assert.match(html, /id="centerResizeBtn"/u);
+    assert.match(html, /id="playPauseBtn"/u);
+    assert.match(html, /id="floatingControlPanel"[\s\S]*data-fit="contain"/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display \.control-btn\[data-fit\]:not\(\.active\)[\s\S]*background:\s*var\(--bg-secondary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display \.control-btn\[data-fit\]\.active[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--accent-secondary\),\s*var\(--accent-color\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display \.control-btn\[data-rotation\]:not\(\.active\)[\s\S]*background:\s*var\(--bg-secondary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display #playPauseBtn\.playing[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--success-color\),\s*var\(--accent-color\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display #playPauseBtn\.paused[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--danger-color\),\s*var\(--accent-secondary\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] \.floating-control-panel \.floating-btn\[data-fit\]:not\(\.active\)[\s\S]*background:\s*var\(--bg-secondary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] \.floating-control-panel \.floating-btn\.active[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--accent-secondary\),\s*var\(--accent-color\)\)\s*!important/u);
+});
+
+test('显示控制设备和其他状态按钮应同步语义状态并适配浅色主题', () => {
+    const html = fs.readFileSync(uploadHtmlPath, 'utf8');
+    const css = fs.readFileSync(themeCssPath, 'utf8');
+    const tts = fs.readFileSync(ttsScriptPath, 'utf8');
+    const controls = fs.readFileSync(controlsScriptPath, 'utf8');
+    const floatingControl = fs.readFileSync(floatingControlScriptPath, 'utf8');
+    const mediaLibrary = fs.readFileSync(mediaLibraryScriptPath, 'utf8');
+
+    assert.match(html, /id="asrDeviceServerBtn"[^>]*data-asr="server"/u);
+    assert.match(html, /id="asrDeviceDisplayBtn"[^>]*data-asr="display"/u);
+    assert.match(html, /id="ttsDeviceServerBtn"[^>]*data-tts="server"/u);
+    assert.match(html, /id="ttsDeviceDisplayBtn"[^>]*data-tts="display"/u);
+    assert.match(tts, /serverBtn\.classList\.toggle\('active', this\.currentDevice === 'server'\)/u);
+    assert.match(tts, /displayBtn\.classList\.toggle\('active', this\.currentDevice === 'display'\)/u);
+    assert.match(tts, /btn\.classList\.toggle\('active', this\.autoTtsEnabled\)/u);
+    assert.match(controls, /textPlaybackToggleBtn[\s\S]*classList\.toggle\('playing', isPlaying\)/u);
+    assert.match(floatingControl, /floatingTextPlaybackToggleBtn[\s\S]*classList\.toggle\('playing', isPlaying\)/u);
+    assert.match(mediaLibrary, /toggleBtn\.classList\.toggle\('playing', info\.state === 'playing'\)/u);
+    assert.match(mediaLibrary, /toggleBtn\.classList\.toggle\('paused', info\.state === 'paused'\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display \[data-asr\]:not\(\.active\)[\s\S]*background:\s*var\(--bg-secondary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display \[data-asr\]\.active[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--accent-secondary\),\s*var\(--accent-color\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display #autoTtsBtn\.active[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--accent-secondary\),\s*var\(--accent-color\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display #textPlaybackToggleBtn\.playing[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--success-color\),\s*var\(--accent-color\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] #panel-display #textPlaybackToggleBtn\.paused[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--danger-color\),\s*var\(--accent-secondary\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] \.selection-mode-btn\.active[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--accent-secondary\),\s*var\(--accent-color\)\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\] \.task-btn-option:not\(\.active\)[\s\S]*background:\s*var\(--bg-secondary\)\s*!important/u);
 });

@@ -101,4 +101,34 @@ MutationObserver:
     显示设备名、助手消息、普通日志消息使用 text-primary
     辅助信息使用 text-secondary
     用户消息、错误/警告日志和按钮继续保留对应强调色
+
+浅色主题开关与路由选中态:
+    input[type=checkbox] 和 input[type=radio] 使用 accent-color
+    crop-debug-toggle 关闭时使用 bg-secondary 轨道、border-color 边框和 text-muted 滑块
+    crop-debug-toggle 选中时使用 accent-color 轨道和白色滑块，悬停时使用 accent-secondary
+    Settings.updateUI(type, value) 为对应 LLM 按钮设置 active = value == llm
+    Settings.updateUI(type, value) 为对应系统按钮设置 active = value == system
+    浅色主题下 routing-grid 中未选中按钮使用 bg-secondary/text-secondary/border-color
+    浅色主题下 routing-grid 中选中按钮使用 accent-secondary 到 accent-color 渐变、白字和强调色外框
+    保留路由按钮的现有 ID、data-routing、data-value、点击事件和深色内联背景兼容
+
+显示控制状态控件:
+    panel-display 内 data-fit 非 active 按钮使用 bg-secondary/text-secondary/border-color
+    panel-display 内 data-fit active 按钮使用 accent-secondary 到 accent-color 渐变和强调色外框
+    panel-display 内 data-rotation 非 active 按钮使用浅色中性样式，active 按钮使用强调色样式
+    panel-display 内 centerResizeBtn 根据 active 使用中性/强调色样式
+    panel-display 内 playPauseBtn.playing 使用 success-color，playPauseBtn.paused 使用 danger-color
+    floating-control-panel 内 data-fit 与播放按钮复用相同的浅色状态规则
+    不修改 Controls、Crop、FloatingControl 的状态计算和 WebSocket 控制消息
+
+其他状态按钮:
+    AsrDevice.updateUI() 为 data-asr=server/display 按钮同步 active
+    TtsDevice.updateUI() 为 data-tts=server/display 按钮同步 active
+    Tts.toggleAutoTts() 为 autoTtsBtn 同步 active = autoTtsEnabled
+    Controls.updateTextPlaybackStatus() 为主面板文本按钮同步 playing/paused
+    FloatingControl.updateTextPlaybackStatus() 为浮动文本按钮同步 playing/paused
+    MediaLibrary.updatePlaylistProgress() 为主面板和浮动批量播放按钮同步 playing/paused
+    data-selection-mode、selection-mode-btn、log-filter-btn、task-btn-option、chat-tab 等现有 active 状态复用统一浅色状态表现
+    已选中项使用 accent-color/accent gradient；未选中项使用 bg-secondary/text-secondary/border-color
+    不为纯导航 active、弹窗 active、媒体条目 active 强行套用按钮状态，保留各自布局和语义样式
 ```

@@ -5,6 +5,8 @@ const Tts = {
         if (window.CpuAffinitySettings) {
             window.CpuAffinitySettings.init();
         }
+        const autoTtsButton = document.getElementById('autoTtsBtn');
+        if (autoTtsButton) autoTtsButton.classList.toggle('active', this.autoTtsEnabled);
     },
     
     toggleAutoTts() {
@@ -13,6 +15,7 @@ const Tts = {
         const btn = document.getElementById('autoTtsBtn');
         if (btn) {
             btn.textContent = '自动播报: ' + (this.autoTtsEnabled ? '开' : '关');
+            btn.classList.toggle('active', this.autoTtsEnabled);
         }
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
@@ -114,11 +117,13 @@ const AsrDevice = {
         const statusEl = document.getElementById('asrDeviceStatus');
 
         if (serverBtn) {
+            serverBtn.classList.toggle('active', this.currentDevice === 'server');
             serverBtn.style.background = this.currentDevice === 'server'
                 ? 'linear-gradient(135deg, #4CAF50, #45a049)'
                 : '';
         }
         if (displayBtn) {
+            displayBtn.classList.toggle('active', this.currentDevice === 'display');
             displayBtn.style.background = this.currentDevice === 'display'
                 ? 'linear-gradient(135deg, #4CAF50, #45a049)'
                 : '';
@@ -186,11 +191,13 @@ const TtsDevice = {
         const statusEl = document.getElementById('ttsDeviceStatus');
 
         if (serverBtn) {
+            serverBtn.classList.toggle('active', this.currentDevice === 'server');
             serverBtn.style.background = this.currentDevice === 'server'
                 ? 'linear-gradient(135deg, #4CAF50, #45a049)'
                 : '';
         }
         if (displayBtn) {
+            displayBtn.classList.toggle('active', this.currentDevice === 'display');
             displayBtn.style.background = this.currentDevice === 'display'
                 ? 'linear-gradient(135deg, #4CAF50, #45a049)'
                 : '';
