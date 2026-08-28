@@ -10,6 +10,12 @@
   - 验证：显示端主题同步与控制端主题回归 21/21 通过，主题脚本语法检查通过。
   - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_显示端媒体底色固定黑色.md`。
 
+- ✅ [2026-08-29] render-display 进度条外标签增加半透明主题描边
+  - 设备名、`M`、`GPU`、`VRAM` 等进度条外标签恢复固定白字与黑色阴影，增加 1px 当前主题强调色描边。
+  - 描边使用 65% 半透明 `color-mix()`，不支持时回退纯色主题描边；进度条和条内数值保持不变。
+  - 验证：render-display 标签、旋转布局和主题回归 23/23 通过，脚本语法检查通过。
+  - 文档：`docs/design/render-display-inline-text.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-29_render-display标签主题色半透明描边.md`。
+
 - ✅ [2026-08-28] 显示端时间和媒体名增加主题色外描边
   - 时间和媒体名恢复固定白色文字与固定黑色阴影，新增 1px 当前主题强调色外描边。
   - 验证：显示端主题同步回归 2/2 通过，主题脚本语法检查通过。

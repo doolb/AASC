@@ -150,7 +150,8 @@ function makeBar(label, pct, color, text, L, lblW) {
     bar.style.cssText = 'display:flex;align-items:center;gap:' + L.barGap + 'px;font-size:45px;white-space:nowrap';
 
     var lbl = document.createElement('span');
-    lbl.style.cssText = 'width:' + (lblW || L.lblW) + 'px;color:rgba(255,255,255,0.7);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    // 条外标签恢复固定白字和黑色阴影，主题色只用于半透明外描边；不支持 color-mix 时退回纯色描边。
+    lbl.style.cssText = 'width:' + (lblW || L.lblW) + 'px;color:#fff;-webkit-text-stroke:1px var(--accent-color,#00d2ff);-webkit-text-stroke:1px color-mix(in srgb,var(--accent-color,#00d2ff) 65%,transparent);text-shadow:2px 2px 8px rgba(0,0,0,0.8);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
     lbl.textContent = label;
 
     var track = document.createElement('div');
