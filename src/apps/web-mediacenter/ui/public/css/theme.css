@@ -37,121 +37,311 @@
     --shadow-color: rgba(41, 55, 75, 0.16);
 }
 
-:root[data-theme="dark"] { color-scheme: dark; }
-:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="warm"] {
+    --bg-primary: #fff9ed;
+    --bg-secondary: #fff0c9;
+    --bg-surface: rgba(255, 250, 235, 0.9);
+    --bg-surface-strong: #fff1cc;
+    --card-background: #fff1cc;
+    --content-background: #fff8e8;
+    --text-primary: #4a3520;
+    --text-secondary: #7a6246;
+    --text-muted: #927b5d;
+    --border-color: rgba(154, 107, 32, 0.22);
+    --input-background: #fffaf0;
+    --accent-color: #c27a12;
+    --accent-secondary: #e3a72e;
+    --success-color: #2f855a;
+    --danger-color: #c53030;
+    --shadow-color: rgba(112, 76, 15, 0.16);
+}
 
-:root[data-theme="light"] body {
+:root[data-theme="pink"] {
+    --bg-primary: #fff5f8;
+    --bg-secondary: #ffe7ef;
+    --bg-surface: rgba(255, 247, 250, 0.9);
+    --bg-surface-strong: #ffeaf1;
+    --card-background: #ffeaf1;
+    --content-background: #fff4f7;
+    --text-primary: #4a2735;
+    --text-secondary: #7a5261;
+    --text-muted: #966f7e;
+    --border-color: rgba(194, 59, 112, 0.2);
+    --input-background: #fff9fb;
+    --accent-color: #c23b70;
+    --accent-secondary: #8b5aa8;
+    --success-color: #2f855a;
+    --danger-color: #c53030;
+    --shadow-color: rgba(139, 56, 96, 0.15);
+}
+
+:root[data-theme="lavender-yellow"] {
+    --bg-primary: #faf7ff;
+    --bg-secondary: #f3eaff;
+    --bg-surface: rgba(252, 249, 255, 0.9);
+    --bg-surface-strong: #fff7d6;
+    --card-background: #fff7d6;
+    --content-background: #fffaf0;
+    --text-primary: #433854;
+    --text-secondary: #73647f;
+    --text-muted: #91839b;
+    --border-color: rgba(139, 111, 192, 0.22);
+    --input-background: #fffdf4;
+    --accent-color: #8b6fc0;
+    --accent-secondary: #d0a13a;
+    --success-color: #2f855a;
+    --danger-color: #c53030;
+    --shadow-color: rgba(99, 76, 151, 0.15);
+}
+
+:root[data-theme="red-blue"] {
+    --bg-primary: #f5f8ff;
+    --bg-secondary: #edf2ff;
+    --bg-surface: rgba(248, 250, 255, 0.9);
+    --bg-surface-strong: #e8f0ff;
+    --card-background: #e8f0ff;
+    --content-background: #f7f9ff;
+    --text-primary: #202f4d;
+    --text-secondary: #52627f;
+    --text-muted: #73819a;
+    --border-color: rgba(47, 111, 208, 0.2);
+    --input-background: #fbfcff;
+    --accent-color: #d33f49;
+    --accent-secondary: #2f6fd0;
+    --success-color: #2f855a;
+    --danger-color: #b42318;
+    --shadow-color: rgba(44, 72, 130, 0.15);
+}
+
+:root[data-theme="gold"] {
+    --bg-primary: #fffaf0;
+    --bg-secondary: #f8e6b0;
+    --bg-surface: rgba(255, 252, 241, 0.9);
+    --bg-surface-strong: #fff1c7;
+    --card-background: #fff1c7;
+    --content-background: #fff8df;
+    --text-primary: #4b3515;
+    --text-secondary: #796039;
+    --text-muted: #99805a;
+    --border-color: rgba(184, 134, 11, 0.25);
+    --input-background: #fffdf5;
+    --accent-color: #b8860b;
+    --accent-secondary: #d4a72c;
+    --success-color: #2f855a;
+    --danger-color: #b42318;
+    --shadow-color: rgba(129, 92, 10, 0.18);
+}
+
+:root[data-theme="mint"] {
+    --bg-primary: #f1fbf8;
+    --bg-secondary: #dff5ee;
+    --bg-surface: rgba(247, 255, 252, 0.9);
+    --bg-surface-strong: #e2f7ef;
+    --card-background: #e2f7ef;
+    --content-background: #f3fcf8;
+    --text-primary: #21443d;
+    --text-secondary: #4f7169;
+    --text-muted: #70918a;
+    --border-color: rgba(47, 143, 125, 0.2);
+    --input-background: #f8fffc;
+    --accent-color: #159a86;
+    --accent-secondary: #4bbf9f;
+    --success-color: #2f855a;
+    --danger-color: #c53030;
+    --shadow-color: rgba(29, 105, 89, 0.15);
+}
+
+:root[data-theme="ocean"] {
+    --bg-primary: #eff8ff;
+    --bg-secondary: #dceeff;
+    --bg-surface: rgba(247, 252, 255, 0.9);
+    --bg-surface-strong: #e3f1ff;
+    --card-background: #e3f1ff;
+    --content-background: #f2f9ff;
+    --text-primary: #183b5b;
+    --text-secondary: #4f6d87;
+    --text-muted: #728ea7;
+    --border-color: rgba(37, 116, 181, 0.2);
+    --input-background: #f9fdff;
+    --accent-color: #087ea4;
+    --accent-secondary: #2f6fd0;
+    --success-color: #2f855a;
+    --danger-color: #c53030;
+    --shadow-color: rgba(31, 86, 135, 0.16);
+}
+
+:root[data-theme="forest"] {
+    --bg-primary: #f3faf4;
+    --bg-secondary: #e0f0e1;
+    --bg-surface: rgba(248, 253, 248, 0.9);
+    --bg-surface-strong: #e4f3e3;
+    --card-background: #e4f3e3;
+    --content-background: #f4fbf3;
+    --text-primary: #25432c;
+    --text-secondary: #58705c;
+    --text-muted: #78907b;
+    --border-color: rgba(66, 126, 72, 0.2);
+    --input-background: #fbfffb;
+    --accent-color: #398a49;
+    --accent-secondary: #79a943;
+    --success-color: #227a46;
+    --danger-color: #b42318;
+    --shadow-color: rgba(43, 95, 48, 0.15);
+}
+
+:root[data-theme="slate"] {
+    --bg-primary: #f4f6f8;
+    --bg-secondary: #e5e9ee;
+    --bg-surface: rgba(250, 251, 252, 0.9);
+    --bg-surface-strong: #e9edf2;
+    --card-background: #e9edf2;
+    --content-background: #f5f7f9;
+    --text-primary: #27313d;
+    --text-secondary: #596575;
+    --text-muted: #7b8794;
+    --border-color: rgba(71, 85, 105, 0.2);
+    --input-background: #ffffff;
+    --accent-color: #52677d;
+    --accent-secondary: #71869b;
+    --success-color: #2f855a;
+    --danger-color: #b42318;
+    --shadow-color: rgba(51, 65, 85, 0.15);
+}
+
+:root[data-theme="algae-salt"] {
+    --bg-primary: #f5fbf8;
+    --bg-secondary: #e6f3ed;
+    --bg-surface: rgba(250, 255, 252, 0.92);
+    --bg-surface-strong: #e8f6f0;
+    --card-background: #e8f6f0;
+    --content-background: #f3faf7;
+    --text-primary: #24473d;
+    --text-secondary: #58766d;
+    --text-muted: #78948b;
+    --border-color: rgba(55, 126, 105, 0.2);
+    --input-background: #fbfffd;
+    --accent-color: #159a86;
+    --accent-secondary: #5bbda4;
+    --success-color: #2f855a;
+    --danger-color: #c53030;
+    --shadow-color: rgba(39, 102, 84, 0.14);
+}
+
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme-mode="light"] { color-scheme: light; }
+
+:root[data-theme-mode="light"] body {
     background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
     color: var(--text-primary);
 }
 
-:root[data-theme="light"] .sidebar {
+:root[data-theme-mode="light"] .sidebar {
     background: rgba(255, 255, 255, 0.72);
     border-color: var(--border-color);
 }
 
-:root[data-theme="light"] .sidebar-header,
-:root[data-theme="light"] .section,
-:root[data-theme="light"] .device-item,
-:root[data-theme="light"] .display-item,
-:root[data-theme="light"] .media-library-container,
-:root[data-theme="light"] .chat-container,
-:root[data-theme="light"] .task-card,
-:root[data-theme="light"] .control-item {
+:root[data-theme-mode="light"] .sidebar-header,
+:root[data-theme-mode="light"] .section,
+:root[data-theme-mode="light"] .device-item,
+:root[data-theme-mode="light"] .display-item,
+:root[data-theme-mode="light"] .media-library-container,
+:root[data-theme-mode="light"] .chat-container,
+:root[data-theme-mode="light"] .task-card,
+:root[data-theme-mode="light"] .control-item {
     border-color: var(--border-color);
 }
 
-:root[data-theme="light"] .section,
-:root[data-theme="light"] .control-item,
-:root[data-theme="light"] .media-library-container,
-:root[data-theme="light"] .task-card,
-:root[data-theme="light"] .chat-container,
-:root[data-theme="light"] .device-item,
-:root[data-theme="light"] .display-item,
-:root[data-theme="light"] .task-form-section,
-:root[data-theme="light"] .media-library-item {
+:root[data-theme-mode="light"] .section,
+:root[data-theme-mode="light"] .control-item,
+:root[data-theme-mode="light"] .media-library-container,
+:root[data-theme-mode="light"] .task-card,
+:root[data-theme-mode="light"] .chat-container,
+:root[data-theme-mode="light"] .device-item,
+:root[data-theme-mode="light"] .display-item,
+:root[data-theme-mode="light"] .task-form-section,
+:root[data-theme-mode="light"] .media-library-item {
     background: var(--card-background);
     color: var(--text-primary);
 }
 
-:root[data-theme="light"] .device-list,
-:root[data-theme="light"] .chat-messages,
-:root[data-theme="light"] .chat-search-history,
-:root[data-theme="light"] .log-entries {
+:root[data-theme-mode="light"] .device-list,
+:root[data-theme-mode="light"] .chat-messages,
+:root[data-theme-mode="light"] .chat-search-history,
+:root[data-theme-mode="light"] .log-entries {
     background: var(--content-background) !important;
     color: var(--text-primary);
 }
 
-:root[data-theme="light"] .nav-item,
-:root[data-theme="light"] .section h2,
-:root[data-theme="light"] label,
-:root[data-theme="light"] [data-ui-type="text"],
-:root[data-theme="light"] [data-ui-type="tip"],
-:root[data-theme="light"] .stat-label,
-:root[data-theme="light"] .stat-value {
+:root[data-theme-mode="light"] .nav-item,
+:root[data-theme-mode="light"] .section h2,
+:root[data-theme-mode="light"] label,
+:root[data-theme-mode="light"] [data-ui-type="text"],
+:root[data-theme-mode="light"] [data-ui-type="tip"],
+:root[data-theme-mode="light"] .stat-label,
+:root[data-theme-mode="light"] .stat-value {
     color: var(--text-secondary) !important;
 }
 
-:root[data-theme="light"] .nav-item:hover,
-:root[data-theme="light"] .nav-item.active,
-:root[data-theme="light"] .display-item:hover {
+:root[data-theme-mode="light"] .nav-item:hover,
+:root[data-theme-mode="light"] .nav-item.active,
+:root[data-theme-mode="light"] .display-item:hover {
     background: rgba(49, 93, 180, 0.1);
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] input:not([type="file"]),
-:root[data-theme="light"] select,
-:root[data-theme="light"] textarea {
+:root[data-theme-mode="light"] input:not([type="file"]),
+:root[data-theme-mode="light"] select,
+:root[data-theme-mode="light"] textarea {
     background: var(--input-background) !important;
     color: var(--text-primary) !important;
     border-color: var(--border-color) !important;
 }
 
-:root[data-theme="light"] input::placeholder,
-:root[data-theme="light"] textarea::placeholder {
+:root[data-theme-mode="light"] input::placeholder,
+:root[data-theme-mode="light"] textarea::placeholder {
     color: var(--text-muted) !important;
 }
 
-:root[data-theme="light"] button:not(.file-label),
-:root[data-theme="light"] .control-btn,
-:root[data-theme="light"] .floating-btn,
-:root[data-theme="light"] .chat-add-btn,
-:root[data-theme="light"] .task-card-btn,
-:root[data-theme="light"] .task-submit-btn,
-:root[data-theme="light"] .log-action-btn,
-:root[data-theme="light"] .log-filter-control-btn {
-    background: linear-gradient(135deg, #315db4, #087ea4) !important;
+:root[data-theme-mode="light"] button:not(.file-label),
+:root[data-theme-mode="light"] .control-btn,
+:root[data-theme-mode="light"] .floating-btn,
+:root[data-theme-mode="light"] .chat-add-btn,
+:root[data-theme-mode="light"] .task-card-btn,
+:root[data-theme-mode="light"] .task-submit-btn,
+:root[data-theme-mode="light"] .log-action-btn,
+:root[data-theme-mode="light"] .log-filter-control-btn {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color)) !important;
     color: #ffffff !important;
     border-color: transparent !important;
 }
 
-:root[data-theme="light"] .btn-cancel,
-:root[data-theme="light"] .task-confirm-btn.cancel {
+:root[data-theme-mode="light"] .btn-cancel,
+:root[data-theme-mode="light"] .task-confirm-btn.cancel {
     background: #718096 !important;
 }
 
-:root[data-theme="light"] .toast-success { background: var(--success-color) !important; }
-:root[data-theme="light"] .toast-error,
-:root[data-theme="light"] .restart-btn,
-:root[data-theme="light"] .task-card-btn.danger { background: var(--danger-color) !important; }
+:root[data-theme-mode="light"] .toast-success { background: var(--success-color) !important; }
+:root[data-theme-mode="light"] .toast-error,
+:root[data-theme-mode="light"] .restart-btn,
+:root[data-theme-mode="light"] .task-card-btn.danger { background: var(--danger-color) !important; }
 
-:root[data-theme="light"] .modal-overlay,
-:root[data-theme="light"] .chat-modal-overlay,
-:root[data-theme="light"] .modal-mask,
-:root[data-theme="light"] .library-modal,
-:root[data-theme="light"] .self-test-modal,
-:root[data-theme="light"] .task-confirm-overlay,
-:root[data-theme="light"] .task-overlay {
+:root[data-theme-mode="light"] .modal-overlay,
+:root[data-theme-mode="light"] .chat-modal-overlay,
+:root[data-theme-mode="light"] .modal-mask,
+:root[data-theme-mode="light"] .library-modal,
+:root[data-theme-mode="light"] .self-test-modal,
+:root[data-theme-mode="light"] .task-confirm-overlay,
+:root[data-theme-mode="light"] .task-overlay {
     background: rgba(22, 33, 62, 0.38);
 }
 
-:root[data-theme="light"] .modal-content,
-:root[data-theme="light"] .chat-modal-content,
-:root[data-theme="light"] .playlist-settings-dialog,
-:root[data-theme="light"] .library-modal-content,
-:root[data-theme="light"] .self-test-modal-content,
-:root[data-theme="light"] .task-dialog,
-:root[data-theme="light"] .task-confirm-box {
+:root[data-theme-mode="light"] .modal-content,
+:root[data-theme-mode="light"] .chat-modal-content,
+:root[data-theme-mode="light"] .playlist-settings-dialog,
+:root[data-theme-mode="light"] .library-modal-content,
+:root[data-theme-mode="light"] .self-test-modal-content,
+:root[data-theme-mode="light"] .task-dialog,
+:root[data-theme-mode="light"] .task-confirm-box {
     background: var(--bg-surface-strong);
     color: var(--text-primary);
     border-color: var(--border-color);
@@ -164,144 +354,144 @@
  * 更具体的选择器或内联 color，因此需要在浅色主题下显式覆盖，避免白底白字。
  * 按钮不纳入内联覆盖，确保有色按钮仍使用白色文字保持对比度。
  */
-:root[data-theme="light"] .task-card-title,
-:root[data-theme="light"] .task-monitor-name,
-:root[data-theme="light"] .task-breadcrumb .current,
-:root[data-theme="light"] .task-confirm-title,
-:root[data-theme="light"] .dialog-title,
-:root[data-theme="light"] .library-modal-header h3,
-:root[data-theme="light"] .chat-modal-header h3,
-:root[data-theme="light"] .self-test-status {
+:root[data-theme-mode="light"] .task-card-title,
+:root[data-theme-mode="light"] .task-monitor-name,
+:root[data-theme-mode="light"] .task-breadcrumb .current,
+:root[data-theme-mode="light"] .task-confirm-title,
+:root[data-theme-mode="light"] .dialog-title,
+:root[data-theme-mode="light"] .library-modal-header h3,
+:root[data-theme-mode="light"] .chat-modal-header h3,
+:root[data-theme-mode="light"] .self-test-status {
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .settings-label,
-:root[data-theme="light"] .task-confirm-msg,
-:root[data-theme="light"] .task-card-meta,
-:root[data-theme="light"] .task-form-field label,
-:root[data-theme="light"] .item-meta,
-:root[data-theme="light"] .empty-list,
-:root[data-theme="light"] .chat-empty,
-:root[data-theme="light"] .chat-template-permission,
-:root[data-theme="light"] .chat-template-permission-label {
+:root[data-theme-mode="light"] .settings-label,
+:root[data-theme-mode="light"] .task-confirm-msg,
+:root[data-theme-mode="light"] .task-card-meta,
+:root[data-theme-mode="light"] .task-form-field label,
+:root[data-theme-mode="light"] .item-meta,
+:root[data-theme-mode="light"] .empty-list,
+:root[data-theme-mode="light"] .chat-empty,
+:root[data-theme-mode="light"] .chat-template-permission,
+:root[data-theme-mode="light"] .chat-template-permission-label {
     color: var(--text-secondary) !important;
 }
 
-:root[data-theme="light"] .task-form-field select option,
-:root[data-theme="light"] .form-group select option,
-:root[data-theme="light"] .chat-template-select option {
+:root[data-theme-mode="light"] .task-form-field select option,
+:root[data-theme-mode="light"] .form-group select option,
+:root[data-theme-mode="light"] .chat-template-select option {
     background: var(--bg-surface-strong) !important;
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .library-name,
-:root[data-theme="light"] .item-name,
-:root[data-theme="light"] .command-keyword,
-:root[data-theme="light"] .chat-template-name {
+:root[data-theme-mode="light"] .library-name,
+:root[data-theme-mode="light"] .item-name,
+:root[data-theme-mode="light"] .command-keyword,
+:root[data-theme-mode="light"] .chat-template-name {
     color: var(--text-primary) !important;
 }
 
 /* 显示端/设备列表：覆盖原组件的白色设备名，保留状态色。 */
-:root[data-theme="light"] .display-item-id,
-:root[data-theme="light"] .task-device-name {
+:root[data-theme-mode="light"] .display-item-id,
+:root[data-theme-mode="light"] .task-device-name {
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .display-item-size,
-:root[data-theme="light"] .browser-info,
-:root[data-theme="light"] .voice-status {
+:root[data-theme-mode="light"] .display-item-size,
+:root[data-theme-mode="light"] .browser-info,
+:root[data-theme-mode="light"] .voice-status {
     color: var(--text-secondary) !important;
 }
 
 /* 聊天区域：助手消息使用浅蓝气泡，用户消息继续使用有色渐变和白字。 */
-:root[data-theme="light"] .chat-tabs {
+:root[data-theme-mode="light"] .chat-tabs {
     background: var(--card-background) !important;
 }
 
-:root[data-theme="light"] .chat-tab {
+:root[data-theme-mode="light"] .chat-tab {
     color: var(--text-secondary) !important;
     border-color: var(--border-color);
 }
 
-:root[data-theme="light"] .chat-tab.active {
+:root[data-theme-mode="light"] .chat-tab.active {
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .chat-header h3,
-:root[data-theme="light"] .search-history-header h4,
-:root[data-theme="light"] .search-history-item .keyword,
-:root[data-theme="light"] .profile-name,
-:root[data-theme="light"] .command-actions,
-:root[data-theme="light"] .chat-template-content {
+:root[data-theme-mode="light"] .chat-header h3,
+:root[data-theme-mode="light"] .search-history-header h4,
+:root[data-theme-mode="light"] .search-history-item .keyword,
+:root[data-theme-mode="light"] .profile-name,
+:root[data-theme-mode="light"] .command-actions,
+:root[data-theme-mode="light"] .chat-template-content {
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .chat-message.assistant .chat-message-content {
+:root[data-theme-mode="light"] .chat-message.assistant .chat-message-content {
     background: var(--card-background) !important;
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .chat-message.assistant .chat-message-content blockquote,
-:root[data-theme="light"] .chat-message.assistant .chat-message-content code,
-:root[data-theme="light"] .chat-message.assistant .chat-message-content pre,
-:root[data-theme="light"] .chat-message.assistant .chat-message-content th,
-:root[data-theme="light"] .chat-message.assistant .chat-message-content td {
+:root[data-theme-mode="light"] .chat-message.assistant .chat-message-content blockquote,
+:root[data-theme-mode="light"] .chat-message.assistant .chat-message-content code,
+:root[data-theme-mode="light"] .chat-message.assistant .chat-message-content pre,
+:root[data-theme-mode="light"] .chat-message.assistant .chat-message-content th,
+:root[data-theme-mode="light"] .chat-message.assistant .chat-message-content td {
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .chat-message.system .chat-message-content {
+:root[data-theme-mode="light"] .chat-message.system .chat-message-content {
     color: #664d03 !important;
 }
 
-:root[data-theme="light"] .profile-model,
-:root[data-theme="light"] .profile-status,
-:root[data-theme="light"] .search-history-item .time,
-:root[data-theme="light"] .search-history-item .result {
+:root[data-theme-mode="light"] .profile-model,
+:root[data-theme-mode="light"] .profile-status,
+:root[data-theme-mode="light"] .search-history-item .time,
+:root[data-theme-mode="light"] .search-history-item .result {
     color: var(--text-secondary) !important;
 }
 
 /* 日志区域：内容底色与卡片区区分，普通文字使用主题色，级别颜色保留语义。 */
-:root[data-theme="light"] .log-count,
-:root[data-theme="light"] .log-filter-label,
-:root[data-theme="light"] .log-filter-hint,
-:root[data-theme="light"] .log-time,
-:root[data-theme="light"] .log-category,
-:root[data-theme="light"] .log-device,
-:root[data-theme="light"] .log-arrow-sym,
-:root[data-theme="light"] .log-ack-badge,
-:root[data-theme="light"] .log-empty {
+:root[data-theme-mode="light"] .log-count,
+:root[data-theme-mode="light"] .log-filter-label,
+:root[data-theme-mode="light"] .log-filter-hint,
+:root[data-theme-mode="light"] .log-time,
+:root[data-theme-mode="light"] .log-category,
+:root[data-theme-mode="light"] .log-device,
+:root[data-theme-mode="light"] .log-arrow-sym,
+:root[data-theme-mode="light"] .log-ack-badge,
+:root[data-theme-mode="light"] .log-empty {
     color: var(--text-secondary) !important;
 }
 
-:root[data-theme="light"] .log-message {
+:root[data-theme-mode="light"] .log-message {
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] .log-level-error .log-message {
+:root[data-theme-mode="light"] .log-level-error .log-message {
     color: #b42318 !important;
 }
 
-:root[data-theme="light"] .log-level-warn .log-message {
+:root[data-theme-mode="light"] .log-level-warn .log-message {
     color: #9a6700 !important;
 }
 
-:root[data-theme="light"] .log-entries mark {
+:root[data-theme-mode="light"] .log-entries mark {
     background: rgba(8, 126, 164, 0.22);
     color: var(--text-primary) !important;
 }
 
 /* 兼容 upload.html、提醒列表和动态任务面板中的内联白色文字。 */
-:root[data-theme="light"] [style*="color: #fff"]:not(button),
-:root[data-theme="light"] [style*="color:#fff"]:not(button),
-:root[data-theme="light"] [style*="color: #ffffff"]:not(button),
-:root[data-theme="light"] [style*="color:#ffffff"]:not(button) {
+:root[data-theme-mode="light"] [style*="color: #fff"]:not(button),
+:root[data-theme-mode="light"] [style*="color:#fff"]:not(button),
+:root[data-theme-mode="light"] [style*="color: #ffffff"]:not(button),
+:root[data-theme-mode="light"] [style*="color:#ffffff"]:not(button) {
     color: var(--text-primary) !important;
 }
 
-:root[data-theme="light"] [style*="color: rgba(255,255,255"]:not(button),
-:root[data-theme="light"] [style*="color:rgba(255,255,255"]:not(button),
-:root[data-theme="light"] [style*="color: rgba(255, 255, 255"]:not(button),
-:root[data-theme="light"] [style*="color:rgba(255, 255, 255"]:not(button) {
+:root[data-theme-mode="light"] [style*="color: rgba(255,255,255"]:not(button),
+:root[data-theme-mode="light"] [style*="color:rgba(255,255,255"]:not(button),
+:root[data-theme-mode="light"] [style*="color: rgba(255, 255, 255"]:not(button),
+:root[data-theme-mode="light"] [style*="color:rgba(255, 255, 255"]:not(button) {
     color: var(--text-secondary) !important;
 }
 

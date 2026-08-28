@@ -4,7 +4,7 @@
 
 ```text
 UiTheme:
-    themes = [dark, light]
+    themes = [dark, light, warm, pink, lavender-yellow, red-blue, gold, mint, ocean, forest, slate, algae-salt]
     storageKey = controlTheme
 
     init():
@@ -26,6 +26,7 @@ UiTheme:
     apply(theme):
         normalized = theme 在 themes 中 ? theme : dark
         document.documentElement.dataset.theme = normalized
+        document.documentElement.dataset.themeMode = normalized == dark ? dark : light
         themeSelector.value = normalized
         try:
             localStorage.setItem(storageKey, normalized)
@@ -62,8 +63,15 @@ MutationObserver:
 ## 样式伪代码
 
 ```text
-:root / [data-theme=dark] / [data-theme=light]:
+:root / [data-theme=dark] / [data-theme=light] / [data-theme=warm] / [data-theme=pink]
+    / [data-theme=lavender-yellow] / [data-theme=red-blue] / [data-theme=gold]
+    / [data-theme=mint] / [data-theme=ocean] / [data-theme=forest] / [data-theme=slate]
+    / [data-theme=algae-salt]:
     定义背景、卡片、文字、边框、强调色、成功色、危险色和阴影变量
+
+[data-theme-mode=light]:
+    所有非深色主题复用浅色控件、卡片、弹窗和内容区域的对比度规则
+    按钮渐变使用 accent-secondary 到 accent-color 的主题变量
 
 [data-ui-type]:
     使用语义变量绘制控件

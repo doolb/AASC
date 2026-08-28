@@ -132,6 +132,33 @@ test('控制端页面应提供主题选择、主题脚本和主题变量', () =>
     assert.match(css, /\.playlist-settings-dialog/u);
 });
 
+test('控制端应提供完整的 12 种主题配色', () => {
+    const html = fs.readFileSync(uploadHtmlPath, 'utf8');
+    const css = fs.readFileSync(themeCssPath, 'utf8');
+    const { manager } = loadThemeManager();
+    const expectedThemes = [
+        'dark', 'light', 'warm', 'pink', 'lavender-yellow', 'red-blue', 'gold',
+        'mint', 'ocean', 'forest', 'slate', 'algae-salt'
+    ];
+
+    assert.deepEqual(Array.from(manager.themes), expectedThemes);
+    expectedThemes.slice(2).forEach((theme) => {
+        assert.match(html, new RegExp(`value=["']${theme}["']`, 'u'));
+        assert.match(css, new RegExp(`data-theme=["']${theme}["']`, 'u'));
+    });
+});
+
+test('非深色主题应用时应启用浅色组件样式模式', () => {
+    const { manager, document, selector } = loadThemeManager();
+
+    manager.init();
+    manager.apply('gold');
+
+    assert.equal(document.documentElement.dataset.theme, 'gold');
+    assert.equal(document.documentElement.dataset.themeMode, 'light');
+    assert.equal(selector.value, 'gold');
+});
+
 test('浅色主题应覆盖弹窗中的遗留白色文字，并处理动态内联白字', () => {
     const css = fs.readFileSync(themeCssPath, 'utf8');
 
@@ -146,17 +173,17 @@ test('浅色主题的卡片应使用独立的浅蓝色背景，不改变弹窗�
 
     assert.match(css, /:root\[data-theme="light"\][\s\S]*--card-background:\s*#eaf4ff/u);
     assert.match(css, /:root\[data-theme="light"\][\s\S]*--bg-surface-strong:\s*#eaf4ff/u);
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.task-card[\s\S]*background:\s*var\(--card-background\)/u);
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.media-library-item[\s\S]*background:\s*var\(--card-background\)/u);
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.modal-content[\s\S]*background:\s*var\(--bg-surface-strong\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.task-card[\s\S]*background:\s*var\(--card-background\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.media-library-item[\s\S]*background:\s*var\(--card-background\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.modal-content[\s\S]*background:\s*var\(--bg-surface-strong\)/u);
 });
 
 test('浅色主题应适配显示设备名、聊天消息和日志文字', () => {
     const css = fs.readFileSync(themeCssPath, 'utf8');
 
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.display-item-id[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.chat-message\.assistant \.chat-message-content[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.chat-message\.assistant \.chat-message-content[\s\S]*background:\s*var\(--card-background\)/u);
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.log-entries[\s\S]*background:\s*var\(--content-background\)/u);
-    assert.match(css, /:root\[data-theme="light"\][\s\S]*\.log-message[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.display-item-id[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.chat-message\.assistant \.chat-message-content[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.chat-message\.assistant \.chat-message-content[\s\S]*background:\s*var\(--card-background\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.log-entries[\s\S]*background:\s*var\(--content-background\)/u);
+    assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.log-message[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
 });

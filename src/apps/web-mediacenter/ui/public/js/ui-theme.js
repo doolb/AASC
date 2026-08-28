@@ -2,7 +2,10 @@
 
 // 控制端主题与 UI 语义管理器：只管理浏览器端表现，不参与业务消息和服务器配置。
 (function createUiTheme(windowObject, documentObject) {
-    const themes = ['dark', 'light'];
+    const themes = [
+        'dark', 'light', 'warm', 'pink', 'lavender-yellow', 'red-blue', 'gold',
+        'mint', 'ocean', 'forest', 'slate', 'algae-salt'
+    ];
     const storageKey = 'controlTheme';
     const classificationSelector = [
         'button', 'input', 'select', 'textarea', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -79,6 +82,7 @@
         apply(theme) {
             const normalizedTheme = this.normalize(theme);
             documentObject.documentElement.dataset.theme = normalizedTheme;
+            documentObject.documentElement.dataset.themeMode = normalizedTheme === 'dark' ? 'dark' : 'light';
             if (this.selector) this.selector.value = normalizedTheme;
             try {
                 windowObject.localStorage.setItem(storageKey, normalizedTheme);
