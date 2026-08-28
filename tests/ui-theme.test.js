@@ -10,6 +10,7 @@ const publicRoot = path.join(__dirname, '../src/apps/web-mediacenter/ui/public')
 const themeScriptPath = path.join(publicRoot, 'js/ui-theme.js');
 const uploadHtmlPath = path.join(publicRoot, 'upload.html');
 const themeCssPath = path.join(publicRoot, 'css/theme.css');
+const uploadCssPath = path.join(publicRoot, 'css/upload.css');
 const ttsScriptPath = path.join(publicRoot, 'js/tts.js');
 const controlsScriptPath = path.join(publicRoot, 'js/controls.js');
 const floatingControlScriptPath = path.join(publicRoot, 'js/floating-control.js');
@@ -234,6 +235,18 @@ test('浅色主题应适配显示设备名、聊天消息和日志文字', () =>
     assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.chat-message\.assistant \.chat-message-content[\s\S]*background:\s*var\(--card-background\)/u);
     assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.log-entries[\s\S]*background:\s*var\(--content-background\)/u);
     assert.match(css, /:root\[data-theme-mode="light"\][\s\S]*\.log-message[\s\S]*color:\s*var\(--text-primary\)\s*!important/u);
+});
+
+test('显示端信息和树状视图应消费基础主题色并让上层文字继承', () => {
+    const css = fs.readFileSync(uploadCssPath, 'utf8');
+
+    assert.match(css, /\.modal-content\s*\{[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);
+    assert.match(css, /\.feature-name span:first-child\s*\{[\s\S]*color:\s*inherit/u);
+    assert.match(css, /\.browser-detail-value\s*\{[\s\S]*color:\s*inherit/u);
+    assert.match(css, /\.tree-label\s*\{[\s\S]*color:\s*inherit/u);
+    assert.match(css, /\.tree-info-item\s*\{[\s\S]*color:\s*var\(--text-secondary(?:,\s*[^)]+)?\)/u);
+    assert.match(css, /\.tree-setting-select\s*\{[\s\S]*background:\s*var\(--input-background(?:,\s*[^)]+)?\)[\s\S]*color:\s*inherit/u);
+    assert.match(css, /\.tree-event-input\s*\{[\s\S]*background:\s*var\(--input-background(?:,\s*[^)]+)?\)[\s\S]*color:\s*inherit/u);
 });
 
 test('浅色主题的自定义 toggle 应明确区分未选中和选中状态', () => {

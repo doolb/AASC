@@ -292,6 +292,11 @@
     color: var(--text-primary);
 }
 
+/* 所有主题都从根变量提供默认文字色，让未单独声明颜色的控件自然继承主题。 */
+:root[data-theme] body {
+    color: var(--text-primary);
+}
+
 :root[data-theme-mode="light"] .sidebar {
     background: rgba(255, 255, 255, 0.72);
     border-color: var(--border-color);

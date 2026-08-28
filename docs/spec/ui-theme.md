@@ -156,6 +156,15 @@ MutationObserver:
     匹配动态 HTML 内联的 #fff 和白色 rgba 文字，并排除按钮文字
     任务确认框使用浅色表面背景
 
+基础主题色与控件继承:
+    根节点变量作为页面颜色的唯一来源，body 设置 text-primary 作为默认文字色
+    modal-content、feature-name、browser-detail 和 tree-node 默认继承父级文字颜色
+    辅助文字使用 text-secondary 或 text-muted，禁止普通文字固定使用 #fff、#888 或白色 rgba
+    device-tree、browser-detail、feature-item 和树状容器使用 content-background、bg-surface 或 bg-surface-strong
+    tree-setting-select、tree-capability-select、tree-event-input 和滑条使用 input-background/text-primary/border-color
+    在线、错误、支持/不支持、选中和危险操作保留 success-color/danger-color/accent-color 等语义例外
+    新增控件优先继承父级文字和基础控件颜色，不新增单个主题的硬编码覆盖
+
 卡片和弹窗背景:
     定义 card-background 语义变量
     深色主题的 card-background 和 bg-surface-strong 保持原有半透明效果
