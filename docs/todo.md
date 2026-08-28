@@ -2,6 +2,11 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-28][2026-08-28] 显示端文件变化轮询调整为 30 秒
+  - 显示端 `/api/display-version` 成功检查和失败重试统一改为每 30 秒执行；控制端保持无独立文件变化轮询。
+  - 测试：版本变化、成功间隔、失败重试和控制端无轮询检查通过。
+  - 文档：`docs/design/display.md`、`docs/spec/api.md`、`docs/task/2026-08-28_显示端文件变化轮询改为30秒.md`。
+
 - ✅已完成 [2026-08-28][2026-08-28] 主题服务端持久化与天气响应弹窗旋转适配
   - 服务端保存控制端全局主题，控制端保留本地缓存回退；显示端天气响应弹窗随 0/90/180/270 度旋转并按逻辑画布限制尺寸。
   - 改动：`src/apps/server/modules/config/control-theme-config.js`、`src/apps/server/modules/config/config-app-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/ui-theme.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/display.html`、`src/apps/web-mediacenter/ui/public/css/display.css`。

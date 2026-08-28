@@ -4066,9 +4066,9 @@
                         location.reload();
                         return;
                     }
-                    setTimeout(watchDisplayVersion, 8000);
+                    setTimeout(watchDisplayVersion, 30000);
                 })
-                .catch(() => setTimeout(watchDisplayVersion, 8000));
+                .catch(() => setTimeout(watchDisplayVersion, 30000));
         })();
 
         initVoiceRecognition();
