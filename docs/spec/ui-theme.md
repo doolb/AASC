@@ -4,7 +4,7 @@
 
 ```text
 UiTheme:
-    themes = [dark, light, warm, pink, lavender-yellow, red-blue, gold, mint, ocean, forest, slate, algae-salt]
+    themes = [dark, light, warm, pink, lavender-yellow, red-blue, gold, mint, ocean, forest, slate, algae-salt, girl-pink]
     storageKey = controlTheme
 
     init():
@@ -66,7 +66,7 @@ MutationObserver:
 :root / [data-theme=dark] / [data-theme=light] / [data-theme=warm] / [data-theme=pink]
     / [data-theme=lavender-yellow] / [data-theme=red-blue] / [data-theme=gold]
     / [data-theme=mint] / [data-theme=ocean] / [data-theme=forest] / [data-theme=slate]
-    / [data-theme=algae-salt]:
+    / [data-theme=algae-salt] / [data-theme=girl-pink]:
     定义背景、卡片、文字、边框、强调色、成功色、危险色和阴影变量
 
 [data-theme-mode=light]:

@@ -4,7 +4,7 @@
 (function createUiTheme(windowObject, documentObject) {
     const themes = [
         'dark', 'light', 'warm', 'pink', 'lavender-yellow', 'red-blue', 'gold',
-        'mint', 'ocean', 'forest', 'slate', 'algae-salt'
+        'mint', 'ocean', 'forest', 'slate', 'algae-salt', 'girl-pink'
     ];
     const storageKey = 'controlTheme';
     const classificationSelector = [

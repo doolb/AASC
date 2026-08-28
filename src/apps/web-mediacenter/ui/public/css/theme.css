@@ -227,6 +227,25 @@
     --shadow-color: rgba(39, 102, 84, 0.14);
 }
 
+:root[data-theme="girl-pink"] {
+    --bg-primary: #fff1f6;
+    --bg-secondary: #ffdce9;
+    --bg-surface: rgba(255, 245, 250, 0.92);
+    --bg-surface-strong: #ffd9e8;
+    --card-background: #ffd9e8;
+    --content-background: #fff3f7;
+    --text-primary: #552338;
+    --text-secondary: #875067;
+    --text-muted: #ad748b;
+    --border-color: rgba(240, 106, 155, 0.25);
+    --input-background: #fff9fc;
+    --accent-color: #f06a9b;
+    --accent-secondary: #ff9fbd;
+    --success-color: #2f855a;
+    --danger-color: #c53030;
+    --shadow-color: rgba(184, 69, 116, 0.16);
+}
+
 :root[data-theme="dark"] { color-scheme: dark; }
 :root[data-theme-mode="light"] { color-scheme: light; }
 
