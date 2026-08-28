@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const DataSnapshot = require('../../../../core/data-snapshot');
 const { USER_CONFIG_DIR } = require('./user-config-paths');
+const { normalizeControlTheme } = require('./control-theme-config');
 
 const CONFIG_FILE = path.join(__dirname, '../../../../../config/config.json');
 const USER_CONFIG_FILE = path.join(USER_CONFIG_DIR, 'userconfig.json');
@@ -544,6 +545,7 @@ module.exports.getCpuAffinityConfig = () => normalizeCpuAffinityConfig(config.ge
 module.exports.createCpuAffinityChangedMessage = (cpuAffinity) => createCpuAffinityChangedMessage(cpuAffinity);
 module.exports.createCpuConfigMessage = (cpuAffinity) => createCpuConfigMessage(cpuAffinity);
 module.exports.applyCpuAffinityConfigUpdate = (options) => applyCpuAffinityConfigUpdate(options);
+module.exports.normalizeControlTheme = normalizeControlTheme;
 module.exports.getDisplayState = (ip) => userConfig.getDisplayState(ip);
 module.exports.getDisplayStateById = (displayId, legacyIp) => userConfig.getDisplayStateById(displayId, legacyIp);
 module.exports.setDisplayState = (ip, state) => userConfig.setDisplayState(ip, state);

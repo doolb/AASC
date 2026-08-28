@@ -53,6 +53,28 @@ UiTheme:
 
     bindThemeSelector():
         themeSelector.change -> apply(themeSelector.value, persistServer = true)
+
+    applyRemoteTheme(theme):
+        apply(theme, persistServer = false)
+```
+
+## 显示端主题同步伪代码
+
+```text
+DisplayTheme:
+    reuse UiTheme from ui-theme.js
+    init():
+        UiTheme.init()
+
+    onWebSocketMessage(data):
+        if data.type == controlThemeChanged:
+            UiTheme.applyRemoteTheme(data.theme)
+
+Server controlTheme update:
+    validate theme in CONTROL_THEMES
+    persist ui.controlTheme
+    broadcast { type: controlThemeChanged, theme } to display clients
+    display connection -> send current { type: controlThemeChanged, theme }
 ```
 
 ## 控件分类伪代码
@@ -91,6 +113,19 @@ MutationObserver:
 [data-theme-mode=light]:
     所有非深色主题复用浅色控件、卡片、弹窗和内容区域的对比度规则
     按钮渐变使用 accent-secondary 到 accent-color 的主题变量
+
+显示端样式:
+    html, body, mediaContainer background -> bg-primary
+    waitingMessage and fixed status text -> text-primary/text-secondary
+    mediaText background -> card-background, text -> text-primary
+    response/confirm/search/play/reminder popup background -> bg-secondary
+    popup border/accent/shadow -> accent-color/success-color/shadow-color
+    image, video, iframe and iframe internal content -> keep original content and styles
+
+显示端不透明表面:
+    connectionStatus、mediaText、voiceStatus、voiceTextDisplay、task-status 和各类临时弹窗背景 -> bg-secondary
+    不直接使用深色主题中为控制端组件设计的半透明 bg-surface-strong/card-background
+    iframe 网页和图片/视频节点保持原内容，不添加主题滤镜
 
 [data-ui-type]:
     使用语义变量绘制控件

@@ -40,3 +40,10 @@ test('服务端应提供主题读写接口并把主题写入 ui.controlTheme', (
     assert.match(serverSource, /config\.set\('ui\.controlTheme', theme\)/u);
     assert.match(configSource, /ui:\s*\{\s*controlTheme:\s*'dark'/u);
 });
+
+test('配置服务模块应能加载并导出主题规范化函数', () => {
+    const configService = require('../src/apps/server/modules/config/config-app-service');
+
+    assert.equal(configService.normalizeControlTheme('mint'), 'mint');
+    assert.equal(configService.normalizeControlTheme('unknown'), 'dark');
+});
