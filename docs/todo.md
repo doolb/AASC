@@ -2,6 +2,12 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-29][2026-08-29] 显示端文字增加半透明主题色斜向投影
+  - render-display 进度条外标签、显示端时间文本和媒体名统一使用固定白字、黑色阴影和右下方 1px 无模糊主题色斜向投影。
+  - 不支持 `color-mix()` 时回退纯色主题投影，不使用文字轮廓或元素盒子内阴影，避免矩形框和额外底部投影；进度条及条内数值保持不变。
+  - 测试：render-display 标签、显示端主题同步、旋转布局和控制端主题回归通过。
+  - 文档：`docs/design/render-display-inline-text.md`、`docs/design/control-ui-theme.md`、`docs/spec/monitor-system.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-29_render-display标签主题色半透明描边.md`。
+
 - ✅已完成 [2026-08-28][2026-08-28] 显示端媒体底色固定黑色
   - 显示端 `html/body`、媒体容器和媒体睡眠遮罩恢复固定黑色，媒体画面后方不再随控制端主题切换。
   - 连接状态、文本媒体、天气/语音弹窗和任务提示仍继续使用主题变量。
