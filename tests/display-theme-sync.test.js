@@ -22,8 +22,16 @@ test('显示端应加载共享主题并处理服务端主题通知', () => {
     assert.match(server, /displayClients\.forEach\([\s\S]*controlThemeChanged/u);
 });
 
-test('显示端 UI 应使用共享主题变量且不覆盖媒体内容', () => {
-    assert.match(displayCss, /html, body[\s\S]*background:\s*var\(--bg-primary(?:,\s*[^)]+)?\)/u);
+test('显示端媒体底色应固定为黑色，UI 控件仍使用共享主题变量', () => {
+    const pageBackground = displayCss.match(/html, body\s*\{([\s\S]*?)\}/u)?.[1] || '';
+    const mediaContainerBackground = displayCss.match(/#mediaContainer\s*\{([\s\S]*?)\}/u)?.[1] || '';
+    const mediaSleepOverlayBackground = displayCss.match(/\.sleep-overlay\s*\{([\s\S]*?)\}/u)?.[1] || '';
+
+    assert.match(pageBackground, /background:\s*#000\b/u);
+    assert.doesNotMatch(pageBackground, /var\(--bg-primary/u);
+    assert.match(mediaContainerBackground, /background:\s*#000\b/u);
+    assert.doesNotMatch(mediaContainerBackground, /var\(--bg-primary/u);
+    assert.match(mediaSleepOverlayBackground, /background:\s*#000\b/u);
     assert.match(displayCss, /#mediaText[\s\S]*background:\s*var\(--bg-secondary(?:,\s*[^)]+)?\)/u);
     assert.match(displayCss, /#mediaText[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);
     assert.match(displayCss, /#waitingMessage h2[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);

@@ -115,12 +115,17 @@ MutationObserver:
     按钮渐变使用 accent-secondary 到 accent-color 的主题变量
 
 显示端样式:
-    html, body, mediaContainer background -> bg-primary
+    html, body, mediaContainer 和 mediaSleepOverlay background -> 固定 #000，作为媒体画布底色，不随主题变化
     waitingMessage and fixed status text -> text-primary/text-secondary
     mediaText background -> card-background, text -> text-primary
     response/confirm/search/play/reminder popup background -> bg-secondary
     popup border/accent/shadow -> accent-color/success-color/shadow-color
     image, video, iframe and iframe internal content -> keep original content and styles
+
+媒体画布与主题 UI 边界:
+    媒体画布未被图片、视频或网页内容覆盖的区域保持黑色
+    主题切换只更新显示端 UI 控件和文本媒体的主题变量
+    不把 bg-primary 主题变量应用到 html/body/mediaContainer，避免浅色主题改变媒体底色
 
 显示端不透明表面:
     connectionStatus、mediaText、voiceStatus、voiceTextDisplay、task-status 和各类临时弹窗背景 -> bg-secondary

@@ -8,7 +8,8 @@ html, body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: var(--bg-primary, #000);
+    /* 媒体画布底色与主题 UI 分离，媒体未覆盖的区域始终保持黑色。 */
+    background: #000;
 }
 
 body {
@@ -27,13 +28,15 @@ body {
     justify-content: center;
     overflow: hidden;
     z-index: 1;
-    background: var(--bg-primary, #000);
+    /* 图片、视频或网页媒体之外的空白区域固定为黑色，不随控制端主题变化。 */
+    background: #000;
 }
 
 /* 睡眠遮罩只改变可见性，不改变媒体节点的布局尺寸，避免填充模式重新计算时得到 0 尺寸。 */
 .sleep-overlay {
     display: none;
-    background: var(--bg-primary, #000);
+    /* 睡眠时覆盖媒体画布，也必须保持固定黑色。 */
+    background: #000;
 }
 
 .sleep-overlay-media {
