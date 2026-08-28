@@ -127,6 +127,12 @@ MutationObserver:
     主题切换只更新显示端 UI 控件和文本媒体的主题变量
     不把 bg-primary 主题变量应用到 html/body/mediaContainer，避免浅色主题改变媒体底色
 
+显示端时间文本:
+    #timeDisplay 和 #fileNameDisplay 文字颜色 -> 固定旧版白色
+    #timeDisplay 和 #fileNameDisplay text-shadow -> 固定旧版黑色阴影
+    #timeDisplay 和 #fileNameDisplay 外描边 -> accent-color，宽度 1px
+    主题切换只更新外描边颜色，不改变文字、阴影、旋转和定位行为
+
 显示端不透明表面:
     connectionStatus、mediaText、voiceStatus、voiceTextDisplay、task-status 和各类临时弹窗背景 -> bg-secondary
     不直接使用深色主题中为控制端组件设计的半透明 bg-surface-strong/card-background

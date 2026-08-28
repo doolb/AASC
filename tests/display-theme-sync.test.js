@@ -8,6 +8,7 @@ const { test } = require('node:test');
 const root = path.join(__dirname, '../src/apps/web-mediacenter/ui/public');
 const display = fs.readFileSync(path.join(root, 'display.html'), 'utf8');
 const displayCss = fs.readFileSync(path.join(root, 'css/display.css'), 'utf8');
+const themeCss = fs.readFileSync(path.join(root, 'css/theme.css'), 'utf8');
 const server = fs.readFileSync(
     path.join(__dirname, '../src/apps/server/boot/server-app.js'),
     'utf8'
@@ -34,6 +35,15 @@ test('显示端媒体底色应固定为黑色，UI 控件仍使用共享主题�
     assert.match(mediaSleepOverlayBackground, /background:\s*#000\b/u);
     assert.match(displayCss, /#mediaText[\s\S]*background:\s*var\(--bg-secondary(?:,\s*[^)]+)?\)/u);
     assert.match(displayCss, /#mediaText[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);
+    const timeDisplay = displayCss.match(/#timeDisplay\s*\{([\s\S]*?)\}/u)?.[1] || '';
+    const fileNameDisplay = displayCss.match(/#fileNameDisplay\s*\{([\s\S]*?)\}/u)?.[1] || '';
+    assert.match(timeDisplay, /color:\s*rgba\(255,\s*255,\s*255,\s*0\.9\)/u);
+    assert.match(timeDisplay, /text-shadow:\s*2px\s+2px\s+8px\s+rgba\(0,\s*0,\s*0,\s*0\.8\)/u);
+    assert.match(timeDisplay, /-webkit-text-stroke:\s*1px\s+var\(--accent-color/u);
+    assert.match(fileNameDisplay, /color:\s*rgba\(255,\s*255,\s*255,\s*0\.8\)/u);
+    assert.match(fileNameDisplay, /text-shadow:\s*2px\s+2px\s+8px\s+rgba\(0,\s*0,\s*0,\s*0\.8\)/u);
+    assert.match(fileNameDisplay, /-webkit-text-stroke:\s*1px\s+var\(--accent-color/u);
+    assert.match(themeCss, /--accent-color:\s*#00d2ff/u);
     assert.match(displayCss, /#waitingMessage h2[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);
     assert.match(displayCss, /\.voice-response-popup[\s\S]*background:\s*var\(--bg-secondary(?:,\s*[^)]+)?\)/u);
     assert.match(displayCss, /\.voice-response-content[\s\S]*color:\s*var\(--text-primary(?:,\s*[^)]+)?\)/u);

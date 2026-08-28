@@ -230,8 +230,10 @@ body {
 #timeDisplay {
     position: fixed;
     font-size: 48px;
-    color: var(--text-primary, rgba(255, 255, 255, 0.9));
-    text-shadow: 2px 2px 8px var(--shadow-color, rgba(0, 0, 0, 0.8));
+    /* 时间文字恢复媒体主题改造前的固定白字/黑影，主题色只用于外描边。 */
+    color: rgba(255, 255, 255, 0.9);
+    -webkit-text-stroke: 1px var(--accent-color, #00d2ff);
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
     font-weight: 300;
     z-index: 100;
     font-variant-numeric: tabular-nums;
@@ -240,8 +242,10 @@ body {
 #fileNameDisplay {
     position: fixed;
     font-size: 48px;
-    color: var(--text-primary, rgba(255, 255, 255, 0.8));
-    text-shadow: 2px 2px 8px var(--shadow-color, rgba(0, 0, 0, 0.8));
+    /* 媒体名与时间保持相同的固定文字效果，只继承主题强调色描边。 */
+    color: rgba(255, 255, 255, 0.8);
+    -webkit-text-stroke: 1px var(--accent-color, #00d2ff);
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
     z-index: 100;
     max-width: 60%;
     overflow: hidden;
