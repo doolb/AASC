@@ -430,6 +430,8 @@ const assert = require('assert');
   // ---- 19. 睡眠不影响普通 TTS ----
   await page.evaluate(() => {
     activationUntil = 0;
+    // 清理前面 restoreState 播放测试留下的当前句，避免自然 ended 事件干扰本段睡眠断言。
+    stopTtsPlayback();
     // 模拟当前正在播放一条 TTS
     isPlayingTts = true;
     ttsAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';

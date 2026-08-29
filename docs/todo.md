@@ -604,3 +604,39 @@
  - ✅已完成 [2026-08-29][2026-08-29] 修复显示端监听开关无响应，删除 ASR 处理区域和语言选择，迁移全局降噪开关到声纹面板
    - 改动文件：`src/apps/web-mediacenter/ui/public/js/device-list.js`、`src/apps/web-mediacenter/ui/public/js/websocket.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/voiceprint-panel.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/display.html`、`src/apps/web-mediacenter/ui/public/js/tts.js`。
    - 测试：相关 Node 回归 14/14，正式 Display APK 构建成功。
+# Android 显示端音频
+
+## TTS 播放
+
+ - ✅已完成 [2026-08-29][2026-08-29] 修复 TTS 播放时视频被暂停及 TTS 音频卡顿
+   - TTS 作为网页唯一音频焦点 owner；视频保持画面和原有音轨，TTS 活跃期间不再执行媒体焦点恢复循环，结束后恢复原状态。
+   - 普通 TTS、文本媒体逐句 TTS 和远程文本 TTS 共用协调状态；显示端焦点契约 7/7、相关回归 37/37、`npm run build:apk` 通过。
+   - 任务文档：`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+   - 二次修复：原生焦点改为 `GAIN_TRANSIENT_MAY_DUCK`，忽略 `-3` 可 duck 回调，停止正常 `waiting/stalled` 的焦点重抢；焦点契约更新为 9/9，APK 已重新安装运行。
+
+ - ✅已完成 [2026-08-29][2026-08-29] TTS 播放期间保留视频声音
+   - 移除 TTS 协调和视频恢复分支中的网页主动静音，视频继续播放原有音轨；仍使用 `GAIN_TRANSIENT_MAY_DUCK`，允许系统自动 duck。
+   - TTS 开始和结束均不写回视频 `muted`/`volume`；普通、远程和逐句 TTS 播放前统一设置自身音量为 100%。
+   - 回归：媒体焦点及相关显示端、文本媒体、语音、睡眠测试 40/40；`npm run build:apk` 成功；APK 覆盖安装并启动 display 2，PID=17375。
+   - 文档：`docs/design/android-display.md`、`docs/design/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+ - ✅已完成 [2026-08-29][2026-08-29] 显示端视频、音频和 TTS 统一使用一个网页媒体焦点
+   - 删除独立 TTS 焦点接口；所有网页媒体统一调用 `requestAudioFocus()`/`abandonAudioFocus()`，只在没有其他网页播放意图时释放。
+   - 回归：统一焦点契约 11/11，相关显示端、文本媒体、语音、睡眠测试 41/41；`npm run build:apk` 成功；APK 覆盖安装并启动 display 2，PID=20732。
+
+ - ✅已完成 [2026-08-29][2026-08-29] 还原显示端未处理 Android 原生音频焦点
+   - 删除 APK 原生 `AudioFocusController`、`NativeBridge` 音频焦点桥接，以及网页 TTS/媒体对原生焦点的申请、释放和恢复回调。
+   - 保留 WebView 网页 TTS、视频播放、普通音频和音量设置；焦点契约 8/8、相关回归 38/38、内嵌脚本语法检查和 `git diff --check` 通过。
+   - `npm run build:apk` 成功；`adb install -r` 覆盖安装成功，display 2 启动成功，真机进程 PID=22246。
+   - 任务文档：`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+ - ✅已完成 [2026-08-29][2026-08-29] 恢复 Android Kotlin 基线代码
+   - 恢复 `NativeBridge.kt` 和 `AudioFocusController.kt` 到 Git 基线；网页端仍不主动调用原生音频焦点接口。
+   - 其他 Android Kotlin 文件没有未提交改动，未做无关恢复。
+   - 焦点契约 8/8，相关回归退出码 0；`npm run build:apk` 成功，APK 覆盖安装并启动 display 2，真机 PID=24605。
+   - 任务文档：`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+ - ✅已完成 [2026-08-29][2026-08-29] 修复网页 TTS 被其他 APK 抢占音频焦点后卡住
+   - 普通 TTS 与文本媒体逐句 TTS 保留当前网页音频和句子位置，主动申请原生焦点并在焦点恢复后继续播放。
+   - 改动：`src/apps/web-mediacenter/ui/public/display.html`、`src/apps/web-mediacenter/ui/public/js/text-media-player.js`、`tests/display-media-focus.test.js`。
+   - 构建：`npm run build:apk` 成功；真机旧签名私钥不在工作区，未卸载旧 APK。

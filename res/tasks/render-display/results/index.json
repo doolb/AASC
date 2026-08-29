@@ -17,14 +17,14 @@
       "progress": 100
     },
     {
-      "instanceId": "fc67ce52",
+      "instanceId": "3c33fd92",
       "taskName": "render-display",
       "status": "running",
-      "timestamp": 1787664990865,
+      "timestamp": 1787985801939,
       "target": "display",
       "env": "auto",
       "mode": "service",
-      "displayId": "display-n2wpk2v5",
+      "displayId": "display-umwo5k6l",
       "params": {},
       "taskType": "user",
       "builtinId": null,

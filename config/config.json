@@ -16,12 +16,17 @@
     "maxQueueLength": 8,
     "mallocTrimEnabled": true,
     "requireChinese": true,
+    "languageMode": "zh",
+    "denoise": false,
     "isolateProcess": {
       "enabled": false,
       "requestTimeoutMs": 60000,
       "autoRestart": true
     },
     "device": "display"
+  },
+  "ui": {
+    "controlTheme": "girl-pink"
   },
   "cpuAffinity": {
     "asr": {
@@ -39,7 +44,9 @@
     "enabled": false,
     "extraction": "display",
     "threshold": 0.5,
-    "multiSpeaker": false
+    "multiSpeaker": true,
+    "multiMode": "fast",
+    "speakerCount": "AUTO"
   },
   "voiceCommand": {
     "defaultWeatherCity": "Chengdu",

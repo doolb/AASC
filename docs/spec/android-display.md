@@ -18,7 +18,9 @@ getSystemStats() -> String JSON                   # 同步返回 APK 自身资�
                                                   # CPU 回退链：优先 /proc/stat 整体 CPU 两次采样差值；
                                                   #   SELinux 拒读时（部分 Android 14+ ROM）回退 /proc/self/stat 进程自身 CPU
                                                   #   （utime+stime，按 10ms/jiffy 与真实时间间隔换算百分比）
-onAudioFocusChanged(change: int)                  # 原生 AudioManager 音频焦点变化通知 WebView
+requestAudioFocus() -> boolean                     # Git 基线原生媒体音频焦点接口，当前网页不主动调用
+abandonAudioFocus() -> void                        # Git 基线释放原生媒体音频焦点接口，当前网页不主动调用
+onAudioFocusChanged(change: int)                  # Git 基线原生焦点变化通知 WebView
 ```
 
 > 截图回调机制：JS 函数传 @JavascriptInterface String 参数在 WebView 不可靠
@@ -86,18 +88,36 @@ display websocket onmessage:
     如果 media 非预期 pause 且 desiredPlaying 且未处于 sleep/playlistPause:
         短间隔调用 media.play()
         成功 -> playStateReport(isPlaying=true)
-        失败 -> 保留 desiredPlaying=true，继续等待 native audio focus 恢复通知或低频 watchdog 重试
+        失败 -> 保留 desiredPlaying=true，由网页 watchdog 重试
     控制端 play=false、睡眠、播放列表 pause:
         标记 pauseExpected，禁止自动恢复
     media 触发 play 且当前处于 sleep/deep:
         立即 pause media
-        释放 native audio focus
         清理媒体恢复定时器
     watchdog:
         sleep/deep 且 media 正在播放 -> pause media
-    NativeDisplay.onAudioFocusChanged(LOSS/GAIN):
-        LOSS -> 标记系统焦点中断，保留 desiredPlaying
-        GAIN -> 若 desiredPlaying 且媒体已暂停，重新调用 media.play()
+网页 TTS 播放:
+    playNextTts 直接设置 ttsAudio.src 并调用 ttsAudio.play
+    ttsAudio.ended -> 清理当前 item，推进 ttsQueue
+    tts stop/页面销毁 -> 清空队列并停止网页音频
+    TextMediaPlayer 当前句播放:
+        直接使用网页音频元素播放
+        仅在 ended/错误/显式 stop 后推进 sentenceIndex 或清理当前句
+
+TTS 与视频音轨协调:
+    TTS 开始且视频正在播放:
+        ttsVideoState = { active: true, wasPlaying: true }
+        不修改 mediaVideo.muted、mediaVideo.volume 或视频播放状态，允许视频音轨与 TTS 同时播放
+    普通/远程/文本媒体逐句 TTS 播放:
+        ttsAudio.volume = 1
+        直接使用网页音频元素播放，不调用 NativeDisplay 音频焦点接口
+    TTS 活跃期间视频 pause/error/watchdog:
+        保留视频播放意图，不调用 playVideoAuto，不申请媒体焦点
+    TTS 的 waiting/stalled:
+        视为网页媒体自身的缓冲状态，不调用原生焦点接口
+    TTS 队列结束/显式 stop/页面销毁:
+        ttsVideoState = null
+        wasPlaying == true 且控制端仍期望播放且视频已暂停 -> 直接恢复 mediaVideo.play()
 ```
 
 ## APK 实现（Kotlin, src/apps/android-display/）

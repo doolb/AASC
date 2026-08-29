@@ -116,11 +116,22 @@
                 if (!playlistState || !playlistState.active || !context) return;
                 if (context.listId !== playlistState.listId || context.index !== playlistState.index) return;
                 playlistNext();
+            },
+            // 文本媒体 TTS 与普通 TTS 共用网页视频音轨协调，避免逐句播放时改写视频声音。
+            onAudioPlaybackStart() {
+                textTtsPlaybackActive = true;
+                beginTtsVideoCoordination();
+            },
+            onAudioPlaybackEnd() {
+                textTtsPlaybackActive = false;
+                endTtsVideoCoordinationIfIdle();
             }
         });
         let autoTtsEnabled = true;
         let ttsQueue = [];
         let isPlayingTts = false;
+        let ttsVideoState = null;
+        let textTtsPlaybackActive = false;
         let remoteTextPlayback = null;
         let remotePrefetchedTextPlayback = null;
         let remoteTextPlaybackToken = 0;
@@ -1260,19 +1271,107 @@
         }
         
         function playTTS(text) {
-            fetch('/api/tts/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: text })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    ttsAudio.src = data.audioUrl;
-                    ttsAudio.play().catch(e => console.log('TTS播放被阻止'));
+            queueTts({ text: text });
+        }
+
+        // TTS 播放期间视频保留画面和音轨；网页不主动静音，焦点行为交由 WebView 网页媒体处理。
+        function isTtsPlaybackActive() {
+            return !!(ttsVideoState && ttsVideoState.active);
+        }
+
+        function beginTtsVideoCoordination() {
+            if (isTtsPlaybackActive()) return;
+            const hasPlayableVideo = currentMediaType === 'video' && !!mediaVideo.src;
+            ttsVideoState = {
+                active: true,
+                wasPlaying: hasPlayableVideo && !mediaVideo.paused && !mediaVideo.ended
+            };
+            // TTS 使用网页音频元素的最大音量；视频音量由页面和系统策略自行决定，不在这里改动。
+            ttsAudio.volume = 1;
+        }
+
+        function endTtsVideoCoordination() {
+            const state = ttsVideoState;
+            if (!state) return;
+            ttsVideoState = null;
+            if (!state.wasPlaying || !isMediaPlaybackExpected() || !mediaVideo.src || mediaVideo.ended || !mediaVideo.paused) return;
+            try {
+                const playResult = mediaVideo.play();
+                if (playResult && typeof playResult.catch === 'function') {
+                    playResult.catch((error) => console.warn('TTS 结束后恢复视频播放失败', error));
                 }
-            })
-            .catch(err => console.error('TTS生成失败:', err));
+            } catch (error) {
+                console.warn('TTS 结束后恢复视频播放失败', error);
+            }
+        }
+
+        function endTtsVideoCoordinationIfIdle() {
+            if (isPlayingTts || ttsQueue.length > 0 || textTtsPlaybackActive || remoteTextPlayback) return;
+            endTtsVideoCoordination();
+        }
+
+        let currentTtsItem = null;
+        let ttsPlaybackToken = 0;
+
+        function recoverTtsPlayback(reason) {
+            if (!currentTtsItem || !currentTtsItem.audioUrl || !isPlayingTts) return;
+            ttsAudio.volume = 1;
+            try {
+                const playResult = ttsAudio.play();
+                if (playResult && typeof playResult.catch === 'function') {
+                    playResult.catch((error) => {
+                        if (!currentTtsItem || !isPlayingTts) return;
+                        if (ttsAudio.error) {
+                            finishCurrentTts('error');
+                            return;
+                        }
+                        console.warn('TTS 播放失败:', reason, error);
+                    });
+                }
+            } catch (error) {
+                console.warn('TTS 播放失败:', reason, error);
+                finishCurrentTts('error');
+            }
+        }
+
+        function finishCurrentTts(status) {
+            if (!currentTtsItem) return;
+            currentTtsItem = null;
+            ttsPlaybackToken++;
+            hideTtsText();
+            isPlayingTts = false;
+            console.log('[显示端] TTS 当前句完成:', status || 'ended');
+            playNextTts();
+            endTtsVideoCoordinationIfIdle();
+        }
+
+        function stopTtsPlayback() {
+            currentTtsItem = null;
+            ttsPlaybackToken++;
+            ttsQueue = [];
+            ttsAudio.pause();
+            ttsAudio.currentTime = 0;
+            isPlayingTts = false;
+            hideTtsText();
+            endTtsVideoCoordinationIfIdle();
+        }
+
+        function startTtsAudio(item, audioUrl) {
+            if (currentTtsItem !== item || !isPlayingTts) return;
+            item.audioUrl = audioUrl;
+            ttsAudio.src = audioUrl;
+            recoverTtsPlayback('start');
+        }
+
+        function isCurrentTtsAudioSource() {
+            if (!currentTtsItem || !currentTtsItem.audioUrl) return false;
+            const elementSource = ttsAudio.getAttribute && ttsAudio.getAttribute('src');
+            if (elementSource === currentTtsItem.audioUrl) return true;
+            try {
+                return new URL(currentTtsItem.audioUrl, window.location.href).href === ttsAudio.currentSrc;
+            } catch (error) {
+                return false;
+            }
         }
         
         function playNextTts() {
@@ -1291,6 +1390,9 @@
             
             isPlayingTts = true;
             const item = ttsQueue.shift();
+            currentTtsItem = item;
+            item.playbackToken = ++ttsPlaybackToken;
+            beginTtsVideoCoordination();
             
             console.log('[显示端] 播放TTS:', item.audioUrl || item.text);
             
@@ -1299,13 +1401,7 @@
             }
             
             if (item.audioUrl) {
-                ttsAudio.src = item.audioUrl;
-                ttsAudio.play().catch(e => {
-                    console.log('TTS播放被阻止:', e.message);
-                    hideTtsText();
-                    isPlayingTts = false;
-                    playNextTts();
-                });
+                startTtsAudio(item, item.audioUrl);
             } else if (item.text) {
                 fetch('/api/tts/generate', {
                     method: 'POST',
@@ -1314,27 +1410,15 @@
                 })
                 .then(res => res.json())
                 .then(data => {
-                    if (data.status === 'success') {
-                        ttsAudio.src = data.audioUrl;
-                        ttsAudio.play().catch(e => {
-                            console.log('TTS播放被阻止');
-                            hideTtsText();
-                            isPlayingTts = false;
-                            playNextTts();
-                        });
-                    } else {
-                        isPlayingTts = false;
-                        playNextTts();
-                    }
+                    if (data.status === 'success') startTtsAudio(item, data.audioUrl);
+                    else finishCurrentTts('generate-error');
                 })
                 .catch(err => {
                     console.error('TTS生成失败:', err);
-                    isPlayingTts = false;
-                    playNextTts();
+                    finishCurrentTts('generate-error');
                 });
             } else {
-                isPlayingTts = false;
-                playNextTts();
+                finishCurrentTts('empty');
             }
         }
         
@@ -1344,17 +1428,15 @@
         }
         
         ttsAudio.addEventListener('ended', () => {
-            hideTtsText();
-            isPlayingTts = false;
-            playNextTts();
+            if (!isCurrentTtsAudioSource()) return;
+            finishCurrentTts('ended');
         });
         
         ttsAudio.addEventListener('error', () => {
-            hideTtsText();
-            isPlayingTts = false;
-            playNextTts();
+            if (!isCurrentTtsAudioSource()) return;
+            finishCurrentTts('error');
         });
-        
+
         function showTtsText(text) {
             if (voiceTextDisplay && text) {
                 voiceTextDisplay.textContent = text;
@@ -1383,11 +1465,8 @@
             } else if (data.action === 'playAudio') {
                 queueTts({ audioUrl: data.audioUrl, text: data.text });
             } else if (data.action === 'stop') {
-                ttsQueue = [];
+                stopTtsPlayback();
                 clearRemoteTextPlayback();
-                ttsAudio.pause();
-                ttsAudio.currentTime = 0;
-                isPlayingTts = false;
             } else if (data.action === 'setAutoTts') {
                 autoTtsEnabled = data.enabled;
             }
@@ -1512,6 +1591,7 @@
             ttsAudio.pause();
             ttsAudio.currentTime = 0;
             isPlayingTts = false;
+            endTtsVideoCoordinationIfIdle();
         }
 
         function playRemoteTextPlayback(data) {
@@ -1523,6 +1603,7 @@
             remoteTextPlaybackToken += 1;
             const playbackToken = remoteTextPlaybackToken;
             remoteTextPlayback = data;
+            beginTtsVideoCoordination();
             // 远程文本播报只负责发声，不改变本机文本分页状态；结束/失败后由源显示端推进句子。
             const cleanup = () => {
                 audio.removeEventListener('ended', onEnded);
@@ -1540,12 +1621,14 @@
                     return;
                 }
                 remoteTextPlayback = null;
+                endTtsVideoCoordinationIfIdle();
             };
             const onEnded = () => finishRemoteSentence('ended');
             const onError = () => finishRemoteSentence('failed');
             audio.addEventListener('ended', onEnded, { once: true });
             audio.addEventListener('error', onError, { once: true });
             audio.src = data.audioUrl;
+            audio.volume = 1;
             audio.play().catch((error) => {
                 console.warn('远程文本 TTS 播放失败', error);
                 onError();
@@ -1826,7 +1909,6 @@
             TextMediaPlayer.attachPlaylist(null);
             TextMediaPlayer.stop();
             pauseExpected = true;
-            abandonNativeAudioFocus();
             stopHtmlScroll();
             if (playlistState.timer) {
                 clearTimeout(playlistState.timer);
@@ -2118,7 +2200,6 @@
                 TextMediaPlayer.handleControl('pause');
             }
             pauseExpected = true;
-            abandonNativeAudioFocus();
             stopHtmlScroll();
             if (ps.timer) {
                 clearTimeout(ps.timer);
@@ -2181,7 +2262,6 @@
         function finishPlaylist() {
             if (!playlistState) return;
             pauseExpected = true;
-            abandonNativeAudioFocus();
             const info = {
                 listId: playlistState.listId,
                 index: playlistState.index,
@@ -2989,14 +3069,18 @@
 
         // 视频自动播放：浏览器/WebView autoplay 策略拦截有声视频（无用户手势），
         // 先 muted 播放绕过拦截，成功后取消静音（音量跟随显示端 volume）
-        function playVideoAuto(video) {
-            requestNativeAudioFocus();
+        function playVideoAuto(video, preserveMuted = false) {
+            if (isTtsPlaybackActive() && video === mediaVideo) {
+                // TTS 期间视频保持原始音轨，不再次申请媒体焦点；系统可按策略自动 duck。
+                return Promise.resolve(video.play()).then(() => true).catch(() => false);
+            }
+            const mutedBeforePlay = video.muted;
             video.muted = true;
             return video.play().then(() => {
-                video.muted = false;
+                video.muted = preserveMuted ? mutedBeforePlay : false;
                 return true;
             }).catch(e => {
-                video.muted = false;
+                video.muted = preserveMuted ? mutedBeforePlay : false;
                 console.log('自动播放被阻止');
                 return false;
             });
@@ -3004,9 +3088,9 @@
 
         // 音频自动播放沿用统一的 Promise 捕获，避免浏览器策略阻止时产生未处理 rejection。
         function playAudioAuto(audio) {
+            if (isTtsPlaybackActive()) return Promise.resolve(false);
             // WebSocket 下发不属于用户手势，先静音播放绕过 Chromium/WebView 自动播放限制，
             // 播放成功后恢复当前音量；失败时捕获 Promise，交给控制端播放按钮再次触发。
-            requestNativeAudioFocus();
             audio.muted = true;
             return audio.play().then(() => {
                 audio.muted = false;
@@ -3036,13 +3120,11 @@
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
             pauseExpected = true;
-            mediaAudioFocusInterrupted = false;
             mediaRecoveryAttempts = 0;
             if (mediaRecoveryTimer) {
                 clearTimeout(mediaRecoveryTimer);
                 mediaRecoveryTimer = null;
             }
-            abandonNativeAudioFocus();
             const previousMediaType = currentMediaType;
             currentMediaType = data.mediaType || 'image';
             mediaVideo.pause();
@@ -3362,7 +3444,6 @@
                         }
                     } else {
                         pauseExpected = true;
-                        abandonNativeAudioFocus();
                         if (mediaHtml.style.display !== 'none') {
                             // html 模式：暂停滚动（滚动位置保留）
                             stopHtmlScroll();
@@ -3450,7 +3531,6 @@
         let pauseExpected = true;    // 媒体元素的暂停是否由控制端、睡眠或媒体切换主动触发
         let mediaRecoveryTimer = null;
         let mediaRecoveryAttempts = 0;
-        let mediaAudioFocusInterrupted = false;
         const MEDIA_RECOVERY_MAX_ATTEMPTS = 5;
         const MEDIA_RECOVERY_DELAY_MS = 300;
 
@@ -3470,8 +3550,6 @@
         // 暂停媒体：视频暂停 + html 滚动暂停（图片无需处理）
         function pauseSleepMedia() {
             pauseExpected = true;
-            mediaAudioFocusInterrupted = false;
-            abandonNativeAudioFocus();
             mediaRecoveryAttempts = 0;
             if (mediaRecoveryTimer) {
                 clearTimeout(mediaRecoveryTimer);
@@ -3525,26 +3603,6 @@
             }
         }
 
-        // 请求 APK 原生层取得媒体焦点；浏览器显示端没有该桥时保持兼容。
-        function requestNativeAudioFocus() {
-            if (!window.NativeDisplay || typeof window.NativeDisplay.requestAudioFocus !== 'function') return;
-            try {
-                window.NativeDisplay.requestAudioFocus();
-            } catch (error) {
-                console.warn('申请原生音频焦点失败', error);
-            }
-        }
-
-        // 控制端明确暂停、进入睡眠或切换媒体时释放焦点，避免影响系统媒体播放。
-        function abandonNativeAudioFocus() {
-            if (!window.NativeDisplay || typeof window.NativeDisplay.abandonAudioFocus !== 'function') return;
-            try {
-                window.NativeDisplay.abandonAudioFocus();
-            } catch (error) {
-                console.warn('释放原生音频焦点失败', error);
-            }
-        }
-
         function getExpectedMediaElement() {
             if (currentMediaType === 'audio') return mediaAudio;
             if (currentMediaType === 'video') return mediaVideo;
@@ -3564,7 +3622,7 @@
             const reason = arguments[0] || 'pause';
             const media = getExpectedMediaElement();
             if (!media || !media.src || !isMediaPlaybackExpected() || pauseExpected) return;
-            if (media.ended || mediaAudioFocusInterrupted) {
+            if (media.ended) {
                 reportPlayState(true);
                 return;
             }
@@ -3625,32 +3683,12 @@
                     if (media && media.src && !media.paused) pauseSleepMedia();
                     return;
                 }
-                if (media && media.src && media.paused && !media.ended && !mediaAudioFocusInterrupted
+                if (media && media.src && media.paused && !media.ended
                     && isMediaPlaybackExpected() && !pauseExpected) {
                     recoverUnexpectedMediaPause('watchdog');
                 }
             }, 1000);
         }
-
-        // 原生焦点丢失只记录中断，焦点恢复后按控制端期望状态再次尝试播放。
-        window.onNativeAudioFocusChanged = function(change) {
-            const code = Number(change);
-            if (code < 0) {
-                mediaAudioFocusInterrupted = true;
-                // 焦点丢失期间不与系统媒体反复争抢；服务器仍保留控制端期望的播放状态。
-                if (isMediaPlaybackExpected()) reportPlayState(true);
-                return;
-            }
-            if (mediaAudioFocusInterrupted) {
-                mediaAudioFocusInterrupted = false;
-                mediaRecoveryAttempts = 0;
-                if (mediaRecoveryTimer) {
-                    clearTimeout(mediaRecoveryTimer);
-                    mediaRecoveryTimer = null;
-                }
-                recoverUnexpectedMediaPause('audioFocusGain');
-            }
-        };
 
         installMediaPlaybackStateMonitor();
 
@@ -4433,12 +4471,8 @@
 
                 // 语音播放能力关闭 → 停止 TTS，清空队列
                 if (!data.capabilities.voicePlayback) {
-                    ttsQueue = [];
+                    stopTtsPlayback();
                     clearRemoteTextPlayback();
-                    ttsAudio.pause();
-                    ttsAudio.currentTime = 0;
-                    isPlayingTts = false;
-                    voiceTextDisplay.className = 'voice-text-hidden';
                 }
 
                 // 语音录音能力关闭 → 停止录音
@@ -5071,7 +5105,6 @@
                 } else {
                     mediaIsPlaying = false;
                     pauseExpected = true;
-                    abandonNativeAudioFocus();
                     mediaVideo.pause();
                     reportPlayState(false);
                 }

@@ -345,6 +345,32 @@ switch:
     localTtsEnabled=true → ready?上报 true : ensureNativeTtsModel()
     localTtsEnabled=false → nativeTtsReady=false + 上报 false
   ttsGenerate: handleTtsGenerate(data)
+
+网页 TTS 播放与焦点恢复:
+    playNextTts:
+      当前存在 item 且未 stop -> 直接播放网页 ttsAudio
+      ttsAudio.src = item.audioUrl
+      ttsAudio.play()
+    ttsAudio.pause/stalled/waiting:
+      若不是 stop/ended/error -> 保留 current item 和 currentTime
+      网页播放器按自身媒体状态处理暂停，不调用原生焦点接口
+    tts ended:
+      current item=null，推进 playNextTts
+    tts stop/页面销毁:
+      清空队列并停止网页音频
+    TextMediaPlayer 逐句音频:
+      保留网页播放器自身的 playbackId/sentenceIndex，不重复生成当前 WAV
+    TTS 开始时记录 mediaVideo.wasPlaying
+    TTS 活跃期间 mediaVideo 继续播放，网页不主动修改 muted/volume；系统按 WebView 默认策略处理混音
+    普通、远程和逐句 TTS 播放前设置 ttsAudio.volume = 1
+    视频、普通音频和 TTS 均由 WebView 网页媒体自行处理焦点
+    不调用任何原生音频焦点接口
+    TTS 队列结束或 stop -> 不写回 mediaVideo 音频属性；仅原来播放且控制端仍期望播放且视频已暂停时恢复 video.play()
+    TTS 活跃期间视频恢复分支不得调用原生焦点接口
+    APK Kotlin 层恢复 Git 基线的 Native AudioFocusRequest 和 AudioManager.OnAudioFocusChangeListener
+    当前网页不调用 NativeDisplay 音频焦点接口，也不接收原生焦点回调
+    ttsAudio waiting/stalled:
+      由 WebView 网页媒体自身处理
 ```
 
 ## 服务器（server-app.js）

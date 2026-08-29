@@ -72,6 +72,25 @@
             if (typeof options.send === 'function') options.send(message);
         };
 
+        // 通知显示页当前逐句 TTS 的生命周期，使普通 TTS、文本 TTS 共用音频焦点协调。
+        function notifyAudioPlaybackStart() {
+            if (typeof options.onAudioPlaybackStart !== 'function') return;
+            try {
+                options.onAudioPlaybackStart();
+            } catch (error) {
+                console.warn('通知文本 TTS 开始失败', error);
+            }
+        }
+
+        function notifyAudioPlaybackEnd() {
+            if (typeof options.onAudioPlaybackEnd !== 'function') return;
+            try {
+                options.onAudioPlaybackEnd();
+            } catch (error) {
+                console.warn('通知文本 TTS 结束失败', error);
+            }
+        }
+
         function getFontPixels() {
             return options.fontSize || FONT_SIZE_MAP[style.fontSize];
         }
@@ -95,6 +114,23 @@
             if (noVoiceFallbackTimer !== null) {
                 clearTimeout(noVoiceFallbackTimer);
                 noVoiceFallbackTimer = null;
+            }
+        }
+
+        function recoverAudioPlayback(reason = 'manual') {
+            const audio = activeAudio;
+            if (state !== 'playing' || !audio) return;
+            audio.volume = 1;
+            try {
+                const playResult = audio.play();
+                if (playResult && typeof playResult.catch === 'function') {
+                    playResult.catch((error) => {
+                        if (state !== 'playing' || activeAudio !== audio) return;
+                        console.warn('文本 TTS 播放失败', reason, error);
+                    });
+                }
+            } catch (error) {
+                console.warn('文本 TTS 播放失败', reason, error);
             }
         }
 
@@ -371,6 +407,7 @@
 
         function clearAudio() {
             const audio = getAudio();
+            if (activeAudio) notifyAudioPlaybackEnd();
             activeAudio = null;
             if (!audio) return;
             try {
@@ -486,15 +523,12 @@
                 return;
             }
             activeAudio = audio;
+            notifyAudioPlaybackStart();
             audio.src = data.audioUrl;
             audio.onended = finishCurrentSentence;
             audio.onerror = finishCurrentSentence;
-            const playResult = audio.play();
+            recoverAudioPlayback('start');
             requestPrefetchSentence();
-            playResult.catch((error) => {
-                console.warn('文本 TTS 播放失败，跳过当前句', error);
-                finishCurrentSentence();
-            });
         }
 
         function consumePrefetchedSentence() {
@@ -567,6 +601,7 @@
         function finishCurrentSentence() {
             if (state !== 'playing') return;
             requestPending = false;
+            if (activeAudio) notifyAudioPlaybackEnd();
             activeAudio = null;
             remoteActiveSentence = null;
             sentenceIndex += 1;
@@ -650,7 +685,7 @@
                     }
                     if (state === 'paused' && activeAudio) {
                         state = 'playing';
-                        activeAudio.play().catch((error) => console.warn('恢复文本 TTS 失败', error));
+                        recoverAudioPlayback('manual-play');
                         emitProgress();
                         return;
                     }
@@ -794,6 +829,7 @@
             handleTtsError,
             handleTtsReady,
             handleTtsFinished,
+            recoverAudioPlayback,
             applyStyle,
             loadRoute(route) { voiceRoute = normalizeRoute(route); },
             attachPlaylist(context) { playlistContext = context || null; },

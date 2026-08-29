@@ -4,10 +4,58 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 还原显示端未处理 Android 原生音频焦点
+  - 删除 `AudioFocusController`、`NativeBridge` 音频焦点接口及 display.html 的原生焦点申请、释放、回调恢复逻辑。
+  - 保留网页 TTS、视频、普通音频和 TTS 100% 音量设置；网页媒体焦点交由 WebView/Android 默认行为处理。
+  - 验证：焦点回退契约 8/8，相关显示端/文本媒体/语音/睡眠回归 38/38，内嵌脚本语法检查和 `git diff --check` 通过；APK 构建、覆盖安装和 display 2 启动成功，PID=22246。
+  - 文档：`docs/design/android-display.md`、`docs/design/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+- ✅ [2026-08-29] 恢复 Android Kotlin 基线代码
+  - 恢复 `NativeBridge.kt` 和 `AudioFocusController.kt` 到 Git 基线，重新保留原生音频焦点桥接口。
+  - 网页端仍不主动调用原生音频焦点，避免实际播放流程重新申请焦点。
+  - 验证：焦点契约 8/8，相关回归退出码 0，APK 构建、覆盖安装和 display 2 启动成功，PID=24605。
+
+- ✅ [2026-08-29] 显示端网页媒体统一使用一个音频焦点
+  - 视频、普通音频和 TTS 统一使用 `requestAudioFocus()`/`abandonAudioFocus()`，删除独立 TTS 焦点接口和 owner 分流。
+  - 统一焦点只在显示端没有其他网页媒体播放意图时释放；TTS 仍保持网页音量 100%，视频音频属性不被 TTS 修改。
+  - 验证：统一焦点契约 11/11，相关显示端、文本媒体、语音、睡眠回归 41/41；APK 构建、覆盖安装和 display 2 启动成功。
+  - 文档：`docs/design/android-display.md`、`docs/design/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+- ✅ [2026-08-29] TTS 音量固定为 100%，不修改视频声音
+  - 普通、远程和文本媒体逐句 TTS 播放前统一设置网页 TTS 音频 `volume = 1`。
+  - TTS 开始和结束均不修改视频 `muted`、`volume`；视频保持原有声音，结束后仅按播放意图直接恢复 `video.play()`。
+  - 验证：显示端媒体焦点测试 10/10；相关显示端、文本媒体、语音、睡眠回归 40/40；APK 重新构建安装验证。
+  - 文档：`docs/design/android-display.md`、`docs/design/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+- ✅ [2026-08-29] TTS 播放期间保留视频声音
+  - 移除显示端 TTS 协调期间对视频的网页主动静音，视频继续播放原有音轨；原生仍使用 `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`，系统可自动降低视频音量。
+  - 保留视频 `muted`/`volume` 状态记录和 TTS 结束后的异步恢复校正，避免播放恢复流程覆盖视频音量。
+  - 验证：显示端媒体焦点及相关显示端/文本媒体/语音/睡眠回归 40/40；`npm run build:apk` 成功；真机覆盖安装并启动 display 2 成功。
+  - 文档：`docs/design/android-display.md`、`docs/design/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
 - ✅ [2026-08-29] 修复 render-display 设备名左对齐
   - 进度条外标签在固定宽度内统一左对齐，修复 `arch0` 与 `SM-N...` 等不同长度设备名起点不一致的问题。
   - 保留原有标签宽度、进度条位置和显示文本，不添加前导空格；验证标签、旋转布局测试通过。
   - 文档：`docs/design/render-display-inline-text.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-29_render-display设备名左对齐.md`。
+
+- ✅ [2026-08-29] 修正显示端 TTS 焦点循环和视频暂停
+  - 真机日志确认 Chromium `GAIN` 与 APK 原生 `GAIN` 互相触发，每约 150ms 形成 `req=1/req=3` 循环；网页错误处理 `-3` 可 duck 回调是主要原因。
+  - APK 原生焦点改为 `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`；网页只对 `-1/-2` 恢复，正常 `waiting/stalled` 不再反复申请焦点。
+  - 验证：焦点契约 9/9、页面脚本语法检查通过；Debug APK 构建、覆盖安装和 display 2 启动成功，`dumpsys audio` 未再出现焦点交替循环。
+  - 文档：`docs/design/android-display.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+- ✅ [2026-08-29] 修复 Android 显示端 TTS 与视频音频焦点竞争
+  - TTS 播放期间由 TTS 持有唯一网页/原生焦点；当前视频只保留画面并临时静音，不再与 TTS 反复申请、释放或恢复媒体焦点。
+  - 普通 TTS、文本媒体逐句 TTS、远程文本 TTS 统一接入；TTS 结束或停止后恢复视频原始静音和播放状态。
+  - 验证：显示端焦点契约 7/7、相关显示端/文本媒体/语音/睡眠回归 37/37，`npm run build:apk` 成功。
+  - 外部 APK 视频焦点抢占未能稳定自动复现，已完成网页焦点竞争和恢复路径验证。
+  - 文档：`docs/design/android-display.md`、`docs/design/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
+
+- ✅ [2026-08-29] 修复 Android 显示端网页 TTS 被其他 APK 抢占焦点后卡住
+  - 普通 TTS 和文本媒体逐句 TTS 播放前主动申请原生音频焦点；焦点丢失、网页音频 `pause/stalled/waiting` 时保留当前句和播放位置，立即恢复并以 150ms 单飞定时器重试。
+  - 显式停止、正常结束、切页和错误会取消恢复任务，不会因迟到焦点事件误播或跳过队列。
+  - 验证：显示端焦点契约 6/6、文本媒体/集成回归 25/25、APK 构建通过；真机旧签名私钥缺失，未卸载现有 APK。
+  - 文档：`docs/design/android-display.md`、`docs/design/android-native-tts.md`、`docs/spec/android-display.md`、`docs/spec/android-native-tts.md`、`docs/task/2026-08-29_显示端网页TTS外部焦点主动恢复.md`。
 
 - ✅ [2026-08-29] 接入显示端 CPU 拓扑回报与 TTS 双路生成
   - Display APK 回报实际 CPU topology、ASR policy 和 TTS policy，服务端按显示端状态保存并限制 TTS 生成并发。
