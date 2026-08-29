@@ -2,6 +2,42 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-29][2026-08-29] 调整浅色主题大卡片使用 bg-surface
+  - 大卡片 `.section` 改用略微调深后的 `bg-surface`；小卡片继续使用 `card-background`，弹窗保持 `bg-surface-strong`。
+  - 测试：主题卡片层级测试、主题回归测试和 `git diff --check` 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-29_浅色主题大卡片改用bg-surface.md`。
+
+- ✅已完成 [2026-08-29][2026-08-29] 降低浅色主题大卡片背景亮度
+  - 大卡片 `.section` 改用 `bg-secondary`，避免大面积近白；小卡片和弹窗继续使用原有主题变量。
+  - 测试：主题卡片层级测试、主题回归测试和 `git diff --check` 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-29_浅色主题大卡片背景降低亮度.md`。
+
+- ✅已完成 [2026-08-29][2026-08-29] 修复浅色主题大小卡片背景层级
+  - 大卡片 `.section` 使用 `bg-surface`，小卡片 `.control-item` 使用 `card-background`，恢复浅色主题下的层级对比；任务卡片、媒体条目和弹窗保持原语义。
+  - 测试：主题卡片层级测试及 UI 主题回归通过，`git diff --check` 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-29_浅色主题大小卡片层级对比.md`。
+
+- ✅已完成 [2026-08-29][2026-08-29] 调整媒体播放音量滑条布局
+  - 主显示控制区的音量滑条移动到媒体播放进度条下面，保留原有 DOM id、事件处理和音量协议；快捷控制面板不变。
+  - 测试：媒体控制布局断言、页面脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/control.md`、`docs/spec/upload.md`、`docs/task/2026-08-29_媒体播放音量滑条布局调整.md`。
+
+- ✅已完成 [2026-08-29][2026-08-29] 增加服务端语音识别和语音生成独立开关，关闭后不调用服务器功能
+  - 控制端声纹面板增加两个独立开关；关闭后对应服务端按钮禁用，当前服务端设备自动切换到显示端，无显示端能力时不回退服务器。
+  - 测试：服务端语音开关测试 3/3 通过，相关 ASR/TTS、显示端和 UI 回归测试通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_服务器ASR_TTS开关.md`。
+
+- ✅已完成 [2026-08-29][2026-08-29] 修复设备列表监听开关无法关闭并移动语音设备选项
+  - 监听复选框绑定 `change` 事件并复用 `updateCapability`；语音识别设备和语音生成设备选项移动到声纹面板，保留原配置接口和 DOM id。
+  - 测试：显示端监听、显示列表状态、声纹选项和 UI 回归 26/26 通过；脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_修复设备列表监听开关无法关闭.md`。
+
+- ✅已完成 [2026-08-29][2026-08-29] 显示端 ASR 统一公共入口与提供端选择
+  - 浏览器和录音 Android 显示端统一采集 PCM/WAV 并提交 `/api/asr/recognize`；保留“服务端/显示端”选择，显示端模式由服务端按连接顺序转发给第一个 `voiceRecognition=true` 的提供端。
+  - 录音端不直接调用自身 ASR；APK 仅在被选为提供端时使用原生 ASR，未对任何 IP 设置优先级。
+  - 测试：显示端监听契约 27/27、ASR/Android/主题相关回归 45/45，`zh.wav` 公共接口识别成功，显示端脚本语法检查通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/design/android-native-asr.md`、`docs/spec/android-native-asr.md`、`docs/task/2026-08-29_显示端ASR统一服务端路径.md`。
+
 - ✅已完成 [2026-08-29][2026-08-29] render-display 设备名左对齐
   - 保留设备名固定宽度和进度条位置，条外标签改为左对齐；`arch0` 与 `SM-N...` 从同一左边缘开始显示，不添加前导空格。
   - 测试：render-display 标签 2/2、旋转布局 1/1 通过，脚本语法检查和 `git diff --check` 通过。
@@ -600,6 +636,14 @@
 # 当前任务
 
 ## 控制端语音配置
+
+ - ✅已完成 [2026-08-29][2026-08-29] 修复 192.168.1.39 显示端 ASR 能力状态误报不可用
+   - 异步 ASR 检查完成后补发 `voiceStatus` 和 `capabilities.voiceRecognition`，避免初始 false 状态长期留在控制端。
+   - 测试：监听状态/回传契约 19/19，显示列表、语音会话和 WebSocket 重连 7/7，显示端脚本语法检查通过；详细任务见 `docs/task/2026-08-29_显示端ASR能力状态回传修复.md`。
+
+ - ✅已完成 [2026-08-29][2026-08-29] 回传显示端所有有效识别文字并只显示最新一条
+   - 声纹未匹配的文字也广播到控制端，但不进入唤醒、对话或命令处理；每个显示端仍只保留最新识别结果。
+   - 测试：监听状态、显示列表、语音会话、监听回传和 WebSocket 重连 7/7 通过；详细任务见 `docs/task/2026-08-29_显示端识别结果回传最新文本.md`。
 
  - ✅已完成 [2026-08-29][2026-08-29] 修复显示端监听开关无响应，删除 ASR 处理区域和语言选择，迁移全局降噪开关到声纹面板
    - 改动文件：`src/apps/web-mediacenter/ui/public/js/device-list.js`、`src/apps/web-mediacenter/ui/public/js/websocket.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/voiceprint-panel.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/display.html`、`src/apps/web-mediacenter/ui/public/js/tts.js`。

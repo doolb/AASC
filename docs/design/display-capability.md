@@ -18,7 +18,7 @@
 |------|----------|----------|
 | 显示端A：有扬声器、无麦克风 | 收到录音指令但无法执行 | 不发送录音指令给A |
 | 显示端B：有麦克风、无扬声器 | 收到TTS播放但无法播放 | 不发送TTS给B |
-| 显示端A：有本地ASR能力 | 与B同等对待 | 优先使用A进行语音识别 |
+| 显示端A：有本地ASR能力 | 与B同等对待 | 显示端模式按当前连接顺序选择第一个可用提供端 |
 | 子显示端（纯语音） | 收到媒体渲染指令 | 只收到语音相关指令 |
 
 ## 2. 显示端能力定义
@@ -30,8 +30,12 @@
 | `media-rendering` | 媒体渲染 | 能显示图片/视频 | 默认 true，子显示端为 false |
 | `voice-playback` | 语音播放 | 能播放TTS音频 | 浏览器检测 AudioContext / 子显示端默认 true |
 | `voice-recording` | 语音录音 | 能录制音频 | 浏览器检测 getUserMedia / 子显示端默认 true |
-| `voice-recognition` | 语音识别 | 能进行本地ASR | 检测 sherpa-onnx-wasm 可用性 / 服务端ASR可用性 |
+| `voice-recognition` | 语音识别提供端 | 可被服务器选作 ASR 提供端 | Android 原生模型状态或控制端能力配置 |
 | `display-text` | 文本显示 | 能显示文字覆盖层 | 默认 true，子显示端为 false |
+
+### 2.1.1 ASR 能力归属
+
+`voiceRecognition` 表示该显示端是否可以作为服务器选择的 ASR 提供端：Android 显示端由原生模型状态决定，普通浏览器显示端通常为 false。`voiceRecording` 仍作为每个显示端的监听开关由控制端管理；录音显示端是否可用由服务端公共 ASR 状态决定。
 
 ### 2.2 能力数据结构
 
@@ -64,7 +68,7 @@ interface DisplayCapabilities {
 检测浏览器能力:
     - AudioContext → voicePlayback
     - getUserMedia → voiceRecording
-    - sherpa-onnx-wasm → voiceRecognition
+    - Android 原生 ASR 模型状态 → voiceRecognition
     - 非子显示端 → mediaRendering, displayText
     ↓
 发送 capabilities 消息到服务端
@@ -99,7 +103,7 @@ interface DisplayCapabilities {
     mediaRendering = false
     voicePlayback = true
     voiceRecording = true
-    voiceRecognition = true (服务端ASR可用时)
+    voiceRecognition = true (本显示端作为 ASR 提供端可用时)
     displayText = false
 ```
 

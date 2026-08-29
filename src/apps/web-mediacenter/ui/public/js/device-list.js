@@ -861,6 +861,11 @@ const DeviceList = {
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.checked = capabilities.voiceRecording === true;
+        input.addEventListener('change', (event) => {
+            // 监听开关属于设备列表内的独立控件，避免同时触发设备条目选择。
+            event.stopPropagation();
+            this.updateCapability(display.id, 'voiceRecording', event.target.checked);
+        });
         const labelText = document.createElement('span');
         labelText.textContent = '🎙️ 监听';
         label.append(input, labelText);

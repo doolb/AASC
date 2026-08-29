@@ -24,7 +24,10 @@
             document.getElementById('vpMultiModeSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpSpeakerCountSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpExtractionSel').addEventListener('change', () => this.saveConfig());
+            document.getElementById('serverAsrEnabledCheck').addEventListener('change', () => this.saveServerVoiceConfig());
+            document.getElementById('serverTtsEnabledCheck').addEventListener('change', () => this.saveServerVoiceConfig());
             this.loadConfig();
+            this.loadServerVoiceConfig();
             this.refreshList();
             this.bindRemoveDelegation();
         },
@@ -57,6 +60,29 @@
             } catch (e) { console.warn('加载声纹配置失败:', e); }
         },
 
+        applyServerVoiceConfig(data) {
+            if (!data || data.status && data.status !== 'success') return;
+            const asrEnabled = data.asrEnabled !== false;
+            const ttsEnabled = data.ttsEnabled !== false;
+            const asrCheck = document.getElementById('serverAsrEnabledCheck');
+            const ttsCheck = document.getElementById('serverTtsEnabledCheck');
+            if (asrCheck) asrCheck.checked = asrEnabled;
+            if (ttsCheck) ttsCheck.checked = ttsEnabled;
+            window.AsrDevice?.handleServerEnabledChanged(asrEnabled);
+            window.TtsDevice?.handleServerEnabledChanged(ttsEnabled);
+            if (data.asrDevice) window.AsrDevice?.handleDeviceChanged(data.asrDevice);
+            if (data.ttsDevice) window.TtsDevice?.handleDeviceChanged(data.ttsDevice);
+        },
+
+        async loadServerVoiceConfig() {
+            try {
+                const response = await fetch('/api/config/serverVoice');
+                const data = await response.json();
+                if (data.status !== 'success') return;
+                this.applyServerVoiceConfig(data);
+            } catch (e) { console.warn('加载服务器语音开关失败:', e); }
+        },
+
         async saveConfig() {
             const body = {
                 enabled: document.getElementById('vpEnabledCheck').checked,
@@ -73,6 +99,27 @@
                     body: JSON.stringify(body)
                 });
             } catch (e) { console.warn('保存声纹配置失败:', e); }
+        },
+
+        async saveServerVoiceConfig() {
+            const asrEnabled = document.getElementById('serverAsrEnabledCheck').checked;
+            const ttsEnabled = document.getElementById('serverTtsEnabledCheck').checked;
+            try {
+                const response = await fetch('/api/config/serverVoice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ asrEnabled, ttsEnabled })
+                });
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    window.showToast?.(data.message || '服务器语音开关保存失败', 'error');
+                    return;
+                }
+                this.applyServerVoiceConfig(data);
+                window.showToast?.('服务器语音开关已更新', 'success');
+            } catch (e) {
+                window.showToast?.('服务器语音开关保存失败: ' + e.message, 'error');
+            }
         },
 
         async toggleRecord() {

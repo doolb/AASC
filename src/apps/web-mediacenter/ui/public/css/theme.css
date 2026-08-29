@@ -21,7 +21,7 @@
 :root[data-theme="light"] {
     --bg-primary: #f4f7fb;
     --bg-secondary: #e7edf6;
-    --bg-surface: rgba(255, 255, 255, 0.86);
+    --bg-surface: rgba(255, 255, 255, 0.78);
     --bg-surface-strong: #eaf4ff;
     --card-background: #eaf4ff;
     --content-background: #f2f8ff;
@@ -40,7 +40,7 @@
 :root[data-theme="warm"] {
     --bg-primary: #fff9ed;
     --bg-secondary: #fff0c9;
-    --bg-surface: rgba(255, 250, 235, 0.9);
+    --bg-surface: rgba(255, 250, 235, 0.82);
     --bg-surface-strong: #fff1cc;
     --card-background: #fff1cc;
     --content-background: #fff8e8;
@@ -59,7 +59,7 @@
 :root[data-theme="pink"] {
     --bg-primary: #fff5f8;
     --bg-secondary: #ffe7ef;
-    --bg-surface: rgba(255, 247, 250, 0.9);
+    --bg-surface: rgba(255, 247, 250, 0.82);
     --bg-surface-strong: #ffeaf1;
     --card-background: #ffeaf1;
     --content-background: #fff4f7;
@@ -78,7 +78,7 @@
 :root[data-theme="lavender-yellow"] {
     --bg-primary: #faf7ff;
     --bg-secondary: #f3eaff;
-    --bg-surface: rgba(252, 249, 255, 0.9);
+    --bg-surface: rgba(252, 249, 255, 0.82);
     --bg-surface-strong: #fff7d6;
     --card-background: #fff7d6;
     --content-background: #fffaf0;
@@ -97,7 +97,7 @@
 :root[data-theme="red-blue"] {
     --bg-primary: #f5f8ff;
     --bg-secondary: #edf2ff;
-    --bg-surface: rgba(248, 250, 255, 0.9);
+    --bg-surface: rgba(248, 250, 255, 0.82);
     --bg-surface-strong: #e8f0ff;
     --card-background: #e8f0ff;
     --content-background: #f7f9ff;
@@ -116,7 +116,7 @@
 :root[data-theme="gold"] {
     --bg-primary: #fffaf0;
     --bg-secondary: #f8e6b0;
-    --bg-surface: rgba(255, 252, 241, 0.9);
+    --bg-surface: rgba(255, 252, 241, 0.82);
     --bg-surface-strong: #fff1c7;
     --card-background: #fff1c7;
     --content-background: #fff8df;
@@ -135,7 +135,7 @@
 :root[data-theme="mint"] {
     --bg-primary: #f1fbf8;
     --bg-secondary: #dff5ee;
-    --bg-surface: rgba(247, 255, 252, 0.9);
+    --bg-surface: rgba(247, 255, 252, 0.82);
     --bg-surface-strong: #e2f7ef;
     --card-background: #e2f7ef;
     --content-background: #f3fcf8;
@@ -154,7 +154,7 @@
 :root[data-theme="ocean"] {
     --bg-primary: #eff8ff;
     --bg-secondary: #dceeff;
-    --bg-surface: rgba(247, 252, 255, 0.9);
+    --bg-surface: rgba(247, 252, 255, 0.82);
     --bg-surface-strong: #e3f1ff;
     --card-background: #e3f1ff;
     --content-background: #f2f9ff;
@@ -173,7 +173,7 @@
 :root[data-theme="forest"] {
     --bg-primary: #f3faf4;
     --bg-secondary: #e0f0e1;
-    --bg-surface: rgba(248, 253, 248, 0.9);
+    --bg-surface: rgba(248, 253, 248, 0.82);
     --bg-surface-strong: #e4f3e3;
     --card-background: #e4f3e3;
     --content-background: #f4fbf3;
@@ -192,7 +192,7 @@
 :root[data-theme="slate"] {
     --bg-primary: #f4f6f8;
     --bg-secondary: #e5e9ee;
-    --bg-surface: rgba(250, 251, 252, 0.9);
+    --bg-surface: rgba(250, 251, 252, 0.82);
     --bg-surface-strong: #e9edf2;
     --card-background: #e9edf2;
     --content-background: #f5f7f9;
@@ -211,7 +211,7 @@
 :root[data-theme="algae-salt"] {
     --bg-primary: #f5fbf8;
     --bg-secondary: #e6f3ed;
-    --bg-surface: rgba(250, 255, 252, 0.92);
+    --bg-surface: rgba(250, 255, 252, 0.84);
     --bg-surface-strong: #e8f6f0;
     --card-background: #e8f6f0;
     --content-background: #f3faf7;
@@ -230,7 +230,7 @@
 :root[data-theme="girl-pink"] {
     --bg-primary: #fff1f6;
     --bg-secondary: #ffdce9;
-    --bg-surface: rgba(255, 245, 250, 0.92);
+    --bg-surface: rgba(255, 245, 250, 0.84);
     --bg-surface-strong: #ffd9e8;
     --card-background: #ffd9e8;
     --content-background: #fff3f7;
@@ -249,7 +249,7 @@
 :root[data-theme="rose-gold"] {
     --bg-primary: #fff9f6;
     --bg-secondary: #f8e5df;
-    --bg-surface: rgba(255, 251, 249, 0.92);
+    --bg-surface: rgba(255, 251, 249, 0.84);
     --bg-surface-strong: #f9e8e1;
     --card-background: #f9e8e1;
     --content-background: #fff7f3;
@@ -268,7 +268,7 @@
 :root[data-theme="new-year-red"] {
     --bg-primary: #fff8f2;
     --bg-secondary: #fbe1d5;
-    --bg-surface: rgba(255, 250, 246, 0.92);
+    --bg-surface: rgba(255, 250, 246, 0.84);
     --bg-surface-strong: #fff0e7;
     --card-background: #fff0e7;
     --content-background: #fff8f2;
@@ -313,8 +313,16 @@
     border-color: var(--border-color);
 }
 
-:root[data-theme-mode="light"] .section,
-:root[data-theme-mode="light"] .control-item,
+:root[data-theme-mode="light"] .section {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+:root[data-theme-mode="light"] .control-item {
+    background: var(--card-background);
+    color: var(--text-primary);
+}
+
 :root[data-theme-mode="light"] .media-library-container,
 :root[data-theme-mode="light"] .task-card,
 :root[data-theme-mode="light"] .chat-container,

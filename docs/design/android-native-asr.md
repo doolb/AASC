@@ -2,9 +2,7 @@
 
 ## 概述
 
-在现有 `android-display` APK 中集成 **sherpa-onnx 官方 Android AAR**，原生加载 SenseVoice Small int8 模型（与服务器端同一份模型文件），替代 display.html 里的浏览器 WASM ASR（`sherpa-asr.js`），解决 WASM 推理慢、占内存高的体验问题。
-
-核心价值：APK 作为"原生识别引擎"接入**现有服务器中转流程**（`asr.device='display'` 时的 `asrAudio`/`asrResult` 协议），服务器代码与调度逻辑基本不变，浏览器环境行为完全不受影响。
+在现有 `android-display` APK 中集成 **sherpa-onnx 官方 Android AAR**，作为服务器选择“显示端”时的 ASR 提供端。录音显示端仍只提交服务端公共 `/api/asr/recognize`，不会直接调用自己的 ASR。
 
 ## 需求背景
 
@@ -20,14 +18,14 @@
 
 1. APK 原生运行 SenseVoice int8（`model.int8.onnx`，约 234MB），识别性能显著优于 WASM
 2. 模型**需要识别时自动下载**：首次需要时从 AASC 服务器拉取，APK 安装包保持小体积
-3. 识别路径**统一服务器中转**：音频先上传服务器，服务器按 `asr.device` 设置分发（`display` 时经 WS 回本机原生识别）
-4. 录音方式不变：沿用现有 `getUserMedia` + `MediaRecorder`（APK 补权限即可），PCM 解码在 JS 侧用 WebAudio 完成
+3. 识别路径**统一服务器入口**：音频先上传公共 `/api/asr/recognize`；服务端模式由服务器识别，显示端模式按连接顺序转发给第一个可用 Android ASR 提供端
+4. 录音端使用 `getUserMedia` + `PcmAudioCapture` 封装原始 WAV；仅被服务器选中的 APK 提供端调用原生 ASR
 
 ### 约束
 
 - 显示端设备：Android 7+（minSdk=24 已满足，sherpa-onnx AAR 兼容）
 - 服务器中转协议（`asrAudio`/`asrResult`/`voiceInput`）零改动；仅新增模型下载接口
-- display.html 渐进改造：检测到原生桥才走原生路径，浏览器访问行为完全不变
+- 录音显示端不直接调用原生 ASR；被服务端选中的 Android ASR 提供端处理 `asrAudio` 并回传 `asrResult`
 - 原生桥接口契约：**只收解码后的裸 PCM**（16kHz mono s16le base64），容器解码放 JS 侧 WebAudio
 - 不做本地流式识别上屏（统一服务器中转，不做"本机直识别"双路径）
 
@@ -129,47 +127,24 @@ ASR 从单个全局 `OfflineRecognizer` 改为 `AsrEnginePool`。池大小等于
 
 **5.1 能力探测 `detectCapabilities`**
 - `voiceRecording`：现有 getUserMedia 探测不变（APK 补权限后自然通过）
-- `voiceRecognition`：APK 下由 `NativeDisplay.asrStatus()` 决定
-  - `ready` → true
-  - `not_ready` → 触发 `asrEnsureModel()`，先报 false；`onNativeAsrModel({state:'ready'})` 后重新探测并上报 true（服务器 `findDisplayWithAsr` 随即选中它）
+- `voiceRecognition`：表示显示端可作为服务器 ASR 提供端；Android 由原生模型状态决定，普通浏览器显示端为 false
+- 录音显示端的公共 ASR 可用性由 `/api/asr/status` 单独决定，不与 `voiceRecognition` 混用
 
-**5.2 跳过 WASM 加载（性能核心）**
-- `checkAsrStatus`/`initLocalAsr`/`forceInitLocalAsr` 开头判断：原生 ASR 可用直接返回
-- 不再加载 234MB WASM，不走 `startStreaming` 本地流式
-- `startVoiceRecording` 因 `localAsrAvailable=false` 自动落到现有 `MediaRecorder → POST /api/asr/recognize` 路径，录音代码零改动
+**5.2 统一服务端入口与显示端提供者**
+- `checkAsrStatus` 请求 `/api/asr/status`，决定录音显示端是否可以启动公共 ASR 监听
+- `startVoiceRecording` 使用 `PcmAudioCapture` 采集原始 PCM/WAV，每段 POST `/api/asr/recognize`
+- `asr.device=server` 时服务器直接执行 ASR；`asr.device=display` 时服务器按 `displayClients` 连接顺序选择 `voiceRecognition=true` 的显示端
+- 录音显示端不调用本地 Sherpa 或自身 Android ASR；被选中的 Android 提供端才处理 `asrAudio`
 
-**5.3 `handleAsrAudio` 改调原生识别**
-```
-收到 asrAudio(data.audioData = base64 webm/wav)
-  ├─ 原生 ASR 可用 → base64 解码 → AudioContext.decodeAudioData
-  │    → OfflineAudioContext 重采样 16kHz mono → s16le base64
-  │    → 新 APK 调 NativeDisplay.asrRecognizeAsync(requestId, pcm, voiceprint)
-  │    → ASR pool 按槽位并发识别 → window.onNativeAsrResult → 回 asrResult{text}
-  │    → 旧 APK 无异步入口时回退 NativeDisplay.asrRecognize(pcm)
-  │    （模型未就绪：先 asrEnsureModel()，回 asrResult{error:'模型下载中'}，
-  │      服务器 60s 超时按失败处理，下次请求时模型可能已就绪）
-  └─ 非 APK → 现有 SherpaASR.recognizeBuffer WASM 路径（不动）
-```
+**5.3 `asrConfig`**：服务端推送公共 ASR 设备和中文/降噪参数；选择显示端且模型未就绪时，提供端按原生模型状态下载和回报能力。
 
-异步桥只在 JS bridge 线程提交任务并立即返回，识别最长 60 秒；超时或异常均通过
-`window.onNativeAsrResult` 回传；这样原生推理不会阻塞 WebView 的 WebSocket、媒体和页面事件循环。
-
-**5.4 下载进度上屏**：`onNativeAsrModel` 回调复用 `updateVoiceTextDisplay`：`downloading` 显示"语音模型下载中 N%"，`ready` 显示"语音识别已就绪"，`error` 显示失败原因。`AsrModelManager` 将状态切换为 `downloading` 后立即回调 0%，避免 tokens 下载、网络建立或首个模型数据块到达前界面没有提示；`detectCapabilities` 读到已有 `downloading` 状态时也立即恢复当前进度提示，覆盖 WebView 回调时序不确定的情况。
-
-**5.5 `asrConfig` 开关映射**：服务器推送 `localAsrEnabled` 时，APK 下映射为原生引擎启用/停用（停用时 `voiceRecognition` 报 false）；浏览器仍控制 WASM。
+**5.4 原生模型接口**：Kotlin 原生 ASR 模型、异步桥和并发池仅在该 APK 被服务器选为 ASR 提供端时使用。
 
 **5.6 模型 hash 校验与缓存**：服务器在 `res/models/sensevoice/` 为每个模型保存同名 `.sha256` 文件。APK 首次下载时将模型写入 `.tmp`，下载完成后计算 SHA-256，与服务器 hash 文件比较；比较成功后才改名，并保存本地 `.sha256` 文件。后续启动不重新计算模型 hash，只读取本地保存的 hash 和服务器 hash 比较；模型文件、本地 hash 均存在且与服务器一致时直接加载。服务器 hash 暂时不可访问时，已有模型与本地 hash 均存在则沿用上次已验证结果；没有本地已验证文件时不启动无 hash 校验的下载。
 
-### 5.5.1 自动下载触发修复
+### 5.5 原生模型验证记录
 
-- detectCapabilities 的 WebGPU 异步诊断使用独立变量缓存，待 capabilities 对象初始化完成后再写入诊断字段，避免 JavaScript 暂时性死区异常中断能力检测。
-- 收到 localAsrEnabled=true 时，如果原生模型状态为 not_ready 或 error，主动调用幂等的 asrEnsureModel()；状态为 ready 时直接恢复 voiceRecognition 能力。
-- 以上修复保证首次连接和服务器动态切换两条路径都能触发模型下载。
-
-### 5.5.2 真机压测发现的后续问题
-
-- SM-N9500 真机已验证模型自动下载、hash 校验、加载和 `voiceRecognition=true` 能力上报。
-- 通过服务器路由的 5 次串行 `zh.wav` 请求均到达 APK，但 `NativeDisplay.asrRecognize()` 返回空 JSON `{}`，正式速度压测需待原生桥结果链路修复。
+- 原生模型下载、hash 校验、加载和 APK 桥接口用于显示端提供端识别，不作为录音显示端的本地识别依赖。
 - 声纹匹配 native 路径出现 `VoiceprintEngine.match` 崩溃，需与 ASR 识别链路分开定位。
 
 ### 6. 服务器改动（server-app.js，仅 1 个新接口）
@@ -183,10 +158,10 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 
 ## 数据流（完整识别链路）
 
-1. APK 端按住说话（或持续监听）：`getUserMedia` 录音 → `MediaRecorder` 产出 webm
+1. 录音显示端：`getUserMedia` 录音 → `PcmAudioCapture` 产出 WAV
 2. `sendAudioForRecognition` → `POST /api/asr/recognize`（现有）
-3. 服务器 `asr.device='display'` → `findDisplayWithAsr()` 选中本 APK → WS `asrAudio` 下发 base64
-4. display.html `handleAsrAudio` → WebAudio 解码 webm 重采样 16kHz mono PCM → `NativeDisplay.asrRecognize(pcmBase64)`
+3. 服务器 `asr.device='display'` → 按连接顺序 `findDisplayWithAsr()` 选择本 APK → WS `asrAudio` 下发 WAV base64
+4. 被选 APK 的 display.html `handleAsrAudio` → WAV/PCM 转换 → `NativeDisplay.asrRecognize(pcmBase64)`
 5. 原生 sherpa-onnx 识别 → 同步返回 text → WS `asrResult` 回传
 6. 服务器收到 text → `POST /api/asr/recognize` 响应给上传端 → 上传端发 `voiceInput` → `voiceCommand` 流程（现有）
 
@@ -208,8 +183,8 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 
 ## 兼容性
 
-- **浏览器访问 display.html**：`NativeDisplay` 不存在，走原有 WASM/服务器路径，完全不受影响
-- **旧版 APK + 新服务器**：无 ASR 桥方法，`voiceRecognition` 依旧报 false，退化到 `asr.device=server`
+- **浏览器访问 display.html**：`NativeDisplay` 不存在，只作为录音端提交公共 ASR，不作为显示端 ASR 提供端
+- **旧版 APK + 新服务器**：无 ASR 桥方法，`voiceRecognition` 报 false；显示端模式跳过该设备，服务端模式仍可用
 - **新版 APK + 旧服务器**：无 `/api/asr/model` 接口，模型下载 404 → 报 `error`；功能不可用但不影响其他能力
 
 ## 性能预期

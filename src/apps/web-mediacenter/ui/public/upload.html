@@ -194,6 +194,10 @@
                         <button class="control-btn" onclick="Controls.showHtmlModePanel()" title="设置 html 播放滚动模式">HTML 模式</button>
                     </div>
                     <input type="range" id="progressSlider" min="0" max="100" value="0" oninput="updateProgress(this.value)" style="margin-top:8px">
+                    <div class="media-volume-control">
+                        <label>音量: <span id="volumeValue">100</span>%</label>
+                        <input type="range" id="volumeSlider" min="0" max="100" value="100" oninput="updateVolume(this.value)">
+                    </div>
                 </div>
 
                 <div class="control-item">
@@ -207,11 +211,6 @@
                     </div>
                     <div class="text-playback-status" id="textPlaybackStatus">未播放文本</div>
                 </div>
-                
-                <div class="control-item">
-                    <label>音量: <span id="volumeValue">100</span>%</label>
-                    <input type="range" id="volumeSlider" min="0" max="100" value="100" oninput="updateVolume(this.value)">
-                </div>
             </div>
 
             <div class="playlist-progress-panel" id="displayPlaylistStatus" style="display:none;margin-top:15px;">
@@ -222,28 +221,6 @@
                     <button onclick="MediaLibrary.controlPlaylist('next')">下一个</button>
                     <button onclick="MediaLibrary.controlPlaylist('stop')">停止</button>
                 </span>
-            </div>
-
-            <div class="control-item">
-                <label>语音识别设备</label>
-                <div class="control-buttons">
-                    <button class="control-btn active" id="asrDeviceServerBtn" data-asr="server" onclick="setAsrDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
-                    <button class="control-btn" id="asrDeviceDisplayBtn" data-asr="display" onclick="setAsrDevice('display')">显示端</button>
-                </div>
-                <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
-                    <span id="asrDeviceStatus">加载中...</span>
-                </div>
-            </div>
-
-            <div class="control-item">
-                <label>语音生成设备</label>
-                <div class="control-buttons">
-                    <button class="control-btn active" id="ttsDeviceServerBtn" data-tts="server" onclick="setTtsDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
-                    <button class="control-btn" id="ttsDeviceDisplayBtn" data-tts="display" onclick="setTtsDevice('display')">显示端</button>
-                </div>
-                <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
-                    <span id="ttsDeviceStatus">加载中...</span>
-                </div>
             </div>
 
             <div class="control-item">
@@ -700,6 +677,42 @@
                         <option value="server">服务器</option>
                         <option value="display">显示端</option>
                     </select>
+                </div>
+            </div>
+            <div class="control-item">
+                <label>语音识别设备</label>
+                <div class="control-buttons">
+                    <button class="control-btn active" id="asrDeviceServerBtn" data-asr="server" onclick="setAsrDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
+                    <button class="control-btn" id="asrDeviceDisplayBtn" data-asr="display" onclick="setAsrDevice('display')">显示端</button>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
+                    <span id="asrDeviceStatus">加载中...</span>
+                </div>
+            </div>
+            <div class="control-item">
+                <label>语音生成设备</label>
+                <div class="control-buttons">
+                    <button class="control-btn active" id="ttsDeviceServerBtn" data-tts="server" onclick="setTtsDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
+                    <button class="control-btn" id="ttsDeviceDisplayBtn" data-tts="display" onclick="setTtsDevice('display')">显示端</button>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.5);">
+                    <span id="ttsDeviceStatus">加载中...</span>
+                </div>
+            </div>
+            <div class="control-item">
+                <label>服务器语音功能</label>
+                <div style="margin-top:6px;font-size:13px;">
+                    <label style="display:inline-block;margin-right:16px;">
+                        <input type="checkbox" id="serverAsrEnabledCheck" checked>
+                        启用服务器语音识别
+                    </label>
+                    <label style="display:inline-block;">
+                        <input type="checkbox" id="serverTtsEnabledCheck" checked>
+                        启用服务器语音生成
+                    </label>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
+                    关闭后不会调用服务器对应引擎；当前选择服务端时自动切换到显示端。
                 </div>
             </div>
         </section>

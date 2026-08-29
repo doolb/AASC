@@ -179,8 +179,9 @@ MutationObserver:
 卡片和弹窗背景:
     定义 card-background 语义变量
     深色主题的 card-background 和 bg-surface-strong 保持原有半透明效果
-    浅色主题的 card-background 和 bg-surface-strong 均使用 #eaf4ff
-    卡片、内容分组、任务面板和媒体库条目使用 card-background
+    浅色主题的 card-background 使用主题浅蓝色，bg-surface-strong 保持弹窗表面语义
+    浅色主题的 .section 大容器使用略微调深后的 bg-surface，避免大面积近白背景
+    .control-item 小控件卡片、任务面板和媒体库条目使用 card-background
     modal-content、playlist-settings-dialog、task-confirm-box 等弹窗使用 bg-surface-strong
 
 内容区域对比度:

@@ -101,6 +101,10 @@ const WebSocketManager = {
             if (window.TtsDevice) {
                 window.TtsDevice.handleDeviceChanged(data.device);
             }
+        } else if (data.type === 'serverVoiceChanged') {
+            if (window.VoiceprintPanel) {
+                window.VoiceprintPanel.applyServerVoiceConfig(data);
+            }
         } else if (data.type === 'cpuAffinityChanged') {
             if (window.CpuAffinitySettings) {
                 window.CpuAffinitySettings.handleConfigChanged(data.cpuAffinity);

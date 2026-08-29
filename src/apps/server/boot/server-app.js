@@ -291,12 +291,13 @@ const aiRoles = new AiRolesService({
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
 const piRuntimeManager = new PiRuntimeManager({ projectRoot: PROJECT_ROOT });
 const runtimeBridgeClients = new Map();
-
 const pendingDisplayAsrRequests = new Map();
 let pendingAsrRequestId = 0;
 
 tts.init(config.getTtsConfig());
-asr.init(config.get('asr', {}));
+if (config.get('asr.serverEnabled', true) === true) {
+    asr.init(config.get('asr', {}));
+}
 chat.init(config.get('chat', {}), { piRuntimeManager });
 reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
@@ -487,6 +488,10 @@ async function startServer() {
             wsServer.registerHandler('audioChunk', (data, ctx) => {
                 const { requestId, chunk, isLast, sampleRate } = data;
                 if (!requestId || !chunk) return;
+                if (!isServerAsrEnabled()) {
+                    log('语音', '服务器 ASR 已关闭，忽略音频流请求');
+                    return;
+                }
 
                 let session = audioChunkSessions.get(requestId);
                 if (!session) {
@@ -735,6 +740,12 @@ const SUB_DISPLAY_CAPABILITIES = {
     displayText: false,
     ttsGeneration: false
 };
+
+// 用户能力覆盖只影响对应显示端；voiceRecognition 也允许控制端明确开启/关闭，
+// 服务器仍按 displayClients 的插入顺序选择第一个可用 ASR 提供端。
+function normalizeDisplayUserCapabilities(capabilities) {
+    return { ...(capabilities || {}) };
+}
 
 const DEFAULT_DYNAMIC_FIT_CONFIG = Object.freeze({
     transitionSeconds: 3,
@@ -1272,9 +1283,84 @@ app.post('/api/config/controlTheme', (req, res) => {
     }
 });
 
+function isServerAsrEnabled() {
+    return config.get('asr.serverEnabled', true) === true;
+}
+
+function isServerTtsEnabled() {
+    return config.get('tts.serverEnabled', true) === true;
+}
+
+function getServerVoiceConfig() {
+    return {
+        asrEnabled: isServerAsrEnabled(),
+        ttsEnabled: isServerTtsEnabled(),
+        asrDevice: config.get('asr.device', 'server'),
+        ttsDevice: config.get('tts.device', 'server')
+    };
+}
+
+function broadcastServerVoiceConfig() {
+    broadcastToControls({
+        type: 'serverVoiceChanged',
+        ...getServerVoiceConfig()
+    });
+}
+
+app.get('/api/config/serverVoice', (req, res) => {
+    res.json({ status: 'success', ...getServerVoiceConfig() });
+});
+
+app.post('/api/config/serverVoice', (req, res) => {
+    try {
+        const body = req.body || {};
+        const booleanFields = [
+            ['asrEnabled', 'asr.serverEnabled'],
+            ['ttsEnabled', 'tts.serverEnabled']
+        ];
+        for (const [field] of booleanFields) {
+            if (body[field] !== undefined && typeof body[field] !== 'boolean') {
+                return res.status(400).json({ status: 'error', message: `${field} 必须是布尔值` });
+            }
+        }
+
+        const changedDevices = [];
+        for (const [field, configKey] of booleanFields) {
+            if (body[field] !== undefined) config.set(configKey, body[field]);
+        }
+
+        if (!isServerAsrEnabled() && config.get('asr.device', 'server') === 'server') {
+            config.set('asr.device', 'display');
+            changedDevices.push({ type: 'asrDeviceChanged', device: 'display' });
+        }
+        if (!isServerTtsEnabled() && config.get('tts.device', 'server') === 'server') {
+            config.set('tts.device', 'display');
+            changedDevices.push({ type: 'ttsDeviceChanged', device: 'display' });
+        }
+
+        if (isServerAsrEnabled()) asr.init(config.get('asr', {}));
+        broadcastAsrOptions();
+        for (const message of changedDevices) broadcastToControls(message);
+        broadcastServerVoiceConfig();
+        displayClients.forEach((_, displayId) => {
+            sendToDisplay(displayId, {
+                type: 'ttsConfig',
+                device: config.get('tts.device', 'server'),
+                localTtsEnabled: config.get('tts.device', 'server') === 'display'
+            });
+        });
+        res.json({ status: 'success', ...getServerVoiceConfig() });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: '服务器语音开关更新失败: ' + err.message });
+    }
+});
+
 app.get('/api/config/asrDevice', (req, res) => {
-    const device = config.get('asr.device', 'server');
-    res.json({ status: 'success', device });
+    res.json({
+        status: 'success',
+        device: config.get('asr.device', 'server'),
+        serverEnabled: isServerAsrEnabled()
+    });
 });
 
 app.post('/api/config/asrDevice', (req, res) => {
@@ -1283,15 +1369,19 @@ app.post('/api/config/asrDevice', (req, res) => {
         if (device !== 'server' && device !== 'display') {
             return res.status(400).json({ status: 'error', message: 'device 必须是 server 或 display' });
         }
+        if (device === 'server' && !isServerAsrEnabled()) {
+            return res.status(409).json({ status: 'error', message: '服务器 ASR 已关闭，请先开启服务器语音识别' });
+        }
         config.set('asr.device', device);
         broadcastAsrOptions();
 
         broadcastToControls({
             type: 'asrDeviceChanged',
-            device: device
+            device
         });
+        broadcastServerVoiceConfig();
 
-        res.json({ status: 'success', device });
+        res.json({ status: 'success', device, serverEnabled: isServerAsrEnabled() });
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });
     }
@@ -1336,7 +1426,7 @@ app.post('/api/config/asrOptions', (req, res) => {
 // TTS 生成设备配置（server=服务端生成，display=显示端离线生成；显示端离线时回退服务端）
 app.get('/api/config/ttsDevice', (req, res) => {
     const device = config.get('tts.device', 'server');
-    res.json({ status: 'success', device });
+    res.json({ status: 'success', device, serverEnabled: isServerTtsEnabled() });
 });
 
 app.post('/api/config/ttsDevice', (req, res) => {
@@ -1344,6 +1434,9 @@ app.post('/api/config/ttsDevice', (req, res) => {
         const { device } = req.body;
         if (device !== 'server' && device !== 'display') {
             return res.status(400).json({ status: 'error', message: 'device 必须是 server 或 display' });
+        }
+        if (device === 'server' && !isServerTtsEnabled()) {
+            return res.status(409).json({ status: 'error', message: '服务器 TTS 已关闭，请先开启服务器语音生成' });
         }
         config.set('tts.device', device);
 
@@ -1359,8 +1452,9 @@ app.post('/api/config/ttsDevice', (req, res) => {
                 localTtsEnabled: device === 'display'
             });
         });
+        broadcastServerVoiceConfig();
 
-        res.json({ status: 'success', device });
+        res.json({ status: 'success', device, serverEnabled: isServerTtsEnabled() });
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });
     }
@@ -1402,7 +1496,7 @@ app.post('/api/config/asrMode', (req, res) => {
 
         const asrConfig = config.get('asr', {});
         asrConfig.mode = mode;
-        asr.reset(asrConfig);
+        if (isServerAsrEnabled()) asr.reset(asrConfig);
 
         const modeLabel = mode === 'isolated' ? '独立进程' : '内嵌';
         log('语音', `ASR 模式切换为: ${modeLabel}`);
@@ -1468,9 +1562,15 @@ function cleanupTempFile(filePath) {
 }
 
 app.get('/api/asr/status', (req, res) => {
+    const device = config.get('asr.device', 'server');
+    const ready = device === 'display'
+        ? !!findDisplayWithAsr()
+        : isServerAsrEnabled() && asr.isReady() === true;
     res.json({
         status: 'success',
-        ready: asr.isReady(),
+        ready,
+        device,
+        serverEnabled: isServerAsrEnabled(),
         mode: asr.getMode(),
         isolatedProcessEnabled: config.get('asr.isolateProcess.enabled', false)
     });
@@ -1743,32 +1843,38 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
             return res.status(400).json({ status: 'error', message: '未收到音频文件' });
         }
         const asrDevice = config.get('asr.device', 'server');
-        
+
+        if (asrDevice === 'server' && !isServerAsrEnabled()) {
+            cleanupTempFile(req.file.path);
+            return res.status(503).json({ status: 'error', message: '服务器 ASR 已关闭' });
+        }
+
         if (asrDevice === 'display') {
             const displayWithAsr = findDisplayWithAsr();
             if (!displayWithAsr) {
                 cleanupTempFile(req.file.path);
                 return res.status(503).json({ status: 'error', message: '没有支持 ASR 的显示端在线' });
             }
-        
+
             try {
                 const audioBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
                 const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
-        
                 const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId);
                 cleanupTempFile(req.file.path);
 
-                // 多人分割：只处理识别到声纹的段，逐段下发
                 if (result.segments && result.segments.length) {
-                    const segs = result.segments
-                        .map(s => ({ ...s, text: normalizeAsrText(s.text) }))
-                        .filter(s => s.speaker && hasValidContent(s.text));
-                    if (segs.length === 0) {
+                    const segments = result.segments
+                        .map(segment => ({ ...segment, text: normalizeAsrText(segment.text) }))
+                        .filter(segment => segment.speaker && hasValidContent(segment.text));
+                    if (segments.length === 0) {
                         return res.json({ status: 'ignored', reason: '未识别到已注册声纹', segments: [] });
                     }
                     return res.json({
                         status: 'success',
-                        segments: segs.map(s => ({ text: s.text, speaker: s.speaker }))
+                        segments: segments.map(segment => ({
+                            text: segment.text,
+                            speaker: segment.speaker
+                        }))
                     });
                 }
 
@@ -1781,7 +1887,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                     return res.json({ status: 'ignored', reason: '未检测到有效内容', text });
                 }
 
-                // speaker 语义：字段存在但为 null（声纹可用未匹配）→ 拦截；缺省 → 放行
+                // speaker 存在但为空表示启用声纹后未匹配；字段缺省表示普通 ASR，直接放行。
                 if (result.speaker !== undefined) {
                     if (!result.speaker) {
                         log('语音', `忽略未识别到声纹的语音: ${text}`);
@@ -1796,9 +1902,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                 return res.status(500).json({ status: 'error', message: '显示端 ASR 失败: ' + err.message });
             }
         }
-        
 
-        
         if (!asr.isReady()) {
             cleanupTempFile(req.file.path);
             return res.status(503).json({ status: 'error', message: 'ASR 服务未初始化' });
@@ -3109,10 +3213,11 @@ function broadcastDisplayList() {
     });
 }
 
+// 显示端模式严格复用 Map 的连接插入顺序，不按 IP、设备名或固定设备优先级排序。
 function findDisplayWithAsr() {
     for (const [displayId, displayData] of displayClients) {
         const caps = displayData.state?.capabilities;
-        if (caps && caps.voiceRecognition) {
+        if (caps && caps.voiceRecognition === true) {
             return { id: displayId, ws: displayData.ws };
         }
     }
@@ -3139,13 +3244,17 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
         }, timeoutMs);
 
         pendingDisplayAsrRequests.set(requestId, { resolve, reject, timer });
-
         try {
-            sendToDisplay(display.id, {
+            const sent = sendToDisplay(display.id, {
                 type: 'asrAudio',
                 audioData: audioBase64,
-                requestId: requestId
+                requestId
             });
+            if (!sent) {
+                clearTimeout(timer);
+                pendingDisplayAsrRequests.delete(requestId);
+                reject(new Error('显示端已离线，ASR 请求发送失败'));
+            }
         } catch (err) {
             clearTimeout(timer);
             pendingDisplayAsrRequests.delete(requestId);
@@ -3256,11 +3365,20 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
                 log('TTS', '显示端生成成功 (displayId=' + display.id + ' bytes=' + buffer.length + ')');
                 return outPath;
             } catch (err) {
+                if (!isServerTtsEnabled()) {
+                    throw new Error('服务器 TTS 已关闭，显示端生成失败: ' + err.message);
+                }
                 log('TTS', '显示端生成失败，回退服务端: ' + err.message);
             }
         } else {
+            if (!isServerTtsEnabled()) {
+                throw new Error('服务器 TTS 已关闭，且没有可用显示端');
+            }
             log('TTS', '无在线支持 TTS 的显示端，回退服务端');
         }
+    }
+    if (!isServerTtsEnabled()) {
+        throw new Error('服务器 TTS 已关闭');
     }
     return tts.generateTTS(ttsText, voice, speed);
 }
@@ -3496,10 +3614,10 @@ wss.on('connection', (ws, req) => {
         if (!isSubDisplay && savedState?.userCapabilities) {
             const entry = displayClients.get(displayId);
             if (entry) {
-                entry.state.userCapabilities = { ...savedState.userCapabilities };
+                entry.state.userCapabilities = normalizeDisplayUserCapabilities(savedState.userCapabilities);
                 entry.state.capabilities = {
                     ...DEFAULT_CAPABILITIES,
-                    ...savedState.userCapabilities
+                    ...entry.state.userCapabilities
                 };
             }
         }
@@ -3530,11 +3648,10 @@ wss.on('connection', (ws, req) => {
             }));
         }
 
-        const asrDevice = config.get('asr.device', 'server');
         ws.send(JSON.stringify({
             type: 'asrConfig',
-            device: asrDevice,
-            localAsrEnabled: asrDevice === 'display',
+            device: config.get('asr.device', 'server'),
+            localAsrEnabled: config.get('asr.device', 'server') === 'display',
             ...getAsrOptions()
         }));
 
@@ -3572,7 +3689,7 @@ wss.on('connection', (ws, req) => {
         if (!isSubDisplay && savedState?.userCapabilities) {
             const initialCaps = {
                 ...DEFAULT_CAPABILITIES,
-                ...savedState.userCapabilities
+                ...normalizeDisplayUserCapabilities(savedState.userCapabilities)
             };
             ws.send(JSON.stringify({
                 type: 'capabilitiesUpdated',
@@ -3630,8 +3747,8 @@ wss.on('connection', (ws, req) => {
                         if (data.text || (data.segments && data.segments.length)) {
                             pending.resolve({
                                 text: data.text || '',
-                                speaker: data.speaker,       // undefined | null | 人名
-                                segments: data.segments      // undefined | [{text,speaker,start,end}]
+                                speaker: data.speaker,
+                                segments: data.segments
                             });
                         } else {
                             pending.reject(new Error(data.error || '显示端 ASR 识别失败'));
@@ -3792,12 +3909,13 @@ wss.on('connection', (ws, req) => {
                     const targetDisplayId = data.displayId;
                     const targetDisplayData = displayClients.get(targetDisplayId);
                     if (targetDisplayData) {
+                        const userCapabilities = normalizeDisplayUserCapabilities(data.capabilities);
                         targetDisplayData.state.capabilities = {
                             ...DEFAULT_CAPABILITIES,
                             ...data.capabilities
                         };
                         // 保存用户覆盖值，重连后恢复
-                        targetDisplayData.state.userCapabilities = { ...data.capabilities };
+                        targetDisplayData.state.userCapabilities = userCapabilities;
                         syncDisplayConversationListeningState(targetDisplayId, 'control');
                         sendToDisplay(targetDisplayId, {
                             type: 'capabilitiesUpdated',
@@ -3811,7 +3929,7 @@ wss.on('connection', (ws, req) => {
                         if (config) {
                             persistDisplayState(targetDisplayData, {
                                 capabilities: targetDisplayData.state.capabilities,
-                                userCapabilities: { ...data.capabilities }
+                                userCapabilities
                             });
                         }
                         broadcastDisplayList();
@@ -4019,12 +4137,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             log('语音', `显示端 ${displayId} TTS 播放完成，重新计时3分钟`);
         }
     } else if (data.type === 'voiceInput' && displayData) {
-        // 只处理声纹语音：声明了 speaker 但为 null（未注册/未匹配）的语音丢弃，不触发命令
+        // 控制端需要观察所有有效 ASR 文字，声纹过滤只决定是否进入命令处理链路。
         const voiceprintEnabledNow = config.get('voiceprint.enabled', true);
-        if (voiceprintEnabledNow && data.speaker !== undefined && data.speaker === null) {
-            log('语音', `丢弃未识别到声纹的语音: "${data.text}"`);
-            return;
-        }
         const speakerPayload = voiceprintEnabledNow && data.speaker !== undefined
             ? { speaker: data.speaker }
             : {};
@@ -4036,6 +4150,12 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             fullText: data.fullText,
             ...speakerPayload
         });
+
+        // 声纹未注册/未匹配时不触发唤醒、对话或命令，但不能撤销已经回传控制端的文字。
+        if (voiceprintEnabledNow && data.speaker !== undefined && data.speaker === null) {
+            log('语音', `未识别到声纹，仅回传控制端不处理: "${data.text}"`);
+            return;
+        }
 
         // 构造 voiceCommand 消息转发到控制端处理链路，复用 LLM/命令解析/执行逻辑
         if (data.isFinal && data.text && data.text.trim()) {
@@ -4079,7 +4199,10 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         };
         // 重连后恢复用户手动覆盖的能力值
         if (displayData.state.userCapabilities) {
-            Object.assign(displayData.state.capabilities, displayData.state.userCapabilities);
+            Object.assign(
+                displayData.state.capabilities,
+                normalizeDisplayUserCapabilities(displayData.state.userCapabilities)
+            );
         }
         syncDisplayConversationListeningState(displayId, 'capabilities');
         // 将合并后的能力通知显示端，让显示端根据限制调整行为

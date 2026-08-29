@@ -205,25 +205,22 @@ onNativeAsrModel(payload):
   error       → nativeAsrReady=false；提示失败
 detectCapabilities.voiceRecognition:
   nativeAsrAvailable → JSON.parse(nativeBridge.asrStatus())；ready→true；downloading→立即显示当前进度并保持 false；not_ready/error→触发 asrEnsureModel() 报 false
+  非 APK → false（录音端仍通过 /api/asr/status 判断公共 ASR 可用性）
 detectCapabilities.webgpu:
   先以独立变量 webgpuDiag 保存异步探测诊断信息；完成 capabilities 对象初始化后再写入 capabilities._webgpuDiag
   # WebGPU 探测不得在对象字面量的 await 表达式中直接访问 capabilities，避免触发 JavaScript 暂时性死区异常
-checkAsrStatus/initLocalAsr/forceInitLocalAsr: nativeAsrAvailable → 早期 return（不加载 WASM）
-startVoiceRecording: 不变（localAsrAvailable=false → MediaRecorder → POST /api/asr/recognize）
-handleAsrAudio:
-  nativeAsrAvailable:
-    未 ready → 触发 ensureModel → 回 asrResult{error:'模型下载中'}
-    ready → decodeAudioToPcmBase64(webm→16k mono s16le base64) → asrRecognizeAsync → onNativeAsrResult → asrResult{text}
-    旧 APK 无异步入口 → 回退 asrRecognize
-  非 APK → SherpaASR.recognizeBuffer WASM（不变）
-decodeAudioToPcmBase64: atob → OfflineAudioContext.decodeAudioData → OfflineAudioContext(1,len,16000) 重采样 → Float32→s16le → btoa
+checkAsrStatus:
+  所有显示端 → GET /api/asr/status；ready → voiceSupported=true
+startVoiceRecording: getUserMedia → PcmAudioCapture → POST /api/asr/recognize
+handleAsrAudio（仅服务器选择的 APK 提供端）:
+  WAV/PCM → NativeDisplay.asrRecognizeAsync/asrRecognize
+  结果 → asrResult 回服务器
+录音显示端:
+  不调用 NativeDisplay.asrRecognize/asrRecognizeAsync
+  不调用 SherpaASR.recognizeBuffer/startStreaming
 asrConfig:
-  nativeAsrAvailable → localAsrEnabled=false 时 nativeAsrReady=false + 能力上报 false
-  localAsrEnabled=true 且 nativeAsrReady=false:
-    st = JSON.parse(nativeBridge.asrStatus())
-    st.state == ready → nativeAsrReady=true + 能力上报 true
-    st.state == not_ready 或 error → nativeBridge.asrEnsureModel()；等待 onNativeAsrModel.ready 后能力上报 true
-  否则 → 原有 WASM 启停逻辑
+  录音显示端 → GET /api/asr/status 判断 voiceSupported
+  APK 提供端 → 原生模型 ready/error 更新 voiceRecognition
 ```
 
 ## 服务器（server-app.js）

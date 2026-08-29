@@ -178,7 +178,8 @@ class Config extends DataSnapshot {
            requestTimeoutMs: 20000,
            extraTimeoutPerPending: 10000,
             maxErrorBytes: 65536,
-            device: 'server'
+            device: 'server',
+            serverEnabled: true
        },
         asr: {
             mode: 'isolated',
@@ -187,6 +188,7 @@ class Config extends DataSnapshot {
             requireChinese: false,
             languageMode: 'zh',
             denoise: false,
+            serverEnabled: true,
             isolateProcess: {
                 enabled: false,
                 requestTimeoutMs: 60000,

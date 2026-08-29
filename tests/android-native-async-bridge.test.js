@@ -23,25 +23,38 @@ test('原生桥提供 ASR/TTS 异步入口并通过主线程回调 JS', () => {
     assert.match(bridge, /TTS_TIMEOUT_SECONDS\s*=\s*60L/);
 });
 
-test('显示端优先使用异步 ASR/TTS，旧 APK 保留同步兼容回退', () => {
+test('录音端使用公共路径，APK 提供端保留原生异步入口', () => {
     const display = read(DISPLAY);
 
-    assert.match(display, /window\.onNativeAsrResult\s*=\s*function/);
     assert.match(display, /window\.onNativeTtsResult\s*=\s*function/);
-    assert.match(display, /nativeBridge\.asrRecognizeAsync\(/);
     assert.match(display, /nativeBridge\.ttsSynthesizeAsync\(/);
-    assert.match(display, /typeof nativeBridge\.asrRecognizeAsync/);
     assert.match(display, /typeof nativeBridge\.ttsSynthesizeAsync/);
+    assert.match(display, /fetch\('\/api\/asr\/recognize'/);
+    assert.match(display, /nativeBridge\.asrRecognizeAsyncWithOptions\(/);
+    assert.match(display, /window\.onNativeAsrResult\s*=\s*function/);
+
+    const recordingStart = display.indexOf('async function startVoiceRecording()');
+    const recordingEnd = display.indexOf('function startSilenceDetection()', recordingStart);
+    assert.doesNotMatch(display.slice(recordingStart, recordingEnd), /nativeBridge\.asrRecognize|SherpaASR\./);
 
     const ttsCallback = display.match(/window\.onNativeTtsResult\s*=\s*function\(payload\)\s*\{([\s\S]*?)\n\s*\};/);
     assert.ok(ttsCallback, '应注册原生 TTS 完成回调');
     assert.doesNotMatch(ttsCallback[1], /ttsAudio\.play\s*\(/, 'TTS 生成回调不应直接播放音频');
 });
 
-test('服务端显示端 ASR 等待超时与原生桥统一为 60 秒', () => {
+test('服务端显示端模式按连接顺序转发 ASR，并保持 60 秒超时', () => {
     const server = read(SERVER);
 
-    assert.match(server, /function sendAudioToDisplayAsr[\s\S]*?const timeoutMs\s*=\s*60000/);
+    const uploadStart = server.indexOf("app.post('/api/asr/recognize'");
+    const uploadEnd = server.indexOf("app.get('/api/config'", uploadStart);
+    const upload = server.slice(uploadStart, uploadEnd);
+    assert.match(upload, /const asrDevice = config\.get\('asr\.device', 'server'\)/);
+    assert.match(upload, /findDisplayWithAsr\(\)/);
+    assert.match(upload, /sendAudioToDisplayAsr\(displayWithAsr/);
+    assert.match(server, /function findDisplayWithAsr\(\)[\s\S]*?for \(const \[displayId, displayData\] of displayClients\)/);
+    assert.match(server, /function sendAudioToDisplayAsr[\s\S]*?const timeoutMs = 60000/);
+    assert.match(server, /type:\s*['"]asrAudio['"]/);
+    assert.doesNotMatch(server, /192\.168\.1\.6/);
 });
 
 test('TTS 原生桥在提交边界按 policy slotCount 有界并同步换代', () => {

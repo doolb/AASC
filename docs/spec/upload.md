@@ -1,5 +1,30 @@
 # 上传功能实现文档
 
+## 显示控制媒体播放布局
+
+控制端 `upload.html` 的主显示控制区将媒体播放相关控件集中在同一个 `control-item` 内，保持既有
+DOM id、事件处理和 WebSocket 控制协议不变：
+
+```
+媒体播放控件:
+    播放/暂停按钮、进度百分比、HTML 模式按钮
+    播放进度滑条(progressSlider)
+    音量标签和音量滑条(volumeSlider)
+
+布局约束:
+    volumeSlider 必须位于 progressSlider 的直接后续控件位置
+    音量控件不再作为媒体播放区域外的独立 control-item
+    快捷控制面板中的 floatingVolumeSlider 保持原有位置和行为
+```
+
+交互协议保持不变：
+
+```
+用户拖动 progressSlider -> updateProgress(value) -> 发送 seek(value)
+用户拖动 volumeSlider -> updateVolume(value) -> 发送 volume(value)
+服务端回传 state.volume -> 同步 volumeSlider 和 volumeValue
+```
+
 ## 裁剪功能 (crop.js)
 
 ### 裁剪框交互

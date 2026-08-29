@@ -35,7 +35,7 @@ test('控制端按显示端展示最近一次 ASR 回传文本', () => {
     assert.match(server, /voiceConversation: data\.state\.voiceConversation/);
 });
 
-test('监听开关只通过委托链路发送，并处理 WebSocket 未连接', () => {
+test('监听开关绑定独立 change 事件，并处理 WebSocket 未连接', () => {
     const deviceList = read('src/apps/web-mediacenter/ui/public/js/device-list.js');
     const websocket = read('src/apps/web-mediacenter/ui/public/js/websocket.js');
     const server = read('src/apps/server/boot/server-app.js');
@@ -43,7 +43,8 @@ test('监听开关只通过委托链路发送，并处理 WebSocket 未连接', 
     const renderVoiceControl = deviceList.match(/renderVoiceControl\(display\) \{([\s\S]*?)\n    \},\n\n    renderSettingControl/);
 
     assert.ok(renderVoiceControl, '应能定位树形视图监听控件渲染函数');
-    assert.doesNotMatch(renderVoiceControl[1], /addEventListener\(['"]change['"]/);
+    assert.match(renderVoiceControl[1], /input\.addEventListener\(['"]change['"]/, '监听复选框必须绑定 change 事件');
+    assert.match(renderVoiceControl[1], /updateCapability\(display\.id, ['"]voiceRecording['"], event\.target\.checked\)/);
     assert.match(deviceList, /监听开关发送失败/);
     assert.match(deviceList, /发送中/);
     assert.match(websocket, /DeviceList\.handleCapabilitiesUpdated\(data\)/);

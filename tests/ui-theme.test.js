@@ -309,12 +309,18 @@ test('显示控制设备和其他状态按钮应同步语义状态并适配浅�
     const floatingControl = fs.readFileSync(floatingControlScriptPath, 'utf8');
     const mediaLibrary = fs.readFileSync(mediaLibraryScriptPath, 'utf8');
 
-    assert.match(html, /id="asrDeviceServerBtn"[^>]*data-asr="server"/u);
-    assert.match(html, /id="asrDeviceDisplayBtn"[^>]*data-asr="display"/u);
-    assert.match(html, /id="ttsDeviceServerBtn"[^>]*data-tts="server"/u);
-    assert.match(html, /id="ttsDeviceDisplayBtn"[^>]*data-tts="display"/u);
+    const voiceprintPanelStart = html.indexOf('<section class="panel" id="panel-voiceprint"');
+    const voiceprintPanelEnd = html.indexOf('</section>', voiceprintPanelStart);
+    const voiceprintPanel = html.slice(voiceprintPanelStart, voiceprintPanelEnd);
+    const beforeVoiceprintPanel = html.slice(0, voiceprintPanelStart);
+    assert.match(voiceprintPanel, /id="asrDeviceServerBtn"[^>]*data-asr="server"/u);
+    assert.match(voiceprintPanel, /id="asrDeviceDisplayBtn"[^>]*data-asr="display"/u);
+    assert.match(voiceprintPanel, /id="ttsDeviceServerBtn"[^>]*data-tts="server"/u);
+    assert.match(voiceprintPanel, /id="ttsDeviceDisplayBtn"[^>]*data-tts="display"/u);
+    assert.doesNotMatch(beforeVoiceprintPanel, /id="asrDeviceServerBtn"|id="ttsDeviceServerBtn"/u);
     assert.match(tts, /serverBtn\.classList\.toggle\('active', this\.currentDevice === 'server'\)/u);
-    assert.match(tts, /displayBtn\.classList\.toggle\('active', this\.currentDevice === 'display'\)/u);
+    const asrDeviceSource = tts.slice(tts.indexOf('const AsrDevice'), tts.indexOf('const TtsDevice'));
+    assert.match(asrDeviceSource, /displayBtn\.classList\.toggle\('active', this\.currentDevice === 'display'\)/u);
     assert.match(tts, /btn\.classList\.toggle\('active', this\.autoTtsEnabled\)/u);
     assert.match(controls, /textPlaybackToggleBtn[\s\S]*classList\.toggle\('playing', isPlaying\)/u);
     assert.match(floatingControl, /floatingTextPlaybackToggleBtn[\s\S]*classList\.toggle\('playing', isPlaying\)/u);

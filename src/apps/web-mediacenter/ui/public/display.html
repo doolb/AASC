@@ -160,7 +160,7 @@
         const MAX_CONSECUTIVE_IGNORES = 3;
         const VOICE_COOLDOWN_MS = 10000;
         let localAsrAvailable = false;
-        // APK 原生 ASR 引擎（sherpa-onnx AAR）：检测到桥方法即认为可用，不再加载 WASM
+        // APK 原生 ASR 只作为服务器选择的识别提供端，录音端仍走公共 HTTP 接口。
         const nativeAsrAvailable = !!(window.NativeDisplay && window.NativeDisplay.asrStatus);
         let nativeAsrReady = false;
         // APK 原生 TTS 引擎：检测到桥方法即认为可用，模型就绪后上报 ttsGeneration 能力
@@ -205,8 +205,8 @@
                 console.warn('[声纹] 声纹库同步失败:', payload.error);
             }
         };
+
         let localAsrStreaming = false;
-        // 原生 ASR 模型下载/加载事件（由 NativeBridge evaluateJavascript 触发）
         window.onNativeAsrModel = function(payload) {
             if (!payload) return;
             if (payload.state === 'downloading') {
@@ -215,25 +215,15 @@
                 nativeAsrReady = true;
                 updateVoiceTextDisplay('语音识别已就绪', true);
                 setTimeout(() => updateVoiceTextDisplay('', true), 2000);
-                // 模型就绪后重新上报能力，让服务器 findDisplayWithAsr 能选中本机
-                if (displayWs && displayWs.readyState === WebSocket.OPEN && currentCapabilities) {
-                    currentCapabilities.voiceRecognition = true;
-                    displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
-                }
+                reportLocalAsrProviderAvailability(true);
             } else if (payload.state === 'error') {
                 nativeAsrReady = false;
                 const errorText = payload.error || '未知错误';
                 updateVoiceTextDisplay('语音模型加载失败: ' + errorText, true);
                 setTimeout(() => updateVoiceTextDisplay('', true), 4000);
-                // 内存不足属于终态错误：停止当前录音并撤销能力上报，避免请求继续触发 ensureModel 和重连。
                 if (errorText.includes('内存不足')) {
                     if (isListening) stopVoiceRecording();
-                    if (currentCapabilities) {
-                        currentCapabilities.voiceRecognition = false;
-                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                            displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
-                        }
-                    }
+                    reportLocalAsrProviderAvailability(false);
                 }
             }
         };
@@ -242,11 +232,10 @@
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
             displayWs.send(JSON.stringify(Object.assign({
                 type: 'asrResult',
-                requestId: requestId
+                requestId
             }, payload)));
         }
 
-        // 新版 APK 原生 ASR 完成回调；旧 APK 不会注册该回调，继续走同步兼容路径。
         window.onNativeAsrResult = function(payload) {
             if (!payload || !payload.requestId) return;
             const result = {
@@ -254,12 +243,9 @@
                 error: payload.error || ''
             };
             if (Array.isArray(payload.segments)) result.segments = payload.segments;
-            if (Object.prototype.hasOwnProperty.call(payload, 'speaker')) {
-                result.speaker = payload.speaker;
-            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'speaker')) result.speaker = payload.speaker;
             sendAsrResult(payload.requestId, result);
         };
-
         function reportNativeTtsCapability(ready) {
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN || !currentCapabilities) return;
             currentCapabilities.ttsGeneration = ready;
@@ -299,14 +285,15 @@
             }
         };
 
-        // 统一显示原生 ASR 下载进度；回调或状态查询缺少进度时也明确显示 0%，避免用户误以为下载未启动。
-        function showNativeAsrDownloadProgress(progress) {
-            const numericProgress = Number(progress);
-            const safeProgress = Number.isFinite(numericProgress)
-                ? Math.max(0, Math.min(100, Math.floor(numericProgress)))
-                : 0;
-            updateVoiceTextDisplay('语音模型下载中 ' + safeProgress + '%', false);
+        // 原生 ASR 能力与公共 ASR 可用性分开上报，避免 1.39 的公共录音状态覆盖 1.6 的提供端能力。
+        function reportLocalAsrProviderAvailability(available) {
+            if (!currentCapabilities) return;
+            currentCapabilities.voiceRecognition = available === true;
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+            }
         }
+
         let logReportConfig = null;
         let _originalConsole = null;
         
@@ -3948,7 +3935,7 @@
                     }
 
                     if (data.type === 'asrAudio') {
-                        handleAsrAudio(data);
+                        void handleAsrAudio(data);
                         return;
                     }
 
@@ -4027,45 +4014,25 @@
                     if (data.type === 'asrConfig') {
                         asrLanguageMode = 'zh';
                         asrDenoiseEnabled = !!data.denoise;
-                        if (nativeAsrAvailable) {
+                        if (nativeAsrAvailable && data.localAsrEnabled) {
                             if (typeof nativeBridge.asrConfigure === 'function') {
                                 nativeBridge.asrConfigure(asrLanguageMode, asrDenoiseEnabled);
                             }
-                            // APK 原生引擎：localAsrEnabled 关闭时把能力声明置 false
-                            if (!data.localAsrEnabled && nativeAsrReady) {
-                                nativeAsrReady = false;
-                                if (displayWs && displayWs.readyState === WebSocket.OPEN && currentCapabilities) {
-                                    currentCapabilities.voiceRecognition = false;
-                                    displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+                            try {
+                                const state = JSON.parse(nativeBridge.asrStatus());
+                                if (state.state === 'ready') {
+                                    nativeAsrReady = true;
+                                    reportLocalAsrProviderAvailability(true);
+                                } else if (state.state === 'not_ready' ||
+                                    (state.state === 'error' && !(state.error || '').includes('内存不足'))) {
+                                    nativeBridge.asrEnsureModel();
                                 }
-                            } else if (data.localAsrEnabled && !nativeAsrReady) {
-                                // 重新启用原生 ASR：模型已就绪则恢复能力上报（未就绪保持原状，等 onNativeAsrModel ready 回调）
-                                try {
-                                    const st = JSON.parse(nativeBridge.asrStatus());
-                                    if (st.state === 'ready') {
-                                        nativeAsrReady = true;
-                                        if (displayWs && displayWs.readyState === WebSocket.OPEN && currentCapabilities) {
-                                            currentCapabilities.voiceRecognition = true;
-                                            displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
-                                        }
-                                    } else if (st.state === 'not_ready' ||
-                                        (st.state === 'error' && !(st.error || '').includes('内存不足'))) {
-                                        // 普通下载错误允许配置变更时重试；内存错误是终态，不能循环重试。
-                                        nativeBridge.asrEnsureModel();
-                                    }
-                                } catch (e) {
-                                    console.warn('[ASR] asrStatus 解析失败:', e);
-                                }
+                            } catch (e) {
+                                console.warn('[ASR] asrStatus 解析失败:', e);
                             }
-                            return;
-                        }
-                        if (data.localAsrEnabled && !localAsrAvailable) {
-                            forceInitLocalAsr();
-                        } else if (!data.localAsrEnabled && localAsrAvailable) {
-                            if (localAsrStreaming) {
-                                SherpaASR.stopStreaming();
-                                localAsrStreaming = false;
-                            }
+                        } else if (nativeAsrAvailable && nativeAsrReady) {
+                            nativeAsrReady = false;
+                            reportLocalAsrProviderAvailability(false);
                         }
                         return;
                     }
@@ -4236,6 +4203,7 @@
                 .catch(() => setTimeout(watchDisplayVersion, 30000));
         })();
 
+        let currentCapabilities = null;
         initVoiceRecognition();
         updateVoiceStatusDisplay();
         
@@ -4270,11 +4238,6 @@
         }
         
         function sendVoiceStatus() {
-            if (!isListening && localAsrStreaming) {
-                SherpaASR.stopStreaming();
-                localAsrStreaming = false;
-            }
-            
             updateVoiceStatusDisplay();
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                 displayWs.send(JSON.stringify({
@@ -4318,8 +4281,25 @@
             }));
         }
         
-        let currentCapabilities = null;
-        
+        function reportVoiceAvailability(available) {
+            voiceSupported = available === true;
+            sendVoiceStatus();
+            if (!currentCapabilities || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'capabilities',
+                capabilities: currentCapabilities
+            }));
+        }
+
+        // 模型下载状态只更新本 APK 的提供端提示，不改变公共 ASR 可用性状态。
+        function showNativeAsrDownloadProgress(progress) {
+            const numericProgress = Number(progress);
+            const safeProgress = Number.isFinite(numericProgress)
+                ? Math.max(0, Math.min(100, Math.floor(numericProgress)))
+                : 0;
+            updateVoiceTextDisplay('语音模型下载中 ' + safeProgress + '%', false);
+        }
+
         async function detectCapabilities() {
             // WebGPU 探测在 capabilities 对象构造完成前可能异步执行，先独立保存诊断信息，
             // 避免异步闭包提前访问仍处于暂时性死区的 capabilities。
@@ -4408,31 +4388,20 @@
             }
             
             if (nativeAsrAvailable) {
-                // APK 原生识别引擎：按模型就绪状态声明能力，未就绪时触发下载
                 try {
-                    const st = JSON.parse(nativeBridge.asrStatus());
-                    nativeAsrReady = (st.state === 'ready');
+                    const state = JSON.parse(nativeBridge.asrStatus());
+                    nativeAsrReady = state.state === 'ready';
                     capabilities.voiceRecognition = nativeAsrReady;
-                    if (st.state === 'downloading') {
-                        showNativeAsrDownloadProgress(st.progress);
-                    } else if (st.state === 'not_ready' ||
-                        (st.state === 'error' && !(st.error || '').includes('内存不足'))) {
+                    if (state.state === 'downloading') {
+                        showNativeAsrDownloadProgress(state.progress);
+                    } else if (state.state === 'not_ready' ||
+                        (state.state === 'error' && !(state.error || '').includes('内存不足'))) {
                         nativeBridge.asrEnsureModel();
                     }
                 } catch (e) {
+                    nativeAsrReady = false;
                     capabilities.voiceRecognition = false;
-                }
-            } else if (localAsrAvailable || voiceSupported) {
-                capabilities.voiceRecognition = true;
-            } else {
-                try {
-                    const response = await fetch('/api/asr/status');
-                    const result = await response.json();
-                    if (result.available || result.ready) {
-                        capabilities.voiceRecognition = true;
-                    }
-                } catch (e) {
-                    capabilities.voiceRecognition = false;
+                    console.warn('[ASR] asrStatus 解析失败:', e);
                 }
             }
 
@@ -4491,6 +4460,7 @@
                             capabilities: full
                         }));
                     }
+                    sendVoiceStatus();
                     console.log('[能力] 已声明完整能力:', full);
                 }).catch(e => console.error('[能力] 完整能力声明失败:', e));
             } catch (e) {
@@ -4536,17 +4506,6 @@
                     stopVoiceRecording();
                 }
 
-                // 语音识别能力关闭 → 停止 ASR 和录音
-                if (!data.capabilities.voiceRecognition) {
-                    if (localAsrStreaming) {
-                        SherpaASR.stopStreaming();
-                        localAsrStreaming = false;
-                    }
-                    if (isListening) {
-                        stopVoiceRecording();
-                    }
-                }
-
                 // 文本显示能力关闭 → 隐藏提醒弹窗和文字覆盖层
                 if (!data.capabilities.displayText) {
                     const popup = document.querySelector('.reminder-popup');
@@ -4554,308 +4513,37 @@
                     voiceTextDisplay.className = 'voice-text-hidden';
                 }
 
-                // 初始能力从服务器到达 → 检查是否要自动启动录音
-                if (pendingAutoStart && isAlwaysListening && !isListening) {
+                // 能力确认或重连后都尝试启动，不能依赖 prevCaps/pendingAutoStart 的时序。
+                const shouldStartRecording = isAlwaysListening && !isListening
+                    && voiceListeningEnabled && voiceSupported;
+                if (shouldStartRecording) {
                     pendingAutoStart = false;
-                    if (voiceListeningEnabled && data.capabilities.voiceRecognition) {
-                        console.log('[能力] 服务器能力已确认，启动录音');
-                        startVoiceRecording();
-                    } else {
-                        console.log('[能力] 服务器禁止语音录制，跳过自动启动');
-                    }
-                }
-
-                // 动态开启录音 → 如果能力从关闭变为开启，启动录音
-                if (!pendingAutoStart && isAlwaysListening && !isListening &&
-                    voiceListeningEnabled && data.capabilities.voiceRecognition) {
-                    // 检测是否有能力从关闭变为开启（prevCaps 存在时才算转变，避免与初始 pendingAutoStart 冲突）
-                    if (prevCaps && (!prevCaps.voiceRecording || !prevCaps.voiceRecognition)) {
-                        console.log('[能力] 录音能力已开启，启动录音');
-                        startVoiceRecording();
-                    }
+                    console.log('[能力] 服务器能力已确认，启动录音');
+                    void startVoiceRecording();
                 }
             }
         }
         
-        // 旧 APK 没有异步 ASR 桥方法时保留原有同步实现，保证页面与旧安装包兼容。
-        function handleLegacyNativeAsr(data, pcmBase64) {
-            const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
-            if (useVoiceprint && voiceprintMultiSpeaker) {
-                const res = JSON.parse(nativeBridge.voiceprintDiarize(pcmBase64));
-                sendAsrResult(data.requestId, {
-                    segments: res.segments || [],
-                    error: res.error || ''
-                });
-                return;
-            }
-
-            const res = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
-            if (!useVoiceprint) {
-                sendAsrResult(data.requestId, {
-                    text: res.text || '',
-                    error: res.error || ''
-                });
-                return;
-            }
-
-            const vp = JSON.parse(nativeBridge.voiceprintMatch(pcmBase64));
-            const result = {
-                text: res.text || '',
-                error: res.error || vp.error || ''
-            };
-            // vp.error 表示声纹不可用，省略 speaker 让服务端放行；
-            // speaker:null 表示声纹可用但没有匹配对象，交给服务端按声纹策略拦截。
-            if (!vp.error) result.speaker = vp.speaker || null;
-            sendAsrResult(data.requestId, result);
-        }
-
-        async function handleAsrAudio(data) {
-            // APK 原生识别路径：webm/wav base64 → WebAudio 解码重采样 16k mono → 裸 PCM → 原生引擎
-            if (nativeAsrAvailable) {
-                if (!nativeAsrReady) {
-                    // 只有 not_ready 才触发幂等下载；error 可能是内存终态，不能因每个请求重复加载。
-                    let triggerEnsure = false;
-                    let modelError = '';
-                    try {
-                        const st = JSON.parse(nativeBridge.asrStatus());
-                        triggerEnsure = st.state === 'not_ready' ||
-                            (st.state === 'error' && !modelError.includes('内存不足'));
-                        modelError = st.error || '';
-                    } catch (e) {
-                        console.warn('[ASR] asrStatus 解析失败:', e);
-                        triggerEnsure = true;
-                    }
-                    if (triggerEnsure && !modelError.includes('内存不足')) {
-                        nativeBridge.asrEnsureModel();
-                    }
-                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                        displayWs.send(JSON.stringify({
-                            type: 'asrResult',
-                            requestId: data.requestId,
-                            error: modelError || '模型下载中',
-                            text: ''
-                        }));
-                    }
-                    return;
-                }
-                try {
-                    const pcmBase64 = await decodeAudioToPcmBase64(data.audioData);
-                    const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
-                    if (typeof nativeBridge.asrRecognizeAsyncWithOptions === 'function') {
-                        const accepted = JSON.parse(nativeBridge.asrRecognizeAsyncWithOptions(
-                            data.requestId,
-                            pcmBase64,
-                            useVoiceprint,
-                            voiceprintMultiSpeaker,
-                            asrDenoiseEnabled,
-                            asrLanguageMode,
-                            voiceprintMultiMode,
-                            voiceprintSpeakerCount
-                        ));
-                        if (!accepted.accepted) {
-                            sendAsrResult(data.requestId, {
-                                text: '',
-                                error: accepted.error || '识别任务提交失败'
-                            });
-                        }
-                    } else if (typeof nativeBridge.asrRecognizeAsync === 'function') {
-                        const accepted = JSON.parse(nativeBridge.asrRecognizeAsync(
-                            data.requestId,
-                            pcmBase64,
-                            useVoiceprint,
-                            voiceprintMultiSpeaker
-                        ));
-                        if (!accepted.accepted) {
-                            sendAsrResult(data.requestId, {
-                                text: '',
-                                error: accepted.error || '识别任务提交失败'
-                            });
-                        }
-                    } else {
-                        handleLegacyNativeAsr(data, pcmBase64);
-                    }
-                } catch (e) {
-                    sendAsrResult(data.requestId, { error: e.message, text: '' });
-                }
-                return;
-            }
-
-            if (!SherpaASR || !SherpaASR.isLoaded) {
-                console.log('[显示端] 收到ASR音频但本地ASR未初始化');
-                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                    displayWs.send(JSON.stringify({
-                        type: 'asrResult',
-                        requestId: data.requestId,
-                        error: '本地ASR未初始化',
-                        text: ''
-                    }));
-                }
-                return;
-            }
-
-            try {
-                const text = await SherpaASR.recognizeBuffer(data.audioData);
-                console.log('[显示端] ASR识别结果:', text);
-
-                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                    displayWs.send(JSON.stringify({
-                        type: 'asrResult',
-                        requestId: data.requestId,
-                        text: text || ''
-                    }));
-                }
-            } catch (e) {
-                console.error('[显示端] ASR音频处理失败:', e.message);
-                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                    displayWs.send(JSON.stringify({
-                        type: 'asrResult',
-                        requestId: data.requestId,
-                        error: e.message,
-                        text: ''
-                    }));
-                }
-            }
-        }
-
-        // webm/wav base64 → 16kHz mono 裸 PCM s16le 的 base64（原生引擎输入契约）
-        async function decodeAudioToPcmBase64(base64Audio) {
-            const binary = atob(base64Audio);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            const decodeCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1, 44100);
-            const audioBuffer = await decodeCtx.decodeAudioData(bytes.buffer.slice(0));
-            const length = Math.ceil(audioBuffer.duration * 16000);
-            const resampleCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, length, 16000);
-            const src = resampleCtx.createBufferSource();
-            src.buffer = audioBuffer;
-            src.connect(resampleCtx.destination);
-            src.start();
-            const rendered = await resampleCtx.startRendering();
-            const samples = rendered.getChannelData(0);
-            const pcm = new Uint8Array(samples.length * 2);
-            const dv = new DataView(pcm.buffer);
-            for (let i = 0; i < samples.length; i++) {
-                const s = Math.max(-1, Math.min(1, samples[i]));
-                dv.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-            }
-            let bin = '';
-            for (let i = 0; i < pcm.length; i++) bin += String.fromCharCode(pcm[i]);
-            return btoa(bin);
-        }
-
         function initVoiceRecognition() {
             checkAsrStatus();
         }
         
-        async function forceInitLocalAsr() {
-            if (nativeAsrAvailable) return false;  // 原生引擎负责识别，不加载 WASM
+        async function checkAsrStatus() {
             try {
-                if (!SherpaASR) return false;
-                if (SherpaASR.isLoaded) return true;
-
-                const ready = await SherpaASR.init({ enabled: true });
-                if (ready) {
-                    SherpaASR.onPartial = (text) => {
-                        if (text) {
-                            updateVoiceTextDisplay(text, true);
-                        }
-                    };
-                    SherpaASR.onResult = (text) => {
-                        if (!text) return;
-
-                        consecutiveIgnoreCount = 0;
-                        console.log('显示端本地ASR识别结果:', text);
-                        updateVoiceTextDisplay(text, true);
-
-                        sendRecognizedVoiceInput(text);
-
-                        setTimeout(() => {
-                            updateVoiceTextDisplay('', true);
-                        }, 3000);
-                    };
-                    localAsrAvailable = true;
-                    voiceSupported = true;
-                    console.log('[显示端] 本地 WASM ASR 已就绪 (服务端请求)');
-                    return true;
-                }
-                return false;
-            } catch (e) {
-                console.log('[显示端] 强制初始化本地ASR失败:', e.message);
-                return false;
-            }
-        }
-
-                async function checkAsrStatus() {
-            if (nativeAsrAvailable) {
-                console.log('显示端原生 ASR 引擎可用');
-                return;  // 原生引擎由 asrEnsureModel 下载模型，就绪后 onNativeAsrModel 重新上报能力
-            }
-            try {
-                const localAsrReady = await initLocalAsr();
-                if (localAsrReady) {
-                    localAsrAvailable = true;
-                    voiceSupported = true;
-                    console.log('显示端本地 WASM ASR 可用');
-                    // 不直接启动录音，由 handleCapabilitiesUpdated 中的 pendingAutoStart 处理
-                    return;
-                }
-                
+                // 显示端只使用服务端公共 ASR，避免本地模型状态覆盖服务器能力。
                 const response = await fetch('/api/asr/status');
                 const data = await response.json();
-                voiceSupported = data.ready;
+                reportVoiceAvailability(data.ready === true);
                 
                 if (voiceSupported) {
                     console.log('显示端服务器 ASR 服务可用');
                     // 不直接启动录音，由 handleCapabilitiesUpdated 中的 pendingAutoStart 处理
                 } else {
                     console.log('ASR 服务未初始化');
-                    updateVoiceStatusDisplay();
                 }
             } catch (e) {
                 console.log('ASR 服务不可用:', e.message);
-                voiceSupported = false;
-                updateVoiceStatusDisplay();
-            }
-        }
-        
-        async function initLocalAsr() {
-            if (nativeAsrAvailable) return false;  // 原生引擎负责识别，不加载 WASM
-            try {
-                if (!window.SherpaASR) return false;
-                
-                const enabled = await fetch('/api/config/localAsr')
-                    .then(r => r.json())
-                    .then(d => d.enabled)
-                    .catch(() => false);
-                
-                if (!enabled) return false;
-                
-                const ready = await SherpaASR.init({ enabled: true });
-                if (ready) {
-                    SherpaASR.onPartial = (text) => {
-                        if (text) {
-                            updateVoiceTextDisplay(text, true);
-                        }
-                    };
-                    SherpaASR.onResult = (text) => {
-                        if (!text) return;
-                        
-                        consecutiveIgnoreCount = 0;
-                        console.log('显示端本地ASR识别结果:', text);
-                        updateVoiceTextDisplay(text, true);
-                        
-                        sendRecognizedVoiceInput(text);
-                        
-                        setTimeout(() => {
-                            updateVoiceTextDisplay('', true);
-                        }, 3000);
-                    };
-                    return true;
-                }
-                return false;
-            } catch (e) {
-                console.log('本地ASR初始化失败:', e.message);
-                return false;
+                reportVoiceAvailability(false);
             }
         }
         
@@ -4893,10 +4581,6 @@
             stopSilenceDetection();
             const audioBlob = pcmCapture ? pcmCapture.stopWav() : null;
             pcmCapture = null;
-            if (localAsrStreaming) {
-                SherpaASR.stopStreaming();
-                localAsrStreaming = false;
-            }
             if (micStream) {
                 micStream.getTracks().forEach(t => t.stop());
                 micStream = null;
@@ -4939,8 +4623,8 @@
                 return;
             }
 
-            if (currentCapabilities && !currentCapabilities.voiceRecognition) {
-                console.log('[能力] 无语音识别能力，跳过录音启动');
+            if (!voiceSupported) {
+                console.log('[能力] 公共 ASR 不可用，跳过录音启动');
                 return;
             }
 
@@ -4962,20 +4646,6 @@
                         sampleRate: 16000
                     }
                 });
-                
-                if (localAsrAvailable && SherpaASR.isLoaded) {
-                    const started = await SherpaASR.startStreaming(micStream);
-                    if (started) {
-                        localAsrStreaming = true;
-                        isListening = true;
-                        hasSpeech = false;
-                        speechStartTime = null;
-                        silenceStartTime = null;
-                        console.log('显示端本地ASR流式识别已启动');
-                        sendVoiceStatus();
-                        return;
-                    }
-                }
                 
                 if (!startRawPcmCapture(micStream)) {
                     throw new Error('当前浏览器不支持原始 PCM 录音');
@@ -5128,6 +4798,112 @@
             } catch (e) {
                 console.error('显示端语音识别请求失败:', e);
             }
+        }
+
+        // 只有服务器选中的 APK 提供端处理 asrAudio；录音端永远走上面的公共 HTTP 接口。
+        function handleLegacyNativeAsr(data, pcmBase64) {
+            const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
+            if (useVoiceprint && voiceprintMultiSpeaker) {
+                const result = JSON.parse(nativeBridge.voiceprintDiarize(pcmBase64));
+                sendAsrResult(data.requestId, {
+                    segments: result.segments || [],
+                    error: result.error || ''
+                });
+                return;
+            }
+            const result = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
+            if (!useVoiceprint) {
+                sendAsrResult(data.requestId, { text: result.text || '', error: result.error || '' });
+                return;
+            }
+            const voiceprint = JSON.parse(nativeBridge.voiceprintMatch(pcmBase64));
+            const response = {
+                text: result.text || '',
+                error: result.error || voiceprint.error || ''
+            };
+            if (!voiceprint.error) response.speaker = voiceprint.speaker || null;
+            sendAsrResult(data.requestId, response);
+        }
+
+        async function handleAsrAudio(data) {
+            if (!nativeAsrAvailable) {
+                sendAsrResult(data.requestId, { text: '', error: '当前显示端不是 ASR 提供端' });
+                return;
+            }
+            if (!nativeAsrReady) {
+                let modelError = '';
+                try {
+                    const state = JSON.parse(nativeBridge.asrStatus());
+                    modelError = state.error || '';
+                    if ((state.state === 'not_ready' || state.state === 'error') &&
+                        !modelError.includes('内存不足')) {
+                        nativeBridge.asrEnsureModel();
+                    }
+                } catch (e) {
+                    console.warn('[ASR] asrStatus 解析失败:', e);
+                }
+                sendAsrResult(data.requestId, { text: '', error: modelError || '模型下载中' });
+                return;
+            }
+            try {
+                const pcmBase64 = await decodeAudioToPcmBase64(data.audioData);
+                const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
+                if (typeof nativeBridge.asrRecognizeAsyncWithOptions === 'function') {
+                    const accepted = JSON.parse(nativeBridge.asrRecognizeAsyncWithOptions(
+                        data.requestId,
+                        pcmBase64,
+                        useVoiceprint,
+                        voiceprintMultiSpeaker,
+                        asrDenoiseEnabled,
+                        asrLanguageMode,
+                        voiceprintMultiMode,
+                        voiceprintSpeakerCount
+                    ));
+                    if (!accepted.accepted) {
+                        sendAsrResult(data.requestId, { text: '', error: accepted.error || '识别任务提交失败' });
+                    }
+                } else if (typeof nativeBridge.asrRecognizeAsync === 'function') {
+                    const accepted = JSON.parse(nativeBridge.asrRecognizeAsync(
+                        data.requestId,
+                        pcmBase64,
+                        useVoiceprint,
+                        voiceprintMultiSpeaker
+                    ));
+                    if (!accepted.accepted) {
+                        sendAsrResult(data.requestId, { text: '', error: accepted.error || '识别任务提交失败' });
+                    }
+                } else {
+                    handleLegacyNativeAsr(data, pcmBase64);
+                }
+            } catch (e) {
+                sendAsrResult(data.requestId, { text: '', error: e.message });
+            }
+        }
+
+        // 服务端下发的音频是 WAV/PCM，桥只接收 16kHz mono s16le 裸 PCM。
+        async function decodeAudioToPcmBase64(base64Audio) {
+            const binary = atob(base64Audio);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const decodeContext = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1, 44100);
+            const audioBuffer = await decodeContext.decodeAudioData(bytes.buffer.slice(0));
+            const length = Math.ceil(audioBuffer.duration * 16000);
+            const resampleContext = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, length, 16000);
+            const source = resampleContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(resampleContext.destination);
+            source.start();
+            const rendered = await resampleContext.startRendering();
+            const samples = rendered.getChannelData(0);
+            const pcm = new Uint8Array(samples.length * 2);
+            const dataView = new DataView(pcm.buffer);
+            for (let i = 0; i < samples.length; i++) {
+                const sample = Math.max(-1, Math.min(1, samples[i]));
+                dataView.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+            }
+            let encoded = '';
+            for (let i = 0; i < pcm.length; i++) encoded += String.fromCharCode(pcm[i]);
+            return btoa(encoded);
         }
         
         document.addEventListener('click', function() {

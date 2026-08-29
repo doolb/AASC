@@ -26,9 +26,12 @@ test('正式显示端固定中文，降噪由声纹面板统一配置', () => {
     const server = read('src/apps/server/boot/server-app.js');
     const bridge = read('src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt');
     const languageMode = read('src/apps/android-display/app/src/main/java/com/aasc/display/AsrLanguageMode.kt');
-    assert.match(display, /asrRecognizeAsyncWithOptions/);
     assert.match(display, /asrDenoiseEnabled/);
     assert.match(display, /asrLanguageMode = 'zh'/);
+    assert.match(display, /fetch\('\/api\/asr\/recognize'/);
+    assert.match(display, /asrRecognizeAsyncWithOptions/);
+    assert.match(display, /handleAsrAudio/);
+    assert.match(display, /asrConfig[\s\S]*?localAsrEnabled/);
     assert.match(upload, /vpDenoiseCheck/);
     assert.match(voiceprintPanel, /vpDenoiseCheck/);
     assert.match(voiceprintPanel, /denoise:/);

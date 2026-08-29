@@ -700,6 +700,11 @@ input[type="file"] {
     border-radius: 12px;
 }
 
+/* 媒体播放进度与音量属于同一组控制，音量滑条紧跟进度滑条显示。 */
+.media-volume-control {
+    margin-top: 12px;
+}
+
 .control-item label {
     display: block;
     font-size: 13px;

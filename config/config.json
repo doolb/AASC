@@ -9,7 +9,8 @@
     "requestTimeoutMs": 20000,
     "extraTimeoutPerPending": 10000,
     "maxErrorBytes": 65536,
-    "device": "display"
+    "device": "display",
+    "serverEnabled": false
   },
   "asr": {
     "mode": "isolated",
@@ -18,6 +19,7 @@
     "requireChinese": true,
     "languageMode": "zh",
     "denoise": false,
+    "serverEnabled": false,
     "isolateProcess": {
       "enabled": false,
       "requestTimeoutMs": 60000,

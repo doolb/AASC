@@ -33,6 +33,11 @@ SUB_DISPLAY_CAPABILITIES:
     voiceRecording: true
     voiceRecognition: true
     displayText: false
+
+voiceRecognition:
+    表示显示端可作为服务器 ASR 提供端
+    Android 由原生模型状态自动上报，浏览器普通显示端为 false
+    不与录音显示端是否可以调用公共 /api/asr/recognize 混用
 ```
 
 ## 服务端实现 (server.js)
@@ -266,19 +271,16 @@ async function detectCapabilities():
     catch:
         capabilities.voiceRecording = false
     
-    // 检测语音识别能力（本地 sherpa-onnx-wasm）
-    localAsrReady = await initLocalAsr()
-    if localAsrReady:
-        capabilities.voiceRecognition = true
+    // voiceRecognition 只表示本显示端能否作为 ASR 提供端
+    if nativeAsrAvailable:
+        state = JSON.parse(nativeBridge.asrStatus())
+        capabilities.voiceRecognition = state.state == 'ready'
+        if state.state == 'downloading':
+            显示下载进度
+        else if state.state == 'not_ready' or state.state == 'error':
+            nativeBridge.asrEnsureModel()
     else:
-        // 检测服务端 ASR
-        try:
-            response = await fetch('/api/asr/status')
-            result = await response.json()
-            if result.available:
-                capabilities.voiceRecognition = true
-        catch:
-            capabilities.voiceRecognition = false
+        capabilities.voiceRecognition = false
     
     return capabilities
 ```
@@ -324,13 +326,9 @@ function handleCapabilitiesUpdated(data):
     if !data.capabilities.voiceRecording && isListening:
         stopVoiceRecording()
     
-    // 语音识别能力关闭 → 停止 ASR 和录音
-    if !data.capabilities.voiceRecognition:
-        if localAsrStreaming:
-            SherpaASR.stopStreaming()
-            localAsrStreaming = false
-        if isListening:
-            stopVoiceRecording()
+    // 录音能力关闭才停止采集；voiceRecognition 是提供端能力
+    if !data.capabilities.voiceRecording and isListening:
+        stopVoiceRecording()
     
     // 文本显示能力关闭 → 隐藏提醒弹窗和文字覆盖层
     if !data.capabilities.displayText:
@@ -340,7 +338,7 @@ function handleCapabilitiesUpdated(data):
     // 初始能力从服务器到达 → 检查是否要自动启动录音
     if pendingAutoStart && isAlwaysListening && !isListening:
         pendingAutoStart = false
-        if data.capabilities.voiceRecording && data.capabilities.voiceRecognition:
+        if data.capabilities.voiceRecording && voiceSupported:
             startVoiceRecording()
         else:
             console.log('[能力] 服务器禁止语音录制，跳过自动启动')
@@ -381,7 +379,7 @@ async function startVoiceRecording():
     // 检查服务器是否允许录音
     if currentCapabilities && !currentCapabilities.voiceRecording:
         return
-    if currentCapabilities && !currentCapabilities.voiceRecognition:
+    if !voiceSupported:
         return
     
     // ... 正常启动录音流程

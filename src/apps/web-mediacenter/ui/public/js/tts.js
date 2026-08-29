@@ -75,6 +75,7 @@ const Tts = {
 
 const AsrDevice = {
     currentDevice: 'server',
+    serverEnabled: true,
 
     async init() {
         try {
@@ -82,6 +83,7 @@ const AsrDevice = {
             const data = await res.json();
             if (data.status === 'success') {
                 this.currentDevice = data.device || 'server';
+                this.serverEnabled = data.serverEnabled !== false;
                 this.updateUI();
             }
         } catch (err) {
@@ -91,6 +93,10 @@ const AsrDevice = {
 
     async setDevice(device) {
         if (device !== 'server' && device !== 'display') return;
+        if (device === 'server' && !this.serverEnabled) {
+            showToast('服务器语音识别已关闭，请先开启', 'error');
+            return;
+        }
 
         try {
             const res = await fetch('/api/config/asrDevice', {
@@ -118,6 +124,8 @@ const AsrDevice = {
 
         if (serverBtn) {
             serverBtn.classList.toggle('active', this.currentDevice === 'server');
+            serverBtn.disabled = !this.serverEnabled;
+            serverBtn.title = this.serverEnabled ? '' : '服务器语音识别已关闭';
             serverBtn.style.background = this.currentDevice === 'server'
                 ? 'linear-gradient(135deg, #4CAF50, #45a049)'
                 : '';
@@ -129,17 +137,19 @@ const AsrDevice = {
                 : '';
         }
         if (statusEl) {
-            const deviceName = this.currentDevice === 'server' ? '服务端 (本地 CPU)' : '显示端 (浏览器 WASM)';
-            const displayCount = window.DeviceList ? window.DeviceList.getDisplays().filter(d => {
-                const caps = d.capabilities;
-                return caps && caps.voiceRecognition;
-            }).length : 0;
-            statusEl.textContent = `当前: ${deviceName}` + (this.currentDevice === 'display' ? ` | 可用显示端: ${displayCount}` : '');
+            statusEl.textContent = this.currentDevice === 'display'
+                ? '当前: 显示端（按连接顺序选择提供端）'
+                : '当前: 服务端公共 ASR';
         }
     },
 
     handleDeviceChanged(device) {
         this.currentDevice = device;
+        this.updateUI();
+    },
+
+    handleServerEnabledChanged(enabled) {
+        this.serverEnabled = enabled === true;
         this.updateUI();
     }
 };
@@ -149,6 +159,7 @@ window.setAsrDevice = AsrDevice.setDevice.bind(AsrDevice);
 
 const TtsDevice = {
     currentDevice: 'server',
+    serverEnabled: true,
 
     async init() {
         try {
@@ -156,6 +167,7 @@ const TtsDevice = {
             const data = await res.json();
             if (data.status === 'success') {
                 this.currentDevice = data.device || 'server';
+                this.serverEnabled = data.serverEnabled !== false;
                 this.updateUI();
             }
         } catch (err) {
@@ -165,6 +177,10 @@ const TtsDevice = {
 
     async setDevice(device) {
         if (device !== 'server' && device !== 'display') return;
+        if (device === 'server' && !this.serverEnabled) {
+            showToast('服务器语音生成已关闭，请先开启', 'error');
+            return;
+        }
 
         try {
             const res = await fetch('/api/config/ttsDevice', {
@@ -192,6 +208,8 @@ const TtsDevice = {
 
         if (serverBtn) {
             serverBtn.classList.toggle('active', this.currentDevice === 'server');
+            serverBtn.disabled = !this.serverEnabled;
+            serverBtn.title = this.serverEnabled ? '' : '服务器语音生成已关闭';
             serverBtn.style.background = this.currentDevice === 'server'
                 ? 'linear-gradient(135deg, #4CAF50, #45a049)'
                 : '';
@@ -214,6 +232,11 @@ const TtsDevice = {
 
     handleDeviceChanged(device) {
         this.currentDevice = device;
+        this.updateUI();
+    },
+
+    handleServerEnabledChanged(enabled) {
+        this.serverEnabled = enabled === true;
         this.updateUI();
     }
 };

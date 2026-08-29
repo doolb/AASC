@@ -8,7 +8,7 @@ const path = require('node:path');
 const DISPLAY = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/display.html');
 const PCM_CAPTURE = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/pcm-audio-capture.js');
 
-test('APK 显示端优先使用原始 PCM 采集并封装 WAV', () => {
+test('录音显示端使用原始 PCM 公共 ASR，APK 提供端保留原生入口', () => {
     const display = fs.readFileSync(DISPLAY, 'utf8');
     const pcmCapture = fs.readFileSync(PCM_CAPTURE, 'utf8');
 
@@ -18,7 +18,10 @@ test('APK 显示端优先使用原始 PCM 采集并封装 WAV', () => {
     assert.match(pcmCapture, /createScriptProcessor\(/);
     assert.match(pcmCapture, /encodeWav\(/);
     assert.match(display, /sampleRate: 16000/);
+    assert.match(display, /fetch\('\/api\/asr\/recognize'/);
     assert.match(display, /nativeAsrAvailable/);
+    assert.match(display, /handleAsrAudio/);
+    assert.doesNotMatch(display, /new MediaRecorder\(/);
 });
 
 test('APK 录音不主动启用浏览器回声消除和噪声抑制', () => {
