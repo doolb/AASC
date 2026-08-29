@@ -144,6 +144,9 @@
         let audioContext = null;
         let pcmCapture = null;
         let analyser = null;
+        let vadSource = null;
+        let silenceDetectionFrameId = null;
+        let silenceDetectionRunning = false;
         let silenceStartTime = null;
         let hasSpeech = false;
         let speechStartTime = null;
@@ -4179,6 +4182,8 @@
         window.addEventListener('pagehide', function() {
             displayPageActive = false;
             clearDisplayReconnectTimer();
+            // 页面离开时主动释放麦克风和音频上下文，避免 WebView 保留旧的持续监听链路。
+            stopVoiceRecording();
             const socket = displayWs;
             displayWs = null;
             if (!socket || socket.readyState === WebSocket.CLOSED) return;
@@ -4668,7 +4673,19 @@
             pcmCapture = null;
         }
 
+        // 统一释放持续监听资源；调用方可以安全重复执行，避免异常/关闭路径留下旧音频图。
+        function releaseVoiceRecordingResources() {
+            stopSilenceDetection();
+            stopRawPcmCapture();
+            if (micStream) {
+                micStream.getTracks().forEach(track => track.stop());
+                micStream = null;
+            }
+        }
+
         function stopVoiceRecording() {
+            const shouldSubmitPendingAudio = isListening === true;
+            isListening = false;
             if (vadNoiseTestActive) {
                 vadNoiseTestActive = false;
                 sendVoiceVadNoiseResult({
@@ -4677,18 +4694,8 @@
                 });
                 vadNoiseTestRequestId = null;
             }
-            if (!isListening) {
-                stopRawPcmCapture();
-                return;
-            }
-            isListening = false;
-            stopSilenceDetection();
-            const audioBlob = pcmCapture ? pcmCapture.stopWav() : null;
-            pcmCapture = null;
-            if (micStream) {
-                micStream.getTracks().forEach(t => t.stop());
-                micStream = null;
-            }
+            const audioBlob = shouldSubmitPendingAudio ? takeRawPcmWav() : null;
+            releaseVoiceRecordingResources();
             sendVoiceStatus();
             console.log('[语音] 录音已停止');
             if (audioBlob) void sendAudioForRecognition(audioBlob);
@@ -4697,25 +4704,19 @@
         // VAD 检测到一段语音结束后，只清空当前 WAV 缓冲并重新开始采集，不创建新的编码器。
         async function finishVoiceSegment() {
             if (!isListening || !pcmCapture) return;
-            stopSilenceDetection();
+            // 当前检测回调即将返回，先标记为停止，再使用同一个 AnalyserNode 开启下一轮。
+            silenceDetectionRunning = false;
             const audioBlob = takeRawPcmWav();
-            stopRawPcmCapture();
             hasSpeech = false;
             speechStartTime = null;
             silenceStartTime = null;
             if (audioBlob) void sendAudioForRecognition(audioBlob);
             if (!isListening) return;
-            if (!startRawPcmCapture(micStream)) {
-                isListening = false;
-                stopRawPcmCapture();
-                sendVoiceStatus();
-                return;
-            }
             startSilenceDetection();
         }
 
         async function startVoiceRecording() {
-            if (isListening) return;
+            if (!displayPageActive || isListening) return;
 
             if (!voiceListeningEnabled) {
                 console.log('[能力] 显示端语音监听已关闭，跳过录音启动');
@@ -4742,6 +4743,19 @@
             }
             
             try {
+                if (micStream && pcmCapture?.active) {
+                    isListening = true;
+                    hasSpeech = false;
+                    speechStartTime = null;
+                    silenceStartTime = null;
+                    console.log('复用显示端已有语音采集链路');
+                    sendVoiceStatus();
+                    startSilenceDetection();
+                    return;
+                }
+
+                // 旧资源可能处于半关闭状态，创建新麦克风前先幂等清理，避免覆盖旧引用。
+                releaseVoiceRecordingResources();
                 micStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: {
                         // 关闭浏览器隐式处理，保证 APK 本地 ASR 收到与测试 APK 一致的原始音频。
@@ -4764,7 +4778,7 @@
                 
             } catch (e) {
                 console.error('显示端麦克风访问失败:', e);
-                stopRawPcmCapture();
+                releaseVoiceRecordingResources();
                 isListening = false;
                 voiceSupported = false;
                 sendVoiceStatus();
@@ -4772,22 +4786,29 @@
         }
         
         function startSilenceDetection() {
-            if (!micStream) return;
+            if (!micStream || !pcmCapture?.context || silenceDetectionRunning) return;
             
             try {
                 if (!audioContext) {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    // VAD 与 PCM 采集复用同一个 AudioContext，整段监听期间只保留一条音频图。
+                    audioContext = pcmCapture.context;
                 }
-                const source = audioContext.createMediaStreamSource(micStream);
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 2048;
-                source.connect(analyser);
+                if (!analyser) {
+                    vadSource = audioContext.createMediaStreamSource(micStream);
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = 2048;
+                    vadSource.connect(analyser);
+                }
                 
                 const SILENCE_DURATION = 1000;
                 const MIN_SPEECH_DURATION = 300;
+                silenceDetectionRunning = true;
                 
                 const checkSilence = () => {
-                    if (!isListening || !analyser) return;
+                    if (!silenceDetectionRunning || !isListening || !analyser) {
+                        silenceDetectionFrameId = null;
+                        return;
+                    }
                     
                     const timeDomainData = new Uint8Array(analyser.fftSize);
                     analyser.getByteTimeDomainData(timeDomainData);
@@ -4800,7 +4821,7 @@
                     const rms = Math.sqrt(sumSquares / timeDomainData.length);
                     
                     if (vadNoiseTestActive) {
-                        requestAnimationFrame(checkSilence);
+                        silenceDetectionFrameId = requestAnimationFrame(checkSilence);
                         return;
                     }
 
@@ -4824,21 +4845,27 @@
                         }
                     }
                     
-                    requestAnimationFrame(checkSilence);
+                    silenceDetectionFrameId = requestAnimationFrame(checkSilence);
                 };
                 
-                requestAnimationFrame(checkSilence);
+                silenceDetectionFrameId = requestAnimationFrame(checkSilence);
             } catch (e) {
+                silenceDetectionRunning = false;
                 console.log('静音检测初始化失败:', e);
             }
         }
         
         function stopSilenceDetection() {
-            if (audioContext) {
-                audioContext.close();
-                audioContext = null;
-                analyser = null;
+            silenceDetectionRunning = false;
+            if (silenceDetectionFrameId !== null) {
+                cancelAnimationFrame(silenceDetectionFrameId);
+                silenceDetectionFrameId = null;
             }
+            if (vadSource) vadSource.disconnect();
+            vadSource = null;
+            analyser = null;
+            // audioContext 由 PcmAudioCapture 统一关闭，这里只断开 VAD 节点，避免分段时销毁采集上下文。
+            audioContext = null;
         }
         
         async function sendAudioForRecognition(audioBlob) {
@@ -4889,6 +4916,8 @@
                         voiceCooldownUntil = Date.now() + cooldownMs;
                         console.log('显示端连续' + consecutiveIgnoreCount + '次无效输入，冷却' + (cooldownMs / 1000) + '秒');
                         isListening = false;
+                        // 连续无效识别进入冷却时才释放采集资源；普通 ignored 继续复用当前链路。
+                        releaseVoiceRecordingResources();
                         sendVoiceStatus();
                         
                         if (isAlwaysListening) {
@@ -4900,7 +4929,8 @@
                             }, cooldownMs);
                         }
                     } else if (isAlwaysListening) {
-                        setTimeout(() => startVoiceRecording(), 500);
+                        // finishVoiceSegment 已经在同一条采集链路上恢复 VAD，这里不再重复启动麦克风。
+                        console.log('显示端忽略无效语音，继续复用当前监听链路');
                     }
                 }
             } catch (e) {

@@ -103,6 +103,27 @@ VAD 配置:
     recommendedThreshold = clamp(p95Rms * 1.5, 0.001, 0.2)
     显示端回传 voiceVadNoiseResult
     服务端转发结果到控制端，控制端显示数值和建议阈值
+
+持续监听资源生命周期:
+    startVoiceRecording():
+        如果 micStream、pcmCapture、analyser 已存在:
+            只恢复 isListening 和 VAD 检测循环
+            不重新 getUserMedia，不重新创建 AudioContext
+        否则创建一次 micStream、PCM AudioContext 和 AnalyserNode
+
+    finishVoiceSegment():
+        audioBlob = takeRawPcmWav()
+        仅清空当前 PCM chunks
+        不调用 stopRawPcmCapture，不调用 stopSilenceDetection
+        继续复用当前采集链路进行下一段检测
+
+    ignored 或异常重启:
+        releaseVoiceRecordingResources()
+        停止媒体轨道、断开节点、关闭 AudioContext、取消检测循环
+        再按需要启动下一次监听
+
+    关闭监听/页面离开/冷却:
+        调用同一个幂等 releaseVoiceRecordingResources()
 ```
 
 ## 显示端实现伪代码

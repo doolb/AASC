@@ -4,6 +4,12 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 修复显示端持续监听 Chromium 内存泄漏
+  - 连续监听期间复用 PCM/VAD 的同一个 `AudioContext`，语音分段只清空 PCM 缓冲，不重复申请麦克风和创建音频图。
+  - 普通 `ignored` 识别继续复用当前链路；连续无效冷却、关闭监听、异常和页面离开使用统一资源清理。
+  - 验证：资源生命周期、显示端监听/会话/内置指令/TTS、VAD 配置回归通过；脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_显示端持续监听内存泄漏修复.md`。
+
 - ✅ [2026-08-29] 增加显示端 VAD 设置与底噪检测
   - 控制端设备列表可按显示端调整 VAD RMS 阈值，服务端按 `displayId` 持久化，并在显示端连接或修改时同步配置。
   - 增加约 3 秒静音采样，返回平均 RMS、峰值 RMS、P95 RMS、采样数量和建议阈值，支持控制端直接应用建议值。
