@@ -452,6 +452,44 @@ input[type="file"] {
     white-space: nowrap;
 }
 
+.voice-vad-description {
+    margin: 0 0 12px;
+    color: var(--text-secondary, #aaa);
+    font-size: 12px;
+}
+
+.display-vad-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 10px;
+}
+
+.display-vad-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    background: var(--card-background, rgba(255, 255, 255, 0.04));
+}
+
+.display-vad-card-title {
+    overflow: hidden;
+    color: var(--text-primary, #fff);
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.display-vad-card-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
 .display-vad-threshold input {
     width: 68px;
     padding: 2px 4px;
@@ -485,8 +523,14 @@ input[type="file"] {
 }
 
 .display-vad-noise-result {
-    min-width: 220px;
+    min-width: 0;
     color: var(--text-secondary, #aaa);
+    font-size: 12px;
+}
+
+.display-vad-hint {
+    color: var(--text-secondary, #888);
+    font-size: 11px;
 }
 
 .sub-display-indicator {

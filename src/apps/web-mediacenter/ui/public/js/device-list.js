@@ -229,17 +229,6 @@ const DeviceList = {
         const latestText = latest?.text ? this.escapeHtml(latest.text) : '暂无识别回传';
         const latestType = latest ? (latest.isFinal ? '最终' : '实时') : '';
         const displayId = this.escapeHtml(display.id);
-        const vadThreshold = this.getVoiceVadThreshold(display);
-        const vadNoise = this.voiceVadNoiseByDisplay.get(display.id);
-        const vadNoisePending = this.voiceVadNoisePending.has(display.id);
-        const vadNoiseText = vadNoise?.error
-            ? `检测失败：${this.escapeHtml(vadNoise.error)}`
-            : vadNoise
-                ? `底噪 RMS 均值 ${vadNoise.averageRms.toFixed(4)} / P95 ${vadNoise.p95Rms.toFixed(4)} / 峰值 ${vadNoise.peakRms.toFixed(4)}，建议 ${vadNoise.recommendedThreshold.toFixed(4)}`
-                : '尚未检测底噪';
-        const vadApplyButton = vadNoise && !vadNoise.error
-            ? `<button type="button" class="display-vad-apply" data-vad-apply data-display-id="${displayId}">应用建议</button>`
-            : '';
         return `
             <div class="display-voice-control" data-display-id="${displayId}">
                 <label class="display-voice-toggle" title="直接控制该显示端是否采集语音">
@@ -248,14 +237,6 @@ const DeviceList = {
                 </label>
                 <span class="display-voice-state ${status.className}">${status.label}</span>
                 <span class="display-voice-latest" title="最近一次语音识别结果">最近识别${latestType ? `（${latestType}）` : ''}：${latestText}</span>
-                <label class="display-vad-threshold" title="数值越大越不容易被底噪触发">
-                    VAD 阈值
-                    <input type="number" min="0.001" max="0.2" step="0.001" value="${vadThreshold}" data-vad-threshold data-display-id="${displayId}">
-                </label>
-                <button type="button" class="display-vad-noise-test" data-vad-noise-test data-display-id="${displayId}" ${vadNoisePending ? 'disabled' : ''}>
-                    ${vadNoisePending ? '检测中…' : '检测底噪'}
-                </button>
-                <span class="display-vad-noise-result" title="最近一次底噪检测结果">${vadNoiseText}</span>${vadApplyButton}
             </div>
         `;
     },
@@ -263,6 +244,65 @@ const DeviceList = {
     bindVoiceListeningControls(container) {
         if (!container || container.dataset.voiceControlsBound) return;
         container.dataset.voiceControlsBound = '1';
+        container.addEventListener('click', (event) => {
+            if (event.target.closest('.display-voice-control')) event.stopPropagation();
+        });
+        container.addEventListener('change', (event) => {
+            const input = event.target.closest('[data-voice-listening-toggle]');
+            if (input) {
+                event.stopPropagation();
+                this.toggleVoiceListening(input.dataset.displayId, input.checked);
+                return;
+            }
+        });
+    },
+
+    renderVoiceVadCardHtml(display) {
+        const displayId = this.escapeHtml(display.id);
+        const vadThreshold = this.getVoiceVadThreshold(display);
+        const vadNoise = this.voiceVadNoiseByDisplay.get(display.id);
+        const vadNoisePending = this.voiceVadNoisePending.has(display.id);
+        const vadNoiseText = vadNoise?.error
+            ? `检测失败：${this.escapeHtml(vadNoise.error)}`
+            : vadNoise
+                ? `均值 ${vadNoise.averageRms.toFixed(4)} · P95 ${vadNoise.p95Rms.toFixed(4)} · 峰值 ${vadNoise.peakRms.toFixed(4)} · 建议 ${vadNoise.recommendedThreshold.toFixed(4)}`
+                : '尚未检测底噪';
+        const applyButton = vadNoise && !vadNoise.error
+            ? `<button type="button" class="display-vad-apply" data-vad-apply data-display-id="${displayId}">应用建议</button>`
+            : '';
+        return `
+            <div class="display-vad-card" data-display-id="${displayId}">
+                <div class="display-vad-card-title">${this.getDisplayLabel(display)}</div>
+                <div class="display-vad-card-controls">
+                    <label class="display-vad-threshold" title="数值越大越不容易被底噪触发">
+                        VAD 阈值
+                        <input type="number" min="0.001" max="0.2" step="0.001" value="${vadThreshold}" data-vad-threshold data-display-id="${displayId}">
+                    </label>
+                    <button type="button" class="display-vad-noise-test" data-vad-noise-test data-display-id="${displayId}" ${vadNoisePending ? 'disabled' : ''}>
+                        ${vadNoisePending ? '检测中…' : '检测底噪'}
+                    </button>
+                    ${applyButton}
+                </div>
+                <div class="display-vad-noise-result" title="最近一次底噪检测结果">${vadNoiseText}</div>
+                <div class="display-vad-hint">请保持安静约 3 秒；检测只采样 RMS，不会触发识别。</div>
+            </div>
+        `;
+    },
+
+    renderVoiceVadPanel() {
+        const panel = document.getElementById('voiceVadPanel');
+        if (!panel) return;
+        if (this.list.length === 0) {
+            panel.innerHTML = '<div class="empty-list">暂无显示端连接</div>';
+            return;
+        }
+        panel.innerHTML = `<div class="display-vad-grid">${this.list.map((display) => this.renderVoiceVadCardHtml(display)).join('')}</div>`;
+        this.bindVoiceVadControls(panel);
+    },
+
+    bindVoiceVadControls(container) {
+        if (!container || container.dataset.voiceVadControlsBound) return;
+        container.dataset.voiceVadControlsBound = '1';
         container.addEventListener('click', (event) => {
             const applyButton = event.target.closest('[data-vad-apply]');
             if (applyButton) {
@@ -274,22 +314,13 @@ const DeviceList = {
             if (noiseButton) {
                 event.stopPropagation();
                 this.requestVoiceNoiseTest(noiseButton.dataset.displayId);
-                return;
             }
-            if (event.target.closest('.display-voice-control')) event.stopPropagation();
         });
         container.addEventListener('change', (event) => {
-            const input = event.target.closest('[data-voice-listening-toggle]');
-            if (input) {
-                event.stopPropagation();
-                this.toggleVoiceListening(input.dataset.displayId, input.checked);
-                return;
-            }
             const vadInput = event.target.closest('[data-vad-threshold]');
-            if (vadInput) {
-                event.stopPropagation();
-                this.sendVoiceVad(vadInput.dataset.displayId, vadInput.value);
-            }
+            if (!vadInput) return;
+            event.stopPropagation();
+            this.sendVoiceVad(vadInput.dataset.displayId, vadInput.value);
         });
     },
 
@@ -504,6 +535,7 @@ const DeviceList = {
     render() {
         this.renderToContainer('deviceList');
         this.renderToContainer('mediaDeviceList');
+        this.renderVoiceVadPanel();
         if (window.FloatingControl) {
             window.FloatingControl.updateDisplayList();
         }
@@ -1010,55 +1042,7 @@ const DeviceList = {
             ? `最近识别（${latest.isFinal ? '最终' : '实时'}）：${latest.text}`
             : '最近识别：暂无识别回传';
 
-        const vadThresholdLabel = document.createElement('label');
-        vadThresholdLabel.className = 'display-vad-threshold';
-        vadThresholdLabel.title = '数值越大越不容易被底噪触发';
-        vadThresholdLabel.append(document.createTextNode('VAD 阈值'));
-        const vadThresholdInput = document.createElement('input');
-        vadThresholdInput.type = 'number';
-        vadThresholdInput.min = '0.001';
-        vadThresholdInput.max = '0.2';
-        vadThresholdInput.step = '0.001';
-        vadThresholdInput.value = this.getVoiceVadThreshold(display);
-        vadThresholdInput.addEventListener('change', (event) => {
-            event.stopPropagation();
-            this.sendVoiceVad(display.id, event.target.value);
-        });
-        vadThresholdLabel.appendChild(vadThresholdInput);
-
-        const noiseTestButton = document.createElement('button');
-        noiseTestButton.type = 'button';
-        noiseTestButton.className = 'display-vad-noise-test';
-        noiseTestButton.disabled = this.voiceVadNoisePending.has(display.id);
-        noiseTestButton.textContent = noiseTestButton.disabled ? '检测中…' : '检测底噪';
-        noiseTestButton.addEventListener('click', (event) => {
-            event.stopPropagation();
-            this.requestVoiceNoiseTest(display.id);
-        });
-
-        const vadNoise = this.voiceVadNoiseByDisplay.get(display.id);
-        const noiseResult = document.createElement('span');
-        noiseResult.className = 'display-vad-noise-result';
-        noiseResult.title = '最近一次底噪检测结果';
-        noiseResult.textContent = vadNoise?.error
-            ? `检测失败：${vadNoise.error}`
-            : vadNoise
-                ? `底噪 RMS 均值 ${vadNoise.averageRms.toFixed(4)} / P95 ${vadNoise.p95Rms.toFixed(4)} / 峰值 ${vadNoise.peakRms.toFixed(4)}，建议 ${vadNoise.recommendedThreshold.toFixed(4)}`
-                : '尚未检测底噪';
-
-        const vadApplyButton = document.createElement('button');
-        if (vadNoise && !vadNoise.error) {
-            vadApplyButton.type = 'button';
-            vadApplyButton.className = 'display-vad-apply';
-            vadApplyButton.textContent = '应用建议';
-            vadApplyButton.addEventListener('click', (event) => {
-                event.stopPropagation();
-                this.applyVoiceVadRecommendation(display.id);
-            });
-        }
-
-        container.append(label, state, latestText, vadThresholdLabel, noiseTestButton, noiseResult);
-        if (vadNoise && !vadNoise.error) container.appendChild(vadApplyButton);
+        container.append(label, state, latestText);
         return container;
     },
 

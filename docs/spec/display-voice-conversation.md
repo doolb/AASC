@@ -244,6 +244,13 @@ DeviceList:
     发送 updateCapabilities(displayId, capabilities)
     服务端广播 capabilitiesUpdated 和 displayList
 
+VAD 独立卡片:
+    DeviceList.renderVoiceVadPanel():
+        在显示控制页的 voiceVadPanel 中按在线 displayId 渲染独立卡片
+        每张卡片包含 vadThreshold 输入、detectVoiceNoise 按钮和统计结果
+        不把 VAD 控件渲染到设备列表的 renderVoiceControl/renderVoiceControlHtml
+    设备列表仍只显示监听开关、监听状态和最近识别文字
+
 监听状态显示:
     voiceSupported=false -> 不可用
     capabilities.voiceRecording=false -> 已关闭

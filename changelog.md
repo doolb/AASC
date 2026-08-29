@@ -4,6 +4,12 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 将显示端 VAD 设置移至独立卡片
+  - VAD 阈值、底噪检测、统计结果和建议值从设备列表移到“显示控制”页的“监听 VAD / 底噪检测”卡片。
+  - 设备列表继续保留监听开关、监听状态和最近识别，原有按显示端配置和 WebSocket 协议不变。
+  - 验证：VAD 配置布局契约、监听与语音回归通过，脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_显示端VAD独立卡片布局.md`。
+
 - ✅ [2026-08-29] 修复显示端持续监听 Chromium 内存泄漏
   - 连续监听期间复用 PCM/VAD 的同一个 `AudioContext`，语音分段只清空 PCM 缓冲，不重复申请麦克风和创建音频图。
   - 普通 `ignored` 识别继续复用当前链路；连续无效冷却、关闭监听、异常和页面离开使用统一资源清理。

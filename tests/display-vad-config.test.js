@@ -8,12 +8,14 @@ const SERVER = path.resolve(__dirname, '../src/apps/server/boot/server-app.js');
 const DISPLAY = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/display.html');
 const DEVICE_LIST = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/device-list.js');
 const WEBSOCKET = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/websocket.js');
+const UPLOAD = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/upload.html');
 
 const read = file => fs.readFileSync(file, 'utf8');
 const server = read(SERVER);
 const display = read(DISPLAY);
 const deviceList = read(DEVICE_LIST);
 const websocket = read(WEBSOCKET);
+const upload = read(UPLOAD);
 
 assert.match(server, /DEFAULT_VAD_THRESHOLD\s*=\s*0\.01/, '服务端应定义统一的默认 VAD 阈值');
 assert.match(server, /normalizeVadThreshold/, '服务端应校验并限制控制端设置的 VAD 阈值');
@@ -35,7 +37,23 @@ assert.match(deviceList, /data-vad-threshold/, '控制端设备列表应显示 V
 assert.match(deviceList, /data-vad-noise-test/, '控制端设备列表应提供底噪检测入口');
 assert.match(deviceList, /setVoiceVad|detectVoiceNoise/, '控制端应发送 VAD 配置和底噪检测消息');
 assert.match(deviceList, /voiceVadNoiseResult|recommendedThreshold/, '控制端应展示底噪检测结果');
-assert.match(deviceList, /renderVoiceControl\(display\)[\s\S]*?display-vad-noise-test/, '树形和列表视图都应提供底噪检测控件');
+
+const listVoiceHtmlStart = deviceList.indexOf('renderVoiceControlHtml(display)');
+const listVoiceHtmlEnd = deviceList.indexOf('bindVoiceListeningControls(container)', listVoiceHtmlStart);
+assert.doesNotMatch(
+    deviceList.slice(listVoiceHtmlStart, listVoiceHtmlEnd),
+    /data-vad-threshold|data-vad-noise-test/,
+    '设备列表语音控制区域不应包含 VAD 配置和底噪检测控件'
+);
+const treeVoiceStart = deviceList.indexOf('renderVoiceControl(display)');
+const treeVoiceEnd = deviceList.indexOf('renderSettingControl(node)', treeVoiceStart);
+assert.doesNotMatch(
+    deviceList.slice(treeVoiceStart, treeVoiceEnd),
+    /display-vad-noise-test|display-vad-threshold/,
+    '树形设备列表语音控制区域不应包含 VAD 配置和底噪检测控件'
+);
+assert.match(upload, /id="voiceVadPanel"/, '显示控制页应提供独立 VAD 卡片容器');
+assert.match(deviceList, /renderVoiceVadPanel/, '控制端应独立渲染 VAD 卡片');
 
 assert.match(websocket, /voiceVadConfig/, '控制端 WebSocket 应处理 VAD 配置消息');
 assert.match(websocket, /voiceVadNoiseTest|voiceVadNoiseResult/, '控制端 WebSocket 应处理底噪检测消息');
