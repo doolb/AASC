@@ -1311,10 +1311,31 @@
         }
 
         let currentTtsItem = null;
+        let ttsRecoveryTimer = null;
+        let ttsRecoveryAttempts = 0;
         let ttsPlaybackToken = 0;
+        const TTS_RECOVERY_DELAY_MS = 200;
+        const TTS_RECOVERY_MAX_ATTEMPTS = 5;
+
+        function clearTtsRecovery() {
+            if (ttsRecoveryTimer) clearTimeout(ttsRecoveryTimer);
+            ttsRecoveryTimer = null;
+            ttsRecoveryAttempts = 0;
+        }
+
+        function scheduleTtsRecovery(reason) {
+            if (!currentTtsItem || !isPlayingTts || ttsAudio.ended
+                || ttsRecoveryTimer || ttsRecoveryAttempts >= TTS_RECOVERY_MAX_ATTEMPTS) return;
+            ttsRecoveryTimer = setTimeout(() => {
+                ttsRecoveryTimer = null;
+                if (!currentTtsItem || !isPlayingTts || ttsAudio.ended) return;
+                recoverTtsPlayback(reason + ':retry');
+            }, TTS_RECOVERY_DELAY_MS);
+        }
 
         function recoverTtsPlayback(reason) {
             if (!currentTtsItem || !currentTtsItem.audioUrl || !isPlayingTts) return;
+            if (reason !== 'start') ttsRecoveryAttempts++;
             ttsAudio.volume = 1;
             try {
                 const playResult = ttsAudio.play();
@@ -1326,16 +1347,19 @@
                             return;
                         }
                         console.warn('TTS 播放失败:', reason, error);
+                        scheduleTtsRecovery(reason);
                     });
                 }
             } catch (error) {
                 console.warn('TTS 播放失败:', reason, error);
-                finishCurrentTts('error');
+                scheduleTtsRecovery(reason);
             }
+            if (ttsAudio.paused) scheduleTtsRecovery(reason);
         }
 
         function finishCurrentTts(status) {
             if (!currentTtsItem) return;
+            clearTtsRecovery();
             currentTtsItem = null;
             ttsPlaybackToken++;
             hideTtsText();
@@ -1346,6 +1370,7 @@
         }
 
         function stopTtsPlayback() {
+            clearTtsRecovery();
             currentTtsItem = null;
             ttsPlaybackToken++;
             ttsQueue = [];
@@ -1435,6 +1460,17 @@
         ttsAudio.addEventListener('error', () => {
             if (!isCurrentTtsAudioSource()) return;
             finishCurrentTts('error');
+        });
+
+        ttsAudio.addEventListener('play', () => {
+            ttsRecoveryAttempts = 0;
+        });
+
+        ['pause', 'stalled', 'waiting'].forEach((eventName) => {
+            ttsAudio.addEventListener(eventName, () => {
+                if (!currentTtsItem || !isPlayingTts || ttsAudio.ended) return;
+                scheduleTtsRecovery('audio-' + eventName);
+            });
         });
 
         function showTtsText(text) {
@@ -3689,6 +3725,26 @@
                 }
             }, 1000);
         }
+
+        // 原生焦点只负责通知，不在网页端再次申请焦点；恢复统一走网页媒体 play()。
+        window.onNativeAudioFocusChanged = function(change) {
+            const code = Number(change);
+            if (code < 0) {
+                if (isMediaPlaybackExpected()) recoverUnexpectedMediaPause('audioFocusLoss');
+                scheduleTtsRecovery('audioFocusLoss');
+                TextMediaPlayer.recoverAudioPlayback('audioFocusLoss');
+                return;
+            }
+            ttsRecoveryAttempts = 0;
+            mediaRecoveryAttempts = 0;
+            if (mediaRecoveryTimer) {
+                clearTimeout(mediaRecoveryTimer);
+                mediaRecoveryTimer = null;
+            }
+            recoverUnexpectedMediaPause('audioFocusGain');
+            recoverTtsPlayback('audioFocusGain');
+            TextMediaPlayer.recoverAudioPlayback('audioFocusGain');
+        };
 
         installMediaPlaybackStateMonitor();
 

@@ -7,6 +7,7 @@ const path = require('path');
 
 const DISPLAY = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/display.html');
 const TEXT_PLAYER = path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/text-media-player.js');
+const MAIN_ACTIVITY = path.resolve(__dirname, '../src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt');
 const NATIVE_BRIDGE = path.resolve(__dirname, '../src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt');
 const AUDIO_FOCUS = path.resolve(__dirname, '../src/apps/android-display/app/src/main/java/com/aasc/display/AudioFocusController.kt');
 
@@ -22,6 +23,7 @@ test('显示端仍按网页期望播放状态恢复非预期媒体暂停', () =>
 });
 
 test('APK Kotlin 恢复 Git 基线的原生音频焦点桥接', () => {
+    const activity = fs.readFileSync(MAIN_ACTIVITY, 'utf8');
     const bridge = fs.readFileSync(NATIVE_BRIDGE, 'utf8');
     const source = fs.readFileSync(AUDIO_FOCUS, 'utf8');
     assert.equal(fs.existsSync(AUDIO_FOCUS), true);
@@ -31,12 +33,15 @@ test('APK Kotlin 恢复 Git 基线的原生音频焦点桥接', () => {
     assert.match(bridge, /audioFocusController/);
     assert.match(bridge, /fun requestAudioFocus\(\)/);
     assert.match(bridge, /fun abandonAudioFocus\(\)/);
+    assert.match(activity, /AudioFocusController/);
+    assert.match(activity, /audioFocusController\.request\(\)/);
+    assert.match(activity, /NativeBridge\(wv, audioFocusController\)/);
 });
 
 test('网页媒体不调用 Android 原生音频焦点接口', () => {
     const display = fs.readFileSync(DISPLAY, 'utf8');
     assert.doesNotMatch(display, /requestNativeAudioFocus|abandonNativeAudioFocus|requestWebAudioFocus/);
-    assert.doesNotMatch(display, /hasNativeWebAudioFocus|onNativeAudioFocusChanged/);
+    assert.doesNotMatch(display, /hasNativeWebAudioFocus/);
     assert.doesNotMatch(display, /requestAudioFocus\s*:/);
 });
 
@@ -57,9 +62,13 @@ test('文本媒体播放器不接入原生焦点回调', () => {
     assert.match(player, /audio\.volume\s*=\s*1/);
 });
 
-test('TTS 不维护原生焦点恢复定时器或焦点变化回调', () => {
+test('TTS 通过网页媒体事件自动恢复且不重新申请原生焦点', () => {
     const source = fs.readFileSync(DISPLAY, 'utf8');
-    assert.doesNotMatch(source, /ttsRecoveryTimer|scheduleTtsRecovery|onNativeAudioFocusChanged/);
+    assert.match(source, /ttsRecoveryTimer/);
+    assert.match(source, /scheduleTtsRecovery/);
+    assert.match(source, /\['pause', 'stalled', 'waiting'\]/);
+    assert.match(source, /onNativeAudioFocusChanged[\s\S]*?recoverTtsPlayback/);
+    assert.doesNotMatch(source, /requestNativeAudioFocus|requestWebAudioFocus/);
     assert.match(source, /function stopTtsPlayback\(\)/);
     assert.match(source, /currentTtsItem\s*=\s*null/);
 });
@@ -76,5 +85,5 @@ test('网页仍不主动调用原生音频焦点协议', () => {
     const display = fs.readFileSync(DISPLAY, 'utf8');
     assert.doesNotMatch(display, /NativeDisplay\.(requestAudioFocus|abandonAudioFocus)/);
     assert.doesNotMatch(display, /requestNativeAudioFocus|abandonNativeAudioFocus|requestWebAudioFocus/);
-    assert.doesNotMatch(display, /onNativeAudioFocusChanged/);
+    assert.match(display, /window\.onNativeAudioFocusChanged/);
 });

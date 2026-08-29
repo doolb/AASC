@@ -117,9 +117,31 @@
             }
         }
 
+        let audioRecoveryTimer = null;
+        let audioRecoveryAttempts = 0;
+        const AUDIO_RECOVERY_DELAY_MS = 200;
+        const AUDIO_RECOVERY_MAX_ATTEMPTS = 5;
+
+        function clearAudioRecovery() {
+            if (audioRecoveryTimer !== null) clearTimeout(audioRecoveryTimer);
+            audioRecoveryTimer = null;
+            audioRecoveryAttempts = 0;
+        }
+
+        function scheduleAudioRecovery(reason) {
+            if (state !== 'playing' || !activeAudio || activeAudio.ended
+                || audioRecoveryTimer !== null || audioRecoveryAttempts >= AUDIO_RECOVERY_MAX_ATTEMPTS) return;
+            audioRecoveryTimer = setTimeout(() => {
+                audioRecoveryTimer = null;
+                if (state !== 'playing' || !activeAudio || activeAudio.ended) return;
+                recoverAudioPlayback(`${reason}:retry`);
+            }, AUDIO_RECOVERY_DELAY_MS);
+        }
+
         function recoverAudioPlayback(reason = 'manual') {
             const audio = activeAudio;
             if (state !== 'playing' || !audio) return;
+            if (reason !== 'start') audioRecoveryAttempts++;
             audio.volume = 1;
             try {
                 const playResult = audio.play();
@@ -127,11 +149,14 @@
                     playResult.catch((error) => {
                         if (state !== 'playing' || activeAudio !== audio) return;
                         console.warn('文本 TTS 播放失败', reason, error);
+                        scheduleAudioRecovery(reason);
                     });
                 }
             } catch (error) {
                 console.warn('文本 TTS 播放失败', reason, error);
+                scheduleAudioRecovery(reason);
             }
+            if (audio.paused) scheduleAudioRecovery(reason);
         }
 
         function getReadingFallbackDelay(text) {
@@ -407,6 +432,7 @@
 
         function clearAudio() {
             const audio = getAudio();
+            clearAudioRecovery();
             if (activeAudio) notifyAudioPlaybackEnd();
             activeAudio = null;
             if (!audio) return;
@@ -527,6 +553,10 @@
             audio.src = data.audioUrl;
             audio.onended = finishCurrentSentence;
             audio.onerror = finishCurrentSentence;
+            audio.onplay = () => {
+                audioRecoveryAttempts = 0;
+            };
+            audio.onpause = () => scheduleAudioRecovery('audio-pause');
             recoverAudioPlayback('start');
             requestPrefetchSentence();
         }

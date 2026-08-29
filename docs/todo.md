@@ -631,9 +631,11 @@
    - 任务文档：`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
 
  - ✅已完成 [2026-08-29][2026-08-29] 恢复 Android Kotlin 基线代码
-   - 恢复 `NativeBridge.kt` 和 `AudioFocusController.kt` 到 Git 基线；网页端仍不主动调用原生音频焦点接口。
+   - 恢复 `NativeBridge.kt` 和 `AudioFocusController.kt` 到 Git 基线；APK 启动时申请一个共享原生焦点，网页端不重复申请或释放。
+   - 网页媒体和 TTS 通过事件/watchdog 自动恢复，连续失败有限重试，避免形成无限播放循环。
    - 其他 Android Kotlin 文件没有未提交改动，未做无关恢复。
    - 焦点契约 8/8，相关回归退出码 0；`npm run build:apk` 成功，APK 覆盖安装并启动 display 2，真机 PID=24605。
+   - `dumpsys audio` 确认启动原生焦点申请成功；WebView 网页媒体仍可能建立独立的 Chromium 内部焦点请求。
    - 任务文档：`docs/task/2026-08-29_显示端TTS视频焦点竞争修复.md`。
 
  - ✅已完成 [2026-08-29][2026-08-29] 修复网页 TTS 被其他 APK 抢占音频焦点后卡住

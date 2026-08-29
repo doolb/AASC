@@ -146,7 +146,7 @@ APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自�
 
 **5.5 网页 TTS 音频播放**
 
-- `playNextTts()` 直接使用网页 `ttsAudio.play()`；当前网页不通过 `NativeDisplay` 申请或释放 Android 原生音频焦点，APK Kotlin 桥保留 Git 基线接口。
+- `playNextTts()` 直接使用网页 `ttsAudio.play()`；APK 启动时已经申请全局原生音频焦点，网页不再重复申请或释放。
 - `ttsAudio` 的 `pause`、`stalled`、`waiting` 只在当前 TTS 未被用户停止且未正常结束时标记为待恢复，不清空当前队列项。
 - 文本媒体逐句播放器保留网页音频元素的播放、暂停和句子队列逻辑，不接入原生焦点回调。
 - 恢复成功后维持当前音频的 `currentTime`，由 `ended` 事件完成当前句并推进队列；恢复过程不得重复触发 `voiceConversationTtsFinished`。
@@ -156,9 +156,9 @@ APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自�
 
 - 普通 TTS 或文本媒体 TTS 开始前记录当前视频播放状态；视频继续播放，不由网页主动修改静音、音量或播放状态。
 - 普通、远程和文本媒体逐句 TTS 的网页音频统一使用 100% 音量；视频音量不因 TTS 开始或结束而改变。
-- TTS 活跃期间不额外申请或释放原生音频焦点；视频是否暂停、混音或 duck 由 WebView/Android 默认媒体策略决定。
+- TTS 活跃期间不额外申请或释放原生音频焦点；视频是否暂停、混音或 duck 由 WebView/Android 默认媒体策略决定，网页媒体事件负责按期望状态恢复。
 - TTS 队列结束、显式停止或页面销毁时清理协调状态，不写回视频 `muted`/`volume`；仅在开始 TTS 前视频确实播放且后来暂停时尝试恢复视频，用户原本暂停的视频保持暂停。
-- APK Kotlin 层恢复创建 Git 基线的 `AudioFocusRequest` 并注册 `AudioManager.OnAudioFocusChangeListener`；当前网页不调用该桥，网页媒体焦点仍由 WebView 自身处理。
+- APK Kotlin 层创建一个 Git 基线的 `AudioFocusRequest` 并注册 `AudioManager.OnAudioFocusChangeListener`；启动时申请一次，NativeBridge 和网页媒体共用，不按 TTS/视频拆分。
 - 视频、普通音频和 TTS 保持网页媒体共存关系，TTS 保持 100% 网页音量。
 - 网页 TTS 的 `waiting/stalled` 视为正常缓冲，仅真实暂停或 `LOSS/LOSS_TRANSIENT` 才进入恢复流程。
 

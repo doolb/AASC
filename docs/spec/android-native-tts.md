@@ -367,8 +367,9 @@ switch:
     不调用任何原生音频焦点接口
     TTS 队列结束或 stop -> 不写回 mediaVideo 音频属性；仅原来播放且控制端仍期望播放且视频已暂停时恢复 video.play()
     TTS 活跃期间视频恢复分支不得调用原生焦点接口
-    APK Kotlin 层恢复 Git 基线的 Native AudioFocusRequest 和 AudioManager.OnAudioFocusChangeListener
-    当前网页不调用 NativeDisplay 音频焦点接口，也不接收原生焦点回调
+    APK 启动时申请一次 Git 基线的 Native AudioFocusRequest
+    NativeBridge 与网页媒体共用该焦点，不拆分 TTS/视频 owner
+    当前网页不调用 NativeDisplay 音频焦点接口；原生焦点回调只触发网页 play 恢复，不重新申请焦点
     ttsAudio waiting/stalled:
       由 WebView 网页媒体自身处理
 ```

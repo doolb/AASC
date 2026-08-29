@@ -196,22 +196,25 @@ android-display/
 - Android 系统媒体播放器抢占音频焦点时，WebView 内的 video/audio 可能触发 `pause`，但控制端原有 `isPlaying` 仍为播放状态，形成状态断裂。
 - 显示端维护控制端期望播放状态和媒体元素实际播放状态；仅控制端明确暂停、睡眠或播放列表暂停时允许保持暂停。
 - 非预期暂停时显示端短间隔重试播放，并向服务器保持或恢复 `playStateReport(isPlaying=true)`；重试失败时仍保留控制端期望播放状态，由网页自身的播放状态监听和 watchdog 再次尝试，避免系统抢占被误记为控制端手动暂停。
-- APK Kotlin 层保留 Git 基线的 `AudioFocusController` 和 `NativeBridge` 音频焦点桥接；当前 display.html 不调用这些接口，`<audio>`/`<video>` 的实际焦点行为仍交由 WebView 和网页媒体元素自身处理。
+- APK 启动时创建并申请一个全局 `AudioFocusController`；所有 WebView/网页媒体共用该焦点，`NativeBridge` 只引用这个共享控制器，不为每类媒体创建独立焦点。
+- display.html 不重复申请或释放原生焦点；网页通过媒体 `pause`/`stalled`/`waiting`、watchdog 和原生焦点变化通知自动恢复期望播放状态。
+- 网页恢复采用单飞短定时器并限制连续重试次数，避免焦点持续丢失或媒体模拟失败时形成无限 `play()` 循环。
+- WebView/Chromium 仍可能为网页媒体建立内部 `AudioFocusDelegate` 请求；该请求无法直接复用 APK 的 `AudioFocusRequest`，因此系统层面不保证只有一个 focus entry。
 - 睡眠/深度睡眠期间即使 WebView 或原生层延迟触发 `play`，显示端也必须立即暂停媒体并清理恢复定时器；低频 watchdog 继续兜底，防止媒体重新播放。
 
 ### 网页 TTS 与视频播放
 
 - TTS 继续使用网页隐藏的 `<audio id="ttsAudio">` 播放，不改为原生 `AudioTrack`。
-- TTS 继续使用网页隐藏的 `<audio id="ttsAudio">` 播放，不改为原生 `AudioTrack`；当前网页不通过 APK 原生桥申请或释放音频焦点。
+- TTS 继续使用网页隐藏的 `<audio id="ttsAudio">` 播放，不改为原生 `AudioTrack`；APK 启动时的全局焦点已覆盖 TTS，网页不再重复申请或释放焦点。
 - TTS 音频和视频的播放、暂停、缓冲、音量及系统焦点行为由 WebView 网页媒体实现负责；网页保留当前队列和正常 `ended` 推进逻辑。
 - TTS 使用网页音频元素的 100% 音量；TTS 开始和结束不写回视频的 `muted` 或 `volume`。
 
 ### TTS 与视频焦点协调
 
 - TTS 开始时记录当前视频的播放状态；视频元素继续播放画面和音轨，不由网页主动修改 `muted` 或 `volume`，允许系统按音频焦点策略自动 duck。
-- TTS 活跃期间，视频 `pause`、`error` 和 watchdog 仍按网页普通媒体状态监听处理；显示端不额外申请、释放或恢复 Android 原生音频焦点。
+- TTS 活跃期间，视频 `pause`、`error` 和 watchdog 仍按网页普通媒体状态监听处理；恢复动作只调用网页媒体的 `play()`，不重新申请 Android 原生音频焦点。
 - TTS 队列完全结束或显式停止后，不写回视频音频属性；只有原来正在播放且未被用户暂停的视频才尝试恢复播放。
-- 网页不维护 Android 原生焦点 owner，也不调用 `requestAudioFocus()`、`abandonAudioFocus()` 或接收原生焦点回调，避免 APK 与 Chromium 重复争抢同一焦点。
+- 网页不调用 `requestAudioFocus()` 或 `abandonAudioFocus()`；原生焦点变化只作为恢复触发，不在网页中再次申请焦点，避免 APK 与 Chromium 重复争抢。
 - 视频、普通音频和 TTS 仍属于同一个 WebView 网页媒体环境；是否混音、duck 或暂停由系统和 WebView 的原生策略决定。
 
 ## 测试计划

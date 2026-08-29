@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 // display.html 的原生桥：截图（真实像素）+ 输入注入（真实触摸/按键，跨域内容可用）
 class NativeBridge(
     private val webView: WebView,
+    private val audioFocusController: AudioFocusController,
     private val mainHandler: Handler = Handler(Looper.getMainLooper())
 ) {
 
@@ -28,16 +29,6 @@ class NativeBridge(
         // ASR/TTS 统一允许最长 60 秒，保证原生桥、声纹分支和服务端等待边界一致。
         const val ASR_TIMEOUT_SECONDS = 60L
         const val TTS_TIMEOUT_SECONDS = 60L
-    }
-
-    // 音频焦点变化回调必须切回 WebView 主线程，避免从 AudioManager 回调线程直接执行 JS。
-    private val audioFocusController = AudioFocusController(webView.context) { change ->
-        mainHandler.post {
-            webView.evaluateJavascript(
-                "window.onNativeAudioFocusChanged && window.onNativeAudioFocusChanged($change);",
-                null
-            )
-        }
     }
 
     // 由 MainActivity 主线程的页面回调更新；JavaScript bridge 线程只读取该缓存。

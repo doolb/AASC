@@ -18,9 +18,9 @@ getSystemStats() -> String JSON                   # 同步返回 APK 自身资�
                                                   # CPU 回退链：优先 /proc/stat 整体 CPU 两次采样差值；
                                                   #   SELinux 拒读时（部分 Android 14+ ROM）回退 /proc/self/stat 进程自身 CPU
                                                   #   （utime+stime，按 10ms/jiffy 与真实时间间隔换算百分比）
-requestAudioFocus() -> boolean                     # Git 基线原生媒体音频焦点接口，当前网页不主动调用
-abandonAudioFocus() -> void                        # Git 基线释放原生媒体音频焦点接口，当前网页不主动调用
-onAudioFocusChanged(change: int)                  # Git 基线原生焦点变化通知 WebView
+requestAudioFocus() -> boolean                     # 全局原生媒体音频焦点接口，APK 启动时申请一次
+abandonAudioFocus() -> void                        # APK 退出时释放全局原生媒体音频焦点
+onAudioFocusChanged(change: int)                  # 原生焦点变化通知当前 WebView，仅触发网页恢复
 ```
 
 > 截图回调机制：JS 函数传 @JavascriptInterface String 参数在 WebView 不可靠
@@ -88,7 +88,7 @@ display websocket onmessage:
     如果 media 非预期 pause 且 desiredPlaying 且未处于 sleep/playlistPause:
         短间隔调用 media.play()
         成功 -> playStateReport(isPlaying=true)
-        失败 -> 保留 desiredPlaying=true，由网页 watchdog 重试
+    失败 -> 保留 desiredPlaying=true，由网页 watchdog 重试，不重新申请原生焦点
     控制端 play=false、睡眠、播放列表 pause:
         标记 pauseExpected，禁止自动恢复
     media 触发 play 且当前处于 sleep/deep:
@@ -96,8 +96,11 @@ display websocket onmessage:
         清理媒体恢复定时器
     watchdog:
         sleep/deep 且 media 正在播放 -> pause media
-网页 TTS 播放:
+    网页 TTS 播放:
     playNextTts 直接设置 ttsAudio.src 并调用 ttsAudio.play
+    ttsAudio pause/stalled/waiting 且当前句仍有效 -> 单飞定时器调用 ttsAudio.play
+    连续恢复失败达到上限 -> 停止本轮定时重试，保留当前状态等待新的媒体/焦点事件
+    原生焦点 LOSS/GAIN 通知 -> 触发上述网页恢复，不重新 requestAudioFocus
     ttsAudio.ended -> 清理当前 item，推进 ttsQueue
     tts stop/页面销毁 -> 清空队列并停止网页音频
     TextMediaPlayer 当前句播放:

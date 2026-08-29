@@ -29,6 +29,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webContainer: FrameLayout
     private var webView: DisplayWebView? = null
     private var trustedSsl = false
+    // 整个 APK 只维护一个原生音频焦点；网页媒体不按 TTS/视频拆分申请焦点。
+    private val audioFocusController by lazy {
+        AudioFocusController(this) { change ->
+            runOnUiThread {
+                webView?.evaluateJavascript(
+                    "window.onNativeAudioFocusChanged && window.onNativeAudioFocusChanged($change);",
+                    null
+                )
+            }
+        }
+    }
 
     private val REQ_AUDIO_PERMISSION = 1001
 
@@ -75,7 +86,20 @@ class MainActivity : AppCompatActivity() {
             connect()
         }
 
+        // APK 启动即申请全局焦点；后续视频、TTS 和普通音频共用，不在网页重复申请。
+        try {
+            if (!audioFocusController.request()) {
+                android.util.Log.w("MainActivity", "启动时申请原生音频焦点未获授权")
+            }
+        } catch (error: Exception) {
+            android.util.Log.w("MainActivity", "启动时申请原生音频焦点失败: ${error.message}")
+        }
         requestAudioPermissionIfNeeded()
+    }
+
+    override fun onDestroy() {
+        audioFocusController.abandon()
+        super.onDestroy()
     }
 
     // singleTask Activity 被部署脚本再次启动时不会重新执行 onCreate，需要在新 Intent 中恢复配置。
@@ -126,7 +150,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String) {
         val wv = DisplayWebView(this)
-        val bridge = NativeBridge(wv)
+        val bridge = NativeBridge(wv, audioFocusController)
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")
         wv.webViewClient = object : WebViewClient() {
