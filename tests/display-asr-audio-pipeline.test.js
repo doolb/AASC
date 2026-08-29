@@ -115,3 +115,69 @@ test('显示端分段 PCM 采集在 VAD 触发前丢弃长静音并保留短前�
     assert.equal(view.getInt16(44 + 1600 * 2, true), 16383, '前置缓冲后应紧接检测到的语音');
     segmentCapture.stop();
 });
+
+test('PCM 采集暂停时清空旧语音段，恢复后复用原有音频链路', async () => {
+    const source = fs.readFileSync(PCM_CAPTURE, 'utf8');
+    let processor = null;
+
+    class FakeAudioNode {
+        connect() {
+            return this;
+        }
+
+        disconnect() {}
+    }
+
+    class FakeAudioContext extends FakeAudioNode {
+        constructor() {
+            super();
+            this.sampleRate = 16000;
+        }
+
+        createMediaStreamSource() {
+            return new FakeAudioNode();
+        }
+
+        createScriptProcessor() {
+            processor = new FakeAudioNode();
+            return processor;
+        }
+
+        createGain() {
+            const gain = new FakeAudioNode();
+            gain.gain = { value: 0 };
+            return gain;
+        }
+
+        close() {
+            return Promise.resolve();
+        }
+    }
+
+    const sandbox = { window: { AudioContext: FakeAudioContext }, Blob };
+    vm.runInNewContext(source, sandbox);
+    const capture = new sandbox.window.PcmAudioCapture({
+        bufferSize: 1600,
+        segmentMode: true,
+        preRollMs: 100
+    }).start({});
+    const emit = (samples) => {
+        processor.onaudioprocess({
+            inputBuffer: {
+                getChannelData: () => new Float32Array(samples)
+            }
+        });
+    };
+
+    assert.equal(capture.beginSegment(), true, '应能开始缓存 TTS 前的语音段');
+    emit(new Array(1600).fill(0.5));
+    capture.setPaused(true);
+    assert.equal(capture.takeWav(), null, '暂停时必须丢弃 TTS 前未完成的语音段');
+
+    capture.setPaused(false);
+    assert.equal(capture.beginSegment(), true, '恢复后应能重新开始语音段');
+    emit(new Array(1600).fill(0.25));
+    const wav = capture.takeWav();
+    assert.ok(wav, '恢复后应继续使用原采集器生成 WAV');
+    capture.stop();
+});

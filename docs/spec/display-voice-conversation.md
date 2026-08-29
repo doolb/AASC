@@ -142,6 +142,32 @@ VAD 配置:
     关闭监听/页面离开/冷却:
         调用同一个幂等 releaseVoiceRecordingResources()
 
+TTS 与无声纹持续监听:
+    PcmAudioCapture.setPaused(true):
+        paused = true
+        清空当前 chunks、preRollChunks 和段状态
+        保留 AudioContext、MediaStreamSource、ScriptProcessor 和媒体轨道
+    PcmAudioCapture.setPaused(false):
+        paused = false
+        清空恢复前残留缓冲
+    playNextTts():
+        如果开始处理第一个 TTS 且 voiceprintEnabled !== true 且正在持续监听:
+            pauseVoiceRecordingForTts()
+        队列还有项目 -> 继续播放，不重复暂停/恢复
+        队列为空 -> resumeVoiceRecordingAfterTts()
+    pauseVoiceRecordingForTts():
+        记录本次 TTS 前是否正在监听
+        停止 VAD 检测循环
+        标记 isListening = false
+        调用 pcmCapture.setPaused(true)
+    resumeVoiceRecordingAfterTts():
+        仅恢复本次 TTS 前正在监听且监听开关仍开启的显示端
+        调用 pcmCapture.setPaused(false)
+        重置 hasSpeech、speechStartTime、silenceStartTime
+        标记 isListening = true 并重新启动 VAD 检测
+    声纹已开启或 TTS 前未在持续监听:
+        不进入上述暂停恢复流程
+
 浏览器显示端 VAD 分段缓存:
     startRawPcmCapture(stream):
         PcmAudioCapture.start(stream, segmentMode=true, preRollMs=300)

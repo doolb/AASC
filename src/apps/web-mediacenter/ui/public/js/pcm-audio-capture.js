@@ -21,6 +21,7 @@
             this.preRollSampleLimit = 0;
             this.segmentActive = !this.segmentMode;
             this.active = false;
+            this.paused = false;
         }
 
         start(stream) {
@@ -35,13 +36,14 @@
             this.preRollSampleCount = 0;
             this.preRollSampleLimit = Math.max(1, Math.round(this.sourceSampleRate * this.preRollMs / 1000));
             this.segmentActive = !this.segmentMode;
+            this.paused = false;
             this.source = this.context.createMediaStreamSource(stream);
             this.processor = this.context.createScriptProcessor(this.bufferSize, 1, 1);
             this.silentGain = this.context.createGain();
             this.silentGain.gain.value = 0;
             this.active = true;
             this.processor.onaudioprocess = (event) => {
-                if (!this.active) return;
+                if (!this.active || this.paused) return;
                 const samples = new Float32Array(event.inputBuffer.getChannelData(0));
                 if (this.segmentMode && !this.segmentActive) {
                     this.appendPreRoll(samples);
@@ -74,7 +76,7 @@
 
         // 开始一个新的语音段：把短前置缓冲转入当前段，之后才正式累计 PCM。
         beginSegment() {
-            if (!this.active) return false;
+            if (!this.active || this.paused) return false;
             if (!this.segmentMode) return true;
             if (this.segmentActive) return false;
             this.chunks = this.preRollChunks.slice();
@@ -82,6 +84,16 @@
             this.preRollSampleCount = 0;
             this.segmentActive = true;
             return true;
+        }
+
+        // 暂停只停止 PCM 缓冲，不关闭音频上下文和媒体流，供 TTS 播报期间复用采集链路。
+        setPaused(paused) {
+            if (!this.active) return;
+            this.paused = paused === true;
+            this.chunks = [];
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.segmentActive = !this.segmentMode;
         }
 
         takeWav() {
@@ -111,6 +123,7 @@
             this.preRollSampleCount = 0;
             this.preRollSampleLimit = 0;
             this.segmentActive = !this.segmentMode;
+            this.paused = false;
             if (this.processor) this.processor.disconnect();
             if (this.source) this.source.disconnect();
             if (this.silentGain) this.silentGain.disconnect();

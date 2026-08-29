@@ -4,6 +4,13 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 未开启声纹识别时 TTS 播放暂停显示端录音
+  - 复用子显示端 `mute` 模式：TTS 播放期间暂停 Web 显示端 PCM/VAD，避免扬声器回声再次进入 ASR。
+  - 暂停只清空当前语音段和前置缓冲，保留麦克风、AudioContext 与 PCM 采集器；TTS 队列结束、失败或停止后恢复原监听状态。
+  - 声纹识别开启时保持原有录音流程和语音打断能力；增加 PCM 暂停恢复测试与资源生命周期契约检查。
+  - 验证：语音相关回归 45/45、PCM/资源生命周期测试 6/6、显示端脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_无声纹时TTS暂停显示端录音.md`。
+
 - ✅ [2026-08-29] 完整处理天气 JSON 并优化本地天气回复
   - 服务端继续使用 wttr.in `format=j1`，本地归一化当前天气、未来 3 天逐日/逐时预报、天文信息、降雨概率/降水量和紫外线等字段。
   - 增加天气编码中文映射，`weatherCode=143` 且接口返回 `Mist` 时统一显示为“雾”。

@@ -120,11 +120,13 @@
             // 文本媒体 TTS 与普通 TTS 共用网页视频音轨协调，避免逐句播放时改写视频声音。
             onAudioPlaybackStart() {
                 textTtsPlaybackActive = true;
+                pauseVoiceRecordingForTts();
                 beginTtsVideoCoordination();
             },
             onAudioPlaybackEnd() {
                 textTtsPlaybackActive = false;
                 endTtsVideoCoordinationIfIdle();
+                scheduleTtsRecordingResume();
             }
         });
         let autoTtsEnabled = true;
@@ -132,6 +134,8 @@
         let isPlayingTts = false;
         let ttsVideoState = null;
         let textTtsPlaybackActive = false;
+        let ttsRecordingPaused = false;
+        let ttsRecordingResumeTimer = null;
         let remoteTextPlayback = null;
         let remotePrefetchedTextPlayback = null;
         let remoteTextPlaybackToken = 0;
@@ -1305,6 +1309,61 @@
             endTtsVideoCoordination();
         }
 
+        function hasActiveTtsPlayback() {
+            return isPlayingTts || ttsQueue.length > 0 || textTtsPlaybackActive || !!remoteTextPlayback;
+        }
+
+        function clearTtsRecordingResumeTimer() {
+            if (ttsRecordingResumeTimer) clearTimeout(ttsRecordingResumeTimer);
+            ttsRecordingResumeTimer = null;
+        }
+
+        // 复用子显示端 mute 模式：无声纹时暂停 PCM/VAD，避免扬声器回声进入 ASR。
+        function pauseVoiceRecordingForTts() {
+            if (voiceprintEnabled === true || ttsRecordingPaused || !isListening || !pcmCapture?.active) return;
+            clearTtsRecordingResumeTimer();
+            wasListeningBeforePlayback = true;
+            ttsRecordingPaused = true;
+            stopSilenceDetection();
+            hasSpeech = false;
+            speechStartTime = null;
+            silenceStartTime = null;
+            pcmCapture.setPaused(true);
+            isListening = false;
+            sendVoiceStatus();
+            console.log('[语音] 未启用声纹识别，TTS 播放期间暂停录音');
+        }
+
+        // TTS 队列结束后恢复原本正在监听的显示端，AudioContext 和麦克风轨道保持复用。
+        function resumeVoiceRecordingAfterTts() {
+            clearTtsRecordingResumeTimer();
+            if (!ttsRecordingPaused) return;
+            const shouldResume = wasListeningBeforePlayback && displayPageActive
+                && voiceListeningEnabled && currentCapabilities?.voiceRecording === true
+                && pcmCapture?.active && micStream;
+            ttsRecordingPaused = false;
+            wasListeningBeforePlayback = false;
+            if (!shouldResume) return;
+            pcmCapture.setPaused(false);
+            isListening = true;
+            hasSpeech = false;
+            speechStartTime = null;
+            silenceStartTime = null;
+            sendVoiceStatus();
+            startSilenceDetection();
+            console.log('[语音] TTS 播放结束，恢复录音');
+        }
+
+        // 文本媒体逐句播报之间可能有短暂请求间隔，延迟恢复避免把下一句 TTS 的开头再次采入。
+        function scheduleTtsRecordingResume() {
+            if (!ttsRecordingPaused) return;
+            clearTtsRecordingResumeTimer();
+            ttsRecordingResumeTimer = setTimeout(() => {
+                ttsRecordingResumeTimer = null;
+                if (!hasActiveTtsPlayback()) resumeVoiceRecordingAfterTts();
+            }, 300);
+        }
+
         let currentTtsItem = null;
         let ttsRecoveryTimer = null;
         let ttsRecoveryAttempts = 0;
@@ -1362,6 +1421,7 @@
             console.log('[显示端] TTS 当前句完成:', status || 'ended');
             playNextTts();
             endTtsVideoCoordinationIfIdle();
+            scheduleTtsRecordingResume();
         }
 
         function stopTtsPlayback() {
@@ -1374,6 +1434,7 @@
             isPlayingTts = false;
             hideTtsText();
             endTtsVideoCoordinationIfIdle();
+            scheduleTtsRecordingResume();
         }
 
         function startTtsAudio(item, audioUrl) {
@@ -1400,14 +1461,13 @@
                 return;
             }
             if (ttsQueue.length === 0) {
-                // TTS 队列播放完毕，如果始终监听模式且能力允许，恢复录音
+                // TTS 队列播放完毕，如果此前由无声纹模式暂停了录音，恢复原有采集链路。
+                scheduleTtsRecordingResume();
                 sendVoiceConversationTtsFinished();
-                if (isAlwaysListening && currentCapabilities?.voiceRecording) {
-                    setTimeout(() => startVoiceRecording(), 500);
-                }
                 return;
             }
             
+            pauseVoiceRecordingForTts();
             isPlayingTts = true;
             const item = ttsQueue.shift();
             currentTtsItem = item;
@@ -1623,6 +1683,7 @@
             ttsAudio.currentTime = 0;
             isPlayingTts = false;
             endTtsVideoCoordinationIfIdle();
+            scheduleTtsRecordingResume();
         }
 
         function playRemoteTextPlayback(data) {
@@ -1634,6 +1695,7 @@
             remoteTextPlaybackToken += 1;
             const playbackToken = remoteTextPlaybackToken;
             remoteTextPlayback = data;
+            pauseVoiceRecordingForTts();
             beginTtsVideoCoordination();
             // 远程文本播报只负责发声，不改变本机文本分页状态；结束/失败后由源显示端推进句子。
             const cleanup = () => {
@@ -1653,6 +1715,7 @@
                 }
                 remoteTextPlayback = null;
                 endTtsVideoCoordinationIfIdle();
+                scheduleTtsRecordingResume();
             };
             const onEnded = () => finishRemoteSentence('ended');
             const onError = () => finishRemoteSentence('failed');
@@ -4616,7 +4679,7 @@
 
                 // 能力确认或重连后都尝试启动，不能依赖 prevCaps/pendingAutoStart 的时序。
                 const shouldStartRecording = isAlwaysListening && !isListening
-                    && voiceListeningEnabled && voiceSupported;
+                    && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused;
                 if (shouldStartRecording) {
                     pendingAutoStart = false;
                     console.log('[能力] 服务器能力已确认，启动录音');
@@ -4687,6 +4750,9 @@
         function stopVoiceRecording() {
             const shouldSubmitPendingAudio = isListening === true;
             isListening = false;
+            clearTtsRecordingResumeTimer();
+            ttsRecordingPaused = false;
+            wasListeningBeforePlayback = false;
             if (vadNoiseTestActive) {
                 vadNoiseTestActive = false;
                 sendVoiceVadNoiseResult({
@@ -4718,6 +4784,11 @@
 
         async function startVoiceRecording() {
             if (!displayPageActive || isListening) return;
+
+            if (ttsRecordingPaused) {
+                console.log('[语音] TTS 播放中，暂不恢复录音');
+                return;
+            }
 
             if (!voiceListeningEnabled) {
                 console.log('[能力] 显示端语音监听已关闭，跳过录音启动');
