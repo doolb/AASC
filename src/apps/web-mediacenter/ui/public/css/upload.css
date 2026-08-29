@@ -445,6 +445,50 @@ input[type="file"] {
     white-space: nowrap;
 }
 
+.display-vad-threshold {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.display-vad-threshold input {
+    width: 68px;
+    padding: 2px 4px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.2));
+    border-radius: 4px;
+    color: var(--text-primary, #fff);
+    background: var(--input-background, rgba(0, 0, 0, 0.18));
+}
+
+.display-vad-noise-test {
+    padding: 2px 7px;
+    border: 1px solid var(--accent-color, #00d2ff);
+    border-radius: 4px;
+    color: var(--accent-color, #00d2ff);
+    background: transparent;
+    cursor: pointer;
+}
+
+.display-vad-noise-test:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.display-vad-apply {
+    padding: 2px 7px;
+    border: 1px solid var(--success-color, #2ecc71);
+    border-radius: 4px;
+    color: var(--success-color, #2ecc71);
+    background: transparent;
+    cursor: pointer;
+}
+
+.display-vad-noise-result {
+    min-width: 220px;
+    color: var(--text-secondary, #aaa);
+}
+
 .sub-display-indicator {
     font-size: 14px;
     cursor: help;

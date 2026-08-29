@@ -10,6 +10,9 @@ const DeviceList = {
     voiceInputByDisplay: new Map(),
     // 监听开关发出后等待服务端回执，避免用户误以为点击没有生效。
     voiceListeningPending: new Map(),
+    // 每台显示端独立保存最近一次底噪统计，避免设备列表刷新后结果丢失。
+    voiceVadNoiseByDisplay: new Map(),
+    voiceVadNoisePending: new Map(),
 
     getDisplays() {
         return this.list || [];
@@ -226,6 +229,17 @@ const DeviceList = {
         const latestText = latest?.text ? this.escapeHtml(latest.text) : '暂无识别回传';
         const latestType = latest ? (latest.isFinal ? '最终' : '实时') : '';
         const displayId = this.escapeHtml(display.id);
+        const vadThreshold = this.getVoiceVadThreshold(display);
+        const vadNoise = this.voiceVadNoiseByDisplay.get(display.id);
+        const vadNoisePending = this.voiceVadNoisePending.has(display.id);
+        const vadNoiseText = vadNoise?.error
+            ? `检测失败：${this.escapeHtml(vadNoise.error)}`
+            : vadNoise
+                ? `底噪 RMS 均值 ${vadNoise.averageRms.toFixed(4)} / P95 ${vadNoise.p95Rms.toFixed(4)} / 峰值 ${vadNoise.peakRms.toFixed(4)}，建议 ${vadNoise.recommendedThreshold.toFixed(4)}`
+                : '尚未检测底噪';
+        const vadApplyButton = vadNoise && !vadNoise.error
+            ? `<button type="button" class="display-vad-apply" data-vad-apply data-display-id="${displayId}">应用建议</button>`
+            : '';
         return `
             <div class="display-voice-control" data-display-id="${displayId}">
                 <label class="display-voice-toggle" title="直接控制该显示端是否采集语音">
@@ -234,6 +248,14 @@ const DeviceList = {
                 </label>
                 <span class="display-voice-state ${status.className}">${status.label}</span>
                 <span class="display-voice-latest" title="最近一次语音识别结果">最近识别${latestType ? `（${latestType}）` : ''}：${latestText}</span>
+                <label class="display-vad-threshold" title="数值越大越不容易被底噪触发">
+                    VAD 阈值
+                    <input type="number" min="0.001" max="0.2" step="0.001" value="${vadThreshold}" data-vad-threshold data-display-id="${displayId}">
+                </label>
+                <button type="button" class="display-vad-noise-test" data-vad-noise-test data-display-id="${displayId}" ${vadNoisePending ? 'disabled' : ''}>
+                    ${vadNoisePending ? '检测中…' : '检测底噪'}
+                </button>
+                <span class="display-vad-noise-result" title="最近一次底噪检测结果">${vadNoiseText}</span>${vadApplyButton}
             </div>
         `;
     },
@@ -242,13 +264,32 @@ const DeviceList = {
         if (!container || container.dataset.voiceControlsBound) return;
         container.dataset.voiceControlsBound = '1';
         container.addEventListener('click', (event) => {
+            const applyButton = event.target.closest('[data-vad-apply]');
+            if (applyButton) {
+                event.stopPropagation();
+                this.applyVoiceVadRecommendation(applyButton.dataset.displayId);
+                return;
+            }
+            const noiseButton = event.target.closest('[data-vad-noise-test]');
+            if (noiseButton) {
+                event.stopPropagation();
+                this.requestVoiceNoiseTest(noiseButton.dataset.displayId);
+                return;
+            }
             if (event.target.closest('.display-voice-control')) event.stopPropagation();
         });
         container.addEventListener('change', (event) => {
             const input = event.target.closest('[data-voice-listening-toggle]');
-            if (!input) return;
-            event.stopPropagation();
-            this.toggleVoiceListening(input.dataset.displayId, input.checked);
+            if (input) {
+                event.stopPropagation();
+                this.toggleVoiceListening(input.dataset.displayId, input.checked);
+                return;
+            }
+            const vadInput = event.target.closest('[data-vad-threshold]');
+            if (vadInput) {
+                event.stopPropagation();
+                this.sendVoiceVad(vadInput.dataset.displayId, vadInput.value);
+            }
         });
     },
 
@@ -268,6 +309,94 @@ const DeviceList = {
             display.lastVoiceInput = latest;
             this.render();
         }
+    },
+
+    getVoiceVadThreshold(display) {
+        const threshold = Number(display?.vadThreshold);
+        if (!Number.isFinite(threshold)) return 0.01;
+        return Math.min(0.2, Math.max(0.001, threshold));
+    },
+
+    sendVoiceVad(displayId, value) {
+        const display = this.list.find((item) => item.id === displayId);
+        if (!display || !this.isControlSocketOpen()) {
+            if (window.showToast) window.showToast('VAD 阈值发送失败：控制端未连接', 'error');
+            return false;
+        }
+        const number = Number(value);
+        const threshold = Number.isFinite(number)
+            ? Math.round(Math.min(0.2, Math.max(0.001, number)) * 1000000) / 1000000
+            : this.getVoiceVadThreshold(display);
+        display.vadThreshold = threshold;
+        this.render();
+        try {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setVoiceVad',
+                displayId,
+                threshold
+            }));
+            return true;
+        } catch (error) {
+            if (window.showToast) window.showToast(`VAD 阈值发送失败：${error.message}`, 'error');
+            return false;
+        }
+    },
+
+    requestVoiceNoiseTest(displayId) {
+        if (!this.isControlSocketOpen()) {
+            if (window.showToast) window.showToast('底噪检测失败：控制端未连接', 'error');
+            return false;
+        }
+        const requestId = `vad-noise-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        this.voiceVadNoisePending.set(displayId, requestId);
+        try {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'detectVoiceNoise',
+                displayId,
+                requestId
+            }));
+            this.render();
+            if (window.showToast) window.showToast('底噪检测开始，请保持安静约 3 秒', 'info');
+            return true;
+        } catch (error) {
+            this.voiceVadNoisePending.delete(displayId);
+            if (window.showToast) window.showToast(`底噪检测发送失败：${error.message}`, 'error');
+            return false;
+        }
+    },
+
+    handleVoiceVadConfig(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display || data.threshold === undefined) return;
+        display.vadThreshold = this.getVoiceVadThreshold({ vadThreshold: data.threshold });
+        this.render();
+    },
+
+    handleVoiceVadNoiseResult(data) {
+        const displayId = String(data?.displayId || '');
+        if (!displayId) return;
+        this.voiceVadNoisePending.delete(displayId);
+        this.voiceVadNoiseByDisplay.set(displayId, {
+            averageRms: Number(data.averageRms) || 0,
+            peakRms: Number(data.peakRms) || 0,
+            p95Rms: Number(data.p95Rms) || 0,
+            recommendedThreshold: Number(data.recommendedThreshold) || 0,
+            sampleCount: Number(data.sampleCount) || 0,
+            error: data.error ? String(data.error) : ''
+        });
+        this.render();
+        if (window.showToast) {
+            window.showToast(
+                data.error ? `底噪检测失败：${data.error}` : '底噪检测完成，可参考建议阈值',
+                data.error ? 'error' : 'success'
+            );
+        }
+    },
+
+    applyVoiceVadRecommendation(displayId) {
+        const result = this.voiceVadNoiseByDisplay.get(displayId);
+        if (!result || !Number.isFinite(result.recommendedThreshold) || result.recommendedThreshold <= 0) return false;
+        return this.sendVoiceVad(displayId, result.recommendedThreshold);
     },
 
     updateVoiceConversationState(data) {
@@ -881,7 +1010,55 @@ const DeviceList = {
             ? `最近识别（${latest.isFinal ? '最终' : '实时'}）：${latest.text}`
             : '最近识别：暂无识别回传';
 
-        container.append(label, state, latestText);
+        const vadThresholdLabel = document.createElement('label');
+        vadThresholdLabel.className = 'display-vad-threshold';
+        vadThresholdLabel.title = '数值越大越不容易被底噪触发';
+        vadThresholdLabel.append(document.createTextNode('VAD 阈值'));
+        const vadThresholdInput = document.createElement('input');
+        vadThresholdInput.type = 'number';
+        vadThresholdInput.min = '0.001';
+        vadThresholdInput.max = '0.2';
+        vadThresholdInput.step = '0.001';
+        vadThresholdInput.value = this.getVoiceVadThreshold(display);
+        vadThresholdInput.addEventListener('change', (event) => {
+            event.stopPropagation();
+            this.sendVoiceVad(display.id, event.target.value);
+        });
+        vadThresholdLabel.appendChild(vadThresholdInput);
+
+        const noiseTestButton = document.createElement('button');
+        noiseTestButton.type = 'button';
+        noiseTestButton.className = 'display-vad-noise-test';
+        noiseTestButton.disabled = this.voiceVadNoisePending.has(display.id);
+        noiseTestButton.textContent = noiseTestButton.disabled ? '检测中…' : '检测底噪';
+        noiseTestButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            this.requestVoiceNoiseTest(display.id);
+        });
+
+        const vadNoise = this.voiceVadNoiseByDisplay.get(display.id);
+        const noiseResult = document.createElement('span');
+        noiseResult.className = 'display-vad-noise-result';
+        noiseResult.title = '最近一次底噪检测结果';
+        noiseResult.textContent = vadNoise?.error
+            ? `检测失败：${vadNoise.error}`
+            : vadNoise
+                ? `底噪 RMS 均值 ${vadNoise.averageRms.toFixed(4)} / P95 ${vadNoise.p95Rms.toFixed(4)} / 峰值 ${vadNoise.peakRms.toFixed(4)}，建议 ${vadNoise.recommendedThreshold.toFixed(4)}`
+                : '尚未检测底噪';
+
+        const vadApplyButton = document.createElement('button');
+        if (vadNoise && !vadNoise.error) {
+            vadApplyButton.type = 'button';
+            vadApplyButton.className = 'display-vad-apply';
+            vadApplyButton.textContent = '应用建议';
+            vadApplyButton.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.applyVoiceVadRecommendation(display.id);
+            });
+        }
+
+        container.append(label, state, latestText, vadThresholdLabel, noiseTestButton, noiseResult);
+        if (vadNoise && !vadNoise.error) container.appendChild(vadApplyButton);
         return container;
     },
 
@@ -1281,6 +1458,12 @@ const DeviceList = {
         const onlineIds = new Set(nextList.map((display) => display.id));
         for (const displayId of this.voiceInputByDisplay.keys()) {
             if (!onlineIds.has(displayId)) this.voiceInputByDisplay.delete(displayId);
+        }
+        for (const displayId of this.voiceVadNoiseByDisplay.keys()) {
+            if (!onlineIds.has(displayId)) this.voiceVadNoiseByDisplay.delete(displayId);
+        }
+        for (const displayId of this.voiceVadNoisePending.keys()) {
+            if (!onlineIds.has(displayId)) this.voiceVadNoisePending.delete(displayId);
         }
         this.list = nextList.map((display) => ({
             ...display,

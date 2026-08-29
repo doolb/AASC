@@ -64,6 +64,17 @@ const WebSocketManager = {
             if (window.DeviceList) {
                 window.DeviceList.handleCapabilitiesUpdateError(data);
             }
+        } else if (data.type === 'voiceVadConfig') {
+            if (window.DeviceList) {
+                window.DeviceList.handleVoiceVadConfig(data);
+            }
+        } else if (data.type === 'voiceVadNoiseStarted') {
+            // 设备列表的检测按钮已在发送请求时进入 pending，开始回执仅用于兼容其他控制端。
+            console.log('[WS] 底噪检测已开始:', data.displayId, data.requestId);
+        } else if (data.type === 'voiceVadNoiseResult') {
+            if (window.DeviceList) {
+                window.DeviceList.handleVoiceVadNoiseResult(data);
+            }
         } else if (data.type === 'playlistProgress') {
             // 只处理当前选中显示端的播放列表进度
             if (data.displayId && data.displayId !== window.currentDisplayId) return;

@@ -492,7 +492,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceVadNoiseResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -555,6 +555,7 @@ async function startServer() {
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
+                'setVoiceVad', 'detectVoiceNoise',
                 'playlistRequest', 'playlistControl'
             ];
             for (const type of controlTypes) {
@@ -745,6 +746,17 @@ const DEFAULT_CAPABILITIES = {
     ttsGeneration: false
 };
 
+// 浏览器显示端的 VAD 阈值按设备保存；不同麦克风和摆放环境的底噪不能共用一个动态值。
+const DEFAULT_VAD_THRESHOLD = 0.01;
+const MIN_VAD_THRESHOLD = 0.001;
+const MAX_VAD_THRESHOLD = 0.2;
+
+function normalizeVadThreshold(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_VAD_THRESHOLD;
+    return Math.round(Math.min(MAX_VAD_THRESHOLD, Math.max(MIN_VAD_THRESHOLD, number)) * 1000000) / 1000000;
+}
+
 const SUB_DISPLAY_CAPABILITIES = {
     mediaRendering: false,
     voicePlayback: true,
@@ -796,6 +808,7 @@ function createDisplayState() {
         browserInfo: null,
         capabilities: null,
         cpuStatus: null,
+        vadThreshold: DEFAULT_VAD_THRESHOLD,
         voiceConversation: createConversationState(true)
     };
 }
@@ -3037,6 +3050,7 @@ function getDisplayList() {
             voiceListening: data.state.voiceListening,
             cpuStatus: data.state.cpuStatus,
             voiceConversation: data.state.voiceConversation,
+            vadThreshold: normalizeVadThreshold(data.state.vadThreshold),
             capabilities: caps
         });
     });
@@ -3652,6 +3666,7 @@ wss.on('connection', (ws, req) => {
                 ...createDisplayState(),
                 ...savedState,
                 dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
+                vadThreshold: normalizeVadThreshold(savedState?.vadThreshold),
                 isSubDisplay: isSubDisplay,
                 capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : null
             }
@@ -3689,10 +3704,15 @@ wss.on('connection', (ws, req) => {
                 type: 'configUpdate',
                 config: {
                     serverUrl: `${protocol}://${localIP}:${PORT}`,
-                    vadThreshold: 0.01
+                    vadThreshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold)
                 }
             }));
         }
+
+        ws.send(JSON.stringify({
+            type: 'voiceVadConfig',
+            threshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold)
+        }));
 
         ws.send(JSON.stringify({
             type: 'asrConfig',
@@ -4182,6 +4202,20 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             armDisplayConversationTimer(displayId);
             log('语音', `显示端 ${displayId} TTS 播放完成，重新计时3分钟`);
         }
+    } else if (data.type === 'voiceVadNoiseResult' && displayData) {
+        // 底噪检测只回传统计结果，不进入 ASR、唤醒或内置指令处理链路。
+        broadcastToControls({
+            type: 'voiceVadNoiseResult',
+            displayId,
+            requestId: data.requestId || null,
+            durationMs: data.durationMs,
+            sampleCount: data.sampleCount,
+            averageRms: data.averageRms,
+            peakRms: data.peakRms,
+            p95Rms: data.p95Rms,
+            recommendedThreshold: normalizeVadThreshold(data.recommendedThreshold),
+            error: data.error || null
+        });
     } else if (data.type === 'voiceInput' && displayData) {
         // 控制端需要观察所有有效 ASR 文字，声纹过滤只决定是否进入命令处理链路。
         const voiceprintEnabledNow = config.get('voiceprint.enabled', true);
@@ -4280,6 +4314,55 @@ function handleDisplayMessageFallback(displayId, data, ws) {
 async function handleControlMessageFallback(data, ws) {
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
+
+    if (data.type === 'setVoiceVad') {
+        if (!displayData) {
+            ws.send(JSON.stringify({
+                type: 'voiceVadConfigError',
+                displayId,
+                message: '显示端不存在或已断开'
+            }));
+            return;
+        }
+        const threshold = normalizeVadThreshold(data.threshold);
+        displayData.state.vadThreshold = threshold;
+        persistDisplayState(displayData, { vadThreshold: threshold });
+        sendToDisplay(displayId, { type: 'voiceVadConfig', threshold });
+        ws.send(JSON.stringify({ type: 'voiceVadConfig', displayId, threshold }));
+        broadcastDisplayList();
+        log('语音', `控制端更新显示端 ${displayId} VAD 阈值: ${threshold}`);
+        return;
+    }
+
+    if (data.type === 'detectVoiceNoise') {
+        if (!displayData) {
+            ws.send(JSON.stringify({
+                type: 'voiceVadNoiseResult',
+                displayId,
+                requestId: data.requestId || null,
+                error: '显示端不存在或已断开'
+            }));
+            return;
+        }
+        const requestId = data.requestId || generateCorrelationId('vad-noise');
+        const sent = sendToDisplay(displayId, {
+            type: 'voiceVadNoiseTest',
+            requestId,
+            durationMs: 3000
+        });
+        if (!sent) {
+            ws.send(JSON.stringify({
+                type: 'voiceVadNoiseResult',
+                displayId,
+                requestId,
+                error: '显示端当前不可用'
+            }));
+            return;
+        }
+        ws.send(JSON.stringify({ type: 'voiceVadNoiseStarted', displayId, requestId, durationMs: 3000 }));
+        log('语音', `开始检测显示端 ${displayId} 底噪，requestId=${requestId}`);
+        return;
+    }
     
     if (data.type === 'voiceCommand') {
                     (async () => {

@@ -84,6 +84,25 @@ waitingWake 中的免唤醒范围:
     计时器到期:
         状态改为 waitingWake
         清理当前助手目标
+
+VAD 配置:
+    createDisplayState().vadThreshold = 0.01
+    显示端连接时发送 voiceVadConfig(vadThreshold)
+    控制端发送 setVoiceVad(displayId, vadThreshold)
+    服务端校验阈值范围并按 displayId 持久化
+    服务端发送 voiceVadConfig 到目标显示端并广播 displayList
+    显示端运行 VAD 时读取当前 vadThreshold
+
+底噪检测:
+    控制端发送 detectVoiceNoise(displayId, requestId)
+    服务端转发 voiceVadNoiseTest 到目标显示端
+    显示端确认麦克风监听和 Analyser 可用
+    连续采样约 3000ms 的麦克风 RMS
+    检测期间不执行语音段结束和 ASR 提交
+    计算 sampleCount、averageRms、peakRms、p95Rms
+    recommendedThreshold = clamp(p95Rms * 1.5, 0.001, 0.2)
+    显示端回传 voiceVadNoiseResult
+    服务端转发结果到控制端，控制端显示数值和建议阈值
 ```
 
 ## 显示端实现伪代码

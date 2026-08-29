@@ -147,6 +147,11 @@
         let silenceStartTime = null;
         let hasSpeech = false;
         let speechStartTime = null;
+        // VAD 阈值由服务端按显示端保存并下发，初始值只用于首次连接前的兜底。
+        const DEFAULT_VAD_THRESHOLD = 0.01;
+        let vadThreshold = DEFAULT_VAD_THRESHOLD;
+        let vadNoiseTestActive = false;
+        let vadNoiseTestRequestId = null;
         let isAlwaysListening = false;
         let pendingAutoStart = false;
         let wasListeningBeforePlayback = false;
@@ -3934,6 +3939,17 @@
                         return;
                     }
 
+                    if (data.type === 'voiceVadConfig') {
+                        vadThreshold = normalizeVadThreshold(data.threshold);
+                        console.log('[语音] VAD 阈值已更新:', vadThreshold);
+                        return;
+                    }
+
+                    if (data.type === 'voiceVadNoiseTest') {
+                        startVoiceNoiseTest(data.requestId, data.durationMs);
+                        return;
+                    }
+
                     if (data.type === 'asrAudio') {
                         void handleAsrAudio(data);
                         return;
@@ -4280,6 +4296,86 @@
                 ...extra
             }));
         }
+
+        function normalizeVadThreshold(value) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) return DEFAULT_VAD_THRESHOLD;
+            return Math.round(Math.min(0.2, Math.max(0.001, number)) * 1000000) / 1000000;
+        }
+
+        function sendVoiceVadNoiseResult(result) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'voiceVadNoiseResult',
+                ...result
+            }));
+        }
+
+        function calculateRms(analyserNode) {
+            const timeDomainData = new Uint8Array(analyserNode.fftSize);
+            analyserNode.getByteTimeDomainData(timeDomainData);
+            let sumSquares = 0;
+            for (let i = 0; i < timeDomainData.length; i++) {
+                const normalized = (timeDomainData[i] - 128) / 128;
+                sumSquares += normalized * normalized;
+            }
+            return Math.sqrt(sumSquares / timeDomainData.length);
+        }
+
+        function startVoiceNoiseTest(requestId, requestedDurationMs) {
+            if (vadNoiseTestActive) {
+                sendVoiceVadNoiseResult({ requestId, error: '已有底噪检测正在进行' });
+                return;
+            }
+            if (!isListening || !analyser) {
+                sendVoiceVadNoiseResult({ requestId, error: '请先开启显示端监听' });
+                return;
+            }
+
+            const durationMs = Math.min(10000, Math.max(1000, Number(requestedDurationMs) || 3000));
+            const samples = [];
+            const startedAt = Date.now();
+            vadNoiseTestActive = true;
+            vadNoiseTestRequestId = requestId || null;
+            console.log('[语音] 开始底噪检测，请保持安静:', durationMs, 'ms');
+
+            const collect = () => {
+                if (!vadNoiseTestActive) return;
+                if (!analyser) {
+                    vadNoiseTestActive = false;
+                    vadNoiseTestRequestId = null;
+                    sendVoiceVadNoiseResult({ requestId, error: '麦克风分析器已停止' });
+                    return;
+                }
+                samples.push(calculateRms(analyser));
+                if (Date.now() - startedAt < durationMs) {
+                    requestAnimationFrame(collect);
+                    return;
+                }
+
+                vadNoiseTestActive = false;
+                vadNoiseTestRequestId = null;
+                const sortedSamples = [...samples].sort((a, b) => a - b);
+                const p95Index = Math.max(0, Math.ceil(sortedSamples.length * 0.95) - 1);
+                const p95Rms = sortedSamples[p95Index] || 0;
+                const averageRms = samples.length
+                    ? samples.reduce((total, value) => total + value, 0) / samples.length
+                    : 0;
+                const peakRms = samples.length ? Math.max(...samples) : 0;
+                const recommendedThreshold = normalizeVadThreshold(p95Rms * 1.5);
+                sendVoiceVadNoiseResult({
+                    requestId,
+                    durationMs: Date.now() - startedAt,
+                    sampleCount: samples.length,
+                    averageRms,
+                    peakRms,
+                    p95Rms,
+                    recommendedThreshold
+                });
+                console.log('[语音] 底噪检测完成:', { averageRms, peakRms, p95Rms, recommendedThreshold });
+            };
+            requestAnimationFrame(collect);
+        }
         
         function reportVoiceAvailability(available) {
             voiceSupported = available === true;
@@ -4573,6 +4669,14 @@
         }
 
         function stopVoiceRecording() {
+            if (vadNoiseTestActive) {
+                vadNoiseTestActive = false;
+                sendVoiceVadNoiseResult({
+                    requestId: vadNoiseTestRequestId,
+                    error: '监听已停止，底噪检测未完成'
+                });
+                vadNoiseTestRequestId = null;
+            }
             if (!isListening) {
                 stopRawPcmCapture();
                 return;
@@ -4679,7 +4783,6 @@
                 analyser.fftSize = 2048;
                 source.connect(analyser);
                 
-                const SILENCE_THRESHOLD = 0.01;
                 const SILENCE_DURATION = 1000;
                 const MIN_SPEECH_DURATION = 300;
                 
@@ -4696,7 +4799,12 @@
                     }
                     const rms = Math.sqrt(sumSquares / timeDomainData.length);
                     
-                    if (rms >= SILENCE_THRESHOLD) {
+                    if (vadNoiseTestActive) {
+                        requestAnimationFrame(checkSilence);
+                        return;
+                    }
+
+                    if (rms >= vadThreshold) {
                         if (!hasSpeech && !speechStartTime) {
                             speechStartTime = Date.now();
                         }
