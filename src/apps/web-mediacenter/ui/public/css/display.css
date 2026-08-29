@@ -230,10 +230,10 @@ body {
 #timeDisplay {
     position: fixed;
     font-size: 48px;
-    /* 时间文字恢复媒体主题改造前的固定白字/黑影，主题色只用于右下方 2px 无模糊的半透明斜向投影。 */
+    /* 时间文字恢复媒体主题改造前的固定白字/黑影，主题色只用于正下方 2px 无模糊的半透明投影。 */
     color: rgba(255, 255, 255, 0.9);
-    text-shadow: 2px 2px 0 var(--accent-color, #00d2ff), 2px 2px 8px rgba(0, 0, 0, 0.8);
-    text-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-color, #00d2ff) 65%, transparent), 2px 2px 8px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 2px 0 var(--accent-color, #00d2ff), 2px 2px 8px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 2px 0 color-mix(in srgb, var(--accent-color, #00d2ff) 65%, transparent), 2px 2px 8px rgba(0, 0, 0, 0.8);
     font-weight: 300;
     z-index: 100;
     font-variant-numeric: tabular-nums;
@@ -242,10 +242,10 @@ body {
 #fileNameDisplay {
     position: fixed;
     font-size: 48px;
-    /* 媒体名与时间保持相同的固定文字效果，只继承右下方 2px 无模糊的主题强调色斜向投影。 */
+    /* 媒体名与时间保持相同的固定文字效果，只继承正下方 2px 无模糊的主题强调色投影。 */
     color: rgba(255, 255, 255, 0.8);
-    text-shadow: 2px 2px 0 var(--accent-color, #00d2ff), 2px 2px 8px rgba(0, 0, 0, 0.8);
-    text-shadow: 2px 2px 0 color-mix(in srgb, var(--accent-color, #00d2ff) 65%, transparent), 2px 2px 8px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 2px 0 var(--accent-color, #00d2ff), 2px 2px 8px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 2px 0 color-mix(in srgb, var(--accent-color, #00d2ff) 65%, transparent), 2px 2px 8px rgba(0, 0, 0, 0.8);
     z-index: 100;
     max-width: 60%;
     overflow: hidden;
