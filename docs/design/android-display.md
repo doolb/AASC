@@ -202,6 +202,13 @@ android-display/
 - WebView/Chromium 仍可能为网页媒体建立内部 `AudioFocusDelegate` 请求；该请求无法直接复用 APK 的 `AudioFocusRequest`，因此系统层面不保证只有一个 focus entry。
 - 睡眠/深度睡眠期间即使 WebView 或原生层延迟触发 `play`，显示端也必须立即暂停媒体并清理恢复定时器；低频 watchdog 继续兜底，防止媒体重新播放。
 
+### 外部应用焦点切换时的视频画面保护
+
+- 外部应用开始或结束播放时，`MainActivity.onWindowFocusChanged(true)` 只负责重新隐藏系统栏和请求 WebView 非破坏性重绘。
+- 不在窗口焦点回归时把 WebView 设置为 `INVISIBLE` 再切回 `VISIBLE`；该操作可能重建视频 Surface/SurfaceTexture，造成视频画面冻结而音频继续播放。
+- WebView 保持现有可见性和媒体元素状态；网页已有的媒体暂停恢复逻辑只处理真实的 `media.paused`，不通过 `play()` 处理纯渲染面冻结。
+- 旧设备 GPU 黑屏兜底不再绑定每次窗口焦点回归，后续应以明确的画面异常检测或用户重新加载作为重建渲染面的入口。
+
 ### 网页 TTS 与视频播放
 
 - TTS 继续使用网页隐藏的 `<audio id="ttsAudio">` 播放，不改为原生 `AudioTrack`。

@@ -96,6 +96,11 @@ display websocket onmessage:
         清理媒体恢复定时器
     watchdog:
         sleep/deep 且 media 正在播放 -> pause media
+窗口焦点回归(MainActivity.onWindowFocusChanged(true)):
+    hideSystemUi()
+    webView.postInvalidate()                 # 请求非破坏性重绘
+    不修改 webView.visibility
+    不销毁/重建 WebView 或媒体元素，避免视频 Surface 重建后画面停止而音频继续
     网页 TTS 播放:
     playNextTts 直接设置 ttsAudio.src 并调用 ttsAudio.play
     ttsAudio pause/stalled/waiting 且当前句仍有效 -> 单飞定时器调用 ttsAudio.play

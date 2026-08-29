@@ -38,6 +38,17 @@ test('APK Kotlin 恢复 Git 基线的原生音频焦点桥接', () => {
     assert.match(activity, /NativeBridge\(wv, audioFocusController\)/);
 });
 
+test('外部焦点回归时不重建 WebView 视频渲染面', () => {
+    const source = fs.readFileSync(MAIN_ACTIVITY, 'utf8');
+    const focusHandlerStart = source.indexOf('override fun onWindowFocusChanged');
+    const focusHandlerEnd = source.indexOf('private fun connect', focusHandlerStart);
+    const focusHandler = source.slice(focusHandlerStart, focusHandlerEnd);
+    assert.match(focusHandler, /hideSystemUi\(\)/);
+    assert.match(focusHandler, /postInvalidate\(\)/);
+    assert.doesNotMatch(focusHandler, /visibility\s*=\s*View\.(INVISIBLE|VISIBLE)/);
+    assert.doesNotMatch(focusHandler, /postDelayed/);
+});
+
 test('网页媒体不调用 Android 原生音频焦点接口', () => {
     const display = fs.readFileSync(DISPLAY, 'utf8');
     assert.doesNotMatch(display, /requestNativeAudioFocus|abandonNativeAudioFocus|requestWebAudioFocus/);

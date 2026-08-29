@@ -4,6 +4,12 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 修复外部视频焦点切换后内部视频画面冻结
+  - 外部应用切换焦点后，MainActivity 不再通过 `INVISIBLE`/`VISIBLE` 切换强制重建 WebView 视频渲染面，避免画面暂停而音频继续播放。
+  - 保留沉浸式系统栏恢复，焦点回归改为调用 `postInvalidate()` 请求非破坏性重绘。
+  - 验证：`tests/display-media-focus.test.js` 9/9 通过，相关显示端回归命令退出码 0；`npm run build:apk` 成功，Debug APK 已覆盖安装并启动，进程无崩溃日志。
+  - 文档：`docs/design/android-display.md`、`docs/spec/android-display.md`、`docs/task/2026-08-29_外部视频焦点切换画面冻结修复.md`。
+
 - ✅ [2026-08-29] 还原显示端未处理 Android 原生音频焦点
   - 删除 `AudioFocusController`、`NativeBridge` 音频焦点接口及 display.html 的原生焦点申请、释放、回调恢复逻辑。
   - 保留网页 TTS、视频、普通音频和 TTS 100% 音量设置；网页媒体焦点交由 WebView/Android 默认行为处理。
