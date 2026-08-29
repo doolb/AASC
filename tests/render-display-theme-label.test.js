@@ -17,3 +17,8 @@ test('render-display 进度条外标签应使用固定白字、黑影和正下�
     assert.doesNotMatch(renderSource, /lbl\.style\.cssText[\s\S]*?-webkit-text-stroke/u);
     assert.doesNotMatch(renderSource, /lbl\.style\.cssText[\s\S]*?box-shadow:inset/u);
 });
+
+test('render-display 设备名标签应左对齐，避免 arch0 与 SM-N 系列起点不一致', () => {
+    assert.match(renderSource, /lbl\.style\.cssText[\s\S]*?text-align:left/u);
+    assert.doesNotMatch(renderSource, /lbl\.style\.cssText[\s\S]*?text-align:right/u);
+});

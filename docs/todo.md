@@ -2,6 +2,11 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-29][2026-08-29] render-display 设备名左对齐
+  - 保留设备名固定宽度和进度条位置，条外标签改为左对齐；`arch0` 与 `SM-N...` 从同一左边缘开始显示，不添加前导空格。
+  - 测试：render-display 标签 2/2、旋转布局 1/1 通过，脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/render-display-inline-text.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-29_render-display设备名左对齐.md`。
+
 - ✅已完成 [2026-08-29][2026-08-29] 服务器 TUI 默认关闭
   - `npm start` 默认不启用 TUI，只有显式传入 `--tui` 才启用；`--no-tui` 继续优先关闭。
   - 测试：服务器启动器、重启脚本和 WebSocket 重连相关测试 12/12 通过，服务端脚本语法检查和 `git diff --check` 通过。

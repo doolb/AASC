@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 修复 render-display 设备名左对齐
+  - 进度条外标签在固定宽度内统一左对齐，修复 `arch0` 与 `SM-N...` 等不同长度设备名起点不一致的问题。
+  - 保留原有标签宽度、进度条位置和显示文本，不添加前导空格；验证标签、旋转布局测试通过。
+  - 文档：`docs/design/render-display-inline-text.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-29_render-display设备名左对齐.md`。
+
 - ✅ [2026-08-29] 接入显示端 CPU 拓扑回报与 TTS 双路生成
   - Display APK 回报实际 CPU topology、ASR policy 和 TTS policy，服务端按显示端状态保存并限制 TTS 生成并发。
   - TTS 槽位达到 2 时文本媒体、普通 Chat、旧版 Chat、手动 TTS 和 Agent TTS 可以同时生成两句，播放仍按句子序号保持顺序；无状态时安全回退为串行。
