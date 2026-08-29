@@ -22,6 +22,7 @@ object VoiceprintEngine {
     private var diarization: OfflineSpeakerDiarization? = null
     private var threshold: Float = 0.5f
     private var multiSpeaker: Boolean = false
+    private var speakerCount: Int = VoiceprintSpeakerCount.AUTO
 
     @Volatile var ready: Boolean = false; private set
     @Volatile var dim: Int = 0; private set
@@ -32,9 +33,21 @@ object VoiceprintEngine {
     // 加载引擎；segmentationModel 为 null 或 multiSpeaker=false 时不建 diarization
     // synchronized 与 extract/match/diarize 互斥：避免并发时 release 原生引擎导致读已释放句柄
     @Suppress("UNUSED_PARAMETER")
-    fun load(context: Context, embeddingModel: String, segmentationModel: String?, threshold: Float, multiSpeaker: Boolean): Boolean {
+    fun load(
+        context: Context,
+        embeddingModel: String,
+        segmentationModel: String?,
+        threshold: Float,
+        multiSpeaker: Boolean,
+        multiMode: String = "fast",
+        speakerCount: Int = VoiceprintSpeakerCount.AUTO
+    ): Boolean {
         synchronized(this) {
             return try {
+                require(multiMode == "fast") { "正式 APK 只支持快速多段模式" }
+                require(speakerCount in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
+                    "speakerCount 必须是 AUTO 或 1-5"
+                }
                 extractor?.release()
                 // embeddingModel 是 APK 私有目录绝对路径，必须让 AAR 走文件系统加载分支。
                 extractor = SpeakerEmbeddingExtractor(null, SpeakerEmbeddingExtractorConfig(
@@ -52,7 +65,7 @@ object VoiceprintEngine {
                             numThreads = 1, debug = false, provider = "cpu"),
                         embedding = SpeakerEmbeddingExtractorConfig(
                             model = embeddingModel, numThreads = 1, debug = false, provider = "cpu"),
-                        clustering = FastClusteringConfig(numClusters = 0, threshold = 0.5f),
+                        clustering = FastClusteringConfig(numClusters = speakerCount, threshold = 0.5f),
                         minDurationOn = 0.3f, minDurationOff = 0.5f))
                 } else {
                     diarization?.release()
@@ -60,6 +73,7 @@ object VoiceprintEngine {
                 }
                 this.threshold = threshold
                 this.multiSpeaker = multiSpeaker
+                this.speakerCount = speakerCount
                 ready = true
                 true
             } catch (e: Exception) {
@@ -116,9 +130,12 @@ object VoiceprintEngine {
 
     // 多人分割：返回 [start, end] 秒的分段（speakerIndex 为聚类编号，非人名）
     @Throws(Exception::class)
-    fun diarize(samples: FloatArray): List<Segment> {
+    fun diarize(samples: FloatArray, requestedSpeakerCount: Int = speakerCount): List<Segment> {
         synchronized(this) {
             val dz = diarization ?: throw IllegalStateException("分割模型未加载")
+            require(requestedSpeakerCount in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
+                "speakerCount 必须是 AUTO 或 1-5"
+            }
             val segs = dz.process(samples)
             return segs.map { Segment(it.start, it.end, it.speaker) }
         }

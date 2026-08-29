@@ -24,7 +24,8 @@ object HttpJson {
     }
 
     fun voiceprintRegistration(result: VoiceprintRegistrationResult): String =
-        "{\"success\":true,\"name\":\"${escape(result.name)}\",\"embeddingDim\":${result.embeddingDim}}"
+        "{\"success\":true,\"name\":\"${escape(result.name)}\",\"embeddingDim\":${result.embeddingDim}," +
+            "\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}}"
 
     fun voiceprintResult(result: VoiceprintTestResult): String {
         val segments = result.segments.joinToString(",") { segment ->
@@ -32,7 +33,8 @@ object HttpJson {
                 "\"speaker\":${nullableString(segment.speaker)},\"text\":\"${escape(segment.text)}\"," +
                 "\"error\":${nullableString(segment.error)}}"
         }
-        return "{\"success\":true,\"mode\":\"${result.mode.name}\",\"embeddingDim\":${result.embeddingDim}," +
+        return "{\"success\":true,\"mode\":\"${result.mode.name}\",\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}," +
+            "\"embeddingDim\":${result.embeddingDim}," +
             "\"matchedSpeaker\":${nullableString(result.matchedSpeaker)},\"text\":\"${escape(result.text)}\"," +
             "\"segments\":[$segments],\"elapsedMs\":${result.elapsedMs}," +
             "\"diarizationMs\":${result.diarizationMs},\"embeddingMs\":${result.embeddingMs},\"asrMs\":${result.asrMs}}"

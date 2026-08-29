@@ -185,6 +185,8 @@ class Config extends DataSnapshot {
             maxQueueLength: 8,
             mallocTrimEnabled: true,
             requireChinese: false,
+            languageMode: 'zh',
+            denoise: false,
             isolateProcess: {
                 enabled: false,
                 requestTimeoutMs: 60000,
@@ -195,7 +197,14 @@ class Config extends DataSnapshot {
             controlTheme: 'dark'
         },
         cpuAffinity: cloneCpuAffinityConfig(),
-        voiceprint: { enabled: true, extraction: 'server', threshold: 0.5, multiSpeaker: true },
+        voiceprint: {
+            enabled: true,
+            extraction: 'server',
+            threshold: 0.5,
+            multiSpeaker: true,
+            multiMode: 'fast',
+            speakerCount: 'AUTO'
+        },
         voiceCommand: {
             defaultWeatherCity: '',
             weatherCities: [

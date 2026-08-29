@@ -201,6 +201,11 @@ class AsrHttpServer(
             respond(output, 409, HttpJson.error("识别服务忙，请稍后重试"))
             return
         }
+        val languageMode = AsrLanguageMode.parse(request.queryValue("language"))
+        if (languageMode == null) {
+            respond(output, 400, HttpJson.error("language 必须是 auto、zh 或 en"))
+            return
+        }
         try {
             val samples = if (contentType == "audio/wav") {
                 AudioResampler.toMono16k(WavAudio.decode(request.body))
@@ -208,7 +213,7 @@ class AsrHttpServer(
                 AsrPcm.decodeS16(request.body)
             }
             AsrCoordinator.validateSamples(samples)
-            val result = coordinator.submit(samples, cpuModeProvider()).get(60, TimeUnit.SECONDS)
+            val result = coordinator.submit(samples, cpuModeProvider(), languageMode).get(60, TimeUnit.SECONDS)
             respond(output, 200, HttpJson.success(result.text, result.elapsedMs))
         } catch (error: java.util.concurrent.TimeoutException) {
             respond(output, 504, HttpJson.error("识别超时"))
@@ -230,9 +235,10 @@ class AsrHttpServer(
             respond(output, 400, HttpJson.error("缺少 name 参数"))
             return
         }
+        val denoise = DenoiseOption.parse(request.queryValue("denoise"))
         try {
             val samples = decodeAudio(request)
-            val result = voiceprintCoordinator.register(name, samples, cpuModeProvider()).get(60, TimeUnit.SECONDS)
+            val result = voiceprintCoordinator.register(name, samples, cpuModeProvider(), denoise).get(60, TimeUnit.SECONDS)
             respond(output, 200, HttpJson.voiceprintRegistration(result))
         } catch (error: java.util.concurrent.TimeoutException) {
             respond(output, 504, HttpJson.error("声纹注册超时"))
@@ -253,13 +259,26 @@ class AsrHttpServer(
             respond(output, 400, HttpJson.error("speakerCount 必须是 AUTO 或 1-5"))
             return
         }
+        val denoise = DenoiseOption.parse(request.queryValue("denoise"))
+        val languageMode = AsrLanguageMode.parse(request.queryValue("language"))
+        if (languageMode == null) {
+            respond(output, 400, HttpJson.error("language 必须是 auto、zh 或 en"))
+            return
+        }
         if (!engine.isLoaded || !voiceprintCoordinator.isReady()) {
             respond(output, 503, HttpJson.error("ASR 或 Sherpa 声纹模型尚未就绪"))
             return
         }
         try {
             val samples = decodeAudio(request)
-            val result = voiceprintCoordinator.test(mode, samples, cpuModeProvider(), speakerCount).get(60, TimeUnit.SECONDS)
+            val result = voiceprintCoordinator.test(
+                mode,
+                samples,
+                cpuModeProvider(),
+                speakerCount,
+                denoise,
+                languageMode
+            ).get(60, TimeUnit.SECONDS)
             respond(output, 200, HttpJson.voiceprintResult(result))
         } catch (error: java.util.concurrent.TimeoutException) {
             respond(output, 504, HttpJson.error("声纹测试超时"))

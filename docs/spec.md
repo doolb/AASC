@@ -37,6 +37,7 @@
 | 语音显示端 | [voice-display.md](spec/voice-display.md) | Go实现纯语音交互显示端、ASR、音频播放 |
 | 显示端UI旋转 | [display-ui-rotation.md](spec/display-ui-rotation.md) | UI四角布局、旋转重力方向调整、设备事件防抖 |
 | 显示端分布式能力 | [display-capability.md](spec/display-capability.md) | 显示端能力声明、能力路由、能力编辑 |
+| 显示端语音唤醒与监听控制 | [display-voice-conversation.md](spec/display-voice-conversation.md) | 监听开关、唤醒状态、TTS结束计时和声纹独立语义 |
 | 日志筛选与系统监控 | [log-viewer.md](spec/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
 | 日志大脑 | [log-brain.md](spec/log-brain.md) | 日志摘要、记忆体构建、LLM判断上下文接口 |
 | 资源目录 | [resource-layout.md](spec/resource-layout.md) | 资源路径规范、目录整理、清理伪代码 |

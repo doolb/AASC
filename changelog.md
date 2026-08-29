@@ -4,6 +4,46 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 接入显示端 CPU 拓扑回报与 TTS 双路生成
+  - Display APK 回报实际 CPU topology、ASR policy 和 TTS policy，服务端按显示端状态保存并限制 TTS 生成并发。
+  - TTS 槽位达到 2 时文本媒体、普通 Chat、旧版 Chat、手动 TTS 和 Agent TTS 可以同时生成两句，播放仍按句子序号保持顺序；无状态时安全回退为串行。
+  - 验证：CPU 协议测试 3/3、文本 TTS 测试 28/28、有序调度器/Chat/手动 TTS/Agent 回归 9/9、Android JVM 单测和 Debug APK 构建通过。
+  - 真机复测：跳过 `？` 后只生成两段，当前串行总耗时约 2966ms，未再触发服务端回退。
+  - 所有 TTS 入口直接跳过仅标点分句，避免单独 `？` 触发无效合成和服务端回退；文本媒体通过可定位通知继续下一句。
+  - 文档：docs/design/android-native-tts.md、docs/spec/android-native-tts.md、docs/design/tts.md、docs/spec/tts.md、docs/task/2026-08-29_显示端CPU拓扑回报与TTS并发.md。
+
+- ✅ [2026-08-29] 收敛 TTS 连续仅标点分句
+  - 分句结果中如果当前分句和前一个分句都仅包含标点，则删除当前分句，只保留连续标点中的第一个分句。
+  - `喵呜……？！ （耳朵瞬间变得通红` 处理为 `喵呜……`、`？`、`（耳朵瞬间变得通红`，避免 `！` 单独进入 TTS 队列。
+  - 保持 `你好......世界` 的省略号句间边界行为不变。
+  - 文档：`docs/design/tts.md`、`docs/spec/tts.md`、`docs/task/2026-08-29_TTS省略号停顿缩短.md`。
+
+- ✅ [2026-08-29] 缩短 TTS 连续省略号停顿
+  - 连续英文句点和中文省略号作为 TTS 句子边界；`你好......世界` 拆为 `你好......`、`世界` 两句，界面原文保持不变。
+  - 每个分句的 TTS 输入将省略号边界压缩为单个英文句点，覆盖显示端离线 TTS、服务端 TTS 和 fallback 路由。
+  - 实测当前音色：`你好......世界` 分别生成 `你好.`（0.5875 秒）和 `世界`（0.6875 秒）。
+  - 验证：TTS 文本处理和分句回归 13/13、语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/tts.md`、`docs/spec/tts.md`、`docs/task/2026-08-29_TTS省略号停顿缩短.md`。
+
+- ✅ [2026-08-29] 修复控制端监听开关并统一 ASR 配置入口
+  - 修复树形/列表视图监听开关重复绑定导致的无响应风险，改为单一事件委托；增加发送中、发送失败和服务端回执状态。
+  - 删除控制端“显示端 ASR 处理”区域及语言选择，正式显示端固定使用中文 ASR。
+  - 降噪开关移动到声纹面板，服务端保存为全局 ASR 降噪配置，普通 ASR、单段声纹和快速多段声纹统一使用。
+  - 验证：相关 Node 回归 14/14、JavaScript 语法检查、`git diff --check` 和正式 Display APK 构建通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/design/android-native-asr.md`、`docs/spec/display-voice-conversation.md`、`docs/spec/android-native-asr.md`、`docs/task/2026-08-29_控制端监听开关与全局降噪配置.md`。
+
+- ✅ [2026-08-29] 控制端显示端列表增加监听状态和最近 ASR 回传
+  - 每个显示端条目直接显示监听开关、监听中/等待唤醒/已关闭/不可用状态和最近一次实时/最终识别文本。
+  - 监听开关复用 `voiceRecording` 能力，不新增控制协议；最近文本按显示端只保留一条。
+  - 验证：显示列表回归 2/2、相关网页/语音监听/录音回归 9/9、JS 语法检查和正式 APK 构建通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_显示端监听状态与最近识别文本.md`。
+
+- ✅ [2026-08-29] 删除 ASR“过滤其他文字”开关和 `zh-en-filter` 模式
+  - 测试 APK、正式 Display APK、控制端配置和服务端 ASR 链路不再保存、广播或执行文字脚本过滤。
+  - 保留 `auto`、`zh`、`en` 语言选择、降噪、快速多段和流式 ASR；识别结果只做首尾空白清理。
+  - 验证：相关 Node 契约 3/3、两个 Android JVM 单测和正式 Display APK Debug 构建通过。
+  - 文档：`docs/design/android-native-asr.md`、`docs/spec/android-native-asr.md`、`docs/task/2026-08-29_删除ASR其他文字过滤.md`。
+
 - ✅ [2026-08-29] 服务器 TUI 默认关闭
   - `npm start` 默认不启用 TUI，只有显式传入 `--tui` 才启用；`--no-tui` 继续作为强制关闭参数。
   - 验证：相关启动器、重启脚本和 WebSocket 重连测试 12/12 通过，服务端脚本语法检查通过。
@@ -21,17 +61,22 @@
   - 验证：新增 `tests/display-render-update-ack.test.js` 覆盖高频分支与显式播放命令回执契约。
   - 文档：`docs/design/monitor-system.md`、`docs/spec/monitor-system.md`、`docs/spec/websocket.md`、`docs/task/2026-08-29_renderUpdate提示过滤.md`。
 
+- ✅ [2026-08-29] 测试 ASR APK 增加保存当前 WAV
+  - 内置测试网页和 Android 原生界面均增加“保存当前 WAV”按钮；没有当前音频时按钮不可用。
+  - Android 10+ 写入系统 Download，旧系统写入 APK 专属外部音频目录；保存内容统一为 16kHz mono 16-bit PCM WAV。
+  - 验证：网页保存契约 3/3、Android JVM 单元测试、debug APK 构建通过。
+  - 文档：`3rd/tts-server/docs/design/android-asr-apk.md`、`3rd/tts-server/docs/spec/android-asr-apk.md`、`3rd/tts-server/docs/task/2026-08-28_测试ASR保存当前WAV.md`。
+
+- ✅ [2026-08-29] 测试 ASR 普通识别固定使用中文
+  - 内置网页删除语言选择，普通 ASR 和声纹测试固定传 `language=zh`；Android 原生识别固定使用 `AsrLanguageMode.ZH`。
+  - 流式 ASR 继续使用固定中英双语 Zipformer，HTTP 接口仍保留显式语言参数兼容性。
+  - 验证：网页语言契约 4/4、Android JVM 单元测试、debug APK 构建和真机安装通过。
+  - 文档：`3rd/tts-server/docs/design/android-asr-apk.md`、`3rd/tts-server/docs/spec/android-asr-apk.md`、`3rd/tts-server/docs/task/2026-08-29_测试ASR普通识别固定中文.md`。
 
 - ✅ [2026-08-29] 显示端文字增加半透明主题色斜向投影
   - render-display 进度条外标签、显示端时间文本和媒体名统一使用固定白字、黑色阴影和正下方 2px 无模糊主题色投影。
   - 不支持 `color-mix()` 时回退纯色主题投影，不使用文字轮廓或元素盒子内阴影，避免矩形框和额外底部投影；进度条及条内数值保持不变。
   - 文档：`docs/design/render-display-inline-text.md`、`docs/design/control-ui-theme.md`、`docs/spec/monitor-system.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-29_render-display标签主题色半透明描边.md`。
-
-- ✅ [2026-08-28] 显示端媒体底色恢复固定黑色
-  - `html/body`、`#mediaContainer` 和媒体睡眠遮罩不再使用主题 `bg-primary`，媒体未覆盖区域始终保持黑色。
-  - 显示端连接状态、文本媒体、天气/语音弹窗和任务提示继续使用共享主题变量；图片、视频和 iframe 内容不变。
-  - 验证：显示端主题同步与控制端主题回归 21/21 通过，主题脚本语法检查通过。
-  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_显示端媒体底色固定黑色.md`。
 
 - ✅ [2026-08-29] render-display 进度条外标签增加半透明主题描边
   - 设备名、`M`、`GPU`、`VRAM` 等进度条外标签恢复固定白字与黑色阴影，增加 1px 当前主题强调色描边。
@@ -39,10 +84,29 @@
   - 验证：render-display 标签、旋转布局和主题回归 23/23 通过，脚本语法检查通过。
   - 文档：`docs/design/render-display-inline-text.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-29_render-display标签主题色半透明描边.md`。
 
+- ✅ [2026-08-28] 显示端媒体底色恢复固定黑色
+  - `html/body`、`#mediaContainer` 和媒体睡眠遮罩不再使用主题 `bg-primary`，媒体未覆盖区域始终保持黑色。
+  - 显示端连接状态、文本媒体、天气/语音弹窗和任务提示继续使用共享主题变量；图片、视频和 iframe 内容不变。
+  - 验证：显示端主题同步与控制端主题回归 21/21 通过，主题脚本语法检查通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_显示端媒体底色固定黑色.md`。
+
 - ✅ [2026-08-28] 显示端时间和媒体名增加主题色外描边
   - 时间和媒体名恢复固定白色文字与固定黑色阴影，新增 1px 当前主题强调色外描边。
   - 验证：显示端主题同步回归 2/2 通过，主题脚本语法检查通过。
   - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_显示端时间文本外描边.md`。
+
+- ✅ [2026-08-28] 统一所有 ASR/声纹录音为原始 PCM/WAV
+  - 控制端语音输入、声纹注册、正式显示端和独立 `ttslive` 网页均改用 WebAudio 原始 Float32 采集，统一封装为 16 kHz mono 16-bit WAV。
+  - Node 子显示端保留现有 WAV 录音器，Go/C# 子显示端保留 `audio.wav` 上传契约；网页端不再使用 MediaRecorder/WebM。
+  - 验证：网页录音契约测试 8/8 通过，控制端、显示端、声纹注册和 ttslive 入口均通过 WAV 静态检查。
+  - 文档：`docs/design/android-native-asr.md`、`docs/spec/android-native-asr.md`、`docs/task/2026-08-28_APK内存不足ASR重连与正式识别准确度修复.md`。
+
+- ✅ [2026-08-28] 修复正式 Display APK ASR 内存不足重连并对齐测试 APK 音频链路
+  - 正常情况下保留按 CPU 核心数创建 recognizer；内存预算不足时回退为单实例，recognizer 构造抛 `OutOfMemoryError` 时释放已创建 slot 后再次尝试单实例。
+  - 单实例仍无法创建时报告内存终态，显示端停止录音、撤销 `voiceRecognition` 能力并停止自动模型重试，不关闭 WebSocket。
+  - APK 本地 ASR 使用 WebAudio 原始 Float32 采集并封装 16 kHz mono WAV，关闭浏览器层回声消除/噪声抑制请求；普通浏览器同样使用 WAV。
+  - 验证：Android JVM 全量单测、网页音频契约测试、`npm run build:apk`、SM-N9500 安装启动通过；启动后无 FATAL/OOM/ASR 重连日志。
+  - 文档：`docs/design/android-native-asr.md`、`docs/spec/android-native-asr.md`、`docs/task/2026-08-28_APK内存不足ASR重连与正式识别准确度修复.md`。
 
 - ✅ [2026-08-28] 统一基础主题色并让显示端信息、设备树控件继承主题
   - 显示端信息弹窗、浏览器详情、设备树、树状节点和树状输入控件改用基础主题变量或父级继承色，修复浅色主题下白字/灰字对比度异常。
@@ -62,6 +126,21 @@
   - 检测到 `public` 目录文件版本变化仍立即刷新显示端页面；控制端不新增独立文件变化轮询。
   - 测试：显示端版本检测成功间隔、失败重试间隔、版本变化刷新和控制端无轮询检查通过。
   - 文档：`docs/design/display.md`、`docs/spec/api.md`、`docs/task/2026-08-28_显示端文件变化轮询改为30秒.md`。
+
+- ✅ [2026-08-28] 增加显示端语音唤醒、监听开关和 TTS 后超时控制
+  - 控制端复用每个显示端的“语音监听（录音能力）”开关；关闭后立即停止麦克风、本地 ASR 和自动恢复，未完成的语音结果不再触发命令。
+  - 正式网页显示端增加等待唤醒、群聊激活、私聊激活和结束对话状态；支持“你好小爱”“小爱你好”“{助手}开始对话”“结束对话”等流程，3 分钟无有效对话后重新等待唤醒。
+  - TTS 队列全部实际播放结束后由显示端回报，服务端和显示端从最后一段 TTS 结束时重新计时；关闭声纹只取消 speaker 匹配，不影响 ASR、唤醒和对话。
+  - 旧 Go/C#/Node 子显示端保留原有语音命令兼容流程。
+  - 验证：状态机 4/4、监听契约 8/8、显示端重连 2/2、TTS 路由 3/3、原生桥 4/4、ASR 配置 3/3、播放恢复 5/5 通过；服务端/模块/显示端脚本语法检查通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/spec/websocket.md`、`docs/design/display-capability.md`、`docs/task/2026-08-28_显示端语音唤醒监听控制.md`。
+
+- ✅ [2026-08-28] 显示端跟随服务端主题颜色变化
+  - 显示端加载共享 `theme.css` 与 `ui-theme.js`，首次连接、重连和控制端切换均使用服务端全局主题；主题更新通过 `controlThemeChanged` WebSocket 消息即时生效。
+  - 显示端背景、文本媒体、设备/连接状态文字、语音提示、任务状态、监控条和天气/语音等临时弹窗改用主题变量，覆盖当前 15 种主题。
+  - 图片、视频、iframe 网页及其内部内容不套用主题滤镜或样式，保持媒体原样显示。
+  - 验证：主题、显示端同步、旋转弹窗、文本媒体和播放恢复相关回归 44/44 通过；`node --check` 与 `git diff --check` 通过。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_显示端主题同步.md`。
 
 - ✅ [2026-08-28] 主题设置保存到服务端并修复天气响应弹窗旋转适配
   - 服务端新增 `ui.controlTheme` 配置和 `/api/config/controlTheme` 读写接口，限制为控制端当前 15 种主题；控制端启动优先同步服务端主题，保留 `localStorage` 离线回退。
@@ -88,6 +167,27 @@
   - 测试：`tests/ui-theme.test.js` 主题回归 13/13 通过。
   - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-28_浅色主题toggle选中态修复.md`。
 
+- ✅ [2026-08-28] 修复控制端聊天群聊页签无效并增加模式退出按钮
+  - 修复群聊页签只有 `data-chat-tab` 标记却没有点击事件，现可从私聊或工作组模式直接返回群聊。
+  - 私聊模式显示“退出私聊”，工作 AI 角色模式显示“退出工作组”，均复用 `Chat.setMode('group', null)` 清理上下文。
+  - 测试：聊天/Agent 控制端回归 6/6、脚本语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/2026-08-28_控制端聊天模式页签切换与退出按钮.md`。
+
+- ✅ [2026-08-28] 将测试 APK 的 ASR 增强能力接入正式 Display APK
+  - 正式 APK 增加普通非流式 ASR 的自动/中文/英文/中英双语语言选择；中英双语结果过滤日文假名、韩文等其他脚本文字。
+  - 集成 Sherpa GTCRN 降噪开关；一次请求只降噪一次，普通 ASR、声纹和快速多段共用降噪后的 PCM。
+  - 集成 Sherpa 快速多段声纹流程，按 cluster 选择最长代表片段提取 embedding，人数支持 AUTO 或 1～5。
+  - 网页、服务端配置、显示端 WebSocket 和原生桥完成扩展；保留旧异步桥和旧配置兼容，不接入流式 ASR。
+  - 验证：正式 APK Android JVM 全量单测通过，新增 Node 契约测试 9/9，通过 `node --check` 和 `npm run build:apk`；APK 已确认包含 GTCRN 资源。
+  - 文档：`docs/design/android-native-asr.md`、`docs/spec/android-native-asr.md`、`docs/task/2026-08-28_正式APK接入测试APK的ASR增强功能.md`。
+
+- ✅ [2026-08-28] 测试 APK 增加当前音频播放和中英混合识别后过滤
+  - 原生 APK 增加当前选择/录制音频播放和停止按钮；测试网页增加 WAV 播放器、播放/停止按钮，并在替换音频时释放 object URL。
+  - 离线 ASR 支持 `auto`、`zh`、`en` 和 `zh-en-filter`；中英混合模式使用 SenseVoice auto 后过滤日文假名、韩文等其他脚本，声纹分段 ASR 同步应用过滤。
+  - `/api/asr`、`/api/voiceprint/test` 增加 `language` 查询参数；语言切换只保留一个 SenseVoice recognizer，避免多份模型常驻。
+  - 验证：独立 APK 29 项 JVM 单测、网页脚本语法检查、Debug APK 构建和 `192.168.1.6:5555` 真机安装通过；原生按钮手工点击因设备锁屏未完成。
+  - 文档：`docs/design/android-voiceprint-test-apk.md`、`docs/spec/android-voiceprint-test-apk.md`、`docs/task/2026-08-28_测试APK当前音频播放与中英混合过滤.md`。
+
 - ✅ [2026-08-28] 扩展控制端多主题配色
   - 新增薄荷青、海洋蓝、森林绿、极简灰、藻盐、少女粉、玫瑰金和新年红八套浅色主题，连同已有主题共支持 15 种配色。
   - 藻盐主题采用盐白背景与低饱和藻绿强调色，推荐主背景 `#E8F6F0`、强调色 `#159A86`。
@@ -109,6 +209,12 @@
   - 测试：主题回归 8/8 通过。
   - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-27_控制端主题切换与UI控件分类.md`。
 
+- ✅ [2026-08-27] 独立声纹测试 APK 增加 Sherpa GTCRN 降噪开关
+  - 网页增加“ASR/声纹降噪”开关，覆盖声纹注册、Sherpa 单段、普通多段和快速多段；流式 ASR 保持不变。
+  - 开启时完整音频只执行一次 GTCRN 降噪，降噪音频统一用于 diarization、embedding、声纹匹配和 ASR；结果增加 `denoise`、`denoiseMs`。
+  - 真机 SM-N9500 验证 `zh.wav` 四个降噪请求均成功，注册/单段/普通多段/快速多段降噪耗时分别为 `1556/1536/1542/1615ms`，均匹配 `ZH`。
+  - 改动：`3rd/tts-server/android-asr/`、`res/models/speech-enhancement/gtcrn_simple.onnx`；文档：`docs/design/android-voiceprint-test-apk.md`、`docs/spec/android-voiceprint-test-apk.md`、`docs/task/2026-08-27_独立APK声纹测试降噪开关.md`。
+
 - ✅ [2026-08-27] 修复控制端浅色主题白底白字
   - 根因：浅色主题容器改为浅色背景后，旧组件高优先级选择器和动态 HTML 内联样式仍保留 `#fff` 文字。
   - `theme.css` 增加任务确认、媒体库/聊天弹窗、任务文字、下拉选项和动态内联白字的浅色覆盖；有色按钮仍保留白字。
@@ -127,6 +233,10 @@
   - 快速模式按 cluster 复用最长代表片段的 embedding，保留每个时间段的 ASR 文本；原 `SHERPA_MULTI` 保持兼容。
   - 真机 `zh-en.wav` 对比：通用多段 `35268ms`，快速 2 人 `33113ms`，约快 `6.1%`；最大瓶颈仍为 diarization 和逐段 ASR。
   - 文档：`docs/design/android-voiceprint-test-apk.md`、`docs/spec/android-voiceprint-test-apk.md`、`docs/task/2026-08-27_Sherpa快速多段人数上限5.md`。
+
+- ✅ [2026-08-27] 补充 Sherpa 混合语音处理验证
+  - `zh-en-mix.wav` 多段返回重叠的 EN/ZH 时间段，但不执行 source separation；两个分段 ASR 均被英文主导。
+  - 快速 2 人模式 `11920ms`，普通多段 `11955ms`，混合输入只有两个分段时优化收益很小。
 
 - ✅ [2026-08-27] 完成 Sherpa 单段/多段真机速度复测
   - 在 SM-N9500、CPU `BIG` 模式下使用 `zh.wav`、`en.wav`、`zh-en.wav`、`zh-en-mix.wav` 完成单段/多段共 8 次 HTTPS 测试，全部返回成功。

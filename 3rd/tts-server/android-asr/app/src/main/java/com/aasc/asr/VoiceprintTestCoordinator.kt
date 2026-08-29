@@ -18,6 +18,8 @@ data class VoiceprintSegmentResult(
 
 data class VoiceprintTestResult(
     val mode: VoiceprintMode,
+    val denoise: Boolean,
+    val denoiseMs: Long,
     val embeddingDim: Int,
     val matchedSpeaker: String?,
     val text: String,
@@ -28,12 +30,18 @@ data class VoiceprintTestResult(
     val asrMs: Long
 )
 
-data class VoiceprintRegistrationResult(val name: String, val embeddingDim: Int)
+data class VoiceprintRegistrationResult(
+    val name: String,
+    val embeddingDim: Int,
+    val denoise: Boolean,
+    val denoiseMs: Long
+)
 
 // Sherpa 声纹测试协调器：注册、单段和多段请求共用一个线程，避免多个 native 推理同时占用内存。
 class VoiceprintTestCoordinator(
     private val asrEngine: AsrEngine,
-    private val voiceprintEngine: SherpaVoiceprintEngine
+    private val voiceprintEngine: SherpaVoiceprintEngine,
+    private val denoiseEngine: SherpaDenoiseEngine = SherpaDenoiseEngine()
 ) {
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
@@ -43,56 +51,75 @@ class VoiceprintTestCoordinator(
 
     fun isReady(): Boolean = voiceprintEngine.isLoaded
 
+    fun denoiseReady(): Boolean = denoiseEngine.isLoaded
+
     fun embeddingDim(): Int = voiceprintEngine.embeddingDim
 
     fun registeredSpeakers(): List<String> = synchronized(database) { database.keys.toList() }
 
-    fun register(name: String, samples: FloatArray, cpuMode: CpuMode): Future<VoiceprintRegistrationResult> =
+    fun register(
+        name: String,
+        samples: FloatArray,
+        cpuMode: CpuMode,
+        denoise: Boolean = false
+    ): Future<VoiceprintRegistrationResult> =
         submit {
             val normalizedName = name.trim()
             require(normalizedName.isNotEmpty()) { "speaker 名称不能为空" }
             AsrCoordinator.validateSamples(samples)
             CpuAffinity.apply(cpuMode)
+            val prepared = prepareAudio(samples, denoise)
             synchronized(database) {
-                database[normalizedName] = voiceprintEngine.extract(samples)
+                database[normalizedName] = voiceprintEngine.extract(prepared.samples)
                 voiceprintEngine.setDatabase(database)
             }
-            VoiceprintRegistrationResult(normalizedName, voiceprintEngine.embeddingDim)
+            VoiceprintRegistrationResult(
+                name = normalizedName,
+                embeddingDim = voiceprintEngine.embeddingDim,
+                denoise = prepared.enabled,
+                denoiseMs = prepared.elapsedMs
+            )
         }
 
     fun test(
         mode: VoiceprintMode,
         samples: FloatArray,
         cpuMode: CpuMode,
-        speakerCount: Int = VoiceprintSpeakerCount.AUTO
+        speakerCount: Int = VoiceprintSpeakerCount.AUTO,
+        denoise: Boolean = false,
+        languageMode: AsrLanguageMode = AsrLanguageMode.AUTO
     ): Future<VoiceprintTestResult> =
         submit {
             AsrCoordinator.validateSamples(samples)
             check(asrEngine.isLoaded) { "ASR 模型尚未就绪" }
             check(voiceprintEngine.isLoaded) { "声纹模型尚未就绪" }
             CpuAffinity.apply(cpuMode)
+            val prepared = prepareAudio(samples, denoise)
             when (mode) {
-                VoiceprintMode.SHERPA_SINGLE -> testSingle(samples)
-                VoiceprintMode.SHERPA_MULTI -> testMulti(samples)
-                VoiceprintMode.SHERPA_MULTI_FAST -> testFastMulti(samples, speakerCount)
+                VoiceprintMode.SHERPA_SINGLE -> testSingle(prepared, languageMode)
+                VoiceprintMode.SHERPA_MULTI -> testMulti(prepared, languageMode)
+                VoiceprintMode.SHERPA_MULTI_FAST -> testFastMulti(prepared, speakerCount, languageMode)
             }
         }
 
     fun shutdown() {
         executor.shutdownNow()
         voiceprintEngine.release()
+        denoiseEngine.release()
     }
 
-    private fun testSingle(samples: FloatArray): VoiceprintTestResult {
+    private fun testSingle(audio: PreparedDenoiseAudio, languageMode: AsrLanguageMode): VoiceprintTestResult {
         val started = System.nanoTime()
         val embeddingStarted = System.nanoTime()
-        val embedding = voiceprintEngine.extract(samples)
+        val embedding = voiceprintEngine.extract(audio.samples)
         val embeddingMs = elapsedMs(embeddingStarted)
         val asrStarted = System.nanoTime()
-        val text = asrEngine.recognize(samples)
+        val text = asrEngine.recognize(audio.samples, languageMode.engineLanguage)
         val asrMs = elapsedMs(asrStarted)
         return VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_SINGLE,
+            denoise = audio.enabled,
+            denoiseMs = audio.elapsedMs,
             embeddingDim = voiceprintEngine.embeddingDim,
             matchedSpeaker = voiceprintEngine.match(embedding),
             text = text,
@@ -104,22 +131,22 @@ class VoiceprintTestCoordinator(
         )
     }
 
-    private fun testMulti(samples: FloatArray): VoiceprintTestResult {
+    private fun testMulti(audio: PreparedDenoiseAudio, languageMode: AsrLanguageMode): VoiceprintTestResult {
         val started = System.nanoTime()
         val diarizationStarted = System.nanoTime()
-        val diarized = voiceprintEngine.diarize(samples)
+        val diarized = voiceprintEngine.diarize(audio.samples)
         val diarizationMs = elapsedMs(diarizationStarted)
         val merged = VoiceprintSegmentMerger.merge(diarized)
         var embeddingMs = 0L
         var asrMs = 0L
         val results = merged.map { segment ->
-            val segmentSamples = slice(samples, segment.start, segment.end)
+            val segmentSamples = slice(audio.samples, segment.start, segment.end)
             try {
                 val embeddingStarted = System.nanoTime()
                 val embedding = voiceprintEngine.extract(segmentSamples)
                 embeddingMs += elapsedMs(embeddingStarted)
                 val asrStarted = System.nanoTime()
-                val text = asrEngine.recognize(segmentSamples)
+                val text = asrEngine.recognize(segmentSamples, languageMode.engineLanguage)
                 asrMs += elapsedMs(asrStarted)
                 VoiceprintSegmentResult(
                     start = segment.start,
@@ -141,6 +168,8 @@ class VoiceprintTestCoordinator(
         }
         return VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_MULTI,
+            denoise = audio.enabled,
+            denoiseMs = audio.elapsedMs,
             embeddingDim = voiceprintEngine.embeddingDim,
             matchedSpeaker = null,
             text = results.mapNotNull { it.text.takeIf(String::isNotEmpty) }.joinToString(" "),
@@ -152,13 +181,17 @@ class VoiceprintTestCoordinator(
         )
     }
 
-    private fun testFastMulti(samples: FloatArray, speakerCount: Int): VoiceprintTestResult {
+    private fun testFastMulti(
+        audio: PreparedDenoiseAudio,
+        speakerCount: Int,
+        languageMode: AsrLanguageMode
+    ): VoiceprintTestResult {
         require(speakerCount in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
             "speakerCount 必须是 AUTO 或 1-5"
         }
         val started = System.nanoTime()
         val diarizationStarted = System.nanoTime()
-        val diarized = voiceprintEngine.diarize(samples, speakerCount)
+        val diarized = voiceprintEngine.diarize(audio.samples, speakerCount)
         val diarizationMs = elapsedMs(diarizationStarted)
         val merged = VoiceprintSegmentMerger.merge(diarized)
         var embeddingMs = 0L
@@ -168,7 +201,7 @@ class VoiceprintTestCoordinator(
         merged.groupBy { it.speakerIndex }.values
             .mapNotNull { segments -> segments.maxByOrNull { it.end - it.start } }
             .forEach { representative ->
-                val segmentSamples = slice(samples, representative.start, representative.end)
+                val segmentSamples = slice(audio.samples, representative.start, representative.end)
                 try {
                     val embeddingStarted = System.nanoTime()
                     val embedding = voiceprintEngine.extract(segmentSamples)
@@ -182,10 +215,10 @@ class VoiceprintTestCoordinator(
 
         var asrMs = 0L
         val results = merged.map { segment ->
-            val segmentSamples = slice(samples, segment.start, segment.end)
+            val segmentSamples = slice(audio.samples, segment.start, segment.end)
             try {
                 val asrStarted = System.nanoTime()
-                val text = asrEngine.recognize(segmentSamples)
+                val text = asrEngine.recognize(segmentSamples, languageMode.engineLanguage)
                 asrMs += elapsedMs(asrStarted)
                 VoiceprintSegmentResult(
                     start = segment.start,
@@ -208,6 +241,8 @@ class VoiceprintTestCoordinator(
         }
         return VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_MULTI_FAST,
+            denoise = audio.enabled,
+            denoiseMs = audio.elapsedMs,
             embeddingDim = voiceprintEngine.embeddingDim,
             matchedSpeaker = null,
             text = results.mapNotNull { it.text.takeIf(String::isNotEmpty) }.joinToString(" "),
@@ -229,6 +264,9 @@ class VoiceprintTestCoordinator(
             }
         })
     }
+
+    private fun prepareAudio(samples: FloatArray, denoise: Boolean): PreparedDenoiseAudio =
+        DenoiseAudioPolicy.prepare(samples, denoise) { denoiseEngine.process(samples) }
 
     private fun slice(samples: FloatArray, start: Float, end: Float): FloatArray {
         val first = (start * SherpaVoiceprintEngine.SAMPLE_RATE).toInt().coerceIn(0, samples.size)

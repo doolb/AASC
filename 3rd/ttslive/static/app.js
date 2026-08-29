@@ -203,8 +203,8 @@ const audioPlayer = document.getElementById('audio-player');
 const clearHistoryBtn = document.getElementById('clear-history');
 const noInterruptCheckbox = document.getElementById('no-interrupt');
 
-let mediaRecorder;
-let audioChunks = [];
+let pcmCapture = null;
+let recordingStream = null;
 let isRecording = false;
 let isAlwaysListening = false;
 let silenceStartTime = null;
@@ -252,55 +252,13 @@ async function startRecording() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
             audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
+                echoCancellation: false,
+                noiseSuppression: false,
                 sampleRate: 16000
             } 
         });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-        
-        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-        
-        mediaRecorder.onstop = async () => {
-            stream.getTracks().forEach(track => track.stop());
-            
-            if (currentAbortController) {
-                showToast('取消上一次请求', 'warning');
-                currentAbortController.abort();
-                currentAbortController = null;
-            }
-            
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            setStatus('UPLOADING...', 'busy');
-            
-            const speechOffset = speechStartTime ? (speechStartTime - recordingStartTime) : 0;
-            
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.wav');
-            formData.append('speechOffset', speechOffset.toString());
-            
-            currentAbortController = new AbortController();
-            
-            try {
-                const response = await fetch('/audio', {
-                    method: 'POST',
-                    body: formData,
-                    signal: currentAbortController.signal
-                });
-                handleStream(response);
-            } catch (e) {
-                if (e.name === 'AbortError') {
-                    showToast('请求已取消', 'info');
-                } else {
-                    console.error(e);
-                    showToast('请求错误', 'error');
-                    setStatus('ERROR', 'busy');
-                }
-            }
-        };
-        
-        mediaRecorder.start();
+        recordingStream = stream;
+        pcmCapture = new PcmAudioCapture().start(stream);
         isRecording = true;
         recordBtn.classList.add('recording');
         setStatus('LISTENING...', 'busy');
@@ -317,6 +275,14 @@ async function startRecording() {
         
     } catch (e) {
         console.error('Mic error:', e);
+        if (pcmCapture) {
+            pcmCapture.stop();
+            pcmCapture = null;
+        }
+        if (recordingStream) {
+            recordingStream.getTracks().forEach(track => track.stop());
+            recordingStream = null;
+        }
         let msg = '无法访问麦克风';
         if (e.name === 'NotAllowedError') {
             msg = '麦克风权限被拒绝，请在浏览器设置中允许';
@@ -331,16 +297,52 @@ async function startRecording() {
     }
 }
 
-function stopRecording() {
-    if (isRecording && mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-        isRecording = false;
-        recordBtn.classList.remove('recording');
-        silenceStartTime = null;
-        hasSpeech = false;
-        
-        showToast('停止监听', 'stop');
+async function sendRecordedAudio(audioBlob) {
+    if (!audioBlob) return;
+    if (currentAbortController) {
+        showToast('取消上一次请求', 'warning');
+        currentAbortController.abort();
+        currentAbortController = null;
     }
+    setStatus('UPLOADING...', 'busy');
+
+    const speechOffset = speechStartTime ? (speechStartTime - recordingStartTime) : 0;
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.wav');
+    formData.append('speechOffset', speechOffset.toString());
+    currentAbortController = new AbortController();
+    try {
+        const response = await fetch('/audio', {
+            method: 'POST',
+            body: formData,
+            signal: currentAbortController.signal
+        });
+        handleStream(response);
+    } catch (e) {
+        if (e.name === 'AbortError') {
+            showToast('请求已取消', 'info');
+        } else {
+            console.error(e);
+            showToast('请求错误', 'error');
+            setStatus('ERROR', 'busy');
+        }
+    }
+}
+
+function stopRecording() {
+    if (!isRecording) return;
+    const audioBlob = pcmCapture ? pcmCapture.stopWav() : null;
+    pcmCapture = null;
+    if (recordingStream) {
+        recordingStream.getTracks().forEach(track => track.stop());
+        recordingStream = null;
+    }
+    isRecording = false;
+    recordBtn.classList.remove('recording');
+    silenceStartTime = null;
+    hasSpeech = false;
+    showToast('停止监听', 'stop');
+    void sendRecordedAudio(audioBlob);
 }
 
 let audioQueue = [];

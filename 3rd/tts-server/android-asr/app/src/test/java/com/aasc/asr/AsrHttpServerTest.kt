@@ -3,6 +3,7 @@ package com.aasc.asr
 import java.net.HttpURLConnection
 import java.net.URL
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,6 +29,10 @@ class AsrHttpServerTest {
             assertTrue(body.contains("SHERPA_MULTI"))
             assertTrue(body.contains("SHERPA_MULTI_FAST"))
             assertTrue(body.contains("speakerCount"))
+            assertTrue(body.contains("denoise"))
+            assertTrue(body.contains("currentAudio"))
+            assertFalse(body.contains("id=\"languageMode\""))
+            assertTrue(body.contains("language: 'zh'"))
         } finally {
             server.stop()
             coordinator.shutdown()

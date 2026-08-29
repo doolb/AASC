@@ -11,6 +11,10 @@
             android:layout_marginTop="12dp" android:text="@string/record_start" />
         <Button android:id="@+id/selectAudioButton" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="@string/select_audio" />
+        <Button android:id="@+id/playAudioButton" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:enabled="false" android:text="@string/play_audio" />
+        <Button android:id="@+id/saveAudioButton" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:enabled="false" android:text="@string/save_audio" />
         <TextView android:id="@+id/audioStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="@string/no_audio" android:textSize="14sp" />
         <Button android:id="@+id/recognizeButton" android:layout_width="match_parent" android:layout_height="wrap_content"

@@ -109,6 +109,15 @@ test('主题管理器应优先读取服务端全局主题，并在切换后保�
     assert.match(requests[1].options.body, /girl-pink/u);
 });
 
+test('主题管理器应支持显示端应用远程主题而不再次保存服务端', () => {
+    const { manager, document, storage } = loadThemeManager();
+
+    manager.applyRemoteTheme('mint');
+
+    assert.equal(document.documentElement.dataset.theme, 'mint');
+    assert.equal(storage.get('controlTheme'), 'mint');
+});
+
 test('服务端主题读取失败时应保留本地主题', async () => {
     const { manager, document, storage } = loadThemeManager([], {
         fetch: async () => {

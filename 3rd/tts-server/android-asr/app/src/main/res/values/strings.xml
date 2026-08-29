@@ -6,6 +6,9 @@
     <string name="record_start">开始录音</string>
     <string name="record_stop">停止录音</string>
     <string name="select_audio">选择音频</string>
+    <string name="play_audio">播放当前音频</string>
+    <string name="stop_audio">停止播放</string>
+    <string name="save_audio">保存当前 WAV</string>
     <string name="no_audio">尚未选择音频</string>
     <string name="recognize">开始识别</string>
     <string name="recognizing">识别中…</string>

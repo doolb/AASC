@@ -66,9 +66,14 @@ class AsrModelManager(
                     postModelEvent(JSONObject().put("state", "downloading").put("progress", p), onModelEvent)
                 })
                 val hashSaved = validOnDisk || (okModel && serverHashes != null && saveLocalHashes(serverHashes))
-                // 内存不足时不硬加载防 OOM（234MB 模型在低端机可能 OOM，设计文档风险项）
-                val memOk = hasEnoughMemory()
-                val loadOk = okModel && hashSaved && memOk && AsrEngine.load(context, modelFile, tokensFile)
+                // AsrEngine 默认按核心数创建 recognizer；内存不足时内部回退到单实例。
+                // 只有连单实例也无法创建时才返回内存错误，避免反复触发 WebSocket 重连。
+                val loadOk = if (okModel && hashSaved) {
+                    AsrEngine.load(context, modelFile, tokensFile)
+                } else {
+                    false
+                }
+                val loadMemoryError = !loadOk && okModel && hashSaved && AsrEngine.lastLoadWasMemoryError
                 if (loadOk) {
                     state = "ready"
                     postModelEvent(JSONObject().put("state", "ready"), onModelEvent)
@@ -78,14 +83,14 @@ class AsrModelManager(
                         !validOnDisk && serverHashes == null -> "无法获取模型校验 hash"
                         !okModel -> "模型下载失败"
                         !hashSaved -> "模型 hash 保存失败"
-                        !memOk -> "设备内存不足，无法加载语音模型"
+                        loadMemoryError -> "设备内存不足，无法加载语音模型"
                         else -> "模型加载自检失败"
                     }
                     when {
                         // 下载或 hash 校验失败：模型/tokens/hash 全部清掉（含 .tmp 残件）
                         !okModel || !hashSaved -> purgeModelFiles()
                         // 内存不足：保留已下载文件（内存释放后可重试加载），仅清理 .tmp 残件
-                        !memOk -> {
+                        loadMemoryError -> {
                             File(modelFile.parentFile, modelFile.name + ".tmp").delete()
                             File(tokensFile.parentFile, tokensFile.name + ".tmp").delete()
                         }
@@ -94,6 +99,10 @@ class AsrModelManager(
                     }
                     postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
                 }
+            } catch (e: OutOfMemoryError) {
+                state = "error"
+                lastError = "设备内存不足，无法加载语音模型"
+                postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
             } catch (e: Exception) {
                 state = "error"
                 lastError = e.message ?: "模型下载异常"
@@ -105,18 +114,6 @@ class AsrModelManager(
 
     private fun postModelEvent(json: JSONObject, onModelEvent: (JSONObject) -> Unit) {
         uiHandler.post { onModelEvent(json) }
-    }
-
-    // 低端机防 OOM：可用内存需 > 400MB（SenseVoice int8 模型约 234MB + 引擎原生开销）
-    private fun hasEnoughMemory(): Boolean {
-        return try {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val mi = android.app.ActivityManager.MemoryInfo()
-            am.getMemoryInfo(mi)
-            mi.availMem > 400L * 1024 * 1024
-        } catch (_: Exception) {
-            true  // 查询失败时放行，由 load 自检兜底
-        }
     }
 
     // 下载委托共享 ModelDownloader（SSL-trust 自签名证书 + .tmp 原子改名逻辑已抽离，见 ModelDownloader.kt）

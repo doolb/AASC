@@ -6,6 +6,10 @@ const DeviceList = {
     expandedNodes: new Set(['server']),
     selectedNodeId: null,
     serverInfo: { ip: '', port: 8081 },
+    // 控制端只保留每个显示端最近一条 ASR 回传，避免实时结果无限累积。
+    voiceInputByDisplay: new Map(),
+    // 监听开关发出后等待服务端回执，避免用户误以为点击没有生效。
+    voiceListeningPending: new Map(),
 
     getDisplays() {
         return this.list || [];
@@ -74,6 +78,206 @@ const DeviceList = {
         const identity = display.id || 'unknown-display';
         const address = display.ip || 'unknown-ip';
         return identity === address ? identity : `${identity} · ${address}`;
+    },
+
+    escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[character]));
+    },
+
+    getVoiceListeningStatus(display) {
+        const pending = this.voiceListeningPending.get(display.id);
+        if (pending) {
+            return { className: 'pending', label: '发送中' };
+        }
+        const capabilities = {
+            voiceRecording: true,
+            ...(display.capabilities || {})
+        };
+        if (capabilities.voiceRecording !== true) {
+            return { className: 'disabled', label: '已关闭' };
+        }
+        if (display.voiceSupported === false) {
+            return { className: 'unsupported', label: '不可用' };
+        }
+        if (display.voiceListening === true) {
+            return { className: 'listening', label: '监听中' };
+        }
+        const conversationState = display.voiceConversation?.state || display.voiceConversationState;
+        if (conversationState === 'waitingWake') {
+            return { className: 'waiting', label: '等待唤醒' };
+        }
+        return { className: 'ready', label: '已启用' };
+    },
+
+    getLatestVoiceInput(display) {
+        return this.voiceInputByDisplay.get(display.id) || display.lastVoiceInput || null;
+    },
+
+    isControlSocketOpen() {
+        const socket = window.WebSocketManager?.ws;
+        const openState = window.WebSocket?.OPEN ?? 1;
+        return !!socket && socket.readyState === openState;
+    },
+
+    getVoiceCapabilities(display) {
+        return {
+            mediaRendering: true,
+            voicePlayback: true,
+            voiceRecording: true,
+            voiceRecognition: false,
+            ttsGeneration: false,
+            displayText: true,
+            ...(display.capabilities || {})
+        };
+    },
+
+    sendVoiceCapabilities(displayId, enabled) {
+        const display = this.list.find((item) => item.id === displayId);
+        if (!display) return false;
+
+        const previousEnabled = this.getVoiceCapabilities(display).voiceRecording === true;
+        if (!this.isControlSocketOpen()) {
+            display.capabilities = {
+                ...this.getVoiceCapabilities(display),
+                voiceRecording: previousEnabled
+            };
+            this.render();
+            if (window.showToast) {
+                window.showToast('监听开关发送失败：控制端未连接', 'error');
+            }
+            return false;
+        }
+
+        const capabilities = {
+            ...this.getVoiceCapabilities(display),
+            voiceRecording: enabled === true
+        };
+        this.voiceListeningPending.set(displayId, {
+            enabled: enabled === true,
+            previousEnabled
+        });
+        display.capabilities = capabilities;
+        this.render();
+
+        try {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'updateCapabilities',
+                displayId,
+                capabilities
+            }));
+        } catch (error) {
+            this.handleCapabilitiesUpdateError({
+                displayId,
+                message: `监听开关发送失败：${error.message}`
+            });
+            return false;
+        }
+        return true;
+    },
+
+    toggleVoiceListening(displayId, enabled) {
+        const sent = this.sendVoiceCapabilities(displayId, enabled === true);
+        if (sent && window.showToast) {
+            window.showToast('监听开关发送中', 'info');
+        }
+        return sent;
+    },
+
+    handleCapabilitiesUpdated(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display || !data.capabilities) return;
+        display.capabilities = { ...this.getVoiceCapabilities(display), ...data.capabilities };
+        const pending = this.voiceListeningPending.get(display.id);
+        if (!pending || display.capabilities.voiceRecording === pending.enabled) {
+            this.voiceListeningPending.delete(display.id);
+        }
+        this.render();
+        if (window.showToast) {
+            window.showToast(`显示端监听已${display.capabilities.voiceRecording ? '开启' : '关闭'}`, 'success');
+        }
+    },
+
+    handleCapabilitiesUpdateError(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        const pending = this.voiceListeningPending.get(data?.displayId);
+        if (display && pending) {
+            display.capabilities = {
+                ...this.getVoiceCapabilities(display),
+                voiceRecording: pending.previousEnabled
+            };
+        }
+        this.voiceListeningPending.delete(data?.displayId);
+        this.render();
+        if (window.showToast) {
+            window.showToast(data?.message || '监听开关发送失败', 'error');
+        }
+    },
+
+    renderVoiceControlHtml(display) {
+        const capabilities = { voiceRecording: true, ...(display.capabilities || {}) };
+        const status = this.getVoiceListeningStatus(display);
+        const latest = this.getLatestVoiceInput(display);
+        const latestText = latest?.text ? this.escapeHtml(latest.text) : '暂无识别回传';
+        const latestType = latest ? (latest.isFinal ? '最终' : '实时') : '';
+        const displayId = this.escapeHtml(display.id);
+        return `
+            <div class="display-voice-control" data-display-id="${displayId}">
+                <label class="display-voice-toggle" title="直接控制该显示端是否采集语音">
+                    <input type="checkbox" data-voice-listening-toggle data-display-id="${displayId}" ${capabilities.voiceRecording ? 'checked' : ''}>
+                    <span>🎙️ 监听</span>
+                </label>
+                <span class="display-voice-state ${status.className}">${status.label}</span>
+                <span class="display-voice-latest" title="最近一次语音识别结果">最近识别${latestType ? `（${latestType}）` : ''}：${latestText}</span>
+            </div>
+        `;
+    },
+
+    bindVoiceListeningControls(container) {
+        if (!container || container.dataset.voiceControlsBound) return;
+        container.dataset.voiceControlsBound = '1';
+        container.addEventListener('click', (event) => {
+            if (event.target.closest('.display-voice-control')) event.stopPropagation();
+        });
+        container.addEventListener('change', (event) => {
+            const input = event.target.closest('[data-voice-listening-toggle]');
+            if (!input) return;
+            event.stopPropagation();
+            this.toggleVoiceListening(input.dataset.displayId, input.checked);
+        });
+    },
+
+    handleVoiceInput(data) {
+        const displayId = String(data?.displayId || '');
+        if (!displayId) return;
+        const text = String(data?.text || data?.fullText || '').trim();
+        if (!text) return;
+        const latest = {
+            text,
+            isFinal: data.isFinal === true,
+            timestamp: Date.now()
+        };
+        this.voiceInputByDisplay.set(displayId, latest);
+        const display = this.list.find((item) => item.id === displayId);
+        if (display) {
+            display.lastVoiceInput = latest;
+            this.render();
+        }
+    },
+
+    updateVoiceConversationState(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display) return;
+        display.voiceConversation = {
+            state: data.state || 'waitingWake',
+            target: data.target || null
+        };
+        this.render();
     },
 
     setViewMode(mode) {
@@ -205,6 +409,7 @@ const DeviceList = {
         } else {
             contentEl.innerHTML = this.renderListView();
         }
+        this.bindVoiceListeningControls(contentEl);
         container.appendChild(contentEl);
     },
 
@@ -321,6 +526,7 @@ const DeviceList = {
                             </div>
                         </div>
                         ${browserInfoHtml}
+                        ${this.renderVoiceControlHtml(d)}
                     </div>
                 </div>
             `;
@@ -621,6 +827,7 @@ const DeviceList = {
         }
 
         if (node.displayData && node.type === undefined) {
+            nodeEl.appendChild(this.renderVoiceControl(node.displayData));
             nodeEl.addEventListener('click', () => {
                 this.select(node.id);
             });
@@ -638,6 +845,39 @@ const DeviceList = {
         }
 
         return wrapper;
+    },
+
+    renderVoiceControl(display) {
+        const container = document.createElement('div');
+        container.className = 'display-voice-control';
+        container.addEventListener('click', (event) => event.stopPropagation());
+
+        const capabilities = { voiceRecording: true, ...(display.capabilities || {}) };
+        const status = this.getVoiceListeningStatus(display);
+        const latest = this.getLatestVoiceInput(display);
+
+        const label = document.createElement('label');
+        label.className = 'display-voice-toggle';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = capabilities.voiceRecording === true;
+        const labelText = document.createElement('span');
+        labelText.textContent = '🎙️ 监听';
+        label.append(input, labelText);
+
+        const state = document.createElement('span');
+        state.className = `display-voice-state ${status.className}`;
+        state.textContent = status.label;
+
+        const latestText = document.createElement('span');
+        latestText.className = 'display-voice-latest';
+        latestText.title = '最近一次语音识别结果';
+        latestText.textContent = latest?.text
+            ? `最近识别（${latest.isFinal ? '最终' : '实时'}）：${latest.text}`
+            : '最近识别：暂无识别回传';
+
+        container.append(label, state, latestText);
+        return container;
     },
 
     renderSettingControl(node) {
@@ -1032,7 +1272,15 @@ const DeviceList = {
     },
 
     setDisplayList(list) {
-        this.list = list || [];
+        const nextList = list || [];
+        const onlineIds = new Set(nextList.map((display) => display.id));
+        for (const displayId of this.voiceInputByDisplay.keys()) {
+            if (!onlineIds.has(displayId)) this.voiceInputByDisplay.delete(displayId);
+        }
+        this.list = nextList.map((display) => ({
+            ...display,
+            lastVoiceInput: this.voiceInputByDisplay.get(display.id) || display.lastVoiceInput || null
+        }));
         const selectedStillOnline = this.list.some((display) => display.id === window.currentDisplayId);
         if (!selectedStillOnline) {
             window.currentDisplayId = null;

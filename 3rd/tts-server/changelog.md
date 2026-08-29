@@ -1,5 +1,19 @@
 # 变更日志
 
+## 2026-08-29
+
+- 删除：测试 APK 普通 ASR、声纹测试及正式 Display APK 不再支持“过滤其他文字”和 `zh-en-filter`，识别结果不再按 Unicode 脚本删除字符。
+- 保留：`auto`、`zh`、`en` 语言提示、降噪、快速多段和固定双语流式 ASR。
+- 测试：测试 APK JVM 单测和正式 Display APK Debug 构建通过。
+
+- 调整：测试 ASR 普通非流式识别和声纹网页测试固定使用中文 `zh`，移除网页语言选择；流式中英双语 Zipformer 保持不变。
+- 测试：网页语言契约 4/4、Android JVM 单元测试、debug APK 构建和真机安装通过。
+
+- 新增：测试 ASR APK Android 原生界面和内置网页增加“保存当前 WAV”按钮。
+- 兼容：Android 10 及以上保存到系统 Download，Android 8/9 保存到 APK 专属外部音频目录，不增加旧版存储权限。
+- 统一：保存文件使用 16kHz、单声道、16-bit PCM WAV；网页保持 `.wav` 文件名下载。
+- 测试：网页静态契约 3/3、Android JVM 单元测试和 debug APK 构建通过。
+
 ## 2026-08-25
 
 - 新增：`android-asr/` 独立 Android 离线语音识别 APK，内置 SenseVoice int8 模型，支持录音、音频选择和识别耗时显示。

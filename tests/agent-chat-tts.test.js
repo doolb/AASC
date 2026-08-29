@@ -80,6 +80,43 @@ test('Agent 流式完整句子应立即进入 TTS，完成时只冲刷尾句', a
     assert.deepStrictEqual(harness.controlMessages.map((item) => item.text), ['第一句。', '第二句。', '第三']);
 });
 
+test('Agent 双路生成完成顺序变化时仍按句子顺序发送', async () => {
+    let releaseFirst;
+    const firstReady = new Promise((resolve) => {
+        releaseFirst = resolve;
+    });
+    const started = [];
+    const harness = createHarness({
+        message: '第一句。第二句。',
+        displayId: 'display-1',
+        generatedAudio: async (text) => {
+            started.push(text);
+            if (text === '第一句。') await firstReady;
+            return `/uploads/tts/${text}.wav`;
+        }
+    });
+    harness.options.ttsConcurrency = 2;
+
+    const pending = playAgentTts(harness.options);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(started, ['第一句。', '第二句。']);
+    assert.deepEqual(harness.displayMessages, []);
+
+    releaseFirst();
+    await pending;
+    assert.deepEqual(harness.displayMessages.map((item) => item.data.text), ['第一句。', '第二句。']);
+});
+
+test('Agent TTS 直接跳过仅标点分句', async () => {
+    const harness = createHarness({ displayId: 'display-1' });
+    harness.options.splitIntoSentences = () => ['第一句。', '？', '第二句。'];
+
+    await playAgentTts(harness.options);
+
+    assert.deepEqual(harness.generatedTexts, ['第一句。', '第二句。']);
+    assert.deepEqual(harness.displayMessages.map((item) => item.data.text), ['第一句。', '第二句。']);
+});
+
 test('Agent 回复按单显示端和多显示端选择下发 tts/playAudio', async () => {
     const single = createHarness({ message: '单显示端。', displayId: 'display-1' });
     await playAgentTts(single.options);

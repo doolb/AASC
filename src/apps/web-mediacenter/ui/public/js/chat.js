@@ -32,8 +32,7 @@ const Chat = {
     requestCounter: 0,
     currentUserMessage: '',
     isListening: false,
-    mediaRecorder: null,
-    audioChunks: [],
+    pcmCapture: null,
     asrSupported: false,
     audioQueue: [],
     isPlayingAudio: false,
@@ -105,38 +104,13 @@ const Chat = {
         try {
             this.micStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
+                    // 语音输入统一使用原始 PCM，关闭浏览器隐式音频处理。
+                    echoCancellation: false,
+                    noiseSuppression: false,
                     sampleRate: 16000
                 }
             });
-            
-            this.mediaRecorder = new MediaRecorder(this.micStream);
-            this.audioChunks = [];
-            
-            this.mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    this.audioChunks.push(e.data);
-                }
-            };
-            
-            this.mediaRecorder.onstop = async () => {
-                if (this.micStream) {
-                    this.micStream.getTracks().forEach(track => track.stop());
-                    this.micStream = null;
-                }
-                
-                if (this.audioChunks.length === 0) {
-                    this.isListening = false;
-                    this.updateVoiceButton();
-                    return;
-                }
-                
-                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-                await this.sendAudioForRecognition(audioBlob);
-            };
-            
-            this.mediaRecorder.start();
+            this.pcmCapture = new PcmAudioCapture().start(this.micStream);
             this.isListening = true;
             this.updateVoiceButton();
             this.silenceStartTime = null;
@@ -149,6 +123,14 @@ const Chat = {
             
         } catch (e) {
             console.error('麦克风访问失败:', e);
+            if (this.pcmCapture) {
+                this.pcmCapture.stop();
+                this.pcmCapture = null;
+            }
+            if (this.micStream) {
+                this.micStream.getTracks().forEach(track => track.stop());
+                this.micStream = null;
+            }
             let msg = '无法访问麦克风';
             if (e.name === 'NotAllowedError') {
                 msg = '麦克风权限被拒绝';
@@ -160,8 +142,11 @@ const Chat = {
     },
     
     stopListening() {
-        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-            this.mediaRecorder.stop();
+        const audioBlob = this.pcmCapture ? this.pcmCapture.stopWav() : null;
+        this.pcmCapture = null;
+        if (this.micStream) {
+            this.micStream.getTracks().forEach(track => track.stop());
+            this.micStream = null;
         }
         this.isListening = false;
         this.hasSpeech = false;
@@ -170,6 +155,7 @@ const Chat = {
         this.updateVoiceButton();
         this.stopSilenceDetection();
         console.log('语音录制已停止');
+        if (audioBlob) void this.sendAudioForRecognition(audioBlob);
     },
     
     startSilenceDetection() {
@@ -244,7 +230,7 @@ const Chat = {
         
         try {
             const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.webm');
+            formData.append('audio', audioBlob, 'recording.wav');
             
             const response = await fetch('/api/asr/recognize', {
                 method: 'POST',
@@ -701,6 +687,11 @@ const Chat = {
         `;
         
         const tabs = container.querySelector('.chat-tabs');
+        const groupTab = tabs.querySelector('[data-chat-tab="group"]');
+        if (groupTab) {
+            // 群聊页签必须主动清理私聊/工作组状态，否则页签只显示但不会切换上下文。
+            groupTab.addEventListener('click', () => this.setMode('group', null));
+        }
         tabs.querySelectorAll('[data-role-tab]').forEach((tab) => {
             const name = tab.dataset.roleTab;
             const role = this.aiRoles.find((item) => item.name === name);
@@ -761,7 +752,7 @@ const Chat = {
             const online = role && role.running;
             html += `
                 <span class="mode-badge role">Agent · ${this.escapeHtml(backend)} · ${this.escapeHtml(this.session.roleTarget)} · ${online ? '在线' : '离线'}</span>
-                <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出角色</button>
+                <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出工作组</button>
             `;
         } else if (this.session.mode === 'private') {
             html += `

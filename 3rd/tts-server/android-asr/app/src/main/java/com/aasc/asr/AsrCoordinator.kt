@@ -14,14 +14,18 @@ class AsrCoordinator(private val engine: AsrEngine) {
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
 
-    fun submit(samples: FloatArray, mode: CpuMode): Future<RecognitionResult> {
+    fun submit(
+        samples: FloatArray,
+        mode: CpuMode,
+        languageMode: AsrLanguageMode = AsrLanguageMode.AUTO
+    ): Future<RecognitionResult> {
         validateSamples(samples)
         if (!busy.compareAndSet(false, true)) throw AsrBusyException()
         return executor.submit<RecognitionResult> {
             try {
                 CpuAffinity.apply(mode)
                 val start = System.nanoTime()
-                val text = engine.recognize(samples)
+                val text = engine.recognize(samples, languageMode.engineLanguage)
                 RecognitionResult(text, (System.nanoTime() - start) / 1_000_000L)
             } finally {
                 busy.set(false)

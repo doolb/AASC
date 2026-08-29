@@ -35,7 +35,16 @@ selectAudio:
     else:
         decoded = Android MediaExtractor + MediaCodec
         samples = resample decoded PCM to 16kHz mono
-    selectedAudio = samples
+selectedAudio = samples
+
+saveCurrentWav:
+    reject when selectedAudio is null or empty
+    wav = encode selectedAudio as PCM 16-bit, mono, 16kHz WAV
+    if Android version >= 10:
+        insert wav into MediaStore Downloads with MIME audio/wav
+    else:
+        write wav to app-specific external Music directory
+    show saved file name in audio status
 ```
 
 ## 识别流程
@@ -54,6 +63,12 @@ recognize(samples):
     release stream
     elapsedMs = monotonicMilliseconds() - start
     return text, elapsedMs
+
+webAndNativeOfflineAsr:
+    do not expose a language selector in the test page
+    submit ordinary offline ASR and voiceprint segment ASR with language = "zh"
+    keep the HTTP language parameter for direct external compatibility
+    keep streaming ASR on the fixed bilingual Zipformer model
 ```
 
 ## HTTP 服务
@@ -67,10 +82,12 @@ startHttp(port):
 
 GET /:
     return embedded HTML page
-    page shows file picker, record button, recognize button, result text and elapsed time
+    page shows file picker, record button, play current WAV button, save current WAV button,
+        recognize button, result text and elapsed time
     browser recording requests microphone permission
     recording PCM is downmixed/resampled and encoded to 16kHz mono WAV in browser
     page fetches /health and submits selected WAV bytes to /api/asr
+    save button downloads the selected current WAV with a .wav file name
 
 GET /health:
     return JSON(modelState, httpRunning, cpuModeStatus)
@@ -96,4 +113,13 @@ on mode changed:
     SharedPreferences.put("cpu_mode", selectedCpuMode)
     status = CpuAffinity.apply(selectedCpuMode)
     display status
+```
+
+## 2026-08-29 移除其他文字过滤
+
+```text
+supportedLanguage = auto | zh | en
+拒绝 zh-en-filter 参数
+普通 ASR、声纹分段 ASR -> 返回 recognizer text.trim()
+不执行 Unicode 脚本过滤，不删除日文、韩文或其他文字
 ```

@@ -41,6 +41,18 @@ test('Agent 请求进行中收到 roleList 只更新在线状态，不重建聊�
     assert.match(websocket, /Chat\.isLoading[\s\S]{0,180}Chat\.render\s*\(\s*\)/u);
 });
 
+test('聊天群聊页签应能退出私聊和工作组模式', () => {
+    const chat = fs.readFileSync(chatFile, 'utf8');
+
+    assert.match(
+        chat,
+        /data-chat-tab=["']group["'][\s\S]{0,500}addEventListener\(['"]click['"][\s\S]{0,180}setMode\(['"]group['"],\s*null\)/u,
+        '群聊页签应绑定回到群聊的点击事件'
+    );
+    assert.match(chat, /退出私聊/u);
+    assert.match(chat, /退出工作组/u);
+});
+
 test('Agent 流式回复和 TTS 沿用 LLM 的 chunk、句子队列和完成冲刷链路', () => {
     const server = fs.readFileSync(serverFile, 'utf8');
     assert.match(server, /createAgentTtsStream/u);

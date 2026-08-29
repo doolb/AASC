@@ -588,6 +588,33 @@ function getLocalIP():
 
 ## 显示端语音识别
 
+### 语音监听开关与唤醒会话
+
+```text
+控制端 updateCapabilities(displayId, { voiceRecording: false }):
+    服务端只更新目标显示端
+    发送 capabilitiesUpdated
+    显示端停止麦克风、本地 ASR 和自动恢复计时
+    后续 voiceInput 不触发命令
+
+voiceRecording: true:
+    显示端回到 waitingWake
+    重新开始 ASR 监听，但普通文本只显示、不执行
+
+waitingWake + voiceInput:
+    只有“你好小爱”“小爱你好”或“{助手}开始对话”等唤醒词进入激活状态
+
+activeGroup/activePrivate + voiceInput:
+    交给现有 voiceCommand 处理
+    结束对话后回到 waitingWake
+
+显示端普通 TTS 队列全部触发 audio ended/error 后:
+    发送 { type: 'voiceConversationTtsFinished' }
+    服务端从此刻重新计时 180000ms
+```
+
+`voiceprintConfig.enabled` 与 `voiceRecording` 相互独立。关闭声纹只让显示端 ASR 不携带 `speaker`，仍然允许唤醒和对话；关闭 `voiceRecording` 才是停止该显示端语音监听。
+
 **public/display.html**:
 
 ```

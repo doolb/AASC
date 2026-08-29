@@ -267,3 +267,67 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 | `src/apps/server/boot/server-app.js` | 新增 `GET /api/asr/model/<file>` 接口 |
 | `docs/spec/android-native-asr.md`（新增） | 实现伪代码文档 |
 | `docs/design.md` / `docs/spec.md` | 索引更新 |
+
+## 2026-08-28 测试 APK 能力接入正式 Display APK
+
+本次正式接入只保留普通非流式 ASR、全局降噪开关和快速多段声纹识别；不接入测试 APK 的流式 ASR，正式显示端固定使用中文。
+
+## 2026-08-29 固定中文与全局降噪入口
+
+正式显示端不再提供语言选择，原生 ASR 请求统一使用 `zh`。降噪配置虽然由控制端声纹面板维护，但它是 ASR 全局配置，普通非流式 ASR、单段声纹和快速多段声纹都使用同一状态；关闭声纹识别不会关闭降噪。
+
+### 功能边界
+
+- 普通 ASR：完整音频一次送入 SenseVoice，返回一次文本，不做流式 partial、不做分段和说话人识别。
+- 降噪：开启后每个请求只执行一次 Sherpa GTCRN，降噪后的同一份 PCM 同时用于普通 ASR、声纹分段、embedding 和分段 ASR。
+- 快速多段：使用 Sherpa diarization 的 `numClusters`；人数为 `AUTO` 时由模型估计，或显式限制为 1～5 人。每个 cluster 只提取最长代表片段的 embedding，再对原始时间段做 ASR。
+- 语言：正式显示端固定使用 `zh`。识别结果只做首尾空白清理，不按 Unicode 脚本删除文字。
+- 生效范围：降噪和快速多段在 `asr.device=display` 的原生 APK 路径统一生效；控制端的降噪入口位于声纹面板，普通 ASR 和声纹流程共享状态。
+
+### 配置协议
+
+服务端保存并广播：
+
+```json
+{
+  "type": "asrConfig",
+  "device": "display",
+  "localAsrEnabled": true,
+  "languageMode": "auto",
+  "denoise": false
+}
+```
+
+```json
+{
+  "type": "voiceprintConfig",
+  "enabled": true,
+  "threshold": 0.5,
+  "multiSpeaker": true,
+  "multiMode": "fast",
+  "speakerCount": "AUTO"
+}
+```
+
+旧字段继续保留；缺失 `multiMode` 时按 `fast` 处理，缺失人数时按 `AUTO` 处理。
+
+### 2026-08-28 内存不足重连与正式 APK 准确度修复
+
+- 正常情况下仍按服务器下发的 ASR 核心数创建 recognizer 池，保留多请求并发能力；只有内存预算不足时才回退为 1 个 recognizer。
+- 加载前按“每个 recognizer 的内存预算 × 请求 slot 数”判断是否可承载完整池。单 slot 仍不足，或 native 构造过程中抛出 `OutOfMemoryError` 时，释放已经创建的 slot，进入不可自动重试的内存错误状态。
+- 内存错误只撤销 `voiceRecognition` 能力并停止录音，不关闭 WebSocket；内存恢复后的显式重试可以再次按核心数尝试。
+- 测试 APK 与正式 APK 的 SenseVoice 模型 SHA-256、16kHz 特征、CPU provider 和 ITN 配置一致；正式 APK 的准确度差异来自 WebM/Opus 录音和浏览器隐式音频处理。
+- 显示端改用 WebAudio 原始 PCM 采集并封装 WAV，关闭浏览器层 `echoCancellation`/`noiseSuppression` 请求参数；不再创建 MediaRecorder/WebM 录音上传路径。
+
+### 2026-08-28 全端录音格式统一
+
+- 控制端语音输入、控制端声纹注册、正式显示端和网页录音统一使用 WebAudio 原始 Float32 采集，重采样为 16 kHz mono 后封装 WAV。
+- Node 子显示端继续使用现有 16 kHz PCM/WAV 录音器；Go/C# 子显示端继续以 `audio.wav` 上传，增加契约校验。
+- 独立 `3rd/ttslive` 测试网页的录音入口同样改用原始 PCM/WAV，避免仓库内仍残留把 WebM 数据伪装成 WAV 的路径。
+- 正式链路不再以 MediaRecorder/WebM 作为录音回退，避免不同端因浏览器编码器差异产生识别准确度差异；仅保留已有 WAV 接口协议。
+
+## 2026-08-29 移除 ASR 其他文字过滤
+
+正式显示端和独立测试 APK 不再提供“过滤其他文字”开关，也不再支持 `zh-en-filter` 语言模式。正式显示端固定使用 `zh` 语言提示，识别结果仅做原有首尾空白清理，不按 Unicode 脚本删除文字。这样可以避免把模型误识别出的日文字符直接删除，便于继续观察真实识别结果；流式 ASR 的固定中英双语模型不受影响。
+
+配置广播只保留 `languageMode` 和 `denoise`，Android 原生桥只接收语言与降噪参数；旧请求中的 `filterOtherText` 或 `zh-en-filter` 不再被处理。

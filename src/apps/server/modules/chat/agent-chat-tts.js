@@ -1,6 +1,8 @@
 'use strict';
 
 const path = require('node:path');
+const { createOrderedTaskScheduler } = require('../media/ordered-task-scheduler');
+const { isPunctuationOnly } = require('../../../../core/utils/sentence-splitter');
 
 /**
  * 为工作 AI 角色的完整回复生成 TTS，并沿用普通 LLM 的播放目标优先级。
@@ -16,22 +18,21 @@ async function playAgentTts({
     generateTTS,
     sendToControl,
     sendToDisplay,
-    onError
+    onError,
+    ttsScheduler = null,
+    ttsConcurrency = 1
 }) {
-    let sentences = splitIntoSentences(message);
-    if (sentences.length === 0 && message) sentences = [message];
+    let sentences = splitIntoSentences(message).filter((sentence) => !isPunctuationOnly(sentence));
+    if (sentences.length === 0 && message && !isPunctuationOnly(message)) sentences = [message];
+    const scheduler = ttsScheduler || createOrderedTaskScheduler({ concurrency: ttsConcurrency });
 
-    for (const sentence of sentences) {
-        try {
+    const tasks = sentences.map((sentence) => scheduler.enqueue(async () => {
             const cleanText = stripMarkdown(sentence);
             const audioPath = await generateTTS(cleanText);
+            return { audioPath, sentence };
+        }).then(({ audioPath, sentence }) => {
             const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
-            const audioMessage = {
-                type: 'tts',
-                action: 'playAudio',
-                audioUrl,
-                text: sentence
-            };
+            const audioMessage = { type: 'tts', action: 'playAudio', audioUrl, text: sentence };
 
             if (playOnControl) {
                 sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
@@ -40,29 +41,30 @@ async function playAgentTts({
             } else if (displayId) {
                 sendToDisplay(displayId, audioMessage);
             }
-        } catch (error) {
+        }).catch((error) => {
             if (onError) onError(error, sentence);
-        }
-    }
+        }));
+    await Promise.all(tasks);
 }
 
 /**
  * 创建与普通 LLM chatStream.onSentence 对齐的 Agent 流式 TTS 处理器。
  *
  * Agent bridge 只提供 onChunk/onComplete，因此在这里累积未结束文本，
- * 将已确认的完整句子放入串行队列，并在完成事件中冲刷最后一个片段。
+ * 将已确认的完整句子放入有序 TTS 调度器，并在完成事件中冲刷最后一个片段。
  */
 function createAgentTtsStream(options) {
     const { splitIntoSentences, onError } = options;
     let pendingText = '';
-    let ttsQueue = Promise.resolve();
+    const ttsScheduler = options.ttsScheduler || createOrderedTaskScheduler({ concurrency: options.ttsConcurrency || 1 });
 
     const enqueueSentence = (sentence) => {
         if (!sentence || !sentence.trim()) return;
-        ttsQueue = ttsQueue.then(() => playAgentTts({
+        void playAgentTts({
             ...options,
-            message: sentence
-        })).catch((error) => {
+            message: sentence,
+            ttsScheduler
+        }).catch((error) => {
             if (onError) onError(error, sentence);
         });
     };
@@ -84,7 +86,7 @@ function createAgentTtsStream(options) {
             const tail = pendingText.trim() || (typeof message === 'string' ? message.trim() : '');
             pendingText = '';
             enqueueSentence(tail);
-            await ttsQueue;
+            await ttsScheduler.waitForIdle();
         }
     };
 }

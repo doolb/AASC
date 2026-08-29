@@ -686,6 +686,14 @@
                 <div style="margin-top:6px;font-size:13px;">
                     <label><input type="checkbox" id="vpEnabledCheck"> 启用声纹识别（只处理识别到声纹的语音）</label><br>
                     <label style="margin-top:4px;display:inline-block;"><input type="checkbox" id="vpMultiCheck"> 多人分割（一句话多个说话人逐段归属）</label>
+                    <br><label style="margin-top:4px;display:inline-block;"><input type="checkbox" id="vpDenoiseCheck"> 降噪（全局作用于普通 ASR 和声纹识别）</label>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
+                    多人模式：<select id="vpMultiModeSel"><option value="fast">快速多段</option></select>
+                    人数：<select id="vpSpeakerCountSel">
+                        <option value="AUTO">自动</option><option value="1">1</option><option value="2">2</option>
+                        <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+                    </select>
                 </div>
                 <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
                     声纹提取位置：<select id="vpExtractionSel">
@@ -898,6 +906,7 @@
     <script src="js/controls.js"></script>
     <script src="js/reminder.js"></script>
     <script src="js/chat-markdown.js"></script>
+    <script src="js/pcm-audio-capture.js"></script>
     <script src="js/chat.js"></script>
     <script src="js/search.js"></script>
     <script src="js/floating-control.js"></script>

@@ -11,12 +11,15 @@ VoiceprintTestMode:
 VoiceprintTestRequest:
   mode: VoiceprintTestMode
   speakerCount: AUTO 或 1..5，可选
+  denoise: Boolean，默认 false
   audioWav: 二进制 WAV
   registeredAudioWav: 可选的注册音频列表
   speakerName: 可选的人名
 
 VoiceprintTestResult:
   mode
+  denoise
+  denoiseMs
   embeddingDim
   matchedSpeaker
   segments: [{start, end, clusterId, speaker, text?}]
@@ -41,14 +44,17 @@ VoiceprintTestResult:
 
 注册声纹:
   用户填写 speakerName 并选择注册 WAV
-  POST /api/voiceprint/register?name=<speakerName>
-  APK 对注册音频执行 Sherpa embedding 提取
+  用户选择是否启用降噪
+  POST /api/voiceprint/register?name=<speakerName>&denoise=<0|1>
+  denoise=true -> 对完整注册音频执行一次 GTCRN 降噪
+  使用选择后的音频执行 Sherpa embedding 提取
   将 embedding 和 speakerName 写入 APK 进程内存声纹库
   返回 embeddingDim 和状态
 
 开始测试:
   页面选择 mode 和 audio
-  POST /api/voiceprint/test?mode=SHERPA_SINGLE|SHERPA_MULTI|SHERPA_MULTI_FAST
+  页面选择是否启用降噪
+  POST /api/voiceprint/test?mode=SHERPA_SINGLE|SHERPA_MULTI|SHERPA_MULTI_FAST&denoise=<0|1>
   body = WAV 二进制
   页面渲染 VoiceprintTestResult
 ```
@@ -59,6 +65,8 @@ VoiceprintTestResult:
 VoiceprintTestCoordinator.test(request):
   校验 audioWav 存在且可解码
   将 WAV 解码为 16k mono Float32 samples
+  denoise=true -> 调用 SherpaDenoiseEngine.process(samples)，记录 denoiseMs
+  denoise=false -> 直接使用原始 samples
   根据 mode 选择 Sherpa 单段或多段 engine
   记录总耗时
   调用 engine.test(samples, registeredDb)
@@ -77,14 +85,19 @@ SherpaSingleEngine.test(samples, db):
   返回 text、speaker 和 embeddingDim
 ```
 
+降噪音频准备:
+  denoise=false -> preparedSamples = rawSamples，denoiseMs = 0
+  denoise=true -> preparedSamples = SherpaDenoiseEngine.process(rawSamples)，denoiseMs = 推理耗时
+  单次请求后将 preparedSamples 同时传给 embedding、match 和 ASR
+
 ## Sherpa 多人
 
 ```text
 SherpaMultiEngine.test(samples, db):
-  diarized = OfflineSpeakerDiarization.process(samples)
+  diarized = OfflineSpeakerDiarization.process(preparedSamples)
   merged = VoiceprintSegmentMerger.merge(diarized)
   遍历 merged:
-    按 start/end 从原始 samples 切片，限制在样本数组范围内
+    按 start/end 从 preparedSamples 切片，限制在样本数组范围内
     embedding = SpeakerEmbeddingExtractor.compute(segmentSamples)
     speaker = SpeakerEmbeddingManager.search(embedding, threshold)
     text = sherpa AsrEngine.recognize(segmentSamples)
@@ -99,19 +112,20 @@ GET /api/voiceprint/status:
   返回三种 Sherpa 模式的模型是否 ready、embeddingDim、threshold
 
 POST /api/voiceprint/register:
-  接收 name + audio
+  接收 name + denoise + audio
   解码音频
-  使用 Sherpa SpeakerEmbeddingExtractor 提取 embedding
+  denoise=true -> 对完整音频执行 GTCRN 降噪
+  使用选择后的音频执行 Sherpa SpeakerEmbeddingExtractor 提取 embedding
   写入内存测试库
-  返回 {success, name, embeddingDim}
+  返回 {success, name, embeddingDim, denoise, denoiseMs}
 
 POST /api/voiceprint/test:
-  接收 mode、可选 speakerCount 查询参数 + audio，使用进程内注册库
+  接收 mode、可选 speakerCount、可选 denoise 查询参数 + audio，使用进程内注册库
   speakerCount 缺失、空白或 AUTO -> 动态聚类
   speakerCount 为 1..5 -> 已知人数聚类
   speakerCount 其他值 -> 返回 400
   调用 VoiceprintTestCoordinator.test
-  成功返回 {success, mode, embeddingDim, matchedSpeaker, text, segments, elapsedMs, diarizationMs, embeddingMs, asrMs}
+  成功返回 {success, mode, denoise, denoiseMs, embeddingDim, matchedSpeaker, text, segments, elapsedMs, diarizationMs, embeddingMs, asrMs}
   失败返回 {success:false, error}
 ```
 
@@ -119,7 +133,7 @@ POST /api/voiceprint/test:
 
 ```text
 SherpaFastMultiEngine.test(samples, db, speakerCount):
-  diarized = OfflineSpeakerDiarization.process(samples)
+  diarized = OfflineSpeakerDiarization.process(preparedSamples)
   speakerCount 为 AUTO -> clustering.numClusters = 0
   speakerCount 为 1..5 -> clustering.numClusters = speakerCount
   merged = VoiceprintSegmentMerger.merge(diarized)
@@ -186,6 +200,84 @@ HTTP 或推理异常:
   try-catch
   清理临时资源
   返回 JSON
+
+## 当前音频播放
+
+```text
+原生 APK 选择/录音完成:
+  selectedSamples = 16k mono Float32
+  用户点击播放:
+    停止并释放上一个 AudioTrack
+    Float32 转为 16-bit PCM
+    创建 16 kHz 单声道 AudioTrack
+    写入 PCM 并开始播放
+  用户再次点击或切换音频/页面销毁:
+    停止 AudioTrack
+    释放 AudioTrack
+
+网页选择/录音完成:
+  selectedAudio = 当前 WAV Blob/File
+  释放旧 currentAudioUrl
+  currentAudioUrl = URL.createObjectURL(selectedAudio)
+  currentAudio.src = currentAudioUrl
+  播放按钮调用 currentAudio.play()
+  停止按钮调用 currentAudio.pause() 并回到起始位置
+```
+
+## 离线 ASR 语言模式与中英混合过滤
+
+```text
+AsrLanguageMode:
+  AUTO: engineLanguage = "auto", 不做文字过滤
+  ZH_EN_FILTER: engineLanguage = "auto", 识别后执行中英文字过滤
+  ZH: engineLanguage = "zh", 不做文字过滤
+  EN: engineLanguage = "en", 不做文字过滤
+
+解析 language 查询参数:
+  缺失或空白 -> AUTO
+  auto -> AUTO
+  zh-en-filter -> ZH_EN_FILTER
+  zh -> ZH
+  en -> EN
+  其他值 -> HTTP 400
+
+普通离线 ASR:
+  从请求解析 languageMode
+  将 audio 解码为 16k mono Float32
+  使用单个缓存的 SenseVoice recognizer
+  languageMode 变化 -> 在同步区内按 engineLanguage 重建 recognizer
+  text = recognizer.recognize(samples)
+  ZH_EN_FILTER -> text = ChineseEnglishTextFilter.filter(text)
+  返回 text 和耗时
+
+声纹测试:
+  diarization、embedding、match 始终使用原有音频准备流程
+  每个分段调用 ASR 时传入 languageMode
+  ZH_EN_FILTER -> 仅过滤每个分段的 text 和汇总 text
+  声纹匹配结果不受文字过滤影响
+```
+
+```text
+ChineseEnglishTextFilter.filter(text):
+  遍历 Unicode 字符
+  保留 Han 脚本字符
+  保留 ASCII A-Z/a-z 和 0-9
+  保留空白和常用中英文标点
+  删除日文假名、韩文及其他脚本字符
+  清理过滤产生的多余空白
+  返回过滤后的文字
+```
+
+## HTTP 接口变更
+
+```text
+POST /api/asr?language=auto|zh-en-filter|zh|en
+  其他 body、Content-Type、错误码保持不变
+
+POST /api/voiceprint/test?language=auto|zh-en-filter|zh|en
+  与 mode、speakerCount、denoise 共同使用
+  语言参数只作用于分段 ASR
+```
 ```
 
 ## 历史真机验证记录（2026-08-27）
@@ -320,4 +412,58 @@ APK 内部 elapsedMs:
 快速 SHERPA_MULTI_FAST speakerCount=AUTO:
   elapsedMs=33113，diarizationMs=19273，embeddingMs=3847，asrMs=9986，segments=6
 结论: 快速模式本轮约快 6.1%，收益主要来自减少重复 embedding；diarization 和逐段 ASR 仍是主要耗时。
+```
+
+## zh-en-mix 混合语音复测（2026-08-27）
+
+```text
+SHERPA_SINGLE:
+  matchedSpeaker=EN
+  ASR 以英文为主，不输出多人分段
+
+SHERPA_MULTI:
+  EN: 1.0772188-6.375969s
+  ZH: 1.0772188-5.0090938s
+  两段时间重叠；两个分段 ASR 均主要输出英文
+  elapsedMs=11955，diarizationMs=320，embeddingMs=4538，asrMs=7095
+
+SHERPA_MULTI_FAST speakerCount=2:
+  得到相同的 EN/ZH 两个重叠分段
+  elapsedMs=11920，diarizationMs=324，embeddingMs=4588，asrMs=7003
+
+结论:
+  diarization 只标注时间和说话人，不做 source separation；重叠波形仍会同时进入 ASR。
+```
+
+## 本次降噪开关验收（2026-08-27）
+
+```text
+环境: SM-N9500 / Android 9 / arm64-v8a / CPU BIG
+模型: Sherpa GTCRN gtcrn_simple.onnx
+音频: zh.wav
+注册: ZH，denoise=true，denoiseMs=1556
+
+SHERPA_SINGLE:
+  denoise=true，denoiseMs=1536，matchedSpeaker=ZH，成功返回中文 ASR
+SHERPA_MULTI:
+  denoise=true，denoiseMs=1542，分段 speaker=ZH，成功返回中文 ASR
+SHERPA_MULTI_FAST:
+  denoise=true，denoiseMs=1615，分段 speaker=ZH，成功返回中文 ASR
+
+结论:
+  降噪开关已覆盖注册、单段、普通多段和快速多段；流式 ASR 保持原链路。
+```
+
+## 2026-08-29 移除其他文字过滤
+
+```text
+AsrLanguageMode:
+  AUTO -> engineLanguage = auto
+  ZH -> engineLanguage = zh
+  EN -> engineLanguage = en
+  zh-en-filter -> null（HTTP 400）
+
+普通 ASR 和声纹分段 ASR:
+  直接返回 recognizer text.trim()
+  不执行 ChineseEnglishTextFilter
 ```

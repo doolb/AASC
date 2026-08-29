@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>媒体显示端</title>
+    <link rel="stylesheet" href="css/theme.css">
     <link rel="stylesheet" href="css/display.css">
 </head>
 <body>
@@ -45,11 +46,13 @@
     <script src="js/control-mode-utils.js"></script>
     <script src="js/dynamic-fit-controller.js"></script>
     <script src="js/sherpa-asr.js"></script>
+    <script src="js/pcm-audio-capture.js"></script>
     <script src="/js/lib/ort.min.js"></script>
     <script src="js/native-compute.js"></script>
     <script src="/js/sentence-splitter.js"></script>
     <script src="js/chat-markdown.js"></script>
     <script src="js/text-media-player.js"></script>
+    <script src="js/ui-theme.js"></script>
     <script>
         const connectionStatus = document.getElementById('connectionStatus');
         const timeDisplay = document.getElementById('timeDisplay');
@@ -70,6 +73,11 @@
         const taskStatusModel = document.getElementById('taskStatusModel');
         const taskStatusProgress = document.getElementById('taskStatusProgress');
         const taskStatusMetrics = document.getElementById('taskStatusMetrics');
+
+        // 显示端复用控制端主题管理器，仅应用服务端主题，不在显示端发起保存请求。
+        if (window.UiTheme) {
+            window.UiTheme.init();
+        }
         
         let currentRotation = 0;
         window.currentRotation = 0;
@@ -118,16 +126,16 @@
         let remoteTextPlaybackToken = 0;
         let voiceSupported = false;
         let isListening = false;
-        let mediaRecorder = null;
-        let audioChunks = [];
+        let voiceListeningEnabled = true;
+        let voiceConversationState = 'waitingWake';
+        let voiceConversationTimer = null;
         let micStream = null;
         let audioContext = null;
+        let pcmCapture = null;
         let analyser = null;
         let silenceStartTime = null;
         let hasSpeech = false;
         let speechStartTime = null;
-        let speechChunks = [];
-        let collectingSpeech = false;
         let isAlwaysListening = false;
         let pendingAutoStart = false;
         let wasListeningBeforePlayback = false;
@@ -154,6 +162,11 @@
         let voiceprintEnabled = false;
         let voiceprintReady = false;
         let voiceprintMultiSpeaker = true;
+        let voiceprintMultiMode = 'fast';
+        let voiceprintSpeakerCount = 'AUTO';
+        // 正式显示端统一使用中文 ASR，不向用户暴露语言选择。
+        let asrLanguageMode = 'zh';
+        let asrDenoiseEnabled = false;
 
         // 声纹模型下载/引擎加载事件（NativeBridge voiceprintConfigure 触发）
         window.onVoiceprintModel = function(payload) {
@@ -198,8 +211,19 @@
                 }
             } else if (payload.state === 'error') {
                 nativeAsrReady = false;
-                updateVoiceTextDisplay('语音模型下载失败: ' + (payload.error || '未知错误'), true);
+                const errorText = payload.error || '未知错误';
+                updateVoiceTextDisplay('语音模型加载失败: ' + errorText, true);
                 setTimeout(() => updateVoiceTextDisplay('', true), 4000);
+                // 内存不足属于终态错误：停止当前录音并撤销能力上报，避免请求继续触发 ensureModel 和重连。
+                if (errorText.includes('内存不足')) {
+                    if (isListening) stopVoiceRecording();
+                    if (currentCapabilities) {
+                        currentCapabilities.voiceRecognition = false;
+                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                            displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+                        }
+                    }
+                }
             }
         };
 
@@ -1258,6 +1282,7 @@
             }
             if (ttsQueue.length === 0) {
                 // TTS 队列播放完毕，如果始终监听模式且能力允许，恢复录音
+                sendVoiceConversationTtsFinished();
                 if (isAlwaysListening && currentCapabilities?.voiceRecording) {
                     setTimeout(() => startVoiceRecording(), 500);
                 }
@@ -2339,6 +2364,21 @@
         // CPU 配置只交给异步原生桥；重复广播去重，避免 WebView 消息线程等待 native pool 换代。
         let lastAppliedCpuConfigKey = '';
         let pendingCpuConfigKey = '';
+
+        // 向服务端回报 APK 实际探测到的 CPU 拓扑和 TTS 生效槽位，浏览器显示端安全跳过。
+        function reportNativeCpuStatus(status = null) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN
+                || !nativeBridge || typeof nativeBridge.cpuStatus !== 'function') return;
+            try {
+                const currentStatus = status || JSON.parse(nativeBridge.cpuStatus());
+                if (!currentStatus || currentStatus.ok !== true) return;
+                displayWs.send(JSON.stringify({ type: 'cpuStatus', status: currentStatus }));
+            } catch (error) {
+                console.warn('[CPU] 回报显示端 CPU 状态失败:', error);
+            }
+        }
+
+        window.onNativeCpuStatus = reportNativeCpuStatus;
 
         function applyCpuConfig(config) {
             if (!config) return;
@@ -3757,6 +3797,7 @@
                 declareCapabilities();
                 sendVoiceStatus();
                 reportSleepState();
+                reportNativeCpuStatus();
                 
                 if (!isAlwaysListening) {
                     pendingAutoStart = true;
@@ -3787,9 +3828,28 @@
                         displayId = data.id;
                         return;
                     }
+
+                    if (data.type === 'controlThemeChanged') {
+                        if (window.UiTheme) {
+                            window.UiTheme.applyRemoteTheme(data.theme);
+                        }
+                        return;
+                    }
                     
                     if (data.type === 'capabilitiesUpdated') {
                         handleCapabilitiesUpdated(data);
+                        return;
+                    }
+
+                    if (data.type === 'voiceConversationState') {
+                        voiceConversationState = data.state || 'waitingWake';
+                        if (voiceConversationState === 'disabled') {
+                            clearVoiceConversationTimer();
+                            stopVoiceRecording();
+                        } else if (voiceConversationState === 'waitingWake') {
+                            clearVoiceConversationTimer();
+                        }
+                        updateVoiceStatusDisplay();
                         return;
                     }
 
@@ -3799,13 +3859,18 @@
                     }
 
                     if (data.type === 'voiceprintConfig') {
+                        asrDenoiseEnabled = !!data.denoise;
                         voiceprintEnabled = !!data.enabled;
                         voiceprintMultiSpeaker = !!data.multiSpeaker;
+                        voiceprintMultiMode = data.multiMode || 'fast';
+                        voiceprintSpeakerCount = data.speakerCount || 'AUTO';
                         if (nativeVoiceprintAvailable) {
                             nativeBridge.voiceprintConfigure(JSON.stringify({
                                 enabled: voiceprintEnabled,
                                 threshold: data.threshold || 0.5,
-                                multiSpeaker: voiceprintMultiSpeaker
+                                multiSpeaker: voiceprintMultiSpeaker,
+                                multiMode: voiceprintMultiMode,
+                                speakerCount: voiceprintSpeakerCount
                             }));
                             if (voiceprintEnabled) {
                                 // 拉取权威库重建本地声纹库（WebView 信任自签名证书，走 fetch）
@@ -3866,7 +3931,12 @@
                     }
 
                     if (data.type === 'asrConfig') {
+                        asrLanguageMode = 'zh';
+                        asrDenoiseEnabled = !!data.denoise;
                         if (nativeAsrAvailable) {
+                            if (typeof nativeBridge.asrConfigure === 'function') {
+                                nativeBridge.asrConfigure(asrLanguageMode, asrDenoiseEnabled);
+                            }
                             // APK 原生引擎：localAsrEnabled 关闭时把能力声明置 false
                             if (!data.localAsrEnabled && nativeAsrReady) {
                                 nativeAsrReady = false;
@@ -3884,8 +3954,9 @@
                                             currentCapabilities.voiceRecognition = true;
                                             displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
                                         }
-                                    } else if (st.state === 'not_ready' || st.state === 'error') {
-                                        // 模型未下载或上次加载失败时，重新启用配置应再次触发幂等下载。
+                                    } else if (st.state === 'not_ready' ||
+                                        (st.state === 'error' && !(st.error || '').includes('内存不足'))) {
+                                        // 普通下载错误允许配置变更时重试；内存错误是终态，不能循环重试。
                                         nativeBridge.asrEnsureModel();
                                     }
                                 } catch (e) {
@@ -4082,10 +4153,14 @@
                 voiceStatus.title = '不支持语音识别';
             } else if (isListening) {
                 voiceStatus.className = 'voice-status-listening';
-                voiceStatus.title = '语音识别中...';
+                voiceStatus.title = voiceConversationState === 'waitingWake'
+                    ? '等待唤醒词...'
+                    : '语音识别中...';
             } else {
                 voiceStatus.className = 'voice-status-ready';
-                voiceStatus.title = '语音识别就绪';
+                voiceStatus.title = voiceConversationState === 'disabled'
+                    ? '语音监听已关闭'
+                    : '语音识别就绪';
             }
         }
         
@@ -4114,6 +4189,39 @@
                     listening: isListening
                 }));
             }
+        }
+
+        function clearVoiceConversationTimer() {
+            if (voiceConversationTimer) {
+                clearTimeout(voiceConversationTimer);
+                voiceConversationTimer = null;
+            }
+        }
+
+        function sendVoiceConversationTtsFinished() {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({ type: 'voiceConversationTtsFinished' }));
+            scheduleVoiceConversationTimer();
+        }
+
+        function scheduleVoiceConversationTimer() {
+            clearVoiceConversationTimer();
+            if (!voiceListeningEnabled || !['activeGroup', 'activePrivate'].includes(voiceConversationState)) return;
+            voiceConversationTimer = setTimeout(() => {
+                voiceConversationState = 'waitingWake';
+                updateVoiceStatusDisplay();
+            }, 180000);
+        }
+
+        function sendRecognizedVoiceInput(text, extra = {}) {
+            if (!voiceListeningEnabled || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'voiceInput',
+                text,
+                isFinal: true,
+                fullText: text,
+                ...extra
+            }));
         }
         
         let currentCapabilities = null;
@@ -4213,7 +4321,8 @@
                     capabilities.voiceRecognition = nativeAsrReady;
                     if (st.state === 'downloading') {
                         showNativeAsrDownloadProgress(st.progress);
-                    } else if (st.state === 'not_ready' || st.state === 'error') {
+                    } else if (st.state === 'not_ready' ||
+                        (st.state === 'error' && !(st.error || '').includes('内存不足'))) {
                         nativeBridge.asrEnsureModel();
                     }
                 } catch (e) {
@@ -4299,7 +4408,17 @@
             if (data.capabilities) {
                 const prevCaps = currentCapabilities;
                 currentCapabilities = data.capabilities;
+                voiceListeningEnabled = data.capabilities.voiceRecording === true;
                 console.log('[能力] 能力已更新:', data.capabilities);
+
+                if (!voiceListeningEnabled) {
+                    pendingAutoStart = false;
+                    voiceConversationState = 'disabled';
+                    clearVoiceConversationTimer();
+                    stopVoiceRecording();
+                } else if (prevCaps && prevCaps.voiceRecording !== true) {
+                    voiceConversationState = 'waitingWake';
+                }
 
                 // 媒体渲染能力关闭 → 停止媒体播放，清空画面
                 if (!data.capabilities.mediaRendering) {
@@ -4348,7 +4467,7 @@
                 // 初始能力从服务器到达 → 检查是否要自动启动录音
                 if (pendingAutoStart && isAlwaysListening && !isListening) {
                     pendingAutoStart = false;
-                    if (data.capabilities.voiceRecording && data.capabilities.voiceRecognition) {
+                    if (voiceListeningEnabled && data.capabilities.voiceRecognition) {
                         console.log('[能力] 服务器能力已确认，启动录音');
                         startVoiceRecording();
                     } else {
@@ -4358,7 +4477,7 @@
 
                 // 动态开启录音 → 如果能力从关闭变为开启，启动录音
                 if (!pendingAutoStart && isAlwaysListening && !isListening &&
-                    data.capabilities.voiceRecording && data.capabilities.voiceRecognition) {
+                    voiceListeningEnabled && data.capabilities.voiceRecognition) {
                     // 检测是否有能力从关闭变为开启（prevCaps 存在时才算转变，避免与初始 pendingAutoStart 冲突）
                     if (prevCaps && (!prevCaps.voiceRecording || !prevCaps.voiceRecognition)) {
                         console.log('[能力] 录音能力已开启，启动录音');
@@ -4404,24 +4523,26 @@
             // APK 原生识别路径：webm/wav base64 → WebAudio 解码重采样 16k mono → 裸 PCM → 原生引擎
             if (nativeAsrAvailable) {
                 if (!nativeAsrReady) {
-                    // asrStatus 解析容错：桥异常/返回非 JSON 时也按未就绪处理并触发下载，
-                    // 始终回 asrResult{error:'模型下载中'}，避免异常挂住服务器 30s 超时
+                    // 只有 not_ready 才触发幂等下载；error 可能是内存终态，不能因每个请求重复加载。
                     let triggerEnsure = false;
+                    let modelError = '';
                     try {
                         const st = JSON.parse(nativeBridge.asrStatus());
-                        triggerEnsure = (st.state === 'not_ready' || st.state === 'error');
+                        triggerEnsure = st.state === 'not_ready' ||
+                            (st.state === 'error' && !modelError.includes('内存不足'));
+                        modelError = st.error || '';
                     } catch (e) {
                         console.warn('[ASR] asrStatus 解析失败:', e);
                         triggerEnsure = true;
                     }
-                    if (triggerEnsure) {
+                    if (triggerEnsure && !modelError.includes('内存不足')) {
                         nativeBridge.asrEnsureModel();
                     }
                     if (displayWs && displayWs.readyState === WebSocket.OPEN) {
                         displayWs.send(JSON.stringify({
                             type: 'asrResult',
                             requestId: data.requestId,
-                            error: '模型下载中',
+                            error: modelError || '模型下载中',
                             text: ''
                         }));
                     }
@@ -4430,7 +4551,24 @@
                 try {
                     const pcmBase64 = await decodeAudioToPcmBase64(data.audioData);
                     const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
-                    if (typeof nativeBridge.asrRecognizeAsync === 'function') {
+                    if (typeof nativeBridge.asrRecognizeAsyncWithOptions === 'function') {
+                        const accepted = JSON.parse(nativeBridge.asrRecognizeAsyncWithOptions(
+                            data.requestId,
+                            pcmBase64,
+                            useVoiceprint,
+                            voiceprintMultiSpeaker,
+                            asrDenoiseEnabled,
+                            asrLanguageMode,
+                            voiceprintMultiMode,
+                            voiceprintSpeakerCount
+                        ));
+                        if (!accepted.accepted) {
+                            sendAsrResult(data.requestId, {
+                                text: '',
+                                error: accepted.error || '识别任务提交失败'
+                            });
+                        }
+                    } else if (typeof nativeBridge.asrRecognizeAsync === 'function') {
                         const accepted = JSON.parse(nativeBridge.asrRecognizeAsync(
                             data.requestId,
                             pcmBase64,
@@ -4539,14 +4677,7 @@
                         console.log('显示端本地ASR识别结果:', text);
                         updateVoiceTextDisplay(text, true);
 
-                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                            displayWs.send(JSON.stringify({
-                                type: 'voiceInput',
-                                text: text,
-                                isFinal: true,
-                                fullText: text
-                            }));
-                        }
+                        sendRecognizedVoiceInput(text);
 
                         setTimeout(() => {
                             updateVoiceTextDisplay('', true);
@@ -4623,14 +4754,7 @@
                         console.log('显示端本地ASR识别结果:', text);
                         updateVoiceTextDisplay(text, true);
                         
-                        if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                            displayWs.send(JSON.stringify({
-                                type: 'voiceInput',
-                                text: text,
-                                isFinal: true,
-                                fullText: text
-                            }));
-                        }
+                        sendRecognizedVoiceInput(text);
                         
                         setTimeout(() => {
                             updateVoiceTextDisplay('', true);
@@ -4645,13 +4769,40 @@
             }
         }
         
-        function stopVoiceRecording() {
-            if (!isListening) return;
-            isListening = false;
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
+        // 所有网页端 ASR/声纹录音统一使用共享 PCM 采集器，避免不同端的编码器差异。
+        function startRawPcmCapture(stream) {
+            try {
+                pcmCapture = new PcmAudioCapture().start(stream);
+                return true;
+            } catch (e) {
+                console.warn('[语音] 原始 PCM 采集失败:', e);
+                stopRawPcmCapture();
+                return false;
             }
+        }
+
+        function encodePcmSamplesToWav(samples, sampleRate) {
+            return PcmAudioCapture.encodeWav(samples, sampleRate, 16000);
+        }
+
+        function takeRawPcmWav() {
+            return pcmCapture ? pcmCapture.takeWav() : null;
+        }
+
+        function stopRawPcmCapture() {
+            if (pcmCapture) pcmCapture.stop();
+            pcmCapture = null;
+        }
+
+        function stopVoiceRecording() {
+            if (!isListening) {
+                stopRawPcmCapture();
+                return;
+            }
+            isListening = false;
             stopSilenceDetection();
+            const audioBlob = pcmCapture ? pcmCapture.stopWav() : null;
+            pcmCapture = null;
             if (localAsrStreaming) {
                 SherpaASR.stopStreaming();
                 localAsrStreaming = false;
@@ -4662,10 +4813,36 @@
             }
             sendVoiceStatus();
             console.log('[语音] 录音已停止');
+            if (audioBlob) void sendAudioForRecognition(audioBlob);
+        }
+
+        // VAD 检测到一段语音结束后，只清空当前 WAV 缓冲并重新开始采集，不创建新的编码器。
+        async function finishVoiceSegment() {
+            if (!isListening || !pcmCapture) return;
+            stopSilenceDetection();
+            const audioBlob = takeRawPcmWav();
+            stopRawPcmCapture();
+            hasSpeech = false;
+            speechStartTime = null;
+            silenceStartTime = null;
+            if (audioBlob) void sendAudioForRecognition(audioBlob);
+            if (!isListening) return;
+            if (!startRawPcmCapture(micStream)) {
+                isListening = false;
+                stopRawPcmCapture();
+                sendVoiceStatus();
+                return;
+            }
+            startSilenceDetection();
         }
 
         async function startVoiceRecording() {
             if (isListening) return;
+
+            if (!voiceListeningEnabled) {
+                console.log('[能力] 显示端语音监听已关闭，跳过录音启动');
+                return;
+            }
             
             if (currentCapabilities && !currentCapabilities.voiceRecording) {
                 console.log('[能力] 无语音录音能力，跳过录音启动');
@@ -4689,8 +4866,9 @@
             try {
                 micStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
+                        // 关闭浏览器隐式处理，保证 APK 本地 ASR 收到与测试 APK 一致的原始音频。
+                        echoCancellation: false,
+                        noiseSuppression: false,
                         sampleRate: 16000
                     }
                 });
@@ -4709,47 +4887,9 @@
                     }
                 }
                 
-                mediaRecorder = new MediaRecorder(micStream);
-                audioChunks = [];
-                speechChunks = [];
-                collectingSpeech = false;
-
-                mediaRecorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) {
-                        audioChunks.push(e.data);
-
-                        if (collectingSpeech || hasSpeech) {
-                            collectingSpeech = true;
-                            speechChunks.push(e.data);
-                        } else if (speechChunks.length === 0) {
-                            speechChunks.push(e.data);
-                        }
-                    }
-                };
-
-                mediaRecorder.onstop = async () => {
-                    const useChunks = collectingSpeech ? speechChunks : audioChunks;
-                    if (useChunks.length > 0) {
-                        const audioBlob = new Blob(useChunks, { type: 'audio/webm' });
-                        await sendAudioForRecognition(audioBlob);
-                    }
-
-                    if (isListening) {
-                        audioChunks = [];
-                        speechChunks = [];
-                        collectingSpeech = false;
-                        try {
-                            mediaRecorder.start();
-                            startSilenceDetection();
-                        } catch (e) {
-                            console.log('重新启动录音失败:', e);
-                            isListening = false;
-                            sendVoiceStatus();
-                        }
-                    }
-                };
-                
-                mediaRecorder.start();
+                if (!startRawPcmCapture(micStream)) {
+                    throw new Error('当前浏览器不支持原始 PCM 录音');
+                }
                 isListening = true;
                 hasSpeech = false;
                 speechStartTime = null;
@@ -4760,6 +4900,7 @@
                 
             } catch (e) {
                 console.error('显示端麦克风访问失败:', e);
+                stopRawPcmCapture();
                 isListening = false;
                 voiceSupported = false;
                 sendVoiceStatus();
@@ -4809,10 +4950,7 @@
                             const speechDuration = speechStartTime ? Date.now() - speechStartTime : 0;
                             if (speechDuration >= MIN_SPEECH_DURATION) {
                                 console.log('显示端检测到静音，发送识别');
-                                if (mediaRecorder && mediaRecorder.state === 'recording') {
-                                    mediaRecorder.stop();
-                                }
-                                stopSilenceDetection();
+                                void finishVoiceSegment();
                                 return;
                             }
                         }
@@ -4838,7 +4976,7 @@
         async function sendAudioForRecognition(audioBlob) {
             try {
                 const formData = new FormData();
-                formData.append('audio', audioBlob, 'recording.webm');
+                formData.append('audio', audioBlob, 'recording.wav');
                 
                 const response = await fetch('/api/asr/recognize', {
                     method: 'POST',
@@ -4854,15 +4992,7 @@
                             const segText = (seg.text || '').trim();
                             if (!segText) continue;
                             console.log('显示端分段识别:', segText, '->', seg.speaker);
-                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                                displayWs.send(JSON.stringify({
-                                    type: 'voiceInput',
-                                    text: segText,
-                                    isFinal: true,
-                                    fullText: segText,
-                                    speaker: seg.speaker
-                                }));
-                            }
+                            sendRecognizedVoiceInput(segText, { speaker: seg.speaker });
                         }
                         return;
                     }
@@ -4874,16 +5004,9 @@
 
                     updateVoiceTextDisplay(recognizedText, true);
 
-                    if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                        const msg = {
-                            type: 'voiceInput',
-                            text: recognizedText,
-                            isFinal: true,
-                            fullText: recognizedText
-                        };
-                        if (data.speaker !== undefined) msg.speaker = data.speaker;
-                        displayWs.send(JSON.stringify(msg));
-                    }
+                    const extra = {};
+                    if (data.speaker !== undefined) extra.speaker = data.speaker;
+                    sendRecognizedVoiceInput(recognizedText, extra);
 
                     setTimeout(() => {
                         updateVoiceTextDisplay('', true);

@@ -1,6 +1,25 @@
+import org.gradle.api.tasks.Copy
+
 // AGP 9.0+ 内置 Kotlin 支持，无需 org.jetbrains.kotlin.android 插件
 plugins {
     id("com.android.application")
+}
+
+val bundledDenoiseModelFiles = listOf("gtcrn_simple.onnx")
+
+val prepareBundledDenoiseModel = tasks.register<Copy>("prepareBundledDenoiseModel") {
+    from(rootProject.file("../../../res/models/speech-enhancement")) {
+        include(bundledDenoiseModelFiles)
+    }
+    into(layout.buildDirectory.dir("generated/assets/speech-enhancement"))
+}
+
+android {
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(layout.buildDirectory.dir("generated/assets").get().asFile)
+        }
+    }
 }
 
 android {
@@ -35,6 +54,10 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
+}
+
+tasks.named("preBuild") {
+    dependsOn(prepareBundledDenoiseModel)
 }
 
 dependencies {

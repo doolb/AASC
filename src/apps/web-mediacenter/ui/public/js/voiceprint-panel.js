@@ -9,8 +9,9 @@
     }
     const panel = {
         recording: false,
-        mediaRecorder: null,
-        audioChunks: [],
+        pcmCapture: null,
+        recordingStream: null,
+        recordingName: '',
         speakers: {},
 
         init() {
@@ -19,6 +20,9 @@
             });
             document.getElementById('vpEnabledCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpMultiCheck').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpDenoiseCheck').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpMultiModeSel').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpSpeakerCountSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpExtractionSel').addEventListener('change', () => this.saveConfig());
             this.loadConfig();
             this.refreshList();
@@ -46,6 +50,9 @@
                 const c = await r.json();
                 document.getElementById('vpEnabledCheck').checked = !!c.enabled;
                 document.getElementById('vpMultiCheck').checked = !!c.multiSpeaker;
+                document.getElementById('vpDenoiseCheck').checked = !!c.denoise;
+                document.getElementById('vpMultiModeSel').value = c.multiMode || 'fast';
+                document.getElementById('vpSpeakerCountSel').value = c.speakerCount || 'AUTO';
                 document.getElementById('vpExtractionSel').value = c.extraction || 'server';
             } catch (e) { console.warn('加载声纹配置失败:', e); }
         },
@@ -54,6 +61,9 @@
             const body = {
                 enabled: document.getElementById('vpEnabledCheck').checked,
                 multiSpeaker: document.getElementById('vpMultiCheck').checked,
+                denoise: document.getElementById('vpDenoiseCheck').checked,
+                multiMode: document.getElementById('vpMultiModeSel').value,
+                speakerCount: document.getElementById('vpSpeakerCountSel').value,
                 extraction: document.getElementById('vpExtractionSel').value
             };
             try {
@@ -72,13 +82,18 @@
                 document.getElementById('vpRecordStatus').textContent = '请先输入名字';
                 return;
             }
+            let stream = null;
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                this.mediaRecorder = new MediaRecorder(stream);
-                this.audioChunks = [];
-                this.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) this.audioChunks.push(e.data); };
-                this.mediaRecorder.onstop = () => this.register(name);
-                this.mediaRecorder.start();
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        sampleRate: 16000
+                    }
+                });
+                this.recordingStream = stream;
+                this.pcmCapture = new PcmAudioCapture().start(stream);
+                this.recordingName = name;
                 this.recording = true;
                 document.getElementById('vpRecordBtn').textContent = '录音中...点击停止';
                 document.getElementById('vpStopBtn').style.display = '';
@@ -87,6 +102,11 @@
                     if (this.recording) this.stopRecord();
                 }));
             } catch (e) {
+                if (this.pcmCapture) {
+                    this.pcmCapture.stop();
+                    this.pcmCapture = null;
+                }
+                if (stream) stream.getTracks().forEach(track => track.stop());
                 document.getElementById('vpRecordStatus').textContent = '录音失败: ' + e.message;
             }
         },
@@ -94,21 +114,25 @@
         stopRecord() {
             if (!this.recording) return;
             this.recording = false;
-            if (this.mediaRecorder && this.mediaRecorder.state === 'recording') this.mediaRecorder.stop();
-            if (this.mediaRecorder && this.mediaRecorder.stream) {
-                this.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+            const wav = this.pcmCapture ? this.pcmCapture.stopWav() : null;
+            this.pcmCapture = null;
+            if (this.recordingStream) {
+                this.recordingStream.getTracks().forEach(track => track.stop());
+                this.recordingStream = null;
             }
+            const name = this.recordingName;
+            this.recordingName = '';
             document.getElementById('vpRecordBtn').textContent = '🎤 录音注册';
             document.getElementById('vpStopBtn').style.display = 'none';
+            if (wav) void this.register(name, wav);
         },
 
-        async register(name) {
+        async register(name, audioBlob) {
             document.getElementById('vpRecordStatus').textContent = '正在注册...';
             try {
-                const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
                 const formData = new FormData();
                 formData.append('name', name);
-                formData.append('audio', blob, 'voiceprint.webm');
+                formData.append('audio', audioBlob, 'voiceprint.wav');
                 const r = await fetch('/api/voiceprint/register', { method: 'POST', body: formData });
                 const data = await r.json();
                 document.getElementById('vpRecordStatus').textContent = data.message || (data.status === 'success' ? '注册成功' : '注册失败');

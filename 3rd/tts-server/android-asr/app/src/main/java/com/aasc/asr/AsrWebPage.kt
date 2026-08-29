@@ -30,6 +30,10 @@ object AsrWebPage {
     <input id="audio" type="file" accept="audio/wav,.wav">
     <br>
     <button id="record" type="button">开始录音</button>
+    <button id="playCurrentAudio" type="button" disabled>播放当前 WAV</button>
+    <button id="saveCurrentAudio" type="button" disabled>保存当前 WAV</button>
+    <button id="stopCurrentAudio" type="button" disabled>停止播放</button>
+    <audio id="currentAudio" controls preload="metadata" hidden></audio>
     <button id="recognize" type="button">开始识别</button>
     <p id="fileStatus" class="muted">尚未选择音频</p>
   </section>
@@ -45,6 +49,8 @@ object AsrWebPage {
     <label for="speakerName">注册名称</label><br>
     <input id="speakerName" type="text" placeholder="例如 ZH 或 EN">
     <br>
+    <label><input id="voiceprintDenoise" type="checkbox"> 启用 ASR/声纹降噪（GTCRN）</label>
+    <p class="muted">开启后，注册、分段、声纹匹配和 ASR 都使用降噪音频；注册和测试请保持开关一致。</p>
     <button id="registerSpeaker" type="button">注册当前音频</button>
     <button id="testSingle" type="button">Sherpa 单段</button>
     <button id="testMulti" type="button">Sherpa 多段</button>
@@ -72,12 +78,17 @@ object AsrWebPage {
     const audio = document.getElementById('audio');
     const record = document.getElementById('record');
     const recognize = document.getElementById('recognize');
+    const playCurrentAudio = document.getElementById('playCurrentAudio');
+    const saveCurrentAudio = document.getElementById('saveCurrentAudio');
+    const stopCurrentAudioButton = document.getElementById('stopCurrentAudio');
+    const currentAudio = document.getElementById('currentAudio');
     const health = document.getElementById('health');
     const fileStatus = document.getElementById('fileStatus');
     const result = document.getElementById('result');
     const elapsed = document.getElementById('elapsed');
     const voiceprintStatus = document.getElementById('voiceprintStatus');
     const speakerName = document.getElementById('speakerName');
+    const voiceprintDenoise = document.getElementById('voiceprintDenoise');
     const registerSpeaker = document.getElementById('registerSpeaker');
     const testSingle = document.getElementById('testSingle');
     const testMulti = document.getElementById('testMulti');
@@ -90,6 +101,7 @@ object AsrWebPage {
     const streamResult = document.getElementById('streamResult');
     let selectedAudio = null;
     let selectedAudioName = '';
+    let currentAudioUrl = null;
     let recording = false;
     let mediaStream = null;
     let audioContext = null;
@@ -179,10 +191,42 @@ object AsrWebPage {
       audioContext = null;
     }
 
+    function stopCurrentAudio() {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      stopCurrentAudioButton.disabled = true;
+      playCurrentAudio.disabled = !selectedAudio;
+      saveCurrentAudio.disabled = !selectedAudio;
+    }
+
+    function setSelectedAudio(value, name) {
+      stopCurrentAudio();
+      if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+      currentAudioUrl = null;
+      selectedAudio = value || null;
+      selectedAudioName = name || '';
+      if (selectedAudio) {
+        currentAudioUrl = URL.createObjectURL(selectedAudio);
+        currentAudio.src = currentAudioUrl;
+        currentAudio.hidden = false;
+        playCurrentAudio.disabled = false;
+        saveCurrentAudio.disabled = false;
+        fileStatus.textContent = '已选择：' + selectedAudioName;
+      } else {
+        currentAudio.removeAttribute('src');
+        currentAudio.load();
+        currentAudio.hidden = true;
+        playCurrentAudio.disabled = true;
+        saveCurrentAudio.disabled = true;
+        fileStatus.textContent = '尚未选择音频';
+      }
+    }
+
     async function startRecording() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('浏览器录音需要 HTTPS 或 localhost 安全页面');
       }
+      stopCurrentAudio();
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) throw new Error('浏览器不支持 AudioContext');
@@ -208,8 +252,7 @@ object AsrWebPage {
       if (!recording) return;
       recording = false;
       const samples = resample(mergeChunks(recordingChunks), recordingSampleRate, 16000);
-      selectedAudio = new Blob([encodeWav(samples)], { type: 'audio/wav' });
-      selectedAudioName = 'browser-recording.wav';
+      setSelectedAudio(new Blob([encodeWav(samples)], { type: 'audio/wav' }), 'browser-recording.wav');
       record.textContent = '开始录音';
       fileStatus.textContent = '录音完成：' + Math.round(samples.length / 16000) + ' 秒';
       releaseRecorder();
@@ -353,9 +396,38 @@ object AsrWebPage {
 
     audio.addEventListener('change', () => {
       const file = audio.files[0];
-      selectedAudio = file || null;
-      selectedAudioName = file ? file.name : '';
-      fileStatus.textContent = file ? '已选择：' + file.name : '尚未选择音频';
+      setSelectedAudio(file || null, file ? file.name : '');
+    });
+
+    playCurrentAudio.addEventListener('click', async () => {
+      if (!selectedAudio) return;
+      try {
+        await currentAudio.play();
+        stopCurrentAudioButton.disabled = false;
+      } catch (error) {
+        fileStatus.textContent = '播放失败：' + error.message;
+      }
+    });
+
+    saveCurrentAudio.addEventListener('click', () => {
+      if (!selectedAudio) return;
+      const link = document.createElement('a');
+      link.href = currentAudioUrl;
+      link.download = selectedAudioName.toLowerCase().endsWith('.wav') ? selectedAudioName : 'asr-recording.wav';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      fileStatus.textContent = '已开始保存：' + link.download;
+    });
+
+    stopCurrentAudioButton.addEventListener('click', () => stopCurrentAudio());
+    currentAudio.addEventListener('ended', () => {
+      stopCurrentAudioButton.disabled = true;
+      playCurrentAudio.disabled = !selectedAudio;
+    });
+    window.addEventListener('beforeunload', () => {
+      stopCurrentAudio();
+      if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
     });
 
     record.addEventListener('click', async () => {
@@ -384,7 +456,8 @@ object AsrWebPage {
       result.textContent = '识别中…';
       elapsed.textContent = '';
       try {
-        const response = await fetch('/api/asr', {
+        const query = new URLSearchParams({ language: 'zh' });
+        const response = await fetch('/api/asr?' + query.toString(), {
           method: 'POST',
           headers: { 'Content-Type': 'audio/wav' },
           body: selectedAudio
@@ -412,7 +485,11 @@ object AsrWebPage {
       registerSpeaker.disabled = true;
       voiceprintResult.textContent = '注册中…';
       try {
-        const response = await fetch('/api/voiceprint/register?name=' + encodeURIComponent(speakerName.value.trim()), {
+        const query = new URLSearchParams({
+          name: speakerName.value.trim(),
+          denoise: voiceprintDenoise.checked ? '1' : '0'
+        });
+        const response = await fetch('/api/voiceprint/register?' + query.toString(), {
           method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: selectedAudio
         });
         const data = await response.json();
@@ -437,7 +514,11 @@ object AsrWebPage {
       testMultiFast.disabled = true;
       voiceprintResult.textContent = '测试中…';
       try {
-        const query = new URLSearchParams({ mode });
+        const query = new URLSearchParams({
+          mode,
+          denoise: voiceprintDenoise.checked ? '1' : '0',
+          language: 'zh'
+        });
         if (mode === 'SHERPA_MULTI_FAST') query.set('speakerCount', speakerCount.value);
         const response = await fetch('/api/voiceprint/test?' + query.toString(), {
           method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: selectedAudio

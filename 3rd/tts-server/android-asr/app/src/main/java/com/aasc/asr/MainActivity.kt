@@ -20,7 +20,9 @@ import javax.net.ssl.SSLContext
 class MainActivity : AppCompatActivity() {
     private val engine = AsrEngine()
     private val voiceprintEngine = SherpaVoiceprintEngine()
+    private val denoiseEngine = SherpaDenoiseEngine()
     private val streamingEngine = StreamingAsrEngine()
+    private val audioPlayer = PcmAudioPlayer()
     private lateinit var coordinator: AsrCoordinator
     private lateinit var voiceprintCoordinator: VoiceprintTestCoordinator
     private lateinit var recorder: AudioRecorder
@@ -29,6 +31,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var resultText: TextView
     private lateinit var recordButton: Button
     private lateinit var recognizeButton: Button
+    private lateinit var playAudioButton: Button
+    private lateinit var saveAudioButton: Button
     private lateinit var cpuModeSpinner: Spinner
     private lateinit var httpStatus: TextView
     private lateinit var httpPortInput: EditText
@@ -52,7 +56,10 @@ class MainActivity : AppCompatActivity() {
             try {
                 val samples = AudioFileDecoder.decode(this, uri)
                 runOnUiThread {
+                    audioPlayer.stop()
+                    playAudioButton.isEnabled = true
                     selectedSamples = samples
+                    saveAudioButton.isEnabled = samples.isNotEmpty()
                     audioStatus.text = "已选择音频：${samples.size / AudioRecorder.SAMPLE_RATE} 秒"
                 }
             } catch (error: Exception) {
@@ -68,7 +75,7 @@ class MainActivity : AppCompatActivity() {
         setupCpuMode()
         recorder = AudioRecorder()
         coordinator = AsrCoordinator(engine)
-        voiceprintCoordinator = VoiceprintTestCoordinator(engine, voiceprintEngine)
+        voiceprintCoordinator = VoiceprintTestCoordinator(engine, voiceprintEngine, denoiseEngine)
         loadModel()
     }
 
@@ -78,12 +85,16 @@ class MainActivity : AppCompatActivity() {
         resultText = findViewById(R.id.resultText)
         recordButton = findViewById(R.id.recordButton)
         recognizeButton = findViewById(R.id.recognizeButton)
+        playAudioButton = findViewById(R.id.playAudioButton)
+        saveAudioButton = findViewById(R.id.saveAudioButton)
         cpuModeSpinner = findViewById(R.id.cpuModeSpinner)
         httpStatus = findViewById(R.id.httpStatus)
         httpPortInput = findViewById(R.id.httpPortInput)
         httpToggleButton = findViewById(R.id.httpToggleButton)
         recordButton.setOnClickListener { toggleRecording() }
         findViewById<Button>(R.id.selectAudioButton).setOnClickListener { selectAudio.launch(arrayOf("audio/*")) }
+        playAudioButton.setOnClickListener { toggleAudioPlayback() }
+        saveAudioButton.setOnClickListener { saveCurrentWav() }
         recognizeButton.setOnClickListener { recognizeSelectedAudio() }
         httpToggleButton.setOnClickListener { toggleHttpServer() }
     }
@@ -118,6 +129,13 @@ class MainActivity : AppCompatActivity() {
                     File(voiceprintDir, VoiceprintModelFiles.FILE_NAMES[0]),
                     File(voiceprintDir, VoiceprintModelFiles.FILE_NAMES[1])
                 )
+                val denoiseLoaded = try {
+                    val denoiseDir = File(filesDir, "models/speech-enhancement")
+                    DenoiseModelFiles.ensureCopied(assets, denoiseDir)
+                    denoiseEngine.load(File(denoiseDir, DenoiseModelFiles.FILE_NAMES[0]))
+                } catch (_: Exception) {
+                    false
+                }
                 val streamingDir = File(filesDir, "models/streaming")
                 StreamingAsrModelFiles.ensureCopied(assets, streamingDir)
                 val streamingLoaded = streamingEngine.load(
@@ -130,7 +148,8 @@ class MainActivity : AppCompatActivity() {
                 modelReady = loaded
                 runOnUiThread {
                     modelStatus.text = when {
-                        loaded && voiceprintLoaded && streamingLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\n流式 ASR 模型已就绪\nHTTPS 证书已就绪\nCPU 模式：$status"
+                        loaded && voiceprintLoaded && streamingLoaded && denoiseLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\nSherpa GTCRN 降噪模型已就绪\n流式 ASR 模型已就绪\nHTTPS 证书已就绪\nCPU 模式：$status"
+                        loaded && voiceprintLoaded && streamingLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\nSherpa GTCRN 降噪模型加载失败\n流式 ASR 模型已就绪\nHTTPS 证书已就绪\nCPU 模式：$status"
                         loaded && voiceprintLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\n流式 ASR 模型加载失败\nCPU 模式：$status"
                         loaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型加载失败\nCPU 模式：$status"
                         else -> getString(R.string.model_load_failed, "请检查内置模型")
@@ -139,6 +158,7 @@ class MainActivity : AppCompatActivity() {
             } catch (error: Exception) {
                 modelReady = false
                 voiceprintEngine.release()
+                denoiseEngine.release()
                 streamingEngine.release()
                 tlsContext = null
                 runOnUiThread { modelStatus.text = getString(R.string.model_load_failed, error.message ?: "未知错误") }
@@ -152,6 +172,9 @@ class MainActivity : AppCompatActivity() {
             background.execute {
                 val samples = recorder.stop()
                 runOnUiThread {
+                    audioPlayer.stop()
+                    playAudioButton.isEnabled = true
+                    saveAudioButton.isEnabled = samples.isNotEmpty()
                     recordButton.isEnabled = true
                     recordButton.setText(R.string.record_start)
                     selectedSamples = samples
@@ -165,9 +188,34 @@ class MainActivity : AppCompatActivity() {
 
     private fun startRecording() {
         if (recorder.start()) {
+            saveAudioButton.isEnabled = false
             recordButton.setText(R.string.record_stop)
             audioStatus.text = "录音中…"
         } else audioStatus.text = "无法启动录音"
+    }
+
+    private fun saveCurrentWav() {
+        val samples = selectedSamples
+        if (samples == null || samples.isEmpty()) {
+            audioStatus.text = "请先录音或选择音频"
+            return
+        }
+        saveAudioButton.isEnabled = false
+        audioStatus.text = "保存 WAV 中…"
+        background.execute {
+            try {
+                val location = WavFileSaver.save(this, samples)
+                runOnUiThread {
+                    audioStatus.text = "WAV 已保存：$location"
+                    saveAudioButton.isEnabled = true
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    audioStatus.text = "保存 WAV 失败：${error.message ?: "存储不可用"}"
+                    saveAudioButton.isEnabled = true
+                }
+            }
+        }
     }
 
     private fun recognizeSelectedAudio() {
@@ -180,12 +228,44 @@ class MainActivity : AppCompatActivity() {
         resultText.text = getString(R.string.recognizing)
         background.execute {
             try {
-                val result = coordinator.submit(samples, selectedCpuMode).get()
+                val result = coordinator.submit(samples, selectedCpuMode, AsrLanguageMode.ZH).get()
                 runOnUiThread { resultText.text = UiStatus.result(result.text, result.elapsedMs) }
             } catch (error: Exception) {
                 runOnUiThread { resultText.text = "识别失败：${error.cause?.message ?: error.message ?: "未知错误"}" }
             } finally {
                 runOnUiThread { recognizeButton.isEnabled = true }
+            }
+        }
+    }
+
+    private fun toggleAudioPlayback() {
+        val samples = selectedSamples
+        if (samples == null) {
+            audioStatus.text = "请先录音或选择音频"
+            return
+        }
+        if (audioPlayer.isPlaying()) {
+            audioPlayer.stop()
+            playAudioButton.setText(R.string.play_audio)
+            audioStatus.text = "已停止播放"
+            return
+        }
+        playAudioButton.isEnabled = false
+        audioStatus.text = "准备播放音频…"
+        background.execute {
+            try {
+                audioPlayer.play(samples)
+                runOnUiThread {
+                    playAudioButton.isEnabled = true
+                    playAudioButton.setText(R.string.stop_audio)
+                    audioStatus.text = "正在播放音频"
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    playAudioButton.isEnabled = true
+                    playAudioButton.setText(R.string.play_audio)
+                    audioStatus.text = "播放失败：${error.message ?: "设备不支持"}"
+                }
             }
         }
     }
@@ -216,9 +296,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         httpServer?.stop()
+        audioPlayer.stop()
         coordinator.shutdown()
         voiceprintCoordinator.shutdown()
         streamingEngine.release()
+        engine.release()
         background.shutdownNow()
         super.onDestroy()
     }

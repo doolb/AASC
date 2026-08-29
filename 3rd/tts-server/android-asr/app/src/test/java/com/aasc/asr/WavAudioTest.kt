@@ -9,6 +9,15 @@ import org.junit.Test
 
 class WavAudioTest {
     @Test
+    fun wavEncoderCreatesStandardAsrInput() {
+        val wav = WavAudio.encode(floatArrayOf(0.0f, 0.5f, -1.0f))
+        val audio = WavAudio.decode(wav)
+        assertEquals(16000, audio.sampleRate)
+        assertEquals(1, audio.channels)
+        assertArrayEquals(shortArrayOf(0, 16383, -32768), audio.samples)
+    }
+
+    @Test
     fun wavDecoderReadsPcmHeaderAndSamples() {
         val wav = testWav(sampleRate = 8000, channels = 1, samples = shortArrayOf(0, 16384, -16384))
         val audio = WavAudio.decode(wav)

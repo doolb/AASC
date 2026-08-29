@@ -86,6 +86,9 @@ object TtsEngine {
         }
     }
 
+    // 返回当前已生效的 TTS CPU policy，供显示端向服务端回报实际槽位和 affinity。
+    fun currentPolicy(): CpuPolicy = synchronized(lock) { currentPolicy }
+
     // 同步合成文本为 WAV 字节（Riff24Khz16BitMonoPcm）；调用方需保证 ready
     @Throws(Exception::class)
     fun synthesize(text: String): ByteArray {

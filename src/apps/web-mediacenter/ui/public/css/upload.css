@@ -386,6 +386,65 @@ input[type="file"] {
     opacity: 0.3;
 }
 
+.display-voice-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-secondary, #aaa);
+}
+
+.display-voice-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.display-voice-toggle input {
+    accent-color: var(--accent-color, #00d2ff);
+}
+
+.display-voice-state {
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.display-voice-state.listening {
+    color: #3498db;
+    background: rgba(52, 152, 219, 0.2);
+}
+
+.display-voice-state.pending {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.16);
+}
+
+.display-voice-state.waiting,
+.display-voice-state.ready {
+    color: #2ecc71;
+    background: rgba(46, 204, 113, 0.16);
+}
+
+.display-voice-state.disabled,
+.display-voice-state.unsupported {
+    color: var(--text-secondary, #888);
+    background: rgba(128, 128, 128, 0.16);
+}
+
+.display-voice-latest {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .sub-display-indicator {
     font-size: 14px;
     cursor: help;

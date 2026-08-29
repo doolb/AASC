@@ -114,6 +114,11 @@
             return normalizedTheme;
         },
 
+        // 显示端只接受服务端广播，不重复发起 POST，避免主题通知在显示端形成回环。
+        applyRemoteTheme(theme) {
+            return this.apply(theme, false);
+        },
+
         async persistServerTheme(theme) {
             if (typeof windowObject.fetch !== 'function') return;
             try {

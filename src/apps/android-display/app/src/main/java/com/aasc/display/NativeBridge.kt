@@ -9,6 +9,7 @@ import org.json.JSONObject
 import android.app.ActivityManager
 import android.os.Build
 import android.os.SystemClock
+import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
@@ -152,11 +153,17 @@ class NativeBridge(
     private val asrModelManager = AsrModelManager(webView.context)
     // ASR 桥任务允许并发进入 AsrEnginePool；真实并发上限由 pool slot 队列控制，超额任务在池内排队。
     private val asrExecutor = Executors.newCachedThreadPool()
+    private val denoiseEngine = SherpaDenoiseEngine()
+    private val denoiseLock = Any()
 
     // ---- 声纹识别桥（speaker identification / 多人分割）----
    private val voiceprintModelManager = VoiceprintModelManager(webView.context)
    private var voiceprintEnabled = false
-   private var voiceprintThreshold = 0.5f
+    private var voiceprintThreshold = 0.5f
+    private var voiceprintMultiMode = "fast"
+    private var voiceprintSpeakerCount = VoiceprintSpeakerCount.AUTO
+    private var asrLanguageMode = AsrLanguageMode.AUTO
+    private var asrDenoiseEnabled = false
     // ---- TTS 嵌入式语音合成桥（Microsoft Embedded Speech SDK，模型按需下载）----
     private val ttsModelManager = TtsModelManager(webView.context)
     // TTS 桥侧自身即完成有限准入：worker 数和队列容量都等于当前 policy 的 slotCount。
@@ -274,6 +281,16 @@ class NativeBridge(
         }
     }
 
+    // 保存普通 ASR 的默认处理选项，供旧页面的异步桥和同步兼容入口使用。
+    @JavascriptInterface
+    fun asrConfigure(languageMode: String, denoise: Boolean): String {
+        val parsed = AsrLanguageMode.parse(languageMode)
+            ?: return JSONObject().put("ok", false).put("error", "不支持的 ASR 语言").toString()
+        asrLanguageMode = parsed
+        asrDenoiseEnabled = denoise
+        return JSONObject().put("ok", true).toString()
+    }
+
     // 应用服务器下发的 CPU affinity 配置。ASR/TTS 各自使用独立 policy 和独立 pool。
     @JavascriptInterface
     fun cpuConfigure(configJson: String): String {
@@ -302,6 +319,22 @@ class NativeBridge(
         return JSONObject().put("accepted", true).toString()
     }
 
+    // 返回显示端当前实际 CPU 拓扑和 ASR/TTS 生效策略；只读，不触发模型加载或 policy 变更。
+    @JavascriptInterface
+    fun cpuStatus(): String {
+        return try {
+            val topology = CpuCluster.detect()
+            JSONObject()
+                .put("ok", true)
+                .put("topology", cpuTopologyJson(topology))
+                .put("asr", cpuPolicyJson(AsrEngine.currentPolicy()))
+                .put("tts", cpuPolicyJson(TtsEngine.currentPolicy()))
+                .toString()
+        } catch (e: Exception) {
+            JSONObject().put("ok", false).put("error", e.message ?: "CPU 状态读取失败").toString()
+        }
+    }
+
     // CPU 配置的实际应用主体运行在专用后台线程；退出临界区后再执行耗时的 native pool 构造。
     private fun drainCpuConfigQueue() {
         while (true) {
@@ -323,11 +356,27 @@ class NativeBridge(
                     synchronized(cpuConfigLock) {
                         cpuConfigLastAppliedKey = request.key
                     }
+                    notifyCpuStatusToPage()
                 } else {
                     android.util.Log.w("NativeBridge", "异步 CPU 配置失败: ${resultJson.optString("error")}")
                 }
             } catch (e: Exception) {
                 android.util.Log.w("NativeBridge", "异步 CPU 配置结果解析失败: ${e.message}")
+            }
+        }
+    }
+
+    // CPU 配置在后台线程实际应用完成后主动回调页面，避免页面只读取到旧 policy。
+    private fun notifyCpuStatusToPage() {
+        val status = cpuStatus()
+        mainHandler.post {
+            try {
+                webView.evaluateJavascript(
+                    "window.onNativeCpuStatus && window.onNativeCpuStatus($status);",
+                    null
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("NativeBridge", "CPU 状态回调页面失败: ${e.message}")
             }
         }
     }
@@ -381,7 +430,8 @@ class NativeBridge(
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
             val samples = AsrPcm.decodeS16(bytes)
             val text = asrExecutor.submit {
-                AsrEngine.recognize(samples)
+                val prepared = prepareAudio(samples, asrDenoiseEnabled)
+                recognizeText(prepared.samples, asrLanguageMode)
             }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             JSONObject().put("text", text).toString()
         } catch (e: java.util.concurrent.TimeoutException) {
@@ -399,6 +449,50 @@ class NativeBridge(
         useVoiceprint: Boolean,
         multiSpeaker: Boolean
     ): String {
+        return submitAsrTask(
+            requestId,
+            pcmBase64,
+            useVoiceprint,
+            multiSpeaker,
+            asrDenoiseEnabled,
+            asrLanguageMode.queryValue,
+            voiceprintMultiMode,
+            voiceprintSpeakerCount
+        )
+    }
+
+    // 新版异步桥：扩展降噪、语言和快速多人参数；保留上面的四参数入口兼容旧页面。
+    @JavascriptInterface
+    fun asrRecognizeAsyncWithOptions(
+        requestId: String,
+        pcmBase64: String,
+        useVoiceprint: Boolean,
+        multiSpeaker: Boolean,
+        denoise: Boolean,
+        languageMode: String,
+        multiMode: String,
+        speakerCount: String
+    ): String = submitAsrTask(
+        requestId,
+        pcmBase64,
+        useVoiceprint,
+        multiSpeaker,
+        denoise,
+        languageMode,
+        multiMode,
+        VoiceprintSpeakerCount.parse(speakerCount) ?: VoiceprintSpeakerCount.AUTO
+    )
+
+    private fun submitAsrTask(
+        requestId: String,
+        pcmBase64: String,
+        useVoiceprint: Boolean,
+        multiSpeaker: Boolean,
+        denoise: Boolean,
+        languageValue: String,
+        multiMode: String,
+        speakerCount: Int
+    ): String {
         if (!asrModelManager.isReady) {
             return JSONObject().put("accepted", false).put("error", "模型未就绪").toString()
         }
@@ -410,7 +504,7 @@ class NativeBridge(
                 val result = try {
                     val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
                     val samples = AsrPcm.decodeS16(bytes)
-                    recognizeAsyncPayload(samples, useVoiceprint, multiSpeaker)
+                    recognizeAsyncPayload(samples, useVoiceprint, multiSpeaker, denoise, languageValue, multiMode, speakerCount)
                 } catch (e: Exception) {
                     JSONObject().put("error", e.message ?: "识别失败")
                 }
@@ -431,44 +525,91 @@ class NativeBridge(
     }
 
     // 原生 ASR/声纹统一结果，避免 display.html 为声纹分支重新同步调用多个桥方法。
-    private fun recognizeAsyncPayload(samples: FloatArray, useVoiceprint: Boolean, multiSpeaker: Boolean): JSONObject {
+    private fun recognizeAsyncPayload(
+        samples: FloatArray,
+        useVoiceprint: Boolean,
+        multiSpeaker: Boolean,
+        denoise: Boolean,
+        languageValue: String,
+        multiMode: String,
+        speakerCount: Int
+    ): JSONObject {
+        val languageMode = AsrLanguageMode.parse(languageValue) ?: AsrLanguageMode.AUTO
+        val prepared = prepareAudio(samples, denoise)
+        val preparedSamples = prepared.samples
         if (!useVoiceprint || !voiceprintEnabled || !voiceprintModelManager.isReady || !VoiceprintEngine.ready) {
-            return JSONObject().put("text", AsrEngine.recognize(samples))
+            return JSONObject()
+                .put("text", recognizeText(preparedSamples, languageMode))
+                .put("denoise", prepared.enabled)
+                .put("languageMode", languageMode.queryValue)
         }
         if (multiSpeaker) {
-            if (samples.isEmpty()) return JSONObject().put("error", "音频数据为空")
-            val segments = VoiceprintEngine.diarize(samples)
+            if (preparedSamples.isEmpty()) return JSONObject().put("error", "音频数据为空")
+            if (multiMode != "fast") return JSONObject().put("error", "正式 APK 只支持快速多段模式")
+            if (speakerCount !in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
+                return JSONObject().put("error", "speakerCount 必须是 AUTO 或 1-5")
+            }
+            val segments = VoiceprintEngine.diarize(preparedSamples, speakerCount)
             val indexMergedSegments = VoiceprintSegmentMerger.merge(segments.map { seg ->
                 VoiceprintSegmentMerger.DiarizedSegment(seg.start, seg.end, seg.speakerIndex)
             })
-            val matchedSegments = indexMergedSegments.map { seg ->
-                val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
-                val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
-                val embedding = VoiceprintEngine.extract(samples.copyOfRange(startIdx, endIdx))
-                VoiceprintSegmentMerger.MatchedSegment(seg.start, seg.end, VoiceprintEngine.match(embedding))
+            val speakerByCluster = VoiceprintFastPath.representatives(indexMergedSegments).associate {
+                val representativeSamples = sliceSamples(preparedSamples, it.start, it.end)
+                it.speakerIndex to VoiceprintEngine.match(VoiceprintEngine.extract(representativeSamples))
             }
-            val mergedSegments = VoiceprintSegmentMerger.mergeMatched(matchedSegments)
             val arr = org.json.JSONArray()
-            for (seg in mergedSegments) {
-                val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
-                val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
-                val mergedSamples = samples.copyOfRange(startIdx, endIdx)
-                val text = if (mergedSamples.size >= 1600) AsrEngine.recognize(mergedSamples) else ""
+            for (seg in indexMergedSegments) {
+                val mergedSamples = sliceSamples(preparedSamples, seg.start, seg.end)
+                val text = if (mergedSamples.size >= 1600) {
+                    recognizeText(mergedSamples, languageMode)
+                } else ""
+                val speaker = speakerByCluster[seg.speakerIndex]
                 arr.put(JSONObject()
                     .put("start", seg.start.toDouble())
                     .put("end", seg.end.toDouble())
                     .put("text", text)
-                    .put("speaker", seg.speaker ?: JSONObject.NULL))
+                    .put("speaker", speaker ?: JSONObject.NULL))
             }
-            return JSONObject().put("segments", arr)
+            return JSONObject()
+                .put("segments", arr)
+                .put("denoise", prepared.enabled)
+                .put("languageMode", languageMode.queryValue)
+                .put("multiMode", multiMode)
+                .put("speakerCount", speakerCount)
         }
-        val text = AsrEngine.recognize(samples)
-        val embedding = VoiceprintEngine.extract(samples)
+        val text = recognizeText(preparedSamples, languageMode)
+        val embedding = VoiceprintEngine.extract(preparedSamples)
         val speaker = VoiceprintEngine.match(embedding)
         return JSONObject()
             .put("text", text)
             .put("speaker", speaker ?: JSONObject.NULL)
             .put("dim", VoiceprintEngine.dim)
+            .put("denoise", prepared.enabled)
+            .put("languageMode", languageMode.queryValue)
+    }
+
+    private fun prepareAudio(samples: FloatArray, enabled: Boolean): PreparedDenoiseAudio =
+        DenoiseAudioPolicy.prepare(samples, enabled) {
+            synchronized(denoiseLock) {
+                if (!denoiseEngine.isLoaded) {
+                    val modelFile = DenoiseModelFiles.ensureCopied(
+                        webView.context.assets,
+                        File(webView.context.filesDir, "models/speech-enhancement")
+                    )
+                    check(denoiseEngine.load(modelFile)) { "降噪模型加载失败" }
+                }
+                denoiseEngine.process(samples)
+            }
+        }
+
+    private fun recognizeText(samples: FloatArray, languageMode: AsrLanguageMode): String =
+        AsrEngine.recognize(samples, languageMode)
+
+    private fun sliceSamples(samples: FloatArray, start: Float, end: Float): FloatArray {
+        if (samples.isEmpty()) return FloatArray(0)
+        val startIndex = (start * 16000).toInt().coerceIn(0, samples.size - 1)
+        val endIndex = (end * 16000).toInt().coerceIn(startIndex + 1, samples.size)
+        return samples.copyOfRange(startIndex, endIndex)
     }
 
     private fun postNativeAsrResult(requestId: String, result: JSONObject) {
@@ -638,6 +779,12 @@ class NativeBridge(
             voiceprintEnabled = cfg.optBoolean("enabled", true)
             voiceprintThreshold = cfg.optDouble("threshold", 0.5).toFloat()
             voiceprintMultiSpeaker = cfg.optBoolean("multiSpeaker", true)
+            voiceprintMultiMode = cfg.optString("multiMode", "fast").lowercase()
+            voiceprintSpeakerCount = VoiceprintSpeakerCount.parse(cfg.optString("speakerCount", "AUTO"))
+                ?: return JSONObject().put("error", "speakerCount 必须是 AUTO 或 1-5").toString()
+            if (voiceprintMultiMode != "fast") {
+                return JSONObject().put("error", "正式 APK 只支持快速多段模式").toString()
+            }
             if (!voiceprintEnabled) return JSONObject().put("ok", true).toString()
             val baseUrl = serverBaseUrl()
             if (baseUrl.isEmpty()) return JSONObject().put("error", "无法确定服务器地址").toString()
@@ -648,7 +795,7 @@ class NativeBridge(
                     val loaded = VoiceprintEngine.load(
                         webView.context, voiceprintModelManager.embeddingModelPath,
                         if (voiceprintMultiSpeaker) voiceprintModelManager.segmentationModelPath else null,
-                        voiceprintThreshold, voiceprintMultiSpeaker)
+                        voiceprintThreshold, voiceprintMultiSpeaker, voiceprintMultiMode, voiceprintSpeakerCount)
                     event.put("engineReady", loaded)
                 }
                 val js = "window.onVoiceprintModel && window.onVoiceprintModel(${event.toString()});"
@@ -665,7 +812,7 @@ class NativeBridge(
                 val loaded = VoiceprintEngine.load(
                     webView.context, voiceprintModelManager.embeddingModelPath,
                     if (voiceprintMultiSpeaker) voiceprintModelManager.segmentationModelPath else null,
-                    voiceprintThreshold, voiceprintMultiSpeaker)
+                    voiceprintThreshold, voiceprintMultiSpeaker, voiceprintMultiMode, voiceprintSpeakerCount)
                 val js = "window.onVoiceprintModel && window.onVoiceprintModel(${JSONObject().put("state","ready").put("engineReady",loaded)});"
                 mainHandler.post {
                     try {

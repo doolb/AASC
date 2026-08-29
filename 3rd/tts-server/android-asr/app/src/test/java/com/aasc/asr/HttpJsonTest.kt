@@ -22,4 +22,26 @@ class HttpJsonTest {
             json
         )
     }
+
+    @Test
+    fun voiceprintResultReportsDenoiseStateAndElapsedTime() {
+        val result = VoiceprintTestResult(
+            mode = VoiceprintMode.SHERPA_SINGLE,
+            denoise = true,
+            denoiseMs = 42,
+            embeddingDim = 512,
+            matchedSpeaker = "ZH",
+            text = "你好",
+            segments = emptyList(),
+            elapsedMs = 123,
+            diarizationMs = 0,
+            embeddingMs = 10,
+            asrMs = 20
+        )
+
+        val json = HttpJson.voiceprintResult(result)
+
+        assertEquals(true, json.contains("\"denoise\":true"))
+        assertEquals(true, json.contains("\"denoiseMs\":42"))
+    }
 }

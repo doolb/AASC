@@ -19,7 +19,7 @@ class AsrEnginePool private constructor(
     private val affinityApplier: (Long) -> Boolean
 ) {
     interface RecognizerFactory {
-        fun create(modelFile: File, tokensFile: File): Recognizer
+        fun create(modelFile: File, tokensFile: File, language: String): Recognizer
     }
 
     interface Recognizer {
@@ -34,15 +34,17 @@ class AsrEnginePool private constructor(
             policy: CpuPolicy,
             modelFile: File,
             tokensFile: File,
+            language: String = "auto",
+            slotCountOverride: Int? = null,
             recognizerFactory: RecognizerFactory = SherpaRecognizerFactory,
             affinityApplier: (Long) -> Boolean = CpuAffinity::applyCurrentThread
         ): AsrEnginePool {
             val createdSlots = mutableListOf<Slot>()
             return try {
-                val slotCount = maxOf(1, policy.totalCoreCount)
+                val slotCount = maxOf(1, slotCountOverride ?: policy.totalCoreCount)
                 val masks = slotMasks(policy, slotCount)
                 for (index in 0 until slotCount) {
-                    val recognizer = recognizerFactory.create(modelFile, tokensFile)
+                    val recognizer = recognizerFactory.create(modelFile, tokensFile, language)
                     createdSlots += Slot(index, masks[index], recognizer)
                 }
                 AsrEnginePool(
@@ -50,7 +52,7 @@ class AsrEnginePool private constructor(
                     idleSlots = LinkedBlockingQueue(createdSlots),
                     affinityApplier = affinityApplier
                 )
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 for (slot in createdSlots) {
                     slot.release()
                 }
@@ -186,13 +188,13 @@ class AsrEnginePool private constructor(
     }
 
     private object SherpaRecognizerFactory : RecognizerFactory {
-        override fun create(modelFile: File, tokensFile: File): Recognizer {
+        override fun create(modelFile: File, tokensFile: File, language: String): Recognizer {
             val config = OfflineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = 16000),
                 modelConfig = OfflineModelConfig(
                     senseVoice = OfflineSenseVoiceModelConfig(
                         model = modelFile.absolutePath,
-                        language = "auto",
+                        language = language,
                         useInverseTextNormalization = true
                     ),
                     tokens = tokensFile.absolutePath,

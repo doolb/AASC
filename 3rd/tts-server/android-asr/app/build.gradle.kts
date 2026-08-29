@@ -10,6 +10,7 @@ val bundledVoiceprintModelFiles = listOf(
     "pyannote_segmentation_3_0_int8.onnx"
 )
 val bundledStreamingAsrModelFiles = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
+val bundledDenoiseModelFiles = listOf("gtcrn_simple.onnx")
 val bundledTlsFiles = listOf("android-asr-cert.pem", "android-asr-key.pem")
 
 val prepareBundledAsrModel = tasks.register<Copy>("prepareBundledAsrModel") {
@@ -31,6 +32,13 @@ val prepareBundledStreamingAsrModel = tasks.register<Copy>("prepareBundledStream
         include(bundledStreamingAsrModelFiles)
     }
     into(layout.buildDirectory.dir("generated/assets/streaming"))
+}
+
+val prepareBundledDenoiseModel = tasks.register<Copy>("prepareBundledDenoiseModel") {
+    from(rootProject.file("../../../res/models/speech-enhancement")) {
+        include(bundledDenoiseModelFiles)
+    }
+    into(layout.buildDirectory.dir("generated/assets/speech-enhancement"))
 }
 
 val prepareBundledTls = tasks.register<Copy>("prepareBundledTls") {
@@ -83,6 +91,7 @@ tasks.named("preBuild") {
     dependsOn(prepareBundledAsrModel)
     dependsOn(prepareBundledVoiceprintModels)
     dependsOn(prepareBundledStreamingAsrModel)
+    dependsOn(prepareBundledDenoiseModel)
     dependsOn(prepareBundledTls)
 }
 

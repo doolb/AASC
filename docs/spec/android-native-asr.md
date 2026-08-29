@@ -275,3 +275,120 @@ verifyAsrRuntime():
 ## 录音（不变）
 
 Manifest 加 RECORD_AUDIO；MainActivity 运行时权限；DisplayWebView.onPermissionRequest 授予 RESOURCE_AUDIO_CAPTURE。
+
+## 2026-08-28 正式 APK ASR 增强接入伪代码
+
+```text
+配置页：
+  GET/POST /api/config/asr 读取或保存 languageMode、denoise
+  GET/POST /api/voiceprint/config 读取或保存 multiMode、speakerCount
+  服务端保存配置后向 display 广播 asrConfig/voiceprintConfig
+
+display.html：
+  收到 asrConfig -> 缓存 languageMode、denoise
+  收到 voiceprintConfig -> 缓存 multiMode、speakerCount，并调用 voiceprintConfigure
+  收到 asrAudio：
+    webm/wav -> 16kHz mono PCM
+    调 NativeBridge.asrRecognizeAsync(requestId, pcm, useVoiceprint,
+      multiSpeaker, denoise, languageMode, multiMode, speakerCount)
+  旧 APK 缺少扩展参数时使用旧四参数入口
+
+NativeBridge：
+  denoise=true 且降噪引擎已加载 -> DenoiseAudioPolicy.prepare(rawSamples)
+  否则直接使用 rawSamples
+  languageMode.parse；非法值回退 AUTO
+  不使用声纹 -> AsrEngine.recognize(preparedSamples, languageMode)
+  普通单段声纹 -> 对 preparedSamples 提取 embedding、匹配，再对同一音频 ASR
+  快速多段声纹 ->
+    VoiceprintEngine.diarize(preparedSamples, speakerCount)
+    按 speakerIndex 合并相邻区间
+    每个 cluster 选择最长片段提取一次 embedding
+    匹配声纹后按相邻人名合并时间区间
+    对每个合并区间执行 ASR，并只清理首尾空白
+  返回 text 或 segments，并携带 denoise/languageMode/multiMode 元数据
+
+AsrEnginePool：
+  recognizerFactory.create(modelFile, tokensFile, language)
+  language 变化时构造新 pool，成功后替换旧 pool并延迟释放
+  同一时刻只保留当前语言 pool，避免 SenseVoice 模型重复占用内存
+
+SherpaDenoiseEngine：
+  从 APK assets/speech-enhancement/gtcrn_simple.onnx 安装到 filesDir 临时目录
+  OfflineSpeechDenoiser.run(samples, 16000) -> DenoisedAudio
+  每次请求最多运行一次；引擎按 APK 生命周期复用
+
+VoiceprintEngine：
+  load(..., multiMode, speakerCount)
+  FastClusteringConfig.numClusters = AUTO 或 1..5
+  普通多段兼容入口仍可读取旧配置，但正式 UI 只暴露快速多段
+
+  服务端结果边界：
+  收到 display asrResult 后，对 text 和每个 segment.text 执行中英过滤
+  过滤后为空的 segment 丢弃；保持原有 speaker 门控和错误语义
+```
+
+## 2026-08-28 内存不足重连与正式 APK 准确度修复伪代码
+
+```text
+requestedSlots = currentCpuPolicy.totalCoreCount
+effectiveSlots = AsrMemoryPolicy.chooseSlots(
+  availableBytes = ActivityManager.MemoryInfo.availMem,
+  requestedSlots = requestedSlots,
+  perRecognizerBudget = 400MB,
+  singleRecognizerMinimum = 400MB
+)
+
+if effectiveSlots == 0:
+  state = error("设备内存不足，无法加载语音模型")
+else:
+  AsrEnginePool.configure(slotCount = effectiveSlots)
+  # 内存充足时仍保留核心数个 recognizer；只有预算不足才回退为 1 个
+
+AsrEnginePool.configure:
+  for index in 0 until slotCount:
+    try create recognizer
+    catch OutOfMemoryError:
+      release all already-created slots
+      rethrow memory error
+
+display.html APK 录音:
+  getUserMedia(audio: { echoCancellation:false, noiseSuppression:false })
+  native APK -> AudioContext ScriptProcessor 采集原始 Float32
+  按实际采样率重采样为 16kHz mono，封装 WAV
+  非 APK -> 同样使用 PCM/WAV，不创建 MediaRecorder/WebM 录音上传路径
+
+全端录音统一:
+  控制端 chat.js -> PcmAudioCapture.start(stream) -> stopWav() -> /api/asr/recognize
+  控制端 voiceprint-panel.js -> PcmAudioCapture.start(stream) -> stopWav() -> /api/voiceprint/register
+  display.html -> PcmAudioCapture.start(stream) -> takeWav() -> /api/asr/recognize
+  Node 子显示端 -> 现有 AudioRecorder/PvRecorder 的 16kHz PCM -> encodeWAV
+  Go/C# 子显示端 -> 仅上传 WAV 文件名和 audio/wav Content-Type
+  3rd/ttslive -> WebAudio 原始 Float32 -> 16kHz mono WAV -> /audio
+  禁止新的 MediaRecorder/WebM 录音上传路径
+
+内存错误:
+  display.html 停止录音并上报 voiceRecognition=false
+  后续普通 asrAudio 只返回错误，不再次调用 asrEnsureModel
+```
+
+## 2026-08-29 移除其他文字过滤伪代码
+
+```text
+asrOptions:
+  兼容读取/保存 denoise
+  languageMode 固定为 zh
+  不读取、不保存、不广播 filterOtherText
+
+display.html:
+  收到 asrConfig -> 固定 languageMode='zh'，缓存 denoise
+  调 NativeBridge.asrConfigure('zh', denoise)
+
+NativeBridge:
+  asrConfigure('zh', denoise) -> 保存固定中文和降噪配置
+  普通 ASR、单段声纹、多段声纹 -> AsrEngine.recognize(准备后的音频, languageMode)
+  结果只执行首尾空白清理，不执行 Unicode 脚本过滤
+
+测试 APK HTTP:
+  /api/asr 和 /api/voiceprint/test 的 language 只接受 auto、zh、en
+  普通网页和声纹测试网页继续固定发送 language=zh
+```

@@ -311,8 +311,8 @@ const DisplayList = {
                     </label>
                     <label class="capability-item">
                         <input type="checkbox" ${caps.voiceRecording ? 'checked' : ''} data-cap="voiceRecording">
-                        <span>🎙️ 语音录音</span>
-                        <span class="capability-desc">能录制音频</span>
+                        <span>🎙️ 语音监听</span>
+                        <span class="capability-desc">关闭后该显示端不主动采集或处理任何语音</span>
                     </label>
                     <label class="capability-item">
                         <input type="checkbox" ${caps.voiceRecognition ? 'checked' : ''} data-cap="voiceRecognition">

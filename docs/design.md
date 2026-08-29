@@ -47,6 +47,7 @@
 | 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/design/android-offline-tts-apk.md) | 内置 Xiaoxiao 模型、离线生成、播放和耗时显示 |
 | Android TTS CPU 核心模式 | [android-tts-cpu-affinity.md](../3rd/tts-server/docs/design/android-tts-cpu-affinity.md) | 自动/大核/小核选择、JNI affinity 和自动回退 |
 | 显示端分布式能力 | [display-capability.md](design/display-capability.md) | 显示端能力声明、能力路由、分布式协调 |
+| 显示端语音唤醒与监听控制 | [display-voice-conversation.md](design/display-voice-conversation.md) | 按显示端监听开关、唤醒状态、TTS完成后3分钟超时 |
 | 日志筛选与系统监控 | [log-viewer.md](design/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
 | 日志大脑 | [log-brain.md](design/log-brain.md) | 类人脑日志摘要、模式提取、LLM诊断上下文 |
 | 资源目录 | [resource-layout.md](design/resource-layout.md) | res 目录分层、路径边界、统一资源规范 |

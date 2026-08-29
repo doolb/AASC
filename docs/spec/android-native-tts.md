@@ -12,6 +12,8 @@ ttsSynthesize(text) -> String JSON      # 旧 APK 兼容入口；同步阻塞≤
 window.onNativeTtsModel({state,progress,error})  # 原生→JS：downloading(进度)/ready/error
 window.onNativeTtsResult({requestId,audio,error}) # 原生→JS：异步 WAV 结果
 WS ttsGenerating{requestId}              # 显示端接受生成任务后的开始回执
+cpuStatus() -> String JSON               # 返回实际 topology、ASR policy、TTS policy
+WS cpuStatus{status}                     # 回报实际拓扑和当前生效的 ASR/TTS policy
 ```
 
 ## TtsModelFiles（纯逻辑）

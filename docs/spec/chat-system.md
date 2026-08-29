@@ -794,8 +794,9 @@ const Chat = {
     
     render():
         渲染左侧页签:
-            群聊页签
+            群聊页签，并绑定 click -> setMode('group', null)
             各助手私聊页签 (从模板列表生成)
+            各工作 AI 角色页签 (从角色列表生成)
         渲染聊天主区域:
             头部: 标题 + 模式指示 + 操作按钮
             消息区域: 聊天记录列表
@@ -811,11 +812,20 @@ const Chat = {
             modeText += '[指令模式] '
         如果 session.mode === 'group':
             modeText += '群聊'
-        否则:
+        如果 session.mode === 'private':
             modeText += '私聊({session.privateTarget})'
+        如果 session.mode === 'role':
+            modeText += '工作组({session.roleTarget})'
         显示 "当前模式: {modeText}"
         如果 session.mode === 'private':
             添加 "退出私聊" 按钮
+        如果 session.mode === 'role':
+            添加 "退出工作组" 按钮
+
+    群聊页签点击:
+        调用 setMode('group', null)
+        清空 privateTarget、roleTarget 和 privateSessionId
+        刷新群聊历史和模式指示
     
     addSystemMessage(content):
         使用 toast 提示显示系统消息

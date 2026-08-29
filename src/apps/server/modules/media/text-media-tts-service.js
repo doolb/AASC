@@ -1,12 +1,13 @@
 'use strict';
 
 const path = require('path');
+const { isPunctuationOnly } = require('../../../../core/utils/sentence-splitter');
 
 /**
  * 创建纯文本分页播放使用的单句 TTS 服务。
  *
- * 每个显示端维护独立队列，避免同一显示端的分句请求并发调用底层 TTS；
- * 不同显示端仍可并行生成语音。取消操作只使对应 playbackId 的回包失效，
+ * 每个显示端维护独立的当前句/预取句通道：显示端报告至少两个 TTS 槽位时，
+ * 当前句和下一句预取可以并行生成；同一通道内仍按接收顺序执行。取消操作只使对应 playbackId 的回包失效，
  * 因此无法中断的底层 TTS 即使稍后完成，也不会把旧音频发送回显示端。
  *
  * @param {object} dependencies 外部依赖
@@ -15,6 +16,7 @@ const path = require('path');
  * @param {Function} dependencies.logError 记录服务端错误的方法
  * @param {Function} [dependencies.getDisplayCapabilities] 读取显示端当前能力的方法；返回空值视为离线
  * @param {Function} [dependencies.getVoicePlaybackDisplayIds] 读取当前全部在线语音显示端 ID 的方法，结果顺序用于目标选择
+ * @param {Function} [dependencies.getDisplayTtsConcurrency] 读取显示端 TTS 并发槽位的方法；缺失或异常时回退单路
  * @returns {{handleSentenceRequest: Function, cancel: Function}} 单句请求与取消接口
  */
 function createTextMediaTtsService({
@@ -23,6 +25,7 @@ function createTextMediaTtsService({
     logError,
     getDisplayCapabilities,
     getVoicePlaybackDisplayIds,
+    getDisplayTtsConcurrency,
     remoteSentenceTimeoutMs = 10000
 }) {
     const displayQueues = new Map();
@@ -461,15 +464,41 @@ function createTextMediaTtsService({
      * @param {Function} task 本次需要串行执行的异步任务
      * @returns {Promise<void>} 本次任务完成后的 Promise
      */
-    function enqueue(displayId, task) {
-        const previous = displayQueues.get(displayId);
-        // 首个请求立即进入合成，保证取消消息可以使已启动的底层请求失效；
-        // 已有任务时才追加到队尾，维持同一显示端的顺序。
-        const current = previous ? previous.catch(() => {}).then(task) : task();
-        displayQueues.set(displayId, current);
+    function getTtsConcurrency(displayId) {
+        if (typeof getDisplayTtsConcurrency !== 'function') return 1;
+        try {
+            return Math.max(1, Math.min(2, Number(getDisplayTtsConcurrency(displayId)) || 1));
+        } catch (error) {
+            logError('TextMediaTTS', `读取显示端 TTS 并发失败: ${error.message}`);
+            return 1;
+        }
+    }
+
+    function enqueue(displayId, task, isPrefetch = false) {
+        const queueState = displayQueues.get(displayId) || { current: null, prefetch: null };
+        // 只有实际具备两个以上 TTS 槽位时才拆分预取通道；普通句子通道始终串行，保证发送顺序。
+        const laneName = isPrefetch && getTtsConcurrency(displayId) >= 2 ? 'prefetch' : 'current';
+        const previous = queueState[laneName];
+        // 无前置任务时立即启动，保证取消请求可以失效已经进入底层 TTS 的任务；
+        // 有前置任务时才通过 Promise 链追加，避免同一通道乱序。
+        let current;
+        if (previous) {
+            current = previous.catch(() => {}).then(task);
+        } else {
+            try {
+                current = Promise.resolve(task());
+            } catch (error) {
+                current = Promise.reject(error);
+            }
+        }
+        queueState[laneName] = current;
+        displayQueues.set(displayId, queueState);
 
         return current.finally(() => {
-            if (displayQueues.get(displayId) === current) {
+            const activeQueue = displayQueues.get(displayId);
+            if (!activeQueue || activeQueue[laneName] !== current) return;
+            activeQueue[laneName] = null;
+            if (!activeQueue.current && !activeQueue.prefetch) {
                 displayQueues.delete(displayId);
             }
         });
@@ -500,6 +529,12 @@ function createTextMediaTtsService({
         const validationMessage = validateRequest(data);
         if (validationMessage) {
             sendError(displayId, data, validationMessage);
+            return;
+        }
+        if (isPunctuationOnly(data.text)) {
+            // 文本播放器收到可定位的跳过通知后会推进下一句；不让仅标点文本进入
+            // 显示端或服务端 TTS，避免原生引擎返回无音频并触发无意义 fallback。
+            sendError(displayId, data, '仅标点分句已跳过', 'punctuationOnly');
             return;
         }
 
@@ -581,7 +616,7 @@ function createTextMediaTtsService({
                 logError('TextMediaTTS', `显示端 ${displayId} 分句合成失败: ${message}`);
                 sendError(displayId, data, message);
             }
-        });
+        }, data.prefetch === true);
     }
 
     /**

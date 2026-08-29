@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -115,13 +116,48 @@ class AsrEnginePoolTest {
         }
     }
 
+    @Test
+    fun recognizer构造发生OOM时释放已经创建的slot() {
+        val releaseCount = AtomicInteger(0)
+        val factory = object : AsrEnginePool.RecognizerFactory {
+            private val createCount = AtomicInteger(0)
+
+            override fun create(modelFile: File, tokensFile: File, language: String): AsrEnginePool.Recognizer {
+                if (createCount.incrementAndGet() == 2) throw OutOfMemoryError("test oom")
+                return object : AsrEnginePool.Recognizer {
+                    override fun recognize(samples: FloatArray): String = "ok"
+
+                    override fun release() {
+                        releaseCount.incrementAndGet()
+                    }
+                }
+            }
+        }
+        val policy = CpuTopology(
+            listOf(0 to 1200000L, 1 to 2400000L)
+        ).policy(bigCoreCount = 1, littleCoreCount = 1)
+
+        try {
+            AsrEnginePool.configure(
+                policy = policy,
+                modelFile = File("model.int8.onnx"),
+                tokensFile = File("tokens.txt"),
+                recognizerFactory = factory,
+                affinityApplier = { true }
+            )
+            fail("应向上层报告模型构造 OOM")
+        } catch (error: OutOfMemoryError) {
+            assertEquals(1, releaseCount.get())
+        }
+    }
+
     private class RecordingRecognizerFactory(
         private val operationDelayMs: Long
     ) : AsrEnginePool.RecognizerFactory {
         private val active = AtomicInteger(0)
         val maxConcurrentObserved = AtomicInteger(0)
 
-        override fun create(modelFile: File, tokensFile: File): AsrEnginePool.Recognizer {
+        override fun create(modelFile: File, tokensFile: File, language: String): AsrEnginePool.Recognizer {
             return object : AsrEnginePool.Recognizer {
                 override fun recognize(samples: FloatArray): String {
                     val nowActive = active.incrementAndGet()
@@ -146,7 +182,7 @@ class AsrEnginePoolTest {
         private val calls = AtomicInteger(0)
         val releaseCount = AtomicInteger(0)
 
-        override fun create(modelFile: File, tokensFile: File): AsrEnginePool.Recognizer {
+        override fun create(modelFile: File, tokensFile: File, language: String): AsrEnginePool.Recognizer {
             return object : AsrEnginePool.Recognizer {
                 override fun recognize(samples: FloatArray): String {
                     val call = calls.incrementAndGet()

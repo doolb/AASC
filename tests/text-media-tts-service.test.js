@@ -26,6 +26,36 @@ test('合成单个请求分句并返回带播放定位标签的音频消息', as
     }]);
 });
 
+test('文本媒体 TTS 直接跳过仅标点分句', async () => {
+    let generated = false;
+    const messages = [];
+    const service = createTextMediaTtsService({
+        generateTTS: async () => {
+            generated = true;
+            return '/tmp/punctuation.wav';
+        },
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {}
+    });
+
+    await service.handleSentenceRequest('display-1', {
+        playbackId: 'p-punctuation', pageIndex: 0, sentenceIndex: 1, text: '？'
+    });
+
+    assert.equal(generated, false);
+    assert.deepEqual(messages, [{
+        displayId: 'display-1',
+        message: {
+            type: 'textSentenceTtsError',
+            playbackId: 'p-punctuation',
+            pageIndex: 0,
+            sentenceIndex: 1,
+            errorCode: 'punctuationOnly',
+            message: '仅标点分句已跳过'
+        }
+    }]);
+});
+
 test('取消播放后不会下发正在生成的过期音频', async () => {
     let resolveAudio;
     const messages = [];
@@ -234,6 +264,36 @@ test('同一显示端的请求按接收顺序逐句生成', async () => {
     releaseFirst();
     await Promise.all([first, second]);
     assert.deepEqual(generatedTexts, ['第一句。', '第二句。']);
+});
+
+test('显示端有两个 TTS 槽位时当前句和预取句可以并行生成', async () => {
+    const generatedTexts = [];
+    let releaseFirst;
+    const service = createTextMediaTtsService({
+        generateTTS: async (text) => {
+            generatedTexts.push(text);
+            if (text === '第一句。') {
+                await new Promise((resolve) => { releaseFirst = resolve; });
+            }
+            return `/tmp/${text}.wav`;
+        },
+        sendToDisplay: () => {},
+        logError: () => {},
+        getDisplayTtsConcurrency: () => 2
+    });
+
+    const first = service.handleSentenceRequest('display-1', {
+        playbackId: 'p2', pageIndex: 0, sentenceIndex: 0, text: '第一句。'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const prefetch = service.handleSentenceRequest('display-1', {
+        playbackId: 'p2', pageIndex: 0, sentenceIndex: 1, text: '第二句。', prefetch: true
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(generatedTexts, ['第一句。', '第二句。']);
+    releaseFirst();
+    await Promise.all([first, prefetch]);
 });
 
 test('无效分句请求返回带定位标签的错误消息且不进入 TTS', async () => {

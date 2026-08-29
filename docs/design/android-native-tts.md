@@ -103,6 +103,13 @@ TTS 合成任务由 `NativeBridge.ttsExecutor` 的 `TtsBridgeDispatcher` 提交�
 
 ### 4.0 TtsBridgeDispatcher（桥侧有界调度）
 
+### 4.0.1 显示端实际 CPU 状态回报
+
+- NativeBridge.cpuStatus() 返回当前实际 CPU topology、ASR policy 和 TTS policy。
+- Display APK 首次建立 WebSocket 以及 CPU 配置实际应用成功后回报 cpuStatus。
+- 服务端只保存显示端的内存态硬件状态，不写入用户配置；显示端断开后清除。
+- 服务端按目标显示端的 TTS 有效槽位限制生成并发，最多同时生成两句，音频发送仍按句子序号保持播放顺序。
+
 - `workerCount = max(1, currentTtsPolicy.totalCoreCount)`，固定 worker 数；`queueCapacity = workerCount`，使用 `ArrayBlockingQueue`。
 - `submit()`、`reconfigure()` 与 NativeBridge 的 TTS 提交流程共用锁，避免 policy 换代期间出现提交到错误 executor 或非确定性接受结果。
 - `RejectedExecutionException` 在 API 边界映射为同步 `{error:'TTS 请求过多，请稍后重试'}` 或异步 `{accepted:false,error:'TTS 请求过多，请稍后重试'}`，被拒绝异步请求不注册超时任务、不发送 `onNativeTtsResult`。
@@ -138,6 +145,8 @@ APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自�
 - `error` 置 `false` 并上报能力，等待下次下载
 
 ### 6. 服务器改动
+
+- CPU 状态协议：服务端接收显示端 cpuStatus，保存实际拓扑和 ASR/TTS 生效 policy，并向控制端转发状态变化。
 
 - 配置：`tts.device`（`server` / `display`），默认 `server`
 - API：`GET/POST /api/config/ttsDevice`

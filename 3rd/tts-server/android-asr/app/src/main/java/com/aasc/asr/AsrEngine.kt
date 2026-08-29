@@ -11,39 +11,38 @@ import java.io.File
 class AsrEngine {
     @Volatile
     private var recognizer: OfflineRecognizer? = null
+    private var modelFile: File? = null
+    private var tokensFile: File? = null
+    private var activeLanguage: String? = null
 
     val isLoaded: Boolean get() = recognizer != null
 
     @Synchronized
-    fun load(modelFile: File, tokensFile: File): Boolean {
+    fun load(modelFile: File, tokensFile: File, language: String = "auto"): Boolean {
         return try {
-            val config = OfflineRecognizerConfig(
-                featConfig = FeatureConfig(sampleRate = 16000),
-                modelConfig = OfflineModelConfig(
-                    senseVoice = OfflineSenseVoiceModelConfig(
-                        model = modelFile.absolutePath,
-                        language = "auto",
-                        useInverseTextNormalization = true
-                    ),
-                    tokens = tokensFile.absolutePath,
-                    numThreads = 1,
-                    debug = false,
-                    provider = "cpu"
-                )
-            )
+            val normalizedLanguage = normalizeLanguage(language)
+            val replacement = createRecognizer(modelFile, tokensFile, normalizedLanguage)
             recognizer?.release()
-            recognizer = OfflineRecognizer(null, config)
+            this.modelFile = modelFile
+            this.tokensFile = tokensFile
+            recognizer = replacement
+            activeLanguage = normalizedLanguage
             true
         } catch (_: Exception) {
             recognizer = null
+            this.modelFile = null
+            this.tokensFile = null
+            activeLanguage = null
             false
         }
     }
 
     @Synchronized
-    fun recognize(samples: FloatArray): String {
-        val current = recognizer ?: throw IllegalStateException("ASR 模型未加载")
+    fun recognize(samples: FloatArray, language: String = "auto"): String {
         require(samples.isNotEmpty()) { "没有可识别的音频" }
+        val normalizedLanguage = normalizeLanguage(language)
+        ensureLanguage(normalizedLanguage)
+        val current = recognizer ?: throw IllegalStateException("ASR 模型未加载")
         val stream = current.createStream()
         return try {
             stream.acceptWaveform(samples, 16000)
@@ -52,5 +51,47 @@ class AsrEngine {
         } finally {
             stream.release()
         }
+    }
+
+    @Synchronized
+    fun release() {
+        recognizer?.release()
+        recognizer = null
+        modelFile = null
+        tokensFile = null
+        activeLanguage = null
+    }
+
+    private fun ensureLanguage(language: String) {
+        if (recognizer != null && activeLanguage == language) return
+        val currentModelFile = modelFile ?: throw IllegalStateException("ASR 模型未加载")
+        val currentTokensFile = tokensFile ?: throw IllegalStateException("ASR 模型未加载")
+        val replacement = createRecognizer(currentModelFile, currentTokensFile, language)
+        recognizer?.release()
+        recognizer = replacement
+        activeLanguage = language
+    }
+
+    private fun createRecognizer(modelFile: File, tokensFile: File, language: String): OfflineRecognizer {
+        val config = OfflineRecognizerConfig(
+            featConfig = FeatureConfig(sampleRate = 16000),
+            modelConfig = OfflineModelConfig(
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    model = modelFile.absolutePath,
+                    language = language,
+                    useInverseTextNormalization = true
+                ),
+                tokens = tokensFile.absolutePath,
+                numThreads = 1,
+                debug = false,
+                provider = "cpu"
+            )
+        )
+        return OfflineRecognizer(null, config)
+    }
+
+    private fun normalizeLanguage(language: String): String = when (language.lowercase()) {
+        "auto", "zh", "en" -> language.lowercase()
+        else -> throw IllegalArgumentException("ASR language 必须是 auto、zh 或 en")
     }
 }
