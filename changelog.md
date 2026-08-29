@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 服务器 TUI 默认关闭
+  - `npm start` 默认不启用 TUI，只有显式传入 `--tui` 才启用；`--no-tui` 继续作为强制关闭参数。
+  - 验证：相关启动器、重启脚本和 WebSocket 重连测试 12/12 通过，服务端脚本语法检查通过。
+  - 文档：`docs/design/server-restart-script.md`、`docs/spec/server-restart-script.md`、`docs/task/2026-08-29_服务器TUI默认关闭.md`。
+
 - ✅ [2026-08-29] 新增服务器双进程启动器与控制台重启
   - 新增前台 `server-launcher.js`，服务器子进程继承控制台标准流和 IPC；主动重启由启动器重新拉起，普通停止不自动重启。
   - `/api/restart` 不再 detached 启动新进程，改为通知启动器，并在退出前关闭 WebSocket、TUI 和 Chat 运行时；服务器直接运行时保留仅退出当前进程的兼容行为。

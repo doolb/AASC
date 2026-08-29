@@ -65,7 +65,8 @@ const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler'
 const ServerTUI = require('../../../framework/observability/server-tui');
 const { installConsoleRedirect } = require('../../../framework/observability/console-redirect');
 
-const useTUI = !process.argv.includes('--no-tui');
+// 默认使用普通日志输出；只有显式 --tui 才启用控制台界面，--no-tui 始终优先关闭。
+const useTUI = process.argv.includes('--tui') && !process.argv.includes('--no-tui');
 const tui = new ServerTUI({ enabled: useTUI });
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../../..');

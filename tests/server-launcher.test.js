@@ -132,3 +132,12 @@ test('npm start 和 main 入口均指向前台启动器', () => {
     assert.equal(packageJson.main, 'src/apps/server/boot/server-launcher.js');
     assert.equal(packageJson.scripts.start, 'node --openssl-legacy-provider --expose-gc src/apps/server/boot/server-launcher.js');
 });
+
+test('服务器默认关闭 TUI，仅显式 --tui 启用且 --no-tui 优先', () => {
+    const source = fs.readFileSync(SERVER_PATH, 'utf8');
+
+    assert.match(
+        source,
+        /const useTUI = process\.argv\.includes\(['"]--tui['"]\)\s*&&\s*!process\.argv\.includes\(['"]--no-tui['"]\)/u
+    );
+});
