@@ -1,10 +1,14 @@
 # Web MediaCenter - 未完成任务列表
 
+## 显示端语音
+
+- [ ] TTS 在其他显示端播放时，暂停所有未开启声纹识别的录音显示端，避免播报回声进入 ASR。
+
 ## 控制端
 
 - ✅已完成 [2026-08-29][2026-08-29] 完整处理天气 JSON 并优化本地天气回复
   - 本地归一化当前天气、未来 3 天逐日/逐时预报、天文信息、降雨概率/降水量和紫外线等天气字段。
-  - 天气编码本地转换为中文，完整详情展示在天气弹窗，TTS 使用当前天气和逐日摘要。
+  - 天气编码本地转换为中文，完整详情按每 3 个可见字符 1 秒展示且至少 30 秒，TTS 使用当前天气和逐日摘要。
   - 测试：天气专项 5/5、显示端旋转/语音相关回归 17/17 通过。
   - 文档：`docs/design/display-control-refactor.md`、`docs/design/display-voice-conversation.md`、`docs/spec/voiceCommand.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_天气JSON完整本地处理.md`。
 

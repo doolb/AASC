@@ -83,6 +83,12 @@ waitingWake 中的免唤醒范围:
         detailText = 完整天气详情，用于显示端弹窗
         weather = 本地归一化后的结构化天气对象
         旧显示端只读取 text 时保持兼容
+    显示端收到 action == 'weatherResult':
+        如果存在 audioUrl: 将 text 放入 TTS 队列
+        使用 detailText || text 调用 showVoiceResponsePopup
+        visibleTextLength = 去除 detailText 空白后的 Unicode 字符数
+        popupDurationMs = max(30000, ceil(visibleTextLength / 3) * 1000)
+        popupDurationMs 后自动移除 .voice-response-popup
     语音触发的普通对话使用 routeVoiceToAll=true，在每句 TTS 完成时重新读取在线 voicePlayback 目标
 
 控制端语音命令兼容:
@@ -167,6 +173,27 @@ TTS 与无声纹持续监听:
         标记 isListening = true 并重新启动 VAD 检测
     声纹已开启或 TTS 前未在持续监听:
         不进入上述暂停恢复流程
+
+跨显示端 TTS 播报状态:
+    服务端 sendToDisplay(displayId, { type: 'tts', action: 'playAudio' }):
+        如果消息没有 voiceTtsPlaybackId:
+            生成唯一 voiceTtsPlaybackId 并写入消息
+        向所有 capabilities.voiceRecording == true 的显示端发送:
+            { type: 'voiceTtsPlaybackState', state: 'started', voiceTtsPlaybackId, playbackDisplayId: displayId }
+        向 displayId 发送带 voiceTtsPlaybackId 的原 TTS 消息
+        为 displayId + voiceTtsPlaybackId 设置超时结束清理
+    显示端回传 voiceTtsPlaybackFinished:
+        服务端按回传 displayId 和 voiceTtsPlaybackId 清理该目标的活动状态
+        向所有录音显示端发送 state='finished'
+    Web 显示端收到 voiceTtsPlaybackState:
+        state='started' -> 加入 remoteTtsPlaybackIds；无声纹时调用 pauseVoiceRecordingForTts()
+        state='finished' -> 移除 remoteTtsPlaybackIds；集合为空时调用 scheduleTtsRecordingResume()
+        TTS 音频/文本句完成 -> 回传 voiceTtsPlaybackFinished
+    Node 子显示端收到 voiceTtsPlaybackState:
+        无声纹且有录音器 -> 按活动播放 ID 集合调用 recorder.pause()/resume()
+        本地 AudioPlayer 队列结束 -> 回传队列内全部 voiceTtsPlaybackId
+    旧显示端未回报完成:
+        服务端超时清理状态，录音端按 finished 事件恢复
 
 浏览器显示端 VAD 分段缓存:
     startRawPcmCapture(stream):

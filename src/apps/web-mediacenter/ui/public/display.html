@@ -136,6 +136,7 @@
         let textTtsPlaybackActive = false;
         let ttsRecordingPaused = false;
         let ttsRecordingResumeTimer = null;
+        const remoteTtsPlaybackIds = new Set();
         let remoteTextPlayback = null;
         let remotePrefetchedTextPlayback = null;
         let remoteTextPlaybackToken = 0;
@@ -1310,7 +1311,8 @@
         }
 
         function hasActiveTtsPlayback() {
-            return isPlayingTts || ttsQueue.length > 0 || textTtsPlaybackActive || !!remoteTextPlayback;
+            return isPlayingTts || ttsQueue.length > 0 || textTtsPlaybackActive
+                || !!remoteTextPlayback || remoteTtsPlaybackIds.size > 0;
         }
 
         function clearTtsRecordingResumeTimer() {
@@ -1364,6 +1366,20 @@
             }, 300);
         }
 
+        function handleVoiceTtsPlaybackState(data) {
+            const playbackId = data.voiceTtsPlaybackId;
+            if (!playbackId) return;
+            if (data.state === 'started') {
+                remoteTtsPlaybackIds.add(playbackId);
+                pauseVoiceRecordingForTts();
+                return;
+            }
+            if (['finished', 'timeout', 'stopped'].includes(data.state)) {
+                remoteTtsPlaybackIds.delete(playbackId);
+                scheduleTtsRecordingResume();
+            }
+        }
+
         let currentTtsItem = null;
         let ttsRecoveryTimer = null;
         let ttsRecoveryAttempts = 0;
@@ -1414,10 +1430,12 @@
         function finishCurrentTts(status) {
             if (!currentTtsItem) return;
             clearTtsRecovery();
+            const playbackId = currentTtsItem.voiceTtsPlaybackId;
             currentTtsItem = null;
             ttsPlaybackToken++;
             hideTtsText();
             isPlayingTts = false;
+            sendVoiceTtsPlaybackFinished(playbackId);
             console.log('[显示端] TTS 当前句完成:', status || 'ended');
             playNextTts();
             endTtsVideoCoordinationIfIdle();
@@ -1426,6 +1444,7 @@
 
         function stopTtsPlayback() {
             clearTtsRecovery();
+            const playbackId = currentTtsItem?.voiceTtsPlaybackId;
             currentTtsItem = null;
             ttsPlaybackToken++;
             ttsQueue = [];
@@ -1433,6 +1452,7 @@
             ttsAudio.currentTime = 0;
             isPlayingTts = false;
             hideTtsText();
+            sendVoiceTtsPlaybackFinished(playbackId);
             endTtsVideoCoordinationIfIdle();
             scheduleTtsRecordingResume();
         }
@@ -1678,10 +1698,12 @@
         }
 
         function stopRemoteTextAudio(data) {
+            const playbackId = remoteTextPlayback?.voiceTtsPlaybackId;
             if (!clearRemoteTextPlayback(data)) return;
             ttsAudio.pause();
             ttsAudio.currentTime = 0;
             isPlayingTts = false;
+            sendVoiceTtsPlaybackFinished(playbackId);
             endTtsVideoCoordinationIfIdle();
             scheduleTtsRecordingResume();
         }
@@ -1714,6 +1736,7 @@
                     return;
                 }
                 remoteTextPlayback = null;
+                sendVoiceTtsPlaybackFinished(finishedData?.voiceTtsPlaybackId);
                 endTtsVideoCoordinationIfIdle();
                 scheduleTtsRecordingResume();
             };
@@ -1774,7 +1797,8 @@
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
                 }
-                showVoiceResponsePopup(data.detailText || data.text);
+                const detailText = data.detailText || data.text;
+                showVoiceResponsePopup(detailText, calculateWeatherPopupDuration(detailText));
             } else if (data.action === 'playChoices') {
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
@@ -1808,7 +1832,13 @@
             }, 6000);
         }
         
-        function showVoiceResponsePopup(text) {
+        // 天气详情需要覆盖足够长的阅读时间；空白不计入字数，每 3 个可见字符保留 1 秒。
+        function calculateWeatherPopupDuration(text) {
+            const visibleTextLength = Array.from(String(text || '').replace(/\s/gu, '')).length;
+            return Math.max(30000, Math.ceil(visibleTextLength / 3) * 1000);
+        }
+
+        function showVoiceResponsePopup(text, durationMs = 5000) {
             const existing = document.querySelector('.voice-response-popup');
             if (existing) {
                 existing.remove();
@@ -1823,7 +1853,7 @@
                 if (popup.parentElement) {
                     popup.remove();
                 }
-            }, 5000);
+            }, durationMs);
         }
         
         function showSearchResultPopup(query, results) {
@@ -3993,6 +4023,11 @@
                         return;
                     }
 
+                    if (data.type === 'voiceTtsPlaybackState') {
+                        handleVoiceTtsPlaybackState(data);
+                        return;
+                    }
+
                     if (data.type === 'voiceConversationState') {
                         voiceConversationState = data.state || 'waitingWake';
                         if (voiceConversationState === 'disabled') {
@@ -4343,6 +4378,14 @@
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
             displayWs.send(JSON.stringify({ type: 'voiceConversationTtsFinished' }));
             scheduleVoiceConversationTimer();
+        }
+
+        function sendVoiceTtsPlaybackFinished(playbackId) {
+            if (!playbackId || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'voiceTtsPlaybackFinished',
+                voiceTtsPlaybackId: playbackId
+            }));
         }
 
         function scheduleVoiceConversationTimer() {

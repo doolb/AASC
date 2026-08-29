@@ -127,7 +127,28 @@ test('90°和270°旋转使用交换后的逻辑画布重新适配文本位置',
 });
 
 test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限制尺寸', () => {
-    assert.match(DISPLAY_HTML, /data\.action === 'weatherResult'[\s\S]*showVoiceResponsePopup\(data\.detailText \|\| data\.text\)/u);
+    assert.match(
+        DISPLAY_HTML,
+        /data\.action === 'weatherResult'[\s\S]*const detailText = data\.detailText \|\| data\.text[\s\S]*showVoiceResponsePopup\(detailText, calculateWeatherPopupDuration\(detailText\)\)/u
+    );
+    const weatherPopupFunction = DISPLAY_HTML.match(
+        /function showVoiceResponsePopup\(text, durationMs = 5000\)[\s\S]*?\n        \}\n        \n        function showSearchResultPopup/u
+    )?.[0] || '';
+    assert.match(
+        weatherPopupFunction,
+        /function showVoiceResponsePopup\(text, durationMs = 5000\)[\s\S]*?\}, durationMs\);/u,
+        '天气弹窗应支持由调用方传入显示时长，普通响应保持 5 秒默认值'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /function calculateWeatherPopupDuration\(text\)[\s\S]*?Math\.max\(30000, Math\.ceil\(visibleTextLength \/ 3\) \* 1000\)/u,
+        '天气弹窗时长应按每 3 个可见字符 1 秒计算且不少于 30 秒'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /data\.action === 'weatherResult'[\s\S]*?calculateWeatherPopupDuration\(detailText\)/u,
+        '天气响应应使用按字数计算的弹窗时长'
+    );
     assert.match(
         DISPLAY_HTML,
         /function getRotationPopupElements\(\)[\s\S]*voice-response-popup[\s\S]*voice-confirm-popup[\s\S]*reminder-popup/u,
