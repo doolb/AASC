@@ -62,3 +62,9 @@ win-monitor (子显示端/服务器)
 支持的消息类型：
 - `task:renderUpdate` — 按 instanceId 分发的实时数据
 - `hardwareStats` — 兼容旧版转发方式
+
+实时更新不产生命令回执：
+
+- `task:renderUpdate` 和兼容的 `hardwareStats` 是高频状态推送，不代表一次需要用户确认的控制命令。
+- 显示端只更新已注册的渲染任务，不发送 `commandAck`，避免控制端把每次监控刷新显示成 Toast/Tips。
+- 播放、控制、TTS、提醒和其他显式控制消息仍按原协议发送 `commandAck`。

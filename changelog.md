@@ -4,6 +4,13 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 过滤 renderUpdate 高频命令提示
+  - 显示端对 `task:renderUpdate` 和兼容 `hardwareStats` 只分发监控数据，不再发送 `commandAck`，控制端不再将每次刷新显示为 Toast/Tips。
+  - 播放、控制、TTS、提醒等显式控制命令继续发送命令确认。
+  - 验证：新增 `tests/display-render-update-ack.test.js` 覆盖高频分支与显式播放命令回执契约。
+  - 文档：`docs/design/monitor-system.md`、`docs/spec/monitor-system.md`、`docs/spec/websocket.md`、`docs/task/2026-08-29_renderUpdate提示过滤.md`。
+
+
 - ✅ [2026-08-29] 显示端文字增加半透明主题色斜向投影
   - render-display 进度条外标签、显示端时间文本和媒体名统一使用固定白字、黑色阴影和正下方 2px 无模糊主题色投影。
   - 不支持 `color-mix()` 时回退纯色主题投影，不使用文字轮廓或元素盒子内阴影，避免矩形框和额外底部投影；进度条及条内数值保持不变。

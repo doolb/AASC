@@ -278,7 +278,7 @@ handleDisplayDisconnect(displayId, ws):
 | chatResponse | 聊天完整响应 | `{ type, message, history }` |
 | chatHistory | 聊天历史 | `{ type, history }` |
 | voiceInput | 显示端语音输入 | `{ type, displayId, text, isFinal, fullText }` |
-| commandAck | 命令确认 | `{ type, displayId, commandType, success, details, timestamp }` |
+| commandAck | 显式命令确认 | `{ type, displayId, commandType, success, details, timestamp }`；`task:renderUpdate`、`hardwareStats` 等高频状态推送不产生此消息 |
 | serverLog | 实时日志条目 | `{ type, entry: { id, timestamp, time, category, level, device, message, displayId } }` |
 | logHistory | 日志历史 | `{ type, entries: [...], categories: [...] }` |
 | systemStats | 系统监控数据 | `{ type, stats: { timestamp, cpu, memory, uptime } }` |
@@ -399,6 +399,9 @@ pagehide:
                 调用 SelfTest.handleAck(data)
             如果 Chat 存在:
                 调用 Chat.addCommandAckMessage(displayId, commandType, success, details)
+
+        注：控制端收到的 commandAck 只对应显式控制命令；显示端的 task:renderUpdate 和 hardwareStats
+        仅更新监控画面，不经过 commandAck/聊天 Toast 链路。
     
     sendControl(action, value):
         检查 currentDisplayId

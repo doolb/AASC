@@ -181,8 +181,25 @@ return function(api) {
 display.html 收到后：
 1. 查找 `window._renderTaskUpdates[instanceId]`
 2. 如果存在，调用 `fn(data)`
+3. 不发送 `commandAck`；该消息是高频实时数据，不是需要控制端提示的命令执行结果
 
 兼容方式：`type: 'hardwareStats'` 广播给所有活跃渲染任务。
+
+兼容消息同样只执行数据分发，不发送 `commandAck`。控制端的命令确认提示仅由播放、控制、TTS、提醒等显式控制消息触发。
+
+伪代码：
+
+```
+收到 task:renderUpdate:
+    找到对应 instanceId 的更新函数
+    如果存在:
+        调用更新函数(data)
+    结束处理，不回传 commandAck
+
+收到 hardwareStats:
+    遍历所有活跃渲染任务并分发 data
+    结束处理，不回传 commandAck
+```
 
 ### 停止渲染任务
 

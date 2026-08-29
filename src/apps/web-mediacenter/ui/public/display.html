@@ -3985,16 +3985,16 @@
                             delete window._renderTaskUpdates[stopInstanceId];
                         }
                     } else if (data.type === 'task:renderUpdate') {
-                        // 渲染任务实时数据更新
+                        // 渲染任务实时数据更新。该消息是高频状态推送，只更新画面，不回传
+                        // commandAck，避免服务端广播后在控制端反复生成 renderUpdate 提示。
                         var fn = window._renderTaskUpdates && window._renderTaskUpdates[data.instanceId];
                         if (fn) fn(data.data, data.sourceInstanceId);
-                        sendCommandAck('renderUpdate', true, null);
                     } else if (data.type === 'hardwareStats') {
-                        // 兼容 direct hardwareStats 消息（旧转发方式）
+                        // 兼容 direct hardwareStats 消息（旧转发方式）。这同样是高频监控数据，
+                        // 仅分发给渲染任务，不发送命令回执；显式控制命令仍保留回执逻辑。
                         for (var _rid in window._renderTaskUpdates) {
                             window._renderTaskUpdates[_rid](data.data);
                         }
-                        sendCommandAck('hardwareStats', true, null);
                     } else if (data.type === 'playlistStart') {
                         handlePlaylistStart(data);
                         sendCommandAck('playlistStart', true, data.listId);
