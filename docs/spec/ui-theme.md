@@ -130,7 +130,7 @@ MutationObserver:
 显示端时间文本:
     #timeDisplay 和 #fileNameDisplay 文字颜色 -> 固定旧版白色
     #timeDisplay 和 #fileNameDisplay text-shadow -> 固定旧版黑色阴影
-    #timeDisplay 和 #fileNameDisplay 右下方 1px 无模糊文字投影 -> accent-color，优先使用 65% 透明度的 color-mix 并保留纯色回退
+    #timeDisplay 和 #fileNameDisplay 右下方 2px 无模糊文字投影 -> accent-color，优先使用 65% 透明度的 color-mix 并保留纯色回退
     主题切换只更新主题色投影，不改变文字、黑色阴影、旋转和定位行为
 
 显示端不透明表面:
