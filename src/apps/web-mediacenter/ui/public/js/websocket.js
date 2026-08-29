@@ -376,6 +376,10 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handleCommands(data);
             }
+        } else if (data.type === 'builtinVoiceCommands') {
+            if (window.Chat) {
+                window.Chat.handleBuiltinCommands(data);
+            }
         } else if (data.type === 'playOnControl') {
             if (window.Chat) {
                 window.Chat.handlePlayOnControl(data);

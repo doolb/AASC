@@ -541,7 +541,7 @@ async function startServer() {
                 'getChatCommands', 'setChatCommands', 'mute', 'unmute', 'todayReminders',
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
-                'getCommandRouting', 'updateCommandRouting',
+                'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'playlistRequest', 'playlistControl'
             ];
             for (const type of controlTypes) {
@@ -900,7 +900,8 @@ function handleDisplayConversationInput(displayId, text) {
         current,
         text,
         getDisplayVoiceAssistantNames(),
-        Date.now()
+        Date.now(),
+        { isBuiltin: voiceCommand.isBuiltinVoiceCommand }
     );
     if (!result.accepted) return result;
 
@@ -4535,6 +4536,12 @@ async function handleControlMessageFallback(data, ws) {
                     ws.send(JSON.stringify({
                         type: 'chatCommands',
                         commands: chat.getCommands()
+                    }));
+                    return;
+                } else if (data.type === 'getBuiltinVoiceCommands') {
+                    ws.send(JSON.stringify({
+                        type: 'builtinVoiceCommands',
+                        commands: voiceCommand.getBuiltinVoiceCommands()
                     }));
                     return;
                 } else if (data.type === 'setChatCommands') {

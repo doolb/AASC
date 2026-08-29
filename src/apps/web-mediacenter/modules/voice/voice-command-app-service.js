@@ -20,6 +20,75 @@ let unmuteAllDisplays = null;
 let timeAnnounceToggle = null;
 let voiceInputQueues = new Map();
 
+// 内置功能命令定义同时供语音门控和控制端列表使用，避免两处维护不同的命令范围。
+const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
+    {
+        id: 'commandMode',
+        examples: ['打开指令模式', '关闭指令模式'],
+        description: '开启或关闭指令模式',
+        matcher: text => text === '打开指令模式' || text === '关闭指令模式'
+    },
+    {
+        id: 'recording',
+        examples: ['开启录音', '关闭录音', '开始录音', '停止录音'],
+        description: '开启或关闭显示端语音录音',
+        matcher: text => text.includes('开启录音') || text.includes('开始录音')
+            || text.includes('关闭录音') || text.includes('停止录音')
+    },
+    {
+        id: 'time',
+        examples: ['报时', '现在几点', '开启报时', '关闭报时'],
+        description: '播报当前时间',
+        matcher: text => text.includes('报时') || text.includes('现在几点')
+    },
+    {
+        id: 'reminder',
+        examples: ['提醒{时间} {内容}', '今日提醒', '明日提醒'],
+        description: '设置或查看提醒',
+        matcher: text => text.includes('今日提醒') || text.includes('今天提醒')
+            || text.includes('明日提醒') || text.includes('明天提醒')
+            || text.includes('提醒')
+    },
+    {
+        id: 'mute',
+        examples: ['静音', '全部静音', '取消静音', '恢复音量'],
+        description: '静音或恢复所有显示端音量',
+        matcher: text => text === '静音' || text.includes('全部静音')
+            || text.includes('取消静音') || text === '恢复音量'
+    },
+    {
+        id: 'weather',
+        examples: ['天气', '天气{城市}'],
+        description: '查询天气；天气和搜索可按配置交给系统或 LLM 处理',
+        matcher: text => text.includes('天气')
+    },
+    {
+        id: 'search',
+        examples: ['搜索{关键词}'],
+        description: '搜索信息；可按配置交给系统或 LLM 处理',
+        matcher: text => text.includes('搜索')
+    },
+    {
+        id: 'play',
+        examples: ['播放{文件名}'],
+        description: '搜索并播放媒体',
+        matcher: text => text.includes('播放')
+    },
+    {
+        id: 'stopTts',
+        examples: ['停止播报', '中止播报'],
+        description: '停止当前语音播报',
+        matcher: text => text.includes('停止播报') || text.includes('中止播报')
+    },
+    {
+        id: 'confirmation',
+        examples: ['确认', '确认添加', '是', '好的', '拒绝', '取消'],
+        description: '处理待确认或待选择操作',
+        matcher: text => text.includes('拒绝') || text.includes('取消')
+            || ['确认', '确认添加', '是', '好的'].includes(text)
+    }
+];
+
 // 指令分级路由
 const COMMAND_LEVEL = {
     weather: 'high',
@@ -143,6 +212,21 @@ function setTimeAnnounceToggle(fn) {
 
 function setMediaLibrary(manager) {
     mediaLibraryManager = manager;
+}
+
+function isBuiltinVoiceCommand(text) {
+    const cmdText = String(text || '')
+        .trim()
+        .replace(/[。，！？、；：,.!?;:]+$/gu, '');
+    if (!cmdText) return false;
+    return BUILTIN_VOICE_COMMAND_DEFINITIONS.some(command => command.matcher(cmdText));
+}
+
+function getBuiltinVoiceCommands() {
+    return BUILTIN_VOICE_COMMAND_DEFINITIONS.map(({ matcher, ...command }) => ({
+        ...command,
+        wakeRequired: false
+    }));
 }
 
 // 指令分级路由：检查高级指令是否需要转 LLM 处理
@@ -1310,22 +1394,7 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false)
             }
         }
 
-        const isBuiltin = (
-            cmdText.includes('拒绝') || cmdText.includes('取消') ||
-            cmdText === '确认' || cmdText === '确认添加' || cmdText === '是' || cmdText === '好的' ||
-            cmdText.includes('开启录音') || cmdText.includes('开始录音') || cmdText.includes('关闭录音') || cmdText.includes('停止录音') ||
-            cmdText === '静音' || cmdText.includes('全部静音') ||
-            cmdText.includes('取消静音') || cmdText === '恢复音量' ||
-            cmdText.includes('今日提醒') || cmdText.includes('今天提醒') ||
-            cmdText.includes('明日提醒') || cmdText.includes('明天提醒') ||
-            cmdText.includes('提醒') ||
-            cmdText.includes('报时') || cmdText.includes('现在几点') ||
-            cmdText.includes('天气') ||
-            cmdText.includes('搜索') ||
-            cmdText.includes('播放') ||
-            cmdText.includes('停止播报') || cmdText.includes('中止播报')
-        );
-        if (!isBuiltin) {
+        if (!isBuiltinVoiceCommand(cmdText)) {
             return;
         }
     }
@@ -1541,6 +1610,8 @@ module.exports = {
     setMuteFunctions,
     setTimeAnnounceToggle,
     setMediaLibrary,
+    isBuiltinVoiceCommand,
+    getBuiltinVoiceCommands,
     processVoiceCommand,
     enqueueVoiceInput,
     handleReminderCommand,

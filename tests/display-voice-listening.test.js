@@ -9,6 +9,10 @@ const serverJs = fs.readFileSync(
     'src/apps/server/boot/server-app.js',
     'utf8'
 );
+const voiceCommandJs = fs.readFileSync(
+    'src/apps/web-mediacenter/modules/voice/voice-command-app-service.js',
+    'utf8'
+);
 const deviceListJs = fs.readFileSync(
     'src/apps/web-mediacenter/ui/public/js/device-list.js',
     'utf8'
@@ -59,6 +63,8 @@ assert.match(serverJs, /display-voice-conversation/);
 assert.match(serverJs, /isDisplayVoiceListeningEnabled\(displayData\)/);
 assert.match(serverJs, /voiceConversationTtsFinished/);
 assert.match(serverJs, /voiceprintEnabledNow = config\.get\('voiceprint\.enabled', true\)/);
+assert.match(serverJs, /isBuiltin: voiceCommand\.isBuiltinVoiceCommand/);
+assert.match(voiceCommandJs, /function isBuiltinVoiceCommand\(text\)/);
 assert.match(serverJs, /function normalizeDisplayUserCapabilities\(capabilities\)/);
 assert.doesNotMatch(serverJs, /delete normalized\.voiceRecognition/);
 assert.match(serverJs, /\.\.\.data\.capabilities/);

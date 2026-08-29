@@ -918,6 +918,38 @@
     margin-bottom: 10px;
 }
 
+.builtin-command-item {
+    position: relative;
+    padding: 10px 86px 10px 12px;
+    margin-bottom: 8px;
+    background: var(--card-background, rgba(255, 255, 255, 0.05));
+    border-radius: 8px;
+}
+
+.builtin-command-examples {
+    color: var(--accent-color, #667eea);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.builtin-command-description {
+    margin-top: 3px;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.72));
+    font-size: 12px;
+}
+
+.builtin-command-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(46, 204, 113, 0.16);
+    color: var(--success-color, #2ecc71);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
 .command-keyword {
     font-size: 14px;
     font-weight: 500;

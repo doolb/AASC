@@ -25,6 +25,7 @@ const Chat = {
     commands: {
         commands: {}
     },
+    builtinCommands: null,
     searchHistory: [],
     isLoading: false,
     currentStreamingMessage: '',
@@ -61,6 +62,7 @@ const Chat = {
         this.loadSession();
         this.loadAiRoles();
         this.loadCommands();
+        this.loadBuiltinCommands();
         this.initVoiceRecognition();
         this.render();
     },
@@ -70,6 +72,7 @@ const Chat = {
         this.loadSession();
         this.loadAiRoles();
         this.loadCommands();
+        this.loadBuiltinCommands();
         this.loadProfiles();
     },
     
@@ -440,6 +443,15 @@ const Chat = {
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'getChatCommands'
+            }));
+        }
+    },
+
+    loadBuiltinCommands() {
+        if (window.WebSocketManager && window.WebSocketManager.ws &&
+            window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'getBuiltinVoiceCommands'
             }));
         }
     },
@@ -1655,7 +1667,31 @@ const Chat = {
         const modal = document.getElementById('chatHelpModal');
         if (modal) {
             modal.style.display = 'flex';
+            this.renderBuiltinCommands();
         }
+    },
+
+    renderBuiltinCommands() {
+        const container = document.getElementById('builtinVoiceCommandsList');
+        if (!container) return;
+
+        if (!Array.isArray(this.builtinCommands)) {
+            container.innerHTML = '<p class="chat-empty">加载中...</p>';
+            return;
+        }
+
+        if (this.builtinCommands.length === 0) {
+            container.innerHTML = '<p class="chat-empty">暂无内置命令</p>';
+            return;
+        }
+
+        container.innerHTML = this.builtinCommands.map(command => `
+            <div class="builtin-command-item">
+                <div class="builtin-command-examples">${this.escapeHtml(command.examples.join(' / '))}</div>
+                <div class="builtin-command-description">${this.escapeHtml(command.description)}</div>
+                <span class="builtin-command-badge">无需唤醒</span>
+            </div>
+        `).join('');
     },
     
     hideHelp() {
@@ -2026,6 +2062,12 @@ const Chat = {
         if (data.commands) {
             this.commands = data.commands;
         }
+    },
+
+    handleBuiltinCommands(data) {
+        if (!Array.isArray(data.commands)) return;
+        this.builtinCommands = data.commands;
+        this.renderBuiltinCommands();
     },
 
     handlePlayOnControl(data) {

@@ -30,7 +30,9 @@ createDisplayState():
     如果当前为 disabled:
         丢弃输入
     如果当前为 waitingWake:
-        若匹配唤醒词:
+        若匹配内置功能指令:
+            转交现有 voiceCommand 处理，不改变会话状态
+        否则若匹配唤醒词:
             设置 activeGroup 或 activePrivate
             发送唤醒确认
         否则丢弃普通文本
@@ -39,6 +41,18 @@ createDisplayState():
             更新状态并发送确认
         否则将文本交给现有 voiceCommand 处理
         有效输入更新 lastValidInputAt
+
+waitingWake 中的免唤醒范围:
+    包含报时、提醒、静音、取消静音、天气、搜索、播放、停止播报、确认、取消、录音控制和指令模式开关等现有内置功能指令
+    不包含普通聊天、自定义关键词命令、你好小爱/结束对话/退出私聊等会话控制词
+    内置功能指令执行完成后仍保持 waitingWake，不启动普通对话计时器
+
+控制端加载内置命令:
+    Chat.init 或 WebSocket 重连 -> 发送 { type: 'getBuiltinVoiceCommands' }
+    服务端 -> 返回 { type: 'builtinVoiceCommands', commands }
+    Chat.handleBuiltinCommands(data) -> 保存 commands -> 刷新系统指令帮助弹窗
+    每条 command 包含 id、examples、description、wakeRequired=false
+    弹窗展示示例、说明和“无需唤醒”标记
 
 显示端 TTS 队列结束:
     若监听开关仍开启且没有新的 LLM/TTS 任务:

@@ -54,14 +54,23 @@ function parseConversationCommand(text, assistants) {
     return null;
 }
 
-function reduceConversationInput(currentState, text, assistants, now = Date.now()) {
+function reduceConversationInput(currentState, text, assistants, now = Date.now(), options = {}) {
     const state = { ...createConversationState(true), ...(currentState || {}) };
     if (state.state === 'disabled') {
         return { accepted: false, state, event: null };
     }
 
+    const isBuiltin = typeof options.isBuiltin === 'function'
+        && options.isBuiltin(text) === true;
     const command = parseConversationCommand(text, assistants);
     if (state.state === 'waitingWake') {
+        if (isBuiltin) {
+            return {
+                accepted: true,
+                state,
+                event: { type: 'input', bypassWake: true }
+            };
+        }
         if (!command || command.type !== 'wake') {
             return { accepted: false, state, event: null };
         }

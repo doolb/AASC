@@ -62,8 +62,35 @@ function testDisabledAndExpiry() {
     assert.strictEqual(isConversationExpired(active, 181000), true);
 }
 
+function testBuiltinCommandBypassesWakeWithoutActivatingConversation() {
+    const waiting = createConversationState(true);
+    const isBuiltin = text => text.includes('现在几点');
+
+    const builtinResult = reduceConversationInput(
+        waiting,
+        '现在几点？',
+        assistants,
+        1000,
+        { isBuiltin }
+    );
+    assert.strictEqual(builtinResult.accepted, true);
+    assert.deepStrictEqual(builtinResult.state, waiting);
+    assert.deepStrictEqual(builtinResult.event, { type: 'input', bypassWake: true });
+
+    const ordinaryResult = reduceConversationInput(
+        waiting,
+        '今天天气怎么样',
+        assistants,
+        1000,
+        { isBuiltin }
+    );
+    assert.strictEqual(ordinaryResult.accepted, false);
+    assert.strictEqual(ordinaryResult.state.state, 'waitingWake');
+}
+
 testInitialState();
 testWakeAndPrivateSwitch();
 testStateTransitions();
 testDisabledAndExpiry();
-console.log('display-voice-conversation.test.js: 4/4 passed');
+testBuiltinCommandBypassesWakeWithoutActivatingConversation();
+console.log('display-voice-conversation.test.js: 5/5 passed');
