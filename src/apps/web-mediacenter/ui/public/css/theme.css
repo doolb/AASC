@@ -742,3 +742,313 @@
 [data-ui-type="tip"] { color: var(--text-muted); }
 [data-ui-type="slider"] { accent-color: var(--accent-color); }
 [data-ui-type="status"] { border-color: var(--border-color); }
+
+/* 主题预览器：预览控件只展示主题层级，不参与真实业务操作。 */
+.theme-selector-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.theme-selector-row select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.theme-preview-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.theme-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow: auto;
+    background: rgba(8, 15, 30, 0.58);
+}
+
+.theme-preview-dialog {
+    width: min(940px, 100%);
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    padding: 24px;
+    color: var(--text-primary);
+    background: var(--bg-surface-strong);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px var(--shadow-color);
+}
+
+.theme-preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.theme-preview-header h2 {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.theme-preview-subtitle {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+}
+
+.theme-preview-close {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    padding: 0;
+    color: var(--text-secondary);
+    font-size: 24px;
+    line-height: 1;
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.theme-preview-close:hover,
+.theme-preview-close:focus-visible {
+    color: var(--text-primary);
+    border-color: var(--accent-color);
+}
+
+.theme-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+}
+
+.theme-preview-section {
+    min-width: 0;
+    padding: 16px;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.theme-preview-section h3 {
+    margin: 0 0 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+}
+
+.theme-preview-section p {
+    margin: 0 0 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.theme-preview-sample-wide {
+    grid-column: 1 / -1;
+}
+
+.theme-preview-small-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    color: var(--text-primary);
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.theme-preview-small-card span {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.theme-preview-button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.theme-preview-button {
+    cursor: default;
+}
+
+.theme-preview-dialog .theme-preview-button {
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color));
+    border-color: transparent;
+}
+
+.theme-preview-dialog .theme-preview-button.active {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color));
+    box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.theme-preview-dialog .theme-preview-button.playing {
+    background: linear-gradient(135deg, var(--success-color), var(--accent-color));
+}
+
+.theme-preview-dialog .theme-preview-button.danger {
+    background: var(--danger-color);
+}
+
+.theme-preview-field,
+.theme-preview-switch-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    color: var(--text-secondary);
+}
+
+.theme-preview-field {
+    justify-content: space-between;
+}
+
+.theme-preview-field input[type="text"],
+.theme-preview-field select {
+    width: min(180px, 60%);
+    min-width: 0;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    background: var(--input-background);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+}
+
+.theme-preview-slider {
+    width: min(180px, 60%);
+    accent-color: var(--accent-color);
+}
+
+.theme-preview-switch {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    flex: 0 0 auto;
+    margin: 0;
+    appearance: none;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    cursor: default;
+}
+
+.theme-preview-switch::after {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    content: "";
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition: transform 0.16s ease, background 0.16s ease;
+}
+
+.theme-preview-switch:checked {
+    background: var(--accent-color);
+}
+
+.theme-preview-switch:checked::after {
+    background: #fff;
+    transform: translateX(18px);
+}
+
+.theme-preview-tip {
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-left: 3px solid var(--accent-color);
+    border-radius: 6px;
+}
+
+.theme-preview-status {
+    display: inline-flex;
+    padding: 6px 10px;
+    color: var(--success-color);
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 13px;
+}
+
+.theme-preview-chat {
+    display: grid;
+    gap: 8px;
+}
+
+.theme-preview-chat-message,
+.theme-preview-log {
+    padding: 9px 10px;
+    color: var(--text-primary);
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.theme-preview-chat-message.user {
+    color: var(--accent-color);
+}
+
+.theme-preview-log {
+    margin-top: 10px;
+    color: var(--text-secondary);
+    font-family: monospace;
+}
+
+.theme-preview-popup {
+    position: relative;
+    inset: auto;
+    display: block;
+    min-height: 90px;
+    padding: 12px;
+    overflow: visible;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+}
+
+.theme-preview-popup-content {
+    display: grid;
+    gap: 6px;
+    padding: 14px;
+    color: var(--text-primary);
+    background: var(--bg-surface-strong);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px var(--shadow-color);
+}
+
+.theme-preview-popup-content span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+@media (max-width: 640px) {
+    .theme-preview-modal {
+        align-items: flex-start;
+        padding: 12px;
+    }
+
+    .theme-preview-dialog {
+        max-height: calc(100vh - 24px);
+        padding: 16px;
+    }
+
+    .theme-preview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .theme-preview-sample-wide {
+        grid-column: auto;
+    }
+}

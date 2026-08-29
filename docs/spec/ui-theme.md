@@ -70,6 +70,13 @@ DisplayTheme:
         if data.type == controlThemeChanged:
             UiTheme.applyRemoteTheme(data.theme)
 
+主题预览器:
+    主题选择框旁的 preview button -> UiTheme.showPreview(selector.value)
+    保存当前 documentElement 的 data-theme/data-theme-mode
+    documentElement 临时应用待预览主题，不调用 apply，不写 localStorage，不发送 POST
+    创建 theme-preview-modal，展示 section/control-item/button/switch/slider/input/select/text/tip/status/chat/log/popup 样例
+    点击关闭按钮、遮罩或按 Escape -> 删除 theme-preview-modal，恢复原 data-theme/data-theme-mode
+
 Server controlTheme update:
     validate theme in CONTROL_THEMES
     persist ui.controlTheme

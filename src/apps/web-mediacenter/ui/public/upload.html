@@ -581,23 +581,26 @@
                 <h2 data-ui-type="title">界面主题</h2>
                 <div class="control-item">
                     <label for="themeSelect">控制端主题</label>
-                    <select id="themeSelect" data-ui-type="select">
-                        <option value="dark">深色</option>
-                        <option value="light">浅色</option>
-                        <option value="warm">暖黄</option>
-                        <option value="pink">淡粉</option>
-                        <option value="lavender-yellow">淡紫黄</option>
-                        <option value="red-blue">红蓝</option>
-                        <option value="gold">尊贵金</option>
-                        <option value="mint">薄荷青</option>
-                        <option value="ocean">海洋蓝</option>
-                        <option value="forest">森林绿</option>
-                        <option value="slate">极简灰</option>
-                        <option value="algae-salt">藻盐</option>
-                        <option value="girl-pink">少女粉</option>
-                        <option value="rose-gold">玫瑰金</option>
-                        <option value="new-year-red">新年红</option>
-                    </select>
+                    <div class="theme-selector-row">
+                        <select id="themeSelect" data-ui-type="select">
+                            <option value="dark">深色</option>
+                            <option value="light">浅色</option>
+                            <option value="warm">暖黄</option>
+                            <option value="pink">淡粉</option>
+                            <option value="lavender-yellow">淡紫黄</option>
+                            <option value="red-blue">红蓝</option>
+                            <option value="gold">尊贵金</option>
+                            <option value="mint">薄荷青</option>
+                            <option value="ocean">海洋蓝</option>
+                            <option value="forest">森林绿</option>
+                            <option value="slate">极简灰</option>
+                            <option value="algae-salt">藻盐</option>
+                            <option value="girl-pink">少女粉</option>
+                            <option value="rose-gold">玫瑰金</option>
+                            <option value="new-year-red">新年红</option>
+                        </select>
+                        <button class="control-btn theme-preview-btn" id="themePreviewBtn" type="button" data-ui-type="button" onclick="UiTheme.showPreview()">预览</button>
+                    </div>
                     <div class="routing-hint" data-ui-type="tip">主题保存到服务端，所有控制端浏览器共享；显示端不切换主题。</div>
                 </div>
             </div>

@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 增加控制端主题预览器
+  - 主题选择框旁增加“预览”按钮，弹窗集中展示卡片、按钮、开关、滑条、输入框、文本、Tip、状态、聊天、日志和弹窗样式。
+  - 预览只临时切换主题，关闭后恢复原主题，不写入浏览器缓存或服务端配置，并支持遮罩和 Esc 关闭。
+  - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-29_控制端主题预览器.md`。
+
 - ✅ [2026-08-29] 调整浅色主题大卡片使用 bg-surface
   - 大卡片 `.section` 改用略微调深后的 `bg-surface`；小卡片继续使用 `card-background`，弹窗保持 `bg-surface-strong`。
   - 文档：`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/2026-08-29_浅色主题大卡片改用bg-surface.md`。
