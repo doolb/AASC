@@ -123,8 +123,9 @@
                 pauseVoiceRecordingForTts();
                 beginTtsVideoCoordination();
             },
-            onAudioPlaybackEnd() {
+            onAudioPlaybackEnd(playbackId) {
                 textTtsPlaybackActive = false;
+                sendVoiceTtsPlaybackFinished(playbackId);
                 endTtsVideoCoordinationIfIdle();
                 scheduleTtsRecordingResume();
             }
@@ -1315,6 +1316,10 @@
                 || !!remoteTextPlayback || remoteTtsPlaybackIds.size > 0;
         }
 
+        function getRemoteTtsPlaybackKey(data) {
+            return `${data.playbackDisplayId || ''}:${data.voiceTtsPlaybackId}`;
+        }
+
         function clearTtsRecordingResumeTimer() {
             if (ttsRecordingResumeTimer) clearTimeout(ttsRecordingResumeTimer);
             ttsRecordingResumeTimer = null;
@@ -1369,13 +1374,14 @@
         function handleVoiceTtsPlaybackState(data) {
             const playbackId = data.voiceTtsPlaybackId;
             if (!playbackId) return;
+            const playbackKey = getRemoteTtsPlaybackKey(data);
             if (data.state === 'started') {
-                remoteTtsPlaybackIds.add(playbackId);
+                remoteTtsPlaybackIds.add(playbackKey);
                 pauseVoiceRecordingForTts();
                 return;
             }
             if (['finished', 'timeout', 'stopped'].includes(data.state)) {
-                remoteTtsPlaybackIds.delete(playbackId);
+                remoteTtsPlaybackIds.delete(playbackKey);
                 scheduleTtsRecordingResume();
             }
         }
@@ -1444,7 +1450,10 @@
 
         function stopTtsPlayback() {
             clearTtsRecovery();
-            const playbackId = currentTtsItem?.voiceTtsPlaybackId;
+            const playbackIds = [
+                currentTtsItem?.voiceTtsPlaybackId,
+                ...ttsQueue.map((item) => item.voiceTtsPlaybackId)
+            ].filter(Boolean);
             currentTtsItem = null;
             ttsPlaybackToken++;
             ttsQueue = [];
@@ -1452,7 +1461,7 @@
             ttsAudio.currentTime = 0;
             isPlayingTts = false;
             hideTtsText();
-            sendVoiceTtsPlaybackFinished(playbackId);
+            playbackIds.forEach((playbackId) => sendVoiceTtsPlaybackFinished(playbackId));
             endTtsVideoCoordinationIfIdle();
             scheduleTtsRecordingResume();
         }
@@ -1572,9 +1581,13 @@
                 return;
             }
             if (data.action === 'play') {
-                queueTts({ text: data.text });
+                queueTts({ text: data.text, voiceTtsPlaybackId: data.voiceTtsPlaybackId });
             } else if (data.action === 'playAudio') {
-                queueTts({ audioUrl: data.audioUrl, text: data.text });
+                queueTts({
+                    audioUrl: data.audioUrl,
+                    text: data.text,
+                    voiceTtsPlaybackId: data.voiceTtsPlaybackId
+                });
             } else if (data.action === 'stop') {
                 stopTtsPlayback();
                 clearRemoteTextPlayback();
@@ -4796,6 +4809,7 @@
             clearTtsRecordingResumeTimer();
             ttsRecordingPaused = false;
             wasListeningBeforePlayback = false;
+            remoteTtsPlaybackIds.clear();
             if (vadNoiseTestActive) {
                 vadNoiseTestActive = false;
                 sendVoiceVadNoiseResult({

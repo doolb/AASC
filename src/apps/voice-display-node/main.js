@@ -140,6 +140,9 @@ class VoiceDisplay {
         this.recordingMode = config.recordingMode || 'mute';
         this.aecProcessor = null;
         this.bargeInTriggered = false;
+        this.localTtsPlaybackActive = false;
+        this.pendingVoiceTtsPlaybackIds = new Set();
+        this.remoteTtsPlaybackIds = new Set();
         this.logReportConfig = null; // { enabled, level } 由服务器推送
         this._volume = 100;
         this._serviceTasks = {}; // 长期运行的服务任务 { instanceId: { taskName, stop } }
@@ -273,6 +276,9 @@ class VoiceDisplay {
             case 'tts':
                 this.handleTTS(data);
                 break;
+            case 'voiceTtsPlaybackState':
+                this.handleVoiceTtsPlaybackState(data);
+                break;
             case 'voiceInput':
                 log('语音', '收到语音输入确认');
                 break;
@@ -373,6 +379,9 @@ class VoiceDisplay {
             case 'playAudio':
                 const audioUrl = data.audioUrl;
                 const text = data.text;
+                if (data.voiceTtsPlaybackId) {
+                    this.pendingVoiceTtsPlaybackIds.add(data.voiceTtsPlaybackId);
+                }
                 if (text) {
                     log('TTS', `播报: ${text}`);
                 }
@@ -391,6 +400,7 @@ class VoiceDisplay {
                     this.audio.stop();
                     this.audio.clearQueue();
                 }
+                this.notifyVoiceTtsPlaybackFinished();
                 log('TTS', '停止播报并清空队列');
                 break;
         }
@@ -626,6 +636,49 @@ class VoiceDisplay {
         } catch (error) {
             logError('TTS', `加入播放队列失败: ${error.message}`);
         }
+    }
+
+    handleVoiceTtsPlaybackState(data) {
+        const playbackId = data && data.voiceTtsPlaybackId;
+        if (!playbackId || data.voiceprintEnabled === true || !this.recorder) return;
+        const playbackKey = `${data.playbackDisplayId || ''}:${playbackId}`;
+
+        if (data.state === 'started') {
+            this.remoteTtsPlaybackIds.add(playbackKey);
+            this.recorder.pause();
+            return;
+        }
+
+        if (['finished', 'timeout', 'stopped'].includes(data.state)) {
+            this.remoteTtsPlaybackIds.delete(playbackKey);
+            this.resumeRecorderIfTtsIdle();
+        }
+    }
+
+    markLocalTtsPlaybackStart() {
+        this.localTtsPlaybackActive = true;
+    }
+
+    markLocalTtsPlaybackEnd() {
+        this.localTtsPlaybackActive = false;
+        this.notifyVoiceTtsPlaybackFinished();
+        this.resumeRecorderIfTtsIdle();
+    }
+
+    notifyVoiceTtsPlaybackFinished() {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        for (const playbackId of this.pendingVoiceTtsPlaybackIds) {
+            this.sendJSON({
+                type: 'voiceTtsPlaybackFinished',
+                voiceTtsPlaybackId: playbackId
+            });
+        }
+        this.pendingVoiceTtsPlaybackIds.clear();
+    }
+
+    resumeRecorderIfTtsIdle() {
+        if (!this.recordingEnabled || this.localTtsPlaybackActive || this.remoteTtsPlaybackIds.size > 0) return;
+        if (this.recorder && this.recorder.isPaused()) this.recorder.resume();
     }
 
     /**
@@ -864,15 +917,14 @@ class VoiceDisplay {
         }
 
         this.audio.onPlayStart = () => {
+            this.markLocalTtsPlaybackStart();
             log('录音', '播放开始，暂停录音');
             this.recorder.pause();
         };
 
         this.audio.onPlayEnd = () => {
+            this.markLocalTtsPlaybackEnd();
             log('录音', '播放结束，恢复录音');
-            if (this.recordingEnabled) {
-                this.recorder.resume();
-            }
         };
     }
 
@@ -888,15 +940,14 @@ class VoiceDisplay {
         this.bargeInTriggered = false;
 
         this.audio.onPlayStart = () => {
+            this.markLocalTtsPlaybackStart();
             this.bargeInTriggered = false;
             log('打断', '播放开始，进入打断待命');
         };
 
         this.audio.onPlayEnd = () => {
+            this.markLocalTtsPlaybackEnd();
             log('打断', '播放结束');
-            if (this.recordingEnabled && this.recorder.isPaused()) {
-                this.recorder.resume();
-            }
         };
 
         this.recorder.onSpeechStart = () => {
@@ -961,6 +1012,7 @@ class VoiceDisplay {
         });
 
         this.audio.onPlayStart = () => {
+            this.markLocalTtsPlaybackStart();
             log('AEC', '播放开始，AEC 处理中');
             if (this.aecProcessor) {
                 this.aecProcessor.reset();
@@ -974,6 +1026,7 @@ class VoiceDisplay {
         };
 
         this.audio.onPlayEnd = () => {
+            this.markLocalTtsPlaybackEnd();
             log('AEC', '播放结束');
         };
 

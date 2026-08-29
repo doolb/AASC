@@ -267,6 +267,9 @@ if (!fs.existsSync(VOICEPRINT_TEMP_DIR)) {
 }
 
 let displayClients = new Map();
+// 跨显示端 TTS 播报状态：按“播放目标 + 播放 ID”维护超时，避免录音端因旧客户端不回报而永久暂停。
+const voiceTtsPlaybackTimers = new Map();
+const VOICE_TTS_PLAYBACK_TIMEOUT_MS = 120000;
 let controlClients = new Set();
 const PLAYBACK_PROGRESS_PERSIST_INTERVAL_MS = 1000;
 const displayProgressPersistAt = new Map();
@@ -492,7 +495,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceVadNoiseResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'voiceVadNoiseResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -3204,6 +3207,62 @@ function sendToDisplaysWithCapability(capabilityName, message) {
     return displays.length;
 }
 
+function getVoiceTtsPlaybackKey(displayId, playbackId) {
+    return `${displayId}:${playbackId}`;
+}
+
+function broadcastVoiceTtsPlaybackState(state, playbackId, playbackDisplayId) {
+    const message = {
+        type: 'voiceTtsPlaybackState',
+        state,
+        voiceTtsPlaybackId: playbackId,
+        playbackDisplayId,
+        voiceprintEnabled: config.get('voiceprint.enabled', true)
+    };
+    for (const { id, data } of getDisplaysWithCapability('voiceRecording')) {
+        if (data.ws?.readyState === WebSocket.OPEN) sendToDisplay(id, message);
+    }
+}
+
+function finishVoiceTtsPlayback(playbackDisplayId, playbackId, reason = 'finished') {
+    if (!playbackDisplayId || !playbackId) return false;
+    const key = getVoiceTtsPlaybackKey(playbackDisplayId, playbackId);
+    const timer = voiceTtsPlaybackTimers.get(key);
+    if (!timer) return false;
+    clearTimeout(timer);
+    voiceTtsPlaybackTimers.delete(key);
+    broadcastVoiceTtsPlaybackState(reason, playbackId, playbackDisplayId);
+    return true;
+}
+
+function finishVoiceTtsPlaybacksForDisplay(playbackDisplayId) {
+    const prefix = `${playbackDisplayId}:`;
+    for (const key of voiceTtsPlaybackTimers.keys()) {
+        if (!key.startsWith(prefix)) continue;
+        const playbackId = key.slice(prefix.length);
+        finishVoiceTtsPlayback(playbackDisplayId, playbackId, 'timeout');
+    }
+}
+
+function startVoiceTtsPlayback(playbackDisplayId, playbackId) {
+    const key = getVoiceTtsPlaybackKey(playbackDisplayId, playbackId);
+    const previousTimer = voiceTtsPlaybackTimers.get(key);
+    if (previousTimer) clearTimeout(previousTimer);
+    broadcastVoiceTtsPlaybackState('started', playbackId, playbackDisplayId);
+    const timer = setTimeout(() => {
+        finishVoiceTtsPlayback(playbackDisplayId, playbackId, 'timeout');
+    }, VOICE_TTS_PLAYBACK_TIMEOUT_MS);
+    voiceTtsPlaybackTimers.set(key, timer);
+}
+
+function prepareVoiceTtsPlayback(displayId, data) {
+    if (!data || data.type !== 'tts' || data.action !== 'playAudio' || data.prefetch === true) return;
+    if (!data.voiceTtsPlaybackId) {
+        data.voiceTtsPlaybackId = generateCorrelationId('voice-tts');
+    }
+    startVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId);
+}
+
 let displayListDebounceTimer = null;
 
 const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'htmlProgress']);
@@ -3468,6 +3527,7 @@ function sendToDisplay(displayId, data, options = {}) {
         return false;
     }
     if (displayData && displayData.ws.readyState === WebSocket.OPEN) {
+        prepareVoiceTtsPlayback(displayId, data);
         if (!data.correlationId) {
             data.correlationId = generateCorrelationId(data.type || 'msg');
         }
@@ -3894,6 +3954,7 @@ wss.on('connection', (ws, req) => {
 
             muteState.previousVolumes.delete(displayId);
             clearDisplayConversationTimer(displayId);
+            finishVoiceTtsPlaybacksForDisplay(displayId);
             displayClients.delete(displayId);
             for (const [requestId, pending] of pendingDisplayTtsRequests) {
                 if (pending.displayId !== displayId) continue;
@@ -4202,6 +4263,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             armDisplayConversationTimer(displayId);
             log('语音', `显示端 ${displayId} TTS 播放完成，重新计时3分钟`);
         }
+    } else if (data.type === 'voiceTtsPlaybackFinished' && displayData) {
+        finishVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId);
     } else if (data.type === 'voiceVadNoiseResult' && displayData) {
         // 底噪检测只回传统计结果，不进入 ASR、唤醒或内置指令处理链路。
         broadcastToControls({
@@ -4234,6 +4297,12 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         // 声纹未注册/未匹配时不触发唤醒、对话或命令，但不能撤销已经回传控制端的文字。
         if (voiceprintEnabledNow && data.speaker !== undefined && data.speaker === null) {
             log('语音', `未识别到声纹，仅回传控制端不处理: "${data.text}"`);
+            return;
+        }
+
+        // TTS 可能在另一台显示端播放；即使录音端刚好有一段 ASR 已在途中，也不能让播报回声继续进入命令处理。
+        if (!voiceprintEnabledNow && voiceTtsPlaybackTimers.size > 0) {
+            log('语音', `TTS 播报期间忽略显示端 ${displayId} 的在途语音: "${data.text}"`);
             return;
         }
 

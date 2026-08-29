@@ -54,6 +54,7 @@
         let style = normalizeStyle(initialOptions.style);
         let playlistContext = null;
         let activeAudio = null;
+        let activeAudioPlaybackId = null;
         let currentSentences = [];
         let requestPending = false;
         let voiceRoute = null;
@@ -73,19 +74,19 @@
         };
 
         // 通知显示页当前逐句 TTS 的生命周期，使普通 TTS、文本 TTS 共用音频焦点协调。
-        function notifyAudioPlaybackStart() {
+        function notifyAudioPlaybackStart(playbackId) {
             if (typeof options.onAudioPlaybackStart !== 'function') return;
             try {
-                options.onAudioPlaybackStart();
+                options.onAudioPlaybackStart(playbackId);
             } catch (error) {
                 console.warn('通知文本 TTS 开始失败', error);
             }
         }
 
-        function notifyAudioPlaybackEnd() {
+        function notifyAudioPlaybackEnd(playbackId) {
             if (typeof options.onAudioPlaybackEnd !== 'function') return;
             try {
-                options.onAudioPlaybackEnd();
+                options.onAudioPlaybackEnd(playbackId);
             } catch (error) {
                 console.warn('通知文本 TTS 结束失败', error);
             }
@@ -433,8 +434,9 @@
         function clearAudio() {
             const audio = getAudio();
             clearAudioRecovery();
-            if (activeAudio) notifyAudioPlaybackEnd();
+            if (activeAudio) notifyAudioPlaybackEnd(activeAudioPlaybackId);
             activeAudio = null;
+            activeAudioPlaybackId = null;
             if (!audio) return;
             try {
                 audio.pause();
@@ -549,7 +551,8 @@
                 return;
             }
             activeAudio = audio;
-            notifyAudioPlaybackStart();
+            activeAudioPlaybackId = data.voiceTtsPlaybackId || null;
+            notifyAudioPlaybackStart(activeAudioPlaybackId);
             audio.src = data.audioUrl;
             audio.onended = finishCurrentSentence;
             audio.onerror = finishCurrentSentence;
@@ -631,8 +634,9 @@
         function finishCurrentSentence() {
             if (state !== 'playing') return;
             requestPending = false;
-            if (activeAudio) notifyAudioPlaybackEnd();
+            if (activeAudio) notifyAudioPlaybackEnd(activeAudioPlaybackId);
             activeAudio = null;
+            activeAudioPlaybackId = null;
             remoteActiveSentence = null;
             sentenceIndex += 1;
             requestNextSentence();
