@@ -2,9 +2,10 @@
 
 ## 控制端
 
-- ⏳待完成 [2026-08-29] 服务器双进程启动器与控制台重启
-  - 已确认采用前台启动器监管服务器子进程，子进程继承控制台标准流；允许短暂 WebSocket 断线并自动恢复。
-  - 设计与实现伪代码已记录，待代码实现和验证后完成任务闭环。
+- ✅已完成 [2026-08-29][2026-08-29] 服务器双进程启动器与控制台重启
+  - 新增前台启动器监管 server-app 子进程，继承控制台标准流和 IPC；服务器重启后复用同一控制台 TTY，不再 detached 到后台。
+  - `/api/restart` 通过 IPC 通知启动器，重启前关闭 WebSocket、TUI 和受管运行时；普通 SIGINT/SIGTERM 不自动拉起，异常退出最多延迟重启 5 次。
+  - 测试：`tests/server-launcher.test.js`、重启脚本配置、显示端 WebSocket 重连共 11/11 通过，两个入口语法检查和 `git diff --check` 通过。
   - 文档：`docs/design/server-restart-script.md`、`docs/spec/server-restart-script.md`、`docs/task/2026-08-29_服务器双进程启动器与控制台重启.md`。
 
 - ✅已完成 [2026-08-29][2026-08-29] 过滤 renderUpdate 高频命令提示

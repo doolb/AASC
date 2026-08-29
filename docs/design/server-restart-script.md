@@ -24,10 +24,11 @@ npm start
         └── server-app.js（HTTP、WebSocket、业务模块和 TUI）
 ```
 
-- 启动器使用 IPC 管理服务器子进程，子进程继承启动器的 `stdin/stdout/stderr`，不使用 `detached` 或 `stdio: ignore`。
+- 启动器使用 IPC 管理服务器子进程，子进程继承启动器的 `stdin/stdout/stderr`，不使用 `detached` 或 `stdio: ignore`；服务器成功监听后发送 `serverReady`，启动器据此清零异常重启计数。
 - `/api/restart` 由服务器子进程通知启动器进入“主动重启”流程；子进程先关闭 WebSocket、TUI 和业务运行时，再退出。
 - 启动器只在收到主动重启标记时重新拉起子进程；普通 `SIGINT`/`SIGTERM` 不重启并将信号转发给子进程。
 - 子进程退出后，启动器复用同一个控制台 TTY 启动新子进程，解决服务器重启后变为后台进程、控制台绑定丢失的问题。
+- 非零异常退出按 1 秒延迟重试，连续 5 次失败后退出；TUI 按 `q` 返回 0 时按正常停止处理。
 - 服务器业务状态仍按现有配置和运行时机制处理；本需求不引入 WebSocket 代理，不承诺已有连接零断线。
 
 ## npm 命令

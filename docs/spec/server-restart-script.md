@@ -63,6 +63,8 @@ package.json scripts.restart:server:
     child.on(message):
         如果 message.type == 'restartRequested':
             restartRequested = true
+        如果 message.type == 'serverReady':
+            crashCount = 0
 
     child.on(exit):
         如果 stopping:
@@ -73,12 +75,16 @@ package.json scripts.restart:server:
             重新启动 server-app.js
         否则:
             记录异常退出
-            按递增延迟重新启动，达到上限后退出
+            crashCount 加一
+            如果 crashCount 小于 5:
+                延迟 1000 毫秒重新启动
+            否则:
+                以非零码退出
 
     收到 SIGINT 或 SIGTERM:
         stopping = true
         向 child 转发相同信号
-        等待子进程退出，超时后强制结束
+        等待子进程退出，不再触发自动重启
 ```
 
 ## 服务器重启伪代码

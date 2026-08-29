@@ -412,6 +412,15 @@ async function startServer() {
             log('系统', 'HTTP 模式，麦克风功能需要 HTTPS 或 localhost');
         }
 
+        // 启动器通过 serverReady 重置异常重启计数，避免一次成功启动后继承旧的崩溃次数。
+        if (typeof process.send === 'function') {
+            try {
+                process.send({ type: 'serverReady' });
+            } catch (error) {
+                logError('系统', `通知启动器服务器已就绪失败: ${error.message}`);
+            }
+        }
+
         tui.setHeader(protocol, localIP, PORT);
 
         timeListener.start();
@@ -2611,26 +2620,22 @@ app.post('/api/restart', (req, res) => {
 
     log('系统', '收到重启请求，正在关闭服务器...');
 
-    // 不依赖 server.close 回调（残留 keep-alive 连接可能导致永不回调）：
-    // 直接 spawn 新进程（延迟 2.5s 监听），旧进程 500ms 后退出释放端口，无缝接管
     setTimeout(() => {
+        // 双进程模式下由前台启动器复用同一个 TTY 拉起新服务器；直接运行 server-app.js 时则只退出当前进程。
+        if (typeof process.send === 'function') {
+            try {
+                process.send({ type: 'restartRequested' });
+            } catch (error) {
+                logError('系统', `通知启动器重启失败: ${error.message}`);
+            }
+        }
+
         wss.clients.forEach(client => {
             client.close();
         });
 
-        const { spawn } = require('child_process');
-        const args = process.argv.slice(1);
-
-        spawn(process.execPath, args, {
-            detached: true,
-            stdio: 'ignore',
-            env: { ...process.env, AASC_RELOAD_DELAY: '2500' }
-        }).unref();
-
-        setTimeout(async () => {
-            await chat.shutdown();
-            process.exit(0);
-        }, 500);
+        tui.destroy();
+        void shutdownManagedRuntimes(0);
     }, 100);
 });
 
@@ -2639,6 +2644,8 @@ async function shutdownManagedRuntimes(exitCode) {
     if (processShutdownStarted) return;
     processShutdownStarted = true;
     try {
+        // 无论是控制端重启还是外部 SIGINT/SIGTERM，都要先释放 blessed 的 raw mode 和刷新定时器。
+        tui.destroy();
         await chat.shutdown();
     } catch (error) {
         logError('Chat', `Pi Runtime关闭失败: ${error.message}`);
