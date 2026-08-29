@@ -1,5 +1,4 @@
 const path = require('path');
-const tts = require('../../../../external/tts/tts-service');
 const reminder = require('../reminder/reminder-app-service');
 const timeAnnounce = require('../time/time-announce-app-service');
 const chat = require('../../../../external/llm/llm-service');
@@ -19,6 +18,7 @@ let muteAllDisplays = null;
 let unmuteAllDisplays = null;
 let timeAnnounceToggle = null;
 let voiceInputQueues = new Map();
+let ttsRouter = null;
 
 // 内置功能命令定义同时供语音门控和控制端列表使用，避免两处维护不同的命令范围。
 const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
@@ -210,6 +210,12 @@ function setTimeAnnounceToggle(fn) {
     timeAnnounceToggle = fn;
 }
 
+// TTS 由服务端统一注入，语音命令服务只负责描述播报内容和界面动作。
+// 这样显示端语音输入不会把生成结果默认发回触发输入的显示端。
+function setTtsRouter(router) {
+    ttsRouter = router && typeof router.speak === 'function' ? router : null;
+}
+
 function setMediaLibrary(manager) {
     mediaLibraryManager = manager;
 }
@@ -284,26 +290,35 @@ function getCommandRouting() {
     return { ...highLevelRouting };
 }
 
-function buildDisplayAudioUrl(audioPath) {
-    const fileName = path.basename(audioPath);
-    return `/uploads/tts/${fileName}`;
-}
+async function speakVoiceResponse(displayId, text, action = 'response', extra = {}, callbacks = null) {
+    if (!text) return false;
 
-async function speakToDisplay(displayId, text, action = 'response', extra = {}) {
-    if (!displayId || !sendToDisplay) {
-        return false;
+    // 控制端播放仍由原有 onResult 回调处理，避免改变控制端播放协议。
+    if (callbacks && callbacks.onResult) {
+        await callbacks.onResult(text);
+        return true;
     }
 
-    const audioPath = await tts.generateTTS(text);
-    sendToDisplay(displayId, {
-        type: 'voiceCommand',
-        action,
-        text,
-        audioUrl: buildDisplayAudioUrl(audioPath),
-        ...extra
-    });
+    // 显示端语音输入通过 onTts 进入服务端通用 TTS 生成和目标选择流程。
+    if (callbacks && callbacks.onTts) {
+        await callbacks.onTts(text);
+        if (displayId && sendToDisplay) {
+            sendToDisplay(displayId, {
+                type: 'voiceCommand',
+                action,
+                text,
+                ...extra
+            });
+        }
+        return true;
+    }
 
-    return true;
+    // 兼容非 processVoiceCommand 调用方，由服务端注入的定向路由负责旧行为。
+    if (ttsRouter) {
+        return ttsRouter.speak({ displayId, text, action, extra });
+    }
+
+    return false;
 }
 
 function formatReminderContent(content) {
@@ -461,7 +476,7 @@ function extractReminderContent(text) {
     return formatReminderContent(content);
 }
 
-async function handleReminderCommand(text, displayId) {
+async function handleReminderCommand(text, displayId, callbacks) {
     const { targetTime, timeDescription } = parseTimeExpression(text);
     const { type: repeatType, description: repeatDescription } = parseRepeatRule(text);
     const content = extractReminderContent(text);
@@ -477,6 +492,7 @@ async function handleReminderCommand(text, displayId) {
     pendingConfirmations.set(confirmationId, {
         type: 'reminder',
         displayId: displayId,
+        callbacks: callbacks,
         confirmedAt: null,
         data: {
             content: content,
@@ -495,13 +511,9 @@ async function handleReminderCommand(text, displayId) {
     });
     
     try {
-        sendToDisplay(displayId, {
-            type: 'voiceCommand',
-            action: 'confirm',
-            confirmationId: confirmationId,
-            text: confirmText,
-            audioUrl: buildDisplayAudioUrl(await tts.generateTTS(confirmText))
-        });
+        await speakVoiceResponse(displayId, confirmText, 'confirm', {
+            confirmationId
+        }, callbacks);
     } catch (err) {
         console.error('[语音命令] 提醒确认语音生成失败:', err.message);
     }
@@ -527,7 +539,13 @@ async function executeReminderConfirmation(confirmationId, confirmed) {
             try {
                 const nextTrigger = newReminder.nextTrigger ? new Date(newReminder.nextTrigger) : new Date();
                 const successText = `提醒添加成功，时间是${formatDateTimeLabel(nextTrigger)}，内容是${newReminder.content}`;
-                await speakToDisplay(confirmation.displayId, successText, 'response');
+                await speakVoiceResponse(
+                    confirmation.displayId,
+                    successText,
+                    'response',
+                    {},
+                    confirmation.callbacks
+                );
             } catch (err) {
                 console.error('[语音命令] 提醒成功语音生成失败:', err.message);
             }
@@ -537,7 +555,13 @@ async function executeReminderConfirmation(confirmationId, confirmed) {
 
     if (confirmation.displayId) {
         try {
-            await speakToDisplay(confirmation.displayId, '好的，已取消这次提醒', 'response');
+            await speakVoiceResponse(
+                confirmation.displayId,
+                '好的，已取消这次提醒',
+                'response',
+                {},
+                confirmation.callbacks
+            );
         } catch (err) {
             console.error('[语音命令] 提醒取消语音生成失败:', err.message);
         }
@@ -556,21 +580,13 @@ function handleCancelCommand(text, displayId) {
     return false;
 }
 
-async function handleTimeAnnounceCommand(text, displayId) {
+async function handleTimeAnnounceCommand(text, displayId, callbacks) {
     if (text.includes('关闭报时')) {
         if (timeAnnounceToggle) await timeAnnounceToggle(false);
         const responseText = '已关闭报时功能';
 
         try {
-            const audioPath = await tts.generateTTS(responseText);
-            const fileName = path.basename(audioPath);
-
-            sendToDisplay(displayId, {
-                type: 'voiceCommand',
-                action: 'response',
-                text: responseText,
-                audioUrl: `/uploads/tts/${fileName}`
-            });
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 报时语音生成失败:', err.message);
         }
@@ -579,37 +595,21 @@ async function handleTimeAnnounceCommand(text, displayId) {
         const responseText = '已开启报时功能';
 
         try {
-            const audioPath = await tts.generateTTS(responseText);
-            const fileName = path.basename(audioPath);
-
-            sendToDisplay(displayId, {
-                type: 'voiceCommand',
-                action: 'response',
-                text: responseText,
-                audioUrl: `/uploads/tts/${fileName}`
-            });
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 报时语音生成失败:', err.message);
         }
     } else {
         try {
             const timeText = timeAnnounce.generateTimeText();
-            const audioPath = await tts.generateTTS(timeText);
-            const fileName = path.basename(audioPath);
-            
-            sendToDisplay(displayId, {
-                type: 'tts',
-                action: 'playAudio',
-                audioUrl: `/uploads/tts/${fileName}`,
-                text: timeText
-            });
+            await speakVoiceResponse(displayId, timeText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 报时语音生成失败:', err.message);
         }
     }
 }
 
-async function handleRecordingCommand(text, displayId) {
+async function handleRecordingCommand(text, displayId, callbacks) {
     if (!displayId || !sendToDisplay) {
         return false;
     }
@@ -628,7 +628,13 @@ async function handleRecordingCommand(text, displayId) {
     });
 
     try {
-        await speakToDisplay(displayId, shouldEnable ? '已开启录音' : '已关闭录音', 'response');
+        await speakVoiceResponse(
+            displayId,
+            shouldEnable ? '已开启录音' : '已关闭录音',
+            'response',
+            {},
+            callbacks
+        );
     } catch (err) {
         console.error('[语音命令] 录音指令语音生成失败:', err.message);
     }
@@ -646,7 +652,7 @@ async function handleAffirmCommand(displayId) {
     return executeReminderConfirmation(confirmationId, true);
 }
 
-async function handleTodayReminders(displayId) {
+async function handleTodayReminders(displayId, callbacks) {
     const allReminders = reminder.getAllReminders();
     const today = new Date();
     const todayStr = today.toDateString();
@@ -671,20 +677,13 @@ async function handleTodayReminders(displayId) {
     }
     
     try {
-        const audioPath = await tts.generateTTS(responseText);
-        const fileName = path.basename(audioPath);
-        sendToDisplay(displayId, {
-            type: 'tts',
-            action: 'playAudio',
-            audioUrl: `/uploads/tts/${fileName}`,
-            text: responseText
-        });
+        await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
     } catch (err) {
         console.error('[语音命令] 今日提醒语音生成失败:', err.message);
     }
 }
 
-async function handleTomorrowReminders(displayId) {
+async function handleTomorrowReminders(displayId, callbacks) {
     const allReminders = reminder.getAllReminders();
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -710,31 +709,17 @@ async function handleTomorrowReminders(displayId) {
     }
     
     try {
-        const audioPath = await tts.generateTTS(responseText);
-        const fileName = path.basename(audioPath);
-        sendToDisplay(displayId, {
-            type: 'tts',
-            action: 'playAudio',
-            audioUrl: `/uploads/tts/${fileName}`,
-            text: responseText
-        });
+        await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
     } catch (err) {
         console.error('[语音命令] 明日提醒语音生成失败:', err.message);
     }
 }
 
-async function handleMuteCommand(displayId) {
+async function handleMuteCommand(displayId, callbacks) {
     if (!muteAllDisplays) {
         const responseText = '静音功能不可用';
         try {
-            const audioPath = await tts.generateTTS(responseText);
-            const fileName = path.basename(audioPath);
-            sendToDisplay(displayId, {
-                type: 'voiceCommand',
-                action: 'response',
-                text: responseText,
-                audioUrl: `/uploads/tts/${fileName}`
-            });
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 静音语音生成失败:', err.message);
         }
@@ -745,31 +730,17 @@ async function handleMuteCommand(displayId) {
     const responseText = result ? '已静音所有显示端' : '已经是静音状态';
     
     try {
-        const audioPath = await tts.generateTTS(responseText);
-        const fileName = path.basename(audioPath);
-        sendToDisplay(displayId, {
-            type: 'voiceCommand',
-            action: 'response',
-            text: responseText,
-            audioUrl: `/uploads/tts/${fileName}`
-        });
+        await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
     } catch (err) {
         console.error('[语音命令] 静音语音生成失败:', err.message);
     }
 }
 
-async function handleUnmuteCommand(displayId) {
+async function handleUnmuteCommand(displayId, callbacks) {
     if (!unmuteAllDisplays) {
         const responseText = '取消静音功能不可用';
         try {
-            const audioPath = await tts.generateTTS(responseText);
-            const fileName = path.basename(audioPath);
-            sendToDisplay(displayId, {
-                type: 'voiceCommand',
-                action: 'response',
-                text: responseText,
-                audioUrl: `/uploads/tts/${fileName}`
-            });
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 取消静音语音生成失败:', err.message);
         }
@@ -780,14 +751,7 @@ async function handleUnmuteCommand(displayId) {
     const responseText = result ? '已取消静音' : '当前不是静音状态';
     
     try {
-        const audioPath = await tts.generateTTS(responseText);
-        const fileName = path.basename(audioPath);
-        sendToDisplay(displayId, {
-            type: 'voiceCommand',
-            action: 'response',
-            text: responseText,
-            audioUrl: `/uploads/tts/${fileName}`
-        });
+        await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
     } catch (err) {
         console.error('[语音命令] 取消静音语音生成失败:', err.message);
     }
@@ -799,20 +763,11 @@ async function handlePlayCommand(text, displayId, callbacks) {
     if (!fileName) {
         const responseText = '请问您要播放什么文件？';
         if (callbacks && callbacks.onResult) {
-            callbacks.onResult(responseText);
+            await callbacks.onResult(responseText);
+        } else if (callbacks && callbacks.onTts) {
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         } else if (displayId && sendToDisplay) {
-            try {
-                const audioPath = await tts.generateTTS(responseText);
-                const audioFileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: responseText,
-                    audioUrl: `/uploads/tts/${audioFileName}`
-                });
-            } catch (err) {
-                console.error('[语音命令] 播放语音生成失败:', err.message);
-            }
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         }
         return;
     }
@@ -824,20 +779,11 @@ async function handlePlayCommand(text, displayId, callbacks) {
     if (matches.length === 0) {
         const responseText = `没有找到名为"${fileName}"的文件`;
         if (callbacks && callbacks.onResult) {
-            callbacks.onResult(responseText);
+            await callbacks.onResult(responseText);
+        } else if (callbacks && callbacks.onTts) {
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         } else if (displayId && sendToDisplay) {
-            try {
-                const audioPath = await tts.generateTTS(responseText);
-                const audioFileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: responseText,
-                    audioUrl: `/uploads/tts/${audioFileName}`
-                });
-            } catch (err) {
-                console.error('[语音命令] 播放语音生成失败:', err.message);
-            }
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         }
         return;
     }
@@ -847,31 +793,18 @@ async function handlePlayCommand(text, displayId, callbacks) {
         const responseText = `正在播放${file.name}`;
         
         if (callbacks && callbacks.onResult) {
-            callbacks.onResult(responseText);
+            await callbacks.onResult(responseText);
+        } else if (callbacks && callbacks.onTts) {
+            await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
         }
         
         if (displayId && sendToDisplay) {
-            try {
-                if (!callbacks) {
-                    const audioPath = await tts.generateTTS(responseText);
-                    const audioFileName = path.basename(audioPath);
-                    sendToDisplay(displayId, {
-                        type: 'voiceCommand',
-                        action: 'response',
-                        text: responseText,
-                        audioUrl: `/uploads/tts/${audioFileName}`
-                    });
-                }
-                
-                sendToDisplay(displayId, {
-                    type: 'media',
-                    url: file.url,
-                    mediaType: file.mediaType,
-                    name: file.name
-                });
-            } catch (err) {
-                console.error('[语音命令] 播放语音生成失败:', err.message);
-            }
+            sendToDisplay(displayId, {
+                type: 'media',
+                url: file.url,
+                mediaType: file.mediaType,
+                name: file.name
+            });
         }
         return;
     }
@@ -897,34 +830,19 @@ async function handlePlayCommand(text, displayId, callbacks) {
     }, 35000);
     
     if (callbacks && callbacks.onResult) {
-        callbacks.onResult(responseText);
+        await callbacks.onResult(responseText);
+    } else if (callbacks && callbacks.onTts) {
+        await speakVoiceResponse(displayId, responseText, 'playChoices', {
+            confirmationId,
+            matches: matches.slice(0, 5)
+        }, callbacks);
     }
-    
-    if (displayId && sendToDisplay) {
-        try {
-            if (!callbacks) {
-                const audioPath = await tts.generateTTS(responseText);
-                const audioFileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'playChoices',
-                    confirmationId: confirmationId,
-                    matches: matches.slice(0, 5),
-                    text: responseText,
-                    audioUrl: `/uploads/tts/${audioFileName}`
-                });
-            } else {
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'playChoices',
-                    confirmationId: confirmationId,
-                    matches: matches.slice(0, 5),
-                    text: responseText
-                });
-            }
-        } catch (err) {
-            console.error('[语音命令] 播放语音生成失败:', err.message);
-        }
+
+    if (displayId && sendToDisplay && !callbacks?.onTts) {
+        await speakVoiceResponse(displayId, responseText, 'playChoices', {
+            confirmationId,
+            matches: matches.slice(0, 5)
+        }, callbacks);
     }
 }
 
@@ -1002,25 +920,12 @@ async function handlePlaySelection(confirmationId, selection, displayId) {
     const callbacks = confirmation.callbacks;
     
     if (callbacks && callbacks.onResult) {
-        callbacks.onResult(responseText);
+        await callbacks.onResult(responseText);
+    } else if (callbacks && callbacks.onTts) {
+        await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
     }
     
     if (displayId && sendToDisplay) {
-        if (!callbacks) {
-            try {
-                const audioPath = await tts.generateTTS(responseText);
-                const audioFileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: responseText,
-                    audioUrl: `/uploads/tts/${audioFileName}`
-                });
-            } catch (err) {
-                console.error('[语音命令] 播放语音生成失败:', err.message);
-            }
-        }
-        
         sendToDisplay(displayId, {
             type: 'media',
             url: file.url,
@@ -1091,58 +996,33 @@ async function handleWeatherCommand(text, displayId, callbacks) {
         const weatherText = `${fallbackText}${cityName}当前天气：${weather}，温度${temp}度，湿度${humidity}%`;
         
         if (callbacks && callbacks.onResult) {
-            callbacks.onResult(weatherText);
+            await callbacks.onResult(weatherText);
+        } else if (callbacks && callbacks.onTts) {
+            await speakVoiceResponse(displayId, weatherText, 'weatherResult', {}, callbacks);
         } else if (displayId && sendToDisplay) {
-            try {
-                const audioPath = await tts.generateTTS(weatherText);
-                const fileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'weatherResult',
-                    text: weatherText,
-                    audioUrl: `/uploads/tts/${fileName}`
-                });
-            } catch (err) {
-                console.error('[语音命令] 天气语音生成失败:', err.message);
-            }
+            await speakVoiceResponse(displayId, weatherText, 'weatherResult', {}, callbacks);
         }
     } catch (err) {
         console.error('[语音命令] 获取天气失败:', err.message);
         const errorText = '获取天气失败，天气服务暂时不可用，请稍后再试';
         if (callbacks && callbacks.onError) {
-            callbacks.onError(errorText);
+            await callbacks.onError(errorText);
+        } else if (callbacks && callbacks.onTts) {
+            await speakVoiceResponse(displayId, errorText, 'response', {}, callbacks);
         } else if (displayId && sendToDisplay) {
-            try {
-                const audioPath = await tts.generateTTS(errorText);
-                const fileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: errorText,
-                    audioUrl: `/uploads/tts/${fileName}`
-                });
-            } catch (ttsErr) {
-                console.error('[语音命令] 错误语音生成失败:', ttsErr.message);
-            }
+            await speakVoiceResponse(displayId, errorText, 'response', {}, callbacks);
         }
     }
 }
 
-async function handleSearchCommand(text, displayId) {
+async function handleSearchCommand(text, displayId, callbacks) {
     let query = text.replace(/搜索/, '').trim();
     
     if (!query) {
         if (displayId && sendToDisplay) {
             const responseText = '请问您要搜索什么？';
             try {
-                const audioPath = await tts.generateTTS(responseText);
-                const fileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: responseText,
-                    audioUrl: `/uploads/tts/${fileName}`
-                });
+                await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
             } catch (err) {
                 console.error('[语音命令] 搜索语音生成失败:', err.message);
             }
@@ -1153,14 +1033,7 @@ async function handleSearchCommand(text, displayId) {
     if (displayId && sendToDisplay) {
         const searchingText = `正在搜索${query}`;
         try {
-            const searchAudioPath = await tts.generateTTS(searchingText);
-            const searchFileName = path.basename(searchAudioPath);
-            sendToDisplay(displayId, {
-                type: 'voiceCommand',
-                action: 'response',
-                text: searchingText,
-                audioUrl: `/uploads/tts/${searchFileName}`
-            });
+            await speakVoiceResponse(displayId, searchingText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 搜索语音生成失败:', err.message);
         }
@@ -1199,31 +1072,17 @@ async function handleSearchCommand(text, displayId) {
         }
         
         if (displayId && sendToDisplay) {
-            const audioPath = await tts.generateTTS(responseText);
-            const fileName = path.basename(audioPath);
-            
-            sendToDisplay(displayId, {
-                type: 'voiceCommand',
-                action: 'searchResult',
-                query: query,
-                results: results,
-                text: responseText,
-                audioUrl: `/uploads/tts/${fileName}`
-            });
+            await speakVoiceResponse(displayId, responseText, 'searchResult', {
+                query,
+                results
+            }, callbacks);
         }
     } catch (err) {
         console.error('[语音命令] 搜索失败:', err.message);
         if (displayId && sendToDisplay) {
             const errorText = '搜索失败，请稍后再试';
             try {
-                const audioPath = await tts.generateTTS(errorText);
-                const fileName = path.basename(audioPath);
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: errorText,
-                    audioUrl: `/uploads/tts/${fileName}`
-                });
+                await speakVoiceResponse(displayId, errorText, 'response', {}, callbacks);
             } catch (ttsErr) {
                 console.error('[语音命令] 错误语音生成失败:', ttsErr.message);
             }
@@ -1404,18 +1263,7 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false)
         if (cancelled) {
             const responseText = '好的，已取消';
             try {
-                const audioPath = await tts.generateTTS(responseText);
-                const fileName = path.basename(audioPath);
-                if (callbacks && callbacks.onResult) {
-                    callbacks.onResult(responseText);
-                } else if (displayId && sendToDisplay) {
-                    sendToDisplay(displayId, {
-                        type: 'voiceCommand',
-                        action: 'response',
-                        text: responseText,
-                        audioUrl: `/uploads/tts/${fileName}`
-                    });
-                }
+                await speakVoiceResponse(displayId, responseText, 'response', {}, callbacks);
             } catch (err) {
                 console.error('[语音命令] 取消语音生成失败:', err.message);
             }
@@ -1431,41 +1279,32 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false)
     }
 
     if (trimmedText.includes('开启录音') || trimmedText.includes('开始录音') || trimmedText.includes('关闭录音') || trimmedText.includes('停止录音')) {
-        const handledRecording = await handleRecordingCommand(trimmedText, displayId);
+        const handledRecording = await handleRecordingCommand(trimmedText, displayId, callbacks);
         if (handledRecording) {
             return;
         }
     }
     
     if (cmdText === '静音' || trimmedText.includes('全部静音')) {
-        await handleMuteCommand(displayId);
+        await handleMuteCommand(displayId, callbacks);
         return;
     }
     
     if (trimmedText.includes('取消静音') || cmdText === '恢复音量') {
-        await handleUnmuteCommand(displayId);
+        await handleUnmuteCommand(displayId, callbacks);
         return;
     }
 
     // 停止播报
     if (trimmedText.includes('停止播报') || trimmedText.includes('中止播报')) {
-        if (sendToDisplay && displayId) {
+        if (callbacks && callbacks.onStop) {
+            await callbacks.onStop();
+        } else if (sendToDisplay && displayId) {
             sendToDisplay(displayId, { type: 'tts', action: 'stop' });
         }
         const stopText = '已停止播报';
         try {
-            const audioPath = await tts.generateTTS(stopText);
-            const fileName = path.basename(audioPath);
-            if (callbacks && callbacks.onResult) {
-                callbacks.onResult(stopText);
-            } else if (displayId && sendToDisplay) {
-                sendToDisplay(displayId, {
-                    type: 'voiceCommand',
-                    action: 'response',
-                    text: stopText,
-                    audioUrl: `/uploads/tts/${fileName}`
-                });
-            }
+            await speakVoiceResponse(displayId, stopText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 停止播报TTS失败:', err.message);
         }
@@ -1473,29 +1312,29 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false)
     }
 
     if (trimmedText.includes('今日提醒') || trimmedText.includes('今天提醒')) {
-        await handleTodayReminders(displayId);
+        await handleTodayReminders(displayId, callbacks);
         return;
     }
     
     if (trimmedText.includes('明日提醒') || trimmedText.includes('明天提醒')) {
-        await handleTomorrowReminders(displayId);
+        await handleTomorrowReminders(displayId, callbacks);
         return;
     }
     
     if (trimmedText.includes('提醒')) {
-        await handleReminderCommand(trimmedText, displayId);
+        await handleReminderCommand(trimmedText, displayId, callbacks);
         return;
     }
     
     if (trimmedText.includes('报时') || trimmedText.includes('现在几点')) {
-        await handleTimeAnnounceCommand(trimmedText, displayId);
+        await handleTimeAnnounceCommand(trimmedText, displayId, callbacks);
         return;
     }
     
     if (trimmedText.includes('搜索')) {
         const routing = checkCommandRouting(trimmedText, 'search');
         if (routing) return routing;
-        await handleSearchCommand(trimmedText, displayId);
+        await handleSearchCommand(trimmedText, displayId, callbacks);
         return;
     }
 
@@ -1578,7 +1417,7 @@ async function executeCommands(actions, displayId, callbacks, depth = 0) {
     }
     
     for (const action of actions) {
-        const result = await processVoiceCommand(action, displayId, null, true);
+        const result = await processVoiceCommand(action, displayId, callbacks, true);
         
         if (!result) continue;
         
@@ -1609,6 +1448,7 @@ module.exports = {
     setClients,
     setMuteFunctions,
     setTimeAnnounceToggle,
+    setTtsRouter,
     setMediaLibrary,
     isBuiltinVoiceCommand,
     getBuiltinVoiceCommands,

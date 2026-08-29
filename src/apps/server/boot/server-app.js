@@ -445,6 +445,19 @@ async function startServer() {
         timeListener.start();
         reminder.start(displayClients, sendToDisplay);
         voiceCommand.setClients(displayClients, sendToDisplay, broadcastToControls);
+        voiceCommand.setTtsRouter({
+            speak: async ({ displayId, text, action, extra }) => {
+                const audioPath = await generateTtsWithFallback(text, undefined, undefined, displayId);
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action,
+                    text,
+                    audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
+                    ...extra
+                });
+                return true;
+            }
+        });
         voiceCommand.setMediaLibrary(mediaLibraryManager);
         voiceCommand.setMuteFunctions(muteAllDisplays, unmuteAllDisplays);
 
@@ -867,12 +880,12 @@ function sendConversationPrompt(displayId, text) {
     if (!displayId || !text) return;
     (async () => {
         try {
-            const audioPath = await generateTtsWithFallback(text);
+            await sendVoiceInputTts(text);
+            // 唤醒状态提示仍只在触发显示端展示文字，不再携带会导致该端独占播放的 audioUrl。
             sendToDisplay(displayId, {
                 type: 'voiceCommand',
                 action: 'response',
-                text,
-                audioUrl: `/uploads/tts/${path.basename(audioPath)}`
+                text
             });
         } catch (error) {
             logError('语音', `唤醒提示 TTS 失败: ${error.message}`);
@@ -3384,6 +3397,38 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
     return tts.generateTTS(ttsText, voice, speed);
 }
 
+// 显示端语音输入的播报不绑定输入来源，统一发送到当前在线且允许语音播放的显示端。
+// TTS 生成设备和音频播放目标分离：生成仍遵循 tts.device 配置，播放目标由通用能力路由决定。
+async function sendVoiceInputTts(text) {
+    const audioPath = await generateTtsWithFallback(text);
+    const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
+    const targetDisplayIds = getOnlineVoicePlaybackDisplayIds();
+
+    for (const targetDisplayId of targetDisplayIds) {
+        sendToDisplay(targetDisplayId, {
+            type: 'tts',
+            action: 'playAudio',
+            audioUrl,
+            text
+        });
+    }
+
+    return targetDisplayIds.length;
+}
+
+// 控制端语音命令继续按控制端指定的显示目标播放，但生成过程同样统一走 fallback 路由。
+async function sendVoiceCommandTts(text, targetDisplayId) {
+    const audioPath = await generateTtsWithFallback(text, undefined, undefined, targetDisplayId);
+    if (!targetDisplayId) return false;
+
+    return sendToDisplay(targetDisplayId, {
+        type: 'tts',
+        action: 'playAudio',
+        audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
+        text
+    });
+}
+
 // 裁剪调试日志开关
 let _cropDebugLog = false;
 
@@ -4241,6 +4286,7 @@ async function handleControlMessageFallback(data, ws) {
                         try {
                             const playOnControl = data.playOnControl || false;
                             const targetDisplayId = data.displayId || displayId;
+                            const isDisplayVoiceInput = displayData?.ws === ws;
                             
                             const sendToControl = (msg) => {
                                 ws.send(JSON.stringify(msg));
@@ -4273,7 +4319,21 @@ async function handleControlMessageFallback(data, ws) {
                                         logError('VoiceCommand', `TTS生成失败: ${err.message}`);
                                     }
                                 }
-                            } : null;
+                            } : {
+                                onTts: isDisplayVoiceInput
+                                    ? async (text) => sendVoiceInputTts(text)
+                                    : async (text) => sendVoiceCommandTts(text, targetDisplayId),
+                                onStop: async () => {
+                                    if (isDisplayVoiceInput) {
+                                        sendToDisplaysWithCapability('voicePlayback', {
+                                            type: 'tts',
+                                            action: 'stop'
+                                        });
+                                    } else if (targetDisplayId) {
+                                        sendToDisplay(targetDisplayId, { type: 'tts', action: 'stop' });
+                                    }
+                                }
+                            };
                             
                             const result = await voiceCommand.processVoiceCommand(data.text, targetDisplayId, callbacks);
                             
@@ -4288,13 +4348,15 @@ async function handleControlMessageFallback(data, ws) {
                                     const helpTTS = '系统指令帮助：说系统显示此帮助。说私聊加助手名字进入私聊模式。说退出私聊退出私聊模式。说提醒加时间和内容设置提醒。说今日提醒或今天提醒查看今日提醒。说明日提醒或明天提醒查看明日提醒。说报时或现在几点播报当前时间。说开启报时或关闭报时控制报时功能。说静音或全部静音静音所有显示端。说取消静音或恢复音量取消静音。说天气加城市查询天气。说播放加文件名搜索并播放媒体。说搜索加关键词搜索信息。说拒绝或取消取消待确认操作。';
                                     (async () => {
                                         try {
-                                            const audioPath = await generateTtsWithFallback(helpTTS);
-                                            const fileName = path.basename(audioPath);
+                                            if (isDisplayVoiceInput) {
+                                                await sendVoiceInputTts(helpTTS);
+                                            } else {
+                                                await sendVoiceCommandTts(helpTTS, targetDisplayId);
+                                            }
                                             sendToDisplay(targetDisplayId, {
                                                 type: 'voiceCommand',
                                                 action: 'response',
-                                                text: helpTTS,
-                                                audioUrl: `/uploads/tts/${fileName}`
+                                                text: helpTTS
                                             });
                                         } catch (err) {
                                             logError('VoiceCommand', `帮助TTS生成失败: ${err.message}`);
@@ -4315,13 +4377,15 @@ async function handleControlMessageFallback(data, ws) {
                                 if (targetDisplayId && sendToDisplay) {
                                     (async () => {
                                         try {
-                                            const audioPath = await generateTtsWithFallback(modeText);
-                                            const fileName = path.basename(audioPath);
+                                            if (isDisplayVoiceInput) {
+                                                await sendVoiceInputTts(modeText);
+                                            } else {
+                                                await sendVoiceCommandTts(modeText, targetDisplayId);
+                                            }
                                             sendToDisplay(targetDisplayId, {
                                                 type: 'voiceCommand',
                                                 action: 'response',
-                                                text: modeText,
-                                                audioUrl: `/uploads/tts/${fileName}`
+                                                text: modeText
                                             });
                                         } catch (err) {
                                             logError('VoiceCommand', `指令模式TTS失败: ${err.message}`);
@@ -4335,6 +4399,7 @@ async function handleControlMessageFallback(data, ws) {
                                             content: message,
                                             displayId: targetDisplayId,
                                             playOnControl: playOnControl,
+                                            routeVoiceToAll: isDisplayVoiceInput,
                                             systemPrompt: systemPrompt,
                                             skipHistory: skipHistory || false,
                                             sendToControl: sendToControl
@@ -4355,6 +4420,7 @@ async function handleControlMessageFallback(data, ws) {
                                     content: result.message,
                                     displayId: targetDisplayId,
                                     playOnControl: playOnControl,
+                                    routeVoiceToAll: isDisplayVoiceInput,
                                     systemPrompt: result.systemPrompt,
                                     skipHistory: result.skipHistory || false,
                                     sendToControl: sendToControl
@@ -5208,6 +5274,7 @@ async function handleChatMessage(options) {
         displayId,
         displayIds = [],
         playOnControl = false,
+        routeVoiceToAll = false,
         systemPrompt: customSystemPrompt,
         templateTarget,
         mode = 'group',
@@ -5257,7 +5324,7 @@ async function handleChatMessage(options) {
         contextCount = 0;
     }
 
-    const preferredDisplayId = displayIds[0] || displayId || null;
+    const preferredDisplayId = displayIds[0] || (routeVoiceToAll ? null : displayId) || null;
     const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId) : null;
     await chat.chatStream(content, {
         useTemplate: null,
@@ -5285,6 +5352,15 @@ async function handleChatMessage(options) {
 
                 if (playOnControl) {
                     sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
+                } else if (routeVoiceToAll) {
+                    for (const targetId of getOnlineVoicePlaybackDisplayIds()) {
+                        sendToDisplay(targetId, {
+                            type: 'tts',
+                            action: 'playAudio',
+                            audioUrl: audioUrl,
+                            text: sentence
+                        });
+                    }
                 } else if (displayIds.length > 0) {
                     for (const tid of displayIds) {
                         sendToDisplay(tid, {

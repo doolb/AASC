@@ -127,6 +127,29 @@ TTS 显示端回包:
 TaskManager:
     注入 generateTtsWithFallback 到内置任务上下文
     time.announce 使用 context.generateTTS
+
+显示端语音输入 TTS:
+    sourceDisplayId = voiceInput.displayId
+    sourceDisplayId 仅传给语音命令执行和结果界面
+    audioPath = generateTtsWithFallback(text)
+    targetDisplayIds = getOnlineVoicePlaybackDisplayIds()
+    对每个 targetDisplayId:
+        sendToDisplay(targetDisplayId, {
+            type: 'tts',
+            action: 'playAudio',
+            audioUrl: audioPath,
+            text: text
+        })
+    不使用 sourceDisplayId 作为隐式 preferredDisplayId 或唯一播放目标
+
+语音触发的普通对话:
+    routeVoiceToAll=true
+    每句 TTS 生成时不优选 sourceDisplayId
+    每句生成完成时重新获取在线 voicePlayback 目标并发送
+
+控制端定向语音:
+    保留显式 targetDisplayId
+    targetDisplayId 只影响播放下发，TTS 生成仍调用 generateTtsWithFallback
 ```
 
 ### 显示端 TTS 下发睡眠检查

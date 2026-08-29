@@ -54,6 +54,29 @@ waitingWake 中的免唤醒范围:
     每条 command 包含 id、examples、description、wakeRequired=false
     弹窗展示示例、说明和“无需唤醒”标记
 
+显示端语音输入 TTS:
+    服务端识别到 voiceInput 后记录 sourceDisplayId
+    sourceDisplayId 只用于命令执行、媒体控制和结果界面，不直接作为 TTS 目标
+    为语音命令注入 onTts(text) 回调
+    onTts:
+        audioPath = generateTtsWithFallback(text)
+        targetDisplayIds = getOnlineVoicePlaybackDisplayIds()
+        对每个 targetDisplayId 发送:
+            { type: 'tts', action: 'playAudio', audioUrl, text }
+    语音命令服务的所有响应（报时、提醒、静音、天气、搜索、播放、录音、停止播报）调用 speakVoiceResponse
+    speakVoiceResponse 不直接导入或调用底层 tts.generateTTS
+    需要弹窗/选择数据时，仍向 sourceDisplayId 发送不带 audioUrl 的 voiceCommand 消息
+    语音触发的普通对话使用 routeVoiceToAll=true，在每句 TTS 完成时重新读取在线 voicePlayback 目标
+
+控制端语音命令兼容:
+    playOnControl=true -> 继续通过 onResult/onError 生成并发送 playOnControl
+    其他控制端语音命令 -> 使用 generateTtsWithFallback(text, ..., targetDisplayId)
+    播放目标仍为控制端指定的 targetDisplayId，不套用显示端语音输入的广播目标
+
+停止播报:
+    显示端来源 -> 向全部在线 voicePlayback 显示端发送 tts.stop
+    控制端来源 -> 只向 targetDisplayId 发送 tts.stop
+
 显示端 TTS 队列结束:
     若监听开关仍开启且没有新的 LLM/TTS 任务:
         进入 waitingTts 或保留当前激活状态

@@ -436,6 +436,21 @@ processVoiceCommand(text, displayId, callbacks):
     └─ systemMessage: sendToControl({ type: 'systemMessage' })
 ```
 
+### 显示端语音输入的 TTS 路由
+
+```text
+显示端 voiceInput -> voiceCommand:
+    服务端注入 onTts(text) 和 onStop() 回调
+    voiceCommand 不直接导入 tts-service，也不根据 displayId 生成音频
+    onTts:
+        服务端 generateTtsWithFallback(text)
+        获取在线 voicePlayback 显示端
+        向每个目标发送 type='tts', action='playAudio'
+    voiceCommand 需要弹窗、确认或播放选择信息时:
+        向来源 displayId 发送不带 audioUrl 的 voiceCommand
+    来源 displayId 只用于命令执行和界面反馈，不是默认 TTS 唯一目标
+```
+
 ### 指令模式状态初始化（服务端启动时）
 
 ```
