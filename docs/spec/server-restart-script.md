@@ -51,3 +51,56 @@ restartServer(serverUrl):
 package.json scripts.restart:server:
     node src/scripts/restart-server.js
 ```
+
+## 双进程启动器伪代码
+
+```text
+启动器 main:
+    stopping = false
+    restartRequested = false
+    child = spawn(server-app.js, { stdio: ['inherit', 'inherit', 'inherit', 'ipc'] })
+
+    child.on(message):
+        如果 message.type == 'restartRequested':
+            restartRequested = true
+
+    child.on(exit):
+        如果 stopping:
+            退出并返回子进程退出码
+        如果 restartRequested:
+            restartRequested = false
+            清理旧子进程引用
+            重新启动 server-app.js
+        否则:
+            记录异常退出
+            按递增延迟重新启动，达到上限后退出
+
+    收到 SIGINT 或 SIGTERM:
+        stopping = true
+        向 child 转发相同信号
+        等待子进程退出，超时后强制结束
+```
+
+## 服务器重启伪代码
+
+```text
+POST /api/restart:
+    返回 { status: 'success', message: '服务器正在重启...' }
+    如果存在 IPC 通道:
+        向启动器发送 { type: 'restartRequested' }
+    否则:
+        执行兼容的优雅退出，不自行 detached 启动新服务器
+
+主动重启关闭流程:
+    关闭所有 WebSocket 客户端
+    停止 TUI 并恢复控制台状态
+    关闭 Chat/Agent 等受管运行时
+    退出当前服务器子进程
+```
+
+## TTY 约束
+
+- 启动器必须保持前台，不调用 `unref()`，并持续占有父级终端生命周期。
+- 服务器子进程的标准输入、输出和错误流继承启动器，TUI 仍由服务器进程渲染。
+- 重启时先调用 TUI 销毁逻辑，再退出子进程；新子进程重新初始化 TUI，但终端设备不改变。
+- 启动器收到外部停止信号时禁止自动拉起新子进程，避免 Ctrl+C 无法真正退出。

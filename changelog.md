@@ -4,6 +4,11 @@
 
 ### 已完成
 
+- 📝 [2026-08-29] 设计服务器双进程启动器与控制台重启
+  - 明确由前台启动器持有控制台 TTY，服务器作为继承标准流的子进程运行；主动重启由启动器重新拉起，普通停止不自动重启。
+  - 实现前补充了重启协议、TUI 清理、异常退出退避和兼容边界设计。
+  - 文档：`docs/design/server-restart-script.md`、`docs/spec/server-restart-script.md`、`docs/task/2026-08-29_服务器双进程启动器与控制台重启.md`。
+
 - ✅ [2026-08-29] 过滤 renderUpdate 高频命令提示
   - 显示端对 `task:renderUpdate` 和兼容 `hardwareStats` 只分发监控数据，不再发送 `commandAck`，控制端不再将每次刷新显示为 Toast/Tips。
   - 播放、控制、TTS、提醒等显式控制命令继续发送命令确认。

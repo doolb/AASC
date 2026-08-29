@@ -2,6 +2,11 @@
 
 ## 控制端
 
+- ⏳待完成 [2026-08-29] 服务器双进程启动器与控制台重启
+  - 已确认采用前台启动器监管服务器子进程，子进程继承控制台标准流；允许短暂 WebSocket 断线并自动恢复。
+  - 设计与实现伪代码已记录，待代码实现和验证后完成任务闭环。
+  - 文档：`docs/design/server-restart-script.md`、`docs/spec/server-restart-script.md`、`docs/task/2026-08-29_服务器双进程启动器与控制台重启.md`。
+
 - ✅已完成 [2026-08-29][2026-08-29] 过滤 renderUpdate 高频命令提示
   - 显示端对 `task:renderUpdate` 和兼容 `hardwareStats` 仅更新渲染任务，不再发送 `commandAck`，避免控制端持续弹出 Tips。
   - 播放、控制、TTS、提醒等显式命令确认保持不变。
