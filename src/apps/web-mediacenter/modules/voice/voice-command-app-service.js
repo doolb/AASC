@@ -136,6 +136,60 @@ const CITY_PINYIN_MAP = {
     '合肥': 'Hefei'
 };
 
+// wttr.in 使用 WorldWeatherOnline 的天气编码。接口的 lang_zh 字段偶尔仍返回英文，
+// 因此服务端必须保留编码映射，不能把接口语言字段当作可靠的中文来源。
+const WEATHER_CODE_LABELS = {
+    113: '晴',
+    116: '局部多云',
+    119: '阴',
+    122: '阴',
+    143: '雾',
+    149: '霾',
+    176: '小雨',
+    179: '雨夹雪',
+    182: '雨夹雪',
+    185: '雨夹雪',
+    200: '雷雨',
+    227: '吹雪',
+    230: '暴雪',
+    248: '雾',
+    260: '冻雾',
+    263: '零星小雨',
+    266: '小雨',
+    281: '冻雨',
+    284: '冻雨',
+    293: '局部小雨',
+    296: '小雨',
+    299: '中雨',
+    302: '中雨',
+    305: '大雨',
+    308: '大雨',
+    311: '冻雨',
+    314: '冻雨',
+    317: '雨夹雪',
+    320: '雨夹雪',
+    323: '小雪',
+    326: '小雪',
+    329: '中雪',
+    332: '中雪',
+    335: '大雪',
+    338: '大雪',
+    350: '冰粒',
+    353: '阵雨',
+    356: '中雨',
+    359: '暴雨',
+    362: '雨夹雪',
+    365: '雨夹雪',
+    368: '小雪',
+    371: '中雪',
+    374: '雨夹冰粒',
+    377: '雨夹冰粒',
+    386: '雷阵雨',
+    389: '雷暴',
+    392: '雷阵雪',
+    395: '暴雪'
+};
+
 let assistantConfig = {
     defaultName: '小爱',
     assistants: [
@@ -974,6 +1028,248 @@ async function handlePlaySelection(confirmationId, selection, displayId) {
     return true;
 }
 
+// 读取 wttr.in 的数组包装值，统一处理字段缺失、空字符串和 { value } 结构。
+function getWeatherValue(value) {
+    if (Array.isArray(value)) {
+        return getWeatherValue(value[0]);
+    }
+    if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'value')) {
+        return getWeatherValue(value.value);
+    }
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    return value;
+}
+
+function getWeatherText(value) {
+    const text = getWeatherValue(value);
+    if (text === null) return null;
+    const normalized = String(text).trim();
+    return normalized || null;
+}
+
+function getWeatherNumber(value) {
+    const rawValue = getWeatherValue(value);
+    if (rawValue === null) return null;
+    const number = Number(rawValue);
+    return Number.isFinite(number) ? number : null;
+}
+
+function isEnglishWeatherText(text) {
+    return Boolean(text) && /^[A-Za-z][A-Za-z\s-]*$/u.test(text);
+}
+
+function getWeatherCondition(source) {
+    const weatherCode = getWeatherNumber(source?.weatherCode);
+    const translatedText = getWeatherText(source?.lang_zh);
+    const originalText = getWeatherText(source?.weatherDesc);
+    const mappedText = WEATHER_CODE_LABELS[weatherCode];
+
+    if (mappedText && (!translatedText || isEnglishWeatherText(translatedText))) {
+        return mappedText;
+    }
+    return translatedText || mappedText || originalText || '未知天气';
+}
+
+function normalizeWeatherWind(source) {
+    const direction = getWeatherText(source?.winddir16Point);
+    const degree = getWeatherNumber(source?.winddirDegree);
+    const speedKmph = getWeatherNumber(source?.windspeedKmph);
+    const gustKmph = getWeatherNumber(source?.WindGustKmph);
+
+    if (direction === null && degree === null && speedKmph === null && gustKmph === null) {
+        return null;
+    }
+
+    return { direction, degree, speedKmph, gustKmph };
+}
+
+function normalizeWeatherAstronomy(source) {
+    if (!source) return null;
+
+    return {
+        sunrise: getWeatherText(source.sunrise),
+        sunset: getWeatherText(source.sunset),
+        moonrise: getWeatherText(source.moonrise),
+        moonset: getWeatherText(source.moonset),
+        moonPhase: getWeatherText(source.moon_phase),
+        moonIlluminationPercent: getWeatherNumber(source.moon_illumination)
+    };
+}
+
+function normalizeWeatherHourly(source) {
+    const weatherCode = getWeatherNumber(source?.weatherCode);
+    return {
+        time: getWeatherText(source?.time),
+        temperatureC: getWeatherNumber(source?.tempC),
+        feelsLikeC: getWeatherNumber(source?.FeelsLikeC),
+        humidityPercent: getWeatherNumber(source?.humidity),
+        condition: getWeatherCondition(source || {}),
+        weatherCode,
+        chanceOfRainPercent: getWeatherNumber(source?.chanceofrain),
+        chanceOfFogPercent: getWeatherNumber(source?.chanceoffog),
+        chanceOfSnowPercent: getWeatherNumber(source?.chanceofsnow),
+        chanceOfSunshinePercent: getWeatherNumber(source?.chanceofsunshine),
+        precipitationMm: getWeatherNumber(source?.precipMM),
+        uvIndex: getWeatherNumber(source?.uvIndex),
+        visibilityKm: getWeatherNumber(source?.visibility),
+        cloudCoverPercent: getWeatherNumber(source?.cloudcover),
+        wind: normalizeWeatherWind(source || {})
+    };
+}
+
+function getMaximumWeatherNumber(items, field) {
+    const numbers = items
+        .map(item => item[field])
+        .filter(value => value !== null);
+    return numbers.length > 0 ? Math.max(...numbers) : null;
+}
+
+function getTotalWeatherNumber(items, field) {
+    const numbers = items
+        .map(item => item[field])
+        .filter(value => value !== null);
+    return numbers.length > 0 ? numbers.reduce((total, value) => total + value, 0) : null;
+}
+
+function normalizeWeatherDay(source) {
+    const hourly = Array.isArray(source?.hourly)
+        ? source.hourly.map(normalizeWeatherHourly)
+        : [];
+
+    return {
+        date: getWeatherText(source?.date),
+        maxTemperatureC: getWeatherNumber(source?.maxtempC),
+        minTemperatureC: getWeatherNumber(source?.mintempC),
+        averageTemperatureC: getWeatherNumber(source?.avgtempC),
+        sunHour: getWeatherNumber(source?.sunHour),
+        totalSnowCm: getWeatherNumber(source?.totalSnow_cm),
+        uvIndex: getWeatherNumber(source?.uvIndex),
+        condition: hourly.find(item => item.condition && item.condition !== '未知天气')?.condition || '未知天气',
+        maxChanceOfRainPercent: getMaximumWeatherNumber(hourly, 'chanceOfRainPercent'),
+        totalPrecipitationMm: getTotalWeatherNumber(hourly, 'precipitationMm'),
+        astronomy: normalizeWeatherAstronomy(getWeatherValue(source?.astronomy)),
+        hourly
+    };
+}
+
+function normalizeWeatherCurrent(source) {
+    return {
+        observationTime: getWeatherText(source?.observation_time),
+        temperatureC: getWeatherNumber(source?.temp_C),
+        feelsLikeC: getWeatherNumber(source?.FeelsLikeC),
+        humidityPercent: getWeatherNumber(source?.humidity),
+        pressureHpa: getWeatherNumber(source?.pressure),
+        visibilityKm: getWeatherNumber(source?.visibility),
+        condition: getWeatherCondition(source || {}),
+        weatherCode: getWeatherNumber(source?.weatherCode),
+        cloudCoverPercent: getWeatherNumber(source?.cloudcover),
+        precipitationMm: getWeatherNumber(source?.precipMM),
+        uvIndex: getWeatherNumber(source?.uvIndex),
+        iconUrl: getWeatherText(source?.weatherIconUrl),
+        wind: normalizeWeatherWind(source || {})
+    };
+}
+
+function normalizeWeatherData(data, fallbackCity = '') {
+    const nearestArea = getWeatherValue(data?.nearest_area) || {};
+    const currentSource = getWeatherValue(data?.current_condition) || {};
+    const weatherDays = Array.isArray(data?.weather) ? data.weather.slice(0, 3) : [];
+
+    return {
+        location: {
+            name: getWeatherText(nearestArea.areaName) || fallbackCity || '本地',
+            country: getWeatherText(nearestArea.country),
+            region: getWeatherText(nearestArea.region),
+            latitude: getWeatherNumber(nearestArea.latitude),
+            longitude: getWeatherNumber(nearestArea.longitude)
+        },
+        current: normalizeWeatherCurrent(currentSource),
+        forecast: weatherDays.map(normalizeWeatherDay),
+        request: getWeatherValue(data?.request)
+    };
+}
+
+function formatWeatherMetric(value, unit = '') {
+    return value === null ? '未知' : `${value}${unit}`;
+}
+
+// wttr.in 的 hourly.time 通常是 0、300、600 这种 HHMM 数字字符串，
+// 转成标准时刻后再拼接，避免把 300 播报成“300时”。
+function formatWeatherHourLabel(value) {
+    if (value === null) return '未知时间';
+    const text = String(value).trim();
+    if (!/^\d{1,4}$/u.test(text)) return text;
+    const padded = text.padStart(4, '0');
+    return `${padded.slice(0, 2)}:${padded.slice(2)}`;
+}
+
+function formatWeatherWind(wind) {
+    if (!wind) return '风向未知，风速未知';
+    const direction = wind.direction || (wind.degree === null ? '未知' : `${wind.degree}度`);
+    const speed = formatWeatherMetric(wind.speedKmph, '公里每小时');
+    const gust = wind.gustKmph === null ? '' : `，阵风${wind.gustKmph}公里每小时`;
+    return `风向${direction}，风速${speed}${gust}`;
+}
+
+function formatWeatherAstronomy(astronomy) {
+    if (!astronomy) return '天文信息未知';
+    return [
+        `日出${astronomy.sunrise || '未知'}`,
+        `日落${astronomy.sunset || '未知'}`,
+        `月出${astronomy.moonrise || '未知'}`,
+        `月落${astronomy.moonset || '未知'}`,
+        `月相${astronomy.moonPhase || '未知'}`,
+        `月亮照明${formatWeatherMetric(astronomy.moonIlluminationPercent, '%')}`
+    ].join('，');
+}
+
+function formatWeatherHourly(hourly) {
+    const time = formatWeatherHourLabel(hourly.time);
+    return `${time}时${hourly.condition}，温度${formatWeatherMetric(hourly.temperatureC, '℃')}，体感${formatWeatherMetric(hourly.feelsLikeC, '℃')}，湿度${formatWeatherMetric(hourly.humidityPercent, '%')}，降雨概率${formatWeatherMetric(hourly.chanceOfRainPercent, '%')}，降雾概率${formatWeatherMetric(hourly.chanceOfFogPercent, '%')}，降雪概率${formatWeatherMetric(hourly.chanceOfSnowPercent, '%')}，日照概率${formatWeatherMetric(hourly.chanceOfSunshinePercent, '%')}，降水${formatWeatherMetric(hourly.precipitationMm, '毫米')}，紫外线${formatWeatherMetric(hourly.uvIndex)}，能见度${formatWeatherMetric(hourly.visibilityKm, '公里')}，${formatWeatherWind(hourly.wind)}`;
+}
+
+function formatWeatherDayDetail(day) {
+    const hourlyText = day.hourly.length > 0
+        ? day.hourly.map(formatWeatherHourly).join('；')
+        : '无逐时数据';
+    return `${day.date || '未知日期'}：${day.condition}，最高${formatWeatherMetric(day.maxTemperatureC, '℃')}，最低${formatWeatherMetric(day.minTemperatureC, '℃')}，平均${formatWeatherMetric(day.averageTemperatureC, '℃')}，日照${formatWeatherMetric(day.sunHour, '小时')}，降雪${formatWeatherMetric(day.totalSnowCm, '厘米')}，紫外线${formatWeatherMetric(day.uvIndex)}，最高降雨概率${formatWeatherMetric(day.maxChanceOfRainPercent, '%')}，预计降水${formatWeatherMetric(day.totalPrecipitationMm, '毫米')}；${formatWeatherAstronomy(day.astronomy)}；逐时预报：${hourlyText}`;
+}
+
+function formatWeatherDetail(weather) {
+    const current = weather.current;
+    const location = weather.location.name;
+    const currentText = [
+        `${location}当前天气：${current.condition}`,
+        `温度${formatWeatherMetric(current.temperatureC, '℃')}`,
+        `体感${formatWeatherMetric(current.feelsLikeC, '℃')}`,
+        `湿度${formatWeatherMetric(current.humidityPercent, '%')}`,
+        `气压${formatWeatherMetric(current.pressureHpa, '百帕')}`,
+        `能见度${formatWeatherMetric(current.visibilityKm, '公里')}`,
+        formatWeatherWind(current.wind),
+        `天气编码${formatWeatherMetric(current.weatherCode)}`,
+        `云量${formatWeatherMetric(current.cloudCoverPercent, '%')}`,
+        `降水${formatWeatherMetric(current.precipitationMm, '毫米')}`,
+        `紫外线${formatWeatherMetric(current.uvIndex)}`,
+        `观测时间${current.observationTime || '未知'}`
+    ].join('，');
+    const forecastText = weather.forecast.length > 0
+        ? weather.forecast.map(formatWeatherDayDetail).join('\n')
+        : '暂无未来预报数据';
+
+    return `${currentText}\n未来${weather.forecast.length}天预报：\n${forecastText}`;
+}
+
+function formatWeatherSpeech(weather) {
+    const current = weather.current;
+    const dailyText = weather.forecast.length > 0
+        ? weather.forecast.map(day => `${day.date || '未来日期'}${day.condition}，${formatWeatherMetric(day.minTemperatureC, '℃')}到${formatWeatherMetric(day.maxTemperatureC, '℃')}，降雨概率最高${formatWeatherMetric(day.maxChanceOfRainPercent, '%')}`).join('；')
+        : '暂无未来预报';
+
+    return `${weather.location.name}当前天气：${current.condition}，温度${formatWeatherMetric(current.temperatureC, '℃')}，体感${formatWeatherMetric(current.feelsLikeC, '℃')}，湿度${formatWeatherMetric(current.humidityPercent, '%')}。未来${weather.forecast.length}天：${dailyText}。`;
+}
+
 async function handleWeatherCommand(text, displayId, callbacks) {
     const axios = require('axios');
     const weatherRequest = resolveWeatherCity(text);
@@ -1023,21 +1319,25 @@ async function handleWeatherCommand(text, displayId, callbacks) {
         if (!current) {
             throw new Error('天气数据为空');
         }
-        const temp = current.temp_C;
-        const weather = current.lang_zh ? current.lang_zh[0].value : current.weatherDesc[0].value;
-        const humidity = current.humidity;
-
+        const normalizedWeather = normalizeWeatherData(data, cityName);
         const fallbackText = weatherRequest.usedDefault && weatherRequest.requestedCity
             ? `没有找到${weatherRequest.requestedCity}，为你播报默认城市${cityName}的天气。`
             : '';
-        const weatherText = `${fallbackText}${cityName}当前天气：${weather}，温度${temp}度，湿度${humidity}%`;
+        const detailText = `${fallbackText}${formatWeatherDetail(normalizedWeather)}`;
+        const speechText = `${fallbackText}${formatWeatherSpeech(normalizedWeather)}`;
         
         if (callbacks && callbacks.onResult) {
-            await callbacks.onResult(weatherText);
+            await callbacks.onResult(detailText);
         } else if (callbacks && callbacks.onTts) {
-            await speakVoiceResponse(displayId, weatherText, 'weatherResult', {}, callbacks);
+            await speakVoiceResponse(displayId, speechText, 'weatherResult', {
+                detailText,
+                weather: normalizedWeather
+            }, callbacks);
         } else if (displayId && sendToDisplay) {
-            await speakVoiceResponse(displayId, weatherText, 'weatherResult', {}, callbacks);
+            await speakVoiceResponse(displayId, speechText, 'weatherResult', {
+                detailText,
+                weather: normalizedWeather
+            }, callbacks);
         }
     } catch (err) {
         console.error('[语音命令] 获取天气失败:', err.message);
@@ -1510,6 +1810,9 @@ module.exports = {
     getAssistantConfig,
     setAssistantConfig,
     findAssistant,
+    normalizeWeatherData,
+    formatWeatherDetail,
+    formatWeatherSpeech,
     parseTimeExpression,
     parseRepeatRule,
     extractReminderContent,

@@ -4,6 +4,13 @@
 
 ### 已完成
 
+- ✅ [2026-08-29] 完整处理天气 JSON 并优化本地天气回复
+  - 服务端继续使用 wttr.in `format=j1`，本地归一化当前天气、未来 3 天逐日/逐时预报、天文信息、降雨概率/降水量和紫外线等字段。
+  - 增加天气编码中文映射，`weatherCode=143` 且接口返回 `Mist` 时统一显示为“雾”。
+  - 天气弹窗显示完整详情，TTS 播报当前天气和逐日摘要；旧客户端读取 `text` 的行为保持兼容。
+  - 验证：天气专项 5/5、显示端旋转/语音相关回归 17/17 通过。
+  - 文档：`docs/design/display-control-refactor.md`、`docs/design/display-voice-conversation.md`、`docs/spec/voiceCommand.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_天气JSON完整本地处理.md`。
+
 - ✅ [2026-08-29] 系统指令动态播报全部可用命令
   - “系统”加入免唤醒内置指令，支持 ASR 常见的末尾标点；等待唤醒状态下会执行帮助而不再被当作普通语音忽略。
   - 帮助播报改为动态汇总内置指令、自定义关键词及会话/系统控制指令，显示端继续通过通用 TTS 路由播报，控制端同步打开帮助弹窗。

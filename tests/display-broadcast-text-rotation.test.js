@@ -127,7 +127,7 @@ test('90°和270°旋转使用交换后的逻辑画布重新适配文本位置',
 });
 
 test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限制尺寸', () => {
-    assert.match(DISPLAY_HTML, /data\.action === 'weatherResult'[\s\S]*showVoiceResponsePopup\(data\.text\)/u);
+    assert.match(DISPLAY_HTML, /data\.action === 'weatherResult'[\s\S]*showVoiceResponsePopup\(data\.detailText \|\| data\.text\)/u);
     assert.match(
         DISPLAY_HTML,
         /function getRotationPopupElements\(\)[\s\S]*voice-response-popup[\s\S]*voice-confirm-popup[\s\S]*reminder-popup/u,

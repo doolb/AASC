@@ -2,6 +2,12 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-29][2026-08-29] 完整处理天气 JSON 并优化本地天气回复
+  - 本地归一化当前天气、未来 3 天逐日/逐时预报、天文信息、降雨概率/降水量和紫外线等天气字段。
+  - 天气编码本地转换为中文，完整详情展示在天气弹窗，TTS 使用当前天气和逐日摘要。
+  - 测试：天气专项 5/5、显示端旋转/语音相关回归 17/17 通过。
+  - 文档：`docs/design/display-control-refactor.md`、`docs/design/display-voice-conversation.md`、`docs/spec/voiceCommand.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_天气JSON完整本地处理.md`。
+
 - ✅已完成 [2026-08-29][2026-08-29] 系统指令动态播报全部可用命令
   - “系统/系统。”免唤醒执行，动态播报内置、自定义及会话控制指令。
   - 测试：语音会话、内置指令和 TTS 路由相关回归通过。

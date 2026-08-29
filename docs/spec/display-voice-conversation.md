@@ -78,6 +78,11 @@ waitingWake 中的免唤醒范围:
     语音命令服务的所有响应（报时、提醒、静音、天气、搜索、播放、录音、停止播报）调用 speakVoiceResponse
     speakVoiceResponse 不直接导入或调用底层 tts.generateTTS
     需要弹窗/选择数据时，仍向 sourceDisplayId 发送不带 audioUrl 的 voiceCommand 消息
+    天气响应发送:
+        text = 天气短摘要，用于 TTS
+        detailText = 完整天气详情，用于显示端弹窗
+        weather = 本地归一化后的结构化天气对象
+        旧显示端只读取 text 时保持兼容
     语音触发的普通对话使用 routeVoiceToAll=true，在每句 TTS 完成时重新读取在线 voicePlayback 目标
 
 控制端语音命令兼容:

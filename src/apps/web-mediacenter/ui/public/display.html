@@ -1711,7 +1711,7 @@
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
                 }
-                showVoiceResponsePopup(data.text);
+                showVoiceResponsePopup(data.detailText || data.text);
             } else if (data.action === 'playChoices') {
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });

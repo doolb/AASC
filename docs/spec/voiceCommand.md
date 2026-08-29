@@ -248,20 +248,35 @@ handleWeatherCommand(text, displayId):
         重试: 最多3次，每次间隔1秒
     
     解析返回数据:
-        cityName: 城市名称
-        temp: 当前温度（摄氏度）
-        weather: 天气描述
-        humidity: 湿度
-    
+        normalizeWeatherData(data):
+            读取 nearest_area、current_condition 和 weather 数组
+            将字符串数字转换为 number；缺失值统一为 null
+            current:
+                保存温度、体感温度、湿度、气压、能见度、风向、风速、天气编码、云量、降水、紫外线和观测时间
+            forecast:
+                最多保留 3 天逐日预报
+                每天保存最高/最低/平均温度、日照时长、降雪量、紫外线和 astronomy
+                每小时保存温度、体感温度、湿度、天气编码、天气描述、天气概率、降水、紫外线、能见度和风速
+            weather 描述优先使用中文文本；如果中文字段仍为英文:
+                使用 weatherCode 的本地映射，例如 143 -> "雾"
+                没有映射时再保留接口原文
+
     生成天气文本:
+        formatWeatherDetail(normalizedWeather):
+            生成当前天气、未来逐日、逐时、天文信息和天气指标的多行完整文本
+        formatWeatherSpeech(normalizedWeather):
+            只生成当前天气和未来逐日概览的简短中文播报文本
         如果发生默认城市回退:
-            "没有找到{requestedCity}，为你播报默认城市{cityName}的天气。{cityName}当前天气：..."
-        否则:
-            "{cityName}当前天气：{weather}，温度{temp}度，湿度{humidity}%"
+            在两种文本前添加 "没有找到{requestedCity}，为你播报默认城市{cityName}的天气。"
     
-    如果 displayId 存在:
-        生成 TTS 并播放
-        发送天气结果到显示端
+    如果 callbacks.onResult 存在:
+        将完整天气文本返回控制端
+    否则如果 callbacks.onTts 存在:
+        使用 speechText 生成 TTS
+        发送 { text: speechText, detailText: detailText, weather: normalizedWeather } 到显示端
+    否则如果 displayId 存在:
+        通过通用 TTS 路由播报 speechText
+        发送完整 detailText 和结构化 weather 到显示端
     
     如果请求失败:
         语音播放 "获取天气失败，请稍后再试"
