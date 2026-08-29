@@ -13,6 +13,13 @@
             this.silentGain = null;
             this.sourceSampleRate = 0;
             this.chunks = [];
+            // 分段模式只由持续监听的显示端使用，其他录音入口仍完整缓存所有 PCM。
+            this.segmentMode = options.segmentMode === true;
+            this.preRollMs = Math.max(Number(options.preRollMs) || 300, 0);
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.preRollSampleLimit = 0;
+            this.segmentActive = !this.segmentMode;
             this.active = false;
         }
 
@@ -24,6 +31,10 @@
             this.context = new AudioContextClass();
             this.sourceSampleRate = this.context.sampleRate;
             this.chunks = [];
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.preRollSampleLimit = Math.max(1, Math.round(this.sourceSampleRate * this.preRollMs / 1000));
+            this.segmentActive = !this.segmentMode;
             this.source = this.context.createMediaStreamSource(stream);
             this.processor = this.context.createScriptProcessor(this.bufferSize, 1, 1);
             this.silentGain = this.context.createGain();
@@ -31,7 +42,12 @@
             this.active = true;
             this.processor.onaudioprocess = (event) => {
                 if (!this.active) return;
-                this.chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+                const samples = new Float32Array(event.inputBuffer.getChannelData(0));
+                if (this.segmentMode && !this.segmentActive) {
+                    this.appendPreRoll(samples);
+                    return;
+                }
+                this.chunks.push(samples);
             };
             this.source.connect(this.processor);
             this.processor.connect(this.silentGain);
@@ -39,8 +55,37 @@
             return this;
         }
 
+        // 记录有限长度的循环前置缓冲，避免 VAD 检测延迟时截断首字，同时不让静音无限增长。
+        appendPreRoll(samples) {
+            this.preRollChunks.push(samples);
+            this.preRollSampleCount += samples.length;
+            while (this.preRollSampleCount > this.preRollSampleLimit && this.preRollChunks.length > 0) {
+                const firstChunk = this.preRollChunks[0];
+                const overflow = this.preRollSampleCount - this.preRollSampleLimit;
+                if (firstChunk.length <= overflow) {
+                    this.preRollChunks.shift();
+                    this.preRollSampleCount -= firstChunk.length;
+                    continue;
+                }
+                this.preRollChunks[0] = firstChunk.slice(overflow);
+                this.preRollSampleCount -= overflow;
+            }
+        }
+
+        // 开始一个新的语音段：把短前置缓冲转入当前段，之后才正式累计 PCM。
+        beginSegment() {
+            if (!this.active) return false;
+            if (!this.segmentMode) return true;
+            if (this.segmentActive) return false;
+            this.chunks = this.preRollChunks.slice();
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.segmentActive = true;
+            return true;
+        }
+
         takeWav() {
-            if (!this.active || this.chunks.length === 0) return null;
+            if (!this.active || this.chunks.length === 0 || (this.segmentMode && !this.segmentActive)) return null;
             const sampleCount = this.chunks.reduce((total, chunk) => total + chunk.length, 0);
             const samples = new Float32Array(sampleCount);
             let offset = 0;
@@ -49,6 +94,7 @@
                 offset += chunk.length;
             });
             this.chunks = [];
+            if (this.segmentMode) this.segmentActive = false;
             return PcmAudioCapture.encodeWav(samples, this.sourceSampleRate, this.targetSampleRate);
         }
 
@@ -61,6 +107,10 @@
         stop() {
             this.active = false;
             this.chunks = [];
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.preRollSampleLimit = 0;
+            this.segmentActive = !this.segmentMode;
             if (this.processor) this.processor.disconnect();
             if (this.source) this.source.disconnect();
             if (this.silentGain) this.silentGain.disconnect();

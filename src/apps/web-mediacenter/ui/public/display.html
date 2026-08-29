@@ -4651,7 +4651,8 @@
         // 所有网页端 ASR/声纹录音统一使用共享 PCM 采集器，避免不同端的编码器差异。
         function startRawPcmCapture(stream) {
             try {
-                pcmCapture = new PcmAudioCapture().start(stream);
+                // 持续监听复用子显示端的 VAD 分段策略：语音开始前只保留短前置缓冲。
+                pcmCapture = new PcmAudioCapture({ segmentMode: true, preRollMs: 300 }).start(stream);
                 return true;
             } catch (e) {
                 console.warn('[语音] 原始 PCM 采集失败:', e);
@@ -4827,6 +4828,7 @@
 
                     if (rms >= vadThreshold) {
                         if (!hasSpeech && !speechStartTime) {
+                            pcmCapture.beginSegment();
                             speechStartTime = Date.now();
                         }
                         hasSpeech = true;

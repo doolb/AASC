@@ -124,6 +124,22 @@ VAD 配置:
 
     关闭监听/页面离开/冷却:
         调用同一个幂等 releaseVoiceRecordingResources()
+
+浏览器显示端 VAD 分段缓存:
+    startRawPcmCapture(stream):
+        PcmAudioCapture.start(stream, segmentMode=true, preRollMs=300)
+        持续采集期间只维护短前置循环缓冲
+    VAD 首次检测到 rms >= vadThreshold:
+        pcmCapture.beginSegment()
+        将前置循环缓冲并入当前语音段
+        后续 PCM 帧写入当前语音段
+    VAD 未检测到语音:
+        不写入当前语音段，避免上一段之后的长静音上传 ASR
+    finishVoiceSegment():
+        继续收集判停所需的尾部静音
+        audioBlob = takeRawPcmWav()
+        提交包含短前置缓冲、语音和判停尾静音的 WAV
+        清空当前段，继续复用同一个采集链路
 ```
 
 ## 显示端实现伪代码
