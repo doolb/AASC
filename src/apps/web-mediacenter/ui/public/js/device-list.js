@@ -292,11 +292,15 @@ const DeviceList = {
     renderVoiceVadPanel() {
         const panel = document.getElementById('voiceVadPanel');
         if (!panel) return;
-        if (this.list.length === 0) {
-            panel.innerHTML = '<div class="empty-list">暂无显示端连接</div>';
+        const selectedDisplayId = window.currentDisplayId;
+        const display = this.list.find((item) => item.id === selectedDisplayId);
+        if (!display) {
+            panel.innerHTML = selectedDisplayId
+                ? '<div class="empty-list">当前选中的显示端已离线</div>'
+                : '<div class="empty-list">请先选择显示端</div>';
             return;
         }
-        panel.innerHTML = `<div class="display-vad-grid">${this.list.map((display) => this.renderVoiceVadCardHtml(display)).join('')}</div>`;
+        panel.innerHTML = this.renderVoiceVadCardHtml(display);
         this.bindVoiceVadControls(panel);
     },
 

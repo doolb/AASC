@@ -458,12 +458,6 @@ input[type="file"] {
     font-size: 12px;
 }
 
-.display-vad-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 10px;
-}
-
 .display-vad-card {
     display: flex;
     flex-direction: column;

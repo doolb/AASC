@@ -54,6 +54,12 @@ assert.doesNotMatch(
 );
 assert.match(upload, /id="voiceVadPanel"/, '显示控制页应提供独立 VAD 卡片容器');
 assert.match(deviceList, /renderVoiceVadPanel/, '控制端应独立渲染 VAD 卡片');
+const vadPanelStart = deviceList.indexOf('renderVoiceVadPanel()');
+const vadPanelEnd = deviceList.indexOf('bindVoiceVadControls(container)', vadPanelStart);
+const vadPanelBody = deviceList.slice(vadPanelStart, vadPanelEnd);
+assert.match(vadPanelBody, /window\.currentDisplayId/, 'VAD 卡片应读取当前选中的显示端');
+assert.match(vadPanelBody, /find\(/, 'VAD 卡片应定位当前选中的显示端');
+assert.doesNotMatch(vadPanelBody, /this\.list\.map/, 'VAD 卡片不应同时渲染全部显示端');
 
 assert.match(websocket, /voiceVadConfig/, '控制端 WebSocket 应处理 VAD 配置消息');
 assert.match(websocket, /voiceVadNoiseTest|voiceVadNoiseResult/, '控制端 WebSocket 应处理底噪检测消息');

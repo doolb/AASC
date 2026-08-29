@@ -246,8 +246,10 @@ DeviceList:
 
 VAD 独立卡片:
     DeviceList.renderVoiceVadPanel():
-        在显示控制页的 voiceVadPanel 中按在线 displayId 渲染独立卡片
-        每张卡片包含 vadThreshold 输入、detectVoiceNoise 按钮和统计结果
+        读取 window.currentDisplayId 并定位当前在线显示端
+        当前未选择显示端 -> 显示“请选择显示端”
+        当前已选择显示端 -> 在 voiceVadPanel 中渲染一张卡片
+        卡片包含 vadThreshold 输入、detectVoiceNoise 按钮和统计结果
         不把 VAD 控件渲染到设备列表的 renderVoiceControl/renderVoiceControlHtml
     设备列表仍只显示监听开关、监听状态和最近识别文字
 
