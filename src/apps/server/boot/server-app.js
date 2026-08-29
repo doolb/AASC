@@ -4428,7 +4428,7 @@ async function handleControlMessageFallback(data, ws) {
                                     sendToControl({ type: 'showHelp' });
                                 }
                                 if (targetDisplayId && sendToDisplay) {
-                                    const helpTTS = '系统指令帮助：说系统显示此帮助。说私聊加助手名字进入私聊模式。说退出私聊退出私聊模式。说提醒加时间和内容设置提醒。说今日提醒或今天提醒查看今日提醒。说明日提醒或明天提醒查看明日提醒。说报时或现在几点播报当前时间。说开启报时或关闭报时控制报时功能。说静音或全部静音静音所有显示端。说取消静音或恢复音量取消静音。说天气加城市查询天气。说播放加文件名搜索并播放媒体。说搜索加关键词搜索信息。说拒绝或取消取消待确认操作。';
+                                    const helpTTS = voiceCommand.getVoiceCommandHelpText();
                                     (async () => {
                                         try {
                                             if (isDisplayVoiceInput) {

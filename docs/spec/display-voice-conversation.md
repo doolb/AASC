@@ -54,6 +54,18 @@ waitingWake 中的免唤醒范围:
     每条 command 包含 id、examples、description、wakeRequired=false
     弹窗展示示例、说明和“无需唤醒”标记
 
+系统指令语音帮助:
+    isBuiltinVoiceCommand('系统。') == true
+    processVoiceCommand('系统。') -> { type: 'showHelp' }
+    getVoiceCommandHelpText():
+        读取 getBuiltinVoiceCommands()
+        读取 chat.getCommands() 中的自定义关键词和动作
+        加入私聊、退出私聊、系统记录等会话/系统指令说明
+        按当前配置拼接完整帮助播报文本
+    服务端收到 showHelp:
+        控制端发送 showHelp 打开帮助弹窗
+        显示端来源通过 sendVoiceInputTts(helpText) 走通用 TTS 广播
+
 显示端语音输入 TTS:
     服务端识别到 voiceInput 后记录 sourceDisplayId
     sourceDisplayId 只用于命令执行、媒体控制和结果界面，不直接作为 TTS 目标

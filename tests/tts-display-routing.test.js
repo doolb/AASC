@@ -17,6 +17,7 @@ test('服务端普通 TTS 入口统一经过显示端 fallback 路由', () => {
 
     // 只允许 generateTtsWithFallback 内部在最终回退分支调用底层服务器 TTS。
     assert.equal(directCalls.length, 1);
+    assert.match(server, /const helpTTS = voiceCommand\.getVoiceCommandHelpText\(\)/);
     assert.match(server, /sendVoiceCommandTts\(helpTTS, targetDisplayId\)/);
     assert.match(server, /sendVoiceCommandTts\(modeText, targetDisplayId\)/);
     assert.match(server, /今日提醒：\$\{text\}.*generateTtsWithFallback/s);

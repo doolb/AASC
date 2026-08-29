@@ -23,6 +23,12 @@ let ttsRouter = null;
 // 内置功能命令定义同时供语音门控和控制端列表使用，避免两处维护不同的命令范围。
 const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
     {
+        id: 'systemHelp',
+        examples: ['系统'],
+        description: '播报所有可用的语音指令并显示帮助',
+        matcher: text => text === '系统'
+    },
+    {
         id: 'commandMode',
         examples: ['打开指令模式', '关闭指令模式'],
         description: '开启或关闭指令模式',
@@ -233,6 +239,37 @@ function getBuiltinVoiceCommands() {
         ...command,
         wakeRequired: false
     }));
+}
+
+// 统一生成“系统”语音帮助，始终从当前内置和自定义指令配置读取，避免帮助内容过期。
+function getVoiceCommandHelpText(commandConfig = chat.getCommands()) {
+    const builtinHelp = getBuiltinVoiceCommands().map(command =>
+        `说${command.examples.join('、')}，${command.description}`
+    );
+    const customHelp = Object.entries(commandConfig?.commands || {})
+        .filter(([keyword]) => keyword !== '系统')
+        .map(([keyword, actions]) => {
+            const actionList = Array.isArray(actions)
+                ? actions.map(action => String(action || '').trim()).filter(Boolean)
+                : [];
+            return actionList.length > 0
+                ? `说${keyword}，执行${actionList.join('、')}`
+                : `说${keyword}`;
+        });
+
+    const sections = [
+        '系统指令帮助',
+        ...builtinHelp,
+        '说你好加助手名字或助手名字你好，唤醒进入群聊',
+        '说私聊加助手名字，进入私聊模式',
+        '说退出私聊，退出私聊模式',
+        '说结束对话，结束当前语音对话',
+        '说系统记录加内容，保存重要记录'
+    ];
+    if (customHelp.length > 0) {
+        sections.push(`自定义指令：${customHelp.join('；')}`);
+    }
+    return `${sections.join('。')}。`;
 }
 
 // 指令分级路由：检查高级指令是否需要转 LLM 处理
@@ -1452,6 +1489,7 @@ module.exports = {
     setMediaLibrary,
     isBuiltinVoiceCommand,
     getBuiltinVoiceCommands,
+    getVoiceCommandHelpText,
     processVoiceCommand,
     enqueueVoiceInput,
     handleReminderCommand,

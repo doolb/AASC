@@ -5,6 +5,7 @@ const {
     reduceConversationInput,
     isConversationExpired
 } = require('../src/apps/server/modules/voice/display-voice-conversation');
+const voiceCommand = require('../src/apps/web-mediacenter/modules/voice/voice-command-app-service');
 
 const assistants = ['小爱', '妲己'];
 
@@ -88,9 +89,24 @@ function testBuiltinCommandBypassesWakeWithoutActivatingConversation() {
     assert.strictEqual(ordinaryResult.state.state, 'waitingWake');
 }
 
+function testSystemHelpBypassesWakeWithTrailingPunctuation() {
+    const waiting = createConversationState(true);
+    const result = reduceConversationInput(
+        waiting,
+        '系统。',
+        assistants,
+        1000,
+        { isBuiltin: voiceCommand.isBuiltinVoiceCommand }
+    );
+    assert.strictEqual(result.accepted, true);
+    assert.deepStrictEqual(result.state, waiting);
+    assert.deepStrictEqual(result.event, { type: 'input', bypassWake: true });
+}
+
 testInitialState();
 testWakeAndPrivateSwitch();
 testStateTransitions();
 testDisabledAndExpiry();
 testBuiltinCommandBypassesWakeWithoutActivatingConversation();
-console.log('display-voice-conversation.test.js: 5/5 passed');
+testSystemHelpBypassesWakeWithTrailingPunctuation();
+console.log('display-voice-conversation.test.js: 6/6 passed');
