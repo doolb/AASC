@@ -158,7 +158,9 @@ module.exports = {
           type: 'tts',
           action: 'playAudio',
           audioUrl: `/uploads/tts/${fileName}`,
-          text: timeText
+          text: timeText,
+          // 三次重复属于同一房间级 TTS 会话，最后一次结束前录音端不能恢复监听。
+          voiceTtsPlaybackRepeatCount: config.repeatCount
         };
 
         for (let i = 0; i < config.repeatCount; i++) {

@@ -116,16 +116,17 @@ async function checkAndAnnounce(displayClients, sendToDisplay, force = false) {
     try {
         const audioPath = await tts.generateTTS(timeText);
         const fileName = path.basename(audioPath);
+        const repeatCount = timeAnnounceConfig.repeatCount || 1;
+        const repeatDelay = timeAnnounceConfig.repeatDelay || 3000;
         
         const announceData = {
             type: 'tts',
             action: 'playAudio',
             audioUrl: `/uploads/tts/${fileName}`,
-            text: timeText
+            text: timeText,
+            // 兼容旧的 Agent/服务调用：重复报时作为一个 TTS 播放组协调录音暂停。
+            voiceTtsPlaybackRepeatCount: repeatCount
         };
-        
-        const repeatCount = timeAnnounceConfig.repeatCount || 1;
-        const repeatDelay = timeAnnounceConfig.repeatDelay || 3000;
         
         for (let i = 0; i < repeatCount; i++) {
             clients.forEach((displayData, displayId) => {

@@ -178,13 +178,21 @@ TTS 与无声纹持续监听:
     服务端 sendToDisplay(displayId, { type: 'tts', action: 'playAudio' }):
         如果消息没有 voiceTtsPlaybackId:
             生成唯一 voiceTtsPlaybackId 并写入消息
+        如果消息带有 voiceTtsPlaybackRepeatCount:
+            将同一 voiceTtsPlaybackId 视为一个重复播报组
+            以重复总数初始化该目标的待完成次数
         向所有 capabilities.voiceRecording == true 的显示端发送:
             { type: 'voiceTtsPlaybackState', state: 'started', voiceTtsPlaybackId, playbackDisplayId: displayId }
         向 displayId 发送带 voiceTtsPlaybackId 的原 TTS 消息
         为 displayId + voiceTtsPlaybackId 设置超时结束清理
     显示端回传 voiceTtsPlaybackFinished:
-        服务端按回传 displayId 和 voiceTtsPlaybackId 清理该目标的活动状态
-        向所有录音显示端发送 state='finished'
+        服务端按回传 displayId 和 voiceTtsPlaybackId 将该重复组已完成次数加一
+        已完成次数小于重复总数 -> 保持活动状态，不广播 finished
+        已完成次数达到重复总数 -> 清理该目标的活动状态并向所有录音显示端发送 state='finished'
+    重复报时:
+        复用同一个 voiceTtsPlaybackId 和 voiceTtsPlaybackRepeatCount
+        显示端仍将每条音频依次加入本地 TTS 队列
+        直到最后一条音频完成前，录音显示端不得恢复监听
     Web 显示端收到 voiceTtsPlaybackState:
         state='started' -> 加入 remoteTtsPlaybackIds；无声纹时调用 pauseVoiceRecordingForTts()
         state='finished' -> 移除 remoteTtsPlaybackIds；集合为空时调用 scheduleTtsRecordingResume()

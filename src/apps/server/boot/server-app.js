@@ -267,7 +267,7 @@ if (!fs.existsSync(VOICEPRINT_TEMP_DIR)) {
 }
 
 let displayClients = new Map();
-// 跨显示端 TTS 播报状态：按“播放目标 + 播放 ID”维护超时，避免录音端因旧客户端不回报而永久暂停。
+// 跨显示端 TTS 播报状态：按“播放目标 + 播放 ID”维护会话和超时，避免录音端因旧客户端不回报而永久暂停。
 const voiceTtsPlaybackTimers = new Map();
 const VOICE_TTS_PLAYBACK_TIMEOUT_MS = 120000;
 let controlClients = new Set();
@@ -3211,6 +3211,11 @@ function getVoiceTtsPlaybackKey(displayId, playbackId) {
     return `${displayId}:${playbackId}`;
 }
 
+function normalizeVoiceTtsRepeatCount(value) {
+    const count = Number(value);
+    return Number.isInteger(count) && count > 0 ? count : 1;
+}
+
 function broadcastVoiceTtsPlaybackState(state, playbackId, playbackDisplayId) {
     const message = {
         type: 'voiceTtsPlaybackState',
@@ -3227,12 +3232,24 @@ function broadcastVoiceTtsPlaybackState(state, playbackId, playbackDisplayId) {
 function finishVoiceTtsPlayback(playbackDisplayId, playbackId, reason = 'finished') {
     if (!playbackDisplayId || !playbackId) return false;
     const key = getVoiceTtsPlaybackKey(playbackDisplayId, playbackId);
-    const timer = voiceTtsPlaybackTimers.get(key);
-    if (!timer) return false;
-    clearTimeout(timer);
+    const session = voiceTtsPlaybackTimers.get(key);
+    if (!session) return false;
+    clearTimeout(session.timer);
     voiceTtsPlaybackTimers.delete(key);
     broadcastVoiceTtsPlaybackState(reason, playbackId, playbackDisplayId);
     return true;
+}
+
+function completeVoiceTtsPlayback(playbackDisplayId, playbackId, completedCount = 1) {
+    if (!playbackDisplayId || !playbackId) return false;
+    const key = getVoiceTtsPlaybackKey(playbackDisplayId, playbackId);
+    const session = voiceTtsPlaybackTimers.get(key);
+    if (!session) return false;
+
+    const count = normalizeVoiceTtsRepeatCount(completedCount);
+    session.completedCount += count;
+    if (session.completedCount < session.repeatCount) return false;
+    return finishVoiceTtsPlayback(playbackDisplayId, playbackId);
 }
 
 function finishVoiceTtsPlaybacksForDisplay(playbackDisplayId) {
@@ -3244,15 +3261,20 @@ function finishVoiceTtsPlaybacksForDisplay(playbackDisplayId) {
     }
 }
 
-function startVoiceTtsPlayback(playbackDisplayId, playbackId) {
+function startVoiceTtsPlayback(playbackDisplayId, playbackId, repeatCount = 1) {
     const key = getVoiceTtsPlaybackKey(playbackDisplayId, playbackId);
-    const previousTimer = voiceTtsPlaybackTimers.get(key);
-    if (previousTimer) clearTimeout(previousTimer);
-    broadcastVoiceTtsPlaybackState('started', playbackId, playbackDisplayId);
+    const existingSession = voiceTtsPlaybackTimers.get(key);
+    if (existingSession) return;
+
     const timer = setTimeout(() => {
         finishVoiceTtsPlayback(playbackDisplayId, playbackId, 'timeout');
     }, VOICE_TTS_PLAYBACK_TIMEOUT_MS);
-    voiceTtsPlaybackTimers.set(key, timer);
+    voiceTtsPlaybackTimers.set(key, {
+        timer,
+        repeatCount: normalizeVoiceTtsRepeatCount(repeatCount),
+        completedCount: 0
+    });
+    broadcastVoiceTtsPlaybackState('started', playbackId, playbackDisplayId);
 }
 
 function prepareVoiceTtsPlayback(displayId, data) {
@@ -3260,7 +3282,15 @@ function prepareVoiceTtsPlayback(displayId, data) {
     if (!data.voiceTtsPlaybackId) {
         data.voiceTtsPlaybackId = generateCorrelationId('voice-tts');
     }
-    startVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId);
+    const key = getVoiceTtsPlaybackKey(displayId, data.voiceTtsPlaybackId);
+    const repeatCount = normalizeVoiceTtsRepeatCount(data.voiceTtsPlaybackRepeatCount);
+    const session = voiceTtsPlaybackTimers.get(key);
+    if (session) {
+        session.repeatCount = Math.max(session.repeatCount, repeatCount);
+        return;
+    }
+
+    startVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId, repeatCount);
 }
 
 let displayListDebounceTimer = null;
@@ -4264,7 +4294,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             log('语音', `显示端 ${displayId} TTS 播放完成，重新计时3分钟`);
         }
     } else if (data.type === 'voiceTtsPlaybackFinished' && displayData) {
-        finishVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId);
+        completeVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId, data.completedCount);
     } else if (data.type === 'voiceVadNoiseResult' && displayData) {
         // 底噪检测只回传统计结果，不进入 ASR、唤醒或内置指令处理链路。
         broadcastToControls({

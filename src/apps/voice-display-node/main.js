@@ -141,7 +141,8 @@ class VoiceDisplay {
         this.aecProcessor = null;
         this.bargeInTriggered = false;
         this.localTtsPlaybackActive = false;
-        this.pendingVoiceTtsPlaybackIds = new Set();
+        // 按播放 ID 记录本地队列中待完成的条数，支持重复报时使用同一播放组。
+        this.pendingVoiceTtsPlaybackIds = new Map();
         this.remoteTtsPlaybackIds = new Set();
         this.logReportConfig = null; // { enabled, level } 由服务器推送
         this._volume = 100;
@@ -380,7 +381,8 @@ class VoiceDisplay {
                 const audioUrl = data.audioUrl;
                 const text = data.text;
                 if (data.voiceTtsPlaybackId) {
-                    this.pendingVoiceTtsPlaybackIds.add(data.voiceTtsPlaybackId);
+                    const pendingCount = this.pendingVoiceTtsPlaybackIds.get(data.voiceTtsPlaybackId) || 0;
+                    this.pendingVoiceTtsPlaybackIds.set(data.voiceTtsPlaybackId, pendingCount + 1);
                 }
                 if (text) {
                     log('TTS', `播报: ${text}`);
@@ -667,10 +669,11 @@ class VoiceDisplay {
 
     notifyVoiceTtsPlaybackFinished() {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-        for (const playbackId of this.pendingVoiceTtsPlaybackIds) {
+        for (const [playbackId, completedCount] of this.pendingVoiceTtsPlaybackIds) {
             this.sendJSON({
                 type: 'voiceTtsPlaybackFinished',
-                voiceTtsPlaybackId: playbackId
+                voiceTtsPlaybackId: playbackId,
+                completedCount
             });
         }
         this.pendingVoiceTtsPlaybackIds.clear();
