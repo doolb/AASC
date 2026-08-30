@@ -18,7 +18,7 @@ test('服务端普通 TTS 入口统一经过显示端 fallback 路由', () => {
     // 只允许 generateTtsWithFallback 内部在最终回退分支调用底层服务器 TTS。
     assert.equal(directCalls.length, 1);
     assert.match(server, /const helpTTS = voiceCommand\.getVoiceCommandHelpText\(\)/);
-    assert.match(server, /sendVoiceCommandTts\(helpTTS, targetDisplayId\)/);
+    assert.match(server, /sendVoiceCommandTtsSentences\(helpTTS, targetDisplayId\)/);
     assert.match(server, /sendVoiceCommandTts\(modeText, targetDisplayId\)/);
     assert.match(server, /今日提醒：\$\{text\}.*generateTtsWithFallback/s);
 });
@@ -33,6 +33,18 @@ test('显示端 TTS 必须先回报开始生成，服务端 3 秒未收到即失
     assert.match(server, /pending\.started/);
     assert.match(display, /function sendTtsGenerating\(requestId\)/);
     assert.match(display, /sendTtsGenerating\(data\.requestId\)/);
+});
+
+test('分句 TTS 必须作为一个批次，全部句子播放完成后才结束语音会话', () => {
+    const server = read(SERVER);
+    const display = read(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/display.html'));
+
+    assert.match(server, /voiceTtsBatchId/);
+    assert.match(server, /voiceTtsBatchEnd/);
+    assert.match(server, /generateCorrelationId\('voice-tts-batch'\)/);
+    assert.match(display, /ttsBatchPlaybackStates/);
+    assert.match(display, /isVoiceTtsBatchPlaybackComplete/);
+    assert.match(display, /if \(ttsQueue\.length === 0\)[\s\S]*isVoiceTtsBatchPlaybackComplete/);
 });
 
 test('整点报时任务使用服务端注入的 TTS 路由', () => {

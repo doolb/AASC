@@ -139,6 +139,8 @@
         });
         let autoTtsEnabled = true;
         let ttsQueue = [];
+        // 分句 TTS 共用批次标识，避免服务端生成下一句的间隔被误判为整段播报完成。
+        const ttsBatchPlaybackStates = new Map();
         let isPlayingTts = false;
         let ttsVideoState = null;
         let textTtsPlaybackActive = false;
@@ -1456,13 +1458,48 @@
         }
 
         function endTtsVideoCoordinationIfIdle() {
-            if (isPlayingTts || ttsQueue.length > 0 || textTtsPlaybackActive || remoteTextPlayback) return;
+            if (isPlayingTts || ttsQueue.length > 0 || textTtsPlaybackActive || remoteTextPlayback
+                || ttsBatchPlaybackStates.size > 0) return;
             endTtsVideoCoordination();
         }
 
         function hasActiveTtsPlayback() {
             return isPlayingTts || ttsQueue.length > 0 || textTtsPlaybackActive
-                || !!remoteTextPlayback || remoteTtsPlaybackIds.size > 0;
+                || !!remoteTextPlayback || remoteTtsPlaybackIds.size > 0 || ttsBatchPlaybackStates.size > 0;
+        }
+
+        function registerTtsBatchItem(item) {
+            if (!item.voiceTtsBatchId) return;
+            const state = ttsBatchPlaybackStates.get(item.voiceTtsBatchId) || {
+                totalItems: 0,
+                completedItems: 0,
+                endQueued: false
+            };
+            state.totalItems++;
+            state.endQueued = state.endQueued || item.voiceTtsBatchEnd === true;
+            ttsBatchPlaybackStates.set(item.voiceTtsBatchId, state);
+        }
+
+        function markTtsBatchItemFinished(item) {
+            if (!item?.voiceTtsBatchId) return;
+            const state = ttsBatchPlaybackStates.get(item.voiceTtsBatchId);
+            if (!state) return;
+            state.completedItems++;
+        }
+
+        function isVoiceTtsBatchPlaybackComplete() {
+            for (const state of ttsBatchPlaybackStates.values()) {
+                if (!state.endQueued || state.completedItems < state.totalItems) return false;
+            }
+            return true;
+        }
+
+        function clearCompletedTtsBatches() {
+            for (const [batchId, state] of ttsBatchPlaybackStates.entries()) {
+                if (state.endQueued && state.completedItems >= state.totalItems) {
+                    ttsBatchPlaybackStates.delete(batchId);
+                }
+            }
         }
 
         function getRemoteTtsPlaybackKey(data) {
@@ -1585,11 +1622,13 @@
         function finishCurrentTts(status) {
             if (!currentTtsItem) return;
             clearTtsRecovery();
-            const playbackId = currentTtsItem.voiceTtsPlaybackId;
+            const finishedItem = currentTtsItem;
+            const playbackId = finishedItem.voiceTtsPlaybackId;
             currentTtsItem = null;
             ttsPlaybackToken++;
             hideTtsText();
             isPlayingTts = false;
+            markTtsBatchItemFinished(finishedItem);
             sendVoiceTtsPlaybackFinished(playbackId);
             console.log('[显示端] TTS 当前句完成:', status || 'ended');
             playNextTts();
@@ -1606,6 +1645,7 @@
             currentTtsItem = null;
             ttsPlaybackToken++;
             ttsQueue = [];
+            ttsBatchPlaybackStates.clear();
             ttsAudio.pause();
             ttsAudio.currentTime = 0;
             isPlayingTts = false;
@@ -1639,6 +1679,9 @@
                 return;
             }
             if (ttsQueue.length === 0) {
+                // 分句生成之间队列可能短暂为空；批次未收到结束句或仍有句子未播完时不能结束会话。
+                if (!isVoiceTtsBatchPlaybackComplete()) return;
+                clearCompletedTtsBatches();
                 // TTS 队列播放完毕，如果此前由无声纹模式暂停了录音，恢复原有采集链路。
                 scheduleTtsRecordingResume();
                 sendVoiceConversationTtsFinished();
@@ -1681,6 +1724,7 @@
         }
         
         function queueTts(item) {
+            registerTtsBatchItem(item);
             ttsQueue.push(item);
             playNextTts();
         }
@@ -1730,12 +1774,19 @@
                 return;
             }
             if (data.action === 'play') {
-                queueTts({ text: data.text, voiceTtsPlaybackId: data.voiceTtsPlaybackId });
+                queueTts({
+                    text: data.text,
+                    voiceTtsPlaybackId: data.voiceTtsPlaybackId,
+                    voiceTtsBatchId: data.voiceTtsBatchId,
+                    voiceTtsBatchEnd: data.voiceTtsBatchEnd === true
+                });
             } else if (data.action === 'playAudio') {
                 queueTts({
                     audioUrl: data.audioUrl,
                     text: data.text,
-                    voiceTtsPlaybackId: data.voiceTtsPlaybackId
+                    voiceTtsPlaybackId: data.voiceTtsPlaybackId,
+                    voiceTtsBatchId: data.voiceTtsBatchId,
+                    voiceTtsBatchEnd: data.voiceTtsBatchEnd === true
                 });
             } else if (data.action === 'stop') {
                 stopTtsPlayback();

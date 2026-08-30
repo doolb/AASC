@@ -3506,25 +3506,57 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
 
 // 显示端语音输入的播报统一遵循通用播放路由；来源显示端只接收语音回复弹窗，不自动成为 TTS 目标。
 // TTS 生成设备和音频播放目标分离：生成仍遵循 tts.device 配置，播放目标由通用能力路由决定。
-async function sendVoiceInputTts(text) {
+function getVoiceTtsBatchPayload(playbackOptions = {}) {
+    if (!playbackOptions.batchId) return {};
+    return {
+        voiceTtsBatchId: playbackOptions.batchId,
+        voiceTtsBatchEnd: playbackOptions.batchEnd === true
+    };
+}
+
+async function sendVoiceInputTts(text, playbackOptions = {}) {
     const audioPath = await generateTtsWithFallback(text);
     const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
     const targetDisplayIds = getOnlineVoicePlaybackDisplayIds();
+    const batchPayload = getVoiceTtsBatchPayload(playbackOptions);
 
     for (const targetDisplayId of targetDisplayIds) {
         sendToDisplay(targetDisplayId, {
             type: 'tts',
             action: 'playAudio',
             audioUrl,
-            text
+            text,
+            ...batchPayload
         });
     }
 
     return targetDisplayIds.length;
 }
 
+// 帮助文本等较长语音内容按句串行处理，避免一次 TTS 请求携带整段长文本。
+// 回调内部仍负责选择通用或控制端定向播放目标，本函数只负责分句和顺序。
+async function sendVoiceTtsSentences(text, sendSentence) {
+    const sentences = chat.splitIntoSentences(text);
+    const orderedSentences = sentences.length > 0 ? sentences : [text];
+    const batchId = generateCorrelationId('voice-tts-batch');
+    for (let index = 0; index < orderedSentences.length; index++) {
+        await sendSentence(orderedSentences[index], {
+            batchId,
+            batchEnd: index === orderedSentences.length - 1
+        });
+    }
+}
+
+async function sendVoiceInputTtsSentences(text) {
+    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceInputTts(sentence, playbackOptions));
+}
+
+async function sendVoiceCommandTtsSentences(text, targetDisplayId) {
+    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceCommandTts(sentence, targetDisplayId, playbackOptions));
+}
+
 // 控制端语音命令继续按控制端指定的显示目标播放，但生成过程同样统一走 fallback 路由。
-async function sendVoiceCommandTts(text, targetDisplayId) {
+async function sendVoiceCommandTts(text, targetDisplayId, playbackOptions = {}) {
     const audioPath = await generateTtsWithFallback(text, undefined, undefined, targetDisplayId);
     if (!targetDisplayId) return false;
 
@@ -3532,7 +3564,8 @@ async function sendVoiceCommandTts(text, targetDisplayId) {
         type: 'tts',
         action: 'playAudio',
         audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
-        text
+        text,
+        ...getVoiceTtsBatchPayload(playbackOptions)
     });
 }
 
@@ -4541,9 +4574,9 @@ async function handleControlMessageFallback(data, ws) {
                                     (async () => {
                                         try {
                                             if (isDisplayVoiceInput) {
-                                                await sendVoiceInputTts(helpTTS);
+                                                await sendVoiceInputTtsSentences(helpTTS);
                                             } else {
-                                                await sendVoiceCommandTts(helpTTS, targetDisplayId);
+                                                await sendVoiceCommandTtsSentences(helpTTS, targetDisplayId);
                                             }
                                             sendToDisplay(targetDisplayId, {
                                                 type: 'voiceCommand',

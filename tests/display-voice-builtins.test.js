@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const {
     isBuiltinVoiceCommand,
     getBuiltinVoiceCommands,
@@ -25,4 +27,16 @@ assert.match(helpText, /现在几点/);
 assert.match(helpText, /早安/);
 assert.match(helpText, /今日提醒/);
 
-console.log('display-voice-builtins.test.js: 10/10 passed');
+const serverSource = fs.readFileSync(
+    path.resolve(__dirname, '../src/apps/server/boot/server-app.js'),
+    'utf8'
+);
+const helpStart = serverSource.indexOf("if (result.type === 'showHelp')");
+const helpEnd = serverSource.indexOf("} else if (result.type === 'commandMode')", helpStart);
+assert.ok(helpStart >= 0 && helpEnd > helpStart, '应能定位系统帮助处理分支');
+const helpHandler = serverSource.slice(helpStart, helpEnd);
+assert.match(helpHandler, /sendVoiceInputTtsSentences\(helpTTS\)/);
+assert.match(helpHandler, /sendVoiceCommandTtsSentences\(helpTTS, targetDisplayId\)/);
+assert.doesNotMatch(helpHandler, /sendVoiceInputTts\(helpTTS\)/);
+
+console.log('display-voice-builtins.test.js: 13/13 passed');

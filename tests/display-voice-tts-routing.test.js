@@ -16,7 +16,7 @@ const voiceCommand = read(VOICE_COMMAND);
 
 assert.match(
     server,
-    /async function sendVoiceInputTts\(text(?:, originDisplayId = null)?\)[\s\S]*?generateTtsWithFallback\(text[\s\S]*?getOnlineVoicePlaybackDisplayIds\(\)/,
+    /async function sendVoiceInputTts\(text(?:, playbackOptions = \{\})?\)[\s\S]*?generateTtsWithFallback\(text[\s\S]*?getOnlineVoicePlaybackDisplayIds\(\)/,
     '显示端语音 TTS 应通过服务端通用生成和语音播放目标列表，必要时支持来源显示端'
 );
 assert.match(

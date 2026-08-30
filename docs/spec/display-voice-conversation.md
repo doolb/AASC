@@ -64,7 +64,22 @@ waitingWake 中的免唤醒范围:
         按当前配置拼接完整帮助播报文本
     服务端收到 showHelp:
         控制端发送 showHelp 打开帮助弹窗
-        显示端来源通过 sendVoiceInputTts(helpText) 走通用 TTS 广播
+        如果来源是显示端:
+            sentences = chat.splitIntoSentences(helpText)
+            batchId = generateCorrelationId('voice-tts-batch')
+            通过通用 TTS 调度器逐句串行调用 sendVoiceInputTts(sentence, { batchId, batchEnd })
+        如果来源是控制端:
+            sentences = chat.splitIntoSentences(helpText)
+            batchId = generateCorrelationId('voice-tts-batch')
+            通过定向 TTS 调度器逐句串行调用 sendVoiceCommandTts(sentence, targetDisplayId, { batchId, batchEnd })
+        所有句子按原文顺序生成和发送，全部完成后结束帮助播报
+
+TTS 批次完成和中断:
+    每条分句 playAudio 携带 voiceTtsBatchId，最后一句携带 voiceTtsBatchEnd=true
+    显示端收到分句后记录批次句子，仍按队列逐句播放
+    单句播放完成 -> 发送 voiceTtsPlaybackFinished，服务端更新该句播放状态
+    只有批次结束句真正播放完成，且不存在未完成的批次句子时 -> 发送 voiceConversationTtsFinished
+    显示端收到 tts action=stop -> 停止当前句、清空后续句子和批次状态，不发送会话完成事件
 
 显示端语音输入 TTS:
     服务端识别到 voiceInput 后记录 sourceDisplayId
