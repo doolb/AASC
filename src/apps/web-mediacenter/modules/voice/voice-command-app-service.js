@@ -19,6 +19,7 @@ let unmuteAllDisplays = null;
 let timeAnnounceToggle = null;
 let voiceInputQueues = new Map();
 let ttsRouter = null;
+let conversationConfirmationMode = 'off';
 
 // 内置功能命令定义同时供语音门控和控制端列表使用，避免两处维护不同的命令范围。
 const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
@@ -33,6 +34,14 @@ const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
         examples: ['打开指令模式', '关闭指令模式'],
         description: '开启或关闭指令模式',
         matcher: text => text === '打开指令模式' || text === '关闭指令模式'
+    },
+    {
+        id: 'conversationConfirmation',
+        examples: ['开启对话确认', '关闭对话确认', '开启自动确认'],
+        description: '设置普通语音聊天的确认模式',
+        matcher: text => text === '开启对话确认'
+            || text === '关闭对话确认'
+            || text === '开启自动确认'
     },
     {
         id: 'recording',
@@ -214,6 +223,9 @@ function init(config = {}) {
     if (config.assistants) {
         assistantConfig.assistants = config.assistants;
     }
+    if (config.conversationConfirmationMode) {
+        setConversationConfirmationMode(config.conversationConfirmationMode);
+    }
     loadSearchHistory();
     console.log(`[语音命令] 默认助手: ${assistantConfig.defaultName}`);
 }
@@ -268,6 +280,18 @@ function setMuteFunctions(muteFunc, unmuteFunc) {
 
 function setTimeAnnounceToggle(fn) {
     timeAnnounceToggle = fn;
+}
+
+function setConversationConfirmationMode(mode) {
+    const normalized = String(mode || '').trim().toLowerCase();
+    conversationConfirmationMode = ['off', 'manual', 'auto'].includes(normalized)
+        ? normalized
+        : 'off';
+    return conversationConfirmationMode;
+}
+
+function getConversationConfirmationMode() {
+    return conversationConfirmationMode;
 }
 
 // TTS 由服务端统一注入，语音命令服务只负责描述播报内容和界面动作。
@@ -1758,7 +1782,17 @@ function handleSystemCommand(text, displayId) {
     if (trimmedText === '系统') {
         return { type: 'showHelp' };
     }
-    
+
+    if (trimmedText === '开启对话确认') {
+        return { type: 'conversationConfirmationMode', mode: 'manual' };
+    }
+    if (trimmedText === '关闭对话确认') {
+        return { type: 'conversationConfirmationMode', mode: 'off' };
+    }
+    if (trimmedText === '开启自动确认') {
+        return { type: 'conversationConfirmationMode', mode: 'auto' };
+    }
+
     if (trimmedText.startsWith('私聊')) {
         const name = trimmedText.substring(2).trim();
         if (name) {
@@ -1822,6 +1856,8 @@ module.exports = {
     setClients,
     setMuteFunctions,
     setTimeAnnounceToggle,
+    setConversationConfirmationMode,
+    getConversationConfirmationMode,
     setTtsRouter,
     setMediaLibrary,
     isBuiltinVoiceCommand,

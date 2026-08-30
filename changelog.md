@@ -14,12 +14,84 @@
   - 已确认来源疑似旧 Pi Agent/工具调用流程，暂不修改代码、历史文件或播报逻辑。
   - 详细记录：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
 
+### Chat2API 内置任务实施中
+
+- 🔄 [2026-08-30] 完成 Chat2API 安全数据层基础能力
+  - 新增私有目录下的配置、Provider、账号、API Key 和模型映射集合存储，凭据文件使用 0600 权限，目录使用 0700 权限。
+  - 账号列表只返回脱敏字段；API Key 只在创建时返回一次完整值，持久化仅保存哈希和掩码。
+  - Chat2API 数据导入采用版本校验、脱敏预览和明确确认后合并，不覆盖未出现在导入文件中的既有记录。
+  - 测试：数据存储安全、API Key 鉴权和导入流程 3/3 通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- 🔄 [2026-08-30] 完成 Chat2API AASC 原生代理边界
+  - 新增不依赖 Koa/Electron 的 Node HTTP 代理服务，提供 `/v1/models`、`/v1/chat/completions` 和 `/v1/completions`。
+  - 支持 Bearer API Key 鉴权、非流式 JSON、流式 SSE、CORS、请求体大小限制，以及服务停止时主动关闭连接并释放端口。
+  - Provider 请求通过统一 adapter 接口进入，核心适配层只向 adapter 传递内存中的完整账号凭据。
+  - 测试：核心适配层和代理服务协议回归 4/4 通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- 🔄 [2026-08-30] 完成 Chat2API 控制端登录会话骨架
+  - 支持一次性 state、Provider 绑定、过期清理、登录地址返回、凭据提交和账号落盘，登录列表只返回脱敏账号。
+  - 兼容上游当前多数 Provider 的浏览器登录后 Token/Cookie 录入模式，并预留 Provider-specific 校验/交换 adapter。
+  - 测试：OAuth 会话和控制端登录流程 3/3 通过；Chat2API 模块全量回归 16/16 通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- 🔄 [2026-08-30] 注册 Chat2API AASC 内置服务任务
+  - 新增 `chat2api.proxy` server service，统一装配数据存储、Provider 注册表、模型映射、负载均衡、OAuth 和 Node HTTP 代理。
+  - 支持任务参数配置监听地址、端口和 API Key 开关，widget 展示运行状态与监听地址；停止任务会清理 OAuth 临时会话并释放端口。
+  - 测试：runtime 与内置任务生命周期 3/3 通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- 🔄 [2026-08-30] 增加 Chat2API 本机控制端管理 API
+  - 新增 `/api/chat2api/config`、`providers`、`accounts`、`oauth`、`api-keys` 和 `import` 管理接口。
+  - 默认仅允许本机直接访问管理接口；非本机请求仍需代理 API Key，列表响应继续进行敏感字段脱敏。
+  - 控制端可先调用 OAuth start 获取登录地址和一次性 state，再提交凭据完成账号登录。
+  - 测试：管理服务、代理管理路由和 runtime 回归 5/5 通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- 🔄 [2026-08-30] 增加 Chat2API 控制端账户管理弹窗
+  - 任务 widget 增加“账户管理”入口，控制端可选择 Provider、打开官方登录页、填写 Token/Cookie 并完成账号绑定。
+  - 弹窗展示已登录账号和脱敏 API Key，并支持创建 API Key 时一次性复制完整值。
+  - 测试：控制端 Chat2API UI 契约、管理 API 和代理路由回归 6/6 通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- 🔄 [2026-08-30] 接入 Chat2API Provider 通用 adapter 底座
+  - 九个内置 Provider 均注册 AASC 原生 HTTP adapter，支持账号凭据认证头、通用 JSON 响应和 SSE chunk 转换。
+  - 控制端登录表单按 Provider 展示必填 Token/Cookie 字段；runtime 默认装配 Provider adapter，不再出现“适配器未配置”。
+  - 上游网页协议中仍有 Provider-specific payload 和流解析差异，后续按 Provider 补齐专用适配并使用上游回归样例验证。
+  - 测试：Provider adapter 3/3、Chat2API 模块全量回归 25/25 通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- 🔄 [2026-08-30] 固定 Chat2API 纯核心上游快照和统一回归脚本
+  - 将 Provider 定义、模型选项、代理类型/映射/负载均衡和工具调用 profile 纳入 `3rd/chat2api-core`，运行时不读取 `/mnt/Chat2API`。
+  - 增加 `npm run check:chat2api`，统一验证上游边界、AASC adapter、代理协议、OAuth、内置任务和控制端契约。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
 ### 已完成
 
 - ⏳ [2026-08-30] 规划 Chat2API 核心内置任务
   - 确认采用上游核心快照 + AASC 适配层 + `chat2api.proxy` 常驻任务方案，完整覆盖 Provider、OAuth、账号、API Key、负载均衡和控制端配置。
   - 设计阶段暂不修改业务代码；保留 Chat2API GPL-3.0 许可证和后续上游同步路径。
   - 文档：`docs/design/chat2api-builtin-task.md`、`docs/spec/chat2api-builtin-task.md`、`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- ✅ [2026-08-30] 增加全局语音对话确认三档模式
+  - 支持关闭、手动确认和自动确认；手动确认 30 秒，自动确认在 TTS 播放完成后提供 7 秒取消窗口。
+  - 确认前不调用 Pi、不写入聊天历史；确认文本立即使用天气同款 Markdown 弹窗显示。
+  - 控制端入口位于“声纹管理 → 声纹识别设置”，由 `VoiceprintPanel` 负责展示和保存全局模式。
+  - TTS 失败时仍保留弹窗和待确认流程；自动模式随后进入 7 秒取消窗口，确认倒计时追加在唤醒倒计时后并带背景。
+  - 清理旧的“5秒内无回复将自动确认”错误提示，提醒确认统一为 30 秒且必须明确确认。
+  - 验证：确认状态机、语音路由、TTS、Pi 和显示端相关回归全部通过。
+  - 详细任务：`docs/task/2026-08-30_语音对话确认模式.md`。
+
+- ✅ [2026-08-30] 修正语音确认远程播报时序并统一声纹设置卡片
+  - 自动确认改为等待所有实际 TTS 播放目标完成后再启动 7 秒取消窗口，避免用户尚未听完就自动提交原话。
+  - 取消在确认记录失效后再次进入普通聊天；声纹页面主要设置统一使用大卡片样式。
+  - 详细任务：`docs/task/2026-08-30_语音确认远程播报时序与声纹卡片.md`。
+
+- ✅ [2026-08-30] 提高确认倒计时可读性
+  - 深色主题使用白字深红背景，浅色主题使用深红字浅红背景，并加粗倒计时文字。
+  - 详细任务：`docs/task/2026-08-30_确认倒计时高对比度.md`。
+
 - ✅ [2026-08-30] 显示端第二行显示唤醒退出倒计时
   - 第一行保持监听状态与柱状图，第二行只显示服务端会话剩余时间 `MM:SS`。
   - 服务端下发权威 `expiresAt`，显示端每秒刷新；会话结束、监听关闭或旧协议无到期时间时自动隐藏并清理定时器。

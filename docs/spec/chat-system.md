@@ -499,10 +499,10 @@ onSentence 外部使用注意事项:
     handleReminderCommand(text, displayId):
         解析时间和重复规则
         生成确认文本
-        创建待确认记录 (5秒过期)
+    创建待确认记录 (30秒过期)
         生成 TTS 语音播放确认
         发送确认弹窗到显示端
-        5秒后自动确认
+    超时不自动确认，直接清理待确认记录
     
     executeReminderConfirmation(confirmationId, confirmed):
         如果确认: 调用 reminder.addReminder()

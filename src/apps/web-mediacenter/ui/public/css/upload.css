@@ -458,6 +458,41 @@ input[type="file"] {
     font-size: 12px;
 }
 
+.voice-confirmation-mode {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-primary, #fff);
+}
+
+.voice-confirmation-mode select {
+    min-width: 220px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.2));
+    border-radius: 6px;
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.35));
+    color: var(--text-primary, #fff);
+}
+
+.voice-confirmation-settings {
+    margin-top: 0;
+}
+
+#panel-voiceprint .voiceprint-card {
+    margin-bottom: 16px;
+    padding: 22px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 16px;
+    background: var(--card-background, rgba(255, 255, 255, 0.05));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+#panel-voiceprint .voiceprint-card > label:first-child {
+    color: var(--text-primary, #fff);
+    font-size: 15px;
+    font-weight: 600;
+}
+
 .display-vad-card {
     display: flex;
     flex-direction: column;

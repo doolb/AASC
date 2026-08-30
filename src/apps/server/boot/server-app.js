@@ -45,6 +45,15 @@ const {
     createConversationState,
     reduceConversationInput
 } = require('../modules/voice/display-voice-conversation');
+const {
+    AUTO_CONFIRMATION_WINDOW_MS,
+    MANUAL_CONFIRMATION_TIMEOUT_MS,
+    createPendingConversationConfirmation,
+    markConversationConfirmationTtsFinished,
+    normalizeConversationConfirmationMode,
+    parseConversationConfirmationAction,
+    resolveConversationConfirmation
+} = require('../modules/voice/conversation-confirmation');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
@@ -274,6 +283,11 @@ let controlClients = new Set();
 const PLAYBACK_PROGRESS_PERSIST_INTERVAL_MS = 1000;
 const displayProgressPersistAt = new Map();
 const displayConversationTimers = new Map();
+const pendingConversationConfirmations = new Map();
+const conversationConfirmationTimers = new Map();
+let conversationConfirmationMode = normalizeConversationConfirmationMode(
+    config.get('voiceCommand.conversationConfirmationMode', 'off')
+);
 let serverStartTime = Date.now();
 let muteState = {
     isMuted: false,
@@ -563,6 +577,7 @@ async function startServer() {
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
+                'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'setVoiceVad', 'detectVoiceNoise',
                 'playlistRequest', 'playlistControl'
             ];
@@ -900,6 +915,7 @@ function syncDisplayConversationListeningState(displayId, reason) {
     if (!displayData) return;
     if (!isDisplayVoiceListeningEnabled(displayData)) {
         clearDisplayConversationTimer(displayId);
+        clearPendingConversationConfirmation(displayId, 'listeningDisabled');
         setDisplayConversationState(displayId, createConversationState(false), reason || 'listeningDisabled');
         return;
     }
@@ -924,6 +940,200 @@ function sendConversationPrompt(displayId, text) {
             logError('语音', `唤醒提示 TTS 失败: ${error.message}`);
         }
     })();
+}
+
+function getConversationConfirmationConfig() {
+    return {
+        mode: conversationConfirmationMode,
+        manualTimeoutMs: MANUAL_CONFIRMATION_TIMEOUT_MS,
+        autoCancelWindowMs: AUTO_CONFIRMATION_WINDOW_MS
+    };
+}
+
+function setConversationConfirmationMode(mode, source = 'control') {
+    conversationConfirmationMode = normalizeConversationConfirmationMode(mode);
+    voiceCommand.setConversationConfirmationMode(conversationConfirmationMode);
+    if (conversationConfirmationMode === 'off') {
+        for (const displayId of pendingConversationConfirmations.keys()) {
+            clearPendingConversationConfirmation(displayId, 'modeDisabled');
+        }
+    }
+    config.set('voiceCommand.conversationConfirmationMode', conversationConfirmationMode);
+    broadcastToControls({
+        type: 'conversationConfirmationConfig',
+        ...getConversationConfirmationConfig(),
+        source
+    });
+    log('语音', `全局对话确认模式已${conversationConfirmationMode === 'off' ? '关闭' : '设置为' + conversationConfirmationMode}`);
+    return conversationConfirmationMode;
+}
+
+function clearConversationConfirmationTimer(displayId) {
+    const timer = conversationConfirmationTimers.get(displayId);
+    if (timer) {
+        clearTimeout(timer);
+        conversationConfirmationTimers.delete(displayId);
+    }
+}
+
+function clearPendingConversationConfirmation(displayId, reason = 'cleared') {
+    clearConversationConfirmationTimer(displayId);
+    const record = pendingConversationConfirmations.get(displayId);
+    if (!record) return null;
+    pendingConversationConfirmations.delete(displayId);
+    sendToDisplay(displayId, {
+        type: 'voiceCommand',
+        action: 'conversationConfirmClear',
+        confirmationId: record.id,
+        reason
+    });
+    return record;
+}
+
+function scheduleConversationConfirmationTimeout(displayId, expiresAt) {
+    clearConversationConfirmationTimer(displayId);
+    const delay = Math.max(0, expiresAt - Date.now());
+    const timer = setTimeout(() => {
+        const record = pendingConversationConfirmations.get(displayId);
+        if (!record) return;
+        const result = resolveConversationConfirmation(record, 'timeout', Date.now());
+        if (result.action === 'confirm') {
+            void submitPendingConversationConfirmation(displayId, record, 'auto');
+        } else if (result.action === 'cancel') {
+            clearPendingConversationConfirmation(displayId, 'timeout');
+        }
+    }, delay);
+    conversationConfirmationTimers.set(displayId, timer);
+}
+
+function beginAutoConversationConfirmationWindow(displayId, now = Date.now()) {
+    const record = pendingConversationConfirmations.get(displayId);
+    if (!record || record.mode !== 'auto' || Number.isFinite(record.cancelUntil)) return false;
+    const nextRecord = markConversationConfirmationTtsFinished(record, now);
+    pendingConversationConfirmations.set(displayId, nextRecord);
+    sendToDisplay(displayId, {
+        type: 'voiceCommand',
+        action: 'conversationConfirmWindow',
+        confirmationId: nextRecord.id,
+        expiresAt: nextRecord.cancelUntil
+    });
+    scheduleConversationConfirmationTimeout(displayId, nextRecord.cancelUntil);
+    return true;
+}
+
+// 自动确认必须等待确认提示涉及的所有实际播放目标完成，避免远程播报尚未结束时提前提交原话。
+function handleConversationConfirmationPlaybackFinished(playbackDisplayId, playbackId, reason = 'finished') {
+    if (!playbackDisplayId || !playbackId) return false;
+    const playbackKey = getVoiceTtsPlaybackKey(playbackDisplayId, playbackId);
+    let handled = false;
+    for (const [displayId, record] of pendingConversationConfirmations.entries()) {
+        if (!record.playbackKeys?.has(playbackKey)) continue;
+        record.playbackKeys.delete(playbackKey);
+        handled = true;
+        log('语音', `对话确认 TTS 播放${reason === 'finished' ? '完成' : '结束'} displayId=${playbackDisplayId}`);
+        if (record.mode === 'auto' && record.playbackKeys.size === 0) {
+            beginAutoConversationConfirmationWindow(displayId);
+        }
+    }
+    return handled;
+}
+
+async function sendConversationConfirmationResult(displayId, text) {
+    sendToDisplay(displayId, {
+        type: 'voiceCommand',
+        action: 'response',
+        text
+    });
+    try {
+        await sendVoiceInputTts(text);
+    } catch (error) {
+        logError('语音', `对话确认结果 TTS 失败: ${error.message}`);
+    }
+}
+
+async function submitPendingConversationConfirmation(displayId, record, reason = 'confirmed') {
+    const current = pendingConversationConfirmations.get(displayId);
+    if (!current || current.id !== record.id) return false;
+    clearPendingConversationConfirmation(displayId, reason);
+    await handleChatMessage({
+        content: record.text,
+        displayContent: record.text,
+        displayId,
+        voiceOriginDisplayId: displayId,
+        routeVoiceToAll: true,
+        mode: record.chatMode,
+        target: record.target,
+        sessionId: record.sessionId,
+        templateTarget: record.templateTarget,
+        sendToControl: broadcastToControls
+    });
+    return true;
+}
+
+async function handlePendingConversationConfirmation(displayId, text) {
+    const record = pendingConversationConfirmations.get(displayId);
+    if (!record) return false;
+    const action = parseConversationConfirmationAction(text);
+    if (!action) return false;
+    const result = resolveConversationConfirmation(record, action, Date.now());
+    if (result.action === 'pending') return true;
+    if (result.action === 'confirm') {
+        await submitPendingConversationConfirmation(displayId, record, 'confirmed');
+        return true;
+    }
+    clearPendingConversationConfirmation(displayId, 'cancelled');
+    await sendConversationConfirmationResult(displayId, '好的，已取消这次对话');
+    return true;
+}
+
+function requestConversationConfirmation(displayId, text) {
+    const session = chat.getSession();
+    clearPendingConversationConfirmation(displayId, 'replaced');
+    const record = {
+        ...createPendingConversationConfirmation(
+            text,
+            displayId,
+            conversationConfirmationMode,
+            Date.now()
+        ),
+        playbackKeys: new Set(),
+        chatMode: session.mode === 'private' ? 'private' : 'group',
+        target: session.mode === 'private' ? session.privateTarget || null : null,
+        sessionId: session.privateSessionId || 'default',
+        templateTarget: session.mode === 'private' ? session.privateTarget || null : null
+    };
+    const promptText = `你刚才说的是：“${record.text}”。请说确认或取消。`;
+    pendingConversationConfirmations.set(displayId, record);
+    sendToDisplay(displayId, {
+        type: 'voiceCommand',
+        action: 'conversationConfirm',
+        confirmationId: record.id,
+        text: promptText,
+        detailText: promptText,
+        expiresAt: record.expiresAt,
+        mode: record.mode
+    });
+    if (record.mode === 'manual') {
+        scheduleConversationConfirmationTimeout(displayId, record.expiresAt);
+    }
+    (async () => {
+        try {
+            const targetCount = await sendVoiceInputTts(promptText, {
+                onPlaybackStarted: ({ displayId: playbackDisplayId, playbackId }) => {
+                    record.playbackKeys.add(getVoiceTtsPlaybackKey(playbackDisplayId, playbackId));
+                }
+            });
+            if (record.mode === 'auto' && targetCount === 0) {
+                beginAutoConversationConfirmationWindow(displayId);
+            }
+        } catch (error) {
+            logError('语音', `对话确认提示 TTS 失败: ${error.message}`);
+            if (record.mode === 'auto') {
+                beginAutoConversationConfirmationWindow(displayId);
+            }
+        }
+    })();
+    return record;
 }
 
 function handleDisplayConversationInput(displayId, text) {
@@ -3267,6 +3477,7 @@ function finishVoiceTtsPlayback(playbackDisplayId, playbackId, reason = 'finishe
     clearTimeout(session.timer);
     voiceTtsPlaybackTimers.delete(key);
     broadcastVoiceTtsPlaybackState(reason, playbackId, playbackDisplayId);
+    handleConversationConfirmationPlaybackFinished(playbackDisplayId, playbackId, reason);
     return true;
 }
 
@@ -3545,18 +3756,28 @@ async function sendVoiceInputTts(text, playbackOptions = {}) {
     const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
     const targetDisplayIds = getOnlineVoicePlaybackDisplayIds();
     const batchPayload = getVoiceTtsBatchPayload(playbackOptions);
+    let sentCount = 0;
 
     for (const targetDisplayId of targetDisplayIds) {
-        sendToDisplay(targetDisplayId, {
+        const message = {
             type: 'tts',
             action: 'playAudio',
             audioUrl,
             text,
             ...batchPayload
-        });
+        };
+        const sent = sendToDisplay(targetDisplayId, message);
+        if (!sent) continue;
+        sentCount++;
+        if (typeof playbackOptions.onPlaybackStarted === 'function') {
+            playbackOptions.onPlaybackStarted({
+                displayId: targetDisplayId,
+                playbackId: message.voiceTtsPlaybackId
+            });
+        }
     }
 
-    return targetDisplayIds.length;
+    return sentCount;
 }
 
 // 媒体文件名播报统一由服务器生成并下发，复用跨显示端 TTS 播放状态广播。
@@ -4066,6 +4287,7 @@ wss.on('connection', (ws, req) => {
 
             muteState.previousVolumes.delete(displayId);
             clearDisplayConversationTimer(displayId);
+            clearPendingConversationConfirmation(displayId, 'displayDisconnected');
             finishVoiceTtsPlaybacksForDisplay(displayId);
             displayClients.delete(displayId);
             for (const [requestId, pending] of pendingDisplayTtsRequests) {
@@ -4093,6 +4315,10 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
+        ws.send(JSON.stringify({
+            type: 'conversationConfirmationConfig',
+            ...getConversationConfirmationConfig()
+        }));
         // 推送各显示端当前临时媒体信息（控制端刷新后预览数据丢失时显示占位提示）
         displayClients.forEach((dd, id) => {
             if (dd.state.lastTempMedia) {
@@ -4378,7 +4604,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         // 文件名播报由服务器统一生成，sendToDisplay 会创建播放状态并广播给其他录音显示端。
         void sendMediaNameTts(displayId, data.text);
     } else if (data.type === 'voiceConversationTtsFinished' && displayData) {
-        // 显示端只有在当前 TTS 队列真正播放结束后才上报，计时起点因此不会落在生成完成或首句结束。
+        // 该事件只负责普通会话的 3 分钟续期；确认提示使用带 playbackId 的完成回执计时。
         if (isDisplayVoiceListeningEnabled(displayData)
             && ['activeGroup', 'activePrivate'].includes(displayData.state.voiceConversation?.state)) {
             armDisplayConversationTimer(displayId);
@@ -4556,6 +4782,24 @@ async function handleControlMessageFallback(data, ws) {
         log('语音', `开始检测显示端 ${displayId} 底噪，requestId=${requestId}`);
         return;
     }
+
+    if (data.type === 'getConversationConfirmationConfig') {
+        ws.send(JSON.stringify({
+            type: 'conversationConfirmationConfig',
+            ...getConversationConfirmationConfig()
+        }));
+        return;
+    }
+
+    if (data.type === 'setConversationConfirmationConfig') {
+        const mode = setConversationConfirmationMode(data.mode, 'control');
+        ws.send(JSON.stringify({
+            type: 'conversationConfirmationConfig',
+            ...getConversationConfirmationConfig(),
+            mode
+        }));
+        return;
+    }
     
     if (data.type === 'voiceCommand') {
                     (async () => {
@@ -4563,6 +4807,22 @@ async function handleControlMessageFallback(data, ws) {
                             const playOnControl = data.playOnControl || false;
                             const targetDisplayId = data.displayId || displayId;
                             const isDisplayVoiceInput = displayData?.ws === ws;
+
+                            if (isDisplayVoiceInput && pendingConversationConfirmations.has(targetDisplayId)) {
+                                const handled = await handlePendingConversationConfirmation(targetDisplayId, data.text);
+                                if (!handled) {
+                                    log('语音', `显示端 ${targetDisplayId} 等待对话确认，忽略非确认输入: ${JSON.stringify(data.text)}`);
+                                }
+                                return;
+                            }
+
+                            if (isDisplayVoiceInput
+                                && data.conversationActive === true
+                                && conversationConfirmationMode !== 'off'
+                                && !voiceCommand.isBuiltinVoiceCommand(data.text)) {
+                                requestConversationConfirmation(targetDisplayId, data.text);
+                                return;
+                            }
                             
                             const sendToControl = isDisplayVoiceInput
                                 ? (msg) => broadcastToControls(msg)
@@ -4647,6 +4907,23 @@ async function handleControlMessageFallback(data, ws) {
                                             logError('VoiceCommand', `帮助TTS生成失败: ${err.message}`);
                                         }
                                     })();
+                                }
+                            } else if (result.type === 'conversationConfirmationMode') {
+                                const mode = setConversationConfirmationMode(result.mode, isDisplayVoiceInput ? 'voice' : 'control');
+                                const modeText = mode === 'manual'
+                                    ? '已开启对话确认'
+                                    : mode === 'auto'
+                                        ? '已开启对话自动确认，七秒内可说取消'
+                                        : '已关闭对话确认';
+                                if (targetDisplayId && sendToDisplay) {
+                                    sendToDisplay(targetDisplayId, {
+                                        type: 'voiceCommand',
+                                        action: 'response',
+                                        text: modeText
+                                    });
+                                    void (isDisplayVoiceInput
+                                        ? sendVoiceInputTts(modeText)
+                                        : sendVoiceCommandTts(modeText, targetDisplayId));
                                 }
                             } else if (result.type === 'commandMode') {
                                 const modeText = result.enabled ? '已开启指令模式' : '已关闭指令模式';

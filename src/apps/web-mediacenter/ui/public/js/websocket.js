@@ -17,6 +17,7 @@ const WebSocketManager = {
                 const port = window.location.port || '8081';
                 window.DeviceList.setServerInfo(host, port);
             }
+            this.ws.send(JSON.stringify({ type: 'getConversationConfirmationConfig' }));
         };
         
         this.ws.onmessage = (event) => {
@@ -74,6 +75,10 @@ const WebSocketManager = {
         } else if (data.type === 'voiceVadNoiseResult') {
             if (window.DeviceList) {
                 window.DeviceList.handleVoiceVadNoiseResult(data);
+            }
+        } else if (data.type === 'conversationConfirmationConfig') {
+            if (window.VoiceprintPanel) {
+                window.VoiceprintPanel.handleConversationConfirmationConfig(data);
             }
         } else if (data.type === 'playlistProgress') {
             // 只处理当前选中显示端的播放列表进度

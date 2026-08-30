@@ -13,6 +13,7 @@
         recordingStream: null,
         recordingName: '',
         speakers: {},
+        conversationConfirmationMode: 'off',
 
         init() {
             document.getElementById('vpNameInput').addEventListener('keydown', e => {
@@ -30,6 +31,54 @@
             this.loadServerVoiceConfig();
             this.refreshList();
             this.bindRemoveDelegation();
+            this.renderConversationConfirmationPanel();
+        },
+
+        renderConversationConfirmationPanel() {
+            const panel = document.getElementById('voiceConversationConfirmationPanel');
+            if (!panel) return;
+            const modes = [
+                { value: 'off', label: '关闭：直接发送' },
+                { value: 'manual', label: '手动确认：等待30秒' },
+                { value: 'auto', label: '自动确认：7秒内可取消' }
+            ];
+            panel.innerHTML = `
+                <label class="voice-confirmation-mode">
+                    确认模式
+                    <select data-conversation-confirmation-mode>
+                        ${modes.map(({ value, label }) => `<option value="${value}"${value === this.conversationConfirmationMode ? ' selected' : ''}>${label}</option>`).join('')}
+                    </select>
+                </label>
+            `;
+            if (!panel.dataset.bound) {
+                panel.dataset.bound = '1';
+                panel.addEventListener('change', (event) => {
+                    const select = event.target.closest('[data-conversation-confirmation-mode]');
+                    if (!select) return;
+                    this.setConversationConfirmationMode(select.value);
+                });
+            }
+        },
+
+        setConversationConfirmationMode(mode) {
+            if (!['off', 'manual', 'auto'].includes(mode)) return false;
+            if (!window.WebSocketManager?.ws || window.WebSocketManager.ws.readyState !== WebSocket.OPEN) {
+                if (window.showToast) window.showToast('对话确认配置发送失败：控制端未连接', 'error');
+                return false;
+            }
+            this.conversationConfirmationMode = mode;
+            this.renderConversationConfirmationPanel();
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setConversationConfirmationConfig',
+                mode
+            }));
+            return true;
+        },
+
+        handleConversationConfirmationConfig(data) {
+            if (!['off', 'manual', 'auto'].includes(data?.mode)) return;
+            this.conversationConfirmationMode = data.mode;
+            this.renderConversationConfirmationPanel();
         },
 
         // 委托点击：读取 data-name 删除（避免内联 onclick 的用户输入注入）

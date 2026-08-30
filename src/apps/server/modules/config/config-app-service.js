@@ -208,6 +208,7 @@ class Config extends DataSnapshot {
             speakerCount: 'AUTO'
         },
         voiceCommand: {
+            conversationConfirmationMode: 'off',
             defaultWeatherCity: '',
             weatherCities: [
                 '北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '天津',

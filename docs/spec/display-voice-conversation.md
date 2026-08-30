@@ -629,6 +629,68 @@ Markdown 渲染器:
     返回 chat -> handleChatMessage -> 发送 chatInput 并进入正常 LLM/Pi 路径
 等待唤醒状态:
     保持原有 commandMode 过滤和免唤醒内置指令规则
+
+## 全局语音对话确认模式
+
+```text
+conversationConfirmationMode = off | manual | auto
+默认值 = off
+
+控制端请求 getConversationConfirmationConfig:
+    返回当前全局模式
+
+控制端界面:
+    语音对话确认设置归入 panel-voiceprint 的“声纹识别设置”卡片
+    不在 panel-display 单独占用显示控制卡片
+    VoiceprintPanel 负责渲染模式下拉框并发送配置
+
+控制端发送 setConversationConfirmationConfig(mode):
+    校验 mode 只能是 off/manual/auto
+    持久化 voiceCommand.conversationConfirmationMode
+    广播 conversationConfirmationConfig 到所有控制端和显示端
+
+语音命令:
+    “开启对话确认” -> 设置 manual
+    “关闭对话确认” -> 设置 off
+    “开启自动确认” -> 设置 auto
+    上述命令无需唤醒词，不能被普通对话确认再次拦截
+
+activeGroup/activePrivate 收到普通语音文本:
+    内置指令仍先执行
+    mode == off -> 原样走正常聊天路径
+    mode == manual 或 auto -> 创建 pendingConversationConfirmation
+        保存 displayId、原始 text、chat mode、target、sessionId 和 createdAt
+        不调用 Pi，不写入聊天历史
+        先向来源显示端发送 conversationConfirmation/detailText
+        通过通用 TTS 路由播报确认文本
+
+manual 待确认:
+    expiresAt = createdAt + 30000
+    确认词 -> 删除记录 -> 使用保存的原始文本调用正常聊天路径
+    取消词或 expiresAt <= now -> 删除记录，不发送聊天
+
+auto 待确认:
+    sendVoiceInputTts 为每个实际播放目标登记 playbackDisplayId/playbackId
+    所有已登记播放目标收到 voiceTtsPlaybackFinished 后设置 cancelUntil = now + 7000
+    cancelUntil 内收到取消词 -> 删除记录，不发送聊天
+    cancelUntil 到期 -> 删除记录 -> 使用保存的原始文本调用正常聊天路径
+    没有播放目标或 TTS 生成失败 -> 保留弹窗并开启 7 秒取消窗口
+
+声纹管理页面:
+    panel-voiceprint 内所有主要 control-item 使用 voiceprint-card 大卡片样式
+    语音对话确认使用独立 voiceprint-card，与声纹识别设置卡片并列
+
+显示端收到 conversationConfirmation:
+    复用天气详情弹窗安全 Markdown 渲染器显示完整原文和确认提示
+    弹窗至少保持当前待确认窗口时长
+    第二行在唤醒倒计时后显示确认 MM:SS，带独立背景
+    确认、取消、超时或监听关闭 -> 立即隐藏弹窗并清理确认计时器
+
+确认倒计时样式:
+    .voice-conversation-countdown-confirmation 使用加粗文字和独立背景
+    深色主题 -> 白色文字 + 深红背景 + 浅红边框
+    浅色主题 -> 深红文字 + 浅红背景 + 深红边框
+```
 ```
 
 ## Pi Agent 会话路由

@@ -20,6 +20,7 @@
             </div>
         </div>
         <div id="voiceConversationCountdown" class="voice-conversation-countdown" aria-hidden="true"></div>
+        <div id="voiceConversationConfirmationCountdown" class="voice-conversation-countdown voice-conversation-countdown-confirmation" aria-hidden="true"></div>
     </div>
     <div id="voiceTextDisplay" class="voice-text-hidden"></div>
     <div id="taskStatusDisplay" class="task-status-hidden">
@@ -66,6 +67,7 @@
         const voiceStatusMainRow = document.getElementById('voiceStatusMainRow');
         const voiceStatus = document.getElementById('voiceStatus');
         const voiceConversationCountdown = document.getElementById('voiceConversationCountdown');
+        const voiceConversationConfirmationCountdown = document.getElementById('voiceConversationConfirmationCountdown');
         const voiceTextDisplay = document.getElementById('voiceTextDisplay');
         const monitorWrapper = document.getElementById('monitorWrapper');
         const waitingMessage = document.getElementById('waitingMessage');
@@ -163,6 +165,8 @@
         let voiceConversationExpiresAt = null;
         let voiceConversationTimer = null;
         let voiceConversationCountdownTimer = null;
+        let voiceConversationConfirmationExpiresAt = null;
+        let voiceConversationConfirmationCountdownTimer = null;
         let micStream = null;
         let audioContext = null;
         let pcmCapture = null;
@@ -754,7 +758,7 @@
 
         // 监听状态和柱状图组成单行语音状态区，识别文本单独位于下一行并沿用当前显示方向。
         function applyVoiceTopCenterLayout(rotationLayout) {
-            [voiceStatusRow, voiceStatusMainRow, voiceStatus, monitorWrapper, voiceConversationCountdown, voiceTextDisplay].forEach((element) => {
+            [voiceStatusRow, voiceStatusMainRow, voiceStatus, monitorWrapper, voiceConversationCountdown, voiceConversationConfirmationCountdown, voiceTextDisplay].forEach((element) => {
                 if (!element) return;
                 element.style.position = '';
                 element.style.bottom = '';
@@ -847,7 +851,7 @@
             // 立即更新所有活跃渲染任务覆盖层的旋转
             // render 任务覆盖层的旋转定位由 render.js 的 applyRotationStyle 管理
 
-            const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatusRow, voiceStatusMainRow, voiceStatus, voiceConversationCountdown, voiceTextDisplay, monitorWrapper];
+            const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatusRow, voiceStatusMainRow, voiceStatus, voiceConversationCountdown, voiceConversationConfirmationCountdown, voiceTextDisplay, monitorWrapper];
             
             uiElements.forEach(el => {
                 if (!el) return;
@@ -2013,6 +2017,17 @@
         function handleVoiceCommand(data) {
             if (data.action === 'confirm') {
                 showVoiceConfirmPopup(data.confirmationId, data.text, data.audioUrl);
+            } else if (data.action === 'conversationConfirm') {
+                voiceConversationConfirmationExpiresAt = Number.isFinite(Number(data.expiresAt))
+                    ? Number(data.expiresAt)
+                    : null;
+                showVoiceConversationConfirmationPopup(data.detailText || data.text, data.confirmationId);
+                startVoiceConversationConfirmationCountdown();
+            } else if (data.action === 'conversationConfirmWindow') {
+                voiceConversationConfirmationExpiresAt = Number(data.expiresAt);
+                startVoiceConversationConfirmationCountdown();
+            } else if (data.action === 'conversationConfirmClear') {
+                clearVoiceConversationConfirmation(data.confirmationId);
             } else if (data.action === 'response') {
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
@@ -2052,7 +2067,7 @@
             popup.className = 'voice-confirm-popup';
             popup.innerHTML = `
                 <div class="voice-confirm-content">${text}</div>
-                <div class="voice-confirm-hint">5秒内无回复将自动确认</div>
+                <div class="voice-confirm-hint">请说确认或取消</div>
             `;
             appendRotationPopup(popup);
             
@@ -2060,7 +2075,15 @@
                 if (popup.parentElement) {
                     popup.remove();
                 }
-            }, 6000);
+            }, 30000);
+        }
+
+        function showVoiceConversationConfirmationPopup(text, confirmationId) {
+            showVoiceResponsePopup(
+                text,
+                Math.max(30000, calculateWeatherPopupDuration(text)),
+                { conversationConfirmationId: confirmationId }
+            );
         }
         
         // 天气详情需要覆盖足够长的阅读时间；空白不计入字数，每 3 个可见字符保留 1 秒，最长 90 秒。
@@ -2069,7 +2092,7 @@
             return Math.min(90000, Math.max(5000, Math.ceil(visibleTextLength / 3) * 1000));
         }
 
-        function showVoiceResponsePopup(text, durationMs = 5000) {
+        function showVoiceResponsePopup(text, durationMs = 5000, options = {}) {
             const existing = document.querySelector('.voice-response-popup');
             if (existing) {
                 existing.remove();
@@ -2077,6 +2100,9 @@
             
             const popup = document.createElement('div');
             popup.className = 'voice-response-popup';
+            if (options.conversationConfirmationId) {
+                popup.dataset.conversationConfirmationId = options.conversationConfirmationId;
+            }
             // 详情文本可能来自 LLM，必须复用安全 Markdown 渲染器，禁止把原始 HTML 直接插入页面。
             popup.innerHTML = `<div class="voice-response-content">${ChatMarkdown.render(text)}</div>`;
             appendRotationPopup(popup);
@@ -2086,6 +2112,7 @@
                     popup.remove();
                 }
             }, durationMs);
+            return popup;
         }
         
         function showSearchResultPopup(query, results) {
@@ -4271,10 +4298,12 @@
                         if (voiceConversationState === 'disabled') {
                             clearVoiceConversationTimer();
                             clearVoiceConversationCountdown();
+                            clearVoiceConversationConfirmation();
                             stopVoiceRecording();
                         } else if (voiceConversationState === 'waitingWake') {
                             clearVoiceConversationTimer();
                             clearVoiceConversationCountdown();
+                            clearVoiceConversationConfirmation();
                         } else {
                             startVoiceConversationCountdown();
                         }
@@ -4675,6 +4704,27 @@
             }
         }
 
+        function clearVoiceConversationConfirmation(confirmationId) {
+            if (voiceConversationConfirmationCountdownTimer) {
+                clearInterval(voiceConversationConfirmationCountdownTimer);
+                voiceConversationConfirmationCountdownTimer = null;
+            }
+            voiceConversationConfirmationExpiresAt = null;
+            hideVoiceConversationConfirmationCountdown();
+            const popup = document.querySelector('.voice-response-popup[data-conversation-confirmation-id]');
+            if (popup && (!confirmationId || popup.dataset.conversationConfirmationId === confirmationId)) {
+                popup.remove();
+            }
+        }
+
+        function hideVoiceConversationConfirmationCountdown() {
+            if (voiceConversationConfirmationCountdown) {
+                voiceConversationConfirmationCountdown.textContent = '';
+                voiceConversationConfirmationCountdown.className = 'voice-conversation-countdown voice-conversation-countdown-confirmation';
+                voiceConversationConfirmationCountdown.setAttribute('aria-hidden', 'true');
+            }
+        }
+
         function updateVoiceConversationCountdown() {
             if (!voiceConversationCountdown
                 || !['activeGroup', 'activePrivate'].includes(voiceConversationState)
@@ -4699,6 +4749,35 @@
             updateVoiceConversationCountdown();
             if (!voiceConversationCountdown || !Number.isFinite(voiceConversationExpiresAt)) return;
             voiceConversationCountdownTimer = setInterval(updateVoiceConversationCountdown, 1000);
+        }
+
+        function updateVoiceConversationConfirmationCountdown() {
+            if (!voiceConversationConfirmationCountdown || !Number.isFinite(voiceConversationConfirmationExpiresAt)) {
+                hideVoiceConversationConfirmationCountdown();
+                return;
+            }
+            const remainingMs = voiceConversationConfirmationExpiresAt - Date.now();
+            if (remainingMs <= 0) {
+                hideVoiceConversationConfirmationCountdown();
+                return;
+            }
+            voiceConversationConfirmationCountdown.textContent = formatVoiceConversationCountdown(remainingMs);
+            voiceConversationConfirmationCountdown.className = 'voice-conversation-countdown voice-conversation-countdown-confirmation voice-conversation-countdown-visible';
+            voiceConversationConfirmationCountdown.setAttribute('aria-hidden', 'false');
+        }
+
+        function startVoiceConversationConfirmationCountdown() {
+            if (voiceConversationConfirmationCountdownTimer) {
+                clearInterval(voiceConversationConfirmationCountdownTimer);
+                voiceConversationConfirmationCountdownTimer = null;
+            }
+            if (!Number.isFinite(voiceConversationConfirmationExpiresAt)) {
+                hideVoiceConversationConfirmationCountdown();
+                return;
+            }
+            updateVoiceConversationConfirmationCountdown();
+            if (!voiceConversationConfirmationCountdown) return;
+            voiceConversationConfirmationCountdownTimer = setInterval(updateVoiceConversationConfirmationCountdown, 1000);
         }
 
         function clearVoiceConversationTimer() {

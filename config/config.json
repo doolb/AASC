@@ -51,6 +51,7 @@
     "speakerCount": "AUTO"
   },
   "voiceCommand": {
+    "conversationConfirmationMode": "off",
     "defaultWeatherCity": "Chengdu",
     "weatherCities": [
       "北京",

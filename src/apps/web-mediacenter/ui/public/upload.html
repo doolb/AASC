@@ -164,7 +164,7 @@
                     <div class="empty-list">暂无显示端连接</div>
                 </div>
             </div>
-            
+
             <div class="section">
                 <h2>显示控制</h2>
             <div class="control-grid">
@@ -653,7 +653,7 @@
         </section>
         <section class="panel" id="panel-voiceprint" style="display:none;">
             <h1 class="page-title">声纹管理</h1>
-            <div class="control-item">
+            <div class="control-item voiceprint-card">
                 <label>注册声纹</label>
                 <input type="text" id="vpNameInput" placeholder="输入名字（如：妲己）"
                     style="width:100%;padding:8px;margin-bottom:8px;box-sizing:border-box;">
@@ -665,11 +665,11 @@
                     <span id="vpRecordStatus">输入名字后录音 3-10 秒</span>
                 </div>
             </div>
-            <div class="control-item">
+            <div class="control-item voiceprint-card">
                 <label>已注册声纹</label>
                 <div id="vpSpeakerList"></div>
             </div>
-            <div class="control-item">
+            <div class="control-item voiceprint-card">
                 <label>声纹识别设置</label>
                 <div style="margin-top:6px;font-size:13px;">
                     <label><input type="checkbox" id="vpEnabledCheck"> 启用声纹识别（只处理识别到声纹的语音）</label><br>
@@ -690,7 +690,14 @@
                     </select>
                 </div>
             </div>
-            <div class="control-item">
+            <div class="control-item voiceprint-card voice-confirmation-settings">
+                <label>语音对话确认</label>
+                <p class="voice-vad-description">全局控制唤醒后的普通语音是否需要确认后再发送到聊天。</p>
+                <div id="voiceConversationConfirmationPanel">
+                    <div class="empty-list">正在加载语音确认配置</div>
+                </div>
+            </div>
+            <div class="control-item voiceprint-card">
                 <label>语音识别设备</label>
                 <div class="control-buttons">
                     <button class="control-btn active" id="asrDeviceServerBtn" data-asr="server" onclick="setAsrDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
@@ -700,7 +707,7 @@
                     <span id="asrDeviceStatus">加载中...</span>
                 </div>
             </div>
-            <div class="control-item">
+            <div class="control-item voiceprint-card">
                 <label>语音生成设备</label>
                 <div class="control-buttons">
                     <button class="control-btn active" id="ttsDeviceServerBtn" data-tts="server" onclick="setTtsDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>
@@ -710,7 +717,7 @@
                     <span id="ttsDeviceStatus">加载中...</span>
                 </div>
             </div>
-            <div class="control-item">
+            <div class="control-item voiceprint-card">
                 <label>服务器语音功能</label>
                 <div style="margin-top:6px;font-size:13px;">
                     <label style="display:inline-block;margin-right:16px;">
