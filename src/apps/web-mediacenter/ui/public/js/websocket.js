@@ -306,6 +306,10 @@ const WebSocketManager = {
             if (window.Crop && window.Crop.showControlScreenshot) {
                 window.Crop.showControlScreenshot(data);
             }
+        } else if (data.type === 'chatInput') {
+            if (window.Chat) {
+                window.Chat.handleDisplayChatInput(data);
+            }
         } else if (data.type === 'chatChunk') {
             if (window.Chat) {
                 window.Chat.handleChunk(data);

@@ -2,7 +2,25 @@
 
 ## [Unreleased]
 
+### 已记录待处理
+
+- ⏳ [2026-08-30] 记录群聊历史遗留工具调用异常（暂不处理）
+  - 未指定角色的群聊可能从统一 `group/default` 历史中带出旧的未闭合 Chat2API 工具调用文本，上游错误 `[Error: write after end]` 可能被当前流式处理当作普通回复并交给 TTS。
+  - 已确认来源疑似旧 Pi Agent/工具调用流程，暂不修改代码、历史文件或播报逻辑。
+  - 详细记录：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
+
 ### 已完成
+
+- ✅ [2026-08-30] 统一语音详情弹窗显示时长
+  - 普通语音回复和天气详情统一按每 3 个可见字符 1 秒计算，最短 5 秒、最长 90 秒。
+  - TTS 播放流程和文本内容保持不变，只调整弹窗自动关闭时间。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_天气弹窗最长90秒.md`。
+
+- ✅ [2026-08-30] 显示端语音普通对话复用正常聊天路径并回传源端
+  - 显示端语音普通对话先向控制端广播 `chatInput`，控制端复用正常聊天用户气泡和流式助手气泡，不重复提交请求。
+  - 普通语音回复向来源显示端发送完整 `detailText` 弹窗，TTS 继续使用原有通用播放目标，避免源显示端因额外音频播放影响视频；内置指令保持原语音命令路径。
+  - 验证：显示端语音普通聊天、语音会话、监听、TTS 路由、群聊模板和资源回归 24/24 通过，页面脚本编译和 `git diff --check` 通过。
+  - 文档：`docs/design/chat-system.md`、`docs/design/display-voice-conversation.md`、`docs/spec/chat-system.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_显示端语音普通聊天路径与源端回复.md`。
 
 - ✅ [2026-08-30] 配置固定 Release keystore
   - 将原 `~/.android/debug.keystore` 复制为固定的 `~/.android/aasc-release.keystore`，原 Debug keystore 本身未修改。
@@ -16,6 +34,11 @@
   - 验证：安装成功，应用数据目录仍存在，设备运行 Release 代码；固定 Release keystore 已切换为该 Debug keystore 的副本，后续构建可继续无损更新。
   - 文档：`docs/task/2026-08-30_固定release签名配置.md`。
 
+- ✅ [2026-08-30] 群聊使用全部角色模板并保留原始消息
+  - 控制端群聊、主显示端和子显示端语音统一把全部角色模板拼接到系统提示词，用户消息保留角色名前缀原样发送。
+  - 带角色名的群聊消息优先进入 AI 群聊，不再被控制端本地天气、搜索等内置分流或单角色模板截断；私聊和工作 AI Agent 保持不变。
+  - 验证：群聊模板、控制端路由、语音会话及相关 LLM/显示端回归共 33/33 通过，页面内联脚本编译和 `git diff --check` 通过。
+  - 文档：`docs/design/chat-system.md`、`docs/design/display-voice-conversation.md`、`docs/spec/chat-system.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_群聊使用全部角色模板.md`。
 
 - ✅ [2026-08-30] 修复多显示端与多来源 render-display 链接冲突
   - 不同 `displayId` 的 render-display 服务并行运行；多个来源可链接同一 render-display。

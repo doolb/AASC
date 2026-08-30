@@ -1486,6 +1486,7 @@ POST /api/chat/profiles/switch:
 | 类型 | 方向 | 说明 |
 |------|------|------|
 | chatMessage | 双向 | 聊天消息 |
+| chatInput | 服务端->控制端 | 显示端语音普通聊天的即时输入展示，不触发再次发送 |
 | chatMode | 双向 | 模式切换 |
 | chatSession | 服务端->控制端 | 会话状态 |
 | chatCommands | 服务端->控制端 | 自定义指令 |
@@ -1570,4 +1571,58 @@ Agent 测试:
     加载 chat-history-*.json
     控制端根据模板生成私聊入口
     模板入口缺失时，历史文件仍保留，不删除历史消息
+
+getGroupSystemPrompt():
+    basePrompt = chatConfig.systemPrompt
+    templates = chatTemplates 中 name 和 content 均非空的模板
+    如果 templates 为空:
+        返回 basePrompt
+    rolePrompts = 按模板顺序拼接 "角色名 + template 内容"
+    返回 basePrompt + 群聊角色说明 + rolePrompts
+
+群聊请求:
+    如果 mode == 'group':
+        systemPrompt = getGroupSystemPrompt()
+        templateTarget = null
+        content 保持用户原始消息，不删除角色名前缀
+        historyKey 使用统一 group/default 会话
+
+私聊请求:
+    如果 mode == 'private':
+        继续使用 templateTarget 对应的单一模板和私聊历史
+
+群聊历史异常（暂不处理）:
+    统一 group/default 历史可能包含旧工具调用流程留下的未闭合 Chat2API 文本
+    上游流式接口返回 [Error: write after end] 时，当前实现可能将其作为普通 assistant 内容
+    记录问题来源和影响，但暂不清理历史或修改流式错误处理
+```
+### 显示端语音普通聊天回包
+
+```text
+服务端接受已通过语音门控的普通显示端语音:
+    effectiveRequestId = options.requestId 或生成唯一请求号
+    sendToControl({
+        type: 'chatInput',
+        requestId: effectiveRequestId,
+        content: displayContent 或 content,
+        displayId: voiceOriginDisplayId,
+        mode: messageMode
+    })
+    只调用一次 handleChatMessage/chat.chatStream()
+
+控制端收到 chatInput:
+    设置 Chat.activeRequestId = data.requestId
+    复用 showStreamingMessage(data.content, 助手名)
+    不发送 chatMessage，避免同一语音请求重复进入服务端
+
+服务端流式完成且 voiceOriginDisplayId 存在:
+    向来源显示端发送:
+        { type: 'voiceCommand', action: 'response', text: fullMessage, detailText: fullMessage }
+    TTS 仍按原有通用 voicePlayback 目标列表发送
+    voiceOriginDisplayId 只用于来源显示端的弹窗回传，不触发源端专属 TTS
+
+显示端收到 voiceCommand(response):
+    detailText = data.detailText 或 data.text
+    用 detailText 打开语音回复详情弹窗
+    音频仍由现有 TTS 播放队列处理
 ```

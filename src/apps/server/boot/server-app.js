@@ -818,11 +818,15 @@ function createDisplayState() {
 
 function getDisplayVoiceAssistantNames() {
     const assistantConfig = voiceCommand.getAssistantConfig();
+    const templateNames = chat.getTemplates()
+        .map(template => template?.name)
+        .filter(Boolean);
     return [
         assistantConfig.defaultName,
         ...(Array.isArray(assistantConfig.assistants)
             ? assistantConfig.assistants.map(assistant => assistant.name)
-            : [])
+            : []),
+        ...templateNames
     ].filter(Boolean);
 }
 
@@ -3500,7 +3504,7 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
     return tts.generateTTS(ttsText, voice, speed);
 }
 
-// 显示端语音输入的播报不绑定输入来源，统一发送到当前在线且允许语音播放的显示端。
+// 显示端语音输入的播报统一遵循通用播放路由；来源显示端只接收语音回复弹窗，不自动成为 TTS 目标。
 // TTS 生成设备和音频播放目标分离：生成仍遵循 tts.device 配置，播放目标由通用能力路由决定。
 async function sendVoiceInputTts(text) {
     const audioPath = await generateTtsWithFallback(text);
@@ -4470,9 +4474,9 @@ async function handleControlMessageFallback(data, ws) {
                             const targetDisplayId = data.displayId || displayId;
                             const isDisplayVoiceInput = displayData?.ws === ws;
                             
-                            const sendToControl = (msg) => {
-                                ws.send(JSON.stringify(msg));
-                            };
+                            const sendToControl = isDisplayVoiceInput
+                                ? (msg) => broadcastToControls(msg)
+                                : (msg) => ws.send(JSON.stringify(msg));
                             
                             const callbacks = playOnControl ? {
                                 onResult: async (text) => {
@@ -4517,7 +4521,13 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                             };
                             
-                            const result = await voiceCommand.processVoiceCommand(data.text, targetDisplayId, callbacks);
+                            const result = await voiceCommand.processVoiceCommand(
+                                data.text,
+                                targetDisplayId,
+                                callbacks,
+                                false,
+                                { groupAssistantNames: getDisplayVoiceAssistantNames() }
+                            );
                             
                             if (!result) return;
                             
@@ -4582,6 +4592,7 @@ async function handleControlMessageFallback(data, ws) {
                                             displayId: targetDisplayId,
                                             playOnControl: playOnControl,
                                             routeVoiceToAll: isDisplayVoiceInput,
+                                            voiceOriginDisplayId: isDisplayVoiceInput ? targetDisplayId : null,
                                             systemPrompt: systemPrompt,
                                             skipHistory: skipHistory || false,
                                             sendToControl: sendToControl
@@ -4603,6 +4614,8 @@ async function handleControlMessageFallback(data, ws) {
                                     displayId: targetDisplayId,
                                     playOnControl: playOnControl,
                                     routeVoiceToAll: isDisplayVoiceInput,
+                                    voiceOriginDisplayId: isDisplayVoiceInput ? targetDisplayId : null,
+                                    mode: result.mode || 'group',
                                     systemPrompt: result.systemPrompt,
                                     skipHistory: result.skipHistory || false,
                                     sendToControl: sendToControl
@@ -5454,6 +5467,7 @@ async function handleChatMessage(options) {
         content,
         displayContent,
         displayId,
+        voiceOriginDisplayId = null,
         displayIds = [],
         playOnControl = false,
         routeVoiceToAll = false,
@@ -5466,8 +5480,10 @@ async function handleChatMessage(options) {
         sendToControl
     } = options;
     
+    const effectiveRequestId = requestId || generateCorrelationId('chat');
     const messageMode = mode;
     const messageTarget = messageMode === 'private' ? target : null;
+    const effectiveTemplateTarget = messageMode === 'group' ? null : templateTarget;
     
     chat.addMessage({
         role: 'control',
@@ -5476,14 +5492,18 @@ async function handleChatMessage(options) {
         mode: messageMode,
         target: messageTarget,
         sessionId: sessionId,
-        templateId: templateTarget || 'default'
+        templateId: effectiveTemplateTarget || 'default'
     });
     
     let systemPrompt = null;
     let includeHistory = false;
     let contextCount = 0;
-    if (templateTarget) {
-        const template = chat.getTemplateByName(templateTarget);
+    if (messageMode === 'group') {
+        systemPrompt = chat.getGroupSystemPrompt();
+        contextCount = chat.getConfig().contextCount || 0;
+        if (contextCount > 0) includeHistory = true;
+    } else if (effectiveTemplateTarget) {
+        const template = chat.getTemplateByName(effectiveTemplateTarget);
         if (template) {
             systemPrompt = template.content;
             if (messageMode === 'private') {
@@ -5498,7 +5518,7 @@ async function handleChatMessage(options) {
         contextCount = chat.getConfig().contextCount || 0;
         if (contextCount > 0) includeHistory = true;
     }
-    if (customSystemPrompt && !templateTarget) {
+    if (customSystemPrompt && !effectiveTemplateTarget && messageMode !== 'group') {
         systemPrompt = customSystemPrompt;
     }
     if (skipHistory) {
@@ -5508,6 +5528,15 @@ async function handleChatMessage(options) {
 
     const preferredDisplayId = displayIds[0] || (routeVoiceToAll ? null : displayId) || null;
     const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId) : null;
+    if (voiceOriginDisplayId && sendToControl) {
+        sendToControl({
+            type: 'chatInput',
+            requestId: effectiveRequestId,
+            content: displayContent || content,
+            displayId: voiceOriginDisplayId,
+            mode: messageMode
+        });
+    }
     await chat.chatStream(content, {
         useTemplate: null,
         displayId: displayId,
@@ -5516,11 +5545,11 @@ async function handleChatMessage(options) {
         contextCount: contextCount,
         mode: messageMode,
         target: messageTarget,
-        templateTarget: templateTarget,
+        templateTarget: effectiveTemplateTarget,
         sessionId: sessionId
     }, {
         onChunk: (chunk, fullMessage) => {
-            sendToControl({ type: 'chatChunk', requestId, chunk, message: fullMessage });
+            sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage });
         },
         onSentence: (sentence) => {
             if (!tts || isPunctuationOnly(sentence)) return;
@@ -5567,18 +5596,26 @@ async function handleChatMessage(options) {
         onComplete: (fullMessage, history) => {
             chat.addMessage({
                 role: 'assistant',
-                name: templateTarget || '助手',
+                name: effectiveTemplateTarget || '助手',
                 content: fullMessage,
                 mode: messageMode,
                 target: messageTarget,
                 sessionId: sessionId,
-                templateId: templateTarget || 'default'
+                templateId: effectiveTemplateTarget || 'default'
             });
             
-            sendToControl({ type: 'chatResponse', requestId, success: true, message: fullMessage, history: chat.getHistory() });
+            sendToControl({ type: 'chatResponse', requestId: effectiveRequestId, success: true, message: fullMessage, history: chat.getHistory() });
+            if (voiceOriginDisplayId) {
+                sendToDisplay(voiceOriginDisplayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: fullMessage,
+                    detailText: fullMessage
+                });
+            }
         },
         onError: (error) => {
-            sendToControl({ type: 'chatResponse', requestId, success: false, error });
+            sendToControl({ type: 'chatResponse', requestId: effectiveRequestId, success: false, error });
         }
     });
     if (ttsScheduler) await ttsScheduler.waitForIdle();

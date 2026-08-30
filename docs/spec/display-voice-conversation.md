@@ -498,9 +498,32 @@ scheduleRotationTextLayout():
     currentRotation == 270 -> top = '50%'、left = offset，transformOrigin = 'center left'
     所有角度都按 currentRotation 旋转状态、柱状图和识别文本方向
 
+语音群聊输入:
+    waitingWake 状态下，如果原始文本包含已配置角色名且角色名后仍有内容:
+        接受输入并切换到 activeGroup
+    voiceCommand 处理群聊时不删除角色名前缀
+    服务端群聊路由使用聊天系统的全部角色模板和原始文本
+
 applyRotation:
     完成媒体、监视图和其他固定 UI 的四向布局后
     调用 applyVoiceTopCenterLayout(rotationLayout)
     按实际包围盒把状态+柱状图整体和识别文本对齐到对应逻辑边缘中心
     旋转文本包围盒校正遇到语音 UI 的百分比定位时不按百分比数值执行像素偏移
+```
+
+## 显示端普通语音聊天
+
+```text
+显示端普通语音聊天:
+    语音门控确认文本不是内置指令后
+    调用 handleChatMessage({ content, displayContent, displayId, voiceOriginDisplayId: displayId, mode, sendToControl })
+    handleChatMessage 先生成 effectiveRequestId
+    通过 sendToControl 发送 chatInput(requestId, content, displayId, mode)
+    控制端只复用正常聊天临时消息节点，不再次发送 chatMessage
+    chatChunk/chatResponse 继续沿用 requestId 更新正常聊天流
+    完成后 sendToDisplay(displayId, { type: 'voiceCommand', action: 'response', text, detailText: fullMessage })
+    TTS 生成完成后继续使用原有通用 voicePlayback 目标列表
+    voiceOriginDisplayId 只用于 response 的 detailText 弹窗回传
+    普通 response 和 weatherResult 都调用 calculateWeatherPopupDuration(detailText)
+    calculateWeatherPopupDuration 按每 3 个可见字符 1 秒计算，结果限制为 5～90 秒
 ```

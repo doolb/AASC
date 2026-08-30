@@ -1554,7 +1554,17 @@ function enqueueVoiceInput(text, displayId, callbacks) {
     return currentTask;
 }
 
-async function processVoiceCommand(text, displayId, callbacks, internal = false) {
+function findAddressedGroupAssistant(text, assistantNames = []) {
+    const normalizedText = String(text || '').trim();
+    const configuredNames = Array.isArray(assistantConfig.assistants)
+        ? assistantConfig.assistants.map(assistant => assistant.name)
+        : [];
+    const names = [...new Set([...configuredNames, ...assistantNames].filter(Boolean))];
+    return names.find(name => normalizedText.includes(name)
+        && normalizedText.replace(name, '').trim()) || null;
+}
+
+async function processVoiceCommand(text, displayId, callbacks, internal = false, options = {}) {
     if (!text) return;
 
     const trimmedText = text.trim();
@@ -1569,6 +1579,14 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false)
         return { type: 'commandMode', enabled: false };
     }
 
+    const session = chat.getSession();
+    const addressedAssistant = !internal && session.mode !== 'private'
+        ? findAddressedGroupAssistant(trimmedText, options.groupAssistantNames)
+        : null;
+    if (addressedAssistant) {
+        return { type: 'chat', message: trimmedText, mode: 'group' };
+    }
+
     // 第一步：系统指令始终优先执行
     const systemResult = handleSystemCommand(cmdText, displayId);
     if (systemResult) {
@@ -1576,22 +1594,10 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false)
     }
 
     // 第二步：指令模式过滤（组合指令的子动作跳过此检查）
-    const session = chat.getSession();
     if (!internal && session.commandMode === true) {
         if (session.mode === 'private') {
             const assistant = findAssistant(session.privateTarget);
             return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };
-        }
-
-        // 匹配任意助手名字（不限于 defaultName）
-        for (const a of assistantConfig.assistants) {
-            if (trimmedText.includes(a.name)) {
-                const message = trimmedText.replace(a.name, '').trim();
-                if (message) {
-                    return { type: 'chat', message, systemPrompt: a.template };
-                }
-                return;
-            }
         }
 
         if (!isBuiltinVoiceCommand(cmdText)) {
@@ -1704,19 +1710,26 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false)
         }
     }
     
-    // 匹配任意助手名字（不限于 defaultName）
-    for (const a of assistantConfig.assistants) {
-        if (trimmedText.includes(a.name)) {
-            const message = trimmedText.replace(a.name, '').trim();
-            if (message) {
-                return { type: 'chat', message, systemPrompt: a.template };
+    // 私聊仍支持用助手名前缀切换到对应模板；群聊已在前面保留原始消息处理。
+    if (session.mode === 'private') {
+        for (const a of assistantConfig.assistants) {
+            if (trimmedText.includes(a.name)) {
+                const message = trimmedText.replace(a.name, '').trim();
+                if (message) {
+                    return { type: 'chat', message, systemPrompt: a.template, mode: 'private' };
+                }
+                return;
             }
-            return { type: 'chat', message: trimmedText, systemPrompt: a.template };
         }
     }
 
     const defaultAssistant = findAssistant(assistantConfig.defaultName);
-    return { type: 'chat', message: trimmedText, systemPrompt: defaultAssistant.template };
+    return {
+        type: 'chat',
+        message: trimmedText,
+        mode: session.mode === 'private' ? 'private' : 'group',
+        systemPrompt: session.mode === 'private' ? defaultAssistant.template : undefined
+    };
 }
 
 function handleSystemCommand(text, displayId) {

@@ -16,12 +16,12 @@ const voiceCommand = read(VOICE_COMMAND);
 
 assert.match(
     server,
-    /async function sendVoiceInputTts\(text\)[\s\S]*?generateTtsWithFallback\(text\)[\s\S]*?getOnlineVoicePlaybackDisplayIds\(\)/,
-    '显示端语音 TTS 应通过服务端通用生成和语音播放目标列表'
+    /async function sendVoiceInputTts\(text(?:, originDisplayId = null)?\)[\s\S]*?generateTtsWithFallback\(text[\s\S]*?getOnlineVoicePlaybackDisplayIds\(\)/,
+    '显示端语音 TTS 应通过服务端通用生成和语音播放目标列表，必要时支持来源显示端'
 );
 assert.match(
     server,
-    /onTts: isDisplayVoiceInput[\s\S]*?sendVoiceInputTts\(text\)/,
+    /onTts: isDisplayVoiceInput[\s\S]*?sendVoiceInputTts\(text(?:, targetDisplayId)?\)/,
     '显示端语音输入应注入通用 TTS 回调，控制端播放回调保持独立'
 );
 assert.match(

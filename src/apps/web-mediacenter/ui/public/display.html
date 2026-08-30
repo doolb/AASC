@@ -1949,7 +1949,8 @@
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
                 }
-                showVoiceResponsePopup(data.text);
+                const detailText = data.detailText || data.text;
+                showVoiceResponsePopup(detailText, calculateWeatherPopupDuration(detailText));
             } else if (data.action === 'searchResult') {
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
@@ -1997,7 +1998,7 @@
         // 天气详情需要覆盖足够长的阅读时间；空白不计入字数，每 3 个可见字符保留 1 秒，最长 90 秒。
         function calculateWeatherPopupDuration(text) {
             const visibleTextLength = Array.from(String(text || '').replace(/\s/gu, '')).length;
-            return Math.min(90000, Math.max(30000, Math.ceil(visibleTextLength / 3) * 1000));
+            return Math.min(90000, Math.max(5000, Math.ceil(visibleTextLength / 3) * 1000));
         }
 
         function showVoiceResponsePopup(text, durationMs = 5000) {

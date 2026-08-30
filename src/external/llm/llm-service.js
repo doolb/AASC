@@ -429,6 +429,21 @@ function getTemplateByName(name) {
     return chatTemplates.find(t => t.name === name || t.id === name);
 }
 
+function getGroupSystemPrompt() {
+    const basePrompt = chatConfig.systemPrompt || '';
+    const rolePrompts = chatTemplates
+        .filter(template => template && template.name && template.content)
+        .map(template => `角色「${template.name}」的设定：\n${template.content}`)
+        .join('\n\n');
+    if (!rolePrompts) return basePrompt;
+
+    return [
+        basePrompt,
+        '以下是当前群聊中的全部角色设定，请综合这些角色设定理解并回答用户。',
+        rolePrompts
+    ].filter(Boolean).join('\n\n');
+}
+
 function getHistory() {
     const all = [];
     for (const messages of Object.values(chatHistories)) {
@@ -1138,6 +1153,7 @@ module.exports = {
     addTemplate,
     removeTemplate,
     getTemplateByName,
+    getGroupSystemPrompt,
     getHistory,
     clearHistory,
     getSession,

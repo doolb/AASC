@@ -103,10 +103,24 @@ function testSystemHelpBypassesWakeWithTrailingPunctuation() {
     assert.deepStrictEqual(result.event, { type: 'input', bypassWake: true });
 }
 
+function testAddressedGroupInputWakesWithoutRemovingOriginalText() {
+    const waiting = createConversationState(true);
+    const result = reduceConversationInput(
+        waiting,
+        '小爱，请介绍一下今天的安排',
+        assistants,
+        1000
+    );
+    assert.strictEqual(result.accepted, true);
+    assert.strictEqual(result.state.state, 'activeGroup');
+    assert.deepStrictEqual(result.event, { type: 'input', addressedAssistant: '小爱' });
+}
+
 testInitialState();
 testWakeAndPrivateSwitch();
 testStateTransitions();
 testDisabledAndExpiry();
 testBuiltinCommandBypassesWakeWithoutActivatingConversation();
 testSystemHelpBypassesWakeWithTrailingPunctuation();
-console.log('display-voice-conversation.test.js: 6/6 passed');
+testAddressedGroupInputWakesWithoutRemovingOriginalText();
+console.log('display-voice-conversation.test.js: 7/7 passed');

@@ -43,3 +43,13 @@ test('聊天消息显式区分 Agent 与普通 LLM，并兼容旧角色消息', 
     assert.match(source, /!data\.assistantType\s*&&\s*data\.mode\s*===\s*'role'/u);
     assert.match(source, /Agent 消息缺少角色/u);
 });
+
+test('控制端群聊不应按角色名前缀裁剪消息', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/apps/web-mediacenter/ui/public/js/chat.js'), 'utf8');
+    const start = source.indexOf('sendMessage() {');
+    const end = source.indexOf('\n    }\n};', start);
+    const handler = source.slice(start, end);
+
+    assert.doesNotMatch(handler, /templateTarget\s*=\s*template\.name/u);
+    assert.doesNotMatch(handler, /sendMessage\s*=\s*message\.substring\(template\.name\.length\)/u);
+});

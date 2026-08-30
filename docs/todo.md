@@ -2,6 +2,23 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-30][2026-08-30] 显示端语音普通对话复用正常聊天路径并回传源端
+  - 显示端语音普通对话先广播 `chatInput` 到控制端，复用正常聊天流式 UI；控制端不重复发送请求。
+  - 普通语音回复携带完整 `detailText` 回源显示端并复用语音弹窗；TTS 继续走原有通用目标路由，内置指令继续走原语音路径。
+  - 测试：显示端语音普通聊天、语音会话、监听、TTS 路由、群聊模板和资源回归 24/24 通过，页面脚本编译和 `git diff --check` 通过。
+  - 文档：`docs/design/chat-system.md`、`docs/design/display-voice-conversation.md`、`docs/spec/chat-system.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_显示端语音普通聊天路径与源端回复.md`。
+
+- ⏳待处理 [2026-08-30] 群聊统一历史中的旧工具调用异常文本
+  - 现象：未指定角色的群聊使用 `group/default` 历史时，可能收到并播报 `[Error: write after end]`。
+  - 疑似来源：旧 Pi Agent/工具调用流程遗留的未闭合 Chat2API 工具调用记录；当前历史中存在 `profileName=qwen3.5`、`templateId=default` 的异常内容，具体产生流程待后续确认。
+  - 处理决定：仅记录，暂不修改代码、历史文件或 TTS 行为。
+  - 关联任务：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
+
+- ✅已完成 [2026-08-30][2026-08-30] 群聊使用全部角色模板并保留原始消息
+  - 控制端群聊、主显示端和子显示端语音统一下发全部角色模板；角色名前缀不再被删除，群聊历史保持统一。
+  - 测试：群聊模板、控制端路由、语音会话及相关 LLM/显示端回归共 33/33 通过。
+  - 文档：`docs/design/chat-system.md`、`docs/design/display-voice-conversation.md`、`docs/spec/chat-system.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_群聊使用全部角色模板.md`。
+
 - ✅已完成 [2026-08-30][2026-08-30] 修复多显示端与多来源 render-display 链接冲突
   - 不同 `displayId` 的 render-display 服务并行运行；多个来源可链接同一 render-display。
   - 解除单个来源时只隐藏显示端对应子条目，保留其他来源和目标任务。
@@ -57,8 +74,8 @@
   - 文档：`docs/design/monitor-system.md`、`docs/spec/monitor-system.md`、`docs/task/2026-08-30_任务链接面板统一管理.md`。
 
 - ✅已完成 [2026-08-30][2026-08-30] 限制天气弹窗最长显示 90 秒
-  - 天气详情弹窗按每 3 个可见字符 1 秒计算，最短 30 秒，最长 90 秒。
-  - 普通语音响应默认 5 秒、天气 TTS 和结构化天气数据保持不变。
+  - 天气详情和普通语音回复弹窗统一按每 3 个可见字符 1 秒计算，最短 5 秒，最长 90 秒。
+  - TTS 和结构化天气数据保持不变。
   - 测试：天气弹窗契约断言通过；完整旋转测试的其他失败与本次无关。
   - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_天气弹窗最长90秒.md`。
 

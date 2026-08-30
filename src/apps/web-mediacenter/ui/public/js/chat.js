@@ -951,6 +951,14 @@ const Chat = {
             }
         }
     },
+
+    isGroupRoleAddressedMessage(message) {
+        if (this.session.mode !== 'group') return false;
+        return this.templates.some((template) => {
+            const name = String(template.name || '').trim();
+            return name && message.includes(name) && message.replace(name, '').trim();
+        });
+    },
     
     sendMessage() {
         if (this.isLoading) return;
@@ -974,44 +982,34 @@ const Chat = {
         let displayMessage = message;
         let sendMessage = message;
         let multiHandlerKeywords = [];
-        
+
         if (mode === 'group') {
-            const systemResult = this.handleSystemCommand(message);
-            if (systemResult) {
-                input.value = '';
-                return;
-            }
-            
-            multiHandlerKeywords = this.checkMultiHandlerKeywords(message);
-            
-            for (const template of this.templates) {
-                if (message.startsWith(template.name)) {
-                    templateTarget = template.name;
-                    sendMessage = message.substring(template.name.length).trim();
-                    if (!sendMessage) {
-                        this.addSystemMessage(`已进入与 ${template.name} 的私聊模式`);
-                        input.value = '';
-                        return;
-                    }
-                    break;
+            const isRoleAddressedMessage = this.isGroupRoleAddressedMessage(message);
+            if (!isRoleAddressedMessage) {
+                const systemResult = this.handleSystemCommand(message);
+                if (systemResult) {
+                    input.value = '';
+                    return;
                 }
             }
-            if (!templateTarget && this.templates.length > 0) {
-                templateTarget = this.templates[0].name;
-            }
+
+            multiHandlerKeywords = isRoleAddressedMessage
+                ? []
+                : this.checkMultiHandlerKeywords(message);
+            // 群聊使用全部角色模板，用户输入必须保持原样，包括角色名前缀。
         }
-        
+
         const requestId = `${Date.now()}-${++this.requestCounter}`;
         this.activeRequestId = requestId;
         this.isLoading = true;
         this.currentStreamingMessage = '';
         this.currentUserMessage = displayMessage;
         this.updateSendButton();
-        
+
         if (mode === 'group' && multiHandlerKeywords.length > 0) {
             this.executeMultiHandlers(message, multiHandlerKeywords);
         }
-        
+
         let assistantName = '助手';
         if (mode === 'private' && target) {
             assistantName = target;
@@ -1034,7 +1032,7 @@ const Chat = {
                 mode: mode,
                 assistantType: mode === 'role' ? 'agent' : 'llm',
                 target: target,
-                // 角色模式才带 role 字段；templateTarget 保留以维持群聊模板选中
+                // 角色模式才带 role 字段；群聊不指定 templateTarget，私聊由服务端按 target 处理。
                 role: mode === 'role' ? this.session.roleTarget : undefined,
                 templateTarget: templateTarget,
                 sessionId: this.session.privateSessionId || 'default',
@@ -1823,6 +1821,25 @@ const Chat = {
         }
         
         // 服务端已处理 voiceInput 消息（语音命令解析），控制端仅展示识别文本
+    },
+
+    handleDisplayChatInput(data) {
+        if (!data || !data.requestId || !data.content) return;
+
+        this.activeRequestId = data.requestId;
+        this.isLoading = true;
+        this.currentStreamingMessage = '';
+        this.currentUserMessage = data.content;
+
+        let assistantName = '助手';
+        if (data.mode === 'private' && this.session.privateTarget) {
+            assistantName = this.session.privateTarget;
+        } else if (data.mode === 'role' && this.session.roleTarget) {
+            assistantName = this.session.roleTarget;
+        }
+
+        this.showStreamingMessage(data.content, assistantName);
+        this.updateSendButton();
     },
     
     processVoiceCommand(text) {

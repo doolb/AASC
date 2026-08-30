@@ -24,6 +24,17 @@ function uniqueAssistantNames(assistants) {
         .filter(Boolean))];
 }
 
+function findAddressedAssistant(text, assistants) {
+    const normalized = normalizeConversationText(text);
+    for (const name of uniqueAssistantNames(assistants)) {
+        const remaining = normalized.replace(name, '').trim();
+        if (normalized.includes(name) && remaining) {
+            return name;
+        }
+    }
+    return null;
+}
+
 function parseConversationCommand(text, assistants) {
     const normalized = normalizeConversationText(text);
     const names = uniqueAssistantNames(assistants);
@@ -64,6 +75,19 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
         && options.isBuiltin(text) === true;
     const command = parseConversationCommand(text, assistants);
     if (state.state === 'waitingWake') {
+        const addressedAssistant = findAddressedAssistant(text, assistants);
+        if (addressedAssistant) {
+            return {
+                accepted: true,
+                state: {
+                    ...state,
+                    state: 'activeGroup',
+                    target: null,
+                    lastValidInputAt: now
+                },
+                event: { type: 'input', addressedAssistant }
+            };
+        }
         if (isBuiltin) {
             return {
                 accepted: true,

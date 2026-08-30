@@ -137,22 +137,27 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
     assert.match(
         weatherPopupFunction,
         /function showVoiceResponsePopup\(text, durationMs = 5000\)[\s\S]*?\}, durationMs\);/u,
-        '天气弹窗应支持由调用方传入显示时长，普通响应保持 5 秒默认值'
+        '天气和普通语音响应都应支持由调用方传入按文字计算的显示时长'
     );
     assert.match(
         DISPLAY_HTML,
-        /function calculateWeatherPopupDuration\(text\)[\s\S]*?Math\.max\(30000, Math\.ceil\(visibleTextLength \/ 3\) \* 1000\)/u,
-        '天气弹窗时长应按每 3 个可见字符 1 秒计算且不少于 30 秒'
+        /function calculateWeatherPopupDuration\(text\)[\s\S]*?Math\.max\(5000, Math\.ceil\(visibleTextLength \/ 3\) \* 1000\)/u,
+        '语音详情弹窗时长应按每 3 个可见字符 1 秒计算且不少于 5 秒'
     );
     assert.match(
         DISPLAY_HTML,
-        /function calculateWeatherPopupDuration\(text\)[\s\S]*?Math\.min\(90000, Math\.max\(30000, Math\.ceil\(visibleTextLength \/ 3\) \* 1000\)\)/u,
+        /function calculateWeatherPopupDuration\(text\)[\s\S]*?Math\.min\(90000, Math\.max\(5000, Math\.ceil\(visibleTextLength \/ 3\) \* 1000\)\)/u,
         '天气弹窗时长最多 90 秒'
     );
     assert.match(
         DISPLAY_HTML,
         /data\.action === 'weatherResult'[\s\S]*?calculateWeatherPopupDuration\(detailText\)/u,
         '天气响应应使用按字数计算的弹窗时长'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /data\.action === 'response'[\s\S]*?calculateWeatherPopupDuration\(detailText\)/u,
+        '普通语音响应应使用按字数计算的弹窗时长'
     );
     assert.match(
         DISPLAY_HTML,
