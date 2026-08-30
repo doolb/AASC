@@ -49,6 +49,7 @@ PiRuntimeManager(options):
     projectRoot = 固定项目根目录
     extensionPath = 项目内置只读扩展路径
     requestTimeoutMs = options.requestTimeoutMs || 600000
+    requestQueueTimeoutMs = options.requestQueueTimeoutMs || 30000
     logger = options.logger 或空函数
 
 logPi(event, details):
@@ -58,7 +59,7 @@ logPi(event, details):
 getOrCreate(profile, template):
     校验 profile.mode == 'agent' 且 profile.backend == 'pi'
     校验 template.permissionProfile 是服务器支持的策略
-    根据 permissionProfile 映射固定工具白名单
+    根据 permissionProfile 映射固定工具白名单；文件查找使用 aasc_find，不启用依赖 fd 的 Pi 原生 find
     如果 sessions 中存在同一 profile/template/permission 且配置指纹未变化:
         返回已有 session
     如果存在但配置指纹或权限策略变化:
@@ -70,7 +71,17 @@ chatStream(profile, template, prompt, callbacks, options):
     session = getOrCreate(profile, template, options.conversationKey)
     生成 requestId
     记录请求入队和实际开始，日志包含 requestId、会话键和队列等待信息
-    将请求加入 session 串行队列
+    将请求加入 session 串行队列，并为“从入队到开始执行”单独设置 requestQueueTimeoutMs
+    如果排队超时:
+        标记该排队任务已过期，不再调用 Pi
+        callbacks.onError('Pi 请求排队超时')
+        让 session.queue 继续处理其他任务
+    如果请求失败且错误属于空回复或可恢复 RPC 错误:
+        终止并删除当前 session
+        记录“Pi 会话重建”
+        使用新 session 自动重试一次
+    重试仍失败、请求超时、协议错误或配置错误:
+        callbacks.onError(error)
     session.ensureStarted()
     如果 session 尚未初始化:
         通过 stdin 写入 { id, type: 'prompt', message: prompt }\n
@@ -88,9 +99,9 @@ chatStream(profile, template, prompt, callbacks, options):
         type='agent_end':
             如果 willRetry=true → 记录重试事件，继续等待后续事件
             如果最后 assistant 消息 stopReason='error' 或存在 errorMessage:
-                记录失败，callbacks.onError(errorMessage)
+                终止当前 session，记录失败，交给上层判断是否自动重试
             否则提取最终文本
-            如果最终文本为空 → 记录空回复失败，callbacks.onError('Pi Agent 返回空回复')
+            如果最终文本为空 → 终止当前 session，记录空回复失败，交给上层判断是否自动重试
             否则记录完成，callbacks.onComplete(fullMessage)
     stderr 仅写服务器 Agent 日志，不作为助手消息
     等待当前请求响应时使用 requestTimeoutMs 计时
@@ -101,6 +112,13 @@ resetSession(profile, template, conversationKey):
     计算同 chatStream 的会话键
     停止并删除对应 PiSession
     下次请求重新使用剩余应用历史初始化
+```
+
+```text
+主动压缩（当前暂不实现）:
+    Pi RPC 支持 { type: 'compact', customInstructions? }
+    当前 PiRuntimeManager 不发送 compact，不提供控制端按钮，也不按阈值主动触发
+    继续使用 Pi 自带的接近上下文上限自动压缩机制
 ```
 
 Pi 启动参数伪代码：
@@ -128,17 +146,21 @@ spawn('pi', [
 })
 ```
 
-只读策略扩展在启动时用环境变量注册 `aasc-openai` provider，并注册 `aasc_web_search` 和 `aasc_web_fetch`。扩展不导入写文件 API，不注册 bash/edit/write 工具。后续命令策略通过另一个固定扩展或固定工具集合接入，不允许模板内容动态生成工具。
+只读策略扩展在启动时用环境变量注册 `aasc-openai` provider，并注册 `aasc_find`、`aasc_web_search` 和 `aasc_web_fetch`。`aasc_find` 使用 Node 文件系统递归遍历和 glob 匹配，不依赖 `fd` 或网络下载。扩展不导入写文件 API，不注册 bash/edit/write 工具。后续命令策略通过另一个固定扩展或固定工具集合接入，不允许模板内容动态生成工具。
 
 Chat2API 工具转换伪代码：
 
 ```text
 parseChat2ApiToolCalls(text, allowedTools):
-    查找 `<|CHAT2API|tool_calls>` 后的所有 `<|CHAT2API|invoke name="...">...</function>` 块
-    对每个块读取 `<|parameter=参数名>值</parameter>` 参数
+    查找 `<|CHAT2API|tool_calls>` 后的所有工具调用块
+    对每个块读取旧式 `<|parameter=参数名>值</parameter>` 或命名参数 CDATA 格式
+        `<|CHAT2API|parameter name="参数名"><![CDATA[值]]></|CHAT2API|parameter>` 参数
+    接受 `</function>` 或 `</|CHAT2API|invoke>` 调用结束标签
     如果工具名不在 allowedTools → 返回 unsupportedTool 错误，不执行
     如果参数名重复、标签未闭合或工具调用为空 → 返回 malformedProtocol 错误
-    返回 calls = [{ id: 'chat2api-' + 序号, name, arguments }]
+    将外部工具名 find 映射为内部工具名 aasc_find
+    返回 calls = [{ id: 'chat2api-' + 序号, name: 内部工具名, arguments }]
+    删除可选的 `</|CHAT2API|tool_calls>` 结束标记
     返回 remainingText = 删除协议块和标记后的普通文本
 ```
 

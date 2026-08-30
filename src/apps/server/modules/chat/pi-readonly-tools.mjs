@@ -3,10 +3,13 @@ import {
     createAssistantMessageEventStream,
     createProvider
 } from '@earendil-works/pi-ai';
+import { stat as fsStat } from 'node:fs/promises';
+import nodePath from 'node:path';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/compat';
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import { parseSearchResults, readOnlyFetch } from './pi-readonly-tools.js';
 import chat2ApiToolConverter from './pi-chat2api-tool-converter.js';
+import { FIND_DEFAULT_LIMIT, findFiles } from './pi-find-tool.mjs';
 import { normalizePiApiKey } from './pi-runtime-policy.js';
 
 const {
@@ -181,6 +184,39 @@ const webFetchTool = defineTool({
     }
 });
 
+const findTool = defineTool({
+    name: 'aasc_find',
+    label: 'AASC Find',
+    description: '按 glob 模式查找项目内文件，只读且跳过 .git、node_modules，不依赖外部 fd。',
+    parameters: Type.Object({
+        pattern: Type.String({ description: "文件 glob 模式，例如 '*.json' 或 '**/*.spec.js'" }),
+        path: Type.Optional(Type.String({ description: '查找目录，默认当前项目目录' })),
+        limit: Type.Optional(Type.Number({ minimum: 1, maximum: FIND_DEFAULT_LIMIT }))
+    }),
+    async execute(_toolCallId, { pattern, path: searchDir, limit }, signal) {
+        const searchPath = nodePath.resolve(process.cwd(), searchDir || '.');
+        let stats;
+        try {
+            stats = await fsStat(searchPath);
+        } catch (error) {
+            throw new Error(`Path not found: ${searchPath}`);
+        }
+        if (!stats.isDirectory()) throw new Error(`Not a directory: ${searchPath}`);
+        const effectiveLimit = Math.min(
+            FIND_DEFAULT_LIMIT,
+            Math.max(1, Number.isFinite(limit) ? Math.floor(limit) : FIND_DEFAULT_LIMIT)
+        );
+        const results = await findFiles(searchPath, pattern, effectiveLimit, signal);
+        return {
+            content: [{
+                type: 'text',
+                text: results.length > 0 ? results.join('\n') : 'No files found matching pattern'
+            }],
+            details: results.length >= effectiveLimit ? { resultLimitReached: effectiveLimit } : undefined
+        };
+    }
+});
+
 const webSearchTool = defineTool({
     name: 'aasc_web_search',
     label: 'AASC Web Search',
@@ -211,6 +247,7 @@ export default function registerAascReadonlyTools(pi) {
     if (baseUrl) {
         pi.registerProvider(createChat2ApiCompatibleProvider({ baseUrl, modelId }));
     }
+    pi.registerTool(findTool);
     pi.registerTool(webFetchTool);
     pi.registerTool(webSearchTool);
 }

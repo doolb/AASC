@@ -74,9 +74,28 @@ function createFakePiChildWithEvents(events) {
     return child;
 }
 
+function createNeverRespondingPiChild() {
+    const child = new EventEmitter();
+    child.killed = false;
+    child.stdin = {
+        write() {
+            return true;
+        },
+        end() {}
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = () => {
+        child.killed = true;
+        queueMicrotask(() => child.emit('exit', 0, 'SIGTERM'));
+    };
+    return child;
+}
+
 test('Pi 默认 RPC 请求超时为 600 秒', () => {
     const manager = new PiRuntimeManager();
     assert.equal(manager.requestTimeoutMs, 600000);
+    assert.equal(manager.requestQueueTimeoutMs, 30000);
 });
 
 test('Pi RPC 流式文本按增量回调并完成请求', async () => {
@@ -138,23 +157,114 @@ test('Pi Agent 错误型空 agent_end 必须拒绝请求', async () => {
 });
 
 test('Pi Agent 空成功 agent_end 必须报告空回复失败', async () => {
-    const child = createFakePiChildWithEvents([
-        { type: 'agent_end', messages: [{ role: 'assistant', content: [] }] }
-    ]);
+    const children = [];
     const manager = new PiRuntimeManager({
         projectRoot: '/project',
         extensionPath: '/project/pi-readonly-tools.mjs',
-        spawn: () => child
+        spawn: () => {
+            const child = createFakePiChildWithEvents([
+                { type: 'agent_end', messages: [{ role: 'assistant', content: [] }] }
+            ]);
+            children.push(child);
+            return child;
+        }
     });
-    await assert.rejects(
-        manager.chatStream(
-            { name: 'local', mode: 'agent', backend: 'pi', apiUrl: 'http://llm/v1', model: 'qwen' },
-            { id: 'researcher', permissionProfile: 'readonly' },
-            '继续处理'
-        ),
-        /返回空回复/
-    );
+    const errors = [];
+    await assert.rejects(manager.chatStream(
+        { name: 'local', mode: 'agent', backend: 'pi', apiUrl: 'http://llm/v1', model: 'qwen' },
+        { id: 'researcher', permissionProfile: 'readonly' },
+        '继续处理',
+        { onError: (error) => errors.push(error) }
+    ), /返回空回复/);
+    assert.equal(children.length, 2, '空回复失败后应新建 Pi 会话重试一次');
+    assert.equal(children[0].killed, true, '空回复会话应被销毁');
+    assert.deepStrictEqual(errors, ['Pi Agent 返回空回复'], '最终失败只通知一次');
     await manager.stopAll();
+});
+
+test('Pi Agent 空回复后新会话重试可以成功', async () => {
+    const children = [];
+    const manager = new PiRuntimeManager({
+        projectRoot: '/project',
+        extensionPath: '/project/pi-readonly-tools.mjs',
+        spawn: () => {
+            const child = children.length === 0
+                ? createFakePiChildWithEvents([
+                    { type: 'agent_end', messages: [{ role: 'assistant', content: [] }] }
+                ])
+                : createFakePiChildWithEvents([
+                    { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: '重试成功' } },
+                    { type: 'agent_end', messages: [{ role: 'assistant', content: [{ type: 'text', text: '重试成功' }] }] }
+                ]);
+            children.push(child);
+            return child;
+        }
+    });
+    const errors = [];
+    const result = await manager.chatStream(
+        { name: 'local', mode: 'agent', backend: 'pi', apiUrl: 'http://llm/v1', model: 'qwen' },
+        { id: 'researcher', permissionProfile: 'readonly' },
+        '继续处理',
+        { onError: (error) => errors.push(error) }
+    );
+    assert.equal(result.message, '重试成功');
+    assert.equal(children.length, 2);
+    assert.equal(children[0].killed, true);
+    assert.deepStrictEqual(errors, []);
+    await manager.stopAll();
+});
+
+test('Pi 当前请求失败时已排队请求会切换到新会话', async () => {
+    const children = [];
+    const manager = new PiRuntimeManager({
+        projectRoot: '/project',
+        extensionPath: '/project/pi-readonly-tools.mjs',
+        spawn: () => {
+            const child = children.length === 0
+                ? createFakePiChildWithEvents([
+                    { type: 'agent_end', messages: [{ role: 'assistant', content: [] }] }
+                ])
+                : createFakePiChildWithEvents([
+                    { type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: '后续成功' } },
+                    { type: 'agent_end', messages: [{ role: 'assistant', content: [{ type: 'text', text: '后续成功' }] }] }
+                ]);
+            children.push(child);
+            return child;
+        }
+    });
+    const profile = { name: 'local', mode: 'agent', backend: 'pi', apiUrl: 'http://llm/v1', model: 'qwen' };
+    const template = { id: 'researcher', permissionProfile: 'readonly' };
+    const firstRequest = manager.chatStream(profile, template, '第一个请求');
+    const secondRequest = manager.chatStream(profile, template, '第二个请求');
+    const firstResult = await firstRequest;
+    assert.equal(firstResult.message, '后续成功');
+    const result = await secondRequest;
+    assert.equal(result.message, '后续成功');
+    assert.equal(children.length, 2);
+    assert.equal(children[0].killed, true);
+    await manager.stopAll();
+});
+
+test('Pi 请求排队超过限制时失败且不启动排队请求', async () => {
+    const child = createNeverRespondingPiChild();
+    const manager = new PiRuntimeManager({
+        projectRoot: '/project',
+        extensionPath: '/project/pi-readonly-tools.mjs',
+        spawn: () => child,
+        requestTimeoutMs: 1000,
+        requestQueueTimeoutMs: 20
+    });
+    const profile = { name: 'local', mode: 'agent', backend: 'pi', apiUrl: 'http://llm/v1', model: 'qwen' };
+    const template = { id: 'researcher', permissionProfile: 'readonly' };
+    const firstRequest = manager.chatStream(profile, template, '第一个请求');
+    const errors = [];
+    const secondRequest = manager.chatStream(profile, template, '第二个请求', {
+        onError: (error) => errors.push(error)
+    });
+    await assert.rejects(secondRequest, /排队超时/);
+    assert.deepStrictEqual(errors, ['Pi 请求排队超时']);
+    await manager.stopAll();
+    await assert.rejects(firstRequest, /已停止/);
 });
 
 test('Pi Agent 可重试的 agent_end 不会提前结束请求', async () => {
@@ -292,12 +402,17 @@ test('profile、模板和权限变化会创建独立 Pi 会话', async () => {
 });
 
 test('子进程退出会拒绝请求并清理会话', async () => {
-    const child = createFakePiChild();
-    child.stdin.write = () => true;
+    const children = [];
     const manager = new PiRuntimeManager({
         projectRoot: '/project',
         extensionPath: '/project/pi-readonly-tools.mjs',
-        spawn: () => child,
+        spawn: () => {
+            const child = createFakePiChild();
+            child.stdin.write = () => true;
+            children.push(child);
+            queueMicrotask(() => child.emit('exit', 1, null));
+            return child;
+        },
         requestTimeoutMs: 1000
     });
     const pending = manager.chatStream(
@@ -305,8 +420,9 @@ test('子进程退出会拒绝请求并清理会话', async () => {
         { id: 'one', permissionProfile: 'readonly' },
         'a'
     );
-    child.emit('exit', 1, null);
     await assert.rejects(pending, /退出/);
+    assert.equal(children.length, 2, '进程退出后应只自动重试一次');
+    assert.equal(children[0].killed, true);
     assert.equal(manager.getSessionCount(), 0);
 });
 

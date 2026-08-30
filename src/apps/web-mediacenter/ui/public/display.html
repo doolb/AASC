@@ -154,6 +154,7 @@
         let isListening = false;
         let voiceListeningEnabled = true;
         let voiceConversationState = 'waitingWake';
+        let voiceConversationTarget = null;
         let voiceConversationTimer = null;
         let micStream = null;
         let audioContext = null;
@@ -4247,6 +4248,7 @@
 
                     if (data.type === 'voiceConversationState') {
                         voiceConversationState = data.state || 'waitingWake';
+                        voiceConversationTarget = data.target || null;
                         if (voiceConversationState === 'disabled') {
                             clearVoiceConversationTimer();
                             stopVoiceRecording();
@@ -4572,6 +4574,15 @@
         function updateVoiceStatusDisplay() {
             if (!voiceStatus) return;
 
+            const getConversationScope = () => {
+                if (voiceConversationState === 'activeGroup') return ' · 群聊';
+                if (voiceConversationState === 'activePrivate') {
+                    return ` · 私聊${voiceConversationTarget ? `：${voiceConversationTarget}` : ''}`;
+                }
+                if (voiceConversationState === 'waitingWake') return ' · 等待唤醒';
+                return '';
+            };
+
             const setStatus = (key, text, title) => {
                 voiceStatus.className = `voice-status-${key}`;
                 voiceStatus.textContent = text;
@@ -4584,13 +4595,15 @@
                 return;
             }
             if (ttsRecordingPaused) {
-                setStatus('paused', '暂停监听', '语音监听因 TTS 播放暂时暂停');
+                setStatus('paused', `暂停监听${getConversationScope()}`, '语音监听因 TTS 播放暂时暂停');
                 return;
             }
             if (isListening) {
-                setStatus('listening', '监听中', voiceConversationState === 'waitingWake'
+                setStatus('listening', `监听中${getConversationScope()}`, voiceConversationState === 'waitingWake'
                     ? '等待唤醒词...'
-                    : '语音识别中...');
+                    : voiceConversationState === 'activePrivate'
+                        ? `私聊助手：${voiceConversationTarget || '未指定'}`
+                        : '群聊语音识别中...');
                 return;
             }
             setStatus('not-ready', '未就绪', voiceConversationState === 'disabled'

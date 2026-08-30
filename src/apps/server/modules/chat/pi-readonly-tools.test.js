@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
@@ -11,6 +12,7 @@ const {
 } = require('./pi-readonly-tools');
 
 const extensionFile = path.join(__dirname, 'pi-readonly-tools.mjs');
+const findToolFile = path.join(__dirname, 'pi-find-tool.mjs');
 
 test('拒绝非 HTTP URL', () => {
     assert.throws(() => validateReadOnlyUrl('file:///etc/passwd'), /URL/);
@@ -42,4 +44,24 @@ test('扩展源码注册 Chat2API 兼容 Provider 流', () => {
     const source = fs.readFileSync(extensionFile, 'utf8');
     assert.match(source, /createChat2ApiCompatibleProvider/u);
     assert.match(source, /registerProvider\(createChat2ApiCompatibleProvider/u);
+});
+
+test('扩展源码注册不依赖 fd 的稳定文件查找工具', () => {
+    const source = fs.readFileSync(extensionFile, 'utf8');
+    const finderSource = fs.readFileSync(findToolFile, 'utf8');
+    assert.match(source, /name:\s*'aasc_find'/u);
+    assert.match(source, /findFiles/u);
+    assert.match(finderSource, /readdir/u);
+    assert.doesNotMatch(source, /ensureTool\(['"]fd['"]\)/u);
+});
+
+test('稳定文件查找工具可以在没有 fd 时查找 package.json', async () => {
+    const finder = await import(pathToFileURL(findToolFile).href);
+    const results = await finder.findFiles(
+        '/mnt/AASC',
+        'package.json',
+        1000,
+        new AbortController().signal
+    );
+    assert.ok(results.includes('package.json'));
 });

@@ -51,6 +51,11 @@ assert.match(
 );
 assert.match(
     server,
+    /conversationActive:\s*\['activeGroup',\s*'activePrivate'\]\.includes\(conversation\.state\)/,
+    '显示端唤醒后的语音应把活跃会话标记传给命令处理器'
+);
+assert.match(
+    server,
     /const sendToControl = isDisplayVoiceInput\s*\n\s*\? \(msg\) => broadcastToControls\(msg\)/,
     '显示端语音普通聊天回包应广播到控制端'
 );

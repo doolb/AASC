@@ -3,7 +3,7 @@
 const READONLY_TOOLS = Object.freeze([
     'read',
     'grep',
-    'find',
+    'aasc_find',
     'ls',
     'aasc_web_search',
     'aasc_web_fetch'

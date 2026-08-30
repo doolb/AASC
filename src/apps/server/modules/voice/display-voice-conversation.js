@@ -75,6 +75,16 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
         && options.isBuiltin(text) === true;
     const command = parseConversationCommand(text, assistants);
     if (state.state === 'waitingWake') {
+        if (command?.type === 'wake') {
+            const nextState = {
+                ...state,
+                state: command.mode === 'private' ? 'activePrivate' : 'activeGroup',
+                target: command.target,
+                lastValidInputAt: now
+            };
+            return { accepted: true, state: nextState, event: command };
+        }
+
         const addressedAssistant = findAddressedAssistant(text, assistants);
         if (addressedAssistant) {
             return {
@@ -95,16 +105,7 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
                 event: { type: 'input', bypassWake: true }
             };
         }
-        if (!command || command.type !== 'wake') {
-            return { accepted: false, state, event: null };
-        }
-        const nextState = {
-            ...state,
-            state: command.mode === 'private' ? 'activePrivate' : 'activeGroup',
-            target: command.target,
-            lastValidInputAt: now
-        };
-        return { accepted: true, state: nextState, event: command };
+        return { accepted: false, state, event: null };
     }
 
     if (command?.type === 'end') {

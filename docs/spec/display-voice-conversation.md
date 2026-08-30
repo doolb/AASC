@@ -32,15 +32,26 @@ createDisplayState():
     如果当前为 waitingWake:
         若匹配内置功能指令:
             转交现有 voiceCommand 处理，不改变会话状态
-        否则若匹配唤醒词:
+        否则若匹配纯唤醒词（你好+助手名、助手名+你好或私聊唤醒）:
             设置 activeGroup 或 activePrivate
             发送唤醒确认
+            不发送当前纯唤醒文本到聊天
+        否则若文本包含助手名且还包含其他内容:
+            设置 activeGroup
+            保留完整原文并发送到聊天
         否则丢弃普通文本
     如果当前为 activeGroup/activePrivate:
         若匹配结束/退出命令:
             更新状态并发送确认
-        否则将文本交给现有 voiceCommand 处理
+        否则将文本交给现有 voiceCommand 处理，并标记 conversationActive=true
         有效输入更新 lastValidInputAt
+
+纯助手唤醒判断:
+    先执行 parseConversationCommand(text, assistants)
+    如果 command.type == 'wake':
+        返回 wake 事件
+    再执行 findAddressedAssistant(text, assistants)
+    避免“你好，小爱。”先被识别为 addressedAssistant 而误发给聊天
 
 waitingWake 中的免唤醒范围:
     包含报时、提醒、静音、取消静音、天气、搜索、播放、停止播报、确认、取消、录音控制和指令模式开关等现有内置功能指令
@@ -545,4 +556,26 @@ applyRotation:
     voiceOriginDisplayId 只用于 response 的 detailText 弹窗回传
     普通 response 和 weatherResult 都调用 calculateWeatherPopupDuration(detailText)
     calculateWeatherPopupDuration 按每 3 个可见字符 1 秒计算，结果限制为 5～90 秒
+```
+
+```text
+显示端语音状态文案:
+    保存 voiceConversationState.state 和 voiceConversationState.target
+    waitingWake -> “监听中 · 等待唤醒”
+    activeGroup -> “监听中 · 群聊”
+    activePrivate -> “监听中 · 私聊：” + target
+    ttsRecordingPaused 时保留上述会话范围，并将前缀改为“暂停监听”
+    voiceSupported=false 或监听未启动 -> “未就绪”
+```
+
+## 唤醒后群聊放行
+
+```text
+显示端 activeGroup 普通文本:
+    voiceConversationActive=true 传入 processVoiceCommand
+    内置系统命令和自定义命令仍按原优先级解析
+    commandMode=true 时不再过滤普通聊天文本
+    返回 chat -> handleChatMessage -> 发送 chatInput 并进入正常 LLM/Pi 路径
+等待唤醒状态:
+    保持原有 commandMode 过滤和免唤醒内置指令规则
 ```

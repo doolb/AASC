@@ -12,6 +12,8 @@ const {
 } = require('./pi-runtime-policy');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 600000;
+const DEFAULT_REQUEST_QUEUE_TIMEOUT_MS = 30000;
+const MAX_AUTOMATIC_RETRIES = 1;
 const DEFAULT_EXTENSION_PATH = path.join(__dirname, 'pi-readonly-tools.mjs');
 
 function formatPiUserPrompt(prompt) {
@@ -26,6 +28,7 @@ class PiRuntimeManager {
         this.spawn = options.spawn || defaultSpawn;
         this.commandPath = options.commandPath || process.env.PI_COMMAND_PATH || 'pi';
         this.requestTimeoutMs = options.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+        this.requestQueueTimeoutMs = options.requestQueueTimeoutMs || DEFAULT_REQUEST_QUEUE_TIMEOUT_MS;
         this.logger = typeof options.logger === 'function' ? options.logger : () => {};
         this.sessions = new Map();
         this.requestSequence = 0;
@@ -53,21 +56,107 @@ class PiRuntimeManager {
         }
         const normalizedTemplate = normalizeChatTemplate(template);
         const key = this.getSessionKey(normalizedProfile, normalizedTemplate, options.conversationKey);
-        const session = this.getOrCreateSession(key, normalizedProfile, normalizedTemplate);
+        return this.enqueueRequest({
+            key,
+            profile: normalizedProfile,
+            template: normalizedTemplate,
+            prompt,
+            callbacks,
+            options,
+            attempt: 0,
+            retryState: { count: 0 }
+        });
+    }
+
+    enqueueRequest({ key, profile, template, prompt, callbacks, options, attempt, retryState }) {
+        const session = this.getOrCreateSession(key, profile, template);
         const requestId = `aasc-${++this.requestSequence}`;
         const queuedAt = Date.now();
+        let queueExpired = false;
+        let queueTimer = null;
+        let attemptError = null;
+        const queueError = new Error('Pi 请求排队超时');
+        const attemptCallbacks = {
+            ...callbacks,
+            onError: (error) => {
+                attemptError = error instanceof Error ? error : new Error(String(error));
+            }
+        };
+
         this.logLifecycle(`Pi 请求入队 requestId=${requestId}`, {
             requestId,
-            sessionKey: key
+            sessionKey: key,
+            attempt
         });
-        const task = session.queue.then(() => this.runRequest(session, session.initialized
-            ? formatPiUserPrompt(options.continuationPrompt || prompt)
-            : prompt, callbacks, {
-            requestId,
-            queuedAt
-        }));
-        session.queue = task.catch(() => undefined);
-        return task;
+
+        const queuedTask = session.queue.then(() => {
+            if (queueTimer !== null) {
+                clearTimeout(queueTimer);
+                queueTimer = null;
+            }
+            if (queueExpired) throw queueError;
+            if (session.closed || this.sessions.get(key) !== session) {
+                if (retryState.count >= MAX_AUTOMATIC_RETRIES) {
+                    throw createPiError('Pi 进程已退出，无法继续请求', 'PI_PROCESS_ERROR');
+                }
+                retryState.count += 1;
+                return this.enqueueRequest({
+                    key,
+                    profile,
+                    template,
+                    prompt,
+                    callbacks,
+                    options,
+                    attempt: retryState.count,
+                    retryState
+                });
+            }
+            return this.runRequest(session, session.initialized
+                ? formatPiUserPrompt(options.continuationPrompt || prompt)
+                : prompt, attemptCallbacks, {
+                requestId,
+                queuedAt
+            });
+        });
+        session.queue = queuedTask.catch(() => undefined);
+
+        const queueTimeout = new Promise((resolve, reject) => {
+            queueTimer = setTimeout(() => {
+                queueExpired = true;
+                this.logLifecycle(`Pi 请求排队超时 requestId=${requestId}`, {
+                    requestId,
+                    sessionKey: key,
+                    queueTimeoutMs: this.requestQueueTimeoutMs
+                });
+                reject(queueError);
+            }, this.requestQueueTimeoutMs);
+        });
+
+        return Promise.race([queuedTask, queueTimeout]).catch((error) => {
+            const normalizedError = error instanceof Error ? error : new Error(String(error));
+            if (retryState.count < MAX_AUTOMATIC_RETRIES && isRetryableError(normalizedError)) {
+                retryState.count += 1;
+                this.logLifecycle(`Pi 会话重建 requestId=${requestId} attempt=${retryState.count}`, {
+                    requestId,
+                    sessionKey: key,
+                    error: normalizedError.message
+                });
+                return this.enqueueRequest({
+                    key,
+                    profile,
+                    template,
+                    prompt,
+                    callbacks,
+                    options,
+                    attempt: retryState.count,
+                    retryState
+                });
+            }
+            callbacks.onError?.((attemptError || normalizedError).message);
+            throw normalizedError;
+        }).finally(() => {
+            if (queueTimer !== null) clearTimeout(queueTimer);
+        });
     }
 
     getSessionKey(profile, template, conversationKey = 'default') {
@@ -132,7 +221,10 @@ class PiRuntimeManager {
         session.child.on('error', (error) => this.failSession(session, error));
         session.child.on('exit', (code, signal) => {
             if (session.closed) return;
-            const error = new Error(`Pi 进程退出: code=${code ?? 'null'}, signal=${signal || 'null'}`);
+            const error = createPiError(
+                `Pi 进程退出: code=${code ?? 'null'}, signal=${signal || 'null'}`,
+                'PI_PROCESS_ERROR'
+            );
             this.failSession(session, error);
         });
     }
@@ -168,11 +260,14 @@ class PiRuntimeManager {
             ...(toolName ? { toolName } : {})
         });
         if (event.type === 'response' && event.success === false) {
-            this.rejectPending(session, new Error(event.error || 'Pi RPC 请求失败'));
+            this.failSession(session, createPiError(event.error || 'Pi RPC 请求失败', 'PI_RPC_ERROR'));
             return;
         }
         if (event.type === 'error') {
-            this.rejectPending(session, new Error(event.error || event.message || 'Pi RPC 执行失败'));
+            this.failSession(session, createPiError(
+                event.error || event.message || 'Pi RPC 执行失败',
+                'PI_RPC_ERROR'
+            ));
             return;
         }
         if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
@@ -190,12 +285,12 @@ class PiRuntimeManager {
             }
             const assistantError = extractAssistantError(event.messages);
             if (assistantError) {
-                this.rejectPending(session, new Error(assistantError));
+                this.failSession(session, createPiError(assistantError, 'PI_AGENT_ERROR'));
                 return;
             }
             if (!pending.message) pending.message = extractAssistantText(event.messages);
             if (!pending.message) {
-                this.rejectPending(session, new Error('Pi Agent 返回空回复'));
+                this.failSession(session, createPiError('Pi Agent 返回空回复', 'PI_EMPTY_RESPONSE'));
                 return;
             }
             this.resolvePending(session, {
@@ -236,7 +331,7 @@ class PiRuntimeManager {
                     message: String(prompt || '')
                 })}\n`);
             } catch (error) {
-                this.rejectPending(session, error);
+                this.failSession(session, createPiError(error.message, 'PI_PROCESS_ERROR'));
             }
         });
     }
@@ -360,6 +455,17 @@ function extractToolName(event) {
         || event.assistantMessageEvent?.toolCall?.name
         || event.assistantMessageEvent?.partial?.toolCall?.name
         || '';
+}
+
+function createPiError(message, code) {
+    const error = new Error(String(message || 'Pi Runtime 请求失败'));
+    error.code = code;
+    return error;
+}
+
+function isRetryableError(error) {
+    return ['PI_EMPTY_RESPONSE', 'PI_RPC_ERROR', 'PI_AGENT_ERROR', 'PI_PROCESS_ERROR']
+        .includes(error?.code);
 }
 
 module.exports = {

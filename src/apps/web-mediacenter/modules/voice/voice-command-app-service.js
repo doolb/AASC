@@ -1594,7 +1594,7 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
     }
 
     // 第二步：指令模式过滤（组合指令的子动作跳过此检查）
-    if (!internal && session.commandMode === true) {
+    if (!internal && session.commandMode === true && options.conversationActive !== true) {
         if (session.mode === 'private') {
             const assistant = findAssistant(session.privateTarget);
             return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };

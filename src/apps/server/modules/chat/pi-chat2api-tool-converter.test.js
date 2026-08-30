@@ -24,6 +24,30 @@ test('解析 Chat2API read 调用并生成 Pi 工具参数', () => {
     });
 });
 
+test('Chat2API find 调用映射为不依赖 fd 的稳定工具', () => {
+    const text = '<|CHAT2API|tool_calls><|CHAT2API|invoke name="find"><|parameter=pattern>package.json</parameter></function>';
+    const result = parseChat2ApiToolCalls(text, ['aasc_find']);
+
+    assert.deepStrictEqual(result.calls, [{
+        type: 'toolCall',
+        id: 'chat2api-1',
+        name: 'aasc_find',
+        arguments: { pattern: 'package.json' }
+    }]);
+});
+
+test('解析 Chat2API 的命名参数 CDATA 格式并映射 find', () => {
+    const text = '<|CHAT2API|tool_calls><|CHAT2API|invoke name="find"><|CHAT2API|parameter name="pattern"><![CDATA[package.json]]></|CHAT2API|parameter></|CHAT2API|invoke></|CHAT2API|tool_calls>';
+    const result = parseChat2ApiToolCalls(text, ['aasc_find']);
+
+    assert.deepStrictEqual(result.calls, [{
+        type: 'toolCall',
+        id: 'chat2api-1',
+        name: 'aasc_find',
+        arguments: { pattern: 'package.json' }
+    }]);
+});
+
 test('支持多个调用、多个参数和 JSON 参数', () => {
     const text = [
         '先查询：',

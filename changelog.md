@@ -4,12 +4,35 @@
 
 ### 已记录待处理
 
+- ⏳ [2026-08-30] 记录 Pi Agent 主动压缩上下文需求（暂不处理）
+  - Pi RPC 已支持 `compact` 和自定义压缩说明；当前项目不增加手动压缩入口，也不增加自动阈值触发。
+  - 继续使用 Pi 自带的接近上下文上限自动压缩，后续实现时需保证按聊天 session 串行执行。
+  - 详细记录：`docs/task/2026-08-30_Pi主动压缩暂不实现.md`。
+
 - ⏳ [2026-08-30] 记录群聊历史遗留工具调用异常（暂不处理）
   - 未指定角色的群聊可能从统一 `group/default` 历史中带出旧的未闭合 Chat2API 工具调用文本，上游错误 `[Error: write after end]` 可能被当前流式处理当作普通回复并交给 TTS。
   - 已确认来源疑似旧 Pi Agent/工具调用流程，暂不修改代码、历史文件或播报逻辑。
   - 详细记录：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
 
 ### 已完成
+
+- ✅ [2026-08-30] 修复唤醒后群聊不入聊天与 Chat2API 查找工具失败
+  - 显示端唤醒进入群聊或私聊后，普通语音恢复正常聊天路径；内置命令仍优先，顶部状态显示当前会话范围和私聊目标。
+  - Chat2API `find` 转换为项目内置 `aasc_find`，使用 Node 文件系统只读遍历，兼容命名参数 CDATA 格式，不再依赖 Pi 原生 `fd` 下载。
+  - 验证：相关全量回归 70/70、Node 语法检查和 `git diff --check` 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/design/llm-agent-mode.md`、`docs/spec/display-voice-conversation.md`、`docs/spec/llm-agent-mode.md`、`docs/task/2026-08-30_唤醒后群聊与Chat2API查找工具修复.md`。
+
+- ✅ [2026-08-30] Pi Agent 无回复自动恢复与排队保护
+  - Pi 请求增加默认 30 秒排队超时，超时任务不再启动，避免异常请求阻塞同一 session 后续聊天。
+  - 空回复、错误型 `agent_end`、RPC 失败和进程异常立即销毁旧 session；同一请求链最多自动重试一次，并使用共享计数防止嵌套重试无限循环。
+  - 验证：Pi Runtime 16/16、聊天与 Agent 综合回归 57/57、显示端语音子用例 8/8，Node 语法检查和 `git diff --check` 均通过。
+  - 文档：`docs/design/llm-agent-mode.md`、`docs/spec/llm-agent-mode.md`、`docs/task/2026-08-30_PiAgent无回复自动恢复.md`。
+
+- ✅ [2026-08-30] 修复显示端纯唤醒误进入聊天并屏蔽 Pi 详细日志
+  - 等待唤醒时先识别纯“你好，小爱。”等唤醒命令，不再将纯唤醒文本转发为聊天；包含额外内容的“小爱，请……”仍按群聊输入处理。
+  - 服务器默认不注入 Pi Agent 生命周期 logger，保留 Pi Runtime 的显式 logger 和错误处理。
+  - 验证：显示端语音、Pi Runtime 和聊天回归 54/54，通过脚本语法检查和 `git diff --check`。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_显示端纯唤醒与Pi日志屏蔽.md`。
 
 - ✅ [2026-08-30] 统一 Pi Agent 历史角色标记
   - 续聊发送给 Pi 的当前用户消息统一补充 `User:`，已存在前缀时不重复添加。

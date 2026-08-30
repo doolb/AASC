@@ -22,7 +22,7 @@ test('Agent profile 只接受 Pi', () => {
 
 test('只读权限只返回固定工具白名单', () => {
     assert.deepStrictEqual(resolvePermissionPolicy('readonly').tools, [
-        'read', 'grep', 'find', 'ls', 'aasc_web_search', 'aasc_web_fetch'
+        'read', 'grep', 'aasc_find', 'ls', 'aasc_web_search', 'aasc_web_fetch'
     ]);
 });
 

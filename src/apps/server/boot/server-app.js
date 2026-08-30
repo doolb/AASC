@@ -293,8 +293,7 @@ const aiRoles = new AiRolesService({
 });
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
 const piRuntimeManager = new PiRuntimeManager({
-    projectRoot: PROJECT_ROOT,
-    logger: (message, details) => log('Pi', message, { source: 'server', scope: 'global', ...details })
+    projectRoot: PROJECT_ROOT
 });
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
@@ -4409,6 +4408,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
                 type: 'voiceCommand',
                 text: data.text.trim(),
                 displayId,
+                conversationActive: ['activeGroup', 'activePrivate'].includes(conversation.state),
                 ...speakerPayload
             }, ws);
         }
@@ -4581,7 +4581,10 @@ async function handleControlMessageFallback(data, ws) {
                                 targetDisplayId,
                                 callbacks,
                                 false,
-                                { groupAssistantNames: getDisplayVoiceAssistantNames() }
+                                {
+                                    groupAssistantNames: getDisplayVoiceAssistantNames(),
+                                    conversationActive: data.conversationActive === true
+                                }
                             );
                             
                             if (!result) return;

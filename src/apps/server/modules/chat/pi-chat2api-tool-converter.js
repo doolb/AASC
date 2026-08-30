@@ -3,7 +3,13 @@
 const CHAT2API_TOOL_CALLS_MARKER = '<|CHAT2API|tool_calls>';
 const CHAT2API_INVOKE_PATTERN = /<\|CHAT2API\|invoke\s+name=(?:"([^"]+)"|'([^']+)')\s*>/gu;
 const CHAT2API_PARAMETER_PATTERN = /<\|parameter=([A-Za-z_][A-Za-z0-9_.-]*)>([\s\S]*?)<\/parameter>/gu;
+const CHAT2API_NAMED_PARAMETER_PATTERN = /<\|CHAT2API\|parameter\s+name=(?:"([^"]+)"|'([^']+)')\s*>(?:\s*<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))\s*<\/\|CHAT2API\|parameter>/gu;
 const CHAT2API_FUNCTION_END = '</function>';
+const CHAT2API_INVOKE_END = '</|CHAT2API|invoke>';
+const CHAT2API_TOOL_CALLS_END = '</|CHAT2API|tool_calls>';
+const CHAT2API_TOOL_ALIASES = Object.freeze({
+    find: 'aasc_find'
+});
 
 const DEFAULT_CHAT2API_TOOLS = Object.freeze([
     'read',
@@ -23,7 +29,10 @@ const DEFAULT_CHAT2API_TOOLS = Object.freeze([
  */
 function normalizeAllowedTools(allowedTools) {
     const source = allowedTools === undefined ? DEFAULT_CHAT2API_TOOLS : allowedTools;
-    return new Set(source.map((tool) => typeof tool === 'string' ? tool : tool?.name).filter(Boolean));
+    return new Set(source
+        .map((tool) => typeof tool === 'string' ? tool : tool?.name)
+        .filter(Boolean)
+        .map((name) => CHAT2API_TOOL_ALIASES[name] || name));
 }
 
 /**
@@ -58,17 +67,22 @@ function parseInvocationParameters(rawParameters) {
     const parameters = {};
     let cursor = 0;
     let match;
-    CHAT2API_PARAMETER_PATTERN.lastIndex = 0;
-    while ((match = CHAT2API_PARAMETER_PATTERN.exec(rawParameters))) {
+    const isNamedParameterFormat = rawParameters.includes('<|CHAT2API|parameter');
+    const parameterPattern = isNamedParameterFormat
+        ? CHAT2API_NAMED_PARAMETER_PATTERN
+        : CHAT2API_PARAMETER_PATTERN;
+    parameterPattern.lastIndex = 0;
+    while ((match = parameterPattern.exec(rawParameters))) {
         if (rawParameters.slice(cursor, match.index).trim()) {
             throw new Error('Chat2API 工具调用格式错误：参数之间存在未识别内容');
         }
-        const name = match[1];
+        const name = isNamedParameterFormat ? (match[1] || match[2]) : match[1];
         if (Object.prototype.hasOwnProperty.call(parameters, name)) {
             throw new Error(`Chat2API 工具调用包含重复参数：${name}`);
         }
-        parameters[name] = parseParameterValue(match[2]);
-        cursor = CHAT2API_PARAMETER_PATTERN.lastIndex;
+        const rawValue = isNamedParameterFormat ? (match[3] ?? match[4]) : match[2];
+        parameters[name] = parseParameterValue(rawValue);
+        cursor = parameterPattern.lastIndex;
     }
     if (rawParameters.slice(cursor).trim()) {
         throw new Error('Chat2API 工具调用格式错误：参数标签未闭合');
@@ -110,14 +124,19 @@ function parseChat2ApiToolCalls(text, allowedTools) {
             throw new Error('Chat2API 工具调用格式错误：调用之间存在未识别内容');
         }
 
-        const name = match[1] || match[2];
+        const requestedName = match[1] || match[2];
+        const name = CHAT2API_TOOL_ALIASES[requestedName] || requestedName;
         if (!permittedTools.has(name)) {
-            throw new Error(`Chat2API 不允许的工具：${name}`);
+            throw new Error(`Chat2API 不允许的工具：${requestedName}`);
         }
 
-        const endIndex = payload.indexOf(CHAT2API_FUNCTION_END, CHAT2API_INVOKE_PATTERN.lastIndex);
+        const endCandidates = [
+            payload.indexOf(CHAT2API_FUNCTION_END, CHAT2API_INVOKE_PATTERN.lastIndex),
+            payload.indexOf(CHAT2API_INVOKE_END, CHAT2API_INVOKE_PATTERN.lastIndex)
+        ].filter((index) => index >= 0);
+        const endIndex = endCandidates.length > 0 ? Math.min(...endCandidates) : -1;
         if (endIndex < 0) {
-            throw new Error('Chat2API 工具调用格式错误：缺少 function 结束标签');
+            throw new Error('Chat2API 工具调用格式错误：缺少 invoke 结束标签');
         }
         const rawParameters = payload.slice(CHAT2API_INVOKE_PATTERN.lastIndex, endIndex);
         calls.push({
@@ -133,7 +152,10 @@ function parseChat2ApiToolCalls(text, allowedTools) {
     if (calls.length === 0) {
         throw new Error('Chat2API 工具调用格式错误：没有找到 invoke 调用');
     }
-    const remainingPayload = payload.slice(cursor);
+    let remainingPayload = payload.slice(cursor).trim();
+    if (remainingPayload.startsWith(CHAT2API_TOOL_CALLS_END)) {
+        remainingPayload = remainingPayload.slice(CHAT2API_TOOL_CALLS_END.length).trim();
+    }
     if (remainingPayload.includes('<|CHAT2API|')) {
         throw new Error('Chat2API 工具调用格式错误：存在未识别协议标签');
     }

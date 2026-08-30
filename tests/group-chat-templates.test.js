@@ -83,3 +83,25 @@ test('语音中包含角色名时应保留完整原始文本并按群聊发送',
     assert.strictEqual(result.message, input);
     assert.strictEqual(result.systemPrompt, undefined);
 });
+
+test('显示端唤醒后的普通群聊文本不受指令模式过滤', async () => {
+    const originalSession = chat.getSession();
+    chat.setSession({ ...originalSession, mode: 'group', commandMode: true });
+    try {
+        const result = await voiceCommand.processVoiceCommand(
+            '你在做什么吗？',
+            'display-test',
+            {},
+            false,
+            { conversationActive: true }
+        );
+        assert.deepStrictEqual(result, {
+            type: 'chat',
+            message: '你在做什么吗？',
+            mode: 'group',
+            systemPrompt: undefined
+        });
+    } finally {
+        chat.setSession(originalSession);
+    }
+});

@@ -7,10 +7,9 @@ const path = require('node:path');
 
 const SERVER_FILE = path.resolve(__dirname, '../src/apps/server/boot/server-app.js');
 
-test('Pi Runtime 使用服务器 Pi 分类日志并保留 requestId', () => {
+test('Pi Runtime 默认屏蔽服务器 Pi 详细分类日志', () => {
     const source = fs.readFileSync(SERVER_FILE, 'utf8');
-    assert.match(source, /new PiRuntimeManager\(\{[\s\S]{0,180}logger:\s*\(message, details\)/u);
-    assert.match(source, /log\('Pi', message, /u);
+    assert.doesNotMatch(source, /new PiRuntimeManager\(\{[\s\S]{0,180}logger:\s*\(message, details\)/u);
 });
 
 test('控制端聊天输入日志包含 content 和 requestId', () => {

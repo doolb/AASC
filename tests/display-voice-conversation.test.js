@@ -116,6 +116,14 @@ function testAddressedGroupInputWakesWithoutRemovingOriginalText() {
     assert.deepStrictEqual(result.event, { type: 'input', addressedAssistant: '小爱' });
 }
 
+function testPureAddressedWakeDoesNotBecomeChatInput() {
+    const waiting = createConversationState(true);
+    const result = reduceConversationInput(waiting, '你好，小爱。', assistants, 1000);
+    assert.strictEqual(result.accepted, true);
+    assert.strictEqual(result.state.state, 'activeGroup');
+    assert.deepStrictEqual(result.event, { type: 'wake', mode: 'group', target: null });
+}
+
 testInitialState();
 testWakeAndPrivateSwitch();
 testStateTransitions();
@@ -123,4 +131,5 @@ testDisabledAndExpiry();
 testBuiltinCommandBypassesWakeWithoutActivatingConversation();
 testSystemHelpBypassesWakeWithTrailingPunctuation();
 testAddressedGroupInputWakesWithoutRemovingOriginalText();
-console.log('display-voice-conversation.test.js: 7/7 passed');
+testPureAddressedWakeDoesNotBecomeChatInput();
+console.log('display-voice-conversation.test.js: 8/8 passed');
