@@ -4,6 +4,19 @@
 
 ### 已完成
 
+- ✅ [2026-08-30] 配置固定 Release keystore
+  - 将原 `~/.android/debug.keystore` 复制为固定的 `~/.android/aasc-release.keystore`，原 Debug keystore 本身未修改。
+  - `android-display` 的 release buildType 显式使用固定签名；密码和别名从被 Git 忽略的 `local.properties` 或环境变量读取。
+  - Release 配置缺失时直接终止构建，避免 keystore 被静默重新生成；debug 构建保持原流程。
+  - 验证：Release 连续构建成功且 APK/证书指纹一致，`npm run build:apk` debug 构建成功；固定 Release 与原设备签名兼容。
+  - 文档：`docs/design/android-display.md`、`docs/spec/android-display.md`、`docs/task/2026-08-30_固定release签名配置.md`。
+
+- ✅ [2026-08-30] 保留数据重新安装当前 Release 代码
+  - 设备旧包与新固定 Release keystore 签名不同，使用原未修改的 `~/.android/debug.keystore` 对当前 Release APK 临时签名后覆盖安装。
+  - 验证：安装成功，应用数据目录仍存在，设备运行 Release 代码；固定 Release keystore 已切换为该 Debug keystore 的副本，后续构建可继续无损更新。
+  - 文档：`docs/task/2026-08-30_固定release签名配置.md`。
+
+
 - ✅ [2026-08-30] 修复多显示端与多来源 render-display 链接冲突
   - 不同 `displayId` 的 render-display 服务并行运行；多个来源可链接同一 render-display。
   - 解除单个来源时向显示端发送来源级停止标记，只隐藏对应子条目，不停止其他来源或目标任务。

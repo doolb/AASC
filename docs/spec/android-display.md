@@ -189,6 +189,41 @@ connect():
 
 约束：部署脚本不直接写 APK 私有目录 XML，避免依赖 debug `run-as` 权限和 Android SharedPreferences 文件格式；服务器地址通过 Intent 显式传递，脚本使用参数数组调用 adb，避免 shell 字符串注入。
 
+## 固定 Release 签名伪代码
+
+```text
+读取 src/apps/android-display/local.properties（文件被 Git 忽略）
+releaseStoreFile = 本地配置 aasc.release.storeFile 或 user.home/.android/aasc-release.keystore
+releaseStorePassword = 本地配置 aasc.release.storePassword 或环境变量 AASC_RELEASE_STORE_PASSWORD
+releaseKeyAlias = 本地配置 aasc.release.keyAlias 或环境变量 AASC_RELEASE_KEY_ALIAS
+releaseKeyPassword = 本地配置 aasc.release.keyPassword 或环境变量 AASC_RELEASE_KEY_PASSWORD
+
+android.signingConfigs.aascRelease:
+    storeFile = releaseStoreFile
+    storePassword = releaseStorePassword
+    keyAlias = releaseKeyAlias
+    keyPassword = releaseKeyPassword
+
+android.buildTypes.release:
+    signingConfig = aascRelease
+    保持现有 release 构建选项
+
+固定兼容策略:
+    aasc-release.keystore 的内容固定复制自原 debug.keystore
+    keyAlias 使用 androiddebugkey
+    storePassword 和 keyPassword 使用 android
+    不得自动重新生成或切换签名文件
+
+如果当前 Gradle 请求包含 Release 任务:
+    releaseStoreFile 必须存在
+    releaseStorePassword、releaseKeyAlias、releaseKeyPassword 必须非空
+    任一条件不满足 -> 直接终止构建并提示配置项
+
+debug 构建:
+    不读取 Release 必填条件
+    继续使用默认 debug 签名
+```
+
 ## 控制端提示（crop.js）
 
 ```

@@ -1,8 +1,59 @@
 import org.gradle.api.tasks.Copy
+import java.util.Properties
 
 // AGP 9.0+ 内置 Kotlin 支持，无需 org.jetbrains.kotlin.android 插件
 plugins {
     id("com.android.application")
+}
+
+// Release 签名只允许读取本机忽略配置或环境变量，避免把私钥和密码提交到仓库。
+val androidLocalProperties = Properties()
+val androidLocalPropertiesFile = rootProject.file("local.properties")
+if (androidLocalPropertiesFile.isFile) {
+    androidLocalPropertiesFile.inputStream().use { androidLocalProperties.load(it) }
+}
+
+fun configuredSigningValue(propertyName: String, environmentName: String): String {
+    val localValue = androidLocalProperties.getProperty(propertyName)?.trim()
+    return localValue?.takeIf { it.isNotEmpty() }
+        ?: System.getenv(environmentName)?.trim().orEmpty()
+}
+
+val releaseStoreFile = androidLocalProperties.getProperty("aasc.release.storeFile")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { rootProject.file(it) }
+    ?: rootProject.file("${System.getProperty("user.home")}/.android/aasc-release.keystore")
+val releaseStorePassword = configuredSigningValue(
+    "aasc.release.storePassword",
+    "AASC_RELEASE_STORE_PASSWORD"
+)
+val releaseKeyAlias = configuredSigningValue(
+    "aasc.release.keyAlias",
+    "AASC_RELEASE_KEY_ALIAS"
+)
+val releaseKeyPassword = configuredSigningValue(
+    "aasc.release.keyPassword",
+    "AASC_RELEASE_KEY_PASSWORD"
+)
+
+// 只在 Release 任务执行时校验，保证普通 debug 构建仍可使用默认 debug 签名。
+val releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+if (releaseTaskRequested) {
+    check(releaseStoreFile.isFile) {
+        "固定 Release keystore 不存在: ${releaseStoreFile.absolutePath}"
+    }
+    check(releaseStorePassword.isNotBlank()) {
+        "缺少 Release keystore 密码，请配置 aasc.release.storePassword 或 AASC_RELEASE_STORE_PASSWORD"
+    }
+    check(releaseKeyAlias.isNotBlank()) {
+        "缺少 Release key alias，请配置 aasc.release.keyAlias 或 AASC_RELEASE_KEY_ALIAS"
+    }
+    check(releaseKeyPassword.isNotBlank()) {
+        "缺少 Release key 密码，请配置 aasc.release.keyPassword 或 AASC_RELEASE_KEY_PASSWORD"
+    }
 }
 
 val bundledDenoiseModelFiles = listOf("gtcrn_simple.onnx")
@@ -26,7 +77,7 @@ android {
     namespace = "com.aasc.display"
     compileSdk = 34
 
-    defaultConfig {
+   defaultConfig {
         applicationId = "com.aasc.display"
         // Microsoft Embedded Speech SDK -> azure-core 1.58.1 使用 MethodHandle，D8 要求 Android 8.0+
         minSdk = 26
@@ -39,9 +90,20 @@ android {
         }
    }
 
+   signingConfigs {
+       // 独立 Release 身份与 debug 身份隔离；固定文件缺失时由上面的校验阻止构建。
+       create("aascRelease") {
+           storeFile = releaseStoreFile
+           storePassword = releaseStorePassword
+           keyAlias = releaseKeyAlias
+           keyPassword = releaseKeyPassword
+       }
+   }
+
    buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("aascRelease")
         }
     }
     compileOptions {

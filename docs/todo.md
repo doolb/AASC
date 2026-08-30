@@ -665,6 +665,12 @@
 
 ## Android APK
 
+- ✅已完成 [2026-08-30][2026-08-30] 配置固定 Release keystore
+  - Release 使用 `~/.android/aasc-release.keystore`，密码和别名使用被忽略的 `local.properties` 或环境变量。
+  - Release 配置缺失时构建直接失败；debug 签名流程保持不变。
+  - 验证：Release 连续构建证书和 APK 指纹一致，debug 构建成功。
+  - 文档：`docs/design/android-display.md`、`docs/spec/android-display.md`、`docs/task/2026-08-30_固定release签名配置.md`。
+
 - ✅已完成 [2026-08-26][2026-08-26] 完成 APK TTS 并发引擎池（Task 4）
   - 新增 `TtsEnginePool.kt`，按 TTS 大核+小核 policy 建立 `max(1, policy.totalCoreCount)` 个独立 silent synthesizer slot，每个 slot 拥有单线程 worker。
   - `TtsEngine.kt` 保持 `load/synthesize/release/ready` 公开接口，内部改为安全替换 pool；模型加载和 TTS CPU policy 变更不会释放正在合成或已排队旧请求使用的 synthesizer。

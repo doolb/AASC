@@ -164,6 +164,15 @@ android-display/
 
 `minSdk` 仅决定 APK 的最低 Android 安装/运行版本；TTS 接入将其从 24 提升到 26，但 SM-N9500 的 Android 9/API 28 不受此限制。DeX 的 `freeform` 窗口尺寸由 Samsung 启动器决定，不能只依赖 `SYSTEM_UI_FLAG_FULLSCREEN` 隐藏系统栏，因此需要额外声明 DeX 启动窗口元数据。
 
+## 固定 Release 签名
+
+- Release APK 使用固定 keystore：`~/.android/aasc-release.keystore`，其内容复制自原 `~/.android/debug.keystore`，因此与现有设备安装包保持同一签名。
+- keystore 的别名和密码只从被 Git 忽略的 `local.properties` 或环境变量读取，不进入仓库；keystore 文件本身也不进入仓库。
+- 执行 Release 构建时，如果 keystore、别名或密码缺失，Gradle 直接失败，禁止静默生成新签名。
+- debug 构建继续使用 Android 默认 debug 签名，现有 debug 流程不受 Release 签名配置影响。
+- 固定 keystore 必须单独备份；如果丢失，已安装的 Release APK 只能卸载后重新安装，不能通过包名或版本号替换。
+- 该固定 Release keystore 来源于 Debug keystore，适用于内网/测试部署；正式公开发布仍应改用独立且受保护的生产 Release keystore。
+
 ## 服务器改动
 
 零改动：display 消息处理、capabilities 透传、displayTypes 白名单均已支持。
