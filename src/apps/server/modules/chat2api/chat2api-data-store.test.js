@@ -30,6 +30,7 @@ test('账号凭据保存后只返回脱敏数据，并使用私有权限', async
   assert.equal('accessToken' in accounts[0], false);
   assert.equal('refreshToken' in accounts[0], false);
   assert.equal('cookie' in accounts[0], false);
+  assert.equal((await store.getAccount('deepseek-main')).accessToken, 'access-secret');
 
   const rootStat = await fs.stat(rootDir);
   const accountFile = path.join(rootDir, 'accounts.json');
@@ -88,4 +89,16 @@ test('导入先预览，未确认时不写入，确认后合并数据', async ()
   assert.equal((await store.listAccounts()).length, 1);
   assert.equal((await store.readCollection('providers', [])).length, 1);
   assert.equal((await store.readCollection('modelMappings', [])).length, 1);
+});
+
+test('OAuth 临时会话一次性消费并按 Provider 绑定', async () => {
+  const rootDir = await makeTempDir();
+  const store = createChat2ApiDataStore({ rootDir });
+  const session = await store.createOAuthSession({ providerId: 'deepseek', loginUrl: 'https://chat.deepseek.com', ttlMs: 60_000 });
+  assert.equal(session.providerId, 'deepseek');
+  assert.equal((await store.consumeOAuthSession(session.state, 'kimi')), null);
+  const consumed = await store.consumeOAuthSession(session.state, 'deepseek');
+  assert.equal(consumed.loginUrl, 'https://chat.deepseek.com');
+  assert.equal(await store.consumeOAuthSession(session.state, 'deepseek'), null);
+  assert.equal((await fs.readdir(path.join(rootDir, 'oauth-sessions'))).length, 0);
 });

@@ -218,6 +218,35 @@ createChat2ApiProxyService(options):
     stop() -> 结束活动连接并关闭 HTTP Server
 ```
 
+## 控制端登录与 OAuth 会话
+
+```text
+startLogin(providerId):
+    校验 Provider 存在且启用
+    创建随机 state、Provider 绑定和过期时间
+    将临时会话写入 oauth-sessions/<state>.json，权限 0600
+    返回 state、expiresAt、loginUrl 和支持的凭据字段
+
+completeLogin(state, providerId, credentials, accountInfo):
+    一次性读取并删除 state 会话
+    校验 state 未过期且 Provider 一致
+    调用 Provider OAuth/manual adapter 验证凭据或交换 code
+    生成 accountId，保存 active 账号和完整凭据
+    返回脱敏账号
+
+handleOAuthCallback(query):
+    只接受已创建且未过期的 state
+    Provider 绑定不一致 -> 拒绝
+    code/token -> 交给对应 adapter 交换或验证
+    回调重复使用 -> 拒绝
+
+cancelLogin(state):
+    删除对应临时会话，不影响已有账号
+
+stopOAuthService():
+    删除全部临时会话并关闭回调监听器
+```
+
 ## 上游同步
 
 ```text

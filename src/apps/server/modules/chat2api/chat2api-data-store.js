@@ -23,6 +23,7 @@ const COLLECTION_FILES = Object.freeze({
 });
 const IMPORT_COLLECTIONS = Object.freeze(['providers', 'accounts', 'modelMappings']);
 const MAX_IMPORT_ITEMS = 1000;
+const OAUTH_SESSION_TTL_MS = 5 * 60 * 1000;
 
 const assertCollectionName = (name) => {
   if (!Object.prototype.hasOwnProperty.call(COLLECTION_FILES, name)) {
@@ -58,11 +59,45 @@ const mergeByKey = (current, incoming, keySelector) => {
 const createChat2ApiDataStore = (options = {}) => {
   const rootDir = path.resolve(options.rootDir || DEFAULT_ROOT_DIR);
   const filePath = (name) => path.join(rootDir, COLLECTION_FILES[name]);
+  const oauthSessionDir = path.join(rootDir, 'oauth-sessions');
 
   const ensurePrivateDirectory = async () => {
     await fs.mkdir(rootDir, { recursive: true, mode: 0o700 });
     // 目录可能是历史版本创建的，显式修正权限，避免凭据目录被组用户读取。
     await fs.chmod(rootDir, 0o700);
+  };
+
+  const ensureOAuthSessionDirectory = async () => {
+    await ensurePrivateDirectory();
+    await fs.mkdir(oauthSessionDir, { recursive: true, mode: 0o700 });
+    await fs.chmod(oauthSessionDir, 0o700);
+  };
+
+  const oauthSessionPath = (state) => {
+    if (typeof state !== 'string' || !/^[a-f0-9]{32,128}$/.test(state)) {
+      return null;
+    }
+    return path.join(oauthSessionDir, `${state}.json`);
+  };
+
+  const writePrivateJson = async (target, value) => {
+    const temporary = `${target}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    let handle;
+    try {
+      handle = await fs.open(temporary, 'wx', 0o600);
+      await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
+      await handle.sync();
+      await handle.close();
+      handle = undefined;
+      await fs.rename(temporary, target);
+      await fs.chmod(target, 0o600);
+    } catch (error) {
+      if (handle) {
+        await handle.close().catch(() => {});
+      }
+      await fs.unlink(temporary).catch(() => {});
+      throw error;
+    }
   };
 
   const readCollection = async (name, fallback = []) => {
@@ -133,6 +168,65 @@ const createChat2ApiDataStore = (options = {}) => {
     const accounts = await readCollection('accounts', []);
     ensureArray(accounts, 'accounts');
     return accounts.map((account) => publicAccount(account));
+  };
+
+  const getAccount = async (accountId) => {
+    const accounts = await readCollection('accounts', []);
+    ensureArray(accounts, 'accounts');
+    return accounts.find((account) => account.accountId === accountId) || null;
+  };
+
+  const createOAuthSession = async ({ providerId, loginUrl, ttlMs = OAUTH_SESSION_TTL_MS } = {}) => {
+    if (typeof providerId !== 'string' || providerId.trim().length === 0 || typeof loginUrl !== 'string' || loginUrl.length === 0) {
+      throw new Error('Chat2API OAuth 会话参数无效');
+    }
+    await ensureOAuthSessionDirectory();
+    const state = crypto.randomBytes(24).toString('hex');
+    const session = {
+      state,
+      providerId: providerId.trim(),
+      loginUrl,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + Math.max(1_000, Number(ttlMs) || OAUTH_SESSION_TTL_MS),
+    };
+    await writePrivateJson(oauthSessionPath(state), session);
+    return { ...session };
+  };
+
+  const consumeOAuthSession = async (state, providerId) => {
+    const target = oauthSessionPath(state);
+    if (!target) {
+      return null;
+    }
+    try {
+      const session = JSON.parse(await fs.readFile(target, 'utf8'));
+      if (providerId && session.providerId !== providerId) {
+        return null;
+      }
+      await fs.unlink(target).catch(() => {});
+      if (session.expiresAt <= Date.now()) {
+        return null;
+      }
+      return session;
+    } catch (error) {
+      if (error.code === 'ENOENT' || error instanceof SyntaxError) {
+        return null;
+      }
+      throw error;
+    }
+  };
+
+  const cancelOAuthSession = async (state) => {
+    const target = oauthSessionPath(state);
+    if (target) {
+      await fs.unlink(target).catch(() => {});
+    }
+  };
+
+  const clearOAuthSessions = async () => {
+    await ensureOAuthSessionDirectory();
+    const names = await fs.readdir(oauthSessionDir);
+    await Promise.all(names.filter((name) => name.endsWith('.json')).map((name) => fs.unlink(path.join(oauthSessionDir, name)).catch(() => {})));
   };
 
   const createApiKey = async (input = {}) => {
@@ -228,6 +322,11 @@ const createChat2ApiDataStore = (options = {}) => {
     writeCollection,
     saveAccount,
     listAccounts,
+    getAccount,
+    createOAuthSession,
+    consumeOAuthSession,
+    cancelOAuthSession,
+    clearOAuthSessions,
     createApiKey,
     listApiKeys,
     validateApiKey,

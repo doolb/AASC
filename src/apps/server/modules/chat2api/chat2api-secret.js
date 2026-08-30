@@ -39,10 +39,10 @@ const hasConfiguredSecret = (value) => {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  return [...SECRET_FIELDS].some((field) => {
-    const secret = value[field];
-    return typeof secret === 'string' && secret.length > 0;
-  });
+  if (Object.entries(value).some(([key, item]) => SECRET_FIELDS.has(key) && typeof item === 'string' && item.length > 0)) {
+    return true;
+  }
+  return Object.values(value).some((item) => item && typeof item === 'object' && hasConfiguredSecret(item));
 };
 
 const maskSecret = (value, visibleLength = 4) => {
