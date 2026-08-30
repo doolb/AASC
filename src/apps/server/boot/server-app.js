@@ -497,7 +497,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'voiceVadNoiseResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'voiceVadNoiseResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -3548,6 +3548,25 @@ async function sendVoiceInputTts(text, playbackOptions = {}) {
     return targetDisplayIds.length;
 }
 
+// 媒体文件名播报统一由服务器生成并下发，复用跨显示端 TTS 播放状态广播。
+async function sendMediaNameTts(displayId, text) {
+    const normalizedText = typeof text === 'string' ? text.trim() : '';
+    if (!displayId || !normalizedText) return false;
+
+    try {
+        const audioPath = await generateTtsWithFallback(normalizedText, undefined, undefined, displayId);
+        return sendToDisplay(displayId, {
+            type: 'tts',
+            action: 'playAudio',
+            audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
+            text: normalizedText
+        });
+    } catch (error) {
+        logError('TTS', `媒体文件名播报失败: ${error.message}`);
+        return false;
+    }
+}
+
 // 帮助文本等较长语音内容按句串行处理，避免一次 TTS 请求携带整段长文本。
 // 回调内部仍负责选择通用或控制端定向播放目标，本函数只负责分句和顺序。
 async function sendVoiceTtsSentences(text, sendSentence) {
@@ -4344,6 +4363,9 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             type: 'playStateReport',
             isPlaying: data.isPlaying
         });
+    } else if (data.type === 'mediaNameTts' && displayData) {
+        // 文件名播报由服务器统一生成，sendToDisplay 会创建播放状态并广播给其他录音显示端。
+        void sendMediaNameTts(displayId, data.text);
     } else if (data.type === 'voiceConversationTtsFinished' && displayData) {
         // 显示端只有在当前 TTS 队列真正播放结束后才上报，计时起点因此不会落在生成完成或首句结束。
         if (isDisplayVoiceListeningEnabled(displayData)

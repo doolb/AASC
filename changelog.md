@@ -16,6 +16,11 @@
 
 ### 已完成
 
+- ✅ [2026-08-30] 其他设备播报文件名时暂停非声纹监听
+  - 媒体文件名自动播报改走服务器统一 TTS，复用跨设备播放 ID 和 `voiceTtsPlaybackState` 状态广播。
+  - 非声纹监听设备在其他显示端播报文件名时暂停录音，相关播放全部结束后恢复；媒体本身播放不受影响。
+  - 验证：文件名 TTS、跨设备 TTS、显示端 UI、语音会话和文本媒体回归 13/13 通过，服务端语法检查及 `git diff --check` 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_其他设备文件名播报暂停监听.md`。
 - ✅ [2026-08-30] 天气和语音详情弹窗支持 Markdown
   - 显示端天气/普通语音详情弹窗复用安全 `ChatMarkdown` 渲染器，支持结构化 Markdown 展示并转义原始 HTML、过滤危险链接。
   - TTS 仍使用纯文本，弹窗显示时长、滚动和四向旋转布局保持不变。

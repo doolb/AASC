@@ -561,6 +561,31 @@ Markdown 渲染器:
     拒绝 javascript、vbscript、data 等危险链接协议
 ```
 
+## 媒体文件名统一 TTS
+
+```text
+显示端 announceAndReport(mediaName, data):
+    autoTtsEnabled 且文件名非空:
+        提取可播报文件名
+        发送 mediaNameTts(text) 到服务器
+    不在显示端本地调用 playTTS，避免只暂停当前设备
+
+服务器收到 mediaNameTts(displayId, text):
+    调用 generateTtsWithFallback(text, preferredDisplayId=displayId)
+    通过 sendToDisplay(displayId, { type='tts', action='playAudio', audioUrl, text }) 下发
+    sendToDisplay 内部调用 prepareVoiceTtsPlayback
+    分配 voiceTtsPlaybackId 并广播 voiceTtsPlaybackState='started'
+
+所有显示端收到 voiceTtsPlaybackState='started':
+    非声纹模式调用 pauseVoiceRecordingForTts()
+    将播放状态加入 remoteTtsPlaybackIds
+
+目标显示端播放完成:
+    回传 voiceTtsPlaybackFinished(voiceTtsPlaybackId)
+    服务器广播结束状态
+    所有相关远程播放结束后恢复非声纹监听
+```
+
 ## 显示端普通语音聊天
 
 ```text

@@ -1423,8 +1423,13 @@
             connectionStatus.textContent = text;
         }
         
-        function playTTS(text) {
-            queueTts({ text: text });
+        // 媒体文件名必须交给服务器统一 TTS，才能让其他显示端收到跨设备播放状态并暂停非声纹监听。
+        function requestMediaNameTts(text) {
+            if (!text || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({
+                type: 'mediaNameTts',
+                text: text
+            }));
         }
 
         // TTS 播放期间视频保留画面和音轨；网页不主动静音，焦点行为交由 WebView 网页媒体处理。
@@ -3370,7 +3375,7 @@
             if (autoTtsEnabled && mediaName) {
                 const displayName = extractFileName(mediaName);
                 if (displayName) {
-                    playTTS(displayName);
+                    requestMediaNameTts(displayName);
                 }
             }
 
