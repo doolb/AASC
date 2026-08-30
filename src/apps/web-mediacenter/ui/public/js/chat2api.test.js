@@ -10,4 +10,6 @@ test('控制端 Chat2API 弹窗包含登录、账号和 API Key 管理流程', (
   assert.match(source, /\/api\/chat2api\/oauth\/complete/);
   assert.match(source, /window\.open/);
   assert.match(source, /\/api\/chat2api\/api-keys/);
+  assert.match(source, /chat2apiSaveConfig/);
+  assert.match(source, /data-chat2api-account-toggle/);
 });
