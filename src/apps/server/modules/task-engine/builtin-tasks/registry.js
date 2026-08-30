@@ -2,7 +2,8 @@ const tasks = {
   'image.resize': require('./image-resize'),
   'model.inference': require('./model-inference'),
   'time.announce': require('./time-announce'),
-  'llm.chat': require('./llm-chat')
+  'llm.chat': require('./llm-chat'),
+  'chat2api.proxy': require('./chat2api-proxy')
 };
 
 module.exports = {

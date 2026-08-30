@@ -247,6 +247,27 @@ stopOAuthService():
     删除全部临时会话并关闭回调监听器
 ```
 
+## 内置服务任务装配
+
+```text
+createChat2ApiRuntime(options):
+    创建 dataStore、Provider registry、modelMapper、loadBalancer
+    创建 OAuth service、core adapter 和 proxy service
+    所有组件共享同一个数据存储和配置快照
+
+chat2api.proxy.run(context):
+    从 params 读取 host、port、enableApiKey
+    创建 Chat2API runtime 并启动 proxy service
+    推送运行状态、监听地址和统计到任务 widget
+    注册 refresh、updateConfig、stop 等 widget action
+    返回 { type: service, stop }
+
+chat2api.proxy.stop():
+    停止 OAuth 临时会话
+    停止代理 HTTP Server
+    清理 runtime 引用和 widget action
+```
+
 ## 上游同步
 
 ```text
