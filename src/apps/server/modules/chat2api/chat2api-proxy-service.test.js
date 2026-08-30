@@ -72,3 +72,23 @@ test('代理服务把流式结果转换为 SSE，并在停止时释放端口', a
   await service.stop();
   await assert.rejects(() => request(port, { path: '/health', method: 'GET' }));
 });
+
+test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
+  const service = createChat2ApiProxyService({
+    host: '127.0.0.1', port: 0, config: { enableApiKey: true },
+    dataStore: { validateApiKey: async () => null },
+    coreAdapter: { listModels: async () => ({ object: 'list', data: [] }), forwardChatCompletion: async () => ({ body: {} }) },
+    managementService: { listProviders: async () => [{ id: 'deepseek' }], startLogin: async () => ({ state: 'state-1' }) },
+  });
+  await service.start();
+  try {
+    const response = await request(service.address().port, { path: '/api/chat2api/providers', method: 'GET' });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(JSON.parse(response.text), [{ id: 'deepseek' }]);
+    const login = await request(service.address().port, { path: '/api/chat2api/oauth/start', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ providerId: 'deepseek' }));
+    assert.equal(login.statusCode, 200);
+    assert.equal(JSON.parse(login.text).state, 'state-1');
+  } finally {
+    await service.stop();
+  }
+});

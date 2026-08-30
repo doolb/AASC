@@ -11,6 +11,7 @@ const createChat2ApiProxyService = (options = {}) => {
   const config = { ...DEFAULT_CONFIG, ...(options.config || {}), host: options.host || options.config?.host || DEFAULT_CONFIG.host, port: options.port ?? options.config?.port ?? DEFAULT_CONFIG.port };
   const dataStore = options.dataStore;
   const coreAdapter = options.coreAdapter;
+  const managementService = options.managementService;
   let server = null;
   const sockets = new Set();
   const statistics = {
@@ -58,7 +59,9 @@ const createChat2ApiProxyService = (options = {}) => {
   };
 
   const authorize = async (request, pathname) => {
-    if (!config.enableApiKey || pathname === '/health' || pathname === '/') {
+    const remoteAddress = request.socket && request.socket.remoteAddress;
+    const isLocalRequest = remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+    if (!config.enableApiKey || pathname === '/health' || pathname === '/' || (pathname.startsWith('/api/chat2api') && isLocalRequest)) {
       return true;
     }
     if (!dataStore || typeof dataStore.validateApiKey !== 'function') {
@@ -122,6 +125,35 @@ const createChat2ApiProxyService = (options = {}) => {
     }
     if (request.method === 'GET' && url.pathname === '/stats') {
       sendJson(response, 200, { ...statistics, activeConnections: sockets.size });
+      return;
+    }
+    if (url.pathname.startsWith('/api/chat2api')) {
+      if (!managementService) {
+        const error = new Error('Chat2API 管理服务不可用');
+        error.statusCode = 503;
+        error.code = 'management_unavailable';
+        throw error;
+      }
+      const body = ['POST', 'PUT'].includes(request.method) ? await readJson(request) : null;
+      const managementResult = await (async () => {
+        if (request.method === 'GET' && url.pathname === '/api/chat2api/config') return managementService.getConfig();
+        if (request.method === 'PUT' && url.pathname === '/api/chat2api/config') return managementService.saveConfig(body);
+        if (request.method === 'GET' && url.pathname === '/api/chat2api/providers') return managementService.listProviders();
+        if (['POST', 'PUT'].includes(request.method) && url.pathname === '/api/chat2api/providers') return managementService.saveProvider(body);
+        if (request.method === 'GET' && url.pathname === '/api/chat2api/accounts') return managementService.listAccounts();
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/oauth/start') return managementService.startLogin(body && body.providerId);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/oauth/complete') return managementService.completeLogin(body);
+        if (request.method === 'GET' && url.pathname === '/api/chat2api/oauth/callback') return managementService.handleCallback(Object.fromEntries(url.searchParams.entries()));
+        if (request.method === 'GET' && url.pathname === '/api/chat2api/api-keys') return managementService.listApiKeys();
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/api-keys') return managementService.createApiKey(body);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/import/preview') return managementService.previewImport(body);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/import/merge') return managementService.mergeImport(body && body.data, body && body.confirmed);
+        const error = new Error(`管理路由不存在: ${request.method} ${url.pathname}`);
+        error.statusCode = 404;
+        error.code = 'not_found';
+        throw error;
+      })();
+      sendJson(response, 200, await managementResult);
       return;
     }
     if (request.method === 'GET' && url.pathname === '/v1/models') {

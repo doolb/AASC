@@ -268,6 +268,23 @@ chat2api.proxy.stop():
     清理 runtime 引用和 widget action
 ```
 
+## 控制端管理服务
+
+```text
+createChat2ApiManagementService(runtime):
+    getConfig/saveConfig -> 读取和保存代理配置
+    listProviders/saveProvider -> Provider 元数据管理
+    listAccounts -> 只返回脱敏账号
+    startLogin/completeLogin/callback -> 委托 OAuth service
+    listApiKeys/createApiKey -> API Key 管理，完整 key 只返回一次
+    previewImport/mergeImport -> 委托 dataStore 导入流程
+
+proxy /api/chat2api/*:
+    本机控制端请求可访问管理接口
+    非本机请求必须通过代理 API Key 鉴权
+    账号列表、Provider 列表和 API Key 列表不返回秘密字段
+```
+
 ## 上游同步
 
 ```text

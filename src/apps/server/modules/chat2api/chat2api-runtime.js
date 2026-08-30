@@ -5,6 +5,7 @@ const { createChat2ApiLoadBalancer } = require('./chat2api-load-balancer');
 const { createChat2ApiCoreAdapter } = require('./chat2api-core-adapter');
 const { createChat2ApiOAuthService } = require('./chat2api-oauth-service');
 const { createChat2ApiProxyService } = require('./chat2api-proxy-service');
+const { createChat2ApiManagementService } = require('./chat2api-management-service');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -23,12 +24,14 @@ const createChat2ApiRuntime = (options = {}) => {
     providerRegistry,
     credentialAdapters: options.credentialAdapters || {},
   });
+  const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth });
   const proxy = options.proxy || createChat2ApiProxyService({
     host: options.host,
     port: options.port,
     config: options.config,
     dataStore,
     coreAdapter,
+    managementService,
   });
 
   const start = async () => proxy.start();
@@ -41,7 +44,7 @@ const createChat2ApiRuntime = (options = {}) => {
     address: proxy.address(),
   });
 
-  return { dataStore, providerRegistry, modelMapper, loadBalancer, coreAdapter, oauth, proxy, start, stop, getStatus };
+  return { dataStore, providerRegistry, modelMapper, loadBalancer, coreAdapter, oauth, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };
