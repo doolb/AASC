@@ -275,6 +275,71 @@ function ensureDefaultSessions() {
     }
 }
 
+/**
+ * 规范化会话元数据并按会话 ID 去重。
+ * 会话列表用于控制端展示，不能因为旧客户端传入异常条目而污染持久化状态。
+ */
+function normalizeSessionEntries(entries) {
+    if (!Array.isArray(entries)) return [];
+
+    const normalized = [];
+    const seenIds = new Set();
+    for (const entry of entries) {
+        const id = String(entry?.id || '').trim();
+        if (!id || seenIds.has(id)) continue;
+        seenIds.add(id);
+        normalized.push({ ...entry, id });
+    }
+    return normalized;
+}
+
+/**
+ * 合并客户端快照与服务端会话列表。
+ * 客户端可能在异步加载完成前保存，此时 incoming 可能只有 default，不能删除已有会话。
+ */
+function mergeSessionEntries(existing = [], incoming = []) {
+    const merged = new Map();
+    for (const entry of normalizeSessionEntries(existing)) {
+        merged.set(entry.id, entry);
+    }
+    for (const entry of normalizeSessionEntries(incoming)) {
+        merged.set(entry.id, { ...merged.get(entry.id), ...entry });
+    }
+    return [...merged.values()];
+}
+
+/**
+ * 从私聊历史补回丢失的会话元数据。
+ * 历史消息没有保存会话名称时只能使用 sessionId 作为临时显示名称，但聊天内容不会丢失。
+ */
+function recoverSessionsFromHistory(target, sessions = [], historyItems = Object.values(chatHistories).flat()) {
+    const recovered = mergeSessionEntries(sessions, []);
+    const knownIds = new Set(recovered.map(session => session.id));
+    const targetMessages = (Array.isArray(historyItems) ? historyItems : [])
+        .filter(message => (
+            message?.mode === 'private'
+            && message.target === target
+            && String(message.sessionId || 'default').trim()
+        ))
+        .sort((left, right) => (left.timestamp || 0) - (right.timestamp || 0));
+
+    for (const message of targetMessages) {
+        const sessionId = String(message.sessionId || 'default').trim();
+        if (knownIds.has(sessionId)) continue;
+        recovered.push({
+            id: sessionId,
+            name: sessionId === 'default' ? '默认会话' : sessionId,
+            createdAt: message.timestamp || Date.now()
+        });
+        knownIds.add(sessionId);
+    }
+
+    if (!knownIds.has('default')) {
+        recovered.unshift({ id: 'default', name: '默认会话', createdAt: Date.now() });
+    }
+    return recovered;
+}
+
 function loadCommands() {
     try {
         if (fs.existsSync(COMMANDS_FILE)) {
@@ -558,7 +623,16 @@ function setSession(session) {
     if (session.privateSessionId !== undefined) chatSession.privateSessionId = session.privateSessionId;
     if (session.playOnControl !== undefined) chatSession.playOnControl = session.playOnControl;
     if (session.commandMode !== undefined) chatSession.commandMode = session.commandMode;
-    if (session.sessions !== undefined) chatSession.sessions = session.sessions;
+    if (session.sessions !== undefined) {
+        const incomingSessions = session.sessions && typeof session.sessions === 'object'
+            ? session.sessions
+            : {};
+        const mergedSessions = { ...chatSession.sessions };
+        for (const [target, entries] of Object.entries(incomingSessions)) {
+            mergedSessions[target] = mergeSessionEntries(mergedSessions[target], entries);
+        }
+        chatSession.sessions = mergedSessions;
+    }
     if (!chatSession.sessions) chatSession.sessions = {};
     saveSession();
     return getSession();
@@ -1143,13 +1217,14 @@ function makeStreamRequest(url, options, onLine) {
 
 function listSessions(target) {
     if (!chatSession.sessions) chatSession.sessions = {};
-    if (!chatSession.sessions[target]) {
-        chatSession.sessions[target] = [
-            { id: 'default', name: '默认会话', createdAt: Date.now() }
-        ];
+    const existing = chatSession.sessions[target] || [];
+    const recovered = recoverSessionsFromHistory(target, existing);
+    const changed = JSON.stringify(existing) !== JSON.stringify(recovered);
+    chatSession.sessions[target] = recovered;
+    if (changed) {
         saveSession();
     }
-    return chatSession.sessions[target];
+    return recovered;
 }
 
 function createSession(target, name) {
@@ -1250,6 +1325,8 @@ module.exports = {
     getImportantRecords,
     addImportantRecord,
     addMessage,
+    mergeSessionEntries,
+    recoverSessionsFromHistory,
     listSessions,
     createSession,
     deleteSession,

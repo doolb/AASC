@@ -591,6 +591,71 @@ body {
     font-size: 24px;
     color: var(--text-primary, #fff);
     line-height: 1.5;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.voice-response-content h1,
+.voice-response-content h2,
+.voice-response-content h3,
+.voice-response-content h4,
+.voice-response-content h5,
+.voice-response-content h6 {
+    margin: 0.35em 0 0.5em;
+    line-height: 1.25;
+}
+
+.voice-response-content p {
+    margin: 0.45em 0;
+}
+
+.voice-response-content ul,
+.voice-response-content ol {
+    margin: 0.5em 0;
+    padding-left: 1.4em;
+}
+
+.voice-response-content blockquote {
+    margin: 0.6em 0;
+    padding-left: 0.8em;
+    border-left: 4px solid var(--accent-color, #2196F3);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.8));
+}
+
+.voice-response-content table {
+    width: 100%;
+    margin: 0.7em 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+.voice-response-content th,
+.voice-response-content td {
+    padding: 0.3em 0.5em;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.25));
+    text-align: left;
+}
+
+.voice-response-content th {
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.1));
+}
+
+.voice-response-content pre {
+    margin: 0.7em 0;
+    padding: 0.7em;
+    overflow-x: auto;
+    text-align: left;
+    white-space: pre-wrap;
+    background: var(--bg-primary, rgba(0, 0, 0, 0.35));
+    border-radius: 8px;
+    font-size: 0.75em;
+}
+
+.voice-response-content code {
+    padding: 0.08em 0.25em;
+    background: var(--bg-primary, rgba(0, 0, 0, 0.25));
+    border-radius: 4px;
+    font-size: 0.85em;
 }
 
 .search-result-popup {

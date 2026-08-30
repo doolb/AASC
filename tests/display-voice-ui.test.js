@@ -10,6 +10,16 @@ const displayCss = fs.readFileSync(
     'utf8'
 );
 
+assert.match(displayHtml, /<script src="js\/chat-markdown\.js"><\/script>/u, '显示端应加载安全 Markdown 渲染器');
+const voiceResponseStart = displayHtml.indexOf('function showVoiceResponsePopup');
+const voiceResponseEnd = displayHtml.indexOf('function showSearchResultPopup', voiceResponseStart);
+const voiceResponseBody = displayHtml.slice(voiceResponseStart, voiceResponseEnd);
+assert.match(voiceResponseBody, /ChatMarkdown\.render\(text\)/u, '语音详情弹窗应使用 Markdown 渲染器');
+assert.doesNotMatch(voiceResponseBody, /voice-response-content">\$\{text\}/u, '语音详情弹窗不得直接插入原始文本');
+assert.match(displayCss, /\.voice-response-content h[1-6]/u, '弹窗应提供 Markdown 标题样式');
+assert.match(displayCss, /\.voice-response-content table/u, '弹窗应提供 Markdown 表格样式');
+assert.match(displayCss, /\.voice-response-content pre/u, '弹窗应提供 Markdown 代码块样式');
+
 const statusStart = displayHtml.indexOf('function updateVoiceStatusDisplay()');
 const statusEnd = displayHtml.indexOf('function updateVoiceTextDisplay', statusStart);
 const statusBody = displayHtml.slice(statusStart, statusEnd);

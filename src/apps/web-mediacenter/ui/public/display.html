@@ -2061,7 +2061,8 @@
             
             const popup = document.createElement('div');
             popup.className = 'voice-response-popup';
-            popup.innerHTML = `<div class="voice-response-content">${text}</div>`;
+            // 详情文本可能来自 LLM，必须复用安全 Markdown 渲染器，禁止把原始 HTML 直接插入页面。
+            popup.innerHTML = `<div class="voice-response-content">${ChatMarkdown.render(text)}</div>`;
             appendRotationPopup(popup);
             
             setTimeout(() => {

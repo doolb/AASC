@@ -16,6 +16,12 @@
 
 ### 已完成
 
+- ✅ [2026-08-30] 天气和语音详情弹窗支持 Markdown
+  - 显示端天气/普通语音详情弹窗复用安全 `ChatMarkdown` 渲染器，支持结构化 Markdown 展示并转义原始 HTML、过滤危险链接。
+  - TTS 仍使用纯文本，弹窗显示时长、滚动和四向旋转布局保持不变。
+  - 验证：Markdown、显示端 UI、语音会话和普通聊天回归 7/7 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_天气弹窗支持Markdown.md`。
+
 - ✅ [2026-08-30] 修复唤醒后群聊不入聊天与 Chat2API 查找工具失败
   - 显示端唤醒进入群聊或私聊后，普通语音恢复正常聊天路径；内置命令仍优先，顶部状态显示当前会话范围和私聊目标。
   - Chat2API `find` 转换为项目内置 `aasc_find`，使用 Node 文件系统只读遍历，兼容命名参数 CDATA 格式，不再依赖 Pi 原生 `fd` 下载。

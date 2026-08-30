@@ -94,7 +94,17 @@ getSessionHistory(target, sessionId):
 
 listSessions(target):
     从 chatSession.sessions 返回指定助手的所有会话列表
+    如果历史中存在不在元数据列表的 sessionId:
+        自动补充该会话条目
+        名称优先使用已有元数据，否则暂用 sessionId
     不存在则创建默认会话
+    将恢复后的列表持久化
+
+setSession(session):
+    合并 incoming sessions 与服务端已有 sessions
+    以 target + session.id 去重
+    不允许控制端的空/不完整快照删除服务端已有会话
+    保存合并后的 chatSession
 
 createSession(target, name):
     生成 sessionId = Date.now().toString(36) + random(4)
@@ -248,6 +258,7 @@ privateSessionSwitched:
 1. 旧消息无 `sessionId` 字段 → 加载时默认视为 `'default'` 会话
 2. 旧版本 `chat-session.json` 无 `sessions` 字段 → 初始化时自动创建默认会话
 3. `setMode('private', target)` 时自动设置 `privateSessionId = 'default'`
+4. 会话元数据丢失但历史仍在时，按历史中的 `target/sessionId` 自动恢复条目；原会话名称不可从消息记录推断时使用 sessionId
 
 ## 文件列表
 

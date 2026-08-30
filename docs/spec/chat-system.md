@@ -196,6 +196,19 @@ saveSession():
     序列化 chatSession
     写入 SESSION_FILE
 
+mergeSessionEntries(existing, incoming):
+    按 id 合并两个会话列表
+    incoming 只有已有 id 的字段更新，不删除 existing 中未出现的条目
+    返回去重后的会话列表
+
+recoverSessionsFromHistory(target, sessions):
+    保留 sessions 中已有条目
+    扫描 chatHistories 中 mode='private' 且 target 匹配的消息
+    对历史出现但元数据缺失的 sessionId 添加恢复条目
+    恢复条目名称优先使用已知名称，否则使用 sessionId
+    确保 default 会话存在
+    返回恢复后的列表
+
 loadCommands():
     读取 COMMANDS_FILE
     返回默认值如果文件不存在
@@ -252,6 +265,13 @@ setMode(mode, target):
         设置 chatSession.privateTarget = target
     否则:
         清空 chatSession.privateTarget
+    调用 saveSession()
+
+setSession(session):
+    更新模式、目标、当前会话和播放设置
+    如果 session.sessions 存在:
+        按 target 调用 mergeSessionEntries()
+        不用不完整客户端快照删除服务端已有会话
     调用 saveSession()
 
 getMode():
@@ -779,7 +799,8 @@ const Chat = {
     
     saveSession():
         请求 POST /api/chat/session
-        发送 this.session
+        只发送模式、目标、当前会话和播放设置
+        不发送 sessions 元数据，避免尚未加载完成的空快照覆盖服务端列表
     
     loadCommands():
         请求 GET /api/chat/commands

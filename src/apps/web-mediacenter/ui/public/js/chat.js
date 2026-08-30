@@ -459,9 +459,12 @@ const Chat = {
     saveSession() {
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            // 会话元数据由服务端的创建/删除接口维护，避免页面尚未加载完成时提交空快照覆盖服务端列表。
+            const session = { ...this.session };
+            delete session.sessions;
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'setChatSession',
-                session: this.session
+                session: session
             }));
         }
     },

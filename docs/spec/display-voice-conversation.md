@@ -541,6 +541,26 @@ applyRotation:
     旋转文本包围盒校正遇到语音 UI 的百分比定位时不按百分比数值执行像素偏移
 ```
 
+## 语音详情弹窗 Markdown
+
+```text
+页面加载 ChatMarkdown 渲染器
+
+收到 voiceCommand.response 或 voiceCommand.weatherResult:
+    detailText = data.detailText 或 data.text
+    如果存在 audioUrl:
+        TTS 队列仍使用 data.text，保持纯文本播报
+    创建天气/语音通用弹窗
+    将 detailText 交给 ChatMarkdown.render
+    只把安全渲染结果插入弹窗内容
+    弹窗显示时长继续按原始文本可见字符计算，最短 5 秒，最长 90 秒
+
+Markdown 渲染器:
+    支持标题、强调、删除线、列表、表格、引用、代码块和安全链接
+    转义原始 HTML、代码文本和属性
+    拒绝 javascript、vbscript、data 等危险链接协议
+```
+
 ## 显示端普通语音聊天
 
 ```text
