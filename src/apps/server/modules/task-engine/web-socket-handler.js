@@ -299,7 +299,9 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
       }
 
       case 'task:widget_action': {
-        console.log('[WS] >> task:widget_action:', payload.instanceId, payload.action);
+        if (payload.action !== 'widgetRefresh') {
+          console.log('[WS] >> task:widget_action:', payload.instanceId, payload.action);
+        }
         const wResult = await taskManager.handleWidgetAction(payload.instanceId, payload.action, payload.params);
         ctx.ws.send(JSON.stringify({
           type: 'task:widget_action_result',

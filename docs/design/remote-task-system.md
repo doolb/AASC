@@ -72,6 +72,10 @@ res/tasks/
 - `task:heartbeat` — 常驻任务定期汇报存活
 - `task:partial_result` — 中间结果持续返回
 
+### Widget 刷新日志
+
+运行中服务任务的 `widgetRefresh` 用于周期性同步状态。刷新动作和 `task:widget_update` 仍正常传输，但不写普通 WebSocket 操作日志；人工操作、任务错误和其他状态日志继续保留。
+
 ## 内置任务
 
 内置任务代码预装在服务端，运行于 Node.js 环境，可访问：

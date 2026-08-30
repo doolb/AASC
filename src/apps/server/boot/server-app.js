@@ -3545,7 +3545,7 @@ function prepareVoiceTtsPlayback(displayId, data) {
 
 let displayListDebounceTimer = null;
 
-const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'htmlProgress']);
+const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'task:widget_update', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'htmlProgress']);
 function broadcastToControls(data) {
     const message = JSON.stringify(data);
     if (!SILENT_BROADCAST_TYPES.has(data.type)) {
@@ -4374,7 +4374,9 @@ wss.on('connection', (ws, req) => {
                     const extra = { source: 'control', scope: 'single', targetId: data.displayId || null };
                     if (data.correlationId) extra.correlationId = data.correlationId;
                     const shouldLogCrop = data.type !== 'control' || (data.action !== 'crop' && data.action !== 'controlInput') || _cropDebugLog;
-                    if (shouldLogCrop) {
+                    const isWidgetRefreshAction = data.type === 'task:widget_action'
+                        && data.payload?.action === 'widgetRefresh';
+                    if (shouldLogCrop && !isWidgetRefreshAction) {
                         const inputText = typeof data.text === 'string' ? data.text : data.content;
                         const textSummary = typeof inputText === 'string'
                             ? ` "${inputText.length > 500 ? `${inputText.slice(0, 500)}…` : inputText}"`

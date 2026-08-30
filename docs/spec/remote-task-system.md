@@ -187,6 +187,14 @@ widgetUpdate -> task:widget_update  { instanceId, data, displayId }
 
 桥接时统一从实例补 `displayId`（`inst.displayId || inst.targetInfo.displayId`），标识回传来源显示端；控制端仅作来源标记，任务更新按 instanceId 全局处理，与选中显示端无感。
 
+日志规则：
+
+```text
+task:widget_action(action='widgetRefresh') -> 执行刷新，不记录普通 WS 收发日志
+task:widget_update                    -> 正常广播，不记录普通 WS 广播日志
+其他 widget action                    -> 保留既有操作日志
+```
+
 ## Widget 系统
 
 内置服务任务可定义 widget，在控制端显示自定义 UI。
