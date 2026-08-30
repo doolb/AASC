@@ -125,6 +125,10 @@ listAccounts():
     只返回账号公开字段和 secretConfigured
     对可能存在的兼容字段统一脱敏
 
+getAccount(accountId):
+    仅供服务端 Provider adapter 读取指定账号的完整凭据
+    不直接作为控制端管理接口返回
+
 createApiKey(input):
     生成不可预测的完整 key
     只在创建结果中返回一次完整 key
@@ -182,6 +186,36 @@ markAccountFailed(accountId):
 
 clearAccountFailure(accountId):
     删除账号失败状态
+```
+
+## AASC 原生代理边界
+
+```text
+createChat2ApiCoreAdapter(options):
+    注入 dataStore、providerRegistry、modelMapper、loadBalancer 和 Provider adapters
+    不加载 Electron、Koa 或上游 Store
+
+forwardChatCompletion(request):
+    校验 model 和 messages
+    解析候选 Provider、actualModel 和账号
+    读取选中账号的完整凭据，仅在内存中传给对应 Provider adapter
+    adapter 返回非流式 JSON 或可读流
+    Provider 失败 -> 标记账号失败并返回不含凭据的错误
+
+listModels():
+    汇总启用 Provider 和可用账号的有效模型
+    转换为 OpenAI models 响应
+
+createChat2ApiProxyService(options):
+    使用 Node 原生 HTTP Server 监听 host/port
+    OPTIONS -> 返回 CORS 响应
+    /health -> 返回运行状态和请求统计
+    /stats -> 返回请求统计
+    /v1/models -> 返回模型列表
+    /v1/chat/completions -> 解析 JSON、鉴权并转发
+    /v1/completions -> 将 prompt 转成 chat messages 后转发
+    stream=true -> 设置 text/event-stream，逐块输出 data: JSON
+    stop() -> 结束活动连接并关闭 HTTP Server
 ```
 
 ## 上游同步
