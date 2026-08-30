@@ -147,6 +147,43 @@ mergeImport(data, confirmed):
     成功后返回新增/更新统计和脱敏摘要
 ```
 
+## Provider、模型映射和负载均衡
+
+```text
+createProviderRegistry(dataStore):
+    加载 Chat2API 内置 Provider 元数据
+    读取 providers.json 中的用户覆盖项
+    以 providerId 合并默认配置和用户配置
+    默认 Provider 缺失时补齐，不覆盖用户的 enabled、模型和描述修改
+    返回 Provider 列表、Provider 详情和可用模型列表
+
+saveProvider(provider):
+    校验 providerId、名称、认证类型和接口地址
+    只允许修改 AASC 允许的字段
+    原子保存 Provider 配置
+
+resolveModel(requestedModel, provider):
+    优先匹配指定 Provider 的精确模型映射
+    再匹配全局映射和通配符映射
+    未找到映射 -> 使用原始模型名
+    返回 requestedModel、actualModel 和 preferredProviderId
+
+selectAccount(model, strategy, preferredProviderId, preferredAccountId):
+    过滤 Provider enabled、模型支持和账号 enabled/status/dailyLimit
+    preferredAccountId 可用时优先使用
+    fill-first -> 选择当日使用量最低且最久未使用账号
+    failover -> 排除冷却中的账号，全部不可用时选择失败次数最少账号
+    round-robin -> 按 Provider/模型候选集合轮询
+    返回 provider、account、actualModel；无候选 -> 返回 null
+
+markAccountFailed(accountId):
+    累加失败次数并记录时间
+    达到阈值后进入冷却期
+
+clearAccountFailure(accountId):
+    删除账号失败状态
+```
+
 ## 上游同步
 
 ```text
