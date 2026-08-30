@@ -23,7 +23,7 @@ function readUpstreamManifest(projectRoot = DEFAULT_ROOT) {
         version: readField('version'),
         commit: readField('commit'),
         license: readField('license'),
-        includedPaths: section('计划纳入的核心路径'),
+        includedPaths: section('当前纳入的核心路径'),
         excludedPaths: section('明确排除的路径')
     };
 }

@@ -312,6 +312,31 @@ createApiKey(label):
     后续刷新只显示掩码
 ```
 
+## 管理操作补充
+
+```text
+updateAccount(accountId, patch):
+    读取完整账号
+    只更新 enabled、status、label、dailyLimit 等非凭据字段
+    原子保存并返回脱敏账号
+
+deleteAccount(accountId):
+    删除账号凭据和 Provider 会话缓存
+    返回删除结果，不返回凭据
+
+deleteProvider(providerId):
+    存在关联账号或模型映射 -> 拒绝删除并提示关联项
+    无关联项 -> 删除 Provider 用户覆盖
+
+saveModelMapping(mapping):
+    校验 model、actualModel、Provider/账号引用
+    原子保存并返回映射
+
+disableApiKey(keyId) / deleteApiKey(keyId):
+    更新启用状态或删除密钥哈希
+    列表永远只返回掩码
+```
+
 ## 上游同步
 
 ```text
@@ -319,7 +344,7 @@ syncUpstream(version):
     记录上游仓库地址、版本和许可证
     更新 3rd/chat2api-core 快照
     检查 AASC 排除清单仍未引入 Electron/Renderer 文件
-    运行核心协议、Provider、OAuth、鉴权和流式测试
+    运行 npm run check:chat2api，覆盖核心协议、Provider、OAuth、鉴权和流式测试
     运行 AASC 内置任务启动/停止/重启测试
     失败 -> 不更新当前可运行版本
     成功 -> 更新 UPSTREAM.md 和版本记录

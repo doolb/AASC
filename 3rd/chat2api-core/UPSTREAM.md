@@ -5,14 +5,14 @@
 - commit: `59f03ab2988867a4d7bacb97d98f3ee018b0e4d0`
 - license: `GPL-3.0`
 
-## 计划纳入的核心路径
+## 当前纳入的核心路径
 
-- `src/main/providers/`：Provider 定义、模型和账号字段。
-- `src/main/proxy/adapters/`：Provider 请求适配器和流式处理。
-- `src/main/proxy/forwarder.ts`、`loadbalancer.ts`、`modelMapper.ts`、`stream.ts`：代理转发、路由和响应处理。
-- `src/main/proxy/routes/`：OpenAI 兼容路由的协议参考。
-- `src/main/proxy/toolCalling/`、`utils/`：工具调用和协议转换。
-- `src/main/oauth/`：Provider OAuth 登录适配器和凭据转换。
+- `src/main/providers/builtin/`：九个 Provider 定义、模型和账号字段。
+- `src/main/proxy/adapters/providerModelOptions.ts`：Provider 模型请求选项参考。
+- `src/main/proxy/types.ts`、`loadbalancer.ts`、`modelMapper.ts`：代理协议、负载均衡和模型映射参考。
+- `src/main/proxy/toolCalling/`：工具调用 Provider profile 和运行计划参考。
+
+Provider 的 Electron 相关 OAuth 窗口、Store 和完整桌面适配器不直接纳入运行时；AASC 对应能力由 `src/apps/server/modules/chat2api/` 的 Node 适配层实现。
 
 ## 明确排除的路径
 
