@@ -103,6 +103,20 @@ function testSystemHelpBypassesWakeWithTrailingPunctuation() {
     assert.deepStrictEqual(result.event, { type: 'input', bypassWake: true });
 }
 
+function testConfirmationKeywordInsideOrdinarySentenceDoesNotBypassWake() {
+    const waiting = createConversationState(true);
+    const result = reduceConversationInput(
+        waiting,
+        '拒绝奖励出街注意。',
+        assistants,
+        1000,
+        { isBuiltin: voiceCommand.isBuiltinVoiceCommand }
+    );
+    assert.strictEqual(result.accepted, false);
+    assert.strictEqual(result.state.state, 'waitingWake');
+    assert.strictEqual(result.event, null);
+}
+
 function testAddressedGroupInputWakesWithoutRemovingOriginalText() {
     const waiting = createConversationState(true);
     const result = reduceConversationInput(
@@ -130,6 +144,7 @@ testStateTransitions();
 testDisabledAndExpiry();
 testBuiltinCommandBypassesWakeWithoutActivatingConversation();
 testSystemHelpBypassesWakeWithTrailingPunctuation();
+testConfirmationKeywordInsideOrdinarySentenceDoesNotBypassWake();
 testAddressedGroupInputWakesWithoutRemovingOriginalText();
 testPureAddressedWakeDoesNotBecomeChatInput();
 console.log('display-voice-conversation.test.js: 8/8 passed');

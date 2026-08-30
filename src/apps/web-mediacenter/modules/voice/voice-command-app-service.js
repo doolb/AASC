@@ -99,8 +99,8 @@ const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
         id: 'confirmation',
         examples: ['确认', '确认添加', '是', '好的', '拒绝', '取消'],
         description: '处理待确认或待选择操作',
-        matcher: text => text.includes('拒绝') || text.includes('取消')
-            || ['确认', '确认添加', '是', '好的'].includes(text)
+        // 确认词会在 waitingWake 状态下免唤醒放行，必须完整匹配，避免普通语音包含“拒绝/取消”时误进入命令链路。
+        matcher: text => ['确认', '确认添加', '是', '好的', '拒绝', '取消'].includes(text)
     }
 ];
 

@@ -15,6 +15,11 @@ assert.strictEqual(isBuiltinVoiceCommand('请告诉我今天天气怎么样'), t
 assert.strictEqual(isBuiltinVoiceCommand('你好，今天过得怎么样'), false);
 assert.strictEqual(isBuiltinVoiceCommand('你好小爱'), false);
 assert.strictEqual(isBuiltinVoiceCommand('退出私聊'), false);
+assert.strictEqual(isBuiltinVoiceCommand('拒绝'), true);
+assert.strictEqual(isBuiltinVoiceCommand('取消。'), true);
+assert.strictEqual(isBuiltinVoiceCommand('确认添加'), true);
+assert.strictEqual(isBuiltinVoiceCommand('拒绝奖励出街注意。'), false);
+assert.strictEqual(isBuiltinVoiceCommand('取消奖励出街注意'), false);
 
 const builtinCommands = getBuiltinVoiceCommands();
 assert.ok(builtinCommands.some(command => command.examples.includes('系统')));
@@ -45,4 +50,4 @@ assert.ok(responseIndex >= 0, '系统帮助应向目标显示端发送完整响�
 assert.ok(responseIndex < ttsWaitIndex, '显示端系统帮助弹窗应先于通用 TTS 生成下发');
 assert.ok(responseIndex < directedTtsWaitIndex, '控制端系统帮助弹窗应先于定向 TTS 生成下发');
 
-console.log('display-voice-builtins.test.js: 16/16 passed');
+console.log('display-voice-builtins.test.js: 21/21 passed');
