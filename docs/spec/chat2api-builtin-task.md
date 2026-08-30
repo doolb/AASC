@@ -94,6 +94,59 @@ importChat2ApiData(file):
     删除或隔离导入临时文件
 ```
 
+## 本地数据存储实现
+
+```text
+createChat2ApiDataStore(options):
+    rootDir = options.rootDir 或 ~/.config/aasc-user/chat2api
+    创建 rootDir，权限设为 0700
+    为 config/providers/accounts/api-keys 建立 JSON 文件入口
+    为 oauth-sessions 建立临时会话目录
+
+readCollection(name, fallback):
+    读取对应 JSON 文件
+    文件不存在 -> 返回 fallback 的深拷贝
+    JSON 格式错误 -> 抛出可定位错误，不覆盖原文件
+
+writeCollection(name, value):
+    序列化为 UTF-8 JSON
+    在同一目录创建私有临时文件，权限设为 0600
+    flush 临时文件后原子 rename 为正式文件
+    正式文件权限保持为 0600
+
+saveAccount(account):
+    校验 providerId、accountId 和账号结构
+    合并同 accountId 记录
+    保存完整凭据到 accounts.json
+    返回脱敏账号，不返回 token、cookie、refreshToken、accessToken 或 apiKey
+
+listAccounts():
+    读取 accounts.json
+    只返回账号公开字段和 secretConfigured
+    对可能存在的兼容字段统一脱敏
+
+createApiKey(input):
+    生成不可预测的完整 key
+    只在创建结果中返回一次完整 key
+    持久化 key 的哈希和脱敏预览
+
+validateApiKey(value):
+    读取启用的 key 哈希
+    使用恒定时间比较逐项校验
+    只返回匹配的 key 元数据或 null，不返回持久化密钥
+
+previewImport(data):
+    校验版本、集合类型和字段上限
+    统计待新增/合并的 Provider、账号和模型映射
+    返回脱敏预览，不写入正式文件
+
+mergeImport(data, confirmed):
+    confirmed 不是 true -> 拒绝写入
+    先在内存中合并并校验全部集合
+    依次原子写入，任一失败则保留原文件并返回错误
+    成功后返回新增/更新统计和脱敏摘要
+```
+
 ## 上游同步
 
 ```text

@@ -63,9 +63,10 @@ Chat2APIProxyService
 ```text
 ~/.config/aasc-user/chat2api/
     config.json       代理地址、端口、超时、负载均衡和 API Key 开关
-    providers.json    Provider 定义和模型映射
+    providers.json    Provider 定义和启用状态
     accounts.json     账号凭据、启用状态和健康状态
     api-keys.json     AASC 代理访问密钥
+    model-mappings.json 代理模型到 Provider/上游模型的映射
     oauth-sessions/   临时 OAuth 状态，完成或超时后删除
 ```
 
