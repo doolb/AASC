@@ -1,7 +1,11 @@
 const axios = require('axios');
+const fs = require('fs/promises');
+const path = require('path');
 const { Readable } = require('stream');
 const { createHash, createHmac, randomUUID } = require('crypto');
 const { createBrotliDecompress, createGunzip, createInflate } = require('zlib');
+
+let deepSeekWasmPromise;
 
 const PROVIDER_IDS = Object.freeze(['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'perplexity', 'qwen', 'qwen-ai', 'zai']);
 
@@ -314,11 +318,59 @@ const createMiniMaxRequest = (request, actualModel, provider, headers, account, 
   const dataJson = JSON.stringify(requestData);
   const yy = createHash('md5').update(`${encodeURIComponent(fullPath)}_${dataJson}${createHash('md5').update(unix).digest('hex')}ooui`).digest('hex');
   const signature = createHash('md5').update(`${timestamp}${token}${dataJson}`).digest('hex');
+  const minimaxHeaders = { ...headers, token, Origin: getProviderOrigin(provider, 'https://agent.minimaxi.com'), 'X-User-ID': realUserId, 'x-timestamp': String(timestamp), 'x-signature': signature, yy };
+  delete minimaxHeaders.Authorization;
+  delete minimaxHeaders.authorization;
   return {
     url: `${getProviderOrigin(provider, 'https://agent.minimaxi.com')}${fullPath}`,
     data: requestData,
-    headers: { ...headers, Authorization: undefined, token, Origin: getProviderOrigin(provider, 'https://agent.minimaxi.com'), 'X-User-ID': realUserId, 'x-timestamp': String(timestamp), 'x-signature': signature, yy },
+    headers: minimaxHeaders,
   };
+};
+
+const createMiniMaxDetailRequest = (provider, headers, account, chatId) => {
+  const token = getProviderToken(account);
+  const credentials = getCredentials(account);
+  const realUserId = credentials.realUserID || credentials.real_user_id || 'guest';
+  const unix = String(Date.now());
+  const timestamp = Math.floor(Date.now() / 1000);
+  const path = '/matrix/api/v1/chat/get_chat_detail';
+  const data = { chat_id: chatId };
+  const dataJson = JSON.stringify(data);
+  const query = new URLSearchParams({ device_platform: 'web', biz_id: '3', app_id: '3001', version_code: '22201', uuid: realUserId, device_id: credentials.deviceId || '', os_name: 'Mac', browser_name: 'chrome', browser_language: 'zh-CN', user_id: realUserId, unix, lang: 'zh', token, timezone_offset: '28800', sys_language: 'zh', client: 'web' });
+  const fullPath = `${path}?${query.toString()}`;
+  const yy = createHash('md5').update(`${encodeURIComponent(fullPath)}_${dataJson}${createHash('md5').update(unix).digest('hex')}ooui`).digest('hex');
+  const signature = createHash('md5').update(`${timestamp}${token}${dataJson}`).digest('hex');
+  const detailHeaders = { ...headers, token, 'x-timestamp': String(timestamp), 'x-signature': signature, yy };
+  delete detailHeaders.Authorization;
+  delete detailHeaders.authorization;
+  return { method: 'POST', url: `${getProviderOrigin(provider, 'https://agent.minimaxi.com')}${fullPath}`, data, headers: detailHeaders, responseType: 'json', timeout: 120_000, validateStatus: () => true };
+};
+
+const getMiniMaxAnswer = (data) => {
+  const messages = Array.isArray(data && data.messages) ? data.messages.filter((message) => message && message.msg_type === 2) : [];
+  const message = messages.at(-1);
+  return { chatId: data && data.chat_id, content: message && message.msg_content || '', thinking: message && message.extra_info && message.extra_info.thinking_content || '', done: Boolean(data && data.chat && data.chat.chat_status === 2), usage: data && data.usage };
+};
+
+const pollMiniMaxAnswer = async (httpClient, provider, headers, account, chatId, maxPolls = 120) => {
+  let latest = { chatId, content: '', thinking: '', done: false };
+  for (let poll = 0; poll < maxPolls; poll += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const response = await httpClient.request(createMiniMaxDetailRequest(provider, headers, account, chatId));
+    if (response.status < 200 || response.status >= 300) continue;
+    const current = getMiniMaxAnswer(response.data);
+    latest = { ...latest, ...current, chatId: current.chatId || chatId };
+    if (latest.done && latest.content) return latest;
+  }
+  return latest;
+};
+
+const createMiniMaxPollingStream = async function* (httpClient, provider, headers, account, chatId, model) {
+  const result = await pollMiniMaxAnswer(httpClient, provider, headers, account, chatId);
+  if (result.thinking) yield { id: chatId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta: { reasoning_content: result.thinking }, finish_reason: null }] };
+  if (result.content) yield { id: chatId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta: { content: result.content }, finish_reason: null }] };
+  yield { id: chatId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
 };
 
 const createDeepSeekRequest = (request, actualModel, provider, headers, account, sessionId, powResponse) => {
@@ -612,9 +664,110 @@ const saveMimoConversation = async (httpClient, provider, headers, account, conv
   if (response.status < 200 || response.status >= 300 || (response.data && response.data.code !== undefined && response.data.code !== 0)) throw new Error(`MiMo 保存会话失败: HTTP ${response.status}`);
 };
 
+const registerMiniMaxDevice = async (httpClient, provider, headers, account) => {
+  const credentials = getCredentials(account);
+  const token = getProviderToken(account);
+  const realUserId = credentials.realUserID || credentials.real_user_id || (() => {
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      return payload.user && payload.user.id || payload.user_id || payload.sub || 'guest';
+    } catch {
+      return 'guest';
+    }
+  })();
+  const deviceUuid = randomUUID();
+  const unix = String(Date.now());
+  const timestamp = Math.floor(Date.now() / 1000);
+  const query = new URLSearchParams({ device_platform: 'web', biz_id: '3', app_id: '3001', version_code: '22201', uuid: deviceUuid, user_id: realUserId, unix, lang: 'zh', token, client: 'web' });
+  const path = `/v1/api/user/device/register?${query.toString()}`;
+  const data = { uuid: deviceUuid };
+  const dataJson = JSON.stringify(data);
+  const yy = createHash('md5').update(`${encodeURIComponent(path)}_${dataJson}${createHash('md5').update(unix).digest('hex')}ooui`).digest('hex');
+  const signature = createHash('md5').update(`${timestamp}${token}${dataJson}`).digest('hex');
+  const response = await httpClient.request({
+    method: 'POST',
+    url: `${getProviderOrigin(provider, 'https://agent.minimaxi.com')}${path}`,
+    data,
+    headers: { ...headers, token, 'x-timestamp': String(timestamp), 'x-signature': signature, yy },
+    responseType: 'json',
+    timeout: 15_000,
+    validateStatus: () => true,
+  });
+  const deviceId = response.data && response.data.data && response.data.data.deviceIDStr;
+  if (response.status < 200 || response.status >= 300 || (response.data && response.data.statusInfo && response.data.statusInfo.code !== 0) || !deviceId) throw new Error(`MiniMax 设备注册失败: HTTP ${response.status}`);
+  return { ...account, credentials: { ...credentials, realUserID: response.data.data.realUserID || realUserId, deviceId } };
+};
+
+const createDeepSeekSession = async (httpClient, provider, headers, account) => {
+  const token = getProviderToken(account);
+  const response = await httpClient.request({
+    method: 'POST',
+    url: `${getProviderOrigin(provider, 'https://chat.deepseek.com')}/api/v0/chat_session/create`,
+    data: {},
+    headers: { ...headers, Authorization: `Bearer ${token}` },
+    responseType: 'json',
+    timeout: 15_000,
+    validateStatus: () => true,
+  });
+  const data = response.data && (response.data.data && response.data.data.biz_data || response.data.biz_data);
+  const sessionId = data && data.chat_session && data.chat_session.id || data && data.id;
+  if (response.status < 200 || response.status >= 300 || !sessionId) throw new Error(`DeepSeek 创建会话失败: HTTP ${response.status}`);
+  return sessionId;
+};
+
+const solveDeepSeekChallenge = async (challenge) => {
+  if (!challenge || challenge.algorithm !== 'DeepSeekHashV1') throw new Error('DeepSeek 返回了不支持的 PoW 算法');
+  if (!deepSeekWasmPromise) {
+    deepSeekWasmPromise = fs.readFile(path.join(__dirname, 'assets', 'sha3_wasm_bg.7b9ca65ddd.wasm'))
+      .then((buffer) => WebAssembly.instantiate(buffer, { wbg: {} }))
+      .then(({ instance }) => instance.exports);
+  }
+  const wasm = await deepSeekWasmPromise;
+  const encode = (value) => {
+    const bytes = Buffer.from(value, 'utf8');
+    const pointer = wasm.__wbindgen_export_0(bytes.length, 1) >>> 0;
+    new Uint8Array(wasm.memory.buffer).subarray(pointer, pointer + bytes.length).set(bytes);
+    return { pointer, length: bytes.length };
+  };
+  const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+  try {
+    const challengeText = encode(challenge.challenge);
+    const prefix = encode(`${challenge.salt}_${challenge.expire_at}_`);
+    wasm.wasm_solve(retptr, challengeText.pointer, challengeText.length, prefix.pointer, prefix.length, challenge.difficulty);
+    const view = new DataView(wasm.memory.buffer);
+    if (view.getInt32(retptr, true) === 0) throw new Error('DeepSeek PoW 计算失败');
+    return view.getFloat64(retptr + 8, true);
+  } finally {
+    wasm.__wbindgen_add_to_stack_pointer(16);
+  }
+};
+
+const createDeepSeekPowResponse = async (httpClient, provider, headers, account) => {
+  const token = getProviderToken(account);
+  const response = await httpClient.request({
+    method: 'POST',
+    url: `${getProviderOrigin(provider, 'https://chat.deepseek.com')}/api/v0/chat/create_pow_challenge`,
+    data: { target_path: '/api/v0/chat/completion' },
+    headers: { ...headers, Authorization: `Bearer ${token}` },
+    responseType: 'json',
+    timeout: 15_000,
+    validateStatus: () => true,
+  });
+  const challenge = response.data && (response.data.data && response.data.data.biz_data && response.data.data.biz_data.challenge || response.data.biz_data && response.data.biz_data.challenge);
+  if (response.status < 200 || response.status >= 300 || !challenge) throw new Error(`DeepSeek 获取 PoW 挑战失败: HTTP ${response.status}`);
+  const answer = await solveDeepSeekChallenge(challenge);
+  return Buffer.from(JSON.stringify({ ...challenge, answer, target_path: '/api/v0/chat/completion' })).toString('base64');
+};
+
 const prepareNativeRequest = async ({ httpClient, providerId, provider, account, request, actualModel, headers }) => {
   let preparedAccount = account;
   if (providerId === 'glm') preparedAccount = await refreshGlmToken(httpClient, provider, headers, account);
+  if (providerId === 'minimax') preparedAccount = await registerMiniMaxDevice(httpClient, provider, headers, account);
+  if (providerId === 'deepseek') {
+    const sessionId = await createDeepSeekSession(httpClient, provider, headers, account);
+    const powResponse = getCredentials(account).powResponse || await createDeepSeekPowResponse(httpClient, provider, headers, account);
+    return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, account, sessionId, powResponse);
+  }
   if (providerId === 'mimo') {
     const conversationId = randomUUID().replaceAll('-', '');
     await saveMimoConversation(httpClient, provider, headers, account, conversationId);
@@ -631,19 +784,37 @@ const prepareNativeRequest = async ({ httpClient, providerId, provider, account,
   return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount);
 };
 
-const createProviderAdapter = ({ httpClient, providerId }) => async ({ request, account, provider, actualModel }) => {
+const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig }) => async ({ request, account, provider, actualModel, context = {} }) => {
+  let currentConfig = {};
+  if (rawTrafficLogger && typeof getConfig === 'function') {
+    try {
+      currentConfig = await getConfig();
+    } catch {
+      // 调试配置读取失败时按关闭处理，不能让日志功能阻断正常 Provider 请求。
+      currentConfig = {};
+    }
+  }
+  const tracedHttpClient = rawTrafficLogger
+    ? rawTrafficLogger.createHttpClient({
+      httpClient,
+      providerId,
+      context,
+      enabled: currentConfig && currentConfig.debugRawTraffic === true,
+      maxBytes: currentConfig && currentConfig.rawTrafficMaxBytes,
+    })
+    : httpClient;
   const isQwen = providerId === 'qwen';
   const headers = buildProviderHeaders(provider, account, providerId);
   const qwenRequest = isQwen ? createQwenRequest(request, actualModel, provider, headers) : null;
   const nativeRequest = !isQwen && NATIVE_REQUEST_BUILDERS[providerId]
-    ? await prepareNativeRequest({ httpClient, providerId, provider, account, request, actualModel, headers })
+    ? await prepareNativeRequest({ httpClient: tracedHttpClient, providerId, provider, account, request, actualModel, headers })
     : null;
-  const response = await httpClient.request({
+  const response = await tracedHttpClient.request({
     method: 'POST',
     url: qwenRequest ? qwenRequest.url : nativeRequest ? nativeRequest.url : `${String(provider.apiEndpoint).replace(/\/$/, '')}${provider.chatPath || '/v1/chat/completions'}`,
     data: qwenRequest ? qwenRequest.data : nativeRequest ? nativeRequest.data : buildRequestBody(request, actualModel),
     headers: qwenRequest ? qwenRequest.headers : nativeRequest ? nativeRequest.headers : headers,
-    responseType: isQwen || nativeRequest || request.stream === true ? 'stream' : 'json',
+    responseType: providerId === 'minimax' ? 'json' : isQwen || nativeRequest || request.stream === true ? 'stream' : 'json',
     decompress: isQwen || nativeRequest ? false : undefined,
     timeout: 120_000,
     validateStatus: () => true,
@@ -653,6 +824,14 @@ const createProviderAdapter = ({ httpClient, providerId }) => async ({ request, 
     error.statusCode = response.status;
     throw error;
   }
+  if (providerId === 'minimax' && response.data && typeof response.data[Symbol.asyncIterator] !== 'function') {
+    const initial = getMiniMaxAnswer(response.data);
+    if (initial.chatId) {
+      if (request.stream === true) return { stream: createMiniMaxPollingStream(tracedHttpClient, provider, nativeRequest.headers, account, initial.chatId, request.model) };
+      const answer = await pollMiniMaxAnswer(tracedHttpClient, provider, nativeRequest.headers, account, initial.chatId);
+      return { body: createQwenBody(answer.content, request.model, initial.chatId) };
+    }
+  }
   if (request.stream === true) {
     const source = response.data && typeof response.data[Symbol.asyncIterator] === 'function' ? response.data : Readable.from([JSON.stringify(response.data)]);
     return { stream: parseSseStream(source, request.model, providerId, response.headers) };
@@ -661,6 +840,6 @@ const createProviderAdapter = ({ httpClient, providerId }) => async ({ request, 
   return { body: normalizeBody(response.data, request.model) };
 };
 
-const createChat2ApiProviderAdapters = ({ httpClient = axios } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId, createProviderAdapter({ httpClient, providerId })]));
+const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId, createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig })]));
 
 module.exports = { PROVIDER_IDS, createChat2ApiProviderAdapters, buildProviderHeaders, buildRequestBody, createQwenRequest, parseSseStream };

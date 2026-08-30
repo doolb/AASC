@@ -22,6 +22,7 @@
 - 不保留 Electron 主进程、窗口、托盘、IPC 和独立 React 应用。
 - 不依赖 `/mnt/Chat2API` 的源码路径、`node_modules` 或运行进程。
 - 不把 Chat2API 的日志文件、构建产物和桌面更新器带入 AASC。
+- 原始请求/响应调试日志默认关闭；开启后只写入 AASC 服务日志，并对凭据字段脱敏、按请求限长。
 - 不改变 AASC 现有 LLM profile、Pi Agent 和统一 TTS 的默认行为。
 
 ## 上游同步策略
@@ -72,7 +73,7 @@ Chat2API 代理 HTTP 127.0.0.1:{port}
 
 ```text
 ~/.config/aasc-user/chat2api/
-    config.json       代理地址、端口、超时、负载均衡和 API Key 开关
+    config.json       代理地址、端口、超时、负载均衡、API Key 开关和原始流量调试配置
     providers.json    Provider 定义和启用状态
     accounts.json     账号凭据、启用状态和健康状态
     api-keys.json     AASC 代理访问密钥
@@ -85,8 +86,16 @@ Chat2API 代理 HTTP 127.0.0.1:{port}
 - 支持从原 Chat2API Electron Store 的 `data.json` 自动读取并预览迁移；不迁移原 API Key、日志、会话和 Electron 状态。
 - 迁移 `userModelOverrides.*.addedModels` 中的用户模型别名，例如 `Qwen3.6-Flash → Qwen3.7`，并保留 Provider 归属。
 - 用户模型映射指定 Provider 后，路由按该 Provider 的活动账号选择，不要求别名出现在内置模型清单中。
-- Qwen Provider 使用专用请求/响应适配：按 `/api/v2/chat` 原生协议生成请求参数，解压 gzip/deflate/br 后兼容 `data.messages`、`multi_load/iframe`、SSE 累计内容和思考标记，避免通用 OpenAI 解析得到空回复。
+- 负载均衡候选生成时先复用统一模型映射器解析 `actualModel`，保持原版“Provider 内置映射 → 全局映射 → 原始模型”的优先级；候选选择和最终 Provider 请求使用同一个实际模型。
+- 所有内置 Provider 均按原版选择专用请求/响应适配；DeepSeek、GLM、Kimi、MiMo、MiniMax、Perplexity、Qwen AI 和 Z.ai 分别保留其会话、签名、Cookie、gRPC/HTTP2、SSE 或轮询协议边界，统一转换为 OpenAI 输出。
+- Qwen Provider 按 `/api/v2/chat` 原生协议生成请求参数，解压 gzip/deflate/br 后兼容 `data.messages`、`multi_load/iframe`、SSE 累计内容和思考标记，避免通用 OpenAI 解析得到空回复。
 - 旧 AASC LLM 配置继续有效；Chat2API 代理作为独立服务，不自动替换当前 profile。
+
+### 原始请求/响应调试日志
+
+控制端在 Chat2API 配置中提供“记录原始请求/响应”开关和单次请求最大日志字节数。开关默认关闭，关闭时不序列化请求体、不读取响应流内容，也不增加原始流量日志。开启后，统一 HTTP 追踪层记录每个 Provider 预处理请求和最终聊天请求的脱敏 URL、方法、请求头、请求体，以及响应状态、响应头和原始响应流块；每条记录带有 AASC `requestId`、Provider ID 和内部请求序号。
+
+日志只进入服务端普通日志，不返回给调用方。`Authorization`、`Cookie`、Token、Ticket、签名、API Key、密码等字段以及 URL 中同类查询参数统一替换为 `[REDACTED]`；单次请求的请求体和响应流共享最大字节预算，超过后停止记录并标记 `truncated`，避免聊天内容或二进制响应无限增长。日志追踪失败不得影响正常 Provider 请求。
 
 ## 控制端设计
 

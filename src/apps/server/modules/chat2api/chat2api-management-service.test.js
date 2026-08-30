@@ -36,7 +36,10 @@ test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接
     },
   };
   const management = createChat2ApiManagementService(runtime);
-  assert.equal((await management.getConfig()).port, 8080);
+  const defaultConfig = await management.getConfig();
+  assert.equal(defaultConfig.port, 8080);
+  assert.equal(defaultConfig.debugRawTraffic, false);
+  assert.equal(defaultConfig.rawTrafficMaxBytes, 262144);
   assert.deepEqual(await management.listProviders(), [{ id: 'deepseek', name: 'DeepSeek' }]);
   assert.equal((await management.listAccounts())[0].secretConfigured, true);
   assert.equal((await management.startLogin('deepseek')).state, 'state-1');
@@ -47,4 +50,6 @@ test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接
   assert.equal((await management.listModelMappings()).length, 0);
   await management.saveConfig({ port: 9090 });
   assert.equal(calls[0][0], 'config');
+  await assert.rejects(() => management.saveConfig({ debugRawTraffic: 'true' }), /debugRawTraffic/);
+  await assert.rejects(() => management.saveConfig({ rawTrafficMaxBytes: 512 }), /rawTrafficMaxBytes/);
 });

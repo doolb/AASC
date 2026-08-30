@@ -11,6 +11,7 @@
 - `src/main/proxy/adapters/providerModelOptions.ts`：Provider 模型请求选项参考。
 - `src/main/proxy/types.ts`、`loadbalancer.ts`、`modelMapper.ts`：代理协议、负载均衡和模型映射参考。
 - `src/main/proxy/toolCalling/`：工具调用 Provider profile 和运行计划参考。
+- `sha3_wasm_bg.7b9ca65ddd.wasm`：DeepSeek PoW 计算所需的上游 WASM 资源，复制到 AASC 运行时资源目录后独立加载。
 
 Provider 的 Electron 相关 OAuth 窗口、Store 和完整桌面适配器不直接纳入运行时；AASC 对应能力由 `src/apps/server/modules/chat2api/` 的 Node 适配层实现。
 

@@ -16,11 +16,32 @@
 
 ### Chat2API 内置任务实施中
 
+- ✅ [2026-08-30] 增加 Chat2API 原始请求/响应调试日志
+  - 控制端增加“记录发给 AI 的原始请求和返回结果”开关及单次日志字节上限，默认关闭，配置保存后下一次请求生效。
+  - 统一追踪所有 Provider 的会话创建、Token 刷新、设备注册、聊天请求和轮询请求，记录脱敏 URL、请求头、请求体、响应状态、响应头和原始流块。
+  - Authorization、Cookie、Token、Ticket、签名、API Key、密码及 URL 查询凭据统一脱敏；超出预算后停止原始内容记录并标记截断。
+  - 流式 SSE/gRPC 响应继续原样透传，日志 sink 或配置读取失败不影响 Provider 请求。
+  - 测试：Chat2API 全量回归通过。
+  - 详细任务：`docs/task/2026-08-30_Chat2API原始请求响应调试日志.md`。
+
+- ✅ [2026-08-31] 修复 Chat2API 模型映射未传递到 Provider
+  - 负载均衡器候选阶段复用统一模型映射器，保持原版“Provider 内置映射 → 全局映射 → 原始模型”的优先级。
+  - `Qwen3.6-Flash → Qwen3.7` 现在会正确进入 Provider 请求体的 `data.model`，原始流量日志可显示实际发送模型。
+  - 兼容没有 modelMapper 或简化数据存储的独立调用，保留原有 Provider 内置模型解析。
+  - 测试：Chat2API 全量回归通过。
+  - 详细任务：`docs/task/2026-08-31_Chat2API模型映射优先级对齐原版.md`。
+
 - ✅ [2026-08-30] 修复内置 Chat2API 的 Qwen 空回复
   - 按原版 Qwen adapter 生成 `/api/v2/chat` 的 `req_id`、`session_id`、`nonce`、`timestamp` 和专用消息体。
   - 使用 `tongyi_sso_ticket` Cookie 鉴权，移除会导致 `EX015 签名错误` 的 Bearer ticket。
   - 对 gzip、deflate、br SSE 响应先解压，再提取 `data.messages` 的累计答案内容。
   - 测试：适配器回归 6/6 通过，真实 `Qwen3.7` 请求返回“测试成功”。
+  - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+
+- ✅ [2026-08-30] 按原版协议接入其他 Chat2API Provider
+  - DeepSeek、GLM、Kimi、MiMo、MiniMax、Perplexity、Qwen AI、Z.ai 增加专用请求体、认证头、会话/设备预处理和响应解析。
+  - Kimi 使用 gRPC-Web 长度帧，MiniMax使用设备注册与聊天详情轮询，DeepSeek PoW WASM 随 AASC 内置，不依赖 `/mnt/Chat2API` 运行。
+  - 测试：Chat2API 全量回归 38/38 通过；真实 Qwen3.7 请求返回“测试成功”。
   - 详细任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
 
 ### 搜索频道与独立 Pi 进程

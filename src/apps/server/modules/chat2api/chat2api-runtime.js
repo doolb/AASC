@@ -7,18 +7,21 @@ const { createChat2ApiOAuthService } = require('./chat2api-oauth-service');
 const { createChat2ApiProxyService } = require('./chat2api-proxy-service');
 const { createChat2ApiManagementService } = require('./chat2api-management-service');
 const { createChat2ApiProviderAdapters } = require('./chat2api-provider-adapters');
+const { createRawTrafficLogger } = require('./chat2api-raw-traffic-logger');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
   const providerRegistry = options.providerRegistry || createChat2ApiProviderRegistry({ dataStore });
   const modelMapper = options.modelMapper || createChat2ApiModelMapper({ dataStore });
-  const loadBalancer = options.loadBalancer || createChat2ApiLoadBalancer({ providerRegistry, dataStore });
+  const loadBalancer = options.loadBalancer || createChat2ApiLoadBalancer({ providerRegistry, dataStore, modelMapper });
+  const rawTrafficLogger = options.rawTrafficLogger || createRawTrafficLogger();
+  const getConfig = options.getChat2ApiConfig || (() => dataStore.readCollection('config', {}));
   const coreAdapter = options.coreAdapter || createChat2ApiCoreAdapter({
     dataStore,
     providerRegistry,
     modelMapper,
     loadBalancer,
-    providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient }),
+    providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig }),
   });
   const oauth = options.oauth || createChat2ApiOAuthService({
     dataStore,
@@ -45,7 +48,7 @@ const createChat2ApiRuntime = (options = {}) => {
     address: proxy.address(),
   });
 
-  return { dataStore, providerRegistry, modelMapper, loadBalancer, coreAdapter, oauth, managementService, proxy, start, stop, getStatus };
+  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, oauth, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };

@@ -52,9 +52,16 @@ test('指定 Provider 的用户模型映射不要求别名存在于内置模型�
       getEffectiveModels: () => [{ displayName: 'Qwen3.6', actualModelId: 'Qwen' }],
     },
     dataStore: { listAccounts: async () => [account] },
+    modelMapper: {
+      resolveModel: async (requestedModel, selectedProvider) => ({
+        requestedModel,
+        actualModel: selectedProvider.id === 'qwen' && requestedModel === 'Qwen3.6-Flash' ? 'Qwen3.7' : requestedModel,
+      }),
+    },
   });
 
   const selection = await balancer.selectAccount('Qwen3.6-Flash', 'round-robin', 'qwen');
   assert.equal(selection.account.accountId, 'qwen-main');
   assert.equal(selection.provider.id, 'qwen');
+  assert.equal(selection.actualModel, 'Qwen3.7');
 });

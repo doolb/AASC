@@ -196,6 +196,9 @@ resolveModel(requestedModel, provider):
 
 selectAccount(model, strategy, preferredProviderId, preferredAccountId):
     有 preferredProviderId 时只筛选指定 Provider；用户明确配置的自定义模型不再要求出现在 Provider 内置模型列表
+    对每个候选 Provider 先调用 modelMapper.resolveModel(model, provider)
+    actualModel 优先使用 Provider 内置映射，其次使用全局精确/通配符映射，最后使用请求模型
+    Provider 支持性判断和候选返回的 actualModel 使用同一解析结果
     无 preferredProviderId 时继续过滤 Provider 内置模型支持和账号 enabled/status/dailyLimit
     preferredAccountId 可用时优先使用
     fill-first -> 选择当日使用量最低且最久未使用账号
@@ -220,7 +223,15 @@ createChat2ApiCoreAdapter(options):
 
 createProviderAdapters(httpClient):
     为每个 Provider 注册独立 adapter
-    组装 Provider endpoint、认证头和 Provider 请求体
+    根据 Provider ID 选择原版专用请求体、认证头和 endpoint
+    DeepSeek 使用会话/挑战协议和 prompt 转换
+    GLM 使用 token refresh、签名头和 assistant stream 请求体
+    Kimi 使用 5 字节长度前缀 gRPC-Web 帧和专用 payload
+    MiMo 使用保存会话、Cookie、查询参数和 bot/chat 请求体
+    MiniMax 使用设备/用户参数、签名请求体和 chat/send_msg 协议
+    Perplexity 使用 perplexity_ask 查询体和会话 Cookie
+    Qwen AI 使用 chats/new 会话及 chat/completions phase 请求体
+    Z.ai 使用 chats/new、请求签名、查询参数和 phase 请求体
     Qwen adapter 使用原生 /api/v2/chat 请求协议，生成 req_id、session_id、nonce、timestamp 和 Qwen 专用消息体
     Qwen adapter 按响应 content-encoding 解压 gzip、deflate、br 后再读取 SSE 事件
     Qwen adapter 统一按 SSE 事件读取 data.messages，并从 multi_load/iframe 或 text/plain 提取答案内容
@@ -228,7 +239,13 @@ createProviderAdapters(httpClient):
     Qwen 流式请求按累计内容长度只发送新增文本，过滤 deep_think 标记
     非流式响应转换为 OpenAI chat.completion
     流式响应解析为 OpenAI chat.completion.chunk SSE
-    不在日志记录完整凭据和请求内容
+    默认不记录原始请求和响应内容
+    配置 debugRawTraffic=true 后，统一 HTTP 追踪层记录每个 Provider 预处理请求和最终请求
+    记录项包含 requestId、providerId、序号、脱敏 URL、方法、请求头、请求体、响应状态和响应头
+    流式响应按原始块记录并继续透传给现有 SSE/gRPC 解析器，不消费或改变响应流
+    Authorization、Cookie、Token、Ticket、签名、API Key、密码及同类查询参数替换为 [REDACTED]
+    请求体和响应块共享 rawTrafficMaxBytes，超限停止记录并标记 truncated
+    调试日志写入服务日志，追踪器异常不得改变 Provider 请求结果
 
 forwardChatCompletion(request):
     校验 model 和 messages
@@ -251,6 +268,40 @@ createChat2ApiProxyService(options):
     /v1/completions -> 将 prompt 转成 chat messages 后转发
     stream=true -> 设置 text/event-stream，逐块输出 data: JSON
     stop() -> 结束活动连接并关闭 HTTP Server
+```
+
+## 原始请求/响应调试日志
+
+```text
+DEFAULT_CONFIG:
+    debugRawTraffic = false
+    rawTrafficMaxBytes = 262144
+
+saveConfig(input):
+    合并配置
+    校验 debugRawTraffic 为布尔值
+    校验 rawTrafficMaxBytes 为 1024 到 2097152 之间的整数
+    原子保存 config.json
+
+createRawTrafficLogger(sink):
+    sanitize(value):
+        递归复制对象和数组
+        敏感字段或 URL 敏感查询参数 -> [REDACTED]
+        Buffer/二进制 -> 截断后的可识别文本或 base64 摘要
+    traceRequest(meta, requestConfig):
+        调试关闭 -> 返回原始 HTTP 请求结果，不序列化原始数据
+        调试开启 -> 输出脱敏请求记录并创建单次字节预算
+        响应返回 -> 输出脱敏状态和响应头
+        响应为流 -> 记录每个原始响应块后原样透传
+        非流式响应 -> 记录脱敏响应体
+        超出预算 -> 停止记录并标记 truncated
+        日志 sink 失败 -> 忽略，不影响请求和响应
+
+createProviderAdapter(providerId):
+    读取当前 Chat2API config 的调试开关和字节预算
+    用 rawTrafficLogger 包装 httpClient
+    Provider 会话创建、Token 刷新、设备注册、聊天请求和详情轮询统一使用包装后的 client
+    使用同一个 AASC requestId 关联同一次 OpenAI 请求产生的内部 HTTP 请求
 ```
 
 ## 控制端登录与 OAuth 会话
@@ -339,6 +390,7 @@ Chat2APIControl.render():
     使用 chat2api-section、chat2api-field、chat2api-list-row 等 class
     主题切换只修改根元素 data-theme，弹窗通过 CSS 变量即时更新
     模型映射列表提供新增、编辑和删除操作
+    配置区显示 debugRawTraffic 开关和 rawTrafficMaxBytes 输入框
 
 Chat2APIControl.saveModelMapping():
     校验请求模型和实际模型不能为空

@@ -1,4 +1,4 @@
-const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, failureThreshold = 3, recoveryMs = 60_000 } = {}) => {
+const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, modelMapper, failureThreshold = 3, recoveryMs = 60_000 } = {}) => {
   if (!providerRegistry || typeof providerRegistry.listProviders !== 'function' || typeof providerRegistry.getEffectiveModels !== 'function') {
     throw new Error('Chat2API 负载均衡器需要 Provider 注册表');
   }
@@ -21,6 +21,27 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, failureThresh
     return failure.count >= failureThreshold;
   };
 
+  const matchesMapping = (model, pattern) => {
+    const normalizedModel = String(model || '').toLowerCase();
+    const normalizedPattern = String(pattern || '').toLowerCase();
+    if (!normalizedPattern.includes('*')) return normalizedModel === normalizedPattern;
+    const parts = normalizedPattern.split('*');
+    return parts.length === 2 && normalizedModel.startsWith(parts[0]) && normalizedModel.endsWith(parts[1]);
+  };
+
+  const resolveActualModel = async (model, provider) => {
+    if (modelMapper && typeof modelMapper.resolveModel === 'function') {
+      const mapping = await modelMapper.resolveModel(model, provider);
+      return mapping && mapping.actualModel || model;
+    }
+    const effective = providerRegistry.getEffectiveModels(provider).find((item) => matchesMapping(model, item.displayName));
+    if (effective) return effective.actualModelId;
+    if (typeof dataStore.readCollection !== 'function') return model;
+    const mappings = await dataStore.readCollection('modelMappings', []);
+    const mapping = Array.isArray(mappings) ? mappings.find((item) => matchesMapping(model, item.model)) : null;
+    return mapping && mapping.actualModel || model;
+  };
+
   const supportsModel = (provider, requestedModel) => providerRegistry
     .getEffectiveModels(provider)
     .some((model) => model.displayName.toLowerCase() === requestedModel.toLowerCase()
@@ -32,7 +53,8 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, failureThresh
     const candidates = [];
     for (const provider of providers) {
       const providerMatches = !preferredProviderId || provider.id === preferredProviderId;
-      const modelMatches = Boolean(preferredProviderId) || supportsModel(provider, model);
+      const actualModel = await resolveActualModel(model, provider);
+      const modelMatches = Boolean(preferredProviderId) || supportsModel(provider, model) || (actualModel !== model && supportsModel(provider, actualModel));
       if (provider.enabled === false || !providerMatches || !modelMatches) {
         continue;
       }
@@ -46,8 +68,7 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, failureThresh
         if (excludeFailed && isFailed(account.accountId)) {
           continue;
         }
-        const effective = providerRegistry.getEffectiveModels(provider).find((item) => item.displayName.toLowerCase() === model.toLowerCase());
-        candidates.push({ provider, account, actualModel: effective ? effective.actualModelId : model });
+        candidates.push({ provider, account, actualModel });
       }
     }
     return candidates;

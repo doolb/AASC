@@ -4,6 +4,8 @@ const DEFAULT_CONFIG = Object.freeze({
   timeout: 120_000,
   loadBalanceStrategy: 'round-robin',
   enableApiKey: true,
+  debugRawTraffic: false,
+  rawTrafficMaxBytes: 256 * 1024,
 });
 
 const createChat2ApiManagementService = (runtime) => {
@@ -26,7 +28,13 @@ const createChat2ApiManagementService = (runtime) => {
     if (!Number.isInteger(Number(next.port)) || Number(next.port) < 0 || Number(next.port) > 65535) {
       throw new Error('代理端口无效');
     }
-    await dataStore.writeCollection('config', { ...next, port: Number(next.port) });
+    if (typeof next.debugRawTraffic !== 'boolean') {
+      throw new Error('debugRawTraffic 必须是布尔值');
+    }
+    if (!Number.isInteger(Number(next.rawTrafficMaxBytes)) || Number(next.rawTrafficMaxBytes) < 1024 || Number(next.rawTrafficMaxBytes) > 2 * 1024 * 1024) {
+      throw new Error('rawTrafficMaxBytes 必须是 1024 到 2097152 之间的整数');
+    }
+    await dataStore.writeCollection('config', { ...next, port: Number(next.port), rawTrafficMaxBytes: Number(next.rawTrafficMaxBytes) });
     return getConfig();
   };
 

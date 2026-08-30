@@ -17,6 +17,10 @@ test('控制端 Chat2API 弹窗包含登录、账号和 API Key 管理流程', (
   assert.match(source, new RegExp('/api/chat2api/import/legacy/merge'));
   assert.match(source, new RegExp('api/chat2api-gateway'));
   assert.match(source, /instanceId/);
+  assert.match(source, /chat2apiConfigDebugRawTraffic/);
+  assert.match(source, /chat2apiConfigRawTrafficMaxBytes/);
+  assert.match(source, /debugRawTraffic/);
+  assert.match(source, /rawTrafficMaxBytes/);
 });
 
 test('控制端 Chat2API 账户管理使用主题语义样式', () => {
