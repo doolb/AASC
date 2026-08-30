@@ -12,6 +12,7 @@ const createChat2ApiProxyService = (options = {}) => {
   const dataStore = options.dataStore;
   const coreAdapter = options.coreAdapter;
   const managementService = options.managementService;
+  const responsesService = options.responsesService;
   let server = null;
   const sockets = new Set();
   const statistics = {
@@ -104,6 +105,18 @@ const createChat2ApiProxyService = (options = {}) => {
     }
   };
 
+  const writeResponsesStream = async (response, stream) => {
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    response.setHeader('Cache-Control', 'no-cache');
+    response.setHeader('Connection', 'keep-alive');
+    for await (const event of stream) {
+      if (response.writableEnded) break;
+      response.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+    if (!response.writableEnded) response.end('data: [DONE]\n\n');
+  };
+
   const handleRequest = async (request, response) => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -116,7 +129,7 @@ const createChat2ApiProxyService = (options = {}) => {
     const url = new URL(request.url || '/', `http://${config.host}`);
     await authorize(request, url.pathname);
     if (request.method === 'GET' && url.pathname === '/') {
-      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/completions', '/v1/models'] });
+      sendJson(response, 200, { name: 'AASC Chat2API Proxy', endpoints: ['/v1/chat/completions', '/v1/responses', '/v1/completions', '/v1/models'] });
       return;
     }
     if (request.method === 'GET' && url.pathname === '/health') {
@@ -178,6 +191,21 @@ const createChat2ApiProxyService = (options = {}) => {
       const result = await coreAdapter.forwardChatCompletion(chatRequest);
       if (result.stream) {
         await writeStream(response, result.stream);
+        return;
+      }
+      sendJson(response, 200, result.body);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/responses') {
+      if (!responsesService || typeof responsesService.createResponse !== 'function') {
+        const error = new Error('Responses 兼容服务不可用');
+        error.statusCode = 503;
+        error.code = 'responses_unavailable';
+        throw error;
+      }
+      const result = await responsesService.createResponse(await readJson(request));
+      if (result.stream) {
+        await writeResponsesStream(response, result.stream);
         return;
       }
       sendJson(response, 200, result.body);

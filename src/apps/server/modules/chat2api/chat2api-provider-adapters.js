@@ -58,9 +58,16 @@ const getMessageText = (content) => {
     .join('\n');
 };
 
-const createQwenRequest = (request, actualModel, provider, headers) => {
+const getNativeState = (responseSession) => responseSession && responseSession.nativeState && typeof responseSession.nativeState === 'object'
+  ? responseSession.nativeState
+  : {};
+
+const createQwenRequest = (request, actualModel, provider, headers, responseSession) => {
+  const nativeState = getNativeState(responseSession);
+  const hasSession = Boolean(nativeState.sessionId);
   const requestId = randomUUID().replaceAll('-', '');
-  const sessionId = randomUUID().replaceAll('-', '');
+  const sessionId = nativeState.sessionId || randomUUID().replaceAll('-', '');
+  if (responseSession && !nativeState.sessionId) nativeState.sessionId = sessionId;
   const timestamp = Date.now();
   const nonce = randomUUID().replaceAll('-', '').slice(0, 12);
   const messages = (request.messages || []).map((message) => {
@@ -106,10 +113,10 @@ const createQwenRequest = (request, actualModel, provider, headers) => {
       temporary: false,
       messages: [{ content, mime_type: 'text/plain', meta_data: { ori_query: content } }],
       from: 'default',
-      parent_req_id: '0',
+      parent_req_id: nativeState.parentReqId || '0',
       enable_search: false,
       biz_data: '{"entryPoint":"tongyigw"}',
-      scene_param: 'first_turn',
+      scene_param: hasSession ? 'continue' : 'first_turn',
       chat_client: 'h5',
       client_tm: String(timestamp),
       protocol_version: 'v2',
@@ -139,7 +146,8 @@ const getProviderOrigin = (provider, fallback) => {
 
 const createRequestId = () => randomUUID();
 
-const createGlmRequest = (request, actualModel, provider, headers, account) => {
+const createGlmRequest = (request, actualModel, provider, headers, account, responseSession) => {
+  const nativeState = getNativeState(responseSession);
   const timestamp = String(Date.now());
   const nonce = createRequestId();
   const sign = createHash('md5').update(`${timestamp}-${nonce}-8a1317a7468aa3ad86e997d08f3f31cb`).digest('hex');
@@ -149,7 +157,7 @@ const createGlmRequest = (request, actualModel, provider, headers, account) => {
     url: `${origin}/chatglm/backend-api/assistant/stream`,
     data: {
       assistant_id: /^[a-z0-9]{24,}$/.test(actualModel) ? actualModel : '65940acff94777010aa6b796',
-      conversation_id: '',
+      conversation_id: nativeState.conversationId || '',
       project_id: '',
       chat_type: 'user_chat',
       messages: prepared,
@@ -178,15 +186,16 @@ const createGlmRequest = (request, actualModel, provider, headers, account) => {
   };
 };
 
-const createKimiRequest = (request, actualModel, provider, headers, account) => {
+const createKimiRequest = (request, actualModel, provider, headers, account, responseSession) => {
+  const nativeState = getNativeState(responseSession);
   const model = actualModel || 'kimi-k2.6';
   const scenario = model.toLowerCase().includes('k2.6') ? 'SCENARIO_K2D6' : 'SCENARIO_K2D5';
   const payload = {
     scenario,
-    chat_id: '',
+    chat_id: nativeState.chatId || '',
     tools: request.web_search ? [{ type: 'TOOL_TYPE_SEARCH', search: {} }] : [],
     message: {
-      parent_id: '',
+      parent_id: nativeState.parentId || '',
       role: 'user',
       blocks: [{ message_id: '', text: { content: getMessagesText(request.messages) } }],
       scenario,
@@ -205,9 +214,10 @@ const createKimiRequest = (request, actualModel, provider, headers, account) => 
   };
 };
 
-const createMimoRequest = (request, actualModel, provider, headers, account) => {
+const createMimoRequest = (request, actualModel, provider, headers, account, responseSession) => {
   const credentials = getCredentials(account);
-  const conversationId = request.nativeConversationId || randomUUID().replaceAll('-', '');
+  const nativeState = getNativeState(responseSession);
+  const conversationId = nativeState.conversationId || request.nativeConversationId || randomUUID().replaceAll('-', '');
   const query = getMessagesText(request.messages);
   return {
     url: `${getProviderOrigin(provider, 'https://aistudio.xiaomimimo.com')}/open-apis/bot/chat?xiaomichatbot_ph=${encodeURIComponent(credentials.ph_token || credentials.phToken || '')}`,
@@ -260,7 +270,8 @@ const createPerplexityRequest = (request, actualModel, provider, headers, accoun
   };
 };
 
-const createQwenAiRequest = (request, actualModel, provider, headers, account, chatId) => {
+const createQwenAiRequest = (request, actualModel, provider, headers, account, chatId, responseSession) => {
+  const nativeState = getNativeState(responseSession);
   const credentials = getCredentials(account);
   const model = String(actualModel || 'qwen3.7-max').toLowerCase() === 'qwen' ? 'qwen3.7-max' : actualModel;
   const userContent = getMessagesText(request.messages).replace(/^User:\s*/, '');
@@ -271,7 +282,7 @@ const createQwenAiRequest = (request, actualModel, provider, headers, account, c
     url: `${getProviderOrigin(provider, 'https://chat.qwen.ai')}/api/v2/chat/completions?chat_id=${encodeURIComponent(chatId)}`,
     data: {
       stream: true, version: '2.1', incremental_output: true, chat_id: chatId, chat_mode: 'normal', model,
-      parent_id: null,
+      parent_id: nativeState.parentId || null,
       messages: [{ fid, parentId: null, childrenIds: [childId], role: 'user', content: userContent, user_action: 'chat', files: [], timestamp, models: [model], chat_type: 't2t', feature_config: { thinking_enabled: Boolean(request.enable_thinking || /think|r1/i.test(request.originalModel || request.model)), output_schema: 'phase', research_mode: 'normal', auto_thinking: false, thinking_format: 'summary', auto_search: false }, extra: { meta: { subChatType: 't2t' } }, sub_chat_type: 't2t' }],
       timestamp: timestamp + 1,
     },
@@ -279,7 +290,8 @@ const createQwenAiRequest = (request, actualModel, provider, headers, account, c
   };
 };
 
-const createZaiRequest = (request, actualModel, provider, headers, account, chatId, messageId) => {
+const createZaiRequest = (request, actualModel, provider, headers, account, chatId, messageId, responseSession) => {
+  const nativeState = getNativeState(responseSession);
   const token = getProviderToken(account);
   const requestId = createRequestId();
   const timestamp = Date.now();
@@ -291,12 +303,14 @@ const createZaiRequest = (request, actualModel, provider, headers, account, chat
   const signature = createHmac('sha256', derived).update(`requestId,${requestId},timestamp,${timestamp},user_id,${userId}|${Buffer.from(prompt).toString('base64')}|${timestamp}`).digest('hex');
   return {
     url: `${getProviderOrigin(provider, 'https://chat.z.ai')}/api/v2/chat/completions?${new URLSearchParams({ timestamp: String(timestamp), requestId, user_id: userId, version: '0.0.1', platform: 'web', token, language: 'zh-CN', timezone: 'Asia/Shanghai', signature_timestamp: String(timestamp) }).toString()}`,
-    data: { stream: true, model: actualModel, messages: request.messages, signature_prompt: prompt, params: {}, extra: {}, features: { image_generation: false, web_search: false, auto_web_search: Boolean(request.web_search), preview_mode: true, flags: [], vlm_tools_enable: false, vlm_web_search_enable: false, vlm_website_mode: false, enable_thinking: request.reasoning_effort !== false }, variables: {}, chat_id: chatId, id: requestId, current_user_message_id: messageId, current_user_message_parent_id: null, background_tasks: { title_generation: true, tags_generation: true } },
+    data: { stream: true, model: actualModel, messages: request.messages, signature_prompt: prompt, params: {}, extra: {}, features: { image_generation: false, web_search: false, auto_web_search: Boolean(request.web_search), preview_mode: true, flags: [], vlm_tools_enable: false, vlm_web_search_enable: false, vlm_website_mode: false, enable_thinking: request.reasoning_effort !== false }, variables: {}, chat_id: chatId, id: requestId, current_user_message_id: messageId, current_user_message_parent_id: nativeState.parentMessageId || null, background_tasks: { title_generation: true, tags_generation: true } },
     headers: { ...headers, Authorization: `Bearer ${token}`, Cookie: `token=${token}`, 'X-Signature': signature, Referer: `${getProviderOrigin(provider, 'https://chat.z.ai')}/c/${chatId}` },
   };
 };
 
-const createMiniMaxRequest = (request, actualModel, provider, headers, account, chatId) => {
+const createMiniMaxRequest = (request, actualModel, provider, headers, account, chatId, responseSession) => {
+  const nativeState = getNativeState(responseSession);
+  chatId = chatId || nativeState.chatId;
   const token = getProviderToken(account);
   const credentials = getCredentials(account);
   const realUserId = credentials.realUserID || credentials.real_user_id || 'guest';
@@ -373,12 +387,13 @@ const createMiniMaxPollingStream = async function* (httpClient, provider, header
   yield { id: chatId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
 };
 
-const createDeepSeekRequest = (request, actualModel, provider, headers, account, sessionId, powResponse) => {
+const createDeepSeekRequest = (request, actualModel, provider, headers, account, sessionId, powResponse, responseSession) => {
+  const nativeState = getNativeState(responseSession);
   const token = getProviderToken(account);
   const modelLower = String(request.originalModel || request.model).toLowerCase();
   return {
     url: `${getProviderOrigin(provider, 'https://chat.deepseek.com')}/api/v0/chat/completion`,
-    data: { chat_session_id: sessionId || '', parent_message_id: null, prompt: getMessagesText(request.messages), model_type: modelLower.includes('pro') ? 'expert' : 'default', ref_file_ids: [], search_enabled: Boolean(request.web_search || modelLower.includes('search')), thinking_enabled: Boolean(request.reasoning_effort || modelLower.includes('think') || modelLower.includes('r1')), preempt: false },
+    data: { chat_session_id: sessionId || nativeState.sessionId || '', parent_message_id: nativeState.parentMessageId || null, prompt: getMessagesText(request.messages), model_type: modelLower.includes('pro') ? 'expert' : 'default', ref_file_ids: [], search_enabled: Boolean(request.web_search || modelLower.includes('search')), thinking_enabled: Boolean(request.reasoning_effort || modelLower.includes('think') || modelLower.includes('r1')), preempt: false },
     headers: { ...headers, Authorization: `Bearer ${token}`, Referer: `${getProviderOrigin(provider, 'https://chat.deepseek.com')}/a/chat/s/${sessionId || ''}`, 'X-Ds-Pow-Response': powResponse || headers['X-Ds-Pow-Response'] || '' },
   };
 };
@@ -470,11 +485,12 @@ const decompressStream = (source, headers = {}) => {
   return source;
 };
 
-const parseSseStream = async function* (source, model, providerId, headers) {
+const parseSseStream = async function* (source, model, providerId, headers, responseSession) {
   let qwenContent = '';
   let providerContent = '';
   const events = providerId === 'kimi' ? parseGrpcEvents(source, headers) : parseSseEvents(decompressStream(source, headers));
   for await (const data of events) {
+    updateNativeState(data, providerId, responseSession);
     if (providerId === 'qwen') {
       const currentContent = extractQwenContent(data);
       if (currentContent === null || currentContent.length <= qwenContent.length) continue;
@@ -523,6 +539,36 @@ const extractNativeProviderId = (data, providerId) => {
   return ids[providerId] || null;
 };
 
+const updateNativeState = (data, providerId, responseSession) => {
+  if (!responseSession || !responseSession.nativeState) return;
+  const nativeState = responseSession.nativeState;
+  if (providerId === 'qwen') {
+    const communication = data && data.communication;
+    if (communication && communication.sessionid) nativeState.sessionId = communication.sessionid;
+    if (communication && communication.reqid) nativeState.parentReqId = communication.reqid;
+    return;
+  }
+  const id = extractNativeProviderId(data, providerId);
+  if (!id) return;
+  const stateFields = {
+    deepseek: 'parentMessageId',
+    glm: 'conversationId',
+    kimi: 'chatId',
+    mimo: 'conversationId',
+    minimax: 'chatId',
+    perplexity: 'threadId',
+    'qwen-ai': 'parentId',
+    zai: 'parentMessageId',
+  };
+  const field = stateFields[providerId];
+  if (field && !nativeState[field]) nativeState[field] = id;
+  if (providerId === 'glm' && data.conversation_id) nativeState.conversationId = data.conversation_id;
+  if (providerId === 'mimo' && data.conversationId) nativeState.conversationId = data.conversationId;
+  if (providerId === 'minimax' && id) nativeState.chatId = id;
+  if (providerId === 'qwen-ai' && data.chat_id) nativeState.chatId = data.chat_id;
+  if (providerId === 'zai' && data.data && data.data.chat_id) nativeState.chatId = data.data.chat_id;
+};
+
 const extractNativeProviderContent = (data, providerId) => {
   if (!data || typeof data !== 'object') return null;
   if (providerId === 'deepseek') {
@@ -565,13 +611,15 @@ const createQwenBody = (content, model, id) => ({
   choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
 });
 
-const normalizeQwenBody = async (data, model, headers) => {
+const normalizeQwenBody = async (data, model, headers, responseSession) => {
   if (!data || typeof data[Symbol.asyncIterator] !== 'function') {
+    updateNativeState(data, 'qwen', responseSession);
     return createQwenBody(extractQwenContent(data) || '', model, extractQwenResponseId(data));
   }
   let content = '';
   let id;
   for await (const event of parseSseEvents(decompressStream(data, headers))) {
+    updateNativeState(event, 'qwen', responseSession);
     id = extractQwenResponseId(event) || id;
     const currentContent = extractQwenContent(event);
     if (currentContent !== null && currentContent.length > content.length) content = currentContent;
@@ -579,14 +627,16 @@ const normalizeQwenBody = async (data, model, headers) => {
   return createQwenBody(content.trim(), model, id);
 };
 
-const normalizeNativeBody = async (data, model, providerId, headers) => {
+const normalizeNativeBody = async (data, model, providerId, headers, responseSession) => {
   if (!data || typeof data[Symbol.asyncIterator] !== 'function') {
+    updateNativeState(data, providerId, responseSession);
     return normalizeBody(data, model);
   }
   let content = '';
   let id;
   const events = providerId === 'kimi' ? parseGrpcEvents(data, headers) : parseSseEvents(decompressStream(data, headers));
   for await (const event of events) {
+    updateNativeState(event, providerId, responseSession);
     id = extractNativeProviderId(event, providerId) || id;
     const current = extractNativeProviderContent(event, providerId);
     if (typeof current === 'string') {
@@ -759,32 +809,40 @@ const createDeepSeekPowResponse = async (httpClient, provider, headers, account)
   return Buffer.from(JSON.stringify({ ...challenge, answer, target_path: '/api/v0/chat/completion' })).toString('base64');
 };
 
-const prepareNativeRequest = async ({ httpClient, providerId, provider, account, request, actualModel, headers }) => {
+const prepareNativeRequest = async ({ httpClient, providerId, provider, account, request, actualModel, headers, responseSession }) => {
+  const nativeState = getNativeState(responseSession);
   let preparedAccount = account;
   if (providerId === 'glm') preparedAccount = await refreshGlmToken(httpClient, provider, headers, account);
   if (providerId === 'minimax') preparedAccount = await registerMiniMaxDevice(httpClient, provider, headers, account);
   if (providerId === 'deepseek') {
-    const sessionId = await createDeepSeekSession(httpClient, provider, headers, account);
+    const sessionId = nativeState.sessionId || await createDeepSeekSession(httpClient, provider, headers, account);
+    if (responseSession && !nativeState.sessionId) nativeState.sessionId = sessionId;
     const powResponse = getCredentials(account).powResponse || await createDeepSeekPowResponse(httpClient, provider, headers, account);
-    return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, account, sessionId, powResponse);
+    return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, account, sessionId, powResponse, responseSession);
   }
   if (providerId === 'mimo') {
-    const conversationId = randomUUID().replaceAll('-', '');
-    await saveMimoConversation(httpClient, provider, headers, account, conversationId);
+    const hasConversation = Boolean(nativeState.conversationId);
+    const conversationId = nativeState.conversationId || randomUUID().replaceAll('-', '');
+    if (responseSession && !nativeState.conversationId) nativeState.conversationId = conversationId;
+    if (!hasConversation) await saveMimoConversation(httpClient, provider, headers, account, conversationId);
     request = { ...request, nativeConversationId: conversationId };
   }
   if (providerId === 'qwen-ai') {
-    const chatId = await createQwenAiChat(httpClient, provider, headers, preparedAccount, actualModel);
-    return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, chatId);
+    const chatId = nativeState.chatId || await createQwenAiChat(httpClient, provider, headers, preparedAccount, actualModel);
+    if (responseSession && !nativeState.chatId) nativeState.chatId = chatId;
+    return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, chatId, responseSession);
   }
   if (providerId === 'zai') {
-    const { chatId, messageId } = await createZaiChat(httpClient, provider, headers, preparedAccount, actualModel);
-    return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, chatId, messageId);
+    const chat = nativeState.chatId
+      ? { chatId: nativeState.chatId, messageId: createRequestId() }
+      : await createZaiChat(httpClient, provider, headers, preparedAccount, actualModel);
+    if (responseSession && !nativeState.chatId) nativeState.chatId = chat.chatId;
+    return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, chat.chatId, chat.messageId, responseSession);
   }
-  return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount);
+  return NATIVE_REQUEST_BUILDERS[providerId](request, actualModel, provider, headers, preparedAccount, responseSession);
 };
 
-const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig }) => async ({ request, account, provider, actualModel, context = {} }) => {
+const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getConfig }) => async ({ request, account, provider, actualModel, context = {}, responseSession }) => {
   let currentConfig = {};
   if (rawTrafficLogger && typeof getConfig === 'function') {
     try {
@@ -805,9 +863,9 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
     : httpClient;
   const isQwen = providerId === 'qwen';
   const headers = buildProviderHeaders(provider, account, providerId);
-  const qwenRequest = isQwen ? createQwenRequest(request, actualModel, provider, headers) : null;
+  const qwenRequest = isQwen ? createQwenRequest(request, actualModel, provider, headers, responseSession) : null;
   const nativeRequest = !isQwen && NATIVE_REQUEST_BUILDERS[providerId]
-    ? await prepareNativeRequest({ httpClient: tracedHttpClient, providerId, provider, account, request, actualModel, headers })
+    ? await prepareNativeRequest({ httpClient: tracedHttpClient, providerId, provider, account, request, actualModel, headers, responseSession })
     : null;
   const response = await tracedHttpClient.request({
     method: 'POST',
@@ -827,17 +885,20 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
   if (providerId === 'minimax' && response.data && typeof response.data[Symbol.asyncIterator] !== 'function') {
     const initial = getMiniMaxAnswer(response.data);
     if (initial.chatId) {
-      if (request.stream === true) return { stream: createMiniMaxPollingStream(tracedHttpClient, provider, nativeRequest.headers, account, initial.chatId, request.model) };
+      if (responseSession && responseSession.nativeState) responseSession.nativeState.chatId = initial.chatId;
+      if (request.stream === true) return { stream: createMiniMaxPollingStream(tracedHttpClient, provider, nativeRequest.headers, account, initial.chatId, request.model), nativeState: responseSession?.nativeState || {} };
       const answer = await pollMiniMaxAnswer(tracedHttpClient, provider, nativeRequest.headers, account, initial.chatId);
-      return { body: createQwenBody(answer.content, request.model, initial.chatId) };
+      if (responseSession && responseSession.nativeState) responseSession.nativeState.chatId = initial.chatId;
+      return { body: createQwenBody(answer.content, request.model, initial.chatId), nativeState: responseSession?.nativeState || {} };
     }
   }
   if (request.stream === true) {
     const source = response.data && typeof response.data[Symbol.asyncIterator] === 'function' ? response.data : Readable.from([JSON.stringify(response.data)]);
-    return { stream: parseSseStream(source, request.model, providerId, response.headers) };
+    return { stream: parseSseStream(source, request.model, providerId, response.headers, responseSession), nativeState: responseSession?.nativeState || {} };
   }
-  if (isQwen) return { body: await normalizeQwenBody(response.data, request.model, response.headers) };
-  return { body: normalizeBody(response.data, request.model) };
+  if (isQwen) return { body: await normalizeQwenBody(response.data, request.model, response.headers, responseSession), nativeState: responseSession?.nativeState || {} };
+  if (nativeRequest) return { body: await normalizeNativeBody(response.data, request.model, providerId, response.headers, responseSession), nativeState: responseSession?.nativeState || {} };
+  return { body: normalizeBody(response.data, request.model), nativeState: responseSession?.nativeState || {} };
 };
 
 const createChat2ApiProviderAdapters = ({ httpClient = axios, rawTrafficLogger, getConfig } = {}) => Object.fromEntries(PROVIDER_IDS.map((providerId) => [providerId, createProviderAdapter({ httpClient, providerId, rawTrafficLogger, getConfig })]));

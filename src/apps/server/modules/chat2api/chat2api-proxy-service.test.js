@@ -103,3 +103,37 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     await service.stop();
   }
 });
+
+test('代理服务提供 Responses 非流式和流式接口', async () => {
+  const received = [];
+  const service = createChat2ApiProxyService({
+    host: '127.0.0.1', port: 0, config: { enableApiKey: false },
+    coreAdapter: { listModels: async () => ({ object: 'list', data: [] }), forwardChatCompletion: async () => ({ body: {} }) },
+    responsesService: {
+      createResponse: async (payload) => {
+        received.push(payload);
+        if (payload.stream) {
+          return { stream: (async function* events() {
+            yield { type: 'response.created', response: { id: 'resp_stream' } };
+            yield { type: 'response.completed', response: { id: 'resp_stream' } };
+          }()) };
+        }
+        return { body: { id: 'resp_test', object: 'response', output_text: 'ok' } };
+      },
+    },
+  });
+  await service.start();
+  try {
+    const nonStream = await request(service.address().port, { path: '/v1/responses', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ model: 'public-chat', input: 'hello' }));
+    assert.equal(nonStream.statusCode, 200);
+    assert.equal(JSON.parse(nonStream.text).object, 'response');
+    const stream = await request(service.address().port, { path: '/v1/responses', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ model: 'public-chat', input: 'hello', stream: true }));
+    assert.equal(stream.statusCode, 200);
+    assert.match(stream.headers['content-type'], /text\/event-stream/);
+    assert.match(stream.text, /response.created/);
+    assert.match(stream.text, /data: \[DONE\]/);
+    assert.equal(received.length, 2);
+  } finally {
+    await service.stop();
+  }
+});

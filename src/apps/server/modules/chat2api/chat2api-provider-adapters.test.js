@@ -105,6 +105,54 @@ test('Qwen gzip SSE 先解压再解析，避免压缩字节被当成空响应', 
   assert.equal(result.body.choices[0].message.content, 'gzip成功');
 });
 
+test('Qwen Responses 会话复用原生 session_id 和 parent_req_id', async () => {
+  let requestConfig;
+  const adapters = createChat2ApiProviderAdapters({
+    httpClient: {
+      request: async (config) => {
+        requestConfig = config;
+        return { status: 200, data: Readable.from(['data: {"communication":{"reqid":"next-req","sessionid":"fixed-session"},"data":{"messages":[{"mime_type":"multi_load/iframe","content":"继续成功"}]}}\n\n']) };
+      },
+    },
+  });
+
+  const result = await adapters.qwen({
+    request: { model: 'Qwen3.7', messages: [{ role: 'user', content: '继续' }], stream: false },
+    account: { credentials: { ticket: 'ticket-secret' } },
+    provider: { id: 'qwen', apiEndpoint: 'https://example.com', chatPath: '/api/v2/chat', headers: {} },
+    actualModel: 'Qwen3.7',
+    responseSession: { nativeState: { sessionId: 'fixed-session', parentReqId: 'previous-req' } },
+  });
+
+  assert.equal(requestConfig.data.session_id, 'fixed-session');
+  assert.equal(requestConfig.data.parent_req_id, 'previous-req');
+  assert.equal(requestConfig.data.scene_param, 'continue');
+  assert.deepEqual(result.nativeState, { sessionId: 'fixed-session', parentReqId: 'next-req' });
+});
+
+test('Qwen Responses 首轮生成新 session 时仍使用 first_turn', async () => {
+  let requestConfig;
+  const adapters = createChat2ApiProviderAdapters({
+    httpClient: {
+      request: async (config) => {
+        requestConfig = config;
+        return { status: 200, data: Readable.from(['data: {"communication":{"reqid":"first-req","sessionid":"new-session"},"data":{"messages":[{"mime_type":"multi_load/iframe","content":"首轮成功"}]}}\n\n']) };
+      },
+    },
+  });
+
+  await adapters.qwen({
+    request: { model: 'Qwen3.7', messages: [{ role: 'user', content: '首轮' }], stream: false },
+    account: { credentials: { ticket: 'ticket-secret' } },
+    provider: { id: 'qwen', apiEndpoint: 'https://example.com', chatPath: '/api/v2/chat', headers: {} },
+    actualModel: 'Qwen3.7',
+    responseSession: { nativeState: {} },
+  });
+
+  assert.equal(requestConfig.data.scene_param, 'first_turn');
+  assert.equal(requestConfig.data.parent_req_id, '0');
+});
+
 test('Qwen 流式响应按累计内容只输出新增文本并过滤思考标记', async () => {
   const adapters = createChat2ApiProviderAdapters({
     httpClient: {
@@ -210,4 +258,26 @@ test('各内置 Provider 使用原版专用请求协议并归一化流式文本'
     assert.ok(chunks.length > 0, `Provider ${providerId} 未产生标准 chunk`);
     assert.equal(chunks[0].choices[0].delta.content, expected, providerId);
   }
+});
+
+test('native Provider 的非流式请求聚合上游流并保留会话状态', async () => {
+  const adapters = createChat2ApiProviderAdapters({
+    httpClient: {
+      request: async (config) => {
+        if (config.url.includes('/chat_session/create')) return { status: 200, data: { data: { biz_data: { chat_session: { id: 'deepseek-session' } } } } };
+        return { status: 200, data: Readable.from(['data: {"v":"DeepSeek 回复","response_message_id":"message-2"}\n\n']) };
+      },
+    },
+  });
+  const result = await adapters.deepseek({
+    request: { model: 'deepseek-v4-flash', messages: [{ role: 'user', content: '你好' }], stream: false },
+    account: { credentials: { token: 'token', powResponse: 'pow-response' } },
+    provider: { id: 'deepseek', apiEndpoint: 'https://example.com', chatPath: '/chat', headers: {} },
+    actualModel: 'deepseek-v4-flash',
+    responseSession: { nativeState: {} },
+  });
+
+  assert.equal(result.body.choices[0].message.content, 'DeepSeek 回复');
+  assert.equal(result.nativeState.sessionId, 'deepseek-session');
+  assert.equal(result.nativeState.parentMessageId, 'message-2');
 });

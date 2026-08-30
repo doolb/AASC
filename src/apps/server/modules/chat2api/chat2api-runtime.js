@@ -8,6 +8,8 @@ const { createChat2ApiProxyService } = require('./chat2api-proxy-service');
 const { createChat2ApiManagementService } = require('./chat2api-management-service');
 const { createChat2ApiProviderAdapters } = require('./chat2api-provider-adapters');
 const { createRawTrafficLogger } = require('./chat2api-raw-traffic-logger');
+const { createChat2ApiResponseSessionStore } = require('./chat2api-response-session-store');
+const { createChat2ApiResponsesService } = require('./chat2api-responses-service');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -23,6 +25,8 @@ const createChat2ApiRuntime = (options = {}) => {
     loadBalancer,
     providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient, rawTrafficLogger, getConfig }),
   });
+  const responseSessionStore = options.responseSessionStore || createChat2ApiResponseSessionStore({ dataStore });
+  const responsesService = options.responsesService || createChat2ApiResponsesService({ sessionStore: responseSessionStore, coreAdapter });
   const oauth = options.oauth || createChat2ApiOAuthService({
     dataStore,
     providerRegistry,
@@ -35,6 +39,7 @@ const createChat2ApiRuntime = (options = {}) => {
     config: options.config,
     dataStore,
     coreAdapter,
+    responsesService,
     managementService,
   });
 
@@ -48,7 +53,7 @@ const createChat2ApiRuntime = (options = {}) => {
     address: proxy.address(),
   });
 
-  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, oauth, managementService, proxy, start, stop, getStatus };
+  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, responseSessionStore, responsesService, oauth, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };

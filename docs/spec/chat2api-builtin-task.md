@@ -217,6 +217,25 @@ clearAccountFailure(accountId):
 ## AASC 原生代理边界
 
 ```text
+POST /v1/responses(request):
+    校验 model 和 input；input 支持字符串或 Responses 输入项数组
+    校验 conversation 与 previous_response_id 不同时出现
+    conversation 缺失且 previous_response_id 缺失 -> 创建新的 conversation 和 response 链
+    previous_response_id 存在 -> 在 responses-sessions 集合中查找对应会话
+    conversation 存在 -> 读取对应会话并校验会话仍可使用
+    将 instructions、input message、function_call 和 function_call_output 转换为内部 messages
+    从会话记录取得固定 Provider/账号/原生状态；无记录时按模型映射和负载均衡选择
+    有原生状态 -> 传递 Provider 专用 session/chat/conversation/parent 标识
+    无原生状态 -> 将会话历史和本轮输入合并后重放给 Provider
+    调用现有 coreAdapter.forwardChatCompletion
+    生成唯一 resp_ 响应 ID并保存 response -> conversation 关联
+    非流式 -> 将 chat.completion 转换为 response、message、output_text 和 usage
+    流式 -> 将 chat.completion.chunk 转换为 response.created、response.output_text.delta、response.output_text.done、response.completed
+    Provider 返回的原生状态和本轮 assistant 输出写回会话
+    Provider 失败 -> 返回 Responses error，不泄露账号凭据
+```
+
+```text
 createChat2ApiCoreAdapter(options):
     注入 dataStore、providerRegistry、modelMapper、loadBalancer 和 Provider adapters
     不加载 Electron、Koa 或上游 Store
@@ -235,6 +254,9 @@ createProviderAdapters(httpClient):
     Qwen adapter 使用原生 /api/v2/chat 请求协议，生成 req_id、session_id、nonce、timestamp 和 Qwen 专用消息体
     Qwen adapter 按响应 content-encoding 解压 gzip、deflate、br 后再读取 SSE 事件
     Qwen adapter 统一按 SSE 事件读取 data.messages，并从 multi_load/iframe 或 text/plain 提取答案内容
+    adapter 接收可选 responseSession.nativeState
+    Qwen、DeepSeek、Mimo、MiniMax、Qwen AI、Z.ai、Kimi 优先复用可用原生会话标识
+    原生会话标识无法安全续接时回退为请求历史重放，并返回本轮可观察的原生状态
     Qwen 非流式请求先聚合 SSE 增量，再转换为单个 OpenAI chat.completion
     Qwen 流式请求按累计内容长度只发送新增文本，过滤 deep_think 标记
     非流式响应转换为 OpenAI chat.completion
@@ -246,6 +268,33 @@ createProviderAdapters(httpClient):
     Authorization、Cookie、Token、Ticket、签名、API Key、密码及同类查询参数替换为 [REDACTED]
     请求体和响应块共享 rawTrafficMaxBytes，超限停止记录并标记 truncated
     调试日志写入服务日志，追踪器异常不得改变 Provider 请求结果
+
+createChat2ApiResponsesService(dataStore, coreAdapter):
+    读取和原子保存 responses-sessions 集合
+    以 conversationId 建立持久会话，以 responseId 建立响应链索引
+    保存 providerId、accountId、actualModel、history、latestResponseId 和 nativeState
+    为同一 conversation 串行化状态更新，避免并发请求覆盖最新 parent 标识
+    返回非流式 Responses response 或 Responses SSE 事件生成器
+
+toChatRequest(responseRequest, session):
+    将 instructions 转成 system message
+    将 input_text/output_text 文本转成 user、assistant、tool 消息
+    将 function_call 转成 assistant tool_calls
+    将 function_call_output 转成 tool 消息
+    将 Responses tools 转成 Chat Completions tools
+
+toResponsesBody(chatBody, metadata):
+    生成 response.id、response.object、response.status、response.model 和 response.output
+    普通 assistant 文本转为 output message 的 output_text 内容
+    tool_calls 转为 function_call output item
+    保留 previous_response_id、conversation、store 和可用 usage
+
+toResponsesStream(chatStream, metadata):
+    先发送 response.created
+    文本增量 -> response.output_text.delta
+    文本结束 -> response.output_text.done
+    工具调用增量 -> 对应 function call 事件；无法识别的 Provider 增量不伪造工具参数
+    流结束 -> 保存会话并发送 response.completed 和 [DONE]
 
 forwardChatCompletion(request):
     校验 model 和 messages
@@ -264,6 +313,7 @@ createChat2ApiProxyService(options):
     /health -> 返回运行状态和请求统计
     /stats -> 返回请求统计
     /v1/models -> 返回模型列表
+    /v1/responses -> 解析 Responses JSON、鉴权、转换并转发
     /v1/chat/completions -> 解析 JSON、鉴权并转发
     /v1/completions -> 将 prompt 转成 chat messages 后转发
     stream=true -> 设置 text/event-stream，逐块输出 data: JSON

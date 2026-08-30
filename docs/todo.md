@@ -78,9 +78,14 @@
   - 关联任务：`docs/task/2026-08-30_搜索频道与独立Pi进程.md`。
 
 - ⏳待处理 [2026-08-30] Chat2API 核心移植为完整内置任务
-  - 待补齐各 Provider 专用请求/流解析、完整 OAuth 交换和发布前兼容性回归；Provider、账号、API Key、负载均衡、OpenAI 代理、控制端配置及原数据一键迁移已具备基础实现。
+
+- ✅已完成 [2026-08-31][2026-08-31] Chat2API 增加 Pi Agent Responses 协议兼容
+  - 新增 `/v1/responses`，支持 `conversation`、`previous_response_id`、非流式/流式输出、输入项转换和 Responses tools 兼容子集。
+  - AASC 持久化 Responses 会话、响应链、Provider/账号绑定、历史消息和 Provider 原生会话状态；不支持稳定原生续接时回退历史重放。
+  - Qwen、DeepSeek、Mimo、MiniMax、Qwen AI、Z.ai、Kimi 复用已知原生会话字段；GLM、Perplexity 等场景保留历史重放能力。
+  - 测试：Chat2API 全量回归 53/53 通过，覆盖会话持久化、并发串行、Provider 状态、输入输出转换和 SSE 路由。
   - 保留上游核心版本和 GPL-3.0 许可证，不依赖 `/mnt/Chat2API` 或 Electron 运行。
-  - 关联任务：`docs/task/2026-08-30_Chat2API核心内置任务.md`。
+  - 关联任务：`docs/task/2026-08-31_Chat2APIResponses协议兼容.md`。
 
 - ✅已完成 [2026-08-30][2026-08-30] 增加全局语音对话确认三档模式
   - 支持关闭、手动确认（30秒）和自动确认（TTS完成后7秒取消窗口）。

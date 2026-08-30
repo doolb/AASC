@@ -16,6 +16,13 @@
 
 ### Chat2API 内置任务实施中
 
+- ✅ [2026-08-31] 增加 Chat2API Responses 协议兼容
+  - 面向 Pi Agent 提供 `/v1/responses`，支持 `conversation`、`previous_response_id`、非流式/流式响应、输入项与 Responses tools 兼容转换。
+  - 持久化 AASC 会话、response 链、Provider/账号绑定、历史消息和原生会话状态；Provider 原生状态不可续接时回退历史重放。
+  - Qwen、DeepSeek、Mimo、MiniMax、Qwen AI、Z.ai、Kimi 接入已确认的原生会话标识，保留其他 Provider 的统一历史上下文能力。
+  - 测试：Chat2API 全量回归 53/53 通过。
+  - 详细任务：`docs/task/2026-08-31_Chat2APIResponses协议兼容.md`。
+
 - ✅ [2026-08-30] 增加 Chat2API 原始请求/响应调试日志
   - 控制端增加“记录发给 AI 的原始请求和返回结果”开关及单次日志字节上限，默认关闭，配置保存后下一次请求生效。
   - 统一追踪所有 Provider 的会话创建、Token 刷新、设备注册、聊天请求和轮询请求，记录脱敏 URL、请求头、请求体、响应状态、响应头和原始流块。

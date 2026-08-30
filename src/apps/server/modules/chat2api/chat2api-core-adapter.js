@@ -41,14 +41,16 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
     throw createHttpError(501, 'provider_adapter_unavailable', `Provider ${provider.id} 尚未配置适配器`);
   };
 
-  const forwardChatCompletion = async (request) => {
+  const forwardChatCompletion = async (request, options = {}) => {
     validateRequest(request);
     const requestedMapping = await modelMapper.resolveModel(request.model);
+    const preferredProviderId = options.preferredProviderId || requestedMapping.preferredProviderId;
+    const preferredAccountId = options.preferredAccountId || requestedMapping.preferredAccountId;
     const selection = await loadBalancer.selectAccount(
       request.model,
       'round-robin',
-      requestedMapping.preferredProviderId,
-      requestedMapping.preferredAccountId,
+      preferredProviderId,
+      preferredAccountId,
     );
     if (!selection) {
       throw createHttpError(503, 'no_available_account', `没有可用的模型账号: ${request.model}`);
@@ -78,14 +80,28 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
         provider: selection.provider,
         actualModel,
         context,
+        responseSession: options.responseSession,
       });
       if (!result || (!result.body && !result.stream)) {
         throw new Error('Provider adapter 返回了空结果');
       }
       if (result.body) {
-        return { ...result, body: { ...result.body, model: result.body.model || request.model } };
+        return {
+          ...result,
+          body: { ...result.body, model: result.body.model || request.model },
+          nativeState: result.nativeState || options.responseSession?.nativeState || {},
+          providerId: selection.provider.id,
+          accountId,
+          actualModel,
+        };
       }
-      return result;
+      return {
+        ...result,
+        nativeState: result.nativeState || options.responseSession?.nativeState || {},
+        providerId: selection.provider.id,
+        accountId,
+        actualModel,
+      };
     } catch (error) {
       if (typeof loadBalancer.markAccountFailed === 'function') {
         loadBalancer.markAccountFailed(accountId);

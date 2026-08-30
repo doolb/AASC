@@ -21,6 +21,7 @@ const COLLECTION_FILES = Object.freeze({
   accounts: 'accounts.json',
   apiKeys: 'api-keys.json',
   modelMappings: 'model-mappings.json',
+  responsesSessions: 'responses-sessions.json',
 });
 const IMPORT_COLLECTIONS = Object.freeze(['providers', 'accounts', 'modelMappings']);
 const MAX_IMPORT_ITEMS = 1000;

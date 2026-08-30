@@ -10,6 +10,7 @@
 
 - 内置常驻任务：启动、停止、重启和状态展示。
 - OpenAI 兼容接口：`/v1/chat/completions`、`/v1/models`、`/v1/completions`。
+- OpenAI Responses 兼容接口：`/v1/responses`，面向 Pi Agent 支持输入转换、非流式/流式输出和会话续接。
 - Chat2API 当前 Provider：DeepSeek、GLM、Kimi、Mimo、MiniMax、Perplexity、Qwen、Qwen AI、Z.ai。
 - Provider 配置、账号凭据、账号状态和多账号负载均衡。
 - OAuth 登录流程及登录状态回调。
@@ -78,6 +79,7 @@ Chat2API 代理 HTTP 127.0.0.1:{port}
     accounts.json     账号凭据、启用状态和健康状态
     api-keys.json     AASC 代理访问密钥
     model-mappings.json 代理模型到 Provider/上游模型的映射
+    responses-sessions.json Responses conversation、response 链和 Provider 原生会话状态
     oauth-sessions/   临时 OAuth 状态，完成或超时后删除
 ```
 
@@ -90,6 +92,29 @@ Chat2API 代理 HTTP 127.0.0.1:{port}
 - 所有内置 Provider 均按原版选择专用请求/响应适配；DeepSeek、GLM、Kimi、MiMo、MiniMax、Perplexity、Qwen AI 和 Z.ai 分别保留其会话、签名、Cookie、gRPC/HTTP2、SSE 或轮询协议边界，统一转换为 OpenAI 输出。
 - Qwen Provider 按 `/api/v2/chat` 原生协议生成请求参数，解压 gzip/deflate/br 后兼容 `data.messages`、`multi_load/iframe`、SSE 累计内容和思考标记，避免通用 OpenAI 解析得到空回复。
 - 旧 AASC LLM 配置继续有效；Chat2API 代理作为独立服务，不自动替换当前 profile。
+
+### Responses 会话兼容设计
+
+Responses 层的 `conversation` 和 `previous_response_id` 是 AASC 代理自己的逻辑标识，不直接假定各 Provider 存在统一的 `session_id`。代理为每个 Responses 会话保存 Provider、账号、实际模型、历史消息、最近响应 ID 和 Provider 原生状态。
+
+```text
+Responses conversation / previous_response_id
+    ↓
+AASC responses-sessions.json
+    ├─ providerId + accountId + actualModel
+    ├─ history（用于无原生会话 Provider 的上下文重放）
+    ├─ latestResponseId
+    └─ nativeState（Provider 专用 session/chat/conversation/parent 标识）
+         ↓
+Provider adapter
+```
+
+- Qwen 使用 `session_id`、`parent_req_id` 和响应中的 `communication.reqid/sessionid`。
+- DeepSeek 使用 `chat_session_id`、`parent_message_id`；Mimo 使用 `conversationId`；MiniMax 使用 `chat_id`。
+- Qwen AI、Z.ai、Kimi 使用各自的 `chat_id` 及消息父子标识；GLM、Perplexity 如果原生状态无法可靠续接，则重放 AASC 保存的历史消息。
+- 会话优先固定到首次选择的 Provider 账号；账号不可用时允许切换账号并重放历史，同时清空失效的原生状态。
+- `store=false` 不阻止 AASC 为完成 Provider 续接而保存最小会话状态；Responses 的返回对象仍标记调用方请求的 `store` 值。
+- 当前只实现 Pi Agent 所需的 Responses 兼容子集，不实现后台响应、内置工具、Conversations CRUD 和响应查询/删除管理 API。
 
 ### 原始请求/响应调试日志
 
