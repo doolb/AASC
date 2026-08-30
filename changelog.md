@@ -11,6 +11,20 @@
 
 ### 已完成
 
+- ✅ [2026-08-30] Pi Agent 会话历史递归与聊天单轮删除
+  - Pi Agent 首次请求初始化必要历史，后续请求只发送当前消息，避免 Pi 内存上下文和应用历史递归叠加。
+  - 会话键增加群聊/私聊 conversationKey，避免不同聊天会话共享 Pi 上下文；删除单轮历史后会重置对应 Pi 会话。
+  - 控制端用户消息增加“删除本轮”，支持删除中间任意一轮用户消息及其紧随的助手回复。
+  - 验证：Pi、LLM、聊天删除和控制端契约回归 51/51，通过脚本语法检查和 `git diff --check`。
+  - 文档：`docs/design/llm-agent-mode.md`、`docs/spec/llm-agent-mode.md`、`docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/2026-08-30_PiAgent会话去重与聊天单轮删除.md`。
+
+- ✅ [2026-08-30] Pi Agent 偶发无回复与控制端聊天回包诊断
+  - Pi Runtime 增加 requestId 生命周期日志，记录入队、启动、关键 RPC 事件、完成、失败和超时；文本只记录事件类型和长度摘要，不记录完整 prompt 或密钥。
+  - 错误型或空 `agent_end` 不再被当作成功空回复；`willRetry` 事件会继续等待后续结果。
+  - 控制端 `chatMessage`、`chatResponse` 日志统一记录 requestId、状态和消息长度，便于判断 Pi、服务器和前端的具体断点。
+  - 验证：Pi Runtime、Agent 配置、Chat2API、控制端回包相关回归 41/41，通过脚本语法检查和 `git diff --check`。
+  - 文档：`docs/design/llm-agent-mode.md`、`docs/spec/llm-agent-mode.md`、`docs/task/2026-08-30_PiAgent无回复诊断与控制端聊天日志.md`。
+
 - ✅ [2026-08-30] 添加 Chat2API 到 Pi 的工具转换
   - 在 Pi Provider 边界解析 `<|CHAT2API|tool_calls>`、`invoke` 和 `parameter` 标签，转换为 Pi 原生 `toolCall`，由 Pi 内部继续执行只读工具并回传工具结果。
   - 未知工具、重复参数、未闭合标签和非法协议不会执行，原始协议标签不再进入助手文本或 TTS；普通文本和 Pi 原生工具调用保持兼容。

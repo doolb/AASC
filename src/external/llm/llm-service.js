@@ -469,7 +469,83 @@ function clearHistory(options = {}) {
         if (chatHistories[key].length === 0) delete chatHistories[key];
     }
     saveHistory();
+    resetPiSessionForScope(options);
     return getHistory();
+}
+
+function deleteConversationRound(options = {}) {
+    const messageId = String(options.messageId || '');
+    if (!messageId) return { success: false, history: getHistory(), message: '缺少消息 ID' };
+
+    const matchesScope = (message) => {
+        if (message.profileName && message.profileName !== activeProfile) return false;
+        if (options.mode && (message.mode || 'group') !== options.mode) return false;
+        if (Object.prototype.hasOwnProperty.call(options, 'target') && (message.target || null) !== (options.target || null)) return false;
+        if (Object.prototype.hasOwnProperty.call(options, 'sessionId')) {
+            return (message.sessionId || 'default') === (options.sessionId || 'default');
+        }
+        return true;
+    };
+
+    for (const [key, messages] of Object.entries(chatHistories)) {
+        const removal = getConversationRoundRemoval(messages, messageId, matchesScope);
+        if (!removal) continue;
+        if (!removal.isUserMessage) return { success: false, history: getHistory(), message: '只能删除用户消息所在的对话轮次' };
+
+        messages.splice(removal.index, removal.removeCount);
+        if (messages.length === 0) delete chatHistories[key];
+        saveHistory();
+        resetPiSessionForMessage(removal.message);
+        return { success: true, history: getHistory() };
+    }
+
+    return { success: false, history: getHistory(), message: '对话轮次不存在' };
+}
+
+function getConversationRoundRemoval(messages, messageId, matchesScope = () => true) {
+    const index = messages.findIndex(message => String(message.id || '') === String(messageId) && matchesScope(message));
+    if (index < 0) return null;
+
+    const message = messages[index];
+    const isLegacyRound = message.user !== undefined || message.assistant !== undefined;
+    const isUserMessage = isLegacyRound || message.role === 'user' || message.role === 'control';
+    const removeCount = isLegacyRound || messages[index + 1]?.role !== 'assistant' ? 1 : 2;
+    return { index, removeCount, message, isUserMessage };
+}
+
+function buildPiConversationKey(mode, target, sessionId) {
+    return JSON.stringify({
+        mode: mode || 'group',
+        target: target || null,
+        sessionId: sessionId || 'default'
+    });
+}
+
+function resetPiSessionForMessage(message) {
+    if (!piRuntimeManager) return;
+    const profile = getProfileByName(message.profileName || activeProfile);
+    if (!profile || profile.mode !== 'agent' || profile.backend !== 'pi') return;
+    const template = normalizeChatTemplate(getTemplateByName(message.templateId) || {
+        id: 'default',
+        name: 'default',
+        content: '',
+        permissionProfile: 'readonly'
+    });
+    piRuntimeManager.resetSession(
+        profile,
+        template,
+        buildPiConversationKey(message.mode, message.target, message.sessionId)
+    );
+}
+
+function resetPiSessionForScope(options = {}) {
+    resetPiSessionForMessage({
+        profileName: activeProfile,
+        templateId: options.mode === 'private' ? options.target : 'default',
+        mode: options.mode || 'group',
+        target: options.target || null,
+        sessionId: options.sessionId || 'default'
+    });
 }
 
 function getSession() {
@@ -847,6 +923,9 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
                 reportedError = true;
                 onError?.(error);
             }
+        }, {
+            continuationPrompt: userMessage,
+            conversationKey: buildPiConversationKey(mode, target, sessionId)
         });
         return {
             success: true,
@@ -1156,6 +1235,8 @@ module.exports = {
     getGroupSystemPrompt,
     getHistory,
     clearHistory,
+    deleteConversationRound,
+    getConversationRoundRemoval,
     getSession,
     setSession,
     setMode,

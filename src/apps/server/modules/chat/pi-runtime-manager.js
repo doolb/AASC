@@ -21,6 +21,7 @@ class PiRuntimeManager {
         this.spawn = options.spawn || defaultSpawn;
         this.commandPath = options.commandPath || process.env.PI_COMMAND_PATH || 'pi';
         this.requestTimeoutMs = options.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
+        this.logger = typeof options.logger === 'function' ? options.logger : () => {};
         this.sessions = new Map();
         this.requestSequence = 0;
     }
@@ -40,27 +41,38 @@ class PiRuntimeManager {
         ];
     }
 
-    async chatStream(profile, template, prompt, callbacks = {}) {
+    async chatStream(profile, template, prompt, callbacks = {}, options = {}) {
         const normalizedProfile = normalizeAgentProfile(profile);
         if (normalizedProfile.mode !== 'agent' || normalizedProfile.backend !== 'pi') {
             throw new Error('Pi Runtime 只接受 agent/pi profile');
         }
         const normalizedTemplate = normalizeChatTemplate(template);
-        const key = this.getSessionKey(normalizedProfile, normalizedTemplate);
+        const key = this.getSessionKey(normalizedProfile, normalizedTemplate, options.conversationKey);
         const session = this.getOrCreateSession(key, normalizedProfile, normalizedTemplate);
-        const task = session.queue.then(() => this.runRequest(session, prompt, callbacks));
+        const requestId = `aasc-${++this.requestSequence}`;
+        const queuedAt = Date.now();
+        this.logLifecycle(`Pi 请求入队 requestId=${requestId}`, {
+            requestId,
+            sessionKey: key
+        });
+        const task = session.queue.then(() => this.runRequest(session, session.initialized
+            ? (options.continuationPrompt || prompt)
+            : prompt, callbacks, {
+            requestId,
+            queuedAt
+        }));
         session.queue = task.catch(() => undefined);
         return task;
     }
 
-    getSessionKey(profile, template) {
+    getSessionKey(profile, template, conversationKey = 'default') {
         const policy = resolvePermissionPolicy(template.permissionProfile);
         const baseKey = buildChatSessionKey({
             profileName: profile.name || 'default',
             templateId: template.id || template.name || 'default',
             mode: 'agent'
         });
-        return `${baseKey}:permission:${policy.name}`;
+        return `${baseKey}:permission:${policy.name}:conversation:${conversationKey}`;
     }
 
     getOrCreateSession(key, profile, template) {
@@ -99,6 +111,7 @@ class PiRuntimeManager {
             queue: Promise.resolve(),
             pending: null,
             closed: false,
+            initialized: false,
             configurationFingerprint,
             profile,
             template
@@ -141,6 +154,14 @@ class PiRuntimeManager {
     handleEvent(session, event) {
         const pending = session.pending;
         if (!pending) return;
+        const eventType = event.type || 'unknown';
+        const toolName = extractToolName(event);
+        const toolSummary = toolName ? ` tool=${toolName}` : '';
+        this.logLifecycle(`Pi RPC 事件 requestId=${pending.requestId} type=${eventType}${toolSummary}`, {
+            requestId: pending.requestId,
+            eventType,
+            ...(toolName ? { toolName } : {})
+        });
         if (event.type === 'response' && event.success === false) {
             this.rejectPending(session, new Error(event.error || 'Pi RPC 请求失败'));
             return;
@@ -156,7 +177,22 @@ class PiRuntimeManager {
             return;
         }
         if (event.type === 'agent_end') {
+            if (event.willRetry === true) {
+                this.logLifecycle(`Pi Agent 将重试 requestId=${pending.requestId}`, {
+                    requestId: pending.requestId
+                });
+                return;
+            }
+            const assistantError = extractAssistantError(event.messages);
+            if (assistantError) {
+                this.rejectPending(session, new Error(assistantError));
+                return;
+            }
             if (!pending.message) pending.message = extractAssistantText(event.messages);
+            if (!pending.message) {
+                this.rejectPending(session, new Error('Pi Agent 返回空回复'));
+                return;
+            }
             this.resolvePending(session, {
                 success: true,
                 message: pending.message
@@ -164,13 +200,19 @@ class PiRuntimeManager {
         }
     }
 
-    runRequest(session, prompt, callbacks) {
+    runRequest(session, prompt, callbacks, requestInfo) {
+        const requestId = requestInfo.requestId;
         if (session.closed) {
+            this.logLifecycle(`Pi 请求无法启动 requestId=${requestId} 原因=进程已退出`, { requestId });
             return Promise.reject(new Error('Pi 进程退出，不能继续请求'));
         }
+        this.logLifecycle(`Pi 请求开始 requestId=${requestId}`, {
+            requestId,
+            queueWaitMs: Date.now() - requestInfo.queuedAt
+        });
         return new Promise((resolve, reject) => {
-            const requestId = `aasc-${++this.requestSequence}`;
             const timer = setTimeout(() => {
+                this.logLifecycle(`Pi 请求超时 requestId=${requestId}`, { requestId });
                 this.rejectPending(session, new Error('Pi RPC 请求超时'));
                 this.terminateSession(session);
             }, this.requestTimeoutMs);
@@ -199,6 +241,11 @@ class PiRuntimeManager {
         if (!pending) return;
         clearTimeout(pending.timer);
         session.pending = null;
+        session.initialized = true;
+        this.logLifecycle(`Pi 请求完成 requestId=${pending.requestId} messageLength=${(result.message || '').length}`, {
+            requestId: pending.requestId,
+            messageLength: (result.message || '').length
+        });
         pending.callbacks.onComplete?.(result.message);
         pending.resolve(result);
     }
@@ -208,8 +255,20 @@ class PiRuntimeManager {
         if (!pending) return;
         clearTimeout(pending.timer);
         session.pending = null;
+        this.logLifecycle(`Pi 请求失败 requestId=${pending.requestId} error=${error.message}`, {
+            requestId: pending.requestId,
+            error: error.message
+        });
         pending.callbacks.onError?.(error.message);
         pending.reject(error);
+    }
+
+    logLifecycle(message, details = {}) {
+        try {
+            this.logger(message, details);
+        } catch (error) {
+            // 诊断日志不能影响 Pi RPC 主流程。
+        }
     }
 
     failSession(session, error) {
@@ -232,6 +291,16 @@ class PiRuntimeManager {
         const session = this.sessions.get(key);
         if (!session) return;
         this.terminateSession(session);
+    }
+
+    resetSession(profile, template, conversationKey = 'default') {
+        const normalizedProfile = normalizeAgentProfile(profile);
+        const normalizedTemplate = normalizeChatTemplate(template);
+        const key = this.getSessionKey(normalizedProfile, normalizedTemplate, conversationKey);
+        const session = this.sessions.get(key);
+        if (!session) return false;
+        this.terminateSession(session);
+        return true;
     }
 
     async stopAll() {
@@ -269,6 +338,23 @@ function extractAssistantText(messages) {
         .filter(item => item.type === 'text')
         .map(item => item.text || '')
         .join('');
+}
+
+function extractAssistantError(messages) {
+    const assistant = [...(messages || [])].reverse().find(message => message.role === 'assistant');
+    if (!assistant) return '';
+    if (String(assistant.stopReason || '').toLowerCase() === 'error') {
+        return assistant.errorMessage || assistant.error || 'Pi Agent 执行失败';
+    }
+    return assistant.errorMessage || '';
+}
+
+function extractToolName(event) {
+    return event.toolName
+        || event.toolCall?.name
+        || event.assistantMessageEvent?.toolCall?.name
+        || event.assistantMessageEvent?.partial?.toolCall?.name
+        || '';
 }
 
 module.exports = {

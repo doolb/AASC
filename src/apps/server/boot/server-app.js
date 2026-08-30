@@ -292,7 +292,10 @@ const aiRoles = new AiRolesService({
     agentBackendClient: new AgentBackendClient()
 });
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
-const piRuntimeManager = new PiRuntimeManager({ projectRoot: PROJECT_ROOT });
+const piRuntimeManager = new PiRuntimeManager({
+    projectRoot: PROJECT_ROOT,
+    logger: (message, details) => log('Pi', message, { source: 'server', scope: 'global', ...details })
+});
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
 let pendingAsrRequestId = 0;
@@ -2096,6 +2099,19 @@ app.post('/api/chat/clear', (req, res) => {
         message: '聊天记录已清空',
         history: history
     });
+});
+
+app.post('/api/chat/round', (req, res) => {
+    try {
+        const result = chat.deleteConversationRound(req.body || {});
+        res.json({
+            status: result.success ? 'success' : 'error',
+            message: result.message || (result.success ? '本轮对话已删除' : '删除本轮对话失败'),
+            history: result.history
+        });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: `删除本轮对话失败: ${error.message}` });
+    }
 });
 
 app.get('/api/chat/sessions', (req, res) => {
@@ -4095,7 +4111,13 @@ wss.on('connection', (ws, req) => {
                     if (data.correlationId) extra.correlationId = data.correlationId;
                     const shouldLogCrop = data.type !== 'control' || (data.action !== 'crop' && data.action !== 'controlInput') || _cropDebugLog;
                     if (shouldLogCrop) {
-                        log('WS', `<< ${data.type}${data.displayId ? ' displayId='+data.displayId : ''}${data.text ? ' "'+data.text+'"' : ''}`, extra);
+                        const inputText = typeof data.text === 'string' ? data.text : data.content;
+                        const textSummary = typeof inputText === 'string'
+                            ? ` "${inputText.length > 500 ? `${inputText.slice(0, 500)}…` : inputText}"`
+                            : '';
+                        const requestSummary = data.requestId ? ` requestId=${data.requestId}` : '';
+                        const modeSummary = data.mode ? ` mode=${data.mode}` : '';
+                        log('WS', `<< ${data.type}${requestSummary}${data.displayId ? ' displayId='+data.displayId : ''}${modeSummary}${textSummary}`, extra);
                     }
                 }
 
@@ -5561,6 +5583,16 @@ async function handleChatMessage(options) {
 
     const preferredDisplayId = displayIds[0] || (routeVoiceToAll ? null : displayId) || null;
     const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId) : null;
+    const sendChatResponse = (payload) => {
+        const responseLength = typeof payload.message === 'string' ? payload.message.length : 0;
+        log('WS', `>> chatResponse requestId=${effectiveRequestId} success=${payload.success} messageLength=${responseLength}`, {
+            source: 'server',
+            scope: 'single',
+            targetId: displayId || voiceOriginDisplayId || null,
+            correlationId: effectiveRequestId
+        });
+        sendToControl(payload);
+    };
     if (voiceOriginDisplayId && sendToControl) {
         sendToControl({
             type: 'chatInput',
@@ -5637,7 +5669,7 @@ async function handleChatMessage(options) {
                 templateId: effectiveTemplateTarget || 'default'
             });
             
-            sendToControl({ type: 'chatResponse', requestId: effectiveRequestId, success: true, message: fullMessage, history: chat.getHistory() });
+            sendChatResponse({ type: 'chatResponse', requestId: effectiveRequestId, success: true, message: fullMessage, history: chat.getHistory() });
             if (voiceOriginDisplayId) {
                 sendToDisplay(voiceOriginDisplayId, {
                     type: 'voiceCommand',
@@ -5648,7 +5680,7 @@ async function handleChatMessage(options) {
             }
         },
         onError: (error) => {
-            sendToControl({ type: 'chatResponse', requestId: effectiveRequestId, success: false, error });
+            sendChatResponse({ type: 'chatResponse', requestId: effectiveRequestId, success: false, error });
         }
     });
     if (ttsScheduler) await ttsScheduler.waitForIdle();

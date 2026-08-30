@@ -229,6 +229,18 @@ clearHistory(options):
     调用 saveHistory()
     返回 getHistory()
 
+deleteConversationRound(messageId, options):
+    在 activeProfile 和 options.mode/target/sessionId 对应历史中查找 messageId
+    仅接受用户消息或旧式同时包含 user/assistant 的记录
+    如果是用户消息:
+        删除该消息
+        如果下一条仍属于同一会话且 role == 'assistant'，同时删除下一条
+    如果是旧式 user/assistant 记录:
+        删除该条记录
+    调用 saveHistory()
+    通知 Pi Runtime 重置相同 profile/template/conversation 的内存会话
+    返回 { success, history: getHistory() }
+
 trimHistory():
     对 chatHistories 中每个会话:
         如果超过 MAX_HISTORY_PER_SESSION:
@@ -1544,13 +1556,15 @@ chat.chatStream(message, options, callbacks):
         template = 从服务端模板表读取 templateTarget
         policy = resolvePermissionPolicy(template.permissionProfile)
         prompt = 当前 profile/template 历史 + 当前系统提示词 + 当前消息
-        PiRuntimeManager.chatStream(profile, template, prompt, callbacks)
+        continuationPrompt = 当前消息
+        conversationKey = encode(mode, target, sessionId)
+        PiRuntimeManager.chatStream(profile, template, prompt, callbacks, { continuationPrompt, conversationKey })
         Pi 失败时返回失败，不回退到普通 LLM HTTP
     否则:
         沿用现有 OpenAI 兼容 SSE 请求
 ```
 
-`PiRuntimeManager` 为 `(profileName, templateId, permissionProfile)` 维护服务器拥有的 RPC 子进程，并在服务器重启、SIGTERM/SIGINT 或单次异常时清理进程。模板请求中的任意 `tools` 字段不参与策略计算；高权限策略暂由控制端配置，服务器仍执行固定策略校验。
+`PiRuntimeManager` 为 `(profileName, templateId, permissionProfile, conversationKey)` 维护服务器拥有的 RPC 子进程，并在服务器重启、SIGTERM/SIGINT、删除单轮历史或单次异常时清理对应进程。首次请求初始化必要历史，后续请求只发送当前消息。模板请求中的任意 `tools` 字段不参与策略计算；高权限策略暂由控制端配置，服务器仍执行固定策略校验。
 
 ## 模板持久化隔离伪代码
 

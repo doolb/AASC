@@ -878,12 +878,20 @@ const Chat = {
                 name = '助手';
                 content = item.assistant;
             }
+
+            const canDeleteRound = this.session.mode !== 'role'
+                && Boolean(item.id)
+                && (roleClass === 'user' || item.user !== undefined);
+            const deleteButton = canDeleteRound
+                ? `<button class="chat-delete-round-btn" onclick="Chat.deleteConversationRound('${this.escapeHtml(String(item.id))}')" title="删除本轮对话">删除本轮</button>`
+                : '';
             
             return `
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
                     <div class="chat-message-content">${ChatMarkdown.render(content)}</div>
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
+                    ${deleteButton}
                 </div>
             `;
         }).join('');
@@ -1502,6 +1510,34 @@ const Chat = {
                 }
             })
             .catch(err => window.showToast('清空失败', 'error'));
+    },
+
+    deleteConversationRound(messageId) {
+        if (!messageId || !window.confirm('确定删除这一轮对话吗？')) return;
+
+        const mode = this.session.mode === 'private' ? 'private' : 'group';
+        const body = {
+            messageId,
+            mode,
+            target: mode === 'private' ? this.session.privateTarget : null,
+            sessionId: this.session.privateSessionId || 'default'
+        };
+        fetch('/api/chat/round', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status !== 'success') {
+                    window.showToast(data.message || '删除本轮对话失败', 'error');
+                    return;
+                }
+                this.history = data.history || [];
+                this.renderHistory();
+                window.showToast('本轮对话已删除', 'success');
+            })
+            .catch(err => window.showToast(`删除本轮对话失败: ${err.message}`, 'error'));
     },
     
     showConfig() {

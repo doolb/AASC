@@ -74,6 +74,29 @@
     transform: scale(1.1);
 }
 
+.chat-delete-round-btn {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    padding: 4px 7px;
+    border: none;
+    border-radius: 4px;
+    background: rgba(220, 70, 70, 0.28);
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 11px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s;
+}
+
+.chat-message.user:hover .chat-delete-round-btn {
+    opacity: 1;
+}
+
+.chat-delete-round-btn:hover {
+    background: rgba(220, 70, 70, 0.55);
+}
+
 .chat-role-status {
     margin-left: 6px;
     font-size: 11px;
@@ -146,6 +169,7 @@
 .chat-message {
     margin-bottom: 8px;
     display: flex;
+    position: relative;
 }
 
 .chat-message.user {

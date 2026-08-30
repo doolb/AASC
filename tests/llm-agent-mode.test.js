@@ -10,8 +10,8 @@ const originalTemplates = chat.getTemplates();
 function createAgentChatHarness() {
     const calls = [];
     const runtime = {
-        async chatStream(profile, template, prompt, callbacks) {
-            calls.push({ profile, template, prompt });
+        async chatStream(profile, template, prompt, callbacks, options) {
+            calls.push({ profile, template, prompt, options });
             callbacks.onChunk?.('Pi回复', 'Pi回复');
             callbacks.onComplete?.('Pi回复');
             return { success: true, message: 'Pi回复' };
@@ -89,4 +89,21 @@ test('模板权限来自服务端模板，不能由请求 tools 字段覆盖', a
     }, {});
     assert.equal(calls[0].template.permissionProfile, 'readonly');
     assert.equal('tools' in calls[0].template, false);
+});
+
+test('Pi Agent 请求传递会话键和后续当前消息', async () => {
+    const { calls } = createAgentChatHarness();
+    const options = {
+        templateTarget: 'researcher',
+        mode: 'group',
+        target: null,
+        sessionId: 'default',
+        includeHistory: true,
+        contextCount: 10
+    };
+    await chat.chatStream('第一轮', options, {});
+    await chat.chatStream('第二轮', options, {});
+    assert.equal(calls[0].options.continuationPrompt, '第一轮');
+    assert.equal(calls[1].options.continuationPrompt, '第二轮');
+    assert.equal(calls[0].options.conversationKey, calls[1].options.conversationKey);
 });

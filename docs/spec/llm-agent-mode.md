@@ -44,11 +44,16 @@ loadHistory():
 
 ```text
 PiRuntimeManager(options):
-    sessions = Map<(profileName, templateId, permissionProfile), PiSession>
+    sessions = Map<(profileName, templateId, permissionProfile, conversationKey), PiSession>
     spawn = 注入的子进程创建函数，生产环境使用 child_process.spawn
     projectRoot = 固定项目根目录
     extensionPath = 项目内置只读扩展路径
     requestTimeoutMs = options.requestTimeoutMs || 600000
+    logger = options.logger 或空函数
+
+logPi(event, details):
+    调用 logger(event, details)
+    logger 失败时忽略日志异常，不影响 Pi 请求
 
 getOrCreate(profile, template):
     校验 profile.mode == 'agent' 且 profile.backend == 'pi'
@@ -61,22 +66,38 @@ getOrCreate(profile, template):
     创建 PiSession(profile, template, toolAllowlist)
     返回 session
 
-chatStream(profile, template, prompt, callbacks):
-    session = getOrCreate(profile, template)
+chatStream(profile, template, prompt, callbacks, options):
+    session = getOrCreate(profile, template, options.conversationKey)
+    生成 requestId
+    记录请求入队和实际开始，日志包含 requestId、会话键和队列等待信息
     将请求加入 session 串行队列
     session.ensureStarted()
-    通过 stdin 写入 { id, type: 'prompt', message: prompt }\n
+    如果 session 尚未初始化:
+        通过 stdin 写入 { id, type: 'prompt', message: prompt }\n
+    否则:
+        通过 stdin 写入 { id, type: 'prompt', message: options.continuationPrompt }\n
     读取 stdout JSONL:
+        记录 requestId 关联的关键事件类型；工具事件只记录工具名/长度，不记录完整内容
         type='response' 且 id 匹配且 success=false → 当前请求失败
         type='message_update' 且 assistantMessageEvent.type='text_delta':
             callbacks.onChunk(delta, fullMessage)
             按句切分，完整句调用 callbacks.onSentence
-        type='turn_end' 或 type='agent_end':
-            callbacks.onComplete(fullMessage)
+        type='agent_end':
+            如果 willRetry=true → 记录重试事件，继续等待后续事件
+            如果最后 assistant 消息 stopReason='error' 或存在 errorMessage:
+                记录失败，callbacks.onError(errorMessage)
+            否则提取最终文本
+            如果最终文本为空 → 记录空回复失败，callbacks.onError('Pi Agent 返回空回复')
+            否则记录完成，callbacks.onComplete(fullMessage)
     stderr 仅写服务器 Agent 日志，不作为助手消息
     等待当前请求响应时使用 requestTimeoutMs 计时
     超时 → stop(session)，callbacks.onError('Pi 请求超时')
     退出/非法协议 → stop(session)，callbacks.onError(error)
+
+resetSession(profile, template, conversationKey):
+    计算同 chatStream 的会话键
+    停止并删除对应 PiSession
+    下次请求重新使用剩余应用历史初始化
 ```
 
 Pi 启动参数伪代码：
@@ -192,12 +213,25 @@ chatStream(userMessage, options, callbacks):
     如果 profile.mode == 'agent':
         prompt = buildAgentPrompt(userMessage, options)
         template = loadTemplate(options.templateTarget)
-        PiRuntimeManager.chatStream(profile, template, prompt, callbacks)
+        conversationKey = encode(mode, target, sessionId)
+        PiRuntimeManager.chatStream(profile, template, prompt, callbacks, {
+            continuationPrompt: userMessage,
+            conversationKey
+        })
         成功后沿用普通聊天 onComplete/history 保存流程
         失败后只调用 onError，不调用普通 LLM HTTP 请求
         返回
     否则:
         使用现有 OpenAI 兼容 SSE 流程
+
+deleteConversationRound(messageId, scope):
+    在 active profile 和 scope 对应历史中定位 messageId
+    如果目标是用户消息:
+        删除目标消息
+        如果下一条是同 scope 的 assistant 消息，一并删除
+    保存历史
+    PiRuntimeManager.resetSession(profile, template, conversationKey)
+    返回最新全局历史
 ```
 
 ## 服务器生命周期
@@ -239,6 +273,11 @@ onPiError(profileName, error):
     结束当前请求并返回 error
     从 sessions 删除 profile
     下次 Agent 请求重新 spawn
+
+控制端聊天日志:
+    收到 chatMessage 时记录 requestId、displayId、mode 和 content 摘要
+    发送 chatChunk/chatResponse 时记录 requestId、成功状态和文本长度
+    前端只接受 activeRequestId 对应的 chatResponse；日志用于区分服务端未回包和前端主动丢弃迟到回包
 
 ## 控制端权限设置
 
