@@ -56,6 +56,16 @@ Chat2APIProxyService
     DeepSeek / GLM / Kimi / Mimo / MiniMax / Perplexity / Qwen / Z.ai
 ```
 
+控制端请求链路：
+
+```text
+控制端 HTTPS 页面
+    ↓ /api/chat2api-gateway/{instanceId}
+AASC 主服务 HTTPS
+    ↓ 仅允许运行中的 chat2api.proxy + 回环端口
+Chat2API 代理 HTTP 127.0.0.1:{port}
+```
+
 内置任务启动独立的代理 HTTP Server，默认监听 `127.0.0.1:8080`，端口和监听地址可配置，避免占用 AASC 主服务端口。任务停止时关闭代理、OAuth 临时回调和活动连接，并清理内存中的敏感状态。
 
 ## 配置与数据
@@ -72,6 +82,10 @@ Chat2APIProxyService
 
 - 凭据文件创建目录后设置用户私有权限，日志和控制端响应不得输出完整 Token、Cookie 或 API Key。
 - 支持导入 Chat2API 导出的 Provider/账号数据；导入采用预览、确认、写入三步，失败不覆盖原数据。
+- 支持从原 Chat2API Electron Store 的 `data.json` 自动读取并预览迁移；不迁移原 API Key、日志、会话和 Electron 状态。
+- 迁移 `userModelOverrides.*.addedModels` 中的用户模型别名，例如 `Qwen3.6-Flash → Qwen3.7`，并保留 Provider 归属。
+- 用户模型映射指定 Provider 后，路由按该 Provider 的活动账号选择，不要求别名出现在内置模型清单中。
+- Qwen Provider 使用专用请求/响应适配：按 `/api/v2/chat` 原生协议生成请求参数，解压 gzip/deflate/br 后兼容 `data.messages`、`multi_load/iframe`、SSE 累计内容和思考标记，避免通用 OpenAI 解析得到空回复。
 - 旧 AASC LLM 配置继续有效；Chat2API 代理作为独立服务，不自动替换当前 profile。
 
 ## 控制端设计
@@ -83,6 +97,11 @@ Chat2APIProxyService
 - OAuth 登录、回调状态和账号刷新。
 - API Key 创建、复制、禁用和删除。
 - 上游版本、数据导入和健康检查入口。
+- 原 Chat2API 数据一键导入：读取同用户 `~/.chat2api/data.json`，迁移 Provider、账号、模型映射和代理基础配置。
+- 控制端管理请求通过 AASC 主服务同源 HTTPS 网关转发，Chat2API 代理保持本机回环监听。
+- 账户管理弹窗使用独立语义样式和控制端主题变量，随深色、浅色及扩展主题同步切换。
+- 账户管理页面的响应式布局在窄屏下切换为单列，配置表单和列表操作保持可读、可操作。
+- 模型映射区域支持手动新增、编辑和删除，并可指定优先 Provider 与账号。
 
 敏感凭据只允许写入专用表单，列表只显示脱敏值；控制端不把完整凭据写入普通任务参数或任务日志。
 

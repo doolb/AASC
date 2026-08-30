@@ -53,6 +53,26 @@ class TaskManager extends EventEmitter {
   }
 
   /**
+   * 直接执行一次内置任务，不创建任务实例、不写入任务历史，供语音等内部调用使用。
+   * 控制端手动调用仍通过 submit/runInstance 走标准实例生命周期。
+   */
+  async runBuiltinOnce(builtinId, params = {}, extraContext = {}) {
+    if (!builtinRegistry) throw new Error('内置任务模块不可用');
+    const task = builtinRegistry.getTask(builtinId);
+    if (!task) throw new Error('内置任务不存在: ' + builtinId);
+
+    return builtinRegistry.run(builtinId, {
+      ...extraContext,
+      params,
+      taskName: task.id,
+      taskIO: this.taskIO,
+      generateTTS: this._generateTts,
+      sendToDisplay: this._sendToDisplay,
+      broadcastToDisplays: this._broadcastToDisplays
+    });
+  }
+
+  /**
    * 启动时恢复孤儿服务实例（上次崩溃/重启时 running 的实例）
    * 先创建 draft，再 runInstance() 启动
    * running 实例：立即 submit + runInstance 恢复

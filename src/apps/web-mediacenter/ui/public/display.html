@@ -2121,16 +2121,23 @@
                 existing.remove();
             }
             
+            const resultList = Array.isArray(results) ? results : (results ? [results] : []);
+            const escapeSearchText = (text) => String(text || '').replace(/[&<>"']/gu, (char) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[char]));
             let contentHtml = '';
-            if (results.type === 'ai_answer') {
-                contentHtml = `<div class="search-ai-answer">${results.content}</div>`;
-            } else if (results.type === 'first_result') {
-                contentHtml = `
-                    <div class="search-result-title">${results.title}</div>
-                    <div class="search-result-snippet">${results.snippet}</div>
-                `;
+            if (resultList.length > 0) {
+                contentHtml = resultList.map((result, index) => {
+                    if (result.type === 'ai_answer') {
+                        return `<div class="search-result-item"><div class="search-result-title">${index + 1}. AI 回答</div><div class="search-ai-answer">${escapeSearchText(result.content)}</div></div>`;
+                    }
+                    if (result.type === 'first_result') {
+                        return `<div class="search-result-item"><div class="search-result-title">${index + 1}. ${escapeSearchText(result.title)}</div><div class="search-result-snippet">${escapeSearchText(result.snippet)}</div></div>`;
+                    }
+                    return `<div class="search-result-item"><div class="search-result-snippet">${index + 1}. ${escapeSearchText(result.message || '没有找到结果')}</div></div>`;
+                }).join('');
             } else {
-                contentHtml = `<div class="search-no-result">没有找到结果</div>`;
+                contentHtml = '<div class="search-no-result">没有找到结果</div>';
             }
             
             const popup = document.createElement('div');

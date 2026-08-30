@@ -78,7 +78,12 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     host: '127.0.0.1', port: 0, config: { enableApiKey: true },
     dataStore: { validateApiKey: async () => null },
     coreAdapter: { listModels: async () => ({ object: 'list', data: [] }), forwardChatCompletion: async () => ({ body: {} }) },
-    managementService: { listProviders: async () => [{ id: 'deepseek' }], startLogin: async () => ({ state: 'state-1' }) },
+    managementService: {
+      listProviders: async () => [{ id: 'deepseek' }],
+      startLogin: async () => ({ state: 'state-1' }),
+      previewLegacyImport: async () => ({ counts: { providers: 1, accounts: 1, modelMappings: 1 } }),
+      mergeLegacyImport: async (confirmed) => ({ confirmed }),
+    },
   });
   await service.start();
   try {
@@ -88,6 +93,12 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     const login = await request(service.address().port, { path: '/api/chat2api/oauth/start', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ providerId: 'deepseek' }));
     assert.equal(login.statusCode, 200);
     assert.equal(JSON.parse(login.text).state, 'state-1');
+    const preview = await request(service.address().port, { path: '/api/chat2api/import/legacy/preview', method: 'POST', headers: { 'Content-Type': 'application/json' } }, '{}');
+    assert.equal(preview.statusCode, 200);
+    assert.equal(JSON.parse(preview.text).counts.accounts, 1);
+    const merge = await request(service.address().port, { path: '/api/chat2api/import/legacy/merge', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ confirmed: true }));
+    assert.equal(merge.statusCode, 200);
+    assert.equal(JSON.parse(merge.text).confirmed, true);
   } finally {
     await service.stop();
   }

@@ -18,6 +18,7 @@
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |
+| 搜索 | [search.md](spec/search.md) | 搜索频道、搜索历史同步和独立 Pi 搜索会话 |
 | AASC系统 | [aasc.md](spec/aasc.md) | 消息总线、执行者模型、消息路由、消息过滤 |
 | Auto-Brain | [auto-brain.md](spec/auto-brain.md) | 独立分层决策流程、策略草案把关、AASC 主题协作 |
 | 分层架构 | [layered-architecture.md](spec/layered-architecture.md) | 分层装配流程、依赖约束、模块组装伪代码 |

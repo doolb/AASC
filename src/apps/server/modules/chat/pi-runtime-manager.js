@@ -56,16 +56,24 @@ class PiRuntimeManager {
         }
         const normalizedTemplate = normalizeChatTemplate(template);
         const key = this.getSessionKey(normalizedProfile, normalizedTemplate, options.conversationKey);
-        return this.enqueueRequest({
-            key,
-            profile: normalizedProfile,
-            template: normalizedTemplate,
-            prompt,
-            callbacks,
-            options,
-            attempt: 0,
-            retryState: { count: 0 }
-        });
+        try {
+            return await this.enqueueRequest({
+                key,
+                profile: normalizedProfile,
+                template: normalizedTemplate,
+                prompt,
+                callbacks,
+                options,
+                attempt: 0,
+                retryState: { count: 0 }
+            });
+        } finally {
+            // 搜索等一次性任务不能把独立 Pi 进程留在 sessions 中，否则每次搜索都会叠加一个常驻进程。
+            if (options.ephemeral === true) {
+                const session = this.sessions.get(key);
+                if (session) this.terminateSession(session);
+            }
+        }
     }
 
     enqueueRequest({ key, profile, template, prompt, callbacks, options, attempt, retryState }) {

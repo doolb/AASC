@@ -63,6 +63,7 @@ const SystemMonitor = require('../../../framework/observability/system-monitor')
 const LogBrain = require('../../../framework/observability/log-brain');
 const { registerLogBrainApi } = require('../api/log-brain-api');
 const TaskManager = require('../modules/task-engine/task-manager');
+const { createChat2ApiGateway } = require('../modules/chat2api/chat2api-gateway');
 const { registerTaskHandlers } = require('../modules/task-engine/web-socket-handler');
 const AiRolesService = require('../modules/ai-roles/ai-roles-service');
 const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
@@ -701,6 +702,12 @@ async function startServer() {
             });
             await taskManager.init();
             log('任务引擎', '远程任务系统已初始化');
+
+            // 语音搜索复用任务引擎的单次内置任务；搜索任务只返回结果，播报、频道和历史仍由语音层处理。
+            voiceCommand.setSearchRunner(async (query) => {
+                const taskResponse = await taskManager.runBuiltinOnce('search.web', { query });
+                return taskResponse?.data || taskResponse;
+            });
             await taskManager.restoreAutoStartServices();
 
             // 注入报时任务控制函数（供语音命令"开启报时/关闭报时"使用）
@@ -1255,6 +1262,8 @@ app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
 app.use('/js/lib', express.static(path.join(PROJECT_ROOT, 'node_modules', 'onnxruntime-web', 'dist')));
 app.use(express.json({ limit: '50mb' }));
+// Chat2API 代理只监听服务器本机；控制端通过当前 HTTPS 主服务同源转发，避免浏览器拦截 HTTP 混合内容。
+app.use('/api/chat2api-gateway/:instanceId', createChat2ApiGateway({ getTaskManager: () => taskManager }));
 
 app.get('/', (req, res) => {
     res.redirect('/upload');
@@ -4968,6 +4977,15 @@ async function handleControlMessageFallback(data, ws) {
                                             sendToControl: sendToControl
                                         });
                                     },
+                                    onSearch: async (searchResult) => {
+                                        await handleLlmSearchCommand({
+                                            query: searchResult.query,
+                                            targetDisplayId,
+                                            playOnControl,
+                                            isDisplayVoiceInput,
+                                            sendToControl
+                                        });
+                                    },
                                     onShowHelp: () => {
                                         sendToControl({ type: 'showHelp' });
                                     },
@@ -4977,6 +4995,14 @@ async function handleControlMessageFallback(data, ws) {
                                     onSystemMessage: (content) => {
                                         sendToControl({ type: 'systemMessage', content: content });
                                     }
+                                });
+                            } else if (result.type === 'search') {
+                                await handleLlmSearchCommand({
+                                    query: result.query,
+                                    targetDisplayId,
+                                    playOnControl,
+                                    isDisplayVoiceInput,
+                                    sendToControl
                                 });
                             } else if (result.type === 'chat') {
                                 await handleChatMessage({
@@ -6004,6 +6030,147 @@ async function handleChatMessage(options) {
     if (ttsScheduler) await ttsScheduler.waitForIdle();
 }
 
+async function sendSearchTts(text, options = {}) {
+    const {
+        targetDisplayId = null,
+        playOnControl = false,
+        isDisplayVoiceInput = false,
+        sendToControl
+    } = options;
+    if (!text) return;
+
+    if (playOnControl) {
+        const audioPath = await generateTtsWithFallback(text);
+        sendToControl({
+            type: 'playOnControl',
+            audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
+            text
+        });
+        return;
+    }
+
+    if (isDisplayVoiceInput) {
+        await sendVoiceInputTtsSentences(text);
+        return;
+    }
+
+    if (targetDisplayId) {
+        await sendVoiceCommandTtsSentences(text, targetDisplayId);
+    }
+}
+
+async function handleLlmSearchCommand(options = {}) {
+    const {
+        query = '',
+        targetDisplayId = null,
+        playOnControl = false,
+        isDisplayVoiceInput = false,
+        sendToControl
+    } = options;
+    const normalizedQuery = String(query || '').trim();
+    const requestId = generateCorrelationId('search');
+    const searchingText = `正在搜索${normalizedQuery || '相关信息'}`;
+    const sendChannel = (payload) => {
+        sendToControl({
+            type: 'searchChannel',
+            requestId,
+            query: normalizedQuery,
+            timestamp: Date.now(),
+            ...payload
+        });
+    };
+
+    sendChannel({
+        status: 'started',
+        content: searchingText,
+        result: null,
+        error: null
+    });
+    try {
+        await sendSearchTts(searchingText, {
+            targetDisplayId,
+            playOnControl,
+            isDisplayVoiceInput,
+            sendToControl
+        });
+    } catch (error) {
+        logError('Search', `搜索开始提示TTS失败: ${error.message}`);
+    }
+
+    const activeProfile = chat.getProfileByName(chat.getActiveProfile());
+    const useEphemeralPi = activeProfile?.mode === 'agent' && activeProfile?.backend === 'pi';
+    const prompt = normalizedQuery ? `搜索：${normalizedQuery}` : '帮我搜索一些信息';
+    const searchSystemPrompt = '你是独立搜索助手。只处理当前搜索请求，使用可用的只读网络搜索工具获取信息；不要引用或猜测其他聊天内容，回答时给出简洁、准确的搜索结果。';
+    let result;
+
+    try {
+        result = await chat.chatStream(prompt, {
+            systemPrompt: searchSystemPrompt,
+            includeHistory: false,
+            contextCount: 0,
+            mode: 'search',
+            target: null,
+            sessionId: requestId,
+            conversationKey: `search:${requestId}`,
+            ephemeral: useEphemeralPi
+        }, {
+            onChunk: (chunk, fullMessage) => {
+                sendChannel({
+                    status: 'running',
+                    content: fullMessage || chunk,
+                    result: null,
+                    error: null
+                });
+            }
+        });
+
+        if (!result?.success || !String(result.message || '').trim()) {
+            throw new Error(result?.error || '搜索返回空结果');
+        }
+
+        const responseText = String(result.message).trim();
+        const searchResult = {
+            type: 'agent_answer',
+            content: responseText
+        };
+        voiceCommand.recordSearchHistory(normalizedQuery, searchResult);
+        sendChannel({
+            status: 'completed',
+            content: responseText,
+            result: searchResult,
+            error: null
+        });
+
+        try {
+            await sendSearchTts(responseText, {
+                targetDisplayId,
+                playOnControl,
+                isDisplayVoiceInput,
+                sendToControl
+            });
+        } catch (error) {
+            logError('Search', `搜索结果TTS失败: ${error.message}`);
+        }
+
+        if (!playOnControl && targetDisplayId && sendToDisplay) {
+            sendToDisplay(targetDisplayId, {
+                type: 'voiceCommand',
+                action: 'response',
+                text: responseText,
+                detailText: responseText
+            });
+        }
+    } catch (error) {
+        sendChannel({
+            status: 'failed',
+            content: '搜索失败，请稍后再试',
+            result: null,
+            error: error.message
+        });
+        logError('Search', `LLM 搜索失败: ${error.message}`);
+    }
+}
+
 const deviceEventDebounce = new Map();
 const DEVICE_EVENT_DEBOUNCE_MS = 30000;
 
@@ -6090,6 +6257,13 @@ async function executeDeviceEvent(ip, eventType, displayId) {
                         sendToControl: sendToControl
                     });
                 },
+                onSearch: async (searchResult) => {
+                    await handleLlmSearchCommand({
+                        query: searchResult.query,
+                        targetDisplayId,
+                        sendToControl
+                    });
+                },
                 onShowHelp: () => {
                     sendToControl({ type: 'showHelp' });
                 },
@@ -6099,6 +6273,12 @@ async function executeDeviceEvent(ip, eventType, displayId) {
                 onSystemMessage: (content) => {
                     sendToControl({ type: 'systemMessage', content: content });
                 }
+            });
+        } else if (result.type === 'search') {
+            await handleLlmSearchCommand({
+                query: result.query,
+                targetDisplayId,
+                sendToControl
             });
         } else if (result.type === 'chat') {
             await handleChatMessage({

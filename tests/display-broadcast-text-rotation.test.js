@@ -132,11 +132,11 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
         /data\.action === 'weatherResult'[\s\S]*const detailText = data\.detailText \|\| data\.text[\s\S]*showVoiceResponsePopup\(detailText, calculateWeatherPopupDuration\(detailText\)\)/u
     );
     const weatherPopupFunction = DISPLAY_HTML.match(
-        /function showVoiceResponsePopup\(text, durationMs = 5000\)[\s\S]*?\n        \}\n        \n        function showSearchResultPopup/u
+        /function showVoiceResponsePopup\(text, durationMs = 5000, options = \{\}\)[\s\S]*?\n        \}\n        \n        function showSearchResultPopup/u
     )?.[0] || '';
     assert.match(
         weatherPopupFunction,
-        /function showVoiceResponsePopup\(text, durationMs = 5000\)[\s\S]*?\}, durationMs\);/u,
+        /function showVoiceResponsePopup\(text, durationMs = 5000, options = \{\}\)[\s\S]*?\}, durationMs\);/u,
         '天气和普通语音响应都应支持由调用方传入按文字计算的显示时长'
     );
     assert.match(

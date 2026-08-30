@@ -149,6 +149,27 @@ mergeImport(data, confirmed):
     先在内存中合并并校验全部集合
     依次原子写入，任一失败则保留原文件并返回错误
     成功后返回新增/更新统计和脱敏摘要
+
+previewLegacyImport():
+    读取当前用户 ~/.chat2api/data.json
+    将 Electron Store 的 providers、accounts、config.modelMappings 和 userModelOverrides.*.addedModels 转换为 AASC 导入格式
+    addedModels 使用 displayName 作为 model、actualModelId 作为 actualModel，并保留所属 Provider
+    返回 Provider、账号、模型映射数量、代理配置预览和脱敏账号摘要
+
+mergeLegacyImport(confirmed):
+    confirmed 不是 true -> 拒绝写入
+    重新读取并校验 ~/.chat2api/data.json
+    复用 mergeImport 合并 Provider、账号和模型映射
+    userModelOverrides.*.addedModels 转换为带 providerId 的模型映射并合并
+    将 proxyHost、proxyPort、loadBalanceStrategy、enableApiKey 转换并合并到 AASC config.json
+    不迁移原 Chat2API API Key、日志、会话和桌面应用状态
+
+createChat2ApiGateway(taskManager):
+    接收控制端同源 HTTPS 请求和 chat2api.proxy 实例 ID
+    从 TaskManager 查询实例状态和端口，只允许运行中的 chat2api.proxy 实例
+    仅转发 /api/chat2api、/v1、/health 和 /stats 路径到服务器本机回环地址
+    重新生成请求体长度，移除冲突的 transfer-encoding，透传响应状态、头和流
+    实例不存在、未运行或转发失败 -> 返回可识别的网关错误
 ```
 
 ## Provider、模型映射和负载均衡
@@ -170,10 +191,12 @@ resolveModel(requestedModel, provider):
     优先匹配指定 Provider 的精确模型映射
     再匹配全局映射和通配符映射
     未找到映射 -> 使用原始模型名
-    返回 requestedModel、actualModel 和 preferredProviderId
+    兼容映射中的 preferredProviderId 和历史 providerId 字段
+    返回 requestedModel、actualModel、preferredProviderId 和 preferredAccountId
 
 selectAccount(model, strategy, preferredProviderId, preferredAccountId):
-    过滤 Provider enabled、模型支持和账号 enabled/status/dailyLimit
+    有 preferredProviderId 时只筛选指定 Provider；用户明确配置的自定义模型不再要求出现在 Provider 内置模型列表
+    无 preferredProviderId 时继续过滤 Provider 内置模型支持和账号 enabled/status/dailyLimit
     preferredAccountId 可用时优先使用
     fill-first -> 选择当日使用量最低且最久未使用账号
     failover -> 排除冷却中的账号，全部不可用时选择失败次数最少账号
@@ -198,6 +221,11 @@ createChat2ApiCoreAdapter(options):
 createProviderAdapters(httpClient):
     为每个 Provider 注册独立 adapter
     组装 Provider endpoint、认证头和 Provider 请求体
+    Qwen adapter 使用原生 /api/v2/chat 请求协议，生成 req_id、session_id、nonce、timestamp 和 Qwen 专用消息体
+    Qwen adapter 按响应 content-encoding 解压 gzip、deflate、br 后再读取 SSE 事件
+    Qwen adapter 统一按 SSE 事件读取 data.messages，并从 multi_load/iframe 或 text/plain 提取答案内容
+    Qwen 非流式请求先聚合 SSE 增量，再转换为单个 OpenAI chat.completion
+    Qwen 流式请求按累计内容长度只发送新增文本，过滤 deep_think 标记
     非流式响应转换为 OpenAI chat.completion
     流式响应解析为 OpenAI chat.completion.chunk SSE
     不在日志记录完整凭据和请求内容
@@ -290,6 +318,10 @@ proxy /api/chat2api/*:
     本机控制端请求可访问管理接口
     非本机请求必须通过代理 API Key 鉴权
     账号列表、Provider 列表和 API Key 列表不返回秘密字段
+
+proxy /api/chat2api-gateway/{instanceId}/*:
+    控制端通过 AASC 当前 HTTPS 主服务访问
+    校验实例为运行中的 chat2api.proxy 后转发到对应回环端口
 ```
 
 ## 控制端账户弹窗
@@ -298,7 +330,25 @@ proxy /api/chat2api/*:
 Chat2APIControl.open():
     获取 config/providers/accounts/api-keys
     根据代理监听地址设置管理 API base URL
+    以 chat2api-modal/chat2api-dialog 等语义 class 创建账户管理弹窗
+    所有表面、文字、输入控件和分隔线使用控制端主题变量
     展示 Provider 选择、已登录账号和 API Key 列表
+
+Chat2APIControl.render():
+    不写入固定深色背景、文字色或边框色内联样式
+    使用 chat2api-section、chat2api-field、chat2api-list-row 等 class
+    主题切换只修改根元素 data-theme，弹窗通过 CSS 变量即时更新
+    模型映射列表提供新增、编辑和删除操作
+
+Chat2APIControl.saveModelMapping():
+    校验请求模型和实际模型不能为空
+    保存可选 preferredProviderId、preferredAccountId
+    编辑请求模型名称时先删除旧 model，再保存新 model，避免残留旧键
+    保存成功后刷新模型映射列表
+
+chat2api.css:
+    定义弹窗、配置区、账号列表、API Key、模型映射和响应式布局样式
+    使用 --bg-*、--text-*、--border-color、--input-background 和语义色变量
 
 login(providerId):
     POST oauth/start

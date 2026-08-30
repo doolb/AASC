@@ -31,7 +31,9 @@ const createChat2ApiLoadBalancer = ({ providerRegistry, dataStore, failureThresh
     const providers = await providerRegistry.listProviders();
     const candidates = [];
     for (const provider of providers) {
-      if (provider.enabled === false || (preferredProviderId && provider.id !== preferredProviderId) || !supportsModel(provider, model)) {
+      const providerMatches = !preferredProviderId || provider.id === preferredProviderId;
+      const modelMatches = Boolean(preferredProviderId) || supportsModel(provider, model);
+      if (provider.enabled === false || !providerMatches || !modelMatches) {
         continue;
       }
       for (const account of accounts) {

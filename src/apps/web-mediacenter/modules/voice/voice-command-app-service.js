@@ -3,6 +3,7 @@ const reminder = require('../reminder/reminder-app-service');
 const timeAnnounce = require('../time/time-announce-app-service');
 const chat = require('../../../../external/llm/llm-service');
 const timeParser = require('../../../../core/utils/time-parser');
+const searchTask = require('../../../server/modules/task-engine/builtin-tasks/search');
 
 const { USER_CONFIG_DIR } = require('../../../server/modules/config/user-config-paths');
 
@@ -17,6 +18,7 @@ let mediaLibraryManager = null;
 let muteAllDisplays = null;
 let unmuteAllDisplays = null;
 let timeAnnounceToggle = null;
+let searchRunner = null;
 let voiceInputQueues = new Map();
 let ttsRouter = null;
 let conversationConfirmationMode = 'off';
@@ -257,6 +259,42 @@ function saveSearchHistory() {
     }
 }
 
+function createSearchRequestId() {
+    return `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function broadcastSearchChannel(payload) {
+    if (!broadcastToControls) return;
+    broadcastToControls({
+        type: 'searchChannel',
+        timestamp: Date.now(),
+        ...payload
+    });
+}
+
+function recordSearchHistory(query, results) {
+    const historyItem = {
+        id: Date.now().toString(),
+        query,
+        results,
+        timestamp: Date.now()
+    };
+
+    searchHistory.unshift(historyItem);
+    if (searchHistory.length > 50) {
+        searchHistory = searchHistory.slice(0, 50);
+    }
+    saveSearchHistory();
+
+    if (broadcastToControls) {
+        broadcastToControls({
+            type: 'searchHistory',
+            history: searchHistory
+        });
+    }
+    return historyItem;
+}
+
 function setClients(clients, sendFunc, broadcastFunc) {
     displayClients = clients;
     sendToDisplay = sendFunc;
@@ -280,6 +318,11 @@ function setMuteFunctions(muteFunc, unmuteFunc) {
 
 function setTimeAnnounceToggle(fn) {
     timeAnnounceToggle = fn;
+}
+
+// 搜索实现由服务端任务引擎注入，语音层只负责触发流程和处理返回结果。
+function setSearchRunner(fn) {
+    searchRunner = typeof fn === 'function' ? fn : null;
 }
 
 function setConversationConfirmationMode(mode) {
@@ -1382,6 +1425,7 @@ async function handleWeatherCommand(text, displayId, callbacks) {
 
 async function handleSearchCommand(text, displayId, callbacks) {
     let query = text.replace(/搜索/, '').trim();
+    const requestId = createSearchRequestId();
     
     if (!query) {
         if (displayId && sendToDisplay) {
@@ -1397,53 +1441,85 @@ async function handleSearchCommand(text, displayId, callbacks) {
     
     if (displayId && sendToDisplay) {
         const searchingText = `正在搜索${query}`;
+        broadcastSearchChannel({
+            requestId,
+            query,
+            status: 'started',
+            content: searchingText,
+            result: null,
+            error: null
+        });
         try {
             await speakVoiceResponse(displayId, searchingText, 'response', {}, callbacks);
         } catch (err) {
             console.error('[语音命令] 搜索语音生成失败:', err.message);
         }
+    } else {
+        broadcastSearchChannel({
+            requestId,
+            query,
+            status: 'started',
+            content: `正在搜索${query}`,
+            result: null,
+            error: null
+        });
     }
     
     try {
-        const results = await performSearch(query);
-        
-        const historyItem = {
-            id: Date.now().toString(),
-            query: query,
-            results: results,
-            timestamp: Date.now()
-        };
-        
-        searchHistory.unshift(historyItem);
-        if (searchHistory.length > 50) {
-            searchHistory = searchHistory.slice(0, 50);
+        // 服务启动后由任务引擎提供统一执行入口；独立调用语音模块时保留内置任务兜底。
+        const taskResponse = searchRunner
+            ? await searchRunner(query)
+            : await searchTask.run({ params: { query } });
+        const taskData = taskResponse?.data || taskResponse;
+        if (!taskData || taskData.result === undefined) {
+            throw new Error('搜索任务未返回结果');
         }
-        saveSearchHistory();
+        const results = Array.isArray(taskData.result) ? taskData.result : [taskData.result];
         
-        if (broadcastToControls) {
-            broadcastToControls({
-                type: 'searchHistory',
-                history: searchHistory
-            });
-        }
+        recordSearchHistory(query, results);
         
-        let responseText = '';
-        if (results.type === 'ai_answer') {
-            responseText = `搜索结果：${results.content}`;
-        } else if (results.type === 'first_result') {
-            responseText = `搜索结果：${results.title}。${results.snippet}`;
-        } else {
-            responseText = `没有找到关于${query}的结果`;
-        }
+        const speechTexts = getSearchSpeechTexts(results, taskData?.ttsLimit);
+        const responseText = results.length > 0
+            ? getSearchSpeechTexts(results, 1)[0]
+            : `没有找到关于${query}的结果`;
+
+        broadcastSearchChannel({
+            requestId,
+            query,
+            status: 'completed',
+            content: responseText,
+            result: results,
+            error: null
+        });
         
         if (displayId && sendToDisplay) {
-            await speakVoiceResponse(displayId, responseText, 'searchResult', {
-                query,
-                results
-            }, callbacks);
+            for (const [index, speechText] of speechTexts.entries()) {
+                if (index === 0) {
+                    await speakVoiceResponse(displayId, speechText, 'searchResult', {
+                        query,
+                        results
+                    }, callbacks);
+                    continue;
+                }
+                if (callbacks && callbacks.onTts) {
+                    await callbacks.onTts(speechText);
+                } else if (callbacks && callbacks.onResult) {
+                    await callbacks.onResult(speechText);
+                } else if (ttsRouter) {
+                    await ttsRouter.speak({ displayId, text: speechText, action: 'response', extra: {} });
+                }
+            }
         }
     } catch (err) {
         console.error('[语音命令] 搜索失败:', err.message);
+        broadcastSearchChannel({
+            requestId,
+            query,
+            status: 'failed',
+            content: '搜索失败，请稍后再试',
+            result: null,
+            error: err.message
+        });
         if (displayId && sendToDisplay) {
             const errorText = '搜索失败，请稍后再试';
             try {
@@ -1455,73 +1531,20 @@ async function handleSearchCommand(text, displayId, callbacks) {
     }
 }
 
-async function performSearch(query) {
-    const axios = require('axios');
-    const cheerio = require('cheerio');
-    
-    const searchUrl = `https://cn.bing.com/search?q=${encodeURIComponent(query)}&form=QBLH&sp=-1&lq=0&qs=n&sk=&sc=8-1`;
-    console.log(`[搜索] 正在搜索: ${query}`);
-    
-    try {
-        const response = await axios.get(searchUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Cache-Control': 'max-age=0',
-                'Referer': 'https://cn.bing.com/',
-                'sec-ch-ua': '"Microsoft Edge";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-                'sec-fetch-dest': 'document',
-                'sec-fetch-mode': 'navigate',
-                'sec-fetch-site': 'same-origin',
-                'sec-fetch-user': '?1',
-                'upgrade-insecure-requests': '1'
-            },
-            timeout: 15000
+// 将搜索结果转换为独立播报句子，数量由 search.web 全局配置返回，默认最多播报三条。
+function getSearchSpeechTexts(results, limit = 3) {
+    const normalizedLimit = Number.isInteger(Number(limit))
+        ? Math.max(0, Number(limit))
+        : 3;
+    return (Array.isArray(results) ? results : [])
+        .slice(0, normalizedLimit)
+        .map(result => {
+            if (result.type === 'ai_answer') return `搜索结果：${result.content || ''}`.trim();
+            if (result.type === 'first_result') {
+                return `搜索结果：${result.title || '未获取到标题'}。${result.snippet || '未获取到摘要'}`;
+            }
+            return result.message ? `搜索结果：${result.message}` : '没有找到相关搜索结果';
         });
-        
-        const $ = cheerio.load(response.data);
-        
-        const poleContent = $('#b_pole').text().trim();
-        if (poleContent) {
-            console.log('[搜索] 结果类型: ai_answer');
-            return {
-                type: 'ai_answer',
-                content: poleContent.substring(0, 500)
-            };
-        }
-        
-        const firstLi = $('#b_results li').first();
-        if (firstLi.length > 0) {
-            const title = firstLi.find('h2 a').text().trim();
-            const link = firstLi.find('h2 a').attr('href') || '';
-            const snippet = firstLi.find('.b_caption p').text().trim();
-            
-            console.log('[搜索] 结果类型: first_result');
-            return {
-                type: 'first_result',
-                title: title || '未获取到标题',
-                link: link,
-                snippet: snippet || '未获取到摘要'
-            };
-        }
-        
-        console.log('[搜索] 未找到结果');
-        return {
-            type: 'error',
-            message: '未找到搜索结果'
-        };
-        
-    } catch (err) {
-        console.error('[搜索] 失败:', err.message);
-        return {
-            type: 'error',
-            message: err.message
-        };
-    }
 }
 
 function getSearchHistory() {
@@ -1719,7 +1742,15 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
     
     if (trimmedText.includes('搜索')) {
         const routing = checkCommandRouting(trimmedText, 'search');
-        if (routing) return routing;
+        if (routing) {
+            const query = trimmedText.replace(/搜索/g, '').trim();
+            return {
+                ...routing,
+                type: 'search',
+                route: 'llm',
+                query
+            };
+        }
         await handleSearchCommand(trimmedText, displayId, callbacks);
         return;
     }
@@ -1833,7 +1864,11 @@ async function executeCommands(actions, displayId, callbacks, depth = 0) {
             await executeCommands(result.actions, displayId, callbacks, depth + 1);
         } else if (result.type === 'chat') {
             if (callbacks && callbacks.onChat) {
-                callbacks.onChat(result.message, result.systemPrompt, result.skipHistory);
+                await callbacks.onChat(result.message, result.systemPrompt, result.skipHistory);
+            }
+        } else if (result.type === 'search') {
+            if (callbacks && callbacks.onSearch) {
+                await callbacks.onSearch(result);
             }
         } else if (result.type === 'showHelp') {
             if (callbacks && callbacks.onShowHelp) {
@@ -1856,6 +1891,7 @@ module.exports = {
     setClients,
     setMuteFunctions,
     setTimeAnnounceToggle,
+    setSearchRunner,
     setConversationConfirmationMode,
     getConversationConfirmationMode,
     setTtsRouter,
@@ -1873,11 +1909,13 @@ module.exports = {
     handleUnmuteCommand,
     handleWeatherCommand,
     handleSearchCommand,
+    getSearchSpeechTexts,
     handlePlayCommand,
     handlePlaySelection,
     executeReminderConfirmation,
     handleCancelCommand,
     getSearchHistory,
+    recordSearchHistory,
     clearSearchHistory,
     deleteSearchHistoryItem,
     getAssistantConfig,

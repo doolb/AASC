@@ -16,10 +16,10 @@
 │  ┌─────────────────────────────────────────────────────┐│
 │  │ 搜索历史列表                                        ││
 │  │ ┌─────────────────────────────────────────────────┐ ││
-│  │ │ [时间] 关键词 - 结果摘要          [播放][删除]  │ ││
+│  │ │ [时间] 关键词 - 前五条结果摘要      [播放][删除]  │ ││
 │  │ └─────────────────────────────────────────────────┘ ││
 │  │ ┌─────────────────────────────────────────────────┐ ││
-│  │ │ [时间] 关键词 - 结果摘要          [播放][删除]  │ ││
+│  │ │ [时间] 关键词 - 前五条结果摘要      [播放][删除]  │ ││
 │  │ └─────────────────────────────────────────────────┘ ││
 │  │                    [清空历史]                       ││
 │  └─────────────────────────────────────────────────────┘│
@@ -92,7 +92,7 @@ const Search = {
             返回
         查找对应的历史记录
         如果存在:
-            调用 TTS 播放结果摘要
+            将前 3 条结果分别交给通用 TTS 播放
     
     deleteItem(id):
         发送 { type: 'deleteSearchHistory', id }
@@ -108,7 +108,7 @@ const Search = {
             显示 "暂无搜索记录"
         否则:
             遍历 history 生成列表项
-            每项包含: 时间、关键词、结果摘要、播放按钮、删除按钮
+            每项包含: 时间、关键词、前五条结果、播放按钮、删除按钮
     
     formatTime(timestamp):
         格式化时间戳为可读字符串
@@ -258,12 +258,23 @@ App.init():
 {
     id: string,          // 唯一标识
     query: string,       // 搜索关键词
-    results: {           // 搜索结果
+    results: [{          // 最多五条搜索结果
         type: string,    // 'first_result' | 'ai_answer' | 'error'
         title: string,   // 结果标题
-        snippet: string  // 结果摘要
-    },
+        snippet: string, // 结果摘要
+        link: string     // 结果链接
+    }],
     timestamp: number    // 搜索时间戳
+}
+```
+
+搜索数量配置:
+
+```javascript
+{
+    fetchLimit: 10,    // Bing 解析数量
+    displayLimit: 5,   // 频道、历史和弹窗展示数量
+    ttsLimit: 3        // 语音播报数量
 }
 ```
 
@@ -293,6 +304,70 @@ App.init():
 
 1. **查看历史**: 进入搜索页签自动加载搜索历史
 2. **手动搜索**: 输入关键词点击搜索，发送到服务端执行
-3. **播放结果**: 点击播放按钮，TTS 播放结果摘要
+3. **播放结果**: 点击播放按钮，TTS 播放对应搜索记录的结果摘要
 4. **删除记录**: 点击删除按钮，删除单条记录
 5. **清空历史**: 点击清空按钮，清空所有记录
+
+## 搜索频道与 Pi Agent 隔离
+
+```text
+handleSearchRequest(query, route, sourceDisplayId):
+    requestId = 生成唯一请求号
+    广播 searchChannel({ requestId, query, status: 'started', timestamp })
+    先触发通用语音播报“正在搜索${query}”
+
+    如果 route == 'system':
+        调用 performSearch(query)
+        保存到 search-history.json
+        广播 searchHistory(最新历史)
+        广播 searchChannel({ requestId, status: 'completed', result })
+        显示端继续收到搜索结果弹窗和结果 TTS
+
+    如果 route == 'llm' 且当前 profile 是 Pi Agent:
+        创建唯一临时 Pi 会话
+        只发送当前搜索内容和搜索系统提示词
+        不调用普通 handleChatMessage
+        不发送 chatInput/chatChunk/chatResponse
+        将 Pi 流式内容映射为 searchChannel 更新
+        完成、失败或超时后关闭临时 Pi 会话
+        广播 searchChannel({ requestId, status: 'completed' | 'failed' })
+```
+
+### 搜索频道消息
+
+```javascript
+{
+    type: 'searchChannel',
+    requestId: string,
+    query: string,
+    status: 'started' | 'running' | 'completed' | 'failed',
+    content: string,
+    result: object | null,
+    error: string | null,
+    timestamp: number
+}
+```
+
+### 历史刷新约束
+
+```text
+收到 searchHistory:
+    Search.setHistory(data.history)
+    Chat.searchHistory = data.history
+    Chat.renderSearchHistory()
+
+Search.render():
+    使用实际存在的 searchHistoryList 容器
+    容器不存在时只记录兼容性日志，不丢弃内存历史
+```
+
+### 一次性 Pi 会话
+
+```text
+PiRuntimeManager.chatStream(..., { ephemeral: true, conversationKey }):
+    使用唯一 conversationKey 创建独立 Pi 进程
+    不读取既有群聊/私聊 Pi 内存上下文
+    请求完成或抛错后 finally:
+        terminateSession(key)
+        从 sessions 删除 key
+```

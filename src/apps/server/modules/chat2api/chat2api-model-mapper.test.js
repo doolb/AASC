@@ -27,3 +27,20 @@ test('模型映射支持 Provider 映射、全局精确映射和通配符', asyn
   assert.equal((await mapper.resolveModel('public-chat', provider)).actualModel, 'deepseek-v4-flash');
   assert.equal((await mapper.resolveModel('unknown', provider)).actualModel, 'unknown');
 });
+
+test('模型映射兼容导入数据的 providerId，并返回 Provider 路由提示', async () => {
+  const mapper = createChat2ApiModelMapper({
+    dataStore: {
+      readCollection: async () => [{
+        model: 'Qwen3.6-Flash', actualModel: 'Qwen3.7', providerId: 'qwen',
+      }],
+    },
+  });
+
+  assert.deepEqual(await mapper.resolveModel('Qwen3.6-Flash'), {
+    requestedModel: 'Qwen3.6-Flash',
+    actualModel: 'Qwen3.7',
+    preferredProviderId: 'qwen',
+    preferredAccountId: undefined,
+  });
+});

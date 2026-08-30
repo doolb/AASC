@@ -359,9 +359,14 @@ const WebSocketManager = {
         } else if (data.type === 'searchHistory') {
             if (window.Chat) {
                 window.Chat.searchHistory = data.history;
+                window.Chat.renderSearchHistory();
             }
             if (window.Search) {
                 window.Search.setHistory(data.history);
+            }
+        } else if (data.type === 'searchChannel') {
+            if (window.Search) {
+                window.Search.handleChannel(data);
             }
         } else if (data.type === 'assistantConfig') {
             if (window.Chat && data.config) {

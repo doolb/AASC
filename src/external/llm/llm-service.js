@@ -961,7 +961,9 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
         contextCount = 0,
         mode = null,
         target = null,
-        sessionId = null
+        sessionId = null,
+        conversationKey = null,
+        ephemeral = false
     } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
     const template = normalizeChatTemplate(
@@ -1013,7 +1015,8 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
             }
         }, {
             continuationPrompt: userMessage,
-            conversationKey: buildPiConversationKey(mode, target, sessionId)
+            conversationKey: conversationKey || buildPiConversationKey(mode, target, sessionId),
+            ephemeral
         });
         return {
             success: true,

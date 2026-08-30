@@ -293,24 +293,54 @@ handleSearchCommand(text, displayId):
     提取搜索关键词
     如果 displayId 存在:
         语音播放 "正在搜索..."
-    调用 performSearch(query) 执行搜索
+    调用已注入的 search.web 单次内置任务执行搜索
     保存搜索历史
     广播搜索历史到控制端
     如果 displayId 存在:
         语音播放搜索结果
         发送搜索结果弹窗到显示端
 
-performSearch(query):
+searchRunner(query):
+    服务启动后委托 taskManager.runBuiltinOnce('search.web', { query })
+    语音模块未注入任务管理器时，直接调用 search.web.run 作为兜底
+    任务只返回搜索结果，不执行 TTS、频道广播、历史写入或聊天处理
+    接收 { result: [最多5条结果] } 或错误结果
+
+search.web.run(context):
     使用 axios 发送 HTTP 请求到 Bing 搜索
     使用 cheerio 解析 HTML
     尝试获取 AI 回答区域 #b_pole
     如果存在 AI 回答:
-        返回 { type: 'ai_answer', content }
+        返回 { success: true, data: { result: [{ type: 'ai_answer', content }] } }
     否则:
-        获取第一个搜索结果 li
-        返回 { type: 'first_result', title, link, snippet }
-    如果没有结果:
-        返回 { type: 'error', message }
+        只获取 #b_results > li.b_algo 中前 10 条真实搜索结果
+        从每条摘要解析绝对日期或相对日期并排序
+        有日期的结果按时间从新到旧排序
+        无日期的结果排在有日期结果之后
+        全部无日期时保持 Bing 原顺序
+        返回排序后的前 5 条结果
+        返回 { success: true, data: { result: [...最多5条] } }
+    请求失败:
+        抛出错误，由外部语音流程或任务引擎处理
+
+语音搜索结果处理:
+    将最多 5 条结果写入搜索频道、搜索历史和显示端弹窗
+    将前 3 条结果按“标题 + 摘要”分别交给通用 TTS 流程
+
+控制端手动调用:
+    在内置任务列表选择 search.web
+    输入 params.query
+    以 one-shot 模式执行
+    任务引擎通过标准 task:result 返回 data.result
+
+search.web 全局配置:
+    不创建任务实例时也可在任务卡片的全局配置中设置 fetchLimit、displayLimit、ttsLimit
+    默认值为 10、5、3，执行时由 taskIO 读取任务级 config.json
+
+parseBingResultDate(text, now):
+    优先解析 YYYY年M月D日、Mon D, YYYY 或 YYYY-MM-DD
+    否则解析“今天/昨天/刚刚”、X分钟前、X小时前、X天前、X周前、X个月前、X年前
+    无法解析时返回 null
 ```
 
 ### 5. AI 助手响应
@@ -347,8 +377,11 @@ checkCommandRouting(text, commandType):
                     LLM 查询: "查询{文本}的天气"
                 如果没有残留文本: "查询{defaultWeatherCity}今天的天气"
             search: "搜索：{关键词}" / "帮我搜索一些信息"
-        返回 { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template, skipHistory: true }
-        // skipHistory: 系统指令（天气/搜索）不走聊天上下文，节省 token 并避免干扰
+        如果 commandType == 'search':
+            返回 { type: 'search', route: 'llm', query: keyword, message: llmQuery }
+        否则:
+            返回 { type: 'chat', message: llmQuery, systemPrompt: defaultAssistant.template, skipHistory: true }
+        // 搜索由独立搜索频道处理；Pi Agent 搜索使用一次性进程，不进入群聊历史
 
 setCommandRouting(routing):
     验证 routing 中的键值（只接受 weather/search 且值为 system/llm）

@@ -42,3 +42,19 @@ test('首选账号优先，失败达到阈值后进入冷却并可故障转移',
   await balancer.clearAccountFailure('a1');
   assert.equal((await balancer.selectAccount('deepseek-chat', 'round-robin', 'deepseek', 'a1')).account.accountId, 'a1');
 });
+
+test('指定 Provider 的用户模型映射不要求别名存在于内置模型清单', async () => {
+  const provider = { id: 'qwen', name: 'Qwen', enabled: true, supportedModels: ['Qwen3.6'] };
+  const account = { accountId: 'qwen-main', providerId: 'qwen', enabled: true, status: 'active' };
+  const balancer = createChat2ApiLoadBalancer({
+    providerRegistry: {
+      listProviders: async () => [provider],
+      getEffectiveModels: () => [{ displayName: 'Qwen3.6', actualModelId: 'Qwen' }],
+    },
+    dataStore: { listAccounts: async () => [account] },
+  });
+
+  const selection = await balancer.selectAccount('Qwen3.6-Flash', 'round-robin', 'qwen');
+  assert.equal(selection.account.accountId, 'qwen-main');
+  assert.equal(selection.provider.id, 'qwen');
+});

@@ -1,0 +1,268 @@
+/* Chat2API 账户管理组件样式：只使用控制端主题变量，避免弹窗固定为深色。 */
+.chat2api-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+    background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
+}
+
+.chat2api-dialog {
+    width: min(720px, 100%);
+    max-height: 90vh;
+    overflow: auto;
+    padding: 20px;
+    box-sizing: border-box;
+    background: var(--bg-surface-strong);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 16px 50px var(--shadow-color);
+}
+
+.chat2api-header,
+.chat2api-section-heading,
+.chat2api-row-actions,
+.chat2api-actions {
+    display: flex;
+    align-items: center;
+}
+
+.chat2api-header {
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.chat2api-title {
+    font-size: 18px;
+}
+
+.chat2api-header-actions,
+.chat2api-actions,
+.chat2api-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.chat2api-message {
+    min-height: 20px;
+    margin-bottom: 10px;
+    color: var(--accent-secondary);
+    font-size: 13px;
+}
+
+.chat2api-message.is-error {
+    color: var(--danger-color);
+}
+
+.chat2api-content {
+    color: var(--text-primary);
+}
+
+.chat2api-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.chat2api-section {
+    min-width: 0;
+    padding: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.chat2api-section-wide {
+    grid-column: 1 / -1;
+}
+
+.chat2api-section-title {
+    margin: 0 0 10px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.chat2api-section-heading {
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.chat2api-section-heading .chat2api-section-title {
+    margin-bottom: 8px;
+}
+
+.chat2api-config-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 100px minmax(0, 1fr);
+    gap: 8px;
+}
+
+.chat2api-field {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.chat2api-field input,
+.chat2api-field select,
+.chat2api-select {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px;
+    box-sizing: border-box;
+    background: var(--input-background);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.chat2api-field input:focus,
+.chat2api-field select:focus,
+.chat2api-select:focus {
+    outline: 2px solid color-mix(in srgb, var(--accent-color) 45%, transparent);
+    border-color: var(--accent-color);
+}
+
+.chat2api-field input::placeholder {
+    color: var(--text-muted);
+}
+
+.chat2api-checkbox {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.chat2api-checkbox input {
+    accent-color: var(--accent-color);
+}
+
+.chat2api-save-button {
+    margin-top: 8px;
+}
+
+.chat2api-credential-fields {
+    margin-top: 10px;
+}
+
+.chat2api-list-row,
+.chat2api-mapping-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.chat2api-mapping-values {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.chat2api-mapping-editor {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.chat2api-editor-title {
+    margin: 0 0 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.chat2api-mapping-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.chat2api-list-row {
+    justify-content: space-between;
+}
+
+.chat2api-list-row:last-child,
+.chat2api-mapping-row:last-child {
+    border-bottom: 0;
+}
+
+.chat2api-secondary-text,
+.chat2api-empty {
+    color: var(--text-muted);
+}
+
+.chat2api-success-text {
+    color: var(--success-color);
+}
+
+.chat2api-code {
+    padding: 2px 5px;
+    overflow-wrap: anywhere;
+    background: var(--content-background);
+    color: var(--accent-secondary);
+    border-radius: 4px;
+}
+
+.chat2api-dialog .task-card-btn {
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface-strong);
+    color: var(--text-secondary);
+}
+
+.chat2api-dialog .task-card-btn:hover {
+    background: var(--bg-surface-strong);
+    color: var(--text-primary);
+}
+
+.chat2api-dialog .task-card-btn.primary {
+    background: linear-gradient(135deg, var(--accent-secondary), var(--accent-color));
+    color: #ffffff;
+}
+
+.chat2api-dialog .task-card-btn.danger {
+    color: var(--danger-color);
+}
+
+@media (max-width: 640px) {
+    .chat2api-modal {
+        padding: 10px;
+    }
+
+    .chat2api-dialog {
+        padding: 14px;
+    }
+
+    .chat2api-header,
+    .chat2api-list-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .chat2api-grid,
+    .chat2api-config-grid,
+    .chat2api-mapping-form {
+        grid-template-columns: 1fr;
+    }
+
+    .chat2api-mapping-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .chat2api-section-wide {
+        grid-column: auto;
+    }
+}

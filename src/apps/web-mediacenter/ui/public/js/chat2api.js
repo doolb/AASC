@@ -11,7 +11,11 @@
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     },
 
-    setProxyAddress(addressText) {
+    setProxyAddress(addressText, instanceId) {
+      if (instanceId && typeof window !== 'undefined' && window.location && window.location.origin) {
+        this.baseUrl = `${window.location.origin}/api/chat2api-gateway/${encodeURIComponent(instanceId)}`;
+        return;
+      }
       if (typeof addressText !== 'string' || !addressText.includes(':')) return;
       const match = addressText.match(/^(\[[^\]]+\]|[^:]+):(\d+)$/);
       if (!match) return;
@@ -29,8 +33,8 @@
       return body;
     },
 
-    async open(addressText) {
-      this.setProxyAddress(addressText);
+    async open(addressText, instanceId) {
+      this.setProxyAddress(addressText, instanceId);
       this.ensureModal();
       document.getElementById('chat2apiModal').style.display = 'flex';
       await this.refresh();
@@ -45,11 +49,11 @@
       if (document.getElementById('chat2apiModal')) return;
       const modal = document.createElement('div');
       modal.id = 'chat2apiModal';
-      modal.style.cssText = 'position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:20px;box-sizing:border-box';
-      modal.innerHTML = '<div style="width:min(720px,100%);max-height:90vh;overflow:auto;background:#182033;color:#fff;border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:20px;box-sizing:border-box">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><strong style="font-size:18px">Chat2API 账户管理</strong><button class="task-card-btn" onclick="Chat2APIControl.close()">关闭</button></div>' +
-        '<div id="chat2apiMessage" style="min-height:20px;color:#9bd1ff;font-size:13px;margin-bottom:10px"></div>' +
-        '<div id="chat2apiContent"></div>' +
+      modal.className = 'chat2api-modal modal-mask';
+      modal.innerHTML = '<div class="chat2api-dialog">' +
+        '<div class="chat2api-header"><strong class="chat2api-title">Chat2API 账户管理</strong><span class="chat2api-header-actions"><button class="task-card-btn" id="chat2apiImportLegacy">导入原 Chat2API 数据</button><button class="task-card-btn" onclick="Chat2APIControl.close()">关闭</button></span></div>' +
+        '<div id="chat2apiMessage" class="chat2api-message"></div>' +
+        '<div id="chat2apiContent" class="chat2api-content"></div>' +
       '</div>';
       modal.addEventListener('click', (event) => { if (event.target === modal) this.close(); });
       document.body.appendChild(modal);
@@ -57,7 +61,10 @@
 
     message(text, isError) {
       const element = document.getElementById('chat2apiMessage');
-      if (element) { element.textContent = text || ''; element.style.color = isError ? '#ff9b9b' : '#9bd1ff'; }
+      if (element) {
+        element.textContent = text || '';
+        element.classList.toggle('is-error', Boolean(isError));
+      }
     },
 
     async refresh() {
@@ -81,23 +88,28 @@
       const content = document.getElementById('chat2apiContent');
       if (!content) return;
       const providerOptions = providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(provider.name || provider.id)}</option>`).join('');
-      const accountRows = accounts.length ? accounts.map((account) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08)"><span>${this.escapeHtml(account.label || account.accountId)} <small style="color:#9aa7bf">${this.escapeHtml(account.providerId)}</small></span><span style="display:flex;gap:5px;align-items:center"><span style="color:#8ee6a2">${account.enabled === false ? '已禁用' : '已登录'}</span><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div style="color:#9aa7bf">暂无已登录账号</div>';
-      const keyRows = apiKeys.length ? apiKeys.map((key) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08)"><span>${this.escapeHtml(key.label || key.id)}</span><span><code>${this.escapeHtml(key.maskedValue || '')}</code> <button class="task-card-btn" data-chat2api-key-disable="${this.escapeHtml(key.id)}">禁用</button><button class="task-card-btn danger" data-chat2api-key-delete="${this.escapeHtml(key.id)}">删除</button></span></div>`).join('') : '<div style="color:#9aa7bf">暂无 API Key</div>';
-      const mappingRows = mappings.length ? mappings.map((mapping) => `<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08)"><code>${this.escapeHtml(mapping.model)}</code> → <code>${this.escapeHtml(mapping.actualModel)}</code></div>`).join('') : '<div style="color:#9aa7bf">暂无模型映射</div>';
+      const mappingProviderOptions = ['<option value="">自动选择 Provider</option>', ...providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(provider.name || provider.id)}</option>`)].join('');
+      const mappingAccountOptions = ['<option value="">自动选择账号</option>', ...accounts.map((account) => `<option value="${this.escapeHtml(account.accountId || account.id)}">${this.escapeHtml(account.label || account.name || account.accountId || account.id)}（${this.escapeHtml(account.providerId)}）</option>`)].join('');
+      const accountRows = accounts.length ? accounts.map((account) => `<div class="chat2api-list-row"><span>${this.escapeHtml(account.label || account.accountId)} <small class="chat2api-secondary-text">${this.escapeHtml(account.providerId)}</small></span><span class="chat2api-row-actions"><span class="chat2api-success-text">${account.enabled === false ? '已禁用' : '已登录'}</span><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无已登录账号</div>';
+      const keyRows = apiKeys.length ? apiKeys.map((key) => `<div class="chat2api-list-row"><span>${this.escapeHtml(key.label || key.id)}</span><span class="chat2api-row-actions"><code class="chat2api-code">${this.escapeHtml(key.maskedValue || '')}</code><button class="task-card-btn" data-chat2api-key-disable="${this.escapeHtml(key.id)}">禁用</button><button class="task-card-btn danger" data-chat2api-key-delete="${this.escapeHtml(key.id)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无 API Key</div>';
+      const mappingRows = mappings.length ? mappings.map((mapping) => `<div class="chat2api-mapping-row"><span class="chat2api-mapping-values"><code class="chat2api-code">${this.escapeHtml(mapping.model)}</code><span class="chat2api-secondary-text">→</span><code class="chat2api-code">${this.escapeHtml(mapping.actualModel)}</code><small class="chat2api-secondary-text">${this.escapeHtml(mapping.preferredProviderId || mapping.providerId || '自动 Provider')}</small></span><span class="chat2api-row-actions"><button class="task-card-btn" data-chat2api-mapping-edit="${this.escapeHtml(mapping.model)}">编辑</button><button class="task-card-btn danger" data-chat2api-mapping-delete="${this.escapeHtml(mapping.model)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无模型映射</div>';
+      const mappingEditor = `<div id="chat2apiMappingEditor" class="chat2api-mapping-editor" hidden><div class="chat2api-section-heading"><h5 id="chat2apiMappingEditorTitle" class="chat2api-editor-title">新增模型映射</h5><button class="task-card-btn" id="chat2apiMappingCancel" hidden>取消编辑</button></div><div class="chat2api-mapping-form"><label class="chat2api-field">请求模型<input id="chat2apiMappingModel" placeholder="例如 Qwen3.6-Flash"></label><label class="chat2api-field">实际模型<input id="chat2apiMappingActualModel" placeholder="例如 Qwen3.7"></label><label class="chat2api-field">优先 Provider<select id="chat2apiMappingProvider">${mappingProviderOptions}</select></label><label class="chat2api-field">优先账号<select id="chat2apiMappingAccount">${mappingAccountOptions}</select></label></div><button class="task-card-btn primary chat2api-save-button" id="chat2apiMappingSave">保存映射</button></div>`;
       const config = data.config || {};
-      const configSection = `<section style="grid-column:1/-1;padding:12px;background:rgba(255,255,255,.04);border-radius:10px"><h4 style="margin:0 0 10px">代理配置</h4><div style="display:grid;grid-template-columns:1fr 100px 1fr;gap:8px"><label style="font-size:12px;color:#b5bfd1">监听地址<input id="chat2apiConfigHost" value="${this.escapeHtml(config.host || '127.0.0.1')}" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:7px;background:#202b42;color:#fff;border:1px solid #46516b;border-radius:6px"></label><label style="font-size:12px;color:#b5bfd1">端口<input id="chat2apiConfigPort" type="number" value="${this.escapeHtml(config.port || 8080)}" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:7px;background:#202b42;color:#fff;border:1px solid #46516b;border-radius:6px"></label><label style="font-size:12px;color:#b5bfd1">负载均衡<select id="chat2apiConfigStrategy" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:7px;background:#202b42;color:#fff;border:1px solid #46516b;border-radius:6px"><option value="round-robin" ${config.loadBalanceStrategy === 'round-robin' ? 'selected' : ''}>轮询</option><option value="fill-first" ${config.loadBalanceStrategy === 'fill-first' ? 'selected' : ''}>最低用量</option><option value="failover" ${config.loadBalanceStrategy === 'failover' ? 'selected' : ''}>故障转移</option></select></label></div><label style="display:block;margin-top:8px;font-size:13px"><input type="checkbox" id="chat2apiConfigApiKey" ${config.enableApiKey !== false ? 'checked' : ''}> 启用 API Key 鉴权</label><button class="task-card-btn primary" id="chat2apiSaveConfig" style="margin-top:8px">保存配置</button></section>`;
-      content.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
+      const configSection = `<section class="chat2api-section chat2api-section-wide"><h4 class="chat2api-section-title">代理配置</h4><div class="chat2api-config-grid"><label class="chat2api-field">监听地址<input id="chat2apiConfigHost" value="${this.escapeHtml(config.host || '127.0.0.1')}"></label><label class="chat2api-field">端口<input id="chat2apiConfigPort" type="number" value="${this.escapeHtml(config.port || 8080)}"></label><label class="chat2api-field">负载均衡<select id="chat2apiConfigStrategy"><option value="round-robin" ${config.loadBalanceStrategy === 'round-robin' ? 'selected' : ''}>轮询</option><option value="fill-first" ${config.loadBalanceStrategy === 'fill-first' ? 'selected' : ''}>最低用量</option><option value="failover" ${config.loadBalanceStrategy === 'failover' ? 'selected' : ''}>故障转移</option></select></label></div><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiConfigApiKey" ${config.enableApiKey !== false ? 'checked' : ''}> 启用 API Key 鉴权</label><button class="task-card-btn primary chat2api-save-button" id="chat2apiSaveConfig">保存配置</button></section>`;
+      content.innerHTML = '<div class="chat2api-grid">' +
         configSection +
-        '<section style="padding:12px;background:rgba(255,255,255,.04);border-radius:10px"><h4 style="margin:0 0 10px">登录 Provider</h4>' +
-          `<select id="chat2apiProvider" style="width:100%;padding:8px;background:#202b42;color:#fff;border:1px solid #46516b;border-radius:6px">${providerOptions}</select>` +
-          '<div id="chat2apiCredentialFields" style="margin-top:10px"></div>' +
-          '<div style="display:flex;gap:8px;margin-top:10px"><button class="task-card-btn" id="chat2apiOpenLogin">打开登录页</button><button class="task-card-btn primary" id="chat2apiCompleteLogin" style="display:none">完成登录</button></div>' +
+        '<section class="chat2api-section"><h4 class="chat2api-section-title">登录 Provider</h4>' +
+          `<select id="chat2apiProvider" class="chat2api-select">${providerOptions}</select>` +
+          '<div id="chat2apiCredentialFields" class="chat2api-credential-fields"></div>' +
+          '<div class="chat2api-actions"><button class="task-card-btn" id="chat2apiOpenLogin">打开登录页</button><button class="task-card-btn primary" id="chat2apiCompleteLogin" hidden>完成登录</button></div>' +
         '</section>' +
-        '<section style="padding:12px;background:rgba(255,255,255,.04);border-radius:10px"><h4 style="margin:0 0 10px">已登录账号</h4><div id="chat2apiAccounts">' + accountRows + '</div></section>' +
-        '<section style="grid-column:1/-1;padding:12px;background:rgba(255,255,255,.04);border-radius:10px"><div style="display:flex;justify-content:space-between;align-items:center"><h4 style="margin:0 0 8px">代理 API Key</h4><button class="task-card-btn" id="chat2apiCreateKey">新建 Key</button></div><div>' + keyRows + '</div></section>' +
-        '<section style="grid-column:1/-1;padding:12px;background:rgba(255,255,255,.04);border-radius:10px"><h4 style="margin:0 0 8px">模型映射</h4><div>' + mappingRows + '</div></section>' +
+        '<section class="chat2api-section"><h4 class="chat2api-section-title">已登录账号</h4><div id="chat2apiAccounts">' + accountRows + '</div></section>' +
+        '<section class="chat2api-section chat2api-section-wide"><div class="chat2api-section-heading"><h4 class="chat2api-section-title">代理 API Key</h4><button class="task-card-btn" id="chat2apiCreateKey">新建 Key</button></div><div>' + keyRows + '</div></section>' +
+        '<section class="chat2api-section chat2api-section-wide"><div class="chat2api-section-heading"><h4 class="chat2api-section-title">模型映射</h4><button class="task-card-btn primary" id="chat2apiMappingNew">新增映射</button></div><div>' + mappingRows + '</div>' + mappingEditor + '</section>' +
       '</div>';
       this.providers = providers;
+      this.accounts = accounts;
+      this.modelMappings = mappings;
       const select = document.getElementById('chat2apiProvider');
       const renderFields = () => this.renderCredentialFields(select && select.value);
       if (select) select.addEventListener('change', renderFields);
@@ -109,11 +121,82 @@
       if (keyButton) keyButton.addEventListener('click', () => this.createKey());
       const saveConfigButton = document.getElementById('chat2apiSaveConfig');
       if (saveConfigButton) saveConfigButton.addEventListener('click', () => this.saveConfig());
+      const importLegacyButton = document.getElementById('chat2apiImportLegacy');
+      if (importLegacyButton) importLegacyButton.addEventListener('click', () => this.importLegacyData());
+      const newMappingButton = document.getElementById('chat2apiMappingNew');
+      if (newMappingButton) newMappingButton.addEventListener('click', () => this.openMappingEditor());
+      const saveMappingButton = document.getElementById('chat2apiMappingSave');
+      if (saveMappingButton) saveMappingButton.addEventListener('click', () => this.saveModelMapping());
+      const cancelMappingButton = document.getElementById('chat2apiMappingCancel');
+      if (cancelMappingButton) cancelMappingButton.addEventListener('click', () => this.resetMappingEditor());
       content.querySelectorAll('[data-chat2api-account-toggle]').forEach((button) => button.addEventListener('click', () => this.updateAccount(button.dataset.chat2apiAccountToggle, button.textContent === '启用')));
       content.querySelectorAll('[data-chat2api-account-delete]').forEach((button) => button.addEventListener('click', () => this.deleteAccount(button.dataset.chat2apiAccountDelete)));
       content.querySelectorAll('[data-chat2api-key-disable]').forEach((button) => button.addEventListener('click', () => this.disableKey(button.dataset.chat2apiKeyDisable)));
       content.querySelectorAll('[data-chat2api-key-delete]').forEach((button) => button.addEventListener('click', () => this.deleteKey(button.dataset.chat2apiKeyDelete)));
+      content.querySelectorAll('[data-chat2api-mapping-edit]').forEach((button) => button.addEventListener('click', () => this.openMappingEditor((this.modelMappings || []).find((mapping) => mapping.model === button.dataset.chat2apiMappingEdit))));
+      content.querySelectorAll('[data-chat2api-mapping-delete]').forEach((button) => button.addEventListener('click', () => this.deleteModelMapping(button.dataset.chat2apiMappingDelete)));
       renderFields();
+    },
+
+    openMappingEditor(mapping) {
+      const editor = document.getElementById('chat2apiMappingEditor');
+      const modelInput = document.getElementById('chat2apiMappingModel');
+      const actualModelInput = document.getElementById('chat2apiMappingActualModel');
+      const providerSelect = document.getElementById('chat2apiMappingProvider');
+      const accountSelect = document.getElementById('chat2apiMappingAccount');
+      const title = document.getElementById('chat2apiMappingEditorTitle');
+      const cancelButton = document.getElementById('chat2apiMappingCancel');
+      if (!editor || !modelInput || !actualModelInput || !providerSelect || !accountSelect) return;
+      const current = mapping && typeof mapping === 'object' ? mapping : null;
+      this.mappingEditingModel = current ? current.model : null;
+      editor.hidden = false;
+      modelInput.value = current ? current.model || '' : '';
+      actualModelInput.value = current ? current.actualModel || '' : '';
+      providerSelect.value = current ? current.preferredProviderId || current.providerId || '' : '';
+      accountSelect.value = current ? current.preferredAccountId || current.accountId || '' : '';
+      if (title) title.textContent = current ? '编辑模型映射' : '新增模型映射';
+      if (cancelButton) cancelButton.hidden = !current;
+      modelInput.focus();
+    },
+
+    resetMappingEditor() {
+      const editor = document.getElementById('chat2apiMappingEditor');
+      if (editor) editor.hidden = true;
+      this.mappingEditingModel = null;
+    },
+
+    async saveModelMapping() {
+      const modelInput = document.getElementById('chat2apiMappingModel');
+      const actualModelInput = document.getElementById('chat2apiMappingActualModel');
+      const providerSelect = document.getElementById('chat2apiMappingProvider');
+      const accountSelect = document.getElementById('chat2apiMappingAccount');
+      const model = modelInput && modelInput.value.trim();
+      const actualModel = actualModelInput && actualModelInput.value.trim();
+      if (!model || !actualModel) {
+        this.message('请求模型和实际模型不能为空。', true);
+        return;
+      }
+      const payload = { model, actualModel };
+      if (providerSelect && providerSelect.value) payload.preferredProviderId = providerSelect.value;
+      if (accountSelect && accountSelect.value) payload.preferredAccountId = accountSelect.value;
+      try {
+        await this.request('/api/chat2api/model-mappings', { method: 'POST', body: JSON.stringify(payload) });
+        if (this.mappingEditingModel && this.mappingEditingModel !== model) {
+          await this.request(`/api/chat2api/model-mappings/${encodeURIComponent(this.mappingEditingModel)}`, { method: 'DELETE' });
+        }
+        this.mappingEditingModel = null;
+        await this.refresh();
+        this.message('模型映射已保存。');
+      } catch (error) { this.message(`模型映射保存失败：${error.message}`, true); }
+    },
+
+    async deleteModelMapping(model) {
+      if (!window.confirm(`确定删除模型映射“${model}”吗？`)) return;
+      try {
+        await this.request(`/api/chat2api/model-mappings/${encodeURIComponent(model)}`, { method: 'DELETE' });
+        await this.refresh();
+        this.message('模型映射已删除。');
+      } catch (error) { this.message(`模型映射删除失败：${error.message}`, true); }
     },
 
     renderCredentialFields(providerId) {
@@ -121,14 +204,14 @@
       const fields = provider && provider.credentialFields && provider.credentialFields.length ? provider.credentialFields : [{ name: 'token', label: 'Token / Cookie', type: 'password', required: true }];
       const container = document.getElementById('chat2apiCredentialFields');
       if (!container) return;
-      container.innerHTML = fields.map((field) => `<label style="display:block;margin-top:8px;font-size:12px;color:#b5bfd1">${this.escapeHtml(field.label || field.name)}<input data-chat2api-credential="${this.escapeHtml(field.name)}" type="${field.type === 'textarea' ? 'text' : (field.type || 'password')}" placeholder="${this.escapeHtml(field.placeholder || '')}" style="display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:8px;background:#202b42;color:#fff;border:1px solid #46516b;border-radius:6px"></label>`).join('');
+      container.innerHTML = fields.map((field) => `<label class="chat2api-field">${this.escapeHtml(field.label || field.name)}<input data-chat2api-credential="${this.escapeHtml(field.name)}" type="${field.type === 'textarea' ? 'text' : (field.type || 'password')}" placeholder="${this.escapeHtml(field.placeholder || '')}"></label>`).join('');
     },
 
     async startLogin(providerId) {
       try {
         this.loginSession = await this.request('/api/chat2api/oauth/start', { method: 'POST', body: JSON.stringify({ providerId }) });
         const completeButton = document.getElementById('chat2apiCompleteLogin');
-        if (completeButton) completeButton.style.display = 'inline-block';
+        if (completeButton) completeButton.hidden = false;
         const loginWindow = window.open(this.loginSession.loginUrl, '_blank', 'noopener');
         this.message(loginWindow ? '已打开官方登录页，登录后将 Token/Cookie 粘贴到下方。' : '浏览器阻止了弹窗，请手动打开登录地址：' + this.loginSession.loginUrl);
       } catch (error) { this.message(error.message, true); }
@@ -161,6 +244,23 @@
         await this.request('/api/chat2api/config', { method: 'PUT', body: JSON.stringify({ host: document.getElementById('chat2apiConfigHost').value.trim(), port: Number(document.getElementById('chat2apiConfigPort').value), loadBalanceStrategy: document.getElementById('chat2apiConfigStrategy').value, enableApiKey: document.getElementById('chat2apiConfigApiKey').checked }) });
         this.message('配置已保存；监听地址/端口变更需重启 chat2api.proxy。');
       } catch (error) { this.message(error.message, true); }
+    },
+
+    async importLegacyData() {
+      try {
+        const preview = await this.request('/api/chat2api/import/legacy/preview', { method: 'POST', body: '{}' });
+        const counts = preview.counts || {};
+        const config = preview.config || {};
+        const summary = `将导入 Provider ${Number(counts.providers || 0)} 个、账号 ${Number(counts.accounts || 0)} 个、模型映射 ${Number(counts.modelMappings || 0)} 条`;
+        const configSummary = Object.keys(config).length > 0 ? `，并更新代理配置${config.port ? `（端口 ${config.port}）` : ''}` : '';
+        if (!window.confirm(`${summary}${configSummary}。不会删除现有数据，确认继续吗？`)) {
+          this.message('已取消原 Chat2API 数据导入。');
+          return;
+        }
+        const result = await this.request('/api/chat2api/import/legacy/merge', { method: 'POST', body: JSON.stringify({ confirmed: true }) });
+        await this.refresh();
+        this.message(`原 Chat2API 数据导入完成：账号 ${Number((result.counts || {}).accounts || 0)} 个。`);
+      } catch (error) { this.message(`原 Chat2API 数据导入失败：${error.message}`, true); }
     },
 
     async updateAccount(accountId, enabled) {

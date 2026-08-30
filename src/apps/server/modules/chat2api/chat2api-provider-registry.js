@@ -121,6 +121,18 @@ const createChat2ApiProviderRegistry = ({ dataStore } = {}) => {
     return (await getProvider(normalized.id));
   };
 
+  const deleteProvider = async (providerId, related = {}) => {
+    if ((related.accounts || []).some((account) => account.providerId === providerId)
+      || (related.mappings || []).some((mapping) => mapping.providerId === providerId || mapping.preferredProviderId === providerId)) {
+      return false;
+    }
+    const stored = await getStoredProviders();
+    const next = stored.filter((provider) => provider.id !== providerId);
+    if (next.length === stored.length) return false;
+    await dataStore.writeCollection('providers', next);
+    return true;
+  };
+
   const listModels = async () => {
     const models = new Set();
     for (const provider of await listProviders()) {
@@ -146,6 +158,7 @@ const createChat2ApiProviderRegistry = ({ dataStore } = {}) => {
     listProviders,
     getProvider,
     saveProvider,
+    deleteProvider,
     listModels,
     getEffectiveModels,
   };

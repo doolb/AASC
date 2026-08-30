@@ -33,13 +33,27 @@ const createChat2ApiManagementService = (runtime) => {
   const listProviders = () => providerRegistry.listProviders();
   const saveProvider = (provider) => providerRegistry.saveProvider(provider);
   const listAccounts = () => dataStore.listAccounts();
+  const updateAccount = (accountId, patch) => dataStore.updateAccount(accountId, patch);
+  const deleteAccount = (accountId) => dataStore.deleteAccount(accountId);
+  const listModelMappings = () => dataStore.listModelMappings();
+  const saveModelMapping = (mapping) => dataStore.saveModelMapping(mapping);
+  const deleteModelMapping = (model) => dataStore.deleteModelMapping(model);
   const startLogin = (providerId) => oauth.startLogin(providerId);
   const completeLogin = (input) => oauth.completeLogin(input);
   const handleCallback = (query) => oauth.handleCallback(query);
   const createApiKey = (input) => dataStore.createApiKey(input);
   const listApiKeys = () => dataStore.listApiKeys();
+  const updateApiKey = (id, patch) => dataStore.updateApiKey(id, patch);
+  const disableApiKey = (id) => dataStore.disableApiKey(id);
+  const deleteApiKey = (id) => dataStore.deleteApiKey(id);
+  const deleteProvider = async (providerId) => providerRegistry.deleteProvider(providerId, {
+    accounts: await dataStore.listAccounts(),
+    mappings: await dataStore.listModelMappings(),
+  });
   const previewImport = (input) => dataStore.previewImport(input);
   const mergeImport = (input, confirmed) => dataStore.mergeImport(input, confirmed);
+  const previewLegacyImport = () => dataStore.previewLegacyImport();
+  const mergeLegacyImport = (confirmed) => dataStore.mergeLegacyImport(confirmed);
 
   return {
     getConfig,
@@ -47,13 +61,24 @@ const createChat2ApiManagementService = (runtime) => {
     listProviders,
     saveProvider,
     listAccounts,
+    updateAccount,
+    deleteAccount,
+    listModelMappings,
+    saveModelMapping,
+    deleteModelMapping,
+    deleteProvider,
     startLogin,
     completeLogin,
     handleCallback,
     createApiKey,
     listApiKeys,
+    updateApiKey,
+    disableApiKey,
+    deleteApiKey,
     previewImport,
     mergeImport,
+    previewLegacyImport,
+    mergeLegacyImport,
   };
 };
 

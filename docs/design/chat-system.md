@@ -328,8 +328,8 @@ processVoiceCommand() 处理其他命令
 - `public/js/chat.js` - 重构前端聊天界面
 - `public/css/chat.css` - 更新聊天样式
 - `server.js` - 更新WebSocket消息处理
-- `public/upload.html` - 移除搜索页签
-- `public/js/search.js` - 删除或整合到chat.js
+- `public/upload.html` - 提供独立搜索频道面板，不将搜索记录嵌入群聊
+- `public/js/search.js` - 管理搜索频道状态和搜索历史
 
 ### 删除文件
 - 无（搜索功能整合到聊天系统）

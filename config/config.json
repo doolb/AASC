@@ -80,7 +80,7 @@
     "reminderTemplateSuffix": "",
     "routing": {
       "weather": "system",
-      "search": "llm"
+      "search": "system"
     }
   },
   "logBrain": {

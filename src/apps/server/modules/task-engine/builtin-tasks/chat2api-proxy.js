@@ -1,5 +1,16 @@
 const { createChat2ApiRuntime } = require('../../chat2api/chat2api-runtime');
 
+const FALSE_VALUES = new Set(['false', '0', 'off', 'no']);
+const TRUE_VALUES = new Set(['true', '1', 'on', 'yes']);
+
+const normalizeBoolean = (value, fallback) => {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value == null ? '' : value).trim().toLowerCase();
+  if (FALSE_VALUES.has(normalized)) return false;
+  if (TRUE_VALUES.has(normalized)) return true;
+  return fallback;
+};
+
 module.exports = {
   id: 'chat2api.proxy',
   name: 'Chat2API 兼容代理',
@@ -17,7 +28,7 @@ module.exports = {
       '<div>状态：<strong style="color:{{_statusColor}}">{{statusText}}</strong></div>' +
       '<div style="font-size:12px;color:rgba(255,255,255,.65)">地址：{{addressText}}</div>' +
       '<div style="display:flex;gap:8px"><button class="task-card-btn" onclick="TaskPanel._onWidgetAction(\'{{instanceId}}\',\'widgetRefresh\')">刷新</button>' +
-      '<button class="task-card-btn primary" onclick="Chat2APIControl.open(\'{{addressText}}\')">账户管理</button>' +
+      '<button class="task-card-btn primary" onclick="Chat2APIControl.open(\'{{addressText}}\',\'{{instanceId}}\')">账户管理</button>' +
       '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'{{instanceId}}\')">停止服务</button></div>' +
     '</div>',
     actions: [{ id: 'widgetRefresh', label: '刷新' }],
@@ -29,7 +40,7 @@ module.exports = {
       rootDir: params.rootDir,
       host: params.host,
       port: params.port,
-      config: { enableApiKey: params.enableApiKey !== false },
+      config: { enableApiKey: normalizeBoolean(params.enableApiKey, true) },
     });
     await runtime.start();
 

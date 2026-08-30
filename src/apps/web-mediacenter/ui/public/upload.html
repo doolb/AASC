@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="css/media-library.css">
     <link rel="stylesheet" href="css/map.css">
     <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/chat2api.css">
     <script type="importmap">
     {
         "imports": {
@@ -38,6 +39,10 @@
             <button class="nav-item" data-target="chat" title="AI助手">
                 <span class="nav-icon">💬</span>
                 <span class="nav-text">助手</span>
+            </button>
+            <button class="nav-item" data-target="search" title="搜索频道">
+                <span class="nav-icon">🔍</span>
+                <span class="nav-text">搜索</span>
             </button>
             <button class="nav-item" data-target="map" title="地图">
                 <span class="nav-icon">🗺️</span>
@@ -450,6 +455,35 @@
             <div class="section">
                 <h2>AI 聊天助手</h2>
                 <div class="chat-container" id="chatContainer"></div>
+            </div>
+        </section>
+
+        <section class="panel" id="panel-search" style="display:none;">
+            <h1 class="page-title">搜索频道</h1>
+
+            <div class="section">
+                <h2>搜索</h2>
+                <div class="search-input-group">
+                    <input type="text" id="searchInput" placeholder="输入搜索关键词">
+                    <button onclick="Search.performSearch()">搜索</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>当前搜索</h2>
+                <div class="search-channel-list" id="searchChannelList">
+                    <div class="empty-list">暂无搜索任务</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="search-history-header">
+                    <h2>搜索历史</h2>
+                    <button class="clear-btn" onclick="Search.clearHistory()">清空历史</button>
+                </div>
+                <div class="search-history-list" id="searchHistoryList">
+                    <div class="empty-list">暂无搜索记录</div>
+                </div>
             </div>
         </section>
         

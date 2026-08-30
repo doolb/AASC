@@ -35,13 +35,15 @@ const createChat2ApiModelMapper = ({ dataStore } = {}) => {
       throw new Error('Chat2API 模型映射数据必须是数组');
     }
     const mapping = mappings.find((item) => {
-      const providerMatches = !item.preferredProviderId || !provider || item.preferredProviderId === provider.id;
+      const mappedProviderId = item.preferredProviderId || item.providerId;
+      const providerMatches = !mappedProviderId || !provider || mappedProviderId === provider.id;
       return providerMatches && matchesPattern(requestedModel, item.model);
     });
+    const preferredProviderId = mapping && (mapping.preferredProviderId || mapping.providerId);
     return {
       requestedModel,
       actualModel: mapping ? mapping.actualModel : requestedModel,
-      preferredProviderId: mapping && mapping.preferredProviderId,
+      preferredProviderId,
       preferredAccountId: mapping && mapping.preferredAccountId,
     };
   };

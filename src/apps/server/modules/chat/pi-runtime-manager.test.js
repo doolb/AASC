@@ -446,3 +446,22 @@ test('请求超时会终止子进程并清理会话', async () => {
     assert.equal(child.killed, true);
     assert.equal(manager.getSessionCount(), 0);
 });
+
+test('Pi 一次性会话完成后自动回收进程', async () => {
+    const child = createFakePiChild();
+    const manager = new PiRuntimeManager({
+        spawn: () => child
+    });
+
+    const result = await manager.chatStream(
+        { name: 'local', mode: 'agent', backend: 'pi', apiUrl: 'http://llm/v1', model: 'qwen' },
+        { id: 'search', permissionProfile: 'readonly' },
+        '搜索：Pi 临时上下文',
+        {},
+        { conversationKey: 'search:one', ephemeral: true }
+    );
+
+    assert.equal(result.message, '找到文件');
+    assert.equal(child.killed, true);
+    assert.equal(manager.getSessionCount(), 0);
+});

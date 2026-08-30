@@ -697,7 +697,6 @@ const Chat = {
                         </label>
                     </div>
                 </div>
-                <div class="chat-search-history" id="chatSearchHistory"></div>
             </div>
         `;
         

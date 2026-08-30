@@ -748,7 +748,7 @@
 
       // 其他内置任务：从 params 数组通用渲染
       var task = this._getBuiltinTask(builtinId);
-      var params = task ? task.params || [] : [];
+      var params = task ? (task.params || []).filter(function(param) { return !param.globalOnly; }) : [];
       if (params.length === 0) {
         container.innerHTML = '<div style="color:#666;font-size:12px;padding:8px">无参数</div>';
         return;
@@ -1188,7 +1188,7 @@
           for (var i = 0; i < self.taskList.length; i++) {
             if (self.taskList[i].taskName === taskName) { task = self.taskList[i]; break; }
           }
-          var params = task ? task.params || [] : [];
+          var params = task ? (task.params || []).filter(function(param) { return param.globalOnly !== false; }) : [];
 
           // 构建表单 HTML
           var fieldsHtml = '';
@@ -1369,8 +1369,9 @@
       if (this.currentTab === 'monitor') this._renderMonitor();
       // 提交后切换到任务列表并选中任务
       if (this.currentTab === 'new') {
-        this._selectedInstanceId = payload.instanceId;
         this._selectTask(payload.taskName);
+        // _selectTask 会按任务列表默认选中旧记录，最后再锁定本次新提交的实例。
+        this._selectedInstanceId = payload.instanceId;
         this._showView('list');
       }
     },
@@ -1440,21 +1441,34 @@
     },
 
     _onResult: function(payload) {
-      var inst = this.instances.get(payload.instanceId);
-      if (inst) {
-        // 服务模式任务启动成功（data.serviceStarted），保持 running 状态
-        if (payload.data && payload.data.serviceStarted) {
-          inst.status = 'running';
-        } else {
-          inst.status = payload.success ? 'completed' : 'failed';
-          inst.completedAt = Date.now();
-        }
-        if (payload.displayId) inst.displayId = payload.displayId;
-        inst.result = payload;
-        this._updateMonitorBadge();
-        if (this.currentTab === 'monitor') this._renderMonitor();
-        this._requestTaskList();
+      let inst = this.instances.get(payload.instanceId);
+      // 手动执行或页面加载后的历史实例可能只存在 taskList 中，结果事件到达时
+      // 不能因为内存映射缺失而丢弃结果，先补建一个可供详情面板使用的实例。
+      if (!inst) {
+        inst = {
+          instanceId: payload.instanceId,
+          taskName: payload.taskName,
+          status: payload.success ? 'completed' : 'failed',
+          stage: payload.success ? 'completed' : 'failed',
+          timestamp: Date.now(),
+          logs: [],
+          displayId: payload.displayId || null
+        };
+        this.instances.set(payload.instanceId, inst);
       }
+
+      // 服务模式任务启动成功（data.serviceStarted），保持 running 状态
+      if (payload.data && payload.data.serviceStarted) {
+        inst.status = 'running';
+      } else {
+        inst.status = payload.success ? 'completed' : 'failed';
+        inst.completedAt = Date.now();
+      }
+      if (payload.displayId) inst.displayId = payload.displayId;
+      inst.result = payload;
+      this._updateMonitorBadge();
+      if (this.currentTab === 'monitor') this._renderMonitor();
+      this._requestTaskList();
     },
 
     _onTaskError: function(payload) {
@@ -2227,7 +2241,7 @@
       for (var i = 0; i < this.taskList.length; i++) {
         if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
       }
-      var taskParams = task ? task.params || [] : [];
+      var taskParams = task ? (task.params || []).filter(function(param) { return !param.globalOnly; }) : [];
       if (taskParams.length === 0) return;
 
       // 获取实例当前 params
@@ -2504,7 +2518,27 @@
         : '-';
 
       var outputText = '';
-      if (result.data && result.data.text) {
+      const resultData = result.data ? result.data.result : undefined;
+      if (Array.isArray(resultData)) {
+        const resultItemsHtml = resultData.map(function(item, index) {
+          const itemTitle = item && item.title ? item.title : (item && item.type === 'ai_answer' ? 'AI 回答' : '结果 ' + (index + 1));
+          const itemContent = item && (item.snippet || item.content || item.message) ? (item.snippet || item.content || item.message) : '无摘要';
+          const itemLink = item && item.link ? '<div style="margin-top:4px;word-break:break-all;color:#8cf">' + this._escapeHtml(item.link) + '</div>' : '';
+          return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">' +
+            '<div style="font-weight:600;color:#e0e0e0">' + (index + 1) + '. ' + this._escapeHtml(itemTitle) + '</div>' +
+            '<div style="margin-top:3px;color:#c8c8c8">' + this._escapeHtml(itemContent) + '</div>' + itemLink +
+            '</div>';
+        }, this).join('');
+        outputText = '<div class="task-result-text">' +
+          '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">输出结果</div>' +
+          '<div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:4px 12px;font-size:13px;line-height:1.6;color:#e0e0e0;word-break:break-word;margin-bottom:8px">' +
+          resultItemsHtml + '</div></div>';
+      } else if (resultData !== undefined && resultData !== null) {
+        outputText = '<div class="task-result-text">' +
+          '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">输出结果</div>' +
+          '<div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:12px;font-size:13px;line-height:1.6;color:#e0e0e0;white-space:pre-wrap;word-break:break-word;margin-bottom:8px">' +
+          this._escapeHtml(typeof resultData === 'string' ? resultData : JSON.stringify(resultData)) + '</div></div>';
+      } else if (result.data && result.data.text) {
         outputText = '<div class="task-result-text">' +
           '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:4px">输出</div>' +
           '<div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:12px;font-size:13px;line-height:1.6;color:#e0e0e0;white-space:pre-wrap;word-break:break-word;margin-bottom:8px">' +

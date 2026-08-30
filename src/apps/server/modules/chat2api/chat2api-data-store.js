@@ -14,6 +14,7 @@ const {
 } = require('./chat2api-secret');
 
 const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.config', 'aasc-user', 'chat2api');
+const DEFAULT_LEGACY_DATA_PATH = path.join(os.homedir(), '.chat2api', 'data.json');
 const COLLECTION_FILES = Object.freeze({
   config: 'config.json',
   providers: 'providers.json',
@@ -58,6 +59,7 @@ const mergeByKey = (current, incoming, keySelector) => {
 
 const createChat2ApiDataStore = (options = {}) => {
   const rootDir = path.resolve(options.rootDir || DEFAULT_ROOT_DIR);
+  const legacyDataPath = path.resolve(options.legacyDataPath || DEFAULT_LEGACY_DATA_PATH);
   const filePath = (name) => path.join(rootDir, COLLECTION_FILES[name]);
   const oauthSessionDir = path.join(rootDir, 'oauth-sessions');
 
@@ -176,6 +178,51 @@ const createChat2ApiDataStore = (options = {}) => {
     return accounts.find((account) => account.accountId === accountId) || null;
   };
 
+  const updateAccount = async (accountId, patch = {}) => {
+    const current = await getAccount(accountId);
+    if (!current) {
+      return null;
+    }
+    const next = validateAccount({ ...current, ...patch, accountId: current.accountId, providerId: current.providerId, credentials: patch.credentials || current.credentials });
+    const accounts = await readCollection('accounts', []);
+    await writeCollection('accounts', accounts.map((account) => account.accountId === accountId ? next : account));
+    return publicAccount(next);
+  };
+
+  const deleteAccount = async (accountId) => {
+    const accounts = await readCollection('accounts', []);
+    const next = accounts.filter((account) => account.accountId !== accountId);
+    if (next.length === accounts.length) {
+      return false;
+    }
+    await writeCollection('accounts', next);
+    return true;
+  };
+
+  const listModelMappings = async () => {
+    const mappings = await readCollection('modelMappings', []);
+    ensureArray(mappings, 'modelMappings');
+    return cloneValue(mappings);
+  };
+
+  const saveModelMapping = async (mapping) => {
+    if (!mapping || typeof mapping.model !== 'string' || mapping.model.trim().length === 0 || typeof mapping.actualModel !== 'string' || mapping.actualModel.trim().length === 0) {
+      throw new Error('Chat2API 模型映射必须包含 model 和 actualModel');
+    }
+    const normalized = { ...cloneValue(mapping), model: mapping.model.trim(), actualModel: mapping.actualModel.trim() };
+    const mappings = await listModelMappings();
+    await writeCollection('modelMappings', mergeByKey(mappings, [normalized], (item) => item.model));
+    return normalized;
+  };
+
+  const deleteModelMapping = async (model) => {
+    const mappings = await listModelMappings();
+    const next = mappings.filter((mapping) => mapping.model !== model);
+    if (next.length === mappings.length) return false;
+    await writeCollection('modelMappings', next);
+    return true;
+  };
+
   const createOAuthSession = async ({ providerId, loginUrl, ttlMs = OAUTH_SESSION_TTL_MS } = {}) => {
     if (typeof providerId !== 'string' || providerId.trim().length === 0 || typeof loginUrl !== 'string' || loginUrl.length === 0) {
       throw new Error('Chat2API OAuth 会话参数无效');
@@ -264,6 +311,26 @@ const createChat2ApiDataStore = (options = {}) => {
     return publicKey;
   };
 
+  const updateApiKey = async (id, patch = {}) => {
+    const keys = await readCollection('apiKeys', []);
+    const current = keys.find((key) => key.id === id);
+    if (!current) return null;
+    const next = { ...current, ...patch, id: current.id, hash: current.hash, maskedValue: current.maskedValue, updatedAt: new Date().toISOString() };
+    await writeCollection('apiKeys', keys.map((key) => key.id === id ? next : key));
+    const { hash, ...publicKey } = next;
+    return publicKey;
+  };
+
+  const disableApiKey = async (id) => updateApiKey(id, { enabled: false });
+
+  const deleteApiKey = async (id) => {
+    const keys = await readCollection('apiKeys', []);
+    const next = keys.filter((key) => key.id !== id);
+    if (next.length === keys.length) return false;
+    await writeCollection('apiKeys', next);
+    return true;
+  };
+
   const normalizeImport = (data) => {
     if (!data || typeof data !== 'object' || data.version !== 1) {
       throw new Error('Chat2API 导入文件版本不受支持');
@@ -316,6 +383,95 @@ const createChat2ApiDataStore = (options = {}) => {
     };
   };
 
+  const readLegacyData = async () => {
+    let content;
+    try {
+      content = await fs.readFile(legacyDataPath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        const missing = new Error(`未找到原 Chat2API 数据文件: ${legacyDataPath}`);
+        missing.code = 'legacy_data_not_found';
+        missing.statusCode = 404;
+        throw missing;
+      }
+      throw error;
+    }
+    try {
+      return JSON.parse(content);
+    } catch (error) {
+      const invalid = new Error('原 Chat2API data.json 格式错误，无法迁移');
+      invalid.code = 'legacy_data_invalid';
+      invalid.statusCode = 422;
+      throw invalid;
+    }
+  };
+
+  const normalizeLegacyConfig = (legacyConfig = {}) => {
+    const config = {};
+    const mappings = legacyConfig.modelMappings && typeof legacyConfig.modelMappings === 'object' && !Array.isArray(legacyConfig.modelMappings)
+      ? legacyConfig.modelMappings
+      : {};
+    if (typeof legacyConfig.proxyHost === 'string' && legacyConfig.proxyHost.trim()) config.host = legacyConfig.proxyHost.trim();
+    if (Number.isInteger(Number(legacyConfig.proxyPort))) config.port = Number(legacyConfig.proxyPort);
+    if (['round-robin', 'fill-first', 'failover'].includes(legacyConfig.loadBalanceStrategy)) config.loadBalanceStrategy = legacyConfig.loadBalanceStrategy;
+    if (typeof legacyConfig.enableApiKey === 'boolean') config.enableApiKey = legacyConfig.enableApiKey;
+    return { config, mappings };
+  };
+
+  const normalizeLegacyUserModelOverrides = (overrides = {}) => {
+    if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return [];
+    return Object.entries(overrides).flatMap(([providerId, override]) => {
+      const addedModels = override && Array.isArray(override.addedModels) ? override.addedModels : [];
+      return addedModels.map((model) => ({
+        model: ensureId(model && model.displayName, 'model', '原 Chat2API 用户模型映射'),
+        actualModel: ensureId(model && model.actualModelId, 'actualModel', '原 Chat2API 用户模型映射'),
+        providerId: ensureId(providerId, 'providerId', '原 Chat2API 用户模型映射'),
+      }));
+    });
+  };
+
+  const normalizeLegacyImport = (data) => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('原 Chat2API 数据必须是对象');
+    }
+    const providers = ensureArray(data.providers || [], 'providers').map((provider) => ({
+      ...cloneValue(provider),
+      providerId: ensureId(provider.providerId || provider.id, 'providerId', '原 Chat2API Provider'),
+    }));
+    const accounts = ensureArray(data.accounts || [], 'accounts').map((account) => validateAccount({
+      ...cloneValue(account),
+      accountId: ensureId(account.accountId || account.id, 'accountId', '原 Chat2API 账号'),
+      label: account.label || account.name,
+    }));
+    const { config, mappings } = normalizeLegacyConfig(data.config);
+    const configModelMappings = Object.entries(mappings).map(([model, mapping]) => ({
+      model: mapping && mapping.requestModel ? mapping.requestModel : model,
+      actualModel: mapping && mapping.actualModel ? mapping.actualModel : model,
+      ...(mapping && mapping.preferredProviderId ? { providerId: mapping.preferredProviderId } : {}),
+    }));
+    const modelMappings = [...configModelMappings, ...normalizeLegacyUserModelOverrides(data.userModelOverrides)];
+    const payload = normalizeImport({ version: 1, providers, accounts, modelMappings });
+    return { payload, config };
+  };
+
+  const previewLegacyImport = async () => {
+    const normalized = normalizeLegacyImport(await readLegacyData());
+    return { ...importPreview({ version: 1, ...normalized.payload }), source: legacyDataPath, config: normalized.config };
+  };
+
+  const mergeLegacyImport = async (confirmed) => {
+    if (confirmed !== true) {
+      throw new Error('Chat2API 导入必须先预览并明确确认');
+    }
+    const normalized = normalizeLegacyImport(await readLegacyData());
+    const result = await mergeImport({ version: 1, ...normalized.payload }, true);
+    if (Object.keys(normalized.config).length > 0) {
+      const current = await readCollection('config', {});
+      await writeCollection('config', { ...(current && !Array.isArray(current) ? current : {}), ...normalized.config });
+    }
+    return { ...result, config: normalized.config };
+  };
+
   return {
     rootDir,
     readCollection,
@@ -323,6 +479,11 @@ const createChat2ApiDataStore = (options = {}) => {
     saveAccount,
     listAccounts,
     getAccount,
+    updateAccount,
+    deleteAccount,
+    listModelMappings,
+    saveModelMapping,
+    deleteModelMapping,
     createOAuthSession,
     consumeOAuthSession,
     cancelOAuthSession,
@@ -330,12 +491,18 @@ const createChat2ApiDataStore = (options = {}) => {
     createApiKey,
     listApiKeys,
     validateApiKey,
+    updateApiKey,
+    disableApiKey,
+    deleteApiKey,
     previewImport,
     mergeImport,
+    previewLegacyImport,
+    mergeLegacyImport,
   };
 };
 
 module.exports = {
   DEFAULT_ROOT_DIR,
+  DEFAULT_LEGACY_DATA_PATH,
   createChat2ApiDataStore,
 };

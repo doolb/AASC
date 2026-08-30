@@ -9,6 +9,14 @@ const SECRET_FIELDS = new Set([
   'apiKey',
   'password',
   'clientSecret',
+  'ticket',
+  'cookies',
+  'serviceToken',
+  'service_token',
+  'phToken',
+  'ph_token',
+  'sessionToken',
+  'refresh_token',
 ]);
 
 const cloneValue = (value) => {

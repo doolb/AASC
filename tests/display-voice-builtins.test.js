@@ -6,7 +6,8 @@ const path = require('path');
 const {
     isBuiltinVoiceCommand,
     getBuiltinVoiceCommands,
-    getVoiceCommandHelpText
+    getVoiceCommandHelpText,
+    getSearchSpeechTexts
 } = require('../src/apps/web-mediacenter/modules/voice/voice-command-app-service');
 
 assert.strictEqual(isBuiltinVoiceCommand('现在几点？'), true);
@@ -31,6 +32,16 @@ const helpText = getVoiceCommandHelpText({
 assert.match(helpText, /现在几点/);
 assert.match(helpText, /早安/);
 assert.match(helpText, /今日提醒/);
+assert.deepEqual(getSearchSpeechTexts([
+    { type: 'first_result', title: '第一条', snippet: '摘要一' },
+    { type: 'first_result', title: '第二条', snippet: '摘要二' },
+    { type: 'first_result', title: '第三条', snippet: '摘要三' },
+    { type: 'first_result', title: '第四条', snippet: '摘要四' }
+]), [
+    '搜索结果：第一条。摘要一',
+    '搜索结果：第二条。摘要二',
+    '搜索结果：第三条。摘要三'
+]);
 
 const serverSource = fs.readFileSync(
     path.resolve(__dirname, '../src/apps/server/boot/server-app.js'),
@@ -50,4 +61,4 @@ assert.ok(responseIndex >= 0, '系统帮助应向目标显示端发送完整响�
 assert.ok(responseIndex < ttsWaitIndex, '显示端系统帮助弹窗应先于通用 TTS 生成下发');
 assert.ok(responseIndex < directedTtsWaitIndex, '控制端系统帮助弹窗应先于定向 TTS 生成下发');
 
-console.log('display-voice-builtins.test.js: 21/21 passed');
+console.log('display-voice-builtins.test.js: 22/22 passed');
