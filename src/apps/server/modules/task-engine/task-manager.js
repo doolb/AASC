@@ -166,7 +166,7 @@ class TaskManager extends EventEmitter {
       if (task.mode === 'service') {
         for (const [sid, svc] of this._services) {
           const sInst = this.instances.get(sid);
-          if (sInst && sInst.taskName === task.taskName && sInst.target === task.target && svc.status === 'running') {
+          if (svc.status === 'running' && this._isSameServiceScope(sInst, task)) {
             console.log('[TaskManager] 停止旧服务实例:', sid, 'taskName:', task.taskName);
             try { await svc.stop(); } catch (e) { }
             this._services.delete(sid);
@@ -774,12 +774,34 @@ class TaskManager extends EventEmitter {
     if (!this.taskLinks.has(sourceInstanceId)) {
       this.taskLinks.set(sourceInstanceId, []);
     }
-    this.taskLinks.get(sourceInstanceId).push({
-      taskName: targetTaskName,
-      instanceId: targetInstanceId
-    });
+    const targets = this.taskLinks.get(sourceInstanceId);
+    const alreadyLinked = targets.some(target =>
+      target.taskName === targetTaskName && target.instanceId === targetInstanceId
+    );
+    if (!alreadyLinked) {
+      targets.push({
+        taskName: targetTaskName,
+        instanceId: targetInstanceId
+      });
+    }
     console.log('[TaskManager] 任务链绑定:', sourceInstanceId, '->', targetTaskName + '/' + targetInstanceId);
     await this.taskIO.saveTaskLinks(this.taskLinks);
+  }
+
+  /**
+   * 判断两个服务实例是否占用同一个运行范围。
+   * 服务端服务继续按任务名和 target 单实例运行；显示端服务还必须比较 displayId，
+   * 否则启动第二个显示端的同名 render-display 会误停止第一个显示端的覆盖层。
+   */
+  _isSameServiceScope(existingInstance, task) {
+    if (!existingInstance || existingInstance.taskName !== task.taskName || existingInstance.target !== task.target) {
+      return false;
+    }
+    const isDisplayTarget = task.target === 'display' || task.target === 'subdisplay';
+    if (!isDisplayTarget) return true;
+    const existingDisplayId = (existingInstance.targetInfo && existingInstance.targetInfo.displayId) ||
+      existingInstance.displayId || null;
+    return existingDisplayId === (task.displayId || null);
   }
 
   /**
@@ -787,6 +809,11 @@ class TaskManager extends EventEmitter {
    */
   async unlinkTasks(sourceInstanceId, targetInstanceId) {
     if (!this.taskLinks.has(sourceInstanceId)) return;
+    const currentLinks = await this.getTaskLinks();
+    const removedLinks = currentLinks.filter(link =>
+      link.sourceInstanceId === sourceInstanceId &&
+      (!targetInstanceId || link.targetInstanceId === targetInstanceId)
+    );
     if (targetInstanceId) {
       const list = this.taskLinks.get(sourceInstanceId);
       this.taskLinks.set(sourceInstanceId, list.filter(l => l.instanceId !== targetInstanceId));
@@ -797,6 +824,59 @@ class TaskManager extends EventEmitter {
       this.taskLinks.delete(sourceInstanceId);
     }
     await this.taskIO.saveTaskLinks(this.taskLinks);
+
+    // 多来源共用同一 render-display 时，只清理被解除来源的显示端子条目，不能停止整个目标任务。
+    for (const link of removedLinks) {
+      if (link.targetTaskName !== 'render-display' || !link.targetDisplayId || !this._sendToDisplay) continue;
+      this._sendToDisplay(link.targetDisplayId, {
+        type: 'task:renderUpdate',
+        instanceId: link.targetInstanceId,
+        sourceInstanceId,
+        data: { _stop: true, _sourceInstanceId: sourceInstanceId }
+      });
+    }
+  }
+
+  /**
+   * 返回控制端链接面板使用的规范化链接。
+   *
+   * 链接文件会跨越任务实例的生命周期保留，历史上可能包含已经清理的实例或重复记录。
+   * 这里每次查询都以任务索引为准过滤并去重，避免把失效目标暴露给控制端，也不改变高频
+   * progress 路由的数据结构。
+   */
+  async getTaskLinks() {
+    const tasks = await this.listTasks();
+    const instanceMap = new Map();
+    for (const task of tasks) {
+      for (const entry of (task.instances || [])) {
+        if (!entry.instanceId) continue;
+        instanceMap.set(entry.instanceId, { taskName: task.taskName, entry });
+      }
+    }
+
+    const links = [];
+    const seen = new Set();
+    for (const [sourceInstanceId, targets] of this.taskLinks) {
+      const source = instanceMap.get(sourceInstanceId);
+      if (!source) continue;
+      for (const target of (Array.isArray(targets) ? targets : [])) {
+        const targetInfo = instanceMap.get(target.instanceId);
+        if (!targetInfo || targetInfo.taskName !== target.taskName) continue;
+        const linkKey = sourceInstanceId + ':' + target.taskName + ':' + target.instanceId;
+        if (seen.has(linkKey)) continue;
+        seen.add(linkKey);
+        const targetParams = targetInfo.entry.params || {};
+        links.push({
+          sourceTaskName: source.taskName,
+          sourceInstanceId,
+          targetTaskName: target.taskName,
+          targetInstanceId: target.instanceId,
+          targetDisplayId: targetInfo.entry.displayId || targetParams.targetDisplay || targetParams._displayId || null,
+          targetStatus: targetInfo.entry.status || 'unknown'
+        });
+      }
+    }
+    return links;
   }
 
   /**

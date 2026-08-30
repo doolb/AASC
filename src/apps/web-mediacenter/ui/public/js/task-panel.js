@@ -7,6 +7,7 @@
     _widgetControllers: {},
     displayList: [],
     taskList: [],
+    taskLinks: [],
     currentTab: 'list',
     viewStack: [],
     timers: {},
@@ -69,6 +70,8 @@
     _handleTaskList: function(payload) {
       // 向后兼容：如果是数组直接当 tasks
       var tasks = Array.isArray(payload) ? payload : (payload.tasks || []);
+      // 旧服务端没有 links 字段时按空数组处理，保持任务列表协议兼容。
+      this.taskLinks = Array.isArray(payload) ? [] : (Array.isArray(payload.links) ? payload.links : []);
       // 合并同名条目：内置任务带 widget，磁盘任务带实例
       var merged = {};
       for (var t = 0; t < tasks.length; t++) {
@@ -1299,6 +1302,9 @@
         if (data.type === 'task:updated') {
           self._onUpdated(data.payload);
         }
+        if (data.type === 'task:linked' || data.type === 'task:unlinked') {
+          self._requestTaskList();
+        }
         if (data.type === 'task:instance_logs') {
           self._onInstanceLogs(data.payload);
         }
@@ -2048,60 +2054,170 @@
     },
 
     _linkInstance: function(sourceTaskName, sourceInstanceId) {
-      var self = this;
-      var overlay = document.createElement('div');
+      const self = this;
+      const overlay = document.createElement('div');
       overlay.className = 'task-confirm-overlay';
+      const sourceLinks = this.taskLinks.filter(function(link) {
+        return link.sourceInstanceId === sourceInstanceId && link.sourceTaskName === sourceTaskName;
+      });
+      const linkedTargetIds = new Set(sourceLinks.map(function(link) { return link.targetInstanceId; }));
 
-      // 收集所有其他任务的 running 实例作为候选目标
-      var targetOptions = '';
-      for (var i = 0; i < this.taskList.length; i++) {
-        var t = this.taskList[i];
-        var instances = t.instances || [];
-        for (var j = 0; j < instances.length; j++) {
-          var inst = instances[j];
-          if (inst.status === 'running' && inst.instanceId !== sourceInstanceId) {
-            targetOptions += '<div class="task-link-item" data-taskname="' + this._escapeAttr(t.taskName) +
-              '" data-instanceid="' + this._escapeAttr(inst.instanceId) + '">' +
-              '<span class="task-link-item-name">' + this._escapeHtml(t.name || t.taskName) + '</span>' +
-              '<span class="task-link-item-id">#' + this._escapeHtml(inst.instanceId.substring(0, 8)) + '</span>' +
-              '<button class="task-link-select-btn">选择</button></div>';
-          }
-        }
+      const getTaskName = function(taskName) {
+        const task = self.taskList.find(function(item) { return item.taskName === taskName; });
+        return task ? (task.name || task.taskName) : taskName;
+      };
+      const getDisplayLabel = function(displayId) {
+        if (!displayId) return '未指定显示端';
+        const display = self.displayList.find(function(item) { return item.id === displayId; });
+        return display && display.ip ? displayId + ' (' + display.ip + ')' : displayId;
+      };
+      const getStatusText = function(status) {
+        const statusNames = {
+          running: '运行中', pending_forward: '转发中', display_offline: '显示端离线',
+          completed: '已完成', failed: '失败', stopped: '已停止'
+        };
+        return statusNames[status] || status || '未知';
+      };
+      const formatInstanceId = function(instanceId) {
+        const value = String(instanceId || '');
+        return value.substring(0, 8);
+      };
+      const getTargetDisplayId = function(instance) {
+        const params = instance.params || {};
+        return instance.displayId || params.targetDisplay || params._displayId || '';
+      };
+
+      // 先展示当前来源实例已经绑定的有效目标，链接数据已由服务端过滤失效实例。
+      let linkedOptions = sourceLinks.map(function(link) {
+        const displayId = link.targetDisplayId || '';
+        return '<div class="task-link-item task-link-linked-item" data-taskname="' +
+          self._escapeAttr(link.targetTaskName) + '" data-instanceid="' +
+          self._escapeAttr(link.targetInstanceId) + '" data-status="' +
+          self._escapeAttr(link.targetStatus) + '">' +
+          '<div class="task-link-item-main">' +
+            '<span class="task-link-item-name">' + self._escapeHtml(getTaskName(link.targetTaskName)) + '</span>' +
+            '<span class="task-link-item-meta">显示端：' + self._escapeHtml(getDisplayLabel(displayId)) +
+              ' · ' + self._escapeHtml(getStatusText(link.targetStatus)) + '</span>' +
+          '</div>' +
+          '<span class="task-link-item-id">#' + self._escapeHtml(formatInstanceId(link.targetInstanceId)) + '</span>' +
+          '<button class="task-link-remove-btn">解除</button></div>';
+      }).join('');
+      if (!linkedOptions) {
+        linkedOptions = '<div class="task-link-empty">当前没有已链接的目标实例</div>';
       }
 
+      // 候选目标按实例 ID 去重，并排除来源自身和已经绑定的目标。
+      const candidateIds = new Set();
+      let targetOptions = '';
+      for (const task of self.taskList) {
+        for (const instance of (task.instances || [])) {
+          if (instance.status !== 'running' || instance.instanceId === sourceInstanceId ||
+              linkedTargetIds.has(instance.instanceId) || candidateIds.has(instance.instanceId)) continue;
+          candidateIds.add(instance.instanceId);
+          const displayId = getTargetDisplayId(instance);
+          targetOptions += '<div class="task-link-item" data-taskname="' + self._escapeAttr(task.taskName) +
+            '" data-instanceid="' + self._escapeAttr(instance.instanceId) + '">' +
+            '<div class="task-link-item-main">' +
+              '<span class="task-link-item-name">' + self._escapeHtml(task.name || task.taskName) + '</span>' +
+              '<span class="task-link-item-meta">显示端：' + self._escapeHtml(getDisplayLabel(displayId)) + ' · 运行中</span>' +
+            '</div>' +
+            '<span class="task-link-item-id">#' + self._escapeHtml(formatInstanceId(instance.instanceId)) + '</span>' +
+            '<button class="task-link-select-btn">选择</button></div>';
+        }
+      }
       if (!targetOptions) {
-        targetOptions = '<div style="padding:20px;text-align:center;color:#666">没有其他运行中的实例可供链接</div>';
+        targetOptions = '<div class="task-link-empty">没有其他运行中的实例可供链接</div>';
       }
 
       overlay.innerHTML =
-        '<div class="task-confirm-box" style="max-width:420px">' +
-          '<div class="task-confirm-title">选择目标实例</div>' +
-          '<div class="task-confirm-msg">将 <strong>' + this._escapeHtml(sourceInstanceId.substring(0, 12)) + '</strong> 的输出链接到：</div>' +
-          '<div class="task-link-list">' + targetOptions + '</div>' +
+        '<div class="task-confirm-box" style="max-width:520px">' +
+          '<div class="task-confirm-title">管理任务链接</div>' +
+          '<div class="task-confirm-msg">来源：<strong>' + self._escapeHtml(sourceTaskName) +
+            '</strong> #' + self._escapeHtml(formatInstanceId(sourceInstanceId)) + '</div>' +
+          '<div class="task-link-section-title">已链接目标</div>' +
+          '<div class="task-link-list" id="taskLinkLinkedList">' + linkedOptions + '</div>' +
+          '<div class="task-link-section-title">添加目标</div>' +
+          '<div class="task-link-list" id="taskLinkCandidateList">' + targetOptions + '</div>' +
           '<div class="task-confirm-actions" style="margin-top:12px">' +
-            '<button class="task-confirm-btn cancel" id="tlCancel">取消</button>' +
+            '<button class="task-confirm-btn cancel" id="tlCancel">关闭</button>' +
           '</div>' +
         '</div>';
       document.body.appendChild(overlay);
 
-      document.getElementById('tlCancel').onclick = function() { document.body.removeChild(overlay); };
+      const closeOverlay = function() {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      };
+      overlay.querySelector('#tlCancel').onclick = closeOverlay;
 
-      // 点击选择按钮时执行链接
-      overlay.querySelectorAll('.task-link-select-btn').forEach(function(btn) {
-        btn.onclick = function() {
-          var item = this.closest('.task-link-item');
-          var targetTaskName = item.dataset.taskname;
-          var targetInstanceId = item.dataset.instanceid;
+      const bindRemoveButton = function(button) {
+        button.onclick = function() {
+          const item = this.closest('.task-link-item');
+          const linkedList = item ? item.parentNode : null;
+          const candidateList = overlay.querySelector('#taskLinkCandidateList');
+          const targetStatus = item ? item.dataset.status : '';
+          button.disabled = true;
+          self._send({
+            type: 'task:unlink',
+            payload: { sourceInstance: sourceInstanceId, targetInstance: item.dataset.instanceid }
+          });
+          if (targetStatus === 'running' && candidateList) {
+            // 目标仍在运行时，直接把条目移动到添加列表，方便用户立即重新链接。
+            const emptyState = candidateList.querySelector('.task-link-empty');
+            if (emptyState) emptyState.remove();
+            item.classList.remove('task-link-linked-item');
+            button.className = 'task-link-select-btn';
+            button.textContent = '选择';
+            button.disabled = false;
+            candidateList.appendChild(item);
+            bindSelectButton(button);
+          } else {
+            // 已停止目标不再是可添加候选，只从当前已链接列表移除。
+            item.remove();
+          }
+          if (linkedList && !linkedList.querySelector('.task-link-linked-item')) {
+            linkedList.innerHTML = '<div class="task-link-empty">当前没有已链接的目标实例</div>';
+          }
+        };
+      };
+
+      const bindSelectButton = function(button) {
+        button.onclick = function() {
+          const item = this.closest('.task-link-item');
+          const candidateList = item ? item.parentNode : null;
+          const linkedList = overlay.querySelector('#taskLinkLinkedList');
           self._send({
             type: 'task:link',
             payload: {
               sourceInstance: sourceInstanceId,
-              targetTask: targetTaskName,
-              targetInstance: targetInstanceId
+              targetTask: item.dataset.taskname,
+              targetInstance: item.dataset.instanceid
             }
           });
-          document.body.removeChild(overlay);
+          if (linkedList) {
+            // 选择成功后立即刷新当前弹窗：目标从添加列表移动到已链接列表。
+            const emptyState = linkedList.querySelector('.task-link-empty');
+            if (emptyState) emptyState.remove();
+            item.dataset.status = 'running';
+            item.classList.add('task-link-linked-item');
+            button.className = 'task-link-remove-btn';
+            button.textContent = '解除';
+            button.disabled = false;
+            linkedList.appendChild(item);
+            if (candidateList && !candidateList.querySelector('.task-link-item')) {
+              candidateList.innerHTML = '<div class="task-link-empty">没有其他运行中的实例可供链接</div>';
+            }
+            bindRemoveButton(button);
+          }
+          // 保持链接面板打开，允许同一来源连续选择多个目标显示端。
         };
+      };
+
+      overlay.querySelectorAll('.task-link-remove-btn').forEach(function(button) {
+        bindRemoveButton(button);
+      });
+
+      overlay.querySelectorAll('.task-link-select-btn').forEach(function(button) {
+        bindSelectButton(button);
       });
     },
 

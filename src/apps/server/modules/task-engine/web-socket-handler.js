@@ -202,10 +202,12 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
               return { ...t, params, widget, mode, target, entryFile };
             });
             const manifest = getSidebarManifest();
+            const links = await taskManager.getTaskLinks();
             ctx.ws.send(JSON.stringify({
               type: 'task:list:result',
               payload: {
                 tasks: [...getBuiltinTasks(), ...tasksWithMeta],
+                links,
                 sidebarGroups: manifest.groups,
                 sidebarTabs: manifest.tabs
               }
@@ -377,6 +379,13 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
       }
 
       case 'task:unlink': {
+        if (!payload.targetInstance) {
+          ctx.ws.send(JSON.stringify({
+            type: 'task:error',
+            payload: { error: '解除任务链接缺少目标实例 ID' }
+          }));
+          break;
+        }
         await taskManager.unlinkTasks(payload.sourceInstance, payload.targetInstance);
         ctx.ws.send(JSON.stringify({
           type: 'task:unlinked',

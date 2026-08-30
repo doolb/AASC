@@ -86,8 +86,60 @@ render.js 检测 window.NativeDisplay 存在
 
 | 文件 | 说明 |
 |------|------|
-| `task-manager.js` | 新增 taskLinks Map + linkTasks/unlinkTasks 方法 |
-| `web-socket-handler.js` | 新增 task:link/task:unlink handler；task:progress 触发 taskManager 事件（广播+路由） |
+| `task-manager.js` | 维护 taskLinks Map，提供 linkTasks/unlinkTasks/getTaskLinks；链接新增幂等，查询时过滤失效实例并去重 |
+| `web-socket-handler.js` | 新增 task:link/task:unlink handler；task:list 返回 links；task:progress 触发 taskManager 事件（广播+路由） |
+
+#### 任务链接查询与管理伪代码
+
+```text
+TaskManager.linkTasks(sourceId, targetTask, targetId):
+  targets = taskLinks.get(sourceId) 或 []
+  如果 targets 中已经存在相同 targetTask + targetId:
+    保持原数组，不重复添加
+  否则追加目标并持久化 taskLinks
+
+TaskManager.getTaskLinks():
+  taskIndex = 读取所有任务及实例，建立 instanceId -> { taskName, entry } 索引
+  result = []
+  对 taskLinks 中每个 sourceId -> targets:
+    如果 sourceId 不在 taskIndex：跳过
+    对 targets 中每个 target:
+      如果 target.instanceId 不在 taskIndex：跳过
+      key = sourceId + target.taskName + target.instanceId
+      如果 key 已处理：跳过
+      追加 {
+        sourceTaskName, sourceInstanceId,
+        targetTaskName, targetInstanceId,
+        targetDisplayId, targetStatus
+      }
+  返回 result
+
+服务实例互斥范围:
+  如果 target 是 server：同一任务名 + target 仍保持单实例互斥
+  如果 target 是 display/subdisplay：仅同一任务名 + target + displayId 互斥
+  不同 displayId 的 render-display 实例并行运行，不能停止彼此的显示端覆盖层
+  多个 sourceInstanceId 可以共同指向同一个 targetInstanceId，解除其中一个来源不影响其他来源路由
+  解除来源时向 render-display 发送 task:renderUpdate({_stop:true, _sourceInstanceId:sourceId})，只隐藏该来源子条目
+
+task:list:
+  tasks = listTasks() 并合并任务元数据
+  links = getTaskLinks()
+  向控制端返回 { tasks, links, sidebarGroups, sidebarTabs }
+
+控制端现有“链接到...”弹窗:
+  当前来源 = sourceTaskName + sourceInstanceId
+  已链接列表 = links 中 sourceInstanceId 匹配的有效目标
+  可链接列表 = running 实例 - 当前来源 - 已链接目标，并按目标实例去重
+  已链接目标显示目标任务、实例短 ID、displayId/设备名称和状态
+  每个已链接目标节点写入 data-instanceid=targetInstanceId
+  点击“解除”读取该节点的 targetInstanceId，发送 task:unlink(sourceInstance, targetInstance)
+  解除成功后从当前弹窗的已链接列表移除该目标节点
+  如果目标仍为 running，将该节点移动到当前弹窗的添加列表，保持弹窗打开并可直接再次链接
+  如果目标已停止，只从已链接列表移除，不加入添加列表
+  点击“选择”发送 task:link(sourceInstance, targetTask, targetInstance)，保持当前弹窗打开
+  选择成功后将目标节点从添加列表移动到已链接列表，并将按钮切换为“解除”，便于继续管理多个目标
+  收到 task:linked/task:unlinked 后刷新 task:list
+```
 
 ### 显示端增强
 
