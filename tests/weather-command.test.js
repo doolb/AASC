@@ -50,7 +50,7 @@ const createWeatherPayload = () => ({
             moon_illumination: '12'
         }],
         hourly: [{
-            time: '0',
+            time: dayIndex === 0 ? '0' : '300',
             tempC: '20',
             FeelsLikeC: '20',
             humidity: '90',
@@ -111,6 +111,17 @@ test('天气完整文本包含当前、逐日、逐时、天文和指标信息',
     assert.match(detail, /降雨概率20%/u);
     assert.match(detail, /日出06:25 AM/u);
     assert.match(detail, /月相Waning Crescent/u);
+});
+
+test('天气详情只展示今日逐时数据，未来日期不展开逐时明细', () => {
+    const weather = normalizeWeatherData(createWeatherPayload());
+    const detail = formatWeatherDetail(weather);
+
+    assert.match(detail, /2026-08-29：雾/u);
+    assert.match(detail, /00:00时雾/u);
+    assert.match(detail, /2026-08-30：雾/u);
+    assert.doesNotMatch(detail, /03:00时雾/u);
+    assert.equal(weather.forecast[1].hourly[0].time, '300');
 });
 
 test('天气语音摘要保留当前天气和逐日概览但不播报逐时明细', () => {

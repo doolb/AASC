@@ -87,7 +87,7 @@ waitingWake 中的免唤醒范围:
         如果存在 audioUrl: 将 text 放入 TTS 队列
         使用 detailText || text 调用 showVoiceResponsePopup
         visibleTextLength = 去除 detailText 空白后的 Unicode 字符数
-        popupDurationMs = max(30000, ceil(visibleTextLength / 3) * 1000)
+        popupDurationMs = min(90000, max(30000, ceil(visibleTextLength / 3) * 1000))
         popupDurationMs 后自动移除 .voice-response-popup
     语音触发的普通对话使用 routeVoiceToAll=true，在每句 TTS 完成时重新读取在线 voicePlayback 目标
 
@@ -406,6 +406,7 @@ POST /api/voiceprint/config({ denoise }):
     声纹流程使用 denoise
     普通 ASR 仍使用同一个 asrDenoiseEnabled
 ```
+```
 
 ## 服务器重启后的显示端监听恢复
 
@@ -436,4 +437,70 @@ WebSocket error:
     关闭当前 socket
     不再执行旧 ASR 请求的恢复回调
 ```
+
+## 显示端语音状态、旋转布局与音频监视图
+
+```text
+getVoiceDisplayState:
+    如果 voiceSupported != true:
+        返回 { key: 'not-ready', text: '未就绪', title: '不支持语音识别' }
+    如果 ttsRecordingPaused == true:
+        返回 { key: 'paused', text: '暂停监听', title: '语音监听因 TTS 播放暂时暂停' }
+    如果 isListening == true:
+        返回 { key: 'listening', text: '监听中', title: '语音识别监听中' }
+    返回 { key: 'not-ready', text: '未就绪', title: '语音监听尚未启动或已关闭' }
+
+updateVoiceStatusDisplay:
+    state = getVoiceDisplayState()
+    voiceStatus.textContent = state.text
+    voiceStatus.className = 'voice-status-' + state.key
+    voiceStatus.title = state.title
+    voiceStatus.dataset.state = state.key
+
+applyRotation:
+    清理 voiceStatus 和 monitorWrapper 的旧 transform、锚点与边缘样式
+    按 currentRotation 设置两者的屏幕角位置
+    voiceStatus 使用 currentRotation 旋转，文字方向与其他显示端状态文本一致
+    monitorWrapper 使用 currentRotation 旋转
+    0 度以 bottom right、90 度以 bottom left、180 度以 top left、270 度以 top right 作为变换原点
+    继续使用旋转后的逻辑画布校正文本最大尺寸和固定边缘
+
+animateMonitor(timestamp):
+    使用 timestamp 的秒级增量推进 monitorTime
+    如果 isListening 且 analyser 有效:
+        复用 monitorDataArray 读取 AnalyserNode 频谱
+        绘制频谱柱；低于可见幅度时叠加微弱动态基线
+    否则:
+        绘制低幅、随 monitorTime 变化的待机柱
+    重置 canvas globalAlpha 后请求下一帧
+```
+
+## 显示端语音 UI 顶部居中
+
+```text
+applyVoiceTopCenterLayout(rotationLayout):
+    voiceStatusRow 包含 voiceStatus 和 monitorWrapper，使用 flex 横向排列并整体居中
+    voiceStatusRow 内状态和柱状图禁止换行，monitorWrapper 宽度固定为 140px，内容水平居中
+    voiceStatusRow 使用 1 倍边距，voiceTextDisplay 使用 8 倍边距并单独位于下一行
+    voiceTextDisplay 使用独立的固定边缘锚点，柱状图尺寸变化不能改变其逻辑中心位置
+
+applyVoiceCenteredAnchor(element, rotationLayout):
+    根据元素未旋转时的实际宽高和当前旋转角度，计算语音状态行或识别文字的固定边缘锚点
+    90°/270° 直接写入对应的 left/right 与 top 补偿，不叠加上一次排版的补偿值
+    0°/180° 保持水平中心定位，仅在必要时按实际包围盒校正
+
+scheduleRotationTextLayout():
+    文本内容变化时先同步更新可见语音元素的确定性锚点，再在下一帧更新尺寸限制，不重新初始化整套语音 UI
+    首次显示识别文字时在下一帧重新读取实际尺寸，再调用 applyVoiceCenteredAnchor，避免显示位置跳动
+    currentRotation == 0 -> top + left = '50%' 的顶部中间、translateX(-50%)
+    currentRotation == 90 -> top = '50%'、right = offset，transformOrigin = 'center right'
+    currentRotation == 180 -> bottom + left = '50%' 的底部中间、transformOrigin = 'bottom center'
+    currentRotation == 270 -> top = '50%'、left = offset，transformOrigin = 'center left'
+    所有角度都按 currentRotation 旋转状态、柱状图和识别文本方向
+
+applyRotation:
+    完成媒体、监视图和其他固定 UI 的四向布局后
+    调用 applyVoiceTopCenterLayout(rotationLayout)
+    按实际包围盒把状态+柱状图整体和识别文本对齐到对应逻辑边缘中心
+    旋转文本包围盒校正遇到语音 UI 的百分比定位时不按百分比数值执行像素偏移
 ```

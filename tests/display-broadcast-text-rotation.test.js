@@ -42,13 +42,15 @@ after(async () => {
 });
 
 function getRotationBranch(rotation) {
+    const rotationFunctionStart = DISPLAY_HTML.indexOf('function applyRotation()');
+    const rotationHtml = DISPLAY_HTML.slice(rotationFunctionStart);
     const branchPattern = rotation === 0
         ? /if \(currentRotation === 0\) \{([\s\S]*?)\n            \} else if \(currentRotation === 90\)/u
         : new RegExp(
             `else if \\(currentRotation === ${rotation}\\) \\{([\\s\\S]*?)(?=\\n            \\} else if|\\n            \\})`,
             'u'
         );
-    const match = DISPLAY_HTML.match(branchPattern);
+    const match = rotationHtml.match(branchPattern);
     assert.ok(match, `未找到 ${rotation}° 旋转分支`);
     return match[1];
 }
@@ -65,9 +67,7 @@ test('播报文本整体跟随90°/180°/270°旋转且不使用竖排字形', (
     const textElementNames = [
         'connectionStatus',
         'timeDisplay',
-        'fileNameDisplay',
-        'voiceStatus',
-        'voiceTextDisplay'
+        'fileNameDisplay'
     ];
 
     for (const [branch, angle] of [[rotation90, 90], [rotation180, 180], [rotation270, 270]]) {
@@ -143,6 +143,11 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
         DISPLAY_HTML,
         /function calculateWeatherPopupDuration\(text\)[\s\S]*?Math\.max\(30000, Math\.ceil\(visibleTextLength \/ 3\) \* 1000\)/u,
         '天气弹窗时长应按每 3 个可见字符 1 秒计算且不少于 30 秒'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /function calculateWeatherPopupDuration\(text\)[\s\S]*?Math\.min\(90000, Math\.max\(30000, Math\.ceil\(visibleTextLength \/ 3\) \* 1000\)\)/u,
+        '天气弹窗时长最多 90 秒'
     );
     assert.match(
         DISPLAY_HTML,
@@ -227,6 +232,7 @@ test('旋转后新增长中文文本会重新适配位置', async () => {
         const longText = '旋转后新增的连接状态和媒体中文文本不能越界。'.repeat(8);
         const connection = document.getElementById('connectionStatus');
         const fileName = document.getElementById('fileNameDisplay');
+        const voiceStatusRow = document.getElementById('voiceStatusRow');
         const voiceStatus = document.getElementById('voiceStatus');
         const voiceText = document.getElementById('voiceTextDisplay');
         connection.textContent = longText;
@@ -240,7 +246,7 @@ test('旋转后新增长中文文本会重新适配位置', async () => {
         return new Promise((resolve) => {
             const waitForFrames = (count) => {
                 if (count === 0) {
-                    resolve([connection, fileName, voiceStatus, voiceText].map((element) => {
+                    resolve([connection, fileName, voiceStatusRow, voiceStatus, voiceText].map((element) => {
                         const rect = element.getBoundingClientRect();
                         return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
                     }));
@@ -275,6 +281,7 @@ test('90°和270°旋转后的文本包围盒贴合对应四角锚点', async ()
             connection: document.getElementById('connectionStatus'),
             time: document.getElementById('timeDisplay'),
             fileName: document.getElementById('fileNameDisplay'),
+            voiceStatusRow: document.getElementById('voiceStatusRow'),
             voiceStatus: document.getElementById('voiceStatus'),
             voiceText: document.getElementById('voiceTextDisplay')
         };
@@ -322,15 +329,11 @@ test('90°和270°旋转后的文本包围盒贴合对应四角锚点', async ()
             connection: ['top', 'right'],
             time: ['bottom', 'right'],
             fileName: ['top', 'left'],
-            voiceStatus: ['bottom', 'left'],
-            voiceText: ['bottom', 'left']
         },
         270: {
             connection: ['bottom', 'left'],
             time: ['top', 'left'],
             fileName: ['bottom', 'right'],
-            voiceStatus: ['top', 'right'],
-            voiceText: ['top', 'right']
         }
     };
     for (const [angle, elements] of Object.entries(expectedAnchors)) {
@@ -348,6 +351,22 @@ test('90°和270°旋转后的文本包围盒贴合对应四角锚点', async ()
                     `${angle}° ${name} 的 ${anchor} 锚点偏移: ${JSON.stringify(box)}`
                 );
             }
+        }
+    }
+    for (const angle of [90, 270]) {
+        const voiceCenterProperty = angle === 90 ? 'right' : 'left';
+        for (const name of ['voiceStatusRow', 'voiceText']) {
+            const voiceOffset = name === 'voiceStatusRow' ? 20 : 160;
+            const voiceCenterExpected = angle === 90 ? 1200 - voiceOffset : voiceOffset;
+            const box = positions[angle][name];
+            assert.ok(
+                Math.abs(box[voiceCenterProperty] - voiceCenterExpected) <= 1.5,
+                `${angle}° ${name} 没有贴合逻辑顶部边缘中心: ${JSON.stringify(box)}`
+            );
+            assert.ok(
+                Math.abs((box.top + box.bottom) / 2 - 400) <= 1.5,
+                `${angle}° ${name} 没有保持边缘居中: ${JSON.stringify(box)}`
+            );
         }
     }
     await page.close();

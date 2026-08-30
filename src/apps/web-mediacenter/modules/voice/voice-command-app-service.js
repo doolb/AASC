@@ -1230,11 +1230,14 @@ function formatWeatherHourly(hourly) {
     return `${time}时${hourly.condition}，温度${formatWeatherMetric(hourly.temperatureC, '℃')}，体感${formatWeatherMetric(hourly.feelsLikeC, '℃')}，湿度${formatWeatherMetric(hourly.humidityPercent, '%')}，降雨概率${formatWeatherMetric(hourly.chanceOfRainPercent, '%')}，降雾概率${formatWeatherMetric(hourly.chanceOfFogPercent, '%')}，降雪概率${formatWeatherMetric(hourly.chanceOfSnowPercent, '%')}，日照概率${formatWeatherMetric(hourly.chanceOfSunshinePercent, '%')}，降水${formatWeatherMetric(hourly.precipitationMm, '毫米')}，紫外线${formatWeatherMetric(hourly.uvIndex)}，能见度${formatWeatherMetric(hourly.visibilityKm, '公里')}，${formatWeatherWind(hourly.wind)}`;
 }
 
-function formatWeatherDayDetail(day) {
+function formatWeatherDayDetail(day, includeHourly) {
+    const dailyText = `${day.date || '未知日期'}：${day.condition}，最高${formatWeatherMetric(day.maxTemperatureC, '℃')}，最低${formatWeatherMetric(day.minTemperatureC, '℃')}，平均${formatWeatherMetric(day.averageTemperatureC, '℃')}，日照${formatWeatherMetric(day.sunHour, '小时')}，降雪${formatWeatherMetric(day.totalSnowCm, '厘米')}，紫外线${formatWeatherMetric(day.uvIndex)}，最高降雨概率${formatWeatherMetric(day.maxChanceOfRainPercent, '%')}，预计降水${formatWeatherMetric(day.totalPrecipitationMm, '毫米')}；${formatWeatherAstronomy(day.astronomy)}`;
+    if (!includeHourly) return dailyText;
+
     const hourlyText = day.hourly.length > 0
         ? day.hourly.map(formatWeatherHourly).join('；')
         : '无逐时数据';
-    return `${day.date || '未知日期'}：${day.condition}，最高${formatWeatherMetric(day.maxTemperatureC, '℃')}，最低${formatWeatherMetric(day.minTemperatureC, '℃')}，平均${formatWeatherMetric(day.averageTemperatureC, '℃')}，日照${formatWeatherMetric(day.sunHour, '小时')}，降雪${formatWeatherMetric(day.totalSnowCm, '厘米')}，紫外线${formatWeatherMetric(day.uvIndex)}，最高降雨概率${formatWeatherMetric(day.maxChanceOfRainPercent, '%')}，预计降水${formatWeatherMetric(day.totalPrecipitationMm, '毫米')}；${formatWeatherAstronomy(day.astronomy)}；逐时预报：${hourlyText}`;
+    return `${dailyText}；逐时预报：${hourlyText}`;
 }
 
 function formatWeatherDetail(weather) {
@@ -1255,7 +1258,8 @@ function formatWeatherDetail(weather) {
         `观测时间${current.observationTime || '未知'}`
     ].join('，');
     const forecastText = weather.forecast.length > 0
-        ? weather.forecast.map(formatWeatherDayDetail).join('\n')
+        // wttr.in 按日期顺序返回预报，第一天就是今日；未来日期只保留逐日和天文信息。
+        ? weather.forecast.map((day, index) => formatWeatherDayDetail(day, index === 0)).join('\n')
         : '暂无未来预报数据';
 
     return `${currentText}\n未来${weather.forecast.length}天预报：\n${forecastText}`;

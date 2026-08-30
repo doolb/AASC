@@ -11,7 +11,13 @@
     <div id="connectionStatus" class="connecting">连接中...</div>
     <div id="timeDisplay"></div>
     <div id="fileNameDisplay"></div>
-    <div id="voiceStatus" class="voice-status-hidden">语音</div>
+    <div class="voice-status-row" id="voiceStatusRow">
+        <div id="voiceStatus" class="voice-status-hidden">语音</div>
+        <div class="monitor-wrapper" id="monitorWrapper">
+            <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
+            <canvas id="mini-monitor" width="140" height="50"></canvas>
+        </div>
+    </div>
     <div id="voiceTextDisplay" class="voice-text-hidden"></div>
     <div id="taskStatusDisplay" class="task-status-hidden">
         <div class="task-status-title">模型推理中</div>
@@ -19,11 +25,7 @@
         <div class="task-status-progress" id="taskStatusProgress"><span></span></div>
         <div class="task-status-metrics" id="taskStatusMetrics"></div>
     </div>
-    <div class="monitor-wrapper" id="monitorWrapper">
-        <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
-        <canvas id="mini-monitor" width="160" height="50"></canvas>
-    </div>
-    
+
     <div id="mediaContainer">
         <div id="waitingMessage">
             <h2>等待媒体...</h2>
@@ -57,6 +59,7 @@
         const connectionStatus = document.getElementById('connectionStatus');
         const timeDisplay = document.getElementById('timeDisplay');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
+        const voiceStatusRow = document.getElementById('voiceStatusRow');
         const voiceStatus = document.getElementById('voiceStatus');
         const voiceTextDisplay = document.getElementById('voiceTextDisplay');
         const monitorWrapper = document.getElementById('monitorWrapper');
@@ -316,13 +319,14 @@
         let _originalConsole = null;
         
         let monitorTime = 0;
-        let monitorAnalyser = null;
         let monitorDataArray = null;
+        let monitorLastFrameAt = 0;
+        const VOICE_MONITOR_WIDTH = 140;
         
         const monitorCanvas = document.getElementById('mini-monitor');
         const monitorCtx = monitorCanvas.getContext('2d');
         
-        function drawMonitor(data) {
+        function drawMonitor(data, timeSeconds) {
             monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
             monitorCtx.fillStyle = '#00f2ff';
             
@@ -334,36 +338,46 @@
                 const dataIndex = Math.floor(i / (barWidth + gap)) * step;
                 const value = data[dataIndex] || 0;
                 const percent = value / 255;
-                const barHeight = percent * monitorCanvas.height;
+                // 真实频谱过低时保留轻微动态基线，避免监听状态下整块监视图看起来像停止刷新。
+                const motionFloor = 1 + (Math.sin(timeSeconds * 5 + i * 0.18) + 1) * 0.75;
+                const barHeight = Math.max(percent * monitorCanvas.height, motionFloor);
 
                 monitorCtx.globalAlpha = 0.5 + (percent * 0.5);
                 monitorCtx.fillRect(i, monitorCanvas.height - barHeight, barWidth, barHeight);
             }
+            monitorCtx.globalAlpha = 1;
         }
         
         function drawIdleMonitor(t) {
             monitorCtx.clearRect(0, 0, monitorCanvas.width, monitorCanvas.height);
             monitorCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
             for (let i = 0; i < monitorCanvas.width; i += 4) {
-                const h = 5 + Math.sin(i * 0.1 + t * 5) * 3;
+                const h = 5 + (Math.sin(i * 0.1 + t * 5) + 1) * 1.5;
                 monitorCtx.fillRect(i, monitorCanvas.height - h, 3, h);
             }
+            monitorCtx.globalAlpha = 1;
         }
         
-        function animateMonitor() {
-            requestAnimationFrame(animateMonitor);
-            monitorTime += 0.005;
+        function animateMonitor(timestamp = 0) {
+            const elapsed = monitorLastFrameAt === 0
+                ? 1 / 60
+                : Math.min(Math.max(timestamp - monitorLastFrameAt, 0) / 1000, 0.1);
+            monitorLastFrameAt = timestamp;
+            monitorTime += elapsed;
 
             if (isListening && analyser) {
-                const data = new Uint8Array(analyser.frequencyBinCount);
-                analyser.getByteFrequencyData(data);
-                drawMonitor(data);
+                if (!monitorDataArray || monitorDataArray.length !== analyser.frequencyBinCount) {
+                    monitorDataArray = new Uint8Array(analyser.frequencyBinCount);
+                }
+                analyser.getByteFrequencyData(monitorDataArray);
+                drawMonitor(monitorDataArray, monitorTime);
             } else {
                 drawIdleMonitor(monitorTime);
             }
+            requestAnimationFrame(animateMonitor);
         }
         
-        animateMonitor();
+        requestAnimationFrame(animateMonitor);
         
         function sendCanvasSize() {
             if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -585,7 +599,7 @@
                 connectionStatus,
                 timeDisplay,
                 fileNameDisplay,
-                voiceStatus,
+                voiceStatusRow,
                 voiceTextDisplay
             ];
         }
@@ -629,8 +643,42 @@
             }
         }
 
+        // 语音状态行和识别文字使用固定边缘中心锚点；每次排版都根据当前尺寸直接计算，避免补偿值逐帧累加。
+        function applyVoiceCenteredAnchor(element, layout) {
+            if (!element || element.dataset.voiceCentered !== 'true') return;
+            const forceVoiceTextLayout = element === voiceTextDisplay
+                && element.classList.contains('voice-text-visible')
+                && (element.offsetWidth === 0 || element.offsetHeight === 0);
+            if (forceVoiceTextLayout) element.style.display = 'block';
+            const width = element.offsetWidth;
+            const height = element.offsetHeight;
+            if (!width || !height) {
+                if (forceVoiceTextLayout) element.style.display = '';
+                return;
+            }
+            const edgeMargin = element === voiceStatusRow
+                ? layout.margin
+                : layout.margin * 8;
+            if (currentRotation === 90) {
+                element.style.right = `${edgeMargin + height / 2}px`;
+                element.style.top = `calc(50% + ${(width - height) / 2}px)`;
+            } else if (currentRotation === 270) {
+                element.style.left = `${edgeMargin + height / 2}px`;
+                element.style.top = `calc(50% + ${(width - height) / 2}px)`;
+            }
+            if (forceVoiceTextLayout) element.style.display = '';
+        }
+
         function repositionRotationTextElement(element, layout) {
-            if (!element || element.offsetWidth === 0 || element.offsetHeight === 0) return;
+            if (!element) return;
+            if (element.dataset.voiceCentered === 'true') {
+                applyVoiceCenteredAnchor(element, layout);
+                return;
+            }
+            if (element.offsetWidth === 0 || element.offsetHeight === 0) return;
+            // 其他旋转文本使用像素边缘定位；百分比定位由顶部居中的语音 UI 专用。
+            if (element.style.left.endsWith('%') || element.style.right.endsWith('%')
+                || element.style.top.endsWith('%') || element.style.bottom.endsWith('%')) return;
             const rect = element.getBoundingClientRect();
             const minX = layout.margin;
             const maxX = layout.viewportWidth - layout.margin;
@@ -668,10 +716,82 @@
 
         let rotationTextLayoutRaf = null;
         function scheduleRotationTextLayout() {
+            // MutationObserver 在浏览器绘制前执行；先同步校正可见语音元素，避免新文字以旧锚点闪现一帧。
+            if (voiceTextDisplay && voiceTextDisplay.classList.contains('voice-text-visible')) {
+                voiceTextDisplay.style.display = 'block';
+                const immediateLayout = getRotationLayout();
+                applyVoiceCenteredAnchor(voiceTextDisplay, immediateLayout);
+                applyVoiceCenteredAnchor(voiceStatusRow, immediateLayout);
+            }
             if (rotationTextLayoutRaf !== null) return;
             rotationTextLayoutRaf = requestAnimationFrame(() => {
                 rotationTextLayoutRaf = null;
-                applyRotationTextLayout(getRotationLayout());
+                const layout = getRotationLayout();
+                if (voiceTextDisplay && voiceTextDisplay.classList.contains('voice-text-visible')) {
+                    voiceTextDisplay.style.display = 'block';
+                }
+                applyRotationTextLayout(layout);
+                repositionRotationTextElement(voiceStatusRow, layout);
+                // 语音文字刚从隐藏切换为可见时，等浏览器完成一次实际排版后再校正独立锚点，避免首帧跳位。
+                requestAnimationFrame(() => {
+                    const settledLayout = getRotationLayout();
+                    applyRotationTextLayout(settledLayout);
+                    repositionRotationTextElement(voiceTextDisplay, settledLayout);
+                    repositionRotationTextElement(voiceStatusRow, settledLayout);
+                });
+            });
+        }
+
+        // 监听状态和柱状图组成单行语音状态区，识别文本单独位于下一行并沿用当前显示方向。
+        function applyVoiceTopCenterLayout(rotationLayout) {
+            [voiceStatusRow, voiceStatus, monitorWrapper, voiceTextDisplay].forEach((element) => {
+                if (!element) return;
+                element.style.position = '';
+                element.style.bottom = '';
+                element.style.top = '';
+                element.style.left = '';
+                element.style.right = '';
+                element.style.transformOrigin = '';
+                element.style.transform = '';
+                delete element.dataset.voiceCentered;
+            });
+            monitorWrapper.style.width = `${VOICE_MONITOR_WIDTH}px`;
+            monitorWrapper.style.alignItems = 'center';
+            monitorWrapper.style.flexDirection = 'column';
+
+            [voiceStatusRow, voiceTextDisplay].forEach((element, index) => {
+                if (!element) return;
+                const offset = index === 0
+                    ? `${rotationLayout.margin}px`
+                    : `${rotationLayout.margin * 8}px`;
+                element.dataset.voiceCentered = 'true';
+                element.style.position = 'fixed';
+                element.style.bottom = '';
+                element.style.top = '';
+                element.style.left = '';
+                element.style.right = '';
+                if (currentRotation === 0) {
+                    element.style.top = offset;
+                    element.style.left = '50%';
+                    element.style.transformOrigin = 'top center';
+                    element.style.transform = 'translateX(-50%)';
+                } else if (currentRotation === 90) {
+                    element.style.top = '50%';
+                    element.style.right = offset;
+                    element.style.transformOrigin = 'center right';
+                    element.style.transform = 'rotate(90deg)';
+                } else if (currentRotation === 180) {
+                    element.style.bottom = offset;
+                    element.style.left = '50%';
+                    element.style.transformOrigin = 'bottom center';
+                    element.style.transform = 'translateX(-50%) rotate(180deg)';
+                } else if (currentRotation === 270) {
+                    element.style.top = '50%';
+                    element.style.left = offset;
+                    element.style.transformOrigin = 'center left';
+                    element.style.transform = 'rotate(270deg)';
+                }
+                applyVoiceCenteredAnchor(element, rotationLayout);
             });
         }
 
@@ -713,7 +833,7 @@
             // 立即更新所有活跃渲染任务覆盖层的旋转
             // render 任务覆盖层的旋转定位由 render.js 的 applyRotationStyle 管理
 
-            const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatus, voiceTextDisplay, monitorWrapper];
+            const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatusRow, voiceStatus, voiceTextDisplay, monitorWrapper];
             
             uiElements.forEach(el => {
                 if (!el) return;
@@ -728,6 +848,11 @@
                 el.style.writingMode = '';
                 el.style.textOrientation = '';
                 el.style.flexDirection = '';
+                el.style.width = '';
+                el.style.alignItems = '';
+                el.style.marginLeft = '';
+                el.style.marginTop = '';
+                delete el.dataset.voiceCentered;
             });
             
             if (currentRotation === 0) {
@@ -739,6 +864,7 @@
                 fileNameDisplay.style.left = edgeOffset;
                 monitorWrapper.style.bottom = edgeOffset;
                 monitorWrapper.style.right = edgeOffset;
+                monitorWrapper.style.transformOrigin = 'bottom right';
                 voiceStatus.style.bottom = voiceStatusOffset;
                 voiceStatus.style.right = edgeOffset;
                 if (voiceTextDisplay) {
@@ -761,6 +887,8 @@
                 monitorWrapper.style.bottom = edgeOffset;
                 monitorWrapper.style.left = edgeOffset;
                 monitorWrapper.style.flexDirection = 'column-reverse';
+                monitorWrapper.style.transformOrigin = 'bottom left';
+                monitorWrapper.style.transform = 'rotate(90deg)';
                 
                 voiceStatus.style.bottom = voiceStatusOffset;
                 voiceStatus.style.left = edgeOffset;
@@ -785,6 +913,8 @@
                 
                 monitorWrapper.style.top = edgeOffset;
                 monitorWrapper.style.left = edgeOffset;
+                monitorWrapper.style.transformOrigin = 'top left';
+                monitorWrapper.style.transform = 'rotate(180deg)';
                 
                 voiceStatus.style.top = voiceStatusOffset;
                 voiceStatus.style.left = edgeOffset;
@@ -810,6 +940,8 @@
                 monitorWrapper.style.top = edgeOffset;
                 monitorWrapper.style.right = edgeOffset;
                 monitorWrapper.style.flexDirection = 'column-reverse';
+                monitorWrapper.style.transformOrigin = 'top right';
+                monitorWrapper.style.transform = 'rotate(270deg)';
                 
                 voiceStatus.style.top = voiceStatusOffset;
                 voiceStatus.style.right = edgeOffset;
@@ -821,6 +953,19 @@
                 }
             }
             applyRotationTextLayout(rotationLayout);
+            // 先应用旋转后的最大尺寸，再计算语音 UI 的实际包围盒，避免长文本在首帧越界。
+            // 语音文本刚切换为可见时，强制同步 display，确保首帧包围盒可用于旋转校正。
+            if (voiceTextDisplay && voiceTextDisplay.classList.contains('voice-text-visible')) {
+                voiceTextDisplay.style.display = 'block';
+            }
+            applyVoiceTopCenterLayout(rotationLayout);
+            applyRotationTextLayout(rotationLayout);
+            repositionRotationTextElement(voiceStatusRow, rotationLayout);
+            requestAnimationFrame(() => {
+                const settledLayout = getRotationLayout();
+                applyRotationTextLayout(settledLayout);
+                repositionRotationTextElement(voiceStatusRow, settledLayout);
+            });
         }
 
         // 媒体名、连接状态和播报文本可能在旋转完成后才更新；内容变化后下一帧重新校正包围盒。
@@ -1849,10 +1994,10 @@
             }, 6000);
         }
         
-        // 天气详情需要覆盖足够长的阅读时间；空白不计入字数，每 3 个可见字符保留 1 秒。
+        // 天气详情需要覆盖足够长的阅读时间；空白不计入字数，每 3 个可见字符保留 1 秒，最长 90 秒。
         function calculateWeatherPopupDuration(text) {
             const visibleTextLength = Array.from(String(text || '').replace(/\s/gu, '')).length;
-            return Math.max(30000, Math.ceil(visibleTextLength / 3) * 1000);
+            return Math.min(90000, Math.max(30000, Math.ceil(visibleTextLength / 3) * 1000));
         }
 
         function showVoiceResponsePopup(text, durationMs = 5000) {
@@ -4374,21 +4519,31 @@
         
         function updateVoiceStatusDisplay() {
             if (!voiceStatus) return;
-            
+
+            const setStatus = (key, text, title) => {
+                voiceStatus.className = `voice-status-${key}`;
+                voiceStatus.textContent = text;
+                voiceStatus.title = title;
+                voiceStatus.dataset.state = key;
+            };
+
             if (!voiceSupported) {
-                voiceStatus.className = 'voice-status-unsupported';
-                voiceStatus.title = '不支持语音识别';
-            } else if (isListening) {
-                voiceStatus.className = 'voice-status-listening';
-                voiceStatus.title = voiceConversationState === 'waitingWake'
-                    ? '等待唤醒词...'
-                    : '语音识别中...';
-            } else {
-                voiceStatus.className = 'voice-status-ready';
-                voiceStatus.title = voiceConversationState === 'disabled'
-                    ? '语音监听已关闭'
-                    : '语音识别就绪';
+                setStatus('not-ready', '未就绪', '不支持语音识别');
+                return;
             }
+            if (ttsRecordingPaused) {
+                setStatus('paused', '暂停监听', '语音监听因 TTS 播放暂时暂停');
+                return;
+            }
+            if (isListening) {
+                setStatus('listening', '监听中', voiceConversationState === 'waitingWake'
+                    ? '等待唤醒词...'
+                    : '语音识别中...');
+                return;
+            }
+            setStatus('not-ready', '未就绪', voiceConversationState === 'disabled'
+                ? '语音监听已关闭'
+                : '语音监听尚未启动');
         }
         
         function updateVoiceTextDisplay(text, isFinal) {

@@ -380,8 +380,24 @@ body {
     }
 }
 
-#voiceStatus {
+.voice-status-row {
     position: fixed;
+    z-index: 2000;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 12px;
+    width: max-content;
+    max-width: calc(100vw - 40px);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+#voiceStatus {
+    position: static;
+    flex: 0 0 auto;
     font-size: 16px;
     padding: 6px 12px;
     border-radius: 8px;
@@ -392,6 +408,7 @@ body {
     transition: opacity 0.3s ease, background-color 0.3s ease;
     text-shadow: 1px 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.8));
     white-space: nowrap;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -400,23 +417,34 @@ body {
     display: none;
 }
 
-.voice-status-unsupported {
+.voice-status-not-ready {
     opacity: 0.3;
 }
 
-.voice-status-ready {
-    opacity: 0.6;
+.voice-status-paused {
+    opacity: 1;
+    background: #e67e22;
+    border: 2px solid #ffd166;
+    color: #241300;
+    animation: voice-paused-pulse 1.5s ease-in-out infinite;
 }
 
 .voice-status-listening {
     opacity: 1;
-    background: var(--success-color, rgba(76, 175, 80, 0.8));
+    background: #16a34a;
+    border: 2px solid #86efac;
+    color: #fff;
     animation: voice-pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes voice-pulse {
     0%, 100% { box-shadow: 0 0 10px var(--shadow-color, rgba(76, 175, 80, 0.4)); }
     50% { box-shadow: 0 0 25px var(--shadow-color, rgba(76, 175, 80, 0.7)); }
+}
+
+@keyframes voice-paused-pulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(230, 126, 34, 0.45); }
+    50% { box-shadow: 0 0 25px rgba(230, 126, 34, 0.8); }
 }
 
 #voiceTextDisplay {
@@ -436,7 +464,7 @@ body {
 }
 
 .voice-text-hidden {
-    display: none;
+    display: none !important;
 }
 
 .voice-text-visible {
@@ -660,11 +688,13 @@ body {
 }
 
 .monitor-wrapper {
-    position: fixed;
+    position: static;
     z-index: 2000;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: center;
+    flex: 0 0 auto;
+    width: 140px;
     pointer-events: none;
     transition: all 0.3s ease;
 }
@@ -678,6 +708,8 @@ body {
 }
 
 #mini-monitor {
+    width: 140px;
+    height: 50px;
     border-bottom: 1px solid var(--accent-color, #00f2ff);
     border-left: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
     background: linear-gradient(to top, var(--bg-surface, rgba(0, 242, 255, 0.05)), transparent);
