@@ -91,6 +91,10 @@
         // 显示端重连必须单飞：原生 ASR/TTS 同步阻塞 WebView 时，旧 close 回调不能再创建第二个连接。
         let displayReconnectTimer = null;
         let displayPageActive = true;
+        // 服务器重启后 ASR 可能比 WebSocket 晚就绪，使用独立单飞定时器轮询恢复状态。
+        const ASR_STATUS_RETRY_MS = 5000;
+        let asrStatusRetryTimer = null;
+        let asrStatusRequestToken = 0;
         // 文本播放器独立管理分页和逐句 TTS；显示页只提供 DOM、WebSocket 与旋转状态。
         const TextMediaPlayer = window.TextMediaPlayer;
         TextMediaPlayer.configure({
@@ -3993,12 +3997,15 @@
                 sendVoiceStatus();
                 reportSleepState();
                 reportNativeCpuStatus();
-                
+
                 if (!isAlwaysListening) {
                     pendingAutoStart = true;
                     isAlwaysListening = true;
                     console.log('标记自动启动监听模式，等待服务器能力确认');
                 }
+                // 每次连接都重新查询服务端 ASR，避免服务器重启期间的一次未就绪状态永久残留。
+                clearAsrStatusRetryTimer();
+                void checkAsrStatus();
             };
             
             socket.onmessage = function(event) {
@@ -4286,13 +4293,26 @@
             socket.onerror = function(error) {
                 if (!isCurrentDisplaySocket(socket)) return;
                 console.error('WebSocket错误:', error);
+                // 部分 Android WebView 在服务端重启时可能只触发 error，不保证随后触发 close。
+                // 先释放当前连接引用，确保 scheduleDisplayReconnect 不被 OPEN/CLOSING 状态拦截。
+                displayWs = null;
+                stopControlScreenshot();
+                controlModeEnabled = false;
                 setConnectionStatus('disconnected', '连接错误');
+                try {
+                    if (socket.readyState !== WebSocket.CLOSED) socket.close();
+                } catch (closeError) {
+                    console.warn('关闭异常 WebSocket 失败:', closeError);
+                }
+                scheduleDisplayReconnect();
             };
         }
 
         window.addEventListener('pagehide', function() {
             displayPageActive = false;
             clearDisplayReconnectTimer();
+            clearAsrStatusRetryTimer();
+            asrStatusRequestToken += 1;
             // 页面离开时主动释放麦克风和音频上下文，避免 WebView 保留旧的持续监听链路。
             stopVoiceRecording();
             const socket = displayWs;
@@ -4336,6 +4356,19 @@
         })();
 
         let currentCapabilities = null;
+
+        function clearAsrStatusRetryTimer() {
+            if (asrStatusRetryTimer === null) return;
+            clearTimeout(asrStatusRetryTimer);
+            asrStatusRetryTimer = null;
+        }
+
+        function scheduleAsrStatusRetry() {
+            if (!displayPageActive || asrStatusRetryTimer !== null) return;
+            if (!isAlwaysListening || !voiceListeningEnabled) return;
+            asrStatusRetryTimer = setTimeout(() => checkAsrStatus(), ASR_STATUS_RETRY_MS);
+        }
+
         initVoiceRecognition();
         updateVoiceStatusDisplay();
         
@@ -4697,6 +4730,7 @@
 
                 if (!voiceListeningEnabled) {
                     pendingAutoStart = false;
+                    clearAsrStatusRetryTimer();
                     voiceConversationState = 'disabled';
                     clearVoiceConversationTimer();
                     stopVoiceRecording();
@@ -4749,21 +4783,28 @@
         }
         
         async function checkAsrStatus() {
+            const requestToken = ++asrStatusRequestToken;
+            clearAsrStatusRetryTimer();
             try {
                 // 显示端只使用服务端公共 ASR，避免本地模型状态覆盖服务器能力。
                 const response = await fetch('/api/asr/status');
                 const data = await response.json();
-                reportVoiceAvailability(data.ready === true);
+                if (requestToken !== asrStatusRequestToken || !displayPageActive) return;
+                const ready = data.ready === true;
+                reportVoiceAvailability(ready);
                 
-                if (voiceSupported) {
+                if (ready) {
                     console.log('显示端服务器 ASR 服务可用');
                     // 不直接启动录音，由 handleCapabilitiesUpdated 中的 pendingAutoStart 处理
                 } else {
                     console.log('ASR 服务未初始化');
+                    scheduleAsrStatusRetry();
                 }
             } catch (e) {
+                if (requestToken !== asrStatusRequestToken || !displayPageActive) return;
                 console.log('ASR 服务不可用:', e.message);
                 reportVoiceAvailability(false);
+                scheduleAsrStatusRetry();
             }
         }
         

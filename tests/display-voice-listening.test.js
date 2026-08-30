@@ -23,7 +23,7 @@ assert.match(displayHtml, /type: 'voiceConversationTtsFinished'/);
 assert.match(displayHtml, /voiceListeningEnabled = data\.capabilities\.voiceRecording === true/);
 assert.match(displayHtml, /function sendRecognizedVoiceInput\(text, extra = \{\}\)/);
 assert.match(displayHtml, /function reportVoiceAvailability\(available\)/);
-assert.match(displayHtml, /reportVoiceAvailability\(data\.ready === true\)/);
+assert.match(displayHtml, /const ready = data\.ready === true[\s\S]*?reportVoiceAvailability\(ready\)/);
 assert.match(displayHtml, /reportVoiceAvailability\(false\)/);
 assert.doesNotMatch(displayHtml, /currentCapabilities\.voiceRecognition = voiceSupported/);
 assert.match(displayHtml, /currentCapabilities = full[\s\S]*?sendVoiceStatus\(\)/);

@@ -406,4 +406,34 @@ POST /api/voiceprint/config({ denoise }):
     声纹流程使用 denoise
     普通 ASR 仍使用同一个 asrDenoiseEnabled
 ```
+
+## 服务器重启后的显示端监听恢复
+
+```text
+connectWebSocket.onopen:
+    建立连接、声明能力和发送当前状态
+    重新执行 checkAsrStatus()
+
+checkAsrStatus:
+    请求 /api/asr/status
+    ready == true:
+        取消 ASR 重试定时器
+        reportVoiceAvailability(true)
+        能力允许且 isAlwaysListening == true 且当前未监听 -> startVoiceRecording()
+    ready == false 或请求失败:
+        reportVoiceAvailability(false)
+        如果页面仍活跃且监听开关仍开启:
+            安排下一次 ASR 状态重试
+
+WebSocket error:
+    如果仍是当前 socket:
+        清理 displayWs 和异常连接
+        设置断开状态
+        进入 scheduleDisplayReconnect()，保持重连单飞
+
+页面离开:
+    取消 WebSocket 重连定时器和 ASR 重试定时器
+    关闭当前 socket
+    不再执行旧 ASR 请求的恢复回调
+```
 ```
