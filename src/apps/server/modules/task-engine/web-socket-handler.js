@@ -177,7 +177,6 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
 
       // ---- 任务列表 ----
       case 'task:list': {
-        console.log('[WS] >> task:list: filter=' + payload.filter);
         try {
           const filter = payload.filter || 'all';
           if (filter === 'builtin') {
@@ -214,6 +213,7 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             }));
           }
         } catch (err) {
+          console.error('[WS] task:list 失败:', err.message);
           ctx.ws.send(JSON.stringify({ type: 'task:error', payload: { error: err.message } }));
         }
         break;

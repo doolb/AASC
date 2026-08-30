@@ -4376,7 +4376,8 @@ wss.on('connection', (ws, req) => {
                     const shouldLogCrop = data.type !== 'control' || (data.action !== 'crop' && data.action !== 'controlInput') || _cropDebugLog;
                     const isWidgetRefreshAction = data.type === 'task:widget_action'
                         && data.payload?.action === 'widgetRefresh';
-                    if (shouldLogCrop && !isWidgetRefreshAction) {
+                    const isTaskListRequest = data.type === 'task:list';
+                    if (shouldLogCrop && !isWidgetRefreshAction && !isTaskListRequest) {
                         const inputText = typeof data.text === 'string' ? data.text : data.content;
                         const textSummary = typeof inputText === 'string'
                             ? ` "${inputText.length > 500 ? `${inputText.slice(0, 500)}…` : inputText}"`

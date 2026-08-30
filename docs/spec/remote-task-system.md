@@ -195,6 +195,8 @@ task:widget_update                    -> 正常广播，不记录普通 WS 广�
 其他 widget action                    -> 保留既有操作日志
 ```
 
+`task:list` 正常轮询同样不记录普通 WS 收发日志；处理失败时保留错误日志，仍按原协议返回 `task:list:result` 或错误消息。
+
 ## Widget 系统
 
 内置服务任务可定义 widget，在控制端显示自定义 UI。

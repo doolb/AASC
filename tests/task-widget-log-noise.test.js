@@ -17,7 +17,7 @@ test('widgetRefresh 的控制端收发日志被静默', () => {
         serverApp,
         /const isWidgetRefreshAction = data\.type === 'task:widget_action'[\s\S]{0,180}data\.payload\?\.action === 'widgetRefresh'/u
     );
-    assert.match(serverApp, /if \(shouldLogCrop && !isWidgetRefreshAction\)/u);
+    assert.match(serverApp, /if \(shouldLogCrop && !isWidgetRefreshAction && !isTaskListRequest\)/u);
     assert.match(
         taskSocketHandler,
         /if \(payload\.action !== 'widgetRefresh'\) \{\s*console\.log\('\[WS\] >> task:widget_action:'/u
@@ -28,4 +28,13 @@ test('task:widget_update 广播不写普通 WS 日志', () => {
     assert.match(serverApp, /SILENT_BROADCAST_TYPES[\s\S]{0,260}'task:widget_update'/u);
 });
 
-console.log('task-widget-log-noise.test.js: 2/2 passed');
+test('task:list 正常轮询不写普通 WS 日志但保留异常日志', () => {
+    assert.match(
+        serverApp,
+        /const isTaskListRequest = data\.type === 'task:list'[\s\S]{0,180}if \(shouldLogCrop && !isWidgetRefreshAction && !isTaskListRequest\)/u
+    );
+    assert.doesNotMatch(taskSocketHandler, /console\.log\('\[WS\] >> task:list:/u);
+    assert.match(taskSocketHandler, /console\.error\('\[WS\] task:list 失败:'/u);
+});
+
+console.log('task-widget-log-noise.test.js: 3/3 passed');
