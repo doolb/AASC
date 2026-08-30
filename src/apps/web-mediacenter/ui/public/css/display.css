@@ -384,7 +384,7 @@ body {
     position: fixed;
     z-index: 2000;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     flex-wrap: nowrap;
@@ -393,6 +393,33 @@ body {
     max-width: calc(100vw - 40px);
     white-space: nowrap;
     pointer-events: none;
+}
+
+.voice-status-main-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 12px;
+    width: max-content;
+    max-width: 100%;
+    white-space: nowrap;
+}
+
+.voice-conversation-countdown {
+    display: none;
+    min-width: 3.8em;
+    font-size: 20px;
+    line-height: 1.2;
+    text-align: center;
+    color: var(--text-primary, #fff);
+    text-shadow: 1px 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.8));
+    white-space: nowrap;
+}
+
+.voice-conversation-countdown-visible {
+    display: block;
 }
 
 #voiceStatus {

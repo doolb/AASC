@@ -105,3 +105,30 @@ test('显示端唤醒后的普通群聊文本不受指令模式过滤', async ()
         chat.setSession(originalSession);
     }
 });
+
+test('私聊语音聊天应携带当前角色和会话元数据', async () => {
+    const originalSession = chat.getSession();
+    chat.setSession({
+        ...originalSession,
+        mode: 'private',
+        privateTarget: '小爱',
+        privateSessionId: 'default',
+        commandMode: true
+    });
+    try {
+        const result = await voiceCommand.processVoiceCommand(
+            '你在做什么吗？',
+            'display-test',
+            {},
+            false,
+            { conversationActive: true }
+        );
+        assert.equal(result.type, 'chat');
+        assert.equal(result.mode, 'private');
+        assert.equal(result.target, '小爱');
+        assert.equal(result.sessionId, 'default');
+        assert.equal(result.templateTarget, '小爱');
+    } finally {
+        chat.setSession(originalSession);
+    }
+});

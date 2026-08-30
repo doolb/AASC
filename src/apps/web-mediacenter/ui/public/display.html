@@ -12,11 +12,14 @@
     <div id="timeDisplay"></div>
     <div id="fileNameDisplay"></div>
     <div class="voice-status-row" id="voiceStatusRow">
-        <div id="voiceStatus" class="voice-status-hidden">语音</div>
-        <div class="monitor-wrapper" id="monitorWrapper">
-            <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
-            <canvas id="mini-monitor" width="140" height="50"></canvas>
+        <div class="voice-status-main-row" id="voiceStatusMainRow">
+            <div id="voiceStatus" class="voice-status-hidden">语音</div>
+            <div class="monitor-wrapper" id="monitorWrapper">
+                <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
+                <canvas id="mini-monitor" width="140" height="50"></canvas>
+            </div>
         </div>
+        <div id="voiceConversationCountdown" class="voice-conversation-countdown" aria-hidden="true"></div>
     </div>
     <div id="voiceTextDisplay" class="voice-text-hidden"></div>
     <div id="taskStatusDisplay" class="task-status-hidden">
@@ -60,7 +63,9 @@
         const timeDisplay = document.getElementById('timeDisplay');
         const fileNameDisplay = document.getElementById('fileNameDisplay');
         const voiceStatusRow = document.getElementById('voiceStatusRow');
+        const voiceStatusMainRow = document.getElementById('voiceStatusMainRow');
         const voiceStatus = document.getElementById('voiceStatus');
+        const voiceConversationCountdown = document.getElementById('voiceConversationCountdown');
         const voiceTextDisplay = document.getElementById('voiceTextDisplay');
         const monitorWrapper = document.getElementById('monitorWrapper');
         const waitingMessage = document.getElementById('waitingMessage');
@@ -155,7 +160,9 @@
         let voiceListeningEnabled = true;
         let voiceConversationState = 'waitingWake';
         let voiceConversationTarget = null;
+        let voiceConversationExpiresAt = null;
         let voiceConversationTimer = null;
+        let voiceConversationCountdownTimer = null;
         let micStream = null;
         let audioContext = null;
         let pcmCapture = null;
@@ -747,7 +754,7 @@
 
         // 监听状态和柱状图组成单行语音状态区，识别文本单独位于下一行并沿用当前显示方向。
         function applyVoiceTopCenterLayout(rotationLayout) {
-            [voiceStatusRow, voiceStatus, monitorWrapper, voiceTextDisplay].forEach((element) => {
+            [voiceStatusRow, voiceStatusMainRow, voiceStatus, monitorWrapper, voiceConversationCountdown, voiceTextDisplay].forEach((element) => {
                 if (!element) return;
                 element.style.position = '';
                 element.style.bottom = '';
@@ -758,6 +765,10 @@
                 element.style.transform = '';
                 delete element.dataset.voiceCentered;
             });
+            voiceStatusRow.style.flexDirection = 'column';
+            voiceStatusMainRow.style.flexDirection = 'row';
+            voiceStatusMainRow.style.alignItems = 'center';
+            voiceStatusMainRow.style.justifyContent = 'center';
             monitorWrapper.style.width = `${VOICE_MONITOR_WIDTH}px`;
             monitorWrapper.style.alignItems = 'center';
             monitorWrapper.style.flexDirection = 'column';
@@ -836,7 +847,7 @@
             // 立即更新所有活跃渲染任务覆盖层的旋转
             // render 任务覆盖层的旋转定位由 render.js 的 applyRotationStyle 管理
 
-            const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatusRow, voiceStatus, voiceTextDisplay, monitorWrapper];
+            const uiElements = [connectionStatus, timeDisplay, fileNameDisplay, voiceStatusRow, voiceStatusMainRow, voiceStatus, voiceConversationCountdown, voiceTextDisplay, monitorWrapper];
             
             uiElements.forEach(el => {
                 if (!el) return;
@@ -4255,11 +4266,17 @@
                     if (data.type === 'voiceConversationState') {
                         voiceConversationState = data.state || 'waitingWake';
                         voiceConversationTarget = data.target || null;
+                        const expiresAt = Number(data.expiresAt);
+                        voiceConversationExpiresAt = Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null;
                         if (voiceConversationState === 'disabled') {
                             clearVoiceConversationTimer();
+                            clearVoiceConversationCountdown();
                             stopVoiceRecording();
                         } else if (voiceConversationState === 'waitingWake') {
                             clearVoiceConversationTimer();
+                            clearVoiceConversationCountdown();
+                        } else {
+                            startVoiceConversationCountdown();
                         }
                         updateVoiceStatusDisplay();
                         return;
@@ -4639,6 +4656,51 @@
             }
         }
 
+        function formatVoiceConversationCountdown(remainingMs) {
+            const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+            const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${minutes}:${seconds}`;
+        }
+
+        function clearVoiceConversationCountdown() {
+            if (voiceConversationCountdownTimer) {
+                clearInterval(voiceConversationCountdownTimer);
+                voiceConversationCountdownTimer = null;
+            }
+            if (voiceConversationCountdown) {
+                voiceConversationCountdown.textContent = '';
+                voiceConversationCountdown.className = 'voice-conversation-countdown';
+                voiceConversationCountdown.setAttribute('aria-hidden', 'true');
+            }
+        }
+
+        function updateVoiceConversationCountdown() {
+            if (!voiceConversationCountdown
+                || !['activeGroup', 'activePrivate'].includes(voiceConversationState)
+                || !Number.isFinite(voiceConversationExpiresAt)) {
+                clearVoiceConversationCountdown();
+                return;
+            }
+
+            const remainingMs = voiceConversationExpiresAt - Date.now();
+            if (remainingMs <= 0) {
+                clearVoiceConversationCountdown();
+                return;
+            }
+
+            voiceConversationCountdown.textContent = formatVoiceConversationCountdown(remainingMs);
+            voiceConversationCountdown.className = 'voice-conversation-countdown voice-conversation-countdown-visible';
+            voiceConversationCountdown.setAttribute('aria-hidden', 'false');
+        }
+
+        function startVoiceConversationCountdown() {
+            clearVoiceConversationCountdown();
+            updateVoiceConversationCountdown();
+            if (!voiceConversationCountdown || !Number.isFinite(voiceConversationExpiresAt)) return;
+            voiceConversationCountdownTimer = setInterval(updateVoiceConversationCountdown, 1000);
+        }
+
         function clearVoiceConversationTimer() {
             if (voiceConversationTimer) {
                 clearTimeout(voiceConversationTimer);
@@ -4665,6 +4727,8 @@
             if (!voiceListeningEnabled || !['activeGroup', 'activePrivate'].includes(voiceConversationState)) return;
             voiceConversationTimer = setTimeout(() => {
                 voiceConversationState = 'waitingWake';
+                voiceConversationExpiresAt = null;
+                clearVoiceConversationCountdown();
                 updateVoiceStatusDisplay();
             }, 180000);
         }

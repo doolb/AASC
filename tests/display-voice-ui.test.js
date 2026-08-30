@@ -70,6 +70,12 @@ assert.match(displayHtml, /\[voiceStatusRow, voiceTextDisplay\][\s\S]*?element\.
 assert.match(displayCss, /\.voice-status-row\s*\{[\s\S]*?display:\s*flex[\s\S]*?justify-content:\s*center[\s\S]*?flex-wrap:\s*nowrap/);
 assert.match(displayCss, /\.monitor-wrapper\s*\{[\s\S]*?position:\s*static[\s\S]*?align-items:\s*center/);
 assert.match(displayCss, /#voiceStatus\s*\{[\s\S]*?white-space:\s*nowrap[\s\S]*?max-width:\s*180px/);
+assert.match(displayHtml, /id="voiceConversationCountdown"/u, '显示端应提供第二行倒计时元素');
+assert.match(displayHtml, /voiceConversationExpiresAt/u, '语音状态应保存服务端下发的到期时间');
+assert.match(displayHtml, /function updateVoiceConversationCountdown\(\)/u, '显示端应提供倒计时刷新函数');
+assert.match(displayHtml, /setInterval\([^\n]*updateVoiceConversationCountdown/u, '倒计时应按秒刷新');
+assert.match(displayCss, /\.voice-conversation-countdown\s*\{/u, '倒计时应有独立样式');
+assert.match(displayCss, /\.voice-status-row\s*\{[\s\S]*?flex-direction:\s*column/u, '倒计时应位于状态第一行下方');
 assert.match(displayHtml, /element\.style\.right\s*=\s*offset/);
 assert.match(displayHtml, /element\.style\.top\s*=\s*'50%'/);
 assert.match(displayHtml, /translateX\(-50%\)/);

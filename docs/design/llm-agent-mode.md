@@ -12,7 +12,7 @@ Agent 用于扩展普通 LLM 的能力，例如文件搜索和网络查询。Age
 
 - LLM profile 增加 `mode: 'llm' | 'agent'`，默认 `llm`。
 - `agent` 模式暂只接受 `backend: 'pi'`。
-- 每个 profile 独立管理一个 Pi RPC 进程和内存会话。
+- 每个 profile 按聊天会话管理 Pi RPC 进程和内存会话：群聊共用一个，私聊按助手角色独立；模式或角色切换时回收旧会话，下一次请求重新创建进程。
 - Agent 请求使用当前 profile 的 `apiUrl`、`model`、`apiKey`、`maxTokens`、`temperature`。
 - 当前聊天会话的系统提示词、最近 `contextCount` 条聊天记录和当前用户消息传入 Agent。
 - profile 之间的聊天历史和 Agent 会话隔离；工作 AI 角色的历史和进程不参与普通 LLM Agent。

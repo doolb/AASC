@@ -1564,6 +1564,16 @@ function findAddressedGroupAssistant(text, assistantNames = []) {
         && normalizedText.replace(name, '').trim()) || null;
 }
 
+function getPrivateChatMetadata(session) {
+    const target = session.privateTarget || null;
+    return {
+        mode: 'private',
+        target,
+        sessionId: session.privateSessionId || 'default',
+        templateTarget: target
+    };
+}
+
 async function processVoiceCommand(text, displayId, callbacks, internal = false, options = {}) {
     if (!text) return;
 
@@ -1597,7 +1607,12 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
     if (!internal && session.commandMode === true && options.conversationActive !== true) {
         if (session.mode === 'private') {
             const assistant = findAssistant(session.privateTarget);
-            return { type: 'chat', message: trimmedText, systemPrompt: assistant.template };
+            return {
+                type: 'chat',
+                message: trimmedText,
+                systemPrompt: assistant.template,
+                ...getPrivateChatMetadata(session)
+            };
         }
 
         if (!isBuiltinVoiceCommand(cmdText)) {
@@ -1716,7 +1731,12 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
             if (trimmedText.includes(a.name)) {
                 const message = trimmedText.replace(a.name, '').trim();
                 if (message) {
-                    return { type: 'chat', message, systemPrompt: a.template, mode: 'private' };
+                    return {
+                        type: 'chat',
+                        message,
+                        systemPrompt: a.template,
+                        ...getPrivateChatMetadata(session)
+                    };
                 }
                 return;
             }
@@ -1727,7 +1747,7 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
     return {
         type: 'chat',
         message: trimmedText,
-        mode: session.mode === 'private' ? 'private' : 'group',
+        ...(session.mode === 'private' ? getPrivateChatMetadata(session) : { mode: 'group' }),
         systemPrompt: session.mode === 'private' ? defaultAssistant.template : undefined
     };
 }

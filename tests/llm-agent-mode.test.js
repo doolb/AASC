@@ -9,12 +9,17 @@ const originalTemplates = chat.getTemplates();
 
 function createAgentChatHarness() {
     const calls = [];
+    const resets = [];
     const runtime = {
         async chatStream(profile, template, prompt, callbacks, options) {
             calls.push({ profile, template, prompt, options });
             callbacks.onChunk?.('Pi回复', 'Pi回复');
             callbacks.onComplete?.('Pi回复');
             return { success: true, message: 'Pi回复' };
+        },
+        resetSession(profile, template, conversationKey) {
+            resets.push({ profile, template, conversationKey });
+            return true;
         },
         async stopAll() {}
     };
@@ -39,7 +44,7 @@ function createAgentChatHarness() {
         content: '只读助手',
         permissionProfile: 'readonly'
     }], { persist: false });
-    return { calls };
+    return { calls, resets };
 }
 
 afterEach(() => {
@@ -106,4 +111,44 @@ test('Pi Agent 请求传递会话键和后续当前消息', async () => {
     assert.equal(calls[0].options.continuationPrompt, '第一轮');
     assert.equal(calls[1].options.continuationPrompt, '第二轮');
     assert.equal(calls[0].options.conversationKey, calls[1].options.conversationKey);
+});
+
+test('切换群聊和私聊角色时重置旧 Pi 会话', () => {
+    const { resets } = createAgentChatHarness();
+    chat.setSession({ ...chat.getSession(), mode: 'group', privateTarget: null, privateSessionId: 'default' });
+
+    chat.setMode('private', '小爱');
+    chat.setMode('private', '妲己');
+    chat.setMode('group');
+
+    assert.deepEqual(
+        resets.map(item => item.conversationKey),
+        [
+            JSON.stringify({ mode: 'group', target: null, sessionId: 'default' }),
+            JSON.stringify({ mode: 'private', target: '小爱', sessionId: 'default' }),
+            JSON.stringify({ mode: 'private', target: '妲己', sessionId: 'default' })
+        ]
+    );
+});
+
+test('切换私聊会话时重置旧 Pi 会话', () => {
+    const { resets } = createAgentChatHarness();
+    chat.setSession({
+        ...chat.getSession(),
+        mode: 'private',
+        privateTarget: '小爱',
+        privateSessionId: 'default',
+        sessions: {
+            小爱: [
+                { id: 'default', name: '默认会话' },
+                { id: 'next', name: '新会话' }
+            ]
+        }
+    });
+
+    assert.equal(chat.switchSession('小爱', 'next'), true);
+    assert.equal(
+        resets.at(-1).conversationKey,
+        JSON.stringify({ mode: 'private', target: '小爱', sessionId: 'default' })
+    );
 });

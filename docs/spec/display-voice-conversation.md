@@ -611,6 +611,12 @@ Markdown 渲染器:
     activePrivate -> “监听中 · 私聊：” + target
     ttsRecordingPaused 时保留上述会话范围，并将前缀改为“暂停监听”
     voiceSupported=false 或监听未启动 -> “未就绪”
+
+显示端唤醒倒计时:
+    服务端 voiceConversationState 携带 expiresAt
+    activeGroup 或 activePrivate -> 第一行显示状态+柱状图，第二行只显示 MM:SS
+    每秒按 expiresAt - Date.now() 更新剩余时间
+    expiresAt <= now 或状态回到 waitingWake/disabled -> 隐藏第二行并停止计时器
 ```
 
 ## 唤醒后群聊放行
@@ -623,4 +629,37 @@ Markdown 渲染器:
     返回 chat -> handleChatMessage -> 发送 chatInput 并进入正常 LLM/Pi 路径
 等待唤醒状态:
     保持原有 commandMode 过滤和免唤醒内置指令规则
+```
+
+## Pi Agent 会话路由
+
+```text
+进入 activeGroup:
+    chat.setMode('group', null)
+    回收原 activePrivate 会话的 Pi 进程
+    后续 chat 返回 mode=group、target=null、sessionId=default
+
+进入 activePrivate(target):
+    chat.setMode('private', target)
+    回收原群聊或其他私聊角色会话的 Pi 进程
+    后续 chat 返回 mode=private、target=target、sessionId=default
+
+控制端切换私聊 sessionId:
+    chat.switchSession(target, sessionId)
+    回收原私聊 target/sessionId 的 Pi 进程
+    保留应用层历史，下一次请求按新 target/sessionId 创建进程
+
+processVoiceCommand 私聊分支:
+    返回 chat.message
+    返回 mode='private'
+    返回 target=chatSession.privateTarget
+    返回 sessionId=chatSession.privateSessionId
+    返回 templateTarget=chatSession.privateTarget
+
+server audioChunk 完成 ASR:
+    conversation = handleDisplayConversationInput(displayId, text)
+    conversationState = conversation.state.state
+    activeGroup 或 activePrivate -> conversationActive=true
+    记录 displayId、conversationState、accepted、event.type 和 conversationActive，便于诊断门控结果
+    调用 voiceCommand.processVoiceCommand(text, ..., { conversationActive })
 ```

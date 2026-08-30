@@ -51,9 +51,26 @@ assert.match(
 );
 assert.match(
     server,
-    /conversationActive:\s*\['activeGroup',\s*'activePrivate'\]\.includes\(conversation\.state\)/,
+    /const conversationActive = \['activeGroup',\s*'activePrivate'\]\.includes\(conversation\.state\??\.state\)/,
     '显示端唤醒后的语音应把活跃会话标记传给命令处理器'
 );
+const audioChunkStart = server.indexOf("wsServer.registerHandler('audioChunk'");
+const audioChunkEnd = server.indexOf("// 注册控制端消息 handler", audioChunkStart);
+assert.ok(audioChunkStart >= 0 && audioChunkEnd > audioChunkStart, '应能定位音频流入口');
+const audioChunkHandler = server.slice(audioChunkStart, audioChunkEnd);
+assert.match(
+    audioChunkHandler,
+    /const conversationActive = \['activeGroup',\s*'activePrivate'\]\.includes\(conversation\.state\??\.state\)/,
+    '音频流识别也应把活跃会话标记传给命令处理器'
+);
+assert.match(
+    server,
+    /voiceCommand门控[\s\S]{0,260}accepted[\s\S]{0,260}conversationActive/,
+    '服务端应记录 voiceCommand 门控状态，便于诊断语音未进入聊天的问题'
+);
+assert.match(server, /target:\s*result\.target/);
+assert.match(server, /sessionId:\s*result\.sessionId/);
+assert.match(server, /templateTarget:\s*result\.templateTarget/);
 assert.match(
     server,
     /const sendToControl = isDisplayVoiceInput\s*\n\s*\? \(msg\) => broadcastToControls\(msg\)/,

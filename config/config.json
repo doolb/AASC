@@ -127,12 +127,13 @@
         "contextCount": 10,
         "apiKey": "",
         "promptFormat": "raw",
-        "mode": "llm"
+        "mode": "agent",
+        "backend": "pi"
       }
     ],
     "promptFormat": "raw",
-    "mode": "llm",
-    "backend": null
+    "mode": "agent",
+    "backend": "pi"
   },
   "logCategoryFilter": null,
   "timeAnnounce": {

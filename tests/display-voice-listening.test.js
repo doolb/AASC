@@ -62,6 +62,8 @@ assert.doesNotMatch(recognitionBody, /SherpaASR\.(?:startStreaming|recognizeBuff
 assert.match(serverJs, /display-voice-conversation/);
 assert.match(serverJs, /isDisplayVoiceListeningEnabled\(displayData\)/);
 assert.match(serverJs, /voiceConversationTtsFinished/);
+assert.match(serverJs, /expiresAt:\s*Number\.isFinite\(conversation\.expiresAt\)/u, '服务端应广播会话到期时间');
+assert.match(serverJs, /voiceConversationExpiresAt|expiresAt\s*=\s*Date\.now\(\)\s*\+/u, '服务端应在启动会话计时器时生成到期时间');
 assert.match(serverJs, /voiceprintEnabledNow = config\.get\('voiceprint\.enabled', true\)/);
 assert.match(serverJs, /isBuiltin: voiceCommand\.isBuiltinVoiceCommand/);
 assert.match(voiceCommandJs, /function isBuiltinVoiceCommand\(text\)/);

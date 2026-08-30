@@ -639,9 +639,21 @@ function setSession(session) {
 }
 
 function setMode(mode, target = null) {
+    const previousSession = getSession();
+    const nextSessionId = 'default';
+    const modeChanged = previousSession.mode !== mode
+        || previousSession.privateTarget !== target
+        || (previousSession.mode === 'private' && previousSession.privateSessionId !== nextSessionId);
+    if (modeChanged) {
+        resetPiSessionForScope({
+            mode: previousSession.mode,
+            target: previousSession.mode === 'private' ? previousSession.privateTarget : null,
+            sessionId: previousSession.privateSessionId || 'default'
+        });
+    }
     chatSession.mode = mode;
     chatSession.privateTarget = target;
-    chatSession.privateSessionId = 'default';
+    chatSession.privateSessionId = nextSessionId;
     saveSession();
     return getSession();
 }
@@ -1275,6 +1287,16 @@ function switchSession(target, sessionId) {
     if (!chatSession.sessions || !chatSession.sessions[target]) return false;
     const exists = chatSession.sessions[target].some(s => s.id === sessionId);
     if (!exists) return false;
+
+    const isPrivateSessionChanged = chatSession.mode === 'private'
+        && (chatSession.privateTarget !== target || chatSession.privateSessionId !== sessionId);
+    if (isPrivateSessionChanged) {
+        resetPiSessionForScope({
+            mode: 'private',
+            target: chatSession.privateTarget,
+            sessionId: chatSession.privateSessionId || 'default'
+        });
+    }
 
     chatSession.privateTarget = target;
     chatSession.privateSessionId = sessionId;

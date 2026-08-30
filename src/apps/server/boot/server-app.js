@@ -531,6 +531,8 @@ async function startServer() {
                         const text = asr.recognize(fullBuffer);
                         if (text) {
                             const conversation = handleDisplayConversationInput(ctx.displayId, text);
+                            const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
+                            log('语音', `voiceCommand门控 displayId=${ctx.displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} text=${JSON.stringify(text)}`);
                             broadcastToControls({
                                 type: 'voiceInput',
                                 text,
@@ -541,7 +543,8 @@ async function startServer() {
                                 handleControlMessageFallback({
                                     type: 'voiceCommand',
                                     text,
-                                    displayId: ctx.displayId
+                                    displayId: ctx.displayId,
+                                    conversationActive
                                 }, ctx.ws);
                             }
                         }
@@ -853,6 +856,7 @@ function sendDisplayConversationState(displayId, reason) {
         type: 'voiceConversationState',
         state: conversation.state,
         target: conversation.target,
+        expiresAt: Number.isFinite(conversation.expiresAt) ? conversation.expiresAt : null,
         reason: reason || null
     });
 }
@@ -873,6 +877,13 @@ function setDisplayConversationState(displayId, conversation, reason) {
 
 function armDisplayConversationTimer(displayId) {
     clearDisplayConversationTimer(displayId);
+    const displayData = displayClients.get(displayId);
+    const current = displayData?.state?.voiceConversation;
+    if (!displayData || !['activeGroup', 'activePrivate'].includes(current?.state)) return;
+
+    // 服务端是会话到期时间的唯一来源；显示端据此展示倒计时，避免本地计时与实际退出时刻漂移。
+    const expiresAt = Date.now() + CONVERSATION_TIMEOUT_MS;
+    setDisplayConversationState(displayId, { ...current, expiresAt }, 'conversationTimerStarted');
     const timer = setTimeout(() => {
         const displayData = displayClients.get(displayId);
         if (!displayData || !isDisplayVoiceListeningEnabled(displayData)) return;
@@ -4419,6 +4430,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         // 构造 voiceCommand 消息转发到控制端处理链路，复用 LLM/命令解析/执行逻辑
         if (data.isFinal && data.text && data.text.trim()) {
             const conversation = handleDisplayConversationInput(displayId, data.text.trim());
+            const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
+            log('语音', `voiceCommand门控 displayId=${displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} text=${JSON.stringify(data.text.trim())}`);
             if (!conversation.accepted) {
                 log('语音', `显示端 ${displayId} 当前等待唤醒，忽略普通语音`);
                 return;
@@ -4430,7 +4443,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
                 type: 'voiceCommand',
                 text: data.text.trim(),
                 displayId,
-                conversationActive: ['activeGroup', 'activePrivate'].includes(conversation.state),
+                conversationActive,
                 ...speakerPayload
             }, ws);
         }
@@ -4696,6 +4709,9 @@ async function handleControlMessageFallback(data, ws) {
                                     routeVoiceToAll: isDisplayVoiceInput,
                                     voiceOriginDisplayId: isDisplayVoiceInput ? targetDisplayId : null,
                                     mode: result.mode || 'group',
+                                    target: result.target || null,
+                                    sessionId: result.sessionId || 'default',
+                                    templateTarget: result.templateTarget,
                                     systemPrompt: result.systemPrompt,
                                     skipHistory: result.skipHistory || false,
                                     sendToControl: sendToControl

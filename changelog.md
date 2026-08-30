@@ -16,14 +16,35 @@
 
 ### 已完成
 
+- ✅ [2026-08-30] 显示端第二行显示唤醒退出倒计时
+  - 第一行保持监听状态与柱状图，第二行只显示服务端会话剩余时间 `MM:SS`。
+  - 服务端下发权威 `expiresAt`，显示端每秒刷新；会话结束、监听关闭或旧协议无到期时间时自动隐藏并清理定时器。
+  - 验证：显示端倒计时、旋转布局和语音状态回归 12/12 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_显示端唤醒退出倒计时.md`。
+
 - ✅ [2026-08-30] 其他设备播报文件名时暂停非声纹监听
   - 媒体文件名自动播报改走服务器统一 TTS，复用跨设备播放 ID 和 `voiceTtsPlaybackState` 状态广播。
   - 非声纹监听设备在其他显示端播报文件名时暂停录音，相关播放全部结束后恢复；媒体本身播放不受影响。
   - 验证：文件名 TTS、跨设备 TTS、显示端 UI、语音会话和文本媒体回归 13/13 通过，服务端语法检查及 `git diff --check` 通过。
   - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_其他设备文件名播报暂停监听.md`。
+
+- ✅ [2026-08-30] 修复妲己私聊会话列表只显示默认会话
+  - 服务端保存会话状态时按助手和会话 ID 合并，避免控制端异步加载期间用不完整快照覆盖已有会话。
+  - 列出会话时从仍存在的私聊历史恢复缺失条目；前端普通状态保存不再提交 `sessions` 元数据快照。
+  - 验证：私聊会话恢复专项 3/3、LLM 回归 4/4，通过 JavaScript 语法检查和 `git diff --check`。
+  - 文档：`docs/design/private-chat-sessions.md`、`docs/spec/chat-system.md`、`docs/task/2026-08-30_妲己私聊会话恢复.md`。
+
+- ✅ [2026-08-30] Pi 语音会话按群聊/私聊角色隔离并修复唤醒群聊路由
+  - 群聊共用一个 Pi 会话，私聊按助手角色和会话 ID 隔离；模式、角色或私聊会话切换时回收旧 Pi 进程，应用层历史保留。
+  - 私聊语音聊天完整传递模式、角色、模板和会话 ID，避免私聊错误使用群聊 Pi 历史。
+  - 音频流 ASR 与普通 voiceInput 使用一致的活跃会话判断，群聊唤醒后无角色名普通语音进入正常聊天路径。
+  - 修正会话状态对象取值错误，并增加 voiceCommand 门控日志，记录状态、accepted、事件类型和 conversationActive。
+  - 验证：语音路由、私聊元数据、Pi 会话切换回归 15/15 通过。
+  - 文档：`docs/design/display-voice-conversation.md`、`docs/design/llm-agent-mode.md`、`docs/design/chat-system.md`、`docs/spec/display-voice-conversation.md`、`docs/spec/llm-agent-mode.md`、`docs/spec/chat-system.md`、`docs/task/2026-08-30_Pi语音会话隔离与唤醒群聊路由.md`。
+
 - ✅ [2026-08-30] 天气和语音详情弹窗支持 Markdown
   - 显示端天气/普通语音详情弹窗复用安全 `ChatMarkdown` 渲染器，支持结构化 Markdown 展示并转义原始 HTML、过滤危险链接。
-  - TTS 仍使用纯文本，弹窗显示时长、滚动和四向旋转布局保持不变。
+  - TTS 仍使用纯文本，弹窗时长、滚动和四向旋转布局保持不变。
   - 验证：Markdown、显示端 UI、语音会话和普通聊天回归 7/7 通过。
   - 文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-30_天气弹窗支持Markdown.md`。
 

@@ -1587,6 +1587,8 @@ chat.chatStream(message, options, callbacks):
 
 `PiRuntimeManager` 为 `(profileName, templateId, permissionProfile, conversationKey)` 维护服务器拥有的 RPC 子进程，并在服务器重启、SIGTERM/SIGINT、删除单轮历史或单次异常时清理对应进程。首次请求初始化必要历史，后续请求只发送当前消息。模板请求中的任意 `tools` 字段不参与策略计算；高权限策略暂由控制端配置，服务器仍执行固定策略校验。
 
+语音会话路由补充：群聊固定使用 `mode=group,target=null,sessionId=default`，私聊按助手角色使用独立的 `mode=private,target,sessionId=default`。`setMode()` 在模式或私聊目标变化时回收旧 Pi 会话，`switchSession()` 在私聊 sessionId 变化时回收旧会话，均保留应用层历史；下一次输入创建新进程。语音 `chat` 结果必须显式携带模式、目标、会话 ID 和模板目标，服务端据此构造 Pi 会话键。
+
 ## 模板持久化隔离伪代码
 
 ```text

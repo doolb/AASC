@@ -67,6 +67,12 @@ getOrCreate(profile, template):
     创建 PiSession(profile, template, toolAllowlist)
     返回 session
 
+会话生命周期:
+    群聊固定使用 mode=group、target=null、sessionId=default 的 conversationKey
+    私聊按 mode=private、target、sessionId 隔离
+    模式、私聊目标或私聊 sessionId 切换时回收旧 conversationKey 的 PiSession
+    应用层聊天历史不删除；下一次请求按新 key 创建干净进程
+
 chatStream(profile, template, prompt, callbacks, options):
     session = getOrCreate(profile, template, options.conversationKey)
     生成 requestId
@@ -258,6 +264,8 @@ deleteConversationRound(messageId, scope):
     PiRuntimeManager.resetSession(profile, template, conversationKey)
     返回最新全局历史
 ```
+
+语音 chat 路由必须显式传递 mode、target、sessionId 和私聊模板目标，服务端不得使用默认群聊值覆盖这些字段。
 
 ## 服务器生命周期
 
