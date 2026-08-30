@@ -20,6 +20,7 @@ Agent 用于扩展普通 LLM 的能力，例如文件搜索和网络查询。Age
 - 当前先提供 `readonly` 只读策略，包含 `read`、`grep`、`find`、`ls` 和服务器提供的受限网络查询工具。
 - Pi 使用 profile 的 API 地址和模型；本地 OpenAI 兼容服务未配置 API Key 时，使用固定本地占位 Key 通过 Pi provider 校验，真实 Key 仍按 profile 配置传递。
 - 服务器负责 Pi 进程的启动、RPC 通信、异常回收、配置变更重启和服务器退出清理。
+- Chat2API 返回的标签式工具调用在 Pi Provider 边界转换为 Pi 原生 `ToolCall`，避免工具标签进入聊天文本和 TTS；只转换当前只读白名单中的工具。
 
 ### 不在本次实现
 
@@ -106,6 +107,22 @@ Pi 进程继续保留该 profile 的 Agent 会话上下文，工具调用结果�
 - Agent 模式失败不回退为直接 LLM 请求，避免绕过只读权限和用户选择的执行模式。
 - 一个 profile 的 Pi 失败不影响其他 profile 或普通 LLM 请求。
 - 服务器关闭时清理全部 Pi 进程；清理失败记录日志，但不阻塞服务器退出。
+- Chat2API 工具标签格式错误、参数无法解析或工具名不在只读白名单时，禁止执行并返回明确的 Agent 错误，不把原始协议标签作为助手文本输出。
+
+## Chat2API 工具协议转换
+
+部分 Chat2API/OpenAI 兼容网关不会返回标准 `message.tool_calls`，而是把工具调用编码在助手文本中：
+
+```text
+<|CHAT2API|tool_calls><|CHAT2API|invoke name="read"><|parameter=path>
+/mnt/AASC/package.json
+</parameter>
+</function>
+```
+
+Pi 的工具执行依赖 Provider 输出的原生 `ToolCall` 内容块。因此在 Pi 扩展注册的 `aasc-openai` Provider 内包装 OpenAI Completions 流：先让标准适配器完整读取模型响应，再解析 Chat2API 标签，将参数映射为 JSON 对象并生成 Pi 工具调用事件；普通文本保持原样，协议标签不向上层暴露。
+
+转换只允许服务器根据权限策略下发的只读工具集合；工具调用 ID 在一次响应内稳定生成，支持同一响应中的多个调用。转换器本身保持纯函数，服务器侧单元测试覆盖完整响应、分片后合并、普通文本、多个调用、非法工具和非法参数。
 
 ## UI 设计
 

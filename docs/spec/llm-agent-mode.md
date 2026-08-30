@@ -106,6 +106,40 @@ spawn('pi', [
 
 只读策略扩展在启动时用环境变量注册 `aasc-openai` provider，并注册 `aasc_web_search` 和 `aasc_web_fetch`。扩展不导入写文件 API，不注册 bash/edit/write 工具。后续命令策略通过另一个固定扩展或固定工具集合接入，不允许模板内容动态生成工具。
 
+Chat2API 工具转换伪代码：
+
+```text
+parseChat2ApiToolCalls(text, allowedTools):
+    查找 `<|CHAT2API|tool_calls>` 后的所有 `<|CHAT2API|invoke name="...">...</function>` 块
+    对每个块读取 `<|parameter=参数名>值</parameter>` 参数
+    如果工具名不在 allowedTools → 返回 unsupportedTool 错误，不执行
+    如果参数名重复、标签未闭合或工具调用为空 → 返回 malformedProtocol 错误
+    返回 calls = [{ id: 'chat2api-' + 序号, name, arguments }]
+    返回 remainingText = 删除协议块和标记后的普通文本
+```
+
+```text
+createChat2ApiCompatibleProvider(baseProvider):
+    stream(model, context, options):
+        source = baseProvider.stream(model, context, options)
+        等待 source 完成并取得最终 AssistantMessage
+        如果 source 失败 → 原样生成 error 事件
+        result = parseChat2ApiToolCalls(最终消息中的文本, 当前 context.tools)
+        如果没有 Chat2API 标签 → 原样回放文本/思考/完成事件
+        如果 result 有错误 → 生成明确 provider error，不回放原始标签
+        否则 → 生成普通文本块和 Pi toolCall 块
+        stopReason = 存在 calls 时为 toolUse，否则沿用原结果
+        发送 done(message)
+```
+
+```text
+toolCallArguments:
+    参数值默认作为字符串保留
+    对唯一 JSON 对象/数组/数字/布尔/null 参数尝试 JSON 解析
+    JSON 解析失败时保留原始字符串，避免破坏 read/grep 等文本参数
+    不允许通过协议文本新增工具，工具集合仍由 readonly permissionProfile 决定
+```
+
 `normalizePiApiKey(apiKey)`：真实 Key 原样返回；空 Key 返回 `aasc-local-key` 占位值，使本地无鉴权 OpenAI 兼容服务通过 Pi provider 的非空 Key 校验。
 
 高级指令路由伪代码：

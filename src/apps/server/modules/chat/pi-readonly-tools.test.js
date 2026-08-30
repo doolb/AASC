@@ -37,3 +37,9 @@ test('扩展源码不得启用写入或 shell 工具', () => {
     const source = fs.readFileSync(extensionFile, 'utf8');
     assert.doesNotMatch(source, /registerTool\(\{\s*name:\s*['"](?:bash|edit|write)['"]/u);
 });
+
+test('扩展源码注册 Chat2API 兼容 Provider 流', () => {
+    const source = fs.readFileSync(extensionFile, 'utf8');
+    assert.match(source, /createChat2ApiCompatibleProvider/u);
+    assert.match(source, /registerProvider\(createChat2ApiCompatibleProvider/u);
+});
