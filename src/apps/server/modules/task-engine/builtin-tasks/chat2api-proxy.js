@@ -17,6 +17,7 @@ module.exports = {
       '<div>状态：<strong style="color:{{_statusColor}}">{{statusText}}</strong></div>' +
       '<div style="font-size:12px;color:rgba(255,255,255,.65)">地址：{{addressText}}</div>' +
       '<div style="display:flex;gap:8px"><button class="task-card-btn" onclick="TaskPanel._onWidgetAction(\'{{instanceId}}\',\'widgetRefresh\')">刷新</button>' +
+      '<button class="task-card-btn primary" onclick="Chat2APIControl.open(\'{{addressText}}\')">账户管理</button>' +
       '<button class="task-card-btn danger" onclick="TaskPanel._stopInstance(\'{{instanceId}}\')">停止服务</button></div>' +
     '</div>',
     actions: [{ id: 'widgetRefresh', label: '刷新' }],

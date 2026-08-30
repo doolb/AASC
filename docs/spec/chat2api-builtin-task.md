@@ -285,6 +285,26 @@ proxy /api/chat2api/*:
     账号列表、Provider 列表和 API Key 列表不返回秘密字段
 ```
 
+## 控制端账户弹窗
+
+```text
+Chat2APIControl.open():
+    获取 config/providers/accounts/api-keys
+    根据代理监听地址设置管理 API base URL
+    展示 Provider 选择、已登录账号和 API Key 列表
+
+login(providerId):
+    POST oauth/start
+    使用返回的 loginUrl 打开 Provider 官方登录页
+    按 credentialFields 展示 Token/Cookie 输入框
+    提交 oauth/complete，成功后刷新账号列表
+
+createApiKey(label):
+    POST api-keys
+    将完整 key 仅展示给当前控制端一次
+    后续刷新只显示掩码
+```
+
 ## 上游同步
 
 ```text
