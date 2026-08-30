@@ -14,6 +14,11 @@ const {
 const DEFAULT_REQUEST_TIMEOUT_MS = 600000;
 const DEFAULT_EXTENSION_PATH = path.join(__dirname, 'pi-readonly-tools.mjs');
 
+function formatPiUserPrompt(prompt) {
+    const text = String(prompt || '');
+    return text.startsWith('User:') ? text : `User:${text}`;
+}
+
 class PiRuntimeManager {
     constructor(options = {}) {
         this.projectRoot = options.projectRoot || process.cwd();
@@ -56,7 +61,7 @@ class PiRuntimeManager {
             sessionKey: key
         });
         const task = session.queue.then(() => this.runRequest(session, session.initialized
-            ? (options.continuationPrompt || prompt)
+            ? formatPiUserPrompt(options.continuationPrompt || prompt)
             : prompt, callbacks, {
             requestId,
             queuedAt

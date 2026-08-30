@@ -219,7 +219,21 @@ test('Pi 会话后续请求只发送当前消息，不重复发送初始化 prom
         continuationPrompt: '第二轮消息',
         conversationKey: 'group:default'
     });
-    assert.deepStrictEqual(child.prompts, ['初始化上下文与历史', '第二轮消息']);
+    assert.deepStrictEqual(child.prompts, ['初始化上下文与历史', 'User:第二轮消息']);
+    await manager.stopAll();
+});
+
+test('Pi Agent 已带 User 前缀的续聊消息不会重复添加', async () => {
+    const child = createFakePiChild();
+    const manager = new PiRuntimeManager({ spawn: () => child });
+    const profile = { name: 'local', mode: 'agent', backend: 'pi', apiUrl: 'http://llm/v1', model: 'qwen' };
+    const template = { id: 'researcher', permissionProfile: 'readonly' };
+    await manager.chatStream(profile, template, '初始化', {}, { conversationKey: 'group:default' });
+    await manager.chatStream(profile, template, '历史内容', {}, {
+        conversationKey: 'group:default',
+        continuationPrompt: 'User:第二轮消息'
+    });
+    assert.deepStrictEqual(child.prompts, ['初始化', 'User:第二轮消息']);
     await manager.stopAll();
 });
 

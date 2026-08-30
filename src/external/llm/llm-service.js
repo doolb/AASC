@@ -708,10 +708,11 @@ function buildMessages(userMessage, options = {}) {
         mode = null,
         target = null,
         sessionId = null,
-        profileName = activeProfile
+        profileName = activeProfile,
+        promptFormat = chatConfig.promptFormat
     } = options;
     const templateId = templateTarget || useTemplate || 'default';
-    const format = chatConfig.promptFormat || 'openai';
+    const format = promptFormat || 'openai';
     const sysPrompt = systemPrompt || chatConfig.systemPrompt;
     const selectedTemplate = findTemplate(templateId);
     // 服务器聊天路由可能已经把模板内容作为 systemPrompt 传入，避免 Agent/LLM 收到重复模板。
@@ -859,9 +860,9 @@ async function chat(userMessage, options = {}) {
 function buildAgentPrompt(messages) {
     return messages.map((message) => {
         const roleName = message.role === 'system'
-            ? '系统'
-            : message.role === 'assistant' ? '助手' : '用户';
-        return `${roleName}：\n${message.content}`;
+            ? 'System:'
+            : message.role === 'assistant' ? 'Assistant:' : 'User:';
+        return `${roleName}\n${message.content}`;
     }).join('\n\n');
 }
 
@@ -900,7 +901,8 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
             mode,
             target,
             sessionId,
-            profileName: profile.name
+            profileName: profile.name,
+            promptFormat: 'openai'
         });
         const prompt = buildAgentPrompt(messages);
         const result = await piRuntimeManager.chatStream(profile, template, prompt, {
@@ -1237,6 +1239,7 @@ module.exports = {
     clearHistory,
     deleteConversationRound,
     getConversationRoundRemoval,
+    buildAgentPrompt,
     getSession,
     setSession,
     setMode,

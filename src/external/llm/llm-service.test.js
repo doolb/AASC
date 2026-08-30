@@ -2,7 +2,17 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const chat = require('./llm-service');
-const { getConversationRoundRemoval } = chat;
+const { buildAgentPrompt, getConversationRoundRemoval } = chat;
+
+test('Pi 历史重建使用 Assistant 标记而不是旧 AI 标记', () => {
+    const prompt = buildAgentPrompt([
+        { role: 'system', content: '系统设定' },
+        { role: 'user', content: '用户问题' },
+        { role: 'assistant', content: '助手回复' }
+    ]);
+    assert.match(prompt, /Assistant:\n助手回复/u);
+    assert.doesNotMatch(prompt, /AI:\n助手回复/u);
+});
 
 test('Agent 后端默认 Codex，并只接受 Claude/Codex', () => {
     const original = chat.getConfig().agentBackend;

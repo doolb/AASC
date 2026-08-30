@@ -11,6 +11,12 @@
 
 ### 已完成
 
+- ✅ [2026-08-30] 统一 Pi Agent 历史角色标记
+  - 续聊发送给 Pi 的当前用户消息统一补充 `User:`，已存在前缀时不重复添加。
+  - Pi Agent 初始化历史统一使用 `System:`、`User:`、`Assistant:`；普通 LLM 的既有 raw `AI:` 格式保持不变。
+  - 验证：Pi Runtime、LLM Agent 角色标记和聊天回归 21/21，通过脚本语法检查和 `git diff --check`。
+  - 文档：`docs/design/llm-agent-mode.md`、`docs/spec/llm-agent-mode.md`、`docs/task/2026-08-30_Pi历史角色标记统一.md`。
+
 - ✅ [2026-08-30] Pi Agent 会话历史递归与聊天单轮删除
   - Pi Agent 首次请求初始化必要历史，后续请求只发送当前消息，避免 Pi 内存上下文和应用历史递归叠加。
   - 会话键增加群聊/私聊 conversationKey，避免不同聊天会话共享 Pi 上下文；删除单轮历史后会重置对应 Pi 会话。

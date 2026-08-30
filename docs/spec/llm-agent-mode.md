@@ -75,7 +75,10 @@ chatStream(profile, template, prompt, callbacks, options):
     如果 session 尚未初始化:
         通过 stdin 写入 { id, type: 'prompt', message: prompt }\n
     否则:
-        通过 stdin 写入 { id, type: 'prompt', message: options.continuationPrompt }\n
+        continuation = options.continuationPrompt 或 prompt
+        如果 continuation 不以 'User:' 开头:
+            continuation = 'User:' + continuation
+        通过 stdin 写入 { id, type: 'prompt', message: continuation }\n
     读取 stdout JSONL:
         记录 requestId 关联的关键事件类型；工具事件只记录工具名/长度，不记录完整内容
         type='response' 且 id 匹配且 success=false → 当前请求失败
@@ -198,7 +201,7 @@ buildAgentPrompt(userMessage, options):
     })
     返回结构化纯文本：
         System: messages 中的 system 内容
-        User/Assistant: 最近历史
+        User/Assistant: 最近历史，其中助手历史统一使用 Assistant:
         User: 当前消息
 ```
 
