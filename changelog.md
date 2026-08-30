@@ -16,6 +16,10 @@
 
 ### 已完成
 
+- ⏳ [2026-08-30] 规划 Chat2API 核心内置任务
+  - 确认采用上游核心快照 + AASC 适配层 + `chat2api.proxy` 常驻任务方案，完整覆盖 Provider、OAuth、账号、API Key、负载均衡和控制端配置。
+  - 设计阶段暂不修改业务代码；保留 Chat2API GPL-3.0 许可证和后续上游同步路径。
+  - 文档：`docs/design/chat2api-builtin-task.md`、`docs/spec/chat2api-builtin-task.md`、`docs/task/2026-08-30_Chat2API核心内置任务.md`。
 - ✅ [2026-08-30] 显示端第二行显示唤醒退出倒计时
   - 第一行保持监听状态与柱状图，第二行只显示服务端会话剩余时间 `MM:SS`。
   - 服务端下发权威 `expiresAt`，显示端每秒刷新；会话结束、监听关闭或旧协议无到期时间时自动隐藏并清理定时器。

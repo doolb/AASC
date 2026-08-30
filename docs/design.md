@@ -71,4 +71,5 @@
 | 服务器重启命令 | [server-restart-script.md](design/server-restart-script.md) | 通过控制端接口重启服务器，绕过 HTTPS 代理 |
 | 工作 AI 角色 | [ai-roles.md](design/ai-roles.md) | 控制端 AI 角色、角色定义自管理与任务历史 |
 | LLM 配置 Agent 模式 | [llm-agent-mode.md](design/llm-agent-mode.md) | 普通 LLM profile 的 Pi Agent 模式、只读工具与服务器进程管理 |
+| Chat2API 核心内置任务 | [chat2api-builtin-task.md](design/chat2api-builtin-task.md) | Provider、OAuth、账号、API Key 和 OpenAI 兼容代理内置为常驻任务 |
 | 动态画面填充模式 | [dynamic-fit-mode.md](design/dynamic-fit-mode.md) | 适应与铺满循环过渡、控制端时间配置 |
