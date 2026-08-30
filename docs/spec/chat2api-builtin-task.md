@@ -195,6 +195,13 @@ createChat2ApiCoreAdapter(options):
     注入 dataStore、providerRegistry、modelMapper、loadBalancer 和 Provider adapters
     不加载 Electron、Koa 或上游 Store
 
+createProviderAdapters(httpClient):
+    为每个 Provider 注册独立 adapter
+    组装 Provider endpoint、认证头和 Provider 请求体
+    非流式响应转换为 OpenAI chat.completion
+    流式响应解析为 OpenAI chat.completion.chunk SSE
+    不在日志记录完整凭据和请求内容
+
 forwardChatCompletion(request):
     校验 model 和 messages
     解析候选 Provider、actualModel 和账号

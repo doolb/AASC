@@ -6,6 +6,7 @@ const { createChat2ApiCoreAdapter } = require('./chat2api-core-adapter');
 const { createChat2ApiOAuthService } = require('./chat2api-oauth-service');
 const { createChat2ApiProxyService } = require('./chat2api-proxy-service');
 const { createChat2ApiManagementService } = require('./chat2api-management-service');
+const { createChat2ApiProviderAdapters } = require('./chat2api-provider-adapters');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -17,7 +18,7 @@ const createChat2ApiRuntime = (options = {}) => {
     providerRegistry,
     modelMapper,
     loadBalancer,
-    providerAdapters: options.providerAdapters || {},
+    providerAdapters: options.providerAdapters || createChat2ApiProviderAdapters({ httpClient: options.httpClient }),
   });
   const oauth = options.oauth || createChat2ApiOAuthService({
     dataStore,

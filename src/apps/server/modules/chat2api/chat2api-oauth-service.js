@@ -47,6 +47,12 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
       if (!validated || validated.valid !== true) {
         throw new Error(validated && validated.error ? validated.error : 'Provider 凭据校验失败');
       }
+    } else {
+      const requiredFields = (provider.credentialFields || []).filter((field) => field.required).map((field) => field.name);
+      const missing = requiredFields.filter((field) => typeof credentials[field] !== 'string' || credentials[field].trim().length === 0);
+      if (missing.length > 0) {
+        throw new Error(`缺少必填凭据字段: ${missing.join(', ')}`);
+      }
     }
     const now = Date.now();
     const saved = await dataStore.saveAccount({
