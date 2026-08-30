@@ -38,5 +38,11 @@ const helpHandler = serverSource.slice(helpStart, helpEnd);
 assert.match(helpHandler, /sendVoiceInputTtsSentences\(helpTTS\)/);
 assert.match(helpHandler, /sendVoiceCommandTtsSentences\(helpTTS, targetDisplayId\)/);
 assert.doesNotMatch(helpHandler, /sendVoiceInputTts\(helpTTS\)/);
+const responseIndex = helpHandler.indexOf("action: 'response'");
+const ttsWaitIndex = helpHandler.indexOf('await sendVoiceInputTtsSentences(helpTTS)');
+const directedTtsWaitIndex = helpHandler.indexOf('await sendVoiceCommandTtsSentences(helpTTS, targetDisplayId)');
+assert.ok(responseIndex >= 0, '系统帮助应向目标显示端发送完整响应文本');
+assert.ok(responseIndex < ttsWaitIndex, '显示端系统帮助弹窗应先于通用 TTS 生成下发');
+assert.ok(responseIndex < directedTtsWaitIndex, '控制端系统帮助弹窗应先于定向 TTS 生成下发');
 
-console.log('display-voice-builtins.test.js: 13/13 passed');
+console.log('display-voice-builtins.test.js: 16/16 passed');

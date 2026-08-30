@@ -2,6 +2,11 @@
 
 ## 控制端
 
+- ✅已完成 [2026-08-30][2026-08-30] 系统帮助弹窗提前显示
+  - 完整帮助文本先发送到目标显示端立即打开语音响应弹窗，分句 TTS 后台生成播放，不等待全部音频生成完成。
+  - 测试：系统帮助、批次完成状态、显示端语音会话、普通聊天和 TTS 路由回归 17/17 通过，服务端脚本语法检查通过。
+  - 关联文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-29_系统指令动态播报全部命令.md`。
+
 - ✅已完成 [2026-08-30][2026-08-30] 系统帮助分句 TTS 批次完成状态
   - 分句帮助消息共享 `voiceTtsBatchId`，最后一句标记 `voiceTtsBatchEnd`；显示端只有最后一句真正播放完成后才发送 `voiceConversationTtsFinished`。
   - 停止播报会清空当前句、后续句子和批次状态，不发送会话完成事件。

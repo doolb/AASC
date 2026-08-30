@@ -64,6 +64,9 @@ waitingWake 中的免唤醒范围:
         按当前配置拼接完整帮助播报文本
     服务端收到 showHelp:
         控制端发送 showHelp 打开帮助弹窗
+        如果存在目标显示端:
+            立即发送 { type: 'voiceCommand', action: 'response', text: helpText }
+            目标显示端立即使用完整 helpText 打开语音响应弹窗
         如果来源是显示端:
             sentences = chat.splitIntoSentences(helpText)
             batchId = generateCorrelationId('voice-tts-batch')
@@ -72,6 +75,7 @@ waitingWake 中的免唤醒范围:
             sentences = chat.splitIntoSentences(helpText)
             batchId = generateCorrelationId('voice-tts-batch')
             通过定向 TTS 调度器逐句串行调用 sendVoiceCommandTts(sentence, targetDisplayId, { batchId, batchEnd })
+        异步 TTS 生成不能阻塞完整帮助弹窗的首次下发
         所有句子按原文顺序生成和发送，全部完成后结束帮助播报
 
 TTS 批次完成和中断:

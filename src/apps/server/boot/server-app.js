@@ -4565,12 +4565,17 @@ async function handleControlMessageFallback(data, ws) {
                             if (!result) return;
                             
                             if (result.type === 'showHelp') {
-                                // showHelp 仅发给控制端网页，显示端只播报 TTS
+                                // 控制端网页显示帮助列表；目标显示端先收到完整文本，立即打开帮助弹窗。
                                 if (controlClients.has(ws)) {
                                     sendToControl({ type: 'showHelp' });
                                 }
                                 if (targetDisplayId && sendToDisplay) {
                                     const helpTTS = voiceCommand.getVoiceCommandHelpText();
+                                    sendToDisplay(targetDisplayId, {
+                                        type: 'voiceCommand',
+                                        action: 'response',
+                                        text: helpTTS
+                                    });
                                     (async () => {
                                         try {
                                             if (isDisplayVoiceInput) {
@@ -4578,11 +4583,6 @@ async function handleControlMessageFallback(data, ws) {
                                             } else {
                                                 await sendVoiceCommandTtsSentences(helpTTS, targetDisplayId);
                                             }
-                                            sendToDisplay(targetDisplayId, {
-                                                type: 'voiceCommand',
-                                                action: 'response',
-                                                text: helpTTS
-                                            });
                                         } catch (err) {
                                             logError('VoiceCommand', `帮助TTS生成失败: ${err.message}`);
                                         }
