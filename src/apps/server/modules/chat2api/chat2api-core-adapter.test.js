@@ -93,3 +93,89 @@ test('Responses 会话把固定 Provider、账号和原生状态传给核心适�
   assert.deepEqual(received.responseSession, { nativeState: { sessionId: 'old-session' } });
   assert.deepEqual(result.nativeState, { sessionId: 'next-session' });
 });
+test('核心适配层统一转换网页 Provider 工具并在原生续聊中去重提示', async () => {
+  const received = [];
+  const responseSession = { nativeState: {} };
+  const adapter = createChat2ApiCoreAdapter({
+    dataStore: {
+      getAccount: async () => account,
+      listAccounts: async () => [account],
+      readCollection: async () => [],
+    },
+    providerRegistry: {
+      listProviders: async () => [provider],
+      getEffectiveModels: (item) => item.supportedModels.map((displayName) => ({ displayName, actualModelId: item.modelMappings[displayName] })),
+    },
+    modelMapper: { resolveModel: async (model, item) => ({ requestedModel: model, actualModel: item ? item.modelMappings[model] : model }) },
+    loadBalancer: { selectAccount: async () => ({ provider, account, actualModel: 'deepseek-v4-flash' }), markAccountFailed: () => {} },
+    providerAdapters: {
+      deepseek: async (input) => {
+        received.push(input);
+        return { body: { choices: [{ message: { role: 'assistant', content: '收到' } }] } };
+      },
+    },
+  });
+  const tools = [{
+    type: 'function',
+    function: { name: 'read', description: '读取文件', parameters: { type: 'object', required: ['path'] } },
+  }];
+
+  await adapter.forwardChatCompletion({
+    model: 'public-chat',
+    messages: [{ role: 'user', content: '读取 package.json' }],
+    tools,
+    tool_choice: 'auto',
+  }, { responseSession });
+  await adapter.forwardChatCompletion({
+    model: 'public-chat',
+    messages: [{ role: 'user', content: '继续读取' }],
+    tools,
+    tool_choice: 'auto',
+  }, { responseSession });
+
+  assert.equal(received.length, 2);
+  assert.equal(received[0].request.messages[0].role, 'system');
+  assert.match(received[0].request.messages[0].content, /<\|CHAT2API\|tool_calls>/u);
+  assert.match(received[0].request.messages[0].content, /read/u);
+  assert.equal(received[0].request.tools, undefined);
+  assert.equal(received[0].request.tool_choice, undefined);
+  assert.equal(received[1].request.messages[0].role, 'user');
+  assert.equal(received[1].request.messages[0].content, '继续读取');
+  assert.equal(received[1].request.tools, undefined);
+  assert.equal(received[1].request.tool_choice, undefined);
+  assert.match(responseSession.nativeState.managedToolPromptHash, /^[a-f0-9]{64}$/u);
+});
+
+test('核心适配层兼容没有工具指纹的旧原生会话并避免重复 System', async () => {
+  let received;
+  const responseSession = { nativeState: { sessionId: 'legacy-session' } };
+  const adapter = createChat2ApiCoreAdapter({
+    dataStore: {
+      getAccount: async () => account,
+      listAccounts: async () => [account],
+      readCollection: async () => [],
+    },
+    providerRegistry: {
+      listProviders: async () => [provider],
+      getEffectiveModels: (item) => item.supportedModels.map((displayName) => ({ displayName, actualModelId: item.modelMappings[displayName] })),
+    },
+    modelMapper: { resolveModel: async (model, item) => ({ requestedModel: model, actualModel: item ? item.modelMappings[model] : model }) },
+    loadBalancer: { selectAccount: async () => ({ provider, account, actualModel: 'deepseek-v4-flash' }), markAccountFailed: () => {} },
+    providerAdapters: {
+      deepseek: async (input) => {
+        received = input;
+        return { body: { choices: [{ message: { role: 'assistant', content: '继续' } }] } };
+      },
+    },
+  });
+
+  await adapter.forwardChatCompletion({
+    model: 'public-chat',
+    messages: [{ role: 'user', content: '继续' }],
+    tools: [{ type: 'function', function: { name: 'read', parameters: { type: 'object' } } }],
+  }, { responseSession });
+
+  assert.equal(received.request.messages[0].role, 'user');
+  assert.equal(received.request.tools, undefined);
+  assert.match(responseSession.nativeState.managedToolPromptHash, /^[a-f0-9]{64}$/u);
+});

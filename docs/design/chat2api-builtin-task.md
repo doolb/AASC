@@ -90,6 +90,7 @@ Chat2API 代理 HTTP 127.0.0.1:{port}
 - 用户模型映射指定 Provider 后，路由按该 Provider 的活动账号选择，不要求别名出现在内置模型清单中。
 - 负载均衡候选生成时先复用统一模型映射器解析 `actualModel`，保持原版“Provider 内置映射 → 全局映射 → 原始模型”的优先级；候选选择和最终 Provider 请求使用同一个实际模型。
 - 所有内置 Provider 均按原版选择专用请求/响应适配；DeepSeek、GLM、Kimi、MiMo、MiniMax、Perplexity、Qwen AI 和 Z.ai 分别保留其会话、签名、Cookie、gRPC/HTTP2、SSE 或轮询协议边界，统一转换为 OpenAI 输出。
+- 所有网页 Provider 的工具调用均由核心适配层统一转换为 Chat2API `managed_xml` 标签提示；Provider 请求移除原生 `tools`/`tool_choice`，不再由单个 Qwen adapter 独立注入。
 - Qwen Provider 按 `/api/v2/chat` 原生协议生成请求参数，解压 gzip/deflate/br 后兼容 `data.messages`、`multi_load/iframe`、SSE 累计内容和思考标记，避免通用 OpenAI 解析得到空回复。
 - 旧 AASC LLM 配置继续有效；Chat2API 代理作为独立服务，不自动替换当前 profile。
 
@@ -114,6 +115,7 @@ Provider adapter
 - Qwen AI、Z.ai、Kimi 使用各自的 `chat_id` 及消息父子标识；GLM、Perplexity 如果原生状态无法可靠续接，则重放 AASC 保存的历史消息。
 - 会话优先固定到首次选择的 Provider 账号；账号不可用时允许切换账号并重放历史，同时清空失效的原生状态。
 - `store=false` 不阻止 AASC 为完成 Provider 续接而保存最小会话状态；Responses 的返回对象仍标记调用方请求的 `store` 值。
+- Responses 会话的工具提示由核心适配层统一注入，并在 `nativeState` 保存工具集合指纹；原生会话的后续增量请求不重复注入，兼容旧会话时避免再次追加重复 `System`。
 - 当前只实现 Pi Agent 所需的 Responses 兼容子集，不实现后台响应、内置工具、Conversations CRUD 和响应查询/删除管理 API。
 - 2026-08-31 已通过 `npm run restart:server` 重启实际主服务，并确认运行中的 Chat2API 代理根路径已加载 `/v1/responses`。
 - 2026-08-31 使用已配置的 Qwen3.6-Flash 完成真实非流式首轮、`previous_response_id` 续聊和流式 SSE 验证。

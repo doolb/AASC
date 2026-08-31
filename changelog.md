@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Chat2API 工具调用
+
+- ✅ [2026-08-31] 对齐原版 Chat2API 公共 managed tool calling 并修复原生会话重复 System
+  - 所有网页 Provider 统一由 `chat2api-tool-calling.js` 将 function tools 转成 Chat2API 标签协议提示，核心适配层移除 `tools` 和 `tool_choice` 后再调用 Provider 专用适配器。
+  - `responseSession.nativeState` 保存工具定义指纹；同一原生会话的增量续聊不重复注入，已有提示和没有指纹的旧会话也不会继续追加重复 System。
+  - 移除 Qwen adapter 的独立注入逻辑，保留 Pi 现有标签解析、工具白名单和 TTS 隔离链路。
+  - 改动文件：`src/apps/server/modules/chat2api/chat2api-tool-calling.js`、`chat2api-core-adapter.js`、`chat2api-provider-adapters.js` 及相关测试、design/spec/task 文档。
+  - 验证：`npm run check:chat2api`，70/70 通过；`git diff --check` 通过。
+
 ### 普通聊天 Agent
 
 - ✅ [2026-08-31] 统一普通聊天与工作 Agent 的 Codex 代理配置

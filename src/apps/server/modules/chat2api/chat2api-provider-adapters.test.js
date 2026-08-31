@@ -4,6 +4,7 @@ const { gzipSync } = require('zlib');
 const test = require('node:test');
 
 const { createChat2ApiProviderAdapters, buildProviderHeaders, createQwenRequest } = require('./chat2api-provider-adapters');
+const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
 const { createRawTrafficLogger } = require('./chat2api-raw-traffic-logger');
 
 test('九个 Provider 都注册统一 HTTP adapter，并按账号凭据生成认证头', async () => {
@@ -84,13 +85,14 @@ test('Qwen 非流式响应解析 data.messages 中的实际答案内容', async 
   assert.equal(calls[0].headers.Authorization, undefined);
 });
 
-test('Qwen 不支持原生工具时在上游提示中声明 Responses 工具标签协议', () => {
+test('公共工具转换层为 Qwen 上游声明 Chat2API 工具标签协议', () => {
+  const prepared = prepareManagedToolRequest({
+    model: 'Qwen3.6-Flash',
+    messages: [{ role: 'user', content: '查找文件' }],
+    tools: [{ type: 'function', name: 'aasc_find', description: '查找文件', parameters: { type: 'object', required: ['pattern'] } }],
+  }, { nativeState: {} });
   const request = createQwenRequest(
-    {
-      model: 'Qwen3.6-Flash',
-      messages: [{ role: 'user', content: '查找文件' }],
-      tools: [{ type: 'function', name: 'aasc_find', description: '查找文件', parameters: { type: 'object', required: ['pattern'] } }],
-    },
+    prepared,
     'Qwen3.7',
     { apiEndpoint: 'https://example.com', chatPath: '/api/v2/chat' },
     {},
@@ -100,15 +102,17 @@ test('Qwen 不支持原生工具时在上游提示中声明 Responses 工具标�
   assert.match(request.data.messages[0].content, /aasc_find/u);
   assert.match(request.data.messages[0].content, /<\|CHAT2API\|tool_calls>/u);
   assert.match(request.data.messages[0].content, /parameter name/u);
+  assert.doesNotMatch(request.data.messages[0].content, /System: System:/u);
 });
 
-test('Qwen 工具提示兼容 Responses 规范化后的 function 嵌套结构', () => {
+test('公共工具转换层兼容 Responses 规范化后的 function 嵌套结构', () => {
+  const prepared = prepareManagedToolRequest({
+    model: 'Qwen3.6-Flash',
+    messages: [{ role: 'user', content: '查找文件' }],
+    tools: [{ type: 'function', function: { name: 'aasc_find', description: '查找文件', parameters: { type: 'object' } } }],
+  }, { nativeState: {} });
   const request = createQwenRequest(
-    {
-      model: 'Qwen3.6-Flash',
-      messages: [{ role: 'user', content: '查找文件' }],
-      tools: [{ type: 'function', function: { name: 'aasc_find', description: '查找文件', parameters: { type: 'object' } } }],
-    },
+    prepared,
     'Qwen3.7',
     { apiEndpoint: 'https://example.com', chatPath: '/api/v2/chat' },
     {},

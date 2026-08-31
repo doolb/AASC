@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { prepareManagedToolRequest } = require('./chat2api-tool-calling');
 
 const createHttpError = (statusCode, code, message) => {
   const error = new Error(message);
@@ -63,6 +64,11 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
     }
     const providerMapping = await modelMapper.resolveModel(request.model, selection.provider);
     const actualModel = selection.actualModel || providerMapping.actualModel || request.model;
+    const providerRequest = prepareManagedToolRequest({
+      ...request,
+      model: actualModel,
+      originalModel: request.model,
+    }, options.responseSession);
     const context = {
       requestId: `chatcmpl-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`,
       providerId: selection.provider.id,
@@ -75,7 +81,7 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
 
     try {
       const result = await getAdapter(selection.provider)({
-        request: { ...request, model: actualModel, originalModel: request.model },
+        request: providerRequest,
         account,
         provider: selection.provider,
         actualModel,

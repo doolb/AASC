@@ -254,6 +254,11 @@ createProviderAdapters(httpClient):
     Qwen adapter 使用原生 /api/v2/chat 请求协议，生成 req_id、session_id、nonce、timestamp 和 Qwen 专用消息体
     Qwen adapter 按响应 content-encoding 解压 gzip、deflate、br 后再读取 SSE 事件
     Qwen adapter 统一按 SSE 事件读取 data.messages，并从 multi_load/iframe 或 text/plain 提取答案内容
+    核心适配层统一把所有网页 Provider 的 function tools 转成 managed_xml 标签提示
+    将 managed_xml 提示加入首个 system 消息；没有 system 消息时新建一条
+    Provider 请求移除 tools 和 tool_choice，不依赖 Provider 的原生 OpenAI tools 支持
+    responseSession.nativeState 保存工具提示指纹，原生会话增量请求不重复注入
+    没有指纹的旧原生会话按已注入提示处理，避免重复生成 System
     adapter 接收可选 responseSession.nativeState
     Qwen、DeepSeek、Mimo、MiniMax、Qwen AI、Z.ai、Kimi 优先复用可用原生会话标识
     原生会话标识无法安全续接时回退为请求历史重放，并返回本轮可观察的原生状态

@@ -107,9 +107,36 @@ createChat2ApiCompatibleProvider():
     Responses function_call output -> Pi toolCall
     Responses output_item 事件必须先于 delta 事件建立对应内容块
     Provider 不支持原生 function tool 时:
-        将已授权工具的名称、参数和 Chat2API 标签格式加入上游提示
+        由核心适配层统一将已授权工具的名称、参数和 Chat2API 标签格式加入首个 system 消息
+        保存工具提示指纹；同一原生会话的后续增量请求不再重复注入
+        旧原生会话没有指纹时，按已有会话已注入过提示处理，避免重复 System
+        从请求中移除 tools 和 tool_choice，Provider 只接收 managed_xml 文本协议
         仅解析白名单工具标签，其他标签报错
     未识别工具事件 -> 返回 error，不加入普通文本
+```
+
+## Chat2API 公共工具提示伪代码
+
+```text
+prepareManagedToolRequest(request, responseSession):
+    tools = 过滤有效 function 工具
+    tools 为空 -> 原样返回 request
+    prompt = 使用统一 managed_xml 协议渲染工具定义
+    promptHash = 对规范化工具定义计算稳定指纹
+    promptExists = 扫描 system/user 消息中的协议标记和工具提示签名
+    nativeState = responseSession.nativeState
+
+    如果 promptExists:
+        nativeState.managedToolPromptHash = promptHash
+    否则如果 nativeState.managedToolPromptHash == promptHash:
+        不注入 prompt
+    否则如果存在旧 Provider 原生会话但没有 managedToolPromptHash:
+        不注入 prompt，并记录 promptHash，兼容旧会话避免重复 System
+    否则:
+        将 prompt 追加到首个 system 消息，或新建 system 消息
+        nativeState.managedToolPromptHash = promptHash
+
+    返回复制后的 request.messages、删除 tools 和 tool_choice 的请求
 ```
 
 ## 单次 LLM 任务伪代码

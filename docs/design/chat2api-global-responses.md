@@ -96,6 +96,16 @@ Pi 自定义 Provider 改为 `openai-responses`。Pi 的只读工具白名单保
 
 如果 Responses 服务无法识别某个 Provider 的工具调用增量，先将其归一化为完整 function call；无法安全识别的增量不伪造成工具参数，并返回可识别错误。
 
+### Chat2API Provider 工具调用兼容
+
+原版 Chat2API 将 DeepSeek、GLM、Kimi、Qwen 等网页 Provider 统一视为不支持 OpenAI 原生 `tools`，由公共工具调用层使用 `managed_xml` 协议兼容，而不是只在 Qwen 适配器中追加提示词。AASC 复用同一原则：
+
+- 在核心适配层统一把当前请求的工具定义转换为 Chat2API 标签协议提示，并加入首个 `system` 消息；没有 `system` 消息时才新建一条。
+- 发送到网页 Provider 的请求不再携带原生 `tools` 和 `tool_choice` 字段，避免不同 Provider 各自解释不一致。
+- Provider 返回的标签文本继续由 Pi 的 Chat2API 转换器恢复为 Pi `toolCall`，不将协议标签交给聊天文本或 TTS。
+- Responses 原生会话只发送当前增量消息时，在 `nativeState` 保存工具提示指纹；相同工具集合的后续请求不再重复注入。兼容没有指纹的旧原生会话时，按已有会话视为首轮提示已经存在，避免在 Qwen 等上游会话中重复生成 `System`。
+- 如果本次完整消息已经包含兼容提示词，也只保留一份并移除原生工具字段；工具定义发生变化时生成新的提示指纹。
+
 ## 外部实例停用
 
 切换顺序固定为：
@@ -121,4 +131,5 @@ Pi 自定义 Provider 改为 `openai-responses`。Pi 的只读工具白名单保
 
 - 已完成普通聊天、语音复用链路、搜索/`llm.chat` 任务和 Pi Agent 的全局 Responses 切换。
 - 已补齐 Responses 流式 `output_item`、文本增量、function_call 参数事件，以及 Qwen 文本工具标签到 Pi 工具调用的兼容层。
+- 已对齐原版 Chat2API 的公共 managed tool calling：所有网页 Provider 统一接收 Chat2API 标签提示，原生续聊通过工具定义指纹避免重复 `System`，旧原生会话也不会再次注入。
 - 已验证服务重启后内置 8083 和真实 Qwen 请求正常；外部 `/mnt/Chat2API` 进程已停止，外部配置和数据目录保留。
