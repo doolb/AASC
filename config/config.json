@@ -100,6 +100,9 @@
   "logBlocklist": [],
   "chat": {
     "agentBackend": "codex",
+    "protocol": "openai-responses",
+    "responsesBaseUrl": "http://127.0.0.1:8083/v1",
+    "responsesApiKey": "",
     "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
     "model": "Qwen3.6-Flash",
     "maxTokens": 65536,
