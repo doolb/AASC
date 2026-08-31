@@ -7,6 +7,8 @@ const {
     isBuiltinVoiceCommand,
     getBuiltinVoiceCommands,
     getVoiceCommandHelpText,
+    parseVoiceHelpRequest,
+    handleSystemCommand,
     getSearchSpeechTexts
 } = require('../src/apps/web-mediacenter/modules/voice/voice-command-app-service');
 
@@ -21,6 +23,8 @@ assert.strictEqual(isBuiltinVoiceCommand('取消。'), true);
 assert.strictEqual(isBuiltinVoiceCommand('确认添加'), true);
 assert.strictEqual(isBuiltinVoiceCommand('拒绝奖励出街注意。'), false);
 assert.strictEqual(isBuiltinVoiceCommand('取消奖励出街注意'), false);
+assert.strictEqual(isBuiltinVoiceCommand('帮助静音'), true);
+assert.strictEqual(isBuiltinVoiceCommand('静音帮助'), true);
 
 const builtinCommands = getBuiltinVoiceCommands();
 assert.ok(builtinCommands.some(command => command.examples.includes('系统')));
@@ -32,6 +36,39 @@ const helpText = getVoiceCommandHelpText({
 assert.match(helpText, /现在几点/);
 assert.match(helpText, /早安/);
 assert.match(helpText, /今日提醒/);
+
+assert.deepStrictEqual(parseVoiceHelpRequest('帮助静音'), { topic: '静音' });
+assert.deepStrictEqual(parseVoiceHelpRequest('静音帮助'), { topic: '静音' });
+assert.deepStrictEqual(handleSystemCommand('帮助静音'), { type: 'showHelp', topic: '静音' });
+assert.deepStrictEqual(handleSystemCommand('静音帮助'), { type: 'showHelp', topic: '静音' });
+
+const muteHelp = getVoiceCommandHelpText({
+    commands: {
+        '早安': ['报时', '今日提醒']
+    }
+}, '静音');
+assert.match(muteHelp, /静音/);
+assert.match(muteHelp, /取消静音/);
+assert.doesNotMatch(muteHelp, /天气|搜索|播放|早安/);
+assert.strictEqual(getVoiceCommandHelpText({
+    commands: {
+        '早安': ['报时', '今日提醒']
+    }
+}, '静音'), getVoiceCommandHelpText({
+    commands: {
+        '早安': ['报时', '今日提醒']
+    }
+}, '静音'));
+
+const customHelp = getVoiceCommandHelpText({
+    commands: {
+        '早安': ['报时', '今日提醒']
+    }
+}, '早安');
+assert.match(customHelp, /早安/);
+assert.match(customHelp, /今日提醒/);
+assert.doesNotMatch(customHelp, /天气|搜索|播放/);
+assert.match(getVoiceCommandHelpText({}, '未知功能'), /未找到.*未知功能/);
 assert.deepEqual(getSearchSpeechTexts([
     { type: 'first_result', title: '第一条', snippet: '摘要一' },
     { type: 'first_result', title: '第二条', snippet: '摘要二' },
@@ -53,6 +90,7 @@ assert.ok(helpStart >= 0 && helpEnd > helpStart, '应能定位系统帮助处理
 const helpHandler = serverSource.slice(helpStart, helpEnd);
 assert.match(helpHandler, /sendVoiceInputTtsSentences\(helpTTS\)/);
 assert.match(helpHandler, /sendVoiceCommandTtsSentences\(helpTTS, targetDisplayId\)/);
+assert.match(helpHandler, /getVoiceCommandHelpText\([\s\S]*?result\.topic/);
 assert.doesNotMatch(helpHandler, /sendVoiceInputTts\(helpTTS\)/);
 const responseIndex = helpHandler.indexOf("action: 'response'");
 const ttsWaitIndex = helpHandler.indexOf('await sendVoiceInputTtsSentences(helpTTS)');
@@ -61,4 +99,4 @@ assert.ok(responseIndex >= 0, '系统帮助应向目标显示端发送完整响�
 assert.ok(responseIndex < ttsWaitIndex, '显示端系统帮助弹窗应先于通用 TTS 生成下发');
 assert.ok(responseIndex < directedTtsWaitIndex, '控制端系统帮助弹窗应先于定向 TTS 生成下发');
 
-console.log('display-voice-builtins.test.js: 22/22 passed');
+console.log('display-voice-builtins.test.js: 31/31 passed');

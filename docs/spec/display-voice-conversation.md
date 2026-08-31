@@ -70,16 +70,24 @@ waitingWake 中的免唤醒范围:
 系统指令语音帮助:
     isBuiltinVoiceCommand('系统。') == true
     processVoiceCommand('系统。') -> { type: 'showHelp' }
+    parseVoiceHelpRequest('帮助静音') -> { topic: '静音' }
+    parseVoiceHelpRequest('静音帮助') -> { topic: '静音' }
+    processVoiceCommand('帮助静音') -> { type: 'showHelp', topic: '静音' }
+    processVoiceCommand('静音帮助') -> { type: 'showHelp', topic: '静音' }
     getVoiceCommandHelpText():
         读取 getBuiltinVoiceCommands()
         读取 chat.getCommands() 中的自定义关键词和动作
         加入私聊、退出私聊、系统记录等会话/系统指令说明
         按当前配置拼接完整帮助播报文本
+    getVoiceCommandHelpText(topic):
+        topic 为空 -> 返回完整帮助
+        topic 非空 -> 只保留匹配 topic 的内置命令或自定义关键词帮助
+        没有匹配 -> 返回未找到相关帮助的提示，不执行实际命令
     服务端收到 showHelp:
         控制端发送 showHelp 打开帮助弹窗
         如果存在目标显示端:
             立即发送 { type: 'voiceCommand', action: 'response', text: helpText }
-            目标显示端立即使用完整 helpText 打开语音响应弹窗
+            目标显示端立即使用 helpText 打开语音响应弹窗
         如果来源是显示端:
             sentences = chat.splitIntoSentences(helpText)
             batchId = generateCorrelationId('voice-tts-batch')

@@ -32,6 +32,12 @@ const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
         matcher: text => text === '系统'
     },
     {
+        id: 'helpTopic',
+        examples: ['帮助{指令}', '{指令}帮助'],
+        description: '只播报指定语音指令的帮助',
+        matcher: text => Boolean(parseVoiceHelpRequest(text))
+    },
+    {
         id: 'commandMode',
         examples: ['打开指令模式', '关闭指令模式'],
         description: '开启或关闭指令模式',
@@ -359,6 +365,25 @@ function normalizeVoiceCommandText(text) {
         .replace(/[。，！？、；：,.!?;:]+$/gu, '');
 }
 
+// 识别“帮助静音”和“静音帮助”，只提取帮助主题，不把帮助请求当成实际控制命令。
+function parseVoiceHelpRequest(text) {
+    const cmdText = normalizeVoiceCommandText(text);
+    if (!cmdText) return null;
+    if (cmdText === '帮助') return { topic: '' };
+
+    if (cmdText.startsWith('帮助')) {
+        const topic = cmdText.slice(2).trim();
+        return topic ? { topic } : { topic: '' };
+    }
+
+    if (cmdText.endsWith('帮助')) {
+        const topic = cmdText.slice(0, -2).trim();
+        return topic ? { topic } : { topic: '' };
+    }
+
+    return null;
+}
+
 // 等待唤醒状态只放行明确配置过的命令，普通聊天文本仍必须经过唤醒词门控。
 function isWakeFreeVoiceCommand(text, commandConfig = chat.getCommands()) {
     const cmdText = normalizeVoiceCommandText(text);
@@ -378,22 +403,59 @@ function getBuiltinVoiceCommands() {
     }));
 }
 
-// 统一生成“系统”语音帮助，始终从当前内置和自定义指令配置读取，避免帮助内容过期。
-function getVoiceCommandHelpText(commandConfig = chat.getCommands()) {
-    const builtinHelp = getBuiltinVoiceCommands().map(command =>
-        `说${command.examples.join('、')}，${command.description}`
-    );
-    const customHelp = Object.entries(commandConfig?.commands || {})
-        .filter(([keyword]) => keyword !== '系统')
-        .map(([keyword, actions]) => {
-            const actionList = Array.isArray(actions)
-                ? actions.map(action => String(action || '').trim()).filter(Boolean)
-                : [];
-            return actionList.length > 0
-                ? `说${keyword}，执行${actionList.join('、')}`
-                : `说${keyword}`;
-        });
+function getBuiltinHelpLine(command) {
+    return `说${command.examples.join('、')}，${command.description}`;
+}
 
+function getCustomHelpLine(keyword, actions) {
+    const actionList = Array.isArray(actions)
+        ? actions.map(action => String(action || '').trim()).filter(Boolean)
+        : [];
+    return actionList.length > 0
+        ? `说${keyword}，执行${actionList.join('、')}`
+        : `说${keyword}`;
+}
+
+function isHelpTopicMatch(topic, candidates) {
+    const normalizedTopic = normalizeVoiceCommandText(topic);
+    if (!normalizedTopic) return false;
+    return candidates.some(candidate => {
+        const normalizedCandidate = normalizeVoiceCommandText(candidate);
+        return Boolean(normalizedCandidate)
+            && (normalizedCandidate.includes(normalizedTopic)
+                || normalizedTopic.includes(normalizedCandidate));
+    });
+}
+
+// 统一生成完整或按主题筛选的语音帮助，始终从当前配置读取，避免帮助内容过期。
+function getVoiceCommandHelpText(commandConfig = chat.getCommands(), topic = '') {
+    const builtinCommands = getBuiltinVoiceCommands();
+    const customCommands = Object.entries(commandConfig?.commands || {})
+        .filter(([keyword]) => keyword !== '系统');
+    const normalizedTopic = normalizeVoiceCommandText(topic);
+
+    if (normalizedTopic) {
+        const matchedBuiltinHelp = builtinCommands
+            .filter(command => isHelpTopicMatch(normalizedTopic, [
+                command.id,
+                ...command.examples,
+                command.description
+            ]))
+            .map(getBuiltinHelpLine);
+        const matchedCustomHelp = customCommands
+            .filter(([keyword]) => isHelpTopicMatch(normalizedTopic, [keyword]))
+            .map(([keyword, actions]) => getCustomHelpLine(keyword, actions));
+        const matchedHelp = [...matchedBuiltinHelp, ...matchedCustomHelp];
+
+        return matchedHelp.length > 0
+            ? `${normalizedTopic}相关帮助：${matchedHelp.join('；')}。`
+            : `未找到“${normalizedTopic}”相关的语音帮助，请说“系统”获取完整帮助。`;
+    }
+
+    const builtinHelp = builtinCommands.map(getBuiltinHelpLine);
+    const customHelp = customCommands.map(([keyword, actions]) =>
+        getCustomHelpLine(keyword, actions)
+    );
     const sections = [
         '系统指令帮助',
         ...builtinHelp,
@@ -1796,6 +1858,11 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
 
 function handleSystemCommand(text, displayId) {
     const trimmedText = text.trim();
+
+    const helpRequest = parseVoiceHelpRequest(trimmedText);
+    if (helpRequest) {
+        return { type: 'showHelp', topic: helpRequest.topic };
+    }
     
     if (trimmedText === '系统') {
         return { type: 'showHelp' };
@@ -1886,6 +1953,7 @@ module.exports = {
     isBuiltinVoiceCommand,
     getBuiltinVoiceCommands,
     isWakeFreeVoiceCommand,
+    parseVoiceHelpRequest,
     getVoiceCommandHelpText,
     processVoiceCommand,
     enqueueVoiceInput,

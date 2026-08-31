@@ -4910,7 +4910,10 @@ async function handleControlMessageFallback(data, ws) {
                                     sendToControl({ type: 'showHelp' });
                                 }
                                 if (targetDisplayId && sendToDisplay) {
-                                    const helpTTS = voiceCommand.getVoiceCommandHelpText();
+                                    const helpTTS = voiceCommand.getVoiceCommandHelpText(
+                                        chat.getCommands(),
+                                        result.topic
+                                    );
                                     sendToDisplay(targetDisplayId, {
                                         type: 'voiceCommand',
                                         action: 'response',

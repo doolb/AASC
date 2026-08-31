@@ -19,6 +19,13 @@
   - 改动文件：`src/core/utils/time-parser.js`、`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`、`src/apps/server/boot/server-app.js`、相关测试和 design/spec/task 文档。
   - 验证：时间解析 5/5、显示端语音回归 10/10、Chat2API 回归 60/60、内置任务回归 6/6 通过；语法检查和 `git diff --check` 通过。
 
+### 语音帮助
+
+- ✅ [2026-08-31] 支持按关键词查询语音帮助
+  - 支持“帮助静音”和“静音帮助”，只播报匹配的内置或自定义指令帮助；“系统”继续播报完整帮助，未知关键词不执行命令。
+  - 改动文件：`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`、`src/apps/server/boot/server-app.js`、相关测试和 design/spec/task 文档。
+  - 验证：语音帮助 31/31、显示端语音回归 9/9、Chat2API 回归 60/60、内置任务回归 6/6；语法检查和 `git diff --check` 通过。
+
 ### AI 规则：任务台账与变更日志分离
 
 - 明确 `docs/todo.md` 只保留待处理、可选和进行中任务。
