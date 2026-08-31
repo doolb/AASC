@@ -144,7 +144,10 @@ Pi 的工具执行依赖 Provider 输出的原生 `ToolCall` 内容块。因此�
 LLM profile 编辑器增加“调用模式”：
 
 - `直接 LLM`：保持现有 HTTP API 行为。
-- `Agent（Pi）`：使用 profile 的服务器配置启动 Pi；具体工具权限从当前聊天模板/角色读取。
+- `Agent`：使用 profile 的服务器配置启动所选 Agent 后端；具体工具权限从当前聊天模板/角色读取。
+- Agent 模式下增加“Agent 后端”选择：`Pi` 或 `Codex`，分别使用 `PiRuntimeManager` 或 `CodexRuntimeManager`；旧 profile 缺少该字段时默认 Pi。
+- 直接 LLM 模式隐藏 Agent 后端选择，避免保存无效的后端字段。
+- profile 列表显示实际模式和后端，避免当前配置为 Codex 时仍显示成 Pi。
 
 聊天模板/角色编辑器增加“Agent 权限”选择。当前只显示“只读”，并说明可进行文件读取/搜索和受限网络查询，不能修改文件或执行命令；后续内置命令策略也从这里设置。当前不实现管理员权限和用户身份鉴权，控制端设置即作为配置来源。profile 列表显示当前 profile 的调用模式。
 

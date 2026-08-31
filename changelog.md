@@ -69,6 +69,11 @@
 
 ### Chat2API 内置任务实施中
 
+- ✅ [2026-08-31] 补齐普通聊天 Agent profile 的 Pi/Codex 控制端选择
+  - 「聊天 → 设置 → LLM 服务器配置」中，调用模式选择 Agent 后显示 Pi/Codex 后端选择；直接 LLM 模式隐藏该配置。
+  - 编辑和保存 profile 时正确读写 `mode`、`backend`，profile 列表显示实际 Agent 后端；旧 Agent profile 缺少 backend 时继续兼容为 Pi。
+  - 详细设计：`docs/design/llm-agent-mode.md`；详细任务：`docs/task/2026-08-31_普通聊天Agent后端控制端选择.md`。
+
 - ✅ [2026-08-31] 完成 Chat2API 全局 Responses 协议切换并停用外部实例
   - 普通聊天、语音、搜索/系统 LLM 任务和 Pi Agent 统一使用内置 `http://127.0.0.1:8083/v1/responses`；AI 角色 Codex/Claude 后端和旧 profile 配置保留。
   - 普通聊天保存 Responses 会话状态，任务引擎注入统一 chat service；Pi 使用 `openai-responses`，并补齐文本、function_call 和只读工具闭环。

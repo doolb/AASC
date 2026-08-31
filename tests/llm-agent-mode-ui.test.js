@@ -29,7 +29,17 @@ test('profile 编辑器提供 llm/agent 模式', () => {
     assert.match(html, /id="profileEditMode"/u);
     assert.match(html, /value="agent"/u);
     assert.match(chatSource, /mode\s*:/u);
-    assert.match(chatSource, /backend\s*:\s*['"]pi['"]/u);
+    assert.match(chatSource, /profileEditBackend/u);
+});
+
+test('Agent profile 编辑器提供 Pi/Codex 后端选择并按 profile 展示', () => {
+    assert.match(html, /id="profileEditBackend"/u);
+    assert.match(html, /value="pi"/u);
+    assert.match(html, /value="codex"/u);
+    assert.match(chatSource, /profileEditBackend/u);
+    assert.match(chatSource, /backend\s*===\s*['"]codex['"]/u);
+    assert.match(chatSource, /const backend = document\.getElementById\(['"]profileEditBackend['"]\)/u);
+    assert.match(chatSource, /if \(mode === ['"]agent['"]\) profile\.backend = backend/u);
 });
 
 test('模板编辑器提供 readonly 权限并保存 permissionProfile', () => {

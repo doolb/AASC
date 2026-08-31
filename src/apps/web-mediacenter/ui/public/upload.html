@@ -856,11 +856,19 @@
                     <label>配置名称</label>
                     <input type="text" id="profileEditName" placeholder="例如: 本地模型">
                     <label style="margin-top:8px;display:block" for="profileEditMode">调用模式</label>
-                    <select id="profileEditMode" style="width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
+                    <select id="profileEditMode" onchange="Chat.updateProfileBackendVisibility()" style="width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
                         <option value="llm">普通 LLM（直接调用接口）</option>
-                        <option value="agent">Pi Agent（服务器托管，只读）</option>
+                        <option value="agent">Agent（服务器托管，只读）</option>
                     </select>
-                    <p class="chat-config-hint">Pi Agent 由服务器启动和管理，只允许文件搜索及受限网络查询，不能修改文件。</p>
+                    <p class="chat-config-hint">Agent 由服务器启动和管理，只允许文件搜索及受限网络查询，不能修改文件。</p>
+                    <div class="chat-config-item" id="profileBackendEditorItem" hidden>
+                        <label style="margin-top:8px;display:block" for="profileEditBackend">Agent 后端</label>
+                        <select id="profileEditBackend" style="width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
+                            <option value="pi">Pi</option>
+                            <option value="codex">Codex</option>
+                        </select>
+                        <p class="chat-config-hint">Pi 和 Codex 使用独立的只读 Agent 运行时；直接 LLM 模式不使用此项。</p>
+                    </div>
                     <label style="margin-top:8px;display:block">API URL</label>
                     <input type="text" id="profileEditApiUrl" placeholder="http://192.168.1.12:8080/v1/chat/completions">
                     <label style="margin-top:8px;display:block">模型</label>

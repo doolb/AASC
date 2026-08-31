@@ -1573,7 +1573,7 @@ const Chat = {
                     <div class="profile-info" onclick="Chat.switchProfile('${this.escapeHtml(p.name)}')" style="cursor:pointer;flex:1">
                         <span class="profile-name">${this.escapeHtml(p.name)}</span>
                         <span class="profile-model">${this.escapeHtml(p.model)}</span>
-                        <span class="profile-mode">${p.mode === 'agent' ? 'Pi Agent · 只读' : '直接 LLM'}</span>
+                        <span class="profile-mode">${this.getProfileModeLabel(p)}</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;">
                         <span class="profile-status">${isActive ? '✓ 当前' : '切换'}</span>
@@ -1587,15 +1587,28 @@ const Chat = {
         container.innerHTML = html;
     },
 
+    getProfileModeLabel(profile = {}) {
+        if (profile.mode !== 'agent') return '直接 LLM';
+        return `Agent · ${profile.backend === 'codex' ? 'Codex' : 'Pi'}`;
+    },
+
+    updateProfileBackendVisibility() {
+        const mode = document.getElementById('profileEditMode')?.value || 'llm';
+        const backendItem = document.getElementById('profileBackendEditorItem');
+        if (backendItem) backendItem.hidden = mode !== 'agent';
+    },
+
     showAddProfile() {
         document.getElementById('profileEditName').value = '';
         document.getElementById('profileEditMode').value = 'llm';
+        document.getElementById('profileEditBackend').value = 'pi';
         document.getElementById('profileEditApiUrl').value = '';
         document.getElementById('profileEditModel').value = '';
         document.getElementById('profileEditMaxTokens').value = '';
         document.getElementById('profileEditTemperature').value = '';
         document.getElementById('profileEditContextCount').value = '';
         document.getElementById('profileEditApiKey').value = '';
+        this.updateProfileBackendVisibility();
         document.getElementById('profileEditor').style.display = 'block';
     },
 
@@ -1604,6 +1617,7 @@ const Chat = {
         if (!profile) return;
         document.getElementById('profileEditName').value = profile.name || '';
         document.getElementById('profileEditMode').value = profile.mode || 'llm';
+        document.getElementById('profileEditBackend').value = profile.backend || 'pi';
         document.getElementById('profileEditApiUrl').value = profile.apiUrl || '';
         document.getElementById('profileEditModel').value = profile.model || '';
         document.getElementById('profileEditMaxTokens').value = profile.maxTokens || '';
@@ -1611,6 +1625,7 @@ const Chat = {
         document.getElementById('profileEditContextCount').value = profile.contextCount || '';
         document.getElementById('profileEditApiKey').value = profile.apiKey || '';
         document.getElementById('profileEditPromptFormat').value = profile.promptFormat || 'openai';
+        this.updateProfileBackendVisibility();
         document.getElementById('profileEditor').style.display = 'block';
     },
 
@@ -1627,6 +1642,7 @@ const Chat = {
         const contextCount = parseInt(document.getElementById('profileEditContextCount').value) || 0;
         const apiKey = document.getElementById('profileEditApiKey').value.trim();
         const mode = document.getElementById('profileEditMode').value;
+        const backend = document.getElementById('profileEditBackend').value === 'codex' ? 'codex' : 'pi';
 
         if (!name) {
             window.showToast('请输入配置名称', 'error');
@@ -1643,9 +1659,8 @@ const Chat = {
 
         const existingIdx = this.profiles.findIndex(p => p.name === name);
         const promptFormat = document.getElementById('profileEditPromptFormat').value;
-        const profile = mode === 'agent'
-            ? { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode: mode, backend: 'pi' }
-            : { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode: mode };
+        const profile = { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode };
+        if (mode === 'agent') profile.backend = backend;
 
         if (existingIdx >= 0) {
             this.profiles[existingIdx] = profile;

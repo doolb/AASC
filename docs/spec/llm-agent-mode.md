@@ -301,6 +301,28 @@ chatStream(userMessage, options, callbacks):
     否则:
         使用现有 OpenAI 兼容 SSE 流程
 
+## 控制端 profile 编辑
+
+```text
+打开普通聊天设置:
+    调用模式选择 = 'llm' 或 'agent'
+    如果 mode == 'agent':
+        显示 Agent 后端 = 'pi' 或 'codex'
+        编辑已有 profile 时 backend 缺失 → 选择并保存 'pi'
+    否则:
+        隐藏 Agent 后端
+        保存 profile 时不写入 backend
+
+保存 profile:
+    payload.mode = 调用模式
+    如果 payload.mode == 'agent': payload.backend = Agent 后端选择值
+    服务端按 normalizeAgentProfile 校验并持久化
+
+profile 列表:
+    mode == 'agent' → 显示 'Agent · Pi' 或 'Agent · Codex'
+    mode == 'llm' → 显示 '直接 LLM'
+```
+
 deleteConversationRound(messageId, scope):
     在 active profile 和 scope 对应历史中定位 messageId
     如果目标是用户消息:
