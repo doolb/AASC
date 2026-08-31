@@ -153,3 +153,28 @@ test('Agent TTS 失败时记录错误并继续处理后续句子', async () => {
     assert.deepStrictEqual(errors, [{ error: 'TTS unavailable', sentence: '失败句。' }]);
     assert.deepStrictEqual(harness.displayMessages.map((item) => item.data.text), ['成功句。']);
 });
+
+test('普通 Agent TTS 在修复模式暂停期间不生成也不下发', async () => {
+    const harness = createHarness({ message: '普通回复。', displayId: 'display-1' });
+    harness.options.isTtsSuppressed = () => true;
+
+    await playAgentTts(harness.options);
+
+    assert.deepEqual(harness.generatedTexts, []);
+    assert.deepEqual(harness.displayMessages, []);
+});
+
+test('修复 Agent TTS 显式放行并把放行标记传到显示端', async () => {
+    const harness = createHarness({ message: '修复结果。', displayId: 'display-1' });
+    const sendOptions = [];
+    harness.options.isTtsSuppressed = () => true;
+    harness.options.allowRepairModeTts = true;
+    harness.options.sendToDisplay = (displayId, data, options) => {
+        sendOptions.push({ displayId, data, options });
+    };
+
+    await playAgentTts(harness.options);
+
+    assert.deepEqual(harness.generatedTexts, ['修复结果。']);
+    assert.equal(sendOptions[0].options.allowRepairModeTts, true);
+});

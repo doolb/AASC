@@ -25,6 +25,8 @@ assert.strictEqual(isBuiltinVoiceCommand('拒绝奖励出街注意。'), false);
 assert.strictEqual(isBuiltinVoiceCommand('取消奖励出街注意'), false);
 assert.strictEqual(isBuiltinVoiceCommand('帮助静音'), true);
 assert.strictEqual(isBuiltinVoiceCommand('静音帮助'), true);
+assert.strictEqual(isBuiltinVoiceCommand('进入修复模式'), true);
+assert.strictEqual(isBuiltinVoiceCommand('退出修复模式'), true);
 
 const builtinCommands = getBuiltinVoiceCommands();
 assert.ok(builtinCommands.some(command => command.examples.includes('系统')));
@@ -41,6 +43,8 @@ assert.deepStrictEqual(parseVoiceHelpRequest('帮助静音'), { topic: '静音' 
 assert.deepStrictEqual(parseVoiceHelpRequest('静音帮助'), { topic: '静音' });
 assert.deepStrictEqual(handleSystemCommand('帮助静音'), { type: 'showHelp', topic: '静音' });
 assert.deepStrictEqual(handleSystemCommand('静音帮助'), { type: 'showHelp', topic: '静音' });
+assert.deepStrictEqual(handleSystemCommand('进入修复模式'), { type: 'repairMode', action: 'enter' });
+assert.deepStrictEqual(handleSystemCommand('退出修复模式'), { type: 'repairMode', action: 'exit' });
 
 const muteHelp = getVoiceCommandHelpText({
     commands: {
@@ -99,4 +103,4 @@ assert.ok(responseIndex >= 0, '系统帮助应向目标显示端发送完整响�
 assert.ok(responseIndex < ttsWaitIndex, '显示端系统帮助弹窗应先于通用 TTS 生成下发');
 assert.ok(responseIndex < directedTtsWaitIndex, '控制端系统帮助弹窗应先于定向 TTS 生成下发');
 
-console.log('display-voice-builtins.test.js: 31/31 passed');
+console.log('display-voice-builtins.test.js: 33/33 passed');

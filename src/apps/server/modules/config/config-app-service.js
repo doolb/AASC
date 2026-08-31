@@ -222,6 +222,10 @@ class Config extends DataSnapshot {
                 search: 'system'
             }
         },
+        repairMode: {
+            password: '',
+            role: 'mainfront'
+        },
         logBrain: {
             errorThreshold: 1,
             warnThreshold: 20,

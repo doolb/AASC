@@ -29,6 +29,7 @@
             document.getElementById('serverTtsEnabledCheck').addEventListener('change', () => this.saveServerVoiceConfig());
             this.loadConfig();
             this.loadServerVoiceConfig();
+            this.loadRepairModeConfig();
             this.refreshList();
             this.bindRemoveDelegation();
             this.renderConversationConfirmationPanel();
@@ -130,6 +131,69 @@
                 if (data.status !== 'success') return;
                 this.applyServerVoiceConfig(data);
             } catch (e) { console.warn('加载服务器语音开关失败:', e); }
+        },
+
+        applyRepairModeConfig(data) {
+            if (!data || data.status && data.status !== 'success') return;
+            const roleSelect = document.getElementById('repairModeRole');
+            const status = document.getElementById('repairModePasswordStatus');
+            if (!roleSelect || !status) return;
+
+            const roles = Array.isArray(data.roles) ? data.roles : [];
+            roleSelect.innerHTML = roles.map((role) => {
+                const safeRole = escapeHtml(role);
+                const selected = role === data.role ? ' selected' : '';
+                return `<option value="${safeRole}"${selected}>${safeRole}</option>`;
+            }).join('');
+            if (data.role && roles.includes(data.role)) roleSelect.value = data.role;
+            status.textContent = data.passwordConfigured
+                ? '密码已配置（不会回显密码）'
+                : '未配置密码，修复模式当前停用';
+        },
+
+        async loadRepairModeConfig() {
+            try {
+                const response = await fetch('/api/repair-mode/config');
+                const data = await response.json();
+                this.applyRepairModeConfig(data);
+            } catch (e) {
+                console.warn('加载修复模式配置失败:', e);
+                const status = document.getElementById('repairModePasswordStatus');
+                if (status) status.textContent = '修复模式配置加载失败';
+            }
+        },
+
+        async saveRepairModeConfig() {
+            const role = document.getElementById('repairModeRole')?.value || '';
+            const password = document.getElementById('repairModePassword')?.value || '';
+            const clearPassword = document.getElementById('repairModeClearPassword')?.checked === true;
+            const body = { role };
+            if (clearPassword) {
+                body.clearPassword = true;
+            } else if (password.trim()) {
+                body.password = password;
+            }
+
+            try {
+                const response = await fetch('/api/repair-mode/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    window.showToast?.(data.message || '修复模式配置保存失败', 'error');
+                    return;
+                }
+                const passwordInput = document.getElementById('repairModePassword');
+                const clearInput = document.getElementById('repairModeClearPassword');
+                if (passwordInput) passwordInput.value = '';
+                if (clearInput) clearInput.checked = false;
+                this.applyRepairModeConfig(data);
+                window.showToast?.('修复模式配置已更新', 'success');
+            } catch (e) {
+                window.showToast?.('修复模式配置保存失败: ' + e.message, 'error');
+            }
         },
 
         async saveConfig() {

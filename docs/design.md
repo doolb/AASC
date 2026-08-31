@@ -72,6 +72,7 @@
 | 服务器重启命令 | [server-restart-script.md](design/server-restart-script.md) | 通过控制端接口重启服务器，绕过 HTTPS 代理 |
 | 工作 AI 角色 | [ai-roles.md](design/ai-roles.md) | 控制端 AI 角色、角色定义自管理与任务历史 |
 | LLM 配置 Agent 模式 | [llm-agent-mode.md](design/llm-agent-mode.md) | 普通 LLM profile 的 Pi Agent 模式、只读工具与服务器进程管理 |
+| 私聊聊天 Agent 系统工具 | [private-chat-agent-tools.md](design/private-chat-agent-tools.md) | 私聊 Agent 调用受限系统工具、修复模式安全边界与 Pi/Codex 统一适配 |
 | Chat2API 核心内置任务 | [chat2api-builtin-task.md](design/chat2api-builtin-task.md) | Provider、OAuth、账号、API Key 和 OpenAI 兼容代理内置为常驻任务 |
 | Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](design/chat2api-global-responses.md) | 普通聊天、语音、搜索/系统任务和 Pi Agent 统一使用内置 Responses 代理 |
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](design/chat2api-raw-traffic-log-modes.md) | 原始流量完整/简洁日志模式和控制端配置 |

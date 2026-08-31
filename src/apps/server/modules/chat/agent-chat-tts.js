@@ -20,26 +20,33 @@ async function playAgentTts({
     sendToDisplay,
     onError,
     ttsScheduler = null,
-    ttsConcurrency = 1
+    ttsConcurrency = 1,
+    isTtsSuppressed = () => false,
+    allowRepairModeTts = false
 }) {
     let sentences = splitIntoSentences(message).filter((sentence) => !isPunctuationOnly(sentence));
     if (sentences.length === 0 && message && !isPunctuationOnly(message)) sentences = [message];
     const scheduler = ttsScheduler || createOrderedTaskScheduler({ concurrency: ttsConcurrency });
 
     const tasks = sentences.map((sentence) => scheduler.enqueue(async () => {
+            if (isTtsSuppressed() && !allowRepairModeTts) return null;
             const cleanText = stripMarkdown(sentence);
             const audioPath = await generateTTS(cleanText);
             return { audioPath, sentence };
-        }).then(({ audioPath, sentence }) => {
+        }).then((result) => {
+            if (!result || (isTtsSuppressed() && !allowRepairModeTts)) return;
+            const { audioPath, sentence } = result;
             const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
             const audioMessage = { type: 'tts', action: 'playAudio', audioUrl, text: sentence };
 
             if (playOnControl) {
                 sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
             } else if (displayIds.length > 0) {
-                for (const targetId of displayIds) sendToDisplay(targetId, audioMessage);
+                for (const targetId of displayIds) {
+                    sendToDisplay(targetId, audioMessage, { allowRepairModeTts });
+                }
             } else if (displayId) {
-                sendToDisplay(displayId, audioMessage);
+                sendToDisplay(displayId, audioMessage, { allowRepairModeTts });
             }
         }).catch((error) => {
             if (onError) onError(error, sentence);

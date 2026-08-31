@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 语音修复模式
+
+- ✅ [2026-08-31] 显示端语音密码进入修复模式并调用可配置工作 Agent
+  - 新增 `repairMode.password` 共用明文密码和 `repairMode.role` 多角色配置；空密码默认关闭入口，密码输入不进入控制端语音回显、日志、聊天历史或 Agent 请求。
+  - 修复会话仅允许显示端进入，所有修复请求先预览并等待确认/取消，确认后复用 `AiRolesService` 工作 Agent；普通聊天 Agent 不参与。
+  - 进入修复模式时停止并抑制普通 TTS，修复提示和工作 Agent 回复显式放行；退出、超时、关闭监听和显示端断开后恢复普通 TTS。
+  - 改动文件：`src/apps/server/modules/voice/repair-mode.js`、`src/apps/server/boot/server-app.js`、`src/apps/server/modules/chat/agent-chat-tts.js`、`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`、`config/config.json` 及对应测试/设计/spec/task 文档。
+  - 验证：修复模式和语音相关回归 21/21 通过；Node 语法检查和 `git diff --check` 通过。
+
 ### 服务端 TTS
 
 - ✅ [2026-08-31] 创建 `tts.server` 内置 Wine/Linux TTS 服务实例
@@ -7064,3 +7073,25 @@
 - `docs/design/display.md`
 - `docs/spec/websocket.md`
 - `docs/task/2026-08-22_显示端同ID重连清理.md`
+
+# 2026-08-31
+
+## 控制端修复模式设置
+
+- ✅ [2026-08-31] 新增修复模式配置卡片，支持设置共用密码、选择工作 Agent 和清空密码停用。
+  - 改动文件：`src/apps/server/modules/voice/repair-mode-config.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/js/voiceprint-panel.js`、`src/apps/web-mediacenter/ui/public/js/websocket.js`。
+  - 配置读取只返回 `passwordConfigured`，不回传密码原文；空密码输入保持旧密码，明确清空才停用。
+  - 验证结果：新增配置测试 8/8 通过。
+
+## 群聊/私聊搜索路由
+
+- ✅ [2026-08-31] active 群聊和私聊中的“搜索”文本改为普通聊天，原文交给当前会话 Agent；私聊保留 target、sessionId 和模板元数据。
+  - 改动文件：`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`、`tests/group-chat-templates.test.js`、`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/2026-08-31_群聊私聊搜索转普通聊天.md`、`docs/todo.md`。
+  - active 会话不再执行特殊搜索分流或独立搜索 session；等待唤醒状态的搜索命令保持原行为。
+  - 验证结果：定向测试、`node --check` 和 `git diff --check` 通过。
+
+## 私聊聊天 Agent 系统工具设计
+
+- ✅ [2026-08-31] 新增后续设计文档，规划 activePrivate 将原始文本交给聊天 Agent，并通过服务端白名单工具执行结束对话、退出私聊、切换助手、请求修复模式、静音和报时。
+  - 修复模式仍由本地密码流程掌权，Pi/Codex 共用工具定义与执行协议；当前仅保存设计和伪代码，未修改代码行为。
+  - 文档：`docs/design/private-chat-agent-tools.md`、`docs/spec/private-chat-agent-tools.md`、`docs/task/2026-08-31_私聊Agent系统工具设计.md`。

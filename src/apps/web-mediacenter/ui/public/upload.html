@@ -732,6 +732,30 @@
                 </div>
             </div>
             <div class="control-item voiceprint-card">
+                <label>语音修复模式</label>
+                <p class="voice-vad-description">显示端说“进入修复模式”后输入密码；空密码表示停用。修复模式中的每条请求仍需要确认。</p>
+                <div style="margin-top:8px;font-size:13px;">
+                    <label for="repairModePassword">修复模式密码</label>
+                    <input type="password" id="repairModePassword" autocomplete="new-password"
+                        placeholder="留空保持当前密码"
+                        style="width:100%;padding:8px;margin-top:4px;box-sizing:border-box;">
+                </div>
+                <div style="margin-top:8px;font-size:13px;">
+                    <label for="repairModeRole">工作 Agent</label>
+                    <select id="repairModeRole" style="width:100%;padding:8px;margin-top:4px;box-sizing:border-box;"></select>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
+                    <span id="repairModePasswordStatus">正在加载修复模式配置</span>
+                </div>
+                <label style="display:block;margin-top:8px;font-size:13px;">
+                    <input type="checkbox" id="repairModeClearPassword">
+                    清空密码并停用修复模式
+                </label>
+                <div class="control-buttons" style="margin-top:8px;">
+                    <button class="control-btn" id="repairModeSaveBtn" onclick="VoiceprintPanel.saveRepairModeConfig()">保存修复模式配置</button>
+                </div>
+            </div>
+            <div class="control-item voiceprint-card">
                 <label>语音识别设备</label>
                 <div class="control-buttons">
                     <button class="control-btn active" id="asrDeviceServerBtn" data-asr="server" onclick="setAsrDevice('server')" style="background: linear-gradient(135deg, #4CAF50, #45a049);">服务端</button>

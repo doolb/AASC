@@ -517,6 +517,10 @@ const WebSocketManager = {
                     window.Chat.render();
                 }
             }
+        } else if (data.type === 'repairModeConfig') {
+            if (window.VoiceprintPanel) {
+                window.VoiceprintPanel.applyRepairModeConfig(data);
+            }
         } else if (data.type === 'roleHistory') {
             if (window.Chat && data.role) {
                 window.Chat.roleHistories[data.role] = data.history || [];

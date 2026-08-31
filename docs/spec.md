@@ -62,6 +62,7 @@
 | 服务器重启命令 | [server-restart-script.md](spec/server-restart-script.md) | 原生 HTTP/HTTPS 调用控制端重启接口 |
 | 工作 AI 角色 | [ai-roles.md](spec/ai-roles.md) | 控制端 AI 角色、角色定义自管理与任务历史 |
 | LLM 配置 Agent 模式 | [llm-agent-mode.md](spec/llm-agent-mode.md) | 普通 LLM profile 的 Pi RPC 分流、历史隔离与只读权限伪代码 |
+| 私聊聊天 Agent 系统工具 | [private-chat-agent-tools.md](spec/private-chat-agent-tools.md) | 私聊 Agent 工具注册、服务端校验和 Pi/Codex 统一调用伪代码 |
 | Chat2API 核心内置任务 | [chat2api-builtin-task.md](spec/chat2api-builtin-task.md) | Chat2API 核心代理、Provider、OAuth、账号和任务生命周期伪代码 |
 | Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](spec/chat2api-global-responses.md) | 全局 Responses transport、聊天会话映射、Pi Provider 和外部实例停用伪代码 |
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](spec/chat2api-raw-traffic-log-modes.md) | 原始流量日志模式、摘要字段和控制端配置伪代码 |

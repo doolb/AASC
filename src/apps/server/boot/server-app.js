@@ -46,6 +46,15 @@ const {
     reduceConversationInput
 } = require('../modules/voice/display-voice-conversation');
 const {
+    beginRepairModeEntry,
+    verifyRepairModePassword,
+    handleRepairModeInput
+} = require('../modules/voice/repair-mode');
+const {
+    createPublicRepairModeConfig,
+    updateRepairModeConfig
+} = require('../modules/voice/repair-mode-config');
+const {
     AUTO_CONFIRMATION_WINDOW_MS,
     MANUAL_CONFIRMATION_TIMEOUT_MS,
     createPendingConversationConfirmation,
@@ -286,6 +295,12 @@ const displayProgressPersistAt = new Map();
 const displayConversationTimers = new Map();
 const pendingConversationConfirmations = new Map();
 const conversationConfirmationTimers = new Map();
+const repairModeStates = new Map();
+const repairModeTimers = new Map();
+const activeRepairModeDisplays = new Set();
+let repairModeTtsSuppressed = false;
+const REPAIR_PASSWORD_TIMEOUT_MS = 30000;
+const REPAIR_SESSION_TIMEOUT_MS = CONVERSATION_TIMEOUT_MS;
 let conversationConfirmationMode = normalizeConversationConfirmationMode(
     config.get('voiceCommand.conversationConfirmationMode', 'off')
 );
@@ -520,7 +535,7 @@ async function startServer() {
 
             // audioChunk handler：显示端→服务端的音频流识别 // 分片累积后调 asr.recognize
             const audioChunkSessions = new Map();
-            wsServer.registerHandler('audioChunk', (data, ctx) => {
+            wsServer.registerHandler('audioChunk', async (data, ctx) => {
                 const { requestId, chunk, isLast, sampleRate } = data;
                 if (!requestId || !chunk) return;
                 if (!isServerAsrEnabled()) {
@@ -547,15 +562,22 @@ async function startServer() {
                     try {
                         const text = asr.recognize(fullBuffer);
                         if (text) {
+                            if (!config.get('voiceprint.enabled', true) && voiceTtsPlaybackTimers.size > 0) {
+                                return;
+                            }
+                            const passwordInput = isRepairModePasswordInput(ctx.displayId);
+                            if (!passwordInput) {
+                                broadcastToControls({
+                                    type: 'voiceInput',
+                                    text,
+                                    displayId: ctx.displayId,
+                                    isFinal: true
+                                });
+                            }
+                            if (await handleRepairModeDisplayInput(ctx.displayId, text)) return;
                             const conversation = handleDisplayConversationInput(ctx.displayId, text);
                             const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
                             log('语音', `voiceCommand门控 displayId=${ctx.displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} text=${JSON.stringify(text)}`);
-                            broadcastToControls({
-                                type: 'voiceInput',
-                                text,
-                                displayId: ctx.displayId,
-                                isFinal: true
-                            });
                             if (conversation.accepted && conversation.event?.type === 'input') {
                                 handleControlMessageFallback({
                                     type: 'voiceCommand',
@@ -878,6 +900,217 @@ function clearDisplayConversationTimer(displayId) {
     }
 }
 
+function getRepairModeConfig() {
+    const repairConfig = config.get('repairMode', {});
+    return {
+        password: typeof repairConfig?.password === 'string' ? repairConfig.password : '',
+        role: typeof repairConfig?.role === 'string' ? repairConfig.role.trim() : ''
+    };
+}
+
+function clearRepairModeTimer(displayId) {
+    const timer = repairModeTimers.get(displayId);
+    if (!timer) return;
+    clearTimeout(timer);
+    repairModeTimers.delete(displayId);
+}
+
+function isRepairModeTtsSuppressed() {
+    return repairModeTtsSuppressed;
+}
+
+function scheduleRepairModeTimer(displayId, expiresAt) {
+    clearRepairModeTimer(displayId);
+    const delay = Math.max(0, expiresAt - Date.now());
+    const timer = setTimeout(() => {
+        const state = repairModeStates.get(displayId);
+        if (!state || state.expiresAt !== expiresAt) return;
+        const wasActive = state.state === 'active';
+        repairModeStates.delete(displayId);
+        repairModeTimers.delete(displayId);
+        if (wasActive) {
+            activeRepairModeDisplays.delete(displayId);
+            if (activeRepairModeDisplays.size === 0) repairModeTtsSuppressed = false;
+        }
+        sendRepairModeResponse(displayId, wasActive ? '修复模式已超时退出' : '修复模式密码输入已超时');
+    }, delay);
+    repairModeTimers.set(displayId, timer);
+}
+
+function activateRepairMode(displayId) {
+    clearPendingConversationConfirmation(displayId, 'repairMode');
+    for (const key of [...voiceTtsPlaybackTimers.keys()]) {
+        const separatorIndex = key.indexOf(':');
+        if (separatorIndex < 0) continue;
+        finishVoiceTtsPlayback(key.slice(0, separatorIndex), key.slice(separatorIndex + 1), 'repairMode');
+    }
+    activeRepairModeDisplays.add(displayId);
+    if (repairModeTtsSuppressed) return;
+    repairModeTtsSuppressed = true;
+    sendToDisplaysWithCapability('voicePlayback', {
+        type: 'tts',
+        action: 'stop'
+    });
+}
+
+function clearRepairMode(displayId, reason = 'cleared') {
+    clearRepairModeTimer(displayId);
+    const state = repairModeStates.get(displayId);
+    repairModeStates.delete(displayId);
+    if (state?.state === 'active') activeRepairModeDisplays.delete(displayId);
+    if (activeRepairModeDisplays.size === 0) repairModeTtsSuppressed = false;
+    return state ? { ...state, reason } : null;
+}
+
+async function sendRepairModeResponse(displayId, text) {
+    if (!displayId || !text) return;
+    sendToDisplay(displayId, {
+        type: 'voiceCommand',
+        action: 'response',
+        text
+    });
+    try {
+        await sendVoiceInputTts(text, { allowRepairModeTts: true });
+    } catch (error) {
+        logError('修复模式', `响应 TTS 失败: ${error.message}`);
+    }
+}
+
+function isRepairModePasswordInput(displayId) {
+    return repairModeStates.get(displayId)?.state === 'awaitingPassword';
+}
+
+function beginRepairMode(displayId) {
+    const repairConfig = getRepairModeConfig();
+    const result = beginRepairModeEntry(repairModeStates.get(displayId), {
+        passwordConfigured: repairConfig.password.length > 0,
+        role: repairConfig.role,
+        now: Date.now(),
+        passwordTimeoutMs: REPAIR_PASSWORD_TIMEOUT_MS
+    });
+    repairModeStates.set(displayId, result.state);
+    if (result.event.type === 'passwordUnavailable') {
+        void sendRepairModeResponse(displayId, '修复模式未配置密码');
+        return result;
+    }
+    scheduleRepairModeTimer(displayId, result.state.expiresAt);
+    void sendRepairModeResponse(displayId, '请输入修复模式密码');
+    return result;
+}
+
+function scheduleActiveRepairMode(displayId, state) {
+    if (state?.state === 'active' && Number.isFinite(state.expiresAt)) {
+        scheduleRepairModeTimer(displayId, state.expiresAt);
+    }
+}
+
+async function runRepairModeAgent(displayId, state, text) {
+    const role = state.role || getRepairModeConfig().role;
+    if (!role || !aiRoles.list().some(item => item.name === role)) {
+        await sendRepairModeResponse(displayId, '修复模式工作角色不存在，请检查配置');
+        return;
+    }
+
+    const agentTtsStream = createAgentTtsStream({
+        playOnControl: false,
+        displayId,
+        displayIds: [],
+        ttsScheduler: createTtsGenerationScheduler(displayId),
+        splitIntoSentences: chat.splitIntoSentences,
+        stripMarkdown,
+        generateTTS: (ttsText) => generateTtsWithFallback(ttsText, undefined, undefined, displayId),
+        sendToControl: broadcastToControls,
+        sendToDisplay,
+        allowRepairModeTts: true,
+        isTtsSuppressed: isRepairModeTtsSuppressed,
+        onError: (error) => logError('修复模式', `工作 Agent TTS 失败: ${error.message}`)
+    });
+
+    try {
+        await aiRoles.chat(role, text, {
+            onStatus: () => broadcastToControls({ type: 'roleList', roles: aiRoles.list() }),
+            onChunk: (chunk, message, requestId) => {
+                broadcastToControls({ type: 'chatChunk', requestId: requestId || null, chunk, message });
+                agentTtsStream.onChunk(chunk);
+            },
+            onComplete: (message, history, requestId) => {
+                broadcastToControls({ type: 'chatResponse', requestId: requestId || null, success: true, message, history });
+                sendToDisplay(displayId, {
+                    type: 'voiceCommand',
+                    action: 'response',
+                    text: message,
+                    detailText: message
+                });
+                void agentTtsStream.onComplete(message);
+            },
+            onError: (error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                broadcastToControls({ type: 'chatResponse', success: false, error: message });
+                void sendRepairModeResponse(displayId, `修复 Agent 处理失败：${message}`);
+            }
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logError('修复模式', `工作 Agent 调用失败: ${message}`);
+        await sendRepairModeResponse(displayId, `修复 Agent 处理失败：${message}`);
+    }
+}
+
+async function handleRepairModeDisplayInput(displayId, text) {
+    const currentState = repairModeStates.get(displayId);
+    if (!currentState) return false;
+
+    if (currentState.state === 'awaitingPassword') {
+        clearRepairModeTimer(displayId);
+        const repairConfig = getRepairModeConfig();
+        const result = verifyRepairModePassword(currentState, text, repairConfig.password, {
+            roleAvailable: Boolean(repairConfig.role) && aiRoles.list().some(item => item.name === repairConfig.role),
+            now: Date.now(),
+            sessionTimeoutMs: REPAIR_SESSION_TIMEOUT_MS
+        });
+        if (result.event.type === 'entered') {
+            repairModeStates.set(displayId, result.state);
+            activateRepairMode(displayId);
+            scheduleActiveRepairMode(displayId, result.state);
+            await sendRepairModeResponse(displayId, '密码正确，已进入修复模式。所有操作需要确认。');
+        } else {
+            repairModeStates.delete(displayId);
+            if (result.event.type === 'roleUnavailable') {
+                await sendRepairModeResponse(displayId, '修复模式工作角色不存在，请检查配置');
+            } else {
+                await sendRepairModeResponse(displayId, '修复模式密码错误');
+            }
+        }
+        return true;
+    }
+
+    if (currentState.state !== 'active') return false;
+    const result = handleRepairModeInput(currentState, text, Date.now());
+    if (!result.event) return true;
+    if (result.event.type === 'exited') {
+        clearRepairMode(displayId, 'voiceExit');
+        await sendRepairModeResponse(displayId, '已退出修复模式');
+        return true;
+    }
+
+    const nextState = {
+        ...result.state,
+        expiresAt: Date.now() + REPAIR_SESSION_TIMEOUT_MS
+    };
+    repairModeStates.set(displayId, nextState);
+    scheduleActiveRepairMode(displayId, nextState);
+    if (result.event.type === 'confirmed') {
+        await runRepairModeAgent(displayId, nextState, result.event.text);
+    } else if (result.event.type === 'cancelled') {
+        await sendRepairModeResponse(displayId, '好的，已取消修复请求');
+    } else if (result.event.type === 'confirmationRequired') {
+        await sendRepairModeResponse(displayId, result.event.repeat
+            ? '请只说确认或取消'
+            : `你要执行的是：“${result.event.text}”。请说确认或取消。`);
+    }
+    return true;
+}
+
 function sendDisplayConversationState(displayId, reason) {
     const displayData = displayClients.get(displayId);
     if (!displayData) return;
@@ -931,6 +1164,7 @@ function syncDisplayConversationListeningState(displayId, reason) {
     if (!isDisplayVoiceListeningEnabled(displayData)) {
         clearDisplayConversationTimer(displayId);
         clearPendingConversationConfirmation(displayId, 'listeningDisabled');
+        clearRepairMode(displayId, 'listeningDisabled');
         setDisplayConversationState(displayId, createConversationState(false), reason || 'listeningDisabled');
         return;
     }
@@ -2024,6 +2258,33 @@ app.post('/api/voiceprint/config', (req, res) => {
     // 普通 ASR 与声纹流程共享同一降噪状态，配置从声纹面板修改后立即同步。
     broadcastAsrOptions();
     res.json({ status: 'success', message: '声纹配置已更新' });
+});
+
+// 修复模式配置：读取时只返回密码状态，避免控制端获取明文密码。
+app.get('/api/repair-mode/config', (req, res) => {
+    const publicConfig = createPublicRepairModeConfig(
+        config.get('repairMode', {}),
+        aiRoles.list()
+    );
+    res.json({ status: 'success', ...publicConfig });
+});
+
+// 修复模式配置：空密码输入表示保持原密码，只有明确勾选清空才会停用修复模式。
+app.post('/api/repair-mode/config', (req, res) => {
+    const result = updateRepairModeConfig({
+        body: req.body,
+        currentConfig: config.get('repairMode', {}),
+        roles: aiRoles.list()
+    });
+    if (!result.ok) {
+        return res.status(400).json({ status: 'error', message: result.message });
+    }
+
+    config.set('repairMode.password', result.value.password);
+    config.set('repairMode.role', result.value.role);
+    config.saveConfig();
+    broadcastToControls({ type: 'repairModeConfig', ...result.publicConfig });
+    res.json({ status: 'success', message: '修复模式配置已更新', ...result.publicConfig });
 });
 
 // 声纹库：读取权威库（APK 同步用）
@@ -3769,6 +4030,7 @@ function getVoiceTtsBatchPayload(playbackOptions = {}) {
 }
 
 async function sendVoiceInputTts(text, playbackOptions = {}) {
+    if (isRepairModeTtsSuppressed() && playbackOptions.allowRepairModeTts !== true) return 0;
     const audioPath = await generateTtsWithFallback(text);
     const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
     const targetDisplayIds = getOnlineVoicePlaybackDisplayIds();
@@ -3783,7 +4045,9 @@ async function sendVoiceInputTts(text, playbackOptions = {}) {
             text,
             ...batchPayload
         };
-        const sent = sendToDisplay(targetDisplayId, message);
+        const sent = sendToDisplay(targetDisplayId, message, {
+            allowRepairModeTts: playbackOptions.allowRepairModeTts === true
+        });
         if (!sent) continue;
         sentCount++;
         if (typeof playbackOptions.onPlaybackStarted === 'function') {
@@ -3840,6 +4104,7 @@ async function sendVoiceCommandTtsSentences(text, targetDisplayId) {
 
 // 控制端语音命令继续按控制端指定的显示目标播放，但生成过程同样统一走 fallback 路由。
 async function sendVoiceCommandTts(text, targetDisplayId, playbackOptions = {}) {
+    if (isRepairModeTtsSuppressed() && playbackOptions.allowRepairModeTts !== true) return false;
     const audioPath = await generateTtsWithFallback(text, undefined, undefined, targetDisplayId);
     if (!targetDisplayId) return false;
 
@@ -3849,6 +4114,8 @@ async function sendVoiceCommandTts(text, targetDisplayId, playbackOptions = {}) 
         audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
         text,
         ...getVoiceTtsBatchPayload(playbackOptions)
+    }, {
+        allowRepairModeTts: playbackOptions.allowRepairModeTts === true
     });
 }
 
@@ -3867,6 +4134,12 @@ function rewriteMediaUrl(url) {
 function sendToDisplay(displayId, data, options = {}) {
     // 统一出口重写 http 媒体 URL：手动 URL 输入、restore 恢复、单文件播放等所有下发路径一次覆盖
     if (data.url) data.url = rewriteMediaUrl(data.url);
+    if (isRepairModeTtsSuppressed()
+        && data.type === 'tts'
+        && data.action === 'playAudio'
+        && options.allowRepairModeTts !== true) {
+        return false;
+    }
     const displayData = displayClients.get(displayId);
     if (shouldSkipDisplayTts(displayData, options)) {
         log('TTS', `跳过睡眠显示端播报: ${displayId}`, {
@@ -4305,6 +4578,7 @@ wss.on('connection', (ws, req) => {
             muteState.previousVolumes.delete(displayId);
             clearDisplayConversationTimer(displayId);
             clearPendingConversationConfirmation(displayId, 'displayDisconnected');
+            clearRepairMode(displayId, 'displayDisconnected');
             finishVoiceTtsPlaybacksForDisplay(displayId);
             displayClients.delete(displayId);
             for (const [requestId, pending] of pendingDisplayTtsRequests) {
@@ -4652,14 +4926,16 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         const speakerPayload = voiceprintEnabledNow && data.speaker !== undefined
             ? { speaker: data.speaker }
             : {};
-        broadcastToControls({
-            type: 'voiceInput',
-            displayId: displayId,
-            text: data.text,
-            isFinal: data.isFinal,
-            fullText: data.fullText,
-            ...speakerPayload
-        });
+        if (!isRepairModePasswordInput(displayId)) {
+            broadcastToControls({
+                type: 'voiceInput',
+                displayId: displayId,
+                text: data.text,
+                isFinal: data.isFinal,
+                fullText: data.fullText,
+                ...speakerPayload
+            });
+        }
 
         // 声纹未注册/未匹配时不触发唤醒、对话或命令，但不能撤销已经回传控制端的文字。
         if (voiceprintEnabledNow && data.speaker !== undefined && data.speaker === null) {
@@ -4669,7 +4945,15 @@ function handleDisplayMessageFallback(displayId, data, ws) {
 
         // TTS 可能在另一台显示端播放；即使录音端刚好有一段 ASR 已在途中，也不能让播报回声继续进入命令处理。
         if (!voiceprintEnabledNow && voiceTtsPlaybackTimers.size > 0) {
-            log('语音', `TTS 播报期间忽略显示端 ${displayId} 的在途语音: "${data.text}"`);
+            if (!isRepairModePasswordInput(displayId)) {
+                log('语音', `TTS 播报期间忽略显示端 ${displayId} 的在途语音: "${data.text}"`);
+            }
+            return;
+        }
+
+        if (data.isFinal && data.text && data.text.trim()
+            && ['awaitingPassword', 'active'].includes(repairModeStates.get(displayId)?.state)) {
+            void handleRepairModeDisplayInput(displayId, data.text.trim());
             return;
         }
 
@@ -4828,6 +5112,12 @@ async function handleControlMessageFallback(data, ws) {
                             const targetDisplayId = data.displayId || displayId;
                             const isDisplayVoiceInput = displayData?.ws === ws;
 
+                            if (isDisplayVoiceInput
+                                && ['awaitingPassword', 'active'].includes(repairModeStates.get(targetDisplayId)?.state)) {
+                                await handleRepairModeDisplayInput(targetDisplayId, data.text);
+                                return;
+                            }
+
                             if (isDisplayVoiceInput && pendingConversationConfirmations.has(targetDisplayId)) {
                                 const handled = await handlePendingConversationConfirmation(targetDisplayId, data.text);
                                 if (!handled) {
@@ -4850,6 +5140,7 @@ async function handleControlMessageFallback(data, ws) {
                             
                             const callbacks = playOnControl ? {
                                 onResult: async (text) => {
+                                    if (isRepairModeTtsSuppressed()) return;
                                     try {
                                         const audioPath = await generateTtsWithFallback(text);
                                         const fileName = path.basename(audioPath);
@@ -4863,6 +5154,7 @@ async function handleControlMessageFallback(data, ws) {
                                     }
                                 },
                                 onError: async (text) => {
+                                    if (isRepairModeTtsSuppressed()) return;
                                     try {
                                         const audioPath = await generateTtsWithFallback(text);
                                         const fileName = path.basename(audioPath);
@@ -4903,7 +5195,31 @@ async function handleControlMessageFallback(data, ws) {
                             );
                             
                             if (!result) return;
-                            
+
+                            if (result.type === 'repairMode') {
+                                if (!isDisplayVoiceInput) {
+                                    const message = '修复模式只能从显示端语音进入';
+                                    if (targetDisplayId) {
+                                        sendToDisplay(targetDisplayId, {
+                                            type: 'voiceCommand',
+                                            action: 'response',
+                                            text: message
+                                        });
+                                        void sendVoiceCommandTts(message, targetDisplayId);
+                                    }
+                                    return;
+                                }
+                                if (result.action === 'enter') {
+                                    beginRepairMode(targetDisplayId);
+                                } else if (repairModeStates.has(targetDisplayId)) {
+                                    clearRepairMode(targetDisplayId, 'voiceExit');
+                                    await sendRepairModeResponse(targetDisplayId, '已退出修复模式');
+                                } else {
+                                    await sendRepairModeResponse(targetDisplayId, '当前未进入修复模式');
+                                }
+                                return;
+                            }
+
                             if (result.type === 'showHelp') {
                                 // 控制端网页显示帮助列表；目标显示端先收到完整文本，立即打开帮助弹窗。
                                 if (controlClients.has(ws)) {
@@ -5540,6 +5856,7 @@ async function handleControlMessageFallback(data, ws) {
                     if (data.action === 'stop') {
                         sendToDisplaysWithCapability('voicePlayback', data);
                     } else if (data.action === 'play' && data.text) {
+                        if (isRepairModeTtsSuppressed()) return;
                         (async () => {
                             try {
                                 const cleanText = stripMarkdown(data.text);
@@ -5552,7 +5869,9 @@ async function handleControlMessageFallback(data, ws) {
                                 const tasks = sentences.map((sentence) => ttsScheduler.enqueue(async () => {
                                     const audioPath = await generateTtsWithFallback(sentence, undefined, undefined, preferredDisplayId);
                                     return { sentence, audioPath };
-                                }).then(({ sentence, audioPath }) => {
+                                }).then((result) => {
+                                    if (!result || isRepairModeTtsSuppressed()) return;
+                                    const { sentence, audioPath } = result;
                                     const fileName = path.basename(audioPath);
                                     const audioUrl = `/uploads/tts/${fileName}`;
 
@@ -5741,6 +6060,7 @@ async function handleControlMessageFallback(data, ws) {
                                     generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId),
                                     sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
                                     sendToDisplay,
+                                    isTtsSuppressed: isRepairModeTtsSuppressed,
                                     onError: (error) => logError('Chat', `Agent TTS生成失败: ${error.message}`)
                                 });
                                 if (!data.role) {
@@ -5890,6 +6210,7 @@ async function handleChatMessage(options) {
         target,
         sessionId,
         skipHistory = false,
+        allowRepairModeTts = false,
         sendToControl
     } = options;
     
@@ -5976,11 +6297,15 @@ async function handleChatMessage(options) {
         },
         onSentence: (sentence) => {
             if (!tts || isPunctuationOnly(sentence)) return;
+            if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return;
             ttsScheduler.enqueue(async () => {
+                if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
                 const cleanText = stripMarkdown(sentence);
                 const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId);
                 return { audioPath, sentence };
-            }).then(({ audioPath, sentence }) => {
+            }).then((result) => {
+                if (!result || (isRepairModeTtsSuppressed() && !allowRepairModeTts)) return;
+                const { audioPath, sentence } = result;
                 const fileName = path.basename(audioPath);
                 const audioUrl = `/uploads/tts/${fileName}`;
 
@@ -6052,6 +6377,7 @@ async function sendSearchTts(text, options = {}) {
         sendToControl
     } = options;
     if (!text) return;
+    if (isRepairModeTtsSuppressed()) return;
 
     if (playOnControl) {
         const audioPath = await generateTtsWithFallback(text);

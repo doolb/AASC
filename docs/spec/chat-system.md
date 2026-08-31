@@ -83,6 +83,17 @@
 
 ## 核心模块实现
 
+### 语音修复模式
+
+```text
+显示端语音“进入修复模式” -> 服务端等待密码
+密码正确 -> 校验 config.repairMode.role 在 aiRoles.list() 中 -> 标记修复会话活动
+修复会话文本 -> 暂存原文 -> 要求确认
+确认 -> aiRoles.chat(config.repairMode.role, 原文, callbacks)
+取消/退出/断开/超时 -> 清理修复状态
+修复活动期间 -> 普通 TTS 下发被统一出口抑制，修复响应带 allowRepairModeTts 放行
+```
+
 ### src/external/llm/llm-service.js
 
 ```

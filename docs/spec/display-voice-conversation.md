@@ -1,5 +1,75 @@
 # 显示端语音唤醒与监听控制实现文档
 
+## 修复模式状态与工作 Agent 路由
+
+```text
+createRepairModeState():
+    state = 'inactive'
+    pendingText = null
+    expiresAt = null
+
+收到显示端“进入修复模式”:
+    若 repairMode.password 为空:
+        发送“修复模式未配置密码”，不改变状态
+    否则:
+        state = 'awaitingPassword'
+        设置密码输入超时
+        发送“请输入修复模式密码”
+
+收到 awaitingPassword 的显示端文本:
+    只在内存中与 repairMode.password 做明文比较
+    立即清理密码等待状态和超时
+    正确:
+        校验 repairMode.role 存在于 aiRoles.list()
+        state = 'active'
+        暂停普通 TTS、停止当前普通播报
+        发送进入成功提示
+    错误:
+        state = 'inactive'
+        发送密码错误提示
+    不把密码文本写入日志、历史或 Agent 请求
+
+收到 active 的显示端文本:
+    若文本是“退出修复模式”:
+        清理确认和超时
+        state = 'inactive'
+        恢复普通 TTS并发送退出提示
+    否则若没有 pendingText:
+        pendingText = 原始文本
+        发送原文预览和确认提示
+    否则:
+        “确认/是/好的” -> 清理 pendingText，调用 aiRoles.chat(repairMode.role, 原文)
+        “取消/拒绝” -> 清理 pendingText，发送取消提示
+        其他文本 -> 保持待确认，提示只能确认或取消
+
+工作 Agent 回复:
+    沿用 AiRolesService 的 onChunk/onComplete/onError 和多角色校验
+    发送 chatChunk/chatResponse 到控制端
+    修复模式 TTS 显式允许，普通 TTS 继续丢弃
+
+显示端断开、关闭录音或修复超时:
+    清理该显示端修复状态和所有计时器
+    没有其他 active 修复显示端时恢复普通 TTS
+
+控制端修复模式配置:
+    GET /api/repair-mode/config:
+        读取 repairMode.password 和 repairMode.role
+        返回 passwordConfigured、role 和当前 aiRoles 的角色名称列表
+        不返回 password 原文
+    POST /api/repair-mode/config:
+        校验 role 必须存在于当前 aiRoles 列表
+        clearPassword == true -> 将 repairMode.password 设为空字符串
+        password 为非空字符串 -> 更新 repairMode.password
+        password 缺失或为空且未要求清空 -> 保留原密码
+        保存 config.json 并返回脱敏后的配置
+    控制端设置卡片:
+        显示密码已配置/未配置状态
+        密码输入框不回填旧密码
+        留空保存表示保持密码不变
+        提供清空密码并停用操作
+        使用动态角色列表选择 repairMode.role
+```
+
 ## 服务端状态与控制
 
 ```text
@@ -634,12 +704,18 @@ Markdown 渲染器:
 ```text
 显示端 activeGroup 普通文本:
     voiceConversationActive=true 传入 processVoiceCommand
-    内置系统命令和自定义命令仍按原优先级解析
+    包含“搜索”的文本优先作为普通聊天返回，保留完整原文
+    不执行搜索关键词提取、checkCommandRouting、handleSearchCommand 或独立 search session
+    其他内置系统命令和自定义命令仍按原优先级解析
     commandMode=true 时不再过滤普通聊天文本
     返回 chat -> handleChatMessage -> 发送 chatInput 并进入正常 LLM/Pi 路径
+显示端 activePrivate 普通文本:
+    包含“搜索”的文本按当前私聊 target、sessionId 和模板元数据返回 chat
+    不进入独立搜索路由，原文交给当前私聊 Agent 会话
+    其他内置系统命令和自定义命令暂时保持原优先级
 等待唤醒状态:
     保持原有 commandMode 过滤
-    内置功能和已配置自定义关键词命令免唤醒执行
+    搜索及其他内置功能和已配置自定义关键词命令继续按现有规则免唤醒执行
     普通聊天、你好小爱/结束对话/退出私聊等会话控制词仍需唤醒词
 
 ## 全局语音对话确认模式

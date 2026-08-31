@@ -52,6 +52,12 @@ const BUILTIN_VOICE_COMMAND_DEFINITIONS = [
             || text === '开启自动确认'
     },
     {
+        id: 'repairMode',
+        examples: ['进入修复模式', '退出修复模式'],
+        description: '从显示端进入或退出需要确认的工作 Agent 修复模式',
+        matcher: text => text === '进入修复模式' || text === '退出修复模式'
+    },
+    {
         id: 'recording',
         examples: ['开启录音', '关闭录音', '开始录音', '停止录音'],
         description: '开启或关闭显示端语音录音',
@@ -1693,6 +1699,27 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
         return { type: 'chat', message: trimmedText, mode: 'group' };
     }
 
+    // 活跃群聊/私聊中的“搜索”是普通聊天内容，必须保留原文交给当前会话 Agent。
+    // 只有等待唤醒状态才继续使用下面的独立搜索命令路由，避免改变免唤醒搜索功能。
+    if (!internal && options.conversationActive === true && trimmedText.includes('搜索')) {
+        if (session.mode === 'private') {
+            const assistant = findAssistant(session.privateTarget);
+            return {
+                type: 'chat',
+                message: trimmedText,
+                systemPrompt: assistant.template,
+                ...getPrivateChatMetadata(session)
+            };
+        }
+
+        return {
+            type: 'chat',
+            message: trimmedText,
+            mode: 'group',
+            systemPrompt: undefined
+        };
+    }
+
     // 第一步：系统指令始终优先执行
     const systemResult = handleSystemCommand(cmdText, displayId);
     if (systemResult) {
@@ -1876,6 +1903,13 @@ function handleSystemCommand(text, displayId) {
     }
     if (trimmedText === '开启自动确认') {
         return { type: 'conversationConfirmationMode', mode: 'auto' };
+    }
+
+    if (trimmedText === '进入修复模式') {
+        return { type: 'repairMode', action: 'enter' };
+    }
+    if (trimmedText === '退出修复模式') {
+        return { type: 'repairMode', action: 'exit' };
     }
 
     if (trimmedText.startsWith('私聊')) {
