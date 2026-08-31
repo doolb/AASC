@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawn: defaultSpawn } = require('node:child_process');
 
 const DEFAULT_PROXY = 'http://127.0.0.1:7899';
 // Codex 可能执行较长的代码任务；超时按“连续无活动”计算，而不是整轮固定时长。
@@ -20,7 +20,10 @@ class CodexBridge {
         cwd = process.cwd(),
         env = {},
         proxy = DEFAULT_PROXY,
-        readTimeoutMs = DEFAULT_TIMEOUT_MS
+        readTimeoutMs = DEFAULT_TIMEOUT_MS,
+        spawn = defaultSpawn,
+        approvalPolicy = 'never',
+        sandboxPolicy = { type: 'dangerFullAccess' }
     } = {}) {
         this.dir = dir;
         this.name = name;
@@ -30,6 +33,9 @@ class CodexBridge {
         this.env = { ...env };
         this.proxy = proxy;
         this.readTimeoutMs = readTimeoutMs;
+        this.spawn = spawn;
+        this.approvalPolicy = approvalPolicy;
+        this.sandboxPolicy = sandboxPolicy;
         this.child = null;
         this.threadId = null;
         this.nextRequestId = 1;
@@ -177,7 +183,7 @@ class CodexBridge {
             ...this.env,
             HTTPS_PROXY: this.proxy
         };
-        const child = spawn(this.commandPath, this.commandArgs, {
+        const child = this.spawn(this.commandPath, this.commandArgs, {
             cwd: this.cwd,
             env: childEnv,
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -194,7 +200,8 @@ class CodexBridge {
         this._notify('initialized', {});
         const result = await this._request('thread/start', {
             cwd: this.cwd,
-            approvalPolicy: 'never',
+            approvalPolicy: this.approvalPolicy,
+            sandboxPolicy: this.sandboxPolicy,
             developerInstructions: this.systemPrompt || null
         });
         this.threadId = result.thread?.id || result.threadId || result.id;
@@ -233,8 +240,8 @@ class CodexBridge {
             await this._request('turn/start', {
                 threadId: this.threadId,
                 input: [{ type: 'text', text: String(content) }],
-                approvalPolicy: 'never',
-                sandboxPolicy: { type: 'dangerFullAccess' }
+                approvalPolicy: this.approvalPolicy,
+                sandboxPolicy: this.sandboxPolicy
             });
         } catch (error) {
             this._finishTurn(error);

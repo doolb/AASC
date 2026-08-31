@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### 普通聊天 Agent
+
+- ✅ [2026-08-31] 统一普通聊天与工作 Agent 的 Codex 代理配置
+  - 工作 Agent bridge 创建时改为读取 `chat.codexProxy`，经服务器、IPC 客户端和后端宿主传递到 Codex；已运行进程保持原代理，重启或重建后生效。
+  - 群聊/私聊仍按独立会话复用 threadId，不共享历史、权限或进程。
+  - 验证：工作 Agent 代理传递及 Codex/Agent/聊天回归测试通过。
+
+- ✅ [2026-08-31] 普通聊天 Agent 增加 Codex 后端并完成真实链路验证
+  - 新增独立 `CodexRuntimeManager`，按群聊/私聊会话复用 Codex `threadId`；首轮重放必要历史，后续仅发送当前消息；普通聊天使用只读沙箱，不复用工作 Agent。
+  - `mode=agent` profile 支持 `backend=pi|codex`，旧配置缺省仍为 Pi；当前 `qwen3.5` 切换为 Codex，普通聊天 Codex 使用 `chat.codexProxy=http://127.0.0.1:7899`。
+  - 搜索独立 Agent 请求同时支持 Codex 并在结束后回收；工作 Agent Codex 仍使用原有独立宿主和代理。
+  - 改动文件：`src/apps/server/modules/chat/codex-runtime-manager.js`、`src/apps/server/modules/ai-roles/codex-bridge.js`、`src/external/llm/llm-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/server/modules/chat/pi-runtime-policy.js`、`config/config.json` 及对应测试/设计/spec/task/usage 文档。
+  - 验证：相关回归 49/49 通过；真实 Codex Runtime 和服务器 `/control` WebSocket 普通聊天链路均成功；服务器配置确认 active profile 为 `qwen3.5/backend=codex`，代理为 `http://127.0.0.1:7899`。
+
 ### 语音修复模式
 
 - ✅ [2026-08-31] 显示端语音密码进入修复模式并调用可配置工作 Agent

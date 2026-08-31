@@ -15,9 +15,10 @@ test('缺少 mode 的 profile 默认按普通 LLM', () => {
     assert.deepStrictEqual(normalizeAgentProfile({ name: 'local' }).mode, 'llm');
 });
 
-test('Agent profile 只接受 Pi', () => {
+test('Agent profile 支持 Pi 和 Codex，缺省仍为 Pi', () => {
     assert.equal(normalizeAgentProfile({ name: 'local', mode: 'agent' }).backend, 'pi');
-    assert.throws(() => normalizeAgentProfile({ mode: 'agent', backend: 'codex' }), /Pi/);
+    assert.equal(normalizeAgentProfile({ mode: 'agent', backend: 'codex' }).backend, 'codex');
+    assert.throws(() => normalizeAgentProfile({ mode: 'agent', backend: 'claude' }), /后端/);
 });
 
 test('只读权限只返回固定工具白名单', () => {

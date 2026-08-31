@@ -47,6 +47,41 @@ function createAgentChatHarness() {
     return { calls, resets };
 }
 
+function createCodexChatHarness() {
+    const calls = [];
+    const runtime = {
+        async chatStream(profile, template, prompt, callbacks, options) {
+            calls.push({ profile, template, prompt, options });
+            callbacks.onChunk?.('Codex回复', 'Codex回复');
+            callbacks.onComplete?.('Codex回复');
+            return { success: true, message: 'Codex回复' };
+        },
+        resetSession() {
+            return true;
+        },
+        async stopAll() {}
+    };
+    chat.init({
+        systemPrompt: '默认助手',
+        activeProfile: 'codex',
+        llmProfiles: [{
+            name: 'codex',
+            mode: 'agent',
+            backend: 'codex',
+            model: 'gpt-5.3-codex',
+            contextCount: 10,
+            apiKey: ''
+        }]
+    }, { codexRuntimeManager: runtime });
+    chat.setTemplates([{
+        id: 'researcher',
+        name: 'researcher',
+        content: '只读助手',
+        permissionProfile: 'readonly'
+    }], { persist: false });
+    return { calls };
+}
+
 afterEach(() => {
     chat.setTemplates(originalTemplates, { persist: false });
 });
@@ -83,6 +118,22 @@ test('Agent profile 使用 Pi，不调用普通 LLM HTTP', async () => {
     assert.equal(calls[0].profile.name, 'agent');
     assert.equal(calls[0].template.permissionProfile, 'readonly');
     assert.match(calls[0].prompt, /查找文件/u);
+});
+
+test('Agent profile 使用 Codex，并把系统提示与首轮历史分开传递', async () => {
+    const { calls } = createCodexChatHarness();
+    const result = await chat.chatStream('介绍今天安排', {
+        templateTarget: 'researcher',
+        mode: 'group',
+        includeHistory: true,
+        contextCount: 10
+    }, {});
+    assert.equal(result.success, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].profile.backend, 'codex');
+    assert.match(calls[0].options.developerInstructions, /默认助手/u);
+    assert.match(calls[0].prompt, /介绍今天安排/u);
+    assert.doesNotMatch(calls[0].prompt, /^System:/u);
 });
 
 test('模板权限来自服务端模板，不能由请求 tools 字段覆盖', async () => {

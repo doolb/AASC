@@ -76,6 +76,8 @@ const { createChat2ApiGateway } = require('../modules/chat2api/chat2api-gateway'
 const { registerTaskHandlers } = require('../modules/task-engine/web-socket-handler');
 const AiRolesService = require('../modules/ai-roles/ai-roles-service');
 const AgentBackendClient = require('../modules/ai-roles/agent-backend-client');
+const { CodexRuntimeManager } = require('../modules/chat/codex-runtime-manager');
+const { PiRuntimeManager } = require('../modules/chat/pi-runtime-manager');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const { createTextMediaTtsService } = require('../modules/media/text-media-tts-service');
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
@@ -87,7 +89,6 @@ const {
     handleTextMediaDisplayMessage,
     handleTextMediaControlMessage
 } = require('../modules/media/text-media-ws-integration');
-const { PiRuntimeManager } = require('../modules/chat/pi-runtime-manager');
 const { shouldSkipDisplayTts } = require('../modules/tts/display-tts-policy');
 const registerAiRoleHandlers = require('../modules/ai-roles/ai-roles-ws-handler');
 const ServerTUI = require('../../../framework/observability/server-tui');
@@ -318,6 +319,8 @@ const aiRoles = new AiRolesService({
     projectRoot: PROJECT_ROOT,
     // 全局设置只作为新建/重建角色的默认后端；AiRolesService 内存中的 bridge 不会因设置变化被替换。
     getAgentBackend: () => chat.getConfig().agentBackend || 'codex',
+    // 工作 Agent 与普通聊天 Codex 共用 chat.codexProxy；已运行 bridge 不在运行中切换代理。
+    getCodexProxy: () => config.get('chat.codexProxy', 'http://127.0.0.1:7899'),
     // Agent 的实际进程和 stdio 由独立后端宿主持有，服务器只保留 Unix Socket 客户端。
     agentBackendClient: new AgentBackendClient()
 });
@@ -327,6 +330,10 @@ const piRuntimeManager = new PiRuntimeManager({
     // 普通聊天、任务和 Pi Agent 共用内置 Chat2API Responses 入口，避免 Pi 继续读取旧 profile 地址。
     responsesBaseUrl: config.get('chat.responsesBaseUrl', 'http://127.0.0.1:8083/v1')
 });
+const codexRuntimeManager = new CodexRuntimeManager({
+    projectRoot: PROJECT_ROOT,
+    proxy: config.get('chat.codexProxy', 'http://127.0.0.1:7899')
+});
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
 let pendingAsrRequestId = 0;
@@ -335,7 +342,7 @@ tts.init(config.getTtsConfig());
 if (config.get('asr.serverEnabled', true) === true) {
     asr.init(config.get('asr', {}));
 }
-chat.init(config.get('chat', {}), { piRuntimeManager });
+chat.init(config.get('chat', {}), { piRuntimeManager, codexRuntimeManager });
 reminder.init();
 voiceCommand.init(config.get('voiceCommand', {}));
 // 文本分页播放单独逐句合成，不能复用通用 TTS 的整段队列，避免播放定位标签丢失。
@@ -6438,7 +6445,8 @@ async function handleLlmSearchCommand(options = {}) {
     }
 
     const activeProfile = chat.getProfileByName(chat.getActiveProfile());
-    const useEphemeralPi = activeProfile?.mode === 'agent' && activeProfile?.backend === 'pi';
+    const useEphemeralAgent = activeProfile?.mode === 'agent'
+        && ['pi', 'codex'].includes(activeProfile?.backend);
     const prompt = normalizedQuery ? `搜索：${normalizedQuery}` : '帮我搜索一些信息';
     const searchSystemPrompt = '你是独立搜索助手。只处理当前搜索请求，使用可用的只读网络搜索工具获取信息；不要引用或猜测其他聊天内容，回答时给出简洁、准确的搜索结果。';
     let result;
@@ -6452,7 +6460,7 @@ async function handleLlmSearchCommand(options = {}) {
             target: null,
             sessionId: requestId,
             conversationKey: `search:${requestId}`,
-            ephemeral: useEphemeralPi
+            ephemeral: useEphemeralAgent
         }, {
             onChunk: (chunk, fullMessage) => {
                 sendChannel({

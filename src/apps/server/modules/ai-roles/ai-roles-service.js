@@ -27,7 +27,7 @@ const ROLE_SELF_MANAGEMENT_PROMPT = `
 
 // 聚合：角色持久化 + 每角色后端 bridge + 提示词来源 + 消息路由
 class AiRolesService {
-    constructor({ baseDir = DEFAULT_BASE, projectRoot, command = 'claude', commandPath = null, commandArgs = [], keeperPath = KEEPER_PATH, getAgentBackend = () => 'codex', bridgeFactory = null, agentBackendClient = null } = {}) {
+    constructor({ baseDir = DEFAULT_BASE, projectRoot, command = 'claude', commandPath = null, commandArgs = [], keeperPath = KEEPER_PATH, getAgentBackend = () => 'codex', getCodexProxy = () => undefined, bridgeFactory = null, agentBackendClient = null } = {}) {
         this.store = new RoleStore(baseDir);
         this.projectRoot = projectRoot;
         this.command = command;
@@ -35,6 +35,7 @@ class AiRolesService {
         this.commandArgs = [...commandArgs];
         this.keeperPath = keeperPath;
         this.getAgentBackend = getAgentBackend;
+        this.getCodexProxy = getCodexProxy;
         this.bridgeFactory = bridgeFactory;
         this.agentBackendClient = agentBackendClient;
         this.bridges = new Map(); // name -> AgentBackendClientBridge 或测试注入的 bridge
@@ -72,7 +73,8 @@ class AiRolesService {
             commandPath: this.commandPath,
             commandArgs: this.commandArgs,
             cwd: this.projectRoot,
-            keeperPath: this.keeperPath
+            keeperPath: this.keeperPath,
+            proxy: backend === 'codex' ? this.getCodexProxy() : undefined
         };
         if (this.bridgeFactory) return this.bridgeFactory(options);
         if (this.agentBackendClient) return this.agentBackendClient.createBridge(options);
@@ -81,7 +83,8 @@ class AiRolesService {
                 dir: options.dir,
                 name,
                 commandPath: 'codex',
-                cwd: this.projectRoot
+                cwd: this.projectRoot,
+                proxy: options.proxy
             });
         }
         return new ClaudeBridge(options);

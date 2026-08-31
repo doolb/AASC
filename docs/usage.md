@@ -89,6 +89,8 @@ npm start
 
 显示端语音会话的详细使用说明见：[语音三种会话状态](usage/voice-conversation.md)。
 
+普通聊天 Agent 后端的配置和会话规则见：[普通聊天 Agent 后端](usage/llm-agent.md)。
+
 ### 3.1 连接状态
 
 - 左上角显示连接状态

@@ -135,6 +135,30 @@ test('chat 确认 Agent 启动后先回调在线状态', async () => {
     assert.deepStrictEqual(status, { name: '后端', running: true, backend: 'codex' });
 });
 
+test('工作 Codex Agent 创建 bridge 时使用统一代理配置', async () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    let bridgeOptions;
+    const svc = new AiRolesService({
+        baseDir: base,
+        projectRoot: dir,
+        getAgentBackend: () => 'codex',
+        getCodexProxy: () => 'http://proxy.example:7899',
+        bridgeFactory: (options) => {
+            bridgeOptions = options;
+            return {
+                isAlive: () => false,
+                async ensureStarted() {},
+                async chat() { return { success: true, message: 'ok' }; },
+                stop() {}
+            };
+        }
+    });
+    svc.add('后端');
+    await svc.chat('后端', '代理测试', {});
+    assert.equal(bridgeOptions.proxy, 'http://proxy.example:7899');
+});
+
 test('提示词复用 workgroup/roles/<名>.md', async () => {
     const dir = tmpDir();
     const base = path.join(dir, 'roles');

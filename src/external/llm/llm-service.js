@@ -32,6 +32,7 @@ const DEFAULT_TEMPLATES = [
 
 let chatConfig = {
     agentBackend: 'codex',
+    codexProxy: 'http://127.0.0.1:7899',
     protocol: 'openai-responses',
     responsesBaseUrl: 'http://127.0.0.1:8083/v1',
     responsesApiKey: '',
@@ -48,6 +49,7 @@ let chatConfig = {
 let llmProfiles = [];
 let activeProfile = 'default';
 let piRuntimeManager = null;
+let codexRuntimeManager = null;
 let responsesSessionStates = {};
 let responsesClient = null;
 let responsesClientFingerprint = '';
@@ -172,7 +174,11 @@ function init(config = {}, options = {}) {
     if (options.piRuntimeManager !== undefined) {
         piRuntimeManager = options.piRuntimeManager;
     }
+    if (options.codexRuntimeManager !== undefined) {
+        codexRuntimeManager = options.codexRuntimeManager;
+    }
     if (config.agentBackend === 'codex' || config.agentBackend === 'claude') chatConfig.agentBackend = config.agentBackend;
+    if (config.codexProxy !== undefined) chatConfig.codexProxy = config.codexProxy;
     if (config.protocol !== undefined) chatConfig.protocol = normalizeChatTransport(config).protocol;
     if (config.responsesBaseUrl) chatConfig.responsesBaseUrl = config.responsesBaseUrl;
     if (config.responsesApiKey !== undefined) chatConfig.responsesApiKey = config.responsesApiKey;
@@ -567,6 +573,7 @@ function setConfig(newConfig) {
         }
         chatConfig.agentBackend = newConfig.agentBackend;
     }
+    if (newConfig.codexProxy !== undefined) chatConfig.codexProxy = String(newConfig.codexProxy || '');
     if (newConfig.protocol !== undefined) chatConfig.protocol = normalizeChatTransport(newConfig).protocol;
     if (newConfig.responsesBaseUrl !== undefined) chatConfig.responsesBaseUrl = newConfig.responsesBaseUrl;
     if (newConfig.responsesApiKey !== undefined) chatConfig.responsesApiKey = newConfig.responsesApiKey;
@@ -753,16 +760,17 @@ function buildPiConversationKey(mode, target, sessionId) {
 }
 
 function resetPiSessionForMessage(message) {
-    if (!piRuntimeManager) return;
     const profile = getProfileByName(message.profileName || activeProfile);
-    if (!profile || profile.mode !== 'agent' || profile.backend !== 'pi') return;
+    if (!profile || profile.mode !== 'agent') return;
     const template = normalizeChatTemplate(getTemplateByName(message.templateId) || {
         id: 'default',
         name: 'default',
         content: '',
         permissionProfile: 'readonly'
     });
-    piRuntimeManager.resetSession(
+    const runtimeManager = profile.backend === 'codex' ? codexRuntimeManager : piRuntimeManager;
+    if (!runtimeManager?.resetSession) return;
+    runtimeManager.resetSession(
         profile,
         template,
         buildPiConversationKey(message.mode, message.target, message.sessionId)
@@ -1124,7 +1132,25 @@ function buildAgentPrompt(messages) {
     }).join('\n\n');
 }
 
-async function chatStreamWithPi(userMessage, options, callbacks, profile) {
+function buildCodexDeveloperInstructions(messages) {
+    return messages
+        .filter(message => message.role === 'system')
+        .map(message => String(message.content || ''))
+        .filter(Boolean)
+        .join('\n\n');
+}
+
+function buildCodexConversationPrompt(messages) {
+    return messages
+        .filter(message => message.role !== 'system')
+        .map((message) => {
+            const roleName = message.role === 'assistant' ? 'Assistant:' : 'User:';
+            return `${roleName}\n${message.content}`;
+        })
+        .join('\n\n');
+}
+
+async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
     const {
         useTemplate = null,
         templateTarget = null,
@@ -1151,7 +1177,8 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
     let reportedError = false;
 
     try {
-        if (!piRuntimeManager) throw new Error('Pi Runtime 未初始化');
+        const runtimeManager = profile.backend === 'codex' ? codexRuntimeManager : piRuntimeManager;
+        if (!runtimeManager) throw new Error(`${profile.backend} Runtime 未初始化`);
         const messages = buildMessages(userMessage, {
             useTemplate,
             templateTarget,
@@ -1164,8 +1191,10 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
             profileName: profile.name,
             promptFormat: 'openai'
         });
-        const prompt = buildAgentPrompt(messages);
-        const result = await piRuntimeManager.chatStream(profile, template, prompt, {
+        const prompt = profile.backend === 'codex'
+            ? buildCodexConversationPrompt(messages)
+            : buildAgentPrompt(messages);
+        const result = await runtimeManager.chatStream(profile, template, prompt, {
             onChunk: (chunk, currentMessage) => {
                 fullMessage = currentMessage || `${fullMessage}${chunk}`;
                 pendingText += chunk;
@@ -1186,6 +1215,9 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
                 onError?.(error);
             }
         }, {
+            developerInstructions: profile.backend === 'codex'
+                ? buildCodexDeveloperInstructions(messages)
+                : undefined,
             continuationPrompt: userMessage,
             conversationKey: conversationKey || buildPiConversationKey(mode, target, sessionId),
             ephemeral
@@ -1196,7 +1228,7 @@ async function chatStreamWithPi(userMessage, options, callbacks, profile) {
             history: getHistory()
         };
     } catch (error) {
-        console.error('[Chat] Pi Agent调用失败:', error.message);
+        console.error(`[Chat] ${profile.backend} Agent调用失败:`, error.message);
         if (!reportedError) onError?.(error.message);
         return {
             success: false,
@@ -1212,7 +1244,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
 
     const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
     if (activeProfileConfig?.mode === 'agent') {
-        return chatStreamWithPi(userMessage, {
+        return chatStreamWithAgent(userMessage, {
             ...options,
             useTemplate,
             templateTarget,
@@ -1389,8 +1421,8 @@ function makeRequest(url, options) {
 }
 
 async function shutdown() {
-    if (!piRuntimeManager?.stopAll) return;
-    await piRuntimeManager.stopAll();
+    if (piRuntimeManager?.stopAll) await piRuntimeManager.stopAll();
+    if (codexRuntimeManager?.stopAll) await codexRuntimeManager.stopAll();
 }
 
 function makeStreamRequest(url, options, onLine) {

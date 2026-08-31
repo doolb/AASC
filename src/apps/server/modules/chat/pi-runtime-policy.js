@@ -12,7 +12,7 @@ const READONLY_TOOLS = Object.freeze([
 const AGENT_MODES = new Set(['llm', 'agent']);
 
 /**
- * 规范化聊天 profile，确保 Agent 分支只能使用服务器支持的 Pi 后端。
+ * 规范化聊天 profile，确保 Agent 分支只能使用服务器支持的后端。
  * 这里不接受请求侧传入的工具列表，避免调用方绕过控制端权限配置。
  *
  * @param {object} profile 原始 profile
@@ -28,10 +28,10 @@ function normalizeAgentProfile(profile = {}) {
 
     normalized.mode = mode;
     if (mode === 'agent') {
-        if (normalized.backend !== undefined && normalized.backend !== 'pi') {
-            throw new Error('Agent 后端目前只支持 Pi');
+        if (normalized.backend !== undefined && !['pi', 'codex'].includes(normalized.backend)) {
+            throw new Error('Agent 后端配置不合法');
         }
-        normalized.backend = 'pi';
+        normalized.backend = normalized.backend || 'pi';
     }
 
     return normalized;

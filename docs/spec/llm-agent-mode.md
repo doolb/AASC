@@ -8,7 +8,7 @@ normalizeProfile(profile):
     如果 mode 缺失 → mode = 'llm'
     如果 mode = 'agent' 且 backend 缺失 → backend = 'pi'
     如果 mode 不是 'llm' 或 'agent' → 抛出配置错误
-    如果 mode = 'agent' 且 backend != 'pi' → 抛出暂不支持错误
+    如果 mode = 'agent' 且 backend 不在 ['pi', 'codex'] → 抛出后端配置错误
 
 normalizeTemplate(template):
     返回 template 的副本
@@ -118,6 +118,46 @@ resetSession(profile, template, conversationKey):
     计算同 chatStream 的会话键
     停止并删除对应 PiSession
     下次请求重新使用剩余应用历史初始化
+```
+
+## CodexRuntimeManager
+
+```text
+CodexRuntimeManager(options):
+    sessions = Map<(profileName, templateId, permissionProfile, conversationKey), CodexSession>
+    bridgeFactory = 注入的 CodexBridge 工厂，生产环境使用 Codex app-server stdio
+    projectRoot = 固定项目根目录
+    runtimeRoot = 独立于工作 Agent 的临时目录
+    proxy = options.proxy 或 'http://127.0.0.1:7899'
+
+getOrCreate(profile, template, developerInstructions):
+    校验 profile.mode == 'agent' 且 profile.backend == 'codex'
+    生成配置指纹；系统提示词或 profile 配置改变时停止旧 session
+    创建 CodexBridge({ cwd: projectRoot, dir: 独立 session 目录,
+        approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly' },
+        developerInstructions })
+    返回 session
+
+chatStream(profile, template, initialPrompt, callbacks, options):
+    session = getOrCreate(profile, template, options.developerInstructions)
+    将请求加入 session 串行队列
+    如果 session 尚未初始化:
+        Codex thread/start 使用 developerInstructions
+        turn/start 输入 initialPrompt（含必要的 User/Assistant 历史）
+    否则:
+        turn/start 只输入 options.continuationPrompt 或 initialPrompt
+    将 item/agentMessage/delta 转换为 onChunk，turn/completed 转换为 onComplete
+    失败时停止 session；下次请求重新创建 thread
+
+resetSession(profile, template, conversationKey):
+    计算同 chatStream 的会话键，停止并删除对应 CodexSession
+```
+
+```text
+chatConfig.codexProxy:
+    普通聊天 Runtime 和工作 Agent bridge 创建时都读取该代理地址
+    默认值为 'http://127.0.0.1:7899'
+    已运行的 bridge 不动态切换；下次创建或重启 bridge 时生效
 ```
 
 ```text
@@ -245,10 +285,16 @@ chatStream(userMessage, options, callbacks):
         prompt = buildAgentPrompt(userMessage, options)
         template = loadTemplate(options.templateTarget)
         conversationKey = encode(mode, target, sessionId)
-        PiRuntimeManager.chatStream(profile, template, prompt, callbacks, {
-            continuationPrompt: userMessage,
-            conversationKey
-        })
+        如果 profile.backend == 'pi':
+            PiRuntimeManager.chatStream(profile, template, prompt, callbacks, {
+                continuationPrompt: userMessage, conversationKey
+            })
+        如果 profile.backend == 'codex':
+            CodexRuntimeManager.chatStream(profile, template,
+                buildCodexConversationPrompt(messages), callbacks, {
+                    developerInstructions: buildCodexDeveloperInstructions(messages),
+                    continuationPrompt: userMessage, conversationKey
+                })
         成功后沿用普通聊天 onComplete/history 保存流程
         失败后只调用 onError，不调用普通 LLM HTTP 请求
         返回
@@ -272,11 +318,13 @@ deleteConversationRound(messageId, scope):
 ```text
 server 初始化:
     创建 PiRuntimeManager(projectRoot)
-    chat.init(config.chat, { piRuntimeManager })
+    创建 CodexRuntimeManager(projectRoot)
+    chat.init(config.chat, { piRuntimeManager, codexRuntimeManager })
 
 服务器退出信号/HTTP 重启前:
-    await piAgentManager.stopAll()
-    关闭每个 stdin
+    await piRuntimeManager.stopAll()
+    await codexRuntimeManager.stopAll()
+    关闭每个 Agent stdin
     等待子进程退出，超时后发送 SIGTERM/SIGKILL
 ```
 

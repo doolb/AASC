@@ -136,12 +136,13 @@
         "apiKey": "",
         "promptFormat": "raw",
         "mode": "agent",
-        "backend": "pi"
+        "backend": "codex"
       }
     ],
+    "codexProxy": "http://127.0.0.1:7899",
     "promptFormat": "raw",
     "mode": "agent",
-    "backend": "pi"
+    "backend": "codex"
   },
   "logCategoryFilter": null,
   "timeAnnounce": {

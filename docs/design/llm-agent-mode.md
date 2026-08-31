@@ -2,7 +2,7 @@
 
 ## 需求概述
 
-普通聊天的每个 LLM profile 增加独立调用模式。`llm` 模式继续直接调用 profile 配置的 OpenAI 兼容接口；`agent` 模式暂只支持 Pi，由服务器进程直接管理 Pi RPC 子进程，使用同一个 profile 的服务器地址、模型、API Key、Token 和温度配置。
+普通聊天的每个 LLM profile 增加独立调用模式。`llm` 模式继续直接调用 profile 配置的 OpenAI 兼容接口；`agent` 模式支持 Pi 或 Codex，由服务器进程分别管理 Pi RPC 子进程或 Codex app-server 子进程。
 
 Agent 用于扩展普通 LLM 的能力，例如文件搜索和网络查询。Agent 只允许只读工具，不能修改文件、执行 shell 命令或加载项目中的外部 Agent 配置。
 
@@ -11,15 +11,17 @@ Agent 用于扩展普通 LLM 的能力，例如文件搜索和网络查询。Age
 ### 本次实现
 
 - LLM profile 增加 `mode: 'llm' | 'agent'`，默认 `llm`。
-- `agent` 模式暂只接受 `backend: 'pi'`。
-- 每个 profile 按聊天会话管理 Pi RPC 进程和内存会话：群聊共用一个，私聊按助手角色独立；模式或角色切换时回收旧会话，下一次请求重新创建进程。
-- Agent 请求使用当前 profile 的 `apiUrl`、`model`、`apiKey`、`maxTokens`、`temperature`。
+- `agent` 模式接受 `backend: 'pi' | 'codex'`；缺少 backend 的旧 Agent profile 仍默认为 Pi。
+- 普通聊天和工作 Agent 的 Codex 统一使用 `chat.codexProxy`，当前配置为 `http://127.0.0.1:7899`；配置变更后由新建或重启的 Codex 进程生效。
+- 每个 profile 按聊天会话管理对应 Agent 进程和内存会话：群聊共用一个，私聊按助手角色独立；模式或角色切换时回收旧会话，下一次请求重新创建进程。
+- Pi 请求使用当前 profile 的 `apiUrl`、`model`、`apiKey`、`maxTokens`、`temperature`；Codex 请求使用本机 Codex CLI 的登录和模型配置，profile 的显示配置仍参与 profile/session 隔离。
 - 当前聊天会话的系统提示词、最近 `contextCount` 条聊天记录和当前用户消息传入 Agent。
 - profile 之间的聊天历史和 Agent 会话隔离；工作 AI 角色的历史和进程不参与普通 LLM Agent。
 - 权限策略绑定到聊天模板/角色，由控制端直接设置；Pi 按模板策略启用工具。
 - 当前先提供 `readonly` 只读策略，包含 `read`、`grep`、稳定的 `aasc_find` 文件查找、`ls` 和服务器提供的受限网络查询工具；Chat2API 的 `find` 标签在 Provider 边界映射为 `aasc_find`。
 - Pi 使用 profile 的 API 地址和模型；本地 OpenAI 兼容服务未配置 API Key 时，使用固定本地占位 Key 通过 Pi provider 校验，真实 Key 仍按 profile 配置传递。
 - 服务器负责 Pi 进程的启动、RPC 通信、异常回收、配置变更重启和服务器退出清理。
+- 服务器负责 Codex app-server 的启动、JSON-RPC 通信、threadId 会话复用、异常回收和服务器退出清理；普通聊天 Codex 使用只读沙箱，不复用工作 Agent 的 Codex 进程。两类 Codex 进程共享代理配置，但不共享进程、threadId 或权限策略。
 - Chat2API 返回的标签式工具调用在 Pi Provider 边界转换为 Pi 原生 `ToolCall`，避免工具标签进入聊天文本和 TTS；只转换当前只读白名单中的工具。
 - Pi Agent 请求记录 requestId 生命周期日志，覆盖排队、启动、收到关键 RPC 事件、完成、失败和超时；错误型空 `agent_end` 必须作为失败回传，不能伪装成空成功回复。
 - 控制端聊天输入和 `chatResponse` 记录同一 requestId，便于区分 Pi 未返回、服务器处理失败和前端丢弃迟到回包。
@@ -30,7 +32,7 @@ Agent 用于扩展普通 LLM 的能力，例如文件搜索和网络查询。Age
 - 不修改已有工作 AI 角色的 Codex/Claude 后端选择。
 - 当前不开放 `bash`、`edit`、`write`、任意外部扩展、项目 `.pi` 配置和上下文文件；后续命令策略只增加显式注册的服务器工具。
 - 不提供文件写入、代码修改、命令执行、进程管理或任意 URL 代理能力。
-- 不实现 Pi 以外的 Agent 后端。
+- 不修改已有工作 AI 角色的 Codex/Claude 后端选择，也不让普通聊天 Codex 复用工作 Agent 的 threadId。
 
 ## 配置模型
 
@@ -45,7 +47,7 @@ chat.llmProfiles[] = {
     contextCount,
     promptFormat,
     mode: 'llm' | 'agent',
-    backend: 'pi'              // mode='agent' 时固定为 pi
+    backend: 'pi' | 'codex'    // mode='agent' 时可选，缺省为 pi
 }
 
 chatTemplates[] = {
@@ -65,11 +67,10 @@ chatTemplates[] = {
     ↓ chatMessage
 server-app -> llm-service 当前 profile
     ├─ mode=llm   -> OpenAI 兼容 HTTP/SSE 接口
-    └─ mode=agent -> PiRuntimeManager
-                       └─ pi --mode rpc（服务器子进程）
-                            ├─ profile provider 配置
-                            ├─ read/grep/aasc_find/ls
-                            └─ aasc_web_search/aasc_web_fetch
+    ├─ mode=agent/backend=pi    -> PiRuntimeManager
+    │                              └─ pi --mode rpc（服务器子进程，固定只读工具）
+    └─ mode=agent/backend=codex -> CodexRuntimeManager
+                                   └─ codex app-server --stdio（服务器子进程，独立 threadId + 只读沙箱）
 ```
 
 通用 `PiRuntimeManager` 在服务器进程内维护 `(profileName, templateId, permissionProfile, conversation) -> PiSession` 映射，聊天只是第一个调用方。后续服务器内置命令可以复用 Runtime，但必须使用自己的上下文和工具策略。Pi 不使用 detached 进程；服务器退出时逐个发送 abort/关闭 stdin 并回收子进程。单个 session 的并发请求串行化，避免上下文和响应互相污染。单次 Pi RPC 请求默认使用 600 秒超时；测试或特殊调用可以注入更短的超时，超时后终止当前子进程并在下一次请求时重建。排队等待默认最多 30 秒，排队超时不启动该请求。空回复或可恢复 RPC 错误会先终止当前 session，再自动重试一次；重试仍失败才通知上层。
@@ -92,7 +93,7 @@ Pi 启动时固定使用以下约束：
 
 ### 发送给 Agent 的内容
 
-首次 Agent 会话初始化时包含当前 profile 的系统提示词、角色模板和当前聊天会话的必要历史；重建文本统一使用 `User:`/`Assistant:` 标记。同一 Pi 会话后续只发送带 `User:` 前缀的当前用户消息，不再把应用历史重复拼接到 prompt。Pi 进程继续保留该会话上下文，工具调用结果只保留在该 Pi 会话中。Pi 内部仍使用原生 `user`/`assistant` 角色，`AI：` 只属于控制端展示层，不写入 Agent 上下文。最终助手文本通过普通聊天历史接口保存并显示；工具调用过程不伪装成普通用户/助手消息。
+首次 Agent 会话初始化时包含当前 profile 的系统提示词、角色模板和当前聊天会话的必要历史；重建文本统一使用 `User:`/`Assistant:` 标记。Pi 初始请求包含完整重放文本，后续只发送带 `User:` 前缀的当前用户消息；Codex 初始 thread 使用 developer instructions 接收系统提示词，首轮 turn 接收历史和当前消息，后续 turn 只接收当前消息。两种进程都继续保留自己的上下文，工具调用结果不写入普通聊天历史。
 
 Pi RPC 原生提供 `compact` 命令，可将较早对话压缩为摘要并保留最近上下文；当前 `PiRuntimeManager` 暂不主动调用该命令，也不增加控制端入口，仍由 Pi 在接近上下文上限时按自身策略自动处理。后续若启用主动压缩，需要保证压缩请求与当前聊天 session 串行，并向控制端回报压缩状态。
 
@@ -104,10 +105,10 @@ Pi 会话键包含 profile、模板、权限策略和聊天会话（群聊或私
 
 ## 错误处理
 
-- Pi 不存在、启动失败、provider 配置失败、RPC JSONL 解析失败、超时或异常退出：当前请求返回失败消息，并清理该 profile 的进程。
+- Pi/Codex 不存在、启动失败、provider/app-server 配置失败、RPC JSONL 解析失败、超时或异常退出：当前请求返回失败消息，并清理该 profile 的进程。
 - Agent 模式失败不回退为直接 LLM 请求，避免绕过只读权限和用户选择的执行模式。
-- 一个 profile 的 Pi 失败不影响其他 profile 或普通 LLM 请求。
-- 服务器关闭时清理全部 Pi 进程；清理失败记录日志，但不阻塞服务器退出。
+- 一个 profile 的 Agent 失败不影响其他 profile 或普通 LLM 请求。
+- 服务器关闭时清理全部 Pi/Codex 进程；清理失败记录日志，但不阻塞服务器退出。
 - Chat2API 工具标签格式错误、参数无法解析或工具名不在只读白名单时，禁止执行并返回明确的 Agent 错误，不把原始协议标签作为助手文本输出。
 - Pi 返回 `agent_end` 时，如果最后助手消息为错误停止原因、携带错误消息或最终文本为空，当前请求返回失败；`willRetry` 事件不提前结束仍可重试的请求。
 - 请求失败时当前 Pi session 立即回收，避免异常上下文被后续请求复用；排队超时直接失败并释放排队任务，不占用 Pi 并发队列。空回复和可恢复 RPC 错误自动新建 session 重试一次，超时、协议错误和配置错误不盲目重试。
