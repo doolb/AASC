@@ -1,0 +1,21 @@
+{
+  "instances": [
+    {
+      "instanceId": "307919bc",
+      "taskName": "search.web",
+      "status": "completed",
+      "timestamp": 1788102843234,
+      "target": "server",
+      "env": "auto",
+      "mode": "one-shot",
+      "displayId": null,
+      "params": {
+        "query": "妲己"
+      },
+      "taskType": "builtin",
+      "builtinId": "search.web",
+      "entryFile": "task.js",
+      "completedAt": 1788107176362
+    }
+  ]
+}

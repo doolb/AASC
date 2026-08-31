@@ -1,19 +1,21 @@
 {
   "instances": [
     {
-      "instanceId": "tts-wine",
-      "taskName": "tts.server",
+      "instanceId": "c12d152e",
+      "taskName": "chat2api.proxy",
       "status": "running",
-      "timestamp": 1788144071595,
+      "timestamp": 1788144071538,
       "target": "server",
       "env": "auto",
       "mode": "service",
+      "displayId": null,
       "params": {
-        "engine": "wine",
-        "port": 3001
+        "host": "127.0.0.1",
+        "port": 8083,
+        "enableApiKey": "false"
       },
       "taskType": "builtin",
-      "builtinId": "tts.server",
+      "builtinId": "chat2api.proxy",
       "entryFile": null,
       "stage": "running",
       "progress": 100

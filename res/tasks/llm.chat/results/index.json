@@ -78,14 +78,14 @@
     {
       "instanceId": "qwen3.5",
       "taskName": "llm.chat",
-      "status": "draft",
+      "status": "completed",
       "timestamp": 1779598820000,
       "env": "auto",
       "mode": "one-shot",
       "displayId": null,
       "params": {
-        "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
-        "modelId": "Qwen3.5-Plus",
+        "apiUrl": "http://127.0.0.1:8083/v1/chat/completions",
+        "modelId": "Qwen3.6-Flash",
         "temperature": "0.7",
         "systemPrompt": "你是一个电子猫娘，是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
         "promptFormat": "raw",
@@ -97,8 +97,9 @@
       "taskType": "builtin",
       "builtinId": "llm.chat",
       "entryFile": "task.js",
-      "completedAt": null,
-      "error": "API 返回 500: {\"error\":{\"message\":\"getaddrinfo EAI_AGAIN chat2.qianwen.com\",\"type\":\"api_error\",\"param\":null,\"code\":null}}"
+      "completedAt": 1788106990980,
+      "error": "API 返回 503: {\"error\":{\"message\":\"没有可用的模型账号: Qwen3.6-Flash\",\"type\":\"api_error\",\"code\":\"no_available_account\"}}",
+      "target": "server"
     }
   ]
 }
