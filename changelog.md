@@ -7095,3 +7095,13 @@
 - ✅ [2026-08-31] 新增后续设计文档，规划 activePrivate 将原始文本交给聊天 Agent，并通过服务端白名单工具执行结束对话、退出私聊、切换助手、请求修复模式、静音和报时。
   - 修复模式仍由本地密码流程掌权，Pi/Codex 共用工具定义与执行协议；当前仅保存设计和伪代码，未修改代码行为。
   - 文档：`docs/design/private-chat-agent-tools.md`、`docs/spec/private-chat-agent-tools.md`、`docs/task/2026-08-31_私聊Agent系统工具设计.md`。
+
+## 语音三状态使用说明
+
+- ✅ [2026-08-31] 新增显示端语音三种会话状态使用说明，补充 `commandMode` 在 `waitingWake`、`activeGroup` 和 `activePrivate` 下的处理规则。
+  - 明确“助手名 + 额外内容”会进入 `activeGroup` 并发送完整原文；active 搜索继续作为普通聊天，等待唤醒搜索保持免唤醒特殊处理。
+  - 新增 `docs/usage/voice-conversation.md` 和根使用说明入口；纯使用说明不新增独立 spec/task，后续代码行为变化时按 `docs/rules.md` 同步文档。
+
+## commandMode 状态记录
+
+- ✅ [2026-08-31] 记录 `commandMode` 当前未参与现代显示端三状态的实际门控，暂不删除或重定义，保留配置和旧调用路径兼容。
