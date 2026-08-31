@@ -71,3 +71,14 @@
 ## 预计工时
 
 约 8-12 小时，包含统一客户端、Pi 工具兼容、配置迁移、真实链路验证和外部实例停用。
+
+## 执行结果
+
+- ✅已完成 [2026-08-31][2026-08-31] 全局 Responses 协议切换。
+  - 改动文件：统一 Responses 客户端、`llm-service`、`llm.chat` 任务、TaskManager、Pi Runtime/只读 Provider、Responses 服务、Qwen Provider 适配器、配置默认值及对应测试。
+  - 全局入口：`http://127.0.0.1:8083/v1/responses`；旧 `apiUrl`、profile 和 AI 角色 Codex/Claude 配置保留。
+  - 工具兼容：Responses 原生 function_call 事件和 Qwen Chat2API 文本工具标签均可进入 Pi 只读工具闭环。
+- ✅已完成 [2026-08-31][2026-08-31] 停用外部 Chat2API。
+  - 仅停止 `/mnt/Chat2API` Electron/npm 进程树；`/home/as/.config/chat2api` 仍保留。
+- ✅已完成 [2026-08-31][2026-08-31] 验证。
+  - Chat2API 回归 56/56；统一 Responses、Pi 和任务引擎测试 39/39；真实 Qwen 非流式、SSE、Pi 文本和只读工具闭环通过；内置 8083 健康检查继续返回 running。

@@ -308,7 +308,9 @@ const aiRoles = new AiRolesService({
 });
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
 const piRuntimeManager = new PiRuntimeManager({
-    projectRoot: PROJECT_ROOT
+    projectRoot: PROJECT_ROOT,
+    // 普通聊天、任务和 Pi Agent 共用内置 Chat2API Responses 入口，避免 Pi 继续读取旧 profile 地址。
+    responsesBaseUrl: config.get('chat.responsesBaseUrl', 'http://127.0.0.1:8083/v1')
 });
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
@@ -690,7 +692,13 @@ async function startServer() {
             bindRuntimeBridgeTransports();
 
             // 初始化远程任务引擎
-            taskManager = new TaskManager({ maxInstances: 50 });
+            taskManager = new TaskManager({
+                maxInstances: 50,
+                chatService: chat,
+                // tts.server 只切换通用 HTTP 客户端的运行时地址，不改变服务器 TTS 开关。
+                getTtsServiceUrl: () => tts.getConfig().serviceUrl,
+                setTtsServiceUrl: (serviceUrl) => tts.init({ serviceUrl })
+            });
             taskManager.setGenerateTts((text, voice, speed) => generateTtsWithFallback(text, voice, speed));
             registerTaskHandlers(wsServer, taskManager,
                 (msg) => broadcastToControls(msg),

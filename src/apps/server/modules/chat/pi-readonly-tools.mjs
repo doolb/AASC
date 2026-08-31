@@ -5,7 +5,7 @@ import {
 } from '@earendil-works/pi-ai';
 import { stat as fsStat } from 'node:fs/promises';
 import nodePath from 'node:path';
-import { openAICompletionsApi } from '@earendil-works/pi-ai/compat';
+import { openAIResponsesApi } from '@earendil-works/pi-ai/compat';
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import { parseSearchResults, readOnlyFetch } from './pi-readonly-tools.js';
 import chat2ApiToolConverter from './pi-chat2api-tool-converter.js';
@@ -123,14 +123,14 @@ function createChat2ApiCompatibleStream(source, model, context) {
     return stream;
 }
 
-// 使用 Pi AI 原生 OpenAI Completions 适配器完成网络请求，仅替换最终消息
+// 使用 Pi AI 原生 OpenAI Responses 适配器完成网络请求，仅替换最终消息
 // 的协议表示。这样文件和网络工具仍由 Pi 根据 --tools 白名单执行。
 function createChat2ApiCompatibleProvider({ baseUrl, modelId }) {
-    const openAiApi = openAICompletionsApi();
+    const openAiApi = openAIResponsesApi();
     const model = {
         id: modelId,
         name: modelId,
-        api: 'openai-completions',
+        api: 'openai-responses',
         provider: 'aasc-openai',
         baseUrl,
         reasoning: false,

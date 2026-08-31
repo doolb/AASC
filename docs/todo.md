@@ -14,11 +14,6 @@
 
 - ⏳待处理 [2026-08-30] Chat2API 核心移植为完整内置任务
 
-- ⏳待处理 [2026-08-31] Chat2API 全局切换 Responses 协议并停用外部实例
-  - 普通聊天、语音、搜索/系统 LLM 任务和 Pi Agent 统一调用内置 `http://127.0.0.1:8083/v1/responses`。
-  - AI 角色 Codex/Claude 后端和旧 profile 配置保留；内置链路通过真实验证后停止 `/mnt/Chat2API` Electron 进程，不删除其数据。
-  - 关联设计：`docs/design/chat2api-global-responses.md`；关联任务：`docs/task/2026-08-31_Chat2API全局Responses协议切换.md`。
-
 - ⏳待处理 [2026-08-30] Pi Agent 主动压缩上下文
   - Pi RPC 原生支持 `compact`，当前 PiRuntimeManager 暂不封装手动压缩入口和自动阈值触发；保留后续增加控制端按钮或按上下文占用触发的需求。
   - 关联任务：`docs/task/2026-08-30_Pi主动压缩暂不实现.md`。

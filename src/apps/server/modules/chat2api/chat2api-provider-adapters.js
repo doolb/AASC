@@ -58,6 +58,28 @@ const getMessageText = (content) => {
     .join('\n');
 };
 
+// Qwen 网页接口不接受 OpenAI tools 字段，因此把当前已授权的工具转换为
+// 明确的提示协议。Responses 层仍负责把这些标签恢复成标准 function_call，
+// 工具白名单由 Pi 当前上下文决定，不能由模型自行扩大。
+const buildQwenToolInstruction = (tools) => {
+  if (!Array.isArray(tools) || tools.length === 0) return '';
+  const definitions = tools
+    .map((tool) => ({ tool, definition: tool?.function || tool }))
+    .filter(({ tool, definition }) => tool && tool.type === 'function' && definition?.name)
+    .map(({ definition }) => ({
+      name: definition.name,
+      description: definition.description || '',
+      parameters: definition.parameters || {},
+    }));
+  if (definitions.length === 0) return '';
+  return [
+    'System: 你可以使用以下只读工具。需要调用工具时，不要解释调用过程，只输出下面的 Chat2API 工具标签格式；不需要工具时直接正常回答。',
+    JSON.stringify(definitions),
+    '工具调用格式：<|CHAT2API|tool_calls><|CHAT2API|invoke name="工具名"><|CHAT2API|parameter name="参数名"><![CDATA[参数值]]></|CHAT2API|parameter></|CHAT2API|invoke></|CHAT2API|tool_calls>',
+    '只能调用上面列出的工具，参数值必须是合法 JSON 或字符串。',
+  ].join('\n');
+};
+
 const getNativeState = (responseSession) => responseSession && responseSession.nativeState && typeof responseSession.nativeState === 'object'
   ? responseSession.nativeState
   : {};
@@ -77,6 +99,8 @@ const createQwenRequest = (request, actualModel, provider, headers, responseSess
     if (message.role === 'tool') return `Tool: ${text}`;
     return text;
   }).filter(Boolean);
+  const toolInstruction = buildQwenToolInstruction(request.tools);
+  if (toolInstruction) messages.unshift(toolInstruction);
   const content = messages.join('\n\n');
   const url = new URL(`${String(provider.apiEndpoint).replace(/\/$/, '')}${provider.chatPath || '/api/v2/chat'}`);
   url.search = new URLSearchParams({

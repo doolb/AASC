@@ -116,3 +116,9 @@ Pi 自定义 Provider 改为 `openai-responses`。Pi 的只读工具白名单保
 - 同一聊天 session 第二轮使用之前的 Responses 会话，服务重启后仍可续聊。
 - 旧 Chat Completions 兼容接口仍可供外部客户端使用，但 AASC 内部不再调用它。
 - `/mnt/Chat2API` Electron 进程停止，内置代理保持健康。
+
+## 实施结果（2026-08-31）
+
+- 已完成普通聊天、语音复用链路、搜索/`llm.chat` 任务和 Pi Agent 的全局 Responses 切换。
+- 已补齐 Responses 流式 `output_item`、文本增量、function_call 参数事件，以及 Qwen 文本工具标签到 Pi 工具调用的兼容层。
+- 已验证服务重启后内置 8083 和真实 Qwen 请求正常；外部 `/mnt/Chat2API` 进程已停止，外部配置和数据目录保留。

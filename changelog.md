@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 服务端 TTS
+
+- ✅ [2026-08-31] 创建 `tts.server` 内置 Wine/Linux TTS 服务实例
+  - 新增 `tts.server` server service 内置任务，实例参数支持 `engine=wine|linux` 和可配置 `port`，默认恢复唯一 Wine 实例 `tts-wine:3001`。
+  - Wine 服务在 Linux 主机本地启动，不再依赖 libvirt Win7；主服务器继续通过通用 HTTP URL `http://127.0.0.1:3001/api/tts` 调用。
+  - 保持 `tts.serverEnabled=false`，暂不启用显示端 TTS 失败后的服务器回退。
+  - 改动文件：`src/apps/server/modules/task-engine/builtin-tasks/tts-server.js`、`registry.js`、`task-manager.js`、`server-app.js`、`config/config.json`、`res/tasks/tts.server/results/index.json` 及对应 design/spec/task/test 文档。
+  - 验证：内置任务测试 4/4 通过；服务器重启后实例自动恢复；Wine 3/3 worker 就绪；本机 `/api/tts` 返回 `200 audio/wav`。
+
 ### AI 规则：任务台账与变更日志分离
 
 - 明确 `docs/todo.md` 只保留待处理、可选和进行中任务。
@@ -22,9 +31,12 @@
 
 ### Chat2API 内置任务实施中
 
-- ⏳ [2026-08-31] 规划 Chat2API 全局切换 Responses 协议并停用外部实例
-  - 普通聊天、语音、搜索/系统 LLM 任务和 Pi Agent 将统一使用内置 `/v1/responses`；AI 角色后端和旧 profile 配置保留。
-  - 内置链路通过真实验证后，精确停止 `/mnt/Chat2API` Electron 进程树，不删除外部配置和数据。
+- ✅ [2026-08-31] 完成 Chat2API 全局 Responses 协议切换并停用外部实例
+  - 普通聊天、语音、搜索/系统 LLM 任务和 Pi Agent 统一使用内置 `http://127.0.0.1:8083/v1/responses`；AI 角色 Codex/Claude 后端和旧 profile 配置保留。
+  - 普通聊天保存 Responses 会话状态，任务引擎注入统一 chat service；Pi 使用 `openai-responses`，并补齐文本、function_call 和只读工具闭环。
+  - Qwen 无原生 OpenAI tools 时，内置适配器向上游声明白名单工具的 Chat2API 标签协议，并由 Responses/Pi 边界恢复工具调用。
+  - 已停止 `/mnt/Chat2API` Electron/npm 进程树，保留 `/home/as/.config/chat2api` 数据；内置 8083 健康检查和真实 Qwen 请求仍正常。
+  - 验证：Chat2API 回归 56/56；统一 Responses/Pi/任务引擎测试 39/39；真实 Qwen 非流式、SSE、Pi 文本和只读工具闭环通过。
   - 详细设计：`docs/design/chat2api-global-responses.md`；详细任务：`docs/task/2026-08-31_Chat2API全局Responses协议切换.md`。
 
 - ✅ [2026-08-31] 增加 Chat2API Responses 协议兼容

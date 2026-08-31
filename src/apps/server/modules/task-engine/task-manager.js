@@ -22,6 +22,9 @@ class TaskManager extends EventEmitter {
     this._services = new Map();  // instanceId -> { stop, status }
     this._sendToDisplay = null;  // 由 setSendToDisplay() 注入
     this._generateTts = null;  // 由 server-app 注入统一的显示端优先 TTS 路由
+    this._getTtsServiceUrl = options.getTtsServiceUrl || null;
+    this._setTtsServiceUrl = options.setTtsServiceUrl || null;
+    this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
     this._isRestoring = false;
     this.maxInstances = options.maxInstances || 50;
@@ -68,7 +71,10 @@ class TaskManager extends EventEmitter {
       taskIO: this.taskIO,
       generateTTS: this._generateTts,
       sendToDisplay: this._sendToDisplay,
-      broadcastToDisplays: this._broadcastToDisplays
+      broadcastToDisplays: this._broadcastToDisplays,
+      chatService: extraContext.chatService || this._chatService,
+      getTtsServiceUrl: extraContext.getTtsServiceUrl || this._getTtsServiceUrl,
+      setTtsServiceUrl: extraContext.setTtsServiceUrl || this._setTtsServiceUrl
     });
   }
 
@@ -229,10 +235,13 @@ class TaskManager extends EventEmitter {
 
         const builtinCtx = {
           ...context,
+          chatService: context.chatService || this._chatService,
           instanceId,
           taskName: task.taskName,
           taskIO: this.taskIO,
           generateTTS: this._generateTts,
+          getTtsServiceUrl: context.getTtsServiceUrl || this._getTtsServiceUrl,
+          setTtsServiceUrl: context.setTtsServiceUrl || this._setTtsServiceUrl,
           postStream: (data) => this.emit('stream', instanceId, data)
         };
         const result = await builtinRegistry.run(task.builtinId, builtinCtx);
@@ -571,6 +580,7 @@ class TaskManager extends EventEmitter {
 
         const result = await builtinRegistry.run(task.builtinId, {
           ...context, instanceId, taskName: task.taskName, taskIO: this.taskIO,
+          chatService: context.chatService || this._chatService,
           sendToDisplay: this._sendToDisplay,
           broadcastToDisplays: this._broadcastToDisplays,
           generateTTS: this._generateTts,

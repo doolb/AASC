@@ -83,7 +83,10 @@ chatStream(userMessage, options, callbacks):
         state = loadChatResponseState(sessionKey)
         streamBody = buildResponsesRequest(messages, state, options)
         client.stream(streamBody, event):
+            response.output_item.added(message/function_call) -> 建立 output item
             response.output_text.delta -> onChunk(delta)
+            response.function_call_arguments.delta/done -> 传递工具参数增量
+            response.output_item.done -> 结束文本或工具 output item
             response.output_text.done -> 更新完整文本
             response.completed -> 保存 response/conversation 状态
             response.failed -> onError(error)
@@ -101,7 +104,11 @@ createChat2ApiCompatibleProvider():
     model.baseUrl = responsesBaseUrl
     api.stream / api.streamSimple -> Responses SSE
     Responses message output -> Pi assistant event stream
-    function_call output -> Pi toolCall
+    Responses function_call output -> Pi toolCall
+    Responses output_item 事件必须先于 delta 事件建立对应内容块
+    Provider 不支持原生 function tool 时:
+        将已授权工具的名称、参数和 Chat2API 标签格式加入上游提示
+        仅解析白名单工具标签，其他标签报错
     未识别工具事件 -> 返回 error，不加入普通文本
 ```
 

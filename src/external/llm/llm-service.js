@@ -10,10 +10,12 @@ const {
     normalizeChatTemplate,
     buildChatSessionKey
 } = require('../../apps/server/modules/chat/pi-runtime-policy');
+const { createResponsesClient } = require('./llm-responses-client');
 
 const HISTORY_DIR = USER_CONFIG_DIR;
 const HISTORY_FILE_BASE = 'chat-history';
 const SESSION_FILE = path.join(USER_CONFIG_DIR, 'chat-session.json');
+const RESPONSES_SESSION_FILE = path.join(USER_CONFIG_DIR, 'chat-responses-sessions.json');
 const COMMANDS_FILE = path.join(USER_CONFIG_DIR, 'chat-commands.json');
 const IMPORTANT_FILE = path.join(USER_CONFIG_DIR, 'important-records.json');
 const TEMPLATES_FILE = path.join(USER_CONFIG_DIR, 'chat-templates.json');
@@ -30,6 +32,9 @@ const DEFAULT_TEMPLATES = [
 
 let chatConfig = {
     agentBackend: 'codex',
+    protocol: 'openai-responses',
+    responsesBaseUrl: 'http://127.0.0.1:8083/v1',
+    responsesApiKey: '',
     apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
     model: 'gpt-3.5-turbo',
     maxTokens: 1000,
@@ -43,6 +48,9 @@ let chatConfig = {
 let llmProfiles = [];
 let activeProfile = 'default';
 let piRuntimeManager = null;
+let responsesSessionStates = {};
+let responsesClient = null;
+let responsesClientFingerprint = '';
 
 let chatHistories = {};
 const MAX_HISTORY_PER_SESSION = 100;
@@ -165,6 +173,9 @@ function init(config = {}, options = {}) {
         piRuntimeManager = options.piRuntimeManager;
     }
     if (config.agentBackend === 'codex' || config.agentBackend === 'claude') chatConfig.agentBackend = config.agentBackend;
+    if (config.protocol !== undefined) chatConfig.protocol = normalizeChatTransport(config).protocol;
+    if (config.responsesBaseUrl) chatConfig.responsesBaseUrl = config.responsesBaseUrl;
+    if (config.responsesApiKey !== undefined) chatConfig.responsesApiKey = config.responsesApiKey;
     if (config.apiUrl) chatConfig.apiUrl = config.apiUrl;
     if (config.model) chatConfig.model = config.model;
     if (config.maxTokens) chatConfig.maxTokens = config.maxTokens;
@@ -193,6 +204,7 @@ function init(config = {}, options = {}) {
         applyProfile(activeProfile);
     }
     loadHistory();
+    loadResponsesSessionState();
     loadSession();
     ensureDefaultSessions();
     loadCommands();
@@ -254,6 +266,157 @@ function loadSession() {
         }
     } catch (err) {
         console.error('[Chat] 加载会话状态失败:', err.message);
+    }
+}
+
+function normalizeChatTransport(config = {}) {
+    const protocol = config.protocol === 'openai-completions'
+        ? 'openai-completions'
+        : 'openai-responses';
+    return {
+        protocol,
+        baseUrl: config.responsesBaseUrl || 'http://127.0.0.1:8083/v1'
+    };
+}
+
+function loadResponsesSessionState() {
+    try {
+        if (!fs.existsSync(RESPONSES_SESSION_FILE)) {
+            responsesSessionStates = {};
+            return;
+        }
+        const parsed = JSON.parse(fs.readFileSync(RESPONSES_SESSION_FILE, 'utf8'));
+        responsesSessionStates = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (error) {
+        console.error('[Chat] 加载 Responses 会话状态失败:', error.message);
+        responsesSessionStates = {};
+    }
+}
+
+function saveResponsesSessionState() {
+    try {
+        const dir = path.dirname(RESPONSES_SESSION_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        const tempFile = `${RESPONSES_SESSION_FILE}.${process.pid}.tmp`;
+        fs.writeFileSync(tempFile, JSON.stringify(responsesSessionStates, null, 2), { encoding: 'utf8', mode: 0o600 });
+        fs.chmodSync(tempFile, 0o600);
+        fs.renameSync(tempFile, RESPONSES_SESSION_FILE);
+        fs.chmodSync(RESPONSES_SESSION_FILE, 0o600);
+    } catch (error) {
+        console.error('[Chat] 保存 Responses 会话状态失败:', error.message);
+    }
+}
+
+function getResponsesClient() {
+    const fingerprint = `${chatConfig.responsesBaseUrl}\n${chatConfig.responsesApiKey || ''}`;
+    if (!responsesClient || responsesClientFingerprint !== fingerprint) {
+        responsesClient = createResponsesClient({
+            baseUrl: chatConfig.responsesBaseUrl,
+            apiKey: chatConfig.responsesApiKey || ''
+        });
+        responsesClientFingerprint = fingerprint;
+    }
+    return responsesClient;
+}
+
+function getResponsesSessionKey(options = {}) {
+    const templateId = options.templateTarget || options.useTemplate || 'default';
+    return sessionKey(
+        options.mode,
+        options.target,
+        options.sessionId || chatSession.privateSessionId,
+        activeProfile,
+        templateId
+    );
+}
+
+function getResponsesFingerprint(options = {}) {
+    return JSON.stringify({
+        profileName: activeProfile,
+        templateId: options.templateTarget || options.useTemplate || 'default',
+        systemPrompt: options.systemPrompt || chatConfig.systemPrompt || '',
+        model: chatConfig.model,
+        promptFormat: chatConfig.promptFormat || 'openai'
+    });
+}
+
+function buildResponsesPayload({ messages, userMessage, state, fingerprint, model, maxTokens, temperature, stream = false }) {
+    const reusable = state
+        && state.fingerprint === fingerprint
+        && (state.latestResponseId || state.conversationId);
+    const payload = {
+        model,
+        input: reusable ? [{ role: 'user', content: userMessage }] : messages,
+        max_output_tokens: maxTokens,
+        temperature,
+        stream: Boolean(stream)
+    };
+    if (reusable && state.latestResponseId) {
+        payload.previous_response_id = state.latestResponseId;
+    } else if (reusable && state.conversationId) {
+        payload.conversation = state.conversationId;
+    }
+    return payload;
+}
+
+function extractResponsesText(response) {
+    if (typeof response?.output_text === 'string') return response.output_text;
+    if (!Array.isArray(response?.output)) return '';
+    return response.output.flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+        .filter((item) => item?.type === 'output_text' && typeof item.text === 'string')
+        .map((item) => item.text)
+        .join('');
+}
+
+function saveResponseReference(sessionKeyValue, response, fingerprint) {
+    const conversationId = response?.conversation?.id || response?.conversation_id;
+    const responseId = response?.id;
+    if (!conversationId && !responseId) return;
+    responsesSessionStates[sessionKeyValue] = {
+        conversationId: conversationId || responsesSessionStates[sessionKeyValue]?.conversationId || '',
+        latestResponseId: responseId || responsesSessionStates[sessionKeyValue]?.latestResponseId || '',
+        model: response?.model || chatConfig.model,
+        fingerprint,
+        updatedAt: Date.now()
+    };
+    saveResponsesSessionState();
+}
+
+function clearResponseReference(sessionKeyValue) {
+    if (!responsesSessionStates[sessionKeyValue]) return;
+    delete responsesSessionStates[sessionKeyValue];
+    saveResponsesSessionState();
+}
+
+function canRebuildResponsesSession(error) {
+    return error?.statusCode === 404 || ['conversation_not_found', 'response_not_found'].includes(error?.code);
+}
+
+async function requestResponsesWithRecovery(context) {
+    const client = getResponsesClient();
+    const request = buildResponsesPayload(context);
+    try {
+        return await client.request(request);
+    } catch (error) {
+        if (!context.state || !canRebuildResponsesSession(error)) throw error;
+        clearResponseReference(context.sessionKey);
+        return client.request(buildResponsesPayload({ ...context, state: null }));
+    }
+}
+
+async function streamResponsesWithRecovery(context, onEvent) {
+    const client = getResponsesClient();
+    const request = buildResponsesPayload(context);
+    let receivedText = false;
+    try {
+        await client.stream(request, (event) => {
+            if (event?.type === 'response.output_text.delta') receivedText = true;
+            onEvent(event);
+        });
+    } catch (error) {
+        if (!context.state || receivedText || !canRebuildResponsesSession(error)) throw error;
+        clearResponseReference(context.sessionKey);
+        await client.stream(buildResponsesPayload({ ...context, state: null }), onEvent);
     }
 }
 
@@ -404,6 +567,9 @@ function setConfig(newConfig) {
         }
         chatConfig.agentBackend = newConfig.agentBackend;
     }
+    if (newConfig.protocol !== undefined) chatConfig.protocol = normalizeChatTransport(newConfig).protocol;
+    if (newConfig.responsesBaseUrl !== undefined) chatConfig.responsesBaseUrl = newConfig.responsesBaseUrl;
+    if (newConfig.responsesApiKey !== undefined) chatConfig.responsesApiKey = newConfig.responsesApiKey;
     if (newConfig.apiUrl !== undefined) chatConfig.apiUrl = newConfig.apiUrl;
     if (newConfig.model !== undefined) chatConfig.model = newConfig.model;
     if (newConfig.maxTokens !== undefined) chatConfig.maxTokens = newConfig.maxTokens;
@@ -885,54 +1051,60 @@ async function chat(userMessage, options = {}) {
 
     try {
         const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId });
-        
-        const requestBody = {
-            model: chatConfig.model,
-            messages: messages,
-            max_tokens: chatConfig.maxTokens,
-            temperature: chatConfig.temperature
-        };
-        
-        const headers = { 'Content-Type': 'application/json' };
-        if (chatConfig.apiKey) headers['Authorization'] = 'Bearer ' + chatConfig.apiKey;
-        const response = await makeRequest(chatConfig.apiUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(requestBody)
-        });
-        
-        const data = JSON.parse(response);
-        
-        if (data.choices && data.choices[0] && data.choices[0].message) {
-            const assistantMessage = data.choices[0].message.content;
-            
-            const templateId = templateTarget || useTemplate || 'default';
-            const historyKey = sessionKey(mode, target, sessionId || chatSession.privateSessionId, activeProfile, templateId);
-            if (!chatHistories[historyKey]) chatHistories[historyKey] = [];
-            chatHistories[historyKey].push({
-                id: Date.now().toString(),
-                user: userMessage.substring(0, MAX_MESSAGE_LENGTH),
-                assistant: assistantMessage.substring(0, MAX_MESSAGE_LENGTH),
-                timestamp: Date.now(),
-                displayId: displayId,
-                mode: mode || chatSession.mode,
-                target: target || chatSession.privateTarget,
-                sessionId: sessionId || chatSession.privateSessionId || 'default',
-                profileName: activeProfile,
-                templateId
+        let assistantMessage = '';
+        if (normalizeChatTransport(chatConfig).protocol === 'openai-responses') {
+            const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
+            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt });
+            const response = await requestResponsesWithRecovery({
+                messages,
+                userMessage,
+                state: responsesSessionStates[responseSessionKey],
+                sessionKey: responseSessionKey,
+                fingerprint,
+                model: chatConfig.model,
+                maxTokens: chatConfig.maxTokens,
+                temperature: chatConfig.temperature,
+                stream: false
             });
-            
-            trimHistory();
-            saveHistory();
-            
-            return {
-                success: true,
-                message: assistantMessage,
-                history: getHistory()
-            };
+            assistantMessage = extractResponsesText(response);
+            saveResponseReference(responseSessionKey, response, fingerprint);
         } else {
-            throw new Error('Invalid response format from API');
+            const requestBody = {
+                model: chatConfig.model,
+                messages: messages,
+                max_tokens: chatConfig.maxTokens,
+                temperature: chatConfig.temperature
+            };
+            const headers = { 'Content-Type': 'application/json' };
+            if (chatConfig.apiKey) headers.Authorization = 'Bearer ' + chatConfig.apiKey;
+            const response = await makeRequest(chatConfig.apiUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(requestBody)
+            });
+            const data = JSON.parse(response);
+            if (!data.choices?.[0]?.message) throw new Error('Invalid response format from API');
+            assistantMessage = data.choices[0].message.content || '';
         }
+
+        const templateId = templateTarget || useTemplate || 'default';
+        const historyKey = sessionKey(mode, target, sessionId || chatSession.privateSessionId, activeProfile, templateId);
+        if (!chatHistories[historyKey]) chatHistories[historyKey] = [];
+        chatHistories[historyKey].push({
+            id: Date.now().toString(),
+            user: userMessage.substring(0, MAX_MESSAGE_LENGTH),
+            assistant: assistantMessage.substring(0, MAX_MESSAGE_LENGTH),
+            timestamp: Date.now(),
+            displayId: displayId,
+            mode: mode || chatSession.mode,
+            target: target || chatSession.privateTarget,
+            sessionId: sessionId || chatSession.privateSessionId || 'default',
+            profileName: activeProfile,
+            templateId
+        });
+        trimHistory();
+        saveHistory();
+        return { success: true, message: assistantMessage, history: getHistory() };
     } catch (error) {
         console.error('[Chat] API调用失败:', error.message);
         return {
@@ -1051,6 +1223,48 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
             target,
             sessionId
         }, callbacks, activeProfileConfig);
+    }
+
+    if (normalizeChatTransport(chatConfig).protocol === 'openai-responses') {
+        let fullMessage = '';
+        let pendingText = '';
+        try {
+            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId });
+            const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
+            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt });
+            await streamResponsesWithRecovery({
+                messages,
+                userMessage,
+                state: responsesSessionStates[responseSessionKey],
+                sessionKey: responseSessionKey,
+                fingerprint,
+                model: chatConfig.model,
+                maxTokens: chatConfig.maxTokens,
+                temperature: chatConfig.temperature,
+                stream: true
+            }, (event) => {
+                if (event?.type === 'response.output_text.delta' && typeof event.delta === 'string') {
+                    fullMessage += event.delta;
+                    pendingText += event.delta;
+                    onChunk?.(event.delta, fullMessage);
+                    const sentences = splitIntoSentences(pendingText);
+                    if (sentences.length >= 2) {
+                        for (const sentence of sentences.slice(0, -1)) onSentence?.(sentence, fullMessage);
+                        pendingText = sentences[sentences.length - 1];
+                    }
+                }
+                if (event?.type === 'response.completed') {
+                    saveResponseReference(responseSessionKey, event.response, fingerprint);
+                }
+            });
+            if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage);
+            onComplete?.(fullMessage, getHistory());
+            return { success: true, message: fullMessage, history: getHistory() };
+        } catch (error) {
+            console.error('[Chat] Responses 流式API调用失败:', error.message);
+            onError?.(error.message);
+            return { success: false, error: error.message, history: getHistory() };
+        }
     }
 
     let fullMessage = '';
@@ -1359,6 +1573,9 @@ module.exports = {
     getSessionHistory,
     chat,
     chatStream,
+    buildResponsesPayload,
+    extractResponsesText,
+    normalizeChatTransport,
     isSentenceEnd,
     splitIntoSentences
 };

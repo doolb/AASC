@@ -29,6 +29,7 @@ class PiRuntimeManager {
         this.commandPath = options.commandPath || process.env.PI_COMMAND_PATH || 'pi';
         this.requestTimeoutMs = options.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
         this.requestQueueTimeoutMs = options.requestQueueTimeoutMs || DEFAULT_REQUEST_QUEUE_TIMEOUT_MS;
+        this.responsesBaseUrl = options.responsesBaseUrl || '';
         this.logger = typeof options.logger === 'function' ? options.logger : () => {};
         this.sessions = new Map();
         this.requestSequence = 0;
@@ -182,6 +183,7 @@ class PiRuntimeManager {
             apiUrl: profile.apiUrl || '',
             model: profile.model || '',
             apiKey: profile.apiKey || '',
+            responsesBaseUrl: this.responsesBaseUrl,
             maxTokens: profile.maxTokens || 0,
             temperature: profile.temperature,
             templateContent: template.content || '',
@@ -197,7 +199,7 @@ class PiRuntimeManager {
         const env = {
             ...process.env,
             PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || path.join(os.tmpdir(), 'aasc-pi-runtime'),
-            AASC_PI_BASE_URL: normalizeOpenAiBaseUrl(profile.apiUrl || ''),
+            AASC_PI_BASE_URL: this.responsesBaseUrl || normalizeOpenAiBaseUrl(profile.apiUrl || ''),
             AASC_PI_MODEL: profile.model || '',
             AASC_PI_API_KEY: profile.apiKey || ''
         };

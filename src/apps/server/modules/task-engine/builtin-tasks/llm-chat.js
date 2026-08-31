@@ -1,5 +1,6 @@
 const http = require('http');
 const https = require('https');
+const { createResponsesClient } = require('../../../../../external/llm/llm-responses-client');
 
 const DEFAULT_API_URL = 'http://192.168.1.12:8080/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-3.5-turbo';
@@ -51,19 +52,23 @@ module.exports = {
   },
 
   async run(context) {
-    const { params, taskIO, taskName, postStream } = context;
+    const { params, taskIO, taskName, postStream, chatService } = context;
 
     // 合并全局 + 实例配置 (全局配置通过 task:set_config 持久化到 config.json)
     const globalConfig = taskIO ? await taskIO.getTaskConfig(taskName) : {};
+    const globalChatConfig = chatService?.getConfig?.() || null;
+    const useResponses = Boolean(globalChatConfig && globalChatConfig.protocol !== 'openai-completions');
 
     const config = {
-      apiUrl: params.apiUrl || globalConfig.apiUrl || DEFAULT_API_URL,
-      modelId: params.modelId || globalConfig.modelId || DEFAULT_MODEL,
+      apiUrl: params.apiUrl || globalConfig.apiUrl || globalChatConfig?.apiUrl || DEFAULT_API_URL,
+      modelId: params.modelId || globalConfig.modelId || globalChatConfig?.model || DEFAULT_MODEL,
       temperature: params.temperature ?? globalConfig.temperature ?? 0.7,
       systemPrompt: params.systemPrompt || globalConfig.systemPrompt || '',
       promptFormat: params.promptFormat || globalConfig.promptFormat || 'openai',
       maxTokens: params.maxTokens || globalConfig.maxTokens || 4096,
-      apiKey: params.apiKey || globalConfig.apiKey || ''
+      apiKey: params.apiKey || globalConfig.apiKey || globalChatConfig?.apiKey || '',
+      responsesBaseUrl: globalChatConfig?.responsesBaseUrl || 'http://127.0.0.1:8083/v1',
+      responsesApiKey: globalChatConfig?.responsesApiKey || ''
     };
 
     let messages = [];
@@ -93,6 +98,31 @@ module.exports = {
     }
 
     // ─── LLM API 调用（流式/非流式） ───
+
+    async function callResponses() {
+      const client = createResponsesClient({ baseUrl: config.responsesBaseUrl, apiKey: config.responsesApiKey });
+      const request = {
+        model: config.modelId,
+        input: messages,
+        temperature: config.temperature,
+        max_output_tokens: config.maxTokens,
+        stream: Boolean(postStream)
+      };
+      if (!postStream) {
+        const response = await client.request(request);
+        return response.output_text || '';
+      }
+
+      let fullText = '';
+      let index = 0;
+      await client.stream(request, (event) => {
+        if (event?.type !== 'response.output_text.delta' || typeof event.delta !== 'string') return;
+        fullText += event.delta;
+        postStream({ chunk: event.delta, index: index++, done: false });
+      });
+      postStream({ chunk: '', index, done: true });
+      return fullText;
+    }
 
     function callLLM() {
       return new Promise((resolve, reject) => {
@@ -191,7 +221,7 @@ module.exports = {
     }
 
     try {
-      const fullText = await callLLM();
+      const fullText = useResponses ? await callResponses() : await callLLM();
       return { success: true, data: { text: fullText } };
     } catch (err) {
       return { success: false, error: err.message };

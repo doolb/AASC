@@ -98,6 +98,27 @@ test('Pi 默认 RPC 请求超时为 600 秒', () => {
     assert.equal(manager.requestQueueTimeoutMs, 30000);
 });
 
+test('Pi Agent 使用全局 Responses 地址而不是旧 profile API 地址', async () => {
+    const child = createFakePiChild();
+    const spawnCalls = [];
+    const manager = new PiRuntimeManager({
+        responsesBaseUrl: 'http://127.0.0.1:8083/v1',
+        spawn: (...args) => {
+            spawnCalls.push(args);
+            return child;
+        }
+    });
+    manager.getOrCreateSession('responses-session', {
+        name: 'local',
+        mode: 'agent',
+        backend: 'pi',
+        apiUrl: 'http://old-chat2api.invalid/v1/chat/completions',
+        model: 'qwen'
+    }, { id: 'default', permissionProfile: 'readonly', content: '' });
+    assert.equal(spawnCalls[0][2].env.AASC_PI_BASE_URL, 'http://127.0.0.1:8083/v1');
+    await manager.stopAll();
+});
+
 test('Pi RPC 流式文本按增量回调并完成请求', async () => {
     const child = createFakePiChild();
     const spawnCalls = [];

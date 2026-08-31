@@ -229,16 +229,114 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
     const created = createResponseBody({ responseId, conversationId, previousResponseId, request, chatBody: { choices: [{ message: { role: 'assistant', content: '' } }] }, textOverride: '' });
     yield { type: 'response.created', response: { ...created, status: 'in_progress', output: [], output_text: '' } };
     let text = '';
+    const toolCalls = new Map();
+    let textItemCreated = false;
+    const ensureTextItem = () => {
+      if (textItemCreated) return null;
+      textItemCreated = true;
+      return {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { id: outputItemId, type: 'message', status: 'in_progress', role: 'assistant', content: [] },
+      };
+    };
+    const ensureToolCall = (toolCall) => {
+      const index = Number.isInteger(toolCall.index) ? toolCall.index : toolCalls.size;
+      let current = toolCalls.get(index);
+      if (!current) {
+        const callId = toolCall.id || `call_${randomUUID().replaceAll('-', '')}`;
+        current = {
+          index,
+          id: `fc_${randomUUID().replaceAll('-', '')}`,
+          callId,
+          name: '',
+          arguments: '',
+        };
+        toolCalls.set(index, current);
+      }
+      const functionData = toolCall.function || {};
+      if (toolCall.id) current.callId = toolCall.id;
+      if (functionData.name) current.name = functionData.name;
+      if (typeof functionData.arguments === 'string') current.arguments += functionData.arguments;
+      return current;
+    };
+    const createToolCallOutputItem = (toolCall) => ({
+      type: 'response.output_item.added',
+      output_index: toolCall.index,
+      item: {
+        id: toolCall.id,
+        type: 'function_call',
+        status: 'in_progress',
+        call_id: toolCall.callId,
+        name: toolCall.name,
+        arguments: '',
+      },
+    });
+    const createToolCallMessage = () => ({
+      role: 'assistant',
+      content: null,
+      tool_calls: [...toolCalls.values()].map((toolCall) => ({
+        id: toolCall.callId,
+        type: 'function',
+        function: { name: toolCall.name, arguments: toolCall.arguments },
+      })),
+    });
     for await (const chunk of result.stream) {
       const delta = chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+      const deltaToolCalls = Array.isArray(delta?.tool_calls) ? delta.tool_calls : [];
+      for (const deltaToolCall of deltaToolCalls) {
+        const toolCall = ensureToolCall(deltaToolCall);
+        if (toolCall.arguments === deltaToolCall.function?.arguments) {
+          yield createToolCallOutputItem(toolCall);
+        }
+        const argumentDelta = deltaToolCall.function?.arguments;
+        if (typeof argumentDelta === 'string' && argumentDelta.length > 0) {
+          yield {
+            type: 'response.function_call_arguments.delta',
+            item_id: toolCall.id,
+            output_index: toolCall.index,
+            delta: argumentDelta,
+          };
+        }
+      }
       const content = delta && typeof delta.content === 'string' ? delta.content : '';
-      if (!content) continue;
-      text += content;
-      yield { type: 'response.output_text.delta', item_id: outputItemId, output_index: 0, content_index: 0, delta: content, logprobs: [] };
+      if (content) {
+        const itemAdded = ensureTextItem();
+        if (itemAdded) yield itemAdded;
+        text += content;
+        yield { type: 'response.output_text.delta', item_id: outputItemId, output_index: 0, content_index: 0, delta: content, logprobs: [] };
+      }
     }
-    const finalBody = createResponseBody({ responseId, conversationId, previousResponseId, request, chatBody: { choices: [{ message: { role: 'assistant', content: text } }] }, textOverride: text, messageId: outputItemId });
-    yield { type: 'response.output_text.done', item_id: outputItemId, output_index: 0, content_index: 0, text };
-    await persist({ session, conversationId, request, inputMessages, chatBody: { choices: [{ message: { role: 'assistant', content: text } }] }, result, responseId });
+    const assistantMessage = toolCalls.size > 0 ? createToolCallMessage() : { role: 'assistant', content: text };
+    const finalBody = createResponseBody({ responseId, conversationId, previousResponseId, request, chatBody: { choices: [{ message: assistantMessage }] }, ...(toolCalls.size > 0 ? {} : { textOverride: text, messageId: outputItemId }) });
+    if (toolCalls.size > 0) {
+      for (const toolCall of toolCalls.values()) {
+        yield {
+          type: 'response.function_call_arguments.done',
+          item_id: toolCall.id,
+          output_index: toolCall.index,
+          arguments: toolCall.arguments,
+        };
+        yield {
+          type: 'response.output_item.done',
+          output_index: toolCall.index,
+          item: {
+            id: toolCall.id,
+            type: 'function_call',
+            status: 'completed',
+            call_id: toolCall.callId,
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+          },
+        };
+      }
+    } else {
+      if (textItemCreated) {
+        yield { type: 'response.output_item.done', output_index: 0, item: { id: outputItemId, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text, annotations: [] }] } };
+      }
+      yield { type: 'response.output_text.done', item_id: outputItemId, output_index: 0, content_index: 0, text };
+    }
+    await persist({ session, conversationId, request, inputMessages, chatBody: { choices: [{ message: assistantMessage }] }, result, responseId });
     yield { type: 'response.completed', response: finalBody };
   }());
 

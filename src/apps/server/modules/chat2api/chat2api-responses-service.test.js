@@ -124,14 +124,54 @@ test('Responses 流式服务按协议顺序输出增量并在结束后保存状�
 
   assert.deepEqual(events.map((event) => event.type), [
     'response.created',
+    'response.output_item.added',
     'response.output_text.delta',
     'response.output_text.delta',
+    'response.output_item.done',
     'response.output_text.done',
     'response.completed',
   ]);
-  assert.equal(events[1].delta, '你好');
-  assert.equal(events[2].delta, '世界');
+  assert.equal(events[2].delta, '你好');
+  assert.equal(events[3].delta, '世界');
   assert.equal(events.at(-1).response.output_text, '你好世界');
-  assert.equal(events[3].item_id, events.at(-1).response.output[0].id);
+  assert.equal(events[5].item_id, events.at(-1).response.output[0].id);
   assert.equal(sessionStore.sessions.size, 1);
+});
+
+test('Responses 流式服务把 Chat Completions 工具调用转换为 Responses function_call 事件', async () => {
+  const sessionStore = createFakeSessionStore();
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: {
+      forwardChatCompletion: async () => ({
+        stream: (async function* streamChunks() {
+          yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_weather', type: 'function', function: { name: 'weather', arguments: '{"city"' } }] }, index: 0, finish_reason: null }] };
+          yield { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: ':"成都"}' } }] }, index: 0, finish_reason: 'tool_calls' }] };
+        }()),
+        providerId: 'qwen',
+        accountId: 'qwen-main',
+        actualModel: 'Qwen3.7',
+        nativeState: { sessionId: 'qwen-session' },
+      }),
+    },
+  });
+
+  const result = await service.createResponse({ model: 'Qwen3.7', input: '查天气', stream: true, tools: [{ type: 'function', name: 'weather', parameters: { type: 'object' } }] });
+  const events = [];
+  for await (const event of result.stream) events.push(event);
+
+  assert.deepEqual(events.map((event) => event.type), [
+    'response.created',
+    'response.output_item.added',
+    'response.function_call_arguments.delta',
+    'response.function_call_arguments.delta',
+    'response.function_call_arguments.done',
+    'response.output_item.done',
+    'response.completed',
+  ]);
+  assert.equal(events[1].item.type, 'function_call');
+  assert.equal(events[2].delta, '{"city"');
+  assert.equal(events[4].arguments, '{"city":"成都"}');
+  assert.equal(events.at(-1).response.output[0].type, 'function_call');
+  assert.equal(events.at(-1).response.output[0].name, 'weather');
 });
