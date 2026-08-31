@@ -56,6 +56,13 @@
   - 测试：Chat2API 全量回归通过。
   - 详细任务：`docs/task/2026-08-30_Chat2API原始请求响应调试日志.md`。
 
+- ✅ [2026-08-31] Chat2API 原始流量日志增加简洁模式
+  - 控制端增加完整/简洁模式选择，默认保持完整日志；配置保存后对下一次 Provider 请求生效。
+  - 简洁模式只记录请求模型、文本和最终输出，不记录原始 URL、请求头、Cookie、Token 或逐块流量；流式响应结束后聚合为一条输出。
+  - 兼容标准 choices、Qwen `data.messages` 以及 gzip SSE，保留敏感信息保护、字节上限和日志异常隔离。
+  - 测试：Chat2API 全量回归 60/60 通过。
+  - 详细设计：`docs/design/chat2api-raw-traffic-log-modes.md`；详细任务：`docs/task/2026-08-31_Chat2API日志简洁模式.md`。
+
 - ✅ [2026-08-31] 修复 Chat2API 模型映射未传递到 Provider
   - 负载均衡器候选阶段复用统一模型映射器，保持原版“Provider 内置映射 → 全局映射 → 原始模型”的优先级。
   - `Qwen3.6-Flash → Qwen3.7` 现在会正确进入 Provider 请求体的 `data.model`，原始流量日志可显示实际发送模型。

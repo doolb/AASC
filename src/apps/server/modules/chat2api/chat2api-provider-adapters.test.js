@@ -222,7 +222,7 @@ test('Provider adapter 开启调试后记录内部 HTTP 请求并关联核心 re
   const records = [];
   const adapters = createChat2ApiProviderAdapters({
     rawTrafficLogger: createRawTrafficLogger({ sink: (record) => records.push(record) }),
-    getConfig: async () => ({ debugRawTraffic: true, rawTrafficMaxBytes: 262144 }),
+    getConfig: async () => ({ debugRawTraffic: true, rawTrafficMaxBytes: 262144, rawTrafficMode: 'compact' }),
     httpClient: {
       request: async () => ({ status: 200, headers: {}, data: { choices: [{ message: { content: 'ok' } }] } }),
     },
@@ -237,6 +237,9 @@ test('Provider adapter 开启调试后记录内部 HTTP 请求并关联核心 re
 
   assert.equal(records.some((record) => record.requestId === 'chatcmpl-raw-test' && record.event === 'request'), true);
   assert.doesNotMatch(JSON.stringify(records), /ticket-secret/);
+  assert.deepEqual(records.find((record) => record.event === 'request').data, { model: 'Qwen3.7', text: 'hi' });
+  assert.deepEqual(records.find((record) => record.event === 'response').data, { output: 'ok' });
+  assert.doesNotMatch(JSON.stringify(records), /example\.com/);
 });
 
 test('各内置 Provider 使用原版专用请求协议并归一化流式文本', async () => {

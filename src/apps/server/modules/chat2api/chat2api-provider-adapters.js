@@ -883,6 +883,7 @@ const createProviderAdapter = ({ httpClient, providerId, rawTrafficLogger, getCo
       context,
       enabled: currentConfig && currentConfig.debugRawTraffic === true,
       maxBytes: currentConfig && currentConfig.rawTrafficMaxBytes,
+      mode: currentConfig && currentConfig.rawTrafficMode,
     })
     : httpClient;
   const isQwen = providerId === 'qwen';

@@ -6,6 +6,7 @@ const DEFAULT_CONFIG = Object.freeze({
   enableApiKey: true,
   debugRawTraffic: false,
   rawTrafficMaxBytes: 256 * 1024,
+  rawTrafficMode: 'full',
 });
 
 const createChat2ApiManagementService = (runtime) => {
@@ -30,6 +31,9 @@ const createChat2ApiManagementService = (runtime) => {
     }
     if (typeof next.debugRawTraffic !== 'boolean') {
       throw new Error('debugRawTraffic 必须是布尔值');
+    }
+    if (!['full', 'compact'].includes(next.rawTrafficMode)) {
+      throw new Error('rawTrafficMode 必须是 full 或 compact');
     }
     if (!Number.isInteger(Number(next.rawTrafficMaxBytes)) || Number(next.rawTrafficMaxBytes) < 1024 || Number(next.rawTrafficMaxBytes) > 2 * 1024 * 1024) {
       throw new Error('rawTrafficMaxBytes 必须是 1024 到 2097152 之间的整数');

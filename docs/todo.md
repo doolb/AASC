@@ -12,8 +12,6 @@
   - 建议优先级：`weather.query` → `media.search` → `reminder.*` → `display.control`。
   - 当前仅登记方案，暂不实现，也不创建对应任务实例。
 
-- ⏳待处理 [2026-08-30] Chat2API 核心移植为完整内置任务
-
 - ⏳待处理 [2026-08-30] Pi Agent 主动压缩上下文
   - Pi RPC 原生支持 `compact`，当前 PiRuntimeManager 暂不封装手动压缩入口和自动阈值触发；保留后续增加控制端按钮或按上下文占用触发的需求。
   - 关联任务：`docs/task/2026-08-30_Pi主动压缩暂不实现.md`。
