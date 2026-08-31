@@ -1,0 +1,22 @@
+{
+  "instances": [
+    {
+      "instanceId": "tts-wine",
+      "taskName": "tts.server",
+      "status": "running",
+      "timestamp": 1788142764344,
+      "target": "server",
+      "env": "auto",
+      "mode": "service",
+      "params": {
+        "engine": "wine",
+        "port": 3001
+      },
+      "taskType": "builtin",
+      "builtinId": "tts.server",
+      "entryFile": null,
+      "stage": "running",
+      "progress": 100
+    }
+  ]
+}

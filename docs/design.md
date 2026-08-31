@@ -42,7 +42,7 @@
 | 地图可视化 | [map-visualization.md](design/map-visualization.md) | 执行者能力可视化、2D地图渲染、PixiJS渲染器 |
 | 子服务器 | [sub-server.md](design/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | 服务端语音识别 | [sherpa-asr.md](design/sherpa-asr.md) | ASR 串行识别、native 资源释放、临时文件清理 |
-| 服务端 TTS | [tts.md](design/tts.md) | 外部 TTS 调用超时、流式写盘、失败清理与内存保护 |
+| 服务端 TTS | [tts.md](design/tts.md) | 外部 TTS 调用保护、内置 tts.server Wine/Linux HTTP 服务与统一路由 |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/design/android-asr-apk.md) | 内置 SenseVoice、录音/文件识别、HTTP 测试和 CPU 核心模式 |
 | Linux TTS 服务 | [tts-linux.md](design/tts-linux.md) | Embedded Speech Linux TTS HTTP 服务与 NaturalVoice 运行时解耦 |
 | 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/design/android-offline-tts-apk.md) | 内置 Xiaoxiao 模型、离线生成、播放和耗时显示 |

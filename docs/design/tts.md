@@ -93,3 +93,12 @@
 - `tts-linux.js` 与 Wine TTS 保持 HTTP 接口兼容，但默认通过独立 Linux CLI 子进程执行合成。
 - 正式运行时资源放在 `3rd/tts-server/linux` 或由环境变量指定，不依赖 `NaturalVoiceSAPIAdapter`。
 - Linux/Wine/APK 使用同一硬编码授权串；Wine 默认 prefix 位于 `3rd/tts-server/wine/runtime/prefix`。
+
+## 内置 tts.server 服务任务
+
+- `tts.server` 是唯一的服务任务，通过实例参数 `engine=wine|linux` 选择本机 TTS HTTP 服务实现。
+- 任务实例参数包含 `port`，监听地址固定为 `127.0.0.1`；默认端口为 `3001`，Wine 和 Linux 服务均使用与主服务器 TTS 客户端兼容的 `/api/tts`、`/api/voices` 和 `/api/tts/status` 接口。
+- `engine=wine` 启动 `3rd/tts-server/tts-wine.js`，不依赖 Win7 虚拟机；`engine=linux` 启动 `3rd/tts-server/tts-linux.js` 并显式使用共享模型目录。
+- 任务系统只创建一个 `tts.server` server service 实例，并根据该实例的 `running` 状态在主服务器启动时自动恢复；重复启动同一 server service scope 会先停止旧实例。
+- 服务就绪后只更新主服务器通用 TTS URL；本阶段保持 `tts.serverEnabled=false`，不启用显示端失败后的服务器 TTS 回退。
+- 主服务器继续使用 `src/external/tts/tts-service.js` 的 HTTP 客户端，不直接调用 Wine worker 或 Linux CLI。

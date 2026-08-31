@@ -2,6 +2,7 @@ const tasks = {
   'image.resize': require('./image-resize'),
   'model.inference': require('./model-inference'),
   'time.announce': require('./time-announce'),
+  'tts.server': require('./tts-server'),
   'llm.chat': require('./llm-chat'),
   'search.web': require('./search'),
   'chat2api.proxy': require('./chat2api-proxy')

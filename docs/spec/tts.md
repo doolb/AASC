@@ -266,6 +266,59 @@ onResponse(res):
 
 Linux TTS 的 HTTP、队列、CLI 和运行时路径伪代码见 `docs/spec/tts-linux.md`。
 
+## tts.server 内置服务任务
+
+```text
+tts.server:
+    id = 'tts.server'
+    target = 'server'
+    mode = 'service'
+    params = [engine, port]
+    engine 默认 'wine'
+    port 默认 3001
+
+run(context):
+    engine = 校验 params.engine，只允许 wine 或 linux
+    port = 校验 params.port，为 1024..65535 的整数
+    如果 engine == wine:
+        entry = 3rd/tts-server/tts-wine.js
+        环境变量 PORT = port
+        环境变量 WINEPREFIX = 3rd/tts-server/wine/runtime/prefix
+        环境变量 WINE_BIN_DIR = 3rd/tts-server/wine/bin
+    如果 engine == linux:
+        entry = 3rd/tts-server/tts-linux.js
+        环境变量 PORT = port
+        环境变量 TTS_LINUX_BIN = 3rd/tts-server/linux/bin/tts_linux
+        环境变量 TTS_LINUX_MODEL_DIR = 3rd/tts-server/models/extracted
+        环境变量 TTS_LINUX_SDK_DIR = 3rd/tts-server/linux/lib
+
+    启动 process.execPath + entry，绑定 stdout/stderr 日志
+    轮询 http://127.0.0.1:port/api/tts/status，直到 HTTP 200 或启动超时
+    服务未就绪:
+        终止子进程
+        返回启动失败
+    服务已就绪:
+        setTtsServiceUrl('http://127.0.0.1:port/api/tts')
+        推送 widget 状态 { engine, port, status: 'running' }
+        返回 { type: 'service', stop }
+
+stop():
+    发送 SIGTERM，超时后发送 SIGKILL
+    恢复任务启动前的通用 TTS serviceUrl
+    推送 widget 状态为 stopped
+```
+
+自动恢复流程:
+
+```text
+任务索引中存在一个 tts.server server service 实例且 status == 'running'
+    -> TaskManager.restoreAutoStartServices()
+    -> submit(instance) 保留 instanceId、params 和 builtinId
+    -> runInstance(instance)
+    -> tts.server.run(context)
+    -> 更新主服务器内存中的通用 serviceUrl
+```
+
 ## TTS 压测脚本 (src/scripts/tts-stress-test.js)
 
 ```

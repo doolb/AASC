@@ -30,7 +30,7 @@
 | 地图可视化 | [map-visualization.md](spec/map-visualization.md) | 执行者能力可视化、PixiJS渲染器、数据模型 |
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
-| 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求超时、pipeline 写盘、失败文件回收 |
+| 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求保护、内置 tts.server 服务任务与通用 HTTP URL |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/spec/android-asr-apk.md) | SenseVoice 模型、音频输入、识别耗时和 HTTP 服务伪代码 |
 | Linux TTS 服务 | [tts-linux.md](spec/tts-linux.md) | Linux Embedded Speech TTS HTTP 服务、队列与独立运行时路径 |
 | 独立 Android 离线 TTS APK | [android-offline-tts-apk.md](../3rd/tts-server/docs/spec/android-offline-tts-apk.md) | 内置模型离线合成、WAV 播放和耗时显示伪代码 |
