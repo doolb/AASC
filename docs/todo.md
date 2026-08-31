@@ -8,6 +8,11 @@
 
 ## 控制端
 
+- ⏳可选任务 [2026-08-31] 能力拆分为内置任务或用户任务
+  - 候选：天气查询、媒体搜索/播放、提醒管理、显示端控制、TTS 生成、系统诊断、RSS/数据处理和自定义工作流。
+  - 建议优先级：`weather.query` → `media.search` → `reminder.*` → `display.control`。
+  - 当前仅登记方案，暂不实现，也不创建对应任务实例。
+
 - ✅已完成 [2026-08-31][2026-08-31] 任务列表轮询日志降噪
   - 静默正常 `task:list` 的 WebSocket 收发日志，保留任务列表处理异常日志。
   - 测试：任务列表/Widget 日志降噪专项 3/3 通过。
@@ -91,6 +96,7 @@
   - Qwen、DeepSeek、Mimo、MiniMax、Qwen AI、Z.ai、Kimi 复用已知原生会话字段；GLM、Perplexity 等场景保留历史重放能力。
   - 测试：Chat2API 全量回归 53/53 通过，覆盖会话持久化、并发串行、Provider 状态、输入输出转换和 SSE 路由。
   - 重启验证：执行 `npm run restart:server` 后，实际 `8083` 代理健康检查正常，根路径和 `/v1/responses` 请求均已生效。
+  - 真实模型验证：Qwen3.6-Flash 非流式首轮、`previous_response_id` 续聊和 `stream=true` 流式请求均成功。
   - 保留上游核心版本和 GPL-3.0 许可证，不依赖 `/mnt/Chat2API` 或 Electron 运行。
   - 关联任务：`docs/task/2026-08-31_Chat2APIResponses协议兼容.md`。
 

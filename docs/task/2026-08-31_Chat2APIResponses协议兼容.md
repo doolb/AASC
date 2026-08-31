@@ -85,3 +85,4 @@ POST /v1/responses(request):
 - 已完成会话并发串行、敏感数据不回传和路由 SSE 终止标记测试。
 - Chat2API 全量回归：53/53 通过；变更 JavaScript 语法检查和 `git diff --check` 通过。
 - 已执行 `npm run restart:server` 重启实际主服务；`127.0.0.1:8083/health` 正常，根路径包含 `/v1/responses`，空请求返回 `invalid_request_error`。
+- 使用已配置的 Qwen3.6-Flash 完成真实非流式首轮、`previous_response_id` 续聊和 `stream=true` 流式请求，均返回预期结果。

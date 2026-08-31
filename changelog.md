@@ -22,6 +22,7 @@
   - Qwen、DeepSeek、Mimo、MiniMax、Qwen AI、Z.ai、Kimi 接入已确认的原生会话标识，保留其他 Provider 的统一历史上下文能力。
   - 测试：Chat2API 全量回归 53/53 通过。
   - 重启验证：主服务重启后 `8083` 代理健康检查正常，根路径已列出 `/v1/responses`，空请求返回预期的 `invalid_request_error`。
+  - 真实模型验证：Qwen3.6-Flash 非流式首轮、`previous_response_id` 续聊和 `stream=true` 流式请求均成功。
   - 详细任务：`docs/task/2026-08-31_Chat2APIResponses协议兼容.md`。
 
 - ✅ [2026-08-30] 增加 Chat2API 原始请求/响应调试日志

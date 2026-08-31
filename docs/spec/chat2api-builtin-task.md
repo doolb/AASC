@@ -322,6 +322,9 @@ createChat2ApiProxyService(options):
 运行验证:
     重启主服务后访问 Chat2API 代理根路径 -> endpoints 包含 /v1/responses
     POST /v1/responses 空请求 -> 返回 invalid_request_error，而不是 not_found
+    使用已配置模型发送真实非流式请求 -> 返回 response/output_text/conversation
+    使用 previous_response_id 发送第二轮 -> 复用 conversation 并返回新的 response
+    使用 stream=true 发送真实请求 -> 返回 Responses 增量事件和 [DONE]
 ```
 
 ## 原始请求/响应调试日志

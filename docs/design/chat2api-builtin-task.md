@@ -116,6 +116,7 @@ Provider adapter
 - `store=false` 不阻止 AASC 为完成 Provider 续接而保存最小会话状态；Responses 的返回对象仍标记调用方请求的 `store` 值。
 - 当前只实现 Pi Agent 所需的 Responses 兼容子集，不实现后台响应、内置工具、Conversations CRUD 和响应查询/删除管理 API。
 - 2026-08-31 已通过 `npm run restart:server` 重启实际主服务，并确认运行中的 Chat2API 代理根路径已加载 `/v1/responses`。
+- 2026-08-31 使用已配置的 Qwen3.6-Flash 完成真实非流式首轮、`previous_response_id` 续聊和流式 SSE 验证。
 
 ### 原始请求/响应调试日志
 
