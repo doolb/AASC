@@ -115,6 +115,7 @@ Provider adapter
 - 会话优先固定到首次选择的 Provider 账号；账号不可用时允许切换账号并重放历史，同时清空失效的原生状态。
 - `store=false` 不阻止 AASC 为完成 Provider 续接而保存最小会话状态；Responses 的返回对象仍标记调用方请求的 `store` 值。
 - 当前只实现 Pi Agent 所需的 Responses 兼容子集，不实现后台响应、内置工具、Conversations CRUD 和响应查询/删除管理 API。
+- 2026-08-31 已通过 `npm run restart:server` 重启实际主服务，并确认运行中的 Chat2API 代理根路径已加载 `/v1/responses`。
 
 ### 原始请求/响应调试日志
 

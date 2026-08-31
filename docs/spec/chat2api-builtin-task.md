@@ -318,6 +318,10 @@ createChat2ApiProxyService(options):
     /v1/completions -> 将 prompt 转成 chat messages 后转发
     stream=true -> 设置 text/event-stream，逐块输出 data: JSON
     stop() -> 结束活动连接并关闭 HTTP Server
+
+运行验证:
+    重启主服务后访问 Chat2API 代理根路径 -> endpoints 包含 /v1/responses
+    POST /v1/responses 空请求 -> 返回 invalid_request_error，而不是 not_found
 ```
 
 ## 原始请求/响应调试日志

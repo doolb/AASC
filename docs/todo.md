@@ -1,5 +1,11 @@
 # Web MediaCenter - 未完成任务列表
 
+提醒语音指令文本，包含时间和提醒
+系统帮助分指令
+晚安 自定义，指令不响应
+添加修复模式，调用工作者对话，需要输入密码进入
+
+
 ## 控制端
 
 - ✅已完成 [2026-08-31][2026-08-31] 任务列表轮询日志降噪
@@ -84,6 +90,7 @@
   - AASC 持久化 Responses 会话、响应链、Provider/账号绑定、历史消息和 Provider 原生会话状态；不支持稳定原生续接时回退历史重放。
   - Qwen、DeepSeek、Mimo、MiniMax、Qwen AI、Z.ai、Kimi 复用已知原生会话字段；GLM、Perplexity 等场景保留历史重放能力。
   - 测试：Chat2API 全量回归 53/53 通过，覆盖会话持久化、并发串行、Provider 状态、输入输出转换和 SSE 路由。
+  - 重启验证：执行 `npm run restart:server` 后，实际 `8083` 代理健康检查正常，根路径和 `/v1/responses` 请求均已生效。
   - 保留上游核心版本和 GPL-3.0 许可证，不依赖 `/mnt/Chat2API` 或 Electron 运行。
   - 关联任务：`docs/task/2026-08-31_Chat2APIResponses协议兼容.md`。
 

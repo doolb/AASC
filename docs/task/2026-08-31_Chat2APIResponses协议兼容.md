@@ -84,3 +84,4 @@ POST /v1/responses(request):
 - 已完成 Provider/账号固定、原生会话状态传递，以及无稳定原生会话时的历史重放。
 - 已完成会话并发串行、敏感数据不回传和路由 SSE 终止标记测试。
 - Chat2API 全量回归：53/53 通过；变更 JavaScript 语法检查和 `git diff --check` 通过。
+- 已执行 `npm run restart:server` 重启实际主服务；`127.0.0.1:8083/health` 正常，根路径包含 `/v1/responses`，空请求返回 `invalid_request_error`。
