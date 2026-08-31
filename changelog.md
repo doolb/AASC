@@ -22,6 +22,11 @@
 
 ### Chat2API 内置任务实施中
 
+- ⏳ [2026-08-31] 规划 Chat2API 全局切换 Responses 协议并停用外部实例
+  - 普通聊天、语音、搜索/系统 LLM 任务和 Pi Agent 将统一使用内置 `/v1/responses`；AI 角色后端和旧 profile 配置保留。
+  - 内置链路通过真实验证后，精确停止 `/mnt/Chat2API` Electron 进程树，不删除外部配置和数据。
+  - 详细设计：`docs/design/chat2api-global-responses.md`；详细任务：`docs/task/2026-08-31_Chat2API全局Responses协议切换.md`。
+
 - ✅ [2026-08-31] 增加 Chat2API Responses 协议兼容
   - 面向 Pi Agent 提供 `/v1/responses`，支持 `conversation`、`previous_response_id`、非流式/流式响应、输入项与 Responses tools 兼容转换。
   - 持久化 AASC 会话、response 链、Provider/账号绑定、历史消息和原生会话状态；Provider 原生状态不可续接时回退历史重放。

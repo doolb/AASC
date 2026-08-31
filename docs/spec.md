@@ -63,6 +63,7 @@
 | 工作 AI 角色 | [ai-roles.md](spec/ai-roles.md) | 控制端 AI 角色、角色定义自管理与任务历史 |
 | LLM 配置 Agent 模式 | [llm-agent-mode.md](spec/llm-agent-mode.md) | 普通 LLM profile 的 Pi RPC 分流、历史隔离与只读权限伪代码 |
 | Chat2API 核心内置任务 | [chat2api-builtin-task.md](spec/chat2api-builtin-task.md) | Chat2API 核心代理、Provider、OAuth、账号和任务生命周期伪代码 |
+| Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](spec/chat2api-global-responses.md) | 全局 Responses transport、聊天会话映射、Pi Provider 和外部实例停用伪代码 |
 | 动态画面填充模式 | [dynamic-fit-mode.md](spec/dynamic-fit-mode.md) | 动态阶段控制器、显示端动画与控制协议伪代码 |
 
 ## 核心模块
