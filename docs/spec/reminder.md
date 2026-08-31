@@ -43,6 +43,25 @@
 
 ## 核心 API
 
+### 语音提醒时间解析
+
+```text
+parseReminderVoiceInput(text):
+    parsed = timeParser.parseTimeForReminder(text)
+    targetTime = new Date(parsed.timestamp)
+    timeDescription = parsed.description
+    content = 从 text 中移除“提醒我”、重复规则和已识别的日期/时间表达
+    如果 content 为空:
+        content = “该做事了”
+    返回 { targetTime, timeDescription, content }
+
+时间表达支持:
+    相对时间: 数字或中文数字 + 秒/分钟/小时 + 前/后
+    相对日期: 今天/明天/后天/大后天
+    时段: 凌晨/早上/上午/中午/下午/傍晚/晚上/深夜
+    绝对日期和时刻: 年月日、X点、X点Y分
+```
+
 ### init()
 初始化提醒模块。
 

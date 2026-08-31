@@ -74,16 +74,16 @@ function parseRelativeDays(text) {
         return { date: tomorrow, description: '明天' };
     }
     
-    if (text.includes('后天')) {
-        const dayAfter = new Date(today);
-        dayAfter.setDate(dayAfter.getDate() + 2);
-        return { date: dayAfter, description: '后天' };
-    }
-    
     if (text.includes('大后天')) {
         const dayAfter = new Date(today);
         dayAfter.setDate(dayAfter.getDate() + 3);
         return { date: dayAfter, description: '大后天' };
+    }
+
+    if (text.includes('后天')) {
+        const dayAfter = new Date(today);
+        dayAfter.setDate(dayAfter.getDate() + 2);
+        return { date: dayAfter, description: '后天' };
     }
     
     if (text.includes('昨天') || text.includes('昨日')) {
@@ -172,6 +172,7 @@ function parseAbsoluteTime(text) {
     let minutes = 0;
     
     const timeMatch = text.match(/(\d{1,2}|[一二三四五六七八九十零〇]+)\s*[点时](\d{1,2}|[一二三四五六七八九十零〇]+)?\s*分?/);
+    const periodMatch = text.match(/凌晨|早上|早晨|上午|中午|下午|傍晚|黄昏|晚上|晚间|深夜|半夜/);
     if (timeMatch) {
         hours = extractNumber(timeMatch[1]);
         if (timeMatch[2]) {
@@ -180,15 +181,25 @@ function parseAbsoluteTime(text) {
     }
     
     if (hours !== null) {
+        const period = periodMatch ? periodMatch[0] : '';
+        const originalHours = hours;
+        if (['中午', '下午', '傍晚', '黄昏', '晚上', '晚间'].includes(period) && hours < 12) {
+            hours += 12;
+        }
+        if (['凌晨', '深夜', '半夜'].includes(period) && hours === 12) {
+            hours = 0;
+        }
+
         const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
         
         if (date <= now) {
             date.setDate(date.getDate() + 1);
         }
         
-        const description = minutes > 0 
-            ? `${hours}点${minutes}分`
-            : `${hours}点`;
+        const hourDescription = period ? `${period}${originalHours}点` : `${hours}点`;
+        const description = minutes > 0
+            ? `${hourDescription}${minutes}分`
+            : hourDescription;
         return { date, description, isAbsolute: true };
     }
     

@@ -1172,7 +1172,7 @@ function handleDisplayConversationInput(displayId, text) {
         text,
         getDisplayVoiceAssistantNames(),
         Date.now(),
-        { isBuiltin: voiceCommand.isBuiltinVoiceCommand }
+        { isBuiltin: voiceCommand.isWakeFreeVoiceCommand }
     );
     if (!result.accepted) return result;
 
@@ -4839,7 +4839,7 @@ async function handleControlMessageFallback(data, ws) {
                             if (isDisplayVoiceInput
                                 && data.conversationActive === true
                                 && conversationConfirmationMode !== 'off'
-                                && !voiceCommand.isBuiltinVoiceCommand(data.text)) {
+                                && !voiceCommand.isWakeFreeVoiceCommand(data.text)) {
                                 requestConversationConfirmation(targetDisplayId, data.text);
                                 return;
                             }

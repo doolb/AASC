@@ -11,6 +11,14 @@
   - 改动文件：`src/apps/server/modules/task-engine/builtin-tasks/tts-server.js`、`registry.js`、`task-manager.js`、`server-app.js`、`config/config.json`、`res/tasks/tts.server/results/index.json` 及对应 design/spec/task/test 文档。
   - 验证：内置任务测试 4/4 通过；服务器重启后实例自动恢复；Wine 3/3 worker 就绪；本机 `/api/tts` 返回 `200 audio/wav`。
 
+### 语音提醒与自定义指令
+
+- ✅ [2026-08-31] 统一语音提醒时间解析并允许自定义命令免唤醒
+  - 语音提醒复用共享时间解析器，支持中文数字、时段、相对日期/时间和年月日表达，并从提醒内容中移除已识别的时间片段。
+  - 已配置的自定义关键词在显示端等待唤醒状态下可直接进入命令执行链；普通聊天和会话控制词仍需唤醒，未开启服务器 TTS 回退。
+  - 改动文件：`src/core/utils/time-parser.js`、`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js`、`src/apps/server/boot/server-app.js`、相关测试和 design/spec/task 文档。
+  - 验证：时间解析 5/5、显示端语音回归 10/10、Chat2API 回归 60/60、内置任务回归 6/6 通过；语法检查和 `git diff --check` 通过。
+
 ### AI 规则：任务台账与变更日志分离
 
 - 明确 `docs/todo.md` 只保留待处理、可选和进行中任务。

@@ -103,6 +103,24 @@ function testSystemHelpBypassesWakeWithTrailingPunctuation() {
     assert.deepStrictEqual(result.event, { type: 'input', bypassWake: true });
 }
 
+function testCustomCommandBypassesWakeWithoutActivatingConversation() {
+    const waiting = createConversationState(true);
+    const commandConfig = { commands: { '晚安': ['关闭报时', '静音'] } };
+    const isWakeFree = text => voiceCommand.isWakeFreeVoiceCommand(text, commandConfig);
+    const result = reduceConversationInput(
+        waiting,
+        '晚安。',
+        assistants,
+        1000,
+        { isBuiltin: isWakeFree }
+    );
+
+    assert.strictEqual(voiceCommand.isWakeFreeVoiceCommand('晚安。', commandConfig), true);
+    assert.strictEqual(result.accepted, true);
+    assert.deepStrictEqual(result.state, waiting);
+    assert.deepStrictEqual(result.event, { type: 'input', bypassWake: true });
+}
+
 function testConfirmationKeywordInsideOrdinarySentenceDoesNotBypassWake() {
     const waiting = createConversationState(true);
     const result = reduceConversationInput(
@@ -144,7 +162,8 @@ testStateTransitions();
 testDisabledAndExpiry();
 testBuiltinCommandBypassesWakeWithoutActivatingConversation();
 testSystemHelpBypassesWakeWithTrailingPunctuation();
+testCustomCommandBypassesWakeWithoutActivatingConversation();
 testConfirmationKeywordInsideOrdinarySentenceDoesNotBypassWake();
 testAddressedGroupInputWakesWithoutRemovingOriginalText();
 testPureAddressedWakeDoesNotBecomeChatInput();
-console.log('display-voice-conversation.test.js: 8/8 passed');
+console.log('display-voice-conversation.test.js: 9/9 passed');

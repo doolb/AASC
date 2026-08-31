@@ -348,11 +348,27 @@ function setMediaLibrary(manager) {
 }
 
 function isBuiltinVoiceCommand(text) {
-    const cmdText = String(text || '')
-        .trim()
-        .replace(/[。，！？、；：,.!?;:]+$/gu, '');
+    const cmdText = normalizeVoiceCommandText(text);
     if (!cmdText) return false;
     return BUILTIN_VOICE_COMMAND_DEFINITIONS.some(command => command.matcher(cmdText));
+}
+
+function normalizeVoiceCommandText(text) {
+    return String(text || '')
+        .trim()
+        .replace(/[。，！？、；：,.!?;:]+$/gu, '');
+}
+
+// 等待唤醒状态只放行明确配置过的命令，普通聊天文本仍必须经过唤醒词门控。
+function isWakeFreeVoiceCommand(text, commandConfig = chat.getCommands()) {
+    const cmdText = normalizeVoiceCommandText(text);
+    if (!cmdText) return false;
+    if (isBuiltinVoiceCommand(cmdText)) return true;
+
+    return Object.keys(commandConfig?.commands || {}).some(keyword => {
+        const normalizedKeyword = normalizeVoiceCommandText(keyword);
+        return Boolean(normalizedKeyword) && cmdText.includes(normalizedKeyword);
+    });
 }
 
 function getBuiltinVoiceCommands() {
@@ -558,49 +574,11 @@ function getPendingConfirmationByDisplay(displayId, type) {
 }
 
 function parseTimeExpression(text) {
-    const now = new Date();
-    let targetTime = null;
-    let timeDescription = '';
-    
-    const relativeMinuteMatch = text.match(/(\d+)\s*分钟/);
-    const relativeSecondMatch = text.match(/(\d+)\s*秒/);
-    const relativeHourMatch = text.match(/(\d+)\s*小时/);
-    const absoluteTimeMatch = text.match(/(\d{1,2})[点时](\d{1,2})?分?/);
-    const absoluteHourMatch = text.match(/(\d{1,2})[点时]$/);
-    
-    if (relativeMinuteMatch) {
-        const minutes = parseInt(relativeMinuteMatch[1]);
-        targetTime = new Date(now.getTime() + minutes * 60 * 1000);
-        timeDescription = `${minutes}分钟后`;
-    } else if (relativeSecondMatch) {
-        const seconds = parseInt(relativeSecondMatch[1]);
-        targetTime = new Date(now.getTime() + seconds * 1000);
-        timeDescription = `${seconds}秒后`;
-    } else if (relativeHourMatch) {
-        const hours = parseInt(relativeHourMatch[1]);
-        targetTime = new Date(now.getTime() + hours * 60 * 60 * 1000);
-        timeDescription = `${hours}小时后`;
-    } else if (absoluteTimeMatch) {
-        const hours = parseInt(absoluteTimeMatch[1]);
-        const minutes = absoluteTimeMatch[2] ? parseInt(absoluteTimeMatch[2]) : 0;
-        targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
-        if (targetTime <= now) {
-            targetTime.setDate(targetTime.getDate() + 1);
-        }
-        timeDescription = `${hours}点${minutes > 0 ? minutes + '分' : '整'}`;
-    } else if (absoluteHourMatch) {
-        const hours = parseInt(absoluteHourMatch[1]);
-        targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, 0, 0, 0);
-        if (targetTime <= now) {
-            targetTime.setDate(targetTime.getDate() + 1);
-        }
-        timeDescription = `${hours}点整`;
-    } else {
-        targetTime = new Date(now.getTime() + 5 * 60 * 1000);
-        timeDescription = '5分钟后';
-    }
-    
-    return { targetTime, timeDescription };
+    const parsed = timeParser.parseTimeForReminder(text);
+    return {
+        targetTime: new Date(parsed.timestamp),
+        timeDescription: parsed.description
+    };
 }
 
 function parseRepeatRule(text) {
@@ -618,12 +596,21 @@ function parseRepeatRule(text) {
 
 function extractReminderContent(text) {
     let content = text;
-    
-    content = content.replace(/提醒我?/, '');
-    content = content.replace(/每天|每周|每月|每年/, '');
-    content = content.replace(/\d+\s*(分钟|秒|小时)后/, '');
-    content = content.replace(/\d{1,2}[点时](\d{1,2})?分?/, '');
-    content = content.replace(/\d{1,2}[点时]$/, '');
+
+    const numberPattern = '(?:\\d+|[零〇一二三四五六七八九十百千万]+)';
+    const timeExpressions = [
+        new RegExp(`${numberPattern}\\s*(?:秒|分钟|小时|天|周|个月|年)\\s*(?:前|后)`, 'gu'),
+        new RegExp(`(?:${numberPattern})\\s*[点时](?:${numberPattern}\\s*分?)?`, 'gu'),
+        new RegExp(`(?:(?:\\d{4}|[零〇一二三四五六七八九十]+)\\s*年\\s*)?(?:\\d{1,2}|[零〇一二三四五六七八九十]+)\\s*月\\s*(?:\\d{1,2}|[零〇一二三四五六七八九十]+)\\s*[日号]`, 'gu'),
+        /(?:大后天|今天|今日|明天|明日|后天)/gu,
+        /(?:凌晨|早上|早晨|上午|中午|下午|傍晚|黄昏|晚上|晚间|深夜|半夜)/gu,
+        /(?:每天|每周|每月|每年)/gu
+    ];
+
+    content = content.replace(/提醒我?/gu, '');
+    for (const expression of timeExpressions) {
+        content = content.replace(expression, '');
+    }
     
     content = content.trim();
     
@@ -1898,6 +1885,7 @@ module.exports = {
     setMediaLibrary,
     isBuiltinVoiceCommand,
     getBuiltinVoiceCommands,
+    isWakeFreeVoiceCommand,
     getVoiceCommandHelpText,
     processVoiceCommand,
     enqueueVoiceInput,
