@@ -584,13 +584,15 @@ async function startServer() {
                             if (await handleRepairModeDisplayInput(ctx.displayId, text)) return;
                             const conversation = handleDisplayConversationInput(ctx.displayId, text);
                             const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
-                            log('语音', `voiceCommand门控 displayId=${ctx.displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} text=${JSON.stringify(text)}`);
+                            const oneShotGroup = conversation.event?.oneShotGroup === true;
+                            log('语音', `voiceCommand门控 displayId=${ctx.displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} oneShotGroup=${oneShotGroup} text=${JSON.stringify(text)}`);
                             if (conversation.accepted && conversation.event?.type === 'input') {
                                 handleControlMessageFallback({
                                     type: 'voiceCommand',
                                     text,
                                     displayId: ctx.displayId,
-                                    conversationActive
+                                    conversationActive,
+                                    oneShotGroup
                                 }, ctx.ws);
                             }
                         }
@@ -1020,12 +1022,14 @@ async function runRepairModeAgent(displayId, state, text) {
 
     const agentTtsStream = createAgentTtsStream({
         playOnControl: false,
-        displayId,
+        // 来源显示端只负责接收文字响应；音频沿用通用语音播放目标，避免播到无扬声器的来源端。
+        displayId: null,
         displayIds: [],
-        ttsScheduler: createTtsGenerationScheduler(displayId),
+        getDisplayIds: getOnlineVoicePlaybackDisplayIds,
+        ttsScheduler: createTtsGenerationScheduler(),
         splitIntoSentences: chat.splitIntoSentences,
         stripMarkdown,
-        generateTTS: (ttsText) => generateTtsWithFallback(ttsText, undefined, undefined, displayId),
+        generateTTS: (ttsText) => generateTtsWithFallback(ttsText),
         sendToControl: broadcastToControls,
         sendToDisplay,
         allowRepairModeTts: true,
@@ -1704,8 +1708,8 @@ app.post('/api/tts/generate', async (req, res) => {
         
         const audioPath = await generateTtsWithFallback(text, voice, speed);
         const fileName = path.basename(audioPath);
-        res.json({ 
-            status: 'success', 
+        res.json({
+            status: 'success',
             audioUrl: `/uploads/tts/${fileName}`,
             message: 'TTS生成成功'
         });
@@ -2470,8 +2474,8 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
             });
         }
         
-        res.json({ 
-            status: 'success', 
+        res.json({
+            status: 'success',
             text: recognizedText
          });
     } catch (err) {
@@ -5030,7 +5034,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         if (data.isFinal && data.text && data.text.trim()) {
             const conversation = handleDisplayConversationInput(displayId, data.text.trim());
             const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
-            log('语音', `voiceCommand门控 displayId=${displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} text=${JSON.stringify(data.text.trim())}`);
+            const oneShotGroup = conversation.event?.oneShotGroup === true;
+            log('语音', `voiceCommand门控 displayId=${displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} oneShotGroup=${oneShotGroup} text=${JSON.stringify(data.text.trim())}`);
             if (!conversation.accepted) {
                 log('语音', `显示端 ${displayId} 当前等待唤醒，忽略普通语音`);
                 return;
@@ -5043,6 +5048,7 @@ function handleDisplayMessageFallback(displayId, data, ws) {
                 text: data.text.trim(),
                 displayId,
                 conversationActive,
+                oneShotGroup,
                 ...speakerPayload
             }, ws);
         }
@@ -5259,7 +5265,8 @@ async function handleControlMessageFallback(data, ws) {
                                 false,
                                 {
                                     groupAssistantNames: getDisplayVoiceAssistantNames(),
-                                    conversationActive: data.conversationActive === true
+                                    conversationActive: data.conversationActive === true,
+                                    oneShotGroup: data.oneShotGroup === true
                                 }
                             );
                             

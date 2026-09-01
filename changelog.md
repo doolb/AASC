@@ -20,7 +20,28 @@
   - 改动文件：`src/external/llm/chat-history-store.js`、`src/external/llm/chat-history-store.test.js`、`src/external/llm/llm-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/js/aasc-user-config.js`、`src/apps/web-mediacenter/ui/public/upload.html` 及对应 design/spec/task 文档。
   - 验证：历史存储、Pi snapshot/delta 重建及聊天/Agent 相关回归共 34/34 通过；Node 语法检查和 `git diff --check` 通过；自动测试请求隔离按要求暂不实现并保留在 `docs/todo.md`。
   - 真实链路补充验收：重启后历史加载和聊天导出正常，独立 Pi RPC/`PiRuntimeManager` 返回完整回复；控制端群聊请求 90 秒未返回且未污染历史，列为现有聊天集成链路的后续问题。
+
+### Android Termux服务器
+
+- ✅ [2026-09-01] 完成 AASC Node.js 服务器在 Termux Android 设备上的试迁移和持久运行验证。
+  - 远端独立目录：`~/aasc-server-test`；测试端口：`18081`；未停止或修改现有 8081 code-server。
+  - 通过 Termux npm 安装 293 个依赖，跳过 npm 安装脚本和 Puppeteer 浏览器下载；使用 runit 服务监督和独立日志目录保持运行。
+  - 验证：`/api/status` 返回 `status=ok`，`/upload` 和 `/display` 返回 HTTP 200，局域网访问 `https://192.168.1.6:18081/display` 返回 HTTP 200，服务连续运行检查通过。
+  - 已知边界：`sherpa-onnx-node` 未安装；TTS Wine、Puppeteer 和 Android 重启自动恢复尚未迁移或验收。
+  - 文档：`docs/design/android-termux-server.md`、`docs/spec/android-termux-server.md`、`docs/task/2026-09-01_Termux服务器试迁移.md`。
+
+- ✅ [2026-09-01] 停止 Android Termux 中的 code-server 并将 AASC 端口切换到 8081。
+  - 停止 code-server 并写入 runit `down` 标记，取消自动启动但保留其数据；AASC 从 18081 切换到 8081，旧端口已释放。
+  - 验证：AASC runit 状态为 `run`，`/api/status` 返回 `status=ok`，`/upload` 和 `/display` 返回 HTTP 200，局域网 `https://192.168.1.6:8081/display` 返回 HTTP 200。
+  - 文档：`docs/design/android-termux-server.md`、`docs/spec/android-termux-server.md`、`docs/task/2026-09-01_Termux服务器切换8081端口.md`。
+
 ### Chat2API 工具调用
+
+- ✅ [2026-09-01] 修复 Pi Chat2API canonical 工具标签残留
+  - 参考 `/mnt/Chat2API` 的 `managedXmlProtocol`，按实际匹配到的 `</function>` 或 `</|CHAT2API|invoke>` 标签长度推进解析游标，并完整清理 `tool_calls` 区块。
+  - 拒绝带 `/` 的未识别 Chat2API 协议残留，避免 `|invoke></|CHAT2API|tool_calls>` 进入聊天文本和 TTS。
+  - 改动文件：`src/apps/server/modules/chat/pi-chat2api-tool-converter.js`、`src/apps/server/modules/chat/pi-chat2api-tool-converter.test.js`、`docs/design/llm-agent-mode.md`、`docs/spec/llm-agent-mode.md`、`docs/task/2026-09-01_修复Chat2API工具标签残留.md`。
+  - 验证：转换器回归 10/10、`npm run check:chat2api` 70/70 通过；两个转换器文件语法检查和 `git diff --check` 通过。
 
 - ✅ [2026-08-31] 对齐原版 Chat2API 公共 managed tool calling 并修复原生会话重复 System
   - 所有网页 Provider 统一由 `chat2api-tool-calling.js` 将 function tools 转成 Chat2API 标签协议提示，核心适配层移除 `tools` 和 `tool_choice` 后再调用 Provider 专用适配器。
@@ -28,6 +49,20 @@
   - 移除 Qwen adapter 的独立注入逻辑，保留 Pi 现有标签解析、工具白名单和 TTS 隔离链路。
   - 改动文件：`src/apps/server/modules/chat2api/chat2api-tool-calling.js`、`chat2api-core-adapter.js`、`chat2api-provider-adapters.js` 及相关测试、design/spec/task 文档。
   - 验证：`npm run check:chat2api`，70/70 通过；`git diff --check` 通过。
+
+### 显示端语音唤醒
+
+- ✅ [2026-08-31] 修复工作 Agent 回复 TTS 播放到错误显示端的问题
+  - 修复模式 Agent 回复不再把语音来源端作为唯一播放目标，改为每句动态复用在线 `voicePlayback` 显示端，兼容语音采集端与扬声器端分离的部署。
+  - 保留 `allowRepairModeTts=true`，仅放行修复 Agent 的回复 TTS，普通 TTS 仍受修复模式抑制。
+  - 验证：Agent TTS 测试 9/9、修复模式业务测试 4/4 通过；相关源文件语法检查通过。
+
+- ✅ [2026-08-31] 助手名对话改为一次性群聊输入，不自动激活持续群聊
+  - 等待唤醒时说“助手名 + 对话内容”仍保留完整原文并进入正常群聊路由，但显示端继续保持 `waitingWake`，不广播群聊模式、不启动持续会话倒计时。
+  - 新增 `oneShotGroup` 路由标记，确保当前全局处于私聊时也使用群聊的全部角色模板；纯“你好 + 助手名”仍按原规则进入持续群聊。
+  - 普通 `voiceInput` 和 `audioChunk` ASR 路径保持一致，下一条未唤醒的普通语音继续被忽略。
+  - 改动文件：`src/apps/server/modules/voice/display-voice-conversation.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/modules/voice/voice-command-app-service.js` 及相关测试、design/spec/task 文档。
+  - 验证：显示端语音状态测试 9/9、群聊模板与语音路由测试 12/12 通过；相关源文件语法检查通过。
 
 ### 普通聊天 Agent
 
@@ -95,6 +130,20 @@
   - 详细记录：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
 
 ### Chat2API 内置任务实施中
+
+- ✅ [2026-08-31] Chat2API 简洁日志增加 sessionId
+  - 简洁模式从请求、普通响应和 SSE/压缩 SSE 的已知会话字段提取统一的 `sessionId`，兼容不同 Provider 的命名方式及约定的嵌套会话对象。
+  - 请求或响应没有会话 ID 时不输出空字段；响应未重复返回时可复用请求中的会话 ID。
+  - 完整模式、敏感信息保护、字节上限和流式透传行为保持不变。
+  - 验证：原始流量日志测试 9/9、Chat2API 全量检查 62/62 通过。
+
+- ✅ [2026-08-31] 修复 Pi Agent 与 Chat2API 原生会话偶发断链
+  - Pi Responses 快照改为按 role、content、工具调用字段比较，忽略 assistant 的模型、用量、时间戳等运行时元数据，避免误切断 `previous_response_id`。
+  - 每个 Pi 子进程生成独立稳定的 `piSessionId`；首次请求或快照重建使用 Pi `conversation`，快照重建时清空旧 Provider native state，避免完整历史被追加到旧会话。
+  - compact 原始流量日志同时显示 Provider `sessionId` 和 Pi `piSessionId`，便于排查外层 Pi 会话与上游原生会话是否串链。
+  - 改动文件：Pi runtime/provider、Chat2API Responses 服务、核心适配层、原始流量日志及对应测试、设计/spec/task 文档。
+  - 验证：目标测试 6 个测试文件全部通过，Chat2API 全量检查 68/68 通过。
+  - 详细设计：`docs/design/chat2api-global-responses.md`；详细任务：`docs/task/2026-08-31_Pi与Chat2API原生会话复用.md`。
 
 - ✅ [2026-08-31] 补齐普通聊天 Agent profile 的 Pi/Codex 控制端选择
   - 「聊天 → 设置 → LLM 服务器配置」中，调用模式选择 Agent 后显示 Pi/Codex 后端选择；直接 LLM 模式隐藏该配置。
@@ -7121,6 +7170,21 @@
 - `docs/task/2026-08-22_显示端同ID重连清理.md`
 
 # 2026-08-31
+
+## Responses 续接历史重放修复
+
+- ✅ [2026-08-31] 修复 Responses 续接重复历史和 Pi Agent 未复用 `response_id`。
+  - `chat2api-responses-service` 在 Provider 有原生会话状态时只发送本轮新增 input；无原生状态时继续重放本地历史。
+  - Pi Responses Provider 按 `sessionId` 保存已发送消息快照和最新响应 ID，正常追加时发送消息增量及 `previous_response_id`，上下文变化时自动重建链。
+  - 验证：Responses 服务、Provider adapter、Pi tracker、Pi Runtime、只读工具测试通过；`npm run check:chat2api` 64/64、语法检查和 `git diff --check` 通过。
+  - 任务文档：`docs/task/2026-08-31_Responses续接历史重放修复.md`。
+
+## Pi Agent 真实链路验收
+
+- ✅ [2026-08-31] 完成当前 `qwen3.5` Pi Agent 的真实流程测试。
+  - AASC 服务重启后，Pi RPC、控制端流式 `chatChunk`、最终 `chatResponse` 均验证成功。
+  - 同一控制端 session 连续两轮请求成功续接，第二轮正确读取首轮上下文并返回 `PI-CONT-20260831`。
+  - 发现无 `displayId` 的控制端 `chatMessage` 会提前返回，已登记为待处理边界；带显示端 ID 的现有控制端流程不受影响。
 
 ## 控制端修复模式设置
 

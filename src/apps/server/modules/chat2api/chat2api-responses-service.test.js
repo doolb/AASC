@@ -21,7 +21,7 @@ const createFakeSessionStore = () => {
   };
 };
 
-test('Responses 服务创建会话并把第二轮历史传给核心适配器', async () => {
+test('Responses 服务创建会话并让原生 Provider 续接第二轮增量', async () => {
   const sessionStore = createFakeSessionStore();
   const requests = [];
   const service = createChat2ApiResponsesService({
@@ -57,10 +57,134 @@ test('Responses 服务创建会话并把第二轮历史传给核心适配器', a
     preferredAccountId: 'qwen-main',
     responseSession: { nativeState: { sessionId: 'qwen-session', parentReqId: 'qwen-parent' } },
   });
-  assert.deepEqual(requests[1].request.messages.map((message) => message.role), ['user', 'assistant', 'user']);
+  assert.deepEqual(requests[1].request.messages.map((message) => message.role), ['user']);
   assert.equal(sessionStore.sessions.get(first.body.conversation.id).latestResponseId, third.body.id);
   assert.equal(sessionStore.sessions.get(first.body.conversation.id).responseIds.includes(first.body.id), true);
   assert.equal(sessionStore.sessions.get(first.body.conversation.id).responseIds.includes(second.body.id), true);
+});
+
+test('Responses 原生会话续接只把本轮新增输入传给核心适配器', async () => {
+  const sessionStore = createFakeSessionStore();
+  const requests = [];
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: {
+      forwardChatCompletion: async (request) => {
+        requests.push(request);
+        return {
+          body: {
+            choices: [{ message: { role: 'assistant', content: `收到：${request.messages.at(-1).content}` } }],
+          },
+          providerId: 'qwen',
+          accountId: 'qwen-main',
+          actualModel: 'Qwen3.7',
+          nativeState: { sessionId: 'qwen-session', parentReqId: 'qwen-parent' },
+        };
+      },
+    },
+  });
+
+  const first = await service.createResponse({ model: 'Qwen3.6-Flash', input: '第一轮' });
+  await service.createResponse({ model: 'Qwen3.6-Flash', previous_response_id: first.body.id, input: '第二轮' });
+
+  assert.deepEqual(requests[0].messages.map((message) => message.content), ['第一轮']);
+  assert.deepEqual(requests[1].messages.map((message) => message.content), ['第二轮']);
+});
+
+test('Responses 没有原生会话时续接仍重放本地历史', async () => {
+  const sessionStore = createFakeSessionStore();
+  const requests = [];
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: {
+      forwardChatCompletion: async (request) => {
+        requests.push(request);
+        return {
+          body: { choices: [{ message: { role: 'assistant', content: '完成' } }] },
+          providerId: 'perplexity',
+          accountId: 'perplexity-main',
+          actualModel: 'sonar',
+          nativeState: {},
+        };
+      },
+    },
+  });
+
+  const first = await service.createResponse({ model: 'sonar', input: '第一轮' });
+  await service.createResponse({ model: 'sonar', previous_response_id: first.body.id, input: '第二轮' });
+
+  assert.deepEqual(requests[1].messages.map((message) => message.content), ['第一轮', '完成', '第二轮']);
+});
+
+test('Pi snapshot 会话允许首次建立并在重建时清空旧 Provider 状态', async () => {
+  const sessionStore = createFakeSessionStore();
+  const requests = [];
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: {
+      forwardChatCompletion: async (request, options) => {
+        requests.push({ request, options });
+        return {
+          body: { choices: [{ message: { role: 'assistant', content: '完成' } }] },
+          providerId: 'qwen', accountId: 'qwen-main', actualModel: 'Qwen3.7',
+          nativeState: { sessionId: `qwen-session-${requests.length}` },
+        };
+      },
+    },
+  });
+  const metadata = {
+    aasc_context_owner: 'pi',
+    aasc_pi_session_id: 'pi_snapshot',
+    aasc_pi_context_mode: 'snapshot',
+  };
+  const first = await service.createResponse({
+    model: 'Qwen3.7', conversation: 'pi_snapshot', metadata,
+    input: [{ role: 'user', content: '第一轮' }],
+  });
+  await service.createResponse({
+    model: 'Qwen3.7', conversation: first.body.conversation.id, metadata,
+    input: [
+      { role: 'user', content: '第一轮' },
+      { role: 'assistant', content: '第一轮回复' },
+      { role: 'user', content: '第二轮' },
+    ],
+  });
+
+  assert.deepEqual(requests[1].request.messages.map((message) => message.content), ['第一轮', '第一轮回复', '第二轮']);
+  assert.deepEqual(requests[1].options.responseSession, { nativeState: {} });
+  assert.equal(requests[1].options.conversationId, 'pi_snapshot');
+  assert.equal(requests[1].options.piSessionId, 'pi_snapshot');
+});
+
+test('Pi delta 会话仍只发送增量并复用 Provider 状态', async () => {
+  const sessionStore = createFakeSessionStore();
+  const requests = [];
+  const service = createChat2ApiResponsesService({
+    sessionStore,
+    coreAdapter: {
+      forwardChatCompletion: async (request, options) => {
+        requests.push({ request, options });
+        return {
+          body: { choices: [{ message: { role: 'assistant', content: '完成' } }] },
+          providerId: 'qwen', accountId: 'qwen-main', actualModel: 'Qwen3.7',
+          nativeState: { sessionId: 'qwen-session' },
+        };
+      },
+    },
+  });
+  const baseMetadata = { aasc_context_owner: 'pi', aasc_pi_session_id: 'pi_delta' };
+  const first = await service.createResponse({
+    model: 'Qwen3.7', conversation: 'pi_delta',
+    metadata: { ...baseMetadata, aasc_pi_context_mode: 'snapshot' }, input: '第一轮',
+  });
+  await service.createResponse({
+    model: 'Qwen3.7', conversation: first.body.conversation.id,
+    metadata: { ...baseMetadata, aasc_pi_context_mode: 'delta' }, input: '第二轮',
+  });
+
+  assert.deepEqual(requests[1].request.messages.map((message) => message.content), ['第二轮']);
+  assert.deepEqual(requests[1].options.responseSession, { nativeState: { sessionId: 'qwen-session' } });
+  assert.equal(requests[1].options.piSessionId, 'pi_delta');
 });
 
 test('Responses 服务拒绝未知 previous_response_id 和 conversation 冲突', async () => {

@@ -116,6 +116,7 @@ test('Pi Agent 使用全局 Responses 地址而不是旧 profile API 地址', as
         model: 'qwen'
     }, { id: 'default', permissionProfile: 'readonly', content: '' });
     assert.equal(spawnCalls[0][2].env.AASC_PI_BASE_URL, 'http://127.0.0.1:8083/v1');
+    assert.match(spawnCalls[0][2].env.AASC_PI_CONVERSATION_ID, /^pi_[a-f0-9]{32}$/u);
     await manager.stopAll();
 });
 

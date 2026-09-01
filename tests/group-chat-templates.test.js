@@ -84,6 +84,37 @@ test('语音中包含角色名时应保留完整原始文本并按群聊发送',
     assert.strictEqual(result.systemPrompt, undefined);
 });
 
+test('一次性群聊输入不受当前私聊会话模式影响', async () => {
+    const originalSession = chat.getSession();
+    chat.setSession({
+        ...originalSession,
+        mode: 'private',
+        privateTarget: '妲己',
+        privateSessionId: 'private-session'
+    });
+    try {
+        const input = '小爱，请介绍一下今天的安排';
+        const result = await voiceCommand.processVoiceCommand(
+            input,
+            'display-test',
+            {},
+            false,
+            {
+                groupAssistantNames: ['小爱', '妲己'],
+                oneShotGroup: true
+            }
+        );
+
+        assert.deepStrictEqual(result, {
+            type: 'chat',
+            message: input,
+            mode: 'group'
+        });
+    } finally {
+        chat.setSession(originalSession);
+    }
+});
+
 test('显示端唤醒后的普通群聊文本不受指令模式过滤', async () => {
     const originalSession = chat.getSession();
     chat.setSession({ ...originalSession, mode: 'group', commandMode: true });

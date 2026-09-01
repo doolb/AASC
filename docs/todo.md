@@ -14,6 +14,7 @@
 - ⏳待处理 [2026-08-30] 群聊统一历史中的旧工具调用异常文本
   - 现象：未指定角色的群聊使用 `group/default` 历史时，可能收到并播报 `[Error: write after end]`。
   - 疑似来源：旧 Pi Agent/工具调用流程遗留的未闭合 Chat2API 工具调用记录；当前历史中存在 `profileName=qwen3.5`、`templateId=default` 的异常内容，具体产生流程待后续确认。
+  - 已完成当前 Chat2API canonical 工具标签解析残留修复；历史中已经保存的异常消息和 `write after end` 清理仍暂不处理。
   - 处理决定：仅记录，暂不修改代码、历史文件或 TTS 行为。
   - 关联任务：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
 
@@ -24,6 +25,14 @@
 ## 文本媒体
 
 ## 聊天系统
+
+- ⏳可选任务 [2026-09-01] 自动测试请求级聊天隔离
+  - 当前自动测试仍可能连接现有服务器并写入真实群聊；聊天历史持久化已先增加防误删保护。
+  - 后续可增加 `testOnly/testRunId` 临时会话命名空间，禁止测试持久化 AASC、Pi 和 Responses 历史。
+
+- ⏳待处理 [2026-08-31] 控制端无 `displayId` 时无法启动普通 Pi Agent 聊天
+  - 现象：控制端发送 `chatMessage` 且不带 `displayId` 时，服务端回退处理因缺少显示端上下文提前返回，不产生 `chatChunk` 或 `chatResponse`。
+  - 当前带已连接显示端 ID 的控制端流程正常；后续需将普通聊天处理从显示端上下文门控中拆出，支持无显示端的控制端会话。
 
 - ⏳待处理 [2026-08-31] `commandMode` 开关当前未使用
   - 现代显示端的 `waitingWake` 由会话状态门控过滤，`activeGroup` 和 `activePrivate` 会绕过该过滤；当前开关只保留配置、控制端同步和旧调用路径兼容。
@@ -40,6 +49,10 @@
 ## AI 角色
 
 ## Android APK
+
+- ⏳待处理 [2026-09-01] 将 Termux 服务器试运行整理为正式 Android 节点
+  - 当前 `~/aasc-server-test` 已能在 Termux 以 runit 服务运行，使用 8081 端口；后续需要增加主服务器注册、心跳、认证、能力声明、媒体同步和 Android 重启自动恢复。
+  - 当前 ASR、TTS Wine、Puppeteer 暂不迁移；正式节点需要在配置和控制端明确不可用能力。
 
 - ⏳待处理 [2026-08-25] 修复 APK 原生 ASR 识别结果为空及声纹 native 崩溃
   - 真机 `NativeDisplay.asrRecognize()` 对有效 PCM 返回 `{}`，`/api/asr/recognize` 连续 5 次全部失败；调试声纹匹配时 `VoiceprintEngine.match` native 崩溃导致 APK 进程退出。

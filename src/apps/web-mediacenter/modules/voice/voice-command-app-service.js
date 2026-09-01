@@ -1692,7 +1692,7 @@ async function processVoiceCommand(text, displayId, callbacks, internal = false,
     }
 
     const session = chat.getSession();
-    const addressedAssistant = !internal && session.mode !== 'private'
+    const addressedAssistant = !internal && (options.oneShotGroup === true || session.mode !== 'private')
         ? findAddressedGroupAssistant(trimmedText, options.groupAssistantNames)
         : null;
     if (addressedAssistant) {

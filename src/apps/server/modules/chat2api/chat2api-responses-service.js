@@ -81,6 +81,38 @@ const createResponseId = () => `resp_${randomUUID().replaceAll('-', '')}`;
 const createConversationId = () => `conv_${randomUUID().replaceAll('-', '')}`;
 const createMessageId = () => `msg_${randomUUID().replaceAll('-', '')}`;
 
+// 这些 Provider 的网页协议带有稳定的会话/父消息标识，可以让上游自行保存上下文。
+// 续接时只发送新增 input，避免上游把 AASC 保存的历史当作另一轮消息再次拼入会话。
+const NATIVE_CONTINUATION_FIELDS = Object.freeze({
+  qwen: ['sessionId'],
+  deepseek: ['sessionId'],
+  glm: ['conversationId'],
+  kimi: ['chatId'],
+  mimo: ['conversationId'],
+  minimax: ['chatId'],
+  'qwen-ai': ['chatId'],
+  zai: ['chatId'],
+});
+
+const hasNativeContinuation = (session) => {
+  const fields = NATIVE_CONTINUATION_FIELDS[session && session.providerId] || [];
+  const nativeState = session && session.nativeState;
+  return fields.some((field) => typeof nativeState?.[field] === 'string' && nativeState[field].length > 0);
+};
+
+// Pi 自己维护完整上下文，因此需要把 Pi 的外层会话和 Provider 原生状态分开处理。
+// metadata 只接受 AASC 约定字段，普通 Responses 调用不会进入这条分支。
+const getPiContext = (request) => {
+  const metadata = request && request.metadata;
+  if (!metadata || metadata.aasc_context_owner !== 'pi') return null;
+  const sessionId = String(metadata.aasc_pi_session_id || request.conversation || '').trim();
+  if (!sessionId) return null;
+  return {
+    sessionId,
+    mode: metadata.aasc_pi_context_mode === 'delta' ? 'delta' : 'snapshot',
+  };
+};
+
 const getAssistantMessage = (body) => {
   const choice = body && Array.isArray(body.choices) ? body.choices[0] : null;
   return choice && choice.message ? choice.message : { role: 'assistant', content: '' };
@@ -159,7 +191,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
     if (request.conversation && request.previous_response_id) throw createError(400, 'invalid_request_error', 'conversation 不能与 previous_response_id 同时使用');
   };
 
-  const resolveConversation = async (request) => {
+  const resolveConversation = async (request, piContext) => {
     if (request.previous_response_id) {
       const session = await sessionStore.findByResponseId(request.previous_response_id);
       if (!session) throw createError(404, 'response_not_found', `找不到响应: ${request.previous_response_id}`);
@@ -167,21 +199,25 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
     }
     if (request.conversation) {
       const session = await sessionStore.get(request.conversation);
+      if (!session && piContext && piContext.sessionId === request.conversation) {
+        return { conversationId: request.conversation, session: null };
+      }
       if (!session) throw createError(404, 'conversation_not_found', `找不到会话: ${request.conversation}`);
       return { conversationId: request.conversation, session };
     }
     return { conversationId: createConversationId(), session: null };
   };
 
-  const persist = async ({ session, conversationId, request, inputMessages, chatBody, result, responseId }) => {
+  const persist = async ({ session, conversationId, request, inputMessages, chatBody, result, responseId, piContext }) => {
     const assistantMessage = getAssistantMessage(chatBody);
+    const historySession = piContext?.mode === 'snapshot' ? { ...(session || {}), history: [] } : session;
     const next = {
       ...(session || {}),
       conversationId,
       providerId: result.providerId || session?.providerId || '',
       accountId: result.accountId || session?.accountId || '',
       actualModel: result.actualModel || session?.actualModel || request.model,
-      history: createChatHistory(session || {}, inputMessages, assistantMessage),
+      history: createChatHistory(historySession || {}, inputMessages, assistantMessage),
       nativeState: result.nativeState || session?.nativeState || {},
       latestResponseId: responseId,
       responseIds: [...new Set([...(session?.responseIds || []), ...(session?.latestResponseId ? [session.latestResponseId] : []), responseId])],
@@ -194,12 +230,20 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
   const createResponse = async (request) => {
     validateRequest(request);
     const inputMessages = normalizeInput(request);
-    const { conversationId, session: initialSession } = await resolveConversation(request);
+    const piContext = getPiContext(request);
+    const { conversationId, session: initialSession } = await resolveConversation(request, piContext);
     return sessionStore.withLock(conversationId, async () => {
       // 在锁内重新读取，避免并发请求在锁外取得同一份旧历史后互相覆盖。
       const session = await sessionStore.get(conversationId) || initialSession || { conversationId, history: [], nativeState: {} };
-      const messages = [...(session.history || []), ...inputMessages];
-      const responseSession = { nativeState: { ...(session.nativeState || {}) } };
+      const canUseNativeContinuation = hasNativeContinuation(session);
+      const messages = piContext?.mode === 'snapshot' || canUseNativeContinuation
+        ? inputMessages
+        : [...(session.history || []), ...inputMessages];
+      const responseSession = {
+        nativeState: piContext?.mode === 'snapshot'
+          ? {}
+          : { ...(session.nativeState || {}) },
+      };
       const chatRequest = {
         model: request.model,
         messages,
@@ -213,18 +257,19 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
         preferredProviderId: session.providerId || undefined,
         preferredAccountId: session.accountId || undefined,
         responseSession,
+        ...(piContext ? { conversationId, piSessionId: piContext.sessionId } : {}),
       });
       const responseId = createResponseId();
       if (!result.stream) {
         const body = createResponseBody({ responseId, conversationId, previousResponseId: request.previous_response_id, request, chatBody: result.body });
-        await persist({ session, conversationId, request, inputMessages, chatBody: result.body, result, responseId });
+        await persist({ session, conversationId, request, inputMessages, chatBody: result.body, result, responseId, piContext });
         return { body };
       }
-      return { stream: createResponseStream({ result, responseId, conversationId, previousResponseId: request.previous_response_id, request, session, inputMessages, persist }) };
+      return { stream: createResponseStream({ result, responseId, conversationId, previousResponseId: request.previous_response_id, request, session, inputMessages, persist, piContext }) };
     });
   };
 
-  const createResponseStream = ({ result, responseId, conversationId, previousResponseId, request, session, inputMessages, persist }) => (async function* responseEvents() {
+  const createResponseStream = ({ result, responseId, conversationId, previousResponseId, request, session, inputMessages, persist, piContext }) => (async function* responseEvents() {
     const outputItemId = createMessageId();
     const created = createResponseBody({ responseId, conversationId, previousResponseId, request, chatBody: { choices: [{ message: { role: 'assistant', content: '' } }] }, textOverride: '' });
     yield { type: 'response.created', response: { ...created, status: 'in_progress', output: [], output_text: '' } };
@@ -336,7 +381,7 @@ const createChat2ApiResponsesService = ({ sessionStore, coreAdapter } = {}) => {
       }
       yield { type: 'response.output_text.done', item_id: outputItemId, output_index: 0, content_index: 0, text };
     }
-    await persist({ session, conversationId, request, inputMessages, chatBody: { choices: [{ message: assistantMessage }] }, result, responseId });
+    await persist({ session, conversationId, request, inputMessages, chatBody: { choices: [{ message: assistantMessage }] }, result, responseId, piContext });
     yield { type: 'response.completed', response: finalBody };
   }());
 

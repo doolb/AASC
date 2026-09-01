@@ -80,11 +80,11 @@
     "reminderTemplateSuffix": "",
     "routing": {
       "weather": "system",
-      "search": "system"
+      "search": "llm"
     }
   },
   "repairMode": {
-    "password": "",
+    "password": "暖暖",
     "role": "mainfront"
   },
   "logBrain": {
@@ -136,13 +136,13 @@
         "apiKey": "",
         "promptFormat": "raw",
         "mode": "agent",
-        "backend": "codex"
+        "backend": "pi"
       }
     ],
     "codexProxy": "http://127.0.0.1:7899",
     "promptFormat": "raw",
     "mode": "agent",
-    "backend": "codex"
+    "backend": "pi"
   },
   "logCategoryFilter": null,
   "timeAnnounce": {

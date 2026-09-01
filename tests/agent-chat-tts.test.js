@@ -178,3 +178,15 @@ test('修复 Agent TTS 显式放行并把放行标记传到显示端', async () 
     assert.deepEqual(harness.generatedTexts, ['修复结果。']);
     assert.equal(sendOptions[0].options.allowRepairModeTts, true);
 });
+
+test('修复 Agent TTS 使用动态通用播放端而不是语音来源端', async () => {
+    const harness = createHarness({ message: '修复结果。', displayId: 'display-source' });
+    harness.options.isTtsSuppressed = () => true;
+    harness.options.allowRepairModeTts = true;
+    harness.options.getDisplayIds = () => ['display-speaker'];
+
+    await playAgentTts(harness.options);
+
+    assert.deepEqual(harness.displayMessages.map((item) => item.displayId), ['display-speaker']);
+    assert.equal(harness.displayMessages[0].data.action, 'playAudio');
+});

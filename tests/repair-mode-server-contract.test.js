@@ -19,6 +19,8 @@ assert.match(server, /aiRoles\.list\(\)\.some/);
 assert.match(server, /aiRoles\.chat\(role, text/);
 assert.match(server, /allowRepairModeTts: true/);
 assert.match(server, /data\.type === 'tts'[\s\S]*?options\.allowRepairModeTts !== true/);
+assert.match(server, /getDisplayIds: getOnlineVoicePlaybackDisplayIds/);
+assert.match(server, /generateTTS: \(ttsText\) => generateTtsWithFallback\(ttsText\)/);
 assert.deepEqual(config.repairMode, { password: '', role: 'mainfront' });
 
 console.log('repair-mode-server-contract.test.js: contract checks passed');

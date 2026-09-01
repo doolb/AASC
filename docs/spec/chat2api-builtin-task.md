@@ -231,7 +231,11 @@ POST /v1/responses(request):
     生成唯一 resp_ 响应 ID并保存 response -> conversation 关联
     非流式 -> 将 chat.completion 转换为 response、message、output_text 和 usage
     流式 -> 将 chat.completion.chunk 转换为 response.created、response.output_text.delta、response.output_text.done、response.completed
-    Provider 返回的原生状态和本轮 assistant 输出写回会话
+    如果会话已有可用的 Provider nativeState:
+        只把本轮 inputMessages 发送给 Provider
+    否则:
+        把 session.history 与 inputMessages 合并后发送
+    将 Provider 返回的原生状态和本轮 assistant 输出写回会话
     Provider 失败 -> 返回 Responses error，不泄露账号凭据
 ```
 

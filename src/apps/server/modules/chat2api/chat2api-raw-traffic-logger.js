@@ -141,6 +141,40 @@ const extractResponseText = (value) => {
   return '';
 };
 
+// Provider 对会话 ID 的命名并不统一，只读取这些已知字段，避免把普通业务 ID 或敏感字段写入简洁日志。
+const SESSION_ID_KEYS = Object.freeze([
+  'session_id',
+  'sessionId',
+  'chat_session_id',
+  'chatSessionId',
+  'conversation_id',
+  'conversationId',
+  'dialog_id',
+  'dialogId',
+]);
+
+const extractSessionId = (value, seen = new WeakSet()) => {
+  const body = parseBodyValue(value);
+  if (!body || typeof body !== 'object' || seen.has(body)) return '';
+  seen.add(body);
+
+  for (const key of SESSION_ID_KEYS) {
+    const candidate = body[key];
+    if (candidate !== undefined && candidate !== null && String(candidate).trim()) return String(candidate);
+  }
+
+  for (const key of ['conversation', 'chat_session', 'data', 'result']) {
+    const nested = body[key];
+    if (!nested || typeof nested !== 'object') continue;
+    if ((key === 'conversation' || key === 'chat_session') && nested.id !== undefined && String(nested.id).trim()) {
+      return String(nested.id);
+    }
+    const sessionId = extractSessionId(nested, seen);
+    if (sessionId) return sessionId;
+  }
+  return '';
+};
+
 const extractDeltaText = (value) => {
   const body = parseBodyValue(value);
   if (!body || typeof body !== 'object' || !Array.isArray(body.choices)) return null;
@@ -154,7 +188,7 @@ const getHeader = (headers, name) => {
   return entry ? String(entry[1] || '').toLowerCase() : '';
 };
 
-const decodeStreamBody = (chunks, headers) => {
+const decodeStreamText = (chunks, headers) => {
   let buffer = Buffer.concat(chunks);
   const encoding = getHeader(headers, 'content-encoding');
   try {
@@ -165,14 +199,37 @@ const decodeStreamBody = (chunks, headers) => {
     // 压缩数据不完整时保留空输出，不能影响原始流透传。
     return '';
   }
-  const text = buffer.toString('utf8');
+  return buffer.toString('utf8');
+};
+
+const parseStreamEvents = (text) => {
   const dataLines = text.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).filter((line) => line && line !== '[DONE]');
-  if (!dataLines.length) return text;
-  const parsed = dataLines.map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+  if (!dataLines.length) {
+    const parsed = parseBodyValue(Buffer.from(text, 'utf8'));
+    return parsed && typeof parsed === 'object' ? [parsed] : [];
+  }
+  return dataLines.map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+};
+
+const decodeStreamBody = (chunks, headers) => {
+  const text = decodeStreamText(chunks, headers);
+  if (!text) return '';
+  const parsed = parseStreamEvents(text);
+  if (!parsed.length) return text;
   const deltas = parsed.map((item) => extractDeltaText(item)).filter(Boolean);
   if (deltas.length) return deltas.join('');
   const outputs = parsed.map((item) => extractResponseText(item)).filter(Boolean);
   return outputs.reduce((longest, output) => output.length > longest.length ? output : longest, '');
+};
+
+const extractStreamSessionId = (chunks, headers) => {
+  const text = decodeStreamText(chunks, headers);
+  if (!text) return '';
+  for (const event of parseStreamEvents(text)) {
+    const sessionId = extractSessionId(event);
+    if (sessionId) return sessionId;
+  }
+  return '';
 };
 
 const createRawTrafficLogger = ({ sink = (record) => console.log(`[Chat2API][raw] ${JSON.stringify(record)}`) } = {}) => {
@@ -216,10 +273,14 @@ const createRawTrafficLogger = ({ sink = (record) => console.log(`[Chat2API][raw
       const compact = trafficMode === 'compact';
       let responseHeaders = {};
       if (compact) {
-        emit('request', {
+        const requestData = {
           model: extractModel(requestConfig.data) || context.model || '',
           text: extractRequestText(requestConfig.data),
-        });
+        };
+        const requestSessionId = extractSessionId(requestConfig.data) || context.sessionId || '';
+        if (requestSessionId) requestData.sessionId = requestSessionId;
+        if (context.piSessionId) requestData.piSessionId = String(context.piSessionId);
+        emit('request', requestData);
       } else {
         emit('request', {
           method: requestConfig.method || 'GET',
@@ -230,12 +291,20 @@ const createRawTrafficLogger = ({ sink = (record) => console.log(`[Chat2API][raw
           responseType: requestConfig.responseType,
         });
       }
+      const requestSessionId = compact ? extractSessionId(requestConfig.data) || context.sessionId || '' : '';
+      const createCompactResponseData = (body, streamSessionId = '') => {
+        const responseData = { output: extractResponseText(body) };
+        const sessionId = extractSessionId(body) || streamSessionId || requestSessionId;
+        if (sessionId) responseData.sessionId = sessionId;
+        if (context.piSessionId) responseData.piSessionId = String(context.piSessionId);
+        return responseData;
+      };
       return {
         response: (response) => {
           responseHeaders = response && response.headers || {};
           if (!compact) emit('response', { status: response && response.status, headers: sanitizeValue(responseHeaders) }, undefined, false);
         },
-        body: (body) => compact ? emit('response', { output: extractResponseText(body) }) : emit('response_body', body),
+        body: (body) => compact ? emit('response', createCompactResponseData(body)) : emit('response_body', body),
         chunk: (chunk) => emit('response_chunk', { type: 'chunk', value: sanitizeValue(chunk) }),
         error: (error) => emit('error', compact ? { message: error && error.message } : { message: error && error.message, status: error && error.response && error.response.status }, undefined, false),
         wrapStream: (data) => {
@@ -258,7 +327,10 @@ const createRawTrafficLogger = ({ sink = (record) => console.log(`[Chat2API][raw
               callback(null, chunk);
             },
             flush(callback) {
-              if (compact) emit('response', { output: decodeStreamBody(compactChunks, responseHeaders) });
+              if (compact) {
+                const streamSessionId = extractStreamSessionId(compactChunks, responseHeaders);
+                emit('response', createCompactResponseData(decodeStreamBody(compactChunks, responseHeaders), streamSessionId));
+              }
               callback();
             },
           });

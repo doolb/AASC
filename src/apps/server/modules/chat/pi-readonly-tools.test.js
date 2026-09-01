@@ -44,6 +44,10 @@ test('扩展源码注册 Chat2API 兼容 Provider 流', () => {
     const source = fs.readFileSync(extensionFile, 'utf8');
     assert.match(source, /createChat2ApiCompatibleProvider/u);
     assert.match(source, /registerProvider\(createChat2ApiCompatibleProvider/u);
+    assert.match(source, /AASC_PI_CONVERSATION_ID/u);
+    assert.match(source, /previous_response_id/u);
+    assert.match(source, /conversation/u);
+    assert.match(source, /aasc_context_owner/u);
 });
 
 test('扩展源码注册不依赖 fd 的稳定文件查找工具', () => {

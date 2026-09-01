@@ -2,6 +2,7 @@
 
 const os = require('node:os');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { spawn: defaultSpawn } = require('node:child_process');
 const {
     normalizeAgentProfile,
@@ -196,12 +197,16 @@ class PiRuntimeManager {
         if (existing && !existing.closed) this.terminateSession(existing);
 
         const args = this.buildSpawnArgs(profile, template);
+        // 会话 ID 绑定到实际 Pi 子进程。进程被重建时必须得到新 ID，避免把新 Pi
+        // 的完整上下文误接到旧 Provider 原生会话；同一进程内则始终保持不变。
+        const conversationId = `pi_${randomUUID().replaceAll('-', '')}`;
         const env = {
             ...process.env,
             PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || path.join(os.tmpdir(), 'aasc-pi-runtime'),
             AASC_PI_BASE_URL: this.responsesBaseUrl || normalizeOpenAiBaseUrl(profile.apiUrl || ''),
             AASC_PI_MODEL: profile.model || '',
-            AASC_PI_API_KEY: profile.apiKey || ''
+            AASC_PI_API_KEY: profile.apiKey || '',
+            AASC_PI_CONVERSATION_ID: conversationId,
         };
         const child = this.spawn(this.commandPath, args, {
             cwd: this.projectRoot,
@@ -217,6 +222,7 @@ class PiRuntimeManager {
             closed: false,
             initialized: false,
             configurationFingerprint,
+            conversationId,
             profile,
             template
         };

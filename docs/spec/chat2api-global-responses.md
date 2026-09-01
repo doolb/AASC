@@ -51,12 +51,20 @@ buildResponsesRequest(messages, state, options):
         input = messages
         不携带旧 response id
     否则:
-        input = 当前 user message
+        input = 当前新增消息
         携带 state.conversationId 或 state.latestResponseId
     返回 model、input、temperature、max_output_tokens、stream
 
 saveChatResponseState(sessionKey, response, fingerprint):
     保存 conversation.id、response.id、model、fingerprint、updatedAt
+```
+
+```text
+selectProviderMessages(session, inputMessages):
+    如果 session.providerId 对应的 nativeState 包含可续接标识:
+        返回 inputMessages
+    否则:
+        返回 session.history + inputMessages
 ```
 
 ```text
@@ -100,9 +108,27 @@ chatStream(userMessage, options, callbacks):
 ```text
 createChat2ApiCompatibleProvider():
     api = openAIResponsesApi()
+    tracker = createResponsesContinuationTracker()
     model.api = "openai-responses"
     model.baseUrl = responsesBaseUrl
-    api.stream / api.streamSimple -> Responses SSE
+    api.stream / api.streamSimple:
+        按 Pi sessionId 查找最近 responseId 和已发送消息快照
+        只比较 role、content、工具调用名称/参数和调用 ID 等语义字段
+        忽略 api、provider、model、usage、timestamp、stopReason 等运行时字段
+        快照匹配当前上下文前缀 -> 只发送新增消息并附 previous_response_id
+        快照不匹配 -> 清除旧 responseId，发送完整上下文并使用 piSessionId 对应 conversation
+        previous_response_id 和 conversation 不能同时发送
+        Responses SSE 完成后保存新的 responseId 和上下文快照
+        请求 metadata 写入 aasc_context_owner=pi、aasc_pi_session_id、aasc_pi_context_mode
+
+Chat2API Responses 服务收到 aasc_context_owner=pi:
+    如果 mode == snapshot 且已有 Provider nativeState:
+        只使用 Pi 传入的完整 input
+        清空 responseSession.nativeState，创建新的 Provider 原生会话
+    否则:
+        有 Provider nativeState -> 只使用本次 input 增量
+        无 Provider nativeState -> 按普通规则重放本地历史
+    记录 conversationId、Provider sessionId 和 piSessionId，但不重复拼接 Pi 完整历史
     Responses message output -> Pi assistant event stream
     Responses function_call output -> Pi toolCall
     Responses output_item 事件必须先于 delta 事件建立对应内容块
@@ -193,13 +219,19 @@ Pi 工具事件无法解析:
 普通聊天:
     首轮完整 input
     第二轮同 session 只发当前输入
+    Provider 已有原生会话时，核心适配器只接收当前新增消息
+    Provider 无原生会话时，核心适配器重放保存的历史
     profile/template 改变后创建新 Responses 会话
     重启后加载本地状态继续
 
 Pi:
     api == openai-responses
     文本回复正常
+    同一 Pi session 后续请求携带 previous_response_id 和消息增量
+    Pi 上下文压缩或分支变化后自动重新建立 Responses 链
     工具调用和 function_call_output 闭环
+    控制端带 displayId 时通过 chatMessage 收到 chatChunk 和 chatResponse
+    两轮真实控制端请求能从同一 Pi session 读取首轮上下文
 
 停用:
     外部 Chat2API 进程不存在

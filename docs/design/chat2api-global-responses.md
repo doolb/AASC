@@ -39,6 +39,8 @@
 
 Pi Agent
     └─ Pi openai-responses Provider
+        ├─ 首轮：完整上下文
+        ├─ 后续：新增消息 + previous_response_id
         └─ 127.0.0.1:8083/v1/responses
 
 AI 角色 Codex/Claude
@@ -74,13 +76,15 @@ chat-responses-sessions.json
 
 ## 请求与响应流程
 
+续接规则补充：内置代理发现 Provider 已返回可用的原生会话状态时，只向该 Provider 发送本轮新增消息；没有原生会话的 Provider 才使用 AASC 保存的完整历史重放。上下文指纹变化、远端会话不存在或续接失败时，清除旧标识并重新发送完整上下文。
+
 ```text
 chat(userMessage, options)
     → buildMessages()
     → resolve profile/template/session fingerprint
     → read chat-responses-sessions.json
     → first request: input = complete messages
-      continuation: input = current user message + previous_response_id
+      continuation: input = current delta + previous_response_id
     → POST /v1/responses
     → non-stream: read output_text
       stream: read response.output_text.delta
@@ -89,6 +93,12 @@ chat(userMessage, options)
 ```
 
 `llm.chat` 是单次任务，不加入普通聊天 session；它仍使用 Responses 请求和 `output_text`，任务自己的 `messages` 作为完整输入。搜索和语音复用普通 `llm-service` 的 session/流式处理。
+
+Pi 自定义 Provider 在进程内按 Pi `sessionId` 保存最近一次已发送消息快照和 AASC 返回的 `response.id`。下一次请求仅在当前上下文仍以该快照为前缀时截取新增消息并设置 `previous_response_id`；上下文被压缩、分支切换或快照不匹配时清除续接 ID，重新发送完整上下文。
+
+Pi 进程同时生成独立的 `piSessionId`，通过 Responses 的 `conversation` 和受控 metadata 传递给 Chat2API。`previous_response_id` 是正常增量续接路径，`conversation` 只作为快照重建、Pi 进程首次建立或续接状态失效时的稳定归属。Chat2API 识别 `aasc_context_owner=pi` 后，不把 Pi 已携带的完整上下文再次拼接到自身历史；快照模式会清空旧 Provider native state，确保完整快照创建新的 Provider 原生会话。普通 Responses 客户端仍维持原有未知会话即报错的行为。
+
+续接快照只比较 role、content、工具调用名称/参数和调用 ID 等语义字段，忽略 Pi assistant message 的 api、provider、model、usage、timestamp、stopReason 等运行时元数据，避免无意义地切断 `previous_response_id`。原始简洁日志同时记录 Provider `sessionId` 与可选 `piSessionId`，便于区分 Pi 外层会话和上游原生会话。
 
 ## Pi Agent 与工具
 
@@ -131,5 +141,14 @@ Pi 自定义 Provider 改为 `openai-responses`。Pi 的只读工具白名单保
 
 - 已完成普通聊天、语音复用链路、搜索/`llm.chat` 任务和 Pi Agent 的全局 Responses 切换。
 - 已补齐 Responses 流式 `output_item`、文本增量、function_call 参数事件，以及 Qwen 文本工具标签到 Pi 工具调用的兼容层。
+- 已修复续接时的历史重复：原生 Provider 只接收新增 input，Pi 按 sessionId 复用 `previous_response_id`，上下文压缩或分支变化时回到完整上下文请求。
+- 已修复 Pi Responses 续接误断链：语义快照不再受 assistant 运行时元数据变化影响；每个 Pi 进程使用独立 `piSessionId`，快照重建时清空旧 Provider native state，并在简洁日志中区分 Pi 会话和 Provider 原生 sessionId。
 - 已对齐原版 Chat2API 的公共 managed tool calling：所有网页 Provider 统一接收 Chat2API 标签提示，原生续聊通过工具定义指纹避免重复 `System`，旧原生会话也不会再次注入。
 - 已验证服务重启后内置 8083 和真实 Qwen 请求正常；外部 `/mnt/Chat2API` 进程已停止，外部配置和数据目录保留。
+
+## 真实 Pi Agent 链路验收（2026-08-31）
+
+- 重启 AASC 服务后，使用当前 `qwen3.5 → agent/pi → Qwen3.6-Flash` 配置完成 Pi RPC 真实请求。
+- 控制端 WebSocket 带已连接显示端 ID 时，收到流式 `chatChunk` 和成功的 `chatResponse`。
+- 同一控制端聊天 session 连续发送两轮，第二轮正确返回首轮记住的 `PI-CONT-20260831`，确认 Pi Agent 续接上下文有效。
+- 控制端消息不带 `displayId` 时，当前回退处理会因缺少显示端上下文提前返回，未启动 Pi；该场景登记到 `docs/todo.md`，不影响当前带显示端 ID 的控制端流程。

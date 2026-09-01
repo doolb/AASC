@@ -89,13 +89,9 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
         if (addressedAssistant) {
             return {
                 accepted: true,
-                state: {
-                    ...state,
-                    state: 'activeGroup',
-                    target: null,
-                    lastValidInputAt: now
-                },
-                event: { type: 'input', addressedAssistant }
+                // 助手名只作为这一条消息的接受标识，不把等待唤醒升级为持续群聊。
+                state,
+                event: { type: 'input', addressedAssistant, oneShotGroup: true }
             };
         }
         if (isBuiltin) {

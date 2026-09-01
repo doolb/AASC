@@ -77,6 +77,8 @@ const createChat2ApiCoreAdapter = ({ dataStore, providerRegistry, modelMapper, l
       actualModel,
       isStream: request.stream === true,
       startTime: Date.now(),
+      ...(options.conversationId ? { conversationId: options.conversationId } : {}),
+      ...(options.piSessionId ? { piSessionId: options.piSessionId } : {}),
     };
 
     try {

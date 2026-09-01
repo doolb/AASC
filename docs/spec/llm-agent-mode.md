@@ -198,16 +198,19 @@ Chat2API 工具转换伪代码：
 
 ```text
 parseChat2ApiToolCalls(text, allowedTools):
-    查找 `<|CHAT2API|tool_calls>` 后的所有工具调用块
-    对每个块读取旧式 `<|parameter=参数名>值</parameter>` 或命名参数 CDATA 格式
+    查找 `<|CHAT2API|tool_calls>`，按完整区块定位对应的 `</|CHAT2API|tool_calls>`
+    在每个完整区块内查找 invoke
+    对每个 invoke 读取旧式 `<|parameter=参数名>值</parameter>` 或命名参数 CDATA 格式
         `<|CHAT2API|parameter name="参数名"><![CDATA[值]]></|CHAT2API|parameter>` 参数
-    接受 `</function>` 或 `</|CHAT2API|invoke>` 调用结束标签
+    允许旧式 `</function>` 或 canonical `</|CHAT2API|invoke>`，并消费实际匹配到的结束标签全文
     如果工具名不在 allowedTools → 返回 unsupportedTool 错误，不执行
-    如果参数名重复、标签未闭合或工具调用为空 → 返回 malformedProtocol 错误
+    如果区块未闭合、参数名重复、参数标签未闭合、调用之间有未识别文本或工具调用为空
+        → 返回 malformedProtocol 错误
     将外部工具名 find 映射为内部工具名 aasc_find
     返回 calls = [{ id: 'chat2api-' + 序号, name: 内部工具名, arguments }]
-    删除可选的 `</|CHAT2API|tool_calls>` 结束标记
-    返回 remainingText = 删除协议块和标记后的普通文本
+    从普通文本中删除完整 tool_calls 区块
+    如果删除后仍有未识别 Chat2API 协议标签 → 返回 malformedProtocol 错误
+    返回 remainingText = 删除完整协议区块后的普通文本
 ```
 
 ```text

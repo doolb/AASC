@@ -93,6 +93,38 @@ test('Responses 会话把固定 Provider、账号和原生状态传给核心适�
   assert.deepEqual(received.responseSession, { nativeState: { sessionId: 'old-session' } });
   assert.deepEqual(result.nativeState, { sessionId: 'next-session' });
 });
+
+test('核心适配层把 Pi 会话标识传给 Provider 日志上下文', async () => {
+  let received;
+  const adapter = createChat2ApiCoreAdapter({
+    dataStore: {
+      getAccount: async () => account,
+      listAccounts: async () => [account],
+      readCollection: async () => [],
+    },
+    providerRegistry: {
+      listProviders: async () => [provider],
+      getEffectiveModels: (item) => item.supportedModels.map((displayName) => ({ displayName, actualModelId: item.modelMappings[displayName] })),
+    },
+    modelMapper: { resolveModel: async (model, item) => ({ requestedModel: model, actualModel: item ? item.modelMappings[model] : model }) },
+    loadBalancer: { selectAccount: async () => ({ provider, account, actualModel: 'deepseek-v4-flash' }), markAccountFailed: () => {} },
+    providerAdapters: {
+      deepseek: async (input) => {
+        received = input;
+        return { body: { choices: [{ message: { role: 'assistant', content: '收到' } }] } };
+      },
+    },
+  });
+
+  await adapter.forwardChatCompletion(
+    { model: 'public-chat', messages: [{ role: 'user', content: 'Pi' }] },
+    { conversationId: 'pi-conversation', piSessionId: 'pi_123' },
+  );
+
+  assert.equal(received.context.conversationId, 'pi-conversation');
+  assert.equal(received.context.piSessionId, 'pi_123');
+});
+
 test('核心适配层统一转换网页 Provider 工具并在原生续聊中去重提示', async () => {
   const received = [];
   const responseSession = { nativeState: {} };

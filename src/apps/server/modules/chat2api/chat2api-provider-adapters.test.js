@@ -241,8 +241,10 @@ test('Provider adapter 开启调试后记录内部 HTTP 请求并关联核心 re
 
   assert.equal(records.some((record) => record.requestId === 'chatcmpl-raw-test' && record.event === 'request'), true);
   assert.doesNotMatch(JSON.stringify(records), /ticket-secret/);
-  assert.deepEqual(records.find((record) => record.event === 'request').data, { model: 'Qwen3.7', text: 'hi' });
-  assert.deepEqual(records.find((record) => record.event === 'response').data, { output: 'ok' });
+  const requestData = records.find((record) => record.event === 'request').data;
+  assert.deepEqual({ model: requestData.model, text: requestData.text }, { model: 'Qwen3.7', text: 'hi' });
+  assert.match(requestData.sessionId, /^[a-f0-9]{32}$/);
+  assert.deepEqual(records.find((record) => record.event === 'response').data, { output: 'ok', sessionId: requestData.sessionId });
   assert.doesNotMatch(JSON.stringify(records), /example\.com/);
 });
 

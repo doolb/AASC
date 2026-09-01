@@ -48,6 +48,22 @@ test('解析 Chat2API 的命名参数 CDATA 格式并映射 find', () => {
     }]);
 });
 
+test('canonical Chat2API 工具调用不会残留 invoke 和 tool_calls 结束标签', () => {
+    const text = '<|CHAT2API|tool_calls><|CHAT2API|invoke name="read"><|CHAT2API|parameter name="path"><![CDATA[/mnt/AASC/package.json]]></|CHAT2API|parameter></|CHAT2API|invoke></|CHAT2API|tool_calls>';
+    const result = parseChat2ApiToolCalls(text, DEFAULT_CHAT2API_TOOLS);
+
+    assert.equal(result.remainingText, '');
+});
+
+test('Chat2API 结束标签残留会被拒绝为协议错误', () => {
+    const text = '<|CHAT2API|tool_calls><|CHAT2API|invoke name="read"><|CHAT2API|parameter name="path"><![CDATA[/mnt/AASC/package.json]]></|CHAT2API|parameter></|CHAT2API|invoke></|CHAT2API|tool_calls></|CHAT2API|invoke>';
+
+    assert.throws(
+        () => parseChat2ApiToolCalls(text, DEFAULT_CHAT2API_TOOLS),
+        /未识别协议标签/u
+    );
+});
+
 test('支持多个调用、多个参数和 JSON 参数', () => {
     const text = [
         '先查询：',

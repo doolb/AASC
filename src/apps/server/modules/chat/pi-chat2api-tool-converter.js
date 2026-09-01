@@ -7,6 +7,7 @@ const CHAT2API_NAMED_PARAMETER_PATTERN = /<\|CHAT2API\|parameter\s+name=(?:"([^"
 const CHAT2API_FUNCTION_END = '</function>';
 const CHAT2API_INVOKE_END = '</|CHAT2API|invoke>';
 const CHAT2API_TOOL_CALLS_END = '</|CHAT2API|tool_calls>';
+const CHAT2API_PROTOCOL_TAG_PATTERN = /<\/?\|CHAT2API\|/u;
 const CHAT2API_TOOL_ALIASES = Object.freeze({
     find: 'aasc_find'
 });
@@ -105,7 +106,7 @@ function parseChat2ApiToolCalls(text, allowedTools) {
     const source = String(text || '');
     const markerIndex = source.indexOf(CHAT2API_TOOL_CALLS_MARKER);
     if (markerIndex < 0) {
-        if (source.includes('<|CHAT2API|')) {
+        if (CHAT2API_PROTOCOL_TAG_PATTERN.test(source)) {
             throw new Error('Chat2API 工具调用格式错误：缺少 tool_calls 标记');
         }
         return { calls: [], remainingText: source };
@@ -131,21 +132,31 @@ function parseChat2ApiToolCalls(text, allowedTools) {
         }
 
         const endCandidates = [
-            payload.indexOf(CHAT2API_FUNCTION_END, CHAT2API_INVOKE_PATTERN.lastIndex),
-            payload.indexOf(CHAT2API_INVOKE_END, CHAT2API_INVOKE_PATTERN.lastIndex)
-        ].filter((index) => index >= 0);
-        const endIndex = endCandidates.length > 0 ? Math.min(...endCandidates) : -1;
-        if (endIndex < 0) {
+            {
+                index: payload.indexOf(CHAT2API_FUNCTION_END, CHAT2API_INVOKE_PATTERN.lastIndex),
+                tag: CHAT2API_FUNCTION_END
+            },
+            {
+                index: payload.indexOf(CHAT2API_INVOKE_END, CHAT2API_INVOKE_PATTERN.lastIndex),
+                tag: CHAT2API_INVOKE_END
+            }
+        ].filter((candidate) => candidate.index >= 0);
+        const end = endCandidates.length > 0
+            ? endCandidates.reduce((earliest, candidate) => (
+                candidate.index < earliest.index ? candidate : earliest
+            ))
+            : null;
+        if (!end) {
             throw new Error('Chat2API 工具调用格式错误：缺少 invoke 结束标签');
         }
-        const rawParameters = payload.slice(CHAT2API_INVOKE_PATTERN.lastIndex, endIndex);
+        const rawParameters = payload.slice(CHAT2API_INVOKE_PATTERN.lastIndex, end.index);
         calls.push({
             type: 'toolCall',
             id: `chat2api-${calls.length + 1}`,
             name,
             arguments: parseInvocationParameters(rawParameters)
         });
-        cursor = endIndex + CHAT2API_FUNCTION_END.length;
+        cursor = end.index + end.tag.length;
         CHAT2API_INVOKE_PATTERN.lastIndex = cursor;
     }
 
@@ -156,7 +167,7 @@ function parseChat2ApiToolCalls(text, allowedTools) {
     if (remainingPayload.startsWith(CHAT2API_TOOL_CALLS_END)) {
         remainingPayload = remainingPayload.slice(CHAT2API_TOOL_CALLS_END.length).trim();
     }
-    if (remainingPayload.includes('<|CHAT2API|')) {
+    if (CHAT2API_PROTOCOL_TAG_PATTERN.test(remainingPayload)) {
         throw new Error('Chat2API 工具调用格式错误：存在未识别协议标签');
     }
     return {

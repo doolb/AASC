@@ -22,7 +22,8 @@ async function playAgentTts({
     ttsScheduler = null,
     ttsConcurrency = 1,
     isTtsSuppressed = () => false,
-    allowRepairModeTts = false
+    allowRepairModeTts = false,
+    getDisplayIds = null
 }) {
     let sentences = splitIntoSentences(message).filter((sentence) => !isPunctuationOnly(sentence));
     if (sentences.length === 0 && message && !isPunctuationOnly(message)) sentences = [message];
@@ -38,11 +39,15 @@ async function playAgentTts({
             const { audioPath, sentence } = result;
             const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
             const audioMessage = { type: 'tts', action: 'playAudio', audioUrl, text: sentence };
+            const resolvedDisplayIds = typeof getDisplayIds === 'function'
+                ? getDisplayIds()
+                : displayIds;
+            const targetDisplayIds = Array.isArray(resolvedDisplayIds) ? resolvedDisplayIds : [];
 
             if (playOnControl) {
                 sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
-            } else if (displayIds.length > 0) {
-                for (const targetId of displayIds) {
+            } else if (targetDisplayIds.length > 0) {
+                for (const targetId of targetDisplayIds) {
                     sendToDisplay(targetId, audioMessage, { allowRepairModeTts });
                 }
             } else if (displayId) {

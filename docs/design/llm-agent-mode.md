@@ -135,9 +135,9 @@ Pi 会话键包含 profile、模板、权限策略和聊天会话（群聊或私
 <|CHAT2API|tool_calls><|CHAT2API|invoke name="find"><|CHAT2API|parameter name="pattern"><![CDATA[package.json]]></|CHAT2API|parameter></|CHAT2API|invoke></|CHAT2API|tool_calls>
 ```
 
-Pi 的工具执行依赖 Provider 输出的原生 `ToolCall` 内容块。因此在 Pi 扩展注册的 `aasc-openai` Provider 内包装 OpenAI Completions 流：先让标准适配器完整读取模型响应，再解析 Chat2API 标签，将参数映射为 JSON 对象并生成 Pi 工具调用事件；普通文本保持原样，协议标签不向上层暴露。
+Pi 的工具执行依赖 Provider 输出的原生 `ToolCall` 内容块。因此在 Pi 扩展注册的 `aasc-openai` Provider 内包装 OpenAI Completions 流：先让标准适配器完整读取模型响应，再解析 Chat2API 标签，将参数映射为 JSON 对象并生成 Pi 工具调用事件；普通文本保持原样，协议标签不向上层暴露。解析器按完整 `tool_calls` 区块匹配并删除整个区块；多种 invoke 结束标签必须消费各自的实际文本长度，不能使用固定旧标签长度推进游标。
 
-转换只允许服务器根据权限策略下发的只读工具集合；工具调用 ID 在一次响应内稳定生成，支持同一响应中的多个调用。转换器本身保持纯函数，服务器侧单元测试覆盖两种参数格式、完整响应、分片后合并、普通文本、多个调用、非法工具和非法参数。
+转换只允许服务器根据权限策略下发的只读工具集合；工具调用 ID 在一次响应内稳定生成，支持同一响应中的多个调用。转换器本身保持纯函数，服务器侧单元测试覆盖两种参数格式、完整响应、分片后合并、普通文本、多个调用、非法工具和非法参数。已识别调用之后若仍有未消费的 Chat2API 开始/结束标签，必须报告协议错误，禁止把残留标签当作助手文本交给聊天或 TTS。
 
 ## UI 设计
 

@@ -107,8 +107,9 @@ createDisplayState():
             发送唤醒确认
             不发送当前纯唤醒文本到聊天
         否则若文本包含助手名且还包含其他内容:
-            设置 activeGroup
-            保留完整原文并发送到聊天
+            保持 waitingWake，不写入 lastValidInputAt
+            返回 { type: 'input', addressedAssistant, oneShotGroup: true }
+            保留完整原文并按群聊路由发送到聊天
         否则丢弃普通文本
     如果当前为 activeGroup/activePrivate:
         若匹配结束/退出命令:
@@ -610,7 +611,9 @@ scheduleRotationTextLayout():
 
 语音群聊输入:
     waitingWake 状态下，如果原始文本包含已配置角色名且角色名后仍有内容:
-        接受输入并切换到 activeGroup
+        接受为一次性群聊输入，状态仍为 waitingWake
+        不更新 lastValidInputAt，不广播 groupMode，不启动持续群聊倒计时
+        转发 voiceCommand 时携带 oneShotGroup=true，强制使用群聊模式和全部角色模板
     voiceCommand 处理群聊时不删除角色名前缀
     服务端群聊路由使用聊天系统的全部角色模板和原始文本
 
@@ -716,7 +719,8 @@ Markdown 渲染器:
 等待唤醒状态:
     保持原有 commandMode 过滤
     搜索及其他内置功能和已配置自定义关键词命令继续按现有规则免唤醒执行
-    普通聊天、你好小爱/结束对话/退出私聊等会话控制词仍需唤醒词
+    普通聊天仍需唤醒词，但“助手名 + 其他内容”可作为一次性群聊输入
+    你好小爱/结束对话/退出私聊等会话控制词仍需唤醒词
 
 ## 全局语音对话确认模式
 
@@ -810,6 +814,20 @@ server audioChunk 完成 ASR:
     conversation = handleDisplayConversationInput(displayId, text)
     conversationState = conversation.state.state
     activeGroup 或 activePrivate -> conversationActive=true
-    记录 displayId、conversationState、accepted、event.type 和 conversationActive，便于诊断门控结果
-    调用 voiceCommand.processVoiceCommand(text, ..., { conversationActive })
+    conversation.event.oneShotGroup=true -> oneShotGroup=true
+    记录 displayId、conversationState、accepted、event.type、conversationActive 和 oneShotGroup，便于诊断门控结果
+    调用 voiceCommand.processVoiceCommand(text, ..., { conversationActive, oneShotGroup })
+
+## 修复模式 Agent TTS 路由
+
+```text
+runRepairModeAgent(displayId, state, text):
+    工作 Agent 回复分句进入通用 Agent TTS 队列
+    每句生成 TTS 时不把 displayId 作为播放目标或生成偏好目标
+    每句下发前动态读取当前 voicePlayback 能力显示端列表
+    播放目标为空 -> 不下发音频，保留文字回复
+    播放目标非空 -> 向所有当前可播放显示端发送 playAudio
+    每次发送携带 allowRepairModeTts=true，绕过修复模式对普通 TTS 的抑制
+    displayId 仅用于修复请求来源和文字响应，不承担默认音频播放目标
+```
 ```

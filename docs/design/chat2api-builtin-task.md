@@ -115,10 +115,12 @@ Provider adapter
 - Qwen AI、Z.ai、Kimi 使用各自的 `chat_id` 及消息父子标识；GLM、Perplexity 如果原生状态无法可靠续接，则重放 AASC 保存的历史消息。
 - 会话优先固定到首次选择的 Provider 账号；账号不可用时允许切换账号并重放历史，同时清空失效的原生状态。
 - `store=false` 不阻止 AASC 为完成 Provider 续接而保存最小会话状态；Responses 的返回对象仍标记调用方请求的 `store` 值。
+- Responses 服务区分 Provider 原生续接和历史重放：`nativeState` 有效时只把本轮新增 input 交给 Provider，原生状态缺失时才把保存的历史与新增 input 合并，避免 Qwen 等 Provider 的原生 session 再次收到重复 assistant/user 历史。
 - Responses 会话的工具提示由核心适配层统一注入，并在 `nativeState` 保存工具集合指纹；原生会话的后续增量请求不重复注入，兼容旧会话时避免再次追加重复 `System`。
 - 当前只实现 Pi Agent 所需的 Responses 兼容子集，不实现后台响应、内置工具、Conversations CRUD 和响应查询/删除管理 API。
 - 2026-08-31 已通过 `npm run restart:server` 重启实际主服务，并确认运行中的 Chat2API 代理根路径已加载 `/v1/responses`。
 - 2026-08-31 使用已配置的 Qwen3.6-Flash 完成真实非流式首轮、`previous_response_id` 续聊和流式 SSE 验证。
+- 2026-08-31 修复 Responses 续接的历史重复：原生 Provider 只接收新增 input，Pi 按 sessionId 复用 `previous_response_id`，上下文变化时安全重建 Responses 链。
 
 ### 原始请求/响应调试日志
 

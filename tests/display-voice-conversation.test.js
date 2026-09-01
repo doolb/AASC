@@ -135,7 +135,7 @@ function testConfirmationKeywordInsideOrdinarySentenceDoesNotBypassWake() {
     assert.strictEqual(result.event, null);
 }
 
-function testAddressedGroupInputWakesWithoutRemovingOriginalText() {
+function testAddressedGroupInputIsOneShotWithoutActivatingConversation() {
     const waiting = createConversationState(true);
     const result = reduceConversationInput(
         waiting,
@@ -144,8 +144,13 @@ function testAddressedGroupInputWakesWithoutRemovingOriginalText() {
         1000
     );
     assert.strictEqual(result.accepted, true);
-    assert.strictEqual(result.state.state, 'activeGroup');
-    assert.deepStrictEqual(result.event, { type: 'input', addressedAssistant: '小爱' });
+    assert.strictEqual(result.state.state, 'waitingWake');
+    assert.strictEqual(result.state.lastValidInputAt, null);
+    assert.deepStrictEqual(result.event, {
+        type: 'input',
+        addressedAssistant: '小爱',
+        oneShotGroup: true
+    });
 }
 
 function testPureAddressedWakeDoesNotBecomeChatInput() {
@@ -164,6 +169,6 @@ testBuiltinCommandBypassesWakeWithoutActivatingConversation();
 testSystemHelpBypassesWakeWithTrailingPunctuation();
 testCustomCommandBypassesWakeWithoutActivatingConversation();
 testConfirmationKeywordInsideOrdinarySentenceDoesNotBypassWake();
-testAddressedGroupInputWakesWithoutRemovingOriginalText();
+testAddressedGroupInputIsOneShotWithoutActivatingConversation();
 testPureAddressedWakeDoesNotBecomeChatInput();
 console.log('display-voice-conversation.test.js: 9/9 passed');

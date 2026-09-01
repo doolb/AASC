@@ -11,11 +11,13 @@ import { parseSearchResults, readOnlyFetch } from './pi-readonly-tools.js';
 import chat2ApiToolConverter from './pi-chat2api-tool-converter.js';
 import { FIND_DEFAULT_LIMIT, findFiles } from './pi-find-tool.mjs';
 import { normalizePiApiKey } from './pi-runtime-policy.js';
+import continuationTrackerModule from './pi-responses-continuation.js';
 
 const {
     DEFAULT_CHAT2API_TOOLS,
     convertChat2ApiContent
 } = chat2ApiToolConverter;
+const { createResponsesContinuationTracker } = continuationTrackerModule;
 
 const SEARCH_ENDPOINT = 'https://html.duckduckgo.com/html/';
 
@@ -89,7 +91,7 @@ function emitProviderError(stream, model, error) {
     stream.end();
 }
 
-function createChat2ApiCompatibleStream(source, model, context) {
+function createChat2ApiCompatibleStream(source, model, context, onResponse) {
     const stream = createAssistantMessageEventStream();
     (async () => {
         try {
@@ -103,6 +105,7 @@ function createChat2ApiCompatibleStream(source, model, context) {
             const allowedTools = context.tools || DEFAULT_CHAT2API_TOOLS;
             const converted = convertChat2ApiContent(text, allowedTools);
             if (converted.calls.length === 0) {
+                onResponse?.(message);
                 emitAssistantMessage(stream, message);
                 return;
             }
@@ -111,11 +114,13 @@ function createChat2ApiCompatibleStream(source, model, context) {
             const convertedContent = [];
             if (converted.text) convertedContent.push({ type: 'text', text: converted.text });
             convertedContent.push(...nonTextBlocks, ...converted.calls);
-            emitAssistantMessage(stream, {
+            const convertedMessage = {
                 ...message,
                 content: convertedContent,
                 stopReason: 'toolUse'
-            });
+            };
+            onResponse?.(convertedMessage);
+            emitAssistantMessage(stream, convertedMessage);
         } catch (error) {
             emitProviderError(stream, model, error);
         }
@@ -123,10 +128,70 @@ function createChat2ApiCompatibleStream(source, model, context) {
     return stream;
 }
 
+// 根据当前 Pi session 准备 Responses 请求。Pi 自身会把完整历史放在 context
+// 中，但 AASC Responses 代理已经保存上一轮 response，因此续接只需要发送
+// 快照之后的新增消息；上下文发生压缩或分支变化时则重新发送完整上下文。
+function createPiPayload({ payload, previousResponseId, conversationId, mode }) {
+    const {
+        conversation: _conversation,
+        previous_response_id: _previousResponseId,
+        metadata: payloadMetadata,
+        ...payloadWithoutConversation
+    } = payload || {};
+    const metadata = {
+        ...(payloadMetadata && typeof payloadMetadata === 'object' ? payloadMetadata : {}),
+        aasc_context_owner: 'pi',
+        aasc_pi_session_id: conversationId,
+        aasc_pi_context_mode: mode,
+    };
+    if (previousResponseId) {
+        return { ...payloadWithoutConversation, previous_response_id: previousResponseId, metadata };
+    }
+    return { ...payloadWithoutConversation, conversation: conversationId, metadata };
+}
+
+function createContinuationStream({ method, openAiApi, continuationTracker, requestModel, context, options, conversationId }) {
+    const sessionId = options?.sessionId || 'default';
+    const prepared = continuationTracker.prepare(sessionId, context);
+    const contextMode = prepared.previousResponseId ? 'delta' : 'snapshot';
+    const requestContext = {
+        ...context,
+        messages: prepared.messages,
+        // Pi AI 适配器会自动把 systemPrompt 放入每次请求。Responses 已经
+        // 通过 previous_response_id 继承首轮系统提示，续接时不能再次提交它。
+        ...(prepared.previousResponseId ? { systemPrompt: '' } : {})
+    };
+    const requestOptions = { ...(options || {}) };
+    if (conversationId) {
+        requestOptions.onPayload = async (payload, payloadModel) => {
+            const customPayload = await options?.onPayload?.(payload, payloadModel);
+            return createPiPayload({
+                payload: customPayload === undefined ? payload : customPayload,
+                previousResponseId: prepared.previousResponseId,
+                conversationId,
+                mode: contextMode,
+            });
+        };
+    }
+    const source = openAiApi[method](requestModel, requestContext, requestOptions);
+    return createChat2ApiCompatibleStream(
+        source,
+        requestModel,
+        context,
+        (responseMessage) => continuationTracker.record(
+            sessionId,
+            context,
+            responseMessage,
+            responseMessage?.responseId
+        )
+    );
+}
+
 // 使用 Pi AI 原生 OpenAI Responses 适配器完成网络请求，仅替换最终消息
 // 的协议表示。这样文件和网络工具仍由 Pi 根据 --tools 白名单执行。
-function createChat2ApiCompatibleProvider({ baseUrl, modelId }) {
+function createChat2ApiCompatibleProvider({ baseUrl, modelId, conversationId }) {
     const openAiApi = openAIResponsesApi();
+    const continuationTracker = createResponsesContinuationTracker();
     const model = {
         id: modelId,
         name: modelId,
@@ -154,16 +219,24 @@ function createChat2ApiCompatibleProvider({ baseUrl, modelId }) {
         },
         models: [model],
         api: {
-            stream: (requestModel, context, options) => createChat2ApiCompatibleStream(
-                openAiApi.stream(requestModel, context, options),
+            stream: (requestModel, context, options) => createContinuationStream({
+                method: 'stream',
+                openAiApi,
+                continuationTracker,
                 requestModel,
-                context
-            ),
-            streamSimple: (requestModel, context, options) => createChat2ApiCompatibleStream(
-                openAiApi.streamSimple(requestModel, context, options),
+                context,
+                options,
+                conversationId,
+            }),
+            streamSimple: (requestModel, context, options) => createContinuationStream({
+                method: 'streamSimple',
+                openAiApi,
+                continuationTracker,
                 requestModel,
-                context
-            )
+                context,
+                options,
+                conversationId,
+            })
         }
     });
 }
@@ -244,8 +317,9 @@ const webSearchTool = defineTool({
 export default function registerAascReadonlyTools(pi) {
     const baseUrl = process.env.AASC_PI_BASE_URL;
     const modelId = process.env.AASC_PI_MODEL || 'aasc-model';
+    const conversationId = process.env.AASC_PI_CONVERSATION_ID || '';
     if (baseUrl) {
-        pi.registerProvider(createChat2ApiCompatibleProvider({ baseUrl, modelId }));
+        pi.registerProvider(createChat2ApiCompatibleProvider({ baseUrl, modelId, conversationId }));
     }
     pi.registerTool(findTool);
     pi.registerTool(webFetchTool);

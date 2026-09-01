@@ -7,12 +7,12 @@ const {
   createRawTrafficLogger,
 } = require('./chat2api-raw-traffic-logger');
 
-const createClient = ({ records, enabled = true, maxBytes = 262144, mode = 'full', response }) => {
+const createClient = ({ records, enabled = true, maxBytes = 262144, mode = 'full', response, context = { requestId: 'chatcmpl-test-1' } }) => {
   const logger = createRawTrafficLogger({ sink: (record) => records.push(record) });
   return logger.createHttpClient({
     httpClient: { request: async () => response },
     providerId: 'qwen',
-    context: { requestId: 'chatcmpl-test-1' },
+    context,
     enabled,
     maxBytes,
     mode,
@@ -91,6 +91,70 @@ test('简洁模式只记录请求模型、文本和响应输出', async () => {
   assert.doesNotMatch(JSON.stringify(records), /qwen\.test|should-not-log|provider-request-id/);
 });
 
+test('简洁模式在请求和响应存在时记录 sessionId', async () => {
+  const records = [];
+  const client = createClient({
+    records,
+    mode: 'compact',
+    response: {
+      status: 200,
+      headers: {},
+      data: {
+        session_id: 'qwen-session-123',
+        choices: [{ message: { role: 'assistant', content: '已继续' } }],
+      },
+    },
+  });
+  await client.request({
+    method: 'POST',
+    url: 'https://qwen.test/chat',
+    data: {
+      model: 'Qwen3.7',
+      session_id: 'qwen-session-123',
+      messages: [{ role: 'user', content: '继续刚才的话题' }],
+    },
+  });
+
+  assert.deepEqual(records.find((record) => record.event === 'request').data, {
+    model: 'Qwen3.7',
+    text: '继续刚才的话题',
+    sessionId: 'qwen-session-123',
+  });
+  assert.deepEqual(records.find((record) => record.event === 'response').data, {
+    output: '已继续',
+    sessionId: 'qwen-session-123',
+  });
+});
+
+test('简洁模式同时记录 Pi 会话和 Provider sessionId', async () => {
+  const records = [];
+  const client = createClient({
+    records,
+    mode: 'compact',
+    context: { requestId: 'chatcmpl-pi-test', piSessionId: 'pi_123' },
+    response: {
+      status: 200,
+      headers: {},
+      data: {
+        session_id: 'qwen-session-123',
+        choices: [{ message: { role: 'assistant', content: '已回复' } }],
+      },
+    },
+  });
+  await client.request({
+    method: 'POST',
+    url: 'https://qwen.test/chat',
+    data: { model: 'Qwen3.7', session_id: 'qwen-session-123', input: 'Pi 请求' },
+  });
+
+  assert.deepEqual(records.find((record) => record.event === 'request').data, {
+    model: 'Qwen3.7', text: 'Pi 请求', sessionId: 'qwen-session-123', piSessionId: 'pi_123',
+  });
+  assert.deepEqual(records.find((record) => record.event === 'response').data, {
+    output: '已回复', sessionId: 'qwen-session-123', piSessionId: 'pi_123',
+  });
+});
+
 test('简洁模式会聚合流式响应为一条输出日志', async () => {
   const records = [];
   const chunks = [
@@ -114,6 +178,30 @@ test('简洁模式会聚合流式响应为一条输出日志', async () => {
   assert.equal(responseRecords.length, 1);
   assert.deepEqual(responseRecords[0].data, { output: '成都今天晴' });
   assert.equal(records.some((record) => record.event === 'response_chunk'), false);
+});
+
+test('简洁模式会从 SSE 会话事件记录 sessionId', async () => {
+  const records = [];
+  const chunks = [
+    Buffer.from('data: {"conversation_id":"conversation-456","choices":[{"delta":{"content":"结果"}}]}\n\n'),
+    Buffer.from('data: [DONE]\n\n'),
+  ];
+  const client = createClient({
+    records,
+    mode: 'compact',
+    response: { status: 200, headers: { 'content-type': 'text/event-stream' }, data: Readable.from(chunks) },
+  });
+  const result = await client.request({
+    method: 'POST',
+    url: 'https://glm.test/chat',
+    data: { model: 'GLM-5', messages: [{ role: 'user', content: '测试会话' }] },
+  });
+  for await (const chunk of result.data) void chunk;
+
+  assert.deepEqual(records.find((record) => record.event === 'response').data, {
+    output: '结果',
+    sessionId: 'conversation-456',
+  });
 });
 
 test('简洁模式兼容 Qwen data.messages 响应结构', async () => {
