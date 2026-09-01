@@ -43,7 +43,7 @@ curl http://设备IP:18080/health
 
 ## Android RapidOCR 图片测试 APK
 
-`android-rapidocr/` 是独立的 RapidOCR 图片测试应用，内置 PP-OCRv6 中文 ONNX 模型。APK 页面加载模型后可启动默认 `0.0.0.0:18080` HTTP 服务；浏览器访问根路径可以手动上传 JPG、PNG 或 WebP 图片，显示识别文本、耗时、置信度和文字框。
+`android-rapidocr/` 是独立的 RapidOCR 图片测试应用，内置 PP-OCRv6 中文 ONNX 模型。APK 页面加载模型后可选择“自动 / 大核 / 小核”推理线程模式，并启动默认 `0.0.0.0:18080` HTTP 服务；浏览器访问根路径可以手动上传 JPG、PNG 或 WebP 图片，显示识别文本、耗时、置信度和文字框。
 
 构建 debug APK：
 
@@ -59,7 +59,7 @@ curl http://设备IP:18080/health
 curl -X POST -H 'Content-Type: image/png' --data-binary @sample.png http://设备IP:18080/api/ocr
 ```
 
-服务仅用于受信任局域网测试，不提供鉴权；APK 仅支持 arm64-v8a、Android 8.0+。模型唯一源文件位于 `res/models/rapidocr/`，构建时复制进 APK，不需要联网下载。
+服务仅用于受信任局域网测试，不提供鉴权；CPU affinity 失败时自动回退系统调度；APK 仅支持 arm64-v8a、Android 8.0+。模型唯一源文件位于 `res/models/rapidocr/`，构建时复制进 APK，不需要联网下载。
 
 ## 环境要求
 

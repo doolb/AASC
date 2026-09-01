@@ -5,6 +5,9 @@
 - ✅ [2026-09-01] 新增独立 Android RapidOCR HTTP 测试 APK。
   - 改动文件：`3rd/tts-server/android-rapidocr/`、`res/models/rapidocr/`、`3rd/tts-server/package.json`、RapidOCR design/spec/task 文档和使用说明。
   - 验证结果：JVM 单元测试、debug APK 构建、arm64 真机安装、模型加载、`/health`、内置网页和 `/api/ocr` 真实图片请求均通过；未宣称多系统版本和 P95 压测完成。
+- ✅ [2026-09-01] 增加 RapidOCR 推理线程自动/大核/小核选择。
+  - 改动文件：`CpuMode.kt`、`CpuAffinity.kt`、`OcrInferenceRunner.kt`、CMake/JNI affinity、`MainActivity.kt`、`OcrHttpServer.kt` 及对应测试和文档。
+  - 验证结果：三档控件、选择持久化、大小核真机 OCR 和小核线程 `Cpus_allowed_list=0-3` 检查通过；native 失败保留自动回退。
 
 ## [Unreleased]
 

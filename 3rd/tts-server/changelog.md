@@ -6,6 +6,9 @@
   - 改动文件：`android-rapidocr/` 工程、`res/models/rapidocr/` 四个固定模型资源、`package.json` 构建脚本、RapidOCR design/spec/task 文档和 readme。
   - 功能：ONNX Runtime + OpenCV 离线检测/方向分类/识别，提供 `GET /`、`GET /health`、`POST /api/ocr`，网页支持手动上传 JPG/PNG/WebP 并绘制文字框。
   - 验证结果：模块 JVM 单元测试通过；debug APK 构建和 arm64 真机安装通过；真机模型加载、health、网页页面、PNG curl 上传和真实文字 OCR 通过。
+- ✅ [2026-09-01] 增加 RapidOCR 推理线程自动/大核/小核选择。
+  - 改动文件：CPU 模式枚举、JNI affinity、CMake 构建、推理线程包装器、APK 控制页、HTTP 服务、测试及文档。
+  - 验证结果：模块 JVM 单元测试和 CMake/JNI 构建通过；Android 9 arm64 真机三档控件、选择持久化、大小核 OCR 和小核线程 CPU 集合检查通过。
 
 ## 2026-08-29
 

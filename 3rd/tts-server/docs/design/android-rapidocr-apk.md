@@ -33,12 +33,24 @@
 
 模型资源唯一源目录为 `res/models/rapidocr`。Gradle 在构建时把固定模型和字典复制到 `build/generated/assets/rapidocr`，APK 第一次启动时再以临时文件加改名的方式复制到 `filesDir/rapidocr`。模型目录完整后才初始化 ONNX Runtime session，避免中断复制留下的半文件被当作模型使用。
 
+## CPU 核心选择
+
+- APK 原生控制页提供“自动 / 大核 / 小核”三档，默认使用“自动”，选择结果保存在 `SharedPreferences`。
+- 大核和小核通过 JNI 读取设备的 `cpu_capacity` 或 `cpuinfo_max_freq` 区分集群，再使用 `sched_setaffinity` 绑定当前线程；自动模式恢复为系统可调度的全部在线 CPU。
+- RapidOCR 的模型加载线程、HTTP 接收线程和 UI 线程不绑定核心；只有 `OcrHttpServer` 的单线程推理执行器在调用 `RapidOcrEngine.recognize` 前应用所选模式，避免把 affinity 错误地应用到 Activity 线程。
+- 设备无法识别集群、native 库加载失败或系统拒绝绑定时，返回明确的自动回退状态，OCR 继续使用 Android 默认调度，不把性能控制失败变成识别失败。
+- 每次推理前重新应用当前模式；从大核/小核切换到自动时会解除此前的线程限制，服务重启后新的推理线程也使用当前选择。
+
 ## 组件职责
 
 ```text
 MainActivity
-    ├── 模型状态、HTTP 端口、启动/停止按钮
+    ├── 模型状态、CPU 模式、HTTP 端口、启动/停止按钮
     └── 后台线程调度模型加载和 HTTP 服务生命周期
+
+CpuMode / CpuAffinity
+    ├── 保存自动 / 大核 / 小核模式
+    └── 在 RapidOCR 推理线程调用 JNI affinity，失败时回退系统调度
 
 RapidOcrModelFiles
     └── assets/rapidocr → filesDir/rapidocr 的安全复制和完整性检查
@@ -53,7 +65,7 @@ RapidOcrEngine
 OcrHttpServer
     ├── GET /：返回 OcrWebPage.HTML
     ├── GET /health：返回模型、服务和推理状态
-    └── POST /api/ocr：校验图片并调用 RapidOcrEngine
+    └── POST /api/ocr：校验图片、设置推理线程 affinity 并调用 RapidOcrEngine
 
 OcrWebPage
     └── 图片选择、预览、上传、文字结果和文字框叠加显示
@@ -112,6 +124,7 @@ OcrWebPage
 ## 线程和资源生命周期
 
 - 模型加载、图片解码、OpenCV 处理和 ONNX 推理均不在主线程执行。
+- CPU affinity 只作用于单线程推理执行器的当前线程，模式切换和 affinity 失败不改变 OCR 正确性。
 - HTTP 客户端使用固定大小线程池；模型推理使用单独的互斥状态，禁止并发使用同一组 session。
 - 每次请求处理结束后释放 Bitmap、Mat、tensor buffer 和临时字节引用。
 - Activity 销毁时先停止 HTTP 服务，再释放推理 session 和后台线程池。
@@ -132,11 +145,13 @@ OcrWebPage
 4. 网页选择图片后可以完成上传并显示 OCR 文本、耗时、置信度和文字框。
 5. `curl` 直接向 `/api/ocr` 上传 JPG/PNG/WebP 可以得到结构化 JSON。
 6. 无网络状态下，已安装 APK 仍可以加载模型并完成识别。
-7. 空请求、错误 Content-Type、空图片、超大图片、模型未就绪、并发请求和超时均返回可理解的 HTTP 状态及 JSON 错误。
+7. 原生页面可以在自动 / 大核 / 小核之间切换并保留选择；OCR 推理线程应用 affinity 失败时仍能返回结果。
+8. 空请求、错误 Content-Type、空图片、超大图片、模型未就绪、并发请求和超时均返回可理解的 HTTP 状态及 JSON 错误。
 
 ## 风险
 
 - RapidOCR 官方 Android 示例和模型版本存在时间差，ONNX 输出形状、预处理均需要使用固定模型做真机验证。
 - OpenCV 和 ONNX Runtime 会增加 APK 体积，首版优先保证识别链路正确，暂不做 native 库裁剪。
 - DB 检测后处理、透视裁剪和 CTC 解码均是模型强相关逻辑，JVM 单测覆盖纯逻辑，arm64 真机已用 PNG 文字图和 APK 截图完成基础验收。
+- CPU 核心名称依赖设备 sysfs 能力和 Linux affinity 权限；无法识别或绑定时只能保证自动调度，不能宣称目标核心一定生效。
 - HTTP 无鉴权且绑定 `0.0.0.0`，仅适合受信任局域网测试。

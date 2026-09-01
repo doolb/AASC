@@ -16,6 +16,20 @@
             android:text="@string/loading_model"
             android:textSize="16sp" />
 
+        <TextView
+            android:id="@+id/cpuStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/cpu_mode_selected_auto"
+            android:textSize="14sp" />
+
+        <Spinner
+            android:id="@+id/cpuModeSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
         <EditText
             android:id="@+id/httpPortInput"
             android:layout_width="match_parent"

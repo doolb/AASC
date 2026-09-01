@@ -23,9 +23,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 面向局域网测试的明文 HTTP 服务。只实现图片上传所需的四个路由，
  * 请求头和请求体均有上限，服务停止时会主动关闭监听和工作线程。
  */
-class OcrHttpServer(private val engine: RapidOcrEngine) {
+class OcrHttpServer(
+    private val engine: RapidOcrEngine,
+    cpuModeProvider: () -> CpuMode = { CpuMode.AUTO },
+    affinityApplier: (CpuMode) -> String = CpuAffinity::apply
+) {
     private var clientExecutor: ExecutorService = Executors.newFixedThreadPool(2)
     private var inferenceExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val inferenceRunner = OcrInferenceRunner(cpuModeProvider, affinityApplier)
     private val inferenceBusy = AtomicBoolean(false)
     @Volatile private var running = false
     @Volatile private var serverSocket: ServerSocket? = null
@@ -130,7 +135,7 @@ class OcrHttpServer(private val engine: RapidOcrEngine) {
             val future: Future<OcrResult> = try {
                 inferenceExecutor.submit<OcrResult> {
                     try {
-                        engine.recognize(image)
+                        inferenceRunner.run { engine.recognize(image) }
                     } finally {
                         image.recycle()
                         inferenceBusy.set(false)

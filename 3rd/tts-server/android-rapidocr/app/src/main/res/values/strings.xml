@@ -3,6 +3,8 @@
     <string name="loading_model">正在加载 RapidOCR 模型…</string>
     <string name="model_ready">RapidOCR 模型已就绪</string>
     <string name="model_load_failed">RapidOCR 模型加载失败：%1$s</string>
+    <string name="cpu_mode_selected_auto">推理线程模式：自动</string>
+    <string name="cpu_mode_selected">推理线程模式：%1$s（每次 OCR 请求前应用）</string>
     <string name="http_port_hint">HTTP 端口</string>
     <string name="http_start">启动 HTTP 服务</string>
     <string name="http_stop">停止 HTTP 服务</string>

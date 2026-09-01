@@ -126,6 +126,37 @@ RapidOcrEngine.release():
 再按 `unclipRatio = 1.6` 以中心点扩张并映射回原图。`CtcDecoder` 的 blank 索引为 0，
 相邻重复 token 合并，输出置信度只对最终输出字符求平均。
 
+## CPU 核心模式
+
+```text
+CpuMode:
+    AUTO = 0, displayName = "自动"
+    BIG = 1, displayName = "大核"
+    LITTLE = 2, displayName = "小核"
+    fromPersistedValue(value) -> 未知值返回 AUTO
+
+CpuAffinity.apply(mode):
+    native 库不可用 -> 返回 "自动回退，CPU 绑定不可用"
+    nativeApply(mode.persistedValue) 成功 -> 返回实际模式和核心列表
+    nativeApply 失败 -> 返回自动回退文案
+
+NativeCpuAffinity.nativeApply(mode):
+    allCpus = 读取系统在线/配置 CPU 编号
+    AUTO -> 将当前推理线程恢复到 allCpus
+    BIG/LITTLE -> 从 cpu_capacity 或 cpuinfo_max_freq 读取每个 CPU 的能力值
+        无法读取或所有能力值相同 -> 恢复 allCpus 并返回自动回退
+        按最小值与最大值中点划分大小核
+        选择目标 CPU 集合并调用 sched_setaffinity(当前线程, 目标集合)
+        失败 -> 恢复 allCpus 并返回自动回退
+        成功 -> 返回目标模式和 CPU 编号
+
+OcrHttpServer.inferenceWorker(request):
+    mode = cpuModeProvider()
+    CpuAffinity.apply(mode)
+    # affinity 失败只影响性能位置，不影响 engine.recognize
+    engine.recognize(bitmap)
+```
+
 ## HTTP 服务
 
 ```text
@@ -154,7 +185,7 @@ OcrHttpServer.handle(request):
         if recognition lock is occupied:
             return 409 error
         bitmap = OcrImagePolicy.decode(request.body)
-        result = submit engine.recognize(bitmap) to one inference worker
+        result = submit { CpuAffinity.apply(cpuModeProvider()); engine.recognize(bitmap) } to one inference worker
             with 60 second timeout
         always recycle bitmap in inference worker finally
         return OcrHttpJson.success(result)
@@ -195,6 +226,10 @@ OcrWebPage:
 
 ```text
 MainActivity.onCreate:
+    selectedCpuMode = SharedPreferences["cpuMode"]，未知值使用 AUTO
+    cpuModeSpinner 显示 [自动, 大核, 小核]
+    选择变化 -> 保存 persistedValue -> cpuStatus 显示已选择模式
+    创建 OcrHttpServer(engine, cpuModeProvider = { selectedCpuMode })
     show model status, HTTP port input default 18080 and start button
     background:
         copy models from assets
@@ -236,4 +271,13 @@ OcrHttpServerTest:
     root endpoint returns embedded page containing /api/ocr and image upload
     health endpoint reports running service and model state
     invalid method and invalid content type return expected status
+
+CpuModeTest:
+    persisted values 0/1/2 map to AUTO/BIG/LITTLE
+    unknown persisted value falls back to AUTO
+
+OcrHttpServerCpuModeTest:
+    inference worker reads the selected mode before recognition
+    changing mode provider affects the next request without recreating server
+    affinity failure does not turn a successful OCR result into an HTTP error
 ```

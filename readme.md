@@ -18,7 +18,7 @@
 
 ## Android RapidOCR 测试 APK
 
-`3rd/tts-server/android-rapidocr/` 提供内置模型的图片 OCR 测试 APK，支持 HTTP 接口和网页手动上传图片。构建与调用方式见 [`3rd/tts-server/readme.md`](3rd/tts-server/readme.md) 及 [RapidOCR 设计文档](3rd/tts-server/docs/design/android-rapidocr-apk.md)。
+`3rd/tts-server/android-rapidocr/` 提供内置模型的图片 OCR 测试 APK，支持 HTTP 接口、网页手动上传图片和自动/大核/小核推理线程选择。构建与调用方式见 [`3rd/tts-server/readme.md`](3rd/tts-server/readme.md) 及 [RapidOCR 设计文档](3rd/tts-server/docs/design/android-rapidocr-apk.md)。
 
 ## 快速开始
 
