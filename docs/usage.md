@@ -110,6 +110,32 @@ npm start
 - **右上角**: 当前时间
 - **左下角**: 当前播放的文件名
 
+### 3.4 Android 显示端时间同步
+
+当 Android 显示端时间明显不正确时，可以通过 ADB 将其同步为主机当前时间。先确认设备已连接：
+
+```bash
+adb devices
+```
+
+关闭自动校时后，使用 Android AlarmManager 设置主机时间（`date -s` 在普通 ADB shell 下可能没有设置系统时间的权限）：
+
+```bash
+adb -s <设备序列号> shell settings put global auto_time 0
+host_millis=$(date +%s%3N)
+adb -s <设备序列号> shell cmd alarm set-time "$host_millis"
+```
+
+同步后检查 Android 时间和时区：
+
+```bash
+adb -s <设备序列号> shell date
+adb -s <设备序列号> shell date +%s
+adb -s <设备序列号> shell getprop persist.sys.timezone
+```
+
+应确保 Android 与主机处于同一时区（例如 `Asia/Shanghai`），并且两端 Unix 时间戳相差不超过几秒。
+
 ## 4. 使用场景
 
 ### 4.1 单屏展示
