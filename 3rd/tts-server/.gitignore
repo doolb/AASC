@@ -10,6 +10,7 @@ wine/*.headers
 wine/*.log
 wine/*.out
 ttslive/node_modules/
+scripts/__pycache__/
 
 # 独立 Android TTS APK 的 Gradle 缓存与构建产物
 android-tts/.gradle/
@@ -25,3 +26,8 @@ android-rapidocr/build/
 android-rapidocr/app/build/
 android-rapidocr/app/.cxx/
 android-rapidocr/.kotlin/
+android-yolo/.gradle/
+android-yolo/build/
+android-yolo/app/build/
+android-yolo/app/.cxx/
+android-yolo/.kotlin/

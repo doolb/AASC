@@ -11,7 +11,8 @@
     "start:wine": "node tts-wine.js",
     "build:android-tts": "../../src/apps/android-display/gradlew -p android-tts :app:assembleDebug",
     "build:android-asr": "../../src/apps/android-display/gradlew -p android-asr :app:assembleDebug",
-    "build:android-rapidocr": "../../src/apps/android-display/gradlew -p android-rapidocr :app:assembleDebug"
+    "build:android-rapidocr": "../../src/apps/android-display/gradlew -p android-rapidocr :app:assembleDebug",
+    "build:android-yolo": "../../src/apps/android-display/gradlew -p android-yolo :app:assembleDebug"
   },
   "dependencies": {
     "express": "^4.17.1"

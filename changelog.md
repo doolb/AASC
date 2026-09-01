@@ -9,6 +9,14 @@
   - 改动文件：`CpuMode.kt`、`CpuAffinity.kt`、`OcrInferenceRunner.kt`、CMake/JNI affinity、`MainActivity.kt`、`OcrHttpServer.kt` 及对应测试和文档。
   - 验证结果：三档控件、选择持久化、大小核真机 OCR 和小核线程 `Cpus_allowed_list=0-3` 检查通过；native 失败保留自动回退。
 
+### Android YOLO11 测试 APK
+
+- ✅ [2026-09-01] 新增独立 Android YOLO11 五模型 HTTP/网页测试 APK。
+  - 改动文件：`3rd/tts-server/android-yolo/`、`3rd/tts-server/scripts/export-yolo11-onnx.py`、对应测试、`3rd/tts-server/package.json` 及 Android YOLO11 design/spec/task 文档；`.pt` 和生成 ONNX 不提交到仓库。
+  - 能力：从 `/home/as` 的 `yolo11n/s/m/l/x.pt` 构建 ONNX，单模型检测、手动网页上传、检测框叠加、五模型串行测速、AUTO/大核/小核 CPU 模式和 JNI affinity。
+  - 验证：导出脚本单测 2/2、Kotlin JVM 单测 16/16、debug APK 构建成功；Android 9 arm64 真机安装、`/health`、`/api/models`、真实图片 `/api/yolo` 和五模型 `/api/benchmark` 通过。AUTO 模式 n/s/m/l/x 平均总耗时约 595.5/1668.5/5080.5/6556.0/13962.0 ms。
+  - 审查修复：benchmark 等待上限调整为 900 秒；停止服务等待执行器收尾，并以 detector 生命周期锁串行保护检测、测速和资源释放；图片在实际 Bitmap 解码前先检查 bounds 像素上限，letterbox 缩放使用四舍五入。
+
 ## [Unreleased]
 
 ### 聊天历史与用户配置持久化
