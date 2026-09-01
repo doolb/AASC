@@ -58,7 +58,7 @@ RapidOcrModelFiles:
 ```text
 OcrImagePolicy:
     MAX_BODY_BYTES = 20 MiB
-    MAX_PIXELS = configured safe pixel limit
+    MAX_PIXELS = 12 * 1024 * 1024
     SUPPORTED_CONTENT_TYPES = [image/jpeg, image/png, image/webp]
 
     validateContentType(contentType):

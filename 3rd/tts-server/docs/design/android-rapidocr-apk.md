@@ -16,6 +16,17 @@
 - 目标设备为 `arm64-v8a`、Android 8.0（API 26）及以上。
 - HTTP 服务仅用于受信任局域网测试，无鉴权、无外网请求，不作为生产服务。
 
+### 模型来源和校验值
+
+模型与字典从 RapidAI RapidOCR v3.9.2 的默认模型配置获取，构建前固定校验 SHA-256：
+
+| 文件 | 来源 | SHA-256 |
+|------|------|---------|
+| `PP-OCRv6_det_small.onnx` | `https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/det/PP-OCRv6_det_small.onnx` | `090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f` |
+| `ch_ppocr_mobile_v2.0_cls_mobile.onnx` | `https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx` | `e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c` |
+| `PP-OCRv6_rec_small.onnx` | `https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/rec/PP-OCRv6_rec_small.onnx` | `6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884` |
+| `ppocrv6_dict.txt` | `https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv6/rec/PP-OCRv6_rec_small/ppocrv6_dict.txt` | `b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d` |
+
 ## 技术方案
 
 使用 Kotlin 编写独立 Android 工程，使用 ONNX Runtime Android 执行三个 OCR 模型，使用 OpenCV Android AAR 完成图片缩放、裁剪、透视变换、检测图后处理和文字框计算。图像上传由 APK 内置的极简 HTTP 服务读取，避免引入 Web 框架。
@@ -111,7 +122,7 @@ OcrWebPage
 - Manifest 必须声明 `INTERNET`，该权限仅用于监听本地 HTTP 端口；APK 不主动访问外部网络。
 - 服务绑定所有网卡且无鉴权，只允许在用户信任的局域网中使用。
 - 只打包 `arm64-v8a`，非 arm64 设备不属于验收范围。
-- 图片解码在进入 OCR 前限制像素总量，防止超大图片造成内存异常；原图尺寸和缩放比例返回给网页用于坐标叠加。
+- 图片解码在进入 OCR 前限制像素总量为 12 Mi（`12 * 1024 * 1024`），防止超大图片造成内存异常；原图尺寸和缩放比例返回给网页用于坐标叠加。
 
 ## 验收标准
 
