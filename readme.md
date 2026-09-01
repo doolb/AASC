@@ -16,6 +16,10 @@
 - 语音生成：可使用 balcon 程序 （windows 系统）本地生成语音
 - 语言模型：可使用 MNN chat （android 系统）本地运行
 
+## Android RapidOCR 测试 APK
+
+`3rd/tts-server/android-rapidocr/` 提供内置模型的图片 OCR 测试 APK，支持 HTTP 接口和网页手动上传图片。构建与调用方式见 [`3rd/tts-server/readme.md`](3rd/tts-server/readme.md) 及 [RapidOCR 设计文档](3rd/tts-server/docs/design/android-rapidocr-apk.md)。
+
 ## 快速开始
 
 ### 安装依赖

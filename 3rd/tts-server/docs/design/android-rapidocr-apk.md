@@ -31,7 +31,7 @@
 
 使用 Kotlin 编写独立 Android 工程，使用 ONNX Runtime Android 执行三个 OCR 模型，使用 OpenCV Android AAR 完成图片缩放、裁剪、透视变换、检测图后处理和文字框计算。图像上传由 APK 内置的极简 HTTP 服务读取，避免引入 Web 框架。
 
-模型资源唯一源目录为 `res/models/rapidocr`。Gradle 在构建时把固定模型和字典复制到 `build/generated/assets/rapidocr`，APK 第一次启动时再以临时文件加改名的方式复制到 `filesDir/models/rapidocr`。模型目录完整后才初始化 ONNX Runtime session，避免中断复制留下的半文件被当作模型使用。
+模型资源唯一源目录为 `res/models/rapidocr`。Gradle 在构建时把固定模型和字典复制到 `build/generated/assets/rapidocr`，APK 第一次启动时再以临时文件加改名的方式复制到 `filesDir/rapidocr`。模型目录完整后才初始化 ONNX Runtime session，避免中断复制留下的半文件被当作模型使用。
 
 ## 组件职责
 
@@ -41,7 +41,7 @@ MainActivity
     └── 后台线程调度模型加载和 HTTP 服务生命周期
 
 RapidOcrModelFiles
-    └── assets/rapidocr → filesDir/models/rapidocr 的安全复制和完整性检查
+    └── assets/rapidocr → filesDir/rapidocr 的安全复制和完整性检查
 
 RapidOcrEngine
     ├── ONNX Runtime session 初始化和释放
@@ -122,7 +122,7 @@ OcrWebPage
 - Manifest 必须声明 `INTERNET`，该权限仅用于监听本地 HTTP 端口；APK 不主动访问外部网络。
 - 服务绑定所有网卡且无鉴权，只允许在用户信任的局域网中使用。
 - 只打包 `arm64-v8a`，非 arm64 设备不属于验收范围。
-- 图片解码在进入 OCR 前限制像素总量为 12 Mi（`12 * 1024 * 1024`），防止超大图片造成内存异常；原图尺寸和缩放比例返回给网页用于坐标叠加。
+- 图片解码在进入 OCR 前限制像素总量为 12 MiB（`12 * 1024 * 1024`），防止超大图片造成内存异常；原图尺寸和缩放比例返回给网页用于坐标叠加。
 
 ## 验收标准
 
@@ -138,5 +138,5 @@ OcrWebPage
 
 - RapidOCR 官方 Android 示例和模型版本存在时间差，ONNX 输出形状、预处理均需要使用固定模型做真机验证。
 - OpenCV 和 ONNX Runtime 会增加 APK 体积，首版优先保证识别链路正确，暂不做 native 库裁剪。
-- DB 检测后处理、透视裁剪和 CTC 解码均是模型强相关逻辑，JVM 单测只能覆盖纯逻辑，必须在 arm64 真机用真实图片验收。
+- DB 检测后处理、透视裁剪和 CTC 解码均是模型强相关逻辑，JVM 单测覆盖纯逻辑，arm64 真机已用 PNG 文字图和 APK 截图完成基础验收。
 - HTTP 无鉴权且绑定 `0.0.0.0`，仅适合受信任局域网测试。

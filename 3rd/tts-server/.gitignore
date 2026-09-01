@@ -20,3 +20,8 @@ android-asr/.gradle/
 android-asr/build/
 android-asr/app/build/
 android-asr/app/.cxx/
+android-rapidocr/.gradle/
+android-rapidocr/build/
+android-rapidocr/app/build/
+android-rapidocr/app/.cxx/
+android-rapidocr/.kotlin/

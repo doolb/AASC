@@ -42,7 +42,7 @@ RapidOcrModelFiles:
     ensureCopied(assetManager, modelDir):
         if isComplete(modelDir):
             return
-        create modelDir
+        create filesDir/rapidocr as modelDir
         for name in FILE_NAMES:
             source = assetManager.open(ASSET_DIRECTORY + "/" + name)
             temporary = modelDir + "/" + name + ".tmp"
@@ -80,33 +80,36 @@ OcrImagePolicy:
 ```text
 RapidOcrEngine.load(modelDir):
     require RapidOcrModelFiles.isComplete(modelDir)
+    require OpenCVLoader.initLocal()
     environment = OrtEnvironment.getEnvironment()
-    sessionOptions = create CPU session options
+    sessionOptions = create CPU session options with 2 intra-op threads and 1 inter-op thread
     detSession = environment.createSession(detModel, sessionOptions)
     clsSession = environment.createSession(clsModel, sessionOptions)
     recSession = environment.createSession(recModel, sessionOptions)
-    dictionary = read UTF-8 dictionary lines
+    dictionary = read UTF-8 dictionary lines and append the special space token
     ready = true
 
 RapidOcrEngine.recognize(bitmap):
     require ready
     synchronize inference lock
     startedAt = monotonicClock()
-    normalizedImage = resize and normalize bitmap using RapidOCR det defaults
+    normalizedImage = resize bitmap so the short side reaches 736 and round dimensions to 32
+    normalizedImage = RGB NCHW with (pixel / 255 - 0.5) / 0.5
     probabilityMap = detSession.run(normalizedImage)
     detectedBoxes = DBPostProcessor.extractBoxes(
         probabilityMap,
         threshold = 0.3,
         boxThreshold = 0.5,
-        unclipRatio = 1.6
+        unclipRatio = 1.6,
+        dilation = 2x2
     )
     results = []
     for box in detectedBoxes sorted top-to-bottom then left-to-right:
         crop = PerspectiveCropper.crop(bitmap, box)
-        direction = clsSession.run(ClassifierPreprocessor.toInput(crop))
+        direction = clsSession.run([1, 3, 48, 192] padded input)
         if direction.label == "180" and direction.score >= 0.9:
             crop = rotate180(crop)
-        recognitionInput = RecognitionPreprocessor.toInput(crop, height = 48, maxWidth = 320)
+        recognitionInput = resize and pad crop to [1, 3, 48, 320]
         logits = recSession.run(recognitionInput)
         text, score = CtcDecoder.decode(logits, dictionary)
         if text is not blank:
@@ -115,9 +118,13 @@ RapidOcrEngine.recognize(bitmap):
     return { text = join result texts, boxes = results, elapsedMs, image size }
 
 RapidOcrEngine.release():
-    close detSession, clsSession, recSession and sessionOptions
+    close detSession, clsSession, recSession, sessionOptions and environment
     ready = false
 ```
+
+`DbPostProcessor` 使用 OpenCV 轮廓和旋转矩形计算四点框；置信度在扩张框前计算，
+再按 `unclipRatio = 1.6` 以中心点扩张并映射回原图。`CtcDecoder` 的 blank 索引为 0，
+相邻重复 token 合并，输出置信度只对最终输出字符求平均。
 
 ## HTTP 服务
 
@@ -141,13 +148,15 @@ OcrHttpServer.handle(request):
     if GET route is "/health":
         return OcrHttpJson.health(engine.ready, running, busy)
     if POST route is "/api/ocr":
+        validate image Content-Type first
         if not engine.ready:
             return 503 error
         if recognition lock is occupied:
             return 409 error
-        validate image Content-Type
         bitmap = OcrImagePolicy.decode(request.body)
-        result = engine.recognize(bitmap) with 60 second timeout
+        result = submit engine.recognize(bitmap) to one inference worker
+            with 60 second timeout
+        always recycle bitmap in inference worker finally
         return OcrHttpJson.success(result)
     if method is not GET or POST:
         return 405 error
@@ -203,9 +212,8 @@ on stop button:
     show HTTP stopped
 
 onDestroy:
-    server.stop()
-    engine.release()
-    background.shutdownNow()
+    mark Activity destroyed
+    background: server.stop(); engine.release(); background.shutdown()
 ```
 
 ## 单元测试

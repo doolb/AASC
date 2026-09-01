@@ -1,5 +1,12 @@
 # 变更日志
 
+### Android RapidOCR 测试 APK
+
+- ✅ [2026-09-01] 新增独立 Android RapidOCR HTTP 测试 APK。
+  - 改动文件：`android-rapidocr/` 工程、`res/models/rapidocr/` 四个固定模型资源、`package.json` 构建脚本、RapidOCR design/spec/task 文档和 readme。
+  - 功能：ONNX Runtime + OpenCV 离线检测/方向分类/识别，提供 `GET /`、`GET /health`、`POST /api/ocr`，网页支持手动上传 JPG/PNG/WebP 并绘制文字框。
+  - 验证结果：模块 JVM 单元测试通过；debug APK 构建和 arm64 真机安装通过；真机模型加载、health、网页页面、PNG curl 上传和真实文字 OCR 通过。
+
 ## 2026-08-29
 
 - 删除：测试 APK 普通 ASR、声纹测试及正式 Display APK 不再支持“过滤其他文字”和 `zh-en-filter`，识别结果不再按 Unicode 脚本删除字符。

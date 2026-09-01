@@ -72,11 +72,11 @@
 - Produces Gradle task `:app:assembleDebug` and npm command `npm --prefix 3rd/tts-server run build:android-rapidocr`.
 - Produces generated assets at `app/build/generated/assets/rapidocr` with exactly the four fixed files.
 
-- [ ] **Step 1: Add the build-only project skeleton**
+- [x] **Step 1: Add the build-only project skeleton**
 
   Configure `com.android.application` version `9.3.1`, `compileSdk = 34`, `minSdk = 26`, `targetSdk = 34`, `namespace/applicationId = "com.aasc.rapidocr"`, and `abiFilters += "arm64-v8a"`. Add `androidx.core:core-ktx:1.12.0`, `androidx.appcompat:appcompat:1.6.1`, `com.microsoft.onnxruntime:onnxruntime-android:1.22.0`, `org.opencv:opencv:4.9.0`, `androidx.exifinterface:exifinterface:1.3.7`, and JUnit 4.13.2. Add a `Copy` task that copies the four files from `../../../res/models/rapidocr` into generated `assets/rapidocr` and make `preBuild` depend on it.
 
-- [ ] **Step 2: Acquire the four pinned RapidOCR v3.9.2 resources**
+- [x] **Step 2: Acquire the four pinned RapidOCR v3.9.2 resources**
 
   Download the exact files from the RapidAI ModelScope URLs recorded in the design doc's source notes, then verify these SHA-256 values before keeping them:
 
@@ -89,7 +89,7 @@
 
   Keep the files under `res/models/rapidocr`; do not duplicate them under `android-rapidocr/src/main/assets`.
 
-- [ ] **Step 3: Add the npm build entry**
+- [x] **Step 3: Add the npm build entry**
 
   Add:
 
@@ -97,13 +97,13 @@
   "build:android-rapidocr": "../../src/apps/android-display/gradlew -p android-rapidocr :app:assembleDebug"
   ```
 
-- [ ] **Step 4: Run the build skeleton check**
+- [x] **Step 4: Run the build skeleton check**
 
   Run: `npm --prefix 3rd/tts-server run build:android-rapidocr`
 
   Expected: the command reaches Android compilation, generates all four files under `app/build/generated/assets/rapidocr`, and only fails because the launcher Activity has not been added yet. If Gradle fails before compilation due to dependency or settings errors, fix the project skeleton before proceeding.
 
-- [ ] **Step 5: Commit only new scaffold/model files if they are isolated**
+- [x] **Step 5: Commit only new scaffold/model files if they are isolated**
 
   Run:
 
@@ -129,7 +129,7 @@
 - `OcrHttpJson.success(result: OcrResult): String` and `OcrHttpJson.error(message: String): String` return valid JSON strings.
 - `OcrPoint(x: Float, y: Float)`, `OcrBox(text: String, score: Float, points: List<OcrPoint>)`, and `OcrResult(text: String, elapsedMs: Long, imageWidth: Int, imageHeight: Int, boxes: List<OcrBox>)` are defined in `OcrModels.kt`.
 
-- [ ] **Step 1: Write tests that describe the missing contracts**
+- [x] **Step 1: Write tests that describe the missing contracts**
 
   Cover exactly these behaviors:
 
@@ -143,7 +143,7 @@
   @Test fun jsonEscapesQuotesNewlinesAndBackslashes()
   ```
 
-- [ ] **Step 2: Run the tests and confirm the expected RED state**
+- [x] **Step 2: Run the tests and confirm the expected RED state**
 
   Run: `../../src/apps/android-display/gradlew -p 3rd/tts-server/android-rapidocr :app:testDebugUnitTest --tests 'com.aasc.rapidocr.*'`
 
@@ -168,19 +168,19 @@
 - `OcrResult(text: String, elapsedMs: Long, imageWidth: Int, imageHeight: Int, boxes: List<OcrBox>)`.
 - `OcrBox(text: String, score: Float, points: List<OcrPoint>)`.
 
-- [ ] **Step 1: Implement the smallest model-file code to make Task 2 green**
+- [x] **Step 1: Implement the smallest model-file code to make Task 2 green**
 
   Use the four constant names from Task 1, return false for missing/empty files, and copy each asset to `$name.tmp` before rename. Delete only the current temporary file when that file fails; do not delete a valid existing model file until the replacement is complete.
 
-- [ ] **Step 2: Implement the image policy**
+- [x] **Step 2: Implement the image policy**
 
   Accept `image/jpeg`, `image/png`, and `image/webp`, ignoring a content-type parameter suffix. Reject null/blank/other types with the exact supported-type message. Decode with `BitmapFactory`, reject empty or undecodable bytes, reject images over the configured pixel limit, and rotate according to EXIF when a stream contains orientation metadata.
 
-- [ ] **Step 3: Implement JSON escaping and result serialization**
+- [x] **Step 3: Implement JSON escaping and result serialization**
 
   Escape backslash, quote, CR, LF, tab, and control characters. Serialize `success`, `text`, `elapsedMs`, `imageWidth`, `imageHeight`, and each box's `text`, `score`, and four or more point pairs. Keep errors in the same `{success:false,error:...}` shape.
 
-- [ ] **Step 4: Run the focused tests and then all current tests**
+- [x] **Step 4: Run the focused tests and then all current tests**
 
   Run: `../../src/apps/android-display/gradlew -p 3rd/tts-server/android-rapidocr :app:testDebugUnitTest --tests 'com.aasc.rapidocr.*'`
 
@@ -203,21 +203,21 @@
 - `CtcDecoder.decode(logits: Array<FloatArray>, dictionary: List<String>): DecodedText` removes repeated tokens and blank index zero, returning text and mean confidence.
 - `OcrTensorPreprocessor.toNchw(pixels: IntArray, width: Int, height: Int): FloatArray` returns normalized RGB values in `[1,3,height,width]` flattened order; a separate Android adapter reads pixels from Bitmap.
 
-- [ ] **Step 1: Write failing geometry and decoder tests**
+- [x] **Step 1: Write failing geometry and decoder tests**
 
   Assert clockwise ordering for shuffled quadrilateral points, inverse detector scaling, CTC collapse of `[blank, A, A, blank, B]` to `AB`, and confidence calculated only over emitted tokens. Assert dictionary bounds produce a controlled `IllegalArgumentException`.
 
-- [ ] **Step 2: Run the new tests and confirm RED**
+- [x] **Step 2: Run the new tests and confirm RED**
 
   Run: `../../src/apps/android-display/gradlew -p 3rd/tts-server/android-rapidocr :app:testDebugUnitTest --tests 'com.aasc.rapidocr.OcrGeometryTest' --tests 'com.aasc.rapidocr.CtcDecoderTest' --tests 'com.aasc.rapidocr.OcrTensorPreprocessorTest'`
 
   Expected: FAIL because the geometry, decoder, and tensor preprocessing functions are not implemented.
 
-- [ ] **Step 3: Implement deterministic pure logic**
+- [x] **Step 3: Implement deterministic pure logic**
 
   Implement point ordering without a long if/else chain: compute centroid and polar angle, then rotate the ordered list so the smallest `x + y` point is first. Implement CTC with a single pass and explicit blank/repeat state. Normalize RGB using RapidOCR mean/std `[0.5, 0.5, 0.5]`, resize while preserving the selected model's detector/recognizer dimensions, and fill the NCHW buffer in channel-major order. Test the tensor helper with a synthetic `IntArray` so JVM tests do not call unavailable Android Bitmap framework methods.
 
-- [ ] **Step 4: Run the focused tests and confirm GREEN**
+- [x] **Step 4: Run the focused tests and confirm GREEN**
 
   Expected: all geometry, decoder, preprocessing, model, image and JSON tests PASS with no warnings.
 
@@ -238,23 +238,23 @@
 - `OrientationClassifier.correct(crop: Bitmap, session: OrtSession, environment: OrtEnvironment): Bitmap`.
 - `RecognitionDecoder.decode(crop: Bitmap, session: OrtSession, environment: OrtEnvironment, dictionary: List<String>): DecodedText`.
 
-- [ ] **Step 1: Add a non-native guard test for incomplete models**
+- [x] **Step 1: Add a non-native guard test for incomplete models**
 
   Add `RapidOcrEngineTest.rejectsIncompleteModelDirectoryBeforeCreatingSessions`, passing a temporary directory containing only one model file and asserting the error message is `RapidOCR 模型文件不完整`. Run it and confirm RED before implementing `RapidOcrEngine.load`.
 
-- [ ] **Step 2: Implement session lifecycle**
+- [x] **Step 2: Implement session lifecycle**
 
   Initialize OpenCV before creating any `Mat`, then create one `OrtEnvironment`, one CPU `SessionOptions`, and three sessions. Read model input names at load time instead of assuming names. Set `isReady` only after all sessions and dictionary lines load. Close result tensors with `use`/`finally`, close sessions/options/environment references in `release`, and make `recognize` synchronized so the HTTP layer cannot enter two inference calls.
 
-- [ ] **Step 3: Implement detector preprocessing and DB postprocessing**
+- [x] **Step 3: Implement detector preprocessing and DB postprocessing**
 
   Use detector limit side length 736, normalize with mean/std 0.5, run the detector, threshold the probability map at 0.3, filter boxes by score 0.5, approximate contours/rotated rectangles with OpenCV, expand boxes with unclip ratio 1.6, and map points to original image coordinates. Sort boxes top-to-bottom and left-to-right.
 
-- [ ] **Step 4: Implement classification and recognition**
+- [x] **Step 4: Implement classification and recognition**
 
   Crop each detected quadrilateral with perspective transformation. Resize classifier input to `[1,3,48,192]`, rotate crops when class `180` has score at least 0.9. Resize recognition crops to height 48 and width capped at 320, run `[1,3,48,320]` padded input, decode CTC with `ppocrv6_dict.txt`, and omit blank text boxes.
 
-- [ ] **Step 5: Run JVM tests and compile the engine**
+- [x] **Step 5: Run JVM tests and compile the engine**
 
   Run: `../../src/apps/android-display/gradlew -p 3rd/tts-server/android-rapidocr :app:testDebugUnitTest`
 
@@ -275,25 +275,25 @@
 - `isRunning(): Boolean`, `addressText(): String`.
 - Routes: `GET /`, `GET /index.html`, `GET /health`, `POST /api/ocr`.
 
-- [ ] **Step 1: Write server contract tests first**
+- [x] **Step 1: Write server contract tests first**
 
   Add tests for root HTML containing `RapidOCR`, `type="file"`, `/api/ocr`, and `/health`; health returning `modelReady:false` and `httpRunning:true` with an unloaded engine; unsupported Content-Type returning 415; unsupported method returning 405; and stopping the server making the next request fail to connect.
 
-- [ ] **Step 2: Run the server tests and confirm RED**
+- [x] **Step 2: Run the server tests and confirm RED**
 
   Run: `../../src/apps/android-display/gradlew -p 3rd/tts-server/android-rapidocr :app:testDebugUnitTest --tests 'com.aasc.rapidocr.OcrHttpServerTest'`
 
   Expected: FAIL because the server and embedded page do not exist.
 
-- [ ] **Step 3: Implement the bounded socket parser**
+- [x] **Step 3: Implement the bounded socket parser**
 
   Copy the established ASR server pattern only for request parsing: 16 KiB headers, Content-Length body reads, 20 MiB limit, 65-second socket timeout, fixed two-client worker pool, `Connection: close`, and explicit status reasons. Do not add multipart parsing; the web page sends the selected image bytes directly with its MIME type.
 
-- [ ] **Step 4: Implement the routes and inference boundary**
+- [x] **Step 4: Implement the routes and inference boundary**
 
   Return 503 before decoding when the model is not ready, 409 when the single inference lock is occupied, 415 for unsupported image types, 400 for decode errors, 504 for the 60-second inference timeout, and 200 with `OcrHttpJson.success` on success. Close every decoded Bitmap in `finally`.
 
-- [ ] **Step 5: Run focused server tests and all module tests**
+- [x] **Step 5: Run focused server tests and all module tests**
 
   Expected: server contract tests and all previous tests PASS. Verify root page and JSON responses use UTF-8 and do not contain an external script, stylesheet, image, or network URL.
 
@@ -311,19 +311,19 @@
 - Native UI IDs: `modelStatus`, `httpPortInput`, `httpStatus`, `httpToggleButton`.
 - Web UI IDs: `imageInput`, `imagePreview`, `recognizeButton`, `resultText`, `elapsedText`, `boxesOverlay`.
 
-- [ ] **Step 1: Add the native layout and manifest**
+- [x] **Step 1: Add the native layout and manifest**
 
   Add model status text, port input defaulting to `18080`, start/stop button, and address text. Add `android.permission.INTERNET` because the APK listens on a local socket. Keep no camera or external storage permission.
 
-- [ ] **Step 2: Implement Activity lifecycle**
+- [x] **Step 2: Implement Activity lifecycle**
 
   On create, disable the HTTP button, copy/load models on a single background executor, then enable the button only when `RapidOcrEngine.isReady`. Validate ports in `1024..65535`; start/stop the server off the main thread; update UI only through a guarded `postUi` helper. On destroy, stop server, release engine, and shut down executor.
 
-- [ ] **Step 3: Implement the embedded upload page**
+- [x] **Step 3: Implement the embedded upload page**
 
   Use a single inline HTML document with no external resources. The file input accepts `.jpg`, `.jpeg`, `.png`, `.webp`; selected data is previewed with an object URL; clicking recognize sends the raw `ArrayBuffer` to `/api/ocr` with the original MIME; response text, elapsed time, scores, and point coordinates are rendered; a canvas overlay maps returned image coordinates to preview coordinates; errors preserve the selected image and show the HTTP error.
 
-- [ ] **Step 4: Run static page contract tests and module tests**
+- [x] **Step 4: Run static page contract tests and module tests**
 
   Add assertions to `OcrHttpServerTest` for upload MIME strings, `ArrayBuffer`, result fields, and canvas overlay. Run `:app:testDebugUnitTest` and expect all tests PASS.
 
@@ -347,11 +347,11 @@
 **Interfaces:**
 - Documentation must describe the implemented route names, default port, supported image types, APK path, model source, and actual verification results.
 
-- [ ] **Step 1: Update usage and indexes**
+- [x] **Step 1: Update usage and indexes**
 
   Add the build command and curl example to `3rd/tts-server/readme.md`. Keep root and subproject design/spec indexes pointing to the same new design/spec files. Do not duplicate model files or claim a feature is production-ready.
 
-- [ ] **Step 2: Record completion and remove active todo entries**
+- [x] **Step 2: Record completion and remove active todo entries**
 
   Replace the in-progress entries with a completed task record containing the exact APK path, model names, modified files, and test/build results. Use the required changelog format:
 
@@ -363,7 +363,7 @@
     - 验证结果：...
   ```
 
-- [ ] **Step 3: Run documentation consistency checks**
+- [x] **Step 3: Run documentation consistency checks**
 
   Run: `rg -n 'android-rapidocr|RapidOCR|/api/ocr' 3rd/tts-server/docs docs 3rd/tts-server/readme.md` and `git diff --check`. Expected: all implemented route/model references point to the same names and no whitespace errors exist.
 
@@ -373,7 +373,7 @@
 - Test: `3rd/tts-server/android-rapidocr/app/build/outputs/apk/debug/app-debug.apk`
 - Test: generated manifest and assets inside the APK
 
-- [ ] **Step 1: Run the project-preferred build and unit tests**
+- [x] **Step 1: Run the project-preferred build and unit tests**
 
   Run:
 
@@ -384,7 +384,7 @@
 
   Expected: both commands exit with code 0 and the APK exists at `3rd/tts-server/android-rapidocr/app/build/outputs/apk/debug/app-debug.apk`.
 
-- [ ] **Step 2: Verify APK metadata and bundled resources**
+- [x] **Step 2: Verify APK metadata and bundled resources**
 
   Run:
 
@@ -396,7 +396,7 @@
 
   Expected: all four assets are present, package is `com.aasc.rapidocr`, ABI is arm64-v8a, and only the required `android.permission.INTERNET` network permission is present.
 
-- [ ] **Step 3: Run a local JVM HTTP smoke test**
+- [x] **Step 3: Run a local JVM HTTP smoke test**
 
   Execute the module HTTP tests against an ephemeral port and verify root/health/error responses. If an arm64 device is available, install the debug APK and run:
 
@@ -407,11 +407,11 @@
 
   Expected: health reports ready/running, and OCR returns `success:true`, non-negative `elapsedMs`, text, and boxes. Record if a real-device check is unavailable; do not claim it passed.
 
-- [ ] **Step 4: Review only intended changes**
+- [x] **Step 4: Review only intended changes**
 
   Run `git status --short` and `git diff --stat`. Confirm no user-generated logs, Gradle caches, `.cxx`, `.kotlin`, APK build outputs, or unrelated source changes are added. Keep generated build outputs ignored/untracked.
 
-- [ ] **Step 5: Commit isolated implementation changes**
+- [x] **Step 5: Commit isolated implementation changes**
 
   Stage only RapidOCR app files, model resources, package script, and the documentation files whose diff contains this task's changes. Use commit message:
 

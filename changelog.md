@@ -1,5 +1,11 @@
 # Web MediaCenter - 变更日志
 
+### Android RapidOCR 测试 APK
+
+- ✅ [2026-09-01] 新增独立 Android RapidOCR HTTP 测试 APK。
+  - 改动文件：`3rd/tts-server/android-rapidocr/`、`res/models/rapidocr/`、`3rd/tts-server/package.json`、RapidOCR design/spec/task 文档和使用说明。
+  - 验证结果：JVM 单元测试、debug APK 构建、arm64 真机安装、模型加载、`/health`、内置网页和 `/api/ocr` 真实图片请求均通过；未宣称多系统版本和 P95 压测完成。
+
 ## [Unreleased]
 
 ### Chat2API 工具调用

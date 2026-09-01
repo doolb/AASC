@@ -76,4 +76,9 @@
 
 ## 执行记录
 
-- ⏳进行中 [2026-09-01] 已确认通过 HTTP 接口和内置网页手动上传图片测试；设计、spec 和实现待完成。
+- ✅ [2026-09-01] 已完成独立 RapidOCR HTTP 测试 APK。
+  - 模型资源：`res/models/rapidocr/` 下 PP-OCRv6 det/rec、PP-OCRv4 cls 和 `ppocrv6_dict.txt`，构建时复制到 APK assets。
+  - HTTP：`GET /`、`GET /health`、`POST /api/ocr`，默认 `0.0.0.0:18080`，支持 JPG/PNG/WebP 原始二进制上传。
+  - 网页：内置单文件 HTML，支持手动选图、预览、ArrayBuffer 上传、结果/耗时/置信度和文字框 canvas 叠加。
+  - 验证：模块 JVM 单元测试通过；debug APK 构建、arm64 真机安装、模型加载、health、网页接口和真实图片 OCR 请求通过。
+  - 真实图片示例：`RapidOCR HTTP Test 123` 返回 `RapidOCR HT`、`CR HTTP Test 12`、`t 123` 三个文字框；设备端未执行多系统版本和连续 P95 压测。
