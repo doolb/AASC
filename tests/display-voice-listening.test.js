@@ -59,6 +59,29 @@ assert.match(recognitionBody, /fetch\('\/api\/asr\/recognize'/);
 assert.match(recognitionBody, /FormData/);
 assert.doesNotMatch(recognitionBody, /asrRecognizeAsync|asrRecognize\(/);
 assert.doesNotMatch(recognitionBody, /SherpaASR\.(?:startStreaming|recognizeBuffer)/);
+assert.match(
+    recognitionBody,
+    /data\.status === 'ignored'[\s\S]*?const ignoredText = String\(data\.text \|\| ''\)\.trim\(\)/,
+    '显示端应保留有文字的 ignored 识别结果'
+);
+assert.match(
+    recognitionBody,
+    /const ignoredText = String\(data\.text \|\| ''\)\.trim\(\)[\s\S]*?updateVoiceTextDisplay\(ignoredText, true\)/,
+    '显示端应显示有文字的无效识别结果'
+);
+assert.match(
+    recognitionBody,
+    /data\.ignoredText[\s\S]*?updateVoiceTextDisplay\(ignoredText, true\)/,
+    '混合声纹分段中的无效文字也应显示'
+);
+const asrEndpointStart = serverJs.indexOf("app.post('/api/asr/recognize'");
+const asrEndpointEnd = serverJs.indexOf("app.get('/api/asr/status'", asrEndpointStart);
+const asrEndpointBody = serverJs.slice(asrEndpointStart, asrEndpointEnd);
+assert.match(
+    asrEndpointBody,
+    /ignoredText/,
+    '服务端 ASR 响应应保留被忽略分段的识别文字'
+);
 assert.match(serverJs, /display-voice-conversation/);
 assert.match(serverJs, /isDisplayVoiceListeningEnabled\(displayData\)/);
 assert.match(serverJs, /voiceConversationTtsFinished/);
@@ -90,4 +113,4 @@ const voiceControl = deviceListJs.slice(voiceControlStart, voiceControlEnd);
 assert.match(voiceControl, /input\.addEventListener\(['"]change['"]/);
 assert.match(voiceControl, /updateCapability\(display\.id, ['"]voiceRecording['"], event\.target\.checked\)/);
 
-console.log('display-voice-listening.test.js: 27/27 passed');
+console.log('display-voice-listening.test.js: 31/31 passed');

@@ -5436,6 +5436,13 @@
                             console.log('显示端分段识别:', segText, '->', seg.speaker);
                             sendRecognizedVoiceInput(segText, { speaker: seg.speaker });
                         }
+                        const ignoredText = String(data.ignoredText || '').trim();
+                        if (ignoredText) {
+                            updateVoiceTextDisplay(ignoredText, true);
+                            setTimeout(() => {
+                                updateVoiceTextDisplay('', true);
+                            }, 3000);
+                        }
                         return;
                     }
                     if (!data.text) return;
@@ -5456,7 +5463,15 @@
                 } else if (data.status === 'ignored') {
                     consecutiveIgnoreCount++;
                     console.log('显示端无效语音输入，已忽略 (' + consecutiveIgnoreCount + '/' + MAX_CONSECUTIVE_IGNORES + '):', data.text);
-                    updateVoiceTextDisplay('', true);
+                    const ignoredText = String(data.text || '').trim();
+                    if (ignoredText) {
+                        updateVoiceTextDisplay(ignoredText, true);
+                        setTimeout(() => {
+                            updateVoiceTextDisplay('', true);
+                        }, 3000);
+                    } else {
+                        updateVoiceTextDisplay('', true);
+                    }
                     
                     if (consecutiveIgnoreCount >= MAX_CONSECUTIVE_IGNORES) {
                         const cooldownMs = VOICE_COOLDOWN_MS * Math.pow(2, Math.min(consecutiveIgnoreCount - MAX_CONSECUTIVE_IGNORES, 3));

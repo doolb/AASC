@@ -4,7 +4,7 @@
       "instanceId": "3c33fd92",
       "taskName": "render-display",
       "status": "running",
-      "timestamp": 1788270584411,
+      "timestamp": 1788278764566,
       "target": "display",
       "env": "auto",
       "mode": "service",
@@ -20,8 +20,8 @@
     {
       "instanceId": "5a5af822",
       "taskName": "render-display",
-      "status": "pending_forward",
-      "timestamp": 1788270589483,
+      "status": "running",
+      "timestamp": 1788278764596,
       "target": "display",
       "env": "auto",
       "mode": "service",
@@ -30,7 +30,9 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "error": "显示端已断开连接"
+      "error": "显示端已断开连接",
+      "stage": "running",
+      "progress": 100
     }
   ]
 }

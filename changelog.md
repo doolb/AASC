@@ -20,6 +20,13 @@
 
 ## [Unreleased]
 
+### Pi Agent 与聊天导出测试记录
+
+- ✅ [2026-09-01] 记录真实群聊 Pi Agent 读取 `package.json` 的测试方法，并补充聊天历史导出格式说明。
+  - 测试通过控制端 WebSocket `/control` 发送带当前 `displayId`、`mode=group`、独立 `sessionId` 的 `chatMessage`，要求 Pi 先调用只读 `read` 工具，再返回文件字段。
+  - 真实响应 `success=true`，返回的 `name` 和 8 个 `scripts` 命令与本地 `package.json` 核对一致；缺少 `displayId` 的请求仍属于已记录的回退分支边界。
+  - 聊天导出为 `chat-history.json` 的 UTF-8 JSON，使用 `aasc-chat-history` v1 包装，`messages` 为扁平消息数组；对应接口和字段已补充到聊天历史 design/spec 文档。
+
 ### 聊天历史与用户配置持久化
 
 - ✅ [2026-09-01] 修复聊天保存误删私聊历史，并增加 `aasc-user` 全目录备份与导入导出。

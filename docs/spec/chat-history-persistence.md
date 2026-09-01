@@ -104,6 +104,17 @@ exportHistory():
         exportedAt: 当前时间,
         messages: 所有已加载消息的副本
     }
+
+chatHistoryDownload():
+    文件名 = "chat-history.json"
+    编码 = UTF-8
+    内容 = JSON.stringify(exportHistory(), null, 2)
+
+    每条 messages 记录至少包含：
+        id, timestamp, role, name, content,
+        mode, target, sessionId, profileName, templateId
+    如果存在来源地址，则保留 ip 等扩展字段
+    messages 是扁平消息数组，不按 user/assistant 成对包装一轮对话
 ```
 
 ## 导入

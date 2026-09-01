@@ -29,6 +29,34 @@
 - 运行时日志、PID、锁、socket 和临时文件不属于配置快照，不复制、不导入。
 - 聊天导出使用 `format`、`version`、`exportedAt`、`messages` 包装；目录导出使用 `format`、`version`、`exportedAt`、`root`、`files` 包装，文件内容采用 Base64 保存二进制兼容性。
 
+### 聊天历史导出格式
+
+`GET /api/chat/history/export` 下载 UTF-8、格式化缩进的 JSON 文件 `chat-history.json`，结构如下：
+
+```json
+{
+  "format": "aasc-chat-history",
+  "version": 1,
+  "exportedAt": "2026-09-01T00:00:00.000Z",
+  "messages": [
+    {
+      "id": "消息 ID",
+      "timestamp": 1788273030000,
+      "role": "control",
+      "name": "控制端",
+      "content": "用户消息文本",
+      "mode": "group",
+      "target": null,
+      "sessionId": "default",
+      "profileName": "qwen3.5",
+      "templateId": "default"
+    }
+  ]
+}
+```
+
+`messages` 是按时间保存的扁平消息数组，每个元素代表一条控制端或助手消息，不是把一轮对话包装成 `user`/`assistant` 成对对象。消息可能额外包含来源 `ip` 等字段；`role`、`mode`、`target`、`sessionId`、`profileName` 和 `templateId` 用于恢复显示、群聊/私聊筛选及 Agent 会话上下文。导入时支持同版本包装格式，也兼容旧的顶层消息数组。
+
 ## 保存安全策略
 
 普通 `saveHistory()`：

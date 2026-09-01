@@ -57,3 +57,8 @@
 - 验证结果：Chat2API 全量检查 64/64；Responses、Provider、Pi 相关定向测试通过；语法检查和 `git diff --check` 通过。
 - 真实流程验证：重启 AASC 服务后，独立 Pi RPC 请求成功；控制端带显示端 ID 的请求收到流式回复；同一控制端 session 两轮续接成功，第二轮正确返回首轮记住的 `PI-CONT-20260831`。
 - 发现待处理边界：控制端 `chatMessage` 不带 `displayId` 时，服务端当前回退分支提前返回，不会启动 Pi；已登记到 `docs/todo.md`。
+- 2026-09-01 补充真实群聊 Pi Agent 只读工具验收：
+  - 通过控制端 WebSocket `/control` 发送 `type=chatMessage`、`mode=group`、`assistantType=llm`、当前 `displayId` 和独立 `sessionId`。
+  - 测试消息要求 Pi 必须先调用只读 `read` 工具读取项目根目录 `package.json`，再返回 `name` 和 `scripts` 命令列表。
+  - 服务端收到 `chatResponse success=true`；返回的 `name=web-mediacenter`，以及 `start`、`restart:server`、`check:chat2api`、`test:log-brain`、`stress:tts`、`build:apk`、`upload:apk`、`start:apk:display` 8 个脚本键，与本地 `package.json` 核对一致。
+  - 测试注意：控制端请求必须带当前有效的 `displayId`；缺少该字段时当前回退分支会提前返回，不能据此判断 Pi 工具调用失败。

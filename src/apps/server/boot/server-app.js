@@ -2409,19 +2409,36 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                 cleanupTempFile(req.file.path);
 
                 if (result.segments && result.segments.length) {
-                    const segments = result.segments
-                        .map(segment => ({ ...segment, text: normalizeAsrText(segment.text) }))
-                        .filter(segment => segment.speaker && hasValidContent(segment.text));
+                    const normalizedSegments = result.segments
+                        .map(segment => ({ ...segment, text: normalizeAsrText(segment.text) }));
+                    const segmentStates = normalizedSegments.map(segment => ({
+                        segment,
+                        isValid: Boolean(segment.speaker) && hasValidContent(segment.text)
+                    }));
+                    const segments = segmentStates
+                        .filter(state => state.isValid)
+                        .map(state => state.segment);
+                    const ignoredText = segmentStates
+                        .filter(state => state.segment.text && !state.isValid)
+                        .map(state => state.segment.text)
+                        .join('，');
                     if (segments.length === 0) {
-                        return res.json({ status: 'ignored', reason: '未识别到已注册声纹', segments: [] });
+                        return res.json({
+                            status: 'ignored',
+                            reason: '未识别到已注册声纹',
+                            text: ignoredText,
+                            segments: []
+                        });
                     }
-                    return res.json({
+                    const response = {
                         status: 'success',
                         segments: segments.map(segment => ({
                             text: segment.text,
                             speaker: segment.speaker
                         }))
-                    });
+                    };
+                    if (ignoredText) response.ignoredText = ignoredText;
+                    return res.json(response);
                 }
 
                 const text = normalizeAsrText(result.text);
