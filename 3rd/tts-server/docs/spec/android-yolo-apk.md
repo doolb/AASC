@@ -304,3 +304,15 @@ CpuModeTest:
     persisted values 0/1/2 map to AUTO/BIG/LITTLE
     unknown persisted value falls back to AUTO
 ```
+
+## 当前验证记录
+
+```text
+ValidationRecord:
+    device = Android 9 arm64, 192.168.1.6:5555
+    image = bus.jpg
+    yolo11n detections = bus(classId=5, confidence=0.939) + 4 persons(classId=0)
+    confidence values = [0.939, 0.902, 0.849, 0.833, 0.396]
+    conclusion = single-image qualitative smoke test passed
+    precision/recall/mAP = not measured because no labeled validation dataset was supplied
+```

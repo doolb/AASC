@@ -121,6 +121,7 @@ YoloWebPage
 
 - 已完成独立 `android-yolo` 工程、五模型 ONNX 构建资源、ONNX Runtime 推理、HTTP API、内置网页、CPU 大核/小核选择和对应 JVM 单元测试。
 - 已在 Android 9 arm64 真机完成 APK 安装、网页根路径、模型列表、健康检查、真实图片检测和五模型测速；查询参数解码使用 Android 低版本兼容的 charset 名称重载。
+- 已用 `bus.jpg` 做定性检测验证：返回 1 辆公交车和 4 个人，公交车置信度 `0.939`，人员置信度为 `0.396/0.833/0.849/0.902`；当前未使用带标注验证集计算 Precision、Recall 或 mAP，不能将该单图结果表述为正式准确率。
 
 ## 风险
 

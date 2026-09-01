@@ -50,6 +50,9 @@
 
 ## Android APK
 
+- ⏳可选任务 [2026-09-02] 为 Android YOLO11 测试 APK 增加带标注验证集的准确率评估
+  - 当前已记录 `bus.jpg` 单图定性结果；正式 Precision、Recall、mAP 需要目标场景的图片和标注数据。
+
 - ⏳待处理 [2026-09-01] 将 Termux 服务器试运行整理为正式 Android 节点
   - 当前 `~/aasc-server-test` 已能在 Termux 以 runit 服务运行，使用 8081 端口；后续需要增加主服务器注册、心跳、认证、能力声明、媒体同步和 Android 重启自动恢复。
   - 当前 ASR、TTS Wine、Puppeteer 暂不迁移；正式节点需要在配置和控制端明确不可用能力。
