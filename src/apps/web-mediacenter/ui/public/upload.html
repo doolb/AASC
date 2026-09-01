@@ -670,6 +670,20 @@
                 </div>
             </div>
             <div class="section" style="margin-top: 24px;">
+                <h2>aasc-user 配置备份</h2>
+                <div class="control-item" style="margin-top: 12px;">
+                    <label>导入/导出全部持久化配置</label>
+                    <div class="control-buttons">
+                        <button class="control-btn" onclick="AascUserConfig.exportConfig()">导出配置目录</button>
+                        <button class="control-btn" onclick="AascUserConfig.selectImport()">导入配置目录</button>
+                        <input type="file" id="aascUserConfigImportInput" accept="application/json,.json" style="display:none" onchange="AascUserConfig.importConfig(this.files[0]); this.value=''">
+                    </div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 6px;">
+                        导出聊天、角色、Chat2API 等持久化配置；导入默认合并，同路径文件会覆盖，运行时日志/PID/锁文件不会导入。导入后请重启服务端。
+                    </div>
+                </div>
+            </div>
+            <div class="section" style="margin-top: 24px;">
                 <h2>服务端</h2>
                 <div class="control-item" style="margin-top: 12px;">
                     <label>重载服务端代码</label>
@@ -1009,6 +1023,7 @@
     <script src="js/chat2api.js"></script>
     <script src="js/sidebar-registry.js"></script>
     <script src="js/voiceprint-panel.js"></script>
+    <script src="js/aasc-user-config.js"></script>
 
     <script>
     const Settings = {

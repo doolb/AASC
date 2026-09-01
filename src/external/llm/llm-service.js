@@ -11,6 +11,7 @@ const {
     buildChatSessionKey
 } = require('../../apps/server/modules/chat/pi-runtime-policy');
 const { createResponsesClient } = require('./llm-responses-client');
+const { createChatHistoryStore } = require('./chat-history-store');
 
 const HISTORY_DIR = USER_CONFIG_DIR;
 const HISTORY_FILE_BASE = 'chat-history';
@@ -80,33 +81,35 @@ let chatCommands = {
 };
 let importantRecords = [];
 let historySaveTimer = null;
+const pendingChangedHistoryFiles = new Set();
+const historyStore = createChatHistoryStore({
+    historyDir: HISTORY_DIR,
+    timeZone: 'Asia/Shanghai',
+    logger: (level, message) => {
+        const output = level === 'error' ? console.error : console.log;
+        output(`[Chat] ${message}`);
+    }
+});
 
 function loadHistory() {
     try {
-        const allFiles = fs.readdirSync(HISTORY_DIR)
-            .filter(f => f.startsWith(HISTORY_FILE_BASE) && f.endsWith('.json'));
-
-        if (allFiles.length === 0) return;
-
         chatHistories = {};
-        for (const file of allFiles) {
-            const data = fs.readFileSync(path.join(HISTORY_DIR, file), 'utf8');
-            const messages = JSON.parse(data);
-            for (const msg of messages) {
-                // 旧消息没有 profile/template 时归入启动时的当前 profile/default 模板。
-                if (!msg.sessionId) msg.sessionId = 'default';
-                if (!msg.profileName) msg.profileName = activeProfile;
-                if (!msg.templateId) msg.templateId = 'default';
-                const key = sessionKey(
-                    msg.mode,
-                    msg.target,
-                    msg.sessionId,
-                    msg.profileName,
-                    msg.templateId
-                );
-                if (!chatHistories[key]) chatHistories[key] = [];
-                chatHistories[key].push(msg);
-            }
+        for (const sourceMessage of historyStore.load()) {
+            if (!sourceMessage || typeof sourceMessage !== 'object') continue;
+            const msg = sourceMessage;
+            // 旧消息没有 profile/template 时归入启动时的当前 profile/default 模板。
+            if (!msg.sessionId) msg.sessionId = 'default';
+            if (!msg.profileName) msg.profileName = activeProfile;
+            if (!msg.templateId) msg.templateId = 'default';
+            const key = sessionKey(
+                msg.mode,
+                msg.target,
+                msg.sessionId,
+                msg.profileName,
+                msg.templateId
+            );
+            if (!chatHistories[key]) chatHistories[key] = [];
+            chatHistories[key].push(msg);
         }
 
         const total = Object.values(chatHistories).reduce((s, a) => s + a.length, 0);
@@ -117,49 +120,37 @@ function loadHistory() {
     }
 }
 
-function saveHistory() {
+function getAllHistoryMessages() {
+    return Object.values(chatHistories).flat();
+}
+
+function flushHistorySave() {
+    if (historySaveTimer) {
+        clearTimeout(historySaveTimer);
+        historySaveTimer = null;
+    }
+    if (pendingChangedHistoryFiles.size === 0 && getAllHistoryMessages().length === 0) return true;
+    try {
+        historyStore.ensurePreviousDayBackup();
+        historyStore.saveSnapshot(getAllHistoryMessages(), {
+            changedFiles: Array.from(pendingChangedHistoryFiles)
+        });
+        pendingChangedHistoryFiles.clear();
+        return true;
+    } catch (err) {
+        console.error('[Chat] 保存历史记录失败:', err.message);
+        return false;
+    }
+}
+
+function saveHistory(changedFiles = []) {
+    for (const fileName of changedFiles) {
+        pendingChangedHistoryFiles.add(fileName);
+    }
     if (historySaveTimer) {
         clearTimeout(historySaveTimer);
     }
-    historySaveTimer = setTimeout(() => {
-        try {
-            if (!fs.existsSync(HISTORY_DIR)) {
-                fs.mkdirSync(HISTORY_DIR, { recursive: true });
-            }
-            const groupedByFile = {};
-            const expectedFiles = new Set();
-
-            for (const messages of Object.values(chatHistories)) {
-                if (messages.length === 0) continue;
-
-                const firstMessage = messages[0];
-                const fileName = firstMessage.mode === 'private' && firstMessage.target
-                    ? `${HISTORY_FILE_BASE}-${firstMessage.target}.json`
-                    : `${HISTORY_FILE_BASE}.json`;
-
-                if (!groupedByFile[fileName]) groupedByFile[fileName] = [];
-                groupedByFile[fileName].push(...messages);
-                expectedFiles.add(fileName);
-            }
-
-            // 写入文件
-            for (const [fileName, messages] of Object.entries(groupedByFile)) {
-                fs.writeFileSync(path.join(HISTORY_DIR, fileName), JSON.stringify(messages, null, 2), 'utf8');
-            }
-
-            // 清理已不存在的会话对应的历史文件
-            const existingFiles = fs.readdirSync(HISTORY_DIR)
-                .filter(f => f.startsWith(HISTORY_FILE_BASE) && f.endsWith('.json'));
-            for (const f of existingFiles) {
-                if (!expectedFiles.has(f)) {
-                    try { fs.unlinkSync(path.join(HISTORY_DIR, f)); } catch {}
-                }
-            }
-        } catch (err) {
-            console.error('[Chat] 保存历史记录失败:', err.message);
-        }
-        historySaveTimer = null;
-    }, 2000);
+    historySaveTimer = setTimeout(flushHistorySave, 2000);
 }
 
 function trimHistory() {
@@ -208,6 +199,11 @@ function init(config = {}, options = {}) {
     } else {
         activeProfile = llmProfiles[0] ? llmProfiles[0].name : 'default';
         applyProfile(activeProfile);
+    }
+    try {
+        historyStore.ensurePreviousDayBackup();
+    } catch (error) {
+        console.error('[Chat] 创建 aasc-user 上一天配置快照失败:', error.message);
     }
     loadHistory();
     loadResponsesSessionState();
@@ -693,21 +689,39 @@ function getHistory() {
     return all;
 }
 
-function clearHistory(options = {}) {
+function validateHistoryScope(options = {}) {
     const mode = options.mode || null;
     const target = options.target || null;
     const sessionId = options.sessionId || null;
+    if (mode === 'group' && !target && !sessionId) {
+        return { mode: 'group', target: null, sessionId: null };
+    }
+    if (mode === 'private' && target && sessionId) {
+        return { mode: 'private', target, sessionId };
+    }
+    throw new Error('必须指定群聊或具体私聊会话');
+}
+
+function clearHistory(options = {}) {
+    const scope = validateHistoryScope(options);
+    const affectedFile = scope.mode === 'private'
+        ? historyStore.getHistoryFileName({ mode: 'private', target: scope.target })
+        : historyStore.getHistoryFileName({ mode: 'group' });
+    historyStore.ensurePreviousDayBackup();
     for (const key of Object.keys(chatHistories)) {
         chatHistories[key] = chatHistories[key].filter(message => {
-            if (mode && message.mode !== mode) return true;
-            if (target && message.target !== target) return true;
-            if (sessionId && message.sessionId !== sessionId) return true;
-            return false;
+            if (scope.mode === 'group') return message.mode === 'private';
+            return !(
+                message.mode === 'private'
+                && message.target === scope.target
+                && (message.sessionId || 'default') === scope.sessionId
+            );
         });
         if (chatHistories[key].length === 0) delete chatHistories[key];
     }
-    saveHistory();
-    resetPiSessionForScope(options);
+    saveHistory([affectedFile]);
+    resetPiSessionForScope(scope);
+    console.log(`[Chat] 清空历史 scope=${scope.mode} target=${scope.target || '-'} sessionId=${scope.sessionId || '-'}`);
     return getHistory();
 }
 
@@ -730,9 +744,10 @@ function deleteConversationRound(options = {}) {
         if (!removal) continue;
         if (!removal.isUserMessage) return { success: false, history: getHistory(), message: '只能删除用户消息所在的对话轮次' };
 
+        historyStore.ensurePreviousDayBackup();
         messages.splice(removal.index, removal.removeCount);
         if (messages.length === 0) delete chatHistories[key];
-        saveHistory();
+        saveHistory([historyStore.getHistoryFileName(removal.message)]);
         resetPiSessionForMessage(removal.message);
         return { success: true, history: getHistory() };
     }
@@ -903,7 +918,7 @@ function addMessage(message) {
     if (!chatHistories[key]) chatHistories[key] = [];
     chatHistories[key].push(msg);
     trimHistory();
-    saveHistory();
+    saveHistory([historyStore.getHistoryFileName(msg)]);
     
     if (content && content.startsWith('系统记录')) {
         const importantContent = content.replace('系统记录', '').trim();
@@ -1111,7 +1126,7 @@ async function chat(userMessage, options = {}) {
             templateId
         });
         trimHistory();
-        saveHistory();
+        saveHistory([historyStore.getHistoryFileName({ mode, target })]);
         return { success: true, message: assistantMessage, history: getHistory() };
     } catch (error) {
         console.error('[Chat] API调用失败:', error.message);
@@ -1421,6 +1436,7 @@ function makeRequest(url, options) {
 }
 
 async function shutdown() {
+    flushHistorySave();
     if (piRuntimeManager?.stopAll) await piRuntimeManager.stopAll();
     if (codexRuntimeManager?.stopAll) await codexRuntimeManager.stopAll();
 }
@@ -1512,6 +1528,7 @@ function deleteSession(target, sessionId) {
 
     if (!chatSession.sessions || !chatSession.sessions[target]) return false;
 
+    historyStore.ensurePreviousDayBackup();
     chatSession.sessions[target] = chatSession.sessions[target].filter(s => s.id !== sessionId);
 
     // 删除该目标和会话下所有 profile/template 隔离分区的历史。
@@ -1521,7 +1538,7 @@ function deleteSession(target, sessionId) {
         ));
         if (chatHistories[key].length === 0) delete chatHistories[key];
     }
-    saveHistory();
+    saveHistory([historyStore.getHistoryFileName({ mode: 'private', target })]);
 
     // 如果当前会话被删除，切回 default
     if (chatSession.privateTarget === target && chatSession.privateSessionId === sessionId) {
@@ -1565,6 +1582,78 @@ function getSessionHistory(target, sessionId) {
         ));
 }
 
+function exportHistory() {
+    if (!flushHistorySave()) throw new Error('聊天历史保存失败');
+    return historyStore.createExport(getAllHistoryMessages());
+}
+
+function rebuildChatHistories(messages) {
+    chatHistories = {};
+    for (const sourceMessage of messages) {
+        const message = historyStore.normalizeChatMessage(sourceMessage, {
+            profileName: activeProfile,
+            templateId: 'default'
+        });
+        const key = sessionKey(
+            message.mode,
+            message.target,
+            message.sessionId,
+            message.profileName,
+            message.templateId
+        );
+        if (!chatHistories[key]) chatHistories[key] = [];
+        chatHistories[key].push(message);
+    }
+    trimHistory();
+}
+
+function importHistory(payload, options = {}) {
+    const mode = options.mode || 'merge';
+    if (!['merge', 'replace'].includes(mode)) {
+        throw new Error('聊天历史导入模式无效');
+    }
+    if (mode === 'replace' && options.confirmed !== true) {
+        throw new Error('替换导入需要明确确认');
+    }
+    const existing = getAllHistoryMessages();
+    const mergeResult = mode === 'replace'
+        ? historyStore.mergeImport([], payload)
+        : historyStore.mergeImport(existing, payload);
+    const nextMessages = mergeResult.messages;
+    const affectedFiles = new Set();
+    for (const message of existing) affectedFiles.add(historyStore.getHistoryFileName(message));
+    for (const message of nextMessages) affectedFiles.add(historyStore.getHistoryFileName(message));
+
+    historyStore.ensurePreviousDayBackup();
+    rebuildChatHistories(nextMessages);
+    for (const message of nextMessages) resetPiSessionForMessage(message);
+    saveHistory(Array.from(affectedFiles));
+    if (!flushHistorySave()) throw new Error('聊天历史保存失败');
+    return {
+        importedCount: mergeResult.importedCount,
+        skippedCount: mergeResult.skippedCount,
+        history: getHistory()
+    };
+}
+
+function exportUserConfig() {
+    if (!flushHistorySave()) throw new Error('聊天历史保存失败');
+    return historyStore.createUserConfigExport();
+}
+
+function importUserConfig(payload, options = {}) {
+    if (!flushHistorySave()) throw new Error('聊天历史保存失败');
+    const result = historyStore.importUserConfig(payload, options);
+    pendingChangedHistoryFiles.clear();
+    loadHistory();
+    loadSession();
+    loadCommands();
+    loadTemplates();
+    loadImportantRecords();
+    loadResponsesSessionState();
+    return result;
+}
+
 module.exports = {
     init,
     shutdown,
@@ -1603,6 +1692,10 @@ module.exports = {
     deleteSession,
     switchSession,
     getSessionHistory,
+    exportHistory,
+    importHistory,
+    exportUserConfig,
+    importUserConfig,
     chat,
     chatStream,
     buildResponsesPayload,

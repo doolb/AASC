@@ -1673,4 +1673,36 @@ getGroupSystemPrompt():
     detailText = data.detailText 或 data.text
     用 detailText 打开语音回复详情弹窗
     音频仍由现有 TTS 播放队列处理
+
+## 聊天历史安全持久化伪代码
+
+```text
+普通消息写入:
+    将消息加入 chatHistories
+    标记该消息所属的 chat-history 文件为 changed
+    防抖 2 秒后保存
+    写入当前非空文件和 changed 的空文件
+    不删除其他未出现在内存快照中的文件
+
+clearHistory(options):
+    要求 mode=group，或 mode=private 且同时提供 target/sessionId
+    范围无效时拒绝，不执行全量清空
+    清空前备份当前历史
+    只删除范围内消息
+    标记受影响文件并保存
+
+dailyBackup():
+    按 Asia/Shanghai 计算昨天日期
+    递归复制 aasc-user 下所有持久化配置到上一天快照目录
+    删除旧的上一天快照，只保留一份
+
+exportHistory():
+    返回带 format/version/exportedAt/messages 的 JSON
+
+importHistory(payload, mode):
+    校验并标准化 messages
+    merge 模式按 id/稳定指纹去重追加
+    replace 模式先备份再整体替换
+    保存受影响文件并刷新控制端历史
+```
 ```

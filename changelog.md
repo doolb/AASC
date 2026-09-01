@@ -11,6 +11,15 @@
 
 ## [Unreleased]
 
+### 聊天历史与用户配置持久化
+
+- ✅ [2026-09-01] 修复聊天保存误删私聊历史，并增加 `aasc-user` 全目录备份与导入导出。
+  - 普通历史保存只更新当前历史文件，不再根据不完整的内存快照删除其他私聊文件；显式清空、删除和导入按范围处理并使用原子写入。
+  - 每天按上海时区保留一份 `/home/as/.config/aasc-user-backups/aasc-user-previous-day-YYYY-MM-DD/` 完整持久化配置快照，包含聊天、角色、Chat2API 等文件，排除日志、PID、锁、socket 和临时文件；已生成 `2026-08-31` 快照。
+  - 新增 `/api/chat/history/export`、`/api/chat/history/import`、`/api/aasc-user/export`、`/api/aasc-user/import`，控制端聊天面板和系统设置分别提供聊天记录及整个配置目录的导入/导出。
+  - 改动文件：`src/external/llm/chat-history-store.js`、`src/external/llm/chat-history-store.test.js`、`src/external/llm/llm-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/js/aasc-user-config.js`、`src/apps/web-mediacenter/ui/public/upload.html` 及对应 design/spec/task 文档。
+  - 验证：历史存储、Pi snapshot/delta 重建及聊天/Agent 相关回归共 34/34 通过；Node 语法检查和 `git diff --check` 通过；自动测试请求隔离按要求暂不实现并保留在 `docs/todo.md`。
+  - 真实链路补充验收：重启后历史加载和聊天导出正常，独立 Pi RPC/`PiRuntimeManager` 返回完整回复；控制端群聊请求 90 秒未返回且未污染历史，列为现有聊天集成链路的后续问题。
 ### Chat2API 工具调用
 
 - ✅ [2026-08-31] 对齐原版 Chat2API 公共 managed tool calling 并修复原生会话重复 System

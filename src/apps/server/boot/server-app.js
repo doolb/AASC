@@ -2598,12 +2598,74 @@ app.get('/api/chat/history', (req, res) => {
 });
 
 app.post('/api/chat/clear', (req, res) => {
-    const history = chat.clearHistory(req.body);
-    res.json({ 
-        status: 'success', 
-        message: '聊天记录已清空',
-        history: history
-    });
+    try {
+        const history = chat.clearHistory(req.body || {});
+        log('Chat', `清空聊天历史 source=http mode=${req.body?.mode || '-'} target=${req.body?.target || '-'} sessionId=${req.body?.sessionId || '-'}`);
+        res.json({
+            status: 'success',
+            message: '聊天记录已清空',
+            history: history
+        });
+    } catch (error) {
+        logError('Chat', `拒绝清空聊天历史: ${error.message}`);
+        res.status(400).json({ status: 'error', message: error.message });
+    }
+});
+
+app.get('/api/chat/history/export', (req, res) => {
+    try {
+        const payload = chat.exportHistory();
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="chat-history.json"');
+        res.send(JSON.stringify(payload, null, 2));
+    } catch (error) {
+        logError('Chat', `导出聊天历史失败: ${error.message}`);
+        res.status(500).json({ status: 'error', message: `导出聊天历史失败: ${error.message}` });
+    }
+});
+
+app.post('/api/chat/history/import', (req, res) => {
+    try {
+        const body = req.body || {};
+        const payload = body.history || body;
+        const result = chat.importHistory(payload, {
+            mode: body.mode || 'merge',
+            confirmed: body.confirmed === true
+        });
+        log('Chat', `导入聊天历史 source=http mode=${body.mode || 'merge'} imported=${result.importedCount} skipped=${result.skippedCount}`);
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        logError('Chat', `导入聊天历史失败: ${error.message}`);
+        res.status(400).json({ status: 'error', message: error.message });
+    }
+});
+
+app.get('/api/aasc-user/export', (req, res) => {
+    try {
+        const payload = chat.exportUserConfig();
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="aasc-user-config.json"');
+        res.send(JSON.stringify(payload, null, 2));
+    } catch (error) {
+        logError('Config', `导出 aasc-user 配置失败: ${error.message}`);
+        res.status(500).json({ status: 'error', message: `导出配置失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc-user/import', (req, res) => {
+    try {
+        const body = req.body || {};
+        const payload = body.config || body;
+        const result = chat.importUserConfig(payload, {
+            mode: body.mode || 'merge',
+            confirmed: body.confirmed === true
+        });
+        log('Config', `导入 aasc-user 配置 source=http mode=${body.mode || 'merge'} written=${result.writtenCount} deleted=${result.deletedCount}`);
+        res.json({ status: 'success', message: '配置导入完成，请重启服务端使全部配置生效', ...result });
+    } catch (error) {
+        logError('Config', `导入 aasc-user 配置失败: ${error.message}`);
+        res.status(400).json({ status: 'error', message: error.message });
+    }
 });
 
 app.post('/api/chat/round', (req, res) => {
@@ -5459,11 +5521,18 @@ async function handleControlMessageFallback(data, ws) {
                     }));
                     return;
                 } else if (data.type === 'clearChatHistory') {
-                    chat.clearHistory();
-                    ws.send(JSON.stringify({
-                        type: 'chatHistory',
-                        history: []
-                    }));
+                    try {
+                        const history = chat.clearHistory({
+                            mode: data.mode,
+                            target: data.target,
+                            sessionId: data.sessionId
+                        });
+                        log('Chat', `清空聊天历史 source=websocket mode=${data.mode || '-'} target=${data.target || '-'} sessionId=${data.sessionId || '-'}`);
+                        ws.send(JSON.stringify({ type: 'chatHistory', history }));
+                    } catch (error) {
+                        logError('Chat', `拒绝 WebSocket 清空聊天历史: ${error.message}`);
+                        ws.send(JSON.stringify({ type: 'chatHistoryError', message: error.message }));
+                    }
                     return;
                 } else if (data.type === 'getChatSession') {
                     ws.send(JSON.stringify({

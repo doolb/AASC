@@ -676,6 +676,9 @@ const Chat = {
                         <button class="chat-action-btn" onclick="Chat.showConfig()">设置</button>
                         <button class="chat-action-btn" onclick="Chat.showTemplates()">模板</button>
                         <button class="chat-action-btn" onclick="Chat.showCommands()">指令</button>
+                        <button class="chat-action-btn" onclick="Chat.exportHistory()">导出记录</button>
+                        <button class="chat-action-btn" onclick="Chat.selectHistoryImport()">导入记录</button>
+                        <input type="file" id="chatHistoryImportInput" accept="application/json,.json" style="display:none" onchange="Chat.importHistory(this.files[0]); this.value=''">
                         <button class="chat-action-btn" onclick="Chat.clearHistory()">清空</button>
                     </div>
                 </div>
@@ -1512,6 +1515,49 @@ const Chat = {
                 }
             })
             .catch(err => window.showToast('清空失败', 'error'));
+    },
+
+    async exportHistory() {
+        try {
+            const response = await fetch('/api/chat/history/export');
+            const data = response.ok ? await response.blob() : await response.json();
+            if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+            const url = URL.createObjectURL(data);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `chat-history-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            window.showToast('聊天记录已导出', 'success');
+        } catch (error) {
+            window.showToast(`导出聊天记录失败: ${error.message}`, 'error');
+        }
+    },
+
+    selectHistoryImport() {
+        const input = document.getElementById('chatHistoryImportInput');
+        if (input) input.click();
+    },
+
+    async importHistory(file) {
+        if (!file) return;
+        try {
+            const payload = JSON.parse(await file.text());
+            const response = await fetch('/api/chat/history/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ history: payload, mode: 'merge' })
+            });
+            const data = await response.json();
+            if (!response.ok || data.status !== 'success') throw new Error(data.message || `HTTP ${response.status}`);
+            this.history = data.history || [];
+            this.renderHistory();
+            window.showToast(`聊天记录导入完成：新增 ${data.importedCount || 0} 条`, 'success');
+        } catch (error) {
+            window.showToast(`导入聊天记录失败: ${error.message}`, 'error');
+        }
     },
 
     deleteConversationRound(messageId) {
