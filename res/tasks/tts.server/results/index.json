@@ -3,8 +3,8 @@
     {
       "instanceId": "tts-wine",
       "taskName": "tts.server",
-      "status": "running",
-      "timestamp": 1788144071595,
+      "status": "stopped",
+      "timestamp": 1788266205204,
       "target": "server",
       "env": "auto",
       "mode": "service",
@@ -15,7 +15,7 @@
       "taskType": "builtin",
       "builtinId": "tts.server",
       "entryFile": null,
-      "stage": "running",
+      "stage": "stopped",
       "progress": 100
     }
   ]
