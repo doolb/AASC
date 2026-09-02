@@ -274,8 +274,13 @@ class NativeBridge(
     /** 异步提交 OCR 图片；图片结果通过 window.onNativeOcrResult 返回。 */
     @JavascriptInterface
     fun ocrRecognizeAsync(requestId: String, imageBase64: String): String =
+        ocrRecognizeScaledAsync(requestId, imageBase64, 0)
+
+    /** 异步提交带短边上限的 OCR 图片；正数只缩小，结果坐标仍对应原图。 */
+    @JavascriptInterface
+    fun ocrRecognizeScaledAsync(requestId: String, imageBase64: String, shortSide: Int): String =
         submitVisionTask("ocr", requestId, imageBase64) { callback ->
-            visionRuntime.submitOcr(requestId, imageBase64, callback)
+            visionRuntime.submitOcr(requestId, imageBase64, shortSide, callback)
         }
 
     /** 异步提交 YOLO11n 图片；图片结果通过 window.onNativeYoloResult 返回。 */

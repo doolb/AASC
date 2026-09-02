@@ -7,6 +7,8 @@ const DEFAULT_SERVER_URL = 'http://127.0.0.1:8081';
 const DEFAULT_TIMEOUT_MS = 120000;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 const IMAGE_FILE_PATTERN = /\.(?:jpe?g|png|webp|bmp|gif)$/i;
+const OCR_SHORT_SIDE_MIN = 256;
+const OCR_SHORT_SIDE_MAX = 2048;
 
 /**
  * 规范化任务配置中的服务器地址，避免重复拼接斜杠或误把其他协议交给 HTTP 客户端。
@@ -36,6 +38,16 @@ function normalizeImageBuffer(image) {
         return Buffer.from(base64, 'base64');
     }
     throw new Error('视觉任务图片必须是 Buffer、Uint8Array 或 Base64 字符串');
+}
+
+/** 统一校验 OCR 短边参数，任务调用方和 HTTP 请求体使用同一范围。 */
+function normalizeVisionShortSide(value) {
+    if (value === undefined || value === null || String(value).trim() === '') return 0;
+    const number = Number(value);
+    if (!Number.isInteger(number) || (number !== 0 && (number < OCR_SHORT_SIDE_MIN || number > OCR_SHORT_SIDE_MAX))) {
+        throw new Error(`OCR 短边必须为 0 或 ${OCR_SHORT_SIDE_MIN}..${OCR_SHORT_SIDE_MAX} 的整数`);
+    }
+    return number;
 }
 
 function resolveImageFile(files, imageFileName) {
@@ -147,16 +159,19 @@ async function requestVisionJson({
     path: endpointPath,
     image,
     displayId = null,
+    shortSide,
     timeoutMs = DEFAULT_TIMEOUT_MS
 }) {
     const imageBuffer = normalizeImageBuffer(image);
     if (imageBuffer.length === 0) throw new Error('视觉任务图片不能为空');
     if (!endpointPath) throw new Error('视觉接口路径不能为空');
 
-    const body = JSON.stringify({
+    const requestBody = {
         imageBase64: imageBuffer.toString('base64'),
         displayId: displayId || null
-    });
+    };
+    if (shortSide !== undefined) requestBody.shortSide = normalizeVisionShortSide(shortSide);
+    const body = JSON.stringify(requestBody);
     const requestUrl = appendVisionPath(serverUrl, endpointPath);
     const candidates = [requestUrl];
     if (requestUrl.protocol === 'http:' && isLoopbackUrl(requestUrl)) {
@@ -178,7 +193,7 @@ async function requestVisionJson({
     throw lastError || new Error('视觉接口请求失败');
 }
 
-function createVisionTask({ id, name, description, path: endpointPath }) {
+function createVisionTask({ id, name, description, path: endpointPath, extraParams = [] }) {
     return {
         id,
         name,
@@ -189,7 +204,7 @@ function createVisionTask({ id, name, description, path: endpointPath }) {
             { name: 'serverUrl', type: 'string', required: false, default: DEFAULT_SERVER_URL, label: '视觉服务器 URL' },
             { name: 'targetDisplay', type: 'string', required: false, default: '', label: '目标显示端 ID' },
             { name: 'imageFileName', type: 'string', required: false, default: '', label: '图片文件名' }
-        ],
+        ].concat(extraParams),
         async run(context = {}) {
             try {
                 const params = context.params || {};
@@ -202,13 +217,15 @@ function createVisionTask({ id, name, description, path: endpointPath }) {
                 if (!image) throw new Error('缺少图片文件');
 
                 const requestVision = context.requestVision || requestVisionJson;
-                const response = await requestVision({
+                const request = {
                     serverUrl,
                     path: endpointPath,
                     image: image.data,
                     imageFileName: image.name,
                     displayId: params.targetDisplay || null
-                });
+                };
+                if (endpointPath === '/api/vision/ocr') request.shortSide = normalizeVisionShortSide(params.shortSide);
+                const response = await requestVision(request);
                 return {
                     success: true,
                     data: response
@@ -224,6 +241,7 @@ module.exports = {
     DEFAULT_SERVER_URL,
     DEFAULT_TIMEOUT_MS,
     normalizeServerUrl,
+    normalizeVisionShortSide,
     requestVisionJson,
     createVisionTask
 };

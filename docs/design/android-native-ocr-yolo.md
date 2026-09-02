@@ -18,6 +18,7 @@
 - `vision-test.html` 手动测试网页。
 - APK DevTools。
 - YOLO11s/m/l/x 和 ASR/TTS CPU 行为改造。
+- YOLO 图片缩放参数；YOLO 继续使用现有预处理。
 
 ## 运行架构
 
@@ -70,7 +71,8 @@ POST 同时支持 multipart 字段 `image` 和 JSON 字段 `imageBase64`，可�
 server -> display: {
     type: "visionOcr" | "visionYolo11n",
     requestId,
-    imageBase64
+    imageBase64,
+    shortSide: 0 | positive integer // 仅 visionOcr，可省略
 }
 
 display -> server: {
@@ -90,8 +92,13 @@ display -> server: {
 - `serverUrl`：服务器根地址，默认 `http://127.0.0.1:8081`，支持实例参数覆盖和任务全局配置。
 - `targetDisplay`：可选显示端 ID；为空时由服务器按能力自动选择。
 - `input.*`：任务图片文件，控制端任务面板选择本地图片后上传保存。
+- `shortSide`：仅 OCR 可选的目标短边上限，`0` 表示沿用原有自动行为；控制端预置 `384`、`512`、`736`，也允许 HTTP 调用传入 `256..2048` 的整数。图片短边小于目标值时不放大。
 
 任务执行先将图片编码为 Base64，再请求 `serverUrl` 对应路由；服务器完成显示端本地推理后，任务将完整结果写入任务结果和日志。
+
+## OCR 短边缩放
+
+OCR 任务收到正数 `shortSide` 后，显示端在检测、方向分类和文字识别前按原始宽高比缩小图片；检测到的四边形坐标按实际缩放比例映射回原图，返回结果的 `imageWidth`、`imageHeight` 和文字框坐标仍对应原图。`shortSide=0` 保持现有自动检测尺寸策略。服务器只校验并转发参数，不执行缩放或模型推理。
 
 ## 能力声明
 

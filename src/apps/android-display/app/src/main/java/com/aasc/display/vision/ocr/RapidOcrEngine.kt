@@ -75,20 +75,32 @@ class RapidOcrEngine {
     }
 
     @Synchronized
-    fun recognize(bitmap: Bitmap, policy: CpuPolicy): OcrResult {
+    fun recognize(bitmap: Bitmap, policy: CpuPolicy, shortSide: Int = OcrImageScale.AUTO_SHORT_SIDE): OcrResult {
         check(isLoaded) { "RapidOCR 模型未就绪" }
         load(activeModelDir ?: error("RapidOCR 模型目录未记录"), policy)
+        val normalizedShortSide = OcrImageScale.normalizeShortSide(shortSide)
         val start = System.nanoTime()
-        val boxes = detect(bitmap)
-        val recognized = boxes.mapNotNull { box -> recognizeBox(bitmap, box) }
-        return OcrResult(
-            text = recognized.joinToString("\n") { it.text },
-            elapsedMs = (System.nanoTime() - start) / 1_000_000L,
-            imageWidth = bitmap.width,
-            imageHeight = bitmap.height,
-            boxes = recognized,
-            affinityStatus = affinityStatus
-        )
+        val workingBitmap = OcrImageScale.resizeForInference(bitmap, normalizedShortSide)
+        return try {
+            // 显式设置尺寸时，工作图已经是目标尺寸，不再由检测器自动放大到 736。
+            val boxes = detect(workingBitmap, normalizedShortSide > OcrImageScale.AUTO_SHORT_SIDE)
+            val recognized = boxes.mapNotNull { box -> recognizeBox(workingBitmap, box) }
+            val scaleX = workingBitmap.width.toFloat() / bitmap.width.toFloat()
+            val scaleY = workingBitmap.height.toFloat() / bitmap.height.toFloat()
+            val mapped = recognized.map { box ->
+                box.copy(points = OcrGeometry.scaleToOriginal(box.points, scaleX, scaleY, 0f, 0f))
+            }
+            OcrResult(
+                text = mapped.joinToString("\n") { it.text },
+                elapsedMs = (System.nanoTime() - start) / 1_000_000L,
+                imageWidth = bitmap.width,
+                imageHeight = bitmap.height,
+                boxes = mapped,
+                affinityStatus = affinityStatus
+            )
+        } finally {
+            if (workingBitmap !== bitmap) workingBitmap.recycle()
+        }
     }
 
     @Synchronized
@@ -117,14 +129,14 @@ class RapidOcrEngine {
         return if (applied) "单小核（核心 $cpu）" else "单小核（核心 $cpu，affinity 回退）"
     }
 
-    private fun detect(bitmap: Bitmap): List<List<OcrPoint>> {
+    private fun detect(bitmap: Bitmap, keepInputSize: Boolean): List<List<OcrPoint>> {
         val source = Mat()
         val rgb = Mat()
         val resized = Mat()
         return try {
             Utils.bitmapToMat(bitmap, source)
             Imgproc.cvtColor(source, rgb, Imgproc.COLOR_RGBA2RGB)
-            val ratio = detectorScale(bitmap.width, bitmap.height)
+            val ratio = if (keepInputSize) 1f else detectorScale(bitmap.width, bitmap.height)
             val resizedWidth = roundTo32(bitmap.width * ratio)
             val resizedHeight = roundTo32(bitmap.height * ratio)
             Imgproc.resize(rgb, resized, org.opencv.core.Size(resizedWidth.toDouble(), resizedHeight.toDouble()))

@@ -14,6 +14,12 @@
 
 ### Android 正式显示端视觉
 
+- ✅ [2026-09-02] 为正式显示端 OCR 任务增加图片短边缩放参数。
+  - 改动文件：`OcrImageScale.kt`、`RapidOcrEngine.kt`、`VisionRuntime.kt`、`NativeBridge.kt`、服务器视觉路由、视觉内置任务、任务面板、`display.html` 及对应 design/spec/task/usage 文档。
+  - 能力：OCR 支持自动 `0`、`736`、`512`、`384` 预置档，HTTP 可传 `256..2048` 整数；显示端按比例只缩小并把文字框映射回原图；YOLO 不增加缩放参数。
+  - 验证：Node 任务/路由/能力测试 8/8、Android JVM `testDebugUnitTest`、`npm run build:apk`、Android 9 arm64 真机安装均通过；非法 `shortSide=255` 返回 HTTP 400。
+  - 真机使用 `/mnt/tmp` 现有 4 张游戏截图经内置任务完成 16/16；平均耗时自动/736/512/384 为 `30,528/19,622/15,045/11,416ms`，平均框数为 `15.5/15.0/14.75/12.5`，全部单小核（核心 0）。无标注集，未宣称正式准确率。
+
 - ✅ [2026-09-02] 正式 Android 显示 APK 接入 RapidOCR 与 YOLO11n，并新增服务器路由任务调用。
   - 改动文件：正式 APK 视觉运行时/NativeBridge、`display.html`、服务器 `/api/vision/ocr` `/api/vision/yolo` `/api/vision/status`、任务引擎 `ocr`/`yolo`、控制端任务面板、能力展示及对应 design/spec/task 文档；删除 `vision-test.html` 和 APK DevTools。
   - 架构：服务器不加载模型，只通过 WebSocket 转发；显示端本地单线程推理，默认单小核（核心 0），ORT intra/inter 均为 1；任务服务器 URL 默认 `http://127.0.0.1:8081`。

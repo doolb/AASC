@@ -60,3 +60,26 @@ test('视觉任务实例参数覆盖服务器 URL 和图片文件名', async () 
   assert.equal(request.displayId, 'display-2');
   assert.deepEqual([...request.image], [4, 5]);
 });
+
+test('OCR 任务转发短边参数，YOLO 任务不暴露该参数', async () => {
+  const ocrTask = require('./ocr');
+  const yoloTask = require('./yolo');
+  let ocrRequest = null;
+  let yoloRequest = null;
+  const context = (taskName, requestVision) => ({
+    taskName,
+    params: { shortSide: '512' },
+    files: { 'input.png': Buffer.from([1]) },
+    taskIO: { async getTaskConfig() { return {}; } },
+    requestVision: async (request) => {
+      requestVision(request);
+      return { status: 'success' };
+    }
+  });
+
+  await ocrTask.run(context('ocr', (request) => { ocrRequest = request; }));
+  await yoloTask.run(context('yolo', (request) => { yoloRequest = request; }));
+
+  assert.equal(ocrRequest.shortSide, 512);
+  assert.equal(Object.prototype.hasOwnProperty.call(yoloRequest, 'shortSide'), false);
+});

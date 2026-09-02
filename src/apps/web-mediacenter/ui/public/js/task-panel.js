@@ -709,6 +709,18 @@
       // OCR/YOLO 任务通过服务器路由调度到显示端 NativeDisplay，本表单只收集任务参数和图片。
       if (builtinId === 'ocr' || builtinId === 'yolo') {
         var visionName = builtinId === 'ocr' ? 'OCR 文字识别' : 'YOLO11n 目标检测';
+        var shortSideHtml = builtinId === 'ocr'
+          ? '<div class="task-form-field">' +
+            '<label>OCR 图片短边上限</label>' +
+            '<select id="visionShortSide" style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px">' +
+              '<option value="0" selected>自动（0）</option>' +
+              '<option value="736">736 px</option>' +
+              '<option value="512">512 px</option>' +
+              '<option value="384">384 px</option>' +
+            '</select>' +
+            '<div style="font-size:12px;color:#8cf;margin-top:5px">只缩小不放大，返回文字框仍使用原图坐标</div>' +
+          '</div>'
+          : '';
         container.innerHTML =
           '<div class="task-form-field">' +
             '<label>服务器 URL</label>' +
@@ -719,6 +731,7 @@
             '<input type="file" id="visionImageFile" accept="image/*" style="width:100%;color:#ccc;font-size:13px">' +
             '<div id="visionImageName" style="font-size:12px;color:#8cf;margin-top:5px">未选择图片</div>' +
           '</div>' +
+          shortSideHtml +
           '<div class="task-form-field">' +
             '<label>目标显示端</label>' +
             '<div class="task-device-list" id="visionDisplayList" style="max-height:150px;overflow-y:auto"></div>' +
@@ -905,6 +918,7 @@
       var serverInput = document.getElementById('visionServerUrl');
       var imageInput = document.getElementById('visionImageFile');
       var displayList = document.getElementById('visionDisplayList');
+      var shortSideInput = document.getElementById('visionShortSide');
       var submitButton = document.getElementById('visionSubmitBtn');
       var serverUrl = serverInput && serverInput.value.trim() ? serverInput.value.trim() : 'http://127.0.0.1:8081';
       var file = imageInput && imageInput.files ? imageInput.files[0] : null;
@@ -923,6 +937,12 @@
       }
       try {
         var imageBase64 = await this._readVisionFile(file);
+        var taskParams = {
+          serverUrl: serverUrl,
+          targetDisplay: selectedDisplay.dataset.id,
+          imageFileName: file.name
+        };
+        if (builtinId === 'ocr') taskParams.shortSide = shortSideInput ? Number(shortSideInput.value || 0) : 0;
         this._send({
           type: 'task:submit',
           payload: {
@@ -933,11 +953,7 @@
             displayId: null,
             mode: 'one-shot',
             env: 'cpu',
-            params: {
-              serverUrl: serverUrl,
-              targetDisplay: selectedDisplay.dataset.id,
-              imageFileName: file.name
-            },
+            params: taskParams,
             files: [{ name: file.name, data: imageBase64 }]
           }
         });

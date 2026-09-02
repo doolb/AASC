@@ -10,6 +10,8 @@
 4. 选择目标显示端；不指定时服务器自动选择声明对应视觉能力的在线显示端。
 5. 选择图片文件并提交任务。可以直接选择 `/mnt/tmp/` 下已有的游戏截图。
 
+OCR 任务另外提供“图片短边上限”：默认 `自动（0）`，也可以选择 `736`、`512` 或 `384`。正数会让显示端在本地 OCR 前按比例缩小图片，短边小于目标值时不会放大；返回的文字框坐标仍是原图坐标。YOLO 任务暂不提供缩放参数。
+
 ## HTTP 接口
 
 ```text
@@ -18,7 +20,7 @@ POST http://<服务器地址>:8081/api/vision/yolo
 GET  http://<服务器地址>:8081/api/vision/status
 ```
 
-POST 支持 multipart 的 `image` 文件，也支持 JSON 的 `imageBase64` 和可选 `displayId`。接口返回显示端本地推理结果、耗时、CPU affinity 和实际使用的显示端 ID。
+POST 支持 multipart 的 `image` 文件，也支持 JSON 的 `imageBase64` 和可选 `displayId`。OCR 接口还支持可选 `shortSide`（`0` 或 `256..2048` 的整数）；YOLO 接口忽略该参数。接口返回显示端本地推理结果、耗时、CPU affinity 和实际使用的显示端 ID。
 
 ## RapidOCR 为什么需要四个文件
 

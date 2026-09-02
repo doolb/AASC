@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import com.aasc.display.CpuCluster
 import com.aasc.display.vision.ocr.RapidOcrEngine
+import com.aasc.display.vision.ocr.OcrImageScale
 import com.aasc.display.vision.yolo.Yolo11nDetector
 import java.io.File
 import java.util.concurrent.ArrayBlockingQueue
@@ -51,11 +52,25 @@ class VisionRuntime(context: Context) {
             .put("sessionLoaded", yoloEngine.isLoaded))
 
     fun submitOcr(requestId: String, encodedImage: String, callback: (JSONObject) -> Unit): JSONObject {
+        return submitOcr(requestId, encodedImage, OcrImageScale.AUTO_SHORT_SIDE, callback)
+    }
+
+    fun submitOcr(
+        requestId: String,
+        encodedImage: String,
+        shortSide: Int,
+        callback: (JSONObject) -> Unit
+    ): JSONObject {
+        val normalizedShortSide = try {
+            OcrImageScale.normalizeShortSide(shortSide)
+        } catch (error: IllegalArgumentException) {
+            return VisionJson.error(requestId, "ocr", error.message ?: "OCR 短边参数无效")
+        }
         return submit("ocr", requestId, encodedImage, callback) { bitmap ->
             VisionModelFiles.ensureRapidOcrCopied(appContext.assets, rapidOcrDirectory)
             val cpuPolicy = policy
             if (!ocrEngine.isLoaded) ocrEngine.load(rapidOcrDirectory, cpuPolicy)
-            VisionJson.ocrResult(requestId, ocrEngine.recognize(bitmap, cpuPolicy))
+            VisionJson.ocrResult(requestId, ocrEngine.recognize(bitmap, cpuPolicy, normalizedShortSide))
         }
     }
 

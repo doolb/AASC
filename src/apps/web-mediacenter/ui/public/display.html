@@ -312,7 +312,9 @@
         // 服务器通过 WebSocket 下发视觉请求；能力不存在、原生桥拒绝或调用异常都回传结构化错误。
         function handleNativeVisionRequest(data, kind) {
             const isOcr = kind === 'ocr';
-            const methodName = isOcr ? 'ocrRecognizeAsync' : 'yolo11nDetectAsync';
+            const requestedShortSide = isOcr ? Number(data && data.shortSide ? data.shortSide : 0) : 0;
+            const useScaledOcr = isOcr && Number.isInteger(requestedShortSide) && requestedShortSide > 0;
+            const methodName = useScaledOcr ? 'ocrRecognizeScaledAsync' : (isOcr ? 'ocrRecognizeAsync' : 'yolo11nDetectAsync');
             const resultType = isOcr ? 'visionOcrResult' : 'visionYolo11nResult';
             const taskName = isOcr ? 'OCR' : 'YOLO11n';
             if (!data || !data.requestId) return;
@@ -327,7 +329,9 @@
                 // 保留对 NativeDisplay.ocrRecognizeAsync/yolo11nDetectAsync 的显式引用，
                 // 同时动态取桥方法，保持 Android 注入对象更新后的调用行为。
                 const nativeMethod = nativeBridge[methodName];
-                const acceptedRaw = nativeMethod.call(nativeBridge, data.requestId, data.imageBase64 || '');
+                const nativeArguments = [data.requestId, data.imageBase64 || ''];
+                if (useScaledOcr) nativeArguments.push(requestedShortSide);
+                const acceptedRaw = nativeMethod.apply(nativeBridge, nativeArguments);
                 const accepted = typeof acceptedRaw === 'string' ? JSON.parse(acceptedRaw) : acceptedRaw;
                 if (!accepted || accepted.accepted !== true) {
                     sendVisionResult(resultType, data.requestId, {

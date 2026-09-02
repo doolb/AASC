@@ -1643,8 +1643,21 @@ function readVisionImageBase64(req) {
     return imageBase64.replace(/^data:[^;]+;base64,/, '');
 }
 
+// OCR 尺寸只作为显示端本地缩放提示，服务器限制范围以避免异常参数进入 WebSocket 链路。
+function normalizeVisionShortSide(value) {
+    if (value === undefined || value === null || String(value).trim() === '') return 0;
+    const shortSide = Number(value);
+    if (!Number.isInteger(shortSide) || (shortSide !== 0 && (shortSide < 256 || shortSide > 2048))) {
+        const error = new Error('OCR 短边必须为 0 或 256..2048 的整数');
+        error.code = 'VISION_INVALID_PARAM';
+        throw error;
+    }
+    return shortSide;
+}
+
 function getVisionRouteErrorStatus(error) {
     if (error?.code === 'VISION_INVALID_IMAGE') return 400;
+    if (error?.code === 'VISION_INVALID_PARAM') return 400;
     if (error?.code === 'VISION_TIMEOUT') return 504;
     if (error?.code === 'VISION_DISPLAY_OFFLINE') return 503;
     return 502;
@@ -1655,6 +1668,7 @@ async function handleVisionRoute(kind, req, res) {
     try {
         tempPath = req.file?.path || null;
         const imageBase64 = readVisionImageBase64(req);
+        const shortSide = kind === 'ocr' ? normalizeVisionShortSide(req.body?.shortSide) : undefined;
         const capabilityName = kind === 'ocr' ? 'ocrAvailable' : 'yolo11nAvailable';
         const preferredDisplayId = req.body?.displayId || req.body?.targetDisplay || null;
         const display = findDisplayWithVision(capabilityName, preferredDisplayId);
@@ -1668,7 +1682,7 @@ async function handleVisionRoute(kind, req, res) {
         }
 
         const requestId = `vision-${kind}-${Date.now()}-${++pendingVisionRequestId}`;
-        const result = await sendVisionToDisplay(display, kind, imageBase64, requestId);
+        const result = await sendVisionToDisplay(display, kind, imageBase64, requestId, { shortSide });
         const payload = result && typeof result === 'object' ? result : { data: result };
         return res.json({
             ...payload,
@@ -4120,7 +4134,7 @@ function findDisplayWithVision(capabilityName, preferredDisplayId = null) {
     return null;
 }
 
-function sendVisionToDisplay(display, kind, imageBase64, requestId) {
+function sendVisionToDisplay(display, kind, imageBase64, requestId, options = {}) {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
             const pending = pendingDisplayVisionRequests.get(requestId);
@@ -4141,11 +4155,13 @@ function sendVisionToDisplay(display, kind, imageBase64, requestId) {
 
         try {
             const messageType = kind === 'ocr' ? 'visionOcr' : 'visionYolo11n';
-            const sent = sendToDisplay(display.id, {
+            const message = {
                 type: messageType,
                 requestId,
                 imageBase64
-            });
+            };
+            if (kind === 'ocr' && options.shortSide !== undefined) message.shortSide = options.shortSide;
+            const sent = sendToDisplay(display.id, message);
             if (!sent) {
                 clearTimeout(timer);
                 pendingDisplayVisionRequests.delete(requestId);

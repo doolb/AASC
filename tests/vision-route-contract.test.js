@@ -16,6 +16,8 @@ test('服务器提供显示端本地推理的统一视觉路由', () => {
   assert.match(server, /pendingDisplayVisionRequests/);
   assert.match(server, /visionOcrResult/);
   assert.match(server, /visionYolo11nResult/);
+  assert.match(server, /normalizeVisionShortSide/);
+  assert.match(server, /shortSide/);
 });
 
 test('显示端把服务器视觉请求转给 NativeDisplay 并回传结果', () => {
@@ -23,6 +25,7 @@ test('显示端把服务器视觉请求转给 NativeDisplay 并回传结果', ()
   assert.match(display, /data\.type === 'visionOcr'/);
   assert.match(display, /data\.type === 'visionYolo11n'/);
   assert.match(display, /NativeDisplay\.ocrRecognizeAsync/);
+  assert.match(display, /ocrRecognizeScaledAsync/);
   assert.match(display, /NativeDisplay\.yolo11nDetectAsync/);
   assert.match(display, /type: 'visionOcrResult'/);
   assert.match(display, /type: 'visionYolo11nResult'/);
@@ -35,4 +38,6 @@ test('控制端任务面板提供 OCR/YOLO 任务的服务器 URL、图片和显
   assert.match(taskPanel, /visionImageFile/);
   assert.match(taskPanel, /targetDisplay/);
   assert.match(taskPanel, /serverUrl/);
+  assert.match(taskPanel, /visionShortSide/);
+  assert.match(taskPanel, /shortSide/);
 });
