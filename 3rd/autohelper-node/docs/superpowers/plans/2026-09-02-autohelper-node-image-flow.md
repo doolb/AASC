@@ -57,7 +57,8 @@
 │   ├── vision/image-matcher.test.ts
 │   ├── runtime/action-selector.test.ts
 │   ├── runtime/automation-loop.test.ts
-│   └── cli/capture-tool.test.ts
+│   ├── cli/capture-tool.test.ts
+│   └── cli/cli.test.ts
 ├── docs/
 │   ├── design.md
 │   ├── design/image-driven-adb-automation.md
@@ -707,6 +708,7 @@ git commit -m "feat: add image flow capture tools"
 
 **Files:**
 - Create: `3rd/autohelper-node/src/cli.ts`
+- Create: `3rd/autohelper-node/test/cli/cli.test.ts`
 - Modify: `3rd/autohelper-node/package.json`
 - Modify: `3rd/autohelper-node/README.md`
 - Modify: `3rd/autohelper-node/docs/usage.md`
@@ -739,7 +741,7 @@ it('requires device and flow for start', () => {
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `npm test -- test/cli/capture-tool.test.ts`
+Run: `npm test -- test/cli/cli.test.ts`
 
 Expected: FAIL until CLI parsing and dispatch exist。
 
