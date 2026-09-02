@@ -29,4 +29,9 @@
   - 改动文件：`src/runtime/action-selector.ts`、`test/runtime/action-selector.test.ts`、`src/types.ts`。
   - 行为：支持队列/分数排序、负队列过滤、`select`/`default` 和归一化/中心点击坐标边界限制。
   - 验证结果：5 个动作选择测试和 TypeScript 构建通过。
+
+- ✅ [2026-09-02] 完成图片自动循环和 Flow 跳转状态机。
+  - 改动文件：`src/runtime/automation-loop.ts`、`src/runtime/record-store.ts`、`test/runtime/automation-loop.test.ts`。
+  - 行为：支持截图、匹配、队列选择、wait、dry-run、ADB tap、delay、`goto`、非 loop 抑制和跳转上限；记录使用 JSONL。
+  - 验证结果：4 个自动循环测试和 TypeScript 构建通过。
   - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

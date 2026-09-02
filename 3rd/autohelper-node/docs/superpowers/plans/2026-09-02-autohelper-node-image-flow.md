@@ -572,7 +572,7 @@ git commit -m "feat: select image actions and resolve taps"
 - `TickResult` 包含 `flowId`、`actionName`、`clicked`、`gotoFlow` 和 `reason`。
 - `RecordStore.append(entry)` 和 `RecordStore.read()` 以 JSONL 保存 Flow ID、图片名和时间。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('clicks a matched action and switches to its goto flow', async () => {
@@ -621,23 +621,23 @@ it('stops when transition limit is reached', async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -- test/runtime/automation-loop.test.ts`
 
 Expected: FAIL because `AutomationLoop` does not exist。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 循环必须严格遵守：截图 → 匹配当前 Flow → 选择 → wait 或 tap → delay → 成功点击后 goto。`goto` 目标由 `FlowLoader.switchTo` 校验，失败时停止而不是继续旧 Flow。`once` 只执行一轮；`dryRun` 不调用 tap，但仍计算坐标和输出结果；所有错误通过 `try-catch` 记录上下文后重新抛出。默认 interval 为 500 毫秒，默认 transition 上限为 100。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -- test/runtime/automation-loop.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add 3rd/autohelper-node/src/runtime/automation-loop.ts 3rd/autohelper-node/src/runtime/record-store.ts 3rd/autohelper-node/test/runtime/automation-loop.test.ts 3rd/autohelper-node/src/types.ts 3rd/autohelper-node/docs/spec/image-driven-adb-automation.md

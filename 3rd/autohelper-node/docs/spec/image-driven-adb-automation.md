@@ -81,7 +81,7 @@ tick():
   如果 action.wait：记录 wait，不点击，不跳转
   否则：
     point = selector.resolveClickPoint(action, frame.size)
-    如果 dryRun：记录拟点击，不调用 adb.tap
+    如果 dryRun：记录拟点击，不调用 adb.tap，也不执行 goto
     否则：调用 adb.tap(point.x, point.y)
     记录动作
     等待 action.delayMs
@@ -89,6 +89,8 @@ tick():
       loader.switchTo(action.gotoFlow)
   返回 TickResult
 ```
+
+非 `loop` 图片在点击后会被暂时抑制，直到它不再匹配；`loop` 图片允许下一轮继续执行。每次成功切换 Flow 都增加 transition 计数，超过上限立即停止。
 
 ## ADB Client
 
