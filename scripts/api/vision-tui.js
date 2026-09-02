@@ -152,11 +152,15 @@ function boundsFromPoints(points) {
 
 function ocrItems(payload) {
     return (Array.isArray(payload.boxes) ? payload.boxes : [])
-        .map((box) => ({
-            label: String(box?.text || '（空文字）'),
-            score: box?.score,
-            bounds: boundsFromPoints(box?.points)
-        }))
+        .map((box) => {
+            const points = (Array.isArray(box?.points) ? box.points : []).map(parsePoint);
+            return {
+                label: String(box?.text || '（空文字）'),
+                score: box?.score,
+                points,
+                bounds: boundsFromPoints(points)
+            };
+        })
         .filter((item) => item.bounds);
 }
 
@@ -322,10 +326,12 @@ function main(argv = process.argv.slice(2)) {
 
 module.exports = {
     formatVisionResult,
+    ocrItems,
     parseArgs,
     renderOcr,
     renderYolo,
-    renderError
+    renderError,
+    yoloItems
 };
 
 if (require.main === module) main();

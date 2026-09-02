@@ -146,6 +146,12 @@ TUI 会显示识别全文、文字框置信度/坐标和字符位置图；查看
 cat ocr-result.json | node scripts/api/vision-tui.js --kind ocr
 ```
 
+如果要在原图上直接查看 OCR 标注，可使用 `--chafa`。该模式会将文字和半透明背景绘制到临时 PNG 位图，再交给 `chafa` 输出；需要预先安装 ImageMagick 和 chafa：
+
+```bash
+scripts/api/vision-ocr.js --image /mnt/tmp/game.png --chafa
+```
+
 也可以通过 `imageBase64` 发送 JSON/表单中的 base64，但推荐使用脚本的 multipart 文件方式：
 
 ```bash
@@ -172,6 +178,12 @@ scripts/api/vision-yolo.js \
 
 ```bash
 scripts/api/vision-yolo.js --image /mnt/tmp/game.png --model yolo11n --tui
+```
+
+使用 `--chafa` 可以把检测框、类别名和置信度绘制到临时 PNG 位图后显示：
+
+```bash
+scripts/api/vision-yolo.js --image /mnt/tmp/game.png --model yolo11n --chafa
 ```
 
 返回的每个检测框同时包含 `classId` 和由模型标签文件解析出的 `className`；没有匹配标签时 `className` 为 `null`。TUI 会显示模型、类别名称/编号、置信度、坐标和位置图；YOLO 返回未携带原图尺寸时，位置图按检测框最大坐标估算。

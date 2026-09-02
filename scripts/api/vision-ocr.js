@@ -2,14 +2,16 @@
 'use strict';
 
 const { formatVisionResult } = require('./vision-tui');
+const { renderAndShowVisionImage } = require('./vision-image');
 const { requestText, requireFile, runCli, validateShortSide } = require('./common');
 
 function printHelp() {
-    process.stdout.write(`用法：vision-ocr.js --image FILE [--display DISPLAY_ID] [--short-side PIXELS] [--tui]
+    process.stdout.write(`用法：vision-ocr.js --image FILE [--display DISPLAY_ID] [--short-side PIXELS] [--tui | --chafa]
 
 调用 POST /api/vision/ocr，以 multipart 字段 image 上传图片。
 --short-side 为 0 表示保持原图；指定正整数时按图片短边缩放。
 --tui 将返回的 JSON 渲染为终端可读面板；不指定时输出原始 JSON。
+--chafa 将 OCR 结果绘制到 PNG 位图后使用 chafa 显示（需要 ImageMagick 和 chafa）。
 环境变量：AASC_URL、AASC_INSECURE、AASC_TIMEOUT_SECONDS
 `);
 }
@@ -24,6 +26,7 @@ async function main(argv = process.argv.slice(2)) {
     let displayId;
     let shortSide;
     let tui = false;
+    let chafa = false;
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];
         if (arg === '--image' || arg === '--display' || arg === '--display-id' || arg === '--short-side') {
@@ -34,6 +37,8 @@ async function main(argv = process.argv.slice(2)) {
             if (arg === '--short-side') shortSide = value;
         } else if (arg === '--tui') {
             tui = true;
+        } else if (arg === '--chafa') {
+            chafa = true;
         } else if (arg === '--help' || arg === '-h') {
             printHelp();
             return;
@@ -42,19 +47,30 @@ async function main(argv = process.argv.slice(2)) {
         }
     }
     if (!imagePath) throw new Error('必须指定 --image');
+    if (tui && chafa) throw new Error('--tui 和 --chafa 不能同时使用');
     if (shortSide !== undefined) validateShortSide(shortSide);
+    const resolvedImagePath = requireFile(imagePath);
     const fields = [];
     if (displayId !== undefined) fields.push({ key: 'displayId', value: displayId });
     if (shortSide !== undefined) fields.push({ key: 'shortSide', value: shortSide });
     const response = await requestText('POST', '/api/vision/ocr', {
         fields,
-        files: [{ key: 'image', path: requireFile(imagePath) }]
+        files: [{ key: 'image', path: resolvedImagePath }]
     });
-    if (!tui) {
+    if (!tui && !chafa) {
         process.stdout.write(response);
         return;
     }
     const payload = JSON.parse(response);
+    if (chafa) {
+        if (payload.status === 'error' || payload.success === false) {
+            process.stdout.write(`${formatVisionResult(payload, 'ocr')}\n`);
+            process.exitCode = 1;
+            return;
+        }
+        renderAndShowVisionImage(resolvedImagePath, payload, 'ocr');
+        return;
+    }
     process.stdout.write(`${formatVisionResult(payload, 'ocr')}\n`);
     if (payload.status === 'error' || payload.success === false) process.exitCode = 1;
 }

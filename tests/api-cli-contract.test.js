@@ -30,6 +30,7 @@ test('API 命令行工具包含跨平台 Node 公共调用器和业务脚本', (
         assert.match(source, /--help/);
     }
     assert.equal(fs.existsSync(path.join(scriptsDir, 'vision-tui.js')), true);
+    assert.equal(fs.existsSync(path.join(scriptsDir, 'vision-image.js')), true);
 });
 
 test('API 命令行工具暴露用户操作和 AI 机器输出契约', () => {
@@ -42,6 +43,10 @@ test('API 命令行工具暴露用户操作和 AI 机器输出契约', () => {
     assert.match(read('vision-yolo.js'), /\/api\/vision\/yolo/);
     assert.match(read('vision-ocr.js'), /--tui/);
     assert.match(read('vision-yolo.js'), /--tui/);
+    assert.match(read('vision-ocr.js'), /--chafa/);
+    assert.match(read('vision-yolo.js'), /--chafa/);
+    assert.match(read('vision-ocr.js'), /vision-image/);
+    assert.match(read('vision-yolo.js'), /vision-image/);
     assert.match(read('vision-ocr.js'), /vision-tui/);
     assert.match(read('vision-yolo.js'), /vision-tui/);
     assert.match(read('api-request.js'), /--json/);
@@ -59,6 +64,7 @@ test('项目提供 API 文档和 api:test 入口', () => {
     assert.match(documentation, /asr-recognize\.js/);
     assert.match(documentation, /vision-tui\.js/);
     assert.match(documentation, /--tui/);
+    assert.match(documentation, /--chafa/);
     assert.match(documentation, /JSON/);
     assert.equal(packageData.scripts['api:test'], 'node scripts/api/run-all.js');
     assert.match(documentation, /scripts\/api\//);
