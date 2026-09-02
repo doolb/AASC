@@ -44,4 +44,8 @@
   - 改动文件：`src/cli.ts`、CLI 测试、README 和使用说明。
   - 行为：支持 `start`、`capture`、`record`、`inspect`，参数错误返回 2，运行错误返回 1，Ctrl-C 使用 AbortController 停止。
   - 验证结果：`npm test` 9 个测试文件/29 个测试通过，`npm run build` 通过；无参数命令返回 2。
+
+- ⚠️ [2026-09-02] 完成真实设备只读检查，暂未生成无限暖暖模板。
+  - 设备 `192.168.1.6:5555` 在线，但前台是 `com.aasc.tts`，包扫描未发现无限暖暖。
+  - 曾生成的一张非游戏截图已移到 `/mnt/tmp/autohelper-node-current-not-game.png`，未加入流程目录，防止误识别。
   - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

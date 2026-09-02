@@ -49,3 +49,5 @@ npm run start -- --device 192.168.1.6:5555 --flow launch
 自动点击前应先执行 `--dry-run --once`，确认匹配图片和坐标。
 
 参数缺失时 CLI 返回退出码 2；ADB、图片或 Flow 运行错误返回退出码 1。`start` 收到 Ctrl-C 后通过 AbortController 停止循环，不接管其他服务进程。
+
+《无限暖暖》的模板目录见 `flows/infinity-nikki`。如果游戏尚未启动或设备没有安装游戏，不要把当前其他应用的画面作为模板；进入目标画面后再用 `capture` 生成局部 PNG，并在确认识别报告后决定是否使用真实点击。

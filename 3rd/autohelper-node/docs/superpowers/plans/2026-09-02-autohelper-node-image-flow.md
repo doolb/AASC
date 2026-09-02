@@ -794,11 +794,11 @@ Run: `npm run capture -- --device 192.168.1.6:5555 --flow infinity-nikki --name 
 
 Expected: 截图工具创建 `flows/infinity-nikki/current@0.90.png`，不发送点击。
 
-- [ ] **Step 2: 运行 dry-run 单轮识别**
+- [x] **Step 2: 运行 dry-run 单轮识别**
 
 Run: `npm run start -- --device 192.168.1.6:5555 --flow infinity-nikki --dry-run --once --interval 500`
 
-Expected: 输出截图尺寸、当前 Flow、候选图片、匹配分数和拟点击坐标；ADB 调用记录中没有 `input tap`。
+Expected: 输出截图尺寸、当前 Flow、候选图片、匹配分数和拟点击坐标；ADB 调用记录中没有 `input tap`。当前 Flow 尚无模板，因此实际结果为 `{"flowId":"infinity-nikki","clicked":false,"reason":"no-match"}`。
 
 - [ ] **Step 3: 由实际画面补充流程图片**
 
