@@ -63,7 +63,7 @@
 - [x] 工程初始化（配置、类型、测试框架和 AASC 文档已创建；`npm test`、`npm run build` 已通过）
 - [x] 文件名解析器（支持旧参数和 `goto@flowId`，3 个解析测试通过）
 - [x] Flow Loader（只加载活动目录并缓存模板，4 个测试通过）
-- [ ] ADB Client
+- [x] ADB Client（显式 serial、二进制截图和坐标校验，3 个测试通过）
 - [ ] OpenCV Matcher
 - [ ] 自动循环
 - [ ] CLI 与图片流程

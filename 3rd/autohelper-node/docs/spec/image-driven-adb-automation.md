@@ -69,6 +69,27 @@ tick():
   返回 TickResult
 ```
 
+## ADB Client
+
+```text
+AdbClient({ serial, runner }):
+  serial 必须非空
+  runner 默认使用 spawn(adb)，禁止 shell 重定向
+
+assertConnected():
+  执行 adb devices
+  只有目标 serial 的状态为 device 才通过
+  否则抛出 ADB device is not ready
+
+screenshot():
+  执行 adb -s serial exec-out screencap -p
+  返回二进制 PNG Buffer
+
+tap(x, y):
+  校验 x、y 是非负整数
+  执行 adb -s serial shell input tap x y
+```
+
 ## Flow Loader
 
 ```text

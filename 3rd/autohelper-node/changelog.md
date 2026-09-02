@@ -16,3 +16,7 @@
   - 改动文件：`src/flow/flow-loader.ts`、`src/vision/template-cache.ts`、`test/flow/flow-loader.test.ts` 和 spec 文档。
   - 行为：只加载当前 Flow 的 PNG/BMP，安全拒绝路径遍历，按文件路径缓存模板。
   - 验证结果：4 个 Flow Loader 测试和 TypeScript 构建通过。
+- ✅ [2026-09-02] 完成 Linux ADB Client。
+  - 改动文件：`src/adb/adb-client.ts`、`test/adb/adb-client.test.ts` 和 spec 文档。
+  - 行为：显式 serial、二进制截图、ADB tap 和离线设备拒绝。
+  - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

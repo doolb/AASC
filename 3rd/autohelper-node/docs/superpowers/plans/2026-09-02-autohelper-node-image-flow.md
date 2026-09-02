@@ -350,7 +350,7 @@ git commit -m "feat: load active image flow directory"
 - `tap(x: number, y: number): Promise<void>`
 - `AdbRunner(file: string, args: string[], options): Promise<{ stdout: Buffer; stderr: Buffer; exitCode: number }>`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('uses the explicit serial for screenshot and tap', async () => {
@@ -382,23 +382,23 @@ it('fails before automation when the selected device is offline', async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -- test/adb/adb-client.test.ts`
 
 Expected: FAIL because `AdbClient` does not exist。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 使用 `child_process.spawn` 的 Promise 包装器读取二进制 stdout，不使用 shell 重定向或固定截图文件。`tap` 只接受有限整数且必须为非负坐标；命令失败时抛出包含 stderr 的错误。`assertConnected` 通过 `adb devices` 的制表符状态确认目标设备为 `device`。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -- test/adb/adb-client.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 运行真实设备只读冒烟并提交**
+- [x] **Step 5: 运行真实设备只读冒烟并提交**
 
 Run: `adb devices -l`
 
