@@ -147,6 +147,7 @@ class NativeBridge(
     // ASR 桥任务允许并发进入 AsrEnginePool；真实并发上限由 pool slot 队列控制，超额任务在池内排队。
     private val asrExecutor = Executors.newCachedThreadPool()
     private val denoiseEngine = SherpaDenoiseEngine()
+    private val denoiseModelManager = DenoiseModelManager(webView.context)
     private val denoiseLock = Any()
 
     // 视觉引擎按首次调用懒加载；状态查询也只创建轻量运行时，不会复制或加载模型。
@@ -259,7 +260,7 @@ class NativeBridge(
         }
     }
 
-    // ---- 正式 APK 原生视觉桥（RapidOCR + YOLO11n，默认单小核）----
+    // ---- 正式 APK 原生视觉桥（RapidOCR + YOLO11，默认单小核）----
 
     /** 返回视觉模型、队列、CPU affinity 和 ORT 线程配置，不触发模型复制或 session 加载。 */
     @JavascriptInterface
@@ -280,14 +281,21 @@ class NativeBridge(
     @JavascriptInterface
     fun ocrRecognizeScaledAsync(requestId: String, imageBase64: String, shortSide: Int): String =
         submitVisionTask("ocr", requestId, imageBase64) { callback ->
-            visionRuntime.submitOcr(requestId, imageBase64, shortSide, callback)
+            visionRuntime.submitOcr(requestId, imageBase64, shortSide, serverBaseUrl(), callback)
         }
 
     /** 异步提交 YOLO11n 图片；图片结果通过 window.onNativeYoloResult 返回。 */
     @JavascriptInterface
     fun yolo11nDetectAsync(requestId: String, imageBase64: String): String =
         submitVisionTask("yolo11n", requestId, imageBase64) { callback ->
-            visionRuntime.submitYolo11n(requestId, imageBase64, callback)
+            visionRuntime.submitYolo11n(requestId, imageBase64, serverBaseUrl(), "yolo11n", callback)
+        }
+
+    /** 异步提交可选 YOLO11 模型；旧 yolo11nDetectAsync 保留给旧网页兼容。 */
+    @JavascriptInterface
+    fun yoloDetectAsync(requestId: String, imageBase64: String, modelId: String): String =
+        submitVisionTask("yolo11n", requestId, imageBase64) { callback ->
+            visionRuntime.submitYolo11n(requestId, imageBase64, serverBaseUrl(), modelId, callback)
         }
 
     private fun submitVisionTask(
@@ -654,11 +662,14 @@ class NativeBridge(
         DenoiseAudioPolicy.prepare(samples, enabled) {
             synchronized(denoiseLock) {
                 if (!denoiseEngine.isLoaded) {
-                    val modelFile = DenoiseModelFiles.ensureCopied(
-                        webView.context.assets,
-                        File(webView.context.filesDir, "models/speech-enhancement")
-                    )
-                    check(denoiseEngine.load(modelFile)) { "降噪模型加载失败" }
+                    val install = denoiseModelManager.ensureModel(serverBaseUrl())
+                    check(denoiseEngine.load(install.file(DenoiseModelFiles.FILE_NAME))) { "降噪模型加载失败" }
+                } else {
+                    // 每次准备音频都刷新清单；模型发生更新时重新加载，避免继续使用旧 session。
+                    val install = denoiseModelManager.ensureModel(serverBaseUrl())
+                    if (install.changed) {
+                        check(denoiseEngine.load(install.file(DenoiseModelFiles.FILE_NAME))) { "降噪模型更新后加载失败" }
+                    }
                 }
                 denoiseEngine.process(samples)
             }

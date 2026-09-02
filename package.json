@@ -9,6 +9,7 @@
     "check:chat2api": "node --test src/apps/server/modules/chat2api/*.test.js src/apps/server/modules/task-engine/builtin-tasks/chat2api-proxy.test.js src/apps/web-mediacenter/ui/public/js/chat2api.test.js",
     "test:log-brain": "node src/scripts/run-log-brain-tests.js",
     "api:test": "bash scripts/api-tests/run-all.sh",
+    "prepare:vision-models": "python3 3rd/tts-server/scripts/export-yolo11-onnx.py --input-dir \"${YOLO11_MODEL_DIR:-/home/as}\" --output-dir res/models/yolo11 --models yolo11n yolo11s yolo11m yolo11l yolo11x",
     "stress:tts": "node src/scripts/tts-stress-test.js",
     "build:apk": "cd src/apps/android-display && ANDROID_HOME=${ANDROID_HOME:-/opt/android-sdk} ./gradlew :app:assembleDebug",
     "upload:apk": "npm run build:apk && node src/scripts/apk-deploy.js",

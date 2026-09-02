@@ -6,6 +6,7 @@ import com.aasc.display.CpuCluster
 import com.aasc.display.vision.ocr.RapidOcrEngine
 import com.aasc.display.vision.ocr.OcrImageScale
 import com.aasc.display.vision.yolo.Yolo11nDetector
+import com.aasc.display.vision.yolo.YoloModel
 import java.io.File
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.RejectedExecutionException
@@ -15,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
 /**
- * 正式 APK 的统一视觉执行器。OCR 和 YOLO11n 共享一个 worker 与一个等待槽，
+ * 正式 APK 的统一视觉执行器。OCR 和 YOLO11 共享一个 worker 与一个等待槽，
  * 只允许串行推理，避免视觉模型之间互相抢占小核和内存。
  */
 class VisionRuntime(context: Context) {
@@ -23,7 +24,7 @@ class VisionRuntime(context: Context) {
     private val policy = VisionCpuPolicy.defaultFor(CpuCluster.detect())
     private val rapidOcrDirectory = File(appContext.filesDir, "models/vision/rapidocr")
     private val yoloDirectory = File(appContext.filesDir, "models/vision/yolo11")
-    private val yoloModelFile = File(yoloDirectory, "yolo11n.onnx")
+    private val modelManager = VisionModelManager(appContext)
     private val ocrEngine = RapidOcrEngine()
     private val yoloEngine = Yolo11nDetector()
     private val running = AtomicBoolean(false)
@@ -47,9 +48,10 @@ class VisionRuntime(context: Context) {
         .put("ocr", JSONObject()
             .put("modelReady", VisionModelFiles.isRapidOcrComplete(rapidOcrDirectory))
             .put("sessionLoaded", ocrEngine.isLoaded))
-        .put("yolo11n", JSONObject()
-            .put("modelReady", VisionModelFiles.isYoloComplete(yoloDirectory))
-            .put("sessionLoaded", yoloEngine.isLoaded))
+        .put("yolo11n", yoloStatus(YoloModel.N))
+        .put("yoloModels", org.json.JSONArray().apply {
+            YoloModel.values().forEach { put(it.id) }
+        })
 
     fun submitOcr(requestId: String, encodedImage: String, callback: (JSONObject) -> Unit): JSONObject {
         return submitOcr(requestId, encodedImage, OcrImageScale.AUTO_SHORT_SIDE, callback)
@@ -61,24 +63,58 @@ class VisionRuntime(context: Context) {
         shortSide: Int,
         callback: (JSONObject) -> Unit
     ): JSONObject {
+        return submitOcr(requestId, encodedImage, shortSide, "", callback)
+    }
+
+    fun submitOcr(
+        requestId: String,
+        encodedImage: String,
+        shortSide: Int,
+        serverBaseUrl: String,
+        callback: (JSONObject) -> Unit
+    ): JSONObject {
         val normalizedShortSide = try {
             OcrImageScale.normalizeShortSide(shortSide)
         } catch (error: IllegalArgumentException) {
             return VisionJson.error(requestId, "ocr", error.message ?: "OCR 短边参数无效")
         }
         return submit("ocr", requestId, encodedImage, callback) { bitmap ->
-            VisionModelFiles.ensureRapidOcrCopied(appContext.assets, rapidOcrDirectory)
+            val install = modelManager.ensureRapidOcr(serverBaseUrl)
+            if (install.changed) ocrEngine.release()
             val cpuPolicy = policy
-            if (!ocrEngine.isLoaded) ocrEngine.load(rapidOcrDirectory, cpuPolicy)
+            ocrEngine.load(install.directory, cpuPolicy)
             VisionJson.ocrResult(requestId, ocrEngine.recognize(bitmap, cpuPolicy, normalizedShortSide))
         }
     }
 
     fun submitYolo11n(requestId: String, encodedImage: String, callback: (JSONObject) -> Unit): JSONObject {
-        return submit("yolo11n", requestId, encodedImage, callback) { bitmap ->
-            VisionModelFiles.ensureYoloCopied(appContext.assets, yoloDirectory)
-            VisionJson.yoloResult(requestId, yoloEngine.detect(bitmap, yoloModelFile, policy))
+        return submitYolo11n(requestId, encodedImage, "", YoloModel.N.id, callback)
+    }
+
+    fun submitYolo11n(
+        requestId: String,
+        encodedImage: String,
+        serverBaseUrl: String,
+        modelId: String,
+        callback: (JSONObject) -> Unit
+    ): JSONObject {
+        val model = try {
+            YoloModel.fromId(modelId)
+        } catch (error: IllegalArgumentException) {
+            return VisionJson.error(requestId, "yolo11n", error.message ?: "YOLO 模型无效")
         }
+        return submit("yolo11n", requestId, encodedImage, callback) { bitmap ->
+            val install = modelManager.ensureYolo(model, serverBaseUrl)
+            if (install.changed) yoloEngine.release()
+            VisionJson.yoloResult(requestId, yoloEngine.detect(bitmap, install.file(model.fileName), policy, model.id))
+        }
+    }
+
+    private fun yoloStatus(model: YoloModel): JSONObject {
+        val modelDirectory = File(yoloDirectory, model.id)
+        return JSONObject()
+            .put("modelReady", VisionModelFiles.isYoloComplete(modelDirectory, model))
+            .put("sessionLoaded", yoloEngine.isLoaded && yoloEngine.currentModelId == model.id)
     }
 
     private fun submit(

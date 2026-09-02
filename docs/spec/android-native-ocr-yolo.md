@@ -3,10 +3,14 @@
 ## 模型构建伪代码
 
 ```text
-Gradle prepareBundledVisionModels:
-    copy res/models/rapidocr/{det,cls,rec,dict} to generated/assets/vision/rapidocr
-    invoke export-yolo11-onnx.py with --models yolo11n
-    copy yolo11n.onnx to generated/assets/vision/yolo11
+Gradle preBuild:
+    do not copy RapidOCR or GTCRN files into generated/assets
+    do not invoke YOLO ONNX export for the APK
+    package only model manager and inference code
+
+Server prepare:vision-models:
+    convert /home/as/yolo11{n,s,m,l,x}.pt to res/models/yolo11/*.onnx
+    server manifest exposes only files that exist
 ```
 
 ## 显示端本地运行时伪代码
@@ -25,7 +29,8 @@ submit(kind, requestId, imageBase64, callback):
         bitmap = decode and validate image
         apply single-little-core affinity
         if kind == OCR:
-            atomically copy four RapidOCR assets
+            ensure four RapidOCR files from server manifest into filesDir cache
+            if the manifest changed, release the old OCR sessions
             load detector/classifier/recognizer with ORT 1/1
             shortSide = request.shortSide or 0
             workingBitmap = OCR.resizeDownOnly(bitmap, shortSide)
@@ -33,7 +38,8 @@ submit(kind, requestId, imageBase64, callback):
             result.boxes = OCR.mapBoxesToOriginal(result.boxes, workingBitmap, bitmap)
             result.imageWidth/Height = bitmap dimensions
         if kind == YOLO:
-            atomically copy yolo11n.onnx
+            select yolo11n/s/m/l/x and ensure its ONNX from server manifest
+            if the selected manifest changed, release the old YOLO session
             load one ORT session with ORT 1/1
             result = preprocess -> inference -> confidence/NMS postprocess
         callback(success result with timing and affinity status)
@@ -52,7 +58,12 @@ on display websocket message:
         if accepted is false:
             send visionOcrResult(requestId, success=false, error)
     if type == "visionYolo11n":
-        accepted = NativeDisplay.yolo11nDetectAsync(requestId, imageBase64)
+        if NativeDisplay.yoloDetectAsync exists:
+            accepted = NativeDisplay.yoloDetectAsync(requestId, imageBase64, model or "yolo11n")
+        else if model is absent or model == "yolo11n":
+            accepted = NativeDisplay.yolo11nDetectAsync(requestId, imageBase64)
+        else:
+            return an explicit unsupported-model error instead of silently running yolo11n
         if accepted is false:
             send visionYolo11nResult(requestId, success=false, error)
 
@@ -71,6 +82,8 @@ POST /api/vision/{kind}:
     validate kind in {ocr, yolo}
     if kind == ocr:
         validate optional shortSide as 0 or integer in 256..2048
+    if kind == yolo:
+        validate model as yolo11n/s/m/l/x and require it in the server manifest
     resolve optional displayId
     display = find online display with capability kindAvailable
     if display missing:
@@ -81,7 +94,8 @@ POST /api/vision/{kind}:
         type: kind == ocr ? "visionOcr" : "visionYolo11n",
         requestId,
         imageBase64,
-        if kind == ocr and shortSide is provided: shortSide
+        if kind == ocr and shortSide is provided: shortSide,
+        if kind == yolo: model
     })
     await matching vision*Result or timeout
     cleanup pending request and temporary upload

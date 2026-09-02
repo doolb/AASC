@@ -1,5 +1,15 @@
 # Web MediaCenter - 变更日志
 
+### Android 正式 APK 统一模型分发
+
+- ✅ [2026-09-02] 正式显示 APK 的模型改为服务器按需下载，APK 不再内置视觉、降噪、ASR、TTS 和声纹模型资源。
+  - 新增 `ModelManifestService`、`/api/vision/model-manifest`、`/api/vision/model/:modelId/:filename`、`/api/speech-enhancement/model-manifest` 和降噪模型下载路由；清单包含文件大小和 SHA-256，固定白名单阻止路径穿越。
+  - 新增 APK `RemoteModelManager`、`VisionModelManager`、`DenoiseModelManager`；RapidOCR 四文件、GTCRN 和 YOLO11n/s/m/l/x 均通过服务器清单下载，`.tmp` 校验通过后原子安装，推理仍在显示端单小核本地执行。
+  - 移除正式 APK Gradle 的视觉/降噪资产复制和 YOLO 导出任务；新增 `npm run prepare:vision-models`，从 `/home/as/yolo11*.pt` 准备服务器 ONNX，生成模型不提交 git。
+  - YOLO 任务、HTTP CLI 和显示端桥新增模型 ID，默认 `yolo11n`，支持后续切换更大模型；保留旧 `yolo11nDetectAsync` 兼容入口。
+  - 验证：Node 模型/任务契约 11/11、Android JVM `testDebugUnitTest`、Debug/Release APK 构建、Shell/Node 语法检查通过；APK 压缩包不含 RapidOCR、YOLO 或 GTCRN 模型。
+  - 真机 `192.168.1.6:5555`：`/mnt/tmp/infinity_nikki_main.png` OCR 512 短边成功（28,656ms，单小核），YOLO11n 成功（1,897ms），YOLO11s 经服务器下载后成功（5,359ms）；临时打开降噪后 ASR 成功，随后恢复 `denoise=false`。
+
 ### 服务器 API 文档与命令行工具
 
 - ✅ [2026-09-02] 新增当前服务器 HTTP API 使用文档和用户/AI 可执行的 Bash 调用脚本。

@@ -83,6 +83,10 @@ const { createTextMediaTtsService } = require('../modules/media/text-media-tts-s
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
 const { normalizeDisplayCpuStatus, getDisplayTtsConcurrency } = require('../modules/media/display-cpu-status');
 const { createOrderedTaskScheduler } = require('../modules/media/ordered-task-scheduler');
+const {
+    ModelManifestService,
+    YOLO_MODEL_IDS
+} = require('../modules/model-distribution/model-manifest-service');
 const { isPunctuationOnly } = require('../../../core/utils/sentence-splitter');
 const {
     registerTextMediaDisplayHandlers,
@@ -249,6 +253,9 @@ const app = express();
 
 const PORT = config.get('server.port', 8081);
 const RES_DIR = path.join(PROJECT_ROOT, 'res');
+const modelManifestService = new ModelManifestService({
+    modelRoot: path.join(RES_DIR, 'models')
+});
 const UPLOADS_DIR = path.join(RES_DIR, 'uploads');
 const ASR_TEMP_DIR = path.join(RES_DIR, 'temp', 'asr');
 const HTTP_UPLOAD_TEMP_DIR = path.join(RES_DIR, 'temp', 'uploads');
@@ -1655,9 +1662,20 @@ function normalizeVisionShortSide(value) {
     return shortSide;
 }
 
+function normalizeVisionModel(value) {
+    const modelId = String(value || 'yolo11n').trim() || 'yolo11n';
+    if (!YOLO_MODEL_IDS.includes(modelId)) {
+        const error = new Error(`YOLO 模型必须是 ${YOLO_MODEL_IDS.join('、')} 之一`);
+        error.code = 'VISION_INVALID_PARAM';
+        throw error;
+    }
+    return modelId;
+}
+
 function getVisionRouteErrorStatus(error) {
     if (error?.code === 'VISION_INVALID_IMAGE') return 400;
     if (error?.code === 'VISION_INVALID_PARAM') return 400;
+    if (error?.code === 'VISION_MODEL_NOT_FOUND') return 404;
     if (error?.code === 'VISION_TIMEOUT') return 504;
     if (error?.code === 'VISION_DISPLAY_OFFLINE') return 503;
     return 502;
@@ -1669,9 +1687,15 @@ async function handleVisionRoute(kind, req, res) {
         tempPath = req.file?.path || null;
         const imageBase64 = readVisionImageBase64(req);
         const shortSide = kind === 'ocr' ? normalizeVisionShortSide(req.body?.shortSide) : undefined;
+        const modelId = kind === 'yolo' ? normalizeVisionModel(req.body?.model) : undefined;
+        if (kind === 'yolo' && !modelManifestService.createManifest('vision').models.some((model) => model.id === modelId)) {
+            const error = new Error(`服务器未准备 YOLO 模型: ${modelId}`);
+            error.code = 'VISION_MODEL_NOT_FOUND';
+            throw error;
+        }
         const capabilityName = kind === 'ocr' ? 'ocrAvailable' : 'yolo11nAvailable';
         const preferredDisplayId = req.body?.displayId || req.body?.targetDisplay || null;
-        const display = findDisplayWithVision(capabilityName, preferredDisplayId);
+        const display = findDisplayWithVision(capabilityName, preferredDisplayId, modelId);
         if (!display) {
             return res.status(503).json({
                 status: 'error',
@@ -1682,7 +1706,7 @@ async function handleVisionRoute(kind, req, res) {
         }
 
         const requestId = `vision-${kind}-${Date.now()}-${++pendingVisionRequestId}`;
-        const result = await sendVisionToDisplay(display, kind, imageBase64, requestId, { shortSide });
+        const result = await sendVisionToDisplay(display, kind, imageBase64, requestId, { shortSide, modelId });
         const payload = result && typeof result === 'object' ? result : { data: result };
         return res.json({
             ...payload,
@@ -1701,6 +1725,66 @@ async function handleVisionRoute(kind, req, res) {
     }
 }
 
+function sendModelManifest(res, groupName) {
+    try {
+        return res.json(modelManifestService.createManifest(groupName));
+    } catch (error) {
+        logError('模型', `${groupName} 模型清单生成失败: ${error.message}`);
+        return res.status(500).json({ status: 'error', message: '模型清单生成失败' });
+    }
+}
+
+function modelDownloadErrorStatus(error) {
+    if (error?.code === 'MODEL_INVALID_GROUP' || error?.code === 'MODEL_INVALID_ID' || error?.code === 'MODEL_INVALID_FILE') {
+        return 400;
+    }
+    if (error?.code === 'MODEL_NOT_FOUND') return 404;
+    return 500;
+}
+
+function streamModelFile(res, filePath) {
+    try {
+        const stat = fs.statSync(filePath);
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Length', stat.size);
+        const stream = fs.createReadStream(filePath);
+        stream.on('error', () => {
+            if (!res.headersSent) {
+                res.status(500).json({ status: 'error', message: '模型文件读取失败' });
+            } else {
+                res.end();
+            }
+        });
+        res.on('close', () => stream.destroy());
+        res.on('error', () => stream.destroy());
+        return stream.pipe(res);
+    } catch (error) {
+        return res.status(404).json({ status: 'error', message: '模型文件不存在' });
+    }
+}
+
+// 正式 APK 视觉模型只从服务器按需下载；服务器本身不加载或执行视觉模型。
+app.get('/api/vision/model-manifest', (req, res) => sendModelManifest(res, 'vision'));
+app.get('/api/vision/model/:modelId/:filename', (req, res) => {
+    try {
+        const filePath = modelManifestService.resolveFile('vision', req.params.modelId, req.params.filename);
+        return streamModelFile(res, filePath);
+    } catch (error) {
+        return res.status(modelDownloadErrorStatus(error)).json({ status: 'error', message: error.message });
+    }
+});
+
+// GTCRN 降噪模型与视觉模型使用相同的清单/hash/原子下载契约。
+app.get('/api/speech-enhancement/model-manifest', (req, res) => sendModelManifest(res, 'speech-enhancement'));
+app.get('/api/speech-enhancement/model/:filename', (req, res) => {
+    try {
+        const filePath = modelManifestService.resolveFile('speech-enhancement', 'gtcrn', req.params.filename);
+        return streamModelFile(res, filePath);
+    } catch (error) {
+        return res.status(modelDownloadErrorStatus(error)).json({ status: 'error', message: error.message });
+    }
+});
+
 // 服务器仅负责接收图片并通过 WebSocket 转发到显示端，不在服务端加载或执行视觉模型。
 app.post('/api/vision/ocr', visionUpload.single('image'), (req, res) => handleVisionRoute('ocr', req, res));
 app.post('/api/vision/yolo', visionUpload.single('image'), (req, res) => handleVisionRoute('yolo', req, res));
@@ -1717,7 +1801,8 @@ app.get('/api/vision/status', (req, res) => {
         serverInference: false,
         routes: {
             ocr: '/api/vision/ocr',
-            yolo: '/api/vision/yolo'
+            yolo: '/api/vision/yolo',
+            modelManifest: '/api/vision/model-manifest'
         },
         displays
     });
@@ -4114,12 +4199,12 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
 }
 
 // 按显示端能力查找视觉推理目标；指定 displayId 时只允许选择该显示端，避免结果回错设备。
-function findDisplayWithVision(capabilityName, preferredDisplayId = null) {
+function findDisplayWithVision(capabilityName, preferredDisplayId = null, modelId = null) {
     if (preferredDisplayId) {
         const preferredDisplay = displayClients.get(preferredDisplayId);
         const preferredCaps = preferredDisplay?.state?.capabilities;
         if (preferredDisplay && preferredDisplay.ws?.readyState === WebSocket.OPEN &&
-            preferredCaps?.[capabilityName] === true) {
+            supportsVisionModel(preferredCaps, capabilityName, modelId)) {
             return { id: preferredDisplayId, ws: preferredDisplay.ws };
         }
         return null;
@@ -4127,11 +4212,17 @@ function findDisplayWithVision(capabilityName, preferredDisplayId = null) {
 
     for (const [displayId, displayData] of displayClients) {
         const caps = displayData.state?.capabilities;
-        if (displayData.ws?.readyState === WebSocket.OPEN && caps?.[capabilityName] === true) {
+        if (displayData.ws?.readyState === WebSocket.OPEN && supportsVisionModel(caps, capabilityName, modelId)) {
             return { id: displayId, ws: displayData.ws };
         }
     }
     return null;
+}
+
+function supportsVisionModel(capabilities, capabilityName, modelId) {
+    if (capabilities?.[capabilityName] !== true) return false;
+    if (capabilityName !== 'yolo11nAvailable' || !modelId || modelId === 'yolo11n') return true;
+    return Array.isArray(capabilities.yoloModels) && capabilities.yoloModels.includes(modelId);
 }
 
 function sendVisionToDisplay(display, kind, imageBase64, requestId, options = {}) {
@@ -4161,6 +4252,7 @@ function sendVisionToDisplay(display, kind, imageBase64, requestId, options = {}
                 imageBase64
             };
             if (kind === 'ocr' && options.shortSide !== undefined) message.shortSide = options.shortSide;
+            if (kind === 'yolo' && options.modelId) message.model = options.modelId;
             const sent = sendToDisplay(display.id, message);
             if (!sent) {
                 clearTimeout(timer);

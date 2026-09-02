@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.Copy
-import org.gradle.api.tasks.Exec
 import java.util.Properties
 
 // AGP 9.0+ 内置 Kotlin 支持，无需 org.jetbrains.kotlin.android 插件
@@ -57,52 +55,6 @@ if (releaseTaskRequested) {
     }
 }
 
-val bundledDenoiseModelFiles = listOf("gtcrn_simple.onnx")
-
-val bundledRapidOcrModelFiles = listOf(
-    "PP-OCRv6_det_small.onnx",
-    "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
-    "PP-OCRv6_rec_small.onnx",
-    "ppocrv6_dict.txt"
-)
-
-val prepareBundledDenoiseModel = tasks.register<Copy>("prepareBundledDenoiseModel") {
-    from(rootProject.file("../../../res/models/speech-enhancement")) {
-        include(bundledDenoiseModelFiles)
-    }
-    into(layout.buildDirectory.dir("generated/assets/speech-enhancement"))
-}
-
-val prepareBundledRapidOcrModels = tasks.register<Copy>("prepareBundledRapidOcrModels") {
-    from(rootProject.file("../../../res/models/rapidocr")) {
-        include(bundledRapidOcrModelFiles)
-    }
-    into(layout.buildDirectory.dir("generated/assets/vision/rapidocr"))
-}
-
-val prepareBundledYolo11nModel = tasks.register<Exec>("prepareBundledYolo11nModel") {
-    val inputDirectory = providers.environmentVariable("YOLO11_MODEL_DIR").orElse("/home/as").get()
-    val outputDirectory = layout.buildDirectory.dir("generated/assets/vision/yolo11").get().asFile
-    commandLine(
-        "python3",
-        rootProject.file("../../../3rd/tts-server/scripts/export-yolo11-onnx.py").absolutePath,
-        "--input-dir",
-        inputDirectory,
-        "--output-dir",
-        outputDirectory.absolutePath,
-        "--models",
-        "yolo11n"
-    )
-}
-
-android {
-    sourceSets {
-        getByName("main") {
-            assets.srcDir(layout.buildDirectory.dir("generated/assets").get().asFile)
-        }
-    }
-}
-
 android {
     namespace = "com.aasc.display"
     compileSdk = 34
@@ -152,12 +104,6 @@ android {
             pickFirsts += "lib/arm64-v8a/libonnxruntime.so"
         }
     }
-}
-
-tasks.named("preBuild") {
-    dependsOn(prepareBundledDenoiseModel)
-    dependsOn(prepareBundledRapidOcrModels)
-    dependsOn(prepareBundledYolo11nModel)
 }
 
 dependencies {

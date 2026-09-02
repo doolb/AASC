@@ -708,7 +708,7 @@
     _renderBuiltinParams: function(builtinId, container) {
       // OCR/YOLO 任务通过服务器路由调度到显示端 NativeDisplay，本表单只收集任务参数和图片。
       if (builtinId === 'ocr' || builtinId === 'yolo') {
-        var visionName = builtinId === 'ocr' ? 'OCR 文字识别' : 'YOLO11n 目标检测';
+        var visionName = builtinId === 'ocr' ? 'OCR 文字识别' : 'YOLO11 目标检测';
         var shortSideHtml = builtinId === 'ocr'
           ? '<div class="task-form-field">' +
             '<label>OCR 图片短边上限</label>' +
@@ -721,6 +721,19 @@
             '<div style="font-size:12px;color:#8cf;margin-top:5px">只缩小不放大，返回文字框仍使用原图坐标</div>' +
           '</div>'
           : '';
+        var yoloModelHtml = builtinId === 'yolo'
+          ? '<div class="task-form-field">' +
+            '<label>YOLO 模型</label>' +
+            '<select id="visionYoloModel" style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px">' +
+              '<option value="yolo11n" selected>yolo11n（默认）</option>' +
+              '<option value="yolo11s">yolo11s</option>' +
+              '<option value="yolo11m">yolo11m</option>' +
+              '<option value="yolo11l">yolo11l</option>' +
+              '<option value="yolo11x">yolo11x</option>' +
+            '</select>' +
+            '<div style="font-size:12px;color:#8cf;margin-top:5px">模型由服务器准备并按需下载，默认使用 yolo11n</div>' +
+          '</div>'
+          : '';
         container.innerHTML =
           '<div class="task-form-field">' +
             '<label>服务器 URL</label>' +
@@ -731,7 +744,7 @@
             '<input type="file" id="visionImageFile" accept="image/*" style="width:100%;color:#ccc;font-size:13px">' +
             '<div id="visionImageName" style="font-size:12px;color:#8cf;margin-top:5px">未选择图片</div>' +
           '</div>' +
-          shortSideHtml +
+          shortSideHtml + yoloModelHtml +
           '<div class="task-form-field">' +
             '<label>目标显示端</label>' +
             '<div class="task-device-list" id="visionDisplayList" style="max-height:150px;overflow-y:auto"></div>' +
@@ -919,6 +932,7 @@
       var imageInput = document.getElementById('visionImageFile');
       var displayList = document.getElementById('visionDisplayList');
       var shortSideInput = document.getElementById('visionShortSide');
+      var yoloModelInput = document.getElementById('visionYoloModel');
       var submitButton = document.getElementById('visionSubmitBtn');
       var serverUrl = serverInput && serverInput.value.trim() ? serverInput.value.trim() : 'http://127.0.0.1:8081';
       var file = imageInput && imageInput.files ? imageInput.files[0] : null;
@@ -943,6 +957,7 @@
           imageFileName: file.name
         };
         if (builtinId === 'ocr') taskParams.shortSide = shortSideInput ? Number(shortSideInput.value || 0) : 0;
+        if (builtinId === 'yolo') taskParams.model = yoloModelInput ? yoloModelInput.value : 'yolo11n';
         this._send({
           type: 'task:submit',
           payload: {

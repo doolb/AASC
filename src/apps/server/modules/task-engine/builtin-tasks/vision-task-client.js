@@ -159,6 +159,7 @@ async function requestVisionJson({
     path: endpointPath,
     image,
     displayId = null,
+    model,
     shortSide,
     timeoutMs = DEFAULT_TIMEOUT_MS
 }) {
@@ -171,6 +172,7 @@ async function requestVisionJson({
         displayId: displayId || null
     };
     if (shortSide !== undefined) requestBody.shortSide = normalizeVisionShortSide(shortSide);
+    if (model !== undefined) requestBody.model = model;
     const body = JSON.stringify(requestBody);
     const requestUrl = appendVisionPath(serverUrl, endpointPath);
     const candidates = [requestUrl];
@@ -225,6 +227,7 @@ function createVisionTask({ id, name, description, path: endpointPath, extraPara
                     displayId: params.targetDisplay || null
                 };
                 if (endpointPath === '/api/vision/ocr') request.shortSide = normalizeVisionShortSide(params.shortSide);
+                if (endpointPath === '/api/vision/yolo') request.model = params.model || config.model || 'yolo11n';
                 const response = await requestVision(request);
                 return {
                     success: true,

@@ -160,7 +160,8 @@ scripts/api-tests/vision-yolo.sh \
 ```bash
 curl -k -sS -X POST "$AASC_URL/api/vision/yolo" \
   -F 'image=@/mnt/tmp/game.png' \
-  -F 'displayId=display-1'
+  -F 'displayId=display-1' \
+  -F 'model=yolo11n'
 ```
 
 ### 2.7 视觉能力和显示端状态
@@ -171,6 +172,14 @@ curl -k -sS "$AASC_URL/api/actors"
 ```
 
 `/api/vision/status` 返回 `serverInference: false`，并列出每个在线显示端的 `ocrAvailable`、`yolo11nAvailable` 和 `cpuStatus`。`/api/actors`、`/api/map-data` 的显示端能力列表也会包含 OCR 和 YOLO11n。
+
+正式 APK 的视觉/降噪模型由服务器按需提供。首次发布或增加 YOLO 尺寸前，在服务器工程目录执行：
+
+```bash
+npm run prepare:vision-models
+```
+
+该命令读取 `${YOLO11_MODEL_DIR:-/home/as}/yolo11*.pt`，生成 `res/models/yolo11/*.onnx`；接口清单只返回实际已经生成的模型。APK 不把这些模型打进安装包。
 
 ## 3. HTTP API 目录
 

@@ -203,7 +203,7 @@
         let nativeTtsReady = false;
         // 正式 APK 原生视觉桥：能力存在不等于模型已加载，模型状态由 visionStatus 单独报告。
         const nativeOcrMethod = window.NativeDisplay && window.NativeDisplay.ocrRecognizeAsync;
-        const nativeYoloMethod = window.NativeDisplay && window.NativeDisplay.yolo11nDetectAsync;
+        const nativeYoloMethod = window.NativeDisplay && (window.NativeDisplay.yoloDetectAsync || window.NativeDisplay.yolo11nDetectAsync);
         const nativeOcrAvailable = typeof nativeOcrMethod === 'function';
         const nativeYoloAvailable = typeof nativeYoloMethod === 'function';
         let ttsDevice = 'server';
@@ -314,10 +314,19 @@
             const isOcr = kind === 'ocr';
             const requestedShortSide = isOcr ? Number(data && data.shortSide ? data.shortSide : 0) : 0;
             const useScaledOcr = isOcr && Number.isInteger(requestedShortSide) && requestedShortSide > 0;
-            const methodName = useScaledOcr ? 'ocrRecognizeScaledAsync' : (isOcr ? 'ocrRecognizeAsync' : 'yolo11nDetectAsync');
+            const requestedModel = !isOcr && data && data.model ? String(data.model) : 'yolo11n';
+            const useGenericYolo = !isOcr && typeof nativeBridge?.yoloDetectAsync === 'function';
+            const methodName = useScaledOcr ? 'ocrRecognizeScaledAsync' : (isOcr ? 'ocrRecognizeAsync' : (useGenericYolo ? 'yoloDetectAsync' : 'yolo11nDetectAsync'));
             const resultType = isOcr ? 'visionOcrResult' : 'visionYolo11nResult';
             const taskName = isOcr ? 'OCR' : 'YOLO11n';
             if (!data || !data.requestId) return;
+            if (!isOcr && !useGenericYolo && requestedModel !== 'yolo11n') {
+                sendVisionResult(resultType, data.requestId, {
+                    success: false,
+                    error: '当前显示端仅支持 yolo11n，不能静默降级执行其他模型'
+                });
+                return;
+            }
             if (!nativeBridge || typeof nativeBridge[methodName] !== 'function') {
                 sendVisionResult(resultType, data.requestId, {
                     success: false,
@@ -331,6 +340,7 @@
                 const nativeMethod = nativeBridge[methodName];
                 const nativeArguments = [data.requestId, data.imageBase64 || ''];
                 if (useScaledOcr) nativeArguments.push(requestedShortSide);
+                if (!isOcr && useGenericYolo) nativeArguments.push(requestedModel);
                 const acceptedRaw = nativeMethod.apply(nativeBridge, nativeArguments);
                 const accepted = typeof acceptedRaw === 'string' ? JSON.parse(acceptedRaw) : acceptedRaw;
                 if (!accepted || accepted.accepted !== true) {
@@ -5136,6 +5146,7 @@
                     capabilities.yolo11nAvailable = nativeYoloAvailable;
                     capabilities.ocrModelReady = visionState.ocr?.modelReady === true;
                     capabilities.yolo11nModelReady = visionState.yolo11n?.modelReady === true;
+                    capabilities.yoloModels = Array.isArray(visionState.yoloModels) ? visionState.yoloModels : ['yolo11n'];
                     capabilities.visionCpu = visionState.cpu || null;
                 } catch (e) {
                     capabilities.ocrAvailable = false;

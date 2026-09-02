@@ -2,12 +2,12 @@
 
 ## 需求等级与边界
 
-这是一次 L7 架构级功能接入：正式 Android 显示端继续负责本地视觉推理，服务器提供统一 HTTP 任务入口和显示端路由。服务器不加载、不执行 OCR/YOLO 模型。
+这是一次 L7 架构级功能接入：正式 Android 显示端继续负责本地视觉推理，服务器提供统一 HTTP 任务入口、显示端路由和模型下载。服务器不加载、不执行 OCR/YOLO 模型。模型分发的统一设计见 [android-model-distribution.md](android-model-distribution.md)。
 
 本次接入：
 
-- RapidOCR：检测、方向分类、识别三份 ONNX 模型和字典，共四个资源文件。
-- YOLO11n：构建得到的 `yolo11n.onnx`。
+- RapidOCR：检测、方向分类、识别三份 ONNX 模型和字典，共四个服务器资源文件，APK 首次使用时下载。
+- YOLO11n：服务器准备的 `yolo11n.onnx`，APK 首次使用时下载。
 - 两个内置一次性任务：`ocr`、`yolo`。
 - 服务器 HTTP 路由：`/api/vision/ocr`、`/api/vision/yolo`、`/api/vision/status`。
 - 任务参数配置服务器 URL，默认 `http://127.0.0.1:8081`；任务上传图片后调用服务器接口。
@@ -17,7 +17,7 @@
 - 服务器侧模型推理。
 - `vision-test.html` 手动测试网页。
 - APK DevTools。
-- YOLO11s/m/l/x 和 ASR/TTS CPU 行为改造。
+- YOLO11s/m/l/x 的默认任务选择和服务器模型准备统一见 [android-model-distribution.md](android-model-distribution.md)。
 - YOLO 图片缩放参数；YOLO 继续使用现有预处理。
 
 ## 运行架构
@@ -47,7 +47,7 @@
 3. `PP-OCRv6_rec_small.onnx`：识别文字内容。
 4. `ppocrv6_dict.txt`：CTC 输出索引到汉字/字符的字典。
 
-前三个是不同阶段的模型，字典不是模型但识别解码必需，因此 APK 仍需携带四个文件。
+前三个是不同阶段的模型，字典不是模型但识别解码必需，因此服务器清单仍需提供四个文件；APK 不再携带它们。
 
 ## CPU 策略
 
@@ -72,7 +72,8 @@ server -> display: {
     type: "visionOcr" | "visionYolo11n",
     requestId,
     imageBase64,
-    shortSide: 0 | positive integer // 仅 visionOcr，可省略
+    shortSide: 0 | positive integer, // 仅 visionOcr，可省略
+    model: "yolo11n" | "yolo11s" | "yolo11m" | "yolo11l" | "yolo11x" // YOLO 可选，默认 n
 }
 
 display -> server: {

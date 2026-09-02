@@ -83,3 +83,27 @@ test('OCR 任务转发短边参数，YOLO 任务不暴露该参数', async () =>
   assert.equal(ocrRequest.shortSide, 512);
   assert.equal(Object.prototype.hasOwnProperty.call(yoloRequest, 'shortSide'), false);
 });
+
+test('YOLO 任务默认使用 n，并允许配置更大模型 ID', async () => {
+  const task = require('./yolo');
+  const calls = [];
+  const context = (params) => ({
+    taskName: 'yolo',
+    params,
+    files: { 'input.png': Buffer.from([1]) },
+    taskIO: { async getTaskConfig() { return {}; } },
+    requestVision: async (request) => {
+      calls.push(request);
+      return { status: 'success' };
+    }
+  });
+
+  await task.run(context({}));
+  await task.run(context({ model: 'yolo11x' }));
+
+  assert.equal(calls[0].model, 'yolo11n');
+  assert.equal(calls[1].model, 'yolo11x');
+  assert.deepEqual(task.params.find((param) => param.name === 'model').options, [
+    'yolo11n', 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x'
+  ]);
+});

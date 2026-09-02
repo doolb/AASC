@@ -58,6 +58,7 @@
 | Android 原生语音生成 | [android-native-tts.md](spec/android-native-tts.md) | Embedded Speech 离线合成 Xiaoxiao、模型按需下载、显示端生成与回退伪代码 |
 | Android 原生声纹识别 | [voiceprint.md](spec/voiceprint.md) | 说话人识别、多人分割、服务器权威库、声纹门控 |
 | 正式 Android 原生 OCR 与 YOLO11n | [android-native-ocr-yolo.md](spec/android-native-ocr-yolo.md) | 正式显示端单小核 OCR/YOLO11n、NativeBridge 和网页伪代码 |
+| 正式 Android 统一模型分发 | [android-model-distribution.md](spec/android-model-distribution.md) | 正式 APK 全模型服务器下载、清单、校验、缓存和构建约束伪代码 |
 | 独立 Android 声纹对比测试 APK | [android-voiceprint-test-apk.md](spec/android-voiceprint-test-apk.md) | APK HTTP 网页、Sherpa 声纹和流式 ASR 接口伪代码 |
 | 3D 视图 | [viewer3d.md](spec/viewer3d.md) | 执行者 3D 可视化、动画循环、场景管理 |
 | 显示端睡眠模式 | [display-sleep-mode.md](spec/display-sleep-mode.md) | 时段判定/媒体遮罩/深度 UI 遮罩/临时激活/控制端配置 |

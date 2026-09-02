@@ -8,12 +8,13 @@ import com.aasc.display.CpuPolicy
 import com.aasc.display.vision.VisionCpuPolicy
 import java.io.File
 
-/** YOLO11n 单模型推理引擎；只保留一个 session，复用正式 APK 的单小核策略。 */
+/** YOLO11 单模型推理引擎；只保留一个 session，复用正式 APK 的单小核策略。 */
 class Yolo11nDetector {
     private val environment = OrtEnvironment.getEnvironment()
     private var sessionOptions: OrtSession.SessionOptions? = null
     private var activeSession: OrtSession? = null
     private var activeModel: File? = null
+    private var activeModelId: String? = null
     private var activePolicy: CpuPolicy? = null
     private var affinityStatus = "未执行"
 
@@ -23,10 +24,13 @@ class Yolo11nDetector {
     val currentAffinityStatus: String
         get() = affinityStatus
 
+    val currentModelId: String?
+        get() = activeModelId
+
     @Synchronized
-    fun load(modelFile: File, policy: CpuPolicy): Long {
-        require(modelFile.isFile && modelFile.length() > 0L) { "YOLO11n 模型文件未就绪" }
-        if (activeSession != null && activeModel == modelFile && activePolicy == policy) {
+    fun load(modelFile: File, policy: CpuPolicy, modelId: String = "yolo11n"): Long {
+        require(modelFile.isFile && modelFile.length() > 0L) { "YOLO11 模型文件未就绪" }
+        if (activeSession != null && activeModel == modelFile && activeModelId == modelId && activePolicy == policy) {
             affinityStatus = applyAffinity(policy)
             return 0L
         }
@@ -45,6 +49,7 @@ class Yolo11nDetector {
             sessionOptions = newOptions
             activeSession = newSession
             activeModel = modelFile
+            activeModelId = modelId
             activePolicy = policy
             return (System.nanoTime() - start) / 1_000_000L
         } catch (error: Exception) {
@@ -55,8 +60,8 @@ class Yolo11nDetector {
     }
 
     @Synchronized
-    fun detect(bitmap: Bitmap, modelFile: File, policy: CpuPolicy): YoloResult {
-        val loadModelMs = load(modelFile, policy)
+    fun detect(bitmap: Bitmap, modelFile: File, policy: CpuPolicy, modelId: String = "yolo11n"): YoloResult {
+        val loadModelMs = load(modelFile, policy, modelId)
         val session = activeSession ?: error("YOLO11n ONNX session 未加载")
         affinityStatus = applyAffinity(policy)
         val preprocessStart = System.nanoTime()
@@ -71,7 +76,7 @@ class Yolo11nDetector {
                 val tensor = YoloOrtUtils.readFloatTensor(outputs)
                 val detections = YoloPostprocessor.decode(tensor.shape, tensor.values, prepared.transform, 0.25f, 0.45f)
                 val postprocessMs = elapsedMilliseconds(postprocessStart)
-                return YoloResult("yolo11n", detections, YoloTiming(preprocessMs, inferenceMs, postprocessMs), affinityStatus, loadModelMs)
+                return YoloResult(modelId, detections, YoloTiming(preprocessMs, inferenceMs, postprocessMs), affinityStatus, loadModelMs)
             }
         } finally {
             input.close()
@@ -89,6 +94,7 @@ class Yolo11nDetector {
         activeSession = null
         sessionOptions = null
         activeModel = null
+        activeModelId = null
         activePolicy = null
     }
 

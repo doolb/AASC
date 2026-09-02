@@ -93,6 +93,8 @@ npm start
 
 正式 Android 显示端的 OCR/YOLO11n 通过控制端任务面板调用；任务会请求服务器视觉接口，再由服务器转发给显示端本地推理。
 
+正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。
+
 普通聊天 Agent 后端的配置和会话规则见：[普通聊天 Agent 后端](usage/llm-agent.md)。
 
 ### 3.1 连接状态
