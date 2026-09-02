@@ -39,4 +39,9 @@
   - 改动文件：`src/tools/capture-tool.ts`、`test/cli/capture-tool.test.ts`。
   - 行为：安全写入 Flow 模板、裁剪 PNG、读取 JSONL 录制路径，并提供只读 Flow inspect 能力。
   - 验证结果：3 个工具测试和 TypeScript 构建通过。
+
+- ✅ [2026-09-02] 完成 Node.js CLI 自动运行入口。
+  - 改动文件：`src/cli.ts`、CLI 测试、README 和使用说明。
+  - 行为：支持 `start`、`capture`、`record`、`inspect`，参数错误返回 2，运行错误返回 1，Ctrl-C 使用 AbortController 停止。
+  - 验证结果：`npm test` 9 个测试文件/29 个测试通过，`npm run build` 通过；无参数命令返回 2。
   - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

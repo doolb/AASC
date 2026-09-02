@@ -68,5 +68,5 @@
 - [x] 动作选择器（队列、阈值、select/default 和点击坐标，5 个测试通过）
 - [x] 自动循环（点击、wait、dry-run、goto 和跳转上限，4 个测试通过）
 - [x] 截图/裁剪工具（安全文件名、区域裁剪，3 个测试通过）
-- [ ] CLI 与图片流程
+- [x] CLI（start/capture/record/inspect、参数退出码，29 个全量测试通过）
 - [ ] 最终回归

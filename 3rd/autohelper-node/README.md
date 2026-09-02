@@ -18,6 +18,8 @@ npm install
 npm test
 npm run build
 npm run capture -- --device <serial> --flow launch --name close-popup@0.88
+npm run inspect -- --device <serial> --flow launch
+npm run record -- --record-file logs/record.jsonl
 npm run start -- --device <serial> --flow launch --dry-run
 ```
 

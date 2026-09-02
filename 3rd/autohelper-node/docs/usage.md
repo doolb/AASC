@@ -40,8 +40,12 @@ npm install
 npm test
 npm run build
 npm run capture -- --device 192.168.1.6:5555 --flow launch --name close-popup@0.88
+npm run inspect -- --device 192.168.1.6:5555 --flow launch
+npm run record -- --record-file logs/record.jsonl
 npm run start -- --device 192.168.1.6:5555 --flow launch --dry-run --once
 npm run start -- --device 192.168.1.6:5555 --flow launch
 ```
 
 自动点击前应先执行 `--dry-run --once`，确认匹配图片和坐标。
+
+参数缺失时 CLI 返回退出码 2；ADB、图片或 Flow 运行错误返回退出码 1。`start` 收到 Ctrl-C 后通过 AbortController 停止循环，不接管其他服务进程。

@@ -723,7 +723,7 @@ git commit -m "feat: add image flow capture tools"
 - `capture` 参数：`--device`、`--flow`、`--flows-root`、`--name`、`--region`。
 - 缺少必填参数时退出码为 2；ADB、图片或 Flow 错误退出码为 1；成功退出码为 0。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('parses start options and enables dry-run', () => {
@@ -743,17 +743,17 @@ it('requires device and flow for start', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -- test/cli/cli.test.ts`
 
 Expected: FAIL until CLI parsing and dispatch exist。
 
-- [ ] **Step 3: 写最小 CLI 实现**
+- [x] **Step 3: 写最小 CLI 实现**
 
 使用 Node.js `util.parseArgs` 解析命令行，不引入 Web 服务。`start` 创建 ADB Client、Flow Loader、Template Cache、Matcher、Selector 和 Automation Loop；启动前调用 `assertConnected`。捕获 `SIGINT` 后通过 AbortController 停止循环，不主动 kill 或接管其他服务进程。
 
-- [ ] **Step 4: 运行单元测试和构建**
+- [x] **Step 4: 运行单元测试和构建**
 
 Run: `npm test`
 
@@ -763,7 +763,7 @@ Run: `npm run build`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add 3rd/autohelper-node/src/cli.ts 3rd/autohelper-node/package.json 3rd/autohelper-node/README.md 3rd/autohelper-node/docs/usage.md
