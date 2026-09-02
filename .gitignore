@@ -22,3 +22,4 @@ src/apps/android-display/.kotlin/
 # 原始来源：FunAudioLLM/SenseVoice（转换后的 SenseVoice int8 ONNX 模型）
 # 参考：https://github.com/FunAudioLLM/SenseVoice
 /3rd/ttslive/models/sensevoice/model.int8.onnx
+/res/models/sensevoice/model.int8.onnx
