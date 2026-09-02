@@ -1,6 +1,6 @@
-const { runTests: runLogBrainUnitTests } = require('../framework/observability/log-brain.test');
-const { runTests: runLogBrainApiIntegrationTests } = require('../apps/server/api/log-brain-api.integration.test');
-const { runTests: runRuntimeChainTests } = require('../framework/aasc/message-bus.runtime-chain.test');
+const { runTests: runLogBrainUnitTests } = require('../../src/framework/observability/log-brain.test');
+const { runTests: runLogBrainApiIntegrationTests } = require('../../src/apps/server/api/log-brain-api.integration.test');
+const { runTests: runRuntimeChainTests } = require('../../src/framework/aasc/message-bus.runtime-chain.test');
 
 async function runAll() {
     const results = [];

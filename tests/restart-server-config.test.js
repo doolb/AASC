@@ -9,15 +9,15 @@ const {
     resolveServerUrl,
     buildRestartUrl,
     buildRequestOptions
-} = require('../src/scripts/restart-server-config');
+} = require('../scripts/ops/restart-server-config');
 
 const ROOT = path.resolve(__dirname, '..');
 const PACKAGE_FILE = path.join(ROOT, 'package.json');
-const SCRIPT_FILE = path.join(ROOT, 'src/scripts/restart-server.js');
+const SCRIPT_FILE = path.join(ROOT, 'scripts/ops/restart-server.js');
 
 test('npm 提供 restart:server 命令并指向重启脚本', () => {
     const packageJson = JSON.parse(fs.readFileSync(PACKAGE_FILE, 'utf8'));
-    assert.strictEqual(packageJson.scripts['restart:server'], 'node src/scripts/restart-server.js');
+    assert.strictEqual(packageJson.scripts['restart:server'], 'node scripts/ops/restart-server.js');
     assert.ok(fs.existsSync(SCRIPT_FILE), '重启脚本应存在');
 });
 

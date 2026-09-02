@@ -5,12 +5,12 @@
  *   WebSocket → 声明能力 → HTTP POST /api/asr/recognize → voiceInput → 断开
  *
  * 用法:
- *   node src/scripts/asr-stress-test.js --url http://127.0.0.1:8081
- *   node src/scripts/asr-stress-test.js --url http://127.0.0.1:8081 --total 200 --concurrency 10
- *   node src/scripts/asr-stress-test.js --url http://127.0.0.1:8081 --file /path/to/test.wav
- *   node src/scripts/asr-stress-test.js --url http://127.0.0.1:8081 --audio-type noise --audio-duration 3
- *   node src/scripts/asr-stress-test.js --url http://127.0.0.1:8081 --no-system-stats --no-ws
- *   node src/scripts/asr-stress-test.js --url https://192.168.1.39:8081
+ *   node scripts/stress/asr-stress-test.js --url http://127.0.0.1:8081
+ *   node scripts/stress/asr-stress-test.js --url http://127.0.0.1:8081 --total 200 --concurrency 10
+ *   node scripts/stress/asr-stress-test.js --url http://127.0.0.1:8081 --file /path/to/test.wav
+ *   node scripts/stress/asr-stress-test.js --url http://127.0.0.1:8081 --audio-type noise --audio-duration 3
+ *   node scripts/stress/asr-stress-test.js --url http://127.0.0.1:8081 --no-system-stats --no-ws
+ *   node scripts/stress/asr-stress-test.js --url https://192.168.1.39:8081
  *
  * 音频类型 (--audio-type):
  *   sine       纯音（默认，440Hz）

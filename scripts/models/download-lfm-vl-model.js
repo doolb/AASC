@@ -1,5 +1,5 @@
 // 下载 LFM2.5-VL-1.6B ONNX 模型文件到 res/models/lfm-vl/
-// 用法: node src/scripts/download-lfm-vl-model.js [--source modelscope|huggingface]
+// 用法: node scripts/models/download-lfm-vl-model.js [--source modelscope|huggingface]
 const https = require('https');
 const fs = require('fs');
 const path = require('path');

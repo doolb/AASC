@@ -22,7 +22,12 @@ res/                -> 模型、上传、临时文件、证书
 skills/             -> 技能配置
 src/framework/aasc/ -> Actor 与消息总线
 src/framework/auto-brain/ -> 独立决策分层
-src/scripts/        -> 工具脚本
+tests/              -> 自动化测试用例
+scripts/test-runners/ -> 可直接运行的测试启动器
+scripts/api-sh/     -> 手动或 AI 调用接口的 Shell 脚本
+scripts/ops/        -> 重启、APK 部署和启动脚本
+scripts/stress/     -> ASR、TTS、RSS 压测脚本
+scripts/models/     -> 模型下载脚本
 src/apps/web-mediacenter/ui/public/ -> 控制端与显示端静态页面
 src/                -> 分层主代码（core/framework/external/apps）
 ```

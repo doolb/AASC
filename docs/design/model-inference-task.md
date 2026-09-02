@@ -304,11 +304,11 @@ async function executeModelInference(payload) {
 
 ## 模型下载脚本
 
-`src/scripts/download-lfm-vl-model.js`：
+`scripts/models/download-lfm-vl-model.js`：
 
 ```javascript
 // 从 ModelScope 下载 LFM2.5-VL-1.6B-ONNX 模型文件
-// node src/scripts/download-lfm-vl-model.js
+// node scripts/models/download-lfm-vl-model.js
 // 下载到 res/models/lfm-vl/
 ```
 
@@ -355,5 +355,5 @@ modelManager.register('asr', new AsrAdapter());
 | `src/apps/web-mediacenter/ui/public/display.html` | 显示端，新增 ModelManager + LfmVlAdapter |
 | `src/apps/server/modules/task-engine/builtin-tasks/model-inference.js` | 内置任务注册 |
 | `src/apps/web-mediacenter/ui/public/js/task-panel.js` | 控制端 UI |
-| `src/scripts/download-lfm-vl-model.js` | 模型下载脚本 |
+| `scripts/models/download-lfm-vl-model.js` | 模型下载脚本 |
 | `res/models/lfm-vl/` | 模型文件目录 |

@@ -45,7 +45,7 @@ console.log('\n[测试 1] 模块加载');
 
 let ServerTUI;
 try {
-    ServerTUI = require('../framework/observability/server-tui');
+    ServerTUI = require('../../src/framework/observability/server-tui');
     assert(typeof ServerTUI === 'function', 'ServerTUI 模块加载成功，为构造函数');
 } catch (e) {
     assert(false, `ServerTUI 模块加载: ${e.message}`);
@@ -53,7 +53,7 @@ try {
 
 let installConsoleRedirect;
 try {
-    const cr = require('../framework/observability/console-redirect');
+    const cr = require('../../src/framework/observability/console-redirect');
     installConsoleRedirect = cr.installConsoleRedirect;
     assert(typeof installConsoleRedirect === 'function', 'installConsoleRedirect 加载成功，为函数');
 } catch (e) {

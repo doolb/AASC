@@ -10,12 +10,12 @@ export AASC_INSECURE=1          # 本机自签名证书使用；正式证书可�
 export AASC_TIMEOUT_SECONDS=120
 ```
 
-直接使用 `curl` 时，本机自签名 HTTPS 等价于加 `-k`。命令行脚本位于 `scripts/api-tests/`，可从项目根目录运行：
+直接使用 `curl` 时，本机自签名 HTTPS 等价于加 `-k`。命令行脚本位于 `scripts/api-sh/`，可从项目根目录运行：
 
 ```bash
-scripts/api-tests/health.sh
-scripts/api-tests/media-list.sh
-scripts/api-tests/api-request.sh GET /api/status
+scripts/api-sh/health.sh
+scripts/api-sh/media-list.sh
+scripts/api-sh/api-request.sh GET /api/status
 npm run api:test
 ```
 
@@ -31,12 +31,12 @@ npm run api:test
 通用调用器：
 
 ```bash
-scripts/api-tests/api-request.sh GET /api/status
-scripts/api-tests/api-request.sh POST /api/tts/generate \
+scripts/api-sh/api-request.sh GET /api/status
+scripts/api-sh/api-request.sh POST /api/tts/generate \
   --json '{"text":"你好，AASC"}'
-scripts/api-tests/api-request.sh PUT /api/device-settings/display-1 \
+scripts/api-sh/api-request.sh PUT /api/device-settings/display-1 \
   --json '{"volume":60}'
-scripts/api-tests/api-request.sh POST /api/asr/recognize \
+scripts/api-sh/api-request.sh POST /api/asr/recognize \
   --file audio=/path/to/sample.wav
 ```
 
@@ -47,7 +47,7 @@ scripts/api-tests/api-request.sh POST /api/asr/recognize \
 ### 2.1 查询服务器状态
 
 ```bash
-scripts/api-tests/health.sh
+scripts/api-sh/health.sh
 ```
 
 等价请求：
@@ -61,7 +61,7 @@ curl -k -sS "$AASC_URL/api/status"
 `POST /upload-file` 接收 multipart 字段 `file` 和 `displayId`。服务器保存文件、更新当前媒体，并向指定在线显示端发送播放消息。
 
 ```bash
-scripts/api-tests/play.sh \
+scripts/api-sh/play.sh \
   --file ./media/demo.mp4 \
   --display display-1
 ```
@@ -79,7 +79,7 @@ curl -k -sS -X POST "$AASC_URL/upload-file" \
 `POST /api/tts/generate` 接收 JSON：`text` 必填，`voice` 和 `speed` 可选。成功返回 `audioUrl`，脚本只负责生成，不自动播放。
 
 ```bash
-scripts/api-tests/tts-generate.sh \
+scripts/api-sh/tts-generate.sh \
   --text '你好，这是一次 TTS 测试' \
   --voice 'Microsoft Xiaoxiao' \
   --speed 1.0
@@ -103,7 +103,7 @@ curl -k -sS -X POST "$AASC_URL/api/tts/generate" \
 
 ```bash
 curl -k -sS "$AASC_URL/uploads/tts/xxx.wav" -o /tmp/aasc-tts.wav
-scripts/api-tests/play.sh --file /tmp/aasc-tts.wav --display display-1
+scripts/api-sh/play.sh --file /tmp/aasc-tts.wav --display display-1
 ```
 
 ### 2.4 ASR 识别
@@ -111,7 +111,7 @@ scripts/api-tests/play.sh --file /tmp/aasc-tts.wav --display display-1
 `POST /api/asr/recognize` 接收 multipart 字段 `audio`。实际识别设备由服务器配置决定：`server` 使用服务端 ASR，`display` 转发到支持 ASR 的显示端。
 
 ```bash
-scripts/api-tests/asr-recognize.sh --audio ./audio/sample.wav
+scripts/api-sh/asr-recognize.sh --audio ./audio/sample.wav
 ```
 
 等价请求：
@@ -128,7 +128,7 @@ curl -k -sS -X POST "$AASC_URL/api/asr/recognize" \
 OCR 由服务器接收图片后转发给在线且声明 `ocrAvailable=true` 的显示端，服务器本身不加载 OCR 模型。`displayId` 可选；不传时由服务器选择支持 OCR 的显示端。`shortSide` 可选，取 `0` 或 `256..2048` 的整数，表示显示端推理前的图片短边缩放尺寸。
 
 ```bash
-scripts/api-tests/vision-ocr.sh \
+scripts/api-sh/vision-ocr.sh \
   --image /mnt/tmp/game.png \
   --display display-1 \
   --short-side 960
@@ -147,12 +147,13 @@ curl -k -sS -X POST "$AASC_URL/api/vision/ocr" \
 
 ### 2.6 显示端 YOLO11n
 
-YOLO 路由同样只负责服务器到显示端的转发，要求显示端声明 `yolo11nAvailable=true`。当前 YOLO 接口不接受 `shortSide` 参数。
+YOLO 路由同样只负责服务器到显示端的转发，要求显示端声明 `yolo11nAvailable=true`。当前 YOLO 接口不接受 `shortSide` 参数，可选 `model=yolo11n|yolo11s|yolo11m|yolo11l|yolo11x`，默认 `yolo11n`。
 
 ```bash
-scripts/api-tests/vision-yolo.sh \
+scripts/api-sh/vision-yolo.sh \
   --image /mnt/tmp/game.png \
-  --display display-1
+  --display display-1 \
+  --model yolo11n
 ```
 
 等价请求：
@@ -190,8 +191,12 @@ npm run prepare:vision-models
 | 方法 | 路径 | 请求/说明 | 副作用 |
 |---|---|---|---|
 | POST | `/api/vision/ocr` | multipart `image`；可选 `displayId`、`targetDisplay`、`shortSide` | 转发到显示端并产生推理负载 |
-| POST | `/api/vision/yolo` | multipart `image`；可选 `displayId`、`targetDisplay` | 转发到显示端并产生推理负载 |
+| POST | `/api/vision/yolo` | multipart `image`；可选 `displayId`、`targetDisplay`、`model` | 转发到显示端并产生推理负载 |
 | GET | `/api/vision/status` | 返回服务器转发声明和显示端视觉能力 | 只读 |
+| GET | `/api/vision/model-manifest` | 返回 RapidOCR 和服务器已准备 YOLO11 模型的文件大小/hash 清单 | 只读 |
+| GET | `/api/vision/model/:modelId/:filename` | 下载清单内视觉模型文件；模型 ID 支持 `yolo11n/s/m/l/x` | 只读二进制 |
+| GET | `/api/speech-enhancement/model-manifest` | 返回 GTCRN 降噪模型文件大小/hash 清单 | 只读 |
+| GET | `/api/speech-enhancement/model/:filename` | 下载清单内 GTCRN 文件 | 只读二进制 |
 | POST | `/upload-file` | multipart `file`、`displayId` | 保存文件并播放 |
 | GET | `/media-list` | 返回上传媒体列表 | 只读 |
 | DELETE | `/media/:filename` | 删除上传目录中的文件 | 删除文件，需确认 |
@@ -311,7 +316,7 @@ npm run prepare:vision-models
 `/api/chat2api-gateway/:instanceId` 是动态挂载的 Chat2API 网关。具体子路径、请求协议和流式返回由网关模块维护，调用时使用实际 `instanceId`，例如：
 
 ```bash
-scripts/api-tests/api-request.sh POST \
+scripts/api-sh/api-request.sh POST \
   /api/chat2api-gateway/my-instance/v1/chat/completions \
   --json '{"model":"...","messages":[{"role":"user","content":"你好"}]}'
 ```
@@ -329,8 +334,8 @@ scripts/api-tests/api-request.sh POST \
 推荐 AI 先调用：
 
 ```bash
-scripts/api-tests/health.sh
-scripts/api-tests/run-all.sh
+scripts/api-sh/health.sh
+scripts/api-sh/run-all.sh
 ```
 
 `run-all.sh` 只请求无副作用接口，并输出 JSON Lines，例如每行包含 `name`、`ok` 以及 `response` 或 `error`。业务脚本返回服务端原始 JSON，AI 应同时检查：
@@ -343,29 +348,29 @@ scripts/api-tests/run-all.sh
 高风险调用示例（仅展示确认方式，执行前确认目标）：
 
 ```bash
-scripts/api-tests/api-request.sh DELETE /media/file.mp4 --confirm
-scripts/api-tests/api-request.sh POST /api/chat/round --json '{"target":"group"}' --confirm
-API_CONFIRM=1 scripts/api-tests/api-request.sh POST /api/restart
+scripts/api-sh/api-request.sh DELETE /media/file.mp4 --confirm
+scripts/api-sh/api-request.sh POST /api/chat/round --json '{"target":"group"}' --confirm
+API_CONFIRM=1 scripts/api-sh/api-request.sh POST /api/restart
 ```
 
 ## 6. 测试脚本清单
 
 | 脚本 | 用途 |
 |---|---|
-| `scripts/api-tests/common.sh` | 公共 curl、地址、HTTPS、超时和错误处理；由其他脚本 source |
-| `scripts/api-tests/api-request.sh` | 任意 HTTP 方法、JSON、表单、文件和请求头 |
-| `scripts/api-tests/health.sh` | `/api/status` |
-| `scripts/api-tests/media-list.sh` | `/media-list` |
-| `scripts/api-tests/play.sh` | 上传并播放媒体 |
-| `scripts/api-tests/tts-generate.sh` | TTS 生成 |
-| `scripts/api-tests/asr-recognize.sh` | ASR 音频识别 |
-| `scripts/api-tests/vision-ocr.sh` | OCR 图片识别，支持短边参数 |
-| `scripts/api-tests/vision-yolo.sh` | YOLO11n 图片检测 |
-| `scripts/api-tests/run-all.sh` | 串行执行只读健康探针 |
+| `scripts/api-sh/common.sh` | 公共 curl、地址、HTTPS、超时和错误处理；由其他脚本 source |
+| `scripts/api-sh/api-request.sh` | 任意 HTTP 方法、JSON、表单、文件和请求头 |
+| `scripts/api-sh/health.sh` | `/api/status` |
+| `scripts/api-sh/media-list.sh` | `/media-list` |
+| `scripts/api-sh/play.sh` | 上传并播放媒体 |
+| `scripts/api-sh/tts-generate.sh` | TTS 生成 |
+| `scripts/api-sh/asr-recognize.sh` | ASR 音频识别 |
+| `scripts/api-sh/vision-ocr.sh` | OCR 图片识别，支持短边参数 |
+| `scripts/api-sh/vision-yolo.sh` | YOLO11 图片检测，可选模型 |
+| `scripts/api-sh/run-all.sh` | 串行执行只读健康探针 |
 
 脚本语法和静态契约测试：
 
 ```bash
 node --test tests/api-cli-contract.test.js
-bash -n scripts/api-tests/*.sh
+bash -n scripts/api-sh/*.sh
 ```

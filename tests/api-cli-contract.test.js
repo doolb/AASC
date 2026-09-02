@@ -6,7 +6,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const root = path.resolve(__dirname, '..');
-const scriptsDir = path.join(root, 'scripts', 'api-tests');
+const scriptsDir = path.join(root, 'scripts', 'api-sh');
 const userScripts = [
     'api-request.sh',
     'health.sh',
@@ -54,5 +54,5 @@ test('项目提供 API 文档和 api:test 入口', () => {
     assert.match(documentation, /tts-generate\.sh/);
     assert.match(documentation, /asr-recognize\.sh/);
     assert.match(documentation, /JSON/);
-    assert.equal(packageData.scripts['api:test'], 'bash scripts/api-tests/run-all.sh');
+    assert.equal(packageData.scripts['api:test'], 'bash scripts/api-sh/run-all.sh');
 });

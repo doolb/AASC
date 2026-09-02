@@ -7,7 +7,7 @@ const {
     DEFAULT_SERVER_URL,
     buildStartArgs,
     resolveServerUrl
-} = require('../src/scripts/apk-deploy-config');
+} = require('../scripts/ops/apk-deploy-config');
 
 const MANIFEST = path.resolve(__dirname, '../src/apps/android-display/app/src/main/AndroidManifest.xml');
 

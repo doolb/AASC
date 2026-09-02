@@ -8,9 +8,10 @@ source "${SCRIPT_DIR}/common.sh"
 
 show_help() {
     cat <<'EOF'
-用法：vision-yolo.sh --image FILE [--display DISPLAY_ID]
+用法：vision-yolo.sh --image FILE [--display DISPLAY_ID] [--model MODEL_ID]
 
 调用 POST /api/vision/yolo，以 multipart 字段 image 上传图片。
+--model 可选 yolo11n、yolo11s、yolo11m、yolo11l、yolo11x，默认 yolo11n。
 环境变量：AASC_URL、AASC_INSECURE、AASC_TIMEOUT_SECONDS
 EOF
 }
@@ -22,6 +23,7 @@ fi
 
 image_path=""
 display_id=""
+model_id="yolo11n"
 while (( $# > 0 )); do
     case "$1" in
         --image)
@@ -32,6 +34,11 @@ while (( $# > 0 )); do
         --display|--display-id)
             [[ $# -ge 2 ]] || api_die '--display 缺少参数'
             display_id="$2"
+            shift 2
+            ;;
+        --model)
+            [[ $# -ge 2 ]] || api_die '--model 缺少参数'
+            model_id="$2"
             shift 2
             ;;
         --help)
@@ -46,9 +53,14 @@ done
 
 [[ -n "$image_path" ]] || api_die '必须指定 --image'
 api_require_file "$image_path"
+case "$model_id" in
+    yolo11n|yolo11s|yolo11m|yolo11l|yolo11x) ;;
+    *) api_die '--model 必须是 yolo11n、yolo11s、yolo11m、yolo11l 或 yolo11x' ;;
+esac
 form_arguments=(--form "image=@${image_path}")
 if [[ -n "$display_id" ]]; then
     form_arguments+=(--form "displayId=${display_id}")
 fi
+form_arguments+=(--form "model=${model_id}")
 
 api_request POST /api/vision/yolo "${form_arguments[@]}"
