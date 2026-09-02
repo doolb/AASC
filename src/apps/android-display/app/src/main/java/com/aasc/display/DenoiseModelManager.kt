@@ -19,4 +19,8 @@ class DenoiseModelManager(context: Context) {
             includeModelId = false,
             onProgress = onProgress
         )
+
+    fun finalizeInstall(install: RemoteModelInstall) = remoteManager.finalizeInstall(install)
+
+    fun rollbackInstall(install: RemoteModelInstall): RemoteModelInstall? = remoteManager.rollbackInstall(install)
 }
