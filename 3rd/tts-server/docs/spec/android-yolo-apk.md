@@ -319,4 +319,14 @@ ValidationRecord:
     confidence values = [0.939, 0.902, 0.849, 0.833, 0.396]
     conclusion = single-image qualitative smoke test passed
     precision/recall/mAP = not measured because no labeled validation dataset was supplied
+
+BenchmarkRecord:
+    parameters = warmup=1, runs=2, models=all, serial execution
+    bigCores = cpu 4-7, intraOp=2, averageTotalMs[n,s,m,l,x] = [461.5, 1306.0, 4042.0, 5277.5, 11757.5]
+    bigCoresFps[n,s,m,l,x] = [2.167, 0.766, 0.247, 0.189, 0.085]
+    littleCores = cpu 0-3, intraOp=2, averageTotalMs[n,s,m,l,x] = [1066.5, 2992.0, 8508.0, 11086.5, 23917.0]
+    littleCoresFps[n,s,m,l,x] = [0.938, 0.334, 0.118, 0.090, 0.042]
+    formalFiveModelPassTotalMs = big=22844.5, little=47570.0
+    inferenceThreadConsumption = two ORT intra-op threads in the selected CPU cluster
+    loadModelMs = excluded from averageTotalMs and recorded separately by each item
 ```

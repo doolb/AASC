@@ -14,6 +14,11 @@
 
 ### Android YOLO11 测试 APK
 
+- ✅ [2026-09-02] 补充当前真机大核/小核五模型速度与线程消耗基线。
+  - 测试条件：Android 9 arm64 `192.168.1.6:5555`，同一 `bus.jpg`，五模型串行，预热 1 次、正式 2 次；`averageTotalMs` 不含模型加载。
+  - 大核（CPU 4-7，ORT 2 个 intra-op 线程）n/s/m/l/x 为 `461.5/1306.0/4042.0/5277.5/11757.5 ms`，FPS 为 `2.167/0.766/0.247/0.189/0.085`。
+  - 小核（CPU 0-3，ORT 2 个 intra-op 线程）n/s/m/l/x 为 `1066.5/2992.0/8508.0/11086.5/23917.0 ms`，FPS 为 `0.938/0.334/0.118/0.090/0.042`；五模型一轮正式样本合计大核 `22.845 s`、小核 `47.570 s`。
+
 - ✅ [2026-09-01] 新增独立 Android YOLO11 五模型 HTTP/网页测试 APK。
   - 改动文件：`3rd/tts-server/android-yolo/`、`3rd/tts-server/scripts/export-yolo11-onnx.py`、对应测试、`3rd/tts-server/package.json` 及 Android YOLO11 design/spec/task 文档；`.pt` 和生成 ONNX 不提交到仓库。
   - 能力：从 `/home/as` 的 `yolo11n/s/m/l/x.pt` 构建 ONNX，单模型检测、手动网页上传、检测框叠加、五模型串行测速、AUTO/大核/小核 CPU 模式和 JNI affinity。
