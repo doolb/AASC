@@ -661,15 +661,16 @@ class NativeBridge(
     private fun prepareAudio(samples: FloatArray, enabled: Boolean): PreparedDenoiseAudio =
         DenoiseAudioPolicy.prepare(samples, enabled) {
             synchronized(denoiseLock) {
-                if (!denoiseEngine.isLoaded) {
-                    val install = denoiseModelManager.ensureModel(serverBaseUrl())
-                    check(denoiseEngine.load(install.file(DenoiseModelFiles.FILE_NAME))) { "降噪模型加载失败" }
-                } else {
-                    // 每次准备音频都刷新清单；模型发生更新时重新加载，避免继续使用旧 session。
-                    val install = denoiseModelManager.ensureModel(serverBaseUrl())
-                    if (install.changed) {
-                        check(denoiseEngine.load(install.file(DenoiseModelFiles.FILE_NAME))) { "降噪模型更新后加载失败" }
+                val install = denoiseModelManager.ensureModel(serverBaseUrl())
+                if (install.changed || !denoiseEngine.isLoaded) {
+                    var loaded = denoiseEngine.load(install.file(DenoiseModelFiles.FILE_NAME))
+                    val newInstallAccepted = install.changed && loaded
+                    if (!loaded && install.changed) {
+                        val restored = denoiseModelManager.rollbackInstall(install)
+                        loaded = restored != null && denoiseEngine.load(restored.file(DenoiseModelFiles.FILE_NAME))
                     }
+                    check(loaded) { "降噪模型加载失败" }
+                    if (newInstallAccepted) denoiseModelManager.finalizeInstall(install)
                 }
                 denoiseEngine.process(samples)
             }

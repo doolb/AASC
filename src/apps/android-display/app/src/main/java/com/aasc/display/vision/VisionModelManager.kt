@@ -32,6 +32,10 @@ class VisionModelManager(context: Context) {
             onProgress = onProgress
         )
 
+    fun finalizeInstall(install: RemoteModelInstall) = remoteManager.finalizeInstall(install)
+
+    fun rollbackInstall(install: RemoteModelInstall): RemoteModelInstall? = remoteManager.rollbackInstall(install)
+
     companion object {
         const val RAPID_OCR_MODEL_ID = "rapidocr"
     }

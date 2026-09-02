@@ -3,6 +3,8 @@ package com.aasc.display.vision
 import android.content.Context
 import android.graphics.Bitmap
 import com.aasc.display.CpuCluster
+import com.aasc.display.CpuPolicy
+import com.aasc.display.RemoteModelInstall
 import com.aasc.display.vision.ocr.RapidOcrEngine
 import com.aasc.display.vision.ocr.OcrImageScale
 import com.aasc.display.vision.yolo.Yolo11nDetector
@@ -82,7 +84,13 @@ class VisionRuntime(context: Context) {
             val install = modelManager.ensureRapidOcr(serverBaseUrl)
             if (install.changed) ocrEngine.release()
             val cpuPolicy = policy
-            ocrEngine.load(install.directory, cpuPolicy)
+            try {
+                ocrEngine.load(install.directory, cpuPolicy)
+                modelManager.finalizeInstall(install)
+            } catch (error: Exception) {
+                restoreOcrInstall(install, cpuPolicy)
+                throw error
+            }
             VisionJson.ocrResult(requestId, ocrEngine.recognize(bitmap, cpuPolicy, normalizedShortSide))
         }
     }
@@ -106,7 +114,34 @@ class VisionRuntime(context: Context) {
         return submit("yolo11n", requestId, encodedImage, callback) { bitmap ->
             val install = modelManager.ensureYolo(model, serverBaseUrl)
             if (install.changed) yoloEngine.release()
+            try {
+                yoloEngine.load(install.file(model.fileName), policy, model.id)
+                modelManager.finalizeInstall(install)
+            } catch (error: Exception) {
+                restoreYoloInstall(install, model, policy)
+                throw error
+            }
             VisionJson.yoloResult(requestId, yoloEngine.detect(bitmap, install.file(model.fileName), policy, model.id))
+        }
+    }
+
+    private fun restoreOcrInstall(install: RemoteModelInstall, cpuPolicy: CpuPolicy) {
+        if (!install.changed) return
+        try {
+            val restored = modelManager.rollbackInstall(install) ?: return
+            ocrEngine.load(restored.directory, cpuPolicy)
+        } catch (_: Exception) {
+            // 原始加载错误更有助于定位问题；旧模型恢复失败时由下一次请求重新建立状态。
+        }
+    }
+
+    private fun restoreYoloInstall(install: RemoteModelInstall, model: YoloModel, cpuPolicy: CpuPolicy) {
+        if (!install.changed) return
+        try {
+            val restored = modelManager.rollbackInstall(install) ?: return
+            yoloEngine.load(restored.file(model.fileName), cpuPolicy, model.id)
+        } catch (_: Exception) {
+            // 原始加载错误更有助于定位问题；旧模型恢复失败时由下一次请求重新建立状态。
         }
     }
 

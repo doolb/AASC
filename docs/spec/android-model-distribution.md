@@ -48,16 +48,20 @@ RemoteModelManager.ensure(baseUrl, group, modelId):
     manifest = GET baseUrl + group manifest
     selected = manifest.models.find(id == modelId)
     reject when selected is absent or files is empty
+    on process start, recover a leftover backup directory from an interrupted install
     create a sibling staging directory under the manager's fixed filesDir/models cache directory
     for file in selected.files:
-        if local file size, cached .manifest.json metadata and local SHA-256 == server file metadata:
+        if local file size/mtime, cached .manifest.json metadata and the process verification cache match server file metadata:
             continue
+        if the process verification cache misses:
+            calculate local SHA-256 once and record the file size/mtime stamp
         download to staging/file.tmp
         verify SHA-256(staging/file.tmp) == file.sha256
         atomically rename staging/file.tmp to staging/file
     save the server manifest as staging/.manifest.json atomically
     atomically swap the complete staging directory with the active cache directory
-    keep the previous active directory until the swap succeeds
+    keep the previous active directory until the new engine session loads successfully
+    finalize the install after load success; rollback to the previous directory on load failure
     return complete local directory
 
 on download/hash/load failure:
@@ -67,6 +71,9 @@ on download/hash/load failure:
 HTTPS download:
     use system certificate validation for normal HTTPS
     allow the configured development self-signed server certificate only by its pinned SHA-256 fingerprint
+HTTP download:
+    allow only loopback development addresses
+    reject LAN/public HTTP addresses before reading a manifest or model
 ```
 
 ## 视觉运行时伪代码

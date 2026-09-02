@@ -9,6 +9,7 @@
   - YOLO 任务、HTTP CLI 和显示端桥新增模型 ID，默认 `yolo11n`，支持后续切换更大模型；保留旧 `yolo11nDetectAsync` 兼容入口。
   - 验证：Node 模型/任务契约 11/11、Android JVM `testDebugUnitTest`、Debug/Release APK 构建、Shell/Node 语法检查通过；APK 压缩包不含 RapidOCR、YOLO 或 GTCRN 模型。
   - 真机 `192.168.1.6:5555`：`/mnt/tmp/infinity_nikki_main.png` OCR 512 短边成功（28,656ms，单小核），YOLO11n 成功（1,897ms），YOLO11s 经服务器下载后成功（5,359ms）；临时打开降噪后 ASR 成功，随后恢复 `denoise=false`。
+  - 加固：缓存进程内按文件大小/修改时间复用已验证 hash；模型目录切换保留旧备份，等待新引擎加载成功后提交，失败时回滚；正式模型下载拒绝非回环 HTTP。
 
 ### 服务器 API 文档与命令行工具
 

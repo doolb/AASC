@@ -61,6 +61,48 @@ class RemoteModelManagerTest {
         }
     }
 
+    @Test
+    fun rollbackRestoresPreviousDirectoryAfterSuccessfulSwap() {
+        val root = Files.createTempDirectory("aasc-remote-model-").toFile()
+        val state = ModelServerState("model-v1")
+        val server = startServer(state)
+        try {
+            val manager = RemoteModelManager()
+            val directory = File(root, "yolo11n")
+            ensure(manager, server, directory)
+            state.body = "model-v2"
+
+            val updated = ensure(manager, server, directory)
+            assertEquals("model-v2", File(directory, "yolo11n.onnx").readText())
+            val restored = manager.rollbackInstall(updated)
+
+            assertTrue(restored != null)
+            assertEquals("model-v1", File(directory, "yolo11n.onnx").readText())
+        } finally {
+            server.stop(0)
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun rejectsNonLoopbackHttpModelServer() {
+        val manager = RemoteModelManager()
+        val root = Files.createTempDirectory("aasc-remote-model-").toFile()
+        try {
+            assertThrows(IllegalArgumentException::class.java) {
+                manager.ensureModel(
+                    baseUrl = "http://192.168.1.39:8081",
+                    manifestPath = "/manifest",
+                    downloadPath = "/model",
+                    modelId = "yolo11n",
+                    directory = File(root, "yolo11n")
+                )
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     private fun ensure(manager: RemoteModelManager, server: HttpServer, directory: File): RemoteModelInstall =
         manager.ensureModel(
             baseUrl = "http://127.0.0.1:${server.address.port}",
