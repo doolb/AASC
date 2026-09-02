@@ -35,6 +35,7 @@
 | 聊天历史安全持久化 | [chat-history-persistence.md](design/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出 |
 | 搜索频道与独立 Pi 搜索进程 | [search-channel.md](design/search-channel.md) | 搜索状态/历史独立展示、LLM 搜索上下文隔离与临时进程回收 |
 | WebSocket | [websocket.md](design/websocket.md) | 通信协议、消息类型 |
+| 服务器 API 使用与命令行工具 | [api-usage.md](design/api-usage.md) | HTTP API 目录、curl/Bash 调用和 AI 输出契约 |
 | AASC架构 | [aasc.md](design/aasc.md) | 消息总线架构、执行者模型、用户模型、能力继承 |
 | Auto-Brain 架构 | [auto-brain.md](design/auto-brain.md) | 独立决策分层、LLM 策略规划、Guard 把关回滚 |
 | 分层架构 | [layered-architecture.md](design/layered-architecture.md) | Core/Framework/External/App 分层与依赖规则 |

@@ -9,6 +9,7 @@
 | 模块 | 文档 | 说明 |
 |------|------|------|
 | HTTP API | [api.md](spec/api.md) | 文件上传、媒体管理、TTS、提醒、聊天、整点报时等 API |
+| API 使用与命令行工具 | [api-usage.md](spec/api-usage.md) | 服务器 HTTP API 目录、Bash 调用器和安全测试伪代码 |
 | WebSocket | [websocket.md](spec/websocket.md) | 连接处理、消息类型、广播函数、前端客户端 |
 | 配置管理 | [config.md](spec/config.md) | 配置文件、API、显示端状态、播放列表 |
 | 提醒功能 | [reminder.md](spec/reminder.md) | 提醒数据结构、触发逻辑、定时检查 |

@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### 服务器 API 文档与命令行工具
+
+- ✅ [2026-09-02] 新增当前服务器 HTTP API 使用文档和用户/AI 可执行的 Bash 调用脚本。
+  - 新增 `docs/api-usage.md`，覆盖状态、媒体播放、TTS、ASR、显示端 OCR/YOLO、配置、聊天、提醒、媒体库、诊断、设备和模型路由；明确视觉推理在显示端、任务引擎使用 WebSocket 的边界。
+  - 新增 `scripts/api-tests/`：通用 `api-request.sh`、`health.sh`、`media-list.sh`、`play.sh`、`tts-generate.sh`、`asr-recognize.sh`、`vision-ocr.sh`、`vision-yolo.sh`、只读探测 `run-all.sh`；新增 `npm run api:test`。
+  - 脚本统一输出 JSON/JSON Lines，错误输出到 stderr 并返回非零状态；删除、导入、停止和重启需要显式确认；本机回环请求自动绕过环境代理。
+  - 验证：API CLI 契约测试 3/3、Shell 语法、帮助和安全边界通过；本机 `npm run api:test`、TTS、ASR、播放、`/mnt/tmp/infinity_nikki_main.png` 的 OCR/YOLO11n 请求均成功。
+
 ### Android RapidOCR 测试 APK
 
 - ✅ [2026-09-01] 新增独立 Android RapidOCR HTTP 测试 APK。
