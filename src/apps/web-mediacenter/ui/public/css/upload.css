@@ -2294,6 +2294,25 @@ input[type="range"]::-webkit-slider-thumb:active {
     color: var(--text-primary, #fff);
 }
 
+.tree-capability-status {
+    min-width: 54px;
+    color: var(--text-secondary, #aaa);
+    font-size: 11px;
+    text-align: right;
+}
+
+.tree-capability-status.active {
+    color: #6ee7b7;
+}
+
+.tree-capability-status.inactive {
+    color: var(--text-secondary, #777);
+}
+
+.capability-readonly {
+    opacity: 0.85;
+}
+
 .tree-selection-bar {
     display: flex;
     gap: 4px;

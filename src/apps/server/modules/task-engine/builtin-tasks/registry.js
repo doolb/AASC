@@ -3,6 +3,8 @@ const tasks = {
   'model.inference': require('./model-inference'),
   'time.announce': require('./time-announce'),
   'tts.server': require('./tts-server'),
+  'ocr': require('./ocr'),
+  'yolo': require('./yolo'),
   'llm.chat': require('./llm-chat'),
   'search.web': require('./search'),
   'chat2api.proxy': require('./chat2api-proxy')

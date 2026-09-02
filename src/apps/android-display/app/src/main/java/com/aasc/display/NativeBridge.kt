@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import com.aasc.display.vision.VisionRuntime
 
 // display.html 的原生桥：截图（真实像素）+ 输入注入（真实触摸/按键，跨域内容可用）
 class NativeBridge(
@@ -29,6 +30,7 @@ class NativeBridge(
         // ASR/TTS 统一允许最长 60 秒，保证原生桥、声纹分支和服务端等待边界一致。
         const val ASR_TIMEOUT_SECONDS = 60L
         const val TTS_TIMEOUT_SECONDS = 60L
+        const val VISION_TIMEOUT_SECONDS = 120L
     }
 
     // 由 MainActivity 主线程的页面回调更新；JavaScript bridge 线程只读取该缓存。
@@ -147,6 +149,9 @@ class NativeBridge(
     private val denoiseEngine = SherpaDenoiseEngine()
     private val denoiseLock = Any()
 
+    // 视觉引擎按首次调用懒加载；状态查询也只创建轻量运行时，不会复制或加载模型。
+    private val visionRuntime by lazy { VisionRuntime(webView.context) }
+
     // ---- 声纹识别桥（speaker identification / 多人分割）----
    private val voiceprintModelManager = VoiceprintModelManager(webView.context)
    private var voiceprintEnabled = false
@@ -251,6 +256,67 @@ class NativeBridge(
             JSONObject().put("error", e.message ?: "compute 参数错误").toString()
         } catch (e: Exception) {
             JSONObject().put("error", "compute 异常: ${e.message}").toString()
+        }
+    }
+
+    // ---- 正式 APK 原生视觉桥（RapidOCR + YOLO11n，默认单小核）----
+
+    /** 返回视觉模型、队列、CPU affinity 和 ORT 线程配置，不触发模型复制或 session 加载。 */
+    @JavascriptInterface
+    fun visionStatus(): String {
+        return try {
+            visionRuntime.status().toString()
+        } catch (error: Exception) {
+            JSONObject().put("ok", false).put("error", error.message ?: "视觉状态读取失败").toString()
+        }
+    }
+
+    /** 异步提交 OCR 图片；图片结果通过 window.onNativeOcrResult 返回。 */
+    @JavascriptInterface
+    fun ocrRecognizeAsync(requestId: String, imageBase64: String): String =
+        submitVisionTask("ocr", requestId, imageBase64) { callback ->
+            visionRuntime.submitOcr(requestId, imageBase64, callback)
+        }
+
+    /** 异步提交 YOLO11n 图片；图片结果通过 window.onNativeYoloResult 返回。 */
+    @JavascriptInterface
+    fun yolo11nDetectAsync(requestId: String, imageBase64: String): String =
+        submitVisionTask("yolo11n", requestId, imageBase64) { callback ->
+            visionRuntime.submitYolo11n(requestId, imageBase64, callback)
+        }
+
+    private fun submitVisionTask(
+        kind: String,
+        requestId: String,
+        imageBase64: String,
+        submit: ((JSONObject) -> Unit) -> JSONObject
+    ): String {
+        val completed = AtomicBoolean(false)
+        return try {
+            val accepted = submit { result ->
+                if (completed.compareAndSet(false, true)) postNativeVisionResult(kind, result)
+            }
+            if (!accepted.optBoolean("accepted", false)) return accepted.toString()
+            asyncTimeoutExecutor.schedule({
+                if (completed.compareAndSet(false, true)) {
+                    postNativeVisionResult(kind, com.aasc.display.vision.VisionJson.error(requestId, kind, "视觉推理超时"))
+                }
+            }, VISION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            accepted.toString()
+        } catch (error: Exception) {
+            JSONObject().put("accepted", false).put("error", error.message ?: "视觉任务提交失败").toString()
+        }
+    }
+
+    private fun postNativeVisionResult(kind: String, result: JSONObject) {
+        val callbackName = if (kind == "ocr") "onNativeOcrResult" else "onNativeYoloResult"
+        val js = "window.$callbackName && window.$callbackName(${result.toString()});"
+        mainHandler.post {
+            try {
+                webView.evaluateJavascript(js, null)
+            } catch (_: Exception) {
+                // 页面销毁或重载期间回调可能失效，不能让视觉 worker 因此崩溃。
+            }
         }
     }
 

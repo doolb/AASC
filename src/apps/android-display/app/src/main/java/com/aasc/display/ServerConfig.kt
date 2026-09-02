@@ -8,4 +8,19 @@ object ServerConfig {
         if (injected.isNotEmpty()) return injected
         return savedUrl?.trim().orEmpty()
     }
+
+    /**
+     * 将配置地址转换为 APK 要加载的正式显示页面。
+     * 普通主机地址仍然默认进入 display，兼容既有部署参数。
+     */
+    fun pageUrl(input: String): String {
+        val value = input.trim()
+        if (value.isEmpty()) return ""
+        val withScheme = if (value.startsWith("http://") || value.startsWith("https://")) value else "https://$value"
+        val path = withScheme.substringBefore('?').trimEnd('/')
+        return when {
+            path.endsWith("/display") -> withScheme
+            else -> "$withScheme/display"
+        }
+    }
 }

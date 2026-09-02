@@ -12,6 +12,15 @@
   - 改动文件：`3rd/tts-server/android-rapidocr/`、`3rd/tts-server/android-yolo/` 的 CPU 模式、ORT session、JNI affinity、HTTP/网页状态展示、测试及 design/spec/task 文档。
   - 验证结果：两个 APK JVM 单元测试、debug 构建和 arm64 JNI 编译通过；Android 9 arm64 真机 RapidOCR 单小核/单大核为 CPU 0/4，YOLO 单大核为 CPU 5，HTTP 图片接口成功。
 
+### Android 正式显示端视觉
+
+- ✅ [2026-09-02] 正式 Android 显示 APK 接入 RapidOCR 与 YOLO11n，并新增服务器路由任务调用。
+  - 改动文件：正式 APK 视觉运行时/NativeBridge、`display.html`、服务器 `/api/vision/ocr` `/api/vision/yolo` `/api/vision/status`、任务引擎 `ocr`/`yolo`、控制端任务面板、能力展示及对应 design/spec/task 文档；删除 `vision-test.html` 和 APK DevTools。
+  - 架构：服务器不加载模型，只通过 WebSocket 转发；显示端本地单线程推理，默认单小核（核心 0），ORT intra/inter 均为 1；任务服务器 URL 默认 `http://127.0.0.1:8081`。
+  - 验证：Node 视觉契约 7/7、Android JVM `testDebugUnitTest`、YOLO 导出 Python 3/3、`npm run build:apk` 和 arm64 真机安装均通过；APK 包含 RapidOCR 4 个资源和 `yolo11n.onnx`。
+  - 真机截图链路：Android 9 arm64 `192.168.1.6:5555`，显示端 `display-umwo5k6l`，使用 `/mnt/tmp` 现有 16 张游戏截图顺序调用 OCR/YOLO，OCR 16/16、YOLO 16/16 成功；OCR 平均耗时 37,796ms、平均 26.7 个文本框，YOLO 平均推理 1,728ms、平均 0.5 个检测框，所有结果均报告“单小核（核心 0）”。
+  - 准确性边界：OCR 对 `infinity_nikki_main.png` 可识别主要中文 UI 文本，但截图顶部状态栏等小字存在噪声/误识别；YOLO11n 为通用 COCO 模型，本次仅作定性检测，没有标注集，未计算 Precision/Recall/mAP。
+
 ### Android YOLO11 测试 APK
 
 - ✅ [2026-09-02] 补充当前真机大核/小核核心集合五模型速度与线程消耗基线。
@@ -7198,6 +7207,11 @@
 - `docs/task/2026-08-22_显示端同ID重连清理.md`
 
 # 2026-08-31
+
+## 正式 Android 显示端原生 OCR 与 YOLO11n（进行中）
+
+- 🛠️ [2026-09-02] 需求调整为“任务配置服务器 URL → 服务器 HTTP 路由 → WebSocket → 显示端本地单小核推理”；取消手动测试网页和 APK DevTools。
+  - 文档：`docs/design/android-native-ocr-yolo.md`、`docs/spec/android-native-ocr-yolo.md`、`docs/task/2026-09-02_正式APK接入OCR与YOLO11n.md`、`docs/superpowers/plans/2026-09-02-formal-ocr-yolo11n.md`。
 
 ## Responses 续接历史重放修复
 

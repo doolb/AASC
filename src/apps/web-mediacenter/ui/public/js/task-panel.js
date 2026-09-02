@@ -676,6 +676,10 @@
       return null;
     },
 
+    _isVisionBuiltin: function(builtinId) {
+      return builtinId === 'ocr' || builtinId === 'yolo';
+    },
+
     _renderGenericParam: function(param) {
       var fieldId = 'param-' + param.name;
       var label = this._escapeHtml(param.label || param.name);
@@ -702,6 +706,28 @@
     },
 
     _renderBuiltinParams: function(builtinId, container) {
+      // OCR/YOLO 任务通过服务器路由调度到显示端 NativeDisplay，本表单只收集任务参数和图片。
+      if (builtinId === 'ocr' || builtinId === 'yolo') {
+        var visionName = builtinId === 'ocr' ? 'OCR 文字识别' : 'YOLO11n 目标检测';
+        container.innerHTML =
+          '<div class="task-form-field">' +
+            '<label>服务器 URL</label>' +
+            '<input type="url" id="visionServerUrl" value="http://127.0.0.1:8081" placeholder="http://127.0.0.1:8081" style="width:100%;padding:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:13px;box-sizing:border-box">' +
+          '</div>' +
+          '<div class="task-form-field">' +
+            '<label>测试图片</label>' +
+            '<input type="file" id="visionImageFile" accept="image/*" style="width:100%;color:#ccc;font-size:13px">' +
+            '<div id="visionImageName" style="font-size:12px;color:#8cf;margin-top:5px">未选择图片</div>' +
+          '</div>' +
+          '<div class="task-form-field">' +
+            '<label>目标显示端</label>' +
+            '<div class="task-device-list" id="visionDisplayList" style="max-height:150px;overflow-y:auto"></div>' +
+          '</div>' +
+          '<button class="task-submit-btn" id="visionSubmitBtn">提交' + visionName + '任务</button>';
+        this._bindVisionEvents(builtinId);
+        return;
+      }
+
       // model.inference 使用自定义表单（图片选择、显示端列表等）
       if (builtinId === 'model.inference') {
         var modelTask = this._getBuiltinTask(builtinId);
@@ -805,6 +831,123 @@
       var submitBtn = document.getElementById('miSubmitBtn');
       if (submitBtn) {
         submitBtn.addEventListener('click', function() { self._submitMiTask(); });
+      }
+    },
+
+    _bindVisionEvents: function(builtinId) {
+      var self = this;
+      var imageInput = document.getElementById('visionImageFile');
+      var imageName = document.getElementById('visionImageName');
+      if (imageInput) {
+        imageInput.addEventListener('change', function() {
+          var file = imageInput.files && imageInput.files[0];
+          if (imageName) imageName.textContent = file ? file.name : '未选择图片';
+        });
+      }
+      this._renderVisionDisplayList(builtinId);
+      var submitButton = document.getElementById('visionSubmitBtn');
+      if (submitButton) {
+        submitButton.addEventListener('click', function() {
+          void self._submitVisionTask(builtinId);
+        });
+      }
+    },
+
+    _renderVisionDisplayList: function(builtinId) {
+      var list = document.getElementById('visionDisplayList');
+      if (!list) return;
+      var selectedId = '';
+      var selected = list.querySelector('.task-device-item.selected');
+      if (selected) selectedId = selected.dataset.id || '';
+      var capability = builtinId === 'ocr' ? 'ocrAvailable' : 'yolo11nAvailable';
+      var html = '';
+      for (var i = 0; i < this.displayList.length; i++) {
+        var display = this.displayList[i];
+        var caps = display.capabilities || {};
+        var capable = display[capability] === true || caps[capability] === true;
+        var modelReadyKey = capability === 'ocrAvailable' ? 'ocrModelReady' : 'yolo11nModelReady';
+        capable = capable || display[modelReadyKey] === true || caps[modelReadyKey] === true;
+        if (!capable) continue;
+        var safeId = this._escapeAttr(display.id);
+        var label = display.ip ? this._escapeHtml(display.id + ' (' + display.ip + ')') : this._escapeHtml(display.id);
+        var isSelected = selectedId ? selectedId === String(display.id) : html === '';
+        html += '<div class="task-device-item' + (isSelected ? ' selected' : '') + '" data-id="' + safeId + '">' +
+          '<div class="task-device-radio"></div>' +
+          '<div class="task-device-info"><div class="task-device-name">' + label + '</div>' +
+          '<div class="task-device-cap">' + (builtinId === 'ocr' ? 'OCR' : 'YOLO11n') + ' · CPU</div></div>' +
+          '<span class="task-device-state online">在线</span></div>';
+      }
+      if (!html) {
+        html = '<div style="color:#666;font-size:12px;padding:8px">没有支持' + (builtinId === 'ocr' ? ' OCR' : ' YOLO11n') + ' 的在线显示端</div>';
+      }
+      list.innerHTML = html;
+      list.onclick = function(event) {
+        var item = event.target.closest('.task-device-item');
+        if (!item) return;
+        list.querySelectorAll('.task-device-item').forEach(function(element) { element.classList.remove('selected'); });
+        item.classList.add('selected');
+      };
+    },
+
+    _readVisionFile: function(file) {
+      return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function(event) {
+          var value = String(event.target.result || '');
+          resolve(value.indexOf(',') >= 0 ? value.split(',')[1] : value);
+        };
+        reader.onerror = function() { reject(new Error('图片读取失败')); };
+        reader.readAsDataURL(file);
+      });
+    },
+
+    _submitVisionTask: async function(builtinId) {
+      var serverInput = document.getElementById('visionServerUrl');
+      var imageInput = document.getElementById('visionImageFile');
+      var displayList = document.getElementById('visionDisplayList');
+      var submitButton = document.getElementById('visionSubmitBtn');
+      var serverUrl = serverInput && serverInput.value.trim() ? serverInput.value.trim() : 'http://127.0.0.1:8081';
+      var file = imageInput && imageInput.files ? imageInput.files[0] : null;
+      var selectedDisplay = displayList ? displayList.querySelector('.task-device-item.selected') : null;
+      if (!file) {
+        alert('请选择图片');
+        return;
+      }
+      if (!selectedDisplay || !selectedDisplay.dataset.id) {
+        alert('请选择支持视觉能力的目标显示端');
+        return;
+      }
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = '读取图片并提交中...';
+      }
+      try {
+        var imageBase64 = await this._readVisionFile(file);
+        this._send({
+          type: 'task:submit',
+          payload: {
+            taskName: builtinId,
+            taskType: 'builtin',
+            builtinId: builtinId,
+            target: 'server',
+            displayId: null,
+            mode: 'one-shot',
+            env: 'cpu',
+            params: {
+              serverUrl: serverUrl,
+              targetDisplay: selectedDisplay.dataset.id,
+              imageFileName: file.name
+            },
+            files: [{ name: file.name, data: imageBase64 }]
+          }
+        });
+      } catch (error) {
+        alert(error.message || '图片读取失败');
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = '提交' + (builtinId === 'ocr' ? 'OCR 文字识别' : 'YOLO11n 目标检测') + '任务';
+        }
       }
     },
 
@@ -1116,7 +1259,7 @@
       for (var i = 0; i < this.taskList.length; i++) {
         if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
       }
-      if (task && task.params && task.params.length > 0) {
+      if (task && ((task.params && task.params.length > 0) || this._isVisionBuiltin(taskName))) {
         this._viewBuiltinParams(taskName);
       } else {
         this._send({ type: 'task:submit', payload: {
@@ -1273,6 +1416,10 @@
           }
           if (document.getElementById('miDisplayList')) {
             self._renderMiDisplayList();
+          }
+          var visionBuiltin = document.getElementById('builtinId');
+          if (document.getElementById('visionDisplayList') && visionBuiltin && self._isVisionBuiltin(visionBuiltin.value)) {
+            self._renderVisionDisplayList(visionBuiltin.value);
           }
         }
         if (data.type === 'task:list:result') {

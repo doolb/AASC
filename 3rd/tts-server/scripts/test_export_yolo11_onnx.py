@@ -20,6 +20,16 @@ def load_export_module():
 class ExportYolo11OnnxTest(unittest.TestCase):
     """模型导出脚本的输入校验测试。"""
 
+    def test_selected_model_only_requires_selected_weight(self):
+        module = load_export_module()
+        with tempfile.TemporaryDirectory(prefix="yolo11-export-test-") as directory:
+            source = Path(directory) / "yolo11n.pt"
+            source.write_bytes(b"pt")
+
+            sources = module.validate_sources(Path(directory), ("yolo11n",))
+
+        self.assertEqual((source,), sources)
+
     def test_missing_model_reports_exact_filename(self):
         with tempfile.TemporaryDirectory(prefix="yolo11-export-test-") as directory:
             result = subprocess.run(

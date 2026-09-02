@@ -672,6 +672,8 @@ const DeviceList = {
                     <span class="cap-icon ${caps.voiceRecognition ? 'active' : 'inactive'}" title="语音识别${caps.voiceRecognition ? '' : '（不可用）'}">🧠</span>
                     <span class="cap-icon ${caps.ttsGeneration ? 'active' : 'inactive'}" title="语音生成${caps.ttsGeneration ? '' : '（不可用）'}">🗣️</span>
                     <span class="cap-icon ${caps.displayText ? 'active' : 'inactive'}" title="文本显示${caps.displayText ? '' : '（不可用）'}">📝</span>
+                    <span class="cap-icon ${caps.ocrAvailable ? 'active' : 'inactive'}" title="RapidOCR${caps.ocrAvailable ? '' : '（不可用）'}">🔤</span>
+                    <span class="cap-icon ${caps.yolo11nAvailable ? 'active' : 'inactive'}" title="YOLO11n 目标检测${caps.yolo11nAvailable ? '' : '（不可用）'}">🎯</span>
                 `;
             }
 
@@ -887,7 +889,9 @@ const DeviceList = {
             voiceRecording: true,
             voiceRecognition: false,
             ttsGeneration: false,
-            displayText: true
+            displayText: true,
+            ocrAvailable: false,
+            yolo11nAvailable: false
         };
 
         const capabilityDefinitions = [
@@ -896,7 +900,9 @@ const DeviceList = {
             { key: 'voiceRecording', label: '语音录音', icon: '🎙️' },
             { key: 'voiceRecognition', label: '语音识别', icon: '🧠' },
             { key: 'ttsGeneration', label: '语音生成', icon: '🗣️' },
-            { key: 'displayText', label: '文本显示', icon: '📝' }
+            { key: 'displayText', label: '文本显示', icon: '📝' },
+            { key: 'ocrAvailable', label: 'RapidOCR 图像文字识别', icon: '🔤', readOnly: true },
+            { key: 'yolo11nAvailable', label: 'YOLO11n 目标检测', icon: '🎯', readOnly: true }
         ];
 
         for (const capDef of capabilityDefinitions) {
@@ -907,7 +913,8 @@ const DeviceList = {
                 type: 'capability-item',
                 capabilityKey: capDef.key,
                 value: caps[capDef.key] !== undefined ? caps[capDef.key] : true,
-                editable: true,
+                editable: capDef.readOnly !== true,
+                readOnly: capDef.readOnly === true,
                 inputType: 'select',
                 options: [
                     { value: true, label: '启用' },
@@ -1145,6 +1152,14 @@ const DeviceList = {
         const container = document.createElement('div');
         container.className = 'tree-capability-control';
 
+        if (node.readOnly === true) {
+            const status = document.createElement('span');
+            status.className = `tree-capability-status ${node.value ? 'active' : 'inactive'}`;
+            status.textContent = node.value ? '已检测到' : '不可用';
+            container.appendChild(status);
+            return container;
+        }
+
         const select = document.createElement('select');
         select.className = 'tree-capability-select';
         for (const opt of node.options) {
@@ -1241,9 +1256,11 @@ const DeviceList = {
             mediaRendering: true,
             voicePlayback: true,
             voiceRecording: true,
-            voiceRecognition: false,
-            ttsGeneration: false,
-            displayText: true
+                voiceRecognition: false,
+                ttsGeneration: false,
+                displayText: true,
+                ocrAvailable: false,
+                yolo11nAvailable: false
         };
 
         capabilities[key] = value;
@@ -1400,6 +1417,16 @@ const DeviceList = {
                         <input type="checkbox" ${caps.displayText ? 'checked' : ''} data-cap="displayText">
                         <span>📝 文本显示</span>
                         <span class="capability-desc">能显示文字覆盖层</span>
+                    </label>
+                    <label class="capability-item capability-readonly">
+                        <input type="checkbox" ${caps.ocrAvailable ? 'checked' : ''} data-cap="ocrAvailable" disabled>
+                        <span>🔤 RapidOCR 图像文字识别</span>
+                        <span class="capability-desc">正式 APK 原生能力，只读</span>
+                    </label>
+                    <label class="capability-item capability-readonly">
+                        <input type="checkbox" ${caps.yolo11nAvailable ? 'checked' : ''} data-cap="yolo11nAvailable" disabled>
+                        <span>🎯 YOLO11n 目标检测</span>
+                        <span class="capability-desc">正式 APK 原生能力，只读</span>
                     </label>
                 </div>
                 <div class="capability-actions">

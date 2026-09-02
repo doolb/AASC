@@ -89,6 +89,8 @@ npm start
 
 显示端语音会话的详细使用说明见：[语音三种会话状态](usage/voice-conversation.md)。
 
+正式 Android 显示端的 OCR/YOLO11n 通过控制端任务面板调用；任务会请求服务器视觉接口，再由服务器转发给显示端本地推理。
+
 普通聊天 Agent 后端的配置和会话规则见：[普通聊天 Agent 后端](usage/llm-agent.md)。
 
 ### 3.1 连接状态

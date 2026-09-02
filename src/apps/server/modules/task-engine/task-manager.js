@@ -188,6 +188,23 @@ class TaskManager extends EventEmitter {
       workDir: this.taskIO._taskPath(task.taskName)
     };
 
+    // 内置一次性任务从任务目录读取上传文件，并以 Buffer 提供给任务模块；
+    // 这样视觉任务可以把图片交给服务器路由，而不需要任务模块自行访问磁盘。
+    if (task.taskType === 'builtin') {
+      try {
+        const taskFiles = await this.taskIO.readTaskFiles(task.taskName, null);
+        context.files = {};
+        for (const file of taskFiles) {
+          if (file && file.name && file.data) {
+            context.files[file.name] = Buffer.from(file.data, 'base64');
+          }
+        }
+      } catch (error) {
+        context.files = {};
+        console.warn('[TaskManager] 读取内置任务文件失败:', task.taskName, error.message);
+      }
+    }
+
     try {
       if (task.mode === 'service') {
         for (const [sid, svc] of this._services) {

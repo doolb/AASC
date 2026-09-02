@@ -17,13 +17,20 @@ class ExportError(RuntimeError):
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-dir", type=Path, required=True, help="五个 .pt 权重所在目录")
+    parser.add_argument("--input-dir", type=Path, required=True, help="YOLO11 .pt 权重所在目录")
     parser.add_argument("--output-dir", type=Path, required=True, help="生成 ONNX 资产目录")
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        choices=MODEL_NAMES,
+        default=MODEL_NAMES,
+        help="只导出的模型名称，默认导出全部五个模型",
+    )
     return parser.parse_args()
 
 
-def validate_sources(input_dir: Path) -> tuple[Path, ...]:
-    sources = tuple(input_dir / f"{model_name}.pt" for model_name in MODEL_NAMES)
+def validate_sources(input_dir: Path, model_names: tuple[str, ...] = MODEL_NAMES) -> tuple[Path, ...]:
+    sources = tuple(input_dir / f"{model_name}.pt" for model_name in model_names)
     missing = tuple(source for source in sources if not source.is_file())
     if missing:
         missing_text = ", ".join(str(path) for path in missing)
@@ -78,7 +85,7 @@ def export_one(yolo_class, source: Path, output_dir: Path) -> Path:
 def main() -> int:
     arguments = parse_arguments()
     try:
-        sources = validate_sources(arguments.input_dir)
+        sources = validate_sources(arguments.input_dir, tuple(arguments.models))
         yolo_class = load_yolo_class()
         for source in sources:
             target = export_one(yolo_class, source, arguments.output_dir)

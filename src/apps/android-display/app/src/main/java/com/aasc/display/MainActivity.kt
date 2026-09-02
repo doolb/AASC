@@ -129,8 +129,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
             return
         }
-        val base = if (input.startsWith("http://") || input.startsWith("https://")) input else "https://$input"
-        val displayPath = if (base.endsWith("/display")) base else "$base/display"
+        val displayPath = ServerConfig.pageUrl(input)
         // 时间戳参数强制绕过 WebView HTTP 缓存（display.html 更新后 APK 重启即加载最新版）
         val url = displayPath + (if (displayPath.contains("?")) "&" else "?") + "v=" + System.currentTimeMillis()
         getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", input).apply()

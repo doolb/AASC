@@ -201,6 +201,11 @@
         // APK 原生 TTS 引擎：检测到桥方法即认为可用，模型就绪后上报 ttsGeneration 能力
         const nativeTtsAvailable = !!(window.NativeDisplay && window.NativeDisplay.ttsStatus);
         let nativeTtsReady = false;
+        // 正式 APK 原生视觉桥：能力存在不等于模型已加载，模型状态由 visionStatus 单独报告。
+        const nativeOcrMethod = window.NativeDisplay && window.NativeDisplay.ocrRecognizeAsync;
+        const nativeYoloMethod = window.NativeDisplay && window.NativeDisplay.yolo11nDetectAsync;
+        const nativeOcrAvailable = typeof nativeOcrMethod === 'function';
+        const nativeYoloAvailable = typeof nativeYoloMethod === 'function';
         let ttsDevice = 'server';
         let localTtsEnabled = false;
         // APK 原生声纹引擎：检测到桥方法即认为可用
@@ -281,6 +286,63 @@
             if (Object.prototype.hasOwnProperty.call(payload, 'speaker')) result.speaker = payload.speaker;
             sendAsrResult(payload.requestId, result);
         };
+
+        // 显示端视觉任务回包：服务器只负责转发，图片始终在 APK 的 NativeDisplay 中推理。
+        const VISION_RESULT_TYPES = {
+            ocr: { type: 'visionOcrResult' },
+            yolo: { type: 'visionYolo11nResult' }
+        };
+
+        function sendVisionResult(type, requestId, payload) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN || !requestId) return;
+            const result = Object.assign({ type: type, requestId: requestId }, payload || {});
+            displayWs.send(JSON.stringify(result));
+        }
+
+        window.onNativeOcrResult = function(payload) {
+            if (!payload || !payload.requestId) return;
+            sendVisionResult(VISION_RESULT_TYPES.ocr.type, payload.requestId, payload);
+        };
+
+        window.onNativeYoloResult = function(payload) {
+            if (!payload || !payload.requestId) return;
+            sendVisionResult(VISION_RESULT_TYPES.yolo.type, payload.requestId, payload);
+        };
+
+        // 服务器通过 WebSocket 下发视觉请求；能力不存在、原生桥拒绝或调用异常都回传结构化错误。
+        function handleNativeVisionRequest(data, kind) {
+            const isOcr = kind === 'ocr';
+            const methodName = isOcr ? 'ocrRecognizeAsync' : 'yolo11nDetectAsync';
+            const resultType = isOcr ? 'visionOcrResult' : 'visionYolo11nResult';
+            const taskName = isOcr ? 'OCR' : 'YOLO11n';
+            if (!data || !data.requestId) return;
+            if (!nativeBridge || typeof nativeBridge[methodName] !== 'function') {
+                sendVisionResult(resultType, data.requestId, {
+                    success: false,
+                    error: '当前显示端不支持' + taskName
+                });
+                return;
+            }
+            try {
+                // 保留对 NativeDisplay.ocrRecognizeAsync/yolo11nDetectAsync 的显式引用，
+                // 同时动态取桥方法，保持 Android 注入对象更新后的调用行为。
+                const nativeMethod = nativeBridge[methodName];
+                const acceptedRaw = nativeMethod.call(nativeBridge, data.requestId, data.imageBase64 || '');
+                const accepted = typeof acceptedRaw === 'string' ? JSON.parse(acceptedRaw) : acceptedRaw;
+                if (!accepted || accepted.accepted !== true) {
+                    sendVisionResult(resultType, data.requestId, {
+                        success: false,
+                        error: (accepted && accepted.error) || taskName + '任务提交失败'
+                    });
+                }
+            } catch (error) {
+                sendVisionResult(resultType, data.requestId, {
+                    success: false,
+                    error: error.message || taskName + '调用异常'
+                });
+            }
+        }
+
         function reportNativeTtsCapability(ready) {
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN || !currentCapabilities) return;
             currentCapabilities.ttsGeneration = ready;
@@ -4334,6 +4396,16 @@
                         return;
                     }
 
+                    if (data.type === 'visionOcr') {
+                        handleNativeVisionRequest(data, 'ocr');
+                        return;
+                    }
+
+                    if (data.type === 'visionYolo11n') {
+                        handleNativeVisionRequest(data, 'yolo');
+                        return;
+                    }
+
                     if (data.type === 'voiceprintConfig') {
                         asrDenoiseEnabled = !!data.denoise;
                         voiceprintEnabled = !!data.enabled;
@@ -4939,6 +5011,8 @@
                 voiceRecording: false,
                 voiceRecognition: false,
                 ttsGeneration: false,
+                ocrAvailable: nativeOcrAvailable,
+                yolo11nAvailable: nativeYoloAvailable,
                 displayText: true,
                 webgl: (function() {
                     try {
@@ -5049,6 +5123,22 @@
                     console.warn('[TTS] ttsStatus 解析失败:', e);
                 }
             }
+
+            // 原生视觉只在 APK 内运行，不在能力探测阶段加载模型，避免显示端启动时抢占内存。
+            if (nativeOcrAvailable || nativeYoloAvailable) {
+                try {
+                    const visionState = JSON.parse(nativeBridge.visionStatus());
+                    capabilities.ocrAvailable = nativeOcrAvailable;
+                    capabilities.yolo11nAvailable = nativeYoloAvailable;
+                    capabilities.ocrModelReady = visionState.ocr?.modelReady === true;
+                    capabilities.yolo11nModelReady = visionState.yolo11n?.modelReady === true;
+                    capabilities.visionCpu = visionState.cpu || null;
+                } catch (e) {
+                    capabilities.ocrAvailable = false;
+                    capabilities.yolo11nAvailable = false;
+                    console.warn('[视觉] visionStatus 解析失败:', e);
+                }
+            }
             
             return capabilities;
         }
@@ -5069,7 +5159,9 @@
                         } catch(e) { return false; }
                     })(),
                     crossOriginControl: !!(nativeBridge && nativeBridge.injectTouch),
-                    crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch)
+                    crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch),
+                    ocrAvailable: nativeOcrAvailable,
+                    yolo11nAvailable: nativeYoloAvailable
                 };
                 currentCapabilities = baseCaps;
                 if (displayWs && displayWs.readyState === WebSocket.OPEN) {

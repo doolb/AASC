@@ -25,4 +25,20 @@ class ServerConfigTest {
     fun 两个地址都为空时返回空字符串() {
         assertEquals("", ServerConfig.chooseUrl(null, null))
     }
+
+    @Test
+    fun 普通服务器地址默认进入正式display页面() {
+        assertEquals(
+            "https://192.168.1.39:8081/display",
+            ServerConfig.pageUrl("https://192.168.1.39:8081")
+        )
+    }
+
+    @Test
+    fun 正式display页面地址保持不变() {
+        assertEquals(
+            "https://192.168.1.39:8081/display",
+            ServerConfig.pageUrl("https://192.168.1.39:8081/display")
+        )
+    }
 }

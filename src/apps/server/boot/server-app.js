@@ -337,6 +337,10 @@ const codexRuntimeManager = new CodexRuntimeManager({
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();
 let pendingAsrRequestId = 0;
+// 视觉请求只在服务端排队并转发，实际模型推理由显示端 NativeDisplay 完成。
+const pendingDisplayVisionRequests = new Map();
+let pendingVisionRequestId = 0;
+const VISION_REQUEST_TIMEOUT_MS = 120000;
 
 tts.init(config.getTtsConfig());
 if (config.get('asr.serverEnabled', true) === true) {
@@ -1607,9 +1611,103 @@ const uploadMiddleware = multer({
     limits: { fileSize: 200 * 1024 * 1024 }
 });
 
+const visionUpload = multer({
+    dest: HTTP_UPLOAD_TEMP_DIR,
+    limits: { fileSize: 20 * 1024 * 1024 }
+});
+
 if (!fs.existsSync(HTTP_UPLOAD_TEMP_DIR)) {
     fs.mkdirSync(HTTP_UPLOAD_TEMP_DIR, { recursive: true });
 }
+
+function cleanupVisionTempFile(filePath) {
+    if (!filePath) return;
+    try {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch (error) {
+        logError('视觉', `清理临时图片失败: ${error.message}`);
+    }
+}
+
+function readVisionImageBase64(req) {
+    if (req.file) {
+        return fs.readFileSync(req.file.path, { encoding: 'base64' });
+    }
+
+    const imageBase64 = req.body?.imageBase64;
+    if (typeof imageBase64 !== 'string' || !imageBase64.trim()) {
+        const error = new Error('未收到图片文件或 imageBase64');
+        error.code = 'VISION_INVALID_IMAGE';
+        throw error;
+    }
+    return imageBase64.replace(/^data:[^;]+;base64,/, '');
+}
+
+function getVisionRouteErrorStatus(error) {
+    if (error?.code === 'VISION_INVALID_IMAGE') return 400;
+    if (error?.code === 'VISION_TIMEOUT') return 504;
+    if (error?.code === 'VISION_DISPLAY_OFFLINE') return 503;
+    return 502;
+}
+
+async function handleVisionRoute(kind, req, res) {
+    let tempPath = null;
+    try {
+        tempPath = req.file?.path || null;
+        const imageBase64 = readVisionImageBase64(req);
+        const capabilityName = kind === 'ocr' ? 'ocrAvailable' : 'yolo11nAvailable';
+        const preferredDisplayId = req.body?.displayId || req.body?.targetDisplay || null;
+        const display = findDisplayWithVision(capabilityName, preferredDisplayId);
+        if (!display) {
+            return res.status(503).json({
+                status: 'error',
+                message: preferredDisplayId
+                    ? `目标显示端不在线或不支持 ${kind.toUpperCase()}`
+                    : `没有支持 ${kind.toUpperCase()} 的显示端在线`
+            });
+        }
+
+        const requestId = `vision-${kind}-${Date.now()}-${++pendingVisionRequestId}`;
+        const result = await sendVisionToDisplay(display, kind, imageBase64, requestId);
+        const payload = result && typeof result === 'object' ? result : { data: result };
+        return res.json({
+            ...payload,
+            status: 'success',
+            displayId: display.id,
+            requestId
+        });
+    } catch (error) {
+        logError('视觉', `${kind.toUpperCase()} 路由失败: ${error.message}`);
+        return res.status(getVisionRouteErrorStatus(error)).json({
+            status: 'error',
+            message: error.message
+        });
+    } finally {
+        cleanupVisionTempFile(tempPath);
+    }
+}
+
+// 服务器仅负责接收图片并通过 WebSocket 转发到显示端，不在服务端加载或执行视觉模型。
+app.post('/api/vision/ocr', visionUpload.single('image'), (req, res) => handleVisionRoute('ocr', req, res));
+app.post('/api/vision/yolo', visionUpload.single('image'), (req, res) => handleVisionRoute('yolo', req, res));
+app.get('/api/vision/status', (req, res) => {
+    const displays = getDisplayList().map((display) => ({
+        id: display.id,
+        online: true,
+        ocrAvailable: display.capabilities?.ocrAvailable === true,
+        yolo11nAvailable: display.capabilities?.yolo11nAvailable === true,
+        cpuStatus: display.cpuStatus || null
+    }));
+    res.json({
+        status: 'success',
+        serverInference: false,
+        routes: {
+            ocr: '/api/vision/ocr',
+            yolo: '/api/vision/yolo'
+        },
+        displays
+    });
+});
 
 app.post('/upload-file', uploadMiddleware.single('file'), async (req, res) => {
     try {
@@ -3273,8 +3371,14 @@ app.get('/api/map-data', (req, res) => {
             if (caps.ttsGeneration) {
                 capabilities.push({ id: 'voice-generation', name: '语音生成', category: 'professional', level: 3 });
             }
-           if (caps.displayText) {
+            if (caps.displayText) {
                 capabilities.push({ id: 'display-text', name: '文本显示', category: 'basic', level: 2 });
+            }
+            if (caps.ocrAvailable === true) {
+                capabilities.push({ id: 'ocr', name: '图像文字识别（OCR）', category: 'professional', level: 3 });
+            }
+            if (caps.yolo11nAvailable === true) {
+                capabilities.push({ id: 'yolo11n', name: '目标检测（YOLO11n）', category: 'professional', level: 3 });
             }
             actors.push({
                 address: { ip: state.state?.browserInfo?.ip || state.ip || 'unknown', role: 'display', name: displayId },
@@ -3339,6 +3443,12 @@ app.get('/api/actors', (req, res) => {
             }
             if (caps.ttsGeneration) {
                 capabilities.push({ id: 'voice-generation', name: '语音生成', category: 'professional', level: 3 });
+            }
+            if (caps.ocrAvailable === true) {
+                capabilities.push({ id: 'ocr', name: '图像文字识别（OCR）', category: 'professional', level: 3 });
+            }
+            if (caps.yolo11nAvailable === true) {
+                capabilities.push({ id: 'yolo11n', name: '目标检测（YOLO11n）', category: 'professional', level: 3 });
             }
             actors.push({
                 address: { ip: state.state?.browserInfo?.ip || state.ip || 'unknown', role: 'display', name: displayId },
@@ -3989,6 +4099,81 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
     });
 }
 
+// 按显示端能力查找视觉推理目标；指定 displayId 时只允许选择该显示端，避免结果回错设备。
+function findDisplayWithVision(capabilityName, preferredDisplayId = null) {
+    if (preferredDisplayId) {
+        const preferredDisplay = displayClients.get(preferredDisplayId);
+        const preferredCaps = preferredDisplay?.state?.capabilities;
+        if (preferredDisplay && preferredDisplay.ws?.readyState === WebSocket.OPEN &&
+            preferredCaps?.[capabilityName] === true) {
+            return { id: preferredDisplayId, ws: preferredDisplay.ws };
+        }
+        return null;
+    }
+
+    for (const [displayId, displayData] of displayClients) {
+        const caps = displayData.state?.capabilities;
+        if (displayData.ws?.readyState === WebSocket.OPEN && caps?.[capabilityName] === true) {
+            return { id: displayId, ws: displayData.ws };
+        }
+    }
+    return null;
+}
+
+function sendVisionToDisplay(display, kind, imageBase64, requestId) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            const pending = pendingDisplayVisionRequests.get(requestId);
+            if (!pending) return;
+            pendingDisplayVisionRequests.delete(requestId);
+            const error = new Error(`显示端 ${kind.toUpperCase()} 响应超时`);
+            error.code = 'VISION_TIMEOUT';
+            reject(error);
+        }, VISION_REQUEST_TIMEOUT_MS);
+
+        pendingDisplayVisionRequests.set(requestId, {
+            displayId: display.id,
+            kind,
+            resolve,
+            reject,
+            timer
+        });
+
+        try {
+            const messageType = kind === 'ocr' ? 'visionOcr' : 'visionYolo11n';
+            const sent = sendToDisplay(display.id, {
+                type: messageType,
+                requestId,
+                imageBase64
+            });
+            if (!sent) {
+                clearTimeout(timer);
+                pendingDisplayVisionRequests.delete(requestId);
+                const error = new Error('显示端已离线，视觉请求发送失败');
+                error.code = 'VISION_DISPLAY_OFFLINE';
+                reject(error);
+            }
+        } catch (error) {
+            clearTimeout(timer);
+            pendingDisplayVisionRequests.delete(requestId);
+            const sendError = new Error('发送视觉请求到显示端失败: ' + error.message);
+            sendError.code = 'VISION_DISPLAY_SEND_ERROR';
+            reject(sendError);
+        }
+    });
+}
+
+function rejectPendingVisionRequestsForDisplay(displayId) {
+    for (const [requestId, pending] of pendingDisplayVisionRequests) {
+        if (pending.displayId !== displayId) continue;
+        pendingDisplayVisionRequests.delete(requestId);
+        clearTimeout(pending.timer);
+        const error = new Error('显示端已离线，视觉请求失败');
+        error.code = 'VISION_DISPLAY_OFFLINE';
+        pending.reject(error);
+    }
+}
+
 // 查找支持本地 TTS 生成（ttsGeneration）的显示端，用于 tts.device='display' 路由。
 // 优先使用当前请求的目标显示端，避免多个显示端连接时把任务发到错误设备。
 function findDisplayWithTts(preferredDisplayId = null) {
@@ -4596,6 +4781,19 @@ wss.on('connection', (ws, req) => {
                     return;
                 }
 
+                if (data.type === 'visionOcrResult' || data.type === 'visionYolo11nResult') {
+                    const pending = pendingDisplayVisionRequests.get(data.requestId);
+                    if (!pending || pending.displayId !== displayId) return;
+                    pendingDisplayVisionRequests.delete(data.requestId);
+                    clearTimeout(pending.timer);
+                    if (data.success === false || data.error) {
+                        pending.reject(new Error(data.error || '显示端视觉推理失败'));
+                    } else {
+                        pending.resolve(data);
+                    }
+                    return;
+                }
+
                 if (data.type === 'voiceprintExtracted') {
                     const pending = pendingVoiceprintExtracts.get(data.requestId);
                     if (pending) {
@@ -4678,6 +4876,7 @@ wss.on('connection', (ws, req) => {
                 clearTimeout(pending.startTimer);
                 pending.reject(new Error('显示端已离线，TTS 生成失败'));
             }
+            rejectPendingVisionRequestsForDisplay(displayId);
             ws.removeAllListeners();
             if (wsServer) {
                 wsServer.handleDisplayDisconnect(displayId, ws);
@@ -6796,6 +6995,7 @@ setInterval(() => {
     });
     deadDisplays.forEach(id => {
         displayClients.delete(id);
+        rejectPendingVisionRequestsForDisplay(id);
         if (wsServer) {
             wsServer.handleDisplayDisconnect(id);
         }

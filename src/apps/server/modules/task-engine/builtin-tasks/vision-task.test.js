@@ -1,0 +1,62 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const test = require('node:test');
+
+const tasks = [
+  ['ocr', './ocr', '/api/vision/ocr'],
+  ['yolo', './yolo', '/api/vision/yolo']
+];
+
+for (const [id, modulePath, expectedPath] of tasks) {
+  test(`${id} 内置任务使用默认本机服务器 URL 调用视觉接口`, async () => {
+    const task = require(modulePath);
+    const calls = [];
+    const result = await task.run({
+      taskName: id,
+      params: { targetDisplay: 'display-1' },
+      files: { 'input.png': Buffer.from([1, 2, 3]) },
+      taskIO: {
+        async getTaskConfig() { return {}; }
+      },
+      requestVision: async (request) => {
+        calls.push(request);
+        return { status: 'success', requestPath: request.path, displayId: request.displayId };
+      }
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].serverUrl, 'http://127.0.0.1:8081');
+    assert.equal(calls[0].path, expectedPath);
+    assert.equal(calls[0].displayId, 'display-1');
+    assert.equal(calls[0].image.length, 3);
+    assert.equal(result.success, true);
+    assert.equal(result.data.status, 'success');
+  });
+}
+
+test('视觉任务实例参数覆盖服务器 URL 和图片文件名', async () => {
+  const task = require('./ocr');
+  let request = null;
+  await task.run({
+    taskName: 'ocr',
+    params: {
+      serverUrl: 'https://vision.example:8443/',
+      targetDisplay: 'display-2',
+      imageFileName: 'game.webp'
+    },
+    files: {
+      'input.png': Buffer.from([0]),
+      'game.webp': Buffer.from([4, 5])
+    },
+    taskIO: { async getTaskConfig() { return {}; } },
+    requestVision: async (value) => {
+      request = value;
+      return { status: 'success' };
+    }
+  });
+
+  assert.equal(request.serverUrl, 'https://vision.example:8443');
+  assert.equal(request.displayId, 'display-2');
+  assert.deepEqual([...request.image], [4, 5]);
+});
