@@ -34,4 +34,9 @@
   - 改动文件：`src/runtime/automation-loop.ts`、`src/runtime/record-store.ts`、`test/runtime/automation-loop.test.ts`。
   - 行为：支持截图、匹配、队列选择、wait、dry-run、ADB tap、delay、`goto`、非 loop 抑制和跳转上限；记录使用 JSONL。
   - 验证结果：4 个自动循环测试和 TypeScript 构建通过。
+
+- ✅ [2026-09-02] 完成截图、裁剪、录制读取和 inspect 工具。
+  - 改动文件：`src/tools/capture-tool.ts`、`test/cli/capture-tool.test.ts`。
+  - 行为：安全写入 Flow 模板、裁剪 PNG、读取 JSONL 录制路径，并提供只读 Flow inspect 能力。
+  - 验证结果：3 个工具测试和 TypeScript 构建通过。
   - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

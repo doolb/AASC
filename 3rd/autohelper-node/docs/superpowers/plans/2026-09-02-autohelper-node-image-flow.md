@@ -659,7 +659,7 @@ git commit -m "feat: run image flow automation loop"
 - `recordPath(store: RecordStore): Promise<string[]>`
 - `inspectFlow({ adb, loader, matcher, flowId }): Promise<InspectResult>`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('writes a captured screenshot into the selected flow directory', async () => {
@@ -683,23 +683,23 @@ it('rejects a capture name that would escape the flow directory', async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -- test/cli/capture-tool.test.ts`
 
 Expected: FAIL because capture helpers do not exist。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 截图工具调用 `adb.screenshot()`，验证 Flow ID 和文件名 stem 后写入 `flows/<flowId>/<stem>.png`。若指定 region，使用 OpenCV 裁剪；region 超出截图范围时失败。录制工具只写 JSONL，不自动修改图片文件名；`goto` 仍由用户在图片名中明确指定。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -- test/cli/capture-tool.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add 3rd/autohelper-node/src/tools/capture-tool.ts 3rd/autohelper-node/test/cli/capture-tool.test.ts 3rd/autohelper-node/src/runtime/record-store.ts
