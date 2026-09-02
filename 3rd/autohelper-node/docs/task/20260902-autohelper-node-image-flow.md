@@ -56,7 +56,7 @@
 
 ## 预计工时
 
-约 1 个工作日，包含单元测试、原生 OpenCV 安装验证和真实设备 dry-run。
+约 1 个工作日，包含单元测试、预编译 OpenCV.js 验证和真实设备 dry-run。
 
 ## 当前进度
 
@@ -66,9 +66,9 @@
 - [x] ADB Client（显式 serial、二进制截图和坐标校验，3 个测试通过）
 - [x] OpenCV Matcher（预编译 OpenCV.js/WASM、PNG/BMP 解码、模板匹配和可选 ORB，3 个测试通过）
 - [x] 动作选择器（队列、阈值、select/default 和点击坐标，5 个测试通过）
-- [x] 自动循环（点击、wait、dry-run、goto 和跳转上限，4 个测试通过）
+- [x] 自动循环（点击、wait、dry-run、goto、录制和跳转上限，5 个测试通过）
 - [x] 截图/裁剪工具（安全文件名、区域裁剪，3 个测试通过）
-- [x] CLI（start/capture/record/inspect、参数退出码，29 个全量测试通过）
+- [x] CLI（start/capture/record/inspect、参数退出码，30 个全量测试通过）
 - [x] 设备只读检查（设备在线；当前前台为 `com.aasc.tts`，未发现无限暖暖应用包）
 - [ ] 无限暖暖实际模板和 dry-run（等待游戏启动并停留在目标画面）
 - [ ] 最终回归

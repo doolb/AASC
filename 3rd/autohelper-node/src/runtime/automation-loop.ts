@@ -190,7 +190,6 @@ export class AutomationLoop {
         point,
         reason: 'clicked',
       };
-      await this.record(result);
       if (action.descriptor.delayMs > 0) {
         await this.sleep(action.descriptor.delayMs);
       }
@@ -205,6 +204,7 @@ export class AutomationLoop {
         result.gotoFlow = action.descriptor.gotoFlow;
         this.suppressedActionName = undefined;
       }
+      await this.record(result);
       return this.emit(result);
     } catch (error: unknown) {
       throw new Error(`automation tick failed in flow ${flowId}: ${errorMessage(error)}`, { cause: error });

@@ -139,6 +139,27 @@ describe('AutomationLoop', () => {
     expect(result.reason).toBe('dry-run');
   });
 
+  it('records the destination Flow after a successful goto', async () => {
+    const adb = new FakeAdb();
+    const loader = new FakeLoader({
+      launch: context('launch', descriptor('enter', { gotoFlow: 'home' })),
+      home: context('home', descriptor('daily')),
+    }, 'launch');
+    const records: Array<Record<string, unknown>> = [];
+    const loop = new AutomationLoop({
+      adb,
+      loader,
+      matcher: { matchAll: async () => [matched()] },
+      options: { intervalMs: 0 },
+      sleep: async () => {},
+      recordStore: { append: async (entry) => { records.push(entry); } },
+    });
+
+    await loop.tick();
+
+    expect(records[0]?.gotoFlow).toBe('home');
+  });
+
   it('stops when transition limit is reached', async () => {
     const adb = new FakeAdb();
     const loader = new FakeLoader({

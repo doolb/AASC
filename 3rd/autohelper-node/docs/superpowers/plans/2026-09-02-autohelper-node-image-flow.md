@@ -880,4 +880,4 @@ Expected: 新工程下没有遗漏的未提交改动；父仓库其他用户改�
 - AASC 要求的 design、spec 伪代码、task、todo、usage、rules、ref、changelog 均有明确文件任务。
 - 所有实现任务都先写失败测试，再写最小生产代码；配置文件和文档任务属于 TDD 例外。
 - 计划不包含系统级开机自启动、JSON 流程 DSL 或游戏内部接口，符合已确认范围。
-- OpenCV 原生绑定兼容性在 Task 5 前置验证；如果当前 Node ABI 不兼容，必须在该任务内解决并同步锁定依赖版本。
+- 预编译 OpenCV.js/WASM 运行时兼容性在 Task 5 前置验证；Node CommonJS/ESM 入口通过 `createRequire` 处理，避免 native addon ABI 风险。
