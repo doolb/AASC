@@ -24,4 +24,9 @@
   - 改动文件：`src/vision/opencv-runtime.ts`、`src/vision/image-decoder.ts`、`src/vision/image-matcher.ts`、匹配测试和 npm 依赖。
   - 行为：不再依赖 `opencv4nodejs`、系统 OpenCV 或本机 C++ 编译；支持 PNG/BMP 模板、`TM_CCOEFF_NORMED` 模板匹配和可选 ORB。
   - 验证结果：3 个 OpenCV 匹配测试和 TypeScript 构建通过。
+
+- ✅ [2026-09-02] 完成动作选择和点击坐标计算。
+  - 改动文件：`src/runtime/action-selector.ts`、`test/runtime/action-selector.test.ts`、`src/types.ts`。
+  - 行为：支持队列/分数排序、负队列过滤、`select`/`default` 和归一化/中心点击坐标边界限制。
+  - 验证结果：5 个动作选择测试和 TypeScript 构建通过。
   - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

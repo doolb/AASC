@@ -65,6 +65,7 @@
 - [x] Flow Loader（只加载活动目录并缓存模板，4 个测试通过）
 - [x] ADB Client（显式 serial、二进制截图和坐标校验，3 个测试通过）
 - [x] OpenCV Matcher（预编译 OpenCV.js/WASM、PNG/BMP 解码、模板匹配和可选 ORB，3 个测试通过）
+- [x] 动作选择器（队列、阈值、select/default 和点击坐标，5 个测试通过）
 - [ ] 自动循环
 - [ ] CLI 与图片流程
 - [ ] 最终回归

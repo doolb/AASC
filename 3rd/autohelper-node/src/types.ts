@@ -50,6 +50,11 @@ export type MatchCandidate = {
   match: MatchResult;
 };
 
+export type SelectedAction = {
+  descriptor: ImageDescriptor;
+  match: MatchResult;
+};
+
 export type FlowContext = {
   id: string;
   directory: string;

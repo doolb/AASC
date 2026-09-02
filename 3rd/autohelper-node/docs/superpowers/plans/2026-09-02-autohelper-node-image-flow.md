@@ -500,7 +500,7 @@ git commit -m "feat: add opencv image matching"
 - `resolveClickPoint(descriptor: ImageDescriptor, rect: Rect, frameSize: { width: number; height: number }): Point`
 - `SelectedAction` 包含 `descriptor` 和 `match`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('ranks by queue first and score second', () => {
@@ -531,23 +531,23 @@ it('calculates normalized and center click points inside the frame', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -- test/runtime/action-selector.test.ts`
 
 Expected: FAIL because selector functions do not exist。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 候选先过滤 `queue < 0` 和未达到阈值的结果，再按 queue 降序、score 降序和稳定文件名顺序排序。`selectImage` 必须在同 Flow 且匹配成功；不满足时丢弃候选。点击点使用 `rect.x + rect.width * x` 和 `rect.y + rect.height * y`，四舍五入后做 frame 边界限制。`centerClick` 忽略矩形并点击帧中心。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -- test/runtime/action-selector.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add 3rd/autohelper-node/src/runtime/action-selector.ts 3rd/autohelper-node/test/runtime/action-selector.test.ts 3rd/autohelper-node/src/types.ts
