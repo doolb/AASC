@@ -2,7 +2,7 @@
 
 ## 状态
 
-设计已确认，尚未实现。
+设计已确认，基础工程、文件名解析、Flow Loader、ADB Client 和预编译 OpenCV 匹配器已实现，运行循环与 CLI 仍在实现中。
 
 ## 目标
 
@@ -124,6 +124,8 @@ adb -s <serial> shell input tap <x> <y>
 截图以标准输入流读取，不依赖固定的临时截图文件。点击坐标使用截图原始像素坐标；如果云游戏画面与设备方向发生变化，使用截图尺寸和设备尺寸做明确的坐标转换，并在日志中记录转换结果。
 
 ### OpenCV Matcher
+
+Node.js 版本使用 `@techstark/opencv-js` 提供的预编译 OpenCV.js/WASM，不依赖本机 OpenCV 动态库或 `node-gyp`。PNG/BMP 由纯 JavaScript 解码器转换为 RGBA 像素，再由 OpenCV.js 转成灰度矩阵。
 
 匹配器通过接口隔离，以便在 Linux 上先使用稳定的模板匹配，再根据实际图片质量启用 ORB 等跨平台特征匹配。匹配器返回匹配分数和识别矩形，不直接负责点击。
 

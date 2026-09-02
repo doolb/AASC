@@ -6,7 +6,7 @@
 
 **Architecture:** 工程采用 TypeScript 分层结构。ADB 客户端只负责设备通信，图片描述解析器只负责文件名 DSL，Flow Loader 只负责当前目录和缓存，OpenCV Matcher 只负责返回匹配分数与矩形，Automation Loop 负责排序、点击、延迟和 `goto` 状态机。CLI 将这些组件组合为 `start`、`capture`、`record` 和 `inspect` 四个入口。
 
-**Tech Stack:** Node.js 25、TypeScript、`opencv4nodejs` 5.6.0、系统 OpenCV 4.13、Vitest、ADB。
+**Tech Stack:** Node.js 25、TypeScript、`@techstark/opencv-js` 5.0.0-release.1 预编译 OpenCV.js/WASM、`pngjs`、`bmp-js`、Vitest、ADB。
 
 **Spec:** `docs/design/image-driven-adb-automation.md`
 
@@ -115,10 +115,14 @@
     "inspect": "tsx src/cli.ts inspect"
   },
   "dependencies": {
-    "opencv4nodejs": "5.6.0"
+    "@techstark/opencv-js": "5.0.0-release.1",
+    "bmp-js": "0.1.0",
+    "pngjs": "7.0.0"
   },
   "devDependencies": {
+    "@types/bmp-js": "0.1.2",
     "@types/node": "26.4.1",
+    "@types/pngjs": "6.0.5",
     "tsx": "4.23.13",
     "typescript": "7.0.2",
     "vitest": "4.1.11"
@@ -428,7 +432,7 @@ git commit -m "feat: add linux adb client"
 - `MatchResult` 包含 `score`、`rect`、`matched` 和 `method`。
 - `TemplateCache` 负责把模板 PNG/BMP 解码为匹配器需要的 `LoadedTemplate`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 测试使用仓库内的最小 PNG fixture：一个 32×32 的纯色背景和一个 8×8 的高对比度方块，避免依赖游戏截图。测试通过 OpenCV 生成 fixture 或读取固定二进制，不调用 ADB。
 
@@ -451,21 +455,21 @@ it('returns an unmatched result when the score is below threshold', async () => 
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -- test/vision/image-matcher.test.ts`
 
 Expected: FAIL because the matcher and fixtures do not exist。
 
-- [ ] **Step 3: 验证原生 OpenCV 依赖后写最小实现**
+- [x] **Step 3: 验证预编译 OpenCV.js 运行时后写最小实现**
 
-Run: `OPENCV4NODEJS_DISABLE_AUTOBUILD=1 node -e "const cv = require('opencv4nodejs'); console.log(cv.version)"`
+Run: `node --input-type=module -e 'import { createRequire } from "node:module"; const cv = await createRequire(import.meta.url)("@techstark/opencv-js"); console.log(typeof (await cv).Mat)'`
 
-Expected: 输出 OpenCV 版本；如果 Node 25 ABI 与 `opencv4nodejs@5.6.0` 不兼容，先调整为与系统 OpenCV 和当前 Node ABI 可用的绑定版本，并同步 `package.json`，不能把失败依赖留给后续任务。
+Expected: 输出 `function`；如果直接 ESM 默认导入出现 Promise namespace 兼容错误，使用 `createRequire`，不回退到需要本机编译的 native addon。
 
-模板匹配使用 `matchTemplate(..., TM_CCOEFF_NORMED)`，返回最大位置和模板尺寸。只有 score 大于等于调用方阈值时才设置 `matched`。ORB 作为同一接口的可选方法；如果特征点不足，返回 `matched: false`，不抛出业务错误。匹配器不执行点击。
+使用 `pngjs` 和 `bmp-js` 解码图片，模板匹配使用 `matchTemplate(..., TM_CCOEFF_NORMED)`，返回最大位置和模板尺寸。只有 score 大于等于调用方阈值时才设置 `matched`。ORB 作为同一接口的可选方法；如果特征点不足，返回 `matched: false`，不抛出业务错误。匹配器不执行点击。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -- test/vision/image-matcher.test.ts`
 
@@ -475,7 +479,7 @@ Run: `npm run build`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add 3rd/autohelper-node/src/vision/image-matcher.ts 3rd/autohelper-node/test/vision/image-matcher.test.ts 3rd/autohelper-node/src/types.ts 3rd/autohelper-node/package.json 3rd/autohelper-node/package-lock.json

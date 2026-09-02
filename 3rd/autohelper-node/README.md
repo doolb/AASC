@@ -9,12 +9,12 @@ Linux + Node.js + ADB + OpenCV 的图片驱动自动化工具，参考 `/mnt/tmp
 - Linux
 - Node.js 25 或兼容的现代 Node.js
 - ADB，并且目标 Android 设备状态为 `device`
-- 系统 OpenCV 4.x 和 `opencv4nodejs` 原生模块
+- `@techstark/opencv-js` 预编译 OpenCV.js/WASM（由 npm 自动安装）
 
 ## 常用命令
 
 ```bash
-OPENCV4NODEJS_DISABLE_AUTOBUILD=1 npm install
+npm install
 npm test
 npm run build
 npm run capture -- --device <serial> --flow launch --name close-popup@0.88

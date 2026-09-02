@@ -19,4 +19,9 @@
 - ✅ [2026-09-02] 完成 Linux ADB Client。
   - 改动文件：`src/adb/adb-client.ts`、`test/adb/adb-client.test.ts` 和 spec 文档。
   - 行为：显式 serial、二进制截图、ADB tap 和离线设备拒绝。
+
+- ✅ [2026-09-02] 切换到预编译 OpenCV.js/WASM 匹配器。
+  - 改动文件：`src/vision/opencv-runtime.ts`、`src/vision/image-decoder.ts`、`src/vision/image-matcher.ts`、匹配测试和 npm 依赖。
+  - 行为：不再依赖 `opencv4nodejs`、系统 OpenCV 或本机 C++ 编译；支持 PNG/BMP 模板、`TM_CCOEFF_NORMED` 模板匹配和可选 ORB。
+  - 验证结果：3 个 OpenCV 匹配测试和 TypeScript 构建通过。
   - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

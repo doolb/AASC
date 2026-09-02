@@ -4,6 +4,10 @@
 
 功能正在实现中。以下命令和图片格式是已确认的目标接口。
 
+## OpenCV 运行时
+
+项目使用 `@techstark/opencv-js` 提供的预编译 OpenCV.js/WASM，不需要安装系统 OpenCV、`node-gyp` 或 C++ 编译工具。PNG/BMP 文件由纯 JavaScript 解码后交给 OpenCV.js；默认使用模板匹配，也支持 `--matcher orb`。
+
 ## 图片目录
 
 每个 `flows/` 一级子目录是一个 Flow：

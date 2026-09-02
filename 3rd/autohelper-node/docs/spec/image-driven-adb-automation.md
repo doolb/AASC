@@ -16,6 +16,27 @@
   启动 AutomationLoop
 ```
 
+## OpenCV.js 运行时和图片匹配
+
+```text
+getOpenCv():
+  通过 createRequire 加载 @techstark/opencv-js 的 CommonJS/WASM 主入口
+  等待 Emscripten Promise 完成
+  共享同一个已初始化的 OpenCV.js runtime
+
+match(frameBuffer, template, method):
+  解码 frameBuffer 和模板为 RGBA 像素
+  转换为 CV_8UC1 灰度 Mat
+  如果 method == template:
+    执行 matchTemplate(..., TM_CCOEFF_NORMED)
+    读取 minMaxLoc 的最大值和位置
+  如果 method == orb:
+    执行 ORB 特征提取和 BFMatcher
+    用高质量特征的中位位移估算模板位置
+  分数低于 threshold 时 matched=false 且 rect=null
+  释放本轮临时 Mat，不执行点击
+```
+
 ## 图片文件名解析
 
 ```text

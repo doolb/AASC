@@ -37,7 +37,7 @@
 
 - Linux x64
 - Node.js 25
-- 系统 OpenCV 4.x
+- `@techstark/opencv-js` 5.0.0-release.1 预编译 OpenCV.js/WASM
 - ADB 设备 `192.168.1.6:5555`
 - PNG 和 BMP 模板
 
@@ -49,7 +49,7 @@
 
 ## 风险评估
 
-- `opencv4nodejs` 原生模块可能受 Node ABI 影响，需要安装阶段做 smoke test。
+- OpenCV.js 需要等待 Emscripten runtime 完成初始化；Node 的 CommonJS/ESM 互操作必须通过 `createRequire` 加载。
 - 云游戏画面可能旋转或缩放，需要使用截图原始尺寸计算点击点。
 - 阈值过低可能产生误点击，因此默认提供 dry-run 和人工 inspect。
 - `goto` 目标缺失时停止，不继续使用旧 Flow 盲点。
@@ -64,7 +64,7 @@
 - [x] 文件名解析器（支持旧参数和 `goto@flowId`，3 个解析测试通过）
 - [x] Flow Loader（只加载活动目录并缓存模板，4 个测试通过）
 - [x] ADB Client（显式 serial、二进制截图和坐标校验，3 个测试通过）
-- [ ] OpenCV Matcher
+- [x] OpenCV Matcher（预编译 OpenCV.js/WASM、PNG/BMP 解码、模板匹配和可选 ORB，3 个测试通过）
 - [ ] 自动循环
 - [ ] CLI 与图片流程
 - [ ] 最终回归
