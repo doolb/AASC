@@ -17,3 +17,8 @@ src/apps/android-display/build/
 src/apps/android-display/app/build/
 src/apps/android-display/local.properties
 src/apps/android-display/.kotlin/
+
+# SenseVoice 模型由外部模型包管理，不纳入 Git
+# 原始来源：FunAudioLLM/SenseVoice（转换后的 SenseVoice int8 ONNX 模型）
+# 参考：https://github.com/FunAudioLLM/SenseVoice
+/3rd/ttslive/models/sensevoice/model.int8.onnx
