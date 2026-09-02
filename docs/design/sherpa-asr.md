@@ -35,7 +35,7 @@
 
 ### 5. 压测验证工具
 
-- 提供 `src/scripts/asr-stress-test.js` 作为服务端 ASR 压测脚本
+- 提供 `scripts/stress/asr-stress-test.js` 作为服务端 ASR 压测脚本
 - 脚本直接以 multipart/form-data 调用 `/api/asr/recognize`
 - 支持总请求数、并发数、超时、429 重试次数等参数
 - 每隔固定进度输出一次 RSS / Heap / External / ArrayBuffers，便于观察是否进入平台期

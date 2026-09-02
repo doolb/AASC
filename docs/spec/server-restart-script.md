@@ -49,7 +49,7 @@ restartServer(serverUrl):
 
 ```text
 package.json scripts.restart:server:
-    node src/scripts/restart-server.js
+    node scripts/ops/restart-server.js
 ```
 
 ## 双进程启动器伪代码

@@ -340,7 +340,7 @@ GET /api/asr/status
   - 子进程默认 60 秒超时，超时后 SIGKILL 强制终止，不会泄漏僵尸进程
   - 每次识别都有完整的模型加载/销毁周期，适合低频识别场景；高频场景建议使用内嵌模式
 
-## ASR 压测脚本 (src/scripts/asr-stress-test.js)
+## ASR 压测脚本 (scripts/stress/asr-stress-test.js)
 
 ```
 main():

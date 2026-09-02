@@ -2,7 +2,7 @@
 
 ## 文件位置
 
-`src/scripts/rss-stress-test.js`
+`scripts/stress/rss-stress-test.js`
 
 ## 功能描述
 
