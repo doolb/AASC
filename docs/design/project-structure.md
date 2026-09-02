@@ -24,7 +24,7 @@ src/framework/aasc/ -> Actor 与消息总线
 src/framework/auto-brain/ -> 独立决策分层
 tests/              -> 自动化测试用例
 scripts/test-runners/ -> 可直接运行的测试启动器
-scripts/api-sh/     -> 手动或 AI 调用接口的 Shell 脚本
+scripts/api/        -> 手动或 AI 调用接口的 Node.js 脚本
 scripts/ops/        -> 重启、APK 部署和启动脚本
 scripts/stress/     -> ASR、TTS、RSS 压测脚本
 scripts/models/     -> 模型下载脚本

@@ -7,7 +7,7 @@ ModelDistributionService:
     groups = {
         vision: {
             rapidocr: [det, cls, rec, dict],
-            yolo11n/s/m/l/x: [yolo11*.onnx]
+            yolo11n/s/m/l/x: [yolo11*.onnx, yolo11*.classes.json]
         },
         speech-enhancement: {
             gtcrn: [gtcrn_simple.onnx]
@@ -92,7 +92,8 @@ YOLO request(modelId = yolo11n):
     model = YoloModel.fromId(modelId)
     directory = VisionModelManager.ensure(serverOrigin, vision, model.id)
     load model.fileName with ORT 1/1 and single-little-core policy
-    detect and return the selected model ID
+    read model.classNamesFileName and map each detection classId to className
+    detect and return the selected model ID with classId and className
 ```
 
 ## 降噪运行时伪代码
@@ -120,7 +121,7 @@ Gradle preBuild:
 
 ```text
 server unit tests:
-    manifest contains RapidOCR files and existing YOLO files only
+    manifest contains RapidOCR files and existing YOLO ONNX plus class-name sidecar files only
     path traversal and unknown model/file return 400
     missing model file returns 404
     download response has matching Content-Length and SHA-256

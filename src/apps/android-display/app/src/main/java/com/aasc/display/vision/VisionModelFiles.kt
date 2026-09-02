@@ -18,7 +18,7 @@ object VisionModelFiles {
     fun isYoloComplete(modelDir: File): Boolean = isYoloComplete(modelDir, YoloModel.N)
 
     fun isYoloComplete(modelDir: File, model: YoloModel): Boolean =
-        isComplete(modelDir, listOf(model.fileName))
+        isComplete(modelDir, listOf(model.fileName, model.classNamesFileName))
 
     private fun isComplete(modelDir: File, fileNames: List<String>): Boolean {
         return modelDir.isDirectory && fileNames.all { name ->

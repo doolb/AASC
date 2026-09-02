@@ -17,7 +17,7 @@ const GROUP_DEFINITIONS = Object.freeze({
         ...YOLO_MODEL_IDS.map((id) => Object.freeze({
             id,
             directory: 'yolo11',
-            files: [`${id}.onnx`]
+            files: [`${id}.onnx`, `${id}.classes.json`]
         }))
     ]),
     'speech-enhancement': Object.freeze([

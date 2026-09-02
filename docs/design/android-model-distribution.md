@@ -10,7 +10,7 @@
 - Embedded Speech TTS：沿用现有 `/api/tts/model-manifest` 和 `/api/tts/model/*` 下载。
 - 声纹模型：沿用现有 `/api/voiceprint/model/*` 下载。
 - RapidOCR：服务器提供四个 pipeline 文件和 SHA-256 清单。
-- YOLO11：服务器按模型 ID 提供 `yolo11n/s/m/l/x` ONNX；APK 默认只请求 `yolo11n`，后续新增尺寸只需准备服务器资源和配置模型 ID。
+- YOLO11：服务器按模型 ID 提供 `yolo11n/s/m/l/x` ONNX 和对应的类别标签 sidecar；APK 默认只请求 `yolo11n`，后续新增尺寸只需准备服务器资源和配置模型 ID。
 - GTCRN 语音降噪：服务器按清单提供 `gtcrn_simple.onnx`。
 
 独立的 ASR、RapidOCR、YOLO 测试 APK 保持原有离线测试定位，不随正式显示 APK 的模型分发策略改造。
@@ -33,17 +33,17 @@
 
 ## 服务器接口
 
-- `GET /api/vision/model-manifest`：返回 RapidOCR 和已准备好的 YOLO 模型文件清单，清单包含 `id`、文件名、字节数和 SHA-256。
+- `GET /api/vision/model-manifest`：返回 RapidOCR 和已准备好的 YOLO 模型/标签文件清单，清单包含 `id`、文件名、字节数和 SHA-256。
 - `GET /api/vision/model/:modelId/:filename`：只允许清单中对应模型的文件名，禁止路径穿越。
 - `GET /api/speech-enhancement/model-manifest`：返回降噪模型清单。
 - `GET /api/speech-enhancement/model/:filename`：下载清单内的降噪模型文件。
 
-YOLO 清单由服务器实际存在的 ONNX 文件生成。`yolo11*.pt` 只作为导出输入，不进入 APK 或 git；新增更大模型时运行服务器准备命令生成 ONNX，发布后清单自动暴露它，APK 通过模型 ID 下载。
+YOLO 清单由服务器实际存在且配套的 ONNX 与 `*.classes.json` 文件生成。标签文件由导出脚本从每个 `yolo11*.pt` 的 `model.names` 产生；`.pt` 只作为导出输入，不进入 APK 或 git。新增模型时运行服务器准备命令，发布后清单自动暴露它，APK 通过模型 ID 下载并返回 `className`。
 
 ## APK 存储与能力
 
 - `filesDir/models/vision/rapidocr/`：四个 RapidOCR 文件。
-- `filesDir/models/vision/yolo11/`：按模型 ID 保存 ONNX。
+- `filesDir/models/vision/yolo11/`：按模型 ID 保存 ONNX 和对应的 `*.classes.json` 标签文件。
 - `filesDir/models/speech-enhancement/`：GTCRN 文件。
 - ASR/TTS/声纹目录保持现有路径和 hash/manifest 机制。
 

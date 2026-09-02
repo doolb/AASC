@@ -8,6 +8,7 @@ import com.aasc.display.RemoteModelInstall
 import com.aasc.display.vision.ocr.RapidOcrEngine
 import com.aasc.display.vision.ocr.OcrImageScale
 import com.aasc.display.vision.yolo.Yolo11nDetector
+import com.aasc.display.vision.yolo.YoloClassNames
 import com.aasc.display.vision.yolo.YoloModel
 import java.io.File
 import java.util.concurrent.ArrayBlockingQueue
@@ -121,7 +122,11 @@ class VisionRuntime(context: Context) {
                 restoreYoloInstall(install, model, policy)
                 throw error
             }
-            VisionJson.yoloResult(requestId, yoloEngine.detect(bitmap, install.file(model.fileName), policy, model.id))
+            VisionJson.yoloResult(
+                requestId,
+                yoloEngine.detect(bitmap, install.file(model.fileName), policy, model.id),
+                YoloClassNames.read(install.file(model.classNamesFileName))
+            )
         }
     }
 

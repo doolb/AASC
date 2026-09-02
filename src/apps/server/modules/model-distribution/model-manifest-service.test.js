@@ -18,6 +18,7 @@ function createFixture() {
     fs.writeFileSync(path.join(root, 'rapidocr', 'PP-OCRv6_rec_small.onnx'), 'rec-model');
     fs.writeFileSync(path.join(root, 'rapidocr', 'ppocrv6_dict.txt'), '字典');
     fs.writeFileSync(path.join(root, 'yolo11', 'yolo11n.onnx'), 'yolo-n');
+    fs.writeFileSync(path.join(root, 'yolo11', 'yolo11n.classes.json'), '{"model":"yolo11n","names":["person"]}');
     fs.writeFileSync(path.join(root, 'speech-enhancement', 'gtcrn_simple.onnx'), 'denoise');
     return root;
 }
@@ -40,6 +41,10 @@ test('model manifest includes existing files with size and sha256', () => {
         assert.equal(rapidOcr.files[0].size, Buffer.byteLength('det-model'));
         assert.match(rapidOcr.files[0].sha256, /^[a-f0-9]{64}$/);
         assert.ok(yolo);
+        assert.deepEqual(yolo.files.map((file) => file.name), [
+            'yolo11n.onnx',
+            'yolo11n.classes.json'
+        ]);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }

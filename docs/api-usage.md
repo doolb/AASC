@@ -1,6 +1,6 @@
 # AASC 服务器 API 使用说明
 
-本文档按当前 `/mnt/AASC` 服务端源码整理，适合用户手动调用，也适合 AI 通过命令行读取 stdout、stderr 和退出码执行。服务器默认监听地址为 `https://127.0.0.1:8081`；如果部署地址、端口或协议不同，请先设置 `AASC_URL`。
+本文档按当前 `/mnt/AASC` 服务端源码整理，适合用户手动调用，也适合 AI 通过 Node.js 命令行读取 stdout、stderr 和退出码执行。服务器默认监听地址为 `https://127.0.0.1:8081`；如果部署地址、端口或协议不同，请先设置 `AASC_URL`。
 
 ## 1. 调用约定
 
@@ -10,12 +10,12 @@ export AASC_INSECURE=1          # 本机自签名证书使用；正式证书可�
 export AASC_TIMEOUT_SECONDS=120
 ```
 
-直接使用 `curl` 时，本机自签名 HTTPS 等价于加 `-k`。命令行脚本位于 `scripts/api-sh/`，可从项目根目录运行：
+直接使用 `curl` 时，本机自签名 HTTPS 等价于加 `-k`。命令行脚本位于 `scripts/api/`，可从项目根目录运行：
 
 ```bash
-scripts/api-sh/health.sh
-scripts/api-sh/media-list.sh
-scripts/api-sh/api-request.sh GET /api/status
+scripts/api/health.js
+scripts/api/media-list.js
+scripts/api/api-request.js GET /api/status
 npm run api:test
 ```
 
@@ -24,30 +24,30 @@ npm run api:test
 - 成功响应原样写到 stdout，通常是 JSON；二进制下载接口不要把 stdout 当 JSON 解析。
 - 网络错误、HTTP 4xx/5xx 和参数错误写到 stderr，并返回非零退出码。
 - `--help` 只显示帮助，不请求服务器。
-- 默认允许本机自签名证书；设置 `AASC_INSECURE=0` 后由 curl 校验证书。
+- 默认允许本机自签名证书；设置 `AASC_INSECURE=0` 后由 Node.js 校验证书。
 - 删除、导入、停止 Agent、重启等操作必须传 `--confirm`，或设置 `API_CONFIRM=1`。
-- 当前服务端没有统一鉴权中间件。脚本和文档不保存密码、Cookie、Token 或 API Key；如果部署层增加鉴权，可通过 `api-request.sh --header 'Authorization: ...'` 传递。
+- 当前服务端没有统一鉴权中间件。脚本和文档不保存密码、Cookie、Token 或 API Key；如果部署层增加鉴权，可通过 `api-request.js --header 'Authorization: ...'` 传递。
 
 通用调用器：
 
 ```bash
-scripts/api-sh/api-request.sh GET /api/status
-scripts/api-sh/api-request.sh POST /api/tts/generate \
+scripts/api/api-request.js GET /api/status
+scripts/api/api-request.js POST /api/tts/generate \
   --json '{"text":"你好，AASC"}'
-scripts/api-sh/api-request.sh PUT /api/device-settings/display-1 \
+scripts/api/api-request.js PUT /api/device-settings/display-1 \
   --json '{"volume":60}'
-scripts/api-sh/api-request.sh POST /api/asr/recognize \
+scripts/api/api-request.js POST /api/asr/recognize \
   --file audio=/path/to/sample.wav
 ```
 
-`api-request.sh` 支持 `--json JSON`、`--form KEY=VALUE`、`--file KEY=FILE`、`--header HEADER` 和 `--confirm`。路径可以是相对当前服务器的 `/api/...`，也可以直接传完整 `http://` 或 `https://` URL。
+`api-request.js` 支持 `--json JSON`、`--form KEY=VALUE`、`--file KEY=FILE`、`--header HEADER` 和 `--confirm`。路径可以是相对当前服务器的 `/api/...`，也可以直接传完整 `http://` 或 `https://` URL。
 
 ## 2. 高频操作
 
 ### 2.1 查询服务器状态
 
 ```bash
-scripts/api-sh/health.sh
+scripts/api/health.js
 ```
 
 等价请求：
@@ -61,7 +61,7 @@ curl -k -sS "$AASC_URL/api/status"
 `POST /upload-file` 接收 multipart 字段 `file` 和 `displayId`。服务器保存文件、更新当前媒体，并向指定在线显示端发送播放消息。
 
 ```bash
-scripts/api-sh/play.sh \
+scripts/api/play.js \
   --file ./media/demo.mp4 \
   --display display-1
 ```
@@ -79,7 +79,7 @@ curl -k -sS -X POST "$AASC_URL/upload-file" \
 `POST /api/tts/generate` 接收 JSON：`text` 必填，`voice` 和 `speed` 可选。成功返回 `audioUrl`，脚本只负责生成，不自动播放。
 
 ```bash
-scripts/api-sh/tts-generate.sh \
+scripts/api/tts-generate.js \
   --text '你好，这是一次 TTS 测试' \
   --voice 'Microsoft Xiaoxiao' \
   --speed 1.0
@@ -99,11 +99,11 @@ curl -k -sS -X POST "$AASC_URL/api/tts/generate" \
 {"status":"success","audioUrl":"/uploads/tts/xxx.wav","message":"TTS生成成功"}
 ```
 
-服务器返回的 `audioUrl` 可能是相对路径，使用时拼接 `AASC_URL`；如果要进一步播放，先下载到本地，再执行 `play.sh`：
+服务器返回的 `audioUrl` 可能是相对路径，使用时拼接 `AASC_URL`；如果要进一步播放，先下载到本地，再执行 `play.js`：
 
 ```bash
 curl -k -sS "$AASC_URL/uploads/tts/xxx.wav" -o /tmp/aasc-tts.wav
-scripts/api-sh/play.sh --file /tmp/aasc-tts.wav --display display-1
+scripts/api/play.js --file /tmp/aasc-tts.wav --display display-1
 ```
 
 ### 2.4 ASR 识别
@@ -111,7 +111,7 @@ scripts/api-sh/play.sh --file /tmp/aasc-tts.wav --display display-1
 `POST /api/asr/recognize` 接收 multipart 字段 `audio`。实际识别设备由服务器配置决定：`server` 使用服务端 ASR，`display` 转发到支持 ASR 的显示端。
 
 ```bash
-scripts/api-sh/asr-recognize.sh --audio ./audio/sample.wav
+scripts/api/asr-recognize.js --audio ./audio/sample.wav
 ```
 
 等价请求：
@@ -128,10 +128,22 @@ curl -k -sS -X POST "$AASC_URL/api/asr/recognize" \
 OCR 由服务器接收图片后转发给在线且声明 `ocrAvailable=true` 的显示端，服务器本身不加载 OCR 模型。`displayId` 可选；不传时由服务器选择支持 OCR 的显示端。`shortSide` 可选，取 `0` 或 `256..2048` 的整数，表示显示端推理前的图片短边缩放尺寸。
 
 ```bash
-scripts/api-sh/vision-ocr.sh \
+scripts/api/vision-ocr.js \
   --image /mnt/tmp/game.png \
   --display display-1 \
   --short-side 960
+```
+
+需要在终端中便于人工阅读时，加上 `--tui`；不加该选项仍输出服务端原始 JSON：
+
+```bash
+scripts/api/vision-ocr.js --image /mnt/tmp/game.png --tui
+```
+
+TUI 会显示识别全文、文字框置信度/坐标和字符位置图；查看器也可以单独读取已有 JSON：
+
+```bash
+cat ocr-result.json | node scripts/api/vision-tui.js --kind ocr
 ```
 
 也可以通过 `imageBase64` 发送 JSON/表单中的 base64，但推荐使用脚本的 multipart 文件方式：
@@ -150,11 +162,19 @@ curl -k -sS -X POST "$AASC_URL/api/vision/ocr" \
 YOLO 路由同样只负责服务器到显示端的转发，要求显示端声明 `yolo11nAvailable=true`。当前 YOLO 接口不接受 `shortSide` 参数，可选 `model=yolo11n|yolo11s|yolo11m|yolo11l|yolo11x`，默认 `yolo11n`。
 
 ```bash
-scripts/api-sh/vision-yolo.sh \
+scripts/api/vision-yolo.js \
   --image /mnt/tmp/game.png \
   --display display-1 \
   --model yolo11n
 ```
+
+人工查看 YOLO 结果时：
+
+```bash
+scripts/api/vision-yolo.js --image /mnt/tmp/game.png --model yolo11n --tui
+```
+
+返回的每个检测框同时包含 `classId` 和由模型标签文件解析出的 `className`；没有匹配标签时 `className` 为 `null`。TUI 会显示模型、类别名称/编号、置信度、坐标和位置图；YOLO 返回未携带原图尺寸时，位置图按检测框最大坐标估算。
 
 等价请求：
 
@@ -163,6 +183,12 @@ curl -k -sS -X POST "$AASC_URL/api/vision/yolo" \
   -F 'image=@/mnt/tmp/game.png' \
   -F 'displayId=display-1' \
   -F 'model=yolo11n'
+```
+
+YOLO 成功返回的 `detections` 示例：
+
+```json
+{"classId":32,"className":"sports ball","confidence":0.47,"left":960.6,"top":1555.8,"right":1033.5,"bottom":1627.7}
 ```
 
 ### 2.7 视觉能力和显示端状态
@@ -180,7 +206,7 @@ curl -k -sS "$AASC_URL/api/actors"
 npm run prepare:vision-models
 ```
 
-该命令读取 `${YOLO11_MODEL_DIR:-/home/as}/yolo11*.pt`，生成 `res/models/yolo11/*.onnx`；接口清单只返回实际已经生成的模型。APK 不把这些模型打进安装包。
+该命令读取 `${YOLO11_MODEL_DIR:-/home/as}/yolo11*.pt`，生成 `res/models/yolo11/*.onnx` 及同名的 `*.classes.json` 标签文件；接口清单只返回模型和标签文件都存在的模型。APK 不把这些模型打进安装包。
 
 ## 3. HTTP API 目录
 
@@ -316,7 +342,7 @@ npm run prepare:vision-models
 `/api/chat2api-gateway/:instanceId` 是动态挂载的 Chat2API 网关。具体子路径、请求协议和流式返回由网关模块维护，调用时使用实际 `instanceId`，例如：
 
 ```bash
-scripts/api-sh/api-request.sh POST \
+scripts/api/api-request.js POST \
   /api/chat2api-gateway/my-instance/v1/chat/completions \
   --json '{"model":"...","messages":[{"role":"user","content":"你好"}]}'
 ```
@@ -327,18 +353,18 @@ scripts/api-sh/api-request.sh POST \
 
 任务引擎和显示端控制不是独立的 HTTP API。服务端通过 WebSocket 承载 `task:*` 消息，例如 `task:submit`、`task:run`、`task:rerun`、`task:stop`、`task:status`、`task:result`、`task:list`、`task:update`、`task:delete`、`task:get_instance_logs`、`task:delete_instance`、`task:widget_action`、`task:update_instance_params`、`task:get_config`、`task:set_config`、`task:clear_instance_logs`、`task:link`、`task:unlink` 和 `task:progress`。
 
-本文档的 Bash 工具只覆盖 HTTP，不伪造 WebSocket 调用。需要执行任务时，应使用现有网页/客户端 WebSocket 连接，或使用专门的 WebSocket 客户端实现消息协议。
+本文档的 Node.js 工具只覆盖 HTTP，不伪造 WebSocket 调用。需要执行任务时，应使用现有网页/客户端 WebSocket 连接，或使用专门的 WebSocket 客户端实现消息协议。
 
 ## 5. AI/脚本调用建议
 
 推荐 AI 先调用：
 
 ```bash
-scripts/api-sh/health.sh
-scripts/api-sh/run-all.sh
+scripts/api/health.js
+scripts/api/run-all.js
 ```
 
-`run-all.sh` 只请求无副作用接口，并输出 JSON Lines，例如每行包含 `name`、`ok` 以及 `response` 或 `error`。业务脚本返回服务端原始 JSON，AI 应同时检查：
+`run-all.js` 只请求无副作用接口，并输出 JSON Lines，例如每行包含 `name`、`ok` 以及 `response` 或 `error`。业务脚本返回服务端原始 JSON，AI 应同时检查：
 
 1. Shell 退出码是否为 `0`。
 2. JSON 的 `status` 是否为 `success`、`ok` 或业务允许的 `ignored`。
@@ -348,29 +374,30 @@ scripts/api-sh/run-all.sh
 高风险调用示例（仅展示确认方式，执行前确认目标）：
 
 ```bash
-scripts/api-sh/api-request.sh DELETE /media/file.mp4 --confirm
-scripts/api-sh/api-request.sh POST /api/chat/round --json '{"target":"group"}' --confirm
-API_CONFIRM=1 scripts/api-sh/api-request.sh POST /api/restart
+scripts/api/api-request.js DELETE /media/file.mp4 --confirm
+scripts/api/api-request.js POST /api/chat/round --json '{"target":"group"}' --confirm
+API_CONFIRM=1 scripts/api/api-request.js POST /api/restart
 ```
 
 ## 6. 测试脚本清单
 
 | 脚本 | 用途 |
 |---|---|
-| `scripts/api-sh/common.sh` | 公共 curl、地址、HTTPS、超时和错误处理；由其他脚本 source |
-| `scripts/api-sh/api-request.sh` | 任意 HTTP 方法、JSON、表单、文件和请求头 |
-| `scripts/api-sh/health.sh` | `/api/status` |
-| `scripts/api-sh/media-list.sh` | `/media-list` |
-| `scripts/api-sh/play.sh` | 上传并播放媒体 |
-| `scripts/api-sh/tts-generate.sh` | TTS 生成 |
-| `scripts/api-sh/asr-recognize.sh` | ASR 音频识别 |
-| `scripts/api-sh/vision-ocr.sh` | OCR 图片识别，支持短边参数 |
-| `scripts/api-sh/vision-yolo.sh` | YOLO11 图片检测，可选模型 |
-| `scripts/api-sh/run-all.sh` | 串行执行只读健康探针 |
+| `scripts/api/common.js` | 公共地址、HTTPS、超时、multipart 和错误处理；由其他脚本调用 |
+| `scripts/api/api-request.js` | 任意 HTTP 方法、JSON、表单、文件和请求头 |
+| `scripts/api/health.js` | `/api/status` |
+| `scripts/api/media-list.js` | `/media-list` |
+| `scripts/api/play.js` | 上传并播放媒体 |
+| `scripts/api/tts-generate.js` | TTS 生成 |
+| `scripts/api/asr-recognize.js` | ASR 音频识别 |
+| `scripts/api/vision-ocr.js` | OCR 图片识别，支持短边参数 |
+| `scripts/api/vision-yolo.js` | YOLO11 图片检测，可选模型 |
+| `scripts/api/vision-tui.js` | 将 OCR/YOLO JSON 结果渲染为终端可读面板 |
+| `scripts/api/run-all.js` | 串行执行只读健康探针 |
 
 脚本语法和静态契约测试：
 
 ```bash
 node --test tests/api-cli-contract.test.js
-bash -n scripts/api-sh/*.sh
+find scripts/api -type f -name '*.js' -exec node --check {} +
 ```

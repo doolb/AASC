@@ -2,6 +2,7 @@ package com.aasc.display.vision
 
 import com.aasc.display.CpuPolicy
 import com.aasc.display.vision.ocr.OcrResult
+import com.aasc.display.vision.yolo.YoloClassNames
 import com.aasc.display.vision.yolo.YoloResult
 import org.json.JSONArray
 import org.json.JSONObject
@@ -42,7 +43,7 @@ object VisionJson {
         return base.put("boxes", boxes)
     }
 
-    fun yoloResult(requestId: String, result: YoloResult): JSONObject {
+    fun yoloResult(requestId: String, result: YoloResult, classNames: YoloClassNames? = null): JSONObject {
         val base = success(requestId, "yolo11n", result.timing.totalMs, result.affinityStatus)
             .put("model", result.model)
             .put("loadModelMs", result.loadModelMs)
@@ -53,6 +54,7 @@ object VisionJson {
         result.detections.forEach { detection ->
             detections.put(JSONObject()
                 .put("classId", detection.classId)
+                .put("className", classNames?.nameFor(detection.classId) ?: JSONObject.NULL)
                 .put("confidence", detection.confidence)
                 .put("left", detection.left)
                 .put("top", detection.top)

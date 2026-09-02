@@ -38,10 +38,11 @@ submit(kind, requestId, imageBase64, callback):
             result.boxes = OCR.mapBoxesToOriginal(result.boxes, workingBitmap, bitmap)
             result.imageWidth/Height = bitmap dimensions
         if kind == YOLO:
-            select yolo11n/s/m/l/x and ensure its ONNX from server manifest
+            select yolo11n/s/m/l/x and ensure its ONNX and classes.json from server manifest
             if the selected manifest changed, release the old YOLO session
             load one ORT session with ORT 1/1
             result = preprocess -> inference -> confidence/NMS postprocess
+            result.detections[*].className = classes.json.names[result.detections[*].classId] or null
         callback(success result with timing and affinity status)
         recycle bitmap in finally
 ```

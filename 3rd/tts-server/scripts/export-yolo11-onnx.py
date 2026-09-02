@@ -2,6 +2,7 @@
 """将本地五个 YOLO11 PyTorch 权重导出为 Android 使用的静态 ONNX 模型。"""
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -13,6 +14,54 @@ IMAGE_SIZE = 640
 
 class ExportError(RuntimeError):
     """表示模型导出前置条件或导出过程失败。"""
+
+
+def class_names_path(source: Path, output_dir: Path) -> Path:
+    return output_dir / f"{source.stem}.classes.json"
+
+
+def normalize_class_names(names) -> list[str]:
+    if isinstance(names, dict):
+        try:
+            indexed_names = {int(index): str(name).strip() for index, name in names.items()}
+        except (TypeError, ValueError) as error:
+            raise ExportError("YOLO 模型类别名称索引无效") from error
+        if not indexed_names or min(indexed_names) < 0:
+            raise ExportError("YOLO 模型类别名称为空或索引无效")
+        result = [""] * (max(indexed_names) + 1)
+        for index, name in indexed_names.items():
+            if not name:
+                raise ExportError(f"YOLO 模型类别名称为空: {index}")
+            result[index] = name
+        return result
+    if isinstance(names, (list, tuple)):
+        result = [str(name).strip() for name in names]
+        if not result or any(not name for name in result):
+            raise ExportError("YOLO 模型类别名称为空")
+        return result
+    raise ExportError("YOLO 模型缺少可识别的类别名称")
+
+
+def write_class_names(source: Path, output_dir: Path, names) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    target = class_names_path(source, output_dir)
+    temporary = output_dir / f"{target.name}.tmp"
+    payload = {
+        "model": source.stem,
+        "source": "Ultralytics model.names",
+        "names": normalize_class_names(names),
+    }
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(target)
+    return target
+
+
+def ensure_class_names(yolo_class, source: Path, output_dir: Path) -> Path:
+    target = class_names_path(source, output_dir)
+    if target.is_file() and target.stat().st_size > 0 and target.stat().st_mtime >= source.stat().st_mtime:
+        return target
+    model = yolo_class(str(source))
+    return write_class_names(source, output_dir, model.names)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -72,6 +121,7 @@ def export_one(yolo_class, source: Path, output_dir: Path) -> Path:
         if temporary.stat().st_size <= 0:
             raise ExportError(f"导出结果为空: {source.name}")
         temporary.replace(target)
+        write_class_names(source, output_dir, model.names)
         return target
     except ExportError:
         raise
@@ -89,6 +139,7 @@ def main() -> int:
         yolo_class = load_yolo_class()
         for source in sources:
             target = export_one(yolo_class, source, arguments.output_dir)
+            ensure_class_names(yolo_class, source, arguments.output_dir)
             print(f"已生成 {target}")
         return 0
     except ExportError as error:

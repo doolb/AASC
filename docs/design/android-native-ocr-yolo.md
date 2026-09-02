@@ -7,7 +7,7 @@
 本次接入：
 
 - RapidOCR：检测、方向分类、识别三份 ONNX 模型和字典，共四个服务器资源文件，APK 首次使用时下载。
-- YOLO11n：服务器准备的 `yolo11n.onnx`，APK 首次使用时下载。
+- YOLO11n：服务器准备的 `yolo11n.onnx` 和 `yolo11n.classes.json`，APK 首次使用时下载。
 - 两个内置一次性任务：`ocr`、`yolo`。
 - 服务器 HTTP 路由：`/api/vision/ocr`、`/api/vision/yolo`、`/api/vision/status`。
 - 任务参数配置服务器 URL，默认 `http://127.0.0.1:8081`；任务上传图片后调用服务器接口。
@@ -33,7 +33,7 @@
     ↓ NativeDisplay 异步桥
 显示端 VisionRuntime：单线程、单小核、ORT intra/inter=1
     ↓
-服务器收到 vision*Result，再返回 HTTP JSON 和任务结果
+    服务器收到 vision*Result，再返回 HTTP JSON 和任务结果；YOLO 检测项包含 classId 与 className
 ```
 
 服务器路由只负责接收图片、选择具有对应能力的在线显示端、关联 requestId、等待回传和清理临时文件。指定 `targetDisplay` 时只使用该显示端；未指定时按在线连接顺序选择第一个声明能力的显示端。

@@ -14,6 +14,7 @@ class VisionModelFilesTest {
         try {
             assertFalse(VisionModelFiles.isYoloComplete(directory))
             File(directory, "yolo11n.onnx").writeBytes(byteArrayOf(1))
+            File(directory, "yolo11n.classes.json").writeText("{\"names\":[\"person\"]}")
             assertTrue(VisionModelFiles.isYoloComplete(directory))
         } finally {
             directory.deleteRecursively()
