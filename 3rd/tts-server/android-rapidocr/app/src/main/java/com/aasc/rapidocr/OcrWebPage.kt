@@ -140,7 +140,7 @@ object OcrWebPage {
                   const data = await response.json();
                   if (!response.ok || !data.success) throw new Error(data.error || ('HTTP ' + response.status));
                   resultText.textContent = data.text || '(未识别到文字)';
-                  elapsedText.textContent = '耗时：' + data.elapsedMs + ' ms，图片：' + data.imageWidth + ' × ' + data.imageHeight;
+                  elapsedText.textContent = '耗时：' + data.elapsedMs + ' ms，图片：' + data.imageWidth + ' × ' + data.imageHeight + '，CPU：' + (data.affinityStatus || '未返回');
                   const boxSummary = (data.boxes || []).map((box, index) => {
                     return '#' + (index + 1) + ' 置信度：' + Number(box.score || 0).toFixed(4) + '，坐标：' + JSON.stringify(box.points || []);
                   }).join('\n');

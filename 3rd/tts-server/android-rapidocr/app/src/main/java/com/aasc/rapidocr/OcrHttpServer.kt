@@ -18,6 +18,7 @@ import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 面向局域网测试的明文 HTTP 服务。只实现图片上传所需的四个路由，
@@ -30,7 +31,13 @@ class OcrHttpServer(
 ) {
     private var clientExecutor: ExecutorService = Executors.newFixedThreadPool(2)
     private var inferenceExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-    private val inferenceRunner = OcrInferenceRunner(cpuModeProvider, affinityApplier)
+    private val lastAffinityStatus = AtomicReference("未执行")
+    private val inferenceRunner = OcrInferenceRunner(
+        modeProvider = cpuModeProvider,
+        affinityApplier = { mode ->
+            affinityApplier(mode).also { status -> lastAffinityStatus.set(status) }
+        }
+    )
     private val inferenceBusy = AtomicBoolean(false)
     @Volatile private var running = false
     @Volatile private var serverSocket: ServerSocket? = null
@@ -135,7 +142,7 @@ class OcrHttpServer(
             val future: Future<OcrResult> = try {
                 inferenceExecutor.submit<OcrResult> {
                     try {
-                        inferenceRunner.run { engine.recognize(image) }
+                        inferenceRunner.runWithMode { mode -> engine.recognize(image, mode) }
                     } finally {
                         image.recycle()
                         inferenceBusy.set(false)
@@ -148,7 +155,14 @@ class OcrHttpServer(
             }
             submitted = true
             try {
-                respond(output, 200, OcrHttpJson.success(future.get(INFERENCE_TIMEOUT_SECONDS, TimeUnit.SECONDS)))
+                respond(
+                    output,
+                    200,
+                    OcrHttpJson.success(
+                        future.get(INFERENCE_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+                        lastAffinityStatus.get()
+                    )
+                )
             } catch (_: TimeoutException) {
                 future.cancel(true)
                 respond(output, 504, OcrHttpJson.error("识别超时"))

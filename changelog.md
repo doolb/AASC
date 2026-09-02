@@ -8,6 +8,9 @@
 - ✅ [2026-09-01] 增加 RapidOCR 推理线程自动/大核/小核选择。
   - 改动文件：`CpuMode.kt`、`CpuAffinity.kt`、`OcrInferenceRunner.kt`、CMake/JNI affinity、`MainActivity.kt`、`OcrHttpServer.kt` 及对应测试和文档。
   - 验证结果：三档控件、选择持久化、大小核真机 OCR 和小核线程 `Cpus_allowed_list=0-3` 检查通过；native 失败保留自动回退。
+- ✅ [2026-09-02] 测试 RapidOCR 与 YOLO11 增加单大核/单小核推理模式。
+  - 改动文件：`3rd/tts-server/android-rapidocr/`、`3rd/tts-server/android-yolo/` 的 CPU 模式、ORT session、JNI affinity、HTTP/网页状态展示、测试及 design/spec/task 文档。
+  - 验证结果：两个 APK JVM 单元测试、debug 构建和 arm64 JNI 编译通过；Android 9 arm64 真机 RapidOCR 单小核/单大核为 CPU 0/4，YOLO 单大核为 CPU 5，HTTP 图片接口成功。
 
 ### Android YOLO11 测试 APK
 

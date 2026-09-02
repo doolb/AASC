@@ -22,13 +22,16 @@ class RapidOcrEngine {
     private var classifierSession: OrtSession? = null
     private var recognizerSession: OrtSession? = null
     private var dictionary: List<String> = emptyList()
+    private var activeModelDir: File? = null
+    private var activeCpuMode: CpuMode? = null
+    private var sessionBoundToInferenceThread = false
 
     val isReady: Boolean
         get() = ready
 
     /** 校验资源后再初始化 OpenCV 和 ORT，避免缺模型时产生无用 native 资源。 */
     @Synchronized
-    fun load(modelDir: File) {
+    fun load(modelDir: File, cpuMode: CpuMode = CpuMode.AUTO) {
         require(RapidOcrModelFiles.isComplete(modelDir)) { "RapidOCR 模型文件不完整" }
         release()
         check(OpenCVLoader.initLocal()) { "OpenCV 初始化失败" }
@@ -41,7 +44,7 @@ class RapidOcrEngine {
         try {
             newEnvironment = OrtEnvironment.getEnvironment()
             newOptions = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(2)
+                setIntraOpNumThreads(cpuMode.intraOpThreads)
                 setInterOpNumThreads(1)
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             }
@@ -59,6 +62,10 @@ class RapidOcrEngine {
             classifierSession = newClassifier
             recognizerSession = newRecognizer
             dictionary = newDictionary
+            activeModelDir = modelDir
+            activeCpuMode = cpuMode
+            // 首次 load 通常发生在模型准备线程；第一次 HTTP 推理前要在真正的推理线程重建一次。
+            sessionBoundToInferenceThread = false
             ready = true
         } catch (exception: Exception) {
             newRecognizer?.close()
@@ -74,8 +81,9 @@ class RapidOcrEngine {
      * 执行一次完整 OCR。调用方仍然拥有传入 Bitmap，必须在外层 finally 中回收它。
      */
     @Synchronized
-    fun recognize(bitmap: Bitmap): OcrResult {
+    fun recognize(bitmap: Bitmap, cpuMode: CpuMode = CpuMode.AUTO): OcrResult {
         check(ready) { "RapidOCR 模型未就绪" }
+        ensureSessionForCpuMode(cpuMode)
         val start = System.nanoTime()
         val boxes = detect(bitmap)
         val recognized = boxes.mapNotNull { box -> recognizeBox(bitmap, box) }
@@ -103,6 +111,20 @@ class RapidOcrEngine {
         sessionOptions = null
         environment = null
         dictionary = emptyList()
+        activeModelDir = null
+        activeCpuMode = null
+        sessionBoundToInferenceThread = false
+    }
+
+    /**
+     * ORT 的线程数和线程池在 session 创建时确定，因此模式变化不能只重新设置 affinity。
+     * 当前方法在 recognize 的同步锁内执行，重建期间不会与另一张图片并发使用旧 session。
+     */
+    private fun ensureSessionForCpuMode(cpuMode: CpuMode) {
+        if (sessionBoundToInferenceThread && activeCpuMode == cpuMode) return
+        val modelDir = activeModelDir ?: error("RapidOCR 模型目录未记录")
+        load(modelDir, cpuMode)
+        sessionBoundToInferenceThread = true
     }
 
     private fun detect(bitmap: Bitmap): List<List<OcrPoint>> {

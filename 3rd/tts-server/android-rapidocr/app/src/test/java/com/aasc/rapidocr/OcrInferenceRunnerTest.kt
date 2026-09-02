@@ -46,4 +46,14 @@ class OcrInferenceRunnerTest {
 
         assertEquals("recognized", runner.run { "recognized" })
     }
+
+    @Test
+    fun runWithModePassesSelectedModeToInference() {
+        val runner = OcrInferenceRunner(
+            modeProvider = { CpuMode.SINGLE_BIG },
+            affinityApplier = { "单大核（核心 4）" }
+        )
+
+        assertEquals(CpuMode.SINGLE_BIG, runner.runWithMode { mode -> mode })
+    }
 }

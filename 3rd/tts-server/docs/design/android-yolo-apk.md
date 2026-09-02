@@ -45,8 +45,9 @@ APK 第一次启动时将五个 ONNX 文件以临时文件加改名的方式复�
 
 ## CPU 核心选择
 
-- 原生控制页提供“自动 / 大核 / 小核”三档，默认使用“自动”，选择结果保存到 `SharedPreferences`。
-- JNI 读取 `cpu_capacity` 或 `cpuinfo_max_freq` 区分大小核，并用 `sched_setaffinity` 绑定当前 YOLO 推理线程。
+- 原生控制页提供“自动 / 大核 / 小核 / 单大核 / 单小核”五档，默认使用“自动”，选择结果保存到 `SharedPreferences`。
+- JNI 读取 `cpu_capacity` 或 `cpuinfo_max_freq` 区分大小核，并用 `sched_setaffinity` 绑定当前 YOLO 推理线程；单大核和单小核分别选择对应集群中编号最小的一个核心。
+- 单大核和单小核使用 ONNX Runtime `intraOp=1`、`interOp=1`，其余模式保持 `intraOp=2`、`interOp=1`；模式变化时在下一次检测或测速前重建活动 session。
 - UI、HTTP 接收、模型复制和模型加载线程不绑定核心；只有单线程推理执行器在每次检测或测速模型轮次开始前应用所选模式。
 - 无法识别集群、native 库加载失败或系统拒绝绑定时回退到系统调度，性能控制失败不影响检测结果。
 
@@ -82,7 +83,7 @@ MainActivity
     └── 后台线程调度资源复制、模型引擎初始化和 HTTP 服务
 
 CpuMode / CpuAffinity
-    ├── 保存自动 / 大核 / 小核模式
+    ├── 保存自动 / 大核 / 小核 / 单大核 / 单小核模式及 ORT 线程数
     └── 在 YOLO 推理线程调用 JNI affinity，失败时自动回退
 
 YoloModelFiles
@@ -114,12 +115,12 @@ YoloWebPage
 3. 安装 APK 后五个模型资源均可校验，默认加载 `yolo11n`，模型切换不会同时保留多个 session。
 4. 网页选择图片后可以选择任一模型检测并显示框、类别 ID、置信度和耗时。
 5. `/api/benchmark?models=all` 对五个模型返回完整耗时和 FPS 对比。
-6. 自动、大核、小核三种 CPU 模式可以切换并持久化，绑定失败时检测仍成功。
+6. 自动、大核、小核、单大核、单小核五种 CPU 模式可以切换并持久化；单核模式使用一个 ORT intra-op 线程，绑定失败时检测仍成功。
 7. 空请求、错误 Content-Type、超大图片、非法模型名、非法测速参数和并发请求均返回明确错误。
 
 ## 实现状态
 
-- 已完成独立 `android-yolo` 工程、五模型 ONNX 构建资源、ONNX Runtime 推理、HTTP API、内置网页、CPU 大核/小核选择和对应 JVM 单元测试。
+- 已完成独立 `android-yolo` 工程、五模型 ONNX 构建资源、ONNX Runtime 推理、HTTP API、内置网页、CPU 大核/小核/单核选择和对应 JVM 单元测试。
 - 已在 Android 9 arm64 真机完成 APK 安装、网页根路径、模型列表、健康检查、真实图片检测和五模型测速；查询参数解码使用 Android 低版本兼容的 charset 名称重载。
 - 已用 `bus.jpg` 做定性检测验证：返回 1 辆公交车和 4 个人，公交车置信度 `0.939`，人员置信度为 `0.396/0.833/0.849/0.902`；当前未使用带标注验证集计算 Precision、Recall 或 mAP，不能将该单图结果表述为正式准确率。
 

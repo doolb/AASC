@@ -61,7 +61,7 @@ class YoloBenchmark(private val detector: YoloDetector) {
         validateParameters(warmupCount, runCount)
         require(models.isNotEmpty()) { "测速模型不能为空" }
         val items = models.distinct().map { model ->
-            val loadModelMs = detector.load(model)
+            val loadModelMs = detector.load(model, cpuMode)
             repeat(warmupCount) { detector.detectLoaded(bitmap, cpuMode) }
             val samples = (0 until runCount).map { detector.detectLoaded(bitmap, cpuMode) }
             YoloBenchmarkStats.summarize(

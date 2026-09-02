@@ -2,7 +2,7 @@ package com.aasc.rapidocr
 
 // HTTP 测试服务不额外引入 JSON 框架，统一由这里负责转义文本和输出稳定字段顺序。
 object OcrHttpJson {
-    fun success(result: OcrResult): String {
+    fun success(result: OcrResult, affinityStatus: String = "未执行"): String {
         val boxes = result.boxes.joinToString(",") { box ->
             val points = box.points.joinToString(",", prefix = "[", postfix = "]") { point ->
                 "[${point.x},${point.y}]"
@@ -15,6 +15,7 @@ object OcrHttpJson {
             "\"elapsedMs\":${result.elapsedMs}," +
             "\"imageWidth\":${result.imageWidth}," +
             "\"imageHeight\":${result.imageHeight}," +
+            "\"affinityStatus\":\"${escape(affinityStatus)}\"," +
             "\"boxes\":[$boxes]" +
             "}"
     }

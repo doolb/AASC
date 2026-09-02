@@ -25,6 +25,7 @@ class OcrHttpServerTest {
             assertTrue(response.body.contains("elapsedMs"))
             assertTrue(response.body.contains("score"))
             assertTrue(response.body.contains("imageWidth"))
+            assertTrue(response.body.contains("affinityStatus"))
             assertTrue(response.body.contains("resultText"))
             assertTrue(response.body.contains("boxesOverlay"))
             assertTrue(response.body.contains("image/jpeg"))

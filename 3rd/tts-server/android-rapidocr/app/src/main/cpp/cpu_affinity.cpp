@@ -64,6 +64,33 @@ bool readCpuValues(const std::vector<int>& cpus, std::vector<CpuInfo>* result) {
     return !result->empty();
 }
 
+bool matchesMode(int mode, bool isBig) {
+    switch (mode) {
+        case 1:
+        case 3:
+            return isBig;
+        case 2:
+        case 4:
+            return !isBig;
+        default:
+            return false;
+    }
+}
+
+bool isSingleCoreMode(int mode) {
+    return mode == 3 || mode == 4;
+}
+
+const char* modeLabel(int mode) {
+    switch (mode) {
+        case 1: return "大核";
+        case 2: return "小核";
+        case 3: return "单大核";
+        case 4: return "单小核";
+        default: return "自动";
+    }
+}
+
 std::string formatCpus(const std::vector<int>& cpus) {
     std::ostringstream output;
     output << "核心 ";
@@ -107,18 +134,24 @@ std::string applyMode(int mode) {
     std::vector<int> target;
     for (const CpuInfo& cpu : values) {
         const bool isBig = static_cast<double>(cpu.value) >= threshold;
-        const bool selected = (mode == 1 && isBig) || (mode == 2 && !isBig);
-        if (selected) {
+        if (matchesMode(mode, isBig)) {
             CPU_SET(cpu.id, &targetMask);
             target.push_back(cpu.id);
         }
+    }
+
+    if (isSingleCoreMode(mode) && !target.empty()) {
+        const int selectedCpu = target.front();
+        CPU_ZERO(&targetMask);
+        CPU_SET(selectedCpu, &targetMask);
+        target.assign(1, selectedCpu);
     }
 
     if (target.empty() || !setAffinity(targetMask)) {
         setAffinity(originalMask);
         return "自动回退，目标核心绑定失败";
     }
-    return std::string(mode == 1 ? "大核" : "小核") + "（" + formatCpus(target) + "）";
+    return std::string(modeLabel(mode)) + "（" + formatCpus(target) + "）";
 }
 
 }  // namespace

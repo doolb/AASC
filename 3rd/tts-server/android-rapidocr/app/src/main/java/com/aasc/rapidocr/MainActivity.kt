@@ -80,7 +80,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val modelDir = File(filesDir, "rapidocr")
                 RapidOcrModelFiles.ensureCopied(assets, modelDir)
-                engine.load(modelDir)
+                engine.load(modelDir, selectedCpuMode)
                 postUi {
                     modelStatus.setText(R.string.model_ready)
                     httpToggleButton.isEnabled = true

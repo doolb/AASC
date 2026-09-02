@@ -15,6 +15,7 @@ class YoloDetector(private val modelDir: File) : AutoCloseable {
     private var sessionOptions: OrtSession.SessionOptions? = null
     private var activeSession: OrtSession? = null
     private var activeModelValue: YoloModel? = null
+    private var activeCpuMode: CpuMode? = null
     /**
      * 覆盖 HTTP 检测、测速和资源释放的完整生命周期，避免停止服务后旧任务与新任务交叉操作 ORT。
      * 使用可重入锁是因为一次检测内部还会调用 load/detectLoaded 等同步方法。
@@ -28,16 +29,18 @@ class YoloDetector(private val modelDir: File) : AutoCloseable {
         get() = activeModelValue
 
     @Synchronized
-    fun load(model: YoloModel): Long {
-        if (activeModelValue == model && activeSession != null) return 0L
+    fun load(model: YoloModel, cpuMode: CpuMode = CpuMode.AUTO): Long {
+        if (activeModelValue == model && activeSession != null && activeCpuMode == cpuMode) return 0L
         require(isReady) { "YOLO11 模型文件未就绪" }
+        // session 创建出的 ORT 工作线程继承当前线程的 affinity，先绑定再创建 session。
+        CpuAffinity.apply(cpuMode)
         releaseActiveSession()
         val start = System.nanoTime()
         var newOptions: OrtSession.SessionOptions? = null
         var newSession: OrtSession? = null
         try {
             newOptions = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(2)
+                setIntraOpNumThreads(cpuMode.intraOpThreads)
                 setInterOpNumThreads(1)
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             }
@@ -45,6 +48,7 @@ class YoloDetector(private val modelDir: File) : AutoCloseable {
             sessionOptions = newOptions
             activeSession = newSession
             activeModelValue = model
+            activeCpuMode = cpuMode
             return (System.nanoTime() - start) / 1_000_000L
         } catch (error: Exception) {
             newSession?.close()
@@ -56,7 +60,7 @@ class YoloDetector(private val modelDir: File) : AutoCloseable {
 
     fun detect(bitmap: Bitmap, model: YoloModel, cpuMode: CpuMode): YoloResult = withInferenceLock {
         synchronized(this) {
-            val loadModelMs = load(model)
+            val loadModelMs = load(model, cpuMode)
             detectLoaded(bitmap, cpuMode).copy(loadModelMs = loadModelMs)
         }
     }
@@ -131,6 +135,7 @@ class YoloDetector(private val modelDir: File) : AutoCloseable {
         activeSession = null
         sessionOptions = null
         activeModelValue = null
+        activeCpuMode = null
     }
 
     private fun elapsedMilliseconds(start: Long): Long = (System.nanoTime() - start) / 1_000_000L

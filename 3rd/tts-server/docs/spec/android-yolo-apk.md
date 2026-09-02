@@ -144,20 +144,22 @@ YoloPostprocessor.decode(shape, values, preparedInput, confidenceThreshold, iouT
 ## 单模型推理和测速
 
 ```text
-YoloDetector.load(model):
-    if activeModel == model and activeSession != null:
+YoloDetector.load(model, cpuMode):
+    if activeModel == model and activeSession != null and activeCpuMode == cpuMode:
         return loadTimeMs = 0
     close activeSession and activeSessionOptions
+    CpuAffinity.apply(cpuMode) before creating the session
     start = monotonicClock()
-    sessionOptions = create CPU ONNX Runtime options
+    sessionOptions = create CPU ONNX Runtime options with cpuMode.intraOpThreads intra-op threads and 1 inter-op thread
     activeSession = environment.createSession(filesDir/yolo11/model.fileName, sessionOptions)
     activeModel = model
+    activeCpuMode = cpuMode
     return loadTimeMs = monotonicClock() - start
 
 YoloDetector.detect(bitmap, model, cpuMode):
     acquire detector.inferenceLock
     synchronize detector state:
-        loadTimeMs = load(model)
+        loadTimeMs = load(model, cpuMode)
         affinityStatus = CpuAffinity.apply(cpuMode)
         preprocessStarted = monotonicClock()
         prepared = YoloPreprocessor.prepare(bitmap)
@@ -177,7 +179,7 @@ YoloDetector.detect(bitmap, model, cpuMode):
 YoloBenchmark.run(bitmap, models, warmupCount, runCount, cpuMode):
     acquire detector.inferenceLock for the complete benchmark
     for model in models in fixed N,S,M,L,X order:
-        loadTimeMs = detector.load(model)
+        loadTimeMs = detector.load(model, cpuMode)
         repeat warmupCount times:
             detector.detectLoaded(bitmap, cpuMode)
         samples = repeat runCount times:
@@ -301,7 +303,9 @@ YoloHttpServerTest:
     busy flag rejects concurrent detection and benchmark
 
 CpuModeTest:
-    persisted values 0/1/2 map to AUTO/BIG/LITTLE
+    persisted values 0/1/2/3/4 map to AUTO/BIG/LITTLE/SINGLE_BIG/SINGLE_LITTLE
+    SINGLE_BIG and SINGLE_LITTLE use one intra-op thread
+    AUTO/BIG/LITTLE use two intra-op threads
     unknown persisted value falls back to AUTO
 ```
 

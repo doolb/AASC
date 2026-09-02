@@ -78,20 +78,27 @@ OcrImagePolicy:
 ## RapidOCR 推理
 
 ```text
-RapidOcrEngine.load(modelDir):
+RapidOcrEngine.load(modelDir, cpuMode = AUTO):
     require RapidOcrModelFiles.isComplete(modelDir)
     require OpenCVLoader.initLocal()
     environment = OrtEnvironment.getEnvironment()
-    sessionOptions = create CPU session options with 2 intra-op threads and 1 inter-op thread
+    sessionOptions = create CPU session options with cpuMode.intraOpThreads intra-op threads and 1 inter-op thread
     detSession = environment.createSession(detModel, sessionOptions)
     clsSession = environment.createSession(clsModel, sessionOptions)
     recSession = environment.createSession(recModel, sessionOptions)
     dictionary = read UTF-8 dictionary lines and append the special space token
+    activeModelDir = modelDir
+    activeCpuMode = cpuMode
+    sessionBoundToInferenceThread = false
     ready = true
 
-RapidOcrEngine.recognize(bitmap):
+RapidOcrEngine.recognize(bitmap, cpuMode = AUTO):
     require ready
     synchronize inference lock
+    if not sessionBoundToInferenceThread or activeCpuMode != cpuMode:
+        close current sessions and recreate all three sessions from activeModelDir
+        use cpuMode.intraOpThreads for new session options
+        sessionBoundToInferenceThread = true
     startedAt = monotonicClock()
     normalizedImage = resize bitmap so the short side reaches 736 and round dimensions to 32
     normalizedImage = RGB NCHW with (pixel / 255 - 0.5) / 0.5
@@ -133,6 +140,10 @@ CpuMode:
     AUTO = 0, displayName = "自动"
     BIG = 1, displayName = "大核"
     LITTLE = 2, displayName = "小核"
+    SINGLE_BIG = 3, displayName = "单大核"
+    SINGLE_LITTLE = 4, displayName = "单小核"
+    AUTO/BIG/LITTLE.intraOpThreads = 2
+    SINGLE_BIG/SINGLE_LITTLE.intraOpThreads = 1
     fromPersistedValue(value) -> 未知值返回 AUTO
 
 CpuAffinity.apply(mode):
@@ -143,18 +154,21 @@ CpuAffinity.apply(mode):
 NativeCpuAffinity.nativeApply(mode):
     allCpus = 读取系统在线/配置 CPU 编号
     AUTO -> 将当前推理线程恢复到 allCpus
-    BIG/LITTLE -> 从 cpu_capacity 或 cpuinfo_max_freq 读取每个 CPU 的能力值
+    BIG/LITTLE/SINGLE_BIG/SINGLE_LITTLE -> 从 cpu_capacity 或 cpuinfo_max_freq 读取每个 CPU 的能力值
         无法读取或所有能力值相同 -> 恢复 allCpus 并返回自动回退
         按最小值与最大值中点划分大小核
-        选择目标 CPU 集合并调用 sched_setaffinity(当前线程, 目标集合)
+        BIG/LITTLE 选择完整的目标 CPU 集合
+        SINGLE_BIG/SINGLE_LITTLE 选择目标集合中编号最小的一个 CPU
+        调用 sched_setaffinity(当前线程, 目标集合)
         失败 -> 恢复 allCpus 并返回自动回退
         成功 -> 返回目标模式和 CPU 编号
 
 OcrHttpServer.inferenceWorker(request):
     mode = cpuModeProvider()
-    CpuAffinity.apply(mode)
+    affinityStatus = CpuAffinity.apply(mode)
+    lastAffinityStatus = affinityStatus
     # affinity 失败只影响性能位置，不影响 engine.recognize
-    engine.recognize(bitmap)
+    engine.recognize(bitmap, mode)
 ```
 
 ## HTTP 服务
@@ -185,10 +199,14 @@ OcrHttpServer.handle(request):
         if recognition lock is occupied:
             return 409 error
         bitmap = OcrImagePolicy.decode(request.body)
-        result = submit { CpuAffinity.apply(cpuModeProvider()); engine.recognize(bitmap) } to one inference worker
-            with 60 second timeout
+        result = submit {
+            mode = cpuModeProvider()
+            affinityStatus = CpuAffinity.apply(mode)
+            engine.recognize(bitmap, mode)
+        } to one inference worker
+        with 60 second timeout
         always recycle bitmap in inference worker finally
-        return OcrHttpJson.success(result)
+        return OcrHttpJson.success(result, lastAffinityStatus)
     if method is not GET or POST:
         return 405 error
     return 404 error
@@ -198,6 +216,9 @@ OcrHttpServer.stop():
     close server socket
     join accept thread with bounded wait
     shutdown client executor
+
+OcrHttpJson.success(result, affinityStatus):
+    return OCR result fields and affinityStatus for HTTP/web verification
 ```
 
 ## 网页流程
@@ -227,13 +248,13 @@ OcrWebPage:
 ```text
 MainActivity.onCreate:
     selectedCpuMode = SharedPreferences["cpuMode"]，未知值使用 AUTO
-    cpuModeSpinner 显示 [自动, 大核, 小核]
+    cpuModeSpinner 显示 [自动, 大核, 小核, 单大核, 单小核]
     选择变化 -> 保存 persistedValue -> cpuStatus 显示已选择模式
     创建 OcrHttpServer(engine, cpuModeProvider = { selectedCpuMode })
     show model status, HTTP port input default 18080 and start button
     background:
         copy models from assets
-        engine.load(modelDir)
+        engine.load(modelDir, selectedCpuMode)
         main thread: show model ready and enable start button
 
 on start button:
@@ -273,7 +294,9 @@ OcrHttpServerTest:
     invalid method and invalid content type return expected status
 
 CpuModeTest:
-    persisted values 0/1/2 map to AUTO/BIG/LITTLE
+    persisted values 0/1/2/3/4 map to AUTO/BIG/LITTLE/SINGLE_BIG/SINGLE_LITTLE
+    SINGLE_BIG and SINGLE_LITTLE use one intra-op thread
+    AUTO/BIG/LITTLE use two intra-op threads
     unknown persisted value falls back to AUTO
 
 OcrHttpServerCpuModeTest:

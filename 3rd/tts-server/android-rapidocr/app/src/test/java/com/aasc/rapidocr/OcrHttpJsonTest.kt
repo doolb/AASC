@@ -25,12 +25,13 @@ class OcrHttpJsonTest {
             )
         )
 
-        val json = OcrHttpJson.success(result)
+        val json = OcrHttpJson.success(result, "单大核（核心 4）")
 
         assertTrue(json.contains("\"success\":true"))
         assertTrue(json.contains("\"elapsedMs\":123"))
         assertTrue(json.contains("\"imageWidth\":640"))
         assertTrue(json.contains("\"imageHeight\":480"))
+        assertTrue(json.contains("\"affinityStatus\":\"单大核（核心 4）\""))
         assertTrue(json.contains("\"text\":\"你\\\"好\""))
         assertTrue(json.contains("\"points\":[[10.0,20.0]"))
     }
