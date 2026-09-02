@@ -322,11 +322,15 @@ ValidationRecord:
 
 BenchmarkRecord:
     parameters = warmup=1, runs=2, models=all, serial execution
-    bigCores = cpu 4-7, intraOp=2, averageTotalMs[n,s,m,l,x] = [461.5, 1306.0, 4042.0, 5277.5, 11757.5]
-    bigCoresFps[n,s,m,l,x] = [2.167, 0.766, 0.247, 0.189, 0.085]
-    littleCores = cpu 0-3, intraOp=2, averageTotalMs[n,s,m,l,x] = [1066.5, 2992.0, 8508.0, 11086.5, 23917.0]
-    littleCoresFps[n,s,m,l,x] = [0.938, 0.334, 0.118, 0.090, 0.042]
-    formalFiveModelPassTotalMs = big=22844.5, little=47570.0
-    inferenceThreadConsumption = two ORT intra-op threads in the selected CPU cluster
+    bigCoreCluster = cpu 4-7, intraOp=2, averageTotalMs[n,s,m,l,x] = [461.5, 1306.0, 4042.0, 5277.5, 11757.5]
+    bigCoreClusterFps[n,s,m,l,x] = [2.167, 0.766, 0.247, 0.189, 0.085]
+    littleCoreCluster = cpu 0-3, intraOp=2, averageTotalMs[n,s,m,l,x] = [1066.5, 2992.0, 8508.0, 11086.5, 23917.0]
+    littleCoreClusterFps[n,s,m,l,x] = [0.938, 0.334, 0.118, 0.090, 0.042]
+    singleBigCore = intraOp=1, averageTotalMs[n,s,m,l,x] = [1368.0, 3997.0, 12190.0, 15533.0, 34630.0]
+    singleBigCoreFps[n,s,m,l,x] = [0.731, 0.250, 0.082, 0.064, 0.029]
+    singleLittleCore = intraOp=1, averageTotalMs[n,s,m,l,x] = [1945.0, 5530.5, 16874.0, 21607.0, 46533.5]
+    singleLittleCoreFps[n,s,m,l,x] = [0.514, 0.181, 0.059, 0.046, 0.021]
+    formalFiveModelPassTotalMs = bigCluster=22844.5, littleCluster=47570.0, singleBig=67718.0, singleLittle=92490.0
+    inferenceThreadConsumption = two ORT intra-op threads in core-cluster modes; one ORT intra-op thread in single-core modes
     loadModelMs = excluded from averageTotalMs and recorded separately by each item
 ```
