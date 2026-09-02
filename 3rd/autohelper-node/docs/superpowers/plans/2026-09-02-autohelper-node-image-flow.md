@@ -98,7 +98,7 @@
 - `package.json` 提供 `build`、`test`、`start`、`capture`、`record` 和 `inspect` 脚本。
 - `types.ts` 导出 `Point`、`Rect`、`ImageDescriptor`、`LoadedTemplate`、`MatchResult`、`FlowContext`、`AdbRunner` 和 `AutomationOptions`。
 
-- [ ] **Step 1: 写入工程配置和最小类型声明**
+- [x] **Step 1: 写入工程配置和最小类型声明**
 
 ```json
 {
@@ -128,7 +128,7 @@
 
 `tsconfig.json` 使用 `module: NodeNext`、`moduleResolution: NodeNext`、`target: ES2022`、`strict: true`、`noEmit: true`。`types.ts` 只放跨模块数据类型，不导入 OpenCV，保证业务单元测试不依赖原生模块初始化。
 
-- [ ] **Step 2: 写入 AASC 实现伪代码 spec**
+- [x] **Step 2: 写入 AASC 实现伪代码 spec**
 
 `docs/spec/image-driven-adb-automation.md` 必须同步描述以下伪代码：
 
@@ -150,7 +150,7 @@ tick():
   如果点击成功且 action.gotoFlow 存在：loader.switchTo(action.gotoFlow)
 ```
 
-- [ ] **Step 3: 安装依赖并执行配置检查**
+- [x] **Step 3: 安装依赖并执行配置检查**
 
 Run: `OPENCV4NODEJS_DISABLE_AUTOBUILD=1 npm install`
 
@@ -160,11 +160,11 @@ Run: `npm run build`
 
 Expected: PASS；此时还没有业务测试，编译只验证工程配置和类型文件。
 
-- [ ] **Step 4: 写入项目使用说明和任务记录**
+- [x] **Step 4: 写入项目使用说明和任务记录**
 
 `README.md` 描述 Linux 前置条件和四个命令；`docs/usage.md` 描述图片目录、文件名参数、`goto` 示例和 dry-run；`docs/task/...md` 记录需求、受影响模块、自测、兼容性、性能、风险和预计工时；`docs/todo.md` 只记录尚未完成的实现任务。
 
-- [ ] **Step 5: 运行测试并提交**
+- [x] **Step 5: 运行测试并提交**
 
 Run: `npm test`
 
@@ -189,7 +189,7 @@ git commit -m "feat: bootstrap autohelper node project"
 - Produces `parseImageDescriptor(flowId: string, filePath: string): ImageDescriptor`。
 - `ImageDescriptor` 至少包含 `name`、`flowId`、`filePath`、`queue`、`threshold`、`clickPoint`、`centerClick`、`delayMs`、`loop`、`wait`、`defaultCandidate`、`selectImage` 和 `gotoFlow`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('parses goto and legacy click options from one image stem', () => {
@@ -207,7 +207,7 @@ it('parses goto and legacy click options from one image stem', () => {
 });
 
 it('rejects a goto target that can escape the flow root', () => {
-  expect(() => parseImageDescriptor('launch', '/tmp/a@0.9,goto@../home.png'))
+  expect(() => parseImageDescriptor('launch', '/tmp/a@0.9,goto@...png'))
     .toThrow('invalid goto flow id');
 });
 
@@ -224,13 +224,13 @@ it('keeps negative queue and legacy flags', () => {
 });
 ```
 
-- [ ] **Step 2: 运行指定测试确认按预期失败**
+- [x] **Step 2: 运行指定测试确认按预期失败**
 
 Run: `npm test -- test/flow/filename-parser.test.ts`
 
 Expected: FAIL because `filename-parser.ts` and `parseImageDescriptor` do not exist yet。
 
-- [ ] **Step 3: 写最小解析实现**
+- [x] **Step 3: 写最小解析实现**
 
 实现要点：
 
@@ -248,13 +248,13 @@ goto value 必须匹配 /^[A-Za-z0-9._-]+$/ 且不能是 . 或 ..
 
 `clickpoint` 坐标必须在 `[0, 1]`；`delay` 必须是非负整数；阈值必须是有限数。解析器不得访问文件系统或 OpenCV。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -- test/flow/filename-parser.test.ts`
 
 Expected: PASS，所有解析器测试通过。
 
-- [ ] **Step 5: 更新 spec 并提交**
+- [x] **Step 5: 更新 spec 并提交**
 
 同步补充 `goto` 的解析和安全规则，然后运行 `npm run build`。
 

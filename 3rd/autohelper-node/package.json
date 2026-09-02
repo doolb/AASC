@@ -1,0 +1,25 @@
+{
+  "name": "autohelper-node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Linux + ADB + OpenCV 图片驱动自动化工具",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/cli.ts start",
+    "capture": "tsx src/cli.ts capture",
+    "record": "tsx src/cli.ts record",
+    "inspect": "tsx src/cli.ts inspect"
+  },
+  "dependencies": {
+    "opencv4nodejs": "5.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.1",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
