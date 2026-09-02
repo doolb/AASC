@@ -69,6 +69,30 @@ tick():
   返回 TickResult
 ```
 
+## Flow Loader
+
+```text
+new FlowLoader({ flowsRoot, parseDescriptor, loadTemplate })
+  flowsRoot = resolve(flowsRoot)
+  templateCache = TemplateCache(loadTemplate 或读取文件内容)
+
+load(flowId):
+  校验 flowId 是安全的一级目录名
+  校验 flowsRoot/flowId 存在且是目录
+  读取当前目录的 png/bmp 文件并按路径排序
+  解析 ImageDescriptor
+  通过 TemplateCache 加载模板
+  替换 activeContext
+  返回 FlowContext
+
+switchTo(flowId):
+  调用 load(flowId)
+
+current():
+  没有 activeContext 时抛出错误
+  返回当前 FlowContext
+```
+
 ## 安全处理
 
 ```text

@@ -281,7 +281,7 @@ git commit -m "feat: parse image flow goto metadata"
 - `FlowContext` 包含 `id`、`directory`、`descriptors` 和 `templates`。
 - `TemplateCache.load(descriptor): Promise<LoadedTemplate>`，同一个绝对文件路径在一次 Flow 生命周期内只加载一次。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 it('loads only image files from the active flow directory', async () => {
@@ -310,23 +310,23 @@ it('rejects flow ids that are not direct child directories', async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test -- test/flow/flow-loader.test.ts`
 
 Expected: FAIL because `FlowLoader` and `TemplateCache` do not exist。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 实现使用 `path.resolve(flowsRoot, flowId)`，并确认结果的父目录仍是 `flowsRoot`；只扫描 `.png` 和 `.bmp`；目录读取和模板读取错误必须带 Flow ID 与文件路径。Loader 不加载其他 Flow。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm test -- test/flow/flow-loader.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add 3rd/autohelper-node/src/flow/flow-loader.ts 3rd/autohelper-node/src/vision/template-cache.ts 3rd/autohelper-node/test/flow/flow-loader.test.ts 3rd/autohelper-node/src/types.ts
