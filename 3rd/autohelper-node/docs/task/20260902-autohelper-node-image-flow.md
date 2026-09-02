@@ -71,4 +71,5 @@
 - [x] CLI（start/capture/record/inspect、参数退出码，30 个全量测试通过）
 - [x] 设备只读检查（设备在线；当前前台为 `com.aasc.tts`，未发现无限暖暖应用包）
 - [ ] 无限暖暖实际模板和 dry-run（等待游戏启动并停留在目标画面）
+- [x] 工程最终回归（30 个测试通过、TypeScript 构建通过、目标 Flow dry-run 无点击）
 - [ ] 最终回归

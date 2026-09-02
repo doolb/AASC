@@ -48,4 +48,8 @@
 - ⚠️ [2026-09-02] 完成真实设备只读检查，暂未生成无限暖暖模板。
   - 设备 `192.168.1.6:5555` 在线，但前台是 `com.aasc.tts`，包扫描未发现无限暖暖。
   - 曾生成的一张非游戏截图已移到 `/mnt/tmp/autohelper-node-current-not-game.png`，未加入流程目录，防止误识别。
+
+- ✅ [2026-09-02] 完成工程最终回归。
+  - 验证结果：9 个测试文件/30 个测试通过，TypeScript 构建通过，git 空白检查通过；目标设备截图 `720×1480`，`inspect` 和 `dry-run --once` 成功且没有 ADB 点击。
+  - 未完成项：等待设备启动《无限暖暖》后采集 `flows/infinity-nikki` 的实际模板。
   - 验证结果：3 个 ADB 测试、真实 `adb devices -l` 和 TypeScript 构建通过。

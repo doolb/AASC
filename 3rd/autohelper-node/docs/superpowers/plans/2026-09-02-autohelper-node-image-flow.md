@@ -834,11 +834,11 @@ git commit -m "feat: add infinity nikki image flow fixtures"
 - Modify: `3rd/autohelper-node/changelog.md`
 - Modify: `3rd/autohelper-node/README.md`
 
-- [ ] **Step 1: 更新实现状态**
+- [x] **Step 1: 更新实现状态**
 
 将 design 中“尚未实现”的状态改为已实现部分，并在 spec 中同步实际函数名和伪代码。`todo.md` 删除已完成任务，只保留未覆盖的游戏流程或后续可选能力。
 
-- [ ] **Step 2: 运行质量门禁**
+- [x] **Step 2: 运行质量门禁**
 
 Run: `npm test`
 
@@ -856,11 +856,11 @@ Run: `npm run start -- --device 192.168.1.6:5555 --flow infinity-nikki --dry-run
 
 Expected: 真实设备截图 dry-run 成功，不发送点击。
 
-- [ ] **Step 3: 更新 changelog 和使用说明**
+- [x] **Step 3: 更新 changelog 和使用说明**
 
 按 AASC 格式记录完成日期、修改文件、图片资源命名规则和验证结果。README 必须给出从安装、截图、dry-run 到自动运行的完整命令。
 
-- [ ] **Step 4: 最终检查并提交**
+- [x] **Step 4: 最终检查并提交**
 
 ```bash
 git status --short -- 3rd/autohelper-node
