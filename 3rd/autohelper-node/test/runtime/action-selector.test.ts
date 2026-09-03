@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ImageDescriptor, MatchCandidate, MatchResult } from '../../src/types.js';
+import type { ImageDescriptor, MatchCandidate, MatchResult, OcrResult } from '../../src/types.js';
 import { resolveClickPoint, selectAction } from '../../src/runtime/action-selector.js';
 
 const descriptor = (name: string, queue = 0, options: Partial<ImageDescriptor> = {}): ImageDescriptor => ({
@@ -80,5 +80,18 @@ describe('action selector', () => {
     ], new Map());
 
     expect(selected?.descriptor.name).toBe('valid');
+  });
+
+  it('requires OCR text for candidates that declare an OCR condition', () => {
+    const candidates = [
+      candidate('ocr-button', 10, 0.91, { ocrText: '放弃福利' }),
+      candidate('fallback', 1, 0.99),
+    ];
+    const ocr: OcrResult = {
+      boxes: [{ text: '确认：放弃福利', score: 0.98, points: [] }],
+    };
+
+    expect(selectAction(candidates, new Map(), ocr)?.descriptor.name).toBe('ocr-button');
+    expect(selectAction([candidates[0]], new Map(), { boxes: [] })).toBeNull();
   });
 });

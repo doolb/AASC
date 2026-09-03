@@ -1,6 +1,6 @@
 import { decodeImage } from '../vision/image-decoder.js';
 import type { ImageMatcher } from '../vision/image-matcher.js';
-import { resolveClickPoint, selectAction } from './action-selector.js';
+import { resolveClickPoint, satisfiesOcr, selectAction } from './action-selector.js';
 import type { RecordEntry, RecordStore } from './record-store.js';
 import type {
   AdbClientLike,
@@ -8,6 +8,8 @@ import type {
   FlowContext,
   MatchCandidate,
   MatchResult,
+  OcrClientLike,
+  OcrResult,
   Point,
   SelectedAction,
 } from '../types.js';
@@ -18,7 +20,11 @@ type FlowLoaderLike = {
 };
 
 type SelectorLike = {
-  selectAction(candidates: MatchCandidate[], allMatches: Map<string, MatchResult>): SelectedAction | null;
+  selectAction(
+    candidates: MatchCandidate[],
+    allMatches: Map<string, MatchResult>,
+    ocrResult?: OcrResult,
+  ): SelectedAction | null;
   resolveClickPoint: typeof resolveClickPoint;
 };
 
@@ -28,6 +34,7 @@ export type AutomationLoopOptions = {
   adb: AdbClientLike;
   loader: FlowLoaderLike;
   matcher: Pick<ImageMatcher, 'matchAll'>;
+  ocrClient?: Pick<OcrClientLike, 'recognize'>;
   selector?: SelectorLike;
   options?: Partial<AutomationOptions>;
   sleep?: Sleep;
@@ -35,7 +42,7 @@ export type AutomationLoopOptions = {
   logger?: (result: TickResult) => void;
 };
 
-export type TickReason = 'no-match' | 'cooldown' | 'wait' | 'dry-run' | 'clicked';
+export type TickReason = 'no-match' | 'cooldown' | 'wait' | 'dry-run' | 'clicked' | 'ocr-error';
 
 export type TickResult = {
   flowId: string;
@@ -127,6 +134,18 @@ export class AutomationLoop {
       const context = this.dependencies.loader.current();
       flowId = context.id;
       const frame = await this.dependencies.adb.screenshot();
+      const requiresOcr = context.templates.some((template) => Boolean(template.descriptor.ocrText));
+      let ocrResult: OcrResult | undefined;
+      if (requiresOcr) {
+        if (!this.dependencies.ocrClient) {
+          return this.emit({ flowId, clicked: false, reason: 'ocr-error' });
+        }
+        try {
+          ocrResult = await this.dependencies.ocrClient.recognize(frame);
+        } catch {
+          return this.emit({ flowId, clicked: false, reason: 'ocr-error' });
+        }
+      }
       const matches = await this.dependencies.matcher.matchAll(
         frame,
         context.templates,
@@ -142,15 +161,22 @@ export class AutomationLoop {
       const suppressed = this.suppressedActionName
         ? candidates.find((candidate) => candidate.descriptor.name === this.suppressedActionName)
         : undefined;
+      const suppressedVisible = Boolean(
+        suppressed?.match.matched && satisfiesOcr(suppressed.descriptor, ocrResult),
+      );
       const availableCandidates = candidates.filter((candidate) => (
         candidate.descriptor.name !== this.suppressedActionName
       ));
-      const action = this.selector.selectAction(availableCandidates, allMatches);
+      const action = this.selector.selectAction(availableCandidates, allMatches, ocrResult);
       if (!action) {
-        if (!suppressed?.match.matched) {
+        if (!suppressedVisible) {
           this.suppressedActionName = undefined;
         }
-        return this.emit({ flowId, clicked: false, reason: suppressed ? 'cooldown' : 'no-match' });
+        return this.emit({
+          flowId,
+          clicked: false,
+          reason: suppressedVisible ? 'cooldown' : 'no-match',
+        });
       }
 
       this.suppressedActionName = undefined;

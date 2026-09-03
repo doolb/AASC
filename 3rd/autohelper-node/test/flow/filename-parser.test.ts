@@ -32,4 +32,19 @@ describe('parseImageDescriptor', () => {
     expect(descriptor.wait).toBe(true);
     expect(descriptor.centerClick).toBe(true);
   });
+
+  it('parses OCR text as an additional image condition', () => {
+    const descriptor = parseImageDescriptor(
+      'launch', '/tmp/enter@0.9,ocr@放弃福利,clickpoint@0.5&0.5,goto@home.png',
+    );
+
+    expect(descriptor.ocrText).toBe('放弃福利');
+    expect(descriptor.threshold).toBe(0.9);
+    expect(descriptor.gotoFlow).toBe('home');
+  });
+
+  it('rejects an empty OCR condition', () => {
+    expect(() => parseImageDescriptor('launch', '/tmp/enter@0.9,ocr@.png'))
+      .toThrow('missing OCR text');
+  });
 });

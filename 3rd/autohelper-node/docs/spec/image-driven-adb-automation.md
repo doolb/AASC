@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-基础工程、ADB Client、预编译 OpenCV.js 匹配器、动作选择、自动循环和 CLI 已实现；实际游戏图片流程仍需在目标画面就绪后采集。
+基础工程、ADB Client、预编译 OpenCV.js 匹配器、动作选择、自动循环、OCR 辅助和 CLI 已实现；实际游戏图片流程仍需在目标画面就绪后采集。
 
 ## 启动
 
@@ -13,6 +13,7 @@
   通过 ADB 查询目标设备状态
   FlowLoader 加载 activeFlowId 目录中的 png/bmp
   根据 matcher 参数初始化 OpenCV 匹配器
+  初始化 OCR Client；读取 --ocr-url、--ocr-short-side 和 AASC_* 环境变量，显示器由服务端调度
   启动 AutomationLoop
 ```
 
@@ -64,8 +65,45 @@ parseImageDescriptor(flowId, filePath) -> ImageDescriptor
   ImageDescriptor.queue 默认 0
   ImageDescriptor.threshold 默认 0.9
   ImageDescriptor.clickPoint 默认 { x: 0.5, y: 0.5 }
-  识别 clickpoint、clickpoint_ab、delay、loop、wait、default、select、goto
+  识别 clickpoint、clickpoint_ab、delay、loop、wait、default、select、goto、ocr
+  如果 token 的 key == ocr：要求 value 非空，并保存为 ocrText
   gotoFlow 只允许安全的一级 Flow ID
+```
+
+## OCR Client
+
+```text
+OcrClient({ baseUrl, shortSide?, timeoutMs?, rejectUnauthorized? }):
+  baseUrl 未传入时读取 AASC_URL，默认 https://127.0.0.1:8081
+  shortSide 只在配置存在时写入请求 JSON，显示器不由客户端指定
+  timeoutMs 未传入时读取 AASC_TIMEOUT_SECONDS，默认 30 秒
+
+recognize(frameBuffer):
+  body = {
+    imageBase64: frameBuffer 转 base64,
+    shortSide: 如果配置存在则写入
+  }
+  POST baseUrl + /api/vision/ocr，Content-Type 为 application/json
+  HTTP 非 2xx 或 payload.status == error：抛出带服务端 message 的错误
+  解析 payload.boxes；保留 text、score 和规范化后的 points
+  返回 { boxes, imageWidth?, imageHeight? }
+```
+
+## OCR 条件筛选
+
+```text
+requiresOcr(context):
+  如果当前 Flow 任意模板存在 ocrText：返回 true
+
+satisfiesOcr(descriptor, ocrResult):
+  如果 descriptor.ocrText 不存在：返回 true
+  如果 ocrResult 不存在：返回 false
+  如果任意 box.text 包含 descriptor.ocrText：返回 true
+  否则返回 false
+
+selectAction(candidates, allMatches, ocrResult?):
+  过滤图片匹配成功、队列非负、select 条件成立且 satisfiesOcr 的候选
+  继续按 default、queue、score 和 name 规则选择
 ```
 
 ## 自动循环
@@ -74,8 +112,11 @@ parseImageDescriptor(flowId, filePath) -> ImageDescriptor
 tick():
   frame = adb.screenshot()
   context = loader.current()
+  如果 context 存在 OCR 条件：
+    尝试使用同一 frame 调用 OCR Client 一次
+    如果 OCR 失败：返回 { clicked: false, reason: "ocr-error" }
   matches = matcher.matchAll(frame, context.templates)
-  candidates = selector.filterAndRank(matches)
+  candidates = selector.filterAndRank(matches, ocrResult)
   action = selector.choose(candidates)
   如果 action 不存在：返回 no-match
   如果 action.wait：记录 wait，不点击，不跳转

@@ -2,7 +2,7 @@
 
 ## 状态
 
-设计已确认，基础工程、文件名解析、Flow Loader、ADB Client 和预编译 OpenCV 匹配器已实现，运行循环与 CLI 仍在实现中。
+设计已确认，基础工程、文件名解析、Flow Loader、ADB Client、预编译 OpenCV 匹配器、OCR 辅助、运行循环和 CLI 已实现。
 
 ## 目标
 
@@ -17,6 +17,7 @@
 - 原 C# 项目不修改，Node.js 工程独立实现。
 - 流程由图片描述，文件名是流程节点和动作参数的载体。
 - 使用文件名中的 `goto@目标目录` 进行多目录流程切换。
+- OCR 只作为图片节点的附加文字条件，不改变图片模板决定点击位置的职责。
 - 不使用广告观看、会员购买或其他付费操作作为自动化步骤。
 - 目录切换必须限制在流程根目录内，禁止通过 `..` 或绝对路径逃逸。
 
@@ -35,9 +36,9 @@
 
 ## 方案选择
 
-### 方案一：兼容图片文件名规则并增加 `goto`（采用）
+### 方案一：兼容图片文件名规则并增加 `goto` 和 OCR 条件（采用）
 
-保留原有文件名参数，在解析器中增加 `goto@flowId`。运行时维护 `activeFlowId`，每次循环只扫描当前目录，匹配并执行动作后切换到目标目录。
+保留原有文件名参数，在解析器中增加 `goto@flowId` 和 `ocr@文字`。运行时维护 `activeFlowId`，每次循环只扫描当前目录；如果当前 Flow 有 OCR 条件，则对本轮截图请求一次 OCR，再匹配、执行动作或切换目标目录。
 
 优点是已有图片可以继续使用，流程迁移成本最低，图片仍然是唯一的流程描述来源。缺点是复杂分支仍然需要通过图片节点和文件名组合表达。
 
@@ -79,6 +80,15 @@ flows/
 | 选择图片 | `select@other` | 当前候选成立后，要求同一 Flow 的 `other` 图片也成立 |
 | 目录切换 | `goto@home` | 动作处理完成后切换到 `home` Flow |
 | 忽略候选 | `~10@0.90` | 保留原项目的负队列语义，不参与普通自动选择 |
+| OCR 条件 | `ocr@放弃福利` | 当前画面 OCR 文字中必须包含指定文本 |
+
+OCR 参数和其他文件名参数一样使用逗号分隔。例如：
+
+```text
+enter-game@0.90,ocr@放弃福利,goto@home.png
+```
+
+OpenCV 必须先匹配 `enter-game` 模板，OCR 结果还必须包含“放弃福利”，两个条件同时满足后才允许点击。点击位置仍由 OpenCV 匹配矩形和 `clickpoint` 决定。第一版每个图片节点支持一个 `ocr@文字` 条件；OCR 服务异常时本轮安全跳过，不发送点击。
 
 新参数 `goto` 只接收 Flow ID，不接收任意文件系统路径。动作点击成功后才执行切换；如果节点包含 `wait`，则不点击也不执行跳转，避免未完成交互时提前切换流程。Flow 切换后清空上一节点状态并重新加载目标目录的图片缓存。
 
@@ -104,8 +114,12 @@ CLI
  │    ├── template matching
  │    └── optional feature matching
  │
+ ├── OCR Client
+ │    └── POST /api/vision/ocr
+ │
  └── Automation Loop
       ├── capture
+      ├── optional OCR once per tick
       ├── match and rank
       ├── click or wait
       ├── delay
@@ -139,8 +153,10 @@ Node.js 版本使用 `@techstark/opencv-js` 提供的预编译 OpenCV.js/WASM，
 读取 activeFlowId
 加载或取得 activeFlow 的图片缓存
 通过 ADB 获取当前截图
+如果当前 Flow 存在 `ocr@文字` 节点：把同一张截图请求 `/api/vision/ocr` 一次
+OCR 请求失败：返回 `ocr-error`，本轮不匹配、不点击
 对当前 Flow 的所有可选图片执行匹配
-过滤低于阈值和负队列图片
+过滤低于阈值、负队列和不满足 OCR 条件的图片
 按 queue 降序、匹配分数降序排序
 验证 select 图片（如果存在）
 计算点击坐标
@@ -188,12 +204,17 @@ autohelper-node inspect   --device <serial> --flow <flowId> [options]
 - `--dry-run`：只识别和输出点击坐标，不发送 ADB 点击。
 - `--once`：只执行一轮后退出。
 - `--max-transitions <n>`：限制单次运行的目录跳转次数。
+- `--ocr-url <url>`：OCR API 基础地址，未指定时读取 `AASC_URL`，默认 `https://127.0.0.1:8081`。
+- `--ocr-short-side <pixels>`：请求 OCR 时的短边尺寸，必须为 0 或 256 到 2048 的整数。
 - `--log-level <level>`：控制日志详细程度。
+
+OCR 客户端不指定显示器，由 AASC OCR 服务自行调度可用显示端；同时兼容 `AASC_INSECURE` 和 `AASC_TIMEOUT_SECONDS` 环境变量，语义与 `/mnt/AASC/scripts/api/vision-ocr.js` 一致。
 
 ## 错误处理和安全边界
 
 - ADB 设备不存在或离线时启动失败，不进入点击循环。
 - 截图失败、PNG 解码失败或 OpenCV 初始化失败时记录错误并退出当前运行。
+- OCR API 请求失败或返回错误时只返回 `ocr-error`，本轮不点击，下一轮继续尝试。
 - 图片文件名解析失败时跳过该图片并给出文件名和原因。
 - `goto` 目标不存在时停止流程，不保留旧 Flow 继续盲点。
 - 任何点击前都检查坐标在当前截图范围内。
@@ -210,7 +231,8 @@ autohelper-node inspect   --device <serial> --flow <flowId> [options]
 4. 点击坐标：归一化点击点、中心点击、边界检查和方向尺寸转换。
 5. ADB Client：命令参数、设备序列号、截图二进制流错误。
 6. 自动循环：动作顺序、延迟、`wait`、`goto`、循环保护和 dry-run。
-7. 真实设备冒烟：连接当前 ADB 设备执行截图和 `--dry-run --once`，不发送点击。
+7. OCR：验证 JSON 请求字段、响应文字框解析、OCR 条件筛选和单轮请求次数。
+8. 真实设备冒烟：连接当前 ADB 设备执行截图和 `--dry-run --once`，不发送点击。
 
 ## 完成标准
 
@@ -229,4 +251,5 @@ autohelper-node inspect   --device <serial> --flow <flowId> [options]
 - 云端任务调度和多设备并行控制。
 - 游戏内部 API、内存读取或反作弊规避。
 - 复杂的视觉规划、OCR 任务理解和自动生成全部任务步骤。
+- OCR 文字框中心点击；第一版 OCR 只做现有图片节点的附加条件。
 - 系统级开机自启动服务；第一版的“自动运行”指 CLI 启动后持续执行，后续再按需要增加 systemd 服务。

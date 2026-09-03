@@ -87,6 +87,12 @@ export function parseImageDescriptor(flowId: string, filePath: string): ImageDes
     }
 
     switch (key) {
+      case 'ocr':
+        if (!value.trim()) {
+          throw new Error(`missing OCR text in image filename: ${filePath}`);
+        }
+        descriptor.ocrText = value.trim();
+        break;
       case 'select':
         if (!value) {
           throw new Error(`missing select image in image filename: ${filePath}`);

@@ -29,8 +29,25 @@ export type ImageDescriptor = {
   loop: boolean;
   wait: boolean;
   defaultCandidate: boolean;
+  ocrText?: string;
   selectImage?: string;
   gotoFlow?: string;
+};
+
+export type OcrBox = {
+  text: string;
+  score?: number;
+  points: Point[];
+};
+
+export type OcrResult = {
+  boxes: OcrBox[];
+  imageWidth?: number;
+  imageHeight?: number;
+};
+
+export type OcrClientLike = {
+  recognize(frame: Buffer): Promise<OcrResult>;
 };
 
 export type LoadedTemplate = {

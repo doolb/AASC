@@ -2,6 +2,15 @@
 
 ### AutoHelper Node.js 图片流程
 
+- ✅ [2026-09-03] 增加 AASC OCR 图片节点辅助条件。
+  - 改动文件：`src/types.ts`、`src/flow/filename-parser.ts`、`src/vision/ocr-client.ts`、`src/runtime/action-selector.ts`、`src/runtime/automation-loop.ts`、`src/cli.ts` 及对应测试。
+  - 资源命名规则：`图片@阈值,ocr@文字,goto@目标Flow.png`；OpenCV 负责图片匹配和点击坐标，OCR 文字按包含关系作为附加条件。
+  - API：向 `/api/vision/ocr` 发送当前截图的 JSON Base64，支持 `--ocr-url`、`--ocr-short-side` 和 AASC OCR 环境变量；显示器由服务端调度。
+  - 安全行为：每轮最多请求一次 OCR；OCR 服务异常返回 `ocr-error`，本轮不发送点击。
+  - 验证结果：`npm test` 10 个测试文件/38 个测试通过，`npm run build` 和 `git diff --check` 通过。
+- ✅ [2026-09-03] 修正 OCR 显示器调度边界。
+  - AutoHelper 不再暴露或发送 `displayId`，统一交由 AASC OCR 服务自行选择在线显示端。
+
 - ✅ [2026-09-02] 创建 Node.js 工程设计、实现伪代码和任务文档。
   - 目标路径：`/mnt/AASC/3rd/autohelper-node`
   - 资源规则：图片文件名携带匹配和点击参数，使用 `goto@flowId` 切换目录。

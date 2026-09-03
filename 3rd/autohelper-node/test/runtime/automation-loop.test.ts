@@ -6,6 +6,7 @@ import type {
   ImageDescriptor,
   LoadedTemplate,
   MatchResult,
+  OcrResult,
 } from '../../src/types.js';
 import { AutomationLoop } from '../../src/runtime/automation-loop.js';
 
@@ -169,5 +170,70 @@ describe('AutomationLoop', () => {
     const loop = createLoop(adb, loader, { intervalMs: 0, maxTransitions: 2 });
 
     await expect(loop.run()).rejects.toThrow('maximum flow transitions exceeded');
+  });
+
+  it('requests OCR once per tick and filters OCR-constrained actions', async () => {
+    const adb = new FakeAdb();
+    const ocrAction = descriptor('ocr-button', { ocrText: '放弃福利', queue: 10 });
+    const fallbackAction = descriptor('fallback');
+    const flowImages = [ocrAction, fallbackAction].map((image) => ({
+      ...image,
+      filePath: `/tmp/launch/${image.name}.png`,
+    }));
+    const loader = new FakeLoader({
+      launch: {
+        id: 'launch',
+        directory: '/tmp/launch',
+        descriptors: flowImages,
+        templates: flowImages.map((image) => ({ descriptor: image, buffer: Buffer.from('template') })),
+      },
+    }, 'launch');
+    const ocrResult: OcrResult = {
+      boxes: [{ text: '确认：放弃福利', points: [] }],
+    };
+    let ocrCalls = 0;
+    const loop = new AutomationLoop({
+      adb,
+      loader,
+      matcher: { matchAll: async () => [matched(), matched()] },
+      ocrClient: {
+        recognize: async () => {
+          ocrCalls += 1;
+          return ocrResult;
+        },
+      },
+      options: { intervalMs: 0 },
+      sleep: async () => {},
+    });
+
+    const result = await loop.tick();
+
+    expect(ocrCalls).toBe(1);
+    expect(result.actionName).toBe('ocr-button');
+    expect(adb.taps).toEqual([{ x: 50, y: 50 }]);
+  });
+
+  it('skips the tick without clicking when OCR is unavailable', async () => {
+    const adb = new FakeAdb();
+    const loader = new FakeLoader({
+      launch: context('launch', descriptor('ocr-button', { ocrText: '放弃福利' })),
+    }, 'launch');
+    const loop = new AutomationLoop({
+      adb,
+      loader,
+      matcher: { matchAll: async () => [matched()] },
+      ocrClient: {
+        recognize: async () => {
+          throw new Error('OCR service unavailable');
+        },
+      },
+      options: { intervalMs: 0 },
+      sleep: async () => {},
+    });
+
+    const result = await loop.tick();
+
+    expect(result.reason).toBe('ocr-error');
+    expect(adb.taps).toEqual([]);
   });
 });

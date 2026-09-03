@@ -7,6 +7,7 @@ import type { AutomationOptions, MatchMethod, Rect } from './types.js';
 import { AutomationLoop } from './runtime/automation-loop.js';
 import { RecordStore } from './runtime/record-store.js';
 import { OpenCvImageMatcher } from './vision/image-matcher.js';
+import { OcrClient } from './vision/ocr-client.js';
 import { captureTemplate, inspectFlow, recordPath } from './tools/capture-tool.js';
 
 export class CliUsageError extends Error {}
@@ -24,6 +25,8 @@ export type StartCliOptions = CommonCliOptions & {
   dryRun: boolean;
   once: boolean;
   maxTransitions: number;
+  ocrUrl?: string;
+  ocrShortSide?: number;
 };
 
 export type CaptureCliOptions = CommonCliOptions & {
@@ -59,6 +62,22 @@ const parseInteger = (value: string | undefined, option: string, fallback: numbe
     throw new CliUsageError(`--${option} must be a non-negative integer`);
   }
   return parsed;
+};
+
+const parseOcrShortSide = (value: string | undefined): number | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  if (parsed !== 0 && (!Number.isInteger(parsed) || parsed < 256 || parsed > 2048)) {
+    throw new CliUsageError('--ocr-short-side must be 0 or an integer from 256 to 2048');
+  }
+  return parsed;
+};
+
+const optionalString = (values: ParsedValues, name: string): string | undefined => {
+  const value = values[name];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };
 
 const requireString = (values: ParsedValues, name: string): string => {
@@ -110,6 +129,8 @@ const parseArguments = (args: string[]): { command: string; values: ParsedValues
         'dry-run': { type: 'boolean' },
         once: { type: 'boolean' },
         'max-transitions': { type: 'string' },
+        'ocr-url': { type: 'string' },
+        'ocr-short-side': { type: 'string' },
         name: { type: 'string' },
         region: { type: 'string' },
         'record-file': { type: 'string' },
@@ -153,6 +174,10 @@ export const parseCli = (args: string[]): CliOptions => {
         typeof values['max-transitions'] === 'string' ? values['max-transitions'] : undefined,
         'max-transitions',
         100,
+      ),
+      ocrUrl: optionalString(values, 'ocr-url'),
+      ocrShortSide: parseOcrShortSide(
+        typeof values['ocr-short-side'] === 'string' ? values['ocr-short-side'] : undefined,
       ),
     };
   }
@@ -255,6 +280,10 @@ export const runCli = async (options: CliOptions): Promise<void> => {
   }
 
   await loader.load(options.flow);
+  const ocrClient = new OcrClient({
+    baseUrl: options.ocrUrl,
+    shortSide: options.ocrShortSide,
+  });
   const controller = new AbortController();
   const onInterrupt = (): void => controller.abort();
   process.once('SIGINT', onInterrupt);
@@ -263,6 +292,7 @@ export const runCli = async (options: CliOptions): Promise<void> => {
       adb,
       loader,
       matcher,
+      ocrClient,
       options: createAutomationOptions(options, controller.signal),
       logger: (result) => console.log(JSON.stringify(result)),
     }).run();

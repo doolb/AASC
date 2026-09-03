@@ -2,7 +2,7 @@
 
 ## 状态
 
-功能正在实现中。以下命令和图片格式是已确认的目标接口。
+基础功能已实现。以下命令和图片格式是当前接口。
 
 ## OpenCV 运行时
 
@@ -16,7 +16,7 @@
 flows/
 ├── launch/
 │   ├── close-popup@0.88.png
-│   └── enter-game@0.90,goto@home.png
+│   └── enter-game@0.90,ocr@放弃福利,goto@home.png
 └── home/
     └── menu@0.86,clickpoint@0.5&0.5.png
 ```
@@ -32,6 +32,15 @@ flows/
 - `default`：无普通匹配时参与默认候选。
 - `select@图片名`：要求同一 Flow 的另一张图片也匹配。
 - `goto@home`：成功点击后切换到 `home` 目录。
+- `ocr@放弃福利`：要求同一轮 OCR 结果中包含“放弃福利”，再允许该图片节点点击。OCR 只辅助图片匹配，点击位置仍由图片匹配矩形决定。
+
+例如：
+
+```text
+flows/infinity-nikki/launch/enter-game@0.90,ocr@放弃福利,goto@home.png
+```
+
+当前 Flow 有 OCR 条件时，每轮截图只调用一次 `/api/vision/ocr`，所有 OCR 图片节点共享结果。OCR 接口不可用时输出 `ocr-error` 并跳过本轮点击。
 
 ## 命令
 
@@ -44,7 +53,16 @@ npm run inspect -- --device 192.168.1.6:5555 --flow launch
 npm run record -- --record-file logs/record.jsonl
 npm run start -- --device 192.168.1.6:5555 --flow launch --dry-run --once
 npm run start -- --device 192.168.1.6:5555 --flow launch
+npm run start -- --device 192.168.1.6:5555 --flow launch --ocr-url http://127.0.0.1:8081
 ```
+
+OCR 参数：
+
+- `--ocr-url <url>`：OCR 服务地址；默认读取 `AASC_URL`，否则为 `https://127.0.0.1:8081`。
+- `--ocr-short-side <pixels>`：OCR 缩放短边，取 `0` 或 `256` 到 `2048`。
+- OCR 显示器由 AASC OCR 服务自行调度，AutoHelper 不指定显示器。
+- `AASC_INSECURE=0`：校验 HTTPS 证书；默认保持与 AASC OCR 脚本一致，允许本地自签名证书。
+- `AASC_TIMEOUT_SECONDS`：OCR 请求超时时间，默认 30 秒。
 
 自动点击前应先执行 `--dry-run --once`，确认匹配图片和坐标。
 

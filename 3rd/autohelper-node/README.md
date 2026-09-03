@@ -2,7 +2,7 @@
 
 Linux + Node.js + ADB + OpenCV 的图片驱动自动化工具，参考 `/mnt/tmp/autohelper` 的 C# 设计实现。
 
-当前工程处于实现阶段，目标是让图片文件名描述点击规则，并使用 `goto@flowId` 在多个图片目录之间切换。
+当前工程支持让图片文件名描述点击规则，使用 `goto@flowId` 在多个图片目录之间切换，并使用 `ocr@文字` 做 OCR 辅助确认。
 
 ## 运行环境
 
@@ -30,9 +30,9 @@ npm run start -- --device <serial> --flow launch --dry-run
 ```text
 flows/
 ├── launch/
-│   └── enter@0.90,goto@home.png
+│   └── enter@0.90,ocr@放弃福利,goto@home.png
 └── home/
     └── menu@0.88,clickpoint@0.5&0.5.png
 ```
 
-完整参数和 `goto` 规则见 [使用说明](docs/usage.md)。
+完整参数、`ocr@文字` 和 `goto` 规则见 [使用说明](docs/usage.md)。

@@ -1,4 +1,12 @@
-import type { ImageDescriptor, MatchCandidate, MatchResult, Point, Rect, SelectedAction } from '../types.js';
+import type {
+  ImageDescriptor,
+  MatchCandidate,
+  MatchResult,
+  OcrResult,
+  Point,
+  Rect,
+  SelectedAction,
+} from '../types.js';
 
 const isSelectable = (candidate: MatchCandidate): boolean => (
   candidate.descriptor.queue >= 0
@@ -19,13 +27,28 @@ const satisfiesSelectImage = (
   return Boolean(selectedMatch?.matched && selectedMatch.rect !== null);
 };
 
+/** OCR 条件使用包含关系，适配 OCR 可能返回的前后提示文字。 */
+export const satisfiesOcr = (
+  descriptor: ImageDescriptor,
+  ocrResult: OcrResult | undefined,
+): boolean => {
+  const requiredText = descriptor.ocrText;
+  if (!requiredText) {
+    return true;
+  }
+  return Boolean(ocrResult?.boxes.some((box) => box.text.includes(requiredText)));
+};
+
 /** 根据图片元数据选择当前 Flow 中唯一的动作。 */
 export const selectAction = (
   candidates: MatchCandidate[],
   allMatches: Map<string, MatchResult>,
+  ocrResult?: OcrResult,
 ): SelectedAction | null => {
   const validCandidates = candidates.filter((candidate) => (
-    isSelectable(candidate) && satisfiesSelectImage(candidate, allMatches)
+    isSelectable(candidate)
+    && satisfiesSelectImage(candidate, allMatches)
+    && satisfiesOcr(candidate.descriptor, ocrResult)
   ));
   const ordinaryCandidates = validCandidates.filter((candidate) => !candidate.descriptor.defaultCandidate);
   const pool = ordinaryCandidates.length > 0
