@@ -83,6 +83,7 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
       startLogin: async () => ({ state: 'state-1' }),
       previewLegacyImport: async () => ({ counts: { providers: 1, accounts: 1, modelMappings: 1 } }),
       mergeLegacyImport: async (confirmed) => ({ confirmed }),
+      importQwenWebConversations: async (input) => ({ imported: input.limit ? 2 : 1, total: input.limit || 1, failed: 0 }),
     },
   });
   await service.start();
@@ -99,6 +100,9 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     const merge = await request(service.address().port, { path: '/api/chat2api/import/legacy/merge', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ confirmed: true }));
     assert.equal(merge.statusCode, 200);
     assert.equal(JSON.parse(merge.text).confirmed, true);
+    const qwenImport = await request(service.address().port, { path: '/api/chat2api/qwen/web-import', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ limit: 2 }));
+    assert.equal(qwenImport.statusCode, 200);
+    assert.deepEqual(JSON.parse(qwenImport.text), { imported: 2, total: 2, failed: 0 });
   } finally {
     await service.stop();
   }

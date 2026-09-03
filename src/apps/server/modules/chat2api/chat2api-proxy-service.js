@@ -171,6 +171,7 @@ const createChat2ApiProxyService = (options = {}) => {
         if (request.method === 'POST' && url.pathname === '/api/chat2api/import/merge') return managementService.mergeImport(body && body.data, body && body.confirmed);
         if (request.method === 'POST' && url.pathname === '/api/chat2api/import/legacy/preview') return managementService.previewLegacyImport();
         if (request.method === 'POST' && url.pathname === '/api/chat2api/import/legacy/merge') return managementService.mergeLegacyImport(body && body.confirmed);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/qwen/web-import') return managementService.importQwenWebConversations(body || {});
         const error = new Error(`管理路由不存在: ${request.method} ${url.pathname}`);
         error.statusCode = 404;
         error.code = 'not_found';

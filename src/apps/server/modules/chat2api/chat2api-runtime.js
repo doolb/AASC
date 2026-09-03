@@ -10,6 +10,7 @@ const { createChat2ApiProviderAdapters } = require('./chat2api-provider-adapters
 const { createRawTrafficLogger } = require('./chat2api-raw-traffic-logger');
 const { createChat2ApiResponseSessionStore } = require('./chat2api-response-session-store');
 const { createChat2ApiResponsesService } = require('./chat2api-responses-service');
+const { createChat2ApiQwenHistoryService } = require('./chat2api-qwen-history-service');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -27,12 +28,18 @@ const createChat2ApiRuntime = (options = {}) => {
   });
   const responseSessionStore = options.responseSessionStore || createChat2ApiResponseSessionStore({ dataStore });
   const responsesService = options.responsesService || createChat2ApiResponsesService({ sessionStore: responseSessionStore, coreAdapter });
+  const qwenHistoryService = options.qwenHistoryService || createChat2ApiQwenHistoryService({
+    dataStore,
+    providerRegistry,
+    httpClient: options.httpClient,
+    projectRoot: options.projectRoot,
+  });
   const oauth = options.oauth || createChat2ApiOAuthService({
     dataStore,
     providerRegistry,
     credentialAdapters: options.credentialAdapters || {},
   });
-  const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth });
+  const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth, qwenHistoryService });
   const proxy = options.proxy || createChat2ApiProxyService({
     host: options.host,
     port: options.port,
@@ -53,7 +60,7 @@ const createChat2ApiRuntime = (options = {}) => {
     address: proxy.address(),
   });
 
-  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, responseSessionStore, responsesService, oauth, managementService, proxy, start, stop, getStatus };
+  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, responseSessionStore, responsesService, qwenHistoryService, oauth, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };

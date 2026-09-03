@@ -5,6 +5,7 @@ const { createChat2ApiManagementService } = require('./chat2api-management-servi
 
 test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接口', async () => {
   const calls = [];
+  const qwenImports = [];
   const runtime = {
     dataStore: {
       readCollection: async (name, fallback) => name === 'config' ? { port: 8080 } : fallback,
@@ -34,6 +35,12 @@ test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接
       completeLogin: async (input) => ({ account: { accountId: input.accountId || 'a1', providerId: input.providerId } }),
       handleCallback: async (query) => ({ account: { providerId: query.providerId } }),
     },
+    qwenHistoryService: {
+      importConversations: async (input) => {
+        qwenImports.push(input);
+        return { imported: 1, total: input.limit, failed: 0 };
+      },
+    },
   };
   const management = createChat2ApiManagementService(runtime);
   const defaultConfig = await management.getConfig();
@@ -45,6 +52,8 @@ test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接
   assert.equal((await management.listAccounts())[0].secretConfigured, true);
   assert.equal((await management.startLogin('deepseek')).state, 'state-1');
   assert.equal((await management.createApiKey({ label: 'test' })).value, 'aasc_chat2api_secret');
+  assert.deepEqual(await management.importQwenWebConversations({ limit: 3 }), { imported: 1, total: 3, failed: 0 });
+  assert.deepEqual(qwenImports, [{ limit: 3 }]);
   assert.equal((await management.previewLegacyImport()).counts.providers, 1);
   assert.equal((await management.mergeLegacyImport(true)).confirmed, true);
   assert.equal((await management.updateAccount('a1', { enabled: false })).enabled, false);

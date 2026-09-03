@@ -24,7 +24,7 @@ const BUILTIN_PROVIDERS = Object.freeze([
     supportedModels: ['Auto'], modelMappings: { Auto: 'auto' }, credentialFields: [{ name: 'sessionToken', label: 'Session Token', type: 'password', required: true }],
   },
   {
-    id: 'qwen', name: 'Qwen', authType: 'tongyi_sso_ticket', apiEndpoint: 'https://chat2.qianwen.com', chatPath: '/api/v2/chat',
+    id: 'qwen', name: 'Qwen', authType: 'tongyi_sso_ticket', apiEndpoint: 'https://chat2.qianwen.com', historyApiEndpoint: 'https://chat2-api.qianwen.com', chatPath: '/api/v2/chat',
     supportedModels: ['Qwen3.6', 'Qwen3.7-Max', 'Qwen3.5-Flash', 'Qwen3-Max', 'Qwen3-Max-Thinking-Preview', 'Qwen3-Coder'],
     modelMappings: { 'Qwen3.6': 'Qwen', 'Qwen3.7-Max': 'Qwen3.7-Max', 'Qwen3.5-Flash': 'Qwen3.5-Flash', 'Qwen3-Max': 'Qwen3-Max', 'Qwen3-Max-Thinking-Preview': 'Qwen3-Max-Thinking-Preview', 'Qwen3-Coder': 'Qwen3-Coder' }, credentialFields: [{ name: 'ticket', label: 'SSO Ticket', type: 'password', required: true }],
   },

@@ -14,6 +14,7 @@ const createChat2ApiManagementService = (runtime) => {
     throw new Error('Chat2API 管理服务需要完整 runtime');
   }
   const { dataStore, providerRegistry, oauth } = runtime;
+  const qwenHistoryService = runtime.qwenHistoryService;
 
   const getConfig = async () => {
     const stored = await dataStore.readCollection('config', {});
@@ -66,6 +67,12 @@ const createChat2ApiManagementService = (runtime) => {
   const mergeImport = (input, confirmed) => dataStore.mergeImport(input, confirmed);
   const previewLegacyImport = () => dataStore.previewLegacyImport();
   const mergeLegacyImport = (confirmed) => dataStore.mergeLegacyImport(confirmed);
+  const importQwenWebConversations = (input) => {
+    if (!qwenHistoryService || typeof qwenHistoryService.importConversations !== 'function') {
+      throw new Error('Qwen 网页会话导入服务不可用');
+    }
+    return qwenHistoryService.importConversations(input || {});
+  };
 
   return {
     getConfig,
@@ -91,6 +98,7 @@ const createChat2ApiManagementService = (runtime) => {
     mergeImport,
     previewLegacyImport,
     mergeLegacyImport,
+    importQwenWebConversations,
   };
 };
 
