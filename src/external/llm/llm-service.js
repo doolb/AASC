@@ -505,6 +505,35 @@ function recoverSessionsFromHistory(target, sessions = [], historyItems = Object
     return recovered;
 }
 
+/**
+ * 汇总所有目标的私聊会话。
+ *
+ * 会话元数据通常保存在 chatSession.sessions 中，但历史记录中可能存在
+ * 元数据丢失后仍可恢复的 sessionId，因此这里同时扫描两类来源。该函数
+ * 只构造返回值，不改变当前会话状态，适合被只读接口调用。
+ */
+function flattenSessionEntries(sessionMap = {}, historyItems = getAllHistoryMessages()) {
+    const source = sessionMap && typeof sessionMap === 'object' && !Array.isArray(sessionMap)
+        ? sessionMap
+        : {};
+    const history = Array.isArray(historyItems) ? historyItems : [];
+    const targets = new Set(Object.keys(source).filter(target => String(target).trim()));
+
+    for (const message of history) {
+        if (message?.mode !== 'private' || !String(message.target || '').trim()) continue;
+        targets.add(String(message.target).trim());
+    }
+
+    return [...targets]
+        .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+        .flatMap(target => recoverSessionsFromHistory(target, source[target] || [], history)
+            .map(session => ({ ...session, mode: 'private', target })));
+}
+
+function listAllSessions() {
+    return flattenSessionEntries(chatSession.sessions, getAllHistoryMessages());
+}
+
 function loadCommands() {
     try {
         if (fs.existsSync(COMMANDS_FILE)) {
@@ -1687,7 +1716,9 @@ module.exports = {
     addMessage,
     mergeSessionEntries,
     recoverSessionsFromHistory,
+    flattenSessionEntries,
     listSessions,
+    listAllSessions,
     createSession,
     deleteSession,
     switchSession,

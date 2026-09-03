@@ -64,7 +64,18 @@ tts-generate.js --text TEXT       POST /api/tts/generate JSON
 asr-recognize.js --audio FILE     POST /api/asr/recognize multipart(audio)
 vision-ocr.js --image FILE        POST /api/vision/ocr multipart(image, displayId, shortSide?)
 vision-yolo.js --image FILE       POST /api/vision/yolo multipart(image, displayId?)
+chat-history.js [--sessions]      GET history 或 sessions，只读查看聊天历史或 session 名称
 api-request.js METHOD PATH ...    任意 HTTP 路由
 ```
 
 `run-all.js` 只访问 `/api/status`、`/api/asr/status`、`/api/tts/config`、`/api/vision/status`、`/media-list`、`/api/actors` 和 `/api/system-stats` 等无副作用接口。
+
+## 只读聊天查看
+
+复用现有 `GET /api/chat/history`，新增客户端脚本 `scripts/api/chat-history.js`：默认把服务端 JSON 原样输出；传入 `--tui` 时，在本地将历史消息渲染为终端面板。`--mode`、`--target`、`--session`、`--profile` 和 `--limit` 只在客户端过滤已获取的历史，不改变服务端数据。
+
+传入 `--sessions` 时，脚本调用现有 `GET /api/chat/sessions` 获取私聊 session，并调用现有 `GET /api/chat/history` 只识别群聊条目；`--target` 可选，省略时不限制目标。服务端保留带 target 请求的原有数组格式，无 target 时返回带 `target` 的扁平 session 列表。CLI 输出只保留 `target`（私聊角色名或“群聊”）和 `name`（session 名），不包含聊天记录、ID 或创建时间；`--sessions --tui` 只显示角色名和 session 名面板。
+
+历史导入 session 的技术名称已通过一次性数据迁移改为首条用户消息标题；查看命令只读取迁移后的名称，不再动态改名。
+
+本功能不新增服务端路由，不发送消息，不清空、删除、导入或修改聊天；只扩展现有 sessions 路由对缺省 target 的只读查询。实时消息跟随仍属于现有 WebSocket 边界，暂不纳入只读历史查看脚本。

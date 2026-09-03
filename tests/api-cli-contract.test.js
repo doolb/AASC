@@ -16,6 +16,7 @@ const userScripts = [
     'asr-recognize.js',
     'vision-ocr.js',
     'vision-yolo.js',
+    'chat-history.js',
     'run-all.js'
 ];
 
@@ -30,6 +31,7 @@ test('API 命令行工具包含跨平台 Node 公共调用器和业务脚本', (
         assert.match(source, /--help/);
     }
     assert.equal(fs.existsSync(path.join(scriptsDir, 'vision-tui.js')), true);
+    assert.equal(fs.existsSync(path.join(scriptsDir, 'chat-tui.js')), true);
     assert.equal(fs.existsSync(path.join(scriptsDir, 'vision-image.js')), true);
 });
 
@@ -49,6 +51,11 @@ test('API 命令行工具暴露用户操作和 AI 机器输出契约', () => {
     assert.match(read('vision-yolo.js'), /vision-image/);
     assert.match(read('vision-ocr.js'), /vision-tui/);
     assert.match(read('vision-yolo.js'), /vision-tui/);
+    assert.match(read('chat-history.js'), /\/api\/chat\/history/);
+    assert.match(read('chat-history.js'), /\/api\/chat\/sessions/);
+    assert.match(read('chat-history.js'), /--sessions/);
+    assert.match(read('chat-history.js'), /toSessionNamesPayload/);
+    assert.match(read('chat-history.js'), /--tui/);
     assert.match(read('api-request.js'), /--json/);
     assert.match(read('api-request.js'), /--file/);
     assert.match(read('api-request.js'), /confirm/i);
@@ -63,6 +70,7 @@ test('项目提供 API 文档和 api:test 入口', () => {
     assert.match(documentation, /tts-generate\.js/);
     assert.match(documentation, /asr-recognize\.js/);
     assert.match(documentation, /vision-tui\.js/);
+    assert.match(documentation, /chat-history\.js/);
     assert.match(documentation, /--tui/);
     assert.match(documentation, /--chafa/);
     assert.match(documentation, /JSON/);

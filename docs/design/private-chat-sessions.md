@@ -100,6 +100,17 @@ listSessions(target):
     不存在则创建默认会话
     将恢复后的列表持久化
 
+listAllSessions():
+    从 chatSession.sessions 和全部私聊历史收集 target
+    对每个 target 调用 recoverSessionsFromHistory(target, entries, history)
+    展平为 { mode: 'private', target, id, name, createdAt }
+    按 target 排序后返回，不要求调用方提供 target
+
+一次性历史会话命名迁移:
+    对 qwen-import-*、默认会话和新会话等通用名称查找同一 target/sessionId 的最早用户消息
+    将消息清理为短标题并写回 chat-session.json
+    已有明确人工名称和聊天消息内容保持不变
+
 setSession(session):
     合并 incoming sessions 与服务端已有 sessions
     以 target + session.id 去重
@@ -164,7 +175,10 @@ HTTP API（新增）：
 
 ```
 GET /api/chat/sessions?target={target}
-    返回 { status: 'success', sessions: [...] }
+    target 存在时返回 { status: 'success', sessions: [...] }
+
+GET /api/chat/sessions
+    target 省略时返回 { status: 'success', sessions: [{ mode, target, id, name, createdAt }, ...] }
 
 POST /api/chat/sessions/create
     body: { target, name }

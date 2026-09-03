@@ -1,5 +1,22 @@
 # Web MediaCenter - 变更日志
 
+### 私聊角色与 session 名称只读查看
+
+- ✅ [2026-09-03] 调整聊天查看 CLI 的 `--sessions` 输出，不填写 target 即可获取全部私聊 session 的角色名和 session 名。
+  - 扩展既有 `GET /api/chat/sessions` 的缺省 target 分支，带 target 的旧返回格式保持不变；新增全部目标 session 汇总和历史会话恢复。
+  - `scripts/api/chat-history.js --sessions` 复用既有 sessions/history GET 接口，补充 `群聊` 条目；JSON 仅输出 `{ target, name }`，`--sessions --tui` 只显示角色名和 session 名，不输出聊天记录、ID 或时间，未新增服务端 API 路径。
+  - 一次性更新 `/home/as/.config/aasc-user/chat-session.json`：将 `qwen-import-*` 技术名称改为对应 session 的首条用户消息标题，并补回历史中缺失的私聊 session 元数据。
+  - 运行态验证返回 21 个可见条目：群聊 1 项、妲己 5 项、小爱 15 项。
+  - 改动文件：`src/external/llm/llm-service.js`、`src/apps/server/boot/server-app.js`、`scripts/api/chat-history.js`、`scripts/api/chat-tui.js`、`tests/chat-history-cli.test.js`、`tests/private-chat-session-recovery.test.js`、`tests/api-cli-contract.test.js` 及对应设计/spec/task 文档。
+  - 定向验证：18 项通过；全量 `npm test` 共 455 项，454 项通过、1 项失败，唯一失败为按要求暂缓的 DeX 输入契约。
+
+### 聊天历史只读查看
+
+- ✅ [2026-09-03] 增加现有聊天历史 API 的只读 CLI/TUI 查看能力，不新增服务端 API。
+  - 改动文件：`scripts/api/chat-history.js`、`scripts/api/chat-tui.js`、`tests/chat-history-cli.test.js`、`tests/api-cli-contract.test.js`、`docs/api-usage.md`、`docs/design/api-usage.md`、`docs/spec/api-usage.md` 和 `docs/task/2026-09-03_聊天历史只读查看与TUI.md`。
+  - 支持默认 JSON 输出、模式/目标/会话/profile/数量过滤和 `--tui` 终端查看；仅调用既有 `GET /api/chat/history`，不发送聊天、不删除历史、不新增路由。
+  - 验证：定向测试 8/8 通过；全量 `npm test` 共 448 项，447 项通过、1 项失败，唯一失败为按要求暂缓的 DeX 输入契约；帮助命令和差异检查通过。
+
 ### 测试契约同步
 
 - ✅ [2026-09-03] 同步 7 项已发生源码变更的回归测试契约，暂不处理 DeX 多屏触摸/滚轮输入。

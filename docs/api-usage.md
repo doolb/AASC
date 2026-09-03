@@ -220,6 +220,27 @@ npm run prepare:vision-models
 
 该命令读取 `${YOLO11_MODEL_DIR:-/home/as}/yolo11*.pt`，生成 `res/models/yolo11/*.onnx` 及同名的 `*.classes.json` 标签文件；接口清单只返回模型和标签文件都存在的模型。APK 不把这些模型打进安装包。
 
+### 2.8 只读查看聊天历史
+
+项目已有 `GET /api/chat/history`，可使用只读命令行脚本查看，不新增服务端接口：
+
+```bash
+scripts/api/chat-history.js
+```
+
+默认输出服务端 JSON；需要终端面板时加 `--tui`：
+
+```bash
+scripts/api/chat-history.js --tui
+scripts/api/chat-history.js --mode private --target 小爱 --session default --limit 20 --tui
+scripts/api/chat-history.js --sessions
+scripts/api/chat-history.js --sessions --tui
+```
+
+可选参数会在客户端对已获取的历史进行过滤：`--mode group|private`、`--target TARGET`、`--session SESSION_ID`、`--profile PROFILE`、`--limit N` 和 `--width N`。脚本只调用既有 GET 接口，不发送、删除、清空或导入聊天；实时聊天消息仍使用现有 WebSocket 协议。
+
+`--sessions` 不需要填写 `target`，获取全部私聊 session，并从现有聊天历史中补充群聊条目，输出 `{ status, sessions: [{ target, name }] }`；其中 `target` 是私聊角色名或“群聊”，`name` 是 session 名。该模式只调用现有 `GET /api/chat/sessions` 和 `GET /api/chat/history`，聊天历史仅用于识别群聊名称，不会输出消息内容。私聊导入 session 已一次性按首条用户消息写入更易读的名称；`--sessions --tui` 只显示角色名和 session 名，不显示聊天记录、ID 或时间。带 target 的现有 sessions API 调用保持不变，不新增服务端路由。
+
 ## 3. HTTP API 目录
 
 下表是当前服务端源码注册的业务 HTTP 路由。`:id`、`:filename`、`:displayId`、`:ip` 是路径参数，`*` 表示剩余文件路径。除特别注明外，JSON 请求使用 `Content-Type: application/json`，成功响应是 JSON。
@@ -294,7 +315,7 @@ npm run prepare:vision-models
 | GET | `/api/aasc-user/export` | 下载用户配置 JSON | 只读下载 |
 | POST | `/api/aasc-user/import` | JSON `config` 或完整导入对象，可选 `mode` | 导入配置，需确认 |
 | POST | `/api/chat/round` | JSON 按聊天模块约定指定会话轮次 | 删除一轮对话，需确认 |
-| GET | `/api/chat/sessions?target=TARGET` | 查询指定目标会话 | 只读 |
+| GET | `/api/chat/sessions[?target=TARGET]` | 指定 target 时查询目标会话；省略 target 时查询全部私聊 session | 只读 |
 | POST | `/api/chat/sessions/create` | JSON `target`、可选 `name` | 创建会话 |
 | POST | `/api/chat/sessions/delete` | JSON `target`、`sessionId` | 删除会话，需确认 |
 | POST | `/api/chat/sessions/switch` | JSON `target`、`sessionId` | 切换会话 |

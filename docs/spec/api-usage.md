@@ -79,6 +79,55 @@ vision-yolo.js:
     optional displayId
     common.api_request POST /api/vision/yolo with multipart fields
     each detection returns classId and className when the model labels contain that class
+
+chat-history.js:
+    parse --mode, --target, --session, --profile, --limit, --sessions, --tui and --width
+    if sessions is false:
+        call existing GET /api/chat/history
+        validate response as JSON object with history array
+        apply read-only client-side filters and keep latest limit messages
+    if sessions is true:
+        call existing GET /api/chat/sessions with optional target query
+        call existing GET /api/chat/history only to detect the group chat entry
+        validate response as JSON object with sessions array
+        validate history response as JSON object with history array
+        append one virtual group session when group history exists
+        use the first user/control message as the virtual group session name
+        filter sessions locally by the supplied target/session/mode
+        map each entry to { target: role name or 群聊, name: session name }
+        output { status, sessions } without chat records, ids or timestamps
+    if --tui:
+        if sessions is true:
+            render only the role name and session name in a session panel
+        else:
+            render legacy user/assistant pairs and modern role/content messages
+            wrap text by display width and print a terminal-readable panel
+    else:
+        if sessions is false:
+            print the history API JSON envelope
+        if sessions is true:
+            print { status, sessions } where sessions only contains target and name
+    never call POST, PUT or DELETE chat routes
+
+existing GET /api/chat/sessions:
+    if target exists:
+        return { status: 'success', sessions: listSessions(target) }
+    return { status: 'success', sessions: listAllSessions() }
+
+listAllSessions():
+    collect targets from configured session map and private history
+    for each target:
+        recover missing default/session entries from private history
+        flatten each session as { mode: 'private', target, id, name, createdAt }
+    sort by target and preserve session metadata
+
+one-time session data migration:
+    read existing chat-session.json and all chat-history*.json files
+    for generic names such as 默认会话、新会话 or qwen-import-*:
+        find the earliest user/control message for the same private target/sessionId
+        normalize that message into a short session name
+        write the renamed private session metadata back once
+    preserve explicitly meaningful names and all chat messages
 ```
 
 ## 安全测试入口伪代码
@@ -101,6 +150,10 @@ run-all.js:
     assert play/TTS/ASR/OCR/YOLO flags and API paths are present
     assert package.json contains api:test
     assert docs list routes and AI JSON/error contract
+    assert chat-history.js only reads existing GET history/sessions routes
+    assert --sessions does not require target and returns role name plus session name only
+    assert chat TUI renders session names without chat records
+    assert existing target-specific sessions response remains compatible
 
 本机命令测试：
     command --help for every script

@@ -2900,11 +2900,11 @@ app.post('/api/chat/round', (req, res) => {
 });
 
 app.get('/api/chat/sessions', (req, res) => {
-    const target = req.query.target;
-    if (!target) {
-        return res.json({ status: 'error', message: '缺少 target 参数' });
+    const target = String(req.query.target || '').trim();
+    if (target) {
+        return res.json({ status: 'success', sessions: chat.listSessions(target) });
     }
-    res.json({ status: 'success', sessions: chat.listSessions(target) });
+    res.json({ status: 'success', sessions: chat.listAllSessions() });
 });
 
 app.post('/api/chat/sessions/create', (req, res) => {
