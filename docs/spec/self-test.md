@@ -203,6 +203,29 @@ runAllTests():
     设置 isRunning = false
 ```
 
+### 源码契约回归测试同步（2026-09-03）
+
+```
+runSourceContractRegressionTests():
+    检查 Android ASR 测试 APK 的路由变量按查询字符串拆分
+    检查 ASR 网页通过带查询参数的 /api/asr 路由提交音频
+
+    检查正式显示 APK 不复制 GTCRN 资源
+    检查 DenoiseModelManager 使用 speech-enhancement 清单和模型下载路由
+    检查服务器提供 GTCRN 清单与文件白名单路由
+
+    检查网页 TTS 使用 recoverTtsPlayback 恢复自身 audio 元素
+    检查聊天删除单轮按后端选择对应的 runtimeManager 重置会话
+    检查 repairMode.password 为字符串且 repairMode.role 为 mainfront
+    检查搜索频道按 pi 或 codex Agent 会话设置 ephemeral
+    检查语音指令帮助文本传入当前命令集和 topic
+
+    保留 display-native-bridge.test.js 的 DeX 原生触摸/滚轮旧契约失败
+    直到明确 DeX 多屏输入桥接的后续处理方案
+```
+
+上述契约测试只验证源码中对外可观察的稳定行为和路由，不绑定已经重命名或抽取的内部局部变量。
+
 ## 结果存储
 
 测试结果保存在两个地方：

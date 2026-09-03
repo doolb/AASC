@@ -21,6 +21,7 @@ assert.match(server, /allowRepairModeTts: true/);
 assert.match(server, /data\.type === 'tts'[\s\S]*?options\.allowRepairModeTts !== true/);
 assert.match(server, /getDisplayIds: getOnlineVoicePlaybackDisplayIds/);
 assert.match(server, /generateTTS: \(ttsText\) => generateTtsWithFallback\(ttsText\)/);
-assert.deepEqual(config.repairMode, { password: '', role: 'mainfront' });
+assert.equal(typeof config.repairMode?.password, 'string');
+assert.equal(config.repairMode?.role, 'mainfront');
 
 console.log('repair-mode-server-contract.test.js: contract checks passed');

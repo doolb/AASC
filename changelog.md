@@ -1,5 +1,11 @@
 # Web MediaCenter - 变更日志
 
+### 测试契约同步
+
+- ✅ [2026-09-03] 同步 7 项已发生源码变更的回归测试契约，暂不处理 DeX 多屏触摸/滚轮输入。
+  - 改动文件：`tests/android-asr-apk.test.js`、`tests/android-asr-options-integration.test.js`、`tests/display-media-focus.test.js`、`tests/pi-agent-conversation.test.js`、`tests/repair-mode-server-contract.test.js`、`tests/search-channel.test.js`、`tests/tts-display-routing.test.js`；同步 `docs/design/android-model-distribution.md`、`docs/spec/self-test.md`、`docs/task/2026-09-03_同步源码变更测试契约.md` 和 `docs/todo.md`。
+  - 定向验证：7 个测试文件共 30 项通过；全量 `npm test` 共 443 项，442 项通过、1 项失败，唯一失败为按要求暂缓的 DeX 输入契约。
+
 ### Android 正式 APK 统一模型分发
 
 - ✅ [2026-09-02] 正式显示 APK 的模型改为服务器按需下载，APK 不再内置视觉、降噪、ASR、TTS 和声纹模型资源。

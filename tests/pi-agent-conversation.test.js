@@ -18,7 +18,9 @@ test('服务端提供删除单轮对话接口', () => {
 test('聊天服务按消息 ID 删除单轮并重置 Pi 会话', () => {
     const source = fs.readFileSync(SERVICE_FILE, 'utf8');
     assert.match(source, /function deleteConversationRound\(options = \{\}\)/u);
-    assert.match(source, /piRuntimeManager\.resetSession/u);
+    assert.match(source, /const runtimeManager = profile\.backend === 'codex' \? codexRuntimeManager : piRuntimeManager/u);
+    assert.match(source, /runtimeManager\?\.resetSession/u);
+    assert.match(source, /runtimeManager\.resetSession/u);
     assert.match(source, /String\(message\.id\s*\|\|\s*''\) === String\(messageId\)/u);
 });
 

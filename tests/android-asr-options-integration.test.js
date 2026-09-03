@@ -6,12 +6,20 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
-test('正式 APK 包含 GTCRN 降噪资源和快速多段实现', () => {
+test('正式 APK 使用服务器分发 GTCRN 模型并保留快速多段实现', () => {
     const gradle = read('src/apps/android-display/app/build.gradle.kts');
     const bridge = read('src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt');
     const voiceprint = read('src/apps/android-display/app/src/main/java/com/aasc/display/VoiceprintEngine.kt');
-    assert.match(gradle, /speech-enhancement/);
-    assert.match(gradle, /gtcrn_simple\.onnx/);
+    const denoiseManager = read('src/apps/android-display/app/src/main/java/com/aasc/display/DenoiseModelManager.kt');
+    const denoiseFiles = read('src/apps/android-display/app/src/main/java/com/aasc/display/DenoiseModelFiles.kt');
+    const server = read('src/apps/server/boot/server-app.js');
+    assert.doesNotMatch(gradle, /prepareBundledDenoiseModel|generated\/assets\/speech-enhancement/);
+    assert.match(denoiseFiles, /gtcrn_simple\.onnx/);
+    assert.match(denoiseManager, /manifestPath = "\/api\/speech-enhancement\/model-manifest"/);
+    assert.match(denoiseManager, /downloadPath = "\/api\/speech-enhancement\/model"/);
+    assert.match(denoiseManager, /modelId = "gtcrn"/);
+    assert.match(server, /app\.get\('\/api\/speech-enhancement\/model-manifest'/);
+    assert.match(server, /resolveFile\('speech-enhancement', 'gtcrn'/);
     assert.match(bridge, /asrRecognizeAsyncWithOptions/);
     assert.match(bridge, /DenoiseAudioPolicy\.prepare/);
     assert.match(bridge, /VoiceprintFastPath\.representatives/);

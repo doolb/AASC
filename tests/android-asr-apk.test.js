@@ -33,9 +33,10 @@ test('android ASR UI and HTTP endpoints are present', () => {
   assert.match(layout, /cpuModeSpinner/);
   assert.match(server, /"\/health"/);
   assert.match(server, /"\/api\/asr"/);
-  assert.match(server, /request\.path == "\/"/);
+  assert.match(server, /val route = request\.path\.substringBefore/);
+  assert.match(server, /request\.method == "GET" && \(route == "\/" \|\| route == "\/index\.html"\)/);
   assert.match(server, /18080/);
-  assert.match(page, /fetch\('\/api\/asr'/);
+  assert.match(page, /fetch\('\/api\/asr\?/);
   assert.match(page, /type="file"/);
   assert.match(page, /getUserMedia/);
   assert.match(page, /AudioContext/);

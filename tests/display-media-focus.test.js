@@ -58,7 +58,7 @@ test('网页媒体不调用 Android 原生音频焦点接口', () => {
 
 test('网页 TTS 继续使用自身音频元素播放并保持 100% 音量', () => {
     const source = fs.readFileSync(DISPLAY, 'utf8');
-    assert.match(source, /function playTTS\(/);
+    assert.match(source, /function recoverTtsPlayback\(/);
     assert.match(source, /ttsAudio\.play\(\)/);
     assert.match(source, /ttsAudio\.volume\s*=\s*1/);
     assert.doesNotMatch(source, /NativeDisplay\.(requestAudioFocus|abandonAudioFocus)/);

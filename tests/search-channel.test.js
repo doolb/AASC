@@ -38,7 +38,9 @@ test('搜索命令使用独立搜索路由而不是普通群聊路由', () => {
     const searchHandlerEnd = server.indexOf('\nconst deviceEventDebounce', searchHandlerStart);
     assert.ok(searchHandlerStart >= 0 && searchHandlerEnd > searchHandlerStart);
     assert.doesNotMatch(server.slice(searchHandlerStart, searchHandlerEnd), /handleChatMessage\(/u);
-    assert.match(server.slice(searchHandlerStart, searchHandlerEnd), /ephemeral:\s*useEphemeralPi/u);
+    assert.match(server.slice(searchHandlerStart, searchHandlerEnd), /const useEphemeralAgent = activeProfile\?\.mode === 'agent'/u);
+    assert.match(server.slice(searchHandlerStart, searchHandlerEnd), /\['pi', 'codex'\]\.includes\(activeProfile\?\.backend\)/u);
+    assert.match(server.slice(searchHandlerStart, searchHandlerEnd), /ephemeral:\s*useEphemeralAgent/u);
     assert.match(llm, /ephemeral/u);
 });
 

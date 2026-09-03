@@ -57,3 +57,10 @@ YOLO 清单由服务器实际存在且配套的 ONNX 与 `*.classes.json` 文件
 - 新 APK + 旧服务器：模型清单返回 404 时，相关本地能力报错但不影响媒体显示和已有 ASR/TTS 缓存。
 - 旧 APK + 新服务器：`yolo11n` 继续使用旧协议；选择 s/m/l/x 时服务端要求新 APK 声明对应模型能力，旧 APK 返回不支持，不静默降级到 n。
 - APK 包中不再生成 `speech-enhancement`、`vision/rapidocr`、`vision/yolo11` 资源；运行时只从服务器缓存目录加载。
+
+## 测试契约同步（2026-09-03）
+
+源码已将 GTCRN 从正式 APK 内置资源调整为服务器清单分发，因此回归测试应检查
+`DenoiseModelManager`、模型文件白名单和服务器下载路由，而不是检查 Gradle 是否复制
+`speech-enhancement` 资源。独立 Android ASR 测试 APK 仍按自身内置网页和 HTTP 路由契约验证，
+不受正式显示 APK 的模型分发策略影响。
