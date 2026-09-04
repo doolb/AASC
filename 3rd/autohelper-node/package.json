@@ -5,25 +5,24 @@
   "type": "module",
   "description": "Linux + ADB + OpenCV 图片驱动自动化工具",
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "node --check src/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "tsx src/cli.ts start",
-    "capture": "tsx src/cli.ts capture",
-    "record": "tsx src/cli.ts record",
-    "inspect": "tsx src/cli.ts inspect"
+    "start": "node src/cli.js start",
+    "capture": "node src/cli.js capture",
+    "record": "node src/cli.js record",
+    "inspect": "node src/cli.js inspect",
+    "nav-check": "node src/cli.js nav-check",
+    "nav-chain": "node src/cli.js nav-chain",
+    "nav-serve": "node src/cli.js nav-serve"
   },
   "dependencies": {
     "@techstark/opencv-js": "5.0.0-release.1",
     "bmp-js": "0.1.0",
+    "onnxruntime-web": "1.26.0",
     "pngjs": "7.0.0"
   },
   "devDependencies": {
-    "@types/bmp-js": "0.1.2",
-    "@types/node": "26.4.1",
-    "@types/pngjs": "6.0.5",
-    "tsx": "4.23.13",
-    "typescript": "7.0.2",
     "vitest": "4.1.11"
   }
 }

@@ -1,0 +1,14 @@
+{
+  "models": [
+    {
+      "id": "yolo11n",
+      "task": "detect",
+      "backend": "onnx-yolo11",
+      "modelPath": "/mnt/AASC/res/models/yolo11/yolo11n.onnx",
+      "labelsPath": "/mnt/AASC/res/models/yolo11/yolo11n.classes.json",
+      "inputSize": 640,
+      "confidenceThreshold": 0.25,
+      "iouThreshold": 0.45
+    }
+  ]
+}
