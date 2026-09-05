@@ -20,6 +20,7 @@ aasc/
 ├── record.js             # 用户记录
 ├── capability.js         # 能力继承
 ├── cluster.js            # 分布式集群
+├── server-registry.js    # AASC 服务器节点登记与心跳
 ├── pipeline.js           # 能力管道执行器
 ├── composition.js        # 能力组合定义
 ├── level-calculator.js   # 能力等级计算器
@@ -1373,4 +1374,161 @@ wsSystem.registerActor('my-actor', actor);
 
 子服务器
     → 仅执行需要服务器资源、持久化、后台运行或独立运行环境的任务
+```
+
+## AASC 网络演进流程伪代码
+
+```text
+节点启动
+    → 读取预先配置的 AASC 主服务器地址
+    → 当前阶段不执行局域网自动发现
+    → 执行服务器节点注册与心跳
+    → 主服务器返回节点状态和能力
+    → 控制端读取并展示当前服务器列表
+```
+
+```text
+完成服务器节点注册与心跳
+    → 实现 /server 代码版本清单和代码包下发
+    → Bootstrap 校验代码包并启动服务器
+    → 实现服务器媒体库索引上报和聚合
+    → 实现显示端优先的任务路由与服务节点回退
+    → 实现网页版已登记服务器手动切换
+    → 最后实现用户、节点、媒体库和操作权限认证
+```
+
+```text
+当前阶段明确不做
+    → 自动发现
+    → 最近服务器自动选择
+    → 媒体文件全量同步
+    → 主服务器故障转移
+    → 权限认证
+```
+
+## AASC 媒体索引共享伪代码
+
+当前实现对应 `src/framework/aasc/media-index-service.js`，主服务器路由为 `GET /api/aasc/media-index`。
+
+```text
+GET /api/aasc/media-index?scope=local&path=/
+    → 读取当前服务器的媒体库清单
+    → 对每个媒体库调用 MediaLibraryManager.list(libraryId, path)
+    → 返回 node、path、libraries 和每个库的 items
+    → 为条目补充所属服务器地址和 listUrl/proxyUrl
+
+GET /api/aasc/media-index
+    → 构建当前服务器 localIndex
+    → 获取 AascServerRegistry 中 status=online 的远程节点
+    → 并发请求每个节点的 /api/aasc/media-index?scope=local&path=...
+    → 成功结果加入 sources，失败来源加入 errors
+    → 返回 { status: success, path, sources }
+```
+
+```text
+AascMediaIndexService
+    → 规范化 nodeId、url、path、library 和 item 字段
+    → 丢弃远程返回中的凭据、绝对本地路径和未知字段
+    → 远程请求设置有限超时，不因单个节点失败中断聚合
+    → 不保存媒体文件，只返回所属节点的访问地址
+```
+
+## AASC 显示端优先任务路由伪代码
+
+当前实现对应 `src/framework/aasc/task-router.js`；TaskManager 在 `runInstance` 执行前应用路由结果。
+
+```text
+resolve(task)
+    → 如果 task.target 是 display/subdisplay 且指定 displayId
+        → 返回显式显示端目标
+    → 如果 task.target 是 server 且 routing 不是 display-first
+        → 返回当前服务器目标
+    → 读取 task.requiredCapabilities
+    → 过滤在线显示端和能力覆盖候选
+    → 候选存在时返回 { target: display, displayId, reason: capability-match }
+    → 没有候选时返回 { target: server, nodeId: main-server, reason: display-unavailable }
+
+TaskManager.runInstance
+    → 在执行前调用 resolve(task)
+    → display 目标复用 _forwardToDisplay 和 task:execute
+    → server 目标复用现有 Node/Puppeteer runner
+    → 保存 routeTarget/routeReason，供控制端观察
+```
+
+## 网页版服务器手动切换伪代码
+
+当前实现对应 `src/apps/web-mediacenter/ui/public/js/server-list.js`，页面入口位于 `/upload` 的服务器面板。
+
+```text
+渲染服务器卡片
+    → 读取 server.url 并规范化为 http/https 基础地址
+    → 当前 origin 与目标 origin 相同则显示“当前连接”
+    → 在线远程节点显示“连接”按钮
+
+点击连接
+    → 校验目标地址协议和主机
+    → 保存 aasc.serverUrl
+    → window.location.assign(targetOrigin + '/upload')
+
+手动输入地址
+    → 校验地址
+    → 去除查询和 hash
+    → 跳转到地址 + '/upload'
+```
+
+## 服务器节点注册与心跳伪代码
+
+```text
+AascServerRegistry
+    records: Map<nodeId, ServerRecord>
+    heartbeatTimeoutMs: 90000
+    now: 可注入的当前时间函数
+
+register(input)
+    → 校验 nodeId 非空且 url 为 http/https 地址
+    → 创建或合并节点记录
+    → 记录 registeredAt（新节点）
+    → 更新 name、url、version、capabilities、metadata
+    → 更新 lastHeartbeatAt 为 now()
+    → 将 status 设为 online
+    → 返回脱离内部引用的节点快照
+
+heartbeat(nodeId, input)
+    → 查找 nodeId
+    → 不存在时返回空结果
+    → 合并允许更新的 name、url、version、capabilities、metadata
+    → 更新 lastHeartbeatAt 为 now()
+    → 将 status 设为 online
+    → 返回节点快照
+
+getAll()
+    → 遍历 records
+    → 如果 now() - lastHeartbeatAt >= heartbeatTimeoutMs
+        → status = offline
+    → 返回所有节点快照
+```
+
+```text
+POST /api/aasc/servers/register
+    → 调用 registry.register(req.body)
+    → 成功返回 { status: success, server, heartbeatTimeoutMs }
+    → 参数错误返回 HTTP 400
+
+POST /api/aasc/servers/:nodeId/heartbeat
+    → 调用 registry.heartbeat(req.params.nodeId, req.body)
+    → 节点不存在返回 HTTP 404
+    → 成功返回 { status: success, server }
+
+GET /api/aasc/servers
+    → 主服务器先调用 registry.heartbeat('main-server') 刷新自身心跳
+    → 获取 registry.getAll()
+    → 追加尚未出现在 registry 中的 SubServerManager 兼容节点
+    → 返回 { status: success, servers }
+```
+
+```text
+主服务器启动
+    → 使用当前监听协议、局域网地址和固定 nodeId=main-server 登记自身
+    → 控制端服务器页面请求 /api/aasc/servers
+    → 页面显示 registry 节点和兼容旧配置节点
 ```

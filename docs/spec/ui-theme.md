@@ -183,6 +183,29 @@ MutationObserver:
     在线、错误、支持/不支持、选中和危险操作保留 success-color/danger-color/accent-color 等语义例外
     新增控件优先继承父级文字和基础控件颜色，不新增单个主题的硬编码覆盖
 
+网页主题规则:
+    根节点主题变量提供网页颜色，组件只表达语义，不直接决定具体色值
+    普通文字、标题、字段值 -> text-primary
+    辅助文字、节点 ID、字段标签、提示 -> text-secondary 或 text-muted
+    卡片和区块 -> card-background 或 bg-surface
+    输入控件 -> input-background/text-primary/border-color
+    边框和阴影 -> border-color/shadow-color
+    在线、离线、错误、成功、危险、选中和按钮前景色 -> 允许 success-color/danger-color/accent-color 或按钮专用前景色
+    普通网页文字禁止固定使用 #fff、#888、白色 rgba 或仅适用于深色主题的背景值
+    主题切换只更新主题变量和组件外观，不改变业务数据、路由、事件处理和媒体内容
+
+服务器节点列表主题:
+    server-card background -> card-background
+    server-card border -> border-color
+    server-card-header h3 and server-card-details dd -> text-primary
+    server-card-id、server-card-details dt、server-list-status、共享媒体库辅助摘要 -> text-secondary 或 text-muted
+    server-current-label、server-unavailable-label -> text-secondary
+    server-status-online -> success-color 语义色
+    server-status-offline -> danger-color 语义色
+    server-switch-toolbar input -> input-background/text-primary/border-color
+    server-connect-btn -> 保留按钮自身前景色，不套用普通文字颜色
+    禁止服务器节点列表普通文字使用固定 #fff 或白色 rgba
+
 卡片和弹窗背景:
     定义 card-background 语义变量
     深色主题的 card-background 和 bg-surface-strong 保持原有半透明效果

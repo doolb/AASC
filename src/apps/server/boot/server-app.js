@@ -66,6 +66,10 @@ const {
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
+const { AascServerRegistry } = require('../../../framework/aasc/server-registry');
+const { AascMediaIndexService } = require('../../../framework/aasc/media-index-service');
+const { AascTaskRouter } = require('../../../framework/aasc/task-router');
+const { ServerReleaseService } = require('../modules/aasc/server-release-service');
 const { WSViewBindServer } = require('../../../core/viewbind');
 const LogBuffer = require('../../../framework/observability/log-buffer');
 const SystemMonitor = require('../../../framework/observability/system-monitor');
@@ -252,6 +256,10 @@ function getTopSmapsRss(topN = 8) {
 const app = express();
 
 const PORT = config.get('server.port', 8081);
+const serverReleaseService = new ServerReleaseService({
+    projectRoot: PROJECT_ROOT,
+    version: process.env.AASC_SERVER_VERSION || null
+});
 const RES_DIR = path.join(PROJECT_ROOT, 'res');
 const modelManifestService = new ModelManifestService({
     modelRoot: path.join(RES_DIR, 'models')
@@ -439,11 +447,76 @@ const { PlaylistManager } = require('../../web-mediacenter/modules/media/playlis
 const playlistManager = new PlaylistManager(mediaLibraryManager);
 
 const subServerManager = new SubServerManager();
+const AASC_MAIN_NODE_ID = 'main-server';
+const AASC_HEARTBEAT_TIMEOUT_MS = 90000;
+const aascServerRegistry = new AascServerRegistry({
+    heartbeatTimeoutMs: AASC_HEARTBEAT_TIMEOUT_MS
+});
+const aascMediaIndexService = new AascMediaIndexService({
+    mediaLibraryManager,
+    getNode: () => ({
+        nodeId: AASC_MAIN_NODE_ID,
+        name: '主服务器',
+        url: `${useHttps ? 'https' : 'http'}://${getLocalIP()}:${PORT}`
+    }),
+    getRemoteNodes: () => aascServerRegistry.getAll()
+});
+const aascTaskRouter = new AascTaskRouter({
+    getDisplays: () => Array.from(displayClients.entries()).map(([id, data]) => ({
+        id,
+        online: data.ws?.readyState === WebSocket.OPEN,
+        capabilities: data.state?.capabilities || DEFAULT_CAPABILITIES
+    })),
+    getCurrentServer: () => ({ nodeId: AASC_MAIN_NODE_ID })
+});
 
 const subServerConfig = config.get('subServers');
 if (subServerConfig) {
     subServerManager.loadFromConfig(subServerConfig);
     subServerManager.startHealthCheck();
+}
+
+function getAascServerSnapshots() {
+    // 主服务器本身属于当前进程，读取目录时刷新它的心跳，避免主服务在
+    // 长时间没有外部请求心跳时被误判为离线。远程节点仍严格遵守超时规则。
+    aascServerRegistry.heartbeat(AASC_MAIN_NODE_ID);
+    const registeredServers = aascServerRegistry.getAll();
+    const registeredIds = new Set(registeredServers.map(server => server.nodeId));
+    const legacyServers = subServerManager.getAllServers()
+        .filter(server => !registeredIds.has(server.id))
+        .map(server => {
+            const snapshot = server.toJSON();
+            return {
+                ...snapshot,
+                nodeId: snapshot.id,
+                status: snapshot.healthy ? 'online' : 'offline',
+                version: null,
+                capabilities: {},
+                metadata: { source: 'legacy-subserver' },
+                lastHeartbeatAt: snapshot.lastHealthCheck
+            };
+        });
+    return [...registeredServers, ...legacyServers];
+}
+
+function registerMainAascServer(localIP, protocol) {
+    return aascServerRegistry.register({
+        nodeId: AASC_MAIN_NODE_ID,
+        name: '主服务器',
+        url: `${protocol}://${localIP}:${PORT}`,
+        version: process.env.AASC_SERVER_VERSION || 'unknown',
+        capabilities: {
+            nodeRegistry: true,
+            mediaLibrary: true,
+            displayGateway: true
+        },
+        metadata: {
+            role: 'main-server',
+            protocol,
+            platform: process.platform,
+            arch: process.arch
+        }
+    });
 }
 
 mediaLibraryManager.init().then(() => {
@@ -477,6 +550,7 @@ async function startServer() {
     await aiRoles.restoreAll();
 
     server.listen(PORT, '0.0.0.0', async () => {
+        registerMainAascServer(localIP, protocol);
         log('系统', '媒体中心服务器已启动');
         log('系统', `上传端地址: ${protocol}://${localIP}:${PORT}/upload`);
         log('系统', `显示端地址: ${protocol}://${localIP}:${PORT}/display`);
@@ -737,6 +811,7 @@ async function startServer() {
             taskManager = new TaskManager({
                 maxInstances: 50,
                 chatService: chat,
+                resolveTaskRoute: (task) => aascTaskRouter.resolve(task),
                 // tts.server 只切换通用 HTTP 客户端的运行时地址，不改变服务器 TTS 开关。
                 getTtsServiceUrl: () => tts.getConfig().serviceUrl,
                 setTtsServiceUrl: (serviceUrl) => tts.init({ serviceUrl })
@@ -1541,6 +1616,30 @@ app.get('/display', (req, res) => {
     res.sendFile(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public', 'display.html'));
 });
 
+async function sendServerReleaseManifest(req, res) {
+    try {
+        const manifest = await serverReleaseService.getManifest();
+        res.json({ status: 'success', manifest });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: `读取服务器版本清单失败: ${error.message}` });
+    }
+}
+
+app.get('/server', sendServerReleaseManifest);
+app.get('/server/manifest', sendServerReleaseManifest);
+
+app.get('/server/package', async (req, res) => {
+    try {
+        await serverReleaseService.streamPackage(res);
+    } catch (error) {
+        if (!res.headersSent) {
+            res.status(500).json({ status: 'error', message: `读取服务器代码包失败: ${error.message}` });
+        } else {
+            res.destroy(error);
+        }
+    }
+});
+
 function parseMultipart(req) {
     return new Promise((resolve, reject) => {
         const contentType = req.headers['content-type'];
@@ -2256,6 +2355,51 @@ app.delete('/api/subservers/:id', (req, res) => {
 app.get('/api/subservers/health', async (req, res) => {
     const summary = await subServerManager.checkAllHealth();
     res.json({ status: 'success', ...summary });
+});
+
+app.get('/api/aasc/servers', (req, res) => {
+    try {
+        res.json({ status: 'success', servers: getAascServerSnapshots() });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: `读取 AASC 服务器列表失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/register', (req, res) => {
+    try {
+        const server = aascServerRegistry.register(req.body || {});
+        res.json({
+            status: 'success',
+            server,
+            heartbeatTimeoutMs: AASC_HEARTBEAT_TIMEOUT_MS
+        });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: `服务器注册失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/:nodeId/heartbeat', (req, res) => {
+    try {
+        const server = aascServerRegistry.heartbeat(req.params.nodeId, req.body || {});
+        if (!server) {
+            return res.status(404).json({ status: 'error', message: '服务器节点不存在' });
+        }
+        res.json({ status: 'success', server });
+    } catch (error) {
+        res.status(400).json({ status: 'error', message: `服务器心跳失败: ${error.message}` });
+    }
+});
+
+app.get('/api/aasc/media-index', async (req, res) => {
+    try {
+        const requestedPath = typeof req.query.path === 'string' ? req.query.path : '/';
+        const index = req.query.scope === 'local'
+            ? await aascMediaIndexService.buildLocalIndex(requestedPath)
+            : await aascMediaIndexService.buildNetworkIndex(requestedPath);
+        res.json({ status: 'success', index });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: `读取 AASC 媒体索引失败: ${error.message}` });
+    }
 });
 
 const asrUpload = multer({ dest: ASR_TEMP_DIR });

@@ -31,6 +31,7 @@ class TaskManager extends EventEmitter {
     this.taskLinks = new Map();  // sourceInstanceId -> [{ taskName, instanceId }]
     this._pendingDisplayServices = [];  // [{ taskName, instanceId, task, params }] 待显示端连接后转发
     this._orphanedTasks = new Map();     // displayId -> [{ taskName, params, entryFile, ... }] 显示端断连后待重连恢复
+    this._resolveTaskRoute = options.resolveTaskRoute || null;
   }
 
   async init() {
@@ -168,10 +169,28 @@ class TaskManager extends EventEmitter {
       env: entry.env || 'auto',
       mode: entry.mode || 'one-shot',
       displayId: entry.displayId || null,
+      routing: entry.routing || null,
+      requiredCapabilities: entry.requiredCapabilities || [],
       entryFile: entry.entryFile || (entry.mode === 'service' ? 'service.js' : 'task.js'),
       params: entry.params || {},
       refs: entry.refs || {}
     };
+
+    const route = this._resolveTaskRoute ? this._resolveTaskRoute(task) : null;
+    if (route) {
+      task.target = route.target;
+      task.displayId = route.displayId || null;
+      instance.routeTarget = route.target;
+      instance.routeReason = route.reason;
+      await this.taskIO.updateIndex(taskName, {
+        instanceId,
+        target: route.target,
+        displayId: route.displayId || null,
+        routeTarget: route.target,
+        routeReason: route.reason,
+        routeNodeId: route.nodeId || null
+      });
+    }
 
     instance.status = 'running';
     instance.target = task.target;
@@ -451,6 +470,8 @@ class TaskManager extends EventEmitter {
       instanceId, taskName: task.taskName, status: 'draft', timestamp,
       target: task.target || 'server', env: task.env, mode: task.mode,
       displayId: task.displayId, params: task.params || {},
+      routing: task.routing || null,
+      requiredCapabilities: task.requiredCapabilities || [],
       taskType: task.taskType || 'user',
       builtinId: task.builtinId || null,
       entryFile: task.entryFile || null

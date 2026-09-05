@@ -334,3 +334,17 @@ test('显示控制设备和其他状态按钮应同步语义状态并适配浅�
     assert.match(css, /:root\[data-theme-mode="light"\] \.selection-mode-btn\.active[\s\S]*background:\s*linear-gradient\(135deg,\s*var\(--accent-secondary\),\s*var\(--accent-color\)\)\s*!important/u);
     assert.match(css, /:root\[data-theme-mode="light"\] \.task-btn-option:not\(\.active\)[\s\S]*background:\s*var\(--bg-secondary\)\s*!important/u);
 });
+
+test('网页主题规则应覆盖服务器节点列表及 main-server 文字', () => {
+    const css = fs.readFileSync(uploadCssPath, 'utf8');
+
+    assert.match(css, /\.server-card\s*\{[\s\S]*background:\s*var\(--card-background\)/u);
+    assert.match(css, /\.server-card\s*\{[\s\S]*border:\s*1px\s+solid\s+var\(--border-color\)/u);
+    assert.match(css, /\.server-card-header\s+h3\s*\{[\s\S]*color:\s*var\(--text-primary\)/u);
+    assert.match(css, /\.server-card-id\s*\{[\s\S]*color:\s*var\(--text-secondary\)/u);
+    assert.match(css, /\.server-card-details\s+dt\s*\{[\s\S]*color:\s*var\(--text-secondary\)/u);
+    assert.match(css, /\.server-card-details\s+dd\s*\{[\s\S]*color:\s*var\(--text-primary\)/u);
+    assert.match(css, /\.server-switch-toolbar\s+input\s*\{[\s\S]*background:\s*var\(--input-background\)[\s\S]*color:\s*var\(--text-primary\)/u);
+    assert.match(css, /\.server-status-online\s*\{[\s\S]*color:\s*var\(--success-color\)/u);
+    assert.match(css, /\.server-status-offline\s*\{[\s\S]*color:\s*var\(--danger-color\)/u);
+});

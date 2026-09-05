@@ -2,6 +2,13 @@
 
 # 2026-09-05
 
+## 控制端网页主题规则与服务器列表
+
+- ✅ [2026-09-05] 将控制端网页颜色规则补充为统一主题变量规范，并修复服务器列表中 `main-server` 等文字在浅色主题下对比度不足的问题。
+  - 服务器卡片、共享媒体库来源、节点 ID、字段标签、字段值、输入框、边框和辅助文字改用主题变量；在线/离线状态保留成功色和危险色语义，按钮白字保留按钮前景色例外。
+  - 改动文件：`src/apps/web-mediacenter/ui/public/css/upload.css`、`tests/ui-theme.test.js`、`docs/design/control-ui-theme.md`、`docs/spec/ui-theme.md`、`docs/task/20260905_网页主题规则与服务器列表适配.md`、`docs/todo.md`。
+  - 验证：主题定向测试 20/20 通过；全量测试中本次新增主题契约通过，工作区既有 DeX 输入契约仍失败。
+
 ## 聊天助手工作 AI 角色成员选择
 
 - ✅ [2026-09-05] 聊天列表自动显示已保存的 `ai-roles`，点击“+”后可从 `workgroup/members` 成员目录选择并创建工作 AI 角色。
@@ -12,6 +19,37 @@
   - 角色提示词和历史读取兼容直接成员目录，保留既有 `workgroup/roles/<name>.md`、`control-<name>` 路径行为。
   - 改动文件：`src/apps/server/modules/ai-roles/workgroup-member-catalog.js`、`ai-roles-service.js`、`ai-roles-ws-handler.js` 及测试；控制端 `chat.js`、`websocket.js`、`upload.html`、`chat.css`；对应 design/spec/usage/task 文档。
   - 验证：定向测试 30/30 通过，5 个 JavaScript 文件语法检查通过，`git diff --check` 通过；全量测试保留工作区既有失败和汇总阶段长驻句柄问题。
+
+## AASC 媒体索引、显示端优先任务路由与服务器手动切换
+
+- ✅ [2026-09-05] 完成三项 AASC 网络能力：媒体索引本地/网络聚合、`display-first/auto` 任务路由和网页版服务器手动切换。
+  - 新增 `src/framework/aasc/media-index-service.js`、`src/framework/aasc/task-router.js`；主服务器提供 `GET /api/aasc/media-index`，控制端服务器页展示共享媒体库摘要并支持连接在线节点或手动输入 HTTP(S) 地址。
+  - TaskManager 只对显式 `routing: display-first` 或 `target: auto` 的任务进行能力匹配；显示端不可用时回退当前主服务器，显式 display/server 目标保持兼容。
+  - 不实现权限控制、自动发现、最近节点算法、故障转移、跨服务器任务代理和媒体文件同步。
+  - 验证：AASC 定向测试 27/27 通过；完整 `npm test` 为 480 项中 479 项通过，唯一失败是工作区既有 DeX 输入契约。
+
+## AASC 服务器代码下发与 Termux 双进程热更新
+
+- ✅ [2026-09-05] 完成主服务器 `/server` 代码清单/压缩包接口，以及 Termux Bootstrap 的双进程启动、大小与 SHA-256 校验、白名单安装、runit 停止/启动和失败回滚。
+  - 改动文件：`src/apps/server/modules/aasc/server-release-service.js`、`src/apps/server/boot/server-app.js`、`scripts/termux/aasc-server-bootstrap.cjs`、对应测试及 AASC/Termux design、spec、task 文档。
+  - 代码包仅发布 `src/`、`package.json`、`package-lock.json`，保留 Termux 的配置、媒体/任务运行数据、证书、依赖和日志；`src/` 合并复制以保留本地 Android 工程目录。
+  - 验证：定向测试 16/16 通过；完整 `npm test` 为 471 项中 470 项通过，唯一失败是工作区既有 DeX 输入契约；Termux `192.168.1.6:5555` 成功热更和故障回滚，runit 双进程及 `/api/status`、`/upload`、`/display`、`/api/aasc/servers` 均恢复正常。
+
+### AASC 服务器节点注册与心跳
+
+- ✅ [2026-09-05] 主服务器增加 AASC 服务器节点注册、心跳和统一目录接口。
+  - 新增 `AascServerRegistry`，保存节点 ID、地址、版本、能力、元数据和心跳时间；90 秒无心跳时标记离线，节点记录不删除。
+  - 新增 `POST /api/aasc/servers/register`、`POST /api/aasc/servers/:nodeId/heartbeat` 和 `GET /api/aasc/servers`；主服务器启动时登记为 `main-server`。
+  - `/api/aasc/servers` 兼容合并旧 `SubServerManager` 配置节点；控制端服务器列表改用该接口并支持 `nodeId` 展示。
+  - 本阶段未实现自动发现、权限认证、代码下发、媒体索引同步和任务路由。
+  - 定向测试 7/7 通过；完整测试保留工作区原有 DeX 输入契约失败。
+
+### AASC 网络演进流程
+
+- ✅ [2026-09-05] 记录固定主服务器入口下的 AASC 网络开发顺序：服务器节点注册与心跳、服务器代码下发、媒体库索引共享、显示端优先任务路由、网页版服务器手动切换、权限认证。
+  - 更新 `docs/design/aasc.md`、`docs/spec/aasc.md`、`docs/todo.md` 和 `docs/task/20260905_AASC网络演进流程记录.md`。
+  - 明确当前不做自动发现、最近服务器算法、媒体文件全量同步、主服务器故障转移和权限认证实现。
+  - 本次仅更新设计、spec 和待办路线，不改变运行时代码。
 
 ### AASC 子服务器任务边界
 

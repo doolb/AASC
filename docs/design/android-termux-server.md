@@ -40,7 +40,7 @@ Android 设备
 - `tts-wine` 任务依赖 Linux/Wine，Android 节点启动时失败并记录日志
 - Puppeteer 浏览器未下载，相关任务不可用
 - Android 电池优化、Termux:Boot 和设备重启后的自动拉起尚未验收
-- 主服务器节点注册、心跳、媒体同步和负载均衡尚未接入本次试运行
+- 主服务器节点注册与心跳已接入主服务器；Termux 代码下发、双进程热更新和失败回滚已完成真实设备验收，但节点主动注册客户端、媒体同步和负载均衡仍未启用
 
 ## 后续演进
 
@@ -49,3 +49,50 @@ Android 设备
 3. 将现有 `SubServerManager` 从远程 URL 管理扩展为 Android 节点管理。
 4. 增加媒体缓存/同步策略，避免每个节点依赖主服务器本地文件路径。
 5. 使用 Termux:Boot 或定制 APK 完成设备重启后的自动恢复。
+
+## 6. 服务器代码下发与双进程热更新
+
+### 6.1 运行模型
+
+Termux 节点继续使用与主服务器相同的双进程模型：
+
+```text
+runit/启动器进程
+    → 启动 server-launcher.js
+    → server-launcher.js fork server-app.js
+    → 服务进程提供 HTTP、HTTPS、WebSocket 和 AASC 接口
+```
+
+Bootstrap 是一次性更新工具，不作为第三个常驻服务进程。更新时由 Bootstrap 直接停止现有服务，再启动原有启动器；启动器负责拉起新的服务进程。
+
+### 6.2 代码包边界
+
+主服务器的 `/server` 提供当前版本清单和 gzip 压缩包。代码包只包含运行所需的 `src/`、`package.json` 和 `package-lock.json`；其中 Android 工程本地目录和语音显示端本地 `node_modules` 会额外排除。不包含 `logs/`、`3rd/`、`node_modules/`、用户配置、媒体文件、任务运行数据、模型和 HTTPS 证书。
+
+Termux 根目录继续保留：
+
+- `config/`：节点配置和主服务器地址。
+- `res/`：媒体、证书、模型和运行时数据。
+- `node_modules/`：已安装依赖。
+- `logs/`：运行日志。
+
+### 6.3 更新与回滚
+
+```text
+Bootstrap update
+    → 从主服务器 GET /server 获取版本、包地址、大小和 SHA-256
+    → 下载到临时文件并校验大小与 SHA-256
+    → 解压到 staging 目录并检查 server-app.js/package.json
+    → 直接停止 aasc-server-test 服务
+    → 备份当前 src、package.json、package-lock.json 到 previous 目录
+    → 将 staging 的代码文件复制到节点根目录
+    → 启动 aasc-server-test 服务
+    → 检查 /api/status、/upload、/display 和 /api/aasc/servers
+    → 成功则保留 previous；失败则恢复 previous 并重启旧代码
+```
+
+更新仅覆盖代码白名单，`src/` 采用合并复制以保留未随包发布的本地目录；服务停止期间不触碰配置、媒体、证书、依赖和日志；任一校验或启动检查失败都不得删除旧版本。
+
+### 6.4 安全边界
+
+当前 `/server` 暂不增加认证，仍属于局域网内部测试接口。下载包必须经过大小和 SHA-256 校验，解压目标固定在 staging 目录，拒绝路径穿越；权限认证在 AASC 后续阶段实现。

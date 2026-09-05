@@ -70,4 +70,48 @@
 
 ## 现状与正式节点差异
 
-当前实现仅是远端试运行部署，未修改仓库内 Node.js 代码。正式节点需要增加节点配置、主服务器注册、心跳、认证、能力声明、媒体同步和 Android 后台保活的伪代码与实现。
+当前试运行部署使用独立 Termux 目录；主服务器已经具备节点注册与心跳接口。本节补充正式节点的 Bootstrap 代码下发、双进程启动和热更新回滚伪代码。认证、媒体同步和 Android 后台保活仍属于后续阶段。
+
+## 服务器代码下发与双进程热更新伪代码
+
+```text
+GET /server
+    → 构建或读取当前代码包
+    → 返回 { version, size, sha256, packageUrl, files }
+
+GET /server/package
+    → 以流方式返回当前 gzip 包
+    → 只打包 src、package.json、package-lock.json
+    → 排除 Android 工程本地目录和语音显示端本地 node_modules
+    → 不打包 logs、3rd、node_modules、用户配置、媒体、任务运行数据、模型和证书
+```
+
+```text
+Bootstrap run
+    → 读取节点根目录和 server-app.js 路径
+    → 使用 server-launcher 的双进程逻辑
+    → 启动器进程 fork 服务进程 server-app.js
+    → 服务退出时按既有重启策略处理
+
+Bootstrap update
+    → 请求主服务器 /server
+    → 下载 packageUrl 到临时文件
+    → 校验 Content-Length/manifest.size
+    → 计算 SHA-256，必须等于 manifest.sha256
+    → 解压到根目录下 staging/<version>-<timestamp>
+    → 检查 staging/src/apps/server/boot/server-app.js 和 package.json
+    → 调用服务控制器 stop，等待旧服务退出
+    → 备份根目录代码到 previous/<timestamp>
+    → 合并复制 src 到根目录（保留未随包发布的本地目录），替换 package.json 和 package-lock.json
+    → 调用服务控制器 start
+    → 轮询 /api/status、/upload、/display、/api/aasc/servers
+    → 所有检查通过则完成更新
+    → 任一检查失败则 stop、恢复 previous、start，并返回失败结果
+```
+
+```text
+服务控制器
+    → 优先调用 Termux runit 的 sv stop/sv start
+    → 若测试环境没有 runsv，则使用注入的直接进程停止/启动函数
+    → 不改变 aasc-server-test/run 的 npm start 双进程入口
+```

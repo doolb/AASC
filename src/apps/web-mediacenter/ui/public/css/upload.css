@@ -163,7 +163,78 @@ h1 {
 }
 
 .server-list-status {
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.server-switch-toolbar {
+    display: flex;
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.server-switch-toolbar input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-background);
+    color: var(--text-primary);
+}
+
+.server-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 14px;
+}
+
+.shared-media-index-content {
+    display: grid;
+    gap: 10px;
+}
+
+.shared-media-source {
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    background: var(--card-background);
+}
+
+.shared-media-source-header,
+.shared-library-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.shared-media-source-header {
+    margin-bottom: 8px;
+}
+
+.shared-media-source-header span,
+.shared-library-item span:last-child {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.shared-library-item {
+    padding: 7px 0;
+    border-top: 1px solid var(--border-color);
+}
+
+.server-connect-btn {
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--accent-secondary);
+    color: #fff;
+    cursor: pointer;
+}
+
+.server-current-label,
+.server-unavailable-label {
+    color: var(--text-secondary);
     font-size: 12px;
 }
 
@@ -174,9 +245,9 @@ h1 {
 
 .server-card {
     padding: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--card-background);
 }
 
 .server-card-header {
@@ -188,13 +259,13 @@ h1 {
 }
 
 .server-card-header h3 {
-    color: #fff;
+    color: var(--text-primary);
     font-size: 16px;
     margin-bottom: 4px;
 }
 
 .server-card-id {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary);
     font-size: 12px;
     overflow-wrap: anywhere;
 }
@@ -207,13 +278,13 @@ h1 {
 }
 
 .server-status-online {
-    color: #8ff0a4;
-    background: rgba(76, 175, 80, 0.18);
+    color: var(--success-color);
+    background: var(--bg-surface-strong);
 }
 
 .server-status-offline {
-    color: #ffaaa4;
-    background: rgba(231, 76, 60, 0.18);
+    color: var(--danger-color);
+    background: var(--bg-surface-strong);
 }
 
 .server-card-details {
@@ -228,12 +299,12 @@ h1 {
 
 .server-card-details dt {
     margin-bottom: 3px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary);
     font-size: 11px;
 }
 
 .server-card-details dd {
-    color: rgba(255, 255, 255, 0.86);
+    color: var(--text-primary);
     font-size: 13px;
     overflow-wrap: anywhere;
 }
