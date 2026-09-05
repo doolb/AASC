@@ -25,6 +25,14 @@ function registerAiRoleHandlers(wsServer, { aiRoles, broadcastToControls }) {
         }
     });
 
+    wsServer.registerHandler('roleCatalog', async (data, { ws }) => {
+        try {
+            send(ws, { type: 'roleCatalog', members: aiRoles.memberCatalog() });
+        } catch (error) {
+            sendError(ws, error);
+        }
+    });
+
     wsServer.registerHandler('roleAdd', async (data, { ws }) => {
         try {
             aiRoles.add(data.name);

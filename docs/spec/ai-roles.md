@@ -36,6 +36,7 @@ RoleStore
 ```text
 控制端 -> 服务端:
   { type: 'roleList' }
+  { type: 'roleCatalog' }
   { type: 'roleAdd', name }
   { type: 'roleDelete', role }
   { type: 'roleHistory', role }
@@ -43,6 +44,7 @@ RoleStore
 
 服务端 -> 控制端:
   { type: 'roleList', roles: [{ name, createdAt, backend, running }] }
+  { type: 'roleCatalog', members: [{ name, primary, secondary, hasRoleFile, hasHistoryFile }] }
   { type: 'roleHistory', role, history }
   { type: 'roleError', message }
   { type: 'chatChunk', requestId, chunk, message }
@@ -52,6 +54,8 @@ RoleStore
 ```
 
 所有角色管理请求先由服务端使用 `aiRoles.list()` 验证角色存在；非法名称、重名、删除或历史读取异常通过 `roleError` 返回，不让 WebSocket 处理流程抛出未处理异常。
+
+`roleCatalog` 只返回 `workgroup/members` 直接子目录的候选元数据。`primary` 和 `secondary` 从成员目录下 `role.md` 的同名字段解析为字符串/字符串数组；只返回文件是否存在，不返回 `role.md`、`history.md` 的正文和服务器绝对路径。控制端弹窗只渲染列表选择项，不提供角色名输入框；成员目录名作为选择后的 `ai-role` 名称，仍由 `RoleStore` 执行空名、路径穿越和重名校验。
 
 消息类型判断：
 
@@ -90,6 +94,9 @@ server 启动:
   registerAiRoleHandlers(wsServer, { aiRoles, broadcastToControls })
     注册 roleList:
       try -> ws.send({ type: 'roleList', roles: aiRoles.list() })
+      catch -> ws.send({ type: 'roleError', message })
+    注册 roleCatalog:
+      try -> ws.send({ type: 'roleCatalog', members: aiRoles.memberCatalog() })
       catch -> ws.send({ type: 'roleError', message })
     注册 roleAdd:
       try -> aiRoles.add(data.name)
@@ -391,6 +398,9 @@ Codex 的 `threadId` 和 stdio 句柄由独立 Agent 后端宿主持有；同一
     render()                         // 角色增删时重建完整面板
   否则:
     updateRoleStatuses()              // 只更新角色 tab/模式指示器，保留用户消息和 streaming DOM
+收到 roleCatalog:
+  Chat.roleCatalog=data.members
+  renderRoleCatalog()
 收到 roleHistory -> Chat.roleHistories[role]=history；当前角色则 renderHistory()
 收到 roleError -> showToast(message, error)
 
@@ -398,7 +408,10 @@ render():
   输出群聊 tab、既有模板 tab、每个工作角色 tab 和 '+' 添加按钮
   角色 tab 点击 -> mode='role', roleTarget=name, 请求 roleHistory
   角色 tab 状态 -> running=true 显示“在线”，running=false 显示“离线”
-  '+' -> 输入名称并发送 roleAdd
+  '+' -> 打开角色选择窗口并发送 roleCatalog
+  角色选择窗口 -> 只展示所有成员候选列表；已在 Chat.aiRoles 中的候选显示“已添加”并禁用，不显示手动输入控件
+  角色选择窗口样式 -> 标题、成员名、状态文字、背景、边框和按钮使用 --text-primary、--text-secondary、--bg-surface、--bg-surface-strong、--border-color、--accent-color 等主题变量
+  点击未添加成员 -> 发送 roleAdd({ name: member.name })，成功广播 roleList 后关闭窗口
   '×' -> confirm 后发送 roleDelete(role)
 
 发送角色消息:

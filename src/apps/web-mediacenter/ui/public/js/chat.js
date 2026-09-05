@@ -21,6 +21,8 @@ const Chat = {
         sessions: {}
     },
     aiRoles: [],          // 工作 AI 角色列表 [{name, createdAt, running}]
+    roleCatalog: [],      // workgroup/members 候选列表
+    pendingRoleAdd: '',   // 等待服务端广播 roleList 确认的成员名
     roleHistories: {},    // 每个角色的独立对话历史
     commands: {
         commands: {}
@@ -590,16 +592,96 @@ const Chat = {
         }
     },
 
-    // 添加角色：弹窗输入名字，校验非空/不与模板重名
+    // 打开工作 AI 角色选择窗口，候选数据只从服务端读取元数据。
     showAddRole() {
-        const name = window.prompt('输入工作 AI 角色名：');
-        if (!name || !name.trim()) return;
-        const clean = name.trim();
-        if (this.templates.some(t => t.name === clean)) {
+        const modal = document.getElementById('chatRoleCatalogModal');
+        if (!modal) return;
+        modal.classList.add('active');
+        this.roleCatalog = [];
+        this.pendingRoleAdd = '';
+        this.renderRoleCatalog();
+        if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
+            window.WebSocketManager.ws.send(JSON.stringify({ type: 'roleCatalog' }));
+            return;
+        }
+        window.showToast('聊天服务尚未连接，无法加载工作组成员', 'error');
+    },
+
+    hideRoleCatalog() {
+        const modal = document.getElementById('chatRoleCatalogModal');
+        if (modal) modal.classList.remove('active');
+        this.pendingRoleAdd = '';
+    },
+
+    addRoleByName(name) {
+        const clean = typeof name === 'string' ? name.trim() : '';
+        if (!clean) return;
+        if (this.templates.some((template) => template.name === clean)) {
             window.showToast('该名字与聊天模板冲突', 'error');
             return;
         }
+        if (this.aiRoles.some((role) => role.name === clean)) {
+            this.hideRoleCatalog();
+            this.setRoleMode(clean);
+            return;
+        }
+        this.pendingRoleAdd = clean;
         window.WebSocketManager.send({ type: 'roleAdd', name: clean });
+    },
+
+    addRoleFromCatalog(name) {
+        this.addRoleByName(name);
+    },
+
+    renderRoleCatalog() {
+        const container = document.getElementById('chatRoleCatalogList');
+        if (!container) return;
+        container.replaceChildren();
+        if (this.roleCatalog.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'chat-role-catalog-empty';
+            empty.textContent = '暂无可选择的 workgroup 成员';
+            container.appendChild(empty);
+            return;
+        }
+
+        const savedNames = new Set(this.aiRoles.map((role) => role.name));
+        const templateNames = new Set(this.templates.map((template) => template.name));
+        this.roleCatalog.forEach((member) => {
+            const item = document.createElement('div');
+            item.className = 'chat-role-catalog-item';
+
+            const info = document.createElement('div');
+            info.className = 'chat-role-catalog-info';
+            const name = document.createElement('div');
+            name.className = 'chat-role-catalog-name';
+            name.textContent = member.name;
+            info.appendChild(name);
+
+            const roles = document.createElement('div');
+            roles.className = 'chat-role-catalog-meta';
+            const roleLabels = [];
+            if (member.primary) roleLabels.push(`主角色：${member.primary}`);
+            if (Array.isArray(member.secondary) && member.secondary.length > 0) {
+                roleLabels.push(`副角色：${member.secondary.join('、')}`);
+            }
+            if (member.hasRoleFile) roleLabels.push('有角色信息');
+            if (member.hasHistoryFile) roleLabels.push('有历史记录');
+            roles.textContent = roleLabels.join(' · ') || '暂无角色或历史文件';
+            info.appendChild(roles);
+            item.appendChild(info);
+
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'chat-role-catalog-action';
+            const alreadyAdded = savedNames.has(member.name);
+            const templateConflict = templateNames.has(member.name);
+            action.textContent = alreadyAdded ? '已添加' : (templateConflict ? '名称冲突' : '选择');
+            action.disabled = alreadyAdded || templateConflict || this.pendingRoleAdd === member.name;
+            action.addEventListener('click', () => this.addRoleFromCatalog(member.name));
+            item.appendChild(action);
+            container.appendChild(item);
+        });
     },
 
     // 删除角色：确认后发 roleDelete（服务端回收 claude 进程并清历史）

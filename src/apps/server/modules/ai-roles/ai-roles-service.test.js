@@ -63,6 +63,58 @@ test('add/list 往返，running 状态', async () => {
     assert.deepStrictEqual(svc.list(), []);
 });
 
+test('memberCatalog 扫描 workgroup/members 并解析成员角色元数据', () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const membersDir = path.join(dir, 'workgroup', 'members');
+    fs.mkdirSync(path.join(membersDir, 'demoAgent'), { recursive: true });
+    fs.writeFileSync(path.join(membersDir, 'demoAgent', 'role.md'), 'primary: frontend\nsecondary: backend-media, tester');
+    fs.writeFileSync(path.join(membersDir, 'demoAgent', 'history.md'), '# 历史');
+    fs.mkdirSync(path.join(membersDir, 'emptyAgent'), { recursive: true });
+    fs.writeFileSync(path.join(membersDir, 'emptyAgent', 'role.md'), 'primary: \nsecondary: ');
+
+    const svc = makeService(dir, base);
+    assert.deepStrictEqual(svc.memberCatalog(), [
+        {
+            name: 'demoAgent',
+            primary: 'frontend',
+            secondary: ['backend-media', 'tester'],
+            hasRoleFile: true,
+            hasHistoryFile: true
+        },
+        {
+            name: 'emptyAgent',
+            primary: '',
+            secondary: [],
+            hasRoleFile: true,
+            hasHistoryFile: false
+        }
+    ]);
+});
+
+test('memberCatalog 在 workgroup/members 不存在时返回空数组', () => {
+    const dir = tmpDir();
+    const svc = makeService(dir, path.join(dir, 'roles'));
+    assert.deepStrictEqual(svc.memberCatalog(), []);
+});
+
+test('成员目录角色创建时复用成员 role.md 和 history.md', () => {
+    const dir = tmpDir();
+    const base = path.join(dir, 'roles');
+    const memberDir = path.join(dir, 'workgroup', 'members', 'demoAgent');
+    fs.mkdirSync(memberDir, { recursive: true });
+    fs.writeFileSync(path.join(memberDir, 'role.md'), 'primary: frontend');
+    fs.writeFileSync(path.join(memberDir, 'history.md'), '# 成员历史');
+
+    const svc = makeService(dir, base);
+    svc.add('demoAgent');
+
+    const prompt = fs.readFileSync(path.join(base, 'demoAgent', 'prompt.txt'), 'utf8');
+    assert.match(prompt, /primary: frontend/u);
+    assert.match(prompt, /# 成员历史/u);
+    assert.match(prompt, /workgroup[\\/]members[\\/]demoAgent[\\/]history\.md/u);
+});
+
 test('删除后同名角色可重建并继续聊天', async () => {
     const dir = tmpDir();
     const base = path.join(dir, 'roles');

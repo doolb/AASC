@@ -511,11 +511,19 @@ const WebSocketManager = {
         } else if (data.type === 'roleList') {
             if (window.Chat) {
                 window.Chat.aiRoles = data.roles || [];
+                if (window.Chat.pendingRoleAdd && window.Chat.aiRoles.some((role) => role.name === window.Chat.pendingRoleAdd)) {
+                    window.Chat.hideRoleCatalog();
+                }
                 if (window.Chat.isLoading) {
                     window.Chat.updateRoleStatuses();
                 } else {
                     window.Chat.render();
                 }
+            }
+        } else if (data.type === 'roleCatalog') {
+            if (window.Chat) {
+                window.Chat.roleCatalog = data.members || [];
+                window.Chat.renderRoleCatalog();
             }
         } else if (data.type === 'repairModeConfig') {
             if (window.VoiceprintPanel) {
@@ -530,6 +538,10 @@ const WebSocketManager = {
                 }
             }
         } else if (data.type === 'roleError') {
+            if (window.Chat) {
+                window.Chat.pendingRoleAdd = '';
+                window.Chat.renderRoleCatalog();
+            }
             window.showToast(data.message || '操作失败', 'error');
         }
     },

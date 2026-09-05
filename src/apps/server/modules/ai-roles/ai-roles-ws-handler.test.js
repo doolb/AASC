@@ -47,12 +47,19 @@ function makeDependencies() {
         history: (name) => {
             if (!roles.some((role) => role.name === name)) throw new Error('角色不存在');
             return [{ role: 'assistant', name, content: '历史' }];
-        }
+        },
+        memberCatalog: () => [{
+            name: 'demoAgent',
+            primary: 'frontend',
+            secondary: ['tester'],
+            hasRoleFile: true,
+            hasHistoryFile: true
+        }]
     };
     return { aiRoles, broadcasts };
 }
 
-test('角色 WebSocket handler 注册四种角色管理消息', async () => {
+test('角色 WebSocket handler 注册角色管理消息', async () => {
     const server = new FakeWsServer();
     const { aiRoles, broadcasts } = makeDependencies();
     registerAiRoleHandlers(server, {
@@ -93,6 +100,30 @@ test('角色 WebSocket handler 注册四种角色管理消息', async () => {
         type: 'roleList',
         roles: [{ name: '后端', createdAt: 1, running: false }]
     });
+});
+
+test('角色 WebSocket handler 返回 workgroup 成员候选目录', async () => {
+    const server = new FakeWsServer();
+    const { aiRoles, broadcasts } = makeDependencies();
+    registerAiRoleHandlers(server, {
+        aiRoles,
+        broadcastToControls: (message) => broadcasts.push(message)
+    });
+
+    const ws = makeWebSocket();
+    await server.handleControlMessage({ type: 'roleCatalog' }, ws);
+
+    assert.deepStrictEqual(ws.sent, [{
+        type: 'roleCatalog',
+        members: [{
+            name: 'demoAgent',
+            primary: 'frontend',
+            secondary: ['tester'],
+            hasRoleFile: true,
+            hasHistoryFile: true
+        }]
+    }]);
+    assert.deepStrictEqual(broadcasts, []);
 });
 
 test('角色 handler 将添加和删除异常返回 roleError', async () => {

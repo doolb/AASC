@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const RoleStore = require('./role-store');
+const WorkgroupMemberCatalog = require('./workgroup-member-catalog');
 const ClaudeBridge = require('./claude-bridge');
 const CodexBridge = require('./codex-bridge');
 const { USER_CONFIG_DIR } = require('../config/user-config-paths');
@@ -126,14 +127,28 @@ class AiRolesService {
         return path.join(this.projectRoot, 'workgroup', 'members', `control-${name}`, 'history.md');
     }
 
+    _resolveRoleFile(name) {
+        const roleFile = this._roleFile(name);
+        if (fs.existsSync(roleFile)) return roleFile;
+        const memberRoleFile = path.join(this.projectRoot, 'workgroup', 'members', name, 'role.md');
+        return fs.existsSync(memberRoleFile) ? memberRoleFile : roleFile;
+    }
+
+    _resolveHistoryFile(name) {
+        const historyFile = this._historyFile(name);
+        if (fs.existsSync(historyFile)) return historyFile;
+        const memberHistoryFile = path.join(this.projectRoot, 'workgroup', 'members', name, 'history.md');
+        return fs.existsSync(memberHistoryFile) ? memberHistoryFile : historyFile;
+    }
+
     _readOptional(file) {
         try { return fs.readFileSync(file, 'utf8').trim(); } catch (_) { return ''; }
     }
 
     // 提示词来源：当前角色定义 + 当前角色 history.md + 自管理规则；只在进程启动快照时读取
     _promptFor(name) {
-        const roleFile = this._roleFile(name);
-        const historyFile = this._historyFile(name);
+        const roleFile = this._resolveRoleFile(name);
+        const historyFile = this._resolveHistoryFile(name);
         const roleContent = this._readOptional(roleFile) || defaultPrompt(name);
         const historyContent = this._readOptional(historyFile) || '（暂无任务历史，重要任务完成后按规则维护此文件）';
         return [
@@ -150,7 +165,7 @@ class AiRolesService {
     _ensurePromptFile(name) {
         const file = path.join(this.store.roleDir(name), 'prompt.txt');
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        const historyFile = this._historyFile(name);
+        const historyFile = this._resolveHistoryFile(name);
         fs.mkdirSync(path.dirname(historyFile), { recursive: true });
         if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, ROLE_HISTORY_TEMPLATE);
         fs.writeFileSync(file, this._promptFor(name));
@@ -163,6 +178,10 @@ class AiRolesService {
             const running = bridge ? bridge.isAlive() : this._storedBackendIsRunning(r.name, r.backend);
             return { ...r, running };
         });
+    }
+
+    memberCatalog() {
+        return new WorkgroupMemberCatalog(this.projectRoot).list();
     }
 
     add(name) {

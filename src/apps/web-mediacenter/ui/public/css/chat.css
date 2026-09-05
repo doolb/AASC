@@ -504,7 +504,9 @@
 }
 
 .chat-modal-content {
-    background: #2a2a2a;
+    background: var(--bg-surface-strong, #2a2a2a);
+    color: var(--text-primary, #fff);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
     border-radius: 12px;
     width: 90%;
     max-width: 500px;
@@ -519,19 +521,19 @@
     justify-content: space-between;
     align-items: center;
     padding: 15px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
 }
 
 .chat-modal-header h3 {
     margin: 0;
     font-size: 16px;
-    color: #fff;
+    color: var(--text-primary, #fff);
 }
 
 .chat-modal-close {
     background: none;
     border: none;
-    color: #fff;
+    color: var(--text-secondary, #a0a0a0);
     font-size: 24px;
     cursor: pointer;
     opacity: 0.7;
@@ -540,6 +542,7 @@
 
 .chat-modal-close:hover {
     opacity: 1;
+    color: var(--text-primary, #fff);
 }
 
 .chat-modal-body {
@@ -607,6 +610,62 @@
 
 .chat-template-delete:hover {
     background: rgba(231, 76, 60, 0.5);
+}
+
+.chat-role-catalog-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: var(--bg-surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 8px;
+}
+
+.chat-role-catalog-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.chat-role-catalog-name {
+    color: var(--text-primary, #fff);
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-role-catalog-meta,
+.chat-role-catalog-empty {
+    color: var(--text-secondary, #a0a0a0);
+    font-size: 12px;
+}
+
+.chat-role-catalog-empty {
+    padding: 20px 0;
+    text-align: center;
+}
+
+.chat-role-catalog-action {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    border: 1px solid var(--accent-color, #00d2ff);
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent-secondary, #3a7bd5), var(--accent-color, #00d2ff));
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.chat-role-catalog-action:disabled {
+    background: var(--bg-surface-strong, rgba(255, 255, 255, 0.12));
+    color: var(--text-secondary, #a0a0a0);
+    border-color: var(--border-color, rgba(255, 255, 255, 0.1));
+    cursor: not-allowed;
 }
 
 .chat-add-template {
@@ -727,7 +786,7 @@
 
 .chat-config-hint {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-secondary, #a0a0a0);
     margin-top: 8px;
     line-height: 1.4;
 }

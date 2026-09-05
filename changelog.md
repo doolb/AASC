@@ -1,5 +1,18 @@
 # Web MediaCenter - 变更日志
 
+# 2026-09-05
+
+## 聊天助手工作 AI 角色成员选择
+
+- ✅ [2026-09-05] 聊天列表自动显示已保存的 `ai-roles`，点击“+”后可从 `workgroup/members` 成员目录选择并创建工作 AI 角色。
+  - 新增 `roleCatalog` WebSocket 只读协议和成员目录扫描器，展示成员名、`primary`/`secondary` 元数据及角色/历史文件状态，不返回文件正文或绝对路径。
+  - 控制端新增角色选择弹窗；已存在角色和聊天模板重名项不可重复添加；选择后复用原 `roleAdd`/`roleList` 流程。
+  - 交互调整：弹窗仅保留 `workgroup/members` 候选列表选择，移除角色名称手动输入框和手动添加按钮。
+  - 修复主题适配：角色弹窗标题、成员名、历史状态、背景、边框和按钮改用控制端主题变量，浅色主题下保持清晰对比度。
+  - 角色提示词和历史读取兼容直接成员目录，保留既有 `workgroup/roles/<name>.md`、`control-<name>` 路径行为。
+  - 改动文件：`src/apps/server/modules/ai-roles/workgroup-member-catalog.js`、`ai-roles-service.js`、`ai-roles-ws-handler.js` 及测试；控制端 `chat.js`、`websocket.js`、`upload.html`、`chat.css`；对应 design/spec/usage/task 文档。
+  - 验证：定向测试 30/30 通过，5 个 JavaScript 文件语法检查通过，`git diff --check` 通过；全量测试保留工作区既有失败和汇总阶段长驻句柄问题。
+
 ### AASC 子服务器任务边界
 
 - ✅ [2026-09-05] 记录任务执行节点优先级：普通媒体和本地能力任务优先由显示端处理，子服务器仅用于服务器资源、后台运行、资源隔离、网络出口或聚合网关等场景。

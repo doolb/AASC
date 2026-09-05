@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const chatFile = path.join(root, 'src/apps/web-mediacenter/ui/public/js/chat.js');
+const chatCssFile = path.join(root, 'src/apps/web-mediacenter/ui/public/css/chat.css');
 const uploadFile = path.join(root, 'src/apps/web-mediacenter/ui/public/upload.html');
 const serverFile = path.join(root, 'src/apps/server/boot/server-app.js');
 
@@ -39,6 +40,33 @@ test('Agent 请求进行中收到 roleList 只更新在线状态，不重建聊�
     assert.match(chat, /updateRoleStatuses\s*\(\s*\)/u);
     assert.match(websocket, /Chat\.isLoading[\s\S]{0,180}updateRoleStatuses/u);
     assert.match(websocket, /Chat\.isLoading[\s\S]{0,180}Chat\.render\s*\(\s*\)/u);
+});
+
+test('聊天助手自动显示已保存角色，并通过加号打开 workgroup 成员选择窗口', () => {
+    const chat = fs.readFileSync(chatFile, 'utf8');
+    const upload = fs.readFileSync(uploadFile, 'utf8');
+    const websocket = fs.readFileSync(path.join(root, 'src/apps/web-mediacenter/ui/public/js/websocket.js'), 'utf8');
+
+    assert.match(chat, /roleCatalog/u);
+    assert.match(chat, /showAddRoles*\(\)/u);
+    assert.match(chat, /renderRoleCatalogs*\(\)/u);
+    assert.doesNotMatch(chat, /addManualRole\s*\(/u);
+    assert.match(upload, /chatRoleCatalogModal/u);
+    assert.match(upload, /chatRoleCatalogList/u);
+    assert.doesNotMatch(upload, /chatRoleNameInput|手动添加角色/u);
+    assert.match(websocket, /data\.type === ['"]roleCatalog['"]/u);
+});
+
+test('工作 AI 角色选择弹窗使用控制端主题颜色', () => {
+    const chatCss = fs.readFileSync(chatCssFile, 'utf8');
+
+    assert.match(chatCss, /\.chat-modal-content\s*\{[\s\S]{0,220}background:\s*var\(--bg-surface-strong(?:,\s*[^)]*)?\)/u);
+    assert.match(chatCss, /\.chat-modal-header h3\s*\{[\s\S]{0,180}color:\s*var\(--text-primary(?:,\s*[^)]*)?\)/u);
+    assert.match(chatCss, /\.chat-role-catalog-item\s*\{[\s\S]{0,220}background:\s*var\(--bg-surface(?:,\s*[^)]*)?\)/u);
+    assert.match(chatCss, /\.chat-role-catalog-name\s*\{[\s\S]{0,180}color:\s*var\(--text-primary(?:,\s*[^)]*)?\)/u);
+    assert.match(chatCss, /\.chat-role-catalog-meta,[\s\S]{0,80}\.chat-role-catalog-empty\s*\{[\s\S]{0,160}color:\s*var\(--text-secondary(?:,\s*[^)]*)?\)/u);
+    assert.match(chatCss, /\.chat-role-catalog-action\s*\{[\s\S]{0,220}var\(--accent-secondary(?:,\s*[^)]*)?\)[\s\S]{0,80}var\(--accent-color(?:,\s*[^)]*)?\)/u);
+    assert.match(chatCss, /\.chat-role-catalog-action:disabled\s*\{[\s\S]{0,180}background:\s*var\(--bg-surface-strong(?:,\s*[^)]*)?\)[\s\S]{0,120}color:\s*var\(--text-secondary(?:,\s*[^)]*)?\)/u);
 });
 
 test('聊天群聊页签应能退出私聊和工作组模式', () => {

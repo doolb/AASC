@@ -397,8 +397,25 @@
                     </div>
                     <button class="control-btn" id="serverListRefreshBtn" type="button">刷新</button>
                 </div>
+                <div class="server-switch-toolbar">
+                    <input id="serverAddressInput" type="text" placeholder="输入服务器地址，例如 https://192.168.1.39:8081">
+                    <button class="control-btn" id="serverAddressConnectBtn" type="button">手动连接</button>
+                </div>
                 <div class="server-list-content" id="serverListContent">
                     <div class="empty-list">正在加载服务器列表...</div>
+                </div>
+            </div>
+
+            <div class="section shared-media-section">
+                <div class="server-list-toolbar">
+                    <div>
+                        <h2>共享媒体库</h2>
+                        <p class="server-list-status" id="serverMediaIndexStatus">加载中...</p>
+                    </div>
+                    <button class="control-btn" id="serverMediaIndexRefreshBtn" type="button">刷新</button>
+                </div>
+                <div class="shared-media-index-content" id="serverMediaIndexContent">
+                    <div class="empty-list">正在加载共享媒体库...</div>
                 </div>
             </div>
         </section>
@@ -858,6 +875,19 @@
                     </select>
                     <button class="chat-add-btn" onclick="Chat.addTemplate()">添加模板</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-modal-overlay" id="chatRoleCatalogModal">
+        <div class="chat-modal-content">
+            <div class="chat-modal-header">
+                <h3>选择工作 AI 角色</h3>
+                <button class="chat-modal-close" onclick="Chat.hideRoleCatalog()">&times;</button>
+            </div>
+            <div class="chat-modal-body">
+                <p class="chat-config-hint">请从 workgroup/members 成员列表中选择。已保存到 ai-roles 的角色会自动显示在聊天列表中。</p>
+                <div id="chatRoleCatalogList"></div>
             </div>
         </div>
     </div>

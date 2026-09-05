@@ -4,6 +4,8 @@
 
 控制端聊天面板支持工作 AI 角色的动态管理。用户可以添加或删除角色，并在同一个聊天界面中通过角色 tab 切换对话。每个角色拥有独立的 Agent 进程、提示词和聊天历史，角色之间互不共享上下文。
 
+控制端聊天列表自动展示 `ai-roles` 中已经保存的角色。点击“+”时打开只读列表选择窗口，服务端扫描当前项目 `workgroup/members` 的直接子目录，展示成员目录名、主/副角色标记和历史记录可用状态；用户只能从列表选择成员，以成员目录名创建对应的 `ai-role`，不提供手动输入角色名的入口。已存在的角色只标记为“已添加”，不重复创建。弹窗标题、成员名、状态文字、背景、边框和按钮必须使用控制端主题变量，适配浅色与深色主题。
+
 角色数据与历史持久化到 `~/.config/aasc-user/ai-roles/<角色名>/`，服务器重启后角色列表和历史仍可恢复。Agent 后端由独立的 detached 后端宿主进程持有，服务器只通过 Unix Socket 发送控制请求和接收流式事件；服务器重启时不主动终止存活 Agent，后端宿主可被新服务器重新连接。删除角色时由后端宿主回收对应 Agent，再删除角色目录。
 
 ### 独立 Agent 后端进程
@@ -62,7 +64,7 @@ Claude 默认无输出响应超时为 600 秒。响应超时回归测试区分�
 
 ### ai-roles-service
 
-聚合角色存储与后端客户端桥：为每个角色懒创建 `AgentBackendClientBridge`，从 `workgroup/roles/<name>.md` 读取提示词（不存在时使用默认提示词），保存用户和助手历史，并在服务启动时调用异步 `restoreAll()` 通过 IPC 恢复角色连接。控制端 Agent 角色直接处理当前对话，不进入 `poll.js` 任务队列；`poll.js` 只继续服务 workgroup 成员。`stopAll()` 通过 IPC 停止后端宿主中的 Agent，但保留角色数据。
+聚合角色存储与后端客户端桥：为每个角色懒创建 `AgentBackendClientBridge`，从 `workgroup/roles/<name>.md` 读取提示词（不存在时回退到对应 `workgroup/members/<name>/role.md`，再不存在时使用默认提示词），保存用户和助手历史，并在服务启动时调用异步 `restoreAll()` 通过 IPC 恢复角色连接。`memberCatalog()` 只扫描 `workgroup/members` 直接子目录并返回脱敏的候选元数据，不返回角色文件和历史正文。控制端 Agent 角色直接处理当前对话，不进入 `poll.js` 任务队列；`poll.js` 只继续服务 workgroup 成员。`stopAll()` 通过 IPC 停止后端宿主中的 Agent，但保留角色数据。
 
 ## 生命周期
 
@@ -79,6 +81,7 @@ Claude 默认无输出响应超时为 600 秒。响应超时回归测试区分�
 ```text
 控制端 Chat
   ├─ roleList ───────────────> server-app -> aiRoles.list() -> roleList
+  ├─ roleCatalog ────────────> server-app -> aiRoles.memberCatalog() -> roleCatalog
   ├─ roleAdd(name) ──────────> server-app -> aiRoles.add() -> 广播 roleList
   ├─ roleDelete(role) ───────> server-app -> aiRoles.remove() -> 广播 roleList
   ├─ roleHistory(role) ──────> server-app -> aiRoles.history() -> roleHistory
@@ -104,6 +107,8 @@ Claude 默认无输出响应超时为 600 秒。响应超时回归测试区分�
 角色管理消息必须在 WebSocket 服务初始化阶段显式注册为独立 handler，不依赖通用控制消息回退函数中的分支。这样可以保证控制端刷新、添加、删除和读取历史时，角色消息一定被分发；服务端异常时仍通过 `roleError` 返回可见错误。
 
 角色 handler 只负责协议适配和错误边界，角色持久化与进程生命周期继续由 `AiRolesService` 负责。添加或删除成功后广播最新 `roleList`，使多个控制端保持一致。
+
+新增 `roleCatalog` handler 只读扫描 `workgroup/members`，返回成员目录名和 `role.md` 的 `primary`/`secondary` 标记。候选角色的历史正文、角色文件正文和绝对路径不通过 WebSocket 返回；控制端只允许点击候选列表项，不能手动输入角色名，选择候选项后仍复用 `roleAdd(name)`，由服务端重新执行角色名校验和持久化。
 
 角色 tab 使用 `roleList.roles[].running` 显示 Agent 在线状态；首次消息确认 Agent 启动后立即广播新的 `roleList`，关闭所有 Agent 后也广播新的 `roleList`，所有角色立即显示离线，下一次发送消息再懒启动。
 
