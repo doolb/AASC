@@ -1341,3 +1341,36 @@ const actor = AgentActorAdapter.createFromAgent(new MyAgent(), {
 await actor.init();
 wsSystem.registerActor('my-actor', actor);
 ```
+
+## 任务执行节点选择伪代码
+
+```text
+接收任务 task
+    → 提取 task.requiredCapabilities 和 task.executionConstraints
+    → 查询 AASC 注册表中的在线显示端
+    → 过滤：显示端在线
+    → 过滤：显示端能力覆盖 requiredCapabilities
+    → 如果存在候选显示端
+        → 按任务上下文选择显示端
+        → 向显示端发送任务
+    → 否则如果 task 允许服务节点执行
+        → 查询主服务器和子服务器的服务能力
+        → 选择满足约束的服务节点
+        → 向服务节点发送任务
+    → 否则
+        → 返回能力不可用
+```
+
+节点职责边界：
+
+```text
+主服务器
+    → 提供 AASC 网络入口
+    → 注册节点、维护心跳、路由消息、聚合媒体索引
+
+显示端
+    → 优先执行与本机显示、音频、麦克风和本地模型相关的任务
+
+子服务器
+    → 仅执行需要服务器资源、持久化、后台运行或独立运行环境的任务
+```

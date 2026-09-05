@@ -48,6 +48,10 @@
                 <span class="nav-icon">🗺️</span>
                 <span class="nav-text">地图</span>
             </button>
+            <button class="nav-item" data-target="servers" title="服务器">
+                <span class="nav-icon">🖧</span>
+                <span class="nav-text">服务器</span>
+            </button>
             <button class="nav-item" data-target="3d" title="3D展示">
                 <span class="nav-icon">🎮</span>
                 <span class="nav-text">3D</span>
@@ -380,6 +384,23 @@
             <p>显示端地址: <a href="/display" target="_blank">点击打开显示端</a></p>
             <button class="control-btn restart-btn" onclick="restartServer()" style="margin-top: 10px; background: linear-gradient(135deg, #e74c3c, #c0392b);">重启服务器</button>
         </div>
+        </section>
+
+        <section class="panel" id="panel-servers" style="display:none;">
+            <h1 class="page-title">服务器</h1>
+
+            <div class="section server-list-section">
+                <div class="server-list-toolbar">
+                    <div>
+                        <h2>当前服务器</h2>
+                        <p class="server-list-status" id="serverListStatus">加载中...</p>
+                    </div>
+                    <button class="control-btn" id="serverListRefreshBtn" type="button">刷新</button>
+                </div>
+                <div class="server-list-content" id="serverListContent">
+                    <div class="empty-list">正在加载服务器列表...</div>
+                </div>
+            </div>
         </section>
         
         <section class="panel" id="panel-reminder" style="display:none;">
@@ -1003,6 +1024,7 @@
     <script src="js/upload.js"></script>
     <script src="js/media-library.js"></script>
     <script src="js/device-list.js"></script>
+    <script src="js/server-list.js"></script>
     <script src="js/websocket.js"></script>
     <script src="js/control-mode-utils.js"></script>
     <script src="js/crop.js"></script>

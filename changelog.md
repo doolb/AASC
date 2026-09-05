@@ -1,5 +1,21 @@
 # Web MediaCenter - 变更日志
 
+### AASC 子服务器任务边界
+
+- ✅ [2026-09-05] 记录任务执行节点优先级：普通媒体和本地能力任务优先由显示端处理，子服务器仅用于服务器资源、后台运行、资源隔离、网络出口或聚合网关等场景。
+  - 更新 `docs/design/aasc.md`、`docs/spec/aasc.md`、`docs/design/sub-server.md`、`docs/spec/sub-server.md` 和 `docs/task/20260905_明确子服务器任务边界.md`。
+  - 明确主服务器负责 AASC 网络入口、节点注册、心跳、路由和媒体索引；`SubServerManager` 不作为所有显示端任务的必经路径。
+  - 本次仅更新设计和实现伪代码文档，未改变运行时代码、路由或任务行为。
+
+### 控制端服务器列表
+
+- ✅ [2026-09-05] 在 `/upload` 控制端增加当前服务器只读列表页面。
+  - 增加“服务器”导航和列表面板，复用 `GET /api/subservers`，展示名称、节点 ID、地址、在线状态、延迟、显示端数量、优先级、版本、能力和最后检查时间。
+  - 支持手动刷新；请求失败时保留已有列表并显示错误状态；空列表和缺失可选字段均有兼容提示。
+  - 本次不新增 `/server` 代码下发逻辑，不实现自动发现、服务器增删改、权限认证或最近服务器选择。
+  - 改动文件：`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/js/server-list.js`、`src/apps/web-mediacenter/ui/public/css/upload.css`、`tests/server-list-ui.test.js` 及 `docs/design/sub-server.md`、`docs/spec/sub-server.md`、`docs/task/20260905_控制端服务器列表只读页面.md`、`docs/todo.md`。
+  - 验证：定向测试 3/3 通过；`npm test` 共 458 项，457 项通过，唯一失败为工作区原有的 `tests/display-native-bridge.test.js` DeX 输入契约。
+
 ### 私聊角色与 session 名称只读查看
 
 - ✅ [2026-09-03] 调整聊天查看 CLI 的 `--sessions` 输出，不填写 target 即可获取全部私聊 session 的角色名和 session 名。
