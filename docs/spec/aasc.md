@@ -1532,3 +1532,74 @@ GET /api/aasc/servers
     → 控制端服务器页面请求 /api/aasc/servers
     → 页面显示 registry 节点和兼容旧配置节点
 ```
+
+## 子服务器主动连接伪代码
+
+当前架构对应 `docs/superpowers/specs/2026-09-05-aasc-subserver-active-connection-design.md`。主服务器同时保留 HTTP `/server` 代码接口和 WebSocket `/server` 节点入口。
+
+```text
+AascNodeConnector
+    → 读取 aasc.mainServerUrl、aasc.nodeId、aasc.advertisedUrl
+    → 将 https 主服务器地址转换为 wss 主服务器地址
+    → 建立 WebSocket /server
+    → 发送 node.register { nodeId, name, url, version, capabilities, metadata }
+    → 收到 node.registered 后启动 heartbeat 定时器
+    → 周期发送 node.heartbeat
+    → 收到 node.request 时按白名单执行并返回 node.response
+    → 连接关闭时清理请求和定时器
+    → 按指数退避重新连接
+```
+
+```text
+主服务器 WebSocket /server
+    → 等待第一个 node.register
+    → 校验 nodeId、url、版本和能力字段
+    → 关闭同 nodeId 的旧连接
+    → registry.attachConnection(nodeId, ws)
+    → 回复 node.registered
+    → 收到 node.heartbeat 时刷新 registry 心跳
+    → 收到 node.response 时完成对应 requestId
+    → ws close 时 registry.detachConnection(nodeId, ws)
+```
+
+```text
+GET /api/aasc/servers
+    → 返回 main-server 和主动连接注册表中的节点
+    → 不调用 SubServerManager 的远程健康检查
+    → 不通过节点 url 主动发起 HTTP 请求
+```
+
+```text
+主服务器请求远程能力
+    → 从 registry 获取在线节点连接
+    → 通过 node.request 发送 media.index.local 或 task.execute
+    → 按 requestId 等待有限时间
+    → 成功返回远程结果
+    → 超时只记录当前节点错误，不阻塞其他节点
+```
+
+```text
+主服务器下发 server.update
+    → 子服务器返回 accepted
+    → 子服务器启动一次性 Bootstrap update
+    → Bootstrap 主动 GET /server 和 /server/package
+    → 校验、备份、停止服务、替换代码、启动服务
+    → 失败时恢复 previous 并启动旧代码
+    → 新服务重新建立 /server WebSocket
+    → 注册信息带回当前版本和更新结果
+```
+
+## 子服务器配置伪代码
+
+```text
+aasc.role = main | subserver
+aasc.mainServerUrl = https://192.168.1.39:8081
+aasc.nodeId = 持久化节点 ID
+aasc.nodeName = 节点展示名称
+aasc.advertisedUrl = 显示端和网页访问地址
+aasc.heartbeatIntervalMs = 30000
+aasc.reconnectMinMs = 1000
+aasc.reconnectMaxMs = 30000
+```
+
+`server.role=main` 时不创建主动客户端；`server.role=subserver` 时只在本地服务监听成功后创建主动客户端。子服务器连接失败不阻塞本地 HTTP、HTTPS、WebSocket 和显示端服务启动。

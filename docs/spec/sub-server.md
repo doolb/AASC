@@ -169,3 +169,28 @@ loadFromConfig(config):
 ```
 
 `SubServerManager` 只负责已选择服务节点之后的健康检查、负载排序和消息转发，不负责劫持所有显示端任务。
+
+## 子服务器主动连接伪代码
+
+```text
+子服务器启动
+    → 读取 server.role=subserver
+    → 读取 aasc.mainServerUrl、aasc.nodeId、aasc.advertisedUrl
+    → 主动建立 WebSocket /server
+    → 发送 node.register
+    → 周期发送 node.heartbeat
+    → 收到 node.request 后执行 media.index.local、task.execute 或 server.update
+    → 断线清理状态并指数退避重连
+```
+
+```text
+主服务器节点入口
+    → 接收子服务器 /server WebSocket
+    → 首条消息必须是 node.register
+    → 将 nodeId 与连接句柄放入 AascServerRegistry
+    → 新连接接管同 nodeId 的旧连接
+    → 连接关闭时标记节点离线
+    → 不通过节点 url 主动发起 HTTP 健康检查
+```
+
+旧 `/api/subservers` 和 `SubServerManager` 只作为兼容层保留，不再代表 AASC 节点主动连接状态。

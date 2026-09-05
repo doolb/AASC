@@ -7323,6 +7323,13 @@
 
 # 2026-08-31
 
+### AASC 网络
+
+- 🛠️ [2026-09-05] 完成子服务器主动连接架构设计，进入实现前审阅阶段。
+  - 明确 WebSocket `/server` 为子服务器主动连接入口，HTTP `/server` 和 `/server/package` 继续负责代码清单与代码包。
+  - 明确主服务器不再通过 `SubServerManager` 主动访问子服务器；子服务器仍保持启动器进程与服务进程双进程模型。
+  - 设计文档：`docs/superpowers/specs/2026-09-05-aasc-subserver-active-connection-design.md`、`docs/task/20260905_AASC子服务器主动连接架构.md`。
+
 ## 正式 Android 显示端原生 OCR 与 YOLO11n（进行中）
 
 - 🛠️ [2026-09-02] 需求调整为“任务配置服务器 URL → 服务器 HTTP 路由 → WebSocket → 显示端本地单小核推理”；取消手动测试网页和 APK DevTools。

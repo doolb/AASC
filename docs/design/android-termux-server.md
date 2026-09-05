@@ -40,13 +40,13 @@ Android 设备
 - `tts-wine` 任务依赖 Linux/Wine，Android 节点启动时失败并记录日志
 - Puppeteer 浏览器未下载，相关任务不可用
 - Android 电池优化、Termux:Boot 和设备重启后的自动拉起尚未验收
-- 主服务器节点注册与心跳已接入主服务器；Termux 代码下发、双进程热更新和失败回滚已完成真实设备验收，但节点主动注册客户端、媒体同步和负载均衡仍未启用
+- 主服务器节点注册与心跳已接入主服务器；Termux 代码下发、双进程热更新和失败回滚已完成真实设备验收。当前正在将节点注册从 HTTP 主动登记迁移为子服务器主动 WebSocket 连接，媒体同步、权限认证和负载均衡仍未启用
 
 ## 后续演进
 
 1. 增加 `android-node` 运行配置，明确关闭 ASR、TTS Wine、Puppeteer 等不可用能力。
-2. 增加节点 ID、主服务器地址、认证令牌和心跳协议。
-3. 将现有 `SubServerManager` 从远程 URL 管理扩展为 Android 节点管理。
+2. 增加节点 ID、主服务器地址、连接角色和 WebSocket 注册/心跳协议。
+3. 将现有 `SubServerManager` 的主服务器主动访问路径迁移为 AASC 节点连接目录；旧接口保留兼容。
 4. 增加媒体缓存/同步策略，避免每个节点依赖主服务器本地文件路径。
 5. 使用 Termux:Boot 或定制 APK 完成设备重启后的自动恢复。
 
@@ -93,6 +93,12 @@ Bootstrap update
 
 更新仅覆盖代码白名单，`src/` 采用合并复制以保留未随包发布的本地目录；服务停止期间不触碰配置、媒体、证书、依赖和日志；任一校验或启动检查失败都不得删除旧版本。
 
-### 6.4 安全边界
+### 6.4 主动连接迁移
+
+正式 Termux 子服务器启动后，服务进程读取 `server.role=subserver` 和 `aasc.mainServerUrl`，主动连接主服务器的 WebSocket `/server`。节点注册、心跳、远程索引请求、服务节点任务和热更新命令通过该连接处理；主服务器不再通过子服务器 `advertisedUrl` 主动健康检查或下发控制请求。`advertisedUrl` 仅供显示端、网页和媒体访问。
+
+HTTP `/server` 和 `/server/package` 继续保留，收到 `server.update` 命令后由子服务器主动拉取并复用 Bootstrap。Bootstrap 仍只负责一次性更新，服务进程重启后重新建立 WebSocket，保持启动器进程和服务进程双进程模型。
+
+### 6.5 安全边界
 
 当前 `/server` 暂不增加认证，仍属于局域网内部测试接口。下载包必须经过大小和 SHA-256 校验，解压目标固定在 staging 目录，拒绝路径穿越；权限认证在 AASC 后续阶段实现。

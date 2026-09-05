@@ -70,7 +70,30 @@
 
 ## 现状与正式节点差异
 
-当前试运行部署使用独立 Termux 目录；主服务器已经具备节点注册与心跳接口。本节补充正式节点的 Bootstrap 代码下发、双进程启动和热更新回滚伪代码。认证、媒体同步和 Android 后台保活仍属于后续阶段。
+当前试运行部署使用独立 Termux 目录；主服务器已经具备节点注册与心跳接口。本节补充正式节点的主动 WebSocket 连接、Bootstrap 代码下发、双进程启动和热更新回滚伪代码。认证、媒体同步和 Android 后台保活仍属于后续阶段。
+
+## 子服务器主动连接伪代码
+
+```text
+启动服务进程
+    → 读取 server.role
+    → role=main 时只启动主服务器节点入口
+    → role=subserver 时读取 aasc.mainServerUrl 和节点身份
+    → 服务监听成功后连接 wss://主服务器/server
+    → 发送 node.register
+    → 收到 node.registered 后每 30 秒发送 node.heartbeat
+    → 断线后按照 1 秒起步、30 秒封顶的指数退避重连
+```
+
+```text
+收到 node.request
+    → 校验 requestId 和 command
+    → media.index.local：读取本地媒体索引并返回
+    → task.execute：执行明确指定给本节点的服务任务并返回
+    → server.update：启动一次性 Bootstrap update 并先返回 accepted
+    → server.restart：调用现有服务控制器重启服务
+    → 未知 command：返回结构化错误
+```
 
 ## 服务器代码下发与双进程热更新伪代码
 
@@ -94,7 +117,7 @@ Bootstrap run
     → 服务退出时按既有重启策略处理
 
 Bootstrap update
-    → 请求主服务器 /server
+    → 由子服务器主动请求主服务器 /server
     → 下载 packageUrl 到临时文件
     → 校验 Content-Length/manifest.size
     → 计算 SHA-256，必须等于 manifest.sha256
@@ -107,6 +130,7 @@ Bootstrap update
     → 轮询 /api/status、/upload、/display、/api/aasc/servers
     → 所有检查通过则完成更新
     → 任一检查失败则 stop、恢复 previous、start，并返回失败结果
+    → 新服务主动重连 WebSocket /server 并重新发送 node.register
 ```
 
 ```text
