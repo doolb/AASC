@@ -4,7 +4,7 @@
       "instanceId": "728486a7",
       "taskName": "time.announce",
       "status": "running",
-      "timestamp": 1788278764638,
+      "timestamp": 1788680947078,
       "target": "server",
       "mode": "service",
       "params": {
@@ -17,7 +17,13 @@
       "progress": 100,
       "taskType": "builtin",
       "builtinId": "time.announce",
-      "entryFile": null
+      "entryFile": null,
+      "displayId": null,
+      "routing": null,
+      "requiredCapabilities": [],
+      "routeTarget": "server",
+      "routeReason": "explicit-server",
+      "routeNodeId": "main-server"
     }
   ]
 }

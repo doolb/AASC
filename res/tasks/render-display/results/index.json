@@ -3,8 +3,8 @@
     {
       "instanceId": "3c33fd92",
       "taskName": "render-display",
-      "status": "running",
-      "timestamp": 1788278764566,
+      "status": "pending_forward",
+      "timestamp": 1788680947070,
       "target": "display",
       "env": "auto",
       "mode": "service",
@@ -15,13 +15,18 @@
       "entryFile": "task.js",
       "stage": "running",
       "progress": 100,
-      "error": "显示端已断开连接"
+      "error": "显示端已断开连接",
+      "routeTarget": "display",
+      "routeReason": "explicit-display",
+      "routeNodeId": null,
+      "routing": null,
+      "requiredCapabilities": []
     },
     {
       "instanceId": "5a5af822",
       "taskName": "render-display",
-      "status": "running",
-      "timestamp": 1788278764596,
+      "status": "pending_forward",
+      "timestamp": 1788335437464,
       "target": "display",
       "env": "auto",
       "mode": "service",

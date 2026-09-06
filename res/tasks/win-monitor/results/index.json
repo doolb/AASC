@@ -4,7 +4,7 @@
       "instanceId": "ce2c4a03",
       "taskName": "win-monitor",
       "status": "running",
-      "timestamp": 1788278764682,
+      "timestamp": 1788680947132,
       "env": "auto",
       "mode": "service",
       "displayId": null,
@@ -14,7 +14,12 @@
       "entryFile": "task.js",
       "stage": "running",
       "progress": 100,
-      "target": "server"
+      "target": "server",
+      "routing": null,
+      "requiredCapabilities": [],
+      "routeTarget": "server",
+      "routeReason": "explicit-server",
+      "routeNodeId": "main-server"
     },
     {
       "instanceId": "3ed3e09e",

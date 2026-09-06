@@ -4,7 +4,7 @@
       "instanceId": "c12d152e",
       "taskName": "chat2api.proxy",
       "status": "running",
-      "timestamp": 1788278764496,
+      "timestamp": 1788680947039,
       "target": "server",
       "env": "auto",
       "mode": "service",
@@ -18,7 +18,12 @@
       "builtinId": "chat2api.proxy",
       "entryFile": null,
       "stage": "running",
-      "progress": 100
+      "progress": 100,
+      "routing": null,
+      "requiredCapabilities": [],
+      "routeTarget": "server",
+      "routeReason": "explicit-server",
+      "routeNodeId": "main-server"
     }
   ]
 }
