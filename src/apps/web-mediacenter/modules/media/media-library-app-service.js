@@ -128,11 +128,15 @@ class LocalProvider extends MediaLibraryProvider {
             .map(name => {
                 try {
                     const itemPath = path.join(fullPath, name);
-                    const stat = fs.lstatSync(itemPath);
+                    const linkStat = fs.lstatSync(itemPath);
+                    let stat = linkStat;
                     
-                    if (stat.isSymbolicLink()) {
+                    // Termux 的 ~/storage 及其下级目录通常是符号链接。
+                    // lstat 只能得到链接本身，不能正确判断目标是否为目录，
+                    // 因此需要保留断链检查，同时使用 stat 获取目标文件的真实属性。
+                    if (linkStat.isSymbolicLink()) {
                         try {
-                            fs.statSync(itemPath);
+                            stat = fs.statSync(itemPath);
                         } catch (e) {
                             return null;
                         }

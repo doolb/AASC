@@ -5,6 +5,7 @@ const WebSocket = require('ws');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const { spawn } = require('node:child_process');
 const { pipeline } = require('stream');
 const multer = require('multer');
 const config = require('../modules/config/config-app-service');
@@ -69,6 +70,9 @@ const { SubServerManager } = require('../../../framework/cluster/sub-server-mana
 const { AascServerRegistry } = require('../../../framework/aasc/server-registry');
 const { AascMediaIndexService } = require('../../../framework/aasc/media-index-service');
 const { AascTaskRouter } = require('../../../framework/aasc/task-router');
+const { AascNodeSession } = require('../../../framework/aasc/node-session');
+const { normalizeNodeRegistration } = require('../../../framework/aasc/node-protocol');
+const { AascNodeConnector } = require('../../../framework/aasc/node-connector');
 const { ServerReleaseService } = require('../modules/aasc/server-release-service');
 const { WSViewBindServer } = require('../../../core/viewbind');
 const LogBuffer = require('../../../framework/observability/log-buffer');
@@ -328,6 +332,7 @@ let muteState = {
 
 let wsServer = null;
 let taskManager = null;
+let aascNodeConnector = null;
 // AI 角色面板：服务器只持有共享 IPC 客户端，实际 Claude/Codex Agent 由独立后端宿主进程管理。
 // 声明在模块级——handleControlMessageFallback 在模块作用域引用 aiRoles，若只声明在 server.listen 回调里会出作用域。
 const aiRoles = new AiRolesService({
@@ -449,17 +454,28 @@ const playlistManager = new PlaylistManager(mediaLibraryManager);
 const subServerManager = new SubServerManager();
 const AASC_MAIN_NODE_ID = 'main-server';
 const AASC_HEARTBEAT_TIMEOUT_MS = 90000;
+const AASC_ROLE = ['main', 'subserver'].includes(config.get('aasc.role', 'main'))
+    ? config.get('aasc.role', 'main')
+    : 'main';
 const aascServerRegistry = new AascServerRegistry({
     heartbeatTimeoutMs: AASC_HEARTBEAT_TIMEOUT_MS
 });
 const aascMediaIndexService = new AascMediaIndexService({
     mediaLibraryManager,
     getNode: () => ({
-        nodeId: AASC_MAIN_NODE_ID,
-        name: '主服务器',
+        nodeId: AASC_ROLE === 'subserver' ? ensureAascNodeId() : AASC_MAIN_NODE_ID,
+        name: AASC_ROLE === 'subserver'
+            ? (config.get('aasc.nodeName', '') || '子服务器')
+            : '主服务器',
         url: `${useHttps ? 'https' : 'http'}://${getLocalIP()}:${PORT}`
     }),
-    getRemoteNodes: () => aascServerRegistry.getAll()
+    getRemoteNodes: () => aascServerRegistry.getAll(),
+    requestRemoteIndex: (node, requestedPath, timeoutMs) => aascServerRegistry.request(
+        node.nodeId,
+        'media.index.local',
+        { path: requestedPath },
+        timeoutMs
+    )
 });
 const aascTaskRouter = new AascTaskRouter({
     getDisplays: () => Array.from(displayClients.entries()).map(([id, data]) => ({
@@ -471,32 +487,27 @@ const aascTaskRouter = new AascTaskRouter({
 });
 
 const subServerConfig = config.get('subServers');
-if (subServerConfig) {
+if (AASC_ROLE === 'main' && subServerConfig) {
     subServerManager.loadFromConfig(subServerConfig);
     subServerManager.startHealthCheck();
 }
 
 function getAascServerSnapshots() {
     // 主服务器本身属于当前进程，读取目录时刷新它的心跳，避免主服务在
-    // 长时间没有外部请求心跳时被误判为离线。远程节点仍严格遵守超时规则。
-    aascServerRegistry.heartbeat(AASC_MAIN_NODE_ID);
-    const registeredServers = aascServerRegistry.getAll();
-    const registeredIds = new Set(registeredServers.map(server => server.nodeId));
-    const legacyServers = subServerManager.getAllServers()
-        .filter(server => !registeredIds.has(server.id))
-        .map(server => {
-            const snapshot = server.toJSON();
-            return {
-                ...snapshot,
-                nodeId: snapshot.id,
-                status: snapshot.healthy ? 'online' : 'offline',
-                version: null,
-                capabilities: {},
-                metadata: { source: 'legacy-subserver' },
-                lastHeartbeatAt: snapshot.lastHealthCheck
-            };
-        });
-    return [...registeredServers, ...legacyServers];
+    // 长时间没有外部请求心跳时被误判为离线。旧 SubServerManager 配置不再
+    // 注入 AASC 节点目录，避免主服务器继续主动访问子服务器地址。
+    if (AASC_ROLE === 'main') {
+        aascServerRegistry.heartbeat(AASC_MAIN_NODE_ID, { runtime: getAascRuntime() });
+    }
+    return aascServerRegistry.getAll();
+}
+
+function getAascRuntime() {
+    return {
+        displayCount: displayClients.size,
+        controlCount: controlClients.size,
+        libraryCount: mediaLibraryManager.listLibraries().length
+    };
 }
 
 function registerMainAascServer(localIP, protocol) {
@@ -515,8 +526,180 @@ function registerMainAascServer(localIP, protocol) {
             protocol,
             platform: process.platform,
             arch: process.arch
-        }
+        },
+        runtime: getAascRuntime()
     });
+}
+
+function ensureAascNodeId() {
+    const configuredNodeId = String(config.get('aasc.nodeId', '') || '').trim();
+    if (configuredNodeId) {
+        return configuredNodeId.slice(0, 128);
+    }
+
+    const nodeId = `subserver-${generateId()}`;
+    config.set('aasc.nodeId', nodeId);
+    return nodeId;
+}
+
+/**
+ * 子服务器收到主服务器请求后的白名单处理器。
+ *
+ * 媒体索引直接在本地生成；更新和重启只返回“已接受”，实际动作交给一次性
+ * Bootstrap 或当前服务的双进程启动器，避免 WebSocket 会话进程承担生命周期管理。
+ */
+async function handleSubServerNodeRequest(request) {
+    const handlers = new Map([
+        ['media.index.local', async payload => aascMediaIndexService.buildLocalIndex(payload.path || '/')],
+        ['task.execute', async payload => executeSubServerTask(payload)],
+        ['server.update', async payload => spawnSubServerBootstrap('update', payload)],
+        ['server.restart', async () => requestSubServerRestart()]
+    ]);
+    const handler = handlers.get(request.type);
+    if (!handler) {
+        throw new Error(`不支持的子服务器请求: ${request.type}`);
+    }
+    return handler(request.payload || {});
+}
+
+async function executeSubServerTask(payload = {}) {
+    if (!taskManager) {
+        throw new Error('子服务器任务引擎尚未初始化');
+    }
+    const submitted = await taskManager.submit({
+        ...payload,
+        target: 'server',
+        routing: 'server'
+    });
+    return taskManager.runInstance(submitted.taskName, submitted.instanceId);
+}
+
+function spawnSubServerBootstrap(command, options = {}) {
+    const bootstrapPath = path.join(PROJECT_ROOT, 'scripts/termux/aasc-server-bootstrap.cjs');
+    const mainServerUrl = config.get('aasc.mainServerUrl', 'https://192.168.1.39:8081');
+    const bootstrapArguments = [
+        bootstrapPath,
+        command,
+        '--server-url',
+        mainServerUrl,
+        '--project-root',
+        PROJECT_ROOT
+    ];
+    if (options.force === true) {
+        bootstrapArguments.push('--force');
+    }
+    const child = spawn(process.execPath, bootstrapArguments, {
+        cwd: PROJECT_ROOT,
+        detached: true,
+        stdio: 'ignore'
+    });
+    child.unref();
+    const action = command === 'update'
+        ? (options.force === true ? '强制更新' : '更新')
+        : '重启';
+    log('AASC', `已接受子服务器${action}请求，Bootstrap PID: ${child.pid}`);
+    const result = { accepted: true, command, pid: child.pid || null };
+    if (options.force === true) {
+        result.force = true;
+    }
+    return result;
+}
+
+function requestSubServerRestart() {
+    setTimeout(() => {
+        if (typeof process.send === 'function') {
+            try {
+                process.send({ type: 'restartRequested' });
+                return;
+            } catch (error) {
+                logError('AASC', `通知启动器重启子服务器失败: ${error.message}`);
+            }
+        }
+        process.kill(process.pid, 'SIGTERM');
+    }, 100);
+    return { accepted: true, command: 'server.restart' };
+}
+
+async function updateAllAascSubservers(options = {}) {
+    const force = options.force === true;
+    const updatePayload = force ? { force: true } : {};
+    const candidates = aascServerRegistry.getAll().filter(server => (
+        server.nodeId !== AASC_MAIN_NODE_ID
+        && server.status === 'online'
+        && server.connected === true
+        && aascServerRegistry.getConnection(server.nodeId)
+    ));
+    if (candidates.length > 0) {
+        await serverReleaseService.getManifest();
+    }
+    const results = await Promise.all(candidates.map(async server => {
+        try {
+            const response = await aascServerRegistry.request(server.nodeId, 'server.update', updatePayload);
+            const accepted = response?.accepted !== false;
+            return {
+                nodeId: server.nodeId,
+                name: server.name,
+                status: accepted ? 'accepted' : 'rejected',
+                accepted,
+                message: response?.message || (accepted ? '更新已下发' : '子服务器未接受更新'),
+                response: response || {}
+            };
+        } catch (error) {
+            return {
+                nodeId: server.nodeId,
+                name: server.name,
+                status: 'failed',
+                accepted: false,
+                message: error.message
+            };
+        }
+    }));
+    const accepted = results.filter(result => result.accepted).length;
+    const summary = {
+        total: results.length,
+        accepted,
+        failed: results.length - accepted,
+        results
+    };
+    if (force) {
+        summary.forced = true;
+    }
+    return summary;
+}
+
+function startAascNodeConnector(localIP, protocol) {
+    if (AASC_ROLE !== 'subserver') {
+        return null;
+    }
+
+    const connector = new AascNodeConnector({
+        mainServerUrl: config.get('aasc.mainServerUrl', 'https://192.168.1.39:8081'),
+        nodeId: ensureAascNodeId(),
+        nodeName: config.get('aasc.nodeName', '') || `子服务器-${localIP}`,
+        advertisedUrl: config.get('aasc.advertisedUrl', '') || `${protocol}://${localIP}:${PORT}`,
+        version: process.env.AASC_SERVER_VERSION || 'unknown',
+        capabilities: {
+            mediaLibrary: true,
+            displayGateway: true,
+            taskRuntime: true,
+            hotUpdate: true
+        },
+        metadata: {
+            role: 'subserver',
+            platform: process.platform,
+            arch: process.arch
+        },
+        heartbeatIntervalMs: config.get('aasc.heartbeatIntervalMs', 30000),
+        reconnectMinMs: config.get('aasc.reconnectMinMs', 1000),
+        reconnectMaxMs: config.get('aasc.reconnectMaxMs', 30000),
+        onRequest: handleSubServerNodeRequest,
+        getRuntime: getAascRuntime,
+        onStateChange: state => log('AASC', `子服务器主连接状态: ${state.state}`),
+        onError: error => logError('AASC', `子服务器主连接失败: ${error.message}`)
+    });
+    connector.start();
+    log('AASC', `子服务器主动连接主服务器: ${config.get('aasc.mainServerUrl', 'https://192.168.1.39:8081')}/server`);
+    return connector;
 }
 
 mediaLibraryManager.init().then(() => {
@@ -550,9 +733,11 @@ async function startServer() {
     await aiRoles.restoreAll();
 
     server.listen(PORT, '0.0.0.0', async () => {
-        registerMainAascServer(localIP, protocol);
+        if (AASC_ROLE === 'main') {
+            registerMainAascServer(localIP, protocol);
+        }
         log('系统', '媒体中心服务器已启动');
-        log('系统', `上传端地址: ${protocol}://${localIP}:${PORT}/upload`);
+        log('系统', `控制端地址: ${protocol}://${localIP}:${PORT}/control`);
         log('系统', `显示端地址: ${protocol}://${localIP}:${PORT}/display`);
         if (useHttps) {
             log('系统', 'HTTPS 已启用，支持麦克风等安全特性');
@@ -849,6 +1034,8 @@ async function startServer() {
                     console.error('[语音命令] 控制报时任务失败:', err.message);
                 }
             });
+
+            aascNodeConnector = startAascNodeConnector(localIP, protocol);
         } catch (error) {
             logError('WS', `系统初始化失败: ${error.message}`);
         }
@@ -1605,10 +1792,14 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/api/chat2api-gateway/:instanceId', createChat2ApiGateway({ getTaskManager: () => taskManager }));
 
 app.get('/', (req, res) => {
-    res.redirect('/upload');
+    res.redirect('/control');
 });
 
 app.get('/upload', (req, res) => {
+    res.redirect('/control');
+});
+
+app.get('/control', (req, res) => {
     res.sendFile(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public', 'upload.html'));
 });
 
@@ -2387,6 +2578,50 @@ app.post('/api/aasc/servers/:nodeId/heartbeat', (req, res) => {
         res.json({ status: 'success', server });
     } catch (error) {
         res.status(400).json({ status: 'error', message: `服务器心跳失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/:nodeId/request', async (req, res) => {
+    const { type, command, payload, timeoutMs } = req.body || {};
+    const requestType = type || command;
+    if (typeof requestType !== 'string' || requestType.trim() === '') {
+        return res.status(400).json({ status: 'error', message: 'type 或 command 必填' });
+    }
+
+    try {
+        const result = await aascServerRegistry.request(
+            req.params.nodeId,
+            requestType.trim(),
+            payload || {},
+            timeoutMs
+        );
+        res.json({ status: 'success', result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `AASC 节点请求失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/update-all', async (req, res) => {
+    try {
+        const summary = await updateAllAascSubservers();
+        const message = summary.total === 0
+            ? '暂无在线子服务器可更新'
+            : `已下发 ${summary.accepted}/${summary.total} 台子服务器更新`;
+        res.json({ status: 'success', message, ...summary });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: `批量重载子服务器失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/force-update-all', async (req, res) => {
+    try {
+        const summary = await updateAllAascSubservers({ force: true });
+        const message = summary.total === 0
+            ? '暂无在线子服务器可强制更新'
+            : `已下发 ${summary.accepted}/${summary.total} 台子服务器强制更新`;
+        res.json({ status: 'success', message, ...summary });
+    } catch (error) {
+        res.status(500).json({ status: 'error', message: `强制更新子服务器失败: ${error.message}` });
     }
 });
 
@@ -3982,6 +4217,10 @@ async function shutdownManagedRuntimes(exitCode) {
     if (processShutdownStarted) return;
     processShutdownStarted = true;
     try {
+        if (aascNodeConnector) {
+            aascNodeConnector.stop();
+            aascNodeConnector = null;
+        }
         // 无论是控制端重启还是外部 SIGINT/SIGTERM，都要先释放 blessed 的 raw mode 和刷新定时器。
         tui.destroy();
         await chat.shutdown();
@@ -4783,8 +5022,92 @@ function bindRuntimeBridgeTransports() {
     });
 }
 
+/**
+ * 接收子服务器主动建立的 /server WebSocket 连接。
+ *
+ * /server 的 HTTP 请求仍由 Express 提供版本清单和代码包；只有升级为
+ * WebSocket 后才进入这里。节点必须先注册，主服务器再把会话放入注册表，
+ * 后续媒体索引、任务和热更新请求都通过这个会话下发。
+ */
+function handleAascNodeConnection(ws) {
+    let registeredNodeId = null;
+    let registering = false;
+    const session = new AascNodeSession(ws, {
+        onError: error => logError('AASC', `节点会话错误: ${error.message}`),
+        onMessage: async message => {
+            const handlers = {
+                'node.register': handleNodeRegister,
+                'node.heartbeat': handleNodeHeartbeat
+            };
+            const handler = handlers[message.type];
+            if (!handler) return;
+            await handler(message);
+        }
+    });
+
+    async function handleNodeRegister(message) {
+        if (registeredNodeId || registering) {
+            session.close(1008, 'node already registered');
+            return;
+        }
+
+        registering = true;
+        try {
+            const registration = normalizeNodeRegistration(message.payload);
+            const server = aascServerRegistry.register(registration);
+            const attached = aascServerRegistry.attachConnection(server.nodeId, session);
+            if (!attached) {
+                throw new Error('节点连接未能加入 AASC 注册表');
+            }
+            registeredNodeId = server.nodeId;
+            session.send('node.registered', {
+                nodeId: server.nodeId,
+                heartbeatTimeoutMs: AASC_HEARTBEAT_TIMEOUT_MS,
+                serverTime: Date.now()
+            });
+            broadcastToControls({
+                type: 'aascServersChanged',
+                servers: getAascServerSnapshots()
+            });
+            log('AASC', `子服务器已注册: ${server.nodeId}`);
+        } catch (error) {
+            logError('AASC', `子服务器注册失败: ${error.message}`);
+            session.close(1008, 'invalid node registration');
+        } finally {
+            registering = false;
+        }
+    }
+
+    async function handleNodeHeartbeat(message) {
+        if (!registeredNodeId) return;
+        const server = aascServerRegistry.heartbeat(registeredNodeId, message.payload);
+        if (!server) return;
+        session.send('node.heartbeatAck', {
+            nodeId: server.nodeId,
+            lastHeartbeatAt: server.lastHeartbeatAt,
+            serverTime: Date.now()
+        });
+    }
+
+    ws.once('close', () => {
+        if (!registeredNodeId) return;
+        const detached = aascServerRegistry.detachConnection(registeredNodeId, session);
+        if (!detached) return;
+        broadcastToControls({
+            type: 'aascServersChanged',
+            servers: getAascServerSnapshots()
+        });
+        log('AASC', `子服务器已断开: ${registeredNodeId}`);
+    });
+}
+
 wss.on('connection', (ws, req) => {
     const url = req.url || '/';
+
+    if (url === '/server' || url.startsWith('/server?')) {
+        handleAascNodeConnection(ws, req);
+        return;
+    }
 
     if (url === '/runtime-bridge' || url.startsWith('/runtime-bridge')) {
         let runtimeBridgeDeviceId = getRuntimeBridgeDeviceId(url);

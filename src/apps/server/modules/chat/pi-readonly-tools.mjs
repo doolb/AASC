@@ -189,7 +189,7 @@ function createContinuationStream({ method, openAiApi, continuationTracker, requ
 
 // 使用 Pi AI 原生 OpenAI Responses 适配器完成网络请求，仅替换最终消息
 // 的协议表示。这样文件和网络工具仍由 Pi 根据 --tools 白名单执行。
-function createChat2ApiCompatibleProvider({ baseUrl, modelId, conversationId }) {
+function createChat2ApiCompatibleProvider({ baseUrl, modelId, apiKey, conversationId }) {
     const openAiApi = openAIResponsesApi();
     const continuationTracker = createResponsesContinuationTracker();
     const model = {
@@ -212,7 +212,7 @@ function createChat2ApiCompatibleProvider({ baseUrl, modelId, conversationId }) 
             apiKey: {
                 name: 'AASC Pi API key',
                 resolve: async () => ({
-                    auth: { apiKey: normalizePiApiKey(process.env.AASC_PI_API_KEY) },
+                    auth: { apiKey: normalizePiApiKey(apiKey === undefined ? process.env.AASC_PI_API_KEY : apiKey) },
                     source: 'AASC_PI_API_KEY'
                 })
             }
@@ -314,6 +314,14 @@ const webSearchTool = defineTool({
     }
 });
 
+export function createAascChat2ApiProvider(options = {}) {
+    return createChat2ApiCompatibleProvider(options);
+}
+
+export function createAascReadonlyTools() {
+    return [findTool, webFetchTool, webSearchTool];
+}
+
 export default function registerAascReadonlyTools(pi) {
     const baseUrl = process.env.AASC_PI_BASE_URL;
     const modelId = process.env.AASC_PI_MODEL || 'aasc-model';
@@ -321,7 +329,5 @@ export default function registerAascReadonlyTools(pi) {
     if (baseUrl) {
         pi.registerProvider(createChat2ApiCompatibleProvider({ baseUrl, modelId, conversationId }));
     }
-    pi.registerTool(findTool);
-    pi.registerTool(webFetchTool);
-    pi.registerTool(webSearchTool);
+    for (const tool of createAascReadonlyTools()) pi.registerTool(tool);
 }

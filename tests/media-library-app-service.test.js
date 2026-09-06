@@ -266,3 +266,35 @@ test('HttpProvider HEAD 失败（404）回落 size=0 不抛错', async () => {
         srv.close();
     }
 });
+test('LocalProvider.list 将符号链接目录识别为文件夹并支持继续列举', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-symlink-test-'));
+    const targetDir = path.join(dir, 'storage-target');
+    const linkPath = path.join(dir, 'storage');
+    fs.mkdirSync(path.join(targetDir, 'DCIM'), { recursive: true });
+    fs.writeFileSync(path.join(targetDir, 'DCIM', 'photo.jpg'), Buffer.from('test'));
+
+    try {
+        // Windows 使用 junction 避免测试依赖管理员权限，Termux/Linux 使用目录符号链接。
+        fs.symlinkSync(targetDir, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+        const provider = new LocalProvider({ id: 'symlink', path: dir }, {
+            getPort: () => 8081,
+            getLocalIP: () => '127.0.0.1',
+            isHttps: () => false
+        });
+
+        const rootItems = await provider.list('/');
+        const storageItem = rootItems.find(item => item.name === 'storage');
+        assert.ok(storageItem, '符号链接目录应出现在根目录列表中');
+        assert.strictEqual(storageItem.type, 'folder');
+        assert.strictEqual(storageItem.mediaType, 'folder');
+
+        const storageItems = await provider.list('/storage');
+        const dcimItem = storageItems.find(item => item.name === 'DCIM');
+        assert.ok(dcimItem, '符号链接目录的目标内容应可继续列举');
+        assert.strictEqual(dcimItem.type, 'folder');
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});

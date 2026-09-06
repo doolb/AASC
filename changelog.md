@@ -1,6 +1,81 @@
 # Web MediaCenter - 变更日志
 
+## 服务器发布包显式生成
+
+- ✅ [2026-09-06] 将服务器代码包改为 npm 命令显式生成，HTTP 发布接口不再自动打包。
+  - 新增 `npm run build:server-package`，生成 tar.gz、manifest、大小和 SHA-256。
+  - `/server`、`/server/manifest` 和 `/server/package` 只读取已生成并校验的发布产物；批量更新子服务器前增加发布包存在性检查。
+  - 保留 Termux Bootstrap 的下载、校验、安装、重启、健康检查和失败回滚；APK 不纳入本次发布包。
+  - 改动文件：`package.json`、`scripts/ops/build-server-package.js`、发布服务、服务器入口、测试及 design/spec/task 文档。
+  - 验证：发布服务定向测试、npm 发布命令、语法检查和 `git diff --check`。
+
+# 2026-09-06
+
+## Termux Pi Agent SDK
+
+- ✅ [2026-09-06] 将 Termux Node.js 服务的 Pi Agent 从独立 RPC 子进程替换为同进程 Pi Coding Agent SDK。
+  - `PiRuntimeManager` 改用 `AgentSession`、`ModelRuntime.registerNativeProvider()`、内存 Session/Settings Manager 和固定只读工具白名单。
+  - 移除 Pi CLI 子进程、stdin/stdout JSONL 通信和环境变量传递 API Key；保留会话隔离、队列、超时、空回复重试和 dispose 回收。
+  - `pi-readonly-tools.mjs` 新增 provider/tool 工厂导出，旧扩展注册入口保持兼容。
+  - 新增 SDK 注入测试和真实 SDK 初始化烟测；APK 端本次不改，后续统一处理。
+  - 改动文件：`package.json`、`package-lock.json`、Pi Runtime/只读工具及测试、LLM Agent design/spec/task、todo。
+  - 验证：Pi SDK Runtime 与只读工具定向测试通过，真实 AgentSession 创建通过，JavaScript 语法检查和 `git diff --check` 通过。
+
+
 # 2026-09-05
+
+## 媒体库
+
+- ✅ [2026-09-05] 修复 Termux `storage` 符号链接目录无法列举的问题。
+  - `LocalProvider.list` 对符号链接保留断链检查，并使用目标 `stat` 判断真实目录/文件属性。
+  - 新增回归测试，验证根目录识别为文件夹以及通过 `/storage` 继续列举目标内容。
+  - 改动文件：`src/apps/web-mediacenter/modules/media/media-library-app-service.js`、`tests/media-library-app-service.test.js`、`docs/spec/media-library.md`、任务文档。
+  - 验证：媒体库定向测试、JavaScript 语法检查和 `git diff --check`。
+
+## AASC 控制端强制让子服务器获取最新代码
+
+- ✅ [2026-09-05] 增加手动强制更新在线子服务器代码按钮。
+  - 新增 `POST /api/aasc/servers/force-update-all`，只向在线、已建立主动 WebSocket 连接的非主服务器下发 `server.update({ force: true })`。
+  - 子服务器支持 Bootstrap `--force`，为 `/server` 版本清单和代码包请求增加一次性缓存绕过参数，即使版本号相同也重新获取代码。
+  - 保留代码包大小/SHA-256/路径校验、双进程服务重启、健康检查和失败回滚；普通批量更新接口行为保持不变。
+  - 改动文件：`scripts/termux/aasc-server-bootstrap.cjs`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/upload.html`、相关测试、AASC/Termux 设计与 spec、任务文档。
+  - 验证：AASC 定向回归测试 40/40 通过；JavaScript 语法检查和 `git diff --check` 通过。
+  - Termux 现场部署：已通过 ADB 将 Bootstrap 写入 `~/aasc-server-test/scripts/termux/`，执行 `update --force` 成功；远端服务重启后 `/api/status`、`/control` 返回 200，SHA-256 校验一致。
+
+## AASC 控制端批量重载子服务端代码
+
+- ✅ [2026-09-05] 在控制端“服务端”设置增加“重载所有子服务端代码”按钮。
+  - 新增 `POST /api/aasc/servers/update-all`，只向在线且有主动 WebSocket 连接的子服务器并发下发 `server.update`，排除主服务器。
+  - 控制端增加二次确认、请求期间禁用按钮、无节点提示和部分失败汇总提示；既有“重载代码”和“关闭所有 Agent”保持不变。
+  - 改动文件：`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`tests/server-api-contract.test.js`、`tests/subserver-update-ui.test.js` 及 AASC 文档。
+  - 验证：批量更新接口和控制端定向测试包含在 AASC 综合定向测试中，共 31/31 通过；相关 JavaScript 语法检查和 `git diff --check` 通过。
+
+## AASC 节点运行数据与 Termux 媒体库
+
+- ✅ [2026-09-05] 增加节点运行数据上报，并修复 Termux 空媒体库无法添加的问题。
+  - `node.register` 和 `node.heartbeat` 上报 `runtime.displayCount`、`runtime.controlCount`、`runtime.libraryCount`；主服务器注册表保存并通过 `/api/aasc/servers` 返回最近数据。
+  - 控制端服务器列表读取真实显示端、控制端和媒体库数量；AASC 节点没有优先级时显示“不适用”，心跳时间标记为“最后心跳”，缺失运行数据显示“未上报”。
+  - 空媒体库列表仍渲染“+ 添加”按钮；Termux 媒体库仍由子服务器自己的 `/control` 和 `/api/media-libraries` 管理，主服务器共享索引保持只读。
+  - 改动文件：`src/framework/aasc/node-protocol.js`、`node-connector.js`、`server-registry.js`、`src/apps/server/boot/server-app.js`、控制端 `server-list.js`、`media-library.js`、相关测试和 AASC 文档。
+  - 验证：AASC 节点、媒体库和服务器列表定向测试 19/19 通过；相关 JavaScript 语法检查和 `git diff --check` 通过。
+
+## AASC 子服务器主动连接
+
+- ✅ [2026-09-05] 将正式子服务器连接方向改为主动连接主服务器 `/server` WebSocket，同时保留 HTTP `/server` 代码清单和代码包接口。
+  - 新增节点协议、服务端会话、子服务器连接器；支持注册、心跳、请求响应、断线重连、同节点连接接管和断开离线。
+  - 主服务器按 `aasc.role` 区分 `main/subserver`；子服务器服务进程监听成功后主动连接固定主服务器 `https://192.168.1.39:8081`，不再依赖 `SubServerManager` 作为 AASC 节点来源。
+  - 远程媒体索引改走 `media.index.local` WebSocket 请求；子服务器提供 `task.execute`、`server.update`、`server.restart` 白名单命令入口，更新仍由 Bootstrap 一次性执行，保持启动器/服务双进程模型。
+  - 提供 `POST /api/aasc/servers/:nodeId/request` 作为明确节点请求入口；不改变显示端优先任务路由，也不引入自动跨服务器选择。
+  - 改动文件：`src/framework/aasc/node-protocol.js`、`node-session.js`、`node-connector.js`、`server-registry.js`、`media-index-service.js`、`src/apps/server/boot/server-app.js`、配置、Bootstrap、AASC 文档和定向测试。
+  - 验证：节点协议、连接器、会话、注册表、媒体索引、控制端路由、服务器契约和 Bootstrap 共 32 项通过；Termux `192.168.1.6:5555` 已完成主动连接、热更、`/control`/`/api/status` 恢复和主服务器远程媒体索引聚合现场验收。
+
+## 控制端入口统一为 /control
+
+- ✅ [2026-09-05] 将控制端正式页面入口统一为 `/control`，并让 `/control` 同时承载 HTTP 页面和控制端 WebSocket。
+  - `/upload` 和 `/` 保留兼容重定向到 `/control`；内部 `upload.html`、`upload.js` 和 `upload.css` 文件名不变。
+  - 服务器列表节点连接和手动地址连接统一跳转到目标 `/control`。
+  - 改动文件：`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/server-list.js`、`tests/server-api-contract.test.js`、`tests/server-list-ui.test.js` 及控制端/AASC/Termux 文档。
+  - 验证：控制端路由和服务器列表定向测试 8/8 通过。
 
 ## 控制端网页主题规则与服务器列表
 

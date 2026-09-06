@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node --openssl-legacy-provider --expose-gc src/apps/server/boot/server-launcher.js",
     "restart:server": "node scripts/ops/restart-server.js",
+    "build:server-package": "node scripts/ops/build-server-package.js",
     "test": "node --test tests/*.test.js",
     "check:chat2api": "node --test src/apps/server/modules/chat2api/*.test.js src/apps/server/modules/task-engine/builtin-tasks/chat2api-proxy.test.js src/apps/web-mediacenter/ui/public/js/chat2api.test.js",
     "test:log-brain": "node scripts/test-runners/run-log-brain-tests.js",
@@ -17,6 +18,8 @@
     "start:apk:display": "node scripts/ops/apk-start.js"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "0.84.2",
     "@marsaud/smb2": "^0.18.0",
     "axios": "^1.14.0",
     "blessed": "^0.1.81",

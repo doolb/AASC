@@ -40,85 +40,117 @@ loadHistory():
 
 保存历史时按 profile 和会话生成安全文件名，禁止 profile 名称或私聊目标穿越目录。
 
-## PiRuntimeManager
+## PiRuntimeManager（SDK 内嵌实现）
 
 ```text
 PiRuntimeManager(options):
     sessions = Map<(profileName, templateId, permissionProfile, conversationKey), PiSession>
-    spawn = 注入的子进程创建函数，生产环境使用 child_process.spawn
+    sdkLoader = options.sdkLoader 或动态加载 @earendil-works/pi-coding-agent
+    readonlyToolsLoader = options.readonlyToolsLoader 或动态加载项目内置工具模块
     projectRoot = 固定项目根目录
-    extensionPath = 项目内置只读扩展路径
+    responsesBaseUrl = options.responsesBaseUrl 或空字符串
     requestTimeoutMs = options.requestTimeoutMs || 600000
     requestQueueTimeoutMs = options.requestQueueTimeoutMs || 30000
     logger = options.logger 或空函数
 
-logPi(event, details):
-    调用 logger(event, details)
-    logger 失败时忽略日志异常，不影响 Pi 请求
+createSdkSession(profile, template, conversationId):
+    sdk = await sdkLoader()
+    toolsModule = await readonlyToolsLoader()
+    policy = resolvePermissionPolicy(template.permissionProfile)
+    provider = toolsModule.createAascChat2ApiProvider({
+        baseUrl: responsesBaseUrl 或 normalizeOpenAiBaseUrl(profile.apiUrl),
+        modelId: profile.model,
+        apiKey: profile.apiKey,
+        conversationId
+    })
+    modelRuntime = await sdk.ModelRuntime.create({ refreshOnCreate: false })
+    modelRuntime.registerNativeProvider(provider)
+    model = modelRuntime.getModel('aasc-openai', profile.model)
+    resourceLoader = sdk.DefaultResourceLoader({
+        cwd: projectRoot,
+        agentDir: 临时运行目录,
+        settingsManager: sdk.SettingsManager.inMemory(),
+        noExtensions: true,
+        noSkills: true,
+        noPromptTemplates: true,
+        noThemes: true,
+        noContextFiles: true
+    })
+    result = await sdk.createAgentSession({
+        cwd: projectRoot,
+        model,
+        modelRuntime,
+        resourceLoader,
+        sessionManager: sdk.SessionManager.inMemory(projectRoot),
+        settingsManager: sdk.SettingsManager.inMemory(),
+        customTools: toolsModule.createAascReadonlyTools(),
+        tools: policy.tools
+    })
+    返回 result.session
 
 getOrCreate(profile, template):
     校验 profile.mode == 'agent' 且 profile.backend == 'pi'
     校验 template.permissionProfile 是服务器支持的策略
     根据 permissionProfile 映射固定工具白名单；文件查找使用 aasc_find，不启用依赖 fd 的 Pi 原生 find
-    如果 sessions 中存在同一 profile/template/permission 且配置指纹未变化:
-        返回已有 session
-    如果存在但配置指纹或权限策略变化:
-        stop(sessionKey)
-    创建 PiSession(profile, template, toolAllowlist)
+    生成配置指纹；相同配置复用现有 AgentSession
+    配置变化时先 dispose 旧 AgentSession
+    为新会话生成 conversationId，并异步创建 SDK AgentSession
+    订阅 session.subscribe()，只处理 message_update、agent_end 和错误事件
     返回 session
 
 会话生命周期:
     群聊固定使用 mode=group、target=null、sessionId=default 的 conversationKey
     私聊按 mode=private、target、sessionId 隔离
     模式、私聊目标或私聊 sessionId 切换时回收旧 conversationKey 的 PiSession
-    应用层聊天历史不删除；下一次请求按新 key 创建干净进程
+    应用层聊天历史不删除；下一次请求按新 key 创建内存 AgentSession
 
 chatStream(profile, template, prompt, callbacks, options):
-    session = getOrCreate(profile, template, options.conversationKey)
+    session = await getOrCreate(profile, template, options.conversationKey)
     生成 requestId
     记录请求入队和实际开始，日志包含 requestId、会话键和队列等待信息
     将请求加入 session 串行队列，并为“从入队到开始执行”单独设置 requestQueueTimeoutMs
     如果排队超时:
-        标记该排队任务已过期，不再调用 Pi
+        标记该排队任务已过期，不调用 session.prompt()
         callbacks.onError('Pi 请求排队超时')
         让 session.queue 继续处理其他任务
-    如果请求失败且错误属于空回复或可恢复 RPC 错误:
-        终止并删除当前 session
-        记录“Pi 会话重建”
-        使用新 session 自动重试一次
-    重试仍失败、请求超时、协议错误或配置错误:
-        callbacks.onError(error)
-    session.ensureStarted()
-    如果 session 尚未初始化:
-        通过 stdin 写入 { id, type: 'prompt', message: prompt }\n
-    否则:
-        continuation = options.continuationPrompt 或 prompt
-        如果 continuation 不以 'User:' 开头:
-            continuation = 'User:' + continuation
-        通过 stdin 写入 { id, type: 'prompt', message: continuation }\n
-    读取 stdout JSONL:
-        记录 requestId 关联的关键事件类型；工具事件只记录工具名/长度，不记录完整内容
-        type='response' 且 id 匹配且 success=false → 当前请求失败
-        type='message_update' 且 assistantMessageEvent.type='text_delta':
-            callbacks.onChunk(delta, fullMessage)
-            按句切分，完整句调用 callbacks.onSentence
-        type='agent_end':
-            如果 willRetry=true → 记录重试事件，继续等待后续事件
-            如果最后 assistant 消息 stopReason='error' 或存在 errorMessage:
-                终止当前 session，记录失败，交给上层判断是否自动重试
-            否则提取最终文本
-            如果最终文本为空 → 终止当前 session，记录空回复失败，交给上层判断是否自动重试
-            否则记录完成，callbacks.onComplete(fullMessage)
-    stderr 仅写服务器 Agent 日志，不作为助手消息
+    session.prompt(initialPrompt 或 'User:' + continuationPrompt)
+    订阅的 message_update.text_delta 转换为 callbacks.onChunk
+    订阅的 agent_end:
+        如果 willRetry=true → 记录重试事件，继续等待后续事件
+        如果最后 assistant 消息 stopReason='error' 或存在 errorMessage:
+            dispose 当前 session，交给上层判断是否自动重试
+        否则提取最终文本
+        如果最终文本为空 → dispose 当前 session，交给上层判断是否自动重试
+        否则记录完成，callbacks.onComplete(fullMessage)
+    prompt() 的异常转换为 PI_SDK_ERROR
     等待当前请求响应时使用 requestTimeoutMs 计时
-    超时 → stop(session)，callbacks.onError('Pi 请求超时')
-    退出/非法协议 → stop(session)，callbacks.onError(error)
+    超时 → abort() 后 dispose(session)，callbacks.onError('Pi SDK 请求超时')
+    dispose() 不启动子进程，不读取 stdin/stdout，不留下 Pi CLI 进程
 
 resetSession(profile, template, conversationKey):
     计算同 chatStream 的会话键
-    停止并删除对应 PiSession
+    dispose 并删除对应 PiSession
     下次请求重新使用剩余应用历史初始化
 ```
+
+Pi SDK 内嵌边界：
+
+```text
+createAascChat2ApiProvider(options):
+    返回 pi-ai Provider，固定 id='aasc-openai'
+    auth.resolve() 只读取当前 profile apiKey；空 Key 使用本地占位 Key
+    stream/streamSimple 复用现有 Responses continuation 和 Chat2API 工具转换
+    provider 通过 ModelRuntime.registerNativeProvider() 注册，不使用环境变量传递请求凭据
+
+createAascReadonlyTools():
+    返回固定的 aasc_find、aasc_web_search、aasc_web_fetch ToolDefinition
+    内置工具白名单只允许 read、grep、ls 与上述只读工具
+    DefaultResourceLoader 禁用 extensions、skills、prompt templates、themes 和 context files
+    AgentSession 使用 SessionManager.inMemory()、SettingsManager.inMemory()
+    session.dispose() 是唯一会话回收入口；服务器停止时遍历所有 session 执行 dispose()
+```
+
+主动压缩仍暂不实现：继续使用 Pi AgentSession 自带的接近上下文上限自动压缩机制；后续如增加手动压缩，必须复用当前 session 串行队列。
 
 ## CodexRuntimeManager
 
@@ -162,37 +194,10 @@ chatConfig.codexProxy:
 
 ```text
 主动压缩（当前暂不实现）:
-    Pi RPC 支持 { type: 'compact', customInstructions? }
-    当前 PiRuntimeManager 不发送 compact，不提供控制端按钮，也不按阈值主动触发
-    继续使用 Pi 自带的接近上下文上限自动压缩机制
+    Pi AgentSession 自带上下文压缩能力
+    当前 PiRuntimeManager 不提供控制端主动压缩入口，也不按阈值主动触发
+    继续使用 Pi SDK 在接近上下文上限时的自动压缩机制
 ```
-
-Pi 启动参数伪代码：
-
-```text
-spawn('pi', [
-    '--mode', 'rpc',
-    '--no-session',
-    '--no-context-files',
-    '--no-extensions',
-    '--extension', readonlyExtensionPath,
-        '--provider', 'aasc-openai',
-        '--model', 'aasc-openai/' + profile.model,
-    '--tools', toolAllowlist.join(',')
-], {
-    cwd: projectRoot,
-    env: {
-        ...process.env,
-        PI_CODING_AGENT_DIR: profileRuntimeDir,
-        AASC_PI_BASE_URL: normalizeOpenAiBaseUrl(profile.apiUrl),
-        AASC_PI_MODEL: profile.model,
-        AASC_PI_API_KEY: normalizePiApiKey(profile.apiKey)
-    },
-    stdio: ['pipe', 'pipe', 'pipe']
-})
-```
-
-只读策略扩展在启动时用环境变量注册 `aasc-openai` provider，并注册 `aasc_find`、`aasc_web_search` 和 `aasc_web_fetch`。`aasc_find` 使用 Node 文件系统递归遍历和 glob 匹配，不依赖 `fd` 或网络下载。扩展不导入写文件 API，不注册 bash/edit/write 工具。后续命令策略通过另一个固定扩展或固定工具集合接入，不允许模板内容动态生成工具。
 
 Chat2API 工具转换伪代码：
 

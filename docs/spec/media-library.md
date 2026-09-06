@@ -60,6 +60,15 @@
     list(dirPath):
         fullPath = 解析路径(dirPath)
         items = 读取目录(fullPath)
+        对每个 item:
+            itemPath = fullPath + item.name
+            linkStat = lstat(itemPath)
+            stat = linkStat
+            如果 linkStat 是符号链接:
+                尝试 stat = stat(itemPath)
+                如果目标不存在:
+                    跳过该项
+            使用 stat 判断 type、mediaType、size、modifiedTime
         返回 items 映射为:
             - name: 文件名
             - path: 相对路径

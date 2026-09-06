@@ -214,3 +214,4 @@
 | [usage.md](usage.md) | 项目使用说明 |
 | [rules.md](rules.md) | 代码规范、文件结构 |
 | [todo.md](todo.md) | 项目未完成任务列表 |
+| 服务器发布包 | [server-release.md](spec/server-release.md) | npm 显式生成发布包、清单读取和子服务器更新伪代码 |

@@ -37,45 +37,66 @@ afterEach(() => {
     }
 });
 
-test('发布清单包含版本、大小、SHA-256和白名单文件，并可读取压缩包', async () => {
+test('未显式生成发布包时，读取清单不会自动打包', async () => {
+    const projectRoot = createFixture();
+    const service = new ServerReleaseService({ projectRoot });
+
+    await assert.rejects(
+        service.getManifest(),
+        /请先执行 npm run build:server-package/
+    );
+    assert.equal(
+        fs.existsSync(path.join(projectRoot, 'res/temp/aasc-server-release/manifest.json')),
+        false
+    );
+});
+
+test('显式构建发布包后，清单和压缩包可读取', async () => {
     const projectRoot = createFixture();
     const service = new ServerReleaseService({ projectRoot, version: 'test-1' });
 
+    const packageInfo = await service.buildPackage();
     const manifest = await service.getManifest();
+
     assert.equal(manifest.version, 'test-1');
     assert.equal(manifest.packageUrl, '/server/package?version=test-1');
-    assert.ok(manifest.size > 0);
-    assert.match(manifest.sha256, /^[a-f0-9]{64}$/);
+    assert.equal(manifest.size, packageInfo.size);
+    assert.equal(manifest.sha256, packageInfo.sha256);
     assert.deepEqual(manifest.files, ['src', 'package.json', 'package-lock.json']);
+    assert.equal(
+        fs.existsSync(path.join(projectRoot, 'res/temp/aasc-server-release/manifest.json')),
+        true
+    );
 
-    const packageInfo = await service.createPackage();
-    assert.equal(packageInfo.size, manifest.size);
-    assert.equal(packageInfo.sha256, manifest.sha256);
     const { stdout } = await execFileAsync('tar', ['-tzf', packageInfo.filePath]);
     assert.match(stdout, /src\/apps\/server\/boot\/server-app\.js/);
     assert.match(stdout, /package-lock\.json/);
     assert.doesNotMatch(stdout, /res\/tasks|logs|3rd|node_modules|config|cert/);
 });
 
-test('相同版本重复读取清单复用已生成压缩包', async () => {
+test('清单读取会校验现有压缩包与 SHA-256 一致', async () => {
     const projectRoot = createFixture();
-    const service = new ServerReleaseService({ projectRoot, version: 'test-cache' });
+    const service = new ServerReleaseService({ projectRoot, version: 'test-integrity' });
 
-    const first = await service.createPackage();
-    const second = await service.createPackage();
-    assert.equal(second.filePath, first.filePath);
-    assert.equal(second.sha256, first.sha256);
+    const packageInfo = await service.buildPackage();
+    fs.appendFileSync(packageInfo.filePath, 'tampered');
+
+    await assert.rejects(
+        service.getManifest(),
+        /清单与代码包不一致/
+    );
 });
 
-test('并发读取同一版本时只复用一个打包任务', async () => {
+test('并发显式构建同一版本时只复用一个打包任务', async () => {
     const projectRoot = createFixture();
     const service = new ServerReleaseService({ projectRoot, version: 'test-concurrent' });
 
     const results = await Promise.all([
-        service.createPackage(),
-        service.createPackage(),
-        service.createPackage()
+        service.buildPackage(),
+        service.buildPackage(),
+        service.buildPackage()
     ]);
+
     assert.equal(new Set(results.map(result => result.filePath)).size, 1);
     assert.equal(new Set(results.map(result => result.sha256)).size, 1);
 });
