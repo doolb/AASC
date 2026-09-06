@@ -1,6 +1,7 @@
 'use strict';
 
 const { URL } = require('node:url');
+const { normalizeNodeRuntime } = require('./node-protocol');
 
 /**
  * AASC 服务器节点临时注册表。
@@ -25,6 +26,8 @@ class AascServerRegistry {
         this.heartbeatTimeoutMs = heartbeatTimeoutMs;
         this.now = now;
         this.records = new Map();
+        // 连接句柄单独保存，快照只暴露节点信息，避免把 WebSocket 和请求状态泄漏到接口层。
+        this.connections = new Map();
     }
 
     register(input) {
@@ -37,6 +40,7 @@ class AascServerRegistry {
             registeredAt: current ? current.registeredAt : this._toIso(timestamp),
             lastHeartbeatAt: this._toIso(timestamp),
             lastHeartbeatMs: timestamp,
+            connected: true,
             status: 'online'
         };
 
@@ -55,9 +59,60 @@ class AascServerRegistry {
         Object.assign(record, data, {
             lastHeartbeatAt: this._toIso(timestamp),
             lastHeartbeatMs: timestamp,
+            connected: true,
             status: 'online'
         });
         return this._snapshot(record);
+    }
+
+    attachConnection(nodeId, connection) {
+        const normalizedNodeId = this._normalizeNodeId(nodeId);
+        const record = this.records.get(normalizedNodeId);
+        if (!record || !connection || typeof connection.request !== 'function') {
+            return null;
+        }
+
+        const previousConnection = this.connections.get(normalizedNodeId);
+        if (previousConnection && previousConnection !== connection && typeof previousConnection.close === 'function') {
+            try {
+                previousConnection.close(4001, 'replaced by newer node connection');
+            } catch (error) {
+                // 旧连接关闭失败不影响新连接接管节点。
+            }
+        }
+
+        this.connections.set(normalizedNodeId, connection);
+        record.connected = true;
+        record.status = 'online';
+        return this._snapshot(record);
+    }
+
+    detachConnection(nodeId, connection) {
+        const normalizedNodeId = this._normalizeNodeId(nodeId);
+        if (this.connections.get(normalizedNodeId) !== connection) {
+            return false;
+        }
+
+        this.connections.delete(normalizedNodeId);
+        const record = this.records.get(normalizedNodeId);
+        if (record) {
+            record.connected = false;
+            record.status = 'offline';
+        }
+        return true;
+    }
+
+    getConnection(nodeId) {
+        return this.connections.get(this._normalizeNodeId(nodeId)) || null;
+    }
+
+    async request(nodeId, type, payload = {}, timeoutMs = 10000) {
+        const connection = this.getConnection(nodeId);
+        const record = this.records.get(this._normalizeNodeId(nodeId));
+        if (!record || !connection || record.status !== 'online') {
+            throw new Error(`AASC 节点不可用: ${nodeId}`);
+        }
+        return connection.request(type, payload, timeoutMs);
     }
 
     get(nodeId) {
@@ -104,6 +159,9 @@ class AascServerRegistry {
         }
         if (input.metadata !== undefined) {
             data.metadata = this._cloneMap(input.metadata, 'metadata');
+        }
+        if (input.runtime !== undefined) {
+            data.runtime = normalizeNodeRuntime(input.runtime);
         }
         return data;
     }
@@ -155,6 +213,10 @@ class AascServerRegistry {
     }
 
     _refreshStatus(record) {
+        if (record.connected === false) {
+            record.status = 'offline';
+            return;
+        }
         const elapsed = this.now() - record.lastHeartbeatMs;
         record.status = elapsed >= this.heartbeatTimeoutMs ? 'offline' : 'online';
     }
@@ -169,8 +231,10 @@ class AascServerRegistry {
             version: record.version || null,
             capabilities: this._cloneMap(record.capabilities || {}, 'capabilities'),
             metadata: this._cloneMap(record.metadata || {}, 'metadata'),
+            runtime: this._cloneMap(record.runtime || {}, 'runtime'),
             status: record.status,
             healthy: record.status === 'online',
+            connected: record.connected !== false,
             registeredAt: record.registeredAt,
             lastHeartbeatAt: record.lastHeartbeatAt,
             // 页面沿用旧字段名称时仍可显示心跳时间。

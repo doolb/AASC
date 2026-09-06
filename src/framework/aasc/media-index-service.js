@@ -14,6 +14,9 @@ class AascMediaIndexService {
         this.mediaLibraryManager = options.mediaLibraryManager;
         this.getNode = options.getNode || (() => ({ nodeId: 'main-server', url: '' }));
         this.getRemoteNodes = options.getRemoteNodes || (() => []);
+        // 正式 AASC 节点通过主服务器维护的 WebSocket 会话请求索引；fetchJson
+        // 仅保留给旧调用方和单元测试，避免破坏已有本地索引服务接口。
+        this.requestRemoteIndex = options.requestRemoteIndex || null;
         this.fetchJson = options.fetchJson || fetchJson;
         this.requestTimeoutMs = options.requestTimeoutMs || 5000;
     }
@@ -69,16 +72,22 @@ class AascMediaIndexService {
     }
 
     async _fetchRemoteIndex(node, path) {
-        const url = new URL('/api/aasc/media-index', `${node.url.replace(/\/+$/, '')}/`);
-        url.searchParams.set('scope', 'local');
-        url.searchParams.set('path', path);
         try {
-            const payload = await this.fetchJson(url.toString(), this.requestTimeoutMs);
+            const payload = this.requestRemoteIndex
+                ? await this.requestRemoteIndex(node, path, this.requestTimeoutMs)
+                : await this.fetchJson(this._buildLegacyIndexUrl(node, path), this.requestTimeoutMs);
             const remoteIndex = payload?.index || payload;
             return { index: normalizeRemoteIndex(remoteIndex, node, path) };
         } catch (error) {
             return { error: { nodeId: node.nodeId, url: node.url, message: error.message } };
         }
+    }
+
+    _buildLegacyIndexUrl(node, path) {
+        const url = new URL('/api/aasc/media-index', `${node.url.replace(/\/+$/, '')}/`);
+        url.searchParams.set('scope', 'local');
+        url.searchParams.set('path', path);
+        return url.toString();
     }
 }
 

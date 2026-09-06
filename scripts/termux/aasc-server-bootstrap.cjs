@@ -41,21 +41,29 @@ function createBootstrap(options = {}) {
         return launcher.start();
     }
 
-    async function update() {
+    async function update(options = {}) {
+        const force = options.force === true;
         let manifest = null;
         let backup = null;
         let temporaryDirectory = null;
         const updateId = `${Date.now()}-${process.pid}`;
 
         try {
-            manifest = normalizeManifest(await requestJson(resolveUrl(serverUrl, '/server')));
+            const manifestUrl = force
+                ? appendQueryParameter(resolveUrl(serverUrl, '/server'), 'force', updateId)
+                : resolveUrl(serverUrl, '/server');
+            manifest = normalizeManifest(await requestJson(manifestUrl));
             validateManifest(manifest);
 
             temporaryDirectory = path.join(temporaryRoot, `${safeVersion(manifest.version)}-${updateId}`);
             const archivePath = path.join(temporaryDirectory, 'release.tar.gz');
             const stagingPath = path.join(temporaryDirectory, 'staging');
             await fs.promises.mkdir(stagingPath, { recursive: true });
-            await downloadPackage(resolveUrl(serverUrl, manifest.packageUrl), archivePath);
+            const packageUrl = resolveUrl(serverUrl, manifest.packageUrl);
+            const downloadUrl = force
+                ? appendQueryParameter(packageUrl, 'force', updateId)
+                : packageUrl;
+            await downloadPackage(downloadUrl, archivePath);
             await verifyArchive(archivePath, manifest);
             await extractAndValidate(archivePath, stagingPath);
 
@@ -68,7 +76,9 @@ function createBootstrap(options = {}) {
             }
 
             await cleanupTemporaryDirectory(temporaryDirectory);
-            return { success: true, version: manifest.version, rolledBack: false };
+            return force
+                ? { success: true, version: manifest.version, forced: true, rolledBack: false }
+                : { success: true, version: manifest.version, rolledBack: false };
         } catch (error) {
             let rolledBack = false;
             if (backup) {
@@ -82,12 +92,16 @@ function createBootstrap(options = {}) {
                 }
             }
             await cleanupTemporaryDirectory(temporaryDirectory);
-            return {
+            const result = {
                 success: false,
                 version: manifest ? manifest.version : null,
                 rolledBack,
                 message: error.message
             };
+            if (force) {
+                result.forced = true;
+            }
+            return result;
         }
     }
 
@@ -291,7 +305,7 @@ function requestByHttp(url, consumeResponse) {
 }
 
 async function checkServerHealth(baseUrl) {
-    for (const endpoint of ['/api/status', '/upload', '/display', '/api/aasc/servers']) {
+    for (const endpoint of ['/api/status', '/control', '/display', '/api/aasc/servers']) {
         await requestByHttp(resolveUrl(baseUrl, endpoint), response => {
             response.resume();
             return Promise.resolve();
@@ -302,6 +316,12 @@ async function checkServerHealth(baseUrl) {
 
 function resolveUrl(baseUrl, relativeUrl) {
     return new URL(relativeUrl, `${String(baseUrl).replace(/\/+$/, '')}/`).toString();
+}
+
+function appendQueryParameter(url, name, value) {
+    const parsed = new URL(url);
+    parsed.searchParams.set(name, value);
+    return parsed.toString();
 }
 
 function safeVersion(version) {
@@ -332,6 +352,8 @@ function parseArguments(argumentsList) {
         } else if (argument === '--service-name' && nextValue) {
             result.serviceName = nextValue;
             index += 1;
+        } else if (argument === '--force') {
+            result.force = true;
         }
     }
     return result;
@@ -345,14 +367,14 @@ async function main(argumentsList = process.argv.slice(2)) {
         return;
     }
     if (argumentsConfig.command === 'update') {
-        const result = await bootstrap.update();
+        const result = await bootstrap.update({ force: argumentsConfig.force === true });
         console.log(JSON.stringify(result));
         if (!result.success) {
             process.exitCode = 1;
         }
         return;
     }
-    console.log('用法: node aasc-server-bootstrap.cjs run|update [--server-url URL] [--project-root PATH] [--service-name NAME]');
+    console.log('用法: node aasc-server-bootstrap.cjs run|update [--force] [--server-url URL] [--project-root PATH] [--service-name NAME]');
 }
 
 if (require.main === module) {

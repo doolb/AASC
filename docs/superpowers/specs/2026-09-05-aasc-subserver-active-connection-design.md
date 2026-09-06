@@ -20,7 +20,7 @@
 
 ## 方案
 
-采用持久 WebSocket 控制平面，地址为主服务器的 `wss://<host>:<port>/server`。同一个 `/server` 路径按协议区分：
+采用持久 WebSocket 控制平面，地址为主服务器的 `wss://<host>:<port>/server`。`/server` 同时支持 HTTP 代码接口和 WebSocket 节点连接：
 
 - HTTP `GET /server`：返回服务器代码版本清单。
 - HTTP `GET /server/package`：返回服务器代码包。
@@ -46,7 +46,7 @@
                 └── 主动连接主服务器 WS /server
 ```
 
-`server.role=main` 时只提供主服务器入口和节点接收端；`server.role=subserver` 时启动本地服务后创建 `AascNodeConnector`，不登记为 `main-server`，也不启动主服务器专用的远程节点主动检查流程。
+`aasc.role=main` 时只提供主服务器入口和节点接收端；`aasc.role=subserver` 时启动本地服务后创建 `AascNodeConnector`，不登记为 `main-server`，也不启动主服务器专用的远程节点主动检查流程。
 
 ## 配置契约
 
@@ -123,7 +123,7 @@ AascNodeMessage {
 - `media.index.local`：请求子服务器返回本地媒体索引。
 - `task.execute`：仅用于明确指定服务节点的任务；显示端优先规则不变。
 - `server.update`：通知子服务器主动从主服务器拉取 `/server` 清单和代码包，然后运行 Bootstrap 热更新。
-- `server.restart`：请求子服务器通过现有服务控制器停止并重启服务。
+- `server.restart`：请求子服务器通知现有双进程启动器重启服务进程；无启动器时交给外部监督器恢复。
 
 子服务器收到更新命令后先返回 `accepted`，再由一次性 Bootstrap 执行更新。服务重启导致 WebSocket 中断时，Bootstrap 完成后由新服务重新连接并在注册元数据中回传当前版本；更新失败由 Bootstrap 负责恢复旧代码并重新连接。
 
@@ -153,7 +153,7 @@ AascNodeMessage {
 
 ```text
 启动 server-app.js
-    → 读取 server.role
+    → 读取 aasc.role
     → role=subserver 时初始化 AascNodeConnector
     → 服务监听成功后主动连接 mainServerUrl 的 /server
     → 注册节点信息
@@ -197,7 +197,7 @@ AascNodeMessage {
 1. 主服务器继续提供现有 HTTP `/server` 清单和代码包接口，Termux Bootstrap 的主动下载方式不变。
 2. `server-launcher.js` 和 `server-app.js` 的双进程关系不变。
 3. 显示端 `/display`、控制端 `/control`、运行时桥 `/runtime-bridge` 不改路径。
-4. 网页手动输入服务器地址仍保留，仅用于浏览器跳转到目标 `/upload`，不用于登记子服务器。
+4. 网页手动输入服务器地址仍保留，仅用于浏览器跳转到目标 `/control`，不用于登记子服务器。
 5. 旧 `SubServerManager` 和 `/api/subservers` 暂不删除，后续确认无调用后再清理。
 
 ## 验收标准

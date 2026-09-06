@@ -2,6 +2,16 @@
   "server": {
     "port": 8081
   },
+  "aasc": {
+    "role": "main",
+    "mainServerUrl": "https://192.168.1.39:8081",
+    "nodeId": "",
+    "nodeName": "",
+    "advertisedUrl": "",
+    "heartbeatIntervalMs": 30000,
+    "reconnectMinMs": 1000,
+    "reconnectMaxMs": 30000
+  },
   "tts": {
     "serviceUrl": "http://127.0.0.1:3001/api/tts",
     "defaultVoice": "Microsoft Xiaoxiao",

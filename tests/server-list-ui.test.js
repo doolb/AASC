@@ -65,7 +65,9 @@ test('服务器列表加载 AASC 节点目录接口并渲染节点信息', async
                         url: 'https://192.168.1.20:8081',
                         healthy: true,
                         latency: 12,
-                        currentDisplays: 2
+                        currentDisplays: 2,
+                        runtime: { displayCount: 2, controlCount: 1, libraryCount: 3 },
+                        lastHeartbeatAt: '2026-09-05T13:20:00.000Z'
                     }]
                 };
             }
@@ -79,6 +81,10 @@ test('服务器列表加载 AASC 节点目录接口并渲染节点信息', async
     assert.match(elements.serverListContent.innerHTML, /server-a/);
     assert.match(elements.serverListContent.innerHTML, /在线/);
     assert.match(elements.serverListContent.innerHTML, /12 ms/);
+    assert.match(elements.serverListContent.innerHTML, /显示端<\/dt><dd>2 \/ 未限制/);
+    assert.match(elements.serverListContent.innerHTML, /控制端<\/dt><dd>1/);
+    assert.match(elements.serverListContent.innerHTML, /媒体库<\/dt><dd>3/);
+    assert.match(elements.serverListContent.innerHTML, /最后心跳/);
     assert.match(elements.serverListContent.innerHTML, /连接/);
 });
 
@@ -91,7 +97,7 @@ test('服务器列表支持连接在线节点和手动输入服务器地址', as
     }));
 
     await api.connectToAddress('https://node.test:8081/');
-    assert.equal(window.location.assigned, 'https://node.test:8081/upload');
+    assert.equal(window.location.assigned, 'https://node.test:8081/control');
 
     await assert.rejects(
         () => api.connectToAddress('javascript:alert(1)'),

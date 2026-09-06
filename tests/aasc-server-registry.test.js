@@ -16,13 +16,15 @@ test('注册服务器节点后返回在线快照并支持重复注册更新', ()
         url: 'https://192.168.1.20:8081/',
         version: '1.0.0',
         capabilities: { mediaLibrary: true, puppeteer: false },
-        metadata: { role: 'sub-server' }
+        metadata: { role: 'sub-server' },
+        runtime: { displayCount: 2, controlCount: 1, libraryCount: 3 }
     });
 
     assert.equal(first.nodeId, 'server-a');
     assert.equal(first.url, 'https://192.168.1.20:8081');
     assert.equal(first.status, 'online');
     assert.equal(first.healthy, true);
+    assert.deepEqual(first.runtime, { displayCount: 2, controlCount: 1, libraryCount: 3 });
     assert.equal(first.lastHeartbeatAt, new Date(currentTime).toISOString());
 
     currentTime = 2000;
@@ -54,10 +56,14 @@ test('心跳会恢复在线状态，超时节点保留但标记为离线', () =>
     assert.equal(registry.get('server-b').healthy, false);
 
     currentTime = 11000;
-    const heartbeat = registry.heartbeat('server-b', { metadata: { load: 0.2 } });
+    const heartbeat = registry.heartbeat('server-b', {
+        metadata: { load: 0.2 },
+        runtime: { displayCount: 1, controlCount: 0, libraryCount: 2 }
+    });
     assert.equal(heartbeat.status, 'online');
     assert.equal(heartbeat.healthy, true);
     assert.deepEqual(heartbeat.metadata, { load: 0.2 });
+    assert.deepEqual(heartbeat.runtime, { displayCount: 1, controlCount: 0, libraryCount: 2 });
 });
 
 test('注册校验拒绝缺少 nodeId、非法 URL 和未知节点心跳', () => {
@@ -77,4 +83,45 @@ test('主服务器提供 AASC 节点目录、注册和心跳接口', () => {
     assert.match(source, /app\.post\(['"]\/api\/aasc\/servers\/:nodeId\/heartbeat['"]/);
     assert.match(source, /aascServerRegistry\.register/);
     assert.match(source, /aascServerRegistry\.heartbeat/);
+});
+
+test('新连接接管同节点旧连接并支持有限时请求', async () => {
+    const registry = new AascServerRegistry({ now: () => 1000 });
+    registry.register({ nodeId: 'node-a', url: 'https://node-a:8081' });
+    const oldConnection = {
+        closed: false,
+        close() {
+            this.closed = true;
+        },
+        request: async () => 'old'
+    };
+    const newConnection = {
+        request: async (type, payload) => ({ type, payload })
+    };
+
+    registry.attachConnection('node-a', oldConnection);
+    registry.attachConnection('node-a', newConnection);
+
+    assert.equal(oldConnection.closed, true);
+    assert.equal(registry.getConnection('node-a'), newConnection);
+    assert.deepEqual(await registry.request('node-a', 'media.index.local', { path: '/' }), {
+        type: 'media.index.local',
+        payload: { path: '/' }
+    });
+});
+
+test('当前连接断开后节点立即离线，旧连接不能覆盖新状态', () => {
+    const registry = new AascServerRegistry({ now: () => 1000 });
+    registry.register({ nodeId: 'node-b', url: 'https://node-b:8081' });
+    const oldConnection = { request: async () => null };
+    const newConnection = { request: async () => null };
+
+    registry.attachConnection('node-b', oldConnection);
+    registry.attachConnection('node-b', newConnection);
+    registry.detachConnection('node-b', oldConnection);
+    assert.equal(registry.get('node-b').status, 'online');
+
+    registry.detachConnection('node-b', newConnection);
+    assert.equal(registry.get('node-b').status, 'offline');
+    assert.equal(registry.getConnection('node-b'), null);
 });

@@ -190,6 +190,57 @@ test('Bootstrap 参数支持固定主服务器、项目目录和服务名覆盖'
     });
 });
 
+test('Bootstrap 参数支持强制更新标记', () => {
+    assert.deepEqual(parseArguments(['update', '--force']), {
+        command: 'update',
+        force: true
+    });
+});
+
+test('Bootstrap 强制更新为清单和代码包请求增加缓存绕过参数', async () => {
+    const projectRoot = createRoot('aasc-bootstrap-force-root-');
+    const releaseRoot = createRoot('aasc-bootstrap-force-release-');
+    const archiveRoot = createRoot('aasc-bootstrap-force-archive-');
+    writeRelease(projectRoot, 'old');
+    writeRelease(releaseRoot, 'new');
+    const archivePath = path.join(archiveRoot, 'release.tar.gz');
+    await makeArchive(releaseRoot, archivePath);
+    const requestedUrls = [];
+    const bootstrap = createBootstrap({
+        projectRoot,
+        serverUrl: 'https://main.example:8081',
+        requestJson: async url => {
+            requestedUrls.push(url);
+            return {
+                manifest: {
+                    version: 'new',
+                    size: fs.statSync(archivePath).size,
+                    sha256: sha256(archivePath),
+                    packageUrl: '/server/package',
+                    files: ['src', 'package.json', 'package-lock.json']
+                }
+            };
+        },
+        downloadPackage: async (url, targetPath) => {
+            requestedUrls.push(url);
+            await fs.promises.copyFile(archivePath, targetPath);
+        },
+        serviceController: {
+            async stop() {},
+            async start() {}
+        },
+        healthCheck: async () => true
+    });
+
+    const result = await bootstrap.update({ force: true });
+
+    assert.equal(result.success, true);
+    assert.equal(result.forced, true);
+    assert.equal(requestedUrls.length, 2);
+    assert.match(requestedUrls[0], /\/server\?force=/);
+    assert.match(requestedUrls[1], /\/server\/package\?force=/);
+});
+
 test('Bootstrap run 模式复用 server-launcher 并只 fork server-app 服务进程', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'scripts/termux/aasc-server-bootstrap.cjs'), 'utf8');
 

@@ -794,7 +794,10 @@ const MediaLibrary = {
         if (!container) return;
         
         if (this.libraries.length === 0) {
-            container.innerHTML = '<div class="empty-list">暂无媒体库</div>';
+            container.innerHTML = `
+                <div class="empty-list">暂无媒体库</div>
+                <button class="library-add-btn" onclick="MediaLibrary.showAddLibraryDialog()" title="添加媒体库">+ 添加</button>
+            `;
             return;
         }
         

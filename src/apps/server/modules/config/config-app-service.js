@@ -171,6 +171,18 @@ class Config extends DataSnapshot {
         server: {
             port: 8081
         },
+        // AASC 节点角色和主服务器地址。默认保持当前进程为主服务器，
+        // 子服务器通过修改 aasc.role 后主动连接 mainServerUrl。
+        aasc: {
+            role: 'main',
+            mainServerUrl: 'https://192.168.1.39:8081',
+            nodeId: '',
+            nodeName: '',
+            advertisedUrl: '',
+            heartbeatIntervalMs: 30000,
+            reconnectMinMs: 1000,
+            reconnectMaxMs: 30000
+        },
        tts: {
            serviceUrl: 'http://192.168.1.16:3000/api/tts',
            defaultVoice: 'Microsoft Xiaoxiao',

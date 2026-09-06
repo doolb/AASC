@@ -728,6 +728,8 @@
                     <div class="control-buttons">
                         <button class="control-btn" onclick="Settings.reloadServer()">重载代码</button>
                         <button class="control-btn" onclick="Settings.stopAllAgents()">关闭所有 Agent</button>
+                        <button class="control-btn" id="reloadAllSubserversBtn" onclick="Settings.reloadAllSubservers()">重载所有子服务端代码</button>
+                        <button class="control-btn" id="forceUpdateAllSubserversBtn" onclick="Settings.forceUpdateAllSubservers()">强制获取最新代码</button>
                     </div>
                     <div style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 6px;">
                         重启服务端进程加载最新代码，显示端/控制端会短暂断连后自动恢复
@@ -1158,6 +1160,64 @@
                     else showToast(d.message || '关闭 Agent 失败', 'error');
                 })
                 .catch(e => showToast('关闭 Agent 失败: ' + e.message, 'error'));
+        },
+
+        async reloadAllSubservers() {
+            if (!confirm('确认重载所有在线子服务端代码？子服务器会短暂断连并自动重启。')) return;
+            const button = document.getElementById('reloadAllSubserversBtn');
+            if (button) button.disabled = true;
+
+            try {
+                const response = await fetch('/api/aasc/servers/update-all', { method: 'POST' });
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (error) {
+                    // 非 JSON 响应由 HTTP 状态统一转换为可见错误。
+                }
+                if (!response.ok || data.status !== 'success') {
+                    throw new Error(data.message || `HTTP ${response.status}`);
+                }
+                if (data.total === 0) {
+                    showToast(data.message || '暂无在线子服务器可更新', 'success');
+                    return;
+                }
+                const level = data.failed > 0 ? 'error' : 'success';
+                showToast(data.message || `已下发 ${data.accepted}/${data.total} 台子服务器更新`, level);
+            } catch (error) {
+                showToast('批量重载子服务器失败: ' + error.message, 'error');
+            } finally {
+                if (button) button.disabled = false;
+            }
+        },
+
+        async forceUpdateAllSubservers() {
+            if (!confirm('确认强制让所有在线子服务器重新获取最新代码？即使版本号相同也会重新下载并重启。')) return;
+            const button = document.getElementById('forceUpdateAllSubserversBtn');
+            if (button) button.disabled = true;
+
+            try {
+                const response = await fetch('/api/aasc/servers/force-update-all', { method: 'POST' });
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (error) {
+                    // 非 JSON 响应由 HTTP 状态统一转换为可见错误。
+                }
+                if (!response.ok || data.status !== 'success') {
+                    throw new Error(data.message || `HTTP ${response.status}`);
+                }
+                if (data.total === 0) {
+                    showToast(data.message || '暂无在线子服务器可强制更新', 'success');
+                    return;
+                }
+                const level = data.failed > 0 ? 'error' : 'success';
+                showToast(data.message || `已下发 ${data.accepted}/${data.total} 台子服务器强制更新`, level);
+            } catch (error) {
+                showToast('强制更新子服务器失败: ' + error.message, 'error');
+            } finally {
+                if (button) button.disabled = false;
+            }
         }
     };
 

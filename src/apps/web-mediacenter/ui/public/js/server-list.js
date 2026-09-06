@@ -4,6 +4,7 @@
 (() => {
     const AASC_SERVERS_ENDPOINT = '/api/aasc/servers';
     const SERVER_URL_STORAGE_KEY = 'aasc.serverUrl';
+    const CONTROL_PAGE_PATH = '/control';
     const state = {
         servers: [],
         mediaIndex: null
@@ -41,6 +42,27 @@
             return '未测量';
         }
         return `${latency} ms`;
+    }
+
+    function formatRuntimeCount(server, fieldName) {
+        const runtime = server?.runtime;
+        const value = runtime?.[fieldName];
+        if (Number.isSafeInteger(value) && value >= 0) {
+            return String(value);
+        }
+        return '未上报';
+    }
+
+    function formatDisplayCount(server) {
+        const runtimeCount = formatRuntimeCount(server, 'displayCount');
+        if (runtimeCount !== '未上报') {
+            return `${runtimeCount} / ${formatValue(server.maxDisplays, '未限制')}`;
+        }
+        // 兼容旧 SubServerManager 接口；AASC 节点没有 runtime 时不再伪造 0。
+        if (server.currentDisplays !== undefined || server.maxDisplays !== undefined) {
+            return `${formatValue(server.currentDisplays, '未上报')} / ${formatValue(server.maxDisplays, '未限制')}`;
+        }
+        return '未上报 / 未提供上限';
     }
 
     function formatLastHealthCheck(value) {
@@ -93,7 +115,6 @@
     }
 
     function renderServer(server) {
-        const displayCount = `${formatValue(server.currentDisplays, '0')} / ${formatValue(server.maxDisplays, '未限制')}`;
         const connectionAction = isCurrentServer(server.url)
             ? '<span class="server-current-label">当前连接</span>'
             : server.healthy === true && server.url
@@ -111,11 +132,13 @@
                 <dl class="server-card-details">
                     <div><dt>地址</dt><dd>${formatValue(server.url)}</dd></div>
                     <div><dt>连接延迟</dt><dd>${formatLatency(server.latency)}</dd></div>
-                    <div><dt>显示端</dt><dd>${displayCount}</dd></div>
-                    <div><dt>优先级</dt><dd>${formatValue(server.priority, '0')}</dd></div>
+                    <div><dt>显示端</dt><dd>${formatDisplayCount(server)}</dd></div>
+                    <div><dt>控制端</dt><dd>${formatRuntimeCount(server, 'controlCount')}</dd></div>
+                    <div><dt>媒体库</dt><dd>${formatRuntimeCount(server, 'libraryCount')}</dd></div>
+                    <div><dt>优先级</dt><dd>${formatValue(server.priority, '不适用')}</dd></div>
                     <div><dt>版本</dt><dd>${formatValue(server.version)}</dd></div>
                     <div><dt>能力</dt><dd>${formatCapabilities(server.capabilities)}</dd></div>
-                    <div><dt>最后检查</dt><dd>${formatLastHealthCheck(server.lastHealthCheck)}</dd></div>
+                    <div><dt>最后心跳</dt><dd>${formatLastHealthCheck(server.lastHeartbeatAt || server.lastHealthCheck)}</dd></div>
                 </dl>
                 <div class="server-card-actions">${connectionAction}</div>
             </article>`;
@@ -181,7 +204,7 @@
             } catch (error) {
                 // 浏览器禁用存储时仍允许本次页面跳转，不影响手动连接。
             }
-            window.location.assign(`${origin}/upload`);
+            window.location.assign(`${origin}${CONTROL_PAGE_PATH}`);
             return Promise.resolve(origin);
         },
 

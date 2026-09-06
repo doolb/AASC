@@ -1382,7 +1382,8 @@ wsSystem.registerActor('my-actor', actor);
 节点启动
     → 读取预先配置的 AASC 主服务器地址
     → 当前阶段不执行局域网自动发现
-    → 执行服务器节点注册与心跳
+    → role=main 时登记 main-server
+    → role=subserver 时由服务进程主动建立 /server WebSocket 并注册、发送心跳
     → 主服务器返回节点状态和能力
     → 控制端读取并展示当前服务器列表
 ```
@@ -1420,7 +1421,7 @@ GET /api/aasc/media-index?scope=local&path=/
 GET /api/aasc/media-index
     → 构建当前服务器 localIndex
     → 获取 AascServerRegistry 中 status=online 的远程节点
-    → 并发请求每个节点的 /api/aasc/media-index?scope=local&path=...
+    → 并发通过 registry 节点连接发送 media.index.local 请求
     → 成功结果加入 sources，失败来源加入 errors
     → 返回 { status: success, path, sources }
 ```
@@ -1457,7 +1458,7 @@ TaskManager.runInstance
 
 ## 网页版服务器手动切换伪代码
 
-当前实现对应 `src/apps/web-mediacenter/ui/public/js/server-list.js`，页面入口位于 `/upload` 的服务器面板。
+当前实现对应 `src/apps/web-mediacenter/ui/public/js/server-list.js`，页面入口位于 `/control` 的服务器面板。
 
 ```text
 渲染服务器卡片
@@ -1468,12 +1469,12 @@ TaskManager.runInstance
 点击连接
     → 校验目标地址协议和主机
     → 保存 aasc.serverUrl
-    → window.location.assign(targetOrigin + '/upload')
+    → window.location.assign(targetOrigin + '/control')
 
 手动输入地址
     → 校验地址
     → 去除查询和 hash
-    → 跳转到地址 + '/upload'
+    → 跳转到地址 + '/control'
 ```
 
 ## 服务器节点注册与心跳伪代码
@@ -1522,20 +1523,100 @@ POST /api/aasc/servers/:nodeId/heartbeat
 GET /api/aasc/servers
     → 主服务器先调用 registry.heartbeat('main-server') 刷新自身心跳
     → 获取 registry.getAll()
-    → 追加尚未出现在 registry 中的 SubServerManager 兼容节点
     → 返回 { status: success, servers }
+
+POST /api/aasc/servers/:nodeId/request
+    → 读取 type/command、payload 和可选 timeoutMs
+    → 调用 registry.request(nodeId, type, payload, timeoutMs)
+    → 通过节点 /server WebSocket 等待 node.response
+    → 返回 { status: success, result }
+    → 节点离线、超时或业务失败返回 HTTP 502
+```
+
+## 批量重载子服务器代码伪代码
+
+```text
+POST /api/aasc/servers/update-all
+    → 获取 registry 中全部节点
+    → 过滤 nodeId != main-server
+    → 过滤 status == online 且存在 WebSocket 连接
+    → 并发调用 registry.request(nodeId, 'server.update', {})
+    → 每个节点记录 accepted 或失败原因
+    → 返回 { status: success, total, accepted, failed, results }
+```
+
+```text
+控制端点击“重载所有子服务端代码”
+    → 二次确认
+    → POST /api/aasc/servers/update-all
+    → 请求期间按钮禁用
+    → 按返回汇总显示成功、失败和无可更新节点结果
+```
+
+## 强制获取子服务器最新代码伪代码
+
+```text
+POST /api/aasc/servers/force-update-all
+    → 获取 registry 中全部节点
+    → 过滤 nodeId != main-server
+    → 过滤 status == online 且存在 WebSocket 连接
+    → 并发调用 registry.request(nodeId, 'server.update', { force: true })
+    → 每个节点记录 accepted 或失败原因
+    → 返回 { status: success, forced: true, total, accepted, failed, results }
+```
+
+```text
+控制端点击“强制获取最新代码”
+    → 二次确认明确提示会重新下载并重启在线子服务器
+    → POST /api/aasc/servers/force-update-all
+    → 请求期间禁用强制更新按钮
+    → 按返回汇总显示成功、失败和无在线节点结果
+```
+
+## AASC 节点运行数据上报伪代码
+
+```text
+runtime = {
+    displayCount: 非负整数,
+    controlCount: 非负整数,
+    libraryCount: 非负整数
+}
+
+主服务器采集运行数据
+    → displayCount = displayClients.size
+    → controlCount = controlClients.size
+    → libraryCount = mediaLibraryManager.listLibraries().length
+
+子服务器采集运行数据
+    → 通过 getRuntime() 读取本地 displayClients、controlClients 和媒体库数量
+    → 不读取主服务器目录，不通过 url 反向请求主服务器
+
+node.register / node.heartbeat
+    → 携带 runtime
+    → 节点协议和注册表校验三个字段为非负整数
+    → 注册表保存最近一次 runtime
+    → GET /api/aasc/servers 返回 runtime
+```
+
+```text
+服务器状态卡片
+    → 读取 server.runtime.displayCount
+    → 存在时显示“实际数量 / 未限制”
+    → 缺失时显示“未上报 / 未提供上限”
+    → priority 不属于 AASC 节点目录时显示“不适用”
+    → lastHeartbeatAt 标签显示为“最后心跳”
 ```
 
 ```text
 主服务器启动
     → 使用当前监听协议、局域网地址和固定 nodeId=main-server 登记自身
     → 控制端服务器页面请求 /api/aasc/servers
-    → 页面显示 registry 节点和兼容旧配置节点
+    → 页面显示主服务器和主动 WebSocket 注册节点
 ```
 
 ## 子服务器主动连接伪代码
 
-当前架构对应 `docs/superpowers/specs/2026-09-05-aasc-subserver-active-connection-design.md`。主服务器同时保留 HTTP `/server` 代码接口和 WebSocket `/server` 节点入口。
+当前架构对应 `docs/superpowers/specs/2026-09-05-aasc-subserver-active-connection-design.md`。主服务器保留 HTTP `/server` 代码接口，并在同一路径提供 WebSocket `/server` 节点入口。
 
 ```text
 AascNodeConnector
@@ -1602,4 +1683,4 @@ aasc.reconnectMinMs = 1000
 aasc.reconnectMaxMs = 30000
 ```
 
-`server.role=main` 时不创建主动客户端；`server.role=subserver` 时只在本地服务监听成功后创建主动客户端。子服务器连接失败不阻塞本地 HTTP、HTTPS、WebSocket 和显示端服务启动。
+`aasc.role=main` 时不创建主动客户端；`aasc.role=subserver` 时只在本地服务监听成功后创建主动客户端。子服务器连接失败不阻塞本地 HTTP、HTTPS、WebSocket 和显示端服务启动。

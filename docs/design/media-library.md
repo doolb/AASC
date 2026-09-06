@@ -241,3 +241,22 @@
 - src/apps/web-mediacenter/modules/media/media-library-app-service.js
 - tests/media-library-app-service.test.js（+3 测试）
 - docs/spec/media-library.md
+
+### 2026-09-05 Termux storage 符号链接目录列举修复
+
+**问题：** Termux 执行 `termux-setup-storage` 后，`~/storage` 及其下级目录通常是符号链接。LocalProvider 使用 `lstat` 读取链接自身属性，导致目录链接被识别为文件，控制端无法继续进入并列出目录。
+
+**方案：**
+- `LocalProvider.list` 先使用 `lstat` 保留符号链接和断链识别，再对符号链接使用 `stat` 获取目标的真实属性。
+- 目标不存在的断链继续跳过；有效目标按真实目录或文件返回，保持现有路径校验和隐藏文件过滤。
+
+**验收：**
+- 符号链接目录在根目录列表中返回 `type=folder`、`mediaType=folder`。
+- 通过符号链接继续列举目标目录时，可以返回其下级目录。
+- 回归测试覆盖 Linux 目录符号链接，并在 Windows 使用 junction 兼容执行。
+
+**改动文件：**
+- src/apps/web-mediacenter/modules/media/media-library-app-service.js
+- tests/media-library-app-service.test.js
+- docs/spec/media-library.md
+- docs/task/20260905_修复Termux存储符号链接目录列举.md

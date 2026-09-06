@@ -112,19 +112,30 @@ loadFromConfig(config):
 | server.js | API 路由和集成 |
 | config/config.json | 配置持久化 |
 
+## 强制获取最新代码伪代码
+
+```text
+主服务器发送 node.request
+    → type = server.update
+    → payload.force = true
+    → 子服务器启动一次性 Bootstrap update --force
+    → Bootstrap 为 /server 清单和代码包请求增加缓存绕过参数
+    → 即使版本号相同也重新下载并执行既有校验、备份、双进程重启和回滚流程
+```
+
 ## 控制端服务器列表实现（第一阶段）
 
 ```text
-控制端打开 /upload
+控制端打开 /control
     → 侧边栏显示“服务器”入口
     → 用户点击入口
     → 切换到 panel-servers
-    → 页面调用 GET /api/subservers
+    → 页面调用 GET /api/aasc/servers
     → 校验响应为 { status: 'success', servers: [] }
     → 按服务器快照渲染只读卡片
-    → 展示 id、name、url、healthy、latency、lastHealthCheck、currentDisplays、能力/版本元数据
+    → 展示 nodeId、name、url、status、connected、lastHeartbeatAt、能力/版本元数据
     → 用户点击“刷新”
-    → 重新请求 GET /api/subservers
+    → 重新请求 GET /api/aasc/servers
     → 请求失败或响应异常时显示错误状态，不清空上一次成功数据
 ```
 
@@ -174,7 +185,7 @@ loadFromConfig(config):
 
 ```text
 子服务器启动
-    → 读取 server.role=subserver
+    → 读取 aasc.role=subserver
     → 读取 aasc.mainServerUrl、aasc.nodeId、aasc.advertisedUrl
     → 主动建立 WebSocket /server
     → 发送 node.register
@@ -194,3 +205,40 @@ loadFromConfig(config):
 ```
 
 旧 `/api/subservers` 和 `SubServerManager` 只作为兼容层保留，不再代表 AASC 节点主动连接状态。
+
+## AASC 节点运行数据与媒体库空状态
+
+```text
+子服务器服务进程
+    → 每次 node.register 和 node.heartbeat 读取本地运行统计
+    → runtime.displayCount = displayClients.size
+    → runtime.controlCount = controlClients.size
+    → runtime.libraryCount = MediaLibraryManager.listLibraries().length
+    → 通过 /server WebSocket 上报 runtime
+```
+
+```text
+控制端打开子服务器 /control
+    → 请求 GET /api/media-libraries
+    → libraries 为空时显示“暂无媒体库”
+    → 同时保留“+ 添加”按钮
+    → 用户添加本地、HTTP 或 SMB 媒体库
+    → 子服务器保存 media-libraries.json
+    → 主服务器下次 GET /api/aasc/media-index 时通过 node.request 获取该媒体库索引
+```
+
+主服务器的共享媒体库面板只读取聚合索引，不直接修改子服务器媒体库。要管理 Termux 子服务器媒体库，连接 `https://<子服务器地址>:8081/control`。
+
+## 控制端批量重载子服务器代码
+
+```text
+控制端服务端设置
+    → 用户确认“重载所有子服务端代码”
+    → 调用主服务器 POST /api/aasc/servers/update-all
+    → 主服务器只选择在线且已有主动 WebSocket 连接的子服务器
+    → 每个节点接收 server.update
+    → 子服务器启动 Bootstrap update
+    → 返回节点级 accepted 或错误汇总
+```
+
+主服务器不把自己加入批量更新列表；没有在线子服务器时返回成功的空汇总，不产生错误更新请求。

@@ -29,7 +29,7 @@
 
 验收服务
     → 请求 https://127.0.0.1:8081/api/status
-    → 请求 /upload 和 /display
+    → 请求 /control 和 /display
     → 从局域网请求 https://192.168.1.6:8081/display
     → 检查服务状态、运行时长和重启次数
 ```
@@ -47,7 +47,7 @@
     → 启动 aasc-server-test runit 服务
 
 验证端口状态
-    → 请求 8081/api/status、/upload 和 /display
+    → 请求 8081/api/status、/control 和 /display
     → 确认 18081 无监听
     → 确认 code-server 服务状态为 down 且 down 标记存在
 ```
@@ -76,7 +76,7 @@
 
 ```text
 启动服务进程
-    → 读取 server.role
+    → 读取 aasc.role
     → role=main 时只启动主服务器节点入口
     → role=subserver 时读取 aasc.mainServerUrl 和节点身份
     → 服务监听成功后连接 wss://主服务器/server
@@ -91,8 +91,16 @@
     → media.index.local：读取本地媒体索引并返回
     → task.execute：执行明确指定给本节点的服务任务并返回
     → server.update：启动一次性 Bootstrap update 并先返回 accepted
-    → server.restart：调用现有服务控制器重启服务
+    → server.restart：通知现有双进程启动器重启服务进程；无启动器时发送 SIGTERM 交给外部监督器恢复
     → 未知 command：返回结构化错误
+```
+
+```text
+收到 server.update(payload)
+    → 读取 payload.force，缺省为 false
+    → force=true 时启动 Bootstrap update --force
+    → force=false 时启动普通 Bootstrap update
+    → 两种模式都立即返回 accepted
 ```
 
 ## 服务器代码下发与双进程热更新伪代码
@@ -127,10 +135,28 @@ Bootstrap update
     → 备份根目录代码到 previous/<timestamp>
     → 合并复制 src 到根目录（保留未随包发布的本地目录），替换 package.json 和 package-lock.json
     → 调用服务控制器 start
-    → 轮询 /api/status、/upload、/display、/api/aasc/servers
+    → 轮询 /api/status、/control、/display、/api/aasc/servers
     → 所有检查通过则完成更新
     → 任一检查失败则 stop、恢复 previous、start，并返回失败结果
     → 新服务主动重连 WebSocket /server 并重新发送 node.register
+```
+
+```text
+Bootstrap update --force
+    → GET /server?force=<一次性时间戳> 获取当前版本清单
+    → GET packageUrl?force=<一次性时间戳> 获取当前代码包
+    → 即使本地版本号相同也继续执行校验、备份、替换、重启和健康检查
+    → 任一校验或健康检查失败时恢复 previous
+    → 返回 { success, version, forced: true, rolledBack }
+```
+
+```text
+已有 Termux 节点启用强制更新
+    → 首次手动写入 scripts/termux/aasc-server-bootstrap.cjs
+    → 确认 Bootstrap 支持 --force
+    → 执行 Bootstrap update --force 更新 src/服务代码
+    → 检查 /api/status 和 /control 返回 200
+    → 后续由控制端强制更新按钮触发
 ```
 
 ```text

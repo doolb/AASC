@@ -2,7 +2,7 @@
 
 ## 显示控制媒体播放布局
 
-控制端 `upload.html` 的主显示控制区将媒体播放相关控件集中在同一个 `control-item` 内，保持既有
+控制端 `upload.html`（正式页面入口为 `/control`，`/upload` 仅兼容重定向）的主显示控制区将媒体播放相关控件集中在同一个 `control-item` 内，保持既有
 DOM id、事件处理和 WebSocket 控制协议不变：
 
 ```
@@ -386,3 +386,21 @@ async sendTempFile(file):
     border: 3px dashed #4CAF50
     background: rgba(76, 175, 80, 0.08)
 ```
+
+## 控制端页面路由伪代码
+
+```text
+GET /
+    → 重定向 /control
+
+GET /control
+    → 返回 src/apps/web-mediacenter/ui/public/upload.html
+
+GET /upload
+    → 兼容重定向 /control
+
+WebSocket /control
+    → 复用控制端实时消息协议
+```
+
+页面文件仍命名为 `upload.html`，`upload` 只保留为内部资源和兼容路径名称；对外控制端入口统一使用 `/control`。

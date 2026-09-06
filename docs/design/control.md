@@ -125,6 +125,10 @@ UI 分类按交互和视觉职责归并：页面/区块标题、文本/标签、
    - 改动文件：server.js, public/upload.html, public/js/controls.js
    - 功能：点击后发送重启请求，使用 spawn 启动新进程后退出实现自重启
 
+## 控制端访问路由
+
+控制端正式页面入口为 `/control`，由服务端返回现有 `upload.html`；控制端网页加载后通过 `/control` WebSocket 路由建立实时通信。旧 `/upload` 只作为兼容入口重定向到 `/control`，根路径 `/` 也重定向到 `/control`。内部文件名 `upload.html`、`upload.js` 和 `upload.css` 暂不重命名，避免影响既有静态资源和模块引用。
+
 ## 页面交互
  - ✅已完成 界面左侧页签导航
    - 改动文件：public/upload.html, public/css/upload.css, public/js/main.js

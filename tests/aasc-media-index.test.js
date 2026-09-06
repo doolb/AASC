@@ -63,3 +63,32 @@ test('网络媒体索引聚合在线节点并隔离不可达节点', async () =>
     assert.equal(result.errors[0].nodeId, 'node-b');
     assert.equal(requests.length, 2);
 });
+
+test('网络媒体索引优先通过节点会话请求而不是访问节点 HTTP 地址', async () => {
+    const requests = [];
+    const service = new AascMediaIndexService({
+        mediaLibraryManager: createManager(),
+        getNode: () => ({ nodeId: 'main-server', url: 'https://main.test' }),
+        getRemoteNodes: () => [
+            { nodeId: 'node-a', url: 'https://a.test', status: 'online' }
+        ],
+        requestRemoteIndex: async (node, path) => {
+            requests.push({ node, path });
+            return {
+                node: { nodeId: node.nodeId, url: node.url },
+                path,
+                libraries: []
+            };
+        },
+        fetchJson: async () => {
+            throw new Error('不应访问远程 HTTP 索引');
+        }
+    });
+
+    const result = await service.buildNetworkIndex('/music');
+
+    assert.equal(result.sources.length, 2);
+    assert.deepEqual(requests.map(item => ({ nodeId: item.node.nodeId, path: item.path })), [
+        { nodeId: 'node-a', path: '/music' }
+    ]);
+});

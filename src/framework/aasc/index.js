@@ -9,6 +9,9 @@ const { ClusterNode, ClusterManager, ClusterRouter, EdgeOrchestrator, NodeStatus
 const { AascServerRegistry } = require('./server-registry');
 const { AascMediaIndexService } = require('./media-index-service');
 const { AascTaskRouter } = require('./task-router');
+const { AascNodeConnector } = require('./node-connector');
+const { AascNodeSession } = require('./node-session');
+const nodeProtocol = require('./node-protocol');
 const { PipelineStatus, StepErrorStrategy, PipelineContext, PipelineStep, PipelineExecutor, PipelineBuilder } = require('./pipeline');
 const { TriggerType, CompositionStatus, Trigger, CapabilityComposition, CompositionRegistry, CompositionExecutor, CompositionBuilder, defaultCompositions, initDefaultCompositions } = require('./composition');
 const { ScoreWeight, CategoryWeights, CapabilityScore, ActorLevelScore, CapabilityLevelCalculator, LevelCalculatorBuilder } = require('./level-calculator');
@@ -86,6 +89,9 @@ module.exports = {
   AascServerRegistry,
   AascMediaIndexService,
   AascTaskRouter,
+  AascNodeConnector,
+  AascNodeSession,
+  ...nodeProtocol,
   PipelineStatus,
   StepErrorStrategy,
   PipelineContext,
