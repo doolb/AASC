@@ -2523,7 +2523,7 @@
             TextMediaPlayer.attachPlaylist(null);
             TextMediaPlayer.stop();
             const mediaData = item.url
-                ? { type: 'url', url: item.url, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}) }
+                ? { type: 'url', url: item.url, fallbackUrl: item.fallbackUrl, fileName: item.fileName, mediaType: item.mediaType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}) }
                 : { type: 'base64', data: item.data, fileName: item.fileName, mediaType: item.mediaType, mimeType: item.mimeType, ...(item.mediaType === 'text' ? { format: item.format, route: getPlaylistTextRoute(ps) } : {}) };
             const resumeTime = Number.isFinite(options.resumeTime) ? options.resumeTime : ps.resumeTime;
             if (item.mediaType === 'text') {
@@ -3582,6 +3582,33 @@
             media.currentTime = Math.min(Math.max(time, 0), maxTime);
         }
 
+        // 子服务器媒体直连失败时切换到主服务器同源代理。直连地址仍是首选，
+        // 只有资源元素真正触发 error 才回退，避免播放前额外发起一次探测请求。
+        function setMediaSourceWithFallback(element, directUrl, fallbackUrl, reload = false) {
+            let fallbackUsed = false;
+            const normalizeUrl = value => {
+                if (typeof value !== 'string') return '';
+                const url = value.trim();
+                return url && !['null', 'undefined'].includes(url.toLowerCase()) ? url : '';
+            };
+            const safeDirectUrl = normalizeUrl(directUrl);
+            const safeFallbackUrl = normalizeUrl(fallbackUrl);
+            const source = safeDirectUrl || safeFallbackUrl;
+            element.onerror = () => {
+                if (!fallbackUsed && safeFallbackUrl && safeFallbackUrl !== safeDirectUrl) {
+                    fallbackUsed = true;
+                    element.src = safeFallbackUrl;
+                    if (reload && typeof element.load === 'function') {
+                        element.load();
+                    }
+                }
+            };
+            if (source) element.src = source;
+            if (reload && typeof element.load === 'function') {
+                element.load();
+            }
+        }
+
         function showMedia(data, noActivate, paused, resumeTime = 0) {
             // 控制端下发媒体自动进入 60 秒激活窗口（睡眠中操作即时可见）；restore/播放列表等显示端内部调用不激活
             if (!noActivate) activateTemporarily();
@@ -3663,10 +3690,22 @@
                                 mediaHtml.srcdoc = html || '<p style="color:#fff;padding:20px">无法解析该 .mhtml 文件</p>';
                             })
                             .catch(() => {
+                                if (data.fallbackUrl && data.fallbackUrl !== data.url) {
+                                    fetch(data.fallbackUrl, { credentials: 'same-origin' })
+                                        .then(r => r.text())
+                                        .then(text => {
+                                            const html = mhtmlToHtml(text);
+                                            mediaHtml.srcdoc = html || '<p style="color:#fff;padding:20px">无法解析该 .mhtml 文件</p>';
+                                        })
+                                        .catch(() => {
+                                            mediaHtml.srcdoc = '<p style="color:#fff;padding:20px">加载 .mhtml 失败</p>';
+                                        });
+                                    return;
+                                }
                                 mediaHtml.srcdoc = '<p style="color:#fff;padding:20px">加载 .mhtml 失败</p>';
                             });
                     } else {
-                        mediaHtml.src = data.url;
+                        setMediaSourceWithFallback(mediaHtml, data.url, data.fallbackUrl);
                     }
                     const urlParts = data.url.split('/');
                     mediaName = decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]) || mediaName;
@@ -3698,10 +3737,9 @@
                 if (data.mediaType === 'audio') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'none';
-                    mediaAudio.src = data.url;
+                    setMediaSourceWithFallback(mediaAudio, data.url, data.fallbackUrl, true);
                     mediaAudio.loop = true;
                     mediaAudio.onloadedmetadata = () => applyResumeTime(mediaAudio, resumeTime);
-                    mediaAudio.load();
                     if (paused) {
                         mediaAudio.pause();
                     } else {
@@ -3719,7 +3757,7 @@
                 } else if (data.mediaType === 'video') {
                     mediaImage.style.display = 'none';
                     mediaVideo.style.display = 'block';
-                    mediaVideo.src = data.url;
+                    setMediaSourceWithFallback(mediaVideo, data.url, data.fallbackUrl, true);
                     // 单媒体/重连恢复始终循环；批量播放切项时会再改为 false
                     mediaVideo.loop = true;
                     mediaVideo.onloadedmetadata = () => {
@@ -3746,7 +3784,7 @@
                 } else {
                     mediaVideo.style.display = 'none';
                     mediaImage.style.display = 'block';
-                    mediaImage.src = data.url;
+                    setMediaSourceWithFallback(mediaImage, data.url, data.fallbackUrl);
                     mediaImage.onload = restartDynamicFitAfterMediaLoad;
                 }
                 const urlParts = data.url.split('/');

@@ -19,6 +19,8 @@ class AascMediaIndexService {
         this.requestRemoteIndex = options.requestRemoteIndex || null;
         this.fetchJson = options.fetchJson || fetchJson;
         this.requestTimeoutMs = options.requestTimeoutMs || 5000;
+        // 远程媒体仍然优先使用节点原始 URL；该回调只生成同源备用地址。
+        this.getRemoteMediaProxyUrl = options.getRemoteMediaProxyUrl || null;
     }
 
     async buildLocalIndex(requestedPath = '/') {
@@ -49,7 +51,7 @@ class AascMediaIndexService {
     async _buildLibraryIndex(library, path, node) {
         try {
             const items = await this.mediaLibraryManager.list(library.id, path);
-            return this._libraryRecord(library, path, node, normalizeItems(items, node));
+            return this._libraryRecord(library, path, node, normalizeItems(items, node, library.id, null, false));
         } catch (error) {
             return this._libraryRecord(library, path, node, [], error.message);
         }
@@ -77,7 +79,9 @@ class AascMediaIndexService {
                 ? await this.requestRemoteIndex(node, path, this.requestTimeoutMs)
                 : await this.fetchJson(this._buildLegacyIndexUrl(node, path), this.requestTimeoutMs);
             const remoteIndex = payload?.index || payload;
-            return { index: normalizeRemoteIndex(remoteIndex, node, path) };
+            return {
+                index: normalizeRemoteIndex(remoteIndex, node, path, this.getRemoteMediaProxyUrl)
+            };
         } catch (error) {
             return { error: { nodeId: node.nodeId, url: node.url, message: error.message } };
         }
@@ -100,18 +104,18 @@ function normalizeNode(node = {}) {
     };
 }
 
-function normalizeRemoteIndex(index, fallbackNode, fallbackPath) {
+function normalizeRemoteIndex(index, fallbackNode, fallbackPath, getRemoteMediaProxyUrl = null) {
     const node = normalizeNode({ ...(index?.node || {}), ...fallbackNode });
     return {
         node,
         path: normalizeMediaPath(index?.path || fallbackPath),
         libraries: Array.isArray(index?.libraries)
-            ? index.libraries.map(library => normalizeRemoteLibrary(library, node))
+            ? index.libraries.map(library => normalizeRemoteLibrary(library, node, getRemoteMediaProxyUrl))
             : []
     };
 }
 
-function normalizeRemoteLibrary(library = {}, node) {
+function normalizeRemoteLibrary(library = {}, node, getRemoteMediaProxyUrl = null) {
     return {
         id: String(library.id || ''),
         name: String(library.name || library.id || '未命名媒体库'),
@@ -122,22 +126,78 @@ function normalizeRemoteLibrary(library = {}, node) {
         ownerUrl: node.url,
         listUrl: library.listUrl || buildLibraryListUrl(node.url, library.id, library.path || '/'),
         proxyUrl: library.proxyUrl || buildLibraryProxyUrl(node.url, library.id),
-        items: normalizeItems(library.items, node),
+        items: normalizeItems(library.items, node, library.id, getRemoteMediaProxyUrl, true),
         error: library.error || null
     };
 }
 
-function normalizeItems(items, node) {
+function normalizeItems(items, node, libraryId, getRemoteMediaProxyUrl = null, isRemote = false) {
     if (!Array.isArray(items)) return [];
-    return items.map(item => ({
+    return items.map(item => {
+        const directUrl = isRemote
+            ? normalizeRemoteMediaUrl(item?.directUrl || item?.url, node.url, libraryId, item?.path)
+            : item?.directUrl || item?.url || null;
+        const proxyUrl = typeof getRemoteMediaProxyUrl === 'function'
+            ? getRemoteMediaProxyUrl(node, libraryId, item?.path, directUrl) || directUrl
+            : directUrl;
+        return {
         name: String(item?.name || ''),
         path: String(item?.path || ''),
         type: item?.type || null,
         size: Number.isFinite(Number(item?.size)) ? Number(item.size) : null,
         modifiedTime: item?.modifiedTime || null,
+        mediaType: item?.mediaType || null,
+        format: item?.format || null,
+        // url 保持兼容并代表当前首选的节点直连地址，proxyUrl 只作为回退。
+        url: directUrl,
+        directUrl,
+        proxyUrl,
         ownerNodeId: node.nodeId,
         ownerUrl: node.url
-    }));
+        };
+    });
+}
+
+/**
+ * 将子服务器返回的媒体地址绑定到节点注册地址。
+ *
+ * 子服务器可能运行在 Termux、容器或多网卡环境中，媒体提供者生成的
+ * localhost/旧网卡地址不能直接作为控制端和显示端的访问地址。节点注册时
+ * 上报的 advertisedUrl 才是主服务器确认过的可访问入口，因此只替换 URL
+ * 的协议和主机，保留媒体提供者生成的路径；如果条目没有合法地址，则统一
+ * 回退到子服务器的媒体代理 API，保证不会把 null/undefined 传到前端。
+ */
+function normalizeRemoteMediaUrl(rawUrl, nodeUrl, libraryId, itemPath) {
+    const nodeBaseUrl = normalizeBaseUrl(nodeUrl);
+    if (!nodeBaseUrl) return null;
+
+    const value = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+    if (value && !['null', 'undefined'].includes(value.toLowerCase())) {
+        try {
+            const parsed = new URL(value, `${nodeBaseUrl}/`);
+            const nodeOrigin = new URL(nodeBaseUrl);
+            parsed.protocol = nodeOrigin.protocol;
+            parsed.host = nodeOrigin.host;
+            parsed.username = '';
+            parsed.password = '';
+            return parsed.toString();
+        } catch (error) {
+            // 地址格式不合法时继续使用按路径构造的媒体代理地址。
+        }
+    }
+
+    const cleanPath = String(itemPath || '').replace(/^\/+/, '');
+    const encodedPath = cleanPath
+        .split('/')
+        .filter(Boolean)
+        .map(segment => encodeURIComponent(segment))
+        .join('/');
+    if (!libraryId || !encodedPath) return null;
+
+    return new URL(
+        `/api/media-libraries/${encodeURIComponent(String(libraryId))}/proxy/${encodedPath}`,
+        `${nodeBaseUrl}/`
+    ).toString();
 }
 
 function normalizeMediaPath(value) {
@@ -199,5 +259,6 @@ module.exports = {
     buildLibraryProxyUrl,
     normalizeMediaPath,
     normalizeNode,
-    normalizeRemoteIndex
+    normalizeRemoteIndex,
+    normalizeRemoteMediaUrl
 };

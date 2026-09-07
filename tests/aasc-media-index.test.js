@@ -12,7 +12,7 @@ function createManager() {
         async list(libraryId, path) {
             assert.equal(libraryId, 'local-images');
             assert.equal(path, '/');
-            return [{ name: 'a.jpg', path: 'a.jpg', type: 'image', size: 12 }];
+            return [{ name: 'a.jpg', path: 'a.jpg', type: 'image', mediaType: 'image', format: 'jpg', url: 'https://main.test/media/a.jpg', size: 12 }];
         }
     };
 }
@@ -29,6 +29,9 @@ test('本地媒体索引包含节点地址、媒体库和目录条目', async ()
     assert.equal(index.libraries[0].id, 'local-images');
     assert.equal(index.libraries[0].items[0].name, 'a.jpg');
     assert.equal(index.libraries[0].items[0].ownerUrl, 'https://192.168.1.39:8081');
+    assert.equal(index.libraries[0].items[0].mediaType, 'image');
+    assert.equal(index.libraries[0].items[0].format, 'jpg');
+    assert.equal(index.libraries[0].items[0].url, 'https://main.test/media/a.jpg');
     assert.match(index.libraries[0].listUrl, /\/api\/media-libraries\/local-images\/list/);
 });
 
@@ -91,4 +94,93 @@ test('网络媒体索引优先通过节点会话请求而不是访问节点 HTTP
     assert.deepEqual(requests.map(item => ({ nodeId: item.node.nodeId, path: item.path })), [
         { nodeId: 'node-a', path: '/music' }
     ]);
+});
+
+test('远程媒体索引同时保留直连地址和主服务器代理地址', async () => {
+    const service = new AascMediaIndexService({
+        mediaLibraryManager: createManager(),
+        getNode: () => ({ nodeId: 'main-server', url: 'https://main.test' }),
+        getRemoteNodes: () => [
+            { nodeId: 'node-a', url: 'https://a.test', status: 'online' }
+        ],
+        requestRemoteIndex: async () => ({
+            node: { nodeId: 'node-a', url: 'https://a.test' },
+            path: '/',
+            libraries: [{
+                id: 'remote',
+                items: [{
+                    name: '演示图.png',
+                    path: '/演示图.png',
+                    url: 'https://a.test/media/remote/%E6%BC%94%E7%A4%BA%E5%9B%BE.png'
+                }]
+            }]
+        }),
+        getRemoteMediaProxyUrl: (node, libraryId, itemPath) => (
+            `/api/aasc/servers/${node.nodeId}/media-libraries/${libraryId}/proxy${encodeURIComponent(itemPath).replace(/%2F/g, '/')}`
+        )
+    });
+
+    const result = await service.buildNetworkIndex('/');
+    const item = result.sources[1].libraries[0].items[0];
+
+    assert.equal(item.url, 'https://a.test/media/remote/%E6%BC%94%E7%A4%BA%E5%9B%BE.png');
+    assert.equal(item.directUrl, item.url);
+    assert.equal(item.proxyUrl, '/api/aasc/servers/node-a/media-libraries/remote/proxy/%E6%BC%94%E7%A4%BA%E5%9B%BE.png');
+});
+
+test('远程媒体直连地址使用节点注册地址重写主机部分', async () => {
+    const service = new AascMediaIndexService({
+        mediaLibraryManager: createManager(),
+        getNode: () => ({ nodeId: 'main-server', url: 'https://main.test' }),
+        getRemoteNodes: () => [
+            { nodeId: 'node-a', url: 'https://192.168.1.6:8081', status: 'online' }
+        ],
+        requestRemoteIndex: async () => ({
+            node: { nodeId: 'node-a', url: 'http://127.0.0.1:8081' },
+            path: '/',
+            libraries: [{
+                id: 'remote',
+                type: 'local',
+                items: [{
+                    name: '演示图.png',
+                    path: '/演示图.png',
+                    url: 'http://127.0.0.1:8081/api/media-libraries/remote/proxy/%E6%BC%94%E7%A4%BA%E5%9B%BE.png'
+                }]
+            }]
+        }),
+        getRemoteMediaProxyUrl: (node, libraryId, itemPath) => (
+            `/api/aasc/servers/${node.nodeId}/media-libraries/${libraryId}/proxy${encodeURIComponent(itemPath).replace(/%2F/g, '/')}`
+        )
+    });
+
+    const result = await service.buildNetworkIndex('/');
+    const item = result.sources[1].libraries[0].items[0];
+
+    assert.equal(item.directUrl, 'https://192.168.1.6:8081/api/media-libraries/remote/proxy/%E6%BC%94%E7%A4%BA%E5%9B%BE.png');
+    assert.equal(item.url, item.directUrl);
+});
+
+test('远程媒体没有条目 URL 时按节点地址和媒体库路径补全直连地址', async () => {
+    const service = new AascMediaIndexService({
+        mediaLibraryManager: createManager(),
+        getNode: () => ({ nodeId: 'main-server', url: 'https://main.test' }),
+        getRemoteNodes: () => [
+            { nodeId: 'node-a', url: 'https://192.168.1.6:8081', status: 'online' }
+        ],
+        requestRemoteIndex: async () => ({
+            node: { nodeId: 'node-a' },
+            path: '/',
+            libraries: [{
+                id: 'remote',
+                type: 'local',
+                items: [{ name: '演示图.png', path: '/演示图.png', url: null }]
+            }]
+        })
+    });
+
+    const result = await service.buildNetworkIndex('/');
+    const item = result.sources[1].libraries[0].items[0];
+
+    assert.equal(item.directUrl, 'https://192.168.1.6:8081/api/media-libraries/remote/proxy/%E6%BC%94%E7%A4%BA%E5%9B%BE.png');
+    assert.equal(item.url, item.directUrl);
 });

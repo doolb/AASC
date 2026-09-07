@@ -135,17 +135,18 @@
                         <div class="media-library-breadcrumb" id="mediaLibraryBreadcrumb">
                             <span class="breadcrumb-item">根目录</span>
                         </div>
+                        <span class="media-library-route-status" id="mediaLibraryRouteStatus">未选择媒体库</span>
                         <div class="media-library-actions">
-                            <label class="upload-btn">
+                            <label class="upload-btn" data-media-write-control>
                                 上传文件
                                 <input type="file" id="batchFileInput" multiple accept="image/*,video/*,audio/*,.wav,.ogg,.mp3,.html,.htm,.txt,.md" style="display:none" onchange="MediaLibrary.uploadFiles(this.files)">
                             </label>
-                            <label class="upload-btn">
+                            <label class="upload-btn" data-media-write-control>
                                 上传文件夹
                                 <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" onchange="MediaLibrary.uploadFolder(this.files)">
                             </label>
                             <button class="btn-batch" onclick="MediaLibrary.showBatchPlayDialog(MediaLibrary.currentPath)">批量播放当前文件夹</button>
-                            <button onclick="MediaLibrary.showCreateFolderDialog()">新建文件夹</button>
+                            <button data-media-write-control onclick="MediaLibrary.showCreateFolderDialog()">新建文件夹</button>
                             <button onclick="MediaLibrary.loadContent(MediaLibrary.currentPath)">刷新</button>
                         </div>
                     </div>

@@ -1,5 +1,6 @@
 const MediaLibrary = {
     libraries: [],
+    networkIndex: null,
     currentLibrary: null,
     currentPath: '/',
     currentMediaUrl: null,
@@ -13,43 +14,176 @@ const MediaLibrary = {
     
     async loadLibraries() {
         try {
-            const res = await fetch('/api/media-libraries');
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                this.libraries = data.libraries;
-                
+            const res = await fetch('/api/aasc/media-index?path=%2F', { cache: 'no-store' });
+            const data = await this.parseResponse(res);
+
+            if (data.status === 'success' && data.index) {
+                this.networkIndex = data.index;
+                this.libraries = this.flattenNetworkLibraries(data.index);
                 if (this.libraries.length > 0) {
-                    const defaultId = data.defaultLibraryId || this.libraries[0].id;
-                    await this.switchLibrary(defaultId);
+                    const defaultLibrary = this.libraries.find(library => library.isLocal && library.isDefault)
+                        || this.libraries.find(library => library.isLocal)
+                        || this.libraries[0];
+                    await this.switchLibrary(defaultLibrary.id);
                 }
             }
         } catch (err) {
             console.error('加载媒体库列表失败:', err);
         }
     },
-    
+
+    flattenNetworkLibraries(index) {
+        const sources = Array.isArray(index?.sources) ? index.sources : [];
+        const currentOrigin = typeof window !== 'undefined' && window.location
+            ? window.location.origin
+            : '';
+        return sources.flatMap(source => {
+            const node = source?.node || {};
+            const nodeId = String(node.nodeId || node.id || 'unknown-node');
+            const ownerUrl = String(node.url || '').replace(/\/+$/, '');
+            const isLocal = nodeId === 'main-server' || (currentOrigin && ownerUrl === currentOrigin);
+            const libraries = Array.isArray(source?.libraries) ? source.libraries : [];
+            return libraries.map(library => ({
+                ...library,
+                id: isLocal ? String(library.id) : `${nodeId}::${library.id}`,
+                sourceLibraryId: String(library.id || ''),
+                ownerNodeId: nodeId,
+                ownerNodeName: node.name || nodeId,
+                ownerUrl,
+                isLocal,
+                remote: !isLocal,
+                readonly: library.readonly === true,
+                targetAvailable: isLocal || node.status === 'online',
+                items: (Array.isArray(library.items) ? library.items : []).map(item => ({
+                    ...item,
+                    directUrl: item.directUrl || item.url || '',
+                    proxyUrl: item.proxyUrl || this.buildLibraryProxyItemUrl(library, item.path) || item.url || ''
+                })),
+                name: isLocal ? library.name : `${node.name || nodeId} / ${library.name}`
+            }));
+        });
+    },
+
+    buildLibraryProxyItemUrl(library, itemPath) {
+        const baseUrl = String(library?.proxyUrl || '');
+        if (!baseUrl || !itemPath) return '';
+        const encodedPath = String(itemPath).replace(/^\/+/, '').split('/')
+            .filter(Boolean)
+            .map(segment => encodeURIComponent(segment))
+            .join('/');
+        return encodedPath ? `${baseUrl.replace(/\/+$/, '')}/${encodedPath}` : baseUrl;
+    },
+
+    getPlaybackUrl(item) {
+        const directUrl = this.normalizePlaybackUrl(item?.directUrl || item?.url);
+        return directUrl || this.normalizePlaybackUrl(item?.proxyUrl) || '';
+    },
+
+    getPlaybackFallbackUrl(item) {
+        const directUrl = this.normalizePlaybackUrl(item?.directUrl || item?.url);
+        const fallback = this.normalizePlaybackUrl(item?.proxyUrl);
+        return directUrl && fallback && fallback !== directUrl ? fallback : '';
+    },
+
+    normalizePlaybackUrl(value) {
+        if (typeof value !== 'string') return '';
+        const normalized = value.trim();
+        return normalized && !['null', 'undefined'].includes(normalized.toLowerCase())
+            ? normalized
+            : '';
+    },
+
+    getLibraryRequest(library, operation) {
+        const sourceId = encodeURIComponent(String(library?.sourceLibraryId || library?.id || ''));
+        if (library?.remote) {
+            const nodeId = encodeURIComponent(String(library.ownerNodeId || ''));
+            const base = `/api/aasc/servers/${nodeId}/media-libraries/${sourceId}`;
+            const remoteOperations = {
+                update: { url: base, method: 'PUT' },
+                remove: { url: base, method: 'DELETE' },
+                upload: { url: `${base}/upload`, method: 'POST' },
+                deleteFile: { url: `${base}/file`, method: 'DELETE' },
+                createFolder: { url: `${base}/folder`, method: 'POST' },
+                deleteFolder: { url: `${base}/folder`, method: 'DELETE' },
+                setDefault: { url: `${base}/set-default`, method: 'POST' }
+            };
+            return remoteOperations[operation] || null;
+        }
+        const localBase = `/api/media-libraries/${sourceId}`;
+        const localOperations = {
+            update: { url: localBase, method: 'PUT' },
+            remove: { url: localBase, method: 'DELETE' },
+            upload: { url: `${localBase}/upload`, method: 'POST' },
+            deleteFile: { url: `${localBase}/file`, method: 'DELETE' },
+            createFolder: { url: `${localBase}/folder`, method: 'POST' },
+            deleteFolder: { url: `${localBase}/folder`, method: 'DELETE' },
+            setDefault: { url: `${localBase}/set-default`, method: 'POST' }
+        };
+        return localOperations[operation] || null;
+    },
+
+    async parseResponse(res) {
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (error) {
+            data = { message: '服务器返回了无法解析的响应' };
+        }
+        if (!res.ok || data.status === 'error') {
+            throw new Error(`HTTP ${res.status}: ${data.message || '请求失败'}`);
+        }
+        return data;
+    },
+
     async switchLibrary(id) {
-        this.currentLibrary = this.libraries.find(l => l.id === id);
+        this.currentLibrary = this.libraries.find(library => library.id === id) || null;
         this.currentPath = '/';
+        this.renderLibraryList();
+        this.renderLibraryToolbarState();
         await this.loadContent('/');
     },
-    
+
+    renderLibraryToolbarState() {
+        const writable = Boolean(this.currentLibrary && !this.currentLibrary.readonly);
+        document.querySelectorAll('[data-media-write-control]').forEach(element => {
+            element.style.display = writable ? '' : 'none';
+        });
+        const status = document.getElementById('mediaLibraryRouteStatus');
+        if (!status) return;
+        if (!this.currentLibrary) {
+            status.textContent = '未选择媒体库';
+            return;
+        }
+        const mode = this.currentLibrary.remote ? '子服务器媒体库' : '主服务器媒体库';
+        const permission = this.currentLibrary.readonly ? '只读' : '可写';
+        status.textContent = `${mode} · ${permission} · ${this.currentLibrary.ownerNodeName || '主服务器'}`;
+    },
+
     async loadContent(path) {
         if (!this.currentLibrary) return;
-        
+
         this.currentPath = path;
-        
+
         try {
-            const res = await fetch(`/api/media-libraries/${this.currentLibrary.id}/list?path=${encodeURIComponent(path)}`);
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                this.renderFileList(data.items);
-                this.renderBreadcrumb();
+            const res = await fetch(`/api/aasc/media-index?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+            const data = await this.parseResponse(res);
+            if (!data.index) throw new Error('媒体索引响应缺少 index');
+
+            const refreshed = this.flattenNetworkLibraries(data.index).find(library =>
+                library.ownerNodeId === this.currentLibrary.ownerNodeId
+                && library.sourceLibraryId === this.currentLibrary.sourceLibraryId
+            );
+            if (!refreshed) {
+                throw new Error('当前媒体库在网络索引中不可用');
             }
+
+            this.currentLibrary = { ...this.currentLibrary, ...refreshed };
+            this.renderFileList(Array.isArray(refreshed.items) ? refreshed.items : []);
+            this.renderBreadcrumb();
+            this.renderLibraryToolbarState();
         } catch (err) {
             console.error('加载内容失败:', err);
+            showToast(`加载媒体库失败：${err.message}`, 'error');
         }
     },
     
@@ -69,18 +203,13 @@ const MediaLibrary = {
         formData.append('path', dirPath || this.currentPath);
         
         try {
-            const res = await fetch(`/api/media-libraries/${this.currentLibrary.id}/upload`, {
-                method: 'POST',
+            const request = this.getLibraryRequest(this.currentLibrary, 'upload');
+            const res = await fetch(request.url, {
+                method: request.method,
                 body: formData
             });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                return { success: true, data };
-            } else {
-                return { success: false, error: data.message };
-            }
+            const data = await this.parseResponse(res);
+            return { success: true, data };
         } catch (err) {
             return { success: false, error: err.message };
         }
@@ -208,14 +337,16 @@ const MediaLibrary = {
             currentPath = currentPath + '/' + part;
             
             try {
-                await fetch(`/api/media-libraries/${this.currentLibrary.id}/folder`, {
-                    method: 'POST',
+                const request = this.getLibraryRequest(this.currentLibrary, 'createFolder');
+                const res = await fetch(request.url, {
+                    method: request.method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         path: currentPath.substring(0, currentPath.lastIndexOf('/')) || '/', 
                         name: part 
                     })
                 });
+                await this.parseResponse(res);
             } catch (err) {
                 console.error('创建文件夹失败:', err);
             }
@@ -233,19 +364,14 @@ const MediaLibrary = {
         if (!confirm(isFolder ? '确定删除此文件夹及其所有内容？' : '确定删除此文件？')) return;
         
         try {
-            const endpoint = isFolder ? 'folder' : 'file';
-            const res = await fetch(`/api/media-libraries/${this.currentLibrary.id}/${endpoint}?path=${encodeURIComponent(itemPath)}`, {
-                method: 'DELETE'
+            const operation = isFolder ? 'deleteFolder' : 'deleteFile';
+            const request = this.getLibraryRequest(this.currentLibrary, operation);
+            const res = await fetch(`${request.url}?path=${encodeURIComponent(itemPath)}`, {
+                method: request.method
             });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                showToast(isFolder ? '文件夹已删除' : '文件已删除', 'success');
-                await this.loadContent(this.currentPath);
-            } else {
-                showToast('删除失败: ' + data.message, 'error');
-            }
+            await this.parseResponse(res);
+            showToast(isFolder ? '文件夹已删除' : '文件已删除', 'success');
+            await this.loadContent(this.currentPath);
         } catch (err) {
             showToast('删除失败: ' + err.message, 'error');
         }
@@ -260,20 +386,15 @@ const MediaLibrary = {
         }
         
         try {
-            const res = await fetch(`/api/media-libraries/${this.currentLibrary.id}/folder`, {
-                method: 'POST',
+            const request = this.getLibraryRequest(this.currentLibrary, 'createFolder');
+            const res = await fetch(request.url, {
+                method: request.method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: this.currentPath, name })
             });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                showToast('文件夹已创建', 'success');
-                await this.loadContent(this.currentPath);
-            } else {
-                showToast('创建失败: ' + data.message, 'error');
-            }
+            await this.parseResponse(res);
+            showToast('文件夹已创建', 'success');
+            await this.loadContent(this.currentPath);
         } catch (err) {
             showToast('创建失败: ' + err.message, 'error');
         }
@@ -291,21 +412,31 @@ const MediaLibrary = {
         this.loadContent(parentPath);
     },
     
-    playMedia(url, mediaType, fileName, format) {
+    playMedia(url, mediaType, fileName, format, fallbackUrl = '') {
+        const directUrl = this.normalizePlaybackUrl(url);
+        const safeFallbackUrl = this.normalizePlaybackUrl(fallbackUrl);
+        const playbackUrl = directUrl || safeFallbackUrl;
+        if (!playbackUrl) {
+            showToast('媒体地址不可用，无法播放', 'error');
+            return;
+        }
         if (mediaType === 'html') {
-            this.sendHtmlMedia(url);
+            this.sendHtmlMedia(playbackUrl, directUrl ? safeFallbackUrl : '');
             return;
         }
         if (window.Crop) {
-            window.Crop.showPreview(url, mediaType);
+            window.Crop.showPreview(playbackUrl, mediaType);
         }
 
         if (window.WebSocketManager && window.WebSocketManager.sendMedia) {
             const mediaData = {
                 type: 'url',
-                url: url,
+                url: playbackUrl,
                 mediaType: mediaType
             };
+            if (directUrl && safeFallbackUrl && safeFallbackUrl !== directUrl) {
+                mediaData.fallbackUrl = safeFallbackUrl;
+            }
             if (mediaType === 'text') {
                 mediaData.fileName = fileName;
                 mediaData.format = format;
@@ -314,11 +445,11 @@ const MediaLibrary = {
             window.WebSocketManager.sendMedia(mediaData);
         }
 
-        this.setCurrentMedia(url);
+        this.setCurrentMedia(playbackUrl);
     },
 
     // HTML 媒体：不弹滚动设置（沿用显示面板「HTML 播放模式」），直接发送
-    sendHtmlMedia(url) {
+    sendHtmlMedia(url, fallbackUrl = '') {
         if (window.Crop) {
             window.Crop.showPreview(url, 'html');
         }
@@ -326,7 +457,8 @@ const MediaLibrary = {
             window.WebSocketManager.sendMedia({
                 type: 'url',
                 url: url,
-                mediaType: 'html'
+                mediaType: 'html',
+                ...(fallbackUrl && fallbackUrl !== url ? { fallbackUrl } : {})
             });
         }
         this.setCurrentMedia(url);
@@ -542,7 +674,8 @@ const MediaLibrary = {
                 this._lastCropPreviewUrl = null;
                 this.tempPlaylistFiles = null;
                 const ok = window.WebSocketManager.sendPlaylistRequest({
-                    libraryId: this.currentLibrary.id,
+                    libraryId: this.currentLibrary.sourceLibraryId || this.currentLibrary.id,
+                    ...(this.currentLibrary.remote ? { remoteNodeId: this.currentLibrary.ownerNodeId } : {}),
                     path: folderPath,
                     ...settings
                 });
@@ -807,6 +940,7 @@ const MediaLibrary = {
                  title="${lib.name}">
                 <span class="library-icon">${this.getLibraryIcon(lib.type)}</span>
                 <span class="library-name">${lib.name}</span>
+                ${lib.remote ? `<span class="library-owner">${lib.ownerNodeName || lib.ownerNodeId}</span>` : '<span class="library-owner">主服务器</span>'}
                 ${lib.isDefault ? '<span class="library-default">默认</span>' : ''}
                 ${lib.readonly ? '<span class="library-readonly">只读</span>' : ''}
                 <button class="library-edit-btn" onclick="event.stopPropagation(); MediaLibrary.showEditLibraryDialog('${lib.id}')" title="编辑">⚙️</button>
@@ -843,34 +977,53 @@ const MediaLibrary = {
         }
         
         container.innerHTML = items.map(item => {
-            if (item.type === 'folder') {
+            const isFolder = item.type === 'folder';
+            const directUrl = this.normalizePlaybackUrl(item?.directUrl || item?.url);
+            const fallbackUrl = this.getPlaybackFallbackUrl(item);
+            const playbackUrl = directUrl || fallbackUrl;
+            // 文件夹本身没有媒体 URL，但必须保留目录导航入口；只有文件条目才需要校验播放地址。
+            if (!playbackUrl && !isFolder) {
+                return `<div class="media-library-item unavailable">
+                    <div class="media-thumb-wrapper"><div class="media-thumb audio-thumb">⚠️</div></div>
+                    <div class="item-name">${this._escapeHtml(item.name || '未命名媒体')}</div>
+                    <div class="item-meta">媒体地址不可用</div>
+                </div>`;
+            }
+            const fallbackAttributes = fallbackUrl
+                ? `data-fallback-url="${this._escapeHtml(fallbackUrl)}" onerror="if (this.dataset.fallbackUrl && this.src !== this.dataset.fallbackUrl) { this.src = this.dataset.fallbackUrl; }"`
+                : '';
+            const writeAction = this.currentLibrary?.readonly
+                ? ''
+                : `<button class="btn-delete" onclick="event.stopPropagation(); MediaLibrary.deleteItem('${item.path}', true)">删除</button>`;
+            if (isFolder) {
                 return `
                     <div class="media-library-item folder" onclick="MediaLibrary.navigateToFolder('${item.path}')">
                         <div class="folder-icon">📁</div>
                         <div class="item-name">${item.name}</div>
                         <div class="item-actions">
                             <button class="btn-batch" onclick="event.stopPropagation(); MediaLibrary.showBatchPlayDialog('${item.path}')">批量播放</button>
-                            <button class="btn-delete" onclick="event.stopPropagation(); MediaLibrary.deleteItem('${item.path}', true)">删除</button>
+                            ${writeAction}
                         </div>
                     </div>
                 `;
             } else {
-                const isPlaying = this.currentMediaUrl === item.url;
+                const isPlaying = this.currentMediaUrl === playbackUrl
+                    || this.currentMediaUrl === directUrl;
                 let thumbHtml;
                 
                 if (item.mediaType === 'video') {
-                    thumbHtml = `<video class="media-thumb" src="${item.url}" muted preload="metadata" onloadeddata="this.currentTime=0.1"></video>`;
+                    thumbHtml = `<video class="media-thumb" src="${this._escapeHtml(playbackUrl)}" ${fallbackAttributes} muted preload="metadata" onloadeddata="this.currentTime=0.1"></video>`;
                 } else if (item.mediaType === 'audio') {
                     // 音频没有画面，使用稳定的占位图标，避免 img 请求音频导致破图。
                     thumbHtml = '<div class="media-thumb audio-thumb" aria-label="音频">🎵</div>';
                 } else if (item.mediaType === 'text') {
                     thumbHtml = '<div class="media-thumb" style="background:#f4d35e;color:#3d3d3d" aria-label="文本">📄</div>';
                 } else {
-                    thumbHtml = `<img class="media-thumb" src="${item.url}" loading="lazy">`;
+                    thumbHtml = `<img class="media-thumb" src="${this._escapeHtml(playbackUrl)}" ${fallbackAttributes} loading="lazy">`;
                 }
                 
                 return `
-                    <div class="media-library-item ${isPlaying ? 'playing' : ''}" data-url="${item.url}">
+                    <div class="media-library-item ${isPlaying ? 'playing' : ''}" data-url="${this._escapeHtml(playbackUrl)}">
                         <div class="media-thumb-wrapper">
                             ${thumbHtml}
                             ${isPlaying ? '<span class="playing-badge">正在播放</span>' : ''}
@@ -878,8 +1031,8 @@ const MediaLibrary = {
                         <div class="item-name">${item.name}</div>
                         <div class="item-meta">${item.mediaType} · ${this.formatSize(item.size)}</div>
                         <div class="item-actions">
-                            <button class="btn-play" onclick="MediaLibrary.playMedia('${item.url}', '${item.mediaType}', '${item.name}', '${item.format || ''}')">播放</button>
-                            <button class="btn-delete" onclick="MediaLibrary.deleteItem('${item.path}')">删除</button>
+                            <button class="btn-play" onclick="MediaLibrary.playMedia('${this._escapeHtml(playbackUrl)}', '${this._escapeHtml(item.mediaType)}', '${this._escapeHtml(item.name)}', '${this._escapeHtml(item.format || '')}', '${this._escapeHtml(directUrl ? fallbackUrl : '')}')">播放</button>
+                            ${this.currentLibrary?.readonly ? '' : `<button class="btn-delete" onclick="MediaLibrary.deleteItem('${item.path}')">删除</button>`}
                         </div>
                     </div>
                 `;
@@ -1012,27 +1165,42 @@ const MediaLibrary = {
     },
     
     async setDefaultLibrary(id) {
+        const library = this.libraries.find(item => item.id === id);
+        const request = this.getLibraryRequest(library, 'setDefault');
+        if (!request) return;
         try {
-            const res = await fetch(`/api/media-libraries/${id}/set-default`, {
-                method: 'POST'
-            });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                this.libraries = this.libraries.map(lib => ({
-                    ...lib,
-                    isDefault: lib.id === id
-                }));
-                this.renderLibraryList();
-                showToast('已设为默认媒体库', 'success');
-            }
+            const res = await fetch(request.url, { method: request.method });
+            await this.parseResponse(res);
+            this.libraries = this.libraries.map(lib => ({
+                ...lib,
+                isDefault: lib.id === id
+            }));
+            this.renderLibraryList();
+            showToast('已设为默认媒体库', 'success');
         } catch (err) {
             showToast('设置失败: ' + err.message, 'error');
         }
     },
     
-    showAddLibraryDialog() {
+    getTargetNodes(targetNodeId = '') {
+        const sources = Array.isArray(this.networkIndex?.sources) ? this.networkIndex.sources : [];
+        const nodes = sources.map(source => source?.node || {})
+            .filter(node => node.nodeId && (node.nodeId === 'main-server' || node.status !== 'offline'))
+            .map(node => ({
+                nodeId: String(node.nodeId),
+                name: node.name || node.nodeId,
+                isLocal: node.nodeId === 'main-server'
+            }));
+        if (!nodes.some(node => node.isLocal)) {
+            nodes.unshift({ nodeId: 'main-server', name: '主服务器', isLocal: true });
+        }
+        if (targetNodeId && !nodes.some(node => node.nodeId === targetNodeId)) {
+            nodes.push({ nodeId: targetNodeId, name: targetNodeId, isLocal: false });
+        }
+        return nodes;
+    },
+
+    showAddLibraryDialog(targetNodeId = 'main-server') {
         const existingModal = document.getElementById('libraryModal');
         if (existingModal) existingModal.remove();
         
@@ -1046,6 +1214,13 @@ const MediaLibrary = {
                     <button class="modal-close" onclick="this.closest('.library-modal').remove()">×</button>
                 </div>
                 <div class="library-modal-body">
+                    <div class="form-group">
+                        <label>目标服务器</label>
+                        <select id="libTargetNode">
+                            ${this.getTargetNodes(targetNodeId).map(node => `<option value="${node.nodeId}" ${node.nodeId === targetNodeId ? 'selected' : ''}>${node.name}${node.isLocal ? '（本机）' : '（在线）'}</option>`).join('')}
+                        </select>
+                        <small class="library-form-help">本地磁盘路径按目标服务器的文件系统解析。</small>
+                    </div>
                     <div class="form-group">
                         <label>名称 <span class="required">*</span></label>
                         <input type="text" id="libName" placeholder="输入媒体库名称">
@@ -1100,6 +1275,7 @@ const MediaLibrary = {
             </div>
         `;
         document.body.appendChild(modal);
+        this.onTypeChange(document.getElementById('libType').value);
     },
     
     showEditLibraryDialog(id) {
@@ -1169,6 +1345,7 @@ const MediaLibrary = {
     async addLibraryFromForm() {
         const name = document.getElementById('libName').value.trim();
         const type = document.getElementById('libType').value;
+        const targetNodeId = document.getElementById('libTargetNode')?.value || 'main-server';
         
         if (!name) {
             showToast('请输入媒体库名称', 'error');
@@ -1208,22 +1385,19 @@ const MediaLibrary = {
         try {
             showToast('正在添加媒体库...', 'loading');
             
-            const res = await fetch('/api/media-libraries', {
+            const endpoint = targetNodeId === 'main-server'
+                ? '/api/media-libraries'
+                : `/api/aasc/servers/${encodeURIComponent(targetNodeId)}/media-libraries`;
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)
             });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                showToast('媒体库添加成功', 'success');
-                document.getElementById('libraryModal').remove();
-                await this.loadLibraries();
-                this.render();
-            } else {
-                showToast('添加失败: ' + data.message, 'error');
-            }
+            await this.parseResponse(res);
+            showToast(targetNodeId === 'main-server' ? '媒体库添加成功' : '已下发到子服务器并添加成功', 'success');
+            document.getElementById('libraryModal').remove();
+            await this.loadLibraries();
+            this.render();
         } catch (err) {
             showToast('添加失败: ' + err.message, 'error');
         }
@@ -1231,6 +1405,8 @@ const MediaLibrary = {
     
     async updateLibraryFromForm(id) {
         const name = document.getElementById('libName').value.trim();
+        const library = this.libraries.find(item => item.id === id);
+        const request = this.getLibraryRequest(library, 'update');
         
         if (!name) {
             showToast('请输入媒体库名称', 'error');
@@ -1244,22 +1420,16 @@ const MediaLibrary = {
         };
         
         try {
-            const res = await fetch(`/api/media-libraries/${id}`, {
-                method: 'PUT',
+            const res = await fetch(request.url, {
+                method: request.method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updates)
             });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                showToast('媒体库已更新', 'success');
-                document.getElementById('libraryModal').remove();
-                await this.loadLibraries();
-                this.render();
-            } else {
-                showToast('更新失败: ' + data.message, 'error');
-            }
+            await this.parseResponse(res);
+            showToast('媒体库已更新', 'success');
+            document.getElementById('libraryModal').remove();
+            await this.loadLibraries();
+            this.render();
         } catch (err) {
             showToast('更新失败: ' + err.message, 'error');
         }
@@ -1267,27 +1437,20 @@ const MediaLibrary = {
     
     async deleteLibrary(id) {
         if (!confirm('确定删除此媒体库？此操作不会删除实际文件。')) return;
+        const library = this.libraries.find(item => item.id === id);
+        const request = this.getLibraryRequest(library, 'remove');
+        if (!request) return;
         
         try {
-            const res = await fetch(`/api/media-libraries/${id}`, {
-                method: 'DELETE'
-            });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                showToast('媒体库已删除', 'success');
-                document.getElementById('libraryModal').remove();
-                
-                if (this.currentLibrary?.id === id) {
-                    this.currentLibrary = null;
-                }
-                
-                await this.loadLibraries();
-                this.render();
-            } else {
-                showToast('删除失败: ' + data.message, 'error');
+            const res = await fetch(request.url, { method: request.method });
+            await this.parseResponse(res);
+            showToast('媒体库已删除', 'success');
+            document.getElementById('libraryModal').remove();
+            if (this.currentLibrary?.id === id) {
+                this.currentLibrary = null;
             }
+            await this.loadLibraries();
+            this.render();
         } catch (err) {
             showToast('删除失败: ' + err.message, 'error');
         }

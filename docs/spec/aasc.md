@@ -1684,3 +1684,51 @@ aasc.reconnectMaxMs = 30000
 ```
 
 `aasc.role=main` 时不创建主动客户端；`aasc.role=subserver` 时只在本地服务监听成功后创建主动客户端。子服务器连接失败不阻塞本地 HTTP、HTTPS、WebSocket 和显示端服务启动。
+
+## 主服务器控制端聚合与管理子服务器媒体库伪代码
+
+```text
+MediaLibrary.init()
+    → GET /api/aasc/media-index?path=/
+    → 读取 index.sources
+    → 对每个节点的 libraries 展平为控制端媒体库列表
+    → 主服务器库使用原始 library.id
+    → 子服务器库使用 nodeId + "::" + library.id
+    → 子服务器库保存 ownerNodeId、sourceLibraryId、directUrl、proxyUrl
+    → 远程条目的 directUrl 以注册节点 node.url 为权威主机，重写子服务器返回 URL 的 origin
+    → 远程条目 URL 为空、null、undefined 或无法解析时，按原始媒体库 ID 和 path 补为子服务器媒体 API 地址
+    → 子服务器返回批量播放列表时保留每项 path
+    → 主服务器处理远程播放列表时按注册节点 node.url 重写直连 URL，并为每项生成主服务器远程代理 fallbackUrl
+    → 播放列表项直连和代理地址都无效时过滤该项，避免显示端请求空地址
+    → readonly 只表示目标媒体库自身的写入限制，不等同于远程节点不可管理
+    → 默认选择主服务器默认库，没有时选择第一个库
+
+MediaLibrary.loadContent(path)
+    → GET /api/aasc/media-index?path=<path>
+    → 按 ownerNodeId + sourceLibraryId 找到当前库
+    → 使用当前库 items 渲染目录
+    → 文件播放优先使用所属节点 directUrl
+    → directUrl 加载失败时使用主服务器 proxyUrl
+    → 没有可用 directUrl/proxyUrl 时不创建媒体资源请求，也不向显示端下发空 URL
+    → 所有写入操作使用 sourceLibraryId 和 ownerNodeId
+
+主服务器添加子服务器媒体库
+    → POST /api/aasc/servers/{nodeId}/media-libraries
+    → 验证目标节点在线且存在主动 WebSocket 连接
+    → node.request(command="media.library.add", payload=config)
+    → 子服务器 mediaLibraryManager.addLibraryFromConfig(config)
+    → 子服务器持久化配置并注册本地静态媒体路由
+    → 返回不含账号密码的媒体库摘要
+
+主服务器远程媒体库操作
+    → 编辑、删除、删文件、建目录、删目录和设默认
+    → 按 ownerNodeId 通过 node.request 下发白名单命令
+    → 上传和媒体读取访问主服务器同源代理
+    → 主服务器代理转发目标子服务器媒体 API 的状态码、Range 和媒体响应头
+    → 节点离线、超时或返回 404 时，控制端展示目标节点、接口和 HTTP 状态
+
+显示端连接
+    → 不读取媒体库聚合状态
+    → 始终使用 APK 保存的主服务器地址
+    → 不增加子服务器显示路由或自动切换
+```

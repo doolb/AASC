@@ -120,6 +120,9 @@
             : server.healthy === true && server.url
                 ? `<button class="server-connect-btn" type="button" data-server-url="${formatValue(server.url, '')}">连接</button>`
                 : '<span class="server-unavailable-label">不可连接</span>';
+        const mediaLibraryAction = server.nodeId !== 'main-server' && server.healthy === true
+            ? `<button class="server-media-add-btn" type="button" data-add-media-node="${formatValue(server.nodeId, '')}">添加媒体库</button>`
+            : '';
         return `
             <article class="server-card">
                 <div class="server-card-header">
@@ -140,7 +143,7 @@
                     <div><dt>能力</dt><dd>${formatCapabilities(server.capabilities)}</dd></div>
                     <div><dt>最后心跳</dt><dd>${formatLastHealthCheck(server.lastHeartbeatAt || server.lastHealthCheck)}</dd></div>
                 </dl>
-                <div class="server-card-actions">${connectionAction}</div>
+                <div class="server-card-actions">${mediaLibraryAction}${connectionAction}</div>
             </article>`;
     }
 
@@ -279,6 +282,13 @@
                 contentElement.querySelectorAll('[data-server-url]').forEach(button => {
                     button.addEventListener('click', () => {
                         void this.connectToAddress(button.dataset.serverUrl).catch(() => {});
+                    });
+                });
+                contentElement.querySelectorAll('[data-add-media-node]').forEach(button => {
+                    button.addEventListener('click', () => {
+                        if (window.MediaLibrary?.showAddLibraryDialog) {
+                            window.MediaLibrary.showAddLibraryDialog(button.dataset.addMediaNode);
+                        }
                     });
                 });
             }

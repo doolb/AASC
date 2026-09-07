@@ -62,6 +62,15 @@
     background: rgba(255, 165, 0, 0.3);
 }
 
+.library-owner {
+    max-width: 90px;
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .media-library-toolbar {
     display: flex;
     align-items: center;
@@ -100,6 +109,13 @@
 .media-library-actions {
     display: flex;
     gap: 8px;
+}
+
+.media-library-route-status {
+    align-self: center;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 .media-library-actions button,
@@ -417,6 +433,14 @@
 .form-group select option {
     background: #1a1a2e;
     color: #fff;
+}
+
+.library-form-help {
+    display: block;
+    margin-top: 6px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 .checkbox-label {

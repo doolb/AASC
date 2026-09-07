@@ -84,6 +84,8 @@ class PlaylistManager {
         const sorted = this._sortPlaylist(all, mode, sortBy, direction);
         return sorted.map(item => ({
             url: item.url,
+            // 保留原始媒体路径，主服务器聚合远程播放列表时用它生成代理回退地址。
+            path: item.path,
             fileName: item.name,
             mediaType: item.mediaType,
             ...(item.mediaType === 'text' ? { format: item.format } : {})

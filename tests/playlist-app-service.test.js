@@ -71,6 +71,7 @@ test('buildFromLibrary 单层收集当前层全部媒体并过滤文件夹', asy
     const list = await pm.buildFromLibrary('lib1', '/', { recursive: false, mode: 'sequence', sortBy: 'name', direction: 'asc' });
     assert.deepStrictEqual(list.map(i => i.fileName), ['b.mp4', 'readme.txt']);
     assert.strictEqual(list[0].url, '/media/1/b.mp4');
+    assert.strictEqual(list[0].path, '/b.mp4');
     assert.strictEqual(list[1].format, 'plain');
 });
 

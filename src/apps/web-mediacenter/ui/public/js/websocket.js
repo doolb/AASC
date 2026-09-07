@@ -99,6 +99,8 @@ const WebSocketManager = {
             }
         } else if (data.type === 'playlistError') {
             showToast(data.message || '批量播放失败', 'error');
+        } else if (data.type === 'mediaError') {
+            showToast(data.message || '媒体地址不可用，无法播放', 'error');
         } else if (data.type === 'playlistStarted') {
             if (data.temp && Array.isArray(data.playlist) && window.MediaLibrary) {
                 window.MediaLibrary.handleTempPlaylistStarted(data.playlist);
@@ -571,6 +573,25 @@ const WebSocketManager = {
         if (!window.DisplayList) {
             showToast('显示端列表未初始化', 'error');
             return;
+        }
+
+        if (mediaData?.type === 'url') {
+            const normalizeUrl = value => {
+                if (typeof value !== 'string') return '';
+                const url = value.trim();
+                return url && !['null', 'undefined'].includes(url.toLowerCase()) ? url : '';
+            };
+            const directUrl = normalizeUrl(mediaData.url);
+            const fallbackUrl = normalizeUrl(mediaData.fallbackUrl);
+            if (!directUrl && !fallbackUrl) {
+                showToast('媒体地址不可用，无法播放', 'error');
+                return;
+            }
+            mediaData = {
+                ...mediaData,
+                url: directUrl || fallbackUrl,
+                ...(directUrl && fallbackUrl && directUrl !== fallbackUrl ? { fallbackUrl } : {})
+            };
         }
         
         if (mediaRatio === null) {

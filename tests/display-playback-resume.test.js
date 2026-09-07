@@ -36,6 +36,7 @@ test('批量重连恢复当前项时间和暂停状态', () => {
     assert.match(display, /data\.resumeState/);
     assert.match(display, /playlistProgress[\s\S]*currentTime[\s\S]*duration/);
     assert.match(display, /showMedia\(mediaData, true, ps\.paused/);
+    assert.match(display, /url: item\.url, fallbackUrl: item\.fallbackUrl/);
 });
 
 test('播放进度更新有节流持久化并在暂停时强制同步', () => {

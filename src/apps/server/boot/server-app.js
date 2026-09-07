@@ -68,7 +68,15 @@ const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/med
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
 const { AascServerRegistry } = require('../../../framework/aasc/server-registry');
-const { AascMediaIndexService } = require('../../../framework/aasc/media-index-service');
+const {
+    AascMediaIndexService,
+    normalizeRemoteMediaUrl
+} = require('../../../framework/aasc/media-index-service');
+const {
+    buildRemoteMediaProxyPath,
+    createRemoteMediaLibraryHandlers,
+    requestRemoteMediaLibrary
+} = require('../../../framework/aasc/remote-media-library');
 const { AascTaskRouter } = require('../../../framework/aasc/task-router');
 const { AascNodeSession } = require('../../../framework/aasc/node-session');
 const { normalizeNodeRegistration } = require('../../../framework/aasc/node-protocol');
@@ -448,6 +456,42 @@ const mediaLibraryManager = new MediaLibraryManager({
     isHttps: () => useHttps
 });
 
+// 动态添加媒体库时只注册一次静态路由，避免子服务器被主控端重复配置后
+// 在 Express 中不断叠加相同的路由处理器。
+const registeredMediaRoutePrefixes = new Set();
+
+function registerLocalMediaLibraryRoute(libraryId) {
+    const library = mediaLibraryManager.getLibrary(libraryId);
+    if (!library || !library.provider
+        || typeof library.provider.getRoutePrefix !== 'function'
+        || typeof library.provider.getBasePath !== 'function'
+        || library.provider.isUploadsDir) {
+        return false;
+    }
+
+    const routePrefix = library.provider.getRoutePrefix();
+    if (registeredMediaRoutePrefixes.has(routePrefix)) {
+        return true;
+    }
+
+    app.use(routePrefix, staticWithMhtmlMime(library.provider.getBasePath()));
+    registeredMediaRoutePrefixes.add(routePrefix);
+    log('媒体库', `动态添加静态路由: ${routePrefix} -> ${library.provider.getBasePath()}`);
+    return true;
+}
+
+const aascRemoteMediaLibraryHandlers = createRemoteMediaLibraryHandlers({
+    mediaLibraryManager,
+    registerLocalRoutes: library => registerLocalMediaLibraryRoute(library?.id || library?.config?.id),
+    buildPlaylist: payload => playlistManager.buildFromLibrary(payload.id, payload.path || '/', {
+        recursive: payload.recursive,
+        mode: payload.mode,
+        sortBy: payload.sortBy,
+        direction: payload.direction,
+        mediaTypes: payload.mediaTypes
+    })
+});
+
 const { PlaylistManager } = require('../../web-mediacenter/modules/media/playlist-app-service');
 const playlistManager = new PlaylistManager(mediaLibraryManager);
 
@@ -475,7 +519,11 @@ const aascMediaIndexService = new AascMediaIndexService({
         'media.index.local',
         { path: requestedPath },
         timeoutMs
-    )
+    ),
+    getRemoteMediaProxyUrl: (node, libraryId, filePath) => {
+        const origin = `${useHttps ? 'https' : 'http'}://${getLocalIP()}:${PORT}`;
+        return `${origin}${buildRemoteMediaProxyPath(node.nodeId, libraryId, filePath)}`;
+    }
 });
 const aascTaskRouter = new AascTaskRouter({
     getDisplays: () => Array.from(displayClients.entries()).map(([id, data]) => ({
@@ -550,6 +598,7 @@ function ensureAascNodeId() {
  */
 async function handleSubServerNodeRequest(request) {
     const handlers = new Map([
+        ...aascRemoteMediaLibraryHandlers,
         ['media.index.local', async payload => aascMediaIndexService.buildLocalIndex(payload.path || '/')],
         ['task.execute', async payload => executeSubServerTask(payload)],
         ['server.update', async payload => spawnSubServerBootstrap('update', payload)],
@@ -707,8 +756,7 @@ mediaLibraryManager.init().then(() => {
     
     const localRoutes = mediaLibraryManager.getLocalLibraryRoutes();
     localRoutes.forEach(route => {
-        app.use(route.routePrefix, staticWithMhtmlMime(route.basePath));
-        log('媒体库', `静态路由: ${route.routePrefix} -> ${route.basePath}`);
+        registerLocalMediaLibraryRoute(route.id);
     });
     
     startServer();
@@ -1903,6 +1951,116 @@ function parseMultipart(req) {
     });
 }
 
+function requireMediaPath(value, label) {
+    if (typeof value !== 'string' || value.trim() === '') {
+        throw new Error(`${label}不能为空`);
+    }
+    return value;
+}
+
+function getRemoteMediaNode(nodeId) {
+    const node = aascServerRegistry.get(nodeId);
+    if (!node || node.nodeId === AASC_MAIN_NODE_ID || node.status !== 'online' || !node.url) {
+        throw new Error(`AASC 子服务器不可用: ${nodeId}`);
+    }
+    return node;
+}
+
+function encodeRemoteMediaPath(filePath) {
+    return String(filePath || '')
+        .replace(/^\/+/, '')
+        .split('/')
+        .filter(Boolean)
+        .map(segment => encodeURIComponent(segment))
+        .join('/');
+}
+
+function copyRemoteMediaHeaders(remoteResponse, response) {
+    const headers = [
+        'content-type',
+        'content-length',
+        'content-range',
+        'accept-ranges',
+        'cache-control',
+        'content-disposition',
+        'etag',
+        'last-modified'
+    ];
+    headers.forEach(header => {
+        if (remoteResponse.headers[header] !== undefined) {
+            response.setHeader(header, remoteResponse.headers[header]);
+        }
+    });
+}
+
+function requestRemoteHttp(node, target, options = {}) {
+    const client = target.protocol === 'https:' ? https : http;
+    const requestHeaders = { ...(options.headers || {}) };
+    delete requestHeaders.connection;
+    delete requestHeaders.host;
+    return new Promise((resolve, reject) => {
+        const remoteRequest = client.request({
+            protocol: target.protocol,
+            hostname: target.hostname,
+            port: target.port || undefined,
+            path: `${target.pathname}${target.search}`,
+            method: options.method || 'GET',
+            headers: requestHeaders,
+            rejectUnauthorized: false
+        }, resolve);
+        remoteRequest.once('error', reject);
+        remoteRequest.setTimeout(options.timeoutMs || 120000, () => {
+            remoteRequest.destroy(new Error(`远程媒体请求超时: ${node.nodeId}`));
+        });
+        if (options.bodyStream) {
+            options.bodyStream.pipe(remoteRequest);
+        } else {
+            remoteRequest.end();
+        }
+    });
+}
+
+async function proxyRemoteMediaUpload(req, res) {
+    const node = getRemoteMediaNode(req.params.nodeId);
+    const target = new URL(
+        `/api/media-libraries/${encodeURIComponent(req.params.libraryId)}/upload`,
+        `${node.url}/`
+    );
+    const remoteResponse = await requestRemoteHttp(node, target, {
+        method: 'POST',
+        headers: req.headers,
+        bodyStream: req
+    });
+    res.status(remoteResponse.statusCode || 502);
+    copyRemoteMediaHeaders(remoteResponse, res);
+    remoteResponse.pipe(res);
+}
+
+async function proxyRemoteMediaFile(req, res) {
+    const node = getRemoteMediaNode(req.params.nodeId);
+    let filePath;
+    try {
+        filePath = decodeURIComponent(req.params[0] || '');
+    } catch (error) {
+        throw new Error(`远程媒体路径编码无效: ${error.message}`);
+    }
+    const encodedPath = encodeRemoteMediaPath(filePath);
+    if (!encodedPath) {
+        throw new Error('远程媒体文件路径不能为空');
+    }
+    const target = new URL(
+        `/api/media-libraries/${encodeURIComponent(req.params.libraryId)}/proxy/${encodedPath}`,
+        `${node.url}/`
+    );
+    const remoteResponse = await requestRemoteHttp(node, target, {
+        method: 'GET',
+        headers: req.headers
+    });
+    res.status(remoteResponse.statusCode || 502);
+    copyRemoteMediaHeaders(remoteResponse, res);
+    remoteResponse.pipe(res);
+}
+
 const uploadMiddleware = multer({ 
     dest: HTTP_UPLOAD_TEMP_DIR,
     limits: { fileSize: 200 * 1024 * 1024 }
@@ -2623,6 +2781,138 @@ app.post('/api/aasc/servers/force-update-all', async (req, res) => {
     } catch (error) {
         res.status(500).json({ status: 'error', message: `强制更新子服务器失败: ${error.message}` });
     }
+});
+
+app.post('/api/aasc/servers/:nodeId/media-libraries', async (req, res) => {
+    try {
+        const result = await requestRemoteMediaLibrary({
+            registry: aascServerRegistry,
+            nodeId: req.params.nodeId,
+            command: 'media.library.add',
+            payload: req.body || {}
+        });
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `添加远程媒体库失败: ${error.message}` });
+    }
+});
+
+app.put('/api/aasc/servers/:nodeId/media-libraries/:libraryId', async (req, res) => {
+    try {
+        const result = await requestRemoteMediaLibrary({
+            registry: aascServerRegistry,
+            nodeId: req.params.nodeId,
+            command: 'media.library.update',
+            payload: {
+                id: req.params.libraryId,
+                name: req.body?.name,
+                readonly: req.body?.readonly,
+                isDefault: req.body?.isDefault
+            }
+        });
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `更新远程媒体库失败: ${error.message}` });
+    }
+});
+
+app.delete('/api/aasc/servers/:nodeId/media-libraries/:libraryId', async (req, res) => {
+    try {
+        const result = await requestRemoteMediaLibrary({
+            registry: aascServerRegistry,
+            nodeId: req.params.nodeId,
+            command: 'media.library.remove',
+            payload: { id: req.params.libraryId }
+        });
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `删除远程媒体库失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/:nodeId/media-libraries/:libraryId/upload', (req, res) => {
+    proxyRemoteMediaUpload(req, res).catch(error => {
+        if (!res.headersSent) {
+            res.status(502).json({ status: 'error', message: `上传到远程媒体库失败: ${error.message}` });
+        } else {
+            res.end();
+        }
+    });
+});
+
+app.delete('/api/aasc/servers/:nodeId/media-libraries/:libraryId/file', async (req, res) => {
+    try {
+        const filePath = requireMediaPath(req.query.path, '文件路径');
+        const result = await requestRemoteMediaLibrary({
+            registry: aascServerRegistry,
+            nodeId: req.params.nodeId,
+            command: 'media.library.delete-file',
+            payload: { id: req.params.libraryId, path: filePath }
+        });
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `删除远程文件失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/:nodeId/media-libraries/:libraryId/folder', async (req, res) => {
+    try {
+        if (!req.body?.name) {
+            return res.status(400).json({ status: 'error', message: '文件夹名称不能为空' });
+        }
+        const result = await requestRemoteMediaLibrary({
+            registry: aascServerRegistry,
+            nodeId: req.params.nodeId,
+            command: 'media.library.create-folder',
+            payload: {
+                id: req.params.libraryId,
+                path: req.body.path || '/',
+                name: req.body.name
+            }
+        });
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `创建远程文件夹失败: ${error.message}` });
+    }
+});
+
+app.delete('/api/aasc/servers/:nodeId/media-libraries/:libraryId/folder', async (req, res) => {
+    try {
+        const folderPath = requireMediaPath(req.query.path, '文件夹路径');
+        const result = await requestRemoteMediaLibrary({
+            registry: aascServerRegistry,
+            nodeId: req.params.nodeId,
+            command: 'media.library.delete-folder',
+            payload: { id: req.params.libraryId, path: folderPath }
+        });
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `删除远程文件夹失败: ${error.message}` });
+    }
+});
+
+app.post('/api/aasc/servers/:nodeId/media-libraries/:libraryId/set-default', async (req, res) => {
+    try {
+        const result = await requestRemoteMediaLibrary({
+            registry: aascServerRegistry,
+            nodeId: req.params.nodeId,
+            command: 'media.library.set-default',
+            payload: { id: req.params.libraryId }
+        });
+        res.json({ status: 'success', ...result });
+    } catch (error) {
+        res.status(502).json({ status: 'error', message: `设置远程默认媒体库失败: ${error.message}` });
+    }
+});
+
+app.get('/api/aasc/servers/:nodeId/media-libraries/:libraryId/proxy/*', (req, res) => {
+    proxyRemoteMediaFile(req, res).catch(error => {
+        if (!res.headersSent) {
+            res.status(502).json({ status: 'error', message: `读取远程媒体失败: ${error.message}` });
+        } else {
+            res.end();
+        }
+    });
 });
 
 app.get('/api/aasc/media-index', async (req, res) => {
@@ -4897,6 +5187,62 @@ function rewriteMediaUrl(url) {
     return url;
 }
 
+// URL 媒体必须至少有一个可用地址；直连地址缺失时提升同源代理地址，
+// 防止 null/undefined 被持久化、转发后由显示端或浏览器发起无效请求。
+function normalizeMediaBatchPayload(media) {
+    if (!media || typeof media !== 'object' || Array.isArray(media)) return null;
+    if (media.temp || media.type === 'base64') return media;
+
+    const normalizeUrl = value => {
+        if (typeof value !== 'string') return '';
+        const url = value.trim();
+        return url && !['null', 'undefined'].includes(url.toLowerCase()) ? url : '';
+    };
+    const directUrl = normalizeUrl(media.url);
+    const fallbackUrl = normalizeUrl(media.fallbackUrl);
+    const playbackUrl = directUrl || fallbackUrl;
+    if (!playbackUrl) return null;
+
+    return {
+        ...media,
+        url: playbackUrl,
+        ...(directUrl && fallbackUrl && directUrl !== fallbackUrl ? { fallbackUrl } : {})
+    };
+}
+
+/**
+ * 规范化子服务器返回的播放列表。
+ *
+ * 子服务器媒体提供者生成的 URL 可能包含 localhost、容器地址或旧网卡地址，
+ * 不能直接下发给显示端。这里使用注册表中的节点地址重写直连地址，同时保留
+ * 主服务器远程代理作为第二条路径；没有任何可用地址的条目直接过滤掉。
+ */
+function normalizeRemotePlaylist(playlist, nodeId, nodeUrl, libraryId) {
+    if (!Array.isArray(playlist)) return [];
+    return playlist.map(item => {
+        if (!item || typeof item !== 'object' || item.data) return item;
+        const pathValue = typeof item.path === 'string' ? item.path : '';
+        const directUrl = normalizeRemoteMediaUrl(
+            item.directUrl || item.url,
+            nodeUrl,
+            libraryId,
+            pathValue
+        );
+        const fallbackUrl = pathValue
+            ? buildRemoteMediaProxyPath(nodeId, libraryId, pathValue)
+            : '';
+        const playbackUrl = directUrl || fallbackUrl;
+        if (!playbackUrl) return null;
+        return {
+            ...item,
+            path: pathValue,
+            url: playbackUrl,
+            directUrl,
+            ...(directUrl && fallbackUrl && directUrl !== fallbackUrl ? { fallbackUrl } : {})
+        };
+    }).filter(Boolean);
+}
+
 function sendToDisplay(displayId, data, options = {}) {
     // 统一出口重写 http 媒体 URL：手动 URL 输入、restore 恢复、单文件播放等所有下发路径一次覆盖
     if (data.url) data.url = rewriteMediaUrl(data.url);
@@ -6453,11 +6799,17 @@ async function handleControlMessageFallback(data, ws) {
                     return;
                 } else if (data.type === 'mediaBatch') {
                     log('系统', `收到 mediaBatch, displayIds: ${data.displayIds}`);
+                    const media = normalizeMediaBatchPayload(data.media);
+                    if (!media) {
+                        logError('媒体', '拒绝下发无效媒体：直连地址和代理地址均为空');
+                        ws.send(JSON.stringify({ type: 'mediaError', message: '媒体地址不可用，无法播放' }));
+                        return;
+                    }
                     const displayIds = data.displayIds || [];
                     displayIds.forEach(id => {
                         const dd = displayClients.get(id);
                         if (dd) {
-                            const mediaForDisplay = applyTextMediaRoute(data.media, id, displayIds);
+                            const mediaForDisplay = applyTextMediaRoute(media, id, displayIds);
                             if (mediaForDisplay?.mediaType === 'text') {
                                 textMediaTtsService.setDisplayRoute(id, mediaForDisplay.route);
                             } else {
@@ -6506,6 +6858,28 @@ async function handleControlMessageFallback(data, ws) {
                                 playlist = playlistManager.buildFromTemp(data.files || [], {
                                     mode: data.mode, sortBy: data.sortBy, direction: data.direction, mediaTypes: data.mediaTypes
                                 });
+                            } else if (data.remoteNodeId) {
+                                const remoteNode = aascServerRegistry.get(data.remoteNodeId);
+                                const remoteResult = await requestRemoteMediaLibrary({
+                                    registry: aascServerRegistry,
+                                    nodeId: data.remoteNodeId,
+                                    command: 'media.library.playlist',
+                                    payload: {
+                                        id: data.libraryId,
+                                        path: data.path || '/',
+                                        recursive: data.recursive,
+                                        mode: data.mode,
+                                        sortBy: data.sortBy,
+                                        direction: data.direction,
+                                        mediaTypes: data.mediaTypes
+                                    }
+                                });
+                                playlist = normalizeRemotePlaylist(
+                                    remoteResult?.playlist || [],
+                                    data.remoteNodeId,
+                                    remoteNode?.url,
+                                    data.libraryId
+                                );
                             } else {
                                 playlist = await playlistManager.buildFromLibrary(data.libraryId, data.path, {
                                     recursive: data.recursive, mode: data.mode, sortBy: data.sortBy, direction: data.direction, mediaTypes: data.mediaTypes

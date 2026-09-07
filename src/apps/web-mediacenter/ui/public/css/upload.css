@@ -185,8 +185,19 @@ h1 {
 
 .server-card-actions {
     display: flex;
+    align-items: center;
+    gap: 8px;
     justify-content: flex-end;
     margin-top: 14px;
+}
+
+.server-media-add-btn {
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--accent-primary);
+    color: #fff;
+    cursor: pointer;
 }
 
 .shared-media-index-content {

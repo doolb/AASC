@@ -38,7 +38,7 @@ test('detects txt and md as text with the correct format', () => {
 test('library playlist keeps text format metadata', async () => {
     const playlist = await new PlaylistManager(fakeManager).buildFromLibrary('local', '/');
     assert.deepEqual(playlist[0], {
-        url: '/media/1/guide.md', fileName: 'guide.md', mediaType: 'text', format: 'markdown'
+        url: '/media/1/guide.md', path: '/guide.md', fileName: 'guide.md', mediaType: 'text', format: 'markdown'
     });
 });
 
@@ -119,6 +119,6 @@ test('playlistStart 切换 URL 和临时 text 项时将 format 传给 showMedia'
     const showMediaCall = display.indexOf('            showMedia(mediaData, true, ps.paused, resumeTime);', playCurrentStart);
     const playCurrentItem = display.slice(playCurrentStart, showMediaCall);
 
-    assert.match(playCurrentItem, /url: item\.url, fileName: item\.fileName, mediaType: item\.mediaType, \.\.\.\(item\.mediaType === 'text' \? \{ format: item\.format, route: getPlaylistTextRoute\(ps\) \} : \{\}\)/);
+    assert.match(playCurrentItem, /url: item\.url, fallbackUrl: item\.fallbackUrl, fileName: item\.fileName, mediaType: item\.mediaType, \.\.\.\(item\.mediaType === 'text' \? \{ format: item\.format, route: getPlaylistTextRoute\(ps\) \} : \{\}\)/);
     assert.match(playCurrentItem, /data: item\.data, fileName: item\.fileName, mediaType: item\.mediaType, mimeType: item\.mimeType, \.\.\.\(item\.mediaType === 'text' \? \{ format: item\.format, route: getPlaylistTextRoute\(ps\) \} : \{\}\)/);
 });

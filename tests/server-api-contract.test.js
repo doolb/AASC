@@ -92,3 +92,15 @@ test('主服务器提供强制让在线子服务器获取最新代码接口', ()
     assert.match(source, /const updatePayload = force \? \{ force: true \} : \{\}/);
     assert.match(source, /aascServerRegistry\.request\(\s*server\.nodeId[\s\S]*?['"]server\.update['"]\s*,\s*updatePayload/);
 });
+
+test('主服务器规范化远程播放列表的子服务器直连地址并保留代理回退', () => {
+    const source = fs.readFileSync(
+        path.join(__dirname, '..', 'src/apps/server/boot/server-app.js'),
+        'utf8'
+    );
+
+    assert.match(source, /normalizeRemoteMediaUrl/);
+    assert.match(source, /buildRemoteMediaProxyPath/);
+    assert.match(source, /remoteResult\?\.playlist[\s\S]*?\.map\(/);
+    assert.match(source, /fallbackUrl/);
+});
