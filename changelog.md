@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+## 提醒统一 TTS 路由
+
+- ✅ [2026-09-07] 修复提醒触发和单条测试绕过统一 TTS 路由的问题。
+  - 提醒模块改为使用服务器注入的 `generateTtsWithFallback`，在 `tts.device=display` 时优先使用显示端，显示端失败后按配置回退服务器 TTS。
+  - 修复服务器 TTS 关闭时，`/api/reminders/:id/test` 错误访问 `127.0.0.1:3001` 的问题。
+  - 改动文件：`src/apps/web-mediacenter/modules/reminder/reminder-app-service.js`、`src/apps/server/boot/server-app.js`、提醒设计/spec/task 文档及 `tests/reminder-tts-routing.test.js`。
+  - 验证：提醒 TTS 路由测试 2/2 通过。
+
 ## AASC 子服务器媒体直连地址
 
 - ✅ [2026-09-07] 修复主控制端播放子服务器媒体时直连 URL 主机不正确及批量播放列表地址缺失的问题。

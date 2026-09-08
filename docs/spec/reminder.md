@@ -66,8 +66,28 @@ parseReminderVoiceInput(text):
 初始化提醒模块。
 
 ```
+接收可选依赖 { generateTTS }
+如果 generateTTS 是函数:
+    保存为提醒模块的统一 TTS 生成器
+否则:
+    保留底层 tts.generateTTS 兼容实现
 调用 loadReminders()
 输出已加载提醒数量
+```
+
+### 统一 TTS 路由
+
+```text
+服务端初始化提醒模块:
+    reminder.init({ generateTTS: generateTtsWithFallback })
+
+triggerReminder 或 testReminder 需要语音:
+    调用提醒模块保存的 generateTTS(fullContent)
+    统一生成器根据 tts.device 选择显示端离线 TTS，失败时回退服务端 TTS
+    生成音频文件名
+    向目标显示端发送 /uploads/tts/{文件名}
+
+提醒模块不得直接调用底层 tts.generateTTS
 ```
 
 ### loadReminders()
@@ -241,7 +261,7 @@ parseReminderVoiceInput(text):
         发送弹窗消息到所有显示端
     
     如果 methods 包含 'voice':
-        调用 tts.generateTTS(fullContent)
+        调用统一 TTS 生成器 generateTTS(fullContent)
         发送语音消息到所有显示端
         等待 1.5 秒
 
@@ -298,11 +318,11 @@ parseReminderVoiceInput(text):
 对于每次 repeatCount:
     如果指定 targetDisplayId:
         如果需要语音:
-            调用 tts.generateTTS()
+            调用统一 TTS 生成器 generateTTS()
         发送提醒到指定显示端
     否则:
         如果需要语音:
-            调用 tts.generateTTS()
+            调用统一 TTS 生成器 generateTTS()
         发送提醒到所有显示端
     
     等待 1.5 秒

@@ -375,7 +375,8 @@ if (config.get('asr.serverEnabled', true) === true) {
     asr.init(config.get('asr', {}));
 }
 chat.init(config.get('chat', {}), { piRuntimeManager, codexRuntimeManager });
-reminder.init();
+// 提醒必须复用统一 TTS 路由，确保 display 模式优先使用显示端并按策略回退。
+reminder.init({ generateTTS: generateTtsWithFallback });
 voiceCommand.init(config.get('voiceCommand', {}));
 // 文本分页播放单独逐句合成，不能复用通用 TTS 的整段队列，避免播放定位标签丢失。
 const textMediaTtsService = createTextMediaTtsService({

@@ -45,6 +45,14 @@
 - 支持“下午三点”“明天早上八点”“晚上九点”“三十分钟后”等常用表达，并将识别出的时间片段从提醒内容中移除。
 - 未识别到时间时仍默认安排在 5 分钟后，但确认文本必须明确使用默认时间。
 
+## 统一 TTS 路由
+
+提醒触发和单条提醒测试必须复用服务端统一的 `generateTtsWithFallback` 路由。
+提醒模块通过初始化依赖接收 TTS 生成器，不直接依赖底层 `tts.generateTTS`，从而在
+`tts.device=display` 时优先使用在线显示端原生 TTS，显示端不可用时才根据配置回退
+服务器 TTS。这样服务器 TTS 关闭时，使用显示端 TTS 的提醒不会错误访问本地
+`127.0.0.1:3001`。
+
 ---
 
 # 已完成功能
@@ -59,6 +67,8 @@
    - 改动文件：public/js/reminder.js, src/apps/web-mediacenter/modules/reminder/reminder-app-service.js
  - ✅已完成 媒体管理界面显示端选择：在媒体管理界面也可以选择显示端
    - 改动文件：public/js/reminder.js, src/apps/web-mediacenter/modules/reminder/reminder-app-service.js
+ - ✅已完成 提醒统一 TTS 路由：提醒触发和单条测试复用服务端显示端优先、服务器回退的 TTS 生成器
+   - 改动文件：src/apps/web-mediacenter/modules/reminder/reminder-app-service.js, src/apps/server/boot/server-app.js
 
 ## Bug 修复
  - ✅已完成 修复提醒编辑弹窗无法显示问题

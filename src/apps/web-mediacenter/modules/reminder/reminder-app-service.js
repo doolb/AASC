@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const tts = require('../../../../external/tts/tts-service');
 const timeListener = require('../time/time-listener-app-service');
 
 const { USER_CONFIG_DIR } = require('../../../server/modules/config/user-config-paths');
@@ -10,8 +9,16 @@ const REMINDERS_FILE = path.join(USER_CONFIG_DIR, 'reminders.json');
 let reminders = [];
 let displayClients = null;
 let sendToDisplay = null;
+// 提醒模块不直接依赖底层 TTS 服务，统一由服务器入口注入带 fallback 的生成器。
+// 未完成初始化时保留明确错误，避免静默绕过显示端 TTS 路由。
+let generateTTS = async () => {
+    throw new Error('提醒模块尚未配置统一 TTS 生成器');
+};
 
-function init() {
+function init(options = {}) {
+    if (typeof options.generateTTS === 'function') {
+        generateTTS = options.generateTTS;
+    }
     loadReminders();
     console.log(`[提醒] 已加载 ${reminders.length} 个提醒`);
 }
@@ -216,7 +223,7 @@ async function triggerReminder(reminder, repeatIndex = 0) {
             
             if (reminder.methods.includes('voice')) {
                 try {
-                    const audioPath = await tts.generateTTS(fullContent);
+                    const audioPath = await generateTTS(fullContent);
                     const fileName = path.basename(audioPath);
                     
                     displayClients.forEach((displayData, displayId) => {
@@ -300,7 +307,7 @@ async function testReminder(reminderData, targetDisplayId = null, sendFunc = nul
         
         if (reminderData.methods && reminderData.methods.includes('voice')) {
             try {
-                const audioPath = await tts.generateTTS(fullContent);
+                const audioPath = await generateTTS(fullContent);
                 audioFileName = path.basename(audioPath);
             } catch (err) {
                 console.error('[提醒] 测试语音生成失败:', err.message);
