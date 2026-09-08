@@ -98,6 +98,13 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
+    // Node Runtime 和 AASC 服务器运行包由 npm run prepare:android-node 生成，避免把
+    // 体积较大的二进制和依赖直接放入 Git；没有生成 assets 时构建会明确失败。
+    sourceSets {
+        getByName("main") {
+            assets.srcDir(layout.buildDirectory.dir("generated/node-runtime/assets"))
+        }
+    }
     packaging {
         jniLibs {
             // sherpa-onnx 1.12.35 与 ORT Java 都携带同名库；二者均基于 ORT 1.23.2，正式 APK 只保留一份。

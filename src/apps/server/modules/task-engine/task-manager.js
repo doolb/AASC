@@ -24,6 +24,8 @@ class TaskManager extends EventEmitter {
     this._generateTts = null;  // 由 server-app 注入统一的显示端优先 TTS 路由
     this._getTtsServiceUrl = options.getTtsServiceUrl || null;
     this._setTtsServiceUrl = options.setTtsServiceUrl || null;
+    this._serverExecutionDisabled = options.serverExecutionDisabled === true;
+    this._serverExecutionError = options.serverExecutionError || '当前节点不支持服务端任务执行';
     this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
     this._isRestoring = false;
@@ -225,6 +227,12 @@ class TaskManager extends EventEmitter {
     }
 
     try {
+      if (this._serverExecutionDisabled
+        && task.target !== 'display'
+        && task.target !== 'subdisplay') {
+        throw new Error(this._serverExecutionError);
+      }
+
       if (task.mode === 'service') {
         for (const [sid, svc] of this._services) {
           const sInst = this.instances.get(sid);

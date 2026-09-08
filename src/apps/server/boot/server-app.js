@@ -82,6 +82,10 @@ const { AascNodeSession } = require('../../../framework/aasc/node-session');
 const { normalizeNodeRegistration } = require('../../../framework/aasc/node-protocol');
 const { AascNodeConnector } = require('../../../framework/aasc/node-connector');
 const { ServerReleaseService } = require('../modules/aasc/server-release-service');
+const {
+    createAndroidCapabilityUnavailableError,
+    getAndroidNodePolicy
+} = require('../modules/runtime/android-node-capability-policy');
 const { WSViewBindServer } = require('../../../core/viewbind');
 const LogBuffer = require('../../../framework/observability/log-buffer');
 const SystemMonitor = require('../../../framework/observability/system-monitor');
@@ -121,6 +125,7 @@ const tui = new ServerTUI({ enabled: useTUI });
 const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
 
 config.loadConfig();
+const ANDROID_NODE_POLICY = getAndroidNodePolicy();
 
 const logBuffer = new LogBuffer({ maxSize: 1000 });
 const logFileWriter = new LogFileWriter(path.join(__dirname, '../../../../logs'));
@@ -370,8 +375,10 @@ const pendingDisplayVisionRequests = new Map();
 let pendingVisionRequestId = 0;
 const VISION_REQUEST_TIMEOUT_MS = 120000;
 
-tts.init(config.getTtsConfig());
-if (config.get('asr.serverEnabled', true) === true) {
+if (!ANDROID_NODE_POLICY.enabled) {
+    tts.init(config.getTtsConfig());
+}
+if (!ANDROID_NODE_POLICY.enabled && config.get('asr.serverEnabled', true) === true) {
     asr.init(config.get('asr', {}));
 }
 chat.init(config.get('chat', {}), { piRuntimeManager, codexRuntimeManager });
@@ -541,6 +548,18 @@ if (AASC_ROLE === 'main' && subServerConfig) {
     subServerManager.startHealthCheck();
 }
 
+function getSubServerCapabilities() {
+    if (ANDROID_NODE_POLICY.enabled) {
+        return { ...ANDROID_NODE_POLICY.capabilities };
+    }
+    return {
+        mediaLibrary: true,
+        displayGateway: true,
+        taskRuntime: true,
+        hotUpdate: true
+    };
+}
+
 function getAascServerSnapshots() {
     // 主服务器本身属于当前进程，读取目录时刷新它的心跳，避免主服务在
     // 长时间没有外部请求心跳时被误判为离线。旧 SubServerManager 配置不再
@@ -613,6 +632,9 @@ async function handleSubServerNodeRequest(request) {
 }
 
 async function executeSubServerTask(payload = {}) {
+    if (ANDROID_NODE_POLICY.enabled) {
+        throw createAndroidCapabilityUnavailableError('taskRuntime');
+    }
     if (!taskManager) {
         throw new Error('子服务器任务引擎尚未初始化');
     }
@@ -729,10 +751,7 @@ function startAascNodeConnector(localIP, protocol) {
         advertisedUrl: config.get('aasc.advertisedUrl', '') || `${protocol}://${localIP}:${PORT}`,
         version: process.env.AASC_SERVER_VERSION || 'unknown',
         capabilities: {
-            mediaLibrary: true,
-            displayGateway: true,
-            taskRuntime: true,
-            hotUpdate: true
+            ...getSubServerCapabilities()
         },
         metadata: {
             role: 'subserver',
@@ -1045,6 +1064,8 @@ async function startServer() {
             taskManager = new TaskManager({
                 maxInstances: 50,
                 chatService: chat,
+                serverExecutionDisabled: ANDROID_NODE_POLICY.enabled,
+                serverExecutionError: 'Android APK 节点不支持服务端任务执行',
                 resolveTaskRoute: (task) => aascTaskRouter.resolve(task),
                 // tts.server 只切换通用 HTTP 客户端的运行时地址，不改变服务器 TTS 开关。
                 getTtsServiceUrl: () => tts.getConfig().serviceUrl,
@@ -2449,11 +2470,11 @@ app.post('/api/config/controlTheme', (req, res) => {
 });
 
 function isServerAsrEnabled() {
-    return config.get('asr.serverEnabled', true) === true;
+    return !ANDROID_NODE_POLICY.enabled && config.get('asr.serverEnabled', true) === true;
 }
 
 function isServerTtsEnabled() {
-    return config.get('tts.serverEnabled', true) === true;
+    return !ANDROID_NODE_POLICY.enabled && config.get('tts.serverEnabled', true) === true;
 }
 
 function getServerVoiceConfig() {
