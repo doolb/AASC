@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+## APK 内置 Node.js 子服务器设计
+
+- 🚧 [2026-09-08] 完成 APK 内置 Node.js 子服务器的架构设计和实现边界确认。
+  - 确认 Android Service 启动 `server-launcher.js`，保持 launcher/server-app 双进程；子服务器主动连接主服务器 `/server`。
+  - 确认 WebView 显示端继续连接主服务器 `/display`，首版仅支持 arm64-v8a、Android 8/API 26+，关闭需要额外子进程的能力。
+  - 设计/spec/task：`docs/design/android-embedded-node-server.md`、`docs/spec/android-embedded-node-server.md`、`docs/task/20260908_APK内置Node.js子服务器.md`。
+
 ## 提醒统一 TTS 路由
 
 - ✅ [2026-09-07] 修复提醒触发和单条测试绕过统一 TTS 路由的问题。
