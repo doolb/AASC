@@ -102,7 +102,7 @@ android {
     // 体积较大的二进制和依赖直接放入 Git；没有生成 assets 时构建会明确失败。
     sourceSets {
         getByName("main") {
-            assets.srcDir(layout.buildDirectory.dir("generated/node-runtime/assets"))
+            assets.srcDir("$buildDir/generated/node-runtime/assets")
         }
     }
     packaging {
