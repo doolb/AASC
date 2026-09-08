@@ -24,6 +24,15 @@ NodeRuntimeService.start
     → 保留 config、res/uploads、res/certs、logs 和用户媒体
 ```
 
+```text
+准备 Runtime assets
+    → 要求 runtime/arm64-v8a/node 和服务器入口存在
+    → 忽略 npm 生成的 node_modules/.bin 软链接
+    → 拒绝其他软链接、绝对路径和路径穿越
+    → 为 node、动态库、服务器包和证书生成大小/SHA-256 清单
+    → Gradle 只打包生成的 arm64 assets
+```
+
 ## 子服务器配置伪代码
 
 ```text
@@ -43,6 +52,8 @@ NodeRuntimeService.start
 NodeServerService.start
     → 设置工作目录为私有 AASC 根目录
     → 设置 HOME 和配置目录为 APK 私有目录
+    → 设置 LD_LIBRARY_PATH 为私有 Runtime 动态库目录
+    → 设置 OPENSSL_CONF=/dev/null，避免访问 Termux 私有配置路径
     → 设置 AASC_SERVER_VERSION 和 Android 能力环境变量
     → ProcessBuilder 启动 node runtime/server-launcher.js --no-tui
     → launcher fork server-app.js
@@ -55,6 +66,7 @@ launcher 子进程退出
     → server-app 正常重启由 launcher 按现有规则处理
     → launcher 异常退出由 NodeServerService 退避重启
     → 用户停止服务时取消重启任务并终止进程树
+    → destroy() 等待最多 2 秒，仍存活时 destroyForcibly()
 ```
 
 ## AASC 主动连接伪代码
@@ -86,6 +98,9 @@ WebView 页面地址
     → 不创建 ASR 隔离 worker/child_process
     → 不启动 Wine、Puppeteer、浏览器和外部 CLI
     → 不启动 TUI
+    → 不构造 Node/Puppeteer 任务 runner
+    → 不恢复或启动 Claude/Codex 等外部 Agent 子进程
+    → Codex Runtime 请求直接返回 externalCli 不可用错误
     → 保留 HTTP、HTTPS、WebSocket、媒体库和 AASC 节点连接
     → 能力上报移除不可用能力
     → 请求命中不可用能力时返回结构化错误

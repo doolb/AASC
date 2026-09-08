@@ -50,9 +50,9 @@
 
 ## Android APK
 
-- ⏳进行中 [2026-09-08] 将 apk-display 整合为内置 Node.js 子服务器节点
-  - APK 以 Android Service 启动 `server-launcher.js`，子服务器主动连接主服务器 `/server`，WebView 显示端继续连接主服务器 `/display`。
-  - 首版只支持 arm64-v8a、Android 8/API 26+；关闭 ASR 隔离、Wine、Puppeteer、外部 CLI 等额外子进程能力。
+- ⏳待现场验收 [2026-09-08] 完成 APK 内置 Node.js 子服务器的生产依赖打包和真机业务验收
+  - Node Runtime、安装器、Service、主服务器主动连接和能力裁剪已实现；构建时仍需显式提供 Android 可用的 arm64 Node Runtime 和生产 `node_modules`。
+  - 待用完整生产包安装 APK，验收 server-app 启动、AASC 注册、媒体库浏览/上传/直连播放和热更新。
   - 设计：`docs/design/android-embedded-node-server.md`；实现伪代码：`docs/spec/android-embedded-node-server.md`；任务：`docs/task/20260908_APK内置Node.js子服务器.md`。
 
 - ⏳待处理 [2026-09-03] 明确 DeX 多屏控制模式触摸/滚轮输入契约

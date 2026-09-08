@@ -95,6 +95,20 @@ npm start
 
 正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。
 
+### APK 内置 Node.js 子服务器
+
+`apk-display` 启动后会在前台 Service 中启动 `server-launcher.js`，再由 launcher 启动 `server-app.js`。首次连接时填写主服务器根地址，例如 `https://192.168.1.39:8081`；WebView 继续打开主服务器 `/display`，内置 Node 子服务器主动连接主服务器 `/server`。
+
+APK 构建前必须准备 arm64 Android Node Runtime 和独立服务器运行包：
+
+```bash
+export AASC_ANDROID_NODE_RUNTIME_DIR="$PWD/.local/android-node-runtime/arm64-v8a"
+export AASC_ANDROID_NODE_PACKAGE_DIR="$PWD/.local/android-node-package"
+npm run build:apk
+```
+
+Runtime 目录必须包含可执行 `node` 及其动态库；服务器包必须包含 `src/`、`package.json`、`package-lock.json` 和 Android 可用生产依赖。构建脚本会生成 SHA-256 manifest 并将其打入 APK，不会复制仓库日志、模型、用户媒体或 `3rd` 目录。APK 节点首版仅启用媒体库、显示网关和热更新，不启动 ASR、Puppeteer、外部 CLI 或 Agent 子进程。
+
 普通聊天 Agent 后端的配置和会话规则见：[普通聊天 Agent 后端](usage/llm-agent.md)。
 
 ### 工作 AI 角色

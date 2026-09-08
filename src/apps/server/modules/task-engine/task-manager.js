@@ -3,7 +3,6 @@ const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const TaskIO = require('./task-io');
 const NodeJsRunner = require('./nodejs-runner');
-const PuppeteerRunner = require('./puppeteer-runner');
 
 let builtinRegistry = null;
 try {
@@ -16,15 +15,21 @@ class TaskManager extends EventEmitter {
   constructor(options = {}) {
     super();
     this.taskIO = new TaskIO(options);
-    this.nodeRunner = new NodeJsRunner();
-    this.puppeteerRunner = new PuppeteerRunner();
+    this._serverExecutionDisabled = options.serverExecutionDisabled === true;
+    this.nodeRunner = null;
+    this.puppeteerRunner = null;
+    if (!this._serverExecutionDisabled) {
+      this.nodeRunner = new NodeJsRunner();
+      // Android APK 节点不加载 Puppeteer，避免构造浏览器运行时和额外子进程依赖。
+      const PuppeteerRunner = require('./puppeteer-runner');
+      this.puppeteerRunner = new PuppeteerRunner();
+    }
     this.instances = new Map();
     this._services = new Map();  // instanceId -> { stop, status }
     this._sendToDisplay = null;  // 由 setSendToDisplay() 注入
     this._generateTts = null;  // 由 server-app 注入统一的显示端优先 TTS 路由
     this._getTtsServiceUrl = options.getTtsServiceUrl || null;
     this._setTtsServiceUrl = options.setTtsServiceUrl || null;
-    this._serverExecutionDisabled = options.serverExecutionDisabled === true;
     this._serverExecutionError = options.serverExecutionError || '当前节点不支持服务端任务执行';
     this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
@@ -595,7 +600,7 @@ class TaskManager extends EventEmitter {
     }
 
     // 一次性/转发任务：kill 子进程
-    if (this.nodeRunner.kill) {
+    if (typeof this.nodeRunner?.kill === 'function') {
       this.nodeRunner.kill(instanceId);
     }
     instance.status = 'stopped';
@@ -815,7 +820,9 @@ class TaskManager extends EventEmitter {
   async deleteInstance(taskName, instanceId) {
     // 清理内存中的实例
     this.instances.delete(instanceId);
-    try { if (this.nodeRunner.kill) this.nodeRunner.kill(instanceId); } catch (e) {}
+    try {
+      if (typeof this.nodeRunner?.kill === 'function') this.nodeRunner.kill(instanceId);
+    } catch (e) {}
     return this.taskIO.deleteInstance(taskName, instanceId);
   }
 
@@ -823,7 +830,9 @@ class TaskManager extends EventEmitter {
     // 清除此任务在内存中的所有实例
     for (const [id, inst] of this.instances) {
       if (inst.taskName === taskName) {
-        try { if (this.nodeRunner.kill) this.nodeRunner.kill(id); } catch (e) {}
+        try {
+          if (typeof this.nodeRunner?.kill === 'function') this.nodeRunner.kill(id);
+        } catch (e) {}
         this.instances.delete(id);
       }
     }

@@ -41,4 +41,12 @@ class ServerConfigTest {
             ServerConfig.pageUrl("https://192.168.1.39:8081/display")
         )
     }
+
+    @Test
+    fun 子服务器配置使用主服务器根地址而不是display路径() {
+        assertEquals(
+            "https://192.168.1.39:8081",
+            ServerConfig.baseUrl("https://192.168.1.39:8081/display")
+        )
+    }
 }

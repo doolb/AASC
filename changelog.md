@@ -7,6 +7,13 @@
   - 确认 WebView 显示端继续连接主服务器 `/display`，首版仅支持 arm64-v8a、Android 8/API 26+，关闭需要额外子进程的能力。
   - 设计/spec/task：`docs/design/android-embedded-node-server.md`、`docs/spec/android-embedded-node-server.md`、`docs/task/20260908_APK内置Node.js子服务器.md`。
 
+- 🚧 [2026-09-08] 完成 APK 内置 Node.js 子服务器的代码实现和构建链路。
+  - Android 前台 `NodeServerService` 在 APK 私有目录安装并启动 `server-launcher.js`，launcher 继续 fork `server-app.js`；WebView 保持连接主服务器 `/display`，Node 子服务器主动连接主服务器 `/server`。
+  - 新增 arm64 Runtime manifest/校验安装器、稳定节点配置、动态库环境、前台通知、异常退避重启和超时强制停止；保留配置、媒体、证书、临时文件和日志目录。
+  - Android 节点只上报媒体库、显示网关和热更新能力；不构造任务/Puppeteer runner，不恢复或启动 Claude/Codex 外部 Agent，不启动 ASR 隔离、外部 TTS 服务和外部 CLI。
+  - 改动文件：`NodeServerService.kt`、`NodeRuntimeManifest.kt`、`NodeRuntimeInstaller.kt`、`NodeServerConfig.kt`、`MainActivity.kt`、Android Manifest/Gradle、`prepare-android-node-runtime.js`、Android 能力策略、TaskManager、AI/Codex Runtime、相关测试和 APK 文档。
+  - 验证：Node 定向回归 27/27、Android JVM 全量通过；全量 `npm test` 为 542 项中 541 项通过，唯一失败是既有 DeX 触摸/滚轮契约；Termux 官方 arm64 Node 在 Android 9 设备执行 `v26.4.0:arm64` 通过；真实 Runtime assets Debug APK 打包通过。完整生产依赖包安装后的业务真机验收待完成。
+
 ## 提醒统一 TTS 路由
 
 - ✅ [2026-09-07] 修复提醒触发和单条测试绕过统一 TTS 路由的问题。

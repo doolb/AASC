@@ -355,7 +355,9 @@ const aiRoles = new AiRolesService({
     // 工作 Agent 与普通聊天 Codex 共用 chat.codexProxy；已运行 bridge 不在运行中切换代理。
     getCodexProxy: () => config.get('chat.codexProxy', 'http://127.0.0.1:7899'),
     // Agent 的实际进程和 stdio 由独立后端宿主持有，服务器只保留 Unix Socket 客户端。
-    agentBackendClient: new AgentBackendClient()
+    agentBackendClient: new AgentBackendClient(),
+    // APK 节点不启动 Claude/Codex 等外部 Agent；角色文件仍保留，便于代码包跨节点复用。
+    disabled: ANDROID_NODE_POLICY.enabled
 });
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
 const piRuntimeManager = new PiRuntimeManager({
@@ -365,7 +367,9 @@ const piRuntimeManager = new PiRuntimeManager({
 });
 const codexRuntimeManager = new CodexRuntimeManager({
     projectRoot: PROJECT_ROOT,
-    proxy: config.get('chat.codexProxy', 'http://127.0.0.1:7899')
+    proxy: config.get('chat.codexProxy', 'http://127.0.0.1:7899'),
+    // APK 节点不允许普通聊天通过 Codex CLI 创建外部子进程。
+    disabled: ANDROID_NODE_POLICY.enabled
 });
 const runtimeBridgeClients = new Map();
 const pendingDisplayAsrRequests = new Map();

@@ -22,6 +22,7 @@ class CodexRuntimeManager {
         this.runtimeRoot = options.runtimeRoot || DEFAULT_RUNTIME_ROOT;
         this.commandPath = options.commandPath || process.env.CODEX_COMMAND_PATH || 'codex';
         this.proxy = options.proxy;
+        this.disabled = options.disabled === true;
         this.readTimeoutMs = options.readTimeoutMs;
         this.bridgeFactory = options.bridgeFactory || ((bridgeOptions) => new CodexBridge(bridgeOptions));
         this.logger = typeof options.logger === 'function' ? options.logger : () => {};
@@ -29,6 +30,12 @@ class CodexRuntimeManager {
     }
 
     async chatStream(profile, template, prompt, callbacks = {}, options = {}) {
+        if (this.disabled) {
+            const error = new Error('Android APK 节点不支持能力: externalCli');
+            error.code = 'androidCapabilityUnavailable';
+            error.feature = 'externalCli';
+            throw error;
+        }
         const normalizedProfile = normalizeAgentProfile(profile);
         if (normalizedProfile.mode !== 'agent' || normalizedProfile.backend !== 'codex') {
             throw new Error('Codex Runtime 只接受 agent/codex profile');

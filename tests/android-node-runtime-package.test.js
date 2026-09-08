@@ -75,3 +75,22 @@ test('正常输入生成固定 ABI manifest 和 Node 启动入口', async () => 
     assert.equal(manifest.files.some(file => file.path === 'runtime/arm64-v8a/node'), true);
     assert.equal(manifest.files.some(file => file.path === 'server/package.json'), true);
 });
+
+test('服务器运行包忽略 npm 的 .bin 工具软链接', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const binDir = path.join(packageDir, 'node_modules', '.bin');
+    await fs.promises.mkdir(binDir, { recursive: true });
+    await fs.promises.writeFile(path.join(packageDir, 'node_modules', 'tool.js'), 'module.exports = true;\n', 'utf8');
+    await fs.promises.symlink('../tool.js', path.join(binDir, 'tool'));
+    const runtimeDir = path.join(tempDir, 'runtime');
+    await fs.promises.mkdir(runtimeDir, { recursive: true });
+    await fs.promises.writeFile(path.join(runtimeDir, 'node'), '#!/system/bin/sh\n', 'utf8');
+
+    const result = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        packageDir,
+        outputDir: path.join(tempDir, 'output')
+    });
+
+    assert.equal(result.manifest.files.some(file => file.path.endsWith('/.bin/tool')), false);
+});

@@ -7,8 +7,10 @@
 ## 设计结论
 
 - 使用 APK 私有目录中的 arm64 Node.js Runtime，不依赖 Termux。
+- Runtime 输入使用 Android 可执行 Node 二进制及其动态库；当前已验证 Termux 官方 arm64 `nodejs 26.4.0-1` 可在 API 26+ 设备执行，Runtime 本身不提交仓库。
 - Android 前台 `NodeServerService` 启动 `server-launcher.js`；launcher 再 fork `server-app.js`，保持现有双进程模型。
-- APK 只启用 HTTP/HTTPS、WebSocket、AASC 主动连接和媒体库能力。
+- Service 为 Node 设置私有 `HOME`、`LD_LIBRARY_PATH` 和 `OPENSSL_CONF=/dev/null`，避免 Termux 默认 OpenSSL 配置路径不可访问导致进程退出。
+- APK 只启用 HTTP/HTTPS、WebSocket、AASC 主动连接和媒体库能力；任务 runner、Puppeteer、Codex/Claude 外部 Agent、ASR/外部 TTS 服务均不在 APK 节点启动。
 - ASR 隔离进程、Wine、Puppeteer、外部 CLI 和桌面 TUI 等额外子进程能力关闭。
 - 主服务器地址默认 `https://192.168.1.39:8081`，保留手动修改；该地址同时用于子服务器主动连接和 WebView `/display`。
 
@@ -33,3 +35,13 @@ Node.js 服务器运行包必须在构建时生成并校验，运行时只从 AP
 - Node.js：现有 `server-launcher.js`、`server-app.js`、配置模块和 AASC NodeConnector。
 - 构建：新增 Android Node Runtime/服务器运行包准备脚本和校验测试。
 - 文档：`docs/spec/android-embedded-node-server.md`、本设计文档和对应 task 文档。
+
+## 构建输入边界
+
+`npm run prepare:android-node` 要求显式传入：
+
+- `AASC_ANDROID_NODE_RUNTIME_DIR`：包含 `node` 和 arm64 动态库的目录；每个动态库必须是实体文件，不能是软链接。
+- `AASC_ANDROID_NODE_PACKAGE_DIR`：只包含 `src/`、`package.json`、`package-lock.json` 和 Android 可用的生产 `node_modules`。
+- `AASC_ANDROID_NODE_CERT_DIR`：可选，只复制 `cert.pem`、`key.pem`。
+
+生成的 manifest 会记录每个 assets 文件的大小和 SHA-256。APK 私有目录只覆盖运行时代码、依赖和证书，保留用户配置、媒体、临时文件和日志。

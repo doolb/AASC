@@ -32,6 +32,7 @@
 | 地图可视化 | [map-visualization.md](spec/map-visualization.md) | 执行者能力可视化、PixiJS渲染器、数据模型 |
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | Android Termux服务器节点 | [android-termux-server.md](spec/android-termux-server.md) | Termux 服务目录、依赖安装、启动监督和验证伪代码 |
+| APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](spec/android-embedded-node-server.md) | APK Runtime 安装、launcher 进程、主服务器连接和能力裁剪伪代码 |
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
 | 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求保护、内置 tts.server 服务任务与通用 HTTP URL |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/spec/android-asr-apk.md) | SenseVoice 模型、音频输入、识别耗时和 HTTP 服务伪代码 |

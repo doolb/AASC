@@ -4,4 +4,6 @@
     <string name="server_hint">服务器地址，如 192.168.1.39:8081</string>
     <string name="connect">连接</string>
     <string name="ssl_warn">已信任自签名证书（本设备专属）</string>
+    <string name="node_service_channel">AASC Node.js 子服务器</string>
+    <string name="node_service_title">AASC 子服务器</string>
 </resources>

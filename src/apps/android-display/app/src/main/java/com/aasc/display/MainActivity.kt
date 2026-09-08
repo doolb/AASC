@@ -17,6 +17,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -42,11 +43,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val REQ_AUDIO_PERMISSION = 1001
+    private val REQ_NOTIFICATION_PERMISSION = 1002
 
     private fun requestAudioPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= 23 &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO_PERMISSION)
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATION_PERMISSION)
         }
     }
 
@@ -95,6 +104,7 @@ class MainActivity : AppCompatActivity() {
             android.util.Log.w("MainActivity", "启动时申请原生音频焦点失败: ${error.message}")
         }
         requestAudioPermissionIfNeeded()
+        requestNotificationPermissionIfNeeded()
     }
 
     override fun onDestroy() {
@@ -129,10 +139,20 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
             return
         }
-        val displayPath = ServerConfig.pageUrl(input)
+        val mainServerUrl = ServerConfig.baseUrl(input)
+        if (mainServerUrl.isEmpty()) {
+            Toast.makeText(this, "主服务器地址无效", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // APK 内置 Node.js 只作为子服务器运行；显示页面和控制链路仍然连接主服务器。
+        val serviceIntent = Intent(this, NodeServerService::class.java)
+            .putExtra(NodeServerService.EXTRA_MAIN_SERVER_URL, mainServerUrl)
+        ContextCompat.startForegroundService(this, serviceIntent)
+
+        val displayPath = ServerConfig.pageUrl(mainServerUrl)
         // 时间戳参数强制绕过 WebView HTTP 缓存（display.html 更新后 APK 重启即加载最新版）
         val url = displayPath + (if (displayPath.contains("?")) "&" else "?") + "v=" + System.currentTimeMillis()
-        getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", input).apply()
+        getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", mainServerUrl).apply()
 
         hideSystemUi()
         configBar.visibility = View.GONE

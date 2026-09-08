@@ -28,7 +28,7 @@ const ROLE_SELF_MANAGEMENT_PROMPT = `
 
 // 聚合：角色持久化 + 每角色后端 bridge + 提示词来源 + 消息路由
 class AiRolesService {
-    constructor({ baseDir = DEFAULT_BASE, projectRoot, command = 'claude', commandPath = null, commandArgs = [], keeperPath = KEEPER_PATH, getAgentBackend = () => 'codex', getCodexProxy = () => undefined, bridgeFactory = null, agentBackendClient = null } = {}) {
+    constructor({ baseDir = DEFAULT_BASE, projectRoot, command = 'claude', commandPath = null, commandArgs = [], keeperPath = KEEPER_PATH, getAgentBackend = () => 'codex', getCodexProxy = () => undefined, bridgeFactory = null, agentBackendClient = null, disabled = false } = {}) {
         this.store = new RoleStore(baseDir);
         this.projectRoot = projectRoot;
         this.command = command;
@@ -39,6 +39,7 @@ class AiRolesService {
         this.getCodexProxy = getCodexProxy;
         this.bridgeFactory = bridgeFactory;
         this.agentBackendClient = agentBackendClient;
+        this.disabled = disabled === true;
         this.bridges = new Map(); // name -> AgentBackendClientBridge 或测试注入的 bridge
         this.queues = new Map();
         this.removed = new Set();
@@ -228,6 +229,12 @@ class AiRolesService {
     // 发消息给角色：懒启动 → 流式 → 完成写历史。
     // 历史条目与 llm-service 同构（{role, name, content, mode, target}），前端 renderHistory 直接可用。
     async chat(name, content, callbacks = {}) {
+        if (this.disabled) {
+            const error = new Error('Android APK 节点不支持能力: externalCli');
+            error.code = 'androidCapabilityUnavailable';
+            error.feature = 'externalCli';
+            throw error;
+        }
         this._assertExists(name);
         const generation = this.stopGeneration;
         const previous = this.queues.get(name) || Promise.resolve();
@@ -291,6 +298,7 @@ class AiRolesService {
 
     // 服务器启动：通过独立后端查询已存活 Agent；IPC 客户端重建不会停止宿主内 bridge。
     async restoreAll() {
+        if (this.disabled) return this.list();
         const restores = this.store.list().map(async (role) => {
             try {
                 const b = this._bridge(role.name);

@@ -30,6 +30,10 @@ function assertSafeRelativePath(relativePath) {
     }
 }
 
+function isNpmToolShim(relativePath) {
+    return relativePath.split(path.sep).includes('.bin');
+}
+
 async function listFiles(sourceRoot, relativePath = '') {
     const currentPath = path.join(sourceRoot, relativePath);
     const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
@@ -39,6 +43,10 @@ async function listFiles(sourceRoot, relativePath = '') {
         const childRelativePath = path.join(relativePath, entry.name);
         assertSafeRelativePath(childRelativePath);
         if (entry.isSymbolicLink()) {
+            // npm 会在每级 node_modules/.bin 创建指向包内脚本的软链接；APK
+            // 节点不执行 npm CLI，因此安全地跳过这些工具入口，避免把软链接
+            // 原样写进 assets。其他软链接仍全部拒绝，防止代码包越界读取。
+            if (isNpmToolShim(childRelativePath)) continue;
             throw new Error(`服务器运行包不允许符号链接: ${childRelativePath}`);
         }
         if (entry.isDirectory()) {
@@ -198,5 +206,6 @@ module.exports = {
     CERTIFICATE_ENTRIES,
     REQUIRED_PACKAGE_ENTRIES,
     assertSafeRelativePath,
+    isNpmToolShim,
     prepareAndroidNodeRuntime
 };

@@ -23,4 +23,12 @@ object ServerConfig {
             else -> "$withScheme/display"
         }
     }
+
+    // Node 子服务器需要主服务器根地址，不能把 /display 页面路径写进 aasc.mainServerUrl。
+    fun baseUrl(input: String): String {
+        val value = input.trim()
+        if (value.isEmpty()) return ""
+        val withScheme = if (value.startsWith("http://") || value.startsWith("https://")) value else "https://$value"
+        return withScheme.substringBefore('?').trimEnd('/').removeSuffix("/display")
+    }
 }
