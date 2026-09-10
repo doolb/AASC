@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         setupCpuMode()
         recorder = AudioRecorder()
-        coordinator = AsrCoordinator(engine)
+        coordinator = AsrCoordinator(engine, denoiseEngine)
         voiceprintCoordinator = VoiceprintTestCoordinator(engine, voiceprintEngine, denoiseEngine)
         loadModel()
     }

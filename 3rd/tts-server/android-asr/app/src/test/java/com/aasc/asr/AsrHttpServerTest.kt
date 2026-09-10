@@ -29,7 +29,9 @@ class AsrHttpServerTest {
             assertTrue(body.contains("SHERPA_MULTI"))
             assertTrue(body.contains("SHERPA_MULTI_FAST"))
             assertTrue(body.contains("speakerCount"))
-            assertTrue(body.contains("denoise"))
+            assertTrue(body.contains("mode === 'SHERPA_MULTI' || mode === 'SHERPA_MULTI_FAST'"))
+            assertTrue(body.contains("asrDenoise"))
+            assertTrue(body.contains("voiceprintDenoise"))
             assertTrue(body.contains("currentAudio"))
             assertFalse(body.contains("id=\"languageMode\""))
             assertTrue(body.contains("language: 'zh'"))
@@ -80,6 +82,7 @@ class AsrHttpServerTest {
             assertTrue(body.contains("SHERPA_SINGLE"))
             assertTrue(body.contains("SHERPA_MULTI"))
             assertTrue(body.contains("SHERPA_MULTI_FAST"))
+            assertTrue(body.contains("\"threshold\":0.5"))
         } finally {
             server.stop()
             coordinator.shutdown()

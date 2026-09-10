@@ -5,6 +5,10 @@ object HttpJson {
     fun success(text: String, elapsedMs: Long): String =
         "{\"success\":true,\"text\":\"${escape(text)}\",\"elapsedMs\":$elapsedMs}"
 
+    fun success(text: String, elapsedMs: Long, denoise: Boolean, denoiseMs: Long): String =
+        "{\"success\":true,\"text\":\"${escape(text)}\",\"elapsedMs\":$elapsedMs," +
+            "\"denoise\":$denoise,\"denoiseMs\":$denoiseMs}"
+
     fun error(message: String, elapsedMs: Long = 0): String =
         "{\"success\":false,\"error\":\"${escape(message)}\",\"elapsedMs\":$elapsedMs}"
 
@@ -18,24 +22,31 @@ object HttpJson {
     fun streamingError(message: String): String =
         "{\"type\":\"error\",\"error\":\"${escape(message)}\"}"
 
-    fun voiceprintStatus(ready: Boolean, embeddingDim: Int, speakers: List<String>): String {
+    fun voiceprintStatus(ready: Boolean, embeddingDim: Int, speakers: List<String>, threshold: Float): String {
         val names = speakers.joinToString(",") { "\"${escape(it)}\"" }
-        return "{\"modelReady\":$ready,\"embeddingDim\":$embeddingDim,\"registeredSpeakers\":${speakers.size},\"speakers\":[$names],\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\",\"SHERPA_MULTI_FAST\"]}"
+        return "{\"modelReady\":$ready,\"embeddingDim\":$embeddingDim,\"registeredSpeakers\":${speakers.size},\"speakers\":[$names],\"threshold\":${number(threshold)},\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\",\"SHERPA_MULTI_FAST\"]}"
     }
 
     fun voiceprintRegistration(result: VoiceprintRegistrationResult): String =
         "{\"success\":true,\"name\":\"${escape(result.name)}\",\"embeddingDim\":${result.embeddingDim}," +
-            "\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}}"
+            "\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}," +
+            "\"voiceprintDenoise\":${result.voiceprintDenoise}," +
+            "\"voiceprintDenoiseMs\":${result.voiceprintDenoiseMs}}"
 
     fun voiceprintResult(result: VoiceprintTestResult): String {
         val segments = result.segments.joinToString(",") { segment ->
             "{\"start\":${segment.start},\"end\":${segment.end},\"clusterId\":${segment.clusterId}," +
                 "\"speaker\":${nullableString(segment.speaker)},\"text\":\"${escape(segment.text)}\"," +
+                "\"similarityScore\":${nullableNumber(segment.similarityScore)}," +
                 "\"error\":${nullableString(segment.error)}}"
         }
         return "{\"success\":true,\"mode\":\"${result.mode.name}\",\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}," +
+            "\"asrDenoise\":${result.asrDenoise},\"asrDenoiseMs\":${result.asrDenoiseMs}," +
+            "\"voiceprintDenoise\":${result.voiceprintDenoise},\"voiceprintDenoiseMs\":${result.voiceprintDenoiseMs}," +
             "\"embeddingDim\":${result.embeddingDim}," +
-            "\"matchedSpeaker\":${nullableString(result.matchedSpeaker)},\"text\":\"${escape(result.text)}\"," +
+            "\"matchedSpeaker\":${nullableString(result.matchedSpeaker)}," +
+            "\"similarityScore\":${nullableNumber(result.similarityScore)},\"threshold\":${number(result.threshold)}," +
+            "\"text\":\"${escape(result.text)}\"," +
             "\"segments\":[$segments],\"elapsedMs\":${result.elapsedMs}," +
             "\"diarizationMs\":${result.diarizationMs},\"embeddingMs\":${result.embeddingMs},\"asrMs\":${result.asrMs}}"
     }
@@ -54,6 +65,10 @@ object HttpJson {
     }
 
     private fun nullableString(value: String?): String = value?.let { "\"${escape(it)}\"" } ?: "null"
+
+    private fun nullableNumber(value: Float?): String = value?.let(::number) ?: "null"
+
+    private fun number(value: Float): String = value.toString()
 
     private fun streamingText(type: String, text: String): String =
         "{\"type\":\"$type\",\"text\":\"${escape(text)}\"}"

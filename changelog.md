@@ -2,6 +2,33 @@
 
 ## 独立 Android ASR 测试 APK
 
+- ✅ [2026-09-10] 拆分 ASR 文字与声纹双降噪开关。
+  - 普通 `/api/asr` 和声纹测试的文字识别使用 `asrDenoise`；声纹注册、分段、embedding 和匹配使用 `voiceprintDenoise`。
+  - 声纹测试按同一时间区间分别使用文字音频和声纹音频；两个开关相同时复用一次 GTCRN，设置不同时按需生成两份音频。
+  - 新增返回字段 `asrDenoise`、`asrDenoiseMs`、`voiceprintDenoise`、`voiceprintDenoiseMs`；保留旧 `denoise`、`denoiseMs` 和旧请求参数兼容。
+  - 改动文件：`AsrCoordinator.kt`、`VoiceprintTestCoordinator.kt`、`AsrHttpServer.kt`、`HttpJson.kt`、`AsrWebPage.kt`、`DenoiseAudioPolicy.kt`、`DenoiseOption.kt`、`MainActivity.kt` 及对应测试。
+  - 验证：Android JVM 全量单元测试 52 个通过；`npm --prefix 3rd/tts-server run build:android-asr` 构建成功；APK 已安装到 `SM-N9500` 真机。
+  - 真机 WAV 回测：注册 `z` 后，`asrDenoise=1&voiceprintDenoise=0` 单段命中 `z`，`similarityScore=1.0`、`threshold=0.5`，两类降噪耗时分别约 `955ms/0ms`；同时开启时约 `941ms/941ms`，旧 `denoise=1` 兼容通过。
+  - 文档：`3rd/tts-server/docs/design/android-asr-apk.md`、`3rd/tts-server/docs/spec/android-asr-apk.md`、`3rd/tts-server/docs/task/2026-09-10_ASR文字与声纹双降噪开关.md`。
+
+- ✅ [2026-09-10] 优化声纹分段后处理，修复同一说话人短片段被判定为未知及 ASR 文本重复。
+  - 新增 `VoiceprintSegmentPostProcessor`：对相邻短未知片段和相邻同注册说话人片段进行保护性合并，合并后重新提取声纹确认；不同已知说话人之间的短片段不强行合并。
+  - `SHERPA_MULTI` 和 `SHERPA_MULTI_FAST` 共用后处理逻辑；`SHERPA_MULTI` 支持 `speakerCount`，网页多段模式统一提交人数参数。
+  - 保持 ERes2Net-base 模型、512 维 embedding、余弦相似度和默认阈值 `0.5` 不变。
+  - 改动文件：`3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/VoiceprintSegmentPostProcessor.kt`、`VoiceprintTestCoordinator.kt`、`AsrWebPage.kt` 及 `VoiceprintSegmentPostProcessorTest.kt`。
+  - 验证：Android JVM 全量单元测试通过；`npm --prefix 3rd/tts-server run build:android-asr` 构建成功；APK 已安装到 `SM-N9500` 真机。
+  - 真机 WAV 回测：注册 `res/models/sensevoice/zh.wav` 为 `z` 后，普通多段和快速多段单人模式均返回一个连续分段，`similarityScore=0.9773119`，文本只识别一次。
+  - 文档：`3rd/tts-server/docs/design/android-asr-apk.md`、`3rd/tts-server/docs/spec/android-asr-apk.md`、`3rd/tts-server/docs/task/2026-09-10_声纹分段后处理优化.md`。
+
+- ✅ [2026-09-10] 增加声纹匹配相似度分数和阈值返回。
+  - 保持 ERes2Net-base 模型、`SpeakerEmbeddingManager.search` 命中判定及现有声纹流程不变；新增余弦相似度诊断分数。
+  - 单段结果返回顶层 `similarityScore`、`threshold`；多段结果返回顶层 `threshold` 和每个 segment 的 `similarityScore`；状态接口返回当前阈值。
+  - 未命中时保留注册声纹中的最高分，空声纹库或无法计算时返回 `null`。
+  - 改动文件：`3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/VoiceprintSimilarity.kt`、`SherpaVoiceprintEngine.kt`、`VoiceprintTestCoordinator.kt`、`HttpJson.kt`、`AsrHttpServer.kt` 及对应测试。
+  - 验证：Android JVM 单元测试通过，Debug APK 构建成功并已安装启动于 `SM-N9500`；启动日志无 `FATAL EXCEPTION`、`AndroidRuntime` 或 `OutOfMemory`。
+  - 真机 WAV 回测：`res/models/sensevoice/zh.wav` 单段命中分数 `1.0`；快速多段自动返回 1 个 cluster，分段命中分数 `0.9773119`，阈值 `0.5`。
+  - 文档：`3rd/tts-server/docs/design/android-asr-apk.md`、`3rd/tts-server/docs/spec/android-asr-apk.md`、`3rd/tts-server/docs/task/2026-09-10_声纹匹配分数和阈值.md`。
+
 - ✅ [2026-09-09] 完成独立 ASR 测试 APK 的构建、真机安装和启动验收。
   - 使用 `npm --prefix 3rd/tts-server run build:android-asr` 构建 `com.aasc.asr` Debug APK。
   - 通过 ADB 覆盖安装到 `SM-N9500`（`192.168.1.6:5555`），授予录音权限并启动 `com.aasc.asr/.MainActivity`。

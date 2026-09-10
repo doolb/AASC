@@ -10,6 +10,12 @@ import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingManager
 import java.io.File
 
+data class VoiceprintMatchResult(
+    val speaker: String?,
+    val similarityScore: Float?,
+    val threshold: Float
+)
+
 // Sherpa 声纹引擎：负责 embedding 提取、内存声纹库匹配和多人分割。
 // 所有 native 操作串行化，避免模型释放与推理并发造成 native 崩溃。
 class SherpaVoiceprintEngine {
@@ -18,6 +24,7 @@ class SherpaVoiceprintEngine {
     private var diarization: OfflineSpeakerDiarization? = null
     private var threshold = 0.5f
     private var registeredNames: List<String> = emptyList()
+    private var registeredEmbeddings: Map<String, FloatArray> = emptyMap()
 
     @Volatile
     var isLoaded: Boolean = false
@@ -29,6 +36,9 @@ class SherpaVoiceprintEngine {
 
     val registeredSpeakers: List<String>
         get() = synchronized(this) { registeredNames.toList() }
+
+    val matchThreshold: Float
+        get() = synchronized(this) { threshold }
 
     @Synchronized
     fun load(embeddingFile: File, segmentationFile: File, threshold: Float = 0.5f): Boolean {
@@ -67,6 +77,7 @@ class SherpaVoiceprintEngine {
             )
             this.threshold = threshold
             registeredNames = emptyList()
+            registeredEmbeddings = emptyMap()
             isLoaded = true
             true
         } catch (_: Exception) {
@@ -79,8 +90,10 @@ class SherpaVoiceprintEngine {
     fun setDatabase(database: Map<String, FloatArray>) {
         val currentManager = manager ?: throw IllegalStateException("声纹引擎未加载")
         registeredNames.forEach { currentManager.remove(it) }
-        database.forEach { (name, embedding) -> currentManager.add(name, embedding) }
-        registeredNames = database.keys.toList()
+        val snapshot = database.mapValues { (_, embedding) -> embedding.copyOf() }
+        snapshot.forEach { (name, embedding) -> currentManager.add(name, embedding) }
+        registeredNames = snapshot.keys.toList()
+        registeredEmbeddings = snapshot
     }
 
     @Synchronized
@@ -98,9 +111,22 @@ class SherpaVoiceprintEngine {
     }
 
     @Synchronized
-    fun match(embedding: FloatArray): String? {
+    fun match(embedding: FloatArray): VoiceprintMatchResult {
         val currentManager = manager ?: throw IllegalStateException("声纹引擎未加载")
-        return currentManager.search(embedding, threshold).takeIf { it.isNotEmpty() }
+        val matchedSpeaker = currentManager.search(embedding, threshold).takeIf { it.isNotEmpty() }
+        val bestMatch = registeredEmbeddings.asSequence()
+            .mapNotNull { (name, registeredEmbedding) ->
+                VoiceprintSimilarity.cosine(embedding, registeredEmbedding)?.let { score -> name to score }
+            }
+            .maxByOrNull { it.second }
+        val matchedScore = matchedSpeaker?.let { name ->
+            registeredEmbeddings[name]?.let { VoiceprintSimilarity.cosine(embedding, it) }
+        }
+        return VoiceprintMatchResult(
+            speaker = matchedSpeaker,
+            similarityScore = matchedScore ?: bestMatch?.second,
+            threshold = threshold
+        )
     }
 
     @Synchronized
@@ -139,6 +165,7 @@ class SherpaVoiceprintEngine {
         extractor?.release()
         extractor = null
         registeredNames = emptyList()
+        registeredEmbeddings = emptyMap()
         embeddingDim = 0
         isLoaded = false
     }

@@ -8,8 +8,28 @@ data class PreparedDenoiseAudio(
     val elapsedMs: Long
 )
 
+data class PreparedDenoisePair(
+    val asr: PreparedDenoiseAudio,
+    val voiceprint: PreparedDenoiseAudio
+)
+
 // 统一准备一次请求使用的音频，确保声纹分段、匹配和 ASR 使用同一份降噪结果。
 object DenoiseAudioPolicy {
+    fun preparePair(
+        rawSamples: FloatArray,
+        asrEnabled: Boolean,
+        voiceprintEnabled: Boolean,
+        processor: () -> FloatArray
+    ): PreparedDenoisePair {
+        val asr = prepare(rawSamples, asrEnabled, processor)
+        val voiceprint = if (asrEnabled == voiceprintEnabled) {
+            asr
+        } else {
+            prepare(rawSamples, voiceprintEnabled, processor)
+        }
+        return PreparedDenoisePair(asr = asr, voiceprint = voiceprint)
+    }
+
     fun prepare(
         rawSamples: FloatArray,
         enabled: Boolean,

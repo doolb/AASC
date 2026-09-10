@@ -34,6 +34,7 @@ object AsrWebPage {
     <button id="saveCurrentAudio" type="button" disabled>保存当前 WAV</button>
     <button id="stopCurrentAudio" type="button" disabled>停止播放</button>
     <audio id="currentAudio" controls preload="metadata" hidden></audio>
+    <label><input id="asrDenoise" type="checkbox"> ASR 文字降噪（GTCRN）</label>
     <button id="recognize" type="button">开始识别</button>
     <p id="fileStatus" class="muted">尚未选择音频</p>
   </section>
@@ -49,13 +50,13 @@ object AsrWebPage {
     <label for="speakerName">注册名称</label><br>
     <input id="speakerName" type="text" placeholder="例如 ZH 或 EN">
     <br>
-    <label><input id="voiceprintDenoise" type="checkbox"> 启用 ASR/声纹降噪（GTCRN）</label>
-    <p class="muted">开启后，注册、分段、声纹匹配和 ASR 都使用降噪音频；注册和测试请保持开关一致。</p>
+    <label><input id="voiceprintDenoise" type="checkbox"> 声纹降噪（GTCRN）</label>
+    <p class="muted">声纹注册、分段和匹配使用此开关；注册与测试请保持设置一致。</p>
     <button id="registerSpeaker" type="button">注册当前音频</button>
     <button id="testSingle" type="button">Sherpa 单段</button>
     <button id="testMulti" type="button">Sherpa 多段</button>
     <button id="testMultiFast" type="button">Sherpa 快速多段</button>
-    <label for="speakerCount">快速模式实际人数</label>
+    <label for="speakerCount">多段模式实际人数</label>
     <select id="speakerCount">
       <option value="AUTO">自动</option>
       <option value="1">1 人</option>
@@ -88,6 +89,7 @@ object AsrWebPage {
     const elapsed = document.getElementById('elapsed');
     const voiceprintStatus = document.getElementById('voiceprintStatus');
     const speakerName = document.getElementById('speakerName');
+    const asrDenoise = document.getElementById('asrDenoise');
     const voiceprintDenoise = document.getElementById('voiceprintDenoise');
     const registerSpeaker = document.getElementById('registerSpeaker');
     const testSingle = document.getElementById('testSingle');
@@ -457,6 +459,7 @@ object AsrWebPage {
       elapsed.textContent = '';
       try {
         const query = new URLSearchParams({ language: 'zh' });
+        query.set('asrDenoise', asrDenoise.checked ? '1' : '0');
         const response = await fetch('/api/asr?' + query.toString(), {
           method: 'POST',
           headers: { 'Content-Type': 'audio/wav' },
@@ -487,7 +490,7 @@ object AsrWebPage {
       try {
         const query = new URLSearchParams({
           name: speakerName.value.trim(),
-          denoise: voiceprintDenoise.checked ? '1' : '0'
+          voiceprintDenoise: voiceprintDenoise.checked ? '1' : '0'
         });
         const response = await fetch('/api/voiceprint/register?' + query.toString(), {
           method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: selectedAudio
@@ -516,10 +519,11 @@ object AsrWebPage {
       try {
         const query = new URLSearchParams({
           mode,
-          denoise: voiceprintDenoise.checked ? '1' : '0',
+          asrDenoise: asrDenoise.checked ? '1' : '0',
+          voiceprintDenoise: voiceprintDenoise.checked ? '1' : '0',
           language: 'zh'
         });
-        if (mode === 'SHERPA_MULTI_FAST') query.set('speakerCount', speakerCount.value);
+        if (mode === 'SHERPA_MULTI' || mode === 'SHERPA_MULTI_FAST') query.set('speakerCount', speakerCount.value);
         const response = await fetch('/api/voiceprint/test?' + query.toString(), {
           method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: selectedAudio
         });

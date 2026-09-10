@@ -99,7 +99,8 @@ class AsrHttpServer(
                         respond(socket.getOutputStream(), 200, HttpJson.voiceprintStatus(
                             voiceprintCoordinator.isReady(),
                             voiceprintCoordinator.embeddingDim(),
-                            voiceprintCoordinator.registeredSpeakers()
+                            voiceprintCoordinator.registeredSpeakers(),
+                            voiceprintCoordinator.matchThreshold()
                         ))
                     request.method == "POST" && route == "/api/asr" -> handleRecognition(socket.getOutputStream(), request)
                     request.method == "POST" && route == "/api/voiceprint/register" ->
@@ -213,8 +214,15 @@ class AsrHttpServer(
                 AsrPcm.decodeS16(request.body)
             }
             AsrCoordinator.validateSamples(samples)
-            val result = coordinator.submit(samples, cpuModeProvider(), languageMode).get(60, TimeUnit.SECONDS)
-            respond(output, 200, HttpJson.success(result.text, result.elapsedMs))
+            val asrDenoise = request.queryValue("asrDenoise")?.let(DenoiseOption::parse)
+                ?: DenoiseOption.parse(request.queryValue("denoise"))
+            val result = coordinator.submit(
+                samples,
+                cpuModeProvider(),
+                languageMode,
+                asrDenoise
+            ).get(60, TimeUnit.SECONDS)
+            respond(output, 200, HttpJson.success(result.text, result.elapsedMs, result.denoise, result.denoiseMs))
         } catch (error: java.util.concurrent.TimeoutException) {
             respond(output, 504, HttpJson.error("识别超时"))
         } catch (error: AsrBusyException) {
@@ -235,10 +243,11 @@ class AsrHttpServer(
             respond(output, 400, HttpJson.error("缺少 name 参数"))
             return
         }
-        val denoise = DenoiseOption.parse(request.queryValue("denoise"))
+        val voiceprintDenoise = request.queryValue("voiceprintDenoise")?.let(DenoiseOption::parse)
+            ?: DenoiseOption.parse(request.queryValue("denoise"))
         try {
             val samples = decodeAudio(request)
-            val result = voiceprintCoordinator.register(name, samples, cpuModeProvider(), denoise).get(60, TimeUnit.SECONDS)
+            val result = voiceprintCoordinator.register(name, samples, cpuModeProvider(), voiceprintDenoise).get(60, TimeUnit.SECONDS)
             respond(output, 200, HttpJson.voiceprintRegistration(result))
         } catch (error: java.util.concurrent.TimeoutException) {
             respond(output, 504, HttpJson.error("声纹注册超时"))
@@ -259,7 +268,11 @@ class AsrHttpServer(
             respond(output, 400, HttpJson.error("speakerCount 必须是 AUTO 或 1-5"))
             return
         }
-        val denoise = DenoiseOption.parse(request.queryValue("denoise"))
+        val denoiseFlags = DenoiseOption.resolve(
+            request.queryValue("asrDenoise"),
+            request.queryValue("voiceprintDenoise"),
+            request.queryValue("denoise")
+        )
         val languageMode = AsrLanguageMode.parse(request.queryValue("language"))
         if (languageMode == null) {
             respond(output, 400, HttpJson.error("language 必须是 auto、zh 或 en"))
@@ -276,7 +289,8 @@ class AsrHttpServer(
                 samples,
                 cpuModeProvider(),
                 speakerCount,
-                denoise,
+                denoiseFlags.asrDenoise,
+                denoiseFlags.voiceprintDenoise,
                 languageMode
             ).get(60, TimeUnit.SECONDS)
             respond(output, 200, HttpJson.voiceprintResult(result))
