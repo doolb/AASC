@@ -109,6 +109,17 @@ npm run build:apk
 
 Runtime 目录必须包含可执行 `node` 及其动态库；服务器包必须包含 `src/`、`package.json`、`package-lock.json` 和 Android 可用生产依赖。构建脚本会生成 SHA-256 manifest 并将其打入 APK，不会复制仓库日志、模型、用户媒体或 `3rd` 目录。APK 节点首版仅启用媒体库、显示网关和热更新，不启动 ASR、Puppeteer、外部 CLI 或 Agent 子进程。
 
+HTTPS 开发证书会同时绑定到主服务器和 APK；如果更换主服务器证书或访问地址，必须确保新证书 SAN 覆盖访问地址，并重新构建 APK。APK 只会信任系统/用户证书以及构建时绑定的主服务器证书。
+
+Android 9/API 28 设备首次启动 APK 时，会弹出“照片、媒体内容和文件”共享存储授权框。选择允许后，APK 内置 Node 子服务器即可按媒体库配置访问 `/storage/emulated/0/` 及其子目录，例如：
+
+```text
+/storage/emulated/0/Download
+/storage/emulated/0/DCIM
+```
+
+媒体库的 `path` 仍通过控制端的本地媒体库配置设置；上传、创建目录和删除操作受媒体库 `readonly` 设置保护。拒绝授权不会阻塞显示端连接，但共享存储媒体库会返回权限错误。当前实现只保证 Android 9/API 28，Android 10+ 的整个共享存储访问不在本功能范围内。
+
 普通聊天 Agent 后端的配置和会话规则见：[普通聊天 Agent 后端](usage/llm-agent.md)。
 
 ### 工作 AI 角色

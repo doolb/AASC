@@ -72,8 +72,13 @@ test('正常输入生成固定 ABI manifest 和 Node 启动入口', async () => 
 
     assert.equal(result.manifest.abi, 'arm64-v8a');
     assert.equal(manifest.entrypoint, 'server/src/apps/server/boot/server-launcher.js');
-    assert.equal(manifest.files.some(file => file.path === 'runtime/arm64-v8a/node'), true);
+    assert.equal(manifest.nodePath, 'native/arm64-v8a/libaasc_node.so');
+    assert.equal(manifest.files.some(file => file.path === 'runtime/arm64-v8a/node'), false);
     assert.equal(manifest.files.some(file => file.path === 'server/package.json'), true);
+    assert.equal(
+        (await fs.promises.stat(path.join(tempDir, 'jniLibs', 'arm64-v8a', 'libaasc_node.so'))).mode & 0o111,
+        0o111
+    );
 });
 
 test('服务器运行包忽略 npm 的 .bin 工具软链接', async () => {
@@ -93,4 +98,87 @@ test('服务器运行包忽略 npm 的 .bin 工具软链接', async () => {
     });
 
     assert.equal(result.manifest.files.some(file => file.path.endsWith('/.bin/tool')), false);
+});
+
+test('服务器运行包忽略 npm 的内部 package-lock 文件', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const nodeModulesDir = path.join(packageDir, 'node_modules');
+    await fs.promises.mkdir(nodeModulesDir, { recursive: true });
+    await fs.promises.writeFile(path.join(nodeModulesDir, '.package-lock.json'), '{}\n', 'utf8');
+    const runtimeDir = path.join(tempDir, 'runtime');
+    await fs.promises.mkdir(runtimeDir, { recursive: true });
+    await fs.promises.writeFile(path.join(runtimeDir, 'node'), '#!/system/bin/sh\n', 'utf8');
+
+    const result = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        packageDir,
+        outputDir: path.join(tempDir, 'output')
+    });
+
+    assert.equal(
+        result.manifest.files.some(file => file.path === 'server/node_modules/.package-lock.json'),
+        false
+    );
+});
+
+test('服务器运行包忽略 Android assets 不支持的隐藏目录和下划线生成目录', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    await fs.promises.mkdir(path.join(packageDir, 'node_modules', '@pixi', 'assets', 'lib', '_virtual'), {
+        recursive: true
+    });
+    await fs.promises.mkdir(path.join(packageDir, 'node_modules', 'ismobilejs', 'src', '__tests__'), {
+        recursive: true
+    });
+    await fs.promises.mkdir(path.join(packageDir, 'node_modules', 'hidden'), { recursive: true });
+    await fs.promises.writeFile(
+        path.join(packageDir, 'node_modules', '@pixi', 'assets', 'lib', '_virtual', 'worker.js'),
+        'worker',
+        'utf8'
+    );
+    await fs.promises.writeFile(
+        path.join(packageDir, 'node_modules', 'ismobilejs', 'src', '__tests__', 'mobile.test.ts'),
+        'test',
+        'utf8'
+    );
+    await fs.promises.writeFile(path.join(packageDir, 'node_modules', 'hidden', '.npmignore'), '*\n', 'utf8');
+    const runtimeDir = path.join(tempDir, 'runtime');
+    await fs.promises.mkdir(runtimeDir, { recursive: true });
+    await fs.promises.writeFile(path.join(runtimeDir, 'node'), '#!/system/bin/sh\n', 'utf8');
+
+    const result = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        packageDir,
+        outputDir: path.join(tempDir, 'output')
+    });
+
+    assert.equal(result.manifest.files.some(file => file.path.includes('/_virtual/')), false);
+    assert.equal(result.manifest.files.some(file => file.path.includes('/__tests__/')), false);
+    assert.equal(result.manifest.files.some(file => file.path.endsWith('/.npmignore')), false);
+});
+
+test('服务器运行包保留下划线命名的 Node 依赖文件', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const dependencyFile = path.join(
+        packageDir,
+        'node_modules',
+        'readable-stream',
+        'lib',
+        '_stream_readable.js'
+    );
+    await fs.promises.mkdir(path.dirname(dependencyFile), { recursive: true });
+    await fs.promises.writeFile(dependencyFile, 'module.exports = true;\n', 'utf8');
+    const runtimeDir = path.join(tempDir, 'runtime');
+    await fs.promises.mkdir(runtimeDir, { recursive: true });
+    await fs.promises.writeFile(path.join(runtimeDir, 'node'), '#!/system/bin/sh\n', 'utf8');
+
+    const result = await prepareAndroidNodeRuntime({
+        packageDir,
+        runtimeDir,
+        outputDir: path.join(tempDir, 'output')
+    });
+
+    assert.equal(
+        result.manifest.files.some(file => file.path === 'server/node_modules/readable-stream/lib/_stream_readable.js'),
+        true
+    );
 });

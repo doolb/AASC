@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.Executors
 
 class NodeServerService : Service() {
 
@@ -24,11 +25,14 @@ class NodeServerService : Service() {
         private const val MIN_RETRY_DELAY_MS = 1_000L
         private const val MAX_RETRY_DELAY_MS = 30_000L
         private const val PROCESS_STOP_TIMEOUT_MS = 2_000L
+        private const val NODE_LIBRARY_NAME = "libaasc_node.so"
 
         @JvmStatic
-        fun buildNodeCommand(rootDir: File): List<String> {
+        fun buildNodeCommand(rootDir: File, nativeLibraryDir: File? = null): List<String> {
+            val nodePath = nativeLibraryDir?.let { File(it, NODE_LIBRARY_NAME) }
+                ?: File(rootDir, "runtime/arm64-v8a/node")
             return listOf(
-                File(rootDir, "runtime/arm64-v8a/node").absolutePath,
+                nodePath.absolutePath,
                 File(rootDir, "src/apps/server/boot/server-launcher.js").absolutePath,
                 "--no-tui"
             )
@@ -64,7 +68,11 @@ class NodeServerService : Service() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val startExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "aasc-node-start").apply { isDaemon = true }
+    }
     private val restartGeneration = AtomicInteger(0)
+    @Volatile
     private var nodeProcess: Process? = null
     private var restartAttempt = 0
     private var mainServerUrl = ""
@@ -95,7 +103,7 @@ class NodeServerService : Service() {
                 .apply()
             restartAttempt = 0
             stopNodeProcess()
-            startNodeProcess(selectedUrl)
+            enqueueNodeProcessStart(selectedUrl)
         }
         return START_STICKY
     }
@@ -104,6 +112,7 @@ class NodeServerService : Service() {
 
     override fun onDestroy() {
         stopNodeProcess()
+        startExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -112,7 +121,7 @@ class NodeServerService : Service() {
         try {
             val root = NodeRuntimeInstaller(this).ensureInstalled()
             NodeServerConfig.write(root, serverUrl, "APK-${Build.MODEL}")
-            val command = buildNodeCommand(root)
+            val command = buildNodeCommand(root, File(applicationInfo.nativeLibraryDir))
             val processBuilder = ProcessBuilder(command)
                 .directory(root)
                 .redirectErrorStream(false)
@@ -150,6 +159,7 @@ class NodeServerService : Service() {
             }
         } catch (error: Exception) {
             nodeProcess = null
+            android.util.Log.e("AASC-Node", "Node launcher 启动失败", error)
             updateNotification("Node.js 子服务器启动失败：${error.message}")
             scheduleRestart(generation, -1)
         }
@@ -190,9 +200,13 @@ class NodeServerService : Service() {
         updateNotification("Node.js 子服务器退出，${delay}ms 后重试")
         mainHandler.postDelayed({
             if (generation == restartGeneration.get() && nodeProcess == null) {
-                startNodeProcess(mainServerUrl)
+                enqueueNodeProcessStart(mainServerUrl)
             }
         }, delay)
+    }
+
+    private fun enqueueNodeProcessStart(serverUrl: String) {
+        startExecutor.execute { startNodeProcess(serverUrl) }
     }
 
     private fun stopNodeProcess() {

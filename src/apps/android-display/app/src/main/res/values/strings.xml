@@ -3,7 +3,9 @@
     <string name="accessibility_desc">AASC 显示端跨域控制：将控制端的触摸/滚轮注入到网页内容</string>
     <string name="server_hint">服务器地址，如 192.168.1.39:8081</string>
     <string name="connect">连接</string>
-    <string name="ssl_warn">已信任自签名证书（本设备专属）</string>
+    <string name="ssl_warn">已信任主服务器证书</string>
+    <string name="ssl_error">主服务器证书校验失败，连接已取消</string>
     <string name="node_service_channel">AASC Node.js 子服务器</string>
     <string name="node_service_title">AASC 子服务器</string>
+    <string name="shared_storage_permission_denied">未授予共享存储权限，/storage/emulated/0/ 媒体库暂不可用</string>
 </resources>

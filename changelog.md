@@ -1,5 +1,28 @@
 # Web MediaCenter - 变更日志
 
+## 独立 Android ASR 测试 APK
+
+- ✅ [2026-09-09] 完成独立 ASR 测试 APK 的构建、真机安装和启动验收。
+  - 使用 `npm --prefix 3rd/tts-server run build:android-asr` 构建 `com.aasc.asr` Debug APK。
+  - 通过 ADB 覆盖安装到 `SM-N9500`（`192.168.1.6:5555`），授予录音权限并启动 `com.aasc.asr/.MainActivity`。
+  - 验证：Gradle 构建成功，包版本 `0.1.0`，进程和前台 Activity 正常；启动日志显示 Sherpa 声纹/降噪模型初始化且无崩溃异常。
+  - 文档：`3rd/tts-server/docs/design/android-asr-apk.md`、`3rd/tts-server/docs/spec/android-asr-apk.md`。
+
+## Android APK 显示端与 AASC 网络
+
+- ✅ [2026-09-09] 修复 APK 显示端无法连接主服务器及内置 Node 子服务器无法启动的问题。
+  - APK 内置 arm64 Node 改为 native `libaasc_node.so`，Gradle 使用 legacy packaging 解压到 `nativeLibraryDir`；资产过滤保留下划线命名的 Node 依赖文件，修复 `readable-stream` 加载失败。
+  - 主服务器开发证书增加局域网 SAN，APK 通过 Network Security Config 绑定公开证书；未知或主机名不匹配证书统一取消，不再调用 `SslErrorHandler.proceed()`。
+  - 保留 display.html 唯一 WebSocket 重连机制，修复主服务器重启后的 HTTPS/WSS 重连链路。
+  - 改动文件：`res/certs/cert.pem`、Android Manifest/Gradle/MainActivity、APK 证书和 Network Security Config、`scripts/ops/prepare-android-node-runtime.js`、Android 显示端 design/spec/task、相关契约测试。
+  - 验证：定向测试 17/17、Android JVM 单元测试 BUILD SUCCESSFUL、Debug APK 构建成功；SM-N9500 真机已注册主服务器，主服务器重启后显示端和子服务器均自动重连。
+
+- ✅ [2026-09-09] 增加 APK Android 9/API 28 共享存储访问。
+  - Manifest 声明并限制 `READ_EXTERNAL_STORAGE`、`WRITE_EXTERNAL_STORAGE` 到 API 28；MainActivity 启动时申请缺失权限，拒绝权限不阻塞显示端连接。
+  - 内置 Node 媒体库可按配置直接访问 `/storage/emulated/0/` 及其子目录，保留 LocalProvider 路径越界校验和 readonly 写保护。
+  - 改动文件：`SharedStorageAccess.kt`、`MainActivity.kt`、Android Manifest、字符串资源、共享存储策略测试、APK design/spec/task/usage/todo 文档。
+  - 验证：Android JVM 全量测试 BUILD SUCCESSFUL；共享存储/TLS 契约测试 8/8；APK 构建成功；SM-N9500 真机完成权限授权、目录列出、临时目录创建、文件上传/删除和目录删除，测试数据已清理。
+
 ## APK 内置 Node.js 子服务器设计
 
 - 🚧 [2026-09-08] 完成 APK 内置 Node.js 子服务器的架构设计和实现边界确认。

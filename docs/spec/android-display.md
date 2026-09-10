@@ -131,13 +131,58 @@ TTS 与视频音轨协调:
 ## APK 实现（Kotlin, src/apps/android-display/）
 
 ```
-MainActivity           配置页(服务器地址) + WebView 容器 + 自签名证书信任
+MainActivity           配置页(服务器地址) + WebView 容器 + 受信任证书错误处理 + 共享存储权限申请
 DisplayWebView         WebView 子类：JS/DOM 存储/混合内容
 NativeBridge           @JavascriptInterface 桥实现
 ScreenshotEngine       WebView.draw 位图 → 720p JPEG q0.7（真实像素，跨域可读）
 KeyInjector            dispatchKeyEvent 真实按键；ASCII 逐字符；中文剪贴板+Ctrl+V
 DisplayAccessibilityService   dispatchGesture 真实触摸/滚轮
 TouchInjector          触摸注入入口，服务未开启返回 false
+```
+
+## 共享存储访问伪代码
+
+```text
+应用启动(MainActivity.onCreate):
+    → 读取 SharedStorageAccess.requiredPermissions(Build.VERSION.SDK_INT)
+    → Android 6.0(API 23) 至 Android 9(API 28):
+        → 检查 READ_EXTERNAL_STORAGE 和 WRITE_EXTERNAL_STORAGE
+        → 缺少任一权限时调用 requestPermissions(缺少权限, REQ_STORAGE_PERMISSION)
+        → 权限回调中记录授权结果
+    → Android 10(API 29)及以上:
+        → 不声明或申请“所有文件访问”权限
+        → 不承诺直接操作整个 /storage/emulated/0/
+    → 无论存储权限结果如何，继续执行显示端连接和其他启动流程
+
+内置 Node 子服务器访问本地媒体库:
+    → Node 进程继续使用 APK 私有 HOME 和现有 LocalProvider
+    → 媒体库配置 path 可以是 /storage/emulated/0/ 或其子目录
+    → LocalProvider 使用 Node fs 读写已授权的共享存储路径
+    → path.resolve + 路径越界校验继续限制相对文件路径不能逃出媒体库根目录
+    → readonly=true 时禁止上传、删除和建/删目录
+    → Android 系统拒绝访问时返回现有文件系统错误，不绕过权限
+```
+
+## 主服务器 HTTPS/WSS 信任伪代码
+
+```text
+构建 APK:
+    → 读取主服务器公开证书 res/certs/cert.pem
+    → 复制到 app/src/main/res/raw/aasc_server_cert.pem
+    → Gradle packaging.jniLibs 声明 useLegacyPackaging=true，保证 native Node 库在目标设备的 nativeLibraryDir 中可执行
+    → Network Security Config 同时信任 system、user 和 aasc_server_cert
+    → server certificate 必须包含 192.168.1.39、localhost、127.0.0.1 的 SAN
+
+应用初始化 WebView:
+    → AndroidManifest.application 引用 @xml/network_security_config
+    → 页面请求 https://mainServerUrl/display 使用系统 TLS 信任链
+    → display.html 同源创建 wss://mainServerUrl/display
+    → WSS 握手复用同一套 Network Security Config 信任锚点
+
+收到 SSL 错误:
+    → 记录 URL、错误类型和证书信息
+    → 调用 SslErrorHandler.cancel()
+    → 不调用 proceed()，不放行未知或主机名不匹配证书
 ```
 
 ## Samsung DeX 全屏启动
@@ -158,7 +203,7 @@ MainActivity.onCreate:
 
 `minSdk=26` 只限制最低运行系统，不参与 DeX 窗口尺寸决策；`targetSdk=34` 在 TTS 接入前后保持不变。
 
-权限：仅 INTERNET + 无障碍服务（BIND_ACCESSIBILITY_SERVICE）。不用 MediaProjection。
+权限：INTERNET + Android 9/API 28 及以下的 READ_EXTERNAL_STORAGE、WRITE_EXTERNAL_STORAGE + 无障碍服务（BIND_ACCESSIBILITY_SERVICE）。不用 MediaProjection，不申请 Android 10+ 的 MANAGE_EXTERNAL_STORAGE。
 
 ## 部署命令自动恢复服务器地址
 
@@ -185,6 +230,31 @@ connect():
     将输入地址保存到 SharedPreferences("aasc_display").server_url
     将地址补全为 /display
     WebView 加载显示页面
+```
+
+## 显示端 WSS 重连伪代码
+
+```text
+display.html 初始化:
+    displayPageActive = true
+    connectWebSocket()
+
+connectWebSocket():
+    如果已有 CONNECTING/OPEN WebSocket:
+        返回
+    根据页面协议选择 wss 或 ws
+    创建当前 displayId 的 WebSocket
+    onopen:
+        清理重连定时器
+        设置“已连接”状态
+        重新发送 canvas、browserInfo、capabilities 和语音状态
+    onerror:
+        释放当前 socket 引用
+        关闭异常 socket
+        安排唯一的 3 秒重连定时器
+    onclose:
+        仅当前 socket 回调可以清理状态
+        安排唯一的 3 秒重连定时器
 ```
 
 约束：部署脚本不直接写 APK 私有目录 XML，避免依赖 debug `run-as` 权限和 Android SharedPreferences 文件格式；服务器地址通过 Intent 显式传递，脚本使用参数数组调用 adb，避免 shell 字符串注入。
@@ -239,3 +309,7 @@ mode='none' 占位文本按能力区分:
 
 - tests/display-native-bridge.test.js：puppeteer mock 桥，验证 native 截图优先 + 输入走桥；
   `NO_BRIDGE=1` 回归浏览器显示端（走 JS 合成、无 native 截图）
+- tests/display-websocket-reconnect.test.js：验证显示端只保留一个重连定时器、隔离过期 socket，并在 error/close 后恢复连接
+- tests/android-display-tls.test.js：验证 Network Security Config、APK 证书资源、主服务器证书 SAN 和 manifest 引用一致
+- Android `NodeServerServiceTest` 与 `android-node-runtime-package.test.js`：验证 Node 使用 APK 原生库目录中的 `libaasc_node.so`
+- tests/android-shared-storage.test.js 与 Android `SharedStorageAccessTest`：验证 API 28 读写权限申请边界和 API 29+ 不申请全盘权限

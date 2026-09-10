@@ -103,12 +103,16 @@ android {
     sourceSets {
         getByName("main") {
             assets.srcDir("$buildDir/generated/node-runtime/assets")
+            jniLibs.srcDir("$buildDir/generated/node-runtime/jniLibs")
         }
     }
     packaging {
         jniLibs {
             // sherpa-onnx 1.12.35 与 ORT Java 都携带同名库；二者均基于 ORT 1.23.2，正式 APK 只保留一份。
             pickFirsts += "lib/arm64-v8a/libonnxruntime.so"
+            // 目标设备为旧版 Android，必须将内置 Node 库解压到 nativeLibraryDir 后交给 ProcessBuilder 执行。
+            useLegacyPackaging = true
+            doNotStrip += "lib/arm64-v8a/libaasc_node.so"
         }
     }
 }

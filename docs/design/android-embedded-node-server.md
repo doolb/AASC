@@ -11,6 +11,7 @@
 - Android 前台 `NodeServerService` 启动 `server-launcher.js`；launcher 再 fork `server-app.js`，保持现有双进程模型。
 - Service 为 Node 设置私有 `HOME`、`LD_LIBRARY_PATH` 和 `OPENSSL_CONF=/dev/null`，避免 Termux 默认 OpenSSL 配置路径不可访问导致进程退出。
 - APK 只启用 HTTP/HTTPS、WebSocket、AASC 主动连接和媒体库能力；任务 runner、Puppeteer、Codex/Claude 外部 Agent、ASR/外部 TTS 服务均不在 APK 节点启动。
+- Android 9/API 28 的共享存储媒体库通过 READ/WRITE_EXTERNAL_STORAGE 运行时授权访问 `/storage/emulated/0/`；Android 10+ 不申请 MANAGE_EXTERNAL_STORAGE。
 - ASR 隔离进程、Wine、Puppeteer、外部 CLI 和桌面 TUI 等额外子进程能力关闭。
 - 主服务器地址默认 `https://192.168.1.39:8081`，保留手动修改；该地址同时用于子服务器主动连接和 WebView `/display`。
 
@@ -31,7 +32,7 @@ Node.js 服务器运行包必须在构建时生成并校验，运行时只从 AP
 
 ## 相关代码
 
-- Android：`MainActivity.kt`、`NodeServerService.kt`、`NodeRuntimeInstaller.kt`、`NodeServerConfig.kt`、Manifest 和 Gradle assets 配置。
+- Android：`MainActivity.kt`、`SharedStorageAccess.kt`、`NodeServerService.kt`、`NodeRuntimeInstaller.kt`、`NodeServerConfig.kt`、Manifest 和 Gradle assets 配置。
 - Node.js：现有 `server-launcher.js`、`server-app.js`、配置模块和 AASC NodeConnector。
 - 构建：新增 Android Node Runtime/服务器运行包准备脚本和校验测试。
 - 文档：`docs/spec/android-embedded-node-server.md`、本设计文档和对应 task 文档。

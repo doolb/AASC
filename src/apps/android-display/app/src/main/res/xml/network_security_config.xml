@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    APK 显示端需要访问内网开发主服务器。系统证书和用户证书保持兼容，
+    只额外绑定仓库中的主服务器公开证书，避免 WebView 页面和同源 WSS
+    在同一个自签名证书上出现不同的信任结果。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+            <certificates src="@raw/aasc_server_cert" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

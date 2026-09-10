@@ -6,6 +6,21 @@
 
 现有浏览器显示端保持不变，继续工作，并通过能力声明（不声明 `crossOriginControl`）标识自己不具备跨域控制能力。
 
+## 2026-09-09 连接修复结果
+
+- APK WebView 通过 Network Security Config 信任构建时绑定的主服务器公开证书，主服务器证书 SAN 覆盖 `192.168.1.39`、`localhost` 和 `127.0.0.1`；页面导航和同源 WSS 使用同一套信任链。
+- APK arm64 Node Runtime 作为 `libaasc_node.so` 放入 native 库目录，并通过 Gradle `jniLibs.useLegacyPackaging=true` 解压到旧版 Android 设备的 `nativeLibraryDir`；Node 依赖过滤规则只排除目录，保留下划线命名的 JavaScript 文件。
+- 未知证书或主机名不匹配时 WebView 取消连接，不再通过 `SslErrorHandler.proceed()` 放行；display.html 继续使用唯一重连定时器处理 error/close。
+- SM-N9500（Android 9/API 28，`192.168.1.6`）真机验收通过：显示端已连接主服务器，内置 Node 子服务器已注册；主服务器重启后显示端和子服务器均自动重连。
+
+## 2026-09-09 共享存储访问结果
+
+- APK Manifest 增加 `READ_EXTERNAL_STORAGE` 和 `WRITE_EXTERNAL_STORAGE`，均限制 `maxSdkVersion=28`；MainActivity 启动时动态申请缺失权限。
+- 权限流程与显示端连接解耦：授权后继续启动 Node 和 WebView，拒绝时只影响共享存储媒体库操作，不阻塞显示端连接。
+- SM-N9500（Android 9/API 28）首次启动已弹出系统存储授权框；授权后 `/storage/emulated/0/Download` 可读、可写、可建目录和可删目录。
+- 通过 APK Node 媒体库接口完成 Download 目录列出、临时目录创建、文件上传、文件删除和目录删除；测试媒体库与临时文件已清理。
+- Android 10/API 29 及以上不申请 `MANAGE_EXTERNAL_STORAGE`；整个共享存储的跨版本支持需要另行设计。
+
 ## 需求背景
 
 ### 现状问题（浏览器显示端）
@@ -27,7 +42,7 @@
 
 - 显示端设备：Android 7+（无障碍 dispatchGesture 需要 API 24+）
 - APK 定位：WebView 包装 + 原生增强（不重写显示端逻辑）
-- 权限最小化：仅 INTERNET + 无障碍服务，不用 MediaProjection
+- 权限最小化：当前 Android 9/API 28 设备增加共享存储读写权限；不使用 MediaProjection，不申请 Android 10+ 的“所有文件访问”权限
 
 ## 核心架构
 
@@ -125,7 +140,7 @@ CPU affinity 控制项除了大核/小核数量，还保存两个独立的布尔
 android-display/
 ├── settings.gradle.kts / build.gradle.kts / app/
 └── app/src/main/
-    ├── AndroidManifest.xml        # INTERNET + 无障碍服务声明
+    ├── AndroidManifest.xml        # INTERNET + API 28及以下共享存储 + 无障碍服务声明
     ├── java/com/aasc/display/
     │   ├── MainActivity.kt        # 全屏：服务器地址配置 + WebView 容器
     │   ├── DisplayWebView.kt      # WebView 子类：加载 /display + 桥绑定
@@ -147,14 +162,26 @@ android-display/
 | injectText | ASCII 逐字符 KeyEvent；中文：`ClipboardManager` 设剪贴板 → dispatchKeyEvent(Ctrl+V) |
 | getScreenSize | `resources.displayMetrics` |
 
+### 共享存储访问
+
+- 当前目标设备为 Android 9/API 28，APK 需要让内置 Node 子服务器直接读写 `/storage/emulated/0/` 及其子目录，以支持设备本地媒体库。
+- Manifest 只声明 `READ_EXTERNAL_STORAGE` 和 `WRITE_EXTERNAL_STORAGE`，并设置 `maxSdkVersion=28`；MainActivity 启动时动态申请尚未授予的权限。
+- 存储权限授权流程独立于显示端连接；用户拒绝时 WebView 和 AASC 子服务器仍可启动，但访问共享存储的媒体库请求由 Android 文件系统返回权限错误。
+- Android 10/API 29 及以上不在本功能范围内申请 `MANAGE_EXTERNAL_STORAGE`；这些系统不能据此承诺直接读写整个共享存储根目录。
+- 媒体库仍使用现有 `LocalProvider`，例如配置 `path=/storage/emulated/0/Download`；相对路径越界校验和 `readonly` 写保护保持不变。
+
 ### 权限
 
 - `android.permission.INTERNET`
+- `android.permission.READ_EXTERNAL_STORAGE`（仅 `maxSdkVersion=28`）
+- `android.permission.WRITE_EXTERNAL_STORAGE`（仅 `maxSdkVersion=28`）
 - 无障碍服务（`BIND_ACCESSIBILITY_SERVICE`）：系统设置开启一次；未开启时触摸注入返回 false，其余能力可用
 
 ### 配置
 
-- MainActivity 启动时提供服务器地址输入（默认读取持久化值），WebView 加载 `https://<server>/display`（自签名证书处理：WebViewClient 信任一次并提示）
+- MainActivity 启动时提供服务器地址输入（默认读取持久化值），WebView 加载 `https://<server>/display`
+- APK 将当前主服务器的公开证书作为 Network Security Config 的额外信任锚点，同时保留系统证书和用户证书；页面导航与同源 WSS 使用同一套信任链，避免只放行页面导航而导致 WebSocket 重连失败
+- 主服务器开发证书必须包含 `192.168.1.39`、`localhost` 和 `127.0.0.1` 的 SAN；证书不匹配或主机名不匹配时 WebView 取消连接，不再对任意自签名证书调用 `SslErrorHandler.proceed()`
 - APK 部署脚本默认通过启动 Intent 注入 `https://192.168.1.39:8081`；MainActivity 接收后覆盖输入框、保存 `server_url` 并立即连接，解决卸载重装后配置丢失问题
 - 部署脚本可通过 `AASC_DISPLAY_SERVER_URL` 环境变量覆盖默认服务器地址；未注入地址时沿用手动输入和已保存地址逻辑
 - displayId 持久化复用 display.html 的 localStorage 机制
@@ -190,7 +217,8 @@ android-display/
 | takeScreenshot 失败（视频/WebGL 内容位图空白） | 回退现有 html-to-image 链，不影响功能 |
 | 无障碍服务未开启 | 桥可用（截图/键盘），触摸返回 false → display.html 回退 JS 合成（同源可用，跨域点击受限），控制端提示降级 |
 | 截图频率 | 沿用 1 秒 1 帧、busy 跳过防堆积（display.html 现有定时器） |
-| WS 断开/重连、页面刷新 | display.html 现有逻辑不变；桥无状态随 WebView 存活；displayId 走 localStorage |
+| WS 断开/重连、页面刷新 | display.html 保持单定时器、过期连接隔离和 error/close 重连；APK Network Security Config 保证 HTTPS/WSS 证书校验一致；桥无状态随 WebView 存活；displayId 走 localStorage |
+| 主服务器证书不是 APK 信任证书 | WebView 取消页面或 WSS 连接并记录证书错误；用户需要重新构建包含对应公开证书的 APK |
 
 ## 状态与生命周期
 
@@ -245,6 +273,12 @@ android-display/
 8. `npm run upload:apk` 安装后以 Intent 注入默认服务器地址，APK 自动保存并加载 `/display`
 9. 卸载重装后重新执行部署命令，服务器地址仍由部署命令恢复；自定义 `AASC_DISPLAY_SERVER_URL` 地址生效
 10. 系统媒体播放/停止期间，APK 显示端 video/audio 按控制端期望状态自动恢复，服务器播放状态与实际恢复结果一致；控制端手动暂停不被拉起
+11. 主服务器重启后，HTTPS 页面和 WSS 均能重新建立连接，主服务器日志重新出现设备 IP 的显示端连接
+12. APK 启动后原生 Node 使用 `libaasc_node.so`，主服务器出现 `node.register`，不再出现应用私有目录 `Permission denied`
+13. 证书指纹或 SAN 不匹配时连接被取消，不允许通过任意自签名证书
+14. Android 9/API 28 首次启动时申请共享存储读写权限，授权后 Node 媒体库可以列出、创建、上传和删除测试目录/文件
+15. Android 9/API 28 拒绝共享存储权限时，显示端仍可连接，访问 `/storage/emulated/0/` 的媒体库请求返回权限错误且不越界
+16. Android 10/API 29 及以上不声明或申请 `MANAGE_EXTERNAL_STORAGE`
 
 ## 文档与任务
 

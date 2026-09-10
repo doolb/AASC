@@ -29,7 +29,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverInput: EditText
     private lateinit var webContainer: FrameLayout
     private var webView: DisplayWebView? = null
-    private var trustedSsl = false
     // 整个 APK 只维护一个原生音频焦点；网页媒体不按 TTS/视频拆分申请焦点。
     private val audioFocusController by lazy {
         AudioFocusController(this) { change ->
@@ -44,6 +43,8 @@ class MainActivity : AppCompatActivity() {
 
     private val REQ_AUDIO_PERMISSION = 1001
     private val REQ_NOTIFICATION_PERMISSION = 1002
+    private val REQ_STORAGE_PERMISSION = 1003
+    private var startupContinued = false
 
     private fun requestAudioPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= 23 &&
@@ -59,15 +60,68 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 只在 Android 9/API 28 及以下申请旧版共享存储权限；Android 10+ 不申请特殊的全盘权限。
+     * 权限检查完成后再进入统一启动流程，避免在同一生命周期内并发弹出多个权限框。
+     */
+    private fun continueStartupAfterStoragePermission() {
+        val missingPermissions = SharedStorageAccess.missingPermissions(Build.VERSION.SDK_INT) { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+        }
+        if (missingPermissions.isNotEmpty()) {
+            requestPermissions(missingPermissions, REQ_STORAGE_PERMISSION)
+            return
+        }
+        continueStartup()
+    }
+
+    /**
+     * 存储权限允许或拒绝后都继续显示端启动，拒绝只影响共享存储媒体库请求。
+     */
+    private fun continueStartup() {
+        if (startupContinued) return
+        startupContinued = true
+
+        if (serverInput.text.toString().trim().isNotEmpty()) {
+            connect()
+        }
+
+        // APK 启动即申请全局焦点；后续视频、TTS 和普通音频共用，不在网页重复申请。
+        try {
+            if (!audioFocusController.request()) {
+                android.util.Log.w("MainActivity", "启动时申请原生音频焦点未获授权")
+            }
+        } catch (error: Exception) {
+            android.util.Log.w("MainActivity", "启动时申请原生音频焦点失败: ${error.message}")
+        }
+        requestAudioPermissionIfNeeded()
+        requestNotificationPermissionIfNeeded()
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_AUDIO_PERMISSION && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            // 授权成功即重载页面，让 display.html 的 getUserMedia 能力探测通过
-            webView?.reload()
+        when (requestCode) {
+            REQ_STORAGE_PERMISSION -> {
+                val storageGranted = SharedStorageAccess.arePermissionsGranted(Build.VERSION.SDK_INT) { permission ->
+                    ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+                }
+                if (!storageGranted) {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.shared_storage_permission_denied),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                continueStartup()
+            }
+            REQ_AUDIO_PERMISSION -> if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                // 授权成功即重载页面，让 display.html 的 getUserMedia 能力探测通过
+                webView?.reload()
+            }
         }
     }
 
@@ -91,20 +145,8 @@ class MainActivity : AppCompatActivity() {
         connectBtn.setOnClickListener { connect() }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
 
-        if (selectedServerUrl.isNotEmpty()) {
-            connect()
-        }
-
-        // APK 启动即申请全局焦点；后续视频、TTS 和普通音频共用，不在网页重复申请。
-        try {
-            if (!audioFocusController.request()) {
-                android.util.Log.w("MainActivity", "启动时申请原生音频焦点未获授权")
-            }
-        } catch (error: Exception) {
-            android.util.Log.w("MainActivity", "启动时申请原生音频焦点失败: ${error.message}")
-        }
-        requestAudioPermissionIfNeeded()
-        requestNotificationPermissionIfNeeded()
+        // 先完成共享存储权限流程，避免存储和录音权限授权框并发出现；拒绝后仍继续连接显示端。
+        continueStartupAfterStoragePermission()
     }
 
     override fun onDestroy() {
@@ -181,13 +223,14 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, pageUrl)
             }
 
-            // 自签名证书：本设备专属信任（首次提示，不持久化）
+            // Network Security Config 已绑定构建时主服务器证书；未知证书或主机名不匹配时必须拒绝。
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) {
-                if (!trustedSsl) {
-                    trustedSsl = true
-                    Toast.makeText(this@MainActivity, getString(R.string.ssl_warn), Toast.LENGTH_LONG).show()
-                }
-                handler.proceed()
+                android.util.Log.e(
+                    "MainActivity",
+                    "WebView TLS 证书校验失败: url=${error.url}, primaryError=${error.primaryError}"
+                )
+                Toast.makeText(this@MainActivity, getString(R.string.ssl_error), Toast.LENGTH_LONG).show()
+                handler.cancel()
             }
         }
         webContainer.addView(wv)

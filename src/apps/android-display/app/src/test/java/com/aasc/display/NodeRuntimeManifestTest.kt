@@ -13,9 +13,8 @@ class NodeRuntimeManifestTest {
               "version": "dev",
               "abi": "arm64-v8a",
               "entrypoint": "server/src/apps/server/boot/server-launcher.js",
-              "nodePath": "runtime/arm64-v8a/node",
+                "nodePath": "native/arm64-v8a/libaasc_node.so",
               "files": [
-                {"path": "runtime/arm64-v8a/node", "size": 12, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
                 {"path": "server/src/apps/server/boot/server-launcher.js", "size": 32, "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
                 {"path": "server/package.json", "size": 20, "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
               ]
@@ -25,8 +24,8 @@ class NodeRuntimeManifestTest {
 
         assertEquals("dev", manifest.version)
         assertEquals("arm64-v8a", manifest.abi)
-        assertEquals("runtime/arm64-v8a/node", manifest.nodePath)
-        assertEquals(3, manifest.files.size)
+        assertEquals("native/arm64-v8a/libaasc_node.so", manifest.nodePath)
+        assertEquals(2, manifest.files.size)
     }
 
     @Test(expected = IllegalArgumentException::class)

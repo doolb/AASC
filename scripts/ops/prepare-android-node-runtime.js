@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ANDROID_ABI = 'arm64-v8a';
+const NODE_LIBRARY_NAME = 'libaasc_node.so';
+const NODE_LIBRARY_PATH = `native/${ANDROID_ABI}/${NODE_LIBRARY_NAME}`;
 const REQUIRED_PACKAGE_ENTRIES = [
     'src/apps/server/boot/server-launcher.js',
     'package.json',
@@ -34,6 +36,24 @@ function isNpmToolShim(relativePath) {
     return relativePath.split(path.sep).includes('.bin');
 }
 
+function isNpmInternalMetadata(relativePath) {
+    const segments = relativePath.split(path.sep);
+    return segments.at(-1) === '.package-lock.json' && segments.at(-2) === 'node_modules';
+}
+
+function isAndroidAssetExcluded(relativePath, isDirectory = false) {
+    const segments = relativePath.split(path.sep);
+    // 只有目录名会影响 Android AssetManager 的遍历；Node 依赖中存在大量以下划线
+    // 开头的合法 JavaScript 文件（例如 readable-stream/lib/_stream_readable.js），
+    // 不能按文件名过滤，否则运行时会出现 MODULE_NOT_FOUND。
+    const directorySegments = isDirectory ? segments : segments.slice(0, -1);
+    const hasUnsupportedDirectory = directorySegments.some(
+        segment => segment.startsWith('.') || segment.startsWith('_')
+    );
+    const isHiddenFile = !isDirectory && segments.at(-1)?.startsWith('.');
+    return hasUnsupportedDirectory || isHiddenFile;
+}
+
 async function listFiles(sourceRoot, relativePath = '') {
     const currentPath = path.join(sourceRoot, relativePath);
     const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
@@ -42,6 +62,12 @@ async function listFiles(sourceRoot, relativePath = '') {
     for (const entry of entries) {
         const childRelativePath = path.join(relativePath, entry.name);
         assertSafeRelativePath(childRelativePath);
+        // aapt2/AssetManager 会过滤隐藏路径以及 npm/Pixi 的下划线生成目录；
+        // 这些文件不会进入 APK，必须同步从 manifest 排除，避免安装时校验落空。
+        if (isAndroidAssetExcluded(childRelativePath, entry.isDirectory())) continue;
+        // npm v7+ 会在每个 node_modules 根目录生成隐藏的内部锁文件；它不参与
+        // Node.js 运行，且 Android AssetManager/Gradle 不保证打包隐藏文件。
+        if (isNpmInternalMetadata(childRelativePath)) continue;
         if (entry.isSymbolicLink()) {
             // npm 会在每级 node_modules/.bin 创建指向包内脚本的软链接；APK
             // 节点不执行 npm CLI，因此安全地跳过这些工具入口，避免把软链接
@@ -81,16 +107,26 @@ async function copyFileWithManifest(sourceRoot, relativePath, outputRoot, output
     };
 }
 
-async function copyDirectoryWithManifest(sourceRoot, outputRoot, outputPrefix = '') {
+async function copyDirectoryWithManifest(sourceRoot, outputRoot, outputPrefix = '', options = {}) {
     const sourceFiles = await listFiles(sourceRoot);
+    const excludedPaths = new Set(options.excludedPaths || []);
     const files = [];
     for (const relativePath of sourceFiles) {
+        if (excludedPaths.has(relativePath)) continue;
         const outputRelativePath = outputPrefix
             ? path.join(outputPrefix, relativePath)
             : relativePath;
         files.push(await copyFileWithManifest(sourceRoot, relativePath, outputRoot, outputRelativePath));
     }
     return files;
+}
+
+async function copyNodeLibrary(runtimeDir, nativeOutputDir) {
+    const sourcePath = path.join(runtimeDir, 'node');
+    const outputPath = path.join(nativeOutputDir, ANDROID_ABI, NODE_LIBRARY_NAME);
+    await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.promises.copyFile(sourcePath, outputPath);
+    await fs.promises.chmod(outputPath, 0o755);
 }
 
 function assertRequiredPackageEntries(packageDir) {
@@ -133,6 +169,9 @@ async function prepareAndroidNodeRuntime(options = {}) {
     const outputDir = path.resolve(
         options.outputDir || path.join(process.cwd(), 'src/apps/android-display/app/build/generated/node-runtime/assets')
     );
+    const nativeOutputDir = path.resolve(
+        options.nativeOutputDir || path.join(outputDir, '..', 'jniLibs')
+    );
     const nodePath = path.join(runtimeDir, 'node');
 
     if (!fs.existsSync(nodePath) || !fs.statSync(nodePath).isFile()) {
@@ -141,12 +180,21 @@ async function prepareAndroidNodeRuntime(options = {}) {
     assertRequiredPackageEntries(packageDir);
 
     const temporaryOutputDir = `${outputDir}.tmp-${process.pid}-${Date.now()}`;
+    const temporaryNativeOutputDir = `${nativeOutputDir}.tmp-${process.pid}-${Date.now()}`;
     await fs.promises.rm(temporaryOutputDir, { recursive: true, force: true });
+    await fs.promises.rm(temporaryNativeOutputDir, { recursive: true, force: true });
     await fs.promises.mkdir(temporaryOutputDir, { recursive: true });
+    await fs.promises.mkdir(temporaryNativeOutputDir, { recursive: true });
 
     try {
         const files = [];
-        files.push(...await copyDirectoryWithManifest(runtimeDir, temporaryOutputDir, path.join('runtime', ANDROID_ABI)));
+        files.push(...await copyDirectoryWithManifest(
+            runtimeDir,
+            temporaryOutputDir,
+            path.join('runtime', ANDROID_ABI),
+            { excludedPaths: ['node'] }
+        ));
+        await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
         files.push(...await copyDirectoryWithManifest(packageDir, temporaryOutputDir, 'server'));
         files.push(...await copyCertificates(
             options.certDir || process.env.AASC_ANDROID_NODE_CERT_DIR,
@@ -160,7 +208,7 @@ async function prepareAndroidNodeRuntime(options = {}) {
             version,
             abi: ANDROID_ABI,
             entrypoint: 'server/src/apps/server/boot/server-launcher.js',
-            nodePath: `runtime/${ANDROID_ABI}/node`,
+            nodePath: NODE_LIBRARY_PATH,
             files
         };
         await fs.promises.writeFile(
@@ -170,10 +218,13 @@ async function prepareAndroidNodeRuntime(options = {}) {
         );
 
         await fs.promises.rm(outputDir, { recursive: true, force: true });
+        await fs.promises.rm(nativeOutputDir, { recursive: true, force: true });
         await fs.promises.rename(temporaryOutputDir, outputDir);
-        return { outputDir, manifest };
+        await fs.promises.rename(temporaryNativeOutputDir, nativeOutputDir);
+        return { outputDir, nativeOutputDir, manifest };
     } catch (error) {
         await fs.promises.rm(temporaryOutputDir, { recursive: true, force: true });
+        await fs.promises.rm(temporaryNativeOutputDir, { recursive: true, force: true });
         throw error;
     }
 }
@@ -204,8 +255,12 @@ if (require.main === module) {
 module.exports = {
     ANDROID_ABI,
     CERTIFICATE_ENTRIES,
+    NODE_LIBRARY_NAME,
+    NODE_LIBRARY_PATH,
     REQUIRED_PACKAGE_ENTRIES,
     assertSafeRelativePath,
+    isAndroidAssetExcluded,
+    isNpmInternalMetadata,
     isNpmToolShim,
     prepareAndroidNodeRuntime
 };

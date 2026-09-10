@@ -21,6 +21,17 @@ class NodeServerServiceTest {
     }
 
     @Test
+    fun Node命令优先使用APK提取的原生库路径() {
+        val root = File("/data/user/0/com.aasc.display/files/aasc-server")
+        val nativeLibraryDir = File("/data/app/com.aasc.display/lib/arm64")
+
+        assertEquals(
+            "/data/app/com.aasc.display/lib/arm64/libaasc_node.so",
+            NodeServerService.buildNodeCommand(root, nativeLibraryDir).first()
+        )
+    }
+
+    @Test
     fun 进程失败使用一秒起步三十秒封顶退避() {
         assertEquals(1000L, NodeServerService.retryDelayMs(0))
         assertEquals(2000L, NodeServerService.retryDelayMs(1))
