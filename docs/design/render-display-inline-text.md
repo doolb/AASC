@@ -5,7 +5,7 @@
 对 render-display 监控覆盖层（`res/tasks/render-display/render.js`）做**纯前端布局优化**，目标是在不改变数据来源的前提下减少覆盖层的水平占用空间：
 
 1. **条内浮层文字**：把「利用率百分比 + 温度/显存/功耗后缀」从进度条右侧的独立文字，改为**叠加在进度条内部水平居中**的浮层文字；进度条宽度不变。
-2. **GPU/显存第二行**：有 GPU 数据的来源（PC 端）改为两行——第一行放 CPU/MEM 条，第二行（右缩进对齐）放 **GPU 利用率条 + 独立显存条**。
+2. **GPU/显存第二行**：有 GPU 数据的来源（PC 端）改为两行——第一行放 CPU/MEM 条，第二行保留小幅前置缩进放 **GPU 利用率条 + 独立显存条**，使 GPU 条对齐 CPU 条、VRAM 条对齐 MEM 条。
 
 **APK 温度采集本次不补**：APK 显示端自身的 `getSystemStats` 不返回温度（保持现状），其来源仅显示 CPU/MEM 条、条内文字只含利用率。
 
@@ -46,10 +46,10 @@ PC-1      ▓▓▓▓▓▓[62% 45°C]           M ▓▓▓░░[38% 6.4/32G]
 
 ```
 PC-1      ▓▓▓▓▓▓[62% 45°C]           M ▓▓▓░░[38% 6.4/32G]
-          GPU ▓▓░░[12% 52°C 180W]    VRAM ▓░░[23% 6/24G]
+      GPU ▓▓░░[12% 52°C 180W]    VRAM ▓░░[23% 6/24G]
 ```
 
-- 第二行前面放**等宽占位**（宽 = `deviceNameW + barGap + trackW`；行内 flex `gap:rowGap` 使 GPU 条起点 = 占位宽 + rowGap = `deviceNameW + barGap + trackW + rowGap`，恰与第一行 MEM 条标签起点对齐），使 GPU/VRAM 条与第一行 MEM 条起始位置对齐。
+- 第二行保留小幅前置占位，宽度为 `max(0, deviceNameW - lblW - rowGap)`；常规模式约 `42px`、紧凑模式约 `34px`。结合行内 `gap` 后，GPU 进度条起点与第一行 CPU 进度条对齐，VRAM 进度条起点与第一行 MEM 进度条对齐。
 - GPU 条：填充 = `gpuPercent`，条内文字 = 利用率 + 温度 + 功耗。
 - VRAM 条：填充 = `gpuMemUsed / gpuMemTotal * 100`，条内文字 = 已用百分比 + `已用GB/总量GB`；仅在显存字段有效且总量 > 0 时渲染。
 - 来源行从单行改为 flex 纵向两段（第一段 CPU/MEM，第二段 GPU/VRAM），行内纵向间距用小值（约 2px）。
@@ -94,7 +94,7 @@ PC-1      ▓▓▓▓▓▓[62% 45°C]           M ▓▓▓░░[38% 6.4/32G]
 
 | 文件 | 改动 |
 |------|------|
-| `res/tasks/render-display/render.js` | `makeBar()` 改为条内居中浮层文字（去右侧 val）；来源行改两段式（第一行 CPU/MEM，第二行 GPU/VRAM + 等宽占位对齐）；`getLayout()` 移除 valMin；字段合并规则按上表 |
+| `res/tasks/render-display/render.js` | `makeBar()` 改为条内居中浮层文字（去右侧 val）；来源行改两段式（第一行 CPU/MEM，第二行 GPU/VRAM 使用小占位对齐进度条）；`getLayout()` 移除 valMin；字段合并规则按上表 |
 | `docs/spec/monitor-system.md` | 更新 render-display 横条渲染伪代码（条内文字、两行 GPU/显存） |
 | `docs/todo.md` / `changelog.md` / `docs/task/*.md` | 按项目规范更新 |
 

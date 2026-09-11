@@ -175,7 +175,7 @@ function makeBar(label, pct, color, text, L, lblW) {
     return bar;
 }
 
-// 单个来源行：第一行 CPU/MEM，第二行 GPU/VRAM（有 GPU 数据时，前部等宽占位对齐 MEM 条标签起点）
+// 单个来源行：第一行 CPU/MEM，第二行 GPU/VRAM（有 GPU 数据时保留小占位对齐进度条）
 // 行级样式每帧刷新，布局随旋转/来源数动态调整
 function ensureSourceRow(hostname, L) {
     if (sources[hostname] && sources[hostname]._row) {
@@ -263,9 +263,9 @@ function update(data) {
             }
             entry.line2.innerHTML = '';
 
-            // 等宽占位：使第二行 GPU/VRAM 条标签起点与第一行 MEM 条标签起点对齐
+            // 小占位使 GPU 进度条对齐 CPU、VRAM 进度条对齐 MEM，避免整行缩进到 MEM 列
             var spacer = document.createElement('span');
-            spacer.style.cssText = 'display:inline-block;width:' + (L.deviceNameW + L.barGap + L.trackW) + 'px';
+            spacer.style.cssText = 'display:inline-block;width:' + Math.max(0, L.deviceNameW - L.lblW - L.rowGap) + 'px';
             entry.line2.appendChild(spacer);
 
             var gpuPct = parseFloat(d.gpuPercent) || 0;

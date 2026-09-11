@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+## 硬件监控
+
+- ✅ [2026-09-11] render-display GPU/VRAM 第二行调整为小幅缩进并保持进度条对齐。
+  - 将 GPU 行前的过宽占位调整为动态小占位，使 GPU 进度条对齐 CPU、VRAM 进度条对齐 MEM；GPU 与 VRAM 的行内间距及其他布局参数保持不变。
+  - 更新 `res/tasks/render-display/render.js`、结构冒烟测试及 render-display 设计/spec/task 文档。
+  - 验证：render-display 冒烟测试、JavaScript 语法检查、标签样式测试和旋转布局回归测试通过。
+
 ## ASR 结果详细日志开关
 
 - ✅ [2026-09-11] 服务端收到显示端 `asrResult` 时打印 ASR 文字和声纹识别诊断信息，并在控制端声纹面板增加默认开启的详细日志开关。

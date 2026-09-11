@@ -69,8 +69,9 @@ assert.strictEqual(getBarText(line1.children[0]), '34%  45°C', 'CPU 条内文�
 assert.ok(getBarText(line1.children[1]).indexOf('21%') === 0, 'MEM 条内文字以利用率开头');
 assert.ok(getBarText(line1.children[1]).indexOf('6.4/32') > 0, 'MEM 条内文字含已用/总量');
 
-assert.strictEqual(line2.children.length, 3, '第二行应为 占位+GPU+VRAM');
-assert.strictEqual(line2.children[0].style.width, '548px', '占位宽=deviceNameW+barGap+trackW=170+18+360');
+assert.strictEqual(line2.children.length, 3, '第二行应为 小占位+GPU+VRAM');
+assert.strictEqual(line2.children[0].style.width, '42px', '常规模式占位宽=deviceNameW-lblW-rowGap=170-96-32');
+assert.strictEqual(line2.children[1].children[0].textContent, 'GPU', 'GPU 标签应保留小幅缩进');
 assert.strictEqual(getBarText(line2.children[1]), '12%  52°C  180W', 'GPU 条内文字含温度+功耗');
 assert.ok(getBarText(line2.children[2]).indexOf('25%') === 0, 'VRAM 条内文字以显存利用率开头');
 assert.ok(getBarText(line2.children[2]).indexOf('6.0/24.0') > 0, 'VRAM 条内文字含已用/总量');
@@ -84,13 +85,14 @@ const row2 = gauge.children[1];
 assert.strictEqual(row2.children.length, 1, 'APK 来源仅第一行');
 assert.strictEqual(getBarText(row2.children[0].children[0]), '62%', 'APK CPU 条内文字无温度后缀');
 
-// 紧凑模式占位宽（来源数=3 触发）：deviceNameW=150, barGap=12, trackW=280
+// 紧凑模式小占位（来源数=3 触发）：deviceNameW-lblW-rowGap=150-96-20=34
 update({
     hostname: 'PC-2', cpuPercent: 5, memPercent: 5, memUsed: 1, memTotal: 16,
     gpuPercent: 3, gpuMemUsed: 1, gpuMemTotal: 8
 });
 const row3 = gauge.children[2];
-assert.strictEqual(row3.children[1].children[0].style.width, '442px', '紧凑模式占位宽=150+12+280');
+assert.strictEqual(row3.children[1].children[0].style.width, '34px', '紧凑模式占位宽=deviceNameW-lblW-rowGap=150-96-20');
+assert.strictEqual(row3.children[1].children[1].children[0].textContent, 'GPU', '紧凑模式 GPU 标签应保留小幅缩进');
 
 // GPU 数据消失（gpuPercent='N/A'）：第二行移除，来源恢复单行
 update({
