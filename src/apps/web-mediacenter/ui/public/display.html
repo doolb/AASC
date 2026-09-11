@@ -284,6 +284,10 @@
             };
             if (Array.isArray(payload.segments)) result.segments = payload.segments;
             if (Object.prototype.hasOwnProperty.call(payload, 'speaker')) result.speaker = payload.speaker;
+            if (Object.prototype.hasOwnProperty.call(payload, 'similarityScore')) {
+                result.similarityScore = payload.similarityScore;
+            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'threshold')) result.threshold = payload.threshold;
             sendAsrResult(payload.requestId, result);
         };
 
@@ -4467,7 +4471,7 @@
                         if (nativeVoiceprintAvailable) {
                             nativeBridge.voiceprintConfigure(JSON.stringify({
                                 enabled: voiceprintEnabled,
-                                threshold: data.threshold || 0.5,
+                                threshold: data.threshold || 0.3,
                                 multiSpeaker: voiceprintMultiSpeaker,
                                 multiMode: voiceprintMultiMode,
                                 speakerCount: voiceprintSpeakerCount
@@ -5666,7 +5670,11 @@
                 text: result.text || '',
                 error: result.error || voiceprint.error || ''
             };
-            if (!voiceprint.error) response.speaker = voiceprint.speaker || null;
+            if (!voiceprint.error) {
+                response.speaker = voiceprint.speaker || null;
+                response.similarityScore = voiceprint.similarityScore;
+                response.threshold = voiceprint.threshold;
+            }
             sendAsrResult(data.requestId, response);
         }
 

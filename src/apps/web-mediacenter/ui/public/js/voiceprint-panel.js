@@ -24,6 +24,7 @@
             document.getElementById('vpDenoiseCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpMultiModeSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpSpeakerCountSel').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpThresholdInput').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpExtractionSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('serverAsrEnabledCheck').addEventListener('change', () => this.saveServerVoiceConfig());
             document.getElementById('serverTtsEnabledCheck').addEventListener('change', () => this.saveServerVoiceConfig());
@@ -106,6 +107,8 @@
                 document.getElementById('vpDenoiseCheck').checked = !!c.denoise;
                 document.getElementById('vpMultiModeSel').value = c.multiMode || 'fast';
                 document.getElementById('vpSpeakerCountSel').value = c.speakerCount || 'AUTO';
+                const threshold = Number(c.threshold);
+                document.getElementById('vpThresholdInput').value = Number.isFinite(threshold) ? threshold : 0.3;
                 document.getElementById('vpExtractionSel').value = c.extraction || 'server';
             } catch (e) { console.warn('加载声纹配置失败:', e); }
         },
@@ -197,12 +200,18 @@
         },
 
         async saveConfig() {
+            const threshold = Number(document.getElementById('vpThresholdInput').value);
+            if (!Number.isFinite(threshold) || threshold <= 0 || threshold > 1) {
+                window.showToast?.('声纹相似度阈值必须是 (0,1] 的数值', 'error');
+                return;
+            }
             const body = {
                 enabled: document.getElementById('vpEnabledCheck').checked,
                 multiSpeaker: document.getElementById('vpMultiCheck').checked,
                 denoise: document.getElementById('vpDenoiseCheck').checked,
                 multiMode: document.getElementById('vpMultiModeSel').value,
                 speakerCount: document.getElementById('vpSpeakerCountSel').value,
+                threshold: threshold,
                 extraction: document.getElementById('vpExtractionSel').value
             };
             try {

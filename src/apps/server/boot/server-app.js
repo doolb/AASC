@@ -3109,7 +3109,7 @@ app.get('/api/voiceprint/config', (req, res) => {
         status: 'success',
         enabled: config.get('voiceprint.enabled', true),
         extraction: config.get('voiceprint.extraction', 'server'),
-        threshold: config.get('voiceprint.threshold', 0.5),
+        threshold: config.get('voiceprint.threshold', 0.3),
         multiSpeaker: config.get('voiceprint.multiSpeaker', true),
         multiMode: config.get('voiceprint.multiMode', 'fast'),
         speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
@@ -3151,7 +3151,7 @@ app.post('/api/voiceprint/config', (req, res) => {
             type: 'voiceprintConfig',
             enabled: config.get('voiceprint.enabled', true),
             extraction: config.get('voiceprint.extraction', 'server'),
-            threshold: config.get('voiceprint.threshold', 0.5),
+            threshold: config.get('voiceprint.threshold', 0.3),
             multiSpeaker: config.get('voiceprint.multiSpeaker', true),
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
@@ -3324,9 +3324,12 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                     }
                     const response = {
                         status: 'success',
+                        threshold: result.threshold,
                         segments: segments.map(segment => ({
                             text: segment.text,
-                            speaker: segment.speaker
+                            speaker: segment.speaker,
+                            similarityScore: segment.similarityScore,
+                            threshold: segment.threshold
                         }))
                     };
                     if (ignoredText) response.ignoredText = ignoredText;
@@ -3348,7 +3351,13 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                         log('语音', `忽略未识别到声纹的语音: ${text}`);
                         return res.json({ status: 'ignored', reason: '未识别到已注册声纹', text });
                     }
-                    return res.json({ status: 'success', text, speaker: result.speaker });
+                    return res.json({
+                        status: 'success',
+                        text,
+                        speaker: result.speaker,
+                        similarityScore: result.similarityScore,
+                        threshold: result.threshold
+                    });
                 }
                 return res.json({ status: 'success', text });
             } catch (err) {
@@ -5642,7 +5651,7 @@ wss.on('connection', (ws, req) => {
             type: 'voiceprintConfig',
             enabled: config.get('voiceprint.enabled', true),
             extraction: config.get('voiceprint.extraction', 'server'),
-            threshold: config.get('voiceprint.threshold', 0.5),
+            threshold: config.get('voiceprint.threshold', 0.3),
             multiSpeaker: config.get('voiceprint.multiSpeaker', true),
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
@@ -5719,7 +5728,9 @@ wss.on('connection', (ws, req) => {
                             pending.resolve({
                                 text: data.text || '',
                                 speaker: data.speaker,
-                                segments: data.segments
+                                segments: data.segments,
+                                similarityScore: data.similarityScore,
+                                threshold: data.threshold
                             });
                         } else {
                             pending.reject(new Error(data.error || '显示端 ASR 识别失败'));

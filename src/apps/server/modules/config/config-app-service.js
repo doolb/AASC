@@ -214,7 +214,7 @@ class Config extends DataSnapshot {
         voiceprint: {
             enabled: true,
             extraction: 'server',
-            threshold: 0.5,
+            threshold: 0.3,
             multiSpeaker: true,
             multiMode: 'fast',
             speakerCount: 'AUTO'

@@ -10,6 +10,12 @@ import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingManager
 
+data class VoiceprintMatchResult(
+    val speaker: String?,
+    val similarityScore: Float?,
+    val threshold: Float
+)
+
 // 声纹引擎：特征提取 + 库匹配 + 多人分割（仿 AsrEngine 的 synchronized 防 use-after-free）
 // 注意：与 AAR 真实 API 对齐的点（javap 实测，构造签名与计划一致，无需调整）：
 //   1) SpeakerEmbeddingManager 构造参数是 dim，必须用 extractor.dim() 实测值（3dspeaker eres2net 输出 512），不能写死
@@ -20,9 +26,10 @@ object VoiceprintEngine {
     private var extractor: SpeakerEmbeddingExtractor? = null
     private var manager: SpeakerEmbeddingManager? = null
     private var diarization: OfflineSpeakerDiarization? = null
-    private var threshold: Float = 0.5f
+    private var threshold: Float = 0.3f
     private var multiSpeaker: Boolean = false
     private var speakerCount: Int = VoiceprintSpeakerCount.AUTO
+    private var registeredEmbeddings: Map<String, FloatArray> = emptyMap()
 
     @Volatile var ready: Boolean = false; private set
     @Volatile var dim: Int = 0; private set
@@ -45,6 +52,7 @@ object VoiceprintEngine {
         synchronized(this) {
             return try {
                 require(multiMode == "fast") { "正式 APK 只支持快速多段模式" }
+                require(threshold > 0f && threshold <= 1f) { "threshold 必须是 (0,1] 的数值" }
                 require(speakerCount in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
                     "speakerCount 必须是 AUTO 或 1-5"
                 }
@@ -87,6 +95,7 @@ object VoiceprintEngine {
         extractor?.release(); extractor = null
         manager?.release(); manager = null
         diarization?.release(); diarization = null
+        registeredEmbeddings = emptyMap()
         ready = false
     }
 
@@ -95,8 +104,10 @@ object VoiceprintEngine {
         synchronized(this) {
             val mgr = manager ?: return
             for (name in speakers) mgr.remove(name)
-            for ((name, emb) in newSpeakers) mgr.add(name, emb)
-            speakers = newSpeakers.keys.toList()
+            val snapshot = newSpeakers.mapValues { (_, embedding) -> embedding.copyOf() }
+            for ((name, emb) in snapshot) mgr.add(name, emb)
+            registeredEmbeddings = snapshot
+            speakers = snapshot.keys.toList()
         }
     }
 
@@ -118,15 +129,32 @@ object VoiceprintEngine {
         }
     }
 
-    // 匹配声纹库，返回人名；低于 threshold 或未命中（空串）返回 null
+    // 匹配声纹库：SpeakerEmbeddingManager.search 负责命中判定，余弦分数只用于诊断展示。
     @Throws(Exception::class)
-    fun match(embedding: FloatArray): String? {
+    fun match(embedding: FloatArray): VoiceprintMatchResult {
         synchronized(this) {
             val mgr = manager ?: throw IllegalStateException("声纹库未加载")
-            val name = mgr.search(embedding, threshold)
-            return if (name.isEmpty()) null else name
+            val matchedSpeaker = mgr.search(embedding, threshold).takeIf { it.isNotEmpty() }
+            val bestMatch = registeredEmbeddings.asSequence()
+                .mapNotNull { (name, registeredEmbedding) ->
+                    VoiceprintSimilarity.cosine(embedding, registeredEmbedding)?.let { score -> name to score }
+                }
+                .maxByOrNull { it.second }
+            val matchedScore = matchedSpeaker?.let { name ->
+                registeredEmbeddings[name]?.let { registeredEmbedding ->
+                    VoiceprintSimilarity.cosine(embedding, registeredEmbedding)
+                }
+            }
+            return VoiceprintMatchResult(
+                speaker = matchedSpeaker,
+                similarityScore = matchedScore ?: bestMatch?.second,
+                threshold = threshold
+            )
         }
     }
+
+    val matchThreshold: Float
+        get() = synchronized(this) { threshold }
 
     // 多人分割：返回 [start, end] 秒的分段（speakerIndex 为聚类编号，非人名）
     @Throws(Exception::class)

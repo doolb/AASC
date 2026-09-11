@@ -773,6 +773,12 @@
                     </select>
                 </div>
                 <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
+                    声纹相似度阈值：
+                    <input type="number" id="vpThresholdInput" min="0.001" max="1" step="0.01" value="0.3"
+                        style="width:72px;padding:3px 5px;box-sizing:border-box;">
+                    <span title="实际相似度分数达到此值才判定为已注册说话人">（大于 0 且不超过 1，默认 0.3）</span>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
                     声纹提取位置：<select id="vpExtractionSel">
                         <option value="server">服务器</option>
                         <option value="display">显示端</option>

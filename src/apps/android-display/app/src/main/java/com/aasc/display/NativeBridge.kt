@@ -156,7 +156,7 @@ class NativeBridge(
     // ---- 声纹识别桥（speaker identification / 多人分割）----
    private val voiceprintModelManager = VoiceprintModelManager(webView.context)
    private var voiceprintEnabled = false
-    private var voiceprintThreshold = 0.5f
+    private var voiceprintThreshold = 0.3f
     private var voiceprintMultiMode = "fast"
     private var voiceprintSpeakerCount = VoiceprintSpeakerCount.AUTO
     private var asrLanguageMode = AsrLanguageMode.AUTO
@@ -623,25 +623,31 @@ class NativeBridge(
             val indexMergedSegments = VoiceprintSegmentMerger.merge(segments.map { seg ->
                 VoiceprintSegmentMerger.DiarizedSegment(seg.start, seg.end, seg.speakerIndex)
             })
-            val speakerByCluster = VoiceprintFastPath.representatives(indexMergedSegments).associate {
-                val representativeSamples = sliceSamples(preparedSamples, it.start, it.end)
-                it.speakerIndex to VoiceprintEngine.match(VoiceprintEngine.extract(representativeSamples))
+            val matchedSegments = matchFastVoiceprintSegments(preparedSamples, indexMergedSegments)
+            val resolvedSegments = VoiceprintSegmentPostProcessor.resolve(matchedSegments) { start, end, clusterId ->
+                matchVoiceprintSegment(
+                    preparedSamples,
+                    VoiceprintSegmentMerger.MergedSegment(start, end, clusterId)
+                )
             }
             val arr = org.json.JSONArray()
-            for (seg in indexMergedSegments) {
-                val mergedSamples = sliceSamples(preparedSamples, seg.start, seg.end)
-                val text = if (mergedSamples.size >= 1600) {
-                    recognizeText(mergedSamples, languageMode)
+            for (seg in resolvedSegments) {
+                val segmentSamples = sliceSamples(preparedSamples, seg.start, seg.end)
+                val text = if (segmentSamples.size >= 1600) {
+                    recognizeText(segmentSamples, languageMode)
                 } else ""
-                val speaker = speakerByCluster[seg.speakerIndex]
                 arr.put(JSONObject()
                     .put("start", seg.start.toDouble())
                     .put("end", seg.end.toDouble())
                     .put("text", text)
-                    .put("speaker", speaker ?: JSONObject.NULL))
+                    .put("speaker", seg.match.speaker ?: JSONObject.NULL)
+                    .put("similarityScore", seg.match.similarityScore ?: JSONObject.NULL)
+                    .put("threshold", seg.match.threshold)
+                    .put("error", seg.error ?: JSONObject.NULL))
             }
             return JSONObject()
                 .put("segments", arr)
+                .put("threshold", VoiceprintEngine.matchThreshold)
                 .put("denoise", prepared.enabled)
                 .put("languageMode", languageMode.queryValue)
                 .put("multiMode", multiMode)
@@ -649,10 +655,12 @@ class NativeBridge(
         }
         val text = recognizeText(preparedSamples, languageMode)
         val embedding = VoiceprintEngine.extract(preparedSamples)
-        val speaker = VoiceprintEngine.match(embedding)
+        val match = VoiceprintEngine.match(embedding)
         return JSONObject()
             .put("text", text)
-            .put("speaker", speaker ?: JSONObject.NULL)
+            .put("speaker", match.speaker ?: JSONObject.NULL)
+            .put("similarityScore", match.similarityScore ?: JSONObject.NULL)
+            .put("threshold", match.threshold)
             .put("dim", VoiceprintEngine.dim)
             .put("denoise", prepared.enabled)
             .put("languageMode", languageMode.queryValue)
@@ -678,6 +686,54 @@ class NativeBridge(
 
     private fun recognizeText(samples: FloatArray, languageMode: AsrLanguageMode): String =
         AsrEngine.recognize(samples, languageMode)
+
+    // 快速多人模式只对每个 cluster 的最长区间提取一次声纹，随后把同一 cluster 的结果复制到全部原始区间。
+    // 保护性合并触发时，VoiceprintSegmentPostProcessor 会重新提取完整候选区间。
+    private fun matchFastVoiceprintSegments(
+        samples: FloatArray,
+        segments: List<VoiceprintSegmentMerger.MergedSegment>
+    ): List<VoiceprintSegmentPostProcessor.MatchedSegment> {
+        val matchByCluster = VoiceprintFastPath.representatives(segments).associate { representative ->
+            representative.speakerIndex to matchVoiceprintSegment(samples, representative)
+        }
+        return segments.map { segment ->
+            val representative = matchByCluster[segment.speakerIndex]
+            if (representative != null) {
+                representative.copy(
+                    start = segment.start,
+                    end = segment.end,
+                    clusterId = segment.speakerIndex
+                )
+            } else {
+                matchVoiceprintSegment(samples, segment)
+            }
+        }
+    }
+
+    // 对指定原始时间区间执行一次 embedding 提取和声纹匹配；失败时保留区间并返回可序列化错误。
+    private fun matchVoiceprintSegment(
+        samples: FloatArray,
+        segment: VoiceprintSegmentMerger.MergedSegment
+    ): VoiceprintSegmentPostProcessor.MatchedSegment {
+        return try {
+            val segmentSamples = sliceSamples(samples, segment.start, segment.end)
+            val embedding = VoiceprintEngine.extract(segmentSamples)
+            VoiceprintSegmentPostProcessor.MatchedSegment(
+                start = segment.start,
+                end = segment.end,
+                clusterId = segment.speakerIndex,
+                match = VoiceprintEngine.match(embedding)
+            )
+        } catch (e: Exception) {
+            VoiceprintSegmentPostProcessor.MatchedSegment(
+                start = segment.start,
+                end = segment.end,
+                clusterId = segment.speakerIndex,
+                match = VoiceprintMatchResult(null, null, VoiceprintEngine.matchThreshold),
+                error = e.message ?: "声纹提取失败"
+            )
+        }
+    }
 
     private fun sliceSamples(samples: FloatArray, start: Float, end: Float): FloatArray {
         if (samples.isEmpty()) return FloatArray(0)
@@ -838,20 +894,25 @@ class NativeBridge(
                 .put("ready", VoiceprintEngine.ready)
                 .put("dim", VoiceprintEngine.dim)
                 .put("speakers", VoiceprintEngine.speakers)
+                .put("threshold", VoiceprintEngine.matchThreshold)
                 .toString()
         } catch (e: Exception) {
             JSONObject().put("error", e.message ?: "声纹状态异常").toString()
         }
     }
 
-    // 配置声纹引擎：{"enabled":bool,"threshold":0.5,"multiSpeaker":bool}；触发模型下载+引擎加载
+    // 配置声纹引擎：{"enabled":bool,"threshold":0.3,"multiSpeaker":bool}；触发模型下载+引擎加载
     // 结果经 window.onVoiceprintModel 回调（downloading/ready/error）
     @JavascriptInterface
     fun voiceprintConfigure(configJson: String): String {
         return try {
             val cfg = org.json.JSONObject(configJson)
+            val configuredThreshold = cfg.optDouble("threshold", 0.3).toFloat()
+            if (!configuredThreshold.isFinite() || configuredThreshold <= 0f || configuredThreshold > 1f) {
+                return JSONObject().put("error", "threshold 必须是 (0,1] 的数值").toString()
+            }
             voiceprintEnabled = cfg.optBoolean("enabled", true)
-            voiceprintThreshold = cfg.optDouble("threshold", 0.5).toFloat()
+            voiceprintThreshold = configuredThreshold
             voiceprintMultiSpeaker = cfg.optBoolean("multiSpeaker", true)
             voiceprintMultiMode = cfg.optString("multiMode", "fast").lowercase()
             voiceprintSpeakerCount = VoiceprintSpeakerCount.parse(cfg.optString("speakerCount", "AUTO"))
@@ -902,7 +963,7 @@ class NativeBridge(
         }
     }
 
-    // 单段声纹匹配：裸 PCM base64 → {"speaker":人名|null} 或 {"error":"..."}
+    // 单段声纹匹配：裸 PCM base64 → {"speaker":人名|null,"similarityScore":数值|null,"threshold":数值} 或 {"error":"..."}
     @JavascriptInterface
     fun voiceprintMatch(pcmBase64: String): String {
         return try {
@@ -912,8 +973,13 @@ class NativeBridge(
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
             val samples = AsrPcm.decodeS16(bytes)
             val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            val speaker = VoiceprintEngine.match(embedding)
-            JSONObject().put("speaker", speaker ?: JSONObject.NULL).put("dim", VoiceprintEngine.dim).toString()
+            val match = VoiceprintEngine.match(embedding)
+            JSONObject()
+                .put("speaker", match.speaker ?: JSONObject.NULL)
+                .put("similarityScore", match.similarityScore ?: JSONObject.NULL)
+                .put("threshold", match.threshold)
+                .put("dim", VoiceprintEngine.dim)
+                .toString()
         } catch (e: java.util.concurrent.TimeoutException) {
             JSONObject().put("error", "声纹识别超时").toString()
         } catch (e: Exception) {
@@ -921,8 +987,7 @@ class NativeBridge(
         }
     }
 
-    // 多人分割+声纹匹配+合并原始音频后识别：裸 PCM base64 → {"segments":[{start,end,text,speaker}]} 或 {"error":"..."}
-    // 先按 speakerIndex 合并再匹配声纹名，最后按相邻同名 speaker 再合并原始 PCM，避免短片段边界截断 ASR 文本。
+    // 多人分割+声纹匹配+保护性后处理+识别：裸 PCM base64 → {"segments":[...]} 或 {"error":"..."}
     @JavascriptInterface
     fun voiceprintDiarize(pcmBase64: String): String {
         return try {
@@ -939,30 +1004,32 @@ class NativeBridge(
                 val indexMergedSegments = VoiceprintSegmentMerger.merge(segments.map { seg ->
                     VoiceprintSegmentMerger.DiarizedSegment(seg.start, seg.end, seg.speakerIndex)
                 })
-                val matchedSegments = indexMergedSegments.map { seg ->
-                    val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
-                    val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
-                    val segmentSamples = samples.copyOfRange(startIdx, endIdx)
-                    val embedding = VoiceprintEngine.extract(segmentSamples)
-                    val speaker = VoiceprintEngine.match(embedding)
-                    VoiceprintSegmentMerger.MatchedSegment(seg.start, seg.end, speaker)
+                val matchedSegments = matchFastVoiceprintSegments(samples, indexMergedSegments)
+                val resolvedSegments = VoiceprintSegmentPostProcessor.resolve(matchedSegments) { start, end, clusterId ->
+                    matchVoiceprintSegment(
+                        samples,
+                        VoiceprintSegmentMerger.MergedSegment(start, end, clusterId)
+                    )
                 }
-                val mergedSegments = VoiceprintSegmentMerger.mergeMatched(matchedSegments)
                 val arr = org.json.JSONArray()
-                for (seg in mergedSegments) {
-                    val startIdx = (seg.start * 16000).toInt().coerceIn(0, samples.size - 1)
-                    val endIdx = (seg.end * 16000).toInt().coerceIn(startIdx + 1, samples.size)
-                    val mergedSamples = samples.copyOfRange(startIdx, endIdx)
+                for (seg in resolvedSegments) {
+                    val mergedSamples = sliceSamples(samples, seg.start, seg.end)
                     val text = if (mergedSamples.size >= 1600) AsrEngine.recognize(mergedSamples) else ""
                     arr.put(org.json.JSONObject()
                         .put("start", seg.start.toDouble())
                         .put("end", seg.end.toDouble())
                         .put("text", text)
-                        .put("speaker", seg.speaker))
+                        .put("speaker", seg.match.speaker ?: JSONObject.NULL)
+                        .put("similarityScore", seg.match.similarityScore ?: JSONObject.NULL)
+                        .put("threshold", seg.match.threshold)
+                        .put("error", seg.error ?: JSONObject.NULL))
                 }
                 arr
             }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            JSONObject().put("segments", segJson).toString()
+            JSONObject()
+                .put("segments", segJson)
+                .put("threshold", VoiceprintEngine.matchThreshold)
+                .toString()
         } catch (e: java.util.concurrent.TimeoutException) {
             JSONObject().put("error", "多人分割超时").toString()
         } catch (e: Exception) {

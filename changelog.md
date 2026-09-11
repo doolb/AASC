@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+## Android APK 正式显示端声纹识别
+
+- ✅ [2026-09-11] 将当前声纹分段后处理接入正式 APK，并增加相似度阈值设置，默认值为 `0.3`。
+  - 正式 APK 保持现有 ERes2Net 512 维模型；`SHERPA_MULTI` 与 `SHERPA_MULTI_FAST` 接入短未知段保护性合并、合并后重新匹配，并返回 `similarityScore`/`threshold`。
+  - 控制端新增声纹相似度阈值输入，服务端和显示端支持 `(0,1]` 校验及 `0.3` 缺省回退；已有持久化阈值保持不变。
+  - 改动文件：`src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt`、`VoiceprintEngine.kt`、`VoiceprintSegmentPostProcessor.kt`、`VoiceprintSimilarity.kt`、对应 Kotlin 测试、`src/apps/server/boot/server-app.js`、`config-app-service.js`、`src/apps/web-mediacenter/ui/public/display.html`、`upload.html`、`js/voiceprint-panel.js` 及声纹 design/spec/task 文档。
+  - 验证：正式 APK Kotlin 单元测试通过；定向 Node 测试 `9/9` 通过；Debug APK 构建成功并安装启动于 `192.168.1.6:5555`；启动后未发现崩溃或 OOM。全量 Node 测试 `554/555` 通过，唯一失败为既有 DeX 触摸契约测试。
+
 ## 独立 Android ASR 测试 APK
 
 - ✅ [2026-09-10] 拆分 ASR 文字与声纹双降噪开关。
