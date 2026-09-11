@@ -21,7 +21,6 @@ const deviceListJs = fs.readFileSync(
 assert.match(displayHtml, /let voiceListeningEnabled = true/);
 assert.match(displayHtml, /type: 'voiceConversationTtsFinished'/);
 assert.match(displayHtml, /voiceListeningEnabled = data\.capabilities\.voiceRecording === true/);
-assert.match(displayHtml, /function sendRecognizedVoiceInput\(text, extra = \{\}\)/);
 assert.match(displayHtml, /function reportVoiceAvailability\(available\)/);
 assert.match(displayHtml, /const ready = data\.ready === true[\s\S]*?reportVoiceAvailability\(ready\)/);
 assert.match(displayHtml, /reportVoiceAvailability\(false\)/);
@@ -95,7 +94,7 @@ assert.doesNotMatch(serverJs, /delete normalized\.voiceRecognition/);
 assert.match(serverJs, /\.\.\.data\.capabilities/);
 assert.match(serverJs, /normalizeDisplayUserCapabilities\(savedState\.userCapabilities\)/);
 
-const voiceInputStart = serverJs.indexOf("} else if (data.type === 'voiceInput' && displayData) {");
+const voiceInputStart = serverJs.indexOf('function processDisplayVoiceInput(displayId, data, ws = null)');
 const voiceStatusStart = serverJs.indexOf("} else if (data.type === 'voiceStatus' && displayData)", voiceInputStart);
 const voiceInputHandler = serverJs.slice(voiceInputStart, voiceStatusStart);
 const voiceprintRejectIndex = voiceInputHandler.indexOf('data.speaker === null');

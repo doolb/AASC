@@ -1,5 +1,22 @@
 # Web MediaCenter - 变更日志
 
+## ASR 结果详细日志开关
+
+- ✅ [2026-09-11] 服务端收到显示端 `asrResult` 时打印 ASR 文字和声纹识别诊断信息，并在控制端声纹面板增加默认开启的详细日志开关。
+  - 详细模式记录总文字、分段文字、`speaker`、`similarityScore`、`threshold`、时间区间、`clusterId` 和错误信息；关闭后保留请求 ID、总文字和顶层摘要。
+  - 配置保存为 `voiceprint.asrResultDetailLog`，旧配置缺少字段时默认 `true`；不改变 ASR、分段、声纹匹配和命令处理。
+  - 改动文件：`asr-result-log-formatter.js`、`config-app-service.js`、`server-app.js`、`upload.html`、`voiceprint-panel.js`、对应测试及 design/spec/task 文档。
+  - 验证：ASR 日志定向测试 `4/4`，相关声纹/语音定向测试 `10/10`，JavaScript 语法检查和 `git diff --check` 通过。
+
+## 服务端统一处理显示端 ASR/声纹结果
+
+- ✅ [2026-09-11] 显示端上传录音后由服务器直接完成声纹分段合并、跨端去重、控制端回显和语音命令门控。
+  - 相邻同一已识别说话人的分段拼接为一句，不同说话人切句；`speaker: null` 的未识别分段保留文字、`similarityScore`/`similarityScores` 和 `threshold`，只回显不触发命令。
+  - 显示端向 `/api/asr/recognize` 携带 `displayId` 与录音时间区间，不再回传 `voiceInput`；旧版 `voiceInput` WebSocket 仍兼容并复用统一处理入口。
+  - 控制端显示面板补充声纹名称、相似度和阈值；控制端直接录音不携带 `displayId`，不会误进入显示端语音命令链路。
+  - 改动文件：`server-app.js`、`voiceprint-segment-grouper.js`、`display.html`、`chat.js`、`device-list.js`、相关测试及 design/spec/task 文档。
+  - 验证：新增服务端 ASR/声纹处理测试、语音/VAD 定向测试通过；真实 `zh.wav` 回测成功；全量 Node 测试 `570/571` 通过，唯一失败为既有 `display-native-bridge.test.js` 的 DeX 触摸契约。
+
 ## 全局播放时暂停录音开关
 
 - ✅ [2026-09-11] 在控制端声纹管理面板增加全局“播放时暂停录音”开关，默认值为 `true`。

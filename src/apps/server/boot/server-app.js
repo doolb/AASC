@@ -67,6 +67,10 @@ const {
 const {
     createSameSpeakerVoiceInputDeduplicator
 } = require('../modules/voice/voice-input-deduplicator');
+const {
+    mergeVoiceprintSegments
+} = require('../modules/voice/voiceprint-segment-grouper');
+const { formatAsrResultLog } = require('../modules/asr/asr-result-log-formatter');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
@@ -3133,6 +3137,7 @@ app.get('/api/voiceprint/config', (req, res) => {
         multiMode: config.get('voiceprint.multiMode', 'fast'),
         speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
         pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
+        asrResultDetailLog: config.get('voiceprint.asrResultDetailLog', true),
         denoise: config.get('asr.denoise', false)
     });
 });
@@ -3146,7 +3151,8 @@ app.post('/api/voiceprint/config', (req, res) => {
         multiMode,
         speakerCount,
         denoise,
-        pauseRecordingDuringPlayback
+        pauseRecordingDuringPlayback,
+        asrResultDetailLog
     } = req.body || {};
     if (extraction !== undefined && !['server', 'display'].includes(extraction)) {
         return res.status(400).json({ status: 'error', message: 'extraction 只能是 server 或 display' });
@@ -3159,6 +3165,9 @@ app.post('/api/voiceprint/config', (req, res) => {
     }
     if (pauseRecordingDuringPlayback !== undefined && typeof pauseRecordingDuringPlayback !== 'boolean') {
         return res.status(400).json({ status: 'error', message: 'pauseRecordingDuringPlayback 必须是布尔值' });
+    }
+    if (asrResultDetailLog !== undefined && typeof asrResultDetailLog !== 'boolean') {
+        return res.status(400).json({ status: 'error', message: 'asrResultDetailLog 必须是布尔值' });
     }
     if (multiMode !== undefined && multiMode !== 'fast') {
         return res.status(400).json({ status: 'error', message: 'multiMode 只能是 fast' });
@@ -3179,6 +3188,9 @@ app.post('/api/voiceprint/config', (req, res) => {
     if (pauseRecordingDuringPlayback !== undefined) {
         config.set('voiceprint.pauseRecordingDuringPlayback', pauseRecordingDuringPlayback);
     }
+    if (asrResultDetailLog !== undefined) {
+        config.set('voiceprint.asrResultDetailLog', asrResultDetailLog);
+    }
     config.saveConfig();
     // 广播给所有显示端，display.html 收到后 nativeBridge.voiceprintConfigure 重载引擎
     displayClients.forEach((displayData, displayId) => {
@@ -3191,6 +3203,7 @@ app.post('/api/voiceprint/config', (req, res) => {
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
             pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
+            asrResultDetailLog: config.get('voiceprint.asrResultDetailLog', true),
             denoise: config.get('asr.denoise', false)
         });
     });
@@ -3311,12 +3324,115 @@ app.post('/api/voiceprint/register', voiceprintUpload.single('audio'), async (re
     }
 });
 
+function getAsrRequestContext(req) {
+    const displayId = String(req.body?.displayId || '').trim();
+    const speechStartAt = Number(req.body?.speechStartAt);
+    const speechEndAt = Number(req.body?.speechEndAt);
+    return {
+        displayId,
+        speechStartAt: Number.isFinite(speechStartAt) ? speechStartAt : null,
+        speechEndAt: Number.isFinite(speechEndAt) ? speechEndAt : null
+    };
+}
+
+function getAsrSegmentTiming(requestContext, segment) {
+    const requestStartAt = Number(requestContext?.speechStartAt);
+    const requestEndAt = Number(requestContext?.speechEndAt);
+    const segmentStart = Number(segment?.start);
+    const segmentEnd = Number(segment?.end);
+    if (Number.isFinite(requestStartAt) && Number.isFinite(segmentStart) && Number.isFinite(segmentEnd)
+        && segmentEnd >= segmentStart) {
+        return {
+            speechStartAt: requestStartAt + segmentStart * 1000,
+            speechEndAt: requestStartAt + segmentEnd * 1000
+        };
+    }
+    if (Number.isFinite(requestStartAt) && Number.isFinite(requestEndAt)) {
+        return { speechStartAt: requestStartAt, speechEndAt: requestEndAt };
+    }
+    return {};
+}
+
+function getNormalizedAsrSegments(result) {
+    const rawSegments = Array.isArray(result?.segments) ? result.segments : [];
+    return rawSegments
+        .map(segment => ({
+            ...segment,
+            text: normalizeAsrText(segment?.text)
+        }))
+        .filter(segment => segment.text);
+}
+
+function normalizeAsrSegments(result) {
+    return mergeVoiceprintSegments(getNormalizedAsrSegments(result))
+        .filter(segment => hasValidContent(segment.text));
+}
+
+function getIgnoredAsrSegmentText(result) {
+    return mergeVoiceprintSegments(getNormalizedAsrSegments(result))
+        .filter(segment => !hasValidContent(segment.text))
+        .map(segment => segment.text)
+        .join('，');
+}
+
+function serializeAsrSegment(segment, defaultThreshold) {
+    const serialized = {
+        text: segment.text,
+        speaker: segment.speaker,
+        similarityScore: segment.similarityScore,
+        similarityScores: segment.similarityScores,
+        threshold: segment.threshold ?? defaultThreshold
+    };
+    for (const key of ['start', 'end', 'clusterId', 'clusterIds']) {
+        if (segment[key] !== undefined) serialized[key] = segment[key];
+    }
+    return serialized;
+}
+
+function processRecognizedAsrResultForDisplay(displayId, result, requestContext) {
+    if (!displayId || !displayClients.has(displayId)) return [];
+
+    const groupedSegments = normalizeAsrSegments(result);
+    if (groupedSegments.length > 0) {
+        for (const segment of groupedSegments) {
+            const timing = getAsrSegmentTiming(requestContext, segment);
+            processDisplayVoiceInput(displayId, {
+                text: segment.text,
+                fullText: segment.text,
+                isFinal: true,
+                speaker: segment.speaker,
+                similarityScore: segment.similarityScore,
+                similarityScores: segment.similarityScores,
+                threshold: segment.threshold ?? result.threshold,
+                ...timing
+            });
+        }
+        return groupedSegments;
+    }
+
+    const text = normalizeAsrText(result?.text);
+    if (!text || !hasValidContent(text)) return [];
+    processDisplayVoiceInput(displayId, {
+        text,
+        fullText: text,
+        isFinal: true,
+        speaker: result?.speaker,
+        similarityScore: result?.similarityScore,
+        similarityScores: result?.similarityScores,
+        threshold: result?.threshold,
+        ...getAsrSegmentTiming(requestContext, null)
+    });
+    return [];
+}
+
 app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ status: 'error', message: '未收到音频文件' });
         }
         const asrDevice = config.get('asr.device', 'server');
+        const requestContext = getAsrRequestContext(req);
+        const sourceDisplayId = requestContext.displayId;
 
         if (asrDevice === 'server' && !isServerAsrEnabled()) {
             cleanupTempFile(req.file.path);
@@ -3337,23 +3453,12 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                 cleanupTempFile(req.file.path);
 
                 if (result.segments && result.segments.length) {
-                    const normalizedSegments = result.segments
-                        .map(segment => ({ ...segment, text: normalizeAsrText(segment.text) }));
-                    const segmentStates = normalizedSegments.map(segment => ({
-                        segment,
-                        isValid: Boolean(segment.speaker) && hasValidContent(segment.text)
-                    }));
-                    const segments = segmentStates
-                        .filter(state => state.isValid)
-                        .map(state => state.segment);
-                    const ignoredText = segmentStates
-                        .filter(state => state.segment.text && !state.isValid)
-                        .map(state => state.segment.text)
-                        .join('，');
+                    const segments = normalizeAsrSegments(result);
+                    const ignoredText = getIgnoredAsrSegmentText(result);
                     if (segments.length === 0) {
                         return res.json({
                             status: 'ignored',
-                            reason: '未识别到已注册声纹',
+                            reason: '未检测到有效内容',
                             text: ignoredText,
                             segments: []
                         });
@@ -3361,14 +3466,10 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                     const response = {
                         status: 'success',
                         threshold: result.threshold,
-                        segments: segments.map(segment => ({
-                            text: segment.text,
-                            speaker: segment.speaker,
-                            similarityScore: segment.similarityScore,
-                            threshold: segment.threshold
-                        }))
+                        segments: segments.map(segment => serializeAsrSegment(segment, result.threshold))
                     };
                     if (ignoredText) response.ignoredText = ignoredText;
+                    processRecognizedAsrResultForDisplay(sourceDisplayId, result, requestContext);
                     return res.json(response);
                 }
 
@@ -3383,10 +3484,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
 
                 // speaker 存在但为空表示启用声纹后未匹配；字段缺省表示普通 ASR，直接放行。
                 if (result.speaker !== undefined) {
-                    if (!result.speaker) {
-                        log('语音', `忽略未识别到声纹的语音: ${text}`);
-                        return res.json({ status: 'ignored', reason: '未识别到已注册声纹', text });
-                    }
+                    processRecognizedAsrResultForDisplay(sourceDisplayId, result, requestContext);
                     return res.json({
                         status: 'success',
                         text,
@@ -3395,6 +3493,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                         threshold: result.threshold
                     });
                 }
+                processRecognizedAsrResultForDisplay(sourceDisplayId, { ...result, text }, requestContext);
                 return res.json({ status: 'success', text });
             } catch (err) {
                 cleanupTempFile(req.file.path);
@@ -3428,6 +3527,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
             });
         }
         
+        processRecognizedAsrResultForDisplay(sourceDisplayId, { text: recognizedText }, requestContext);
         res.json({
             status: 'success',
             text: recognizedText
@@ -5869,6 +5969,7 @@ wss.on('connection', (ws, req) => {
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
             pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
+            asrResultDetailLog: config.get('voiceprint.asrResultDetailLog', true),
             denoise: config.get('asr.denoise', false)
         }));
 
@@ -5930,7 +6031,13 @@ wss.on('connection', (ws, req) => {
                 data.displayId = displayId;
 
                 if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress' && data.type !== 'textProgress') {
-                    log('WS', `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`, { displayId, source: `display:${displayId}`, scope: 'single' });
+                    const logMessage = data.type === 'asrResult'
+                        ? formatAsrResultLog(
+                            data,
+                            config.get('voiceprint.asrResultDetailLog', true)
+                        )
+                        : `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`;
+                    log('WS', logMessage, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
                 if (data.type === 'asrResult') {
@@ -5944,6 +6051,7 @@ wss.on('connection', (ws, req) => {
                                 speaker: data.speaker,
                                 segments: data.segments,
                                 similarityScore: data.similarityScore,
+                                similarityScores: data.similarityScores,
                                 threshold: data.threshold
                             });
                         } else {
@@ -6197,6 +6305,104 @@ wss.on('connection', (ws, req) => {
     });
 });
 
+/**
+ * 统一处理显示端的一条最终语音输入。
+ *
+ * 新版显示端由 /api/asr/recognize 直接调用这里，旧版显示端发送的
+ * voiceInput WebSocket 消息也复用这里，确保去重、声纹门控和唤醒逻辑只有一份。
+ */
+function processDisplayVoiceInput(displayId, data, ws = null) {
+    const displayData = displayClients.get(displayId);
+    const text = normalizeAsrText(data?.text);
+    if (!displayData || !text) return { handled: false, reason: 'display-or-text-missing' };
+
+    const voiceprintEnabledNow = config.get('voiceprint.enabled', true);
+    if (!voiceprintEnabledNow) {
+        // 声纹关闭期间不积累历史命中，重新开启后不能误用关闭前的缓存。
+        sameSpeakerVoiceInputDeduplicator.clear();
+    }
+
+    const deduplication = voiceprintEnabledNow
+        ? sameSpeakerVoiceInputDeduplicator.check({
+            displayId,
+            speaker: data.speaker,
+            text,
+            isFinal: data.isFinal,
+            speechStartAt: data.speechStartAt,
+            speechEndAt: data.speechEndAt
+        }, Date.now())
+        : { isDuplicate: false };
+    if (deduplication.isDuplicate) {
+        log('语音', `同一注册声纹跨显示端重复 ASR 已抑制: speaker=${data.speaker} 主来源=${deduplication.duplicateOfDisplayId} 当前来源=${displayId} textSimilarity=${deduplication.textSimilarity?.toFixed(3) || '1.000'} text=${JSON.stringify(text)}`);
+        return { handled: true, duplicate: true };
+    }
+
+    const speakerPayload = voiceprintEnabledNow && data.speaker !== undefined
+        ? { speaker: data.speaker }
+        : {};
+    if (data.similarityScore !== undefined) speakerPayload.similarityScore = data.similarityScore;
+    if (Array.isArray(data.similarityScores)) speakerPayload.similarityScores = data.similarityScores;
+    if (data.threshold !== undefined) speakerPayload.threshold = data.threshold;
+
+    if (!isRepairModePasswordInput(displayId)) {
+        broadcastToControls({
+            type: 'voiceInput',
+            displayId,
+            text,
+            isFinal: data.isFinal,
+            fullText: data.fullText || text,
+            ...speakerPayload
+        });
+    }
+
+    // 声纹未注册/未匹配时不触发唤醒、对话或命令，但不能撤销已经回传控制端的文字。
+    if (voiceprintEnabledNow && data.speaker !== undefined && data.speaker === null) {
+        log('语音', `未识别到声纹，仅回传控制端不处理: "${text}" similarityScore=${formatVoiceprintScore(data.similarityScore)} threshold=${formatVoiceprintScore(data.threshold)}`);
+        return { handled: true, unmatched: true };
+    }
+
+    // TTS 可能在另一台显示端播放；即使录音端刚好有一段 ASR 已在途中，也不能让播报回声继续进入命令处理。
+    if (!voiceprintEnabledNow && voiceTtsPlaybackTimers.size > 0) {
+        if (!isRepairModePasswordInput(displayId)) {
+            log('语音', `TTS 播报期间忽略显示端 ${displayId} 的在途语音: "${text}"`);
+        }
+        return { handled: true, ignoredDuringTts: true };
+    }
+
+    if (data.isFinal && ['awaitingPassword', 'active'].includes(repairModeStates.get(displayId)?.state)) {
+        void handleRepairModeDisplayInput(displayId, data.text.trim());
+        return { handled: true, repairMode: true };
+    }
+
+    // 构造 voiceCommand 消息转发到控制端处理链路，复用 LLM/命令解析/执行逻辑。
+    if (!data.isFinal) return { handled: true };
+
+    const conversation = handleDisplayConversationInput(displayId, text);
+    const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
+    const oneShotGroup = conversation.event?.oneShotGroup === true;
+    log('语音', `voiceCommand门控 displayId=${displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} oneShotGroup=${oneShotGroup} text=${JSON.stringify(text)}`);
+    if (!conversation.accepted) {
+        log('语音', `显示端 ${displayId} 当前等待唤醒，忽略普通语音`);
+        return { handled: true, waitingWake: true };
+    }
+    if (conversation.event?.type !== 'input') return { handled: true };
+
+    handleControlMessageFallback({
+        type: 'voiceCommand',
+        text,
+        displayId,
+        conversationActive,
+        oneShotGroup,
+        ...speakerPayload
+    }, ws || displayData.ws);
+    return { handled: true, command: true };
+}
+
+function formatVoiceprintScore(value) {
+    const score = Number(value);
+    return Number.isFinite(score) ? score.toFixed(3) : 'null';
+}
+
 function handleDisplayMessageFallback(displayId, data, ws) {
     const displayData = displayClients.get(displayId);
 
@@ -6387,84 +6593,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         // 显示端录音数据只进入对应的临时会话，不进入 ASR、声纹或广播链路。
         handleDisplayRecordingMessage(displayId, data);
     } else if (data.type === 'voiceInput' && displayData) {
-        // 控制端需要观察所有有效 ASR 文字；同一注册声纹的跨显示端重复结果，
-        // 必须在广播和命令处理之前抑制，避免控制端看到重复文本或命令执行多次。
-        const voiceprintEnabledNow = config.get('voiceprint.enabled', true);
-        if (!voiceprintEnabledNow) {
-            // 声纹关闭期间不积累历史命中，重新开启后不能误用关闭前的缓存。
-            sameSpeakerVoiceInputDeduplicator.clear();
-        }
-        const deduplication = voiceprintEnabledNow
-            ? sameSpeakerVoiceInputDeduplicator.check({
-                displayId,
-                speaker: data.speaker,
-                text: data.text,
-                isFinal: data.isFinal,
-                speechStartAt: data.speechStartAt,
-                speechEndAt: data.speechEndAt
-            }, Date.now())
-            : { isDuplicate: false };
-        if (deduplication.isDuplicate) {
-            log('语音', `同一注册声纹跨显示端重复 ASR 已抑制: speaker=${data.speaker} 主来源=${deduplication.duplicateOfDisplayId} 当前来源=${displayId} textSimilarity=${deduplication.textSimilarity?.toFixed(3) || '1.000'} text=${JSON.stringify(data.text || '')}`);
-            return;
-        }
-
-        const speakerPayload = voiceprintEnabledNow && data.speaker !== undefined
-            ? { speaker: data.speaker }
-            : {};
-        if (!isRepairModePasswordInput(displayId)) {
-            broadcastToControls({
-                type: 'voiceInput',
-                displayId: displayId,
-                text: data.text,
-                isFinal: data.isFinal,
-                fullText: data.fullText,
-                ...speakerPayload
-            });
-        }
-
-        // 声纹未注册/未匹配时不触发唤醒、对话或命令，但不能撤销已经回传控制端的文字。
-        if (voiceprintEnabledNow && data.speaker !== undefined && data.speaker === null) {
-            log('语音', `未识别到声纹，仅回传控制端不处理: "${data.text}"`);
-            return;
-        }
-
-        // TTS 可能在另一台显示端播放；即使录音端刚好有一段 ASR 已在途中，也不能让播报回声继续进入命令处理。
-        if (!voiceprintEnabledNow && voiceTtsPlaybackTimers.size > 0) {
-            if (!isRepairModePasswordInput(displayId)) {
-                log('语音', `TTS 播报期间忽略显示端 ${displayId} 的在途语音: "${data.text}"`);
-            }
-            return;
-        }
-
-        if (data.isFinal && data.text && data.text.trim()
-            && ['awaitingPassword', 'active'].includes(repairModeStates.get(displayId)?.state)) {
-            void handleRepairModeDisplayInput(displayId, data.text.trim());
-            return;
-        }
-
-        // 构造 voiceCommand 消息转发到控制端处理链路，复用 LLM/命令解析/执行逻辑
-        if (data.isFinal && data.text && data.text.trim()) {
-            const conversation = handleDisplayConversationInput(displayId, data.text.trim());
-            const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
-            const oneShotGroup = conversation.event?.oneShotGroup === true;
-            log('语音', `voiceCommand门控 displayId=${displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} oneShotGroup=${oneShotGroup} text=${JSON.stringify(data.text.trim())}`);
-            if (!conversation.accepted) {
-                log('语音', `显示端 ${displayId} 当前等待唤醒，忽略普通语音`);
-                return;
-            }
-            if (conversation.event?.type !== 'input') {
-                return;
-            }
-            handleControlMessageFallback({
-                type: 'voiceCommand',
-                text: data.text.trim(),
-                displayId,
-                conversationActive,
-                oneShotGroup,
-                ...speakerPayload
-            }, ws);
-        }
+        // 兼容旧版显示端主动回传 voiceInput；新版显示端由 ASR HTTP 入口直接调用同一处理函数。
+        processDisplayVoiceInput(displayId, data, ws);
     } else if (data.type === 'voiceStatus' && displayData) {
         displayData.state.voiceSupported = data.supported;
         displayData.state.voiceListening = data.listening;

@@ -218,7 +218,8 @@ class Config extends DataSnapshot {
             multiSpeaker: true,
             multiMode: 'fast',
             speakerCount: 'AUTO',
-            pauseRecordingDuringPlayback: true
+            pauseRecordingDuringPlayback: true,
+            asrResultDetailLog: true
         },
         voiceCommand: {
             conversationConfirmationMode: 'off',

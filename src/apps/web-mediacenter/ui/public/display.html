@@ -4974,17 +4974,6 @@
             }, 180000);
         }
 
-        function sendRecognizedVoiceInput(text, extra = {}) {
-            if (!voiceListeningEnabled || !displayWs || displayWs.readyState !== WebSocket.OPEN) return;
-            displayWs.send(JSON.stringify({
-                type: 'voiceInput',
-                text,
-                isFinal: true,
-                fullText: text,
-                ...extra
-            }));
-        }
-
         function normalizeVadThreshold(value) {
             const number = Number(value);
             if (!Number.isFinite(number)) return DEFAULT_VAD_THRESHOLD;
@@ -5854,10 +5843,36 @@
             return { speechStartAt, speechEndAt };
         }
 
+        function formatVoiceprintDisplaySegment(segment) {
+            const text = String(segment?.text || '').trim();
+            if (!text) return '';
+            const speaker = String(segment?.speaker || '').trim();
+            if (speaker) return `[${speaker}] ${text}`;
+
+            const scores = Array.isArray(segment?.similarityScores)
+                ? segment.similarityScores
+                : [segment?.similarityScore];
+            const scoreText = scores
+                .map(score => Number(score))
+                .filter(Number.isFinite)
+                .map(score => score.toFixed(3))
+                .join('/');
+            const threshold = Number(segment?.threshold);
+            const thresholdText = Number.isFinite(threshold) ? threshold.toFixed(3) : '未知';
+            return `[未识别声纹｜相似度 ${scoreText || '未知'}｜阈值 ${thresholdText}] ${text}`;
+        }
+
         async function sendAudioForRecognition(audioBlob, timing = {}) {
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.wav');
+                if (typeof displayId === 'string' && displayId.trim()) {
+                    formData.append('displayId', displayId.trim());
+                }
+                const speechStartAt = Number(timing?.speechStartAt);
+                const speechEndAt = Number(timing?.speechEndAt);
+                if (Number.isFinite(speechStartAt)) formData.append('speechStartAt', String(speechStartAt));
+                if (Number.isFinite(speechEndAt)) formData.append('speechEndAt', String(speechEndAt));
                 
                 const response = await fetch('/api/asr/recognize', {
                     method: 'POST',
@@ -5867,24 +5882,17 @@
                 const data = await response.json();
                 
                 if (data.status === 'success') {
-                    // 多人分割：逐段独立触发命令（只含已识别声纹的段）
+                    // 分段已经由服务器按说话人合并并进入命令链路，显示端只负责回显。
                     if (data.segments && data.segments.length) {
-                        for (const seg of data.segments) {
-                            const segText = (seg.text || '').trim();
-                            if (!segText) continue;
-                            console.log('显示端分段识别:', segText, '->', seg.speaker);
-                            sendRecognizedVoiceInput(segText, {
-                                speaker: seg.speaker,
-                                ...getVoiceInputTiming(timing, seg)
-                            });
-                        }
+                        const displayTexts = data.segments
+                            .map(formatVoiceprintDisplaySegment)
+                            .filter(Boolean);
                         const ignoredText = String(data.ignoredText || '').trim();
-                        if (ignoredText) {
-                            updateVoiceTextDisplay(ignoredText, true);
-                            setTimeout(() => {
-                                updateVoiceTextDisplay('', true);
-                            }, 3000);
-                        }
+                        if (ignoredText) displayTexts.push(`[未识别有效内容] ${ignoredText}`);
+                        if (!displayTexts.length) return;
+                        consecutiveIgnoreCount = 0;
+                        updateVoiceTextDisplay(displayTexts.join('\n'), true);
+                        setTimeout(() => updateVoiceTextDisplay('', true), 3000);
                         return;
                     }
                     if (!data.text) return;
@@ -5893,14 +5901,10 @@
 
                     consecutiveIgnoreCount = 0;
 
-                    updateVoiceTextDisplay(recognizedText, true);
-
-                    const extra = {};
-                    if (data.speaker !== undefined) extra.speaker = data.speaker;
-                    sendRecognizedVoiceInput(recognizedText, {
-                        ...extra,
-                        ...getVoiceInputTiming(timing)
-                    });
+                    const displayText = data.speaker === null
+                        ? formatVoiceprintDisplaySegment(data)
+                        : recognizedText;
+                    updateVoiceTextDisplay(displayText, true);
 
                     setTimeout(() => {
                         updateVoiceTextDisplay('', true);

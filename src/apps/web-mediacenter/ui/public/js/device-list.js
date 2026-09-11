@@ -126,6 +126,22 @@ const DeviceList = {
         return this.voiceInputByDisplay.get(display.id) || display.lastVoiceInput || null;
     },
 
+    getVoiceInputMeta(latest) {
+        if (!latest || latest.speaker === undefined) return '';
+        const scores = Array.isArray(latest.similarityScores)
+            ? latest.similarityScores
+            : [latest.similarityScore];
+        const scoreText = scores
+            .map(score => Number(score))
+            .filter(Number.isFinite)
+            .map(score => score.toFixed(3))
+            .join('/');
+        const threshold = Number(latest.threshold);
+        const thresholdText = Number.isFinite(threshold) ? threshold.toFixed(3) : '未知';
+        const speakerText = latest.speaker === null ? '未识别声纹' : `声纹 ${latest.speaker}`;
+        return `（${speakerText}｜相似度 ${scoreText || '未知'}｜阈值 ${thresholdText}）`;
+    },
+
     isControlSocketOpen() {
         const socket = window.WebSocketManager?.ws;
         const openState = window.WebSocket?.OPEN ?? 1;
@@ -462,6 +478,7 @@ const DeviceList = {
         const latest = this.getLatestVoiceInput(display);
         const latestText = latest?.text ? this.escapeHtml(latest.text) : '暂无识别回传';
         const latestType = latest ? (latest.isFinal ? '最终' : '实时') : '';
+        const latestMeta = this.escapeHtml(this.getVoiceInputMeta(latest));
         const displayId = this.escapeHtml(display.id);
         return `
             <div class="display-voice-control" data-display-id="${displayId}">
@@ -470,7 +487,7 @@ const DeviceList = {
                     <span>🎙️ 监听</span>
                 </label>
                 <span class="display-voice-state ${status.className}">${status.label}</span>
-                <span class="display-voice-latest" title="最近一次语音识别结果">最近识别${latestType ? `（${latestType}）` : ''}：${latestText}</span>
+                <span class="display-voice-latest" title="最近一次语音识别结果">最近识别${latestType ? `（${latestType}）` : ''}${latestMeta}：${latestText}</span>
             </div>
         `;
     },
@@ -616,6 +633,10 @@ const DeviceList = {
         const latest = {
             text,
             isFinal: data.isFinal === true,
+            speaker: data.speaker,
+            similarityScore: data.similarityScore,
+            similarityScores: data.similarityScores,
+            threshold: data.threshold,
             timestamp: Date.now()
         };
         this.voiceInputByDisplay.set(displayId, latest);
@@ -1330,7 +1351,7 @@ const DeviceList = {
         latestText.className = 'display-voice-latest';
         latestText.title = '最近一次语音识别结果';
         latestText.textContent = latest?.text
-            ? `最近识别（${latest.isFinal ? '最终' : '实时'}）：${latest.text}`
+            ? `最近识别（${latest.isFinal ? '最终' : '实时'}）${this.getVoiceInputMeta(latest)}：${latest.text}`
             : '最近识别：暂无识别回传';
 
         container.append(label, state, latestText);

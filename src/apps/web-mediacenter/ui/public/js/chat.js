@@ -251,6 +251,11 @@ const Chat = {
                         const segText = (seg.text || '').trim();
                         if (!segText) continue;
                         console.log('分段识别:', segText, '->', seg.speaker);
+                        // 控制端直接上传的录音也可能收到未匹配声纹分段；只回显诊断文字，不能当作聊天或命令执行。
+                        if (seg.speaker === null) {
+                            this.handleAsrCommand(segText, null);
+                            continue;
+                        }
                         if (segText.startsWith('聊天')) {
                             const message = segText.substring(2).trim();
                             if (message) {
@@ -271,6 +276,10 @@ const Chat = {
                 }
 
                 if (recognizedText.startsWith('聊天')) {
+                    if (data.speaker === null) {
+                        this.handleAsrCommand(recognizedText, null);
+                        return;
+                    }
                     const message = recognizedText.substring(2).trim();
                     if (message) {
                         setTimeout(() => {

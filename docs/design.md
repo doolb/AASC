@@ -58,6 +58,7 @@
 | 显示端录音模式与控制端回放 | [display-recording.md](design/display-recording.md) | ASR、单次录音、实时回传三种模式及控制端播放 |
 | 同一注册声纹跨显示端 ASR 去重 | [same-speaker-asr-dedup.md](design/same-speaker-asr-dedup.md) | 同一说话人被多个显示端同时听到时只保留一次处理 |
 | 全局播放时暂停录音 | [global-voice-playback-recording-pause.md](design/global-voice-playback-recording-pause.md) | 控制端声纹面板统一配置所有显示端播放期间是否暂停普通 ASR |
+| 服务端统一处理显示端 ASR 与声纹结果 | [server-side-asr-voice-input-processing.md](design/server-side-asr-voice-input-processing.md) | 服务端合并分段、处理声纹门控和命令，显示端只上传并回显 |
 | 日志筛选与系统监控 | [log-viewer.md](design/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
 | 日志大脑 | [log-brain.md](design/log-brain.md) | 类人脑日志摘要、模式提取、LLM诊断上下文 |
 | 资源目录 | [resource-layout.md](design/resource-layout.md) | res 目录分层、路径边界、统一资源规范 |
