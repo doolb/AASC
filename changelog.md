@@ -81,6 +81,13 @@
   - 改动文件：`res/certs/cert.pem`、Android Manifest/Gradle/MainActivity、APK 证书和 Network Security Config、`scripts/ops/prepare-android-node-runtime.js`、Android 显示端 design/spec/task、相关契约测试。
   - 验证：定向测试 17/17、Android JVM 单元测试 BUILD SUCCESSFUL、Debug APK 构建成功；SM-N9500 真机已注册主服务器，主服务器重启后显示端和子服务器均自动重连。
 
+- ✅ [2026-09-11] 修复 APK 子服务器媒体在 AASC 注册完成前播放失败，以及子服务器 IP 变化后旧直连地址失效的问题。
+  - 控制端远程媒体和播放列表项增加来源节点元数据；主服务器在节点注册完成或心跳地址变化后，按来源节点查找所有显示端当前播放状态。
+  - 主服务器按最新节点地址重写直连 URL，并使用既有 `url`、`base64`、`playlistStart` 消息正常重发；保留主服务器代理地址，不新增 `mediaReplay` 协议，显示端无需修改。
+  - AASC NodeConnector 注册和心跳上报动态可访问地址，其他显示端播放同一子服务器媒体时也会由主服务器统一恢复。
+  - 改动文件：`media-replay.js`、`node-connector.js`、`server-app.js`、`media-library.js`、相关测试及 AASC/媒体库/APK design/spec/task 文档。
+  - 验证：媒体重播、节点动态地址和主服务器接入定向测试 `3/3` 通过；JavaScript 语法检查和 `git diff --check` 通过。
+
 - ✅ [2026-09-09] 增加 APK Android 9/API 28 共享存储访问。
   - Manifest 声明并限制 `READ_EXTERNAL_STORAGE`、`WRITE_EXTERNAL_STORAGE` 到 API 28；MainActivity 启动时申请缺失权限，拒绝权限不阻塞显示端连接。
   - 内置 Node 媒体库可按配置直接访问 `/storage/emulated/0/` 及其子目录，保留 LocalProvider 路径越界校验和 readonly 写保护。

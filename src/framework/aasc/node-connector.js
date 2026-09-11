@@ -25,6 +25,7 @@ class AascNodeConnector {
         this.nodeId = options.nodeId;
         this.nodeName = options.nodeName || this.nodeId;
         this.advertisedUrl = options.advertisedUrl;
+        this.getAdvertisedUrl = options.getAdvertisedUrl || (() => this.advertisedUrl);
         this.version = options.version || 'unknown';
         this.capabilities = cloneObject(options.capabilities || {});
         this.metadata = cloneObject(options.metadata || { role: 'subserver' });
@@ -129,7 +130,7 @@ class AascNodeConnector {
         this.send('node.register', {
             nodeId: this.nodeId,
             name: this.nodeName,
-            url: this.advertisedUrl,
+            url: this._getAdvertisedUrl(),
             version: this.version,
             capabilities: this.capabilities,
             metadata: this.metadata,
@@ -205,6 +206,7 @@ class AascNodeConnector {
         this.heartbeatTimer = this.setInterval(() => {
             this.send('node.heartbeat', {
                 nodeId: this.nodeId,
+                url: this._getAdvertisedUrl(),
                 version: this.version,
                 capabilities: this.capabilities,
                 metadata: this.metadata,
@@ -244,6 +246,15 @@ class AascNodeConnector {
         } catch (error) {
             this.onError(new Error(`AASC 节点运行数据采集失败: ${error.message}`));
             return {};
+        }
+    }
+
+    _getAdvertisedUrl() {
+        try {
+            return this.getAdvertisedUrl() || this.advertisedUrl;
+        } catch (error) {
+            this.onError(new Error(`AASC 节点地址采集失败: ${error.message}`));
+            return this.advertisedUrl;
         }
     }
 }

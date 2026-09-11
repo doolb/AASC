@@ -85,6 +85,22 @@ test('主服务器提供 AASC 节点目录、注册和心跳接口', () => {
     assert.match(source, /aascServerRegistry\.heartbeat/);
 });
 
+test('节点注册或地址变化后主服务按来源节点重发原有播放消息', () => {
+    const server = fs.readFileSync(path.join(__dirname, '..', 'src/apps/server/boot/server-app.js'), 'utf8');
+    const mediaLibrary = fs.readFileSync(
+        path.join(__dirname, '..', 'src/apps/web-mediacenter/ui/public/js/media-library.js'),
+        'utf8'
+    );
+
+    assert.match(server, /buildNormalReplayMessages/);
+    assert.match(server, /replayDisplaysForNode/);
+    assert.match(server, /type: 'playlistStart'/);
+    assert.match(server, /handleNodeRegister[\s\S]*replayDisplaysForNode/);
+    assert.match(server, /handleNodeHeartbeat[\s\S]*replayDisplaysForNode/);
+    assert.match(server, /sourceNodeId/);
+    assert.match(mediaLibrary, /sourceNodeId/);
+});
+
 test('新连接接管同节点旧连接并支持有限时请求', async () => {
     const registry = new AascServerRegistry({ now: () => 1000 });
     registry.register({ nodeId: 'node-a', url: 'https://node-a:8081' });

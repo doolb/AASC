@@ -93,6 +93,25 @@ test('连接成功后发送注册，确认后按间隔发送心跳', () => {
     assert.equal(timers[0].delay, 30000);
 });
 
+test('注册和心跳都上报最新的子服务器地址', () => {
+    let advertisedUrl = 'https://192.168.1.6:8081';
+    const { connector, timers } = createConnector({
+        getAdvertisedUrl: () => advertisedUrl
+    });
+    connector.start();
+    const socket = FakeWebSocket.instances[0];
+    socket.open();
+
+    assert.equal(socket.sent[0].payload.url, advertisedUrl);
+    socket.receive({ type: 'node.registered', payload: { nodeId: 'node-a' } });
+    timers[0].callback();
+    assert.equal(socket.sent[1].payload.url, advertisedUrl);
+
+    advertisedUrl = 'https://192.168.1.7:8081';
+    timers[0].callback();
+    assert.equal(socket.sent[2].payload.url, advertisedUrl);
+});
+
 test('收到主服务器请求后调用处理器并返回 node.response', async () => {
     const { connector } = createConnector({
         onRequest: async ({ type, payload }) => ({ type, accepted: payload.action === 'restart' })

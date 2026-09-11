@@ -503,6 +503,22 @@ GET /api/media-proxy?url=<编码后的http地址>
         调用 Crop.showPreview(url, mediaType)
         调用 WebSocketManager.sendMedia({type, url, mediaType})
 
+    playRemoteMedia(url, mediaType, library):
+        sourceNodeId = library.remote ? library.ownerNodeId : 'main-server'
+        mediaData = {type, url, mediaType, sourceNodeId}
+        如果存在 proxyUrl:
+            mediaData.fallbackUrl = proxyUrl
+        通过既有媒体播放消息发送 mediaData
+
+主服务器节点媒体正常重播:
+    收到 node.register，或 node.heartbeat 携带的新 node.url 与旧值不同时:
+        遍历所有显示端的持久化 currentMedia/currentPlaylist
+        只选择 sourceNodeId 或兼容 URL 识别为当前节点的媒体
+        使用当前 node.url 重写节点直连 URL，保留主服务器代理 URL
+        单媒体重新发送原有 url/base64 消息
+        播放列表重新发送原有 playlistStart 消息，并保留 resumeIndex/resumeTime/resumeState
+    显示端按已有 showMedia/handlePlaylistStart 流程处理，不认识新的重播消息
+
     sendHtmlFile(file):
         校验扩展名 .html/.htm
         弹「发送 HTML 文件」对话框（文件信息 + 滚动设置 + 去向 checkbox）

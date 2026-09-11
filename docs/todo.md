@@ -62,7 +62,7 @@
   - 当前已记录 `bus.jpg` 单图定性结果；正式 Precision、Recall、mAP 需要目标场景的图片和标注数据。
 
 - ⏳待处理 [2026-09-01] 将 Termux 服务器试运行整理为正式 Android 节点
-  - 当前 `~/aasc-server-test` 已能在 Termux 以 runit 服务运行，使用 8081 端口；服务器发布包现由 `npm run build:server-package` 显式生成，主服务器媒体索引聚合、远程媒体直连优先/代理回退和控制端媒体写入已完成，后续仍需认证和 Android 重启自动恢复。
+  - 当前 `~/aasc-server-test` 已能在 Termux 以 runit 服务运行，使用 8081 端口；服务器发布包现由 `npm run build:server-package` 显式生成，主服务器媒体索引聚合、远程媒体直连优先/代理回退、控制端媒体写入、APK 子服务器重启恢复和节点就绪后的正常播放重播已完成，后续仍需认证和完整 Android 生产包现场验收。
   - 当前 ASR、TTS Wine、Puppeteer 暂不迁移；正式节点需要在配置和控制端明确不可用能力。
 
 - ⏳待处理 [2026-08-25] 修复 APK 原生 ASR 识别结果为空及声纹 native 崩溃

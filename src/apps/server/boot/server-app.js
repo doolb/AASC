@@ -84,6 +84,7 @@ const { AascTaskRouter } = require('../../../framework/aasc/task-router');
 const { AascNodeSession } = require('../../../framework/aasc/node-session');
 const { normalizeNodeRegistration } = require('../../../framework/aasc/node-protocol');
 const { AascNodeConnector } = require('../../../framework/aasc/node-connector');
+const { buildNormalReplayMessages } = require('../../../framework/aasc/media-replay');
 const { ServerReleaseService } = require('../modules/aasc/server-release-service');
 const {
     createAndroidCapabilityUnavailableError,
@@ -759,11 +760,13 @@ function startAascNodeConnector(localIP, protocol) {
         return null;
     }
 
+    const configuredAdvertisedUrl = String(config.get('aasc.advertisedUrl', '') || '').trim();
     const connector = new AascNodeConnector({
         mainServerUrl: config.get('aasc.mainServerUrl', 'https://192.168.1.39:8081'),
         nodeId: ensureAascNodeId(),
         nodeName: config.get('aasc.nodeName', '') || `子服务器-${localIP}`,
-        advertisedUrl: config.get('aasc.advertisedUrl', '') || `${protocol}://${localIP}:${PORT}`,
+        advertisedUrl: configuredAdvertisedUrl || `${protocol}://${localIP}:${PORT}`,
+        getAdvertisedUrl: () => configuredAdvertisedUrl || `${protocol}://${getLocalIP()}:${PORT}`,
         version: process.env.AASC_SERVER_VERSION || 'unknown',
         capabilities: {
             ...getSubServerCapabilities()
@@ -5307,6 +5310,9 @@ function normalizeRemotePlaylist(playlist, nodeId, nodeUrl, libraryId) {
             path: pathValue,
             url: playbackUrl,
             directUrl,
+            sourceNodeId: nodeId,
+            sourceLibraryId: libraryId,
+            sourcePath: pathValue,
             ...(directUrl && fallbackUrl && directUrl !== fallbackUrl ? { fallbackUrl } : {})
         };
     }).filter(Boolean);
@@ -5345,6 +5351,39 @@ function sendToDisplay(displayId, data, options = {}) {
         return true;
     }
     return false;
+}
+
+/**
+ * 子服务器就绪后，主服务器只重发现有的普通播放消息，不引入新的显示端协议。
+ * 单媒体重发原媒体对象，播放列表重发 playlistStart；显示端完全按原播放流程处理。
+ */
+function replayDisplaysForNode(node, previousNodeUrl = '') {
+    let replayedCount = 0;
+    displayClients.forEach((displayData, displayId) => {
+        const messages = buildNormalReplayMessages(displayData.state, node, previousNodeUrl);
+        messages.forEach(message => {
+            updateDisplayReplayState(displayData, message);
+            if (sendToDisplay(displayId, message)) replayedCount += 1;
+        });
+    });
+    if (replayedCount > 0) {
+        log('AASC', `节点 ${node.nodeId} 就绪，按正常播放流程重发 ${replayedCount} 个显示端媒体`);
+    }
+    return replayedCount;
+}
+
+function updateDisplayReplayState(displayData, message) {
+    if (!displayData || !message) return;
+    if (message.type === 'playlistStart' && displayData.state.currentPlaylist) {
+        const { type: _type, resumeIndex: _resumeIndex, resumeTime: _resumeTime, resumeState: _resumeState, ...startData } = message;
+        displayData.state.currentPlaylist.startData = startData;
+        persistDisplayState(displayData, { currentPlaylist: displayData.state.currentPlaylist });
+        return;
+    }
+    if (message.type === 'url' || message.type === 'base64') {
+        displayData.state.currentMedia = message;
+        persistDisplayState(displayData, { currentMedia: message });
+    }
 }
 
 function sendDisplayRecordingToControl(session, message) {
@@ -5597,6 +5636,7 @@ function handleAascNodeConnection(ws) {
         registering = true;
         try {
             const registration = normalizeNodeRegistration(message.payload);
+            const previousServer = aascServerRegistry.get(registration.nodeId);
             const server = aascServerRegistry.register(registration);
             const attached = aascServerRegistry.attachConnection(server.nodeId, session);
             if (!attached) {
@@ -5613,6 +5653,7 @@ function handleAascNodeConnection(ws) {
                 servers: getAascServerSnapshots()
             });
             log('AASC', `子服务器已注册: ${server.nodeId}`);
+            replayDisplaysForNode(server, previousServer?.url || '');
         } catch (error) {
             logError('AASC', `子服务器注册失败: ${error.message}`);
             session.close(1008, 'invalid node registration');
@@ -5623,6 +5664,7 @@ function handleAascNodeConnection(ws) {
 
     async function handleNodeHeartbeat(message) {
         if (!registeredNodeId) return;
+        const previousServer = aascServerRegistry.get(registeredNodeId);
         const server = aascServerRegistry.heartbeat(registeredNodeId, message.payload);
         if (!server) return;
         session.send('node.heartbeatAck', {
@@ -5630,6 +5672,9 @@ function handleAascNodeConnection(ws) {
             lastHeartbeatAt: server.lastHeartbeatAt,
             serverTime: Date.now()
         });
+        if (server.url !== previousServer?.url) {
+            replayDisplaysForNode(server, previousServer?.url || '');
+        }
     }
 
     ws.once('close', () => {

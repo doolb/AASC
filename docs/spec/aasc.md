@@ -1697,6 +1697,7 @@ MediaLibrary.init()
     → 子服务器库保存 ownerNodeId、sourceLibraryId、directUrl、proxyUrl
     → 远程条目的 directUrl 以注册节点 node.url 为权威主机，重写子服务器返回 URL 的 origin
     → 远程条目 URL 为空、null、undefined 或无法解析时，按原始媒体库 ID 和 path 补为子服务器媒体 API 地址
+    → 远程播放控制消息附带 sourceNodeId、sourceLibraryId 和 sourcePath
     → 子服务器返回批量播放列表时保留每项 path
     → 主服务器处理远程播放列表时按注册节点 node.url 重写直连 URL，并为每项生成主服务器远程代理 fallbackUrl
     → 播放列表项直连和代理地址都无效时过滤该项，避免显示端请求空地址
@@ -1726,6 +1727,18 @@ MediaLibrary.loadContent(path)
     → 上传和媒体读取访问主服务器同源代理
     → 主服务器代理转发目标子服务器媒体 API 的状态码、Range 和媒体响应头
     → 节点离线、超时或返回 404 时，控制端展示目标节点、接口和 HTTP 状态
+
+主服务器子服务器媒体就绪重播
+    → 收到 node.register 时保存注册前的节点地址
+    → 注册节点后，遍历所有 displayClients 的持久化播放状态
+    → 当前单媒体或播放列表项目属于该 nodeId 时，使用最新 node.url 重写直连 URL
+    → 保留主服务器远程代理 URL，不重写代理地址
+    → 单媒体按原对象发送 url/base64；播放列表按原流程发送 playlistStart
+    → 保留播放列表的当前索引、播放时间、播放状态和循环信息
+    → 收到 node.heartbeat 时比较旧 node.url 与新 node.url
+    → 地址变化时重复上述正常播放消息发送流程
+    → 不发送 mediaReplay 等新消息类型，不要求显示端增加节点状态处理
+    → 其他节点媒体和无来源节点播放状态不重播
 
 显示端连接
     → 不读取媒体库聚合状态

@@ -146,6 +146,18 @@ Runtime 校验失败
     → 不启动 Node
     → 前台通知显示安装失败和校验错误
 
+```text
+APK 子服务器媒体就绪后的主服务器处理
+    → APK AascNodeConnector 注册时上报当前可访问 url
+    → 运行期间每次 heartbeat 重新计算并上报当前可访问 url
+    → 主服务器收到 node.register 后读取所有显示端播放状态
+    → 主服务器收到 node.heartbeat 且 url 变化后读取所有显示端播放状态
+    → 仅选择来源为当前 nodeId 的 currentMedia/currentPlaylist
+    → 按最新 node.url 重写直连地址，保留主服务器代理地址
+    → 单媒体沿用 url/base64，播放列表沿用 playlistStart
+    → 显示端继续按现有正常播放处理，不处理节点就绪或 IP 变化消息
+```
+
 Node 启动失败
     → 记录退出码和最近日志
     → 按上限退避重试

@@ -416,12 +416,15 @@ const MediaLibrary = {
         const directUrl = this.normalizePlaybackUrl(url);
         const safeFallbackUrl = this.normalizePlaybackUrl(fallbackUrl);
         const playbackUrl = directUrl || safeFallbackUrl;
+        const sourceNodeId = this.currentLibrary?.remote
+            ? String(this.currentLibrary.ownerNodeId || '')
+            : 'main-server';
         if (!playbackUrl) {
             showToast('媒体地址不可用，无法播放', 'error');
             return;
         }
         if (mediaType === 'html') {
-            this.sendHtmlMedia(playbackUrl, directUrl ? safeFallbackUrl : '');
+            this.sendHtmlMedia(playbackUrl, directUrl ? safeFallbackUrl : '', sourceNodeId);
             return;
         }
         if (window.Crop) {
@@ -432,7 +435,8 @@ const MediaLibrary = {
             const mediaData = {
                 type: 'url',
                 url: playbackUrl,
-                mediaType: mediaType
+                mediaType: mediaType,
+                sourceNodeId
             };
             if (directUrl && safeFallbackUrl && safeFallbackUrl !== directUrl) {
                 mediaData.fallbackUrl = safeFallbackUrl;
@@ -449,7 +453,7 @@ const MediaLibrary = {
     },
 
     // HTML 媒体：不弹滚动设置（沿用显示面板「HTML 播放模式」），直接发送
-    sendHtmlMedia(url, fallbackUrl = '') {
+    sendHtmlMedia(url, fallbackUrl = '', sourceNodeId = 'main-server') {
         if (window.Crop) {
             window.Crop.showPreview(url, 'html');
         }
@@ -458,6 +462,7 @@ const MediaLibrary = {
                 type: 'url',
                 url: url,
                 mediaType: 'html',
+                sourceNodeId,
                 ...(fallbackUrl && fallbackUrl !== url ? { fallbackUrl } : {})
             });
         }
