@@ -43,7 +43,8 @@ data class VoiceprintRegistrationResult(
     val denoise: Boolean,
     val denoiseMs: Long,
     val voiceprintDenoise: Boolean = false,
-    val voiceprintDenoiseMs: Long = 0
+    val voiceprintDenoiseMs: Long = 0,
+    val elapsedMs: Long = 0
 )
 
 // Sherpa 声纹测试协调器：注册、单段和多段请求共用一个线程，避免多个 native 推理同时占用内存。
@@ -75,6 +76,7 @@ class VoiceprintTestCoordinator(
         voiceprintDenoise: Boolean = false
     ): Future<VoiceprintRegistrationResult> =
         submit {
+            val started = System.nanoTime()
             val normalizedName = name.trim()
             require(normalizedName.isNotEmpty()) { "speaker 名称不能为空" }
             AsrCoordinator.validateSamples(samples)
@@ -90,7 +92,8 @@ class VoiceprintTestCoordinator(
                 denoise = prepared.enabled,
                 denoiseMs = prepared.elapsedMs,
                 voiceprintDenoise = prepared.enabled,
-                voiceprintDenoiseMs = prepared.elapsedMs
+                voiceprintDenoiseMs = prepared.elapsedMs,
+                elapsedMs = elapsedMs(started)
             )
         }
 

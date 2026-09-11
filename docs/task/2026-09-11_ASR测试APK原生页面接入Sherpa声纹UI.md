@@ -20,11 +20,15 @@
 ## 受影响的功能模块和代码
 
 - `3rd/tts-server/android-asr/app/src/main/res/layout/activity_main.xml`
+- `3rd/tts-server/android-asr/app/src/main/res/values/strings.xml`
 - `3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/MainActivity.kt`
 - `3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/UiStatus.kt`
+- `3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/VoiceprintUiRequest.kt`
 - `3rd/tts-server/android-asr/app/src/test/java/com/aasc/asr/UiStatusTest.kt`
+- `tests/android-asr-apk.test.js`
 - `docs/design/android-voiceprint-test-apk.md`
 - `docs/spec/android-voiceprint-test-apk.md`
+- `docs/usage.md`
 - `docs/task/2026-09-11_ASR测试APK原生页面接入Sherpa声纹UI.md`
 
 ## 自测用例
@@ -68,4 +72,19 @@
 
 ## 当前状态
 
-- ⏳ 已完成设计，待实现。
+- ✅ 已完成实现、定向测试、Debug 构建和 APK 启动验收。
+- ⏳ 待现场手工验证：在设备上用同一段 WAV 完成注册后，依次点击单段、多段、快速多段并检查页面结果。
+
+## 实际实现与验证结果
+
+- 原生 `activity_main.xml` 已增加普通 ASR 降噪、Sherpa 声纹状态、名称输入、声纹降噪、注册、人数选择、单段/多段/快速多段测试和详细结果区域。
+- `MainActivity.kt` 已复用 `selectedSamples`、`selectedCpuMode`、`background` 和 `VoiceprintTestCoordinator`；注册和测试均使用后台线程，完成/异常路径恢复按钮状态。
+- `UiStatus.kt` 已格式化整体匹配信息和逐段 `speaker`、`similarityScore`、`threshold`、文字、错误及阶段耗时；未识别声纹显示为“未识别”。
+- `VoiceprintUiRequest.kt` 已集中校验单段 AUTO、多段人数及两个降噪参数；注册结果同时显示声纹降噪耗时和注册总耗时。
+- `node --test tests/android-asr-apk.test.js`：3/3 通过。
+- `VoiceprintUiRequestTest`、`UiStatusTest`：通过。
+- `cd 3rd/tts-server && ../../src/apps/android-display/gradlew -p android-asr :app:testDebugUnitTest`：通过。
+- `npm --prefix 3rd/tts-server run build:android-asr`：Debug APK 构建通过。
+- 相关 Node 回归测试：10/10 通过；APK 已覆盖安装到 `192.168.1.6:5555` 并启动，窗口焦点和进程正常，无崩溃日志。
+- 设备 UI 自动化桥未返回 root 节点，因此未将自动控件树读取计入手工交互验收；布局资源、静态契约和编译均已验证。
+- 全量 `npm test`：580/581 通过；唯一失败为既有 `tests/display-native-bridge.test.js` 的旧 `injectTouch` 契约，与本次独立 ASR APK 改动无关。

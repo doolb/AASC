@@ -56,6 +56,13 @@
 
 ## 独立 Android ASR 测试 APK
 
+- ✅ [2026-09-11] 将网页 Sherpa 声纹测试 UI 接入独立 ASR 测试 APK 原生页面。
+  - 原生页面增加声纹模型状态、已注册名称、注册名称输入、ASR/声纹双降噪开关、声纹注册、Sherpa 单段/多段/快速多段按钮、AUTO/1-5 人数选择和详细结果展示。
+  - 复用 `selectedSamples`、`selectedCpuMode`、`VoiceprintTestCoordinator` 和现有模型；原生注册/测试不新增 HTTP 接口、不重复解码、不改变声纹算法。`VoiceprintUiRequest` 统一单段 AUTO、多人数量和双降噪参数。
+  - 详细结果显示整体 `matchedSpeaker`、`similarityScore`、`threshold`、阶段耗时，以及每个分段的时间、cluster、speaker、相似度、文字和错误；未识别声纹保留为“未识别”。
+  - 改动文件：`3rd/tts-server/android-asr/app/src/main/res/layout/activity_main.xml`、`strings.xml`、`MainActivity.kt`、`UiStatus.kt`、`VoiceprintUiRequest.kt`、对应 Kotlin/Node 测试及相关 usage/design/spec/task 文档。
+  - 验证：Android JVM 单元测试通过；Node 相关回归测试 `10/10` 通过；`npm --prefix 3rd/tts-server run build:android-asr` 构建成功；APK 已覆盖安装并启动于 `192.168.1.6:5555`，无崩溃日志。
+
 - ✅ [2026-09-10] 拆分 ASR 文字与声纹双降噪开关。
   - 普通 `/api/asr` 和声纹测试的文字识别使用 `asrDenoise`；声纹注册、分段、embedding 和匹配使用 `voiceprintDenoise`。
   - 声纹测试按同一时间区间分别使用文字音频和声纹音频；两个开关相同时复用一次 GTCRN，设置不同时按需生成两份音频。

@@ -55,6 +55,9 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 - 原生按钮操作使用现有后台线程；运行期间禁用注册和三种测试按钮，完成后恢复；异常显示在声纹结果区域，注册成功后刷新已注册名称。
 - 结果至少显示模式、ASR 文本、匹配名称、`similarityScore`、`threshold`、阶段耗时和各分段的说话人/分数/文字/错误，便于与网页测试结果对照。
 - 本次不新增模型、不改变 Sherpa 推理流程、不持久化声纹库、不新增 HTTP 路由；声纹阈值继续使用当前 `SherpaVoiceprintEngine.matchThreshold`。
+- 已完成原生页面接入：`UiStatus` 负责可测试的注册/测试结果格式化，`MainActivity` 直接调用现有 coordinator；普通 ASR 的 `asrDenoise` 与声纹测试的 `voiceprintDenoise` 分开传递。
+- 注册结果额外记录原生操作总耗时；`VoiceprintUiRequest` 集中归一单段 AUTO、多人数量和两个降噪参数，避免按钮入口之间的参数漂移。
+- 已完成 Debug APK 构建、Node 契约测试和 Android JVM 测试，并覆盖安装到 `192.168.1.6:5555` 启动验证；未修改模型资源或 HTTP 网页接口。
 
 ## 流式 ASR 扩展
 

@@ -15,15 +15,14 @@
   - 现象：未指定角色的群聊使用 `group/default` 历史时，可能收到并播报 `[Error: write after end]`。
   - 疑似来源：旧 Pi Agent/工具调用流程遗留的未闭合 Chat2API 工具调用记录；当前历史中存在 `profileName=qwen3.5`、`templateId=default` 的异常内容，具体产生流程待后续确认。
   - 已完成当前 Chat2API canonical 工具标签解析残留修复；历史中已经保存的异常消息和 `write after end` 清理仍暂不处理。
-  - 处理决定：仅记录，暂不修改代码、历史文件或 TTS 行为。
+- 处理决定：仅记录，暂不修改代码、历史文件或 TTS 行为。
   - 关联任务：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
 
 ## Android ASR APK
 
-- ⏳进行中 [2026-09-11] 将独立 ASR 测试 APK 网页中的 Sherpa 声纹测试 UI 接入原生页面
-  - 增加声纹状态、注册名称、双降噪开关、注册、Sherpa 单段/多段/快速多段、人数选择和详细结果展示。
-  - 复用现有 `VoiceprintTestCoordinator` 和已选择/已录音音频，不新增模型或 HTTP 接口。
-  - 设计：`docs/design/android-voiceprint-test-apk.md`；实现伪代码：`docs/spec/android-voiceprint-test-apk.md`；任务：`docs/task/2026-09-11_ASR测试APK原生页面接入Sherpa声纹UI.md`。
+- ⏳待现场验收 [2026-09-11] 在独立 ASR 测试 APK 原生页面使用测试 WAV 完成 Sherpa 声纹注册和三种测试模式回归
+  - APK 已构建、安装和启动；设备 UI 自动化桥返回空 root，尚未自动完成注册、单段、多段、快速多段及双降噪开关的点击验证。
+  - 相关实现：`docs/design/android-voiceprint-test-apk.md`；`docs/spec/android-voiceprint-test-apk.md`；`docs/task/2026-09-11_ASR测试APK原生页面接入Sherpa声纹UI.md`。
 
 ## TTS
 
@@ -84,6 +83,12 @@
 ## 批量播放模式
 
 # 当前任务
+
+## ASR 与 VAD
+
+- 🔄进行中 [2026-09-11] ASR 内存上传与 VAD 静音时间统一
+  - `/api/asr/recognize` 改为内存 Buffer，网页和 Node 显示端统一使用 500ms 静音结束时间，并同步 VAD 阈值。
+  - 任务文档：`docs/task/20260911_ASR内存上传与VAD静音时间统一.md`。
 
 ## 控制端语音配置
 

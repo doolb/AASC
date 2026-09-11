@@ -7,6 +7,7 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -37,6 +38,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var httpStatus: TextView
     private lateinit var httpPortInput: EditText
     private lateinit var httpToggleButton: Button
+    private lateinit var asrDenoiseCheck: Switch
+    private lateinit var voiceprintStatus: TextView
+    private lateinit var speakerName: EditText
+    private lateinit var voiceprintDenoiseCheck: Switch
+    private lateinit var registerSpeakerButton: Button
+    private lateinit var voiceprintSpeakerCountSpinner: Spinner
+    private lateinit var testSingleButton: Button
+    private lateinit var testMultiButton: Button
+    private lateinit var testMultiFastButton: Button
+    private lateinit var voiceprintResult: TextView
     private val background: ExecutorService = Executors.newCachedThreadPool()
     private var selectedSamples: FloatArray? = null
     @Volatile
@@ -44,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     private var modelReady = false
     private var httpServer: AsrHttpServer? = null
     private var tlsContext: SSLContext? = null
+    private var voiceprintActionBusy = false
 
     private val requestRecordPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startRecording() else audioStatus.text = "麦克风权限被拒绝"
@@ -76,6 +88,7 @@ class MainActivity : AppCompatActivity() {
         recorder = AudioRecorder()
         coordinator = AsrCoordinator(engine, denoiseEngine)
         voiceprintCoordinator = VoiceprintTestCoordinator(engine, voiceprintEngine, denoiseEngine)
+        refreshVoiceprintStatus()
         loadModel()
     }
 
@@ -91,12 +104,27 @@ class MainActivity : AppCompatActivity() {
         httpStatus = findViewById(R.id.httpStatus)
         httpPortInput = findViewById(R.id.httpPortInput)
         httpToggleButton = findViewById(R.id.httpToggleButton)
+        asrDenoiseCheck = findViewById(R.id.asrDenoise)
+        voiceprintStatus = findViewById(R.id.voiceprintStatus)
+        speakerName = findViewById(R.id.speakerName)
+        voiceprintDenoiseCheck = findViewById(R.id.voiceprintDenoise)
+        registerSpeakerButton = findViewById(R.id.registerSpeaker)
+        voiceprintSpeakerCountSpinner = findViewById(R.id.speakerCount)
+        testSingleButton = findViewById(R.id.testSingle)
+        testMultiButton = findViewById(R.id.testMulti)
+        testMultiFastButton = findViewById(R.id.testMultiFast)
+        voiceprintResult = findViewById(R.id.voiceprintResult)
         recordButton.setOnClickListener { toggleRecording() }
         findViewById<Button>(R.id.selectAudioButton).setOnClickListener { selectAudio.launch(arrayOf("audio/*")) }
         playAudioButton.setOnClickListener { toggleAudioPlayback() }
         saveAudioButton.setOnClickListener { saveCurrentWav() }
         recognizeButton.setOnClickListener { recognizeSelectedAudio() }
+        registerSpeakerButton.setOnClickListener { registerSelectedVoiceprint() }
+        testSingleButton.setOnClickListener { testVoiceprint(VoiceprintMode.SHERPA_SINGLE) }
+        testMultiButton.setOnClickListener { testVoiceprint(VoiceprintMode.SHERPA_MULTI) }
+        testMultiFastButton.setOnClickListener { testVoiceprint(VoiceprintMode.SHERPA_MULTI_FAST) }
         httpToggleButton.setOnClickListener { toggleHttpServer() }
+        setupVoiceprintSpeakerCount()
     }
 
     private fun setupCpuMode() {
@@ -114,6 +142,19 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
         }
+    }
+
+    private fun setupVoiceprintSpeakerCount() {
+        val labels = buildList {
+            add(getString(R.string.voiceprint_count_auto))
+            (VoiceprintSpeakerCount.MIN..VoiceprintSpeakerCount.MAX).forEach { count ->
+                add(getString(R.string.voiceprint_count_format, count))
+            }
+        }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        voiceprintSpeakerCountSpinner.adapter = adapter
+        voiceprintSpeakerCountSpinner.setSelection(0)
     }
 
     private fun loadModel() {
@@ -154,6 +195,7 @@ class MainActivity : AppCompatActivity() {
                         loaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型加载失败\nCPU 模式：$status"
                         else -> getString(R.string.model_load_failed, "请检查内置模型")
                     }
+                    refreshVoiceprintStatus()
                 }
             } catch (error: Exception) {
                 modelReady = false
@@ -161,7 +203,10 @@ class MainActivity : AppCompatActivity() {
                 denoiseEngine.release()
                 streamingEngine.release()
                 tlsContext = null
-                runOnUiThread { modelStatus.text = getString(R.string.model_load_failed, error.message ?: "未知错误") }
+                runOnUiThread {
+                    modelStatus.text = getString(R.string.model_load_failed, error.message ?: "未知错误")
+                    refreshVoiceprintStatus()
+                }
             }
         }
     }
@@ -220,20 +265,155 @@ class MainActivity : AppCompatActivity() {
 
     private fun recognizeSelectedAudio() {
         if (!modelReady) { resultText.text = "模型尚未就绪"; return }
-        val samples = selectedSamples
+        val samples = selectedSamples?.copyOf()
         if (samples == null) { resultText.text = "请先录音或选择音频"; return }
         val validation = UiStatus.validate(samples)
         if (validation.isNotEmpty()) { resultText.text = validation; return }
+        val denoise = asrDenoiseCheck.isChecked
         recognizeButton.isEnabled = false
         resultText.text = getString(R.string.recognizing)
         background.execute {
             try {
-                val result = coordinator.submit(samples, selectedCpuMode, AsrLanguageMode.ZH).get()
+                val result = coordinator.submit(samples, selectedCpuMode, AsrLanguageMode.ZH, denoise).get()
                 runOnUiThread { resultText.text = UiStatus.result(result.text, result.elapsedMs) }
             } catch (error: Exception) {
                 runOnUiThread { resultText.text = "识别失败：${error.cause?.message ?: error.message ?: "未知错误"}" }
             } finally {
                 runOnUiThread { recognizeButton.isEnabled = true }
+            }
+        }
+    }
+
+    private fun refreshVoiceprintStatus() {
+        if (!voiceprintCoordinator.isReady()) {
+            voiceprintStatus.setText(R.string.voiceprint_not_ready)
+            updateVoiceprintActionState()
+            return
+        }
+        val speakers = voiceprintCoordinator.registeredSpeakers()
+        val speakerText = if (speakers.isEmpty()) "无" else speakers.joinToString("、")
+        voiceprintStatus.text = buildString {
+            appendLine("Sherpa 声纹模型已就绪")
+            appendLine("embedding 维度：${voiceprintCoordinator.embeddingDim()}")
+            appendLine("匹配阈值：${voiceprintCoordinator.matchThreshold()}")
+            appendLine("已注册声纹：$speakerText")
+        }
+        updateVoiceprintActionState()
+    }
+
+    private fun updateVoiceprintActionState() {
+        val voiceprintReady = voiceprintCoordinator.isReady()
+        val canRegister = voiceprintReady && !voiceprintActionBusy
+        val canTest = modelReady && voiceprintReady && !voiceprintActionBusy
+        registerSpeakerButton.isEnabled = canRegister
+        testSingleButton.isEnabled = canTest
+        testMultiButton.isEnabled = canTest
+        testMultiFastButton.isEnabled = canTest
+        voiceprintSpeakerCountSpinner.isEnabled = canTest
+    }
+
+    private fun selectedVoiceprintSpeakerCount(): Int {
+        val position = voiceprintSpeakerCountSpinner.selectedItemPosition
+        val rawValue = if (position == 0) "AUTO" else position.toString()
+        return VoiceprintSpeakerCount.parse(rawValue) ?: VoiceprintSpeakerCount.AUTO
+    }
+
+    private fun registerSelectedVoiceprint() {
+        if (voiceprintActionBusy) return
+        if (!voiceprintCoordinator.isReady()) {
+            voiceprintResult.text = getString(R.string.voiceprint_not_ready)
+            return
+        }
+        val name = speakerName.text.toString().trim()
+        if (name.isEmpty()) {
+            voiceprintResult.text = "请输入注册名称"
+            return
+        }
+        val samples = selectedSamples?.copyOf()
+        if (samples == null) {
+            voiceprintResult.text = "请先录音或选择音频"
+            return
+        }
+        val validation = UiStatus.validate(samples)
+        if (validation.isNotEmpty()) {
+            voiceprintResult.text = validation
+            return
+        }
+        val voiceprintDenoise = voiceprintDenoiseCheck.isChecked
+        voiceprintActionBusy = true
+        updateVoiceprintActionState()
+        voiceprintResult.text = "正在注册声纹…"
+        background.execute {
+            try {
+                val result = voiceprintCoordinator.register(
+                    name,
+                    samples,
+                    selectedCpuMode,
+                    voiceprintDenoise
+                ).get()
+                runOnUiThread {
+                    voiceprintResult.text = UiStatus.voiceprintRegistration(result)
+                    refreshVoiceprintStatus()
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    voiceprintResult.text = "声纹注册失败：${error.cause?.message ?: error.message ?: "未知错误"}"
+                }
+            } finally {
+                runOnUiThread {
+                    voiceprintActionBusy = false
+                    updateVoiceprintActionState()
+                }
+            }
+        }
+    }
+
+    private fun testVoiceprint(mode: VoiceprintMode) {
+        if (voiceprintActionBusy) return
+        if (!modelReady || !voiceprintCoordinator.isReady()) {
+            voiceprintResult.text = "ASR 或声纹模型尚未就绪"
+            return
+        }
+        val samples = selectedSamples?.copyOf()
+        if (samples == null) {
+            voiceprintResult.text = "请先录音或选择音频"
+            return
+        }
+        val validation = UiStatus.validate(samples)
+        if (validation.isNotEmpty()) {
+            voiceprintResult.text = validation
+            return
+        }
+        val request = VoiceprintUiRequest.create(
+            mode,
+            selectedVoiceprintSpeakerCount(),
+            asrDenoiseCheck.isChecked,
+            voiceprintDenoiseCheck.isChecked
+        )
+        voiceprintActionBusy = true
+        updateVoiceprintActionState()
+        voiceprintResult.text = "正在执行 ${mode.name}…"
+        background.execute {
+            try {
+                val result = voiceprintCoordinator.test(
+                    request.mode,
+                    samples,
+                    selectedCpuMode,
+                    request.speakerCount,
+                    request.asrDenoise,
+                    request.voiceprintDenoise,
+                    AsrLanguageMode.ZH
+                ).get()
+                runOnUiThread { voiceprintResult.text = UiStatus.voiceprintResult(result) }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    voiceprintResult.text = "声纹测试失败：${error.cause?.message ?: error.message ?: "未知错误"}"
+                }
+            } finally {
+                runOnUiThread {
+                    voiceprintActionBusy = false
+                    updateVoiceprintActionState()
+                }
             }
         }
     }

@@ -95,6 +95,19 @@ npm start
 
 正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。
 
+### 独立 ASR 测试 APK 的 Sherpa 声纹测试
+
+独立测试 APK 位于 `3rd/tts-server/android-asr`，构建并安装 Debug APK：
+
+```bash
+npm --prefix 3rd/tts-server run build:android-asr
+adb install -r 3rd/tts-server/android-asr/app/build/outputs/apk/debug/app-debug.apk
+```
+
+打开 APK 后先录音或选择 WAV。普通 ASR 的“ASR 文字降噪”只影响文字识别；Sherpa 区域的“声纹降噪”只影响声纹注册、分段和匹配。输入名称后点击“注册当前音频声纹”，再使用单段、多段或快速多段测试；多人测试可选择自动估计或 1-5 人。结果区域会显示 ASR 文本、匹配名称、相似度、阈值、阶段耗时，以及每个分段的 speaker、相似度、文字和错误。
+
+声纹注册库只保存在 APK 进程内存中，重启 APK 后需要重新注册。APK 内置网页与原生页面共用当前进程的声纹协调器和注册库；网页入口仍可通过 APK 显示的 HTTPS 地址访问。
+
 ### APK 内置 Node.js 子服务器
 
 `apk-display` 启动后会在前台 Service 中启动 `server-launcher.js`，再由 launcher 启动 `server-app.js`。首次连接时填写主服务器根地址，例如 `https://192.168.1.39:8081`；WebView 继续打开主服务器 `/display`，内置 Node 子服务器主动连接主服务器 `/server`。

@@ -258,6 +258,54 @@ MainActivity 初始化:
   模型未就绪时禁用声纹操作并显示原因
 ```
 
+## 原生页面实现映射与验收（2026-09-11）
+
+```text
+activity_main.xml:
+  在普通识别区域增加 Switch#asrDenoise
+  增加 voiceprintStatus、speakerName、Switch#voiceprintDenoise
+  增加 registerSpeaker、Spinner#speakerCount、testSingle、testMulti、testMultiFast
+  增加可选择文本 voiceprintResult
+
+MainActivity.bindViews/setupVoiceprintSpeakerCount:
+  绑定上述控件
+  Spinner 显示 AUTO 和 1-5 人
+  多段测试通过 VoiceprintSpeakerCount.parse(position 对应的 AUTO/1-5 字符串)
+
+VoiceprintUiRequest.create:
+  单段模式统一将 speakerCount 归一为 AUTO
+  多段模式保留已校验的 AUTO/1-5
+  独立保存 asrDenoise 和 voiceprintDenoise，按原顺序传给 coordinator
+
+普通 ASR:
+  复制 selectedSamples
+  读取 asrDenoise.isChecked
+  调用 coordinator.submit(samples, selectedCpuMode, ZH, asrDenoise)
+
+声纹注册:
+  校验 voiceprint 模型、名称和 selectedSamples
+  复制 selectedSamples
+  后台调用 voiceprintCoordinator.register(name, samples, selectedCpuMode, voiceprintDenoise)
+  使用 UiStatus.voiceprintRegistration 展示名称、维度、降噪状态和耗时
+  完成后刷新 registeredSpeakers()
+
+声纹测试:
+  单段使用 SHERPA_SINGLE + AUTO
+  多段使用 SHERPA_MULTI + Spinner 人数
+  快速多段使用 SHERPA_MULTI_FAST + Spinner 人数
+  后台调用 voiceprintCoordinator.test(mode, samples, selectedCpuMode,
+    speakerCount, asrDenoise, voiceprintDenoise, ZH)
+  使用 UiStatus.voiceprintResult 展示整体结果和所有分段诊断字段
+  成功、异常和 finally 均回到主线程恢复按钮状态
+```
+
+验收结果:
+  `node --test tests/android-asr-apk.test.js` 通过 3/3
+  Android `:app:testDebugUnitTest` 通过
+  `npm --prefix 3rd/tts-server run build:android-asr` 通过
+  相关 Node 回归测试通过 10/10
+  Debug APK 已安装到 `192.168.1.6:5555`，`com.aasc.asr/.MainActivity` 获得窗口焦点且无崩溃日志
+
 ## 当前音频播放
 
 ```text
