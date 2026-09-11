@@ -12,7 +12,13 @@ process.on('message', async (message) => {
     }
 
     try {
-        const text = await asr.recognize(message.audioPath);
+        const audioInput = Buffer.isBuffer(message.audioBuffer)
+            ? message.audioBuffer
+            : message.audioPath;
+        if (!audioInput) {
+            throw new Error('ASR 子进程未收到音频数据');
+        }
+        const text = await asr.recognize(audioInput);
         process.send({ type: 'response', id: message.id, ok: true, text: text || '' });
     } catch (error) {
         process.send({ type: 'response', id: message.id, ok: false, error: error.message });

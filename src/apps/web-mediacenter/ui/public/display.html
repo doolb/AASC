@@ -184,7 +184,11 @@
         let speechStartTime = null;
         // VAD 阈值由服务端按显示端保存并下发，初始值只用于首次连接前的兜底。
         const DEFAULT_VAD_THRESHOLD = 0.01;
+        const DEFAULT_VAD_SILENCE_DURATION_MS = 500;
+        const DEFAULT_VAD_MIN_SPEECH_DURATION_MS = 300;
         let vadThreshold = DEFAULT_VAD_THRESHOLD;
+        let vadSilenceDurationMs = DEFAULT_VAD_SILENCE_DURATION_MS;
+        let vadMinSpeechDurationMs = DEFAULT_VAD_MIN_SPEECH_DURATION_MS;
         let vadNoiseTestActive = false;
         let vadNoiseTestRequestId = null;
         let isAlwaysListening = false;
@@ -4457,7 +4461,19 @@
 
                     if (data.type === 'voiceVadConfig') {
                         vadThreshold = normalizeVadThreshold(data.threshold);
-                        console.log('[语音] VAD 阈值已更新:', vadThreshold);
+                        vadSilenceDurationMs = normalizeVadDuration(
+                            data.silenceDurationMs,
+                            DEFAULT_VAD_SILENCE_DURATION_MS
+                        );
+                        vadMinSpeechDurationMs = normalizeVadDuration(
+                            data.minSpeechDurationMs,
+                            DEFAULT_VAD_MIN_SPEECH_DURATION_MS
+                        );
+                        console.log('[语音] VAD 配置已更新:', {
+                            threshold: vadThreshold,
+                            silenceDurationMs: vadSilenceDurationMs,
+                            minSpeechDurationMs: vadMinSpeechDurationMs
+                        });
                         return;
                     }
 
@@ -4978,6 +4994,12 @@
             const number = Number(value);
             if (!Number.isFinite(number)) return DEFAULT_VAD_THRESHOLD;
             return Math.round(Math.min(0.2, Math.max(0.001, number)) * 1000000) / 1000000;
+        }
+
+        function normalizeVadDuration(value, fallback) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) return fallback;
+            return Math.round(Math.min(5000, Math.max(100, number)));
         }
 
         function sendVoiceVadNoiseResult(result) {
@@ -5758,8 +5780,6 @@
                     vadSource.connect(analyser);
                 }
                 
-                const SILENCE_DURATION = 1000;
-                const MIN_SPEECH_DURATION = 300;
                 silenceDetectionRunning = true;
                 
                 const checkSilence = () => {
@@ -5794,9 +5814,9 @@
                         if (!silenceStartTime) {
                             silenceStartTime = Date.now();
                         }
-                        if (Date.now() - silenceStartTime > SILENCE_DURATION) {
+                        if (Date.now() - silenceStartTime > vadSilenceDurationMs) {
                             const speechDuration = speechStartTime ? Date.now() - speechStartTime : 0;
-                            if (speechDuration >= MIN_SPEECH_DURATION) {
+                            if (speechDuration >= vadMinSpeechDurationMs) {
                                 console.log('显示端检测到静音，发送识别');
                                 void finishVoiceSegment();
                                 return;

@@ -927,7 +927,7 @@ async function startServer() {
                     audioChunkSessions.delete(requestId);
                     const fullBuffer = Buffer.concat(session.chunks);
                     try {
-                        const text = asr.recognize(fullBuffer);
+                        const text = await asr.recognize(fullBuffer);
                         if (text) {
                             if (!config.get('voiceprint.enabled', true) && voiceTtsPlaybackTimers.size > 0) {
                                 return;
@@ -1184,11 +1184,21 @@ const DEFAULT_CAPABILITIES = {
 const DEFAULT_VAD_THRESHOLD = 0.01;
 const MIN_VAD_THRESHOLD = 0.001;
 const MAX_VAD_THRESHOLD = 0.2;
+const DEFAULT_VAD_SILENCE_DURATION_MS = 500;
+const DEFAULT_VAD_MIN_SPEECH_DURATION_MS = 300;
+const MIN_VAD_DURATION_MS = 100;
+const MAX_VAD_DURATION_MS = 5000;
 
 function normalizeVadThreshold(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return DEFAULT_VAD_THRESHOLD;
     return Math.round(Math.min(MAX_VAD_THRESHOLD, Math.max(MIN_VAD_THRESHOLD, number)) * 1000000) / 1000000;
+}
+
+function normalizeVadDuration(value, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.round(Math.min(MAX_VAD_DURATION_MS, Math.max(MIN_VAD_DURATION_MS, number)));
 }
 
 function normalizeVoiceRecordingMode(value) {
@@ -1247,6 +1257,8 @@ function createDisplayState() {
         capabilities: null,
         cpuStatus: null,
         vadThreshold: DEFAULT_VAD_THRESHOLD,
+        vadSilenceDurationMs: DEFAULT_VAD_SILENCE_DURATION_MS,
+        vadMinSpeechDurationMs: DEFAULT_VAD_MIN_SPEECH_DURATION_MS,
         voiceRecordingMode: 'asr',
         voiceConversation: createConversationState(true)
     };
@@ -2976,7 +2988,28 @@ app.get('/api/aasc/media-index', async (req, res) => {
     }
 });
 
-const asrUpload = multer({ dest: ASR_TEMP_DIR });
+// ASR 音频通常只有几秒钟，直接保存在内存中即可避免每次识别都创建临时文件。
+// 10MB 限制用于防止异常请求占用过多服务端内存；历史 ASR 临时目录仍由后台清理器负责兜底清理。
+const ASR_MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+const asrUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: ASR_MAX_AUDIO_BYTES }
+});
+
+function parseAsrUpload(req, res, next) {
+    asrUpload.single('audio')(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+
+        const isFileTooLarge = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE';
+        const statusCode = isFileTooLarge ? 413 : 400;
+        const message = isFileTooLarge
+            ? `音频文件不能超过 ${Math.floor(ASR_MAX_AUDIO_BYTES / 1024 / 1024)}MB`
+            : `音频上传失败: ${error.message}`;
+        return res.status(statusCode).json({ status: 'error', message });
+    });
+}
 
 function cleanupTempFile(filePath) {
     if (!filePath) {
@@ -3425,7 +3458,7 @@ function processRecognizedAsrResultForDisplay(displayId, result, requestContext)
     return [];
 }
 
-app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
+app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ status: 'error', message: '未收到音频文件' });
@@ -3433,24 +3466,22 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
         const asrDevice = config.get('asr.device', 'server');
         const requestContext = getAsrRequestContext(req);
         const sourceDisplayId = requestContext.displayId;
+        const processedByServer = Boolean(sourceDisplayId && displayClients.has(sourceDisplayId));
 
         if (asrDevice === 'server' && !isServerAsrEnabled()) {
-            cleanupTempFile(req.file.path);
             return res.status(503).json({ status: 'error', message: '服务器 ASR 已关闭' });
         }
 
         if (asrDevice === 'display') {
             const displayWithAsr = findDisplayWithAsr();
             if (!displayWithAsr) {
-                cleanupTempFile(req.file.path);
                 return res.status(503).json({ status: 'error', message: '没有支持 ASR 的显示端在线' });
             }
 
             try {
-                const audioBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
+                const audioBase64 = req.file.buffer.toString('base64');
                 const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
                 const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId);
-                cleanupTempFile(req.file.path);
 
                 if (result.segments && result.segments.length) {
                     const segments = normalizeAsrSegments(result);
@@ -3466,6 +3497,7 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                     const response = {
                         status: 'success',
                         threshold: result.threshold,
+                        processedByServer,
                         segments: segments.map(segment => serializeAsrSegment(segment, result.threshold))
                     };
                     if (ignoredText) response.ignoredText = ignoredText;
@@ -3488,27 +3520,25 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
                     return res.json({
                         status: 'success',
                         text,
+                        processedByServer,
                         speaker: result.speaker,
                         similarityScore: result.similarityScore,
                         threshold: result.threshold
                     });
                 }
                 processRecognizedAsrResultForDisplay(sourceDisplayId, { ...result, text }, requestContext);
-                return res.json({ status: 'success', text });
+                return res.json({ status: 'success', text, processedByServer });
             } catch (err) {
-                cleanupTempFile(req.file.path);
                 logError('语音', `显示端 ASR 失败: ${err.message}`);
                 return res.status(500).json({ status: 'error', message: '显示端 ASR 失败: ' + err.message });
             }
         }
 
         if (!asr.isReady()) {
-            cleanupTempFile(req.file.path);
             return res.status(503).json({ status: 'error', message: 'ASR 服务未初始化' });
         }
         
-        const recognizedText = normalizeAsrText(await asr.recognize(req.file.path));
-        cleanupTempFile(req.file.path);
+        const recognizedText = normalizeAsrText(await asr.recognize(req.file.buffer));
         
         if (!recognizedText || !recognizedText.trim()) {
             return res.json({ 
@@ -3530,13 +3560,11 @@ app.post('/api/asr/recognize', asrUpload.single('audio'), async (req, res) => {
         processRecognizedAsrResultForDisplay(sourceDisplayId, { text: recognizedText }, requestContext);
         res.json({
             status: 'success',
-            text: recognizedText
+            text: recognizedText,
+            processedByServer
          });
     } catch (err) {
         logError('语音', `ASR识别失败: ${err.message}`);
-        if (req.file) {
-            cleanupTempFile(req.file.path);
-        }
 
         const isQueueBusy = err.message.includes('ASR 忙');
         const statusCode = isQueueBusy ? 429 : 500;
@@ -4715,6 +4743,14 @@ function getDisplayList() {
             cpuStatus: data.state.cpuStatus,
             voiceConversation: data.state.voiceConversation,
             vadThreshold: normalizeVadThreshold(data.state.vadThreshold),
+            vadSilenceDurationMs: normalizeVadDuration(
+                data.state.vadSilenceDurationMs,
+                DEFAULT_VAD_SILENCE_DURATION_MS
+            ),
+            vadMinSpeechDurationMs: normalizeVadDuration(
+                data.state.vadMinSpeechDurationMs,
+                DEFAULT_VAD_MIN_SPEECH_DURATION_MS
+            ),
             voiceRecordingMode: normalizeVoiceRecordingMode(data.state.voiceRecordingMode),
             capabilities: caps
         });
@@ -5888,6 +5924,14 @@ wss.on('connection', (ws, req) => {
                 ...savedState,
                 dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
                 vadThreshold: normalizeVadThreshold(savedState?.vadThreshold),
+                vadSilenceDurationMs: normalizeVadDuration(
+                    savedState?.vadSilenceDurationMs,
+                    DEFAULT_VAD_SILENCE_DURATION_MS
+                ),
+                vadMinSpeechDurationMs: normalizeVadDuration(
+                    savedState?.vadMinSpeechDurationMs,
+                    DEFAULT_VAD_MIN_SPEECH_DURATION_MS
+                ),
                 voiceRecordingMode: normalizeVoiceRecordingMode(savedState?.voiceRecordingMode),
                 isSubDisplay: isSubDisplay,
                 capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : null
@@ -5926,14 +5970,30 @@ wss.on('connection', (ws, req) => {
                 type: 'configUpdate',
                 config: {
                     serverUrl: `${protocol}://${localIP}:${PORT}`,
-                    vadThreshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold)
+                    vadThreshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold),
+                    vadSilenceDurationMs: normalizeVadDuration(
+                        displayClients.get(displayId)?.state.vadSilenceDurationMs,
+                        DEFAULT_VAD_SILENCE_DURATION_MS
+                    ),
+                    vadMinSpeechDurationMs: normalizeVadDuration(
+                        displayClients.get(displayId)?.state.vadMinSpeechDurationMs,
+                        DEFAULT_VAD_MIN_SPEECH_DURATION_MS
+                    )
                 }
             }));
         }
 
         ws.send(JSON.stringify({
             type: 'voiceVadConfig',
-            threshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold)
+            threshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold),
+            silenceDurationMs: normalizeVadDuration(
+                displayClients.get(displayId)?.state.vadSilenceDurationMs,
+                DEFAULT_VAD_SILENCE_DURATION_MS
+            ),
+            minSpeechDurationMs: normalizeVadDuration(
+                displayClients.get(displayId)?.state.vadMinSpeechDurationMs,
+                DEFAULT_VAD_MIN_SPEECH_DURATION_MS
+            )
         }));
 
         ws.send(JSON.stringify({
@@ -6805,12 +6865,32 @@ async function handleControlMessageFallback(data, ws) {
             return;
         }
         const threshold = normalizeVadThreshold(data.threshold);
+        const silenceDurationMs = normalizeVadDuration(
+            data.silenceDurationMs,
+            displayData.state.vadSilenceDurationMs || DEFAULT_VAD_SILENCE_DURATION_MS
+        );
+        const minSpeechDurationMs = normalizeVadDuration(
+            data.minSpeechDurationMs,
+            displayData.state.vadMinSpeechDurationMs || DEFAULT_VAD_MIN_SPEECH_DURATION_MS
+        );
         displayData.state.vadThreshold = threshold;
-        persistDisplayState(displayData, { vadThreshold: threshold });
-        sendToDisplay(displayId, { type: 'voiceVadConfig', threshold });
-        ws.send(JSON.stringify({ type: 'voiceVadConfig', displayId, threshold }));
+        displayData.state.vadSilenceDurationMs = silenceDurationMs;
+        displayData.state.vadMinSpeechDurationMs = minSpeechDurationMs;
+        persistDisplayState(displayData, {
+            vadThreshold: threshold,
+            vadSilenceDurationMs: silenceDurationMs,
+            vadMinSpeechDurationMs: minSpeechDurationMs
+        });
+        const vadConfig = {
+            type: 'voiceVadConfig',
+            threshold,
+            silenceDurationMs,
+            minSpeechDurationMs
+        };
+        sendToDisplay(displayId, vadConfig);
+        ws.send(JSON.stringify({ ...vadConfig, displayId }));
         broadcastDisplayList();
-        log('语音', `控制端更新显示端 ${displayId} VAD 阈值: ${threshold}`);
+        log('语音', `控制端更新显示端 ${displayId} VAD 配置: threshold=${threshold}, silence=${silenceDurationMs}ms, minSpeech=${minSpeechDurationMs}ms`);
         return;
     }
 

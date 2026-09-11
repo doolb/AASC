@@ -46,6 +46,7 @@
 | Android Termux服务器节点 | [android-termux-server.md](design/android-termux-server.md) | Termux Node.js 服务器试运行、节点运行边界与后续演进 |
 | APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](design/android-embedded-node-server.md) | APK 前台 Service、arm64 Runtime、AASC 主动连接和能力裁剪 |
 | 服务端语音识别 | [sherpa-asr.md](design/sherpa-asr.md) | ASR 串行识别、native 资源释放、临时文件清理 |
+| ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](design/asr-memory-upload-vad-unification.md) | ASR Buffer 输入、无临时文件处理、网页与 Node 子显示端 VAD 参数同步 |
 | 服务端 TTS | [tts.md](design/tts.md) | 外部 TTS 调用保护、内置 tts.server Wine/Linux HTTP 服务与统一路由 |
 | 独立 Android 离线语音识别 APK | [android-asr-apk.md](../3rd/tts-server/docs/design/android-asr-apk.md) | 内置 SenseVoice、录音/文件识别、HTTP 测试和 CPU 核心模式 |
 | 独立 Android RapidOCR HTTP 测试 APK | [android-rapidocr-apk.md](../3rd/tts-server/docs/design/android-rapidocr-apk.md) | 内置 RapidOCR、图片 HTTP 上传和网页测试 |

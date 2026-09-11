@@ -7,6 +7,16 @@
   - 更新 `res/tasks/render-display/render.js`、结构冒烟测试及 render-display 设计/spec/task 文档。
   - 验证：render-display 冒烟测试、JavaScript 语法检查、标签样式测试和旋转布局回归测试通过。
 
+## ASR 内存上传与 VAD 参数统一
+
+- ✅ [2026-09-11] `/api/asr/recognize` 改用内存 Buffer，统一网页显示端和 Node 子显示端的 VAD 参数。
+  - 服务端使用 `multer.memoryStorage()` 和 10MB 上限；内嵌/独立 ASR 均支持 Buffer，非 WAV 通过 ffmpeg stdin/stdout 管道转换，不生成 ASR 临时文件；旧声纹注册临时文件链路保持不变。
+  - VAD 默认阈值为 `0.01`，按显示端持久化并下发；静音结束时间统一为 `500ms`，最短有效语音为 `300ms`，网页端和 Node 的 PvRecorder/naudiodon 均支持运行时更新。
+  - Node 子显示端接入服务端 `pauseRecordingDuringPlayback`，播放期间录音策略与网页显示端一致。
+  - Node 子显示端向 ASR 请求携带 `displayId` 和语音时间区间，服务端返回 `processedByServer` 后不再重复发送旧 `voiceInput`；同时修复 Buffer 音频流入口未等待 Promise 的问题。
+  - 修复 `src/apps/voice-display-node/audio-recorder.js` 原有缺失闭合大括号导致的语法错误；更新 `docs/design/asr-memory-upload-vad-unification.md`、`docs/spec/asr-memory-upload-vad-unification.md`、`docs/spec/voice-display.md`、任务文档及相关测试。
+  - 验证：定向测试 12/12 通过，相关 JS 语法检查和 `git diff --check` 通过；全量 `npm test` 582/583 通过，唯一失败为既有 DeX `injectTouch` 契约测试。
+
 ## ASR 结果详细日志开关
 
 - ✅ [2026-09-11] 服务端收到显示端 `asrResult` 时打印 ASR 文字和声纹识别诊断信息，并在控制端声纹面板增加默认开启的详细日志开关。

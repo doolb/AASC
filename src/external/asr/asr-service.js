@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { fork } = require('child_process');
+const { fork, spawn } = require('child_process');
 
 let sherpaOnnx = null;
 let recognizer = null;
@@ -15,11 +15,12 @@ try {
 // 说明：readWavFile/convertAudioFile 只依赖输入文件，不依赖实例(this)状态；
 // 提取为模块级函数便于 voiceprint-service 复用，避免为了读一个 wav 而加载整个 234MB ASR 模型。
 // 函数声明会提升，readWavFileFromPath 引用后文定义的 convertAudioFile 没有问题。
-function readWavFileFromPath(filePath) {
-    const buffer = fs.readFileSync(filePath);
-
-    if (buffer.toString('ascii', 0, 4) !== 'RIFF') {
-        return convertAudioFile(filePath);
+function readWavFileFromBuffer(buffer) {
+    if (!Buffer.isBuffer(buffer)) {
+        throw new TypeError('WAV 输入必须是 Buffer');
+    }
+    if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') {
+        throw new Error('音频不是 WAV 格式');
     }
 
     let dataOffset = 12;
@@ -31,11 +32,11 @@ function readWavFileFromPath(filePath) {
         const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
         const chunkSize = buffer.readUInt32LE(dataOffset + 4);
 
-        if (chunkId === 'fmt ') {
+        if (chunkId === 'fmt ' && chunkSize >= 16 && dataOffset + 24 <= buffer.length) {
             sampleRate = buffer.readUInt32LE(dataOffset + 12);
             bitsPerSample = buffer.readUInt16LE(dataOffset + 22);
         } else if (chunkId === 'data') {
-            dataSize = chunkSize;
+            dataSize = Math.min(chunkSize, buffer.length - dataOffset - 8);
             dataOffset += 8;
             break;
         }
@@ -46,59 +47,119 @@ function readWavFileFromPath(filePath) {
         return { samples: new Float32Array(0), sampleRate: 16000 };
     }
 
-    const sampleCount = bitsPerSample === 16 ? dataSize / 2 : dataSize / 4;
+    const bytesPerSample = bitsPerSample === 16 ? 2 : 4;
+    const sampleCount = Math.floor(dataSize / bytesPerSample);
     const samples = new Float32Array(sampleCount);
 
     if (bitsPerSample === 16) {
-        const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
         for (let i = 0; i < sampleCount; i++) {
-            samples[i] = int16View[i] / 32768.0;
+            samples[i] = buffer.readInt16LE(dataOffset + i * 2) / 32768.0;
         }
     } else if (bitsPerSample === 32) {
-        const float32View = new Float32Array(buffer.buffer, dataOffset, sampleCount);
         for (let i = 0; i < sampleCount; i++) {
-            samples[i] = float32View[i];
+            samples[i] = buffer.readFloatLE(dataOffset + i * 4);
         }
     }
 
     return { samples, sampleRate };
 }
 
-function convertAudioFile(filePath) {
-    const { execSync } = require('child_process');
-    const outputPath = filePath + '.converted.wav';
+function readWavFileFromPath(filePath) {
+    const buffer = fs.readFileSync(filePath);
 
-    try {
-        execSync(`ffmpeg -y -i "${filePath}" -ar 16000 -ac 1 -f wav "${outputPath}"`, { stdio: 'pipe' });
-        const buffer = fs.readFileSync(outputPath);
-        fs.unlinkSync(outputPath);
+    if (buffer.toString('ascii', 0, 4) !== 'RIFF') {
+        return convertAudioFile(filePath);
+    }
 
-        let dataOffset = 12;
-        let sampleRate = 16000;
-        let dataSize = 0;
+    return readWavFileFromBuffer(buffer);
+}
 
-        while (dataOffset < buffer.length - 8) {
-            const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
-            const chunkSize = buffer.readUInt32LE(dataOffset + 4);
+function convertAudioBuffer(buffer) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const stdoutChunks = [];
+        const stderrChunks = [];
+        const ffmpeg = spawn('ffmpeg', [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-i',
+            'pipe:0',
+            '-ar',
+            '16000',
+            '-ac',
+            '1',
+            '-f',
+            'wav',
+            'pipe:1'
+        ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-            if (chunkId === 'fmt ') {
-                sampleRate = buffer.readUInt32LE(dataOffset + 12);
-            } else if (chunkId === 'data') {
-                dataSize = chunkSize;
-                dataOffset += 8;
-                break;
+        const fail = (error) => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+        };
+
+        ffmpeg.stdout.on('data', chunk => stdoutChunks.push(chunk));
+        ffmpeg.stderr.on('data', chunk => stderrChunks.push(chunk));
+        ffmpeg.on('error', error => fail(new Error(`ffmpeg 启动失败: ${error.message}`)));
+        ffmpeg.on('close', code => {
+            if (settled) return;
+            if (code !== 0) {
+                const detail = Buffer.concat(stderrChunks).toString('utf8').trim();
+                return fail(new Error(`ffmpeg 音频转换失败(${code}): ${detail || '未知错误'}`));
             }
-            dataOffset += 8 + chunkSize;
-        }
 
-        const sampleCount = dataSize / 2;
-        const int16View = new Int16Array(buffer.buffer, dataOffset, sampleCount);
-        const samples = new Float32Array(sampleCount);
-        for (let i = 0; i < sampleCount; i++) {
-            samples[i] = int16View[i] / 32768.0;
-        }
+            try {
+                resolve(readWavFileFromBuffer(Buffer.concat(stdoutChunks)));
+            } catch (error) {
+                fail(new Error(`ffmpeg 输出音频解析失败: ${error.message}`));
+            }
+        });
 
-        return { samples, sampleRate };
+        ffmpeg.stdin.on('error', error => fail(new Error(`ffmpeg 输入失败: ${error.message}`)));
+        ffmpeg.stdin.end(buffer);
+    });
+}
+
+async function readAudioInput(audioInput) {
+    if (Buffer.isBuffer(audioInput)) {
+        if (audioInput.toString('ascii', 0, 4) === 'RIFF') {
+            return readWavFileFromBuffer(audioInput);
+        }
+        return convertAudioBuffer(audioInput);
+    }
+
+    if (typeof audioInput === 'string' && audioInput) {
+        return readWavFileFromPath(audioInput);
+    }
+
+    throw new TypeError('ASR 音频输入必须是 Buffer 或文件路径');
+}
+
+function describeAudioInput(audioInput) {
+    return Buffer.isBuffer(audioInput) ? `内存音频 ${audioInput.length}B` : String(audioInput);
+}
+
+function convertAudioFile(filePath) {
+    try {
+        const { execFileSync } = require('child_process');
+        const inputBuffer = fs.readFileSync(filePath);
+        const convertedBuffer = execFileSync('ffmpeg', [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-i',
+            'pipe:0',
+            '-ar',
+            '16000',
+            '-ac',
+            '1',
+            '-f',
+            'wav',
+            'pipe:1'
+        ], { input: inputBuffer, stdio: ['pipe', 'pipe', 'pipe'] });
+        return readWavFileFromBuffer(convertedBuffer);
     } catch (e) {
         return { samples: new Float32Array(0), sampleRate: 16000 };
     }
@@ -172,7 +233,7 @@ class SherpaOnnxASR {
         return this.initialized && recognizer !== null;
     }
 
-    async recognize(audioPath) {
+    async recognize(audioInput) {
         if (!this.initialized || !recognizer) {
             throw new Error('ASR 未初始化');
         }
@@ -185,7 +246,7 @@ class SherpaOnnxASR {
 
         const runRecognition = async () => {
             try {
-                return await this.performRecognition(audioPath);
+                return await this.performRecognition(audioInput);
             } finally {
                 this.pendingCount--;
                 this.completedCount++;
@@ -198,14 +259,14 @@ class SherpaOnnxASR {
         return queuedTask;
     }
 
-    async performRecognition(audioPath) {
+    async performRecognition(audioInput) {
         let stream = null;
         let audioData = null;
         const beforeRss = process.memoryUsage().rss;
 
         try {
             stream = recognizer.createStream();
-            audioData = this.readWavFile(audioPath);
+            audioData = await this.readAudioInput(audioInput);
 
             stream.acceptWaveform({
                 samples: audioData.samples,
@@ -228,7 +289,7 @@ class SherpaOnnxASR {
 
             const deltaRss = (process.memoryUsage().rss - beforeRss) / 1024 / 1024;
             if (Math.abs(deltaRss) > 0.5) {
-                console.log(`[ASR] 识别后RSS变化: ${deltaRss > 0 ? '+' : ''}${deltaRss.toFixed(1)}MB (音频: ${audioPath})`);
+                console.log(`[ASR] 识别后RSS变化: ${deltaRss > 0 ? '+' : ''}${deltaRss.toFixed(1)}MB (音频: ${describeAudioInput(audioInput)})`);
             }
         }
     }
@@ -294,6 +355,10 @@ class SherpaOnnxASR {
         return readWavFileFromPath(filePath);
     }
 
+    async readAudioInput(audioInput) {
+        return readAudioInput(audioInput);
+    }
+
     convertAudioFile(filePath) {
         // 委托给模块级无状态函数；同名模块函数是独立绑定，非递归
         return convertAudioFile(filePath);
@@ -342,27 +407,28 @@ class IsolatedAsrProcessClient {
         return true;
     }
 
-    async recognize(audioPath) {
+    async recognize(audioInput) {
         if (this.pendingCount >= this.maxQueueLength) {
             throw new Error(`ASR 忙，排队请求过多(${this.pendingCount})`);
         }
 
         this.pendingCount++;
         try {
-            return await this.spawnWorker(audioPath);
+            return await this.spawnWorker(audioInput);
         } finally {
             this.pendingCount--;
         }
     }
 
-    spawnWorker(audioPath) {
+    spawnWorker(audioInput) {
         const workerPath = path.join(__dirname, 'asr-worker-process.js');
 
         return new Promise((resolve, reject) => {
             let settled = false;
 
             const child = fork(workerPath, [], {
-                stdio: ['inherit', 'pipe', 'pipe', 'ipc']
+                stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
+                serialization: 'advanced'
             });
 
             // TUI 模式下子进程 stdout/stderr 若继承父进程会直接写终端，破坏 blessed 渲染。
@@ -417,7 +483,8 @@ class IsolatedAsrProcessClient {
             child.send({
                 type: 'recognize',
                 id: requestId,
-                audioPath,
+                audioPath: typeof audioInput === 'string' ? audioInput : null,
+                audioBuffer: Buffer.isBuffer(audioInput) ? audioInput : null,
                 options: this.buildWorkerOptions()
             });
         });
@@ -452,11 +519,11 @@ function getMode() {
     return currentMode;
 }
 
-function recognize(audioPath) {
+function recognize(audioInput) {
     if (!asrInstance) {
         return Promise.reject(new Error('ASR 未初始化'));
     }
-    return asrInstance.recognize(audioPath);
+    return asrInstance.recognize(audioInput);
 }
 
 function isReady() {
@@ -470,5 +537,6 @@ module.exports = {
     getMode,
     recognize,
     isReady,
-    readWavFileFromPath
+    readWavFileFromPath,
+    readWavFileFromBuffer
 };

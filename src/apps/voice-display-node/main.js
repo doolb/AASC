@@ -144,6 +144,8 @@ class VoiceDisplay {
         // 按播放 ID 记录本地队列中待完成的条数，支持重复报时使用同一播放组。
         this.pendingVoiceTtsPlaybackIds = new Map();
         this.remoteTtsPlaybackIds = new Set();
+        // 与网页显示端共用服务端全局配置；默认播放期间暂停普通 ASR，避免把 TTS 当作用户语音。
+        this.pauseRecordingDuringPlayback = config.pauseRecordingDuringPlayback !== false;
         this.logReportConfig = null; // { enabled, level } 由服务器推送
         this._volume = 100;
         this._serviceTasks = {}; // 长期运行的服务任务 { instanceId: { taskName, stop } }
@@ -271,6 +273,12 @@ class VoiceDisplay {
             case 'configUpdate':
                 this.handleConfigUpdate(data);
                 break;
+            case 'voiceVadConfig':
+                this.handleVoiceVadConfig(data);
+                break;
+            case 'voiceprintConfig':
+                this.handleVoiceprintConfig(data);
+                break;
             case 'restoreState':
                 log('系统', '收到恢复状态');
                 break;
@@ -353,6 +361,52 @@ class VoiceDisplay {
         log('ASR', 'ASR 配置: device=' + data.device + ' localEnabled=' + data.localAsrEnabled);
     }
 
+    handleVoiceprintConfig(data) {
+        if (!data) return;
+
+        this.pauseRecordingDuringPlayback = data.pauseRecordingDuringPlayback !== false;
+        if (!this.pauseRecordingDuringPlayback) {
+            this.remoteTtsPlaybackIds.clear();
+            if (this.recorder && this.recorder.isPaused()) {
+                this.recorder.resume();
+            }
+        }
+        log('语音', `播放期间录音策略已更新: ${this.pauseRecordingDuringPlayback ? '暂停录音' : '继续录音'}`);
+    }
+
+    handleVoiceVadConfig(data) {
+        if (!data) return;
+
+        this.applyVadConfig(data);
+        log('语音', `VAD 配置已更新: threshold=${this.config.vadThreshold}, silence=${this.config.vadSilenceDurationMs}ms, minSpeech=${this.config.vadMinSpeechDurationMs}ms`);
+    }
+
+    applyVadConfig(data = {}) {
+        const threshold = Number(data.threshold ?? data.vadThreshold ?? this.config.vadThreshold);
+        const silenceDurationMs = Number(
+            data.silenceDurationMs ?? data.vadSilenceDurationMs ?? this.config.vadSilenceDurationMs
+        );
+        const minSpeechDurationMs = Number(
+            data.minSpeechDurationMs ?? data.vadMinSpeechDurationMs ?? this.config.vadMinSpeechDurationMs
+        );
+        const vadConfig = {
+            threshold: Number.isFinite(threshold) ? Math.min(0.2, Math.max(0.001, threshold)) : 0.01,
+            silenceDurationMs: Number.isFinite(silenceDurationMs)
+                ? Math.min(5000, Math.max(100, Math.round(silenceDurationMs)))
+                : 500,
+            minSpeechDurationMs: Number.isFinite(minSpeechDurationMs)
+                ? Math.min(5000, Math.max(100, Math.round(minSpeechDurationMs)))
+                : 300
+        };
+
+        this.config.vadThreshold = vadConfig.threshold;
+        this.config.vadSilenceDurationMs = vadConfig.silenceDurationMs;
+        this.config.vadMinSpeechDurationMs = vadConfig.minSpeechDurationMs;
+        if (this.recorder && typeof this.recorder.setVadConfig === 'function') {
+            this.recorder.setVadConfig(vadConfig);
+        }
+    }
+
     handleConfigUpdate(data) {
         if (!data.config) return;
         try {
@@ -363,6 +417,8 @@ class VoiceDisplay {
             delete cfg.displayId;
             const newConfig = { ...currentConfig, ...cfg };
             fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
+            this.config = { ...this.config, ...newConfig };
+            this.applyVadConfig(newConfig);
             log('配置', `配置已更新: serverUrl=${newConfig.serverUrl}`);
         } catch (err) {
             logError('配置', `配置更新失败: ${err.message}`);
@@ -642,12 +698,14 @@ class VoiceDisplay {
 
     handleVoiceTtsPlaybackState(data) {
         const playbackId = data && data.voiceTtsPlaybackId;
-        if (!playbackId || data.voiceprintEnabled === true || !this.recorder) return;
+        if (!playbackId || !this.recorder) return;
         const playbackKey = `${data.playbackDisplayId || ''}:${playbackId}`;
 
         if (data.state === 'started') {
             this.remoteTtsPlaybackIds.add(playbackKey);
-            this.recorder.pause();
+            if (this.pauseRecordingDuringPlayback) {
+                this.recorder.pause();
+            }
             return;
         }
 
@@ -718,7 +776,7 @@ class VoiceDisplay {
 
         log('语音', '开始语音识别（服务器端ASR）...');
 
-        const onAudioData = async (wavData) => {
+        const onAudioData = async (wavData, timing = {}) => {
             try {
                 let dataToSend = wavData;
 
@@ -733,12 +791,18 @@ class VoiceDisplay {
                     }
                 }
 
-                const result = await this.asr.recognize(dataToSend);
+                const result = await this.asr.recognize(dataToSend, {
+                    displayId: this.config.displayId,
+                    speechStartAt: timing.speechStartAt,
+                    speechEndAt: timing.speechEndAt
+                });
                 if (result.status === 'success' && result.text) {
                     log('语音', `识别结果: ${result.text}`);
                     this.lastRecognition = result.text;
                     this.updateTUIRecordingState();
-                    this.sendVoiceInput(result.text);
+                    if (result.processedByServer !== true) {
+                        this.sendVoiceInput(result.text);
+                    }
                 } else if (result.status === 'ignored') {
                     log('语音', '服务器忽略该段音频');
                 }
@@ -871,8 +935,9 @@ class VoiceDisplay {
         if (AudioRecorder) {
             this.recorder = new AudioRecorder({
                 sampleRate: 16000,
-                vadThreshold: this.config.vadThreshold || 0.01,
-                minSpeechDuration: 300
+                vadThreshold: this.config.vadThreshold ?? 0.01,
+                vadSilenceDurationMs: this.config.vadSilenceDurationMs ?? 500,
+                vadMinSpeechDurationMs: this.config.vadMinSpeechDurationMs ?? 300
             });
         } else {
             log('录音', '录音器不可用，语音识别功能将不可用');
@@ -921,8 +986,12 @@ class VoiceDisplay {
 
         this.audio.onPlayStart = () => {
             this.markLocalTtsPlaybackStart();
-            log('录音', '播放开始，暂停录音');
-            this.recorder.pause();
+            if (this.pauseRecordingDuringPlayback) {
+                log('录音', '播放开始，暂停录音');
+                this.recorder.pause();
+            } else {
+                log('录音', '播放开始，继续录音');
+            }
         };
 
         this.audio.onPlayEnd = () => {

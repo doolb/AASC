@@ -96,9 +96,10 @@ class ServerASR {
     /**
      * 识别音频
      * @param {Buffer} wavData - WAV格式的音频数据
-     * @returns {Promise<{text: string, status: string}>}
+     * @param {Object} context - 显示端和 VAD 片段时间信息
+     * @returns {Promise<Object>} - 服务端 ASR 完整响应
      */
-    async recognize(wavData) {
+    async recognize(wavData, context = {}) {
         try {
             const url = `${this.serverURL}/api/asr/recognize`;
 
@@ -107,6 +108,15 @@ class ServerASR {
                 filename: 'audio.wav',
                 contentType: 'audio/wav'
             });
+            if (context.displayId) {
+                formData.append('displayId', String(context.displayId));
+            }
+            if (Number.isFinite(Number(context.speechStartAt))) {
+                formData.append('speechStartAt', String(context.speechStartAt));
+            }
+            if (Number.isFinite(Number(context.speechEndAt))) {
+                formData.append('speechEndAt', String(context.speechEndAt));
+            }
 
             const response = await fetch(url, this._getFetchOptions({
                 method: 'POST',
@@ -123,9 +133,9 @@ class ServerASR {
 
             switch (result.status) {
                 case 'success':
-                    return { text: result.text, status: 'success' };
+                    return { ...result, text: result.text || '', status: 'success' };
                 case 'ignored':
-                    return { text: '', status: 'ignored' };
+                    return { ...result, text: '', status: 'ignored' };
                 default:
                     throw new Error(`识别失败: ${result.message || '未知错误'}`);
             }

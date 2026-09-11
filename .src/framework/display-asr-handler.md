@@ -42,7 +42,7 @@ framework
   - 若 isLast 为 true：
     - 清除超时定时器
     - 合并 session.chunks 为完整 Buffer
-    - 调用 asr.recognize(fullBuffer) // 服务端识别
+    - await 调用 asr.recognize(fullBuffer) // 服务端识别，避免把 Promise 当成文本
     - 结果通过 broadcastToControls({ type: 'voiceInput', text, displayId, isFinal: true }) 推送
     - 清理 session
 
@@ -56,3 +56,9 @@ framework
 
 - 在 wsServer 创建后的 handler 注册段增加 audioChunk
 - displayTypes 数组新增 'audioChunk'
+
+### HTTP ASR 内存上传
+
+- `/api/asr/recognize` 使用 multer memoryStorage，读取 `request.file.buffer`
+- Buffer 直接传给服务端 ASR 或 Base64 转发给显示端 ASR
+- 接口不调用 ASR 临时文件清理函数；声纹注册的独立临时文件流程保持不变

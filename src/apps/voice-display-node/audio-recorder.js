@@ -11,12 +11,17 @@ class AudioRecorder {
      * @param {Object} options - 配置选项
      * @param {number} options.sampleRate - 采样率 (默认 16000)
      * @param {number} options.vadThreshold - VAD 静音阈值 (默认 0.01)
-     * @param {number} options.minSpeechDuration - 最短语音时长 ms (默认 300)
+     * @param {number} options.minSpeechDuration - 兼容旧配置，等同于最短语音时长 ms
+     * @param {number} options.vadSilenceDurationMs - 结束语音前需要持续静音的时长 (默认 500)
+     * @param {number} options.vadMinSpeechDurationMs - 最短语音片段时长 (默认 300)
      */
     constructor(options = {}) {
         this.sampleRate = options.sampleRate || 16000;
-        this.vadThreshold = options.vadThreshold || 0.01;
-        this.minSpeechDuration = options.minSpeechDuration || 300;
+        this.vadThreshold = 0.01;
+        this.vadSilenceDurationMs = 500;
+        this.vadMinSpeechDurationMs = 300;
+        this.minSpeechDuration = 300;
+        this.setVadConfig(options);
         
         this.recording = false;
         this.paused = false;
@@ -26,6 +31,7 @@ class AudioRecorder {
         this.onSpeechStart = null;
         /** @type {Function|null} VAD 完成回调（cut 模式用） */
         this.onVadSpeech = null;
+    }
 
     /**
      * 获取可用的音频输入设备列表
@@ -53,37 +59,40 @@ class AudioRecorder {
 
         const frameDurationMs = 20;
         const framesPerBuffer = Math.floor(this.sampleRate * frameDurationMs / 1000);
-        const silenceFramesNeeded = Math.floor(this.minSpeechDuration / frameDurationMs);
-
         let hasSpeech = false;
         let speechSamples = [];
+        let speechVoiceSamples = [];
         let silenceFrameCount = 0;
+        let speechStartAt = null;
 
         const processAudioData = (int16Samples) => {
             const rms = this.computeRMS(int16Samples);
 
             if (rms >= this.vadThreshold) {
-                if (!hasSpeech && this.onSpeechStart) {
-                    this.onSpeechStart();
+                if (!hasSpeech) {
+                    speechStartAt = Date.now();
+                    if (this.onSpeechStart) {
+                        this.onSpeechStart();
+                    }
                 }
                 hasSpeech = true;
                 speechSamples.push(...int16Samples);
+                speechVoiceSamples.push(...int16Samples);
                 silenceFrameCount = 0;
             } else if (hasSpeech) {
                 speechSamples.push(...int16Samples);
                 silenceFrameCount++;
 
-                if (silenceFrameCount >= silenceFramesNeeded) {
-                    if (speechSamples.length >= framesPerBuffer) {
+                if (silenceFrameCount >= this.getSilenceFramesNeeded(frameDurationMs)) {
+                    if (speechVoiceSamples.length >= this.getMinSpeechSamples()) {
                         const wavData = this.encodeWAV(speechSamples, this.sampleRate);
-                        onAudioData(wavData);
-                        if (this.onVadSpeech) {
-                            this.onVadSpeech(wavData);
-                        }
+                        this.emitAudioSegment(onAudioData, wavData, speechStartAt);
                     }
                     speechSamples = [];
+                    speechVoiceSamples = [];
                     hasSpeech = false;
                     silenceFrameCount = 0;
+                    speechStartAt = null;
                 }
             }
         };
@@ -108,7 +117,9 @@ class AudioRecorder {
                     if (this.paused) {
                         hasSpeech = false;
                         speechSamples = [];
+                        speechVoiceSamples = [];
                         silenceFrameCount = 0;
+                        speechStartAt = null;
                         return;
                     }
 
@@ -140,9 +151,9 @@ class AudioRecorder {
                     this.recording = false;
                     console.log('[录音] 录音已关闭');
 
-                    if (hasSpeech && speechSamples.length >= framesPerBuffer) {
+                    if (hasSpeech && speechVoiceSamples.length >= this.getMinSpeechSamples()) {
                         const wavData = this.encodeWAV(speechSamples, this.sampleRate);
-                        onAudioData(wavData);
+                        this.emitAudioSegment(onAudioData, wavData, speechStartAt);
                     }
 
                     resolve();
@@ -205,6 +216,50 @@ class AudioRecorder {
 
     isPaused() {
         return this.paused;
+    }
+
+    /**
+     * 更新 VAD 配置；服务端重连或控制端调整参数时可以即时生效。
+     * @param {Object} config - 服务端下发的 VAD 配置
+     */
+    setVadConfig(config = {}) {
+        const threshold = Number(config.threshold ?? config.vadThreshold);
+        if (Number.isFinite(threshold)) {
+            this.vadThreshold = Math.min(0.2, Math.max(0.001, threshold));
+        }
+
+        const silenceDuration = Number(config.silenceDurationMs ?? config.vadSilenceDurationMs);
+        if (Number.isFinite(silenceDuration)) {
+            this.vadSilenceDurationMs = Math.min(5000, Math.max(100, Math.round(silenceDuration)));
+        }
+
+        const minSpeechDuration = Number(
+            config.minSpeechDurationMs ?? config.vadMinSpeechDurationMs ?? config.minSpeechDuration
+        );
+        if (Number.isFinite(minSpeechDuration)) {
+            this.vadMinSpeechDurationMs = Math.min(5000, Math.max(100, Math.round(minSpeechDuration)));
+        }
+        // 保留旧属性，避免现有 cut/soft 模式代码读取时行为改变。
+        this.minSpeechDuration = this.vadMinSpeechDurationMs;
+    }
+
+    getSilenceFramesNeeded(frameDurationMs) {
+        return Math.max(1, Math.ceil(this.vadSilenceDurationMs / frameDurationMs));
+    }
+
+    getMinSpeechSamples() {
+        return Math.max(1, Math.floor(this.vadMinSpeechDurationMs * this.sampleRate / 1000));
+    }
+
+    emitAudioSegment(onAudioData, wavData, speechStartAt) {
+        const speechEndAt = Date.now();
+        const timing = Number.isFinite(speechStartAt)
+            ? { speechStartAt, speechEndAt }
+            : {};
+        onAudioData(wavData, timing);
+        if (this.onVadSpeech) {
+            this.onVadSpeech(wavData, timing);
+        }
     }
 
     /**

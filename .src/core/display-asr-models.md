@@ -8,14 +8,14 @@ core
 ## 目标文件清单
 
 - `src/apps/server/boot/server-app.js` // WS 消息处理 + ASR 设备 API + pendingDisplayAsrRequests
-- `src/external/asr/asr-service.js` // 服务端 ASR 引擎 SherpaOnnxASR
+- `src/external/asr/asr-service.js` // 服务端 ASR 引擎及 Buffer/WAV 音频适配
 - `src/core/viewbind/WSViewBindServer.js` // 注册 ASR 相关 handler
 
 ## 范围约束
 
 - 只改服务端 handler 注册和消息流转，不动前端 WASM 加载逻辑
-- 服务端 ASR（asr-service.js）不动，只新增 audioChunk 流转 handler
-- 现有 pendingDisplayAsrRequests + asrResult 模式不动，只补 audioChunk 支线
+- 服务端 ASR 保持串行队列和历史路径兼容，新增 Buffer 输入及 ffmpeg 管道转换
+- 现有 pendingDisplayAsrRequests + asrResult 模式不动，HTTP ASR 入口补充内存 Buffer 路径
 
 ## 已有声明（真实路径与行号）
 
@@ -58,6 +58,20 @@ core
 - wsServer 注册 'audioChunk' handler
   - 按 requestId 创建 AsrSession，累积 audioChunks
   - isLast 为 true → 合并 chunks 为完整音频 Buffer
-  - 调用 asr.recognize(fullAudioBuffer)
+  - await 调用 asr.recognize(fullAudioBuffer)
   - 结果通过 broadcastToControls 作为 voiceInput 推送给控制端
   - 超过 30 秒未收全 → 丢弃并报错
+
+### HTTP ASR 内存输入
+
+- multipart audio → request.file.buffer
+- `asr.device == server` → await `asr.recognize(buffer)`
+- `asr.device == display` → `buffer.toString('base64')` → `sendAudioToDisplayAsr`
+- 超过 10MB 或上传解析失败 → 返回 JSON 错误，不创建 ASR 临时文件
+- Node 显示端携带 displayId 和语音时间，服务端已处理时返回 processedByServer，客户端不再重复发送旧 voiceInput
+
+### 显示端 VAD 配置
+
+- 服务端按 displayId 保存 `vadThreshold`、`vadSilenceDurationMs=500`、`vadMinSpeechDurationMs=300`
+- 连接和配置修改时发送 `voiceVadConfig`
+- 网页显示端和 Node 录音器收到消息后即时更新 VAD 参数

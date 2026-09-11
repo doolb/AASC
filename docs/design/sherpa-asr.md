@@ -4,7 +4,7 @@
 
 - 服务端提供统一的 ASR HTTP 接口，供控制端、显示端、子显示端上传音频识别
 - 识别过程需要限制并发访问，避免 `sherpa-onnx-node` 的 native 资源在高频请求下持续堆积
-- 识别完成后必须立即释放流对象、音频样本引用和临时文件，防止 RSS 持续上涨
+- 识别完成后必须立即释放流对象和音频样本引用，防止 RSS 持续上涨；ASR HTTP 请求不再创建临时文件
 - 当服务端 ASR 负载过高时，需要快速拒绝新请求，避免排队无限增长
 
 ## 设计方案
@@ -22,10 +22,12 @@
 - 在 `finally` 中调用 `stream.destroy()` 释放 native 对象
 - 同时清空 `audioData.samples` 引用，缩短大数组存活时间
 
-### 3. 临时文件清理
+### 3. 内存音频输入
 
-- `src/apps/server/boot/server-app.js` 的 `/api/asr/recognize` 在成功、忽略、异常三条路径都调用统一的临时文件清理函数
-- 清理失败只记录日志，不影响接口响应
+- `src/apps/server/boot/server-app.js` 的 `/api/asr/recognize` 使用 `multer.memoryStorage()`，短音频直接以 `Buffer` 进入识别或显示端转发流程
+- 上传大小限制为 10MB，解析失败或超限时直接返回 JSON 错误，不生成 ASR 临时文件
+- `SherpaOnnxASR.recognize()` 同时接受历史文件路径和新的 `Buffer`；WAV 直接解析，其他输入通过 ffmpeg stdin/stdout 管道转换为 16kHz 单声道 WAV，不再生成转换临时文件
+- 声纹注册等仍依赖路径的旧上传接口继续使用各自临时目录，不与 ASR HTTP 上传共用生命周期
 
 ### 4. 内存回收触发策略
 
@@ -49,7 +51,7 @@
 - 向后兼容旧的 `asr.isolateProcess.enabled` 配置
 - 独立进程模式下，主服务进程不直接加载 `sherpa-onnx-node`，改为每次 `recognize()` 调用 `fork` 一个新的 ASR 子进程
 - 子进程加载 SenseVoice 模型、执行识别、通过 IPC 返回结果，然后调用 `process.exit(0)` 退出
-- 主进程通过 IPC 发送 `{ type: 'recognize', id, audioPath, options }` 请求，子进程返回 `{ type: 'response', id, ok, text }`
+- 主进程通过 advanced IPC 发送 `{ type: 'recognize', id, audioBuffer 或 audioPath, options }` 请求，子进程返回 `{ type: 'response', id, ok, text }`
 - 每个请求使用超时保护（`requestTimeoutMs`），超时后 `SIGKILL` 强制终止子进程
 - 通过 `pendingCount` / `maxQueueLength` 限制并发子进程数量，防止同时加载多个模型实例导致内存暴涨
 - 识别完成后子进程立即退出，native 模型内存完全释放回操作系统，仅在识别期间占用内存

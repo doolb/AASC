@@ -413,7 +413,9 @@ stopHeartbeat():
 handleMessage(msgType, data):
     "displayId": 记录服务端分配的显示端ID
     "serverStartTime": 记录服务器启动时间
-    "configUpdate": 更新本地配置文件（serverUrl, displayId, vadThreshold）
+    "configUpdate": 更新本地配置文件（serverUrl, vadThreshold, vadSilenceDurationMs, vadMinSpeechDurationMs）
+    "voiceVadConfig": 立即更新录音器的阈值、静音结束时间和最短语音时长
+    "voiceprintConfig": 更新 pauseRecordingDuringPlayback；播放期间是否暂停普通 ASR 与网页显示端一致
     "restoreState": 记录恢复状态
     "tts":
         playAudio -> 从URL下载并播放音频
@@ -437,7 +439,14 @@ handleConfigUpdate(data):
     读取当前 config.json
     合并新配置: newConfig = { ...currentConfig, ...data.config }
     写入 config.json
+    调用 recorder.setVadConfig(newConfig) 让运行中的录音器立即生效
     记录日志: 配置已更新
+
+handleVoiceprintConfig(data):
+    pauseRecordingDuringPlayback = data.pauseRecordingDuringPlayback !== false
+    如果关闭播放暂停且录音器当前暂停:
+        清理远程播放暂停状态
+        恢复录音器
 ```
 
 ### 重连机制
@@ -549,10 +558,11 @@ recognize(wavData):
     创建 HTTP POST 请求到 /api/asr/recognize
     使用 FormData 构造 multipart/form-data
     字段名 "audio"，文件名 "audio.wav"
+    Node.js 客户端额外提交 displayId、speechStartAt、speechEndAt
     发送请求
     解析响应:
-        status == "success": 返回 { text, status: "success" }
-        status == "ignored": 返回 { text: "", status: "ignored" }
+        status == "success": 返回服务端完整 JSON（包含 processedByServer/segments 等字段）
+        status == "ignored": 返回 { ...response, text: "", status: "ignored" }
         其他: 抛出错误
 ```
 
@@ -562,7 +572,9 @@ recognize(wavData):
 class AudioRecorder:
     sampleRate: number (16000)
     vadThreshold: number (0.01)
-    minSpeechDuration: number (300)
+    vadSilenceDurationMs: number (500)
+    vadMinSpeechDurationMs: number (300)
+    minSpeechDuration: number (兼容旧配置，映射到 vadMinSpeechDurationMs)
     recording: boolean
     paused: boolean
     audioInput: naudiodon.AudioIO
@@ -582,9 +594,12 @@ start(onAudioData, signals):
         转换为 int16 格式
         计算 RMS 音量
         RMS >= 阈值: 标记有语音，累积音频数据
-        RMS < 阈值 且 有语音 且 持续足够长:
-            编码为 WAV 格式
-            调用 onAudioData(wavData)
+        RMS < 阈值 且 有语音:
+            累加静音帧
+            静音累计达到 vadSilenceDurationMs 且有效语音累计达到 vadMinSpeechDurationMs:
+                编码为 WAV 格式
+                调用 onAudioData(wavData, { speechStartAt, speechEndAt })
+                清空当前语音段
     监听 stopSignal 退出
     调用 audioInput.start() 开始录音
 ```
@@ -631,10 +646,19 @@ encodeWAV(samples, sampleRate):
 ```
 参数:
     vadThreshold: 0.01 (RMS阈值)
-    minSpeechDuration: 300 (最短语音时长ms)
+    vadSilenceDurationMs: 500 (结束语音前持续静音时长ms)
+    vadMinSpeechDurationMs: 300 (有效语音最短时长ms)
 
 逻辑:
-    有语音 + RMS < 阈值 + 语音持续 > minSpeechDuration -> 编码WAV并发送
+    RMS >= vadThreshold -> 开始/继续语音段，并记录 speechStartAt
+    RMS < vadThreshold -> 累计静音帧
+    静音帧累计 >= ceil(vadSilenceDurationMs / 帧时长):
+        有效语音采样 >= vadMinSpeechDurationMs -> 编码WAV并发送
+        清空语音段、静音帧和时间标记
+
+收到 voiceVadConfig:
+    更新 vadThreshold、vadSilenceDurationMs、vadMinSpeechDurationMs
+    后续帧立即使用新配置，不重建录音器
 ```
 
 #### 计算 RMS
@@ -663,6 +687,9 @@ VoiceDisplay 支持 4 种录音模式，通过 `config.recordingMode` 配置：
     "serverUrl": "http://localhost:3000",
     "displayId": "voice-display-node-1",
     "vadThreshold": 0.01,
+    "vadSilenceDurationMs": 500,
+    "vadMinSpeechDurationMs": 300,
+    "pauseRecordingDuringPlayback": true,
     "maxReconnectAttempts": 5,
     "recordingMode": "mute"
 }
@@ -675,6 +702,7 @@ start():
     初始化 AudioPlayer
     初始化 ServerASR
     初始化 AudioRecorder
+    订阅服务端 voiceVadConfig，运行时更新三个 VAD 参数
     检查 recordingMode:
         case "mute":
             setupPlaybackPause() → audio.onPlayStart = recorder.pause，audio.onPlayEnd = recorder.resume
