@@ -91,19 +91,26 @@
 
 ## Android APK 显示端与 AASC 网络
 
-- ✅ [2026-09-09] 修复 APK 显示端无法连接主服务器及内置 Node 子服务器无法启动的问题。
-  - APK 内置 arm64 Node 改为 native `libaasc_node.so`，Gradle 使用 legacy packaging 解压到 `nativeLibraryDir`；资产过滤保留下划线命名的 Node 依赖文件，修复 `readable-stream` 加载失败。
-  - 主服务器开发证书增加局域网 SAN，APK 通过 Network Security Config 绑定公开证书；未知或主机名不匹配证书统一取消，不再调用 `SslErrorHandler.proceed()`。
-  - 保留 display.html 唯一 WebSocket 重连机制，修复主服务器重启后的 HTTPS/WSS 重连链路。
-  - 改动文件：`res/certs/cert.pem`、Android Manifest/Gradle/MainActivity、APK 证书和 Network Security Config、`scripts/ops/prepare-android-node-runtime.js`、Android 显示端 design/spec/task、相关契约测试。
-  - 验证：定向测试 17/17、Android JVM 单元测试 BUILD SUCCESSFUL、Debug APK 构建成功；SM-N9500 真机已注册主服务器，主服务器重启后显示端和子服务器均自动重连。
-
 - ✅ [2026-09-11] 修复 APK 子服务器媒体在 AASC 注册完成前播放失败，以及子服务器 IP 变化后旧直连地址失效的问题。
   - 控制端远程媒体和播放列表项增加来源节点元数据；主服务器在节点注册完成或心跳地址变化后，按来源节点查找所有显示端当前播放状态。
   - 主服务器按最新节点地址重写直连 URL，并使用既有 `url`、`base64`、`playlistStart` 消息正常重发；保留主服务器代理地址，不新增 `mediaReplay` 协议，显示端无需修改。
   - AASC NodeConnector 注册和心跳上报动态可访问地址，其他显示端播放同一子服务器媒体时也会由主服务器统一恢复。
   - 改动文件：`media-replay.js`、`node-connector.js`、`server-app.js`、`media-library.js`、相关测试及 AASC/媒体库/APK design/spec/task 文档。
   - 验证：媒体重播、节点动态地址和主服务器接入定向测试 `3/3` 通过；JavaScript 语法检查和 `git diff --check` 通过。
+
+- ✅ [2026-09-11] 优化 APK 手动关闭后重新打开时的 Node 子服务器快速恢复。
+  - 构建阶段生成稳定的 Runtime 内容指纹和小型 `runtime-version.txt`；正常启动只读取版本标记和少量关键文件，不再解析约 7 MB manifest 或校验 631 MB Runtime 全部内容。
+  - 仅在首次安装、Runtime 内容变化或关键文件缺失时执行 staging 全量复制和 SHA-256 校验；Node.js 版本不变时，server 包内容变化仍能通过内容指纹触发一次更新。
+  - `NodeServerService` 增加 Runtime 准备和 Node launcher 启动耗时日志，便于定位后续设备恢复延迟。
+  - 改动文件：`scripts/ops/prepare-android-node-runtime.js`、`NodeRuntimeInstaller.kt`、`NodeServerService.kt`、对应 Node/Kotlin 测试及 APK design/spec/task 文档。
+  - 验证：Node Runtime 定向测试 `2/2` 文件组通过，Android JVM 全量单元测试 `55` 个通过，Debug APK 构建成功；SM-N9500 稳定状态下重复关闭/打开实测 Runtime 快速复用 `16ms`、Node launcher 总耗时 `37ms`、AASC 连接约 `4s`。
+
+- ✅ [2026-09-09] 修复 APK 显示端无法连接主服务器及内置 Node 子服务器无法启动的问题。
+  - APK 内置 arm64 Node 改为 native `libaasc_node.so`，Gradle 使用 legacy packaging 解压到 `nativeLibraryDir`；资产过滤保留下划线命名的 Node 依赖文件，修复 `readable-stream` 加载失败。
+  - 主服务器开发证书增加局域网 SAN，APK 通过 Network Security Config 绑定公开证书；未知或主机名不匹配证书统一取消，不再调用 `SslErrorHandler.proceed()`。
+  - 保留 display.html 唯一 WebSocket 重连机制，修复主服务器重启后的 HTTPS/WSS 重连链路。
+  - 改动文件：`res/certs/cert.pem`、Android Manifest/Gradle/MainActivity、APK 证书和 Network Security Config、`scripts/ops/prepare-android-node-runtime.js`、Android 显示端 design/spec/task、相关契约测试。
+  - 验证：定向测试 17/17、Android JVM 单元测试 BUILD SUCCESSFUL、Debug APK 构建成功；SM-N9500 真机已注册主服务器，主服务器重启后显示端和子服务器均自动重连。
 
 - ✅ [2026-09-09] 增加 APK Android 9/API 28 共享存储访问。
   - Manifest 声明并限制 `READ_EXTERNAL_STORAGE`、`WRITE_EXTERNAL_STORAGE` 到 API 28；MainActivity 启动时申请缺失权限，拒绝权限不阻塞显示端连接。

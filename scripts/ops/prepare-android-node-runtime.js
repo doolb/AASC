@@ -122,11 +122,31 @@ async function copyDirectoryWithManifest(sourceRoot, outputRoot, outputPrefix = 
 }
 
 async function copyNodeLibrary(runtimeDir, nativeOutputDir) {
-    const sourcePath = path.join(runtimeDir, 'node');
+    // 原生 Node 库不放入 Android assets，但必须参与内容版本计算，避免 Node 库变更后
+    // 设备仍错误复用旧的 nativeLibraryDir 文件。
+    const metadata = await copyFileWithManifest(
+        runtimeDir,
+        'node',
+        nativeOutputDir,
+        path.join(ANDROID_ABI, NODE_LIBRARY_NAME)
+    );
     const outputPath = path.join(nativeOutputDir, ANDROID_ABI, NODE_LIBRARY_NAME);
-    await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.promises.copyFile(sourcePath, outputPath);
     await fs.promises.chmod(outputPath, 0o755);
+    return metadata;
+}
+
+function deriveContentVersion(files, nodeFile) {
+    // 构建输入的文件列表可能受文件系统遍历顺序影响，先按路径排序后再计算指纹，
+    // 保证相同输入重复构建时版本稳定，只有实际内容变化才触发 APK 首次启动安装。
+    const fingerprintInput = JSON.stringify({
+        files: [...files].sort((left, right) => left.path.localeCompare(right.path)),
+        node: {
+            size: nodeFile.size,
+            sha256: nodeFile.sha256
+        }
+    });
+    const digest = crypto.createHash('sha256').update(fingerprintInput, 'utf8').digest('hex');
+    return `content-${digest.slice(0, 24)}`;
 }
 
 function assertRequiredPackageEntries(packageDir) {
@@ -188,22 +208,24 @@ async function prepareAndroidNodeRuntime(options = {}) {
 
     try {
         const files = [];
-        files.push(...await copyDirectoryWithManifest(
+        const runtimeFiles = await copyDirectoryWithManifest(
             runtimeDir,
             temporaryOutputDir,
             path.join('runtime', ANDROID_ABI),
             { excludedPaths: ['node'] }
-        ));
-        await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
+        );
+        files.push(...runtimeFiles);
+        const nodeFile = await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
         files.push(...await copyDirectoryWithManifest(packageDir, temporaryOutputDir, 'server'));
         files.push(...await copyCertificates(
             options.certDir || process.env.AASC_ANDROID_NODE_CERT_DIR,
             temporaryOutputDir
         ));
 
-        const version = String(
-            options.version || process.env.AASC_ANDROID_NODE_RUNTIME_VERSION || 'dev'
-        ).trim() || 'dev';
+        const configuredVersion = String(
+            options.version || process.env.AASC_ANDROID_NODE_RUNTIME_VERSION || ''
+        ).trim();
+        const version = configuredVersion || deriveContentVersion(files, nodeFile);
         const manifest = {
             version,
             abi: ANDROID_ABI,
@@ -214,6 +236,12 @@ async function prepareAndroidNodeRuntime(options = {}) {
         await fs.promises.writeFile(
             path.join(temporaryOutputDir, 'runtime-manifest.json'),
             JSON.stringify(manifest, null, 2) + '\n',
+            'utf8'
+        );
+        // 启动时只读取这个小文件即可判断是否需要更新，避免每次启动都解析数 MB 的完整 manifest。
+        await fs.promises.writeFile(
+            path.join(temporaryOutputDir, 'runtime-version.txt'),
+            `${version}\n`,
             'utf8'
         );
 
@@ -262,5 +290,6 @@ module.exports = {
     isAndroidAssetExcluded,
     isNpmInternalMetadata,
     isNpmToolShim,
+    deriveContentVersion,
     prepareAndroidNodeRuntime
 };

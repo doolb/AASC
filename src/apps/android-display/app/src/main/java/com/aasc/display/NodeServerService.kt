@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -118,8 +119,10 @@ class NodeServerService : Service() {
 
     private fun startNodeProcess(serverUrl: String) {
         val generation = restartGeneration.incrementAndGet()
+        val startAt = SystemClock.elapsedRealtime()
         try {
             val root = NodeRuntimeInstaller(this).ensureInstalled()
+            val runtimeReadyAt = SystemClock.elapsedRealtime()
             NodeServerConfig.write(root, serverUrl, "APK-${Build.MODEL}")
             val command = buildNodeCommand(root, File(applicationInfo.nativeLibraryDir))
             val processBuilder = ProcessBuilder(command)
@@ -131,7 +134,10 @@ class NodeServerService : Service() {
             )
             val process = processBuilder.start()
             nodeProcess = process
-            android.util.Log.i("AASC-Node", "Node launcher 已启动，工作目录: ${root.absolutePath}")
+            android.util.Log.i(
+                "AASC-Node",
+                "Node launcher 已启动，工作目录: ${root.absolutePath}，Runtime耗时=${runtimeReadyAt - startAt}ms，总耗时=${SystemClock.elapsedRealtime() - startAt}ms"
+            )
             updateNotification("Node.js 子服务器运行中，正在连接主服务器")
             readProcessOutput(process, false)
             readProcessOutput(process, true)

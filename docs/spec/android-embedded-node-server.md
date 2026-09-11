@@ -41,13 +41,23 @@ MainActivity 启动存储权限流程:
 ```text
 NodeRuntimeService.start
     → 读取 assets/runtime-manifest.json
-    → 校验 runtime 和 server 包版本、大小、SHA-256
-    → 当前私有目录版本一致时复用已安装目录
-    → 版本不同或目录不完整时解压到 staging
+    → 读取私有目录 .runtime-version
+    → 版本一致且关键启动文件存在、大小正确时走快速复用路径
+    → 快速复用路径不遍历和计算全部 Runtime 文件的 SHA-256
+    → 版本不同或关键文件缺失时解压到 staging，并校验全部文件大小和 SHA-256
     → 拒绝绝对路径和包含 .. 的条目
     → 检查 node 可执行文件和 src/apps/server/boot/server-launcher.js
-    → 原子切换 staging 为 active
+    → 安装成功后写入 Runtime 版本标记
     → 保留 config、res/uploads、res/certs、logs 和用户媒体
+```
+
+```text
+Android Node Runtime 版本生成
+    → 收集已复制的 Runtime、server、node_modules 和证书文件元数据
+    → 同时收集 APK 内置 Node 原生库的大小和 SHA-256
+    → 未显式提供版本时，对上述稳定排序后的元数据计算内容指纹
+    → 将内容指纹写入 runtime-manifest.version
+    → APK 更新但 Node.js 版本不变时，仅因 server 包内容变化触发一次安装
 ```
 
 ```text
@@ -145,6 +155,15 @@ WebView 页面地址
 Runtime 校验失败
     → 不启动 Node
     → 前台通知显示安装失败和校验错误
+
+```text
+NodeServerService 快速恢复
+    → Service 启动时记录恢复开始时间
+    → NodeRuntimeInstaller 先执行版本标记和关键文件轻量检查
+    → 检查通过后立即启动 launcher，不等待全量 Runtime 校验
+    → launcher 输出启动时间和 AASC connected 时间
+    → 将启动耗时、Runtime 路径和失败原因写入 AASC-Node 日志
+```
 
 ```text
 APK 子服务器媒体就绪后的主服务器处理

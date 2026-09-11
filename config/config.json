@@ -53,13 +53,14 @@
     }
   },
   "voiceprint": {
-    "enabled": false,
+    "enabled": true,
     "extraction": "display",
-    "threshold": 0.5,
+    "threshold": 0.25,
     "multiSpeaker": true,
     "multiMode": "fast",
     "speakerCount": "AUTO",
-    "pauseRecordingDuringPlayback": true
+    "pauseRecordingDuringPlayback": false,
+    "asrResultDetailLog": true
   },
   "voiceCommand": {
     "conversationConfirmationMode": "off",
@@ -91,7 +92,7 @@
     "reminderTemplateSuffix": "",
     "routing": {
       "weather": "system",
-      "search": "llm"
+      "search": "system"
     }
   },
   "repairMode": {

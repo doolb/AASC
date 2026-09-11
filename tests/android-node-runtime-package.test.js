@@ -69,8 +69,13 @@ test('正常输入生成固定 ABI manifest 和 Node 启动入口', async () => 
     const outputDir = path.join(tempDir, 'output');
     const result = await prepareAndroidNodeRuntime({ runtimeDir, packageDir, outputDir });
     const manifest = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'runtime-manifest.json'), 'utf8'));
+    const runtimeVersion = await fs.promises.readFile(
+        path.join(outputDir, 'runtime-version.txt'),
+        'utf8'
+    );
 
     assert.equal(result.manifest.abi, 'arm64-v8a');
+    assert.equal(runtimeVersion.trim(), manifest.version);
     assert.equal(manifest.entrypoint, 'server/src/apps/server/boot/server-launcher.js');
     assert.equal(manifest.nodePath, 'native/arm64-v8a/libaasc_node.so');
     assert.equal(manifest.files.some(file => file.path === 'runtime/arm64-v8a/node'), false);
@@ -79,6 +84,52 @@ test('正常输入生成固定 ABI manifest 和 Node 启动入口', async () => 
         (await fs.promises.stat(path.join(tempDir, 'jniLibs', 'arm64-v8a', 'libaasc_node.so'))).mode & 0o111,
         0o111
     );
+});
+
+test('未显式版本时相同输入生成稳定内容版本', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const runtimeDir = path.join(tempDir, 'runtime');
+    await fs.promises.mkdir(runtimeDir, { recursive: true });
+    await fs.promises.writeFile(path.join(runtimeDir, 'node'), '#!/system/bin/sh\n', 'utf8');
+
+    const first = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        packageDir,
+        outputDir: path.join(tempDir, 'output-first')
+    });
+    const second = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        packageDir,
+        outputDir: path.join(tempDir, 'output-second')
+    });
+
+    assert.match(first.manifest.version, /^content-[a-f0-9]{24}$/u);
+    assert.equal(second.manifest.version, first.manifest.version);
+});
+
+test('服务器运行包内容变化时自动生成新内容版本', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const runtimeDir = path.join(tempDir, 'runtime');
+    await fs.promises.mkdir(runtimeDir, { recursive: true });
+    await fs.promises.writeFile(path.join(runtimeDir, 'node'), '#!/system/bin/sh\n', 'utf8');
+
+    const first = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        packageDir,
+        outputDir: path.join(tempDir, 'output-first')
+    });
+    await fs.promises.writeFile(
+        path.join(packageDir, 'src', 'apps', 'server', 'boot', 'server-launcher.js'),
+        'console.log("launcher-updated");',
+        'utf8'
+    );
+    const second = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        packageDir,
+        outputDir: path.join(tempDir, 'output-second')
+    });
+
+    assert.notEqual(second.manifest.version, first.manifest.version);
 });
 
 test('服务器运行包忽略 npm 的 .bin 工具软链接', async () => {
