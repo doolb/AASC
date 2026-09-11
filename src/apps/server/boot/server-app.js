@@ -3129,12 +3129,22 @@ app.get('/api/voiceprint/config', (req, res) => {
         multiSpeaker: config.get('voiceprint.multiSpeaker', true),
         multiMode: config.get('voiceprint.multiMode', 'fast'),
         speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
+        pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
         denoise: config.get('asr.denoise', false)
     });
 });
 
 app.post('/api/voiceprint/config', (req, res) => {
-    const { enabled, extraction, threshold, multiSpeaker, multiMode, speakerCount, denoise } = req.body || {};
+    const {
+        enabled,
+        extraction,
+        threshold,
+        multiSpeaker,
+        multiMode,
+        speakerCount,
+        denoise,
+        pauseRecordingDuringPlayback
+    } = req.body || {};
     if (extraction !== undefined && !['server', 'display'].includes(extraction)) {
         return res.status(400).json({ status: 'error', message: 'extraction 只能是 server 或 display' });
     }
@@ -3143,6 +3153,9 @@ app.post('/api/voiceprint/config', (req, res) => {
     }
     if (denoise !== undefined && typeof denoise !== 'boolean') {
         return res.status(400).json({ status: 'error', message: 'denoise 必须是布尔值' });
+    }
+    if (pauseRecordingDuringPlayback !== undefined && typeof pauseRecordingDuringPlayback !== 'boolean') {
+        return res.status(400).json({ status: 'error', message: 'pauseRecordingDuringPlayback 必须是布尔值' });
     }
     if (multiMode !== undefined && multiMode !== 'fast') {
         return res.status(400).json({ status: 'error', message: 'multiMode 只能是 fast' });
@@ -3160,6 +3173,9 @@ app.post('/api/voiceprint/config', (req, res) => {
     config.set('voiceprint.multiMode', multiMode || config.get('voiceprint.multiMode', 'fast'));
     config.set('voiceprint.speakerCount', normalizedSpeakerCount);
     if (denoise !== undefined) config.set('asr.denoise', denoise);
+    if (pauseRecordingDuringPlayback !== undefined) {
+        config.set('voiceprint.pauseRecordingDuringPlayback', pauseRecordingDuringPlayback);
+    }
     config.saveConfig();
     // 广播给所有显示端，display.html 收到后 nativeBridge.voiceprintConfigure 重载引擎
     displayClients.forEach((displayData, displayId) => {
@@ -3171,6 +3187,7 @@ app.post('/api/voiceprint/config', (req, res) => {
             multiSpeaker: config.get('voiceprint.multiSpeaker', true),
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
+            pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
             denoise: config.get('asr.denoise', false)
         });
     });
@@ -5806,6 +5823,7 @@ wss.on('connection', (ws, req) => {
             multiSpeaker: config.get('voiceprint.multiSpeaker', true),
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
+            pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
             denoise: config.get('asr.denoise', false)
         }));
 

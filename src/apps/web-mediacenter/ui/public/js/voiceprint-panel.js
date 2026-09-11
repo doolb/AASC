@@ -22,6 +22,7 @@
             document.getElementById('vpEnabledCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpMultiCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpDenoiseCheck').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpPauseRecordingDuringPlaybackCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpMultiModeSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpSpeakerCountSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpThresholdInput').addEventListener('change', () => this.saveConfig());
@@ -105,6 +106,7 @@
                 document.getElementById('vpEnabledCheck').checked = !!c.enabled;
                 document.getElementById('vpMultiCheck').checked = !!c.multiSpeaker;
                 document.getElementById('vpDenoiseCheck').checked = !!c.denoise;
+                document.getElementById('vpPauseRecordingDuringPlaybackCheck').checked = c.pauseRecordingDuringPlayback !== false;
                 document.getElementById('vpMultiModeSel').value = c.multiMode || 'fast';
                 document.getElementById('vpSpeakerCountSel').value = c.speakerCount || 'AUTO';
                 const threshold = Number(c.threshold);
@@ -209,6 +211,7 @@
                 enabled: document.getElementById('vpEnabledCheck').checked,
                 multiSpeaker: document.getElementById('vpMultiCheck').checked,
                 denoise: document.getElementById('vpDenoiseCheck').checked,
+                pauseRecordingDuringPlayback: document.getElementById('vpPauseRecordingDuringPlaybackCheck').checked,
                 multiMode: document.getElementById('vpMultiModeSel').value,
                 speakerCount: document.getElementById('vpSpeakerCountSel').value,
                 threshold: threshold,

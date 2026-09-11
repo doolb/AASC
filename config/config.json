@@ -58,7 +58,8 @@
     "threshold": 0.5,
     "multiSpeaker": true,
     "multiMode": "fast",
-    "speakerCount": "AUTO"
+    "speakerCount": "AUTO",
+    "pauseRecordingDuringPlayback": true
   },
   "voiceCommand": {
     "conversationConfirmationMode": "off",

@@ -47,6 +47,7 @@
 | 显示端语音唤醒与监听控制 | [display-voice-conversation.md](spec/display-voice-conversation.md) | 监听开关、唤醒状态、TTS结束计时和声纹独立语义 |
 | 显示端录音模式与控制端回放 | [display-recording.md](spec/display-recording.md) | 三种录音模式、WebSocket 音频回传和控制端播放伪代码 |
 | 同一注册声纹跨显示端 ASR 去重 | [same-speaker-asr-dedup.md](spec/same-speaker-asr-dedup.md) | 同一注册声纹跨显示端短时重复语句抑制伪代码 |
+| 全局播放时暂停录音 | [global-voice-playback-recording-pause.md](spec/global-voice-playback-recording-pause.md) | 全局配置播放 TTS 时普通 ASR 录音的暂停与恢复 |
 | 日志筛选与系统监控 | [log-viewer.md](spec/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
 | 日志大脑 | [log-brain.md](spec/log-brain.md) | 日志摘要、记忆体构建、LLM判断上下文接口 |
 | 资源目录 | [resource-layout.md](spec/resource-layout.md) | 资源路径规范、目录整理、清理伪代码 |

@@ -18,7 +18,7 @@ assert.doesNotMatch(finishBody, /stopRawPcmCapture\(\)/, '语音分段结束不�
 assert.match(display, /function releaseVoiceRecordingResources\(\)/, '应有统一的监听资源释放入口');
 assert.match(display, /function pauseVoiceRecordingForTts\(\)/, 'TTS 开始时应有专用的录音暂停入口');
 assert.match(display, /function resumeVoiceRecordingAfterTts\(\)/, 'TTS 队列结束时应有专用的录音恢复入口');
-assert.match(display, /voiceprintEnabled === true/, '声纹识别开启时不应进入 TTS 暂停录音逻辑');
+assert.match(display, /pauseRecordingDuringPlayback\s*===\s*false/, '全局关闭时不应进入 TTS 暂停录音逻辑');
 assert.match(display, /setPaused\(true\)/, 'TTS 暂停应复用 PCM 采集器而不是释放音频资源');
 assert.match(display, /setPaused\(false\)/, 'TTS 结束应恢复 PCM 采集器');
 const recognitionStart = display.indexOf('async function sendAudioForRecognition');

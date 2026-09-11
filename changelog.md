@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+## 全局播放时暂停录音开关
+
+- ✅ [2026-09-11] 在控制端声纹管理面板增加全局“播放时暂停录音”开关，默认值为 `true`。
+  - 配置保存为 `voiceprint.pauseRecordingDuringPlayback`，服务端通过已有 `voiceprintConfig` 消息广播给全部在线显示端；旧配置缺少字段时回退为暂停。
+  - 开启时播放 TTS 暂停普通 ASR 并在播放结束后恢复，关闭时播放期间继续录音；单次录音、实时录音和控制端聊天录音不受影响。
+  - 改动文件：`config/config.json`、`config-app-service.js`、`server-app.js`、`upload.html`、`voiceprint-panel.js`、`display.html` 及对应 design/spec/task/test 文档。
+  - 验证：全局开关定向测试与既有录音生命周期测试通过，服务端 JavaScript 语法检查通过。
+
 ## 同一注册声纹跨显示端 ASR 去重
 
 - ✅ [2026-09-11] 增加同一注册声纹跨显示端短时 ASR 去重。

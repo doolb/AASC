@@ -220,6 +220,8 @@
         let voiceprintMultiSpeaker = true;
         let voiceprintMultiMode = 'fast';
         let voiceprintSpeakerCount = 'AUTO';
+        // 全局声纹设置：默认播放 TTS 时暂停普通 ASR，配置关闭后保持录音。
+        let pauseRecordingDuringPlayback = true;
         // 正式显示端统一使用中文 ASR，不向用户暴露语言选择。
         let asrLanguageMode = 'zh';
         let asrDenoiseEnabled = false;
@@ -1617,10 +1619,11 @@
             ttsRecordingResumeTimer = null;
         }
 
-        // 复用子显示端 mute 模式：无声纹时暂停 PCM/VAD，避免扬声器回声进入 ASR。
+        // 播放期间是否暂停普通 ASR 由控制端声纹面板的全局配置决定，单次/实时录音不会进入此分支。
         function pauseVoiceRecordingForTts() {
             if (activeRecordingPurpose !== 'asr'
-                || voiceprintEnabled === true || ttsRecordingPaused || !isListening || !pcmCapture?.active) return;
+                || pauseRecordingDuringPlayback === false
+                || ttsRecordingPaused || !isListening || !pcmCapture?.active) return;
             clearTtsRecordingResumeTimer();
             wasListeningBeforePlayback = true;
             ttsRecordingPaused = true;
@@ -4479,6 +4482,11 @@
                     }
 
                     if (data.type === 'voiceprintConfig') {
+                        pauseRecordingDuringPlayback = data.pauseRecordingDuringPlayback !== false;
+                        if (!pauseRecordingDuringPlayback && ttsRecordingPaused) {
+                            // 全局关闭时立即恢复本显示端此前因播放而暂停的普通 ASR。
+                            resumeVoiceRecordingAfterTts();
+                        }
                         asrDenoiseEnabled = !!data.denoise;
                         voiceprintEnabled = !!data.enabled;
                         voiceprintMultiSpeaker = !!data.multiSpeaker;
