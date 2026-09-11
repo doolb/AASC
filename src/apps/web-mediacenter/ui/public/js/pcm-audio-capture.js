@@ -22,6 +22,9 @@
             this.segmentActive = !this.segmentMode;
             this.active = false;
             this.paused = false;
+            // 实时录音只把音频块交给上层传输，不保留整段录音，避免长时间录音持续占用内存。
+            this.streamOnly = options.streamOnly === true;
+            this.onChunk = typeof options.onChunk === 'function' ? options.onChunk : null;
         }
 
         start(stream) {
@@ -49,7 +52,17 @@
                     this.appendPreRoll(samples);
                     return;
                 }
-                this.chunks.push(samples);
+                if (!this.streamOnly) {
+                    this.chunks.push(samples);
+                }
+                if (this.onChunk) {
+                    try {
+                        this.onChunk(samples, this.sourceSampleRate);
+                    } catch (error) {
+                        // 音频线程不能因为网络发送或业务回调异常而中断采集。
+                        console.warn('[PcmAudioCapture] 音频块回调失败:', error);
+                    }
+                }
             };
             this.source.connect(this.processor);
             this.processor.connect(this.silentGain);
@@ -138,17 +151,7 @@
         static encodeWav(samples, sourceSampleRate, targetSampleRate = 16000) {
             const sourceRate = Math.max(Number(sourceSampleRate) || targetSampleRate, 1);
             const targetRate = Math.max(Number(targetSampleRate) || 16000, 1);
-            const outputLength = Math.max(1, Math.round(samples.length * targetRate / sourceRate));
-            const pcm = new Int16Array(outputLength);
-            for (let index = 0; index < outputLength; index += 1) {
-                const sourcePosition = index * sourceRate / targetRate;
-                const leftIndex = Math.max(0, Math.min(Math.floor(sourcePosition), samples.length - 1));
-                const rightIndex = Math.max(0, Math.min(leftIndex + 1, samples.length - 1));
-                const fraction = sourcePosition - leftIndex;
-                const value = (samples[leftIndex] || 0) * (1 - fraction) + (samples[rightIndex] || 0) * fraction;
-                const clipped = Math.max(-1, Math.min(1, value));
-                pcm[index] = clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff;
-            }
+            const pcm = PcmAudioCapture.encodePcm16(samples, sourceRate, targetRate);
 
             const buffer = new ArrayBuffer(44 + pcm.length * 2);
             const view = new DataView(buffer);
@@ -174,6 +177,24 @@
                 view.setInt16(44 + index * 2, pcm[index], true);
             }
             return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        // 将 Float32 PCM 重采样并编码为 little-endian PCM16，供实时录音分块传输。
+        static encodePcm16(samples, sourceSampleRate, targetSampleRate = 16000) {
+            const sourceRate = Math.max(Number(sourceSampleRate) || targetSampleRate, 1);
+            const targetRate = Math.max(Number(targetSampleRate) || 16000, 1);
+            const outputLength = Math.max(1, Math.round(samples.length * targetRate / sourceRate));
+            const pcm = new Int16Array(outputLength);
+            for (let index = 0; index < outputLength; index += 1) {
+                const sourcePosition = index * sourceRate / targetRate;
+                const leftIndex = Math.max(0, Math.min(Math.floor(sourcePosition), samples.length - 1));
+                const rightIndex = Math.max(0, Math.min(leftIndex + 1, samples.length - 1));
+                const fraction = sourcePosition - leftIndex;
+                const value = (samples[leftIndex] || 0) * (1 - fraction) + (samples[rightIndex] || 0) * fraction;
+                const clipped = Math.max(-1, Math.min(1, value));
+                pcm[index] = clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff;
+            }
+            return pcm;
         }
     }
 

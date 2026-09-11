@@ -181,3 +181,64 @@ test('PCM 采集暂停时清空旧语音段，恢复后复用原有音频链路'
     assert.ok(wav, '恢复后应继续使用原采集器生成 WAV');
     capture.stop();
 });
+
+test('PCM 采集器支持实时回调并可选择不缓存完整录音', () => {
+    const source = fs.readFileSync(PCM_CAPTURE, 'utf8');
+    let processor = null;
+    const receivedChunks = [];
+
+    class FakeAudioNode {
+        connect() {
+            return this;
+        }
+
+        disconnect() {}
+    }
+
+    class FakeAudioContext extends FakeAudioNode {
+        constructor() {
+            super();
+            this.sampleRate = 48000;
+        }
+
+        createMediaStreamSource() {
+            return new FakeAudioNode();
+        }
+
+        createScriptProcessor() {
+            processor = new FakeAudioNode();
+            return processor;
+        }
+
+        createGain() {
+            const gain = new FakeAudioNode();
+            gain.gain = { value: 0 };
+            return gain;
+        }
+
+        close() {
+            return Promise.resolve();
+        }
+    }
+
+    const sandbox = { window: { AudioContext: FakeAudioContext } };
+    vm.runInNewContext(source, sandbox);
+    const capture = new sandbox.window.PcmAudioCapture({
+        bufferSize: 480,
+        streamOnly: true,
+        onChunk: (samples, sourceSampleRate) => receivedChunks.push({ samples, sourceSampleRate })
+    }).start({});
+
+    processor.onaudioprocess({
+        inputBuffer: {
+            getChannelData: () => new Float32Array([0.5, -0.5, 0.25])
+        }
+    });
+
+    assert.equal(receivedChunks.length, 1, '实时模式应回调每个 PCM 音频块');
+    assert.equal(receivedChunks[0].sourceSampleRate, 48000);
+    assert.deepEqual(Array.from(receivedChunks[0].samples), [0.5, -0.5, 0.25]);
+    assert.equal(capture.takeWav(), null, '实时模式不应缓存完整录音');
+    assert.ok(sandbox.window.PcmAudioCapture.encodePcm16, '应提供 PCM16 编码方法');
+    capture.stop();
+});

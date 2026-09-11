@@ -65,6 +65,22 @@ const WebSocketManager = {
             if (window.DeviceList) {
                 window.DeviceList.handleCapabilitiesUpdateError(data);
             }
+        } else if (data.type === 'displayRecordingModeChanged') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayRecordingModeChanged(data);
+            }
+        } else if (data.type === 'displayRecordingStatus') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayRecordingStatus(data);
+            }
+        } else if (data.type === 'displayRecordingChunk') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayRecordingChunk(data);
+            }
+        } else if (data.type === 'displayRecordingResult') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayRecordingResult(data);
+            }
         } else if (data.type === 'voiceVadConfig') {
             if (window.DeviceList) {
                 window.DeviceList.handleVoiceVadConfig(data);

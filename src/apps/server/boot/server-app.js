@@ -64,6 +64,9 @@ const {
     parseConversationConfirmationAction,
     resolveConversationConfirmation
 } = require('../modules/voice/conversation-confirmation');
+const {
+    createSameSpeakerVoiceInputDeduplicator
+} = require('../modules/voice/voice-input-deduplicator');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
@@ -319,9 +322,17 @@ if (!fs.existsSync(VOICEPRINT_TEMP_DIR)) {
 }
 
 let displayClients = new Map();
+// 多个显示端同时听到同一注册说话人时，服务端只让首个结果进入广播和命令链路。
+// 去重器只保存短文本元数据，不保存音频；声纹关闭或未匹配时由调用方跳过去重。
+const sameSpeakerVoiceInputDeduplicator = createSameSpeakerVoiceInputDeduplicator();
 // 跨显示端 TTS 播报状态：按“播放目标 + 播放 ID”维护会话和超时，避免录音端因旧客户端不回报而永久暂停。
 const voiceTtsPlaybackTimers = new Map();
 const VOICE_TTS_PLAYBACK_TIMEOUT_MS = 120000;
+const DISPLAY_RECORDING_MODES = Object.freeze(['asr', 'single', 'realtime']);
+const DISPLAY_RECORDING_MAX_DURATION_MS = 60000;
+const DISPLAY_RECORDING_CHUNK_MAX_LENGTH = 128 * 1024;
+// 录音回传属于临时会话，键为 requestId，值中保留发起请求的控制端 socket，禁止广播音频数据。
+const displayRecordingSessions = new Map();
 let controlClients = new Set();
 const PLAYBACK_PROGRESS_PERSIST_INTERVAL_MS = 1000;
 const displayProgressPersistAt = new Map();
@@ -878,7 +889,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'voiceVadNoiseResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -954,7 +965,7 @@ async function startServer() {
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
-                'setVoiceVad', 'detectVoiceNoise',
+                'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'requestDisplayRecording', 'stopDisplayRecording',
                 'playlistRequest', 'playlistControl'
             ];
             for (const type of controlTypes) {
@@ -1173,6 +1184,10 @@ function normalizeVadThreshold(value) {
     return Math.round(Math.min(MAX_VAD_THRESHOLD, Math.max(MIN_VAD_THRESHOLD, number)) * 1000000) / 1000000;
 }
 
+function normalizeVoiceRecordingMode(value) {
+    return DISPLAY_RECORDING_MODES.includes(value) ? value : 'asr';
+}
+
 const SUB_DISPLAY_CAPABILITIES = {
     mediaRendering: false,
     voicePlayback: true,
@@ -1225,6 +1240,7 @@ function createDisplayState() {
         capabilities: null,
         cpuStatus: null,
         vadThreshold: DEFAULT_VAD_THRESHOLD,
+        voiceRecordingMode: 'asr',
         voiceConversation: createConversationState(true)
     };
 }
@@ -4579,6 +4595,7 @@ function getDisplayList() {
             cpuStatus: data.state.cpuStatus,
             voiceConversation: data.state.voiceConversation,
             vadThreshold: normalizeVadThreshold(data.state.vadThreshold),
+            voiceRecordingMode: normalizeVoiceRecordingMode(data.state.voiceRecordingMode),
             capabilities: caps
         });
     });
@@ -5313,6 +5330,134 @@ function sendToDisplay(displayId, data, options = {}) {
     return false;
 }
 
+function sendDisplayRecordingToControl(session, message) {
+    const socket = session?.controlSocket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    try {
+        socket.send(JSON.stringify(message));
+        return true;
+    } catch (error) {
+        logError('录音', `录音回传控制端失败: ${error.message}`);
+        return false;
+    }
+}
+
+function closeDisplayRecordingSession(requestId) {
+    const session = displayRecordingSessions.get(requestId);
+    if (!session) return null;
+    clearTimeout(session.timer);
+    displayRecordingSessions.delete(requestId);
+    return session;
+}
+
+function failDisplayRecordingSession(session, message, notifyDisplay = true) {
+    if (!session) return;
+    sendDisplayRecordingToControl(session, {
+        type: 'displayRecordingResult',
+        displayId: session.displayId,
+        requestId: session.requestId,
+        mode: session.mode,
+        completed: false,
+        error: message
+    });
+    if (notifyDisplay) {
+        sendToDisplay(session.displayId, {
+            type: 'displayRecordingRequest',
+            action: 'stop',
+            requestId: session.requestId,
+            mode: session.mode,
+            reason: message
+        });
+    }
+    closeDisplayRecordingSession(session.requestId);
+}
+
+function handleDisplayRecordingMessage(displayId, data) {
+    const requestId = typeof data?.requestId === 'string' ? data.requestId : '';
+    const session = displayRecordingSessions.get(requestId);
+    if (!session || session.displayId !== displayId) return;
+
+    if (data.type === 'displayRecordingStatus') {
+        const state = ['started', 'stopping', 'stopped', 'error'].includes(data.state)
+            ? data.state
+            : 'error';
+        if (state === 'error') {
+            failDisplayRecordingSession(session, String(data.error || '显示端录音失败'), false);
+            return;
+        }
+        session.state = state;
+        sendDisplayRecordingToControl(session, {
+            type: 'displayRecordingStatus',
+            displayId,
+            requestId,
+            mode: session.mode,
+            state
+        });
+        return;
+    }
+
+    if (data.type === 'displayRecordingChunk') {
+        const sequence = Number(data.sequence);
+        const audioData = typeof data.audioData === 'string' ? data.audioData : '';
+        if (session.mode !== 'realtime'
+            || !Number.isInteger(sequence)
+            || sequence !== session.nextSequence
+            || !audioData
+            || audioData.length > DISPLAY_RECORDING_CHUNK_MAX_LENGTH) {
+            failDisplayRecordingSession(session, '实时录音数据块无效');
+            return;
+        }
+        session.nextSequence += 1;
+        session.lastSeenAt = Date.now();
+        sendDisplayRecordingToControl(session, {
+            type: 'displayRecordingChunk',
+            displayId,
+            requestId,
+            mode: session.mode,
+            sequence,
+            sampleRate: Number(data.sampleRate) || 16000,
+            audioData
+        });
+        return;
+    }
+
+    if (data.type === 'displayRecordingResult') {
+        const audioData = session.mode === 'single' && typeof data.audioData === 'string'
+            ? data.audioData
+            : null;
+        if (audioData && audioData.length > 8 * 1024 * 1024) {
+            failDisplayRecordingSession(session, '单次录音文件过大');
+            return;
+        }
+        sendDisplayRecordingToControl(session, {
+            type: 'displayRecordingResult',
+            displayId,
+            requestId,
+            mode: session.mode,
+            mimeType: data.mimeType || (audioData ? 'audio/wav' : null),
+            durationMs: Math.min(Math.max(Number(data.durationMs) || 0, 0), DISPLAY_RECORDING_MAX_DURATION_MS),
+            completed: data.completed === true,
+            audioData,
+            error: data.error ? String(data.error) : null
+        });
+        closeDisplayRecordingSession(requestId);
+    }
+}
+
+function rejectDisplayRecordingSessionsForDisplay(displayId, message) {
+    for (const session of displayRecordingSessions.values()) {
+        if (session.displayId !== displayId) continue;
+        failDisplayRecordingSession(session, message, false);
+    }
+}
+
+function rejectDisplayRecordingSessionsForControl(controlSocket, message) {
+    for (const session of displayRecordingSessions.values()) {
+        if (session.controlSocket !== controlSocket) continue;
+        failDisplayRecordingSession(session, message);
+    }
+}
+
 function muteAllDisplays() {
     if (muteState.isMuted) return false;
     
@@ -5581,6 +5726,7 @@ wss.on('connection', (ws, req) => {
                 ...savedState,
                 dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
                 vadThreshold: normalizeVadThreshold(savedState?.vadThreshold),
+                voiceRecordingMode: normalizeVoiceRecordingMode(savedState?.voiceRecordingMode),
                 isSubDisplay: isSubDisplay,
                 capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : null
             }
@@ -5626,6 +5772,11 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({
             type: 'voiceVadConfig',
             threshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold)
+        }));
+
+        ws.send(JSON.stringify({
+            type: 'voiceRecordingConfig',
+            mode: normalizeVoiceRecordingMode(displayClients.get(displayId)?.state.voiceRecordingMode)
         }));
 
         ws.send(JSON.stringify({
@@ -5826,6 +5977,7 @@ wss.on('connection', (ws, req) => {
             clearPendingConversationConfirmation(displayId, 'displayDisconnected');
             clearRepairMode(displayId, 'displayDisconnected');
             finishVoiceTtsPlaybacksForDisplay(displayId);
+            rejectDisplayRecordingSessionsForDisplay(displayId, '显示端已断开');
             displayClients.delete(displayId);
             for (const [requestId, pending] of pendingDisplayTtsRequests) {
                 if (pending.displayId !== displayId) continue;
@@ -5967,6 +6119,7 @@ wss.on('connection', (ws, req) => {
         });
         
         ws.on('close', () => {
+            rejectDisplayRecordingSessionsForControl(ws, '控制端已断开');
             controlClients.delete(ws);
             ws.removeAllListeners();
             if (wsServer) {
@@ -6167,9 +6320,32 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             recommendedThreshold: normalizeVadThreshold(data.recommendedThreshold),
             error: data.error || null
         });
+    } else if (['displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult'].includes(data.type)) {
+        // 显示端录音数据只进入对应的临时会话，不进入 ASR、声纹或广播链路。
+        handleDisplayRecordingMessage(displayId, data);
     } else if (data.type === 'voiceInput' && displayData) {
-        // 控制端需要观察所有有效 ASR 文字，声纹过滤只决定是否进入命令处理链路。
+        // 控制端需要观察所有有效 ASR 文字；同一注册声纹的跨显示端重复结果，
+        // 必须在广播和命令处理之前抑制，避免控制端看到重复文本或命令执行多次。
         const voiceprintEnabledNow = config.get('voiceprint.enabled', true);
+        if (!voiceprintEnabledNow) {
+            // 声纹关闭期间不积累历史命中，重新开启后不能误用关闭前的缓存。
+            sameSpeakerVoiceInputDeduplicator.clear();
+        }
+        const deduplication = voiceprintEnabledNow
+            ? sameSpeakerVoiceInputDeduplicator.check({
+                displayId,
+                speaker: data.speaker,
+                text: data.text,
+                isFinal: data.isFinal,
+                speechStartAt: data.speechStartAt,
+                speechEndAt: data.speechEndAt
+            }, Date.now())
+            : { isDuplicate: false };
+        if (deduplication.isDuplicate) {
+            log('语音', `同一注册声纹跨显示端重复 ASR 已抑制: speaker=${data.speaker} 主来源=${deduplication.duplicateOfDisplayId} 当前来源=${displayId} textSimilarity=${deduplication.textSimilarity?.toFixed(3) || '1.000'} text=${JSON.stringify(data.text || '')}`);
+            return;
+        }
+
         const speakerPayload = voiceprintEnabledNow && data.speaker !== undefined
             ? { speaker: data.speaker }
             : {};
@@ -6286,6 +6462,145 @@ function handleDisplayMessageFallback(displayId, data, ws) {
 async function handleControlMessageFallback(data, ws) {
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
+
+    if (data.type === 'setVoiceRecordingMode') {
+        if (!displayData) {
+            ws.send(JSON.stringify({
+                type: 'displayRecordingModeError',
+                displayId,
+                message: '显示端不存在或已断开'
+            }));
+            return;
+        }
+        const mode = normalizeVoiceRecordingMode(data.mode);
+        displayData.state.voiceRecordingMode = mode;
+        persistDisplayState(displayData, { voiceRecordingMode: mode });
+        sendToDisplay(displayId, { type: 'voiceRecordingConfig', mode });
+        broadcastToControls({ type: 'displayRecordingModeChanged', displayId, mode });
+        broadcastDisplayList();
+        log('录音', `显示端 ${displayId} 录音模式已更新: ${mode}`);
+        return;
+    }
+
+    if (data.type === 'requestDisplayRecording') {
+        if (!displayData) {
+            ws.send(JSON.stringify({
+                type: 'displayRecordingResult',
+                displayId,
+                requestId: data.requestId || null,
+                mode: normalizeVoiceRecordingMode(data.mode),
+                completed: false,
+                error: '显示端不存在或已断开'
+            }));
+            return;
+        }
+        const mode = normalizeVoiceRecordingMode(data.mode || displayData.state.voiceRecordingMode);
+        if (mode === 'asr') {
+            ws.send(JSON.stringify({
+                type: 'displayRecordingResult',
+                displayId,
+                requestId: data.requestId || null,
+                mode,
+                completed: false,
+                error: '普通 ASR 模式不支持控制端录音回放'
+            }));
+            return;
+        }
+        const capabilities = displayData.state.capabilities || DEFAULT_CAPABILITIES;
+        if (capabilities.voiceRecording !== true) {
+            ws.send(JSON.stringify({
+                type: 'displayRecordingResult',
+                displayId,
+                requestId: data.requestId || null,
+                mode,
+                completed: false,
+                error: '显示端录音能力已关闭'
+            }));
+            return;
+        }
+        const requestId = typeof data.requestId === 'string' && data.requestId
+            ? data.requestId
+            : generateCorrelationId('display-recording');
+        if (displayRecordingSessions.has(requestId)) {
+            ws.send(JSON.stringify({
+                type: 'displayRecordingResult',
+                displayId,
+                requestId,
+                mode,
+                completed: false,
+                error: '录音请求已存在'
+            }));
+            return;
+        }
+        if (mode !== displayData.state.voiceRecordingMode) {
+            displayData.state.voiceRecordingMode = mode;
+            persistDisplayState(displayData, { voiceRecordingMode: mode });
+            sendToDisplay(displayId, { type: 'voiceRecordingConfig', mode });
+            broadcastToControls({ type: 'displayRecordingModeChanged', displayId, mode });
+            broadcastDisplayList();
+        }
+        const session = {
+            requestId,
+            displayId,
+            mode,
+            controlSocket: ws,
+            nextSequence: 0,
+            state: 'requested',
+            lastSeenAt: Date.now(),
+            timer: null
+        };
+        session.timer = setTimeout(() => {
+            const active = displayRecordingSessions.get(requestId);
+            if (!active) return;
+            failDisplayRecordingSession(active, '录音达到最长 60 秒');
+        }, DISPLAY_RECORDING_MAX_DURATION_MS + 1000);
+        displayRecordingSessions.set(requestId, session);
+        const sent = sendToDisplay(displayId, {
+            type: 'displayRecordingRequest',
+            action: 'start',
+            requestId,
+            mode,
+            maxDurationMs: DISPLAY_RECORDING_MAX_DURATION_MS
+        });
+        if (!sent) {
+            failDisplayRecordingSession(session, '显示端当前不可用', false);
+            return;
+        }
+        return;
+    }
+
+    if (data.type === 'stopDisplayRecording') {
+        const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+        const session = displayRecordingSessions.get(requestId);
+        if (!session || session.controlSocket !== ws || (displayId && session.displayId !== displayId)) {
+            ws.send(JSON.stringify({
+                type: 'displayRecordingResult',
+                displayId,
+                requestId: requestId || null,
+                completed: false,
+                error: '录音请求不存在或无权操作'
+            }));
+            return;
+        }
+        session.state = 'stopping';
+        sendDisplayRecordingToControl(session, {
+            type: 'displayRecordingStatus',
+            displayId: session.displayId,
+            requestId,
+            mode: session.mode,
+            state: 'stopping'
+        });
+        if (!sendToDisplay(session.displayId, {
+            type: 'displayRecordingRequest',
+            action: 'stop',
+            requestId,
+            mode: session.mode,
+            reason: 'control'
+        })) {
+            failDisplayRecordingSession(session, '显示端当前不可用', false);
+        }
+        return;
+    }
 
     if (data.type === 'setVoiceVad') {
         if (!displayData) {

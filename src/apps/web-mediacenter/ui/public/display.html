@@ -170,6 +170,11 @@
         let micStream = null;
         let audioContext = null;
         let pcmCapture = null;
+        // 普通 ASR 持续监听与控制端临时录音共用采集链路，但会话用途必须分开，避免误送 ASR。
+        let activeRecordingPurpose = 'asr';
+        let voiceRecordingMode = 'asr';
+        let displayRecordingSession = null;
+        let displayRecordingTimer = null;
         let analyser = null;
         let vadSource = null;
         let silenceDetectionFrameId = null;
@@ -1614,7 +1619,8 @@
 
         // 复用子显示端 mute 模式：无声纹时暂停 PCM/VAD，避免扬声器回声进入 ASR。
         function pauseVoiceRecordingForTts() {
-            if (voiceprintEnabled === true || ttsRecordingPaused || !isListening || !pcmCapture?.active) return;
+            if (activeRecordingPurpose !== 'asr'
+                || voiceprintEnabled === true || ttsRecordingPaused || !isListening || !pcmCapture?.active) return;
             clearTtsRecordingResumeTimer();
             wasListeningBeforePlayback = true;
             ttsRecordingPaused = true;
@@ -4410,6 +4416,16 @@
                         return;
                     }
 
+                    if (data.type === 'voiceRecordingConfig') {
+                        handleVoiceRecordingConfig(data);
+                        return;
+                    }
+
+                    if (data.type === 'displayRecordingRequest') {
+                        void handleDisplayRecordingRequest(data);
+                        return;
+                    }
+
                     if (data.type === 'voiceTtsPlaybackState') {
                         handleVoiceTtsPlaybackState(data);
                         return;
@@ -4669,6 +4685,9 @@
             
             socket.onclose = function() {
                 if (!isCurrentDisplaySocket(socket)) return;
+                if (displayRecordingSession) {
+                    void finalizeDisplayRecording(false, '显示端连接已断开');
+                }
                 displayWs = null;
                 stopControlScreenshot();
                 controlModeEnabled = false;
@@ -5294,12 +5313,56 @@
 
                 // 能力确认或重连后都尝试启动，不能依赖 prevCaps/pendingAutoStart 的时序。
                 const shouldStartRecording = isAlwaysListening && !isListening
+                    && voiceRecordingMode === 'asr'
                     && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused;
                 if (shouldStartRecording) {
                     pendingAutoStart = false;
                     console.log('[能力] 服务器能力已确认，启动录音');
                     void startVoiceRecording();
                 }
+            }
+        }
+
+        function normalizeVoiceRecordingMode(mode) {
+            return ['asr', 'single', 'realtime'].includes(mode) ? mode : 'asr';
+        }
+
+        function sendDisplayRecordingMessage(message) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return false;
+            try {
+                displayWs.send(JSON.stringify(message));
+                return true;
+            } catch (error) {
+                console.warn('[录音] 回传控制端失败:', error);
+                return false;
+            }
+        }
+
+        function handleVoiceRecordingConfig(data) {
+            const nextMode = normalizeVoiceRecordingMode(data.mode);
+            const previousMode = voiceRecordingMode;
+            voiceRecordingMode = nextMode;
+            console.log('[录音] 录音模式已更新:', nextMode);
+            if (displayRecordingSession && displayRecordingSession.mode !== nextMode) {
+                void finalizeDisplayRecording(false, '录音模式已切换').then(() => {
+                    if (voiceRecordingMode === 'asr' && previousMode !== 'asr'
+                        && isAlwaysListening && !isListening
+                        && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused) {
+                        void startVoiceRecording();
+                    }
+                });
+                return;
+            }
+            if (nextMode !== 'asr') {
+                pendingAutoStart = false;
+                if (isListening && activeRecordingPurpose === 'asr') {
+                    stopVoiceRecording(false);
+                }
+                return;
+            }
+            if (previousMode !== 'asr' && isAlwaysListening && !isListening
+                && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused) {
+                void startVoiceRecording();
             }
         }
         
@@ -5334,10 +5397,19 @@
         }
         
         // 所有网页端 ASR/声纹录音统一使用共享 PCM 采集器，避免不同端的编码器差异。
-        function startRawPcmCapture(stream) {
+        function startRawPcmCapture(stream, options = {}) {
             try {
-                // 持续监听复用子显示端的 VAD 分段策略：语音开始前只保留短前置缓冲。
-                pcmCapture = new PcmAudioCapture({ segmentMode: true, preRollMs: 300 }).start(stream);
+                // 持续监听和单次录音复用 VAD 分段策略；实时录音使用 streamOnly，避免缓存整段 PCM。
+                if (Object.keys(options).length === 0) {
+                    pcmCapture = new PcmAudioCapture({ segmentMode: true, preRollMs: 300 }).start(stream);
+                } else {
+                    pcmCapture = new PcmAudioCapture({
+                        segmentMode: options.segmentMode !== false,
+                        preRollMs: Number.isFinite(Number(options.preRollMs)) ? Number(options.preRollMs) : 300,
+                        streamOnly: options.streamOnly === true,
+                        onChunk: options.onChunk
+                    }).start(stream);
+                }
                 return true;
             } catch (e) {
                 console.warn('[语音] 原始 PCM 采集失败:', e);
@@ -5348,6 +5420,37 @@
 
         function encodePcmSamplesToWav(samples, sampleRate) {
             return PcmAudioCapture.encodeWav(samples, sampleRate, 16000);
+        }
+
+        function encodePcmSamplesToBase64(samples, sampleRate) {
+            const pcm = PcmAudioCapture.encodePcm16(samples, sampleRate, 16000);
+            const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += 8192) {
+                const end = Math.min(offset + 8192, bytes.length);
+                for (let index = offset; index < end; index += 1) {
+                    binary += String.fromCharCode(bytes[index]);
+                }
+            }
+            return btoa(binary);
+        }
+
+        async function blobToBase64(blob) {
+            // 使用 FileReader 兼容 Android 9 的旧版 WebView，避免依赖 Blob.arrayBuffer。
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(reader.error || new Error('读取录音文件失败'));
+                reader.onloadend = () => {
+                    const result = String(reader.result || '');
+                    const separatorIndex = result.indexOf(',');
+                    if (separatorIndex < 0) {
+                        reject(new Error('录音文件编码结果无效'));
+                        return;
+                    }
+                    resolve(result.slice(separatorIndex + 1));
+                };
+                reader.readAsDataURL(blob);
+            });
         }
 
         function takeRawPcmWav() {
@@ -5369,9 +5472,162 @@
             }
         }
 
-        function stopVoiceRecording() {
-            const shouldSubmitPendingAudio = isListening === true;
+        function clearDisplayRecordingTimer() {
+            if (displayRecordingTimer) clearTimeout(displayRecordingTimer);
+            displayRecordingTimer = null;
+        }
+
+        function sendDisplayRecordingStatus(session, state, error = null) {
+            if (!session) return;
+            sendDisplayRecordingMessage({
+                type: 'displayRecordingStatus',
+                requestId: session.requestId,
+                mode: session.mode,
+                state,
+                ...(error ? { error } : {})
+            });
+        }
+
+        async function finalizeDisplayRecording(completed = true, error = null) {
+            const session = displayRecordingSession;
+            if (!session) return;
+            displayRecordingSession = null;
+            clearDisplayRecordingTimer();
+            const audioBlob = session.mode === 'single' ? takeRawPcmWav() : null;
             isListening = false;
+            activeRecordingPurpose = 'asr';
+            releaseVoiceRecordingResources();
+            sendVoiceStatus();
+            sendDisplayRecordingStatus(session, 'stopped', error);
+
+            let audioData = null;
+            let resultError = error;
+            if (session.mode === 'single' && audioBlob) {
+                try {
+                    audioData = await blobToBase64(audioBlob);
+                } catch (encodeError) {
+                    resultError = `录音编码失败: ${encodeError.message}`;
+                }
+            }
+            if (!audioData && !resultError) {
+                resultError = '未检测到语音';
+            }
+            sendDisplayRecordingMessage({
+                type: 'displayRecordingResult',
+                requestId: session.requestId,
+                mode: session.mode,
+                mimeType: audioData ? 'audio/wav' : null,
+                durationMs: Math.min(Date.now() - session.startedAt, session.maxDurationMs),
+                completed: completed && !resultError,
+                audioData,
+                error: resultError
+            });
+        }
+
+        async function startDisplayRecording(session) {
+            releaseVoiceRecordingResources();
+            micStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    // 与普通 ASR 共用原始 PCM 采集设置，控制端回放拿到未经浏览器重编码的音频。
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    sampleRate: 16000
+                }
+            });
+            const captureOptions = session.mode === 'realtime'
+                ? {
+                    segmentMode: false,
+                    streamOnly: true,
+                    onChunk: (samples, sampleRate) => {
+                        if (displayRecordingSession !== session) return;
+                        const audioData = encodePcmSamplesToBase64(samples, sampleRate);
+                        sendDisplayRecordingMessage({
+                            type: 'displayRecordingChunk',
+                            requestId: session.requestId,
+                            mode: session.mode,
+                            sequence: session.nextSequence++,
+                            sampleRate: 16000,
+                            audioData
+                        });
+                    }
+                }
+                : { segmentMode: true, preRollMs: 300 };
+            if (!startRawPcmCapture(micStream, captureOptions)) {
+                throw new Error('当前浏览器不支持原始 PCM 录音');
+            }
+            isListening = true;
+            activeRecordingPurpose = session.mode;
+            session.startedAt = Date.now();
+            sendDisplayRecordingStatus(session, 'started');
+            if (session.mode === 'single') {
+                hasSpeech = false;
+                speechStartTime = null;
+                silenceStartTime = null;
+                startSilenceDetection();
+            }
+            displayRecordingTimer = setTimeout(() => {
+                void finalizeDisplayRecording(true, '录音达到最长 60 秒');
+            }, session.maxDurationMs);
+        }
+
+        async function handleDisplayRecordingRequest(data) {
+            const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+            const mode = normalizeVoiceRecordingMode(data.mode);
+            if (!requestId) return;
+            if (data.action === 'stop') {
+                if (displayRecordingSession?.requestId === requestId) {
+                    await finalizeDisplayRecording(true);
+                }
+                return;
+            }
+            if (data.action !== 'start' || mode === 'asr') {
+                sendDisplayRecordingMessage({
+                    type: 'displayRecordingResult',
+                    requestId,
+                    mode,
+                    completed: false,
+                    error: '普通 ASR 模式不支持控制端录音回放'
+                });
+                return;
+            }
+            if (displayRecordingSession || isListening) {
+                sendDisplayRecordingMessage({
+                    type: 'displayRecordingResult',
+                    requestId,
+                    mode,
+                    completed: false,
+                    error: '显示端已有录音任务'
+                });
+                return;
+            }
+            const maxDurationMs = Math.min(
+                Math.max(Number(data.maxDurationMs) || 60000, 1000),
+                60000
+            );
+            const session = {
+                requestId,
+                mode,
+                maxDurationMs,
+                nextSequence: 0,
+                startedAt: Date.now()
+            };
+            displayRecordingSession = session;
+            try {
+                await startDisplayRecording(session);
+            } catch (error) {
+                console.error('[录音] 控制端录音启动失败:', error);
+                await finalizeDisplayRecording(false, error.message);
+            }
+        }
+
+        function stopVoiceRecording(submitPendingAudio = true) {
+            if (displayRecordingSession && activeRecordingPurpose !== 'asr') {
+                void finalizeDisplayRecording(false, '录音已停止');
+                return;
+            }
+            const shouldSubmitPendingAudio = submitPendingAudio && isListening === true;
+            isListening = false;
+            activeRecordingPurpose = 'asr';
             clearTtsRecordingResumeTimer();
             ttsRecordingPaused = false;
             wasListeningBeforePlayback = false;
@@ -5384,29 +5640,38 @@
                 });
                 vadNoiseTestRequestId = null;
             }
+            const speechStartAt = speechStartTime;
+            const speechEndAt = Date.now();
             const audioBlob = shouldSubmitPendingAudio ? takeRawPcmWav() : null;
             releaseVoiceRecordingResources();
             sendVoiceStatus();
             console.log('[语音] 录音已停止');
-            if (audioBlob) void sendAudioForRecognition(audioBlob);
+            if (audioBlob) void sendAudioForRecognition(audioBlob, { speechStartAt, speechEndAt });
         }
 
         // VAD 检测到一段语音结束后，只清空当前 WAV 缓冲并重新开始采集，不创建新的编码器。
         async function finishVoiceSegment() {
             if (!isListening || !pcmCapture) return;
+            if (activeRecordingPurpose === 'single') {
+                await finalizeDisplayRecording(true);
+                return;
+            }
+            if (activeRecordingPurpose !== 'asr') return;
             // 当前检测回调即将返回，先标记为停止，再使用同一个 AnalyserNode 开启下一轮。
             silenceDetectionRunning = false;
+            const speechStartAt = speechStartTime;
+            const speechEndAt = Date.now();
             const audioBlob = takeRawPcmWav();
             hasSpeech = false;
             speechStartTime = null;
             silenceStartTime = null;
-            if (audioBlob) void sendAudioForRecognition(audioBlob);
+            if (audioBlob) void sendAudioForRecognition(audioBlob, { speechStartAt, speechEndAt });
             if (!isListening) return;
             startSilenceDetection();
         }
 
         async function startVoiceRecording() {
-            if (!displayPageActive || isListening) return;
+            if (!displayPageActive || isListening || voiceRecordingMode !== 'asr') return;
 
             if (ttsRecordingPaused) {
                 console.log('[语音] TTS 播放中，暂不恢复录音');
@@ -5438,6 +5703,7 @@
             }
             
             try {
+                activeRecordingPurpose = 'asr';
                 if (micStream && pcmCapture?.active) {
                     isListening = true;
                     hasSpeech = false;
@@ -5564,7 +5830,23 @@
             audioContext = null;
         }
         
-        async function sendAudioForRecognition(audioBlob) {
+        function getVoiceInputTiming(timing, segment = null) {
+            const speechStartAt = Number(timing?.speechStartAt);
+            const speechEndAt = Number(timing?.speechEndAt);
+            if (!Number.isFinite(speechStartAt) || !Number.isFinite(speechEndAt)) return {};
+
+            const segmentStart = Number(segment?.start);
+            const segmentEnd = Number(segment?.end);
+            if (Number.isFinite(segmentStart) && Number.isFinite(segmentEnd) && segmentEnd >= segmentStart) {
+                return {
+                    speechStartAt: speechStartAt + segmentStart * 1000,
+                    speechEndAt: speechStartAt + segmentEnd * 1000
+                };
+            }
+            return { speechStartAt, speechEndAt };
+        }
+
+        async function sendAudioForRecognition(audioBlob, timing = {}) {
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.wav');
@@ -5583,7 +5865,10 @@
                             const segText = (seg.text || '').trim();
                             if (!segText) continue;
                             console.log('显示端分段识别:', segText, '->', seg.speaker);
-                            sendRecognizedVoiceInput(segText, { speaker: seg.speaker });
+                            sendRecognizedVoiceInput(segText, {
+                                speaker: seg.speaker,
+                                ...getVoiceInputTiming(timing, seg)
+                            });
                         }
                         const ignoredText = String(data.ignoredText || '').trim();
                         if (ignoredText) {
@@ -5604,7 +5889,10 @@
 
                     const extra = {};
                     if (data.speaker !== undefined) extra.speaker = data.speaker;
-                    sendRecognizedVoiceInput(recognizedText, extra);
+                    sendRecognizedVoiceInput(recognizedText, {
+                        ...extra,
+                        ...getVoiceInputTiming(timing)
+                    });
 
                     setTimeout(() => {
                         updateVoiceTextDisplay('', true);

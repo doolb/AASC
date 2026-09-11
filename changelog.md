@@ -1,5 +1,26 @@
 # Web MediaCenter - 变更日志
 
+## 同一注册声纹跨显示端 ASR 去重
+
+- ✅ [2026-09-11] 增加同一注册声纹跨显示端短时 ASR 去重。
+  - 服务端仅对已匹配的同一 `speaker`、不同 `displayId` 的结果进行去重；显示端携带语音段时间时，结合区间重叠/接近和字符编辑相似度判断，首个结果保留，后续结果在广播控制端和语音命令处理前抑制。
+  - 文本相似度默认阈值为 `0.65`，时间区间间隔默认不超过 `500ms`；旧显示端没有时间元数据时，回退为规范化文本完全相同且服务端接收时间差不超过 `2s`。
+  - 声纹未匹配、声纹关闭、不同说话人、同一显示端、非最终结果和超时结果保持原有行为；不引入音频融合、质量评分或空间定位。
+  - 新增 `src/apps/server/modules/voice/voice-input-deduplicator.js`、`tests/voice-input-deduplicator.test.js` 及对应 design/spec/task 文档；修改 `src/apps/server/boot/server-app.js`、`display.html` 和显示端语音契约测试。
+  - 验证：同一声纹去重、显示端语音、录音模式和 VAD 相关定向测试 `15/15` 通过，JavaScript 语法检查和 `git diff --check` 通过。
+
+## 显示端录音模式与控制端回放
+
+- ✅ [2026-09-11] 增加普通 ASR、单次录音和实时录音三种模式。
+  - 普通 ASR 保持现有 VAD 分段和 `/api/asr/recognize`；单次录音最长 60 秒，自动/手动结束后回传 16kHz 单声道 WAV；实时录音最长 60 秒，按 PCM16 分块回传。
+  - 服务端按 `requestId` 绑定发起控制端，校验显示端能力、分片序号和会话归属，不向其他控制端广播录音数据；显示端/控制端断开和超时自动清理。
+  - 控制端设备列表新增模式选择、单次录音播放、实时 PCM 排队播放；树形和列表视图共用现有录音能力开关。
+  - 改动文件：`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/display.html`、`js/pcm-audio-capture.js`、`js/device-list.js`、`js/websocket.js`、`css/upload.css`、对应 design/spec/task 和测试。
+  - 验证：录音模式及相关语音测试 `13/13` 通过，JavaScript 语法检查通过；Android 工程直接 Gradle Debug 构建成功；全量 `npm test` `557/559` 通过，剩余 2 项为既有 DeX 触摸和显示端睡眠守卫测试失败。封装构建命令因缺少 `AASC_ANDROID_NODE_RUNTIME_DIR` 未执行完前置资源准备，未进行真机安装回放验收。
+- ✅ [2026-09-11] 将录音模式入口调整到 VAD 卡片。
+  - 树形显示端节点不再重复显示录音模式和录音按钮；当前选中显示端的 VAD 卡片统一提供模式选择、单次/实时录音、状态和重播入口。
+  - 验证：VAD 卡片位置回归测试通过。
+
 ## Android APK 正式显示端声纹识别
 
 - ✅ [2026-09-11] 将当前声纹分段后处理接入正式 APK，并增加相似度阈值设置，默认值为 `0.3`。

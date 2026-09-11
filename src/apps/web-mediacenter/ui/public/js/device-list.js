@@ -13,6 +13,10 @@ const DeviceList = {
     // 每台显示端独立保存最近一次底噪统计，避免设备列表刷新后结果丢失。
     voiceVadNoiseByDisplay: new Map(),
     voiceVadNoisePending: new Map(),
+    // 控制端只保存临时录音会话和最近一次 WAV，实时 PCM 到达后立即排入播放队列。
+    displayRecordingByDisplay: new Map(),
+    displayRecordingPlaybackByDisplay: new Map(),
+    displayRealtimePlaybackByDisplay: new Map(),
 
     getDisplays() {
         return this.list || [];
@@ -222,6 +226,236 @@ const DeviceList = {
         }
     },
 
+    handleDisplayRecordingModeChanged(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display) return;
+        display.voiceRecordingMode = this.normalizeVoiceRecordingMode(data.mode);
+        this.render();
+    },
+
+    normalizeVoiceRecordingMode(mode) {
+        return ['asr', 'single', 'realtime'].includes(mode) ? mode : 'asr';
+    },
+
+    getVoiceRecordingMode(display) {
+        return this.normalizeVoiceRecordingMode(display?.voiceRecordingMode);
+    },
+
+    getDisplayRecordingSession(displayId) {
+        return this.displayRecordingByDisplay.get(displayId) || null;
+    },
+
+    getDisplayRecordingLabel(displayId) {
+        const session = this.getDisplayRecordingSession(displayId);
+        if (session?.state === 'started') return '录音中';
+        if (session?.state === 'stopping') return '停止中';
+        const playback = this.displayRecordingPlaybackByDisplay.get(displayId);
+        return playback ? '已收到录音' : '';
+    },
+
+    sendDisplayRecordingMessage(message) {
+        if (!this.isControlSocketOpen()) {
+            if (window.showToast) window.showToast('录音操作失败：控制端未连接', 'error');
+            return false;
+        }
+        try {
+            window.WebSocketManager.ws.send(JSON.stringify(message));
+            return true;
+        } catch (error) {
+            if (window.showToast) window.showToast(`录音操作失败：${error.message}`, 'error');
+            return false;
+        }
+    },
+
+    setVoiceRecordingMode(displayId, mode) {
+        const display = this.list.find((item) => item.id === displayId);
+        const nextMode = this.normalizeVoiceRecordingMode(mode);
+        if (!display || !this.sendDisplayRecordingMessage({
+            type: 'setVoiceRecordingMode',
+            displayId,
+            mode: nextMode
+        })) return false;
+        display.voiceRecordingMode = nextMode;
+        this.render();
+        return true;
+    },
+
+    requestDisplayRecording(displayId) {
+        const display = this.list.find((item) => item.id === displayId);
+        const mode = this.getVoiceRecordingMode(display);
+        const capabilities = this.getVoiceCapabilities(display || {});
+        if (!display || mode === 'asr' || capabilities.voiceRecording !== true) {
+            if (window.showToast) window.showToast('当前显示端不支持该录音模式', 'error');
+            return false;
+        }
+        if (this.getDisplayRecordingSession(displayId)) {
+            if (window.showToast) window.showToast('该显示端已有录音任务', 'info');
+            return false;
+        }
+        const requestId = `display-recording-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        this.displayRecordingByDisplay.set(displayId, {
+            requestId,
+            mode,
+            state: 'requested'
+        });
+        this.render();
+        const sent = this.sendDisplayRecordingMessage({
+            type: 'requestDisplayRecording',
+            displayId,
+            mode,
+            requestId
+        });
+        if (!sent) {
+            this.displayRecordingByDisplay.delete(displayId);
+            this.render();
+        }
+        return sent;
+    },
+
+    stopDisplayRecording(displayId) {
+        const session = this.getDisplayRecordingSession(displayId);
+        if (!session) return false;
+        session.state = 'stopping';
+        this.render();
+        return this.sendDisplayRecordingMessage({
+            type: 'stopDisplayRecording',
+            displayId,
+            requestId: session.requestId
+        });
+    },
+
+    decodeBase64Bytes(value) {
+        const binary = atob(value || '');
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+        return bytes;
+    },
+
+    playSingleRecording(displayId) {
+        const playback = this.displayRecordingPlaybackByDisplay.get(displayId);
+        if (!playback?.url) return false;
+        if (playback.audio) playback.audio.pause();
+        const audio = new Audio(playback.url);
+        playback.audio = audio;
+        audio.onended = () => {
+            if (playback.audio === audio) playback.audio = null;
+        };
+        void audio.play().catch((error) => {
+            console.warn('[DeviceList] 单次录音自动播放失败:', error);
+            if (window.showToast) window.showToast('浏览器阻止自动播放，请再次点击播放', 'info');
+        });
+        return true;
+    },
+
+    handleDisplayRecordingStatus(data) {
+        const displayId = String(data?.displayId || '');
+        const requestId = String(data?.requestId || '');
+        if (!displayId || !requestId) return;
+        const current = this.getDisplayRecordingSession(displayId);
+        if (current && current.requestId !== requestId) return;
+        this.displayRecordingByDisplay.set(displayId, {
+            ...(current || {}),
+            requestId,
+            mode: this.normalizeVoiceRecordingMode(data.mode),
+            state: data.state || 'started'
+        });
+        if (data.state === 'started' && data.mode === 'realtime') {
+            this.ensureRealtimePlayback(displayId);
+        }
+        this.render();
+    },
+
+    ensureRealtimePlayback(displayId) {
+        let state = this.displayRealtimePlaybackByDisplay.get(displayId);
+        if (state) return state;
+        try {
+            const context = new (window.AudioContext || window.webkitAudioContext)();
+            state = { context, nextPlayTime: 0, finishTimer: null };
+            this.displayRealtimePlaybackByDisplay.set(displayId, state);
+            void context.resume().catch((error) => console.warn('[DeviceList] 实时回放启动失败:', error));
+            return state;
+        } catch (error) {
+            console.warn('[DeviceList] 浏览器不支持实时回放:', error);
+            if (window.showToast) window.showToast('当前浏览器不支持实时录音播放', 'error');
+            return null;
+        }
+    },
+
+    handleDisplayRecordingChunk(data) {
+        const displayId = String(data?.displayId || '');
+        const session = this.getDisplayRecordingSession(displayId);
+        if (!displayId || !session || session.requestId !== data.requestId) return;
+        const playback = this.ensureRealtimePlayback(displayId);
+        if (!playback) return;
+        try {
+            const bytes = this.decodeBase64Bytes(data.audioData);
+            const sampleCount = Math.floor(bytes.byteLength / 2);
+            const buffer = playback.context.createBuffer(1, sampleCount, Number(data.sampleRate) || 16000);
+            const samples = new Float32Array(sampleCount);
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            for (let index = 0; index < sampleCount; index += 1) {
+                samples[index] = view.getInt16(index * 2, true) / 0x8000;
+            }
+            buffer.copyToChannel(samples, 0);
+            const source = playback.context.createBufferSource();
+            source.buffer = buffer;
+            source.connect(playback.context.destination);
+            const startAt = Math.max(playback.nextPlayTime, playback.context.currentTime + 0.04);
+            source.start(startAt);
+            playback.nextPlayTime = startAt + buffer.duration;
+        } catch (error) {
+            console.warn('[DeviceList] 实时录音块播放失败:', error);
+        }
+    },
+
+    handleDisplayRecordingResult(data) {
+        const displayId = String(data?.displayId || '');
+        if (!displayId) return;
+        const session = this.getDisplayRecordingSession(displayId);
+        if (session && data.requestId && session.requestId !== data.requestId) return;
+        this.displayRecordingByDisplay.delete(displayId);
+        if (data.audioData && data.mode === 'single') {
+            const oldPlayback = this.displayRecordingPlaybackByDisplay.get(displayId);
+            if (oldPlayback?.url) URL.revokeObjectURL(oldPlayback.url);
+            const bytes = this.decodeBase64Bytes(data.audioData);
+            const url = URL.createObjectURL(new Blob([bytes], { type: data.mimeType || 'audio/wav' }));
+            this.displayRecordingPlaybackByDisplay.set(displayId, { url, audio: null });
+            this.playSingleRecording(displayId);
+        }
+        if (data.mode === 'realtime') {
+            const playback = this.displayRealtimePlaybackByDisplay.get(displayId);
+            if (playback) {
+                const delay = Math.max(0, (playback.nextPlayTime - playback.context.currentTime) * 1000 + 100);
+                playback.finishTimer = setTimeout(() => {
+                    void playback.context.close().catch(() => {});
+                    this.displayRealtimePlaybackByDisplay.delete(displayId);
+                }, delay);
+            }
+        }
+        this.render();
+        if (data.error && window.showToast) {
+            window.showToast(`显示端录音失败：${data.error}`, 'error');
+        }
+    },
+
+    cleanupDisplayRecordingResources(displayId) {
+        const playback = this.displayRecordingPlaybackByDisplay.get(displayId);
+        if (playback) {
+            if (playback.audio) playback.audio.pause();
+            if (playback.url) URL.revokeObjectURL(playback.url);
+            this.displayRecordingPlaybackByDisplay.delete(displayId);
+        }
+        const realtime = this.displayRealtimePlaybackByDisplay.get(displayId);
+        if (realtime) {
+            if (realtime.finishTimer) clearTimeout(realtime.finishTimer);
+            void realtime.context.close().catch(() => {});
+            this.displayRealtimePlaybackByDisplay.delete(displayId);
+        }
+        this.displayRecordingByDisplay.delete(displayId);
+    },
+
     renderVoiceControlHtml(display) {
         const capabilities = { voiceRecording: true, ...(display.capabilities || {}) };
         const status = this.getVoiceListeningStatus(display);
@@ -270,6 +504,16 @@ const DeviceList = {
         const applyButton = vadNoise && !vadNoise.error
             ? `<button type="button" class="display-vad-apply" data-vad-apply data-display-id="${displayId}">应用建议</button>`
             : '';
+        const capabilities = this.getVoiceCapabilities(display);
+        const recordingMode = this.getVoiceRecordingMode(display);
+        const recordingSession = this.getDisplayRecordingSession(display.id);
+        const recordingLabel = this.getDisplayRecordingLabel(display.id);
+        const recordingButtonText = recordingSession?.state === 'started' || recordingSession?.state === 'requested'
+            ? (recordingMode === 'realtime' ? '停止实时录音' : '停止单次录音')
+            : (recordingMode === 'realtime' ? '🔴 开始实时录音' : '🎙️ 单次录音并播放');
+        const replayButton = this.displayRecordingPlaybackByDisplay.has(display.id)
+            ? `<button type="button" class="display-recording-replay" data-display-recording-replay data-display-id="${displayId}">▶ 重播录音</button>`
+            : '';
         return `
             <div class="display-vad-card" data-display-id="${displayId}">
                 <div class="display-vad-card-title">${this.getDisplayLabel(display)}</div>
@@ -284,6 +528,18 @@ const DeviceList = {
                     ${applyButton}
                 </div>
                 <div class="display-vad-noise-result" title="最近一次底噪检测结果">${vadNoiseText}</div>
+                <div class="display-vad-recording-controls">
+                    <label class="display-recording-mode">录音模式
+                        <select data-voice-recording-mode data-display-id="${displayId}">
+                            <option value="asr" ${recordingMode === 'asr' ? 'selected' : ''}>普通 ASR</option>
+                            <option value="single" ${recordingMode === 'single' ? 'selected' : ''}>单次录音</option>
+                            <option value="realtime" ${recordingMode === 'realtime' ? 'selected' : ''}>实时录音</option>
+                        </select>
+                    </label>
+                    ${recordingMode === 'asr' ? '' : `<button type="button" class="display-recording-btn" data-display-recording-action data-display-id="${displayId}" ${capabilities.voiceRecording !== true ? 'disabled' : ''}>${recordingButtonText}</button>`}
+                    ${replayButton}
+                    ${recordingLabel ? `<span class="display-recording-state">${recordingLabel}</span>` : ''}
+                </div>
                 <div class="display-vad-hint">请保持安静约 3 秒；检测只采样 RMS，不会触发识别。</div>
             </div>
         `;
@@ -318,13 +574,37 @@ const DeviceList = {
             if (noiseButton) {
                 event.stopPropagation();
                 this.requestVoiceNoiseTest(noiseButton.dataset.displayId);
+                return;
+            }
+            const recordButton = event.target.closest('[data-display-recording-action]');
+            if (recordButton && !recordButton.disabled) {
+                event.stopPropagation();
+                const displayId = recordButton.dataset.displayId;
+                if (this.getDisplayRecordingSession(displayId)) {
+                    this.stopDisplayRecording(displayId);
+                } else {
+                    this.requestDisplayRecording(displayId);
+                }
+                return;
+            }
+            const replayButton = event.target.closest('[data-display-recording-replay]');
+            if (replayButton) {
+                event.stopPropagation();
+                this.playSingleRecording(replayButton.dataset.displayId);
             }
         });
         container.addEventListener('change', (event) => {
             const vadInput = event.target.closest('[data-vad-threshold]');
-            if (!vadInput) return;
-            event.stopPropagation();
-            this.sendVoiceVad(vadInput.dataset.displayId, vadInput.value);
+            if (vadInput) {
+                event.stopPropagation();
+                this.sendVoiceVad(vadInput.dataset.displayId, vadInput.value);
+                return;
+            }
+            const mode = event.target.closest('[data-voice-recording-mode]');
+            if (mode) {
+                event.stopPropagation();
+                this.setVoiceRecordingMode(mode.dataset.displayId, mode.value);
+            }
         });
     },
 
@@ -1479,6 +1759,15 @@ const DeviceList = {
         }
         for (const displayId of this.voiceVadNoisePending.keys()) {
             if (!onlineIds.has(displayId)) this.voiceVadNoisePending.delete(displayId);
+        }
+        for (const displayId of this.displayRecordingByDisplay.keys()) {
+            if (!onlineIds.has(displayId)) this.cleanupDisplayRecordingResources(displayId);
+        }
+        for (const displayId of this.displayRecordingPlaybackByDisplay.keys()) {
+            if (!onlineIds.has(displayId)) this.cleanupDisplayRecordingResources(displayId);
+        }
+        for (const displayId of this.displayRealtimePlaybackByDisplay.keys()) {
+            if (!onlineIds.has(displayId)) this.cleanupDisplayRecordingResources(displayId);
         }
         this.list = nextList.map((display) => ({
             ...display,
