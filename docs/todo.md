@@ -20,6 +20,11 @@
 
 ## Android ASR APK
 
+- ⏳进行中 [2026-09-11] 将独立 ASR 测试 APK 网页中的 Sherpa 声纹测试 UI 接入原生页面
+  - 增加声纹状态、注册名称、双降噪开关、注册、Sherpa 单段/多段/快速多段、人数选择和详细结果展示。
+  - 复用现有 `VoiceprintTestCoordinator` 和已选择/已录音音频，不新增模型或 HTTP 接口。
+  - 设计：`docs/design/android-voiceprint-test-apk.md`；实现伪代码：`docs/spec/android-voiceprint-test-apk.md`；任务：`docs/task/2026-09-11_ASR测试APK原生页面接入Sherpa声纹UI.md`。
+
 ## TTS
 
 ## 文本媒体

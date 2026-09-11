@@ -200,6 +200,63 @@ HTTP 或推理异常:
   try-catch
   清理临时资源
   返回 JSON
+```
+
+## 原生 APK 页面 Sherpa 声纹测试伪代码
+
+```text
+MainActivity 初始化:
+  绑定 Sherpa 状态、注册名称、ASR 降噪、声纹降噪、注册按钮、三种测试按钮、人数选择和结果文本
+  继续复用 selectedSamples、selectedCpuMode、background、voiceprintCoordinator
+  模型加载完成后显示声纹模型状态、embeddingDim、当前阈值和已注册名称
+
+注册当前音频:
+  如果 selectedSamples 不存在或为空:
+    在声纹结果区显示“请先录音或选择音频”
+    结束
+  如果注册名称为空:
+    在声纹结果区显示“请填写注册名称”
+    结束
+  禁用注册和三种测试按钮
+  后台调用 voiceprintCoordinator.register(
+    name, selectedSamples, selectedCpuMode, voiceprintDenoise
+  )
+  成功:
+    显示名称、embeddingDim、声纹降噪状态和耗时
+    重新读取 registeredSpeakers()
+  失败:
+    显示解包后的异常信息
+  回到主线程恢复按钮状态
+
+测试当前音频(mode):
+  如果 selectedSamples 不存在或音频校验失败:
+    显示校验信息
+    结束
+  mode 为 SHERPA_SINGLE 时使用 AUTO 人数；
+  mode 为 SHERPA_MULTI 或 SHERPA_MULTI_FAST 时读取 1-5/AUTO 人数
+  禁用注册和三种测试按钮
+  后台调用 voiceprintCoordinator.test(
+    mode,
+    selectedSamples,
+    selectedCpuMode,
+    speakerCount,
+    asrDenoise,
+    voiceprintDenoise,
+    AsrLanguageMode.ZH
+  )
+  成功:
+    显示 mode、text、matchedSpeaker、similarityScore、threshold
+    显示 denoise 状态、diarizationMs、embeddingMs、asrMs、elapsedMs
+    逐段显示 start/end、clusterId、speaker、similarityScore、text、error
+  失败:
+    显示解包后的异常信息
+  回到主线程恢复按钮状态
+
+声纹状态刷新:
+  读取 voiceprintCoordinator.isReady()
+  读取 embeddingDim()、matchThreshold()、registeredSpeakers()
+  模型未就绪时禁用声纹操作并显示原因
+```
 
 ## 当前音频播放
 

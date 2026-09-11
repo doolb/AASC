@@ -45,6 +45,17 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 - 模型只加载一次，声纹任务串行执行；测试结束释放临时音频和 stream，异常通过 JSON 返回，不让 HTTP 工作线程崩溃。
 - 现有 ASR HTTP 接口和原生页面行为保持不变。
 
+## 原生 APK 页面接入 Sherpa 测试 UI（2026-09-11）
+
+独立 ASR 测试 APK 的原生 `MainActivity` 原来只提供普通 ASR、录音、音频选择、播放和 HTTPS 服务控制；同一 APK 的 `AsrWebPage` 已经提供 Sherpa 声纹测试网页。为方便直接在手机 APK 页面上完成测试，将网页中的 Sherpa 测试相关 UI 和操作接入原生页面。
+
+- 原生页面新增 Sherpa 声纹状态和已注册名称展示、注册名称输入框、声纹注册按钮、声纹降噪开关、Sherpa 单段/多段/快速多段按钮、多人模式人数选择和详细结果区域。
+- 普通 ASR 文字降噪开关与声纹降噪开关分别保留，注册只使用声纹降噪开关；声纹测试同时将两个开关传入既有 `VoiceprintTestCoordinator.test`。
+- 所有操作复用当前已选择或刚录制的 `selectedSamples`，直接调用 APK 内已有协调器，不经过本机 HTTPS 页面，不重复解码音频。
+- 原生按钮操作使用现有后台线程；运行期间禁用注册和三种测试按钮，完成后恢复；异常显示在声纹结果区域，注册成功后刷新已注册名称。
+- 结果至少显示模式、ASR 文本、匹配名称、`similarityScore`、`threshold`、阶段耗时和各分段的说话人/分数/文字/错误，便于与网页测试结果对照。
+- 本次不新增模型、不改变 Sherpa 推理流程、不持久化声纹库、不新增 HTTP 路由；声纹阈值继续使用当前 `SherpaVoiceprintEngine.matchThreshold`。
+
 ## 流式 ASR 扩展
 
 - 独立 APK 增加 Sherpa `OnlineRecognizer`，使用官方小型双语 Zipformer int8 模型，支持中文和英文。
