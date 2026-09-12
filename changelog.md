@@ -1,5 +1,14 @@
 # Web MediaCenter - 变更日志
 
+## Windows 子显示端语音输入增强
+
+- ✅ [2026-09-12] 修复发送后立即退出、无超时退出和录音协议未知消息问题，并新增输入模式本地声纹策略；补充请求级声纹旁路。
+  - `src/apps/voice-display-node/main.js`：发送仅发送 Enter 并保持输入模式，成功操作刷新 30 秒计时器，超时退出时播报结束提示；输入模式声纹策略支持 `inherit`/`false`，通过 `Alt+C` 切换并只保存到子显示端本地。
+  - `src/apps/voice-display-node/windows-text-input.js`：全局快捷键支持参数化，保留 `Ctrl+Alt+Space` 并新增 `Alt+C`。
+  - Node 子显示端处理 `voiceRecordingConfig` 和 `displayRecordingRequest`，暂不支持临时录音回放时按协议返回明确错误。
+  - `Alt+C` 切换只改变本地策略，不再触发状态提示或暂停录音；输入模式 `false` 通过 `localTextInputRequireVoiceprint` → `asrAudio.useVoiceprint` 传到实际识别端，跳过声纹提取并返回空声纹耗时。
+  - 更新 Windows 语音输入 design/spec/task/usage 文档、配置和契约测试；定向回归 26/26 通过，Node/服务端 JavaScript 语法检查通过；全量 `npm test` 为 630/631，唯一失败为已登记的 `display-native-bridge.test.js` 原生 `injectTouch(down)` 契约；Windows 10/11 实机验收仍待完成。
+
 ## Windows 子显示端语音输入录音恢复
 
 - ✅ [2026-09-12] 修复状态提示播报后 Windows 子显示端录音无法恢复，并将撤销命令由“回退”改为“返回”。

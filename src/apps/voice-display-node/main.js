@@ -24,6 +24,7 @@ const { formatAsrDisplayText } = require('./asr-display');
 const SubDisplayTUI = require('./tui');
 const {
     WINDOWS_HOTKEY_LABEL,
+    WINDOWS_VOICEPRINT_HOTKEY_LABEL,
     WindowsGlobalHotkey,
     WindowsTextInputInjector,
     isTextInputCommand
@@ -33,6 +34,22 @@ const { installConsoleRedirect } = require('../../framework/observability/consol
 
 const useTUI = !process.argv.includes('--no-tui');
 const tui = new SubDisplayTUI({ enabled: useTUI });
+const TEXT_INPUT_IDLE_TIMEOUT_MS = 30 * 1000;
+const TEXT_INPUT_VOICEPRINT_POLICY_INHERIT = 'inherit';
+const TEXT_INPUT_VOICEPRINT_POLICY_DISABLED = false;
+const DISPLAY_RECORDING_MODES = new Set(['asr', 'single', 'realtime']);
+
+function normalizeTextInputVoiceprintPolicy(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return value === false || normalized === 'false'
+        ? TEXT_INPUT_VOICEPRINT_POLICY_DISABLED
+        : TEXT_INPUT_VOICEPRINT_POLICY_INHERIT;
+}
+
+function normalizeDisplayRecordingMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    return DISPLAY_RECORDING_MODES.has(mode) ? mode : 'asr';
+}
 
 // 将所有 console.* 输出重定向到 TUI，防止各模块的打印破坏 TUI 布局
 installConsoleRedirect({
@@ -149,11 +166,25 @@ class VoiceDisplay {
         // Windows 系统级语音输入状态独立于 TUI 输入栏；记录每段文本以支持“返回”单次撤销。
         this.textInputMode = 'inactive';
         this.textInputHistory = [];
+        this.textInputIdleTimer = null;
+        this.textInputVoiceprintPolicy = normalizeTextInputVoiceprintPolicy(
+            config.textInput?.requireVoiceprint
+        );
+        // 服务器配置消息到达前使用服务器默认开启声纹的安全值；连接后立即以权威配置覆盖。
+        this.serverVoiceprintEnabled = true;
+        this.displayRecordingMode = 'asr';
+        this.configPath = config.configPath || path.join(__dirname, 'config.json');
         this.textInputAnnouncement = null;
         this.textInputAnnouncementSequence = 0;
         this.textInputInjector = new WindowsTextInputInjector();
         this.textInputHotkey = new WindowsGlobalHotkey({
             onToggle: () => this.onToggleTextInputMode()
+        });
+        this.textInputVoiceprintHotkey = new WindowsGlobalHotkey({
+            label: WINDOWS_VOICEPRINT_HOTKEY_LABEL,
+            modifiersExpression: 'MOD_ALT',
+            virtualKeyExpression: 'VK_C',
+            onToggle: () => this.toggleTextInputVoiceprintPolicy()
         });
 
         this.recordingMode = config.recordingMode || 'mute';
@@ -356,6 +387,12 @@ class VoiceDisplay {
             case 'voiceVadNoiseTest':
                 void this.handleVoiceVadNoiseTest(data);
                 break;
+            case 'voiceRecordingConfig':
+                this.handleVoiceRecordingConfig(data);
+                break;
+            case 'displayRecordingRequest':
+                this.handleDisplayRecordingRequest(data);
+                break;
             case 'voiceprintConfig':
                 this.handleVoiceprintConfig(data);
                 break;
@@ -444,9 +481,40 @@ class VoiceDisplay {
         log('ASR', 'ASR 配置: device=' + data.device + ' localEnabled=' + data.localAsrEnabled);
     }
 
+    handleVoiceRecordingConfig(data) {
+        const mode = normalizeDisplayRecordingMode(data?.mode);
+        this.displayRecordingMode = mode;
+        log('录音', `服务器录音模式已更新: ${mode}`);
+    }
+
+    handleDisplayRecordingRequest(data) {
+        const requestId = typeof data?.requestId === 'string' ? data.requestId.trim() : '';
+        if (!requestId) {
+            logError('录音', '忽略缺少 requestId 的控制端录音请求');
+            return;
+        }
+
+        const mode = normalizeDisplayRecordingMode(data.mode);
+        this.sendJSON({
+            type: 'displayRecordingResult',
+            displayId: this.serverDisplayId || this.config.displayId,
+            requestId,
+            mode,
+            completed: false,
+            error: 'Node 子显示端暂不支持控制端临时录音回放'
+        });
+        log('录音', `控制端临时录音请求暂不支持: requestId=${requestId} action=${data.action || 'unknown'} mode=${mode}`);
+    }
+
     handleVoiceprintConfig(data) {
         if (!data) return;
 
+        if (typeof data.enabled === 'boolean') {
+            this.serverVoiceprintEnabled = data.enabled;
+            if (this.textInputVoiceprintPolicy === TEXT_INPUT_VOICEPRINT_POLICY_INHERIT) {
+                log('语音输入', `输入模式声纹策略跟随服务器: ${this.getTextInputVoiceprintPolicyLabel()}`);
+            }
+        }
         this.pauseRecordingDuringPlayback = data.pauseRecordingDuringPlayback !== false;
         if (!this.pauseRecordingDuringPlayback) {
             this.remoteTtsPlaybackIds.clear();
@@ -523,14 +591,21 @@ class VoiceDisplay {
     handleConfigUpdate(data) {
         if (!data.config) return;
         try {
-            const configPath = path.join(__dirname, 'config.json');
-            const currentConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            const currentConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+            const localTextInputConfig = currentConfig.textInput || this.config.textInput || {
+                requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_INHERIT
+            };
             // 不持久化 displayId：每台机器用 hostname 自动生成
             const cfg = { ...data.config };
             delete cfg.displayId;
-            const newConfig = { ...currentConfig, ...cfg };
-            fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
-            this.config = { ...this.config, ...newConfig };
+            delete cfg.textInput;
+            const newConfig = {
+                ...currentConfig,
+                ...cfg,
+                textInput: localTextInputConfig
+            };
+            fs.writeFileSync(this.configPath, JSON.stringify(newConfig, null, 2) + '\n');
+            this.config = { ...this.config, ...newConfig, textInput: localTextInputConfig };
             this.applyVadConfig(newConfig);
             log('配置', `配置已更新: serverUrl=${newConfig.serverUrl}`);
         } catch (err) {
@@ -632,7 +707,7 @@ class VoiceDisplay {
         if (error) {
             logError('语音输入', `状态提示播报失败: ${error.message}`);
         } else {
-            log('语音输入', `状态提示播报完成: ${announcement.mode === 'active' ? '已开始输入' : '已结束输入'}`);
+            log('语音输入', `状态提示播报完成: ${announcement.text}`);
         }
         this.resumeRecorderAfterTextInputAnnouncement();
     }
@@ -645,9 +720,9 @@ class VoiceDisplay {
         }
     }
 
-    requestTextInputAnnouncement(mode) {
+    requestTextInputAnnouncement(mode, textOverride = null) {
         const requestId = `text-input-${Date.now()}-${++this.textInputAnnouncementSequence}`;
-        const text = mode === 'active' ? '已开始输入' : '已结束输入';
+        const text = textOverride || (mode === 'active' ? '已开始输入' : '已结束输入');
         this.textInputAnnouncement = {
             requestId,
             mode,
@@ -971,6 +1046,84 @@ class VoiceDisplay {
         return text ? [text] : [];
     }
 
+    getRecognitionSegments(result = {}) {
+        if (Array.isArray(result.segments) && result.segments.length > 0) {
+            return result.segments
+                .map(segment => ({
+                    text: String(segment?.text || '').trim(),
+                    speaker: String(segment?.speaker || '').trim()
+                }))
+                .filter(segment => segment.text);
+        }
+
+        const text = String(result.text || '').trim();
+        return text ? [{
+            text,
+            speaker: String(result.speaker || '').trim()
+        }] : [];
+    }
+
+    getTextInputVoiceprintPolicyLabel() {
+        if (this.textInputVoiceprintPolicy === TEXT_INPUT_VOICEPRINT_POLICY_DISABLED) {
+            return '已关闭声纹匹配';
+        }
+        return this.serverVoiceprintEnabled ? '跟随服务器（需要声纹匹配）' : '跟随服务器（不需要声纹匹配）';
+    }
+
+    isTextInputVoiceprintRequired() {
+        return this.textInputVoiceprintPolicy === TEXT_INPUT_VOICEPRINT_POLICY_INHERIT
+            && this.serverVoiceprintEnabled === true;
+    }
+
+    clearTextInputIdleTimer() {
+        if (!this.textInputIdleTimer) return;
+        clearTimeout(this.textInputIdleTimer);
+        this.textInputIdleTimer = null;
+    }
+
+    refreshTextInputIdleTimer() {
+        this.clearTextInputIdleTimer();
+        if (this.textInputMode !== 'active') return;
+
+        this.textInputIdleTimer = setTimeout(() => {
+            this.textInputIdleTimer = null;
+            if (this.textInputMode === 'active') {
+                this.exitTextInputMode('30秒无输入', true);
+            }
+        }, TEXT_INPUT_IDLE_TIMEOUT_MS);
+    }
+
+    persistTextInputVoiceprintPolicy() {
+        try {
+            const currentConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
+            const newConfig = {
+                ...currentConfig,
+                textInput: {
+                    ...(currentConfig.textInput || {}),
+                    requireVoiceprint: this.textInputVoiceprintPolicy
+                }
+            };
+            fs.writeFileSync(this.configPath, JSON.stringify(newConfig, null, 2) + '\n');
+            this.config.textInput = newConfig.textInput;
+        } catch (error) {
+            logError('配置', `保存输入模式声纹策略失败: ${error.message}`);
+        }
+    }
+
+    toggleTextInputVoiceprintPolicy() {
+        if (!this.textInputInjector.isAvailable()) {
+            log('语音输入', '当前系统不是 Windows，无法切换输入模式声纹策略');
+            return;
+        }
+
+        this.textInputVoiceprintPolicy = this.textInputVoiceprintPolicy === TEXT_INPUT_VOICEPRINT_POLICY_INHERIT
+            ? TEXT_INPUT_VOICEPRINT_POLICY_DISABLED
+            : TEXT_INPUT_VOICEPRINT_POLICY_INHERIT;
+        this.persistTextInputVoiceprintPolicy();
+        const policyLabel = this.getTextInputVoiceprintPolicyLabel();
+        log('语音输入', `输入模式声纹策略已切换: ${policyLabel}`);
+    }
+
     onToggleTextInputMode() {
         if (!this.textInputInjector.isAvailable()) {
             log('语音输入', '当前系统不是 Windows，无法启用系统文本输入');
@@ -984,12 +1137,14 @@ class VoiceDisplay {
 
         this.textInputMode = 'active';
         this.textInputHistory = [];
+        this.refreshTextInputIdleTimer();
         log('语音输入', `已开启 Windows 系统文本输入（${WINDOWS_HOTKEY_LABEL} 可切换）`);
         this.updateTUIRecordingState();
         this.requestTextInputAnnouncement('active');
     }
 
     exitTextInputMode(reason, announce = true) {
+        this.clearTextInputIdleTimer();
         this.textInputMode = 'inactive';
         this.textInputHistory = [];
         log('语音输入', `已退出 Windows 系统文本输入${reason ? `：${reason}` : ''}`);
@@ -998,8 +1153,9 @@ class VoiceDisplay {
     }
 
     async handleTextInputResult(result, requestTextInputMode) {
-        const texts = this.getRecognitionTexts(result);
-        if (texts.length === 0) return false;
+        const segments = this.getRecognitionSegments(result);
+        if (segments.length === 0) return false;
+        const texts = segments.map(segment => segment.text);
 
         const isActivation = result.localTextInputAction === 'activate'
             || (requestTextInputMode !== 'active'
@@ -1014,8 +1170,16 @@ class VoiceDisplay {
 
         if (requestTextInputMode !== 'active' || this.textInputMode !== 'active') return false;
 
-        for (const text of texts) {
-            await this.handleTextInputSegment(text);
+        const inputSegments = this.isTextInputVoiceprintRequired()
+            ? segments.filter(segment => segment.speaker)
+            : segments;
+        if (inputSegments.length === 0) {
+            log('语音输入', `未通过声纹匹配，忽略输入: ${JSON.stringify(texts.join(''))}`);
+            return true;
+        }
+
+        for (const segment of inputSegments) {
+            await this.handleTextInputSegment(segment.text);
             // 一次 ASR 可能返回多个分段；“发送”结束输入模式后，不再把同一批次的后续分段注入新窗口。
             if (this.textInputMode !== 'active') break;
         }
@@ -1046,6 +1210,7 @@ class VoiceDisplay {
                 text,
                 windowId: result.windowId
             });
+            this.refreshTextInputIdleTimer();
             log('语音输入', `已注入 ${text.length} 个字符`);
         } catch (error) {
             logError('语音输入', `文本注入失败: ${error.message}`);
@@ -1066,6 +1231,7 @@ class VoiceDisplay {
                 return;
             }
             this.textInputHistory.pop();
+            this.refreshTextInputIdleTimer();
             log('语音输入', '已返回最近一次语音输入');
         } catch (error) {
             logError('语音输入', `返回失败: ${error.message}`);
@@ -1085,7 +1251,9 @@ class VoiceDisplay {
                 logError('语音输入', '发送失败：目标窗口已变化，请切回原窗口');
                 return;
             }
-            this.exitTextInputMode('已发送', false);
+            this.textInputHistory = [];
+            this.refreshTextInputIdleTimer();
+            log('语音输入', '已发送 Enter，继续保持 Windows 系统文本输入');
         } catch (error) {
             logError('语音输入', `发送失败: ${error.message}`);
         }
@@ -1094,13 +1262,19 @@ class VoiceDisplay {
     async startWindowsTextInput() {
         if (!this.textInputHotkey.isAvailable()) return;
 
-        try {
-            const started = await this.textInputHotkey.start();
-            if (started) {
-                log('语音输入', `全局快捷键 ${WINDOWS_HOTKEY_LABEL} 已注册`);
+        const hotkeys = [
+            [this.textInputHotkey, WINDOWS_HOTKEY_LABEL],
+            [this.textInputVoiceprintHotkey, WINDOWS_VOICEPRINT_HOTKEY_LABEL]
+        ];
+        for (const [hotkey, label] of hotkeys) {
+            try {
+                const started = await hotkey.start();
+                if (started) {
+                    log('语音输入', `全局快捷键 ${label} 已注册`);
+                }
+            } catch (error) {
+                logError('语音输入', `全局快捷键 ${label} 注册失败: ${error.message}`);
             }
-        } catch (error) {
-            logError('语音输入', `全局快捷键注册失败: ${error.message}`);
         }
     }
 
@@ -1154,13 +1328,19 @@ class VoiceDisplay {
                 }
 
                 const requestTextInputMode = this.textInputMode;
+                // 输入模式声纹策略是当前 Node 的本地决定，只在 active 请求中传递给实际识别端。
+                // 激活词仍按普通全局 ASR 处理，避免“开始输入”受输入模式策略门控。
+                const localTextInputRequireVoiceprint = requestTextInputMode === 'active'
+                    ? this.isTextInputVoiceprintRequired()
+                    : null;
                 const result = await this.asr.recognize(dataToSend, {
                     // 只使用服务器确认的来源，避免重连或 ID 变更时把 ASR 结果路由到旧显示端。
                     displayId: this.serverDisplayId,
                     speechStartAt: timing.speechStartAt,
                     speechEndAt: timing.speechEndAt,
                     textInputClient: this.textInputInjector.isAvailable(),
-                    localTextInputMode: requestTextInputMode
+                    localTextInputMode: requestTextInputMode,
+                    localTextInputRequireVoiceprint
                 });
                 const displayText = formatAsrDisplayText(result);
                 if (result.status === 'success' && displayText) {
@@ -1619,6 +1799,7 @@ class VoiceDisplay {
     stop() {
         this.stopController.abort();
         this.stopHeartbeat();
+        this.clearTextInputIdleTimer();
         this.rejectDisplayIdWaiter(new Error('语音显示端已停止'));
 
         if (this.asrPollTimer) {
@@ -1643,6 +1824,7 @@ class VoiceDisplay {
             this.ws.close();
         }
         this.textInputHotkey.close();
+        this.textInputVoiceprintHotkey.close();
         this.textInputInjector.close();
 
         log('停止', '语音显示端已停止');
@@ -1679,7 +1861,10 @@ function loadConfig(configPath) {
         displayId: 'voice-display-node-' + os.hostname(),
         vadThreshold: 0.01,
         maxReconnectAttempts: 5,
-        recordingMode: 'mute'
+        recordingMode: 'mute',
+        textInput: {
+            requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_INHERIT
+        }
     };
 
     try {
@@ -1700,6 +1885,7 @@ function loadConfig(configPath) {
 async function main() {
     const configPath = process.argv[2] || path.join(__dirname, 'config.json');
     const config = loadConfig(configPath);
+    config.configPath = configPath;
 
     const voiceDisplay = new VoiceDisplay(config);
 

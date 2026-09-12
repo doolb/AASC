@@ -3409,16 +3409,23 @@ function getAsrRequestContext(req) {
     const speechEndAt = Number(req.body?.speechEndAt);
     const textInputClientFlag = String(req.body?.textInputClient || '').toLowerCase() === 'true';
     const requestedTextInputMode = String(req.body?.localTextInputMode || '').trim().toLowerCase();
+    const requestedLocalTextInputRequireVoiceprint = String(req.body?.localTextInputRequireVoiceprint ?? '').trim().toLowerCase();
     // 兼容已经发送 active 模式但遗漏客户端布尔标记的旧 Node 包；仅对明确的 subdisplay 请求启用回退判断。
     const textInputClient = textInputClientFlag
         || (displayKind === 'subdisplay' && requestedTextInputMode === 'active');
+    const localTextInputRequireVoiceprint = textInputClient
+        && requestedTextInputMode === 'active'
+        && (requestedLocalTextInputRequireVoiceprint === 'true' || requestedLocalTextInputRequireVoiceprint === 'false')
+        ? requestedLocalTextInputRequireVoiceprint === 'true'
+        : null;
     return {
         displayId,
         displayKind,
         speechStartAt: Number.isFinite(speechStartAt) ? speechStartAt : null,
         speechEndAt: Number.isFinite(speechEndAt) ? speechEndAt : null,
         textInputClient,
-        localTextInputMode: textInputClient && requestedTextInputMode === 'active' ? 'active' : 'inactive'
+        localTextInputMode: textInputClient && requestedTextInputMode === 'active' ? 'active' : 'inactive',
+        localTextInputRequireVoiceprint
     };
 }
 
@@ -3628,7 +3635,7 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
             try {
                 const audioBase64 = req.file.buffer.toString('base64');
                 const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
-                const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId);
+                const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId, requestContext);
                 const localTextInputResponse = createLocalTextInputResponse(result, requestContext);
                 if (localTextInputResponse) {
                     return res.json(localTextInputResponse);
@@ -5238,7 +5245,7 @@ function findDisplayWithVoiceprint() {
     return null;
 }
 
-function sendAudioToDisplayAsr(display, audioBase64, requestId) {
+function sendAudioToDisplayAsr(display, audioBase64, requestId, requestContext = {}) {
     return new Promise((resolve, reject) => {
         const timeoutMs = 60000;
         const timer = setTimeout(() => {
@@ -5248,11 +5255,16 @@ function sendAudioToDisplayAsr(display, audioBase64, requestId) {
 
         pendingDisplayAsrRequests.set(requestId, { resolve, reject, timer });
         try {
-            const sent = sendToDisplay(display.id, {
+            const message = {
                 type: 'asrAudio',
                 audioData: audioBase64,
                 requestId
-            });
+            };
+            // 仅为输入模式传递请求级覆盖值，普通 ASR 请求继续遵循显示端全局配置。
+            if (typeof requestContext.localTextInputRequireVoiceprint === 'boolean') {
+                message.useVoiceprint = requestContext.localTextInputRequireVoiceprint;
+            }
+            const sent = sendToDisplay(display.id, message);
             if (!sent) {
                 clearTimeout(timer);
                 pendingDisplayAsrRequests.delete(requestId);

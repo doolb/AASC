@@ -8,6 +8,9 @@ WindowsTextInputState:
     history: 按注入顺序保存的 TextInputRecord 列表
     lastWindowId: 最近一次成功注入的前台窗口标识
     announcement: null 或 { requestId, mode, state: pending | playing | waiting-queue | finished | failed }
+    idleTimer: active 模式最后一次成功操作后的 30 秒定时器
+    voiceprintPolicy: inherit | false，只保存在 Node 子显示端
+    serverVoiceprintEnabled: 由服务器 voiceprintConfig.enabled 下发的当前值
 
 TextInputRecord:
     text: 本次完整 ASR 文本
@@ -77,6 +80,8 @@ WindowsGlobalHotkey:
         启动隐藏消息循环
         收到 WM_HOTKEY:
             调用 onToggle()
+        另一个实例注册 Alt+C
+        Alt+C 收到 WM_HOTKEY 时调用 onToggleVoiceprintPolicy()
         注册失败:
             回报 unavailable 和错误
     非 Windows 平台:
@@ -93,8 +98,30 @@ WindowsGlobalHotkey:
 VoiceDisplay 初始化:
     textInputMode = inactive
     textInputHistory = 空列表
+    textInputIdleTimer = null
+    textInputVoiceprintPolicy = config.textInput.requireVoiceprint，仅接受 inherit 或 false，默认 inherit
+    serverVoiceprintEnabled = true
     创建 WindowsTextInputInjector
     创建 WindowsGlobalHotkey(onToggleTextInputMode)
+    创建 WindowsGlobalHotkey(Alt+C, toggleTextInputVoiceprintPolicy)
+
+有效输入模式声纹策略:
+    如果 textInputVoiceprintPolicy == false:
+        requireVoiceprint = false
+    否则:
+        requireVoiceprint = serverVoiceprintEnabled
+
+服务器 voiceprintConfig:
+    保存 data.enabled 到 serverVoiceprintEnabled
+    textInputVoiceprintPolicy == inherit 时，后续输入立即使用新的服务器值
+
+Alt+C:
+    如果 textInputVoiceprintPolicy == inherit:
+        改为 false
+    否则:
+        改为 inherit
+    将该选择只持久化到当前 Node 子显示端配置文件
+    仅记录本地切换结果，不暂停录音、不请求 TTS
 
 onToggleTextInputMode:
     如果 textInputMode == inactive:
@@ -130,9 +157,16 @@ onToggleTextInputMode:
         保持现有 ASR 结果展示和服务端处理语义
         结束当前处理
 
+    如果有效输入模式声纹策略要求匹配:
+        只保留带有非空 speaker 的 ASR 分段
+        如果没有匹配分段:
+            记录未通过声纹匹配
+            不注入文字，不执行“发送”“返回”“结束输入”
+            结束当前处理
+
     如果文本 == “发送”:
         使用最近记录的 windowId 执行 sendEnter
-        成功后退出 active 并清空 history
+        成功后清空 history，保持 active，并刷新 30 秒无操作计时器
         失败则记录窗口变化并保留 active/history
         结束当前处理
 
@@ -141,6 +175,7 @@ onToggleTextInputMode:
         不存在则结束当前处理
         执行 backspaceText(record)
         成功后移除最后一条记录
+        刷新 30 秒无操作计时器
         失败则保留记录并记录窗口变化
         结束当前处理
 
@@ -152,8 +187,14 @@ onToggleTextInputMode:
 
     普通文本:
         执行 insertText(text)
-        成功后 history 追加 { text, windowId }
+        成功后 history 追加 { text, windowId }，刷新 30 秒无操作计时器
         失败只记录错误，不发送 voiceInput
+
+30 秒无操作计时器:
+    进入 active 时启动
+    发送成功、返回成功、普通文本注入成功时重新计时
+    定时器到期且仍为 active 时调用 exitTextInputMode('30秒无输入', true)
+    结束输入、快捷键关闭、停止进程时清除
 ```
 
 ## ASR 请求与服务端伪代码
@@ -163,6 +204,20 @@ Node ASR 请求:
     multipart 增加 textInputClient=true
     如果 textInputMode == active:
         增加 localTextInputMode=active
+        计算 effectiveRequireVoiceprint:
+            voiceprintPolicy == false 时为 false
+            voiceprintPolicy == inherit 时取最近一次 serverVoiceprintEnabled
+        增加 localTextInputRequireVoiceprint=effectiveRequireVoiceprint
+
+服务端转发显示端 ASR:
+    仅当 localTextInputMode == active 且请求携带 localTextInputRequireVoiceprint 时，
+    在 asrAudio 消息中增加 useVoiceprint=localTextInputRequireVoiceprint
+    未携带时保持显示端原有全局 voiceprintConfig 行为
+
+显示端 ASR:
+    useVoiceprint = data.useVoiceprint == false ? false : 全局声纹开关和模型就绪状态
+    useVoiceprint == false 时只执行 ASR，不提取 embedding、不执行声纹匹配
+    返回 voiceprintElapsedMs=null，且不返回 speaker、similarityScore 或声纹分段
 
 Node 提示请求:
     暂停 recorder
@@ -205,12 +260,23 @@ src/apps/voice-display-node/windows-text-input.js:
     通过 Promise 队列串行化系统输入操作，并在停止时清理子进程
 
 src/apps/voice-display-node/main.js:
-    在 VoiceDisplay 内维护 textInputMode 和 textInputHistory
-    启动时注册 WindowsGlobalHotkey，ASR 返回后分流普通文本、返回和发送
+    在 VoiceDisplay 内维护 textInputMode、textInputHistory、textInputIdleTimer 和本地声纹策略
+    启动时注册 Ctrl+Alt+Space 与 Alt+C 两个 WindowsGlobalHotkey，ASR 返回后分流普通文本、返回和发送
+    只在本地保存 textInput.requireVoiceprint，inherit 时读取服务器最新 voiceprintConfig.enabled
     用请求开始时的输入模式快照避免快捷键与在途 ASR 结果串路
 
 src/apps/voice-display-node/asr-client.js:
-    Windows 本地输入客户端请求增加 textInputClient 和 localTextInputMode 表单字段
+    Windows 本地输入客户端请求增加 textInputClient、localTextInputMode 和 active 请求的 localTextInputRequireVoiceprint 表单字段
+
+src/apps/server/boot/server-app.js:
+    解析 localTextInputRequireVoiceprint，仅在 active 本地输入请求中转成 asrAudio.useVoiceprint
+    未携带请求级字段时不改变旧显示端的全局声纹行为
+
+src/apps/web-mediacenter/ui/public/display.html:
+    读取 asrAudio.useVoiceprint；明确 false 时跳过本次原生 ASR 的声纹流程
+
+src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt:
+    useVoiceprint == false 时仅执行 ASR，并返回 voiceprintElapsedMs=null
 
 src/apps/voice-display-node/audio-player.js:
     播放队列项支持 onComplete，并在队列完全空闲时通知状态提示流程
@@ -236,8 +302,10 @@ Node 子显示端契约测试:
     localTextInputAction=activate 激活且不发送 voiceInput
     active 普通文本调用 insertText
     active “返回”只处理最近一条记录
-    active “发送”调用 Enter 并结束模式
+    active “发送”调用 Enter 但保持模式，随后 30 秒无操作自动结束并播报
     active “结束输入”退出模式且不调用 insertText
+    inherit 跟随服务器 voiceprintConfig.enabled，false 放行输入模式 ASR
+    Alt+C 在 inherit/false 间切换并只修改本地配置
     开始/结束提示期间暂停录音，播报结束后恢复
     active ASR 请求包含本地输入标记
 
@@ -245,5 +313,6 @@ Node 子显示端契约测试:
     textInputClient 的“开始输入”旁路服务端命令链路
     localTextInputMode=active 不调用 processDisplayVoiceInput
     textInputAnnouncement 只向来源子显示端下发 TTS，失败回传错误
+    voiceRecordingConfig 和 displayRecordingRequest 已由 Node 显示端处理，不再打印未知消息
     未带本地标记的旧请求继续进入原语音处理链路
 ```

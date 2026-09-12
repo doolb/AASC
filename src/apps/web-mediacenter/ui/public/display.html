@@ -6020,8 +6020,14 @@
         }
 
         // 只有服务器选中的 APK 提供端处理 asrAudio；录音端永远走上面的公共 HTTP 接口。
+        // 输入模式可通过 asrAudio.useVoiceprint 临时关闭声纹，普通请求仍使用显示端全局配置。
+        function resolveAsrVoiceprintEnabled(data) {
+            if (data && data.useVoiceprint === false) return false;
+            return nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
+        }
+
         function handleLegacyNativeAsr(data, pcmBase64) {
-            const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
+            const useVoiceprint = resolveAsrVoiceprintEnabled(data);
             if (useVoiceprint && voiceprintMultiSpeaker) {
                 const result = JSON.parse(nativeBridge.voiceprintDiarize(pcmBase64));
                 sendAsrResult(data.requestId, {
@@ -6070,7 +6076,7 @@
             }
             try {
                 const pcmBase64 = await decodeAudioToPcmBase64(data.audioData);
-                const useVoiceprint = nativeVoiceprintAvailable && voiceprintEnabled && voiceprintReady;
+                const useVoiceprint = resolveAsrVoiceprintEnabled(data);
                 if (typeof nativeBridge.asrRecognizeAsyncWithOptions === 'function') {
                     const accepted = JSON.parse(nativeBridge.asrRecognizeAsyncWithOptions(
                         data.requestId,

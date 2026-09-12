@@ -121,6 +121,10 @@ class ServerASR {
             if (context.textInputClient === true) {
                 formData.append('textInputClient', 'true');
                 formData.append('localTextInputMode', context.localTextInputMode === 'active' ? 'active' : 'inactive');
+                // 只有 active 输入请求携带本地有效策略；未携带时由服务端/显示端沿用全局声纹配置。
+                if (context.localTextInputMode === 'active' && typeof context.localTextInputRequireVoiceprint === 'boolean') {
+                    formData.append('localTextInputRequireVoiceprint', String(context.localTextInputRequireVoiceprint));
+                }
             }
 
             // 表单字段用于兼容旧服务器，请求头用于让服务器明确识别来源类型并执行绑定。

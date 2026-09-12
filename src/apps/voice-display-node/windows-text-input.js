@@ -3,6 +3,7 @@
 const { spawn } = require('node:child_process');
 
 const WINDOWS_HOTKEY_LABEL = 'Ctrl+Alt+Space';
+const WINDOWS_VOICEPRINT_HOTKEY_LABEL = 'Alt+C';
 const POWERSHELL_OPERATION_TIMEOUT_MS = 5000;
 const POWERSHELL_HOTKEY_START_TIMEOUT_MS = 5000;
 
@@ -123,7 +124,10 @@ public static class AascWindowsInputNative {
 `;
 }
 
-function createHotkeyTypeDefinition() {
+function createHotkeyTypeDefinition(options = {}) {
+    const modifiersExpression = options.modifiersExpression || 'MOD_CONTROL | MOD_ALT';
+    const virtualKeyExpression = options.virtualKeyExpression || 'VK_SPACE';
+    const hotkeyId = Number.isInteger(options.hotkeyId) ? options.hotkeyId : 1;
     return `
 Add-Type -TypeDefinition @'
 using System;
@@ -153,11 +157,14 @@ public static class AascWindowsHotkeyNative {
     private const uint MOD_ALT = 0x0001;
     private const uint MOD_CONTROL = 0x0002;
     private const uint VK_SPACE = 0x20;
+    private const uint VK_C = 0x43;
     private const uint WM_HOTKEY = 0x0312;
-    private const int HOTKEY_ID = 1;
+    private const uint HOTKEY_MODIFIERS = ${modifiersExpression};
+    private const uint HOTKEY_VIRTUAL_KEY = ${virtualKeyExpression};
+    private const int HOTKEY_ID = ${hotkeyId};
 
     public static void Run() {
-        if (!RegisterHotKey(IntPtr.Zero, HOTKEY_ID, MOD_CONTROL | MOD_ALT, VK_SPACE)) {
+        if (!RegisterHotKey(IntPtr.Zero, HOTKEY_ID, HOTKEY_MODIFIERS, HOTKEY_VIRTUAL_KEY)) {
             Console.WriteLine("error:register");
             Console.Out.Flush();
             return;
@@ -406,6 +413,10 @@ class WindowsGlobalHotkey {
     constructor(options = {}) {
         this.platform = options.platform || process.platform;
         this.onToggle = typeof options.onToggle === 'function' ? options.onToggle : () => {};
+        this.label = options.label || WINDOWS_HOTKEY_LABEL;
+        this.modifiersExpression = options.modifiersExpression || 'MOD_CONTROL | MOD_ALT';
+        this.virtualKeyExpression = options.virtualKeyExpression || 'VK_SPACE';
+        this.hotkeyId = Number.isInteger(options.hotkeyId) ? options.hotkeyId : 1;
         this.spawnProcess = options.spawnProcess || spawn;
         this.child = null;
         this.closed = false;
@@ -428,7 +439,11 @@ class WindowsGlobalHotkey {
                 '-WindowStyle',
                 'Hidden',
                 '-EncodedCommand',
-                encodePowerShellCommand(createHotkeyTypeDefinition())
+                encodePowerShellCommand(createHotkeyTypeDefinition({
+                    modifiersExpression: this.modifiersExpression,
+                    virtualKeyExpression: this.virtualKeyExpression,
+                    hotkeyId: this.hotkeyId
+                }))
             ], {
                 windowsHide: true,
                 stdio: ['ignore', 'pipe', 'pipe']
@@ -460,7 +475,7 @@ class WindowsGlobalHotkey {
                     if (line.trim() === 'ready') settle(resolve, true);
                     if (line.trim() === 'toggle') this.onToggle();
                     if (line.trim() === 'error:register') {
-                        settle(reject, new Error(`无法注册全局快捷键 ${WINDOWS_HOTKEY_LABEL}`));
+                        settle(reject, new Error(`无法注册全局快捷键 ${this.label}`));
                     }
                 }
             });
@@ -498,6 +513,7 @@ class WindowsGlobalHotkey {
 
 module.exports = {
     WINDOWS_HOTKEY_LABEL,
+    WINDOWS_VOICEPRINT_HOTKEY_LABEL,
     WindowsGlobalHotkey,
     WindowsTextInputInjector,
     countTextUnits,
