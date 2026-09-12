@@ -5,6 +5,7 @@
  */
 
 const naudiodon = require('naudiodon');
+const { calculateNoiseStats, normalizeNoiseTestDuration } = require('./vad-noise');
 
 class AudioRecorder {
     /**
@@ -26,6 +27,7 @@ class AudioRecorder {
         this.recording = false;
         this.paused = false;
         this.audioInput = null;
+        this.noiseTest = null;
 
         /** @type {Function|null} 语音开始回调（cut 模式用） */
         this.onSpeechStart = null;
@@ -67,6 +69,7 @@ class AudioRecorder {
 
         const processAudioData = (int16Samples) => {
             const rms = this.computeRMS(int16Samples);
+            this.collectNoiseSample(rms);
 
             if (rms >= this.vadThreshold) {
                 if (!hasSpeech) {
@@ -143,11 +146,13 @@ class AudioRecorder {
 
                 this.audioInput.on('error', (err) => {
                     console.error('[录音] 录音错误:', err.message);
+                    this.cancelNoiseTest(new Error('录音输入异常'));
                     this.recording = false;
                     reject(err);
                 });
 
                 this.audioInput.on('close', () => {
+                    this.cancelNoiseTest(new Error('录音器已关闭'));
                     this.recording = false;
                     console.log('[录音] 录音已关闭');
 
@@ -182,6 +187,7 @@ class AudioRecorder {
     stop() {
         if (!this.recording) return;
 
+        this.cancelNoiseTest(new Error('录音器已停止'));
         this.recording = false;
 
         if (this.audioInput) {
@@ -205,6 +211,7 @@ class AudioRecorder {
     }
 
     pause() {
+        this.cancelNoiseTest(new Error('录音器当前已暂停'));
         this.paused = true;
         console.log('[录音] 已暂停');
     }
@@ -216,6 +223,66 @@ class AudioRecorder {
 
     isPaused() {
         return this.paused;
+    }
+
+    /**
+     * 在当前录音输入上采集底噪，避免重复打开麦克风设备。
+     * @param {number} durationMs - 检测时长，限制在 1 到 10 秒
+     * @returns {Promise<Object>}
+     */
+    startNoiseTest(durationMs) {
+        if (!this.recording) {
+            return Promise.reject(new Error('录音器未启动'));
+        }
+        if (this.paused) {
+            return Promise.reject(new Error('录音器当前已暂停'));
+        }
+        if (this.noiseTest) {
+            return Promise.reject(new Error('已有底噪检测正在进行'));
+        }
+
+        const testDurationMs = normalizeNoiseTestDuration(durationMs);
+        return new Promise((resolve, reject) => {
+            const test = {
+                samples: [],
+                startedAt: Date.now(),
+                timer: null,
+                resolve,
+                reject
+            };
+            test.timer = setTimeout(() => {
+                this.finishNoiseTest();
+            }, testDurationMs);
+            this.noiseTest = test;
+        });
+    }
+
+    collectNoiseSample(rms) {
+        if (!this.noiseTest || !Number.isFinite(rms)) return;
+        this.noiseTest.samples.push(rms);
+    }
+
+    finishNoiseTest() {
+        const test = this.noiseTest;
+        if (!test) return;
+
+        clearTimeout(test.timer);
+        this.noiseTest = null;
+        const result = calculateNoiseStats(test.samples, Date.now() - test.startedAt);
+        if (result.sampleCount === 0) {
+            test.reject(new Error('未采集到麦克风数据'));
+            return;
+        }
+        test.resolve(result);
+    }
+
+    cancelNoiseTest(error) {
+        const test = this.noiseTest;
+        if (!test) return;
+
+        clearTimeout(test.timer);
+        this.noiseTest = null;
+        test.reject(error);
     }
 
     /**

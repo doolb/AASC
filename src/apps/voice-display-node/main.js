@@ -20,6 +20,7 @@ const os = require('os');
 const { exec } = require('child_process');
 const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
+const { formatAsrDisplayText } = require('./asr-display');
 const SubDisplayTUI = require('./tui');
 const SystemMonitor = require('../../framework/observability/system-monitor');
 const { installConsoleRedirect } = require('../../framework/observability/console-redirect');
@@ -128,6 +129,9 @@ class VoiceDisplay {
         this.audio = null;
         this.recorder = null;
         this.connected = false;
+        // 服务器通过 WebSocket 确认的身份才是 ASR 请求的权威来源，不能只依赖本地候选 ID。
+        this.serverDisplayId = null;
+        this.displayIdWaiter = null;
         this.stopController = new AbortController();
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = config.maxReconnectAttempts || 5;
@@ -180,31 +184,36 @@ class VoiceDisplay {
      * @returns {Promise<void>}
      */
     async connect() {
+        // 每次连接都重新等待服务器确认，避免重连后继续使用上一次连接的显示端 ID。
+        this.serverDisplayId = null;
         const parsedUrl = URL.parse(this.config.serverUrl);
         const wsProtocol = parsedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${parsedUrl.host}/display?subDisplay=true&displayId=${encodeURIComponent(this.config.displayId)}`;
 
         log('连接', `正在连接到 ${wsUrl}`);
 
-        return new Promise((resolve, reject) => {
+        await new Promise((resolve, reject) => {
             const wsOptions = wsProtocol === 'wss:' ? {
                 rejectUnauthorized: false
             } : undefined;
             
-            this.ws = new WebSocket(wsUrl, wsOptions);
+            const ws = new WebSocket(wsUrl, wsOptions);
+            this.ws = ws;
 
-            this.ws.on('open', () => {
+            ws.on('open', () => {
+                if (this.ws !== ws) return;
                 this.connected = true;
                 this.reconnectAttempts = 0;
 
-                log('连接', `已连接，显示端ID: ${this.config.displayId}`);
+                log('连接', `已连接，等待服务器确认显示端ID（本地候选: ${this.config.displayId}）`);
                 this.startHeartbeat();
                 this.declareCapabilities();
                 this.updateTUIConnectionState();
                 resolve();
             });
 
-            this.ws.on('message', (data) => {
+            ws.on('message', (data) => {
+                if (this.ws !== ws) return;
                 try {
                     const msg = JSON.parse(data.toString());
                     this.handleMessage(msg.type, msg);
@@ -213,20 +222,62 @@ class VoiceDisplay {
                 }
             });
 
-            this.ws.on('close', () => {
+            ws.on('close', () => {
+                if (this.ws !== ws) return;
                 this.connected = false;
+                this.rejectDisplayIdWaiter(new Error('WebSocket 已关闭，服务器未确认显示端 ID'));
                 log('断开', '连接已关闭');
                 this.updateTUIConnectionState();
                 this.reconnect();
             });
 
-            this.ws.on('error', (error) => {
+            ws.on('error', (error) => {
+                if (this.ws !== ws) return;
                 logError('连接', `WebSocket错误: ${error.message}`);
                 if (!this.connected) {
                     reject(error);
                 }
             });
         });
+
+        // open 只代表传输层建立；必须等 displayId 消息，才能让 start() 启动 ASR。
+        await this.waitForServerDisplayId();
+    }
+
+    /**
+     * 等待服务器下发本次连接的权威显示端 ID。
+     * @param {number} timeoutMs - 等待超时时间
+     * @returns {Promise<string>}
+     */
+    async waitForServerDisplayId(timeoutMs = 5000) {
+        if (this.serverDisplayId) {
+            return this.serverDisplayId;
+        }
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                if (this.displayIdWaiter?.reject === reject) {
+                    this.displayIdWaiter = null;
+                }
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.close(4002, 'server displayId confirmation timeout');
+                }
+                reject(new Error(`等待服务器确认显示端 ID 超时（${timeoutMs}ms）`));
+            }, timeoutMs);
+            this.displayIdWaiter = { resolve, reject, timer };
+        });
+    }
+
+    /**
+     * 结束等待中的服务器显示端 ID 请求。
+     * @param {Error} error - 失败原因
+     */
+    rejectDisplayIdWaiter(error) {
+        if (!this.displayIdWaiter) return;
+        const waiter = this.displayIdWaiter;
+        this.displayIdWaiter = null;
+        clearTimeout(waiter.timer);
+        waiter.reject(error);
     }
 
     /**
@@ -261,7 +312,18 @@ class VoiceDisplay {
     handleMessage(msgType, data) {
         switch (msgType) {
             case 'displayId':
-                log('连接', `收到显示端ID: ${data.id}, IP: ${data.ip}`);
+                if (typeof data.id === 'string' && data.id.trim()) {
+                    this.serverDisplayId = data.id.trim();
+                    this.config.displayId = this.serverDisplayId;
+                    if (this.displayIdWaiter) {
+                        const waiter = this.displayIdWaiter;
+                        this.displayIdWaiter = null;
+                        clearTimeout(waiter.timer);
+                        waiter.resolve(this.serverDisplayId);
+                    }
+                    this.updateTUIConnectionState();
+                }
+                log('连接', `收到服务器确认显示端ID: ${this.serverDisplayId || data.id}, IP: ${data.ip}`);
                 break;
             case 'serverStartTime':
                 log('系统', `服务器启动时间: ${data.time}`);
@@ -275,6 +337,9 @@ class VoiceDisplay {
                 break;
             case 'voiceVadConfig':
                 this.handleVoiceVadConfig(data);
+                break;
+            case 'voiceVadNoiseTest':
+                void this.handleVoiceVadNoiseTest(data);
                 break;
             case 'voiceprintConfig':
                 this.handleVoiceprintConfig(data);
@@ -371,6 +436,12 @@ class VoiceDisplay {
                 this.recorder.resume();
             }
         }
+        if (data.vadSilenceDurationMs !== undefined || data.vadMinSpeechDurationMs !== undefined) {
+            this.applyVadConfig({
+                vadSilenceDurationMs: data.vadSilenceDurationMs,
+                vadMinSpeechDurationMs: data.vadMinSpeechDurationMs
+            });
+        }
         log('语音', `播放期间录音策略已更新: ${this.pauseRecordingDuringPlayback ? '暂停录音' : '继续录音'}`);
     }
 
@@ -379,6 +450,30 @@ class VoiceDisplay {
 
         this.applyVadConfig(data);
         log('语音', `VAD 配置已更新: threshold=${this.config.vadThreshold}, silence=${this.config.vadSilenceDurationMs}ms, minSpeech=${this.config.vadMinSpeechDurationMs}ms`);
+    }
+
+    async handleVoiceVadNoiseTest(data) {
+        const requestId = data?.requestId || null;
+        try {
+            if (!this.recorder || typeof this.recorder.startNoiseTest !== 'function') {
+                throw new Error('录音器不可用');
+            }
+
+            const result = await this.recorder.startNoiseTest(data?.durationMs);
+            this.sendJSON({
+                type: 'voiceVadNoiseResult',
+                requestId,
+                ...result
+            });
+            log('语音', `底噪检测完成: requestId=${requestId}, average=${result.averageRms.toFixed(4)}, p95=${result.p95Rms.toFixed(4)}, recommended=${result.recommendedThreshold.toFixed(4)}`);
+        } catch (error) {
+            this.sendJSON({
+                type: 'voiceVadNoiseResult',
+                requestId,
+                error: error.message
+            });
+            logError('语音', `底噪检测失败: ${error.message}`);
+        }
     }
 
     applyVadConfig(data = {}) {
@@ -792,19 +887,25 @@ class VoiceDisplay {
                 }
 
                 const result = await this.asr.recognize(dataToSend, {
-                    displayId: this.config.displayId,
+                    // 只使用服务器确认的来源，避免重连或 ID 变更时把 ASR 结果路由到旧显示端。
+                    displayId: this.serverDisplayId,
                     speechStartAt: timing.speechStartAt,
                     speechEndAt: timing.speechEndAt
                 });
-                if (result.status === 'success' && result.text) {
-                    log('语音', `识别结果: ${result.text}`);
-                    this.lastRecognition = result.text;
+                const displayText = formatAsrDisplayText(result);
+                if (result.status === 'success' && displayText) {
+                    log('语音', `识别结果: ${displayText}`);
+                    this.lastRecognition = displayText;
                     this.updateTUIRecordingState();
-                    if (result.processedByServer !== true) {
-                        this.sendVoiceInput(result.text);
-                    }
                 } else if (result.status === 'ignored') {
-                    log('语音', '服务器忽略该段音频');
+                    if (displayText) {
+                        log('语音', `服务器忽略该段音频，识别文本: ${displayText}`);
+                        this.lastRecognition = displayText;
+                        this.updateTUIRecordingState();
+                    } else {
+                        const reason = result.reason || result.message || '未返回识别文本';
+                        log('语音', `服务器忽略该段音频: ${reason}`);
+                    }
                 }
             } catch (error) {
                 logError('语音', `服务器识别失败: ${error.message}`);
@@ -1244,6 +1345,7 @@ class VoiceDisplay {
     stop() {
         this.stopController.abort();
         this.stopHeartbeat();
+        this.rejectDisplayIdWaiter(new Error('语音显示端已停止'));
 
         if (this.asrPollTimer) {
             clearInterval(this.asrPollTimer);

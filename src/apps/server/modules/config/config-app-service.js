@@ -219,6 +219,8 @@ class Config extends DataSnapshot {
             multiMode: 'fast',
             speakerCount: 'AUTO',
             pauseRecordingDuringPlayback: true,
+            vadSilenceDurationMs: 500,
+            vadMinSpeechDurationMs: 300,
             asrResultDetailLog: true
         },
         voiceCommand: {

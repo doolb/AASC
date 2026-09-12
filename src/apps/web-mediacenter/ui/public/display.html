@@ -4503,6 +4503,18 @@
                             // 全局关闭时立即恢复本显示端此前因播放而暂停的普通 ASR。
                             resumeVoiceRecordingAfterTts();
                         }
+                        if (data.vadSilenceDurationMs !== undefined) {
+                            vadSilenceDurationMs = normalizeVadDuration(
+                                data.vadSilenceDurationMs,
+                                vadSilenceDurationMs
+                            );
+                        }
+                        if (data.vadMinSpeechDurationMs !== undefined) {
+                            vadMinSpeechDurationMs = normalizeVadDuration(
+                                data.vadMinSpeechDurationMs,
+                                vadMinSpeechDurationMs
+                            );
+                        }
                         asrDenoiseEnabled = !!data.denoise;
                         voiceprintEnabled = !!data.enabled;
                         voiceprintMultiSpeaker = !!data.multiSpeaker;

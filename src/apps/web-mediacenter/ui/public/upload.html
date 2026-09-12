@@ -766,6 +766,14 @@
                     <br><label style="margin-top:4px;display:inline-block;"><input type="checkbox" id="vpDenoiseCheck"> 降噪（全局作用于普通 ASR 和声纹识别）</label>
                     <br><label style="margin-top:4px;display:inline-block;"><input type="checkbox" id="vpPauseRecordingDuringPlaybackCheck" checked> 播放时暂停录音（全局）</label>
                     <br><label style="margin-top:4px;display:inline-block;"><input type="checkbox" id="vpAsrResultDetailLogCheck" checked> 打印 ASR/声纹详细日志（服务器）</label>
+                    <br><label style="margin-top:4px;display:inline-block;">VAD 静音时长（全局）：
+                        <input type="number" id="vpVadSilenceDurationInput" min="100" max="5000" step="50" value="500"
+                            style="width:72px;padding:3px 5px;box-sizing:border-box;"> ms
+                    </label>
+                    <br><label style="margin-top:4px;display:inline-block;">VAD 最短语音时长（全局）：
+                        <input type="number" id="vpVadMinSpeechDurationInput" min="100" max="5000" step="50" value="300"
+                            style="width:72px;padding:3px 5px;box-sizing:border-box;"> ms
+                    </label>
                 </div>
                 <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.5);">
                     多人模式：<select id="vpMultiModeSel"><option value="fast">快速多段</option></select>

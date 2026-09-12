@@ -46,7 +46,15 @@ assert.match(asrService, /serialization:\s*'advanced'/, '隔离 ASR IPC 应使�
 assert.match(nodeClient, /displayId/, 'Node 显示端 ASR 请求应携带显示端 ID');
 assert.match(nodeClient, /speechStartAt|speechEndAt/, 'Node 显示端 ASR 请求应携带语音时间信息');
 assert.match(nodeMain, /voiceVadConfig/, 'Node 显示端应处理服务端 VAD 配置');
-assert.match(nodeMain, /processedByServer/, 'Node 显示端应避免服务端已处理后的旧 WS 重复上报');
+assert.match(nodeMain, /formatAsrDisplayText/, 'Node 显示端应格式化服务器 ASR 回显');
+const asrCallbackStart = nodeMain.indexOf('const onAudioData = async');
+const asrCallbackEnd = nodeMain.indexOf('\n        };', asrCallbackStart);
+assert.ok(asrCallbackStart >= 0 && asrCallbackEnd > asrCallbackStart, '应找到 Node ASR 音频回调');
+assert.doesNotMatch(
+    nodeMain.slice(asrCallbackStart, asrCallbackEnd),
+    /this\.sendVoiceInput\s*\(/,
+    'Node 显示端不应把服务器已处理的 ASR 结果通过旧 voiceInput 二次上报'
+);
 assert.match(nodeMain, /pauseRecordingDuringPlayback/, 'Node 显示端应复用服务端全局播放暂停录音配置');
 assert.match(nodeMain, /case 'voiceprintConfig'/, 'Node 显示端应处理服务端声纹/播放录音配置');
 assert.match(nodeMain, /vadSilenceDurationMs/, 'Node 显示端录音器应使用静音结束时长');

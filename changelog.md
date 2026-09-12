@@ -1,5 +1,22 @@
 # Web MediaCenter - 变更日志
 
+## Node 子显示端 ASR 来源绑定
+
+- ✅ [2026-09-12] 修复 Node 子显示端 ASR 已识别但服务器不继续处理语音指令的问题。
+  - Node 保存并等待服务器 WebSocket 下发的权威 `displayId`，ASR 请求同时携带表单来源、`X-AASC-Display-Id` 和 `X-AASC-Display-Kind: subdisplay`。
+  - 服务器先将请求绑定到在线显示端，再执行声纹门控和语音命令处理；失效 ID 仅在唯一同 IP 子显示端候选时回退，无法绑定时仍返回 ASR 回显但不触发命令。
+  - 保持单次 ASR 上传和服务器统一处理，不依赖 ASR 响应后的第二次 `voiceInput`；更新对应 design/spec/task 文档及来源绑定回归测试。
+  - 验证：来源绑定、Node ASR 回显、内存上传和服务器 ASR 定向测试 8/8 通过，JavaScript 语法检查和 `git diff --check` 通过；全量 `npm test` 590/592 通过，剩余 2 项为既有/并行改动的 DeX `injectTouch(down)` 和显示端版本远程配置契约失败。
+
+## 子显示端 ASR 回显与单次处理
+
+- ✅ [2026-09-12] 修复 Node 子显示端只打印“服务器忽略该段音频”而不回显识别文本的问题。
+  - 子显示端向 `/api/asr/recognize` 上传一次音频后，由服务器完成 ASR、声纹门控和语音命令处理；Node 仅回显服务器响应，不再通过旧 `voiceInput` 二次上报。
+  - 支持与网页显示端一致的声纹分段、说话人、相似度、阈值、`ignoredText` 和普通文本回显；保留 ignored 响应中的原始文本。
+  - 原始识别文本不被客户端截断，工作角色名和群聊前缀保持完整；键盘手动输入链路保持不变。
+  - 改动文件：`asr-client.js`、`asr-display.js`、`main.js`、`node-display-asr-echo.test.js` 及对应 design/spec/task 文档。
+  - 验证：定向语音测试 12/12 通过，Node JavaScript 语法检查和 `git diff --check` 通过；全量 `npm test` 589/590 通过，唯一失败为既有 DeX `injectTouch(down)` 契约。
+
 ## Chat2API 配置管理
 
 - ✅ [2026-09-12] 增加 Chat2API 配置导出为 JSON 文件和文件导入功能。
@@ -8,6 +25,22 @@
   - 控制端新增“导出配置”“导入配置”入口，导入前提示文件包含敏感凭据。
   - 改动文件：`chat2api-data-store.js`、`chat2api-management-service.js`、`chat2api-proxy-service.js`、`chat2api.js` 及对应测试、design/spec/task/todo 文档。
   - 验证：`npm run check:chat2api`，76/76 通过；JavaScript 语法检查和 `git diff --check` 通过。
+
+## 声纹面板 VAD 时长配置
+
+- ✅ [2026-09-12] 在控制端声纹识别设置中增加全局 VAD 静音时长和最短语音时长。
+  - 默认值为 `silence=500ms`、`minSpeech=300ms`，输入范围限制为 `100..5000ms`；服务端保存到 `voiceprint` 配置并通过 `voiceprintConfig` 广播所有在线网页显示端和 Node 子显示端。
+  - 新连接的 `voiceVadConfig`、网页显示端和 Node 子显示端均使用全局时长；原有按显示端 VAD 阈值和旧消息字段保持兼容。
+  - 改动文件：`config/config.json`、`config-app-service.js`、`server-app.js`、`upload.html`、`js/voiceprint-panel.js`、`display.html`、`voice-display-node/main.js`、对应 design/spec/task 文档及回归测试。
+  - 验证：声纹配置及相关语音定向测试 `14/14` 通过；JavaScript 语法检查和 `git diff --check` 通过；全量 `npm test` `584/586` 通过，唯一稳定失败为既有 DeX `injectTouch` 契约，睡眠守卫单独复核通过。
+
+## 子显示端底噪检测
+
+- ✅ [2026-09-12] 修复 Node 子显示端收到 `voiceVadNoiseTest` 后提示未知消息的问题。
+  - `voice-display-node` 复用当前 PvRecorder/naudiodon 音频输入，采集 RMS 样本并回传 `voiceVadNoiseResult`；支持均值、峰值、P95、建议阈值和 requestId。
+  - 增加未启动、暂停、重复检测、停止、关闭、采集异常和无音频帧的错误处理；更新对应 design/spec/task 文档和回归测试。
+  - 验证：定向测试 11/11 通过，相关 JavaScript 语法检查和 `git diff --check` 通过。
+
 ## 硬件监控
 
 - ✅ [2026-09-11] render-display GPU/VRAM 第二行调整为小幅缩进并保持进度条对齐。

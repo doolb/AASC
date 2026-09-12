@@ -1201,6 +1201,20 @@ function normalizeVadDuration(value, fallback) {
     return Math.round(Math.min(MAX_VAD_DURATION_MS, Math.max(MIN_VAD_DURATION_MS, number)));
 }
 
+// 声纹面板维护的是全局 VAD 时长；旧配置缺失或损坏时回退到统一默认值。
+function getGlobalVoiceVadConfig() {
+    return {
+        vadSilenceDurationMs: normalizeVadDuration(
+            config.get('voiceprint.vadSilenceDurationMs'),
+            DEFAULT_VAD_SILENCE_DURATION_MS
+        ),
+        vadMinSpeechDurationMs: normalizeVadDuration(
+            config.get('voiceprint.vadMinSpeechDurationMs'),
+            DEFAULT_VAD_MIN_SPEECH_DURATION_MS
+        )
+    };
+}
+
 function normalizeVoiceRecordingMode(value) {
     return DISPLAY_RECORDING_MODES.includes(value) ? value : 'asr';
 }
@@ -3170,6 +3184,7 @@ app.get('/api/voiceprint/config', (req, res) => {
         multiMode: config.get('voiceprint.multiMode', 'fast'),
         speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
         pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
+        ...getGlobalVoiceVadConfig(),
         asrResultDetailLog: config.get('voiceprint.asrResultDetailLog', true),
         denoise: config.get('asr.denoise', false)
     });
@@ -3185,7 +3200,9 @@ app.post('/api/voiceprint/config', (req, res) => {
         speakerCount,
         denoise,
         pauseRecordingDuringPlayback,
-        asrResultDetailLog
+        asrResultDetailLog,
+        vadSilenceDurationMs,
+        vadMinSpeechDurationMs
     } = req.body || {};
     if (extraction !== undefined && !['server', 'display'].includes(extraction)) {
         return res.status(400).json({ status: 'error', message: 'extraction 只能是 server 或 display' });
@@ -3202,6 +3219,7 @@ app.post('/api/voiceprint/config', (req, res) => {
     if (asrResultDetailLog !== undefined && typeof asrResultDetailLog !== 'boolean') {
         return res.status(400).json({ status: 'error', message: 'asrResultDetailLog 必须是布尔值' });
     }
+    const currentGlobalVoiceVadConfig = getGlobalVoiceVadConfig();
     if (multiMode !== undefined && multiMode !== 'fast') {
         return res.status(400).json({ status: 'error', message: 'multiMode 只能是 fast' });
     }
@@ -3224,6 +3242,18 @@ app.post('/api/voiceprint/config', (req, res) => {
     if (asrResultDetailLog !== undefined) {
         config.set('voiceprint.asrResultDetailLog', asrResultDetailLog);
     }
+    if (vadSilenceDurationMs !== undefined) {
+        config.set(
+            'voiceprint.vadSilenceDurationMs',
+            normalizeVadDuration(vadSilenceDurationMs, currentGlobalVoiceVadConfig.vadSilenceDurationMs)
+        );
+    }
+    if (vadMinSpeechDurationMs !== undefined) {
+        config.set(
+            'voiceprint.vadMinSpeechDurationMs',
+            normalizeVadDuration(vadMinSpeechDurationMs, currentGlobalVoiceVadConfig.vadMinSpeechDurationMs)
+        );
+    }
     config.saveConfig();
     // 广播给所有显示端，display.html 收到后 nativeBridge.voiceprintConfigure 重载引擎
     displayClients.forEach((displayData, displayId) => {
@@ -3236,6 +3266,7 @@ app.post('/api/voiceprint/config', (req, res) => {
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
             pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
+            ...getGlobalVoiceVadConfig(),
             asrResultDetailLog: config.get('voiceprint.asrResultDetailLog', true),
             denoise: config.get('asr.denoise', false)
         });
@@ -3358,14 +3389,52 @@ app.post('/api/voiceprint/register', voiceprintUpload.single('audio'), async (re
 });
 
 function getAsrRequestContext(req) {
-    const displayId = String(req.body?.displayId || '').trim();
+    const headerDisplayId = req.headers?.['x-aasc-display-id'];
+    // 新版 Node 将服务器确认的 ID 放在请求头；表单字段仅作为旧客户端兼容回退。
+    const displayId = String(headerDisplayId || req.body?.displayId || '').trim();
+    const displayKind = String(req.headers?.['x-aasc-display-kind'] || '').trim().toLowerCase();
     const speechStartAt = Number(req.body?.speechStartAt);
     const speechEndAt = Number(req.body?.speechEndAt);
     return {
         displayId,
+        displayKind,
         speechStartAt: Number.isFinite(speechStartAt) ? speechStartAt : null,
         speechEndAt: Number.isFinite(speechEndAt) ? speechEndAt : null
     };
+}
+
+/**
+ * 将 ASR HTTP 请求绑定到当前在线的显示端。
+ * @param {Object} req - Express 请求
+ * @param {Object} requestContext - 已解析的 ASR 请求上下文
+ * @returns {string} 可处理语音指令的显示端 ID，无法绑定时返回空字符串
+ */
+function resolveAsrSourceDisplayId(req, requestContext) {
+    const requestedDisplayId = String(requestContext?.displayId || '').trim();
+    const displayKind = String(requestContext?.displayKind || '').trim().toLowerCase();
+    const directDisplay = requestedDisplayId ? displayClients.get(requestedDisplayId) : null;
+
+    // 旧网页端没有来源类型请求头，只要 ID 仍在线就保持兼容；Node 子显示端则必须命中子显示端连接。
+    if (directDisplay && (displayKind !== 'subdisplay' || directDisplay.isSubDisplay === true)) {
+        return requestedDisplayId;
+    }
+
+    // ID 失效时禁止猜测来源，只有明确标记的子显示端才允许按 IP 做唯一候选回退。
+    if (displayKind !== 'subdisplay') {
+        return '';
+    }
+
+    const clientIP = getClientIP(req);
+    const candidates = [...displayClients.entries()]
+        .filter(([, displayData]) => displayData.isSubDisplay === true && displayData.ip === clientIP);
+    if (candidates.length !== 1) {
+        log('语音', `ASR来源未唯一绑定: requested=${requestedDisplayId || '-'} kind=${displayKind} ip=${clientIP} candidates=${candidates.length}`);
+        return '';
+    }
+
+    const [resolvedDisplayId] = candidates[0];
+    log('语音', `ASR来源按子显示端身份绑定: requested=${requestedDisplayId || '-'} resolved=${resolvedDisplayId} ip=${clientIP}`);
+    return resolvedDisplayId;
 }
 
 function getAsrSegmentTiming(requestContext, segment) {
@@ -3465,8 +3534,11 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
         }
         const asrDevice = config.get('asr.device', 'server');
         const requestContext = getAsrRequestContext(req);
-        const sourceDisplayId = requestContext.displayId;
-        const processedByServer = Boolean(sourceDisplayId && displayClients.has(sourceDisplayId));
+        const sourceDisplayId = resolveAsrSourceDisplayId(req, requestContext);
+        const processedByServer = Boolean(sourceDisplayId);
+        if (!sourceDisplayId) {
+            log('语音', `ASR请求来源未绑定，仅保留回显: requested=${requestContext.displayId || '-'} kind=${requestContext.displayKind || '-'} ip=${getClientIP(req)}`);
+        }
 
         if (asrDevice === 'server' && !isServerAsrEnabled()) {
             return res.status(503).json({ status: 'error', message: '服务器 ASR 已关闭' });
@@ -3491,7 +3563,8 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
                             status: 'ignored',
                             reason: '未检测到有效内容',
                             text: ignoredText,
-                            segments: []
+                            segments: [],
+                            processedByServer
                         });
                     }
                     const response = {
@@ -3507,11 +3580,11 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
 
                 const text = normalizeAsrText(result.text);
                 if (!text) {
-                    return res.json({ status: 'ignored', reason: '显示端未识别到有效语音', text: '' });
+                    return res.json({ status: 'ignored', reason: '显示端未识别到有效语音', text: '', processedByServer });
                 }
                 if (!hasValidContent(text)) {
                     log('语音', `忽略无效语音输入: ${text}`);
-                    return res.json({ status: 'ignored', reason: '未检测到有效内容', text });
+                    return res.json({ status: 'ignored', reason: '未检测到有效内容', text, processedByServer });
                 }
 
                 // speaker 存在但为空表示启用声纹后未匹配；字段缺省表示普通 ASR，直接放行。
@@ -3544,7 +3617,8 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
             return res.json({ 
                 status: 'ignored', 
                 message: '未识别到有效语音',
-                text: ''
+                text: '',
+                processedByServer
             });
         }
         
@@ -3553,7 +3627,8 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
             return res.json({ 
                 status: 'ignored', 
                 message: '未检测到有效内容',
-                text: recognizedText
+                text: recognizedText,
+                processedByServer
             });
         }
         
@@ -4743,14 +4818,8 @@ function getDisplayList() {
             cpuStatus: data.state.cpuStatus,
             voiceConversation: data.state.voiceConversation,
             vadThreshold: normalizeVadThreshold(data.state.vadThreshold),
-            vadSilenceDurationMs: normalizeVadDuration(
-                data.state.vadSilenceDurationMs,
-                DEFAULT_VAD_SILENCE_DURATION_MS
-            ),
-            vadMinSpeechDurationMs: normalizeVadDuration(
-                data.state.vadMinSpeechDurationMs,
-                DEFAULT_VAD_MIN_SPEECH_DURATION_MS
-            ),
+            vadSilenceDurationMs: globalVoiceVadConfig.vadSilenceDurationMs,
+            vadMinSpeechDurationMs: globalVoiceVadConfig.vadMinSpeechDurationMs,
             voiceRecordingMode: normalizeVoiceRecordingMode(data.state.voiceRecordingMode),
             capabilities: caps
         });
@@ -5963,6 +6032,7 @@ wss.on('connection', (ws, req) => {
         const reportCfg = getDisplayLogReportConfig(displayId);
         ws.send(JSON.stringify({ type: 'logReportConfig', enabled: reportCfg.enabled, level: reportCfg.level }));
 
+        const globalVoiceVadConfig = getGlobalVoiceVadConfig();
         if (isSubDisplay) {
             const protocol = useHttps ? 'https' : 'http';
             const localIP = getLocalIP();
@@ -5971,14 +6041,7 @@ wss.on('connection', (ws, req) => {
                 config: {
                     serverUrl: `${protocol}://${localIP}:${PORT}`,
                     vadThreshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold),
-                    vadSilenceDurationMs: normalizeVadDuration(
-                        displayClients.get(displayId)?.state.vadSilenceDurationMs,
-                        DEFAULT_VAD_SILENCE_DURATION_MS
-                    ),
-                    vadMinSpeechDurationMs: normalizeVadDuration(
-                        displayClients.get(displayId)?.state.vadMinSpeechDurationMs,
-                        DEFAULT_VAD_MIN_SPEECH_DURATION_MS
-                    )
+                    ...globalVoiceVadConfig
                 }
             }));
         }
@@ -5986,14 +6049,8 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({
             type: 'voiceVadConfig',
             threshold: normalizeVadThreshold(displayClients.get(displayId)?.state.vadThreshold),
-            silenceDurationMs: normalizeVadDuration(
-                displayClients.get(displayId)?.state.vadSilenceDurationMs,
-                DEFAULT_VAD_SILENCE_DURATION_MS
-            ),
-            minSpeechDurationMs: normalizeVadDuration(
-                displayClients.get(displayId)?.state.vadMinSpeechDurationMs,
-                DEFAULT_VAD_MIN_SPEECH_DURATION_MS
-            )
+            silenceDurationMs: globalVoiceVadConfig.vadSilenceDurationMs,
+            minSpeechDurationMs: globalVoiceVadConfig.vadMinSpeechDurationMs
         }));
 
         ws.send(JSON.stringify({
@@ -6029,6 +6086,7 @@ wss.on('connection', (ws, req) => {
             multiMode: config.get('voiceprint.multiMode', 'fast'),
             speakerCount: config.get('voiceprint.speakerCount', 'AUTO'),
             pauseRecordingDuringPlayback: config.get('voiceprint.pauseRecordingDuringPlayback', true),
+            ...globalVoiceVadConfig,
             asrResultDetailLog: config.get('voiceprint.asrResultDetailLog', true),
             denoise: config.get('asr.denoise', false)
         }));

@@ -29,6 +29,7 @@ src/apps/voice-display-node/
 ├── main.js            # 主程序，WebSocket 连接和消息处理
 ├── audio-player.js    # 音频播放器（Speaker + wav 解码）
 ├── asr-client.js      # 服务器端 ASR 客户端
+├── asr-display.js     # ASR 结果本地回显格式化
 ├── audio-recorder.js  # 音频录制器（ffmpeg + VAD + WAV 编码）
 ├── config.json        # 配置文件
 └── package.json       # Node.js 模块定义
@@ -68,12 +69,16 @@ Connect():
     连接路径: /display?subDisplay=true&displayId=<displayId>
     建立 WebSocket 连接
     （不再需要发送 register 消息，服务端通过 URL 参数识别子显示端）
+    等待服务端 displayId 消息
+    保存服务端返回的 displayId 作为本次连接的权威来源 ID
+    权威来源 ID 未确认前不启动普通 ASR 录音上传
+    旧 WebSocket 的迟到消息、关闭和错误回调不得覆盖当前连接状态
 ```
 
 ### 消息处理
 ```
 handleMessage(msgType, data):
-    "displayId": 记录服务端分配的显示端ID
+    "displayId": 保存 data.id 为权威显示端ID，并完成连接就绪
     "serverStartTime": 记录服务器启动时间
     "restoreState": 记录恢复状态
     "tts":
@@ -202,11 +207,21 @@ IsReady() bool:
 Recognize(wavData []byte) (string, error):
     创建 HTTP POST 请求到 /api/asr/recognize
     构造 multipart/form-data，字段名 "audio"，文件名 "audio.wav"
+    表单携带服务器确认的 displayId
+    请求头携带 X-AASC-Display-Id 和 X-AASC-Display-Kind: subdisplay
     发送请求
     解析响应:
-        status == "success": 返回 text
-        status == "ignored": 返回空字符串
+        status == "success": 返回服务端完整 JSON
+        status == "ignored": 返回服务端完整 JSON，保留 text、reason 等字段
         其他: 返回错误
+```
+
+```
+Node 子显示端来源绑定:
+    服务器优先使用请求中的在线 displayId
+    请求 ID 失效时，仅允许明确标记的 subdisplay 按来源 IP 唯一回退
+    来源绑定成功才进入服务器声纹门控和语音命令流程
+    ASR 响应只用于本地回显，不再补发 voiceInput
 ```
 
 ## AudioRecorder 音频录制器
@@ -415,7 +430,8 @@ handleMessage(msgType, data):
     "serverStartTime": 记录服务器启动时间
     "configUpdate": 更新本地配置文件（serverUrl, vadThreshold, vadSilenceDurationMs, vadMinSpeechDurationMs）
     "voiceVadConfig": 立即更新录音器的阈值、静音结束时间和最短语音时长
-    "voiceprintConfig": 更新 pauseRecordingDuringPlayback；播放期间是否暂停普通 ASR 与网页显示端一致
+    "voiceVadNoiseTest": 复用当前录音器采集底噪并回传统计结果
+    "voiceprintConfig": 更新 pauseRecordingDuringPlayback、vadSilenceDurationMs、vadMinSpeechDurationMs；播放期间录音策略和全局 VAD 时长与网页显示端一致
     "restoreState": 记录恢复状态
     "tts":
         playAudio -> 从URL下载并播放音频
@@ -447,6 +463,11 @@ handleVoiceprintConfig(data):
     如果关闭播放暂停且录音器当前暂停:
         清理远程播放暂停状态
         恢复录音器
+
+handleVoiceVadNoiseTest(data):
+    调用 recorder.startNoiseTest(data.durationMs)
+    成功: 通过 WebSocket 发送 voiceVadNoiseResult 和统计字段
+    失败: 通过 WebSocket 发送 voiceVadNoiseResult 和 error
 ```
 
 ### 重连机制
@@ -562,8 +583,41 @@ recognize(wavData):
     发送请求
     解析响应:
         status == "success": 返回服务端完整 JSON（包含 processedByServer/segments 等字段）
-        status == "ignored": 返回 { ...response, text: "", status: "ignored" }
+        status == "ignored": 返回服务端完整 JSON，保留 response.text、reason 等字段
         其他: 抛出错误
+```
+
+#### Node 子显示端 ASR 回显与单次处理
+
+```text
+startVoiceRecognition():
+    VAD 结束一个语音段
+    调用 asr.recognize(wavData, { displayId, speechStartAt, speechEndAt })
+    服务器完成 ASR、声纹门控和语音命令处理
+    根据服务器响应更新 TUI 最近识别和语音日志:
+        success 且存在 segments:
+            逐段格式化说话人/声纹相似度/阈值/文本
+            追加 ignoredText（如果存在）
+        success 且只有 text:
+            显示 text；speaker 为空时附加未识别声纹信息
+        ignored:
+            显示服务器返回的 text（如果存在）
+            没有 text 时只记录忽略原因
+    不因 ASR 响应调用 sendVoiceInput
+```
+
+```text
+formatAsrDisplayText(response):
+    如果 response.segments 非空:
+        对每个分段:
+            有 speaker -> 返回 "[speaker] text"
+            无 speaker -> 返回 "[未识别声纹｜相似度 ...｜阈值 ...] text"
+        如果 response.ignoredText 非空:
+            追加 "[未识别有效内容] ignoredText"
+        返回多行文本
+    否则如果 response.text 非空:
+        返回 response.text（必要时按 speaker 为空附加声纹信息）
+    否则返回空字符串
 ```
 
 ### AudioRecorder 音频录制器

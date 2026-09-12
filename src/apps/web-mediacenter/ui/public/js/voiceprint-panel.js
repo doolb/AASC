@@ -24,6 +24,8 @@
             document.getElementById('vpDenoiseCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpPauseRecordingDuringPlaybackCheck').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpAsrResultDetailLogCheck').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpVadSilenceDurationInput').addEventListener('change', () => this.saveConfig());
+            document.getElementById('vpVadMinSpeechDurationInput').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpMultiModeSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpSpeakerCountSel').addEventListener('change', () => this.saveConfig());
             document.getElementById('vpThresholdInput').addEventListener('change', () => this.saveConfig());
@@ -109,12 +111,21 @@
                 document.getElementById('vpDenoiseCheck').checked = !!c.denoise;
                 document.getElementById('vpPauseRecordingDuringPlaybackCheck').checked = c.pauseRecordingDuringPlayback !== false;
                 document.getElementById('vpAsrResultDetailLogCheck').checked = c.asrResultDetailLog !== false;
+                document.getElementById('vpVadSilenceDurationInput').value = this.normalizeVadDuration(c.vadSilenceDurationMs, 500);
+                document.getElementById('vpVadMinSpeechDurationInput').value = this.normalizeVadDuration(c.vadMinSpeechDurationMs, 300);
                 document.getElementById('vpMultiModeSel').value = c.multiMode || 'fast';
                 document.getElementById('vpSpeakerCountSel').value = c.speakerCount || 'AUTO';
                 const threshold = Number(c.threshold);
                 document.getElementById('vpThresholdInput').value = Number.isFinite(threshold) ? threshold : 0.3;
                 document.getElementById('vpExtractionSel').value = c.extraction || 'server';
             } catch (e) { console.warn('加载声纹配置失败:', e); }
+        },
+
+        // 控制端先做一次范围归一化，服务器仍会再次校验，避免异常输入扩散到显示端。
+        normalizeVadDuration(value, fallback) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) return fallback;
+            return Math.round(Math.min(5000, Math.max(100, number)));
         },
 
         applyServerVoiceConfig(data) {
@@ -209,12 +220,22 @@
                 window.showToast?.('声纹相似度阈值必须是 (0,1] 的数值', 'error');
                 return;
             }
+            const vadSilenceDurationMs = this.normalizeVadDuration(
+                document.getElementById('vpVadSilenceDurationInput').value,
+                500
+            );
+            const vadMinSpeechDurationMs = this.normalizeVadDuration(
+                document.getElementById('vpVadMinSpeechDurationInput').value,
+                300
+            );
             const body = {
                 enabled: document.getElementById('vpEnabledCheck').checked,
                 multiSpeaker: document.getElementById('vpMultiCheck').checked,
                 denoise: document.getElementById('vpDenoiseCheck').checked,
                 pauseRecordingDuringPlayback: document.getElementById('vpPauseRecordingDuringPlaybackCheck').checked,
                 asrResultDetailLog: document.getElementById('vpAsrResultDetailLogCheck').checked,
+                vadSilenceDurationMs,
+                vadMinSpeechDurationMs,
                 multiMode: document.getElementById('vpMultiModeSel').value,
                 speakerCount: document.getElementById('vpSpeakerCountSel').value,
                 threshold: threshold,

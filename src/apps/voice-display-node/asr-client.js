@@ -118,9 +118,19 @@ class ServerASR {
                 formData.append('speechEndAt', String(context.speechEndAt));
             }
 
+            // 表单字段用于兼容旧服务器，请求头用于让服务器明确识别来源类型并执行绑定。
+            const headers = {
+                ...formData.getHeaders(),
+                'X-AASC-Display-Kind': 'subdisplay'
+            };
+            if (context.displayId) {
+                headers['X-AASC-Display-Id'] = String(context.displayId);
+            }
+
             const response = await fetch(url, this._getFetchOptions({
                 method: 'POST',
                 body: formData,
+                headers,
                 timeout: 30000
             }));
 
@@ -135,7 +145,8 @@ class ServerASR {
                 case 'success':
                     return { ...result, text: result.text || '', status: 'success' };
                 case 'ignored':
-                    return { ...result, text: '', status: 'ignored' };
+                    // ignored 也可能携带服务器识别出的无效文本，客户端需要保留它用于回显。
+                    return { ...result, text: result.text || '', status: 'ignored' };
                 default:
                     throw new Error(`识别失败: ${result.message || '未知错误'}`);
             }
