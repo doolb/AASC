@@ -1823,21 +1823,29 @@ function handleDisplayConversationInput(displayId, text) {
 
     if (result.event?.type === 'wake') {
         if (result.event.mode === 'private') {
-            chat.setMode('private', result.event.target);
-            broadcastToControls({ type: 'privateMode', target: result.event.target, displayId });
+            chat.setMode('private', result.event.target, {
+                source: 'displayVoice',
+                displayId
+            });
+            broadcastToControls({
+                type: 'privateMode',
+                target: result.event.target,
+                displayId,
+                source: 'displayVoice'
+            });
             sendConversationPrompt(displayId, `已进入与${result.event.target}的私聊`);
         } else {
-            chat.setMode('group');
-            broadcastToControls({ type: 'groupMode', displayId });
+            chat.setMode('group', null, { source: 'displayVoice', displayId });
+            broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
             sendConversationPrompt(displayId, '已唤醒，进入群聊模式');
         }
     } else if (result.event?.type === 'group') {
-        chat.setMode('group');
-        broadcastToControls({ type: 'groupMode', displayId });
+        chat.setMode('group', null, { source: 'displayVoice', displayId });
+        broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
         sendConversationPrompt(displayId, '已退出私聊，进入群聊模式');
     } else if (result.event?.type === 'end') {
-        chat.setMode('group');
-        broadcastToControls({ type: 'groupMode', displayId });
+        chat.setMode('group', null, { source: 'displayVoice', displayId });
+        broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
         clearDisplayConversationTimer(displayId);
         sendConversationPrompt(displayId, '对话已结束，请再次唤醒');
     }
@@ -7255,7 +7263,12 @@ async function handleControlMessageFallback(data, ws) {
                                         sendToControl({ type: 'showHelp' });
                                     },
                                     onModeChange: (mode, target) => {
-                                        sendToControl({ type: mode, target: target });
+                                        sendToControl({
+                                            type: mode,
+                                            target: target,
+                                            source: isDisplayVoiceInput ? 'displayVoice' : 'controlVoice',
+                                            displayId: isDisplayVoiceInput ? targetDisplayId : null
+                                        });
                                     },
                                     onSystemMessage: (content) => {
                                         sendToControl({ type: 'systemMessage', content: content });
@@ -7285,7 +7298,12 @@ async function handleControlMessageFallback(data, ws) {
                                     sendToControl: sendToControl
                                 });
                             } else if (result.type === 'privateMode' || result.type === 'groupMode') {
-                                sendToControl({ type: result.type, target: result.target });
+                                sendToControl({
+                                    type: result.type,
+                                    target: result.target,
+                                    source: isDisplayVoiceInput ? 'displayVoice' : 'controlVoice',
+                                    displayId: isDisplayVoiceInput ? targetDisplayId : null
+                                });
                             } else if (result.type === 'systemMessage') {
                                 sendToControl({ type: 'systemMessage', content: result.content });
                             }
@@ -7407,7 +7425,10 @@ async function handleControlMessageFallback(data, ws) {
                     }));
                     return;
                 } else if (data.type === 'setChatSession') {
-                    chat.setSession(data.session);
+                    chat.setSession(data.session, {
+                        source: data.source || 'unknown',
+                        displayId: data.displayId || null
+                    });
                     broadcastToControls({
                         type: 'chatSession',
                         session: chat.getSession()

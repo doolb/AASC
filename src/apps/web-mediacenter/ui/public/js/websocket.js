@@ -368,11 +368,11 @@ const WebSocketManager = {
             }
         } else if (data.type === 'privateMode') {
             if (window.Chat) {
-                window.Chat.setMode('private', data.target);
+                window.Chat.setMode('private', data.target, data.source || 'serverSync');
             }
         } else if (data.type === 'groupMode') {
             if (window.Chat) {
-                window.Chat.setMode('group', null);
+                window.Chat.setMode('group', null, data.source || 'serverSync');
             }
         } else if (data.type === 'searchHistory') {
             if (window.Chat) {

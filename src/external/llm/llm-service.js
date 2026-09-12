@@ -835,7 +835,30 @@ function getSession() {
     return { ...chatSession };
 }
 
-function setSession(session) {
+/**
+ * 记录聊天模式的实际变化。
+ * 来源和显示端 ID 只作为诊断元数据使用，不写入持久化会话，避免改变旧协议。
+ */
+function logModeChange(previousSession, nextSession, metadata = {}) {
+    const previousMode = previousSession.mode || 'group';
+    const nextMode = nextSession.mode || 'group';
+    const previousTarget = previousSession.privateTarget || '-';
+    const nextTarget = nextSession.privateTarget || '-';
+    if (previousMode === nextMode && previousTarget === nextTarget) return false;
+
+    const source = String(metadata.source || 'unknown').trim() || 'unknown';
+    const displayId = String(metadata.displayId || '').trim();
+    const displaySummary = displayId ? ` displayId=${displayId}` : '';
+    console.log(
+        `[Chat] 模式切换 ${previousMode} -> ${nextMode} `
+        + `previousTarget=${previousTarget} target=${nextTarget} `
+        + `source=${source}${displaySummary}`
+    );
+    return true;
+}
+
+function setSession(session, metadata = {}) {
+    const previousSession = getSession();
     if (session.mode !== undefined) chatSession.mode = session.mode;
     if (session.privateTarget !== undefined) chatSession.privateTarget = session.privateTarget;
     if (session.privateSessionId !== undefined) chatSession.privateSessionId = session.privateSessionId;
@@ -852,11 +875,12 @@ function setSession(session) {
         chatSession.sessions = mergedSessions;
     }
     if (!chatSession.sessions) chatSession.sessions = {};
+    logModeChange(previousSession, chatSession, metadata);
     saveSession();
     return getSession();
 }
 
-function setMode(mode, target = null) {
+function setMode(mode, target = null, metadata = {}) {
     const previousSession = getSession();
     const nextSessionId = 'default';
     const modeChanged = previousSession.mode !== mode
@@ -872,6 +896,7 @@ function setMode(mode, target = null) {
     chatSession.mode = mode;
     chatSession.privateTarget = target;
     chatSession.privateSessionId = nextSessionId;
+    logModeChange(previousSession, chatSession, metadata);
     saveSession();
     return getSession();
 }

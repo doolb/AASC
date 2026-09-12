@@ -1705,4 +1705,52 @@ importHistory(payload, mode):
     replace 模式先备份再整体替换
     保存受影响文件并刷新控制端历史
 ```
+
+## 模式切换审计日志伪代码
+
+```text
+formatModeName(mode):
+    返回 mode 非空值，否则返回 group
+
+logModeChange(previousSession, nextSession, metadata):
+    如果 mode 和 privateTarget 都没有变化:
+        返回 false
+    输出 [Chat] 模式切换日志:
+        previousMode -> nextMode
+        previousTarget -> nextTarget
+        source
+        displayId（存在时）
+    返回 true
+
+setMode(mode, target, metadata):
+    previousSession = getSession()
+    更新 chatSession.mode/privateTarget/privateSessionId
+    logModeChange(previousSession, chatSession, metadata)
+    保存 chatSession
+    返回当前会话
+
+setSession(session, metadata):
+    previousSession = getSession()
+    合并允许的会话字段
+    logModeChange(previousSession, chatSession, metadata)
+    保存 chatSession
+    返回当前会话
+
+控制端 Chat.setMode(mode, target, source):
+    更新本地模式
+    saveSession(source)
+
+控制端 saveSession(source):
+    发送 setChatSession:
+        session = 当前会话（不包含 sessions）
+        source = source 或 controlManual
+        displayId = 当前选中的显示端 ID
+
+控制端收到 privateMode/groupMode:
+    调用 Chat.setMode(..., source=serverSync)
+    服务端已记录的状态不变时不重复打印
+
+显示端语音状态机切换:
+    调用 setMode(..., source=displayVoice, displayId=来源显示端)
+```
 ```

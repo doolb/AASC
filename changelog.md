@@ -7696,3 +7696,10 @@
   - 控制端添加目标服务器选择、子服务器卡片快捷添加、读写状态和明确 HTTP 错误提示，避免将 `nodeId::libraryId` 误当作本地库 ID。
   - 改动文件：`src/framework/aasc/remote-media-library.js`、`src/framework/aasc/media-index-service.js`、`src/apps/server/boot/server-app.js`、媒体库/服务器/显示端前端及对应测试、AASC 设计/spec/task 文档。
   - 验证：定向 AASC、媒体库、服务器列表、播放和显示端回归测试 7 个全部通过；全量测试尝试因既有测试的端口权限/长时间运行问题在 `vision-tui` 阶段超时，不能据此宣称全量通过。
+
+## 聊天模式切换审计
+
+- ✅ [2026-09-12] 增加聊天模式切换来源日志，覆盖控制端手动/文本/语音切换、显示端语音切换和服务端同步。
+  - 改动文件：`src/external/llm/llm-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/js/websocket.js`、`tests/chat-mode-switch-log.test.js`及对应 design/spec/task 文档。
+  - 日志记录旧/新模式、私聊目标、来源和显示端 `displayId`；相同状态的同步不重复打印，旧调用参数保持兼容。
+  - 验证结果：新增测试 3/3、聊天会话恢复 5/5、Pi Agent 模式切换 7/7、群聊/私聊语音流程 12/12、显示端语音状态 9/9 通过；服务端语法检查通过，`git diff --check` 通过。

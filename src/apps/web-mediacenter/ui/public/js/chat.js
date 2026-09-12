@@ -467,7 +467,7 @@ const Chat = {
         }
     },
     
-    saveSession() {
+    saveSession(source = 'controlManual') {
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             // 会话元数据由服务端的创建/删除接口维护，避免页面尚未加载完成时提交空快照覆盖服务端列表。
@@ -475,7 +475,9 @@ const Chat = {
             delete session.sessions;
             window.WebSocketManager.ws.send(JSON.stringify({
                 type: 'setChatSession',
-                session: session
+                session: session,
+                source,
+                displayId: window.currentDisplayId || null
             }));
         }
     },
@@ -581,13 +583,13 @@ const Chat = {
         .catch(err => window.showToast('删除会话失败', 'error'));
     },
 
-    setMode(mode, target = null) {
+    setMode(mode, target = null, source = 'controlManual') {
         this.session.mode = mode;
         this.session.privateTarget = target;
         // 切回群聊/私聊时清空角色状态，避免残留影响角色历史渲染
         this.session.roleTarget = null;
         this.session.privateSessionId = 'default';
-        this.saveSession();
+        this.saveSession(source);
         this.render();
         if (mode === 'private' && target) {
             this.loadSessions(target);
@@ -706,7 +708,7 @@ const Chat = {
         this.session.mode = 'role';
         this.session.roleTarget = name;
         this.session.privateTarget = null;
-        this.saveSession();
+        this.saveSession('controlManual');
         this.render();
         window.WebSocketManager.send({ type: 'roleHistory', role: name });
     },
@@ -1167,7 +1169,7 @@ const Chat = {
     handleSystemCommand(text) {
         if (this.session.mode === 'private') {
             if (text === '退出私聊') {
-                this.setMode('group', null);
+                this.setMode('group', null, 'controlCommand');
                 this.addSystemMessage('已退出私聊模式');
                 return true;
             }
@@ -1190,13 +1192,13 @@ const Chat = {
             if (name) {
                 const template = this.templates.find(t => t.name === name);
                 if (template) {
-                    this.setMode('private', name);
+                    this.setMode('private', name, 'controlCommand');
                     this.addSystemMessage(`已进入与 ${name} 的私聊模式`);
                     return true;
                 }
             } else if (this.templates.length > 0) {
                 const defaultTemplate = this.templates[0];
-                this.setMode('private', defaultTemplate.name);
+                this.setMode('private', defaultTemplate.name, 'controlCommand');
                 this.addSystemMessage(`已进入与 ${defaultTemplate.name} 的私聊模式`);
                 return true;
             }
@@ -1205,7 +1207,7 @@ const Chat = {
         }
         
         if (text === '退出私聊') {
-            this.setMode('group', null);
+            this.setMode('group', null, 'controlCommand');
             this.addSystemMessage('已退出私聊模式');
             return true;
         }
@@ -2045,20 +2047,20 @@ const Chat = {
             if (name) {
                 const template = this.templates.find(t => t.name === name);
                 if (template) {
-                    this.setMode('private', name);
+                    this.setMode('private', name, 'controlVoice');
                     this.addSystemMessage(`已进入私聊模式，正在与 ${name} 对话`);
                     return;
                 }
             }
             if (this.templates.length > 0) {
-                this.setMode('private', this.templates[0].name);
+                this.setMode('private', this.templates[0].name, 'controlVoice');
                 this.addSystemMessage(`已进入私聊模式，正在与 ${this.templates[0].name} 对话`);
             }
             return;
         }
         
         if (text === '退出私聊') {
-            this.setMode('group', null);
+            this.setMode('group', null, 'controlVoice');
             this.addSystemMessage('已退出私聊模式');
             return;
         }
