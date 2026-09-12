@@ -45,6 +45,17 @@ object AsrWebPage {
   </section>
   <section>
     <h2>Sherpa 声纹测试</h2>
+    <label for="voiceprintModel">声纹模型（切换后需重新注册）</label><br>
+    <select id="voiceprintModel" disabled>
+      <option value="eres2net-base">ERes2Net-base</option>
+      <option value="eres2net-large">ERes2Net-large</option>
+      <option value="eres2netv2">ERes2NetV2</option>
+    </select>
+    <label for="voiceprintPrecision">声纹精度（INT8 仅用于 A/B 测试）</label><br>
+    <select id="voiceprintPrecision" disabled>
+      <option value="fp32">FP32</option>
+      <option value="int8">INT8</option>
+    </select>
     <p id="voiceprintStatus" class="muted">正在检查声纹模型状态…</p>
     <p class="muted">先在上方选择 WAV，填写名称并注册；随后选择待测 WAV，运行单段或多段流程。</p>
     <label for="speakerName">注册名称</label><br>
@@ -88,6 +99,8 @@ object AsrWebPage {
     const result = document.getElementById('result');
     const elapsed = document.getElementById('elapsed');
     const voiceprintStatus = document.getElementById('voiceprintStatus');
+    const voiceprintModel = document.getElementById('voiceprintModel');
+    const voiceprintPrecision = document.getElementById('voiceprintPrecision');
     const speakerName = document.getElementById('speakerName');
     const asrDenoise = document.getElementById('asrDenoise');
     const voiceprintDenoise = document.getElementById('voiceprintDenoise');
@@ -119,6 +132,9 @@ object AsrWebPage {
     let streamProcessor = null;
     let streamSilentGain = null;
     let streaming = false;
+    let activeVoiceprintModel = 'eres2net-base';
+    let activeVoiceprintPrecision = 'fp32';
+    let voiceprintModelSwitching = false;
 
     function mergeChunks(chunks) {
       const length = chunks.reduce((total, chunk) => total + chunk.length, 0);
@@ -386,15 +402,58 @@ object AsrWebPage {
         health.classList.toggle('error', !data.modelReady);
         const voiceprintResponse = await fetch('/api/voiceprint/status');
         const voiceprint = await voiceprintResponse.json();
+        activeVoiceprintModel = voiceprint.modelId || activeVoiceprintModel;
+        activeVoiceprintPrecision = voiceprint.precisionId || activeVoiceprintPrecision;
+        voiceprintModel.value = activeVoiceprintModel;
+        voiceprintPrecision.value = activeVoiceprintPrecision;
+        voiceprintModel.disabled = !voiceprint.modelReady || voiceprintModelSwitching;
+        voiceprintPrecision.disabled = !voiceprint.modelReady || voiceprintModelSwitching;
         voiceprintStatus.textContent = voiceprint.modelReady
-          ? 'Sherpa 声纹模型已就绪｜维度：' + voiceprint.embeddingDim + '｜已注册：' + voiceprint.speakers.join(', ')
+          ? 'Sherpa 声纹模型已就绪：' + (voiceprint.modelName || activeVoiceprintModel) + '（' + activeVoiceprintPrecision.toUpperCase() + '）｜维度：' + voiceprint.embeddingDim + '｜已注册：' + (voiceprint.speakers.join(', ') || '无')
           : 'Sherpa 声纹模型尚未就绪';
         voiceprintStatus.classList.toggle('error', !voiceprint.modelReady);
+        setVoiceprintControlsDisabled(!voiceprint.modelReady || voiceprintModelSwitching);
       } catch (error) {
         health.textContent = '状态检查失败：' + error.message;
         health.classList.add('error');
       }
     }
+
+    function setVoiceprintControlsDisabled(disabled) {
+      registerSpeaker.disabled = disabled;
+      testSingle.disabled = disabled;
+      testMulti.disabled = disabled;
+      testMultiFast.disabled = disabled;
+      speakerCount.disabled = disabled;
+    }
+
+    async function switchVoiceprintVariant(nextModel, nextPrecision) {
+      const previousModel = activeVoiceprintModel;
+      const previousPrecision = activeVoiceprintPrecision;
+      voiceprintModelSwitching = true;
+      voiceprintModel.disabled = true;
+      voiceprintPrecision.disabled = true;
+      setVoiceprintControlsDisabled(true);
+      voiceprintResult.textContent = '正在加载声纹模型…';
+      try {
+        const response = await fetch('/api/voiceprint/model?model=' + encodeURIComponent(nextModel) + '&precision=' + encodeURIComponent(nextPrecision), { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || '模型切换失败');
+        activeVoiceprintModel = data.modelId || nextModel;
+        activeVoiceprintPrecision = data.precisionId || nextPrecision;
+        voiceprintResult.textContent = '已切换声纹模型：' + (data.modelName || activeVoiceprintModel) + '（' + activeVoiceprintPrecision.toUpperCase() + '）；已注册声纹已清空，请重新注册';
+      } catch (error) {
+        voiceprintModel.value = previousModel;
+        voiceprintPrecision.value = previousPrecision;
+        voiceprintResult.textContent = '模型切换失败：' + error.message;
+      } finally {
+        voiceprintModelSwitching = false;
+        await loadHealth();
+      }
+    }
+
+    voiceprintModel.addEventListener('change', () => switchVoiceprintVariant(voiceprintModel.value, activeVoiceprintPrecision));
+    voiceprintPrecision.addEventListener('change', () => switchVoiceprintVariant(activeVoiceprintModel, voiceprintPrecision.value));
 
     audio.addEventListener('change', () => {
       const file = audio.files[0];

@@ -1,5 +1,24 @@
 # Web MediaCenter - 变更日志
 
+## 独立 ASR 测试 APK 声纹 FP32/INT8 A/B
+
+- ✅ [2026-09-12] 为 ERes2Net-base、ERes2Net-large、ERes2NetV2 增加 FP32/INT8 精度切换和静态量化测试资源。
+  - 原始 FP32 模型保留为默认；三个 `_int8.onnx` 通过 80 维 Fbank/global-mean 校准生成，原生页面和 HTTPS 测试网页均支持精度选择。
+  - 模型/精度切换时串行释放旧模型并清空注册库；HTTP 状态、注册和测试结果增加 precision/variant 字段，旧的仅 model 请求默认 FP32 继续兼容。
+  - 增加 `3rd/tts-server/scripts/quantize-voiceprint-models.py` 和三个 INT8 资源，不量化 ASR、Pyannote、流式 ASR 或 GTCRN 模型。
+  - 真机 `SM-N9500/Android 9/API 28` 三个 INT8 变体均加载成功；使用 `妲已妈妈.wav` 注册后，两个同域测试音频均匹配“妲己妈妈”，`zh.wav` 均低于 0.5 阈值；未发现崩溃或 OOM。
+  - 追加 `SHERPA_MULTI` 分段复测：INT8 分段阶段与 FP32 基本相当，embedding 阶段 base/large/V2 平均约降低 57%/59%/46%；重复语音 base/large 为 2 段、V2 为 1 段。连续切换大模型曾触发 Android lmkd signal 9，因此验证采用逐模型/精度独立进程。
+  - 验证：Android JVM 单测、`tests/android-asr-apk.test.js`、`npm run build:android-asr`、主机 ONNX Runtime 对照和 `git diff --check` 通过；INT8 性能收益不稳定，默认仍为 FP32。
+
+## 独立 ASR 测试 APK 三个声纹模型
+
+- ✅ [2026-09-12] 在 `3rd/tts-server/android-asr` 增加 ERes2Net-base、ERes2Net-large、ERes2NetV2 三个声纹 embedding 模型的对比测试入口。
+  - 原生页面和内置网页支持三选一；切换时串行释放旧模型并清空注册库，默认使用 base 且不持久化选择。
+  - APK 新增两个 ONNX 资源；Pyannote 分段、SenseVoice ASR、流式 ASR 和 GTCRN 降噪逻辑保持不变。
+  - 新增 `/api/voiceprint/model` 测试切换接口；状态、注册和测试结果返回当前模型 ID、名称和 embedding 维度。
+  - 改动文件：`VoiceprintModel.kt`、声纹协调器/HTTP/网页/原生页面、APK 资源复制配置、三个模型资源及相关测试、design/spec/task 文档。
+  - 验证：Android JVM 单测、`tests/android-asr-apk.test.js`、`npm run build:android-asr` 和 `git diff --check` 通过；真机 `SM-N9500/Android 9/API 28` 三模型均加载、注册和单段匹配成功，切换后注册库清空且无崩溃/OOM。
+
 ## 显示端代码变化检测远端配置
 
 - ✅ [2026-09-12] 将显示端代码变化检测间隔接入 AASC 远端配置流程。

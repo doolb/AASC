@@ -19,6 +19,11 @@ data class VoiceprintSegmentResult(
 
 data class VoiceprintTestResult(
     val mode: VoiceprintMode,
+    val modelId: String = VoiceprintModel.ERES2NET_BASE.id,
+    val modelName: String = VoiceprintModel.ERES2NET_BASE.displayName,
+    val precisionId: String = VoiceprintPrecision.FP32.id,
+    val precisionName: String = VoiceprintPrecision.FP32.displayName,
+    val variantId: String = "${VoiceprintModel.ERES2NET_BASE.id}-${VoiceprintPrecision.FP32.id}",
     val denoise: Boolean,
     val denoiseMs: Long,
     val asrDenoise: Boolean = false,
@@ -40,6 +45,11 @@ data class VoiceprintTestResult(
 data class VoiceprintRegistrationResult(
     val name: String,
     val embeddingDim: Int,
+    val modelId: String = VoiceprintModel.ERES2NET_BASE.id,
+    val modelName: String = VoiceprintModel.ERES2NET_BASE.displayName,
+    val precisionId: String = VoiceprintPrecision.FP32.id,
+    val precisionName: String = VoiceprintPrecision.FP32.displayName,
+    val variantId: String = "${VoiceprintModel.ERES2NET_BASE.id}-${VoiceprintPrecision.FP32.id}",
     val denoise: Boolean,
     val denoiseMs: Long,
     val voiceprintDenoise: Boolean = false,
@@ -56,6 +66,8 @@ class VoiceprintTestCoordinator(
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
     private val database = linkedMapOf<String, FloatArray>()
+    @Volatile
+    private var activeVariant = VoiceprintModel.ERES2NET_BASE.variant(VoiceprintPrecision.FP32)
 
     fun isBusy(): Boolean = busy.get()
 
@@ -67,7 +79,30 @@ class VoiceprintTestCoordinator(
 
     fun matchThreshold(): Float = voiceprintEngine.matchThreshold
 
+    fun model(): VoiceprintModel = activeVariant.model
+
+    fun precision(): VoiceprintPrecision = activeVariant.precision
+
+    fun variant(): VoiceprintModelVariant = activeVariant
+
     fun registeredSpeakers(): List<String> = synchronized(database) { database.keys.toList() }
+
+    fun loadModel(
+        model: VoiceprintModel,
+        embeddingFile: java.io.File,
+        segmentationFile: java.io.File
+    ): Future<Boolean> = loadVariant(model.variant(VoiceprintPrecision.FP32), embeddingFile, segmentationFile)
+
+    fun loadVariant(
+        variant: VoiceprintModelVariant,
+        embeddingFile: java.io.File,
+        segmentationFile: java.io.File
+    ): Future<Boolean> = submit {
+        val loaded = voiceprintEngine.load(embeddingFile, segmentationFile)
+        synchronized(database) { database.clear() }
+        activeVariant = variant
+        loaded
+    }
 
     fun register(
         name: String,
@@ -89,6 +124,11 @@ class VoiceprintTestCoordinator(
             VoiceprintRegistrationResult(
                 name = normalizedName,
                 embeddingDim = voiceprintEngine.embeddingDim,
+                modelId = activeVariant.model.id,
+                modelName = activeVariant.model.displayName,
+                precisionId = activeVariant.precision.id,
+                precisionName = activeVariant.precision.displayName,
+                variantId = activeVariant.id,
                 denoise = prepared.enabled,
                 denoiseMs = prepared.elapsedMs,
                 voiceprintDenoise = prepared.enabled,
@@ -140,6 +180,11 @@ class VoiceprintTestCoordinator(
         val asrMs = elapsedMs(asrStarted)
         return VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_SINGLE,
+            modelId = activeVariant.model.id,
+            modelName = activeVariant.model.displayName,
+            precisionId = activeVariant.precision.id,
+            precisionName = activeVariant.precision.displayName,
+            variantId = activeVariant.id,
             denoise = audio.voiceprint.enabled,
             denoiseMs = audio.voiceprint.elapsedMs,
             asrDenoise = audio.asr.enabled,
@@ -178,6 +223,11 @@ class VoiceprintTestCoordinator(
         val results = recognizeSegments(audio.asr, resolved, languageMode) { asrMs += it }
         return VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_MULTI,
+            modelId = activeVariant.model.id,
+            modelName = activeVariant.model.displayName,
+            precisionId = activeVariant.precision.id,
+            precisionName = activeVariant.precision.displayName,
+            variantId = activeVariant.id,
             denoise = audio.voiceprint.enabled,
             denoiseMs = audio.voiceprint.elapsedMs,
             asrDenoise = audio.asr.enabled,
@@ -231,6 +281,11 @@ class VoiceprintTestCoordinator(
         val results = recognizeSegments(audio.asr, resolved, languageMode) { asrMs += it }
         return VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_MULTI_FAST,
+            modelId = activeVariant.model.id,
+            modelName = activeVariant.model.displayName,
+            precisionId = activeVariant.precision.id,
+            precisionName = activeVariant.precision.displayName,
+            variantId = activeVariant.id,
             denoise = audio.voiceprint.enabled,
             denoiseMs = audio.voiceprint.elapsedMs,
             asrDenoise = audio.asr.enabled,

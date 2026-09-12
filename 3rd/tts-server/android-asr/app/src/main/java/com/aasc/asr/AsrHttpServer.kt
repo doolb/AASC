@@ -24,6 +24,7 @@ class AsrHttpServer(
     private val voiceprintCoordinator: VoiceprintTestCoordinator,
     private val streamingEngine: StreamingAsrEngine,
     private val tlsContext: SSLContext? = null,
+    private val voiceprintModelLoader: ((VoiceprintModelVariant) -> Boolean)? = null,
     private val cpuModeProvider: () -> CpuMode
 ) {
     private var clientExecutor: ExecutorService = Executors.newFixedThreadPool(2)
@@ -100,8 +101,11 @@ class AsrHttpServer(
                             voiceprintCoordinator.isReady(),
                             voiceprintCoordinator.embeddingDim(),
                             voiceprintCoordinator.registeredSpeakers(),
-                            voiceprintCoordinator.matchThreshold()
+                            voiceprintCoordinator.matchThreshold(),
+                            voiceprintCoordinator.variant()
                         ))
+                    request.method == "POST" && route == "/api/voiceprint/model" ->
+                        handleVoiceprintModel(socket.getOutputStream(), request)
                     request.method == "POST" && route == "/api/asr" -> handleRecognition(socket.getOutputStream(), request)
                     request.method == "POST" && route == "/api/voiceprint/register" ->
                         handleVoiceprintRegister(socket.getOutputStream(), request)
@@ -254,6 +258,40 @@ class AsrHttpServer(
         } catch (error: Exception) {
             val cause = error.cause ?: error
             respond(output, if (cause is AsrBusyException) 409 else 400, HttpJson.error(cause.message ?: "声纹注册失败"))
+        }
+    }
+
+    private fun handleVoiceprintModel(output: OutputStream, request: HttpRequest) {
+        val model = VoiceprintModel.fromId(request.queryValue("model"))
+        if (model == null) {
+            respond(output, 400, HttpJson.error("model 必须是 eres2net-base、eres2net-large 或 eres2netv2"))
+            return
+        }
+        val precision = VoiceprintPrecision.fromId(request.queryValue("precision"))
+        if (precision == null) {
+            respond(output, 400, HttpJson.error("precision 必须是 fp32 或 int8"))
+            return
+        }
+        val variant = model.variant(precision)
+        val loader = voiceprintModelLoader
+        if (loader == null) {
+            respond(output, 503, HttpJson.error("声纹模型切换不可用"))
+            return
+        }
+        if (voiceprintCoordinator.isBusy()) {
+            respond(output, 409, HttpJson.error("声纹服务忙，请稍后重试"))
+            return
+        }
+        try {
+            val loaded = loader(variant)
+            if (!loaded) {
+                respond(output, 503, HttpJson.error("声纹模型加载失败：${variant.displayName}"))
+                return
+            }
+            respond(output, 200, HttpJson.voiceprintModelSelection(variant, true))
+        } catch (error: Exception) {
+            val cause = error.cause ?: error
+            respond(output, if (cause is AsrBusyException) 409 else 503, HttpJson.error(cause.message ?: "声纹模型加载失败"))
         }
     }
 

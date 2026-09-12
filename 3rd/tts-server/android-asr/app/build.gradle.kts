@@ -7,6 +7,11 @@ plugins {
 val bundledAsrModelFiles = listOf("model.int8.onnx", "tokens.txt")
 val bundledVoiceprintModelFiles = listOf(
     "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+    "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k_int8.onnx",
+    "3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx",
+    "3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k_int8.onnx",
+    "3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common.onnx",
+    "3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common_int8.onnx",
     "pyannote_segmentation_3_0_int8.onnx"
 )
 val bundledStreamingAsrModelFiles = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")

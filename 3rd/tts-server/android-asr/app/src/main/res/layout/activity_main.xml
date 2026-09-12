@@ -27,6 +27,14 @@
         <TextView android:id="@+id/voiceprintTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="24dp" android:text="@string/voiceprint_title" android:textSize="18sp"
             android:textStyle="bold" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:text="@string/voiceprint_model_label" android:textSize="14sp" />
+        <Spinner android:id="@+id/voiceprintModelSpinner" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:enabled="false" />
+        <TextView android:id="@+id/voiceprintPrecisionLabel" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:text="@string/voiceprint_precision_label" android:textSize="14sp" />
+        <Spinner android:id="@+id/voiceprintPrecisionSpinner" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:enabled="false" />
         <TextView android:id="@+id/voiceprintStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="8dp" android:text="@string/voiceprint_loading" android:textSize="14sp" />
         <EditText android:id="@+id/speakerName" android:layout_width="match_parent" android:layout_height="wrap_content"

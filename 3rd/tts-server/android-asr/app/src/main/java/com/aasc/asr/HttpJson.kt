@@ -27,11 +27,44 @@ object HttpJson {
         return "{\"modelReady\":$ready,\"embeddingDim\":$embeddingDim,\"registeredSpeakers\":${speakers.size},\"speakers\":[$names],\"threshold\":${number(threshold)},\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\",\"SHERPA_MULTI_FAST\"]}"
     }
 
+    fun voiceprintStatus(
+        ready: Boolean,
+        embeddingDim: Int,
+        speakers: List<String>,
+        threshold: Float,
+        model: VoiceprintModel
+    ): String = voiceprintStatus(ready, embeddingDim, speakers, threshold, model.variant(VoiceprintPrecision.FP32))
+
+    fun voiceprintStatus(
+        ready: Boolean,
+        embeddingDim: Int,
+        speakers: List<String>,
+        threshold: Float,
+        variant: VoiceprintModelVariant
+    ): String {
+        val names = speakers.joinToString(",") { "\"${escape(it)}\"" }
+        val models = VoiceprintModel.values().joinToString(",") { candidate ->
+            val precisions = VoiceprintPrecision.values().joinToString(",") { precision ->
+                "\"${escape(precision.id)}\""
+            }
+            "{\"id\":\"${escape(candidate.id)}\",\"name\":\"${escape(candidate.displayName)}\",\"precisions\":[$precisions]}"
+        }
+        return "{\"modelReady\":$ready,\"modelId\":\"${escape(variant.model.id)}\",\"modelName\":\"${escape(variant.model.displayName)}\"," +
+            "\"precisionId\":\"${escape(variant.precision.id)}\",\"precisionName\":\"${escape(variant.precision.displayName)}\",\"variantId\":\"${escape(variant.id)}\",\"models\":[$models]," +
+            "\"embeddingDim\":$embeddingDim,\"registeredSpeakers\":${speakers.size},\"speakers\":[$names],\"threshold\":${number(threshold)},\"modes\":[\"SHERPA_SINGLE\",\"SHERPA_MULTI\",\"SHERPA_MULTI_FAST\"]}"
+    }
+
     fun voiceprintRegistration(result: VoiceprintRegistrationResult): String =
-        "{\"success\":true,\"name\":\"${escape(result.name)}\",\"embeddingDim\":${result.embeddingDim}," +
+        "{\"success\":true,\"name\":\"${escape(result.name)}\",\"modelId\":\"${escape(result.modelId)}\",\"modelName\":\"${escape(result.modelName)}\",\"precisionId\":\"${escape(result.precisionId)}\",\"precisionName\":\"${escape(result.precisionName)}\",\"variantId\":\"${escape(result.variantId)}\",\"embeddingDim\":${result.embeddingDim}," +
             "\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}," +
             "\"voiceprintDenoise\":${result.voiceprintDenoise}," +
             "\"voiceprintDenoiseMs\":${result.voiceprintDenoiseMs}}"
+
+    fun voiceprintModelSelection(model: VoiceprintModel, ready: Boolean): String =
+        voiceprintModelSelection(model.variant(VoiceprintPrecision.FP32), ready)
+
+    fun voiceprintModelSelection(variant: VoiceprintModelVariant, ready: Boolean): String =
+        "{\"success\":$ready,\"modelId\":\"${escape(variant.model.id)}\",\"modelName\":\"${escape(variant.model.displayName)}\",\"precisionId\":\"${escape(variant.precision.id)}\",\"precisionName\":\"${escape(variant.precision.displayName)}\",\"variantId\":\"${escape(variant.id)}\",\"modelReady\":$ready}"
 
     fun voiceprintResult(result: VoiceprintTestResult): String {
         val segments = result.segments.joinToString(",") { segment ->
@@ -40,7 +73,7 @@ object HttpJson {
                 "\"similarityScore\":${nullableNumber(segment.similarityScore)}," +
                 "\"error\":${nullableString(segment.error)}}"
         }
-        return "{\"success\":true,\"mode\":\"${result.mode.name}\",\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}," +
+        return "{\"success\":true,\"mode\":\"${result.mode.name}\",\"modelId\":\"${escape(result.modelId)}\",\"modelName\":\"${escape(result.modelName)}\",\"precisionId\":\"${escape(result.precisionId)}\",\"precisionName\":\"${escape(result.precisionName)}\",\"variantId\":\"${escape(result.variantId)}\",\"denoise\":${result.denoise},\"denoiseMs\":${result.denoiseMs}," +
             "\"asrDenoise\":${result.asrDenoise},\"asrDenoiseMs\":${result.asrDenoiseMs}," +
             "\"voiceprintDenoise\":${result.voiceprintDenoise},\"voiceprintDenoiseMs\":${result.voiceprintDenoiseMs}," +
             "\"embeddingDim\":${result.embeddingDim}," +

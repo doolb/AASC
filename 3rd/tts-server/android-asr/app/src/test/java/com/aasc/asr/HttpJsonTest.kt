@@ -34,6 +34,24 @@ class HttpJsonTest {
     }
 
     @Test
+    fun voiceprintStatusListsModelsAndCurrentSelection() {
+        val json = HttpJson.voiceprintStatus(
+            true,
+            512,
+            listOf("ZH"),
+            0.5f,
+            VoiceprintModel.ERES2NET_LARGE
+        )
+
+        assertEquals(true, json.contains("\"modelId\":\"eres2net-large\""))
+        assertEquals(true, json.contains("\"modelName\":\"ERes2Net-large\""))
+        assertEquals(true, json.contains("\"precisionId\":\"fp32\""))
+        assertEquals(true, json.contains("\"variantId\":\"eres2net-large-fp32\""))
+        assertEquals(true, json.contains("\"id\":\"eres2net-base\""))
+        assertEquals(true, json.contains("\"id\":\"eres2netv2\""))
+    }
+
+    @Test
     fun voiceprintResultReportsDenoiseStateAndElapsedTime() {
         val result = VoiceprintTestResult(
             mode = VoiceprintMode.SHERPA_SINGLE,
@@ -63,8 +81,38 @@ class HttpJsonTest {
         assertEquals(true, json.contains("\"asrDenoiseMs\":0"))
         assertEquals(true, json.contains("\"voiceprintDenoise\":true"))
         assertEquals(true, json.contains("\"voiceprintDenoiseMs\":42"))
+        assertEquals(true, json.contains("\"modelId\":\"eres2net-base\""))
+        assertEquals(true, json.contains("\"modelName\":\"ERes2Net-base\""))
+        assertEquals(true, json.contains("\"precisionId\":\"fp32\""))
         assertEquals(true, json.contains("\"similarityScore\":0.8125"))
         assertEquals(true, json.contains("\"threshold\":0.5"))
+    }
+
+    @Test
+    fun voiceprintResultReportsInt8Variant() {
+        val result = VoiceprintTestResult(
+            mode = VoiceprintMode.SHERPA_SINGLE,
+            modelId = VoiceprintModel.ERES2NET_V2.id,
+            modelName = VoiceprintModel.ERES2NET_V2.displayName,
+            precisionId = VoiceprintPrecision.INT8.id,
+            precisionName = VoiceprintPrecision.INT8.displayName,
+            variantId = "eres2netv2-int8",
+            denoise = false,
+            denoiseMs = 0,
+            embeddingDim = 192,
+            matchedSpeaker = "妲己妈妈",
+            text = "你好",
+            segments = emptyList(),
+            elapsedMs = 10,
+            diarizationMs = 0,
+            embeddingMs = 3,
+            asrMs = 4
+        )
+
+        val json = HttpJson.voiceprintResult(result)
+
+        assertEquals(true, json.contains("\"precisionId\":\"int8\""))
+        assertEquals(true, json.contains("\"variantId\":\"eres2netv2-int8\""))
     }
 
     @Test

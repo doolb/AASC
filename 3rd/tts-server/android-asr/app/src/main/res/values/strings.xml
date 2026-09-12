@@ -15,6 +15,8 @@
     <string name="recognition_result">识别文本将显示在这里</string>
     <string name="asr_denoise">ASR 文字降噪</string>
     <string name="voiceprint_title">Sherpa 声纹测试</string>
+    <string name="voiceprint_model_label">声纹模型（切换后需重新注册）</string>
+    <string name="voiceprint_precision_label">声纹精度（INT8 仅用于 A/B 测试）</string>
     <string name="voiceprint_loading">正在加载 Sherpa 声纹模型…</string>
     <string name="voiceprint_not_ready">Sherpa 声纹模型尚未就绪</string>
     <string name="voiceprint_speaker_hint">注册名称，例如：z</string>

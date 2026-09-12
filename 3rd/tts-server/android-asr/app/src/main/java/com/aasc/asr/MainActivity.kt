@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 
 // 独立 ASR 主界面：模型、文件和识别操作放后台线程，所有视图更新回到主线程。
@@ -40,6 +41,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var httpToggleButton: Button
     private lateinit var asrDenoiseCheck: Switch
     private lateinit var voiceprintStatus: TextView
+    private lateinit var voiceprintModelSpinner: Spinner
+    private lateinit var voiceprintPrecisionSpinner: Spinner
     private lateinit var speakerName: EditText
     private lateinit var voiceprintDenoiseCheck: Switch
     private lateinit var registerSpeakerButton: Button
@@ -56,6 +59,10 @@ class MainActivity : AppCompatActivity() {
     private var httpServer: AsrHttpServer? = null
     private var tlsContext: SSLContext? = null
     private var voiceprintActionBusy = false
+    @Volatile
+    private var selectedVoiceprintModel = VoiceprintModel.ERES2NET_BASE
+    @Volatile
+    private var selectedVoiceprintPrecision = VoiceprintPrecision.FP32
 
     private val requestRecordPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startRecording() else audioStatus.text = "麦克风权限被拒绝"
@@ -88,6 +95,7 @@ class MainActivity : AppCompatActivity() {
         recorder = AudioRecorder()
         coordinator = AsrCoordinator(engine, denoiseEngine)
         voiceprintCoordinator = VoiceprintTestCoordinator(engine, voiceprintEngine, denoiseEngine)
+        setupVoiceprintModel()
         refreshVoiceprintStatus()
         loadModel()
     }
@@ -106,6 +114,8 @@ class MainActivity : AppCompatActivity() {
         httpToggleButton = findViewById(R.id.httpToggleButton)
         asrDenoiseCheck = findViewById(R.id.asrDenoise)
         voiceprintStatus = findViewById(R.id.voiceprintStatus)
+        voiceprintModelSpinner = findViewById(R.id.voiceprintModelSpinner)
+        voiceprintPrecisionSpinner = findViewById(R.id.voiceprintPrecisionSpinner)
         speakerName = findViewById(R.id.speakerName)
         voiceprintDenoiseCheck = findViewById(R.id.voiceprintDenoise)
         registerSpeakerButton = findViewById(R.id.registerSpeaker)
@@ -157,6 +167,38 @@ class MainActivity : AppCompatActivity() {
         voiceprintSpeakerCountSpinner.setSelection(0)
     }
 
+    private fun setupVoiceprintModel() {
+        val models = VoiceprintModel.values()
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, models.map { it.displayName })
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        voiceprintModelSpinner.adapter = adapter
+        voiceprintModelSpinner.setSelection(selectedVoiceprintModel.ordinal)
+        voiceprintModelSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val model = models.getOrNull(position) ?: return
+                if (model == selectedVoiceprintModel || !voiceprintCoordinator.isReady()) return
+                reloadVoiceprintVariant(model.variant(selectedVoiceprintPrecision))
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        }
+
+        val precisions = VoiceprintPrecision.values()
+        val precisionAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, precisions.map { it.displayName })
+        precisionAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        voiceprintPrecisionSpinner.adapter = precisionAdapter
+        voiceprintPrecisionSpinner.setSelection(selectedVoiceprintPrecision.ordinal)
+        voiceprintPrecisionSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val precision = precisions.getOrNull(position) ?: return
+                if (precision == selectedVoiceprintPrecision || !voiceprintCoordinator.isReady()) return
+                reloadVoiceprintVariant(selectedVoiceprintModel.variant(precision))
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        }
+    }
+
     private fun loadModel() {
         background.execute {
             try {
@@ -166,10 +208,7 @@ class MainActivity : AppCompatActivity() {
                 val loaded = engine.load(File(modelDir, "model.int8.onnx"), File(modelDir, "tokens.txt"))
                 val voiceprintDir = File(filesDir, "models/voiceprint")
                 VoiceprintModelFiles.ensureCopied(assets, voiceprintDir)
-                val voiceprintLoaded = voiceprintEngine.load(
-                    File(voiceprintDir, VoiceprintModelFiles.FILE_NAMES[0]),
-                    File(voiceprintDir, VoiceprintModelFiles.FILE_NAMES[1])
-                )
+                val voiceprintLoaded = loadVoiceprintModel(selectedVoiceprintModel.variant(selectedVoiceprintPrecision), voiceprintDir)
                 val denoiseLoaded = try {
                     val denoiseDir = File(filesDir, "models/speech-enhancement")
                     DenoiseModelFiles.ensureCopied(assets, denoiseDir)
@@ -206,6 +245,50 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     modelStatus.text = getString(R.string.model_load_failed, error.message ?: "未知错误")
                     refreshVoiceprintStatus()
+                }
+            }
+        }
+    }
+
+    private fun loadVoiceprintModel(variant: VoiceprintModelVariant, modelDir: File = File(filesDir, "models/voiceprint")): Boolean {
+        VoiceprintModelFiles.ensureCopied(assets, modelDir)
+        val paths = VoiceprintModelFiles.paths(modelDir, variant)
+        return voiceprintCoordinator.loadVariant(variant, paths.embedding, paths.segmentation)
+            .get(60, TimeUnit.SECONDS)
+    }
+
+    private fun reloadVoiceprintVariant(variant: VoiceprintModelVariant) {
+        if (voiceprintActionBusy) return
+        voiceprintActionBusy = true
+        updateVoiceprintActionState()
+        voiceprintStatus.text = "正在加载 ${variant.displayName}…"
+        background.execute {
+            try {
+                val loaded = loadVoiceprintModel(variant)
+                if (loaded) {
+                    selectedVoiceprintModel = variant.model
+                    selectedVoiceprintPrecision = variant.precision
+                }
+                runOnUiThread {
+                    if (loaded) {
+                        voiceprintStatus.text = "${variant.displayName} 已加载，注册库已清空，请重新注册"
+                        voiceprintResult.text = "已切换声纹模型：${variant.displayName}"
+                    } else {
+                        voiceprintStatus.text = "${variant.displayName} 加载失败"
+                    }
+                    syncVoiceprintSelection()
+                    refreshVoiceprintStatus()
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    voiceprintStatus.text = "${variant.displayName} 加载失败：${error.cause?.message ?: error.message ?: "未知错误"}"
+                    syncVoiceprintSelection()
+                    refreshVoiceprintStatus()
+                }
+            } finally {
+                runOnUiThread {
+                    voiceprintActionBusy = false
+                    updateVoiceprintActionState()
                 }
             }
         }
@@ -293,7 +376,7 @@ class MainActivity : AppCompatActivity() {
         val speakers = voiceprintCoordinator.registeredSpeakers()
         val speakerText = if (speakers.isEmpty()) "无" else speakers.joinToString("、")
         voiceprintStatus.text = buildString {
-            appendLine("Sherpa 声纹模型已就绪")
+            appendLine("Sherpa 声纹模型已就绪：${voiceprintCoordinator.variant().displayName}")
             appendLine("embedding 维度：${voiceprintCoordinator.embeddingDim()}")
             appendLine("匹配阈值：${voiceprintCoordinator.matchThreshold()}")
             appendLine("已注册声纹：$speakerText")
@@ -310,6 +393,16 @@ class MainActivity : AppCompatActivity() {
         testMultiButton.isEnabled = canTest
         testMultiFastButton.isEnabled = canTest
         voiceprintSpeakerCountSpinner.isEnabled = canTest
+        voiceprintModelSpinner.isEnabled = voiceprintReady && !voiceprintActionBusy
+        voiceprintPrecisionSpinner.isEnabled = voiceprintReady && !voiceprintActionBusy
+    }
+
+    private fun syncVoiceprintSelection() {
+        val variant = voiceprintCoordinator.variant()
+        selectedVoiceprintModel = variant.model
+        selectedVoiceprintPrecision = variant.precision
+        voiceprintModelSpinner.setSelection(variant.model.ordinal, false)
+        voiceprintPrecisionSpinner.setSelection(variant.precision.ordinal, false)
     }
 
     private fun selectedVoiceprintSpeakerCount(): Int {
@@ -462,7 +555,15 @@ class MainActivity : AppCompatActivity() {
         val port = httpPortInput.text.toString().toIntOrNull()
         if (port == null || port !in 1024..65535) { httpStatus.text = "HTTP 端口必须是 1024-65535"; return }
         background.execute {
-            val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, tlsContext) { selectedCpuMode }
+            val server = AsrHttpServer(
+                engine,
+                coordinator,
+                voiceprintCoordinator,
+                streamingEngine,
+                tlsContext,
+                voiceprintModelLoader = ::switchVoiceprintVariantFromHttp,
+                cpuModeProvider = { selectedCpuMode }
+            )
             val started = server.start(port)
             runOnUiThread {
                 if (started.isSuccess) {
@@ -472,6 +573,20 @@ class MainActivity : AppCompatActivity() {
                 } else httpStatus.text = "HTTP 启动失败：${started.exceptionOrNull()?.message ?: "端口不可用"}"
             }
         }
+    }
+
+    private fun switchVoiceprintVariantFromHttp(variant: VoiceprintModelVariant): Boolean {
+        if (voiceprintCoordinator.isBusy()) throw AsrBusyException()
+        val loaded = loadVoiceprintModel(variant)
+        if (loaded) {
+            selectedVoiceprintModel = variant.model
+            selectedVoiceprintPrecision = variant.precision
+            runOnUiThread {
+                syncVoiceprintSelection()
+                refreshVoiceprintStatus()
+            }
+        }
+        return loaded
     }
 
     override fun onDestroy() {

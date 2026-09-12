@@ -571,4 +571,200 @@ AsrLanguageMode:
 普通 ASR 和声纹分段 ASR:
   直接返回 recognizer text.trim()
   不执行 ChineseEnglishTextFilter
+
+## 三个声纹模型对比测试（2026-09-12）
+
+```text
+VoiceprintModel:
+  ERES2NET_BASE:
+    id = "eres2net-base"
+    displayName = "ERes2Net-base"
+    embeddingFileName = "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
+  ERES2NET_LARGE:
+    id = "eres2net-large"
+    displayName = "ERes2Net-large"
+    embeddingFileName = "3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx"
+  ERES2NET_V2:
+    id = "eres2netv2"
+    displayName = "ERes2NetV2"
+    embeddingFileName = "3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common.onnx"
+
+VoiceprintModelFiles.ensureCopied(assetManager, modelDir):
+  复制三个 embedding 模型和 pyannote segmentation 模型
+  每个文件使用临时文件完成复制后再改名
+
+VoiceprintTestCoordinator.loadModel(model, embeddingFile, segmentationFile):
+  串行提交模型加载任务
+  调用 SherpaVoiceprintEngine.load(embeddingFile, segmentationFile)
+  清空进程内注册声纹库
+  记录当前 VoiceprintModel
+  返回模型是否加载成功
+
+MainActivity:
+  初始化三个模型选项，默认 ERES2NET_BASE
+  启动时只加载当前选中的 embedding 模型
+  用户切换模型:
+    禁用注册、测试和模型选择控件
+    加载目标模型并释放旧模型
+    清空注册库并提示重新注册
+    成功后显示模型名、embeddingDim 和阈值
+    失败后显示未就绪原因
+
+AsrHttpServer:
+  GET /api/voiceprint/status:
+    返回当前 modelId、modelName 和三个可选模型
+  POST /api/voiceprint/model?model=<modelId>:
+    校验模型 ID
+    串行切换 embedding 模型
+    成功返回当前模型和 ready 状态
+    推理忙时返回 409，模型无效时返回 400
+
+AsrWebPage:
+  显示三个声纹模型下拉选项
+  选择变化时调用 POST /api/voiceprint/model
+  切换成功后刷新状态并提示注册库已清空
+  注册和测试请求继续复用当前选择的模型
+
+实现同步（2026-09-12）:
+  VoiceprintModel.values() = [ERES2NET_BASE, ERES2NET_LARGE, ERES2NET_V2]
+  VoiceprintModelFiles.ALL_FILE_NAMES = 三个 embedding 文件 + pyannote_segmentation_3_0_int8.onnx
+  MainActivity 和 AsrWebPage = 共享 modelId，默认 eres2net-base，不持久化选择
+  POST /api/voiceprint/model = 校验 ID -> 检查忙状态 -> 通过串行协调器加载 -> 清空注册库
+  voiceprint/status、register、test = 返回 modelId、modelName；原有 ASR 和流式 ASR 接口不变
+
+真机验证结果（2026-09-12）:
+  设备 = SM-N9500 / Android 9 / API 28 / arm64-v8a
+  ERes2Net-base = embeddingDim 512，注册和单段匹配成功，相似度 1.0
+  ERes2Net-large = embeddingDim 512，注册和单段匹配成功，相似度 1.0
+  ERes2NetV2 = embeddingDim 192，注册和单段匹配成功，相似度 1.0
+  切换后状态 = modelReady true，registeredSpeakers 0；ASR 文本返回正常
+```
+
+## 声纹 FP32/INT8 A/B 对比测试验收（2026-09-12）
+
+```text
+量化工具:
+  3rd/tts-server/scripts/quantize-voiceprint-models.py
+  使用 kaldi_native_fbank 的 80 维 Fbank、dither=0、snip_edges=true
+  使用模型 metadata 的 feature_normalize_type=global-mean
+  ONNX Runtime QDQ 静态 INT8，权重和激活使用对称 QInt8、per-channel 权重
+
+资源体积:
+  base:  FP32 39.6MB -> INT8 10.5MB
+  large: FP32 116.1MB -> INT8 29.8MB
+  V2:    FP32 71.4MB -> INT8 18.6MB
+
+主机输出校验:
+  四段校准/验证 WAV 的 FP32/INT8 embedding cosine 范围为 0.9672-0.9900
+  三个 INT8 输出保持 FLOAT，embedding 维度分别为 base=512、large=512、V2=192
+
+真机单段验收:
+  设备 = SM-N9500 / Android 9 / API 28 / arm64-v8a
+  注册 = 妲已妈妈.wav -> 妲己妈妈，voiceprintDenoise=false
+  测试 = 你好，小爱.wav、你好啊你好啊你好啊.wav、zh.wav
+
+  base INT8:
+    你好，小爱 -> 妲己妈妈 / 0.6854 / embeddingMs=1310
+    你好啊你好啊你好啊 -> 妲己妈妈 / 0.5414 / embeddingMs=2369
+    zh -> null / 0.0370 / embeddingMs=2746
+  large INT8:
+    你好，小爱 -> 妲己妈妈 / 0.6467 / embeddingMs=4212
+    你好啊你好啊你好啊 -> 妲己妈妈 / 0.5110 / embeddingMs=7530
+    zh -> null / -0.0090 / embeddingMs=9001
+  V2 INT8:
+    你好，小爱 -> 妲己妈妈 / 0.6502 / embeddingMs=2842
+    你好啊你好啊你好啊 -> 妲己妈妈 / 0.5476 / embeddingMs=5132
+    zh -> null / 0.1733 / embeddingMs=6341
+
+对应 FP32 分数:
+  base  = 0.7108、0.5456、0.0492
+  large = 0.6684、0.5080、0.0022
+  V2    = 0.6622、0.5626、0.1928
+
+结论:
+  三个 INT8 变体均被 Sherpa AAR 真机加载并完成注册/测试；ASR 文本正常。
+  量化没有让本次跨音频误匹配发生，默认阈值 0.5 暂不改变；本轮 embeddingMs 均低于对应 FP32，但端到端 elapsedMs 还受 ASR 波动影响，不能据此宣称整体一致提速。
+```
+
+## INT8 分段复测验收（2026-09-12）
+
+```text
+流程:
+  mode = SHERPA_MULTI
+  speakerCount = AUTO
+  asrDenoise = false
+  voiceprintDenoise = false
+  每个模型/精度独立重启 APK，注册 妲已妈妈.wav -> 妲己妈妈
+
+平均阶段耗时（你好，小爱、你好啊你好啊你好啊、zh.wav）:
+  base INT8:  diarization=244ms，embedding=563ms，elapsed=3387ms
+  base FP32:  diarization=251ms，embedding=1299ms，elapsed=4106ms
+  large INT8: diarization=235ms，embedding=1833ms，elapsed=4740ms
+  large FP32: diarization=302ms，embedding=4465ms，elapsed=8025ms
+  V2 INT8:    diarization=251ms，embedding=1653ms，elapsed=4479ms
+  V2 FP32:    diarization=240ms，embedding=3041ms，elapsed=6079ms
+
+分段行为:
+  你好，小爱.wav:
+    三个模型/精度均为 1 段；INT8 speaker 均为 妲己妈妈
+  你好啊你好啊你好啊.wav:
+    base/large 的 FP32 和 INT8 均为 2 段；V2 的 FP32 和 INT8 均为 1 段
+    base INT8 两段分数=0.4944、0.2198，均未过阈值
+    large INT8 两段分数=0.4579、0.3034，均未过阈值
+    V2 INT8 单段分数=0.5039，匹配 妲己妈妈
+  zh.wav:
+    所有模型/精度均为 1 段，speaker=null，未过阈值
+
+结论:
+  INT8 不改变本轮 Pyannote 分段耗时，主要降低 embedding 阶段耗时。
+  直接连续切换多个大模型时观察到 Android lmkd signal 9；独立进程测试均完成，默认仍使用 base FP32。
+```
+
+## 声纹 FP32/INT8 A/B 对比（2026-09-12）
+
+```text
+VoiceprintPrecision:
+  FP32: id = "fp32"，显示名 = "FP32"
+  INT8: id = "int8"，显示名 = "INT8"
+
+VoiceprintModelVariant(model, precision):
+  id = model.id + "-" + precision.id
+  embeddingFileName:
+    FP32 -> 原始 embedding 文件名
+    INT8 -> 原始 embedding 文件名去掉 .onnx 后追加 _int8.onnx
+
+VoiceprintModelFiles:
+  ALL_FILE_NAMES = 三个 FP32 embedding、三个 INT8 embedding、pyannote segmentation
+  paths(modelDir, variant) -> variant 对应 embedding + 共用 segmentation
+
+VoiceprintTestCoordinator:
+  activeVariant 初始为 ERES2NET_BASE + FP32
+  loadVariant(variant, embeddingFile, segmentationFile):
+    串行调用 SherpaVoiceprintEngine.load
+    成功或失败后清空当前进程注册库
+    记录 activeVariant
+  model() -> activeVariant.model（保留旧调用兼容）
+  precision() / variant() -> 当前精度和组合
+
+MainActivity / AsrWebPage:
+  同时显示模型和精度选择，默认 base + FP32
+  任一选择改变 -> POST /api/voiceprint/model?model=<id>&precision=<id>
+  切换期间禁用注册、测试和选择控件
+  切换成功提示注册库已清空，并显示变体信息
+
+AsrHttpServer:
+  GET /api/voiceprint/status:
+    返回 modelId、modelName、precisionId、precisionName、variantId
+    models 数组返回三个模型及其 fp32/int8 可选精度
+  POST /api/voiceprint/model:
+    model 缺省时按 base 解析；precision 缺省时按 fp32 解析（兼容旧客户端）
+    校验 model + precision 组合
+    通过变体加载器串行切换，忙时返回 409，无效参数返回 400
+  register/test 结果继续返回同一组变体字段
+
+量化工具:
+  读取 16 kHz WAV -> Sherpa 兼容 80 维 Fbank -> CalibrationDataReader
+  ONNX Runtime quantize_static 生成三个 _int8.onnx 文件
+  使用未参与校准的 WAV 对 FP32/INT8 输出做 cosine 和推理耗时对比
+```
 ```
