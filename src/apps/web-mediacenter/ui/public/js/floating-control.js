@@ -3,10 +3,12 @@ const FloatingControl = {
     selectedDisplayId: null,
     isPlaying: false,
     currentFit: 'contain',
+    globalRecordingPaused: false,
     
     init() {
         this.loadState();
         this.updateDisplayList();
+        this.renderGlobalRecordingPause();
     },
     
     loadState() {
@@ -74,6 +76,50 @@ const FloatingControl = {
             select.value = displayId || '';
         }
         this.saveState();
+    },
+
+    toggleGlobalRecordingPause() {
+        const socket = window.WebSocketManager?.ws;
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            if (window.showToast) window.showToast('控制端尚未连接服务端', 'warning');
+            return;
+        }
+        const previousPaused = this.globalRecordingPaused === true;
+        const nextPaused = !this.globalRecordingPaused;
+        // 先更新本地按钮，避免等待服务端往返期间用户看不到点击反馈。
+        this.globalRecordingPaused = nextPaused;
+        this.renderGlobalRecordingPause();
+        try {
+            socket.send(JSON.stringify({
+                type: 'setGlobalRecordingPause',
+                paused: nextPaused
+            }));
+        } catch (error) {
+            // 发送失败时回滚本地乐观状态，避免按钮与服务端状态长期不一致。
+            this.globalRecordingPaused = previousPaused;
+            this.renderGlobalRecordingPause();
+            console.error('[FloatingControl] 发送全局录音状态失败:', error);
+            if (window.showToast) window.showToast('全局录音状态发送失败', 'error');
+        }
+    },
+
+    handleGlobalRecordingPauseState(data) {
+        // 服务端权威消息类型：globalRecordingPauseState。
+        this.globalRecordingPaused = data?.paused === true;
+        this.renderGlobalRecordingPause();
+    },
+
+    renderGlobalRecordingPause() {
+        const button = document.getElementById('floatingRecordingPauseButton');
+        const icon = document.getElementById('floatingRecordingPauseIcon');
+        if (!button) return;
+        const paused = this.globalRecordingPaused === true;
+        const label = paused ? '恢复所有录音' : '暂停所有录音';
+        button.classList.toggle('paused', paused);
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.setAttribute('aria-pressed', String(paused));
+        if (icon) icon.classList.toggle('is-paused', paused);
     },
     
     togglePlay() {

@@ -1295,6 +1295,20 @@
     </div>
     
     <div class="floating-control" id="floatingControl">
+        <button type="button" class="floating-recording-pause" id="floatingRecordingPauseButton"
+                onclick="FloatingControl.toggleGlobalRecordingPause()"
+                title="暂停所有录音" aria-label="暂停所有录音" aria-pressed="false"
+                data-state-key="globalRecordingPause">
+            <span class="mic-icon" id="floatingRecordingPauseIcon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="img" focusable="false">
+                    <path d="M12 3.5a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0v-5a3 3 0 0 0-3-3Z"></path>
+                    <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0"></path>
+                    <path d="M12 17v3.5"></path>
+                    <path d="M8.5 20.5h7"></path>
+                    <path class="mic-slash" d="m4 4 16 16"></path>
+                </svg>
+            </span>
+        </button>
         <div class="floating-control-toggle" id="floatingControlToggle" onclick="FloatingControl.toggle()">
             <span class="toggle-icon">⚙️</span>
         </div>

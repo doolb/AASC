@@ -1721,6 +1721,63 @@ input[type="range"]::-webkit-slider-thumb:active {
     transition: all 0.3s ease;
 }
 
+.floating-recording-pause {
+    position: absolute;
+    /* 浮动控制容器位于右下角，按钮在自测按钮正上方与齿轮垂直对齐。 */
+    right: 0;
+    bottom: 120px;
+    width: 50px;
+    height: 50px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff9fba, #f783a5);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(238, 82, 83, 0.32);
+    transition: all 0.3s ease;
+}
+
+.floating-recording-pause:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(238, 82, 83, 0.42);
+}
+
+.floating-recording-pause.paused {
+    background: linear-gradient(135deg, #ffe4e8, #ffc4cc);
+    color: #e53935;
+    box-shadow: 0 4px 15px rgba(229, 57, 53, 0.32);
+}
+
+.floating-recording-pause .mic-icon {
+    width: 29px;
+    height: 29px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.floating-recording-pause .mic-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.floating-recording-pause .mic-slash {
+    display: none;
+}
+
+.floating-recording-pause.paused .mic-slash {
+    display: block;
+}
+
 .floating-control-toggle:hover {
     transform: scale(1.1);
     box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4);
