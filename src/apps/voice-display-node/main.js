@@ -22,6 +22,12 @@ const AudioPlayer = require('./audio-player');
 const ServerASR = require('./asr-client');
 const { formatAsrDisplayText } = require('./asr-display');
 const SubDisplayTUI = require('./tui');
+const {
+    WINDOWS_HOTKEY_LABEL,
+    WindowsGlobalHotkey,
+    WindowsTextInputInjector,
+    isTextInputCommand
+} = require('./windows-text-input');
 const SystemMonitor = require('../../framework/observability/system-monitor');
 const { installConsoleRedirect } = require('../../framework/observability/console-redirect');
 
@@ -140,6 +146,15 @@ class VoiceDisplay {
         this.asrPollTimer = null;
         this.recordingEnabled = true;
         this.lastRecognition = '';
+        // Windows 系统级语音输入状态独立于 TUI 输入栏；记录每段文本以支持“返回”单次撤销。
+        this.textInputMode = 'inactive';
+        this.textInputHistory = [];
+        this.textInputAnnouncement = null;
+        this.textInputAnnouncementSequence = 0;
+        this.textInputInjector = new WindowsTextInputInjector();
+        this.textInputHotkey = new WindowsGlobalHotkey({
+            onToggle: () => this.onToggleTextInputMode()
+        });
 
         this.recordingMode = config.recordingMode || 'mute';
         this.aecProcessor = null;
@@ -350,6 +365,9 @@ class VoiceDisplay {
             case 'tts':
                 this.handleTTS(data);
                 break;
+            case 'textInputAnnouncementError':
+                this.handleTextInputAnnouncementError(data);
+                break;
             case 'voiceTtsPlaybackState':
                 this.handleVoiceTtsPlaybackState(data);
                 break;
@@ -529,6 +547,10 @@ class VoiceDisplay {
 
         switch (action) {
             case 'playAudio':
+                if (data.textInputAnnouncementId) {
+                    this.handleTextInputAnnouncementTts(data);
+                    break;
+                }
                 const audioUrl = data.audioUrl;
                 const text = data.text;
                 if (data.voiceTtsPlaybackId) {
@@ -554,9 +576,100 @@ class VoiceDisplay {
                     this.audio.clearQueue();
                 }
                 this.notifyVoiceTtsPlaybackFinished();
+                this.finishTextInputAnnouncement(new Error('状态提示播报被停止'));
                 log('TTS', '停止播报并清空队列');
                 break;
         }
+    }
+
+    handleTextInputAnnouncementTts(data) {
+        const announcement = this.textInputAnnouncement;
+        if (!announcement || announcement.requestId !== data.textInputAnnouncementId) return;
+        if (!this.audio || !data.audioUrl) {
+            this.finishTextInputAnnouncement(new Error('提示播报缺少音频地址'));
+            return;
+        }
+        if (this._volume === 0) {
+            this.finishTextInputAnnouncement(new Error('当前音量为 0，无法播报状态提示'));
+            return;
+        }
+
+        announcement.state = 'playing';
+        log('语音输入', `收到状态提示音频: ${announcement.text}`);
+        try {
+            this.playAudioFromURL(data.audioUrl, {
+                onComplete: (error, queueIdle) => {
+                    if (error) {
+                        logError('语音输入', `状态提示播放失败: ${error.message}`);
+                        this.finishTextInputAnnouncement(error);
+                        return;
+                    }
+                    const current = this.textInputAnnouncement;
+                    if (!current || current.requestId !== announcement.requestId) return;
+                    current.audioFinished = true;
+                    current.state = queueIdle ? 'finished' : 'waiting-queue';
+                    log('语音输入', `状态提示音频播放完成: ${announcement.text} queueIdle=${queueIdle}`);
+                    if (queueIdle) this.finishTextInputAnnouncement();
+                }
+            });
+        } catch (error) {
+            this.finishTextInputAnnouncement(error);
+        }
+    }
+
+    handleTextInputAnnouncementError(data) {
+        const announcement = this.textInputAnnouncement;
+        if (!announcement || announcement.requestId !== data?.requestId) return;
+        this.finishTextInputAnnouncement(new Error(data.message || '提示播报失败'));
+    }
+
+    finishTextInputAnnouncement(error = null) {
+        const announcement = this.textInputAnnouncement;
+        if (!announcement) return;
+        if (!error && !announcement.audioFinished) return;
+
+        this.textInputAnnouncement = null;
+        if (error) {
+            logError('语音输入', `状态提示播报失败: ${error.message}`);
+        } else {
+            log('语音输入', `状态提示播报完成: ${announcement.mode === 'active' ? '已开始输入' : '已结束输入'}`);
+        }
+        this.resumeRecorderAfterTextInputAnnouncement();
+    }
+
+    resumeRecorderAfterTextInputAnnouncement() {
+        if (!this.recordingEnabled || !this.recorder) return;
+        if (this.recorder.isPaused() && !this.localTtsPlaybackActive && this.remoteTtsPlaybackIds.size === 0) {
+            this.recorder.resume();
+            log('录音', '状态提示播报结束，恢复录音');
+        }
+    }
+
+    requestTextInputAnnouncement(mode) {
+        const requestId = `text-input-${Date.now()}-${++this.textInputAnnouncementSequence}`;
+        const text = mode === 'active' ? '已开始输入' : '已结束输入';
+        this.textInputAnnouncement = {
+            requestId,
+            mode,
+            text,
+            state: 'pending',
+            audioFinished: false
+        };
+        if (this.recorder && this.recordingEnabled && !this.recorder.isPaused()) {
+            this.recorder.pause();
+            log('录音', `状态提示播报前暂停录音: ${text}`);
+        }
+
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            this.finishTextInputAnnouncement(new Error('WebSocket 未连接，无法播报状态提示'));
+            return;
+        }
+        this.sendJSON({
+            type: 'textInputAnnouncement',
+            requestId,
+            text,
+            displayId: this.serverDisplayId || this.config.displayId
+        });
     }
 
     /**
@@ -771,23 +884,32 @@ class VoiceDisplay {
      * 从 URL 播放音频
      * @param {string} audioUrl - 音频 URL
      */
-    async playAudioFromURL(audioUrl) {
+    async playAudioFromURL(audioUrl, queueOptions = {}) {
         if (!this.audio) {
             log('TTS', '音频播放器未初始化');
+            if (typeof queueOptions.onComplete === 'function') {
+                queueOptions.onComplete(new Error('音频播放器未初始化'), true);
+            }
             return;
         }
 
         if (this._volume === 0) {
             log('TTS', '已静音，跳过播放');
+            if (typeof queueOptions.onComplete === 'function') {
+                queueOptions.onComplete(new Error('当前音量为 0，已跳过播放'), true);
+            }
             return;
         }
 
         const fullURL = `${this.config.serverUrl}${audioUrl}`;
 
         try {
-            this.audio.queueURL(fullURL);
+            this.audio.queueURL(fullURL, queueOptions);
         } catch (error) {
             logError('TTS', `加入播放队列失败: ${error.message}`);
+            if (typeof queueOptions.onComplete === 'function') {
+                queueOptions.onComplete(error, true);
+            }
         }
     }
 
@@ -835,6 +957,151 @@ class VoiceDisplay {
     resumeRecorderIfTtsIdle() {
         if (!this.recordingEnabled || this.localTtsPlaybackActive || this.remoteTtsPlaybackIds.size > 0) return;
         if (this.recorder && this.recorder.isPaused()) this.recorder.resume();
+    }
+
+    getRecognitionTexts(result = {}) {
+        const segments = Array.isArray(result.segments)
+            ? result.segments
+                .map(segment => String(segment?.text || '').trim())
+                .filter(Boolean)
+            : [];
+        if (segments.length > 0) return segments;
+
+        const text = String(result.text || '').trim();
+        return text ? [text] : [];
+    }
+
+    onToggleTextInputMode() {
+        if (!this.textInputInjector.isAvailable()) {
+            log('语音输入', '当前系统不是 Windows，无法启用系统文本输入');
+            return;
+        }
+
+        if (this.textInputMode === 'active') {
+            this.exitTextInputMode('快捷键关闭', true);
+            return;
+        }
+
+        this.textInputMode = 'active';
+        this.textInputHistory = [];
+        log('语音输入', `已开启 Windows 系统文本输入（${WINDOWS_HOTKEY_LABEL} 可切换）`);
+        this.updateTUIRecordingState();
+        this.requestTextInputAnnouncement('active');
+    }
+
+    exitTextInputMode(reason, announce = true) {
+        this.textInputMode = 'inactive';
+        this.textInputHistory = [];
+        log('语音输入', `已退出 Windows 系统文本输入${reason ? `：${reason}` : ''}`);
+        this.updateTUIRecordingState();
+        if (announce) this.requestTextInputAnnouncement('inactive');
+    }
+
+    async handleTextInputResult(result, requestTextInputMode) {
+        const texts = this.getRecognitionTexts(result);
+        if (texts.length === 0) return false;
+
+        const isActivation = result.localTextInputAction === 'activate'
+            || (requestTextInputMode !== 'active'
+                && texts.length === 1
+                && isTextInputCommand(texts[0], '开始输入'));
+        if (isActivation) {
+            if (this.textInputMode !== 'active') {
+                this.onToggleTextInputMode();
+            }
+            return true;
+        }
+
+        if (requestTextInputMode !== 'active' || this.textInputMode !== 'active') return false;
+
+        for (const text of texts) {
+            await this.handleTextInputSegment(text);
+            // 一次 ASR 可能返回多个分段；“发送”结束输入模式后，不再把同一批次的后续分段注入新窗口。
+            if (this.textInputMode !== 'active') break;
+        }
+        return true;
+    }
+
+    async handleTextInputSegment(text) {
+        if (isTextInputCommand(text, '结束输入')) {
+            this.exitTextInputMode('语音命令', true);
+            return;
+        }
+        if (isTextInputCommand(text, '发送')) {
+            await this.sendTextInput();
+            return;
+        }
+        if (isTextInputCommand(text, '返回')) {
+            await this.backspaceTextInput();
+            return;
+        }
+
+        try {
+            const result = await this.textInputInjector.insertText(text);
+            if (!result?.success) {
+                logError('语音输入', `文本注入失败: ${result?.reason || '未知错误'}`);
+                return;
+            }
+            this.textInputHistory.push({
+                text,
+                windowId: result.windowId
+            });
+            log('语音输入', `已注入 ${text.length} 个字符`);
+        } catch (error) {
+            logError('语音输入', `文本注入失败: ${error.message}`);
+        }
+    }
+
+    async backspaceTextInput() {
+        const record = this.textInputHistory[this.textInputHistory.length - 1];
+        if (!record) {
+            log('语音输入', '没有可返回的语音输入');
+            return;
+        }
+
+        try {
+            const result = await this.textInputInjector.backspaceText(record);
+            if (!result?.success) {
+                logError('语音输入', '返回失败：目标窗口已变化，请切回原窗口');
+                return;
+            }
+            this.textInputHistory.pop();
+            log('语音输入', '已返回最近一次语音输入');
+        } catch (error) {
+            logError('语音输入', `返回失败: ${error.message}`);
+        }
+    }
+
+    async sendTextInput() {
+        const record = this.textInputHistory[this.textInputHistory.length - 1];
+        if (!record) {
+            log('语音输入', '没有已注入文本，无法发送');
+            return;
+        }
+
+        try {
+            const result = await this.textInputInjector.sendEnter(record.windowId);
+            if (!result?.success) {
+                logError('语音输入', '发送失败：目标窗口已变化，请切回原窗口');
+                return;
+            }
+            this.exitTextInputMode('已发送', false);
+        } catch (error) {
+            logError('语音输入', `发送失败: ${error.message}`);
+        }
+    }
+
+    async startWindowsTextInput() {
+        if (!this.textInputHotkey.isAvailable()) return;
+
+        try {
+            const started = await this.textInputHotkey.start();
+            if (started) {
+                log('语音输入', `全局快捷键 ${WINDOWS_HOTKEY_LABEL} 已注册`);
+            }
+        } catch (error) {
+            logError('语音输入', `全局快捷键注册失败: ${error.message}`);
+        }
     }
 
     /**
@@ -886,17 +1153,21 @@ class VoiceDisplay {
                     }
                 }
 
+                const requestTextInputMode = this.textInputMode;
                 const result = await this.asr.recognize(dataToSend, {
                     // 只使用服务器确认的来源，避免重连或 ID 变更时把 ASR 结果路由到旧显示端。
                     displayId: this.serverDisplayId,
                     speechStartAt: timing.speechStartAt,
-                    speechEndAt: timing.speechEndAt
+                    speechEndAt: timing.speechEndAt,
+                    textInputClient: this.textInputInjector.isAvailable(),
+                    localTextInputMode: requestTextInputMode
                 });
                 const displayText = formatAsrDisplayText(result);
                 if (result.status === 'success' && displayText) {
                     log('语音', `识别结果: ${displayText}`);
                     this.lastRecognition = displayText;
                     this.updateTUIRecordingState();
+                    await this.handleTextInputResult(result, requestTextInputMode);
                 } else if (result.status === 'ignored') {
                     if (displayText) {
                         log('语音', `服务器忽略该段音频，识别文本: ${displayText}`);
@@ -1026,6 +1297,8 @@ class VoiceDisplay {
     async start() {
         activeDisplayInstance = this;
         this.audio = new AudioPlayer();
+        // 无论录音模式是否提供普通 TTS 回调，状态提示都必须等待整个音频队列结束后恢复录音。
+        this.audio.onQueueIdle = () => this.finishTextInputAnnouncement();
 
         this.asr = new ServerASR(this.config.serverUrl);
         await this.asr.checkReady();
@@ -1066,6 +1339,7 @@ class VoiceDisplay {
         }
 
         await this.connect();
+        await this.startWindowsTextInput();
 
         if (this.recorder && this.asr && this.asr.isReady()) {
             await this.startVoiceRecognition();
@@ -1368,6 +1642,8 @@ class VoiceDisplay {
         if (this.ws) {
             this.ws.close();
         }
+        this.textInputHotkey.close();
+        this.textInputInjector.close();
 
         log('停止', '语音显示端已停止');
     }

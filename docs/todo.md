@@ -96,4 +96,9 @@
 
 ## 外部应用焦点
 
+- ⏳待现场验收 [2026-09-12] Windows 子显示端语音输入端到端回归
+  - 需在 Windows 10/11 同步最新 Node 子显示端代码并重启，验证“开始输入”/“结束输入”提示完成后持续产生 `asrAudio`，普通文本注入、 “返回”、 “发送”及窗口切换保护。
+  - 当前主服务端已重启加载状态提示播放门控修复；本环境无 Windows，无法替代远端实机验收。
+  - 关联文档：`docs/design/windows-voice-text-input.md`、`docs/spec/windows-voice-text-input.md`、`docs/task/2026-09-12_子显示端Windows语音转文字输入.md`。
+
 ## TTS 播放

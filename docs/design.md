@@ -57,6 +57,7 @@
 | Android TTS CPU 核心模式 | [android-tts-cpu-affinity.md](../3rd/tts-server/docs/design/android-tts-cpu-affinity.md) | 自动/大核/小核选择、JNI affinity 和自动回退 |
 | 显示端分布式能力 | [display-capability.md](design/display-capability.md) | 显示端能力声明、能力路由、分布式协调 |
 | 显示端语音唤醒与监听控制 | [display-voice-conversation.md](design/display-voice-conversation.md) | 按显示端监听开关、唤醒状态、TTS完成后3分钟超时 |
+| Windows子显示端语音转文字输入 | [windows-voice-text-input.md](design/windows-voice-text-input.md) | Windows 前台窗口 Unicode 文本注入、全局快捷键和语音输入状态 |
 | 显示端录音模式与控制端回放 | [display-recording.md](design/display-recording.md) | ASR、单次录音、实时回传三种模式及控制端播放 |
 | 同一注册声纹跨显示端 ASR 去重 | [same-speaker-asr-dedup.md](design/same-speaker-asr-dedup.md) | 同一说话人被多个显示端同时听到时只保留一次处理 |
 | 全局播放时暂停录音 | [global-voice-playback-recording-pause.md](design/global-voice-playback-recording-pause.md) | 控制端声纹面板统一配置所有显示端播放期间是否暂停普通 ASR |

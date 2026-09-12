@@ -91,6 +91,8 @@ npm start
 
 显示端语音会话的详细使用说明见：[语音三种会话状态](usage/voice-conversation.md)。
 
+Windows Node 子显示端的系统级语音转文字输入说明也见：[Windows 子显示端语音转文字输入](usage/voice-conversation.md#八windows-子显示端语音转文字输入)。
+
 正式 Android 显示端的 OCR/YOLO11n 通过控制端任务面板调用；任务会请求服务器视觉接口，再由服务器转发给显示端本地推理。
 
 正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。

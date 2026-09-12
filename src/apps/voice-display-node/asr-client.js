@@ -117,6 +117,11 @@ class ServerASR {
             if (Number.isFinite(Number(context.speechEndAt))) {
                 formData.append('speechEndAt', String(context.speechEndAt));
             }
+            // Windows 子显示端在本地输入模式下需要让服务器只返回 ASR 文字，不能再次进入语音命令链路。
+            if (context.textInputClient === true) {
+                formData.append('textInputClient', 'true');
+                formData.append('localTextInputMode', context.localTextInputMode === 'active' ? 'active' : 'inactive');
+            }
 
             // 表单字段用于兼容旧服务器，请求头用于让服务器明确识别来源类型并执行绑定。
             const headers = {

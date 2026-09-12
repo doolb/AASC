@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+## Windows 子显示端语音输入录音恢复
+
+- ✅ [2026-09-12] 修复状态提示播报后 Windows 子显示端录音无法恢复，并将撤销命令由“回退”改为“返回”。
+  - 根因是服务端把“已开始输入/已结束输入”提示误加入全局 `voiceTtsPlaybackState` 门控；Node 专用提示分支未回报普通 TTS 完成事件，残留的远程播放标识阻止录音恢复。
+  - `server-app.js` 现在跳过状态提示的 `voiceTtsPlaybackId` 创建和全局播放状态广播；Node 继续在本地提示音频队列完成或失败后恢复录音，并增加收到/完成/失败诊断日志。
+  - Node 输入模式只识别“返回”，对应文档和测试同步更新；“发送”“结束输入”和普通文本注入行为保持不变。
+  - 验证：相关定向测试 63/63 通过，完整 `npm test` 620 项中 619 项通过；唯一失败为既有 `display-native-bridge.test.js` 的 `injectTouch(down)` 契约，5 个受影响 JavaScript 文件语法检查及 `git diff --check` 通过。
+
 ## 独立 ASR 测试 APK 声纹 FP32/INT8 A/B
 
 - ✅ [2026-09-12] 为 ERes2Net-base、ERes2Net-large、ERes2NetV2 增加 FP32/INT8 精度切换和静态量化测试资源。
@@ -7715,6 +7723,17 @@
   - 控制端添加目标服务器选择、子服务器卡片快捷添加、读写状态和明确 HTTP 错误提示，避免将 `nodeId::libraryId` 误当作本地库 ID。
   - 改动文件：`src/framework/aasc/remote-media-library.js`、`src/framework/aasc/media-index-service.js`、`src/apps/server/boot/server-app.js`、媒体库/服务器/显示端前端及对应测试、AASC 设计/spec/task 文档。
   - 验证：定向 AASC、媒体库、服务器列表、播放和显示端回归测试 7 个全部通过；全量测试尝试因既有测试的端口权限/长时间运行问题在 `vision-tui` 阶段超时，不能据此宣称全量通过。
+
+### 外部应用焦点
+
+- ✅ [2026-09-12] 子显示端新增 Windows 系统级语音转文字输入。
+  - `Ctrl+Alt+Space` 或语音命令“开始输入”激活；普通 ASR 文本通过 Unicode 剪贴板和 Ctrl+V 注入当前前台窗口。
+  - “返回”删除最近一次完整语音输入，“发送”发送 Enter 并退出输入模式；“结束输入”退出并播报结束提示。窗口变化时拒绝返回/发送，避免误操作。
+  - 开始/结束提示期间暂停录音，提示播放队列完成或失败后恢复录音；服务端只向来源子显示端下发提示音。
+  - 服务端 ASR 增加本地输入旁路，输入模式下不进入语音命令、聊天和 `voiceInput` 下发链路；非 Windows 和旧客户端保持兼容。
+  - 修复 Win32 `INPUT` 联合体尺寸导致的 `SendInput` 失败，PowerShell 输出固定 UTF-8 并保留 Win32 错误码。
+  - 改动文件：`src/apps/voice-display-node/windows-text-input.js`、`src/apps/voice-display-node/main.js`、`src/apps/voice-display-node/audio-player.js`、`src/apps/voice-display-node/asr-client.js`、`src/apps/server/boot/server-app.js`、对应测试及 design/spec/task/usage 文档。
+  - 验证：相关定向测试 32/32 通过，5 个受影响 JS 文件 `node --check` 通过，`git diff --check` 通过；当前环境非 Windows，实机窗口注入待在 Windows 10/11 验收。全量 `npm test` 为 618 项中 616 项通过，另有 2 项既有显示端触摸/睡眠测试失败，与本功能无关。
 
 ## 聊天模式切换审计
 

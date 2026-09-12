@@ -70,7 +70,10 @@ const {
 const {
     mergeVoiceprintSegments
 } = require('../modules/voice/voiceprint-segment-grouper');
-const { formatAsrResultLog } = require('../modules/asr/asr-result-log-formatter');
+const {
+    formatAsrResultLog,
+    normalizeElapsedMs
+} = require('../modules/asr/asr-result-log-formatter');
 const { MediaLibraryManager } = require('../../web-mediacenter/modules/media/media-library-app-service');
 const { detectMediaType, createUploadedMediaData } = require('../modules/media/upload-media-metadata');
 const { SubServerManager } = require('../../../framework/cluster/sub-server-manager');
@@ -896,7 +899,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -3404,11 +3407,74 @@ function getAsrRequestContext(req) {
     const displayKind = String(req.headers?.['x-aasc-display-kind'] || '').trim().toLowerCase();
     const speechStartAt = Number(req.body?.speechStartAt);
     const speechEndAt = Number(req.body?.speechEndAt);
+    const textInputClientFlag = String(req.body?.textInputClient || '').toLowerCase() === 'true';
+    const requestedTextInputMode = String(req.body?.localTextInputMode || '').trim().toLowerCase();
+    // 兼容已经发送 active 模式但遗漏客户端布尔标记的旧 Node 包；仅对明确的 subdisplay 请求启用回退判断。
+    const textInputClient = textInputClientFlag
+        || (displayKind === 'subdisplay' && requestedTextInputMode === 'active');
     return {
         displayId,
         displayKind,
         speechStartAt: Number.isFinite(speechStartAt) ? speechStartAt : null,
-        speechEndAt: Number.isFinite(speechEndAt) ? speechEndAt : null
+        speechEndAt: Number.isFinite(speechEndAt) ? speechEndAt : null,
+        textInputClient,
+        localTextInputMode: textInputClient && requestedTextInputMode === 'active' ? 'active' : 'inactive'
+    };
+}
+
+function normalizeTextInputCommand(text) {
+    return String(text || '')
+        .trim()
+        .replace(/[。！？!?，,、；;：:]+$/u, '');
+}
+
+function getLocalTextInputAction(requestContext, texts) {
+    if (requestContext?.textInputClient !== true) return null;
+    const normalizedTexts = Array.isArray(texts)
+        ? texts.map(text => String(text || '').trim()).filter(Boolean)
+        : [];
+    if (requestContext.localTextInputMode === 'active') return normalizedTexts.length > 0 ? 'text' : null;
+    if (normalizedTexts.length !== 1) return null;
+    return normalizeTextInputCommand(normalizedTexts[0]) === '开始输入' ? 'activate' : null;
+}
+
+function createLocalTextInputResponse(result, requestContext) {
+    const rawSegments = getNormalizedAsrSegments(result);
+    const segmentTexts = rawSegments.map(segment => segment.text);
+    const fallbackText = normalizeAsrText(result?.text);
+    const action = getLocalTextInputAction(
+        requestContext,
+        rawSegments.length > 0 ? segmentTexts : [fallbackText]
+    );
+    if (!action) return null;
+
+    log('语音', `ASR本地输入旁路: displayId=${requestContext.displayId || '-'} mode=${requestContext.localTextInputMode} action=${action}`);
+
+    const response = {
+        status: 'success',
+        processedByServer: false,
+        localTextInputAction: action,
+        ...getAsrTimingPayload(result)
+    };
+    if (rawSegments.length > 0) {
+        response.threshold = result?.threshold;
+        response.segments = rawSegments.map(segment => serializeAsrSegment(segment, result?.threshold));
+        return response;
+    }
+    response.text = fallbackText;
+    if (result?.speaker !== undefined) response.speaker = result.speaker;
+    if (result?.similarityScore !== undefined) response.similarityScore = result.similarityScore;
+    if (result?.threshold !== undefined) response.threshold = result.threshold;
+    return response;
+}
+
+/**
+ * 统一提取 ASR/声纹模型耗时，保证 HTTP 响应和旧客户端缺省字段行为一致。
+ */
+function getAsrTimingPayload(result = {}, fallbackAsrElapsedMs = null) {
+    return {
+        asrElapsedMs: normalizeElapsedMs(result.asrElapsedMs ?? fallbackAsrElapsedMs),
+        voiceprintElapsedMs: normalizeElapsedMs(result.voiceprintElapsedMs)
     };
 }
 
@@ -3563,6 +3629,10 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
                 const audioBase64 = req.file.buffer.toString('base64');
                 const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
                 const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId);
+                const localTextInputResponse = createLocalTextInputResponse(result, requestContext);
+                if (localTextInputResponse) {
+                    return res.json(localTextInputResponse);
+                }
 
                 if (result.segments && result.segments.length) {
                     const segments = normalizeAsrSegments(result);
@@ -3622,6 +3692,14 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
         
         const recognizedText = normalizeAsrText(await asr.recognize(req.file.buffer));
         
+        const localTextInputResponse = createLocalTextInputResponse(
+            { text: recognizedText },
+            requestContext
+        );
+        if (localTextInputResponse) {
+            return res.json(localTextInputResponse);
+        }
+
         if (!recognizedText || !recognizedText.trim()) {
             return res.json({ 
                 status: 'ignored', 
@@ -5084,6 +5162,9 @@ function startVoiceTtsPlayback(playbackDisplayId, playbackId, repeatCount = 1) {
 
 function prepareVoiceTtsPlayback(displayId, data) {
     if (!data || data.type !== 'tts' || data.action !== 'playAudio' || data.prefetch === true) return;
+    // Windows 本地输入状态提示由来源 Node 自己暂停/恢复录音，不参与全局播放门控。
+    // 如果为它创建 voiceTtsPlaybackId，Node 会收到 started 却无法按普通 TTS 回报完成，导致录音一直被远程状态阻塞。
+    if (data.textInputAnnouncementId) return;
     if (!data.voiceTtsPlaybackId) {
         data.voiceTtsPlaybackId = generateCorrelationId('voice-tts');
     }
@@ -5429,6 +5510,37 @@ async function sendVoiceInputTts(text, playbackOptions = {}) {
     }
 
     return sentCount;
+}
+
+const TEXT_INPUT_ANNOUNCEMENT_TEXTS = new Set(['已开始输入', '已结束输入']);
+
+async function sendTextInputAnnouncement(displayId, data) {
+    const requestId = String(data?.requestId || '').trim();
+    const text = String(data?.text || '').trim();
+    if (!displayId || !requestId || !TEXT_INPUT_ANNOUNCEMENT_TEXTS.has(text)) {
+        return false;
+    }
+
+    try {
+        const audioPath = await generateTtsWithFallback(text, undefined, undefined, displayId);
+        const sent = sendToDisplay(displayId, {
+            type: 'tts',
+            action: 'playAudio',
+            audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
+            text,
+            textInputAnnouncementId: requestId
+        }, { allowRepairModeTts: true });
+        if (!sent) throw new Error('显示端已离线，无法下发状态提示');
+        return true;
+    } catch (error) {
+        logError('TTS', `Windows 语音输入状态提示失败: ${error.message}`);
+        sendToDisplay(displayId, {
+            type: 'textInputAnnouncementError',
+            requestId,
+            message: error.message
+        });
+        return false;
+    }
 }
 
 // 媒体文件名播报统一由服务器生成并下发，复用跨显示端 TTS 播放状态广播。
@@ -6723,6 +6835,9 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     } else if (data.type === 'mediaNameTts' && displayData) {
         // 文件名播报由服务器统一生成，sendToDisplay 会创建播放状态并广播给其他录音显示端。
         void sendMediaNameTts(displayId, data.text);
+    } else if (data.type === 'textInputAnnouncement' && displayData) {
+        // Windows 本地输入的开始/结束提示必须回到请求来源端，避免播报到其他显示端。
+        void sendTextInputAnnouncement(displayId, data);
     } else if (data.type === 'voiceConversationTtsFinished' && displayData) {
         // 该事件只负责普通会话的 3 分钟续期；确认提示使用带 playbackId 的完成回执计时。
         if (isDisplayVoiceListeningEnabled(displayData)

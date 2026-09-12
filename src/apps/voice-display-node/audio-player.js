@@ -28,6 +28,8 @@ class AudioPlayer {
         this.isProcessingQueue = false;
         this.onPlayStart = null;
         this.onPlayEnd = null;
+        // 队列完全空闲时通知需要等待整段播报结束的业务，例如 Windows 语音输入提示。
+        this.onQueueIdle = null;
         /** @type {Function|null} 播放PCM数据回调，用于SpeexDSP AEC参考信号 */
         this.onPlayData = null;
     }
@@ -39,9 +41,13 @@ class AudioPlayer {
      * 将音频URL加入播放队列
      * @param {string} url - 音频URL
      */
-    queueURL(url) {
+    queueURL(url, options = {}) {
         this.stopRequested = false;
-        this.playQueue.push({ type: 'url', url });
+        this.playQueue.push({
+            type: 'url',
+            url,
+            onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
+        });
         console.log(`[音频队列] 加入队列，当前队列长度: ${this.playQueue.length}`);
         this.processQueue();
     }
@@ -50,9 +56,13 @@ class AudioPlayer {
      * 将音频Buffer加入播放队列
      * @param {Buffer} wavBuffer - WAV格式音频数据
      */
-    queueBuffer(wavBuffer) {
+    queueBuffer(wavBuffer, options = {}) {
         this.stopRequested = false;
-        this.playQueue.push({ type: 'buffer', buffer: wavBuffer });
+        this.playQueue.push({
+            type: 'buffer',
+            buffer: wavBuffer,
+            onComplete: typeof options.onComplete === 'function' ? options.onComplete : null
+        });
         console.log(`[音频队列] 加入队列，当前队列长度: ${this.playQueue.length}`);
         this.processQueue();
     }
@@ -77,6 +87,7 @@ class AudioPlayer {
             }
 
             const item = this.playQueue.shift();
+            let playbackError = null;
 
             try {
                 if (item.type === 'url') {
@@ -85,7 +96,16 @@ class AudioPlayer {
                     await this.playWavBuffer(item.buffer);
                 }
             } catch (error) {
+                playbackError = error;
                 console.error('[音频队列] 播放失败:', error.message);
+            }
+
+            if (item.onComplete) {
+                try {
+                    item.onComplete(playbackError, this.playQueue.length === 0);
+                } catch (error) {
+                    console.error('[音频队列] 完成回调失败:', error.message);
+                }
             }
         }
 
@@ -93,6 +113,9 @@ class AudioPlayer {
 
         if (this.onPlayEnd) {
             this.onPlayEnd();
+        }
+        if (this.onQueueIdle) {
+            this.onQueueIdle();
         }
     }
 
