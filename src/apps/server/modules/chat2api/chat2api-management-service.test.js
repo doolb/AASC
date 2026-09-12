@@ -64,3 +64,14 @@ test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接
   await assert.rejects(() => management.saveConfig({ rawTrafficMaxBytes: 512 }), /rawTrafficMaxBytes/);
   await assert.rejects(() => management.saveConfig({ rawTrafficMode: 'brief' }), /rawTrafficMode/);
 });
+
+test('管理服务提供 Chat2API 配置导出接口', async () => {
+  const exported = { format: 'aasc-chat2api-config', version: 1, config: {}, providers: [], accounts: [], modelMappings: [] };
+  const management = createChat2ApiManagementService({
+    dataStore: { exportConfiguration: async () => exported },
+    providerRegistry: {},
+    oauth: {},
+  });
+
+  assert.deepEqual(await management.exportConfig(), exported);
+});

@@ -59,6 +59,7 @@ const createChat2ApiManagementService = (runtime) => {
   const updateApiKey = (id, patch) => dataStore.updateApiKey(id, patch);
   const disableApiKey = (id) => dataStore.disableApiKey(id);
   const deleteApiKey = (id) => dataStore.deleteApiKey(id);
+  const exportConfig = () => dataStore.exportConfiguration();
   const deleteProvider = async (providerId) => providerRegistry.deleteProvider(providerId, {
     accounts: await dataStore.listAccounts(),
     mappings: await dataStore.listModelMappings(),
@@ -94,6 +95,7 @@ const createChat2ApiManagementService = (runtime) => {
     updateApiKey,
     disableApiKey,
     deleteApiKey,
+    exportConfig,
     previewImport,
     mergeImport,
     previewLegacyImport,

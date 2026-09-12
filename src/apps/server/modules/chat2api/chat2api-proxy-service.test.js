@@ -80,6 +80,7 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     coreAdapter: { listModels: async () => ({ object: 'list', data: [] }), forwardChatCompletion: async () => ({ body: {} }) },
     managementService: {
       listProviders: async () => [{ id: 'deepseek' }],
+      exportConfig: async () => ({ format: 'aasc-chat2api-config', version: 1, config: {}, providers: [], accounts: [], modelMappings: [] }),
       startLogin: async () => ({ state: 'state-1' }),
       previewLegacyImport: async () => ({ counts: { providers: 1, accounts: 1, modelMappings: 1 } }),
       mergeLegacyImport: async (confirmed) => ({ confirmed }),
@@ -91,6 +92,10 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     const response = await request(service.address().port, { path: '/api/chat2api/providers', method: 'GET' });
     assert.equal(response.statusCode, 200);
     assert.deepEqual(JSON.parse(response.text), [{ id: 'deepseek' }]);
+    const exported = await request(service.address().port, { path: '/api/chat2api/export', method: 'GET' });
+    assert.equal(exported.statusCode, 200);
+    assert.match(exported.headers['content-disposition'], /attachment/);
+    assert.equal(JSON.parse(exported.text).format, 'aasc-chat2api-config');
     const login = await request(service.address().port, { path: '/api/chat2api/oauth/start', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ providerId: 'deepseek' }));
     assert.equal(login.statusCode, 200);
     assert.equal(JSON.parse(login.text).state, 'state-1');

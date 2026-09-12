@@ -164,6 +164,30 @@ mergeLegacyImport(confirmed):
     将 proxyHost、proxyPort、loadBalanceStrategy、enableApiKey 转换并合并到 AASC config.json
     不迁移原 Chat2API API Key、日志、会话和桌面应用状态
 
+exportConfiguration():
+    读取 config、providers、accounts 和 modelMappings 正式 JSON 文件
+    校验集合类型后深拷贝原始内容，账号凭据保持原值
+    生成 { format: "aasc-chat2api-config", version: 1, exportedAt, config, providers, accounts, modelMappings }
+    不读取或输出 api-keys、responses-sessions、oauth-sessions 和日志
+
+previewImport(data):
+    校验 format（如果存在）、version、集合类型和字段上限
+    允许可选 config，并返回配置与 Provider/账号/模型映射的预览
+    账号凭据只在服务端内存参与校验，预览结果使用脱敏账号
+    不写入正式文件
+
+mergeImport(data, confirmed):
+    confirmed 不是 true -> 拒绝写入
+    重新校验配置快照并在内存中合并 config、Provider、账号和模型映射
+    相同 config 字段、Provider ID、账号 ID 或 Provider+model 键使用导入值
+    未出现在导入文件中的现有记录保留
+    原子写入配置和三个配置集合，成功后返回脱敏摘要
+
+GET /api/chat2api/export:
+    仅允许本机控制端/同源网关访问
+    调用 exportConfiguration()
+    以 application/json 附件返回 chat2api-config.json
+
 createChat2ApiGateway(taskManager):
     接收控制端同源 HTTPS 请求和 chat2api.proxy 实例 ID
     从 TaskManager 查询实例状态和端口，只允许运行中的 chat2api.proxy 实例
@@ -457,6 +481,19 @@ Chat2APIControl.render():
     主题切换只修改根元素 data-theme，弹窗通过 CSS 变量即时更新
     模型映射列表提供新增、编辑和删除操作
     配置区显示 debugRawTraffic 开关和 rawTrafficMaxBytes 输入框
+    弹窗头部显示“导出配置”和“导入配置”按钮，并创建隐藏 JSON 文件选择器
+
+Chat2APIControl.exportConfig():
+    GET /api/chat2api/export
+    将响应作为 Blob 下载为 chat2api-config-时间戳.json
+    提示导出文件包含账号 Token/Cookie 等敏感凭据，但不包含 API Key 原文
+
+Chat2APIControl.importConfigFile(file):
+    读取并解析 JSON 文件
+    POST /api/chat2api/import/preview 获取 Provider、账号、模型映射和配置摘要
+    显示“包含敏感凭据、采用合并、不删除未导入数据”的确认提示
+    用户确认后 POST /api/chat2api/import/merge { data, confirmed: true }
+    导入成功后刷新弹窗数据
 
 Chat2APIControl.saveModelMapping():
     校验请求模型和实际模型不能为空

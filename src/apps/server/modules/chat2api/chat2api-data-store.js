@@ -23,6 +23,7 @@ const COLLECTION_FILES = Object.freeze({
   modelMappings: 'model-mappings.json',
   responsesSessions: 'responses-sessions.json',
 });
+const EXPORT_FORMAT = 'aasc-chat2api-config';
 const IMPORT_COLLECTIONS = Object.freeze(['providers', 'accounts', 'modelMappings']);
 const MAX_IMPORT_ITEMS = 1000;
 const OAUTH_SESSION_TTL_MS = 5 * 60 * 1000;
@@ -332,9 +333,46 @@ const createChat2ApiDataStore = (options = {}) => {
     return true;
   };
 
+  const normalizeImportConfig = (config) => {
+    if (config === undefined || config === null) {
+      return {};
+    }
+    if (typeof config !== 'object' || Array.isArray(config)) {
+      throw new Error('Chat2API 导入字段 config 必须是对象');
+    }
+    return cloneValue(config);
+  };
+
+  const exportConfiguration = async () => {
+    const [config, providers, accounts, modelMappings] = await Promise.all([
+      readCollection('config', {}),
+      readCollection('providers', []),
+      readCollection('accounts', []),
+      readCollection('modelMappings', []),
+    ]);
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      throw new Error('Chat2API 配置数据必须是对象');
+    }
+    ensureArray(providers, 'providers');
+    ensureArray(accounts, 'accounts');
+    ensureArray(modelMappings, 'modelMappings');
+    return {
+      format: EXPORT_FORMAT,
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      config: cloneValue(config),
+      providers: cloneValue(providers),
+      accounts: cloneValue(accounts),
+      modelMappings: cloneValue(modelMappings),
+    };
+  };
+
   const normalizeImport = (data) => {
     if (!data || typeof data !== 'object' || data.version !== 1) {
       throw new Error('Chat2API 导入文件版本不受支持');
+    }
+    if (data.format !== undefined && data.format !== EXPORT_FORMAT) {
+      throw new Error('Chat2API 导入文件格式不受支持');
     }
     const providers = ensureArray(data.providers || [], 'providers');
     const accounts = ensureArray(data.accounts || [], 'accounts').map((account) => validateAccount(account));
@@ -342,6 +380,7 @@ const createChat2ApiDataStore = (options = {}) => {
     providers.forEach((provider) => ensureId(provider.providerId, 'providerId', 'Chat2API Provider'));
     modelMappings.forEach((mapping) => ensureId(mapping.model, 'model', 'Chat2API 模型映射'));
     return {
+      config: normalizeImportConfig(data.config),
       providers: cloneValue(providers),
       accounts,
       modelMappings: cloneValue(modelMappings),
@@ -352,6 +391,7 @@ const createChat2ApiDataStore = (options = {}) => {
     const normalized = normalizeImport(data);
     return {
       version: 1,
+      config: cloneValue(normalized.config),
       counts: Object.fromEntries(IMPORT_COLLECTIONS.map((name) => [name, normalized[name].length])),
       providers: normalized.providers.map((provider) => sanitizeSecrets(provider)),
       accounts: normalized.accounts.map((account) => publicAccount(account)),
@@ -366,7 +406,10 @@ const createChat2ApiDataStore = (options = {}) => {
       throw new Error('Chat2API 导入必须先预览并明确确认');
     }
     const normalized = normalizeImport(data);
-    const current = await Promise.all(IMPORT_COLLECTIONS.map((name) => readCollection(name, [])));
+    const [current, currentConfig] = await Promise.all([
+      Promise.all(IMPORT_COLLECTIONS.map((name) => readCollection(name, []))),
+      readCollection('config', {}),
+    ]);
     const currentByName = Object.fromEntries(IMPORT_COLLECTIONS.map((name, index) => [name, current[index]]));
     const next = {
       providers: mergeByKey(currentByName.providers, normalized.providers, (item) => item.providerId),
@@ -377,8 +420,16 @@ const createChat2ApiDataStore = (options = {}) => {
         (item) => `${item.providerId || ''}:${item.model}`,
       ),
     };
-    await Promise.all(IMPORT_COLLECTIONS.map((name) => writeCollection(name, next[name])));
+    const writes = IMPORT_COLLECTIONS.map((name) => writeCollection(name, next[name]));
+    if (Object.keys(normalized.config).length > 0) {
+      writes.push(writeCollection('config', {
+        ...(currentConfig && !Array.isArray(currentConfig) ? currentConfig : {}),
+        ...normalized.config,
+      }));
+    }
+    await Promise.all(writes);
     return {
+      config: cloneValue(normalized.config),
       counts: Object.fromEntries(IMPORT_COLLECTIONS.map((name) => [name, normalized[name].length])),
       accounts: normalized.accounts.map((account) => publicAccount(account)),
     };
@@ -477,6 +528,7 @@ const createChat2ApiDataStore = (options = {}) => {
     rootDir,
     readCollection,
     writeCollection,
+    exportConfiguration,
     saveAccount,
     listAccounts,
     getAccount,

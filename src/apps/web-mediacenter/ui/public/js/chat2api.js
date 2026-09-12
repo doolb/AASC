@@ -51,7 +51,7 @@
       modal.id = 'chat2apiModal';
       modal.className = 'chat2api-modal modal-mask';
       modal.innerHTML = '<div class="chat2api-dialog">' +
-        '<div class="chat2api-header"><strong class="chat2api-title">Chat2API 账户管理</strong><span class="chat2api-header-actions"><button class="task-card-btn" id="chat2apiImportLegacy">导入原 Chat2API 数据</button><button class="task-card-btn" onclick="Chat2APIControl.close()">关闭</button></span></div>' +
+        '<div class="chat2api-header"><strong class="chat2api-title">Chat2API 账户管理</strong><span class="chat2api-header-actions"><button class="task-card-btn" id="chat2apiExportConfig">导出配置</button><button class="task-card-btn" id="chat2apiImportConfig">导入配置</button><input id="chat2apiImportFile" type="file" accept=".json,application/json" hidden><button class="task-card-btn" id="chat2apiImportLegacy">导入原 Chat2API 数据</button><button class="task-card-btn" onclick="Chat2APIControl.close()">关闭</button></span></div>' +
         '<div id="chat2apiMessage" class="chat2api-message"></div>' +
         '<div id="chat2apiContent" class="chat2api-content"></div>' +
       '</div>';
@@ -121,6 +121,12 @@
       if (keyButton) keyButton.addEventListener('click', () => this.createKey());
       const saveConfigButton = document.getElementById('chat2apiSaveConfig');
       if (saveConfigButton) saveConfigButton.addEventListener('click', () => this.saveConfig());
+      const exportConfigButton = document.getElementById('chat2apiExportConfig');
+      if (exportConfigButton) exportConfigButton.addEventListener('click', () => this.exportConfig());
+      const importConfigButton = document.getElementById('chat2apiImportConfig');
+      if (importConfigButton) importConfigButton.addEventListener('click', () => this.openImportPicker());
+      const importFileInput = document.getElementById('chat2apiImportFile');
+      if (importFileInput) importFileInput.addEventListener('change', () => this.importConfigFile(importFileInput.files && importFileInput.files[0]));
       const importLegacyButton = document.getElementById('chat2apiImportLegacy');
       if (importLegacyButton) importLegacyButton.addEventListener('click', () => this.importLegacyData());
       const newMappingButton = document.getElementById('chat2apiMappingNew');
@@ -252,6 +258,55 @@
         }) });
         this.message('配置已保存；监听地址/端口变更需重启 chat2api.proxy，日志开关和模式对下一次请求生效。');
       } catch (error) { this.message(error.message, true); }
+    },
+
+    async exportConfig() {
+      try {
+        const response = await fetch(`${this.baseUrl}/api/chat2api/export`, { headers: { Accept: 'application/json' } });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error && body.error.message ? body.error.message : `请求失败 (${response.status})`);
+        }
+        const blob = await response.blob();
+        const stamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = downloadUrl;
+        anchor.download = `chat2api-config-${stamp}.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+        this.message('配置已导出。文件包含账号 Token/Cookie 等敏感凭据，不包含 API Key 原文。');
+      } catch (error) { this.message(`配置导出失败：${error.message}`, true); }
+    },
+
+    openImportPicker() {
+      const input = document.getElementById('chat2apiImportFile');
+      if (input) {
+        input.value = '';
+        input.click();
+      }
+    },
+
+    async importConfigFile(file) {
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        const preview = await this.request('/api/chat2api/import/preview', { method: 'POST', body: JSON.stringify(data) });
+        const counts = preview.counts || {};
+        const config = preview.config || {};
+        const hasCredentials = Array.isArray(preview.accounts) && preview.accounts.some((account) => account.secretConfigured);
+        const summary = `将导入 Provider ${Number(counts.providers || 0)} 个、账号 ${Number(counts.accounts || 0)} 个、模型映射 ${Number(counts.modelMappings || 0)} 条${Object.keys(config).length > 0 ? '，并合并代理配置' : ''}`;
+        const warning = hasCredentials ? '文件包含账号 Token/Cookie 等敏感凭据。' : '文件不包含可恢复的 API Key 原文。';
+        if (!window.confirm(`${summary}。${warning}不会删除现有数据，确认继续吗？`)) {
+          this.message('已取消 Chat2API 配置导入。');
+          return;
+        }
+        const result = await this.request('/api/chat2api/import/merge', { method: 'POST', body: JSON.stringify({ data, confirmed: true }) });
+        await this.refresh();
+        this.message(`Chat2API 配置导入完成：账号 ${Number((result.counts || {}).accounts || 0)} 个。`);
+      } catch (error) { this.message(`Chat2API 配置导入失败：${error.message}`, true); }
     },
 
     async importLegacyData() {

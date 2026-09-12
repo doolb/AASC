@@ -29,6 +29,15 @@ const createChat2ApiProxyService = (options = {}) => {
     response.end(body);
   };
 
+  const sendJsonAttachment = (response, payload, filename) => {
+    const body = `${JSON.stringify(payload, null, 2)}\n`;
+    response.statusCode = 200;
+    response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    response.setHeader('Content-Length', Buffer.byteLength(body));
+    response.end(body);
+  };
+
   const sendError = (response, error) => {
     const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
     const code = error.code || 'internal_error';
@@ -146,6 +155,10 @@ const createChat2ApiProxyService = (options = {}) => {
         error.statusCode = 503;
         error.code = 'management_unavailable';
         throw error;
+      }
+      if (request.method === 'GET' && url.pathname === '/api/chat2api/export') {
+        sendJsonAttachment(response, await managementService.exportConfig(), 'chat2api-config.json');
+        return;
       }
       const body = ['POST', 'PUT'].includes(request.method) ? await readJson(request) : null;
       const managementResult = await (async () => {

@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+## Chat2API 配置管理
+
+- ✅ [2026-09-12] 增加 Chat2API 配置导出为 JSON 文件和文件导入功能。
+  - 导出持久化代理配置、Provider 用户配置、账号完整 Token/Cookie 凭据和模型映射，保持原值；不导出仅保存哈希的 API Key、运行时会话、OAuth 临时状态和日志。
+  - 导入复用预览/确认/合并流程，相同 Provider、账号和模型映射覆盖，未导入的数据保留；预览响应继续脱敏账号凭据。
+  - 控制端新增“导出配置”“导入配置”入口，导入前提示文件包含敏感凭据。
+  - 改动文件：`chat2api-data-store.js`、`chat2api-management-service.js`、`chat2api-proxy-service.js`、`chat2api.js` 及对应测试、design/spec/task/todo 文档。
+  - 验证：`npm run check:chat2api`，76/76 通过；JavaScript 语法检查和 `git diff --check` 通过。
 ## 硬件监控
 
 - ✅ [2026-09-11] render-display GPU/VRAM 第二行调整为小幅缩进并保持进度条对齐。

@@ -11,6 +11,11 @@ test('控制端 Chat2API 弹窗包含登录、账号和 API Key 管理流程', (
   assert.match(source, /window\.open/);
   assert.match(source, /\/api\/chat2api\/api-keys/);
   assert.match(source, /chat2apiSaveConfig/);
+  assert.match(source, /chat2apiExportConfig/);
+  assert.match(source, /chat2apiImportConfig/);
+  assert.match(source, new RegExp('/api/chat2api/export'));
+  assert.match(source, new RegExp('/api/chat2api/import/preview'));
+  assert.match(source, new RegExp('/api/chat2api/import/merge'));
   assert.match(source, /data-chat2api-account-toggle/);
   assert.match(source, /导入原 Chat2API 数据/);
   assert.match(source, new RegExp('/api/chat2api/import/legacy/preview'));

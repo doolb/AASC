@@ -94,6 +94,42 @@ test('导入先预览，未确认时不写入，确认后合并数据', async ()
   assert.equal((await store.readCollection('modelMappings', [])).length, 1);
 });
 
+test('配置导出按原值保留账号凭据和持久化配置，但不导出 API Key', async () => {
+  const sourceRootDir = await makeTempDir();
+  const source = createChat2ApiDataStore({ rootDir: sourceRootDir });
+  const account = {
+    accountId: 'deepseek-main',
+    providerId: 'deepseek',
+    label: '主账号',
+    credentials: { token: 'token-secret', cookie: 'cookie-secret' },
+    enabled: false,
+    metadata: { region: 'cn' },
+  };
+  const config = { host: '0.0.0.0', port: 9090, enableApiKey: true };
+  const provider = { providerId: 'custom', id: 'custom', name: 'Custom', apiEndpoint: 'https://example.com/api' };
+  const mapping = { model: 'custom-chat', actualModel: 'custom-v1', providerId: 'custom' };
+  await source.writeCollection('config', config);
+  await source.writeCollection('providers', [provider]);
+  await source.writeCollection('accounts', [account]);
+  await source.writeCollection('modelMappings', [mapping]);
+  const apiKey = await source.createApiKey({ label: '不应导出' });
+
+  const exported = await source.exportConfiguration();
+  assert.deepEqual(exported.config, config);
+  assert.deepEqual(exported.providers, [provider]);
+  assert.deepEqual(exported.accounts, [account]);
+  assert.deepEqual(exported.modelMappings, [mapping]);
+  assert.equal(exported.format, 'aasc-chat2api-config');
+  assert.equal(exported.version, 1);
+  assert.equal('apiKeys' in exported, false);
+  assert.doesNotMatch(JSON.stringify(exported), new RegExp(apiKey.value));
+
+  const target = createChat2ApiDataStore({ rootDir: await makeTempDir() });
+  await target.mergeImport(exported, true);
+  assert.deepEqual(await target.readCollection('config', {}), config);
+  assert.deepEqual(await target.getAccount('deepseek-main'), account);
+});
+
 test('一键迁移原 Chat2API data.json，并保留配置与账号凭据', async () => {
   const rootDir = await makeTempDir();
   const legacyDataPath = path.join(rootDir, 'legacy', 'data.json');
