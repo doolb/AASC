@@ -857,6 +857,10 @@ function logModeChange(previousSession, nextSession, metadata = {}) {
     return true;
 }
 
+function shouldPersistSession(metadata = {}) {
+    return metadata.persist !== false;
+}
+
 function setSession(session, metadata = {}) {
     const previousSession = getSession();
     if (session.mode !== undefined) chatSession.mode = session.mode;
@@ -876,7 +880,7 @@ function setSession(session, metadata = {}) {
     }
     if (!chatSession.sessions) chatSession.sessions = {};
     logModeChange(previousSession, chatSession, metadata);
-    saveSession();
+    if (shouldPersistSession(metadata)) saveSession();
     return getSession();
 }
 
@@ -897,7 +901,7 @@ function setMode(mode, target = null, metadata = {}) {
     chatSession.privateTarget = target;
     chatSession.privateSessionId = nextSessionId;
     logModeChange(previousSession, chatSession, metadata);
-    saveSession();
+    if (shouldPersistSession(metadata)) saveSession();
     return getSession();
 }
 
@@ -1603,7 +1607,7 @@ function deleteSession(target, sessionId) {
     return true;
 }
 
-function switchSession(target, sessionId) {
+function switchSession(target, sessionId, metadata = {}) {
     if (!chatSession.sessions || !chatSession.sessions[target]) return false;
     const exists = chatSession.sessions[target].some(s => s.id === sessionId);
     if (!exists) return false;
@@ -1620,7 +1624,7 @@ function switchSession(target, sessionId) {
 
     chatSession.privateTarget = target;
     chatSession.privateSessionId = sessionId;
-    saveSession();
+    if (shouldPersistSession(metadata)) saveSession();
     return true;
 }
 

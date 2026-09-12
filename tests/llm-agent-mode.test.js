@@ -6,6 +6,49 @@ const fs = require('node:fs');
 const chat = require('../src/external/llm/llm-service');
 
 const originalTemplates = chat.getTemplates();
+const originalSession = chat.getSession();
+
+test('测试会话变更使用 persist=false 时不写入用户配置', () => {
+    const originalWriteFileSync = fs.writeFileSync;
+    const writes = [];
+    fs.writeFileSync = (...args) => {
+        writes.push(args[0]);
+    };
+
+    try {
+        chat.setSession({
+            ...originalSession,
+            mode: 'private',
+            privateTarget: '小爱',
+            privateSessionId: 'default',
+            sessions: {
+                小爱: [
+                    { id: 'default', name: '默认会话' },
+                    { id: 'next', name: '新会话' }
+                ]
+            }
+        }, { source: 'test', persist: false });
+        chat.setMode('group', null, { source: 'test', persist: false });
+        chat.setSession({
+            ...originalSession,
+            mode: 'private',
+            privateTarget: '小爱',
+            privateSessionId: 'default',
+            sessions: {
+                小爱: [
+                    { id: 'default', name: '默认会话' },
+                    { id: 'next', name: '新会话' }
+                ]
+            }
+        }, { source: 'test', persist: false });
+        assert.equal(chat.switchSession('小爱', 'next', { source: 'test', persist: false }), true);
+    } finally {
+        chat.setSession(originalSession, { source: 'testRestore', persist: false });
+        fs.writeFileSync = originalWriteFileSync;
+    }
+
+    assert.deepEqual(writes, []);
+});
 
 function createAgentChatHarness() {
     const calls = [];
@@ -84,6 +127,7 @@ function createCodexChatHarness() {
 
 afterEach(() => {
     chat.setTemplates(originalTemplates, { persist: false });
+    chat.setSession(originalSession, { source: 'testRestore', persist: false });
 });
 
 test('测试模板可只更新内存而不写入用户配置', () => {
@@ -166,11 +210,14 @@ test('Pi Agent 请求传递会话键和后续当前消息', async () => {
 
 test('切换群聊和私聊角色时重置旧 Pi 会话', () => {
     const { resets } = createAgentChatHarness();
-    chat.setSession({ ...chat.getSession(), mode: 'group', privateTarget: null, privateSessionId: 'default' });
+    chat.setSession(
+        { ...chat.getSession(), mode: 'group', privateTarget: null, privateSessionId: 'default' },
+        { source: 'test', persist: false }
+    );
 
-    chat.setMode('private', '小爱');
-    chat.setMode('private', '妲己');
-    chat.setMode('group');
+    chat.setMode('private', '小爱', { source: 'test', persist: false });
+    chat.setMode('private', '妲己', { source: 'test', persist: false });
+    chat.setMode('group', null, { source: 'test', persist: false });
 
     assert.deepEqual(
         resets.map(item => item.conversationKey),
@@ -195,9 +242,9 @@ test('切换私聊会话时重置旧 Pi 会话', () => {
                 { id: 'next', name: '新会话' }
             ]
         }
-    });
+    }, { source: 'test', persist: false });
 
-    assert.equal(chat.switchSession('小爱', 'next'), true);
+    assert.equal(chat.switchSession('小爱', 'next', { source: 'test', persist: false }), true);
     assert.equal(
         resets.at(-1).conversationKey,
         JSON.stringify({ mode: 'private', target: '小爱', sessionId: 'default' })

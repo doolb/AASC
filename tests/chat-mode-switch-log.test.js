@@ -42,15 +42,16 @@ test('实际切换聊天模式时打印来源、目标和显示端', () => {
                 mode: 'group',
                 privateTarget: null,
                 privateSessionId: 'default'
-            }, { source: 'testSetup' });
+            }, { source: 'testSetup', persist: false });
             logs.length = 0;
             chat.setMode('private', '小爱', {
                 source: 'controlManual',
-                displayId: 'display-test'
+                displayId: 'display-test',
+                persist: false
             });
         });
     } finally {
-        captureChatLogs(() => chat.setSession(originalSession, { source: 'testRestore' }));
+        captureChatLogs(() => chat.setSession(originalSession, { source: 'testRestore', persist: false }));
     }
 
     const modeLogs = messages.filter(message => message.includes('[Chat] 模式切换'));
@@ -72,17 +73,17 @@ test('重复同步相同聊天模式时不打印模式切换日志', () => {
                 mode: 'private',
                 privateTarget: '小爱',
                 privateSessionId: 'default'
-            }, { source: 'testSetup' });
+            }, { source: 'testSetup', persist: false });
             logs.length = 0;
             chat.setSession({
                 ...chat.getSession(),
                 mode: 'private',
                 privateTarget: '小爱',
                 privateSessionId: 'default'
-            }, { source: 'serverSync' });
+            }, { source: 'serverSync', persist: false });
         });
     } finally {
-        captureChatLogs(() => chat.setSession(originalSession, { source: 'testRestore' }));
+        captureChatLogs(() => chat.setSession(originalSession, { source: 'testRestore', persist: false }));
     }
 
     assert.equal(messages.filter(message => message.includes('[Chat] 模式切换')).length, 0);

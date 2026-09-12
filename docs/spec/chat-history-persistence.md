@@ -51,6 +51,60 @@ flushHistorySave():
     ensurePreviousDayBackup()
 ```
 
+## 会话状态保存策略
+
+```text
+shouldPersistSession(metadata):
+    如果 metadata.persist === false:
+        返回 false
+    返回 true
+
+setSession(session, metadata):
+    保存 previousSession
+    合并 mode、privateTarget、privateSessionId、播放设置和 sessions
+    记录实际模式变化及 metadata.source
+    如果 shouldPersistSession(metadata):
+        saveSession()
+    返回当前会话副本
+
+setMode(mode, target, metadata):
+    保存 previousSession
+    如果模式、目标或私聊 session 发生变化:
+        重置 previousSession 对应的 Pi 会话
+    更新 mode、privateTarget、privateSessionId='default'
+    记录实际模式变化及 metadata.source
+    如果 shouldPersistSession(metadata):
+        saveSession()
+    返回当前会话副本
+
+switchSession(target, sessionId, metadata):
+    校验 target 和 sessionId 对应的会话存在
+    必要时重置旧私聊 Pi 会话
+    更新 privateTarget 和 privateSessionId
+    如果 shouldPersistSession(metadata):
+        saveSession()
+    返回 true
+```
+
+测试会话隔离：
+
+```text
+测试开始:
+    originalSession = getSession()
+
+测试执行模式/会话切换:
+    setSession(..., { source: 'test', persist: false })
+    setMode(..., { source: 'test', persist: false })
+    switchSession(..., { source: 'test', persist: false })
+
+每个测试结束:
+    setSession(originalSession, { source: 'testRestore', persist: false })
+
+约束:
+    测试不得创建、覆盖或删除真实用户目录中的 chat-session.json
+    生产调用未传 persist=false 时保持原有持久化行为
+```
+
 ## 上一天完整配置快照
 
 ```text

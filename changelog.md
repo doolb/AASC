@@ -7741,3 +7741,11 @@
   - 改动文件：`src/external/llm/llm-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/js/websocket.js`、`tests/chat-mode-switch-log.test.js`及对应 design/spec/task 文档。
   - 日志记录旧/新模式、私聊目标、来源和显示端 `displayId`；相同状态的同步不重复打印，旧调用参数保持兼容。
   - 验证结果：新增测试 3/3、聊天会话恢复 5/5、Pi Agent 模式切换 7/7、群聊/私聊语音流程 12/12、显示端语音状态 9/9 通过；服务端语法检查通过，`git diff --check` 通过。
+
+## 聊天会话测试隔离
+
+- ✅ [2026-09-12] 修复 `npm test` 污染聊天模式状态。
+  - `src/external/llm/llm-service.js` 为 `setSession`、`setMode` 和 `switchSession` 增加 `persist=false` 非持久化测试入口；未传该参数的生产调用保持原有保存行为。
+  - `tests/llm-agent-mode.test.js`、`tests/chat-mode-switch-log.test.js`、`tests/group-chat-templates.test.js` 的模式和会话测试改为只修改内存，并在测试结束后恢复原始状态。
+  - 更新 `docs/design/chat-history-persistence.md`、`docs/spec/chat-history-persistence.md` 和 `docs/task/20260912_修复npm测试污染聊天模式状态.md`。
+  - 验证：聊天相关测试 `23/23` 通过；全量 `npm test` `621` 项中 `620` 项通过，唯一失败为既有 `display-native-bridge.test.js` 的 `injectTouch(down)` 契约；全量测试后 `~/.config/aasc-user/chat-session.json` 未生成。

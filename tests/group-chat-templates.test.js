@@ -9,11 +9,13 @@ const voiceCommand = require('../src/apps/web-mediacenter/modules/voice/voice-co
 const serverSource = fs.readFileSync('src/apps/server/boot/server-app.js', 'utf8');
 const controlChatSource = fs.readFileSync('src/apps/web-mediacenter/ui/public/js/chat.js', 'utf8');
 const originalTemplates = chat.getTemplates();
+const originalSession = chat.getSession();
 const originalChatConfig = chat.getConfig();
 const originalAssistantConfig = voiceCommand.getAssistantConfig();
 
 after(() => {
     chat.setTemplates(originalTemplates, { persist: false });
+    chat.setSession(originalSession, { source: 'testRestore', persist: false });
     chat.setConfig(originalChatConfig);
     voiceCommand.init(originalAssistantConfig);
 });
@@ -91,7 +93,7 @@ test('一次性群聊输入不受当前私聊会话模式影响', async () => {
         mode: 'private',
         privateTarget: '妲己',
         privateSessionId: 'private-session'
-    });
+    }, { source: 'test', persist: false });
     try {
         const input = '小爱，请介绍一下今天的安排';
         const result = await voiceCommand.processVoiceCommand(
@@ -111,13 +113,16 @@ test('一次性群聊输入不受当前私聊会话模式影响', async () => {
             mode: 'group'
         });
     } finally {
-        chat.setSession(originalSession);
+        chat.setSession(originalSession, { source: 'testRestore', persist: false });
     }
 });
 
 test('显示端唤醒后的普通群聊文本不受指令模式过滤', async () => {
     const originalSession = chat.getSession();
-    chat.setSession({ ...originalSession, mode: 'group', commandMode: true });
+    chat.setSession(
+        { ...originalSession, mode: 'group', commandMode: true },
+        { source: 'test', persist: false }
+    );
     try {
         const result = await voiceCommand.processVoiceCommand(
             '你在做什么吗？',
@@ -133,13 +138,16 @@ test('显示端唤醒后的普通群聊文本不受指令模式过滤', async ()
             systemPrompt: undefined
         });
     } finally {
-        chat.setSession(originalSession);
+        chat.setSession(originalSession, { source: 'testRestore', persist: false });
     }
 });
 
 test('显示端 active 群聊中的搜索文本应作为普通聊天保留原文', async () => {
     const originalSession = chat.getSession();
-    chat.setSession({ ...originalSession, mode: 'group', commandMode: true });
+    chat.setSession(
+        { ...originalSession, mode: 'group', commandMode: true },
+        { source: 'test', persist: false }
+    );
     try {
         const input = '搜索北京新闻';
         const result = await voiceCommand.processVoiceCommand(
@@ -155,7 +163,7 @@ test('显示端 active 群聊中的搜索文本应作为普通聊天保留原文
         assert.strictEqual(result.message, input);
         assert.strictEqual(result.systemPrompt, undefined);
     } finally {
-        chat.setSession(originalSession);
+        chat.setSession(originalSession, { source: 'testRestore', persist: false });
     }
 });
 
@@ -167,7 +175,7 @@ test('私聊语音聊天应携带当前角色和会话元数据', async () => {
         privateTarget: '小爱',
         privateSessionId: 'default',
         commandMode: true
-    });
+    }, { source: 'test', persist: false });
     try {
         const result = await voiceCommand.processVoiceCommand(
             '你在做什么吗？',
@@ -182,7 +190,7 @@ test('私聊语音聊天应携带当前角色和会话元数据', async () => {
         assert.equal(result.sessionId, 'default');
         assert.equal(result.templateTarget, '小爱');
     } finally {
-        chat.setSession(originalSession);
+        chat.setSession(originalSession, { source: 'testRestore', persist: false });
     }
 });
 
@@ -194,7 +202,7 @@ test('显示端 active 私聊中的搜索文本应保留当前会话元数据', 
         privateTarget: '小爱',
         privateSessionId: 'session-search',
         commandMode: true
-    });
+    }, { source: 'test', persist: false });
     try {
         const input = '搜索北京新闻';
         const result = await voiceCommand.processVoiceCommand(
@@ -212,14 +220,17 @@ test('显示端 active 私聊中的搜索文本应保留当前会话元数据', 
         assert.strictEqual(result.sessionId, 'session-search');
         assert.strictEqual(result.templateTarget, '小爱');
     } finally {
-        chat.setSession(originalSession);
+        chat.setSession(originalSession, { source: 'testRestore', persist: false });
     }
 });
 
 test('等待唤醒状态的搜索命令仍保留独立搜索路由', async () => {
     const originalSession = chat.getSession();
     const originalRouting = voiceCommand.getCommandRouting();
-    chat.setSession({ ...originalSession, mode: 'group', commandMode: true });
+    chat.setSession(
+        { ...originalSession, mode: 'group', commandMode: true },
+        { source: 'test', persist: false }
+    );
     voiceCommand.setCommandRouting({ search: 'llm' });
     try {
         const result = await voiceCommand.processVoiceCommand(
@@ -235,6 +246,6 @@ test('等待唤醒状态的搜索命令仍保留独立搜索路由', async () =>
         assert.strictEqual(result.query, '北京新闻');
     } finally {
         voiceCommand.setCommandRouting(originalRouting);
-        chat.setSession(originalSession);
+        chat.setSession(originalSession, { source: 'testRestore', persist: false });
     }
 });
