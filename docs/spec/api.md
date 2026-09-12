@@ -365,7 +365,9 @@
 ```
 
 ### GET /api/display-version
-显示端代码版本检测接口。显示端前端每 30 秒轮询，返回 `version` 变化即自动 reload 加载最新代码（无需重启 APK）。控制端没有独立的文件变化轮询。
+显示端代码版本检测接口。显示端前端按 AASC 远端配置的间隔轮询，返回 `version` 变化即自动 reload 加载最新代码（无需重启 APK）。默认间隔为 30 秒，控制端可通过 WebSocket 设置 5–300 秒；控制端没有独立的文件变化轮询。
+
+检测间隔配置键为 `display.versionCheckIntervalMs`，由控制端发送 `updateDisplayVersionConfig`，服务端保存并广播 `displayVersionConfig`。不提供独立的配置读取或保存 HTTP 接口。
 
 **响应**:
 ```json

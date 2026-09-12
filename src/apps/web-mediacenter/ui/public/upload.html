@@ -686,6 +686,22 @@
                 </div>
             </div>
 
+            <div class="section" style="margin-top: 24px;">
+                <h2>显示端代码检测</h2>
+                <div class="control-item" style="margin-top: 12px;">
+                    <label for="displayVersionIntervalInput">代码变化检测间隔</label>
+                    <div class="control-buttons" style="align-items: center;">
+                        <input id="displayVersionIntervalInput" type="number" min="5" max="300" step="1" value="30"
+                            style="width: 90px; padding: 8px; box-sizing: border-box;">
+                        <span style="font-size: 13px; color: rgba(255,255,255,0.6);">秒</span>
+                        <button class="control-btn" type="button" onclick="Settings.saveDisplayVersionConfig()">保存</button>
+                    </div>
+                    <div class="routing-hint" style="font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 6px;">
+                        显示端通过 AASC 远端配置同步，支持 5–300 秒；不新增独立配置接口。
+                    </div>
+                </div>
+            </div>
+
             <div class="section">
                 <h2>高级指令路由</h2>
                 <div class="routing-hint" style="font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 15px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">
@@ -1099,6 +1115,7 @@
     <script>
     const Settings = {
         routing: {},
+        displayVersionIntervalMs: 30000,
 
         init() {
             this.updateUI();
@@ -1124,6 +1141,13 @@
             this.updateUI();
         },
 
+        handleDisplayVersionConfig(intervalMs) {
+            const value = Number(intervalMs);
+            if (!Number.isFinite(value)) return;
+            this.displayVersionIntervalMs = Math.round(Math.min(300000, Math.max(5000, value)));
+            this.updateUI();
+        },
+
         updateUI() {
             const updateButton = (type, value) => {
                 const llmBtn = document.getElementById(`routing${type.charAt(0).toUpperCase() + type.slice(1)}Llm`);
@@ -1142,6 +1166,10 @@
             };
             updateButton('weather', this.routing.weather);
             updateButton('search', this.routing.search);
+            const displayVersionInput = document.getElementById('displayVersionIntervalInput');
+            if (displayVersionInput) {
+                displayVersionInput.value = String(this.displayVersionIntervalMs / 1000);
+            }
         },
 
         setRouting(type, value) {
@@ -1153,6 +1181,23 @@
                     routing: update
                 });
             }
+        },
+
+        saveDisplayVersionConfig() {
+            const input = document.getElementById('displayVersionIntervalInput');
+            const seconds = Number(input?.value);
+            if (!Number.isFinite(seconds) || seconds < 5 || seconds > 300) {
+                showToast('代码检测间隔必须是 5–300 秒', 'error');
+                return;
+            }
+            if (!window.WebSocketManager) {
+                showToast('WebSocket 尚未连接，配置未发送', 'error');
+                return;
+            }
+            window.WebSocketManager.send({
+                type: 'updateDisplayVersionConfig',
+                intervalMs: Math.round(seconds * 1000)
+            });
         },
 
         reloadServer() {

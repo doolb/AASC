@@ -10,18 +10,20 @@ const display = fs.readFileSync(path.join(publicRoot, 'display.html'), 'utf8');
 const upload = fs.readFileSync(path.join(publicRoot, 'upload.html'), 'utf8');
 
 function getVersionWatcherSource() {
-    const start = display.indexOf('(function watchDisplayVersion()');
+    const start = display.indexOf('function scheduleDisplayVersionWatch()');
     const end = display.indexOf('        initVoiceRecognition();', start);
     assert.ok(start >= 0, '显示端必须存在文件版本监听器');
     assert.ok(end > start, '显示端文件版本监听器必须位于初始化语音识别之前');
     return display.slice(start, end);
 }
 
-test('显示端文件版本检查成功和失败重试均使用 30 秒', () => {
+test('显示端文件版本检查使用可远端配置的检测间隔', () => {
     const watcher = getVersionWatcherSource();
 
     assert.match(watcher, /fetch\('\/api\/display-version'/u);
-    assert.equal((watcher.match(/setTimeout\(watchDisplayVersion, 30000\)/gu) || []).length, 2);
+    assert.match(watcher, /displayVersionIntervalMs/u);
+    assert.match(watcher, /setTimeout\(watchDisplayVersion, displayVersionIntervalMs\)/u);
+    assert.match(display, /DEFAULT_DISPLAY_VERSION_INTERVAL_MS\s*=\s*30000/u, '必须保留 30 秒默认值');
     assert.doesNotMatch(watcher, /setTimeout\(watchDisplayVersion, 8000\)/u);
 });
 

@@ -98,6 +98,12 @@
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let currentMediaType = 'image';
         let displayWs = null;
+        // 显示端代码版本检查间隔由服务端通过 AASC 远端配置下发，首次连接前使用 30 秒。
+        const DEFAULT_DISPLAY_VERSION_INTERVAL_MS = 30000;
+        const MIN_DISPLAY_VERSION_INTERVAL_MS = 5000;
+        const MAX_DISPLAY_VERSION_INTERVAL_MS = 300000;
+        let displayVersionIntervalMs = DEFAULT_DISPLAY_VERSION_INTERVAL_MS;
+        let displayVersionWatchTimer = null;
         // 显示端重连必须单飞：原生 ASR/TTS 同步阻塞 WebView 时，旧 close 回调不能再创建第二个连接。
         let displayReconnectTimer = null;
         let displayPageActive = true;
@@ -4411,6 +4417,11 @@
                         return;
                     }
 
+                    if (data.type === 'displayVersionConfig') {
+                        applyDisplayVersionConfig(data.intervalMs);
+                        return;
+                    }
+
                     if (data.type === 'controlThemeChanged') {
                         if (window.UiTheme) {
                             window.UiTheme.applyRemoteTheme(data.theme);
@@ -4777,10 +4788,35 @@
         checkSleepMode();
         setInterval(checkSleepMode, 10000);
 
-        // 显示端代码自动刷新：轮询服务器文件版本，mtime 变化即 reload（无需重启 APK）
-        // APK 已禁用 HTTP 缓存 + URL 带时间戳，reload 即加载最新代码
+        // 显示端代码自动刷新：轮询服务器文件版本，mtime 变化即 reload（无需重启 APK）。
+        // APK 已禁用 HTTP 缓存 + URL 带时间戳，reload 即加载最新代码。
         let lastDisplayVersion = 0;
-        (function watchDisplayVersion() {
+        function normalizeDisplayVersionInterval(value) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) return DEFAULT_DISPLAY_VERSION_INTERVAL_MS;
+            return Math.round(Math.min(
+                MAX_DISPLAY_VERSION_INTERVAL_MS,
+                Math.max(MIN_DISPLAY_VERSION_INTERVAL_MS, number)
+            ));
+        }
+
+        function clearDisplayVersionWatchTimer() {
+            if (displayVersionWatchTimer === null) return;
+            clearTimeout(displayVersionWatchTimer);
+            displayVersionWatchTimer = null;
+        }
+
+        function scheduleDisplayVersionWatch() {
+            clearDisplayVersionWatchTimer();
+            displayVersionWatchTimer = setTimeout(watchDisplayVersion, displayVersionIntervalMs);
+        }
+
+        function applyDisplayVersionConfig(intervalMs) {
+            displayVersionIntervalMs = normalizeDisplayVersionInterval(intervalMs);
+            scheduleDisplayVersionWatch();
+        }
+
+        function watchDisplayVersion() {
             fetch('/api/display-version', { cache: 'no-store' })
                 .then(r => r.json())
                 .then(d => {
@@ -4791,10 +4827,12 @@
                         location.reload();
                         return;
                     }
-                    setTimeout(watchDisplayVersion, 30000);
+                    scheduleDisplayVersionWatch();
                 })
-                .catch(() => setTimeout(watchDisplayVersion, 30000));
-        })();
+                .catch(() => scheduleDisplayVersionWatch());
+        }
+
+        watchDisplayVersion();
 
         let currentCapabilities = null;
 

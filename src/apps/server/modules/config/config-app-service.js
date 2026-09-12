@@ -210,6 +210,9 @@ class Config extends DataSnapshot {
         ui: {
             controlTheme: 'dark'
         },
+        display: {
+            versionCheckIntervalMs: 30000
+        },
         cpuAffinity: cloneCpuAffinityConfig(),
         voiceprint: {
             enabled: true,

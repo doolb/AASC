@@ -27,6 +27,7 @@
 | 模块 | 文档 | 说明 |
 |------|------|------|
 | 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪、选择模式 |
+| 显示端代码变化检测远端配置 | [display-version-remote-config.md](design/display-version-remote-config.md) | 控制端通过 AASC 远端配置显示端代码检测间隔 |
 | 控制端 | [control.md](design/control.md) | 媒体管理、显示控制、裁剪预览 |
 | 控制端主题与 UI 控件分类 | [control-ui-theme.md](design/control-ui-theme.md) | 控制端主题切换、交互控件语义分类与统一样式 |
 | 媒体库 | [media-library.md](design/media-library.md) | 多媒体库管理、多协议支持、文件操作 |

@@ -971,6 +971,7 @@ async function startServer() {
                 'tomorrowReminders', 'mediaBatch', 'tts', 'getState', 'media', 'control', 'chat',
                 'chatMessage', 'executeCommands', 'switchProfile',
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
+                'updateDisplayVersionConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'requestDisplayRecording', 'stopDisplayRecording',
                 'playlistRequest', 'playlistControl'
@@ -4638,8 +4639,36 @@ app.delete('/api/device-events/:ip', (req, res) => {
     }
 });
 
-// 显示端代码版本检测：前端轮询此端点，public 目录下任一文件 mtime 变化即自动 reload（无需重启 APK）
-// 递归扫描整个 public 目录，避免新增 js/css 文件时漏检
+// 显示端代码版本检测：前端轮询此端点，public 目录下任一文件 mtime 变化即自动 reload（无需重启 APK）。
+// 递归扫描整个 public 目录，避免新增 js/css 文件时漏检。
+const DEFAULT_DISPLAY_VERSION_INTERVAL_MS = 30000;
+const MIN_DISPLAY_VERSION_INTERVAL_MS = 5000;
+const MAX_DISPLAY_VERSION_INTERVAL_MS = 300000;
+
+function normalizeDisplayVersionInterval(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_DISPLAY_VERSION_INTERVAL_MS;
+    return Math.round(Math.min(MAX_DISPLAY_VERSION_INTERVAL_MS, Math.max(MIN_DISPLAY_VERSION_INTERVAL_MS, number)));
+}
+
+function getDisplayVersionConfig() {
+    return {
+        intervalMs: normalizeDisplayVersionInterval(config.get(
+            'display.versionCheckIntervalMs',
+            DEFAULT_DISPLAY_VERSION_INTERVAL_MS
+        ))
+    };
+}
+
+function broadcastDisplayVersionConfig() {
+    const message = { type: 'displayVersionConfig', ...getDisplayVersionConfig() };
+    broadcastToControls(message);
+    displayClients.forEach((_, displayId) => {
+        sendToDisplay(displayId, message);
+    });
+    return message;
+}
+
 function getDisplayVersion() {
     const publicDir = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public');
     let maxMtime = 0;
@@ -6027,6 +6056,7 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
         ws.send(JSON.stringify({ type: 'controlThemeChanged', theme: getControlTheme() }));
+        ws.send(JSON.stringify({ type: 'displayVersionConfig', ...getDisplayVersionConfig() }));
 
         // 发送日志上报配置
         const reportCfg = getDisplayLogReportConfig(displayId);
@@ -6318,6 +6348,7 @@ wss.on('connection', (ws, req) => {
             stats: systemMonitor.getStats()
         }));
         ws.send(JSON.stringify({ type: 'commandRouting', routing: voiceCommand.getCommandRouting() }));
+        ws.send(JSON.stringify({ type: 'displayVersionConfig', ...getDisplayVersionConfig() }));
         // 发送日志上报配置（控制端需要显示端默认配置和控制端自身配置）
         ws.send(JSON.stringify({ type: 'logReportConfig', target: 'display', enabled: logReportStore.display.enabled, level: logReportStore.display.level }));
         ws.send(JSON.stringify({ type: 'logReportConfig', target: 'control', enabled: logReportStore.control.enabled, level: logReportStore.control.level }));
@@ -6773,6 +6804,14 @@ function handleDisplayMessageFallback(displayId, data, ws) {
 async function handleControlMessageFallback(data, ws) {
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
+
+    if (data.type === 'updateDisplayVersionConfig') {
+        const intervalMs = normalizeDisplayVersionInterval(data.intervalMs);
+        config.set('display.versionCheckIntervalMs', intervalMs);
+        broadcastDisplayVersionConfig();
+        log('配置', `显示端代码检测间隔已更新为 ${intervalMs}ms`);
+        return;
+    }
 
     if (data.type === 'setVoiceRecordingMode') {
         if (!displayData) {

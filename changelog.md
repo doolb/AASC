@@ -1,5 +1,14 @@
 # Web MediaCenter - 变更日志
 
+## 显示端代码变化检测远端配置
+
+- ✅ [2026-09-12] 将显示端代码变化检测间隔接入 AASC 远端配置流程。
+  - 控制端系统设置通过 `/control` WebSocket 发送 `updateDisplayVersionConfig`；服务端规范化 5–300 秒范围，使用 `config.set('display.versionCheckIntervalMs', ...)` 持久化，并广播 `displayVersionConfig` 到控制端和显示端。
+  - 显示端连接时接收当前配置，收到更新后取消旧定时器并按新间隔重新检查 `/api/display-version`；版本变化 reload 和失败重试行为保持不变。
+  - 未新增显示端代码检测配置的 HTTP 读取/保存接口，并将该远端配置流程补充到 `AGENTS.md`、`docs/rules.md`。
+  - 改动文件：`config-app-service.js`、`server-app.js`、`upload.html`、`js/websocket.js`、`display.html`、相关 design/spec/task 文档和契约测试。
+  - 验证：定向测试 5/5、JavaScript 语法检查和 `git diff --check` 通过；全量 `npm test` 595 项通过 594 项，唯一失败为既有 DeX `injectTouch(down)` 契约测试。
+
 ## Node 子显示端 ASR 来源绑定
 
 - ✅ [2026-09-12] 修复 Node 子显示端 ASR 已识别但服务器不继续处理语音指令的问题。

@@ -27,6 +27,7 @@
 | DataSnapshot | [data-snapshot.md](spec/data-snapshot.md) | 数据快照、IFile/IFileSystem接口、RealFileSystem/JsonFile实现 |
 | ViewBind | [viewbind.md](spec/viewbind.md) | 视图绑定、数据驱动UI更新、与DataSnapshot集成 |
 | 显示端选择 | [display-selection.md](spec/display-selection.md) | 单选、全选、自适应选择模式 |
+| 显示端代码变化检测远端配置 | [display-version-remote-config.md](spec/display-version-remote-config.md) | 显示端代码版本检测间隔的 WebSocket 远端配置伪代码 |
 | 设备列表 | [device-list.md](spec/device-list.md) | 设备列表组件，合并 DisplayList 和 DeviceTree |
 | 设备树 | [device-tree.md](spec/device-tree.md) | 树状结构设备列表（已合并到 device-list） |
 | 地图可视化 | [map-visualization.md](spec/map-visualization.md) | 执行者能力可视化、PixiJS渲染器、数据模型 |

@@ -444,6 +444,10 @@ const WebSocketManager = {
             if (window.Settings) {
                 window.Settings.handleRoutingUpdate(data.routing);
             }
+        } else if (data.type === 'displayVersionConfig') {
+            if (window.Settings) {
+                window.Settings.handleDisplayVersionConfig(data.intervalMs);
+            }
         } else if (data.type === 'muteResult') {
             if (window.Chat) {
                 window.Chat.addSystemMessage(data.message);

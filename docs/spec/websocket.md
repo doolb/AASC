@@ -541,6 +541,29 @@ pagehide:
 
 ## 广播函数
 
+### 显示端代码检测间隔远端配置
+
+```
+控制端连接成功:
+    服务端发送 { type: 'displayVersionConfig', intervalMs }
+
+控制端保存:
+    发送 { type: 'updateDisplayVersionConfig', intervalMs }
+    服务端将 intervalMs 规范化到 5000..300000
+    config.set('display.versionCheckIntervalMs', intervalMs)
+    broadcastToControls({ type: 'displayVersionConfig', intervalMs })
+    遍历 displayClients:
+        sendToDisplay(displayId, { type: 'displayVersionConfig', intervalMs })
+
+显示端连接成功:
+    服务端发送当前 displayVersionConfig
+    显示端取消旧版本检测定时器并按 intervalMs 重新调度
+
+约束:
+    /api/display-version 只返回文件版本时间戳
+    不新增配置读取/保存 HTTP 接口
+```
+
 ```
 function broadcastToControls(data):
     message = JSON.stringify(data)
