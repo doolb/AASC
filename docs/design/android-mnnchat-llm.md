@@ -12,6 +12,7 @@
 
 - 不设置默认模型，首次使用前必须由用户选择模型。
 - 每个 APK 本地最多保存一个 MNN 模型。
+- LLM 使用独立的 CPU 核心配置，默认使用 2 个大核、0 个小核，并优先绑定大核。
 - 主服务器维护模型清单，APK 只下载当前选中的模型。
 - 切换模型时等待当前推理完成，再下载、校验和切换新模型。
 - 一个模型名可以映射到多个显示端，并按最短队列分流。
@@ -71,6 +72,7 @@ MNN 源码和生成的 native 库不直接提交大体积构建产物；通过�
 
 - `MnnLlmModelManager` 管理清单、下载、hash 校验、单模型缓存和切换状态。
 - `MnnLlmEngine` 只负责打开一个已校验模型、串行执行推理、发送 token 回调和释放 native 资源。
+- `MnnLlmEngine` 使用独立的 LLM CPU policy，默认选择 2 个大核，不修改 ASR/TTS 的 policy 或线程池。
 - `NativeBridge` 只暴露 JSON/字符串桥接方法，不把 MNN 对象泄漏到 JavaScript。
 - 推理运行在 APK 专用单线程 executor；同一 APK 同时只执行一个 MNN 推理，后续请求由主服务器队列管理。
 - 推理停止、页面重载或 WebSocket 断开时，NativeBridge 发送取消信号并释放对应 requestId。
@@ -79,6 +81,7 @@ MNN 源码和生成的 native 库不直接提交大体积构建产物；通过�
 
 ```text
 mnnLlmStatus() -> JSON
+mnnLlmCpuStatus() -> JSON
 mnnLlmSelectModel(modelId) -> JSON { accepted, status }
 mnnLlmInferAsync(requestId, requestJson) -> JSON { accepted }
 mnnLlmCancel(requestId) -> JSON { accepted }
@@ -291,6 +294,7 @@ GET /v1/models
 - 从主服务器模型清单生成选择框。
 - 选择后发送 `llm.selectModel`，显示下载/切换进度。
 - 显示模型分流池中的 displayId、活动请求数和队列数。
+- 在现有“APK 大小核并发”面板增加 LLM 大核/小核输入，默认显示“大核 2 / 小核 0 / 优先大核”。
 
 APK 的控制页面复用现有控制端页面和设备列表代码，因此控制端和 APK 内控制页使用相同的模型选择、状态回显和错误提示逻辑。普通显示页面只负责上报能力、转发 MNN 请求和回传结果，不增加独立的模型管理 UI。
 
@@ -317,6 +321,27 @@ error          当前模型下载或加载失败
 
 服务器和 APK 都记录 requestId、modelId、displayId、协议类型、排队耗时、推理耗时和最终状态；普通 token 不写高噪声日志。
 
+## LLM CPU 核心配置
+
+LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或 TTS 的数量。服务器配置扩展为：
+
+```json
+{
+  "asr": { "bigCoreCount": 1, "littleCoreCount": 1, "preferBigCores": false },
+  "tts": { "bigCoreCount": 1, "littleCoreCount": 1, "preferBigCores": false },
+  "llm": { "bigCoreCount": 2, "littleCoreCount": 0, "preferBigCores": true }
+}
+```
+
+规则：
+
+- `llm.bigCoreCount` 默认 `2`，`llm.littleCoreCount` 默认 `0`，`llm.preferBigCores` 默认 `true`。
+- 控制端仍通过 `/api/config/cpuAffinity` 保存配置；`cpuConfig` 消息新增 `llm` 字段。
+- APK 收到 `llm` 配置后调用已有 `CpuCluster.policy` 计算实际 CPU mask，并在 MNN 模型加载和推理 worker 上应用 affinity。
+- MNN native 线程数不超过实际选中的 LLM 核心数；设备大核不足时沿用现有 policy 的确定性回退和状态提示。
+- LLM 配置更新只影响后续 MNN 模型加载/推理 worker，不重建 ASR/TTS pool，不改变现有语音录音和播放行为。
+- 控制端状态显示实际选择的大核/小核数量、CPU mask、affinity 是否回退；APK `mnnLlmStatus` 同步返回相同状态。
+
 ## 兼容性与安全
 
 - 旧显示端不声明 `llm` 时保持现有媒体、语音和任务行为，不加入 LLM 分流池。
@@ -337,15 +362,16 @@ error          当前模型下载或加载失败
 7. `/v1/chat/completions` 和 `/v1/responses` 的 JSON、SSE、错误响应符合协议约定。
 8. `/v1/models` 能返回模型目录、已选择显示端和 ready 显示端。
 9. 控制端和 APK 内控制页都能选择模型并显示状态，设备列表标注 LLM 能力。
-10. 旧显示端、无 MNN 库 APK、服务器无模型文件时，原有媒体和语音功能不受影响。
+10. LLM 默认使用 2 个大核、0 个小核；修改 LLM 核心配置不会改变 ASR/TTS 配置或线程池。
+11. 旧显示端、无 MNN 库 APK、服务器无模型文件时，原有媒体和语音功能不受影响。
 
 ## 影响模块
 
 | 模块 | 影响 |
 |------|------|
 | Android APK | MNN native 构建、JNI 引擎、模型管理、NativeBridge、能力上报 |
-| 主服务器 | 模型清单/下载、LLM WebSocket 路由、分流器、OpenAI 网关 |
+| 主服务器 | 模型清单/下载、LLM WebSocket 路由、分流器、OpenAI 网关、LLM CPU 配置广播 |
 | 任务引擎 | `llm-server` 内置常驻任务和 Widget |
-| 显示端前端 | LLM 请求转发、Native 回调、模型状态同步 |
-| 控制端前端 | 模型选择、能力标签、分流状态 |
+| 显示端前端 | LLM 请求转发、Native 回调、模型状态同步、LLM CPU 配置消费 |
+| 控制端前端 | 模型选择、能力标签、分流状态、LLM 大小核配置 |
 | 文档与测试 | design/spec/task、协议和路由回归测试 |
