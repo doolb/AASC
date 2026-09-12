@@ -46,6 +46,7 @@
 | 子服务器 | [sub-server.md](design/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | Android Termux服务器节点 | [android-termux-server.md](design/android-termux-server.md) | Termux Node.js 服务器试运行、节点运行边界与后续演进 |
 | APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](design/android-embedded-node-server.md) | APK 前台 Service、arm64 Runtime、AASC 主动连接和能力裁剪 |
+| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](design/android-display-offline-apk.md) | 独立离线包、内置模型、本机 main 服务和顶层控制端页面 |
 | 服务端语音识别 | [sherpa-asr.md](design/sherpa-asr.md) | ASR 串行识别、native 资源释放、临时文件清理 |
 | ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](design/asr-memory-upload-vad-unification.md) | ASR Buffer 输入、无临时文件处理、网页与 Node 子显示端 VAD 参数同步 |
 | 服务端 TTS | [tts.md](design/tts.md) | 外部 TTS 调用保护、内置 tts.server Wine/Linux HTTP 服务与统一路由 |
@@ -76,6 +77,7 @@
 | Android原生语音识别 | [android-native-asr.md](design/android-native-asr.md) | sherpa-onnx AAR 原生加载 SenseVoice、模型按需下载、服务器中转接入 |
 | Android原生语音生成 | [android-native-tts.md](design/android-native-tts.md) | Microsoft Embedded Speech 离线合成 Xiaoxiao、模型按需下载、显示端生成与服务端回退 |
 | Android原生声纹识别 | [voiceprint.md](design/voiceprint.md) | 外部声纹模型加载、说话人匹配与 APK 端声纹门控 |
+| Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](design/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
 | 正式 Android 原生 OCR 与 YOLO11n | [android-native-ocr-yolo.md](design/android-native-ocr-yolo.md) | 正式显示端单小核 RapidOCR/YOLO11n、服务器路由和任务面板 |
 | 正式 Android 统一模型分发 | [android-model-distribution.md](design/android-model-distribution.md) | 正式 APK 全模型服务器按需下载、hash 校验、缓存和 YOLO 尺寸扩展 |
 | 独立 Android 声纹对比测试 APK | [android-voiceprint-test-apk.md](design/android-voiceprint-test-apk.md) | 通过浏览器访问 APK，测试 Sherpa 声纹及流式 ASR 流程 |
