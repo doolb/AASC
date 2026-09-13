@@ -51,10 +51,14 @@ data class MnnLlmStatus(
  */
 class MnnLlmModelManager(
     context: Context,
-    private val cpuPolicyProvider: () -> CpuPolicy?
+    private val cpuPolicyProvider: () -> CpuPolicy?,
+    private val bundledModelId: String? = null,
+    private val bundledModelRevision: String? = null
 ) {
     private val modelRoot = File(context.filesDir, "models/llm")
     private val activeDirectory = File(modelRoot, "active")
+    // offline APK 的模型由 NodeRuntimeInstaller 安装到这里；该目录是 APK 资产的唯一文件副本。
+    private val bundledModelRoot = File(context.filesDir, "aasc-server/res/models/llm")
     private val stateFile = File(modelRoot, "state.json")
     private val imageRoot = File(context.cacheDir, "llm-images")
     private val remoteModelManager = RemoteModelManager()
@@ -78,6 +82,8 @@ class MnnLlmModelManager(
     private var loadedRevision: String? = null
     private var lastError: String? = null
     private var currentEngine: MnnLlmEngine? = null
+    // 记录当前 native engine 实际加载的目录；CPU runtime 换代必须复用 bundled 或 active 原目录。
+    private var currentModelDirectory: File? = null
     // CPU policy 更新不直接释放当前引擎，而是用代数标记让下一条推理安全换代。
     private var cpuPolicyGeneration = 0L
     private var loadedCpuPolicyGeneration = -1L
@@ -91,6 +97,29 @@ class MnnLlmModelManager(
 
     fun addStatusListener(listener: (MnnLlmStatus) -> Unit) {
         synchronized(stateLock) { stateListeners += listener }
+    }
+
+    /**
+     * offline APK 首次查询状态时自动排队固定 bundled 模型；已有其他模型选择绝不被覆盖。
+     * 状态查询可能被页面多次调用，因此只有没有切换/排队任务时才会创建一次切换任务。
+     */
+    fun ensureDefaultModel() {
+        val defaultModelId = bundledModelId ?: return
+        var shouldStartSwitchExecutor = false
+        synchronized(stateLock) {
+            val shouldLoadSavedDefault = selectedModelId == defaultModelId && currentEngine?.isLoaded() != true
+            val shouldSelectDefault = selectedModelId == null
+            if (!enabled || (!shouldLoadSavedDefault && !shouldSelectDefault)
+                || pendingModelId != null || switching) {
+                return
+            }
+            pendingModelId = defaultModelId
+            pendingBaseUrl = ""
+            switching = true
+            shouldStartSwitchExecutor = true
+            publishStatusLocked()
+        }
+        if (shouldStartSwitchExecutor) switchExecutor.execute { drainSwitchQueue() }
     }
 
     /**
@@ -139,7 +168,7 @@ class MnnLlmModelManager(
     ): JSONObject {
         val normalizedModelId = modelId.trim()
         require(normalizedModelId.isNotEmpty()) { "模型 ID 不能为空" }
-        require(baseUrl.isNotBlank()) { "服务器地址为空，无法下载模型" }
+        require(baseUrl.isNotBlank() || isBundledModelId(normalizedModelId)) { "服务器地址为空，无法下载模型" }
         var rejectedByDisabled = false
         synchronized(stateLock) {
             if (!enabled) {
@@ -297,7 +326,7 @@ class MnnLlmModelManager(
                 val cachedModelId = selectedModelId
                 if (cachedModelId != null
                     && currentEngine?.isLoaded() != true
-                    && baseUrl.isNotBlank()) {
+                    && (baseUrl.isNotBlank() || isBundledModelId(cachedModelId))) {
                     // 释放线程尚未结束时也写入待加载模型，重新启用能够接续本地缓存加载。
                     if (pendingModelId == null) {
                         pendingModelId = cachedModelId
@@ -345,7 +374,8 @@ class MnnLlmModelManager(
                 synchronized(stateLock) {
                     if (releaseRequested && !enabled) {
                         action = 1
-                    } else if (enabled && pendingModelId != null && pendingBaseUrl != null) {
+                    } else if (enabled && pendingModelId != null
+                        && (pendingBaseUrl?.isNotBlank() == true || isBundledModelId(pendingModelId!!))) {
                         action = 2
                         modelId = pendingModelId
                         baseUrl = pendingBaseUrl
@@ -395,29 +425,39 @@ class MnnLlmModelManager(
         var install: RemoteModelInstall? = null
         var candidate: MnnLlmEngine? = null
         try {
-            publishState("downloading", false, modelId)
-            install = remoteModelManager.ensureModel(
-                baseUrl = baseUrl,
-                manifestPath = "/api/llm/model-manifest",
-                downloadPath = "/api/llm/model",
-                modelId = modelId,
-                directory = activeDirectory,
-                includeModelId = true,
-                onProgress = { progress -> publishState("downloading", false, modelId, progress) }
-            )
+            val bundledDirectory = bundledModelDirectory(modelId)
+            val modelDirectory: File
+            if (bundledDirectory != null) {
+                publishState("loading", false, modelId)
+                check(isBundledModelReady(bundledDirectory)) {
+                    "offline APK 内置 MNN-LLM 模型校验失败: $modelId"
+                }
+                modelDirectory = bundledDirectory
+            } else {
+                publishState("downloading", false, modelId)
+                install = remoteModelManager.ensureModel(
+                    baseUrl = baseUrl,
+                    manifestPath = "/api/llm/model-manifest",
+                    downloadPath = "/api/llm/model",
+                    modelId = modelId,
+                    directory = activeDirectory,
+                    includeModelId = true,
+                    onProgress = { progress -> publishState("downloading", false, modelId, progress) }
+                )
+                modelDirectory = install!!.directory
+            }
             if (!isEnabled()) {
-                if (install.changed) restoreInstall(install)
+                install?.takeIf { it.changed }?.let(::restoreInstall)
                 install = null
                 return
             }
-            publishState("loading", false, modelId)
             val loadGeneration = synchronized(stateLock) { cpuPolicyGeneration }
             candidate = MnnLlmEngine(cpuPolicyProvider)
-            check(candidate.load(install.directory)) { "MNN-LLM 模型加载失败" }
+            check(candidate.load(modelDirectory)) { "MNN-LLM 模型加载失败" }
             if (!isEnabled()) {
                 candidate.release()
                 candidate = null
-                if (install.changed) restoreInstall(install)
+                install?.takeIf { it.changed }?.let(::restoreInstall)
                 install = null
                 return
             }
@@ -425,9 +465,12 @@ class MnnLlmModelManager(
             synchronized(stateLock) {
                 oldEngine = currentEngine
                 currentEngine = candidate
+                currentModelDirectory = modelDirectory
                 loadedCpuPolicyGeneration = loadGeneration
                 selectedModelId = modelId
-                selectedRevision = install.model.revision.ifBlank { install.model.id }
+                selectedRevision = install?.model?.revision?.ifBlank { install?.model?.id }
+                    ?: bundledModelRevision?.takeIf { it.isNotBlank() }
+                    ?: modelId
                 loadedModelId = modelId
                 loadedRevision = selectedRevision
                 lastError = null
@@ -435,7 +478,7 @@ class MnnLlmModelManager(
                 publishStatusLocked()
             }
             oldEngine?.release()
-            remoteModelManager.finalizeInstall(install)
+            install?.let(remoteModelManager::finalizeInstall)
             candidate = null
         } catch (error: Exception) {
             candidate?.release()
@@ -465,6 +508,61 @@ class MnnLlmModelManager(
     }
 
     private fun isEnabled(): Boolean = synchronized(stateLock) { enabled }
+
+    private fun isBundledModelId(modelId: String): Boolean = bundledModelId == modelId
+
+    private fun bundledModelDirectory(modelId: String): File? {
+        return if (isBundledModelId(modelId)) {
+            File(bundledModelRoot, modelId)
+        } else {
+            null
+        }
+    }
+
+    /**
+     * 校验 APK 安装目录中的 marker、文件大小和 SHA-256；校验过程分块读取，避免一次性占用模型大小的内存。
+     * marker 是构建时从服务器模型清单生成的固定文件，不能只依赖文件是否存在就报告 ready。
+     */
+    private fun isBundledModelReady(directory: File): Boolean {
+        return try {
+            val canonicalDirectory = directory.canonicalFile
+            if (!canonicalDirectory.isDirectory) return false
+            val marker = JSONObject(File(canonicalDirectory, ".manifest.json").readText())
+            if (marker.optString("modelId") != bundledModelId) return false
+            if (bundledModelRevision?.isNotBlank() == true
+                && marker.optString("revision") != bundledModelRevision) return false
+            val files = marker.optJSONArray("files") ?: return false
+            if (files.length() == 0) return false
+            val requiredNames = setOf(
+                "config.json", "configuration.json", "llm.mnn", "llm.mnn.json",
+                "llm.mnn.weight", "llm_config.json", "tokenizer.txt", "visual.mnn",
+                "visual.mnn.weight"
+            )
+            val foundNames = mutableSetOf<String>()
+            val rootPath = canonicalDirectory.toPath()
+            for (index in 0 until files.length()) {
+                val item = files.optJSONObject(index) ?: return false
+                val name = item.optString("name").trim()
+                val expectedSize = item.optLong("size", -1L)
+                val expectedHash = item.optString("sha256").trim()
+                if (name.isEmpty() || File(name).name != name || expectedSize <= 0L
+                    || !Regex("[0-9a-fA-F]{64}").matches(expectedHash)) {
+                    return false
+                }
+                foundNames += name
+                val file = File(canonicalDirectory, name).canonicalFile
+                if (!file.toPath().startsWith(rootPath)
+                    || !file.isFile
+                    || file.length() != expectedSize
+                    || !ModelHash.matches(file, expectedHash)) {
+                    return false
+                }
+            }
+            requiredNames.all(foundNames::contains)
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     /**
      * 在推理执行器中检查模型身份、CPU policy 代数和 MNN engine 实际线程数；发生变化时只重建
@@ -499,7 +597,7 @@ class MnnLlmModelManager(
             if (loadedModelId != expectedModelId || loadedRevision != expectedRevision) {
                 throw IllegalStateException("MNN-LLM 当前引擎模型与选中模型不一致")
             }
-            modelDirectory = activeDirectory
+            modelDirectory = currentModelDirectory ?: activeDirectory
             loadGeneration = cpuPolicyGeneration
             lastError = null
             publishStatusLocked()
@@ -592,6 +690,7 @@ class MnnLlmModelManager(
             if (!releaseRequested || enabled) return
             engineToRelease = currentEngine
             currentEngine = null
+            currentModelDirectory = null
             loadedCpuPolicyGeneration = -1L
             loadedModelId = null
             loadedRevision = null

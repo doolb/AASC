@@ -19,6 +19,12 @@
 
 ## Android MNNChat LLM 模型分发
 
+- ✅ [2026-09-13] offline APK 内置并默认加载 `qwen3.5-0.8b-claude-opus-distilled-mnn`
+  - offline 模型白名单加入 Qwen 顶层清单、9 个运行文件和可打包 marker；aapt 不支持的隐藏 marker 以 `bundled-manifest.json` 打入 APK，安装器在应用私有目录恢复为 `.manifest.json`。
+  - offline APK 首次无历史选择时自动选择固定 Qwen 模型，MNN native 直接加载 `filesDir/aasc-server/res/models/llm/qwen3.5-0.8b-claude-opus-distilled-mnn`，CPU runtime 换代继续复用同一目录，不复制权重到 `filesDir/models/llm/active`。
+  - 改动文件：`prepare-android-node-runtime.js`、`MnnLlmModelManager.kt`、`NativeBridge.kt`、`MainActivity.kt`、`NodeRuntimeInstaller.kt` 及对应 design/spec/task/测试文档。
+  - 验证：offline APK `assembleDebug` 成功，包名 `com.aasc.display.offline`，APK 内 Qwen 文件 SHA-256 全部匹配；Node 全量回归 695/695 通过。
+
 - ✅ [2026-09-13] 改为服务器统一下载、校验、缓存并分发 MNN-LLM 模型
   - 新增 `npm run download:llm-model -- --id <modelId>` 和 `--force` 强制刷新参数。
   - 新增服务器模型下载服务：固定 ModelScope revision，逐文件校验大小/SHA-256，使用 lock、staging 和原子目录切换，失败保留旧缓存。
@@ -8006,3 +8012,11 @@
   - 保留 `active` 模型目录和 `state.json`，重新启用时从本地缓存加载，不影响 ASR、TTS 或独立 CPU 配置。
   - 改动文件：`display.html`、`NativeBridge.kt`、`MnnLlmModelManager.kt`、对应静态契约测试及 design/spec/task 文档。
   - 验证：定向测试 15/15 通过；`npm run build:apk` 构建成功；APK 已安装并用 `npm run start:apk:display` 无参数启动；真机 Native Heap PSS 约下降 103 MB，模型文件和选中状态保留。
+
+## Android offline APK 真机语音验收
+
+- ✅ [2026-09-13] 在 display 2 完成 offline APK 的 ASR/TTS 真机测试。
+  - 设备：`192.168.1.6:5555`、Samsung SM-N9500、Android 9/API 28；APK `com.aasc.display.offline` 以 `1920x1080` fullscreen 运行于 display 2。
+  - ASR：`你好，小爱.wav` 经显示端原生 ASR 路由返回“你好，小爱。”，HTTP 200，并带回 `asrElapsedMs`/`voiceprintElapsedMs`。
+  - TTS：显示端原生 TTS 生成 `audio/wav`，最近一次文件 `141046` bytes、HTTP 200；控制端播放链路收到 `TTS 当前句完成: ended`。
+  - 关联任务：`docs/task/2026-09-13_android-offline-mnnchat-default-model.md`；定向 Android/Node 测试 30/30 通过。

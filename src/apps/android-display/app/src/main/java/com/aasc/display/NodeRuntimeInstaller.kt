@@ -209,9 +209,30 @@ class NodeRuntimeInstaller(
         replaceFile(root, staging, "package-lock.json")
         replaceDirectory(root, staging, "res/certs")
         replaceDirectory(root, staging, "res/models")
+        materializeBundledModelMarkers(root)
         replaceFile(root, staging, "runtime-mode.txt")
         replaceFile(root, staging, "offline-model-manifest.json")
         seedDirectoryIfAbsent(root, staging, "res/tasks")
+    }
+
+    /**
+     * Android aapt 不携带隐藏 assets；offline 构建将 marker 命名为 bundled-manifest.json，
+     * 安装到应用私有目录后恢复服务器和原生模型管理器约定的 .manifest.json。
+     * 这里只处理约 1.5 KiB 的 marker，不复制任何模型权重。
+     */
+    private fun materializeBundledModelMarkers(root: File) {
+        val modelRoot = File(root, "res/models/llm")
+        modelRoot.listFiles()
+            ?.filter { it.isDirectory }
+            ?.forEach { modelDirectory ->
+                val packagedMarker = File(modelDirectory, "bundled-manifest.json")
+                if (packagedMarker.isFile) {
+                    packagedMarker.copyTo(
+                        File(modelDirectory, ".manifest.json"),
+                        overwrite = true
+                    )
+                }
+            }
     }
 
     private fun preserveMutableDirectories(root: File) {

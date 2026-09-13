@@ -45,7 +45,6 @@ test('显示端布局将控制端按钮放在 WebView 容器的顶层', () => {
     const activity = read(
         'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
     );
-
     assert.match(layout, /controlToggleButton/u);
     assert.match(activity, /controlPageUrl/u);
     assert.match(strings, /name="control_page">控制端/u);
@@ -60,4 +59,29 @@ test('只有离线模式连接后显示控制端按钮', () => {
         activity,
         /controlToggleButton\.visibility\s*=\s*if\s*\(offlineMode\)\s*View\.VISIBLE\s*else\s*View\.GONE/u
     );
+});
+
+test('离线 APK 将 Qwen MNNChat 作为默认模型并直接加载安装目录', () => {
+    const bridge = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt'
+    );
+    const manager = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MnnLlmModelManager.kt'
+    );
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+    const installer = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NodeRuntimeInstaller.kt'
+    );
+
+    assert.match(bridge, /DEFAULT_OFFLINE_LLM_MODEL_ID/u);
+    assert.match(bridge, /ensureDefaultModel\(\)/u);
+    assert.match(manager, /bundledModelId/u);
+    assert.match(manager, /aasc-server[\\/]res[\\/]models[\\/]llm/u);
+    assert.match(manager, /remoteModelManager\.ensureModel/u);
+    assert.match(manager, /candidate\.load\(modelDirectory\)/u);
+    assert.match(activity, /NativeBridge\(wv, audioFocusController, offlineMode\)/u);
+    assert.match(installer, /bundled-manifest\.json/u);
+    assert.match(installer, /\.manifest\.json/u);
 });

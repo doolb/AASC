@@ -23,10 +23,13 @@ import com.aasc.display.vision.VisionRuntime
 class NativeBridge(
     private val webView: WebView,
     private val audioFocusController: AudioFocusController,
+    private val offlineMode: Boolean = false,
     private val mainHandler: Handler = Handler(Looper.getMainLooper())
 ) {
 
     private companion object {
+        const val DEFAULT_OFFLINE_LLM_MODEL_ID = "qwen3.5-0.8b-claude-opus-distilled-mnn"
+        const val DEFAULT_OFFLINE_LLM_MODEL_REVISION = "c1bc31b15286afa708f37f690099d10f21d1cc74"
         // ASR/TTS 统一允许最长 60 秒，保证原生桥、声纹分支和服务端等待边界一致。
         const val ASR_TIMEOUT_SECONDS = 60L
         const val TTS_TIMEOUT_SECONDS = 60L
@@ -176,13 +179,18 @@ class NativeBridge(
     // LLM 使用独立 affinity policy；不复用 ASR/TTS policy，避免模型推理改变语音线程调度。
     @Volatile
     private var llmCpuPolicy: CpuPolicy? = null
-    private val llmModelManager = MnnLlmModelManager(webView.context) {
-        llmCpuPolicy ?: CpuCluster.detect().policy(
-            bigCoreCount = 2,
-            littleCoreCount = 0,
-            preferBigCores = true
-        )
-    }
+    private val llmModelManager = MnnLlmModelManager(
+        context = webView.context,
+        cpuPolicyProvider = {
+            llmCpuPolicy ?: CpuCluster.detect().policy(
+                bigCoreCount = 2,
+                littleCoreCount = 0,
+                preferBigCores = true
+            )
+        },
+        bundledModelId = DEFAULT_OFFLINE_LLM_MODEL_ID.takeIf { offlineMode },
+        bundledModelRevision = DEFAULT_OFFLINE_LLM_MODEL_REVISION.takeIf { offlineMode }
+    )
     // 模型切换、下载、推理队列状态变化都主动通知页面，页面再转发权威状态给服务端。
     init {
         llmModelManager.addStatusListener(::postNativeLlmStatus)
@@ -583,9 +591,12 @@ class NativeBridge(
 
     // ---- MNN-LLM 本地推理桥：模型下载和推理都在 APK 内完成 ----
 
-    /** 返回本 APK 的 MNN-LLM 状态，不设置也不推断默认模型。 */
+    /** 返回本 APK 的 MNN-LLM 状态；offline APK 首次查询时排队内置默认模型。 */
     @JavascriptInterface
-    fun llmStatus(): String = llmModelManager.status().toJson().toString()
+    fun llmStatus(): String {
+        llmModelManager.ensureDefaultModel()
+        return llmModelManager.status().toJson().toString()
+    }
 
     /** 根据服务端 LLM 能力开关释放或恢复模型运行时；磁盘模型缓存始终保留。 */
     @JavascriptInterface

@@ -311,12 +311,50 @@ test('离线 Runtime 只复制正式模型白名单并写入离线元数据', as
         true
     );
     for (const relativePath of OFFLINE_MODEL_FILES) {
-        assert.equal(manifestPaths.includes(`server/res/models/${relativePath}`), true, relativePath);
-        assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'models', relativePath)), true);
+        const outputRelativePath = relativePath.endsWith('/.manifest.json')
+            ? relativePath.replace(/\/\.manifest\.json$/u, '/bundled-manifest.json')
+            : relativePath;
+        assert.equal(manifestPaths.includes(`server/res/models/${outputRelativePath}`), true, relativePath);
+        assert.equal(
+            fs.existsSync(path.join(outputDir, 'server', 'res', 'models', outputRelativePath)),
+            true
+        );
     }
+    assert.equal(
+        fs.existsSync(path.join(
+            outputDir,
+            'server',
+            'res',
+            'models',
+            'llm',
+            'qwen3.5-0.8b-claude-opus-distilled-mnn',
+            'bundled-manifest.json'
+        )),
+        true
+    );
     assert.equal(manifestPaths.some(file => file.includes('test_wavs')), false);
     assert.equal(manifestPaths.some(file => file.endsWith('yolo11n-seg.pt')), false);
     assert.equal(manifestPaths.some(file => file.endsWith('yolo11s.onnx')), false);
+});
+
+test('离线 Runtime 必须包含 MNNChat 默认模型的清单和全部运行文件', () => {
+    const requiredFiles = [
+        'llm/manifest.json',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/.manifest.json',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/config.json',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/configuration.json',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm.mnn',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm.mnn.json',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm.mnn.weight',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm_config.json',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/tokenizer.txt',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/visual.mnn',
+        'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/visual.mnn.weight'
+    ];
+
+    for (const relativePath of requiredFiles) {
+        assert.equal(OFFLINE_MODEL_FILES.includes(relativePath), true, relativePath);
+    }
 });
 
 test('离线 Runtime 缺少白名单模型时拒绝生成 assets', async () => {
@@ -361,8 +399,9 @@ test('离线 Runtime 打包用户任务定义但排除运行结果', async () =>
     const manifestPaths = result.manifest.files.map(file => file.path);
     assert.equal(manifestPaths.includes('server/res/tasks/demo-task/task.js'), true);
     assert.equal(manifestPaths.includes('server/res/tasks/demo-task/config.json'), true);
-    assert.equal(manifestPaths.includes('server/res/tasks/.task-links.json'), true);
+    assert.equal(manifestPaths.includes('server/res/tasks/.task-links.json'), false);
     assert.equal(manifestPaths.some(file => file.includes('/results/')), false);
     assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'task.js')), true);
+    assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', '.task-links.json')), false);
     assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'results')), false);
 });

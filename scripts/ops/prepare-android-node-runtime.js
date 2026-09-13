@@ -30,6 +30,17 @@ const OFFLINE_MODEL_METADATA_FILE = 'offline-model-manifest.json';
 // 正式 Android 显示端的离线模型固定白名单。测试音频、测试 APK 专用模型、
 // YOLO 其他尺寸和原始 PT 文件不进入完整离线包，避免把不可运行或未确认的资源带入生产包。
 const OFFLINE_MODEL_FILES = Object.freeze([
+    'llm/manifest.json',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/.manifest.json',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/config.json',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/configuration.json',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm.mnn',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm.mnn.json',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm.mnn.weight',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/llm_config.json',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/tokenizer.txt',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/visual.mnn',
+    'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/visual.mnn.weight',
     'sensevoice/model.int8.onnx',
     'sensevoice/model.int8.onnx.sha256',
     'sensevoice/tokens.txt',
@@ -199,10 +210,18 @@ async function copyOfflineModels(modelRoot, outputRoot) {
             modelRoot,
             relativePath,
             outputRoot,
-            path.join('server', 'res', 'models', relativePath)
+            offlineModelAssetPath(relativePath)
         ));
     }
     return files;
+}
+
+// aapt/AssetManager 不保留隐藏文件；将模型缓存 marker 改成可打包名称，安装器再恢复运行时约定的 .manifest.json。
+function offlineModelAssetPath(relativePath) {
+    const outputPath = path.join('server', 'res', 'models', relativePath);
+    return relativePath.endsWith('/.manifest.json')
+        ? path.join(path.dirname(outputPath), 'bundled-manifest.json')
+        : outputPath;
 }
 
 async function listOfflineTaskFiles(sourceRoot, relativePath = '') {
@@ -213,6 +232,9 @@ async function listOfflineTaskFiles(sourceRoot, relativePath = '') {
     for (const entry of entries) {
         const childRelativePath = path.join(relativePath, entry.name);
         assertSafeRelativePath(childRelativePath);
+        // Android AssetManager 不支持隐藏文件和以下划线开头的目录；.task-links.json
+        // 还是任务实例运行时生成的状态，更不能把构建机上的历史任务链带进离线 APK。
+        if (isAndroidAssetExcluded(childRelativePath, entry.isDirectory())) continue;
         // results 是设备运行时生成的历史记录，且 latest 可能是软链接；离线包只携带
         // 当前任务定义、配置和根目录的任务关联文件，不把运行结果带进 APK。
         const pathSegments = childRelativePath.split(path.sep);

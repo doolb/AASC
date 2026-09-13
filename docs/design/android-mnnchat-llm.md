@@ -2,19 +2,19 @@
 
 ## 状态
 
-本设计已于 2026-09-12 确认，第一阶段服务端、Android bridge、WebSocket、控制页面、LLM 能力开关和 ModelScope 模型目录实现已落地；2026-09-13 已使用官方 MNN 3.6.1 固定提交构建、安装并在真实设备上完成文本、关闭思考和图片协议验收。本次修正补齐服务器统一下载、缓存校验和本地分发流程，并修复 LLM CPU 配置的 `thread_num` 未进入官方 MNN 主配置、配置变更不能在下一条推理生效的问题。本次增量已完成推理结束后的模型身份与线程数预检查、异步 CPU 配置实际应用确认和失败重试保护，并保留下一次推理前的最终校验。2026-09-13 进一步确认视觉模型的 `mllm.thread_num` 也必须与顶层线程数同步，已完成 native 双 runtime 配置修正。
+本设计已于 2026-09-12 确认，第一阶段服务端、Android bridge、WebSocket、控制页面、LLM 能力开关和 ModelScope 模型目录实现已落地；2026-09-13 已使用官方 MNN 3.6.1 固定提交构建、安装并在真实设备上完成文本、关闭思考和图片协议验收。本次修正补齐服务器统一下载、缓存校验和本地分发流程，并修复 LLM CPU 配置的 `thread_num` 未进入官方 MNN 主配置、配置变更不能在下一条推理生效的问题。本次增量已完成推理结束后的模型身份与线程数预检查、异步 CPU 配置实际应用确认和失败重试保护，并保留下一次推理前的最终校验。2026-09-13 进一步确认视觉模型的 `mllm.thread_num` 也必须与顶层线程数同步，已完成 native 双 runtime 配置修正。当前增量已完成：offline APK 内置并默认加载 `qwen3.5-0.8b-claude-opus-distilled-mnn`；模型只随 APK assets 解压一次，运行时直接使用已安装目录，不再复制权重到在线模型 active 目录。
 本次模型增量已确认接入 `Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`：ModelScope 仓库为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`，固定 revision 为 `c1bc31b15286afa708f37f690099d10f21d1cc74`。该模型包含视觉权重；本次增量补齐按请求关闭思考和标准图片输入到 MNN Vision 的链路。
 
 ## 目标
 
-在现有 Android 显示 APK 中集成阿里 MNN-LLM native 推理引擎，使 APK 能够作为 AASC 的本地 LLM 显示端。主服务器统一提供 OpenAI 兼容协议，服务器根据模型名把请求分配给已加载该模型的在线 APK。模型目录参考 MNNChat 的官方 `assets/model_market.json`，服务器先从固定 ModelScope 仓库下载、校验并缓存模型，APK 只从 AASC 服务器下载当前选中的模型。
+在现有 Android 显示 APK 中集成阿里 MNN-LLM native 推理引擎，使 APK 能够作为 AASC 的本地 LLM 显示端。主服务器统一提供 OpenAI 兼容协议，服务器根据模型名把请求分配给已加载该模型的在线 APK。模型目录参考 MNNChat 的官方 `assets/model_market.json`，在线 APK 只从 AASC 服务器下载当前选中的模型；offline APK 额外内置指定模型并从 APK 安装后的私有目录直接加载。
 
 本功能必须满足：
 
-- 不设置默认模型，首次使用前必须由用户选择模型。
+- 在线 APK 不设置默认模型，首次使用前必须由用户选择模型；offline APK 首次启动自动选择并加载 `qwen3.5-0.8b-claude-opus-distilled-mnn`。
 - 每个 APK 本地最多保存一个 MNN 模型。
 - LLM 使用独立的 CPU 核心配置，默认使用 2 个大核、0 个小核，并优先绑定大核。
-- 主服务器维护模型清单，APK 只下载当前选中的模型。
+- 主服务器维护在线模型清单，在线 APK 只下载当前选中的模型；offline APK 使用构建时内置的固定模型。
 - 切换模型时等待当前推理完成，再下载、校验和切换新模型。
 - 一个模型名可以映射到多个显示端，并按最短队列分流。
 - 指定 `displayId` 时固定调用该显示端，跳过分流。
@@ -27,7 +27,7 @@
 
 - 不把 MNNChat 作为独立 APK 启动或通过外部应用 Intent 调用。
 - 不在 APK 内再开放一个对外 LLM HTTP 端口。
-- 不在第一阶段实现模型自动下载全部模型、默认模型自动选择或主服务器 LLM 回退。
+- 不实现模型自动下载全部模型或主服务器 LLM 回退；offline 默认模型只使用 APK 内置文件，不走下载流程。
 - 不修改既有 ASR、TTS、声纹和媒体路由的协议语义。
 - 不在本功能中引入鉴权系统；沿用当前 AASC 局域网无鉴权边界，并保留后续接入鉴权的扩展点。
 
@@ -57,7 +57,7 @@
               └─ llm.chunk / llm.completed / llm.error
 ```
 
-主服务器是唯一的 OpenAI 协议入口和正式 APK 模型分发入口。APK 显示端只通过已经存在的主服务器显示 WebSocket 接收推理请求，并通过同一连接返回结果；内置 Node.js 子服务器不承载 LLM 协议入口，也不直接访问 ModelScope。
+主服务器是唯一的 OpenAI 协议入口和正式 APK 模型分发入口。APK 显示端只通过已经存在的主服务器显示 WebSocket 接收推理请求，并通过同一连接返回结果；内置 Node.js 子服务器不承载 LLM 协议入口，也不直接访问 ModelScope。offline APK 的模型文件由构建脚本写入 assets，再由 `NodeRuntimeInstaller` 解压到 `filesDir/aasc-server/res/models/llm`；aapt 不支持的隐藏模型 marker 以 `bundled-manifest.json` 打包，安装时仅恢复一个 marker 为 `.manifest.json`，MNN native 直接接收该真实目录，不再复制权重到 `filesDir/models/llm/active`。离线任务只打包可被 Android assets 支持的任务定义，不打包运行时生成的 `.task-links.json`，首次启动缺少该文件时按空任务链运行。
 
 ## MNN 引擎集成
 
@@ -383,7 +383,7 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 ## 验收标准
 
 1. APK 构建包含 arm64 MNN-LLM native 库，native 缺失时构建失败。
-2. 无默认模型时，APK 状态为 `no_model`，`/v1` 请求缺少模型返回 `400`。
+2. 在线 APK 无默认模型时状态为 `no_model`，`/v1` 请求缺少模型返回 `400`；offline APK 首次启动后默认模型为 `qwen3.5-0.8b-claude-opus-distilled-mnn`。
 3. 控制端选择模型后，APK 只下载该模型；下载、hash 校验、加载和能力状态可观察。
 4. 切换模型时当前推理不被中断；新模型失败时旧模型继续可用。
 5. 两个 APK 加载同一模型时，模型请求按最短队列分流。
@@ -459,3 +459,7 @@ HTTP 客户端主动关闭流式响应后，服务端向目标显示端发送 `l
 本地 LLM 网关的 `llm.requestTimeoutMs` 定义为“无响应活动超时”，默认 120 秒。它用于保护模型加载、prefill 或推理卡死场景，不是固定的请求总时长。每收到目标显示端的 `llm.chunk` 都重置计时器，因此持续生成的长回答不会因为总时长超过 120 秒而被截断。
 
 如果在超时时间内没有收到任何 chunk，网关必须通过统一的 `cancel(requestId)` 发送 `llm.cancel`，再拒绝 HTTP 请求并释放路由；不能只释放服务端 pending 状态而让 APK 继续生成。超时取消与客户端主动断开使用相同的 requestId 隔离和原生取消链路。
+
+## offline APK display 2 真机验收
+
+offline APK 安装后通过 Android `--display 2 --windowingMode 1` 启动，实际窗口为 `1920x1080` 全屏。显示端能力确认原生 ASR 和原生 TTS 可用：SenseVoice 测试音频“你好，小爱。”经 `/api/asr/recognize` 路由到 display 2 后返回识别文本及 ASR/声纹耗时；TTS 通过 display 2 原生生成 WAV，并在普通播放链路中收到播放结束事件。该验收只验证现有语音链路，不改变 LLM、ASR 或 TTS 的配置和路由协议。

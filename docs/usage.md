@@ -134,7 +134,22 @@ export AASC_ANDROID_NODE_PACKAGE_DIR="$PWD/.local/android-node-package"
 npm run build:apk:offline
 ```
 
-当前离线包内置正式运行集约 430.4 MiB 模型（SenseVoice、streaming Zipformer、声纹 base FP32 + pyannote、GTCRN、嵌入式 TTS、RapidOCR、默认 YOLO11n）。显示页右上角的“控制端”按钮可弹出或隐藏同源控制端页面；普通 APK 不受此构建命令影响。
+如果发布包目录还没有生产依赖，先在该目录执行一次：
+
+```bash
+npm ci --omit=dev --ignore-scripts --prefix "$AASC_ANDROID_NODE_PACKAGE_DIR"
+```
+
+离线 APK 可显式启动到第二显示屏（例如 Android 虚拟 Desktop display 2）：
+
+```bash
+adb -s <设备序列号> shell am start --display 2 --windowingMode 1 \
+  -n com.aasc.display.offline/com.aasc.display.MainActivity
+```
+
+真机验收时，ASR 可上传 `res/models/sensevoice/test_wavs/你好，小爱.wav` 验证原生识别；TTS 可调用 `/api/tts/generate` 后检查返回的 `audio/wav`，再发送控制端 `tts` 播放消息验证播放结束事件。
+
+当前离线包内置正式运行集约 949.3 MiB 模型（含默认的 `qwen3.5-0.8b-claude-opus-distilled-mnn`、SenseVoice、streaming Zipformer、声纹 base FP32 + pyannote、GTCRN、嵌入式 TTS、RapidOCR 和 YOLO11n）。offline APK 首次启动无历史选择时会直接从 APK 安装目录加载该 Qwen 模型，不复制到在线模型 active 目录。显示页右上角的“控制端”按钮可弹出或隐藏同源控制端页面；普通 APK 不受此构建命令影响。
 
 Android 9/API 28 设备首次启动 APK 时，会弹出“照片、媒体内容和文件”共享存储授权框。选择允许后，APK 内置 Node 子服务器即可按媒体库配置访问 `/storage/emulated/0/` 及其子目录，例如：
 

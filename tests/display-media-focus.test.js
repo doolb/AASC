@@ -35,7 +35,7 @@ test('APK Kotlin 恢复 Git 基线的原生音频焦点桥接', () => {
     assert.match(bridge, /fun abandonAudioFocus\(\)/);
     assert.match(activity, /AudioFocusController/);
     assert.match(activity, /audioFocusController\.request\(\)/);
-    assert.match(activity, /NativeBridge\(wv, audioFocusController\)/);
+    assert.match(activity, /NativeBridge\(wv, audioFocusController(?:, offlineMode)?\)/);
 });
 
 test('外部焦点回归时不重建 WebView 视频渲染面', () => {

@@ -1,6 +1,6 @@
 # Android MNNChat 本地 LLM 实现规格
 
-状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。服务器统一下载/缓存/分发修正已纳入本规格；LLM CPU 配置的顶层与 `mllm` 双 runtime `thread_num` 传递和下一请求 runtime 换代修正已完成构建、安装和短请求验收。本次增量已完成推理结束后的模型身份/线程数预检查、下一次推理前最终校验、实际运行时状态上报以及异步 CPU 配置失败重试保护。
+状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。服务器统一下载/缓存/分发修正已纳入本规格；LLM CPU 配置的顶层与 `mllm` 双 runtime `thread_num` 传递和下一请求 runtime 换代修正已完成构建、安装和短请求验收。本次增量已完成推理结束后的模型身份/线程数预检查、下一次推理前最终校验、实际运行时状态上报以及异步 CPU 配置失败重试保护。本次离线 APK 增量已完成：内置 `qwen3.5-0.8b-claude-opus-distilled-mnn`，默认从 APK assets 解压后的 `filesDir/aasc-server/res/models/llm` 直接加载；offline 构建、APK 内容和全量 Node 回归均已验证。
 本次增量：显示端 LLM 能力开关、MNNChat 参考模型目录、ModelScope 固定 revision 代理、`enable_thinking` 和视觉图片消息已实现；定向契约测试 13/13 通过。
 模型增量：新增 `qwen3.5-0.8b-claude-opus-distilled-mnn`，ModelScope source 固定为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN@c1bc31b15286afa708f37f690099d10f21d1cc74`；清单包含 `llm.*` 与 `visual.*` 运行文件。本次任务补齐 `enable_thinking=false` 和图片消息到 MNN `MultimodalPrompt` 的实现。
 
@@ -101,7 +101,7 @@ GET /api/llm/model/:modelId/:filename
   reject path traversal, symlink escape, unknown file and hash mismatch
 ```
 
-模型清单只声明可下载模型，不产生默认模型。ModelScope `resolve` URL 只供服务器下载器使用，不返回给 APK，也不接受客户端任意上游地址。模型文件不随 APK 强制打包；大文件和生成的 native 产物不提交到 Git。
+模型清单只声明在线可下载模型；在线 APK 不产生默认模型，offline APK 由构建变体声明固定的 `qwen3.5-0.8b-claude-opus-distilled-mnn` 默认模型。ModelScope `resolve` URL 只供服务器下载器使用，不返回给 APK，也不接受客户端任意上游地址。offline APK 的模型文件由离线构建脚本显式加入 assets，大文件和生成的 native 产物不提交到 Git。
 
 ### 4.2 服务器下载器与 npm 命令
 
@@ -137,7 +137,7 @@ Qwen3.5 视觉推理模型的运行清单固定为：`config.json`、`configurat
 
 ### 4.3 APK 模型状态机
 
-每个 APK 同时只保存一个模型的有效选择；`selectedModelId == null` 是合法初始状态。
+在线 APK 同时只保存一个模型的有效选择；`selectedModelId == null` 是合法初始状态。offline APK 在没有历史选择时自动将 `qwen3.5-0.8b-claude-opus-distilled-mnn` 作为选择，但模型目录直接指向安装器解压的 bundled 目录，不进入在线下载的 `active` 目录。
 
 ```text
 filesDir/models/llm/
@@ -145,6 +145,10 @@ filesDir/models/llm/
   staging/   // 新模型完整下载和校验目录
   backup/    // 原子切换期间的旧模型
   state.json // selectedModelId、revision、hash 状态
+
+filesDir/aasc-server/res/models/llm/
+  manifest.json
+  qwen3.5-0.8b-claude-opus-distilled-mnn/ // offline APK bundled model
 ```
 
 ```text
@@ -165,6 +169,30 @@ selectModel(modelId):
     persist selectedModelId and revision
     release backup after the new engine is ready
     report llm.status with selected model and ready=true
+
+ensureOfflineDefaultModel():
+  if offline mode and selectedModelId is null:
+    require installed .manifest.json contains every model file with expected size/hash
+    enqueue the fixed qwen3.5-0.8b-claude-opus-distilled-mnn model
+
+offline asset marker:
+  package source .manifest.json as bundled-manifest.json because aapt excludes hidden assets
+  after asset extraction, NodeRuntimeInstaller restores bundled-manifest.json as .manifest.json
+
+offline task assets:
+  listOfflineTaskFiles skips Android-unsupported hidden paths, including the runtime state file .task-links.json
+  package task definitions and configuration only; do not package task instance results or task-link state
+  when TaskIO.loadTaskLinks() sees the missing .task-links.json, use an empty task-link map
+
+switchModel(modelId):
+  wait until inferenceCount == 0
+  if modelId is the configured offline bundled model and its installed directory is valid:
+    load the installed directory directly with MNN-LLM
+    do not call RemoteModelManager.ensureModel
+    do not copy files to filesDir/models/llm/active
+  else:
+    use the online staging/active atomic download flow above
+  persist selectedModelId and revision only after the candidate engine is ready
 ```
 
 切换期间的新选择覆盖尚未开始的旧选择；不会中断正在执行的推理。下载失败、校验失败或加载失败都不能留下半成品，也不能自动回退到主服务器。
@@ -668,3 +696,28 @@ cancel(requestId, error):
 ```
 
 `requestTimeoutMs` 是无 chunk 活动超时，覆盖首 token、prefill 和生成间隙；持续收到 chunk 的长请求不受固定总时长限制。超时必须复用 `cancel(requestId)`，确保 APK 停止 native 推理，不能只执行 `fail + release`。
+
+## 17. offline APK display 2 真机语音验收
+
+```text
+verifyOfflineVoice(displayId = 2):
+  启动 com.aasc.display.offline/MainActivity 到 display 2 的 fullscreen window
+  等待 display WebSocket capabilities.voiceRecognition == true
+  POST /api/asr/recognize multipart audio=你好，小爱.wav, displayId=当前 displayId
+  require HTTP 200
+  require response.status == "success"
+  require response.text 或 response.segments 非空
+  记录 asrElapsedMs 和 voiceprintElapsedMs
+
+  POST /api/tts/generate { text: "TTS 真机复测" }
+  require HTTP 200
+  require response.audioUrl 非空
+  GET response.audioUrl
+  require Content-Type == "audio/wav" and Content-Length > 0
+
+  通过控制端发送 { type: "tts", displayId, action: "play", text }
+  require display 日志收到 ttsGenerating 和 ttsResult
+  require 网页播放日志收到 "TTS 当前句完成: ended"
+```
+
+本次真机结果：ASR 识别为“你好，小爱。”；TTS 生成 WAV 为 `141046` bytes，播放完成事件已收到。测试设备为 `192.168.1.6:5555` 的 SM-N9500，APK 实际运行于 display 2。

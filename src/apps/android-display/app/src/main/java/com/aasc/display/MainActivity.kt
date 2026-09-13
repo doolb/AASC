@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String, baseUrl: String) {
         val wv = DisplayWebView(this)
-        val bridge = NativeBridge(wv, audioFocusController)
+        val bridge = NativeBridge(wv, audioFocusController, offlineMode)
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")
         wv.webViewClient = createWebViewClient(bridge, baseUrl, true)
