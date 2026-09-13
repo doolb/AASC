@@ -1,5 +1,20 @@
 # Web MediaCenter - 变更日志
 
+## Android MNNChat LLM
+
+- ✅ [2026-09-13] 修复本地 LLM 固定总时长超时中断
+  - `llm.requestTimeoutMs` 改为无 chunk 活动超时，默认 120 秒；每个 `llm.chunk` 都会续期，持续生成的长回答不会因总时长超过 120 秒被截断。
+  - 超时统一复用 `cancel(requestId)`，向 APK 发送 `llm.cancel` 后再释放服务端 pending 和路由，避免网关报错后 native 推理仍继续运行。
+  - 验证：LLM 定向测试 15/15；执行 `npm run restart:server` 后 Qwen3.5 真机流式请求正常返回 chunk 和 `[DONE]`。
+
+- ✅ [2026-09-13] 修复客户端断开后 Android MNN 原生推理继续生成
+  - 显示端按 `requestId` 管理排队和执行中的 LLM 请求；客户端断开后，排队请求不再启动，执行中的请求通过 JNI session 级原子取消标志在下一个 token 回调边界停止，并抑制 `llm.completed`。
+  - 验证：固定 MNN revision `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 下执行 `npm run upload:apk`，成功安装到 `192.168.1.6:5555`；真实断开请求记录 `llm.cancel` 且没有完成事件，后续正常请求返回 `[DONE]`。
+
+- ✅ [2026-09-13] 修复 LLM 流式请求被误判为客户端断开
+  - `server-app.js` 的 SSE 断开监听改为绑定 HTTP 响应 `res.close`，避免请求体读取完成后错误触发 `LLM_CLIENT_DISCONNECTED`；`chatv2.py` 增加 HTTP/SSE 错误显示和 `[DONE]` 处理。
+  - 验证：服务器语法检查通过，LLM 定向测试 20/20 通过；使用 `npm run restart:server` 重启后，Qwen3.5 真实流式请求正常返回 chunk 和 `[DONE]`。
+
 ## 显示端摄像头拍照黑帧修复
 
 - ✅ [2026-09-13] 修复 Android WebView 单次拍照黑图而实时预览正常的问题。
@@ -26,6 +41,33 @@
   - 验证：摄像头/图片聊天/录音回归测试 `10/10` 通过，相关 JavaScript `node --check` 通过；APK 构建因环境缺少 `AASC_ANDROID_NODE_RUNTIME_DIR` 和 `JAVA_HOME` 未完成。
 
 ## Android MNNChat 本地 LLM 构建
+
+- ✅ [2026-09-13] 本地 MNN-LLM 支持关闭思考和图片理解。
+  - 服务端支持 `enable_thinking`、Chat `image_url`、Responses `input_image` 的 data URL 校验和结构化错误；APK 使用固定 MNN 基线配置按请求切换思考模式，兼容 Qwen3.5 固定 `<think>` 模板并过滤 `<think>`/`<thinking>` 输出。
+  - APK 通过 `VisionImageCodec` 生成请求级临时 PNG，JNI 使用官方 `PromptImagePart`/`MultimodalPrompt` 进入 `visual.mnn`，请求结束、错误或取消均清理图片目录。
+  - 验证：定向 Node 测试 13/13；`npm run build:apk` 成功；APK 安装到 `192.168.1.6:5555` 后以 `npm run start:apk:display` 无参数启动；Chat/Responses 文本和图片请求均完成真机验证。
+  - 相关 design/spec/task：`android-mnnchat-llm.md`、`2026-09-13_LLM不思考与图片理解支持.md`。
+
+- ✅ [2026-09-13] LLM 流式 chunk 日志改为生成完成后输出。
+  - 服务端继续实时转发 `llm.chunk`，但按 `displayId + requestId` 临时聚合，不再逐条打印；`llm.completed` 时只记录一次完整文本，错误和断线会清理缓冲。
+  - 相关代码：`server-app.js`、`tests/llm-chunk-log.test.js` 及对应 design/spec/task 文档。
+  - 验证：日志契约测试 1/1、服务端语法检查通过；远端服务重启后 `/v1/models` 返回 HTTP 200。
+
+- ⏳ [2026-09-13] 开始为 MNN-LLM 显式设置单次推理线程数。
+  - `MnnLlmEngine` 根据 LLM CPU policy 显式传入 `thread_num`，默认值为实际选中的核心数（默认 2 个大核）；JNI 入口拒绝缺失或非法线程数。
+  - LLM 状态和 CPU 状态增加 `threadCount`、`selectedCpus`、`cpuMask` 与 affinity 回退信息；ASR/TTS 配置和线程池不变。
+  - 验证：静态契约测试通过；远端固定环境 `npm run build:apk` 成功，APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动；实际推理线程数仍待真机请求核对。
+
+- ✅ [2026-09-13] LLM 能力禁用时释放显示端模型运行内存
+  - 控制端关闭 `capabilities.llm.enabled` 后，显示端等待在途推理/切换完成并释放 `MnnLlmEngine`；已下载模型文件、`state.json` 和选中模型状态保留。
+  - 重新启用优先从本地 `active` 缓存加载，不影响 ASR/TTS 和各自 CPU affinity；服务端同步显示 `disabled/ready=false` 并移出路由池。
+  - 验证：APK 构建成功；真机关闭状态和缓存保留验证通过；重新开启进入 `switching → loading → ready`；相关契约测试 15/15 通过。
+
+- ✅ [2026-09-13] 增加外部模型名到内部 modelId 的映射并验证两种协议
+  - LLM 清单支持 `aliases`；Qwen3.5 增加 `qwen3.5` 和完整展示名别名，服务端冲突时返回 `MODEL_ALIAS_CONFLICT`。
+  - 网关在校验、路由和发送 `llm.request` 前统一转换为内部 `modelId`，HTTP 响应保留客户端请求的外部模型名；APK 不需要改动。
+  - 增加 `/v1/chat/responses` 兼容入口，与 `/v1/responses` 共用 Responses 协议处理器。
+  - 验证：LLM 契约测试 9/9；`/v1/chat/completions`、`/v1/responses`、`/v1/chat/responses` 均使用 Qwen3.5 真机显示端返回 200。
 
 - ✅ [2026-09-13] 本地 LLM 网关创建实例复用任务通用流程
   - `task-panel.js` 按 `mode: service` 统一判断服务型内置任务，`llm-server` 点击创建实例进入既有通用配置页。
@@ -7911,3 +7953,11 @@
   - 控制端临时页签增加角色选择和重新开始按钮，选择通过 `startTemporaryConversation` WebSocket 消息完成，普通聊天只发送服务端会话 ID。
   - 更新 `server-app.js`、语音会话解析、`llm-service.js`、控制端聊天 UI、design/spec/task 文档及角色契约测试。
   - 验证：相关 JavaScript `node --check`、唤醒回归 `11/11`、临时角色契约 `2/2` 通过；全量 `npm.cmd test` 受工作区既有环境/契约失败影响未完成收敛。
+
+## Android MNNChat 本地 LLM
+
+- ✅ [2026-09-13] LLM 能力关闭时释放显示端模型运行时内存，并保留模型缓存。
+  - 控制端下发 `capabilities.llm.enabled=false` 后，APK 等待当前推理和切换任务完成，释放 MNN-LLM native engine；状态上报为 `disabled/ready=false`。
+  - 保留 `active` 模型目录和 `state.json`，重新启用时从本地缓存加载，不影响 ASR、TTS 或独立 CPU 配置。
+  - 改动文件：`display.html`、`NativeBridge.kt`、`MnnLlmModelManager.kt`、对应静态契约测试及 design/spec/task 文档。
+  - 验证：定向测试 15/15 通过；`npm run build:apk` 构建成功；APK 已安装并用 `npm run start:apk:display` 无参数启动；真机 Native Heap PSS 约下降 103 MB，模型文件和选中状态保留。

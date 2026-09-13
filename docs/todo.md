@@ -59,14 +59,9 @@
 
 ## Android APK
 
-- ⏳进行中 [2026-09-13] 外部模型名映射与本地 LLM 两种协议验证
-  - 为 Qwen3.5 增加外部别名到内部 `modelId` 的解析，验证 Chat Completions、Responses 及兼容路径。
-  - 关联设计：`docs/design/android-mnnchat-llm.md`；实现伪代码：`docs/spec/android-mnnchat-llm.md`；任务：`docs/task/2026-09-13_外部模型名映射与LLM协议验证.md`。
-
-- ⏳待现场验收 [2026-09-12] Android MNNChat 本地 LLM 真机验收
-  - 官方 MNN 3.6.1 固定 native、arm64-v8a Debug APK 和 16 KB ELF 对齐产物已生成；固定提交为 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`。
-  - 待使用 ModelScope 真实模型（含 `qwen3.5-0.8b-claude-opus-distilled-mnn`）和至少两个显示端验证模型下载、切换等待、流式推理、LLM 能力开关、最短队列、目标不可用不回退、断线恢复和 LLM CPU affinity；本次已修复证书指纹与状态显示问题；图片输入链路另行验收。
-  - 设计：`docs/design/android-mnnchat-llm.md`；实现伪代码：`docs/spec/android-mnnchat-llm.md`；任务：`docs/task/2026-09-12_Android-MNNChat本地LLM实施计划.md`。
+- ⏳进行中 [2026-09-13] Android MNN-LLM 显式设置单次推理线程数
+  - 当前默认 LLM policy 为 2 个大核、0 个小核，但 MNN native `thread_num` 尚未显式覆盖；需更新 MNN options、状态字段和 APK 真机验收。
+  - 设计：`docs/design/android-mnnchat-llm.md`；实现伪代码：`docs/spec/android-mnnchat-llm.md`；任务：`docs/task/2026-09-13_LLM显式线程数与核心绑定.md`。
 
 - ⏳待现场验收 [2026-09-08] 完成 APK 内置 Node.js 子服务器的生产依赖打包和真机业务验收
   - Node Runtime、安装器、Service、主服务器主动连接和能力裁剪已实现；项目已内置 Android 可用的 arm64 Node Runtime，构建时仍需提供生产 `node_modules`。
