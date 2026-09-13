@@ -4,11 +4,11 @@
       "instanceId": "728486a7",
       "taskName": "time.announce",
       "status": "running",
-      "timestamp": 1789134364537,
+      "timestamp": 1789279369985,
       "target": "server",
       "mode": "service",
       "params": {
-        "enabled": true,
+        "enabled": false,
         "interval": 15,
         "repeatCount": 3,
         "repeatDelay": 3

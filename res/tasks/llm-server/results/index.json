@@ -1,26 +1,22 @@
 {
   "instances": [
     {
-      "instanceId": "c12d152e",
-      "taskName": "chat2api.proxy",
+      "instanceId": "40f3b6b1",
+      "taskName": "llm-server",
       "status": "running",
-      "timestamp": 1789279369962,
+      "timestamp": 1789279369975,
       "target": "server",
       "env": "auto",
       "mode": "service",
       "displayId": null,
-      "params": {
-        "host": "127.0.0.1",
-        "port": 8083,
-        "enableApiKey": "false"
-      },
+      "params": {},
+      "routing": null,
+      "requiredCapabilities": [],
       "taskType": "builtin",
-      "builtinId": "chat2api.proxy",
+      "builtinId": "llm-server",
       "entryFile": null,
       "stage": "running",
       "progress": 100,
-      "routing": null,
-      "requiredCapabilities": [],
       "routeTarget": "server",
       "routeReason": "explicit-server",
       "routeNodeId": "main-server"

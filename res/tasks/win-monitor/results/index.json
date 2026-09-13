@@ -4,7 +4,7 @@
       "instanceId": "ce2c4a03",
       "taskName": "win-monitor",
       "status": "running",
-      "timestamp": 1789134364556,
+      "timestamp": 1789279369990,
       "env": "auto",
       "mode": "service",
       "displayId": null,
@@ -24,8 +24,8 @@
     {
       "instanceId": "3ed3e09e",
       "taskName": "win-monitor",
-      "status": "display_offline",
-      "timestamp": 1783343588528,
+      "status": "pending_forward",
+      "timestamp": 1789216611026,
       "target": "subdisplay",
       "env": "auto",
       "mode": "service",
@@ -34,9 +34,12 @@
       "taskType": "user",
       "builtinId": null,
       "entryFile": "task.js",
-      "stage": "display_offline",
-      "progress": 100,
-      "error": "显示端已断开连接"
+      "error": "显示端已断开连接",
+      "routeTarget": "subdisplay",
+      "routeReason": "explicit-display",
+      "routeNodeId": null,
+      "routing": null,
+      "requiredCapabilities": []
     },
     {
       "instanceId": "28d32243",
