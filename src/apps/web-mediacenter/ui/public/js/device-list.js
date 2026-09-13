@@ -17,9 +17,124 @@ const DeviceList = {
     displayRecordingByDisplay: new Map(),
     displayRecordingPlaybackByDisplay: new Map(),
     displayRealtimePlaybackByDisplay: new Map(),
+    // 每个显示端只允许一个摄像头会话；实时帧只保留最后一帧，不在控制端累积。
+    displayCameraDevicesByDisplay: new Map(),
+    displayCameraByDisplay: new Map(),
+    // LLM 模型清单由服务端统一下发；每个显示端只保存当前选择的一项。
+    llmModelManifest: { models: [] },
 
     getDisplays() {
         return this.list || [];
+    },
+
+    setLlmModelManifest(manifest) {
+        this.llmModelManifest = manifest && Array.isArray(manifest.models)
+            ? manifest
+            : { models: [] };
+        this.render();
+    },
+
+    handleLlmStatus(data) {
+        const displayId = data.displayId;
+        const display = this.list.find((item) => item.id === displayId);
+        if (!display) return;
+        display.llm = {
+            ...(display.llm || {}),
+            ...data
+        };
+        if (display.capabilities) {
+            const previousCapability = display.capabilities.llm || {};
+            display.capabilities.llm = {
+                ...previousCapability,
+                supported: data.supported === true,
+                engine: data.engine || 'mnn-llm',
+                ready: data.ready === true,
+                selectedModelId: data.selectedModelId || null
+            };
+        }
+        // LLM 状态只影响模型面板，避免完整重绘设备/VAD/摄像头卡片导致下拉列表被销毁。
+        this.renderLlmModelPanel();
+    },
+
+    selectLlmModel(displayId, modelId) {
+        const normalizedModelId = String(modelId || '').trim();
+        const display = this.list.find((item) => item.id === displayId);
+        if (display?.capabilities?.llm?.enabled === false) {
+            if (window.showToast) window.showToast('该显示端 LLM 能力已禁用', 'warning');
+            return;
+        }
+        if (!normalizedModelId || !window.WebSocketManager?.ws ||
+            window.WebSocketManager.ws.readyState !== WebSocket.OPEN) return;
+        window.WebSocketManager.ws.send(JSON.stringify({
+            type: 'llm.selectModel',
+            displayId,
+            modelId: normalizedModelId
+        }));
+        if (window.showToast) window.showToast('LLM 模型切换已排队', 'info');
+    },
+
+    renderLlmModelPanelHtml() {
+        const display = this.list.find((item) => item.id === window.currentDisplayId);
+        if (!display) {
+            return '<div class="llm-model-card empty-list">请选择显示端</div>';
+        }
+
+        const llm = {
+            ...(display.llm || {}),
+            ...(display.capabilities?.llm || {})
+        };
+        const llmEnabled = llm.enabled !== false;
+        const models = Array.isArray(this.llmModelManifest.models)
+            ? this.llmModelManifest.models.filter((model) => model.enabled !== false)
+            : [];
+        const statusText = llm.state === 'ready'
+            ? '就绪'
+            : (llm.state === 'switching' || llm.state === 'downloading' || llm.state === 'loading'
+                ? '切换中'
+                : (llm.state === 'error' ? '错误' : '未选择'));
+        if (!llmEnabled) {
+            return `<div class="llm-model-card">
+                <div class="llm-model-card-header">
+                    <strong>${this.escapeHtml(this.getDisplayLabel(display))}</strong>
+                    <span class="llm-status unsupported">LLM 已禁用</span>
+                </div>
+                <div class="llm-model-card-meta">当前模型：${this.escapeHtml(llm.selectedModelId || '未选择')}</div>
+            </div>`;
+        }
+        if (llm.supported !== true) {
+            return `<div class="llm-model-card">
+                <div class="llm-model-card-header">
+                    <strong>${this.escapeHtml(this.getDisplayLabel(display))}</strong>
+                    <span class="llm-status unsupported">LLM 不可用</span>
+                </div>
+            </div>`;
+        }
+        const options = models.map((model) => {
+            const id = this.escapeHtml(model.modelId || model.id || '');
+            const label = this.escapeHtml(model.displayName || model.modelId || model.id || '未命名模型');
+            const selected = (model.modelId || model.id) === llm.selectedModelId ? ' selected' : '';
+            const disabled = model.ready === false ? ' disabled' : '';
+            const suffix = model.ready === false ? '（未准备好）' : '';
+            return `<option value="${id}"${selected}${disabled}>${label}${suffix}</option>`;
+        }).join('');
+        const displayId = this.escapeHtml(display.id);
+        return `<div class="llm-model-card" onclick="event.stopPropagation()">
+            <div class="llm-model-card-header">
+                <strong>${this.escapeHtml(this.getDisplayLabel(display))}</strong>
+            <span class="llm-status ${llm.ready === true ? 'ready' : 'pending'}">LLM ${statusText}</span>
+            </div>
+            <div class="llm-model-card-meta">当前模型：${this.escapeHtml(llm.selectedModelId || '未选择')}</div>
+            <select class="llm-model-select" onchange="event.stopPropagation();DeviceList.selectLlmModel('${displayId}', this.value)"${models.length ? '' : ' disabled'}>
+                <option value=""${llm.selectedModelId ? '' : ' selected'}>${models.length ? '选择模型' : '暂无模型'}</option>
+                ${options}
+            </select>
+        </div>`;
+    },
+
+    renderLlmModelPanel() {
+        const container = document.getElementById('llmModelPanel');
+        if (!container) return;
+        container.innerHTML = this.renderLlmModelPanelHtml();
     },
 
     setSelectionMode(mode) {
@@ -281,6 +396,197 @@ const DeviceList = {
             if (window.showToast) window.showToast(`录音操作失败：${error.message}`, 'error');
             return false;
         }
+    },
+
+    sendDisplayCameraMessage(message) {
+        if (!this.isControlSocketOpen()) {
+            if (window.showToast) window.showToast('摄像头操作失败：控制端未连接', 'error');
+            return false;
+        }
+        try {
+            window.WebSocketManager.ws.send(JSON.stringify(message));
+            return true;
+        } catch (error) {
+            if (window.showToast) window.showToast(`摄像头操作失败：${error.message}`, 'error');
+            return false;
+        }
+    },
+
+    getDisplayCameraState(displayId) {
+        return this.displayCameraByDisplay.get(displayId) || null;
+    },
+
+    getDisplayCameraDevices(displayId) {
+        return this.displayCameraDevicesByDisplay.get(displayId) || [];
+    },
+
+    requestDisplayCameraDevicesIfNeeded(display) {
+        if (!display || display.capabilities?.cameraCapture !== true || !this.isControlSocketOpen()) return;
+        const displayId = display.id;
+        const state = this.getDisplayCameraState(displayId) || {};
+        const devices = this.getDisplayCameraDevices(displayId);
+        if (devices.length > 0 || state.listRequestId || state.autoRefreshRequested) return;
+        state.autoRefreshRequested = true;
+        state.cameraListLoaded = false;
+        state.cameraError = null;
+        this.displayCameraByDisplay.set(displayId, state);
+        // 当前面板正在 render，异步发起请求避免在渲染过程中递归 render。
+        setTimeout(() => {
+            if (this.list.some((item) => item.id === displayId)) {
+                this.requestDisplayCameraDevices(displayId);
+            }
+        }, 0);
+    },
+
+    requestDisplayCameraDevices(displayId) {
+        const requestId = `display-camera-list-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const state = this.getDisplayCameraState(displayId) || {};
+        state.listRequestId = requestId;
+        state.cameraListLoaded = false;
+        state.cameraError = null;
+        this.displayCameraByDisplay.set(displayId, state);
+        this.render();
+        const sent = this.sendDisplayCameraMessage({ type: 'listDisplayCameras', displayId, requestId });
+        if (!sent) {
+            state.listRequestId = null;
+            state.cameraError = '控制端未连接';
+            this.displayCameraByDisplay.set(displayId, state);
+            this.render();
+        }
+        return sent;
+    },
+
+    requestDisplayCamera(displayId, mode) {
+        const display = this.list.find((item) => item.id === displayId);
+        if (display?.capabilities?.cameraCapture !== true) {
+            if (window.showToast) window.showToast('当前显示端不支持摄像头', 'error');
+            return false;
+        }
+        const current = this.getDisplayCameraState(displayId) || {};
+        if (current.mode === 'realtime' && mode === 'realtime') {
+            return this.stopDisplayCamera(displayId);
+        }
+        if (current.requestId && current.mode === 'realtime') {
+            this.sendDisplayCameraMessage({
+                type: 'stopDisplayCamera',
+                displayId,
+                requestId: current.requestId
+            });
+        }
+        const requestId = `display-camera-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const devices = this.getDisplayCameraDevices(displayId);
+        const cameraId = current.cameraId || devices[0]?.deviceId || '';
+        this.displayCameraByDisplay.set(displayId, {
+            ...current,
+            requestId,
+            mode: mode === 'realtime' ? 'realtime' : 'single',
+            state: 'requested',
+            cameraId
+        });
+        this.render();
+        const sent = this.sendDisplayCameraMessage({
+            type: 'requestDisplayCamera',
+            displayId,
+            requestId,
+            mode: mode === 'realtime' ? 'realtime' : 'single',
+            cameraId
+        });
+        if (!sent) {
+            this.displayCameraByDisplay.delete(displayId);
+            this.render();
+        }
+        return sent;
+    },
+
+    stopDisplayCamera(displayId) {
+        const state = this.getDisplayCameraState(displayId);
+        if (!state?.requestId) return false;
+        state.state = 'stopping';
+        this.render();
+        return this.sendDisplayCameraMessage({
+            type: 'stopDisplayCamera',
+            displayId,
+            requestId: state.requestId
+        });
+    },
+
+    handleDisplayCameraDevices(data) {
+        const displayId = String(data?.displayId || '');
+        if (!displayId) return;
+        const devices = Array.isArray(data.devices) ? data.devices : [];
+        this.displayCameraDevicesByDisplay.set(displayId, devices);
+        const state = this.getDisplayCameraState(displayId) || {};
+        if (!state.cameraId || !devices.some((device) => device.deviceId === state.cameraId)) {
+            state.cameraId = devices[0]?.deviceId || '';
+        }
+        state.listRequestId = null;
+        state.cameraListLoaded = true;
+        state.cameraError = null;
+        this.displayCameraByDisplay.set(displayId, state);
+        this.render();
+    },
+
+    handleDisplayCameraStatus(data) {
+        const displayId = String(data?.displayId || '');
+        const requestId = String(data?.requestId || '');
+        if (!displayId || !requestId) return;
+        const current = this.getDisplayCameraState(displayId);
+        if (current?.requestId && current.requestId !== requestId) return;
+        const isListRequest = current?.listRequestId === requestId;
+        const next = { ...(current || {}), requestId, state: data.state || 'started' };
+        if (data.state === 'stopped' || data.state === 'error') next.requestId = null;
+        if (isListRequest && data.state === 'error') {
+            next.listRequestId = null;
+            next.cameraError = data.error || '无法读取摄像头';
+        }
+        this.displayCameraByDisplay.set(displayId, next);
+        this.render();
+        if (data.error && window.showToast) window.showToast(`摄像头操作失败：${data.error}`, 'error');
+    },
+
+    getCameraDataUrl(data) {
+        const mimeType = data.mimeType || 'image/jpeg';
+        return data.imageBase64 ? `data:${mimeType};base64,${data.imageBase64}` : '';
+    },
+
+    handleDisplayCameraFrame(data) {
+        const displayId = String(data?.displayId || '');
+        const state = this.getDisplayCameraState(displayId);
+        if (!displayId || !state || state.requestId !== data.requestId) return;
+        const dataUrl = this.getCameraDataUrl(data);
+        if (!dataUrl) return;
+        state.previewDataUrl = dataUrl;
+        const image = Array.from(document.querySelectorAll('[data-camera-preview]'))
+            .find((candidate) => candidate.dataset.displayId === displayId);
+        if (image) image.src = dataUrl;
+    },
+
+    handleDisplayCameraResult(data) {
+        const displayId = String(data?.displayId || '');
+        const state = this.getDisplayCameraState(displayId);
+        if (!displayId || !state || (state.requestId && state.requestId !== data.requestId)) return;
+        const dataUrl = this.getCameraDataUrl(data);
+        if (!dataUrl) return;
+        state.photoDataUrl = dataUrl;
+        state.photoMimeType = data.mimeType || 'image/jpeg';
+        state.previewDataUrl = dataUrl;
+        state.requestId = null;
+        state.state = 'photo-ready';
+        state.mode = 'single';
+        this.displayCameraByDisplay.set(displayId, state);
+        this.render();
+    },
+
+    sendCameraPhotoToChat(displayId) {
+        const state = this.getDisplayCameraState(displayId);
+        if (!state?.photoDataUrl || !window.Chat?.attachImage) return false;
+        const attached = window.Chat.attachImage({
+            dataUrl: state.photoDataUrl,
+            mimeType: state.photoMimeType || 'image/jpeg',
+            sourceDisplayId: displayId
+        });
+        if (attached && window.showToast) window.showToast('照片已加入聊天输入', 'success');
+        return attached;
     },
 
     setVoiceRecordingMode(displayId, mode) {
@@ -562,6 +868,51 @@ const DeviceList = {
         `;
     },
 
+    renderCameraCardHtml(display) {
+        const displayId = this.escapeHtml(display.id);
+        const capabilities = display.capabilities || {};
+        const supported = capabilities.cameraCapture === true;
+        const state = this.getDisplayCameraState(display.id) || {};
+        const devices = this.getDisplayCameraDevices(display.id);
+        const selectedCameraId = state.cameraId || devices[0]?.deviceId || '';
+        const cameraOptions = devices.length > 0
+            ? devices.map((device, index) => {
+                const id = this.escapeHtml(device.deviceId || '');
+                const label = this.escapeHtml(device.label || `摄像头 ${index + 1}`);
+                return `<option value="${id}"${device.deviceId === selectedCameraId ? ' selected' : ''}>${label}</option>`;
+            }).join('')
+            : `<option value="">${state.listRequestId || (state.autoRefreshRequested && !state.cameraListLoaded)
+                ? '正在自动刷新摄像头…'
+                : (state.cameraError ? '读取失败，请点击刷新' : '暂无可用摄像头')}</option>`;
+        const activePreview = state.previewDataUrl || '';
+        const isRealtime = state.mode === 'realtime' && Boolean(state.requestId);
+        const isBusy = Boolean(state.requestId) || state.state === 'stopping';
+        const photoButton = state.photoDataUrl
+            ? `<button type="button" class="display-camera-attach" data-camera-attach data-display-id="${displayId}">发送给 AI</button>`
+            : '';
+        const status = state.cameraError
+            ? '摄像头列表读取失败'
+            : state.listRequestId
+                ? '正在刷新摄像头'
+                : state.state === 'photo-ready'
+                    ? '已拍照'
+                    : (isRealtime ? '实时预览中' : (state.state === 'error' ? '不可用' : '空闲'));
+        return `
+            <div class="display-camera-card" data-display-id="${displayId}">
+                <div class="display-camera-card-title">摄像头 · ${this.getDisplayLabel(display)}</div>
+                <div class="display-camera-controls">
+                    <select data-camera-device data-display-id="${displayId}" ${supported ? '' : 'disabled'}>${cameraOptions}</select>
+                    <button type="button" data-camera-refresh data-display-id="${displayId}" ${supported && !state.listRequestId ? '' : 'disabled'}>刷新摄像头</button>
+                    <button type="button" data-camera-photo data-display-id="${displayId}" ${supported && !isBusy ? '' : 'disabled'}>📷 拍照</button>
+                    <button type="button" data-camera-live data-display-id="${displayId}" ${supported ? '' : 'disabled'}>${isRealtime ? '停止实时预览' : '▶ 实时预览'}</button>
+                </div>
+                <div class="display-camera-status">${supported ? status : '当前显示端不支持摄像头'}</div>
+                <img class="display-camera-preview" data-camera-preview data-display-id="${displayId}" src="${activePreview}" alt="摄像头预览" ${activePreview ? '' : 'hidden'}>
+                <div class="display-camera-photo-actions">${photoButton}</div>
+            </div>
+        `;
+    },
+
     renderVoiceVadPanel() {
         const panel = document.getElementById('voiceVadPanel');
         if (!panel) return;
@@ -573,8 +924,51 @@ const DeviceList = {
                 : '<div class="empty-list">请先选择显示端</div>';
             return;
         }
-        panel.innerHTML = this.renderVoiceVadCardHtml(display);
+        panel.innerHTML = `${this.renderVoiceVadCardHtml(display)}${this.renderCameraCardHtml(display)}`;
         this.bindVoiceVadControls(panel);
+        this.bindCameraControls(panel);
+        this.requestDisplayCameraDevicesIfNeeded(display);
+    },
+
+    bindCameraControls(container) {
+        if (!container || container.dataset.cameraControlsBound) return;
+        container.dataset.cameraControlsBound = '1';
+        container.addEventListener('click', (event) => {
+            const refresh = event.target.closest('[data-camera-refresh]');
+            if (refresh && !refresh.disabled) {
+                event.stopPropagation();
+                this.requestDisplayCameraDevices(refresh.dataset.displayId);
+                return;
+            }
+            const photo = event.target.closest('[data-camera-photo]');
+            if (photo && !photo.disabled) {
+                event.stopPropagation();
+                this.requestDisplayCamera(photo.dataset.displayId, 'single');
+                return;
+            }
+            const live = event.target.closest('[data-camera-live]');
+            if (live && !live.disabled) {
+                event.stopPropagation();
+                this.requestDisplayCamera(live.dataset.displayId, 'realtime');
+                return;
+            }
+            const attach = event.target.closest('[data-camera-attach]');
+            if (attach) {
+                event.stopPropagation();
+                this.sendCameraPhotoToChat(attach.dataset.displayId);
+            }
+        });
+        container.addEventListener('change', (event) => {
+            const select = event.target.closest('[data-camera-device]');
+            if (!select) return;
+            event.stopPropagation();
+            const state = this.getDisplayCameraState(select.dataset.displayId) || {};
+            state.cameraId = select.value;
+            this.displayCameraByDisplay.set(select.dataset.displayId, state);
+            if (state.requestId && state.mode === 'realtime') {
+                this.stopDisplayCamera(select.dataset.displayId);
+            }
+        });
     },
 
     bindVoiceVadControls(container) {
@@ -841,6 +1235,7 @@ const DeviceList = {
         this.renderToContainer('deviceList');
         this.renderToContainer('mediaDeviceList');
         this.renderVoiceVadPanel();
+        this.renderLlmModelPanel();
         if (window.FloatingControl) {
             window.FloatingControl.updateDisplayList();
         }
@@ -970,11 +1365,13 @@ const DeviceList = {
                     <span class="cap-icon ${caps.mediaRendering ? 'active' : 'inactive'}" title="媒体渲染${caps.mediaRendering ? '' : '（不可用）'}">🖥️</span>
                     <span class="cap-icon ${caps.voicePlayback ? 'active' : 'inactive'}" title="语音播放${caps.voicePlayback ? '' : '（不可用）'}">🔊</span>
                     <span class="cap-icon ${caps.voiceRecording ? 'active' : 'inactive'}" title="语音录音${caps.voiceRecording ? '' : '（不可用）'}">🎙️</span>
+                    <span class="cap-icon ${caps.cameraCapture ? 'active' : 'inactive'}" title="摄像头${caps.cameraCapture ? '' : '（不可用）'}">📷</span>
                     <span class="cap-icon ${caps.voiceRecognition ? 'active' : 'inactive'}" title="语音识别${caps.voiceRecognition ? '' : '（不可用）'}">🧠</span>
                     <span class="cap-icon ${caps.ttsGeneration ? 'active' : 'inactive'}" title="语音生成${caps.ttsGeneration ? '' : '（不可用）'}">🗣️</span>
                     <span class="cap-icon ${caps.displayText ? 'active' : 'inactive'}" title="文本显示${caps.displayText ? '' : '（不可用）'}">📝</span>
                     <span class="cap-icon ${caps.ocrAvailable ? 'active' : 'inactive'}" title="RapidOCR${caps.ocrAvailable ? '' : '（不可用）'}">🔤</span>
                     <span class="cap-icon ${caps.yolo11nAvailable ? 'active' : 'inactive'}" title="YOLO11n 目标检测${caps.yolo11nAvailable ? '' : '（不可用）'}">🎯</span>
+                    <span class="cap-icon ${caps.llm?.enabled !== false && caps.llm?.supported ? 'active' : 'inactive'}" title="本地 MNN-LLM${caps.llm?.enabled === false ? '（已禁用）' : (caps.llm?.supported ? '' : '（不可用）')}">🤖</span>
                 `;
             }
 
@@ -1188,22 +1585,26 @@ const DeviceList = {
             mediaRendering: true,
             voicePlayback: true,
             voiceRecording: true,
+            cameraCapture: false,
             voiceRecognition: false,
             ttsGeneration: false,
             displayText: true,
             ocrAvailable: false,
-            yolo11nAvailable: false
+            yolo11nAvailable: false,
+            llm: { enabled: true }
         };
 
         const capabilityDefinitions = [
             { key: 'mediaRendering', label: '媒体渲染', icon: '🖥️' },
             { key: 'voicePlayback', label: '语音播放', icon: '🔊' },
             { key: 'voiceRecording', label: '语音录音', icon: '🎙️' },
+            { key: 'cameraCapture', label: '摄像头采集', icon: '📷', readOnly: true },
             { key: 'voiceRecognition', label: '语音识别', icon: '🧠' },
             { key: 'ttsGeneration', label: '语音生成', icon: '🗣️' },
             { key: 'displayText', label: '文本显示', icon: '📝' },
             { key: 'ocrAvailable', label: 'RapidOCR 图像文字识别', icon: '🔤', readOnly: true },
-            { key: 'yolo11nAvailable', label: 'YOLO11n 目标检测', icon: '🎯', readOnly: true }
+            { key: 'yolo11nAvailable', label: 'YOLO11n 目标检测', icon: '🎯', readOnly: true },
+            { key: 'llm', label: '本地 LLM', icon: '🤖' }
         ];
 
         for (const capDef of capabilityDefinitions) {
@@ -1213,7 +1614,9 @@ const DeviceList = {
                 icon: capDef.icon,
                 type: 'capability-item',
                 capabilityKey: capDef.key,
-                value: caps[capDef.key] !== undefined ? caps[capDef.key] : true,
+                value: capDef.key === 'llm'
+                    ? caps.llm?.enabled !== false
+                    : (caps[capDef.key] !== undefined ? caps[capDef.key] : true),
                 editable: capDef.readOnly !== true,
                 readOnly: capDef.readOnly === true,
                 inputType: 'select',
@@ -1564,7 +1967,14 @@ const DeviceList = {
                 yolo11nAvailable: false
         };
 
-        capabilities[key] = value;
+        if (key === 'llm') {
+            capabilities.llm = {
+                ...(capabilities.llm || {}),
+                enabled: value === true
+            };
+        } else {
+            capabilities[key] = value;
+        }
 
         if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
             window.WebSocketManager.ws.send(JSON.stringify({
@@ -1583,7 +1993,8 @@ const DeviceList = {
                 voiceRecording: '语音录音',
                 voiceRecognition: '语音识别',
                 ttsGeneration: '语音生成',
-                displayText: '文本显示'
+                displayText: '文本显示',
+                llm: '本地 LLM'
             };
             window.showToast(`${labelMap[key] || key} 已${value ? '启用' : '禁用'}`, 'success');
         }
@@ -1719,6 +2130,11 @@ const DeviceList = {
                         <span>📝 文本显示</span>
                         <span class="capability-desc">能显示文字覆盖层</span>
                     </label>
+                    <label class="capability-item">
+                        <input type="checkbox" ${caps.llm?.enabled !== false ? 'checked' : ''} data-cap="llm.enabled">
+                        <span>🤖 本地 LLM</span>
+                        <span class="capability-desc">允许该显示端参与本地 MNN-LLM 路由和模型切换</span>
+                    </label>
                     <label class="capability-item capability-readonly">
                         <input type="checkbox" ${caps.ocrAvailable ? 'checked' : ''} data-cap="ocrAvailable" disabled>
                         <span>🔤 RapidOCR 图像文字识别</span>
@@ -1750,6 +2166,10 @@ const DeviceList = {
         const checkboxes = document.querySelectorAll('#capabilityModal input[type="checkbox"]');
         const capabilities = {};
         checkboxes.forEach(cb => {
+            if (cb.dataset.cap === 'llm.enabled') {
+                capabilities.llm = { enabled: cb.checked };
+                return;
+            }
             capabilities[cb.dataset.cap] = cb.checked;
         });
 
@@ -1789,6 +2209,12 @@ const DeviceList = {
         }
         for (const displayId of this.displayRealtimePlaybackByDisplay.keys()) {
             if (!onlineIds.has(displayId)) this.cleanupDisplayRecordingResources(displayId);
+        }
+        for (const displayId of this.displayCameraByDisplay.keys()) {
+            if (!onlineIds.has(displayId)) this.displayCameraByDisplay.delete(displayId);
+        }
+        for (const displayId of this.displayCameraDevicesByDisplay.keys()) {
+            if (!onlineIds.has(displayId)) this.displayCameraDevicesByDisplay.delete(displayId);
         }
         this.list = nextList.map((display) => ({
             ...display,
