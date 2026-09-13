@@ -70,9 +70,6 @@
   - 待用完整生产包安装 APK，验收 server-app 启动、AASC 注册、媒体库浏览/上传/直连播放和热更新。
   - 设计：`docs/design/android-embedded-node-server.md`；实现伪代码：`docs/spec/android-embedded-node-server.md`；任务：`docs/task/20260908_APK内置Node.js子服务器.md`。
 
-- ⏳待处理 [2026-09-03] 明确 DeX 多屏控制模式触摸/滚轮输入契约
-  - 当前 `tests/display-native-bridge.test.js` 仍保留原生 `injectTouch`/`injectWheel` 断言并产生已知失败；本次按要求暂不处理，后续确认恢复原生注入还是补充独立的目标显示输入方案。
-
 - ⏳可选任务 [2026-09-02] 为 Android YOLO11 测试 APK 增加带标注验证集的准确率评估
   - 当前已记录 `bus.jpg` 单图定性结果；正式 Precision、Recall、mAP 需要目标场景的图片和标注数据。
 

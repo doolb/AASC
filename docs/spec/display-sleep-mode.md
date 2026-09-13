@@ -84,6 +84,10 @@ function reportSleepState():        # 上报当前睡眠状态给服务端（连
   → 服务端 restoreState(state) → handleRestoreState 读 state.sleep → checkSleepMode() 立即应用
   → 状态变化触发 reportSleepState()
 
+显示端连接初始化收到 llm.status
+  → 仅消费 LLM 状态消息，不进入通用媒体消息分支
+  → 不调用 showMedia()，不创建 activationUntil 临时激活窗口
+
 显示端连接成功 / 每次睡眠状态变化
   → displayWs.send({ type: 'sleepStateReport', sleepState })
   → 服务端 displayData.state.sleepState = sleepState（不持久化，连接即上报）
@@ -168,6 +172,7 @@ sendToDisplay(displayId, message, options={}):
 | `control` / `sleepOverride` | `'sleep'` \| `'deep'` \| `'normal'` | `manualSleepMode` 赋值（`normal`→null）+ checkSleepMode + ack(`extraData.sleepState`) |
 | `sleepStateReport`（显示端上行） | `sleepState` | 服务端存 `displayData.state.sleepState` + broadcastToControls → 控制端更新按钮（需在 server-app 的 `displayTypes` 注册表注册，否则走 viewbind 同步不落 `displayClients.state`） |
 | `restoreState` | `state.sleep` | 恢复设置 + checkSleepMode |
+| `llm.status`（服务端→显示端） | LLM 运行状态 | 作为状态消息消费，不按媒体消息处理，不触发临时激活 |
 | `GET /api/device-settings/:displayId` | — | 返回 `settings.sleep`（控制端填充弹窗） |
 | TTS 显示端下发 | `{ checkSleep: boolean }`（服务端调用参数） | true 时按目标显示端 `sleepState` 过滤；缺省/false 正常下发 |
 

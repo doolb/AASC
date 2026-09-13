@@ -638,3 +638,18 @@ class TTSActor:
     }
 }
 ```
+
+## 控制输入能力与 DeX 回退
+
+```text
+控制模式收到键盘或文本事件
+    -> 存在 NativeDisplay.injectKey/injectText
+    -> 使用原生桥注入
+
+控制模式收到触摸或滚轮事件
+    -> 保持页面 JavaScript 合成事件
+    -> 不调用 NativeDisplay.injectTouch/injectWheel
+    -> 由同源页面或现有浏览器回退链处理
+```
+
+触摸/滚轮不调用原生桥是 Android DeX 多屏目标显示的兼容性约束，不代表显示端没有控制能力。

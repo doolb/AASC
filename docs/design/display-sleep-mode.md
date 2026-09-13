@@ -252,6 +252,12 @@ sleep: { enabled:true, startHour:23, endHour:8, deepStartHour:1, deepEndHour:6 }
   → checkSleep=true 时按每个目标显示端的 sleepState 独立过滤
 ```
 
+```
+显示端连接初始化收到服务端 llm.status
+  → 作为 LLM 状态消息消费，不进入通用媒体消息分支
+  → 不调用 showMedia()，因此不打开 60 秒临时激活窗口
+```
+
 ## 边界情况与降级
 
 | 场景 | 处理 |

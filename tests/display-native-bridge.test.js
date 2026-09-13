@@ -1,4 +1,4 @@
-// display.html 原生桥测试：mock window.NativeDisplay，验证 native 优先 + 输入走桥
+// display.html 原生桥测试：mock window.NativeDisplay，验证截图走桥、键盘/文本走桥，DeX 触摸/滚轮保留 JS 回退
 // 运行：node tests/display-native-bridge.test.js        （桥场景）
 //       NO_BRIDGE=1 node tests/display-native-bridge.test.js  （无桥回归）
 const puppeteer = require('/mnt/AASC/node_modules/puppeteer');
@@ -123,11 +123,11 @@ const FAKE_JPEG = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
     assert(inputCalls.length === 0, '无桥场景不应调用桥，实际: ' + JSON.stringify(inputCalls));
     console.log('PASS: 无桥输入回归（走 JS 合成，不调桥）');
   } else {
-    assert(inputCalls.some(c => c[0] === 'injectTouch' && c[1] > 0 && c[2] > 0 && c[3] === 'down'), 'injectTouch(down) 应被调用并带屏幕坐标: ' + JSON.stringify(inputCalls));
-    assert(inputCalls.some(c => c[0] === 'injectWheel'), 'injectWheel 应被调用');
+    assert(!inputCalls.some(c => c[0] === 'injectTouch'), 'DeX 触摸应走 JS 合成，不应调用 injectTouch: ' + JSON.stringify(inputCalls));
+    assert(!inputCalls.some(c => c[0] === 'injectWheel'), 'DeX 滚轮应走 JS 合成，不应调用 injectWheel: ' + JSON.stringify(inputCalls));
     assert(inputCalls.some(c => c[0] === 'injectKey' && c[1] === 66), 'Enter 应映射 Android keyCode 66: ' + JSON.stringify(inputCalls));
     assert(inputCalls.some(c => c[0] === 'injectText' && c[1] === '中文测试'), 'injectText 应透传中文');
-    console.log('PASS: 桥输入注入（touch/wheel/key/text）');
+    console.log('PASS: 桥输入注入（DeX touch/wheel 走 JS，key/text 走 native）');
   }
 
   await browser.close();

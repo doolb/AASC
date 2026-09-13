@@ -78,7 +78,7 @@ test('控制端提供默认开启的 ASR/声纹详细日志开关并接入配置
     assert.match(panel, /asrResultDetailLog !== false/u);
     assert.match(panel, /asrResultDetailLog:/u);
     assert.match(server, /voiceprint\.asrResultDetailLog/u);
-    assert.match(server, /formatAsrResultLog\(\s*data,/u);
+    assert.match(server, /formatAsrResultLog\(\s*logData,/u);
     assert.match(server, /log\('WS',\s*logMessage/u);
     assert.match(config, /asrResultDetailLog:\s*true/u);
 });

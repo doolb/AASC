@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+## 全量测试回归修复
+
+- ✅ [2026-09-13] 修复全量测试中 6 项失败。
+  - 显示端消费服务端初始化 `llm.status`，不再误触发普通媒体显示和 60 秒临时激活。
+  - 更新 ASR 日志、显示能力和 DeX 输入测试契约；DeX 触摸/滚轮继续走 JS 回退，键盘/文本继续走原生桥。
+  - LLM ModelScope 清单测试隔离本地模型缓存；Windows 语音显示端配置显式持久化 `textInput.requireVoiceprint = "inherit"`。
+  - 验证：6 项定向测试和无桥回归通过，`npm test` 全量 693/693 通过；日志、模型和构建产物未纳入本次提交。
+
 ## Android APK SAF 共享存储
 
 - ✅ [2026-09-13] 支持 Android 10/API 29 及 Android 11+ 通过 SAF 访问用户选择的媒体目录。

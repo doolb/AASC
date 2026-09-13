@@ -60,8 +60,14 @@ test('LLM 模型清单只暴露完整且 hash 正确的文件', () => {
 });
 
 test('ModelScope 远端清单提供固定仓库和逐文件校验信息', () => {
+    // 使用只含清单的临时目录，避免本地已下载模型缓存改变 ready 断言。
+    const modelRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-llm-remote-'));
+    fs.copyFileSync(
+        path.resolve(__dirname, '..', 'res/models/llm/manifest.json'),
+        path.join(modelRoot, 'manifest.json')
+    );
     const service = new LlmModelManifestService({
-        modelRoot: path.resolve(__dirname, '..', 'res/models/llm')
+        modelRoot
     });
     const manifest = service.createManifest();
     assert.ok(manifest.models.length >= 5);

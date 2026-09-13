@@ -54,11 +54,14 @@
       返回原识别结果
 
 显示端 WebSocket 回传 asrResult：
+  先将当前消息规范化为 logData（完成态消息使用已聚合字段，普通 asrResult 使用原消息）
   读取 voiceprint.asrResultDetailLog
   如果开关为 true：
+    formatAsrResultLog(logData, true)
     日志打印 requestId、总文字、顶层 speaker/similarityScore/threshold/error
     日志逐段打印 text、start、end、clusterId、speaker、similarityScore、threshold、error
   如果开关为 false：
+    formatAsrResultLog(logData, false)
     日志只打印 requestId、总文字和错误摘要
   继续执行原有 pending ASR 请求响应，不改变结果处理
 ```

@@ -294,7 +294,7 @@ GET /v1/models
 }
 ```
 
-服务器向目标 APK 转发选择命令；APK 完成切换后用 `llm.status` 上报 `selectedModelId`、`loadedModelId`、`llmStatus` 和错误信息，并触发标准 `capabilities` 更新。
+服务器向目标 APK 转发选择命令；APK 完成切换后用 `llm.status` 上报 `selectedModelId`、`loadedModelId`、`llmStatus` 和错误信息，并触发标准 `capabilities` 更新。显示端收到服务器连接初始化的 `llm.status` 时只消费状态消息，不得按普通媒体消息处理，以免误触发媒体显示和临时激活窗口。
 
 ## `llm-server` 任务
 

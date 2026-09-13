@@ -4769,6 +4769,11 @@
                         return;
                     }
 
+                    if (data.type === 'llm.status') {
+                        // 服务端连接初始化状态只用于同步 LLM 状态，不能落入普通媒体兜底分支触发临时激活。
+                        return;
+                    }
+
                     if (data.type === 'llm.selectModel') {
                         handleNativeLlmModelSelection(data);
                         return;

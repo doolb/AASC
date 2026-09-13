@@ -15,6 +15,9 @@ WindowsTextInputState:
 TextInputRecord:
     text: 本次完整 ASR 文本
     windowId: 注入时的前台窗口标识
+
+src/apps/voice-display-node/config.json:
+    textInput.requireVoiceprint = "inherit"   # 默认跟随服务器 voiceprint.enabled
 ```
 
 ## Windows 输入注入器伪代码

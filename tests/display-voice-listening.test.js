@@ -133,7 +133,7 @@ assert.match(serverJs, /isBuiltin: voiceCommand\.isWakeFreeVoiceCommand/);
 assert.match(voiceCommandJs, /function isBuiltinVoiceCommand\(text\)/);
 assert.match(serverJs, /function normalizeDisplayUserCapabilities\(capabilities\)/);
 assert.doesNotMatch(serverJs, /delete normalized\.voiceRecognition/);
-assert.match(serverJs, /\.\.\.data\.capabilities/);
+assert.match(serverJs, /\.\.\.source/);
 assert.match(serverJs, /normalizeDisplayUserCapabilities\(savedState\.userCapabilities\)/);
 
 const voiceInputStart = serverJs.indexOf('function processDisplayVoiceInput(displayId, data, ws = null)');
