@@ -43,6 +43,7 @@ const reminder = require('../../web-mediacenter/modules/reminder/reminder-app-se
 const voiceCommand = require('../../web-mediacenter/modules/voice/voice-command-app-service');
 const {
     CONVERSATION_TIMEOUT_MS,
+    TEMPORARY_CONVERSATION_WINDOW_MS,
     createConversationState,
     reduceConversationInput
 } = require('../modules/voice/display-voice-conversation');
@@ -342,9 +343,33 @@ const DISPLAY_RECORDING_CHUNK_MAX_LENGTH = 128 * 1024;
 // 录音回传属于临时会话，键为 requestId，值中保留发起请求的控制端 socket，禁止广播音频数据。
 const displayRecordingSessions = new Map();
 let controlClients = new Set();
+const llmModelManifestService = new LlmModelManifestService({
+    modelRoot: path.join(RES_DIR, 'models', 'llm')
+});
+const llmRouter = new LlmRouter({
+    maxQueueLength: config.get('llm.maxQueueLength', 16),
+    logger: (event, data) => log('LLM', `${event}: ${JSON.stringify(data)}`)
+});
+const llmGatewayService = new LlmGatewayService({
+    modelManifestService: llmModelManifestService,
+    router: llmRouter,
+    sendToDisplay: (displayId, message) => sendToDisplay(displayId, message),
+    logger: (event, data) => log('LLM', `${event}: ${JSON.stringify(data)}`),
+    requestTimeoutMs: config.get('llm.requestTimeoutMs', 120000)
+});
 const PLAYBACK_PROGRESS_PERSIST_INTERVAL_MS = 1000;
 const displayProgressPersistAt = new Map();
 const displayConversationTimers = new Map();
+const displayConversationTtsPlaybackKeys = new Map();
+// 临时模式是服务端唯一的全局会话实例，所有显示端和控制端共享这份快照。
+let temporaryConversation = {
+    id: null,
+    startedAt: null,
+    displayId: null,
+    roleName: null,
+    templateId: null,
+    messages: []
+};
 const pendingConversationConfirmations = new Map();
 const conversationConfirmationTimers = new Map();
 const repairModeStates = new Map();
@@ -353,14 +378,91 @@ const activeRepairModeDisplays = new Set();
 let repairModeTtsSuppressed = false;
 const REPAIR_PASSWORD_TIMEOUT_MS = 30000;
 const REPAIR_SESSION_TIMEOUT_MS = CONVERSATION_TIMEOUT_MS;
+const MIN_VOICE_CONVERSATION_WINDOW_MS = 1000;
+const MAX_VOICE_CONVERSATION_WINDOW_MS = 3600000;
 let conversationConfirmationMode = normalizeConversationConfirmationMode(
     config.get('voiceCommand.conversationConfirmationMode', 'off')
 );
+
+function normalizeVoiceConversationWindowMs(value, fallbackMs) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallbackMs;
+    return Math.min(
+        MAX_VOICE_CONVERSATION_WINDOW_MS,
+        Math.max(MIN_VOICE_CONVERSATION_WINDOW_MS, Math.round(number))
+    );
+}
+
+function normalizeAddressedGroupMode(value) {
+    return value === 'oneShot' ? 'oneShot' : 'temporary';
+}
+
+function getVoiceConversationWindowConfig() {
+    const temporaryWindowMs = normalizeVoiceConversationWindowMs(
+        config.get('voiceCommand.temporaryConversationWindowMs', TEMPORARY_CONVERSATION_WINDOW_MS),
+        TEMPORARY_CONVERSATION_WINDOW_MS
+    );
+    const conversationWindowMs = normalizeVoiceConversationWindowMs(
+        config.get('voiceCommand.conversationWindowMs', CONVERSATION_TIMEOUT_MS),
+        CONVERSATION_TIMEOUT_MS
+    );
+    return {
+        temporaryWindowSeconds: Math.round(temporaryWindowMs / 1000),
+        conversationWindowSeconds: Math.round(conversationWindowMs / 1000),
+        addressedGroupMode: normalizeAddressedGroupMode(
+            config.get('voiceCommand.addressedGroupMode', 'temporary')
+        )
+    };
+}
+
+function getVoiceConversationWindowMs(windowType) {
+    const configKey = windowType === 'temporary'
+        ? 'voiceCommand.temporaryConversationWindowMs'
+        : 'voiceCommand.conversationWindowMs';
+    const fallbackMs = windowType === 'temporary'
+        ? TEMPORARY_CONVERSATION_WINDOW_MS
+        : CONVERSATION_TIMEOUT_MS;
+    return normalizeVoiceConversationWindowMs(config.get(configKey, fallbackMs), fallbackMs);
+}
+
+function setVoiceConversationWindowConfig(data, source = 'control') {
+    const current = getVoiceConversationWindowConfig();
+    const temporaryWindowSeconds = data?.temporaryWindowSeconds === undefined
+        ? current.temporaryWindowSeconds
+        : Math.round(Math.min(3600, Math.max(1, Number(data.temporaryWindowSeconds))));
+    const conversationWindowSeconds = data?.conversationWindowSeconds === undefined
+        ? current.conversationWindowSeconds
+        : Math.round(Math.min(3600, Math.max(1, Number(data.conversationWindowSeconds))));
+    const normalizedTemporarySeconds = Number.isFinite(temporaryWindowSeconds)
+        ? temporaryWindowSeconds
+        : current.temporaryWindowSeconds;
+    const normalizedConversationSeconds = Number.isFinite(conversationWindowSeconds)
+        ? conversationWindowSeconds
+        : current.conversationWindowSeconds;
+    const addressedGroupMode = normalizeAddressedGroupMode(
+        data?.addressedGroupMode === undefined
+            ? current.addressedGroupMode
+            : data.addressedGroupMode
+    );
+
+    config.set('voiceCommand.temporaryConversationWindowMs', normalizedTemporarySeconds * 1000);
+    config.set('voiceCommand.conversationWindowMs', normalizedConversationSeconds * 1000);
+    config.set('voiceCommand.addressedGroupMode', addressedGroupMode);
+    const normalized = getVoiceConversationWindowConfig();
+    broadcastToControls({
+        type: 'voiceConversationConfig',
+        ...normalized,
+        source
+    });
+    return normalized;
+}
 let serverStartTime = Date.now();
 let muteState = {
     isMuted: false,
     previousVolumes: new Map()
 };
+// 全局录音暂停只属于服务端运行时状态，服务端重启后按默认值恢复录音。
+let globalRecordingPaused = false;
 
 let wsServer = null;
 let taskManager = null;
@@ -948,6 +1050,7 @@ async function startServer() {
                             const conversation = handleDisplayConversationInput(ctx.displayId, text);
                             const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
                             const oneShotGroup = conversation.event?.oneShotGroup === true;
+                            const temporaryConversationActive = conversation.state?.windowType === 'temporary';
                             log('语音', `voiceCommand门控 displayId=${ctx.displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} oneShotGroup=${oneShotGroup} text=${JSON.stringify(text)}`);
                             if (conversation.accepted && conversation.event?.type === 'input') {
                                 handleControlMessageFallback({
@@ -955,7 +1058,11 @@ async function startServer() {
                                     text,
                                     displayId: ctx.displayId,
                                     conversationActive,
-                                    oneShotGroup
+                                    oneShotGroup,
+                                    temporaryConversation: temporaryConversationActive,
+                                    temporaryConversationId: temporaryConversationActive
+                                        ? temporaryConversation.id
+                                        : null
                                 }, ctx.ws);
                             }
                         }
@@ -976,7 +1083,12 @@ async function startServer() {
                 'getCommandRouting', 'updateCommandRouting', 'getBuiltinVoiceCommands',
                 'updateDisplayVersionConfig',
                 'getConversationConfirmationConfig', 'setConversationConfirmationConfig',
+                'getVoiceConversationConfig', 'setVoiceConversationConfig',
+                'getTemporaryConversation', 'clearTemporaryConversation',
+                'startTemporaryConversation',
                 'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'requestDisplayRecording', 'stopDisplayRecording',
+                'listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera',
+                'setGlobalRecordingPause',
                 'playlistRequest', 'playlistControl'
             ];
             for (const type of controlTypes) {
@@ -1283,17 +1395,125 @@ function createDisplayState() {
 }
 
 function getDisplayVoiceAssistantNames() {
-    const assistantConfig = voiceCommand.getAssistantConfig();
+    // 会话唤醒只匹配明确配置过的角色列表和聊天模板，不把语音模块内部 defaultName 当作默认唤醒词。
     const templateNames = chat.getTemplates()
         .map(template => template?.name)
         .filter(Boolean);
     return [
-        assistantConfig.defaultName,
-        ...(Array.isArray(assistantConfig.assistants)
-            ? assistantConfig.assistants.map(assistant => assistant.name)
-            : []),
+        ...voiceCommand.getConfiguredAssistantNames(),
         ...templateNames
     ].filter(Boolean);
+}
+
+function getTemporaryConversationSnapshot() {
+    return {
+        id: temporaryConversation.id,
+        startedAt: temporaryConversation.startedAt,
+        displayId: temporaryConversation.displayId,
+        roleName: temporaryConversation.roleName,
+        templateId: temporaryConversation.templateId,
+        messages: temporaryConversation.messages.map(message => ({ ...message }))
+    };
+}
+
+function normalizeTemporaryConversationRole(roleName) {
+    const normalizedName = String(roleName || '').trim();
+    if (!normalizedName) {
+        return { roleName: null, templateId: null };
+    }
+
+    const template = chat.getTemplateByName(normalizedName);
+    return {
+        roleName: template?.name || normalizedName,
+        templateId: template?.id || template?.name || normalizedName
+    };
+}
+
+function resolveTemporaryConversationRole(roleName) {
+    const role = normalizeTemporaryConversationRole(roleName);
+    const template = role.roleName ? chat.getTemplateByName(role.roleName) : null;
+    if (!template?.name || !String(template.content || '').trim()) return null;
+    return {
+        roleName: template.name,
+        templateId: template.id || template.name
+    };
+}
+
+function broadcastTemporaryConversation(action = 'snapshot') {
+    broadcastToControls({
+        type: 'temporaryConversation',
+        action,
+        conversation: getTemporaryConversationSnapshot()
+    });
+}
+
+function clearTemporaryChatHistory() {
+    try {
+        chat.clearHistory({ mode: 'temporary' });
+    } catch (error) {
+        logError('临时聊天', `清理旧临时历史失败: ${error.message}`);
+    }
+}
+
+function replaceTemporaryConversation(displayId, roleName = null) {
+    clearTemporaryChatHistory();
+    clearPendingConversationConfirmation(displayId, 'temporaryConversationReplaced');
+    const role = normalizeTemporaryConversationRole(roleName);
+    temporaryConversation = {
+        id: generateCorrelationId('temporary-chat'),
+        startedAt: Date.now(),
+        displayId: displayId || null,
+        roleName: role.roleName,
+        templateId: role.templateId,
+        messages: []
+    };
+
+    for (const [otherDisplayId, otherDisplayData] of displayClients.entries()) {
+        if (otherDisplayId === displayId) continue;
+        const otherState = otherDisplayData.state?.voiceConversation;
+        if (otherState?.windowType !== 'temporary'
+            || !['activeGroup', 'activePrivate'].includes(otherState.state)) continue;
+        clearPendingConversationConfirmation(otherDisplayId, 'temporaryConversationReplaced');
+        clearDisplayConversationTimer(otherDisplayId);
+        setDisplayConversationState(
+            otherDisplayId,
+            {
+                ...createConversationState(true),
+                state: 'activeGroup',
+                windowType: 'temporary',
+                lastValidInputAt: Date.now()
+            },
+            'temporaryConversationReplaced'
+        );
+        armDisplayConversationTimer(otherDisplayId);
+    }
+    broadcastTemporaryConversation('reset');
+    return temporaryConversation.id;
+}
+
+function ensureTemporaryConversation(displayId) {
+    // 控制端刷新或多个控制端并行发送时，始终复用服务端当前唯一实例；只有首次发送才创建实例。
+    return temporaryConversation.id || replaceTemporaryConversation(displayId);
+}
+
+function clearTemporaryConversation() {
+    clearTemporaryChatHistory();
+    temporaryConversation.messages = [];
+    broadcastTemporaryConversation('clear');
+}
+
+function appendTemporaryConversationMessage(message, conversationId) {
+    if (!conversationId || conversationId !== temporaryConversation.id || !message?.content) return;
+    temporaryConversation.messages.push({
+        id: message.id || generateCorrelationId('temporary-message'),
+        timestamp: message.timestamp || Date.now(),
+        role: message.role || 'user',
+        name: message.name || (message.role === 'assistant' ? '助手' : '用户'),
+        content: message.content,
+        mode: 'temporary',
+        sessionId: conversationId
+    });
+    broadcastTemporaryConversation('update');
 }
 
 function isDisplayVoiceListeningEnabled(displayData) {
@@ -1720,11 +1940,13 @@ async function submitPendingConversationConfirmation(displayId, record, reason =
         displayContent: record.text,
         displayId,
         voiceOriginDisplayId: displayId,
-        routeVoiceToAll: true,
+        routeVoiceToPreferredDisplay: true,
         mode: record.chatMode,
         target: record.target,
         sessionId: record.sessionId,
         templateTarget: record.templateTarget,
+        temporaryConversation: record.temporaryConversation === true,
+        temporaryConversationId: record.temporaryConversationId || null,
         sendToControl: broadcastToControls
     });
     return true;
@@ -1760,7 +1982,9 @@ function requestConversationConfirmation(displayId, text) {
         chatMode: session.mode === 'private' ? 'private' : 'group',
         target: session.mode === 'private' ? session.privateTarget || null : null,
         sessionId: session.privateSessionId || 'default',
-        templateTarget: session.mode === 'private' ? session.privateTarget || null : null
+        templateTarget: session.mode === 'private' ? session.privateTarget || null : null,
+        temporaryConversation: options.temporaryConversation === true,
+        temporaryConversationId: options.temporaryConversationId || null
     };
     const promptText = `你刚才说的是：“${record.text}”。请说确认或取消。`;
     pendingConversationConfirmations.set(displayId, record);
@@ -1817,9 +2041,21 @@ function handleDisplayConversationInput(displayId, text) {
         text,
         getDisplayVoiceAssistantNames(),
         Date.now(),
-        { isBuiltin: voiceCommand.isWakeFreeVoiceCommand }
+        {
+            isBuiltin: voiceCommand.isWakeFreeVoiceCommand,
+            addressedGroupMode: getVoiceConversationWindowConfig().addressedGroupMode
+        }
     );
     if (!result.accepted) return result;
+
+    const startsTemporaryConversation = result.event?.windowType === 'temporary'
+        || result.event?.temporaryConversationStarted === true;
+    if (startsTemporaryConversation) {
+        const temporaryRoleName = result.event?.assistantName
+            || result.event?.addressedAssistant
+            || null;
+        result.temporaryConversationId = replaceTemporaryConversation(displayId, temporaryRoleName);
+    }
 
     setDisplayConversationState(displayId, result.state, result.event?.type || 'input');
     clearDisplayConversationTimer(displayId);
@@ -1840,7 +2076,12 @@ function handleDisplayConversationInput(displayId, text) {
         } else {
             chat.setMode('group', null, { source: 'displayVoice', displayId });
             broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
-            sendConversationPrompt(displayId, '已唤醒，进入群聊模式');
+            sendConversationPrompt(
+                displayId,
+                result.event.windowType === 'temporary'
+                    ? '已进入临时对话，三十秒内可以继续说话'
+                    : '已进入群聊模式'
+            );
         }
     } else if (result.event?.type === 'group') {
         chat.setMode('group', null, { source: 'displayVoice', displayId });
@@ -6457,8 +6698,26 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayList', list: getDisplayList() }));
         ws.send(JSON.stringify({
+            type: 'llm.modelManifest',
+            ...llmModelManifestService.createManifest({ includeIncomplete: true })
+        }));
+        ws.send(JSON.stringify({
+            type: 'llm.statusList',
+            list: llmRouter.listDisplayStatuses()
+        }));
+        ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
+        ws.send(JSON.stringify({
             type: 'conversationConfirmationConfig',
             ...getConversationConfirmationConfig()
+        }));
+        ws.send(JSON.stringify({
+            type: 'voiceConversationConfig',
+            ...getVoiceConversationWindowConfig()
+        }));
+        ws.send(JSON.stringify({
+            type: 'temporaryConversation',
+            action: 'snapshot',
+            conversation: getTemporaryConversationSnapshot()
         }));
         // 推送各显示端当前临时媒体信息（控制端刷新后预览数据丢失时显示占位提示）
         displayClients.forEach((dd, id) => {
@@ -6661,6 +6920,7 @@ function processDisplayVoiceInput(displayId, data, ws = null) {
     const conversation = handleDisplayConversationInput(displayId, text);
     const conversationActive = ['activeGroup', 'activePrivate'].includes(conversation.state?.state);
     const oneShotGroup = conversation.event?.oneShotGroup === true;
+    const temporaryConversationActive = conversation.state?.windowType === 'temporary';
     log('语音', `voiceCommand门控 displayId=${displayId} state=${conversation.state?.state || 'unknown'} accepted=${conversation.accepted} event=${conversation.event?.type || 'none'} conversationActive=${conversationActive} oneShotGroup=${oneShotGroup} text=${JSON.stringify(text)}`);
     if (!conversation.accepted) {
         log('语音', `显示端 ${displayId} 当前等待唤醒，忽略普通语音`);
@@ -6674,6 +6934,8 @@ function processDisplayVoiceInput(displayId, data, ws = null) {
         displayId,
         conversationActive,
         oneShotGroup,
+        temporaryConversation: temporaryConversationActive,
+        temporaryConversationId: temporaryConversationActive ? temporaryConversation.id : null,
         ...speakerPayload
     }, ws || displayData.ws);
     return { handled: true, command: true };
@@ -7164,6 +7426,51 @@ async function handleControlMessageFallback(data, ws) {
         return;
     }
 
+    if (data.type === 'getVoiceConversationConfig') {
+        ws.send(JSON.stringify({
+            type: 'voiceConversationConfig',
+            ...getVoiceConversationWindowConfig()
+        }));
+        return;
+    }
+
+    if (data.type === 'getTemporaryConversation') {
+        ws.send(JSON.stringify({
+            type: 'temporaryConversation',
+            action: 'snapshot',
+            conversation: getTemporaryConversationSnapshot()
+        }));
+        return;
+    }
+
+    if (data.type === 'clearTemporaryConversation') {
+        clearTemporaryConversation();
+        return;
+    }
+
+    if (data.type === 'startTemporaryConversation') {
+        const role = resolveTemporaryConversationRole(data.roleName);
+        if (!role) {
+            ws.send(JSON.stringify({
+                type: 'temporaryConversationError',
+                message: '临时对话角色不存在或没有角色定义'
+            }));
+            return;
+        }
+        replaceTemporaryConversation(data.displayId || null, role.roleName);
+        return;
+    }
+
+    if (data.type === 'setVoiceConversationConfig') {
+        const normalized = setVoiceConversationWindowConfig(data, 'control');
+        ws.send(JSON.stringify({
+            type: 'voiceConversationConfig',
+            ...normalized,
+            source: 'control'
+        }));
+        return;
+    }
+
     if (data.type === 'setConversationConfirmationConfig') {
         const mode = setConversationConfirmationMode(data.mode, 'control');
         ws.send(JSON.stringify({
@@ -7199,7 +7506,10 @@ async function handleControlMessageFallback(data, ws) {
                                 && data.conversationActive === true
                                 && conversationConfirmationMode !== 'off'
                                 && !voiceCommand.isWakeFreeVoiceCommand(data.text)) {
-                                requestConversationConfirmation(targetDisplayId, data.text);
+                                requestConversationConfirmation(targetDisplayId, data.text, {
+                                    temporaryConversation: data.temporaryConversation === true,
+                                    temporaryConversationId: data.temporaryConversationId || null
+                                });
                                 return;
                             }
                             
@@ -7260,7 +7570,9 @@ async function handleControlMessageFallback(data, ws) {
                                 {
                                     groupAssistantNames: getDisplayVoiceAssistantNames(),
                                     conversationActive: data.conversationActive === true,
-                                    oneShotGroup: data.oneShotGroup === true
+                                    oneShotGroup: data.oneShotGroup === true,
+                                    temporaryConversation: data.temporaryConversation === true,
+                                    temporaryConversationId: data.temporaryConversationId || null
                                 }
                             );
                             
@@ -7370,10 +7682,12 @@ async function handleControlMessageFallback(data, ws) {
                                             content: message,
                                             displayId: targetDisplayId,
                                             playOnControl: playOnControl,
-                                            routeVoiceToAll: isDisplayVoiceInput,
+                                            routeVoiceToPreferredDisplay: isDisplayVoiceInput,
                                             voiceOriginDisplayId: isDisplayVoiceInput ? targetDisplayId : null,
                                             systemPrompt: systemPrompt,
                                             skipHistory: skipHistory || false,
+                                            temporaryConversation: data.temporaryConversation === true,
+                                            temporaryConversationId: data.temporaryConversationId || null,
                                             sendToControl: sendToControl
                                         });
                                     },
@@ -7422,6 +7736,8 @@ async function handleControlMessageFallback(data, ws) {
                                     templateTarget: result.templateTarget,
                                     systemPrompt: result.systemPrompt,
                                     skipHistory: result.skipHistory || false,
+                                    temporaryConversation: data.temporaryConversation === true,
+                                    temporaryConversationId: data.temporaryConversationId || null,
                                     sendToControl: sendToControl
                                 });
                             } else if (result.type === 'privateMode' || result.type === 'groupMode') {
@@ -8222,6 +8538,9 @@ async function handleControlMessageFallback(data, ws) {
                                 mode: data.mode || session.mode,
                                 target: data.mode === 'private' ? (data.target || session.privateTarget) : null,
                                 sessionId: data.sessionId || session.privateSessionId || 'default',
+                                // 控制端临时页签沿用服务端唯一临时会话；旧客户端只发 mode 时也兼容识别。
+                                temporaryConversation: data.temporaryConversation === true || data.mode === 'temporary',
+                                temporaryConversationId: data.temporaryConversationId || null,
                                 sendToControl: (msg) => {
                                     ws.send(JSON.stringify(msg));
                                 }
@@ -8329,30 +8648,57 @@ async function handleChatMessage(options) {
         sessionId,
         skipHistory = false,
         allowRepairModeTts = false,
+        temporaryConversation: temporaryConversationRequested = false,
+        temporaryConversationId = null,
         sendToControl
     } = options;
+    const images = normalizeChatImages(rawImages);
     
     const effectiveRequestId = requestId || generateCorrelationId('chat');
-    const messageMode = mode;
+    if (temporaryConversationRequested === true
+        && temporaryConversationId
+        && temporaryConversation.id
+        && temporaryConversationId !== temporaryConversation.id) {
+        sendToControl?.({
+            type: 'chatResponse',
+            requestId: effectiveRequestId,
+            success: false,
+            error: '临时会话已被替换，请刷新当前临时页签'
+        });
+        return;
+    }
+    const effectiveTemporaryConversationId = temporaryConversationRequested === true
+        ? ensureTemporaryConversation(displayId || voiceOriginDisplayId || null)
+        : null;
+    const isTemporaryConversation = temporaryConversationRequested === true
+        && effectiveTemporaryConversationId === temporaryConversation.id;
+    const messageMode = isTemporaryConversation ? 'temporary' : mode;
     const messageTarget = messageMode === 'private' ? target : null;
-    const effectiveTemplateTarget = messageMode === 'group' ? null : templateTarget;
+    const effectiveTemplateTarget = ['group', 'temporary'].includes(messageMode) ? null : templateTarget;
+    const effectiveSessionId = isTemporaryConversation ? effectiveTemporaryConversationId : sessionId;
     
-    chat.addMessage({
+    const userMessageRecord = chat.addMessage({
         role: 'control',
         name: '控制端',
         content: displayContent || content,
+        images: images.map(({ mimeType }) => ({ mimeType })),
         mode: messageMode,
         target: messageTarget,
-        sessionId: sessionId,
+        sessionId: effectiveSessionId,
         templateId: effectiveTemplateTarget || 'default'
     });
+    if (isTemporaryConversation) {
+        appendTemporaryConversationMessage(userMessageRecord, effectiveTemporaryConversationId);
+    }
     
     let systemPrompt = null;
     let includeHistory = false;
     let contextCount = 0;
-    if (messageMode === 'group') {
-        systemPrompt = chat.getGroupSystemPrompt();
-        contextCount = chat.getConfig().contextCount || 0;
+    if (['group', 'temporary'].includes(messageMode)) {
+        systemPrompt = isTemporaryConversation
+            ? chat.getTemplateSystemPrompt(temporaryConversation.roleName)
+            : chat.getGroupSystemPrompt();
+        contextCount = chat.getConfig().contextCount || (isTemporaryConversation ? 100 : 0);
         if (contextCount > 0) includeHistory = true;
     } else if (effectiveTemplateTarget) {
         const template = chat.getTemplateByName(effectiveTemplateTarget);
@@ -8396,7 +8742,9 @@ async function handleChatMessage(options) {
             requestId: effectiveRequestId,
             content: displayContent || content,
             displayId: voiceOriginDisplayId,
-            mode: messageMode
+            mode: messageMode,
+            temporaryConversation: isTemporaryConversation,
+            temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
         });
     }
     await chat.chatStream(content, {
@@ -8408,15 +8756,19 @@ async function handleChatMessage(options) {
         mode: messageMode,
         target: messageTarget,
         templateTarget: effectiveTemplateTarget,
-        sessionId: sessionId
+        sessionId: effectiveSessionId,
+        images
     }, {
         onChunk: (chunk, fullMessage) => {
+            if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage });
         },
         onSentence: (sentence) => {
+            if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             if (!tts || isPunctuationOnly(sentence)) return;
             if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return;
             ttsScheduler.enqueue(async () => {
+                if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return null;
                 if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
                 const cleanText = stripMarkdown(sentence);
                 const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId);
@@ -8460,17 +8812,31 @@ async function handleChatMessage(options) {
             });
         },
         onComplete: (fullMessage, history) => {
-            chat.addMessage({
-                role: 'assistant',
-                name: effectiveTemplateTarget || '助手',
-                content: fullMessage,
-                mode: messageMode,
-                target: messageTarget,
-                sessionId: sessionId,
-                templateId: effectiveTemplateTarget || 'default'
-            });
+            if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
+            if (!isTemporaryConversation || effectiveTemporaryConversationId === temporaryConversation.id) {
+                const assistantMessageRecord = chat.addMessage({
+                    role: 'assistant',
+                    name: effectiveTemplateTarget || '助手',
+                    content: fullMessage,
+                    mode: messageMode,
+                    target: messageTarget,
+                    sessionId: effectiveSessionId,
+                    templateId: effectiveTemplateTarget || 'default'
+                });
+                if (isTemporaryConversation) {
+                    appendTemporaryConversationMessage(assistantMessageRecord, effectiveTemporaryConversationId);
+                }
+            }
             
-            sendChatResponse({ type: 'chatResponse', requestId: effectiveRequestId, success: true, message: fullMessage, history: chat.getHistory() });
+            sendChatResponse({
+                type: 'chatResponse',
+                requestId: effectiveRequestId,
+                success: true,
+                message: fullMessage,
+                history: isTemporaryConversation ? [] : chat.getHistory(),
+                temporaryConversation: isTemporaryConversation,
+                temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
+            });
             if (voiceOriginDisplayId) {
                 sendToDisplay(voiceOriginDisplayId, {
                     type: 'voiceCommand',
@@ -8481,7 +8847,14 @@ async function handleChatMessage(options) {
             }
         },
         onError: (error) => {
-            sendChatResponse({ type: 'chatResponse', requestId: effectiveRequestId, success: false, error });
+            sendChatResponse({
+                type: 'chatResponse',
+                requestId: effectiveRequestId,
+                success: false,
+                error,
+                temporaryConversation: isTemporaryConversation,
+                temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
+            });
         }
     });
     if (ttsScheduler) await ttsScheduler.waitForIdle();

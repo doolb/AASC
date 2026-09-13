@@ -1666,8 +1666,8 @@ getGroupSystemPrompt():
 服务端流式完成且 voiceOriginDisplayId 存在:
     向来源显示端发送:
         { type: 'voiceCommand', action: 'response', text: fullMessage, detailText: fullMessage }
-    TTS 仍按原有通用 voicePlayback 目标列表发送
-    voiceOriginDisplayId 只用于来源显示端的弹窗回传，不触发源端专属 TTS
+    TTS 按 voiceOriginDisplayId 优先、在线 voicePlayback 能力兜底的单目标动态规则发送
+    voiceOriginDisplayId 同时用于来源显示端的弹窗回传和 TTS 播放首选目标
 
 显示端收到 voiceCommand(response):
     detailText = data.detailText 或 data.text
@@ -1752,5 +1752,94 @@ setSession(session, metadata):
 
 显示端语音状态机切换:
     调用 setMode(..., source=displayVoice, displayId=来源显示端)
+
+## 临时角色选择消息注册伪代码
+
+服务端初始化控制端消息:
+    controlTypes 必须包含 startTemporaryConversation
+    为该类型注册统一 handleControlMessageFallback
+
+控制端发起角色切换:
+    发送 { type: startTemporaryConversation, roleName, displayId }
+    等待 temporaryConversation 快照或 temporaryConversationError
+    收到任一结果后解除角色选择器的 pending 状态
+
+回归约束:
+    Fallback 分支存在但 controlTypes 未注册时，视为协议不完整
+    必须通过源代码契约测试确认消息类型已进入注册表
+
+## 聊天配置与历史兼容伪代码
+
+服务器启动:
+    读取 config.chat.llmProfiles 和 config.chat.activeProfile
+    如果 activeProfile 存在于 llmProfiles:
+        应用该 profile 的当前 API/模型参数
+    否则:
+        使用第一个 profile，并将其作为规范化 activeProfile
+    从 ~/.config/aasc-user/chat-history*.json 加载全部消息
+
+getHistory():
+    合并所有已加载会话并按 timestamp 排序
+    不因为消息 profileName 与当前 activeProfile 不同而隐藏已持久化消息
+    返回历史消息，控制端按当前模式/会话做展示范围筛选
+
+恢复旧聊天 profile:
+    只更新 config.chat.activeProfile 和 config.chat.llmProfiles 中对应条目
+    保留 config.json 其他模块配置
+    通过现有 config.set/WebSocket 配置广播权威值
+    重启后再次读取同一 profile 和历史文件
+
+兼容删除/编辑历史:
+    删除单轮时仍按明确的 profile、mode、target、sessionId 定位
+    没有明确清空指令时不得删除其他 profile 的历史文件
 ```
+```
+
+## 临时对话单角色绑定伪代码
+
+```text
+temporaryConversation:
+    服务端只保留一个全局实例
+    {
+        id,
+        startedAt,
+        displayId,
+        roleName,
+        templateId,
+        messages[]
+    }
+
+resolveTemporaryRole(roleName):
+    从 chat.getTemplateByName(roleName) 查找模板
+    模板存在且 content 非空时返回规范化 name/templateId
+    否则返回空值
+
+replaceTemporaryConversation(displayId, roleName):
+    role = resolveTemporaryRole(roleName)
+    清空旧 temporary 历史
+    生成新 conversation id
+    保存 role.name 和 role.id
+    清空 messages
+    广播 temporaryConversation reset 快照
+    返回新 id
+
+startTemporaryConversation(WebSocket data):
+    role = resolveTemporaryRole(data.roleName)
+    role 不存在时回传 temporaryConversationError，不替换当前会话
+    role 存在时调用 replaceTemporaryConversation(null, role.name)
+
+handleChatMessage(options):
+    如果请求是 temporary:
+        只接受服务端当前 temporaryConversation.id
+        systemPrompt = chat.getTemplateSystemPrompt(temporaryConversation.roleName)
+        mode = temporary
+    否则如果请求是普通 group:
+        systemPrompt = chat.getGroupSystemPrompt()  // 保留全部角色定义
+    控制端请求不得传入或覆盖 temporary role prompt
+
+控制端临时页签:
+    收到 temporaryConversation 快照后保存 roleName/templateId/messages
+    角色选择变化时发送 { type: startTemporaryConversation, roleName }
+    普通发送只发送 { mode: temporary, temporaryConversationId: id }
+    id 或 roleName 缺失时禁用发送按钮并提示先选择角色
 ```

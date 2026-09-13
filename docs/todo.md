@@ -31,9 +31,13 @@
 
 ## 聊天系统
 
+- ⏳待验证 [2026-09-13] 临时页签连续切换角色：确认收到服务端快照后选择器可再次选择
+
 - ⏳可选任务 [2026-09-01] 自动测试请求级聊天隔离
   - 当前自动测试仍可能连接现有服务器并写入真实群聊；聊天历史持久化已先增加防误删保护。
   - 后续可增加 `testOnly/testRunId` 临时会话命名空间，禁止测试持久化 AASC、Pi 和 Responses 历史。
+  - 本次配置排查确认现有聊天相关测试使用临时目录或只读契约，不直接写入真实 `config/config.json`；后续仍需补充统一测试隔离。
+  - 临时页签角色选择使用服务端 WebSocket 快照，不新增测试持久化配置；统一测试隔离仍待后续处理。
 
 - ⏳待处理 [2026-08-31] 控制端无 `displayId` 时无法启动普通 Pi Agent 聊天
   - 现象：控制端发送 `chatMessage` 且不带 `displayId` 时，服务端回退处理因缺少显示端上下文提前返回，不产生 `chatChunk` 或 `chatResponse`。
@@ -55,8 +59,17 @@
 
 ## Android APK
 
+- ⏳进行中 [2026-09-13] 外部模型名映射与本地 LLM 两种协议验证
+  - 为 Qwen3.5 增加外部别名到内部 `modelId` 的解析，验证 Chat Completions、Responses 及兼容路径。
+  - 关联设计：`docs/design/android-mnnchat-llm.md`；实现伪代码：`docs/spec/android-mnnchat-llm.md`；任务：`docs/task/2026-09-13_外部模型名映射与LLM协议验证.md`。
+
+- ⏳待现场验收 [2026-09-12] Android MNNChat 本地 LLM 真机验收
+  - 官方 MNN 3.6.1 固定 native、arm64-v8a Debug APK 和 16 KB ELF 对齐产物已生成；固定提交为 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`。
+  - 待使用 ModelScope 真实模型（含 `qwen3.5-0.8b-claude-opus-distilled-mnn`）和至少两个显示端验证模型下载、切换等待、流式推理、LLM 能力开关、最短队列、目标不可用不回退、断线恢复和 LLM CPU affinity；本次已修复证书指纹与状态显示问题；图片输入链路另行验收。
+  - 设计：`docs/design/android-mnnchat-llm.md`；实现伪代码：`docs/spec/android-mnnchat-llm.md`；任务：`docs/task/2026-09-12_Android-MNNChat本地LLM实施计划.md`。
+
 - ⏳待现场验收 [2026-09-08] 完成 APK 内置 Node.js 子服务器的生产依赖打包和真机业务验收
-  - Node Runtime、安装器、Service、主服务器主动连接和能力裁剪已实现；构建时仍需显式提供 Android 可用的 arm64 Node Runtime 和生产 `node_modules`。
+  - Node Runtime、安装器、Service、主服务器主动连接和能力裁剪已实现；项目已内置 Android 可用的 arm64 Node Runtime，构建时仍需提供生产 `node_modules`。
   - 待用完整生产包安装 APK，验收 server-app 启动、AASC 注册、媒体库浏览/上传/直连播放和热更新。
   - 设计：`docs/design/android-embedded-node-server.md`；实现伪代码：`docs/spec/android-embedded-node-server.md`；任务：`docs/task/20260908_APK内置Node.js子服务器.md`。
 

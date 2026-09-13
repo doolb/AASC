@@ -1,5 +1,116 @@
 # Web MediaCenter - 变更日志
 
+## 显示端摄像头拍照黑帧修复
+
+- ✅ [2026-09-13] 修复 Android WebView 单次拍照黑图而实时预览正常的问题。
+  - `display.html` 单次拍照优先使用 Web `ImageCapture.takePhoto()` 获取相机照片 Blob，失败或不支持时回退 Canvas；Canvas 兜底等待多个视频帧和稳定时间，超时会释放摄像头轨道并返回错误。
+  - `tests/display-camera-chat.test.js` 增加 `ImageCapture`、`takePhoto`、Canvas 兜底和调用顺序契约测试；同步更新 `docs/design/display-camera-chat.md`、`docs/spec/display-camera-chat.md`、`docs/task/2026-09-12_显示端摄像头拍照预览与AI图片聊天.md`。
+  - 验证：相关测试通过；已通过 `npm run upload:apk` 重新构建并安装到 Android 真机。
+
+- ✅ [2026-09-13] 摄像头卡片自动刷新设备列表，并在显示端增加拍照/预览状态提示。
+  - 控制端首次渲染支持摄像头的在线显示端时自动请求列表，不再显示“请先刷新摄像头”；显示端只枚举设备，不自动开启摄像头预览。
+  - 显示端新增“正在刷新摄像头”“正在拍照”“拍照完成”“实时预览中”“实时预览已停止”和错误状态显示。
+  - 验证：新增摄像头自动刷新和状态测试，相关定向测试 13/13 通过；`npm run upload:apk` 构建安装成功，设备进程已启动。
+
+- ✅ [2026-09-13] 修复 LLM 状态更新导致摄像头列表展开后自动收起。
+  - `DeviceList.handleLlmStatus()` 改为只刷新 LLM 模型面板，不再重建包含摄像头下拉框的声音控制面板。
+  - 验证：摄像头、图片聊天和录音模式定向测试 14/14 通过，`device-list.js` 语法检查通过。
+
+## 显示端摄像头与 AI 图片聊天
+
+- ✅ [2026-09-12] 增加浏览器/Android 显示端单摄像头拍照和监控式实时预览，并在控制端提供摄像头卡片。
+  - 服务端新增 `listDisplayCameras`、`requestDisplayCamera`、`stopDisplayCamera` 及定向摄像头回传协议，实时帧限制大小且不保存；Windows 语音显示端声明 `cameraCapture=false`。
+  - 控制端支持摄像头列表刷新、单摄像头切换、单次拍照、实时预览停止和照片加入聊天；聊天界面支持本地图片选择、缩略图预览、移除和随普通 LLM 消息发送。
+  - Android Manifest/WebView 放行 CAMERA 和 VIDEO_CAPTURE；不修改原有录音模式、VAD、声纹配置。
+  - 文档：`docs/design/display-camera-chat.md`、`docs/spec/display-camera-chat.md`、`docs/task/2026-09-12_显示端摄像头拍照预览与AI图片聊天.md`。
+  - 验证：摄像头/图片聊天/录音回归测试 `10/10` 通过，相关 JavaScript `node --check` 通过；APK 构建因环境缺少 `AASC_ANDROID_NODE_RUNTIME_DIR` 和 `JAVA_HOME` 未完成。
+
+## Android MNNChat 本地 LLM 构建
+
+- ✅ [2026-09-13] 本地 LLM 网关创建实例复用任务通用流程
+  - `task-panel.js` 按 `mode: service` 统一判断服务型内置任务，`llm-server` 点击创建实例进入既有通用配置页。
+  - 支持沿用服务端、显示端、子显示端和目标 `displayId` 选择；未增加 `llm-server` 专用创建分支，任务提交、运行、停止、恢复和日志继续由任务引擎处理。
+  - 验证：`task-panel.js` 语法检查通过；任务入口、视觉任务和任务链接契约测试 9/9 通过。
+
+- ✅ [2026-09-13] 修复模型选择后永久显示“切换已排队”
+  - 更新 `ModelDownloader.kt` 的开发服务器证书指纹，匹配当前 `res/certs/cert.pem`，恢复 APK 从服务端读取 LLM 清单和下载模型文件。
+  - 修正 `llm-gateway-service.js` 对 `{ type: 'llm.status', status: {...} }` 的状态解包，并在 `llm-router.js` 保留 `state` 字段；控制端现在能显示下载中、加载中、就绪和错误状态。
+  - 现场证据：设备已收到 `llm.selectModel`，旧指纹导致下载目录为空；修复后需重新构建安装 APK，再执行 Qwen3.5 真机下载/加载验收。
+- ✅ [2026-09-13] 修复 ModelScope CDN 远端模型文件 403
+  - `server-app.js` 的 ModelScope 远端代理请求补充标准 `User-Agent` 和 `Accept`，跟随签名 CDN 302 后可返回模型文件；此前 Node 默认请求在 `llm.mnn` 处被 CDN 拒绝。
+  - 验证：同一签名 URL 使用请求头返回 `200` 和正确 `Content-Length`，无请求头返回 `403`。
+- ✅ [2026-09-13] 增加 APK 大模型单文件传输重试
+  - `ModelDownloader.kt` 对网络 EOF、HTTP 非 2xx 和 hash 校验失败的当前文件最多重试 3 次，已完成文件继续保留在 staging，最终仍需全部 hash 通过才原子安装。
+  - 针对真机 `visual.mnn.weight` 的 `unexpected end of stream` 现场失败增加保护，避免单个视觉权重中断导致全模型重新开始。
+
+- ✅ [2026-09-13] 接入 Qwen3.5 0.8B Claude Opus 推理蒸馏 MNN 模型
+  - 增加 `qwen3.5-0.8b-claude-opus-distilled-mnn`，固定 ModelScope 仓库 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN` 和 revision `c1bc31b15286afa708f37f690099d10f21d1cc74`。
+  - 清单加入 9 个运行文件及逐文件大小/SHA-256，包含 `visual.mnn`、`visual.mnn.weight`；模型总下载量约 518.93 MiB，标记 `multimodal=true`。
+  - 当前 NativeBridge 只把多模态消息中的文本交给 MNN-LLM，图片理解协议未宣称完成；模型加载失败时保留旧模型。
+  - 验证：ModelScope 直连配置文件 `200/652 bytes`，服务器清单和代理下载 `200/652 bytes`；LLM/显示端定向测试 `11/11` 通过；`npm run restart:server`、`npm run build:server-package` 成功。
+
+- ✅ [2026-09-13] 增加显示端 LLM 能力开关并接入 MNNChat 参考模型的 ModelScope 下载目录
+  - 控制端能力设置新增 `capabilities.llm.enabled`；关闭后显示端不参与本地 LLM 路由且拒绝模型切换，原生 `supported/ready` 状态保持独立。
+  - 参考 MNNChat 官方 `model_market.json`，发布 4 个已核对的轻量 MNN-LLM 模型，固定 ModelScope 仓库/revision、文件大小和 SHA-256；服务端按白名单流式代理，不接受任意上游地址。
+  - 改动：`server-app.js`、LLM 路由/清单服务、`device-list.js`、`display.html`、`res/models/llm/manifest.json`、相关 design/spec/task/测试。
+  - 验证：相关 JavaScript `node --check` 通过；LLM/显示端定向契约测试 `11/11` 通过。
+
+- ✅ [2026-09-13] 将控制端 LLM 模型选择移到设备列表下方的当前显示端卡片
+  - 设备列表继续显示 MNN-LLM 能力图标，但不再在每个列表项内显示模型下拉框。
+  - 下方只渲染一个当前选中显示端的 LLM 卡片；显示端切换、模型清单更新或状态回报后同步刷新。
+  - 验证：`device-list.js`、`upload.html`、`upload.css` 语法检查和 LLM UI 契约测试通过。
+
+- ✅ [2026-09-12] 完成官方 MNN 3.6.1 Android native 与 MNNChat Debug APK 构建
+  - 固定 `AASC_MNN_REVISION=d407447ed56c4121a11ccbd266dc184ca1ead0c2`，使用 `/opt/android-sdk/ndk/28.2.13676358` 完成官方 MNN native 编译/安装；准备脚本在本地已具备固定提交时跳过不必要的网络 fetch。
+  - 修正官方 `third_party` 头文件路径，并为官方 `llm_session.cpp` 的 Firebase 回调提供 AASC 无操作适配，避免引入 Firebase 依赖。
+  - `arguments` 改放到 `defaultConfig.externalNativeBuild.cmake`，模块级 `externalNativeBuild.cmake` 只负责声明 `CMakeLists.txt` 路径，解决 `Unresolved reference: arguments`。
+  - `prepare:mnnllm-android` 和 Gradle 构建均要求显式设置固定 `AASC_MNN_ROOT`、`AASC_MNN_REVISION`；缺少时明确失败，不生成不含官方 MNN-LLM native 库的 APK。
+  - 验证：SSH 远端 `npm run build:apk` 成功；最新 APK 为 `src/apps/android-display/app/build/outputs/apk/debug/app-debug.apk`，109372747 bytes，SHA-256 为 `4d26488f79b2f5e0f69f75d43471095202ad5af3bd19a1db4c38b2caa3968b21`；`libMNN.so`、`libmnn_llm_bridge.so` LOAD 对齐为 `0x4000`，并已通过 `npm run upload:apk` 安装到 `192.168.1.6:5555`。
+
+## 控制端语音配置
+
+- ✅ [2026-09-13] 修复聊天 profile 配置覆盖后历史记录显示为空的问题。
+  - 恢复 `config/config.json` 中的 `qwen3.5` profile 和 activeProfile，保留现有 TTS、ASR、语音窗口等其他配置。
+  - 修正 `llm-service.js` 历史展示过滤：配置切换后仍显示已持久化的群聊、私聊和临时聊天记录；模型上下文继续按 profile 隔离。
+  - 新增配置/历史兼容契约测试和对应 design/spec/task 文档；未发现测试代码直接写入真实配置文件。
+  - 验证：配置 JSON 解析、服务端 JavaScript 语法检查、聊天历史契约测试及重启后 `/api/chat/config`、`/api/chat/history` 接口回归通过。
+
+- ✅ [2026-09-12] 增加临时对话、持续群聊和小爱私聊窗口，并支持两个窗口时长配置。
+  - 任意已配置角色名进入默认 30 秒临时群聊；`开始对话`/`结束对话`控制默认 3 分钟持续群聊；`你好<角色名>`/`<角色名>你好`进入私聊，`<角色名>再见`/`再见<角色名>`结束私聊，关键词中间允许空白、标点或符号。
+  - TTS 实际播放期间暂停服务端和显示端倒计时，播放队列全部完成后按当前窗口类型重新开始完整计时，非打断模式同样生效。
+  - 控制端声纹面板新增临时/持续窗口秒数设置，通过现有 WebSocket 配置流程持久化并广播权威值；更新 display voice design/spec/usage/task 文档和契约测试。
+  - 验证：SSH `as@192.168.1.39` 侧 JavaScript 语法检查通过；定向回归列出的 13 个测试文件全部通过（包含 `display-voice-conversation` 10/10、`display-voice-listening` 40/40）。
+- ✅ [2026-09-12] 修正临时对话唤醒词为现有角色自动匹配，不再依赖默认角色名或写死“小爱”。
+  - 显示端会话解析遍历已配置角色名和聊天模板名；任意角色名单独触发临时窗口，私聊进入/退出继续使用同一角色名匹配链路。
+  - 增加更换角色名后的状态机回归断言；SSH 定向语法检查和 5 个相关测试文件全部通过。
+- ✅ [2026-09-12] 增加临时/一次性群聊切换、全局单实例临时会话和控制端临时页签。
+  - 角色名加内容默认启动临时群聊，配置切换为一次性群聊后保持等待唤醒；临时会话使用独立 LLM 会话键，新临时唤醒替换旧实例，已在临时会话中的其他显示端同步到新实例。
+  - 控制端通过 WebSocket 接收和清空全局临时快照，临时页签展示临时消息且不混入普通群聊历史；语音聊天 TTS 携带原始会话显示端，备用播放端不会暂停错倒计时。
+  - 改动文件：`server-app.js`、`display-voice-conversation.js`、`voice-command-app-service.js`、`llm-service.js`、`voiceprint-panel.js`、`chat.js`、`websocket.js`、相关配置、测试及 design/spec/task/usage 文档。
+  - 验证：6 个 JavaScript 文件 `node --check` 通过；定向回归 5 个测试文件全部通过（状态机 11/11，聊天模板 16/16，监听协议、普通聊天和 TTS 路由契约通过）。
+- ✅ [2026-09-13] 修复控制端临时聊天页签无记录且不支持直接发送。
+  - 临时页签解除只读限制，发送消息携带 `temporaryConversation` 和当前会话 ID；服务端首次发送自动创建全局临时实例，旧会话 ID自动归并到当前实例。
+  - 控制端用户消息和 AI 回复均写入临时快照并通过现有 WebSocket 同步，避免显示“暂无聊天记录”或误写入普通群聊。
+  - 验证：服务端/控制端语法检查通过，普通聊天、聊天模板和临时发送契约测试通过；监听契约测试保留既有 `...data.capabilities` 断言失败。
+
+## 录音控制与天气识别
+
+- ✅ [2026-09-12] 完成控制端一键暂停所有录音和天气识别日期支持。
+  - 服务端新增仅运行时的全局暂停状态，通过 WebSocket 同步控制端、浏览器显示端和 Windows 子显示端；暂停时阻止新 ASR、丢弃在途结果并终止临时录音，恢复时仅恢复普通监听。
+  - 控制端新增右下角圆形图标浮动按钮，按钮按“齿轮 → 自测 → 录音状态”竖直排列；正常状态显示麦克风，暂停状态显示红色麦克风和斜杠，点击后先即时反馈再由服务端权威广播校正，未改动显示端能力、录音模式和声纹配置。
+  - 天气命令支持今天、明天、后天及成都等城市前后组合；今天保留首日逐时预报，明天/后天只输出对应逐日预报，无对应日期时返回“暂无该日期天气预报”。
+  - 新增全局录音暂停契约测试和天气日期测试；本次定向测试 16/16 通过，录音相关回归测试保持通过，相关 JavaScript 语法检查通过。
+  - 本次 UI 修复涉及 `upload.html`、`upload.css`、`floating-control.js`、`tests/global-recording-pause.test.js` 及对应 design/spec/task 文档。
+  - 全量 `npm.cmd test` 受工作区既有环境/契约失败影响未完成收敛，详见本次交付说明。
+
+## Android MNNChat 本地 LLM
+
+- ✅ [2026-09-12] 实现 Android MNNChat 本地 LLM 第一阶段链路。
+  - 新增服务端 LLM 模型清单、hash/路径校验、`/v1/chat/completions`、`/v1/responses`、`/v1/models`、WebSocket 路由/队列和 `llm-server` 内置任务；目标显示端不可用时返回错误，不回退主服务器模型。
+  - 新增 APK 单模型选择/下载/校验/原子切换/推理 bridge、官方 MNN-LLM JNI/CMake 接入和固定 revision 准备脚本；缺少官方 native 产物时构建直接失败。
+  - 新增控制端和 APK 控制页的 LLM 能力标注、模型选择器及状态回报；扩展独立 `cpuAffinity.llm`（默认大核 2、小核 0、优先大核）。
+  - 验证：Node 定向测试 17/17 通过，相关 JS `node --check` 通过；Gradle 编译因远端已有用户构建进程占用资源暂未完成。
+
 ## Windows 子显示端语音输入增强
 
 - ✅ [2026-09-12] 修复发送后立即退出、无超时退出和录音协议未知消息问题，并新增输入模式本地声纹策略；补充请求级声纹旁路。
@@ -8,6 +119,17 @@
   - Node 子显示端处理 `voiceRecordingConfig` 和 `displayRecordingRequest`，暂不支持临时录音回放时按协议返回明确错误。
   - `Alt+C` 切换只改变本地策略，不再触发状态提示或暂停录音；输入模式 `false` 通过 `localTextInputRequireVoiceprint` → `asrAudio.useVoiceprint` 传到实际识别端，跳过声纹提取并返回空声纹耗时。
   - 更新 Windows 语音输入 design/spec/task/usage 文档、配置和契约测试；定向回归 26/26 通过，Node/服务端 JavaScript 语法检查通过；全量 `npm test` 为 630/631，唯一失败为已登记的 `display-native-bridge.test.js` 原生 `injectTouch(down)` 契约；Windows 10/11 实机验收仍待完成。
+
+## Android 显示端完整离线 APK
+
+- ✅ [2026-09-12] 新增正式显示端完整离线 APK 构建命令 `npm run build:apk:offline`。
+  - APK 文件名为 `aasc-display-offline.apk`，applicationId 为 `com.aasc.display.offline`，版本名为 `0.1.0-offline`；普通 `npm run build:apk` 行为保持不变。
+  - 按固定白名单内置 32 个正式模型文件，共 `451266757` bytes（约 430.4 MiB）；不包含测试 WAV、测试声纹变体、YOLO 其他尺寸、分割 PT 和 LFM-VL。
+  - 离线 APK 默认启动本机 `https://127.0.0.1:8081/display`，Node 配置使用 `aasc.role=main`，不启动远端 AASC 子服务器连接；显示页增加顶层“控制端”按钮，可弹出/隐藏同源 `/control` 页面。
+  - 修复离线 APK 未写入 `asr.device=display` 导致页面误走服务端 ASR、提示“ASR 服务未初始化”的问题；离线包现在明确使用本机 ASR。
+  - 离线 APK 现会带入当前 `res/tasks` 的任务定义、配置和 `.task-links.json` 关联文件，排除 `results` 历史运行结果；首次安装时播种，设备已有任务目录时保留本地内容。离线打包结束后自动执行 Gradle Daemon 清理。
+  - 验证：Node 离线 Runtime/HTTPS/构建契约测试 20/20；Android `:app:testDebugUnitTest` 和普通 `:app:assembleDebug` 均通过；真实离线 APK 构建成功，当前 APK 为 `999971485` bytes，`apkanalyzer` 确认 applicationId、版本名和应用名称，APK manifest 无重复路径且 assets 已包含 32 个模型文件。
+  - 真机安装回放发现临时构建 Runtime 漏掉 Node 动态库，启动时报 `libz.so.1 not found`；现已增加构建前动态库完整性校验，并使用真机正常包的完整 arm64 Runtime 重新验收。
 
 ## Windows 子显示端语音输入录音恢复
 
@@ -35,6 +157,14 @@
   - 新增 `/api/voiceprint/model` 测试切换接口；状态、注册和测试结果返回当前模型 ID、名称和 embedding 维度。
   - 改动文件：`VoiceprintModel.kt`、声纹协调器/HTTP/网页/原生页面、APK 资源复制配置、三个模型资源及相关测试、design/spec/task 文档。
   - 验证：Android JVM 单测、`tests/android-asr-apk.test.js`、`npm run build:android-asr` 和 `git diff --check` 通过；真机 `SM-N9500/Android 9/API 28` 三模型均加载、注册和单段匹配成功，切换后注册库清空且无崩溃/OOM。
+
+## 语音命令 TTS 单目标动态路由
+
+- ✅ [2026-09-12] 将语音命令产生的 TTS 改为来源显示端优先、语音播放能力兜底的单目标动态路由。
+  - 语音命令、语音聊天、搜索、帮助、确认、模式提示和修复模式 Agent 每句重新读取在线 `voicePlayback` 能力；来源/指定目标可用时优先，否则只发送到第一个在线备用显示端。
+  - 停止播报按当前会话最近实际播放目标定向发送；`tts.device` 生成设备、`playOnControl` 控制端播放和现有音频协议保持不变。
+  - 文本媒体复用 `voice-playback-router.js` 的来源端优先和能力兜底解析规则；补充路由、Agent 和语音流程契约测试及 design/spec/task 文档。
+  - 验证：语音相关定向测试 `57/57` 通过；完整 `npm test` `600/601` 通过，唯一失败为已登记的 DeX `display-native-bridge.test.js` 原生 `injectTouch(down)` 环境契约。
 
 ## 显示端代码变化检测远端配置
 
@@ -7751,6 +7881,13 @@
   - 日志记录旧/新模式、私聊目标、来源和显示端 `displayId`；相同状态的同步不重复打印，旧调用参数保持兼容。
   - 验证结果：新增测试 3/3、聊天会话恢复 5/5、Pi Agent 模式切换 7/7、群聊/私聊语音流程 12/12、显示端语音状态 9/9 通过；服务端语法检查通过，`git diff --check` 通过。
 
+## ASR/声纹识别耗时
+
+- ✅ [2026-09-12] `asrResult` 增加 ASR 与声纹识别模型处理耗时。
+  - 新增 `asrElapsedMs`、`voiceprintElapsedMs` 毫秒字段，覆盖正式 Android 显示端普通 ASR、单人声纹、多人声纹及兼容回退路径；多人模式返回整段累计耗时。
+  - 网页显示端、服务端 ASR HTTP 响应和 `<< asrResult` 详细/简要日志保持字段透传；非法或缺失值统一记录为 `null`。
+  - 改动文件：`src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt`、`src/apps/web-mediacenter/ui/public/display.html`、`src/apps/server/boot/server-app.js`、`src/apps/server/modules/asr/asr-result-log-formatter.js`、相关测试和 design/spec/task 文档。
+  - 验证：耗时测试 4/4、ASR/显示端相关回归 6/6、直接 Gradle Debug APK 构建成功；完整 `npm test` 为 618 项通过 617 项，唯一失败为既有 DeX `injectTouch(down)` 契约；`npm run build:apk` 因缺少 `AASC_ANDROID_NODE_RUNTIME_DIR` 未进入 Gradle。
 ## 聊天会话测试隔离
 
 - ✅ [2026-09-12] 修复 `npm test` 污染聊天模式状态。
@@ -7758,3 +7895,19 @@
   - `tests/llm-agent-mode.test.js`、`tests/chat-mode-switch-log.test.js`、`tests/group-chat-templates.test.js` 的模式和会话测试改为只修改内存，并在测试结束后恢复原始状态。
   - 更新 `docs/design/chat-history-persistence.md`、`docs/spec/chat-history-persistence.md` 和 `docs/task/20260912_修复npm测试污染聊天模式状态.md`。
   - 验证：聊天相关测试 `23/23` 通过；全量 `npm test` `621` 项中 `620` 项通过，唯一失败为既有 `display-native-bridge.test.js` 的 `injectTouch(down)` 契约；全量测试后 `~/.config/aasc-user/chat-session.json` 未生成。
+
+## 临时角色选择 Bug 修复
+
+- ✅ [2026-09-13] 修复控制端临时页签选择角色后选择器一直禁用的问题
+  - 根因：服务端已有 startTemporaryConversation Fallback 分支，但消息类型遗漏于 controlTypes 注册表，导致请求无法到达处理器。
+  - 修复：补充 WebSocket 控制端消息注册，并增加临时角色协议回归断言；未修改 config/config.json。
+  - 验证：定向测试通过；SSH 完整测试 667 项中 663 项通过，4 项为既有无关失败；远端服务重启及 /api/chat/config 健康检查通过。
+
+## 临时对话角色选择
+
+- ✅ [2026-09-13] 临时页签支持选择单一角色并由服务端绑定临时会话。
+  - 临时会话快照新增 `roleName`/`templateId`；动态角色名精确唤醒会保存自动匹配的角色，新的角色选择会替换旧临时会话。
+  - 临时 LLM 请求只使用当前角色模板提示词；普通“开始对话”群聊继续使用全部角色定义。
+  - 控制端临时页签增加角色选择和重新开始按钮，选择通过 `startTemporaryConversation` WebSocket 消息完成，普通聊天只发送服务端会话 ID。
+  - 更新 `server-app.js`、语音会话解析、`llm-service.js`、控制端聊天 UI、design/spec/task 文档及角色契约测试。
+  - 验证：相关 JavaScript `node --check`、唤醒回归 `11/11`、临时角色契约 `2/2` 通过；全量 `npm.cmd test` 受工作区既有环境/契约失败影响未完成收敛。
