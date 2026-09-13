@@ -8,44 +8,102 @@ const {
 const voiceCommand = require('../src/apps/web-mediacenter/modules/voice/voice-command-app-service');
 
 const assistants = ['小爱', '妲己'];
+const alternateAssistants = ['云雀', '妲己'];
 
 function testInitialState() {
     const state = createConversationState(true);
     assert.strictEqual(state.state, 'waitingWake');
     assert.strictEqual(state.target, null);
+    assert.strictEqual(parseConversationCommand('小爱', []), null);
 }
 
 function testWakeAndPrivateSwitch() {
     assert.deepStrictEqual(parseConversationCommand('你好小爱', assistants), {
         type: 'wake',
-        mode: 'group',
-        target: null
-    });
-    assert.deepStrictEqual(parseConversationCommand('小爱开始对话', assistants), {
-        type: 'wake',
         mode: 'private',
+        windowType: 'conversation',
         target: '小爱'
     });
-    assert.deepStrictEqual(parseConversationCommand('妲己开始对话', assistants), {
+    assert.deepStrictEqual(parseConversationCommand('小爱，你好', assistants), {
         type: 'wake',
         mode: 'private',
+        windowType: 'conversation',
+        target: '小爱'
+    });
+    assert.deepStrictEqual(parseConversationCommand('小 爱 —— 你 好', assistants), {
+        type: 'wake',
+        mode: 'private',
+        windowType: 'conversation',
+        target: '小爱'
+    });
+    assert.deepStrictEqual(parseConversationCommand('开始对话', assistants), {
+        type: 'wake',
+        mode: 'group',
+        windowType: 'conversation',
+        target: null
+    });
+    assert.deepStrictEqual(parseConversationCommand('小爱', assistants), {
+        type: 'wake',
+        mode: 'group',
+        windowType: 'temporary',
+        target: null,
+        assistantName: '小爱'
+    });
+    assert.deepStrictEqual(parseConversationCommand('再见，小爱', assistants), {
+        type: 'endPrivate',
+        target: '小爱'
+    });
+    assert.deepStrictEqual(parseConversationCommand('再见 —— 小 爱', assistants), {
+        type: 'endPrivate',
+        target: '小爱'
+    });
+    assert.deepStrictEqual(parseConversationCommand('妲己，你好', assistants), {
+        type: 'wake',
+        mode: 'private',
+        windowType: 'conversation',
         target: '妲己'
+    });
+    assert.deepStrictEqual(parseConversationCommand('云雀', alternateAssistants), {
+        type: 'wake',
+        mode: 'group',
+        windowType: 'temporary',
+        target: null,
+        assistantName: '云雀'
+    });
+    assert.strictEqual(parseConversationCommand('小爱', alternateAssistants), null);
+    assert.deepStrictEqual(parseConversationCommand('你好，云雀', alternateAssistants), {
+        type: 'wake',
+        mode: 'private',
+        windowType: 'conversation',
+        target: '云雀'
+    });
+    assert.deepStrictEqual(parseConversationCommand('再见，云雀', alternateAssistants), {
+        type: 'endPrivate',
+        target: '云雀'
     });
 }
 
 function testStateTransitions() {
     let state = createConversationState(true);
-    let result = reduceConversationInput(state, '小爱你好', assistants, 1000);
+    let result = reduceConversationInput(state, '小爱', assistants, 1000);
     assert.strictEqual(result.accepted, true);
     assert.strictEqual(result.state.state, 'activeGroup');
+    assert.strictEqual(result.state.windowType, 'temporary');
 
-    result = reduceConversationInput(result.state, '小爱开始对话', assistants, 2000);
+    result = reduceConversationInput(result.state, '小爱你好', assistants, 2000);
     assert.strictEqual(result.state.state, 'activePrivate');
     assert.strictEqual(result.state.target, '小爱');
 
-    result = reduceConversationInput(result.state, '结束对话', assistants, 3000);
+    result = reduceConversationInput(result.state, '小爱再见', assistants, 3000);
     assert.strictEqual(result.state.state, 'waitingWake');
     assert.strictEqual(result.state.target, null);
+
+    result = reduceConversationInput(result.state, '开始对话', assistants, 4000);
+    assert.strictEqual(result.state.state, 'activeGroup');
+    assert.strictEqual(result.state.windowType, 'conversation');
+
+    result = reduceConversationInput(result.state, '结束对话', assistants, 5000);
+    assert.strictEqual(result.state.state, 'waitingWake');
 }
 
 function testDisabledAndExpiry() {
@@ -61,6 +119,13 @@ function testDisabledAndExpiry() {
     };
     assert.strictEqual(isConversationExpired(active, 180999), false);
     assert.strictEqual(isConversationExpired(active, 181000), true);
+
+    const temporary = {
+        ...active,
+        windowType: 'temporary'
+    };
+    assert.strictEqual(isConversationExpired(temporary, 30999), false);
+    assert.strictEqual(isConversationExpired(temporary, 31000), true);
 }
 
 function testBuiltinCommandBypassesWakeWithoutActivatingConversation() {
@@ -141,7 +206,8 @@ function testAddressedGroupInputIsOneShotWithoutActivatingConversation() {
         waiting,
         '小爱，请介绍一下今天的安排',
         assistants,
-        1000
+        1000,
+        { addressedGroupMode: 'oneShot' }
     );
     assert.strictEqual(result.accepted, true);
     assert.strictEqual(result.state.state, 'waitingWake');
@@ -153,12 +219,33 @@ function testAddressedGroupInputIsOneShotWithoutActivatingConversation() {
     });
 }
 
+function testAddressedGroupInputStartsTemporaryConversationByDefault() {
+    const waiting = createConversationState(true);
+    const result = reduceConversationInput(
+        waiting,
+        '妲己，请介绍一下今天的安排',
+        assistants,
+        1000
+    );
+    assert.strictEqual(result.accepted, true);
+    assert.strictEqual(result.state.state, 'activeGroup');
+    assert.strictEqual(result.state.windowType, 'temporary');
+    assert.strictEqual(result.state.lastValidInputAt, 1000);
+    assert.strictEqual(result.event.temporaryConversationStarted, true);
+    assert.strictEqual(result.event.addressedAssistant, '妲己');
+}
+
 function testPureAddressedWakeDoesNotBecomeChatInput() {
     const waiting = createConversationState(true);
     const result = reduceConversationInput(waiting, '你好，小爱。', assistants, 1000);
     assert.strictEqual(result.accepted, true);
-    assert.strictEqual(result.state.state, 'activeGroup');
-    assert.deepStrictEqual(result.event, { type: 'wake', mode: 'group', target: null });
+    assert.strictEqual(result.state.state, 'activePrivate');
+    assert.deepStrictEqual(result.event, {
+        type: 'wake',
+        mode: 'private',
+        windowType: 'conversation',
+        target: '小爱'
+    });
 }
 
 testInitialState();
@@ -170,5 +257,6 @@ testSystemHelpBypassesWakeWithTrailingPunctuation();
 testCustomCommandBypassesWakeWithoutActivatingConversation();
 testConfirmationKeywordInsideOrdinarySentenceDoesNotBypassWake();
 testAddressedGroupInputIsOneShotWithoutActivatingConversation();
+testAddressedGroupInputStartsTemporaryConversationByDefault();
 testPureAddressedWakeDoesNotBecomeChatInput();
-console.log('display-voice-conversation.test.js: 9/9 passed');
+console.log('display-voice-conversation.test.js: 11/11 passed');

@@ -5,14 +5,64 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ANDROID_ABI = 'arm64-v8a';
+const DEFAULT_RUNTIME_DIR = path.resolve(__dirname, '../../3rd/android-node-runtime', ANDROID_ABI);
 const NODE_LIBRARY_NAME = 'libaasc_node.so';
 const NODE_LIBRARY_PATH = `native/${ANDROID_ABI}/${NODE_LIBRARY_NAME}`;
+const REQUIRED_RUNTIME_LIBRARIES = Object.freeze([
+    'libz.so.1',
+    'libcares.so',
+    'libsqlite3.so',
+    'libffi.so',
+    'libcrypto.so.3',
+    'libssl.so.3',
+    'libicui18n.so.78',
+    'libicuuc.so.78',
+    'libicudata.so.78'
+]);
 const REQUIRED_PACKAGE_ENTRIES = [
     'src/apps/server/boot/server-launcher.js',
     'package.json',
     'package-lock.json'
 ];
 const CERTIFICATE_ENTRIES = ['cert.pem', 'key.pem'];
+const RUNTIME_MODE_FILE = 'runtime-mode.txt';
+const OFFLINE_MODEL_METADATA_FILE = 'offline-model-manifest.json';
+// 正式 Android 显示端的离线模型固定白名单。测试音频、测试 APK 专用模型、
+// YOLO 其他尺寸和原始 PT 文件不进入完整离线包，避免把不可运行或未确认的资源带入生产包。
+const OFFLINE_MODEL_FILES = Object.freeze([
+    'sensevoice/model.int8.onnx',
+    'sensevoice/model.int8.onnx.sha256',
+    'sensevoice/tokens.txt',
+    'sensevoice/tokens.txt.sha256',
+    'streaming-zipformer/encoder.int8.onnx',
+    'streaming-zipformer/decoder.int8.onnx',
+    'streaming-zipformer/joiner.int8.onnx',
+    'streaming-zipformer/tokens.txt',
+    'voiceprint/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx',
+    'voiceprint/pyannote_segmentation_3_0_int8.onnx',
+    'speech-enhancement/gtcrn_simple.onnx',
+    'tts/2052.INI',
+    'tts/MSTTSLocEnUS.dat',
+    'tts/MSTTSLocZhCN.dat',
+    'tts/MSTTSLocZhCN.ini',
+    'tts/Tokens.xml',
+    'tts/ZhCN.address.dat',
+    'tts/ZhCN.message.dat',
+    'tts/ZhCN.mixlingual.dat',
+    'tts/ZhCN.name.dat',
+    'tts/am_v5_decoder.bin',
+    'tts/am_v5_encoder.bin',
+    'tts/device_vocoder_v6_streaming.bin',
+    'tts/manifest.json',
+    'tts/phones.txt',
+    'tts/punc.txt',
+    'rapidocr/PP-OCRv6_det_small.onnx',
+    'rapidocr/PP-OCRv6_rec_small.onnx',
+    'rapidocr/ch_ppocr_mobile_v2.0_cls_mobile.onnx',
+    'rapidocr/ppocrv6_dict.txt',
+    'yolo11/yolo11n.onnx',
+    'yolo11/yolo11n.classes.json'
+]);
 
 function resolveRequiredDirectory(value, label) {
     if (typeof value !== 'string' || value.trim() === '') {
@@ -23,6 +73,31 @@ function resolveRequiredDirectory(value, label) {
         throw new Error(`${label} 不存在: ${resolved}`);
     }
     return resolved;
+}
+
+function assertRuntimeLibraries(runtimeDir) {
+    const libraryDir = path.join(runtimeDir, 'lib');
+    let libraryStat;
+    try {
+        libraryStat = fs.lstatSync(libraryDir);
+    } catch {
+        throw new Error(`Android Node Runtime 缺少动态库目录: lib（至少需要 ${REQUIRED_RUNTIME_LIBRARIES[0]}）`);
+    }
+    if (!libraryStat.isDirectory()) {
+        throw new Error('Android Node Runtime 动态库目录不是目录: lib');
+    }
+    for (const libraryName of REQUIRED_RUNTIME_LIBRARIES) {
+        const libraryPath = path.join(libraryDir, libraryName);
+        let libraryFileStat;
+        try {
+            libraryFileStat = fs.lstatSync(libraryPath);
+        } catch {
+            throw new Error(`Android Node Runtime 动态库缺少文件: ${libraryName}`);
+        }
+        if (!libraryFileStat.isFile()) {
+            throw new Error(`Android Node Runtime 动态库不是普通文件: ${libraryName}`);
+        }
+    }
 }
 
 function assertSafeRelativePath(relativePath) {
@@ -107,12 +182,94 @@ async function copyFileWithManifest(sourceRoot, relativePath, outputRoot, output
     };
 }
 
+async function copyOfflineModels(modelRoot, outputRoot) {
+    const files = [];
+    for (const relativePath of OFFLINE_MODEL_FILES) {
+        const sourcePath = path.join(modelRoot, relativePath);
+        let sourceStat;
+        try {
+            sourceStat = await fs.promises.lstat(sourcePath);
+        } catch (error) {
+            throw new Error(`离线模型文件不存在: ${relativePath}`);
+        }
+        if (!sourceStat.isFile()) {
+            throw new Error(`离线模型文件不是普通文件: ${relativePath}`);
+        }
+        files.push(await copyFileWithManifest(
+            modelRoot,
+            relativePath,
+            outputRoot,
+            path.join('server', 'res', 'models', relativePath)
+        ));
+    }
+    return files;
+}
+
+async function listOfflineTaskFiles(sourceRoot, relativePath = '') {
+    const currentPath = path.join(sourceRoot, relativePath);
+    const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
+    const files = [];
+
+    for (const entry of entries) {
+        const childRelativePath = path.join(relativePath, entry.name);
+        assertSafeRelativePath(childRelativePath);
+        // results 是设备运行时生成的历史记录，且 latest 可能是软链接；离线包只携带
+        // 当前任务定义、配置和根目录的任务关联文件，不把运行结果带进 APK。
+        const pathSegments = childRelativePath.split(path.sep);
+        if (pathSegments.includes('results')) continue;
+        if (entry.isSymbolicLink()) {
+            throw new Error(`离线任务目录不允许符号链接: ${childRelativePath}`);
+        }
+        if (entry.isDirectory()) {
+            files.push(...await listOfflineTaskFiles(sourceRoot, childRelativePath));
+            continue;
+        }
+        if (!entry.isFile()) {
+            throw new Error(`离线任务目录包含不支持的文件类型: ${childRelativePath}`);
+        }
+        files.push(childRelativePath);
+    }
+
+    return files;
+}
+
+async function copyOfflineTasks(taskRoot, outputRoot) {
+    const files = [];
+    for (const relativePath of await listOfflineTaskFiles(taskRoot)) {
+        files.push(await copyFileWithManifest(
+            taskRoot,
+            relativePath,
+            outputRoot,
+            path.join('server', 'res', 'tasks', relativePath)
+        ));
+    }
+    return files;
+}
+
+async function writeGeneratedFileWithManifest(outputRoot, relativePath, content) {
+    const outputPath = path.join(outputRoot, relativePath);
+    assertSafeRelativePath(relativePath);
+    await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.promises.writeFile(outputPath, content, 'utf8');
+    const buffer = Buffer.from(content, 'utf8');
+    return {
+        path: relativePath.split(path.sep).join('/'),
+        size: buffer.length,
+        sha256: crypto.createHash('sha256').update(buffer).digest('hex')
+    };
+}
+
 async function copyDirectoryWithManifest(sourceRoot, outputRoot, outputPrefix = '', options = {}) {
     const sourceFiles = await listFiles(sourceRoot);
     const excludedPaths = new Set(options.excludedPaths || []);
+    const excludedPrefixes = options.excludedPrefixes || [];
     const files = [];
     for (const relativePath of sourceFiles) {
-        if (excludedPaths.has(relativePath)) continue;
+        if (excludedPaths.has(relativePath) || excludedPrefixes.some(prefix => (
+            relativePath === prefix || relativePath.startsWith(`${prefix}${path.sep}`)
+        ))) {
+            continue;
+        }
         const outputRelativePath = outputPrefix
             ? path.join(outputPrefix, relativePath)
             : relativePath;
@@ -179,13 +336,27 @@ async function copyCertificates(certDir, outputDir) {
 
 async function prepareAndroidNodeRuntime(options = {}) {
     const runtimeDir = resolveRequiredDirectory(
-        options.runtimeDir || process.env.AASC_ANDROID_NODE_RUNTIME_DIR,
-        'AASC_ANDROID_NODE_RUNTIME_DIR'
+        options.runtimeDir || process.env.AASC_ANDROID_NODE_RUNTIME_DIR || DEFAULT_RUNTIME_DIR,
+        'Android Node Runtime'
     );
     const packageDir = resolveRequiredDirectory(
         options.packageDir || process.env.AASC_ANDROID_NODE_PACKAGE_DIR,
         'AASC_ANDROID_NODE_PACKAGE_DIR'
     );
+    const includeOfflineModels = options.includeOfflineModels === true;
+    const modelRoot = includeOfflineModels
+        ? resolveRequiredDirectory(
+            options.modelRoot || path.join(process.cwd(), 'res', 'models'),
+            '离线模型目录'
+        )
+        : null;
+    const includeOfflineTasks = options.includeOfflineTasks === true;
+    const taskRoot = includeOfflineTasks
+        ? resolveRequiredDirectory(
+            options.taskRoot || path.join(process.cwd(), 'res', 'tasks'),
+            '离线任务目录'
+        )
+        : null;
     const outputDir = path.resolve(
         options.outputDir || path.join(process.cwd(), 'src/apps/android-display/app/build/generated/node-runtime/assets')
     );
@@ -197,6 +368,7 @@ async function prepareAndroidNodeRuntime(options = {}) {
     if (!fs.existsSync(nodePath) || !fs.statSync(nodePath).isFile()) {
         throw new Error(`Android Node Runtime 的 node 不存在: ${nodePath}`);
     }
+    assertRuntimeLibraries(runtimeDir);
     assertRequiredPackageEntries(packageDir);
 
     const temporaryOutputDir = `${outputDir}.tmp-${process.pid}-${Date.now()}`;
@@ -216,11 +388,27 @@ async function prepareAndroidNodeRuntime(options = {}) {
         );
         files.push(...runtimeFiles);
         const nodeFile = await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
-        files.push(...await copyDirectoryWithManifest(packageDir, temporaryOutputDir, 'server'));
+        const excludedPrefixes = [];
+        if (includeOfflineModels) excludedPrefixes.push('res/models');
+        if (includeOfflineTasks) excludedPrefixes.push('res/tasks');
+        files.push(...await copyDirectoryWithManifest(
+            packageDir,
+            temporaryOutputDir,
+            'server',
+            excludedPrefixes.length > 0 ? { excludedPrefixes } : {}
+        ));
         files.push(...await copyCertificates(
             options.certDir || process.env.AASC_ANDROID_NODE_CERT_DIR,
             temporaryOutputDir
         ));
+        const offlineModelFiles = includeOfflineModels
+            ? await copyOfflineModels(modelRoot, temporaryOutputDir)
+            : [];
+        files.push(...offlineModelFiles);
+        const offlineTaskFiles = includeOfflineTasks
+            ? await copyOfflineTasks(taskRoot, temporaryOutputDir)
+            : [];
+        files.push(...offlineTaskFiles);
 
         const configuredVersion = String(
             options.version || process.env.AASC_ANDROID_NODE_RUNTIME_VERSION || ''
@@ -233,6 +421,27 @@ async function prepareAndroidNodeRuntime(options = {}) {
             nodePath: NODE_LIBRARY_PATH,
             files
         };
+        files.push(await writeGeneratedFileWithManifest(
+            temporaryOutputDir,
+            RUNTIME_MODE_FILE,
+            `${includeOfflineModels ? 'offline' : 'online'}\n`
+        ));
+        if (includeOfflineModels) {
+            const modelMetadata = {
+                version,
+                files: offlineModelFiles.map(file => ({
+                    path: file.path.replace(/^server\//u, ''),
+                    size: file.size,
+                    sha256: file.sha256
+                }))
+            };
+            files.push(await writeGeneratedFileWithManifest(
+                temporaryOutputDir,
+                OFFLINE_MODEL_METADATA_FILE,
+                JSON.stringify(modelMetadata, null, 2) + '\n'
+            ));
+        }
+        manifest.files = files;
         await fs.promises.writeFile(
             path.join(temporaryOutputDir, 'runtime-manifest.json'),
             JSON.stringify(manifest, null, 2) + '\n',
@@ -285,8 +494,13 @@ module.exports = {
     CERTIFICATE_ENTRIES,
     NODE_LIBRARY_NAME,
     NODE_LIBRARY_PATH,
+    OFFLINE_MODEL_FILES,
+    OFFLINE_MODEL_METADATA_FILE,
+    RUNTIME_MODE_FILE,
+    REQUIRED_RUNTIME_LIBRARIES,
     REQUIRED_PACKAGE_ENTRIES,
     assertSafeRelativePath,
+    assertRuntimeLibraries,
     isAndroidAssetExcluded,
     isNpmInternalMetadata,
     isNpmToolShim,

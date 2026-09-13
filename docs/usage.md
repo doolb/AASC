@@ -95,7 +95,7 @@ Windows Node 子显示端的系统级语音转文字输入说明也见：[Window
 
 正式 Android 显示端的 OCR/YOLO11n 通过控制端任务面板调用；任务会请求服务器视觉接口，再由服务器转发给显示端本地推理。
 
-正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。
+普通正式 APK 的 ASR、TTS、声纹、RapidOCR、YOLO 和降噪模型均按需从服务器下载并缓存在 APK 私有目录，安装包不携带模型；服务器模型清单和准备命令见：[正式 Android 统一模型分发](design/android-model-distribution.md)。需要完整离线包时运行下面的独立命令，模型会从 `res/models` 按固定白名单打入 APK：
 
 ### 独立 ASR 测试 APK 的 Sherpa 声纹测试
 
@@ -114,17 +114,27 @@ adb install -r 3rd/tts-server/android-asr/app/build/outputs/apk/debug/app-debug.
 
 `apk-display` 启动后会在前台 Service 中启动 `server-launcher.js`，再由 launcher 启动 `server-app.js`。首次连接时填写主服务器根地址，例如 `https://192.168.1.39:8081`；WebView 继续打开主服务器 `/display`，内置 Node 子服务器主动连接主服务器 `/server`。
 
-APK 构建前必须准备 arm64 Android Node Runtime 和独立服务器运行包：
+APK 构建默认使用项目内 `3rd/android-node-runtime/arm64-v8a` 的 Android Node Runtime；只需准备独立服务器运行包：
 
 ```bash
-export AASC_ANDROID_NODE_RUNTIME_DIR="$PWD/.local/android-node-runtime/arm64-v8a"
 export AASC_ANDROID_NODE_PACKAGE_DIR="$PWD/.local/android-node-package"
 npm run build:apk
 ```
 
-Runtime 目录必须包含可执行 `node` 及其动态库；服务器包必须包含 `src/`、`package.json`、`package-lock.json` 和 Android 可用生产依赖。构建脚本会生成 SHA-256 manifest 并将其打入 APK，不会复制仓库日志、模型、用户媒体或 `3rd` 目录。APK 节点首版仅启用媒体库、显示网关和热更新，不启动 ASR、Puppeteer、外部 CLI 或 Agent 子进程。
+项目内 Runtime 包含可执行 `node` 及其动态库；如需使用其他 Runtime，可通过 `AASC_ANDROID_NODE_RUNTIME_DIR` 覆盖。构建脚本会在生成 APK 前校验这些依赖，并生成 SHA-256 manifest 打入 APK，不会复制仓库日志、模型、用户媒体或其他 `3rd` 内容。APK 节点首版仅启用媒体库、显示网关和热更新，不启动 ASR、Puppeteer、外部 CLI 或 Agent 子进程。
 
 HTTPS 开发证书会同时绑定到主服务器和 APK；如果更换主服务器证书或访问地址，必须确保新证书 SAN 覆盖访问地址，并重新构建 APK。APK 只会信任系统/用户证书以及构建时绑定的主服务器证书。
+
+### 正式显示端完整离线 APK
+
+离线 APK 使用独立应用 ID `com.aasc.display.offline`，文件名为 `aasc-display-offline.apk`，安装后默认启动本机 `https://127.0.0.1:8081/display`。构建默认使用项目内 Android Node Runtime，只需准备生产服务器运行包：
+
+```bash
+export AASC_ANDROID_NODE_PACKAGE_DIR="$PWD/.local/android-node-package"
+npm run build:apk:offline
+```
+
+当前离线包内置正式运行集约 430.4 MiB 模型（SenseVoice、streaming Zipformer、声纹 base FP32 + pyannote、GTCRN、嵌入式 TTS、RapidOCR、默认 YOLO11n）。显示页右上角的“控制端”按钮可弹出或隐藏同源控制端页面；普通 APK 不受此构建命令影响。
 
 Android 9/API 28 设备首次启动 APK 时，会弹出“照片、媒体内容和文件”共享存储授权框。选择允许后，APK 内置 Node 子服务器即可按媒体库配置访问 `/storage/emulated/0/` 及其子目录，例如：
 

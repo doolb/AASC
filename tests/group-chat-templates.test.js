@@ -64,8 +64,8 @@ test('普通群聊路由应使用全部角色模板而不是语音传入的单�
     const end = serverSource.indexOf('\nconst deviceEventDebounce', start);
     const handler = serverSource.slice(start, end);
 
-    assert.match(handler, /messageMode === 'group'[\s\S]*getGroupSystemPrompt\(\)/u);
-    assert.match(handler, /effectiveTemplateTarget\s*=\s*messageMode === 'group'\s*\?\s*null/u);
+    assert.match(handler, /\['group', 'temporary'\]\.includes\(messageMode\)[\s\S]*getGroupSystemPrompt\(\)/u);
+    assert.match(handler, /effectiveTemplateTarget\s*=\s*\['group', 'temporary'\]\.includes\(messageMode\)/u);
 });
 
 test('语音中包含角色名时应保留完整原始文本并按群聊发送', async () => {

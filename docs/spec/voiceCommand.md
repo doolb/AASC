@@ -228,7 +228,7 @@ handleTimeAnnounceCommand(text, displayId):
 ```
 handleWeatherCommand(text, displayId):
     提取城市名称:
-        移除 "天气"、"今天"、"明天"、"后天" 等关键词
+        移除 "天气"、"今天"、"今日"、"明天"、"明日"、"后天"、"后日" 等关键词
         清除全角句号、逗号、问号等无效标点
         如果城市不在 weatherCities 配置里:
             回退到 defaultWeatherCity
@@ -264,11 +264,23 @@ handleWeatherCommand(text, displayId):
                 使用 weatherCode 的本地映射，例如 143 -> "雾"
                 没有映射时再保留接口原文
 
+    解析天气日期:
+        今天/今日 -> 偏移 0，选择天气接口第一天
+        明天/明日 -> 偏移 1，按服务端本地日期匹配目标日
+        后天/后日 -> 偏移 2，按服务端本地日期匹配目标日
+        无日期词 -> 保持原有完整天气范围
+
     生成天气文本:
-        formatWeatherDetail(normalizedWeather):
-            生成当前天气、未来逐日、今日逐时、天文信息和天气指标的多行完整文本
-        formatWeatherSpeech(normalizedWeather):
-            只生成当前天气和未来逐日概览的简短中文播报文本
+        无日期:
+            detailText 生成当前天气、未来逐日、今日逐时、天文信息和天气指标
+            text 生成当前天气和未来逐日概览
+        今天:
+            detailText 只生成当前天气和第一天逐日/天文/逐时信息
+            text 生成当前天气和第一天简短摘要
+        明天/后天:
+            只生成目标日逐日和天文信息，不生成当前天气、其他日期和逐时明细
+        目标日期不存在:
+            detailText 和 text 均为 "暂无该日期天气预报"
         如果发生默认城市回退:
             在两种文本前添加 "没有找到{requestedCity}，为你播报默认城市{cityName}的天气。"
     
@@ -494,12 +506,12 @@ processVoiceCommand(text, displayId, callbacks):
     服务端注入 onTts(text) 和 onStop() 回调
     voiceCommand 不直接导入 tts-service，也不根据 displayId 生成音频
     onTts:
-        服务端 generateTtsWithFallback(text)
-        获取在线 voicePlayback 显示端
-        向每个目标发送 type='tts', action='playAudio'
+        服务端按 sourceDisplayId 优先、在线 voicePlayback 能力兜底规则选择唯一目标
+        generateTtsWithFallback(text, ..., targetDisplayId)
+        向该目标发送 type='tts', action='playAudio'
     voiceCommand 需要弹窗、确认或播放选择信息时:
         向来源 displayId 发送不带 audioUrl 的 voiceCommand
-    来源 displayId 只用于命令执行和界面反馈，不是默认 TTS 唯一目标
+    来源 displayId 同时用于命令执行、界面反馈和 TTS 播放首选目标
 ```
 
 ### 指令模式状态初始化（服务端启动时）
@@ -734,4 +746,34 @@ processVoiceCommand(text, displayId, callbacks):
 timeAnnounce.generateTimeText():
     获取当前时间
     生成格式: "现在是{年}年{月}月{日}日{星期}，{上午/下午/晚上}{时}点{分}分"
+```
+
+## 语音命令 TTS 单目标动态路由
+
+```text
+显示端来源语音命令:
+    sourceDisplayId = 语音来源显示端 ID
+    availableDisplayIds = 当前在线且 voicePlayback == true 的显示端 ID，保持稳定顺序
+    targetDisplayId = resolveVoicePlaybackTarget(sourceDisplayId, availableDisplayIds)
+    targetDisplayId 存在 -> 只向 targetDisplayId 发送 tts/playAudio
+    targetDisplayId 为空 -> 跳过当前音频并记录无可用语音播放显示端
+
+控制端来源语音命令:
+    preferredDisplayId = 控制端指定的 targetDisplayId
+    targetDisplayId = resolveVoicePlaybackTarget(preferredDisplayId, availableDisplayIds)
+    targetDisplayId 存在 -> 只向 targetDisplayId 发送 tts/playAudio
+    targetDisplayId 为空 -> 跳过当前音频并记录无可用语音播放显示端
+
+普通语音聊天、搜索、帮助、确认和模式提示:
+    每个 TTS 句子都重新读取 availableDisplayIds
+    只发送给本句解析出的一个 targetDisplayId
+    sourceDisplayId 或 preferredDisplayId 失效时，后续句子切换到备用显示端
+
+停止播报:
+    使用当前语音会话记录的实际 targetDisplayId
+    只向实际目标发送 tts/stop
+
+TTS 生成:
+    仍调用 generateTtsWithFallback(text, voice, speed, preferredDisplayId)
+    tts.device 只决定音频由服务器还是显示端生成，不改变播放目标规则
 ```

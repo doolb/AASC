@@ -9,6 +9,7 @@
 | 模块 | 文档 | 说明 |
 |------|------|------|
 | HTTP API | [api.md](spec/api.md) | 文件上传、媒体管理、TTS、提醒、聊天、整点报时等 API |
+| 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](spec/display-camera-chat.md) | 摄像头请求转发、单次拍照、实时预览和多模态聊天伪代码 |
 | API 使用与命令行工具 | [api-usage.md](spec/api-usage.md) | 服务器 HTTP API 目录、Bash 调用器和安全测试伪代码 |
 | WebSocket | [websocket.md](spec/websocket.md) | 连接处理、消息类型、广播函数、前端客户端 |
 | 配置管理 | [config.md](spec/config.md) | 配置文件、API、显示端状态、播放列表 |
@@ -34,6 +35,8 @@
 | 子服务器管理 | [sub-server.md](spec/sub-server.md) | 子服务器分发器、负载均衡、健康检查 |
 | Android Termux服务器节点 | [android-termux-server.md](spec/android-termux-server.md) | Termux 服务目录、依赖安装、启动监督和验证伪代码 |
 | APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](spec/android-embedded-node-server.md) | APK Runtime 安装、launcher 进程、主服务器连接和能力裁剪伪代码 |
+| 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](spec/android-display-offline-apk.md) | 离线模型打包、本机启动、独立包名和控制端 WebView 伪代码 |
+| Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](spec/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
 | ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](spec/asr-memory-upload-vad-unification.md) | ASR Buffer 识别、独立进程传递和 500ms VAD 配置伪代码 |
 | 服务端 TTS | [tts.md](spec/tts.md) | TTS 请求保护、内置 tts.server 服务任务与通用 HTTP URL |
@@ -51,6 +54,8 @@
 | 显示端录音模式与控制端回放 | [display-recording.md](spec/display-recording.md) | 三种录音模式、WebSocket 音频回传和控制端播放伪代码 |
 | 同一注册声纹跨显示端 ASR 去重 | [same-speaker-asr-dedup.md](spec/same-speaker-asr-dedup.md) | 同一注册声纹跨显示端短时重复语句抑制伪代码 |
 | 全局播放时暂停录音 | [global-voice-playback-recording-pause.md](spec/global-voice-playback-recording-pause.md) | 全局配置播放 TTS 时普通 ASR 录音的暂停与恢复 |
+| 控制端一键暂停所有录音 | [global-recording-pause.md](spec/global-recording-pause.md) | 全局运行时录音暂停、临时录音终止和在途 ASR 丢弃伪代码 |
+| 天气识别日期 | [weather-command-date.md](spec/weather-command-date.md) | 天气日期解析、目标日选择和按日期输出伪代码 |
 | 服务端统一处理显示端 ASR 与声纹结果 | [server-side-asr-voice-input-processing.md](spec/server-side-asr-voice-input-processing.md) | 服务端合并显示端 ASR/声纹结果并复用语音命令链路伪代码 |
 | 日志筛选与系统监控 | [log-viewer.md](spec/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
 | 日志大脑 | [log-brain.md](spec/log-brain.md) | 日志摘要、记忆体构建、LLM判断上下文接口 |

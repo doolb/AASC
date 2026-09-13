@@ -343,7 +343,10 @@ function getResponsesFingerprint(options = {}) {
 }
 
 function buildResponsesPayload({ messages, userMessage, state, fingerprint, model, maxTokens, temperature, stream = false }) {
-    const reusable = state
+    const hasImageContent = Array.isArray(messages)
+        && messages.some((message) => Array.isArray(message?.content)
+            && message.content.some((part) => part?.type === 'input_image' || part?.type === 'image_url'));
+    const reusable = !hasImageContent && state
         && state.fingerprint === fingerprint
         && (state.latestResponseId || state.conversationId);
     const payload = {
@@ -707,12 +710,29 @@ function getGroupSystemPrompt() {
     ].filter(Boolean).join('\n\n');
 }
 
+/**
+ * 构造临时会话的单角色系统提示词。
+ * 临时会话由服务端保存唤醒到的角色名，不能重新使用群聊的全部角色定义，
+ * 否则控制端切换角色后，旧角色的设定仍可能被带入下一轮请求。
+ */
+function getTemplateSystemPrompt(templateName) {
+    const basePrompt = chatConfig.systemPrompt || '';
+    const template = getTemplateByName(templateName);
+    if (!template?.name || !template.content) return basePrompt;
+
+    return [
+        basePrompt,
+        `当前临时对话角色为「${template.name}」，只使用该角色设定回答。`,
+        `角色「${template.name}」的设定：\n${template.content}`
+    ].filter(Boolean).join('\n\n');
+}
+
 function getHistory() {
     const all = [];
     for (const messages of Object.values(chatHistories)) {
-        all.push(...messages.filter(message => (
-            !message.profileName || message.profileName === activeProfile
-        )));
+        // 历史展示不能绑定当前 profile：切换/恢复模型配置后，旧消息仍然是有效记录。
+        // LLM 上下文仍由 getHistoryForOptions() 按 profile 隔离，这里只负责控制端历史展示。
+        all.push(...messages);
     }
     all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     return all;
@@ -722,8 +742,8 @@ function validateHistoryScope(options = {}) {
     const mode = options.mode || null;
     const target = options.target || null;
     const sessionId = options.sessionId || null;
-    if (mode === 'group' && !target && !sessionId) {
-        return { mode: 'group', target: null, sessionId: null };
+    if (['group', 'temporary'].includes(mode) && !target && !sessionId) {
+        return { mode, target: null, sessionId: null };
     }
     if (mode === 'private' && target && sessionId) {
         return { mode: 'private', target, sessionId };
@@ -740,6 +760,7 @@ function clearHistory(options = {}) {
     for (const key of Object.keys(chatHistories)) {
         chatHistories[key] = chatHistories[key].filter(message => {
             if (scope.mode === 'group') return message.mode === 'private';
+            if (scope.mode === 'temporary') return message.mode !== 'temporary';
             return !(
                 message.mode === 'private'
                 && message.target === scope.target
@@ -1031,6 +1052,23 @@ function getHistoryForOptions(options = {}) {
     return chatHistories[key] || [];
 }
 
+function buildImageMessageContent(text, images) {
+    if (!Array.isArray(images) || images.length === 0) return text;
+    const responseProtocol = normalizeChatTransport(chatConfig).protocol === 'openai-responses';
+    const content = [{
+        type: responseProtocol ? 'input_text' : 'text',
+        text: String(text || '')
+    }];
+    for (const image of images) {
+        if (responseProtocol) {
+            content.push({ type: 'input_image', image_url: image.dataUrl });
+        } else {
+            content.push({ type: 'image_url', image_url: { url: image.dataUrl } });
+        }
+    }
+    return content;
+}
+
 function buildMessages(userMessage, options = {}) {
     const {
         useTemplate = null,
@@ -1042,7 +1080,8 @@ function buildMessages(userMessage, options = {}) {
         target = null,
         sessionId = null,
         profileName = activeProfile,
-        promptFormat = chatConfig.promptFormat
+        promptFormat = chatConfig.promptFormat,
+        images = []
     } = options;
     const templateId = templateTarget || useTemplate || 'default';
     const format = promptFormat || 'openai';
@@ -1080,7 +1119,7 @@ function buildMessages(userMessage, options = {}) {
         }
         if (template) raw += `User:${template.content}\n`;
         raw += `User:${userMessage}`;
-        return [{ role: 'user', content: raw }];
+        return [{ role: 'user', content: buildImageMessageContent(raw, images) }];
     }
 
     const messages = [{ role: 'system', content: sysPrompt }];
@@ -1104,7 +1143,7 @@ function buildMessages(userMessage, options = {}) {
         }
     }
     if (template) messages.push({ role: 'user', content: template.content });
-    messages.push({ role: 'user', content: userMessage });
+    messages.push({ role: 'user', content: buildImageMessageContent(userMessage, images) });
     return messages;
 }
 
@@ -1128,10 +1167,10 @@ async function chat(userMessage, options = {}) {
     if (activeProfileConfig?.mode === 'agent') {
         return chatStream(userMessage, options, {});
     }
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null } = options;
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, images = [] } = options;
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images });
         let assistantMessage = '';
         if (normalizeChatTransport(chatConfig).protocol === 'openai-responses') {
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
@@ -1312,7 +1351,7 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
 }
 
 async function chatStream(userMessage, options = {}, callbacks = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null } = options;
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, images = [] } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
 
     const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
@@ -1334,7 +1373,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
         let fullMessage = '';
         let pendingText = '';
         try {
-            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId });
+            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images });
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
             const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt });
             await streamResponsesWithRecovery({
@@ -1376,7 +1415,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     let pendingText = '';
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images });
         
         const requestBody = {
             model: chatConfig.model,
@@ -1728,6 +1767,7 @@ module.exports = {
     removeTemplate,
     getTemplateByName,
     getGroupSystemPrompt,
+    getTemplateSystemPrompt,
     getHistory,
     clearHistory,
     deleteConversationRound,

@@ -23,7 +23,8 @@ async function playAgentTts({
     ttsConcurrency = 1,
     isTtsSuppressed = () => false,
     allowRepairModeTts = false,
-    getDisplayIds = null
+    getDisplayIds = null,
+    resolveDisplayId = null
 }) {
     let sentences = splitIntoSentences(message).filter((sentence) => !isPunctuationOnly(sentence));
     if (sentences.length === 0 && message && !isPunctuationOnly(message)) sentences = [message];
@@ -43,9 +44,15 @@ async function playAgentTts({
                 ? getDisplayIds()
                 : displayIds;
             const targetDisplayIds = Array.isArray(resolvedDisplayIds) ? resolvedDisplayIds : [];
+            const hasSingleTargetResolver = typeof resolveDisplayId === 'function';
+            const targetDisplayId = hasSingleTargetResolver ? resolveDisplayId() : null;
 
             if (playOnControl) {
                 sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
+            } else if (targetDisplayId) {
+                sendToDisplay(targetDisplayId, audioMessage, { allowRepairModeTts });
+            } else if (hasSingleTargetResolver) {
+                // 已明确要求单目标路由但当前没有可用目标时，不能回退到来源端。
             } else if (targetDisplayIds.length > 0) {
                 for (const targetId of targetDisplayIds) {
                     sendToDisplay(targetId, audioMessage, { allowRepairModeTts });

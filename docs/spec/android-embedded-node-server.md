@@ -63,6 +63,8 @@ Android Node Runtime 版本生成
 ```text
 准备 Runtime assets
     → 要求 runtime/arm64-v8a/node 和服务器入口存在
+    → 要求 runtime/arm64-v8a/lib 包含 Node 所需的实体动态库（libz、c-ares、SQLite、FFI、OpenSSL 和 ICU）
+    → 动态库缺失时在构建阶段失败，不生成不可启动的 APK
     → 将 node 复制为 jniLibs/arm64-v8a/libaasc_node.so，并设置可执行权限
     → 在 Gradle packaging.jniLibs 中声明 useLegacyPackaging=true，保证旧版 Android 设备将该库解压到 nativeLibraryDir
     → Android assets 不再携带 runtime/arm64-v8a/node，避免从应用私有目录执行时丢失权限

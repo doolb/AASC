@@ -10,7 +10,13 @@ object NodeServerConfig {
     private const val CONFIG_RELATIVE_PATH = "config/config.json"
     private const val SERVER_PORT = 8081
 
-    fun write(rootDir: File, mainServerUrl: String, nodeName: String, nodeId: String? = null): File {
+    fun write(
+        rootDir: File,
+        mainServerUrl: String,
+        nodeName: String,
+        nodeId: String? = null,
+        offlineMode: Boolean = false
+    ): File {
         val normalizedUrl = normalizeMainServerUrl(mainServerUrl)
         val configFile = File(rootDir, CONFIG_RELATIVE_PATH)
         configFile.parentFile?.mkdirs()
@@ -22,15 +28,20 @@ object NodeServerConfig {
         config.put("server", server)
 
         val aasc = config.optJSONObject("aasc") ?: JSONObject()
-        aasc.put("role", "subserver")
+        aasc.put("role", if (offlineMode) "main" else "subserver")
         aasc.put("mainServerUrl", normalizedUrl)
         aasc.put("nodeId", stableNodeId)
-        aasc.put("nodeName", nodeName.trim().ifEmpty { "APK 子服务器" })
+        aasc.put("nodeName", nodeName.trim().ifEmpty {
+            if (offlineMode) "AASC 显示端 Offline" else "APK 子服务器"
+        })
         aasc.put("advertisedUrl", aasc.optString("advertisedUrl", ""))
         config.put("aasc", aasc)
 
         val asr = config.optJSONObject("asr") ?: JSONObject()
         asr.put("serverEnabled", false)
+        if (offlineMode) {
+            asr.put("device", "display")
+        }
         val isolateProcess = asr.optJSONObject("isolateProcess") ?: JSONObject()
         isolateProcess.put("enabled", false)
         asr.put("isolateProcess", isolateProcess)

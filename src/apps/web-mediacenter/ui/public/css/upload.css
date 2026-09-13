@@ -778,6 +778,68 @@ input[type="file"] {
     font-size: 11px;
 }
 
+.display-camera-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 12px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    background: var(--card-background, rgba(255, 255, 255, 0.04));
+}
+
+.display-camera-card-title {
+    color: var(--text-primary, #fff);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.display-camera-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.display-camera-controls select,
+.display-camera-controls button,
+.display-camera-attach {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.2));
+    border-radius: 4px;
+    color: var(--text-primary, #fff);
+    background: var(--input-background, rgba(0, 0, 0, 0.18));
+    cursor: pointer;
+}
+
+.display-camera-controls button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.display-camera-status {
+    color: var(--text-secondary, #aaa);
+    font-size: 12px;
+}
+
+.display-camera-preview {
+    width: min(100%, 480px);
+    max-height: 300px;
+    border-radius: 6px;
+    background: #111;
+    object-fit: contain;
+}
+
+.display-camera-photo-actions {
+    min-height: 28px;
+}
+
+.display-camera-attach {
+    border-color: var(--accent-color, #00d2ff);
+    color: var(--accent-color, #00d2ff);
+}
+
 .sub-display-indicator {
     font-size: 14px;
     cursor: help;
@@ -794,6 +856,74 @@ input[type="file"] {
 .cap-icon.inactive {
     opacity: 0.3;
     filter: grayscale(1);
+}
+
+/* 显示端本地 LLM 状态和模型选择；不选择任何模型时保留明确占位项。 */
+.llm-device-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 12px;
+}
+
+.llm-model-section {
+    margin-top: 15px;
+}
+
+.llm-model-description {
+    margin: -4px 0 10px;
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 12px;
+}
+
+.llm-model-card {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.14);
+    font-size: 12px;
+}
+
+.llm-model-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.llm-model-card-meta {
+    color: rgba(255, 255, 255, 0.62);
+}
+
+.llm-status {
+    white-space: nowrap;
+    color: #9ca3af;
+}
+
+.llm-status.ready {
+    color: #34d399;
+}
+
+.llm-status.pending {
+    color: #fbbf24;
+}
+
+.llm-status.unsupported {
+    color: #9ca3af;
+}
+
+.llm-model-select {
+    min-width: 150px;
+    max-width: 260px;
+    padding: 3px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.22);
+    color: inherit;
 }
 
 .capability-modal {

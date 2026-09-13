@@ -11,14 +11,15 @@ const SERVER = path.resolve(__dirname, '../src/apps/server/boot/server-app.js');
 
 const DEFAULT_CPU_AFFINITY = {
     asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
-    tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false }
+    tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
+    llm: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: true }
 };
 
 function read(filePath) {
     return fs.readFileSync(filePath, 'utf8');
 }
 
-test('CPU 配置默认值为 ASR/TTS 各 1 大核 1 小核，并对缺失字段回填默认值', () => {
+test('CPU 配置默认值为 ASR/TTS 各 1 大核 1 小核、LLM 为 2 大核 0 小核，并对缺失字段回填默认值', () => {
     assert.deepEqual(configService.normalizeCpuAffinityConfig(undefined), DEFAULT_CPU_AFFINITY);
     assert.deepEqual(
         configService.normalizeCpuAffinityConfig({
@@ -27,7 +28,8 @@ test('CPU 配置默认值为 ASR/TTS 各 1 大核 1 小核，并对缺失字段�
         }),
         {
             asr: { bigCoreCount: 2, littleCoreCount: 1, preferBigCores: false },
-            tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false }
+            tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false },
+            llm: DEFAULT_CPU_AFFINITY.llm
         }
     );
     assert.deepEqual(
@@ -37,7 +39,8 @@ test('CPU 配置默认值为 ASR/TTS 各 1 大核 1 小核，并对缺失字段�
         }),
         {
             asr: DEFAULT_CPU_AFFINITY.asr,
-            tts: { bigCoreCount: 0, littleCoreCount: 2, preferBigCores: false }
+            tts: { bigCoreCount: 0, littleCoreCount: 2, preferBigCores: false },
+            llm: DEFAULT_CPU_AFFINITY.llm
         }
     );
 });
@@ -144,7 +147,8 @@ test('CPU 配置接口对缺失字段回填默认值，并广播规范化配置'
 
     const expected = {
         asr: { bigCoreCount: 2, littleCoreCount: 1, preferBigCores: false },
-        tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false }
+        tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false },
+        llm: DEFAULT_CPU_AFFINITY.llm
     };
 
     assert.equal(result.statusCode, 200);
@@ -160,7 +164,8 @@ test('CPU 配置接口对缺失字段回填默认值，并广播规范化配置'
     assert.deepEqual(displayBroadcasts, [{
         type: 'cpuConfig',
         asr: expected.asr,
-        tts: expected.tts
+        tts: expected.tts,
+        llm: expected.llm
     }]);
 });
 
@@ -186,7 +191,8 @@ test('cpuConfig 消息不会把任一引擎重新发成 0/0', () => {
         {
             type: 'cpuConfig',
             asr: DEFAULT_CPU_AFFINITY.asr,
-            tts: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: false }
+            tts: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: false },
+            llm: DEFAULT_CPU_AFFINITY.llm
         }
     );
 });

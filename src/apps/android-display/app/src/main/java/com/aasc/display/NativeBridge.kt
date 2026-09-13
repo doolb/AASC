@@ -33,6 +33,11 @@ class NativeBridge(
         const val VISION_TIMEOUT_SECONDS = 120L
     }
 
+    // 使用单调时钟计算模型耗时，避免系统时间校准影响结果。
+    private fun elapsedMilliseconds(startNanos: Long): Long {
+        return TimeUnit.NANOSECONDS.toMillis((System.nanoTime() - startNanos).coerceAtLeast(0L))
+    }
+
     // 由 MainActivity 主线程的页面回调更新；JavaScript bridge 线程只读取该缓存。
     @Volatile
     private var serverOrigin: String = ""
@@ -168,6 +173,20 @@ class NativeBridge(
     private val ttsExecutor = TtsBridgeDispatcher(TtsEngine.currentPolicySlotCount())
     private val ttsExecutorLock = Any()
     private var ttsExecutorSlotCount = TtsEngine.currentPolicySlotCount()
+    // LLM 使用独立 affinity policy；不复用 ASR/TTS policy，避免模型推理改变语音线程调度。
+    @Volatile
+    private var llmCpuPolicy: CpuPolicy? = null
+    private val llmModelManager = MnnLlmModelManager(webView.context) {
+        llmCpuPolicy ?: CpuCluster.detect().policy(
+            bigCoreCount = 2,
+            littleCoreCount = 0,
+            preferBigCores = true
+        )
+    }
+    // 模型切换、下载、推理队列状态变化都主动通知页面，页面再转发权威状态给服务端。
+    init {
+        llmModelManager.addStatusListener(::postNativeLlmStatus)
+    }
     // 异步桥超时监控不占用 ASR/TTS 推理线程，避免 JavaScript bridge 线程等待 Future。
     private val asyncTimeoutExecutor = Executors.newSingleThreadScheduledExecutor()
     // CPU 配置应用可能触发 ASR/TTS native pool 换代，必须脱离 WebView JavaBridge 线程执行。
@@ -394,11 +413,17 @@ class NativeBridge(
     fun cpuStatus(): String {
         return try {
             val topology = CpuCluster.detect()
+            val effectiveLlmPolicy = llmCpuPolicy ?: topology.policy(
+                bigCoreCount = 2,
+                littleCoreCount = 0,
+                preferBigCores = true
+            )
             JSONObject()
                 .put("ok", true)
                 .put("topology", cpuTopologyJson(topology))
                 .put("asr", cpuPolicyJson(AsrEngine.currentPolicy()))
                 .put("tts", cpuPolicyJson(TtsEngine.currentPolicy()))
+                .put("llm", cpuPolicyJson(effectiveLlmPolicy))
                 .toString()
         } catch (e: Exception) {
             JSONObject().put("ok", false).put("error", e.message ?: "CPU 状态读取失败").toString()
@@ -457,6 +482,7 @@ class NativeBridge(
         val topology = CpuCluster.detect()
         val asrConfig = config.optJSONObject("asr")
         val ttsConfig = config.optJSONObject("tts")
+        val llmConfig = config.optJSONObject("llm")
         val asrPolicy = topology.policy(
             bigCoreCount = readCoreCount(asrConfig, "bigCoreCount"),
             littleCoreCount = readCoreCount(asrConfig, "littleCoreCount"),
@@ -467,6 +493,19 @@ class NativeBridge(
             littleCoreCount = readCoreCount(ttsConfig, "littleCoreCount"),
             preferBigCores = readPreferBigCores(ttsConfig)
         )
+        val llmPolicy = if (llmConfig != null) {
+            topology.policy(
+                bigCoreCount = readCoreCount(llmConfig, "bigCoreCount", 2),
+                littleCoreCount = readCoreCount(llmConfig, "littleCoreCount", 0),
+                preferBigCores = readPreferBigCores(llmConfig, true)
+            )
+        } else {
+            llmCpuPolicy ?: topology.policy(
+                bigCoreCount = 2,
+                littleCoreCount = 0,
+                preferBigCores = true
+            )
+        }
         if (!AsrEngine.configurePolicy(asrPolicy)) {
             return JSONObject().put("error", "ASR CPU 配置应用失败").toString()
         }
@@ -481,12 +520,102 @@ class NativeBridge(
                 ttsExecutorSlotCount = slotCount
             }
         }
+        llmCpuPolicy = llmPolicy
         return JSONObject()
             .put("ok", true)
             .put("asr", cpuPolicyJson(asrPolicy))
             .put("tts", cpuPolicyJson(ttsPolicy))
+            .put("llm", cpuPolicyJson(llmPolicy))
             .put("topology", cpuTopologyJson(topology))
             .toString()
+    }
+
+    // ---- MNN-LLM 本地推理桥：模型下载和推理都在 APK 内完成 ----
+
+    /** 返回本 APK 的 MNN-LLM 状态，不设置也不推断默认模型。 */
+    @JavascriptInterface
+    fun llmStatus(): String = llmModelManager.status().toJson().toString()
+
+    /** 根据服务端 LLM 能力开关释放或恢复模型运行时；磁盘模型缓存始终保留。 */
+    @JavascriptInterface
+    fun llmSetEnabled(enabled: Boolean): String {
+        return try {
+            llmModelManager.setEnabled(serverBaseUrl(), enabled).toString()
+        } catch (error: Exception) {
+            JSONObject()
+                .put("ok", false)
+                .put("enabled", enabled)
+                .put("error", error.message ?: "LLM 能力状态更新失败")
+                .toString()
+        }
+    }
+
+    /** 选择唯一模型；切换会在当前推理和本地排队任务完成后执行。 */
+    @JavascriptInterface
+    fun llmSelectModel(modelId: String): String {
+        return try {
+            val baseUrl = serverBaseUrl()
+            if (baseUrl.isBlank()) {
+                JSONObject().put("accepted", false).put("error", "无法确定服务器地址").toString()
+            } else {
+                llmModelManager.selectModel(baseUrl, modelId).toString()
+            }
+        } catch (error: Exception) {
+            JSONObject().put("accepted", false).put("error", error.message ?: "模型选择失败").toString()
+        }
+    }
+
+    /** 提交服务端转发的 LLM 请求；文本增量和结束事件回到 display.html。 */
+    @JavascriptInterface
+    fun llmInferAsync(requestId: String, payloadJson: String): String {
+        return try {
+            val payload = JSONObject(payloadJson)
+            llmModelManager.inferAsync(
+                requestId = requestId,
+                payload = payload,
+                onChunk = { text ->
+                    postNativeLlmMessage(
+                        "onNativeLlmChunk",
+                        JSONObject().put("requestId", requestId).put("text", text)
+                    )
+                },
+                onCompleted = { text ->
+                    postNativeLlmMessage(
+                        "onNativeLlmCompleted",
+                        JSONObject().put("requestId", requestId).put("text", text)
+                    )
+                },
+                onError = { code, message ->
+                    postNativeLlmMessage(
+                        "onNativeLlmError",
+                        JSONObject().put("requestId", requestId)
+                            .put("code", code)
+                            .put("message", message)
+                    )
+                }
+            ).toString()
+        } catch (error: Exception) {
+            JSONObject().put("accepted", false).put("error", error.message ?: "LLM 请求提交失败").toString()
+        }
+    }
+
+    /** 取消请求；官方 LlmSession 当前只提供安全停止回调的兼容入口。 */
+    @JavascriptInterface
+    fun llmCancel(requestId: String): Boolean = llmModelManager.cancel(requestId)
+
+    private fun postNativeLlmStatus(status: MnnLlmStatus) {
+        postNativeLlmMessage("onNativeLlmStatus", status.toJson())
+    }
+
+    private fun postNativeLlmMessage(callbackName: String, payload: JSONObject) {
+        val js = "window.$callbackName && window.$callbackName(${payload});"
+        mainHandler.post {
+            try {
+                webView.evaluateJavascript(js, null)
+            } catch (error: Exception) {
+                android.util.Log.w("NativeBridge", "LLM 页面回调失败: ${error.message}")
+            }
+        }
     }
 
     // 一次性识别：输入裸 PCM（16kHz mono s16le）的 base64，同步返回 {"text":"..."} 或 {"error":"..."}
@@ -499,11 +628,16 @@ class NativeBridge(
             }
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
             val samples = AsrPcm.decodeS16(bytes)
-            val text = asrExecutor.submit {
+            val result = asrExecutor.submit {
                 val prepared = prepareAudio(samples, asrDenoiseEnabled)
-                recognizeText(prepared.samples, asrLanguageMode)
+                val asrStartedAt = System.nanoTime()
+                val text = recognizeText(prepared.samples, asrLanguageMode)
+                JSONObject()
+                    .put("text", text)
+                    .put("asrElapsedMs", elapsedMilliseconds(asrStartedAt))
+                    .put("voiceprintElapsedMs", JSONObject.NULL)
             }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            JSONObject().put("text", text).toString()
+            result.toString()
         } catch (e: java.util.concurrent.TimeoutException) {
             JSONObject().put("error", "识别超时").toString()
         } catch (e: Exception) {
@@ -608,8 +742,12 @@ class NativeBridge(
         val prepared = prepareAudio(samples, denoise)
         val preparedSamples = prepared.samples
         if (!useVoiceprint || !voiceprintEnabled || !voiceprintModelManager.isReady || !VoiceprintEngine.ready) {
+            val asrStartedAt = System.nanoTime()
+            val text = recognizeText(preparedSamples, languageMode)
             return JSONObject()
-                .put("text", recognizeText(preparedSamples, languageMode))
+                .put("text", text)
+                .put("asrElapsedMs", elapsedMilliseconds(asrStartedAt))
+                .put("voiceprintElapsedMs", JSONObject.NULL)
                 .put("denoise", prepared.enabled)
                 .put("languageMode", languageMode.queryValue)
         }
@@ -619,6 +757,7 @@ class NativeBridge(
             if (speakerCount !in VoiceprintSpeakerCount.AUTO..VoiceprintSpeakerCount.MAX) {
                 return JSONObject().put("error", "speakerCount 必须是 AUTO 或 1-5")
             }
+            val voiceprintStartedAt = System.nanoTime()
             val segments = VoiceprintEngine.diarize(preparedSamples, speakerCount)
             val indexMergedSegments = VoiceprintSegmentMerger.merge(segments.map { seg ->
                 VoiceprintSegmentMerger.DiarizedSegment(seg.start, seg.end, seg.speakerIndex)
@@ -630,11 +769,16 @@ class NativeBridge(
                     VoiceprintSegmentMerger.MergedSegment(start, end, clusterId)
                 )
             }
+            val voiceprintElapsedMs = elapsedMilliseconds(voiceprintStartedAt)
+            var asrElapsedMs = 0L
             val arr = org.json.JSONArray()
             for (seg in resolvedSegments) {
                 val segmentSamples = sliceSamples(preparedSamples, seg.start, seg.end)
                 val text = if (segmentSamples.size >= 1600) {
-                    recognizeText(segmentSamples, languageMode)
+                    val asrStartedAt = System.nanoTime()
+                    val recognizedText = recognizeText(segmentSamples, languageMode)
+                    asrElapsedMs += elapsedMilliseconds(asrStartedAt)
+                    recognizedText
                 } else ""
                 arr.put(JSONObject()
                     .put("start", seg.start.toDouble())
@@ -647,17 +791,25 @@ class NativeBridge(
             }
             return JSONObject()
                 .put("segments", arr)
+                .put("asrElapsedMs", asrElapsedMs)
+                .put("voiceprintElapsedMs", voiceprintElapsedMs)
                 .put("threshold", VoiceprintEngine.matchThreshold)
                 .put("denoise", prepared.enabled)
                 .put("languageMode", languageMode.queryValue)
                 .put("multiMode", multiMode)
                 .put("speakerCount", speakerCount)
         }
+        val asrStartedAt = System.nanoTime()
         val text = recognizeText(preparedSamples, languageMode)
+        val asrElapsedMs = elapsedMilliseconds(asrStartedAt)
+        val voiceprintStartedAt = System.nanoTime()
         val embedding = VoiceprintEngine.extract(preparedSamples)
         val match = VoiceprintEngine.match(embedding)
+        val voiceprintElapsedMs = elapsedMilliseconds(voiceprintStartedAt)
         return JSONObject()
             .put("text", text)
+            .put("asrElapsedMs", asrElapsedMs)
+            .put("voiceprintElapsedMs", voiceprintElapsedMs)
             .put("speaker", match.speaker ?: JSONObject.NULL)
             .put("similarityScore", match.similarityScore ?: JSONObject.NULL)
             .put("threshold", match.threshold)
@@ -754,16 +906,16 @@ class NativeBridge(
         }
     }
 
-    private fun readCoreCount(config: JSONObject?, fieldName: String): Int {
+    private fun readCoreCount(config: JSONObject?, fieldName: String, defaultCount: Int = 1): Int {
         val raw = config?.opt(fieldName)
         return when (raw) {
             is Number -> raw.toInt().coerceAtLeast(0)
-            else -> 1
+            else -> defaultCount
         }
     }
 
-    private fun readPreferBigCores(config: JSONObject?): Boolean {
-        return config?.optBoolean("preferBigCores", false) ?: false
+    private fun readPreferBigCores(config: JSONObject?, defaultValue: Boolean = false): Boolean {
+        return config?.optBoolean("preferBigCores", defaultValue) ?: defaultValue
     }
 
     private fun cpuPolicyJson(policy: CpuPolicy): JSONObject {
@@ -775,6 +927,8 @@ class NativeBridge(
             .put("effectiveBigCoreCount", policy.effectiveBigCoreCount)
             .put("effectiveLittleCoreCount", policy.effectiveLittleCoreCount)
             .put("totalCoreCount", policy.totalCoreCount)
+            // LLM 将该值作为 MNN native 的显式 thread_num；其他能力保留同一策略结构。
+            .put("threadCount", policy.totalCoreCount.coerceAtLeast(1))
             .put("fallback", policy.fallback)
             .put("fallbackReason", policy.fallbackReason ?: JSONObject.NULL)
     }
@@ -972,13 +1126,16 @@ class NativeBridge(
             }
             val bytes = Base64.decode(pcmBase64, Base64.DEFAULT)
             val samples = AsrPcm.decodeS16(bytes)
+            val voiceprintStartedAt = System.nanoTime()
             val embedding = asrExecutor.submit<FloatArray> { VoiceprintEngine.extract(samples) }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             val match = VoiceprintEngine.match(embedding)
+            val voiceprintElapsedMs = elapsedMilliseconds(voiceprintStartedAt)
             JSONObject()
                 .put("speaker", match.speaker ?: JSONObject.NULL)
                 .put("similarityScore", match.similarityScore ?: JSONObject.NULL)
                 .put("threshold", match.threshold)
                 .put("dim", VoiceprintEngine.dim)
+                .put("voiceprintElapsedMs", voiceprintElapsedMs)
                 .toString()
         } catch (e: java.util.concurrent.TimeoutException) {
             JSONObject().put("error", "声纹识别超时").toString()
@@ -999,7 +1156,8 @@ class NativeBridge(
             if (samples.isEmpty()) {
                 return JSONObject().put("error", "音频数据为空").toString()
             }
-            val segJson = asrExecutor.submit<org.json.JSONArray> {
+            val result = asrExecutor.submit<JSONObject> {
+                val voiceprintStartedAt = System.nanoTime()
                 val segments = VoiceprintEngine.diarize(samples)
                 val indexMergedSegments = VoiceprintSegmentMerger.merge(segments.map { seg ->
                     VoiceprintSegmentMerger.DiarizedSegment(seg.start, seg.end, seg.speakerIndex)
@@ -1011,10 +1169,17 @@ class NativeBridge(
                         VoiceprintSegmentMerger.MergedSegment(start, end, clusterId)
                     )
                 }
+                val voiceprintElapsedMs = elapsedMilliseconds(voiceprintStartedAt)
+                var asrElapsedMs = 0L
                 val arr = org.json.JSONArray()
                 for (seg in resolvedSegments) {
                     val mergedSamples = sliceSamples(samples, seg.start, seg.end)
-                    val text = if (mergedSamples.size >= 1600) AsrEngine.recognize(mergedSamples) else ""
+                    val text = if (mergedSamples.size >= 1600) {
+                        val asrStartedAt = System.nanoTime()
+                        val recognizedText = AsrEngine.recognize(mergedSamples)
+                        asrElapsedMs += elapsedMilliseconds(asrStartedAt)
+                        recognizedText
+                    } else ""
                     arr.put(org.json.JSONObject()
                         .put("start", seg.start.toDouble())
                         .put("end", seg.end.toDouble())
@@ -1024,10 +1189,12 @@ class NativeBridge(
                         .put("threshold", seg.match.threshold)
                         .put("error", seg.error ?: JSONObject.NULL))
                 }
-                arr
+                JSONObject()
+                    .put("segments", arr)
+                    .put("asrElapsedMs", asrElapsedMs)
+                    .put("voiceprintElapsedMs", voiceprintElapsedMs)
             }.get(ASR_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            JSONObject()
-                .put("segments", segJson)
+            result
                 .put("threshold", VoiceprintEngine.matchThreshold)
                 .toString()
         } catch (e: java.util.concurrent.TimeoutException) {

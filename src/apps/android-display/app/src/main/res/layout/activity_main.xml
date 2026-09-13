@@ -32,5 +32,17 @@
         android:id="@+id/webContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1">
+
+        <!-- 运行时 WebView 从 index=0 插入，因此这个按钮始终位于所有页面的最上层。 -->
+        <Button
+            android:id="@+id/controlToggleButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="12dp"
+            android:elevation="12dp"
+            android:text="@string/control_page"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>

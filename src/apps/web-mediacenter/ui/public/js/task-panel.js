@@ -1290,7 +1290,13 @@
       for (var i = 0; i < this.taskList.length; i++) {
         if (this.taskList[i].taskName === taskName) { task = this.taskList[i]; break; }
       }
-      if (task && ((task.params && task.params.length > 0) || this._isVisionBuiltin(taskName))) {
+      // 服务型内置任务也必须进入通用配置页，复用目标设备、实例 ID 和服务模式选择。
+      // 这里按任务元数据判断，不为某个具体内置任务增加专用分支。
+      if (task && (
+        (task.params && task.params.length > 0)
+        || this._isVisionBuiltin(taskName)
+        || task.mode === 'service'
+      )) {
         this._viewBuiltinParams(taskName);
       } else {
         this._send({ type: 'task:submit', payload: {

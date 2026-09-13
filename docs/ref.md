@@ -27,6 +27,10 @@
 - 项目使用自定义 TTS 服务生成语音
 - 配置项：语音服务地址、端口
 
+### Android MNN-LLM
+- [阿里官方 MNN MnnLlmChat Android README](https://github.com/alibaba/MNN/blob/master/apps/Android/MnnLlmChat/README.md) - 官方 Android 构建参数、NDK 版本和 16 KB page-size 链接要求
+- [MNN 官方 LlmSession](https://github.com/alibaba/MNN/blob/master/apps/Android/MnnLlmChat/app/src/main/cpp/llm_session.h) - APK JNI bridge 使用的本地会话接口
+
 ## 设计模式
 
 ### 客户端-服务器架构

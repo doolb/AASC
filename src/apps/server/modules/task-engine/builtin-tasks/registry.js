@@ -6,6 +6,7 @@ const tasks = {
   'ocr': require('./ocr'),
   'yolo': require('./yolo'),
   'llm.chat': require('./llm-chat'),
+  'llm-server': require('./llm-server'),
   'search.web': require('./search'),
   'chat2api.proxy': require('./chat2api-proxy')
 };

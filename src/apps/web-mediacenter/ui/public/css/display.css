@@ -459,6 +459,52 @@ body {
     text-overflow: ellipsis;
 }
 
+#cameraStatusDisplay {
+    position: static;
+    flex: 0 0 auto;
+    max-width: 260px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 16px;
+    line-height: 1.2;
+    text-shadow: 1px 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.8));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.camera-status-hidden {
+    display: none;
+}
+
+.camera-status-loading,
+.camera-status-capturing {
+    background: #b45309;
+    border: 2px solid #fde68a;
+}
+
+.camera-status-previewing,
+.camera-status-ready {
+    background: #166534;
+    border: 2px solid #86efac;
+}
+
+.camera-status-success {
+    background: #1d4ed8;
+    border: 2px solid #93c5fd;
+}
+
+.camera-status-stopped {
+    background: rgba(0, 0, 0, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.camera-status-error {
+    background: #991b1b;
+    border: 2px solid #fecaca;
+}
+
 .voice-status-hidden {
     display: none;
 }

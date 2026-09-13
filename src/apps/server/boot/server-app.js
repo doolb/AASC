@@ -112,6 +112,7 @@ const { CodexRuntimeManager } = require('../modules/chat/codex-runtime-manager')
 const { PiRuntimeManager } = require('../modules/chat/pi-runtime-manager');
 const { createAgentTtsStream } = require('../modules/chat/agent-chat-tts');
 const { createTextMediaTtsService } = require('../modules/media/text-media-tts-service');
+const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-router');
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
 const { normalizeDisplayCpuStatus, getDisplayTtsConcurrency } = require('../modules/media/display-cpu-status');
 const { createOrderedTaskScheduler } = require('../modules/media/ordered-task-scheduler');
@@ -119,6 +120,13 @@ const {
     ModelManifestService,
     YOLO_MODEL_IDS
 } = require('../modules/model-distribution/model-manifest-service');
+const { LlmModelManifestService } = require('../modules/llm/llm-model-manifest-service');
+const { LlmRouter } = require('../modules/llm/llm-router');
+const {
+    LlmGatewayService,
+    createGatewayError,
+    createOpenAiErrorBody
+} = require('../modules/llm/llm-gateway-service');
 const { isPunctuationOnly } = require('../../../core/utils/sentence-splitter');
 const {
     registerTextMediaDisplayHandlers,
@@ -331,11 +339,39 @@ if (!fs.existsSync(VOICEPRINT_TEMP_DIR)) {
 }
 
 let displayClients = new Map();
+// LLM chunk 只用于流式转发，不逐片段写入服务端日志；按显示端和 requestId 临时聚合，完成时只记录一次。
+const llmLogBuffers = new Map();
+function getLlmLogBufferKey(displayId, requestId) {
+    return displayId && requestId ? `${displayId}:${requestId}` : null;
+}
+function appendLlmLogChunk(displayId, requestId, text) {
+    const key = getLlmLogBufferKey(displayId, requestId);
+    if (!key || typeof text !== 'string') return;
+    const current = llmLogBuffers.get(key) || '';
+    llmLogBuffers.set(key, current + text);
+}
+function consumeLlmLogText(displayId, requestId, fallbackText = '') {
+    const key = getLlmLogBufferKey(displayId, requestId);
+    if (!key) return fallbackText;
+    const bufferedText = llmLogBuffers.get(key) || '';
+    llmLogBuffers.delete(key);
+    return typeof fallbackText === 'string' && fallbackText.length > 0
+        ? fallbackText
+        : bufferedText;
+}
+function clearLlmLogBuffersForDisplay(displayId) {
+    const prefix = `${displayId}:`;
+    for (const key of llmLogBuffers.keys()) {
+        if (key.startsWith(prefix)) llmLogBuffers.delete(key);
+    }
+}
 // 多个显示端同时听到同一注册说话人时，服务端只让首个结果进入广播和命令链路。
 // 去重器只保存短文本元数据，不保存音频；声纹关闭或未匹配时由调用方跳过去重。
 const sameSpeakerVoiceInputDeduplicator = createSameSpeakerVoiceInputDeduplicator();
 // 跨显示端 TTS 播报状态：按“播放目标 + 播放 ID”维护会话和超时，避免录音端因旧客户端不回报而永久暂停。
 const voiceTtsPlaybackTimers = new Map();
+// 按语音来源保存最近一次实际播放目标，停止命令需要停止当前真实目标而不是重新广播。
+const voicePlaybackTargetsByOrigin = new Map();
 const VOICE_TTS_PLAYBACK_TIMEOUT_MS = 120000;
 const DISPLAY_RECORDING_MODES = Object.freeze(['asr', 'single', 'realtime']);
 const DISPLAY_RECORDING_MAX_DURATION_MS = 60000;
@@ -1001,7 +1037,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1010,6 +1046,10 @@ async function startServer() {
             wsServer.registerHandler('audioChunk', async (data, ctx) => {
                 const { requestId, chunk, isLast, sampleRate } = data;
                 if (!requestId || !chunk) return;
+                if (globalRecordingPaused) {
+                    log('语音', '全局录音已暂停，忽略新的音频流请求');
+                    return;
+                }
                 if (!isServerAsrEnabled()) {
                     log('语音', '服务器 ASR 已关闭，忽略音频流请求');
                     return;
@@ -1033,6 +1073,10 @@ async function startServer() {
                     const fullBuffer = Buffer.concat(session.chunks);
                     try {
                         const text = await asr.recognize(fullBuffer);
+                        if (globalRecordingPaused) {
+                            log('语音', `全局录音暂停，丢弃在途 ASR 结果: ${requestId}`);
+                            return;
+                        }
                         if (text) {
                             if (!config.get('voiceprint.enabled', true) && voiceTtsPlaybackTimers.size > 0) {
                                 return;
@@ -1207,7 +1251,8 @@ async function startServer() {
                 resolveTaskRoute: (task) => aascTaskRouter.resolve(task),
                 // tts.server 只切换通用 HTTP 客户端的运行时地址，不改变服务器 TTS 开关。
                 getTtsServiceUrl: () => tts.getConfig().serviceUrl,
-                setTtsServiceUrl: (serviceUrl) => tts.init({ serviceUrl })
+                setTtsServiceUrl: (serviceUrl) => tts.init({ serviceUrl }),
+                llmGatewayService
             });
             taskManager.setGenerateTts((text, voice, speed) => generateTtsWithFallback(text, voice, speed));
             registerTaskHandlers(wsServer, taskManager,
@@ -1293,8 +1338,66 @@ const DEFAULT_CAPABILITIES = {
     voiceRecording: true,
     voiceRecognition: false,
     displayText: true,
-    ttsGeneration: false
+    ttsGeneration: false,
+    cameraCapture: false,
+    llm: { enabled: true, supported: false, engine: 'mnn-llm' }
 };
+
+// 摄像头帧只在 WebSocket 内存中短暂转发，限制单帧大小，避免异常显示端持续推高服务端内存。
+const MAX_CAMERA_PAYLOAD_SIZE = 1024 * 1024 * 2;
+const MAX_CHAT_IMAGE_DATA_LENGTH = 1024 * 1024 * 8;
+const displayCameraSessions = new Map();
+
+function normalizeChatImages(images) {
+    if (!Array.isArray(images) || images.length === 0) return [];
+    if (images.length > 4) throw new Error('单条消息最多添加 4 张图片');
+    return images.map((image) => {
+        const mimeType = String(image?.mimeType || '').toLowerCase();
+        const dataUrl = String(image?.dataUrl || '');
+        if (!/^image\/(jpeg|jpg|png|webp|gif)$/.test(mimeType)) {
+            throw new Error('只支持 JPEG、PNG、WebP 或 GIF 图片');
+        }
+        if (!dataUrl.startsWith(`data:${mimeType};base64,`) || dataUrl.length > MAX_CHAT_IMAGE_DATA_LENGTH) {
+            throw new Error('图片数据无效或超过大小限制');
+        }
+        return { mimeType, dataUrl };
+    });
+}
+
+function isCameraPayloadWithinLimit(imageBase64) {
+    return typeof imageBase64 === 'string'
+        && imageBase64.length > 0
+        && imageBase64.length <= MAX_CAMERA_PAYLOAD_SIZE;
+}
+
+function sendDisplayCameraToControl(session, data) {
+    if (!session?.controlSocket || session.controlSocket.readyState !== WebSocket.OPEN) return false;
+    session.controlSocket.send(JSON.stringify({ ...data, displayId: session.displayId }));
+    return true;
+}
+
+function closeDisplayCameraSession(requestId) {
+    if (requestId) displayCameraSessions.delete(requestId);
+}
+
+function rejectDisplayCameraSessionsForDisplay(displayId, message) {
+    for (const [requestId, session] of displayCameraSessions) {
+        if (session.displayId !== displayId) continue;
+        sendDisplayCameraToControl(session, {
+            type: 'displayCameraStatus',
+            requestId,
+            state: 'error',
+            error: message
+        });
+        closeDisplayCameraSession(requestId);
+    }
+}
+
+function rejectDisplayCameraSessionsForControl(controlSocket) {
+    for (const [requestId, session] of displayCameraSessions) {
+        if (session.controlSocket === controlSocket) closeDisplayCameraSession(requestId);
+    }
+}
 
 // 浏览器显示端的 VAD 阈值按设备保存；不同麦克风和摆放环境的底噪不能共用一个动态值。
 const DEFAULT_VAD_THRESHOLD = 0.01;
@@ -1341,13 +1444,51 @@ const SUB_DISPLAY_CAPABILITIES = {
     voiceRecording: true,
     voiceRecognition: true,
     displayText: false,
-    ttsGeneration: false
+    ttsGeneration: false,
+    llm: { enabled: true, supported: false, engine: 'mnn-llm' }
 };
 
 // 用户能力覆盖只影响对应显示端；voiceRecognition 也允许控制端明确开启/关闭，
 // 服务器仍按 displayClients 的插入顺序选择第一个可用 ASR 提供端。
 function normalizeDisplayUserCapabilities(capabilities) {
-    return { ...(capabilities || {}) };
+    const source = capabilities && typeof capabilities === 'object' && !Array.isArray(capabilities)
+        ? capabilities
+        : {};
+    const normalized = { ...source };
+    if (Object.prototype.hasOwnProperty.call(source, 'llm')) {
+        normalized.llm = source.llm
+            && typeof source.llm === 'object'
+            && !Array.isArray(source.llm)
+            && typeof source.llm.enabled === 'boolean'
+            ? { enabled: source.llm.enabled }
+            : {};
+    }
+    return normalized;
+}
+
+function mergeDisplayCapabilities(capabilities, userCapabilities = null) {
+    const source = capabilities && typeof capabilities === 'object' && !Array.isArray(capabilities)
+        ? capabilities
+        : {};
+    const merged = {
+        ...DEFAULT_CAPABILITIES,
+        ...source,
+        llm: {
+            ...DEFAULT_CAPABILITIES.llm,
+            ...(source.llm && typeof source.llm === 'object' && !Array.isArray(source.llm)
+                ? source.llm
+                : {})
+        }
+    };
+    const normalizedUserCapabilities = normalizeDisplayUserCapabilities(userCapabilities);
+    return {
+        ...merged,
+        ...normalizedUserCapabilities,
+        llm: {
+            ...merged.llm,
+            ...(normalizedUserCapabilities.llm || {})
+        }
+    };
 }
 
 const DEFAULT_DYNAMIC_FIT_CONFIG = Object.freeze({
@@ -1386,6 +1527,7 @@ function createDisplayState() {
         browserInfo: null,
         capabilities: null,
         cpuStatus: null,
+        llmStatus: null,
         vadThreshold: DEFAULT_VAD_THRESHOLD,
         vadSilenceDurationMs: DEFAULT_VAD_SILENCE_DURATION_MS,
         vadMinSpeechDurationMs: DEFAULT_VAD_MIN_SPEECH_DURATION_MS,
@@ -1599,7 +1741,10 @@ async function sendRepairModeResponse(displayId, text) {
         text
     });
     try {
-        await sendVoiceInputTts(text, { allowRepairModeTts: true });
+        await sendVoiceInputTts(text, {
+            preferredDisplayId: displayId,
+            allowRepairModeTts: true
+        });
     } catch (error) {
         logError('修复模式', `响应 TTS 失败: ${error.message}`);
     }
@@ -1642,14 +1787,18 @@ async function runRepairModeAgent(displayId, state, text) {
 
     const agentTtsStream = createAgentTtsStream({
         playOnControl: false,
-        // 来源显示端只负责接收文字响应；音频沿用通用语音播放目标，避免播到无扬声器的来源端。
-        displayId: null,
+        // 修复模式也遵循来源显示端优先、在线语音播放端兜底的单目标规则。
+        displayId,
         displayIds: [],
-        getDisplayIds: getOnlineVoicePlaybackDisplayIds,
-        ttsScheduler: createTtsGenerationScheduler(),
+        resolveDisplayId: () => {
+            const targetDisplayId = resolveCurrentVoicePlaybackTarget(displayId);
+            rememberVoicePlaybackTarget(displayId, targetDisplayId);
+            return targetDisplayId;
+        },
+        ttsScheduler: createTtsGenerationScheduler(displayId),
         splitIntoSentences: chat.splitIntoSentences,
         stripMarkdown,
-        generateTTS: (ttsText) => generateTtsWithFallback(ttsText),
+        generateTTS: (ttsText) => generateTtsWithFallback(ttsText, undefined, undefined, displayId),
         sendToControl: broadcastToControls,
         sendToDisplay,
         allowRepairModeTts: true,
@@ -1751,6 +1900,9 @@ function sendDisplayConversationState(displayId, reason) {
         state: conversation.state,
         target: conversation.target,
         expiresAt: Number.isFinite(conversation.expiresAt) ? conversation.expiresAt : null,
+        windowType: conversation.windowType || null,
+        timerPaused: conversation.timerPaused === true,
+        remainingMs: Number.isFinite(conversation.remainingMs) ? conversation.remainingMs : null,
         reason: reason || null
     });
 }
@@ -1765,6 +1917,10 @@ function setDisplayConversationState(displayId, conversation, reason) {
         displayId,
         state: conversation.state,
         target: conversation.target,
+        expiresAt: Number.isFinite(conversation.expiresAt) ? conversation.expiresAt : null,
+        windowType: conversation.windowType || null,
+        timerPaused: conversation.timerPaused === true,
+        remainingMs: Number.isFinite(conversation.remainingMs) ? conversation.remainingMs : null,
         reason: reason || null
     });
 }
@@ -1776,17 +1932,60 @@ function armDisplayConversationTimer(displayId) {
     if (!displayData || !['activeGroup', 'activePrivate'].includes(current?.state)) return;
 
     // 服务端是会话到期时间的唯一来源；显示端据此展示倒计时，避免本地计时与实际退出时刻漂移。
-    const expiresAt = Date.now() + CONVERSATION_TIMEOUT_MS;
-    setDisplayConversationState(displayId, { ...current, expiresAt }, 'conversationTimerStarted');
+    const windowMs = getVoiceConversationWindowMs(current.windowType);
+    const expiresAt = Date.now() + windowMs;
+    setDisplayConversationState(displayId, {
+        ...current,
+        expiresAt,
+        timerPaused: false,
+        remainingMs: null
+    }, 'conversationTimerStarted');
     const timer = setTimeout(() => {
         const displayData = displayClients.get(displayId);
         if (!displayData || !isDisplayVoiceListeningEnabled(displayData)) return;
         const conversation = displayData.state.voiceConversation;
         if (!['activeGroup', 'activePrivate'].includes(conversation?.state)) return;
         setDisplayConversationState(displayId, createConversationState(true), 'timeout');
-        log('语音', `显示端 ${displayId} 3分钟无有效对话，等待重新唤醒`);
-    }, CONVERSATION_TIMEOUT_MS);
+        log('语音', `显示端 ${displayId} ${Math.round(windowMs / 1000)}秒无有效对话，等待重新唤醒`);
+    }, windowMs);
     displayConversationTimers.set(displayId, timer);
+}
+
+function pauseDisplayConversationTimer(displayId) {
+    clearDisplayConversationTimer(displayId);
+    const displayData = displayClients.get(displayId);
+    const current = displayData?.state?.voiceConversation;
+    if (!displayData || !['activeGroup', 'activePrivate'].includes(current?.state)) return false;
+    if (current.timerPaused === true) return true;
+
+    const fallbackWindowMs = getVoiceConversationWindowMs(current.windowType);
+    const remainingMs = Number.isFinite(current.expiresAt)
+        ? Math.max(0, current.expiresAt - Date.now())
+        : fallbackWindowMs;
+    setDisplayConversationState(displayId, {
+        ...current,
+        timerPaused: true,
+        remainingMs
+    }, 'ttsPlaybackStarted');
+    return true;
+}
+
+function resumeDisplayConversationTimer(displayId) {
+    const displayData = displayClients.get(displayId);
+    const current = displayData?.state?.voiceConversation;
+    if (!current || !['activeGroup', 'activePrivate'].includes(current.state)) return false;
+    armDisplayConversationTimer(displayId);
+    return true;
+}
+
+function clearDisplayConversationTtsPlaybackKey(displayId, playbackKey) {
+    const keys = displayConversationTtsPlaybackKeys.get(displayId);
+    if (!keys) return;
+    keys.delete(playbackKey);
+    if (keys.size === 0) {
+        displayConversationTtsPlaybackKeys.delete(displayId);
+        resumeDisplayConversationTimer(displayId);
+    }
 }
 
 function syncDisplayConversationListeningState(displayId, reason) {
@@ -1809,7 +2008,7 @@ function sendConversationPrompt(displayId, text) {
     if (!displayId || !text) return;
     (async () => {
         try {
-            await sendVoiceInputTts(text);
+            await sendVoiceInputTts(text, { preferredDisplayId: displayId });
             // 唤醒状态提示仍只在触发显示端展示文字，不再携带会导致该端独占播放的 audioUrl。
             sendToDisplay(displayId, {
                 type: 'voiceCommand',
@@ -1925,7 +2124,7 @@ async function sendConversationConfirmationResult(displayId, text) {
         text
     });
     try {
-        await sendVoiceInputTts(text);
+        await sendVoiceInputTts(text, { preferredDisplayId: displayId });
     } catch (error) {
         logError('语音', `对话确认结果 TTS 失败: ${error.message}`);
     }
@@ -1968,7 +2167,7 @@ async function handlePendingConversationConfirmation(displayId, text) {
     return true;
 }
 
-function requestConversationConfirmation(displayId, text) {
+function requestConversationConfirmation(displayId, text, options = {}) {
     const session = chat.getSession();
     clearPendingConversationConfirmation(displayId, 'replaced');
     const record = {
@@ -2003,6 +2202,7 @@ function requestConversationConfirmation(displayId, text) {
     (async () => {
         try {
             const targetCount = await sendVoiceInputTts(promptText, {
+                preferredDisplayId: displayId,
                 onPlaybackStarted: ({ displayId: playbackDisplayId, playbackId }) => {
                     record.playbackKeys.add(getVoiceTtsPlaybackKey(playbackDisplayId, playbackId));
                 }
@@ -2092,6 +2292,14 @@ function handleDisplayConversationInput(displayId, text) {
         broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
         clearDisplayConversationTimer(displayId);
         sendConversationPrompt(displayId, '对话已结束，请再次唤醒');
+    } else if (result.event?.type === 'endPrivate') {
+        chat.setMode('group', null, { source: 'displayVoice', displayId });
+        broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
+        clearDisplayConversationTimer(displayId);
+        sendConversationPrompt(displayId, '私聊已结束，请再次唤醒');
+    } else if (result.event?.type === 'input' && result.event.temporaryConversationStarted) {
+        chat.setMode('group', null, { source: 'displayVoice', displayId });
+        broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
     }
 
     if (result.state.state !== 'waitingWake' && result.state.state !== 'disabled') {
@@ -2511,7 +2719,8 @@ function sendModelManifest(res, groupName) {
 }
 
 function modelDownloadErrorStatus(error) {
-    if (error?.code === 'MODEL_INVALID_GROUP' || error?.code === 'MODEL_INVALID_ID' || error?.code === 'MODEL_INVALID_FILE') {
+    if (error?.code === 'MODEL_INVALID_GROUP' || error?.code === 'MODEL_INVALID_ID' || error?.code === 'MODEL_INVALID_FILE'
+        || error?.code === 'MODEL_MANIFEST_INVALID') {
         return 400;
     }
     if (error?.code === 'MODEL_NOT_FOUND') return 404;
@@ -2539,6 +2748,72 @@ function streamModelFile(res, filePath) {
     }
 }
 
+function streamRemoteModelFile(res, remoteUrl, expectedSize, redirectCount = 0) {
+    if (redirectCount > 3) {
+        return res.status(502).json({ status: 'error', message: '远端模型重定向次数过多' });
+    }
+    let parsedUrl;
+    try {
+        parsedUrl = new URL(remoteUrl);
+    } catch (error) {
+        return res.status(502).json({ status: 'error', message: '远端模型地址无效' });
+    }
+    if (parsedUrl.protocol !== 'https:') {
+        return res.status(502).json({ status: 'error', message: '远端模型地址必须使用 HTTPS' });
+    }
+    const request = https.get(parsedUrl, {
+        headers: {
+            // ModelScope 的签名 CDN 会拒绝没有常规客户端标识的 Node 请求。
+            'User-Agent': 'AASC-Model-Proxy/1.0',
+            Accept: '*/*'
+        }
+    }, (remoteResponse) => {
+        const statusCode = remoteResponse.statusCode || 0;
+        const location = remoteResponse.headers.location;
+        if (statusCode >= 300 && statusCode < 400 && location) {
+            remoteResponse.resume();
+            return streamRemoteModelFile(
+                res,
+                new URL(location, parsedUrl).toString(),
+                expectedSize,
+                redirectCount + 1
+            );
+        }
+        if (statusCode !== 200) {
+            remoteResponse.resume();
+            return res.status(502).json({ status: 'error', message: '远端模型文件不可用' });
+        }
+        const contentLength = Number(remoteResponse.headers['content-length']);
+        if (Number.isInteger(expectedSize) && expectedSize > 0
+            && Number.isFinite(contentLength) && contentLength !== expectedSize) {
+            remoteResponse.resume();
+            return res.status(502).json({ status: 'error', message: '远端模型文件大小不匹配' });
+        }
+        res.setHeader('Content-Type', remoteResponse.headers['content-type'] || 'application/octet-stream');
+        if (Number.isFinite(contentLength) && contentLength > 0) {
+            res.setHeader('Content-Length', contentLength);
+        }
+        remoteResponse.on('error', () => {
+            if (!res.headersSent) {
+                res.status(502).json({ status: 'error', message: '远端模型读取失败' });
+            } else {
+                res.end();
+            }
+        });
+        res.on('close', () => remoteResponse.destroy());
+        res.on('error', () => remoteResponse.destroy());
+        return remoteResponse.pipe(res);
+    });
+    request.on('error', () => {
+        if (!res.headersSent) {
+            res.status(502).json({ status: 'error', message: '远端模型连接失败' });
+        } else {
+            res.end();
+        }
+    });
+    return request;
+}
+
 // 正式 APK 视觉模型只从服务器按需下载；服务器本身不加载或执行视觉模型。
 app.get('/api/vision/model-manifest', (req, res) => sendModelManifest(res, 'vision'));
 app.get('/api/vision/model/:modelId/:filename', (req, res) => {
@@ -2560,6 +2835,144 @@ app.get('/api/speech-enhancement/model/:filename', (req, res) => {
         return res.status(modelDownloadErrorStatus(error)).json({ status: 'error', message: error.message });
     }
 });
+
+// MNN-LLM 模型使用同一份 manifest/hash/原子下载契约；APK 只下载当前选择模型的文件。
+app.get('/api/llm/model-manifest', (req, res) => {
+    try {
+        return res.json(llmModelManifestService.createManifest());
+    } catch (error) {
+        logError('模型', `LLM 模型清单生成失败: ${error.message}`);
+        return res.status(500).json({ status: 'error', message: 'LLM 模型清单生成失败' });
+    }
+});
+app.get('/api/llm/model/:modelId/:filename', (req, res) => {
+    try {
+        const source = llmModelManifestService.resolveDownload(
+            req.params.modelId,
+            req.params.filename
+        );
+        if (source.type === 'remote') {
+            return streamRemoteModelFile(res, source.url, source.size);
+        }
+        return streamModelFile(res, source.path);
+    } catch (error) {
+        return res.status(modelDownloadErrorStatus(error)).json({
+            status: 'error',
+            message: error.message
+        });
+    }
+});
+
+function writeLlmSse(res, event, payload) {
+    if (res.writableEnded) return false;
+    if (event) res.write(`event: ${event}\n`);
+    const data = payload === '[DONE]' ? payload : JSON.stringify(payload);
+    res.write(`data: ${data}\n\n`);
+    return true;
+}
+
+function sendLlmHttpError(res, error, requestId = null) {
+    const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+    return res.status(statusCode).json(createOpenAiErrorBody(error, requestId));
+}
+
+async function handleLlmHttpRequest(req, res, protocol) {
+    let request;
+    try {
+        request = llmGatewayService.validateRequest(protocol, req.body, req.headers);
+    } catch (error) {
+        return sendLlmHttpError(res, error);
+    }
+
+    let started;
+    try {
+        started = llmGatewayService.startRequest(request, (text) => {
+            if (!request.stream || res.writableEnded) return;
+            if (protocol === 'chat.completions') {
+                writeLlmSse(res, null, {
+                    id: request.requestId,
+                    object: 'chat.completion.chunk',
+                    created: Math.floor(Date.now() / 1000),
+                    model: request.requestedModelId || request.modelId,
+                    choices: [{ index: 0, delta: { content: text }, finish_reason: null }]
+                });
+                return;
+            }
+            writeLlmSse(res, 'response.output_text.delta', {
+                type: 'response.output_text.delta',
+                response_id: request.requestId,
+                item_id: request.requestId,
+                output_index: 0,
+                content_index: 0,
+                delta: text
+            });
+        });
+    } catch (error) {
+        return sendLlmHttpError(res, error, request.requestId);
+    }
+
+    if (request.stream) {
+        res.status(200);
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders?.();
+        const cancelOnClose = () => {
+            if (!res.writableEnded && !res.writableFinished) {
+                llmGatewayService.cancel(
+                    started.requestId,
+                    createGatewayError('客户端已断开', 'LLM_CLIENT_DISCONNECTED', 499)
+                );
+            }
+        };
+        res.once('close', cancelOnClose);
+        try {
+            const result = await started.promise;
+            if (protocol === 'chat.completions') {
+                writeLlmSse(res, null, {
+                    id: request.requestId,
+                    object: 'chat.completion.chunk',
+                    created: Math.floor(Date.now() / 1000),
+                    model: request.requestedModelId || request.modelId,
+                    choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+                });
+                writeLlmSse(res, null, '[DONE]');
+            } else {
+                writeLlmSse(res, 'response.completed', {
+                    type: 'response.completed',
+                    response: llmGatewayService.createResponsesResponse(request, result)
+                });
+            }
+        } catch (error) {
+            writeLlmSse(res, 'error', createOpenAiErrorBody(error, request.requestId));
+        } finally {
+            res.removeListener('close', cancelOnClose);
+            if (!res.writableEnded) res.end();
+        }
+        return;
+    }
+
+    try {
+        const result = await started.promise;
+        if (protocol === 'chat.completions') {
+            return res.json(llmGatewayService.createChatResponse(request, result));
+        }
+        return res.json(llmGatewayService.createResponsesResponse(request, result));
+    } catch (error) {
+        return sendLlmHttpError(res, error, request.requestId);
+    }
+}
+
+app.get('/v1/models', (req, res) => {
+    try {
+        return res.json(llmGatewayService.createModelsResponse());
+    } catch (error) {
+        return sendLlmHttpError(res, error);
+    }
+});
+app.post('/v1/chat/completions', (req, res) => handleLlmHttpRequest(req, res, 'chat.completions'));
+app.post('/v1/responses', (req, res) => handleLlmHttpRequest(req, res, 'responses'));
+app.post('/v1/chat/responses', (req, res) => handleLlmHttpRequest(req, res, 'responses'));
 
 // 服务器仅负责接收图片并通过 WebSocket 转发到显示端，不在服务端加载或执行视觉模型。
 app.post('/api/vision/ocr', visionUpload.single('image'), (req, res) => handleVisionRoute('ocr', req, res));
@@ -3727,6 +4140,13 @@ function getAsrTimingPayload(result = {}, fallbackAsrElapsedMs = null) {
 }
 
 /**
+ * 使用 Node 单调时钟计算服务器 ASR 模型耗时，不受系统时间校准影响。
+ */
+function getProcessElapsedMs(startNanos) {
+    return Math.max(0, Math.round(Number(process.hrtime.bigint() - startNanos) / 1e6));
+}
+
+/**
  * 将 ASR HTTP 请求绑定到当前在线的显示端。
  * @param {Object} req - Express 请求
  * @param {Object} requestContext - 已解析的 ASR 请求上下文
@@ -3815,7 +4235,7 @@ function serializeAsrSegment(segment, defaultThreshold) {
 }
 
 function processRecognizedAsrResultForDisplay(displayId, result, requestContext) {
-    if (!displayId || !displayClients.has(displayId)) return [];
+    if (globalRecordingPaused || !displayId || !displayClients.has(displayId)) return [];
 
     const groupedSegments = normalizeAsrSegments(result);
     if (groupedSegments.length > 0) {
@@ -3855,6 +4275,9 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ status: 'error', message: '未收到音频文件' });
         }
+        if (globalRecordingPaused) {
+            return res.json({ status: 'ignored', reason: 'global-recording-paused', text: '' });
+        }
         const asrDevice = config.get('asr.device', 'server');
         const requestContext = getAsrRequestContext(req);
         const sourceDisplayId = resolveAsrSourceDisplayId(req, requestContext);
@@ -3877,6 +4300,9 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
                 const audioBase64 = req.file.buffer.toString('base64');
                 const requestId = 'asr-' + Date.now() + '-' + (++pendingAsrRequestId);
                 const result = await sendAudioToDisplayAsr(displayWithAsr, audioBase64, requestId, requestContext);
+                if (globalRecordingPaused || result?.ignored) {
+                    return res.json({ status: 'ignored', reason: 'global-recording-paused', text: '' });
+                }
                 const localTextInputResponse = createLocalTextInputResponse(result, requestContext);
                 if (localTextInputResponse) {
                     return res.json(localTextInputResponse);
@@ -3891,14 +4317,16 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
                             reason: '未检测到有效内容',
                             text: ignoredText,
                             segments: [],
-                            processedByServer
+                            processedByServer,
+                            ...getAsrTimingPayload(result)
                         });
                     }
                     const response = {
                         status: 'success',
                         threshold: result.threshold,
                         processedByServer,
-                        segments: segments.map(segment => serializeAsrSegment(segment, result.threshold))
+                        segments: segments.map(segment => serializeAsrSegment(segment, result.threshold)),
+                        ...getAsrTimingPayload(result)
                     };
                     if (ignoredText) response.ignoredText = ignoredText;
                     processRecognizedAsrResultForDisplay(sourceDisplayId, result, requestContext);
@@ -3907,11 +4335,23 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
 
                 const text = normalizeAsrText(result.text);
                 if (!text) {
-                    return res.json({ status: 'ignored', reason: '显示端未识别到有效语音', text: '', processedByServer });
+                    return res.json({
+                        status: 'ignored',
+                        reason: '显示端未识别到有效语音',
+                        text: '',
+                        processedByServer,
+                        ...getAsrTimingPayload(result)
+                    });
                 }
                 if (!hasValidContent(text)) {
                     log('语音', `忽略无效语音输入: ${text}`);
-                    return res.json({ status: 'ignored', reason: '未检测到有效内容', text, processedByServer });
+                    return res.json({
+                        status: 'ignored',
+                        reason: '未检测到有效内容',
+                        text,
+                        processedByServer,
+                        ...getAsrTimingPayload(result)
+                    });
                 }
 
                 // speaker 存在但为空表示启用声纹后未匹配；字段缺省表示普通 ASR，直接放行。
@@ -3923,11 +4363,17 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
                         processedByServer,
                         speaker: result.speaker,
                         similarityScore: result.similarityScore,
-                        threshold: result.threshold
+                        threshold: result.threshold,
+                        ...getAsrTimingPayload(result)
                     });
                 }
                 processRecognizedAsrResultForDisplay(sourceDisplayId, { ...result, text }, requestContext);
-                return res.json({ status: 'success', text, processedByServer });
+                return res.json({
+                    status: 'success',
+                    text,
+                    processedByServer,
+                    ...getAsrTimingPayload(result)
+                });
             } catch (err) {
                 logError('语音', `显示端 ASR 失败: ${err.message}`);
                 return res.status(500).json({ status: 'error', message: '显示端 ASR 失败: ' + err.message });
@@ -3938,8 +4384,23 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
             return res.status(503).json({ status: 'error', message: 'ASR 服务未初始化' });
         }
         
+        const asrStartedAt = process.hrtime.bigint();
         const recognizedText = normalizeAsrText(await asr.recognize(req.file.buffer));
+        const serverAsrTiming = getAsrTimingPayload({}, getProcessElapsedMs(asrStartedAt));
+        if (globalRecordingPaused) {
+            return res.json({ status: 'ignored', reason: 'global-recording-paused', text: '', processedByServer, ...serverAsrTiming });
+        }
         
+        if (!recognizedText || !recognizedText.trim()) {
+            return res.json({ 
+                status: 'ignored', 
+                message: '未识别到有效语音',
+                text: '',
+                processedByServer,
+                ...serverAsrTiming
+            });
+        }
+
         const localTextInputResponse = createLocalTextInputResponse(
             { text: recognizedText },
             requestContext
@@ -3948,22 +4409,14 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
             return res.json(localTextInputResponse);
         }
 
-        if (!recognizedText || !recognizedText.trim()) {
-            return res.json({ 
-                status: 'ignored', 
-                message: '未识别到有效语音',
-                text: '',
-                processedByServer
-            });
-        }
-        
         if (!hasValidContent(recognizedText)) {
             log('语音', `忽略无效语音输入: ${recognizedText}`);
             return res.json({ 
                 status: 'ignored', 
                 message: '未检测到有效内容',
                 text: recognizedText,
-                processedByServer
+                processedByServer,
+                ...serverAsrTiming
             });
         }
         
@@ -3971,7 +4424,8 @@ app.post('/api/asr/recognize', parseAsrUpload, async (req, res) => {
         res.json({
             status: 'success',
             text: recognizedText,
-            processedByServer
+            processedByServer,
+            ...serverAsrTiming
          });
     } catch (err) {
         logError('语音', `ASR识别失败: ${err.message}`);
@@ -5167,6 +5621,7 @@ process.once('SIGINT', () => {
 
 function getDisplayList() {
     const list = [];
+    const globalVoiceVadConfig = getGlobalVoiceVadConfig();
     displayClients.forEach((data, id) => {
         const caps = data.state.capabilities || DEFAULT_CAPABILITIES;
         list.push({
@@ -5184,7 +5639,8 @@ function getDisplayList() {
             vadSilenceDurationMs: globalVoiceVadConfig.vadSilenceDurationMs,
             vadMinSpeechDurationMs: globalVoiceVadConfig.vadMinSpeechDurationMs,
             voiceRecordingMode: normalizeVoiceRecordingMode(data.state.voiceRecordingMode),
-            capabilities: caps
+            capabilities: caps,
+            llm: llmRouter.getDisplayStatus(id)
         });
     });
     return list;
@@ -5329,6 +5785,43 @@ function getOnlineVoicePlaybackDisplayIds() {
         .map(({ id }) => id);
 }
 
+/**
+ * 按文本媒体相同的规则选择当前语音播放目标：优先首选显示端，
+ * 首选端不可用时按服务器稳定顺序选择第一个在线语音播放端。
+ *
+ * @param {string|null} preferredDisplayId 首选显示端 ID
+ * @returns {string|null} 当前唯一播放目标
+ */
+function resolveCurrentVoicePlaybackTarget(preferredDisplayId = null) {
+    return resolveVoicePlaybackTarget(preferredDisplayId, getOnlineVoicePlaybackDisplayIds());
+}
+
+function rememberVoicePlaybackTarget(originDisplayId, targetDisplayId) {
+    if (!originDisplayId || !targetDisplayId) return;
+    voicePlaybackTargetsByOrigin.set(originDisplayId, targetDisplayId);
+}
+
+function clearVoicePlaybackTargetsForDisplay(displayId) {
+    for (const [originDisplayId, targetDisplayId] of voicePlaybackTargetsByOrigin) {
+        if (originDisplayId === displayId || targetDisplayId === displayId) {
+            voicePlaybackTargetsByOrigin.delete(originDisplayId);
+        }
+    }
+}
+
+/**
+ * 停止播报时优先使用本次语音会话最近实际使用的目标；
+ * 该目标失效后才重新执行来源优先的动态选择，避免来源恢复后遗留备用端继续播放。
+ */
+function getVoicePlaybackStopTarget(originDisplayId) {
+    const availableDisplayIds = getOnlineVoicePlaybackDisplayIds();
+    const rememberedTarget = voicePlaybackTargetsByOrigin.get(originDisplayId);
+    if (rememberedTarget && availableDisplayIds.includes(rememberedTarget)) {
+        return rememberedTarget;
+    }
+    return resolveVoicePlaybackTarget(originDisplayId, availableDisplayIds);
+}
+
 function sendToDisplaysWithCapability(capabilityName, message) {
     const displays = getDisplaysWithCapability(capabilityName);
     for (const display of displays) {
@@ -5368,6 +5861,10 @@ function finishVoiceTtsPlayback(playbackDisplayId, playbackId, reason = 'finishe
     voiceTtsPlaybackTimers.delete(key);
     broadcastVoiceTtsPlaybackState(reason, playbackId, playbackDisplayId);
     handleConversationConfirmationPlaybackFinished(playbackDisplayId, playbackId, reason);
+    clearDisplayConversationTtsPlaybackKey(
+        session.conversationDisplayId || playbackDisplayId,
+        key
+    );
     return true;
 }
 
@@ -5392,7 +5889,12 @@ function finishVoiceTtsPlaybacksForDisplay(playbackDisplayId) {
     }
 }
 
-function startVoiceTtsPlayback(playbackDisplayId, playbackId, repeatCount = 1) {
+function startVoiceTtsPlayback(
+    playbackDisplayId,
+    playbackId,
+    repeatCount = 1,
+    conversationDisplayId = playbackDisplayId
+) {
     const key = getVoiceTtsPlaybackKey(playbackDisplayId, playbackId);
     const existingSession = voiceTtsPlaybackTimers.get(key);
     if (existingSession) return;
@@ -5403,8 +5905,13 @@ function startVoiceTtsPlayback(playbackDisplayId, playbackId, repeatCount = 1) {
     voiceTtsPlaybackTimers.set(key, {
         timer,
         repeatCount: normalizeVoiceTtsRepeatCount(repeatCount),
-        completedCount: 0
+        completedCount: 0,
+        conversationDisplayId
     });
+    const conversationKeys = displayConversationTtsPlaybackKeys.get(conversationDisplayId) || new Set();
+    conversationKeys.add(key);
+    displayConversationTtsPlaybackKeys.set(conversationDisplayId, conversationKeys);
+    pauseDisplayConversationTimer(conversationDisplayId);
     broadcastVoiceTtsPlaybackState('started', playbackId, playbackDisplayId);
 }
 
@@ -5418,13 +5925,14 @@ function prepareVoiceTtsPlayback(displayId, data) {
     }
     const key = getVoiceTtsPlaybackKey(displayId, data.voiceTtsPlaybackId);
     const repeatCount = normalizeVoiceTtsRepeatCount(data.voiceTtsPlaybackRepeatCount);
+    const conversationDisplayId = data.voiceConversationDisplayId || displayId;
     const session = voiceTtsPlaybackTimers.get(key);
     if (session) {
         session.repeatCount = Math.max(session.repeatCount, repeatCount);
         return;
     }
 
-    startVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId, repeatCount);
+    startVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId, repeatCount, conversationDisplayId);
 }
 
 let displayListDebounceTimer = null;
@@ -5723,7 +6231,8 @@ async function generateTtsWithFallback(text, voice, speed, preferredDisplayId = 
     return tts.generateTTS(ttsText, voice, speed);
 }
 
-// 显示端语音输入的播报统一遵循通用播放路由；来源显示端只接收语音回复弹窗，不自动成为 TTS 目标。
+// 显示端语音输入的播报统一遵循文本媒体的单目标动态路由；来源显示端优先，
+// 没有语音播放能力时切换到稳定顺序中的第一个可用显示端。
 // TTS 生成设备和音频播放目标分离：生成仍遵循 tts.device 配置，播放目标由通用能力路由决定。
 function getVoiceTtsBatchPayload(playbackOptions = {}) {
     if (!playbackOptions.batchId) return {};
@@ -5735,34 +6244,48 @@ function getVoiceTtsBatchPayload(playbackOptions = {}) {
 
 async function sendVoiceInputTts(text, playbackOptions = {}) {
     if (isRepairModeTtsSuppressed() && playbackOptions.allowRepairModeTts !== true) return 0;
-    const audioPath = await generateTtsWithFallback(text);
-    const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
-    const targetDisplayIds = getOnlineVoicePlaybackDisplayIds();
-    const batchPayload = getVoiceTtsBatchPayload(playbackOptions);
-    let sentCount = 0;
-
-    for (const targetDisplayId of targetDisplayIds) {
-        const message = {
-            type: 'tts',
-            action: 'playAudio',
-            audioUrl,
-            text,
-            ...batchPayload
-        };
-        const sent = sendToDisplay(targetDisplayId, message, {
-            allowRepairModeTts: playbackOptions.allowRepairModeTts === true
-        });
-        if (!sent) continue;
-        sentCount++;
-        if (typeof playbackOptions.onPlaybackStarted === 'function') {
-            playbackOptions.onPlaybackStarted({
-                displayId: targetDisplayId,
-                playbackId: message.voiceTtsPlaybackId
-            });
-        }
+    const preferredDisplayId = playbackOptions.preferredDisplayId || null;
+    const initialTargetDisplayId = resolveCurrentVoicePlaybackTarget(preferredDisplayId);
+    if (!initialTargetDisplayId) {
+        log('TTS', '没有可用语音播放显示端，跳过语音输入 TTS');
+        return 0;
     }
 
-    return sentCount;
+    const audioPath = await generateTtsWithFallback(
+        text,
+        undefined,
+        undefined,
+        initialTargetDisplayId
+    );
+    const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
+    const targetDisplayId = resolveCurrentVoicePlaybackTarget(preferredDisplayId);
+    if (!targetDisplayId) {
+        log('TTS', 'TTS 生成完成但没有可用语音播放显示端，跳过下发');
+        return 0;
+    }
+    const batchPayload = getVoiceTtsBatchPayload(playbackOptions);
+    const message = {
+        type: 'tts',
+        action: 'playAudio',
+        audioUrl,
+        text,
+        ...batchPayload,
+        ...(preferredDisplayId ? { voiceConversationDisplayId: preferredDisplayId } : {})
+    };
+    const sent = sendToDisplay(targetDisplayId, message, {
+        allowRepairModeTts: playbackOptions.allowRepairModeTts === true
+    });
+    if (!sent) return 0;
+
+    rememberVoicePlaybackTarget(preferredDisplayId, targetDisplayId);
+    if (typeof playbackOptions.onPlaybackStarted === 'function') {
+        playbackOptions.onPlaybackStarted({
+            displayId: targetDisplayId,
+            playbackId: message.voiceTtsPlaybackId
+        });
+    }
+
+    return 1;
 }
 
 const TEXT_INPUT_ANNOUNCEMENT_TEXTS = new Set(['已开始输入', '已结束输入']);
@@ -5829,29 +6352,63 @@ async function sendVoiceTtsSentences(text, sendSentence) {
     }
 }
 
-async function sendVoiceInputTtsSentences(text) {
-    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceInputTts(sentence, playbackOptions));
+async function sendVoiceInputTtsSentences(text, preferredDisplayId = null) {
+    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceInputTts(sentence, {
+        ...playbackOptions,
+        preferredDisplayId
+    }));
 }
 
 async function sendVoiceCommandTtsSentences(text, targetDisplayId) {
-    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceCommandTts(sentence, targetDisplayId, playbackOptions));
+    await sendVoiceTtsSentences(text, (sentence, playbackOptions) => sendVoiceCommandTts(
+        sentence,
+        targetDisplayId,
+        playbackOptions
+    ));
 }
 
-// 控制端语音命令继续按控制端指定的显示目标播放，但生成过程同样统一走 fallback 路由。
+// 控制端语音命令优先按指定显示端播放，指定端不可用时沿用在线语音设备兜底规则。
 async function sendVoiceCommandTts(text, targetDisplayId, playbackOptions = {}) {
     if (isRepairModeTtsSuppressed() && playbackOptions.allowRepairModeTts !== true) return false;
-    const audioPath = await generateTtsWithFallback(text, undefined, undefined, targetDisplayId);
-    if (!targetDisplayId) return false;
+    const initialTargetDisplayId = resolveCurrentVoicePlaybackTarget(targetDisplayId);
+    if (!initialTargetDisplayId) {
+        log('TTS', '没有可用语音播放显示端，跳过控制端语音 TTS');
+        return false;
+    }
 
-    return sendToDisplay(targetDisplayId, {
+    const audioPath = await generateTtsWithFallback(
+        text,
+        undefined,
+        undefined,
+        initialTargetDisplayId
+    );
+    const actualTargetDisplayId = resolveCurrentVoicePlaybackTarget(targetDisplayId);
+    if (!actualTargetDisplayId) {
+        log('TTS', 'TTS 生成完成但没有可用语音播放显示端，跳过控制端语音下发');
+        return false;
+    }
+
+    const message = {
         type: 'tts',
         action: 'playAudio',
         audioUrl: `/uploads/tts/${path.basename(audioPath)}`,
         text,
-        ...getVoiceTtsBatchPayload(playbackOptions)
-    }, {
+        ...getVoiceTtsBatchPayload(playbackOptions),
+        ...(targetDisplayId ? { voiceConversationDisplayId: targetDisplayId } : {})
+    };
+    const sent = sendToDisplay(actualTargetDisplayId, message, {
         allowRepairModeTts: playbackOptions.allowRepairModeTts === true
     });
+    if (!sent) return false;
+
+    rememberVoicePlaybackTarget(targetDisplayId, actualTargetDisplayId);
+    if (typeof playbackOptions.onPlaybackStarted === 'function') {
+        playbackOptions.onPlaybackStarted({
+            displayId: actualTargetDisplayId,
+            playbackId: message.voiceTtsPlaybackId
+        });
+    }
+    return true;
 }
 
 // 裁剪调试日志开关
@@ -6013,7 +6570,7 @@ function closeDisplayRecordingSession(requestId) {
     return session;
 }
 
-function failDisplayRecordingSession(session, message, notifyDisplay = true) {
+function failDisplayRecordingSession(session, message, notifyDisplay = true, discard = false) {
     if (!session) return;
     sendDisplayRecordingToControl(session, {
         type: 'displayRecordingResult',
@@ -6021,7 +6578,8 @@ function failDisplayRecordingSession(session, message, notifyDisplay = true) {
         requestId: session.requestId,
         mode: session.mode,
         completed: false,
-        error: message
+        error: message,
+        discard
     });
     if (notifyDisplay) {
         sendToDisplay(session.displayId, {
@@ -6029,7 +6587,8 @@ function failDisplayRecordingSession(session, message, notifyDisplay = true) {
             action: 'stop',
             requestId: session.requestId,
             mode: session.mode,
-            reason: message
+            reason: message,
+            discard
         });
     }
     closeDisplayRecordingSession(session.requestId);
@@ -6119,6 +6678,33 @@ function rejectDisplayRecordingSessionsForControl(controlSocket, message) {
         if (session.controlSocket !== controlSocket) continue;
         failDisplayRecordingSession(session, message);
     }
+}
+
+function getGlobalRecordingPauseState() {
+    return { paused: globalRecordingPaused };
+}
+
+function broadcastGlobalRecordingPauseState() {
+    const message = {
+        type: 'globalRecordingPauseState',
+        ...getGlobalRecordingPauseState()
+    };
+    broadcastToControls(message);
+    displayClients.forEach((_displayData, displayId) => {
+        sendToDisplay(displayId, message);
+    });
+}
+
+function setGlobalRecordingPaused(paused) {
+    globalRecordingPaused = paused === true;
+    if (globalRecordingPaused) {
+        for (const session of [...displayRecordingSessions.values()]) {
+            failDisplayRecordingSession(session, '全局录音已暂停', true, true);
+        }
+    }
+    broadcastGlobalRecordingPauseState();
+    log('语音', globalRecordingPaused ? '已暂停所有录音' : '已恢复所有录音');
+    return getGlobalRecordingPauseState();
 }
 
 function muteAllDisplays() {
@@ -6408,15 +6994,20 @@ wss.on('connection', (ws, req) => {
                 capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : null
             }
         });
+        llmRouter.registerDisplay(displayId, {
+            capabilities: displayClients.get(displayId)?.state.capabilities || {},
+            supported: false,
+            ready: false
+        });
         // 非子显示端：从持久化恢复用户覆盖值，等显示端声明能力后自动合并
         if (!isSubDisplay && savedState?.userCapabilities) {
             const entry = displayClients.get(displayId);
             if (entry) {
                 entry.state.userCapabilities = normalizeDisplayUserCapabilities(savedState.userCapabilities);
-                entry.state.capabilities = {
-                    ...DEFAULT_CAPABILITIES,
-                    ...entry.state.userCapabilities
-                };
+                entry.state.capabilities = mergeDisplayCapabilities(
+                    DEFAULT_CAPABILITIES,
+                    entry.state.userCapabilities
+                );
             }
         }
         syncDisplayConversationListeningState(displayId, 'connect');
@@ -6428,6 +7019,7 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
+        ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
         ws.send(JSON.stringify({ type: 'controlThemeChanged', theme: getControlTheme() }));
         ws.send(JSON.stringify({ type: 'displayVersionConfig', ...getDisplayVersionConfig() }));
 
@@ -6478,6 +7070,14 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify(
             config.createCpuConfigMessage(config.getCpuAffinityConfig())
         ));
+        ws.send(JSON.stringify({
+            type: 'llm.modelManifest',
+            ...llmModelManifestService.createManifest()
+        }));
+        ws.send(JSON.stringify({
+            type: 'llm.status',
+            ...llmRouter.getDisplayStatus(displayId)
+        }));
 
         // 显示端连接时推送声纹配置，避免新连接 APK 默认关闭声纹
         ws.send(JSON.stringify({
@@ -6503,10 +7103,10 @@ wss.on('connection', (ws, req) => {
 
         // 连接时发送服务器端保存的用户能力覆盖（如果有），让显示端启动时就知道限制
         if (!isSubDisplay && savedState?.userCapabilities) {
-            const initialCaps = {
-                ...DEFAULT_CAPABILITIES,
-                ...normalizeDisplayUserCapabilities(savedState.userCapabilities)
-            };
+            const initialCaps = mergeDisplayCapabilities(
+                DEFAULT_CAPABILITIES,
+                savedState.userCapabilities
+            );
             ws.send(JSON.stringify({
                 type: 'capabilitiesUpdated',
                 capabilities: initialCaps
@@ -6551,13 +7151,22 @@ wss.on('connection', (ws, req) => {
                 const data = JSON.parse(message);
                 data.displayId = displayId;
 
-                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress' && data.type !== 'textProgress') {
-                    const logMessage = data.type === 'asrResult'
+                if (data.type === 'llm.chunk') {
+                    appendLlmLogChunk(displayId, data.requestId, data.text);
+                }
+                const shouldSkipLlmChunkLog = data.type === 'llm.chunk';
+                const logData = data.type === 'llm.completed'
+                    ? { ...data, text: consumeLlmLogText(displayId, data.requestId, data.text) }
+                    : data.type === 'llm.error'
+                        ? { ...data, text: '', generatedChars: consumeLlmLogText(displayId, data.requestId).length }
+                        : data;
+                if (data.type !== 'clientLog' && data.type !== 'task:progress' && data.type !== 'commandAck' && data.type !== 'videoProgress' && data.type !== 'audioProgress' && data.type !== 'playlistProgress' && data.type !== 'htmlProgress' && data.type !== 'textProgress' && !shouldSkipLlmChunkLog) {
+                    const logMessage = logData.type === 'asrResult'
                         ? formatAsrResultLog(
-                            data,
+                            logData,
                             config.get('voiceprint.asrResultDetailLog', true)
                         )
-                        : `<< ${data.type}${data.chunk ? ' chunk='+data.chunk.length : ''}${data.isLast ? ' isLast' : ''}${data.text ? ' "'+data.text+'"' : ''}`;
+                        : `<< ${logData.type}${logData.requestId ? ' requestId='+logData.requestId : ''}${logData.generatedChars !== undefined ? ' generatedChars='+logData.generatedChars : ''}${logData.chunk ? ' chunk='+logData.chunk.length : ''}${logData.isLast ? ' isLast' : ''}${logData.text ? ' "'+logData.text+'"' : ''}`;
                     log('WS', logMessage, { displayId, source: `display:${displayId}`, scope: 'single' });
                 }
 
@@ -6566,6 +7175,10 @@ wss.on('connection', (ws, req) => {
                     if (pending) {
                         pendingDisplayAsrRequests.delete(data.requestId);
                         clearTimeout(pending.timer);
+                        if (globalRecordingPaused) {
+                            pending.resolve({ ignored: true, text: '' });
+                            return;
+                        }
                         if (data.text || (data.segments && data.segments.length)) {
                             pending.resolve({
                                 text: data.text || '',
@@ -6573,7 +7186,9 @@ wss.on('connection', (ws, req) => {
                                 segments: data.segments,
                                 similarityScore: data.similarityScore,
                                 similarityScores: data.similarityScores,
-                                threshold: data.threshold
+                                threshold: data.threshold,
+                                asrElapsedMs: data.asrElapsedMs,
+                                voiceprintElapsedMs: data.voiceprintElapsedMs
                             });
                         } else {
                             pending.reject(new Error(data.error || '显示端 ASR 识别失败'));
@@ -6637,6 +7252,34 @@ wss.on('connection', (ws, req) => {
                     return;
                 }
 
+                if (llmGatewayService.handleDisplayMessage(displayId, data)) {
+                    if (data.type === 'llm.status') {
+                        const llmStatus = llmRouter.getDisplayStatus(displayId);
+                        if (displayData) {
+                            displayData.state.llmStatus = llmStatus;
+                            const currentLlmCapability = displayData.state.capabilities?.llm
+                                || DEFAULT_CAPABILITIES.llm;
+                            const reportedLlmStatus = data.status || data;
+                            displayData.state.capabilities = {
+                                ...(displayData.state.capabilities || DEFAULT_CAPABILITIES),
+                                llm: {
+                                    ...currentLlmCapability,
+                                    supported: reportedLlmStatus.supported === true,
+                                    engine: reportedLlmStatus.engine || 'mnn-llm',
+                                    ready: reportedLlmStatus.ready === true,
+                                    selectedModelId: reportedLlmStatus.selectedModelId || null
+                                }
+                            };
+                        }
+                        broadcastToControls({
+                            type: 'llm.status',
+                            ...llmStatus
+                        });
+                        broadcastDisplayList();
+                    }
+                    return;
+                }
+
                 if (wsServer) {
                     const result = await wsServer.handleDisplayMessage(displayId, data, ws);
                     if (!result.success && result.reason) {
@@ -6670,6 +7313,10 @@ wss.on('connection', (ws, req) => {
             clearRepairMode(displayId, 'displayDisconnected');
             finishVoiceTtsPlaybacksForDisplay(displayId);
             rejectDisplayRecordingSessionsForDisplay(displayId, '显示端已断开');
+            rejectDisplayCameraSessionsForDisplay(displayId, '显示端已断开');
+            clearVoicePlaybackTargetsForDisplay(displayId);
+            clearLlmLogBuffersForDisplay(displayId);
+            llmGatewayService.handleDisplayDisconnect(displayId);
             displayClients.delete(displayId);
             for (const [requestId, pending] of pendingDisplayTtsRequests) {
                 if (pending.displayId !== displayId) continue;
@@ -6780,15 +7427,68 @@ wss.on('connection', (ws, req) => {
                     }
                 }
 
+                if (data.type === 'llm.selectModel') {
+                    const targetDisplayId = data.displayId;
+                    const modelId = typeof data.modelId === 'string' ? data.modelId.trim() : '';
+                    const targetDisplayData = displayClients.get(targetDisplayId);
+                    if (!targetDisplayData) {
+                        ws.send(JSON.stringify({
+                            type: 'llm.modelSwitchError',
+                            displayId: targetDisplayId,
+                            modelId,
+                            message: '显示端不存在或已断开'
+                        }));
+                        return;
+                    }
+                    if (targetDisplayData.state.capabilities?.llm?.enabled === false) {
+                        ws.send(JSON.stringify({
+                            type: 'llm.modelSwitchError',
+                            displayId: targetDisplayId,
+                            modelId,
+                            message: '显示端 LLM 能力已禁用'
+                        }));
+                        return;
+                    }
+                    if (!modelId || !llmGatewayService.hasModel(modelId)) {
+                        ws.send(JSON.stringify({
+                            type: 'llm.modelSwitchError',
+                            displayId: targetDisplayId,
+                            modelId,
+                            message: '模型不存在或未发布'
+                        }));
+                        return;
+                    }
+                    const requestId = generateCorrelationId('llm-model');
+                    const sent = sendToDisplay(targetDisplayId, {
+                        type: 'llm.selectModel',
+                        requestId,
+                        modelId
+                    });
+                    ws.send(JSON.stringify({
+                        type: sent ? 'llm.modelSwitchAccepted' : 'llm.modelSwitchError',
+                        displayId: targetDisplayId,
+                        modelId,
+                        requestId,
+                        message: sent ? '模型切换已排队' : '显示端不可用'
+                    }));
+                    return;
+                }
+
                 if (data.type === 'updateCapabilities') {
                     const targetDisplayId = data.displayId;
                     const targetDisplayData = displayClients.get(targetDisplayId);
                     if (targetDisplayData) {
                         const userCapabilities = normalizeDisplayUserCapabilities(data.capabilities);
-                        targetDisplayData.state.capabilities = {
-                            ...DEFAULT_CAPABILITIES,
-                            ...data.capabilities
-                        };
+                        targetDisplayData.state.capabilities = mergeDisplayCapabilities(
+                            {
+                                ...(targetDisplayData.state.capabilities || DEFAULT_CAPABILITIES),
+                                ...(data.capabilities || {})
+                            },
+                            userCapabilities
+                        );
+                        llmRouter.updateDisplayStatus(targetDisplayId, {
+                            capabilities: targetDisplayData.state.capabilities
+                        });
                         // 保存用户覆盖值，重连后恢复
                         targetDisplayData.state.userCapabilities = userCapabilities;
                         syncDisplayConversationListeningState(targetDisplayId, 'control');
@@ -6831,6 +7531,7 @@ wss.on('connection', (ws, req) => {
         
         ws.on('close', () => {
             rejectDisplayRecordingSessionsForControl(ws, '控制端已断开');
+            rejectDisplayCameraSessionsForControl(ws);
             controlClients.delete(ws);
             ws.removeAllListeners();
             if (wsServer) {
@@ -6854,6 +7555,7 @@ wss.on('connection', (ws, req) => {
 function processDisplayVoiceInput(displayId, data, ws = null) {
     const displayData = displayClients.get(displayId);
     const text = normalizeAsrText(data?.text);
+    if (globalRecordingPaused) return { handled: true, ignoredDuringGlobalPause: true };
     if (!displayData || !text) return { handled: false, reason: 'display-or-text-missing' };
 
     const voiceprintEnabledNow = config.get('voiceprint.enabled', true);
@@ -7113,11 +7815,14 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         // Windows 本地输入的开始/结束提示必须回到请求来源端，避免播报到其他显示端。
         void sendTextInputAnnouncement(displayId, data);
     } else if (data.type === 'voiceConversationTtsFinished' && displayData) {
-        // 该事件只负责普通会话的 3 分钟续期；确认提示使用带 playbackId 的完成回执计时。
+        // 该事件负责兼容旧显示端；确认提示使用带 playbackId 的完成回执计时。
         if (isDisplayVoiceListeningEnabled(displayData)
             && ['activeGroup', 'activePrivate'].includes(displayData.state.voiceConversation?.state)) {
             armDisplayConversationTimer(displayId);
-            log('语音', `显示端 ${displayId} TTS 播放完成，重新计时3分钟`);
+            const windowSeconds = Math.round(
+                getVoiceConversationWindowMs(displayData.state.voiceConversation.windowType) / 1000
+            );
+            log('语音', `显示端 ${displayId} TTS 播放完成，重新计时${windowSeconds}秒`);
         }
     } else if (data.type === 'voiceTtsPlaybackFinished' && displayData) {
         completeVoiceTtsPlayback(displayId, data.voiceTtsPlaybackId, data.completedCount);
@@ -7135,6 +7840,8 @@ function handleDisplayMessageFallback(displayId, data, ws) {
             recommendedThreshold: normalizeVadThreshold(data.recommendedThreshold),
             error: data.error || null
         });
+    } else if (['displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult'].includes(data.type)) {
+        handleDisplayCameraMessage(displayId, data);
     } else if (['displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult'].includes(data.type)) {
         // 显示端录音数据只进入对应的临时会话，不进入 ASR、声纹或广播链路。
         handleDisplayRecordingMessage(displayId, data);
@@ -7160,10 +7867,10 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         broadcastDisplayList();
         log('能力', `显示端 ${displayId} CPU 状态已更新，TTS 槽位=${cpuStatus.tts.totalCoreCount}`);
     } else if (data.type === 'capabilities' && displayData) {
-        displayData.state.capabilities = {
-            ...DEFAULT_CAPABILITIES,
-            ...data.capabilities
-        };
+        displayData.state.capabilities = mergeDisplayCapabilities(
+            data.capabilities,
+            displayData.state.userCapabilities
+        );
         // 重连后恢复用户手动覆盖的能力值
         if (displayData.state.userCapabilities) {
             Object.assign(
@@ -7171,6 +7878,9 @@ function handleDisplayMessageFallback(displayId, data, ws) {
                 normalizeDisplayUserCapabilities(displayData.state.userCapabilities)
             );
         }
+        llmRouter.updateDisplayStatus(displayId, {
+            capabilities: displayData.state.capabilities
+        });
         syncDisplayConversationListeningState(displayId, 'capabilities');
         // 将合并后的能力通知显示端，让显示端根据限制调整行为
         sendToDisplay(displayId, {
@@ -7198,9 +7908,56 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     }
 }
 
+function handleDisplayCameraMessage(displayId, data) {
+    const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+    const session = displayCameraSessions.get(requestId);
+    if (!session || session.displayId !== displayId) return;
+    if (['displayCameraFrame', 'displayCameraResult'].includes(data.type)
+        && !isCameraPayloadWithinLimit(data.imageBase64)) {
+        sendDisplayCameraToControl(session, {
+            type: 'displayCameraStatus',
+            requestId,
+            state: 'error',
+            error: '摄像头图片超过大小限制'
+        });
+        if (data.type === 'displayCameraResult') closeDisplayCameraSession(requestId);
+        return;
+    }
+    sendDisplayCameraToControl(session, {
+        type: data.type,
+        requestId,
+        state: data.state,
+        error: data.error || null,
+        devices: Array.isArray(data.devices) ? data.devices : undefined,
+        mimeType: data.mimeType || 'image/jpeg',
+        imageBase64: data.imageBase64
+    });
+    if (data.type === 'displayCameraDevices' || data.type === 'displayCameraResult'
+        || data.state === 'stopped' || data.state === 'error') {
+        closeDisplayCameraSession(requestId);
+    }
+}
+
 async function handleControlMessageFallback(data, ws) {
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
+
+    if (data.type === 'setGlobalRecordingPause') {
+        if (typeof data.paused !== 'boolean') {
+            ws.send(JSON.stringify({
+                type: 'globalRecordingPauseError',
+                message: 'paused 必须是布尔值'
+            }));
+            return;
+        }
+        globalRecordingPaused = data.paused === true;
+        const state = setGlobalRecordingPaused(globalRecordingPaused);
+        ws.send(JSON.stringify({
+            type: 'globalRecordingPauseState',
+            ...state
+        }));
+        return;
+    }
 
     if (data.type === 'updateDisplayVersionConfig') {
         const intervalMs = normalizeDisplayVersionInterval(data.intervalMs);
@@ -7229,7 +7986,79 @@ async function handleControlMessageFallback(data, ws) {
         return;
     }
 
+    if (['listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera'].includes(data.type)) {
+        if (!displayData) {
+            ws.send(JSON.stringify({
+                type: 'displayCameraStatus',
+                displayId,
+                requestId: data.requestId || null,
+                state: 'error',
+                error: '显示端不存在或已断开'
+            }));
+            return;
+        }
+        const capabilities = displayData.state.capabilities || DEFAULT_CAPABILITIES;
+        if (capabilities.cameraCapture !== true) {
+            ws.send(JSON.stringify({
+                type: 'displayCameraStatus',
+                displayId,
+                requestId: data.requestId || null,
+                state: 'error',
+                error: '显示端不支持摄像头'
+            }));
+            return;
+        }
+        const requestId = typeof data.requestId === 'string' && data.requestId
+            ? data.requestId
+            : generateCorrelationId('display-camera');
+        if (data.type === 'stopDisplayCamera') {
+            const session = displayCameraSessions.get(requestId);
+            if (!session || session.controlSocket !== ws || session.displayId !== displayId) {
+                ws.send(JSON.stringify({ type: 'displayCameraStatus', displayId, requestId, state: 'error', error: '摄像头请求不存在或无权操作' }));
+                return;
+            }
+            sendToDisplay(displayId, { type: 'stopDisplayCamera', requestId });
+            return;
+        }
+        displayCameraSessions.set(requestId, {
+            requestId,
+            displayId,
+            controlSocket: ws,
+            mode: data.mode === 'realtime' ? 'realtime' : 'single'
+        });
+        const message = data.type === 'listDisplayCameras'
+            ? { type: 'listDisplayCameras', requestId }
+            : {
+                type: 'requestDisplayCamera',
+                requestId,
+                mode: data.mode === 'realtime' ? 'realtime' : 'single',
+                cameraId: typeof data.cameraId === 'string' ? data.cameraId : ''
+            };
+        if (!sendToDisplay(displayId, message)) {
+            sendDisplayCameraToControl(displayCameraSessions.get(requestId), {
+                type: 'displayCameraStatus',
+                requestId,
+                state: 'error',
+                error: '显示端当前不可用'
+            });
+            closeDisplayCameraSession(requestId);
+        }
+        return;
+    }
+
     if (data.type === 'requestDisplayRecording') {
+        if (globalRecordingPaused) {
+            ws.send(JSON.stringify({
+                type: 'displayRecordingResult',
+                displayId,
+                requestId: data.requestId || null,
+                mode: normalizeVoiceRecordingMode(data.mode),
+                completed: false,
+                error: '全局录音已暂停',
+                discard: true
+            }));
+            return;
+        }
         if (!displayData) {
             ws.send(JSON.stringify({
                 type: 'displayRecordingResult',
@@ -7487,6 +8316,10 @@ async function handleControlMessageFallback(data, ws) {
                             const playOnControl = data.playOnControl || false;
                             const targetDisplayId = data.displayId || displayId;
                             const isDisplayVoiceInput = displayData?.ws === ws;
+                            let voicePlaybackTargetId = null;
+                            const rememberCurrentPlaybackTarget = ({ displayId: playbackDisplayId }) => {
+                                voicePlaybackTargetId = playbackDisplayId;
+                            };
 
                             if (isDisplayVoiceInput
                                 && ['awaitingPassword', 'active'].includes(repairModeStates.get(targetDisplayId)?.state)) {
@@ -7548,16 +8381,18 @@ async function handleControlMessageFallback(data, ws) {
                                 }
                             } : {
                                 onTts: isDisplayVoiceInput
-                                    ? async (text) => sendVoiceInputTts(text)
-                                    : async (text) => sendVoiceCommandTts(text, targetDisplayId),
+                                    ? async (text) => sendVoiceInputTts(text, {
+                                        preferredDisplayId: targetDisplayId,
+                                        onPlaybackStarted: rememberCurrentPlaybackTarget
+                                    })
+                                    : async (text) => sendVoiceCommandTts(text, targetDisplayId, {
+                                        onPlaybackStarted: rememberCurrentPlaybackTarget
+                                    }),
                                 onStop: async () => {
-                                    if (isDisplayVoiceInput) {
-                                        sendToDisplaysWithCapability('voicePlayback', {
-                                            type: 'tts',
-                                            action: 'stop'
-                                        });
-                                    } else if (targetDisplayId) {
-                                        sendToDisplay(targetDisplayId, { type: 'tts', action: 'stop' });
+                                    const stopTargetDisplayId = voicePlaybackTargetId
+                                        || getVoicePlaybackStopTarget(targetDisplayId);
+                                    if (stopTargetDisplayId) {
+                                        sendToDisplay(stopTargetDisplayId, { type: 'tts', action: 'stop' });
                                     }
                                 }
                             };
@@ -7620,7 +8455,7 @@ async function handleControlMessageFallback(data, ws) {
                                     (async () => {
                                         try {
                                             if (isDisplayVoiceInput) {
-                                                await sendVoiceInputTtsSentences(helpTTS);
+                                                await sendVoiceInputTtsSentences(helpTTS, targetDisplayId);
                                             } else {
                                                 await sendVoiceCommandTtsSentences(helpTTS, targetDisplayId);
                                             }
@@ -7643,7 +8478,7 @@ async function handleControlMessageFallback(data, ws) {
                                         text: modeText
                                     });
                                     void (isDisplayVoiceInput
-                                        ? sendVoiceInputTts(modeText)
+                                        ? sendVoiceInputTts(modeText, { preferredDisplayId: targetDisplayId })
                                         : sendVoiceCommandTts(modeText, targetDisplayId));
                                 }
                             } else if (result.type === 'commandMode') {
@@ -7661,7 +8496,7 @@ async function handleControlMessageFallback(data, ws) {
                                     (async () => {
                                         try {
                                             if (isDisplayVoiceInput) {
-                                                await sendVoiceInputTts(modeText);
+                                                await sendVoiceInputTts(modeText, { preferredDisplayId: targetDisplayId });
                                             } else {
                                                 await sendVoiceCommandTts(modeText, targetDisplayId);
                                             }
@@ -7728,7 +8563,7 @@ async function handleControlMessageFallback(data, ws) {
                                     content: result.message,
                                     displayId: targetDisplayId,
                                     playOnControl: playOnControl,
-                                    routeVoiceToAll: isDisplayVoiceInput,
+                                    routeVoiceToPreferredDisplay: isDisplayVoiceInput,
                                     voiceOriginDisplayId: isDisplayVoiceInput ? targetDisplayId : null,
                                     mode: result.mode || 'group',
                                     target: result.target || null,
@@ -8479,6 +9314,15 @@ async function handleControlMessageFallback(data, ws) {
                             const isAgentMessage = data.assistantType === 'agent' ||
                                 (!data.assistantType && data.mode === 'role');
                             if (isAgentMessage) {
+                                if (Array.isArray(data.images) && data.images.length > 0) {
+                                    ws.send(JSON.stringify({
+                                        type: 'chatResponse',
+                                        requestId: data.requestId,
+                                        success: false,
+                                        error: 'Agent 暂不支持图片输入'
+                                    }));
+                                    return;
+                                }
                                 const session = chat.getSession();
                                 const targetDisplayId = data.displayId || displayId;
                                 const targetDisplayIds = data.displayIds || [];
@@ -8530,6 +9374,7 @@ async function handleControlMessageFallback(data, ws) {
                             await handleChatMessage({
                                 requestId: data.requestId,
                                 content: data.content,
+                                images: data.images,
                                 displayContent: data.displayContent || data.content,
                                 displayId: targetDisplayId,
                                 displayIds: targetDisplayIds,
@@ -8635,12 +9480,13 @@ async function handleChatMessage(options) {
     const {
         requestId,
         content,
+        images: rawImages = [],
         displayContent,
         displayId,
         voiceOriginDisplayId = null,
         displayIds = [],
         playOnControl = false,
-        routeVoiceToAll = false,
+        routeVoiceToPreferredDisplay = false,
         systemPrompt: customSystemPrompt,
         templateTarget,
         mode = 'group',
@@ -8724,7 +9570,9 @@ async function handleChatMessage(options) {
         contextCount = 0;
     }
 
-    const preferredDisplayId = displayIds[0] || (routeVoiceToAll ? null : displayId) || null;
+    const preferredDisplayId = displayIds[0]
+        || (routeVoiceToPreferredDisplay ? voiceOriginDisplayId || displayId : displayId)
+        || null;
     const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId) : null;
     const sendChatResponse = (payload) => {
         const responseLength = typeof payload.message === 'string' ? payload.message.length : 0;
@@ -8781,14 +9629,24 @@ async function handleChatMessage(options) {
 
                 if (playOnControl) {
                     sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
-                } else if (routeVoiceToAll) {
-                    for (const targetId of getOnlineVoicePlaybackDisplayIds()) {
-                        sendToDisplay(targetId, {
-                            type: 'tts',
-                            action: 'playAudio',
-                            audioUrl: audioUrl,
-                            text: sentence
-                        });
+                } else if (routeVoiceToPreferredDisplay) {
+                    const targetDisplayId = resolveCurrentVoicePlaybackTarget(preferredDisplayId);
+                    if (!targetDisplayId) {
+                        log('TTS', '没有可用语音播放显示端，跳过语音聊天 TTS');
+                        return;
+                    }
+                    const sent = sendToDisplay(targetDisplayId, {
+                        type: 'tts',
+                        action: 'playAudio',
+                        audioUrl: audioUrl,
+                        text: sentence,
+                        voiceConversationDisplayId: voiceOriginDisplayId || displayId || null
+                    });
+                    if (sent) {
+                        rememberVoicePlaybackTarget(
+                            voiceOriginDisplayId || displayId || preferredDisplayId,
+                            targetDisplayId
+                        );
                     }
                 } else if (displayIds.length > 0) {
                     for (const tid of displayIds) {
@@ -8796,7 +9654,8 @@ async function handleChatMessage(options) {
                             type: 'tts',
                             action: 'playAudio',
                             audioUrl: audioUrl,
-                            text: sentence
+                            text: sentence,
+                            voiceConversationDisplayId: voiceOriginDisplayId || displayId || null
                         });
                     }
                 } else if (displayId) {
@@ -8804,7 +9663,8 @@ async function handleChatMessage(options) {
                         type: 'tts',
                         action: 'playAudio',
                         audioUrl: audioUrl,
-                        text: sentence
+                        text: sentence,
+                        voiceConversationDisplayId: voiceOriginDisplayId || displayId || null
                     });
                 }
             }).catch(err => {
@@ -8881,7 +9741,7 @@ async function sendSearchTts(text, options = {}) {
     }
 
     if (isDisplayVoiceInput) {
-        await sendVoiceInputTtsSentences(text);
+        await sendVoiceInputTtsSentences(text, targetDisplayId);
         return;
     }
 
@@ -9167,6 +10027,8 @@ setInterval(() => {
                 const disconnectedIP = displayData.ip;
                 executeDeviceEvent(disconnectedIP, 'onDisconnect', displayId);
                 
+                clearVoicePlaybackTargetsForDisplay(displayId);
+                clearLlmLogBuffersForDisplay(displayId);
                 displayClients.delete(displayId);
                 if (wsServer) {
                     wsServer.handleDisplayDisconnect(displayId);
@@ -9186,6 +10048,7 @@ setInterval(() => {
         }
     });
     deadDisplays.forEach(id => {
+        clearLlmLogBuffersForDisplay(id);
         displayClients.delete(id);
         rejectPendingVisionRequestsForDisplay(id);
         if (wsServer) {

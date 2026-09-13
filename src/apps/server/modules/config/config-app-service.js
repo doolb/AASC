@@ -18,12 +18,13 @@ const defaultDisplayState = {
     sleep: { enabled: true, startHour: 23, endHour: 8, deepStartHour: 1, deepEndHour: 6 }
 };
 
-const CPU_AFFINITY_ENGINES = ['asr', 'tts'];
+const CPU_AFFINITY_ENGINES = ['asr', 'tts', 'llm'];
 const CPU_AFFINITY_FIELDS = ['bigCoreCount', 'littleCoreCount'];
 const CPU_AFFINITY_BOOLEAN_FIELDS = ['preferBigCores'];
 const DEFAULT_CPU_AFFINITY = {
     asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
-    tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false }
+    tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
+    llm: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: true }
 };
 
 function isNonNegativeInteger(value) {
@@ -31,10 +32,16 @@ function isNonNegativeInteger(value) {
 }
 
 function cloneCpuAffinityConfig(cpuAffinity = DEFAULT_CPU_AFFINITY) {
-    return {
-        asr: { ...cpuAffinity.asr },
-        tts: { ...cpuAffinity.tts }
-    };
+    const source = cpuAffinity && typeof cpuAffinity === 'object'
+        ? cpuAffinity
+        : {};
+    return CPU_AFFINITY_ENGINES.reduce((result, engine) => {
+        result[engine] = {
+            ...DEFAULT_CPU_AFFINITY[engine],
+            ...(source[engine] || {})
+        };
+        return result;
+    }, {});
 }
 
 function getCpuAffinityEngineSlotCount(engineConfig) {
@@ -134,7 +141,8 @@ function createCpuConfigMessage(cpuAffinity) {
     return {
         type: 'cpuConfig',
         asr: normalized.asr,
-        tts: normalized.tts
+        tts: normalized.tts,
+        llm: normalized.llm
     };
 }
 
@@ -207,6 +215,11 @@ class Config extends DataSnapshot {
                 autoRestart: true
             }
         },
+        // 本地 LLM 路由参数；模型清单和具体模型文件仍由 res/models/llm 管理。
+        llm: {
+            maxQueueLength: 16,
+            requestTimeoutMs: 120000
+        },
         ui: {
             controlTheme: 'dark'
         },
@@ -228,6 +241,9 @@ class Config extends DataSnapshot {
         },
         voiceCommand: {
             conversationConfirmationMode: 'off',
+            addressedGroupMode: 'temporary',
+            temporaryConversationWindowMs: 30000,
+            conversationWindowMs: 180000,
             defaultWeatherCity: '',
             weatherCities: [
                 '北京', '上海', '广州', '深圳', '杭州', '南京', '苏州', '成都', '重庆', '天津',

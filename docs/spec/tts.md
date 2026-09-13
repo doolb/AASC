@@ -130,26 +130,37 @@ TaskManager:
 
 显示端语音输入 TTS:
     sourceDisplayId = voiceInput.displayId
-    sourceDisplayId 仅传给语音命令执行和结果界面
-    audioPath = generateTtsWithFallback(text)
-    targetDisplayIds = getOnlineVoicePlaybackDisplayIds()
-    对每个 targetDisplayId:
-        sendToDisplay(targetDisplayId, {
+    preferredDisplayId = sourceDisplayId
+    每句 TTS 在生成开始和发送前读取 getOnlineVoicePlaybackDisplayIds()
+    targetDisplayId = resolveVoicePlaybackTarget(preferredDisplayId, availableDisplayIds)
+    如果 sourceDisplayId 在线且 voicePlayback == true:
+        targetDisplayId = sourceDisplayId
+    否则:
+        targetDisplayId = availableDisplayIds[0]
+    如果 targetDisplayId 存在:
+        只向 targetDisplayId 发送 {
             type: 'tts',
             action: 'playAudio',
             audioUrl: audioPath,
             text: text
-        })
-    不使用 sourceDisplayId 作为隐式 preferredDisplayId 或唯一播放目标
+        }
+    否则:
+        跳过当前 TTS，并记录没有可用语音播放显示端
 
 语音触发的普通对话:
-    routeVoiceToAll=true
-    每句 TTS 生成时不优选 sourceDisplayId
-    每句生成完成时重新获取在线 voicePlayback 目标并发送
+    使用 sourceDisplayId 优先的单目标语音路由
+    每句生成完成时重新解析唯一 targetDisplayId
 
 控制端定向语音:
-    保留显式 targetDisplayId
-    targetDisplayId 只影响播放下发，TTS 生成仍调用 generateTtsWithFallback
+    preferredDisplayId = 显式 targetDisplayId
+    targetDisplayId 在线且 voicePlayback == true 时优先该目标
+    否则按在线 voicePlayback 列表第一个目标兜底
+    TTS 生成仍调用 generateTtsWithFallback
+
+停止播报:
+    记录当前语音会话实际 targetDisplayId
+    只向实际目标发送 tts.stop
+    不向全部 voicePlayback 显示端广播
 ```
 
 ### 显示端 TTS 下发睡眠检查

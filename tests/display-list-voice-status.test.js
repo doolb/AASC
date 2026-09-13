@@ -52,3 +52,32 @@ test('监听开关绑定独立 change 事件，并处理 WebSocket 未连接', (
     assert.match(server, /capabilitiesUpdateError/);
     assert.match(uploadCss, /display-voice-state\.pending/);
 });
+
+test('LLM 模型选择只显示当前选中显示端的下方卡片', () => {
+    const deviceList = read('src/apps/web-mediacenter/ui/public/js/device-list.js');
+    const uploadHtml = read('src/apps/web-mediacenter/ui/public/upload.html');
+    const uploadCss = read('src/apps/web-mediacenter/ui/public/css/upload.css');
+
+    assert.match(uploadHtml, /id="llmModelPanel"/);
+    assert.match(deviceList, /renderLlmModelPanelHtml\(\)/);
+    assert.match(deviceList, /this\.list\.find\(\(item\) => item\.id === window\.currentDisplayId\)/);
+    assert.match(deviceList, /renderLlmModelPanel\(\)/);
+    assert.doesNotMatch(deviceList, /renderLlmControlHtml\(d\)/);
+    assert.match(uploadCss, /\.llm-model-card/);
+});
+
+test('显示端能力设置提供 LLM 开关并保持原生支持状态独立', () => {
+    const deviceList = read('src/apps/web-mediacenter/ui/public/js/device-list.js');
+    const display = read('src/apps/web-mediacenter/ui/public/display.html');
+    const server = read('src/apps/server/boot/server-app.js');
+    const router = read('src/apps/server/modules/llm/llm-router.js');
+
+    assert.match(deviceList, /data-cap="llm\.enabled"/u);
+    assert.match(deviceList, /capabilities\.llm = \{ enabled: cb\.checked \}/u);
+    assert.match(deviceList, /LLM 已禁用/u);
+    assert.match(display, /currentCapabilities\?\.llm\?\.enabled/u);
+    assert.match(server, /capabilities\?\.llm\?\.enabled === false/u);
+    assert.match(server, /显示端 LLM 能力已禁用/u);
+    assert.match(router, /const enabled = hasCapabilityEnabled/u);
+    assert.match(router, /const supported = enabled && detectedSupported/u);
+});

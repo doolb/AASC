@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import org.json.JSONObject
 
 class NodeRuntimeInstaller(
     private val context: Context,
@@ -18,6 +19,9 @@ class NodeRuntimeInstaller(
         private const val ROOT_NAME = "aasc-server"
         private const val VERSION_MARKER = ".runtime-version"
         private const val ASSET_VERSION = "runtime-version.txt"
+        private const val ASSET_MODE = "runtime-mode.txt"
+        private const val OFFLINE_MODE = "offline"
+        private const val OFFLINE_MODEL_METADATA_FILE = "offline-model-manifest.json"
         private const val RUNTIME_LIB_DIR = "runtime/arm64-v8a/lib"
         private const val STAGING_PREFIX = ".staging-"
 
@@ -27,7 +31,7 @@ class NodeRuntimeInstaller(
          * manifest 解析、复制和 SHA-256 校验。
          */
         @JvmStatic
-        fun canReuseInstalledRuntime(root: File, version: String): Boolean {
+        fun canReuseInstalledRuntime(root: File, version: String, mode: String = "online"): Boolean {
             val marker = File(root, VERSION_MARKER)
             return try {
                 if (version.isBlank() || !marker.isFile || marker.readText().trim() != version) return false
@@ -37,6 +41,7 @@ class NodeRuntimeInstaller(
                     File(root, "package-lock.json")
                 )
                 requiredFiles.all { it.isFile && it.length() > 0L } &&
+                    (mode != OFFLINE_MODE || hasOfflineModels(root)) &&
                     File(root, RUNTIME_LIB_DIR).listFiles()?.any { it.isFile && it.length() > 0L } == true
             } catch (_: Exception) {
                 false
@@ -52,10 +57,41 @@ class NodeRuntimeInstaller(
             val requiredEntries = listOfNotNull(
                 manifest.files.firstOrNull { it.path == manifest.entrypoint },
                 runtimeEntry
-            )
+            ) + manifest.files.filter { it.path.startsWith("server/res/models/") }
             return requiredEntries.isNotEmpty() && requiredEntries.all { entry ->
                 val file = File(root, mapAssetPath(entry.path))
                 file.isFile && file.length() == entry.size
+            }
+        }
+
+        @JvmStatic
+        fun shouldSeedTaskDirectory(root: File): Boolean {
+            return !File(root, "res/tasks").exists()
+        }
+
+        private fun hasOfflineModels(root: File): Boolean {
+            val metadataFile = File(root, OFFLINE_MODEL_METADATA_FILE)
+            return try {
+                val entries = JSONObject(metadataFile.readText()).optJSONArray("files")
+                    ?: return false
+                if (entries.length() == 0) return false
+                val rootPath = root.canonicalFile.toPath()
+                for (index in 0 until entries.length()) {
+                    val item = entries.optJSONObject(index) ?: return false
+                    val relativePath = item.optString("path").trim()
+                    val size = item.optLong("size", -1L)
+                    if (!relativePath.startsWith("res/models/") || size < 0L) return false
+                    val modelFile = File(root, relativePath).canonicalFile
+                    if (!modelFile.toPath().startsWith(rootPath) ||
+                        !modelFile.isFile ||
+                        modelFile.length() != size
+                    ) {
+                        return false
+                    }
+                }
+                true
+            } catch (_: Exception) {
+                false
             }
         }
 
@@ -69,7 +105,8 @@ class NodeRuntimeInstaller(
         val root = File(context.filesDir, ROOT_NAME)
         val marker = File(root, VERSION_MARKER)
         val runtimeVersion = readRuntimeVersion()
-        if (runtimeVersion != null && canReuseInstalledRuntime(root, runtimeVersion)) {
+        val runtimeMode = readRuntimeMode()
+        if (runtimeVersion != null && canReuseInstalledRuntime(root, runtimeVersion, runtimeMode)) {
             android.util.Log.i(
                 "AASC-Node",
                 "Runtime 快速复用，版本=$runtimeVersion，耗时=${SystemClock.elapsedRealtime() - startedAt}ms"
@@ -129,6 +166,16 @@ class NodeRuntimeInstaller(
         }
     }
 
+    private fun readRuntimeMode(): String {
+        return try {
+            assetManager.open(ASSET_MODE).bufferedReader().use { reader ->
+                reader.readText().trim().ifEmpty { "online" }
+            }
+        } catch (_: Exception) {
+            "online"
+        }
+    }
+
     private fun copyManifestFiles(manifest: NodeRuntimeManifest, staging: File) {
         for (entry in manifest.files) {
             val outputRelativePath = mapAssetPath(entry.path)
@@ -161,12 +208,24 @@ class NodeRuntimeInstaller(
         replaceFile(root, staging, "package.json")
         replaceFile(root, staging, "package-lock.json")
         replaceDirectory(root, staging, "res/certs")
+        replaceDirectory(root, staging, "res/models")
+        replaceFile(root, staging, "runtime-mode.txt")
+        replaceFile(root, staging, "offline-model-manifest.json")
+        seedDirectoryIfAbsent(root, staging, "res/tasks")
     }
 
     private fun preserveMutableDirectories(root: File) {
-        listOf("config", "res/uploads", "res/temp", "logs").forEach { relativePath ->
+        listOf("config", "res/tasks", "res/uploads", "res/temp", "logs").forEach { relativePath ->
             File(root, relativePath).mkdirs()
         }
+    }
+
+    private fun seedDirectoryIfAbsent(root: File, staging: File, relativePath: String) {
+        val target = File(root, relativePath)
+        if (target.exists()) return
+        val source = File(staging, relativePath)
+        if (!source.isDirectory) return
+        source.copyRecursively(target, overwrite = true)
     }
 
     private fun replaceDirectory(root: File, staging: File, relativePath: String) {

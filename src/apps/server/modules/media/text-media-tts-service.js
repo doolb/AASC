@@ -2,6 +2,7 @@
 
 const path = require('path');
 const { isPunctuationOnly } = require('../../../../core/utils/sentence-splitter');
+const { resolveVoicePlaybackTarget } = require('./voice-playback-router');
 
 /**
  * 创建纯文本分页播放使用的单句 TTS 服务。
@@ -421,9 +422,7 @@ function createTextMediaTtsService({
             }
             const targetDisplayId = isPrefetch
                 ? currentTarget
-                : (availableDisplayIds.includes(originDisplayId)
-                    ? originDisplayId
-                    : availableDisplayIds[0]);
+                : resolveVoicePlaybackTarget(originDisplayId, availableDisplayIds);
             if (!targetDisplayId) {
                 return {
                     message: '没有可用的语音播放显示端',

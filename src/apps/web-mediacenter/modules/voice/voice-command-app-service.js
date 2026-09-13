@@ -224,6 +224,7 @@ let assistantConfig = {
     reminderTemplatePrefix: '',
     reminderTemplateSuffix: ''
 };
+let assistantNamesConfigured = false;
 
 function init(config = {}) {
     assistantConfig = {
@@ -237,6 +238,7 @@ function init(config = {}) {
     if (config.assistants) {
         assistantConfig.assistants = config.assistants;
     }
+    assistantNamesConfigured = Array.isArray(config.assistants);
     if (config.conversationConfirmationMode) {
         setConversationConfirmationMode(config.conversationConfirmationMode);
     }
@@ -350,7 +352,7 @@ function getConversationConfirmationMode() {
 }
 
 // TTS 由服务端统一注入，语音命令服务只负责描述播报内容和界面动作。
-// 这样显示端语音输入不会把生成结果默认发回触发输入的显示端。
+// 显示端语音输入由服务端按来源端优先、在线语音播放端兜底的规则选择唯一目标。
 function setTtsRouter(router) {
     ttsRouter = router && typeof router.speak === 'function' ? router : null;
 }
@@ -594,7 +596,7 @@ function sanitizeCityName(text) {
     }
 
     return text
-        .replace(/天气|今天|明天|后天|明日|后日|现在|当前|查询|播报|一下|怎么样|如何|情况/g, '')
+        .replace(/天气|今天|今日|明天|后天|明日|后日|现在|当前|查询|播报|一下|怎么样|如何|情况|的/g, '')
         .replace(/[，。！？、,.!?；;:“”"'‘’]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -1362,6 +1364,89 @@ function formatWeatherDayDetail(day, includeHourly) {
     return `${dailyText}；逐时预报：${hourlyText}`;
 }
 
+const WEATHER_DATE_OFFSETS = Object.freeze({
+    今天: 0,
+    今日: 0,
+    明天: 1,
+    明日: 1,
+    后天: 2,
+    后日: 2
+});
+
+function formatWeatherLocalDate(date) {
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0')
+    ].join('-');
+}
+
+function parseWeatherDateRequest(text, now = new Date()) {
+    const normalizedText = String(text || '');
+    const label = Object.keys(WEATHER_DATE_OFFSETS).find(item => normalizedText.includes(item));
+    if (!label) {
+        return { offset: null, date: null, label: '' };
+    }
+
+    const offset = WEATHER_DATE_OFFSETS[label];
+    const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    return {
+        offset,
+        date: formatWeatherLocalDate(targetDate),
+        label
+    };
+}
+
+function selectWeatherForecastDay(weather, request) {
+    if (!request || request.offset === null || request.offset === undefined) return null;
+    const forecast = Array.isArray(weather?.forecast) ? weather.forecast : [];
+    if (request.offset === 0) return forecast[0] || null;
+    return forecast.find(day => day.date === request.date) || null;
+}
+
+function formatWeatherCurrentDetail(weather) {
+    const current = weather.current;
+    const location = weather.location.name;
+    return [
+        `${location}当前天气：${current.condition}`,
+        `温度${formatWeatherMetric(current.temperatureC, '℃')}`,
+        `体感${formatWeatherMetric(current.feelsLikeC, '℃')}`,
+        `湿度${formatWeatherMetric(current.humidityPercent, '%')}`,
+        `气压${formatWeatherMetric(current.pressureHpa, '百帕')}`,
+        `能见度${formatWeatherMetric(current.visibilityKm, '公里')}`,
+        formatWeatherWind(current.wind),
+        `天气编码${formatWeatherMetric(current.weatherCode)}`,
+        `云量${formatWeatherMetric(current.cloudCoverPercent, '%')}`,
+        `降水${formatWeatherMetric(current.precipitationMm, '毫米')}`,
+        `紫外线${formatWeatherMetric(current.uvIndex)}`,
+        `观测时间${current.observationTime || '未知'}`
+    ].join('，');
+}
+
+function formatWeatherCurrentSpeech(weather) {
+    const current = weather.current;
+    return `${weather.location.name}当前天气：${current.condition}，温度${formatWeatherMetric(current.temperatureC, '℃')}，体感${formatWeatherMetric(current.feelsLikeC, '℃')}，湿度${formatWeatherMetric(current.humidityPercent, '%')}`;
+}
+
+function formatWeatherDateDetail(weather, request) {
+    const day = selectWeatherForecastDay(weather, request);
+    if (!day) return '暂无该日期天气预报';
+    if (request.offset === 0) {
+        return `${formatWeatherCurrentDetail(weather)}\n${formatWeatherDayDetail(day, true)}`;
+    }
+    return `${weather.location.name}天气：${formatWeatherDayDetail(day, false)}`;
+}
+
+function formatWeatherDateSpeech(weather, request) {
+    const day = selectWeatherForecastDay(weather, request);
+    if (!day) return '暂无该日期天气预报';
+    const dailySummary = `${day.date || request.date}${day.condition}，${formatWeatherMetric(day.minTemperatureC, '℃')}到${formatWeatherMetric(day.maxTemperatureC, '℃')}，降雨概率最高${formatWeatherMetric(day.maxChanceOfRainPercent, '%')}`;
+    if (request.offset === 0) {
+        return `${formatWeatherCurrentSpeech(weather)}。今天${dailySummary}。`;
+    }
+    return `${weather.location.name}${dailySummary}。`;
+}
+
 function formatWeatherDetail(weather) {
     const current = weather.current;
     const location = weather.location.name;
@@ -1399,6 +1484,7 @@ function formatWeatherSpeech(weather) {
 async function handleWeatherCommand(text, displayId, callbacks) {
     const axios = require('axios');
     const weatherRequest = resolveWeatherCity(text);
+    const weatherDateRequest = parseWeatherDateRequest(text);
     const city = weatherRequest.city;
     console.log(`[语音命令] 天气查询城市: ${city}`);
     const tryFetchWeather = async (retryCount = 0) => {
@@ -1449,8 +1535,12 @@ async function handleWeatherCommand(text, displayId, callbacks) {
         const fallbackText = weatherRequest.usedDefault && weatherRequest.requestedCity
             ? `没有找到${weatherRequest.requestedCity}，为你播报默认城市${cityName}的天气。`
             : '';
-        const detailText = `${fallbackText}${formatWeatherDetail(normalizedWeather)}`;
-        const speechText = `${fallbackText}${formatWeatherSpeech(normalizedWeather)}`;
+        const detailText = weatherDateRequest.offset === null
+            ? `${fallbackText}${formatWeatherDetail(normalizedWeather)}`
+            : `${fallbackText}${formatWeatherDateDetail(normalizedWeather, weatherDateRequest)}`;
+        const speechText = weatherDateRequest.offset === null
+            ? `${fallbackText}${formatWeatherSpeech(normalizedWeather)}`
+            : `${fallbackText}${formatWeatherDateSpeech(normalizedWeather, weatherDateRequest)}`;
         
         if (callbacks && callbacks.onResult) {
             await callbacks.onResult(detailText);
@@ -1632,12 +1722,22 @@ function getAssistantConfig() {
 
 function setAssistantConfig(config) {
     if (config.defaultName) assistantConfig.defaultName = config.defaultName;
-    if (config.assistants) assistantConfig.assistants = config.assistants;
+    if (config.assistants) {
+        assistantConfig.assistants = config.assistants;
+        assistantNamesConfigured = true;
+    }
     if (config.defaultWeatherCity) assistantConfig.defaultWeatherCity = config.defaultWeatherCity;
     if (config.weatherCities) assistantConfig.weatherCities = config.weatherCities;
     if (config.reminderTemplate !== undefined) assistantConfig.reminderTemplate = config.reminderTemplate;
     if (config.reminderTemplatePrefix !== undefined) assistantConfig.reminderTemplatePrefix = config.reminderTemplatePrefix;
     if (config.reminderTemplateSuffix !== undefined) assistantConfig.reminderTemplateSuffix = config.reminderTemplateSuffix;
+}
+
+function getConfiguredAssistantNames() {
+    if (!assistantNamesConfigured) return [];
+    return assistantConfig.assistants
+        .map(assistant => assistant?.name)
+        .filter(Boolean);
 }
 
 function enqueueVoiceInput(text, displayId, callbacks) {
@@ -2009,11 +2109,17 @@ module.exports = {
     clearSearchHistory,
     deleteSearchHistoryItem,
     getAssistantConfig,
+    getConfiguredAssistantNames,
     setAssistantConfig,
     findAssistant,
+    resolveWeatherCity,
+    parseWeatherDateRequest,
+    selectWeatherForecastDay,
     normalizeWeatherData,
     formatWeatherDetail,
     formatWeatherSpeech,
+    formatWeatherDateDetail,
+    formatWeatherDateSpeech,
     parseTimeExpression,
     parseRepeatRule,
     extractReminderContent,

@@ -343,6 +343,36 @@ test('没有可用语音播放设备时返回专用错误码', async () => {
     }]);
 });
 
+test('文本媒体和语音命令共用来源端优先、备用端兜底的目标顺序', async () => {
+    const messages = [];
+    const capabilities = new Map([
+        ['source', { voicePlayback: false }],
+        ['backup', { voicePlayback: true }]
+    ]);
+    const sockets = new Map([
+        ['source', { readyState: 1 }],
+        ['backup', { readyState: 1 }]
+    ]);
+    const service = createTextMediaTtsService({
+        generateTTS: async () => '/tmp/shared-route.wav',
+        sendToDisplay: (displayId, message) => messages.push({ displayId, message }),
+        logError: () => {},
+        getDisplayCapabilities: (displayId) => capabilities.get(displayId) || null,
+        getVoicePlaybackDisplayIds: () => [...sockets.keys()]
+    });
+
+    await service.handleSentenceRequest('source', {
+        playbackId: 'shared-route', pageIndex: 0, sentenceIndex: 0, text: '备用设备播报。'
+    });
+    await service.handleSentenceFinished('backup', {
+        originDisplayId: 'source', playbackId: 'shared-route', pageIndex: 0, sentenceIndex: 0
+    });
+
+    assert.equal(messages[0].displayId, 'backup');
+    assert.equal(messages[0].message.textPlaybackRemote, true);
+    assert.equal(messages[0].message.voiceTargetDisplayId, 'backup');
+});
+
 test('文本路由目标为远程显示端时仅向服务器确认的在线语音设备下发远程音频', async () => {
     const messages = [];
     const online = new Map([

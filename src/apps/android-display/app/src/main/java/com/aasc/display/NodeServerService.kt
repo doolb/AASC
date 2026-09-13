@@ -20,6 +20,7 @@ class NodeServerService : Service() {
 
     companion object {
         const val EXTRA_MAIN_SERVER_URL = "main_server_url"
+        const val EXTRA_OFFLINE_MODE = "offline_mode"
         private const val CHANNEL_ID = "aasc_node_server"
         private const val NOTIFICATION_ID = 8081
         private const val MAX_RESTART_ATTEMPTS = 5
@@ -49,7 +50,12 @@ class NodeServerService : Service() {
         fun shouldForceTerminate(processAlive: Boolean): Boolean = processAlive
 
         @JvmStatic
-        fun buildNodeEnvironment(rootDir: File, serverUrl: String, serverVersion: String): Map<String, String> {
+        fun buildNodeEnvironment(
+            rootDir: File,
+            serverUrl: String,
+            serverVersion: String,
+            offlineMode: Boolean = false
+        ): Map<String, String> {
             val runtimeLibraryPath = File(rootDir, "runtime/arm64-v8a/lib").absolutePath
             val inheritedLibraryPath = System.getenv("LD_LIBRARY_PATH")?.trim().orEmpty()
             val libraryPath = listOf(runtimeLibraryPath, inheritedLibraryPath)
@@ -62,6 +68,7 @@ class NodeServerService : Service() {
                 // 使用空配置避免启动阶段因权限错误退出；AASC 节点连接仍显式关闭自签名校验。
                 "OPENSSL_CONF" to "/dev/null",
                 "AASC_ANDROID_NODE" to "1",
+                "AASC_OFFLINE_MODE" to if (offlineMode) "1" else "0",
                 "AASC_SERVER_VERSION" to serverVersion,
                 "AASC_MAIN_SERVER_URL" to serverUrl
             )
@@ -77,34 +84,42 @@ class NodeServerService : Service() {
     private var nodeProcess: Process? = null
     private var restartAttempt = 0
     private var mainServerUrl = ""
+    private var offlineMode = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("正在准备 Node.js 子服务器"))
+        startForeground(NOTIFICATION_ID, buildNotification("正在准备 Node.js 服务"))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val requestedUrl = intent?.getStringExtra(EXTRA_MAIN_SERVER_URL)?.trim().orEmpty()
-        val savedUrl = getSharedPreferences("aasc_display", MODE_PRIVATE)
+        val preferences = getSharedPreferences("aasc_display", MODE_PRIVATE)
+        val savedUrl = preferences
             .getString("server_url", "")
             ?.trim()
             .orEmpty()
+        val requestedOffline = intent?.takeIf { it.hasExtra(EXTRA_OFFLINE_MODE) }
+            ?.getBooleanExtra(EXTRA_OFFLINE_MODE, false)
+        val savedOffline = preferences.getBoolean("offline_mode", false)
         val selectedUrl = requestedUrl.ifEmpty { savedUrl }
+        val selectedOffline = requestedOffline ?: savedOffline
         if (selectedUrl.isEmpty()) {
             updateNotification("等待配置主服务器地址")
             return START_STICKY
         }
 
-        if (selectedUrl != mainServerUrl || nodeProcess?.isAlive != true) {
+        if (selectedUrl != mainServerUrl || selectedOffline != offlineMode || nodeProcess?.isAlive != true) {
             mainServerUrl = selectedUrl
-            getSharedPreferences("aasc_display", MODE_PRIVATE)
+            offlineMode = selectedOffline
+            preferences
                 .edit()
                 .putString("server_url", selectedUrl)
+                .putBoolean("offline_mode", selectedOffline)
                 .apply()
             restartAttempt = 0
             stopNodeProcess()
-            enqueueNodeProcessStart(selectedUrl)
+            enqueueNodeProcessStart(selectedUrl, selectedOffline)
         }
         return START_STICKY
     }
@@ -117,20 +132,25 @@ class NodeServerService : Service() {
         super.onDestroy()
     }
 
-    private fun startNodeProcess(serverUrl: String) {
+    private fun startNodeProcess(serverUrl: String, offlineMode: Boolean) {
         val generation = restartGeneration.incrementAndGet()
         val startAt = SystemClock.elapsedRealtime()
         try {
             val root = NodeRuntimeInstaller(this).ensureInstalled()
             val runtimeReadyAt = SystemClock.elapsedRealtime()
-            NodeServerConfig.write(root, serverUrl, "APK-${Build.MODEL}")
+            NodeServerConfig.write(
+                root,
+                serverUrl,
+                if (offlineMode) "AASC 显示端 Offline" else "APK-${Build.MODEL}",
+                offlineMode = offlineMode
+            )
             val command = buildNodeCommand(root, File(applicationInfo.nativeLibraryDir))
             val processBuilder = ProcessBuilder(command)
                 .directory(root)
                 .redirectErrorStream(false)
             File(root, "home").mkdirs()
             processBuilder.environment().putAll(
-                buildNodeEnvironment(root, serverUrl, "apk-${readAppVersion()}")
+                buildNodeEnvironment(root, serverUrl, "apk-${readAppVersion()}", offlineMode)
             )
             val process = processBuilder.start()
             nodeProcess = process
@@ -138,7 +158,9 @@ class NodeServerService : Service() {
                 "AASC-Node",
                 "Node launcher 已启动，工作目录: ${root.absolutePath}，Runtime耗时=${runtimeReadyAt - startAt}ms，总耗时=${SystemClock.elapsedRealtime() - startAt}ms"
             )
-            updateNotification("Node.js 子服务器运行中，正在连接主服务器")
+            updateNotification(
+                if (offlineMode) "Node.js 本地服务运行中" else "Node.js 子服务器运行中，正在连接主服务器"
+            )
             readProcessOutput(process, false)
             readProcessOutput(process, true)
             Thread {
@@ -166,7 +188,10 @@ class NodeServerService : Service() {
         } catch (error: Exception) {
             nodeProcess = null
             android.util.Log.e("AASC-Node", "Node launcher 启动失败", error)
-            updateNotification("Node.js 子服务器启动失败：${error.message}")
+            updateNotification(
+                if (offlineMode) "Node.js 本地服务启动失败：${error.message}"
+                else "Node.js 子服务器启动失败：${error.message}"
+            )
             scheduleRestart(generation, -1)
         }
     }
@@ -198,21 +223,27 @@ class NodeServerService : Service() {
     private fun scheduleRestart(generation: Int, exitCode: Int) {
         if (generation != restartGeneration.get()) return
         if (restartAttempt >= MAX_RESTART_ATTEMPTS) {
-            updateNotification("Node.js 子服务器已停止（退出码 $exitCode），请重新启动")
+            updateNotification(
+                if (offlineMode) "Node.js 本地服务已停止（退出码 $exitCode），请重新启动"
+                else "Node.js 子服务器已停止（退出码 $exitCode），请重新启动"
+            )
             return
         }
         val delay = retryDelayMs(restartAttempt)
         restartAttempt += 1
-        updateNotification("Node.js 子服务器退出，${delay}ms 后重试")
+        updateNotification(
+            if (offlineMode) "Node.js 本地服务退出，${delay}ms 后重试"
+            else "Node.js 子服务器退出，${delay}ms 后重试"
+        )
         mainHandler.postDelayed({
             if (generation == restartGeneration.get() && nodeProcess == null) {
-                enqueueNodeProcessStart(mainServerUrl)
+                enqueueNodeProcessStart(mainServerUrl, offlineMode)
             }
         }, delay)
     }
 
-    private fun enqueueNodeProcessStart(serverUrl: String) {
-        startExecutor.execute { startNodeProcess(serverUrl) }
+    private fun enqueueNodeProcessStart(serverUrl: String, offlineMode: Boolean) {
+        startExecutor.execute { startNodeProcess(serverUrl, offlineMode) }
     }
 
     private fun stopNodeProcess() {

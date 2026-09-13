@@ -38,11 +38,16 @@ const sentenceStart = handler.indexOf('onSentence:');
 const completeStart = handler.indexOf('onComplete:', sentenceStart);
 assert.ok(sentenceStart >= 0 && completeStart > sentenceStart, '应能定位聊天 TTS 和完成回调');
 const sentenceHandler = handler.slice(sentenceStart, completeStart);
-assert.match(sentenceHandler, /routeVoiceToAll/);
+assert.match(sentenceHandler, /routeVoiceToPreferredDisplay/);
 assert.doesNotMatch(
     sentenceHandler,
     /sendToDisplay\(voiceOriginDisplayId/,
-    '语音普通聊天 TTS 不应定向回来源显示端'
+    '语音普通聊天 TTS 应通过统一目标解析后定向播放'
+);
+assert.match(
+    sentenceHandler,
+    /resolveCurrentVoicePlaybackTarget\(preferredDisplayId\)/,
+    '语音普通聊天 TTS 应优先来源显示端并按在线能力兜底'
 );
 assert.match(
     server,
@@ -73,13 +78,28 @@ assert.match(server, /sessionId:\s*result\.sessionId/);
 assert.match(server, /templateTarget:\s*result\.templateTarget/);
 assert.match(
     server,
+    /temporaryConversation:\s*data\.temporaryConversation === true \|\| data\.mode === 'temporary'/,
+    '控制端临时页签消息应进入临时会话处理链路'
+);
+assert.match(
+    handler,
+    /ensureTemporaryConversation\(displayId \|\| voiceOriginDisplayId \|\| null\)/,
+    '临时聊天应确保使用服务端当前唯一会话'
+);
+assert.match(
+    chat,
+    /temporaryConversationId:\s*mode === 'temporary'/,
+    '控制端发送临时消息应携带当前会话 ID'
+);
+assert.match(
+    server,
     /const sendToControl = isDisplayVoiceInput\s*\n\s*\? \(msg\) => broadcastToControls\(msg\)/,
     '显示端语音普通聊天回包应广播到控制端'
 );
 assert.match(
     server,
-    /onTts: isDisplayVoiceInput[\s\S]{0,100}sendVoiceInputTts\(text\)/,
-    '显示端语音命令 TTS 应继续使用原有通用路由'
+    /onTts: isDisplayVoiceInput[\s\S]{0,220}sendVoiceInputTts\(text,\s*\{[\s\S]{0,120}preferredDisplayId:\s*targetDisplayId/,
+    '显示端语音命令 TTS 应使用来源端优先的单目标路由'
 );
 assert.match(websocket, /data\.type === 'chatInput'[\s\S]{0,180}handleDisplayChatInput/);
 const chatInputStart = chat.indexOf('handleDisplayChatInput(data)');

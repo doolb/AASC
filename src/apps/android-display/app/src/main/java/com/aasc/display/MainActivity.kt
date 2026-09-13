@@ -28,7 +28,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var configBar: View
     private lateinit var serverInput: EditText
     private lateinit var webContainer: FrameLayout
+    private lateinit var controlToggleButton: Button
     private var webView: DisplayWebView? = null
+    private var controlWebView: DisplayWebView? = null
+    private var offlineMode = false
+    private var offlineDisplayRetryCount = 0
     // 整个 APK 只维护一个原生音频焦点；网页媒体不按 TTS/视频拆分申请焦点。
     private val audioFocusController by lazy {
         AudioFocusController(this) { change ->
@@ -44,12 +48,21 @@ class MainActivity : AppCompatActivity() {
     private val REQ_AUDIO_PERMISSION = 1001
     private val REQ_NOTIFICATION_PERMISSION = 1002
     private val REQ_STORAGE_PERMISSION = 1003
+    private val REQ_CAMERA_PERMISSION = 1004
     private var startupContinued = false
+    private val maxOfflineDisplayRetries = 20
 
     private fun requestAudioPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= 23 &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO_PERMISSION)
+        }
+    }
+
+    private fun requestCameraPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 23 &&
+            checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAMERA_PERMISSION)
         }
     }
 
@@ -82,7 +95,7 @@ class MainActivity : AppCompatActivity() {
         if (startupContinued) return
         startupContinued = true
 
-        if (serverInput.text.toString().trim().isNotEmpty()) {
+        if (offlineMode || serverInput.text.toString().trim().isNotEmpty()) {
             connect()
         }
 
@@ -95,6 +108,7 @@ class MainActivity : AppCompatActivity() {
             android.util.Log.w("MainActivity", "启动时申请原生音频焦点失败: ${error.message}")
         }
         requestAudioPermissionIfNeeded()
+        requestCameraPermissionIfNeeded()
         requestNotificationPermissionIfNeeded()
     }
 
@@ -122,6 +136,10 @@ class MainActivity : AppCompatActivity() {
                 // 授权成功即重载页面，让 display.html 的 getUserMedia 能力探测通过
                 webView?.reload()
             }
+            REQ_CAMERA_PERMISSION -> if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                // 摄像头授权后重载页面，让控制端收到最新的 cameraCapture 能力。
+                webView?.reload()
+            }
         }
     }
 
@@ -137,13 +155,20 @@ class MainActivity : AppCompatActivity() {
         configBar = findViewById(R.id.configBar)
         serverInput = findViewById(R.id.serverInput)
         webContainer = findViewById(R.id.webContainer)
+        controlToggleButton = findViewById(R.id.controlToggleButton)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
+        offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
 
         val saved = getSharedPreferences("aasc_display", MODE_PRIVATE).getString("server_url", "")
-        val selectedServerUrl = ServerConfig.chooseUrl(intent?.getStringExtra(EXTRA_SERVER_URL), saved)
+        val selectedServerUrl = ServerConfig.chooseUrl(
+            intent?.getStringExtra(EXTRA_SERVER_URL),
+            saved,
+            offlineMode
+        )
         serverInput.setText(selectedServerUrl)
         connectBtn.setOnClickListener { connect() }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
+        controlToggleButton.setOnClickListener { toggleControlPage() }
 
         // 先完成共享存储权限流程，避免存储和录音权限授权框并发出现；拒绝后仍继续连接显示端。
         continueStartupAfterStoragePermission()
@@ -172,6 +197,7 @@ class MainActivity : AppCompatActivity() {
         if (hasFocus) {
             hideSystemUi()
             webView?.postInvalidate()
+            controlWebView?.postInvalidate()
         }
     }
 
@@ -186,41 +212,91 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "主服务器地址无效", Toast.LENGTH_SHORT).show()
             return
         }
-        // APK 内置 Node.js 只作为子服务器运行；显示页面和控制链路仍然连接主服务器。
+        // 普通 APK 的 Node.js 是子服务器；离线 APK 的 Node.js 是本机 main 服务。
         val serviceIntent = Intent(this, NodeServerService::class.java)
             .putExtra(NodeServerService.EXTRA_MAIN_SERVER_URL, mainServerUrl)
+            .putExtra(NodeServerService.EXTRA_OFFLINE_MODE, offlineMode)
         ContextCompat.startForegroundService(this, serviceIntent)
 
         val displayPath = ServerConfig.pageUrl(mainServerUrl)
         // 时间戳参数强制绕过 WebView HTTP 缓存（display.html 更新后 APK 重启即加载最新版）
-        val url = displayPath + (if (displayPath.contains("?")) "&" else "?") + "v=" + System.currentTimeMillis()
+        val url = timestampedUrl(displayPath)
         getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", mainServerUrl).apply()
 
         hideSystemUi()
         configBar.visibility = View.GONE
+        offlineDisplayRetryCount = 0
+        controlToggleButton.visibility = if (offlineMode) View.VISIBLE else View.GONE
+        controlToggleButton.text = getString(R.string.control_page)
         if (webView == null) {
-            setupWebView(url)
+            setupWebView(url, mainServerUrl)
         } else {
             webView?.loadUrl(url)
         }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView(url: String) {
+    private fun setupWebView(url: String, baseUrl: String) {
         val wv = DisplayWebView(this)
         val bridge = NativeBridge(wv, audioFocusController)
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")
-        wv.webViewClient = object : WebViewClient() {
+        wv.webViewClient = createWebViewClient(bridge, baseUrl, true)
+        // 控制按钮由 XML 作为容器的顶层子项加入；WebView 从 index=0 插入，确保按钮永远在最上层。
+        webContainer.addView(wv, 0)
+        webView = wv
+        wv.loadUrl(url)
+
+        val control = DisplayWebView(this)
+        control.visibility = View.GONE
+        control.webViewClient = createWebViewClient(null, baseUrl, false)
+        webContainer.addView(control, 0)
+        controlWebView = control
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun toggleControlPage() {
+        val control = controlWebView ?: return
+        if (control.visibility == View.VISIBLE) {
+            control.visibility = View.GONE
+            controlToggleButton.text = getString(R.string.control_page)
+            return
+        }
+        control.visibility = View.VISIBLE
+        controlToggleButton.text = getString(R.string.hide_control_page)
+        if (control.url.isNullOrBlank()) {
+            val mainServerUrl = ServerConfig.baseUrl(serverInput.text.toString())
+            control.loadUrl(timestampedUrl(ServerConfig.controlPageUrl(mainServerUrl)))
+        }
+    }
+
+    private fun createWebViewClient(
+        bridge: NativeBridge?,
+        baseUrl: String,
+        retryOfflinePage: Boolean
+    ): WebViewClient {
+        return object : WebViewClient() {
             // WebViewClient 回调运行在主线程，在这里缓存 URL，供 JavaScript bridge 线程安全读取。
             override fun onPageStarted(view: WebView, pageUrl: String, favicon: android.graphics.Bitmap?) {
-                bridge.updateServerOrigin(pageUrl)
+                bridge?.updateServerOrigin(pageUrl)
                 super.onPageStarted(view, pageUrl, favicon)
             }
 
             override fun onPageFinished(view: WebView, pageUrl: String) {
-                bridge.updateServerOrigin(pageUrl)
+                bridge?.updateServerOrigin(pageUrl)
+                if (retryOfflinePage) offlineDisplayRetryCount = 0
                 super.onPageFinished(view, pageUrl)
+            }
+
+            override fun onReceivedError(
+                view: WebView,
+                request: android.webkit.WebResourceRequest,
+                error: android.webkit.WebResourceError
+            ) {
+                if (retryOfflinePage && request.isForMainFrame) {
+                    scheduleOfflineDisplayRetry(view, baseUrl)
+                }
+                super.onReceivedError(view, request, error)
             }
 
             // Network Security Config 已绑定构建时主服务器证书；未知证书或主机名不匹配时必须拒绝。
@@ -233,9 +309,20 @@ class MainActivity : AppCompatActivity() {
                 handler.cancel()
             }
         }
-        webContainer.addView(wv)
-        webView = wv
-        wv.loadUrl(url)
+    }
+
+    private fun scheduleOfflineDisplayRetry(view: WebView, baseUrl: String) {
+        if (!offlineMode || offlineDisplayRetryCount >= maxOfflineDisplayRetries) return
+        offlineDisplayRetryCount += 1
+        view.postDelayed({
+            if (view === webView && view.visibility == View.VISIBLE) {
+                view.loadUrl(timestampedUrl(ServerConfig.pageUrl(baseUrl)))
+            }
+        }, 1_000L)
+    }
+
+    private fun timestampedUrl(url: String): String {
+        return url + (if (url.contains("?")) "&" else "?") + "v=" + System.currentTimeMillis()
     }
 
     private fun hideSystemUi() {
@@ -254,8 +341,15 @@ class MainActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (controlWebView?.visibility == View.VISIBLE) {
+            controlWebView?.visibility = View.GONE
+            controlToggleButton.text = getString(R.string.control_page)
+            return
+        }
         // 后退键回配置页（重新输入服务器地址）
         webView?.visibility = View.GONE
+        controlWebView?.visibility = View.GONE
+        controlToggleButton.visibility = View.GONE
         configBar.visibility = View.VISIBLE
     }
 }

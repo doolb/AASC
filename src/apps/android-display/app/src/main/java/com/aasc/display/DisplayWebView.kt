@@ -30,7 +30,10 @@ class DisplayWebView(context: Context) : WebView(context) {
         // getUserMedia 音频采集：APK 内直接授予，无需弹窗（无人值守的显示端）
         webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
-                val granted = request.resources.filter { it == PermissionRequest.RESOURCE_AUDIO_CAPTURE }
+                val granted = request.resources.filter {
+                    it == PermissionRequest.RESOURCE_AUDIO_CAPTURE
+                        || it == PermissionRequest.RESOURCE_VIDEO_CAPTURE
+                }
                 if (granted.isNotEmpty()) {
                     request.grant(granted.toTypedArray())
                 } else {

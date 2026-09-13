@@ -19,8 +19,9 @@ assert.match(server, /aiRoles\.list\(\)\.some/);
 assert.match(server, /aiRoles\.chat\(role, text/);
 assert.match(server, /allowRepairModeTts: true/);
 assert.match(server, /data\.type === 'tts'[\s\S]*?options\.allowRepairModeTts !== true/);
-assert.match(server, /getDisplayIds: getOnlineVoicePlaybackDisplayIds/);
-assert.match(server, /generateTTS: \(ttsText\) => generateTtsWithFallback\(ttsText\)/);
+assert.match(server, /resolveDisplayId: \(\) => \{/);
+assert.match(server, /resolveCurrentVoicePlaybackTarget\(displayId\)/);
+assert.match(server, /generateTTS: \(ttsText\) => generateTtsWithFallback\(ttsText, undefined, undefined, displayId\)/);
 assert.equal(typeof config.repairMode?.password, 'string');
 assert.equal(config.repairMode?.role, 'mainfront');
 

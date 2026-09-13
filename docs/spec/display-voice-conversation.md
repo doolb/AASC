@@ -102,14 +102,25 @@ createDisplayState():
     如果当前为 waitingWake:
         若匹配内置功能指令或已配置自定义关键词（确认/取消类必须是规范化后的完整短指令）:
             转交现有 voiceCommand 处理，不改变会话状态
-        否则若匹配纯唤醒词（你好+助手名、助手名+你好或私聊唤醒）:
-            设置 activeGroup 或 activePrivate
-            发送唤醒确认
+        否则若纯文本匹配任意已配置角色名:
+            设置 activeGroup，windowType=temporary
+            发送临时对话确认
+            不发送当前纯唤醒文本到聊天
+        否则若匹配“开始对话”:
+            设置 activeGroup，windowType=conversation
+            发送群聊确认
+        否则若匹配“你好+助手名”或“助手名+你好”:
+            设置 activePrivate，target=助手名，windowType=conversation
+            发送私聊确认
             不发送当前纯唤醒文本到聊天
         否则若文本包含助手名且还包含其他内容:
-            保持 waitingWake，不写入 lastValidInputAt
-            返回 { type: 'input', addressedAssistant, oneShotGroup: true }
-            保留完整原文并按群聊路由发送到聊天
+            若 addressedGroupMode == 'temporary'（默认）:
+                设置 activeGroup，windowType=temporary，更新 lastValidInputAt
+                返回 { type: 'input', addressedAssistant, temporaryConversationStarted: true }
+            否则（addressedGroupMode == 'oneShot'）:
+                保持 waitingWake，不写入 lastValidInputAt
+                返回 { type: 'input', addressedAssistant, oneShotGroup: true }
+            两种模式都保留完整原文并按群聊路由发送到聊天
         否则丢弃普通文本
     如果当前为 activeGroup/activePrivate:
         若匹配结束/退出命令:
@@ -122,13 +133,13 @@ createDisplayState():
     如果 command.type == 'wake':
         返回 wake 事件
     再执行 findAddressedAssistant(text, assistants)
-    避免“你好，小爱。”先被识别为 addressedAssistant 而误发给聊天
+    避免“你好，角色名。”先被识别为 addressedAssistant 而误发给聊天
 
 waitingWake 中的免唤醒范围:
     包含报时、提醒、静音、取消静音、天气、搜索、播放、停止播报、确认、取消、录音控制和指令模式开关等现有内置功能指令
     确认/取消类仅接受规范化文本等于 "确认"、"确认添加"、"是"、"好的"、"拒绝" 或 "取消"
     不得因为普通文本包含 "拒绝" 或 "取消" 就判定为内置指令
-    不包含普通聊天、你好小爱/结束对话/退出私聊等会话控制词
+    不包含普通聊天；“开始对话”、任意已配置角色名以及私聊进入/退出词按会话状态机处理
     内置功能指令执行完成后仍保持 waitingWake，不启动普通对话计时器
 
 控制端加载内置命令:
@@ -162,7 +173,7 @@ waitingWake 中的免唤醒范围:
         如果来源是显示端:
             sentences = chat.splitIntoSentences(helpText)
             batchId = generateCorrelationId('voice-tts-batch')
-            通过通用 TTS 调度器逐句串行调用 sendVoiceInputTts(sentence, { batchId, batchEnd })
+            通过通用 TTS 调度器逐句串行调用 sendVoiceInputTts(sentence, { batchId, batchEnd, preferredDisplayId: targetDisplayId })
         如果来源是控制端:
             sentences = chat.splitIntoSentences(helpText)
             batchId = generateCorrelationId('voice-tts-batch')
@@ -179,14 +190,17 @@ TTS 批次完成和中断:
 
 显示端语音输入 TTS:
     服务端识别到 voiceInput 后记录 sourceDisplayId
-    sourceDisplayId 只用于命令执行、媒体控制和结果界面，不直接作为 TTS 目标
+    sourceDisplayId 用于命令执行、媒体控制和结果界面，并作为 TTS 播放首选目标
     为语音命令注入 onTts(text) 回调
     onTts:
-        audioPath = generateTtsWithFallback(text)
-        targetDisplayIds = getOnlineVoicePlaybackDisplayIds()
-        对每个 targetDisplayId 发送:
-            { type: 'tts', action: 'playAudio', audioUrl, text }
+        audioPath = generateTtsWithFallback(text, ..., sourceDisplayId)
+        availableDisplayIds = getOnlineVoicePlaybackDisplayIds()
+        targetDisplayId = resolveVoicePlaybackTarget(sourceDisplayId, availableDisplayIds)
+        如果 targetDisplayId 存在:
+            只向 targetDisplayId 发送 { type: 'tts', action: 'playAudio', audioUrl, text }
+        否则记录没有可用语音播放显示端并跳过音频
     语音命令服务的所有响应（报时、提醒、静音、天气、搜索、播放、录音、停止播报）调用 speakVoiceResponse
+    每个 TTS 句子重新读取在线能力，来源端失效时后续句子自动使用第一个可用备用显示端
     speakVoiceResponse 不直接导入或调用底层 tts.generateTTS
     需要弹窗/选择数据时，仍向 sourceDisplayId 发送不带 audioUrl 的 voiceCommand 消息
     天气响应发送:
@@ -200,21 +214,24 @@ TTS 批次完成和中断:
         visibleTextLength = 去除 detailText 空白后的 Unicode 字符数
         popupDurationMs = min(90000, max(30000, ceil(visibleTextLength / 3) * 1000))
         popupDurationMs 后自动移除 .voice-response-popup
-    语音触发的普通对话使用 routeVoiceToAll=true，在每句 TTS 完成时重新读取在线 voicePlayback 目标
+    语音触发的普通对话使用 sourceDisplayId 优先的单目标路由，在每句 TTS 完成时重新读取在线 voicePlayback 目标
 
 控制端语音命令兼容:
     playOnControl=true -> 继续通过 onResult/onError 生成并发送 playOnControl
     其他控制端语音命令 -> 使用 generateTtsWithFallback(text, ..., targetDisplayId)
-    播放目标仍为控制端指定的 targetDisplayId，不套用显示端语音输入的广播目标
+    播放目标优先为控制端指定的 targetDisplayId；目标没有 voicePlayback 能力时按在线语音显示端列表第一个目标兜底
 
 停止播报:
-    显示端来源 -> 向全部在线 voicePlayback 显示端发送 tts.stop
-    控制端来源 -> 只向 targetDisplayId 发送 tts.stop
+    显示端来源 -> 只向当前语音会话实际选中的 targetDisplayId 发送 tts.stop
+    控制端来源 -> 只向当前解析出的 targetDisplayId 发送 tts.stop
+
+显示端 TTS 播放开始:
+    服务端暂停当前显示端 active 会话的到期 timer
+    显示端固定展示暂停时的剩余时间
 
 显示端 TTS 队列结束:
     若监听开关仍开启且没有新的 LLM/TTS 任务:
-        进入 waitingTts 或保留当前激活状态
-        启动 180000ms 计时器
+        按 windowType 重新启动完整窗口 timer
     计时器到期:
         状态改为 waitingWake
         清理当前助手目标
@@ -356,8 +373,9 @@ onTtsAudioEnded():
 onTtsQueueFinished():
     如果监听关闭:
         return
-    clearConversationTimer()
-    conversationTimer = setTimeout(enterWaitingWake, 180000)
+    如果当前会话仍 active:
+        按当前 windowType 重新启动完整窗口 timer
+    否则清理 conversationTimer
                     startVoiceRecording()
 
 reportVoiceAvailability(available):
@@ -611,9 +629,10 @@ scheduleRotationTextLayout():
 
 语音群聊输入:
     waitingWake 状态下，如果原始文本包含已配置角色名且角色名后仍有内容:
-        接受为一次性群聊输入，状态仍为 waitingWake
-        不更新 lastValidInputAt，不广播 groupMode，不启动持续群聊倒计时
-        转发 voiceCommand 时携带 oneShotGroup=true，强制使用群聊模式和全部角色模板
+        addressedGroupMode=temporary（默认）时进入 activeGroup/windowType=temporary，启动全局临时会话
+        addressedGroupMode=oneShot 时接受为一次性群聊输入，状态仍为 waitingWake
+        一次性群聊不更新 lastValidInputAt、不广播 groupMode、不启动会话倒计时
+        两种模式都转发完整原始文本，并强制使用群聊模式和全部角色模板
     voiceCommand 处理群聊时不删除角色名前缀
     服务端群聊路由使用聊天系统的全部角色模板和原始文本
 
@@ -680,8 +699,8 @@ Markdown 渲染器:
     控制端只复用正常聊天临时消息节点，不再次发送 chatMessage
     chatChunk/chatResponse 继续沿用 requestId 更新正常聊天流
     完成后 sendToDisplay(displayId, { type: 'voiceCommand', action: 'response', text, detailText: fullMessage })
-    TTS 生成完成后继续使用原有通用 voicePlayback 目标列表
-    voiceOriginDisplayId 只用于 response 的 detailText 弹窗回传
+    TTS 生成完成后按 sourceDisplayId 优先、在线 voicePlayback 能力兜底的单目标规则发送
+    voiceOriginDisplayId 用于 response 的 detailText 弹窗回传和 TTS 播放首选目标
     普通 response 和 weatherResult 都调用 calculateWeatherPopupDuration(detailText)
     calculateWeatherPopupDuration 按每 3 个可见字符 1 秒计算，结果限制为 5～90 秒
 ```
@@ -719,8 +738,9 @@ Markdown 渲染器:
 等待唤醒状态:
     保持原有 commandMode 过滤
     搜索及其他内置功能和已配置自定义关键词命令继续按现有规则免唤醒执行
-    普通聊天仍需唤醒词，但“助手名 + 其他内容”可作为一次性群聊输入
-    你好小爱/结束对话/退出私聊等会话控制词仍需唤醒词
+    普通聊天仍需唤醒词；“助手名 + 其他内容”按 addressedGroupMode 进入临时模式或一次性群聊
+    任意已配置角色名、开始对话、你好+角色名/角色名+你好等会话控制词由会话状态机处理
+    角色名+再见/再见+角色名只在对应 activePrivate 会话中结束私聊
 
 ## 全局语音对话确认模式
 
@@ -823,11 +843,157 @@ server audioChunk 完成 ASR:
 ```text
 runRepairModeAgent(displayId, state, text):
     工作 Agent 回复分句进入通用 Agent TTS 队列
-    每句生成 TTS 时不把 displayId 作为播放目标或生成偏好目标
+    每句生成 TTS 时使用 displayId 作为首选来源和生成偏好目标
     每句下发前动态读取当前 voicePlayback 能力显示端列表
+    来源端可播放 -> 只向来源端发送 playAudio
+    来源端不可播放 -> 只向第一个在线可播放显示端发送 playAudio
     播放目标为空 -> 不下发音频，保留文字回复
-    播放目标非空 -> 向所有当前可播放显示端发送 playAudio
     每次发送携带 allowRepairModeTts=true，绕过修复模式对普通 TTS 的抑制
-    displayId 仅用于修复请求来源和文字响应，不承担默认音频播放目标
+    displayId 同时用于修复请求来源、文字响应和语音播放首选目标
 ```
+
+```
+
+## ASR/声纹识别耗时伪代码
+
+```text
+recognizeAsyncPayload(samples, options):
+    preparedSamples = prepareAudio(samples, options.denoise)
+    asrElapsedMs = null
+    voiceprintElapsedMs = null
+
+    如果不启用声纹:
+        asrStartedAt = monotonicNow()
+        text = recognizeText(preparedSamples)
+        asrElapsedMs = elapsedMilliseconds(asrStartedAt)
+        返回 text、asrElapsedMs、voiceprintElapsedMs=null
+
+    如果启用多人声纹:
+        voiceprintStartedAt = monotonicNow()
+        segments = diarizeAndMatch(preparedSamples)
+        voiceprintElapsedMs = elapsedMilliseconds(voiceprintStartedAt)
+        对每个有效分段:
+            asrStartedAt = monotonicNow()
+            segment.text = recognizeText(segment.samples)
+            asrElapsedMs += elapsedMilliseconds(asrStartedAt)
+        返回 segments、asrElapsedMs、voiceprintElapsedMs
+
+    asrStartedAt = monotonicNow()
+    text = recognizeText(preparedSamples)
+    asrElapsedMs = elapsedMilliseconds(asrStartedAt)
+    voiceprintStartedAt = monotonicNow()
+    embedding = extractEmbedding(preparedSamples)
+    match = matchVoiceprint(embedding)
+    voiceprintElapsedMs = elapsedMilliseconds(voiceprintStartedAt)
+    返回 text、speaker、asrElapsedMs、voiceprintElapsedMs
+
+window.onNativeAsrResult(payload):
+    将 payload 的 asrElapsedMs、voiceprintElapsedMs 原样放入 asrResult
+
+formatAsrResultLog(data):
+    输出 asrElapsedMs、voiceprintElapsedMs
+    旧 payload 缺少字段时输出 null
+```
+
+## 临时/群聊/私聊窗口伪代码
+
+```text
+ConversationState {
+    state: disabled | waitingWake | activeGroup | activePrivate
+    target: assistantName | null
+    windowType: temporary | conversation | null
+    expiresAt: timestamp | null
+    timerPaused: boolean
+    remainingMs: integer | null
+}
+
+默认配置：
+    temporaryWindowMs = 30000
+    conversationWindowMs = 180000
+
+normalizeConversationText(text):
+    去除首尾空白，并删除中间的空白和中文/英文标点
+
+parseConversationCommand(text, assistants):
+    normalized = normalizeConversationText(text)
+    对每个 assistantName：
+        如果 normalized == normalizeConversationText(assistantName)
+            -> { type: "wake", mode: "group", windowType: "temporary" }
+    如果 normalized == "开始对话" -> { type: "wake", mode: "group", windowType: "conversation" }
+    如果 normalized == "结束对话" -> { type: "end" }
+    对每个 assistantName：
+        如果 normalized == "你好" + assistantName
+            或 normalized == assistantName + "你好"
+            -> { type: "wake", mode: "private", windowType: "conversation", target: assistantName }
+        如果 normalized == assistantName + "再见"
+            或 normalized == "再见" + assistantName
+            -> { type: "endPrivate", target: assistantName }
+    normalized 已删除空白、Unicode 标点和符号，因此上述两侧顺序都支持夹杂标点、符号或空白
+
+reduceConversationInput(state, text):
+    waitingWake + temporary group -> activeGroup, windowType=temporary
+    waitingWake + group -> activeGroup, windowType=conversation
+    waitingWake + private -> activePrivate, windowType=conversation, target=assistant
+    activePrivate + endPrivate -> waitingWake，并切回群聊上下文
+    activeGroup/activePrivate + end -> waitingWake，并清除窗口信息
+    active 状态下普通有效输入 -> 保持 windowType，并更新最后有效输入时间
+
+temporaryConversation:
+    服务端只保留一个全局实例 { id, startedAt, displayId, roleName, templateId, messages[] }
+    新的临时唤醒或 temporaryConversationStarted:
+        清理旧临时实例的 LLM 历史
+        生成新 id，消息置空，广播 { type: "temporaryConversation", action: "reset" }
+        其他显示端已有的 activeGroup/windowType=temporary 状态切换到新临时会话并继续共享
+    临时用户消息和助手回复只写入该实例及 temporary 会话键，不混入普通群聊页签
+    控制端连接或请求 getTemporaryConversation:
+        返回当前全局实例快照
+    控制端临时页签展示快照并允许直接发送:
+        输入框保持可用
+        发送 chatMessage 时携带 mode='temporary'、temporaryConversation=true、temporaryConversationId
+        服务端若当前实例不存在则创建实例；若请求携带旧 id 则归并到当前实例，不创建分叉
+        服务端将控制端消息和助手回复追加到当前实例，并广播最新快照
+    清空操作清空当前实例并广播
+
+临时角色选择:
+    精确角色唤醒命令返回 { type: "wake", windowType: "temporary", assistantName }
+    控制端临时页签从有效聊天模板渲染角色选择器
+    选择角色时发送 { type: "startTemporaryConversation", roleName }
+    服务端校验模板后替换全局实例并广播 roleName/templateId
+    临时普通消息只发送 temporaryConversationId，不发送角色提示词
+    服务端按当前实例 roleName 调用 getTemplateSystemPrompt()
+    getTemplateSystemPrompt() 只包含基础提示词和一个匹配模板
+    普通“开始对话”请求仍调用 getGroupSystemPrompt()，包含全部角色模板
+
+armConversationTimer(displayId):
+    根据 state.windowType 选择 temporaryWindowMs 或 conversationWindowMs
+    expiresAt = 当前时间 + 对应窗口
+    清除旧服务端 timer，广播 expiresAt 和 timerPaused=false
+
+onVoiceTtsPlaybackStarted(displayId):
+    如果 displayId 有 active 会话：
+        记录 expiresAt - 当前时间为 remainingMs
+        清除服务端 timer
+        广播 timerPaused=true 和 remainingMs
+
+onAllVoiceTtsPlaybackFinished(displayId):
+    如果 displayId 的会话 timerPaused=true：
+        清除暂停标记
+        按当前 windowType 重新 arm 完整窗口
+
+显示端倒计时：
+    timerPaused=true 时固定显示 remainingMs，不减少
+    timerPaused=false 时按服务端 expiresAt 每秒刷新
+```
+
+配置同步伪代码：
+
+```text
+控制端发送 { type: "setVoiceConversationConfig", temporaryWindowSeconds, conversationWindowSeconds, addressedGroupMode }
+服务端校验范围并转换为毫秒
+服务端将 addressedGroupMode 规范化为 temporary 或 oneShot，缺失值默认 temporary
+服务端 config.set("voiceCommand.temporaryConversationWindowMs", normalizedTemporaryMs)
+服务端 config.set("voiceCommand.conversationWindowMs", normalizedConversationMs)
+服务端 config.set("voiceCommand.addressedGroupMode", addressedGroupMode)
+服务端广播 { type: "voiceConversationConfig", ...normalizedConfig }
+控制端收到后只渲染服务端返回的权威值
 ```

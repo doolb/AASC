@@ -5,10 +5,21 @@ const { test } = require('node:test');
 const {
     normalizeWeatherData,
     formatWeatherDetail,
-    formatWeatherSpeech
+    formatWeatherSpeech,
+    parseWeatherDateRequest,
+    selectWeatherForecastDay,
+    formatWeatherDateDetail,
+    formatWeatherDateSpeech,
+    resolveWeatherCity
 } = require('../src/apps/web-mediacenter/modules/voice/voice-command-app-service');
 
-const createWeatherPayload = () => ({
+const formatTestDate = (date) => [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+].join('-');
+
+const createWeatherPayload = (baseDate = new Date(2026, 7, 29)) => ({
     nearest_area: [{
         areaName: [{ value: 'Chengdu' }],
         country: [{ value: 'China' }],
@@ -33,8 +44,10 @@ const createWeatherPayload = () => ({
         precipMM: '0.0',
         uvIndex: '0'
     }],
-    weather: [0, 1, 2, 3].map((dayIndex) => ({
-        date: `2026-08-${String(29 + dayIndex).padStart(2, '0')}`,
+    weather: [0, 1, 2, 3].map((dayIndex) => {
+        const forecastDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
+        return {
+        date: formatTestDate(forecastDate),
         maxtempC: String(25 + dayIndex),
         mintempC: String(20 + dayIndex),
         avgtempC: String(22 + dayIndex),
@@ -69,7 +82,8 @@ const createWeatherPayload = () => ({
             WindGustKmph: '15',
             cloudcover: '95'
         }]
-    }))
+        };
+    })
 });
 
 test('normalizeWeatherData 将完整 j1 数据归一化并把 Mist 转为中文', () => {
@@ -156,4 +170,81 @@ test('缺失天气字段使用 null，文案不出现 undefined', () => {
     assert.equal(weather.current.temperatureC, null);
     assert.equal(weather.current.wind, null);
     assert.doesNotMatch(detail, /undefined/u);
+});
+
+test('天气日期解析使用服务端本地日期并支持三种相对日期', () => {
+    const now = new Date(2026, 8, 12, 10, 30, 0);
+
+    assert.deepEqual(parseWeatherDateRequest('今天的天气', now), {
+        offset: 0,
+        date: '2026-09-12',
+        label: '今天'
+    });
+    assert.deepEqual(parseWeatherDateRequest('成都明天天气', now), {
+        offset: 1,
+        date: '2026-09-13',
+        label: '明天'
+    });
+    assert.deepEqual(parseWeatherDateRequest('后天成都天气', now), {
+        offset: 2,
+        date: '2026-09-14',
+        label: '后天'
+    });
+    assert.deepEqual(parseWeatherDateRequest('成都天气', now), {
+        offset: null,
+        date: null,
+        label: ''
+    });
+});
+
+test('天气城市解析会剔除日期词并支持日期在城市前后', () => {
+    assert.equal(resolveWeatherCity('成都明天天气').city, '成都');
+    assert.equal(resolveWeatherCity('后天成都天气').city, '成都');
+    assert.equal(resolveWeatherCity('今天的天气').requestedCity, '');
+});
+
+test('今天天气选择接口第一天并保留今日逐时预报', () => {
+    const now = new Date(2026, 8, 12, 10, 30, 0);
+    const weather = normalizeWeatherData(createWeatherPayload(now));
+    const request = parseWeatherDateRequest('今天的天气', now);
+    const day = selectWeatherForecastDay(weather, request);
+    const detail = formatWeatherDateDetail(weather, request);
+
+    assert.equal(day.date, '2026-09-12');
+    assert.match(detail, /2026-09-12/u);
+    assert.match(detail, /00:00时雾/u);
+    assert.doesNotMatch(detail, /2026-09-13：/u);
+});
+
+test('明天和后天天气只返回对应逐日预报，不包含逐时和其他日期', () => {
+    const now = new Date(2026, 8, 12, 10, 30, 0);
+    const weather = normalizeWeatherData(createWeatherPayload(now));
+
+    for (const text of ['明天天气', '后天天气']) {
+        const request = parseWeatherDateRequest(text, now);
+        const detail = formatWeatherDateDetail(weather, request);
+        const speech = formatWeatherDateSpeech(weather, request);
+        const expectedDate = request.date;
+
+        assert.match(detail, new RegExp(expectedDate));
+        assert.match(speech, new RegExp(expectedDate));
+        assert.doesNotMatch(detail, /逐时预报/u);
+        assert.doesNotMatch(detail, /当前天气/u);
+        assert.doesNotMatch(detail, /00:00时/u);
+        for (const date of ['2026-09-12', '2026-09-13', '2026-09-14']) {
+            if (date !== expectedDate) {
+                assert.doesNotMatch(detail, new RegExp(`${date}：`));
+            }
+        }
+    }
+});
+
+test('目标日期没有对应预报时返回固定提示', () => {
+    const now = new Date(2026, 8, 12, 10, 30, 0);
+    const weather = normalizeWeatherData(createWeatherPayload(now));
+    const request = parseWeatherDateRequest('后天天气', new Date(2027, 0, 1, 10, 30, 0));
+
+    assert.equal(selectWeatherForecastDay(weather, request), null);
+    assert.equal(formatWeatherDateDetail(weather, request), '暂无该日期天气预报');
+    assert.equal(formatWeatherDateSpeech(weather, request), '暂无该日期天气预报');
 });

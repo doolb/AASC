@@ -12,6 +12,15 @@ function normalizeNumber(value) {
 }
 
 /**
+ * 规范化模型耗时：耗时不能为负数，统一按整数毫秒写入结果日志。
+ */
+function normalizeElapsedMs(value) {
+    const number = normalizeNumber(value);
+    if (number === null || number < 0) return null;
+    return Math.round(number);
+}
+
+/**
  * 规范化一个声纹分段，只输出诊断所需字段，不把音频或其他大对象写入日志。
  */
 function normalizeSegment(segment = {}) {
@@ -43,7 +52,9 @@ function formatAsrResultLog(data = {}, detailed = true) {
         speaker: data.speaker ? String(data.speaker) : null,
         similarityScore: normalizeNumber(data.similarityScore),
         threshold: normalizeNumber(data.threshold),
-        error: data.error ? String(data.error) : null
+        error: data.error ? String(data.error) : null,
+        asrElapsedMs: normalizeElapsedMs(data.asrElapsedMs),
+        voiceprintElapsedMs: normalizeElapsedMs(data.voiceprintElapsedMs)
     };
 
     if (Array.isArray(data.similarityScores)) {
@@ -54,4 +65,4 @@ function formatAsrResultLog(data = {}, detailed = true) {
     return `<< asrResult ${JSON.stringify(payload)}`;
 }
 
-module.exports = { formatAsrResultLog };
+module.exports = { formatAsrResultLog, normalizeElapsedMs };

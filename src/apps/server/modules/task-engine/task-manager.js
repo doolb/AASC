@@ -30,6 +30,7 @@ class TaskManager extends EventEmitter {
     this._generateTts = null;  // 由 server-app 注入统一的显示端优先 TTS 路由
     this._getTtsServiceUrl = options.getTtsServiceUrl || null;
     this._setTtsServiceUrl = options.setTtsServiceUrl || null;
+    this._llmGatewayService = options.llmGatewayService || null;
     this._serverExecutionError = options.serverExecutionError || '当前节点不支持服务端任务执行';
     this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
@@ -82,7 +83,8 @@ class TaskManager extends EventEmitter {
       broadcastToDisplays: this._broadcastToDisplays,
       chatService: extraContext.chatService || this._chatService,
       getTtsServiceUrl: extraContext.getTtsServiceUrl || this._getTtsServiceUrl,
-      setTtsServiceUrl: extraContext.setTtsServiceUrl || this._setTtsServiceUrl
+      setTtsServiceUrl: extraContext.setTtsServiceUrl || this._setTtsServiceUrl,
+      llmGatewayService: extraContext.llmGatewayService || this._llmGatewayService
     });
   }
 
@@ -289,8 +291,9 @@ class TaskManager extends EventEmitter {
           taskName: task.taskName,
           taskIO: this.taskIO,
           generateTTS: this._generateTts,
-          getTtsServiceUrl: context.getTtsServiceUrl || this._getTtsServiceUrl,
-          setTtsServiceUrl: context.setTtsServiceUrl || this._setTtsServiceUrl,
+          getTtsServiceUrl: context.getTtsServiceUrl || this._getTtsServiceUrl, 
+          setTtsServiceUrl: context.setTtsServiceUrl || this._setTtsServiceUrl, 
+          llmGatewayService: context.llmGatewayService || this._llmGatewayService,
           postStream: (data) => this.emit('stream', instanceId, data)
         };
         const result = await builtinRegistry.run(task.builtinId, builtinCtx);
@@ -630,8 +633,9 @@ class TaskManager extends EventEmitter {
         this._widgetActions.set(instanceId, actionHandlers);
 
         const result = await builtinRegistry.run(task.builtinId, {
-          ...context, instanceId, taskName: task.taskName, taskIO: this.taskIO,
+          ...context, instanceId, taskName: task.taskName, taskIO: this.taskIO, 
           chatService: context.chatService || this._chatService,
+          llmGatewayService: context.llmGatewayService || this._llmGatewayService,
           sendToDisplay: this._sendToDisplay,
           broadcastToDisplays: this._broadcastToDisplays,
           generateTTS: this._generateTts,

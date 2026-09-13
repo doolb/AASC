@@ -3,10 +3,14 @@ package com.aasc.display
 // 启动配置选择器：部署命令传入的服务器地址优先于 APK 本地保存值。
 object ServerConfig {
 
-    fun chooseUrl(intentUrl: String?, savedUrl: String?): String {
+    const val DEFAULT_OFFLINE_SERVER_URL = "https://127.0.0.1:8081"
+
+    fun chooseUrl(intentUrl: String?, savedUrl: String?, offlineMode: Boolean = false): String {
         val injected = intentUrl?.trim().orEmpty()
         if (injected.isNotEmpty()) return injected
-        return savedUrl?.trim().orEmpty()
+        val saved = savedUrl?.trim().orEmpty()
+        if (saved.isNotEmpty()) return saved
+        return if (offlineMode) DEFAULT_OFFLINE_SERVER_URL else ""
     }
 
     /**
@@ -22,6 +26,12 @@ object ServerConfig {
             path.endsWith("/display") -> withScheme
             else -> "$withScheme/display"
         }
+    }
+
+    fun controlPageUrl(input: String): String {
+        val base = baseUrl(input)
+        if (base.isEmpty()) return ""
+        return "$base/control"
     }
 
     // Node 子服务器需要主服务器根地址，不能把 /display 页面路径写进 aasc.mainServerUrl。

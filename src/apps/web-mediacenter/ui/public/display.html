@@ -14,6 +14,7 @@
     <div class="voice-status-row" id="voiceStatusRow">
         <div class="voice-status-main-row" id="voiceStatusMainRow">
             <div id="voiceStatus" class="voice-status-hidden">语音</div>
+            <div id="cameraStatusDisplay" class="camera-status-hidden" aria-live="polite"></div>
             <div class="monitor-wrapper" id="monitorWrapper">
                 <div class="monitor-label">AUDIO_FREQ // MONITOR</div>
                 <canvas id="mini-monitor" width="140" height="50"></canvas>
@@ -66,6 +67,7 @@
         const voiceStatusRow = document.getElementById('voiceStatusRow');
         const voiceStatusMainRow = document.getElementById('voiceStatusMainRow');
         const voiceStatus = document.getElementById('voiceStatus');
+        const cameraStatusDisplay = document.getElementById('cameraStatusDisplay');
         const voiceConversationCountdown = document.getElementById('voiceConversationCountdown');
         const voiceConversationConfirmationCountdown = document.getElementById('voiceConversationConfirmationCountdown');
         const voiceTextDisplay = document.getElementById('voiceTextDisplay');
@@ -158,6 +160,9 @@
         let ttsVideoState = null;
         let textTtsPlaybackActive = false;
         let ttsRecordingPaused = false;
+        // 服务端下发的全局录音暂停状态；仅记录普通监听是否由本次暂停暂存，临时录音不会自动恢复。
+        let globalRecordingPaused = false;
+        let globalPauseWasListening = false;
         let ttsRecordingResumeTimer = null;
         const remoteTtsPlaybackIds = new Set();
         let remoteTextPlayback = null;
@@ -169,6 +174,8 @@
         let voiceConversationState = 'waitingWake';
         let voiceConversationTarget = null;
         let voiceConversationExpiresAt = null;
+        let voiceConversationTimerPaused = false;
+        let voiceConversationRemainingMs = null;
         let voiceConversationTimer = null;
         let voiceConversationCountdownTimer = null;
         let voiceConversationConfirmationExpiresAt = null;
@@ -216,6 +223,10 @@
         // APK 原生 TTS 引擎：检测到桥方法即认为可用，模型就绪后上报 ttsGeneration 能力
         const nativeTtsAvailable = !!(window.NativeDisplay && window.NativeDisplay.ttsStatus);
         let nativeTtsReady = false;
+        // APK 原生 MNN-LLM：能力必须由 native bridge 明确返回，不因页面存在接口而虚报。
+        const nativeLlmAvailable = !!(window.NativeDisplay && window.NativeDisplay.llmStatus);
+        let nativeLlmStatus = null;
+        let llmModelManifest = { models: [] };
         // 正式 APK 原生视觉桥：能力存在不等于模型已加载，模型状态由 visionStatus 单独报告。
         const nativeOcrMethod = window.NativeDisplay && window.NativeDisplay.ocrRecognizeAsync;
         const nativeYoloMethod = window.NativeDisplay && (window.NativeDisplay.yoloDetectAsync || window.NativeDisplay.yolo11nDetectAsync);
@@ -305,6 +316,9 @@
                 result.similarityScore = payload.similarityScore;
             }
             if (Object.prototype.hasOwnProperty.call(payload, 'threshold')) result.threshold = payload.threshold;
+            for (const key of ['asrElapsedMs', 'voiceprintElapsedMs']) {
+                if (Object.prototype.hasOwnProperty.call(payload, key)) result[key] = payload[key];
+            }
             sendAsrResult(payload.requestId, result);
         };
 
@@ -416,6 +430,170 @@
                 console.warn('[TTS] 模型下载失败:', payload.error);
             }
         };
+
+        // LLM 状态由原生模型管理器主动推送；同时转发给服务端作为路由权威状态。
+        window.onNativeLlmStatus = function(payload) {
+            if (!payload) return;
+            nativeLlmStatus = payload;
+            if (currentCapabilities) {
+                currentCapabilities.llm = {
+                    ...(currentCapabilities.llm || {}),
+                    supported: payload.supported === true,
+                    engine: payload.engine || 'mnn-llm',
+                    ready: payload.ready === true,
+                    selectedModelId: payload.selectedModelId || null
+                };
+            }
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify({ type: 'llm.status', status: payload }));
+            }
+        };
+
+        function sendLlmDisplayMessage(message) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify(message));
+        }
+
+        function reportNativeLlmStatus() {
+            if (!nativeLlmAvailable || !nativeBridge ||
+                typeof nativeBridge.llmStatus !== 'function') return;
+            try {
+                const status = JSON.parse(nativeBridge.llmStatus());
+                window.onNativeLlmStatus(status);
+            } catch (error) {
+                console.warn('[LLM] llmStatus 解析失败:', error);
+            }
+        }
+
+        window.onNativeLlmChunk = function(payload) {
+            if (!payload || !payload.requestId) return;
+            sendLlmDisplayMessage({
+                type: 'llm.chunk',
+                requestId: payload.requestId,
+                text: payload.text || ''
+            });
+        };
+
+        window.onNativeLlmCompleted = function(payload) {
+            if (!payload || !payload.requestId) return;
+            sendLlmDisplayMessage({
+                type: 'llm.completed',
+                requestId: payload.requestId,
+                text: payload.text || ''
+            });
+        };
+
+        window.onNativeLlmError = function(payload) {
+            if (!payload || !payload.requestId) return;
+            sendLlmDisplayMessage({
+                type: 'llm.error',
+                requestId: payload.requestId,
+                code: payload.code || 'LLM_INFERENCE_FAILED',
+                message: payload.message || 'LLM 推理失败'
+            });
+        };
+
+        function handleNativeLlmRequest(data) {
+            if (currentCapabilities?.llm?.enabled === false) {
+                sendLlmDisplayMessage({
+                    type: 'llm.error',
+                    requestId: data.requestId,
+                    code: 'LLM_DISABLED',
+                    message: '当前显示端 LLM 能力已禁用'
+                });
+                return;
+            }
+            if (!nativeLlmAvailable || !nativeBridge ||
+                typeof nativeBridge.llmInferAsync !== 'function') {
+                sendLlmDisplayMessage({
+                    type: 'llm.error',
+                    requestId: data.requestId,
+                    code: 'LLM_UNAVAILABLE',
+                    message: 'APK 的 MNN-LLM 引擎不可用'
+                });
+                return;
+            }
+            try {
+                const payload = Object.assign({}, data.payload || {}, {
+                    protocol: data.protocol || (data.path === '/v1/responses'
+                        ? 'responses'
+                        : 'chat.completions')
+                });
+                const resultText = nativeBridge.llmInferAsync(
+                    data.requestId,
+                    JSON.stringify(payload)
+                );
+                const result = resultText ? JSON.parse(resultText) : null;
+                if (!result || result.accepted !== true) {
+                    sendLlmDisplayMessage({
+                        type: 'llm.error',
+                        requestId: data.requestId,
+                        code: 'LLM_NOT_READY',
+                        message: (result && result.error) || '模型未就绪'
+                    });
+                }
+            } catch (error) {
+                sendLlmDisplayMessage({
+                    type: 'llm.error',
+                    requestId: data.requestId,
+                    code: 'LLM_BRIDGE_ERROR',
+                    message: error.message || 'LLM 桥调用失败'
+                });
+            }
+        }
+
+        function handleNativeLlmModelSelection(data) {
+            if (currentCapabilities?.llm?.enabled === false) {
+                sendLlmDisplayMessage({
+                    type: 'llm.status',
+                    status: Object.assign({}, nativeLlmStatus || {}, {
+                        state: 'error',
+                        ready: false,
+                        error: '当前显示端 LLM 能力已禁用'
+                    })
+                });
+                return;
+            }
+            if (!nativeLlmAvailable || !nativeBridge ||
+                typeof nativeBridge.llmSelectModel !== 'function') {
+                sendLlmDisplayMessage({
+                    type: 'llm.status',
+                    status: Object.assign({}, nativeLlmStatus || {}, {
+                        supported: false,
+                        state: 'error',
+                        ready: false,
+                        error: 'APK 的 MNN-LLM 引擎不可用'
+                    })
+                });
+                return;
+            }
+            try {
+                const resultText = nativeBridge.llmSelectModel(data.modelId || '');
+                const result = resultText ? JSON.parse(resultText) : null;
+                if (!result || result.accepted !== true) {
+                    const current = nativeLlmStatus || {};
+                    sendLlmDisplayMessage({
+                        type: 'llm.status',
+                        status: Object.assign({}, current, {
+                            state: 'error',
+                            ready: false,
+                            selectedModelId: data.modelId || null,
+                            error: (result && result.error) || '模型选择失败'
+                        })
+                    });
+                }
+            } catch (error) {
+                sendLlmDisplayMessage({
+                    type: 'llm.status',
+                    status: Object.assign({}, nativeLlmStatus || {}, {
+                        state: 'error',
+                        ready: false,
+                        selectedModelId: data.modelId || null,
+                        error: error.message || '模型选择失败'
+                    })
+                });
+            }
+        }
 
         // 原生 ASR 能力与公共 ASR 可用性分开上报，避免 1.39 的公共录音状态覆盖 1.6 的提供端能力。
         function reportLocalAsrProviderAvailability(available) {
@@ -1630,6 +1808,51 @@
         }
 
         // 播放期间是否暂停普通 ASR 由控制端声纹面板的全局配置决定，单次/实时录音不会进入此分支。
+        async function handleGlobalRecordingPauseState(data) {
+            const nextPaused = data?.paused === true;
+            globalRecordingPaused = nextPaused;
+            if (nextPaused) {
+                pendingAutoStart = false;
+                globalPauseWasListening = activeRecordingPurpose === 'asr'
+                    && isListening
+                    && pcmCapture?.active;
+                if (displayRecordingSession) {
+                    await finalizeDisplayRecording(false, '全局录音已暂停');
+                }
+                if (globalPauseWasListening && pcmCapture?.active) {
+                    stopSilenceDetection();
+                    hasSpeech = false;
+                    speechStartTime = null;
+                    silenceStartTime = null;
+                    pcmCapture.setPaused(true);
+                    isListening = false;
+                    sendVoiceStatus();
+                } else if (activeRecordingPurpose === 'asr' && isListening) {
+                    stopVoiceRecording(false);
+                }
+            } else {
+                const shouldResume = globalPauseWasListening;
+                globalPauseWasListening = false;
+                if (shouldResume && !ttsRecordingPaused && remoteTtsPlaybackIds.size === 0) {
+                    if (pcmCapture?.active && micStream) {
+                        pcmCapture.setPaused(false);
+                        isListening = true;
+                        hasSpeech = false;
+                        speechStartTime = null;
+                        silenceStartTime = null;
+                        sendVoiceStatus();
+                        startSilenceDetection();
+                    } else if (isAlwaysListening) {
+                        void startVoiceRecording();
+                    }
+                } else if (!shouldResume && isAlwaysListening && voiceRecordingMode === 'asr'
+                    && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused) {
+                    void startVoiceRecording();
+                }
+            }
+            updateVoiceStatusDisplay();
+        }
+
         function pauseVoiceRecordingForTts() {
             if (activeRecordingPurpose !== 'asr'
                 || pauseRecordingDuringPlayback === false
@@ -1653,7 +1876,7 @@
             if (!ttsRecordingPaused) return;
             const shouldResume = wasListeningBeforePlayback && displayPageActive
                 && voiceListeningEnabled && currentCapabilities?.voiceRecording === true
-                && pcmCapture?.active && micStream;
+                && !globalRecordingPaused && pcmCapture?.active && micStream;
             ttsRecordingPaused = false;
             wasListeningBeforePlayback = false;
             if (!shouldResume) return;
@@ -2953,7 +3176,8 @@
             if (!config) return;
             const payload = {
                 asr: config.asr || {},
-                tts: config.tts || {}
+                tts: config.tts || {},
+                llm: config.llm || {}
             };
             const key = JSON.stringify(payload);
             if (key === lastAppliedCpuConfigKey || key === pendingCpuConfigKey) {
@@ -4383,6 +4607,7 @@
                 sendVoiceStatus();
                 reportSleepState();
                 reportNativeCpuStatus();
+                reportNativeLlmStatus();
 
                 if (!isAlwaysListening) {
                     pendingAutoStart = true;
@@ -4434,6 +4659,11 @@
                         return;
                     }
 
+                    if (data.type === 'globalRecordingPauseState') {
+                        void handleGlobalRecordingPauseState(data);
+                        return;
+                    }
+
                     if (data.type === 'voiceRecordingConfig') {
                         handleVoiceRecordingConfig(data);
                         return;
@@ -4441,6 +4671,21 @@
 
                     if (data.type === 'displayRecordingRequest') {
                         void handleDisplayRecordingRequest(data);
+                        return;
+                    }
+
+                    if (data.type === 'listDisplayCameras') {
+                        void listDisplayCameras(data.requestId);
+                        return;
+                    }
+
+                    if (data.type === 'requestDisplayCamera') {
+                        void requestDisplayCamera(data);
+                        return;
+                    }
+
+                    if (data.type === 'stopDisplayCamera') {
+                        stopDisplayCamera(data);
                         return;
                     }
 
@@ -4454,6 +4699,11 @@
                         voiceConversationTarget = data.target || null;
                         const expiresAt = Number(data.expiresAt);
                         voiceConversationExpiresAt = Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null;
+                        voiceConversationTimerPaused = data.timerPaused === true;
+                        const remainingMs = Number(data.remainingMs);
+                        voiceConversationRemainingMs = Number.isFinite(remainingMs) && remainingMs >= 0
+                            ? remainingMs
+                            : null;
                         if (voiceConversationState === 'disabled') {
                             clearVoiceConversationTimer();
                             clearVoiceConversationCountdown();
@@ -4465,6 +4715,7 @@
                             clearVoiceConversationConfirmation();
                         } else {
                             startVoiceConversationCountdown();
+                            scheduleVoiceConversationTimer();
                         }
                         updateVoiceStatusDisplay();
                         return;
@@ -4495,6 +4746,29 @@
 
                     if (data.type === 'asrAudio') {
                         void handleAsrAudio(data);
+                        return;
+                    }
+
+                    if (data.type === 'llm.modelManifest') {
+                        llmModelManifest = data;
+                        return;
+                    }
+
+                    if (data.type === 'llm.selectModel') {
+                        handleNativeLlmModelSelection(data);
+                        return;
+                    }
+
+                    if (data.type === 'llm.request') {
+                        handleNativeLlmRequest(data);
+                        return;
+                    }
+
+                    if (data.type === 'llm.cancel') {
+                        if (nativeLlmAvailable && nativeBridge &&
+                            typeof nativeBridge.llmCancel === 'function') {
+                            nativeBridge.llmCancel(data.requestId || '');
+                        }
                         return;
                     }
 
@@ -4643,7 +4917,8 @@
                     if (data.type === 'cpuConfig') {
                         applyCpuConfig({
                             asr: data.asr,
-                            tts: data.tts
+                            tts: data.tts,
+                            llm: data.llm
                         });
                         return;
                     }
@@ -4735,6 +5010,7 @@
                 if (displayRecordingSession) {
                     void finalizeDisplayRecording(false, '显示端连接已断开');
                 }
+                stopCameraStream();
                 displayWs = null;
                 stopControlScreenshot();
                 controlModeEnabled = false;
@@ -4748,6 +5024,7 @@
                 // 部分 Android WebView 在服务端重启时可能只触发 error，不保证随后触发 close。
                 // 先释放当前连接引用，确保 scheduleDisplayReconnect 不被 OPEN/CLOSING 状态拦截。
                 displayWs = null;
+                stopCameraStream();
                 stopControlScreenshot();
                 controlModeEnabled = false;
                 setConnectionStatus('disconnected', '连接错误');
@@ -4835,6 +5112,249 @@
         watchDisplayVersion();
 
         let currentCapabilities = null;
+        let cameraStream = null;
+        let cameraVideo = null;
+        let cameraCanvas = null;
+        let cameraPreviewTimer = null;
+        let cameraSession = null;
+
+        function sendCameraMessage(message) {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return false;
+            displayWs.send(JSON.stringify(message));
+            return true;
+        }
+
+        function updateCameraStatus(state, text, title = text) {
+            if (!cameraStatusDisplay) return;
+            cameraStatusDisplay.className = `camera-status-${state}`;
+            cameraStatusDisplay.textContent = text;
+            cameraStatusDisplay.title = title;
+            cameraStatusDisplay.dataset.state = state;
+        }
+
+        function stopCameraStream() {
+            if (cameraPreviewTimer !== null) {
+                clearInterval(cameraPreviewTimer);
+                cameraPreviewTimer = null;
+            }
+            if (cameraVideo) {
+                cameraVideo.pause();
+                cameraVideo.srcObject = null;
+                cameraVideo = null;
+            }
+            if (cameraStream) {
+                cameraStream.getTracks().forEach((track) => track.stop());
+                cameraStream = null;
+            }
+            cameraSession = null;
+        }
+
+        function sendCameraStatus(requestId, state, error = null) {
+            sendCameraMessage({
+                type: 'displayCameraStatus',
+                requestId,
+                state,
+                error
+            });
+        }
+
+        function cameraImageBase64(video, quality = 0.68) {
+            if (!video || !video.videoWidth || !video.videoHeight) return null;
+            if (!cameraCanvas) cameraCanvas = document.createElement('canvas');
+            const maxWidth = 640;
+            const scale = Math.min(1, maxWidth / video.videoWidth);
+            cameraCanvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+            cameraCanvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+            const context = cameraCanvas.getContext('2d');
+            context.drawImage(video, 0, 0, cameraCanvas.width, cameraCanvas.height);
+            const dataUrl = cameraCanvas.toDataURL('image/jpeg', quality);
+            return dataUrl.split(',')[1] || null;
+        }
+
+        function readBlobAsDataUrl(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = () => reject(reader.error || new Error('读取摄像头照片失败'));
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        async function cameraPhotoFromTrack() {
+            const track = cameraStream?.getVideoTracks?.()[0];
+            if (!track || typeof ImageCapture !== 'function'
+                || typeof ImageCapture.prototype?.takePhoto !== 'function') {
+                return null;
+            }
+            const imageCapture = new ImageCapture(track);
+            const blob = await imageCapture.takePhoto();
+            if (!blob || blob.size <= 0) return null;
+            const dataUrl = await readBlobAsDataUrl(blob);
+            const separatorIndex = dataUrl.indexOf(',');
+            if (separatorIndex < 0) return null;
+            return {
+                mimeType: blob.type || 'image/jpeg',
+                imageBase64: dataUrl.slice(separatorIndex + 1)
+            };
+        }
+
+        function waitForCameraFrame(video, timeoutMs = 2000) {
+            return new Promise((resolve, reject) => {
+                let settled = false;
+                const timeoutId = setTimeout(() => {
+                    finish(new Error('等待摄像头首帧超时'));
+                }, timeoutMs);
+
+                const finish = (error = null) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timeoutId);
+                    if (error) {
+                        reject(error);
+                        return;
+                    }
+                    resolve();
+                };
+
+                const scheduleAfterPaint = () => {
+                    if (typeof video?.requestVideoFrameCallback === 'function') {
+                        // Android WebView 的首个回调可能只代表 GPU 缓冲区开始工作，
+                        // 连续等待两帧并留出稳定时间，避免回调存在但像素仍是黑帧。
+                        let frameCount = 0;
+                        const waitNextFrame = () => {
+                            video.requestVideoFrameCallback(() => {
+                                frameCount += 1;
+                                if (frameCount < 2) {
+                                    waitNextFrame();
+                                    return;
+                                }
+                                setTimeout(() => finish(), 300);
+                            });
+                        };
+                        waitNextFrame();
+                        return;
+                    }
+                    // 旧版 WebView 没有 requestVideoFrameCallback，等待一次绘制和相机
+                    // 数据刷新间隔后再截取，避免 play() 刚完成时读取到空的 Surface。
+                    const requestFrame = typeof requestAnimationFrame === 'function'
+                        ? requestAnimationFrame
+                        : (callback) => setTimeout(callback, 16);
+                    requestFrame(() => setTimeout(() => finish(), 400));
+                };
+
+                const checkReadyState = () => {
+                    if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+                        if (!settled) setTimeout(checkReadyState, 40);
+                        return;
+                    }
+                    scheduleAfterPaint();
+                };
+
+                checkReadyState();
+            });
+        }
+
+        async function captureSingleCameraImage(video) {
+            try {
+                const photo = await cameraPhotoFromTrack();
+                if (photo?.imageBase64) return photo;
+            } catch (error) {
+                // 部分浏览器只支持 getUserMedia，不支持 ImageCapture；失败后继续使用
+                // 稳定视频帧的 Canvas 兜底，不影响实时预览能力。
+                console.warn('[显示端] ImageCapture 拍照失败，回退 Canvas:', error);
+            }
+            await waitForCameraFrame(video);
+            const imageBase64 = cameraImageBase64(video, 0.8);
+            return imageBase64 ? { mimeType: 'image/jpeg', imageBase64 } : null;
+        }
+
+        async function listDisplayCameras(requestId) {
+            updateCameraStatus('loading', '正在刷新摄像头');
+            try {
+                if (!navigator.mediaDevices?.getUserMedia || !navigator.mediaDevices?.enumerateDevices) {
+                    throw new Error('当前显示端不支持摄像头');
+                }
+                // 先按后置摄像头优先申请一次权限，授权后浏览器才会返回稳定的设备标签。
+                const probeStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: 'environment' } },
+                    audio: false
+                });
+                probeStream.getTracks().forEach((track) => track.stop());
+                const devices = (await navigator.mediaDevices.enumerateDevices())
+                    .filter((device) => device.kind === 'videoinput')
+                    .map((device, index) => ({
+                        deviceId: device.deviceId,
+                        label: device.label || `摄像头 ${index + 1}`,
+                        facingMode: device.getCapabilities?.().facingMode || null
+                    }));
+                sendCameraMessage({ type: 'displayCameraDevices', requestId, devices });
+                updateCameraStatus('ready', `摄像头已就绪：${devices.length} 个`);
+            } catch (error) {
+                updateCameraStatus('error', '摄像头读取失败', error.message || '无法读取摄像头');
+                sendCameraStatus(requestId, 'error', error.message || '无法读取摄像头');
+            }
+        }
+
+        async function openCamera(cameraId) {
+            stopCameraStream();
+            const videoConstraints = cameraId
+                ? { deviceId: { exact: cameraId }, width: { ideal: 640 }, height: { ideal: 480 } }
+                : { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } };
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+            cameraVideo = document.createElement('video');
+            cameraVideo.muted = true;
+            cameraVideo.playsInline = true;
+            cameraVideo.srcObject = cameraStream;
+            await cameraVideo.play();
+        }
+
+        async function requestDisplayCamera(data) {
+            const requestId = data.requestId;
+            const mode = data.mode === 'realtime' ? 'realtime' : 'single';
+            updateCameraStatus('loading', mode === 'single' ? '正在打开摄像头' : '正在启动实时预览');
+            try {
+                if (!currentCapabilities?.cameraCapture) throw new Error('当前显示端不支持摄像头');
+                await openCamera(data.cameraId || '');
+                cameraSession = { requestId, mode };
+                sendCameraStatus(requestId, 'started');
+                if (mode === 'single') {
+                    updateCameraStatus('capturing', '正在拍照');
+                    const photo = await captureSingleCameraImage(cameraVideo);
+                    if (!photo?.imageBase64) throw new Error('摄像头尚未输出画面');
+                    sendCameraMessage({
+                        type: 'displayCameraResult',
+                        requestId,
+                        mimeType: photo.mimeType,
+                        imageBase64: photo.imageBase64
+                    });
+                    updateCameraStatus('success', '拍照完成');
+                    stopCameraStream();
+                    return;
+                }
+                updateCameraStatus('previewing', '实时预览中');
+                cameraPreviewTimer = setInterval(() => {
+                    const imageBase64 = cameraImageBase64(cameraVideo, 0.55);
+                    if (!imageBase64 || !cameraSession || cameraSession.requestId !== requestId) return;
+                    sendCameraMessage({
+                        type: 'displayCameraFrame',
+                        requestId,
+                        mimeType: 'image/jpeg',
+                        imageBase64
+                    });
+                }, 400);
+            } catch (error) {
+                stopCameraStream();
+                updateCameraStatus('error', '摄像头操作失败', error.message || '打开摄像头失败');
+                sendCameraStatus(requestId, 'error', error.message || '打开摄像头失败');
+            }
+        }
+
+        function stopDisplayCamera(data) {
+            const requestId = data.requestId || cameraSession?.requestId || null;
+            stopCameraStream();
+            updateCameraStatus('stopped', '实时预览已停止');
+            if (requestId) sendCameraStatus(requestId, 'stopped');
+        }
 
         function clearAsrStatusRetryTimer() {
             if (asrStatusRetryTimer === null) return;
@@ -4872,6 +5392,10 @@
 
             if (!voiceSupported) {
                 setStatus('not-ready', '未就绪', '不支持语音识别');
+                return;
+            }
+            if (globalRecordingPaused) {
+                setStatus('paused', '暂停所有录音', '服务端已暂停所有录音');
                 return;
             }
             if (ttsRecordingPaused) {
@@ -4956,12 +5480,16 @@
         function updateVoiceConversationCountdown() {
             if (!voiceConversationCountdown
                 || !['activeGroup', 'activePrivate'].includes(voiceConversationState)
-                || !Number.isFinite(voiceConversationExpiresAt)) {
+                || (voiceConversationTimerPaused
+                    ? !Number.isFinite(voiceConversationRemainingMs)
+                    : !Number.isFinite(voiceConversationExpiresAt))) {
                 clearVoiceConversationCountdown();
                 return;
             }
 
-            const remainingMs = voiceConversationExpiresAt - Date.now();
+            const remainingMs = voiceConversationTimerPaused
+                ? voiceConversationRemainingMs
+                : voiceConversationExpiresAt - Date.now();
             if (remainingMs <= 0) {
                 clearVoiceConversationCountdown();
                 return;
@@ -4975,7 +5503,9 @@
         function startVoiceConversationCountdown() {
             clearVoiceConversationCountdown();
             updateVoiceConversationCountdown();
-            if (!voiceConversationCountdown || !Number.isFinite(voiceConversationExpiresAt)) return;
+            if (voiceConversationTimerPaused
+                || !voiceConversationCountdown
+                || !Number.isFinite(voiceConversationExpiresAt)) return;
             voiceConversationCountdownTimer = setInterval(updateVoiceConversationCountdown, 1000);
         }
 
@@ -5018,7 +5548,6 @@
         function sendVoiceConversationTtsFinished() {
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
             displayWs.send(JSON.stringify({ type: 'voiceConversationTtsFinished' }));
-            scheduleVoiceConversationTimer();
         }
 
         function sendVoiceTtsPlaybackFinished(playbackId) {
@@ -5031,13 +5560,20 @@
 
         function scheduleVoiceConversationTimer() {
             clearVoiceConversationTimer();
-            if (!voiceListeningEnabled || !['activeGroup', 'activePrivate'].includes(voiceConversationState)) return;
+            if (!voiceListeningEnabled
+                || voiceConversationTimerPaused
+                || !['activeGroup', 'activePrivate'].includes(voiceConversationState)) return;
+            const delay = Number.isFinite(voiceConversationExpiresAt)
+                ? Math.max(0, voiceConversationExpiresAt - Date.now())
+                : 180000;
             voiceConversationTimer = setTimeout(() => {
                 voiceConversationState = 'waitingWake';
                 voiceConversationExpiresAt = null;
+                voiceConversationTimerPaused = false;
+                voiceConversationRemainingMs = null;
                 clearVoiceConversationCountdown();
                 updateVoiceStatusDisplay();
-            }, 180000);
+            }, delay);
         }
 
         function normalizeVadThreshold(value) {
@@ -5155,8 +5691,16 @@
                 voiceRecording: false,
                 voiceRecognition: false,
                 ttsGeneration: false,
+                llm: {
+                    enabled: currentCapabilities?.llm?.enabled !== false,
+                    supported: nativeLlmStatus?.supported === true,
+                    engine: nativeLlmStatus?.engine || 'mnn-llm',
+                    ready: nativeLlmStatus?.ready === true,
+                    selectedModelId: nativeLlmStatus?.selectedModelId || null
+                },
                 ocrAvailable: nativeOcrAvailable,
                 yolo11nAvailable: nativeYoloAvailable,
+                cameraCapture: !!navigator.mediaDevices?.getUserMedia,
                 displayText: true,
                 webgl: (function() {
                     try {
@@ -5231,8 +5775,10 @@
                     stream.getTracks().forEach(track => track.stop());
                 }
             } catch (e) {
-                capabilities.voiceRecording = false;
+                    capabilities.voiceRecording = false;
             }
+
+            capabilities.cameraCapture = !!navigator.mediaDevices?.getUserMedia;
             
             if (nativeAsrAvailable) {
                 try {
@@ -5265,6 +5811,29 @@
                     nativeTtsReady = false;
                     capabilities.ttsGeneration = false;
                     console.warn('[TTS] ttsStatus 解析失败:', e);
+                }
+            }
+
+            if (nativeLlmAvailable) {
+                try {
+                    const llmState = JSON.parse(nativeBridge.llmStatus());
+                    window.onNativeLlmStatus(llmState);
+                    capabilities.llm = {
+                        enabled: capabilities.llm?.enabled !== false,
+                        supported: llmState.supported === true,
+                        engine: llmState.engine || 'mnn-llm',
+                        ready: llmState.ready === true,
+                        selectedModelId: llmState.selectedModelId || null
+                    };
+                } catch (error) {
+                    capabilities.llm = {
+                        enabled: true,
+                        supported: false,
+                        engine: 'mnn-llm',
+                        ready: false,
+                        selectedModelId: null,
+                        error: error.message || 'LLM 状态读取失败'
+                    };
                 }
             }
 
@@ -5306,7 +5875,15 @@
                     crossOriginControl: !!(nativeBridge && nativeBridge.injectTouch),
                     crossOriginControlDegraded: !!(nativeBridge && !nativeBridge.injectTouch),
                     ocrAvailable: nativeOcrAvailable,
-                    yolo11nAvailable: nativeYoloAvailable
+                    yolo11nAvailable: nativeYoloAvailable,
+                    cameraCapture: !!navigator.mediaDevices?.getUserMedia,
+                    llm: {
+                        enabled: currentCapabilities?.llm?.enabled !== false,
+                        supported: nativeLlmStatus?.supported === true,
+                        engine: nativeLlmStatus?.engine || 'mnn-llm',
+                        ready: nativeLlmStatus?.ready === true,
+                        selectedModelId: nativeLlmStatus?.selectedModelId || null
+                    }
                 };
                 currentCapabilities = baseCaps;
                 if (displayWs && displayWs.readyState === WebSocket.OPEN) {
@@ -5340,6 +5917,16 @@
                 currentCapabilities = data.capabilities;
                 voiceListeningEnabled = data.capabilities.voiceRecording === true;
                 console.log('[能力] 能力已更新:', data.capabilities);
+
+                // LLM 能力关闭时释放 APK native 模型内存，但保留磁盘缓存供重新启用时加载。
+                const llmEnabled = data.capabilities.llm?.enabled !== false;
+                if (nativeBridge && typeof nativeBridge.llmSetEnabled === 'function') {
+                    try {
+                        nativeBridge.llmSetEnabled(llmEnabled);
+                    } catch (error) {
+                        console.warn('[LLM] 能力状态同步失败:', error.message);
+                    }
+                }
 
                 if (!voiceListeningEnabled) {
                     pendingAutoStart = false;
@@ -5383,7 +5970,8 @@
                 // 能力确认或重连后都尝试启动，不能依赖 prevCaps/pendingAutoStart 的时序。
                 const shouldStartRecording = isAlwaysListening && !isListening
                     && voiceRecordingMode === 'asr'
-                    && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused;
+                    && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused
+                    && !globalRecordingPaused;
                 if (shouldStartRecording) {
                     pendingAutoStart = false;
                     console.log('[能力] 服务器能力已确认，启动录音');
@@ -5416,7 +6004,8 @@
                 void finalizeDisplayRecording(false, '录音模式已切换').then(() => {
                     if (voiceRecordingMode === 'asr' && previousMode !== 'asr'
                         && isAlwaysListening && !isListening
-                        && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused) {
+                        && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused
+                        && !globalRecordingPaused) {
                         void startVoiceRecording();
                     }
                 });
@@ -5430,7 +6019,8 @@
                 return;
             }
             if (previousMode !== 'asr' && isAlwaysListening && !isListening
-                && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused) {
+                && voiceListeningEnabled && voiceSupported && !ttsRecordingPaused
+                && !globalRecordingPaused) {
                 void startVoiceRecording();
             }
         }
@@ -5589,11 +6179,13 @@
                 durationMs: Math.min(Date.now() - session.startedAt, session.maxDurationMs),
                 completed: completed && !resultError,
                 audioData,
-                error: resultError
+                error: resultError,
+                discard: error === '全局录音已暂停'
             });
         }
 
         async function startDisplayRecording(session) {
+            if (globalRecordingPaused) throw new Error('全局录音已暂停');
             releaseVoiceRecordingResources();
             micStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
@@ -5603,6 +6195,7 @@
                     sampleRate: 16000
                 }
             });
+            if (globalRecordingPaused) throw new Error('全局录音已暂停');
             const captureOptions = session.mode === 'realtime'
                 ? {
                     segmentMode: false,
@@ -5645,8 +6238,19 @@
             if (!requestId) return;
             if (data.action === 'stop') {
                 if (displayRecordingSession?.requestId === requestId) {
-                    await finalizeDisplayRecording(true);
+                    await finalizeDisplayRecording(data.discard !== true, data.reason || null);
                 }
+                return;
+            }
+            if (globalRecordingPaused) {
+                sendDisplayRecordingMessage({
+                    type: 'displayRecordingResult',
+                    requestId,
+                    mode,
+                    completed: false,
+                    error: '全局录音已暂停',
+                    discard: true
+                });
                 return;
             }
             if (data.action !== 'start' || mode === 'asr') {
@@ -5721,6 +6325,7 @@
         // VAD 检测到一段语音结束后，只清空当前 WAV 缓冲并重新开始采集，不创建新的编码器。
         async function finishVoiceSegment() {
             if (!isListening || !pcmCapture) return;
+            if (globalRecordingPaused) return;
             if (activeRecordingPurpose === 'single') {
                 await finalizeDisplayRecording(true);
                 return;
@@ -5741,6 +6346,7 @@
 
         async function startVoiceRecording() {
             if (!displayPageActive || isListening || voiceRecordingMode !== 'asr') return;
+            if (globalRecordingPaused) return;
 
             if (ttsRecordingPaused) {
                 console.log('[语音] TTS 播放中，暂不恢复录音');
@@ -5933,6 +6539,7 @@
         }
 
         async function sendAudioForRecognition(audioBlob, timing = {}) {
+            if (globalRecordingPaused) return;
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.wav');
@@ -6032,13 +6639,20 @@
                 const result = JSON.parse(nativeBridge.voiceprintDiarize(pcmBase64));
                 sendAsrResult(data.requestId, {
                     segments: result.segments || [],
-                    error: result.error || ''
+                    error: result.error || '',
+                    asrElapsedMs: result.asrElapsedMs,
+                    voiceprintElapsedMs: result.voiceprintElapsedMs
                 });
                 return;
             }
             const result = JSON.parse(nativeBridge.asrRecognize(pcmBase64));
             if (!useVoiceprint) {
-                sendAsrResult(data.requestId, { text: result.text || '', error: result.error || '' });
+                sendAsrResult(data.requestId, {
+                    text: result.text || '',
+                    error: result.error || '',
+                    asrElapsedMs: result.asrElapsedMs,
+                    voiceprintElapsedMs: result.voiceprintElapsedMs
+                });
                 return;
             }
             const voiceprint = JSON.parse(nativeBridge.voiceprintMatch(pcmBase64));
@@ -6051,6 +6665,8 @@
                 response.similarityScore = voiceprint.similarityScore;
                 response.threshold = voiceprint.threshold;
             }
+            response.asrElapsedMs = result.asrElapsedMs;
+            response.voiceprintElapsedMs = voiceprint.voiceprintElapsedMs;
             sendAsrResult(data.requestId, response);
         }
 

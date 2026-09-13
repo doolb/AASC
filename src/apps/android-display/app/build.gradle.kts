@@ -1,5 +1,19 @@
 import java.util.Properties
 
+// 离线包使用同一套源码和依赖，通过 Gradle 属性切换独立包名；普通构建不传属性时保持原行为。
+val offlineBuild = project.findProperty("aascOffline")
+    ?.toString()
+    ?.equals("true", ignoreCase = true) == true
+val mnnRoot = project.findProperty("aascMnnRoot")
+    ?.toString()
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("AASC_MNN_ROOT")?.trim()?.takeIf { it.isNotEmpty() }
+    ?: error("缺少固定 AASC_MNN_ROOT；请先设置官方 MNN checkout 路径，再运行 npm run prepare:mnnllm-android")
+check(!System.getenv("AASC_MNN_REVISION").isNullOrBlank()) {
+    "缺少固定 AASC_MNN_REVISION；请先锁定官方 MNN revision，再运行 npm run prepare:mnnllm-android"
+}
+
 // AGP 9.0+ 内置 Kotlin 支持，无需 org.jetbrains.kotlin.android 插件
 plugins {
     id("com.android.application")
@@ -60,15 +74,24 @@ android {
     compileSdk = 34
 
    defaultConfig {
-        applicationId = "com.aasc.display"
+        applicationId = if (offlineBuild) "com.aasc.display.offline" else "com.aasc.display"
         // Microsoft Embedded Speech SDK -> azure-core 1.58.1 使用 MethodHandle，D8 要求 Android 8.0+
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-       versionName = "0.1.0"
+       versionName = if (offlineBuild) "0.1.0-offline" else "0.1.0"
+        manifestPlaceholders["appLabel"] = if (offlineBuild) "AASC 显示端 Offline" else "AASC 显示端"
+        resValue("bool", "aasc_offline_mode", offlineBuild.toString())
         // Microsoft Embedded Speech SDK 仅提供 arm64-v8a 原生库
         ndk {
             abiFilters += "arm64-v8a"
+        }
+        // CMake 参数属于 defaultConfig.externalNativeBuild，而不是用于绑定
+        // CMakeLists.txt 的 android.externalNativeBuild 配置块。
+        externalNativeBuild {
+            cmake {
+                arguments += listOf("-DAASC_MNN_ROOT=$mnnRoot")
+            }
         }
    }
 
@@ -91,6 +114,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    buildFeatures {
+        resValues = true
     }
     // AGP 9 内置 Kotlin：jvmTarget 跟随 compileOptions（默认对齐），无需额外配置
     externalNativeBuild {

@@ -77,6 +77,9 @@ function createCpuAffinitySandbox(options = {}) {
         ttsBigCoreCountInput: createInput('1'),
         ttsLittleCoreCountInput: createInput('1'),
         ttsPreferBigCoreInput: createInput(''),
+        llmBigCoreCountInput: createInput('2'),
+        llmLittleCoreCountInput: createInput('0'),
+        llmPreferBigCoreInput: createInput('true'),
         cpuAffinityStatus: createInput(''),
         cpuAffinitySaveBtn: createButton(options.saveButtonOnclickCode || '')
     }, options.elements || {});
@@ -165,15 +168,18 @@ function createWebSocketSandbox(cpuAffinityChangedCalls) {
     return sandbox.window.WebSocketManager;
 }
 
-test('控制页提供 ASR/TTS 大小核数量输入且默认值为 1', () => {
+test('控制页提供 ASR/TTS/LLM 大小核数量输入', () => {
     const html = read(UPLOAD_HTML);
 
     assert.match(html, /id="asrBigCoreCountInput"[\s\S]*value="1"/);
     assert.match(html, /id="asrLittleCoreCountInput"[\s\S]*value="1"/);
     assert.match(html, /id="ttsBigCoreCountInput"[\s\S]*value="1"/);
     assert.match(html, /id="ttsLittleCoreCountInput"[\s\S]*value="1"/);
+    assert.match(html, /id="llmBigCoreCountInput"[\s\S]*value="2"/);
+    assert.match(html, /id="llmLittleCoreCountInput"[\s\S]*value="0"/);
     assert.match(html, /id="asrPreferBigCoreInput"/);
     assert.match(html, /id="ttsPreferBigCoreInput"/);
+    assert.match(html, /id="llmPreferBigCoreInput"[^>]*checked/);
     assert.match(html, /id="cpuAffinityStatus"/);
 });
 
@@ -216,7 +222,8 @@ test('CpuAffinitySettings 保存时会规范化非负整数，并保证每个引
     assert.equal(fetchCalls[0].method, 'POST');
     assert.deepEqual(JSON.parse(fetchCalls[0].body), {
         asr: { bigCoreCount: 0, littleCoreCount: 1, preferBigCores: false },
-        tts: { bigCoreCount: 3, littleCoreCount: 0, preferBigCores: false }
+        tts: { bigCoreCount: 3, littleCoreCount: 0, preferBigCores: false },
+        llm: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: false }
     });
 });
 
@@ -244,10 +251,14 @@ test('CpuAffinitySettings 会读取服务器配置并在 websocket 广播后刷�
     assert.equal(elements.ttsBigCoreCountInput.value, '1');
     assert.equal(elements.ttsLittleCoreCountInput.value, '4');
     assert.equal(elements.ttsPreferBigCoreInput.checked, false);
+    assert.equal(elements.llmBigCoreCountInput.value, '2');
+    assert.equal(elements.llmLittleCoreCountInput.value, '0');
+    assert.equal(elements.llmPreferBigCoreInput.checked, true);
 
     settings.handleConfigChanged({
         asr: { bigCoreCount: 5, littleCoreCount: 0, preferBigCores: false },
-        tts: { bigCoreCount: 0, littleCoreCount: 2, preferBigCores: true }
+        tts: { bigCoreCount: 0, littleCoreCount: 2, preferBigCores: true },
+        llm: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: true }
     });
 
     assert.equal(elements.asrBigCoreCountInput.value, '5');
@@ -267,7 +278,8 @@ test('Tts.init 只为保存按钮保留一个绑定，且每次点击只发一�
                     status: 'success',
                     cpuAffinity: {
                         asr: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
-                        tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false }
+                        tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
+                        llm: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: true }
                     }
                 };
             }
@@ -301,7 +313,8 @@ test('控制端 websocket 收到 cpuAffinityChanged 时转交给 CpuAffinitySett
     const manager = createWebSocketSandbox(calls);
     const cpuAffinity = {
         asr: { bigCoreCount: 2, littleCoreCount: 1, preferBigCores: true },
-        tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false }
+        tts: { bigCoreCount: 1, littleCoreCount: 3, preferBigCores: false },
+        llm: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: true }
     };
 
     manager.handleMessage({

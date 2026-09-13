@@ -14,6 +14,11 @@
         recordingName: '',
         speakers: {},
         conversationConfirmationMode: 'off',
+        voiceConversationConfig: {
+            temporaryWindowSeconds: 30,
+            conversationWindowSeconds: 180,
+            addressedGroupMode: 'temporary'
+        },
 
         init() {
             document.getElementById('vpNameInput').addEventListener('keydown', e => {
@@ -38,6 +43,8 @@
             this.refreshList();
             this.bindRemoveDelegation();
             this.renderConversationConfirmationPanel();
+            this.renderConversationWindowPanel();
+            this.requestConversationWindowConfig();
         },
 
         renderConversationConfirmationPanel() {
@@ -85,6 +92,100 @@
             if (!['off', 'manual', 'auto'].includes(data?.mode)) return;
             this.conversationConfirmationMode = data.mode;
             this.renderConversationConfirmationPanel();
+        },
+
+        renderConversationWindowPanel() {
+            const panel = document.getElementById('voiceConversationWindowPanel');
+            if (!panel) return;
+            const temporary = this.voiceConversationConfig.temporaryWindowSeconds;
+            const conversation = this.voiceConversationConfig.conversationWindowSeconds;
+            const addressedGroupMode = this.voiceConversationConfig.addressedGroupMode === 'oneShot'
+                ? 'oneShot'
+                : 'temporary';
+            panel.innerHTML = `
+                <label style="display:block;margin-top:8px;font-size:13px;">
+                    角色名+内容
+                    <select data-voice-conversation-mode style="margin-left:6px;padding:3px 5px;">
+                        <option value="temporary"${addressedGroupMode === 'temporary' ? ' selected' : ''}>临时模式</option>
+                        <option value="oneShot"${addressedGroupMode === 'oneShot' ? ' selected' : ''}>一次性群聊</option>
+                    </select>
+                </label>
+                <label style="display:block;margin-top:8px;font-size:13px;">
+                    临时对话窗口
+                    <input type="number" min="1" max="3600" step="1" data-voice-conversation-window="temporary" value="${temporary}"
+                        style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 秒
+                </label>
+                <label style="display:block;margin-top:8px;font-size:13px;">
+                    群聊/私聊窗口
+                    <input type="number" min="1" max="3600" step="1" data-voice-conversation-window="conversation" value="${conversation}"
+                        style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 秒
+                </label>
+            `;
+            if (panel.dataset.bound) return;
+            panel.dataset.bound = '1';
+            panel.addEventListener('change', (event) => {
+                const mode = event.target.closest('[data-voice-conversation-mode]');
+                if (mode) {
+                    this.setAddressedGroupMode(mode.value);
+                    return;
+                }
+                const input = event.target.closest('[data-voice-conversation-window]');
+                if (!input) return;
+                this.setConversationWindowConfig(input.dataset.voiceConversationWindow, input.value);
+            });
+        },
+
+        setAddressedGroupMode(mode) {
+            if (!['temporary', 'oneShot'].includes(mode)) return false;
+            const next = { ...this.voiceConversationConfig, addressedGroupMode: mode };
+            this.voiceConversationConfig = next;
+            this.renderConversationWindowPanel();
+            if (!window.WebSocketManager?.ws || window.WebSocketManager.ws.readyState !== WebSocket.OPEN) {
+                if (window.showToast) window.showToast('语音对话配置发送失败：控制端未连接', 'error');
+                return false;
+            }
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setVoiceConversationConfig',
+                ...next
+            }));
+            return true;
+        },
+
+        requestConversationWindowConfig() {
+            if (!window.WebSocketManager?.ws || window.WebSocketManager.ws.readyState !== WebSocket.OPEN) return;
+            window.WebSocketManager.ws.send(JSON.stringify({ type: 'getVoiceConversationConfig' }));
+        },
+
+        setConversationWindowConfig(kind, value) {
+            if (!['temporary', 'conversation'].includes(kind)) return false;
+            const seconds = Math.round(Math.min(3600, Math.max(1, Number(value))));
+            if (!Number.isFinite(seconds)) return false;
+            const next = { ...this.voiceConversationConfig };
+            if (kind === 'temporary') next.temporaryWindowSeconds = seconds;
+            if (kind === 'conversation') next.conversationWindowSeconds = seconds;
+            this.voiceConversationConfig = next;
+            this.renderConversationWindowPanel();
+            if (!window.WebSocketManager?.ws || window.WebSocketManager.ws.readyState !== WebSocket.OPEN) {
+                if (window.showToast) window.showToast('语音对话窗口配置发送失败：控制端未连接', 'error');
+                return false;
+            }
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setVoiceConversationConfig',
+                ...next
+            }));
+            return true;
+        },
+
+        handleConversationWindowConfig(data) {
+            const temporary = Number(data?.temporaryWindowSeconds);
+            const conversation = Number(data?.conversationWindowSeconds);
+            if (!Number.isFinite(temporary) || !Number.isFinite(conversation)) return;
+            this.voiceConversationConfig = {
+                temporaryWindowSeconds: Math.round(Math.min(3600, Math.max(1, temporary))),
+                conversationWindowSeconds: Math.round(Math.min(3600, Math.max(1, conversation))),
+                addressedGroupMode: data?.addressedGroupMode === 'oneShot' ? 'oneShot' : 'temporary'
+            };
+            this.renderConversationWindowPanel();
         },
 
         // 委托点击：读取 data-name 删除（避免内联 onclick 的用户输入注入）

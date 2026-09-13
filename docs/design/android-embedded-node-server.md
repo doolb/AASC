@@ -57,9 +57,9 @@ Node.js 服务器运行包必须在构建时生成并校验，运行时只从 AP
 
 ## 构建输入边界
 
-`npm run prepare:android-node` 要求显式传入：
+`npm run prepare:android-node` 默认使用项目内 `3rd/android-node-runtime/arm64-v8a` 的 Android Node Runtime；如需替换版本，可通过环境变量覆盖。构建仍要求传入：
 
-- `AASC_ANDROID_NODE_RUNTIME_DIR`：包含 `node` 和 arm64 动态库的目录；每个动态库必须是实体文件，不能是软链接。
+- `AASC_ANDROID_NODE_RUNTIME_DIR`（可选）：用于覆盖项目内默认 Runtime；目录包含 `node` 和 arm64 动态库，每个动态库必须是实体文件，不能是软链接。构建前必须存在 `lib/libz.so.1`、`lib/libcares.so`、`lib/libsqlite3.so`、`lib/libffi.so`、`lib/libcrypto.so.3`、`lib/libssl.so.3`、`lib/libicui18n.so.78`、`lib/libicuuc.so.78` 和 `lib/libicudata.so.78`，避免生成安装后无法启动的 APK。
 - `AASC_ANDROID_NODE_PACKAGE_DIR`：只包含 `src/`、`package.json`、`package-lock.json` 和 Android 可用的生产 `node_modules`。
 - `AASC_ANDROID_NODE_CERT_DIR`：可选，只复制 `cert.pem`、`key.pem`。
 

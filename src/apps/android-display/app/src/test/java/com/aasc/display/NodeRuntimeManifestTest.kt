@@ -80,6 +80,49 @@ class NodeRuntimeManifestTest {
         }
     }
 
+    @Test
+    fun 离线Runtime快速复用时检查离线模型元数据和文件大小() {
+        val root = Files.createTempDirectory("aasc-offline-runtime-fast-path").toFile()
+        try {
+            File(root, ".runtime-version").writeText("dev")
+            File(root, "src/apps/server/boot/server-launcher.js").apply {
+                parentFile?.mkdirs()
+                writeText("launcher")
+            }
+            File(root, "package.json").writeText("{}")
+            File(root, "package-lock.json").writeText("{}")
+            File(root, "runtime/arm64-v8a/lib/libcrypto.so").apply {
+                parentFile?.mkdirs()
+                writeText("library")
+            }
+            File(root, "res/models/sensevoice/model.int8.onnx").apply {
+                parentFile?.mkdirs()
+                writeText("model")
+            }
+            File(root, "offline-model-manifest.json").writeText(
+                """{"files":[{"path":"res/models/sensevoice/model.int8.onnx","size":5}]}"""
+            )
+
+            assertTrue(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
+            File(root, "res/models/sensevoice/model.int8.onnx").appendText("broken")
+            assertFalse(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun 用户任务目录不存在时才允许首次播种() {
+        val root = Files.createTempDirectory("aasc-task-seed").toFile()
+        try {
+            assertTrue(NodeRuntimeInstaller.shouldSeedTaskDirectory(root))
+            File(root, "res/tasks").mkdirs()
+            assertFalse(NodeRuntimeInstaller.shouldSeedTaskDirectory(root))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     private fun testManifest(launcherSize: Long): NodeRuntimeManifest {
         return NodeRuntimeManifest(
             version = "dev",

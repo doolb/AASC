@@ -16,13 +16,28 @@ const voiceCommand = read(VOICE_COMMAND);
 
 assert.match(
     server,
-    /async function sendVoiceInputTts\(text(?:, playbackOptions = \{\})?\)[\s\S]*?generateTtsWithFallback\(text[\s\S]*?getOnlineVoicePlaybackDisplayIds\(\)/,
-    '显示端语音 TTS 应通过服务端通用生成和语音播放目标列表，必要时支持来源显示端'
+    /async function sendVoiceInputTts\(text(?:, playbackOptions = \{\})?\)[\s\S]*?generateTtsWithFallback\(\s*text[\s\S]*?resolveCurrentVoicePlaybackTarget\(/,
+    '显示端语音 TTS 应通过服务端通用生成和来源优先的唯一播放目标'
 );
 assert.match(
     server,
-    /onTts: isDisplayVoiceInput[\s\S]*?sendVoiceInputTts\(text(?:, targetDisplayId)?\)/,
-    '显示端语音输入应注入通用 TTS 回调，控制端播放回调保持独立'
+    /onTts: isDisplayVoiceInput[\s\S]*?sendVoiceInputTts\(text,\s*\{[\s\S]*?preferredDisplayId:\s*targetDisplayId/,
+    '显示端语音输入应注入来源端优先的单目标 TTS 回调，控制端播放回调保持独立'
+);
+assert.match(
+    server,
+    /resolveCurrentVoicePlaybackTarget\(preferredDisplayId\)/,
+    '语音输入 TTS 应按来源端优先、在线能力兜底动态选择唯一播放目标'
+);
+assert.match(
+    server,
+    /voiceConversationDisplayId:\s*voiceOriginDisplayId\s*\|\|\s*displayId/u,
+    '语音聊天回复 TTS 应关联原始会话显示端，避免备用播放端暂停错倒计时'
+);
+assert.match(
+    server,
+    /rememberVoicePlaybackTarget\(preferredDisplayId, targetDisplayId\)/,
+    '语音输入 TTS 应记录实际播放目标供停止命令使用'
 );
 assert.match(
     voiceCommand,

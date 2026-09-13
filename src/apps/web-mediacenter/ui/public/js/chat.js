@@ -1,5 +1,15 @@
 const Chat = {
     history: [],
+    temporaryConversation: {
+        id: null,
+        startedAt: null,
+        displayId: null,
+        roleName: null,
+        templateId: null,
+        messages: []
+    },
+    temporaryRoleSelection: '',
+    temporaryRolePending: false,
     templates: [],
     config: {
         systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
@@ -53,6 +63,8 @@ const Chat = {
     profiles: [],
     activeProfile: '',
     editingTemplateName: null,
+    // 图片只保留在当前待发送消息中，实时预览帧不会进入这里。
+    pendingImages: [],
 
     init() {
         this.loadHistory();
@@ -76,6 +88,7 @@ const Chat = {
         this.loadCommands();
         this.loadBuiltinCommands();
         this.loadProfiles();
+        this.requestTemporaryConversation();
     },
     
     async initVoiceRecognition() {
@@ -596,6 +609,38 @@ const Chat = {
         }
     },
 
+    requestTemporaryConversation() {
+        if (window.WebSocketManager?.ws?.readyState !== WebSocket.OPEN) return;
+        window.WebSocketManager.ws.send(JSON.stringify({ type: 'getTemporaryConversation' }));
+    },
+
+    handleTemporaryConversation(data) {
+        if (!data || !data.conversation) return;
+        const conversation = data.conversation;
+        this.temporaryConversation = {
+            id: conversation.id || null,
+            startedAt: conversation.startedAt || null,
+            displayId: conversation.displayId || null,
+            roleName: conversation.roleName || null,
+            templateId: conversation.templateId || null,
+            messages: Array.isArray(conversation.messages) ? conversation.messages : []
+        };
+        this.temporaryRoleSelection = this.temporaryConversation.roleName || '';
+        this.temporaryRolePending = false;
+        this.renderModeIndicator();
+        this.renderSessionSelector();
+        this.updateSendButton();
+        if (this.session.mode === 'temporary') this.renderHistory();
+    },
+
+    handleTemporaryConversationError(data) {
+        this.temporaryRolePending = false;
+        this.temporaryRoleSelection = this.temporaryConversation.roleName || '';
+        this.renderSessionSelector();
+        this.updateSendButton();
+        window.showToast(data?.message || '临时对话角色切换失败', 'error');
+    },
+
     // 加载角色列表（WS roleList）
     loadAiRoles() {
         if (window.WebSocketManager && window.WebSocketManager.ws && window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
@@ -747,6 +792,7 @@ const Chat = {
         if (!container) return;
         
         let tabsHtml = '<div class="chat-tabs"><div class="chat-tab' + (this.session.mode === 'group' ? ' active' : '') + '" data-chat-tab="group">群聊</div>';
+        tabsHtml += '<div class="chat-tab' + (this.session.mode === 'temporary' ? ' active' : '') + '" data-chat-tab="temporary">临时</div>';
         this.templates.forEach(t => {
             const isActive = this.session.mode === 'private' && this.session.privateTarget === t.name;
             tabsHtml += `<div class="chat-tab${isActive ? ' active' : ''}" onclick="Chat.setMode('private', '${this.escapeHtml(t.name)}')">${this.escapeHtml(t.name)}</div>`;
@@ -779,9 +825,12 @@ const Chat = {
                 <div class="chat-input-area">
                     <div class="chat-input-row">
                         <button id="voiceInputBtn" class="voice-input-btn" onclick="Chat.toggleVoice()" title="开始语音输入">🎤</button>
-                        <input type="text" id="chatInput" placeholder="输入消息... (说"聊天xxx"触发语音对话)" onkeypress="Chat.handleKeyPress(event)">
+                        <button type="button" class="chat-image-btn" onclick="Chat.selectImageFile()" title="添加图片">🖼️</button>
+                        <input type="file" id="chatImageInput" accept="image/*" style="display:none" onchange="Chat.handleImageFile(this.files[0]); this.value=''">
+                        <input type="text" id="chatInput" placeholder="输入消息... (说“聊天xxx”触发语音对话)" onkeypress="Chat.handleKeyPress(event)">
                         <button class="chat-send-btn" onclick="Chat.sendMessage()" id="chatSendBtn">发送</button>
                     </div>
+                    <div class="chat-image-preview-list" id="chatImagePreview"></div>
                     <div class="chat-options">
                         <label class="chat-option">
                             <input type="checkbox" id="playOnControlCheckbox" onchange="Chat.togglePlayOnControl()">
@@ -802,6 +851,10 @@ const Chat = {
             // 群聊页签必须主动清理私聊/工作组状态，否则页签只显示但不会切换上下文。
             groupTab.addEventListener('click', () => this.setMode('group', null));
         }
+        const temporaryTab = tabs.querySelector('[data-chat-tab="temporary"]');
+        if (temporaryTab) {
+            temporaryTab.addEventListener('click', () => this.setMode('temporary', null));
+        }
         tabs.querySelectorAll('[data-role-tab]').forEach((tab) => {
             const name = tab.dataset.roleTab;
             const role = this.aiRoles.find((item) => item.name === name);
@@ -816,10 +869,21 @@ const Chat = {
             del.addEventListener('click', (event) => { event.stopPropagation(); this.deleteRole(name); }); tab.appendChild(del);
         });
         const add = tabs.querySelector('[data-add-role]'); if (add) { add.addEventListener('click', () => this.showAddRole()); }
+        const chatInput = container.querySelector('#chatInput');
+        const chatSendButton = container.querySelector('#chatSendBtn');
+        if (chatInput) {
+            // 临时页签与普通聊天一样允许手动输入；消息由服务端归并到唯一临时会话。
+            chatInput.disabled = false;
+            chatInput.placeholder = this.session.mode === 'temporary'
+                ? '输入临时对话消息...'
+                : '输入消息... (说"聊天xxx"触发语音对话)';
+        }
+        if (chatSendButton) chatSendButton.disabled = false;
         this.renderHistory();
         this.renderModeIndicator();
         this.renderPlayOnControlToggle();
         this.renderSessionSelector();
+        this.updateSendButton();
         this.renderSearchHistory();
     },
 
@@ -869,6 +933,9 @@ const Chat = {
                 <span class="mode-badge private">私聊: ${this.escapeHtml(this.session.privateTarget)}</span>
                 <button class="mode-exit-btn" onclick="Chat.setMode('group', null)">退出私聊</button>
             `;
+        } else if (this.session.mode === 'temporary') {
+            const roleName = this.temporaryConversation.roleName || '未选择角色';
+            html += `<span class="mode-badge group">临时对话 · ${this.escapeHtml(roleName)}</span>`;
         } else {
             html += '<span class="mode-badge group">群聊</span>';
         }
@@ -893,6 +960,26 @@ const Chat = {
     renderSessionSelector() {
         const container = document.getElementById('chatSessionSelector');
         if (!container) return;
+
+        if (this.session.mode === 'temporary') {
+            const roleTemplates = this.templates.filter(template => (
+                template && template.name && String(template.content || '').trim()
+            ));
+            const selectedRole = this.temporaryRoleSelection || this.temporaryConversation.roleName || '';
+            container.style.display = 'flex';
+            let html = '<label class="session-label">角色:</label>';
+            html += '<select class="session-select" onchange="Chat.onTemporaryRoleChange(this.value)"' + (this.temporaryRolePending ? ' disabled' : '') + '>';
+            html += '<option value="">请选择角色</option>';
+            for (const template of roleTemplates) {
+                const selected = template.name === selectedRole ? ' selected' : '';
+                html += `<option value="${this.escapeHtml(template.name)}"${selected}>${this.escapeHtml(template.name)}</option>`;
+            }
+            html += '</select>';
+            const canRestart = Boolean(selectedRole) && !this.temporaryRolePending;
+            html += `<button class="session-btn session-add" onclick="Chat.startTemporaryConversation()" title="重新开始当前角色临时对话"${canRestart ? '' : ' disabled'}>↻</button>`;
+            container.innerHTML = html;
+            return;
+        }
 
         const target = this.session.privateTarget;
         if (this.session.mode !== 'private' || !target) {
@@ -920,6 +1007,40 @@ const Chat = {
         container.innerHTML = html;
     },
 
+    onTemporaryRoleChange(roleName) {
+        const normalizedRoleName = String(roleName || '').trim();
+        if (!normalizedRoleName) {
+            this.temporaryRoleSelection = '';
+            this.updateSendButton();
+            return;
+        }
+        this.temporaryRoleSelection = normalizedRoleName;
+        this.startTemporaryConversation(normalizedRoleName);
+    },
+
+    startTemporaryConversation(roleName = null) {
+        const selectedRole = String(
+            roleName || this.temporaryRoleSelection || this.temporaryConversation.roleName || ''
+        ).trim();
+        if (!selectedRole) {
+            window.showToast('请先选择临时对话角色', 'warning');
+            return;
+        }
+        if (window.WebSocketManager?.ws?.readyState !== WebSocket.OPEN) {
+            window.showToast('临时对话角色切换失败：控制端未连接', 'error');
+            return;
+        }
+        this.temporaryRoleSelection = selectedRole;
+        this.temporaryRolePending = true;
+        this.renderSessionSelector();
+        this.updateSendButton();
+        window.WebSocketManager.ws.send(JSON.stringify({
+            type: 'startTemporaryConversation',
+            roleName: selectedRole,
+            displayId: window.currentDisplayId || null
+        }));
+    },
+
     onSessionChange(sessionId) {
         if (sessionId === this.session.privateSessionId) return;
         this.switchSession(sessionId);
@@ -930,7 +1051,10 @@ const Chat = {
         if (!messagesContainer) return;
         
         let indexedHistory = [];
-        if (this.session.mode === 'role' && this.session.roleTarget) {
+        if (this.session.mode === 'temporary') {
+            indexedHistory = this.temporaryConversation.messages
+                .map((item, index) => ({ item, originalIndex: index }));
+        } else if (this.session.mode === 'role' && this.session.roleTarget) {
             // 角色模式：渲染该角色独立历史，与群聊/私聊隔离
             indexedHistory = (this.roleHistories[this.session.roleTarget] || []).map((item, index) => ({ item, originalIndex: index }));
         } else {
@@ -942,7 +1066,7 @@ const Chat = {
                 );
             } else {
                 indexedHistory = indexedHistory.filter(({ item }) =>
-                    item.mode !== 'private' && item.mode !== 'role'
+                    item.mode !== 'private' && item.mode !== 'role' && item.mode !== 'temporary'
                 );
             }
         }
@@ -977,7 +1101,7 @@ const Chat = {
                 content = item.assistant;
             }
 
-            const canDeleteRound = this.session.mode !== 'role'
+            const canDeleteRound = !['role', 'temporary'].includes(this.session.mode)
                 && Boolean(item.id)
                 && (roleClass === 'user' || item.user !== undefined);
             const deleteButton = canDeleteRound
@@ -987,7 +1111,7 @@ const Chat = {
             return `
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
-                    <div class="chat-message-content">${ChatMarkdown.render(content)}</div>
+                    <div class="chat-message-content">${this.renderMessageImages(item.images)}${ChatMarkdown.render(content)}</div>
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                     ${deleteButton}
                 </div>
@@ -1066,13 +1190,95 @@ const Chat = {
         });
     },
     
+    selectImageFile() {
+        const input = document.getElementById('chatImageInput');
+        if (input) input.click();
+    },
+
+    async handleImageFile(file) {
+        if (!file || !file.type.startsWith('image/')) return;
+        try {
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('图片读取失败'));
+                reader.readAsDataURL(file);
+            });
+            this.attachImage({ dataUrl, mimeType: file.type });
+        } catch (error) {
+            if (window.showToast) window.showToast(error.message, 'error');
+        }
+    },
+
+    attachImage(image) {
+        const dataUrl = String(image?.dataUrl || '');
+        const mimeType = String(image?.mimeType || '').toLowerCase();
+        if (!dataUrl.startsWith('data:image/') || !mimeType.startsWith('image/')) {
+            if (window.showToast) window.showToast('图片格式不正确', 'error');
+            return false;
+        }
+        if (dataUrl.length > 8 * 1024 * 1024) {
+            if (window.showToast) window.showToast('图片不能超过 8MB', 'error');
+            return false;
+        }
+        if (this.pendingImages.length >= 4) {
+            if (window.showToast) window.showToast('单条消息最多添加 4 张图片', 'error');
+            return false;
+        }
+        this.pendingImages.push({ dataUrl, mimeType, sourceDisplayId: image.sourceDisplayId || null });
+        this.renderPendingImages();
+        return true;
+    },
+
+    removeImage(index) {
+        this.pendingImages.splice(index, 1);
+        this.renderPendingImages();
+    },
+
+    renderPendingImages() {
+        const container = document.getElementById('chatImagePreview');
+        if (!container) return;
+        container.innerHTML = '';
+        this.pendingImages.forEach((image, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chat-image-preview-item';
+            const preview = document.createElement('img');
+            preview.src = image.dataUrl;
+            preview.alt = `待发送图片 ${index + 1}`;
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'chat-image-remove';
+            remove.textContent = '×';
+            remove.title = '移除图片';
+            remove.addEventListener('click', () => this.removeImage(index));
+            wrapper.append(preview, remove);
+            container.appendChild(wrapper);
+        });
+    },
+
+    renderMessageImages(images) {
+        if (!Array.isArray(images) || images.length === 0) return '';
+        return `<div class="chat-message-images">${images.map((image) => {
+            const dataUrl = this.escapeHtml(image.dataUrl || image.url || '');
+            return dataUrl ? `<img src="${dataUrl}" alt="聊天图片">` : '';
+        }).join('')}</div>`;
+    },
+
     sendMessage() {
         if (this.isLoading) return;
+
+        if (this.session.mode === 'temporary'
+            && (this.temporaryRolePending
+                || !this.temporaryConversation.id
+                || !this.temporaryConversation.roleName)) {
+            window.showToast('请先选择并等待临时对话角色生效', 'warning');
+            return;
+        }
         
         const input = document.getElementById('chatInput');
         let message = input.value.trim();
         
-        if (!message) return;
+        if (!message && this.pendingImages.length === 0) return;
         
         if (this.session.mode === 'private') {
             const systemResult = this.handleSystemCommand(message);
@@ -1109,6 +1315,10 @@ const Chat = {
         this.activeRequestId = requestId;
         this.isLoading = true;
         this.currentStreamingMessage = '';
+        const images = this.pendingImages.map((image) => ({
+            dataUrl: image.dataUrl,
+            mimeType: image.mimeType
+        }));
         this.currentUserMessage = displayMessage;
         this.updateSendButton();
 
@@ -1125,7 +1335,7 @@ const Chat = {
         } else if (templateTarget) {
             assistantName = templateTarget;
         }
-        this.showStreamingMessage(displayMessage, assistantName);
+        this.showStreamingMessage(displayMessage, assistantName, images);
         
         if (window.WebSocketManager && window.WebSocketManager.ws && 
             window.WebSocketManager.ws.readyState === WebSocket.OPEN) {
@@ -1134,6 +1344,7 @@ const Chat = {
                 type: 'chatMessage',
                 requestId,
                 content: sendMessage,
+                images: images,
                 displayContent: displayMessage,
                 mode: mode,
                 assistantType: mode === 'role' ? 'agent' : 'llm',
@@ -1142,8 +1353,16 @@ const Chat = {
                 role: mode === 'role' ? this.session.roleTarget : undefined,
                 templateTarget: templateTarget,
                 sessionId: this.session.privateSessionId || 'default',
+                // 临时页签始终使用服务端唯一会话；旧控制端没有最新 ID 时由服务端补齐。
+                temporaryConversation: mode === 'temporary',
+                temporaryConversationId: mode === 'temporary'
+                    ? (this.temporaryConversation.id || null)
+                    : null,
                 playOnControl: this.session.playOnControl
             };
+
+            this.pendingImages = [];
+            this.renderPendingImages();
             
             if (selectionMode === 'all' || selectionMode === 'adaptive') {
                 const selectedIds = window.DisplayList ? window.DisplayList.getSelectedDisplayIds() : [];
@@ -1346,7 +1565,7 @@ const Chat = {
         this.addSystemMessage(content, type);
     },
     
-    showStreamingMessage(userMessage, assistantName = '助手') {
+    showStreamingMessage(userMessage, assistantName = '助手', images = []) {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) return;
         
@@ -1360,7 +1579,7 @@ const Chat = {
         group.id = 'streamingGroup';
         group.innerHTML = `
             <div class="chat-message-header">用户</div>
-            <div class="chat-message-content">${ChatMarkdown.render(userMessage)}</div>
+            <div class="chat-message-content">${this.renderMessageImages(images)}${ChatMarkdown.render(userMessage)}</div>
         `;
         
         messagesContainer.appendChild(group);
@@ -1412,14 +1631,14 @@ const Chat = {
         const streamingGroup = document.getElementById('streamingGroup');
         const streamingAssistant = document.getElementById('streamingAssistant');
         
-        if (data.success) {
+        if (data.success && !data.temporaryConversation) {
             // 角色模式：历史写入该角色独立历史，避免污染群聊/私聊
             if (this.session.mode === 'role' && this.session.roleTarget) {
                 this.roleHistories[this.session.roleTarget] = data.history;
             } else {
                 this.history = data.history;
             }
-        } else {
+        } else if (!data.success) {
             window.showToast('聊天失败: ' + data.error, 'error');
         }
         
@@ -1442,7 +1661,13 @@ const Chat = {
                 playBtn.title = '播放语音';
                 // 角色模式：播放按钮取该角色独立历史最后一条（历史已写入 roleHistories），
                 // 仍读 this.history 会播放群聊最后一条，造成播错消息
-                if (this.session.mode === 'role' && this.session.roleTarget && this.roleHistories[this.session.roleTarget]) {
+                if (data.temporaryConversation) {
+                    playBtn.onclick = () => this.playMessage({
+                        content: data.message,
+                        displayId: window.currentDisplayId,
+                        playOnControl: this.session.playOnControl
+                    });
+                } else if (this.session.mode === 'role' && this.session.roleTarget && this.roleHistories[this.session.roleTarget]) {
                     playBtn.onclick = () => this.playMessage(this.roleHistories[this.session.roleTarget].length - 1);
                 } else {
                     playBtn.onclick = () => this.playMessage(this.history.length - 1);
@@ -1478,7 +1703,9 @@ const Chat = {
             // 按当前模式取历史数组：角色模式读该角色独立历史（renderHistory 的下标来自 roleHistories），
             // 其余模式读群聊历史，避免下标错位播错消息
             let history;
-            if (this.session.mode === 'role' && this.session.roleTarget) {
+            if (this.session.mode === 'temporary') {
+                history = this.temporaryConversation.messages || [];
+            } else if (this.session.mode === 'role' && this.session.roleTarget) {
                 history = this.roleHistories[this.session.roleTarget] || [];
             } else {
                 history = this.history;
@@ -1574,12 +1801,25 @@ const Chat = {
         const btn = document.getElementById('chatSendBtn');
         if (btn) {
             btn.textContent = this.isLoading ? '发送中...' : '发送';
-            btn.disabled = this.isLoading;
+            const temporaryUnavailable = this.session.mode === 'temporary'
+                && (this.temporaryRolePending
+                    || !this.temporaryConversation.id
+                    || !this.temporaryConversation.roleName);
+            btn.disabled = this.isLoading || temporaryUnavailable;
         }
     },
     
     clearHistory() {
         const mode = this.session.mode;
+        if (mode === 'temporary') {
+            if (!confirm('确定要清空当前临时对话吗？')) return;
+            if (window.WebSocketManager?.ws?.readyState !== WebSocket.OPEN) {
+                window.showToast('临时对话清空失败：控制端未连接', 'error');
+                return;
+            }
+            window.WebSocketManager.ws.send(JSON.stringify({ type: 'clearTemporaryConversation' }));
+            return;
+        }
         const target = this.session.privateTarget;
         const sessionId = this.session.privateSessionId;
         let confirmText;
@@ -2028,6 +2268,8 @@ const Chat = {
             assistantName = this.session.privateTarget;
         } else if (data.mode === 'role' && this.session.roleTarget) {
             assistantName = this.session.roleTarget;
+        } else if (data.mode === 'temporary' && this.temporaryConversation.roleName) {
+            assistantName = this.temporaryConversation.roleName;
         }
 
         this.showStreamingMessage(data.content, assistantName);

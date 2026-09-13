@@ -190,3 +190,23 @@ test('修复 Agent TTS 使用动态通用播放端而不是语音来源端', asy
     assert.deepEqual(harness.displayMessages.map((item) => item.displayId), ['display-speaker']);
     assert.equal(harness.displayMessages[0].data.action, 'playAudio');
 });
+
+test('Agent TTS 通过单目标解析器优先来源端并只发送一份音频', async () => {
+    const harness = createHarness({ message: '回复内容。', displayId: 'display-source' });
+    harness.options.resolveDisplayId = () => 'display-source';
+    harness.options.getDisplayIds = () => ['display-source', 'display-backup'];
+
+    await playAgentTts(harness.options);
+
+    assert.deepEqual(harness.displayMessages.map((item) => item.displayId), ['display-source']);
+});
+
+test('Agent TTS 单目标解析不到设备时不回退到没有播放能力的来源端', async () => {
+    const harness = createHarness({ message: '无设备回复。', displayId: 'display-source' });
+    harness.options.resolveDisplayId = () => null;
+    harness.options.getDisplayIds = () => [];
+
+    await playAgentTts(harness.options);
+
+    assert.deepEqual(harness.displayMessages, []);
+});

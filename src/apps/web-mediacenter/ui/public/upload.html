@@ -167,6 +167,14 @@
                 </div>
             </div>
 
+            <div class="section llm-model-section">
+                <h2>LLM 模型</h2>
+                <p class="llm-model-description">只显示当前选中的显示端；模型切换会等待当前推理完成。</p>
+                <div id="llmModelPanel">
+                    <div class="empty-list">请先在上方设备列表中选择显示端</div>
+                </div>
+            </div>
+
             <div class="section voice-vad-section">
                 <h2>监听 VAD / 底噪检测</h2>
                 <p class="voice-vad-description">为每个显示端单独设置监听灵敏度，检测时请保持环境安静。</p>
@@ -259,6 +267,14 @@
                         <span style="font-size:12px;color:rgba(255,255,255,0.55);">小核</span>
                         <input type="number" id="ttsLittleCoreCountInput" min="0" step="1" value="1" style="width:64px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;">
                         <label style="font-size:12px;color:rgba(255,255,255,0.65);"><input type="checkbox" id="ttsPreferBigCoreInput"> 优先大核</label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <span style="font-size:13px;color:rgba(255,255,255,0.75);min-width:36px;">LLM</span>
+                        <span style="font-size:12px;color:rgba(255,255,255,0.55);">大核</span>
+                        <input type="number" id="llmBigCoreCountInput" min="0" step="1" value="2" style="width:64px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;">
+                        <span style="font-size:12px;color:rgba(255,255,255,0.55);">小核</span>
+                        <input type="number" id="llmLittleCoreCountInput" min="0" step="1" value="0" style="width:64px;padding:6px 8px;border:none;border-radius:6px;background:rgba(255,255,255,0.1);color:#fff;">
+                        <label style="font-size:12px;color:rgba(255,255,255,0.65);"><input type="checkbox" id="llmPreferBigCoreInput" checked> 优先大核</label>
                     </div>
                 </div>
                 <div class="control-buttons" style="margin-top:10px;">
@@ -816,6 +832,13 @@
                 <p class="voice-vad-description">全局控制唤醒后的普通语音是否需要确认后再发送到聊天。</p>
                 <div id="voiceConversationConfirmationPanel">
                     <div class="empty-list">正在加载语音确认配置</div>
+                </div>
+            </div>
+            <div class="control-item voiceprint-card voice-conversation-window-settings">
+                <label>语音对话窗口</label>
+                <p class="voice-vad-description">TTS 播放期间窗口倒计时暂停，播放完成后重新计时。</p>
+                <div id="voiceConversationWindowPanel">
+                    <div class="empty-list">正在加载语音对话窗口配置</div>
                 </div>
             </div>
             <div class="control-item voiceprint-card">

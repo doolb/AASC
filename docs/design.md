@@ -26,6 +26,7 @@
 
 | 模块 | 文档 | 说明 |
 |------|------|------|
+| 显示端摄像头与 AI 图片聊天 | [display-camera-chat.md](design/display-camera-chat.md) | 单摄像头拍照、实时预览和聊天图片输入 |
 | 显示端 | [display.md](design/display.md) | 媒体展示、画面适配、旋转裁剪、选择模式 |
 | 显示端代码变化检测远端配置 | [display-version-remote-config.md](design/display-version-remote-config.md) | 控制端通过 AASC 远端配置显示端代码检测间隔 |
 | 控制端 | [control.md](design/control.md) | 媒体管理、显示控制、裁剪预览 |
@@ -62,6 +63,8 @@
 | 显示端录音模式与控制端回放 | [display-recording.md](design/display-recording.md) | ASR、单次录音、实时回传三种模式及控制端播放 |
 | 同一注册声纹跨显示端 ASR 去重 | [same-speaker-asr-dedup.md](design/same-speaker-asr-dedup.md) | 同一说话人被多个显示端同时听到时只保留一次处理 |
 | 全局播放时暂停录音 | [global-voice-playback-recording-pause.md](design/global-voice-playback-recording-pause.md) | 控制端声纹面板统一配置所有显示端播放期间是否暂停普通 ASR |
+| 控制端一键暂停所有录音 | [global-recording-pause.md](design/global-recording-pause.md) | 控制端右下角圆形浮动按钮统一暂停或恢复所有显示端录音 |
+| 天气识别日期 | [weather-command-date.md](design/weather-command-date.md) | 今天、明天、后天天气识别和按日期输出 |
 | 服务端统一处理显示端 ASR 与声纹结果 | [server-side-asr-voice-input-processing.md](design/server-side-asr-voice-input-processing.md) | 服务端合并分段、处理声纹门控和命令，显示端只上传并回显 |
 | 日志筛选与系统监控 | [log-viewer.md](design/log-viewer.md) | 结构化日志缓冲区、多维度筛选、CPU/内存监控 |
 | 日志大脑 | [log-brain.md](design/log-brain.md) | 类人脑日志摘要、模式提取、LLM诊断上下文 |

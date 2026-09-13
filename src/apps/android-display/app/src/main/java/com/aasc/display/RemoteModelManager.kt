@@ -15,7 +15,8 @@ data class RemoteModelFile(
 
 data class RemoteModel(
     val id: String,
-    val files: List<RemoteModelFile>
+    val files: List<RemoteModelFile>,
+    val revision: String = ""
 )
 
 class RemoteModelManifest private constructor(
@@ -38,7 +39,7 @@ class RemoteModelManifest private constructor(
                         ?: throw IllegalStateException("模型 $modelId 缺少 files")
                     val files = parseFiles(modelId, filesJson)
                     require(files.isNotEmpty()) { "模型 $modelId 没有文件" }
-                    add(RemoteModel(modelId, files))
+                    add(RemoteModel(modelId, files, modelJson.optString("revision").trim()))
                 }
             }
             return RemoteModelManifest(models)

@@ -37,8 +37,15 @@
     },
     "device": "display"
   },
+  "llm": {
+    "maxQueueLength": 16,
+    "requestTimeoutMs": 120000
+  },
   "ui": {
     "controlTheme": "girl-pink"
+  },
+  "display": {
+    "versionCheckIntervalMs": 300000
   },
   "cpuAffinity": {
     "asr": {
@@ -49,6 +56,11 @@
     "tts": {
       "bigCoreCount": 1,
       "littleCoreCount": 1,
+      "preferBigCores": false
+    },
+    "llm": {
+      "bigCoreCount": 2,
+      "littleCoreCount": 0,
       "preferBigCores": true
     }
   },
@@ -60,10 +72,15 @@
     "multiMode": "fast",
     "speakerCount": "AUTO",
     "pauseRecordingDuringPlayback": false,
+    "vadSilenceDurationMs": 500,
+    "vadMinSpeechDurationMs": 300,
     "asrResultDetailLog": true
   },
   "voiceCommand": {
     "conversationConfirmationMode": "off",
+    "addressedGroupMode": "temporary",
+    "temporaryConversationWindowMs": 30000,
+    "conversationWindowMs": 180000,
     "defaultWeatherCity": "Chengdu",
     "weatherCities": [
       "北京",

@@ -57,9 +57,35 @@ const WebSocketManager = {
             if (window.TtsDevice) {
                 window.TtsDevice.updateUI();
             }
+        } else if (data.type === 'llm.modelManifest') {
+            if (window.DeviceList) {
+                window.DeviceList.setLlmModelManifest(data);
+            }
+        } else if (data.type === 'llm.statusList') {
+            if (window.DeviceList) {
+                (data.list || []).forEach((status) => {
+                    window.DeviceList.handleLlmStatus({ type: 'llm.status', ...status });
+                });
+            }
+        } else if (data.type === 'llm.status') {
+            if (window.DeviceList) {
+                window.DeviceList.handleLlmStatus(data);
+            }
+        } else if (data.type === 'llm.modelSwitchAccepted') {
+            if (window.showToast) {
+                window.showToast(`${data.displayId} 的 LLM 模型切换已排队`, 'success');
+            }
+        } else if (data.type === 'llm.modelSwitchError') {
+            if (window.showToast) {
+                window.showToast(`LLM 模型切换失败: ${data.message || '未知错误'}`, 'error');
+            }
         } else if (data.type === 'capabilitiesUpdated') {
             if (window.DeviceList) {
                 window.DeviceList.handleCapabilitiesUpdated(data);
+            }
+        } else if (data.type === 'globalRecordingPauseState') {
+            if (window.FloatingControl) {
+                window.FloatingControl.handleGlobalRecordingPauseState(data);
             }
         } else if (data.type === 'capabilitiesUpdateError') {
             if (window.DeviceList) {
@@ -81,6 +107,22 @@ const WebSocketManager = {
             if (window.DeviceList) {
                 window.DeviceList.handleDisplayRecordingResult(data);
             }
+        } else if (data.type === 'displayCameraDevices') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayCameraDevices(data);
+            }
+        } else if (data.type === 'displayCameraStatus') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayCameraStatus(data);
+            }
+        } else if (data.type === 'displayCameraFrame') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayCameraFrame(data);
+            }
+        } else if (data.type === 'displayCameraResult') {
+            if (window.DeviceList) {
+                window.DeviceList.handleDisplayCameraResult(data);
+            }
         } else if (data.type === 'voiceVadConfig') {
             if (window.DeviceList) {
                 window.DeviceList.handleVoiceVadConfig(data);
@@ -95,6 +137,10 @@ const WebSocketManager = {
         } else if (data.type === 'conversationConfirmationConfig') {
             if (window.VoiceprintPanel) {
                 window.VoiceprintPanel.handleConversationConfirmationConfig(data);
+            }
+        } else if (data.type === 'voiceConversationConfig') {
+            if (window.VoiceprintPanel) {
+                window.VoiceprintPanel.handleConversationWindowConfig(data);
             }
         } else if (data.type === 'playlistProgress') {
             // 只处理当前选中显示端的播放列表进度
@@ -340,6 +386,14 @@ const WebSocketManager = {
         } else if (data.type === 'chatResponse') {
             if (window.Chat) {
                 window.Chat.handleResponse(data);
+            }
+        } else if (data.type === 'temporaryConversation') {
+            if (window.Chat) {
+                window.Chat.handleTemporaryConversation(data);
+            }
+        } else if (data.type === 'temporaryConversationError') {
+            if (window.Chat) {
+                window.Chat.handleTemporaryConversationError(data);
             }
         } else if (data.type === 'showHelp') {
             if (window.Chat) {

@@ -18,8 +18,9 @@ import java.security.cert.X509Certificate
 // 模型文件下载（共享）：服务器证书校验 + .tmp 原子改名 + 失败日志。
 // 当前开发服务器使用固定自签名证书，只有匹配下面指纹时才允许跳过系统 CA 校验；普通 HTTPS 仍走系统信任链。
 object ModelDownloader {
+    private const val MAX_DOWNLOAD_ATTEMPTS = 3
     private const val DEVELOPMENT_SERVER_CERT_SHA256 =
-        "8b6ba1e4f802f3e74ec49dc33ad61a1424da59f36019a9db58a67eab496b1ba9"
+        "84453fe21ecae5785c3e442e4ceae85f362b1d0b8ba13df3b41b03aab676d817"
     private val systemTrustManager: X509TrustManager by lazy { createSystemTrustManager() }
 
     // 下载到 .tmp 后原子改名（整文件重下，不做断点续传）；失败返回 false 并记录原因
@@ -28,6 +29,24 @@ object ModelDownloader {
 
     // 下载完成后才校验 hash，校验通过才把 .tmp 原子改名为正式文件。
     fun download(
+        urlStr: String,
+        dest: File,
+        expectedSha256: String?,
+        onProgress: (Int) -> Unit
+    ): Boolean {
+        for (attempt in 1..MAX_DOWNLOAD_ATTEMPTS) {
+            if (downloadOnce(urlStr, dest, expectedSha256, onProgress)) return true
+            if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+                android.util.Log.w(
+                    "ModelDownloader",
+                    "模型文件传输失败，重试当前文件 ($attempt/$MAX_DOWNLOAD_ATTEMPTS): $urlStr"
+                )
+            }
+        }
+        return false
+    }
+
+    private fun downloadOnce(
         urlStr: String,
         dest: File,
         expectedSha256: String?,

@@ -36,6 +36,26 @@ class NodeServerConfigTest {
         assertTrue(!root.exists())
     }
 
+    @Test
+    fun 离线APK写入main角色且保留本机地址() {
+        val root = createTempDirectory("aasc-offline-node-config")
+
+        val file = NodeServerConfig.write(
+            root,
+            "https://127.0.0.1:8081",
+            "AASC 显示端 Offline",
+            offlineMode = true
+        )
+        val config = JSONObject(file.readText())
+
+        assertEquals("main", config.getJSONObject("aasc").getString("role"))
+        assertEquals("https://127.0.0.1:8081", config.getJSONObject("aasc").getString("mainServerUrl"))
+        assertEquals("AASC 显示端 Offline", config.getJSONObject("aasc").getString("nodeName"))
+        assertEquals("display", config.getJSONObject("asr").getString("device"))
+
+        root.deleteRecursively()
+    }
+
     private fun createTempDirectory(prefix: String): File {
         return kotlin.io.path.createTempDirectory(prefix).toFile()
     }

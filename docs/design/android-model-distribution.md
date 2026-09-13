@@ -2,6 +2,8 @@
 
 ## 需求等级与范围
 
+普通正式 APK 仍按本设计从服务器按需分发模型；完整离线 APK 例外地通过独立 `npm run build:apk:offline` 将固定生产模型白名单打入 APK，具体构建和本机启动规则见 [正式 Android 显示端完整离线 APK](android-display-offline-apk.md)。
+
 这是一次 L7 架构级变更：正式 Android 显示 APK 不再内置任何可更新的推理模型或模型字典，统一通过当前 AASC 服务器按需下载。推理仍然发生在显示端本机，服务器只提供清单、文件下载和已有的任务/WebSocket 路由。
 
 本次覆盖正式 APK 的六类模型资源：

@@ -66,4 +66,17 @@ class NodeServerServiceTest {
         assertEquals("https://192.168.1.39:8081", environment["AASC_MAIN_SERVER_URL"])
         assertEquals("/dev/null", environment["OPENSSL_CONF"])
     }
+
+    @Test
+    fun 离线Node运行环境带有离线标记() {
+        val root = File("/data/user/0/com.aasc.display.offline/files/aasc-server")
+        val environment = NodeServerService.buildNodeEnvironment(
+            root,
+            "https://127.0.0.1:8081",
+            "apk-0.1.0-offline",
+            offlineMode = true
+        )
+
+        assertEquals("1", environment["AASC_OFFLINE_MODE"])
+    }
 }

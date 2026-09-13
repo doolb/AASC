@@ -17,6 +17,14 @@ const deviceListJs = fs.readFileSync(
     'src/apps/web-mediacenter/ui/public/js/device-list.js',
     'utf8'
 );
+const voiceprintPanelJs = fs.readFileSync(
+    'src/apps/web-mediacenter/ui/public/js/voiceprint-panel.js',
+    'utf8'
+);
+const uploadHtml = fs.readFileSync(
+    'src/apps/web-mediacenter/ui/public/upload.html',
+    'utf8'
+);
 
 assert.match(displayHtml, /let voiceListeningEnabled = true/);
 assert.match(displayHtml, /type: 'voiceConversationTtsFinished'/);
@@ -86,6 +94,40 @@ assert.match(serverJs, /isDisplayVoiceListeningEnabled\(displayData\)/);
 assert.match(serverJs, /voiceConversationTtsFinished/);
 assert.match(serverJs, /expiresAt:\s*Number\.isFinite\(conversation\.expiresAt\)/u, '服务端应广播会话到期时间');
 assert.match(serverJs, /voiceConversationExpiresAt|expiresAt\s*=\s*Date\.now\(\)\s*\+/u, '服务端应在启动会话计时器时生成到期时间');
+assert.match(serverJs, /pauseDisplayConversationTimer\(/u, 'TTS 开始时应暂停服务端会话计时');
+assert.match(serverJs, /displayConversationTtsPlaybackKeys/u, '服务端应等待同一显示端全部 TTS 完成后恢复计时');
+assert.match(serverJs, /temporaryConversationWindowMs/u, '服务端应读取临时窗口配置');
+assert.match(serverJs, /conversationWindowMs/u, '服务端应读取持续对话窗口配置');
+assert.match(serverJs, /addressedGroupMode/u, '服务端应支持角色名加内容的模式切换');
+assert.match(serverJs, /temporaryConversationReplaced/u, '临时会话替换时应重置其他显示端');
+assert.match(serverJs, /getTemporaryConversation/u, '服务端应提供临时会话快照请求');
+assert.match(serverJs, /clearTemporaryConversation/u, '服务端应提供临时会话清空消息');
+assert.match(serverJs, /temporaryConversationId/u, '临时聊天请求应携带全局会话 ID');
+assert.match(serverJs, /function ensureTemporaryConversation\(displayId\)/u, '控制端临时发送应确保使用服务端当前全局会话');
+assert.match(serverJs, /setVoiceConversationConfig/u, '服务端应提供窗口配置写入消息');
+assert.match(serverJs, /type: 'voiceConversationConfig'/u, '服务端应广播窗口配置权威值');
+assert.match(voiceprintPanelJs, /setVoiceConversationConfig/u, '控制端应发送窗口配置');
+assert.match(voiceprintPanelJs, /temporaryWindowSeconds/u, '控制端应渲染临时窗口设置');
+assert.match(voiceprintPanelJs, /conversationWindowSeconds/u, '控制端应渲染持续窗口设置');
+assert.match(voiceprintPanelJs, /setAddressedGroupMode/u, '控制端应提供临时/一次性群聊切换');
+assert.match(voiceprintPanelJs, /addressedGroupMode/u, '控制端应同步角色名加内容模式');
+const controlChatJs = fs.readFileSync(
+    'src/apps/web-mediacenter/ui/public/js/chat.js',
+    'utf8'
+);
+const controlWebsocketJs = fs.readFileSync(
+    'src/apps/web-mediacenter/ui/public/js/websocket.js',
+    'utf8'
+);
+assert.match(controlChatJs, /data-chat-tab="temporary"/u, '控制端应增加临时页签');
+assert.match(controlChatJs, /handleTemporaryConversation/u, '控制端应渲染临时会话快照');
+assert.match(controlChatJs, /temporaryConversation:\s*mode === 'temporary'/u, '临时页签发送应标记临时会话');
+assert.match(controlChatJs, /temporaryConversationId:\s*mode === 'temporary'/u, '临时页签发送应携带当前临时会话 ID');
+assert.doesNotMatch(controlChatJs, /临时页签只显示语音临时会话/u, '临时页签不应保持只读提示');
+assert.match(controlWebsocketJs, /data.type === 'temporaryConversation'/u, '控制端 WebSocket 应接收临时会话快照');
+assert.match(uploadHtml, /voiceConversationWindowPanel/u, '控制端页面应提供窗口设置面板');
+assert.match(displayHtml, /voiceConversationTimerPaused/u, '显示端应保存会话计时暂停状态');
+assert.match(displayHtml, /voiceConversationRemainingMs/u, '显示端应冻结 TTS 期间剩余时间');
 assert.match(serverJs, /voiceprintEnabledNow = config\.get\('voiceprint\.enabled', true\)/);
 assert.match(serverJs, /isBuiltin: voiceCommand\.isWakeFreeVoiceCommand/);
 assert.match(voiceCommandJs, /function isBuiltinVoiceCommand\(text\)/);
@@ -124,4 +166,4 @@ const voiceControl = deviceListJs.slice(voiceControlStart, voiceControlEnd);
 assert.match(voiceControl, /input\.addEventListener\(['"]change['"]/);
 assert.match(voiceControl, /updateCapability\(display\.id, ['"]voiceRecording['"], event\.target\.checked\)/);
 
-console.log('display-voice-listening.test.js: 40/40 passed');
+console.log('display-voice-listening.test.js: contract checks passed');
