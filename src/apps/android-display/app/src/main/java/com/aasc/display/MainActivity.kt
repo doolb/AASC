@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_SERVER_URL = "server_url"
+        private const val REQ_STORAGE_TREE = 1005
     }
 
     private lateinit var configBar: View
@@ -74,8 +75,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 只在 Android 9/API 28 及以下申请旧版共享存储权限；Android 10+ 不申请特殊的全盘权限。
-     * 权限检查完成后再进入统一启动流程，避免在同一生命周期内并发弹出多个权限框。
+     * API 28 及以下申请旧版读写权限；API 29 及以上通过 SAF 选择并持久化一个目录。
+     * 两种流程都完成后才进入统一启动流程，避免系统授权界面并发弹出。
      */
     private fun continueStartupAfterStoragePermission() {
         val missingPermissions = SharedStorageAccess.missingPermissions(Build.VERSION.SDK_INT) { permission ->
@@ -83,6 +84,24 @@ class MainActivity : AppCompatActivity() {
         }
         if (missingPermissions.isNotEmpty()) {
             requestPermissions(missingPermissions, REQ_STORAGE_PERMISSION)
+            return
+        }
+        if (SharedStorageAccess.requiresTreeAccess(Build.VERSION.SDK_INT) &&
+            !SharedStorageAccess.hasPersistedTreeUri(this)) {
+            try {
+                startActivityForResult(
+                    SharedStorageAccess.createTreePickerIntent(),
+                    REQ_STORAGE_TREE
+                )
+            } catch (error: Exception) {
+                android.util.Log.w("MainActivity", "启动 SAF 目录选择器失败: ${error.message}")
+                Toast.makeText(
+                    this,
+                    getString(R.string.shared_storage_tree_unavailable),
+                    Toast.LENGTH_LONG
+                ).show()
+                continueStartup()
+            }
             return
         }
         continueStartup()
@@ -141,6 +160,28 @@ class MainActivity : AppCompatActivity() {
                 webView?.reload()
             }
         }
+    }
+
+    /**
+     * 用户选择目录后立即申请持久授权；取消选择时仍允许 APK 启动，只有共享媒体库不可用。
+     */
+    @Deprecated("Activity Result API 迁移将在后续统一处理")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_STORAGE_TREE) return
+
+        val selectedUri = data?.data
+        val persisted = selectedUri?.let { uri ->
+            SharedStorageAccess.persistTreeUri(this, uri, data?.flags ?: 0)
+        } ?: false
+        if (!persisted) {
+            Toast.makeText(
+                this,
+                getString(R.string.shared_storage_tree_unavailable),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        continueStartup()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,8 +1,15 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('path');
-const { MediaLibraryProvider, LocalProvider, HttpProvider } = require('../src/apps/web-mediacenter/modules/media/media-library-app-service.js');
+const {
+    MediaLibraryProvider,
+    LocalProvider,
+    HttpProvider,
+    migrateLegacyTildeDirectory
+} = require('../src/apps/web-mediacenter/modules/media/media-library-app-service.js');
 
 const provider = new MediaLibraryProvider({});
 
@@ -296,5 +303,53 @@ test('LocalProvider.list 将符号链接目录识别为文件夹并支持继续�
         assert.strictEqual(dcimItem.type, 'folder');
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('LocalProvider 将 Android 媒体别名解析到应用专属外部目录', () => {
+    const previousMediaHome = process.env.AASC_ANDROID_MEDIA_HOME;
+    process.env.AASC_ANDROID_MEDIA_HOME = '/storage/emulated/0/Android/data/com.aasc.display/files';
+    try {
+        const rootProvider = new LocalProvider({ id: 'android-root', path: '~/' });
+        const childProvider = new LocalProvider({ id: 'android-child', path: '~/photos' });
+        assert.strictEqual(
+            rootProvider.getBasePath(),
+            '/storage/emulated/0/Android/data/com.aasc.display/files'
+        );
+        assert.strictEqual(
+            childProvider.getBasePath(),
+            '/storage/emulated/0/Android/data/com.aasc.display/files/photos'
+        );
+    } finally {
+        if (previousMediaHome === undefined) delete process.env.AASC_ANDROID_MEDIA_HOME;
+        else process.env.AASC_ANDROID_MEDIA_HOME = previousMediaHome;
+    }
+});
+
+test('旧字面波浪号目录迁移到 Android 外部媒体目录且不覆盖同名文件', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-tilde-migration-'));
+    const legacyPath = path.join(root, '~');
+    const targetPath = path.join(root, 'external-files');
+    fs.mkdirSync(legacyPath, { recursive: true });
+    fs.mkdirSync(targetPath, { recursive: true });
+    fs.writeFileSync(path.join(legacyPath, 'new.jpg'), 'legacy-new');
+    fs.writeFileSync(path.join(legacyPath, 'same.jpg'), 'legacy-same');
+    fs.writeFileSync(path.join(targetPath, 'same.jpg'), 'target-same');
+
+    const originalRenameSync = fs.renameSync;
+    fs.renameSync = () => {
+        const error = new Error('跨文件系统');
+        error.code = 'EXDEV';
+        throw error;
+    };
+    try {
+        migrateLegacyTildeDirectory(legacyPath, targetPath);
+        assert.strictEqual(fs.readFileSync(path.join(targetPath, 'new.jpg'), 'utf8'), 'legacy-new');
+        assert.strictEqual(fs.readFileSync(path.join(targetPath, 'same.jpg'), 'utf8'), 'target-same');
+        assert.strictEqual(fs.readFileSync(path.join(legacyPath, 'same.jpg'), 'utf8'), 'legacy-same');
+        assert.ok(!fs.existsSync(path.join(legacyPath, 'new.jpg')));
+    } finally {
+        fs.renameSync = originalRenameSync;
+        fs.rmSync(root, { recursive: true, force: true });
     }
 });

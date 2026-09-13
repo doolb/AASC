@@ -59,9 +59,11 @@
 
 ## Android APK
 
-- ⏳进行中 [2026-09-13] Android MNN-LLM 显式设置单次推理线程数
-  - 当前默认 LLM policy 为 2 个大核、0 个小核，但 MNN native `thread_num` 尚未显式覆盖；需更新 MNN options、状态字段和 APK 真机验收。
-  - 设计：`docs/design/android-mnnchat-llm.md`；实现伪代码：`docs/spec/android-mnnchat-llm.md`；任务：`docs/task/2026-09-13_LLM显式线程数与核心绑定.md`。
+- 🔄进行中 [2026-09-13] Android 子服务器媒体库 `~/` 映射到应用专属外部目录
+  - 目标目录为 `/storage/emulated/0/Android/data/com.aasc.display/files`，需完成旧字面 `~` 目录迁移和 APK 真机验证。
+
+- 🔄进行中 [2026-09-13] APK 内置 Node 子服务器支持 Android 10 及 Android 11+ 共享存储文件访问
+  - 已完成 SAF 文件夹选择器、原生回环网关、虚拟根 `/`、Node provider 和本地回归；SM-N9500 Android 9/API 28 已验收 APK 启动、Node 健康接口和旧版媒体库列举；Android 10/11+ 真机媒体库验收仍待执行。
 
 - ⏳待现场验收 [2026-09-08] 完成 APK 内置 Node.js 子服务器的生产依赖打包和真机业务验收
   - Node Runtime、安装器、Service、主服务器主动连接和能力裁剪已实现；项目已内置 Android 可用的 arm64 Node Runtime，构建时仍需提供生产 `node_modules`。

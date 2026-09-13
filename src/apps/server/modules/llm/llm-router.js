@@ -12,6 +12,10 @@ function normalizeDisplayId(value) {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function normalizeThreadCount(value) {
+    return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 function normalizeStatus(displayId, status = {}) {
     const capabilities = status.capabilities || {};
     const capability = capabilities.llm || {};
@@ -24,6 +28,11 @@ function normalizeStatus(displayId, status = {}) {
         || capability.supported === true;
     const supported = enabled && detectedSupported;
     const selectedModelId = normalizeDisplayId(status.selectedModelId);
+    // 新版 APK 同时上报实际已加载模型；旧 APK 没有该字段时沿用 selectedModelId 兼容。
+    const loadedModelId = normalizeDisplayId(status.loadedModelId) || selectedModelId;
+    const selectedRevision = normalizeDisplayId(status.selectedRevision);
+    const loadedRevision = normalizeDisplayId(status.loadedRevision) || selectedRevision;
+    const modelReady = loadedModelId === selectedModelId;
     const state = typeof status.state === 'string' && status.state.trim()
         ? status.state.trim()
         : (status.ready === true ? 'ready' : 'not_ready');
@@ -33,9 +42,13 @@ function normalizeStatus(displayId, status = {}) {
         connected: status.connected !== false,
         enabled,
         supported,
-        ready: supported && status.ready === true,
+        ready: supported && status.ready === true && modelReady,
         selectedModelId,
-        selectedRevision: normalizeDisplayId(status.selectedRevision),
+        selectedRevision,
+        loadedModelId,
+        loadedRevision,
+        threadCount: normalizeThreadCount(status.threadCount),
+        loadedThreadCount: normalizeThreadCount(status.loadedThreadCount),
         activeRequests: Number.isInteger(status.activeRequests) && status.activeRequests >= 0
             ? status.activeRequests
             : 0,
@@ -103,7 +116,7 @@ class LlmRouter {
             .filter((display) => display.connected
                 && display.supported
                 && display.ready
-                && display.selectedModelId === modelId)
+                && display.loadedModelId === modelId)
             .sort((left, right) => {
                 const leftLoad = left.activeRequests + left.queueDepth;
                 const rightLoad = right.activeRequests + right.queueDepth;
@@ -124,7 +137,7 @@ class LlmRouter {
                     displayId: normalizedDisplayId
                 });
             }
-            if (target.selectedModelId !== normalizedModelId) {
+            if (target.loadedModelId !== normalizedModelId) {
                 throw createRouterError('指定显示端未加载请求模型', 'LLM_MODEL_MISMATCH', 409, {
                     displayId: normalizedDisplayId
                 });

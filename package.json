@@ -9,6 +9,7 @@
     "build:server-package": "node scripts/ops/build-server-package.js",
     "prepare:android-node": "node scripts/ops/prepare-android-node-runtime.js",
     "prepare:mnnllm-android": "node scripts/ops/prepare-mnnllm-android.js",
+    "download:llm-model": "node scripts/ops/download-llm-model.js",
     "test": "node --test tests/*.test.js",
     "check:chat2api": "node --test src/apps/server/modules/chat2api/*.test.js src/apps/server/modules/task-engine/builtin-tasks/chat2api-proxy.test.js src/apps/web-mediacenter/ui/public/js/chat2api.test.js",
     "test:log-brain": "node scripts/test-runners/run-log-brain-tests.js",

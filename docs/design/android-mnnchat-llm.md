@@ -2,12 +2,12 @@
 
 ## 状态
 
-本设计已于 2026-09-12 确认，第一阶段服务端、Android bridge、WebSocket、控制页面、LLM 能力开关和 ModelScope 模型目录实现已落地；2026-09-13 已使用官方 MNN 3.6.1 固定提交构建、安装并在真实设备上完成文本、关闭思考和图片协议验收。
+本设计已于 2026-09-12 确认，第一阶段服务端、Android bridge、WebSocket、控制页面、LLM 能力开关和 ModelScope 模型目录实现已落地；2026-09-13 已使用官方 MNN 3.6.1 固定提交构建、安装并在真实设备上完成文本、关闭思考和图片协议验收。本次修正补齐服务器统一下载、缓存校验和本地分发流程，并修复 LLM CPU 配置的 `thread_num` 未进入官方 MNN 主配置、配置变更不能在下一条推理生效的问题。本次增量已完成推理结束后的模型身份与线程数预检查、异步 CPU 配置实际应用确认和失败重试保护，并保留下一次推理前的最终校验。2026-09-13 进一步确认视觉模型的 `mllm.thread_num` 也必须与顶层线程数同步，已完成 native 双 runtime 配置修正。
 本次模型增量已确认接入 `Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`：ModelScope 仓库为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`，固定 revision 为 `c1bc31b15286afa708f37f690099d10f21d1cc74`。该模型包含视觉权重；本次增量补齐按请求关闭思考和标准图片输入到 MNN Vision 的链路。
 
 ## 目标
 
-在现有 Android 显示 APK 中集成阿里 MNN-LLM native 推理引擎，使 APK 能够作为 AASC 的本地 LLM 显示端。主服务器统一提供 OpenAI 兼容协议，服务器根据模型名把请求分配给已加载该模型的在线 APK。模型目录参考 MNNChat 的官方 `assets/model_market.json`，模型文件通过 ModelScope 仓库下载到 APK。
+在现有 Android 显示 APK 中集成阿里 MNN-LLM native 推理引擎，使 APK 能够作为 AASC 的本地 LLM 显示端。主服务器统一提供 OpenAI 兼容协议，服务器根据模型名把请求分配给已加载该模型的在线 APK。模型目录参考 MNNChat 的官方 `assets/model_market.json`，服务器先从固定 ModelScope 仓库下载、校验并缓存模型，APK 只从 AASC 服务器下载当前选中的模型。
 
 本功能必须满足：
 
@@ -57,7 +57,7 @@
               └─ llm.chunk / llm.completed / llm.error
 ```
 
-主服务器是唯一的 OpenAI 协议入口。APK 显示端只通过已经存在的主服务器显示 WebSocket 接收推理请求，并通过同一连接返回结果；内置 Node.js 子服务器不承载 LLM 协议入口。
+主服务器是唯一的 OpenAI 协议入口和正式 APK 模型分发入口。APK 显示端只通过已经存在的主服务器显示 WebSocket 接收推理请求，并通过同一连接返回结果；内置 Node.js 子服务器不承载 LLM 协议入口，也不直接访问 ModelScope。
 
 ## MNN 引擎集成
 
@@ -102,7 +102,7 @@ window.onNativeLlmEvent({
 
 ## 模型清单、下载与单模型缓存
 
-主服务器新增 MNN 模型清单和白名单下载接口。模型目录参考 MNNChat v9 的官方目录；AASC 只发布已确认兼容 MNN-LLM、能从 ModelScope 获取完整文件元数据的模型，不把没有文件校验信息的目录项伪装成可下载模型：
+主服务器新增 MNN 模型清单、服务器缓存下载器和白名单分发接口。模型目录参考 MNNChat v9 的官方目录；AASC 只发布已确认兼容 MNN-LLM、能从 ModelScope 获取完整文件元数据的模型，不把没有文件校验信息的目录项伪装成可下载模型。ModelScope 只作为服务器上游源，APK 不直接访问：
 
 ```text
 GET /api/llm/model-manifest
@@ -128,7 +128,20 @@ GET /api/llm/model/:modelId/:filename
 }
 ```
 
-远端模型定义额外包含 ModelScope 仓库和 revision；服务端通过固定的 ModelScope `resolve` 地址代理文件，不接受客户端传入任意上游 URL。清单文件仍必须记录每个文件的大小和 SHA-256，APK 下载的是当前选择模型的全部声明文件。实际文件不存在、远端元数据不完整或校验失败的模型不出现在可选列表中。`modelId`、仓库名和文件名必须使用白名单校验，禁止路径穿越。
+远端模型定义额外包含 ModelScope 仓库和 revision；服务端下载器根据固定的 `resolve` 地址获取文件，不接受客户端传入任意上游 URL。清单文件仍必须记录每个文件的大小和 SHA-256，服务器完成全部文件缓存后才将模型标记为 `ready=true`，APK 下载的是服务器缓存中的当前选择模型全部声明文件。实际文件不存在、远端元数据不完整或校验失败的模型不能被分发。`modelId`、仓库名和文件名必须使用白名单校验，禁止路径穿越。
+
+服务器模型缓存目录和下载命令：
+
+```text
+res/models/llm/
+├── manifest.json
+├── <directory>/              # 已完整校验的服务器模型缓存
+└── <directory>.staging-*/    # 下载中临时目录，不能出现在 manifest ready 状态
+
+npm run download:llm-model -- --id <modelId>
+```
+
+下载器按文件顺序写入临时文件，校验大小和 SHA-256 后原子改名；全部文件完成后原子切换模型目录。重复执行已完成模型复用缓存，`--force` 才重新下载。下载失败保留旧完整缓存，不得暴露半成品。
 
 APK 目录约定：
 
@@ -348,10 +361,13 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 - `llm.bigCoreCount` 默认 `2`，`llm.littleCoreCount` 默认 `0`，`llm.preferBigCores` 默认 `true`。
 - 控制端仍通过 `/api/config/cpuAffinity` 保存配置；`cpuConfig` 消息新增 `llm` 字段。
 - APK 收到 `llm` 配置后调用已有 `CpuCluster.policy` 计算实际 CPU mask，并在 MNN 模型加载和推理 worker 上应用 affinity。
-- MNN native 必须显式接收 `thread_num = max(1, 实际选中的 LLM 核心数)`，不使用模型配置或 MNN 默认线程数；线程数不超过实际选中的 LLM 核心数。
+- MNN native 必须显式接收 `thread_num = max(1, 实际选中的 LLM 核心数)`，不使用模型配置或 MNN 默认线程数；该值必须同时写入官方 `LlmSession` 主配置的顶层 `thread_num` 和 `mllm.thread_num`，由 `Llm.set_config` 消费，不能只放在 `extra_config`；两处值保持一致，覆盖文本主 runtime 和视觉/多模态 processor runtime；线程数不超过实际选中的 LLM 核心数。
 - MNN 模型加载和每次推理前先对调用线程应用 LLM affinity，使 native 创建的工作线程继承同一 CPU mask；设备大核不足时沿用现有 policy 的确定性回退和状态提示。
+- LLM CPU 配置变化不打断当前推理；推理结束后在串行 worker 中预检查配置线程数与已加载 MNN runtime 的实际线程数，必要时提前重建同一缓存模型的 runtime。
+- 下一条已接受的推理请求在调用 native 前仍执行最终校验；模型 ID/revision 或线程数不一致时，模型身份复用既有切换队列，线程数则使用当前 policy 重建 runtime。
+- CPU 配置异步调用的 `accepted` 只表示入队，页面必须等待 native `applied=true` 回调才确认去重；应用失败时释放 pending key。ASR/TTS pool 应用失败只汇总错误，不得阻断 LLM policy 更新。
 - LLM 配置更新只影响后续 MNN 模型加载/推理 worker，不重建 ASR/TTS pool，不改变现有语音录音和播放行为。
-- 控制端状态显示实际选择的大核/小核数量、CPU mask、显式 `thread_num`、affinity 是否回退；APK `mnnLlmStatus` 同步返回相同状态。
+- 控制端状态显示选中模型与实际已加载模型、实际选择的大核/小核数量、CPU mask、配置线程数、引擎实际线程数和 affinity 是否回退；APK `mnnLlmStatus` 同步返回相同状态。
 
 ## 兼容性与安全
 
@@ -395,6 +411,7 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 
 - 2026-09-12 已完成服务端 LLM manifest/router/gateway、`/v1` 协议、显示端 WebSocket 状态和请求转发、APK 单模型管理、官方 MNN JNI 接入、控制端模型选择和独立 LLM CPU 配置。
 - 2026-09-13 已完成 `enable_thinking=false` 和 Chat Completions/Responses 图片理解：服务端校验 data URL，APK 生成临时 PNG，JNI 使用 MNN `MultimodalPrompt`，并清理请求级图片资源。
+- 2026-09-13 已完成 MNN 双 runtime 线程配置同步：JNI 将同一 LLM policy 线程数同时写入顶层 `thread_num` 和 `mllm.thread_num`，视觉/多模态 processor runtime 不再保留模型目录默认线程数；契约测试、APK 构建和真机日志已验证 4→2 的两处配置同步。
 - 已新增 `npm run prepare:mnnllm-android`；该脚本要求固定 `AASC_MNN_ROOT` 和 `AASC_MNN_REVISION`，`build:apk` 会先准备官方依赖，CMake 缺少官方产物时直接失败。
 - Android Gradle 配置已按 AGP 9 的 DSL 分层：`CMakeLists.txt` 路径保留在模块级 `externalNativeBuild`，`-DAASC_MNN_ROOT` 放入 `defaultConfig.externalNativeBuild.cmake.arguments`。
 - 已通过 Node 定向测试 13/13（本次协议边界测试）；使用官方 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`、Android NDK 28.2.13676358 完成 `npm run build:apk`，安装到 `192.168.1.6:5555` 并以 `npm run start:apk:display` 无参数启动。Chat/Responses 文本和图片协议已用 Qwen3.5 真机验证；长稳压测仍属于后续可选项。

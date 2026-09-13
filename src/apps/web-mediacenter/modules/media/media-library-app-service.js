@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
@@ -89,10 +90,83 @@ class MediaLibraryProvider {
     }
 }
 
+/**
+ * 将媒体库配置中的波浪号路径解析为实际目录。
+ * Android APK 通过环境变量提供应用专属外部目录；桌面/Termux 没有该变量时
+ * 回退到 Node 标准 HOME，避免改变其他运行环境原有的 `~/` 语义。
+ */
+function resolveLocalProviderPath(configPath) {
+    const rawPath = String(configPath || '.').trim() || '.';
+    const isTildePath = rawPath === '~'
+        || rawPath === '~/'
+        || rawPath.startsWith('~/');
+    if (!isTildePath) return path.resolve(rawPath);
+
+    const suffix = rawPath === '~' || rawPath === '~/'
+        ? ''
+        : rawPath.slice(2);
+    const homePath = process.env.AASC_ANDROID_MEDIA_HOME?.trim() || os.homedir();
+    return path.resolve(homePath, suffix);
+}
+
+/**
+ * 迁移旧版本把 `~/` 当成普通相对路径后写入的字面目录。
+ * Android 私有目录和 Android/data 可能属于不同文件系统，因此 rename 失败时
+ * 必须回退为复制后删除；目标已有同名条目时始终保留目标，防止覆盖用户文件。
+ */
+function migrateLegacyTildeDirectory(legacyPath, targetPath) {
+    const legacyRoot = path.resolve(legacyPath);
+    const targetRoot = path.resolve(targetPath);
+    if (legacyRoot === targetRoot || !fs.existsSync(legacyRoot)) return;
+
+    fs.mkdirSync(targetRoot, { recursive: true });
+    for (const name of fs.readdirSync(legacyRoot)) {
+        const source = path.join(legacyRoot, name);
+        const target = path.join(targetRoot, name);
+        if (fs.existsSync(target)) {
+            console.warn(`[媒体库] 旧波浪号目录文件冲突，保留原文件: ${source}`);
+            continue;
+        }
+
+        try {
+            fs.renameSync(source, target);
+        } catch (renameError) {
+            try {
+                // cpSync 支持文件和目录，适用于 /data 与 /storage 跨文件系统场景。
+                fs.cpSync(source, target, {
+                    recursive: true,
+                    errorOnExist: true,
+                    force: false
+                });
+                fs.rmSync(source, { recursive: true, force: true });
+            } catch (copyError) {
+                console.warn(
+                    `[媒体库] 迁移旧波浪号目录文件失败: ${source} `
+                    + `(${copyError.message || renameError.message})`
+                );
+            }
+        }
+    }
+
+    try {
+        if (fs.readdirSync(legacyRoot).length === 0) fs.rmdirSync(legacyRoot);
+    } catch (error) {
+        console.warn(`[媒体库] 清理旧波浪号目录失败: ${legacyRoot} (${error.message})`);
+    }
+}
+
 class LocalProvider extends MediaLibraryProvider {
     constructor(config, options = {}) {
         super(config);
-        this.basePath = path.resolve(config.path);
+        const configuredPath = String(config.path || '.').trim() || '.';
+        this.isTildePath = configuredPath === '~'
+            || configuredPath === '~/'
+            || configuredPath.startsWith('~/');
+        this.androidMediaHome = process.env.AASC_ANDROID_MEDIA_HOME?.trim() || '';
+        this.legacyBasePath = this.isTildePath && this.androidMediaHome
+            ? path.resolve(configuredPath)
+            : null;
+        this.basePath = resolveLocalProviderPath(configuredPath);
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
         this.isHttps = options.isHttps || (() => false);
@@ -102,6 +176,9 @@ class LocalProvider extends MediaLibraryProvider {
     }
 
     async connect() {
+        if (this.legacyBasePath && this.legacyBasePath !== this.basePath) {
+            migrateLegacyTildeDirectory(this.legacyBasePath, this.basePath);
+        }
         if (!fs.existsSync(this.basePath)) {
             fs.mkdirSync(this.basePath, { recursive: true });
         }
@@ -309,6 +386,232 @@ class LocalProvider extends MediaLibraryProvider {
     }
 }
 
+/**
+ * Android APK 的 SAF 媒体库 provider。
+ * Android 原生侧把 content:// 文档树映射为回环 HTTP 网关，Node 只处理虚拟 `/` 路径，
+ * 因而不会误把 URI 当成本地文件系统路径，也不会要求 Node 进程拥有共享存储权限。
+ */
+class AndroidSafProvider extends MediaLibraryProvider {
+    constructor(config) {
+        super(config);
+        this.baseUrl = String(config.url || '').replace(/\/+$/, '');
+        this.token = String(config.token || '');
+        if (!this.baseUrl || !this.token) {
+            throw new Error('Android SAF 媒体库缺少网关地址或访问令牌');
+        }
+    }
+
+    async connect() {
+        const status = await this._requestJson('GET', '/v1/status');
+        if (!status.ready) {
+            throw new Error('Android SAF 目录尚未选择或授权已失效');
+        }
+        this.connected = true;
+        return true;
+    }
+
+    async disconnect() {
+        this.connected = false;
+        return true;
+    }
+
+    async list(dirPath = '/') {
+        const normalizedPath = this._normalizePath(dirPath);
+        const result = await this._requestJson('GET', '/v1/list', { path: normalizedPath });
+        return (result.items || []).map(item => {
+            const name = String(item.name || '');
+            const itemPath = this._normalizePath(item.path || this._joinPath(normalizedPath, name));
+            const mediaType = item.type === 'folder' ? 'folder' : this.detectMediaType(name);
+            return {
+                name,
+                path: itemPath,
+                type: item.type === 'folder' ? 'folder' : 'file',
+                mediaType,
+                ...(mediaType === 'text' ? { format: this.detectTextFormat(name) } : {}),
+                size: Number(item.size || 0),
+                modifiedTime: item.modifiedTime ? new Date(item.modifiedTime) : null,
+                url: this.getPublicUrl(itemPath)
+            };
+        });
+    }
+
+    async getFile(filePath) {
+        const normalizedPath = this._normalizePath(filePath);
+        const response = await this._request('HEAD', '/v1/file', { query: { path: normalizedPath } });
+        if (response.statusCode === 404) return null;
+        this._throwForStatus(response, '读取 Android SAF 文件信息失败');
+        const name = path.posix.basename(normalizedPath);
+        const mediaType = this.detectMediaType(name);
+        return {
+            name,
+            path: normalizedPath,
+            type: 'file',
+            mediaType,
+            ...(mediaType === 'text' ? { format: this.detectTextFormat(name) } : {}),
+            size: Number(response.headers['content-length'] || 0),
+            modifiedTime: response.headers['last-modified']
+                ? new Date(response.headers['last-modified'])
+                : null,
+            url: this.getPublicUrl(normalizedPath)
+        };
+    }
+
+    async uploadFile(dirPath, file) {
+        const normalizedPath = this._normalizePath(dirPath);
+        const uniqueName = `${Date.now()}_${file.filename}`;
+        const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data || '');
+        await this._requestJson('POST', '/v1/file', {
+            path: normalizedPath,
+            name: uniqueName,
+            mime: file.mimetype || 'application/octet-stream'
+        }, {
+            body: data,
+            headers: { 'Content-Type': file.mimetype || 'application/octet-stream' }
+        });
+        file.data = null;
+        const relativePath = this._joinPath(normalizedPath, uniqueName);
+        return {
+            name: uniqueName,
+            path: relativePath,
+            url: this.getPublicUrl(relativePath)
+        };
+    }
+
+    async deleteFile(filePath) {
+        await this._requestJson('DELETE', '/v1/file', { path: this._normalizePath(filePath) });
+        return true;
+    }
+
+    async createFolder(dirPath, folderName) {
+        const normalizedPath = this._normalizePath(dirPath);
+        const result = await this._requestJson('POST', '/v1/folder', {
+            path: normalizedPath,
+            name: folderName
+        });
+        return {
+            name: result.name || folderName,
+            path: this._normalizePath(result.path || this._joinPath(normalizedPath, folderName))
+        };
+    }
+
+    async deleteFolder(folderPath) {
+        await this._requestJson('DELETE', '/v1/folder', { path: this._normalizePath(folderPath) });
+        return true;
+    }
+
+    async getFileStream(filePath, range) {
+        const normalizedPath = this._normalizePath(filePath);
+        const headers = {};
+        if (range) headers.Range = `bytes=${range.start}-${range.end}`;
+        const response = await this._request('GET', '/v1/file', {
+            query: { path: normalizedPath },
+            headers,
+            stream: true
+        });
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            response.stream.resume();
+            throw new Error(`读取 Android SAF 文件失败（HTTP ${response.statusCode}）`);
+        }
+        const responseHeaders = {
+            'Content-Length': String(response.headers['content-length'] || 0),
+            'Accept-Ranges': response.headers['accept-ranges'] || 'bytes'
+        };
+        if (response.headers['content-range']) {
+            responseHeaders['Content-Range'] = response.headers['content-range'];
+        }
+        return {
+            stream: response.stream,
+            statusCode: response.statusCode,
+            headers: responseHeaders
+        };
+    }
+
+    getPublicUrl(filePath) {
+        const cleanPath = this._normalizePath(filePath).replace(/^\//, '');
+        const encoded = cleanPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+        return `/api/media-libraries/${encodeURIComponent(this.config.id)}/proxy/${encoded}`;
+    }
+
+    async _requestJson(method, endpoint, query = {}, options = {}) {
+        const response = await this._request(method, endpoint, { ...options, query });
+        const text = response.body ? response.body.toString('utf8') : '';
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            throw new Error(`${text || `HTTP ${response.statusCode}`}`);
+        }
+        try {
+            return text ? JSON.parse(text) : {};
+        } catch (error) {
+            throw new Error(`Android SAF 网关返回无效 JSON: ${error.message}`);
+        }
+    }
+
+    async _request(method, endpoint, options = {}) {
+        const target = new URL(endpoint, `${this.baseUrl}/`);
+        Object.entries(options.query || {}).forEach(([key, value]) => {
+            target.searchParams.set(key, String(value));
+        });
+        const transport = target.protocol === 'https:' ? https : http;
+        const body = options.body || null;
+        const headers = {
+            Authorization: `Bearer ${this.token}`,
+            Connection: 'close',
+            ...(body ? { 'Content-Length': String(body.length) } : {}),
+            ...(options.headers || {})
+        };
+        return new Promise((resolve, reject) => {
+            const request = transport.request(target, { method, headers }, response => {
+                if (options.stream) {
+                    resolve({
+                        statusCode: response.statusCode || 500,
+                        headers: response.headers,
+                        stream: response
+                    });
+                    return;
+                }
+                const chunks = [];
+                response.on('data', chunk => chunks.push(chunk));
+                response.on('end', () => resolve({
+                    statusCode: response.statusCode || 500,
+                    headers: response.headers,
+                    body: Buffer.concat(chunks)
+                }));
+            });
+            request.setTimeout(30_000, () => request.destroy(new Error('Android SAF 网关请求超时')));
+            request.on('error', reject);
+            if (body) request.write(body);
+            request.end();
+        });
+    }
+
+    _throwForStatus(response, message) {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            throw new Error(`${message}（HTTP ${response.statusCode}）`);
+        }
+    }
+
+    _normalizePath(value) {
+        const rawPath = String(value || '/');
+        if (rawPath.includes('\\') || rawPath.includes('\0')) {
+            throw new Error('Android SAF 路径包含非法字符');
+        }
+        if (/\/{2,}/.test(rawPath)) {
+            throw new Error('Android SAF 路径包含重复分隔符');
+        }
+        const prefixed = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+        const trimmed = prefixed === '/' ? '/' : prefixed.replace(/\/+$/, '');
+        const segments = trimmed.slice(1).split('/');
+        if (trimmed !== '/' && segments.some(segment => !segment || segment === '.' || segment === '..')) {
+            throw new Error('Android SAF 路径越界');
+        }
+        return trimmed === '/' ? '/' : `/${segments.join('/')}`;
+    }
+
+    _joinPath(dirPath, name) {
+        const normalizedDirectory = this._normalizePath(dirPath);
+        return this._normalizePath(normalizedDirectory === '/' ? `/${name}` : `${normalizedDirectory}/${name}`);
+    }
+}
+
 class HttpProvider extends MediaLibraryProvider {
     constructor(config, options = {}) {
         super(config);
@@ -321,6 +624,7 @@ class HttpProvider extends MediaLibraryProvider {
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
         this.isHttps = options.isHttps || (() => false);
+        this.androidSafConfig = options.androidSafConfig || null;
     }
 
     async connect() {
@@ -846,12 +1150,14 @@ class MediaLibraryManager {
         this.getPort = options.getPort || (() => 8081);
         this.getLocalIP = options.getLocalIP || (() => 'localhost');
         this.isHttps = options.isHttps || (() => false);
+        this.androidSafConfig = options.androidSafConfig || null;
     }
 
     async init() {
         const config = this._loadConfig();
         
         for (const libConfig of config.libraries || []) {
+            if (libConfig.type === 'android-saf' || libConfig.managed === true) continue;
             try {
                 await this.addLibrary(libConfig);
                 if (libConfig.isDefault) {
@@ -859,6 +1165,23 @@ class MediaLibraryManager {
                 }
             } catch (err) {
                 console.error(`初始化媒体库 ${libConfig.id} 失败:`, err.message);
+            }
+        }
+
+        if (this.androidSafConfig) {
+            try {
+                await this.addLibrary({
+                    id: 'android-saf',
+                    name: 'Android SAF 媒体目录',
+                    type: 'android-saf',
+                    managed: true,
+                    readonly: false,
+                    url: this.androidSafConfig.url,
+                    token: this.androidSafConfig.token
+                });
+                if (!this.defaultLibraryId) this.defaultLibraryId = 'android-saf';
+            } catch (err) {
+                console.error('初始化 Android SAF 媒体库失败:', err.message);
             }
         }
     }
@@ -889,10 +1212,13 @@ class MediaLibraryManager {
                     isHttps: this.isHttps
                 });
                 break;
+            case 'android-saf':
+                provider = new AndroidSafProvider(config);
+                break;
             default:
                 throw new Error(`不支持的媒体库类型: ${config.type}`);
         }
-        
+
         await provider.connect();
         
         this.libraries.set(config.id, {
@@ -950,7 +1276,8 @@ class MediaLibraryManager {
                 name: lib.config.name,
                 type: lib.config.type,
                 isDefault: id === this.defaultLibraryId,
-                readonly: lib.config.readonly || false
+                readonly: lib.config.readonly || false,
+                ...(lib.config.managed ? { managed: true } : {})
             });
         });
         
@@ -1062,6 +1389,7 @@ class MediaLibraryManager {
         };
         
         this.libraries.forEach((lib, id) => {
+            if (lib.config.managed) return;
             const libConfig = {
                 id: lib.config.id,
                 name: lib.config.name,
@@ -1096,6 +1424,9 @@ class MediaLibraryManager {
     }
 
     async addLibraryFromConfig(configData) {
+        if (configData.type === 'android-saf') {
+            throw new Error('Android SAF 媒体库只能由 APK 自动注册');
+        }
         const config = {
             id: configData.id || `lib_${Date.now()}`,
             name: configData.name,
@@ -1156,6 +1487,8 @@ class MediaLibraryManager {
 module.exports = {
     MediaLibraryProvider,
     LocalProvider,
+    migrateLegacyTildeDirectory,
+    AndroidSafProvider,
     HttpProvider,
     SmbProvider,
     MediaLibraryManager

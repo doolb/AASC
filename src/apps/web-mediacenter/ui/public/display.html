@@ -3172,6 +3172,21 @@
 
         window.onNativeCpuStatus = reportNativeCpuStatus;
 
+        // 原生异步配置的 accepted 只代表入队；只有 applied=true 才确认页面的已应用 key。
+        window.onNativeCpuConfigResult = function(result) {
+            if (!result || typeof result.configKey !== 'string') return;
+            const configKey = result.configKey;
+            if (result.applied === true) {
+                lastAppliedCpuConfigKey = configKey;
+            }
+            if (pendingCpuConfigKey === configKey) {
+                pendingCpuConfigKey = '';
+            }
+            if (result.applied !== true) {
+                console.warn('[CPU] 原生配置实际应用失败:', result.error || '未知错误');
+            }
+        };
+
         function applyCpuConfig(config) {
             if (!config) return;
             const payload = {
@@ -3196,7 +3211,7 @@
                 const result = JSON.parse(resultText);
                 if (!result || result.accepted !== true) {
                     pendingCpuConfigKey = '';
-                } else {
+                } else if (result.applied === true) {
                     lastAppliedCpuConfigKey = key;
                     pendingCpuConfigKey = '';
                 }

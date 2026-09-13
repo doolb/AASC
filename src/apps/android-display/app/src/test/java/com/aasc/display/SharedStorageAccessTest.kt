@@ -23,6 +23,18 @@ class SharedStorageAccessTest {
     fun Android10及以上不申请整个共享存储权限() {
         assertTrue(SharedStorageAccess.requiredPermissions(29).isEmpty())
         assertTrue(SharedStorageAccess.requiredPermissions(34).isEmpty())
+        assertFalse(SharedStorageAccess.requiresTreeAccess(28))
+        assertTrue(SharedStorageAccess.requiresTreeAccess(29))
+        assertTrue(SharedStorageAccess.requiresTreeAccess(34))
+    }
+
+    @Test
+    fun SAF选择器使用可持久化读写授权() {
+        val flags = SharedStorageAccess.treeAccessIntentFlags()
+
+        assertTrue(flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        assertTrue(flags and android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
+        assertTrue(flags and android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION != 0)
     }
 
     @Test

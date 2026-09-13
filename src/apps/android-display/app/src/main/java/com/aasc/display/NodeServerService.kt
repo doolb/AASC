@@ -54,14 +54,17 @@ class NodeServerService : Service() {
             rootDir: File,
             serverUrl: String,
             serverVersion: String,
-            offlineMode: Boolean = false
+            offlineMode: Boolean = false,
+            safBaseUrl: String? = null,
+            safToken: String? = null,
+            androidMediaHome: String? = null
         ): Map<String, String> {
             val runtimeLibraryPath = File(rootDir, "runtime/arm64-v8a/lib").absolutePath
             val inheritedLibraryPath = System.getenv("LD_LIBRARY_PATH")?.trim().orEmpty()
             val libraryPath = listOf(runtimeLibraryPath, inheritedLibraryPath)
                 .filter { it.isNotEmpty() }
                 .joinToString(File.pathSeparator)
-            return mapOf(
+            val environment = mutableMapOf(
                 "HOME" to File(rootDir, "home").absolutePath,
                 "LD_LIBRARY_PATH" to libraryPath,
                 // Termux Node 默认读取 Termux 私有路径下的 openssl.cnf，APK 无法访问该路径。
@@ -72,6 +75,14 @@ class NodeServerService : Service() {
                 "AASC_SERVER_VERSION" to serverVersion,
                 "AASC_MAIN_SERVER_URL" to serverUrl
             )
+            if (!safBaseUrl.isNullOrBlank() && !safToken.isNullOrBlank()) {
+                environment["AASC_ANDROID_SAF_URL"] = safBaseUrl
+                environment["AASC_ANDROID_SAF_TOKEN"] = safToken
+            }
+            if (!androidMediaHome.isNullOrBlank()) {
+                environment["AASC_ANDROID_MEDIA_HOME"] = androidMediaHome
+            }
+            return environment
         }
     }
 
@@ -85,11 +96,20 @@ class NodeServerService : Service() {
     private var restartAttempt = 0
     private var mainServerUrl = ""
     private var offlineMode = false
+    private var safMediaServer: SafMediaServer? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("正在准备 Node.js 服务"))
+        try {
+            safMediaServer = SafMediaServer(this).also { gateway ->
+                val connection = gateway.start()
+                android.util.Log.i("AASC-SAF", "SAF 网关已启动: ${connection.baseUrl}")
+            }
+        } catch (error: Exception) {
+            android.util.Log.e("AASC-SAF", "SAF 网关启动失败", error)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -128,6 +148,8 @@ class NodeServerService : Service() {
 
     override fun onDestroy() {
         stopNodeProcess()
+        safMediaServer?.stop()
+        safMediaServer = null
         startExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -149,8 +171,24 @@ class NodeServerService : Service() {
                 .directory(root)
                 .redirectErrorStream(false)
             File(root, "home").mkdirs()
+            // Android 负责授予应用专属外部目录访问权限；目录不可用时省略变量，保留内部 HOME 回退。
+            val androidMediaHome = getExternalFilesDir(null)?.let { directory ->
+                if (!directory.exists()) directory.mkdirs()
+                directory.takeIf { it.isDirectory }?.absolutePath
+            }
+            val safConnection = safMediaServer
+                ?.takeIf { SharedStorageAccess.hasPersistedTreeUri(this) }
+                ?.connectionInfo()
             processBuilder.environment().putAll(
-                buildNodeEnvironment(root, serverUrl, "apk-${readAppVersion()}", offlineMode)
+                buildNodeEnvironment(
+                    root,
+                    serverUrl,
+                    "apk-${readAppVersion()}",
+                    offlineMode,
+                    safConnection?.baseUrl,
+                    safConnection?.token,
+                    androidMediaHome
+                )
             )
             val process = processBuilder.start()
             nodeProcess = process

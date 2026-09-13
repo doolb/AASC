@@ -13,13 +13,20 @@
 - 未知证书或主机名不匹配时 WebView 取消连接，不再通过 `SslErrorHandler.proceed()` 放行；display.html 继续使用唯一重连定时器处理 error/close。
 - SM-N9500（Android 9/API 28，`192.168.1.6`）真机验收通过：显示端已连接主服务器，内置 Node 子服务器已注册；主服务器重启后显示端和子服务器均自动重连。
 
-## 2026-09-09 共享存储访问结果
+## 2026-09-09 共享存储访问结果（API 28 历史验收）
 
-- APK Manifest 增加 `READ_EXTERNAL_STORAGE` 和 `WRITE_EXTERNAL_STORAGE`，均限制 `maxSdkVersion=28`；MainActivity 启动时动态申请缺失权限。
+- APK Manifest 为 `READ_EXTERNAL_STORAGE` 和 `WRITE_EXTERNAL_STORAGE` 设置 `maxSdkVersion=28`；本节只记录 Android 9/API 28 的历史验收结果，Android 10+ 后续改用 SAF。
 - 权限流程与显示端连接解耦：授权后继续启动 Node 和 WebView，拒绝时只影响共享存储媒体库操作，不阻塞显示端连接。
 - SM-N9500（Android 9/API 28）首次启动已弹出系统存储授权框；授权后 `/storage/emulated/0/Download` 可读、可写、可建目录和可删目录。
 - 通过 APK Node 媒体库接口完成 Download 目录列出、临时目录创建、文件上传、文件删除和目录删除；测试媒体库与临时文件已清理。
-- Android 10/API 29 及以上不申请 `MANAGE_EXTERNAL_STORAGE`；整个共享存储的跨版本支持需要另行设计。
+- Android 10/API 29 及以上不沿用本节的旧版全盘访问设想，统一采用下方的 SAF 原生网关方案。
+
+## 2026-09-13 共享存储访问方案修订
+
+- Android 9/API 28 保留旧版 `READ_EXTERNAL_STORAGE`、`WRITE_EXTERNAL_STORAGE` 与 Node `fs` 直接访问。
+- Android 10/API 29 及以上通过 `ACTION_OPEN_DOCUMENT_TREE` 选择目录并持久化 URI 读写授权；不声明或申请 `MANAGE_EXTERNAL_STORAGE`。
+- 用户选择的目录在 Node 媒体库中统一映射为虚拟根路径 `/`，Node 不直接读取 `content://` URI，而是通过 APK 原生 SAF 网关执行列举、读取、Range 读取、上传、删除和建/删目录。
+- SAF 目录授权只覆盖所选目录及其子目录；Android 11+ 的内部存储根目录、`Download` 根目录、`Android/data` 和 `Android/obb` 等系统限制继续生效。
 
 ## 需求背景
 
@@ -42,7 +49,7 @@
 
 - 显示端设备：Android 7+（无障碍 dispatchGesture 需要 API 24+）
 - APK 定位：WebView 包装 + 原生增强（不重写显示端逻辑）
-- 权限最小化：当前 Android 9/API 28 设备增加共享存储读写权限；不使用 MediaProjection，不申请 Android 10+ 的“所有文件访问”权限
+- 权限按系统版本分层：Android 9 使用旧版共享存储读写权限，Android 10+ 使用 SAF 目录授权；不申请 `MANAGE_EXTERNAL_STORAGE`，不使用 MediaProjection
 
 ## 核心架构
 
@@ -120,8 +127,10 @@ JS 侧异步取值：`takeScreenshot` 用回调；其余同步返回。
 
 - `window.NativeDisplay` 不存在时直接忽略，保证浏览器显示端和旧 APK 无报错。
 - 旧 APK 只有部分桥方法、缺少 `cpuConfigureAsync` 时也直接忽略，不能影响 `asrConfig`、`ttsConfig`、`voiceprintConfig`、TTS 生成和 ASR 回调。
-- 新 APK 调用 `NativeDisplay.cpuConfigureAsync(JSON.stringify({ asr, tts }))`；调用只入队并立即返回，返回 `{ error }` 只记录日志，不中断页面消息流。
-- 页面按规范化配置 key 去重；原生侧后台队列只保留最新待处理配置。同步 `cpuConfigure` 仅保留原生兼容接口，不由 WebSocket 消息处理路径调用。
+- 新 APK 调用 `NativeDisplay.cpuConfigureAsync(JSON.stringify({ asr, tts, llm }))`；调用只入队并立即返回，`accepted` 只表示已进入后台队列，不表示 native 已应用。
+- 页面按规范化配置 key 去重；只有收到原生 `applied=true` 回调后才写入 `lastAppliedCpuConfigKey`。原生应用失败时回调失败结果并清除 pending，允许同一配置重新广播/重试。
+- 原生侧后台队列只保留最新待处理配置，并通过 `mainHandler` 回传 `{ configKey, applied, error? }`；同步 `cpuConfigure` 仅保留原生兼容接口，不由 WebSocket 消息处理路径调用。
+- ASR、TTS 和 LLM policy 的应用相互隔离；ASR/TTS pool 构造失败只汇总错误，不得提前返回阻断 LLM policy 更新。整体 `applied` 仍仅在全部配置成功时为 `true`。
 - `cpuConfig` 既会在显示端首连初始化时到达，也会在控制端修改后再次广播到显示端。
 - 控制端在 ASR、TTS 行分别提供“优先大核”开关；开关状态随对应引擎配置广播到 APK，两个引擎互不影响。
 - 开关开启时保留该引擎配置的并发槽位总数（大核数 + 小核数），先填充可用大核，不足部分再用小核补齐；关闭时继续按大核数/小核数精确分配。
@@ -140,11 +149,14 @@ CPU affinity 控制项除了大核/小核数量，还保存两个独立的布尔
 android-display/
 ├── settings.gradle.kts / build.gradle.kts / app/
 └── app/src/main/
-    ├── AndroidManifest.xml        # INTERNET + API 28及以下共享存储 + 无障碍服务声明
+    ├── AndroidManifest.xml        # INTERNET + API 28及以下共享存储权限 + 无障碍服务声明
     ├── java/com/aasc/display/
     │   ├── MainActivity.kt        # 全屏：服务器地址配置 + WebView 容器
     │   ├── DisplayWebView.kt      # WebView 子类：加载 /display + 桥绑定
     │   ├── NativeBridge.kt        # JavascriptInterface 实现
+    │   ├── SharedStorageAccess.kt # API 28 旧权限与 API 29+ SAF URI
+    │   ├── SafMediaPath.kt        # 虚拟 / 路径与 Range 校验
+    │   ├── SafMediaServer.kt      # 回环地址 SAF HTTP 网关
     │   ├── ScreenshotEngine.kt    # drawToBitmap → 720p JPEG
     │   ├── KeyInjector.kt         # dispatchKeyEvent 按键/文本
     │   └── DisplayAccessibilityService.kt  # dispatchGesture 触摸
@@ -164,17 +176,20 @@ android-display/
 
 ### 共享存储访问
 
-- 当前目标设备为 Android 9/API 28，APK 需要让内置 Node 子服务器直接读写 `/storage/emulated/0/` 及其子目录，以支持设备本地媒体库。
-- Manifest 只声明 `READ_EXTERNAL_STORAGE` 和 `WRITE_EXTERNAL_STORAGE`，并设置 `maxSdkVersion=28`；MainActivity 启动时动态申请尚未授予的权限。
-- 存储权限授权流程独立于显示端连接；用户拒绝时 WebView 和 AASC 子服务器仍可启动，但访问共享存储的媒体库请求由 Android 文件系统返回权限错误。
-- Android 10/API 29 及以上不在本功能范围内申请 `MANAGE_EXTERNAL_STORAGE`；这些系统不能据此承诺直接读写整个共享存储根目录。
-- 媒体库仍使用现有 `LocalProvider`，例如配置 `path=/storage/emulated/0/Download`；相对路径越界校验和 `readonly` 写保护保持不变。
+- Android 9/API 28 继续由内置 Node 子服务器直接读写用户配置的 `/storage/emulated/0/` 子目录，现有 `LocalProvider`、路径越界校验和 `readonly` 写保护保持不变。
+- Android 10/API 29 及以上不把 SAF `content://` URI 当作文件系统路径，也不依赖旧版读写权限或 `MANAGE_EXTERNAL_STORAGE`。
+- MainActivity 通过 `ACTION_OPEN_DOCUMENT_TREE` 让用户选择媒体根目录，并使用 `takePersistableUriPermission` 持久化读写授权；取消选择或授权失效不阻塞 WebView、Node 和 AASC 连接。
+- NodeServerService 启动仅绑定 `127.0.0.1` 的原生 SAF 网关，使用随机令牌保护接口；Node 通过环境变量获取网关地址和令牌。
+- `AndroidSafProvider` 把原生网关的目录树映射为媒体库虚拟根 `/`：`/` 表示用户选择的目录，`/子目录/文件` 只表示该目录树内的相对路径。
+- 媒体读取使用流式传输和 Range，上传不使用 Base64；大目录按当前目录懒加载，不递归扫描整个树。
+- SAF 目录授权只覆盖用户选择的目录及子目录；Android 11/API 30 及以上的系统目录选择限制由系统文件选择器执行。
+- 真机验收：SM-N9500 Android 9/API 28 已验证 APK 安装、Activity 启动、Node 进程、HTTPS 健康接口和旧版媒体库列举；API 29+ SAF 分支仍需 Android 10 及以上设备。
 
 ### 权限
 
 - `android.permission.INTERNET`
-- `android.permission.READ_EXTERNAL_STORAGE`（仅 `maxSdkVersion=28`）
-- `android.permission.WRITE_EXTERNAL_STORAGE`（仅 `maxSdkVersion=28`）
+- `android.permission.READ_EXTERNAL_STORAGE`（仅 `maxSdkVersion=28`，仅 Android 9 旧版流程）
+- `android.permission.WRITE_EXTERNAL_STORAGE`（仅 `maxSdkVersion=28`，仅 Android 9 旧版流程）
 - 无障碍服务（`BIND_ACCESSIBILITY_SERVICE`）：系统设置开启一次；未开启时触摸注入返回 false，其余能力可用
 
 ### 配置
@@ -278,7 +293,8 @@ android-display/
 13. 证书指纹或 SAN 不匹配时连接被取消，不允许通过任意自签名证书
 14. Android 9/API 28 首次启动时申请共享存储读写权限，授权后 Node 媒体库可以列出、创建、上传和删除测试目录/文件
 15. Android 9/API 28 拒绝共享存储权限时，显示端仍可连接，访问 `/storage/emulated/0/` 的媒体库请求返回权限错误且不越界
-16. Android 10/API 29 及以上不声明或申请 `MANAGE_EXTERNAL_STORAGE`
+16. Android 10/API 29 及以上首次启动可选择 SAF 媒体目录；Node 媒体库以虚拟 `/` 为根完成列出、读取、Range 播放、上传、建目录和删除
+17. Android 11/API 30 及以上拒绝系统限制目录或撤销 URI 授权时，媒体库显示明确错误，不申请全盘文件访问
 
 ## 文档与任务
 

@@ -618,11 +618,16 @@ function normalizeAsrText(text) {
     return String(text || '').trim();
 }
 
+const androidSafUrl = process.env.AASC_ANDROID_SAF_URL?.trim() || '';
+const androidSafToken = process.env.AASC_ANDROID_SAF_TOKEN?.trim() || '';
 const mediaLibraryManager = new MediaLibraryManager({
     configPath: path.join(USER_CONFIG_DIR, 'media-libraries.json'),
     getPort: () => PORT,
     getLocalIP: getLocalIP,
-    isHttps: () => useHttps
+    isHttps: () => useHttps,
+    androidSafConfig: androidSafUrl && androidSafToken
+        ? { url: androidSafUrl, token: androidSafToken }
+        : null
 });
 
 // 动态添加媒体库时只注册一次静态路由，避免子服务器被主控端重复配置后
@@ -2724,6 +2729,7 @@ function modelDownloadErrorStatus(error) {
         return 400;
     }
     if (error?.code === 'MODEL_NOT_FOUND') return 404;
+    if (error?.code === 'MODEL_NOT_READY' || error?.code === 'MODEL_DOWNLOAD_BUSY') return 409;
     return 500;
 }
 
@@ -2746,72 +2752,6 @@ function streamModelFile(res, filePath) {
     } catch (error) {
         return res.status(404).json({ status: 'error', message: '模型文件不存在' });
     }
-}
-
-function streamRemoteModelFile(res, remoteUrl, expectedSize, redirectCount = 0) {
-    if (redirectCount > 3) {
-        return res.status(502).json({ status: 'error', message: '远端模型重定向次数过多' });
-    }
-    let parsedUrl;
-    try {
-        parsedUrl = new URL(remoteUrl);
-    } catch (error) {
-        return res.status(502).json({ status: 'error', message: '远端模型地址无效' });
-    }
-    if (parsedUrl.protocol !== 'https:') {
-        return res.status(502).json({ status: 'error', message: '远端模型地址必须使用 HTTPS' });
-    }
-    const request = https.get(parsedUrl, {
-        headers: {
-            // ModelScope 的签名 CDN 会拒绝没有常规客户端标识的 Node 请求。
-            'User-Agent': 'AASC-Model-Proxy/1.0',
-            Accept: '*/*'
-        }
-    }, (remoteResponse) => {
-        const statusCode = remoteResponse.statusCode || 0;
-        const location = remoteResponse.headers.location;
-        if (statusCode >= 300 && statusCode < 400 && location) {
-            remoteResponse.resume();
-            return streamRemoteModelFile(
-                res,
-                new URL(location, parsedUrl).toString(),
-                expectedSize,
-                redirectCount + 1
-            );
-        }
-        if (statusCode !== 200) {
-            remoteResponse.resume();
-            return res.status(502).json({ status: 'error', message: '远端模型文件不可用' });
-        }
-        const contentLength = Number(remoteResponse.headers['content-length']);
-        if (Number.isInteger(expectedSize) && expectedSize > 0
-            && Number.isFinite(contentLength) && contentLength !== expectedSize) {
-            remoteResponse.resume();
-            return res.status(502).json({ status: 'error', message: '远端模型文件大小不匹配' });
-        }
-        res.setHeader('Content-Type', remoteResponse.headers['content-type'] || 'application/octet-stream');
-        if (Number.isFinite(contentLength) && contentLength > 0) {
-            res.setHeader('Content-Length', contentLength);
-        }
-        remoteResponse.on('error', () => {
-            if (!res.headersSent) {
-                res.status(502).json({ status: 'error', message: '远端模型读取失败' });
-            } else {
-                res.end();
-            }
-        });
-        res.on('close', () => remoteResponse.destroy());
-        res.on('error', () => remoteResponse.destroy());
-        return remoteResponse.pipe(res);
-    });
-    request.on('error', () => {
-        if (!res.headersSent) {
-            res.status(502).json({ status: 'error', message: '远端模型连接失败' });
-        } else {
-            res.end();
-        }
-    });
-    return request;
 }
 
 // 正式 APK 视觉模型只从服务器按需下载；服务器本身不加载或执行视觉模型。
@@ -2851,9 +2791,6 @@ app.get('/api/llm/model/:modelId/:filename', (req, res) => {
             req.params.modelId,
             req.params.filename
         );
-        if (source.type === 'remote') {
-            return streamRemoteModelFile(res, source.url, source.size);
-        }
         return streamModelFile(res, source.path);
     } catch (error) {
         return res.status(modelDownloadErrorStatus(error)).json({

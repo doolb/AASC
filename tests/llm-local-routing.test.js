@@ -68,11 +68,16 @@ test('ModelScope 远端清单提供固定仓库和逐文件校验信息', () => 
     const model = manifest.models.find((item) => item.modelId === 'minicpm4-0.5b-mnn');
     assert.equal(model.source.provider, 'modelscope');
     assert.equal(model.source.repository, 'MNN/MiniCPM4-0.5B-MNN');
-    assert.equal(model.ready, true);
+    assert.equal(model.ready, false);
+    assert.ok(model.files.every((file) => file.cached === false));
     assert.ok(model.files.every((file) => file.size > 0 && /^[0-9a-f]{64}$/u.test(file.sha256)));
-    const source = service.resolveDownload(model.modelId, 'config.json');
+    const source = service.resolveRemoteDownload(model.modelId, 'config.json');
     assert.equal(source.type, 'remote');
     assert.match(source.url, /modelscope\.cn\/models\/MNN\/MiniCPM4-0\.5B-MNN\/resolve\//u);
+    assert.throws(
+        () => service.resolveDownload(model.modelId, 'config.json'),
+        (error) => error.code === 'MODEL_NOT_READY'
+    );
     const visionModel = manifest.models.find((item) => item.modelId === 'qwen3.5-0.8b-claude-opus-distilled-mnn');
     assert.equal(visionModel.source.provider, 'modelscope');
     assert.equal(visionModel.source.repository, 'MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN');
@@ -82,7 +87,7 @@ test('ModelScope 远端清单提供固定仓库和逐文件校验信息', () => 
         'qwen3.5',
         'Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN'
     ]);
-    assert.equal(visionModel.ready, true);
+    assert.equal(visionModel.ready, false);
     assert.equal(visionModel.totalBytes, 544130168);
     assert.deepEqual(visionModel.files.map((file) => file.name), [
         'config.json',
@@ -95,7 +100,7 @@ test('ModelScope 远端清单提供固定仓库和逐文件校验信息', () => 
         'visual.mnn',
         'visual.mnn.weight'
     ]);
-    const visionSource = service.resolveDownload(visionModel.modelId, 'visual.mnn');
+    const visionSource = service.resolveRemoteDownload(visionModel.modelId, 'visual.mnn');
     assert.match(visionSource.url, /MNN\/Qwen3\.5-0\.8B-Claude-4\.6-Opus-Reasoning-Distilled-MNN\/resolve\/c1bc31b15286afa708f37f690099d10f21d1cc74\/visual\.mnn$/u);
 });
 
@@ -180,10 +185,31 @@ test('LLM 状态解包后保留下载和错误状态', () => {
         ready: false,
         selectedModelId: 'qwen-test',
         selectedRevision: null,
+        loadedModelId: 'qwen-test',
+        loadedRevision: null,
+        threadCount: null,
+        loadedThreadCount: null,
         activeRequests: 0,
         queueDepth: 0,
         error: null
     });
+});
+
+test('实际加载模型与选中模型不一致时不进入路由池', () => {
+    const router = new LlmRouter();
+    router.registerDisplay('display-a', {
+        supported: true,
+        ready: true,
+        selectedModelId: 'qwen-test',
+        loadedModelId: 'other-model'
+    });
+    const status = router.getDisplayStatus('display-a');
+    assert.equal(status.ready, false);
+    assert.equal(status.loadedModelId, 'other-model');
+    assert.throws(
+        () => router.resolveTarget({ modelId: 'qwen-test' }),
+        (error) => error.code === 'LLM_TARGET_UNAVAILABLE'
+    );
 });
 
 test('LLM 网关将显示端 chunk 聚合成请求结果并释放路由计数', async () => {

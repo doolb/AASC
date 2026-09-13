@@ -174,6 +174,14 @@ class LlmModelManifestService {
         return definition ? definition.modelId : null;
     }
 
+    getModelDirectory(modelId) {
+        const definition = this.findDefinition(modelId);
+        if (!definition) {
+            throw createModelError(`非法模型 ID: ${modelId}`, 'MODEL_INVALID_ID');
+        }
+        return path.resolve(this.modelRoot, definition.directory);
+    }
+
     resolveDefinitionFile(definition, filename) {
         if (!definition || path.basename(filename) !== filename) {
             throw createModelError(`非法模型文件: ${filename}`, 'MODEL_INVALID_FILE');
@@ -237,11 +245,50 @@ class LlmModelManifestService {
         return { name: file.name, size: stat.size, sha256 };
     }
 
+    readCacheMarker(definition) {
+        const markerPath = path.join(this.getModelDirectory(definition.modelId), '.manifest.json');
+        try {
+            return JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+        } catch (error) {
+            return null;
+        }
+    }
+
+    isModelCacheReady(definition) {
+        if (!definition) return false;
+        if (!definition.source) {
+            return definition.files.every((file) => this.createFileManifest(definition, file) !== null);
+        }
+        const marker = this.readCacheMarker(definition);
+        if (!marker
+            || marker.modelId !== definition.modelId
+            || marker.revision !== definition.revision
+            || !Array.isArray(marker.files)) {
+            return false;
+        }
+        return definition.files.every((file) => {
+            const markerFile = marker.files.find((candidate) => candidate.name === file.name);
+            if (!markerFile
+                || markerFile.size !== file.expectedSize
+                || markerFile.sha256 !== file.expectedSha256) {
+                return false;
+            }
+            const filePath = this.resolveDefinitionFile(definition, file.name);
+            try {
+                return isSafeRegularFile(filePath, this.realModelRoot)
+                    && fs.statSync(filePath).size === file.expectedSize;
+            } catch (error) {
+                return false;
+            }
+        });
+    }
+
     createModelManifest(definition, { includeIncomplete = false } = {}) {
         if (!definition.enabled) return null;
         const files = definition.files.map((file) => this.createFileManifest(definition, file));
         if (!includeIncomplete && files.some((file) => file === null)) return null;
         const safeFiles = files.filter(Boolean);
+        const ready = this.isModelCacheReady(definition);
         return {
             id: definition.modelId,
             modelId: definition.modelId,
@@ -252,9 +299,9 @@ class LlmModelManifestService {
             multimodal: definition.multimodal,
            revision: definition.revision,
             source: definition.source,
-            ready: files.length === definition.files.length,
+            ready,
             totalBytes: safeFiles.reduce((total, file) => total + file.size, 0),
-            files: safeFiles
+            files: safeFiles.map((file) => ({ ...file, cached: ready }))
         };
     }
 
@@ -272,9 +319,37 @@ class LlmModelManifestService {
     }
 
     resolveFile(modelId, filename) {
-        const source = this.resolveDownload(modelId, filename);
-        if (source.type === 'remote') return source.url;
-        return source.path;
+        return this.resolveDownload(modelId, filename).path;
+    }
+
+    resolveRemoteDownload(modelId, filename) {
+        const definition = this.findDefinition(modelId);
+        if (!definition || !definition.enabled) {
+            throw createModelError(`非法模型 ID: ${modelId}`, 'MODEL_INVALID_ID');
+        }
+        const file = definition.files.find((candidate) => candidate.name === filename);
+        if (!file) {
+            throw createModelError(`非法模型文件: ${filename}`, 'MODEL_INVALID_FILE');
+        }
+        const manifestFile = this.createFileManifest(definition, file);
+        if (!manifestFile || definition.source?.provider !== 'modelscope') {
+            throw createModelError('模型没有可用的固定远端下载源', 'MODEL_NOT_FOUND', 404);
+        }
+        const [owner, repository] = definition.source.repository.split('/');
+        const url = [
+            'https://modelscope.cn/models',
+            encodeURIComponent(owner),
+            encodeURIComponent(repository),
+            'resolve',
+            encodeURIComponent(definition.source.revision),
+            encodeURIComponent(filename)
+        ].join('/');
+        return {
+            type: 'remote',
+            url,
+            size: manifestFile.size,
+            sha256: manifestFile.sha256
+        };
     }
 
     resolveDownload(modelId, filename) {
@@ -287,28 +362,32 @@ class LlmModelManifestService {
             throw createModelError(`非法模型文件: ${filename}`, 'MODEL_INVALID_FILE');
         }
         const filePath = this.resolveDefinitionFile(definition, filename);
-        const manifestFile = this.createFileManifest(definition, file);
+        const manifestFile = definition.source
+            ? this.createCachedFileManifest(definition, file)
+            : this.createFileManifest(definition, file);
         if (!manifestFile) {
-            throw createModelError('模型文件不存在或校验失败', 'MODEL_NOT_FOUND', 404);
-        }
-        if (definition.source?.provider === 'modelscope') {
-            const [owner, repository] = definition.source.repository.split('/');
-            const remoteUrl = [
-                'https://modelscope.cn/models',
-                encodeURIComponent(owner),
-                encodeURIComponent(repository),
-                'resolve',
-                encodeURIComponent(definition.source.revision),
-                encodeURIComponent(filename)
-            ].join('/');
-            return {
-                type: 'remote',
-                url: remoteUrl,
-                size: manifestFile.size,
-                sha256: manifestFile.sha256
-            };
+            throw createModelError(
+                definition.source ? '服务器模型缓存未就绪或校验失败' : '模型文件不存在或校验失败',
+                definition.source ? 'MODEL_NOT_READY' : 'MODEL_NOT_FOUND',
+                definition.source ? 409 : 404
+            );
         }
         return { type: 'local', path: filePath, ...manifestFile };
+    }
+
+    createCachedFileManifest(definition, file) {
+        const filePath = this.resolveDefinitionFile(definition, file.name);
+        if (!isSafeRegularFile(filePath, this.realModelRoot)) return null;
+        let stat;
+        try {
+            stat = fs.statSync(filePath);
+        } catch (error) {
+            return null;
+        }
+        if (stat.size !== file.expectedSize) return null;
+        const sha256 = this.getFileHash(filePath, stat);
+        if (sha256 !== file.expectedSha256) return null;
+        return { name: file.name, size: stat.size, sha256, cached: true };
     }
 }
 

@@ -56,7 +56,7 @@ dispatchControlInputNative:
     crossOriginControlDegraded  = 桥存在但触摸不可用
 
 CPU 配置消费(applyCpuConfig):
-    config = { asr: data.asr || {}, tts: data.tts || {} }
+    config = { asr: data.asr || {}, tts: data.tts || {}, llm: data.llm || {} }
     # 每个引擎额外透传 preferBigCores；缺失时由服务端/APK按 false 兼容处理
     key = 稳定序列化(config)
     key == lastAppliedCpuConfigKey 或 key == pendingCpuConfigKey -> return
@@ -64,21 +64,44 @@ CPU 配置消费(applyCpuConfig):
     nativeBridge.cpuConfigureAsync 不是函数 -> return
     pendingCpuConfigKey = key
     result = JSON.parse(nativeBridge.cpuConfigureAsync(JSON.stringify(config)))
-    result.accepted == true -> lastAppliedCpuConfigKey = key; pendingCpuConfigKey = ''
+    result.accepted != true -> pendingCpuConfigKey = ''; 仅 console.warn
+    result.applied == true -> lastAppliedCpuConfigKey = key; pendingCpuConfigKey = ''
+    result.accepted == true 且 result.applied 不为 true -> 保留 pendingCpuConfigKey，等待原生完成回调
     result.error 或调用异常 -> pendingCpuConfigKey = ''; 仅 console.warn
     # 不调用同步 cpuConfigure，不阻塞 WebSocket/UI 主线程
 
+onNativeCpuConfigResult(result):
+    key = result.configKey
+    if key 不是字符串: return
+    if result.applied == true:
+        lastAppliedCpuConfigKey = key
+    if pendingCpuConfigKey == key:
+        pendingCpuConfigKey = ''
+    if result.applied != true:
+        console.warn 原生 CPU 配置应用失败
+
 NativeBridge.cpuConfigureAsync(configJson):
+    if key 已实际应用:
+        return { accepted: true, coalesced: true, applied: true }
+    if key 已在后台队列中:
+        return { accepted: true, coalesced: true, applied: false }
     只在 cpuConfigLock 中覆盖 pending 配置并唤醒单线程后台 worker
-    立即返回 accepted JSON
+    立即返回 { accepted: true, applied: false }
     worker 后台调用原 cpuConfigure 的配置应用主体
+    worker 完成后生成 { configKey, applied, error? }，经 mainHandler 回调页面
+
+NativeBridge.applyCpuConfig(configJson):
+    尝试独立应用 asr 和 tts policy，失败项写入 cpuConfigErrors，不提前返回
+    始终更新 llmCpuPolicy 并通知 llmModelManager.onCpuPolicyChanged()
+    cpuConfigErrors 为空 -> ok=true；否则 ok=false 且保留 error 汇总
+    # ASR/TTS pool 失败不得阻断 LLM 线程数配置
 
 NativeBridge.voiceprintConfigure:
     模型回调 event -> mainHandler.post -> WebView.evaluateJavascript
 
 display websocket onmessage:
-    data.type == 'cpuConfig' -> applyCpuConfig({ asr: data.asr, tts: data.tts })
-    # asr.preferBigCores 与 tts.preferBigCores 独立生效，不改变槽位总数
+    data.type == 'cpuConfig' -> applyCpuConfig({ asr: data.asr, tts: data.tts, llm: data.llm })
+    # asr.preferBigCores、tts.preferBigCores 与 llm.preferBigCores 独立生效，不改变各自槽位总数
     继续保留 asrConfig / ttsConfig / voiceprintConfig / ttsGenerate 原有顺序与 fallback
 
 媒体播放状态检测:
@@ -150,17 +173,23 @@ TouchInjector          触摸注入入口，服务未开启返回 false
         → 缺少任一权限时调用 requestPermissions(缺少权限, REQ_STORAGE_PERMISSION)
         → 权限回调中记录授权结果
     → Android 10(API 29)及以上:
-        → 不声明或申请“所有文件访问”权限
-        → 不承诺直接操作整个 /storage/emulated/0/
+        → 读取 SharedStorageAccess.persistedTreeUri()
+        → 没有有效 URI 时启动 ACTION_OPEN_DOCUMENT_TREE
+        → 选择成功时 takePersistableUriPermission(READ|WRITE)
+        → 取消选择或 URI 无效时只提示 SAF 媒体库不可用
     → 无论存储权限结果如何，继续执行显示端连接和其他启动流程
 
 内置 Node 子服务器访问本地媒体库:
-    → Node 进程继续使用 APK 私有 HOME 和现有 LocalProvider
-    → 媒体库配置 path 可以是 /storage/emulated/0/ 或其子目录
-    → LocalProvider 使用 Node fs 读写已授权的共享存储路径
-    → path.resolve + 路径越界校验继续限制相对文件路径不能逃出媒体库根目录
-    → readonly=true 时禁止上传、删除和建/删目录
-    → Android 系统拒绝访问时返回现有文件系统错误，不绕过权限
+    → Android 9/API 28 继续使用 LocalProvider(path) 和 Node fs
+    → Android 10/API 29 及以上 NodeServerService 启动 127.0.0.1 SAF 网关
+    → NodeServerService 将 SAF 网关 URL 和随机 token 注入 Node 环境
+    → Node server 以 AndroidSafProvider 注册受管媒体库，虚拟根固定为 /
+    → AndroidSafProvider 将相对路径编码后请求原生 list/file/folder 接口
+    → 原生 SAF 网关用 ContentResolver/DocumentFile 从持久 URI 解析路径
+    → 原生网关流式返回元数据、文件内容和 Range，或写入/删除授权目录内容
+    → Node 和原生两侧都拒绝 ..、绝对路径和越出虚拟根的路径
+    → readonly=true 时 Node 层禁止上传、删除和建/删目录
+    → URI 撤销、系统拒绝或文件不存在时返回明确媒体库错误，不绕过系统授权
 ```
 
 ## 主服务器 HTTPS/WSS 信任伪代码
@@ -203,7 +232,7 @@ MainActivity.onCreate:
 
 `minSdk=26` 只限制最低运行系统，不参与 DeX 窗口尺寸决策；`targetSdk=34` 在 TTS 接入前后保持不变。
 
-权限：INTERNET + Android 9/API 28 及以下的 READ_EXTERNAL_STORAGE、WRITE_EXTERNAL_STORAGE + 无障碍服务（BIND_ACCESSIBILITY_SERVICE）。不用 MediaProjection，不申请 Android 10+ 的 MANAGE_EXTERNAL_STORAGE。
+权限：INTERNET + Android 9/API 28 及以下的 READ_EXTERNAL_STORAGE、WRITE_EXTERNAL_STORAGE + 无障碍服务（BIND_ACCESSIBILITY_SERVICE）。Android 10+ 使用 ACTION_OPEN_DOCUMENT_TREE 的用户选择授权，不声明 MANAGE_EXTERNAL_STORAGE。
 
 ## 部署命令自动恢复服务器地址
 
@@ -312,4 +341,5 @@ mode='none' 占位文本按能力区分:
 - tests/display-websocket-reconnect.test.js：验证显示端只保留一个重连定时器、隔离过期 socket，并在 error/close 后恢复连接
 - tests/android-display-tls.test.js：验证 Network Security Config、APK 证书资源、主服务器证书 SAN 和 manifest 引用一致
 - Android `NodeServerServiceTest` 与 `android-node-runtime-package.test.js`：验证 Node 使用 APK 原生库目录中的 `libaasc_node.so`
-- tests/android-shared-storage.test.js 与 Android `SharedStorageAccessTest`：验证 API 28 读写权限申请边界和 API 29+ 不申请全盘权限
+- tests/android-shared-storage.test.js、tests/android-saf-media-provider.test.js 与 Android `SharedStorageAccessTest`/`SafMediaPathTest`：验证 API 28 旧权限、API 29+ SAF 选择边界、虚拟根 `/`、路径安全、Range 和不声明全盘权限
+- 真机：SM-N9500 Android 9/API 28 安装并启动 Debug APK，Node HTTPS 健康接口和旧版媒体库列举返回成功；API 29+ SAF 选择器待 Android 10+ 真机执行

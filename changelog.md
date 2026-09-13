@@ -1,6 +1,43 @@
 # Web MediaCenter - 变更日志
 
+## Android APK SAF 共享存储
+
+- ✅ [2026-09-13] 支持 Android 10/API 29 及 Android 11+ 通过 SAF 访问用户选择的媒体目录。
+  - API 28 及以下保留 READ/WRITE_EXTERNAL_STORAGE 与 Node `fs` 直接路径；API 29+ 启动 `ACTION_OPEN_DOCUMENT_TREE`，持久化读写 URI 授权。
+  - Android 原生新增仅监听 `127.0.0.1` 的 token 网关，使用 `DocumentFile` 完成虚拟根 `/` 的列举、元数据、Range 流读取、上传、删除和目录操作；SAF provider 不接收 `content://` URI，也不使用 `~/` 别名或 `MANAGE_EXTERNAL_STORAGE`，既有 APK 外部目录别名实现保持不变。
+  - Node 新增 `AndroidSafProvider`，运行时自动注册受管媒体库 `android-saf`；网关地址和 token 仅通过环境变量传递，不写入媒体库配置。
+  - 改动文件：`SharedStorageAccess.kt`、`MainActivity.kt`、`SafMediaPath.kt`、`SafMediaServer.kt`、`NodeServerService.kt`、Android `documentfile` 依赖、`media-library-app-service.js`、`server-app.js` 及对应 design/spec/task/测试文档。
+  - 验证：Android JVM 聚焦测试通过，Node 媒体库相关回归 22/22 通过，Android debug APK `assembleDebug` 构建成功；SM-N9500 Android 9/API 28 已完成安装、启动、Node HTTPS 健康接口和旧版媒体库列举验收，Android 10/11+ SAF 媒体库验收待现场执行。
+
+## Android MNNChat LLM 模型分发
+
+- ✅ [2026-09-13] 改为服务器统一下载、校验、缓存并分发 MNN-LLM 模型
+  - 新增 `npm run download:llm-model -- --id <modelId>` 和 `--force` 强制刷新参数。
+  - 新增服务器模型下载服务：固定 ModelScope revision，逐文件校验大小/SHA-256，使用 lock、staging 和原子目录切换，失败保留旧缓存。
+  - `/api/llm/model-manifest` 增加服务器缓存 ready 状态；`/api/llm/model/:modelId/:filename` 只读取服务器本地缓存，不再向 APK 转发 ModelScope URL。
+  - 更新 `android-model-distribution`、`android-mnnchat-llm` 的 design/spec/task 和模型目录 README；模型大文件未加入 Git。
+  - 验证：LLM 定向测试 13/13 通过，新增下载缓存复用、强制刷新、hash 失败回滚测试。
+
 ## Android MNNChat LLM
+
+- ✅ [2026-09-13] 同步 MNN 文本与视觉/多模态 runtime 的 LLM 线程配置
+  - JNI 将同一 LLM policy 线程数同时写入官方 `LlmSession` 主配置的顶层 `thread_num` 和 `mllm.thread_num`，避免视觉模型的 processor runtime 继续使用模型默认 4 线程。
+  - 更新 `docs/design/android-mnnchat-llm.md`、`docs/spec/android-mnnchat-llm.md` 和 `docs/task/2026-09-13_MNN双runtime线程配置同步.md`；双字段契约测试、固定 MNN revision APK 构建和真机 4→2 日志验证通过。
+
+- ✅ [2026-09-13] 修复 LLM CPU 配置未真正传入 MNN native 的问题
+  - JNI 将控制端 LLM policy 计算出的 `thread_num` 写入官方 `LlmSession` 主配置，由 `Llm.set_config` 参与 runtime 初始化，避免只写入 `extra_config` 后回退到 MNN 默认 4 线程。
+  - 新增 JNI 主配置回归契约测试；同步更新 design/spec/task，并移除已完成的 todo 条目。
+  - 验证：定向测试 2/2 通过；固定 MNN checkout 下 Gradle Debug 构建成功，APK 已安装到 `192.168.1.6:5555`；设备日志确认顶层 `thread_num=2`，短流式请求返回 `[DONE]`，推理快照观察到两个主要高负载推理相关线程。
+
+- ✅ [2026-09-13] LLM 核心数切换改为下一条推理自动生效
+  - CPU policy 更新只递增 generation，当前 native 请求继续完成；下一条已接受请求在 `generate` 前重建同一缓存模型的 MNN runtime，不重新下载模型，并使用最新 `thread_num`。
+  - reload 成功后再替换旧 engine，失败时保留旧 engine 并允许后续请求重试；同步更新 design/spec/task 和 todo。
+  - 验证：`apk-llm-explicit-thread-count` 定向测试 3/3 通过；固定 MNN checkout 下 APK Debug 构建成功并安装；真机日志验证 LLM `thread_num` 按 1→2 的配置切换分别在下一条请求前生效，短流式请求均返回 `[DONE]`。
+
+- ✅ [2026-09-13] 修复 CPU 配置异步应用失败后必须重启 APK 才重试
+  - `cpuConfigureAsync` 的 `accepted` 仅表示入队；原生 worker 回传 `{ configKey, applied, error? }`，页面只有在 `applied=true` 后才确认去重，失败会释放 pending 并允许重新配置。
+  - ASR/TTS pool 失败改为错误汇总，不再提前返回阻断 LLM policy 更新；同步更新 Android display/MNNChat 的 design、spec、task 和回归测试。
+  - 验证：相关契约测试 5/5 通过；APK Debug 构建成功并安装；同一 APK 进程不重启时，真机 4→2→4 均在下一次推理前加载对应 `thread_num`。
 
 - ✅ [2026-09-13] 修复本地 LLM 固定总时长超时中断
   - `llm.requestTimeoutMs` 改为无 chunk 活动超时，默认 120 秒；每个 `llm.chunk` 都会续期，持续生成的长回答不会因总时长超过 120 秒被截断。
@@ -52,11 +89,6 @@
   - 服务端继续实时转发 `llm.chunk`，但按 `displayId + requestId` 临时聚合，不再逐条打印；`llm.completed` 时只记录一次完整文本，错误和断线会清理缓冲。
   - 相关代码：`server-app.js`、`tests/llm-chunk-log.test.js` 及对应 design/spec/task 文档。
   - 验证：日志契约测试 1/1、服务端语法检查通过；远端服务重启后 `/v1/models` 返回 HTTP 200。
-
-- ⏳ [2026-09-13] 开始为 MNN-LLM 显式设置单次推理线程数。
-  - `MnnLlmEngine` 根据 LLM CPU policy 显式传入 `thread_num`，默认值为实际选中的核心数（默认 2 个大核）；JNI 入口拒绝缺失或非法线程数。
-  - LLM 状态和 CPU 状态增加 `threadCount`、`selectedCpus`、`cpuMask` 与 affinity 回退信息；ASR/TTS 配置和线程池不变。
-  - 验证：静态契约测试通过；远端固定环境 `npm run build:apk` 成功，APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动；实际推理线程数仍待真机请求核对。
 
 - ✅ [2026-09-13] LLM 能力禁用时释放显示端模型运行内存
   - 控制端关闭 `capabilities.llm.enabled` 后，显示端等待在途推理/切换完成并释放 `MnnLlmEngine`；已下载模型文件、`state.json` 和选中模型状态保留。
@@ -7955,6 +7987,11 @@
   - 验证：相关 JavaScript `node --check`、唤醒回归 `11/11`、临时角色契约 `2/2` 通过；全量 `npm.cmd test` 受工作区既有环境/契约失败影响未完成收敛。
 
 ## Android MNNChat 本地 LLM
+
+- ✅ [2026-09-13] 推理结束后校验 MNN 模型身份和线程配置。
+  - `MnnLlmModelManager` 在每次推理结束后预检查并预加载目标线程数；下一次 `generate` 前再次校验 `loadedModelId/loadedRevision`、policy generation 和实际线程数。
+  - LLM 状态新增实际加载模型和实际 engine 线程数；服务端路由在选中模型与已加载模型不一致时禁止分流，兼容旧 APK 字段缺失。
+  - 验证：APK 定向契约 4/4、页面桥接 3/3、LLM 路由 5/5；Gradle Debug APK 构建成功并安装；真机确认 2→4 在当前请求结束后加载 4 线程 runtime，下一条请求不重复加载。
 
 - ✅ [2026-09-13] LLM 能力关闭时释放显示端模型运行时内存，并保留模型缓存。
   - 控制端下发 `capabilities.llm.enabled=false` 后，APK 等待当前推理和切换任务完成，释放 MNN-LLM native engine；状态上报为 `disabled/ready=false`。

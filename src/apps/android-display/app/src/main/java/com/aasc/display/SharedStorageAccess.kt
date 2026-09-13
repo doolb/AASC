@@ -1,6 +1,9 @@
 package com.aasc.display
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 
 /**
@@ -12,6 +15,8 @@ import android.os.Build
 object SharedStorageAccess {
 
     private const val LEGACY_STORAGE_MAX_SDK = 28
+    private const val STORAGE_PREFERENCES = "aasc_display"
+    private const val TREE_URI_KEY = "shared_storage_tree_uri"
 
     /**
      * 返回指定 Android 版本需要动态申请的共享存储权限。
@@ -25,6 +30,71 @@ object SharedStorageAccess {
             )
         } else {
             emptyArray()
+        }
+    }
+
+    /**
+     * Android 10/API 29 及以上改用用户主动选择的 SAF 目录，不再申请整盘存储权限。
+     */
+    fun requiresTreeAccess(sdkInt: Int): Boolean = sdkInt >= Build.VERSION_CODES.Q
+
+    /**
+     * ACTION_OPEN_DOCUMENT_TREE 启动时请求读、写和可持久化授权。
+     * 单独暴露 flags 便于不依赖 Android Context 的单元测试验证授权契约。
+     */
+    fun treeAccessIntentFlags(): Int {
+        return Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+    }
+
+    fun createTreePickerIntent(): Intent {
+        return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(treeAccessIntentFlags())
+    }
+
+    /**
+     * 返回当前 APK 保存的 SAF 根目录 URI。URI 只保存在 APK 私有 SharedPreferences，
+     * 不写入 Node 配置文件，也不伪装成 ~/ 或普通文件系统路径。
+     */
+    fun persistedTreeUri(context: Context): Uri? {
+        val rawUri = context
+            .getSharedPreferences(STORAGE_PREFERENCES, Context.MODE_PRIVATE)
+            .getString(TREE_URI_KEY, null)
+            ?.trim()
+            .orEmpty()
+        return rawUri.takeIf { it.isNotEmpty() }?.let { Uri.parse(it) }
+    }
+
+    /**
+     * 仅当系统仍保留读写持久授权时才认为 SAF 目录可用；用户撤销授权后会重新弹出选择器。
+     */
+    fun hasPersistedTreeUri(context: Context): Boolean {
+        val uri = persistedTreeUri(context) ?: return false
+        return context.contentResolver.persistedUriPermissions.any { permission ->
+            permission.uri == uri &&
+                permission.isReadPermission &&
+                permission.isWritePermission
+        }
+    }
+
+    /**
+     * 保存用户刚选择的目录，并向系统申请可跨进程、跨重启保留的读写授权。
+     */
+    fun persistTreeUri(context: Context, uri: Uri, grantedFlags: Int): Boolean {
+        val persistableFlags = grantedFlags and (
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        if (persistableFlags == 0) return false
+        return try {
+            context.contentResolver.takePersistableUriPermission(uri, persistableFlags)
+            context
+                .getSharedPreferences(STORAGE_PREFERENCES, Context.MODE_PRIVATE)
+                .edit()
+                .putString(TREE_URI_KEY, uri.toString())
+                .apply()
+            true
+        } catch (error: SecurityException) {
+            false
         }
     }
 

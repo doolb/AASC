@@ -11,7 +11,8 @@
 - Android 前台 `NodeServerService` 启动 `server-launcher.js`；launcher 再 fork `server-app.js`，保持现有双进程模型。
 - Service 为 Node 设置私有 `HOME`、`LD_LIBRARY_PATH` 和 `OPENSSL_CONF=/dev/null`，避免 Termux 默认 OpenSSL 配置路径不可访问导致进程退出。
 - APK 只启用 HTTP/HTTPS、WebSocket、AASC 主动连接和媒体库能力；任务 runner、Puppeteer、Codex/Claude 外部 Agent、ASR/外部 TTS 服务均不在 APK 节点启动。
-- Android 9/API 28 的共享存储媒体库通过 READ/WRITE_EXTERNAL_STORAGE 运行时授权访问 `/storage/emulated/0/`；Android 10+ 不申请 MANAGE_EXTERNAL_STORAGE。
+- Android 9/API 28 的共享存储媒体库继续通过 READ/WRITE_EXTERNAL_STORAGE 和 Node `fs` 访问；Android 10/API 29 及以上由 MainActivity 持久化 SAF 目录授权，Node 通过 APK 原生 SAF 网关访问虚拟根 `/`，不申请 MANAGE_EXTERNAL_STORAGE。
+- APK 媒体库配置中的 `~/` 和 `~/子路径` 映射到 `getExternalFilesDir(null)`，典型路径为 `/storage/emulated/0/Android/data/com.aasc.display/files`；Node 内部 `HOME` 和配置目录继续保留在 APK 私有目录。
 - ASR 隔离进程、Wine、Puppeteer、外部 CLI 和桌面 TUI 等额外子进程能力关闭。
 - 主服务器地址默认 `https://192.168.1.39:8081`，保留手动修改；该地址同时用于子服务器主动连接和 WebView `/display`。
 
@@ -48,9 +49,17 @@ APK Launcher
 
 Node.js 服务器运行包必须在构建时生成并校验，运行时只从 APK 私有目录读取。用户媒体、配置、证书和日志不能写入 APK assets，也不能随代码包覆盖。Node.js 服务缺少可选 Android 不兼容依赖时必须保持主服务启动，并在能力和请求错误中明确反映。
 
+## Android APK 媒体路径边界
+
+APK 启动 Node 时通过 `AASC_ANDROID_MEDIA_HOME` 传递 `getExternalFilesDir(null)` 的绝对路径。Node 的 `LocalProvider` 只对 `~`、`~/` 和 `~/子路径` 做别名解析，分别映射到该外部目录及其子路径；其他绝对路径保持原有行为。
+
+该别名只改变媒体库根目录，不改变 Node 的 `HOME`、配置目录、Runtime 和日志位置。首次启用时，如果工作目录下存在历史字面目录 `files/aasc-server/~`，服务会将其中未冲突的文件迁移到 Android 外部媒体目录；同名目标文件保留，跨文件系统时回退为复制后删除。
+
+API 29+ 的 SAF 媒体库仍使用独立的虚拟 `/` provider；`~/` 别名不保存 `content://` URI，也不替代 SAF 授权流程。
+
 ## 相关代码
 
-- Android：`MainActivity.kt`、`SharedStorageAccess.kt`、`NodeServerService.kt`、`NodeRuntimeInstaller.kt`、`NodeServerConfig.kt`、Manifest 和 Gradle assets 配置。
+- Android：`MainActivity.kt`、`SharedStorageAccess.kt`、`SafMediaServer.kt`、`NodeServerService.kt`、`NodeRuntimeInstaller.kt`、`NodeServerConfig.kt`、Manifest 和 Gradle assets 配置。
 - Node.js：现有 `server-launcher.js`、`server-app.js`、配置模块和 AASC NodeConnector。
 - 构建：新增 Android Node Runtime/服务器运行包准备脚本和校验测试。
 - 文档：`docs/spec/android-embedded-node-server.md`、本设计文档和对应 task 文档。

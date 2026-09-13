@@ -2,9 +2,9 @@
 
 ## 需求等级与范围
 
-普通正式 APK 仍按本设计从服务器按需分发模型；完整离线 APK 例外地通过独立 `npm run build:apk:offline` 将固定生产模型白名单打入 APK，具体构建和本机启动规则见 [正式 Android 显示端完整离线 APK](android-display-offline-apk.md)。
+普通正式 APK 仍按本设计从服务器统一下载并分发模型；完整离线 APK 例外地通过独立 `npm run build:apk:offline` 将固定生产模型白名单打入 APK，具体构建和本机启动规则见 [正式 Android 显示端完整离线 APK](android-display-offline-apk.md)。
 
-这是一次 L7 架构级变更：正式 Android 显示 APK 不再内置任何可更新的推理模型或模型字典，统一通过当前 AASC 服务器按需下载。推理仍然发生在显示端本机，服务器只提供清单、文件下载和已有的任务/WebSocket 路由。
+这是一次 L7 架构级变更：正式 Android 显示 APK 不再内置任何可更新的推理模型或模型字典，统一从当前 AASC 服务器下载。服务器先从固定的上游源下载、校验并缓存模型，再通过白名单接口向 APK 分发；推理仍然发生在显示端本机，服务器不加载模型。
 
 本次覆盖正式 APK 的六类模型资源：
 
@@ -28,8 +28,24 @@
                                   ▼
                          AASC HTTP 模型分发路由
                                   │
-                       res/models/{group}/... 资源
+              ┌───────────────────┴───────────────────┐
+              │                                       │
+       res/models/{group}/...                    APK 下载
+       已校验服务器缓存
 ```
+
+### LLM 服务器缓存与下载命令
+
+MNN-LLM 模型的 ModelScope 地址只存在于服务器清单中，不由 APK 直接访问。服务器管理员必须先使用指定模型 ID 下载模型：
+
+```text
+npm run download:llm-model -- --id qwen3.5-0.8b-claude-opus-distilled-mnn
+```
+
+下载器将每个文件写入同目录临时文件，校验清单声明的字节数和 SHA-256 后再原子切换到
+`res/models/llm/<directory>/`。只有完整缓存的模型才会在 `model-manifest` 中标记为 `ready=true`，
+模型 HTTP 路由只读取服务器缓存，不再把 ModelScope URL 转发给 APK。重复执行已完成的模型下载应复用缓存；
+指定 `--force` 时才重新下载。
 
 模型管理器在推理线程或已有模型工作线程内执行下载，使用服务器 SHA-256、临时目录和完整目录切换。模型未准备好时不加载 ONNX session；下载失败返回结构化错误并保留旧缓存，已验证缓存可以离线继续使用。模型清单变化后会释放旧 session，再加载新模型；新 session 加载成功后才删除旧目录，加载失败则恢复旧目录。进程内对未发生大小/修改时间变化的文件复用已验证 hash，避免每次推理重新计算大模型 hash。
 
@@ -39,6 +55,8 @@
 - `GET /api/vision/model/:modelId/:filename`：只允许清单中对应模型的文件名，禁止路径穿越。
 - `GET /api/speech-enhancement/model-manifest`：返回降噪模型清单。
 - `GET /api/speech-enhancement/model/:filename`：下载清单内的降噪模型文件。
+- `GET /api/llm/model-manifest`：返回 MNN-LLM 模型清单、缓存状态、文件大小和 SHA-256。
+- `GET /api/llm/model/:modelId/:filename`：只分发服务器已完成缓存的模型文件；未缓存模型返回结构化未就绪错误。
 
 YOLO 清单由服务器实际存在且配套的 ONNX 与 `*.classes.json` 文件生成。标签文件由导出脚本从每个 `yolo11*.pt` 的 `model.names` 产生；`.pt` 只作为导出输入，不进入 APK 或 git。新增模型时运行服务器准备命令，发布后清单自动暴露它，APK 通过模型 ID 下载并返回 `className`。
 
@@ -49,11 +67,13 @@ YOLO 清单由服务器实际存在且配套的 ONNX 与 `*.classes.json` 文件
 - `filesDir/models/speech-enhancement/`：GTCRN 文件。
 - ASR/TTS/声纹目录保持现有路径和 hash/manifest 机制。
 
-状态查询只报告本地缓存是否就绪，不触发下载或 session 加载；首次真正推理前由对应 manager 确保模型完整。视觉仍使用单 worker、单小核、ORT 线程数 1/1；模型下载不会改变 CPU affinity 配置。
+状态查询只报告 APK 本地缓存是否就绪，不触发服务器下载或 session 加载；服务器缓存未就绪时，管理员先运行指定模型下载命令，APK 才能从分发接口下载。首次真正推理前由对应 manager 确保模型完整。视觉仍使用单 worker、单小核、ORT 线程数 1/1；模型下载不会改变 CPU affinity 配置。
 
 ## 安全与兼容性
 
 - 文件名和模型 ID 都使用固定白名单，路由不接受任意文件路径。
+- 服务器下载只允许清单中的固定 ModelScope 仓库和 revision；下载临时目录、锁目录和缓存目录均限制在 `res/models/llm` 内。
+- 下载完成前不更新 `ready` 状态；服务器重启或下载中断后只保留已完成缓存，临时文件可以安全清理。
 - APK 下载先写 staging 目录内的 `.tmp`，hash 校验通过后再切换完整目录；新引擎加载成功前保留 backup，失败只清理新目录并恢复旧缓存。
 - HTTPS 普通地址使用系统证书链；当前本机自签名证书只接受内置指纹；HTTP 仅允许回环开发地址，局域网或公网模型服务必须使用 HTTPS，避免“信任所有证书”。
 - 新 APK + 旧服务器：模型清单返回 404 时，相关本地能力报错但不影响媒体显示和已有 ASR/TTS 缓存。

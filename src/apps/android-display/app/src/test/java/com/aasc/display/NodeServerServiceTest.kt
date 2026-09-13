@@ -79,4 +79,36 @@ class NodeServerServiceTest {
 
         assertEquals("1", environment["AASC_OFFLINE_MODE"])
     }
+
+    @Test
+    fun Node运行环境传递回环SAF网关地址和临时令牌() {
+        val root = File("/data/user/0/com.aasc.display/files/aasc-server")
+        val environment = NodeServerService.buildNodeEnvironment(
+            root,
+            "http://127.0.0.1:8081",
+            "apk-0.1",
+            safBaseUrl = "http://127.0.0.1:39123",
+            safToken = "runtime-token"
+        )
+
+        assertEquals("http://127.0.0.1:39123", environment["AASC_ANDROID_SAF_URL"])
+        assertEquals("runtime-token", environment["AASC_ANDROID_SAF_TOKEN"])
+    }
+
+    @Test
+    fun Node运行环境传递Android应用专属外部媒体根目录() {
+        val root = File("/data/user/0/com.aasc.display/files/aasc-server")
+        val environment = NodeServerService.buildNodeEnvironment(
+            root,
+            "http://127.0.0.1:8081",
+            "apk-0.1",
+            androidMediaHome = "/storage/emulated/0/Android/data/com.aasc.display/files"
+        )
+
+        assertEquals(
+            "/storage/emulated/0/Android/data/com.aasc.display/files",
+            environment["AASC_ANDROID_MEDIA_HOME"]
+        )
+    }
+
 }

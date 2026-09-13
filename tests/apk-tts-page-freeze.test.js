@@ -26,6 +26,32 @@ test('显示端消费 cpuConfig 不得同步阻塞 WebView，且应去重后调�
     assert.doesNotMatch(applyCpuConfig[1], /nativeBridge\.cpuConfigure\s*\(/);
 });
 
+test('CPU 配置只有原生实际应用成功后才去重，失败后必须允许重试', () => {
+    const display = read(DISPLAY);
+    const bridge = read(BRIDGE);
+    const applyCpuConfig = display.match(/function applyCpuConfig\(config\) \{([\s\S]*?)\n\s*\}\n\n\s*\/\/ 截图降级链/);
+
+    assert.ok(applyCpuConfig, '应存在 CPU 配置消费函数');
+    assert.match(applyCpuConfig[1], /else if \(result\.applied === true\)/);
+    assert.match(applyCpuConfig[1], /result\.accepted !== true/);
+    assert.match(display, /window\.onNativeCpuConfigResult\s*=\s*function/);
+    assert.match(display, /const configKey = result\.configKey[\s\S]*lastAppliedCpuConfigKey\s*=\s*configKey/);
+    assert.match(display, /pendingCpuConfigKey\s*=\s*''/);
+    assert.match(bridge, /notifyCpuConfigResultToPage\(/);
+    assert.match(bridge, /\.put\("configKey", request\.key\)/);
+});
+
+test('ASR/TTS 配置应用失败不能阻断 LLM policy 更新', () => {
+    const bridge = read(BRIDGE);
+    const applyCpuConfig = bridge.match(/private fun applyCpuConfig\(configJson: String\): String \{([\s\S]*?)\n\s*\}\n\n\s*\/\/ ---- MNN-LLM/);
+
+    assert.ok(applyCpuConfig, '应存在 CPU 配置应用主体');
+    assert.match(applyCpuConfig[1], /cpuConfigErrors/);
+    assert.match(applyCpuConfig[1], /llmCpuPolicy = llmPolicy[\s\S]*llmModelManager\.onCpuPolicyChanged\(\)/);
+    assert.match(applyCpuConfig[1], /if \(cpuConfigErrors\.isNotEmpty\(\)/);
+    assert.doesNotMatch(applyCpuConfig[1], /return JSONObject\(\)\.put\("error", "(?:ASR|TTS)/);
+});
+
 test('原生桥异步合并 CPU 配置，重复 policy 不重建 ASR/TTS pool', () => {
     const bridge = read(BRIDGE);
     const tts = read(TTS_ENGINE);

@@ -10,4 +10,5 @@
     <string name="node_service_channel">AASC Node.js 子服务器</string>
     <string name="node_service_title">AASC 子服务器</string>
     <string name="shared_storage_permission_denied">未授予共享存储权限，/storage/emulated/0/ 媒体库暂不可用</string>
+    <string name="shared_storage_tree_unavailable">未选择可用的 SAF 媒体目录，共享媒体库暂不可用</string>
 </resources>

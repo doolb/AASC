@@ -1,12 +1,12 @@
 # Android MNNChat 本地 LLM 实现规格
 
-状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。
+状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。服务器统一下载/缓存/分发修正已纳入本规格；LLM CPU 配置的顶层与 `mllm` 双 runtime `thread_num` 传递和下一请求 runtime 换代修正已完成构建、安装和短请求验收。本次增量已完成推理结束后的模型身份/线程数预检查、下一次推理前最终校验、实际运行时状态上报以及异步 CPU 配置失败重试保护。
 本次增量：显示端 LLM 能力开关、MNNChat 参考模型目录、ModelScope 固定 revision 代理、`enable_thinking` 和视觉图片消息已实现；定向契约测试 13/13 通过。
 模型增量：新增 `qwen3.5-0.8b-claude-opus-distilled-mnn`，ModelScope source 固定为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN@c1bc31b15286afa708f37f690099d10f21d1cc74`；清单包含 `llm.*` 与 `visual.*` 运行文件。本次任务补齐 `enable_thinking=false` 和图片消息到 MNN `MultimodalPrompt` 的实现。
 
 ## 1. 目标与边界
 
-本模块为 Android MNNChat 增加基于阿里官方 MNN-LLM Android 引擎的本地大语言模型能力。主服务器负责 OpenAI 兼容协议、模型目录分发、显示端能力登记和请求分流；Android APK 只负责当前选中模型的下载、校验、加载、推理和流式结果回传。
+本模块为 Android MNNChat 增加基于阿里官方 MNN-LLM Android 引擎的本地大语言模型能力。主服务器负责 OpenAI 兼容协议、模型目录、模型下载缓存、文件分发、显示端能力登记和请求分流；Android APK 只负责从主服务器下载当前选中模型、校验、加载、推理和流式结果回传。
 
 本模块不引入外部 LLM 供应商作为兜底，也不改变 ASR、TTS 的 CPU 配置。LLM 使用独立的 CPU 配置，默认大核 2、小核 0、优先大核。
 
@@ -29,7 +29,8 @@ LlmModelFile {
   filename: string                  // 仅允许 manifest 中声明的相对文件名
   sizeBytes: integer
   sha256: string
-  url: string                       // 由服务端生成的下载地址
+  cached: boolean                   // 服务器缓存是否已完整校验
+  url: string                       // 由服务端生成的本地分发地址
 }
 
 LlmModelDefinition {
@@ -57,6 +58,10 @@ LlmDisplayState {
   llmReady: boolean
   selectedModelId: string | null    // null 表示 APK 尚未选择模型
   selectedRevision: string | null
+  loadedModelId: string | null      // 当前 native engine 实际加载的模型
+  loadedRevision: string | null
+  threadCount: integer              // 当前 LLM policy 要求的线程数
+  loadedThreadCount: integer        // 当前 native engine 已配置的线程数
   activeRequests: integer
   queueDepth: integer
   lastError: string | null
@@ -91,15 +96,46 @@ GET /api/llm/model-manifest
 GET /api/llm/model/:modelId/:filename
   validate modelId exists and enabled
   validate filename is an exact manifest basename
-  stream local file or fixed ModelScope resolve URL
+  require the server cache is complete and hash-valid
+  stream the local cached file only
   reject path traversal, symlink escape, unknown file and hash mismatch
 ```
 
-模型清单只声明可下载模型，不产生默认模型。服务端只代理白名单 ModelScope `resolve` URL，不接受客户端任意上游地址。模型文件不随 APK 强制打包；大文件和生成的 native 产物不提交到 Git。
+模型清单只声明可下载模型，不产生默认模型。ModelScope `resolve` URL 只供服务器下载器使用，不返回给 APK，也不接受客户端任意上游地址。模型文件不随 APK 强制打包；大文件和生成的 native 产物不提交到 Git。
 
-Qwen3.5 视觉推理模型的运行清单固定为：`config.json`、`configuration.json`、`llm.mnn`、`llm.mnn.json`、`llm.mnn.weight`、`llm_config.json`、`tokenizer.txt`、`visual.mnn`、`visual.mnn.weight`。`README.md`、`.gitattributes` 和 `export_args.json` 仅为仓库说明/导出记录，不下载到 APK。模型声明 `multimodal=true` 后，Chat `image_url` 和 Responses `input_image` 均进入视觉推理路径。
+### 4.2 服务器下载器与 npm 命令
 
-### 4.2 APK 模型状态机
+```text
+LlmModelDownloadService.downloadModel(modelId, force):
+  definition = manifestService.findDefinition(modelId)
+  require definition exists, enabled and has fixed ModelScope source
+  acquire modelRoot/<directory>.lock without following external paths
+  if complete local files match expected size and sha256 and force == false:
+    return cached
+  create modelRoot/<directory>.staging-<unique>
+  for file in definition.files:
+    build fixed ModelScope resolve URL from repository + revision + filename
+    download URL, following bounded HTTPS redirects
+    write to staging/<filename>.tmp
+    require byte count == manifest size
+    require SHA-256 == manifest sha256
+    rename tmp to staging/<filename>
+  atomically rename existing model directory to backup
+  atomically rename staging to model directory
+  remove backup and lock
+  return ready manifest
+
+npm run download:llm-model -- --id <modelId>
+  parse one explicit model ID; support --force for a full refresh
+  print per-file progress and final cache directory
+  exit non-zero on unknown ID, download, size, hash or atomic-install failure
+```
+
+下载失败只清理本次 staging 和 lock；已存在的完整缓存不被删除。服务器进程和 CLI 使用同一 `res/models/llm` 缓存契约。
+
+Qwen3.5 视觉推理模型的运行清单固定为：`config.json`、`configuration.json`、`llm.mnn`、`llm.mnn.json`、`llm.mnn.weight`、`llm_config.json`、`tokenizer.txt`、`visual.mnn`、`visual.mnn.weight`。`README.md`、`.gitattributes` 和 `export_args.json` 仅为仓库说明/导出记录，不下载到服务器缓存或 APK。模型声明 `multimodal=true` 后，Chat `image_url` 和 Responses `input_image` 均进入视觉推理路径。
+
+### 4.3 APK 模型状态机
 
 每个 APK 同时只保存一个模型的有效选择；`selectedModelId == null` 是合法初始状态。
 
@@ -116,7 +152,8 @@ selectModel(modelId):
   require modelId exists in latest manifest
   mark latest selection request
   wait until inferenceCount == 0
-  download only files of modelId into staging
+  require server manifest says modelId is ready
+  download only files of modelId from the server cache into staging
   verify every file size and sha256
   load staging model with MNN-LLM
   if load fails:
@@ -157,7 +194,12 @@ prepareMnnLlmNative():
 
 ```text
 NativeDisplay.llmStatus():
-  return { supported, selectedModelId, ready, activeRequests, error }
+  return {
+    supported, selectedModelId, selectedRevision,
+    loadedModelId, loadedRevision,
+    ready, activeRequests, queueDepth,
+    threadCount, loadedThreadCount, error
+  }
 
 NativeDisplay.llmSelectModel(modelId):
   validate modelId and enqueue latest model switch
@@ -169,14 +211,15 @@ server.handleDisplayLlmStatus(message):
   normalize status.state, ready, selectedModelId, queue counters and error
   broadcast the normalized state to control clients
 
-modelDownloader.open(url):
-  accept the current pinned development certificate fingerprint
-  retain normal system CA validation for non-development HTTPS hosts
+serverModelCache:
+  ModelScope URL is resolved and downloaded only by the server CLI/service
+  APK request never receives an upstream ModelScope URL
 
-streamRemoteModelFile(url):
-  send a normal User-Agent and Accept header to ModelScope and its CDN redirect
-  follow only HTTPS redirects within the bounded redirect limit
-  validate final status and declared size before streaming to the APK
+streamCachedModelFile(modelId, filename):
+  resolve the fixed local path inside res/models/llm/<directory>
+  require server cache manifest is complete and hash-valid
+  stream local file with Content-Length
+  return MODEL_NOT_READY when the CLI download has not completed
 
 downloadModelFile(url, expectedHash):
   download to the current file's temporary path
@@ -343,17 +386,59 @@ applyLlmCpuPolicy(cpuConfig, topology):
   threadCount = max(1, policy.totalCoreCount)
   return { policy, threadCount }
 
+onLlmCpuPolicyChanged(policy):
+  update current llm policy
+  increment policyGeneration
+  keep current MNN runtime for the active request
+
 loadMnnModel(modelDirectory, llmPolicy):
   apply affinity to current thread using llmPolicy.cpuMask
-  options.thread_num = llmPolicy.threadCount
-  create official LlmSession(modelDirectory, options)
+  sessionConfig.thread_num = llmPolicy.threadCount
+  sessionConfig.mllm.thread_num = llmPolicy.threadCount
+  extraOptions.keep_history = false
+  extraOptions.mmap_dir = modelDirectory/.mmap
+  extraOptions.thread_num = absent
+  create official LlmSession(modelDirectory, sessionConfig, extraOptions)
+  require official LlmSession forwards both sessionConfig.thread_num and
+    sessionConfig.mllm.thread_num to MNN Llm.set_config
 
 inferMnn(messages, llmPolicy):
+  enqueue request without capturing the old engine
+  after earlier request completes:
+    if no active request and no model switch is running:
+      if loadedModelId != selectedModelId or loadedRevision != selectedRevision:
+        keep the existing model-switch queue responsible for model replacement
+      if loadedPolicyGeneration != policyGeneration
+          or loadedEngine.threadCount != max(1, llmPolicy.totalCoreCount):
+        candidate = load the same active model directory with current llmPolicy
+        require candidate.threadCount == max(1, llmPolicy.totalCoreCount)
+        require model identity and policy generation did not change during load
+        if candidate succeeds:
+          replace current engine with candidate
+          release old MNN engine
+          set loadedModelId/loadedRevision to the candidate identity
+          set loadedPolicyGeneration = policyGeneration
+        else:
+          release candidate if it was created
+          keep old MNN engine and mismatch for a later retry
+  before native generate:
+    compare loadedModelId/revision with selectedModelId/revision
+    compare loadedEngine.threadCount with max(1, current llmPolicy.totalCoreCount)
+    compare loadedPolicyGeneration with policyGeneration
+    if any comparison differs:
+      perform the same safe candidate reload or report a structured mismatch
+    generate using the verified engine
   apply affinity to current thread using llmPolicy.cpuMask
-  call LlmSession with explicit thread_num already fixed at load
+  call the verified LlmSession with explicit thread_num
 ```
 
-LLM 不得依赖模型目录中的 `thread_num` 或 MNN 默认值；`thread_num` 必须由 APK 根据当前生效的 LLM CPU policy 显式传给官方 `LlmSession`。模型加载/推理调用线程先设置 affinity，native 创建的线程继承该 mask；ASR/TTS 的线程池和 affinity 不变。状态 JSON 需要返回 `threadCount`、`selectedCpus`、`cpuMask` 和 `fallback`，便于核对实际策略。
+LLM 不得依赖模型目录中的 `thread_num` 或 MNN 默认值；`thread_num` 必须由 APK 根据当前生效的 LLM CPU policy 同时写入官方 `LlmSession` 主配置的顶层 `thread_num` 和 `mllm.thread_num`，并由 `LlmSession` 转交给 MNN `Llm.set_config`。两处值必须保持一致，分别覆盖文本主 runtime 和视觉/多模态 processor runtime；只放入 `extra_config` 不算生效，因为官方会用主配置初始化 runtime。模型加载/推理调用线程先设置 affinity；ASR/TTS 的线程池和 affinity 不变。状态 JSON 需要返回 `threadCount`、`selectedCpus`、`cpuMask` 和 `fallback`，真机验收还必须通过 native 线程观测确认实际线程数。
+
+CPU policy 变化不立即中断当前请求，也不重新下载模型。当前请求结束后，串行推理 worker 预检查模型身份和线程数并尽量提前换代 MNN runtime；下一条已接受请求在调用 native 前再次校验 generation、实际线程数和模型身份。换代失败时保留旧 runtime、报告状态错误并保留差异，后续请求可以重试。模型名/revision 的实际加载状态与 selected 状态分开记录，模型切换继续复用原有等待当前请求和队列的流程。服务端路由优先使用 `loadedModelId`，缺失时回退旧 APK 的 `selectedModelId`。
+
+CPU 配置的 WebSocket 消息到达页面后，`cpuConfigureAsync` 的 `accepted` 只表示进入 APK 后台队列，不得直接视为已应用。页面保留 pending key，原生 worker 完成后通过主线程回调 `{ configKey, applied, error? }`；仅 `applied=true` 才更新已应用 key，失败则清除对应 pending，允许后续同配置重试，避免必须重启 APK 才恢复配置下发。
+
+CPU 配置应用时，ASR/TTS pool 的独立失败只记录到错误汇总，不能阻断 `llmCpuPolicy` 更新和 `llmModelManager.onCpuPolicyChanged()`；因此 LLM 线程配置不依赖语音池是否可重建。
 
 ## 9. 控制页面
 
@@ -397,7 +482,7 @@ integration/device:
   ASR/TTS behavior and CPU affinity remain unchanged
 ```
 
-验证顺序：先运行已有 `npm test` 和新增 Node 测试，再执行 MNN native prepare、Gradle APK 构建，最后使用至少两个真实显示端验证下载、切换、流式输出、断线恢复和 CPU 状态。没有真实 MNN 模型或目标设备时，不把 mock 通过误判为端到端完成。
+验证顺序：先运行已有 `npm test` 和新增 Node 测试，再执行 MNN native prepare、Gradle APK 构建，最后使用至少两个真实显示端验证下载、切换、流式输出、断线恢复和 CPU 状态。线程数修正已使用固定 MNN checkout 完成 Gradle 构建、安装和短流式请求；推理期间快照观察到两个主要高负载推理相关线程，进程总 CPU 仍包含 WebView 等线程。没有真实 MNN 模型或目标设备时，不把 mock 通过误判为端到端完成。
 
 ## 11. 失败处理、可观测性与性能约束
 
@@ -409,7 +494,7 @@ integration/device:
 
 ## 12. 实施状态
 
-本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。模型二进制和官方 MNN checkout 不提交到仓库；构建必须设置固定 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 并运行 `npm run prepare:mnnllm-android`，缺失依赖时 CMake 直接失败。Gradle 将根目录通过 `defaultConfig.externalNativeBuild.cmake.arguments` 传给 CMake，避免 AGP 9 模块级 DSL 不提供 `arguments` 属性。当前已使用 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 完成 `npm run build:apk`；native ELF 的 LOAD 对齐为 `0x4000`；APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动。Chat `image_url` 和 Responses `input_image` 已用 Qwen3.5 真机验证，图片进入 `MultimodalPrompt` 并清理临时文件。
+本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。模型二进制和官方 MNN checkout 不提交到仓库；构建必须设置固定 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 并运行 `npm run prepare:mnnllm-android`，缺失依赖时 CMake 直接失败。Gradle 将根目录通过 `defaultConfig.externalNativeBuild.cmake.arguments` 传给 CMake，避免 AGP 9 模块级 DSL 不提供 `arguments` 属性。当前已使用 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 完成 `npm run build:apk`；native ELF 的 LOAD 对齐为 `0x4000`；APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动。Chat `image_url` 和 Responses `input_image` 已用 Qwen3.5 真机验证，图片进入 `MultimodalPrompt` 并清理临时文件。双 runtime 线程配置同步任务 `docs/task/2026-09-13_MNN双runtime线程配置同步.md` 已完成，真机同一 APK 进程 PID `27146` 的下一次推理日志同时显示顶层与 `mllm` `thread_num=2`。
 ## 11. 本地 LLM 网关任务实例
 
 `llm-server` 是任务引擎中的常驻内置服务。它的创建入口不使用 LLM 专用分支：

@@ -118,12 +118,22 @@ JNIEXPORT jlong JNICALL
 Java_com_aasc_display_MnnLlmEngine_nativeLoad(
         JNIEnv* env, jobject, jstring configPath, jstring optionsJson) {
     try {
-        const auto options = json::parse(toString(env, optionsJson));
+        auto options = json::parse(toString(env, optionsJson));
         const int threadNum = options.value("thread_num", 0);
         if (threadNum <= 0) {
             throw std::invalid_argument("MNN-LLM options 缺少有效 thread_num");
         }
-        auto* session = new mls::LlmSession(toString(env, configPath), json::object(), options, {});
+        options.erase("thread_num");
+        // 官方 LlmSession 会把第 2 个参数作为 MNN Llm 的主配置，只有该配置
+        // 才会进入 LlmConfig 并参与 runtime 初始化；extra_config 仅用于
+        // keep_history、mmap_dir 等 AASC 会话控制项，不能承载 thread_num。
+        // qwen3.5 等视觉模型同时拥有文本主 runtime 和 mllm processor runtime，
+        // 因此必须把同一个 policy 线程数写入两个主配置字段，避免其中一个
+        // runtime 继续读取模型目录中的默认 4 线程。
+        json sessionConfig = json::object();
+        sessionConfig["thread_num"] = threadNum;
+        sessionConfig["mllm"]["thread_num"] = threadNum;
+        auto* session = new mls::LlmSession(toString(env, configPath), sessionConfig, options, {});
         if (!session->Load() || !session->isModelReady()) {
             const std::string message = session->getLastLoadError().empty()
                     ? "MNN-LLM 模型加载失败"

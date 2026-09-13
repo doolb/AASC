@@ -18,7 +18,10 @@ data class MnnLlmStatus(
     val activeRequests: Int,
     val queueDepth: Int,
     val error: String?,
+    val loadedModelId: String? = null,
+    val loadedRevision: String? = null,
     val threadCount: Int = 1,
+    val loadedThreadCount: Int = 0,
     val selectedCpus: List<Int> = emptyList(),
     val cpuMask: Long = 0L,
     val affinityFallback: Boolean = false
@@ -32,7 +35,10 @@ data class MnnLlmStatus(
         .put("selectedRevision", selectedRevision ?: JSONObject.NULL)
         .put("activeRequests", activeRequests)
         .put("queueDepth", queueDepth)
+        .put("loadedModelId", loadedModelId ?: JSONObject.NULL)
+        .put("loadedRevision", loadedRevision ?: JSONObject.NULL)
         .put("threadCount", threadCount)
+        .put("loadedThreadCount", loadedThreadCount)
         .put("selectedCpus", JSONArray(selectedCpus))
         .put("cpuMask", cpuMask)
         .put("affinityFallback", affinityFallback)
@@ -67,8 +73,16 @@ class MnnLlmModelManager(
     private val cancelledRequestIds = mutableSetOf<String>()
     private var selectedModelId: String? = null
     private var selectedRevision: String? = null
+    // selected 表示目标模型，loaded 表示当前 native engine 实际完成加载的模型。
+    private var loadedModelId: String? = null
+    private var loadedRevision: String? = null
     private var lastError: String? = null
     private var currentEngine: MnnLlmEngine? = null
+    // CPU policy 更新不直接释放当前引擎，而是用代数标记让下一条推理安全换代。
+    private var cpuPolicyGeneration = 0L
+    private var loadedCpuPolicyGeneration = -1L
+    // 推理结束后的 runtime 预检查期间，模型切换线程必须等待，避免并发替换 native engine。
+    private var runtimePreparationInProgress = false
     private val stateListeners = mutableListOf<(MnnLlmStatus) -> Unit>()
 
     init {
@@ -77,6 +91,17 @@ class MnnLlmModelManager(
 
     fun addStatusListener(listener: (MnnLlmStatus) -> Unit) {
         synchronized(stateLock) { stateListeners += listener }
+    }
+
+    /**
+     * 标记 CPU policy 已变化。当前 native 推理继续使用旧引擎，避免配置回调打断生成；
+     * 下一条已接受的请求会在调用 generate 前检查代数并重载同一份本地模型缓存。
+     */
+    fun onCpuPolicyChanged() {
+        synchronized(stateLock) {
+            cpuPolicyGeneration += 1L
+            publishStatusLocked()
+        }
     }
 
     fun status(): MnnLlmStatus = synchronized(stateLock) {
@@ -97,7 +122,10 @@ class MnnLlmModelManager(
             activeRequests = activeRequests,
             queueDepth = queueDepth,
             error = lastError,
+            loadedModelId = loadedModelId,
+            loadedRevision = loadedRevision,
             threadCount = cpuPolicy?.totalCoreCount?.coerceAtLeast(1) ?: 1,
+            loadedThreadCount = currentEngine?.threadCount() ?: 0,
             selectedCpus = cpuPolicy?.selectedCpus ?: emptyList(),
             cpuMask = cpuPolicy?.cpuMask ?: 0L,
             affinityFallback = cpuPolicy?.fallback ?: true
@@ -149,7 +177,6 @@ class MnnLlmModelManager(
         onError: (String, String) -> Unit,
         onStatus: (MnnLlmStatus) -> Unit = {}
     ): JSONObject {
-        val engine: MnnLlmEngine
         synchronized(stateLock) {
             if (!enabled) {
                 return JSONObject().put("accepted", false).put("error", "LLM 能力已禁用")
@@ -160,7 +187,9 @@ class MnnLlmModelManager(
             if (switching) {
                 return JSONObject().put("accepted", false).put("error", "模型正在切换")
             }
-            engine = currentEngine ?: return JSONObject().put("accepted", false).put("error", "模型未就绪")
+            if (currentEngine?.isLoaded() != true) {
+                return JSONObject().put("accepted", false).put("error", "模型未就绪")
+            }
             queueDepth += 1
             pendingInferenceIds += requestId
             publishStatusLocked()
@@ -176,6 +205,8 @@ class MnnLlmModelManager(
             }
             val imageStore = LlmImageFileStore(imageRoot, requestId)
             try {
+                if (isRequestCancelled(requestId)) return@execute
+                val engine = ensureEngineForCurrentCpuPolicy()
                 if (isRequestCancelled(requestId)) return@execute
                 val messages = messagesFromPayload(payload, imageStore)
                 val thinkingDisabled = payload.has("enable_thinking")
@@ -223,14 +254,23 @@ class MnnLlmModelManager(
                 }
             } finally {
                 imageStore.cleanup()
+                var shouldReconcileRuntime = false
                 synchronized(stateLock) {
                     activeRequests = (activeRequests - 1).coerceAtLeast(0)
                     if (activeRequestId == requestId) activeRequestId = null
                     pendingInferenceIds.remove(requestId)
                     cancelledRequestIds.remove(requestId)
+                    // 当前 inference executor 是单线程；设置准备标志后再做预检查，
+                    // 模型切换线程会等待该标志，避免释放或替换当前 native engine。
+                    shouldReconcileRuntime = activeRequests == 0
+                        && !switching
+                        && pendingModelId == null
+                        && currentEngine?.isLoaded() == true
+                    runtimePreparationInProgress = shouldReconcileRuntime
                     stateLock.notifyAll()
                     publishStatusLocked()
                 }
+                if (shouldReconcileRuntime) reconcileRuntimeAfterInference()
             }
         }
         return JSONObject().put("accepted", true).put("requestId", requestId)
@@ -333,7 +373,7 @@ class MnnLlmModelManager(
             if (!enabled) return
             lastError = null
             publishStatusLocked()
-            while (activeRequests > 0 || queueDepth > 0) {
+            while (activeRequests > 0 || queueDepth > 0 || runtimePreparationInProgress) {
                 try {
                     stateLock.wait(250L)
                 } catch (error: InterruptedException) {
@@ -345,7 +385,9 @@ class MnnLlmModelManager(
             }
             if (!enabled) return
             // 重复选择当前已加载模型不重新下载或重载，避免误删仍被旧 engine 使用的 active 目录。
-            if (selectedModelId == modelId && currentEngine?.isLoaded() == true) {
+            if (selectedModelId == modelId
+                && loadedModelId == modelId
+                && currentEngine?.isLoaded() == true) {
                 publishStatusLocked()
                 return
             }
@@ -369,6 +411,7 @@ class MnnLlmModelManager(
                 return
             }
             publishState("loading", false, modelId)
+            val loadGeneration = synchronized(stateLock) { cpuPolicyGeneration }
             candidate = MnnLlmEngine(cpuPolicyProvider)
             check(candidate.load(install.directory)) { "MNN-LLM 模型加载失败" }
             if (!isEnabled()) {
@@ -382,8 +425,11 @@ class MnnLlmModelManager(
             synchronized(stateLock) {
                 oldEngine = currentEngine
                 currentEngine = candidate
+                loadedCpuPolicyGeneration = loadGeneration
                 selectedModelId = modelId
                 selectedRevision = install.model.revision.ifBlank { install.model.id }
+                loadedModelId = modelId
+                loadedRevision = selectedRevision
                 lastError = null
                 writeSavedStateLocked()
                 publishStatusLocked()
@@ -409,6 +455,8 @@ class MnnLlmModelManager(
                 synchronized(stateLock) {
                     selectedModelId = null
                     selectedRevision = null
+                    loadedModelId = null
+                    loadedRevision = null
                 }
             }
         } catch (error: Exception) {
@@ -418,11 +466,119 @@ class MnnLlmModelManager(
 
     private fun isEnabled(): Boolean = synchronized(stateLock) { enabled }
 
+    /**
+     * 在推理执行器中检查模型身份、CPU policy 代数和 MNN engine 实际线程数；发生变化时只重建
+     * native runtime，复用 active 目录，因而不会重新下载模型。调用方已将请求计入 activeRequests，
+     * 且推理结束后的预检查由 runtimePreparationInProgress 保护，模型切换线程不会并发替换目录。
+     */
+    private fun ensureEngineForCurrentCpuPolicy(): MnnLlmEngine {
+        val modelDirectory: File
+        val loadGeneration: Long
+        val expectedModelId: String
+        val expectedRevision: String?
+        val expectedThreadCount: Int
+        synchronized(stateLock) {
+            val current = currentEngine
+            if (current?.isLoaded() != true) {
+                throw IllegalStateException("MNN-LLM 模型未就绪")
+            }
+            expectedModelId = selectedModelId
+                ?: throw IllegalStateException("MNN-LLM 模型未选择")
+            expectedRevision = selectedRevision
+            expectedThreadCount = cpuPolicyProvider()?.totalCoreCount?.coerceAtLeast(1) ?: 1
+            val runtimeMatches = loadedCpuPolicyGeneration == cpuPolicyGeneration
+                && loadedModelId == expectedModelId
+                && loadedRevision == expectedRevision
+                && current.threadCount() == expectedThreadCount
+            if (runtimeMatches) {
+                return current
+            }
+            if (!enabled) {
+                throw IllegalStateException("LLM 能力已禁用")
+            }
+            if (loadedModelId != expectedModelId || loadedRevision != expectedRevision) {
+                throw IllegalStateException("MNN-LLM 当前引擎模型与选中模型不一致")
+            }
+            modelDirectory = activeDirectory
+            loadGeneration = cpuPolicyGeneration
+            lastError = null
+            publishStatusLocked()
+        }
+
+        var reloadedEngine: MnnLlmEngine? = null
+        try {
+            val candidate = MnnLlmEngine(cpuPolicyProvider)
+            reloadedEngine = candidate
+            check(candidate.load(modelDirectory)) { "MNN-LLM CPU 配置变更后模型重载失败" }
+            check(candidate.threadCount() == expectedThreadCount) {
+                "MNN-LLM runtime 线程数不匹配: expected=$expectedThreadCount actual=${candidate.threadCount()}"
+            }
+            val oldEngine: MnnLlmEngine?
+            synchronized(stateLock) {
+                if (!enabled) {
+                    throw IllegalStateException("LLM 能力已禁用")
+                }
+                if (selectedModelId != expectedModelId
+                    || selectedRevision != expectedRevision
+                    || cpuPolicyGeneration != loadGeneration) {
+                    throw IllegalStateException("MNN-LLM runtime 配置在重载期间发生变化")
+                }
+                oldEngine = currentEngine
+                currentEngine = candidate
+                loadedCpuPolicyGeneration = loadGeneration
+                loadedModelId = expectedModelId
+                loadedRevision = expectedRevision
+                lastError = null
+                publishStatusLocked()
+            }
+            oldEngine?.release()
+            reloadedEngine = null
+            return candidate
+        } catch (error: Exception) {
+            reloadedEngine?.release()
+            synchronized(stateLock) {
+                lastError = error.message ?: "MNN-LLM CPU 配置变更后模型重载失败"
+                publishStatusLocked()
+            }
+            throw error
+        }
+    }
+
+    /**
+     * 当前请求已经完成后，提前准备下一次推理需要的 runtime。模型切换仍由既有切换队列负责；
+     * 这里只对同一个已加载模型执行线程数/代数校验，失败不影响刚完成的请求，下一次推理会重试。
+     */
+    private fun reconcileRuntimeAfterInference() {
+        try {
+            val shouldCheck = synchronized(stateLock) {
+                activeRequests == 0
+                    && !switching
+                    && pendingModelId == null
+                    && currentEngine?.isLoaded() == true
+            }
+            if (shouldCheck) ensureEngineForCurrentCpuPolicy()
+        } catch (error: Exception) {
+            synchronized(stateLock) {
+                if (lastError.isNullOrBlank()) {
+                    lastError = "推理结束后运行时校验失败: ${error.message}"
+                }
+                publishStatusLocked()
+            }
+        } finally {
+            synchronized(stateLock) {
+                runtimePreparationInProgress = false
+                stateLock.notifyAll()
+                publishStatusLocked()
+            }
+        }
+    }
+
     /** 在模型切换线程中等待在途推理完成后释放当前 native engine。 */
     private fun releaseEngineWhenIdle() {
         var engineToRelease: MnnLlmEngine? = null
         synchronized(stateLock) {
-            while (releaseRequested && !enabled && (activeRequests > 0 || queueDepth > 0)) {
+            while (releaseRequested && !enabled
+                && (activeRequests > 0 || queueDepth > 0 || runtimePreparationInProgress)) {
                 try {
                     stateLock.wait(250L)
                 } catch (error: InterruptedException) {
@@ -436,6 +592,9 @@ class MnnLlmModelManager(
             if (!releaseRequested || enabled) return
             engineToRelease = currentEngine
             currentEngine = null
+            loadedCpuPolicyGeneration = -1L
+            loadedModelId = null
+            loadedRevision = null
             releaseRequested = false
             lastError = null
         }
@@ -601,7 +760,10 @@ class MnnLlmModelManager(
             activeRequests = status.optInt("activeRequests", 0),
             queueDepth = status.optInt("queueDepth", 0),
             error = status.optString("error").takeIf { it.isNotBlank() && it != "null" },
+            loadedModelId = status.optString("loadedModelId").takeIf { it.isNotBlank() && it != "null" },
+            loadedRevision = status.optString("loadedRevision").takeIf { it.isNotBlank() && it != "null" },
             threadCount = status.optInt("threadCount", 1).coerceAtLeast(1),
+            loadedThreadCount = status.optInt("loadedThreadCount", 0).coerceAtLeast(0),
             selectedCpus = status.optJSONArray("selectedCpus")?.let(::readIntArray) ?: emptyList(),
             cpuMask = status.optLong("cpuMask", 0L),
             affinityFallback = status.optBoolean("affinityFallback", false)

@@ -396,8 +396,19 @@ class NativeBridge(
     fun cpuConfigureAsync(configJson: String): String {
         val key = configJson.trim()
         synchronized(cpuConfigLock) {
-            if (key == cpuConfigLastAppliedKey || key == cpuConfigPending?.key) {
-                return JSONObject().put("accepted", true).put("coalesced", true).toString()
+            if (key == cpuConfigLastAppliedKey) {
+                return JSONObject()
+                    .put("accepted", true)
+                    .put("coalesced", true)
+                    .put("applied", true)
+                    .toString()
+            }
+            if (key == cpuConfigPending?.key) {
+                return JSONObject()
+                    .put("accepted", true)
+                    .put("coalesced", true)
+                    .put("applied", false)
+                    .toString()
             }
             cpuConfigPending = CpuConfigRequest(key, configJson)
             if (!cpuConfigRunning) {
@@ -405,7 +416,8 @@ class NativeBridge(
                 cpuConfigExecutor.execute { drainCpuConfigQueue() }
             }
         }
-        return JSONObject().put("accepted", true).toString()
+        // accepted 只表示请求已经进入后台队列，实际应用结果由异步回调通知页面。
+        return JSONObject().put("accepted", true).put("applied", false).toString()
     }
 
     // 返回显示端当前实际 CPU 拓扑和 ASR/TTS 生效策略；只读，不触发模型加载或 policy 变更。
@@ -440,23 +452,41 @@ class NativeBridge(
                 next
             } ?: return
 
-            val result = try {
+            val resultJson = try {
                 applyCpuConfig(request.configJson)
+                    .let(::JSONObject)
             } catch (e: Exception) {
-                JSONObject().put("error", e.message ?: "CPU 配置异常").toString()
+                JSONObject().put("error", e.message ?: "CPU 配置异常")
             }
-            try {
-                val resultJson = JSONObject(result)
-                if (resultJson.optBoolean("ok", false)) {
-                    synchronized(cpuConfigLock) {
-                        cpuConfigLastAppliedKey = request.key
-                    }
-                    notifyCpuStatusToPage()
-                } else {
-                    android.util.Log.w("NativeBridge", "异步 CPU 配置失败: ${resultJson.optString("error")}")
+            val applied = resultJson.optBoolean("ok", false)
+            if (applied) {
+                synchronized(cpuConfigLock) {
+                    cpuConfigLastAppliedKey = request.key
                 }
+                notifyCpuStatusToPage()
+            } else {
+                android.util.Log.w("NativeBridge", "异步 CPU 配置失败: ${resultJson.optString("error")}")
+            }
+            // 无论成功还是失败都回传真实结果；失败必须让页面释放 pending key，后续才能重试。
+            notifyCpuConfigResultToPage(
+                resultJson
+                    .put("configKey", request.key)
+                    .put("applied", applied)
+            )
+        }
+    }
+
+    // 异步 CPU 配置结果必须在 WebView 主线程回调，页面据此确认或释放 pending 配置 key。
+    private fun notifyCpuConfigResultToPage(result: JSONObject) {
+        val resultJson = result.toString()
+        mainHandler.post {
+            try {
+                webView.evaluateJavascript(
+                    "window.onNativeCpuConfigResult && window.onNativeCpuConfigResult($resultJson);",
+                    null
+                )
             } catch (e: Exception) {
-                android.util.Log.w("NativeBridge", "异步 CPU 配置结果解析失败: ${e.message}")
+                android.util.Log.w("NativeBridge", "CPU 配置结果回调页面失败: ${e.message}")
             }
         }
     }
@@ -506,28 +536,49 @@ class NativeBridge(
                 preferBigCores = true
             )
         }
-        if (!AsrEngine.configurePolicy(asrPolicy)) {
-            return JSONObject().put("error", "ASR CPU 配置应用失败").toString()
+        val cpuConfigErrors = mutableListOf<String>()
+        val asrError = try {
+            if (AsrEngine.configurePolicy(asrPolicy)) null else "ASR CPU 配置应用失败"
+        } catch (error: Exception) {
+            "ASR CPU 配置应用异常: ${error.message ?: "未知错误"}"
         }
+        asrError?.let(cpuConfigErrors::add)
+
+        var ttsError: String? = null
         synchronized(ttsExecutorLock) {
-            if (!TtsEngine.configurePolicy(ttsPolicy)) {
-                return JSONObject().put("error", "TTS CPU 配置应用失败").toString()
-            }
-            val slotCount = maxOf(1, ttsPolicy.totalCoreCount)
-            if (ttsExecutorSlotCount != slotCount) {
-                // 只在 TTS slot 数变化且 policy 成功应用后换代；旧桥任务由旧执行器自然排空。
-                ttsExecutor.reconfigure(slotCount)
-                ttsExecutorSlotCount = slotCount
+            ttsError = try {
+                if (!TtsEngine.configurePolicy(ttsPolicy)) {
+                    "TTS CPU 配置应用失败"
+                } else {
+                    val slotCount = maxOf(1, ttsPolicy.totalCoreCount)
+                    if (ttsExecutorSlotCount != slotCount) {
+                        // 只在 TTS slot 数变化且 policy 成功应用后换代；旧桥任务由旧执行器自然排空。
+                        ttsExecutor.reconfigure(slotCount)
+                        ttsExecutorSlotCount = slotCount
+                    }
+                    null
+                }
+            } catch (error: Exception) {
+                "TTS CPU 配置应用异常: ${error.message ?: "未知错误"}"
             }
         }
+        ttsError?.let(cpuConfigErrors::add)
+
+        // ASR/TTS pool 失败只汇总结果，不能阻断 LLM policy 更新和后续 runtime 换代。
         llmCpuPolicy = llmPolicy
-        return JSONObject()
+        // 只通知 LLM 管理器换代；当前请求不中断，下一条请求在 native generate 前应用新线程数。
+        llmModelManager.onCpuPolicyChanged()
+        val result = JSONObject()
             .put("ok", true)
             .put("asr", cpuPolicyJson(asrPolicy))
             .put("tts", cpuPolicyJson(ttsPolicy))
             .put("llm", cpuPolicyJson(llmPolicy))
             .put("topology", cpuTopologyJson(topology))
-            .toString()
+        if (cpuConfigErrors.isNotEmpty()) {
+            result.put("ok", false)
+            result.put("error", cpuConfigErrors.joinToString("; "))
+        }
+        return result.toString()
     }
 
     // ---- MNN-LLM 本地推理桥：模型下载和推理都在 APK 内完成 ----

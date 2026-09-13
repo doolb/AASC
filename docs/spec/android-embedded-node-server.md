@@ -6,9 +6,11 @@
 MainActivity 启动
     → 读取持久化 mainServerUrl
     → 没有配置时使用 https://192.168.1.39:8081
-    → Android 6.0(API 23)至 Android 9(API 28)检查共享存储读写权限
-    → 缺少权限时弹出系统授权框；回调完成后继续启动流程
-    → Android 10(API 29)及以上不申请 MANAGE_EXTERNAL_STORAGE
+    → Android 6.0(API 23)至 Android 9(API 28)检查 READ/WRITE_EXTERNAL_STORAGE
+    → API 23..28 缺少读写权限时弹出运行时授权框
+    → Android 10(API 29)及以上检查持久化 SAF tree URI
+    → 缺少 URI 时启动 ACTION_OPEN_DOCUMENT_TREE，成功后持久化 READ|WRITE 授权
+    → 选择取消或 URI 失效时提示“SAF 媒体库不可用”并继续正常启动
     → 启动 NodeServerService(mainServerUrl)
     → WebView 加载 mainServerUrl/display
 ```
@@ -22,18 +24,42 @@ SharedStorageAccess.requiredPermissions(sdkInt):
     否则:
         返回 []
 
+SharedStorageAccess.requiresTreeAccess(sdkInt):
+    返回 sdkInt >= 29
+
 MainActivity 启动存储权限流程:
-    → 计算 requiredPermissions(Build.VERSION.SDK_INT)
-    → 过滤当前尚未授予的权限
+    → 如果 API >= 29 且没有持久化 tree URI：启动 ACTION_OPEN_DOCUMENT_TREE
+    → 如果 API <= 28：计算 requiredPermissions 并过滤缺失权限
     → 有缺失权限时 requestPermissions(缺失权限, REQ_STORAGE_PERMISSION)
-    → 收到结果后提示“共享存储未授权”或继续正常启动
+    → 权限或 SAF 选择未完成时提示媒体库不可用并继续正常启动
     → 不因权限拒绝阻塞 WebView 显示端；仅共享存储媒体库操作不可用
 
 媒体库配置:
-    → LocalProvider(path) 接受 /storage/emulated/0/ 或其子目录作为 basePath
-    → Node fs 操作由 Android 进程的共享存储权限控制
-    → LocalProvider 继续执行 canonical path/path traversal 校验
+    → API 23..28 的 LocalProvider(path) 接受 /storage/emulated/0/ 或其子目录
+    → NodeServerService 读取 getExternalFilesDir(null)，通过 AASC_ANDROID_MEDIA_HOME 传入绝对路径
+    → LocalProvider(path) 将 `~`、`~/`、`~/子路径` 映射到 AASC_ANDROID_MEDIA_HOME
+    → Android APK 内部 HOME、配置、Runtime 和日志仍位于 files/aasc-server 私有目录
+    → 首次 connect 时将工作目录下历史字面 `~` 目录的未冲突内容迁移到外部媒体根
+    → rename 跨文件系统失败时改用复制后删除；目标同名文件不覆盖
+    → API 29+ 的 AndroidSafProvider 根路径固定为 /，不保存 content:// URI 到 Node 媒体路径字段
+    → NodeServerService 通过环境变量传递 SAF 网关 URL 和随机 token
+    → AndroidSafProvider 仅发送相对路径，原生 ContentResolver 负责解析 tree URI
+    → Node 与原生网关继续执行路径 traversal 校验
     → 只读媒体库仍禁止写操作
+
+AndroidSafProvider 操作:
+    → list(/相对目录) -> 原生网关返回当前目录子项及元数据
+    → getFile(/相对文件) -> HEAD/元数据请求返回 size 和 modifiedTime
+    → getFileStream(/相对文件, range) -> 原生网关流式返回 200/206
+    → upload/delete/createFolder/deleteFolder -> 仅在 readonly=false 时转发到原生网关
+
+原生 SAF 网关:
+    → 仅监听 127.0.0.1 随机端口并要求 Authorization: Bearer <随机 token>
+    → 将 / 映射为持久化 tree URI，将每个后续 path segment 映射为子 DocumentFile
+    → list 时只列当前目录，不递归扫描
+    → read/write/delete/folder 操作都通过 ContentResolver/DocumentFile 执行
+    → 对 Range 读取先校验总长度，再跳过起始偏移并按区间流式复制
+    → URI 授权丢失或系统拒绝时返回非 2xx 和中文错误信息
 ```
 
 ## Runtime 安装伪代码
@@ -94,6 +120,8 @@ Android Node Runtime 版本生成
 NodeServerService.start
     → 设置工作目录为私有 AASC 根目录
     → 设置 HOME 和配置目录为 APK 私有目录
+    → 读取 getExternalFilesDir(null) 并设置 AASC_ANDROID_MEDIA_HOME；目录不可用时省略该变量
+    → 启动 SafMediaServer；将回环 URL 和随机 token 写入 Node 环境
     → 设置 LD_LIBRARY_PATH 为私有 Runtime 动态库目录
     → 设置 OPENSSL_CONF=/dev/null，避免访问 Termux 私有配置路径
     → 设置 AASC_SERVER_VERSION 和 Android 能力环境变量
@@ -122,7 +150,8 @@ server-app 启动且本地媒体库初始化完成
     → 发送 node.register，能力只包含 Android 节点实际可用能力
     → 每 30 秒发送 node.heartbeat
     → 收到 media.index.local 或媒体库管理请求时访问本地媒体库
-    → path 位于 /storage/emulated/0/ 时使用 Android 已授予的共享存储权限读写
+    → Android 9/API 28 的 path 位于 /storage/emulated/0/ 时使用系统已授予的共享存储权限读写
+    → Android APK 的 path 为 `~/` 时访问 AASC_ANDROID_MEDIA_HOME；Android 10/API 29 及以上的 SAF 媒体库根仍为虚拟 /
     → 收到禁用能力请求时返回 androidCapabilityUnavailable
     → 断线按 1 秒起步、30 秒封顶退避重连
 ```
