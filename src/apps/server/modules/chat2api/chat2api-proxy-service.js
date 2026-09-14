@@ -168,6 +168,7 @@ const createChat2ApiProxyService = (options = {}) => {
         if (['POST', 'PUT'].includes(request.method) && url.pathname === '/api/chat2api/providers') return managementService.saveProvider(body);
         if (request.method === 'DELETE' && url.pathname.startsWith('/api/chat2api/providers/')) return managementService.deleteProvider(decodeURIComponent(url.pathname.split('/').pop()));
         if (request.method === 'GET' && url.pathname === '/api/chat2api/accounts') return managementService.listAccounts();
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/manual') return managementService.addManualAccount(body);
         if (request.method === 'PUT' && url.pathname.startsWith('/api/chat2api/accounts/')) return managementService.updateAccount(decodeURIComponent(url.pathname.split('/').pop()), body);
         if (request.method === 'DELETE' && url.pathname.startsWith('/api/chat2api/accounts/')) return managementService.deleteAccount(decodeURIComponent(url.pathname.split('/').pop()));
         if (request.method === 'GET' && url.pathname === '/api/chat2api/model-mappings') return managementService.listModelMappings();

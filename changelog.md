@@ -1,5 +1,34 @@
 # Web MediaCenter - 变更日志
 
+## Android APK 启动体验
+
+- ✅ [2026-09-14] offline APK 首次解包增加原生启动状态提示。
+  - 在 WebView 上方显示不确定进度条和准备、解包、启动阶段文案，避免新手机首次启动时直接看到 `net::ERR_CONNECTION_REFUSED`。
+  - `NodeServerService` 通过应用内显式广播回传 Node 准备、解包、启动和失败状态；失败或重试超时显示错误详情及“重试”按钮。
+  - offline display 本地服务等待窗口延长至约 5 分钟；普通在线 APK 保持原有连接流程。
+  - 改动文件：`activity_main.xml`、`strings.xml`、`MainActivity.kt`、`NodeServerService.kt`、`tests/android-offline-apk.test.js` 及对应 design/spec/task 文档。
+  - 验证：offline 静态契约测试 8/8、Android 单元测试 134/134、offline APK 构建成功；测试设备本地控制页 HTTP 200。真实卸载重装已进入首次解包，但发现错误页 `onPageFinished` 会误隐藏遮罩，待修复后验收。
+
+- ✅ [2026-09-14] 修复 offline APK 首装提示误隐藏，并让控制端入口默认可用。
+  - `MainActivity.kt` 在 offline 模式默认开放同源 `/control`；服务端初始化的 `enabled=false` 不再隐藏本地控制端入口，普通在线 APK 行为保持不变。
+  - WebView 连接失败后保留启动遮罩，只有实际加载本地 `/display` 页面才隐藏；新增错误页回调与目标 URL 回归保护。
+  - 改动文件：`MainActivity.kt`、`tests/android-offline-apk.test.js`、对应 design/spec/task 文档、`docs/todo.md`。
+  - 验证：offline 静态契约测试 10/10、Android JVM 单元测试 136/136；offline APK 构建成功，包内模型 43 个；SM-N9500 Android 9/API 28 卸载重装后首次解包提示正常、本地 `/display` HTTPS 返回 200、聊天回复返回“测试成功”；控制端按钮可点击并成功进入 `/control`，APK 活动已恢复 display 2。
+
+## Chat2API 普通网页手动外部认证
+
+- ✅ [2026-09-14] 按原版 Chat2API 合并 Token/Cookie 认证入口。
+  - 移除控制端“手动 Token/外部 Cookie”认证方式选择器；先选 Provider，再在统一外部认证表单中填写 Provider 字段或粘贴完整 Cookie。
+  - 完整 Cookie 由服务端根据输入自动识别为 cookie 认证，Android 外部登录按钮继续使用当前已选 Provider；旧接口 `authMethod` 参数保留兼容。
+  - 验证：统一入口手动认证定向测试 6/6、`npm run check:chat2api` 84/84、JavaScript 语法检查和 `git diff --check` 通过。
+
+- ✅ [2026-09-14] 普通网页控制端支持外部登录后手动粘贴 Cookie/Token 添加 Chat2API 账号。
+  - 新增 `POST /api/chat2api/accounts/manual`，按 MiMo、Perplexity、Qwen 的完整 Cookie 规则提取凭据，复用现有校验器和私有账号存储；GLM、Kimi、Qwen AI、Z.ai 等 Provider 继续使用 Chat2API 风格的手动 Token 字段。
+  - 控制端先选择 Provider，再进入统一外部认证表单；表单同时承载 Provider 手动字段和完整 Cookie，Android 原生桥存在时额外显示当前 Provider 的隔离 WebView 外部登录按钮。
+  - 参考 `/mnt/Chat2API` 的 Provider 字段和 Cookie 处理逻辑，未复制 Electron 登录页面，也未新增普通网页 OAuth。
+  - 改动文件：`src/apps/server/modules/chat2api/chat2api-manual-account-service.js`、`chat2api-runtime.js`、`chat2api-management-service.js`、`chat2api-proxy-service.js`、`chat2api-provider-registry.js`、控制端 `chat2api.js`，以及对应 design/spec/task/测试文档。
+  - 验证：手动认证定向测试 6/6、`npm run check:chat2api` 84/84 通过；`npm test` 737 项中 735 项通过，剩余失败为既有睡眠播放断言和已确认暂不处理的 Windows 输入模式声纹策略断言。
+
 ## Android Chat2API 登录与控制端开放
 
 - ✅ [2026-09-14] 普通 APK 增加按显示端开放控制端入口和隔离 WebView Chat2API 登录链路。

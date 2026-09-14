@@ -35,6 +35,9 @@ test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接
       completeLogin: async (input) => ({ account: { accountId: input.accountId || 'a1', providerId: input.providerId } }),
       handleCallback: async (query) => ({ account: { providerId: query.providerId } }),
     },
+    manualAccount: {
+      addManualAccount: async (input) => ({ account: { accountId: 'manual-1', providerId: input.providerId } }),
+    },
     qwenHistoryService: {
       importConversations: async (input) => {
         qwenImports.push(input);
@@ -51,6 +54,7 @@ test('管理服务统一提供配置、Provider、账号、OAuth 和 API Key 接
   assert.deepEqual(await management.listProviders(), [{ id: 'deepseek', name: 'DeepSeek' }]);
   assert.equal((await management.listAccounts())[0].secretConfigured, true);
   assert.equal((await management.startLogin('deepseek')).state, 'state-1');
+  assert.equal((await management.addManualAccount({ providerId: 'deepseek', credentials: { token: 'secret' } })).account.accountId, 'manual-1');
   assert.equal((await management.createApiKey({ label: 'test' })).value, 'aasc_chat2api_secret');
   assert.deepEqual(await management.importQwenWebConversations({ limit: 3 }), { imported: 1, total: 3, failed: 0 });
   assert.deepEqual(qwenImports, [{ limit: 3 }]);

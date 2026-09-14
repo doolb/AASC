@@ -14,6 +14,7 @@ const createChat2ApiManagementService = (runtime) => {
     throw new Error('Chat2API 管理服务需要完整 runtime');
   }
   const { dataStore, providerRegistry, oauth } = runtime;
+  const manualAccount = runtime.manualAccount;
   const qwenHistoryService = runtime.qwenHistoryService;
 
   const getConfig = async () => {
@@ -53,6 +54,12 @@ const createChat2ApiManagementService = (runtime) => {
   const deleteModelMapping = (model) => dataStore.deleteModelMapping(model);
   const startLogin = (providerId) => oauth.startLogin(providerId);
   const completeLogin = (input) => oauth.completeLogin(input);
+  const addManualAccount = (input) => {
+    if (!manualAccount || typeof manualAccount.addManualAccount !== 'function') {
+      throw new Error('Chat2API 手动账号服务不可用');
+    }
+    return manualAccount.addManualAccount(input);
+  };
   const handleCallback = (query) => oauth.handleCallback(query);
   const createApiKey = (input) => dataStore.createApiKey(input);
   const listApiKeys = () => dataStore.listApiKeys();
@@ -89,6 +96,7 @@ const createChat2ApiManagementService = (runtime) => {
     deleteProvider,
     startLogin,
     completeLogin,
+    addManualAccount,
     handleCallback,
     createApiKey,
     listApiKeys,

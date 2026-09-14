@@ -113,6 +113,7 @@
 
 .chat2api-field input,
 .chat2api-field select,
+.chat2api-field textarea,
 .chat2api-select {
     display: block;
     width: 100%;
@@ -127,12 +128,23 @@
 
 .chat2api-field input:focus,
 .chat2api-field select:focus,
+.chat2api-field textarea:focus,
 .chat2api-select:focus {
     outline: 2px solid color-mix(in srgb, var(--accent-color) 45%, transparent);
     border-color: var(--accent-color);
 }
 
 .chat2api-field input::placeholder {
+    color: var(--text-muted);
+}
+
+.chat2api-field textarea {
+    min-height: 76px;
+    resize: vertical;
+    font: inherit;
+}
+
+.chat2api-field textarea::placeholder {
     color: var(--text-muted);
 }
 

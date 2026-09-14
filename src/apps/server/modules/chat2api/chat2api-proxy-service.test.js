@@ -80,6 +80,7 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     coreAdapter: { listModels: async () => ({ object: 'list', data: [] }), forwardChatCompletion: async () => ({ body: {} }) },
     managementService: {
       listProviders: async () => [{ id: 'deepseek' }],
+      addManualAccount: async (input) => ({ account: { accountId: 'manual-1', providerId: input.providerId } }),
       exportConfig: async () => ({ format: 'aasc-chat2api-config', version: 1, config: {}, providers: [], accounts: [], modelMappings: [] }),
       startLogin: async () => ({ state: 'state-1' }),
       previewLegacyImport: async () => ({ counts: { providers: 1, accounts: 1, modelMappings: 1 } }),
@@ -99,6 +100,9 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     const login = await request(service.address().port, { path: '/api/chat2api/oauth/start', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ providerId: 'deepseek' }));
     assert.equal(login.statusCode, 200);
     assert.equal(JSON.parse(login.text).state, 'state-1');
+    const manual = await request(service.address().port, { path: '/api/chat2api/accounts/manual', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ providerId: 'deepseek', credentials: { token: 'secret' } }));
+    assert.equal(manual.statusCode, 200);
+    assert.equal(JSON.parse(manual.text).account.accountId, 'manual-1');
     const preview = await request(service.address().port, { path: '/api/chat2api/import/legacy/preview', method: 'POST', headers: { 'Content-Type': 'application/json' } }, '{}');
     assert.equal(preview.statusCode, 200);
     assert.equal(JSON.parse(preview.text).counts.accounts, 1);

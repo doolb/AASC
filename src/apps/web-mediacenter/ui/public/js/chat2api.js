@@ -98,10 +98,11 @@
       const configSection = `<section class="chat2api-section chat2api-section-wide"><h4 class="chat2api-section-title">代理配置</h4><div class="chat2api-config-grid"><label class="chat2api-field">监听地址<input id="chat2apiConfigHost" value="${this.escapeHtml(config.host || '127.0.0.1')}"></label><label class="chat2api-field">端口<input id="chat2apiConfigPort" type="number" value="${this.escapeHtml(config.port || 8080)}"></label><label class="chat2api-field">负载均衡<select id="chat2apiConfigStrategy"><option value="round-robin" ${config.loadBalanceStrategy === 'round-robin' ? 'selected' : ''}>轮询</option><option value="fill-first" ${config.loadBalanceStrategy === 'fill-first' ? 'selected' : ''}>最低用量</option><option value="failover" ${config.loadBalanceStrategy === 'failover' ? 'selected' : ''}>故障转移</option></select></label><label class="chat2api-field">原始日志最大字节数<input id="chat2apiConfigRawTrafficMaxBytes" type="number" min="1024" max="2097152" step="1" value="${this.escapeHtml(config.rawTrafficMaxBytes || 262144)}"></label><label class="chat2api-field">原始日志模式<select id="chat2apiConfigRawTrafficMode"><option value="full" ${config.rawTrafficMode !== 'compact' ? 'selected' : ''}>完整（含 URL、请求头和原始数据）</option><option value="compact" ${config.rawTrafficMode === 'compact' ? 'selected' : ''}>简洁（模型、文本和输出）</option></select></label></div><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiConfigApiKey" ${config.enableApiKey !== false ? 'checked' : ''}> 启用 API Key 鉴权</label><label class="chat2api-checkbox"><input type="checkbox" id="chat2apiConfigDebugRawTraffic" ${config.debugRawTraffic === true ? 'checked' : ''}> 记录发给 AI 的原始请求和返回结果</label><div class="chat2api-secondary-text">调试日志默认关闭；简洁模式只记录模型、用户文本和最终输出，不记录原始 URL、请求头或流式分块。</div><button class="task-card-btn primary chat2api-save-button" id="chat2apiSaveConfig">保存配置</button></section>`;
       content.innerHTML = '<div class="chat2api-grid">' +
         configSection +
-        '<section class="chat2api-section"><h4 class="chat2api-section-title">登录 Provider</h4>' +
+        '<section class="chat2api-section"><h4 class="chat2api-section-title">外部认证</h4>' +
           `<select id="chat2apiProvider" class="chat2api-select">${providerOptions}</select>` +
           '<div id="chat2apiCredentialFields" class="chat2api-credential-fields"></div>' +
-          '<div class="chat2api-actions"><button class="task-card-btn" id="chat2apiOpenLogin">打开登录页</button><button class="task-card-btn primary" id="chat2apiCompleteLogin" hidden>完成登录</button></div>' +
+          '<div id="chat2apiManualHint" class="chat2api-secondary-text">选择 Provider 后，当前 Provider 可填写对应字段或粘贴完整 Cookie；普通网页不打开登录页。</div>' +
+          '<div class="chat2api-actions"><button class="task-card-btn primary" id="chat2apiManualAdd">添加外部认证</button><button class="task-card-btn" id="chat2apiOpenLogin" hidden>Android 外部登录</button><button class="task-card-btn primary" id="chat2apiCompleteLogin" hidden>完成登录</button></div>' +
         '</section>' +
         '<section class="chat2api-section"><h4 class="chat2api-section-title">已登录账号</h4><div id="chat2apiAccounts">' + accountRows + '</div></section>' +
         '<section class="chat2api-section chat2api-section-wide"><div class="chat2api-section-heading"><h4 class="chat2api-section-title">代理 API Key</h4><button class="task-card-btn" id="chat2apiCreateKey">新建 Key</button></div><div>' + keyRows + '</div></section>' +
@@ -115,6 +116,8 @@
       if (select) select.addEventListener('change', renderFields);
       const openButton = document.getElementById('chat2apiOpenLogin');
       if (openButton) openButton.addEventListener('click', () => this.startLogin(select.value));
+      const manualButton = document.getElementById('chat2apiManualAdd');
+      if (manualButton) manualButton.addEventListener('click', () => this.addManualAccount());
       const completeButton = document.getElementById('chat2apiCompleteLogin');
       if (completeButton) completeButton.addEventListener('click', () => this.completeLogin());
       const keyButton = document.getElementById('chat2apiCreateKey');
@@ -210,7 +213,55 @@
       const fields = provider && provider.credentialFields && provider.credentialFields.length ? provider.credentialFields : [{ name: 'token', label: 'Token / Cookie', type: 'password', required: true }];
       const container = document.getElementById('chat2apiCredentialFields');
       if (!container) return;
-      container.innerHTML = fields.map((field) => `<label class="chat2api-field">${this.escapeHtml(field.label || field.name)}<input data-chat2api-credential="${this.escapeHtml(field.name)}" type="${field.type === 'textarea' ? 'text' : (field.type || 'password')}" placeholder="${this.escapeHtml(field.placeholder || '')}"></label>`).join('');
+      const fieldMarkup = fields.map((field) => {
+        const label = this.escapeHtml(field.label || field.name);
+        const name = this.escapeHtml(field.name);
+        const placeholder = this.escapeHtml(field.placeholder || '');
+        if (field.type === 'textarea') {
+          return `<label class="chat2api-field">${label}<textarea data-chat2api-credential="${name}" placeholder="${placeholder}"></textarea></label>`;
+        }
+        return `<label class="chat2api-field">${label}<input data-chat2api-credential="${name}" type="${field.type === 'text' ? 'text' : 'password'}" placeholder="${placeholder}"></label>`;
+      }).join('');
+      const cookieFields = provider && Array.isArray(provider.manualCookieFields) ? provider.manualCookieFields : [];
+      const supportsCookie = cookieFields.length > 0 || (provider && provider.authType === 'cookie');
+      const hasCookieField = fields.some((field) => ['cookie', 'cookies'].includes(field.name));
+      const cookieNames = cookieFields.length > 0 ? cookieFields.map((field) => this.escapeHtml(field.name)).join('、') : 'Provider 所需 Cookie';
+      const cookieMarkup = supportsCookie && !hasCookieField
+        ? '<label class="chat2api-field">完整 Cookie<textarea id="chat2apiManualCookie" rows="4" placeholder="粘贴浏览器复制的完整 Cookie 字符串"></textarea></label>'
+        : '';
+      container.innerHTML = fieldMarkup + cookieMarkup;
+      const hint = document.getElementById('chat2apiManualHint');
+      if (hint) hint.textContent = supportsCookie
+        ? `当前 Provider 按 Chat2API 规则填写字段，或粘贴完整 Cookie（支持提取：${cookieNames}）；普通网页不打开登录页。`
+        : '按 Chat2API 的 Provider 字段填写 Token、Ticket 等凭据；普通网页不打开登录页。';
+      const openButton = document.getElementById('chat2apiOpenLogin');
+      const completeButton = document.getElementById('chat2apiCompleteLogin');
+      const hasNativeLogin = typeof window !== 'undefined' && window.NativeControl && typeof window.NativeControl.openChat2ApiLogin === 'function';
+      if (openButton) openButton.hidden = !hasNativeLogin;
+      if (completeButton) completeButton.hidden = !this.loginSession;
+    },
+
+    async addManualAccount() {
+      const providerSelect = document.getElementById('chat2apiProvider');
+      if (!providerSelect || !providerSelect.value) {
+        this.message('请选择 Provider。', true);
+        return;
+      }
+      const credentials = {};
+      document.querySelectorAll('[data-chat2api-credential]').forEach((element) => {
+        if (element.value && element.value.trim()) credentials[element.dataset.chat2apiCredential] = element.value.trim();
+      });
+      const cookieElement = document.getElementById('chat2apiManualCookie');
+      try {
+        await this.request('/api/chat2api/accounts/manual', {
+          method: 'POST',
+          body: JSON.stringify({ providerId: providerSelect.value, credentials, cookie: cookieElement ? cookieElement.value.trim() : '' }),
+        });
+        document.querySelectorAll('[data-chat2api-credential]').forEach((element) => { element.value = ''; });
+        if (cookieElement) cookieElement.value = '';
+        await this.refresh();
+        this.message('外部认证已验证，账号已保存。');
+      } catch (error) { this.message(`外部认证添加失败：${error.message}`, true); }
     },
 
     async startLogin(providerId) {
@@ -268,8 +319,9 @@
       if (!this.loginSession) { this.message('请先点击“打开登录页”。', true); return; }
       const credentials = {};
       document.querySelectorAll('[data-chat2api-credential]').forEach((element) => { if (element.value) credentials[element.dataset.chat2apiCredential] = element.value; });
+      const cookieElement = document.getElementById('chat2apiManualCookie');
       try {
-        await this.request('/api/chat2api/oauth/complete', { method: 'POST', body: JSON.stringify({ state: this.loginSession.state, providerId: this.loginSession.providerId, credentials }) });
+        await this.request('/api/chat2api/oauth/complete', { method: 'POST', body: JSON.stringify({ state: this.loginSession.state, providerId: this.loginSession.providerId, credentials, cookie: cookieElement ? cookieElement.value.trim() : '' }) });
         this.loginSession = null;
         this.message('登录成功，账号已保存。');
         await this.refresh();
