@@ -14,7 +14,7 @@ const Chat = {
     config: {
         systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
         protocol: 'openai-responses',
-        responsesBaseUrl: 'http://127.0.0.1:8081/v1',
+        responsesBaseUrl: 'https://127.0.0.1:8081/v1',
         responsesApiKey: '',
         agentBackend: 'codex'
     },
@@ -391,7 +391,7 @@ const Chat = {
                     this.config.protocol = data.config.protocol === 'openai-completions'
                         ? 'openai-completions'
                         : 'openai-responses';
-                    this.config.responsesBaseUrl = data.config.responsesBaseUrl || 'http://127.0.0.1:8081/v1';
+                    this.config.responsesBaseUrl = data.config.responsesBaseUrl || 'https://127.0.0.1:8081/v1';
                     this.config.responsesApiKey = data.config.responsesApiKey || '';
                     this.config.agentBackend = data.config.agentBackend || 'codex';
                 }

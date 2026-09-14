@@ -37,21 +37,24 @@ test('聊天配置客户端应加载、显示并保存 Responses 传输配置', 
     assert.match(chatScript, /chatResponsesBaseUrl/);
     assert.match(chatScript, /chatResponsesApiKey/);
     assert.match(chatScript, /this\.config\.protocol/);
+    assert.match(chatScript, /https:\/\/127\.0\.0\.1:8081\/v1/u);
+    assert.match(uploadPage, /placeholder="https:\/\/127\.0\.0\.1:8081\/v1"/u);
 });
 
-test('当前聊天配置应将 Responses 网关指向本机 8081 服务', () => {
+test('当前聊天配置应将 HTTPS Responses 网关指向本机 8081 服务', () => {
     const config = JSON.parse(fs.readFileSync(
         path.join(projectRoot, 'config/config.json'),
         'utf8'
     ));
 
     assert.equal(config.chat.protocol, 'openai-responses');
-    assert.equal(config.chat.responsesBaseUrl, 'http://127.0.0.1:8081/v1');
+    assert.equal(config.chat.responsesBaseUrl, 'https://127.0.0.1:8081/v1');
 });
 
-test('offline APK 内置 Node 服务的 Responses 默认值应使用本机 8081', () => {
+test('offline APK 内置 Node 服务的 HTTPS Responses 默认值应使用本机 8081', () => {
     for (const { relativePath, source } of offlineChatDefaultsSources) {
-        assert.match(source, /http:\/\/127\.0\.0\.1:8081\/v1/u, `${relativePath} 缺少 offline Responses 默认地址`);
+        assert.match(source, /https:\/\/127\.0\.0\.1:8081\/v1/u, `${relativePath} 缺少 offline HTTPS Responses 默认地址`);
+        assert.doesNotMatch(source, /http:\/\/127\.0\.0\.1:8081\/v1/u, `${relativePath} 仍使用 HTTP Responses 默认地址`);
         assert.doesNotMatch(source, /http:\/\/127\.0\.0\.1:8083\/v1/u, `${relativePath} 仍保留旧 Responses 默认地址`);
     }
 });

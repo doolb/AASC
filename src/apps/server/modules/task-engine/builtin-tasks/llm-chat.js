@@ -67,7 +67,7 @@ module.exports = {
       promptFormat: params.promptFormat || globalConfig.promptFormat || 'openai',
       maxTokens: params.maxTokens || globalConfig.maxTokens || 4096,
       apiKey: params.apiKey || globalConfig.apiKey || globalChatConfig?.apiKey || '',
-      responsesBaseUrl: globalChatConfig?.responsesBaseUrl || 'http://127.0.0.1:8081/v1',
+      responsesBaseUrl: globalChatConfig?.responsesBaseUrl || 'https://127.0.0.1:8081/v1',
       responsesApiKey: globalChatConfig?.responsesApiKey || ''
     };
 

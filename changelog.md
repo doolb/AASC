@@ -4,9 +4,13 @@
 
 - ✅ [2026-09-13] 修复聊天协议与接口地址不匹配导致 Android 端连接 `127.0.0.1` 失败的问题。
   - 聊天设置增加 `openai-responses`/`openai-completions` 协议选择、Responses Base URL 和 Responses API Key；profile 的 `apiUrl` 明确为 Chat Completions 地址。
-  - 前端通过现有 `/api/chat/config` 加载和保存完整传输配置，并使用服务端返回的权威值；主服务和 offline APK 统一使用 `http://127.0.0.1:8081/v1`，离线 APK 内置 Node 服务的缺省回退值也与主配置一致。
+  - 前端通过现有 `/api/chat/config` 加载和保存完整传输配置，并使用服务端返回的权威值；主服务和 offline APK 统一使用 `https://127.0.0.1:8081/v1`，离线 APK 内置 Node 服务的缺省回退值也与主配置一致。
   - 改动文件：`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`config/config.json`、`src/apps/server/modules/config/config-app-service.js`、`src/external/llm/llm-service.js`、`src/apps/server/boot/server-app.js`、`src/apps/server/modules/task-engine/builtin-tasks/llm-chat.js`、`docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/2026-09-13_聊天协议配置修复.md`、`tests/chat-config-transport.test.js`。
   - 验证：聊天配置与 offline APK 默认值回归 4/4、Responses 请求 2/2、LLM 路由契约 4/4 通过；全量 `npm test` 为 726 项中 725 项通过，唯一失败为既有 Windows 输入模式声纹策略断言。
+
+- ✅ [2026-09-14] 修正聊天 Responses 网关默认协议为 HTTPS。
+  - 主配置、控制端默认提示、服务端兜底及 offline APK 内置 Node 服务统一使用 `https://127.0.0.1:8081/v1`；请求转发测试继续使用临时 HTTP mock，仅验证任务转发逻辑。
+  - 验证：聊天配置/默认值回归 4/4、Responses 请求与任务路由测试 6/6 通过；未处理 Windows 输入模式声纹策略问题。
 
 ## AI 任务系统通用能力
 
