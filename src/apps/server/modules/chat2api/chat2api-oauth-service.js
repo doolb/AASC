@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { getAndroidLoginProfile } = require('./chat2api-login-profiles');
 
 const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAdapters = {} } = {}) => {
   if (!dataStore || typeof dataStore.createOAuthSession !== 'function' || typeof dataStore.consumeOAuthSession !== 'function' || typeof dataStore.saveAccount !== 'function') {
@@ -7,6 +8,7 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
   if (!providerRegistry || typeof providerRegistry.getProvider !== 'function') {
     throw new Error('Chat2API OAuth 服务需要 Provider 注册表');
   }
+  const completingStates = new Set();
 
   const startLogin = async (providerId) => {
     const provider = await providerRegistry.getProvider(providerId);
@@ -16,7 +18,8 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
     if (provider.enabled === false) {
       throw new Error(`Provider ${providerId} 未启用`);
     }
-    const loginUrl = provider.loginUrl || provider.apiEndpoint;
+    const captureProfile = getAndroidLoginProfile(provider.id);
+    const loginUrl = provider.loginUrl || captureProfile?.loginUrl || provider.apiEndpoint;
     const session = await dataStore.createOAuthSession({ providerId: provider.id, loginUrl });
     return {
       state: session.state,
@@ -25,6 +28,8 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
       loginUrl,
       expiresAt: session.expiresAt,
       credentialFields: provider.credentialFields || [],
+      androidWebView: Boolean(captureProfile),
+      captureProfile,
     };
   };
 
@@ -36,38 +41,57 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
     if (!provider) {
       throw new Error(`Provider ${providerId} 不存在`);
     }
-    const session = await dataStore.consumeOAuthSession(state, providerId);
-    if (!session) {
-      throw new Error('登录状态无效、已过期或 Provider 不匹配');
+    if (completingStates.has(state)) {
+      throw new Error('登录状态正在处理中');
     }
-    const adapter = credentialAdapters[provider.id];
-    let validated = { valid: true, credentials, accountInfo: {} };
-    if (adapter && typeof adapter.validate === 'function') {
-      validated = await adapter.validate(credentials, provider);
-      if (!validated || validated.valid !== true) {
-        throw new Error(validated && validated.error ? validated.error : 'Provider 凭据校验失败');
+    completingStates.add(state);
+    try {
+      let session;
+      let consumedBeforeValidation = false;
+      if (typeof dataStore.getOAuthSession === 'function') {
+        session = await dataStore.getOAuthSession(state, providerId);
+      } else {
+        // 兼容旧版注入的数据存储；正式数据存储使用上面的只读查询，验证失败不会消耗 state。
+        session = await dataStore.consumeOAuthSession(state, providerId);
+        consumedBeforeValidation = true;
       }
-    } else {
-      const requiredFields = (provider.credentialFields || []).filter((field) => field.required).map((field) => field.name);
-      const missing = requiredFields.filter((field) => typeof credentials[field] !== 'string' || credentials[field].trim().length === 0);
-      if (missing.length > 0) {
-        throw new Error(`缺少必填凭据字段: ${missing.join(', ')}`);
+      if (!session) {
+        throw new Error('登录状态无效、已过期或 Provider 不匹配');
       }
+      const adapter = credentialAdapters[provider.id];
+      let validated = { valid: true, credentials, accountInfo: {} };
+      if (adapter && typeof adapter.validate === 'function') {
+        validated = await adapter.validate(credentials, provider);
+        if (!validated || validated.valid !== true) {
+          throw new Error(validated && validated.error ? validated.error : 'Provider 凭据校验失败');
+        }
+      } else {
+        const requiredFields = (provider.credentialFields || []).filter((field) => field.required).map((field) => field.name);
+        const missing = requiredFields.filter((field) => typeof credentials[field] !== 'string' || credentials[field].trim().length === 0);
+        if (missing.length > 0) {
+          throw new Error(`缺少必填凭据字段: ${missing.join(', ')}`);
+        }
+      }
+      const now = Date.now();
+      const saved = await dataStore.saveAccount({
+        accountId: accountId || `${provider.id}-${crypto.randomBytes(6).toString('hex')}`,
+        providerId: provider.id,
+        label: label || validated.accountInfo?.name || provider.name,
+        email: email || validated.accountInfo?.email || accountInfo.email,
+        credentials: validated.credentials || credentials,
+        enabled: true,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        ...accountInfo,
+      });
+      if (!consumedBeforeValidation && !(await dataStore.consumeOAuthSession(state, providerId))) {
+        throw new Error('登录状态无效、已过期或 Provider 不匹配');
+      }
+      return { account: saved };
+    } finally {
+      completingStates.delete(state);
     }
-    const now = Date.now();
-    const saved = await dataStore.saveAccount({
-      accountId: accountId || `${provider.id}-${crypto.randomBytes(6).toString('hex')}`,
-      providerId: provider.id,
-      label: label || validated.accountInfo?.name || provider.name,
-      email: email || validated.accountInfo?.email || accountInfo.email,
-      credentials: validated.credentials || credentials,
-      enabled: true,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-      ...accountInfo,
-    });
-    return { account: saved };
   };
 
   const handleCallback = async (query) => {

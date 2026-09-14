@@ -37,3 +37,26 @@ test('控制端登录拒绝未知 Provider、禁用 Provider 和重复/错误 st
   await assert.rejects(() => service.startLogin('disabled'), /未启用/);
   await assert.rejects(() => service.completeLogin({ state: 'bad', providerId: 'deepseek', credentials: { token: 'x' } }), /登录状态无效/);
 });
+
+test('Provider 验证失败时 OAuth state 可以在过期前重试', async () => {
+  let consumed = false;
+  const store = {
+    createOAuthSession: async () => ({ state: 'state-3', expiresAt: Date.now() + 300000 }),
+    getOAuthSession: async () => consumed ? null : { state: 'state-3', providerId: 'deepseek', expiresAt: Date.now() + 300000 },
+    consumeOAuthSession: async () => { consumed = true; return true; },
+    saveAccount: async (account) => ({ ...account, secretConfigured: true }),
+  };
+  const service = createChat2ApiOAuthService({
+    dataStore: store,
+    providerRegistry: { getProvider: async () => ({ id: 'deepseek', name: 'DeepSeek', enabled: true, credentialFields: [{ name: 'token', required: true }] }) },
+    credentialAdapters: { deepseek: { validate: async (credentials) => ({ valid: credentials.token === 'ok', credentials }) } },
+  });
+
+  await assert.rejects(
+    () => service.completeLogin({ state: 'state-3', providerId: 'deepseek', credentials: { token: 'bad' } }),
+    /校验失败/,
+  );
+  assert.equal(consumed, false);
+  await service.completeLogin({ state: 'state-3', providerId: 'deepseek', credentials: { token: 'ok' } });
+  assert.equal(consumed, true);
+});

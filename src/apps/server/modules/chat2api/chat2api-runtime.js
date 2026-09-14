@@ -11,6 +11,7 @@ const { createRawTrafficLogger } = require('./chat2api-raw-traffic-logger');
 const { createChat2ApiResponseSessionStore } = require('./chat2api-response-session-store');
 const { createChat2ApiResponsesService } = require('./chat2api-responses-service');
 const { createChat2ApiQwenHistoryService } = require('./chat2api-qwen-history-service');
+const { createChat2ApiCredentialValidators } = require('./chat2api-credential-validators');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -37,7 +38,7 @@ const createChat2ApiRuntime = (options = {}) => {
   const oauth = options.oauth || createChat2ApiOAuthService({
     dataStore,
     providerRegistry,
-    credentialAdapters: options.credentialAdapters || {},
+    credentialAdapters: options.credentialAdapters || createChat2ApiCredentialValidators({ httpClient: options.httpClient }),
   });
   const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth, qwenHistoryService });
   const proxy = options.proxy || createChat2ApiProxyService({

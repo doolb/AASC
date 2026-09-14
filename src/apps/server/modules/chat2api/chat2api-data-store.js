@@ -265,6 +265,28 @@ const createChat2ApiDataStore = (options = {}) => {
     }
   };
 
+  const getOAuthSession = async (state, providerId) => {
+    const target = oauthSessionPath(state);
+    if (!target) {
+      return null;
+    }
+    try {
+      const session = JSON.parse(await fs.readFile(target, 'utf8'));
+      if (providerId && session.providerId !== providerId) {
+        return null;
+      }
+      if (session.expiresAt <= Date.now()) {
+        return null;
+      }
+      return session;
+    } catch (error) {
+      if (error.code === 'ENOENT' || error instanceof SyntaxError) {
+        return null;
+      }
+      throw error;
+    }
+  };
+
   const cancelOAuthSession = async (state) => {
     const target = oauthSessionPath(state);
     if (target) {
@@ -538,6 +560,7 @@ const createChat2ApiDataStore = (options = {}) => {
     saveModelMapping,
     deleteModelMapping,
     createOAuthSession,
+    getOAuthSession,
     consumeOAuthSession,
     cancelOAuthSession,
     clearOAuthSessions,
