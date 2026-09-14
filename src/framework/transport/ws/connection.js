@@ -16,7 +16,9 @@ function createDisplayState() {
         fit: 'contain',
         crop: { x: 0, y: 0, width: 100, height: 100 },
         canvasSize: { width: 1920, height: 1080 },
-        userAgent: null
+        userAgent: null,
+        capabilities: { androidControlPage: false },
+        androidControlPageOpen: false
     };
 }
 
@@ -67,6 +69,9 @@ function handleDisplayConnection(ws, req, messageHandler) {
             } else if (data.type === 'userAgent' && displayData) {
                 displayData.state.userAgent = data.userAgent;
                 broadcastToControls({ type: 'displayList', list: getDisplayList() });
+            } else if (data.type === 'capabilities' && displayData) {
+                displayData.state.capabilities = { ...displayData.state.capabilities, ...(data.capabilities || {}) };
+                broadcastToControls({ type: 'displayList', list: getDisplayList() });
             }
             
             if (messageHandler) {
@@ -103,6 +108,15 @@ function handleControlConnection(ws, req, messageHandler) {
             const displayData = displayClients.get(displayId);
             
             if (!displayData) return;
+
+            if (data.type === 'setAndroidControlPage') {
+                if (displayData.state.capabilities?.androidControlPage !== true) return;
+                if (typeof data.enabled !== 'boolean') return;
+                displayData.state.androidControlPageOpen = data.enabled;
+                sendToDisplay(displayId, { type: 'displayControlAccess', enabled: data.enabled });
+                broadcastToControls({ type: 'displayControlAccessUpdated', displayId, enabled: data.enabled });
+                return;
+            }
             
             if (data.type === 'getState') {
                 const stateToSend = { ...displayData.state };
@@ -154,7 +168,9 @@ function getDisplayList() {
             id: id,
             ip: data.ip,
             canvasSize: data.state.canvasSize,
-            userAgent: data.state.userAgent
+            userAgent: data.state.userAgent,
+            androidControlPageSupported: data.state.capabilities?.androidControlPage === true,
+            androidControlPageOpen: data.state.capabilities?.androidControlPage === true && data.state.androidControlPageOpen === true
         });
     });
     return list;

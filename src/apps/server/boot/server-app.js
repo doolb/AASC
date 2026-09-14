@@ -116,6 +116,7 @@ const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
 const { normalizeDisplayCpuStatus, getDisplayTtsConcurrency } = require('../modules/media/display-cpu-status');
 const { createOrderedTaskScheduler } = require('../modules/media/ordered-task-scheduler');
+const { createAndroidControlPageAccess } = require('../modules/display/android-control-page-access');
 const {
     ModelManifestService,
     YOLO_MODEL_IDS
@@ -1385,6 +1386,7 @@ const DEFAULT_CAPABILITIES = {
     displayText: true,
     ttsGeneration: false,
     cameraCapture: false,
+    androidControlPage: false,
     llm: { enabled: true, supported: false, engine: 'mnn-llm' }
 };
 
@@ -1500,6 +1502,8 @@ function normalizeDisplayUserCapabilities(capabilities) {
         ? capabilities
         : {};
     const normalized = { ...source };
+    // Android 控制端是显示端原生能力声明，不能由控制端伪造或关闭。
+    delete normalized.androidControlPage;
     if (Object.prototype.hasOwnProperty.call(source, 'llm')) {
         normalized.llm = source.llm
             && typeof source.llm === 'object'
@@ -2373,6 +2377,11 @@ function persistDisplayState(displayData, partialState) {
     if (!displayData) return null;
     return config.updateDisplayStateById(displayData.displayId, displayData.ip, partialState);
 }
+
+const androidControlPageAccess = createAndroidControlPageAccess({
+    sendToDisplay,
+    persist: persistDisplayState
+});
 
 function normalizePlaybackProgress(currentTime, duration) {
     const time = Number(currentTime);
@@ -5626,6 +5635,8 @@ function getDisplayList() {
             vadMinSpeechDurationMs: globalVoiceVadConfig.vadMinSpeechDurationMs,
             voiceRecordingMode: normalizeVoiceRecordingMode(data.state.voiceRecordingMode),
             capabilities: caps,
+            androidControlPageSupported: caps.androidControlPage === true,
+            androidControlPageOpen: caps.androidControlPage === true && data.state.androidControlPageOpen === true,
             llm: llmRouter.getDisplayStatus(id)
         });
     });
@@ -7008,6 +7019,11 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
         ws.send(JSON.stringify({ type: 'controlThemeChanged', theme: getControlTheme() }));
         ws.send(JSON.stringify({ type: 'displayVersionConfig', ...getDisplayVersionConfig() }));
+        // 先发送持久化的权威值；旧版显示端会忽略未知消息，新版 Android 显示端会据此控制原生按钮。
+        ws.send(JSON.stringify({
+            type: 'displayControlAccess',
+            enabled: savedState?.androidControlPageOpen === true
+        }));
 
         // 发送日志上报配置
         const reportCfg = getDisplayLogReportConfig(displayId);
@@ -7509,11 +7525,16 @@ wss.on('connection', (ws, req) => {
                     const targetDisplayId = data.displayId;
                     const targetDisplayData = displayClients.get(targetDisplayId);
                     if (targetDisplayData) {
+                        const requestedCapabilities = data.capabilities && typeof data.capabilities === 'object'
+                            ? { ...data.capabilities }
+                            : {};
+                        // 只接受显示端自身 capabilities 消息声明 Android 控制端，控制端不能伪造原生能力。
+                        delete requestedCapabilities.androidControlPage;
                         const userCapabilities = normalizeDisplayUserCapabilities(data.capabilities);
                         targetDisplayData.state.capabilities = mergeDisplayCapabilities(
                             {
                                 ...(targetDisplayData.state.capabilities || DEFAULT_CAPABILITIES),
-                                ...(data.capabilities || {})
+                                ...requestedCapabilities
                             },
                             userCapabilities
                         );
@@ -7545,6 +7566,33 @@ wss.on('connection', (ws, req) => {
                             type: 'capabilitiesUpdateError',
                             displayId: targetDisplayId,
                             message: '显示端不存在或已断开'
+                        }));
+                    }
+                } else if (data.type === 'setAndroidControlPage') {
+                    const targetDisplayId = typeof data.displayId === 'string' ? data.displayId : '';
+                    const targetDisplayData = displayClients.get(targetDisplayId);
+                    if (!targetDisplayData) {
+                        ws.send(JSON.stringify({
+                            type: 'displayControlAccessError',
+                            displayId: targetDisplayId,
+                            message: '显示端不存在或已断开'
+                        }));
+                        return;
+                    }
+                    try {
+                        const result = androidControlPageAccess.set(targetDisplayData, data.enabled);
+                        targetDisplayData.state.androidControlPageOpen = result.enabled;
+                        broadcastToControls({
+                            type: 'displayControlAccessUpdated',
+                            displayId: targetDisplayId,
+                            enabled: result.enabled
+                        });
+                        broadcastDisplayList();
+                    } catch (error) {
+                        ws.send(JSON.stringify({
+                            type: 'displayControlAccessError',
+                            displayId: targetDisplayId,
+                            message: error.message
                         }));
                     }
                 } else if (wsServer) {
@@ -7917,6 +7965,11 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         sendToDisplay(displayId, {
             type: 'capabilitiesUpdated',
             capabilities: displayData.state.capabilities
+        });
+        sendToDisplay(displayId, {
+            type: 'displayControlAccess',
+            enabled: displayData.state.capabilities.androidControlPage === true
+                && displayData.state.androidControlPageOpen === true
         });
         var diag = data.capabilities._webgpuDiag ? ' [' + data.capabilities._webgpuDiag + ']' : '';
         log('能力', '显示端 ' + displayId + ' webgpu=' + (data.capabilities.webgpu ? '可用' : '不可用') + ', webgl=' + (data.capabilities.webgl ? '可用' : '不可用') + diag);
