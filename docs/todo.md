@@ -59,6 +59,10 @@
 
 ## Android APK
 
+# Android Chat2API 登录与控制端开放
+
+- [进行中] Android 普通/离线 APK 支持隔离 WebView Provider 登录、凭据捕获、服务端验证，以及按显示端开放控制端入口。
+
 - 🔄进行中 [2026-09-13] Android 子服务器媒体库 `~/` 映射到应用专属外部目录
   - 目标目录为 `/storage/emulated/0/Android/data/com.aasc.display/files`，需完成旧字面 `~` 目录迁移和 APK 真机验证。
 

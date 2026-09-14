@@ -95,6 +95,7 @@
 | LLM 配置 Agent 模式 | [llm-agent-mode.md](design/llm-agent-mode.md) | 普通 LLM profile 的 Pi Agent 模式、只读工具与服务器进程管理 |
 | 私聊聊天 Agent 系统工具 | [private-chat-agent-tools.md](design/private-chat-agent-tools.md) | 私聊 Agent 调用受限系统工具、修复模式安全边界与 Pi/Codex 统一适配 |
 | Chat2API 核心内置任务 | [chat2api-builtin-task.md](design/chat2api-builtin-task.md) | Provider、OAuth、账号、API Key 和 OpenAI 兼容代理内置为常驻任务 |
+| Android Chat2API 登录与控制端开放 | [android-chat2api-login-control.md](design/android-chat2api-login-control.md) | Android APK 隔离 WebView 登录捕获、Provider 验证和按显示端开放控制端 |
 | Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](design/chat2api-global-responses.md) | 普通聊天、语音、搜索/系统任务和 Pi Agent 统一使用内置 Responses 代理 |
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](design/chat2api-raw-traffic-log-modes.md) | 原始流量完整/简洁日志模式和控制端配置 |
 | 动态画面填充模式 | [dynamic-fit-mode.md](design/dynamic-fit-mode.md) | 适应与铺满循环过渡、控制端时间配置 |
