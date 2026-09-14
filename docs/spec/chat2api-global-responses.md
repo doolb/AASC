@@ -1,22 +1,23 @@
-# Chat2API 全局 Responses 协议实现规范
+# Chat2API 全局 Responses 协议实现规范（历史实现记录）
+
+> 本文保留 2026-08-31 全局 Responses 迁移的过程伪代码。当前 profile 级配置和请求归属以 `docs/spec/chat-system.md` 为准。
 
 ## 配置伪代码
 
 ```text
-chatConfig:
+chat.llmProfiles[]:
     protocol = "openai-responses"
-    responsesBaseUrl = "http://127.0.0.1:8083/v1"
-    responsesApiKey = ""
-    apiUrl = 旧 Chat Completions 地址
-    apiKey = 旧 profile 凭据
+    apiUrl = Chat Completions API 地址
+    apiKey = 当前 LLM 服务器凭据
 ```
 
 ```text
-normalizeChatTransport(config):
-    如果 config.protocol == "openai-responses":
-        返回 Responses transport 和 responsesBaseUrl
+normalizeChatTransport(profile):
+    如果 profile.protocol == "openai-responses":
+        baseUrl = 去掉 profile.apiUrl 的 "/chat/completions" 后缀
+        返回 Responses transport 和 baseUrl
     否则:
-        返回旧 Chat Completions transport 和 apiUrl
+        返回 Chat Completions transport 和 profile.apiUrl
 ```
 
 ## 统一 Responses 客户端伪代码
@@ -72,7 +73,8 @@ chat(userMessage, options):
     如果 active profile 是 Pi Agent:
         转入 chatStream 的 Pi 分支
     messages = buildMessages(userMessage, options)
-    transport = normalizeChatTransport(chatConfig)
+    profile = 读取 activeProfile
+    transport = normalizeChatTransport(profile)
     如果 transport 是 Responses:
         state = loadChatResponseState(sessionKey)
         body = buildResponsesRequest(messages, state, options)
@@ -110,7 +112,7 @@ createChat2ApiCompatibleProvider():
     api = openAIResponsesApi()
     tracker = createResponsesContinuationTracker()
     model.api = "openai-responses"
-    model.baseUrl = responsesBaseUrl
+    model.baseUrl = 去掉 profile.apiUrl 的 "/chat/completions" 后缀
     api.stream / api.streamSimple:
         按 Pi sessionId 查找最近 responseId 和已发送消息快照
         只比较 role、content、工具调用名称/参数和调用 ID 等语义字段
@@ -170,8 +172,9 @@ prepareManagedToolRequest(request, responseSession):
 ```text
 llm.chat.run(context):
     messages = 根据 promptFormat 生成 system/user 消息
-    如果全局协议是 Responses:
-        response = responsesClient.request({ model, input: messages, stream })
+    profile = 读取 activeProfile
+    如果 profile.protocol 是 Responses:
+        response = responsesClient.request({ baseUrl: profile.apiUrl, apiKey: profile.apiKey, model, input: messages, stream })
         非流式返回 response.output_text
         流式把 response.output_text.delta 转成 taskIO chunk
     否则:
@@ -183,7 +186,7 @@ llm.chat.run(context):
 ```text
 switchToResponsesAndStopExternal():
     确认内置 8083 /health 为 running
-    保存 chat.protocol = "openai-responses"
+    保存当前 profile.protocol = "openai-responses"
     重启 AASC 主服务
     执行真实普通、流式、Pi 工具和重启续聊测试
     精确查找命令路径为 /mnt/Chat2API 的进程树

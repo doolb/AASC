@@ -49,6 +49,12 @@
 
 ## 聊天协议配置
 
+- ✅ [2026-09-14] 将聊天调用协议及 Responses 地址归属当前 LLM 服务器配置。
+  - `llmProfiles[]` 保存各自的 `protocol`、Chat Completions API URL 和 API Key；Responses 从当前 profile 的 URL 派生 `/responses` 服务基址并复用同一 Key，移除聊天设置中的全局 Responses 地址、协议和密钥入口。
+  - 普通聊天、`llm.chat` 任务和 Pi Runtime 均按当前 profile 选择协议与认证信息；旧全局协议仅用于缺失 profile 字段的启动兼容，不再读取旧 Responses 地址和密钥。
+  - 改动文件：`src/external/llm/llm-service.js`、`src/apps/server/modules/task-engine/builtin-tasks/llm-chat.js`、`src/apps/server/modules/chat/pi-runtime-manager.js`、`src/apps/server/boot/server-app.js`、`src/apps/server/modules/config/config-app-service.js`、控制端聊天设置及对应 design/spec/task/测试文档。
+  - 验证：聊天配置、Responses、`llm.chat` 和 TaskManager 定向回归 11/11；相关 JavaScript 语法检查通过。全量 `npm test` 已执行，但当前工作区另有多项既有/环境相关失败，聊天配置用例通过。
+
 - ✅ [2026-09-13] 修复聊天协议与接口地址不匹配导致 Android 端连接 `127.0.0.1` 失败的问题。
   - 聊天设置增加 `openai-responses`/`openai-completions` 协议选择、Responses Base URL 和 Responses API Key；profile 的 `apiUrl` 明确为 Chat Completions 地址。
   - 前端通过现有 `/api/chat/config` 加载和保存完整传输配置，并使用服务端返回的权威值；主服务和 offline APK 统一使用 `https://127.0.0.1:8081/v1`，离线 APK 内置 Node 服务的缺省回退值也与主配置一致。

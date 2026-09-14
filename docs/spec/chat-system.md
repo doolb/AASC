@@ -69,7 +69,8 @@
   activeProfile: string,        // 当前激活的配置名
   llmProfiles: [{               // LLM 配置列表
     name: string,               // 配置名称（唯一标识）
-    apiUrl: string,             // Chat Completions API 地址，仅 openai-completions 使用
+    protocol: string,            // 'openai-responses' | 'openai-completions'
+    apiUrl: string,             // Chat Completions API 地址；Responses 模式复用其服务基址
     model: string,              // 模型名称
     maxTokens: number,          // 最大 token 数
     temperature: number,        // 温度参数
@@ -79,56 +80,44 @@
 }
 ```
 
-配置存储在 config.json 的 chat 段。全局 `protocol` 决定请求协议：`openai-responses` 使用 `responsesBaseUrl`/`responsesApiKey`，`openai-completions` 使用当前 profile 的 `apiUrl`/`apiKey`。切换 profile 时更新 Chat Completions 的 apiUrl/model/maxTokens/temperature，Responses 地址保持全局独立配置。
-
-全局聊天路由字段:
-
-```javascript
-{
-  protocol: string,           // 'openai-responses' | 'openai-completions'
-  responsesBaseUrl: string,   // Responses 服务基地址，不含末尾 /responses
-  responsesApiKey: string     // Responses API 密钥，可为空
-}
-```
+配置存储在 config.json 的 chat 段。`protocol`、`apiUrl`、`apiKey` 随当前 `llmProfiles[]` 保存；`openai-responses` 将当前 profile 的 Chat Completions API URL 去掉 `/chat/completions` 后请求 `/responses`，两种协议共用当前 profile 的 API Key。全局聊天配置不再保存 Responses 地址或密钥。
 
 ### 聊天传输配置伪代码
 
 ```text
-默认前端聊天配置:
+默认 profile:
     protocol = 'openai-responses'
-    responsesBaseUrl = 'https://127.0.0.1:8081/v1'
-    responsesApiKey = ''
+    apiUrl = 默认 Chat Completions API URL
+    apiKey = ''
 
 loadConfig():
     请求 GET /api/chat/config
     如果返回成功:
-        protocol = 返回 protocol 为 'openai-completions' ? 'openai-completions' : 'openai-responses'
-        responsesBaseUrl = 返回 responsesBaseUrl 或默认 Responses Base URL
-        responsesApiKey = 返回 responsesApiKey 或空字符串
         同步 systemPrompt 和 agentBackend
+    请求 GET /api/chat/profiles
+    同步 llmProfiles 和 activeProfile
 
 showConfig():
-    填充协议选择框、Responses Base URL 和 Responses API Key
-    protocol == 'openai-responses' 时显示 Responses 配置项
-    protocol == 'openai-completions' 时隐藏 Responses 配置项
-    profile 编辑器的 apiUrl 显示为 Chat Completions API URL
+    填充 systemPrompt 和 agentBackend
+    profile 编辑器填充 protocol、Chat Completions API URL 和 API Key
 
 saveConfig():
-    读取协议并规范化为 openai-responses 或 openai-completions
-    读取 responsesBaseUrl 和 responsesApiKey
-    protocol == 'openai-responses' 且 responsesBaseUrl 为空时拒绝保存
-    POST /api/chat/config { protocol, responsesBaseUrl, responsesApiKey, ... }
+    仅读取全局聊天级字段
+    POST /api/chat/config { systemPrompt, agentBackend, ... }
     以服务端返回的 config 覆盖本地对应字段
 
-chat(userMessage):
-    如果 protocol == 'openai-responses':
-        请求 responsesBaseUrl + '/responses'
-    否则:
-        请求当前 profile.apiUrl（Chat Completions）
+saveProfile():
+    读取并规范化 protocol、apiUrl、apiKey 和其他 profile 字段
+    POST /api/chat/profiles { profiles }
+    以服务端返回的 profile 列表更新本地配置
 
-offline APK 启动:
-    内置 Node 服务的 Responses 默认基地址 = 'https://127.0.0.1:8081/v1'
-    配置缺失或为空时，配置服务、LLM 服务、服务器入口和 llm.chat 任务均使用该默认值
+chat(userMessage):
+    读取当前 activeProfile
+    如果 profile.protocol == 'openai-responses':
+        responsesBaseUrl = 去掉 profile.apiUrl 的 '/chat/completions' 后缀
+        请求 responsesBaseUrl + '/responses'，Authorization 使用 profile.apiKey
+    否则:
+        请求 profile.apiUrl（Chat Completions），Authorization 使用 profile.apiKey
 ```
 
 ## 核心模块实现
@@ -186,7 +175,7 @@ init(config):
 applyProfile(name):
     查找 llmProfiles 中名为 name 的 profile
     如果找到:
-        更新 chatConfig 的 apiUrl/model/maxTokens/temperature
+        更新 chatConfig 的当前运行时字段
         设置 activeProfile = profile.name
 
 getConfig():
@@ -224,11 +213,12 @@ getProfileByName(name):
     返回指定 profile 的副本或 null
 
 chat(userMessage, options, callbacks):
-    使用 chatConfig（由 activeProfile 决定）调用 API
+    读取 activeProfile 的 protocol、apiUrl、apiKey 和模型参数
+    按 profile.protocol 调用 Responses 或 Chat Completions API
     其余逻辑不变
 
 chatStream(userMessage, options, callbacks):
-    使用 chatConfig 进行流式调用
+    读取 activeProfile 的协议、地址和密钥进行流式调用
     其余逻辑不变
     加载聊天配置
     加载聊天历史
@@ -871,20 +861,16 @@ const Chat = {
     loadConfig():
         请求 GET /api/chat/config
         更新 this.config.systemPrompt、agentBackend
-        更新 this.config.protocol、responsesBaseUrl、responsesApiKey
+        不从全局配置读取 protocol、responsesBaseUrl、responsesApiKey
 
     showConfig():
         打开聊天设置弹窗
         填充 systemPrompt、agentBackend
-        填充 protocol、responsesBaseUrl、responsesApiKey
-        根据 protocol 显示或隐藏 Responses 配置项
         加载 LLM profile 列表
 
     saveConfig():
-        读取并规范化 protocol
-        读取 responsesBaseUrl、responsesApiKey
-        校验 Responses 协议必须有 responsesBaseUrl
-        POST /api/chat/config 保存全局传输配置
+        仅保存全局聊天级字段
+        POST /api/chat/config 保存全局聊天配置
         成功后使用服务端权威 config 更新本地状态
     
     saveCommands():
@@ -1285,9 +1271,10 @@ const Chat = {
                     ✎ 编辑按钮 (editProfile)
                     ✕ 删除按钮 (deleteProfile)
                 + 添加配置 按钮 (showAddProfile)
-                配置编辑表单 (profileEditor):
+            配置编辑表单 (profileEditor):
                     配置名称 (input)
-                    API URL (input)
+                    调用协议 (select)
+                    Chat Completions API URL (input)
                     模型 (input)
                     最大 Tokens (number input)
                     温度 (number input, 0-2, step 0.1)
@@ -1297,19 +1284,20 @@ const Chat = {
         保存设置 按钮 (saveConfig) 仅保存 systemPrompt
 
     showAddProfile():
-        清空编辑表单（含 apiKey）
+        清空编辑表单并将 protocol 默认设为 openai-responses
         显示配置编辑表单
 
     editProfile(name):
         根据 name 查找 profile
-        填充编辑表单字段（含 apiKey）
+        填充编辑表单字段（含 protocol、apiKey）
         显示配置编辑表单
 
     cancelEditProfile():
         隐藏配置编辑表单
 
     saveProfile():
-        验证必填字段 (name, apiUrl, model)
+        验证必填字段 (name, protocol, apiUrl, model)
+        Responses 模式将 apiUrl 规范化为对应的 Responses 服务基址，不单独读取全局地址或密钥
         如果 name 已存在 → 更新
         否则 → 新增
         请求 POST /api/chat/profiles { profiles }

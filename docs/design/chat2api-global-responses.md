@@ -1,4 +1,6 @@
-# Chat2API 全局 Responses 协议设计
+# Chat2API 全局 Responses 协议设计（历史设计记录）
+
+> 本文记录 2026-08-31 的全局 Responses 切换过程。当前实现已将调用协议、Responses 服务基址和 API Key 收敛到 `chat.llmProfiles[]`，请以 `docs/design/chat-system.md` 和 `docs/spec/chat-system.md` 的 profile 配置规则为准。
 
 ## 需求概述
 

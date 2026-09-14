@@ -13,9 +13,6 @@ const Chat = {
     templates: [],
     config: {
         systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
-        protocol: 'openai-responses',
-        responsesBaseUrl: 'https://127.0.0.1:8081/v1',
-        responsesApiKey: '',
         agentBackend: 'codex'
     },
     assistantConfig: {
@@ -388,11 +385,6 @@ const Chat = {
                     if (data.config.systemPrompt) {
                         this.config.systemPrompt = data.config.systemPrompt;
                     }
-                    this.config.protocol = data.config.protocol === 'openai-completions'
-                        ? 'openai-completions'
-                        : 'openai-responses';
-                    this.config.responsesBaseUrl = data.config.responsesBaseUrl || 'https://127.0.0.1:8081/v1';
-                    this.config.responsesApiKey = data.config.responsesApiKey || '';
                     this.config.agentBackend = data.config.agentBackend || 'codex';
                 }
             })
@@ -779,21 +771,6 @@ const Chat = {
         }
         const agentBackendInput = document.getElementById('chatAgentBackend');
         if (agentBackendInput) this.config.agentBackend = agentBackendInput.value === 'claude' ? 'claude' : 'codex';
-        const protocolInput = document.getElementById('chatProtocol');
-        if (protocolInput) {
-            this.config.protocol = protocolInput.value === 'openai-completions'
-                ? 'openai-completions'
-                : 'openai-responses';
-        }
-        const responsesBaseUrlInput = document.getElementById('chatResponsesBaseUrl');
-        if (responsesBaseUrlInput) this.config.responsesBaseUrl = responsesBaseUrlInput.value.trim();
-        const responsesApiKeyInput = document.getElementById('chatResponsesApiKey');
-        if (responsesApiKeyInput) this.config.responsesApiKey = responsesApiKeyInput.value.trim();
-
-        if (this.config.protocol === 'openai-responses' && !this.config.responsesBaseUrl) {
-            window.showToast('Responses Base URL 不能为空', 'error');
-            return;
-        }
 
         fetch('/api/chat/config', {
             method: 'POST',
@@ -1955,23 +1932,8 @@ const Chat = {
             }
             const agentBackend = document.getElementById('chatAgentBackend');
             if (agentBackend) agentBackend.value = this.config.agentBackend || 'codex';
-            const protocol = document.getElementById('chatProtocol');
-            if (protocol) protocol.value = this.config.protocol || 'openai-responses';
-            const responsesBaseUrl = document.getElementById('chatResponsesBaseUrl');
-            if (responsesBaseUrl) responsesBaseUrl.value = this.config.responsesBaseUrl || '';
-            const responsesApiKey = document.getElementById('chatResponsesApiKey');
-            if (responsesApiKey) responsesApiKey.value = this.config.responsesApiKey || '';
-            this.updateChatProtocolVisibility();
             this.loadProfiles();
         }
-    },
-
-    updateChatProtocolVisibility() {
-        const protocolInput = document.getElementById('chatProtocol');
-        const responsesConfig = document.getElementById('chatResponsesConfig');
-        if (!responsesConfig) return;
-        const protocol = protocolInput ? protocolInput.value : this.config.protocol;
-        responsesConfig.hidden = protocol !== 'openai-responses';
     },
 
     renderProfileSelector() {
@@ -2006,8 +1968,9 @@ const Chat = {
     },
 
     getProfileModeLabel(profile = {}) {
-        if (profile.mode !== 'agent') return '直接 LLM';
-        return `Agent · ${profile.backend === 'codex' ? 'Codex' : 'Pi'}`;
+        const protocolLabel = profile.protocol === 'openai-completions' ? 'Chat Completions' : 'Responses';
+        if (profile.mode !== 'agent') return `直接 LLM · ${protocolLabel}`;
+        return `Agent · ${profile.backend === 'codex' ? 'Codex' : 'Pi'} · ${protocolLabel}`;
     },
 
     updateProfileBackendVisibility() {
@@ -2020,6 +1983,7 @@ const Chat = {
         document.getElementById('profileEditName').value = '';
         document.getElementById('profileEditMode').value = 'llm';
         document.getElementById('profileEditBackend').value = 'pi';
+        document.getElementById('profileEditProtocol').value = 'openai-responses';
         document.getElementById('profileEditApiUrl').value = '';
         document.getElementById('profileEditModel').value = '';
         document.getElementById('profileEditMaxTokens').value = '';
@@ -2036,6 +2000,7 @@ const Chat = {
         document.getElementById('profileEditName').value = profile.name || '';
         document.getElementById('profileEditMode').value = profile.mode || 'llm';
         document.getElementById('profileEditBackend').value = profile.backend || 'pi';
+        document.getElementById('profileEditProtocol').value = profile.protocol || 'openai-responses';
         document.getElementById('profileEditApiUrl').value = profile.apiUrl || '';
         document.getElementById('profileEditModel').value = profile.model || '';
         document.getElementById('profileEditMaxTokens').value = profile.maxTokens || '';
@@ -2060,6 +2025,9 @@ const Chat = {
         const contextCount = parseInt(document.getElementById('profileEditContextCount').value) || 0;
         const apiKey = document.getElementById('profileEditApiKey').value.trim();
         const mode = document.getElementById('profileEditMode').value;
+        const protocol = document.getElementById('profileEditProtocol').value === 'openai-completions'
+            ? 'openai-completions'
+            : 'openai-responses';
         const backend = document.getElementById('profileEditBackend').value === 'codex' ? 'codex' : 'pi';
 
         if (!name) {
@@ -2077,7 +2045,7 @@ const Chat = {
 
         const existingIdx = this.profiles.findIndex(p => p.name === name);
         const promptFormat = document.getElementById('profileEditPromptFormat').value;
-        const profile = { name, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode };
+        const profile = { name, protocol, apiUrl, model, maxTokens, temperature, contextCount, apiKey, promptFormat, mode };
         if (mode === 'agent') profile.backend = backend;
 
         if (existingIdx >= 0) {

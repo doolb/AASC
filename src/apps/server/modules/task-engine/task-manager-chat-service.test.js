@@ -18,8 +18,14 @@ test('TaskManager 将全局 chatService 传给内置 LLM 任务', async () => {
       tasksDir,
       chatService: {
         getConfig: () => ({
+          model: 'legacy-global-model'
+        }),
+        getActiveProfile: () => 'qwen',
+        getProfileByName: () => ({
+          name: 'qwen',
           protocol: 'openai-responses',
-          responsesBaseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+          apiUrl: `http://127.0.0.1:${server.address().port}/v1/chat/completions`,
+          apiKey: '',
           model: 'qwen'
         })
       }

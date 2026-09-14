@@ -51,9 +51,28 @@ test('llm-service Responses 续聊只发送当前输入并携带 previous_respon
   assert.equal(payload.stream, true);
 });
 
-test('llm-service 可以提取 Responses 文本并规范化全局 transport', () => {
+test('llm-service 可以提取 Responses 文本并按 profile 规范化 transport', () => {
   assert.equal(extractResponsesText({ output_text: '直接文本' }), '直接文本');
   assert.equal(extractResponsesText({ output: [{ type: 'message', content: [{ type: 'output_text', text: '嵌套文本' }] }] }), '嵌套文本');
-  assert.equal(normalizeChatTransport({ protocol: 'openai-responses' }).protocol, 'openai-responses');
+  assert.deepEqual(normalizeChatTransport({
+    protocol: 'openai-responses',
+    apiUrl: 'https://llm.example/v1/chat/completions'
+  }), {
+    protocol: 'openai-responses',
+    baseUrl: 'https://llm.example/v1'
+  });
+  assert.deepEqual(normalizeChatTransport({
+    protocol: 'openai-completions',
+    apiUrl: 'https://llm.example/v1/chat/completions'
+  }), {
+    protocol: 'openai-completions',
+    baseUrl: 'https://llm.example/v1'
+  });
   assert.equal(normalizeChatTransport({}).protocol, 'openai-responses');
+});
+
+test('llm-service 不再暴露全局 Responses 地址和密钥', () => {
+  const config = require('./llm-service').getConfig();
+  assert.equal(Object.hasOwn(config, 'responsesBaseUrl'), false);
+  assert.equal(Object.hasOwn(config, 'responsesApiKey'), false);
 });

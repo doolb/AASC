@@ -1,9 +1,31 @@
 const http = require('http');
 const https = require('https');
 const { createResponsesClient } = require('../../../../../external/llm/llm-responses-client');
+const { normalizeOpenAiBaseUrl } = require('../../chat/pi-runtime-policy');
 
 const DEFAULT_API_URL = 'http://192.168.1.12:8080/v1/chat/completions';
 const DEFAULT_MODEL = 'gpt-3.5-turbo';
+
+function resolveChatProfile(chatService, globalConfig = {}) {
+  const activeProfileName = typeof chatService?.getActiveProfile === 'function'
+    ? chatService.getActiveProfile()
+    : globalConfig.activeProfile;
+  const profile = typeof chatService?.getProfileByName === 'function'
+    ? chatService.getProfileByName(activeProfileName)
+    : null;
+  if (profile) return profile;
+  if (Array.isArray(globalConfig.llmProfiles)) {
+    const listedProfile = globalConfig.llmProfiles.find((item) => item?.name === activeProfileName);
+    if (listedProfile) return listedProfile;
+  }
+  return globalConfig;
+}
+
+function normalizeProfileProtocol(profile = {}) {
+  return profile.protocol === 'openai-completions'
+    ? 'openai-completions'
+    : 'openai-responses';
+}
 
 module.exports = {
   id: 'llm.chat',
@@ -57,18 +79,17 @@ module.exports = {
     // 合并全局 + 实例配置 (全局配置通过 task:set_config 持久化到 config.json)
     const globalConfig = taskIO ? await taskIO.getTaskConfig(taskName) : {};
     const globalChatConfig = chatService?.getConfig?.() || null;
-    const useResponses = Boolean(globalChatConfig && globalChatConfig.protocol !== 'openai-completions');
+    const chatProfile = resolveChatProfile(chatService, globalChatConfig || {});
+    const useResponses = normalizeProfileProtocol(chatProfile) === 'openai-responses';
 
     const config = {
-      apiUrl: params.apiUrl || globalConfig.apiUrl || globalChatConfig?.apiUrl || DEFAULT_API_URL,
-      modelId: params.modelId || globalConfig.modelId || globalChatConfig?.model || DEFAULT_MODEL,
+      apiUrl: params.apiUrl || globalConfig.apiUrl || chatProfile.apiUrl || DEFAULT_API_URL,
+      modelId: params.modelId || globalConfig.modelId || chatProfile.model || globalChatConfig?.model || DEFAULT_MODEL,
       temperature: params.temperature ?? globalConfig.temperature ?? 0.7,
       systemPrompt: params.systemPrompt || globalConfig.systemPrompt || '',
       promptFormat: params.promptFormat || globalConfig.promptFormat || 'openai',
       maxTokens: params.maxTokens || globalConfig.maxTokens || 4096,
-      apiKey: params.apiKey || globalConfig.apiKey || globalChatConfig?.apiKey || '',
-      responsesBaseUrl: globalChatConfig?.responsesBaseUrl || 'https://127.0.0.1:8081/v1',
-      responsesApiKey: globalChatConfig?.responsesApiKey || ''
+      apiKey: params.apiKey || globalConfig.apiKey || chatProfile.apiKey || globalChatConfig?.apiKey || ''
     };
 
     let messages = [];
@@ -100,7 +121,10 @@ module.exports = {
     // ─── LLM API 调用（流式/非流式） ───
 
     async function callResponses() {
-      const client = createResponsesClient({ baseUrl: config.responsesBaseUrl, apiKey: config.responsesApiKey });
+      const client = createResponsesClient({
+        baseUrl: normalizeOpenAiBaseUrl(config.apiUrl),
+        apiKey: config.apiKey
+      });
       const request = {
         model: config.modelId,
         input: messages,

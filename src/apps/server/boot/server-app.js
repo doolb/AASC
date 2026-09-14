@@ -546,9 +546,7 @@ const aiRoles = new AiRolesService({
 });
 // 普通聊天的 Pi Agent 由服务器直接持有，和 AI 角色面板使用的后端宿主进程隔离。
 const piRuntimeManager = new PiRuntimeManager({
-    projectRoot: PROJECT_ROOT,
-    // 普通聊天、任务和 Pi Agent 共用内置 Chat2API Responses 入口，避免 Pi 继续读取旧 profile 地址。
-    responsesBaseUrl: config.get('chat.responsesBaseUrl', 'https://127.0.0.1:8081/v1')
+    projectRoot: PROJECT_ROOT
 });
 const codexRuntimeManager = new CodexRuntimeManager({
     projectRoot: PROJECT_ROOT,

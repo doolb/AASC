@@ -65,7 +65,6 @@ class PiRuntimeManager {
         this.agentDir = options.agentDir || path.join(os.tmpdir(), 'aasc-pi-runtime');
         this.requestTimeoutMs = options.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
         this.requestQueueTimeoutMs = options.requestQueueTimeoutMs || DEFAULT_REQUEST_QUEUE_TIMEOUT_MS;
-        this.responsesBaseUrl = options.responsesBaseUrl || '';
         this.logger = typeof options.logger === 'function' ? options.logger : () => {};
         this.sdkLoader = options.sdkLoader || (() => import('@earendil-works/pi-coding-agent'));
         this.readonlyToolsLoader = options.readonlyToolsLoader || (() => import(
@@ -218,7 +217,7 @@ class PiRuntimeManager {
             apiUrl: profile.apiUrl || '',
             model: profile.model || '',
             apiKey: profile.apiKey || '',
-            responsesBaseUrl: this.responsesBaseUrl,
+            protocol: profile.protocol || 'openai-responses',
             maxTokens: profile.maxTokens || 0,
             temperature: profile.temperature,
             templateContent: template.content || '',
@@ -280,7 +279,7 @@ class PiRuntimeManager {
         const policy = resolvePermissionPolicy(template.permissionProfile);
         const modelId = String(profile.model || '').trim() || 'aasc-model';
         const provider = toolsModule.createAascChat2ApiProvider({
-            baseUrl: this.responsesBaseUrl || normalizeOpenAiBaseUrl(profile.apiUrl || ''),
+            baseUrl: normalizeOpenAiBaseUrl(profile.apiUrl || ''),
             modelId,
             apiKey: profile.apiKey || '',
             conversationId

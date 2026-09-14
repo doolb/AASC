@@ -971,21 +971,6 @@
                     <p class="chat-config-hint">仅影响新建或进程退出后重建的工作 AI 角色；运行中的角色继续使用原后端。</p>
                 </div>
                 <div class="chat-config-item">
-                    <label for="chatProtocol">调用协议</label>
-                    <select id="chatProtocol" onchange="Chat.updateChatProtocolVisibility()" style="width:100%;padding:8px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
-                        <option value="openai-responses">OpenAI Responses（/v1/responses）</option>
-                        <option value="openai-completions">OpenAI Chat Completions（/v1/chat/completions）</option>
-                    </select>
-                    <p class="chat-config-hint">Responses 地址是全局聊天路由；profile 中的 Chat Completions 地址仅在选择 Completions 协议时使用。</p>
-                </div>
-                <div class="chat-config-item" id="chatResponsesConfig">
-                    <label for="chatResponsesBaseUrl">Responses Base URL</label>
-                    <input type="text" id="chatResponsesBaseUrl" placeholder="https://127.0.0.1:8081/v1">
-                    <label style="margin-top:8px;display:block" for="chatResponsesApiKey">Responses API Key (可选)</label>
-                    <input type="password" id="chatResponsesApiKey" placeholder="sk-...">
-                    <p class="chat-config-hint">请求会发送到该地址的 /responses 路径；Android 设备访问局域网网关时不要填写 127.0.0.1。</p>
-                </div>
-                <div class="chat-config-item">
                     <label>LLM 服务器配置</label>
                     <div id="profileSelector"></div>
                     <button class="chat-add-btn" style="margin-top:8px" onclick="Chat.showAddProfile()">+ 添加配置</button>
@@ -1007,9 +992,15 @@
                         </select>
                         <p class="chat-config-hint">Pi 和 Codex 使用独立的只读 Agent 运行时；直接 LLM 模式不使用此项。</p>
                     </div>
-                    <label style="margin-top:8px;display:block">Chat Completions API URL</label>
+                    <label style="margin-top:8px;display:block" for="profileEditProtocol">调用协议</label>
+                    <select id="profileEditProtocol" style="width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">
+                        <option value="openai-responses">OpenAI Responses（/v1/responses）</option>
+                        <option value="openai-completions">OpenAI Chat Completions（/v1/chat/completions）</option>
+                    </select>
+                    <p class="chat-config-hint">协议属于当前 LLM 服务器。Responses 模式会复用下面 Chat Completions API URL 的服务基址，并使用同一个 API Key。</p>
+                    <label style="margin-top:8px;display:block" for="profileEditApiUrl">Chat Completions API URL</label>
                     <input type="text" id="profileEditApiUrl" placeholder="http://192.168.1.12:8080/v1/chat/completions">
-                    <p class="chat-config-hint">仅在调用协议为 OpenAI Chat Completions 时使用。</p>
+                    <p class="chat-config-hint">填写完整的 Chat Completions 地址；Responses 模式会去掉末尾的 /chat/completions 后调用同一服务的 /responses。</p>
                     <label style="margin-top:8px;display:block">模型</label>
                     <input type="text" id="profileEditModel" placeholder="gpt-3.5-turbo">
                     <label style="margin-top:8px;display:block">最大 Tokens</label>
@@ -1018,7 +1009,7 @@
                     <input type="number" id="profileEditTemperature" placeholder="0.7" min="0" max="2" step="0.1">
                     <label style="margin-top:8px;display:block">群聊上下文条数</label>
                     <input type="number" id="profileEditContextCount" placeholder="0" min="0" max="200">
-                    <label style="margin-top:8px;display:block">API Key (可选)</label>
+                    <label style="margin-top:8px;display:block" for="profileEditApiKey">API Key (可选)</label>
                     <input type="password" id="profileEditApiKey" placeholder="sk-...">
                     <label style="margin-top:8px;display:block">消息格式</label>
                     <select id="profileEditPromptFormat" style="width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;background:var(--bg-primary);color:var(--text-primary);">

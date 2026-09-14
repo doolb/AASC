@@ -329,9 +329,6 @@ class Config extends DataSnapshot {
         logBlocklist: [],
         chat: {
             agentBackend: 'codex',
-            protocol: 'openai-responses',
-            responsesBaseUrl: 'https://127.0.0.1:8081/v1',
-            responsesApiKey: '',
             apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
             model: 'gpt-3.5-turbo',
             maxTokens: 1000,
@@ -344,6 +341,7 @@ class Config extends DataSnapshot {
                 {
                     name: 'default',
                     mode: 'llm',
+                    protocol: 'openai-responses',
                     apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
                     model: 'gpt-3.5-turbo',
                     maxTokens: 1000,

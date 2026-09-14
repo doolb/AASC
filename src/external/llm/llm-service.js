@@ -8,7 +8,8 @@ const { USER_CONFIG_DIR } = require('../../apps/server/modules/config/user-confi
 const {
     normalizeAgentProfile,
     normalizeChatTemplate,
-    buildChatSessionKey
+    buildChatSessionKey,
+    normalizeOpenAiBaseUrl
 } = require('../../apps/server/modules/chat/pi-runtime-policy');
 const { createResponsesClient } = require('./llm-responses-client');
 const { createChatHistoryStore } = require('./chat-history-store');
@@ -34,9 +35,6 @@ const DEFAULT_TEMPLATES = [
 let chatConfig = {
     agentBackend: 'codex',
     codexProxy: 'http://127.0.0.1:7899',
-    protocol: 'openai-responses',
-    responsesBaseUrl: 'https://127.0.0.1:8081/v1',
-    responsesApiKey: '',
     apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
     model: 'gpt-3.5-turbo',
     maxTokens: 1000,
@@ -170,19 +168,18 @@ function init(config = {}, options = {}) {
     }
     if (config.agentBackend === 'codex' || config.agentBackend === 'claude') chatConfig.agentBackend = config.agentBackend;
     if (config.codexProxy !== undefined) chatConfig.codexProxy = config.codexProxy;
-    if (config.protocol !== undefined) chatConfig.protocol = normalizeChatTransport(config).protocol;
-    if (config.responsesBaseUrl) chatConfig.responsesBaseUrl = config.responsesBaseUrl;
-    if (config.responsesApiKey !== undefined) chatConfig.responsesApiKey = config.responsesApiKey;
     if (config.apiUrl) chatConfig.apiUrl = config.apiUrl;
     if (config.model) chatConfig.model = config.model;
     if (config.maxTokens) chatConfig.maxTokens = config.maxTokens;
     if (config.temperature) chatConfig.temperature = config.temperature;
     if (config.systemPrompt) chatConfig.systemPrompt = config.systemPrompt;
+    const legacyProtocol = normalizeProfileProtocol(config.protocol);
     if (config.llmProfiles) {
-        llmProfiles = config.llmProfiles.map(normalizeAgentProfile);
+        llmProfiles = config.llmProfiles.map((profile) => normalizeLlmProfile(profile, legacyProtocol));
     } else {
-        llmProfiles = [normalizeAgentProfile({
+        llmProfiles = [normalizeLlmProfile({
             name: 'default',
+            protocol: legacyProtocol,
             apiUrl: chatConfig.apiUrl,
             model: chatConfig.model,
             maxTokens: chatConfig.maxTokens,
@@ -230,6 +227,30 @@ function applyProfile(name) {
     }
 }
 
+/**
+ * 将 profile 中的调用协议归一化为服务端支持的两个值。
+ * 旧配置没有 profile.protocol 时，使用启动配置里的旧全局协议作为一次性迁移来源。
+ *
+ * @param {object} profile 原始 LLM profile
+ * @param {string} fallbackProtocol 缺少协议时的回退值
+ * @returns {object} 规范化后的 LLM profile
+ */
+function normalizeLlmProfile(profile = {}, fallbackProtocol = 'openai-responses') {
+    const normalized = normalizeAgentProfile(profile);
+    normalized.protocol = normalizeProfileProtocol(normalized.protocol, fallbackProtocol);
+    return normalized;
+}
+
+function normalizeProfileProtocol(protocol, fallbackProtocol = 'openai-responses') {
+    if (protocol === 'openai-completions') return 'openai-completions';
+    if (protocol === 'openai-responses') return 'openai-responses';
+    return fallbackProtocol === 'openai-completions' ? 'openai-completions' : 'openai-responses';
+}
+
+function getActiveProfileConfig() {
+    return llmProfiles.find((profile) => profile.name === activeProfile) || chatConfig;
+}
+
 function loadTemplates() {
     try {
         if (fs.existsSync(TEMPLATES_FILE)) {
@@ -271,13 +292,11 @@ function loadSession() {
     }
 }
 
-function normalizeChatTransport(config = {}) {
-    const protocol = config.protocol === 'openai-completions'
-        ? 'openai-completions'
-        : 'openai-responses';
+function normalizeChatTransport(profile = {}) {
+    const protocol = normalizeProfileProtocol(profile.protocol);
     return {
         protocol,
-        baseUrl: config.responsesBaseUrl || 'https://127.0.0.1:8081/v1'
+        baseUrl: normalizeOpenAiBaseUrl(profile.apiUrl || '')
     };
 }
 
@@ -309,12 +328,13 @@ function saveResponsesSessionState() {
     }
 }
 
-function getResponsesClient() {
-    const fingerprint = `${chatConfig.responsesBaseUrl}\n${chatConfig.responsesApiKey || ''}`;
+function getResponsesClient(profile = getActiveProfileConfig()) {
+    const transport = normalizeChatTransport(profile);
+    const fingerprint = `${profile.name || activeProfile}\n${transport.baseUrl}\n${profile.apiKey || ''}`;
     if (!responsesClient || responsesClientFingerprint !== fingerprint) {
         responsesClient = createResponsesClient({
-            baseUrl: chatConfig.responsesBaseUrl,
-            apiKey: chatConfig.responsesApiKey || ''
+            baseUrl: transport.baseUrl,
+            apiKey: profile.apiKey || ''
         });
         responsesClientFingerprint = fingerprint;
     }
@@ -332,13 +352,15 @@ function getResponsesSessionKey(options = {}) {
     );
 }
 
-function getResponsesFingerprint(options = {}) {
+function getResponsesFingerprint(options = {}, profile = getActiveProfileConfig()) {
     return JSON.stringify({
-        profileName: activeProfile,
+        profileName: profile.name || activeProfile,
         templateId: options.templateTarget || options.useTemplate || 'default',
         systemPrompt: options.systemPrompt || chatConfig.systemPrompt || '',
-        model: chatConfig.model,
-        promptFormat: chatConfig.promptFormat || 'openai'
+        model: profile.model || chatConfig.model,
+        promptFormat: profile.promptFormat || chatConfig.promptFormat || 'openai',
+        protocol: normalizeChatTransport(profile).protocol,
+        apiUrl: profile.apiUrl || ''
     });
 }
 
@@ -398,7 +420,7 @@ function canRebuildResponsesSession(error) {
 }
 
 async function requestResponsesWithRecovery(context) {
-    const client = getResponsesClient();
+    const client = getResponsesClient(context.profile);
     const request = buildResponsesPayload(context);
     try {
         return await client.request(request);
@@ -410,7 +432,7 @@ async function requestResponsesWithRecovery(context) {
 }
 
 async function streamResponsesWithRecovery(context, onEvent) {
-    const client = getResponsesClient();
+    const client = getResponsesClient(context.profile);
     const request = buildResponsesPayload(context);
     let receivedText = false;
     try {
@@ -602,9 +624,6 @@ function setConfig(newConfig) {
         chatConfig.agentBackend = newConfig.agentBackend;
     }
     if (newConfig.codexProxy !== undefined) chatConfig.codexProxy = String(newConfig.codexProxy || '');
-    if (newConfig.protocol !== undefined) chatConfig.protocol = normalizeChatTransport(newConfig).protocol;
-    if (newConfig.responsesBaseUrl !== undefined) chatConfig.responsesBaseUrl = newConfig.responsesBaseUrl;
-    if (newConfig.responsesApiKey !== undefined) chatConfig.responsesApiKey = newConfig.responsesApiKey;
     if (newConfig.apiUrl !== undefined) chatConfig.apiUrl = newConfig.apiUrl;
     if (newConfig.model !== undefined) chatConfig.model = newConfig.model;
     if (newConfig.maxTokens !== undefined) chatConfig.maxTokens = newConfig.maxTokens;
@@ -614,7 +633,8 @@ function setConfig(newConfig) {
     if (newConfig.systemPrompt !== undefined) chatConfig.systemPrompt = newConfig.systemPrompt;
     if (newConfig.promptFormat !== undefined) chatConfig.promptFormat = newConfig.promptFormat;
     if (newConfig.llmProfiles !== undefined) {
-        llmProfiles = newConfig.llmProfiles.map(normalizeAgentProfile);
+        const legacyProtocol = normalizeProfileProtocol(newConfig.protocol);
+        llmProfiles = newConfig.llmProfiles.map((profile) => normalizeLlmProfile(profile, legacyProtocol));
     }
     if (newConfig.activeProfile !== undefined) {
         activeProfile = newConfig.activeProfile;
@@ -628,7 +648,7 @@ function getProfiles() {
 }
 
 function setProfiles(profiles) {
-    llmProfiles = (profiles || []).map(normalizeAgentProfile);
+    llmProfiles = (profiles || []).map((profile) => normalizeLlmProfile(profile));
     if (!llmProfiles.some(p => p.name === activeProfile)) {
         activeProfile = llmProfiles[0] ? llmProfiles[0].name : 'default';
     }
@@ -1052,9 +1072,9 @@ function getHistoryForOptions(options = {}) {
     return chatHistories[key] || [];
 }
 
-function buildImageMessageContent(text, images) {
+function buildImageMessageContent(text, images, profile = getActiveProfileConfig()) {
     if (!Array.isArray(images) || images.length === 0) return text;
-    const responseProtocol = normalizeChatTransport(chatConfig).protocol === 'openai-responses';
+    const responseProtocol = normalizeChatTransport(profile).protocol === 'openai-responses';
     const content = [{
         type: responseProtocol ? 'input_text' : 'text',
         text: String(text || '')
@@ -1083,6 +1103,7 @@ function buildMessages(userMessage, options = {}) {
         promptFormat = chatConfig.promptFormat,
         images = []
     } = options;
+    const profile = llmProfiles.find((item) => item.name === profileName) || getActiveProfileConfig();
     const templateId = templateTarget || useTemplate || 'default';
     const format = promptFormat || 'openai';
     const sysPrompt = systemPrompt || chatConfig.systemPrompt;
@@ -1119,7 +1140,7 @@ function buildMessages(userMessage, options = {}) {
         }
         if (template) raw += `User:${template.content}\n`;
         raw += `User:${userMessage}`;
-        return [{ role: 'user', content: buildImageMessageContent(raw, images) }];
+        return [{ role: 'user', content: buildImageMessageContent(raw, images, profile) }];
     }
 
     const messages = [{ role: 'system', content: sysPrompt }];
@@ -1143,7 +1164,7 @@ function buildMessages(userMessage, options = {}) {
         }
     }
     if (template) messages.push({ role: 'user', content: template.content });
-    messages.push({ role: 'user', content: buildImageMessageContent(userMessage, images) });
+    messages.push({ role: 'user', content: buildImageMessageContent(userMessage, images, profile) });
     return messages;
 }
 
@@ -1170,34 +1191,37 @@ async function chat(userMessage, options = {}) {
     const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, images = [] } = options;
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images });
+        const profile = activeProfileConfig || getActiveProfileConfig();
+        const transport = normalizeChatTransport(profile);
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
         let assistantMessage = '';
-        if (normalizeChatTransport(chatConfig).protocol === 'openai-responses') {
+        if (transport.protocol === 'openai-responses') {
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
-            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt });
+            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
             const response = await requestResponsesWithRecovery({
                 messages,
                 userMessage,
                 state: responsesSessionStates[responseSessionKey],
                 sessionKey: responseSessionKey,
                 fingerprint,
-                model: chatConfig.model,
-                maxTokens: chatConfig.maxTokens,
-                temperature: chatConfig.temperature,
+                profile,
+                model: profile.model || chatConfig.model,
+                maxTokens: profile.maxTokens || chatConfig.maxTokens,
+                temperature: profile.temperature ?? chatConfig.temperature,
                 stream: false
             });
             assistantMessage = extractResponsesText(response);
             saveResponseReference(responseSessionKey, response, fingerprint);
         } else {
             const requestBody = {
-                model: chatConfig.model,
+                model: profile.model || chatConfig.model,
                 messages: messages,
-                max_tokens: chatConfig.maxTokens,
-                temperature: chatConfig.temperature
+                max_tokens: profile.maxTokens || chatConfig.maxTokens,
+                temperature: profile.temperature ?? chatConfig.temperature
             };
             const headers = { 'Content-Type': 'application/json' };
-            if (chatConfig.apiKey) headers.Authorization = 'Bearer ' + chatConfig.apiKey;
-            const response = await makeRequest(chatConfig.apiUrl, {
+            if (profile.apiKey) headers.Authorization = 'Bearer ' + profile.apiKey;
+            const response = await makeRequest(profile.apiUrl || chatConfig.apiUrl, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(requestBody)
@@ -1369,22 +1393,25 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
         }, callbacks, activeProfileConfig);
     }
 
-    if (normalizeChatTransport(chatConfig).protocol === 'openai-responses') {
+    const profile = activeProfileConfig || getActiveProfileConfig();
+    const transport = normalizeChatTransport(profile);
+    if (transport.protocol === 'openai-responses') {
         let fullMessage = '';
         let pendingText = '';
         try {
-            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images });
+            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
-            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt });
+            const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
             await streamResponsesWithRecovery({
                 messages,
                 userMessage,
                 state: responsesSessionStates[responseSessionKey],
                 sessionKey: responseSessionKey,
                 fingerprint,
-                model: chatConfig.model,
-                maxTokens: chatConfig.maxTokens,
-                temperature: chatConfig.temperature,
+                profile,
+                model: profile.model || chatConfig.model,
+                maxTokens: profile.maxTokens || chatConfig.maxTokens,
+                temperature: profile.temperature ?? chatConfig.temperature,
                 stream: true
             }, (event) => {
                 if (event?.type === 'response.output_text.delta' && typeof event.delta === 'string') {
@@ -1415,19 +1442,19 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     let pendingText = '';
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
         
         const requestBody = {
-            model: chatConfig.model,
+            model: profile.model || chatConfig.model,
             messages: messages,
-            max_tokens: chatConfig.maxTokens,
-            temperature: chatConfig.temperature,
+            max_tokens: profile.maxTokens || chatConfig.maxTokens,
+            temperature: profile.temperature ?? chatConfig.temperature,
             stream: true
         };
         
         const streamHeaders = { 'Content-Type': 'application/json' };
-        if (chatConfig.apiKey) streamHeaders['Authorization'] = 'Bearer ' + chatConfig.apiKey;
-        await makeStreamRequest(chatConfig.apiUrl, {
+        if (profile.apiKey) streamHeaders['Authorization'] = 'Bearer ' + profile.apiKey;
+        await makeStreamRequest(profile.apiUrl || chatConfig.apiUrl, {
             method: 'POST',
             headers: streamHeaders,
             body: JSON.stringify(requestBody)

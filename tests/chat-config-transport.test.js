@@ -16,45 +16,45 @@ const offlineChatDefaultsSources = [
     'src/apps/server/modules/config/config-app-service.js',
     'src/external/llm/llm-service.js',
     'src/apps/server/boot/server-app.js',
-    'src/apps/server/modules/task-engine/builtin-tasks/llm-chat.js'
+    'src/apps/server/modules/task-engine/builtin-tasks/llm-chat.js',
+    'src/apps/server/modules/chat/pi-runtime-manager.js'
 ].map(relativePath => ({
     relativePath,
     source: fs.readFileSync(path.join(projectRoot, relativePath), 'utf8')
 }));
 
-test('聊天设置应提供协议和 Responses 网关配置项', () => {
-    assert.match(uploadPage, /id="chatProtocol"/);
-    assert.match(uploadPage, /id="chatResponsesBaseUrl"/);
-    assert.match(uploadPage, /id="chatResponsesApiKey"/);
+test('聊天设置应将协议和接口认证放在 LLM 服务器配置中', () => {
+    assert.match(uploadPage, /id="profileEditProtocol"/);
     assert.match(uploadPage, /Chat Completions API URL/);
+    assert.match(uploadPage, /profile.*API Key|API Key.*profile/s);
+    assert.doesNotMatch(uploadPage, /id="chatProtocol"/);
+    assert.doesNotMatch(uploadPage, /id="chatResponsesBaseUrl"/);
+    assert.doesNotMatch(uploadPage, /id="chatResponsesApiKey"/);
 });
 
-test('聊天配置客户端应加载、显示并保存 Responses 传输配置', () => {
-    assert.match(chatScript, /protocol:\s*'openai-responses'/);
-    assert.match(chatScript, /responsesBaseUrl:/);
-    assert.match(chatScript, /responsesApiKey:/);
-    assert.match(chatScript, /data\.config\.responsesBaseUrl/);
-    assert.match(chatScript, /chatResponsesBaseUrl/);
-    assert.match(chatScript, /chatResponsesApiKey/);
-    assert.match(chatScript, /this\.config\.protocol/);
-    assert.match(chatScript, /https:\/\/127\.0\.0\.1:8081\/v1/u);
-    assert.match(uploadPage, /placeholder="https:\/\/127\.0\.0\.1:8081\/v1"/u);
+test('聊天配置客户端应只保存全局聊天字段，并在 profile 中保存协议', () => {
+    assert.doesNotMatch(chatScript, /responsesBaseUrl:/);
+    assert.doesNotMatch(chatScript, /responsesApiKey:/);
+    assert.doesNotMatch(chatScript, /data\.config\.responsesBaseUrl/);
+    assert.doesNotMatch(chatScript, /chatResponsesBaseUrl/);
+    assert.doesNotMatch(chatScript, /chatResponsesApiKey/);
+    assert.match(chatScript, /profileEditProtocol/);
+    assert.match(chatScript, /protocol.*openai-completions|openai-completions.*protocol/s);
+    assert.match(chatScript, /profile.*apiKey|apiKey.*profile/s);
 });
 
-test('当前聊天配置应将 HTTPS Responses 网关指向本机 8081 服务', () => {
-    const config = JSON.parse(fs.readFileSync(
-        path.join(projectRoot, 'config/config.json'),
+test('默认配置应将调用协议放在默认 LLM profile 中', () => {
+    const defaultConfigSource = fs.readFileSync(
+        path.join(projectRoot, 'src/apps/server/modules/config/config-app-service.js'),
         'utf8'
-    ));
+    );
 
-    assert.equal(config.chat.protocol, 'openai-responses');
-    assert.equal(config.chat.responsesBaseUrl, 'https://127.0.0.1:8081/v1');
+    assert.match(defaultConfigSource, /llmProfiles[\s\S]{0,1200}protocol:\s*'openai-responses'/u);
+    assert.doesNotMatch(defaultConfigSource, /responsesBaseUrl|responsesApiKey/u);
 });
 
-test('offline APK 内置 Node 服务的 HTTPS Responses 默认值应使用本机 8081', () => {
+test('运行时代码不应从全局 Responses 配置读取地址或密钥', () => {
     for (const { relativePath, source } of offlineChatDefaultsSources) {
-        assert.match(source, /https:\/\/127\.0\.0\.1:8081\/v1/u, `${relativePath} 缺少 offline HTTPS Responses 默认地址`);
-        assert.doesNotMatch(source, /http:\/\/127\.0\.0\.1:8081\/v1/u, `${relativePath} 仍使用 HTTP Responses 默认地址`);
-        assert.doesNotMatch(source, /http:\/\/127\.0\.0\.1:8083\/v1/u, `${relativePath} 仍保留旧 Responses 默认地址`);
+        assert.doesNotMatch(source, /responsesBaseUrl|responsesApiKey/u, `${relativePath} 仍读取全局 Responses 配置`);
     }
 });
