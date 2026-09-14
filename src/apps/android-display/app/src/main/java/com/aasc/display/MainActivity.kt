@@ -18,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -33,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
     private var offlineMode = false
+    private var controlPageAllowed = false
     private var offlineDisplayRetryCount = 0
     // 整个 APK 只维护一个原生音频焦点；网页媒体不按 TTS/视频拆分申请焦点。
     private val audioFocusController by lazy {
@@ -168,6 +170,10 @@ class MainActivity : AppCompatActivity() {
     @Deprecated("Activity Result API 迁移将在后续统一处理")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == Chat2ApiNativeBridge.LOGIN_REQUEST_CODE) {
+            deliverChat2ApiLoginResult(resultCode, data)
+            return
+        }
         if (requestCode != REQ_STORAGE_TREE) return
 
         val selectedUri = data?.data
@@ -267,8 +273,7 @@ class MainActivity : AppCompatActivity() {
         hideSystemUi()
         configBar.visibility = View.GONE
         offlineDisplayRetryCount = 0
-        controlToggleButton.visibility = if (offlineMode) View.VISIBLE else View.GONE
-        controlToggleButton.text = getString(R.string.control_page)
+        setControlPageAccess(false)
         if (webView == null) {
             setupWebView(url, mainServerUrl)
         } else {
@@ -279,7 +284,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String, baseUrl: String) {
         val wv = DisplayWebView(this)
-        val bridge = NativeBridge(wv, audioFocusController, offlineMode)
+        val bridge = NativeBridge(wv, audioFocusController, offlineMode) { allowed -> setControlPageAccess(allowed) }
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")
         wv.webViewClient = createWebViewClient(bridge, baseUrl, true)
@@ -290,6 +295,7 @@ class MainActivity : AppCompatActivity() {
 
         val control = DisplayWebView(this)
         control.visibility = View.GONE
+        control.addJavascriptInterface(Chat2ApiNativeBridge(this), "NativeControl")
         control.webViewClient = createWebViewClient(null, baseUrl, false)
         webContainer.addView(control, 0)
         controlWebView = control
@@ -298,16 +304,51 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun toggleControlPage() {
         val control = controlWebView ?: return
+        if (!controlPageAllowed) return
         if (control.visibility == View.VISIBLE) {
             control.visibility = View.GONE
             controlToggleButton.text = getString(R.string.control_page)
+            controlToggleButton.visibility = View.VISIBLE
             return
         }
         control.visibility = View.VISIBLE
+        controlToggleButton.visibility = View.VISIBLE
         controlToggleButton.text = getString(R.string.hide_control_page)
         if (control.url.isNullOrBlank()) {
             val mainServerUrl = ServerConfig.baseUrl(serverInput.text.toString())
             control.loadUrl(timestampedUrl(ServerConfig.controlPageUrl(mainServerUrl)))
+        }
+    }
+
+    private fun setControlPageAccess(allowed: Boolean) {
+        controlPageAllowed = allowed
+        val controlVisible = controlWebView?.visibility == View.VISIBLE
+        if (!allowed && controlVisible) {
+            controlWebView?.visibility = View.GONE
+            controlToggleButton.text = getString(R.string.control_page)
+        }
+        controlToggleButton.visibility = if (AndroidControlAccess.shouldShowButton(allowed, controlVisible)) View.VISIBLE else View.GONE
+    }
+
+    private fun deliverChat2ApiLoginResult(resultCode: Int, data: Intent?) {
+        val result = JSONObject()
+            .put("success", resultCode == RESULT_OK && data?.getBooleanExtra(Chat2ApiLoginActivity.EXTRA_SUCCESS, false) == true)
+        data?.getStringExtra(Chat2ApiLoginActivity.EXTRA_STATE)?.let { result.put("state", it) }
+        data?.getStringExtra(Chat2ApiLoginActivity.EXTRA_PROVIDER_ID)?.let { result.put("providerId", it) }
+        data?.getStringExtra(Chat2ApiLoginActivity.EXTRA_CREDENTIALS_JSON)?.let { credentials ->
+            try {
+                result.put("credentials", JSONObject(credentials))
+            } catch (_: Exception) {
+                result.put("success", false)
+                result.put("error", "Android 登录结果格式无效")
+            }
+        }
+        data?.getStringExtra(Chat2ApiLoginActivity.EXTRA_ERROR)?.let { result.put("error", it) }
+        controlWebView?.post {
+            controlWebView?.evaluateJavascript(
+                "window.Chat2APIControl && window.Chat2APIControl.completeNativeLogin(${result});",
+                null
+            )
         }
     }
 
@@ -390,7 +431,7 @@ class MainActivity : AppCompatActivity() {
         // 后退键回配置页（重新输入服务器地址）
         webView?.visibility = View.GONE
         controlWebView?.visibility = View.GONE
-        controlToggleButton.visibility = View.GONE
+        setControlPageAccess(false)
         configBar.visibility = View.VISIBLE
     }
 }

@@ -4692,6 +4692,17 @@
                         }
                         return;
                     }
+
+                    if (data.type === 'displayControlAccess') {
+                        if (nativeBridge && typeof nativeBridge.setControlPageAccess === 'function') {
+                            try {
+                                nativeBridge.setControlPageAccess(data.enabled === true);
+                            } catch (error) {
+                                console.warn('[控制端] 原生入口状态同步失败:', error.message);
+                            }
+                        }
+                        return;
+                    }
                     
                     if (data.type === 'capabilitiesUpdated') {
                         handleCapabilitiesUpdated(data);
@@ -5758,6 +5769,7 @@
                     ready: nativeLlmStatus?.ready === true,
                     selectedModelId: nativeLlmStatus?.selectedModelId || null
                 },
+                androidControlPage: !!(nativeBridge && typeof nativeBridge.setControlPageAccess === 'function'),
                 ocrAvailable: nativeOcrAvailable,
                 yolo11nAvailable: nativeYoloAvailable,
                 cameraCapture: !!navigator.mediaDevices?.getUserMedia,
@@ -5943,7 +5955,8 @@
                         engine: nativeLlmStatus?.engine || 'mnn-llm',
                         ready: nativeLlmStatus?.ready === true,
                         selectedModelId: nativeLlmStatus?.selectedModelId || null
-                    }
+                    },
+                    androidControlPage: !!(nativeBridge && typeof nativeBridge.setControlPageAccess === 'function')
                 };
                 currentCapabilities = baseCaps;
                 if (displayWs && displayWs.readyState === WebSocket.OPEN) {

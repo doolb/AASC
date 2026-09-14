@@ -24,7 +24,8 @@ class NativeBridge(
     private val webView: WebView,
     private val audioFocusController: AudioFocusController,
     private val offlineMode: Boolean = false,
-    private val mainHandler: Handler = Handler(Looper.getMainLooper())
+    private val mainHandler: Handler = Handler(Looper.getMainLooper()),
+    private val onControlPageAccessChanged: ((Boolean) -> Unit)? = null
 ) {
 
     private companion object {
@@ -130,6 +131,12 @@ class NativeBridge(
 
     @JavascriptInterface
     fun isAvailable(): Boolean = true
+
+    /** 服务端下发显示端控制端开放状态，原生按钮只在主线程根据权威值更新。 */
+    @JavascriptInterface
+    fun setControlPageAccess(enabled: Boolean) {
+        mainHandler.post { onControlPageAccessChanged?.invoke(enabled) }
+    }
 
     /** 显示端开始播放视频/音频时申请媒体音频焦点。 */
     @JavascriptInterface

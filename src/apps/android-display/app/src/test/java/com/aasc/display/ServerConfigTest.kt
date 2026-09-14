@@ -1,6 +1,8 @@
 package com.aasc.display
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ServerConfigTest {
@@ -64,5 +66,11 @@ class ServerConfigTest {
             "https://192.168.1.39:8081",
             ServerConfig.baseUrl("https://192.168.1.39:8081/display")
         )
+    }
+
+    @Test
+    fun 控制端未开放时原生按钮必须隐藏() {
+        assertFalse(AndroidControlAccess.shouldShowButton(allowed = false, pageVisible = false))
+        assertTrue(AndroidControlAccess.shouldShowButton(allowed = true, pageVisible = false))
     }
 }
