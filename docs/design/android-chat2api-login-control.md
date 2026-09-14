@@ -4,12 +4,12 @@
 
 Android 普通 APK 和离线 APK 都需要能够在本机控制端完成 Chat2API Provider 登录。登录不能依赖用户手工复制 Token 或 Cookie，而应在 APK 内使用独立 WebView 打开 Provider 登录网页，捕获登录后的认证信息，交由 AASC Chat2API 服务端验证并保存账号。
 
-Android 显示端默认不显示控制端入口。主控制端需要针对单个 Android 显示端提供“开放控制端”开关，开关关闭时 APK 不显示按钮，开启后普通 APK 和离线 APK 都显示按钮并可打开同源 `/control` 页面。
+普通 Android 显示端默认不显示控制端入口；离线 APK 因为本地服务和控制端同包，启动后默认显示控制端入口。主控制端仍可针对普通 Android 显示端提供“开放控制端”开关，普通 APK 开关关闭时不显示按钮，开启后可打开同源 `/control` 页面。
 
 ## 范围
 
 - 支持普通 Android APK 和 Android Offline APK。
-- 每个显示端独立保存“开放控制端”状态，默认关闭，断线重连后保持。
+- 普通 Android 显示端独立保存“开放控制端”状态，默认关闭，断线重连后保持；离线 APK 使用本地内置控制端入口，默认开启。
 - Android 使用独立登录进程和 WebView，不复用显示端 WebView、控制端 WebView 或系统浏览器 Cookie。
 - 当前不增加桌面端 Electron 登录助手；桌面浏览器继续保留现有手工登录回退路径。
 - 当前不把 Provider Token、Cookie 或完整登录网页内容写入日志、显示端状态、任务参数或控制端列表。
@@ -63,6 +63,8 @@ enabled = true 或 false
 
 显示端收到消息后同步原生按钮可见性；服务端在显示端连接初始化时补发当前值。旧版 APK 未声明能力时不显示该设置，也不受该协议影响。
 
+离线 APK 收到服务端默认的 `enabled=false` 时仍保留本地控制端入口，因为该入口用于访问同一 APK 内的本地 `/control` 页面；普通 APK 继续严格遵循服务端授权状态。
+
 ## Android 登录捕获
 
 服务端 `oauth/start` 返回登录地址和脱敏捕获配置。捕获配置只包含 Provider 预定义的域名、网络 Authorization 捕获规则、localStorage 字段和 Cookie 字段，不允许控制端网页下发任意脚本或任意域名。
@@ -95,5 +97,6 @@ Android 登录 WebView：
 
 - 服务端已实现按显示端保存 `androidControlPageOpen`、能力校验、断线重连补发和控制端权威广播。
 - 控制端开关位于选中的 Android 显示端详情/功能面板中，不放在设备卡片本身；Chat2API 登录优先调用 Android 原生桥，桌面端仍保留原有手工登录回退。
-- 普通 APK 和离线 APK 共用原生控制端及隔离登录 WebView 代码；本次按范围只重新构建、安装和启动普通 APK，未构建离线 APK。
+- 普通 APK 和离线 APK 共用原生控制端及隔离登录 WebView 代码；本次已重新构建、安装和启动 offline APK，Provider 真实账号网页登录仍需测试账号现场验收。
+- 离线 APK 默认显示控制端入口；启动状态遮罩仅在本地 display 页面成功加载后隐藏，错误页完成回调不得误隐藏遮罩。
 - 普通 APK 已完成真机启动冒烟和无崩溃检查；Provider 真实网页登录需要测试账号，暂留现场验收，不将测试凭据写入项目或日志。

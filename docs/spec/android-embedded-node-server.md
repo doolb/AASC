@@ -12,8 +12,32 @@ MainActivity 启动
     → 缺少 URI 时启动 ACTION_OPEN_DOCUMENT_TREE，成功后持久化 READ|WRITE 授权
     → 选择取消或 URI 失效时提示“SAF 媒体库不可用”并继续正常启动
     → 启动 NodeServerService(mainServerUrl)
-    → WebView 加载 mainServerUrl/display
+    → offline 模式显示原生启动状态遮罩
+    → WebView 加载 mainServerUrl/display；本地服务未就绪时保持遮罩并继续重试
+    → display 页面成功加载后隐藏遮罩
 ```
+
+## offline 首次解包提示伪代码
+
+```text
+NodeServerService.startNodeProcess
+    → 广播 node.status=preparing，提示正在准备离线服务
+    → ensureInstalled() 解包并校验 Runtime、服务器运行包和离线模型
+    → 解包期间广播 node.status=installing，提示首次启动可能需要几分钟
+    → ProcessBuilder 启动 Node launcher
+    → 广播 node.status=starting，提示本地服务已启动并等待 display
+    → Node 启动失败时广播 node.status=failed 和错误详情
+
+MainActivity offline 启动
+    → 显示 startupStatusPanel、ProgressBar 和状态文案
+    → 接收 node.status 广播并更新文案
+    → WebView 主页面连接失败时保持遮罩，按间隔继续加载 /display
+    → WebView 主页面成功完成且页面 URL 属于本地 display 时隐藏 startupStatusPanel
+    → 重试次数达到上限或收到 failed 状态时显示失败文案和 retry 按钮
+    → retry 按钮重新启动/唤醒 NodeServerService 并重置页面重试计数
+```
+
+> 验收约束：WebView 的 `onPageFinished` 也可能在连接错误页之后触发，错误页回调不得隐藏 startupStatusPanel。
 
 ## 共享存储访问伪代码
 
@@ -101,6 +125,16 @@ Android Node Runtime 版本生成
     → Gradle 只打包生成的 arm64 assets
 ```
 
+```text
+准备 offline APK 服务器运行包
+    → 生成当前源码服务器包
+    → 解包到 AASC_ANDROID_NODE_PACKAGE_DIR
+    → 合并 Android 可用的生产 node_modules
+    → 校验 Chat2API 合并入口源码和控制端 chat2api.js 已进入输入目录
+    → prepare-android-node 将源码、依赖、配置资源和离线模型写入 APK assets/server
+    → 安装器校验运行包 manifest 后再替换应用私有目录中的版本
+```
+
 ## 子服务器配置伪代码
 
 ```text
@@ -112,6 +146,17 @@ Android Node Runtime 版本生成
     → aasc.nodeName = APK 节点名称
     → aasc.advertisedUrl = 当前局域网地址 + 服务端口
     → 禁用 ASR 隔离、Wine、Puppeteer、外部 CLI 和桌面 TUI 能力
+```
+
+```text
+offline 语音默认配置
+    → asr.serverEnabled = false
+    → asr.device = display
+    → tts.serverEnabled = false
+    → tts.device = display
+    → display 页面连接 WebSocket 后默认开启语音监听
+    → 本地 server-app 收到 ASR/TTS 请求时只路由到在线显示端原生能力
+    → 显示端能力不可用时返回结构化错误，不启动服务器 ASR/TTS 作为回退
 ```
 
 ## 双进程启动伪代码

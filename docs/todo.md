@@ -61,7 +61,7 @@
 
 - ⏳待现场验收 [2026-09-14] Chat2API Android Provider 真实网页登录验证
   - 普通 APK 已完成构建、安装和启动冒烟；仍需使用测试账号验证网页登录、Authorization/localStorage/Cookie 捕获、Provider 接口校验和账号保存。
-  - 离线 APK 按本次范围暂未构建，后续与普通 APK 共用代码进行独立打包验收。
+  - offline APK 已使用包含当前 Chat2API 源码和生产依赖的运行包重新构建、卸载重装并完成本地聊天/语音接口验收；真实 Provider 登录仍需现场测试账号。
   - 关联文档：`docs/design/android-chat2api-login-control.md`；`docs/spec/android-chat2api-login-control.md`；`docs/task/20260914_Android Chat2API登录与显示端控制端开放.md`。
 
 - 🔄进行中 [2026-09-13] Android 子服务器媒体库 `~/` 映射到应用专属外部目录
@@ -71,8 +71,8 @@
   - 已完成 SAF 文件夹选择器、原生回环网关、虚拟根 `/`、Node provider 和本地回归；SM-N9500 Android 9/API 28 已验收 APK 启动、Node 健康接口和旧版媒体库列举；Android 10/11+ 真机媒体库验收仍待执行。
 
 - ⏳待现场验收 [2026-09-08] 完成 APK 内置 Node.js 子服务器的生产依赖打包和真机业务验收
-  - Node Runtime、安装器、Service、主服务器主动连接和能力裁剪已实现；项目已内置 Android 可用的 arm64 Node Runtime，构建时仍需提供生产 `node_modules`。
-  - 待用完整生产包安装 APK，验收 server-app 启动、AASC 注册、媒体库浏览/上传/直连播放和热更新。
+  - Node Runtime、安装器、Service、主服务器主动连接和能力裁剪已实现；生产 `node_modules` 已用于 offline APK，server-app 启动、AASC 注册、本地聊天、显示端 ASR/TTS 路由已完成 API 级真机验收。
+  - 仍待验收媒体库浏览/上传/直连播放、热更新，以及 Android 10/11+ SAF 真机流程。
   - 设计：`docs/design/android-embedded-node-server.md`；实现伪代码：`docs/spec/android-embedded-node-server.md`；任务：`docs/task/20260908_APK内置Node.js子服务器.md`。
 
 - ⏳可选任务 [2026-09-02] 为 Android YOLO11 测试 APK 增加带标注验证集的准确率评估

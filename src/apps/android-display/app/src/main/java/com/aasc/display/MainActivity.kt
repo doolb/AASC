@@ -2,7 +2,10 @@ package com.aasc.display
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -15,6 +18,7 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -31,11 +35,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverInput: EditText
     private lateinit var webContainer: FrameLayout
     private lateinit var controlToggleButton: Button
+    private lateinit var offlineStartupPanel: View
+    private lateinit var offlineStartupProgress: View
+    private lateinit var offlineStartupMessage: TextView
+    private lateinit var offlineStartupRetry: Button
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
     private var offlineMode = false
     private var controlPageAllowed = false
     private var offlineDisplayRetryCount = 0
+    // WebView 连接失败后可能继续回调 onPageFinished；该标记阻止错误页误判为成功页。
+    private var offlineDisplayLoadFailed = false
     // 整个 APK 只维护一个原生音频焦点；网页媒体不按 TTS/视频拆分申请焦点。
     private val audioFocusController by lazy {
         AudioFocusController(this) { change ->
@@ -53,7 +63,16 @@ class MainActivity : AppCompatActivity() {
     private val REQ_STORAGE_PERMISSION = 1003
     private val REQ_CAMERA_PERMISSION = 1004
     private var startupContinued = false
-    private val maxOfflineDisplayRetries = 20
+    private val maxOfflineDisplayRetries = 300
+    private var nodeStatusReceiverRegistered = false
+    private val nodeStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!offlineMode) return
+            val status = intent?.getStringExtra(NodeServerService.EXTRA_STATUS).orEmpty()
+            val detail = intent?.getStringExtra(NodeServerService.EXTRA_DETAIL)
+            updateOfflineStartupStatus(status, detail)
+        }
+    }
 
     private fun requestAudioPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= 23 &&
@@ -203,8 +222,17 @@ class MainActivity : AppCompatActivity() {
         serverInput = findViewById(R.id.serverInput)
         webContainer = findViewById(R.id.webContainer)
         controlToggleButton = findViewById(R.id.controlToggleButton)
+        offlineStartupPanel = findViewById(R.id.offlineStartupPanel)
+        offlineStartupProgress = findViewById(R.id.offlineStartupProgress)
+        offlineStartupMessage = findViewById(R.id.offlineStartupMessage)
+        offlineStartupRetry = findViewById(R.id.offlineStartupRetry)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
+        if (offlineMode) {
+            // 离线 APK 的控制端与本地 Node 服务同包，启动即允许访问同源 /control。
+            setControlPageAccess(true)
+            showOfflineStartupMessage(getString(R.string.offline_startup_preparing), false)
+        }
 
         val saved = getSharedPreferences("aasc_display", MODE_PRIVATE).getString("server_url", "")
         val selectedServerUrl = ServerConfig.chooseUrl(
@@ -216,9 +244,20 @@ class MainActivity : AppCompatActivity() {
         connectBtn.setOnClickListener { connect() }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
         controlToggleButton.setOnClickListener { toggleControlPage() }
+        offlineStartupRetry.setOnClickListener { connect() }
 
         // 先完成共享存储权限流程，避免存储和录音权限授权框并发出现；拒绝后仍继续连接显示端。
         continueStartupAfterStoragePermission()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        registerNodeStatusReceiver()
+    }
+
+    override fun onStop() {
+        unregisterNodeStatusReceiver()
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -259,6 +298,9 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "主服务器地址无效", Toast.LENGTH_SHORT).show()
             return
         }
+        if (offlineMode) {
+            showOfflineStartupMessage(getString(R.string.offline_startup_preparing), false)
+        }
         // 普通 APK 的 Node.js 是子服务器；离线 APK 的 Node.js 是本机 main 服务。
         val serviceIntent = Intent(this, NodeServerService::class.java)
             .putExtra(NodeServerService.EXTRA_MAIN_SERVER_URL, mainServerUrl)
@@ -273,11 +315,72 @@ class MainActivity : AppCompatActivity() {
         hideSystemUi()
         configBar.visibility = View.GONE
         offlineDisplayRetryCount = 0
-        setControlPageAccess(false)
+        offlineDisplayLoadFailed = false
+        setControlPageAccess(offlineMode)
         if (webView == null) {
             setupWebView(url, mainServerUrl)
         } else {
             webView?.loadUrl(url)
+        }
+    }
+
+    /**
+     * 只在 offline APK 注册 Node 启动状态接收器；在线 APK 不增加广播监听和启动遮罩行为。
+     */
+    private fun registerNodeStatusReceiver() {
+        if (!offlineMode || nodeStatusReceiverRegistered) return
+        val filter = IntentFilter(NodeServerService.ACTION_STATUS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(nodeStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(nodeStatusReceiver, filter)
+        }
+        nodeStatusReceiverRegistered = true
+    }
+
+    private fun unregisterNodeStatusReceiver() {
+        if (!nodeStatusReceiverRegistered) return
+        try {
+            unregisterReceiver(nodeStatusReceiver)
+        } catch (error: Exception) {
+            android.util.Log.w("MainActivity", "注销 Node 状态接收器失败: ${error.message}")
+        } finally {
+            nodeStatusReceiverRegistered = false
+        }
+    }
+
+    private fun updateOfflineStartupStatus(status: String, detail: String?) {
+        if (!offlineMode) return
+        when (status) {
+            NodeServerService.STATUS_PREPARING -> {
+                showOfflineStartupMessage(getString(R.string.offline_startup_preparing), false)
+            }
+            NodeServerService.STATUS_INSTALLING -> {
+                showOfflineStartupMessage(getString(R.string.offline_startup_installing), false)
+            }
+            NodeServerService.STATUS_STARTING -> {
+                showOfflineStartupMessage(getString(R.string.offline_startup_starting), false)
+            }
+            NodeServerService.STATUS_FAILED -> {
+                val failure = detail?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: getString(R.string.offline_startup_unknown_error)
+                showOfflineStartupMessage(getString(R.string.offline_startup_failed, failure), true)
+            }
+        }
+    }
+
+    private fun showOfflineStartupMessage(message: String, failed: Boolean) {
+        if (!offlineMode) return
+        offlineStartupPanel.visibility = View.VISIBLE
+        offlineStartupProgress.visibility = if (failed) View.GONE else View.VISIBLE
+        offlineStartupRetry.visibility = if (failed) View.VISIBLE else View.GONE
+        offlineStartupMessage.text = message
+    }
+
+    private fun hideOfflineStartupPanel() {
+        if (::offlineStartupPanel.isInitialized) {
+            offlineStartupPanel.visibility = View.GONE
         }
     }
 
@@ -321,13 +424,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setControlPageAccess(allowed: Boolean) {
-        controlPageAllowed = allowed
+        // offline APK 的控制端页面和本地服务同源，服务端初始化阶段的默认 false 不应挡住本地入口。
+        val effectiveAllowed = offlineMode || allowed
+        controlPageAllowed = effectiveAllowed
         val controlVisible = controlWebView?.visibility == View.VISIBLE
-        if (!allowed && controlVisible) {
+        if (!effectiveAllowed && controlVisible) {
             controlWebView?.visibility = View.GONE
             controlToggleButton.text = getString(R.string.control_page)
         }
-        controlToggleButton.visibility = if (AndroidControlAccess.shouldShowButton(allowed, controlVisible)) View.VISIBLE else View.GONE
+        controlToggleButton.visibility = if (AndroidControlAccess.shouldShowButton(effectiveAllowed, controlVisible)) View.VISIBLE else View.GONE
     }
 
     private fun deliverChat2ApiLoginResult(resultCode: Int, data: Intent?) {
@@ -361,12 +466,21 @@ class MainActivity : AppCompatActivity() {
             // WebViewClient 回调运行在主线程，在这里缓存 URL，供 JavaScript bridge 线程安全读取。
             override fun onPageStarted(view: WebView, pageUrl: String, favicon: android.graphics.Bitmap?) {
                 bridge?.updateServerOrigin(pageUrl)
+                if (retryOfflinePage) {
+                    // 新一轮主页面请求开始，清除上一轮连接失败状态。
+                    offlineDisplayLoadFailed = false
+                }
                 super.onPageStarted(view, pageUrl, favicon)
             }
 
             override fun onPageFinished(view: WebView, pageUrl: String) {
                 bridge?.updateServerOrigin(pageUrl)
-                if (retryOfflinePage) offlineDisplayRetryCount = 0
+                if (retryOfflinePage &&
+                    !offlineDisplayLoadFailed &&
+                    isDisplayPageUrl(pageUrl, baseUrl)) {
+                    offlineDisplayRetryCount = 0
+                    hideOfflineStartupPanel()
+                }
                 super.onPageFinished(view, pageUrl)
             }
 
@@ -376,6 +490,8 @@ class MainActivity : AppCompatActivity() {
                 error: android.webkit.WebResourceError
             ) {
                 if (retryOfflinePage && request.isForMainFrame) {
+                    offlineDisplayLoadFailed = true
+                    showOfflineStartupMessage(getString(R.string.offline_startup_waiting), false)
                     scheduleOfflineDisplayRetry(view, baseUrl)
                 }
                 super.onReceivedError(view, request, error)
@@ -393,8 +509,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 只有预期的本地 display 页面才可以结束 offline 启动等待；错误页 URL 不能作为成功条件。
+     */
+    private fun isDisplayPageUrl(pageUrl: String, baseUrl: String): Boolean {
+        val expectedUrl = ServerConfig.pageUrl(baseUrl).trimEnd('/')
+        val actualUrl = pageUrl.substringBefore('?').trimEnd('/')
+        return expectedUrl.isNotEmpty() && actualUrl == expectedUrl
+    }
+
     private fun scheduleOfflineDisplayRetry(view: WebView, baseUrl: String) {
-        if (!offlineMode || offlineDisplayRetryCount >= maxOfflineDisplayRetries) return
+        if (!offlineMode || view !== webView || view.visibility != View.VISIBLE) return
+        if (offlineDisplayRetryCount >= maxOfflineDisplayRetries) {
+            showOfflineStartupMessage(getString(R.string.offline_startup_failed, getString(R.string.offline_startup_timeout)), true)
+            return
+        }
         offlineDisplayRetryCount += 1
         view.postDelayed({
             if (view === webView && view.visibility == View.VISIBLE) {

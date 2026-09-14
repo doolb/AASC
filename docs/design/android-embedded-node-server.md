@@ -26,6 +26,20 @@ APK 允许用户手动关闭显示界面后暂时离线；用户重新打开 APK
 - 首次安装、内容指纹变化或关键文件缺失时才执行 staging 全量安装和 SHA-256 校验；只有完整校验通过后才更新 Runtime，失败时清理 staging 并在下次启动修复。
 - 记录 Runtime 快速路径、安装耗时、Node launcher 启动和 AASC 连接成功时间，便于现场确认是否达到 5 秒目标。
 
+## 首次安装启动状态提示
+
+offline APK 首次启动需要将 Node Runtime、服务器运行包和离线模型解包到应用私有目录。MainActivity 在 WebView 上方显示原生启动状态遮罩，避免 WebView 先看到 `ERR_CONNECTION_REFUSED` 而让用户误判安装失败。
+
+- 启动准备、Runtime 解包、Node 进程启动和启动失败由 `NodeServerService` 通过应用内显式广播通知 MainActivity。
+- 解包阶段使用不确定进度条和明确的“首次启动可能需要几分钟”文案，不显示没有可靠依据的百分比。
+- Node 服务未就绪期间 WebView 保持遮罩并继续重试本地 display 页面；页面成功加载后自动隐藏遮罩。
+- 达到重试上限或 Node 启动失败时显示错误详情和“重试”按钮；重试复用现有配置，不清理用户配置、模型和任务结果。
+- 普通在线 APK 不显示该遮罩，不改变原有主服务器连接流程。
+
+### 首装验收记录
+
+真实卸载重装测试确认 Node 服务会进入首次解包流程；WebView 连接失败后可能继续触发 `onPageFinished`，因此实现已用失败状态和目标 URL 双重条件保护遮罩。只有本地 display 页面真正成功加载后才隐藏提示，错误页完成回调不会再误判为成功。
+
 ## 子服务器就绪后的正常媒体流程重播
 
 APK 子服务器可能在 WebView 显示端恢复播放之后才完成 AASC 注册，或因局域网地址变化而更新注册信息。主服务器以 AASC 注册/心跳为就绪信号，使用当前保存的显示端播放状态，按正常播放流程重新发送原有 `url`、`base64` 或 `playlistStart` 消息。
@@ -72,5 +86,13 @@ API 29+ 的 SAF 媒体库仍使用独立的虚拟 `/` provider；`~/` 别名不�
 - `AASC_ANDROID_NODE_RUNTIME_DIR`（可选）：用于覆盖项目内默认 Runtime；目录包含 `node` 和 arm64 动态库，每个动态库必须是实体文件，不能是软链接。构建前必须存在 `lib/libz.so.1`、`lib/libcares.so`、`lib/libsqlite3.so`、`lib/libffi.so`、`lib/libcrypto.so.3`、`lib/libssl.so.3`、`lib/libicui18n.so.78`、`lib/libicuuc.so.78` 和 `lib/libicudata.so.78`，避免生成安装后无法启动的 APK。
 - `AASC_ANDROID_NODE_PACKAGE_DIR`：只包含 `src/`、`package.json`、`package-lock.json` 和 Android 可用的生产 `node_modules`。
 - `AASC_ANDROID_NODE_CERT_DIR`：可选，只复制 `cert.pem`、`key.pem`。
+
+服务器源码发布压缩包只用于传递 `src/`、`package.json` 和 `package-lock.json`，不替代 APK 构建输入；制作 offline APK 时必须将生产 `node_modules` 一并放入 `AASC_ANDROID_NODE_PACKAGE_DIR`。这样 Chat2API 合并入口及其运行时依赖会同时进入 `assets/server`，避免安装后出现 `Cannot find module 'express'`。
+
+offline APK 的语音默认配置固定为：
+
+- `asr.serverEnabled = false`、`asr.device = display`；音频识别请求由本地服务转发给已连接的显示端原生 ASR。
+- `tts.serverEnabled = false`、`tts.device = display`；TTS 请求由本地服务转发给显示端原生 TTS，失败时不回退到服务器 TTS。
+- 显示端语音监听默认开启；服务端只负责协议路由和结果回传，不启动服务器 ASR/TTS 进程。
 
 生成的 manifest 会记录每个 assets 文件的大小和 SHA-256。APK 私有目录只覆盖运行时代码、依赖和证书，保留用户配置、媒体、临时文件和日志。

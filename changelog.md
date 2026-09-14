@@ -1,5 +1,14 @@
 # Web MediaCenter - 变更日志
 
+## Android Offline APK 重打包
+
+- ✅ [2026-09-14] 合并 Chat2API 入口并重新打包 offline APK，默认关闭服务器 ASR/TTS。
+  - 服务器运行包重新生成后补入生产 `node_modules`，将 `chat2api-manual-account-service.js`、控制端 `chat2api.js` 及 Express 依赖一起打入 APK；只使用源码发布包会导致设备启动时报缺少 `express`。
+  - offline 配置为 `asr.serverEnabled=false`、`asr.device=display`、`tts.serverEnabled=false`、`tts.device=display`；显示端语音监听保持默认开启。
+  - 改动文件：`docs/design/android-embedded-node-server.md`、`docs/spec/android-embedded-node-server.md`、`docs/spec/android-chat2api-login-control.md`、`docs/task/2026-09-14_Chat2API合并入口与Offline APK语音默认重打包验证.md`、`docs/todo.md`。
+  - 产物：`src/apps/android-display/app/build/outputs/apk/offline/aasc-display-offline.apk`，SHA-256 为 `caedc0638a5fc321e0da0ee814a78e51ba8a4052c794bbb241ace8f2f6e1a471`。
+  - 验证：Chat2API 84/84、Android offline 定向回归 25/25；SM-N9500 Android 9/API 28 Display 2 卸载重装成功，Chat Completions/Responses、显示端 TTS 和 ASR 均成功。
+
 ## Android APK 启动体验
 
 - ✅ [2026-09-14] offline APK 首次解包增加原生启动状态提示。

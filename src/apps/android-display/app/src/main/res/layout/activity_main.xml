@@ -44,5 +44,57 @@
             android:elevation="12dp"
             android:text="@string/control_page"
             android:visibility="gone" />
+
+        <!-- 首次解包或 Node 服务启动期间覆盖 WebView，避免用户看到短暂的连接拒绝错误。 -->
+        <LinearLayout
+            android:id="@+id/offlineStartupPanel"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:background="#E6000000"
+            android:clickable="true"
+            android:elevation="20dp"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/offlineStartupProgress"
+                style="?android:attr/progressBarStyleLarge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:indeterminate="true" />
+
+            <TextView
+                android:id="@+id/offlineStartupTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/offline_startup_title"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/offlineStartupMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:maxWidth="720dp"
+                android:text="@string/offline_startup_preparing"
+                android:textColor="#E6E6E6"
+                android:textSize="17sp" />
+
+            <Button
+                android:id="@+id/offlineStartupRetry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/offline_startup_retry"
+                android:visibility="gone" />
+        </LinearLayout>
     </FrameLayout>
 </LinearLayout>

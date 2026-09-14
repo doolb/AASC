@@ -11,4 +11,13 @@
     <string name="node_service_title">AASC 子服务器</string>
     <string name="shared_storage_permission_denied">未授予共享存储权限，/storage/emulated/0/ 媒体库暂不可用</string>
     <string name="shared_storage_tree_unavailable">未选择可用的 SAF 媒体目录，共享媒体库暂不可用</string>
+    <string name="offline_startup_title">正在准备离线服务</string>
+    <string name="offline_startup_preparing">正在准备本地 Node.js 服务，请稍候</string>
+    <string name="offline_startup_installing">首次启动正在解包 Node Runtime 和离线模型，可能需要几分钟，请不要关闭应用</string>
+    <string name="offline_startup_starting">本地服务正在启动，正在加载显示端</string>
+    <string name="offline_startup_waiting">本地服务尚未响应，正在继续等待并重试</string>
+    <string name="offline_startup_timeout">本地服务在等待时间内未响应，请检查服务状态后重试</string>
+    <string name="offline_startup_unknown_error">未知启动错误</string>
+    <string name="offline_startup_failed">本地服务启动失败：%1$s</string>
+    <string name="offline_startup_retry">重试</string>
 </resources>

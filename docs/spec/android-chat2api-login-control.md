@@ -77,20 +77,24 @@ MainActivity onCreate:
     创建显示 WebView 和控制 WebView
     display WebView 注入 NativeDisplay
     control WebView 注入 NativeControl
-    原生控制按钮初始隐藏
+    offlineMode == true -> 原生控制按钮初始显示，controlPageAllowed = true
+    offlineMode == false -> 原生控制按钮初始隐藏，等待服务端授权
 
 NativeDisplay.setControlPageAccess(enabled):
-    主线程设置 controlToggleButton.visible = enabled
-    enabled == false -> 隐藏控制 WebView
+    effectiveAllowed = offlineMode == true or enabled == true
+    主线程设置 controlPageAllowed = effectiveAllowed
+    controlToggleButton.visible = effectiveAllowed and controlWebView 未显示
+    effectiveAllowed == false -> 隐藏控制 WebView
 
 MainActivity toggleControlPage():
-    if 按钮未被服务端开放:
+    if controlPageAllowed == false:
         return
     显示或隐藏 controlWebView
     首次显示 -> 加载同源 ServerConfig.controlPageUrl(serverUrl)
 ```
 
 普通 APK 和离线 APK 共用上述流程；离线模式只改变 Node 主服务地址和本地模型配置，不改变控制端授权协议。
+离线模式的原生入口默认可用，不因服务端初始化阶段补发的 `enabled=false` 而隐藏；普通 APK 仍完全遵循服务端授权。
 
 ## Chat2API 登录会话
 
@@ -196,6 +200,14 @@ Provider 验证器按 `/mnt/Chat2API/src/main/oauth/adapters` 的现有校验逻
 
 ```text
 已实现：服务端 OAuth 捕获配置/Provider 验证、显示端控制端开放协议、控制端详情开关、Android 原生桥和独立登录 Activity/WebView
-已验证：Node Chat2API/显示端定向测试、Android JVM 单元测试、普通 APK Debug 构建/安装/启动
-未执行：Offline APK 构建；Provider 真实账号网页登录和接口验证
+已验证：Node Chat2API/显示端定向测试、Android JVM 单元测试、普通 APK Debug 构建/安装/启动、offline APK 构建/卸载重装启动、同源控制端页面和本地聊天回复
+未执行：Provider 真实账号网页登录和接口验证
+```
+
+```text
+offline APK 重打包契约
+    → AASC_ANDROID_NODE_PACKAGE_DIR 必须包含当前 Chat2API 源码和生产 node_modules
+    → APK assets/server 必须包含 chat2api-manual-account-service.js、chat2api.js 和 express 运行依赖
+    → 安装后 /api/chat2api 路由与 /v1/chat/completions、/v1/responses 共用当前本地 server-app
+    → 仅验证本地协议和包内容，不在自动验收中写入真实 Provider 凭据
 ```
