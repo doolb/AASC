@@ -32,8 +32,9 @@ RemoteTaskService (服务端 server-app.js)
 | 子显示端(Node.js) | Puppeteer | 用户 JS | CPU / WebGL / WebGPU |
 
 **路由规则：**
-- `taskType=builtin` → 始终路由到服务端 Node.js 运行时
-- `taskType=user` → 根据 target 路由到对应目标
+- `taskType=builtin` → 默认由服务端 Node.js 运行；明确支持显示端/子显示端执行的内置服务遵守 `target`
+- `taskType=user` → 根据 `target` 路由到对应目标
+- 任务声明的 `target` 只决定执行位置，不改变实例级状态、日志、结果和控制端消息协议
 
 ## 任务目录结构
 
@@ -71,6 +72,63 @@ res/tasks/
 - `task:stop` — 发送停止指令
 - `task:heartbeat` — 常驻任务定期汇报存活
 - `task:partial_result` — 中间结果持续返回
+
+## AI 任务通用能力
+
+任务是项目维护者自行管理的代码隔离单元。任务可以自主管理控制端展示和业务路由，任务引擎提供统一上下文、消息桥接和生命周期清理。
+
+### 任务描述元数据
+
+任务模块可以声明以下通用元数据：
+
+| 元数据 | 作用 |
+|--------|------|
+| `target` | 服务端、显示端或子显示端执行目标 |
+| `mode` | 一次性任务或常驻服务任务 |
+| `params` | 当前任务独立的参数定义和默认值 |
+| `sidebar` | 控制端侧边栏分组、页签、标签和图标 |
+| `widget` | 任务卡片、实例详情和侧边栏中的展示、字段、动作与脚本 |
+| `control.actions` | 任务卡片或实例卡片中的页面/弹窗按钮及其 HTML、JavaScript |
+| `configButton` | 旧版控制端任务专属配置入口；新任务页面统一使用 `control.actions` |
+
+不同任务可以定义不同的参数、展示和控制逻辑，不要求共享同一套业务配置。内置任务和用户任务使用同一描述与上下文契约；后续可把稳定的内置任务迁移到 `res/tasks/<taskName>/` 作为用户任务维护，保留任务入口、元数据和上下文调用即可，控制端不需要新增任务名分支。
+
+### 任务上下文
+
+任务引擎按目标注入通用上下文：
+
+- 基础数据：`taskName`、`instanceId`、`params`、`files`、`refs`、`workDir`、`taskIO`。
+- 运行控制：`sendProgress()`、服务任务返回的 `stop()`。
+- 控制端交互：`postWidgetUpdate()`、`onWidgetAction()`。
+- 网络与节点：`registerRoute()`、`sendToDisplay()`、`broadcastToDisplays()`。
+- 可选系统服务：TTS、LLM、聊天、运行时工厂等，仅在对应目标和任务类型可用时注入。
+
+任务代码只通过上下文使用这些能力；任务停止、异常、显示端断开和引擎销毁时由 TaskManager 统一清理动作、路由、定时器关联状态和服务控制器。
+
+### 控制端页面显示
+
+用户任务可以自主管理控制端页面资源，不需要额外的页面/动作白名单：
+
+- `sidebar` 把任务加入控制端动态侧边栏；`sidebarManifest` 可补充分组和页签。
+- `widget.html` 提供页面片段，支持 `{{instanceId}}` 和任务推送数据占位符。
+- `widget.script` 在任务容器中运行，通过 `api.getContainer()`、`api.getData()`、`api.onUpdate()`、`api.sendAction()` 和 `api.onDestroy()` 管理页面。
+- `control.actions` 提供任务级或实例级页面/弹窗；每个动作可以声明 `placement`、`title`、`html` 和 `script`，由任务自己维护页面内容。
+- `control.actions[].script` 使用控制端提供的通用 API 发送带 `type` 的 WebSocket 消息、接收任务消息、读取实例信息和清理页面资源。
+- 服务端用户服务也可以注册 `postWidgetUpdate()` 与 `onWidgetAction()`，与内置服务使用同一消息通道。
+- 控制端负责承载任务资源和转发 `task:widget_action`，不把任务页面状态混入全局业务配置。
+
+任务自带 HTML/JavaScript 是任务资源管理方式；任务系统不把它当作第三方插件，也不额外引入白名单注册层。
+
+### 内置任务拆分为用户任务
+
+- 可以迁移不再需要服务端预装依赖或特权能力的内置任务。
+- 迁移后的任务放入 `res/tasks/<taskName>/`，由 `task.js` 导出任务元数据；服务模式另由 `service.js` 导出 `run()`，并继续使用同样的 `target`、`mode`、`params`、`sidebar`、`widget`、`control.actions` 契约。
+- 任务引擎继续按 `target`、`mode` 路由，并提供 `taskName`、`instanceId`、`params`、`taskIO`、Widget、控制端消息和 URL 路由上下文。
+- 仍依赖项目级 Node 模块、核心服务或内部特权的任务暂时保留为内置任务；迁移时需要先确认依赖可以通过通用上下文提供。
+
+### URL 路由
+
+服务任务使用 `context.registerRoute()` 在 AASC 当前 `8081` 端口注册 URL。服务端任务直接处理请求，显示端/子显示端任务通过 WebSocket 转发请求和响应。任务路由与实例绑定，生命周期结束时必须注销，详见 [任务 URL 路由注册](task-url-route-registration.md)。
 
 ### Widget 刷新日志
 

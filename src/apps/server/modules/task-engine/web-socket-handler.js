@@ -20,7 +20,9 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
                         'task:list', 'task:update', 'task:delete', 'task:get_instance_logs',
                         'task:delete_instance', 'task:widget_action', 'task:update_instance_params',
                         'task:get_config', 'task:set_config', 'task:clear_instance_logs',
-                        'task:link', 'task:unlink', 'task:progress'];
+                        'task:link', 'task:unlink', 'task:progress',
+                        'task:route_register', 'task:route_unregister',
+                        'task:route_response', 'task:route_cancel'];
 
   // 获取内置任务列表（格式化为前端所需结构）
   function getBuiltinTasks() {
@@ -37,6 +39,9 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
           mode: t.mode || 'one-shot',
           widget: t.widget || null,
           sidebar: t.sidebar || null,
+          sidebarManifest: t.sidebarManifest || null,
+          configButton: t.configButton || null,
+          control: t.control || null,
           instances: []
         }));
       }
@@ -45,12 +50,34 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
   }
 
   // 获取侧边栏清单
-  function getSidebarManifest() {
+  function getSidebarManifest(taskMetadata = []) {
+    let baseManifest = { groups: [], tabs: [] };
     try {
       const registry = require('./builtin-tasks/registry');
-      if (registry.sidebarManifest) return registry.sidebarManifest;
+      if (registry.sidebarManifest) baseManifest = registry.sidebarManifest;
     } catch (e) { /* 忽略 */ }
-    return { groups: [], tabs: [] };
+
+    const groups = Array.isArray(baseManifest.groups) ? [...baseManifest.groups] : [];
+    const tabs = Array.isArray(baseManifest.tabs) ? [...baseManifest.tabs] : [];
+    const groupIds = new Set(groups.map(group => group && group.id).filter(Boolean));
+    const tabIds = new Set(tabs.map(tab => tab && tab.id).filter(Boolean));
+    for (const task of taskMetadata) {
+      const manifest = task && task.sidebarManifest;
+      if (!manifest) continue;
+      for (const group of (Array.isArray(manifest.groups) ? manifest.groups : [])) {
+        if (group && group.id && !groupIds.has(group.id)) {
+          groups.push(group);
+          groupIds.add(group.id);
+        }
+      }
+      for (const tab of (Array.isArray(manifest.tabs) ? manifest.tabs : [])) {
+        if (tab && tab.id && !tabIds.has(tab.id)) {
+          tabs.push(tab);
+          tabIds.add(tab.id);
+        }
+      }
+    }
+    return { groups, tabs };
   }
 
   // ---------------------------------------------------------------
@@ -175,6 +202,36 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
         break;
       }
 
+      // ---- 显示端任务 URL 路由注册与 HTTP 请求回传 ----
+      case 'task:route_register': {
+        const result = taskManager.handleTaskRouteRegister(ctx.displayId, payload);
+        if (ctx.displayId && typeof sendToDisplay === 'function') {
+          sendToDisplay(ctx.displayId, {
+            type: 'task:route_registered',
+            payload: {
+              ...payload,
+              ...result
+            }
+          });
+        }
+        break;
+      }
+
+      case 'task:route_unregister': {
+        taskManager.handleTaskRouteUnregister(ctx.displayId, payload);
+        break;
+      }
+
+      case 'task:route_response': {
+        taskManager.handleTaskRouteResponse(ctx.displayId, payload);
+        break;
+      }
+
+      case 'task:route_cancel': {
+        taskManager.handleTaskRouteCancel(ctx.displayId, payload);
+        break;
+      }
+
       // ---- 任务列表 ----
       case 'task:list': {
         try {
@@ -186,6 +243,10 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
             const tasksWithMeta = tasks.map(t => {
               let params = [];
               let widget = null;
+              let sidebar = null;
+              let sidebarManifest = null;
+              let configButton = null;
+              let control = null;
               let mode = 'one-shot';
               let target = 'server';
               let entryFile = 'task.js';
@@ -194,18 +255,24 @@ function registerTaskHandlers(wsServer, taskManager, sendToControl, sendToDispla
                 const mod = require(entryPath);
                 if (mod.params && Array.isArray(mod.params)) params = mod.params;
                 if (mod.widget) widget = mod.widget;
+                if (mod.sidebar) sidebar = mod.sidebar;
+                if (mod.sidebarManifest) sidebarManifest = mod.sidebarManifest;
+                if (mod.configButton) configButton = mod.configButton;
+                if (mod.control) control = mod.control;
                 if (mod.mode) mode = mod.mode;
                 if (mod.target) target = mod.target;
                 if (mod.entryFile) entryFile = mod.entryFile;
               } catch (e) { /* 无法 require 时降级 */ }
-              return { ...t, params, widget, mode, target, entryFile };
+              return { ...t, params, mode, target, entryFile, sidebar, sidebarManifest, widget, configButton, control };
             });
-            const manifest = getSidebarManifest();
+            const builtinTasks = getBuiltinTasks();
+            const allTasks = [...builtinTasks, ...tasksWithMeta];
+            const manifest = getSidebarManifest(allTasks);
             const links = await taskManager.getTaskLinks();
             ctx.ws.send(JSON.stringify({
               type: 'task:list:result',
               payload: {
-                tasks: [...getBuiltinTasks(), ...tasksWithMeta],
+                tasks: allTasks,
                 links,
                 sidebarGroups: manifest.groups,
                 sidebarTabs: manifest.tabs

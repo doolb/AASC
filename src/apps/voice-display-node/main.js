@@ -203,6 +203,10 @@ class VoiceDisplay {
         this.logReportConfig = null; // { enabled, level } 由服务器推送
         this._volume = 100;
         this._serviceTasks = {}; // 长期运行的服务任务 { instanceId: { taskName, stop } }
+        // 显示端任务 URL 路由只通过主连接回传，不在子显示端额外监听 HTTP 端口。
+        this._taskRoutes = new Map();
+        this._taskRouteRegistrationWaiters = new Map();
+        this._taskRouteRequests = new Map();
     }
 
     updateTUIConnectionState() {
@@ -433,6 +437,15 @@ class VoiceDisplay {
                 break;
             case 'task:execute':
                 this.handleTaskExecute(data.payload);
+                break;
+            case 'task:route_registered':
+                this.handleTaskRouteRegistered(data.payload || {});
+                break;
+            case 'task:route_request':
+                void this.handleTaskRouteRequest(data.payload || {});
+                break;
+            case 'task:route_cancel':
+                this.handleTaskRouteCancel(data.payload || {});
                 break;
             case 'task:renderUpdate':
                 // 子显示端无需处理渲染更新，静默忽略
@@ -844,6 +857,207 @@ class VoiceDisplay {
         }
     }
 
+    /**
+     * 在 Node 子显示端注册任务 URL 路由。
+     * 路由的实际入口仍由主服务器占用 8081，子显示端只负责通过 WebSocket 执行 handler。
+     */
+    registerTaskRoute(taskName, instanceId, route = {}) {
+        const method = String(route.method || 'GET').trim().toUpperCase();
+        const routePath = String(route.path || '').trim();
+        if (!routePath || typeof route.handler !== 'function') {
+            return Promise.reject(new Error('显示端任务路由必须提供 path 和 handler'));
+        }
+        const routeId = `node-display-task-route-${instanceId}-${Date.now()}-${this._taskRoutes.size + 1}`;
+        const entry = {
+            routeId,
+            taskName,
+            instanceId,
+            method,
+            path: routePath,
+            params: route.params || {},
+            handler: route.handler,
+            registered: false
+        };
+        this._taskRoutes.set(routeId, entry);
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this._taskRouteRegistrationWaiters.delete(routeId);
+                this._taskRoutes.delete(routeId);
+                reject(new Error('服务端未确认显示端任务路由注册'));
+            }, 10000);
+            this._taskRouteRegistrationWaiters.set(routeId, { resolve, reject, timer });
+            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                clearTimeout(timer);
+                this._taskRouteRegistrationWaiters.delete(routeId);
+                this._taskRoutes.delete(routeId);
+                reject(new Error('显示端 WebSocket 未连接，无法注册任务路由'));
+                return;
+            }
+            this.sendJSON({
+                type: 'task:route_register',
+                payload: { taskName, instanceId, routeId, method, path: routePath }
+            });
+        });
+    }
+
+    unregisterTaskRoute(routeId) {
+        const entry = this._taskRoutes.get(routeId);
+        if (!entry) return;
+        this._taskRoutes.delete(routeId);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && entry.registered) {
+            this.sendJSON({
+                type: 'task:route_unregister',
+                payload: {
+                    taskName: entry.taskName,
+                    instanceId: entry.instanceId,
+                    routeId: entry.routeId
+                }
+            });
+        }
+    }
+
+    handleTaskRouteRegistered(payload = {}) {
+        const routeId = String(payload.routeId || '').trim();
+        const waiter = this._taskRouteRegistrationWaiters.get(routeId);
+        const entry = this._taskRoutes.get(routeId);
+        if (!waiter || !entry) return;
+        this._taskRouteRegistrationWaiters.delete(routeId);
+        clearTimeout(waiter.timer);
+        if (payload.success === false) {
+            this._taskRoutes.delete(routeId);
+            waiter.reject(new Error(payload.error || '显示端任务路由注册失败'));
+            return;
+        }
+        entry.registered = true;
+        waiter.resolve(() => this.unregisterTaskRoute(routeId));
+    }
+
+    createTaskRouteResponse(route, requestId) {
+        const state = { statusCode: 200, headers: {}, headersSent: false, ended: false };
+        const send = (event, extra = {}) => {
+            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+            this.sendJSON({
+                type: 'task:route_response',
+                payload: {
+                    routeId: route.routeId,
+                    requestId,
+                    event,
+                    statusCode: state.statusCode,
+                    headers: state.headers,
+                    ...extra
+                }
+            });
+            return true;
+        };
+        const sendHeaders = () => {
+            if (state.headersSent) return;
+            state.headersSent = true;
+            send('headers');
+        };
+        const encodeBody = (body) => {
+            if (Buffer.isBuffer(body)) return { data: body.toString('base64'), encoding: 'base64' };
+            return { data: body, encoding: 'utf8' };
+        };
+        const response = {
+            get statusCode() { return state.statusCode; },
+            get headersSent() { return state.headersSent; },
+            get writableEnded() { return state.ended; },
+            get writableFinished() { return state.ended; },
+            status: (code) => {
+                if (Number.isInteger(code)) state.statusCode = code;
+                return response;
+            },
+            setHeader: (name, value) => {
+                state.headers[String(name)] = value;
+                return response;
+            },
+            set: (name, value) => response.setHeader(name, value),
+            flushHeaders: sendHeaders,
+            write: (body) => {
+                sendHeaders();
+                return send('chunk', encodeBody(body));
+            },
+            end: (body) => {
+                if (state.ended) return response;
+                sendHeaders();
+                state.ended = true;
+                send('end', body === undefined ? {} : encodeBody(body));
+                this._taskRouteRequests.delete(requestId);
+                return response;
+            },
+            json: (body) => {
+                if (state.ended) return response;
+                state.headers['Content-Type'] = 'application/json; charset=utf-8';
+                state.headersSent = true;
+                state.ended = true;
+                send('end', { bodyType: 'json', body });
+                this._taskRouteRequests.delete(requestId);
+                return response;
+            },
+            send: (body) => {
+                if (body && typeof body === 'object') return response.json(body);
+                return response.end(body === undefined ? '' : String(body));
+            }
+        };
+        return response;
+    }
+
+    async handleTaskRouteRequest(payload = {}) {
+        const route = this._taskRoutes.get(String(payload.routeId || '').trim());
+        const requestId = String(payload.requestId || '').trim();
+        if (!route || !route.registered || !requestId) return;
+        const controller = new AbortController();
+        this._taskRouteRequests.set(requestId, { controller, route });
+        const response = this.createTaskRouteResponse(route, requestId);
+        try {
+            const result = await route.handler({
+                request: { ...(payload.request || {}), signal: controller.signal },
+                response,
+                taskName: route.taskName,
+                instanceId: route.instanceId,
+                params: route.params
+            });
+            if (!response.writableEnded) {
+                if (result === undefined) response.end();
+                else response.json(result);
+            }
+        } catch (error) {
+            if (!response.writableEnded) {
+                response.status(Number.isInteger(error?.statusCode) ? error.statusCode : 500).json({
+                    error: {
+                        code: error?.code || 'TASK_ROUTE_HANDLER_ERROR',
+                        message: error?.message || '显示端任务路由处理失败'
+                    }
+                });
+            }
+        } finally {
+            this._taskRouteRequests.delete(requestId);
+        }
+    }
+
+    handleTaskRouteCancel(payload = {}) {
+        const requestId = String(payload.requestId || '').trim();
+        const pending = this._taskRouteRequests.get(requestId);
+        if (!pending) return;
+        pending.controller.abort();
+        this._taskRouteRequests.delete(requestId);
+    }
+
+    cleanupTaskRoutes(instanceId) {
+        const routeIds = [...this._taskRoutes.values()]
+            .filter((route) => route.instanceId === instanceId)
+            .map((route) => route.routeId);
+        for (const routeId of routeIds) this.unregisterTaskRoute(routeId);
+        for (const [requestId, pending] of this._taskRouteRequests) {
+            if (pending.route.instanceId === instanceId) {
+                pending.controller.abort();
+                this._taskRouteRequests.delete(requestId);
+            }
+        }
+        return routeIds.length;
+    }
+
     async handleTaskExecute(payload) {
         var taskName = payload.taskName;
         var instanceId = payload.instanceId;
@@ -856,9 +1070,10 @@ class VoiceDisplay {
             log('任务', '发现已有服务运行，先停止旧服务: ' + instanceId);
             try {
                 if (typeof this._serviceTasks[instanceId].stop === 'function') {
-                    this._serviceTasks[instanceId].stop();
+                    await this._serviceTasks[instanceId].stop();
                 }
             } catch (_) {}
+            this.cleanupTaskRoutes(instanceId);
             if (this._serviceTasks[instanceId].tmpDir) {
                 try { fs.rmSync(this._serviceTasks[instanceId].tmpDir, { recursive: true, force: true }); } catch (_) {}
             }
@@ -902,6 +1117,9 @@ class VoiceDisplay {
                         type: 'task:progress',
                         payload: { taskName: taskName, instanceId: instanceId, data: data }
                     });
+                }.bind(this),
+                registerRoute: function(route) {
+                    return this.registerTaskRoute(taskName, instanceId, route);
                 }.bind(this)
             };
 
@@ -947,12 +1165,13 @@ class VoiceDisplay {
         } finally {
             // 服务任务的 cleanup 在 handleTaskStop 中处理
             if (!this._serviceTasks[instanceId]) {
+                this.cleanupTaskRoutes(instanceId);
                 fs.rmSync(tmpDir, { recursive: true, force: true });
             }
         }
     }
 
-    handleTaskStop(msg) {
+    async handleTaskStop(msg) {
         var instanceId = msg.instanceId;
         var svc = this._serviceTasks[instanceId];
         if (!svc) {
@@ -962,7 +1181,7 @@ class VoiceDisplay {
 
         try {
             if (typeof svc.stop === 'function') {
-                svc.stop();
+                await svc.stop();
             }
             log('任务', '服务已停止: ' + svc.taskName + '/' + instanceId);
             this.sendJSON({
@@ -982,6 +1201,7 @@ class VoiceDisplay {
             try { fs.rmSync(svc.tmpDir, { recursive: true, force: true }); } catch (_) {}
         }
         delete this._serviceTasks[instanceId];
+        this.cleanupTaskRoutes(instanceId);
     }
 
     /**

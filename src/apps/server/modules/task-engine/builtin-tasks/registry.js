@@ -22,7 +22,11 @@ module.exports = {
       mode: t.mode || 'one-shot',
       params: t.params || [],
       widget: t.widget || null,
-      sidebar: t.sidebar || null
+      sidebar: t.sidebar || null,
+      sidebarManifest: t.sidebarManifest || null,
+      // 保留旧版控制端使用的专用配置入口；新版控制端统一读取 control.actions。
+      configButton: t.configButton || null,
+      control: t.control || null
     }));
   },
   sidebarManifest: {

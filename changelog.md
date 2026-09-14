@@ -1,5 +1,22 @@
 # Web MediaCenter - 变更日志
 
+## 聊天协议配置
+
+- ✅ [2026-09-13] 修复聊天协议与接口地址不匹配导致 Android 端连接 `127.0.0.1` 失败的问题。
+  - 聊天设置增加 `openai-responses`/`openai-completions` 协议选择、Responses Base URL 和 Responses API Key；profile 的 `apiUrl` 明确为 Chat Completions 地址。
+  - 前端通过现有 `/api/chat/config` 加载和保存完整传输配置，并使用服务端返回的权威值；主服务配置保持 `openai-responses`，Responses Base URL 为 `http://127.0.0.1:8081/v1`，offline APK 的 `192.168.1.6:8081` 网关配置保持独立。
+  - 改动文件：`src/apps/web-mediacenter/ui/public/js/chat.js`、`src/apps/web-mediacenter/ui/public/upload.html`、`config/config.json`、`docs/design/chat-system.md`、`docs/spec/chat-system.md`、`docs/task/2026-09-13_聊天协议配置修复.md`、`tests/chat-config-transport.test.js`。
+  - 验证：聊天配置回归 3/3、Responses 请求 2/2、LLM 路由契约 4/4 通过；全量 `npm test` 为 726 项中 725 项通过，唯一失败为既有 Windows 输入模式声纹策略断言。
+
+## AI 任务系统通用能力
+
+- ✅ [2026-09-13] 内置任务和用户任务统一使用通用控制端页面契约。
+  - 任务列表统一透传 `sidebar`、`sidebarManifest`、`widget`、`control.actions`，`configButton` 降为旧版兼容字段；`TaskPanel` 按任务元数据渲染任务级/实例级页面，负责 Control API 消息分发、Widget 更新通知和页面资源清理。
+  - `llm-server` 的默认模型映射页面迁移到任务自身的 `control.actions` HTML/JavaScript，继续使用原有 WebSocket 校验、持久化和权威广播；删除控制端按具体任务名实现的专用弹窗分支。
+  - 用户服务上下文补齐 `taskType`、`target`、`mode`、Widget 动作/更新、消息流和 URL 路由等共用能力；文档明确不引入页面/动作白名单，并记录符合条件的内置任务可迁移到 `res/tasks/<taskName>/`。
+  - 改动文件：`task-manager.js`、`web-socket-handler.js`、内置任务注册表、`llm-server.js`、`task-panel.js`、对应 design/spec/task 和通用能力测试。
+  - 验证：任务通用能力、LLM 页面和 URL 路由定向测试 23/23 通过；`npm test` 723 项中 722 项通过，唯一失败为既有 Windows 输入模式声纹策略断言。
+
 ## 全量测试回归修复
 
 - ✅ [2026-09-13] 修复全量测试中 6 项失败。
@@ -33,6 +50,18 @@
   - 验证：LLM 定向测试 13/13 通过，新增下载缓存复用、强制刷新、hash 失败回滚测试。
 
 ## Android MNNChat LLM
+
+- ✅ [2026-09-13] 修复本地 LLM 网关任务卡片的“默认映射”按钮未显示
+  - 根因是 `builtin-tasks/registry.js` 的 `listTasks()` 重新组装内置任务元数据时遗漏 `configButton`，导致任务列表 WebSocket 返回 `null`；现已补齐字段透传。
+  - 新增注册表级回归测试，并重启当前服务复核实时 `task:list` 已返回 `{ id: "defaultModelMappings", label: "默认映射" }`；相关定向测试 21/21 通过。
+  - 全量 `npm test` 共 703 项，其中 702 项通过；唯一失败为与本修复无关的既有 `node-display-voice-text-input` 断言。
+
+- ✅ [2026-09-13] 本地 LLM 网关任务页新增默认模型映射配置
+  - `llm-server` 任务卡片新增“默认映射”按钮；控制端弹窗支持外部模型名到内部 `modelId` 的新增、删除、取消和保存。
+  - `server-app.js` 通过 `llm.defaultModelMappings.set/get` WebSocket 消息完成模型清单校验、`config.set` 持久化、连接初始化补发和多控制端权威广播；非法映射或写盘失败不覆盖旧配置。
+  - `llm-gateway-service.js` 按 manifest 内部 ID/alias 优先、动态默认映射兜底解析，ready 检查、最短队列和显式 `displayId` 约束保持不变；控制端增加草稿冲突保护、断线重试和 64 条/256 字符输入限制；同步更新 LLM design/spec/usage、task、todo 和测试。
+  - `DataSnapshot.js` 返回写盘结果，配置保存失败时回滚内存值并阻止错误广播。
+  - 验证：LLM 与任务面板定向测试 20/20 通过；`npm test` 全量 702/702 通过；相关 JavaScript `node --check` 和 `git diff --check` 通过。
 
 - ✅ [2026-09-13] 同步 MNN 文本与视觉/多模态 runtime 的 LLM 线程配置
   - JNI 将同一 LLM policy 线程数同时写入官方 `LlmSession` 主配置的顶层 `thread_num` 和 `mllm.thread_num`，避免视觉模型的 processor runtime 继续使用模型默认 4 线程。

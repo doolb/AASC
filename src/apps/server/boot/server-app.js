@@ -382,6 +382,32 @@ let controlClients = new Set();
 const llmModelManifestService = new LlmModelManifestService({
     modelRoot: path.join(RES_DIR, 'models', 'llm')
 });
+
+// 默认映射属于网关入口配置：读取时始终回退为空数组，避免旧配置或损坏配置影响请求入口启动。
+function getLlmDefaultModelMappings() {
+    const mappings = config.get('llm.defaultModelMappings', []);
+    return Array.isArray(mappings)
+        ? mappings.map((mapping) => ({ ...mapping }))
+        : [];
+}
+
+function createLlmDefaultModelMappingsMessage() {
+    return {
+        type: 'llm.defaultModelMappings',
+        mappings: getLlmDefaultModelMappings()
+    };
+}
+
+function getLlmDefaultModelMappingValidationContext() {
+    const manifest = llmModelManifestService.createManifest({ includeIncomplete: true });
+    const availableModelIds = manifest.models.map((model) => model.modelId);
+    const reservedNames = manifest.models.flatMap((model) => [
+        model.modelId,
+        ...(Array.isArray(model.aliases) ? model.aliases : [])
+    ]);
+    return { availableModelIds, reservedNames };
+}
+
 const llmRouter = new LlmRouter({
     maxQueueLength: config.get('llm.maxQueueLength', 16),
     logger: (event, data) => log('LLM', `${event}: ${JSON.stringify(data)}`)
@@ -391,7 +417,8 @@ const llmGatewayService = new LlmGatewayService({
     router: llmRouter,
     sendToDisplay: (displayId, message) => sendToDisplay(displayId, message),
     logger: (event, data) => log('LLM', `${event}: ${JSON.stringify(data)}`),
-    requestTimeoutMs: config.get('llm.requestTimeoutMs', 120000)
+    requestTimeoutMs: config.get('llm.requestTimeoutMs', 120000),
+    getDefaultModelMappings: getLlmDefaultModelMappings
 });
 const PLAYBACK_PROGRESS_PERSIST_INTERVAL_MS = 1000;
 const displayProgressPersistAt = new Map();
@@ -1257,7 +1284,20 @@ async function startServer() {
                 // tts.server 只切换通用 HTTP 客户端的运行时地址，不改变服务器 TTS 开关。
                 getTtsServiceUrl: () => tts.getConfig().serviceUrl,
                 setTtsServiceUrl: (serviceUrl) => tts.init({ serviceUrl }),
-                llmGatewayService
+                llmGatewayService,
+                llmHttpHandlers: {
+                    models: (request, response) => {
+                        try {
+                            return response.json(llmGatewayService.createModelsResponse());
+                        } catch (error) {
+                            return sendLlmHttpError(response, error);
+                        }
+                    },
+                    request: (request, response, protocol) => handleLlmHttpRequest({
+                        body: request.body,
+                        headers: request.headers
+                    }, response, protocol)
+                }
             });
             taskManager.setGenerateTts((text, voice, speed) => generateTtsWithFallback(text, voice, speed));
             registerTaskHandlers(wsServer, taskManager,
@@ -2377,6 +2417,15 @@ app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
 app.use('/js/lib', express.static(path.join(PROJECT_ROOT, 'node_modules', 'onnxruntime-web', 'dist')));
 app.use(express.json({ limit: '50mb' }));
+// 任务实例路由统一复用主服务 8081；未命中的请求继续交给后续静态资源和既有业务路由。
+app.use((req, res, next) => {
+    try {
+        if (taskManager && taskManager.handleHttpRoute(req, res)) return;
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
 // Chat2API 代理只监听服务器本机；控制端通过当前 HTTPS 主服务同源转发，避免浏览器拦截 HTTP 混合内容。
 app.use('/api/chat2api-gateway/:instanceId', createChat2ApiGateway({ getTaskManager: () => taskManager }));
 
@@ -7289,6 +7338,8 @@ wss.on('connection', (ws, req) => {
             type: 'llm.statusList',
             list: llmRouter.listDisplayStatuses()
         }));
+        // 控制端连接初始化时补发当前权威映射，断线重连后无需依赖本地缓存恢复配置。
+        ws.send(JSON.stringify(createLlmDefaultModelMappingsMessage()));
         ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
         ws.send(JSON.stringify({
             type: 'conversationConfirmationConfig',
@@ -7362,6 +7413,49 @@ wss.on('connection', (ws, req) => {
                         const modeSummary = data.mode ? ` mode=${data.mode}` : '';
                         log('WS', `<< ${data.type}${requestSummary}${data.displayId ? ' displayId='+data.displayId : ''}${modeSummary}${textSummary}`, extra);
                     }
+                }
+
+                if (data.type === 'llm.defaultModelMappings.get') {
+                    ws.send(JSON.stringify(createLlmDefaultModelMappingsMessage()));
+                    return;
+                }
+
+                if (data.type === 'llm.defaultModelMappings.set') {
+                    try {
+                        const { availableModelIds, reservedNames } = getLlmDefaultModelMappingValidationContext();
+                        const result = config.normalizeLlmDefaultModelMappings(
+                            data.mappings,
+                            availableModelIds,
+                            reservedNames
+                        );
+                        if (!result.ok) {
+                            ws.send(JSON.stringify({
+                                type: 'llm.defaultModelMappingsError',
+                                message: result.message
+                            }));
+                            return;
+                        }
+                        const saved = config.set('llm.defaultModelMappings', result.value);
+                        if (!saved) {
+                            ws.send(JSON.stringify({
+                                type: 'llm.defaultModelMappingsError',
+                                message: '默认模型映射持久化失败，原配置未改变'
+                            }));
+                            return;
+                        }
+                        // 保存后广播规范化值，让多个控制端最终都以服务端结果为准。
+                        broadcastToControls({
+                            type: 'llm.defaultModelMappings',
+                            mappings: result.value,
+                            requestId: data.requestId || null
+                        });
+                    } catch (error) {
+                        ws.send(JSON.stringify({
+                            type: 'llm.defaultModelMappingsError',
+                            message: `默认模型映射保存失败: ${error.message}`
+                        }));
+                    }
+                    return;
                 }
 
                 if (data.type === 'llm.selectModel') {

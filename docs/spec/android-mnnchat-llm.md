@@ -2,6 +2,8 @@
 
 状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。服务器统一下载/缓存/分发修正已纳入本规格；LLM CPU 配置的顶层与 `mllm` 双 runtime `thread_num` 传递和下一请求 runtime 换代修正已完成构建、安装和短请求验收。本次增量已完成推理结束后的模型身份/线程数预检查、下一次推理前最终校验、实际运行时状态上报以及异步 CPU 配置失败重试保护。本次离线 APK 增量已完成：内置 `qwen3.5-0.8b-claude-opus-distilled-mnn`，默认从 APK assets 解压后的 `filesDir/aasc-server/res/models/llm` 直接加载；offline 构建、APK 内容和全量 Node 回归均已验证。
 本次增量：显示端 LLM 能力开关、MNNChat 参考模型目录、ModelScope 固定 revision 代理、`enable_thinking` 和视觉图片消息已实现；定向契约测试 13/13 通过。
+本次增量：LLM 网关任务卡片已增加默认模型映射按钮和 WebSocket 配置弹窗，配置服务端完成校验、持久化、连接初始化补发及多控制端权威广播；网关在 manifest 未命中时读取动态映射。
+本次增量：任务引擎已增加实例级 URL 路由注册；服务端和显示端任务均复用 AASC `8081`，显示端通过 `task:route_request` / `task:route_response` 执行，不新增网页监听端口。
 模型增量：新增 `qwen3.5-0.8b-claude-opus-distilled-mnn`，ModelScope source 固定为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN@c1bc31b15286afa708f37f690099d10f21d1cc74`；清单包含 `llm.*` 与 `visual.*` 运行文件。本次任务补齐 `enable_thinking=false` 和图片消息到 MNN `MultimodalPrompt` 的实现。
 
 ## 1. 目标与边界
@@ -78,6 +80,78 @@ LlmRequest {
 ```
 
 模型名可以映射多个 `displayId`。`modelId` 不映射任何可用显示端时，请求返回不可用错误，不转发到主服务器或外部模型。
+
+## 3.1 网关默认模型映射
+
+```text
+LlmDefaultModelMapping {
+  externalModelName: string
+  modelId: string
+}
+
+llm.defaultModelMappings: list<LlmDefaultModelMapping>
+```
+
+控制端任务卡片：
+
+```text
+内置任务注册表 listTasks():
+  对每个内置任务返回任务元数据
+  保留 task.configButton（缺失时返回 null）
+
+任务列表 WebSocket 格式化:
+  configButton = task.configButton 或 null
+  将 configButton 随 llm-server 条目发送到控制端
+
+点击“默认映射”
+  -> 打开映射弹窗
+  -> 从当前 llm.modelManifest 读取内部 modelId 选项
+  -> 编辑 externalModelName 与 modelId
+  -> 发送 { type: "llm.defaultModelMappings.set", mappings }
+
+收到 llm.defaultModelMappings 广播:
+  更新本地权威映射
+  if 弹窗没有未保存草稿:
+    刷新弹窗行
+  else:
+    保留当前草稿并提示服务端配置已变化
+发送失败:
+  恢复保存按钮，保留草稿，允许连接恢复后重试
+```
+
+服务端配置流程：
+
+```text
+收到 llm.defaultModelMappings.set:
+  读取当前模型清单
+  规范化 mappings：去除外部名和 modelId 两端空白
+  丢弃空白编辑行
+  限制最多 64 条且每个外部名/modelId 不超过 256 个字符
+  拒绝重复 externalModelName
+  拒绝不存在的 modelId
+  config.set("llm.defaultModelMappings", normalizedMappings)
+  if config.set 返回 false:
+    返回持久化失败错误，不广播
+  broadcast { type: "llm.defaultModelMappings", mappings: normalizedMappings }
+  向发起控制端返回同一份权威配置
+
+收到非法配置:
+  保留上一份有效配置
+  返回 { type: "llm.defaultModelMappingsError", message }
+```
+
+网关解析：
+
+```text
+resolveModelId(requestedName):
+  if requestedName 是内部 modelId 或 manifest alias:
+    返回 manifest 解析结果
+  if defaultModelMappings 中存在 externalModelName:
+    返回对应 modelId
+  返回未知模型
+```
+
+配置缺失时默认使用空列表。映射目标即使已经发布但尚未 ready，也可以保存；真正请求仍由现有 `hasModel` 和 LLM 路由流程判断 ready 状态。
 
 ## 4. 模型目录与 APK 下载
 
@@ -333,7 +407,7 @@ resolveTarget(request):
 
 ## 7. OpenAI 兼容网关
 
-新增常驻 `LlmGatewayService`，由 `llm-server` 内置服务任务负责启停和状态展示；网关只负责协议转换和本地显示端路由。
+新增常驻 `LlmGatewayService`，由 `llm-server` 内置服务任务负责启停和状态展示；`llm-server` 通过任务上下文注册四个 OpenAI 兼容路由，网关只负责协议转换和本地显示端路由。
 
 ```text
 POST /v1/chat/completions
@@ -525,6 +599,7 @@ integration/device:
 ## 12. 实施状态
 
 本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。模型二进制和官方 MNN checkout 不提交到仓库；构建必须设置固定 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 并运行 `npm run prepare:mnnllm-android`，缺失依赖时 CMake 直接失败。Gradle 将根目录通过 `defaultConfig.externalNativeBuild.cmake.arguments` 传给 CMake，避免 AGP 9 模块级 DSL 不提供 `arguments` 属性。当前已使用 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 完成 `npm run build:apk`；native ELF 的 LOAD 对齐为 `0x4000`；APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动。Chat `image_url` 和 Responses `input_image` 已用 Qwen3.5 真机验证，图片进入 `MultimodalPrompt` 并清理临时文件。双 runtime 线程配置同步任务 `docs/task/2026-09-13_MNN双runtime线程配置同步.md` 已完成，真机同一 APK 进程 PID `27146` 的下一次推理日志同时显示顶层与 `mllm` `thread_num=2`。
+本次任务已完成：默认模型映射配置由 `llm-server` 任务卡片入口维护，服务端使用 `llm.defaultModelMappings.set/get` WebSocket 消息完成规范化校验、持久化、重连补发和多控制端广播；`LlmGatewayService` 在 manifest 内置模型名/alias 未命中时再查找动态映射。
 ## 11. 本地 LLM 网关任务实例
 
 `llm-server` 是任务引擎中的常驻内置服务。它的创建入口不使用 LLM 专用分支：
@@ -545,11 +620,41 @@ openBuiltinTaskForm("llm-server"):
 runInstance(taskName, instanceId):
   从实例索引恢复 target、displayId、mode 和 params
   复用任务路由器和服务作用域隔离
-  target/displayId 决定实例的运行节点
+target/displayId 决定实例的运行节点
   llm-server 只从 context.llmGatewayService 获取网关，不改变任务生命周期
 ```
 
 创建、运行、停止、重连恢复和日志回传均沿用 `TaskManager`，不得为本地 LLM 网关增加单独的 HTTP 或 WebSocket 实例协议。
+
+## 11.1 任务 URL 路由注册
+
+```text
+service.run(context):
+  unregister = await context.registerRoute({ method, path, handler })
+  save unregister in current service instance
+  return { type: "service", stop: unregister all routes }
+
+HTTP :8081:
+  if TaskRouteRegistry has method + path:
+    request = copy method/path/query/headers/body
+    if target == server:
+      await handler({ request, response, taskName, instanceId, params })
+    if target == display/subdisplay:
+      send task:route_request with routeId/requestId
+      wait task:route_response(headers/chunk/end/error)
+  else:
+    continue existing Express routes
+
+display.on task:route_request:
+  find local route handler
+  create response adapter
+  await handler({ request, response, taskName, instanceId, params })
+  return task:route_response
+```
+
+路由注册器限制绝对路径和常用 HTTP 方法，并在同一 AASC 设备内拒绝重复 `method + path`。实例停止、服务替换、启动异常、实例删除、显示端断开和服务端销毁都调用实例级清理；显示端断开时等待中的 HTTP 请求返回 `503`，处理超时返回 `504` 并发送 `task:route_cancel`。浏览器显示端和 Node 子显示端均实现相同消息字段，消息始终包含 `type`、`routeId`、`requestId` 和必要的实例标识。
+
+`llm-server` 通过该接口注册 `GET /v1/models`、`POST /v1/chat/completions`、`POST /v1/responses` 和 `POST /v1/chat/responses`。服务端目标调用现有 LLM handler；显式选择 Android 显示端时，网页端用本地 MNN-LLM bridge 执行请求并将 OpenAI 响应通过任务路由回传。不同设备各自使用 `8081`，本次不实现跨设备统一负载均衡。
 ## 12. 外部模型名映射与协议入口
 
 模型清单定义外部别名，服务端网关统一归一化请求：

@@ -4,6 +4,9 @@
 
 本设计已于 2026-09-12 确认，第一阶段服务端、Android bridge、WebSocket、控制页面、LLM 能力开关和 ModelScope 模型目录实现已落地；2026-09-13 已使用官方 MNN 3.6.1 固定提交构建、安装并在真实设备上完成文本、关闭思考和图片协议验收。本次修正补齐服务器统一下载、缓存校验和本地分发流程，并修复 LLM CPU 配置的 `thread_num` 未进入官方 MNN 主配置、配置变更不能在下一条推理生效的问题。本次增量已完成推理结束后的模型身份与线程数预检查、异步 CPU 配置实际应用确认和失败重试保护，并保留下一次推理前的最终校验。2026-09-13 进一步确认视觉模型的 `mllm.thread_num` 也必须与顶层线程数同步，已完成 native 双 runtime 配置修正。当前增量已完成：offline APK 内置并默认加载 `qwen3.5-0.8b-claude-opus-distilled-mnn`；模型只随 APK assets 解压一次，运行时直接使用已安装目录，不再复制权重到在线模型 active 目录。
 本次模型增量已确认接入 `Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`：ModelScope 仓库为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`，固定 revision 为 `c1bc31b15286afa708f37f690099d10f21d1cc74`。该模型包含视觉权重；本次增量补齐按请求关闭思考和标准图片输入到 MNN Vision 的链路。
+本次增量已完成本地 LLM 网关任务卡片的“默认映射”配置入口：控制端可维护外部模型名到内部 `modelId` 的多条映射，服务端通过 WebSocket 规范化、持久化并广播权威配置，网关请求入口按 manifest 优先、动态映射兜底的顺序解析。
+本次修正已补齐内置任务注册表对 `configButton` 元数据的透传，确保任务列表 WebSocket 返回的 `llm-server` 条目包含“默认映射”按钮配置。
+本次任务已完成任务实例 URL 路由注册：服务端和显示端服务统一使用 `context.registerRoute()`，所有 HTTP 请求复用 AASC `8081`，显示端通过任务 WebSocket 执行路由并回传 JSON、文本或流式响应；任务停止、异常、重启和显示端断开均会清理路由。
 
 ## 目标
 
@@ -19,7 +22,7 @@
 - 一个模型名可以映射到多个显示端，并按最短队列分流。
 - 指定 `displayId` 时固定调用该显示端，跳过分流。
 - 目标 APK 离线、未选模型、模型未就绪或队列已满时直接返回错误，不回退到主服务器模型。
-- 主服务器对外提供 `/v1/chat/completions`、`/v1/responses` 和 `/v1/models`。
+- 主服务器和被选中的显示端任务均可通过 AASC `8081` 对外提供 `/v1/chat/completions`、`/v1/responses` 和 `/v1/models`；显示端不新增监听端口。
 - 控制端和 APK 内控制页面都可以为指定显示端选择模型。
 - 显示端能力列表标注 MNNChat LLM、当前模型和运行状态。
 
@@ -305,7 +308,7 @@ GET /v1/models
 - 配置请求超时、单显示端最大队列长度和分流策略。
 - 通过任务 Widget 展示每个模型的 ready 显示端数量。
 
-实际 HTTP 路由由独立 `LlmGatewayService` 注册到主服务器，任务只调用该服务的启动、停止和配置接口，避免让任务模块直接持有 Express 对象。网关停止时接口返回 `503`，不会改变 APK 已加载的模型。
+实际 HTTP 路由由任务引擎的 `TaskRouteRegistry` 按实例注册到主服务器当前端口；`llm-server` 通过任务上下文获取现有 `LlmGatewayService` 的协议处理器，不直接持有 Express 对象。服务端目标直接执行 handler，显示端目标则通过 `task:route_request` / `task:route_response` 桥接到显示端本地 MNN-LLM。网关停止时接口返回 `503`，不会改变 APK 已加载的模型。
 
 ## 控制端与显示面板
 
@@ -395,6 +398,7 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 11. 控制端和 APK 内控制页都能选择模型并显示状态，设备列表标注 LLM 能力。
 12. LLM 默认使用 2 个大核、0 个小核；修改 LLM 核心配置不会改变 ASR/TTS 配置或线程池。
 13. 旧显示端、无 MNN 库 APK、服务器无模型文件时，原有媒体和语音功能不受影响。
+14. 控制端可在本地 LLM 网关任务卡片中维护默认模型映射；非法模型和重复外部名不能保存，空编辑行会被删除，多个控制端最终显示服务端广播的规范化配置。
 
 ## 影响模块
 
@@ -405,6 +409,7 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 | 任务引擎 | `llm-server` 内置常驻任务和 Widget |
 | 显示端前端 | LLM 请求转发、Native 回调、模型状态同步、LLM CPU 配置消费 |
 | 控制端前端 | 模型选择、能力标签、分流状态、LLM 大小核配置 |
+| LLM 默认映射 | 主服务器动态模型名映射、任务卡片弹窗和 WebSocket 权威同步 |
 | 文档与测试 | design/spec/task、协议和路由回归测试 |
 
 ## 实施计划状态
@@ -412,6 +417,8 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 - 2026-09-12 已完成服务端 LLM manifest/router/gateway、`/v1` 协议、显示端 WebSocket 状态和请求转发、APK 单模型管理、官方 MNN JNI 接入、控制端模型选择和独立 LLM CPU 配置。
 - 2026-09-13 已完成 `enable_thinking=false` 和 Chat Completions/Responses 图片理解：服务端校验 data URL，APK 生成临时 PNG，JNI 使用 MNN `MultimodalPrompt`，并清理请求级图片资源。
 - 2026-09-13 已完成 MNN 双 runtime 线程配置同步：JNI 将同一 LLM policy 线程数同时写入顶层 `thread_num` 和 `mllm.thread_num`，视觉/多模态 processor runtime 不再保留模型目录默认线程数；契约测试、APK 构建和真机日志已验证 4→2 的两处配置同步。
+- 2026-09-13 已完成网关默认模型映射：`llm-server` 任务卡片声明“默认映射”按钮，控制端弹窗编辑外部模型名到内部 `modelId`，服务端沿用 WebSocket 配置流程校验、持久化、连接初始化补发和权威广播，网关请求按 manifest/alias 优先、动态映射兜底解析。
+- 2026-09-13 已修复默认映射按钮未显示：内置任务注册表 `listTasks()` 保留 `configButton` 元数据，任务列表 WebSocket 端到端返回并由控制端渲染该按钮。
 - 已新增 `npm run prepare:mnnllm-android`；该脚本要求固定 `AASC_MNN_ROOT` 和 `AASC_MNN_REVISION`，`build:apk` 会先准备官方依赖，CMake 缺少官方产物时直接失败。
 - Android Gradle 配置已按 AGP 9 的 DSL 分层：`CMakeLists.txt` 路径保留在模块级 `externalNativeBuild`，`-DAASC_MNN_ROOT` 放入 `defaultConfig.externalNativeBuild.cmake.arguments`。
 - 已通过 Node 定向测试 13/13（本次协议边界测试）；使用官方 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`、Android NDK 28.2.13676358 完成 `npm run build:apk`，安装到 `192.168.1.6:5555` 并以 `npm run start:apk:display` 无参数启动。Chat/Responses 文本和图片协议已用 Qwen3.5 真机验证；长稳压测仍属于后续可选项。
@@ -429,6 +436,14 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 ```
 
 不同运行设备的实例必须沿用任务引擎现有的服务作用域隔离规则；LLM 网关本身只提供任务上下文需要的网关服务，不读取或绕过通用任务目标字段。
+
+## 任务 URL 路由注册
+
+任务服务上下文统一提供 `context.registerRoute()`。路由按 `method + path` 在单台 AASC 设备内唯一，并绑定 `taskName + instanceId`。服务端任务由 `TaskRouteRegistry` 直接调用；浏览器显示端和 Node 子显示端通过同一条 WebSocket 注册路由、接收请求、回传 `headers/chunk/end/error` 事件，不执行 `listen()`。
+
+显示端服务被转发后，HTTP 请求仍先到 AASC `8081`，再经 `task:route_request` 到达对应显示端，并以 `task:route_response` 返回；因此网页无需具备端口监听能力。路由注销函数由任务保存并在停止时调用，任务引擎还会在启动失败、服务替换、实例删除、显示端断开和自身销毁时兜底清理。
+
+每台运行 AASC 的设备各自使用 `8081`，不同设备上的相同路径互不冲突；同一设备不提供跨设备统一负载均衡。`llm-server` 在服务端目标注册四个 OpenAI 兼容路径；显式转发到 Android 显示端时，则由显示端本地 MNN-LLM handler 注册并执行这些路径。
 ## 外部模型名映射
 
 主服务器允许 OpenAI 兼容客户端使用外部模型名，服务端在请求进入路由前解析为模型清单中的内部 `modelId`。模型别名只影响网关请求入口，APK、显示端状态和模型下载始终使用内部 `modelId`。
@@ -438,6 +453,16 @@ externalModelName -> manifest.aliases -> internal modelId
 ```
 
 同一别名不得映射到多个模型；`/v1/models` 返回内部模型 ID，并在 metadata 中附带 aliases。兼容 Responses 的标准 `/v1/responses` 和历史客户端使用的 `/v1/chat/responses` 都走同一解析和路由流程。
+
+## 网关默认模型映射配置
+
+控制端在“任务列表 → 本地 LLM 网关”任务卡片中提供“默认映射”按钮，弹出面板维护多条外部模型名到内部 `modelId` 的映射。该配置属于主服务器 LLM 网关运行参数，保存时沿用 WebSocket 远端配置流程，不新增独立 HTTP 配置接口。
+
+映射使用 `llm.defaultModelMappings` 持久化，结构为 `[{ externalModelName, modelId }]`。服务端保存前去除两端空白、删除空行、拒绝重复外部名，限制最多 64 条且单个名称/ID 不超过 256 个字符，并要求目标 `modelId` 存在于已发布模型清单；保存成功后通过 `llm.defaultModelMappings` 广播规范化后的权威值，所有控制端按广播结果刷新面板。
+
+网关请求解析优先使用内部 `modelId` 和 manifest 中已有 aliases，未命中时再查找 `llm.defaultModelMappings`。动态映射只改变请求入口名称，不改变模型 ready 检查、显示端最短队列路由、显式 `displayId` 约束或 APK 内部模型状态。
+
+控制端未收到配置或与服务端断线时使用空映射；服务端控制端连接初始化时补发当前配置。控制端编辑中的草稿不被其他控制端广播覆盖，断线发送失败时保留草稿并允许重试。非法配置或持久化失败只返回带 `type` 的错误消息，不覆盖上一份有效配置。
 ## LLM 能力关闭时的内存释放
 
 控制端关闭显示端的 `capabilities.llm.enabled` 后，显示端只释放 MNN-LLM native engine 和模型运行时内存，保留已下载的模型文件与选中模型状态。当前推理完成后才执行释放；重新开启时优先从本地缓存重新加载，不重复下载。该流程不改变 ASR/TTS 引擎和 CPU 配置。

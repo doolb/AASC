@@ -172,9 +172,11 @@ class DataSnapshot {
     _save() {
         if (this._saving) {
             this._pendingSave = true;
-            return;
+            // 当前写盘尚未结束时只标记补写；调用方可以把该请求视为已排队接受。
+            return true;
         }
         this._saving = true;
+        let saved = true;
         try {
             const dir = path.dirname(this._filePath);
             if (!fs.existsSync(dir)) {
@@ -185,13 +187,15 @@ class DataSnapshot {
             this._notifyChange();
         } catch (err) {
             console.error(`[DataSnapshot] 保存失败: ${this._filePath}`, err.message);
+            saved = false;
         } finally {
             this._saving = false;
             if (this._pendingSave) {
                 this._pendingSave = false;
-                this._save();
+                saved = this._save() && saved;
             }
         }
+        return saved;
     }
 
     bind(key, callback) {

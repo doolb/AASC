@@ -26,6 +26,8 @@ const DEFAULT_CPU_AFFINITY = {
     tts: { bigCoreCount: 1, littleCoreCount: 1, preferBigCores: false },
     llm: { bigCoreCount: 2, littleCoreCount: 0, preferBigCores: true }
 };
+const LLM_DEFAULT_MODEL_MAPPING_MAX_COUNT = 64;
+const LLM_DEFAULT_MODEL_MAPPING_MAX_NAME_LENGTH = 256;
 
 function isNonNegativeInteger(value) {
     return Number.isInteger(value) && value >= 0;
@@ -129,6 +131,60 @@ function validateCpuAffinityPayload(payload, fallbackConfig = DEFAULT_CPU_AFFINI
     return { ok: true, value: normalized };
 }
 
+function normalizeLlmDefaultModelMappings(rawMappings, availableModelIds = [], reservedNames = []) {
+    if (!Array.isArray(rawMappings)) {
+        return { ok: false, message: 'defaultModelMappings 必须是数组' };
+    }
+    if (rawMappings.length > LLM_DEFAULT_MODEL_MAPPING_MAX_COUNT) {
+        return { ok: false, message: `默认模型映射最多支持 ${LLM_DEFAULT_MODEL_MAPPING_MAX_COUNT} 条` };
+    }
+
+    const modelIds = new Set((Array.isArray(availableModelIds) ? availableModelIds : [])
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim()));
+    const reserved = new Set((Array.isArray(reservedNames) ? reservedNames : [])
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim()));
+    const externalNames = new Set();
+    const normalized = [];
+
+    for (const rawMapping of rawMappings) {
+        if (!rawMapping || typeof rawMapping !== 'object' || Array.isArray(rawMapping)) {
+            return { ok: false, message: '默认映射项必须是对象' };
+        }
+        const externalModelName = typeof rawMapping.externalModelName === 'string'
+            ? rawMapping.externalModelName.trim()
+            : '';
+        const modelId = typeof rawMapping.modelId === 'string'
+            ? rawMapping.modelId.trim()
+            : '';
+
+        if (!externalModelName && !modelId) continue;
+        if (!externalModelName) return { ok: false, message: '外部模型名不能为空' };
+        if (!modelId) return { ok: false, message: '内部模型不能为空' };
+        if (externalModelName.length > LLM_DEFAULT_MODEL_MAPPING_MAX_NAME_LENGTH) {
+            return { ok: false, message: `外部模型名不能超过 ${LLM_DEFAULT_MODEL_MAPPING_MAX_NAME_LENGTH} 个字符` };
+        }
+        if (modelId.length > LLM_DEFAULT_MODEL_MAPPING_MAX_NAME_LENGTH) {
+            return { ok: false, message: `内部模型 ID 不能超过 ${LLM_DEFAULT_MODEL_MAPPING_MAX_NAME_LENGTH} 个字符` };
+        }
+        if (externalNames.has(externalModelName)) {
+            return { ok: false, message: `外部模型名重复: ${externalModelName}` };
+        }
+        if (reserved.has(externalModelName)) {
+            return { ok: false, message: `外部模型名与已存在模型别名冲突: ${externalModelName}` };
+        }
+        if (!modelIds.has(modelId)) {
+            return { ok: false, message: `内部模型不存在: ${modelId}` };
+        }
+
+        externalNames.add(externalModelName);
+        normalized.push({ externalModelName, modelId });
+    }
+
+    return { ok: true, value: normalized };
+}
+
 function createCpuAffinityChangedMessage(cpuAffinity) {
     return {
         type: 'cpuAffinityChanged',
@@ -218,7 +274,8 @@ class Config extends DataSnapshot {
         // 本地 LLM 路由参数；模型清单和具体模型文件仍由 res/models/llm 管理。
         llm: {
             maxQueueLength: 16,
-            requestTimeoutMs: 120000
+            requestTimeoutMs: 120000,
+            defaultModelMappings: []
         },
         ui: {
             controlTheme: 'dark'
@@ -321,8 +378,16 @@ class Config extends DataSnapshot {
             }
             obj = obj[keys[i]];
         }
-        obj[keys[keys.length - 1]] = value;
-        this._save();
+        const finalKey = keys[keys.length - 1];
+        const hadPreviousValue = Object.prototype.hasOwnProperty.call(obj, finalKey);
+        const previousValue = obj[finalKey];
+        obj[finalKey] = value;
+        const saved = this._save();
+        if (!saved) {
+            if (hadPreviousValue) obj[finalKey] = previousValue;
+            else delete obj[finalKey];
+        }
+        return saved;
     }
 
     setTtsConfig(ttsConfig) {
@@ -595,6 +660,9 @@ module.exports.setTtsConfig = (ttsConfig) => config.setTtsConfig(ttsConfig);
 module.exports.getTtsConfig = () => config.getTtsConfig();
 module.exports.normalizeCpuAffinityConfig = (rawConfig, fallbackConfig) => normalizeCpuAffinityConfig(rawConfig, fallbackConfig);
 module.exports.validateCpuAffinityPayload = (payload, fallbackConfig) => validateCpuAffinityPayload(payload, fallbackConfig);
+module.exports.normalizeLlmDefaultModelMappings = (rawMappings, availableModelIds, reservedNames) => (
+    normalizeLlmDefaultModelMappings(rawMappings, availableModelIds, reservedNames)
+);
 module.exports.getCpuAffinityConfig = () => normalizeCpuAffinityConfig(config.get('cpuAffinity'));
 module.exports.createCpuAffinityChangedMessage = (cpuAffinity) => createCpuAffinityChangedMessage(cpuAffinity);
 module.exports.createCpuConfigMessage = (cpuAffinity) => createCpuConfigMessage(cpuAffinity);

@@ -62,6 +62,16 @@
 控制端(手机, 192.168.1.50): 播放音乐
 ```
 
+### 聊天传输协议配置
+
+聊天设置需要把“调用协议”和“接口地址”分开表达，避免把 Chat Completions 地址误当成 Responses 地址：
+
+- `protocol=openai-responses` 时，使用全局 `responsesBaseUrl` 和可选的 `responsesApiKey`，请求 `{responsesBaseUrl}/responses`；该地址也作为服务器托管 Pi Agent 使用的 Responses 服务地址。
+- `protocol=openai-completions` 时，使用当前 LLM profile 的 `apiUrl`、`apiKey` 和模型配置，请求 profile 中保存的 Chat Completions 地址。
+- profile 中的 `apiUrl` 标签必须明确写成“Chat Completions API URL”，不能让用户误以为它同时控制 Responses 请求。
+- 控制端通过现有 `/api/chat/config` 配置流程读写协议字段，服务端返回规范化后的权威配置；配置断线或字段缺失时，前端默认使用 `openai-responses` 和 `http://127.0.0.1:8081/v1`。
+- 当前主服务默认使用本机 `127.0.0.1:8081` 的 Responses 网关；offline APK 使用的局域网地址 `192.168.1.6:8081` 属于独立节点配置，不写入主服务默认聊天配置。
+
 ## 功能设计
 
 ### 1. 系统指令
@@ -407,6 +417,8 @@ processVoiceCommand() 处理其他命令
 ## 聊天配置与历史兼容
 
 聊天历史消息会记录写入时的 `profileName`。切换或恢复 LLM profile 时不得删除历史文件；历史查询应继续返回已持久化的旧 profile 消息，避免配置变更被误判为聊天记录丢失。恢复已有 profile 时，`activeProfile` 与 `llmProfiles` 必须保持一致；配置文件只恢复聊天路由字段，不覆盖 TTS、ASR、语音窗口等其他运行参数。
+
+聊天协议配置与 profile 配置分层保存：`protocol`、`responsesBaseUrl` 和 `responsesApiKey` 是全局路由配置，`apiUrl` 是 profile 的 Chat Completions 地址。恢复 profile 或切换 profile 时不得覆盖 Responses 路由字段。
 
 ## 临时角色选择消息注册约束
 

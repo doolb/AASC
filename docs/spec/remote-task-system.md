@@ -21,6 +21,7 @@
 | 文件 | 说明 |
 |------|------|
 | task-panel.js | 任务面板：三标签导航（列表/新建/监控）、编辑、结果查看、设备选择、快捷运行 |
+| sidebar-registry.js | 根据任务 `sidebar` 元数据创建控制端动态侧边栏并承载任务 Widget |
 
 ## 数据流
 
@@ -61,6 +62,54 @@ submit() -> _runServiceTask() -> run() 返回 { type: 'service', stop() }
   停止: stopInstance() -> svc.stop() -> 发送 {type:'task:stop', instanceId} 到显示端
   -> 显示端清理 DOM 覆盖层 + 注销 _renderTaskUpdates
   -> 服务端清理 _services, 更新 status='stopped'
+```
+
+内置任务默认在服务端运行；只有任务明确支持并声明显示端/子显示端目标时，才按 `target` 转发。用户任务始终按提交的 `target` 路由。
+
+## 通用任务上下文伪代码
+
+```text
+createTaskContext(task, instance):
+  context = {
+    taskName: task.taskName,
+    instanceId: instance.instanceId,
+    taskType: task.taskType,
+    target: task.target,
+    mode: task.mode,
+    params: task.params,
+    files: task.files,
+    refs: resolveRefs(task.refs),
+    workDir: taskIO.taskPath(task.taskName),
+    taskIO: taskIO,
+    sendProgress: progress => emit('progress', instance.instanceId, progress),
+    registerRoute: route => routeRegistry.register(task, route)
+  }
+
+  if task.mode == 'service':
+    context.postWidgetUpdate = data => emit('widgetUpdate', instance.instanceId, data)
+    context.onWidgetAction = (action, handler) => widgetActions[instance.instanceId].set(action, handler)
+
+  if task.target supports display messaging:
+    context.sendToDisplay = sendToDisplay
+    context.broadcastToDisplays = broadcastToDisplays
+
+  return context
+```
+
+用户服务和内置服务共用 `postWidgetUpdate`、`onWidgetAction`、`sendProgress` 和 `registerRoute`；服务控制器停止、异常、显示端断开和 TaskManager 销毁时清理对应 Map 和路由。
+
+### 内置任务迁移伪代码
+
+```text
+评估内置任务是否可迁移：
+  如果只依赖 task context、项目公开模块和任务目录资源：
+    将实现放入 res/tasks/<taskName>/
+    用 task.js 导出任务描述，服务模式另用 service.js 导出 run()
+    复制任务元数据和 control.actions/widget/sidebar 声明
+    按 taskType=user 提交并复用同一 TaskPanel 页面
+  否则：
+    保留 builtin registry 注册
+    通过通用 context 补齐可共享能力
 ```
 
 ### 停止孤儿实例
@@ -298,6 +347,63 @@ widget: {
   渲染时把保存按钮替换为 _onWidgetSaveConfig(instanceId, 容器id)，
   使任务面板与独立面板同时存在时各收集各的字段，互不干扰
 ```
+
+## 控制端页面显示规则
+
+```text
+任务描述加载：
+  builtinRegistry.listTasks() 返回 sidebar/widget/control.actions/configButton
+  user task.js 返回 sidebar/sidebarManifest/widget/control.actions/configButton
+  web-socket-handler 将元数据放入 task:list:result
+
+控制端收到 task:list:result：
+  TaskPanel 合并任务描述和实例
+  SidebarRegistry 注册 sidebarManifest 和任务 sidebar
+  task.widget 渲染到任务实例详情或 sidebar-widget-{taskName}
+  widget.script 使用任务容器 API 管理自己的页面和交互
+  task.control.actions 按 placement 渲染任务级或实例级页面/弹窗
+  control.actions[].script 使用 api.sendMessage/onMessage 管理任务专属消息
+
+任务服务收到 task:widget_action：
+  TaskManager 按 instanceId 查找 onWidgetAction handler
+  执行任务注册的动作
+  通过 postWidgetUpdate 返回状态
+```
+
+用户任务可以自主管理控制端页面资源，页面资源随任务一起维护；任务系统不增加控制端页面/动作白名单，控制端只提供容器、实例标识、Widget API、Control API 和消息转发。
+
+### Control API 伪代码
+
+```text
+control.actions[].script 初始化：
+  api.getContainer() -> 当前任务页面容器
+  api.getTask() -> 当前任务描述
+  api.getInstance() -> 当前任务实例（任务级页面可能为空）
+  api.sendMessage({ type, ... }) -> 发送任务专属 WebSocket 消息
+  api.onMessage(type, handler) -> 监听任务专属 WebSocket 消息
+  api.sendAction(action, params) -> 复用 task:widget_action
+  api.onUpdate(handler) -> 接收当前实例的 widget 状态
+  api.onDestroy(handler) -> 页面关闭时清理事件和资源
+  api.close() -> 关闭当前任务页面
+```
+
+## 任务 URL 路由
+
+```text
+context.registerRoute(route):
+  target == server:
+    TaskRouteRegistry 保存 method + path -> handler
+    Express :8081 命中后直接调用 handler
+  target == display/subdisplay:
+    发送 task:route_register 并等待确认
+    Express :8081 命中后发送 task:route_request
+    显示端返回 task:route_response
+  stop/error/disconnect/destroy:
+    注销实例全部路由
+    结束 pending request
+```
+
+详细协议和异常处理见 [任务 URL 路由注册实现规格](task-url-route-registration.md)。
 
 ## 消息类型
 

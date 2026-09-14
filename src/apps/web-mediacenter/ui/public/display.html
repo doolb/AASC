@@ -100,6 +100,15 @@
         let currentCrop = { x: 0, y: 0, width: 100, height: 100 };
         let currentMediaType = 'image';
         let displayWs = null;
+        // 任务服务路由由服务端统一挂载到 8081，显示端只通过当前 WebSocket 处理请求。
+        // 每个实例独立保存路由和请求，避免不同任务的默认映射或生命周期相互污染。
+        const displayTaskRoutes = new Map();
+        const displayTaskRouteRequests = new Map();
+        const displayTaskRouteRegistrations = new Map();
+        const displayTaskRouteRegistrationWaiters = new Map();
+        const displayTaskRouteServices = new Map();
+        const displayTaskLlmRequests = new Map();
+        let displayTaskRouteSequence = 0;
         // 显示端代码版本检查间隔由服务端通过 AASC 远端配置下发，首次连接前使用 30 秒。
         const DEFAULT_DISPLAY_VERSION_INTERVAL_MS = 30000;
         const MIN_DISPLAY_VERSION_INTERVAL_MS = 5000;
@@ -467,6 +476,11 @@
 
         window.onNativeLlmChunk = function(payload) {
             if (!payload || !payload.requestId) return;
+            const taskLlmRequest = displayTaskLlmRequests.get(payload.requestId);
+            if (taskLlmRequest && typeof taskLlmRequest.onChunk === 'function') {
+                taskLlmRequest.onChunk(payload.text || '');
+                return;
+            }
             sendLlmDisplayMessage({
                 type: 'llm.chunk',
                 requestId: payload.requestId,
@@ -476,6 +490,11 @@
 
         window.onNativeLlmCompleted = function(payload) {
             if (!payload || !payload.requestId) return;
+            const taskLlmRequest = displayTaskLlmRequests.get(payload.requestId);
+            if (taskLlmRequest && typeof taskLlmRequest.onCompleted === 'function') {
+                taskLlmRequest.onCompleted(payload.text || '');
+                return;
+            }
             sendLlmDisplayMessage({
                 type: 'llm.completed',
                 requestId: payload.requestId,
@@ -485,6 +504,11 @@
 
         window.onNativeLlmError = function(payload) {
             if (!payload || !payload.requestId) return;
+            const taskLlmRequest = displayTaskLlmRequests.get(payload.requestId);
+            if (taskLlmRequest && typeof taskLlmRequest.onError === 'function') {
+                taskLlmRequest.onError(new Error(payload.message || 'LLM 推理失败'));
+                return;
+            }
             sendLlmDisplayMessage({
                 type: 'llm.error',
                 requestId: payload.requestId,
@@ -4953,6 +4977,21 @@
                         return;
                     }
 
+                    if (data.type === 'task:route_registered') {
+                        handleDisplayTaskRouteRegistered(data.payload || {});
+                        return;
+                    }
+
+                    if (data.type === 'task:route_request') {
+                        void handleDisplayTaskRouteRequest(data.payload || {});
+                        return;
+                    }
+
+                    if (data.type === 'task:route_cancel') {
+                        handleDisplayTaskRouteCancel(data.payload || {});
+                        return;
+                    }
+
                     if (data.type === 'control') {
                         handleControl(data);
                         if (data.action !== 'crop') {
@@ -4985,11 +5024,12 @@
                         handleVoiceCommand(data);
                         sendCommandAck('voiceCommand', true, data.action);
                     } else if (data.type === 'task:execute') {
-                        executeTask(data.payload);
+                        void executeTask(data.payload);
                     } else if (data.type === 'task:stop') {
                         // 停止显示端渲染任务，清理覆盖层
                         var stopInstanceId = data.instanceId;
                         console.log('[显示端] 停止任务:', stopInstanceId);
+                        void stopDisplayTask(stopInstanceId);
                         var overlayEl = document.getElementById('renderTask-' + stopInstanceId);
                         if (overlayEl) overlayEl.remove();
                         var styleEl = document.getElementById('renderTaskStyle-' + stopInstanceId);
@@ -7275,11 +7315,455 @@
             sendTaskResult(taskName, instanceId, true, null, null, null, null, { serviceStarted: true });
         }
 
-        function executeTask(payload) {
+        /**
+         * 将显示端服务注册的 URL 路由转发给服务端，由服务端挂载到 8081。
+         * 显示端本身不监听新的 TCP 端口，HTTP 请求会通过 WebSocket 回到这里执行。
+         */
+        function registerDisplayTaskRoute(taskName, instanceId, route) {
+            const routeMethod = String(route && route.method || 'GET').toUpperCase();
+            const routePath = String(route && route.path || '').trim();
+            const handler = route && route.handler;
+            if (!routePath || typeof handler !== 'function') {
+                return Promise.reject(new Error('显示端任务路由必须提供 path 和 handler'));
+            }
+            const routeId = 'display-task-route-' + instanceId + '-' + (++displayTaskRouteSequence);
+            const routeEntry = {
+                routeId: routeId,
+                taskName: taskName,
+                instanceId: instanceId,
+                method: routeMethod,
+                path: routePath,
+                params: route.params || {},
+                handler: handler,
+                registered: false
+            };
+            displayTaskRouteRegistrations.set(routeId, routeEntry);
+            let service = displayTaskRouteServices.get(instanceId);
+            if (!service) {
+                service = { routeIds: new Set(), stop: null };
+                displayTaskRouteServices.set(instanceId, service);
+            }
+            service.routeIds.add(routeId);
+
+            return new Promise(function(resolve, reject) {
+                const timer = setTimeout(function() {
+                    displayTaskRouteRegistrations.delete(routeId);
+                    service.routeIds.delete(routeId);
+                    reject(new Error('服务端未确认显示端任务路由注册'));
+                }, 10000);
+                displayTaskRouteRegistrationWaiters.set(routeId, { resolve: resolve, reject: reject, timer: timer });
+                if (!displayWs || displayWs.readyState !== WebSocket.OPEN) {
+                    clearTimeout(timer);
+                    displayTaskRouteRegistrationWaiters.delete(routeId);
+                    displayTaskRouteRegistrations.delete(routeId);
+                    service.routeIds.delete(routeId);
+                    reject(new Error('显示端 WebSocket 未连接，无法注册任务路由'));
+                    return;
+                }
+                displayWs.send(JSON.stringify({
+                    type: 'task:route_register',
+                    payload: {
+                        taskName: taskName,
+                        instanceId: instanceId,
+                        routeId: routeId,
+                        method: routeMethod,
+                        path: routePath
+                    }
+                }));
+            });
+        }
+
+        function unregisterDisplayTaskRoute(routeId) {
+            const routeEntry = displayTaskRouteRegistrations.get(routeId);
+            if (!routeEntry) return;
+            displayTaskRouteRegistrations.delete(routeId);
+            const service = displayTaskRouteServices.get(routeEntry.instanceId);
+            if (service) {
+                service.routeIds.delete(routeId);
+            }
+            if (displayWs && displayWs.readyState === WebSocket.OPEN && routeEntry.registered) {
+                displayWs.send(JSON.stringify({
+                    type: 'task:route_unregister',
+                    payload: {
+                        taskName: routeEntry.taskName,
+                        instanceId: routeEntry.instanceId,
+                        routeId: routeId
+                    }
+                }));
+            }
+        }
+
+        function handleDisplayTaskRouteRegistered(payload) {
+            const routeId = String(payload.routeId || '').trim();
+            const waiter = displayTaskRouteRegistrationWaiters.get(routeId);
+            const routeEntry = displayTaskRouteRegistrations.get(routeId);
+            if (!waiter || !routeEntry) return;
+            displayTaskRouteRegistrationWaiters.delete(routeId);
+            clearTimeout(waiter.timer);
+            if (payload.success === false) {
+                displayTaskRouteRegistrations.delete(routeId);
+                const service = displayTaskRouteServices.get(routeEntry.instanceId);
+                if (service) service.routeIds.delete(routeId);
+                waiter.reject(new Error(payload.error || '显示端任务路由注册失败'));
+                return;
+            }
+            routeEntry.registered = true;
+            waiter.resolve(function() {
+                unregisterDisplayTaskRoute(routeId);
+            });
+        }
+
+        function createDisplayTaskRouteResponse(route, requestId) {
+            const state = {
+                statusCode: 200,
+                headers: {},
+                headersSent: false,
+                ended: false
+            };
+            const sendMessage = function(event, extra) {
+                if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return false;
+                displayWs.send(JSON.stringify({
+                    type: 'task:route_response',
+                    payload: Object.assign({
+                        routeId: route.routeId,
+                        requestId: requestId,
+                        event: event,
+                        statusCode: state.statusCode,
+                        headers: state.headers
+                    }, extra || {})
+                }));
+                return true;
+            };
+            const sendHeaders = function() {
+                if (state.headersSent) return;
+                state.headersSent = true;
+                sendMessage('headers');
+            };
+            const response = {
+                get statusCode() { return state.statusCode; },
+                get headersSent() { return state.headersSent; },
+                get writableEnded() { return state.ended; },
+                get writableFinished() { return state.ended; },
+                status: function(code) {
+                    if (Number.isInteger(code)) state.statusCode = code;
+                    return response;
+                },
+                setHeader: function(name, value) {
+                    state.headers[String(name)] = value;
+                    return response;
+                },
+                set: function(name, value) {
+                    return response.setHeader(name, value);
+                },
+                getHeader: function(name) {
+                    return state.headers[String(name)];
+                },
+                flushHeaders: sendHeaders,
+                write: function(data) {
+                    sendHeaders();
+                    return sendMessage('chunk', { data: data, encoding: 'utf8' });
+                },
+                end: function(data) {
+                    if (state.ended) return response;
+                    sendHeaders();
+                    state.ended = true;
+                    sendMessage('end', data === undefined ? {} : { data: data, encoding: 'utf8' });
+                    displayTaskRouteRequests.delete(requestId);
+                    return response;
+                },
+                json: function(body) {
+                    if (state.ended) return response;
+                    state.headers['Content-Type'] = 'application/json; charset=utf-8';
+                    state.headersSent = true;
+                    state.ended = true;
+                    sendMessage('end', { bodyType: 'json', body: body });
+                    displayTaskRouteRequests.delete(requestId);
+                    return response;
+                },
+                send: function(body) {
+                    if (body && typeof body === 'object') return response.json(body);
+                    return response.end(body === undefined ? '' : String(body));
+                }
+            };
+            return response;
+        }
+
+        async function handleDisplayTaskRouteRequest(payload) {
+            const routeId = String(payload.routeId || '').trim();
+            const requestId = String(payload.requestId || '').trim();
+            const routeEntry = displayTaskRouteRegistrations.get(routeId);
+            if (!routeEntry || !routeEntry.registered || !requestId) return;
+            const controller = new AbortController();
+            displayTaskRouteRequests.set(requestId, { controller: controller, route: routeEntry });
+            const response = createDisplayTaskRouteResponse(routeEntry, requestId);
+            try {
+                const result = await routeEntry.handler({
+                    request: Object.assign({}, payload.request || {}, {
+                        requestId: requestId,
+                        signal: controller.signal
+                    }),
+                    response: response,
+                    taskName: routeEntry.taskName,
+                    instanceId: routeEntry.instanceId,
+                    params: routeEntry.params
+                });
+                if (!response.writableEnded) {
+                    if (result === undefined) response.end();
+                    else response.json(result);
+                }
+            } catch (error) {
+                if (!response.writableEnded) {
+                    response.status(Number.isInteger(error && error.statusCode) ? error.statusCode : 500)
+                        .json({
+                            error: {
+                                code: error && error.code || 'TASK_ROUTE_HANDLER_ERROR',
+                                message: error && error.message || '显示端任务路由处理失败'
+                            }
+                        });
+                }
+            } finally {
+                displayTaskRouteRequests.delete(requestId);
+            }
+        }
+
+        function handleDisplayTaskRouteCancel(payload) {
+            const requestId = String(payload.requestId || '').trim();
+            const pending = displayTaskRouteRequests.get(requestId);
+            if (!pending) return;
+            pending.controller.abort();
+            displayTaskRouteRequests.delete(requestId);
+        }
+
+        async function stopDisplayTask(instanceId) {
+            const service = displayTaskRouteServices.get(instanceId);
+            if (service && typeof service.stop === 'function') {
+                try {
+                    await service.stop();
+                } catch (error) {
+                    console.warn('[显示端] 服务停止失败:', error.message);
+                }
+            }
+            if (service) {
+                for (const routeId of Array.from(service.routeIds)) {
+                    unregisterDisplayTaskRoute(routeId);
+                }
+            }
+            displayTaskRouteServices.delete(instanceId);
+        }
+
+        function getDisplayLlmModelsResponse() {
+            const status = nativeLlmStatus || {};
+            const modelId = status.selectedModelId || 'local-llm';
+            return {
+                object: 'list',
+                data: [{
+                    id: modelId,
+                    object: 'model',
+                    created: Math.floor(Date.now() / 1000),
+                    owned_by: 'local-display'
+                }]
+            };
+        }
+
+        function buildDisplayLlmResponse(protocol, requestId, modelId, text) {
+            if (protocol === 'chat.completions') {
+                return {
+                    id: requestId,
+                    object: 'chat.completion',
+                    created: Math.floor(Date.now() / 1000),
+                    model: modelId,
+                    choices: [{
+                        index: 0,
+                        message: { role: 'assistant', content: text },
+                        finish_reason: 'stop'
+                    }]
+                };
+            }
+            return {
+                id: requestId,
+                object: 'response',
+                created_at: Math.floor(Date.now() / 1000),
+                model: modelId,
+                status: 'completed',
+                output_text: text,
+                output: [{
+                    type: 'message',
+                    id: requestId + '-message',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text, annotations: [] }]
+                }]
+            };
+        }
+
+        function createDisplayLlmRouteHandler(protocol) {
+            return ({ request, response }) => {
+                if (protocol === 'models') {
+                    if (!nativeLlmAvailable) {
+                        return response.status(503).json({
+                            error: { code: 'LLM_UNAVAILABLE', message: 'APK 的 MNN-LLM 引擎不可用' }
+                        });
+                    }
+                    return response.json(getDisplayLlmModelsResponse());
+                }
+                if (!nativeLlmAvailable || !nativeBridge ||
+                    typeof nativeBridge.llmInferAsync !== 'function') {
+                    return response.status(503).json({
+                        error: { code: 'LLM_UNAVAILABLE', message: 'APK 的 MNN-LLM 引擎不可用' }
+                    });
+                }
+
+                const body = request.body && typeof request.body === 'object' ? request.body : {};
+                const stream = body.stream === true;
+                const nativeRequestId = 'task-llm-' + request.requestId;
+                const modelId = body.model || nativeLlmStatus?.selectedModelId || 'local-llm';
+                return new Promise((resolve, reject) => {
+                    let settled = false;
+                    let text = '';
+                    const cleanup = () => {
+                        displayTaskLlmRequests.delete(nativeRequestId);
+                        if (request.signal && typeof request.signal.removeEventListener === 'function') {
+                            request.signal.removeEventListener('abort', onAbort);
+                        }
+                    };
+                    const finish = (handler) => {
+                        if (settled) return;
+                        settled = true;
+                        cleanup();
+                        handler();
+                    };
+                    const onAbort = () => {
+                        if (typeof nativeBridge.llmCancel === 'function') {
+                            nativeBridge.llmCancel(nativeRequestId);
+                        }
+                        finish(() => reject(Object.assign(new Error('LLM 请求已取消'), {
+                            statusCode: 499,
+                            code: 'LLM_REQUEST_CANCELLED'
+                        })));
+                    };
+                    displayTaskLlmRequests.set(nativeRequestId, {
+                        onChunk: (chunk) => {
+                            text += chunk;
+                            if (!stream) return;
+                            if (protocol === 'chat.completions') {
+                                response.write('data: ' + JSON.stringify({
+                                    id: request.requestId,
+                                    object: 'chat.completion.chunk',
+                                    created: Math.floor(Date.now() / 1000),
+                                    model: modelId,
+                                    choices: [{ index: 0, delta: { content: chunk }, finish_reason: null }]
+                                }) + '\n\n');
+                            } else {
+                                response.write('event: response.output_text.delta\n\n' +
+                                    'data: ' + JSON.stringify({
+                                        type: 'response.output_text.delta',
+                                        response_id: request.requestId,
+                                        delta: chunk
+                                    }) + '\n\n');
+                            }
+                        },
+                        onCompleted: (completedText) => {
+                            text = completedText || text;
+                            finish(() => {
+                                if (stream) {
+                                    if (protocol === 'chat.completions') {
+                                        response.write('data: ' + JSON.stringify({
+                                            id: request.requestId,
+                                            object: 'chat.completion.chunk',
+                                            created: Math.floor(Date.now() / 1000),
+                                            model: modelId,
+                                            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+                                        }) + '\n\n');
+                                        response.end('data: [DONE]\n\n');
+                                    } else {
+                                        response.write('event: response.completed\n\n' +
+                                            'data: ' + JSON.stringify({
+                                                type: 'response.completed',
+                                                response: buildDisplayLlmResponse(protocol, request.requestId, modelId, text)
+                                            }) + '\n\n');
+                                        response.end();
+                                    }
+                                } else {
+                                    response.json(buildDisplayLlmResponse(protocol, request.requestId, modelId, text));
+                                }
+                                resolve();
+                            });
+                        },
+                        onError: (error) => finish(() => reject(error))
+                    });
+                    if (stream) {
+                        response.status(200)
+                            .setHeader('Content-Type', 'text/event-stream')
+                            .setHeader('Cache-Control', 'no-cache')
+                            .setHeader('Connection', 'keep-alive')
+                            .flushHeaders();
+                    }
+                    if (request.signal && typeof request.signal.addEventListener === 'function') {
+                        request.signal.addEventListener('abort', onAbort, { once: true });
+                    }
+                    try {
+                        const resultText = nativeBridge.llmInferAsync(nativeRequestId, JSON.stringify({
+                            ...body,
+                            protocol: protocol === 'responses' ? 'responses' : 'chat.completions'
+                        }));
+                        const result = resultText ? JSON.parse(resultText) : null;
+                        if (!result || result.accepted !== true) {
+                            finish(() => reject(Object.assign(new Error((result && result.error) || '模型未就绪'), {
+                                statusCode: 503,
+                                code: 'LLM_NOT_READY'
+                            })));
+                        }
+                    } catch (error) {
+                        finish(() => reject(error));
+                    }
+                });
+            };
+        }
+
+        async function executeDisplayLlmServerTask(payload) {
+            await stopDisplayTask(payload.instanceId);
+            const routeDefinitions = [
+                { method: 'GET', path: '/v1/models', protocol: 'models' },
+                { method: 'POST', path: '/v1/chat/completions', protocol: 'chat.completions' },
+                { method: 'POST', path: '/v1/responses', protocol: 'responses' },
+                { method: 'POST', path: '/v1/chat/responses', protocol: 'responses' }
+            ];
+            const unregisterRoutes = [];
+            try {
+                for (const route of routeDefinitions) {
+                    unregisterRoutes.push(await registerDisplayTaskRoute(
+                        payload.taskName,
+                        payload.instanceId,
+                        { ...route, handler: createDisplayLlmRouteHandler(route.protocol) }
+                    ));
+                }
+            } catch (error) {
+                for (const unregister of unregisterRoutes.reverse()) {
+                    if (typeof unregister === 'function') unregister();
+                }
+                sendTaskResult(payload.taskName, payload.instanceId, false, error.message, null);
+                return;
+            }
+            const service = displayTaskRouteServices.get(payload.instanceId) || { routeIds: new Set() };
+            service.stop = async () => {
+                for (const unregister of unregisterRoutes.reverse()) {
+                    if (typeof unregister === 'function') unregister();
+                }
+            };
+            displayTaskRouteServices.set(payload.instanceId, service);
+            sendTaskResult(payload.taskName, payload.instanceId, true, null, null, null, null, { serviceStarted: true });
+        }
+
+        async function executeTask(payload) {
             // 模型推理内置任务（已在 GPU 线程异步执行）
             if (payload.builtinId === 'model.inference') {
                 console.log('[Model] 收到模型推理任务:', payload.instanceId, 'modelId:', payload.params ? payload.params.modelId : '?');
                 executeModelInference(payload);
+                return;
+            }
+
+            // 内置 LLM 网关也可被显式转发到 Android 显示端，路由通过本地 MNN-LLM 执行。
+            if (payload.builtinId === 'llm-server') {
+                await executeDisplayLlmServerTask(payload);
                 return;
             }
 
@@ -7318,6 +7802,14 @@
                 } catch(e) { return false; } })(),
                 webgpu: !!navigator.gpu
             };
+
+            // 服务模式必须在主线程执行，才能保留 registerRoute 和 WebSocket 回传能力。
+            if (payload.mode === 'service') {
+                await stopDisplayTask(instanceId);
+                executeUserTaskMainThread(taskName, instanceId, entryCode, files,
+                    capabilities, params, null, 'service');
+                return;
+            }
 
             // WebGPU/WebGL 任务需要主线程访问 GPU API，跳过 Worker 直接在主线程执行
             if (payload.env === 'webgpu' || payload.env === 'webgl') {
@@ -7383,7 +7875,7 @@
         }
 
         // 回退：主线程执行用户任务（当 Web Worker 不可用时）
-        function executeUserTaskMainThread(taskName, instanceId, entryCode, files, capabilities, params, gpuAdapter) {
+        function executeUserTaskMainThread(taskName, instanceId, entryCode, files, capabilities, params, gpuAdapter, taskMode) {
             var fileStore = {};
             for (var i = 0; i < files.length; i++) {
                 var f = files[i];
@@ -7412,10 +7904,26 @@
             };
 
             try {
-                var ctx = { files: fileStore, capabilities: capabilities, params: params, workDir: '/workspace', gpuAdapter: gpuAdapter || null };
+                var ctx = {
+                    files: fileStore,
+                    capabilities: capabilities,
+                    params: params,
+                    workDir: '/workspace',
+                    gpuAdapter: gpuAdapter || null,
+                    registerRoute: taskMode === 'service'
+                        ? function(route) { return registerDisplayTaskRoute(taskName, instanceId, route); }
+                        : undefined
+                };
                 var fn = new Function('context', entryCode + '\nreturn run(context);');
                 Promise.resolve(fn(ctx)).then(function(result) {
                     console.log = origLog; console.error = origErr; console.warn = origWarn;
+                    if (taskMode === 'service' && result && typeof result.stop === 'function') {
+                        var service = displayTaskRouteServices.get(instanceId) || { routeIds: new Set(), stop: null };
+                        service.stop = result.stop;
+                        displayTaskRouteServices.set(instanceId, service);
+                        sendTaskResult(taskName, instanceId, true, null, null, null, taskLogs, { serviceStarted: true });
+                        return;
+                    }
                     var outputFiles = [];
                     if (result && result.outputFiles) {
                         for (var k = 0; k < result.outputFiles.length; k++) {

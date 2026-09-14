@@ -3,6 +3,7 @@ const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const TaskIO = require('./task-io');
 const NodeJsRunner = require('./nodejs-runner');
+const { TaskRouteRegistry } = require('./task-route-registry');
 
 let builtinRegistry = null;
 try {
@@ -31,6 +32,7 @@ class TaskManager extends EventEmitter {
     this._getTtsServiceUrl = options.getTtsServiceUrl || null;
     this._setTtsServiceUrl = options.setTtsServiceUrl || null;
     this._llmGatewayService = options.llmGatewayService || null;
+    this._llmHttpHandlers = options.llmHttpHandlers || null;
     this._serverExecutionError = options.serverExecutionError || '当前节点不支持服务端任务执行';
     this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
@@ -40,6 +42,13 @@ class TaskManager extends EventEmitter {
     this._pendingDisplayServices = [];  // [{ taskName, instanceId, task, params }] 待显示端连接后转发
     this._orphanedTasks = new Map();     // displayId -> [{ taskName, params, entryFile, ... }] 显示端断连后待重连恢复
     this._resolveTaskRoute = options.resolveTaskRoute || null;
+    // 路由注册器只管理任务拥有的路由和待处理请求，不把 Express app 暴露给任务代码。
+    // sendToDisplay 使用动态读取，确保构造阶段尚未注入显示端发送函数也可以安全初始化。
+    this._taskRouteRegistry = options.taskRouteRegistry || new TaskRouteRegistry({
+      sendToDisplay: (displayId, message) => this._sendToDisplay
+        ? this._sendToDisplay(displayId, message) === true
+        : false
+    });
   }
 
   async init() {
@@ -84,7 +93,8 @@ class TaskManager extends EventEmitter {
       chatService: extraContext.chatService || this._chatService,
       getTtsServiceUrl: extraContext.getTtsServiceUrl || this._getTtsServiceUrl,
       setTtsServiceUrl: extraContext.setTtsServiceUrl || this._setTtsServiceUrl,
-      llmGatewayService: extraContext.llmGatewayService || this._llmGatewayService
+      llmGatewayService: extraContext.llmGatewayService || this._llmGatewayService,
+      llmHttpHandlers: extraContext.llmHttpHandlers || this._llmHttpHandlers
     });
   }
 
@@ -203,6 +213,9 @@ class TaskManager extends EventEmitter {
 
     instance.status = 'running';
     instance.target = task.target;
+    instance.displayId = task.displayId || null;
+    instance.mode = task.mode;
+    instance.taskType = task.taskType;
     instance.params = task.params;
     instance.entryFile = task.entryFile;
     this.emit('progress', instanceId, 'running', 30);
@@ -211,9 +224,15 @@ class TaskManager extends EventEmitter {
 
     const resolvedRefs = this.taskIO.resolveRefs(task.taskName, task.refs);
     const context = {
+      taskName: task.taskName,
+      instanceId,
+      taskType: task.taskType,
+      target: task.target,
+      mode: task.mode,
       params: task.params,
       refs: resolvedRefs,
-      workDir: this.taskIO._taskPath(task.taskName)
+      workDir: this.taskIO._taskPath(task.taskName),
+      taskIO: this.taskIO
     };
 
     // 内置一次性任务从任务目录读取上传文件，并以 Buffer 提供给任务模块；
@@ -246,6 +265,7 @@ class TaskManager extends EventEmitter {
           if (svc.status === 'running' && this._isSameServiceScope(sInst, task)) {
             console.log('[TaskManager] 停止旧服务实例:', sid, 'taskName:', task.taskName);
             try { await svc.stop(); } catch (e) { }
+            this._unregisterTaskRoutes(sid);
             this._services.delete(sid);
             this._widgetActions.delete(sid);
           }
@@ -395,7 +415,8 @@ class TaskManager extends EventEmitter {
         entryFile: task.entryFile,
         files: forwardFiles,
         params: forwardParams || task.params || {},
-        env: task.env || 'auto'
+        env: task.env || 'auto',
+        mode: task.mode || 'one-shot'
       }
     };
 
@@ -442,6 +463,76 @@ class TaskManager extends EventEmitter {
       }
     }
     return { success: false, error: '未知动作: ' + action };
+  }
+
+  /**
+   * 让 HTTP 动态中间件复用任务路由注册器；返回 false 时由 Express 继续处理既有路由。
+   */
+  handleHttpRoute(req, res) {
+    return this._taskRouteRegistry.handleRequest(req, res);
+  }
+
+  /**
+   * 显示端任务启动后，通过 WebSocket 注册它实际能处理的 URL 路由。
+   * 注册前必须校验任务实例确实绑定了当前 displayId，避免显示端越权占用其他实例的路由。
+   */
+  handleTaskRouteRegister(displayId, payload = {}) {
+    const instanceId = String(payload.instanceId || '').trim();
+    const instance = this.instances.get(instanceId);
+    const targetDisplayId = instance?.targetInfo?.displayId || instance?.displayId || null;
+    if (!instance || !['display', 'subdisplay'].includes(instance.target) || targetDisplayId !== displayId) {
+      return { success: false, error: '任务路由实例与显示端不匹配' };
+    }
+    try {
+      const registration = this._taskRouteRegistry.registerDisplayRoute({
+        taskName: instance.taskName,
+        instanceId,
+        displayId,
+        routeId: payload.routeId,
+        method: payload.method,
+        path: payload.path,
+        params: instance.params || {}
+      });
+      return { success: true, routeId: registration.routeId };
+    } catch (error) {
+      return { success: false, error: error.message, code: error.code, statusCode: error.statusCode };
+    }
+  }
+
+  handleTaskRouteUnregister(displayId, payload = {}) {
+    const instanceId = String(payload.instanceId || '').trim();
+    const instance = this.instances.get(instanceId);
+    const targetDisplayId = instance?.targetInfo?.displayId || instance?.displayId || null;
+    if (!instance || targetDisplayId !== displayId) {
+      return { success: false, error: '任务路由实例与显示端不匹配' };
+    }
+    const removed = this._taskRouteRegistry.unregisterRoute(payload.routeId, instanceId);
+    return { success: true, removed };
+  }
+
+  handleTaskRouteResponse(displayId, payload = {}) {
+    return this._taskRouteRegistry.handleDisplayResponse(displayId, payload);
+  }
+
+  handleTaskRouteCancel(displayId, payload = {}) {
+    return this._taskRouteRegistry.handleDisplayCancel(displayId, payload);
+  }
+
+  _registerServerTaskRoute(task, route = {}) {
+    if (task.target !== 'server') {
+      throw new Error('只有服务端任务可以在服务端进程直接注册路由');
+    }
+    const unregister = this._taskRouteRegistry.registerServerRoute({
+      ...route,
+      taskName: task.taskName,
+      instanceId: task.instanceId,
+      params: task.params || {}
+    });
+    return Promise.resolve(unregister);
+  }
+
+  _unregisterTaskRoutes(instanceId) {
+    return this._taskRouteRegistry.unregisterInstance(instanceId);
   }
 
   async submit(task) {
@@ -566,6 +657,7 @@ class TaskManager extends EventEmitter {
       const idx = await this.taskIO.getIndex(taskName).catch(() => []);
       const entry = idx.find(e => e.instanceId === instanceId);
       if (entry) {
+        this._unregisterTaskRoutes(instanceId);
         this.emit('log', instanceId, 'system', 'info', '服务已停止');
         await this.taskIO.updateIndex(taskName, { instanceId, status: 'stopped' });
         return { success: true };
@@ -575,6 +667,7 @@ class TaskManager extends EventEmitter {
 
     // display_offline：服务已断开，直接标记停止
     if (instance.status === 'display_offline') {
+      this._unregisterTaskRoutes(instanceId);
       instance.status = 'stopped';
       instance.stage = 'stopped';
       this.emit('log', instanceId, 'system', 'info', '服务已停止');
@@ -593,6 +686,7 @@ class TaskManager extends EventEmitter {
       }
       this._services.delete(instanceId);
       this._widgetActions.delete(instanceId);
+      this._unregisterTaskRoutes(instanceId);
       instance.status = 'stopped';
       instance.stage = 'stopped';
 
@@ -606,6 +700,7 @@ class TaskManager extends EventEmitter {
     if (typeof this.nodeRunner?.kill === 'function') {
       this.nodeRunner.kill(instanceId);
     }
+    this._unregisterTaskRoutes(instanceId);
     instance.status = 'stopped';
     await this.taskIO.updateIndex(taskName, { instanceId, status: 'stopped' });
     await this.taskIO.writeInstanceLog(taskName, instanceId, 'system', 'info', '已停止执行');
@@ -636,12 +731,14 @@ class TaskManager extends EventEmitter {
           ...context, instanceId, taskName: task.taskName, taskIO: this.taskIO, 
           chatService: context.chatService || this._chatService,
           llmGatewayService: context.llmGatewayService || this._llmGatewayService,
+          llmHttpHandlers: context.llmHttpHandlers || this._llmHttpHandlers,
           sendToDisplay: this._sendToDisplay,
           broadcastToDisplays: this._broadcastToDisplays,
           generateTTS: this._generateTts,
           postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
           postStream: (data) => this.emit('stream', instanceId, data),
           onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
+          registerRoute: (route) => this._registerServerTaskRoute(task, route),
           sendProgress: (progressData) => {
             this.emit('progress', instanceId, 'running', progressData);
           }
@@ -662,9 +759,31 @@ class TaskManager extends EventEmitter {
         const run = typeof mod === 'function' ? mod : mod.run;
         if (typeof run !== 'function') throw new Error('服务模块未导出 run 函数');
 
+        // 用户服务与内置服务共用实例级 widget 动作表，避免不同实例的控制端操作串线。
+        const actionHandlers = new Map();
+        this._widgetActions.set(instanceId, actionHandlers);
         const serviceContext = {
+          taskName: task.taskName,
+          instanceId,
+          taskType: task.taskType,
+          target: task.target,
+          mode: task.mode,
           params: task.params || {},
+          refs: this.taskIO.resolveRefs(task.taskName, task.refs || {}),
           workDir: this.taskIO._taskPath(task.taskName),
+          taskIO: this.taskIO,
+          registerRoute: (route) => this._registerServerTaskRoute(task, route),
+          postWidgetUpdate: (data) => this.emit('widgetUpdate', instanceId, data),
+          onWidgetAction: (action, handler) => actionHandlers.set(action, handler),
+          postStream: (data) => this.emit('stream', instanceId, data),
+          sendToDisplay: this._sendToDisplay,
+          broadcastToDisplays: this._broadcastToDisplays,
+          generateTTS: this._generateTts,
+          getTtsServiceUrl: this._getTtsServiceUrl,
+          setTtsServiceUrl: this._setTtsServiceUrl,
+          llmGatewayService: this._llmGatewayService,
+          llmHttpHandlers: this._llmHttpHandlers,
+          chatService: this._chatService,
           log: (msg) => this.emit('log', instanceId, 'service', 'info', msg),
           sendProgress: (progressData) => {
             this.emit('progress', instanceId, 'running', progressData);
@@ -683,6 +802,9 @@ class TaskManager extends EventEmitter {
       instance.progress = 100;
       this.emit('progress', instanceId, 'running', 100);
     } catch (err) {
+      this._unregisterTaskRoutes(instanceId);
+      // 服务启动失败后不保留已注册的控制端动作，避免下一次重试复用失效 handler。
+      this._widgetActions.delete(instanceId);
       instance.status = 'failed';
       this.emit('log', instanceId, 'system', 'error', '服务启动失败: ' + err.message);
       this.emit('progress', instanceId, 'failed', 0);
@@ -729,6 +851,10 @@ class TaskManager extends EventEmitter {
         }
       });
       return { success: true };
+    }
+
+    if (isDisplayService && result.success === false) {
+      this._unregisterTaskRoutes(instanceId);
     }
 
     await this._handleResult(task, instanceId, instance, {
@@ -823,6 +949,9 @@ class TaskManager extends EventEmitter {
 
   async deleteInstance(taskName, instanceId) {
     // 清理内存中的实例
+    this._unregisterTaskRoutes(instanceId);
+    this._services.delete(instanceId);
+    this._widgetActions.delete(instanceId);
     this.instances.delete(instanceId);
     try {
       if (typeof this.nodeRunner?.kill === 'function') this.nodeRunner.kill(instanceId);
@@ -834,6 +963,9 @@ class TaskManager extends EventEmitter {
     // 清除此任务在内存中的所有实例
     for (const [id, inst] of this.instances) {
       if (inst.taskName === taskName) {
+        this._unregisterTaskRoutes(id);
+        this._services.delete(id);
+        this._widgetActions.delete(id);
         try {
           if (typeof this.nodeRunner?.kill === 'function') this.nodeRunner.kill(id);
         } catch (e) {}
@@ -975,6 +1107,8 @@ class TaskManager extends EventEmitter {
    * 一次性任务直接标记为 failed
    */
   async handleDisplayDisconnect(displayId) {
+    // 先释放 URL 路由和 pending HTTP 请求，再进入既有服务孤儿恢复流程。
+    this._taskRouteRegistry.unregisterDisplay(displayId);
     const stopped = [];
     // 第一遍同步收集孤儿任务信息（先设置 _orphanedTasks 避免重连竞争）
     const orphans = [];
@@ -1109,6 +1243,9 @@ class TaskManager extends EventEmitter {
     if (this.puppeteerRunner && this.puppeteerRunner.close) {
       await this.puppeteerRunner.close();
     }
+    this._taskRouteRegistry.destroy();
+    this._services.clear();
+    this._widgetActions.clear();
     this.removeAllListeners();
     this.instances.clear();
   }

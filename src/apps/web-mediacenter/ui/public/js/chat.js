@@ -13,6 +13,9 @@ const Chat = {
     templates: [],
     config: {
         systemPrompt: '你是一个友好的助手，请用简洁的语言回答问题。',
+        protocol: 'openai-responses',
+        responsesBaseUrl: 'http://127.0.0.1:8081/v1',
+        responsesApiKey: '',
         agentBackend: 'codex'
     },
     assistantConfig: {
@@ -385,6 +388,11 @@ const Chat = {
                     if (data.config.systemPrompt) {
                         this.config.systemPrompt = data.config.systemPrompt;
                     }
+                    this.config.protocol = data.config.protocol === 'openai-completions'
+                        ? 'openai-completions'
+                        : 'openai-responses';
+                    this.config.responsesBaseUrl = data.config.responsesBaseUrl || 'http://127.0.0.1:8081/v1';
+                    this.config.responsesApiKey = data.config.responsesApiKey || '';
                     this.config.agentBackend = data.config.agentBackend || 'codex';
                 }
             })
@@ -771,6 +779,21 @@ const Chat = {
         }
         const agentBackendInput = document.getElementById('chatAgentBackend');
         if (agentBackendInput) this.config.agentBackend = agentBackendInput.value === 'claude' ? 'claude' : 'codex';
+        const protocolInput = document.getElementById('chatProtocol');
+        if (protocolInput) {
+            this.config.protocol = protocolInput.value === 'openai-completions'
+                ? 'openai-completions'
+                : 'openai-responses';
+        }
+        const responsesBaseUrlInput = document.getElementById('chatResponsesBaseUrl');
+        if (responsesBaseUrlInput) this.config.responsesBaseUrl = responsesBaseUrlInput.value.trim();
+        const responsesApiKeyInput = document.getElementById('chatResponsesApiKey');
+        if (responsesApiKeyInput) this.config.responsesApiKey = responsesApiKeyInput.value.trim();
+
+        if (this.config.protocol === 'openai-responses' && !this.config.responsesBaseUrl) {
+            window.showToast('Responses Base URL 不能为空', 'error');
+            return;
+        }
 
         fetch('/api/chat/config', {
             method: 'POST',
@@ -780,6 +803,7 @@ const Chat = {
         .then(res => res.json())
         .then(data => {
             if (data.status === 'success') {
+                if (data.config) this.config = { ...this.config, ...data.config };
                 window.showToast('配置已保存', 'success');
                 this.hideConfig();
             }
@@ -1931,8 +1955,23 @@ const Chat = {
             }
             const agentBackend = document.getElementById('chatAgentBackend');
             if (agentBackend) agentBackend.value = this.config.agentBackend || 'codex';
+            const protocol = document.getElementById('chatProtocol');
+            if (protocol) protocol.value = this.config.protocol || 'openai-responses';
+            const responsesBaseUrl = document.getElementById('chatResponsesBaseUrl');
+            if (responsesBaseUrl) responsesBaseUrl.value = this.config.responsesBaseUrl || '';
+            const responsesApiKey = document.getElementById('chatResponsesApiKey');
+            if (responsesApiKey) responsesApiKey.value = this.config.responsesApiKey || '';
+            this.updateChatProtocolVisibility();
             this.loadProfiles();
         }
+    },
+
+    updateChatProtocolVisibility() {
+        const protocolInput = document.getElementById('chatProtocol');
+        const responsesConfig = document.getElementById('chatResponsesConfig');
+        if (!responsesConfig) return;
+        const protocol = protocolInput ? protocolInput.value : this.config.protocol;
+        responsesConfig.hidden = protocol !== 'openai-responses';
     },
 
     renderProfileSelector() {

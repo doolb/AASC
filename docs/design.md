@@ -81,6 +81,7 @@
 | Android原生语音生成 | [android-native-tts.md](design/android-native-tts.md) | Microsoft Embedded Speech 离线合成 Xiaoxiao、模型按需下载、显示端生成与服务端回退 |
 | Android原生声纹识别 | [voiceprint.md](design/voiceprint.md) | 外部声纹模型加载、说话人匹配与 APK 端声纹门控 |
 | Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](design/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
+| 任务 URL 路由注册 | [task-url-route-registration.md](design/task-url-route-registration.md) | 任务实例复用 AASC 8081 路由、显示端 WebSocket 请求转发和生命周期清理 |
 | 正式 Android 原生 OCR 与 YOLO11n | [android-native-ocr-yolo.md](design/android-native-ocr-yolo.md) | 正式显示端单小核 RapidOCR/YOLO11n、服务器路由和任务面板 |
 | 正式 Android 统一模型分发 | [android-model-distribution.md](design/android-model-distribution.md) | 正式 APK 全模型服务器按需下载、hash 校验、缓存和 YOLO 尺寸扩展 |
 | 独立 Android 声纹对比测试 APK | [android-voiceprint-test-apk.md](design/android-voiceprint-test-apk.md) | 通过浏览器访问 APK，测试 Sherpa 声纹及流式 ASR 流程 |

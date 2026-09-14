@@ -5,6 +5,7 @@
     instances: new Map(),
     _widgetData: {},
     _widgetControllers: {},
+    _taskControlControllers: new Map(),
     displayList: [],
     taskList: [],
     taskLinks: [],
@@ -24,10 +25,12 @@
     },
 
     _send: function(msg) {
-      var ws = window.WebSocketManager;
+      const ws = window.WebSocketManager;
       if (ws && ws.ws && ws.ws.readyState === WebSocket.OPEN) {
         ws.ws.send(JSON.stringify(msg));
+        return true;
       }
+      return false;
     },
 
     _render: function() {
@@ -81,7 +84,10 @@
           // 合并实例、补全 widget 等字段
           if (task.instances) merged[key].instances = (merged[key].instances || []).concat(task.instances);
           if (task.widget && !merged[key].widget) merged[key].widget = task.widget;
+          if (task.sidebar && !merged[key].sidebar) merged[key].sidebar = task.sidebar;
           if (task.mode && !merged[key].mode) merged[key].mode = task.mode;
+          if (task.configButton && !merged[key].configButton) merged[key].configButton = task.configButton;
+          if (task.control && !merged[key].control) merged[key].control = task.control;
         } else {
           merged[key] = Object.assign({}, task);
         }
@@ -234,6 +240,7 @@
         actionsHtml += '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._viewEdit(\'' + safeTaskName + '\')">编辑</button>';
         actionsHtml += '<button class="task-card-btn danger" onclick="event.stopPropagation();TaskPanel._confirmDelete(\'' + safeTaskName + '\')">删除</button>';
       }
+      actionsHtml += this._renderTaskControlButtons(task.taskName, null, 'task');
 
       return '<div class="' + cardClass + (isSelected ? ' selected' : '') + '" onclick="TaskPanel._selectTask(\'' + safeTaskName + '\')">' +
         '<div class="task-card-header">' +
@@ -244,6 +251,169 @@
         progressHtml +
         '<div class="task-card-actions">' + actionsHtml + '</div>' +
       '</div>';
+    },
+
+    // 通用任务控制页面：内置任务和用户任务都通过 metadata 自己声明页面内容。
+    // TaskPanel 只负责承载容器、转发带 type 的消息，并在关闭或更新时完成生命周期清理。
+    _getTask: function(taskName) {
+      return this.taskList.find(function(task) { return task.taskName === taskName; }) || null;
+    },
+
+    _getTaskControls: function(taskName, placement) {
+      var task = this._getTask(taskName);
+      var actions = task && task.control && Array.isArray(task.control.actions) ? task.control.actions : [];
+      return actions.filter(function(action) {
+        return action && action.id && (action.placement || 'task') === placement;
+      });
+    },
+
+    _renderTaskControlButtons: function(taskName, instanceId, placement) {
+      const controls = this._getTaskControls(taskName, placement);
+      const safeTaskName = this._escapeAttr(taskName || '');
+      const safeInstanceId = this._escapeAttr(instanceId || '');
+      return controls.map(function(action) {
+        const safeControlId = this._escapeAttr(action.id);
+        return '<button class="task-card-btn" onclick="event.stopPropagation();TaskPanel._openTaskControl(\'' + safeTaskName + '\',\'' + safeControlId + '\',\'' + safeInstanceId + '\')">' +
+          this._escapeHtml(action.label || action.id) + '</button>';
+      }, this).join('');
+    },
+
+    _findTaskControl: function(taskName, controlId, placement) {
+      return this._getTaskControls(taskName, placement).find(function(action) {
+        return String(action.id) === String(controlId);
+      }) || null;
+    },
+
+    _openTaskControl: function(taskName, controlId, instanceId) {
+      const placement = instanceId ? 'instance' : 'task';
+      const action = this._findTaskControl(taskName, controlId, placement);
+      if (!action) return;
+      const key = [taskName, controlId, instanceId || 'task'].join(':');
+      this._closeTaskControl(key);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'task-confirm-overlay';
+      overlay.style.zIndex = '1001';
+      const title = this._escapeHtml(action.title || action.label || controlId);
+      let html = typeof action.html === 'string' ? action.html : '';
+      html = html.replace(/\{\{taskName\}\}/g, taskName || '');
+      html = html.replace(/\{\{instanceId\}\}/g, instanceId || '');
+      overlay.innerHTML = '<div class="task-confirm-box" style="max-width:900px;width:94%;max-height:90vh;overflow:auto">' +
+        '<div class="task-confirm-title">' + title + '</div>' +
+        '<button type="button" data-task-control-close="true" style="position:absolute;right:18px;top:14px;border:0;background:transparent;color:#aaa;font-size:22px;cursor:pointer">×</button>' +
+        '<div data-task-control-content="true">' + html + '</div>' +
+      '</div>';
+      document.body.appendChild(overlay);
+
+      const state = {
+        key,
+        taskName,
+        controlId,
+        instanceId: instanceId || null,
+        overlay,
+        listeners: [],
+        updateHandlers: [],
+        destroyHandlers: [],
+        timers: []
+      };
+      this._taskControlControllers.set(key, state);
+      const self = this;
+      const api = {
+        taskName: taskName || '',
+        instanceId: instanceId || '',
+        controlId: controlId || '',
+        getContainer: function() { return overlay.querySelector('[data-task-control-content="true"]'); },
+        getTask: function() { return self._getTask(taskName); },
+        getInstance: function() { return instanceId ? self.instances.get(instanceId) || null : null; },
+        getData: function() { return instanceId ? (self._widgetData[instanceId] || {}) : {}; },
+        sendMessage: function(message) {
+          if (!message || typeof message.type !== 'string' || !message.type) return false;
+          return self._send(message);
+        },
+        onMessage: function(type, handler) {
+          if (typeof type === 'function') {
+            handler = type;
+            type = '*';
+          }
+          if (typeof handler !== 'function') return;
+          state.listeners.push({ type: type || '*', handler });
+        },
+        sendAction: function(actionName, params) {
+          return self._send({ type: 'task:widget_action', payload: {
+            instanceId: instanceId || taskName,
+            action: actionName,
+            params: params || {}
+          }});
+        },
+        saveInstanceParams: function(params) {
+          if (!instanceId) return false;
+          return self._send({ type: 'task:update_instance_params', payload: {
+            taskName,
+            instanceId,
+            params: params || {}
+          }});
+        },
+        onUpdate: function(handler) {
+          if (typeof handler === 'function') state.updateHandlers.push(handler);
+        },
+        onDestroy: function(handler) {
+          if (typeof handler === 'function') state.destroyHandlers.push(handler);
+        },
+        setInterval: function(handler, ms) {
+          const timer = setInterval(handler, ms);
+          state.timers.push(timer);
+          return timer;
+        },
+        close: function() { self._closeTaskControl(key); },
+        escapeHtml: function(value) { return self._escapeHtml(value); },
+        escapeAttr: function(value) { return self._escapeAttr(value); }
+      };
+      state.api = api;
+
+      overlay.querySelector('[data-task-control-close="true"]').addEventListener('click', function() {
+        self._closeTaskControl(key);
+      });
+      overlay.addEventListener('click', function(event) {
+        if (event.target === overlay) self._closeTaskControl(key);
+      });
+
+      try {
+        if (typeof action.script === 'string' && action.script.trim()) {
+          (new Function('api', action.script))(api);
+        }
+      } catch (error) {
+        const content = overlay.querySelector('[data-task-control-content="true"]');
+        if (content) content.insertAdjacentHTML('beforeend', '<div style="color:#ff9b9b;margin-top:12px">任务页面初始化失败：' + this._escapeHtml(error.message) + '</div>');
+      }
+    },
+
+    _dispatchTaskControlMessage: function(data) {
+      this._taskControlControllers.forEach(function(state) {
+        state.listeners.forEach(function(listener) {
+          if (listener.type !== '*' && listener.type !== data.type) return;
+          try { listener.handler(data); } catch (error) { console.warn('[TaskPanel] 任务控制页面消息处理失败:', error.message); }
+        });
+      });
+    },
+
+    _notifyTaskControlUpdates: function(payload) {
+      this._taskControlControllers.forEach(function(state) {
+        if (state.taskName !== payload.taskName || (state.instanceId && state.instanceId !== payload.instanceId)) return;
+        state.updateHandlers.forEach(function(handler) {
+          try { handler(payload.data || {}); } catch (error) { console.warn('[TaskPanel] 任务控制页面更新失败:', error.message); }
+        });
+      });
+    },
+
+    _closeTaskControl: function(key) {
+      const state = this._taskControlControllers.get(key);
+      if (!state) return;
+      state.destroyHandlers.forEach(function(handler) {
+        try { handler(); } catch (error) { console.warn('[TaskPanel] 任务控制页面清理失败:', error.message); }
+      });
+      state.timers.forEach(function(timer) { clearInterval(timer); });
+      if (state.overlay && state.overlay.parentNode) state.overlay.parentNode.removeChild(state.overlay);
+      this._taskControlControllers.delete(key);
     },
 
 
@@ -1446,6 +1616,7 @@
       }
       var orig = ws.handleMessage;
       ws.handleMessage = function(data) {
+        self._dispatchTaskControlMessage(data);
         if (data.type === 'displayList') {
           self.displayList = data.list || [];
           if (document.getElementById('deviceSelectorList')) {
@@ -2670,6 +2841,7 @@
         this._widgetData[inst.instanceId] = wd;
       }
       var widgetHtml = widgetDef ? this._renderWidget(widgetDef, inst.instanceId, taskName, inst.status) : '';
+      const instanceControlsHtml = this._renderTaskControlButtons(taskName, inst.instanceId, 'instance');
 
       var result = inst.result || {};
       var outputFiles = result.outputFiles || (result.data ? result.data.outputFiles : []) || [];
@@ -2756,6 +2928,7 @@
         '<div class="task-result-log-content">' + (logHtml || '<span style="color:#555">无日志</span>') + '</div>' +
       '</div>' +
       '<div style="margin-top:12px;display:flex;gap:8px">' +
+        instanceControlsHtml +
         (inst.status === 'draft'
           ? '<button class="task-card-btn primary" onclick="TaskPanel._runCreatedInstance(\'' + taskName + '\',\'' + inst.instanceId + '\')">运行</button>'
           : inst.status === 'completed' || inst.status === 'failed' || inst.status === 'stopped' || inst.status === 'display_offline'
@@ -2783,6 +2956,7 @@
 
     _onWidgetUpdate: function(payload) {
       this._widgetData[payload.instanceId] = payload.data;
+      this._notifyTaskControlUpdates(payload);
       var ctrl = this._widgetControllers[payload.instanceId];
       if (ctrl && ctrl.onUpdate) {
         ctrl.onUpdate(payload.data);

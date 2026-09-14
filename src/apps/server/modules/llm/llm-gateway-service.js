@@ -184,15 +184,36 @@ class LlmGatewayService {
         router,
         sendToDisplay,
         logger = () => {},
-        requestTimeoutMs = 120000
+        requestTimeoutMs = 120000,
+        getDefaultModelMappings = () => []
     }) {
         this.modelManifestService = modelManifestService;
         this.router = router;
         this.sendToDisplay = sendToDisplay;
         this.logger = logger;
         this.requestTimeoutMs = requestTimeoutMs;
+        this.getDefaultModelMappings = getDefaultModelMappings;
         this.pending = new Map();
         this.sequence = 0;
+    }
+
+    resolveRequestedModelId(modelName) {
+        const manifestModelId = this.modelManifestService.resolveModelId(modelName);
+        if (manifestModelId) return manifestModelId;
+
+        let mappings = [];
+        try {
+            mappings = this.getDefaultModelMappings();
+        } catch (error) {
+            this.logger('default-model-mapping-read-error', { message: error.message });
+        }
+        if (!Array.isArray(mappings)) return null;
+
+        const mapping = mappings.find((candidate) => (
+            candidate && candidate.externalModelName === modelName
+        ));
+        if (!mapping) return null;
+        return this.modelManifestService.resolveModelId(mapping.modelId) || null;
     }
 
     generateRequestId() {
@@ -226,7 +247,7 @@ class LlmGatewayService {
 
     validateRequest(protocol, body, headers = {}) {
         const normalized = normalizePayload(protocol, body);
-        const modelId = this.modelManifestService.resolveModelId(normalized.modelId);
+        const modelId = this.resolveRequestedModelId(normalized.modelId);
         if (!modelId || !this.hasModel(modelId)) {
             throw createGatewayError(
                 `未知 LLM 模型: ${normalized.modelId}`,

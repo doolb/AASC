@@ -16,6 +16,7 @@ const {
 const {
     LlmGatewayService
 } = require('../src/apps/server/modules/llm/llm-gateway-service');
+const config = require('../src/apps/server/modules/config/config-app-service');
 
 function createTempManifest() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-llm-'));
@@ -376,6 +377,91 @@ test('LLM 网关把外部模型名映射为内部 modelId 后再路由', () => {
         text: '好的'
     });
     return started.promise.then((result) => assert.equal(result.text, '好的'));
+});
+
+test('LLM 网关在 manifest 未命中时使用动态默认模型映射', () => {
+    const router = new LlmRouter();
+    router.registerDisplay('display-a', {
+        supported: true,
+        ready: true,
+        selectedModelId: 'qwen-test'
+    });
+    const gateway = new LlmGatewayService({
+        modelManifestService: {
+            resolveModelId: (modelName) => modelName === 'qwen-test' ? 'qwen-test' : null,
+            createManifest: () => ({ models: [{ modelId: 'qwen-test', ready: true }] })
+        },
+        router,
+        sendToDisplay: () => true,
+        getDefaultModelMappings: () => [{
+            externalModelName: 'local-chat',
+            modelId: 'qwen-test'
+        }]
+    });
+
+    const request = gateway.validateRequest('chat.completions', {
+        model: 'local-chat',
+        messages: [{ role: 'user', content: '你好' }]
+    });
+
+    assert.equal(request.requestedModelId, 'local-chat');
+    assert.equal(request.modelId, 'qwen-test');
+    assert.equal(request.payload.model, 'qwen-test');
+});
+
+test('LLM 默认模型映射配置缺失时回落为空数组', () => {
+    assert.deepEqual(config.get('llm.defaultModelMappings'), []);
+});
+
+test('LLM 默认模型映射保存前会清理空行和首尾空格', () => {
+    assert.equal(typeof config.normalizeLlmDefaultModelMappings, 'function');
+    const result = config.normalizeLlmDefaultModelMappings([
+        { externalModelName: ' local-chat ', modelId: ' qwen-test ' },
+        { externalModelName: ' ', modelId: ' ' },
+        { externalModelName: 'vision', modelId: 'qwen-vl' }
+    ], ['qwen-test', 'qwen-vl']);
+
+    assert.deepEqual(result, {
+        ok: true,
+        value: [
+            { externalModelName: 'local-chat', modelId: 'qwen-test' },
+            { externalModelName: 'vision', modelId: 'qwen-vl' }
+        ]
+    });
+});
+
+test('LLM 默认模型映射拒绝重复外部名和未知内部模型', () => {
+    assert.equal(typeof config.normalizeLlmDefaultModelMappings, 'function');
+    const duplicate = config.normalizeLlmDefaultModelMappings([
+        { externalModelName: 'chat', modelId: 'qwen-test' },
+        { externalModelName: 'chat', modelId: 'qwen-vl' }
+    ], ['qwen-test', 'qwen-vl']);
+    const unknown = config.normalizeLlmDefaultModelMappings([
+        { externalModelName: 'chat', modelId: 'missing-model' }
+    ], ['qwen-test']);
+
+    assert.equal(duplicate.ok, false);
+    assert.match(duplicate.message, /外部模型名重复/u);
+    assert.equal(unknown.ok, false);
+    assert.match(unknown.message, /内部模型不存在/u);
+});
+
+test('LLM 默认模型映射限制条目数量和名称长度', () => {
+    const tooMany = config.normalizeLlmDefaultModelMappings(
+        Array.from({ length: 65 }, (_, index) => ({
+            externalModelName: `chat-${index}`,
+            modelId: 'qwen-test'
+        })),
+        ['qwen-test']
+    );
+    const tooLong = config.normalizeLlmDefaultModelMappings([
+        { externalModelName: 'x'.repeat(257), modelId: 'qwen-test' }
+    ], ['qwen-test']);
+
+    assert.equal(tooMany.ok, false);
+    assert.match(tooMany.message, /最多支持 64 条/u);
+    assert.equal(tooLong.ok, false);
+    assert.match(tooLong.message, /不能超过 256/u);
 });
 
 test('LLM 模型别名冲突时拒绝清单', () => {
