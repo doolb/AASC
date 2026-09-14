@@ -181,7 +181,7 @@ const DisplayList = {
                                 ${directionIndicator}
                                 ${voiceStatusHtml}
                                 <span class="display-item-size">${d.canvasSize.width}x${d.canvasSize.height}</span>
-                                ${d.browserInfo ? `<button class="info-btn" onclick="event.stopPropagation();DisplayList.showFeatureModal('${d.id}')">详情</button>` : ''}
+                                ${d.browserInfo || d.androidControlPageSupported ? `<button class="info-btn" onclick="event.stopPropagation();DisplayList.showFeatureModal('${d.id}')">详情</button>` : ''}
                                 <button class="info-btn" onclick="event.stopPropagation();DisplayList.showCapabilityEditor('${d.id}')" title="能力设置">⚙️</button>
                             </div>
                         </div>
@@ -220,12 +220,12 @@ const DisplayList = {
     
     showFeatureModal(displayId) {
         const display = this.list.find(d => d.id === displayId);
-        if (!display || !display.browserInfo) return;
+        if (!display) return;
         
         const bi = display.browserInfo;
         
         const browserDetail = document.getElementById('browserDetail');
-        browserDetail.innerHTML = `
+        const browserRows = bi ? `
             <div class="browser-detail-row">
                 <span class="browser-detail-label">浏览器</span>
                 <span class="browser-detail-value">${bi.browserName} ${bi.browserVersion}</span>
@@ -250,7 +250,22 @@ const DisplayList = {
                 <span class="browser-detail-label">IP 地址</span>
                 <span class="browser-detail-value">${display.ip || 'unknown'}</span>
             </div>
-        `;
+        ` : '<div style="text-align:center;color:#666;padding:12px;">暂无浏览器信息</div>';
+        const androidControlRow = display.androidControlPageSupported ? `
+            <div class="browser-detail-row">
+                <span class="browser-detail-label">Android 控制端</span>
+                <label class="chat2api-checkbox">
+                    <input type="checkbox" id="androidControlPageToggle" ${display.androidControlPageOpen ? 'checked' : ''}>
+                    <span>开放 Android 控制端</span>
+                </label>
+            </div>
+            <div style="color:#888;font-size:12px;margin:4px 0 12px;">开启后，该 Android 显示端会显示控制端入口；关闭后立即隐藏。</div>
+        ` : '';
+        browserDetail.innerHTML = browserRows + androidControlRow;
+        const androidControlToggle = document.getElementById('androidControlPageToggle');
+        if (androidControlToggle) {
+            androidControlToggle.addEventListener('change', (event) => this.setAndroidControlPage(displayId, event.target.checked));
+        }
         
         const featureList = document.getElementById('featureList');
         if (bi.featureSupport && bi.featureSupport.length > 0) {
@@ -270,6 +285,36 @@ const DisplayList = {
         }
         
         document.getElementById('featureModal').classList.add('active');
+    },
+
+    setAndroidControlPage(displayId, enabled) {
+        const display = this.list.find(item => item.id === displayId);
+        if (!display || display.androidControlPageSupported !== true) {
+            if (window.showToast) window.showToast('该显示端不支持 Android 控制端', 'error');
+            return;
+        }
+        const socket = window.WebSocketManager && window.WebSocketManager.ws;
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            if (window.showToast) window.showToast('控制端连接已断开，无法更新 Android 控制端状态', 'error');
+            return;
+        }
+        socket.send(JSON.stringify({ type: 'setAndroidControlPage', displayId, enabled: enabled === true }));
+    },
+
+    handleAndroidControlPageUpdated(data) {
+        const display = this.list.find(item => item.id === data.displayId);
+        if (!display) return;
+        display.androidControlPageOpen = data.enabled === true;
+        const toggle = document.getElementById('androidControlPageToggle');
+        if (toggle) toggle.checked = display.androidControlPageOpen;
+        this.render();
+    },
+
+    handleAndroidControlPageError(data) {
+        const toggle = document.getElementById('androidControlPageToggle');
+        const display = this.list.find(item => item.id === data.displayId);
+        if (toggle && display) toggle.checked = display.androidControlPageOpen === true;
+        if (window.showToast) window.showToast(data.message || 'Android 控制端状态更新失败', 'error');
     },
     
     closeFeatureModal() {

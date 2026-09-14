@@ -61,3 +61,19 @@ test('控制端 Chat2API 支持手动编辑模型映射', () => {
   assert.match(source, /method: 'POST'/);
   assert.match(source, /model-mappings/);
 });
+
+test('控制端显示 Android 控制端开关并发送按设备的更新消息', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'display-list.js'), 'utf8');
+
+  assert.match(source, /setAndroidControlPage/);
+  assert.match(source, /androidControlPageOpen/);
+  assert.match(source, /开放 Android 控制端/);
+});
+
+test('Chat2API Android 登录优先调用 NativeControl，未提供桥接时保留手工回退', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'chat2api.js'), 'utf8');
+
+  assert.match(source, /openChat2ApiLogin/);
+  assert.match(source, /completeNativeLogin/);
+  assert.match(source, /window\.open/);
+});

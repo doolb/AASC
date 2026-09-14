@@ -218,8 +218,49 @@
         this.loginSession = await this.request('/api/chat2api/oauth/start', { method: 'POST', body: JSON.stringify({ providerId }) });
         const completeButton = document.getElementById('chat2apiCompleteLogin');
         if (completeButton) completeButton.hidden = false;
+        if (this.loginSession.androidWebView
+          && window.NativeControl
+          && typeof window.NativeControl.openChat2ApiLogin === 'function') {
+          const opened = window.NativeControl.openChat2ApiLogin(JSON.stringify(this.loginSession));
+          if (opened) {
+            this.message('已在 Android 隔离登录页打开官方页面，完成登录后会自动验证并保存账号。');
+            return;
+          }
+          this.message('Android 隔离登录页打开失败，已回退到手工凭据方式。', true);
+        }
         const loginWindow = window.open(this.loginSession.loginUrl, '_blank', 'noopener');
         this.message(loginWindow ? '已打开官方登录页，登录后将 Token/Cookie 粘贴到下方。' : '浏览器阻止了弹窗，请手动打开登录地址：' + this.loginSession.loginUrl);
+      } catch (error) { this.message(error.message, true); }
+    },
+
+    async completeNativeLogin(result) {
+      if (!this.loginSession) {
+        this.message('没有等待完成的 Android 登录。', true);
+        return;
+      }
+      if (!result || result.success !== true) {
+        this.message(result && result.error ? result.error : 'Android 登录未完成。', true);
+        return;
+      }
+      if (result.state !== this.loginSession.state || result.providerId !== this.loginSession.providerId) {
+        this.message('Android 登录结果与当前登录会话不匹配。', true);
+        return;
+      }
+      try {
+        await this.request('/api/chat2api/oauth/complete', {
+          method: 'POST',
+          body: JSON.stringify({
+            state: this.loginSession.state,
+            providerId: this.loginSession.providerId,
+            credentials: result.credentials && typeof result.credentials === 'object' ? result.credentials : {},
+          }),
+        });
+        this.loginSession = null;
+        this.message('登录成功，账号已保存。');
+        if (window.NativeControl && typeof window.NativeControl.closeChat2ApiLogin === 'function') {
+          window.NativeControl.closeChat2ApiLogin();
+        }
+        await this.refresh();
       } catch (error) { this.message(error.message, true); }
     },
 

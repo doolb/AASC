@@ -91,6 +91,14 @@ const WebSocketManager = {
             if (window.DeviceList) {
                 window.DeviceList.handleCapabilitiesUpdateError(data);
             }
+        } else if (data.type === 'displayControlAccessUpdated') {
+            if (window.DisplayList) {
+                window.DisplayList.handleAndroidControlPageUpdated(data);
+            }
+        } else if (data.type === 'displayControlAccessError') {
+            if (window.DisplayList) {
+                window.DisplayList.handleAndroidControlPageError(data);
+            }
         } else if (data.type === 'displayRecordingModeChanged') {
             if (window.DeviceList) {
                 window.DeviceList.handleDisplayRecordingModeChanged(data);
