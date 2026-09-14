@@ -1,7 +1,9 @@
 package com.aasc.display
 
 import java.io.File
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NodeServerServiceTest {
@@ -65,6 +67,43 @@ class NodeServerServiceTest {
         assertEquals("1", environment["AASC_ANDROID_NODE"])
         assertEquals("https://192.168.1.39:8081", environment["AASC_MAIN_SERVER_URL"])
         assertEquals("/dev/null", environment["OPENSSL_CONF"])
+    }
+
+    @Test
+    fun Node运行环境信任APK内置主服务器证书() {
+        val root = Files.createTempDirectory("aasc-node-environment").toFile()
+        val certificate = File(root, "res/certs/cert.pem")
+        certificate.parentFile?.mkdirs()
+        certificate.writeText("test-certificate")
+
+        try {
+            val environment = NodeServerService.buildNodeEnvironment(
+                root,
+                "https://127.0.0.1:8081",
+                "apk-0.1"
+            )
+
+            assertEquals(certificate.absolutePath, environment["NODE_EXTRA_CA_CERTS"])
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun Node运行环境缺少APK内置证书时不注入证书变量() {
+        val root = Files.createTempDirectory("aasc-node-environment-missing-cert").toFile()
+
+        try {
+            val environment = NodeServerService.buildNodeEnvironment(
+                root,
+                "https://127.0.0.1:8081",
+                "apk-0.1"
+            )
+
+            assertNull(environment["NODE_EXTRA_CA_CERTS"])
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     @Test

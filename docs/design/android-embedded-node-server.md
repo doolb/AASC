@@ -10,6 +10,7 @@
 - Runtime 输入使用 Android 可执行 Node 二进制及其动态库；当前已验证 Termux 官方 arm64 `nodejs 26.4.0-1` 可在 API 26+ 设备执行，Runtime 本身不提交仓库。
 - Android 前台 `NodeServerService` 启动 `server-launcher.js`；launcher 再 fork `server-app.js`，保持现有双进程模型。
 - Service 为 Node 设置私有 `HOME`、`LD_LIBRARY_PATH` 和 `OPENSSL_CONF=/dev/null`，避免 Termux 默认 OpenSSL 配置路径不可访问导致进程退出。
+- Service 为 Node 子进程设置 `NODE_EXTRA_CA_CERTS` 指向 APK 内置的 `res/certs/cert.pem`，让本地 HTTPS Responses 请求信任同一套主服务器证书，同时保留 Node.js 其他 HTTPS 连接的默认证书和主机名校验。
 - APK 只启用 HTTP/HTTPS、WebSocket、AASC 主动连接和媒体库能力；任务 runner、Puppeteer、Codex/Claude 外部 Agent、ASR/外部 TTS 服务均不在 APK 节点启动。
 - Android 9/API 28 的共享存储媒体库继续通过 READ/WRITE_EXTERNAL_STORAGE 和 Node `fs` 访问；Android 10/API 29 及以上由 MainActivity 持久化 SAF 目录授权，Node 通过 APK 原生 SAF 网关访问虚拟根 `/`，不申请 MANAGE_EXTERNAL_STORAGE。
 - APK 媒体库配置中的 `~/` 和 `~/子路径` 映射到 `getExternalFilesDir(null)`，典型路径为 `/storage/emulated/0/Android/data/com.aasc.display/files`；Node 内部 `HOME` 和配置目录继续保留在 APK 私有目录。

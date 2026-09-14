@@ -124,6 +124,7 @@ NodeServerService.start
     → 启动 SafMediaServer；将回环 URL 和随机 token 写入 Node 环境
     → 设置 LD_LIBRARY_PATH 为私有 Runtime 动态库目录
     → 设置 OPENSSL_CONF=/dev/null，避免访问 Termux 私有配置路径
+    → 若 APK 私有目录存在 res/certs/cert.pem，则设置 NODE_EXTRA_CA_CERTS 为该路径；仅让该 Node 子进程信任 APK 内置主服务器证书，保留其他 HTTPS 默认校验
     → 设置 AASC_SERVER_VERSION 和 Android 能力环境变量
     → ProcessBuilder 启动 applicationInfo.nativeLibraryDir/libaasc_node.so server-launcher.js --no-tui
     → 若 nativeLibraryDir 中没有可执行文件，启动失败并进入重试；不回退到不可执行的 assets/runtime/arm64-v8a/node

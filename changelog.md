@@ -8053,3 +8053,11 @@
   - ASR：`你好，小爱.wav` 经显示端原生 ASR 路由返回“你好，小爱。”，HTTP 200，并带回 `asrElapsedMs`/`voiceprintElapsedMs`。
   - TTS：显示端原生 TTS 生成 `audio/wav`，最近一次文件 `141046` bytes、HTTP 200；控制端播放链路收到 `TTS 当前句完成: ended`。
   - 关联任务：`docs/task/2026-09-13_android-offline-mnnchat-default-model.md`；定向 Android/Node 测试 30/30 通过。
+
+### Android APK / HTTPS
+
+- ✅ [2026-09-14] 修复 offline APK 的 Node Responses 客户端不信任内置 HTTPS 证书问题
+  - `NodeServerService` 在 APK 私有目录存在 `res/certs/cert.pem` 时向 Node 子进程注入 `NODE_EXTRA_CA_CERTS`；证书缺失时不注入，不关闭 TLS 校验。
+  - 更新 `docs/design/android-embedded-node-server.md`、`docs/spec/android-embedded-node-server.md`、`docs/task/2026-09-14_Android_Node信任内置HTTPS证书.md` 和 `docs/todo.md`；新增 `NodeServerServiceTest` 证书存在/缺失回归用例。
+  - APK 已重建并安装到 `192.168.1.6:5555` display 2；配置为 `https://127.0.0.1:8081/v1`，默认模型为 `qwen3.5-0.8b-claude-opus-distilled-mnn`。
+  - 验证：Gradle 单元测试 134/134；真实聊天 `chatResponse success:true` 且收到 108 个 chunk；ASR HTTP 200 返回“你好，小爱。”；TTS HTTP 200 并生成可访问 WAV。全量 `npm test` 为 727 项通过 726 项，唯一失败为既有 Windows 输入声纹配置契约。

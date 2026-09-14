@@ -64,6 +64,7 @@ class NodeServerService : Service() {
             val libraryPath = listOf(runtimeLibraryPath, inheritedLibraryPath)
                 .filter { it.isNotEmpty() }
                 .joinToString(File.pathSeparator)
+            val bundledCertificate = File(rootDir, "res/certs/cert.pem")
             val environment = mutableMapOf(
                 "HOME" to File(rootDir, "home").absolutePath,
                 "LD_LIBRARY_PATH" to libraryPath,
@@ -75,6 +76,12 @@ class NodeServerService : Service() {
                 "AASC_SERVER_VERSION" to serverVersion,
                 "AASC_MAIN_SERVER_URL" to serverUrl
             )
+            if (bundledCertificate.isFile) {
+                // 证书随 APK 安装到私有目录，只给 Node 子进程增加这一份受信任 CA，
+                // 使内部 HTTPS Responses 请求可以校验主服务器自签名证书；不关闭 TLS 校验，
+                // 证书缺失时也不注入无效路径，避免非证书构建产生启动告警。
+                environment["NODE_EXTRA_CA_CERTS"] = bundledCertificate.absolutePath
+            }
             if (!safBaseUrl.isNullOrBlank() && !safToken.isNullOrBlank()) {
                 environment["AASC_ANDROID_SAF_URL"] = safBaseUrl
                 environment["AASC_ANDROID_SAF_TOKEN"] = safToken
