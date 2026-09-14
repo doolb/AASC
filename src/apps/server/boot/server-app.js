@@ -547,7 +547,7 @@ const aiRoles = new AiRolesService({
 const piRuntimeManager = new PiRuntimeManager({
     projectRoot: PROJECT_ROOT,
     // 普通聊天、任务和 Pi Agent 共用内置 Chat2API Responses 入口，避免 Pi 继续读取旧 profile 地址。
-    responsesBaseUrl: config.get('chat.responsesBaseUrl', 'http://127.0.0.1:8083/v1')
+    responsesBaseUrl: config.get('chat.responsesBaseUrl', 'http://127.0.0.1:8081/v1')
 });
 const codexRuntimeManager = new CodexRuntimeManager({
     projectRoot: PROJECT_ROOT,

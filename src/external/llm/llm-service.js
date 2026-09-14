@@ -35,7 +35,7 @@ let chatConfig = {
     agentBackend: 'codex',
     codexProxy: 'http://127.0.0.1:7899',
     protocol: 'openai-responses',
-    responsesBaseUrl: 'http://127.0.0.1:8083/v1',
+    responsesBaseUrl: 'http://127.0.0.1:8081/v1',
     responsesApiKey: '',
     apiUrl: 'http://192.168.1.12:8080/v1/chat/completions',
     model: 'gpt-3.5-turbo',
@@ -277,7 +277,7 @@ function normalizeChatTransport(config = {}) {
         : 'openai-responses';
     return {
         protocol,
-        baseUrl: config.responsesBaseUrl || 'http://127.0.0.1:8083/v1'
+        baseUrl: config.responsesBaseUrl || 'http://127.0.0.1:8081/v1'
     };
 }
 

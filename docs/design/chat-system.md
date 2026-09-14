@@ -70,7 +70,7 @@
 - `protocol=openai-completions` 时，使用当前 LLM profile 的 `apiUrl`、`apiKey` 和模型配置，请求 profile 中保存的 Chat Completions 地址。
 - profile 中的 `apiUrl` 标签必须明确写成“Chat Completions API URL”，不能让用户误以为它同时控制 Responses 请求。
 - 控制端通过现有 `/api/chat/config` 配置流程读写协议字段，服务端返回规范化后的权威配置；配置断线或字段缺失时，前端默认使用 `openai-responses` 和 `http://127.0.0.1:8081/v1`。
-- 当前主服务默认使用本机 `127.0.0.1:8081` 的 Responses 网关；offline APK 使用的局域网地址 `192.168.1.6:8081` 属于独立节点配置，不写入主服务默认聊天配置。
+- 当前主服务和 offline APK 统一使用本机 `http://127.0.0.1:8081/v1` 作为 Responses 基地址。offline APK 内置 Node 服务缺少持久化配置时，也必须回退到该地址；`127.0.0.1` 在 APK 内表示 APK 所在设备。
 
 ## 功能设计
 

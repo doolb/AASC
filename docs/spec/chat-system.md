@@ -125,6 +125,10 @@ chat(userMessage):
         请求 responsesBaseUrl + '/responses'
     否则:
         请求当前 profile.apiUrl（Chat Completions）
+
+offline APK 启动:
+    内置 Node 服务的 Responses 默认基地址 = 'http://127.0.0.1:8081/v1'
+    配置缺失或为空时，配置服务、LLM 服务、服务器入口和 llm.chat 任务均使用该默认值
 ```
 
 ## 核心模块实现
