@@ -1,5 +1,14 @@
 # Web MediaCenter - 变更日志
 
+## Android Chat2API 登录与控制端开放
+
+- ✅ [2026-09-14] 普通 APK 增加按显示端开放控制端入口和隔离 WebView Chat2API 登录链路。
+  - 服务端按显示端持久化 `androidControlPageOpen`，校验 Android 能力后通过 WebSocket 下发；控制端开关放在选中的显示端详情/功能面板中，关闭后立即隐藏 Android 控制端。
+  - Android 普通/离线 APK 共用原生桥和独立登录进程；登录 WebView 捕获 Provider 预定义的 Authorization、localStorage 和 Cookie，结束时清理 Cookie、WebStorage、缓存和历史记录；服务端使用 Provider 接口验证成功后才保存账号，失败时保留 OAuth state 供重试。
+  - 覆盖 DeepSeek、GLM、Kimi、MiniMax、MiMo、Perplexity、Qwen、Qwen AI 和 Z.ai 的捕获配置与验证适配；不新增桌面 Electron 登录助手，不增加页面/动作白名单。
+  - 改动文件：`src/apps/server/modules/chat2api/`、`src/apps/server/modules/display/android-control-page-access.js`、`src/apps/server/boot/server-app.js`、`src/framework/transport/ws/connection.js`、控制端 `display-list.js`/`websocket.js`/`chat2api.js`、Android `MainActivity.kt`/`NativeBridge.kt`/`Chat2Api*.kt`/`AndroidControlAccess.kt`/Manifest，以及对应 design/spec/task/todo 文档和回归测试。
+  - 验证：`npm run check:chat2api` 84/84、服务端/显示端/控制端合并定向回归 83/83、Android JVM 单元测试和普通 APK Debug 构建通过；APK 已安装到 `192.168.1.6:5555` 并完成启动无崩溃冒烟。按本次范围未构建离线 APK，真实 Provider 账号登录待现场验收。
+
 ## 聊天协议配置
 
 - ✅ [2026-09-13] 修复聊天协议与接口地址不匹配导致 Android 端连接 `127.0.0.1` 失败的问题。

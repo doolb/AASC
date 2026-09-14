@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-13）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-14）
 
 ## 控制端
 
@@ -59,9 +59,10 @@
 
 ## Android APK
 
-# Android Chat2API 登录与控制端开放
-
-- [进行中] Android 普通/离线 APK 支持隔离 WebView Provider 登录、凭据捕获、服务端验证，以及按显示端开放控制端入口。
+- ⏳待现场验收 [2026-09-14] Chat2API Android Provider 真实网页登录验证
+  - 普通 APK 已完成构建、安装和启动冒烟；仍需使用测试账号验证网页登录、Authorization/localStorage/Cookie 捕获、Provider 接口校验和账号保存。
+  - 离线 APK 按本次范围暂未构建，后续与普通 APK 共用代码进行独立打包验收。
+  - 关联文档：`docs/design/android-chat2api-login-control.md`；`docs/spec/android-chat2api-login-control.md`；`docs/task/20260914_Android Chat2API登录与显示端控制端开放.md`。
 
 - 🔄进行中 [2026-09-13] Android 子服务器媒体库 `~/` 映射到应用专属外部目录
   - 目标目录为 `/storage/emulated/0/Android/data/com.aasc.display/files`，需完成旧字面 `~` 目录迁移和 APK 真机验证。

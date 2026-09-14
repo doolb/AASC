@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为普通 Android APK 和 Android Offline APK 增加按显示端开放控制端入口，并完成隔离 WebView 的 Chat2API Provider 自动登录、凭据捕获、服务端验证和账号保存。
+**Goal:** 为普通 Android APK 和 Android Offline APK 增加按显示端开放控制端入口，并完成隔离 WebView 的 Chat2API Provider 自动登录、凭据捕获、服务端验证和账号保存。本次执行按用户范围只构建和验收普通 APK。
 
 **Architecture:** 服务端保存每个显示端的 `androidControlPageOpen`，通过 WebSocket 向声明 Android 能力的显示端发送权威可见性状态。Android 通过独立进程中的登录 Activity/WebView 捕获 Provider 预定义的 Authorization、localStorage 和 Cookie，控制 WebView 只提交候选凭据，AASC Chat2API 服务端验证成功后保存账号。
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - 本次只实现 Android APK；不增加桌面 Electron 登录助手。
-- 普通 APK 和离线 APK 共用 Android 原生登录和控制端入口代码。
+- 普通 APK 和离线 APK 共用 Android 原生登录和控制端入口代码；本次只构建普通 APK，离线 APK 留待后续单独验收。
 - `androidControlPageOpen` 默认 `false`，按显示端 ID 持久化。
 - Provider 捕获只允许内置配置的域名、Authorization、localStorage 和 Cookie 字段。
 - 完整凭据不得写入日志、显示列表、任务参数或普通持久化状态。
@@ -439,13 +439,13 @@ Expected: PASS，所有输出不包含测试 Token 原文。
 
 Run: `npm run build:apk`
 
-Run: `npm run build:apk:offline`
+本次不执行 `npm run build:apk:offline`。仅运行 `npm run build:apk`。
 
-Expected: 普通 APK 和 Offline APK 均构建成功，Manifest 包含独立登录 Activity，Node HTTPS 默认地址仍为 `https://127.0.0.1:8081`。
+Expected: 普通 APK 构建成功，Manifest 包含独立登录 Activity，Node HTTPS 默认地址仍为 `https://127.0.0.1:8081`。
 
 - [ ] **Step 4: 真机验收**
 
-在 Android 设备上打开普通 APK 和 Offline APK，确认：服务端关闭开关时无控制端按钮；按设备开启后按钮出现；控制 WebView 可打开 `/control`；Chat2API Provider 登录 WebView 能捕获并验证测试账号；关闭开关立即隐藏控制页。
+本次仅在 Android 设备上打开普通 APK，确认：服务端关闭开关时无控制端按钮；控制 WebView 可打开 `/control`；关闭开关立即隐藏控制页。Provider 登录 WebView 的真实账号捕获和验证、Offline APK 验收留待后续现场测试。
 
 - [ ] **Step 5: Update documentation and close task**
 

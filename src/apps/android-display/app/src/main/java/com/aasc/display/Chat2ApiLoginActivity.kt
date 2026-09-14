@@ -104,7 +104,7 @@ class Chat2ApiLoginActivity : Activity() {
     }
 
     override fun onDestroy() {
-        authWebView?.stopCapture()
+        authWebView?.clearLoginData()
         authWebView?.destroy()
         authWebView = null
         super.onDestroy()

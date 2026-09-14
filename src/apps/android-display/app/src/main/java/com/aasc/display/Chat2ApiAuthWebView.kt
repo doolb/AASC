@@ -7,6 +7,7 @@ import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONArray
@@ -60,6 +61,19 @@ class Chat2ApiAuthWebView(
         if (stopped.compareAndSet(false, true)) {
             mainHandler.removeCallbacksAndMessages(null)
         }
+    }
+
+    /**
+     * 登录流程结束后清理隔离进程中的临时认证数据，避免下一个 Provider 登录复用本次会话。
+     * Cookie、Web Storage、缓存和历史记录都不属于已保存账号的一部分，统一在 Activity 销毁前删除。
+     */
+    fun clearLoginData() {
+        stopCapture()
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+        WebStorage.getInstance().deleteAllData()
+        clearCache(true)
+        clearHistory()
     }
 
     private fun captureRequest(url: String, headers: Map<String, String>?) {

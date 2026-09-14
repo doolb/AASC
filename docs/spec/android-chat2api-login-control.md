@@ -31,7 +31,8 @@ server getDisplayList():
             id,
             capabilities,
             androidControlPageSupported = capabilities.androidControlPage == true,
-            androidControlPageOpen = state.androidControlPageOpen == true
+            androidControlPageOpen = capabilities.androidControlPage == true
+                and state.androidControlPageOpen == true
         }
 ```
 
@@ -99,8 +100,7 @@ server oauth.start(providerId):
     profile = androidLoginProfiles[providerId]
     session = dataStore.createOAuthSession({
         providerId,
-        loginUrl: provider.loginUrl,
-        captureProfile: profile
+        loginUrl: provider.loginUrl
     })
     return {
         state: session.state,
@@ -166,7 +166,7 @@ Chat2ApiAuthWebView polling:
 Chat2ApiLoginActivity finish:
     停止轮询
     删除页面回调
-    清理 WebView、Cookie、WebStorage 和临时页面
+    清理 WebView、Cookie、WebStorage、缓存和历史记录
     返回 success、state、providerId、credentials 或安全错误码
 ```
 
@@ -191,3 +191,11 @@ oauth.complete(input):
 ```
 
 Provider 验证器按 `/mnt/Chat2API/src/main/oauth/adapters` 的现有校验逻辑迁移到 AASC 适配层；请求由注入的 `httpClient` 执行，测试使用假 HTTP 客户端，不访问真实账号。
+
+## 实现状态与验证边界
+
+```text
+已实现：服务端 OAuth 捕获配置/Provider 验证、显示端控制端开放协议、控制端详情开关、Android 原生桥和独立登录 Activity/WebView
+已验证：Node Chat2API/显示端定向测试、Android JVM 单元测试、普通 APK Debug 构建/安装/启动
+未执行：Offline APK 构建；Provider 真实账号网页登录和接口验证
+```

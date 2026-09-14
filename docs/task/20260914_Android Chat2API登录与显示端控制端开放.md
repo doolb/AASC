@@ -4,6 +4,10 @@
 
 为普通 Android APK 和 Android Offline APK 增加显示端控制端开放开关，并在 Android 控制端内使用隔离 WebView 完成 Chat2API Provider 网页登录、Authorization/localStorage/Cookie 捕获、Provider 接口验证和账号保存。
 
+## 执行状态
+
+实现已完成。本次只按用户确认范围构建和测试普通 APK；离线 APK 未构建，Provider 真实账号网页登录留待现场使用测试账号验收。
+
 ## design 需求
 
 - 使用 `docs/design/android-chat2api-login-control.md` 的 Android 专用方案。
@@ -24,8 +28,9 @@
 
 - 服务端显示端状态、WebSocket、控制端显示列表：`src/apps/server/boot/server-app.js`、`src/framework/transport/ws/connection.js`、`src/apps/web-mediacenter/ui/public/js/display-list.js`、`src/apps/web-mediacenter/ui/public/js/websocket.js`。
 - Chat2API Provider 登录配置、OAuth 验证、任务运行时：`src/apps/server/modules/chat2api/chat2api-login-profiles.js`、`src/apps/server/modules/chat2api/chat2api-credential-validators.js`、`chat2api-oauth-service.js`、`chat2api-runtime.js`、`chat2api-data-store.js`。
-- Android 原生入口和登录容器：`MainActivity.kt`、`NativeBridge.kt`、新增 `Chat2ApiNativeBridge.kt`、`Chat2ApiLoginActivity.kt`、`Chat2ApiAuthWebView.kt`、`Chat2ApiCredentialCapture.kt`、`activity_main.xml`、`AndroidManifest.xml`。
-- 控制端 Chat2API 登录：`src/apps/web-mediacenter/ui/public/js/chat2api.js`。
+- Android 原生入口和登录容器：`MainActivity.kt`、`NativeBridge.kt`、新增 `AndroidControlAccess.kt`、`Chat2ApiNativeBridge.kt`、`Chat2ApiLoginActivity.kt`、`Chat2ApiAuthWebView.kt`、`Chat2ApiCredentialCapture.kt`、`activity_main.xml`、`AndroidManifest.xml`。
+- 控制端 Chat2API 登录和显示端详情开关：`src/apps/web-mediacenter/ui/public/js/chat2api.js`、`display-list.js`、`websocket.js`。
+- 回归测试：`chat2api-android-login.test.js`、`tests/android-control-page-access.test.js`、`Chat2ApiCredentialCaptureTest.kt`、`ServerConfigTest.kt`。
 - 文档：本任务对应 design/spec、`docs/todo.md`、`changelog.md`。
 
 ## 自测用例
@@ -64,3 +69,10 @@
 ## 预计工时
 
 服务端协议与验证 1.5 天，Android 隔离 WebView 与页面桥接 2 天，控制端开关与状态同步 1 天，测试和 APK 真机验收 1.5 天，合计约 6 个工作日。
+
+## 实际执行结果
+
+- Node：`npm run check:chat2api` 通过，84/84；显示端控制端和 Chat2API 合并定向回归通过，83/83；新增 Android 登录候选保存、失败重试和敏感字段不回显测试通过。
+- Android：在固定 MNN checkout `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 下执行 `:app:testDebugUnitTest`，构建成功；包括凭据捕获、控制端按钮和控制端地址测试。
+- 普通 APK：`npm run build:apk` 构建成功，安装到 `192.168.1.6:5555` 并启动 `com.aasc.display/.MainActivity`，进程正常且无 `AndroidRuntime` 崩溃日志；Manifest 包含独立进程 `Chat2ApiLoginActivity`。
+- 本次未执行 `npm run build:apk:offline`，也未使用真实 Provider 账号完成网页登录、凭据捕获和接口验证；这些作为后续现场验收项保留。

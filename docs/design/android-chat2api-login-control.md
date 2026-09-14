@@ -90,3 +90,10 @@ Android 登录 WebView：
 - Android 设备只负责捕获和提交候选凭据，账号持久化和 Provider 验证仍由本地 Node Chat2API 服务完成。
 - 控制端开关是显示端入口授权，不等同于 Chat2API API Key 鉴权。
 - Android WebView、服务端和控制端都禁止输出完整 Token、Cookie、Authorization 和 API Key。
+
+## 实现状态与本次验收
+
+- 服务端已实现按显示端保存 `androidControlPageOpen`、能力校验、断线重连补发和控制端权威广播。
+- 控制端开关位于选中的 Android 显示端详情/功能面板中，不放在设备卡片本身；Chat2API 登录优先调用 Android 原生桥，桌面端仍保留原有手工登录回退。
+- 普通 APK 和离线 APK 共用原生控制端及隔离登录 WebView 代码；本次按范围只重新构建、安装和启动普通 APK，未构建离线 APK。
+- 普通 APK 已完成真机启动冒烟和无崩溃检查；Provider 真实网页登录需要测试账号，暂留现场验收，不将测试凭据写入项目或日志。
