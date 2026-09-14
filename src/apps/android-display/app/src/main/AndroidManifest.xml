@@ -39,6 +39,13 @@
             </intent-filter>
         </activity>
 
+        <!-- 登录 WebView 使用独立进程和独立 Cookie/LocalStorage 数据目录，禁止外部应用启动。 -->
+        <activity
+            android:name=".Chat2ApiLoginActivity"
+            android:exported="false"
+            android:process=":chat2api_login"
+            android:screenOrientation="portrait" />
+
         <service
             android:name=".DisplayAccessibilityService"
             android:exported="false"
