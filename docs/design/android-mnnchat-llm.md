@@ -446,6 +446,16 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 显示端服务被转发后，HTTP 请求仍先到 AASC `8081`，再经 `task:route_request` 到达对应显示端，并以 `task:route_response` 返回；因此网页无需具备端口监听能力。路由注销函数由任务保存并在停止时调用，任务引擎还会在启动失败、服务替换、实例删除、显示端断开和自身销毁时兜底清理。
 
 每台运行 AASC 的设备各自使用 `8081`，不同设备上的相同路径互不冲突；同一设备不提供跨设备统一负载均衡。`llm-server` 在服务端目标注册四个 OpenAI 兼容路径；显式转发到 Android 显示端时，则由显示端本地 MNN-LLM handler 注册并执行这些路径。
+
+## 2026-09-14 Android offline 网关启动与语音模型复用增量
+
+Android 子服务器保留“禁止创建服务端子进程”的能力边界，但允许 `mode=service` 的服务任务在 `server-app` 当前 Node 进程内运行。`llm-server` 属于此类任务：它只注册 HTTP 路由并调用已经注入的 LLM 网关处理器，不创建 Node/Puppeteer/Wine/CLI 子进程。需要任务 Runner 或其他服务端子进程的任务仍返回明确的 Android 不支持错误。
+
+`/v1/models`、`/v1/chat/completions`、`/v1/responses` 和 `/v1/chat/responses` 的所有权归 `llm-server` 任务。主服务只保留同路径的结构化 `503` 未启动兜底，任务路由中间件优先处理；因此 `llm-server` 启动失败时端口可以正常监听，但 `/v1` 不会伪装成可用网关。
+
+offline APK 的 Node 启动完成任务引擎恢复后，调用通用的内置服务确保入口自动创建并运行 `llm-server` 实例。已有 running 实例复用，失败或停止历史不覆盖，首次启动会写入普通任务实例索引，后续重启沿用任务恢复流程。
+
+offline APK 构建时从当前 `config/config.json` 只提取 `llm` 和 `chat` 配置为首次安装种子；安装器仅在 `files/aasc-server/config/config.json` 不存在时写入，已有用户配置永不覆盖。原生 ASR/TTS 在 offline 模式将模型目录指向 `files/aasc-server/res/models/sensevoice` 和 `files/aasc-server/res/models/tts`，不再在 `files/models` 生成第二份；内置模型校验失败时保留资源并报告错误，不删除 APK 解包的模型。
 ## 外部模型名映射
 
 主服务器允许 OpenAI 兼容客户端使用外部模型名，服务端在请求进入路由前解析为模型清单中的内部 `modelId`。模型别名只影响网关请求入口，APK、显示端状态和模型下载始终使用内部 `modelId`。
@@ -492,3 +502,11 @@ HTTP 客户端主动关闭流式响应后，服务端向目标显示端发送 `l
 ## offline APK display 2 真机验收
 
 offline APK 安装后通过 Android `--display 2 --windowingMode 1` 启动，实际窗口为 `1920x1080` 全屏。显示端能力确认原生 ASR 和原生 TTS 可用：SenseVoice 测试音频“你好，小爱。”经 `/api/asr/recognize` 路由到 display 2 后返回识别文本及 ASR/声纹耗时；TTS 通过 display 2 原生生成 WAV，并在普通播放链路中收到播放结束事件。该验收只验证现有语音链路，不改变 LLM、ASR 或 TTS 的配置和路由协议。
+
+## 2026-09-15 offline 首包解包启动优化
+
+首次安装 offline APK 时，Node Runtime 安装器先把随包文件解包到临时目录并完成 manifest 的大小与 SHA-256 校验，再将已校验的临时目录直接原子切换为正式 Runtime 目录。切换过程使用同一父目录下的重命名，避免把包含近 1 GB 模型的 `res/models` 再从 staging 复制一次。
+
+切换前保留用户可变数据目录，包括 `config`、`home`、`logs`、`res/tasks`、`res/uploads` 和 `res/temp`；新 Runtime 就位后将这些目录恢复到新目录，并仅在配置文件不存在时从随包种子初始化。切换失败时恢复旧 Runtime，避免首包解包中断后留下不可用目录。该优化不生成或预处理 `.mmap` 文件。
+
+本次真机复测先停止普通包并完全卸载 offline 包，再重新安装当前 APK。SM-N9500 的 display 2 首次启动完成 Runtime 解包、Node 服务启动和 `llm-server` 自动创建；默认 Qwen3.5 模型在 display 2 就绪，显示端原生 ASR/录音自动启动，`/v1/chat/completions` 返回非空正文。复测未生成 `.mmap` 文件。

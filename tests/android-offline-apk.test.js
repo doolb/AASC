@@ -39,6 +39,17 @@ test('Gradle 离线属性使用独立 applicationId、label 和版本后缀', ()
     assert.match(manifest, /\$\{appLabel\}/u);
 });
 
+test('offline APK WebView 录音声明 Android 音频采集所需权限', () => {
+    const manifest = read('src/apps/android-display/app/src/main/AndroidManifest.xml');
+
+    assert.match(manifest, /android\.permission\.RECORD_AUDIO/u);
+    assert.match(
+        manifest,
+        /android\.permission\.MODIFY_AUDIO_SETTINGS/u,
+        'WebView getUserMedia 需要 MODIFY_AUDIO_SETTINGS 才能创建录音设备'
+    );
+});
+
 test('显示端布局将控制端按钮放在 WebView 容器的顶层', () => {
     const layout = read('src/apps/android-display/app/src/main/res/layout/activity_main.xml');
     const strings = read('src/apps/android-display/app/src/main/res/values/strings.xml');
@@ -103,6 +114,18 @@ test('offline APK 默认显示控制端入口且不受服务端默认关闭值�
     assert.match(activity, /controlPageAllowed\s*=\s*effectiveAllowed/u);
 });
 
+test('控制端 WebView 位于显示端 WebView 之上且按钮保持可关闭', () => {
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+
+    assert.match(
+        activity,
+        /webContainer\.addView\(wv,\s*0\)[\s\S]*webContainer\.addView\(control,\s*1\)/u
+    );
+    assert.doesNotMatch(activity, /webContainer\.addView\(control,\s*0\)/u);
+});
+
 test('offline 启动遮罩不会被错误页 onPageFinished 隐藏', () => {
     const activity = read(
         'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
@@ -137,4 +160,43 @@ test('离线 APK 将 Qwen MNNChat 作为默认模型并直接加载安装目录'
     assert.match(activity, /NativeBridge\(wv, audioFocusController, offlineMode\)/u);
     assert.match(installer, /bundled-manifest\.json/u);
     assert.match(installer, /\.manifest\.json/u);
+});
+
+test('offline 原生 ASR/TTS 优先复用 aasc-server/res/models 且首次配置不覆盖用户数据', () => {
+    const bridge = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt'
+    );
+    const asr = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/AsrModelManager.kt'
+    );
+    const tts = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/TtsModelManager.kt'
+    );
+    const prepare = read('scripts/ops/prepare-android-node-runtime.js');
+    const installer = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NodeRuntimeInstaller.kt'
+    );
+
+    assert.match(bridge, /aasc-server[\\/]res[\\/]models/u);
+    assert.match(bridge, /AsrModelManager\([\s\S]{0,300}offlineVoiceModelDirectory\("sensevoice"\)/u);
+    assert.match(bridge, /TtsModelManager\([\s\S]{0,300}offlineVoiceModelDirectory\("tts"\)/u);
+    assert.match(asr, /modelDirectory: File\?/u);
+    assert.match(tts, /modelDirectory: File\?/u);
+    assert.match(tts, /manifest\.json/u);
+    assert.match(prepare, /offline-config\.json/u);
+    assert.match(installer, /offline-config\.json/u);
+    assert.match(installer, /config\/config\.json/u);
+});
+
+test('offline Runtime 首次安装在校验后直接原子切换，避免模型二次复制', () => {
+    const installer = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NodeRuntimeInstaller.kt'
+    );
+
+    assert.match(installer, /staging\.renameTo\(root\)/u);
+    assert.match(installer, /moveMutableDirectories/u);
+    assert.doesNotMatch(
+        installer,
+        /replaceDirectory\(root,\s*staging,\s*"res\/models"\)/u
+    );
 });

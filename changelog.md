@@ -1,5 +1,39 @@
 # Web MediaCenter - 变更日志
 
+## Android Offline APK 聊天回复
+
+- ✅ [2026-09-15] 修复 offline APK 发送聊天消息后无回复。
+  - offline 本机 LLM profile 自动归一化到内置 HTTPS 回环地址，仅对本机内置目标放宽自签名证书校验；外部 LLM 地址保持原协议和默认 TLS 校验。
+  - WSViewBind 控制端 `chatMessage` 与旧显示端 WebSocket 入口统一调用聊天处理器，恢复流式 `chatChunk` 和最终 `chatResponse` 回传。
+  - 改动文件：`src/apps/server/boot/server-app.js`、`src/external/llm/llm-service.js`、`src/external/llm/llm-responses-client.js`、对应 Responses/聊天配置回归测试及 design/spec/task 文档。
+  - 验证：相关 Node 回归测试 72/72；offline APK 构建成功；Display 2 真机 `/v1/models`、流式聊天和 `chatResponse(success=true)` 通过。
+  - 产物：`src/apps/android-display/app/build/outputs/apk/offline/aasc-display-offline.apk`，SHA-256 为 `09bbef2d8df7454422a45d6add2ebbdf09ecf959f7db3e7e377a7764abea82f2`。
+
+## Android Offline APK LLM 与原生语音模型
+
+- ✅ [2026-09-14] offline APK 自动启动 `llm-server`，并让原生 ASR/TTS 优先复用 `files/aasc-server/res/models`。
+  - Android 只拒绝需要外部 Runner/子进程的服务端任务；`llm-server` 服务模式在当前 Node 进程运行，并由任务上下文注册 `/v1` 路由；服务未运行时固定入口返回结构化 503。
+  - offline 首次启动自动创建唯一 `llm-server` 实例；构建时同步当前 `llm`/`chat` 配置种子，已有设备配置不覆盖。
+  - ASR 直接加载 `files/aasc-server/res/models/sensevoice`，TTS 直接加载 `files/aasc-server/res/models/tts`；不请求重复模型下载，不创建 `files/models/sensevoice` 或 `files/models/tts`。
+  - 修复 offline APK 生产依赖输入不完整导致的 `Cannot find module 'parseurl'`，使用完整 `npm ci --omit=dev --ignore-scripts` 依赖重新构建。
+  - 验证：Node 定向测试 35/35、Android JVM 单元测试 136/136、offline APK 构建成功；SM-N9500 Android 9/API 28 Display 2 全新安装后运行时解包、显示端连接、`/v1/models`、Chat Completions、Responses、ASR 和 TTS 均通过。
+  - 产物：`src/apps/android-display/app/build/outputs/apk/offline/aasc-display-offline.apk`，SHA-256 为 `e4f7554852443053d1cae5e47f21028096ee12f3124d5689720132d8f7c96025`。
+
+## Android Offline APK 录音
+
+- ✅ [2026-09-14] 修复 offline APK 显示端录音默认启动后显示“未就绪”。
+  - Android Manifest 增加 `MODIFY_AUDIO_SETTINGS`；保留 `RECORD_AUDIO` 运行时授权和 WebView 音频采集授权，修复 Chromium 无法创建录音设备的问题。
+  - 离线 APK 继续默认使用显示端录音和本地公共 ASR：`asr.serverEnabled=false`、`asr.device=display`；显示端监听默认开启。
+  - 验证：offline 静态回归 12/12、Android `:app:testDebugUnitTest` 构建成功；SM-N9500 Android 9/API 28 Display 2 页面显示“监听中 · 等待唤醒”，底噪检测/VAD 配置成功，未再出现音频设备不可用日志。
+  - 产物：`src/apps/android-display/app/build/outputs/apk/offline/aasc-display-offline.apk`，SHA-256 为 `51aa9ebf8fe1470ee987471685ac723e41748464a741140a859967b79b3f2cc5`。
+
+## Android Offline APK 控制端问题定位
+
+- ✅ [2026-09-14] 定位点击“控制端”后页面不可见的图层遮挡问题。
+  - 启动遮罩已隐藏且 display 页面正常显示；根因是 `MainActivity.kt` 使用 `webContainer.addView(control, 0)`，控制端 WebView 位于 display WebView 下方，被后绘制的 display WebView 覆盖。
+  - 已修复为 `webContainer.addView(control, 1)`，新增图层顺序回归测试；最新 APK 已在 Display 2 卸载重装并验证控制端页面可显示、可再次关闭。
+  - 验证：`tests/android-offline-apk.test.js` 11/11、Android `:app:testDebugUnitTest` 构建成功；APK SHA-256 为 `da6ef709c92167cf6aecd2886552de817f41044f8953172a044785e3cd438b31`。
+
 ## Android Offline APK 重打包
 
 - ✅ [2026-09-14] 合并 Chat2API 入口并重新打包 offline APK，默认关闭服务器 ASR/TTS。
@@ -8115,6 +8149,14 @@
   - APK 已重建并安装到 `192.168.1.6:5555` display 2；配置为 `https://127.0.0.1:8081/v1`，默认模型为 `qwen3.5-0.8b-claude-opus-distilled-mnn`。
   - 验证：Gradle 单元测试 134/134；真实聊天 `chatResponse success:true` 且收到 108 个 chunk；ASR HTTP 200 返回“你好，小爱。”；TTS HTTP 200 并生成可访问 WAV。全量 `npm test` 为 727 项通过 726 项，唯一失败为既有 Windows 输入声纹配置契约。
 
+### 聊天输出与私聊历史
+
+- ✅ [2026-09-15] 隐藏聊天 think 输出并修复私聊点击清空无反应。
+  - 新增 `src/external/llm/think-output-filter.js`，统一过滤 `<think>`/`<thinking>` 思考块、未闭合标签以及孤立 `</think>` 前的角色配置泄漏；普通 Responses、Chat Completions 和 Agent 流式回调、非流式回复、历史展示与 TTS 使用清洗后的正文。
+  - `src/apps/web-mediacenter/ui/public/js/chat.js` 的私聊清空请求补充当前 `target/sessionId` 规范化和当前助手未就绪提示；HTTP/业务失败不再静默。
+  - 更新 `docs/design/chat-output-filter.md`、`docs/spec/chat-output-filter.md`、`docs/spec/chat-system.md` 和任务文档；新增 `tests/chat-think-filter.test.js`、`tests/chat-clear-history.test.js`。
+  - 验证：聊天/LLM 定向回归 118 项中 117 项通过；唯一失败为已有默认模型映射配置测试与当前工作区配置不一致；Node 语法检查和 `git diff --check` 通过。`.mmap` 预生成未处理。
+
 ### Android MNNChat 模型映射
 
 - ✅ [2026-09-15] 默认保留 Qwen3.5 本地模型映射配置。
@@ -8124,3 +8166,17 @@
   - 已使用当前源码重新生成 offline APK；包内配置和 server 源码均包含该映射，APK 大小 1073094719 bytes，SHA-256 为 `7471f2db9f6f78a9e228399ae1e663c491e3d634233876663beb349b6a6dd53f`；未处理 `.mmap`。
   - 验证：模型路由定向测试 17/17、聊天/LLM 定向回归 118/118 通过；APK `unzip -tq` 通过。
   - 已安装到 `192.168.1.6:5555`（SM-N9500），`pm install -r` 返回 `Success`，设备端临时 APK SHA-256 与本地一致；未启动应用执行聊天/语音现场测试。
+
+### Android APK / 首包启动
+
+- ✅ [2026-09-15] 优化 offline APK 首次 Runtime 解包，避免模型二次复制
+  - `NodeRuntimeInstaller` 在 staging 完成 manifest 全量大小和 SHA-256 校验后，将旧 Runtime 重命名为同级 backup，再将 staging 直接重命名为正式目录；删除原有 staging 到 root 的代码、依赖和 `res/models` 二次复制。
+  - 升级时移动恢复 `config`、`home`、`logs`、`res/tasks`、`res/uploads`、`res/temp`，缺少配置时才使用随包种子；失败时恢复旧 Runtime。未生成 `.mmap`。
+  - 更新 `docs/design/android-mnnchat-llm.md`、`docs/spec/android-mnnchat-llm.md`、`docs/task/2026-09-15_offline首包启动解包优化.md`、`docs/todo.md` 和 offline APK 静态契约测试。
+  - 验证：Android JVM 单元测试和 offline Runtime/APK 定向测试通过；offline APK 构建成功，包内 43 个模型共 995405414 bytes，`unzip -tq` 通过；真机保留数据重新安装成功并在 display 2 启动，Node 服务和 `https://127.0.0.1:8081/display` 页面正常。
+  - 全量 `npm test` 为 756 项通过 755 项，唯一失败为既有 Windows 输入模式声纹契约测试。
+
+- ✅ [2026-09-15] 完成 offline APK 清空数据后的全新安装复测
+  - 停止普通包并完全卸载 `com.aasc.display.offline` 后重新安装当前 APK；SM-N9500 display 2 首次 Runtime 解包、Node HTTPS 8081、本地显示页和 WebSocket 连接均成功。
+  - offline 自动创建 `llm-server`，Qwen3.5 模型在 display 2 ready；`/v1/chat/completions` 实际返回 HTTP 200 和非空正文；原生 ASR/录音自动启动，服务器 ASR/TTS 仍关闭。
+  - 本次未生成或预处理 `.mmap`；复测结束时普通包无进程，offline 包正常运行。

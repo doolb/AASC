@@ -832,3 +832,110 @@ verifyOfflineVoice(displayId = 2):
 ```
 
 本次真机结果：ASR 识别为“你好，小爱。”；TTS 生成 WAV 为 `141046` bytes，播放完成事件已收到。测试设备为 `192.168.1.6:5555` 的 SM-N9500，APK 实际运行于 display 2。
+
+## 2026-09-14 Android offline 服务启动与模型路径增量
+
+```text
+TaskManager.runInstance(task):
+  if Android 节点且 task.target 是 server/subserver:
+    if task.mode == service:
+      在当前 server-app Node 进程执行 _runServiceTask
+      不创建 nodeRunner、puppeteerRunner 或其他外部子进程
+    else if 内置任务明确声明无需 Runner:
+      允许当前进程内的一次性任务继续执行
+    else:
+      返回“Android APK 节点不支持需要创建子进程的服务端任务”
+
+TaskManager.ensureBuiltinServiceInstance(taskName, options):
+  读取 taskName 的实例索引
+  if 存在 mode=service 且 status=running 的实例:
+    返回已有实例
+  submit builtin task draft，使用 options.target/options.mode/options.params
+  runInstance(taskName, instanceId)
+  返回新建实例的状态
+
+offline server-app 启动:
+  await taskManager.restoreAutoStartServices()
+  if AASC_OFFLINE_MODE == "1":
+    await taskManager.ensureBuiltinServiceInstance("llm-server", {
+      target: "server",
+      mode: "service"
+    })
+```
+
+```text
+HTTP /v1 路由注册:
+  任务路由中间件先调用 taskManager.handleHttpRoute(req, res)
+  llm-server running 时由 context.registerRoute() 处理四个 /v1 路径
+  llm-server 未运行时固定兜底只返回结构化 503
+  固定兜底不得直接调用 LlmGatewayService，避免绕过任务生命周期
+```
+
+```text
+NativeBridge(offlineMode=true):
+  asrDirectory = filesDir/aasc-server/res/models/sensevoice
+  ttsDirectory = filesDir/aasc-server/res/models/tts
+  AsrModelManager(asrDirectory)
+  TtsModelManager(ttsDirectory)
+
+offline ASR ensureModel:
+  校验内置 model.int8.onnx、tokens.txt 及随包 sha256
+  校验成功后直接加载，不请求服务器、不写 files/models/sensevoice
+
+offline TTS ensureModel:
+  读取内置 manifest.json
+  校验清单声明的每个文件存在且 hash 正确
+  校验成功后直接加载，不请求服务器、不写 files/models/tts
+
+online 模式:
+  保持 files/models/sensevoice 和 files/models/tts 的原有下载缓存路径
+```
+
+## 2026-09-15 offline 聊天传输补充伪代码
+
+```text
+offline server-app 初始化 chat:
+  传入当前 AASC 监听协议、127.0.0.1、8081 和设备本机地址
+
+chat profile 地址归一化:
+  if profile.apiUrl 指向回环/设备本机的 8081:
+    使用内置 server 实际协议
+    baseUrl = `${实际协议}://127.0.0.1:8081/v1`
+    completionsUrl = `${baseUrl}/chat/completions`
+    requestOptions = { rejectUnauthorized: false }
+  else:
+    保持用户配置的 URL 和系统默认 TLS 校验
+
+发送聊天:
+  openai-responses 使用 baseUrl/responses
+  openai-completions 使用 completionsUrl
+  两条请求都只对内置本机目标应用 requestOptions
+  连接错误通过 onError 回传 chatResponse(success=false)
+
+## 2026-09-15 offline 首包解包启动补充伪代码
+
+```text
+NodeRuntimeInstaller.ensureInstalled:
+  if 已安装版本、运行模式、必需文件和离线模型尺寸均有效:
+    直接复用正式 Runtime 目录
+  else:
+    staging = filesDir/.aasc-node-runtime-staging-<version>-<timestamp>
+    将 APK Runtime assets 解包到 staging
+    在 staging 对 manifest 中的全部文件执行大小和 SHA-256 校验
+    atomicInstall(staging, filesDir/aasc-server, runtimeVersion):
+      if 正式目录存在:
+        将正式目录重命名为同级 backup
+      将 staging 重命名为正式目录
+      从 backup 恢复 config、home、logs、res/tasks、res/uploads、res/temp
+      正式目录缺少 config/config.json 时，用随包 offline-config.json 初始化
+      生成随包模型的轻量 marker，写入 runtime 版本标记
+      删除 backup
+    if 任一步骤失败:
+      将已恢复的可变目录移回 backup
+      删除不完整的新正式目录
+      将 backup 重命名回正式目录
+```
+
+该安装路径不执行 staging 到正式目录的第二次文件复制；模型仍按原 APK 内容首次解包，不生成 `.mmap`。
+
+2026-09-15 真机复测：完全卸载 `com.aasc.display.offline` 后重新安装 APK，display 2 的 `MainActivity` 正常恢复；Runtime 完整安装耗时约 145 秒，Node 服务随后监听 8081，并自动创建 `llm-server` 任务。`/v1/models` 显示 `qwen3.5-0.8b-claude-opus-distilled-mnn` 已对 display 2 ready，Chat Completions 实际返回非空内容；普通包已停止。
