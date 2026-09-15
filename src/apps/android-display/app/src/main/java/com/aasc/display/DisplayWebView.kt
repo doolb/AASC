@@ -23,6 +23,9 @@ class DisplayWebView(context: Context) : WebView(context) {
         settings.useWideViewPort = false
         settings.loadWithOverviewMode = false
         settings.setSupportZoom(false)
+        // display.html、render-display 和 /control 共用固定 CSS 像素；按当前 WebView
+        // 所属显示屏的 density 统一缩放，避免高 DPI 手机上整个页面（不只是文字）变大。
+        setInitialScale(WebViewScalePolicy.initialScalePercent(resources.displayMetrics.densityDpi))
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()

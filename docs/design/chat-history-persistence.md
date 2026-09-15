@@ -92,3 +92,9 @@
 ## 后续可选：自动测试隔离
 
 未来自动测试连接现有服务器时，可增加 `testOnly/testRunId` 请求命名空间，让测试只使用内存临时会话并禁止持久化。当前阶段不启用该协议。
+
+## 群聊清空参数兼容（2026-09-15）
+
+控制端群聊清空不需要私聊 `sessionId`。为兼容旧控制端或前端统一发送的 `sessionId=default`，服务端按 `mode=group/temporary` 和空 `target` 判断范围，忽略多余的 `sessionId`；只有私聊清空才要求同时提供 `target` 与 `sessionId`。控制端同步调整为仅在私聊请求中发送 `sessionId`，避免继续产生歧义参数。
+
+该规则同时覆盖 HTTP `/api/chat/clear` 和 WebSocket `clearChatHistory`，保证不同入口的范围校验一致，不改变群聊、临时会话和具体私聊会话的清空边界。

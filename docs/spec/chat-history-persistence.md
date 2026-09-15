@@ -140,12 +140,31 @@ clearHistory(options):
 
 ```text
 validateScope(options):
-    如果 mode == "group":
-        返回 group/default
+    mode = options.mode 或 null
+    target = options.target 或 null
+    sessionId = options.sessionId 或 null
+
+    如果 mode == "group" 且 target 为空:
+        忽略客户端多余的 sessionId
+        返回 { mode: "group", target: null, sessionId: null }
+    如果 mode == "temporary" 且 target 为空:
+        忽略客户端多余的 sessionId
+        返回 { mode: "temporary", target: null, sessionId: null }
     如果 mode == "private" 且 target 非空 且 sessionId 非空:
         返回 private/target/sessionId
     否则:
         拒绝，不执行全量清空
+
+控制端清空请求(mode, target, sessionId):
+    request = { mode, target: target 或 null }
+    如果 mode == "private":
+        request.sessionId = sessionId 或 "default"
+    POST /api/chat/clear(request)
+
+HTTP 和 WebSocket 清空入口:
+    使用同一个 validateScope 规范化范围
+    group/temporary 不受多余 sessionId 影响
+    private 仍必须校验 target 和 sessionId
 ```
 
 ## 导出

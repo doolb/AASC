@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const chat = require('./llm-service');
-const { buildAgentPrompt, getConversationRoundRemoval } = chat;
+const { buildAgentPrompt, getConversationRoundRemoval, validateHistoryScope } = chat;
 
 test('Pi 历史重建使用 Assistant 标记而不是旧 AI 标记', () => {
     const prompt = buildAgentPrompt([
@@ -42,4 +42,22 @@ test('删除没有助手回复的轮次只移除用户消息', () => {
         { id: 'u1', role: 'control', content: '未回复' }
     ], 'u1');
     assert.equal(removal.removeCount, 1);
+});
+
+test('群聊清空兼容前端统一携带的默认 sessionId', () => {
+    assert.deepStrictEqual(
+        validateHistoryScope({ mode: 'group', target: null, sessionId: 'default' }),
+        { mode: 'group', target: null, sessionId: null }
+    );
+});
+
+test('私聊清空仍要求助手和具体 sessionId', () => {
+    assert.throws(
+        () => validateHistoryScope({ mode: 'private', target: '小爱' }),
+        /必须指定群聊或具体私聊会话/u
+    );
+    assert.throws(
+        () => validateHistoryScope({ mode: 'private', sessionId: 'default' }),
+        /必须指定群聊或具体私聊会话/u
+    );
 });

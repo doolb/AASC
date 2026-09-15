@@ -334,6 +334,46 @@ mode='none' 占位文本按能力区分:
     跨域控制(绿) / 跨域控制降级(橙) / 不支持跨域控制(灰)
 ```
 
+## 高 DPI WebView 页面缩放伪代码
+
+```text
+WebViewScalePolicy.initialScalePercent(densityDpi):
+    如果 densityDpi 不是正整数:
+        返回 100
+    scale = round(160 * 100 / densityDpi)
+    返回 scale 限制在 [25, 100] 范围内
+
+DisplayWebView.init:
+    设置 JavaScript、DOM 存储和媒体播放能力
+    设置 textZoom = 100
+    设置 useWideViewPort = false
+    设置 loadWithOverviewMode = false
+    禁止用户手势缩放
+    densityDpi = context.resources.displayMetrics.densityDpi
+    initialScale = WebViewScalePolicy.initialScalePercent(densityDpi)
+    调用 setInitialScale(initialScale)
+
+MainActivity.setupWebView:
+    用 Activity 当前 display 的 Context 创建 display WebView
+    用同一 Context 创建 control WebView
+    两个 WebView 都执行上述初始缩放策略
+
+显示端页面与 render-display 任务:
+    继续使用原始 CSS 像素和任务布局
+    WebView 统一页面缩放后，文字、按钮、进度条、任务覆盖层共同缩放
+    不修改 NativeDisplay 坐标、截图像素和媒体播放尺寸
+```
+
+## 高 DPI 缩放测试伪代码
+
+```text
+densityDpi = 160 -> 100%
+densityDpi = 320 -> 50%
+densityDpi = 560 -> 29%
+densityDpi <= 0 -> 100%
+结果始终是整数且不低于 25%
+```
+
 ## 测试
 
 - tests/display-native-bridge.test.js：puppeteer mock 桥，验证 native 截图优先 + 输入走桥；

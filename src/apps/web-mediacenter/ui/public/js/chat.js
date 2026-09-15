@@ -1810,7 +1810,7 @@ const Chat = {
         }
     },
     
-    clearHistory() {
+    async clearHistory() {
         const mode = this.session.mode;
         if (mode === 'temporary') {
             if (!confirm('确定要清空当前临时对话吗？')) return;
@@ -1821,8 +1821,12 @@ const Chat = {
             window.WebSocketManager.ws.send(JSON.stringify({ type: 'clearTemporaryConversation' }));
             return;
         }
-        const target = this.session.privateTarget;
-        const sessionId = this.session.privateSessionId;
+        const target = String(this.session.privateTarget || '').trim();
+        const sessionId = String(this.session.privateSessionId || 'default').trim() || 'default';
+        if (mode === 'private' && !target) {
+            window.showToast('私聊清空失败：当前私聊助手未就绪', 'error');
+            return;
+        }
         let confirmText;
         if (mode === 'private') {
             const sessions = this.session.sessions[target] || [];
@@ -1835,20 +1839,31 @@ const Chat = {
 
         if (!confirm(confirmText)) return;
 
-        fetch('/api/chat/clear', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode, target, sessionId })
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    this.history = data.history;
-                    this.renderHistory();
-                    window.showToast('聊天记录已清空', 'success');
-                }
-            })
-            .catch(err => window.showToast('清空失败', 'error'));
+        try {
+            // 群聊/临时会话不属于具体私聊 session；只有私聊请求携带 sessionId。
+            const clearRequest = { mode, target: target || null };
+            if (mode === 'private') clearRequest.sessionId = sessionId;
+            const response = await fetch('/api/chat/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(clearRequest)
+            });
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (error) {
+                // 非 JSON 错误仍由下面的统一错误提示反馈给用户。
+                data = {};
+            }
+            if (!response.ok || data.status !== 'success') {
+                throw new Error(data.message || data.error || `清空失败（HTTP ${response.status}）`);
+            }
+            this.history = Array.isArray(data.history) ? data.history : [];
+            this.renderHistory();
+            window.showToast('聊天记录已清空', 'success');
+        } catch (error) {
+            window.showToast(`清空失败：${error.message}`, 'error');
+        }
     },
 
     async exportHistory() {

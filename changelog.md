@@ -8180,3 +8180,14 @@
   - 停止普通包并完全卸载 `com.aasc.display.offline` 后重新安装当前 APK；SM-N9500 display 2 首次 Runtime 解包、Node HTTPS 8081、本地显示页和 WebSocket 连接均成功。
   - offline 自动创建 `llm-server`，Qwen3.5 模型在 display 2 ready；`/v1/chat/completions` 实际返回 HTTP 200 和非空正文；原生 ASR/录音自动启动，服务器 ASR/TTS 仍关闭。
   - 本次未生成或预处理 `.mmap`；复测结束时普通包无进程，offline 包正常运行。
+
+### Android 显示端与聊天历史
+
+- ✅ [2026-09-15] 修复高 DPI 手机显示端、`render-display` 和 Offline 控制端页面整体放大
+  - 新增 `WebViewScalePolicy`，以 mdpi 160 dpi 为基准按当前显示屏计算 `setInitialScale`；`DisplayWebView` 的显示页和控制页统一应用，未改变媒体、截图和输入协议。
+  - 更新 `docs/design/android-display.md`、`docs/spec/android-display.md` 和 `docs/task/2026-09-15_Android高DPI显示端WebView缩放修复.md`；新增 Android 单测覆盖 160/320/560 dpi 与非法密度边界。
+  - 最终 Offline APK 已使用带生产依赖的完整 Node 运行包重新生成并安装到 `192.168.1.6:5555` display 2；APK `1071951932` bytes，SHA-256 `b2bfdd4d8943674a973099435676ee4d1759b7965ebce370ffcc55406afb773f`。
+  - 验证：Android JVM `25` 项、聊天/LLM/清空定向测试 `38/38`、render smoke 通过；真机 Node HTTPS、`/display`、`/control`、`/v1/models` 和实际聊天请求均成功。
+- ✅ [2026-09-15] 修复群聊点击清空报错
+  - `chat.js` 仅为私聊携带 `sessionId`；`llm-service.js` 对群聊和临时会话忽略多余旧字段，同时保持私聊严格校验。
+  - 更新 `docs/design/chat-history-persistence.md`、`docs/spec/chat-history-persistence.md` 和 `docs/task/2026-09-15_群聊清空参数修复.md`；定向测试 `38/38` 通过并随最终 Offline APK 验证。

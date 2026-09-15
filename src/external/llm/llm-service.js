@@ -762,7 +762,8 @@ function validateHistoryScope(options = {}) {
     const mode = options.mode || null;
     const target = options.target || null;
     const sessionId = options.sessionId || null;
-    if (['group', 'temporary'].includes(mode) && !target && !sessionId) {
+    // 群聊和临时会话没有私聊会话 ID；兼容旧控制端统一携带 default 的请求字段。
+    if (['group', 'temporary'].includes(mode) && !target) {
         return { mode, target: null, sessionId: null };
     }
     if (mode === 'private' && target && sessionId) {
@@ -1795,6 +1796,7 @@ module.exports = {
     getTemplateByName,
     getGroupSystemPrompt,
     getTemplateSystemPrompt,
+    validateHistoryScope,
     getHistory,
     clearHistory,
     deleteConversationRound,

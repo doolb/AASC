@@ -303,6 +303,26 @@ android-display/
 - docs/todo.md 增加 APK 显示端任务
 - changelog.md 记录完成项
 
+## 高 DPI 设备 WebView 页面缩放（2026-09-15）
+
+### 问题
+
+高 DPI 手机上，显示端的 `display.html`、`render-display` 任务覆盖层和 APK 内控制端通过 WebView 渲染时整体偏大。原因是页面使用固定 CSS 像素，而 Android WebView 按目标显示屏 density 计算页面缩放；现有 `textZoom=100` 只能约束文字，不能约束进度条、面板、按钮和其他布局尺寸。
+
+### 设计
+
+- 在 `DisplayWebView` 统一设置页面初始缩放，显示端 WebView 和控制端 WebView 共用同一策略。
+- 以 mdpi（160 dpi）作为 AASC 固定像素 UI 的基准：`initialScale = 160 / 当前显示 densityDpi * 100`，限制在 WebView 支持的百分比范围内。
+- 只调整网页的逻辑页面比例，不修改媒体源尺寸、Native 截图尺寸、Android 原生模型推理和坐标桥协议。
+- 保留 `textZoom=100`、viewport 和禁止手势缩放设置，避免文字、布局和用户手势形成多套缩放规则。
+- 页面运行于 display 2 等外部显示屏时读取该 WebView 所属 Context 的 display metrics，不误用手机主屏 density。
+
+### 兼容与回退
+
+- mdpi 显示屏保持 100% 初始缩放。
+- 非法或缺失 density 时回退 100%，不阻断 WebView 加载。
+- 浏览器控制端和浏览器显示端不经过 Android WebView，因此不改变其现有响应式布局。
+
 ## 2026-08-26 CPU 配置导致 TTS 页面卡顿修复
 
 ### 现象与处理
