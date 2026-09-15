@@ -28,6 +28,11 @@ const DEFAULT_CPU_AFFINITY = {
 };
 const LLM_DEFAULT_MODEL_MAPPING_MAX_COUNT = 64;
 const LLM_DEFAULT_MODEL_MAPPING_MAX_NAME_LENGTH = 256;
+// 离线包和本地 MNNChat 默认使用的入口名称。该映射只改变请求入口名，实际模型仍由 manifest 和 ready 状态校验。
+const DEFAULT_LLM_MODEL_MAPPINGS = [{
+    externalModelName: 'qwen3.5-0.8b',
+    modelId: 'qwen3.5-0.8b-claude-opus-distilled-mnn'
+}];
 
 function isNonNegativeInteger(value) {
     return Number.isInteger(value) && value >= 0;
@@ -275,7 +280,7 @@ class Config extends DataSnapshot {
         llm: {
             maxQueueLength: 16,
             requestTimeoutMs: 120000,
-            defaultModelMappings: []
+            defaultModelMappings: DEFAULT_LLM_MODEL_MAPPINGS
         },
         ui: {
             controlTheme: 'dark'

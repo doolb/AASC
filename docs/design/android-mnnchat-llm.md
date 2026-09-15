@@ -5,6 +5,8 @@
 本设计已于 2026-09-12 确认，第一阶段服务端、Android bridge、WebSocket、控制页面、LLM 能力开关和 ModelScope 模型目录实现已落地；2026-09-13 已使用官方 MNN 3.6.1 固定提交构建、安装并在真实设备上完成文本、关闭思考和图片协议验收。本次修正补齐服务器统一下载、缓存校验和本地分发流程，并修复 LLM CPU 配置的 `thread_num` 未进入官方 MNN 主配置、配置变更不能在下一条推理生效的问题。本次增量已完成推理结束后的模型身份与线程数预检查、异步 CPU 配置实际应用确认和失败重试保护，并保留下一次推理前的最终校验。2026-09-13 进一步确认视觉模型的 `mllm.thread_num` 也必须与顶层线程数同步，已完成 native 双 runtime 配置修正。当前增量已完成：offline APK 内置并默认加载 `qwen3.5-0.8b-claude-opus-distilled-mnn`；模型只随 APK assets 解压一次，运行时直接使用已安装目录，不再复制权重到在线模型 active 目录。
 本次模型增量已确认接入 `Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`：ModelScope 仓库为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN`，固定 revision 为 `c1bc31b15286afa708f37f690099d10f21d1cc74`。该模型包含视觉权重；本次增量补齐按请求关闭思考和标准图片输入到 MNN Vision 的链路。
 本次增量已完成本地 LLM 网关任务卡片的“默认映射”配置入口：控制端可维护外部模型名到内部 `modelId` 的多条映射，服务端通过 WebSocket 规范化、持久化并广播权威配置，网关请求入口按 manifest 优先、动态映射兜底的顺序解析。
+默认配置保留 `qwen3.5-0.8b` 到 `qwen3.5-0.8b-claude-opus-distilled-mnn` 的映射；只有用户显式保存空数组时才表示关闭该入口别名，不能因为配置文件缺少该字段而丢失默认映射。
+2026-09-15 已使用当前源码重新生成 offline APK，包内 server 源码和首次安装配置均保留该默认映射；未生成 `.mmap`。
 本次修正已补齐内置任务注册表对 `configButton` 元数据的透传，确保任务列表 WebSocket 返回的 `llm-server` 条目包含“默认映射”按钮配置。
 本次任务已完成任务实例 URL 路由注册：服务端和显示端服务统一使用 `context.registerRoute()`，所有 HTTP 请求复用 AASC `8081`，显示端通过任务 WebSocket 执行路由并回传 JSON、文本或流式响应；任务停止、异常、重启和显示端断开均会清理路由。
 
@@ -459,6 +461,8 @@ externalModelName -> manifest.aliases -> internal modelId
 控制端在“任务列表 → 本地 LLM 网关”任务卡片中提供“默认映射”按钮，弹出面板维护多条外部模型名到内部 `modelId` 的映射。该配置属于主服务器 LLM 网关运行参数，保存时沿用 WebSocket 远端配置流程，不新增独立 HTTP 配置接口。
 
 映射使用 `llm.defaultModelMappings` 持久化，结构为 `[{ externalModelName, modelId }]`。服务端保存前去除两端空白、删除空行、拒绝重复外部名，限制最多 64 条且单个名称/ID 不超过 256 个字符，并要求目标 `modelId` 存在于已发布模型清单；保存成功后通过 `llm.defaultModelMappings` 广播规范化后的权威值，所有控制端按广播结果刷新面板。
+
+新配置和存量配置缺少 `llm.defaultModelMappings` 字段时，配置层默认提供 `{ externalModelName: "qwen3.5-0.8b", modelId: "qwen3.5-0.8b-claude-opus-distilled-mnn" }`。显式保存的空数组是用户主动清空映射的有效配置，必须继续保持为空，不得在每次读取时强行补回默认项。
 
 网关请求解析优先使用内部 `modelId` 和 manifest 中已有 aliases，未命中时再查找 `llm.defaultModelMappings`。动态映射只改变请求入口名称，不改变模型 ready 检查、显示端最短队列路由、显式 `displayId` 约束或 APK 内部模型状态。
 

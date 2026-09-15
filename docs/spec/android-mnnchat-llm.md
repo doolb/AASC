@@ -3,6 +3,8 @@
 状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。服务器统一下载/缓存/分发修正已纳入本规格；LLM CPU 配置的顶层与 `mllm` 双 runtime `thread_num` 传递和下一请求 runtime 换代修正已完成构建、安装和短请求验收。本次增量已完成推理结束后的模型身份/线程数预检查、下一次推理前最终校验、实际运行时状态上报以及异步 CPU 配置失败重试保护。本次离线 APK 增量已完成：内置 `qwen3.5-0.8b-claude-opus-distilled-mnn`，默认从 APK assets 解压后的 `filesDir/aasc-server/res/models/llm` 直接加载；offline 构建、APK 内容和全量 Node 回归均已验证。
 本次增量：显示端 LLM 能力开关、MNNChat 参考模型目录、ModelScope 固定 revision 代理、`enable_thinking` 和视觉图片消息已实现；定向契约测试 13/13 通过。
 本次增量：LLM 网关任务卡片已增加默认模型映射按钮和 WebSocket 配置弹窗，配置服务端完成校验、持久化、连接初始化补发及多控制端权威广播；网关在 manifest 未命中时读取动态映射。
+本次增量：配置文件缺少 `llm.defaultModelMappings` 时默认保留 `qwen3.5-0.8b` 到 `qwen3.5-0.8b-claude-opus-distilled-mnn` 的映射；显式保存空数组仍表示用户主动关闭该入口别名。
+2026-09-15 已用当前源码和完整 Android Runtime 重新构建 offline APK：`aasc-display-offline.apk`，大小 1073094719 bytes，SHA-256 为 `7471f2db9f6f78a9e228399ae1e663c491e3d634233876663beb349b6a6dd53f`；已安装到 `192.168.1.6:5555` 的 SM-N9500，未生成 `.mmap`。
 本次增量：任务引擎已增加实例级 URL 路由注册；服务端和显示端任务均复用 AASC `8081`，显示端通过 `task:route_request` / `task:route_response` 执行，不新增网页监听端口。
 模型增量：新增 `qwen3.5-0.8b-claude-opus-distilled-mnn`，ModelScope source 固定为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN@c1bc31b15286afa708f37f690099d10f21d1cc74`；清单包含 `llm.*` 与 `visual.*` 运行文件。本次任务补齐 `enable_thinking=false` 和图片消息到 MNN `MultimodalPrompt` 的实现。
 
@@ -90,6 +92,10 @@ LlmDefaultModelMapping {
 }
 
 llm.defaultModelMappings: list<LlmDefaultModelMapping>
+
+缺少 `llm.defaultModelMappings` 字段时使用：
+  [{ externalModelName: "qwen3.5-0.8b", modelId: "qwen3.5-0.8b-claude-opus-distilled-mnn" }]
+显式保存 [] 时保留空数组，不自动恢复默认映射
 ```
 
 控制端任务卡片：
@@ -151,7 +157,7 @@ resolveModelId(requestedName):
   返回未知模型
 ```
 
-配置缺失时默认使用空列表。映射目标即使已经发布但尚未 ready，也可以保存；真正请求仍由现有 `hasModel` 和 LLM 路由流程判断 ready 状态。
+配置字段缺失时默认使用内置 Qwen 映射；显式保存空列表时保持空列表。映射目标即使已经发布但尚未 ready，也可以保存；真正请求仍由现有 `hasModel` 和 LLM 路由流程判断 ready 状态。
 
 ## 4. 模型目录与 APK 下载
 
@@ -599,7 +605,7 @@ integration/device:
 ## 12. 实施状态
 
 本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。模型二进制和官方 MNN checkout 不提交到仓库；构建必须设置固定 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 并运行 `npm run prepare:mnnllm-android`，缺失依赖时 CMake 直接失败。Gradle 将根目录通过 `defaultConfig.externalNativeBuild.cmake.arguments` 传给 CMake，避免 AGP 9 模块级 DSL 不提供 `arguments` 属性。当前已使用 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 完成 `npm run build:apk`；native ELF 的 LOAD 对齐为 `0x4000`；APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动。Chat `image_url` 和 Responses `input_image` 已用 Qwen3.5 真机验证，图片进入 `MultimodalPrompt` 并清理临时文件。双 runtime 线程配置同步任务 `docs/task/2026-09-13_MNN双runtime线程配置同步.md` 已完成，真机同一 APK 进程 PID `27146` 的下一次推理日志同时显示顶层与 `mllm` `thread_num=2`。
-本次任务已完成：默认模型映射配置由 `llm-server` 任务卡片入口维护，服务端使用 `llm.defaultModelMappings.set/get` WebSocket 消息完成规范化校验、持久化、重连补发和多控制端广播；`LlmGatewayService` 在 manifest 内置模型名/alias 未命中时再查找动态映射。
+本次任务已完成：默认模型映射配置由 `llm-server` 任务卡片入口维护，服务端使用 `llm.defaultModelMappings.set/get` WebSocket 消息完成规范化校验、持久化、重连补发和多控制端广播；配置字段缺失时保留内置 Qwen 映射，显式空数组仍可关闭；`LlmGatewayService` 在 manifest 内置模型名/alias 未命中时再查找动态映射。
 ## 11. 本地 LLM 网关任务实例
 
 `llm-server` 是任务引擎中的常驻内置服务。它的创建入口不使用 LLM 专用分支：

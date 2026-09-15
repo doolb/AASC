@@ -409,8 +409,11 @@ test('LLM 网关在 manifest 未命中时使用动态默认模型映射', () => 
     assert.equal(request.payload.model, 'qwen-test');
 });
 
-test('LLM 默认模型映射配置缺失时回落为空数组', () => {
-    assert.deepEqual(config.get('llm.defaultModelMappings'), []);
+test('LLM 默认模型映射配置缺失时保留内置 Qwen 映射', () => {
+    assert.deepEqual(config.constructor.defaults.llm.defaultModelMappings, [{
+        externalModelName: 'qwen3.5-0.8b',
+        modelId: 'qwen3.5-0.8b-claude-opus-distilled-mnn'
+    }]);
 });
 
 test('LLM 默认模型映射保存前会清理空行和首尾空格', () => {

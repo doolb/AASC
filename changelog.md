@@ -8114,3 +8114,13 @@
   - 更新 `docs/design/android-embedded-node-server.md`、`docs/spec/android-embedded-node-server.md`、`docs/task/2026-09-14_Android_Node信任内置HTTPS证书.md` 和 `docs/todo.md`；新增 `NodeServerServiceTest` 证书存在/缺失回归用例。
   - APK 已重建并安装到 `192.168.1.6:5555` display 2；配置为 `https://127.0.0.1:8081/v1`，默认模型为 `qwen3.5-0.8b-claude-opus-distilled-mnn`。
   - 验证：Gradle 单元测试 134/134；真实聊天 `chatResponse success:true` 且收到 108 个 chunk；ASR HTTP 200 返回“你好，小爱。”；TTS HTTP 200 并生成可访问 WAV。全量 `npm test` 为 727 项通过 726 项，唯一失败为既有 Windows 输入声纹配置契约。
+
+### Android MNNChat 模型映射
+
+- ✅ [2026-09-15] 默认保留 Qwen3.5 本地模型映射配置。
+  - `config-app-service.js` 在 `llm.defaultModelMappings` 字段缺失时默认提供 `qwen3.5-0.8b` → `qwen3.5-0.8b-claude-opus-distilled-mnn`。
+  - 显式保存的空数组仍作为用户主动清空配置保留，不改变已有 WebSocket 配置流程和网关路由优先级。
+  - 更新 `docs/design/android-mnnchat-llm.md`、`docs/spec/android-mnnchat-llm.md`、`docs/task/2026-09-15_保留默认模型映射配置.md` 和 `tests/llm-local-routing.test.js`。
+  - 已使用当前源码重新生成 offline APK；包内配置和 server 源码均包含该映射，APK 大小 1073094719 bytes，SHA-256 为 `7471f2db9f6f78a9e228399ae1e663c491e3d634233876663beb349b6a6dd53f`；未处理 `.mmap`。
+  - 验证：模型路由定向测试 17/17、聊天/LLM 定向回归 118/118 通过；APK `unzip -tq` 通过。
+  - 已安装到 `192.168.1.6:5555`（SM-N9500），`pm install -r` 返回 `Success`，设备端临时 APK SHA-256 与本地一致；未启动应用执行聊天/语音现场测试。
