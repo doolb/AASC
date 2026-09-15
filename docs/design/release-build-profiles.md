@@ -57,4 +57,5 @@
 - profile 配置 JSON、模型 ID、任务结果索引格式或 release 输入目录无效时，构建阶段失败并说明具体路径。
 - 旧命令 `npm start` 和没有 profile 参数的开发服务器行为保持不变。
 - `build:apk`、`build:apk:offline` 默认走 release 输入；新增 `build:apk:noserver` 使用 `noserver` profile。
+- `upload:apk` 使用 `release/apkbuild/withserver/output/aasc-display.apk`，不再依赖旧的 `app/build/outputs/apk` 路径。
 - Gradle/AAR 原生依赖暂不按 feature 删除；feature 负责运行包、任务和模型资源选择，避免缺少 native 库导致 APK 启动失败。

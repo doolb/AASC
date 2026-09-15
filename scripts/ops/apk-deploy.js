@@ -6,7 +6,14 @@ const path = require('path');
 const { buildStartArgs, resolveServerUrl } = require('./apk-deploy-config');
 
 const ROOT = path.resolve(__dirname, '../..');
-const APK = path.join(ROOT, 'src/apps/android-display/app/build/outputs/apk/debug/app-debug.apk');
+const APK = path.join(
+    ROOT,
+    'release',
+    'apkbuild',
+    'withserver',
+    'output',
+    'aasc-display.apk'
+);
 const UPLOAD_DIR = path.join(ROOT, 'res', 'uploads');
 const UPLOAD_NAME = 'aasc-display.apk';
 const SERVER_URL = resolveServerUrl();

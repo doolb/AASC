@@ -10,6 +10,11 @@
   - 改动文件：`src/core/release-runtime-context.js`、服务器 release 路径模块、`scripts/ops/apk-build-profile.js`、`scripts/ops/build-apk.js`、`scripts/ops/prepare-android-server-package.js`、Runtime 打包器、Android Gradle/安装器/Activity、`package.json`、release profile 配置及对应 design/spec/task/测试文档。
   - 验证：本任务相关 Node 定向测试 54/54 通过，`git diff --check` 通过；`npm test` 为 772/773，通过项外唯一失败是既有 Windows 输入模式声纹策略断言；Android Gradle 受当前环境缺少 `AASC_MNN_ROOT` 阻断，未生成新的 APK。
 
+- ✅ [2026-09-15] 清理旧 APK 打包生成物并切换部署路径。
+  - `scripts/ops/apk-deploy.js` 改用 `release/apkbuild/withserver/output/aasc-display.apk`。
+  - 删除旧 `app/build`、`build/android-node-package*` 生成目录；保留 Release profile 输入、第三方 MNN、源码、模型和任务结果。
+  - 旧目录删除结果和释放空间在任务文档中记录。
+
 ## Android Offline APK 聊天回复
 
 - ✅ [2026-09-15] 修复 offline APK 发送聊天消息后无回复。

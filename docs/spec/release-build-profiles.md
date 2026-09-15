@@ -73,6 +73,11 @@ build:apk:noserver:
     profile = "noserver"
     embeddedNode = false
     release = true
+
+upload:apk:
+    先执行 build:apk
+    从 release/apkbuild/withserver/output/aasc-display.apk 上传和安装
+    不读取旧的 app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ```text

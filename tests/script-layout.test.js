@@ -51,11 +51,14 @@ test('test cases stay outside scripts and executable scripts use the unified tax
     assert.deepEqual(apiShellFiles, [], 'scripts/api/ 不应包含 Shell 脚本');
 
     const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    const apkDeployScript = fs.readFileSync(path.join(ROOT, 'scripts/ops/apk-deploy.js'), 'utf8');
     assert.equal(packageJson.scripts['restart:server'], 'node scripts/ops/restart-server.js');
     assert.equal(packageJson.scripts.test, 'node --test tests/*.test.js');
     assert.equal(packageJson.scripts['test:log-brain'], 'node scripts/test-runners/run-log-brain-tests.js');
     assert.equal(packageJson.scripts['api:test'], 'node scripts/api/run-all.js');
     assert.equal(packageJson.scripts['stress:tts'], 'node scripts/stress/tts-stress-test.js');
     assert.equal(packageJson.scripts['upload:apk'], 'npm run build:apk && node scripts/ops/apk-deploy.js');
+    assert.match(apkDeployScript, /'release',\s*'apkbuild',\s*'withserver',\s*'output',\s*'aasc-display\.apk'/u);
+    assert.doesNotMatch(apkDeployScript, /src[\\/]apps[\\/]android-display[\\/]app[\\/]build[\\/]outputs/u);
     assert.equal(packageJson.scripts['start:apk:display'], 'node scripts/ops/apk-start.js');
 });
