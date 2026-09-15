@@ -40,7 +40,12 @@
   "llm": {
     "maxQueueLength": 16,
     "requestTimeoutMs": 120000,
-    "defaultModelMappings": []
+    "defaultModelMappings": [
+      {
+        "externalModelName": "qwen3.5-0.8b",
+        "modelId": "qwen3.5-0.8b-claude-opus-distilled-mnn"
+      }
+    ]
   },
   "ui": {
     "controlTheme": "girl-pink"
@@ -134,9 +139,6 @@
   "logBlocklist": [],
   "chat": {
     "agentBackend": "codex",
-    "protocol": "openai-responses",
-    "responsesBaseUrl": "https://127.0.0.1:8081/v1",
-    "responsesApiKey": "",
     "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
     "model": "Qwen3.6-Flash",
     "maxTokens": 65536,
@@ -169,6 +171,9 @@
         "backend": "pi"
       }
     ],
+    "protocol": "openai-responses",
+    "responsesBaseUrl": "https://127.0.0.1:8081/v1",
+    "responsesApiKey": "",
     "codexProxy": "http://127.0.0.1:7899",
     "promptFormat": "raw",
     "mode": "agent",

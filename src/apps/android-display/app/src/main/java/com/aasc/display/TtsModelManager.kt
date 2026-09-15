@@ -13,9 +13,11 @@ import java.util.concurrent.Executors
 // 状态：not_ready → downloading → ready | error（error 或损坏后再次 ensureModel 会重新下载）
 class TtsModelManager(
     private val context: Context,
+    private val modelDirectory: File? = null,
     private val uiHandler: Handler = Handler(Looper.getMainLooper())
 ) {
-    private val modelDir = File(context.filesDir, "models/tts")
+    // offline APK 直接使用 Node Runtime 已解包的内置目录；online APK 才使用下载缓存。
+    private val modelDir = modelDirectory ?: File(context.filesDir, "models/tts")
     // 本地已验证 hash 记录（重启时只比较记录与服务器 manifest，不重新读取大文件计算 hash）
     private val localHashFile = File(modelDir, "hashes.json")
     private val downloadPool: ExecutorService = Executors.newSingleThreadExecutor()
@@ -45,6 +47,10 @@ class TtsModelManager(
         postModelEvent(JSONObject().put("state", "downloading").put("progress", 0), onModelEvent)
         downloadPool.execute {
             try {
+                if (modelDirectory != null) {
+                    ensureBundledModel(onModelEvent)
+                    return@execute
+                }
                 modelDir.mkdirs()
                 val manifestUrl = "$baseUrl/api/tts/model-manifest"
                 val manifest = fetchManifest(manifestUrl)
@@ -133,16 +139,59 @@ class TtsModelManager(
     private fun fetchManifest(url: String): List<ManifestEntry>? {
         return try {
             val text = ModelDownloader.readText(url) ?: return null
-            if (text.isEmpty()) return null
-            val arr = JSONArray(text)
-            (0 until arr.length()).map { i ->
-                val obj = arr.getJSONObject(i)
-                ManifestEntry(obj.getString("name"), obj.getString("sha256"))
-            }
+            parseManifest(text)
         } catch (e: Exception) {
             android.util.Log.w("TtsModelManager", "获取模型清单失败: ${e.message}")
             null
         }
+    }
+
+    private fun parseManifest(text: String): List<ManifestEntry>? {
+        if (text.isBlank()) return null
+        val arr = JSONArray(text)
+        return (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            ManifestEntry(obj.getString("name"), obj.getString("sha256"))
+        }
+    }
+
+    /**
+     * offline TTS 不访问服务器，也不创建 hashes.json。安装器已经校验资产 manifest，
+     * 这里再次按 manifest 校验文件，确认内置目录完整后直接交给 Embedded Speech SDK。
+     */
+    private fun ensureBundledModel(onModelEvent: (JSONObject) -> Unit) {
+        val manifest = try {
+            if (!File(modelDir, "manifest.json").isFile) null
+            else parseManifest(File(modelDir, "manifest.json").readText())
+        } catch (e: Exception) {
+            android.util.Log.w("TtsModelManager", "读取内置 TTS 清单失败: ${e.message}")
+            null
+        }
+        val allowedNames = TtsModelFiles.FILE_NAMES.toSet()
+        val validOnDisk = manifest != null && manifest.size == allowedNames.size && manifest.all { entry ->
+            entry.name in allowedNames &&
+                !entry.name.contains('/') &&
+                ModelHash.matches(File(modelDir, entry.name), entry.sha256)
+        }
+        if (!validOnDisk) {
+            state = "error"
+            lastError = "APK 内置 TTS 模型校验失败"
+            android.util.Log.e("TtsModelManager", lastError + ": " + modelDir.absolutePath)
+            postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
+            return
+        }
+
+        val memOk = hasEnoughMemory()
+        val loadOk = memOk && TtsEngine.load(context, modelDir)
+        if (loadOk) {
+            state = "ready"
+            progress = 100
+            postModelEvent(JSONObject().put("state", "ready"), onModelEvent)
+            return
+        }
+        state = "error"
+        lastError = if (!memOk) "设备内存不足，无法加载语音模型" else "APK 内置 TTS 模型加载失败"
+        postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
     }
 
     private fun readLocalHashes(): Map<String, String> {

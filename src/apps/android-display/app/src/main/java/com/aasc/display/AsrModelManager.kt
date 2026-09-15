@@ -12,9 +12,11 @@ import java.util.concurrent.Executors
 // 状态：not_ready → downloading → ready | error（error 或损坏后再次 ensureModel 会重新下载）
 class AsrModelManager(
     private val context: Context,
+    private val modelDirectory: File? = null,
     private val uiHandler: Handler = Handler(Looper.getMainLooper())
 ) {
-    private val modelDir = File(context.filesDir, "models/sensevoice")
+    // offline APK 直接使用 Node Runtime 已解包的模型目录；online APK 才使用可下载缓存。
+    private val modelDir = modelDirectory ?: File(context.filesDir, "models/sensevoice")
     private val modelFile = File(modelDir, "model.int8.onnx")
     private val tokensFile = File(modelDir, "tokens.txt")
     private val modelHashFile = File(modelDir, "model.int8.onnx.sha256")
@@ -49,6 +51,10 @@ class AsrModelManager(
         postModelEvent(JSONObject().put("state", "downloading").put("progress", 0), onModelEvent)
         downloadPool.execute {
             try {
+                if (modelDirectory != null) {
+                    ensureBundledModel(onModelEvent)
+                    return@execute
+                }
                 modelDir.mkdirs()
                 val modelUrl = "$baseUrl/api/asr/model/model.int8.onnx"
                 val tokensUrl = "$baseUrl/api/asr/model/tokens.txt"
@@ -114,6 +120,25 @@ class AsrModelManager(
 
     private fun postModelEvent(json: JSONObject, onModelEvent: (JSONObject) -> Unit) {
         uiHandler.post { onModelEvent(json) }
+    }
+
+    /**
+     * offline 资源已经由 NodeRuntimeInstaller 按 runtime manifest 校验过，原生侧只需确认
+     * 约定文件和 hash 标记仍在，再直接加载；失败时绝不清理 APK 解包的内置模型。
+     */
+    private fun ensureBundledModel(onModelEvent: (JSONObject) -> Unit) {
+        val validOnDisk = hasVerifiedLocalFiles(null)
+        val loadOk = validOnDisk && AsrEngine.load(context, modelFile, tokensFile)
+        if (loadOk) {
+            state = "ready"
+            progress = 100
+            postModelEvent(JSONObject().put("state", "ready"), onModelEvent)
+            return
+        }
+        state = "error"
+        lastError = "APK 内置 ASR 模型校验或加载失败"
+        android.util.Log.e("AsrModelManager", lastError + ": " + modelDir.absolutePath)
+        postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
     }
 
     // 下载委托共享 ModelDownloader（SSL-trust 自签名证书 + .tmp 原子改名逻辑已抽离，见 ModelDownloader.kt）

@@ -13,6 +13,10 @@ const {
 } = require('../../apps/server/modules/chat/pi-runtime-policy');
 const { createResponsesClient } = require('./llm-responses-client');
 const { createChatHistoryStore } = require('./chat-history-store');
+const {
+    createThinkOutputFilter,
+    stripThinkBlocks
+} = require('./think-output-filter');
 
 const HISTORY_DIR = USER_CONFIG_DIR;
 const HISTORY_FILE_BASE = 'chat-history';
@@ -52,6 +56,13 @@ let codexRuntimeManager = null;
 let responsesSessionStates = {};
 let responsesClient = null;
 let responsesClientFingerprint = '';
+let localLlmTransportOptions = {
+    offlineNodeMode: false,
+    localLlmBaseUrl: '',
+    localLlmHostnames: []
+};
+
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1']);
 
 let chatHistories = {};
 const MAX_HISTORY_PER_SESSION = 100;
@@ -160,6 +171,7 @@ function trimHistory() {
 }
 
 function init(config = {}, options = {}) {
+    localLlmTransportOptions = normalizeLocalLlmTransportOptions(options);
     if (options.piRuntimeManager !== undefined) {
         piRuntimeManager = options.piRuntimeManager;
     }
@@ -292,11 +304,55 @@ function loadSession() {
     }
 }
 
-function normalizeChatTransport(profile = {}) {
+function normalizeLocalLlmTransportOptions(options = {}) {
+    const hostnames = Array.isArray(options.localLlmHostnames)
+        ? options.localLlmHostnames
+        : [];
+    return {
+        offlineNodeMode: options.offlineNodeMode === true,
+        localLlmBaseUrl: normalizeOpenAiBaseUrl(options.localLlmBaseUrl || ''),
+        localLlmHostnames: hostnames
+            .map((hostname) => String(hostname || '').trim().toLowerCase())
+            .filter(Boolean)
+    };
+}
+
+function isEmbeddedLocalLlmUrl(configuredBaseUrl, runtimeOptions) {
+    if (!runtimeOptions.offlineNodeMode || !runtimeOptions.localLlmBaseUrl) return false;
+    try {
+        const configuredUrl = new URL(configuredBaseUrl);
+        const localUrl = new URL(runtimeOptions.localLlmBaseUrl);
+        const configuredPort = configuredUrl.port || (configuredUrl.protocol === 'https:' ? '443' : '80');
+        const localPort = localUrl.port || (localUrl.protocol === 'https:' ? '443' : '80');
+        if (configuredPort !== localPort) return false;
+        const hostname = configuredUrl.hostname.toLowerCase();
+        return LOOPBACK_HOSTNAMES.has(hostname)
+            || runtimeOptions.localLlmHostnames.includes(hostname);
+    } catch (error) {
+        return false;
+    }
+}
+
+function normalizeChatTransport(profile = {}, runtimeOptions = localLlmTransportOptions) {
     const protocol = normalizeProfileProtocol(profile.protocol);
+    const configuredBaseUrl = normalizeOpenAiBaseUrl(profile.apiUrl || '');
+    if (!isEmbeddedLocalLlmUrl(configuredBaseUrl, runtimeOptions)) {
+        return {
+            protocol,
+            baseUrl: configuredBaseUrl
+        };
+    }
+
+    const localBaseUrl = runtimeOptions.localLlmBaseUrl;
+    const localUrl = new URL(localBaseUrl);
     return {
         protocol,
-        baseUrl: normalizeOpenAiBaseUrl(profile.apiUrl || '')
+        baseUrl: localBaseUrl,
+        requestUrl: `${localBaseUrl}/chat/completions`,
+        requestOptions: localUrl.protocol === 'https:'
+            ? { rejectUnauthorized: false }
+            : {},
+        local: true
     };
 }
 
@@ -330,11 +386,12 @@ function saveResponsesSessionState() {
 
 function getResponsesClient(profile = getActiveProfileConfig()) {
     const transport = normalizeChatTransport(profile);
-    const fingerprint = `${profile.name || activeProfile}\n${transport.baseUrl}\n${profile.apiKey || ''}`;
+    const fingerprint = `${profile.name || activeProfile}\n${transport.baseUrl}\n${JSON.stringify(transport.requestOptions || {})}\n${profile.apiKey || ''}`;
     if (!responsesClient || responsesClientFingerprint !== fingerprint) {
         responsesClient = createResponsesClient({
             baseUrl: transport.baseUrl,
-            apiKey: profile.apiKey || ''
+            apiKey: profile.apiKey || '',
+            requestOptions: transport.requestOptions
         });
         responsesClientFingerprint = fingerprint;
     }
@@ -353,6 +410,7 @@ function getResponsesSessionKey(options = {}) {
 }
 
 function getResponsesFingerprint(options = {}, profile = getActiveProfileConfig()) {
+    const transport = normalizeChatTransport(profile);
     return JSON.stringify({
         profileName: profile.name || activeProfile,
         templateId: options.templateTarget || options.useTemplate || 'default',
@@ -360,7 +418,7 @@ function getResponsesFingerprint(options = {}, profile = getActiveProfileConfig(
         model: profile.model || chatConfig.model,
         promptFormat: profile.promptFormat || chatConfig.promptFormat || 'openai',
         protocol: normalizeChatTransport(profile).protocol,
-        apiUrl: profile.apiUrl || ''
+        apiUrl: transport.baseUrl
     });
 }
 
@@ -755,7 +813,17 @@ function getHistory() {
         all.push(...messages);
     }
     all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    return all;
+    return all.map((message) => {
+        if (message.role === 'assistant' && typeof message.content === 'string') {
+            const content = stripThinkBlocks(message.content);
+            return content === message.content ? message : { ...message, content };
+        }
+        if (typeof message.assistant === 'string') {
+            const assistant = stripThinkBlocks(message.assistant);
+            return assistant === message.assistant ? message : { ...message, assistant };
+        }
+        return message;
+    });
 }
 
 function validateHistoryScope(options = {}) {
@@ -1184,6 +1252,47 @@ function findLastSentenceBoundary(text) {
     return -1;
 }
 
+/**
+ * 统一处理聊天流输出：先过滤模型思考内容，再把可见正文分发给 UI、句子播报和历史。
+ * Responses、Chat Completions、Pi/Codex Agent 都复用这一层，避免只有某一种协议泄漏
+ * <think> 内容，或在 TTS 侧重新处理时出现显示文字与播报文字不一致。
+ */
+function createChatStreamOutput(callbacks = {}) {
+    const { onChunk, onSentence } = callbacks;
+    const filter = createThinkOutputFilter();
+    let fullMessage = '';
+    let pendingText = '';
+
+    const publish = (result) => {
+        const previousMessage = fullMessage;
+        fullMessage = result.message;
+        // 即使过滤器因孤立 </think> 回收了此前暂存内容，也要发送一次空 delta 让前端重绘。
+        if (fullMessage !== previousMessage) onChunk?.(result.delta, fullMessage);
+        if (!result.delta) return;
+
+        pendingText += result.delta;
+        const sentences = splitIntoSentences(pendingText);
+        if (sentences.length < 2) return;
+        for (const sentence of sentences.slice(0, -1)) onSentence?.(sentence, fullMessage);
+        pendingText = sentences[sentences.length - 1];
+    };
+
+    return {
+        push(chunk) {
+            publish(filter.push(chunk));
+        },
+        finish(finalText = null) {
+            publish(filter.finish(finalText));
+        },
+        getMessage() {
+            return fullMessage;
+        },
+        getPendingText() {
+            return pendingText;
+        }
+    };
+}
+
 async function chat(userMessage, options = {}) {
     const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
     if (activeProfileConfig?.mode === 'agent') {
@@ -1211,7 +1320,7 @@ async function chat(userMessage, options = {}) {
                 temperature: profile.temperature ?? chatConfig.temperature,
                 stream: false
             });
-            assistantMessage = extractResponsesText(response);
+            assistantMessage = stripThinkBlocks(extractResponsesText(response));
             saveResponseReference(responseSessionKey, response, fingerprint);
         } else {
             const requestBody = {
@@ -1222,14 +1331,15 @@ async function chat(userMessage, options = {}) {
             };
             const headers = { 'Content-Type': 'application/json' };
             if (profile.apiKey) headers.Authorization = 'Bearer ' + profile.apiKey;
-            const response = await makeRequest(profile.apiUrl || chatConfig.apiUrl, {
+            const response = await makeRequest(transport.requestUrl || profile.apiUrl || chatConfig.apiUrl, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify(requestBody),
+                requestOptions: transport.requestOptions
             });
             const data = JSON.parse(response);
             if (!data.choices?.[0]?.message) throw new Error('Invalid response format from API');
-            assistantMessage = data.choices[0].message.content || '';
+            assistantMessage = stripThinkBlocks(data.choices[0].message.content || '');
         }
 
         const templateId = templateTarget || useTemplate || 'default';
@@ -1309,8 +1419,7 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
             permissionProfile: 'readonly'
         }
     );
-    let fullMessage = '';
-    let pendingText = '';
+    const output = createChatStreamOutput({ onChunk, onSentence });
     let reportedError = false;
 
     try {
@@ -1332,18 +1441,13 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
             ? buildCodexConversationPrompt(messages)
             : buildAgentPrompt(messages);
         const result = await runtimeManager.chatStream(profile, template, prompt, {
-            onChunk: (chunk, currentMessage) => {
-                fullMessage = currentMessage || `${fullMessage}${chunk}`;
-                pendingText += chunk;
-                onChunk?.(chunk, fullMessage);
-                const sentences = splitIntoSentences(pendingText);
-                if (sentences.length >= 2) {
-                    for (const sentence of sentences.slice(0, -1)) onSentence?.(sentence, fullMessage);
-                    pendingText = sentences[sentences.length - 1];
-                }
+            onChunk: (chunk) => {
+                output.push(chunk);
             },
             onComplete: (message) => {
-                fullMessage = message || fullMessage;
+                output.finish(typeof message === 'string' ? message : null);
+                const fullMessage = output.getMessage();
+                const pendingText = output.getPendingText();
                 if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage);
                 onComplete?.(fullMessage, getHistory());
             },
@@ -1359,9 +1463,11 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
             conversationKey: conversationKey || buildPiConversationKey(mode, target, sessionId),
             ephemeral
         });
+        output.finish(typeof result.message === 'string' ? result.message : null);
+        const fullMessage = output.getMessage();
         return {
             success: true,
-            message: result.message || fullMessage,
+            message: fullMessage,
             history: getHistory()
         };
     } catch (error) {
@@ -1397,8 +1503,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     const profile = activeProfileConfig || getActiveProfileConfig();
     const transport = normalizeChatTransport(profile);
     if (transport.protocol === 'openai-responses') {
-        let fullMessage = '';
-        let pendingText = '';
+        const output = createChatStreamOutput({ onChunk, onSentence });
         try {
             const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
@@ -1416,19 +1521,15 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                 stream: true
             }, (event) => {
                 if (event?.type === 'response.output_text.delta' && typeof event.delta === 'string') {
-                    fullMessage += event.delta;
-                    pendingText += event.delta;
-                    onChunk?.(event.delta, fullMessage);
-                    const sentences = splitIntoSentences(pendingText);
-                    if (sentences.length >= 2) {
-                        for (const sentence of sentences.slice(0, -1)) onSentence?.(sentence, fullMessage);
-                        pendingText = sentences[sentences.length - 1];
-                    }
+                    output.push(event.delta);
                 }
                 if (event?.type === 'response.completed') {
                     saveResponseReference(responseSessionKey, event.response, fingerprint);
                 }
             });
+            output.finish();
+            const fullMessage = output.getMessage();
+            const pendingText = output.getPendingText();
             if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage);
             onComplete?.(fullMessage, getHistory());
             return { success: true, message: fullMessage, history: getHistory() };
@@ -1439,8 +1540,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
         }
     }
 
-    let fullMessage = '';
-    let pendingText = '';
+    const output = createChatStreamOutput({ onChunk, onSentence });
 
     try {
         const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
@@ -1455,10 +1555,11 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
         
         const streamHeaders = { 'Content-Type': 'application/json' };
         if (profile.apiKey) streamHeaders['Authorization'] = 'Bearer ' + profile.apiKey;
-        await makeStreamRequest(profile.apiUrl || chatConfig.apiUrl, {
+        await makeStreamRequest(transport.requestUrl || profile.apiUrl || chatConfig.apiUrl, {
             method: 'POST',
             headers: streamHeaders,
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            requestOptions: transport.requestOptions
         }, (line) => {
             if (line.startsWith('data: ')) {
                 const data = line.slice(6);
@@ -1471,30 +1572,16 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
                     const content = parsed.choices?.[0]?.delta?.content;
                     
                     if (content) {
-                        fullMessage += content;
-                        pendingText += content;
-
-                        if (onChunk) {
-                            onChunk(content, fullMessage);
-                        }
-
-                        // 拆分所有完整句子，只保留末尾不完整片段
-                        const sentences = splitIntoSentences(pendingText);
-                        if (sentences.length >= 2) {
-                            for (let i = 0; i < sentences.length - 1; i++) {
-                                if (onSentence) {
-                                    onSentence(sentences[i], fullMessage);
-                                }
-                            }
-                            pendingText = sentences[sentences.length - 1];
-                        }
+                        output.push(content);
                     }
                 } catch (e) {
                     // Ignore parse errors for individual chunks
                 }
             }
         });
-        
+        output.finish();
+        const fullMessage = output.getMessage();
+        const pendingText = output.getPendingText();
         if (pendingText.trim() && onSentence) {
             onSentence(pendingText.trim(), fullMessage);
         }
@@ -1528,6 +1615,7 @@ function makeRequest(url, options) {
         const httpModule = isHttps ? https : http;
         
         const reqOptions = {
+            ...(options.requestOptions || {}),
             hostname: urlObj.hostname,
             port: urlObj.port || (isHttps ? 443 : 80),
             path: urlObj.pathname + urlObj.search,
@@ -1573,6 +1661,7 @@ function makeStreamRequest(url, options, onLine) {
         const httpModule = isHttps ? https : http;
         
         const reqOptions = {
+            ...(options.requestOptions || {}),
             hostname: urlObj.hostname,
             port: urlObj.port || (isHttps ? 443 : 80),
             path: urlObj.pathname + urlObj.search,
@@ -1796,8 +1885,8 @@ module.exports = {
     getTemplateByName,
     getGroupSystemPrompt,
     getTemplateSystemPrompt,
-    validateHistoryScope,
     getHistory,
+    validateHistoryScope,
     clearHistory,
     deleteConversationRound,
     getConversationRoundRemoval,
@@ -1829,6 +1918,8 @@ module.exports = {
     chatStream,
     buildResponsesPayload,
     extractResponsesText,
+    stripThinkBlocks,
+    createThinkOutputFilter,
     normalizeChatTransport,
     isSentenceEnd,
     splitIntoSentences

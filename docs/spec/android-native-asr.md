@@ -269,9 +269,57 @@ verifyAsrRuntime():
   affinity 失败 -> 保持系统默认调度 fallback
 ```
 
-## 录音（不变）
+## 录音权限与启动时序
 
-Manifest 加 RECORD_AUDIO；MainActivity 运行时权限；DisplayWebView.onPermissionRequest 授予 RESOURCE_AUDIO_CAPTURE。
+```text
+APK Manifest:
+  声明 RECORD_AUDIO（运行时权限）
+  声明 MODIFY_AUDIO_SETTINGS（普通安装权限，供 WebView 音频采集创建录音设备）
+
+MainActivity 启动:
+  先完成共享存储授权流程
+  启动本地 display 页面
+  请求 RECORD_AUDIO 运行时权限
+  RECORD_AUDIO 授权完成 -> reload display WebView，重新执行 getUserMedia 能力探测
+
+DisplayWebView.onPermissionRequest(request):
+  允许 RESOURCE_AUDIO_CAPTURE 和 RESOURCE_VIDEO_CAPTURE
+  其他资源拒绝
+
+display.html:
+  detectCapabilities 使用 getUserMedia 探测 voiceRecording
+  checkAsrStatus 使用 /api/asr/status 探测公共 ASR
+  两项均满足且服务端下发 voiceRecording=true -> 自动启动默认 ASR 监听
+```
+
+`MODIFY_AUDIO_SETTINGS` 不是用户可见的运行时授权项，但 Android WebView 的录音设备创建依赖它；缺少该权限时即使 `RECORD_AUDIO` 已授权，Chromium 仍会返回“无可用录音设备”，页面必须显示为未就绪。
+
+## 2026-09-14 offline APK 录音未就绪修复验证
+
+```text
+offline APK 构建与安装:
+  构建产物 = src/apps/android-display/app/build/outputs/apk/offline/aasc-display-offline.apk
+  APK Manifest 包含 RECORD_AUDIO 和 MODIFY_AUDIO_SETTINGS
+  安装到 SM-N9500（Android 9/API 28）并使用 am start --display 2 启动
+
+验证本地服务:
+  GET https://127.0.0.1:8081/api/asr/status
+  断言 status=success
+  断言 ready=true
+  断言 device=display
+  断言 serverEnabled=false
+  断言 mode=embedded
+
+验证显示端录音:
+  读取 Display 2 的 voiceStatus
+  断言 voiceStatus = "监听中 · 等待唤醒"
+  观察 offline 进程日志
+  断言不存在 "No audio device will be available for recording"
+  断言不存在 "Unable to select audio device"
+  断言底噪检测完成且 VAD 配置成功下发
+```
+
+实现回归：`node --test tests/android-offline-apk.test.js` 为 12/12；Android `:app:testDebugUnitTest` 为 `BUILD SUCCESSFUL`。
 
 ## 2026-08-28 正式 APK ASR 增强接入伪代码
 
@@ -388,4 +436,32 @@ NativeBridge:
 测试 APK HTTP:
   /api/asr 和 /api/voiceprint/test 的 language 只接受 auto、zh、en
   普通网页和声纹测试网页继续固定发送 language=zh
+```
+
+## 2026-09-14 offline 原生 ASR/TTS 模型复用伪代码
+
+```text
+NativeBridge(offlineMode):
+  bundledRoot = filesDir/aasc-server/res/models
+  asrDirectory = offlineMode ? bundledRoot/sensevoice : null
+  ttsDirectory = offlineMode ? bundledRoot/tts : null
+  AsrModelManager(context, asrDirectory)
+  TtsModelManager(context, ttsDirectory)
+
+AsrModelManager.ensureModel(offlineDirectory):
+  if offlineDirectory is provided:
+    require model.int8.onnx, tokens.txt, two sha256 files are present
+    load directly from offlineDirectory
+    on validation/load failure: state=error, preserve bundled files
+  else:
+    continue existing server hash/download flow under files/models/sensevoice
+
+TtsModelManager.ensureModel(offlineDirectory):
+  if offlineDirectory is provided:
+    read offlineDirectory/manifest.json
+    require every declared file exists and matches manifest sha256
+    load directly from offlineDirectory
+    on validation/load failure: state=error, preserve bundled files
+  else:
+    continue existing server manifest/download flow under files/models/tts
 ```

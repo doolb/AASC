@@ -71,6 +71,37 @@ test('llm-service 可以提取 Responses 文本并按 profile 规范化 transpor
   assert.equal(normalizeChatTransport({}).protocol, 'openai-responses');
 });
 
+test('offline 本机聊天将历史 HTTP 地址归一化到内置 HTTPS 回环', () => {
+  assert.deepEqual(normalizeChatTransport({
+    protocol: 'openai-responses',
+    apiUrl: 'http://192.168.1.6:8081/v1/chat/completions'
+  }, {
+    offlineNodeMode: true,
+    localLlmBaseUrl: 'https://127.0.0.1:8081/v1',
+    localLlmHostnames: ['192.168.1.6']
+  }), {
+    protocol: 'openai-responses',
+    baseUrl: 'https://127.0.0.1:8081/v1',
+    requestUrl: 'https://127.0.0.1:8081/v1/chat/completions',
+    requestOptions: { rejectUnauthorized: false },
+    local: true
+  });
+});
+
+test('offline 只改写本机地址，不改写外部 LLM 地址', () => {
+  assert.deepEqual(normalizeChatTransport({
+    protocol: 'openai-responses',
+    apiUrl: 'http://llm.example:8081/v1/chat/completions'
+  }, {
+    offlineNodeMode: true,
+    localLlmBaseUrl: 'https://127.0.0.1:8081/v1',
+    localLlmHostnames: ['192.168.1.6']
+  }), {
+    protocol: 'openai-responses',
+    baseUrl: 'http://llm.example:8081/v1'
+  });
+});
+
 test('llm-service 不再暴露全局 Responses 地址和密钥', () => {
   const config = require('./llm-service').getConfig();
   assert.equal(Object.hasOwn(config, 'responsesBaseUrl'), false);

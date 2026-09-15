@@ -147,6 +147,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
 
 config.loadConfig();
 const ANDROID_NODE_POLICY = getAndroidNodePolicy();
+const OFFLINE_NODE_MODE = process.env.AASC_OFFLINE_MODE === '1';
 
 const logBuffer = new LogBuffer({ maxSize: 1000 });
 const logFileWriter = new LogFileWriter(path.join(__dirname, '../../../../logs'));
@@ -568,7 +569,13 @@ if (!ANDROID_NODE_POLICY.enabled) {
 if (!ANDROID_NODE_POLICY.enabled && config.get('asr.serverEnabled', true) === true) {
     asr.init(config.get('asr', {}));
 }
-chat.init(config.get('chat', {}), { piRuntimeManager, codexRuntimeManager });
+chat.init(config.get('chat', {}), {
+    piRuntimeManager,
+    codexRuntimeManager,
+    offlineNodeMode: OFFLINE_NODE_MODE,
+    localLlmBaseUrl: `${useHttps ? 'https' : 'http'}://127.0.0.1:${PORT}/v1`,
+    localLlmHostnames: [getLocalIP()]
+});
 // 提醒必须复用统一 TTS 路由，确保 display 模式优先使用显示端并按策略回退。
 reminder.init({ generateTTS: generateTtsWithFallback });
 voiceCommand.init(config.get('voiceCommand', {}));
@@ -1278,7 +1285,7 @@ async function startServer() {
                 maxInstances: 50,
                 chatService: chat,
                 serverExecutionDisabled: ANDROID_NODE_POLICY.enabled,
-                serverExecutionError: 'Android APK 节点不支持服务端任务执行',
+                serverExecutionError: 'Android APK 节点不支持需要创建子进程的服务端任务',
                 resolveTaskRoute: (task) => aascTaskRouter.resolve(task),
                 // tts.server 只切换通用 HTTP 客户端的运行时地址，不改变服务器 TTS 开关。
                 getTtsServiceUrl: () => tts.getConfig().serviceUrl,
@@ -1316,6 +1323,18 @@ async function startServer() {
                 return taskResponse?.data || taskResponse;
             });
             await taskManager.restoreAutoStartServices();
+            if (OFFLINE_NODE_MODE) {
+                try {
+                    const ensuredLlmServer = await taskManager.ensureBuiltinServiceInstance('llm-server', {
+                        target: 'server',
+                        mode: 'service'
+                    });
+                    log('任务引擎', `offline 已自动启动 llm-server: ${ensuredLlmServer.instanceId}`);
+                } catch (error) {
+                    // 本地 HTTP 服务仍需继续启动，让 /v1 通过结构化 503 暴露真实故障，便于控制端诊断。
+                    logError('任务引擎', `offline 自动启动 llm-server 失败: ${error.message}`);
+                }
+            }
 
             // 注入报时任务控制函数（供语音命令"开启报时/关闭报时"使用）
             voiceCommand.setTimeAnnounceToggle(async (enabled) => {
@@ -2869,6 +2888,13 @@ function sendLlmHttpError(res, error, requestId = null) {
     return res.status(statusCode).json(createOpenAiErrorBody(error, requestId));
 }
 
+function sendLlmGatewayUnavailable(res) {
+    return sendLlmHttpError(
+        res,
+        createGatewayError('本地 LLM 网关服务未启动，请先启动 llm-server 任务', 'LLM_SERVER_NOT_RUNNING', 503)
+    );
+}
+
 async function handleLlmHttpRequest(req, res, protocol) {
     let request;
     try {
@@ -2956,16 +2982,11 @@ async function handleLlmHttpRequest(req, res, protocol) {
     }
 }
 
-app.get('/v1/models', (req, res) => {
-    try {
-        return res.json(llmGatewayService.createModelsResponse());
-    } catch (error) {
-        return sendLlmHttpError(res, error);
-    }
-});
-app.post('/v1/chat/completions', (req, res) => handleLlmHttpRequest(req, res, 'chat.completions'));
-app.post('/v1/responses', (req, res) => handleLlmHttpRequest(req, res, 'responses'));
-app.post('/v1/chat/responses', (req, res) => handleLlmHttpRequest(req, res, 'responses'));
+// /v1 的正式处理器由 llm-server 任务通过 TaskRouteRegistry 注册；固定路由只负责未启动时的明确错误。
+app.get('/v1/models', sendLlmGatewayUnavailable);
+app.post('/v1/chat/completions', sendLlmGatewayUnavailable);
+app.post('/v1/responses', sendLlmGatewayUnavailable);
+app.post('/v1/chat/responses', sendLlmGatewayUnavailable);
 
 // 服务器仅负责接收图片并通过 WebSocket 转发到显示端，不在服务端加载或执行视觉模型。
 app.post('/api/vision/ocr', visionUpload.single('image'), (req, res) => handleVisionRoute('ocr', req, res));
@@ -8020,9 +8041,121 @@ function handleDisplayCameraMessage(displayId, data) {
     }
 }
 
+/**
+ * 处理控制端和显示端发送的统一聊天消息。
+ *
+ * WSViewBindServer 启用后，控制端消息会先经过注册的 handler 再进入
+ * handleControlMessageFallback；旧 WebSocket 分支则直接在显示端消息处理器
+ * 中收到同一种消息。两条入口必须共用这里的实现，否则控制端消息会被记录
+ * 但不会真正调用 LLM，前端就只能看到“发送成功但没有回复”。
+ */
+async function handleChatMessageRequest(data, { displayId, ws }) {
+    try {
+        // Agent 消息显式使用 assistantType；旧控制端只发 mode=role 时继续兼容。
+        const isAgentMessage = data.assistantType === 'agent' ||
+            (!data.assistantType && data.mode === 'role');
+        if (isAgentMessage) {
+            if (Array.isArray(data.images) && data.images.length > 0) {
+                ws.send(JSON.stringify({
+                    type: 'chatResponse',
+                    requestId: data.requestId,
+                    success: false,
+                    error: 'Agent 暂不支持图片输入'
+                }));
+                return;
+            }
+            const session = chat.getSession();
+            const targetDisplayId = data.displayId || displayId;
+            const targetDisplayIds = data.displayIds || [];
+            const playOnControl = data.playOnControl || session.playOnControl;
+            const preferredDisplayId = targetDisplayIds[0] || targetDisplayId || null;
+            const agentTtsStream = createAgentTtsStream({
+                playOnControl,
+                displayId: targetDisplayId,
+                displayIds: targetDisplayIds,
+                ttsScheduler: createTtsGenerationScheduler(preferredDisplayId),
+                splitIntoSentences: chat.splitIntoSentences,
+                stripMarkdown,
+                generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId),
+                sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
+                sendToDisplay,
+                isTtsSuppressed: isRepairModeTtsSuppressed,
+                onError: (error) => logError('Chat', `Agent TTS生成失败: ${error.message}`)
+            });
+            if (!data.role) {
+                ws.send(JSON.stringify({ type: 'roleError', message: 'Agent 消息缺少角色' }));
+                return;
+            }
+            // 角色名来自前端输入：先确认存在，避免对不存在的角色静默建孤儿目录。
+            if (!aiRoles.list().some(r => r.name === data.role)) {
+                ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
+                return;
+            }
+            await aiRoles.chat(data.role, data.content, {
+                requestId: data.requestId,
+                onStatus: () => {
+                    broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
+                },
+                onChunk: (chunk, message, requestId) => {
+                    ws.send(JSON.stringify({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message }));
+                    agentTtsStream.onChunk(chunk);
+                },
+                onComplete: (message, history, requestId) => {
+                    ws.send(JSON.stringify({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history }));
+                    void agentTtsStream.onComplete(message);
+                },
+                onError: (error) => ws.send(JSON.stringify({
+                    type: 'chatResponse',
+                    requestId: data.requestId,
+                    success: false,
+                    error: error instanceof Error ? error.message : error
+                }))
+            });
+            return;
+        }
+
+        const session = chat.getSession();
+        const targetDisplayId = data.displayId || displayId;
+        const targetDisplayIds = data.displayIds || [];
+
+        await handleChatMessage({
+            requestId: data.requestId,
+            content: data.content,
+            images: data.images,
+            displayContent: data.displayContent || data.content,
+            displayId: targetDisplayId,
+            displayIds: targetDisplayIds,
+            playOnControl: data.playOnControl || session.playOnControl,
+            templateTarget: data.templateTarget || data.target,
+            mode: data.mode || session.mode,
+            target: data.mode === 'private' ? (data.target || session.privateTarget) : null,
+            sessionId: data.sessionId || session.privateSessionId || 'default',
+            // 控制端临时页签沿用服务端唯一临时会话；旧客户端只发 mode 时也兼容识别。
+            temporaryConversation: data.temporaryConversation === true || data.mode === 'temporary',
+            temporaryConversationId: data.temporaryConversationId || null,
+            sendToControl: (msg) => {
+                ws.send(JSON.stringify(msg));
+            }
+        });
+    } catch (err) {
+        logError('Chat', `处理失败: ${err.message}`);
+        ws.send(JSON.stringify({
+            type: 'chatResponse',
+            requestId: data.requestId,
+            success: false,
+            error: err.message
+        }));
+    }
+}
+
 async function handleControlMessageFallback(data, ws) {
     const displayId = data.displayId;
     const displayData = displayClients.get(displayId);
+
+    if (data.type === 'chatMessage') {
+        await handleChatMessageRequest(data, { displayId, ws });
+        return;
+    }
 
     if (data.type === 'setGlobalRecordingPause') {
         if (typeof data.paused !== 'boolean') {
@@ -9390,98 +9523,7 @@ async function handleControlMessageFallback(data, ws) {
                         ws.send(JSON.stringify({ type: 'roleError', message: err.message }));
                     }
                 } else if (data.type === 'chatMessage') {
-                    (async () => {
-                        try {
-                            // Agent 消息显式使用 assistantType；旧控制端只发 mode=role 时继续兼容。
-                            const isAgentMessage = data.assistantType === 'agent' ||
-                                (!data.assistantType && data.mode === 'role');
-                            if (isAgentMessage) {
-                                if (Array.isArray(data.images) && data.images.length > 0) {
-                                    ws.send(JSON.stringify({
-                                        type: 'chatResponse',
-                                        requestId: data.requestId,
-                                        success: false,
-                                        error: 'Agent 暂不支持图片输入'
-                                    }));
-                                    return;
-                                }
-                                const session = chat.getSession();
-                                const targetDisplayId = data.displayId || displayId;
-                                const targetDisplayIds = data.displayIds || [];
-                                const playOnControl = data.playOnControl || session.playOnControl;
-                                const preferredDisplayId = targetDisplayIds[0] || targetDisplayId || null;
-                                const agentTtsStream = createAgentTtsStream({
-                                    playOnControl,
-                                    displayId: targetDisplayId,
-                                    displayIds: targetDisplayIds,
-                                    ttsScheduler: createTtsGenerationScheduler(preferredDisplayId),
-                                    splitIntoSentences: chat.splitIntoSentences,
-                                    stripMarkdown,
-                                    generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId),
-                                    sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
-                                    sendToDisplay,
-                                    isTtsSuppressed: isRepairModeTtsSuppressed,
-                                    onError: (error) => logError('Chat', `Agent TTS生成失败: ${error.message}`)
-                                });
-                                if (!data.role) {
-                                    ws.send(JSON.stringify({ type: 'roleError', message: 'Agent 消息缺少角色' }));
-                                    return;
-                                }
-                                // 角色名来自前端输入：先确认存在，避免对不存在的角色静默建孤儿目录
-                                if (!aiRoles.list().some(r => r.name === data.role)) {
-                                    ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
-                                    return;
-                                }
-                                await aiRoles.chat(data.role, data.content, {
-                                    requestId: data.requestId,
-                                    onStatus: () => {
-                                        broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
-                                    },
-                                    onChunk: (chunk, message, requestId) => {
-                                        ws.send(JSON.stringify({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message }));
-                                        agentTtsStream.onChunk(chunk);
-                                    },
-                                    onComplete: (message, history, requestId) => {
-                                        ws.send(JSON.stringify({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history }));
-                                        void agentTtsStream.onComplete(message);
-                                    },
-                                    onError: (error) => ws.send(JSON.stringify({ type: 'chatResponse', requestId: data.requestId, success: false, error: error instanceof Error ? error.message : error }))
-                                });
-                                return;
-                            }
-                            const session = chat.getSession();
-                            const targetDisplayId = data.displayId || displayId;
-                            const targetDisplayIds = data.displayIds || [];
-                            
-                            await handleChatMessage({
-                                requestId: data.requestId,
-                                content: data.content,
-                                images: data.images,
-                                displayContent: data.displayContent || data.content,
-                                displayId: targetDisplayId,
-                                displayIds: targetDisplayIds,
-                                playOnControl: data.playOnControl || session.playOnControl,
-                                templateTarget: data.templateTarget || data.target,
-                                mode: data.mode || session.mode,
-                                target: data.mode === 'private' ? (data.target || session.privateTarget) : null,
-                                sessionId: data.sessionId || session.privateSessionId || 'default',
-                                // 控制端临时页签沿用服务端唯一临时会话；旧客户端只发 mode 时也兼容识别。
-                                temporaryConversation: data.temporaryConversation === true || data.mode === 'temporary',
-                                temporaryConversationId: data.temporaryConversationId || null,
-                                sendToControl: (msg) => {
-                                    ws.send(JSON.stringify(msg));
-                                }
-                            });
-                        } catch (err) {
-                            logError('Chat', `处理失败: ${err.message}`);
-                            ws.send(JSON.stringify({
-                                type: 'chatResponse',
-                                requestId: data.requestId,
-                                success: false,
-                                error: err.message
-                            }));
-                        }
-                    })();
+                    await handleChatMessageRequest(data, { displayId, ws });
                 } else if (data.type === 'executeCommands') {
                     (async () => {
                         try {

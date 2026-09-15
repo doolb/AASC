@@ -33,6 +33,8 @@ module.exports = {
   description: 'LLM API 调用服务',
   target: 'server',
   mode: 'one-shot',
+  // 该任务只调用已注入的聊天客户端，不需要 Node/Puppeteer 子进程；Android 可在当前进程运行。
+  execution: 'in-process',
   sidebar: { group: 'voiceService', tab: null, label: 'AI 聊天', icon: '💬', priority: 20 },
   params: [
     { name: 'apiUrl', type: 'string', required: false, default: 'http://192.168.1.12:8080/v1/chat/completions', label: 'API 地址' },

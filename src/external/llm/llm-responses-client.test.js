@@ -1,5 +1,8 @@
 const assert = require('assert/strict');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const test = require('node:test');
 
 const { createResponsesClient } = require('./llm-responses-client');
@@ -12,6 +15,16 @@ const startServer = async (handler) => {
 
 const closeServer = async (server) => {
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+};
+
+const startHttpsServer = async (handler) => {
+  const certDir = path.resolve(__dirname, '../../../res/certs');
+  const server = https.createServer({
+    key: fs.readFileSync(path.join(certDir, 'key.pem')),
+    cert: fs.readFileSync(path.join(certDir, 'cert.pem'))
+  }, handler);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return server;
 };
 
 test('Responses 客户端发送 JSON 请求并解析 output_text', async () => {
@@ -76,6 +89,42 @@ test('Responses 客户端将 HTTP 错误转换为可识别错误', async () => {
       () => client.request({ model: 'qwen', input: '你好' }),
       (error) => error.statusCode === 401 && error.code === 'invalid_api_key' && error.message === '鉴权失败'
     );
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test('Responses 客户端支持显式允许的本机自签名 HTTPS 请求和流式请求', async () => {
+  const server = await startHttpsServer((incoming, response) => {
+    if (incoming.headers['x-test-stream'] === 'true') {
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.write('data: {"type":"response.output_text.delta","delta":"本机"}\n\n');
+      response.write('data: [DONE]\n\n');
+      response.end();
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ output_text: 'HTTPS 正常' }));
+  });
+
+  try {
+    const client = createResponsesClient({
+      baseUrl: `https://127.0.0.1:${server.address().port}/v1`,
+      requestOptions: { rejectUnauthorized: false }
+    });
+    const response = await client.request(
+      { model: 'qwen', input: '你好' },
+      { headers: { 'x-test-stream': 'false' } }
+    );
+    assert.equal(response.output_text, 'HTTPS 正常');
+
+    const events = [];
+    await client.stream(
+      { model: 'qwen', input: '你好', stream: true },
+      (event) => events.push(event),
+      { headers: { 'x-test-stream': 'true' } }
+    );
+    assert.deepEqual(events, [{ type: 'response.output_text.delta', delta: '本机' }]);
   } finally {
     await closeServer(server);
   }

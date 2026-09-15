@@ -395,7 +395,7 @@ class MainActivity : AppCompatActivity() {
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")
         wv.webViewClient = createWebViewClient(bridge, baseUrl, true)
-        // 控制按钮由 XML 作为容器的顶层子项加入；WebView 从 index=0 插入，确保按钮永远在最上层。
+        // display WebView 先放到底层；XML 中的控制按钮和启动遮罩继续保持在它上方。
         webContainer.addView(wv, 0)
         webView = wv
         wv.loadUrl(url)
@@ -404,7 +404,8 @@ class MainActivity : AppCompatActivity() {
         control.visibility = View.GONE
         control.addJavascriptInterface(Chat2ApiNativeBridge(this), "NativeControl")
         control.webViewClient = createWebViewClient(null, baseUrl, false)
-        webContainer.addView(control, 0)
+        // 插入到 display WebView 之上、控制按钮和启动遮罩之下，避免控制页被显示页覆盖。
+        webContainer.addView(control, 1)
         controlWebView = control
     }
 

@@ -4,7 +4,7 @@
 
 在现有 `android-display` APK 中集成 **Microsoft Cognitive Services Speech SDK（Embedded）** 的离线语音合成能力，让 APK 可以在不依赖外网 TTS 服务的情况下本地合成语音。
 
-本次只支持一个内置声线：`zh-CN-XiaoxiaoNeural`（xiaoxiao）。模型从服务器按需下载，APK 安装包保持小体积。控制端新增“语音生成设备”选项，可选服务端或显示端；当选择显示端但显示端离线、能力未就绪或合成出错时，服务器临时回退到服务端 TTS，保证语音播报不中断。
+本次只支持一个内置声线：`zh-CN-XiaoxiaoNeural`（xiaoxiao）。online APK 的模型从服务器按需下载；offline APK 直接使用随包模型，避免安装后重复下载。控制端新增“语音生成设备”选项，可选服务端或显示端；当选择显示端但显示端离线、能力未就绪或合成出错时，服务器临时回退到服务端 TTS，保证语音播报不中断。
 
 核心价值：把离线语音合成从服务器 / 浏览器端移到 APK 原生引擎，降低对 TTS 服务的依赖，同时保持现有控制端播报协议大部分不变。
 
@@ -21,7 +21,7 @@
 ### 目标
 
 1. APK 原生使用 Embedded Speech SDK 离线合成 `zh-CN-XiaoxiaoNeural` 声线
-2. 模型需要时从 AASC 服务器下载并校验，首次下载后本地缓存复用
+2. online 模型需要时从 AASC 服务器下载并校验，首次下载后本地缓存复用；offline 直接加载 APK 内置模型
 3. 显示端能力记录到 `ttsGeneration`（语音生成）
 4. 控制端新增“语音生成设备”选项，可选服务端或显示端
 5. 显示端离线 / 模型未就绪 / 合成失败时临时回退服务端 TTS
@@ -32,15 +32,16 @@
 - 显示端设备：Android 8+（minSdk=26，Embedded SDK 的 azure-core 1.58.1 依赖 `MethodHandle`，D8 强制要求 API 26）
 - 嵌入式 Speech SDK 仅提供 `arm64-v8a` 原生库
 - 暂时只支持一个内置声线 xiaoxiao，不做多声线切换
-- 模型从服务器下载，不打包进 APK
+- online 模型从服务器下载，不打包进 APK；offline 模型由构建脚本打入 `aasc-server/res/models/tts`
 - 不引入大段 `if-else` 链，路由与回退用状态判断 + 提前返回
 
 ## 核心架构
 
 ```
 【服务器 res/models/tts】                【APK（TtsModelManager + TtsEngine）】
-  manifest.json (sha256 清单)  ──下载──►  filesDir/models/tts（校验后缓存）
-  14 个模型文件                 ──下载──►  加载 EmbeddedSpeechConfig
+  manifest.json (sha256 清单)  ──下载──►  online: filesDir/models/tts（校验后缓存）
+  14 个模型文件                 ──内置──►  offline: filesDir/aasc-server/res/models/tts
+                                  ───────►  加载 EmbeddedSpeechConfig
                                           SpeechSynthesizer（Xiaoxiao）
 
 【控制端】                  【服务器】                【显示端 display.html】
@@ -77,7 +78,7 @@ Embedded Speech SDK 的 `SpeechSynthesizer` 封装。
 
 模型下载、校验、加载与状态管理。
 
-- 存储：`filesDir/models/tts`
+- 存储：online 使用 `filesDir/models/tts`；offline 使用 `filesDir/aasc-server/res/models/tts`
 - 状态机：`not_ready → downloading → ready | error`
 - 获取清单：`GET /api/tts/model-manifest`（数组 `[{name, sha256}]`）
 - 下载校验：逐文件下载到 `.tmp`，SHA-256 与清单一致才原子改名
@@ -300,6 +301,12 @@ APK 共享 `CpuCluster` / `CpuTopology` / `CpuAffinity` 原语，ASR/TTS 各自�
 - APK 已安装并运行在 `192.168.1.6:5555` 的 display2；进程 PID 9959 存活，设备拓扑为 CPU 0--3 little、CPU 4--7 big。
 - 默认 TTS `1 大核 + 1 小核` 下，3 个同时提交的真机请求均收到 `ttsGenerating` 和 `ttsResult`，未出现失败、超时或重复播放错误；两个请求可并行，额外请求由有界队列承接。
 - 本轮未重新采集 PSS/native heap；此前 100 字压测的内存结果继续作为基线。logcat 未输出显式 `cpuConfig` 应用日志，不能据此宣称 affinity syscall 已成功。
+
+## 2026-09-14 offline 原生 TTS 模型路径复用
+
+offline APK 解包后，`TtsModelManager` 直接读取 `files/aasc-server/res/models/tts/manifest.json` 和声明的模型文件，校验成功后加载 Embedded Speech SDK。校验或加载失败只记录错误并保留随包资源，不触发网络下载，也不在 `files/models/tts` 创建副本；online APK 继续使用原有下载缓存。
+
+真机验证使用 SM-N9500（Android 9/API 28，Display 2）：`POST /api/tts/generate` 返回成功；设备存在 `files/aasc-server/res/models/tts`，不存在 `files/models/tts`。
 
 ## 改动文件清单
 

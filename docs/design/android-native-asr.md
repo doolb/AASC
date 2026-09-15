@@ -11,13 +11,13 @@
 | 问题 | 根因 |
 |------|------|
 | APK 内 WASM 识别慢、内存占用高 | 234MB 模型在 WebView WASM 环境推理性能差 |
-| APK 内语音功能实际不可用 | Manifest 无 `RECORD_AUDIO`，WebView 未覆写 `onPermissionRequest`，`getUserMedia` 永久挂起 |
+| APK 内语音功能实际不可用 | Manifest 缺少 `RECORD_AUDIO` 或 `MODIFY_AUDIO_SETTINGS`，或 WebView 未覆写 `onPermissionRequest`；其中缺少音频设置权限时即使录音运行时权限已授权，Chromium 仍无法创建录音设备 |
 | 模型不适合浏览器分发 | 234MB 模型让浏览器加载不现实，APK 本地加载才可行 |
 
 ### 目标
 
 1. APK 原生运行 SenseVoice int8（`model.int8.onnx`，约 234MB），识别性能显著优于 WASM
-2. 模型**需要识别时自动下载**：首次需要时从 AASC 服务器拉取，APK 安装包保持小体积
+2. online APK 在**需要识别时自动下载**模型；offline APK 使用随包资源，避免安装后再次下载，APK 安装包体积由离线功能需求决定
 3. 识别路径**统一服务器入口**：音频先上传公共 `/api/asr/recognize`；服务端模式由服务器识别，显示端模式按连接顺序转发给第一个可用 Android ASR 提供端
 4. 录音端使用 `getUserMedia` + `PcmAudioCapture` 封装原始 WAV；仅被服务器选中的 APK 提供端调用原生 ASR
 
@@ -53,10 +53,11 @@
 
 模型文件的下载、校验、加载与状态管理。
 
-- **存储**：`filesDir/models/sensevoice/{model.int8.onnx, tokens.txt}`
+- **存储**：online 使用 `filesDir/models/sensevoice/{model.int8.onnx, tokens.txt}`；offline 直接使用 `filesDir/aasc-server/res/models/sensevoice/{model.int8.onnx, tokens.txt}`
 - **下载**：先读取服务器同名 `.sha256` 文件；模型拉取到 `.tmp` 后计算 SHA-256，与服务器 hash 一致才原子改名，并把已验证 hash 保存到 APK 本地
 - **校验**：文件大小检查 + 加载自检（sherpa-onnx 初始化成功即认为完整）；损坏则删除本地文件回 `not_ready`
 - **状态机**：`not_ready → downloading → ready / error`；`error` 或损坏后下次需要时重新触发
+- **offline 分支**：只校验随包模型和 hash，直接从 `filesDir/aasc-server/res/models/sensevoice` 加载；校验或加载失败只报告错误并保留随包文件，不下载、不复制到 `filesDir/models/sensevoice`
 - **OOM 防护**：加载前 `ActivityManager.getMemoryInfo` 检查可用内存，不足直接报 `error` 不硬加载
 - **线程**：下载在 IO 线程；引擎加载在工作线程；状态用 `@Volatile` + 单例锁
 
@@ -119,9 +120,18 @@ ASR 从单个全局 `OfflineRecognizer` 改为 `AsrEnginePool`。池大小等于
 ### 4. 录音权限补全（APK）
 
 - Manifest 增加 `RECORD_AUDIO`
+- Manifest 增加 `MODIFY_AUDIO_SETTINGS`，保证 Android WebView 能创建录音设备
 - `MainActivity` 启动时请求运行时权限
 - `DisplayWebView` 的 `WebChromeClient` 覆写 `onPermissionRequest`：对 `RESOURCE_AUDIO_CAPTURE` 直接 `grant()`
-- 效果：现有 `getUserMedia`/`MediaRecorder` 录音代码在 APK 内原样可用，JS 录音逻辑零改动
+- RECORD_AUDIO 授权完成后重载 display WebView，避免首次加载时能力探测早于系统授权
+- 效果：现有 `getUserMedia`/`MediaRecorder` 录音代码在 APK 内原样可用，JS 录音逻辑零改动；缺少任一系统音频权限时按不可用能力安全降级
+
+### 4.1 2026-09-14 offline APK 录音未就绪修复结果
+
+- 根因确认：offline APK 之前只声明并授权了 `RECORD_AUDIO`，Android WebView 的 Chromium 仍因缺少 `MODIFY_AUDIO_SETTINGS` 无法创建录音设备，日志出现 `No audio device will be available for recording`，页面因此显示“未就绪”。
+- 修复方式：在 `AndroidManifest.xml` 增加普通安装权限 `MODIFY_AUDIO_SETTINGS`；保留 `RECORD_AUDIO` 的运行时授权和 WebView `RESOURCE_AUDIO_CAPTURE` 授权流程，不复制或改动网页录音实现。
+- 离线默认策略保持不变：`asr.serverEnabled=false`、`asr.device=display`，显示端监听默认开启，公共 ASR 仍通过本地 `/api/asr/status` 判断可用性。
+- 验证结果：SM-N9500 Android 9/API 28 的 Display 2 卸载重装后，页面显示“监听中 · 等待唤醒”，底噪检测和 VAD 配置均成功，未再出现音频设备不可用日志。
 
 ### 5. display.html 接入点（5 处改造）
 
@@ -231,7 +241,7 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 | 文件 | 改动 |
 |------|------|
 | `src/apps/android-display/app/build.gradle.kts` | 新增 sherpa-onnx AAR 依赖 |
-| `src/apps/android-display/app/src/main/AndroidManifest.xml` | 新增 `RECORD_AUDIO` 权限 |
+| `src/apps/android-display/app/src/main/AndroidManifest.xml` | 新增 `RECORD_AUDIO` 与 `MODIFY_AUDIO_SETTINGS` 权限 |
 | `.../MainActivity.kt` | 运行时权限请求；`onPermissionRequest` 授予音频采集 |
 | `.../NativeBridge.kt` | 新增 `asrStatus`/`asrEnsureModel`/`asrRecognize` 3 个桥方法 |
 | `.../ServerOrigin.kt` | 解析页面 URL 的 HTTP/HTTPS origin，供主线程缓存服务器地址 |
@@ -306,3 +316,9 @@ GET /api/asr/model/<filename>   // filename 白名单：model.int8.onnx / tokens
 正式显示端和独立测试 APK 不再提供“过滤其他文字”开关，也不再支持 `zh-en-filter` 语言模式。正式显示端固定使用 `zh` 语言提示，识别结果仅做原有首尾空白清理，不按 Unicode 脚本删除文字。这样可以避免把模型误识别出的日文字符直接删除，便于继续观察真实识别结果；流式 ASR 的固定中英双语模型不受影响。
 
 配置广播只保留 `languageMode` 和 `denoise`，Android 原生桥只接收语言与降噪参数；旧请求中的 `filterOtherText` 或 `zh-en-filter` 不再被处理。
+
+## 2026-09-14 offline 原生语音模型路径复用
+
+offline APK 解包后的 `files/aasc-server/res/models/sensevoice` 与 `files/aasc-server/res/models/tts` 已经包含正式 ASR/TTS 资源。NativeBridge 在 offline 模式把这两个目录直接注入对应模型管理器，原生能力不再把同一批模型下载或复制到 `files/models`。online APK 保留原有 `files/models` 下载缓存，以兼容没有内置资源的设备。
+
+ASR 继续使用随包 `model.int8.onnx.sha256` 和 `tokens.txt.sha256`；TTS 使用随包 `manifest.json` 逐文件校验。offline 校验失败只报告错误并保留内置文件，避免把 APK 解包资源删除。

@@ -58,3 +58,22 @@ test('运行时代码不应从全局 Responses 配置读取地址或密钥', () 
         assert.doesNotMatch(source, /responsesBaseUrl|responsesApiKey/u, `${relativePath} 仍读取全局 Responses 配置`);
     }
 });
+
+test('offline server-app 将内置 HTTPS LLM 传输上下文注入聊天服务', () => {
+    const server = fs.readFileSync(
+        path.join(projectRoot, 'src/apps/server/boot/server-app.js'),
+        'utf8'
+    );
+
+    assert.match(server, /chat\.init\(config\.get\(['"]chat['"],\s*\{\}\),\s*\{[\s\S]{0,500}offlineNodeMode:\s*OFFLINE_NODE_MODE[\s\S]{0,500}localLlmBaseUrl:[\s\S]{0,500}localLlmHostnames:/u);
+});
+
+test('WSViewBind 控制端 chatMessage 应进入统一聊天处理器', () => {
+    const server = fs.readFileSync(
+        path.join(projectRoot, 'src/apps/server/boot/server-app.js'),
+        'utf8'
+    );
+
+    assert.match(server, /async function handleChatMessageRequest\(data,\s*\{\s*displayId,\s*ws\s*\}\)/u);
+    assert.match(server, /async function handleControlMessageFallback\(data, ws\)\s*\{[\s\S]{0,1200}if \(data\.type === 'chatMessage'\)\s*\{[\s\S]{0,300}handleChatMessageRequest\(data,\s*\{\s*displayId,\s*ws\s*\}\)/u);
+});

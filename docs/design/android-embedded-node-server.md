@@ -96,3 +96,19 @@ offline APK 的语音默认配置固定为：
 - 显示端语音监听默认开启；服务端只负责协议路由和结果回传，不启动服务器 ASR/TTS 进程。
 
 生成的 manifest 会记录每个 assets 文件的大小和 SHA-256。APK 私有目录只覆盖运行时代码、依赖和证书，保留用户配置、媒体、临时文件和日志。
+
+offline APK 的首次配置和模型路径补充约定：
+
+- 构建时从当前 `config/config.json` 只提取 `llm`、`chat` 两个配置段，写入 `offline-config.json` 资产；不把主机任务历史、日志或其他运行态配置打入 APK。
+- 首次安装且 `files/aasc-server/config/config.json` 不存在时，安装器将 `offline-config.json` 种子写入该路径；升级或重启时保留已有配置。
+- 原生 ASR/TTS 优先读取 `files/aasc-server/res/models/sensevoice` 和 `files/aasc-server/res/models/tts`，这些目录就是离线模型的唯一语音权重来源；online APK 仍使用 `files/models` 下载缓存。
+- `files/aasc-server/res/models/llm/<model>/.mmap` 是 MNN 运行时缓存，允许在首次推理后生成，不视为 APK 资源重复。
+- Node 任务引擎启动后，offline 模式自动确保 `llm-server` 内置服务实例运行；该服务只在当前 Node 进程注册 `/v1` 路由。
+
+## offline 本机 LLM 聊天传输
+
+offline APK 的 Node 服务和内置 `llm-server` 共用 `8081` 端口；当服务器加载证书时，该端口是 HTTPS。历史配置可能仍保留 `http://设备地址:8081/v1/chat/completions`，如果直接按该 URL 调用会被 HTTPS 服务重置，直接改为 HTTPS 又会遇到自签名证书和设备地址不匹配。因此启动时向聊天服务注入受限的本机传输上下文：将当前设备回环/本机地址的 `8081` 请求解析为 `https://127.0.0.1:8081/v1`，只对这个内置目标关闭证书校验；外部 LLM profile 继续执行默认 TLS 校验。
+
+Responses 和 Chat Completions 两条客户端路径都复用同一传输上下文。传输失败必须进入现有 `onError → chatResponse(success=false)` 链路，控制端能看到明确错误，不再因协议不匹配等待超时。
+
+聊天 WebSocket 入口也必须保持统一：WSViewBindServer 注册的控制端 `chatMessage` 交给统一聊天处理器，旧显示端 WebSocket 入口复用同一处理器，避免消息只写入日志而不调用 LLM。

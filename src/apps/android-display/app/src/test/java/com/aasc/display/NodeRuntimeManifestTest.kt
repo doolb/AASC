@@ -102,6 +102,10 @@ class NodeRuntimeManifestTest {
             File(root, "offline-model-manifest.json").writeText(
                 """{"files":[{"path":"res/models/sensevoice/model.int8.onnx","size":5}]}"""
             )
+            File(root, "config/config.json").apply {
+                parentFile?.mkdirs()
+                writeText("{\"chat\":{}}")
+            }
 
             assertTrue(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
             File(root, "res/models/sensevoice/model.int8.onnx").appendText("broken")

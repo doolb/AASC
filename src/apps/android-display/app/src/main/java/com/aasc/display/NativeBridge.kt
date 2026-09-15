@@ -157,8 +157,18 @@ class NativeBridge(
             .toString()
     }
 
+    // offline 模型由 NodeRuntimeInstaller 解包到同一份 aasc-server 资源目录，ASR/TTS 直接复用。
+    private val offlineVoiceModelRoot = File(webView.context.filesDir, "aasc-server/res/models")
+
+    private fun offlineVoiceModelDirectory(name: String): File? {
+        return if (offlineMode) File(offlineVoiceModelRoot, name) else null
+    }
+
     // ---- ASR 原生识别桥（sherpa-onnx，模型按需下载）----
-    private val asrModelManager = AsrModelManager(webView.context)
+    private val asrModelManager = AsrModelManager(
+        webView.context,
+        offlineVoiceModelDirectory("sensevoice")
+    )
     // ASR 桥任务允许并发进入 AsrEnginePool；真实并发上限由 pool slot 队列控制，超额任务在池内排队。
     private val asrExecutor = Executors.newCachedThreadPool()
     private val denoiseEngine = SherpaDenoiseEngine()
@@ -177,7 +187,10 @@ class NativeBridge(
     private var asrLanguageMode = AsrLanguageMode.AUTO
     private var asrDenoiseEnabled = false
     // ---- TTS 嵌入式语音合成桥（Microsoft Embedded Speech SDK，模型按需下载）----
-    private val ttsModelManager = TtsModelManager(webView.context)
+    private val ttsModelManager = TtsModelManager(
+        webView.context,
+        offlineVoiceModelDirectory("tts")
+    )
     // TTS 桥侧自身即完成有限准入：worker 数和队列容量都等于当前 policy 的 slotCount。
     // TtsEnginePool 的公平 Semaphore 仍保留，作为进入真实 synthesizer 槽位前的第二层保护。
     private val ttsExecutor = TtsBridgeDispatcher(TtsEngine.currentPolicySlotCount())

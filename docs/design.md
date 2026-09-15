@@ -34,6 +34,7 @@
 | 媒体库 | [media-library.md](design/media-library.md) | 多媒体库管理、多协议支持、文件操作 |
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |
 | 聊天系统 | [chat-system.md](design/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
+| 聊天输出过滤与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 隐藏 think 泄漏内容、统一流式/历史/TTS 文本和私聊清空错误反馈 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](design/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出 |
 | 搜索频道与独立 Pi 搜索进程 | [search-channel.md](design/search-channel.md) | 搜索状态/历史独立展示、LLM 搜索上下文隔离与临时进程回收 |
 | WebSocket | [websocket.md](design/websocket.md) | 通信协议、消息类型 |

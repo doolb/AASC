@@ -93,6 +93,23 @@ MainActivity toggleControlPage():
     首次显示 -> 加载同源 ServerConfig.controlPageUrl(serverUrl)
 ```
 
+```text
+Android FrameLayout 图层约束
+    → displayWebView 位于底层
+    → controlWebView 显示时必须位于 displayWebView 之上
+    → controlToggleButton 位于可见 controlWebView 之上，保持可关闭入口
+    → offlineStartupPanel 仅在启动等待期间位于最上层
+    → 控制端按钮点击后检查 controlWebView 的真实可见层级和 /control 加载结果
+```
+
+MainActivity.setupWebView():
+    → webContainer.addView(displayWebView, 0)
+    → webContainer.addView(controlWebView, displayWebView 之上且按钮/启动遮罩之下)
+    → 保持 controlToggleButton 位于 controlWebView 之上
+    → 保持 offlineStartupPanel 位于所有 WebView 之上
+
+实际实现使用 `webContainer.addView(control, 1)`：display WebView 为索引 0，控制端 WebView 位于其上方，XML 中的按钮和启动遮罩继续位于控制端 WebView 上方。
+
 普通 APK 和离线 APK 共用上述流程；离线模式只改变 Node 主服务地址和本地模型配置，不改变控制端授权协议。
 离线模式的原生入口默认可用，不因服务端初始化阶段补发的 `enabled=false` 而隐藏；普通 APK 仍完全遵循服务端授权。
 

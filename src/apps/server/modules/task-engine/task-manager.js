@@ -37,6 +37,7 @@ class TaskManager extends EventEmitter {
     this._chatService = options.chatService || null;  // 由 server-app 注入全局聊天协议配置
     this._widgetActions = new Map();  // instanceId -> Map<action, handler>
     this._isRestoring = false;
+    this._builtinServiceEnsures = new Map();
     this.maxInstances = options.maxInstances || 50;
     this.taskLinks = new Map();  // sourceInstanceId -> [{ taskName, instanceId }]
     this._pendingDisplayServices = [];  // [{ taskName, instanceId, task, params }] 待显示端连接后转发
@@ -105,7 +106,7 @@ class TaskManager extends EventEmitter {
    * display_offline 实例：内存态（_orphanedTasks/this.instances）已随重启清空，
    *   按 displayId 回填孤儿表，等显示端重连后由 retryOrphanedTasks(displayId) 自动接管
    */
-  async restoreAutoStartServices() {
+    async restoreAutoStartServices() {
     const taskList = await this.taskIO.listTasks().catch(() => []);
     this._isRestoring = true;
     for (const task of taskList) {
@@ -129,8 +130,92 @@ class TaskManager extends EventEmitter {
         }
       }
     }
-    this._isRestoring = false;
-  }
+        this._isRestoring = false;
+    }
+
+    /**
+     * 确保一个内置服务存在且正在运行。该入口供 offline 启动和后续系统服务使用，
+     * 复用普通 submit/runInstance 生命周期，不另造一套任务实例或 HTTP 配置接口。
+     */
+    async ensureBuiltinServiceInstance(taskName, options = {}) {
+        const existingEnsure = this._builtinServiceEnsures.get(taskName);
+        if (existingEnsure) return existingEnsure;
+
+        const ensurePromise = this._ensureBuiltinServiceInstance(taskName, options);
+        this._builtinServiceEnsures.set(taskName, ensurePromise);
+        try {
+            return await ensurePromise;
+        } finally {
+            this._builtinServiceEnsures.delete(taskName);
+        }
+    }
+
+    async _ensureBuiltinServiceInstance(taskName, options = {}) {
+        if (!builtinRegistry) throw new Error('内置任务模块不可用');
+        const builtinTask = builtinRegistry.getTask(taskName);
+        if (!builtinTask) throw new Error('内置任务不存在: ' + taskName);
+        const mode = options.mode || builtinTask.mode || 'one-shot';
+        if (mode !== 'service') throw new Error(`内置任务不是服务任务: ${taskName}`);
+
+        const target = options.target || builtinTask.target || 'server';
+        const index = await this.taskIO.getIndex(taskName).catch(() => []);
+        const running = index.find((entry) => entry.mode === 'service' && entry.status === 'running');
+        if (running) {
+            const ready = await this._waitForServiceInstance(taskName, running.instanceId);
+            if (ready) return { taskName, instanceId: running.instanceId, status: 'running', created: false };
+        }
+
+        const draft = index.find((entry) => entry.mode === 'service' && ['draft', 'created'].includes(entry.status));
+        const submitted = draft
+            ? { taskName, instanceId: draft.instanceId, status: draft.status }
+            : await this.submit({
+                taskName,
+                taskType: 'builtin',
+                builtinId: taskName,
+                target,
+                mode: 'service',
+                env: options.env || 'auto',
+                params: options.params || {},
+                files: []
+            });
+        const result = await this.runInstance(taskName, submitted.instanceId);
+        const ready = await this._waitForServiceInstance(taskName, submitted.instanceId);
+        if (ready) return { taskName, instanceId: submitted.instanceId, status: 'running', created: !draft };
+
+        const current = await this.getInstanceStatus(taskName, submitted.instanceId);
+        return {
+            taskName,
+            instanceId: submitted.instanceId,
+            status: current?.status || result.status || 'failed',
+            error: current?.error || result.error || '内置服务启动失败',
+            created: !draft
+        };
+    }
+
+    async _waitForServiceInstance(taskName, instanceId, timeoutMs = 5000) {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            if (this._services.has(instanceId)) return true;
+            const instance = this.instances.get(instanceId);
+            if (instance?.status === 'failed' || instance?.status === 'stopped') return false;
+            const entry = await this.taskIO.getIndex(taskName).then((entries) =>
+                entries.find((item) => item.instanceId === instanceId)
+            ).catch(() => null);
+            if (entry?.status === 'failed' || entry?.status === 'stopped') return false;
+            await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return this._services.has(instanceId);
+    }
+
+    _requiresServerProcess(task) {
+        if (task.target === 'display' || task.target === 'subdisplay') return false;
+        if (task.mode === 'service') return false;
+        if (task.taskType === 'builtin') {
+            const builtinTask = builtinRegistry?.getTask(task.builtinId || task.taskName);
+            if (builtinTask?.execution === 'in-process') return false;
+        }
+        return true;
+    }
 
   /**
    * 把磁盘上 display_offline 的服务实例回填进 _orphanedTasks（按 displayId 分组）
@@ -253,9 +338,7 @@ class TaskManager extends EventEmitter {
     }
 
     try {
-      if (this._serverExecutionDisabled
-        && task.target !== 'display'
-        && task.target !== 'subdisplay') {
+      if (this._serverExecutionDisabled && this._requiresServerProcess(task)) {
         throw new Error(this._serverExecutionError);
       }
 
@@ -360,6 +443,9 @@ class TaskManager extends EventEmitter {
 
       console.log('[TaskManager] 服务端执行, runner:', usePuppeteer ? 'puppeteer' : 'nodejs', 'instanceId:', instanceId);
       const runner = usePuppeteer ? this.puppeteerRunner : this.nodeRunner;
+      if (!runner || typeof runner.run !== 'function') {
+        throw new Error(this._serverExecutionError);
+      }
       this._runServerTask(task, instanceId, instance, runner, context);
       return { taskName, instanceId, status: 'running' };
 
@@ -1244,6 +1330,7 @@ class TaskManager extends EventEmitter {
       await this.puppeteerRunner.close();
     }
     this._taskRouteRegistry.destroy();
+    this._builtinServiceEnsures.clear();
     this._services.clear();
     this._widgetActions.clear();
     this.removeAllListeners();

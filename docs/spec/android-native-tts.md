@@ -30,9 +30,15 @@ purge(modelDir): 删除每个 FILE_NAMES 及其 .tmp
 
 ```
 状态机: not_ready → downloading → ready | error
-ensureModel(baseUrl, onModelEvent):
+ensureModel(baseUrl, onModelEvent, offlineDirectory=null):
   已 ready → return "ready"；已 downloading → return "downloading"
   置 downloading → 主线程回 onModelEvent({state:"downloading",progress:0}) → 后台线程:
+    if offlineDirectory != null:
+      manifest = 读取 offlineDirectory/manifest.json
+      require manifest 的每个文件存在且 SHA-256 匹配
+      TtsEngine.load(context, offlineDirectory) 成功 → ready
+      校验或加载失败 → error；保留 offlineDirectory 文件；不下载、不写 files/models/tts
+      return
     manifest = fetch("/api/tts/model-manifest")  # [{name,sha256}]；失败 → error
     localHashes = 读取 filesDir/models/tts/hashes.json
     allVerified = 每个 manifest 项 的 本地文件存在 且 localHashes[name]===sha256
@@ -44,6 +50,25 @@ ensureModel(baseUrl, onModelEvent):
       任一下载失败 → error + purge 模型文件
     全部成功 → 保存 hashes.json → 内存检查 + TtsEngine.load → ready / error
 statusJson(): {"state","progress","error"}
+```
+
+## 2026-09-14 offline 原生 TTS 模型路径复用伪代码
+
+```text
+NativeBridge(offlineMode=true):
+  ttsDirectory = filesDir/aasc-server/res/models/tts
+  TtsModelManager(ttsDirectory)
+
+TtsModelManager.ensureModel(offlineDirectory):
+  读取内置 manifest.json
+  校验 manifest 声明的每个文件存在且 SHA-256 正确
+  校验成功 -> TtsEngine.load(offlineDirectory) -> ready
+  任一校验/加载失败 -> error，并保留内置模型文件
+  不请求 /api/tts/model-manifest，不创建 files/models/tts
+
+onlineMode:
+  ttsDirectory = filesDir/models/tts
+  继续使用服务端 manifest、临时文件和原子改名下载流程
 ```
 
 ## TtsEngine（Kotlin 单例，Embedded Speech SDK + TTS 并发池）

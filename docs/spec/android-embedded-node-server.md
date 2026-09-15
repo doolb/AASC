@@ -159,6 +159,34 @@ offline 语音默认配置
     → 显示端能力不可用时返回结构化错误，不启动服务器 ASR/TTS 作为回退
 ```
 
+```text
+offline 配置种子:
+    → 构建脚本读取当前 config/config.json
+    → 只保留 { llm, chat }，写入 assets/offline-config.json 并加入 runtime manifest
+    → NodeRuntimeInstaller 将其复制到 staging
+    → 如果 files/aasc-server/config/config.json 已存在：保留用户配置
+    → 否则将 staging/offline-config.json 写为 config/config.json
+
+offline 原生语音模型:
+    → NativeBridge(offlineMode=true) 将 ASR 目录设为 files/aasc-server/res/models/sensevoice
+    → NativeBridge(offlineMode=true) 将 TTS 目录设为 files/aasc-server/res/models/tts
+    → ASR 校验内置 model/tokens/hash 后直接加载
+    → TTS 校验内置 manifest.json 和全部文件 hash 后直接加载
+    → 不请求在线模型接口，不创建 files/models/sensevoice 或 files/models/tts 副本
+    → online 模式继续使用 files/models 下的下载缓存
+```
+
+```text
+offline server-app 任务启动:
+    → restoreAutoStartServices()
+    → AASC_OFFLINE_MODE == "1" 时 ensureBuiltinServiceInstance("llm-server")
+    → 已存在 running 服务实例则复用
+    → 没有 running 实例则通过普通 submit/runInstance 创建并持久化实例
+    → llm-server 在当前 Node 进程注册四个 /v1 路由
+    → 未注册时 /v1 路由返回结构化 503
+    → target=server 且 mode=service 不创建任务 Runner；需要子进程的非服务端任务继续拒绝
+```
+
 ## 双进程启动伪代码
 
 ```text
@@ -271,4 +299,67 @@ APK WebView HTTPS/WSS 证书错误
 本地端口冲突
     → Service 报告端口占用
     → 不覆盖其他应用数据
+```
+
+## 2026-09-15 offline 本机 LLM 聊天传输伪代码
+
+```text
+server-app 创建聊天服务:
+  localLlmBaseUrl = `${useHttps ? "https" : "http"}://127.0.0.1:${PORT}/v1`
+  chat.init(chatConfig, {
+    offlineNodeMode: OFFLINE_NODE_MODE,
+    localLlmBaseUrl,
+    localLlmHostnames: [getLocalIP()]
+  })
+
+normalizeChatTransport(profile, runtimeOptions):
+  configuredBaseUrl = 去除 /chat/completions 的 profile.apiUrl
+  if runtimeOptions.offlineNodeMode 且 configured 地址的主机名属于
+     127.0.0.1、localhost、当前设备地址，且端口等于内置 LLM 端口:
+    baseUrl = runtimeOptions.localLlmBaseUrl
+    requestUrl = `${baseUrl}/chat/completions`
+    requestOptions = { rejectUnauthorized: false }
+    return protocol、baseUrl、requestUrl、requestOptions、local=true
+  return 原有 profile 地址和默认 HTTPS 校验
+```
+
+```text
+offline 本机 LLM 请求:
+  Responses:
+    使用归一化后的 baseUrl + /responses
+    仅对内置本机目标传入 rejectUnauthorized=false
+  Chat Completions:
+    使用归一化后的 requestUrl
+    仅对内置本机目标传入 rejectUnauthorized=false
+  外部模型地址:
+    不改写 URL，不关闭证书校验
+  连接错误:
+    通过 chatStream.onError 回传 chatResponse(success=false)
+    不让控制端无限等待
+```
+
+## 2026-09-15 聊天 WebSocket 统一入口伪代码
+
+```text
+WSViewBindServer 初始化:
+  注册控制端 chatMessage handler
+  handler 调用 handleControlMessageFallback(data, ws)
+
+handleControlMessageFallback(data, ws):
+  if data.type == "chatMessage":
+    await handleChatMessageRequest(data, { displayId: data.displayId, ws })
+    return
+
+显示端旧 WebSocket 入口:
+  if data.type == "chatMessage":
+    await handleChatMessageRequest(data, { displayId: 当前显示端 ID, ws })
+
+handleChatMessageRequest:
+  if assistantType == "agent" 或兼容 mode == "role":
+    执行 Agent 聊天并回传 chatChunk/chatResponse
+  else:
+    执行普通 LLM handleChatMessage
+    通过 sendToControl 回传 chatChunk/chatResponse
+  发生异常:
+    回传带 requestId 的 chatResponse(success=false)
 ```

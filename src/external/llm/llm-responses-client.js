@@ -46,10 +46,11 @@ const readResponseBody = (response, maxBytes = MAX_RESPONSE_BYTES) => new Promis
   response.on('error', reject);
 });
 
-const requestJson = ({ url, options, timeoutMs }) => new Promise((resolve, reject) => {
+const requestJson = ({ url, options, timeoutMs, requestOptions = {} }) => new Promise((resolve, reject) => {
   const parsedUrl = new URL(url);
   const transport = parsedUrl.protocol === 'https:' ? https : http;
   const request = transport.request({
+    ...requestOptions,
     hostname: parsedUrl.hostname,
     port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
     path: `${parsedUrl.pathname}${parsedUrl.search}`,
@@ -69,10 +70,11 @@ const requestJson = ({ url, options, timeoutMs }) => new Promise((resolve, rejec
   request.end();
 });
 
-const streamSse = ({ url, options, timeoutMs, onEvent }) => new Promise((resolve, reject) => {
+const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) => new Promise((resolve, reject) => {
   const parsedUrl = new URL(url);
   const transport = parsedUrl.protocol === 'https:' ? https : http;
   const request = transport.request({
+    ...requestOptions,
     hostname: parsedUrl.hostname,
     port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
     path: `${parsedUrl.pathname}${parsedUrl.search}`,
@@ -164,9 +166,12 @@ const streamSse = ({ url, options, timeoutMs, onEvent }) => new Promise((resolve
   request.end();
 });
 
-const createResponsesClient = ({ baseUrl, apiKey = '', timeoutMs = DEFAULT_TIMEOUT_MS } = {}) => {
+const createResponsesClient = ({ baseUrl, apiKey = '', timeoutMs = DEFAULT_TIMEOUT_MS, requestOptions = {} } = {}) => {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   if (!normalizedBaseUrl) throw new Error('Responses 客户端缺少 baseUrl');
+  const baseRequestOptions = requestOptions && typeof requestOptions === 'object'
+    ? { ...requestOptions }
+    : {};
 
   const buildRequestOptions = (body, options = {}) => {
     const payload = JSON.stringify(body || {});
@@ -185,7 +190,8 @@ const createResponsesClient = ({ baseUrl, apiKey = '', timeoutMs = DEFAULT_TIMEO
     const result = await requestJson({
       url: `${normalizedBaseUrl}/responses`,
       options: buildRequestOptions(body, options),
-      timeoutMs: options.timeoutMs || timeoutMs
+      timeoutMs: options.timeoutMs || timeoutMs,
+      requestOptions: { ...baseRequestOptions, ...(options.requestOptions || {}) }
     });
     const payload = parseJsonBody(result.body, result.statusCode);
     if (result.statusCode < 200 || result.statusCode >= 300) throw getRemoteError(payload, result.statusCode);
@@ -199,6 +205,7 @@ const createResponsesClient = ({ baseUrl, apiKey = '', timeoutMs = DEFAULT_TIMEO
       url: `${normalizedBaseUrl}/responses`,
       options: buildRequestOptions(body, options),
       timeoutMs: options.timeoutMs || timeoutMs,
+      requestOptions: { ...baseRequestOptions, ...(options.requestOptions || {}) },
       onEvent
     });
   };

@@ -281,16 +281,11 @@ getHistory():
     按 timestamp 排序后返回
 
 clearHistory(options):
-    如果 options.mode === 'private' 且有 target:
-        如果 options.sessionId 存在:
-            delete chatHistories['private:{target}:{sessionId}']
-        否则（兼容旧行为）:
-            删除所有 private:{target}:* 的历史
-    如果 options.mode === 'group':
-        delete chatHistories.group
-    否则:
-        chatHistories = {}
-    调用 saveHistory()
+    校验 mode=group，或 mode=private 且同时存在 target/sessionId
+    私聊只删除 target + sessionId 对应的历史，不删除同一助手其他会话
+    群聊只删除群聊范围的历史
+    清空前创建历史备份
+    标记受影响历史文件并调用 saveHistory()
     返回 getHistory()
 
 deleteConversationRound(messageId, options):
@@ -1325,12 +1320,19 @@ const Chat = {
         更新UI
     
     clearHistory():
-        获取当前模式 mode 和 target
+        获取当前模式 mode、privateTarget 和 privateSessionId
+        如果 mode=private 且 privateTarget 为空:
+            显示“当前私聊助手未就绪”并返回
+        sessionId = privateSessionId 或 'default'
         显示确认对话框 (区分群聊/私聊)
         请求 POST /api/chat/clear
-        发送 { mode, target }
-        更新 this.history
-        调用 renderHistory()
+        发送 { mode, target, sessionId }
+        解析 HTTP 和业务状态
+        如果失败:
+            显示服务端错误原因，不静默忽略
+        否则:
+            更新 this.history
+            调用 renderHistory()
 }
 ```
 

@@ -65,6 +65,12 @@ enabled = true 或 false
 
 离线 APK 收到服务端默认的 `enabled=false` 时仍保留本地控制端入口，因为该入口用于访问同一 APK 内的本地 `/control` 页面；普通 APK 继续严格遵循服务端授权状态。
 
+## 控制端页面图层
+
+Android 原生按钮、显示端 WebView、控制端 WebView 和首次启动遮罩都位于同一个 `FrameLayout` 时，必须明确维护显示顺序：显示端 WebView 作为底层，控制端 WebView 作为可切换的上层页面，控制端按钮位于控制端页面之上，启动遮罩仅在离线服务未就绪期间位于最上层。控制端页面打开后，显示端 WebView 不得继续覆盖控制端 WebView；否则按钮虽然收到点击，用户仍只能看到原显示页。
+
+该图层约束同时适用于普通 APK 和 offline APK，不能仅依赖注释推断 Android 的绘制顺序；当前实现将控制端 WebView 插入 display WebView 之上，并通过运行时层级和真机点击回归确认。
+
 ## Android 登录捕获
 
 服务端 `oauth/start` 返回登录地址和脱敏捕获配置。捕获配置只包含 Provider 预定义的域名、网络 Authorization 捕获规则、localStorage 字段和 Cookie 字段，不允许控制端网页下发任意脚本或任意域名。

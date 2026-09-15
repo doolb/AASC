@@ -34,7 +34,7 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- 运行时 WebView 从 index=0 插入，因此这个按钮始终位于所有页面的最上层。 -->
+        <!-- 控制按钮由 XML 作为容器顶层子项保留，控制端 WebView 运行时插入到它的下方。 -->
         <Button
             android:id="@+id/controlToggleButton"
             android:layout_width="wrap_content"

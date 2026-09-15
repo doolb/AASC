@@ -16,7 +16,7 @@ test('llm-server 通过任务路由注册 OpenAI 兼容接口', () => {
     assert.match(source, /\/v1\/responses/u);
 });
 
-test('AASC 8081 在既有固定路由前挂载任务路由兜底', () => {
+test('AASC 8081 先处理任务路由，未启动 llm-server 时返回固定 503 兜底', () => {
     const source = readSource('src/apps/server/boot/server-app.js');
     const jsonIndex = source.indexOf("app.use(express.json({ limit: '50mb' }));");
     const routeMiddlewareIndex = source.indexOf('taskManager.handleHttpRoute(req, res)');
@@ -24,6 +24,12 @@ test('AASC 8081 在既有固定路由前挂载任务路由兜底', () => {
     assert.ok(jsonIndex >= 0);
     assert.ok(routeMiddlewareIndex > jsonIndex);
     assert.ok(fixedLlmIndex > routeMiddlewareIndex);
+    assert.match(source, /function sendLlmGatewayUnavailable[\s\S]{0,500}503/u);
+    assert.match(source, /app\.get\('\/v1\/models', sendLlmGatewayUnavailable\)/u);
+    assert.match(source, /app\.post\('\/v1\/chat\/completions', sendLlmGatewayUnavailable\)/u);
+    assert.match(source, /app\.post\('\/v1\/responses', sendLlmGatewayUnavailable\)/u);
+    assert.match(source, /app\.post\('\/v1\/chat\/responses', sendLlmGatewayUnavailable\)/u);
+    assert.doesNotMatch(source, /app\.get\('\/v1\/models', \(req, res\) =>[\s\S]{0,300}createModelsResponse/u);
 });
 
 test('TaskManager 向任务上下文提供 LLM HTTP handler', () => {
