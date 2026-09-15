@@ -57,10 +57,10 @@
             android:layout_marginTop="12dp" android:minHeight="220dp" android:text="@string/voiceprint_result"
             android:textIsSelectable="true" android:textSize="14sp" />
         <TextView android:id="@+id/httpStatus" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:layout_marginTop="20dp" android:text="@string/http_stopped" android:textSize="15sp" />
+            android:layout_marginTop="20dp" android:text="@string/http_loading" android:textSize="15sp" />
         <EditText android:id="@+id/httpPortInput" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:hint="@string/http_port_hint" android:inputType="number" android:text="18080" />
         <Button android:id="@+id/httpToggleButton" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="@string/http_start" />
+            android:enabled="false" android:text="@string/http_start" />
     </LinearLayout>
 </ScrollView>

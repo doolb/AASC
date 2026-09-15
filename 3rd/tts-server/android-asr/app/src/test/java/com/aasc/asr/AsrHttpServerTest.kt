@@ -9,12 +9,46 @@ import org.junit.Test
 
 class AsrHttpServerTest {
     @Test
+    fun refusesToStartWithoutTlsByDefault() {
+        val engine = AsrEngine()
+        val coordinator = AsrCoordinator(engine)
+        val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
+        val streamingEngine = StreamingAsrEngine()
+        val server = AsrHttpServer(
+            engine,
+            coordinator,
+            voiceprintCoordinator,
+            streamingEngine,
+            tlsContext = null,
+            cpuModeProvider = { CpuMode.AUTO }
+        )
+        try {
+            val result = server.start(0)
+            assertFalse(result.isSuccess)
+            assertTrue(result.exceptionOrNull()?.message?.contains("HTTPS") == true)
+        } finally {
+            server.stop()
+            coordinator.shutdown()
+            voiceprintCoordinator.shutdown()
+            streamingEngine.release()
+        }
+    }
+
+    @Test
     fun rootEndpointServesBrowserPage() {
         val engine = AsrEngine()
         val coordinator = AsrCoordinator(engine)
         val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
         val streamingEngine = StreamingAsrEngine()
-        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
+        val server = AsrHttpServer(
+            engine,
+            coordinator,
+            voiceprintCoordinator,
+            streamingEngine,
+            tlsContext = null,
+            allowInsecureHttp = true,
+            cpuModeProvider = { CpuMode.AUTO }
+        )
         try {
             val port = server.start(0).getOrThrow()
             val connection = URL("http://127.0.0.1:$port/").openConnection() as HttpURLConnection
@@ -51,7 +85,15 @@ class AsrHttpServerTest {
         val coordinator = AsrCoordinator(engine)
         val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
         val streamingEngine = StreamingAsrEngine()
-        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
+        val server = AsrHttpServer(
+            engine,
+            coordinator,
+            voiceprintCoordinator,
+            streamingEngine,
+            tlsContext = null,
+            allowInsecureHttp = true,
+            cpuModeProvider = { CpuMode.AUTO }
+        )
         try {
             val port = server.start(0).getOrThrow()
             val connection = URL("http://127.0.0.1:$port/health").openConnection() as HttpURLConnection
@@ -75,7 +117,15 @@ class AsrHttpServerTest {
         val coordinator = AsrCoordinator(engine)
         val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
         val streamingEngine = StreamingAsrEngine()
-        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
+        val server = AsrHttpServer(
+            engine,
+            coordinator,
+            voiceprintCoordinator,
+            streamingEngine,
+            tlsContext = null,
+            allowInsecureHttp = true,
+            cpuModeProvider = { CpuMode.AUTO }
+        )
         try {
             val port = server.start(0).getOrThrow()
             val connection = URL("http://127.0.0.1:$port/api/voiceprint/status").openConnection() as HttpURLConnection
@@ -108,6 +158,7 @@ class AsrHttpServerTest {
             voiceprintCoordinator,
             streamingEngine,
             null,
+            allowInsecureHttp = true,
             voiceprintModelLoader = { variant -> loadedVariant = variant; true },
             cpuModeProvider = { CpuMode.AUTO }
         )
@@ -144,6 +195,7 @@ class AsrHttpServerTest {
             voiceprintCoordinator,
             streamingEngine,
             null,
+            allowInsecureHttp = true,
             voiceprintModelLoader = { variant -> loadedVariant = variant; true },
             cpuModeProvider = { CpuMode.AUTO }
         )
@@ -179,6 +231,7 @@ class AsrHttpServerTest {
             voiceprintCoordinator,
             streamingEngine,
             null,
+            allowInsecureHttp = true,
             voiceprintModelLoader = { true },
             cpuModeProvider = { CpuMode.AUTO }
         )
@@ -210,6 +263,7 @@ class AsrHttpServerTest {
             voiceprintCoordinator,
             streamingEngine,
             null,
+            allowInsecureHttp = true,
             voiceprintModelLoader = { true },
             cpuModeProvider = { CpuMode.AUTO }
         )
@@ -235,7 +289,15 @@ class AsrHttpServerTest {
         val coordinator = AsrCoordinator(engine)
         val voiceprintCoordinator = VoiceprintTestCoordinator(engine, SherpaVoiceprintEngine())
         val streamingEngine = StreamingAsrEngine()
-        val server = AsrHttpServer(engine, coordinator, voiceprintCoordinator, streamingEngine, null) { CpuMode.AUTO }
+        val server = AsrHttpServer(
+            engine,
+            coordinator,
+            voiceprintCoordinator,
+            streamingEngine,
+            tlsContext = null,
+            allowInsecureHttp = true,
+            cpuModeProvider = { CpuMode.AUTO }
+        )
         try {
             val port = server.start(0).getOrThrow()
             val connection = URL("http://127.0.0.1:$port/api/voiceprint/test?mode=SHERPA_MULTI_FAST&speakerCount=6")

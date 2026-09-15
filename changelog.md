@@ -1,5 +1,20 @@
 # Web MediaCenter - 变更日志
 
+## Android ASR 测试 APK HTTPS 启动
+
+- ✅ [2026-09-15] 修复独立 ASR 测试 APK 启动竞态导致的 HTTP 明文降级。
+  - `AsrHttpServer.kt` 默认拒绝空 TLS 上下文；JVM 明文回归测试必须显式传入 `allowInsecureHttp=true`。
+  - `MainActivity.kt`、`activity_main.xml` 和 `strings.xml` 在模型/证书加载完成前禁用服务按钮，点击时再次校验，并统一显示 HTTPS 状态。
+  - 改动文件：`3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrHttpServer.kt`、`MainActivity.kt`、`activity_main.xml`、`strings.xml`、`AsrHttpServerTest.kt`、`tests/android-asr-apk.test.js` 及对应 design/spec/task/todo 文档。
+  - 验证：Android JVM 单元测试通过、ASR Node 契约测试 17/17、Debug APK 构建成功；真机加载期间按钮禁用，证书就绪后服务地址为 `https://192.168.1.6:18080`，HTTPS `/health` 返回 200，HTTP 请求被重置且无崩溃日志。
+
+## 控制端 VAD 输入框焦点
+
+- ✅ [2026-09-15] 修复手机控制端打开 VAD 阈值输入框后，键盘弹出时输入框自动关闭。
+  - `DeviceList.renderVoiceVadPanel()` 在当前显示端的 VAD 输入框聚焦期间不再使用 `innerHTML` 替换面板，保留输入框 DOM、编辑值和键盘焦点；失焦后补做一次面板刷新，显示端切换或下线仍立即刷新。
+  - 新增 `tests/display-vad-focus.test.js` 覆盖聚焦保持和失焦补刷；更新显示端语音设计/spec/task 文档。
+  - 验证：VAD/语音定向回归 15/15、JavaScript 语法检查和 `git diff --check` 通过；全量 `npm test` 为 776 项中 775 项通过，唯一失败为既有 Windows 输入模式声纹策略断言。
+
 ## Release 配置与 APK 构建 profile
 
 - ✅ [2026-09-15] 增加 release 运行配置和 `noserver`、`withserver`、`allserver` 三种 APK 构建 profile。

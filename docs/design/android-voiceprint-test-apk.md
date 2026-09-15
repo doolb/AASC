@@ -97,6 +97,21 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 - APK 中的私钥仅用于局域网测试，打包后可被提取，不作为生产安全凭据；浏览器首次访问仍需安装/信任该自签名证书。
 - 原有明文 HTTP 测试构造和服务类兼容保留，便于 JVM 单元测试及 WAV 流式回归。
 
+## HTTPS 启动时序保护（2026-09-15）
+
+- `MainActivity` 在后台完成模型和 `TlsMaterial` 加载前，禁用 HTTPS 服务按钮；证书加载失败时保持禁用并显示明确原因。
+- `MainActivity` 点击启动服务时再次校验证书状态，避免按钮状态刷新与后台加载存在竞态时传入空 TLS 上下文。
+- `AsrHttpServer` 默认要求非空 `SSLContext`；TLS 未就绪时返回启动失败，不创建明文 `ServerSocket`，也不把地址报告为 `http://`。
+- `allowInsecureHttp=true` 只用于 JVM 单元测试中的本地明文回归，生产 `MainActivity` 固定使用默认的安全行为。
+- 已经以明文启动的旧进程不会自动升级；用户需要停止并重新启动服务，重新创建 `SSLServerSocket`。
+
+## HTTPS 启动时序修复验收（2026-09-15）
+
+- 根因确认为服务按钮早于后台 `TlsMaterial` 加载完成被点击，旧实现把空 `SSLContext` 传给 `AsrHttpServer` 后创建了明文 `ServerSocket`。
+- 修复后，APK 首次启动时按钮禁用；模型和证书完成加载后才启用。真机加载期间显示“HTTPS 服务未就绪：正在加载模型和证书”，就绪后显示“HTTPS 服务已就绪：可启动服务”。
+- 真机 `192.168.1.6:5555` 启动服务后显示 `https://192.168.1.6:18080`；HTTPS `/health` 返回 200，HTTP 明文请求被重置，确认生产 APK 不再静默降级。
+- 构建产物继续包含 `assets/tls/android-asr-cert.pem` 和 `assets/tls/android-asr-key.pem`；Android JVM、Node ASR 契约测试和 APK 构建均通过。
+
 ## HTTPS/WSS 实现验收（2026-08-27）
 
 - 使用 `res/certs/android-asr-cert.pem` 和 `android-asr-key.pem` 作为测试证书资产；证书 SAN 覆盖 `192.168.1.6`、`localhost`、`127.0.0.1`。

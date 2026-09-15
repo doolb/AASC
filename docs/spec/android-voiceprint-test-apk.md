@@ -129,6 +129,61 @@ POST /api/voiceprint/test:
   失败返回 {success:false, error}
 ```
 
+## HTTPS 服务生命周期（2026-09-15）
+
+```text
+MainActivity 初始化:
+  tlsContext = null
+  httpToggleButton.enabled = false
+  后台依次加载 ASR、声纹、降噪、流式模型和 TLS 证书
+  TLS 证书加载成功:
+    保存 tlsContext
+    刷新模型状态和 HTTPS 服务按钮
+    httpToggleButton.enabled = true
+  TLS 或模型加载失败:
+    tlsContext = null
+    httpToggleButton.enabled = false
+    显示未就绪原因
+
+点击 HTTPS 服务按钮:
+  如果当前服务运行:
+    停止当前服务
+    显示 HTTPS 服务未启动
+    结束
+  如果 tlsContext 不存在:
+    保持按钮不可用
+    显示“HTTPS 证书尚未就绪”
+    结束
+  使用 tlsContext 创建 AsrHttpServer
+  启动成功:
+    使用 SSLServerSocket 监听端口
+    地址固定显示为 https://<局域网地址>:<端口>
+  启动失败:
+    显示 HTTPS 启动失败原因
+
+AsrHttpServer.start(port):
+  如果 tlsContext 为空且 allowInsecureHttp 不为 true:
+    返回失败“HTTPS 证书尚未就绪”
+    不创建 ServerSocket
+  如果 tlsContext 存在:
+    使用 tlsContext.serverSocketFactory 创建 SSLServerSocket
+  只有 JVM 明文回归测试显式 allowInsecureHttp=true 时:
+    使用普通 ServerSocket
+```
+
+## HTTPS 启动保护验收（2026-09-15）
+
+```text
+APK 启动加载期间:
+  服务按钮 enabled = false
+模型和 TLS 就绪后:
+  状态 = “HTTPS 服务已就绪：可启动服务”
+启动服务后:
+  地址 = https://192.168.1.6:18080
+  HTTPS /health = 200
+  HTTP 明文请求 = 连接重置
+```
+
 ## Sherpa 快速多人
 
 ```text

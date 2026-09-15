@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private var selectedCpuMode = CpuMode.AUTO
     private var modelReady = false
     private var httpServer: AsrHttpServer? = null
+    @Volatile
     private var tlsContext: SSLContext? = null
     private var voiceprintActionBusy = false
     @Volatile
@@ -134,6 +135,7 @@ class MainActivity : AppCompatActivity() {
         testMultiButton.setOnClickListener { testVoiceprint(VoiceprintMode.SHERPA_MULTI) }
         testMultiFastButton.setOnClickListener { testVoiceprint(VoiceprintMode.SHERPA_MULTI_FAST) }
         httpToggleButton.setOnClickListener { toggleHttpServer() }
+        httpToggleButton.isEnabled = false
         setupVoiceprintSpeakerCount()
     }
 
@@ -227,6 +229,8 @@ class MainActivity : AppCompatActivity() {
                 tlsContext = TlsMaterial.load(assets)
                 modelReady = loaded
                 runOnUiThread {
+                    updateHttpServiceButton()
+                    if (httpServer == null) httpStatus.setText(R.string.http_ready)
                     modelStatus.text = when {
                         loaded && voiceprintLoaded && streamingLoaded && denoiseLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\nSherpa GTCRN 降噪模型已就绪\n流式 ASR 模型已就绪\nHTTPS 证书已就绪\nCPU 模式：$status"
                         loaded && voiceprintLoaded && streamingLoaded -> getString(R.string.model_ready) + "\nSherpa 声纹模型已就绪\nSherpa GTCRN 降噪模型加载失败\n流式 ASR 模型已就绪\nHTTPS 证书已就绪\nCPU 模式：$status"
@@ -243,6 +247,8 @@ class MainActivity : AppCompatActivity() {
                 streamingEngine.release()
                 tlsContext = null
                 runOnUiThread {
+                    updateHttpServiceButton()
+                    httpStatus.text = "HTTPS 服务不可用：${error.message ?: "模型或证书加载失败"}"
                     modelStatus.text = getString(R.string.model_load_failed, error.message ?: "未知错误")
                     refreshVoiceprintStatus()
                 }
@@ -543,6 +549,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateHttpServiceButton() {
+        httpToggleButton.isEnabled = httpServer != null || tlsContext != null
+    }
+
     private fun toggleHttpServer() {
         val running = httpServer
         if (running != null) {
@@ -550,17 +560,24 @@ class MainActivity : AppCompatActivity() {
             httpServer = null
             httpStatus.setText(R.string.http_stopped)
             httpToggleButton.setText(R.string.http_start)
+            updateHttpServiceButton()
             return
         }
         val port = httpPortInput.text.toString().toIntOrNull()
-        if (port == null || port !in 1024..65535) { httpStatus.text = "HTTP 端口必须是 1024-65535"; return }
+        if (port == null || port !in 1024..65535) { httpStatus.text = "HTTPS 端口必须是 1024-65535"; return }
+        val readyTlsContext = tlsContext
+        if (readyTlsContext == null) {
+            httpStatus.setText(R.string.http_not_ready)
+            updateHttpServiceButton()
+            return
+        }
         background.execute {
             val server = AsrHttpServer(
                 engine,
                 coordinator,
                 voiceprintCoordinator,
                 streamingEngine,
-                tlsContext,
+                readyTlsContext,
                 voiceprintModelLoader = ::switchVoiceprintVariantFromHttp,
                 cpuModeProvider = { selectedCpuMode }
             )
@@ -568,9 +585,12 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (started.isSuccess) {
                     httpServer = server
-                    httpStatus.text = "HTTP 服务：${server.addressText()}"
+                    httpStatus.text = "HTTPS 服务：${server.addressText()}"
                     httpToggleButton.setText(R.string.http_stop)
-                } else httpStatus.text = "HTTP 启动失败：${started.exceptionOrNull()?.message ?: "端口不可用"}"
+                } else {
+                    httpStatus.text = "HTTPS 启动失败：${started.exceptionOrNull()?.message ?: "端口不可用"}"
+                    updateHttpServiceButton()
+                }
             }
         }
     }

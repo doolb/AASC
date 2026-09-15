@@ -28,6 +28,7 @@ test('android ASR UI and HTTP endpoints are present', () => {
   const voiceprintModel = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/VoiceprintModel.kt');
   const server = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrHttpServer.kt');
   const page = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrWebPage.kt');
+  const strings = read('3rd/tts-server/android-asr/app/src/main/res/values/strings.xml');
   assert.match(layout, /recordButton/);
   assert.match(layout, /selectAudioButton/);
   assert.match(layout, /recognizeButton/);
@@ -54,6 +55,8 @@ test('android ASR UI and HTTP endpoints are present', () => {
   assert.match(main, /UiStatus\.voiceprintResult/);
   assert.match(main, /reloadVoiceprintVariant/);
   assert.match(main, /switchVoiceprintVariantFromHttp/);
+  assert.match(main, /R\.string\.http_ready/);
+  assert.match(strings, /name="http_ready"/);
   assert.match(voiceprintModel, /ERES2NET_BASE/);
   assert.match(voiceprintModel, /ERES2NET_LARGE/);
   assert.match(voiceprintModel, /ERES2NET_V2/);

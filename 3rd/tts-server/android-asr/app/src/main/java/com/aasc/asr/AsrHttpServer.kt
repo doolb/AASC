@@ -25,6 +25,7 @@ class AsrHttpServer(
     private val streamingEngine: StreamingAsrEngine,
     private val tlsContext: SSLContext? = null,
     private val voiceprintModelLoader: ((VoiceprintModelVariant) -> Boolean)? = null,
+    private val allowInsecureHttp: Boolean = false,
     private val cpuModeProvider: () -> CpuMode
 ) {
     private var clientExecutor: ExecutorService = Executors.newFixedThreadPool(2)
@@ -35,6 +36,9 @@ class AsrHttpServer(
 
     fun start(requestedPort: Int): Result<Int> {
         if (running) return Result.success(port)
+        if (tlsContext == null && !allowInsecureHttp) {
+            return Result.failure(IllegalStateException("HTTPS 证书尚未就绪，拒绝启动明文服务"))
+        }
         return try {
             val socket = tlsContext?.serverSocketFactory?.createServerSocket() ?: ServerSocket()
             if (clientExecutor.isShutdown) clientExecutor = Executors.newFixedThreadPool(2)
