@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
     private var offlineMode = false
+    private var embeddedNode = true
     private var controlPageAllowed = false
     private var offlineDisplayRetryCount = 0
     // WebView 连接失败后可能继续回调 onPageFinished；该标记阻止错误页误判为成功页。
@@ -67,7 +68,7 @@ class MainActivity : AppCompatActivity() {
     private var nodeStatusReceiverRegistered = false
     private val nodeStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (!offlineMode) return
+            if (!embeddedNode || !offlineMode) return
             val status = intent?.getStringExtra(NodeServerService.EXTRA_STATUS).orEmpty()
             val detail = intent?.getStringExtra(NodeServerService.EXTRA_DETAIL)
             updateOfflineStartupStatus(status, detail)
@@ -228,7 +229,8 @@ class MainActivity : AppCompatActivity() {
         offlineStartupRetry = findViewById(R.id.offlineStartupRetry)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
-        if (offlineMode) {
+        embeddedNode = resources.getBoolean(R.bool.aasc_embedded_node)
+        if (embeddedNode && offlineMode) {
             // 离线 APK 的控制端与本地 Node 服务同包，启动即允许访问同源 /control。
             setControlPageAccess(true)
             showOfflineStartupMessage(getString(R.string.offline_startup_preparing), false)
@@ -298,14 +300,16 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "主服务器地址无效", Toast.LENGTH_SHORT).show()
             return
         }
-        if (offlineMode) {
+        if (embeddedNode && offlineMode) {
             showOfflineStartupMessage(getString(R.string.offline_startup_preparing), false)
         }
-        // 普通 APK 的 Node.js 是子服务器；离线 APK 的 Node.js 是本机 main 服务。
-        val serviceIntent = Intent(this, NodeServerService::class.java)
-            .putExtra(NodeServerService.EXTRA_MAIN_SERVER_URL, mainServerUrl)
-            .putExtra(NodeServerService.EXTRA_OFFLINE_MODE, offlineMode)
-        ContextCompat.startForegroundService(this, serviceIntent)
+        if (embeddedNode) {
+            // 普通 APK 的 Node.js 是子服务器；离线 APK 的 Node.js 是本机 main 服务。
+            val serviceIntent = Intent(this, NodeServerService::class.java)
+                .putExtra(NodeServerService.EXTRA_MAIN_SERVER_URL, mainServerUrl)
+                .putExtra(NodeServerService.EXTRA_OFFLINE_MODE, offlineMode)
+            ContextCompat.startForegroundService(this, serviceIntent)
+        }
 
         val displayPath = ServerConfig.pageUrl(mainServerUrl)
         // 时间戳参数强制绕过 WebView HTTP 缓存（display.html 更新后 APK 重启即加载最新版）
@@ -316,7 +320,7 @@ class MainActivity : AppCompatActivity() {
         configBar.visibility = View.GONE
         offlineDisplayRetryCount = 0
         offlineDisplayLoadFailed = false
-        setControlPageAccess(offlineMode)
+        setControlPageAccess(if (embeddedNode) offlineMode else false)
         if (webView == null) {
             setupWebView(url, mainServerUrl)
         } else {
@@ -328,7 +332,7 @@ class MainActivity : AppCompatActivity() {
      * 只在 offline APK 注册 Node 启动状态接收器；在线 APK 不增加广播监听和启动遮罩行为。
      */
     private fun registerNodeStatusReceiver() {
-        if (!offlineMode || nodeStatusReceiverRegistered) return
+        if (!embeddedNode || !offlineMode || nodeStatusReceiverRegistered) return
         val filter = IntentFilter(NodeServerService.ACTION_STATUS)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(nodeStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -425,7 +429,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setControlPageAccess(allowed: Boolean) {
         // offline APK 的控制端页面和本地服务同源，服务端初始化阶段的默认 false 不应挡住本地入口。
-        val effectiveAllowed = offlineMode || allowed
+        val effectiveAllowed = embeddedNode && (offlineMode || allowed)
         controlPageAllowed = effectiveAllowed
         val controlVisible = controlWebView?.visibility == View.VISIBLE
         if (!effectiveAllowed && controlVisible) {

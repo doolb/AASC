@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { fork } = require('node:child_process');
+const { hasReleaseFlag } = require('../../../core/release-runtime-context');
 
 const DEFAULT_RESTART_DELAY_MS = 1000;
 const MAX_CRASH_RESTARTS = 5;
@@ -12,6 +13,7 @@ function createServerLauncher(options = {}) {
         ? options.processArguments.slice()
         : process.argv.slice(2);
     const environment = options.environment || process.env;
+    const releaseMode = hasReleaseFlag(processArguments);
     const spawnChild = options.spawnChild || ((file, args, spawnOptions) => fork(file, args, spawnOptions));
     const schedule = options.schedule || ((callback, delayMs) => setTimeout(callback, delayMs));
     const cancelSchedule = options.cancelSchedule || ((timer) => clearTimeout(timer));
@@ -80,9 +82,11 @@ function createServerLauncher(options = {}) {
         if (stopping || child) return child;
 
         try {
+            const childEnvironment = { ...environment, AASC_SERVER_CHILD: '1' };
+            if (releaseMode) childEnvironment.AASC_RELEASE_MODE = '1';
             child = spawnChild(serverPath, processArguments, {
                 stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-                env: { ...environment, AASC_SERVER_CHILD: '1' }
+                env: childEnvironment
             });
             // 服务器启动成功和主动重启是两个独立消息，必须持续监听整个子进程生命周期。
             child.on('message', handleChildMessage);

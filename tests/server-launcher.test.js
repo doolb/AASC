@@ -64,6 +64,41 @@ test('启动器使用继承标准流和 IPC 启动服务器子进程', () => {
     assert.equal(calls[0][2].env.AASC_SERVER_CHILD, '1');
 });
 
+test('启动器使用 --release 启动子进程时传递 release 环境变量', () => {
+    const calls = [];
+    const launcher = createServerLauncher({
+        serverPath: '/tmp/server-app.js',
+        processArguments: ['--release'],
+        environment: { EXISTING_VALUE: 'kept' },
+        spawnChild: (...args) => {
+            calls.push(args);
+            return createFakeChild();
+        }
+    });
+
+    launcher.start();
+
+    assert.equal(calls[0][2].env.AASC_RELEASE_MODE, '1');
+    assert.equal(calls[0][2].env.EXISTING_VALUE, 'kept');
+});
+
+test('启动器不带 --release 时不新增 release 环境变量', () => {
+    const calls = [];
+    const launcher = createServerLauncher({
+        serverPath: '/tmp/server-app.js',
+        processArguments: [],
+        environment: { EXISTING_VALUE: 'kept' },
+        spawnChild: (...args) => {
+            calls.push(args);
+            return createFakeChild();
+        }
+    });
+
+    launcher.start();
+
+    assert.equal(Object.hasOwn(calls[0][2].env, 'AASC_RELEASE_MODE'), false);
+});
+
 test('主动重启会拉起新子进程，外部停止不会拉起新子进程', () => {
     const children = [createFakeChild(), createFakeChild()];
     const scheduler = createImmediateScheduler();

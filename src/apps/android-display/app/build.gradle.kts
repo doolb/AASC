@@ -1,9 +1,31 @@
 import java.util.Properties
 
-// 离线包使用同一套源码和依赖，通过 Gradle 属性切换独立包名；普通构建不传属性时保持原行为。
+// APK profile 使用 Gradle 属性切换包名、Node 内置能力和独立中间目录。
 val offlineBuild = project.findProperty("aascOffline")
     ?.toString()
     ?.equals("true", ignoreCase = true) == true
+val embeddedNodeBuild = project.findProperty("aascEmbeddedNode")
+    ?.toString()
+    ?.equals("true", ignoreCase = true)
+    ?: true
+val apkProfile = project.findProperty("aascProfile")?.toString()?.trim().orEmpty()
+val configuredBuildDirectory = project.findProperty("aascBuildDirectory")
+    ?.toString()
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+if (configuredBuildDirectory != null) {
+    layout.buildDirectory.set(file(configuredBuildDirectory))
+}
+val nodeRuntimeAssetsDirectory = project.findProperty("aascNodeRuntimeAssetsDir")
+    ?.toString()
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { file(it) }
+val nodeRuntimeJniLibsDirectory = project.findProperty("aascNodeRuntimeJniLibsDir")
+    ?.toString()
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { file(it) }
 val mnnRoot = project.findProperty("aascMnnRoot")
     ?.toString()
     ?.trim()
@@ -74,14 +96,27 @@ android {
     compileSdk = 34
 
    defaultConfig {
-        applicationId = if (offlineBuild) "com.aasc.display.offline" else "com.aasc.display"
+        applicationId = when {
+            offlineBuild -> "com.aasc.display.offline"
+            apkProfile == "noserver" -> "com.aasc.display.noserver"
+            else -> "com.aasc.display"
+        }
         // Microsoft Embedded Speech SDK -> azure-core 1.58.1 使用 MethodHandle，D8 要求 Android 8.0+
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-       versionName = if (offlineBuild) "0.1.0-offline" else "0.1.0"
-        manifestPlaceholders["appLabel"] = if (offlineBuild) "AASC 显示端 Offline" else "AASC 显示端"
+       versionName = when {
+           offlineBuild -> "0.1.0-offline"
+           apkProfile == "noserver" -> "0.1.0-noserver"
+           else -> "0.1.0"
+       }
+        manifestPlaceholders["appLabel"] = when {
+            offlineBuild -> "AASC 显示端 Offline"
+            apkProfile == "noserver" -> "AASC 显示端 Noserver"
+            else -> "AASC 显示端"
+        }
         resValue("bool", "aasc_offline_mode", offlineBuild.toString())
+        resValue("bool", "aasc_embedded_node", embeddedNodeBuild.toString())
         // Microsoft Embedded Speech SDK 仅提供 arm64-v8a 原生库
         ndk {
             abiFilters += "arm64-v8a"
@@ -124,12 +159,13 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
         }
     }
-    // Node Runtime 和 AASC 服务器运行包由 npm run prepare:android-node 生成，避免把
-    // 体积较大的二进制和依赖直接放入 Git；没有生成 assets 时构建会明确失败。
+    // Node Runtime 和 AASC 服务器运行包由 profile 编排器生成；noserver 不添加这些资产。
     sourceSets {
         getByName("main") {
-            assets.srcDir("$buildDir/generated/node-runtime/assets")
-            jniLibs.srcDir("$buildDir/generated/node-runtime/jniLibs")
+            if (embeddedNodeBuild) {
+                assets.srcDir(nodeRuntimeAssetsDirectory ?: file("$buildDir/generated/node-runtime/assets"))
+                jniLibs.srcDir(nodeRuntimeJniLibsDirectory ?: file("$buildDir/generated/node-runtime/jniLibs"))
+            }
         }
     }
     packaging {

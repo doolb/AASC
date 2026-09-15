@@ -11,20 +11,20 @@ function read(relativePath) {
     return fs.readFileSync(path.join(rootDir, relativePath), 'utf8');
 }
 
-test('离线 APK npm 命令使用独立 Gradle 标识并重命名 APK', () => {
+test('离线 APK npm 命令使用 allserver profile 和独立输出文件', () => {
     const packageJson = JSON.parse(read('package.json'));
-    const buildScript = read('scripts/ops/build-offline-apk.js');
+    const buildScript = read('scripts/ops/build-apk.js');
 
-    assert.match(packageJson.scripts['build:apk:offline'], /build-offline-apk/u);
-    assert.match(buildScript, /aascOffline=true/u);
+    assert.match(packageJson.scripts['build:apk:offline'], /build-apk\.js allserver/u);
+    assert.match(buildScript, /-PaascOffline=\$\{profile\.offline\}/u);
     assert.match(buildScript, /aasc-display-offline\.apk/u);
 });
 
 test('离线 APK 构建包含用户任务并在 Gradle 完成后清理 Daemon', () => {
-    const buildScript = read('scripts/ops/build-offline-apk.js');
+    const buildScript = read('scripts/ops/build-apk.js');
 
     assert.match(buildScript, /includeOfflineTasks:\s*true/u);
-    assert.match(buildScript, /res.*tasks/u);
+    assert.match(buildScript, /runtimeContext\.taskDir/u);
     assert.match(buildScript, /--stop/u);
     assert.match(buildScript, /--no-daemon/u);
     assert.match(buildScript, /kotlin-compiler-in-aascdisplay-/u);
@@ -109,8 +109,8 @@ test('offline APK 默认显示控制端入口且不受服务端默认关闭值�
         'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
     );
 
-    assert.match(activity, /setControlPageAccess\(offlineMode\)/u);
-    assert.match(activity, /val effectiveAllowed\s*=\s*offlineMode\s*\|\|\s*allowed/u);
+    assert.match(activity, /setControlPageAccess\(if \(embeddedNode\) offlineMode else false\)/u);
+    assert.match(activity, /val effectiveAllowed\s*=\s*embeddedNode\s*&&\s*\(offlineMode\s*\|\|\s*allowed\)/u);
     assert.match(activity, /controlPageAllowed\s*=\s*effectiveAllowed/u);
 });
 
@@ -199,4 +199,22 @@ test('offline Runtime 首次安装在校验后直接原子切换，避免模型�
         installer,
         /replaceDirectory\(root,\s*staging,\s*"res\/models"\)/u
     );
+});
+
+test('Gradle 支持 embeddedNode 和 profile 独立 build directory', () => {
+    const gradle = read('src/apps/android-display/app/build.gradle.kts');
+    const activity = read('src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt');
+
+    assert.match(gradle, /aasc_embedded_node/u);
+    assert.match(gradle, /aascBuildDirectory|aascBuildDir/u);
+    assert.match(activity, /aasc_embedded_node|embeddedNode/u);
+    assert.match(activity, /startForegroundService[\s\S]*embeddedNode/u);
+});
+
+test('Runtime 安装器恢复 task results marker', () => {
+    const installer = read('src/apps/android-display/app/src/main/java/com/aasc/display/NodeRuntimeInstaller.kt');
+
+    assert.match(installer, /resultsDirectory,\s*"latest"/u);
+    assert.match(installer, /task-links/u);
+    assert.match(installer, /status.*running|restoreAutoStartServices/u);
 });

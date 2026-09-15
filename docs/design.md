@@ -101,3 +101,4 @@
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](design/chat2api-raw-traffic-log-modes.md) | 原始流量完整/简洁日志模式和控制端配置 |
 | 动态画面填充模式 | [dynamic-fit-mode.md](design/dynamic-fit-mode.md) | 适应与铺满循环过渡、控制端时间配置 |
 | 服务器发布包 | [server-release.md](design/server-release.md) | npm 显式生成服务器发布包、清单读取和子服务器更新边界 |
+| Release 配置与 APK 构建 profile | [release-build-profiles.md](design/release-build-profiles.md) | release 服务器配置、任务结果恢复、三种 APK profile 和模型/功能选择 |

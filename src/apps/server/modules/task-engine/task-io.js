@@ -1,7 +1,9 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const DataSnapshot = require('../../../../core/data-snapshot');
+const { resolveReleaseRuntimeContext } = require('../../../../core/release-runtime-context');
 
 class TaskIndex extends DataSnapshot {
   static defaults = { instances: [] };
@@ -10,7 +12,16 @@ class TaskIndex extends DataSnapshot {
 class TaskIO extends EventEmitter {
   constructor(options = {}) {
     super();
-    this.tasksDir = options.tasksDir || path.resolve(__dirname, '../../../../../res/tasks');
+    const projectRoot = path.resolve(__dirname, '../../../../../');
+    const runtimeContext = resolveReleaseRuntimeContext({
+      projectRoot,
+      homeDir: os.homedir(),
+      argv: process.argv,
+      environment: process.env
+    });
+    this.tasksDir = options.tasksDir
+      || (process.env.AASC_TASK_DIR ? path.resolve(process.env.AASC_TASK_DIR) : null)
+      || runtimeContext.taskDir;
     this._indexes = new Map();
   }
 

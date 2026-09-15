@@ -27,8 +27,15 @@ const REQUIRED_PACKAGE_ENTRIES = [
 const CERTIFICATE_ENTRIES = ['cert.pem', 'key.pem'];
 const RUNTIME_MODE_FILE = 'runtime-mode.txt';
 const OFFLINE_MODEL_METADATA_FILE = 'offline-model-manifest.json';
-// 正式 Android 显示端的离线模型固定白名单。测试音频、测试 APK 专用模型、
-// YOLO 其他尺寸和原始 PT 文件不进入完整离线包，避免把不可运行或未确认的资源带入生产包。
+const APK_PROFILE_METADATA_FILE = 'apk-profile.json';
+const OFFLINE_CONFIG_SEED_FILE = 'offline-config.json';
+const RELEASE_CONFIG_SEED_FILE = 'release-config.json';
+const RELEASE_USER_CONFIG_PREFIX = 'release-userconfig';
+const TASK_LINKS_MARKER_FILE = 'task-links.marker';
+const TASK_LATEST_MARKER_FILE = 'latest.marker';
+const { resolveSelectedModelFiles } = require('./apk-build-profile');
+// 历史兼容测试使用的模型列表。正式 profile 构建通过 model ID 和 manifest 解析文件，
+// 此常量仅保留导出，避免破坏旧调用方，不参与新的 release APK 资源选择。
 const OFFLINE_MODEL_FILES = Object.freeze([
     'llm/manifest.json',
     'llm/qwen3.5-0.8b-claude-opus-distilled-mnn/.manifest.json',
@@ -193,19 +200,10 @@ async function copyFileWithManifest(sourceRoot, relativePath, outputRoot, output
     };
 }
 
-async function copyOfflineModels(modelRoot, outputRoot) {
+async function copyOfflineModels(modelRoot, outputRoot, modelIds = []) {
     const files = [];
-    for (const relativePath of OFFLINE_MODEL_FILES) {
-        const sourcePath = path.join(modelRoot, relativePath);
-        let sourceStat;
-        try {
-            sourceStat = await fs.promises.lstat(sourcePath);
-        } catch (error) {
-            throw new Error(`离线模型文件不存在: ${relativePath}`);
-        }
-        if (!sourceStat.isFile()) {
-            throw new Error(`离线模型文件不是普通文件: ${relativePath}`);
-        }
+    const selectedFiles = await resolveSelectedModelFiles({ modelRoot, modelIds });
+    for (const { relativePath } of selectedFiles) {
         files.push(await copyFileWithManifest(
             modelRoot,
             relativePath,
@@ -232,14 +230,13 @@ async function listOfflineTaskFiles(sourceRoot, relativePath = '') {
     for (const entry of entries) {
         const childRelativePath = path.join(relativePath, entry.name);
         assertSafeRelativePath(childRelativePath);
-        // Android AssetManager 不支持隐藏文件和以下划线开头的目录；.task-links.json
-        // 还是任务实例运行时生成的状态，更不能把构建机上的历史任务链带进离线 APK。
-        if (isAndroidAssetExcluded(childRelativePath, entry.isDirectory())) continue;
-        // results 是设备运行时生成的历史记录，且 latest 可能是软链接；离线包只携带
-        // 当前任务定义、配置和根目录的任务关联文件，不把运行结果带进 APK。
+        // Android AssetManager 不支持隐藏文件和以下划线开头的目录；任务链和 latest
+        // 通过下方 marker 单独打包，普通 results 文件必须保留用于首次恢复服务实例。
+        if (entry.name === '.task-links.json') continue;
         const pathSegments = childRelativePath.split(path.sep);
-        if (pathSegments.includes('results')) continue;
+        if (isAndroidAssetExcluded(childRelativePath, entry.isDirectory())) continue;
         if (entry.isSymbolicLink()) {
+            if (entry.name === 'latest' && pathSegments.includes('results')) continue;
             throw new Error(`离线任务目录不允许符号链接: ${childRelativePath}`);
         }
         if (entry.isDirectory()) {
@@ -255,7 +252,89 @@ async function listOfflineTaskFiles(sourceRoot, relativePath = '') {
     return files;
 }
 
+function normalizeTaskInstanceId(value) {
+    const instanceId = typeof value === 'string' ? value.trim() : '';
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(instanceId)) {
+        throw new Error(`任务结果 latest 指向了不安全的实例 ID: ${value}`);
+    }
+    return instanceId;
+}
+
+async function validateTaskResultIndexes(taskRoot) {
+    const taskEntries = await fs.promises.readdir(taskRoot, { withFileTypes: true });
+    for (const taskEntry of taskEntries) {
+        if (!taskEntry.isDirectory() || taskEntry.name.startsWith('.') || taskEntry.name.startsWith('_')) continue;
+        const resultsDir = path.join(taskRoot, taskEntry.name, 'results');
+        if (!fs.existsSync(resultsDir)) continue;
+        const indexPath = path.join(resultsDir, 'index.json');
+        let index;
+        try {
+            index = JSON.parse(await fs.promises.readFile(indexPath, 'utf8'));
+        } catch (error) {
+            throw new Error(`任务 results/index.json 无法解析: ${indexPath}: ${error.message}`);
+        }
+        if (!index || typeof index !== 'object' || !Array.isArray(index.instances)) {
+            throw new Error(`任务 results/index.json 必须包含 instances 数组: ${indexPath}`);
+        }
+        for (const instance of index.instances) {
+            if (!instance || typeof instance !== 'object' ||
+                typeof instance.instanceId !== 'string' || instance.instanceId.trim() === '' ||
+                typeof instance.status !== 'string' || instance.status.trim() === '') {
+                throw new Error(`任务 results/index.json 实例缺少 instanceId 或 status: ${indexPath}`);
+            }
+            normalizeTaskInstanceId(instance.instanceId);
+        }
+    }
+}
+
+async function copyTaskMarkers(taskRoot, outputRoot) {
+    const files = [];
+    const taskLinksPath = path.join(taskRoot, '.task-links.json');
+    if (fs.existsSync(taskLinksPath)) {
+        let taskLinks;
+        try {
+            taskLinks = JSON.parse(await fs.promises.readFile(taskLinksPath, 'utf8'));
+        } catch (error) {
+            throw new Error(`任务链文件无法解析: ${taskLinksPath}: ${error.message}`);
+        }
+        if (!taskLinks || typeof taskLinks !== 'object' || Array.isArray(taskLinks)) {
+            throw new Error(`任务链文件必须是 JSON 对象: ${taskLinksPath}`);
+        }
+        files.push(await writeGeneratedFileWithManifest(
+            outputRoot,
+            path.join('server', 'res', 'tasks', TASK_LINKS_MARKER_FILE),
+            JSON.stringify(taskLinks, null, 2) + '\n'
+        ));
+    }
+
+    const taskEntries = await fs.promises.readdir(taskRoot, { withFileTypes: true });
+    for (const taskEntry of taskEntries) {
+        if (!taskEntry.isDirectory() || taskEntry.name.startsWith('.') || taskEntry.name.startsWith('_')) continue;
+        const resultsDir = path.join(taskRoot, taskEntry.name, 'results');
+        const latestPath = path.join(resultsDir, 'latest');
+        let target;
+        try {
+            target = await fs.promises.readlink(latestPath);
+        } catch (error) {
+            if (error.code === 'ENOENT') continue;
+            throw new Error(`任务 latest marker 无法读取: ${latestPath}: ${error.message}`);
+        }
+        const instanceId = normalizeTaskInstanceId(target);
+        const targetPath = path.resolve(resultsDir, instanceId);
+        if (targetPath !== path.join(resultsDir, instanceId) || !fs.existsSync(targetPath)) {
+            throw new Error(`任务 latest 指向不存在的实例: ${latestPath} -> ${target}`);
+        }
+        files.push(await writeGeneratedFileWithManifest(
+            outputRoot,
+            path.join('server', 'res', 'tasks', taskEntry.name, 'results', TASK_LATEST_MARKER_FILE),
+            `${instanceId}\n`
+        ));
+    }
+    return files;
+}
+
 async function copyOfflineTasks(taskRoot, outputRoot) {
+    await validateTaskResultIndexes(taskRoot);
     const files = [];
     for (const relativePath of await listOfflineTaskFiles(taskRoot)) {
         files.push(await copyFileWithManifest(
@@ -265,6 +344,7 @@ async function copyOfflineTasks(taskRoot, outputRoot) {
             path.join('server', 'res', 'tasks', relativePath)
         ));
     }
+    files.push(...await copyTaskMarkers(taskRoot, outputRoot));
     return files;
 }
 
@@ -356,6 +436,51 @@ async function copyCertificates(certDir, outputDir) {
     return files;
 }
 
+async function readOfflineConfigSeed(configFile) {
+    const sourcePath = path.resolve(configFile || path.join(process.cwd(), 'config', 'config.json'));
+    try {
+        const source = JSON.parse(await fs.promises.readFile(sourcePath, 'utf8'));
+        if (!source || typeof source !== 'object' || Array.isArray(source)) {
+            throw new Error('配置根节点必须是对象');
+        }
+        return {
+            // 旧 offline-config 资产只承载聊天和 LLM 配置，保留该格式兼容已安装 APK。
+            llm: source && typeof source.llm === 'object' && !Array.isArray(source.llm) ? source.llm : {},
+            chat: source && typeof source.chat === 'object' && !Array.isArray(source.chat) ? source.chat : {}
+        };
+    } catch (error) {
+        throw new Error(`读取 offline 配置种子失败: ${sourcePath}: ${error.message}`);
+    }
+}
+
+async function readReleaseConfigSeed(configFile) {
+    const sourcePath = path.resolve(configFile || path.join(process.cwd(), 'config', 'config.json'));
+    try {
+        const source = JSON.parse(await fs.promises.readFile(sourcePath, 'utf8'));
+        if (!source || typeof source !== 'object' || Array.isArray(source)) {
+            throw new Error('配置根节点必须是对象');
+        }
+        return source;
+    } catch (error) {
+        throw new Error(`读取 release 配置种子失败: ${sourcePath}: ${error.message}`);
+    }
+}
+
+async function copyUserConfigSeeds(userConfigDir, outputRoot) {
+    if (!userConfigDir) return [];
+    const resolvedDir = resolveRequiredDirectory(userConfigDir, 'release 用户配置目录');
+    const files = [];
+    for (const relativePath of await listFiles(resolvedDir)) {
+        files.push(await copyFileWithManifest(
+            resolvedDir,
+            relativePath,
+            outputRoot,
+            path.join(RELEASE_USER_CONFIG_PREFIX, relativePath)
+        ));
+    }
+    return files;
+}
+
 async function prepareAndroidNodeRuntime(options = {}) {
     const runtimeDir = resolveRequiredDirectory(
         options.runtimeDir || process.env.AASC_ANDROID_NODE_RUNTIME_DIR || DEFAULT_RUNTIME_DIR,
@@ -423,14 +548,41 @@ async function prepareAndroidNodeRuntime(options = {}) {
             options.certDir || process.env.AASC_ANDROID_NODE_CERT_DIR,
             temporaryOutputDir
         ));
-        const offlineModelFiles = includeOfflineModels
-            ? await copyOfflineModels(modelRoot, temporaryOutputDir)
+    const offlineModelFiles = includeOfflineModels
+            ? await copyOfflineModels(modelRoot, temporaryOutputDir, options.modelIds || [])
             : [];
         files.push(...offlineModelFiles);
         const offlineTaskFiles = includeOfflineTasks
             ? await copyOfflineTasks(taskRoot, temporaryOutputDir)
             : [];
         files.push(...offlineTaskFiles);
+
+        if (options.configFile || includeOfflineModels) {
+            const releaseConfig = await readReleaseConfigSeed(
+                options.configFile || process.env.AASC_ANDROID_OFFLINE_CONFIG_FILE
+            );
+            files.push(await writeGeneratedFileWithManifest(
+                temporaryOutputDir,
+                RELEASE_CONFIG_SEED_FILE,
+                JSON.stringify(releaseConfig, null, 2) + '\n'
+            ));
+            // 保留旧 APK 的离线配置资产名称，旧安装器可以继续识别，新安装器优先使用 release-config。
+            files.push(await writeGeneratedFileWithManifest(
+                temporaryOutputDir,
+                OFFLINE_CONFIG_SEED_FILE,
+                JSON.stringify(await readOfflineConfigSeed(
+                    options.configFile || process.env.AASC_ANDROID_OFFLINE_CONFIG_FILE
+                ), null, 2) + '\n'
+            ));
+        }
+        files.push(...await copyUserConfigSeeds(options.userConfigDir, temporaryOutputDir));
+        if (options.profileMetadata) {
+            files.push(await writeGeneratedFileWithManifest(
+                temporaryOutputDir,
+                APK_PROFILE_METADATA_FILE,
+                JSON.stringify(options.profileMetadata, null, 2) + '\n'
+            ));
+        }
 
         const configuredVersion = String(
             options.version || process.env.AASC_ANDROID_NODE_RUNTIME_VERSION || ''
@@ -518,6 +670,12 @@ module.exports = {
     NODE_LIBRARY_PATH,
     OFFLINE_MODEL_FILES,
     OFFLINE_MODEL_METADATA_FILE,
+    APK_PROFILE_METADATA_FILE,
+    OFFLINE_CONFIG_SEED_FILE,
+    RELEASE_CONFIG_SEED_FILE,
+    RELEASE_USER_CONFIG_PREFIX,
+    TASK_LINKS_MARKER_FILE,
+    TASK_LATEST_MARKER_FILE,
     RUNTIME_MODE_FILE,
     REQUIRED_RUNTIME_LIBRARIES,
     REQUIRED_PACKAGE_ENTRIES,
@@ -527,5 +685,7 @@ module.exports = {
     isNpmInternalMetadata,
     isNpmToolShim,
     deriveContentVersion,
+    readOfflineConfigSeed,
+    readReleaseConfigSeed,
     prepareAndroidNodeRuntime
 };

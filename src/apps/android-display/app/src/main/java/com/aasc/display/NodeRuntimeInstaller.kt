@@ -6,6 +6,8 @@ import android.os.SystemClock
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.security.MessageDigest
 import org.json.JSONObject
 
@@ -23,6 +25,10 @@ class NodeRuntimeInstaller(
         private const val OFFLINE_MODE = "offline"
         private const val OFFLINE_MODEL_METADATA_FILE = "offline-model-manifest.json"
         private const val OFFLINE_CONFIG_SEED_FILE = "offline-config.json"
+        private const val RELEASE_CONFIG_SEED_FILE = "release-config.json"
+        private const val RELEASE_USER_CONFIG_PREFIX = "release-userconfig"
+        private const val TASK_LINKS_MARKER_FILE = "task-links.marker"
+        private const val TASK_LATEST_MARKER_FILE = "latest.marker"
         private const val RUNTIME_LIB_DIR = "runtime/arm64-v8a/lib"
         private const val STAGING_PREFIX = ".staging-"
         private const val BACKUP_PREFIX = ".backup-"
@@ -52,7 +58,7 @@ class NodeRuntimeInstaller(
                 )
                 requiredFiles.all { it.isFile && it.length() > 0L } &&
                     (mode != OFFLINE_MODE || hasOfflineModels(root)) &&
-                    (mode != OFFLINE_MODE || File(root, "config/config.json").isFile) &&
+                    File(root, "config/config.json").isFile &&
                     File(root, RUNTIME_LIB_DIR).listFiles()?.any { it.isFile && it.length() > 0L } == true
             } catch (_: Exception) {
                 false
@@ -63,7 +69,7 @@ class NodeRuntimeInstaller(
         fun canReuseInstalledRuntime(root: File, manifest: NodeRuntimeManifest): Boolean {
             // 旧版本兼容路径没有 runtime-mode.txt，使用 manifest 中的离线配置种子判断模式，
             // 确保旧 APK 已经解包过模型但尚未生成 config/config.json 时仍会补齐配置。
-            val mode = if (manifest.files.any { it.path == OFFLINE_CONFIG_SEED_FILE }) {
+            val mode = if (manifest.files.any { it.path == OFFLINE_MODEL_METADATA_FILE }) {
                 OFFLINE_MODE
             } else {
                 "online"
@@ -237,7 +243,10 @@ class NodeRuntimeInstaller(
                 moveMutableDirectories(backup, root, movedPaths = movedMutableDirectories)
             }
             materializeBundledModelMarkers(root)
+            materializeTaskMarkers(root)
+            seedFileIfAbsent(root, root, RELEASE_CONFIG_SEED_FILE, "config/config.json")
             seedFileIfAbsent(root, root, OFFLINE_CONFIG_SEED_FILE, "config/config.json")
+            seedDirectoryFilesIfAbsent(root, RELEASE_USER_CONFIG_PREFIX, "home/.config/aasc-user")
             preserveMutableDirectories(root)
             removeLegacyNativeVoiceModelCopies(root)
             val marker = File(root, VERSION_MARKER)
@@ -288,6 +297,51 @@ class NodeRuntimeInstaller(
             }
     }
 
+    /**
+     * Android assets 不能保留任务 results/latest 软链接和隐藏任务链文件，构建器把它们
+     * 转成 marker。Runtime 切换完成后只在目标不存在时恢复，避免覆盖设备已有任务状态；
+     * 服务启动继续由 TaskManager 根据 results/index.json 的 status=running 恢复。
+     */
+    private fun materializeTaskMarkers(root: File) {
+        val tasksRoot = File(root, "res/tasks")
+        val taskLinksMarker = File(tasksRoot, TASK_LINKS_MARKER_FILE)
+        val taskLinksTarget = File(tasksRoot, ".task-links.json")
+        if (taskLinksMarker.isFile) {
+            try {
+                JSONObject(taskLinksMarker.readText())
+                if (!taskLinksTarget.exists()) taskLinksMarker.copyTo(taskLinksTarget)
+            } finally {
+                taskLinksMarker.delete()
+            }
+        }
+
+        tasksRoot.listFiles()
+            ?.filter { it.isDirectory }
+            ?.forEach { taskDirectory ->
+                val resultsDirectory = File(taskDirectory, "results")
+                val latestMarker = File(resultsDirectory, TASK_LATEST_MARKER_FILE)
+                if (!latestMarker.isFile) return@forEach
+                try {
+                    val instanceId = latestMarker.readText().trim()
+                    require(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$").matches(instanceId)) {
+                        "任务 latest 实例 ID 不安全: $instanceId"
+                    }
+                    val instanceDirectory = File(resultsDirectory, instanceId)
+                    val resultsPath = resultsDirectory.canonicalFile.toPath()
+                    require(instanceDirectory.canonicalFile.toPath().startsWith(resultsPath)) {
+                        "任务 latest 路径越界: $instanceId"
+                    }
+                    require(instanceDirectory.isDirectory) { "任务 latest 实例不存在: $instanceId" }
+                    val latest = File(resultsDirectory, "latest")
+                    if (!latest.exists()) {
+                        Files.createSymbolicLink(latest.toPath(), Paths.get(instanceId))
+                    }
+                } finally {
+                    latestMarker.delete()
+                }
+            }
+    }
+
     private fun preserveMutableDirectories(root: File) {
         MUTABLE_DIRECTORIES.forEach { relativePath ->
             File(root, relativePath).mkdirs()
@@ -326,6 +380,24 @@ class NodeRuntimeInstaller(
         if (!source.isFile) return
         target.parentFile?.mkdirs()
         source.copyTo(target, overwrite = false)
+    }
+
+    /**
+     * 将发布用户配置作为逐文件种子写入 HOME；文件级判断保证设备已有私有配置不被替换。
+     */
+    private fun seedDirectoryFilesIfAbsent(root: File, sourceRelativePath: String, targetRelativePath: String) {
+        val sourceRoot = File(root, sourceRelativePath)
+        if (!sourceRoot.isDirectory) return
+        sourceRoot.walkTopDown()
+            .filter { it.isFile }
+            .forEach { source ->
+                val relativePath = source.relativeTo(sourceRoot)
+                val target = File(File(root, targetRelativePath), relativePath.path)
+                if (!target.exists()) {
+                    target.parentFile?.mkdirs()
+                    source.copyTo(target, overwrite = false)
+                }
+            }
     }
 
     /**

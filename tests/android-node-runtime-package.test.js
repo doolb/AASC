@@ -118,6 +118,43 @@ test('正常输入生成固定 ABI manifest 和 Node 启动入口', async () => 
     );
 });
 
+test('offline Runtime 将当前 llm/chat 配置写为首次安装种子且不带其他主机配置', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const runtimeDir = await createRuntime(tempDir);
+    const modelRoot = path.join(tempDir, 'models');
+    for (const relativePath of OFFLINE_MODEL_FILES) {
+        const filePath = path.join(modelRoot, relativePath);
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.promises.writeFile(filePath, `model:${relativePath}\n`, 'utf8');
+    }
+    const configFile = path.join(tempDir, 'config.json');
+    await fs.promises.writeFile(configFile, JSON.stringify({
+        server: { port: 9999 },
+        task: { autoStart: ['not-for-apk'] },
+        llm: { defaultModelMappings: [{ externalModelName: 'qwen', modelId: 'qwen-local' }] },
+        chat: { activeProfile: 'qwen3.5', protocol: 'openai-responses' }
+    }), 'utf8');
+
+    const outputDir = path.join(tempDir, 'output');
+    const result = await prepareAndroidNodeRuntime({
+        packageDir,
+        runtimeDir,
+        modelRoot,
+        modelIds: ['llm'],
+        configFile,
+        includeOfflineModels: true,
+        outputDir
+    });
+    const seed = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'offline-config.json'), 'utf8'));
+
+    assert.equal(result.manifest.files.some((file) => file.path === 'offline-config.json'), true);
+    assert.deepEqual(seed, {
+        llm: { defaultModelMappings: [{ externalModelName: 'qwen', modelId: 'qwen-local' }] },
+        chat: { activeProfile: 'qwen3.5', protocol: 'openai-responses' }
+    });
+    assert.equal(Object.hasOwn(seed, 'server'), false);
+});
+
 test('未配置 Runtime 环境变量时使用项目内的 Android Runtime', async () => {
     const packageDir = await createServerPackage(tempDir);
     const outputDir = path.join(tempDir, 'output');
@@ -278,7 +315,7 @@ test('服务器运行包保留下划线命名的 Node 依赖文件', async () =>
     );
 });
 
-test('离线 Runtime 只复制正式模型白名单并写入离线元数据', async () => {
+test('离线 Runtime 按选定模型复制并写入离线元数据', async () => {
     const packageDir = await createServerPackage(tempDir);
     await fs.promises.mkdir(path.join(packageDir, 'res', 'models', 'sensevoice'), { recursive: true });
     await fs.promises.writeFile(
@@ -287,7 +324,7 @@ test('离线 Runtime 只复制正式模型白名单并写入离线元数据', as
         'utf8'
     );
     const modelRoot = path.join(tempDir, 'models');
-    for (const relativePath of OFFLINE_MODEL_FILES) {
+    for (const relativePath of OFFLINE_MODEL_FILES.filter((file) => file.startsWith('llm/'))) {
         const filePath = path.join(modelRoot, relativePath);
         await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
         await fs.promises.writeFile(filePath, `model:${relativePath}\n`, 'utf8');
@@ -299,18 +336,20 @@ test('离线 Runtime 只复制正式模型白名单并写入离线元数据', as
         packageDir,
         runtimeDir,
         modelRoot,
+        modelIds: ['llm'],
         includeOfflineModels: true,
         outputDir
     });
 
     const manifestPaths = result.manifest.files.map(file => file.path);
     assert.equal(new Set(manifestPaths).size, manifestPaths.length);
+    assert.equal(manifestPaths.some(file => file === 'server/res/models/sensevoice/model.int8.onnx'), false);
     assert.equal(await fs.promises.readFile(path.join(outputDir, 'runtime-mode.txt'), 'utf8'), 'offline\n');
     assert.equal(
         await fs.promises.stat(path.join(outputDir, 'offline-model-manifest.json')).then(() => true),
         true
     );
-    for (const relativePath of OFFLINE_MODEL_FILES) {
+    for (const relativePath of OFFLINE_MODEL_FILES.filter((file) => file.startsWith('llm/'))) {
         const outputRelativePath = relativePath.endsWith('/.manifest.json')
             ? relativePath.replace(/\/\.manifest\.json$/u, '/bundled-manifest.json')
             : relativePath;
@@ -368,14 +407,15 @@ test('离线 Runtime 缺少白名单模型时拒绝生成 assets', async () => {
             packageDir,
             runtimeDir,
             modelRoot,
+            modelIds: ['llm'],
             includeOfflineModels: true,
             outputDir: path.join(tempDir, 'output')
         }),
-        /离线模型文件不存在/u
+        /未知模型 ID llm/u
     );
 });
 
-test('离线 Runtime 打包用户任务定义但排除运行结果', async () => {
+test('离线 Runtime 打包用户任务定义并保留运行结果 marker', async () => {
     const packageDir = await createServerPackage(tempDir);
     const runtimeDir = await createRuntime(tempDir);
     const taskRoot = path.join(tempDir, 'tasks');
@@ -383,7 +423,11 @@ test('离线 Runtime 打包用户任务定义但排除运行结果', async () =>
     await fs.promises.writeFile(path.join(taskRoot, 'demo-task', 'task.js'), 'module.exports = { run: async () => ({ ok: true }) };\n', 'utf8');
     await fs.promises.writeFile(path.join(taskRoot, 'demo-task', 'config.json'), '{"enabled":true}\n', 'utf8');
     await fs.promises.writeFile(path.join(taskRoot, '.task-links.json'), '{}\n', 'utf8');
-    await fs.promises.writeFile(path.join(taskRoot, 'demo-task', 'results', 'index.json'), '{"instances":[]}\n', 'utf8');
+    await fs.promises.writeFile(
+        path.join(taskRoot, 'demo-task', 'results', 'index.json'),
+        '{"instances":[{"instanceId":"instance-1","status":"completed"}]}\n',
+        'utf8'
+    );
     await fs.promises.writeFile(path.join(taskRoot, 'demo-task', 'results', 'instance-1', 'run.log'), 'old result\n', 'utf8');
     await fs.promises.symlink('instance-1', path.join(taskRoot, 'demo-task', 'results', 'latest'));
 
@@ -399,9 +443,19 @@ test('离线 Runtime 打包用户任务定义但排除运行结果', async () =>
     const manifestPaths = result.manifest.files.map(file => file.path);
     assert.equal(manifestPaths.includes('server/res/tasks/demo-task/task.js'), true);
     assert.equal(manifestPaths.includes('server/res/tasks/demo-task/config.json'), true);
-    assert.equal(manifestPaths.includes('server/res/tasks/.task-links.json'), false);
-    assert.equal(manifestPaths.some(file => file.includes('/results/')), false);
+    assert.equal(manifestPaths.includes('server/res/tasks/task-links.marker'), true);
+    assert.equal(manifestPaths.includes('server/res/tasks/demo-task/results/index.json'), true);
+    assert.equal(manifestPaths.includes('server/res/tasks/demo-task/results/instance-1/run.log'), true);
+    assert.equal(manifestPaths.includes('server/res/tasks/demo-task/results/latest'), false);
+    assert.equal(manifestPaths.includes('server/res/tasks/demo-task/results/latest.marker'), true);
     assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'task.js')), true);
-    assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', '.task-links.json')), false);
-    assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'results')), false);
+    assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'task-links.marker')), true);
+    assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'results', 'index.json')), true);
+    assert.equal(
+        await fs.promises.readFile(
+            path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'results', 'latest.marker'),
+            'utf8'
+        ),
+        'instance-1\n'
+    );
 });

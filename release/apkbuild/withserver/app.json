@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "embeddedNode": true,
+  "features": ["display", "asr", "tts", "llm"],
+  "models": []
+}

@@ -57,6 +57,9 @@ class NodeServerService : Service() {
         fun shouldForceTerminate(processAlive: Boolean): Boolean = processAlive
 
         @JvmStatic
+        fun shouldStartNode(embeddedNode: Boolean): Boolean = embeddedNode
+
+        @JvmStatic
         fun buildNodeEnvironment(
             rootDir: File,
             serverUrl: String,

@@ -1,10 +1,23 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const DataSnapshot = require('../../../../core/data-snapshot');
 const { USER_CONFIG_DIR } = require('./user-config-paths');
+const {
+    resolveReleaseRuntimeContext,
+    validateReleaseRuntimeContext
+} = require('../../../../core/release-runtime-context');
 const { normalizeControlTheme } = require('./control-theme-config');
 
-const CONFIG_FILE = path.join(__dirname, '../../../../../config/config.json');
+const PROJECT_ROOT = path.resolve(__dirname, '../../../../../');
+const RUNTIME_CONTEXT = resolveReleaseRuntimeContext({
+    projectRoot: PROJECT_ROOT,
+    homeDir: os.homedir(),
+    argv: process.argv,
+    environment: process.env
+});
+validateReleaseRuntimeContext(RUNTIME_CONTEXT);
+const CONFIG_FILE = RUNTIME_CONTEXT.configFile;
 const USER_CONFIG_FILE = path.join(USER_CONFIG_DIR, 'userconfig.json');
 
 const defaultDisplayState = {
@@ -686,3 +699,4 @@ module.exports.getDeviceEvent = (ip) => userConfig.getDeviceEvent(ip);
 module.exports.setDeviceEvent = (ip, eventConfig) => userConfig.setDeviceEvent(ip, eventConfig);
 module.exports.removeDeviceEvent = (ip) => userConfig.removeDeviceEvent(ip);
 module.exports.getUserConfigDir = () => USER_CONFIG_DIR;
+module.exports.getRuntimeContext = () => ({ ...RUNTIME_CONTEXT });

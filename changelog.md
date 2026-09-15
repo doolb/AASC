@@ -1,5 +1,15 @@
 # Web MediaCenter - 变更日志
 
+## Release 配置与 APK 构建 profile
+
+- ✅ [2026-09-15] 增加 release 运行配置和 `noserver`、`withserver`、`allserver` 三种 APK 构建 profile。
+  - `npm start -- --release` 使用并保存 `release/config`、`release/userconfig`、`release/task`；无参数路径保持原有逻辑。
+  - `build:apk`、`build:apk:offline` 默认分别构建 `withserver`、`allserver`，新增 `build:apk:noserver`；每个 profile 独立使用 `release/apkbuild/<profile>/{package,runtime,gradle,output}`。
+  - `app.json` 不再声明 tasks；按稳定模型 ID 选择资源，保留任务 results 和运行实例索引，首次安装恢复 `mode=service && status=running` 的服务实例；Android marker 负责恢复隐藏任务链文件和 `results/latest` 软链接。
+  - noserver 不内置、不启动 Node Runtime；features 作为 profile 能力元数据，原生依赖保持完整；`.mmap` 预生成暂不处理。
+  - 改动文件：`src/core/release-runtime-context.js`、服务器 release 路径模块、`scripts/ops/apk-build-profile.js`、`scripts/ops/build-apk.js`、`scripts/ops/prepare-android-server-package.js`、Runtime 打包器、Android Gradle/安装器/Activity、`package.json`、release profile 配置及对应 design/spec/task/测试文档。
+  - 验证：本任务相关 Node 定向测试 54/54 通过，`git diff --check` 通过；`npm test` 为 772/773，通过项外唯一失败是既有 Windows 输入模式声纹策略断言；Android Gradle 受当前环境缺少 `AASC_MNN_ROOT` 阻断，未生成新的 APK。
+
 ## Android Offline APK 聊天回复
 
 - ✅ [2026-09-15] 修复 offline APK 发送聊天消息后无回复。
