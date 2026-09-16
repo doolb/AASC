@@ -64,6 +64,8 @@ class MainActivity : AppCompatActivity() {
     private val REQ_STORAGE_PERMISSION = 1003
     private val REQ_CAMERA_PERMISSION = 1004
     private var startupContinued = false
+    private var startupPermissionIndex = 0
+    private var permissionReloadRequired = false
     private val maxOfflineDisplayRetries = 300
     private var nodeStatusReceiverRegistered = false
     private val nodeStatusReceiver = object : BroadcastReceiver() {
@@ -75,24 +77,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestAudioPermissionIfNeeded() {
+    private fun requestAudioPermissionIfNeeded(): Boolean {
         if (Build.VERSION.SDK_INT >= 23 &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_AUDIO_PERMISSION)
+            return true
         }
+        return false
     }
 
-    private fun requestCameraPermissionIfNeeded() {
+    private fun requestCameraPermissionIfNeeded(): Boolean {
         if (Build.VERSION.SDK_INT >= 23 &&
             checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAMERA_PERMISSION)
+            return true
         }
+        return false
     }
 
-    private fun requestNotificationPermissionIfNeeded() {
+    private fun requestNotificationPermissionIfNeeded(): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATION_PERMISSION)
+            return true
+        }
+        return false
+    }
+
+    /** 按启动顺序逐项请求 Android 权限，等待当前权限回调后才会检查下一项。 */
+    private fun requestNextStartupPermission() {
+        while (startupPermissionIndex < 3) {
+            val shouldWaitForResult = when (startupPermissionIndex++) {
+                0 -> requestAudioPermissionIfNeeded()
+                1 -> requestCameraPermissionIfNeeded()
+                else -> requestNotificationPermissionIfNeeded()
+            }
+            if (shouldWaitForResult) return
+        }
+
+        if (permissionReloadRequired) {
+            permissionReloadRequired = false
+            // 录音/摄像头权限统一在权限队列结束后刷新页面，避免打断后续系统权限弹窗。
+            webView?.reload()
         }
     }
 
@@ -148,9 +174,7 @@ class MainActivity : AppCompatActivity() {
         } catch (error: Exception) {
             android.util.Log.w("MainActivity", "启动时申请原生音频焦点失败: ${error.message}")
         }
-        requestAudioPermissionIfNeeded()
-        requestCameraPermissionIfNeeded()
-        requestNotificationPermissionIfNeeded()
+        requestNextStartupPermission()
     }
 
     override fun onRequestPermissionsResult(
@@ -173,14 +197,19 @@ class MainActivity : AppCompatActivity() {
                 }
                 continueStartup()
             }
-            REQ_AUDIO_PERMISSION -> if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-                // 授权成功即重载页面，让 display.html 的 getUserMedia 能力探测通过
-                webView?.reload()
+            REQ_AUDIO_PERMISSION -> {
+                if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                    permissionReloadRequired = true
+                }
+                requestNextStartupPermission()
             }
-            REQ_CAMERA_PERMISSION -> if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-                // 摄像头授权后重载页面，让控制端收到最新的 cameraCapture 能力。
-                webView?.reload()
+            REQ_CAMERA_PERMISSION -> {
+                if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                    permissionReloadRequired = true
+                }
+                requestNextStartupPermission()
             }
+            REQ_NOTIFICATION_PERMISSION -> requestNextStartupPermission()
         }
     }
 

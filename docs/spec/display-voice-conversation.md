@@ -90,6 +90,28 @@ createDisplayState():
         发送 capabilitiesUpdated
         将目标 voiceConversation.state 设为 waitingWake
 
+Offline APK 控制端手动切换聊天模式:
+    如果 OFFLINE_NODE_MODE !== true 或 source !== controlManual:
+        不触发本流程
+    session = chat.getSession()  // 读取刚由 setChatSession 持久化的服务进程全局模式
+    如果 session.mode == private 且 privateTarget 为空:
+        不改变显示端语音会话
+    如果 session.mode 不是 group 或 private:
+        不改变显示端语音会话
+    对每个当前在线 displayClients:
+        如果该显示端 voiceRecording !== true:
+            保持 disabled/原状态，不启动录音
+            继续
+        如果 session.mode == private:
+            voiceConversation = activePrivate(target=session.privateTarget, windowType=conversation)
+        否则:
+            voiceConversation = activeGroup(windowType=conversation)
+        设置 lastValidInputAt = 当前时间
+        通过现有服务端持续对话计时器启动窗口
+    所有已启用监听的在线显示端后续使用当前全局 chatSession 路由普通识别文本
+    普通部署不因 setChatSession 自动打开显示端语音会话
+    按显示端分别保存聊天模式与私聊目标属于后续任务
+
 显示端 voiceInput(text):
     如果目标不存在或 capabilities.voiceRecording !== true:
         丢弃输入

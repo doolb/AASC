@@ -45,6 +45,7 @@ const {
     CONVERSATION_TIMEOUT_MS,
     TEMPORARY_CONVERSATION_WINDOW_MS,
     createConversationState,
+    buildManualChatVoiceConversationUpdates,
     reduceConversationInput
 } = require('../modules/voice/display-voice-conversation');
 const {
@@ -8918,13 +8919,34 @@ async function handleControlMessageFallback(data, ws) {
                     }));
                     return;
                 } else if (data.type === 'setChatSession') {
-                    chat.setSession(data.session, {
+                    const previousSession = chat.getSession();
+                    const session = chat.setSession(data.session, {
                         source: data.source || 'unknown',
                         displayId: data.displayId || null
                     });
+                    const modeChanged = previousSession.mode !== session.mode
+                        || previousSession.privateTarget !== session.privateTarget;
+                    if (modeChanged) {
+                        const conversationUpdates = buildManualChatVoiceConversationUpdates({
+                            offlineMode: OFFLINE_NODE_MODE,
+                            source: data.source,
+                            chatSession: session,
+                            displays: Array.from(displayClients, ([displayId, displayData]) => ({
+                                displayId,
+                                voiceRecordingEnabled: isDisplayVoiceListeningEnabled(displayData)
+                            }))
+                        });
+                        for (const update of conversationUpdates) {
+                            const displayData = displayClients.get(update.displayId);
+                            if (!displayData || !isDisplayVoiceListeningEnabled(displayData)) continue;
+                            displayData.state.voiceConversation = update.conversation;
+                            clearPendingConversationConfirmation(update.displayId, 'manualChatModeChanged');
+                            armDisplayConversationTimer(update.displayId);
+                        }
+                    }
                     broadcastToControls({
                         type: 'chatSession',
-                        session: chat.getSession()
+                        session
                     });
                     return;
                 } else if (data.type === 'listPrivateSessions') {

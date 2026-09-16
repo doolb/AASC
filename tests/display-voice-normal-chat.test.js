@@ -73,6 +73,33 @@ assert.match(
     /voiceCommand门控[\s\S]{0,260}accepted[\s\S]{0,260}conversationActive/,
     '服务端应记录 voiceCommand 门控状态，便于诊断语音未进入聊天的问题'
 );
+const manualChatSessionStart = server.indexOf("} else if (data.type === 'setChatSession') {");
+const manualChatSessionEnd = server.indexOf("} else if (data.type === 'listPrivateSessions') {", manualChatSessionStart);
+assert.ok(
+    manualChatSessionStart >= 0 && manualChatSessionEnd > manualChatSessionStart,
+    '应能定位控制端聊天会话保存入口'
+);
+const manualChatSessionHandler = server.slice(manualChatSessionStart, manualChatSessionEnd);
+assert.match(
+    manualChatSessionHandler,
+    /buildManualChatVoiceConversationUpdates\(\{[\s\S]*?offlineMode:\s*OFFLINE_NODE_MODE/u,
+    'offline APK 手动切换聊天模式后应同步当前全局模式到语音会话'
+);
+assert.match(
+    manualChatSessionHandler,
+    /previousSession\.mode\s*!==\s*session\.mode[\s\S]*?previousSession\.privateTarget\s*!==\s*session\.privateTarget/u,
+    '只有聊天模式或私聊目标变化时才应触发语音会话同步'
+);
+assert.match(
+    manualChatSessionHandler,
+    /source:\s*data\.source/,
+    '语音会话同步必须使用 setChatSession 的来源以排除被动状态回传'
+);
+assert.match(
+    manualChatSessionHandler,
+    /armDisplayConversationTimer/,
+    '同步后的显示端语音会话应沿用现有服务端计时'
+);
 assert.match(server, /target:\s*result\.target/);
 assert.match(server, /sessionId:\s*result\.sessionId/);
 assert.match(server, /templateTarget:\s*result\.templateTarget/);

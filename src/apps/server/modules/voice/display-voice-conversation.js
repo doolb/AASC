@@ -16,6 +16,49 @@ function createConversationState(listeningEnabled = true) {
     };
 }
 
+/**
+ * 将 offline APK 控制端的手动全局聊天模式转换为各在线显示端的语音会话初始状态。
+ * 这里只生成已启用监听设备的状态，不负责开启录音、广播状态或管理会话计时器。
+ *
+ * @param {{offlineMode?: boolean, source?: string, chatSession?: object, displays?: Array, now?: number}} options 同步策略输入
+ * @returns {Array<{displayId: string, conversation: object}>} 需要同步的显示端会话更新
+ */
+function buildManualChatVoiceConversationUpdates({
+    offlineMode = false,
+    source = '',
+    chatSession = {},
+    displays = [],
+    now = Date.now()
+} = {}) {
+    if (offlineMode !== true || source !== 'controlManual') return [];
+
+    const mode = chatSession?.mode;
+    if (mode !== 'group' && mode !== 'private') return [];
+
+    const target = mode === 'private'
+        ? String(chatSession.privateTarget || '').trim()
+        : null;
+    if (mode === 'private' && !target) return [];
+
+    const timestamp = Number.isFinite(now) ? now : Date.now();
+    const conversationState = mode === 'private' ? 'activePrivate' : 'activeGroup';
+    const conversation = {
+        ...createConversationState(true),
+        state: conversationState,
+        target,
+        lastValidInputAt: timestamp,
+        windowType: 'conversation'
+    };
+
+    return (Array.isArray(displays) ? displays : [])
+        .filter(display => display?.voiceRecordingEnabled === true)
+        .map(display => ({
+            displayId: String(display.displayId || '').trim(),
+            conversation: { ...conversation }
+        }))
+        .filter(update => update.displayId);
+}
+
 function normalizeConversationText(text) {
     return String(text || '')
         .trim()
@@ -219,6 +262,7 @@ module.exports = {
     CONVERSATION_TIMEOUT_MS,
     TEMPORARY_CONVERSATION_WINDOW_MS,
     createConversationState,
+    buildManualChatVoiceConversationUpdates,
     normalizeConversationText,
     parseConversationCommand,
     reduceConversationInput,

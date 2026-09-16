@@ -71,8 +71,29 @@ MainActivity.onCreate:
     offlineMode = resources.getBoolean(aasc_offline_mode)
     selectedUrl = chooseUrl(intentUrl, savedUrl, offlineMode)
     如果离线模式且无 intent/saved 地址：使用 https://127.0.0.1:8081
-    完成权限流程后：
+    现有共享存储权限流程完成后调用 continueStartup()
+    continueStartup():
+        如果已经继续过启动：返回
         如果 offlineMode 或 serverInput 非空：connect()
+        申请音频焦点
+        requestNextStartupPermission()
+
+requestNextStartupPermission:
+    依次检查 RECORD_AUDIO、CAMERA、Android 13+ POST_NOTIFICATIONS
+    找到第一个尚未授权的权限：
+        requestPermissions(该权限)
+        等待 onRequestPermissionsResult 后再次调用 requestNextStartupPermission
+        不因用户拒绝当前权限而中断后续检查
+        返回
+    如果本轮音频或摄像头权限已获准：
+        webView.reload()
+    否则不重载 WebView
+
+onRequestPermissionsResult:
+    REQ_STORAGE_PERMISSION -> 延续现有存储提示与 continueStartup()
+    REQ_AUDIO_PERMISSION -> 记录是否获准；requestNextStartupPermission()
+    REQ_CAMERA_PERMISSION -> 记录是否获准；requestNextStartupPermission()
+    REQ_NOTIFICATION_PERMISSION -> requestNextStartupPermission()
 
 connect:
     baseUrl = ServerConfig.baseUrl(input)

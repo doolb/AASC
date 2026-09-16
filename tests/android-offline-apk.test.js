@@ -50,6 +50,37 @@ test('offline APK WebView 录音声明 Android 音频采集所需权限', () => 
     );
 });
 
+test('offline APK 启动按录音、摄像头、通知顺序串行申请权限', () => {
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+    const requestStart = activity.indexOf('private fun requestNextStartupPermission()');
+    const requestEnd = activity.indexOf('private fun continueStartupAfterStoragePermission()', requestStart);
+    const callbackStart = activity.indexOf('override fun onRequestPermissionsResult(');
+    const callbackEnd = activity.indexOf('override fun onActivityResult(', callbackStart);
+    const requestFlow = activity.slice(requestStart, requestEnd);
+    const permissionCallback = activity.slice(callbackStart, callbackEnd);
+
+    assert.ok(requestStart >= 0 && requestEnd > requestStart, '应有独立的启动权限队列');
+    assert.ok(callbackStart >= 0 && callbackEnd > callbackStart, '应能定位权限回调');
+    assert.ok(
+        requestFlow.indexOf('requestAudioPermissionIfNeeded()')
+            < requestFlow.indexOf('requestCameraPermissionIfNeeded()'),
+        '录音权限必须先于摄像头权限请求'
+    );
+    assert.ok(
+        requestFlow.indexOf('requestCameraPermissionIfNeeded()')
+            < requestFlow.indexOf('requestNotificationPermissionIfNeeded()'),
+        '摄像头权限必须先于通知权限请求'
+    );
+    assert.match(requestFlow, /startupPermissionIndex/u);
+    assert.match(requestFlow, /if\s*\(shouldWaitForResult\)\s*return/u);
+    assert.match(requestFlow, /webView\?\.reload\(\)/u);
+    assert.match(permissionCallback, /REQ_AUDIO_PERMISSION\s*->\s*\{[\s\S]*?requestNextStartupPermission\(\)/u);
+    assert.match(permissionCallback, /REQ_CAMERA_PERMISSION\s*->\s*\{[\s\S]*?requestNextStartupPermission\(\)/u);
+    assert.match(permissionCallback, /REQ_NOTIFICATION_PERMISSION\s*->\s*requestNextStartupPermission\(\)/u);
+});
+
 test('显示端布局将控制端按钮放在 WebView 容器的顶层', () => {
     const layout = read('src/apps/android-display/app/src/main/res/layout/activity_main.xml');
     const strings = read('src/apps/android-display/app/src/main/res/values/strings.xml');

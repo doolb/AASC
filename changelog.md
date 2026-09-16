@@ -8221,3 +8221,11 @@
 - ✅ [2026-09-15] 修复群聊点击清空报错
   - `chat.js` 仅为私聊携带 `sessionId`；`llm-service.js` 对群聊和临时会话忽略多余旧字段，同时保持私聊严格校验。
   - 更新 `docs/design/chat-history-persistence.md`、`docs/spec/chat-history-persistence.md` 和 `docs/task/2026-09-15_群聊清空参数修复.md`；定向测试 `38/38` 通过并随最终 Offline APK 验证。
+
+### Android Offline 启动与语音聊天
+
+- ✅ [2026-09-16] 串行申请启动权限，并让 offline 显示端语音跟随控制端手动聊天模式。
+  - `MainActivity.kt` 按录音、摄像头、通知顺序逐项申请权限；每项回调后继续队列，拒绝不阻断后续申请，录音/摄像头授权后统一刷新 WebView。
+  - offline 服务仅在控制端手动切换群聊/私聊时，将全局会话同步到当前在线且语音监听已开启的显示端；不自动开启麦克风，普通部署不变。按显示端独立保存聊天模式和私聊目标已登记为后续待办。
+  - 更新 Android Offline 与显示端语音 design/spec/task/todo 文档及回归测试。
+  - 验证：定向 Node 测试 21/21、语音状态测试 11/11、手动聊天契约检查和 Android `:app:testDebugUnitTest` 通过；`npm run build:apk:offline` 成功，APK `unzip -tq` 通过。产物 `release/apkbuild/allserver/output/aasc-display-offline.apk` 为 958958786 bytes，SHA-256 `26d1f15c88275cd6553cc31a4798af7cf74103930191a6761cb2ba071c1d9771`；未安装到设备。
