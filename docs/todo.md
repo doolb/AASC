@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-15）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-17）
 
 ## 控制端
 
@@ -63,6 +63,16 @@
 
 ## Android APK
 
+- 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
+  - 服务更新支持 `code-only`（不发布/下载依赖）与 `all`（代码+生产依赖）；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
+  - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本次更新相关 Node 定向测试 69/69、Android JVM 全量测试通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
+  - full v2/min v3 APK、code/dependencies v3 包及 min v3 更新清单已生成并通过静态完整性/签名校验；服务和 min 通道已发布，LAN/WAN HTTP 清单及全部组件 hash 复验通过。
+  - 独立 RSA 密钥对已接入打包工具并存放于 `~/.config/aasc-user/`；更新包构建已支持临时工作区与输出目录跨文件系统，归档复制到输出同目录临时文件后再原子切换。
+  - 外网主机登录 shell 为 fish；发布器已通过 `/bin/sh -c` 执行远端 POSIX 脚本，并在远端 manifest 原子切换前设置 `0644`，真实发布通过。
+  - SM-N9500 真机原有 v1 APK 已按测试要求卸载，fresh install full v2 成功，首次解包约 911 MiB；`/api/status`、`/v1/models` 和默认模型聊天通过。
+  - 已修复 ZIP 目录项规范化后的 `src` / `node_modules` 根目录白名单问题；真机 fresh install 后 code/dependencies v3 成功应用，`active-release.json` 的 `pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。
+  - 仍待：min 原位安装、回滚/异常降级、code-only 与 LAN/WAN fallback/bad-hash/低空间场景，以及 ASR/TTS 完整业务回归。
+  - 设计：`docs/design/android-offline-hot-update.md`；伪代码：`docs/spec/android-offline-hot-update.md`；任务：`docs/task/2026-09-16_OfflineAPK服务热更新与原生增量APK.md`。
 - ⏳待现场验收 [2026-09-14] Chat2API Android Provider 真实网页登录验证
   - 普通 APK 已完成构建、安装和启动冒烟；仍需使用测试账号验证网页登录、Authorization/localStorage/Cookie 捕获、Provider 接口校验和账号保存。
   - offline APK 已使用包含当前 Chat2API 源码和生产依赖的运行包重新构建、卸载重装并完成本地聊天/语音接口验收；真实 Provider 登录仍需现场测试账号。

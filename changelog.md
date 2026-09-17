@@ -1,5 +1,95 @@
 # Web MediaCenter - 变更日志
 
+### Android Offline ZIP 目录白名单热更修复
+
+- ✅ [2026-09-17] 修复 Android 端 ZIP 目录项规范化后误拒绝 `src/` 导致服务热更未应用的问题。
+  - `OfflineUpdateManager.kt` 将去掉尾部 `/` 后的 `src`、`node_modules` 根目录纳入对应组件白名单，继续拒绝跨组件路径、`src/apps/android-display` 和目录穿越；新增 Android JVM 回归用例。
+  - full APK 重新构建：`release/apkbuild/allserver/output/aasc-display-offline.apk`，957281083 bytes，SHA-256 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`。
+  - all v3 服务包发布：code v3 SHA-256 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`；LAN/WAN 清单均为 code=3、dependencies=3。
+  - 真机 fresh install 后生成 `active-release.json`：codeVersion=3、dependencyVersion=3、`pendingHealth=false`；HTTPS `/api/status`、`/v1/models` 和默认模型 Chat Completions 返回成功。验证：Android JVM `BUILD SUCCESSFUL`、更新相关 Node 定向测试 69/69。
+
+### Android Offline APK 热更打包与双站点发布
+
+- ✅ [2026-09-17] 重打 full v2/min v3 APK，生成服务 code/dependencies v2，并完成局域网与外网热更通道发布。
+  - full APK：`release/apkbuild/allserver/output/aasc-display-offline.apk`，957280815 bytes，SHA-256 `21cda4db659347e2acf79bdf2524f3f2c18508f5ba16aa5b0e2be85a7f629c65`；min APK：`release/apkbuild/allserver-min/output/aasc-display-offline-min.apk`，71356163 bytes，SHA-256 `427408dad81da8c26c4375c632288e64d6888f7c92a03857a7fdb411efcf75a1`。
+  - code v2：13994662 bytes，SHA-256 `7196b150c00b5a3e46d6188c8f0c75336499686c71e54c5d42b6f19d33eabc05`；dependencies v2：104867634 bytes，SHA-256 `b2029a9152a340d1281b2796dc1b727dd892b07019175470d6c0d2a851e8db3d`；min 更新 APK 与服务 v2 签名清单已同步到 `release/offline-update/output/`。
+  - 远端默认 fish shell 已兼容为显式 `/bin/sh -c`；修复 SCP 临时 manifest `0600` 导致 Apache 403，切换前改为 `0644`。服务 v2/min v3 发布到 `http://192.168.1.39/mnt/aasc-offline/` 和 `http://120.79.245.103/mnt/aasc-offline/` 后，签名清单、code、dependencies、min APK 的 HTTP hash 全部复验通过。
+  - 定向 Node 回归 69/69、Android `:app:testDebugUnitTest` BUILD SUCCESSFUL，APK/ZIP 完整性和 full/min 同 signer `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df` 通过。真机 full v2 原位安装因 `/data` 仅剩约 1.7 GiB 返回 `INSTALL_FAILED_INSUFFICIENT_STORAGE`，未卸载或清理原有 v1 数据。
+
+- ✅ [2026-09-17] 按测试要求卸载真机原有 Offline APK。
+  - 目标包：`com.aasc.display.offline`；ADB 返回 `Success`，卸载后 `pm path` 不再返回 APK，设备 `/data` 可用空间约 3.7 GiB。
+  - 应用私有数据随系统卸载删除；后续可继续 fresh install full v2，不再执行原位升级测试。
+
+- ⚠️ [2026-09-17] fresh install full v2 并完成真机启动/聊天冒烟，发现服务热更 ZIP 目录项校验兼容问题。
+  - full v2 安装成功，首次 Runtime 解包约 911 MiB；HTTPS `/api/status`、`/v1/models` 和默认 Qwen MNN Chat Completions 返回成功。
+  - 启动读取 LAN/WAN 发布清单后，code v2 下载完整性通过但解压前被拒绝：`src/` 目录项在 `inspectZipArchive()` 中移除尾部 `/` 变为 `src`，`validateComponentArchive()` 未将该规范化目录项纳入 code 白名单，因此当前继续使用 APK 内置服务版本。
+
+### Android Offline 更新包跨文件系统落盘
+
+- ✅ [2026-09-17] 修复 Offline 服务更新包在 `/tmp` 与输出目录跨文件系统时 rename 报 `EXDEV`。
+  - `offline-update-package.js` 将代码包和依赖包复制到输出目录同文件系统的唯一临时文件，再原子改名；签名清单也先在清单目录暂存并最后切换，失败时清理临时文件。
+  - 新增 `all` 模式跨文件系统集成测试；先验证旧实现按预期失败 `EXDEV`，修复后代码包、依赖包和清单均生成。更新包定向测试 12/12 通过。
+
+### Android Offline APK 热更新本地打包
+
+- ✅ [2026-09-16] 接入独立更新密钥并生成 full/min APK 与首发服务更新工件，仅写本地、未上传。
+  - full v2 `release/apkbuild/allserver/output/aasc-display-offline.apk`：957280815 bytes，SHA-256 `21cda4db659347e2acf79bdf2524f3f2c18508f5ba16aa5b0e2be85a7f629c65`；min v3 `release/apkbuild/allserver-min/output/aasc-display-offline-min.apk`：71356163 bytes，SHA-256 `427408dad81da8c26c4375c632288e64d6888f7c92a03857a7fdb411efcf75a1`。
+  - code v1 `release/offline-update/output/code/code-v1.zip`：13994662 bytes，SHA-256 `3b7a729cf9995ccd0d746b62b865b5d31925ffd840e9443d4d35682797ef1ea8`；dependencies v1 `release/offline-update/output/dependencies/dependencies-v1.zip`：104867634 bytes，SHA-256 `3a9187ed66579ec6d9e4f9500b2921f9c391f297aee587ecff28187572afa990`；min APK 更新副本与签名清单位于 `release/offline-update/output/apk/`、`manifests/`。
+  - 验证：full/min APK 与 code/dependencies ZIP 完整性通过；full/min APK 签名相同，APK 内公钥匹配本地公钥且无私钥路径；服务和 APK-min 清单 RSA 验签及所有工件大小/SHA-256 匹配。Node 更新相关测试 51/51 通过，Android `:app:testDebugUnitTest` BUILD SUCCESSFUL。
+  - 后续修复：初次打包时默认 `/tmp` 与 release 输出跨文件系统导致 `EXDEV`，见上方修复记录；本地工件已验签通过，无需重建。真机更新验收和远端发布仍待处理。
+
+### Android Offline APK 界面缩放
+
+- ✅ [2026-09-16] Offline APK 显示页和控制页 WebView 初始比例放大到 200%，普通 APK 维持 100%。
+  - 改动文件：`WebViewScalePolicy.kt`、`DisplayWebView.kt`、`MainActivity.kt`、`WebViewScalePolicyTest.kt`，以及 Offline APK design/spec/task 文档。
+  - 验证：Android JVM 单元测试通过，offline APK 定向回归 17/17；Offline APK 构建、ZIP 完整性和 SM-N9500 Android 9 覆盖安装通过。显示页与控制页截图已复核；200% 下显示页状态条和控制页设备状态行右侧内容较挤，部分横向信息被裁切。
+  - 产物：`release/apkbuild/allserver/output/aasc-display-offline.apk`，大小 958958786 bytes，SHA-256 为 `a9119006236f279d5790aaa34499e443a24a13f1450fd7291c9a4e0a5cbac2f2`。设备物理/覆盖分辨率与 density 前后未变。
+
+## Android Offline APK 热更新方案
+
+- ✅ [2026-09-16] 确认 Offline APK 服务代码/依赖独立发布和原生 `allserver-min` 更新方案；本条仅记录设计阶段，功能尚未实现或发布。
+  - 新增 `docs/design/android-offline-hot-update.md`、`docs/spec/android-offline-hot-update.md`、`docs/task/2026-09-16_OfflineAPK服务热更新与原生增量APK.md`，并更新 design/spec 索引及 `docs/todo.md`。
+  - 方案约定 `code-only` 不生成或传输 `node_modules`、`all` 同步切换代码和依赖、原生 min APK 同签名递增版本码更新且保留 app 数据；真机测试、构建和上传尚未执行。
+
+- ✅ [2026-09-16] 实现 Offline 服务更新包构建/发布器与 `allserver-min` profile 基础。
+  - 新增 `scripts/ops/offline-update-package.js`、`scripts/ops/publish-offline-update.js`；添加 `build:offline-update`、`publish:offline-update`、`build:apk:offline:min`。`code-only` 不重打或传输依赖，要求目标依赖 hash 匹配；`all` 同步发布代码和依赖，manifest 最后切换。
+  - `allserver-min` 构建只打包 Node Runtime allowlist 动态库资产，不调用完整 server package 准备流程；full/min 版本码配置为 2/3。相关 Node/profile 测试通过；Android 更新器和真机验收尚未完成。
+
+- ✅ [2026-09-16] 接通 Android Offline 服务热更新与 `allserver-min` 用户确认安装流程。
+  - 新增/完善 `OfflineUpdateManifest.kt`、`OfflineUpdateManager.kt`、`OfflineApkInstallReceiver.kt`；服务启动前按签名清单应用 `code-only` 或 `all` release，失败保留/回滚旧版本。min APK 检查模型兼容指纹、空间、APK hash、包名、签名证书与版本后才交由 PackageInstaller；模型在安装前物化，Runtime 仅替换 allowlist 动态库。
+  - `MainActivity` 在完整离线数据就绪后后台检查更新，前台才发起未知来源授权/系统安装；回到前台可恢复检查。Node/Android 模型指纹统一为 locale-independent 排序。
+  - 验证：Android 全量 JVM `:app:testDebugUnitTest` 通过；更新相关 Node 定向测试 55/55 通过。全量 `npm test` 为 818/819，单独复跑确认唯一失败是既有 `node-display-voice-text-input.test.js` 的本地声纹策略断言，与本改动无关。APK 构建、真机原位更新、生产密钥和外部发布仍待验收。
+
+## Android Offline APK 首次安装恢复与 Runtime 校验
+
+- ✅ [2026-09-16] 将正式 offline `allserver/app.json` 的 `verifyRuntime` 默认值改为 `false`；`withserver` 和 `noserver` 继续默认开启完整校验。
+  - 解析层仍对未声明字段兼容使用 `true`，只有正式 offline profile 显式关闭 SHA-256 内容校验。
+
+- ✅ [2026-09-16] 使用 offline 默认不校验配置重新构建并安装测试 APK。
+  - 产物：`release/apkbuild/allserver/output/aasc-display-offline.apk`，大小 958958783 bytes，SHA-256 为 `1053ded34e19fb6998c2cd743ca69484374c1dbd757dd284605bf600d0cecd8e`。
+  - 真机 Display 2 验证：Runtime 日志确认跳过完整 SHA-256 校验，`llm-server` 自动恢复，显示端连接；`/api/status`、`/v1/models` 和默认模型 Chat Completions 均返回 HTTP 200。
+
+- ✅ [2026-09-16] 修复 offline APK 首次安装时 `results/latest` 指向空实例目录导致 Node Runtime 安装失败，并新增 `app.json.verifyRuntime` 校验开关。
+  - `NodeRuntimeInstaller.kt` 在恢复 latest marker 前创建合法的空实例目录；`verifyRuntime=true` 保持文件大小/SHA-256 完整校验，`false` 改为仅检查普通文件存在。
+  - `apk-build-profile.js`、`build-apk.js`、`prepare-android-node-runtime.js` 将 `verifyRuntime` 从 profile 传入 APK manifest；解析层对未声明字段默认启用完整校验，正式 offline profile 的关闭配置见上方记录。
+  - 真机 `192.168.1.6:5555` 卸载重装验证通过：Runtime 完整安装完成、恢复 `llm-server` 实例 `40f3b6b1`、显示端连接成功；HTTPS `/api/status` 和 `/v1/models` 返回 200，默认模型聊天返回 200。
+  - 之前完整校验版本产物：`release/apkbuild/allserver/output/aasc-display-offline.apk`，大小 958958781 bytes，SHA-256 为 `a6268c8f7ad06b69be8b948ebc2497bfdffbbb0ea170554fe873b499fed01540`；当前正式 offline 产物已切换为默认不校验版本，详见上方记录。
+
+## Android Offline APK 模型资产打包
+
+- ✅ [2026-09-15] 修复模型目录中的 `.gitkeep` 导致离线 APK 资产清单不一致，并重新生成 offline APK。
+  - `scripts/ops/apk-build-profile.js` 跳过目录型模型扫描中的 `.gitkeep` 占位文件，保留 `.manifest.json` 的可打包映射；新增模型 profile 回归测试。
+  - 产物：`release/apkbuild/allserver/output/aasc-display-offline.apk`，大小 957217710 bytes，SHA-256 为 `2f8634fb596782bed672a7fd7a19a648d718d07f0996d87fbe04a2440f70005a`。
+  - 验证：APK 不含 `.gitkeep`，离线模型 manifest 不含 `.gitkeep`；相关 Node 回归 28/28，ZIP 完整性、语法检查和 `git diff --check` 通过；本次未执行真机安装。
+
+## Android Offline APK 发布打包
+
+- ✅ [2026-09-15] 修复跨平台任务 `results/latest` marker 并重新生成 offline APK。
+  - `scripts/ops/prepare-android-node-runtime.js` 同时接受软链接和文本实例 ID；原始 `latest` 不复制为 APK asset，统一生成安装器使用的 `latest.marker`。
+  - `release/task` 纳入任务定义、results/index、实例结果和有效 marker；失效的 `llm.chat/qwen3.5` release 副本 marker 不再打包，原始 `res/tasks` 保持不变。
+  - 产物：`release/apkbuild/allserver/output/aasc-display-offline.apk`，大小 957217619 bytes，SHA-256 为 `1528d5d7a32e5c247448f1fbda9d15c70be414331590259a70533f66be148dd4`；内含 qwen3.5-0.8b-claude-opus-distilled-mnn、release 配置、任务 marker 和 VAD 修复后的控制端脚本。
+  - 验证：ZIP 完整性通过，Runtime/profile/Release 集成回归 27/27，JavaScript 语法检查和 `git diff --check` 通过；本次未执行真机安装。
+
 ## Android ASR 测试 APK HTTPS 启动
 
 - ✅ [2026-09-15] 修复独立 ASR 测试 APK 启动竞态导致的 HTTP 明文降级。
@@ -8213,6 +8303,12 @@
 
 ### Android 显示端与聊天历史
 
+- ✅ [2026-09-16] 校准高 DPI Android APK WebView 感知尺寸
+  - `WebViewScalePolicy.initialScalePercent()` 固定返回 100%，移除 density 反向缩放；显示端、`render-display` 和控制端仍共用同一 WebView 初始化策略，设备分辨率、viewport 响应式布局、截图及坐标协议不变。
+  - 更新 `docs/design/android-display.md`、`docs/spec/android-display.md`、`docs/task/2026-09-16_Android高DPI WebView尺寸校准.md`；Android JVM 单测 141 项、`render.smoke.js` 通过。
+  - Offline `allserver` APK 构建成功并安装到 `192.168.1.6:5555`，958958786 bytes，SHA-256 `de8b946e0dcdce859a8f7803eb5566ce3259d9b19494112511154cbd3c397eb9`；设备 APK hash 一致，ZIP 完整性检查通过，保留原应用数据。
+  - 高 DPI 内置屏显示页/控制页截图可读；display 2 的 1920x1080 / 160 dpi Activity 正常启动。物理与系统覆盖分辨率/DPI 前后不变。`render-display` 结构冒烟通过；Android 9 无法通过 `screencap -d 2` 捕获虚拟屏画面。
+
 - ✅ [2026-09-15] 修复高 DPI 手机显示端、`render-display` 和 Offline 控制端页面整体放大
   - 新增 `WebViewScalePolicy`，以 mdpi 160 dpi 为基准按当前显示屏计算 `setInitialScale`；`DisplayWebView` 的显示页和控制页统一应用，未改变媒体、截图和输入协议。
   - 更新 `docs/design/android-display.md`、`docs/spec/android-display.md` 和 `docs/task/2026-09-15_Android高DPI显示端WebView缩放修复.md`；新增 Android 单测覆盖 160/320/560 dpi 与非法密度边界。
@@ -8221,6 +8317,28 @@
 - ✅ [2026-09-15] 修复群聊点击清空报错
   - `chat.js` 仅为私聊携带 `sessionId`；`llm-service.js` 对群聊和临时会话忽略多余旧字段，同时保持私聊严格校验。
   - 更新 `docs/design/chat-history-persistence.md`、`docs/spec/chat-history-persistence.md` 和 `docs/task/2026-09-15_群聊清空参数修复.md`；定向测试 `38/38` 通过并随最终 Offline APK 验证。
+
+### Android offline APK 模型资产
+
+- ✅ [2026-09-16] 将 offline APK 的 LLM 权重从 Node Runtime 移到显示端按需资产
+  - `prepare-android-node-runtime.js` 将 9 个 Qwen 模型运行文件打入 `assets/display-models/<modelId>`，Node Runtime 仅保留模型清单和 offline 元数据；Android installer 不再解包权重。
+  - `MnnLlmModelManager` 首次加载时从 APK asset 校验并物化到 `files/models/llm/bundled/<modelId>`。真机发现 bundled 父目录未创建导致 staging 原子切换失败，已补齐目录创建及静态回归断言。
+  - 更新 MNNChat、offline Node Runtime 和模型资产设计/spec/task 文档；完成项已从 `docs/todo.md` 移除。
+  - 验证：Node 定向回归 38/38、Android JVM 单测 143 项通过；offline APK `958958767` bytes，SHA-256 `dae3137a20539750b8f84c6604ea336413a3a4de3cde0efbf94c7aa5e8b8910f`，已安装到 SM-N9500 display 2，设备包 hash 一致；`/v1/models` 默认 Qwen 为 ready，`/v1/chat/completions` 返回非空正文。`files/aasc-server/res/models/llm` 只有清单，权重仅在显示端 bundled 缓存；MNN 运行时自行生成 bundled 下的 `.mmap`，本任务未预生成或改动该机制。
+
+### 聊天系统
+
+- ✅ [2026-09-16] 控制端折叠 Think 内容，显示端气泡展示 Think，并按原顺序播报无标签文本。
+  - `think-output-filter.js`/`llm-service.js` 将模型输出分为最终回答、reasoning 和无标签 speech；流式、非流式、Responses、Chat Completions 与 Agent TTS 共用分流结果，并保留孤立 `</think>` 前缀泄漏防护。
+  - `server-app.js` 将 reasoning/speech 写入可选聊天历史字段并透传；后续模型上下文仍只使用正文。控制端 `chat.js` 仅在 Think 弹窗展示 reasoning，显示端语音回复气泡展示完整无标签 speech；TTS 及历史重播按模型输出顺序播报，旧历史兼容回退。
+  - 更新聊天输出设计/spec/task 文档；定向聊天、TTS、Markdown 和显示端契约测试 32/32 通过，JS 语法检查及 `git diff --check` 通过。全量 `npm test` 因无输出挂起并手动中止，期间有多项测试失败报告，故全量验证未完成。
+
+### Android 控制端按钮位置
+
+- ✅ [2026-09-16] 将 APK 原生控制端按钮移到左上角，避免遮挡页面右侧 tips。
+  - `activity_main.xml` 将 `controlToggleButton` 从 `top|end` 调整为 `top|start`，保留 12dp 边距、12dp elevation、浮层层级及现有显隐和点击行为。
+  - 更新 offline APK 布局契约测试及 Android offline APK design/spec/task 文档。
+  - 验证：offline APK 定向测试 16/16 通过；`npm run build:apk:offline` 构建成功；`unzip -tq` 完整性检查通过。APK 为 958958787 bytes，SHA-256 `10e200e1b379bae1bdb4d9afb0c4958dde5e66e205424e7decdfb499dd2148fa`；未安装到设备。
 
 ### Android Offline 启动与语音聊天
 
