@@ -9,7 +9,7 @@ const {
 } = require('../../../../core/release-runtime-context');
 const { normalizeControlTheme } = require('./control-theme-config');
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../../../../');
+const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../../'));
 const RUNTIME_CONTEXT = resolveReleaseRuntimeContext({
     projectRoot: PROJECT_ROOT,
     homeDir: os.homedir(),

@@ -34,7 +34,7 @@
 | 媒体库 | [media-library.md](design/media-library.md) | 多媒体库管理、多协议支持、文件操作 |
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |
 | 聊天系统 | [chat-system.md](design/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
-| 聊天输出过滤与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 隐藏 think 泄漏内容、统一流式/历史/TTS 文本和私聊清空错误反馈 |
+| 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 控制端折叠 think、显示端展示 think、TTS 播报去标签内容和私聊清空错误反馈 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](design/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出 |
 | 搜索频道与独立 Pi 搜索进程 | [search-channel.md](design/search-channel.md) | 搜索状态/历史独立展示、LLM 搜索上下文隔离与临时进程回收 |
 | WebSocket | [websocket.md](design/websocket.md) | 通信协议、消息类型 |
@@ -82,6 +82,8 @@
 | Android原生语音生成 | [android-native-tts.md](design/android-native-tts.md) | Microsoft Embedded Speech 离线合成 Xiaoxiao、模型按需下载、显示端生成与服务端回退 |
 | Android原生声纹识别 | [voiceprint.md](design/voiceprint.md) | 外部声纹模型加载、说话人匹配与 APK 端声纹门控 |
 | Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](design/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
+| Android offline 模型资产按需加载 | [android-offline-model-assets.md](design/android-offline-model-assets.md) | LLM 权重保留 APK asset，显示端按需物化，Node 服务端不释放模型 |
+| Android Offline APK 服务热更新与原生增量 APK | [android-offline-hot-update.md](design/android-offline-hot-update.md) | code-only/all 服务更新、签名清单、allserver-min 原位更新与模型数据保留 |
 | 任务 URL 路由注册 | [task-url-route-registration.md](design/task-url-route-registration.md) | 任务实例复用 AASC 8081 路由、显示端 WebSocket 请求转发和生命周期清理 |
 | 正式 Android 原生 OCR 与 YOLO11n | [android-native-ocr-yolo.md](design/android-native-ocr-yolo.md) | 正式显示端单小核 RapidOCR/YOLO11n、服务器路由和任务面板 |
 | 正式 Android 统一模型分发 | [android-model-distribution.md](design/android-model-distribution.md) | 正式 APK 全模型服务器按需下载、hash 校验、缓存和 YOLO 尺寸扩展 |

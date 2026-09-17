@@ -89,3 +89,74 @@ installRuntime():
 - Node 定向测试：本任务相关测试 54/54 通过；全量测试存在一个既有的 Windows 输入模式声纹策略断言失败，与本任务无关。
 - Android JVM/Gradle 验证未能在当前环境完成：缺少固定环境变量 `AASC_MNN_ROOT` 对应的官方 MNN checkout，Gradle 在 native 配置阶段停止；实际 APK 未宣称构建成功。
 - 未处理 `.mmap` 预生成；未执行真机安装和现场验收。
+
+## 2026-09-15 补充执行结果
+
+- release 构建输入补齐：`release/config/config.json` 使用当前 `config/config.json` 的配置种子；`release/task` 同步当前任务定义、results/index 和实例结果。
+- 修复 Runtime 打包器对跨平台任务结果的兼容：`results/latest` 同时支持软链接和文本实例 ID；原始 `latest` 不进入 APK，统一生成 `latest.marker`。`release/task/llm.chat/results/latest` 指向不存在的 `qwen3.5` 实例，因此仅从 release 副本移除该失效 marker，原始 `res/tasks` 保持不变。
+- 使用 `npm run build:apk:offline` 重新构建成功，profile 为 `allserver`，offline 和 embedded Node 均为 `true`；APK 内含 release 配置、6 个有效任务 latest marker、task-links marker、默认 MNNChat 模型及 VAD 修复后的控制端脚本。
+- 产物：`release/apkbuild/allserver/output/aasc-display-offline.apk`，大小 957217619 bytes，SHA-256 为 `1528d5d7a32e5c247448f1fbda9d15c70be414331590259a70533f66be148dd4`。
+- 验证：ZIP 完整性通过（33734 个文件）；Runtime/profile/Release 集成回归 27/27 通过；JavaScript 语法检查和 `git diff --check` 通过。本次未执行真机安装。
+
+## 2026-09-15 `.gitkeep` 模型占位文件修复与重打包
+
+- 根因：目录型模型的兜底扫描会把 `.gitkeep` 当作模型文件加入离线 manifest；Android AssetManager 对隐藏文件的处理不稳定，导致 manifest 与实际 APK 资产不一致。
+- 变更：`scripts/ops/apk-build-profile.js` 的目录型模型扫描跳过 `.gitkeep`，但保留需要映射为可打包名称的 `.manifest.json`；新增 `tests/apk-build-profile.test.js` 回归用例。
+- TDD 验证：新增用例先以实际返回 `sensevoice/.gitkeep` 失败，修复后 `tests/apk-build-profile.test.js` 6/6 通过。
+- 使用 `npm run build:apk:offline` 重打包成功；APK 大小 957217710 bytes，SHA-256 为 `2f8634fb596782bed672a7fd7a19a648d718d07f0996d87fbe04a2440f70005a`。
+- 最终包检查：ZIP 完整性通过（33734 个文件）；APK 资产和离线模型 manifest 均不含 `.gitkeep`，离线模型文件 38 个；相关 Runtime/profile/Release 回归 28/28 通过。
+- 启动耗时：当前 `NodeServerService` 已记录 Runtime 解包耗时和 Node 总启动耗时；分阶段统一报告（APK 进程、WebView、8081、任务恢复、模型首载）列为后续可选优化，未在本次改动中实现。
+
+## 2026-09-16 首次安装恢复与 Runtime 校验开关
+
+### 任务描述
+
+修复真实卸载重装时 offline APK 因 `results/latest` 指向空实例目录而无法启动的问题，并允许通过 profile 的 `app.json` 决定是否执行 Runtime 全量 SHA-256 校验。
+
+### Design 需求
+
+- latest marker 指向的实例目录不存在时，若实例 ID 合法，应创建空目录后恢复 `results/latest`；目标路径为普通文件时仍然失败。
+- `verifyRuntime` 缺省为 `true`；开启时校验 Runtime 文件存在性、大小和 SHA-256，关闭时只校验普通文件存在性。
+- 配置应从 `app.json` 传入构建 manifest，并由 Android 安装器执行；不改变用户配置、模型和任务结果的保留规则。
+
+对应设计文档：`docs/design/release-build-profiles.md`、`docs/design/android-embedded-node-server.md`。
+
+### Spec 设计
+
+```text
+loadApkProfile(profile):
+    读取 app.json.verifyRuntime
+    缺省时返回 true
+    非布尔值时构建失败
+
+prepareAndroidNodeRuntime:
+    将 verifyRuntime 写入 runtime-manifest.json
+
+NodeRuntimeInstaller.ensureInstalled:
+    verifyRuntime=true  -> 校验每个文件的大小和 SHA-256
+    verifyRuntime=false -> 仅校验每个文件存在且为普通文件
+    latest marker 目标实例目录不存在 -> 创建空目录后恢复软链接
+```
+
+对应实现规范：`docs/spec/release-build-profiles.md`、`docs/spec/android-embedded-node-server.md`。
+
+### 受影响的功能模块和代码
+
+- Profile 与运行包：`scripts/ops/apk-build-profile.js`、`scripts/ops/build-apk.js`、`scripts/ops/prepare-android-node-runtime.js`。
+- Android 安装器：`NodeRuntimeManifest.kt`、`NodeRuntimeInstaller.kt` 及 JVM 测试。
+- Release 配置：`release/apkbuild/{allserver,withserver,noserver}/app.json`。
+- 文档：对应 design/spec、`docs/todo.md` 和 `changelog.md`。
+
+### 自测与兼容性测试
+
+- Node profile/runtime 和 APK 编排相关回归：47/47 通过。
+- Android `:app:testDebugUnitTest`：`BUILD SUCCESSFUL`；包含空实例目录创建和 manifest 默认值/关闭值测试。
+- 真实设备 `SM-N9500`（Android 9/API 28，Display 2）已安装当前默认不校验版本；Runtime 内容更新后完成安装，恢复 `llm-server 40f3b6b1`，显示端成功连接。
+- Runtime 日志确认 `verifyRuntime=false` 已生效：跳过完整 SHA-256 内容校验；本次内容安装耗时约 116.9 秒（该耗时包含 Runtime 文件复制，不等同于仅复用已安装 Runtime 的启动耗时）。
+- 通过 ADB forward 以 HTTPS 访问本机 8081：`/api/status` HTTP 200、`/v1/models` HTTP 200；使用默认 MNN 模型发送 chat completion 返回 HTTP 200。
+- 当前 APK 完整性检查通过，未包含 `.gitkeep`；manifest 记录 `verifyRuntime=false`，文件数 33261。产物大小 958958783 bytes，SHA-256 为 `1053ded34e19fb6998c2cd743ca69484374c1dbd757dd284605bf600d0cecd8e`。
+
+### 风险与未处理项
+
+- profile 解析缺省仍为 `verifyRuntime=true`，但正式 offline `allserver/app.json` 默认配置为 `false`，`withserver`/`noserver` 仍为 `true`；开关只影响首次 Runtime 内容校验耗时，不减少 APK 体积。
+- 本任务不预生成 `.mmap`，也不改变聊天输出中的 think 过滤逻辑。

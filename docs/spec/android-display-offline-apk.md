@@ -98,9 +98,21 @@ onRequestPermissionsResult:
 connect:
     baseUrl = ServerConfig.baseUrl(input)
     start NodeServerService(mainServerUrl = baseUrl, offlineMode = offlineMode)
-    显示 WebView 加载 baseUrl/display
-    创建顶部控制按钮并显示
-    创建控制 WebView（仍在按钮下方）但初始隐藏
+    创建显示 WebView(context, offlineMode) 并加载 baseUrl/display
+    在 webContainer 左上角（top|start）创建控制按钮并显示
+    创建控制 WebView(context, offlineMode)（仍在按钮下方）但初始隐藏
+
+WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels):
+    如果 offlineMode 为 false：返回 100
+    如果 widthPixels <= 0 或 heightPixels <= 0：返回 100
+    longEdgePixels = max(widthPixels, heightPixels)
+    返回 round(longEdgePixels / 1280 * 100)，最小为 1
+
+DisplayWebView.init(context, offlineMode):
+    初始化现有 WebSettings
+    metrics = context.resources.displayMetrics
+    scale = WebViewScalePolicy.initialScalePercent(offlineMode, metrics.widthPixels, metrics.heightPixels)
+    setInitialScale(scale)
 
 toggleControl:
     如果 controlWebView 可见：隐藏并将按钮文字设为“控制端”

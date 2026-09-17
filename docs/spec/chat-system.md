@@ -16,12 +16,16 @@
   name: string,         // 名字: 系统名/助手名/显示端名/控制端名
   ip: string,           // IP地址（显示端/控制端）
   content: string,      // 消息内容
+  reasoning?: string,   // 模型 <think>/<thinking> 标签内正文；仅控制端折叠展示
+  speech?: string,      // 去除 think 标签、保持模型输出顺序的播报文本
   mode: string,         // 模式: 'group' | 'private'
   target: string,       // 私聊对象（私聊模式）
   sessionId: string,    // 会话ID（私聊多会话支持）
   displayId: string     // 关联的显示端ID
 }
 ```
+
+`reasoning` 和 `speech` 为可选兼容字段。旧历史没有这些字段时，控制端只显示 `content`，回放 TTS 也只播 `content`。reasoning 不进入后续 LLM 上下文。
 
 ### 会话状态
 

@@ -91,13 +91,17 @@ AndroidSafProvider 操作:
 ```text
 NodeRuntimeService.start
     → 读取 assets/runtime-manifest.json
+    → 读取 manifest.verifyRuntime（缺省 true）
     → 读取私有目录 .runtime-version
     → 版本一致且关键启动文件存在、大小正确时走快速复用路径
     → 快速复用路径不遍历和计算全部 Runtime 文件的 SHA-256
-    → 版本不同或关键文件缺失时解压到 staging，并校验全部文件大小和 SHA-256
+    → 版本不同或关键文件缺失时解压到 staging
+    → verifyRuntime=true 时校验全部文件大小和 SHA-256
+    → verifyRuntime=false 时只校验文件存在且为普通文件，跳过 SHA-256 内容校验
     → 拒绝绝对路径和包含 .. 的条目
     → 检查 node 可执行文件和 src/apps/server/boot/server-launcher.js
     → 安装成功后写入 Runtime 版本标记
+    → latest marker 指向空实例目录时创建该目录后再恢复 results/latest
     → 保留 config、res/uploads、res/certs、logs 和用户媒体
 ```
 
@@ -174,6 +178,15 @@ offline 原生语音模型:
     → TTS 校验内置 manifest.json 和全部文件 hash 后直接加载
     → 不请求在线模型接口，不创建 files/models/sensevoice 或 files/models/tts 副本
     → online 模式继续使用 files/models 下的下载缓存
+```
+
+```text
+offline 原生 LLM 模型:
+    → Node Runtime 只解包 res/models/llm/manifest.json 和 offline-model-manifest.json 元数据
+    → APK assets/display-models/<modelId>/ 保留 LLM 权重，不复制到 aasc-server
+    → 显示端首次加载时校验并物化到 files/models/llm/bundled/<modelId>
+    → /v1 模型清单按 offline 元数据声明模型 ready，推理请求仍路由到显示端
+    → MNN 按当前运行时策略处理 bundled 目录下的 mmap 缓存；不在打包或 Runtime 安装阶段预生成
 ```
 
 ```text

@@ -10,7 +10,7 @@ const START_TIMEOUT_MS = 30000;
 const POLL_INTERVAL_MS = 250;
 const HEALTH_TIMEOUT_MS = 1000;
 const STOP_TIMEOUT_MS = 3000;
-const PROJECT_ROOT = path.resolve(__dirname, '../../../../../../');
+const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../../../'));
 
 function normalizeEngine(value = DEFAULT_ENGINE) {
   const engine = String(value).trim().toLowerCase();

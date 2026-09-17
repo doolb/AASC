@@ -157,7 +157,8 @@ class NativeBridge(
             .toString()
     }
 
-    // offline 模型由 NodeRuntimeInstaller 解包到同一份 aasc-server 资源目录，ASR/TTS 直接复用。
+    // offline 语音模型由 NodeRuntimeInstaller 解包到 aasc-server 资源目录，ASR/TTS 直接复用；
+    // LLM 权重属于显示端 display-models asset，由 MnnLlmModelManager 按需物化。
     private val offlineVoiceModelRoot = File(webView.context.filesDir, "aasc-server/res/models")
 
     private fun offlineVoiceModelDirectory(name: String): File? {

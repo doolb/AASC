@@ -41,6 +41,7 @@ const Chat = {
     searchHistory: [],
     isLoading: false,
     currentStreamingMessage: '',
+    currentStreamingReasoning: '',
     activeRequestId: null,
     requestCounter: 0,
     currentUserMessage: '',
@@ -844,6 +845,15 @@ const Chat = {
                     </div>
                 </div>
             </div>
+            <div class="chat-modal-overlay" id="chatThinkModal" role="dialog" aria-modal="true" aria-labelledby="chatThinkModalTitle" onclick="if(event.target===this)Chat.hideThinkModal()">
+                <div class="chat-modal-content">
+                    <div class="chat-modal-header">
+                        <h3 id="chatThinkModalTitle">Think</h3>
+                        <button class="chat-modal-close" onclick="Chat.hideThinkModal()" title="关闭">&times;</button>
+                    </div>
+                    <div class="chat-modal-body chat-think-modal-body" id="chatThinkModalBody"></div>
+                </div>
+            </div>
         `;
         
         const tabs = container.querySelector('.chat-tabs');
@@ -1102,6 +1112,9 @@ const Chat = {
                 content = item.assistant;
             }
 
+            const thinkButton = roleClass === 'assistant' && item.reasoning
+                ? "<button type=\"button\" class=\"chat-think-btn\" data-reasoning=\"" + this.escapeHtml(item.reasoning) + "\" onclick=\"Chat.showThinkModal(this)\" title=\"查看思考内容\">Think</button>"
+                : '';
             const canDeleteRound = !['role', 'temporary'].includes(this.session.mode)
                 && Boolean(item.id)
                 && (roleClass === 'user' || item.user !== undefined);
@@ -1113,6 +1126,7 @@ const Chat = {
                 <div class="chat-message ${roleClass}" data-index="${originalIndex}">
                     <div class="chat-message-header">${this.escapeHtml(name)}</div>
                     <div class="chat-message-content">${this.renderMessageImages(item.images)}${ChatMarkdown.render(content)}</div>
+                    ${thinkButton}
                     <button class="chat-play-btn" onclick="Chat.playMessage(${originalIndex})" title="播放语音">🔊</button>
                     ${deleteButton}
                 </div>
@@ -1591,15 +1605,19 @@ const Chat = {
         assistantMsg.innerHTML = `
             <div class="chat-message-header">${this.escapeHtml(assistantName)}</div>
             <div class="chat-message-content" id="streamingContent"><span class="chat-cursor">|</span></div>
+            <button type="button" class="chat-think-btn" id="streamingThinkBtn" style="display:none" onclick="Chat.showThinkModal(this)" title="查看思考内容">Think</button>
         `;
         
         messagesContainer.appendChild(assistantMsg);
+        this.currentStreamingReasoning = '';
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
     
     handleChunk(data) {
         if (data.requestId !== this.activeRequestId) return;
         this.currentStreamingMessage = data.message;
+        this.currentStreamingReasoning = data.reasoning || '';
+        this.updateStreamingThinkButton(this.currentStreamingReasoning);
         
         const streamingContent = document.getElementById('streamingContent');
         if (streamingContent) {
@@ -1631,6 +1649,8 @@ const Chat = {
         const streamingContent = document.getElementById('streamingContent');
         const streamingGroup = document.getElementById('streamingGroup');
         const streamingAssistant = document.getElementById('streamingAssistant');
+        this.currentStreamingReasoning = data.reasoning || this.currentStreamingReasoning;
+        this.updateStreamingThinkButton(this.currentStreamingReasoning);
         
         if (data.success && !data.temporaryConversation) {
             // 角色模式：历史写入该角色独立历史，避免污染群聊/私聊
@@ -1654,6 +1674,8 @@ const Chat = {
         
         if (streamingAssistant) {
             streamingAssistant.removeAttribute('id');
+            const streamingThinkButton = document.getElementById('streamingThinkBtn');
+            if (streamingThinkButton) streamingThinkButton.removeAttribute('id');
             
             if (data.success) {
                 const playBtn = document.createElement('button');
@@ -1665,6 +1687,7 @@ const Chat = {
                 if (data.temporaryConversation) {
                     playBtn.onclick = () => this.playMessage({
                         content: data.message,
+                        speech: data.speech,
                         displayId: window.currentDisplayId,
                         playOnControl: this.session.playOnControl
                     });
@@ -1680,6 +1703,32 @@ const Chat = {
         }
     },
     
+    updateStreamingThinkButton(reasoning) {
+        const button = document.getElementById('streamingThinkBtn');
+        if (!button) return;
+        if (!reasoning) {
+            button.style.display = 'none';
+            return;
+        }
+        button.dataset.reasoning = reasoning;
+        button.style.display = '';
+    },
+
+    showThinkModal(button) {
+        const reasoning = typeof button === 'string' ? button : button?.dataset?.reasoning;
+        if (!reasoning) return;
+        const modal = document.getElementById('chatThinkModal');
+        const body = document.getElementById('chatThinkModalBody');
+        if (!modal || !body) return;
+        body.innerHTML = ChatMarkdown.render(reasoning);
+        modal.classList.add('active');
+    },
+
+    hideThinkModal() {
+        const modal = document.getElementById('chatThinkModal');
+        if (modal) modal.classList.remove('active');
+    },
+
     handleNewMessage(data) {
         this.history.push(data.message);
         const msg = data.message;
@@ -1689,7 +1738,12 @@ const Chat = {
         
         if (shouldRender) {
             this.renderHistory();
-            this.playMessage({ content: msg.content, displayId: data.displayId, playOnControl: data.playOnControl });
+            this.playMessage({
+                content: msg.content,
+                speech: msg.speech,
+                displayId: data.displayId,
+                playOnControl: data.playOnControl
+            });
         }
     },
     
@@ -1697,7 +1751,7 @@ const Chat = {
         let content, displayId, playOnControl;
         
         if (typeof indexOrData === 'object') {
-            content = indexOrData.content;
+            content = indexOrData.speech || indexOrData.content;
             displayId = indexOrData.displayId;
             playOnControl = indexOrData.playOnControl;
         } else {
@@ -1713,7 +1767,7 @@ const Chat = {
             }
             const item = history[indexOrData];
             if (!item) return;
-            content = item.content || item.assistant || item.user;
+            content = item.speech || item.content || item.assistant || item.user;
             displayId = window.currentDisplayId;
             playOnControl = this.session.playOnControl;
         }

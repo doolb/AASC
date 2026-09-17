@@ -34,6 +34,67 @@ class NodeServerServiceTest {
     }
 
     @Test
+    fun 更新release入口和依赖按active版本配对() {
+        val root = Files.createTempDirectory("aasc-active-release").toFile()
+        val pointer = File(root, "updates/active-release.json")
+        pointer.parentFile?.mkdirs()
+        pointer.writeText("""{"codeVersion":4,"dependencyVersion":3,"legacyDependencies":false}""")
+
+        try {
+            val active = NodeServerService.readActiveRelease(root)
+
+            assertEquals(4, active?.codeVersion)
+            assertEquals(3, active?.dependencyVersion)
+            assertEquals(false, active?.legacyDependencies)
+            assertEquals(
+                File(root, "updates/code/code-v4/src/apps/server/boot/server-launcher.js").absolutePath,
+                NodeServerService.buildNodeCommand(root, activeRelease = active).let { it[1] }
+            )
+            assertEquals(
+                File(root, "updates/dependencies/dependencies-v3/node_modules").absolutePath,
+                NodeServerService.nodeModulesDirectory(root, active!!).absolutePath
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun codeOnly更新仍然从APK基线目录加载依赖() {
+        val root = Files.createTempDirectory("aasc-code-only-release").toFile()
+        val pointer = File(root, "updates/active-release.json")
+        pointer.parentFile?.mkdirs()
+        pointer.writeText("""{"codeVersion":5,"dependencyVersion":2,"legacyDependencies":true}""")
+
+        try {
+            val active = NodeServerService.readActiveRelease(root)
+
+            assertEquals(true, active?.legacyDependencies)
+            assertEquals(
+                File(root, "node_modules").absolutePath,
+                NodeServerService.nodeModulesDirectory(root, active!!).absolutePath
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun 无active更新清单时兼容原始Node入口() {
+        val root = Files.createTempDirectory("aasc-no-active-release").toFile()
+
+        try {
+            assertNull(NodeServerService.readActiveRelease(root))
+            assertEquals(
+                File(root, "src/apps/server/boot/server-launcher.js").absolutePath,
+                NodeServerService.buildNodeCommand(root).let { it[1] }
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun 进程失败使用一秒起步三十秒封顶退避() {
         assertEquals(1000L, NodeServerService.retryDelayMs(0))
         assertEquals(2000L, NodeServerService.retryDelayMs(1))
@@ -67,6 +128,21 @@ class NodeServerServiceTest {
         assertEquals("1", environment["AASC_ANDROID_NODE"])
         assertEquals("https://192.168.1.39:8081", environment["AASC_MAIN_SERVER_URL"])
         assertEquals("/dev/null", environment["OPENSSL_CONF"])
+        assertEquals(root.absolutePath, environment["AASC_PROJECT_ROOT"])
+    }
+
+    @Test
+    fun activeRelease依赖目录通过NODE_PATH传入() {
+        val root = File("/data/user/0/com.aasc.display.offline/files/aasc-server")
+        val modules = File(root, "updates/dependencies/dependencies-v3/node_modules")
+        val environment = NodeServerService.buildNodeEnvironment(
+            root,
+            "http://127.0.0.1:8081",
+            "apk-0.2",
+            nodeModulesDirectory = modules
+        )
+
+        assertEquals(modules.absolutePath, environment["NODE_PATH"])
     }
 
     @Test

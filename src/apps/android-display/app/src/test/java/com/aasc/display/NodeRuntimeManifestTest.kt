@@ -18,6 +18,10 @@ class NodeRuntimeManifestTest {
             launcher.writeText("launcher")
             File(root, "package.json").writeText("{}")
             File(root, "package-lock.json").writeText("{}")
+            File(root, "config/config.json").apply {
+                parentFile?.mkdirs()
+                writeText("{}")
+            }
             File(root, "runtime/arm64-v8a/lib/libcrypto.so").apply {
                 parentFile?.mkdirs()
                 writeText("library")
@@ -69,6 +73,10 @@ class NodeRuntimeManifestTest {
             }
             File(root, "package.json").writeText("{}")
             File(root, "package-lock.json").writeText("{}")
+            File(root, "config/config.json").apply {
+                parentFile?.mkdirs()
+                writeText("{}")
+            }
             File(root, "runtime/arm64-v8a/lib/libcrypto.so").apply {
                 parentFile?.mkdirs()
                 writeText("library")
@@ -81,7 +89,7 @@ class NodeRuntimeManifestTest {
     }
 
     @Test
-    fun 离线Runtime快速复用时检查离线模型元数据和文件大小() {
+    fun 离线Runtime快速复用时只检查内置模型元数据不要求LLM文件已解包() {
         val root = Files.createTempDirectory("aasc-offline-runtime-fast-path").toFile()
         try {
             File(root, ".runtime-version").writeText("dev")
@@ -95,12 +103,8 @@ class NodeRuntimeManifestTest {
                 parentFile?.mkdirs()
                 writeText("library")
             }
-            File(root, "res/models/sensevoice/model.int8.onnx").apply {
-                parentFile?.mkdirs()
-                writeText("model")
-            }
             File(root, "offline-model-manifest.json").writeText(
-                """{"files":[{"path":"res/models/sensevoice/model.int8.onnx","size":5}]}"""
+                """{"version":1,"models":[{"modelId":"qwen-test","files":[] }]}"""
             )
             File(root, "config/config.json").apply {
                 parentFile?.mkdirs()
@@ -108,7 +112,7 @@ class NodeRuntimeManifestTest {
             }
 
             assertTrue(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
-            File(root, "res/models/sensevoice/model.int8.onnx").appendText("broken")
+            File(root, "offline-model-manifest.json").writeText("{\"models\":[]}")
             assertFalse(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev", "offline"))
         } finally {
             root.deleteRecursively()
@@ -124,6 +128,18 @@ class NodeRuntimeManifestTest {
             assertFalse(NodeRuntimeInstaller.shouldSeedTaskDirectory(root))
         } finally {
             root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun latest指向空实例目录时安装器创建目录() {
+        val results = Files.createTempDirectory("aasc-task-results").toFile()
+        try {
+            val instanceDirectory = NodeRuntimeInstaller.ensureTaskInstanceDirectory(results, "running-1")
+
+            assertTrue(instanceDirectory.isDirectory)
+        } finally {
+            results.deleteRecursively()
         }
     }
 
@@ -164,6 +180,131 @@ class NodeRuntimeManifestTest {
         assertEquals("arm64-v8a", manifest.abi)
         assertEquals("native/arm64-v8a/libaasc_node.so", manifest.nodePath)
         assertEquals(2, manifest.files.size)
+    }
+
+    @Test
+    fun manifest解析可选模型资产且不将模型资产当成安装文件() {
+        val manifest = NodeRuntimeManifest.parse(
+            """
+            {
+              "version": "dev",
+              "abi": "arm64-v8a",
+              "entrypoint": "server/src/apps/server/boot/server-launcher.js",
+              "nodePath": "native/arm64-v8a/libaasc_node.so",
+              "files": [
+                {"path": "server/src/apps/server/boot/server-launcher.js", "size": 1, "sha256": "${"a".repeat(64)}"}
+              ],
+              "modelAssets": [
+                {"path": "display-models/qwen-test/model.bin", "size": 2, "sha256": "${"b".repeat(64)}"}
+              ]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(1, manifest.modelAssets.size)
+        assertEquals("display-models/qwen-test/model.bin", manifest.modelAssets[0].path)
+        assertEquals(1, manifest.files.size)
+    }
+
+    @Test
+    fun manifest默认校验且支持关闭内容校验() {
+        val disabled = NodeRuntimeManifest.parse(
+            """
+            {
+              "version": "dev",
+              "abi": "arm64-v8a",
+              "entrypoint": "server/src/apps/server/boot/server-launcher.js",
+              "nodePath": "native/arm64-v8a/libaasc_node.so",
+              "verifyRuntime": false,
+              "files": [
+                {"path": "server/src/apps/server/boot/server-launcher.js", "size": 0, "sha256": "${"a".repeat(64)}"}
+              ]
+            }
+            """.trimIndent()
+        )
+        assertFalse(disabled.verifyRuntime)
+
+        val defaultManifest = NodeRuntimeManifest.parse(
+            """
+            {
+              "version": "dev",
+              "abi": "arm64-v8a",
+              "entrypoint": "server/src/apps/server/boot/server-launcher.js",
+              "nodePath": "native/arm64-v8a/libaasc_node.so",
+              "files": [
+                {"path": "server/src/apps/server/boot/server-launcher.js", "size": 0, "sha256": "${"a".repeat(64)}"}
+              ]
+            }
+            """.trimIndent()
+        )
+        assertTrue(defaultManifest.verifyRuntime)
+    }
+
+    @Test
+    fun updateOnlyManifest只允许明确列出的Runtime动态库且不需要Node入口() {
+        val manifest = NodeRuntimeManifest.parse(
+            """
+            {
+              "version": "update-a1",
+              "abi": "arm64-v8a",
+              "updateOnly": true,
+              "allowedRuntimeLibraryPaths": ["runtime/arm64-v8a/lib/libz.so.1"],
+              "files": [
+                {"path": "runtime/arm64-v8a/lib/libz.so.1", "size": 3, "sha256": "${"a".repeat(64)}"}
+              ]
+            }
+            """.trimIndent()
+        )
+
+        assertTrue(manifest.updateOnly)
+        assertEquals("", manifest.entrypoint)
+        assertEquals(setOf("runtime/arm64-v8a/lib/libz.so.1"), manifest.allowedRuntimeLibraryPaths)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun updateOnlyManifest不能覆盖服务代码或模型() {
+        NodeRuntimeManifest.parse(
+            """
+            {
+              "version": "update-a1",
+              "abi": "arm64-v8a",
+              "updateOnly": true,
+              "allowedRuntimeLibraryPaths": ["server/package.json"],
+              "files": [
+                {"path": "server/package.json", "size": 1, "sha256": "${"a".repeat(64)}"}
+              ]
+            }
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun minAPK只能复用已存在的完整offline运行目录() {
+        val root = Files.createTempDirectory("aasc-full-offline-guard").toFile()
+        try {
+            assertFalse(NodeRuntimeInstaller.hasFullOfflineInstall(root))
+            File(root, "src/apps/server/boot/server-launcher.js").apply {
+                parentFile?.mkdirs()
+                writeText("launcher")
+            }
+            File(root, "package.json").writeText("{}")
+            File(root, "package-lock.json").writeText("{}")
+            File(root, "node_modules/express/package.json").apply {
+                parentFile?.mkdirs()
+                writeText("{}")
+            }
+            File(root, "runtime/arm64-v8a/lib/libz.so.1").apply {
+                parentFile?.mkdirs()
+                writeText("lib")
+            }
+            File(root, "offline-model-manifest.json").writeText(
+                """{"models":[{"modelId":"qwen-test","files":[]}]}"""
+            )
+
+            assertTrue(NodeRuntimeInstaller.hasFullOfflineInstall(root))
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     @Test(expected = IllegalArgumentException::class)

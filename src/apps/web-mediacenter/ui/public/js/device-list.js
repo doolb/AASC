@@ -913,17 +913,56 @@ const DeviceList = {
         `;
     },
 
+    isFocusedVoiceVadInput(panel, displayId) {
+        const activeElement = document.activeElement;
+        return Boolean(
+            activeElement
+            && typeof panel.contains === 'function'
+            && panel.contains(activeElement)
+            && typeof activeElement.matches === 'function'
+            && activeElement.matches('[data-vad-threshold]')
+            && activeElement.dataset?.displayId === displayId
+        );
+    },
+
+    bindVoiceVadRefreshOnFocusout(panel) {
+        if (!panel || panel.dataset.voiceVadFocusRefreshBound) return;
+        panel.dataset.voiceVadFocusRefreshBound = '1';
+        panel.addEventListener('focusout', () => {
+            // Android WebView 在键盘收起和焦点切换时可能分两步更新 activeElement，延后一帧再判断。
+            setTimeout(() => {
+                if (panel.dataset.voiceVadRefreshPending !== '1') return;
+                const activeElement = document.activeElement;
+                const focusRemainsInPanel = activeElement
+                    && typeof panel.contains === 'function'
+                    && panel.contains(activeElement);
+                if (focusRemainsInPanel) return;
+                delete panel.dataset.voiceVadRefreshPending;
+                this.renderVoiceVadPanel();
+            }, 0);
+        });
+    },
+
     renderVoiceVadPanel() {
         const panel = document.getElementById('voiceVadPanel');
         if (!panel) return;
         const selectedDisplayId = window.currentDisplayId;
         const display = this.list.find((item) => item.id === selectedDisplayId);
         if (!display) {
+            delete panel.dataset.voiceVadRefreshPending;
             panel.innerHTML = selectedDisplayId
                 ? '<div class="empty-list">当前选中的显示端已离线</div>'
                 : '<div class="empty-list">请先选择显示端</div>';
             return;
         }
+
+        this.bindVoiceVadRefreshOnFocusout(panel);
+        if (this.isFocusedVoiceVadInput(panel, selectedDisplayId)) {
+            // 设备/语音状态刷新不能替换正在编辑的 input，否则 Android 键盘会随焦点丢失而自动关闭。
+            panel.dataset.voiceVadRefreshPending = '1';
+            return;
+        }
+        delete panel.dataset.voiceVadRefreshPending;
         panel.innerHTML = `${this.renderVoiceVadCardHtml(display)}${this.renderCameraCardHtml(display)}`;
         this.bindVoiceVadControls(panel);
         this.bindCameraControls(panel);

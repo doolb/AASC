@@ -498,6 +498,19 @@ VAD 独立卡片:
         不把 VAD 控件渲染到设备列表的 renderVoiceControl/renderVoiceControlHtml
     设备列表仍只显示监听开关、监听状态和最近识别文字
 
+VAD 输入框焦点保持:
+    DeviceList.renderVoiceVadPanel():
+        读取当前 voiceVadPanel 内的焦点元素
+        如果焦点元素是当前显示端的 data-vad-threshold 输入框:
+            不替换 voiceVadPanel.innerHTML，保留输入框 DOM、当前编辑值和系统键盘焦点
+            标记面板存在待刷新状态
+        否则按当前显示端完整渲染 VAD 与摄像头卡片
+    voiceVadPanel.focusout:
+        如果焦点已离开 VAD 阈值输入框且存在待刷新状态:
+            清除待刷新标记
+            重新渲染当前 VAD/摄像头卡片
+    所有 VAD 状态更新仍写入 DeviceList.list 和临时状态 Map；焦点保持只延迟 DOM 重建，不改变 WebSocket 协议和服务端持久化
+
 监听状态显示:
     voiceSupported=false -> 不可用
     capabilities.voiceRecording=false -> 已关闭

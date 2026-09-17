@@ -144,14 +144,17 @@ const { installConsoleRedirect } = require('../../../framework/observability/con
 const useTUI = process.argv.includes('--tui') && !process.argv.includes('--no-tui');
 const tui = new ServerTUI({ enabled: useTUI });
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
+// 热更新代码存放在版本目录，但配置和运行数据必须继续固定在 Runtime 根目录。
+const CODE_ROOT = path.resolve(__dirname, '../../../..');
+const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || CODE_ROOT);
+const NODE_MODULES_ROOT = path.resolve(process.env.AASC_NODE_MODULES_DIR || path.join(PROJECT_ROOT, 'node_modules'));
 
 config.loadConfig();
 const ANDROID_NODE_POLICY = getAndroidNodePolicy();
 const OFFLINE_NODE_MODE = process.env.AASC_OFFLINE_MODE === '1';
 
 const logBuffer = new LogBuffer({ maxSize: 1000 });
-const logFileWriter = new LogFileWriter(path.join(__dirname, '../../../../logs'));
+const logFileWriter = new LogFileWriter(path.join(PROJECT_ROOT, 'logs'));
 let logBlocklist = config.get('logBlocklist', []);
 logBuffer.onLogEntry(entry => {
     if (logBlocklist.includes(entry.category)) return;
@@ -383,7 +386,10 @@ const DISPLAY_RECORDING_CHUNK_MAX_LENGTH = 128 * 1024;
 const displayRecordingSessions = new Map();
 let controlClients = new Set();
 const llmModelManifestService = new LlmModelManifestService({
-    modelRoot: path.join(RES_DIR, 'models', 'llm')
+    modelRoot: path.join(RES_DIR, 'models', 'llm'),
+    offlineModelMetadataPath: OFFLINE_NODE_MODE
+        ? path.join(PROJECT_ROOT, 'offline-model-manifest.json')
+        : null
 });
 
 // 默认映射属于网关入口配置：读取时始终回退为空数组，避免旧配置或损坏配置影响请求入口启动。
@@ -2413,11 +2419,11 @@ function normalizePlaybackProgress(currentTime, duration) {
 
 app.get('/js/sentence-splitter.js', (req, res) => {
     res.type('application/javascript').sendFile(
-        path.join(PROJECT_ROOT, 'src', 'core', 'utils', 'sentence-splitter.js')
+        path.join(CODE_ROOT, 'src', 'core', 'utils', 'sentence-splitter.js')
     );
 });
 
-app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public'), {
+app.use(express.static(path.join(CODE_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public'), {
   maxAge: 0, etag: true,
   setHeaders: function(res, path) {
     if (path.endsWith('.html') || path.endsWith('.js') || path.endsWith('.css')) {
@@ -2425,8 +2431,8 @@ app.use(express.static(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter',
     }
   }
 }));
-app.use('/aasc', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'aasc')));
-app.use('/auto-brain', express.static(path.join(PROJECT_ROOT, 'src', 'framework', 'auto-brain')));
+app.use('/aasc', express.static(path.join(CODE_ROOT, 'src', 'framework', 'aasc')));
+app.use('/auto-brain', express.static(path.join(CODE_ROOT, 'src', 'framework', 'auto-brain')));
 // .mhtml 是单文件网页（MIME 打包），默认 octet-stream 会被浏览器当下载不渲染；
 // 统一设为 message/rfc822（Chrome/Edge 渲染 mhtml 的标准 MIME）
 function staticWithMhtmlMime(dir) {
@@ -2442,7 +2448,7 @@ function staticWithMhtmlMime(dir) {
 app.use('/uploads', staticWithMhtmlMime(UPLOADS_DIR));
 app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
-app.use('/js/lib', express.static(path.join(PROJECT_ROOT, 'node_modules', 'onnxruntime-web', 'dist')));
+app.use('/js/lib', express.static(path.join(NODE_MODULES_ROOT, 'onnxruntime-web', 'dist')));
 app.use(express.json({ limit: '50mb' }));
 // 任务实例路由统一复用主服务 8081；未命中的请求继续交给后续静态资源和既有业务路由。
 app.use((req, res, next) => {
@@ -2465,11 +2471,11 @@ app.get('/upload', (req, res) => {
 });
 
 app.get('/control', (req, res) => {
-    res.sendFile(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public', 'upload.html'));
+    res.sendFile(path.join(CODE_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public', 'upload.html'));
 });
 
 app.get('/display', (req, res) => {
-    res.sendFile(path.join(PROJECT_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public', 'display.html'));
+    res.sendFile(path.join(CODE_ROOT, 'src', 'apps', 'web-mediacenter', 'ui', 'public', 'display.html'));
 });
 
 async function sendServerReleaseManifest(req, res) {
@@ -5473,7 +5479,7 @@ function broadcastDisplayVersionConfig() {
 }
 
 function getDisplayVersion() {
-    const publicDir = path.join(PROJECT_ROOT, 'src/apps/web-mediacenter/ui/public');
+    const publicDir = path.join(CODE_ROOT, 'src/apps/web-mediacenter/ui/public');
     let maxMtime = 0;
     const walk = (dir) => {
         for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -9457,11 +9463,12 @@ async function handleControlMessageFallback(data, ws) {
                                 useTemplate: data.useTemplate,
                                 displayId: displayId
                             }, {
-                                onChunk: (chunk, fullMessage) => {
+                                onChunk: (chunk, fullMessage, reasoning) => {
                                     ws.send(JSON.stringify({
                                         type: 'chatChunk',
                                         chunk: chunk,
-                                        message: fullMessage
+                                        message: fullMessage,
+                                        reasoning
                                     }));
                                 },
                                 onSentence: (sentence) => {
@@ -9482,11 +9489,13 @@ async function handleControlMessageFallback(data, ws) {
                                         logError('Chat', `TTS生成失败: ${err.message}`);
                                     });
                                 },
-                                onComplete: (fullMessage, history) => {
+                                onComplete: (fullMessage, history, reasoning, speech) => {
                                     ws.send(JSON.stringify({
                                         type: 'chatResponse',
                                         success: true,
                                         message: fullMessage,
+                                        reasoning,
+                                        speech,
                                         history: history
                                     }));
                                 },
@@ -9753,9 +9762,9 @@ async function handleChatMessage(options) {
         sessionId: effectiveSessionId,
         images
     }, {
-        onChunk: (chunk, fullMessage) => {
+        onChunk: (chunk, fullMessage, reasoning) => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
-            sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage });
+            sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage, reasoning });
         },
         onSentence: (sentence) => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
@@ -9817,13 +9826,15 @@ async function handleChatMessage(options) {
                 logError('Chat', `TTS生成失败: ${err.message}`);
             });
         },
-        onComplete: (fullMessage, history) => {
+        onComplete: (fullMessage, history, reasoning, speech) => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             if (!isTemporaryConversation || effectiveTemporaryConversationId === temporaryConversation.id) {
                 const assistantMessageRecord = chat.addMessage({
                     role: 'assistant',
                     name: effectiveTemplateTarget || '助手',
                     content: fullMessage,
+                    reasoning,
+                    speech,
                     mode: messageMode,
                     target: messageTarget,
                     sessionId: effectiveSessionId,
@@ -9839,6 +9850,8 @@ async function handleChatMessage(options) {
                 requestId: effectiveRequestId,
                 success: true,
                 message: fullMessage,
+                reasoning,
+                speech,
                 history: isTemporaryConversation ? [] : chat.getHistory(),
                 temporaryConversation: isTemporaryConversation,
                 temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
@@ -9848,7 +9861,7 @@ async function handleChatMessage(options) {
                     type: 'voiceCommand',
                     action: 'response',
                     text: fullMessage,
-                    detailText: fullMessage
+                    detailText: speech || fullMessage
                 });
             }
         },

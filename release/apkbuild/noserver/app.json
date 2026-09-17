@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "embeddedNode": false,
+  "verifyRuntime": true,
   "features": ["display"],
   "models": []
 }

@@ -16,7 +16,8 @@
 - Runtime 安装器将 `server/res/models` 安装到 APK 私有根目录的 `res/models`，Node 服务器继续通过既有模型路由和模型清单提供本地模型。
 - 离线模式写入 `aasc.role = main`，本机 Node 只监听本地服务，不启动 AASC 子服务器远端连接流程；普通 APK 继续写入 `subserver`。
 - 离线 APK 启动时默认使用 `https://127.0.0.1:8081`，自动连接本机 `/display`。保留地址输入和连接入口，便于现场诊断，但不依赖输入才能启动。
-- 显示 WebView 上层固定放置“控制端”按钮。点击后在同一个 `webContainer` 内显示同源 `/control` WebView；再次点击隐藏，显示 WebView 保持原状态。按钮始终位于控制 WebView 之上。
+- 离线 APK 的显示页和控制页 WebView 初始页面比例按当前显示分辨率长边动态计算：长边 1280 像素为 100%，比例为 `round(长边 / 1280 × 100)`；普通 APK 保持 100%。两个 WebView 均使用所属 display Context 的像素分辨率。
+- 显示 WebView 上层固定放置“控制端”按钮，位于 `webContainer` 左上角，避免遮挡显示页右侧提示。点击后在同一个 `webContainer` 内显示同源 `/control` WebView；再次点击隐藏，显示 WebView 保持原状态。按钮始终位于控制 WebView 之上。
 - 本地 Node 启动存在安装和监听竞态时，离线显示页有限次数自动重试；不对普通远程连接增加重试行为。
 
 ## 边界
@@ -37,6 +38,12 @@
 - 已完成离线模型白名单、Runtime manifest/安装、Gradle 独立标识、自动本机连接和控制端覆盖 WebView。
 - 已验证离线 APK 可生成到 `src/apps/android-display/app/build/outputs/apk/offline/aasc-display-offline.apk`；实际包内模型 32 个，共 451,266,757 bytes。
 - 普通 APK 无属性 Gradle 构建通过；生产命令默认使用项目内 Android Node Runtime，仍需提供生产服务器包。
+
+## Offline APK WebView 按分辨率动态缩放（2026-09-17）
+
+- Offline APK 显示页和控制页的 WebView 初始比例以长边 1280 像素为 100% 基准，按 `round(长边 / 1280 × 100)` 计算；普通 APK 保持 100%。
+- 设备分辨率为 `720x1480` 时，Offline 初始比例为 `116%`；横屏和竖屏使用同一长边规则。
+- 宽度或高度无效时回退 100%；策略只作用于 WebView，不修改系统 density、物理/逻辑分辨率、媒体源或输入坐标。
 
 ## Android 启动权限串行申请
 

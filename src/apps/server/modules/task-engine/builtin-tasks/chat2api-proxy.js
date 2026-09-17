@@ -1,7 +1,7 @@
 const { createChat2ApiRuntime } = require('../../chat2api/chat2api-runtime');
 const path = require('path');
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../../../../../');
+const PROJECT_ROOT = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../../../'));
 
 const FALSE_VALUES = new Set(['false', '0', 'off', 'no']);
 const TRUE_VALUES = new Set(['true', '1', 'on', 'yes']);

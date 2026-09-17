@@ -8,7 +8,18 @@ val embeddedNodeBuild = project.findProperty("aascEmbeddedNode")
     ?.toString()
     ?.equals("true", ignoreCase = true)
     ?: true
+val updateOnlyBuild = project.findProperty("aascUpdateOnly")
+    ?.toString()
+    ?.equals("true", ignoreCase = true) == true
+val apkVersionCodeText = project.findProperty("aascVersionCode")?.toString()?.trim().orEmpty()
+val apkVersionCode = if (apkVersionCodeText.isEmpty()) 1 else apkVersionCodeText.toIntOrNull()
+    ?: error("aascVersionCode 必须是大于 0 的整数")
+check(apkVersionCode > 0) { "aascVersionCode 必须是大于 0 的整数" }
+val apkVersionName = project.findProperty("aascVersionName")?.toString()?.trim().orEmpty()
 val apkProfile = project.findProperty("aascProfile")?.toString()?.trim().orEmpty()
+check(!updateOnlyBuild || (offlineBuild && embeddedNodeBuild && apkProfile == "allserver-min")) {
+    "update-only APK 必须使用 allserver-min offline profile"
+}
 val configuredBuildDirectory = project.findProperty("aascBuildDirectory")
     ?.toString()
     ?.trim()
@@ -104,12 +115,14 @@ android {
         // Microsoft Embedded Speech SDK -> azure-core 1.58.1 使用 MethodHandle，D8 要求 Android 8.0+
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-       versionName = when {
-           offlineBuild -> "0.1.0-offline"
-           apkProfile == "noserver" -> "0.1.0-noserver"
-           else -> "0.1.0"
-       }
+        versionCode = apkVersionCode
+        versionName = apkVersionName.ifEmpty {
+            when {
+                offlineBuild -> "0.1.0-offline"
+                apkProfile == "noserver" -> "0.1.0-noserver"
+                else -> "0.1.0"
+            }
+        }
         manifestPlaceholders["appLabel"] = when {
             offlineBuild -> "AASC 显示端 Offline"
             apkProfile == "noserver" -> "AASC 显示端 Noserver"
@@ -117,6 +130,7 @@ android {
         }
         resValue("bool", "aasc_offline_mode", offlineBuild.toString())
         resValue("bool", "aasc_embedded_node", embeddedNodeBuild.toString())
+        resValue("bool", "aasc_update_only_mode", updateOnlyBuild.toString())
         // Microsoft Embedded Speech SDK 仅提供 arm64-v8a 原生库
         ndk {
             abiFilters += "arm64-v8a"

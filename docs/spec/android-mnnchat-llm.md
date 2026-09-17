@@ -1,6 +1,6 @@
 # Android MNNChat 本地 LLM 实现规格
 
-状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。服务器统一下载/缓存/分发修正已纳入本规格；LLM CPU 配置的顶层与 `mllm` 双 runtime `thread_num` 传递和下一请求 runtime 换代修正已完成构建、安装和短请求验收。本次增量已完成推理结束后的模型身份/线程数预检查、下一次推理前最终校验、实际运行时状态上报以及异步 CPU 配置失败重试保护。本次离线 APK 增量已完成：内置 `qwen3.5-0.8b-claude-opus-distilled-mnn`，默认从 APK assets 解压后的 `filesDir/aasc-server/res/models/llm` 直接加载；offline 构建、APK 内容和全量 Node 回归均已验证。
+状态：已实现并完成真机验证；官方 MNN 3.6.1 固定 native 产物和 arm64-v8a Debug APK 已构建、安装和启动。服务器统一下载/缓存/分发修正已纳入本规格；LLM CPU 配置的顶层与 `mllm` 双 runtime `thread_num` 传递和下一请求 runtime 换代修正已完成构建、安装和短请求验收。本次增量已完成推理结束后的模型身份/线程数预检查、下一次推理前最终校验、实际运行时状态上报以及异步 CPU 配置失败重试保护。本次离线 APK 增量已完成：内置 `qwen3.5-0.8b-claude-opus-distilled-mnn`，Node Runtime 不解包 LLM 权重，显示端首次推理时从 `display-models` assets 物化到 `filesDir/models/llm/bundled/<modelId>` 后加载；offline 构建、APK 内容和 Node 回归均已验证。
 本次增量：显示端 LLM 能力开关、MNNChat 参考模型目录、ModelScope 固定 revision 代理、`enable_thinking` 和视觉图片消息已实现；定向契约测试 13/13 通过。
 本次增量：LLM 网关任务卡片已增加默认模型映射按钮和 WebSocket 配置弹窗，配置服务端完成校验、持久化、连接初始化补发及多控制端权威广播；网关在 manifest 未命中时读取动态映射。
 本次增量：配置文件缺少 `llm.defaultModelMappings` 时默认保留 `qwen3.5-0.8b` 到 `qwen3.5-0.8b-claude-opus-distilled-mnn` 的映射；显式保存空数组仍表示用户主动关闭该入口别名。
@@ -217,7 +217,7 @@ Qwen3.5 视觉推理模型的运行清单固定为：`config.json`、`configurat
 
 ### 4.3 APK 模型状态机
 
-在线 APK 同时只保存一个模型的有效选择；`selectedModelId == null` 是合法初始状态。offline APK 在没有历史选择时自动将 `qwen3.5-0.8b-claude-opus-distilled-mnn` 作为选择，但模型目录直接指向安装器解压的 bundled 目录，不进入在线下载的 `active` 目录。
+在线 APK 同时只保存一个模型的有效选择；`selectedModelId == null` 是合法初始状态。offline APK 在没有历史选择时自动将 `qwen3.5-0.8b-claude-opus-distilled-mnn` 作为选择，模型权重由显示端从 APK `display-models` assets 物化到 bundled 目录，不进入在线下载的 `active` 目录。
 
 ```text
 filesDir/models/llm/
@@ -227,8 +227,13 @@ filesDir/models/llm/
   state.json // selectedModelId、revision、hash 状态
 
 filesDir/aasc-server/res/models/llm/
-  manifest.json
-  qwen3.5-0.8b-claude-opus-distilled-mnn/ // offline APK bundled model
+  manifest.json                           // Node 只保留模型清单
+
+APK assets/display-models/
+  qwen3.5-0.8b-claude-opus-distilled-mnn/ // offline APK LLM 权重
+
+filesDir/models/llm/bundled/
+  qwen3.5-0.8b-claude-opus-distilled-mnn/ // 显示端首次推理时物化
 ```
 
 ```text
@@ -936,6 +941,6 @@ NodeRuntimeInstaller.ensureInstalled:
       将 backup 重命名回正式目录
 ```
 
-该安装路径不执行 staging 到正式目录的第二次文件复制；模型仍按原 APK 内容首次解包，不生成 `.mmap`。
+该安装路径不执行 staging 到正式 Node Runtime 的第二次文件复制；LLM 权重不进入 Node Runtime，显示端首次推理时才从 APK `display-models` asset 物化到 `files/models/llm/bundled/<modelId>`。`.mmap` 仍由 MNN 运行时按原有机制处理，本任务不预生成。
 
 2026-09-15 真机复测：完全卸载 `com.aasc.display.offline` 后重新安装 APK，display 2 的 `MainActivity` 正常恢复；Runtime 完整安装耗时约 145 秒，Node 服务随后监听 8081，并自动创建 `llm-server` 任务。`/v1/models` 显示 `qwen3.5-0.8b-claude-opus-distilled-mnn` 已对 display 2 ready，Chat Completions 实际返回非空内容；普通包已停止。

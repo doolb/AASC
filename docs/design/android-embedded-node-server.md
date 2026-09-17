@@ -28,7 +28,7 @@ APK 允许用户手动关闭显示界面后暂时离线；用户重新打开 APK
 
 ## 首次安装启动状态提示
 
-offline APK 首次启动需要将 Node Runtime、服务器运行包和离线模型解包到应用私有目录。MainActivity 在 WebView 上方显示原生启动状态遮罩，避免 WebView 先看到 `ERR_CONNECTION_REFUSED` 而让用户误判安装失败。
+offline APK 首次启动需要将 Node Runtime、服务器运行包、语音模型和轻量模型元数据解包到应用私有目录；LLM 权重保留在 APK `display-models` assets，由显示端首次推理时按需物化。MainActivity 在 WebView 上方显示原生启动状态遮罩，避免 WebView 先看到 `ERR_CONNECTION_REFUSED` 而让用户误判安装失败。
 
 - 启动准备、Runtime 解包、Node 进程启动和启动失败由 `NodeServerService` 通过应用内显式广播通知 MainActivity。
 - 解包阶段使用不确定进度条和明确的“首次启动可能需要几分钟”文案，不显示没有可靠依据的百分比。
@@ -102,8 +102,14 @@ offline APK 的首次配置和模型路径补充约定：
 - 构建时从当前 `config/config.json` 只提取 `llm`、`chat` 两个配置段，写入 `offline-config.json` 资产；不把主机任务历史、日志或其他运行态配置打入 APK。
 - 首次安装且 `files/aasc-server/config/config.json` 不存在时，安装器将 `offline-config.json` 种子写入该路径；升级或重启时保留已有配置。
 - 原生 ASR/TTS 优先读取 `files/aasc-server/res/models/sensevoice` 和 `files/aasc-server/res/models/tts`，这些目录就是离线模型的唯一语音权重来源；online APK 仍使用 `files/models` 下载缓存。
-- `files/aasc-server/res/models/llm/<model>/.mmap` 是 MNN 运行时缓存，允许在首次推理后生成，不视为 APK 资源重复。
+- `files/models/llm/bundled/<model>/.mmap` 是显示端 MNN 运行时缓存，允许在首次推理后生成，不进入 Node Runtime；本任务不预生成该文件。
 - Node 任务引擎启动后，offline 模式自动确保 `llm-server` 内置服务实例运行；该服务只在当前 Node 进程注册 `/v1` 路由。
+
+Runtime 首次安装校验策略：
+
+- `release/apkbuild/<profile>/app.json` 可通过 `verifyRuntime` 控制首次 Runtime 安装是否执行完整内容校验；解析缺省为 `true`，正式 offline `allserver/app.json` 明确为 `false`。
+- `verifyRuntime=true` 校验每个文件的存在性、大小和 SHA-256；`false` 仍检查普通文件存在，但跳过大文件 SHA-256 计算，以降低首包启动耗时。
+- 任务 `results/latest` marker 指向的实例目录可以为空；安装器会在恢复软链接前创建该目录，避免 APK 无法保存空目录导致首次启动失败。
 
 ## offline 本机 LLM 聊天传输
 

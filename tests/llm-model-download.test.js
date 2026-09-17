@@ -101,3 +101,45 @@ test('服务器模型下载 hash 失败时保留旧缓存并清理 staging', asy
     assert.equal(fs.existsSync(path.join(fixture.root, 'download-test.lock')), false);
     assert.equal(fs.readdirSync(fixture.root).some((name) => name.includes('.staging-')), false);
 });
+
+test('offline 内置模型可报告 ready 但下载接口仍要求服务器实际缓存', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aasc-llm-offline-ready-'));
+    try {
+        const content = Buffer.from('display-asset-only');
+        fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
+            models: [{
+                modelId: 'offline-test',
+                directory: 'offline-test',
+                source: {
+                    provider: 'modelscope',
+                    repository: 'MNN/Offline-Test',
+                    revision: 'fixed-revision'
+                },
+                files: [{
+                    name: 'model.bin',
+                    size: content.length,
+                    sha256: sha256(content)
+                }]
+            }]
+        }));
+        const metadataPath = path.join(root, 'offline-model-manifest.json');
+        fs.writeFileSync(metadataPath, JSON.stringify({
+            version: 1,
+            models: [{ modelId: 'offline-test', revision: 'fixed-revision', files: [] }]
+        }));
+        const manifestService = new LlmModelManifestService({
+            modelRoot: root,
+            offlineModelMetadataPath: metadataPath
+        });
+
+        const model = manifestService.createManifest().models[0];
+        assert.equal(model.ready, true);
+        assert.equal(model.files[0].cached, true);
+        assert.throws(
+            () => manifestService.resolveDownload('offline-test', 'model.bin'),
+            (error) => error.code === 'MODEL_NOT_READY'
+        );
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});

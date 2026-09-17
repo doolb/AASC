@@ -37,13 +37,14 @@
 
 - `embeddedNode` 决定是否打包和启动 Node 服务；`noserver` 必须为 `false`。
 - `features` 是 APK 的能力声明，随 profile 元数据进入运行包，用于运行时/发布检查；Gradle 原生依赖不按 feature 删除，避免裁剪导致启动缺库。
-- `models` 使用模型 manifest 或模型目录清单中的稳定 ID，构建器根据 ID 收集完整文件并生成最终 manifest，不再依赖单一硬编码模型白名单。
+- `models` 使用模型 manifest 或模型目录清单中的稳定 ID，构建器根据 ID 收集完整文件并生成最终 manifest，不再依赖单一硬编码模型白名单；目录型模型中的 `.gitkeep` 仅是版本控制占位文件，不进入 APK，真正的 `.manifest.json` 仍按 Android 资产规则重命名保留。
+- `verifyRuntime` 控制 Android 首次安装 Runtime 时的内容校验；解析缺省值仍为 `true` 以兼容未升级的 profile，但正式 `allserver` offline 配置明确设为 `false`，`withserver`/`noserver` 保持 `true`。关闭时保留文件存在性检查，跳过大文件 SHA-256 校验，以减少首启耗时。
 - `noserver` 不允许配置模型；`withserver` 和 `allserver` 可以分别声明空模型列表或需要内置的模型 ID。
 - 任务不在 `app.json` 选择。release APK 包含 `release/task` 中的任务定义和 `results`，首次启动由 `results/index.json` 中 `mode=service` 且 `status=running` 的实例决定恢复哪些服务。
 
 ## 任务结果与首次恢复
 
-`release/task/<name>/results/index.json` 保存实例 ID、状态、参数和任务元数据；`results/<instanceId>/` 保存日志与输出文件。构建器保留这些文件，并将 Android assets 不支持的 `results/latest` 软链接转换为可恢复的 marker，安装器在私有目录中重新创建软链接。服务启动后沿用 `TaskManager.restoreAutoStartServices()` 恢复预先标记为 `running` 的服务实例。
+`release/task/<name>/results/index.json` 保存实例 ID、状态、参数和任务元数据；`results/<instanceId>/` 保存日志与输出文件。构建器保留这些文件，并将 Android assets 不支持的 `results/latest` 软链接或文本实例 ID marker 统一转换为可恢复的 marker，且不把原始 `latest` 作为普通 asset 复制，安装器在私有目录中重新创建软链接；如果实例目录在源目录中为空，安装器按 marker 创建对应空目录。服务启动后沿用 `TaskManager.restoreAutoStartServices()` 恢复预先标记为 `running` 的服务实例。
 
 ## 配置传递
 

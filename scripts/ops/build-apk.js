@@ -15,6 +15,7 @@ const {
 const {
     prepareAndroidServerPackage
 } = require('./prepare-android-server-package');
+const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
 const {
     resolveReleaseRuntimeContext,
     validateReleaseRuntimeContext
@@ -82,6 +83,7 @@ async function stopGradleDaemons(gradlePath, androidHome, commandRunner) {
 async function copyApkAtomically(sourcePath, outputDir, profileName) {
     const apkName = profileName === 'allserver'
         ? 'aasc-display-offline.apk'
+        : profileName === 'allserver-min' ? 'aasc-display-offline-min.apk'
         : profileName === 'noserver' ? 'aasc-display-noserver.apk' : 'aasc-display.apk';
     const outputPath = path.join(outputDir, apkName);
     const temporaryPath = `${outputPath}.tmp-${process.pid}-${Date.now()}`;
@@ -91,19 +93,76 @@ async function copyApkAtomically(sourcePath, outputDir, profileName) {
     return outputPath;
 }
 
+async function prepareRuntimeForProfile(options = {}) {
+    const { projectRoot, profile, plan, runtimeContext } = options;
+    if (!profile.embeddedNode) return null;
+    const prepareRuntime = options.prepareRuntime || prepareAndroidNodeRuntime;
+    const profileMetadata = {
+        profile: profile.profile,
+        offline: profile.offline,
+        embeddedNode: profile.embeddedNode,
+        updateOnly: profile.updateOnly === true,
+        serviceVersions: profile.serviceVersions,
+        features: profile.features,
+        models: profile.models,
+        verifyRuntime: profile.verifyRuntime
+    };
+    const sharedRuntimeOptions = {
+        projectRoot,
+        runtimeDir: process.env.AASC_ANDROID_NODE_RUNTIME_DIR,
+        verifyRuntime: profile.verifyRuntime,
+        profileMetadata,
+        offlineUpdatePublicKeyPem: options.offlineUpdatePublicKeyPem,
+        offlineUpdatePublicKeyPath: options.offlineUpdatePublicKeyPath,
+        outputDir: plan.runtimeAssetsDir,
+        nativeOutputDir: plan.runtimeJniLibsDir
+    };
+    if (profile.updateOnly) {
+        return prepareRuntime({ ...sharedRuntimeOptions, updateOnly: true, modelIds: [] });
+    }
+
+    const prepareServerPackage = options.prepareServerPackage || prepareAndroidServerPackage;
+    const packageDir = process.env.AASC_ANDROID_NODE_PACKAGE_DIR
+        ? path.resolve(process.env.AASC_ANDROID_NODE_PACKAGE_DIR)
+        : await prepareServerPackage({
+            projectRoot,
+            outputDir: plan.packageDir,
+            commandRunner: options.commandRunner
+        });
+    return prepareRuntime({
+        ...sharedRuntimeOptions,
+        packageDir,
+        certDir: process.env.AASC_ANDROID_NODE_CERT_DIR || path.join(projectRoot, 'res', 'certs'),
+        modelRoot: path.join(projectRoot, 'res', 'models'),
+        modelIds: profile.models,
+        includeOfflineModels: profile.models.length > 0,
+        taskRoot: runtimeContext.taskDir,
+        includeOfflineTasks: true,
+        configFile: runtimeContext.configFile,
+        userConfigDir: runtimeContext.userConfigDir
+    });
+}
+
 async function buildApk(options = {}) {
     const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
     const profileName = String(options.profileName || '').trim();
     const plan = createApkBuildPlan({ projectRoot, profileName });
     const profile = await loadApkProfile({ projectRoot, profile: profileName });
     const commandRunner = options.commandRunner || defaultCommandRunner;
-    const runtimeContext = resolveReleaseRuntimeContext({
+    const offlineUpdateKeyPair = profile.offline
+        ? options.offlineUpdateKeyPair || await loadOfflineUpdateKeyPair({
+            privateKeyPath: options.offlineUpdatePrivateKeyPath,
+            publicKeyPath: options.offlineUpdatePublicKeyPath,
+            homeDir: options.homeDir
+        })
+        : null;
+    const runtimeContext = profile.updateOnly ? null : resolveReleaseRuntimeContext({
         projectRoot,
         homeDir: projectRoot,
         argv: ['node', 'build-apk.js', '--release'],
         environment: {}
     });
-    if (profile.embeddedNode) validateReleaseRuntimeContext(runtimeContext);
+    if (profile.embeddedNode && !profile.updateOnly) validateReleaseRuntimeContext(runtimeContext);
 
     await fs.promises.mkdir(plan.buildRoot, { recursive: true });
     const androidHome = process.env.ANDROID_HOME || '/opt/android-sdk';
@@ -117,37 +176,15 @@ async function buildApk(options = {}) {
         stdio: 'inherit'
     });
 
-    let prepared = null;
-    if (profile.embeddedNode) {
-        const packageDir = process.env.AASC_ANDROID_NODE_PACKAGE_DIR
-            ? path.resolve(process.env.AASC_ANDROID_NODE_PACKAGE_DIR)
-            : await prepareAndroidServerPackage({
-                projectRoot,
-                outputDir: plan.packageDir,
-                commandRunner
-            });
-        prepared = await prepareAndroidNodeRuntime({
-            runtimeDir: process.env.AASC_ANDROID_NODE_RUNTIME_DIR,
-            packageDir,
-            certDir: process.env.AASC_ANDROID_NODE_CERT_DIR || path.join(projectRoot, 'res', 'certs'),
-            modelRoot: path.join(projectRoot, 'res', 'models'),
-            modelIds: profile.models,
-            includeOfflineModels: profile.models.length > 0,
-            taskRoot: runtimeContext.taskDir,
-            includeOfflineTasks: true,
-            configFile: runtimeContext.configFile,
-            userConfigDir: runtimeContext.userConfigDir,
-            profileMetadata: {
-                profile: profile.profile,
-                offline: profile.offline,
-                embeddedNode: profile.embeddedNode,
-                features: profile.features,
-                models: profile.models
-            },
-            outputDir: plan.runtimeAssetsDir,
-            nativeOutputDir: plan.runtimeJniLibsDir
-        });
-    }
+    const prepared = await prepareRuntimeForProfile({
+        projectRoot,
+        profile,
+        plan,
+        runtimeContext,
+        offlineUpdatePublicKeyPem: offlineUpdateKeyPair?.publicKeyPem,
+        offlineUpdatePublicKeyPath: offlineUpdateKeyPair?.publicKeyPath,
+        commandRunner
+    });
 
     const gradlePath = path.join(plan.androidAppDir, 'gradlew');
     const gradleArgs = [
@@ -155,6 +192,9 @@ async function buildApk(options = {}) {
         `-PaascProfile=${profileName}`,
         `-PaascOffline=${profile.offline}`,
         `-PaascEmbeddedNode=${profile.embeddedNode}`,
+        `-PaascUpdateOnly=${profile.updateOnly === true}`,
+        `-PaascVersionCode=${profile.versionCode}`,
+        `-PaascVersionName=${profile.versionName}`,
         `-PaascBuildDirectory=${plan.gradleDir}`,
         `-PaascNodeRuntimeAssetsDir=${plan.runtimeAssetsDir}`,
         `-PaascNodeRuntimeJniLibsDir=${plan.runtimeJniLibsDir}`,
@@ -178,6 +218,9 @@ async function buildApk(options = {}) {
         profile: profileName,
         offline: profile.offline,
         embeddedNode: profile.embeddedNode,
+        updateOnly: profile.updateOnly === true,
+        versionCode: profile.versionCode,
+        versionName: profile.versionName,
         apk: path.basename(apkPath),
         sha256: crypto.createHash('sha256').update(apkContent).digest('hex'),
         runtime: prepared?.manifest || null
@@ -210,5 +253,6 @@ if (require.main === module) {
 module.exports = {
     buildApk,
     createApkBuildPlan,
-    copyApkAtomically
+    copyApkAtomically,
+    prepareRuntimeForProfile
 };

@@ -19,7 +19,7 @@
 | 控制端主题与 UI 控件分类 | [ui-theme.md](spec/ui-theme.md) | 主题持久化、主题应用和控件语义标记伪代码 |
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
-| 聊天输出过滤与私聊清空交互 | [chat-output-filter.md](spec/chat-output-filter.md) | think 输出过滤、流式正文同步和私聊清空错误处理伪代码 |
+| 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](spec/chat-output-filter.md) | think/正文/播报文本分流、控制端弹窗、显示端展示和私聊清空错误伪代码 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](spec/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出伪代码 |
 | 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |
 | 搜索 | [search.md](spec/search.md) | 搜索频道、搜索历史同步和独立 Pi 搜索会话 |
@@ -38,6 +38,8 @@
 | APK 内置 Node.js 子服务器 | [android-embedded-node-server.md](spec/android-embedded-node-server.md) | APK Runtime 安装、launcher 进程、主服务器连接和能力裁剪伪代码 |
 | 正式 Android 显示端完整离线 APK | [android-display-offline-apk.md](spec/android-display-offline-apk.md) | 离线模型打包、本机启动、独立包名和控制端 WebView 伪代码 |
 | Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](spec/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
+| Android offline 模型资产按需加载 | [android-offline-model-assets.md](spec/android-offline-model-assets.md) | LLM asset 与 Node Runtime 安装边界、显示端按需物化伪代码 |
+| Android Offline APK 服务热更新与原生增量 APK | [android-offline-hot-update.md](spec/android-offline-hot-update.md) | 签名更新清单、code/dependencies 原子切换、update-only APK 与模型保留伪代码 |
 | 任务 URL 路由注册 | [task-url-route-registration.md](spec/task-url-route-registration.md) | 任务 URL 路由注册器、显示端请求/响应协议和生命周期伪代码 |
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
 | ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](spec/asr-memory-upload-vad-unification.md) | ASR Buffer 识别、独立进程传递和 500ms VAD 配置伪代码 |

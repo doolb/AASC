@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -8,6 +9,7 @@ const { test, beforeEach, afterEach } = require('node:test');
 const {
     OFFLINE_MODEL_FILES,
     REQUIRED_RUNTIME_LIBRARIES,
+    createModelCompatibilityMetadata,
     prepareAndroidNodeRuntime
 } = require('../scripts/ops/prepare-android-node-runtime');
 
@@ -19,6 +21,20 @@ beforeEach(async () => {
 
 afterEach(async () => {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
+});
+
+test('model compatibility 指纹使用与 Android 一致的 locale-independent 文件名顺序', () => {
+    const compatibility = createModelCompatibilityMetadata([{
+        modelId: 'm',
+        revision: 'r',
+        files: [
+            { name: 'a_b', size: 2, sha256: 'b'.repeat(64) },
+            { name: 'a-b', size: 1, sha256: 'a'.repeat(64) }
+        ]
+    }]);
+
+    assert.deepEqual(compatibility.models[0].files.map(file => file.name), ['a-b', 'a_b']);
+    assert.equal(compatibility.modelCompatibilitySha256, '31b71f35b06ce06a77b31a3ebc22a1963af3705cbc36d6014b24d5adece8c20a');
 });
 
 async function createServerPackage(rootDir, files = {}) {
@@ -116,6 +132,113 @@ test('正常输入生成固定 ABI manifest 和 Node 启动入口', async () => 
         (await fs.promises.stat(path.join(tempDir, 'jniLibs', 'arm64-v8a', 'libaasc_node.so'))).mode & 0o111,
         0o111
     );
+});
+
+test('Runtime manifest 默认开启且支持关闭完整内容校验', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const runtimeDir = await createRuntime(tempDir);
+    const outputDir = path.join(tempDir, 'output');
+    const result = await prepareAndroidNodeRuntime({
+        packageDir,
+        runtimeDir,
+        verifyRuntime: false,
+        outputDir
+    });
+    const manifest = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'runtime-manifest.json'), 'utf8'));
+
+    assert.equal(result.manifest.verifyRuntime, false);
+    assert.equal(manifest.verifyRuntime, false);
+});
+
+test('update-only Runtime 生成允许列表动态库资产并保留 Node 可执行库，不包含服务包和模型', async () => {
+    const runtimeDir = await createRuntime(tempDir);
+    const outputDir = path.join(tempDir, 'update-only-assets');
+    const nativeOutputDir = path.join(tempDir, 'update-only-jniLibs');
+
+    const result = await prepareAndroidNodeRuntime({
+        runtimeDir,
+        updateOnly: true,
+        outputDir,
+        nativeOutputDir
+    });
+    const manifest = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'runtime-manifest.json'), 'utf8'));
+    const allowedPaths = REQUIRED_RUNTIME_LIBRARIES.map((name) => `runtime/arm64-v8a/lib/${name}`).sort();
+
+    assert.equal(manifest.updateOnly, true);
+    assert.deepEqual(manifest.files.map((file) => file.path).sort(), allowedPaths);
+    assert.equal(manifest.files.some((file) => file.path.startsWith('server/')), false);
+    assert.equal(manifest.files.some((file) => file.path.endsWith('/node')), false);
+    assert.equal(fs.existsSync(path.join(outputDir, 'offline-model-manifest.json')), false);
+    assert.deepEqual(await fs.promises.readdir(path.join(nativeOutputDir, 'arm64-v8a')), [
+        'libaasc_node.so'
+    ]);
+    assert.ok((await fs.promises.stat(
+        path.join(nativeOutputDir, 'arm64-v8a', 'libaasc_node.so')
+    )).size > 0);
+});
+
+test('update-only APK 可携带验证公钥但公钥不进入可安装 Runtime 文件列表', async () => {
+    const runtimeDir = await createRuntime(tempDir);
+    const projectRoot = path.join(tempDir, 'project');
+    const publicKeyPath = path.join(projectRoot, 'release', 'offline-update', 'public-key.pem');
+    const publicKeyPem = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 })
+        .publicKey.export({ type: 'spki', format: 'pem' });
+    await fs.promises.mkdir(path.dirname(publicKeyPath), { recursive: true });
+    await fs.promises.writeFile(publicKeyPath, publicKeyPem);
+    const outputDir = path.join(tempDir, 'update-only-key-assets');
+
+    const result = await prepareAndroidNodeRuntime({
+        projectRoot,
+        runtimeDir,
+        updateOnly: true,
+        offlineUpdatePublicKeyPath: publicKeyPath,
+        outputDir,
+        nativeOutputDir: path.join(tempDir, 'update-only-key-jniLibs')
+    });
+    const manifest = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'runtime-manifest.json'), 'utf8'));
+
+    const stagedPublicKey = await fs.promises.readFile(
+        path.join(outputDir, 'offline-update-public-key.pem'), 'utf8'
+    );
+    assert.equal(stagedPublicKey, publicKeyPem);
+    assert.doesNotMatch(stagedPublicKey, /BEGIN PRIVATE KEY/);
+    assert.equal(manifest.files.some((file) => file.path === 'offline-update-public-key.pem'), false);
+    assert.equal(result.manifest.updateOnly, true);
+});
+
+test('Offline Runtime 写入服务基线版本和实际 package-lock 指纹', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const runtimeDir = await createRuntime(tempDir);
+    const projectRoot = path.join(tempDir, 'offline-project');
+    const publicKeyPath = path.join(projectRoot, 'release', 'offline-update', 'public-key.pem');
+    const publicKeyPem = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 })
+        .publicKey.export({ type: 'spki', format: 'pem' });
+    await fs.promises.mkdir(path.dirname(publicKeyPath), { recursive: true });
+    await fs.promises.writeFile(publicKeyPath, publicKeyPem);
+    const outputDir = path.join(tempDir, 'offline-assets');
+
+    const result = await prepareAndroidNodeRuntime({
+        projectRoot,
+        packageDir,
+        runtimeDir,
+        profileMetadata: {
+            offline: true,
+            updateOnly: false,
+            serviceVersions: { codeVersion: 4, dependencyVersion: 2 }
+        },
+        offlineUpdatePublicKeyPath: publicKeyPath,
+        outputDir,
+        nativeOutputDir: path.join(tempDir, 'offline-jniLibs')
+    });
+    const client = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'offline-update-client.json'), 'utf8'));
+    const lock = await fs.promises.readFile(path.join(packageDir, 'package-lock.json'));
+
+    assert.equal(client.schemaVersion, 1);
+    assert.equal(client.codeVersion, 4);
+    assert.equal(client.dependencyVersion, 2);
+    assert.equal(client.lockSha256, crypto.createHash('sha256').update(lock).digest('hex'));
+    assert.equal(result.manifest.files.some((file) => file.path === 'offline-update-client.json'), true);
+    assert.equal(fs.existsSync(path.join(outputDir, 'offline-update-public-key.pem')), true);
 });
 
 test('offline Runtime 将当前 llm/chat 配置写为首次安装种子且不带其他主机配置', async () => {
@@ -342,30 +465,55 @@ test('离线 Runtime 按选定模型复制并写入离线元数据', async () =>
     });
 
     const manifestPaths = result.manifest.files.map(file => file.path);
+    const modelAssetPaths = result.manifest.modelAssets.map(file => file.path);
     assert.equal(new Set(manifestPaths).size, manifestPaths.length);
+    assert.equal(new Set(modelAssetPaths).size, modelAssetPaths.length);
     assert.equal(manifestPaths.some(file => file === 'server/res/models/sensevoice/model.int8.onnx'), false);
+    assert.equal(
+        modelAssetPaths.some(file => file === 'display-models/qwen3.5-0.8b-claude-opus-distilled-mnn/config.json'),
+        true
+    );
+    assert.equal(
+        manifestPaths.some(file => file.startsWith('server/res/models/llm/qwen3.5-0.8b-claude-opus-distilled-mnn/')),
+        false
+    );
     assert.equal(await fs.promises.readFile(path.join(outputDir, 'runtime-mode.txt'), 'utf8'), 'offline\n');
     assert.equal(
         await fs.promises.stat(path.join(outputDir, 'offline-model-manifest.json')).then(() => true),
         true
     );
+    const offlineModelManifest = JSON.parse(
+        await fs.promises.readFile(path.join(outputDir, 'offline-model-manifest.json'), 'utf8')
+    );
+    const offlineCompatibility = JSON.parse(
+        await fs.promises.readFile(path.join(outputDir, 'offline-model-compatibility.json'), 'utf8')
+    );
+    assert.equal(offlineModelManifest.models.length, 1);
+    assert.equal(
+        offlineModelManifest.models[0].modelId,
+        'qwen3.5-0.8b-claude-opus-distilled-mnn'
+    );
+    assert.deepEqual(offlineCompatibility, createModelCompatibilityMetadata(offlineModelManifest.models));
+    assert.equal(result.manifest.files.some((file) => file.path === 'offline-model-compatibility.json'), true);
     for (const relativePath of OFFLINE_MODEL_FILES.filter((file) => file.startsWith('llm/'))) {
         const outputRelativePath = relativePath.endsWith('/.manifest.json')
-            ? relativePath.replace(/\/\.manifest\.json$/u, '/bundled-manifest.json')
-            : relativePath;
-        assert.equal(manifestPaths.includes(`server/res/models/${outputRelativePath}`), true, relativePath);
-        assert.equal(
-            fs.existsSync(path.join(outputDir, 'server', 'res', 'models', outputRelativePath)),
-            true
-        );
+            ? relativePath.replace(
+                /^llm\/([^/]+)\/\.manifest\.json$/u,
+                'display-models/$1/bundled-manifest.json'
+            )
+            : relativePath === 'llm/manifest.json'
+                ? 'server/res/models/llm/manifest.json'
+                : relativePath.replace(/^llm\/([^/]+)\/(.+)$/u, 'display-models/$1/$2');
+        const paths = outputRelativePath.startsWith('display-models/')
+            ? modelAssetPaths
+            : manifestPaths;
+        assert.equal(paths.includes(outputRelativePath), true, relativePath);
+        assert.equal(fs.existsSync(path.join(outputDir, outputRelativePath)), true);
     }
     assert.equal(
         fs.existsSync(path.join(
             outputDir,
-            'server',
-            'res',
-            'models',
-            'llm',
+            'display-models',
             'qwen3.5-0.8b-claude-opus-distilled-mnn',
             'bundled-manifest.json'
         )),
@@ -451,6 +599,45 @@ test('离线 Runtime 打包用户任务定义并保留运行结果 marker', asyn
     assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'task.js')), true);
     assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'task-links.marker')), true);
     assert.equal(fs.existsSync(path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'results', 'index.json')), true);
+    assert.equal(
+        await fs.promises.readFile(
+            path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'results', 'latest.marker'),
+            'utf8'
+        ),
+        'instance-1\n'
+    );
+});
+
+test('离线 Runtime 接受文本形式的 latest marker 且不复制原始 latest 文件', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const runtimeDir = await createRuntime(tempDir);
+    const taskRoot = path.join(tempDir, 'tasks');
+    const resultsDir = path.join(taskRoot, 'demo-task', 'results');
+    await fs.promises.mkdir(path.join(resultsDir, 'instance-1'), { recursive: true });
+    await fs.promises.writeFile(
+        path.join(taskRoot, 'demo-task', 'task.js'),
+        'module.exports = { run: async () => ({ ok: true }) };\n',
+        'utf8'
+    );
+    await fs.promises.writeFile(
+        path.join(resultsDir, 'index.json'),
+        '{"instances":[{"instanceId":"instance-1","status":"completed"}]}\n',
+        'utf8'
+    );
+    await fs.promises.writeFile(path.join(resultsDir, 'latest'), 'instance-1\n', 'utf8');
+
+    const outputDir = path.join(tempDir, 'output');
+    const result = await prepareAndroidNodeRuntime({
+        packageDir,
+        runtimeDir,
+        includeOfflineTasks: true,
+        taskRoot,
+        outputDir
+    });
+
+    const manifestPaths = result.manifest.files.map(file => file.path);
+    assert.equal(manifestPaths.includes('server/res/tasks/demo-task/results/latest'), false);
+    assert.equal(manifestPaths.includes('server/res/tasks/demo-task/results/latest.marker'), true);
     assert.equal(
         await fs.promises.readFile(
             path.join(outputDir, 'server', 'res', 'tasks', 'demo-task', 'results', 'latest.marker'),

@@ -9,7 +9,7 @@ import android.webkit.WebView
 
 // 显示端 WebView：启用 JS/DOM 存储/混合内容，保证 display.html 与跨域 iframe 内容可渲染
 @SuppressLint("SetJavaScriptEnabled")
-class DisplayWebView(context: Context) : WebView(context) {
+class DisplayWebView(context: Context, offlineMode: Boolean) : WebView(context) {
 
     init {
         settings.javaScriptEnabled = true
@@ -23,9 +23,15 @@ class DisplayWebView(context: Context) : WebView(context) {
         settings.useWideViewPort = false
         settings.loadWithOverviewMode = false
         settings.setSupportZoom(false)
-        // display.html、render-display 和 /control 共用固定 CSS 像素；按当前 WebView
-        // 所属显示屏的 density 统一缩放，避免高 DPI 手机上整个页面（不只是文字）变大。
-        setInitialScale(WebViewScalePolicy.initialScalePercent(resources.displayMetrics.densityDpi))
+        // 显示页和控制页按 APK 构建模式使用一致的页面比例；Offline 按长边分辨率计算，普通 APK 为 100%。
+        val displayMetrics = resources.displayMetrics
+        setInitialScale(
+            WebViewScalePolicy.initialScalePercent(
+                offlineMode = offlineMode,
+                widthPixels = displayMetrics.widthPixels,
+                heightPixels = displayMetrics.heightPixels
+            )
+        )
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()

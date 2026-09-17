@@ -7,8 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
@@ -22,6 +24,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import java.io.File
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
@@ -29,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val EXTRA_SERVER_URL = "server_url"
         private const val REQ_STORAGE_TREE = 1005
+        private const val REQ_INSTALL_UNKNOWN_SOURCES = 1006
     }
 
     private lateinit var configBar: View
@@ -43,6 +47,13 @@ class MainActivity : AppCompatActivity() {
     private var controlWebView: DisplayWebView? = null
     private var offlineMode = false
     private var embeddedNode = true
+    private var updateOnlyMode = false
+    private var minApkUpdateCheckStarted = false
+    private var pendingMinApkUpdate: MinApkUpdateResult? = null
+    private var activityResumed = false
+    private var unknownSourcesDialogVisible = false
+    private var waitingForUnknownSourcesResult = false
+    private val offlineUpdateManager by lazy { OfflineUpdateManager(this) }
     private var controlPageAllowed = false
     private var offlineDisplayRetryCount = 0
     // WebView 连接失败后可能继续回调 onPageFinished；该标记阻止错误页误判为成功页。
@@ -223,6 +234,16 @@ class MainActivity : AppCompatActivity() {
             deliverChat2ApiLoginResult(resultCode, data)
             return
         }
+        if (requestCode == REQ_INSTALL_UNKNOWN_SOURCES) {
+            waitingForUnknownSourcesResult = false
+            if (pendingMinApkUpdate != null && offlineUpdateManager.requiresUnknownSourcesApproval()) {
+                pendingMinApkUpdate = null
+                Toast.makeText(this, "未授权此应用安装 Offline 更新", Toast.LENGTH_LONG).show()
+            } else {
+                submitPendingMinApkUpdateIfVisible()
+            }
+            return
+        }
         if (requestCode != REQ_STORAGE_TREE) return
 
         val selectedUri = data?.data
@@ -259,6 +280,18 @@ class MainActivity : AppCompatActivity() {
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
         embeddedNode = resources.getBoolean(R.bool.aasc_embedded_node)
+        updateOnlyMode = resources.getBoolean(R.bool.aasc_update_only_mode)
+        if (updateOnlyMode && !NodeRuntimeInstaller.hasFullOfflineInstall(
+                File(filesDir, "aasc-server")
+            )) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("需要完整 Offline APK")
+                .setMessage("此安装包只更新原生运行库。请先安装完整 Offline APK 并启动一次，再安装此增量更新包。")
+                .setCancelable(false)
+                .setPositiveButton("知道了") { _, _ -> finish() }
+                .show()
+            return
+        }
         if (embeddedNode && offlineMode) {
             // 离线 APK 的控制端与本地 Node 服务同包，启动即允许访问同源 /control。
             setControlPageAccess(true)
@@ -284,6 +317,21 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         registerNodeStatusReceiver()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        activityResumed = true
+        // 服务已在后台运行、Activity 被系统回收后恢复时，不一定再次收到 STARTING 广播。
+        if (offlineMode && NodeRuntimeInstaller.hasFullOfflineInstall(File(filesDir, "aasc-server"))) {
+            checkForMinApkUpdateOnce()
+        }
+        submitPendingMinApkUpdateIfVisible()
+    }
+
+    override fun onPause() {
+        activityResumed = false
+        super.onPause()
     }
 
     override fun onStop() {
@@ -394,12 +442,94 @@ class MainActivity : AppCompatActivity() {
             }
             NodeServerService.STATUS_STARTING -> {
                 showOfflineStartupMessage(getString(R.string.offline_startup_starting), false)
+                checkForMinApkUpdateOnce()
             }
             NodeServerService.STATUS_FAILED -> {
                 val failure = detail?.trim()?.takeIf { it.isNotEmpty() }
                     ?: getString(R.string.offline_startup_unknown_error)
                 showOfflineStartupMessage(getString(R.string.offline_startup_failed, failure), true)
             }
+        }
+    }
+
+    /** 首次本地服务启动完成后检查一次 update-only APK；下载和模型物化均不占用 UI 线程。 */
+    private fun checkForMinApkUpdateOnce() {
+        if (!offlineMode || minApkUpdateCheckStarted) return
+        minApkUpdateCheckStarted = true
+        Thread({
+            val result = offlineUpdateManager.checkAndPrepareMinApkUpdate(
+                File(filesDir, "aasc-server")
+            )
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val apkFile = result.apkFile
+                if (apkFile == null) {
+                    android.util.Log.i("MainActivity", "Offline min APK 更新检查: ${result.status}")
+                    return@runOnUiThread
+                }
+                android.util.Log.i("MainActivity", "Offline min APK 更新就绪: ${result.status}")
+                pendingMinApkUpdate = result
+                submitPendingMinApkUpdateIfVisible()
+            }
+        }, "aasc-min-apk-update-check").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    /** 待安装 APK 只在 Activity 前台处理，避免 Android 后台启动 Activity 限制。 */
+    private fun submitPendingMinApkUpdateIfVisible() {
+        if (!activityResumed || unknownSourcesDialogVisible || waitingForUnknownSourcesResult) return
+        val update = pendingMinApkUpdate ?: return
+        if (offlineUpdateManager.requiresUnknownSourcesApproval()) {
+            requestUnknownSourcesApproval()
+        } else {
+            pendingMinApkUpdate = null
+            submitPreparedMinApkUpdate(update)
+        }
+    }
+
+    /** Android 将“允许此来源安装”和最终安装确认分成两步，均由用户显式确认。 */
+    private fun requestUnknownSourcesApproval() {
+        unknownSourcesDialogVisible = true
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("允许安装 Offline 更新")
+            .setMessage("系统尚未允许 AASC 安装本应用的更新。是否打开系统设置授权？")
+            .setNegativeButton("稍后") { _, _ ->
+                unknownSourcesDialogVisible = false
+                pendingMinApkUpdate = null
+            }
+            .setPositiveButton("打开设置") { _, _ ->
+                unknownSourcesDialogVisible = false
+                waitingForUnknownSourcesResult = true
+                try {
+                    startActivityForResult(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                            .setData(Uri.parse("package:$packageName")),
+                        REQ_INSTALL_UNKNOWN_SOURCES
+                    )
+                } catch (error: Exception) {
+                    waitingForUnknownSourcesResult = false
+                    pendingMinApkUpdate = null
+                    Toast.makeText(this, "无法打开安装权限设置：${error.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setOnCancelListener {
+                unknownSourcesDialogVisible = false
+                pendingMinApkUpdate = null
+            }
+            .show()
+    }
+
+    /** 交给系统 PackageInstaller 后仍显示 Android 的标准更新确认页，不执行静默安装。 */
+    private fun submitPreparedMinApkUpdate(update: MinApkUpdateResult) {
+        try {
+            if (offlineUpdateManager.installPreparedMinApk(update)) {
+                Toast.makeText(this, "已请求系统安装 Offline 更新，请在系统提示中确认", Toast.LENGTH_LONG).show()
+            }
+        } catch (error: Exception) {
+            android.util.Log.e("MainActivity", "提交 Offline min APK 安装失败", error)
+            Toast.makeText(this, "Offline 更新安装失败：${error.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -419,7 +549,7 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView(url: String, baseUrl: String) {
-        val wv = DisplayWebView(this)
+        val wv = DisplayWebView(this, offlineMode)
         val bridge = NativeBridge(wv, audioFocusController, offlineMode) { allowed -> setControlPageAccess(allowed) }
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")
@@ -429,7 +559,7 @@ class MainActivity : AppCompatActivity() {
         webView = wv
         wv.loadUrl(url)
 
-        val control = DisplayWebView(this)
+        val control = DisplayWebView(this, offlineMode)
         control.visibility = View.GONE
         control.addJavascriptInterface(Chat2ApiNativeBridge(this), "NativeControl")
         control.webViewClient = createWebViewClient(null, baseUrl, false)

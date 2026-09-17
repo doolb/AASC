@@ -87,7 +87,7 @@
 - [x] 声明未知来源安装权限；用户可选择稍后或前往系统授权，安装结果 receiver 处理确认页与成功缓存清理。后台完成时延迟到 Activity 前台提交。
 - [x] 安装器只替换 manifest 允许的原生库并保留 `updates/`、models、配置、任务/results、日志和 LLM cache。
 - [x] 运行 Android 全量 JVM 测试：`:app:testDebugUnitTest` BUILD SUCCESSFUL。
-- [ ] 构建 full/min APK 并真机验证 PackageInstaller 原位更新、失败保留旧包与服务数据；full/min 构建和静态校验已完成，此项在 Task 6 验收。
+- [x] 构建 full/min APK 并真机验证 PackageInstaller 原位更新、失败保留旧包与服务数据；full/min 构建和静态校验已完成，min 原位验收由 2026-09-17 动态缩放/快速包任务补充。
 
 ### Task 6：首轮构建、真机升级与双站点发布
 
@@ -101,7 +101,9 @@
 - [x] 修复 Android code ZIP 目录项去除尾部 `/` 后与白名单不一致的问题；规范化后的 `src`、`node_modules` 根目录可通过校验，跨组件和 Android 显示端路径仍被拒绝。
 - [x] 修复后重新打包 full v2 并发布 all v3；真机 fresh install 后确认 `active-release.json` 生成，code/dependencies v3 热更启动且 `pendingHealth=false`。
 - [x] 真机验证 `/api/status`、`/v1/models`、默认模型聊天、显示页连接和显示端录音启动；ASR/TTS 完整业务回归、code-only、LAN unavailable fallback、bad hash fallback、低空间不切换仍待补充。
-- [x] 版本化服务包、min APK 和签名 manifest 已发布到局域网/外网；签名、包名、证书摘要和 HTTP GET 两站点 hash 复验通过。设备端回滚和 min 原位安装仍待完成。
+- [x] 版本化服务包、min APK 和签名 manifest 已发布到局域网/外网；签名、包名、证书摘要和 HTTP GET 两站点 hash 复验通过。
+- [x] 2026-09-17 使用包含 `libaasc_node.so` 的 min v3 本地快速包在 SM-N9500 Android 9 原位安装；active release、服务 API、默认模型聊天和显示端 WebSocket 通过，配置/任务/模型缓存保留。回滚、异常降级和完整 ASR/TTS 回归仍待补充，详见 `docs/task/2026-09-17_Offline APK按分辨率动态缩放与快速热更新验证.md`。
+- [x] full v2 APK 已单独上传到外网 `apk/aasc-display-offline-v2.apk`；远端临时文件经完整 SHA-256 校验后原子发布，HTTP HEAD 的状态码和 Content-Length 通过，未覆盖现有服务 `manifest.json`。
 - [x] 更新 design/spec 实施状态、`docs/todo.md` 和 `changelog.md`，记录本次目录校验修复、full APK、v3 服务包及真机结果；用户已明确要求提交 Git，本次仅提交本任务相关源码、测试和文档。
 
 ### Task 7：接入用户配置目录中的生产更新密钥并打包

@@ -1,5 +1,28 @@
 # Web MediaCenter - 变更日志
 
+### Android Offline APK 分辨率缩放与快速包热更新
+
+- ✅ [2026-09-17] Offline APK WebView 初始比例改为按显示分辨率长边动态计算。
+  - `WebViewScalePolicy` 以长边 1280 像素为 100% 基准，使用 `round(长边 / 1280 × 100)`；`720x1480` 设备为 116%，普通 APK 保持 100%，无效分辨率回退 100%。
+  - `DisplayWebView` 从所属 display Context 的 `displayMetrics` 读取像素宽高；不修改系统 density、分辨率、媒体尺寸或输入坐标。
+  - Android JVM `WebViewScalePolicyTest` 4 项覆盖基准、横竖屏、四舍五入、普通 APK 和无效输入；旧接口先失败后实现通过。
+
+- ✅ [2026-09-17] 修复 `allserver-min` 原位安装后 Node launcher 缺少可执行库的问题，并完成真机快速包验证。
+  - `prepare-android-node-runtime.js` 让 min APK 继续携带 `libaasc_node.so`；Runtime update-only 清单仍只替换 allowlist 动态库，服务数据和模型缓存不变。
+  - 快速包 `release/apkbuild/allserver-min/output/aasc-display-offline-min.apk`：versionCode `3`、大小 `89810222` bytes、SHA-256 `07840b3be8b7605b31d0d558ac9f40034c7d460cc3bbf9e40382974b495e08c6`；ZIP 完整性、包名和 APK 证书 SHA-256 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df` 校验通过，设备 PackageManager 短摘要为 `b2cceec9`。
+  - SM-N9500 Android 9 原位安装成功；`active-release.json` 保持 code/dependencies `3/3`、`pendingHealth=false`，Node launcher 启动无错误；`/api/status`、`/v1/models`、`/display`、`/control` 和默认模型 Chat Completions 均 HTTP 200。配置、任务和 Qwen 模型缓存保留。Android JVM 全量 166 项、更新相关 Node 定向 57 项通过。
+  - 本次修复包先用于本地快速构建和真机验证，后续正式发布记录见本节下一条。
+
+- ✅ [2026-09-17] 正式发布修复后的 Offline min APK v4。
+  - `release/apkbuild/allserver-min/app.json` versionCode 升为 `4`、versionName 为 `0.2.2-offline-min`；APK `release/offline-update/output/apk/aasc-display-offline-min-v4.apk` 大小 `89205130` bytes，SHA-256 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`，签名证书 SHA-256 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
+  - 通过 `npm run package:offline-apk:min` 和发布器 API 将 v4 发布到 `http://192.168.1.39/mnt/aasc-offline/`、`http://120.79.245.103/mnt/aasc-offline/`；两站点 manifest 字节一致、RSA 签名有效，LAN HTTP 整包 hash 和 WAN 远端 SSH 文件 hash 与清单一致，WAN HTTP HEAD 为 200 且首个 1024 字节 Range 响应匹配。
+
+### Android Offline full APK 外网发布
+
+- ✅ [2026-09-17] 将已验证的 full Offline APK 上传到外网热更目录 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`。
+  - 文件大小 `957281083` bytes，SHA-256 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；远端临时文件经完整 hash 校验后原子改名，权限为 `0644`。
+  - HTTP HEAD 返回 `200`，Content-Length 与本地一致；未修改外网现有 `manifest.json`、服务包或 min APK。
+
 ### Android Offline ZIP 目录白名单热更修复
 
 - ✅ [2026-09-17] 修复 Android 端 ZIP 目录项规范化后误拒绝 `src/` 导致服务热更未应用的问题。

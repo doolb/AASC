@@ -12,11 +12,26 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import java.io.File
+import java.io.FileInputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.KeyStore
+import java.security.cert.CertificateFactory
+import org.json.JSONObject
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManagerFactory
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
 
 class NodeServerService : Service() {
+
+    data class ActiveRelease(
+        val codeVersion: Int,
+        val dependencyVersion: Int,
+        val legacyDependencies: Boolean = false
+    )
 
     companion object {
         const val EXTRA_MAIN_SERVER_URL = "main_server_url"
@@ -34,15 +49,48 @@ class NodeServerService : Service() {
         private const val MIN_RETRY_DELAY_MS = 1_000L
         private const val MAX_RETRY_DELAY_MS = 30_000L
         private const val PROCESS_STOP_TIMEOUT_MS = 2_000L
+        private const val RELEASE_HEALTH_TIMEOUT_MS = 120_000L
         private const val NODE_LIBRARY_NAME = "libaasc_node.so"
 
         @JvmStatic
-        fun buildNodeCommand(rootDir: File, nativeLibraryDir: File? = null): List<String> {
+        fun readActiveRelease(rootDir: File): ActiveRelease? {
+            val pointer = File(rootDir, "updates/active-release.json")
+            if (!pointer.isFile) return null
+            val value = JSONObject(pointer.readText())
+            val codeVersion = value.optInt("codeVersion", -1)
+            val dependencyVersion = value.optInt("dependencyVersion", -1)
+            require(codeVersion > 0 && dependencyVersion > 0) {
+                "Offline active-release.json 版本字段无效"
+            }
+            return ActiveRelease(
+                codeVersion,
+                dependencyVersion,
+                value.optBoolean("legacyDependencies", false)
+            )
+        }
+
+        @JvmStatic
+        fun nodeModulesDirectory(rootDir: File, activeRelease: ActiveRelease): File =
+            if (activeRelease.legacyDependencies) {
+                File(rootDir, "node_modules")
+            } else {
+                File(rootDir, "updates/dependencies/dependencies-v${activeRelease.dependencyVersion}/node_modules")
+            }
+
+        @JvmStatic
+        fun buildNodeCommand(
+            rootDir: File,
+            nativeLibraryDir: File? = null,
+            activeRelease: ActiveRelease? = null
+        ): List<String> {
             val nodePath = nativeLibraryDir?.let { File(it, NODE_LIBRARY_NAME) }
                 ?: File(rootDir, "runtime/arm64-v8a/node")
+            val codeRoot = activeRelease?.let {
+                File(rootDir, "updates/code/code-v${it.codeVersion}")
+            } ?: rootDir
             return listOf(
                 nodePath.absolutePath,
-                File(rootDir, "src/apps/server/boot/server-launcher.js").absolutePath,
+                File(codeRoot, "src/apps/server/boot/server-launcher.js").absolutePath,
                 "--no-tui"
             )
         }
@@ -67,7 +115,8 @@ class NodeServerService : Service() {
             offlineMode: Boolean = false,
             safBaseUrl: String? = null,
             safToken: String? = null,
-            androidMediaHome: String? = null
+            androidMediaHome: String? = null,
+            nodeModulesDirectory: File? = null
         ): Map<String, String> {
             val runtimeLibraryPath = File(rootDir, "runtime/arm64-v8a/lib").absolutePath
             val inheritedLibraryPath = System.getenv("LD_LIBRARY_PATH")?.trim().orEmpty()
@@ -84,8 +133,13 @@ class NodeServerService : Service() {
                 "AASC_ANDROID_NODE" to "1",
                 "AASC_OFFLINE_MODE" to if (offlineMode) "1" else "0",
                 "AASC_SERVER_VERSION" to serverVersion,
-                "AASC_MAIN_SERVER_URL" to serverUrl
+                "AASC_MAIN_SERVER_URL" to serverUrl,
+                "AASC_PROJECT_ROOT" to rootDir.absolutePath
             )
+            nodeModulesDirectory?.let {
+                environment["NODE_PATH"] = it.absolutePath
+                environment["AASC_NODE_MODULES_DIR"] = it.absolutePath
+            }
             if (bundledCertificate.isFile) {
                 // 证书随 APK 安装到私有目录，只给 Node 子进程增加这一份受信任 CA，
                 // 使内部 HTTPS Responses 请求可以校验主服务器自签名证书；不关闭 TLS 校验，
@@ -193,6 +247,14 @@ class NodeServerService : Service() {
             sendStatus(STATUS_PREPARING)
             sendStatus(STATUS_INSTALLING)
             val root = NodeRuntimeInstaller(this).ensureInstalled()
+            val updateManager = if (offlineMode) OfflineUpdateManager(this) else null
+            updateManager?.let { manager ->
+                if (manager.rollbackPendingRelease(root)) {
+                    android.util.Log.w("AASC-Node", "上次候选服务未通过启动检查，已回滚到原版本")
+                }
+                val updateStatus = manager.checkAndApplyServerUpdate(root)
+                android.util.Log.i("AASC-Node", "Offline 服务更新检查: $updateStatus")
+            }
             val runtimeReadyAt = SystemClock.elapsedRealtime()
             NodeServerConfig.write(
                 root,
@@ -200,7 +262,9 @@ class NodeServerService : Service() {
                 if (offlineMode) "AASC 显示端 Offline" else "APK-${Build.MODEL}",
                 offlineMode = offlineMode
             )
-            val command = buildNodeCommand(root, File(applicationInfo.nativeLibraryDir))
+            val activeRelease = readActiveRelease(root)
+            val nodeModulesDirectory = activeRelease?.let { nodeModulesDirectory(root, it) }
+            val command = buildNodeCommand(root, File(applicationInfo.nativeLibraryDir), activeRelease)
             val processBuilder = ProcessBuilder(command)
                 .directory(root)
                 .redirectErrorStream(false)
@@ -221,7 +285,8 @@ class NodeServerService : Service() {
                     offlineMode,
                     safConnection?.baseUrl,
                     safConnection?.token,
-                    androidMediaHome
+                    androidMediaHome,
+                    nodeModulesDirectory
                 )
             )
             val process = processBuilder.start()
@@ -234,6 +299,9 @@ class NodeServerService : Service() {
             updateNotification(
                 if (offlineMode) "Node.js 本地服务运行中" else "Node.js 子服务器运行中，正在连接主服务器"
             )
+            if (updateManager?.isReleaseHealthPending(root) == true) {
+                monitorPendingRelease(root, process, generation, updateManager)
+            }
             readProcessOutput(process, false)
             readProcessOutput(process, true)
             Thread {
@@ -268,6 +336,84 @@ class NodeServerService : Service() {
                 else "Node.js 子服务器启动失败：${error.message}"
             )
             scheduleRestart(generation, -1)
+        }
+    }
+
+    /**
+     * 新服务版本只有在本地 HTTP API 真正可用后才提交；超时或进程先退出则回滚指针，
+     * 由现有进程监督器重新拉起上一版本。
+     */
+    private fun monitorPendingRelease(
+        root: File,
+        process: Process,
+        generation: Int,
+        updateManager: OfflineUpdateManager
+    ) {
+        Thread {
+            val deadline = SystemClock.elapsedRealtime() + RELEASE_HEALTH_TIMEOUT_MS
+            var healthy = false
+            while (SystemClock.elapsedRealtime() < deadline && process.isAlive && generation == restartGeneration.get()) {
+                if (isLocalServerHealthy(root)) {
+                    healthy = true
+                    break
+                }
+                try {
+                    Thread.sleep(1_000L)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+            }
+            if (healthy) {
+                if (updateManager.markCurrentReleaseHealthy(root)) {
+                    android.util.Log.i("AASC-Node", "Offline 候选服务已通过健康检查并提交")
+                }
+                return@Thread
+            }
+            if (generation == restartGeneration.get() && updateManager.rollbackPendingRelease(root)) {
+                android.util.Log.e("AASC-Node", "Offline 候选服务未就绪，已回滚并停止候选进程")
+                if (process.isAlive) process.destroyForcibly()
+            }
+        }.apply {
+            name = "aasc-offline-release-health"
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun isLocalServerHealthy(root: File): Boolean {
+        val certificateFile = File(root, "res/certs/cert.pem")
+        val keyFile = File(root, "res/certs/key.pem")
+        val useHttps = certificateFile.isFile && keyFile.isFile
+        val endpoint = URL("${if (useHttps) "https" else "http"}://127.0.0.1:8081/api/status")
+        val connection = endpoint.openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 500
+            connection.readTimeout = 1_000
+            connection.requestMethod = "GET"
+            if (connection is HttpsURLConnection) {
+                val certificate = FileInputStream(certificateFile).use {
+                    CertificateFactory.getInstance("X.509").generateCertificate(it)
+                }
+                val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+                    load(null, null)
+                    setCertificateEntry("aasc-local-server", certificate)
+                }
+                val trustManagers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
+                    init(keyStore)
+                }.trustManagers
+                connection.sslSocketFactory = SSLContext.getInstance("TLS").apply {
+                    init(null, trustManagers, null)
+                }.socketFactory
+                connection.hostnameVerifier = javax.net.ssl.HostnameVerifier { hostname, _ -> hostname == "127.0.0.1" }
+            }
+            if (connection.responseCode != 200) return false
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            return runCatching { JSONObject(body).optString("status") == "ok" }.getOrDefault(false)
+        } catch (_: Exception) {
+            return false
+        } finally {
+            connection.disconnect()
         }
     }
 

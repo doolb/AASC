@@ -11,11 +11,26 @@ const originalSession = llmService.getSession();
 const requireThinkFilterApi = () => {
     assert.equal(typeof llmService.stripThinkBlocks, 'function', '聊天服务应导出 think 清洗函数');
     assert.equal(typeof llmService.createThinkOutputFilter, 'function', '聊天服务应导出流式 think 过滤器');
+    assert.equal(typeof llmService.parseThinkOutput, 'function', '聊天服务应导出 think/回答分流函数');
     return {
         createThinkOutputFilter: llmService.createThinkOutputFilter,
-        stripThinkBlocks: llmService.stripThinkBlocks
+        stripThinkBlocks: llmService.stripThinkBlocks,
+        parseThinkOutput: llmService.parseThinkOutput
     };
 };
+
+test('parseThinkOutput 分离回答和 think，并按原顺序生成无标签播报文本', () => {
+    const { parseThinkOutput } = requireThinkFilterApi();
+
+    assert.deepEqual(
+        parseThinkOutput('开场。<think>先检查条件。</think>结论。'),
+        {
+            answer: '开场。结论。',
+            reasoning: '先检查条件。',
+            speech: '开场。先检查条件。结论。'
+        }
+    );
+});
 
 test('stripThinkBlocks 移除成对和未闭合的 think 内容', () => {
     const { stripThinkBlocks } = requireThinkFilterApi();
@@ -37,10 +52,12 @@ test('stripThinkBlocks 处理孤立结束标签前的角色配置泄漏', () => 
     assert.equal(stripThinkBlocks(leaked), '喵呜～ 来啦？');
 });
 
-test('ThinkOutputFilter 支持跨 chunk 标签并只回调可见正文', () => {
+test('ThinkOutputFilter 支持跨 chunk 标签并分别产生正文、think 和 TTS 增量', () => {
     const { createThinkOutputFilter } = requireThinkFilterApi();
     const filter = createThinkOutputFilter();
     const visible = [];
+    const reasoning = [];
+    const speech = [];
     const chunks = [
         '<th',
         'ink>内部推理',
@@ -52,12 +69,33 @@ test('ThinkOutputFilter 支持跨 chunk 标签并只回调可见正文', () => {
     for (const chunk of chunks) {
         const result = filter.push(chunk);
         if (result.delta) visible.push(result.delta);
+        if (result.reasoningDelta) reasoning.push(result.reasoningDelta);
+        if (result.speechDelta) speech.push(result.speechDelta);
     }
     const finished = filter.finish();
     if (finished.delta) visible.push(finished.delta);
+    if (finished.reasoningDelta) reasoning.push(finished.reasoningDelta);
+    if (finished.speechDelta) speech.push(finished.speechDelta);
 
     assert.deepEqual(visible, ['正文第一句。', '正文第二句！']);
+    assert.deepEqual(reasoning, ['内部推理']);
+    assert.equal(speech.join(''), '内部推理正文第一句。正文第二句！');
     assert.equal(finished.message, '正文第一句。正文第二句！');
+    assert.equal(finished.reasoning, '内部推理');
+    assert.equal(finished.speech, '内部推理正文第一句。正文第二句！');
+});
+
+test('ThinkOutputFilter 在 think 标签未闭合时仍保留思考正文供弹窗和 TTS 使用', () => {
+    const { createThinkOutputFilter } = requireThinkFilterApi();
+    const filter = createThinkOutputFilter();
+
+    filter.push('<thinking>尚未结束的推理');
+    const finished = filter.finish();
+
+    assert.equal(finished.message, '');
+    assert.equal(finished.reasoning, '尚未结束的推理');
+    assert.equal(finished.speech, '尚未结束的推理');
+    assert.doesNotMatch(finished.speech, /<\/?thinking?>/u);
 });
 
 test('ThinkOutputFilter 暂存结构化隐式思考前缀并在结束后释放正文', () => {
@@ -74,11 +112,11 @@ test('ThinkOutputFilter 暂存结构化隐式思考前缀并在结束后释放�
     assert.equal(finished.message, '喵呜～ 来啦？');
 });
 
-test('chatStream Responses 实际只向回调发送清洗后的正文', async () => {
+test('chatStream Responses 分流 think、控制端正文和按顺序播报的句子', async () => {
     const server = http.createServer((_request, response) => {
         response.writeHead(200, { 'Content-Type': 'text/event-stream' });
-        response.write('data: {"type":"response.output_text.delta","delta":"<character_set>内部"}\n\n');
-        response.write('data: {"type":"response.output_text.delta","delta":"</think>喵呜～"}\n\n');
+        response.write('data: {"type":"response.output_text.delta","delta":"<think>先检查条件。"}\n\n');
+        response.write('data: {"type":"response.output_text.delta","delta":"</think>答案是四。"}\n\n');
         response.write('data: [DONE]\n\n');
         response.end();
     });
@@ -98,14 +136,26 @@ test('chatStream Responses 实际只向回调发送清洗后的正文', async ()
             }]
         });
         const chunks = [];
+        const sentences = [];
+        const completions = [];
         const result = await llmService.chatStream('喂喂喂', {}, {
-            onChunk: (_delta, message) => chunks.push(message),
-            onComplete: (message) => chunks.push(`complete:${message}`)
+            onChunk: (delta, message, reasoning) => chunks.push({ delta, message, reasoning }),
+            onSentence: (sentence) => sentences.push(sentence),
+            onComplete: (message, _history, reasoning, speech) => completions.push({ message, reasoning, speech })
         });
 
         assert.equal(result.success, true);
-        assert.equal(result.message, '喵呜～');
-        assert.deepEqual(chunks, ['喵呜～', 'complete:喵呜～']);
+        assert.equal(result.message, '答案是四。');
+        assert.equal(result.reasoning, '先检查条件。');
+        assert.equal(result.speech, '先检查条件。答案是四。');
+        assert.deepEqual(sentences, ['先检查条件。', '答案是四。']);
+        assert.deepEqual(completions, [{
+            message: '答案是四。',
+            reasoning: '先检查条件。',
+            speech: '先检查条件。答案是四。'
+        }]);
+        assert.ok(chunks.some((chunk) => chunk.reasoning === '先检查条件。'));
+        assert.ok(chunks.every((chunk) => !/<\/?think(?:ing)?/iu.test(chunk.message)));
     } finally {
         await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
         llmService.init(originalConfig);
@@ -113,7 +163,7 @@ test('chatStream Responses 实际只向回调发送清洗后的正文', async ()
     }
 });
 
-test('chatStream Chat Completions 也只向回调发送清洗后的正文', async () => {
+test('chatStream Chat Completions 保留独立 think 字段且不把它混入回答', async () => {
     const server = http.createServer((_request, response) => {
         response.writeHead(200, { 'Content-Type': 'text/event-stream' });
         response.write('data: {"choices":[{"delta":{"content":"<think>内部</think>"}}]}\n\n');
@@ -139,6 +189,8 @@ test('chatStream Chat Completions 也只向回调发送清洗后的正文', asyn
         const result = await llmService.chatStream('喂喂喂', {}, {});
         assert.equal(result.success, true);
         assert.equal(result.message, '正文');
+        assert.equal(result.reasoning, '内部');
+        assert.equal(result.speech, '内部正文');
     } finally {
         await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
         llmService.init(originalConfig);

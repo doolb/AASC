@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { loadOfflineUpdatePublicKey } = require('./offline-update-signing');
 
 const ANDROID_ABI = 'arm64-v8a';
 const DEFAULT_RUNTIME_DIR = path.resolve(__dirname, '../../3rd/android-node-runtime', ANDROID_ABI);
@@ -27,6 +28,7 @@ const REQUIRED_PACKAGE_ENTRIES = [
 const CERTIFICATE_ENTRIES = ['cert.pem', 'key.pem'];
 const RUNTIME_MODE_FILE = 'runtime-mode.txt';
 const OFFLINE_MODEL_METADATA_FILE = 'offline-model-manifest.json';
+const DISPLAY_MODEL_ASSET_PREFIX = 'display-models';
 const APK_PROFILE_METADATA_FILE = 'apk-profile.json';
 const OFFLINE_CONFIG_SEED_FILE = 'offline-config.json';
 const RELEASE_CONFIG_SEED_FILE = 'release-config.json';
@@ -201,17 +203,98 @@ async function copyFileWithManifest(sourceRoot, relativePath, outputRoot, output
 }
 
 async function copyOfflineModels(modelRoot, outputRoot, modelIds = []) {
-    const files = [];
+    const serverFiles = [];
+    const modelAssets = [];
+    const bundledModels = new Map();
+    const definitions = await readOfflineLlmDefinitions(modelRoot);
     const selectedFiles = await resolveSelectedModelFiles({ modelRoot, modelIds });
     for (const { relativePath } of selectedFiles) {
-        files.push(await copyFileWithManifest(
+        const modelPath = parseOfflineLlmModelPath(relativePath);
+        if (!modelPath) {
+            serverFiles.push(await copyFileWithManifest(
+                modelRoot,
+                relativePath,
+                outputRoot,
+                offlineModelAssetPath(relativePath)
+            ));
+            continue;
+        }
+        const definition = definitions.get(modelPath.modelDirectory);
+        const modelId = definition?.modelId || modelPath.modelDirectory;
+        const outputRelativePath = modelPath.isMarker
+            ? path.join(DISPLAY_MODEL_ASSET_PREFIX, modelId, 'bundled-manifest.json')
+            : path.join(DISPLAY_MODEL_ASSET_PREFIX, modelId, modelPath.filename);
+        const file = await copyFileWithManifest(
             modelRoot,
             relativePath,
             outputRoot,
-            offlineModelAssetPath(relativePath)
-        ));
+            outputRelativePath
+        );
+        modelAssets.push(file);
+        if (!modelPath.isMarker) {
+            const model = bundledModels.get(modelId) || {
+                modelId,
+                revision: definition?.revision || modelId,
+                assetPrefix: path.join(DISPLAY_MODEL_ASSET_PREFIX, modelId).split(path.sep).join('/'),
+                files: []
+            };
+            model.files.push({
+                name: modelPath.filename,
+                assetPath: file.path,
+                size: file.size,
+                sha256: file.sha256
+            });
+            bundledModels.set(modelId, model);
+        }
     }
-    return files;
+    return {
+        files: serverFiles,
+        modelAssets,
+        models: [...bundledModels.values()].sort((left, right) => left.modelId.localeCompare(right.modelId))
+    };
+}
+
+function parseOfflineLlmModelPath(relativePath) {
+    const normalizedPath = relativePath.split(path.sep).join('/');
+    const segments = normalizedPath.split('/');
+    if (segments[0] !== 'llm' || segments.length < 3 || segments[1] === 'manifest.json') return null;
+    const modelDirectory = segments[1];
+    const filename = segments.slice(2).join('/');
+    return {
+        modelDirectory,
+        filename,
+        isMarker: filename === '.manifest.json'
+    };
+}
+
+async function readOfflineLlmDefinitions(modelRoot) {
+    const manifestPath = path.join(modelRoot, 'llm', 'manifest.json');
+    try {
+        const source = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8'));
+        const definitions = new Map();
+        for (const definition of Array.isArray(source?.models) ? source.models : []) {
+            if (!definition || typeof definition !== 'object') continue;
+            const directory = typeof definition.directory === 'string'
+                ? definition.directory.trim()
+                : '';
+            const modelId = typeof definition.modelId === 'string'
+                ? definition.modelId.trim()
+                : '';
+            if (directory && modelId) definitions.set(directory, {
+                ...definition,
+                modelId
+            });
+        }
+        return new Map([...definitions.values()].map((definition) => [
+            definition.directory,
+            definition
+        ]));
+    } catch (error) {
+        // 模型文件白名单仍由 resolveSelectedModelFiles 负责；这里的定义仅用于补充
+        // bundled metadata。旧构建输入可能只有目录白名单或没有可解析的 manifest，
+        // 此时使用目录名作为稳定 modelId，不能阻断非 LLM 离线资源打包。
+        return new Map();
+    }
 }
 
 // aapt/AssetManager 不保留隐藏文件；将模型缓存 marker 改成可打包名称，安装器再恢复运行时约定的 .manifest.json。
@@ -234,9 +317,11 @@ async function listOfflineTaskFiles(sourceRoot, relativePath = '') {
         // 通过下方 marker 单独打包，普通 results 文件必须保留用于首次恢复服务实例。
         if (entry.name === '.task-links.json') continue;
         const pathSegments = childRelativePath.split(path.sep);
+        // latest 可能来自不同平台的任务结果同步：软链接和文本实例 ID 都只作为
+        // 输入 marker 处理，不能把原始文件写入 APK，否则会阻止安装器创建软链接。
+        if (entry.name === 'latest' && pathSegments.at(-2) === 'results') continue;
         if (isAndroidAssetExcluded(childRelativePath, entry.isDirectory())) continue;
         if (entry.isSymbolicLink()) {
-            if (entry.name === 'latest' && pathSegments.includes('results')) continue;
             throw new Error(`离线任务目录不允许符号链接: ${childRelativePath}`);
         }
         if (entry.isDirectory()) {
@@ -314,7 +399,15 @@ async function copyTaskMarkers(taskRoot, outputRoot) {
         const latestPath = path.join(resultsDir, 'latest');
         let target;
         try {
-            target = await fs.promises.readlink(latestPath);
+            const latestStat = await fs.promises.lstat(latestPath);
+            if (latestStat.isSymbolicLink()) {
+                target = await fs.promises.readlink(latestPath);
+            } else if (latestStat.isFile()) {
+                // Windows/同步目录可能把 latest 软链接降级为文本文件，内容仍是实例 ID。
+                target = await fs.promises.readFile(latestPath, 'utf8');
+            } else {
+                throw new Error('latest 不是软链接或普通文件');
+            }
         } catch (error) {
             if (error.code === 'ENOENT') continue;
             throw new Error(`任务 latest marker 无法读取: ${latestPath}: ${error.message}`);
@@ -361,6 +454,22 @@ async function writeGeneratedFileWithManifest(outputRoot, relativePath, content)
     };
 }
 
+async function copyOfflineUpdatePublicKey(outputRoot, options = {}) {
+    const loadedKey = await loadOfflineUpdatePublicKey({
+        publicKeyPem: options.publicKeyPem,
+        publicKeyPath: options.publicKeyPath,
+        homeDir: options.homeDir,
+        required: options.required === true
+    });
+    if (!loadedKey) return false;
+    await fs.promises.writeFile(
+        path.join(outputRoot, 'offline-update-public-key.pem'),
+        loadedKey.publicKeyPem,
+        'utf8'
+    );
+    return true;
+}
+
 async function copyDirectoryWithManifest(sourceRoot, outputRoot, outputPrefix = '', options = {}) {
     const sourceFiles = await listFiles(sourceRoot);
     const excludedPaths = new Set(options.excludedPaths || []);
@@ -394,11 +503,12 @@ async function copyNodeLibrary(runtimeDir, nativeOutputDir) {
     return metadata;
 }
 
-function deriveContentVersion(files, nodeFile) {
+function deriveContentVersion(files, nodeFile, modelAssets = []) {
     // 构建输入的文件列表可能受文件系统遍历顺序影响，先按路径排序后再计算指纹，
     // 保证相同输入重复构建时版本稳定，只有实际内容变化才触发 APK 首次启动安装。
     const fingerprintInput = JSON.stringify({
         files: [...files].sort((left, right) => left.path.localeCompare(right.path)),
+        modelAssets: [...modelAssets].sort((left, right) => left.path.localeCompare(right.path)),
         node: {
             size: nodeFile.size,
             sha256: nodeFile.sha256
@@ -406,6 +516,32 @@ function deriveContentVersion(files, nodeFile) {
     });
     const digest = crypto.createHash('sha256').update(fingerprintInput, 'utf8').digest('hex');
     return `content-${digest.slice(0, 24)}`;
+}
+
+function canonicalJson(value) {
+    if (Array.isArray(value)) return value.map(canonicalJson);
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])]));
+    }
+    return value;
+}
+
+function createModelCompatibilityMetadata(models) {
+    const compareStableText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+    const stableModels = [...models]
+        .map((model) => ({
+            modelId: model.modelId,
+            revision: model.revision,
+            files: [...model.files]
+                .map(({ name, size, sha256 }) => ({ name, size, sha256: sha256.toLowerCase() }))
+                .sort((left, right) => compareStableText(left.name, right.name))
+        }))
+        .sort((left, right) => compareStableText(left.modelId, right.modelId));
+    const payload = { schemaVersion: 1, models: stableModels };
+    const modelCompatibilitySha256 = crypto.createHash('sha256')
+        .update(JSON.stringify(canonicalJson(payload)), 'utf8')
+        .digest('hex');
+    return { ...payload, modelCompatibilitySha256 };
 }
 
 function assertRequiredPackageEntries(packageDir) {
@@ -481,7 +617,85 @@ async function copyUserConfigSeeds(userConfigDir, outputRoot) {
     return files;
 }
 
+async function prepareUpdateOnlyRuntime(options = {}) {
+    const projectRoot = path.resolve(options.projectRoot || process.cwd());
+    const runtimeDir = resolveRequiredDirectory(
+        options.runtimeDir || process.env.AASC_ANDROID_NODE_RUNTIME_DIR || DEFAULT_RUNTIME_DIR,
+        'Android Node Runtime'
+    );
+    const outputDir = path.resolve(options.outputDir || path.join(process.cwd(), 'release/apkbuild/allserver-min/runtime/assets'));
+    const nativeOutputDir = path.resolve(options.nativeOutputDir || path.join(outputDir, '..', 'jniLibs'));
+    assertRuntimeLibraries(runtimeDir);
+
+    const suffix = `.tmp-${process.pid}-${Date.now()}`;
+    const temporaryOutputDir = `${outputDir}${suffix}`;
+    const temporaryNativeOutputDir = `${nativeOutputDir}${suffix}`;
+    await fs.promises.rm(temporaryOutputDir, { recursive: true, force: true });
+    await fs.promises.rm(temporaryNativeOutputDir, { recursive: true, force: true });
+    await fs.promises.mkdir(temporaryOutputDir, { recursive: true });
+    await fs.promises.mkdir(temporaryNativeOutputDir, { recursive: true });
+
+    try {
+        const files = [];
+        // Android 原位更新会替换旧 APK 的 nativeLibraryDir；即使 update-only
+        // Runtime 不替换服务源码，也必须继续携带 Node 可执行库，否则安装后
+        // NodeServerService 找不到原来的 libaasc_node.so，服务无法热启动。
+        await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
+        for (const libraryName of REQUIRED_RUNTIME_LIBRARIES) {
+            files.push(await copyFileWithManifest(
+                runtimeDir,
+                path.join('lib', libraryName),
+                temporaryOutputDir,
+                path.join('runtime', ANDROID_ABI, 'lib', libraryName)
+            ));
+        }
+        const fingerprint = JSON.stringify([...files].sort((left, right) => left.path.localeCompare(right.path)));
+        const version = `update-${crypto.createHash('sha256').update(fingerprint, 'utf8').digest('hex').slice(0, 24)}`;
+        const manifest = {
+            version,
+            abi: ANDROID_ABI,
+            updateOnly: true,
+            verifyRuntime: options.verifyRuntime !== false,
+            allowedRuntimeLibraryPaths: files.map((file) => file.path).sort(),
+            files
+        };
+        await fs.promises.writeFile(
+            path.join(temporaryOutputDir, 'runtime-manifest.json'),
+            JSON.stringify(manifest, null, 2) + '\n',
+            'utf8'
+        );
+        await fs.promises.writeFile(path.join(temporaryOutputDir, 'runtime-version.txt'), `${version}\n`, 'utf8');
+        if (options.profileMetadata?.offline === true || options.offlineUpdatePublicKeyPem ||
+            options.offlineUpdatePublicKeyPath) {
+            await copyOfflineUpdatePublicKey(temporaryOutputDir, {
+                publicKeyPem: options.offlineUpdatePublicKeyPem,
+                publicKeyPath: options.offlineUpdatePublicKeyPath,
+                homeDir: options.homeDir,
+                required: options.profileMetadata?.offline === true
+            });
+        }
+        if (options.profileMetadata) {
+            await fs.promises.writeFile(
+                path.join(temporaryOutputDir, APK_PROFILE_METADATA_FILE),
+                JSON.stringify(options.profileMetadata, null, 2) + '\n',
+                'utf8'
+            );
+        }
+        await fs.promises.rm(outputDir, { recursive: true, force: true });
+        await fs.promises.rm(nativeOutputDir, { recursive: true, force: true });
+        await fs.promises.rename(temporaryOutputDir, outputDir);
+        await fs.promises.rename(temporaryNativeOutputDir, nativeOutputDir);
+        return { outputDir, nativeOutputDir, manifest };
+    } catch (error) {
+        await fs.promises.rm(temporaryOutputDir, { recursive: true, force: true });
+        await fs.promises.rm(temporaryNativeOutputDir, { recursive: true, force: true });
+        throw error;
+    }
+}
+
 async function prepareAndroidNodeRuntime(options = {}) {
+    if (options.updateOnly === true) return prepareUpdateOnlyRuntime(options);
+    const projectRoot = path.resolve(options.projectRoot || process.cwd());
     const runtimeDir = resolveRequiredDirectory(
         options.runtimeDir || process.env.AASC_ANDROID_NODE_RUNTIME_DIR || DEFAULT_RUNTIME_DIR,
         'Android Node Runtime'
@@ -491,6 +705,7 @@ async function prepareAndroidNodeRuntime(options = {}) {
         'AASC_ANDROID_NODE_PACKAGE_DIR'
     );
     const includeOfflineModels = options.includeOfflineModels === true;
+    const verifyRuntime = options.verifyRuntime !== false;
     const modelRoot = includeOfflineModels
         ? resolveRequiredDirectory(
             options.modelRoot || path.join(process.cwd(), 'res', 'models'),
@@ -548,10 +763,11 @@ async function prepareAndroidNodeRuntime(options = {}) {
             options.certDir || process.env.AASC_ANDROID_NODE_CERT_DIR,
             temporaryOutputDir
         ));
-    const offlineModelFiles = includeOfflineModels
+        const offlineModelPackage = includeOfflineModels
             ? await copyOfflineModels(modelRoot, temporaryOutputDir, options.modelIds || [])
-            : [];
-        files.push(...offlineModelFiles);
+            : { files: [], modelAssets: [], models: [] };
+        files.push(...offlineModelPackage.files);
+        const modelAssets = offlineModelPackage.modelAssets;
         const offlineTaskFiles = includeOfflineTasks
             ? await copyOfflineTasks(taskRoot, temporaryOutputDir)
             : [];
@@ -583,17 +799,48 @@ async function prepareAndroidNodeRuntime(options = {}) {
                 JSON.stringify(options.profileMetadata, null, 2) + '\n'
             ));
         }
+        if (options.profileMetadata?.offline === true && options.profileMetadata.updateOnly !== true) {
+            const versions = options.profileMetadata.serviceVersions || {};
+            const codeVersion = versions.codeVersion === undefined ? 1 : versions.codeVersion;
+            const dependencyVersion = versions.dependencyVersion === undefined ? 1 : versions.dependencyVersion;
+            if (!Number.isSafeInteger(codeVersion) || codeVersion < 1 ||
+                !Number.isSafeInteger(dependencyVersion) || dependencyVersion < 1) {
+                throw new Error('Offline 服务基线 codeVersion/dependencyVersion 必须是正整数');
+            }
+            const lock = await fs.promises.readFile(path.join(packageDir, 'package-lock.json'));
+            files.push(await writeGeneratedFileWithManifest(
+                temporaryOutputDir,
+                'offline-update-client.json',
+                JSON.stringify({
+                    schemaVersion: 1,
+                    codeVersion,
+                    dependencyVersion,
+                    lockSha256: crypto.createHash('sha256').update(lock).digest('hex')
+                }, null, 2) + '\n'
+            ));
+        }
+        if (options.profileMetadata?.offline === true || options.offlineUpdatePublicKeyPem ||
+            options.offlineUpdatePublicKeyPath) {
+            await copyOfflineUpdatePublicKey(temporaryOutputDir, {
+                publicKeyPem: options.offlineUpdatePublicKeyPem,
+                publicKeyPath: options.offlineUpdatePublicKeyPath,
+                homeDir: options.homeDir,
+                required: options.profileMetadata?.offline === true
+            });
+        }
 
         const configuredVersion = String(
             options.version || process.env.AASC_ANDROID_NODE_RUNTIME_VERSION || ''
         ).trim();
-        const version = configuredVersion || deriveContentVersion(files, nodeFile);
+        const version = configuredVersion || deriveContentVersion(files, nodeFile, modelAssets);
         const manifest = {
             version,
             abi: ANDROID_ABI,
             entrypoint: 'server/src/apps/server/boot/server-launcher.js',
             nodePath: NODE_LIBRARY_PATH,
-            files
+            verifyRuntime,
+            files,
+            modelAssets
         };
         files.push(await writeGeneratedFileWithManifest(
             temporaryOutputDir,
@@ -603,16 +850,17 @@ async function prepareAndroidNodeRuntime(options = {}) {
         if (includeOfflineModels) {
             const modelMetadata = {
                 version,
-                files: offlineModelFiles.map(file => ({
-                    path: file.path.replace(/^server\//u, ''),
-                    size: file.size,
-                    sha256: file.sha256
-                }))
+                models: offlineModelPackage.models
             };
             files.push(await writeGeneratedFileWithManifest(
                 temporaryOutputDir,
                 OFFLINE_MODEL_METADATA_FILE,
                 JSON.stringify(modelMetadata, null, 2) + '\n'
+            ));
+            files.push(await writeGeneratedFileWithManifest(
+                temporaryOutputDir,
+                'offline-model-compatibility.json',
+                JSON.stringify(createModelCompatibilityMetadata(offlineModelPackage.models), null, 2) + '\n'
             ));
         }
         manifest.files = files;
@@ -670,6 +918,7 @@ module.exports = {
     NODE_LIBRARY_PATH,
     OFFLINE_MODEL_FILES,
     OFFLINE_MODEL_METADATA_FILE,
+    DISPLAY_MODEL_ASSET_PREFIX,
     APK_PROFILE_METADATA_FILE,
     OFFLINE_CONFIG_SEED_FILE,
     RELEASE_CONFIG_SEED_FILE,
@@ -679,12 +928,15 @@ module.exports = {
     RUNTIME_MODE_FILE,
     REQUIRED_RUNTIME_LIBRARIES,
     REQUIRED_PACKAGE_ENTRIES,
+    prepareUpdateOnlyRuntime,
+    copyOfflineUpdatePublicKey,
     assertSafeRelativePath,
     assertRuntimeLibraries,
     isAndroidAssetExcluded,
     isNpmInternalMetadata,
     isNpmToolShim,
     deriveContentVersion,
+    createModelCompatibilityMetadata,
     readOfflineConfigSeed,
     readReleaseConfigSeed,
     prepareAndroidNodeRuntime

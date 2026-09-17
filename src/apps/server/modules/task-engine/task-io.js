@@ -12,7 +12,7 @@ class TaskIndex extends DataSnapshot {
 class TaskIO extends EventEmitter {
   constructor(options = {}) {
     super();
-    const projectRoot = path.resolve(__dirname, '../../../../../');
+    const projectRoot = path.resolve(process.env.AASC_PROJECT_ROOT || path.resolve(__dirname, '../../../../../'));
     const runtimeContext = resolveReleaseRuntimeContext({
       projectRoot,
       homeDir: os.homedir(),

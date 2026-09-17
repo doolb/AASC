@@ -2,9 +2,9 @@
 
 ## 状态
 
-本次执行已将独立 RSA 密钥对接入打包流程，并重新生成 full v2 APK、code/dependencies v3 服务更新包。full APK SHA-256 为 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；code v3 SHA-256 为 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 为 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`。ZIP、APK 签名、公钥一致性、清单签名和工件 hash 检查通过；服务 v3 和 min v3 通道已发布到 LAN/WAN 并完成 HTTP 复验。真机卸载后 fresh install full v2，首次 Runtime 安装约 94.6 秒；修复 ZIP 目录项规范化白名单后，设备生成 code/dependencies v3 的 `active-release.json`，`pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。min 原位安装、回滚及异常降级仍待验收。
+本次执行已将独立 RSA 密钥对接入打包流程，并重新生成 full v2 APK、code/dependencies v3 服务更新包。full APK SHA-256 为 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；code v3 SHA-256 为 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 为 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`。2026-09-17 将修复后的 min APK 升级为 versionCode `4`、版本 `0.2.2-offline-min`，大小 `89205130` bytes，SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`，并正式发布到 LAN/WAN。两站点 manifest 字节一致、RSA 签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash 及 HTTP 206 首段校验通过；WAN HTTP HEAD 返回 `200` 且 Content-Length 正确。full APK 另已上传为 `apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致。真机卸载后 fresh install full v2，首次 Runtime 安装约 94.6 秒；修复 ZIP 目录项规范化白名单后，设备生成 code/dependencies v3 的 `active-release.json`，`pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。2026-09-17 使用含 `libaasc_node.so` 的 min v3 原位安装成功，数据目录和模型缓存保留，服务重新启动并继续使用 code/dependencies v3；回滚及异常降级仍待验收。
 
-方案已确认并进入实现。Node 更新包/发布器、`allserver-min` 构建 profile、Android 签名下载/服务版本切换和 min APK 安装流程已落地；跨文件系统落盘已改为输出目录同目录暂存后原子切换，并有集成回归覆盖 `/tmp` 到工作区输出。Android JVM 单测及更新相关 Node 定向测试通过。服务发布支持 `code-only` 和 `all` 两种模式；Android 原生更新通过 `allserver-min` APK 独立发布。模型在线更新和 `.mmap` 处理不在本期范围。服务双站点发布和 full APK fresh install 后的 code/dependencies 热更已验收；真机 min 原位升级、回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
+方案已确认并进入实现。Node 更新包/发布器、`allserver-min` 构建 profile、Android 签名下载/服务版本切换和 min APK 安装流程已落地；跨文件系统落盘已改为输出目录同目录暂存后原子切换，并有集成回归覆盖 `/tmp` 到工作区输出。Android JVM 单测及更新相关 Node 定向测试通过。服务发布支持 `code-only` 和 `all` 两种模式；Android 原生更新通过 `allserver-min` APK 独立发布。模型在线更新和 `.mmap` 处理不在本期范围。服务双站点发布、full APK fresh install 后的 code/dependencies 热更、min v3 原位升级和 min v4 正式发布已验收；回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
 
 ## 需求
 
@@ -52,7 +52,7 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 
 - `release/apkbuild/allserver-min/app.json` 定义只更新已安装 offline APK 的 profile。该 APK 使用 `com.aasc.display.offline`、与完整包相同的签名证书和更高的 `versionCode`；新鲜安装时显示“请先安装完整 Offline APK”，不启动服务。
 - `build:apk:offline:min` 只打包应用代码、Android/AAR/CMake 原生库以及 Node Runtime 所需的最小原生动态库集合；不生成/携带完整 Node 服务源码、`node_modules`、服务模型或 LLM 权重。min 构建保持当前 bundled model ID/revision 不变；原生 LLM 管理器先验证缓存，缓存命中时不依赖已从 APK 移除的模型 manifest/权重 asset。
-- 更新包中的显式 update-only Runtime 清单只允许更新 `files/aasc-server/runtime/arm64-v8a/lib/` 下的允许列表原生运行库；不得调用完整 Runtime 替换流程，不触碰服务源码、依赖、配置、任务、results、日志、ASR/TTS 模型和 LLM 缓存。
+- 更新包中的显式 update-only Runtime 清单只允许更新 `files/aasc-server/runtime/arm64-v8a/lib/` 下的允许列表原生运行库；min APK 仍携带 `libaasc_node.so` 以保证 Android 原位替换后 Node 入口存在。不得调用完整 Runtime 替换流程，不触碰服务源码、依赖、配置、任务、results、日志、ASR/TTS 模型和 LLM 缓存。
 - 完整 Offline APK 内的 updater 下载 min APK、校验签名清单和 SHA-256 后交给 Android 系统安装器，由用户确认安装。安装 APK 前检查并确保当前 APK 内置的 LLM 模型已物化并 hash 校验到 `files/models/llm/bundled/<modelId>`；空间不足或模型物化失败则延后原生更新，避免升级后 APK asset 被替换而缓存尚不存在。`MnnLlmModelManager` 在读取 APK metadata 前先检查同 revision 缓存；min 不携带模型 manifest/权重，模型 ID/revision 变更仍必须走完整 APK 发布。
 - min APK 替换后，应用私有数据保持原样；Node Runtime 安装器根据 update-only 标志执行受限原生库更新。模型在线更新、复制/预生成 `.mmap` 不属于该步骤。
 

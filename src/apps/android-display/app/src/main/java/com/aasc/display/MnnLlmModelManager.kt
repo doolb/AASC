@@ -1,6 +1,7 @@
 package com.aasc.display
 
 import android.content.Context
+import android.content.res.AssetManager
 import org.json.JSONArray
 import org.json.JSONObject
 import com.aasc.display.vision.VisionImageCodec
@@ -57,8 +58,12 @@ class MnnLlmModelManager(
 ) {
     private val modelRoot = File(context.filesDir, "models/llm")
     private val activeDirectory = File(modelRoot, "active")
-    // offline APK 的模型由 NodeRuntimeInstaller 安装到这里；该目录是 APK 资产的唯一文件副本。
-    private val bundledModelRoot = File(context.filesDir, "aasc-server/res/models/llm")
+    // LLM 权重属于显示端推理资产：Node Runtime 不解包它们，首次加载时才物化到这里。
+    // 逻辑路径：files/models/llm/bundled/<modelId>，与 server Runtime 完全分离。
+    private val bundledModelRoot = File(modelRoot, "bundled")
+    private val assetManager: AssetManager = context.assets
+    private val offlineModelMetadataAsset = "offline-model-manifest.json"
+    private val displayModelAssetPrefix = "display-models"
     private val stateFile = File(modelRoot, "state.json")
     private val imageRoot = File(context.cacheDir, "llm-images")
     private val remoteModelManager = RemoteModelManager()
@@ -429,6 +434,7 @@ class MnnLlmModelManager(
             val modelDirectory: File
             if (bundledDirectory != null) {
                 publishState("loading", false, modelId)
+                ensureBundledModelFromAssets(modelId)
                 check(isBundledModelReady(bundledDirectory)) {
                     "offline APK 内置 MNN-LLM 模型校验失败: $modelId"
                 }
@@ -516,6 +522,130 @@ class MnnLlmModelManager(
             File(bundledModelRoot, modelId)
         } else {
             null
+        }
+    }
+
+    /** 更新 APK 前计算尚未落盘的 bundled 模型体积，用于预留模型和安装器空间。 */
+    fun estimateBundledModelMaterializationBytes(modelId: String): Long {
+        require(isBundledModelId(modelId)) { "offline APK 未配置 bundled 模型: $modelId" }
+        val destination = bundledModelDirectory(modelId)
+            ?: throw IllegalStateException("offline bundled 模型目录无效")
+        if (isBundledModelReady(destination)) return 0L
+        val files = readBundledModelDefinition(modelId).optJSONArray("files")
+            ?: throw IllegalStateException("offline 模型元数据缺少 files")
+        var total = 0L
+        for (index in 0 until files.length()) {
+            val item = files.optJSONObject(index)
+                ?: throw IllegalStateException("offline 模型文件元数据无效")
+            val size = item.optLong("size", -1L)
+            require(size >= 0L && Long.MAX_VALUE - total >= size) {
+                "offline 模型文件大小无效或总大小溢出"
+            }
+            total += size
+        }
+        return total
+    }
+
+    /** 在完整 APK 的模型 assets 仍可读时，将未缓存模型安全物化到显示端私有模型目录。 */
+    fun ensureBundledModelMaterialized(modelId: String): File {
+        require(isBundledModelId(modelId)) { "offline APK 未配置 bundled 模型: $modelId" }
+        val destination = bundledModelDirectory(modelId)
+            ?: throw IllegalStateException("offline bundled 模型目录无效")
+        ensureBundledModelFromAssets(modelId)
+        check(isBundledModelReady(destination)) { "offline APK 内置模型校验失败: $modelId" }
+        return destination
+    }
+
+    /**
+     * 从 APK 的独立 display-models asset 懒加载内置模型。这里的复制是显示端自己的
+     * MNN 文件缓存，不进入 aasc-server，也不走在线 active 下载目录；写入完成前不会
+     * 替换现有 bundled 目录，避免进程重启或模型切换留下半套权重。
+     */
+    private fun ensureBundledModelFromAssets(modelId: String): File {
+        require(File(modelId).name == modelId) { "offline 模型 ID 无效: $modelId" }
+        val destination = File(bundledModelRoot, modelId)
+        if (isBundledModelReady(destination)) return destination
+        val model = readBundledModelDefinition(modelId)
+
+        val parent = bundledModelRoot.parentFile
+            ?: throw IllegalStateException("offline 模型缓存父目录不存在")
+        check(parent.isDirectory || parent.mkdirs()) { "无法创建 offline 模型缓存目录" }
+        // staging 位于 modelRoot，而最终目录位于 bundled；先创建最终父目录，保证原子 rename 可用。
+        check(bundledModelRoot.isDirectory || bundledModelRoot.mkdirs()) {
+            "无法创建 offline 模型 bundled 目录"
+        }
+        val staging = File(parent, ".bundled-$modelId.staging-${System.currentTimeMillis()}")
+        val backup = File(parent, ".bundled-$modelId.backup-${System.currentTimeMillis()}")
+        staging.deleteRecursively()
+        backup.deleteRecursively()
+        check(staging.mkdirs()) { "无法创建 offline 模型临时目录" }
+        try {
+            val files = model.optJSONArray("files")
+                ?: throw IllegalStateException("offline 模型元数据缺少 files")
+            val markerFiles = JSONArray()
+            for (index in 0 until files.length()) {
+                val item = files.optJSONObject(index)
+                    ?: throw IllegalStateException("offline 模型文件元数据无效")
+                val name = item.optString("name").trim()
+                val size = item.optLong("size", -1L)
+                val sha256 = item.optString("sha256").trim()
+                require(name.isNotEmpty() && File(name).name == name) {
+                    "offline 模型文件名无效: $name"
+                }
+                require(size >= 0L && Regex("[0-9a-fA-F]{64}").matches(sha256)) {
+                    "offline 模型文件校验信息无效: $name"
+                }
+                val assetPath = item.optString("assetPath").trim()
+                    .ifEmpty { "$displayModelAssetPrefix/$modelId/$name" }
+                require(assetPath.startsWith("$displayModelAssetPrefix/$modelId/")) {
+                    "offline 模型 asset 路径无效: $assetPath"
+                }
+                val output = File(staging, name)
+                assetManager.open(assetPath).use { input ->
+                    FileOutputStream(output).use { outputStream -> input.copyTo(outputStream) }
+                }
+                check(output.isFile && output.length() == size && ModelHash.matches(output, sha256)) {
+                    "offline 模型文件校验失败: $name"
+                }
+                markerFiles.put(JSONObject()
+                    .put("name", name)
+                    .put("size", size)
+                    .put("sha256", sha256.lowercase()))
+            }
+            check(markerFiles.length() > 0) { "offline 模型没有可加载文件" }
+            File(staging, ".manifest.json").writeText(JSONObject()
+                .put("modelId", modelId)
+                .put("revision", model.optString("revision").trim())
+                .put("files", markerFiles)
+                .toString())
+
+            if (destination.exists()) check(destination.renameTo(backup)) {
+                "无法暂存旧 offline 模型缓存"
+            }
+            check(staging.renameTo(destination)) { "无法切换 offline 模型缓存" }
+            backup.deleteRecursively()
+            return destination
+        } catch (error: Exception) {
+            staging.deleteRecursively()
+            if (backup.isDirectory && !destination.exists()) backup.renameTo(destination)
+            throw IllegalStateException("从 APK 物化 MNN-LLM 模型失败: ${error.message}", error)
+        }
+    }
+
+    private fun readBundledModelDefinition(modelId: String): JSONObject {
+        return try {
+            val metadata = assetManager.open(offlineModelMetadataAsset).bufferedReader().use { reader ->
+                JSONObject(reader.readText())
+            }
+            val models = metadata.optJSONArray("models")
+                ?: throw IllegalStateException("offline 模型元数据缺少 models")
+            for (index in 0 until models.length()) {
+                val model = models.optJSONObject(index) ?: continue
+                if (model.optString("modelId").trim() == modelId) return model
+            }
+            throw IllegalStateException("offline APK 未内置模型: $modelId")
+        } catch (error: Exception) {
+            throw IllegalStateException("读取 offline 模型元数据失败: ${error.message}", error)
         }
     }
 

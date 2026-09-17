@@ -1,0 +1,223 @@
+{
+  "server": {
+    "port": 8081
+  },
+  "aasc": {
+    "role": "main",
+    "mainServerUrl": "https://192.168.1.39:8081",
+    "nodeId": "",
+    "nodeName": "",
+    "advertisedUrl": "",
+    "heartbeatIntervalMs": 30000,
+    "reconnectMinMs": 1000,
+    "reconnectMaxMs": 30000
+  },
+  "tts": {
+    "serviceUrl": "http://127.0.0.1:3001/api/tts",
+    "defaultVoice": "Microsoft Xiaoxiao",
+    "defaultSpeed": 0,
+    "requestTimeoutMs": 20000,
+    "extraTimeoutPerPending": 10000,
+    "maxErrorBytes": 65536,
+    "device": "display",
+    "serverEnabled": false
+  },
+  "asr": {
+    "mode": "isolated",
+    "maxQueueLength": 8,
+    "mallocTrimEnabled": true,
+    "requireChinese": true,
+    "languageMode": "zh",
+    "denoise": false,
+    "serverEnabled": false,
+    "isolateProcess": {
+      "enabled": false,
+      "requestTimeoutMs": 60000,
+      "autoRestart": true
+    },
+    "device": "display"
+  },
+  "llm": {
+    "maxQueueLength": 16,
+    "requestTimeoutMs": 120000,
+    "defaultModelMappings": [
+      {
+        "externalModelName": "qwen3.5-0.8b",
+        "modelId": "qwen3.5-0.8b-claude-opus-distilled-mnn"
+      }
+    ]
+  },
+  "ui": {
+    "controlTheme": "girl-pink"
+  },
+  "display": {
+    "versionCheckIntervalMs": 300000
+  },
+  "cpuAffinity": {
+    "asr": {
+      "bigCoreCount": 1,
+      "littleCoreCount": 2,
+      "preferBigCores": true
+    },
+    "tts": {
+      "bigCoreCount": 1,
+      "littleCoreCount": 1,
+      "preferBigCores": false
+    },
+    "llm": {
+      "bigCoreCount": 2,
+      "littleCoreCount": 0,
+      "preferBigCores": true
+    }
+  },
+  "voiceprint": {
+    "enabled": true,
+    "extraction": "display",
+    "threshold": 0.25,
+    "multiSpeaker": true,
+    "multiMode": "fast",
+    "speakerCount": "AUTO",
+    "pauseRecordingDuringPlayback": false,
+    "vadSilenceDurationMs": 500,
+    "vadMinSpeechDurationMs": 300,
+    "asrResultDetailLog": true
+  },
+  "voiceCommand": {
+    "conversationConfirmationMode": "off",
+    "addressedGroupMode": "temporary",
+    "temporaryConversationWindowMs": 30000,
+    "conversationWindowMs": 180000,
+    "defaultWeatherCity": "Chengdu",
+    "weatherCities": [
+      "北京",
+      "上海",
+      "广州",
+      "深圳",
+      "杭州",
+      "南京",
+      "苏州",
+      "成都",
+      "重庆",
+      "天津",
+      "武汉",
+      "西安",
+      "长沙",
+      "郑州",
+      "青岛",
+      "厦门",
+      "福州",
+      "宁波",
+      "无锡",
+      "合肥"
+    ],
+    "reminderTemplate": "{content}",
+    "reminderTemplatePrefix": "",
+    "reminderTemplateSuffix": "",
+    "routing": {
+      "weather": "system",
+      "search": "system"
+    }
+  },
+  "repairMode": {
+    "password": "暖暖",
+    "role": "mainfront"
+  },
+  "logBrain": {
+    "errorThreshold": 1,
+    "warnThreshold": 20,
+    "memoryWarningThreshold": 85,
+    "defaultTimeRange": "10m"
+  },
+  "logReportDisplay": {
+    "enabled": false,
+    "level": "debug"
+  },
+  "logReportControl": {
+    "enabled": true,
+    "level": "debug"
+  },
+  "logBlocklist": [],
+  "chat": {
+    "agentBackend": "codex",
+    "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+    "model": "Qwen3.6-Flash",
+    "maxTokens": 65536,
+    "temperature": 0.7,
+    "apiKey": "",
+    "contextCount": 10,
+    "systemPrompt": "你是一个智能助手，你可以回答用户的问题，帮助用户解决问题,  用简短的语言回答。",
+    "activeProfile": "default",
+    "llmProfiles": [
+      {
+        "name": "default",
+        "mode": "llm",
+        "apiUrl": "https://127.0.0.1:8081/v1/chat/completions",
+        "model": "qwen3.5-0.8b",
+        "maxTokens": 1000,
+        "temperature": 0.7,
+        "contextCount": 5,
+        "apiKey": ""
+      },
+      {
+        "name": "qwen3.5",
+        "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+        "model": "Qwen3.6-Flash",
+        "maxTokens": 65536,
+        "temperature": 0.7,
+        "contextCount": 10,
+        "apiKey": "",
+        "promptFormat": "raw",
+        "mode": "agent",
+        "backend": "pi"
+      }
+    ],
+    "protocol": "openai-responses",
+    "responsesBaseUrl": "https://127.0.0.1:8081/v1",
+    "responsesApiKey": "",
+    "codexProxy": "http://127.0.0.1:7899",
+    "promptFormat": "raw",
+    "mode": "agent",
+    "backend": "pi"
+  },
+  "logCategoryFilter": null,
+  "timeAnnounce": {
+    "enabled": true,
+    "interval": 15,
+    "repeatCount": 2,
+    "repeatDelay": 3000
+  },
+  "defaultDisplayState": {
+    "currentMedia": null,
+    "currentMediaProgress": null,
+    "rotation": 0,
+    "fit": "contain",
+    "crop": {
+      "x": 0,
+      "y": 0,
+      "width": 100,
+      "height": 100
+    },
+    "volume": 100,
+    "playlist": [],
+    "sleep": {
+      "enabled": true,
+      "startHour": 23,
+      "endHour": 8,
+      "deepStartHour": 1,
+      "deepEndHour": 6
+    }
+  },
+  "task": {
+    "autoStartServices": [
+      {
+        "taskName": "time.announce",
+        "taskType": "user",
+        "builtinId": null,
+        "entryFile": "service.js",
+        "target": "server",
+        "mode": "service",
+        "params": {}
+      }
+    ]
+  }
+}

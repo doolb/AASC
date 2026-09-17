@@ -6,7 +6,8 @@ const path = require('node:path');
 const APK_PROFILES = Object.freeze({
     noserver: Object.freeze({ offline: false, embeddedNode: false }),
     withserver: Object.freeze({ offline: false, embeddedNode: true }),
-    allserver: Object.freeze({ offline: true, embeddedNode: true })
+    allserver: Object.freeze({ offline: true, embeddedNode: true }),
+    'allserver-min': Object.freeze({ offline: true, embeddedNode: true, updateOnly: true })
 });
 
 function assertStringArray(value, fieldName, profileName) {
@@ -48,16 +49,58 @@ async function loadApkProfile(options = {}) {
     }
     const features = assertStringArray(rawProfile.features, 'features', profileName);
     const models = assertStringArray(rawProfile.models, 'models', profileName);
+    if (rawProfile.updateOnly !== undefined && typeof rawProfile.updateOnly !== 'boolean') {
+        throw new Error(`${profileName}/app.json 的 updateOnly 必须为布尔值`);
+    }
+    const updateOnly = rawProfile.updateOnly === true;
+    const versionCode = rawProfile.versionCode === undefined ? 1 : rawProfile.versionCode;
+    const versionName = rawProfile.versionName === undefined ? '0.1.0' : rawProfile.versionName;
+    const rawServiceVersions = rawProfile.serviceVersions === undefined
+        ? { codeVersion: 1, dependencyVersion: 1 }
+        : rawProfile.serviceVersions;
+    if (!rawServiceVersions || typeof rawServiceVersions !== 'object' || Array.isArray(rawServiceVersions)) {
+        throw new Error(`${profileName}/app.json 的 serviceVersions 必须是对象`);
+    }
+    const serviceVersions = {
+        codeVersion: rawServiceVersions.codeVersion,
+        dependencyVersion: rawServiceVersions.dependencyVersion
+    };
+    for (const [name, value] of Object.entries(serviceVersions)) {
+        if (!Number.isSafeInteger(value) || value < 1) {
+            throw new Error(`${profileName}/app.json 的 serviceVersions.${name} 必须是正整数`);
+        }
+    }
+    if (updateOnly !== (profileRules.updateOnly === true)) {
+        throw new Error(`${profileName} profile 的 updateOnly 必须为 ${profileRules.updateOnly === true}`);
+    }
+    if (!Number.isSafeInteger(versionCode) || versionCode < 1) {
+        throw new Error(`${profileName}/app.json 的 versionCode 必须是大于 0 的安全整数`);
+    }
+    if (typeof versionName !== 'string' || versionName.trim() === '') {
+        throw new Error(`${profileName}/app.json 的 versionName 必须是非空字符串`);
+    }
+    const verifyRuntime = rawProfile.verifyRuntime === undefined ? true : rawProfile.verifyRuntime;
+    if (typeof verifyRuntime !== 'boolean') {
+        throw new Error(`${profileName}/app.json 的 verifyRuntime 必须为布尔值`);
+    }
     if (!rawProfile.embeddedNode && models.length > 0) {
         throw new Error(`${profileName} profile 不允许配置 models；noserver 不内置 Node Runtime 和模型`);
+    }
+    if (updateOnly && models.length > 0) {
+        throw new Error(`${profileName} update-only profile 不允许内置模型`);
     }
 
     return {
         profile: profileName,
         offline: profileRules.offline,
         embeddedNode: rawProfile.embeddedNode,
+        updateOnly,
+        versionCode,
+        versionName: versionName.trim(),
+        serviceVersions,
         features,
         models,
+        verifyRuntime,
         buildRoot
     };
 }
@@ -83,6 +126,9 @@ async function collectDirectoryFiles(rootDir, relativeDir, files = []) {
     for (const entry of entries) {
         const relativePath = path.join(relativeDir, entry.name);
         assertModelRelativePath(relativePath);
+        // 空模型目录使用 .gitkeep 保持在 Git 中，但它不是模型文件；如果把它
+        // 写进离线模型 manifest，Android AssetManager 过滤隐藏文件后会造成清单不一致。
+        if (entry.name === '.gitkeep') continue;
         if (isExcludedModelPath(relativePath)) continue;
         if (entry.isSymbolicLink()) {
             throw new Error(`模型目录不允许符号链接: ${relativePath}`);

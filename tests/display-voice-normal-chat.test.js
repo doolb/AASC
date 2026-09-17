@@ -29,15 +29,24 @@ assert.match(
     /type:\s*'chatInput'[\s\S]{0,240}requestId/,
     '普通聊天流开始前应向控制端发送即时输入事件'
 );
+const completeStart = handler.indexOf('onComplete:');
+const completeEnd = handler.indexOf('onError:', completeStart);
+assert.ok(completeStart >= 0 && completeEnd > completeStart, '应能定位聊天完成回调');
+const completeHandler = handler.slice(completeStart, completeEnd);
 assert.match(
-    handler,
-    /type:\s*'voiceCommand'[\s\S]{0,260}detailText:\s*fullMessage/,
-    '语音普通聊天完成后应向来源显示端发送完整 detailText'
+    completeHandler,
+    /onComplete:\s*\(fullMessage,\s*history,\s*reasoning,\s*speech\)/,
+    '聊天完成回调应接收独立的 reasoning 和 speech'
+);
+assert.match(
+    completeHandler,
+    /detailText:\s*speech\s*\|\|\s*fullMessage/,
+    '语音普通聊天完成后显示端气泡应收到按生成顺序去标签的 think 与回答'
 );
 const sentenceStart = handler.indexOf('onSentence:');
-const completeStart = handler.indexOf('onComplete:', sentenceStart);
-assert.ok(sentenceStart >= 0 && completeStart > sentenceStart, '应能定位聊天 TTS 和完成回调');
-const sentenceHandler = handler.slice(sentenceStart, completeStart);
+const sentenceEnd = handler.indexOf('onComplete:', sentenceStart);
+assert.ok(sentenceStart >= 0 && sentenceEnd > sentenceStart, '应能定位聊天 TTS 和完成回调');
+const sentenceHandler = handler.slice(sentenceStart, sentenceEnd);
 assert.match(sentenceHandler, /routeVoiceToPreferredDisplay/);
 assert.doesNotMatch(
     sentenceHandler,

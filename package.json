@@ -7,6 +7,10 @@
     "start": "node --openssl-legacy-provider --expose-gc src/apps/server/boot/server-launcher.js",
     "restart:server": "node scripts/ops/restart-server.js",
     "build:server-package": "node scripts/ops/build-server-package.js",
+    "build:offline-update": "node scripts/ops/offline-update-package.js",
+    "publish:offline-update": "node scripts/ops/publish-offline-update.js",
+    "package:offline-apk:min": "node scripts/ops/offline-min-apk-package.js",
+    "publish:offline-apk:min": "node scripts/ops/publish-offline-update.js --mode apk-min",
     "prepare:android-node": "node scripts/ops/prepare-android-node-runtime.js",
     "prepare:mnnllm-android": "node scripts/ops/prepare-mnnllm-android.js",
     "download:llm-model": "node scripts/ops/download-llm-model.js",
@@ -18,6 +22,7 @@
     "stress:tts": "node scripts/stress/tts-stress-test.js",
     "build:apk": "node scripts/ops/build-apk.js withserver",
     "build:apk:offline": "node scripts/ops/build-apk.js allserver",
+    "build:apk:offline:min": "node scripts/ops/build-apk.js allserver-min",
     "build:apk:noserver": "node scripts/ops/build-apk.js noserver",
     "upload:apk": "npm run build:apk && node scripts/ops/apk-deploy.js",
     "start:apk:display": "node scripts/ops/apk-start.js"

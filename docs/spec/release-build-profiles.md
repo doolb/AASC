@@ -96,12 +96,15 @@ app.json:
     embeddedNode = true 或 false
     features = 功能 ID 数组
     models = 模型 ID 数组
+    verifyRuntime = true 或 false（解析缺省为 true；offline allserver 正式配置为 false）
 
 校验规则:
     noserver 的 embeddedNode 必须为 false
     noserver 的 models 必须为空数组
     models 中每个 ID 必须能在模型 manifest 或受支持模型目录清单中解析
+    目录型模型扫描跳过 .gitkeep 占位文件；模型 manifest 声明的 .manifest.json 仍需保留并映射为可打包名称
     features 和 models 不允许重复项
+    verifyRuntime 缺省为 true；allserver 的正式 app.json 默认关闭校验；非布尔值 → 构建失败
     不存在或格式错误 → 构建失败
 ```
 
@@ -113,7 +116,11 @@ prepareTaskAssets(release/task, output):
     复制任务定义、config.json、results/index.json、实例目录、日志和输出文件
     不用 tasks 配置筛选任务
     results/latest 如果是软链接:
+        读取软链接目标并写入可打包的 latest marker，记录目标 instanceId
+    results/latest 如果是普通文件:
+        读取去除首尾空白后的实例 ID
         写入可打包的 latest marker，记录目标 instanceId
+    results/latest 不作为普通 APK asset 复制，避免安装后遮挡恢复出的软链接
     .task-links.json 如果存在:
         写入可打包的 task-links marker
     拒绝路径穿越和不支持的文件类型
@@ -122,9 +129,14 @@ prepareTaskAssets(release/task, output):
 ```text
 installRuntime(staging, root):
     完整校验 runtime manifest 后原子切换 staging 为 root
+    manifest.verifyRuntime == true:
+        校验每个 Runtime 文件的存在、大小和 SHA-256
+    manifest.verifyRuntime == false:
+        仅校验每个 Runtime 文件存在且为普通文件，跳过 SHA-256 内容校验
     保留已安装 root 的用户可变目录
     新设备首次安装时写入 release 配置、用户配置和任务结果
     将 latest marker 恢复为 results/latest 软链接
+    latest marker 指向的实例目录不存在时创建空实例目录；若目标是普通文件则失败
     将 task-links marker 恢复为 .task-links.json
 
 server-app 启动:

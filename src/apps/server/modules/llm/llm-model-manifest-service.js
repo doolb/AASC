@@ -123,14 +123,20 @@ class LlmModelManifestService {
     constructor({
         modelRoot,
         manifestPath = path.join(modelRoot, 'manifest.json'),
+        offlineModelMetadataPath = null,
         clock = () => Date.now()
     }) {
         this.modelRoot = path.resolve(modelRoot);
         this.realModelRoot = resolveExistingPath(this.modelRoot);
         this.manifestPath = path.resolve(manifestPath);
+        this.offlineModelMetadataPath = typeof offlineModelMetadataPath === 'string'
+            && offlineModelMetadataPath.trim() !== ''
+            ? path.resolve(offlineModelMetadataPath)
+            : null;
         this.clock = clock;
         this.hashCache = new Map();
         this.manifestCache = null;
+        this.offlineMetadataCache = null;
     }
 
     readDefinitions() {
@@ -256,6 +262,7 @@ class LlmModelManifestService {
 
     isModelCacheReady(definition) {
         if (!definition) return false;
+        if (this.readOfflineReadyModelIds().has(definition.modelId)) return true;
         if (!definition.source) {
             return definition.files.every((file) => this.createFileManifest(definition, file) !== null);
         }
@@ -281,6 +288,44 @@ class LlmModelManifestService {
                 return false;
             }
         });
+    }
+
+    readOfflineReadyModelIds() {
+        if (!this.offlineModelMetadataPath) return new Set();
+        let stat;
+        try {
+            stat = fs.statSync(this.offlineModelMetadataPath);
+        } catch (error) {
+            return new Set();
+        }
+        if (this.offlineMetadataCache
+            && this.offlineMetadataCache.mtimeMs === stat.mtimeMs
+            && this.offlineMetadataCache.size === stat.size) {
+            return this.offlineMetadataCache.modelIds;
+        }
+        const modelIds = new Set();
+        try {
+            const document = JSON.parse(fs.readFileSync(this.offlineModelMetadataPath, 'utf8'));
+            if (Array.isArray(document?.models)) {
+                for (const model of document.models) {
+                    const modelId = normalizeText(model?.modelId || model?.id);
+                    if (modelId && path.basename(modelId) === modelId) modelIds.add(modelId);
+                }
+            } else if (Array.isArray(document?.files)) {
+                // 兼容旧版 offline 元数据，旧格式路径为 res/models/llm/<model>/file。
+                for (const file of document.files) {
+                    const relativePath = normalizeText(file?.path);
+                    const match = /^res\/models\/llm\/([^/]+)\//u.exec(relativePath);
+                    if (match && match[1] !== 'manifest.json') modelIds.add(match[1]);
+                }
+            }
+        } catch (error) {
+            // 元数据属于 APK 构建产物；读取失败时不将模型误判为 ready，主服务仍可启动。
+            this.offlineMetadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, modelIds };
+            return modelIds;
+        }
+        this.offlineMetadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, modelIds };
+        return modelIds;
     }
 
     createModelManifest(definition, { includeIncomplete = false } = {}) {

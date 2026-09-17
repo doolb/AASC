@@ -20,6 +20,7 @@ class NodeRuntimeInstaller(
         private const val ASSET_MANIFEST = "runtime-manifest.json"
         private const val ROOT_NAME = "aasc-server"
         private const val VERSION_MARKER = ".runtime-version"
+        private const val FULL_OFFLINE_INSTALL_MARKER = ".full-offline-installed"
         private const val ASSET_VERSION = "runtime-version.txt"
         private const val ASSET_MODE = "runtime-mode.txt"
         private const val OFFLINE_MODE = "offline"
@@ -36,6 +37,7 @@ class NodeRuntimeInstaller(
             "config",
             "home",
             "logs",
+            "updates",
             "res/tasks",
             "res/uploads",
             "res/temp"
@@ -89,15 +91,88 @@ class NodeRuntimeInstaller(
         }
 
         @JvmStatic
+        fun ensureTaskInstanceDirectory(resultsDirectory: File, instanceId: String): File {
+            require(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$").matches(instanceId)) {
+                "任务实例 ID 不安全: $instanceId"
+            }
+            val resultsPath = resultsDirectory.canonicalFile.toPath()
+            val instanceDirectory = File(resultsDirectory, instanceId)
+            require(instanceDirectory.canonicalFile.toPath().startsWith(resultsPath)) {
+                "任务实例路径越界: $instanceId"
+            }
+            if (instanceDirectory.exists()) {
+                require(instanceDirectory.isDirectory) { "任务实例路径不是目录: $instanceId" }
+            } else {
+                check(instanceDirectory.mkdirs() || instanceDirectory.isDirectory) {
+                    "无法创建任务实例目录: $instanceId"
+                }
+            }
+            return instanceDirectory
+        }
+
+        @JvmStatic
         fun shouldSeedTaskDirectory(root: File): Boolean {
             return !File(root, "res/tasks").exists()
+        }
+
+        /**
+         * update-only APK 只能覆盖完整 Offline APK 已经释放出的 Runtime 动态库。
+         * 旧版完整包没有 marker 时，使用模型清单、Node 服务入口和 production dependencies
+         * 识别既有安装，避免误拦截升级；全新安装的 min APK 不满足这些条件。
+         */
+        @JvmStatic
+        fun hasFullOfflineInstall(root: File): Boolean {
+            return try {
+                val requiredFiles = listOf(
+                    File(root, "src/apps/server/boot/server-launcher.js"),
+                    File(root, "package.json"),
+                    File(root, "package-lock.json"),
+                    File(root, "node_modules/express/package.json"),
+                    File(root, OFFLINE_MODEL_METADATA_FILE)
+                )
+                val complete = requiredFiles.all { it.isFile } && hasOfflineModels(root) &&
+                    File(root, RUNTIME_LIB_DIR).listFiles()?.any { it.isFile && it.length() > 0L } == true
+                if (complete && !File(root, FULL_OFFLINE_INSTALL_MARKER).isFile) {
+                    File(root, FULL_OFFLINE_INSTALL_MARKER).writeText("schemaVersion=1\n")
+                }
+                complete
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        @JvmStatic
+        fun canApplyUpdateOnlyRuntime(root: File, manifest: NodeRuntimeManifest): Boolean {
+            return manifest.updateOnly && manifest.allowedRuntimeLibraryPaths.isNotEmpty() &&
+                manifest.files.map { it.path }.toSet() == manifest.allowedRuntimeLibraryPaths &&
+                manifest.files.all { file ->
+                    file.path.startsWith("runtime/${manifest.abi}/lib/") &&
+                        File(file.path).name in setOf(
+                            "libz.so.1", "libcares.so", "libsqlite3.so", "libffi.so",
+                            "libcrypto.so.3", "libssl.so.3", "libicui18n.so.78",
+                            "libicuuc.so.78", "libicudata.so.78"
+                        )
+                } && hasFullOfflineInstall(root)
         }
 
         private fun hasOfflineModels(root: File): Boolean {
             val metadataFile = File(root, OFFLINE_MODEL_METADATA_FILE)
             return try {
-                val entries = JSONObject(metadataFile.readText()).optJSONArray("files")
-                    ?: return false
+                val metadata = JSONObject(metadataFile.readText())
+                val models = metadata.optJSONArray("models")
+                if (models != null) {
+                    if (models.length() == 0) return false
+                    for (index in 0 until models.length()) {
+                        val model = models.optJSONObject(index) ?: return false
+                        if (model.optString("modelId").trim().isEmpty()
+                            || model.optJSONArray("files") == null) {
+                            return false
+                        }
+                    }
+                    return true
+                }
+                // 兼容旧 APK：旧格式记录的是已解包到 aasc-server 的每个模型文件。
+                val entries = metadata.optJSONArray("files") ?: return false
                 if (entries.length() == 0) return false
                 val rootPath = root.canonicalFile.toPath()
                 for (index in 0 until entries.length()) {
@@ -127,9 +202,20 @@ class NodeRuntimeInstaller(
     fun ensureInstalled(): File {
         val startedAt = SystemClock.elapsedRealtime()
         val root = File(context.filesDir, ROOT_NAME)
+        if (context.resources.getBoolean(R.bool.aasc_update_only_mode)) {
+            val updateManifest = readManifest()
+            require(updateManifest.updateOnly) { "update-only APK 内置 Runtime manifest 模式不匹配" }
+            check(canApplyUpdateOnlyRuntime(root, updateManifest)) {
+                "此为 Offline 增量更新 APK，请先安装并启动完整 Offline APK"
+            }
+            installUpdateOnlyRuntime(root, updateManifest)
+            android.util.Log.i("AASC-Node", "Offline Runtime 动态库增量更新完成，版本=${updateManifest.version}")
+            return root
+        }
         val runtimeVersion = readRuntimeVersion()
         val runtimeMode = readRuntimeMode()
         if (runtimeVersion != null && canReuseInstalledRuntime(root, runtimeVersion, runtimeMode)) {
+            if (runtimeMode == OFFLINE_MODE) markFullOfflineInstall(root)
             android.util.Log.i(
                 "AASC-Node",
                 "Runtime 快速复用，版本=$runtimeVersion，耗时=${SystemClock.elapsedRealtime() - startedAt}ms"
@@ -140,6 +226,7 @@ class NodeRuntimeInstaller(
         // 兼容未携带 runtime-version.txt 的旧 APK；只在这个兼容路径解析一次完整 manifest。
         val manifest = readManifest()
         if (runtimeVersion == null && canReuseInstalledRuntime(root, manifest)) {
+            if (File(root, OFFLINE_MODEL_METADATA_FILE).isFile) markFullOfflineInstall(root)
             android.util.Log.i(
                 "AASC-Node",
                 "Runtime 快速复用（旧版本兼容），版本=${manifest.version}，耗时=${SystemClock.elapsedRealtime() - startedAt}ms"
@@ -152,8 +239,14 @@ class NodeRuntimeInstaller(
         staging.mkdirs()
         try {
             copyManifestFiles(manifest, staging)
-            validateInstalledFiles(manifest, staging)
+            if (manifest.verifyRuntime) {
+                validateInstalledFiles(manifest, staging)
+            } else {
+                validateInstalledFilePresence(manifest, staging)
+                android.util.Log.i("AASC-Node", "Runtime 已跳过完整 SHA-256 内容校验")
+            }
             installCodeFiles(root, staging, manifest.version)
+            if (File(root, OFFLINE_MODEL_METADATA_FILE).isFile) markFullOfflineInstall(root)
             android.util.Log.i(
                 "AASC-Node",
                 "Runtime 完整安装完成，版本=${manifest.version}，耗时=${SystemClock.elapsedRealtime() - startedAt}ms"
@@ -163,6 +256,89 @@ class NodeRuntimeInstaller(
             staging.deleteRecursively()
             throw IllegalStateException("安装 Android Node Runtime 失败: ${error.message}", error)
         }
+    }
+
+    private data class RuntimeFileReplacement(val destination: File, val backup: File?)
+
+    private fun markFullOfflineInstall(root: File) {
+        if (!hasOfflineModels(root)) return
+        File(root, FULL_OFFLINE_INSTALL_MARKER).writeText("schemaVersion=1\n")
+    }
+
+    /**
+     * update-only APK 只暂存并替换 manifest 白名单中的 Node 动态库；不触碰 server、node_modules、
+     * res/models 或 display 侧 files/models。安装中断时利用同目录备份把每个已替换文件恢复。
+     */
+    private fun installUpdateOnlyRuntime(root: File, manifest: NodeRuntimeManifest) {
+        val stage = File(root, ".runtime-update-${System.currentTimeMillis()}")
+        check(stage.mkdirs()) { "无法创建 update-only Runtime 暂存目录" }
+        val rootPath = root.canonicalFile.toPath()
+        val replacements = mutableListOf<RuntimeFileReplacement>()
+        try {
+            for (entry in manifest.files) {
+                val stagedFile = File(stage, entry.path)
+                require(stagedFile.canonicalFile.toPath().startsWith(stage.canonicalFile.toPath())) {
+                    "update-only Runtime 暂存路径越界: ${entry.path}"
+                }
+                check(stagedFile.parentFile?.isDirectory == true || stagedFile.parentFile?.mkdirs() == true) {
+                    "无法创建 update-only Runtime 暂存目录: ${entry.path}"
+                }
+                assetManager.open(entry.path).use { input ->
+                    FileOutputStream(stagedFile).use { output ->
+                        input.copyTo(output)
+                        output.fd.sync()
+                    }
+                }
+                require(stagedFile.isFile && stagedFile.length() == entry.size) {
+                    "update-only Runtime 文件大小校验失败: ${entry.path}"
+                }
+                if (manifest.verifyRuntime) {
+                    require(sha256(stagedFile) == entry.sha256) {
+                        "update-only Runtime 文件 SHA-256 校验失败: ${entry.path}"
+                    }
+                }
+            }
+
+            for (entry in manifest.files) {
+                val destination = File(root, entry.path).canonicalFile
+                require(destination.toPath().startsWith(rootPath)) {
+                    "update-only Runtime 安装路径越界: ${entry.path}"
+                }
+                check(destination.parentFile?.isDirectory == true || destination.parentFile?.mkdirs() == true) {
+                    "无法创建 Runtime 动态库目录: ${entry.path}"
+                }
+                val stagedFile = File(stage, entry.path)
+                val backup = if (destination.exists()) {
+                    val saved = File(stage, "backup/${entry.path}")
+                    check(saved.parentFile?.isDirectory == true || saved.parentFile?.mkdirs() == true) {
+                        "无法创建 Runtime 动态库备份目录: ${entry.path}"
+                    }
+                    check(destination.renameTo(saved)) { "无法备份 Runtime 动态库: ${entry.path}" }
+                    saved
+                } else {
+                    null
+                }
+                replacements += RuntimeFileReplacement(destination, backup)
+                check(stagedFile.renameTo(destination)) { "无法安装 Runtime 动态库: ${entry.path}" }
+                destination.setReadable(true, true)
+            }
+            File(root, ".runtime-update-version").writeText(manifest.version + "\n")
+        } catch (error: Exception) {
+            var rollbackSucceeded = true
+            for (replacement in replacements.asReversed()) {
+                if (replacement.destination.exists() && !replacement.destination.delete()) {
+                    rollbackSucceeded = false
+                }
+                val backup = replacement.backup
+                if (backup != null && backup.exists() && !backup.renameTo(replacement.destination)) {
+                    rollbackSucceeded = false
+                }
+            }
+            if (rollbackSucceeded) stage.deleteRecursively()
+            else android.util.Log.e("AASC-Node", "Runtime 动态库回滚不完整，保留备份: ${stage.absolutePath}")
+            throw IllegalStateException("安装 Offline Runtime 动态库增量更新失败: ${error.message}", error)
+        }
+        check(stage.deleteRecursively()) { "Runtime 动态库已更新，但暂存目录清理失败: ${stage.absolutePath}" }
     }
 
     private fun readManifest(): NodeRuntimeManifest {
@@ -196,6 +372,7 @@ class NodeRuntimeInstaller(
     }
 
     private fun copyManifestFiles(manifest: NodeRuntimeManifest, staging: File) {
+        // modelAssets 只属于 APK 的显示端推理资产，不能在这里复制到 Node Runtime。
         for (entry in manifest.files) {
             val outputRelativePath = mapAssetPath(entry.path)
             val output = File(staging, outputRelativePath)
@@ -216,6 +393,13 @@ class NodeRuntimeInstaller(
             require(file.isFile) { "Runtime 文件未安装: ${entry.path}" }
             require(file.length() == entry.size) { "Runtime 文件大小校验失败: ${entry.path}" }
             require(sha256(file) == entry.sha256) { "Runtime 文件 SHA-256 校验失败: ${entry.path}" }
+        }
+    }
+
+    private fun validateInstalledFilePresence(manifest: NodeRuntimeManifest, staging: File) {
+        for (entry in manifest.files) {
+            val file = File(staging, mapAssetPath(entry.path))
+            require(file.isFile) { "Runtime 文件未安装: ${entry.path}" }
         }
     }
 
@@ -326,12 +510,7 @@ class NodeRuntimeInstaller(
                     require(Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$").matches(instanceId)) {
                         "任务 latest 实例 ID 不安全: $instanceId"
                     }
-                    val instanceDirectory = File(resultsDirectory, instanceId)
-                    val resultsPath = resultsDirectory.canonicalFile.toPath()
-                    require(instanceDirectory.canonicalFile.toPath().startsWith(resultsPath)) {
-                        "任务 latest 路径越界: $instanceId"
-                    }
-                    require(instanceDirectory.isDirectory) { "任务 latest 实例不存在: $instanceId" }
+                    val instanceDirectory = ensureTaskInstanceDirectory(resultsDirectory, instanceId)
                     val latest = File(resultsDirectory, "latest")
                     if (!latest.exists()) {
                         Files.createSymbolicLink(latest.toPath(), Paths.get(instanceId))

@@ -122,7 +122,12 @@ test('release profile 集成输入包含结果索引和选定模型', async (t) 
     assert.equal(manifestPaths.includes('server/res/tasks/demo-service/results/index.json'), true);
     assert.equal(manifestPaths.includes('server/res/tasks/demo-service/results/demo-1/run.log'), true);
     assert.equal(manifestPaths.includes('server/res/tasks/demo-service/results/latest.marker'), true);
-    assert.equal(manifestPaths.includes('server/res/models/llm/qwen-test/model.bin'), true);
+    assert.equal(manifestPaths.includes('server/res/models/llm/manifest.json'), true);
+    assert.equal(
+        prepared.manifest.modelAssets.some((file) => file.path === 'display-models/qwen-test/model.bin'),
+        true
+    );
+    assert.equal(manifestPaths.includes('server/res/models/llm/qwen-test/model.bin'), false);
     assert.equal(manifestPaths.includes('server/res/models/unselected/large.bin'), false);
     assert.equal(manifestPaths.includes('release-userconfig/userconfig.json'), true);
     assert.equal(manifestPaths.includes('apk-profile.json'), true);

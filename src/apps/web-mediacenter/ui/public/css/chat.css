@@ -74,6 +74,23 @@
     transform: scale(1.1);
 }
 
+.chat-think-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 50px;
+    padding: 4px 8px;
+    border: 1px solid rgba(160, 180, 255, 0.35);
+    border-radius: 4px;
+    background: rgba(102, 126, 234, 0.22);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.chat-think-btn:hover {
+    background: rgba(102, 126, 234, 0.45);
+}
+
 .chat-delete-round-btn {
     position: absolute;
     bottom: 8px;
@@ -608,6 +625,11 @@
     padding: 20px;
     overflow-y: auto;
     flex: 1;
+}
+
+.chat-think-modal-body {
+    overflow-wrap: anywhere;
+    line-height: 1.6;
 }
 
 .chat-template-item {

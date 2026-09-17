@@ -1,0 +1,19 @@
+{
+  "instances": [
+    {
+      "instanceId": "49daa29b",
+      "taskName": "test-echo",
+      "status": "completed",
+      "timestamp": 1783229844648,
+      "target": "server",
+      "env": "auto",
+      "mode": "one-shot",
+      "displayId": null,
+      "params": {},
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "completedAt": 1783229848692
+    }
+  ]
+}

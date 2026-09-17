@@ -81,13 +81,17 @@ test('offline APK 启动按录音、摄像头、通知顺序串行申请权限',
     assert.match(permissionCallback, /REQ_NOTIFICATION_PERMISSION\s*->\s*requestNextStartupPermission\(\)/u);
 });
 
-test('显示端布局将控制端按钮放在 WebView 容器的顶层', () => {
+test('显示端控制端按钮位于 WebView 容器左上角且保留浮层布局', () => {
     const layout = read('src/apps/android-display/app/src/main/res/layout/activity_main.xml');
     const strings = read('src/apps/android-display/app/src/main/res/values/strings.xml');
     const activity = read(
         'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
     );
-    assert.match(layout, /controlToggleButton/u);
+    const controlButton = layout.match(/<Button\s+android:id="@\+id\/controlToggleButton"[\s\S]*?\/>/u)?.[0];
+    assert.ok(controlButton, '控制端按钮应作为 webContainer 中的原生顶层按钮存在');
+    assert.match(controlButton, /android:layout_gravity="top\|start"/u);
+    assert.match(controlButton, /android:layout_margin="12dp"/u);
+    assert.match(controlButton, /android:elevation="12dp"/u);
     assert.match(activity, /controlPageUrl/u);
     assert.match(strings, /name="control_page">控制端/u);
 });
@@ -168,7 +172,7 @@ test('offline 启动遮罩不会被错误页 onPageFinished 隐藏', () => {
     assert.match(activity, /isDisplayPageUrl\(pageUrl, baseUrl\)/u);
 });
 
-test('离线 APK 将 Qwen MNNChat 作为默认模型并直接加载安装目录', () => {
+test('离线 APK 将 Qwen MNNChat 作为默认模型并按需物化显示端资产', () => {
     const bridge = read(
         'src/apps/android-display/app/src/main/java/com/aasc/display/NativeBridge.kt'
     );
@@ -185,12 +189,16 @@ test('离线 APK 将 Qwen MNNChat 作为默认模型并直接加载安装目录'
     assert.match(bridge, /DEFAULT_OFFLINE_LLM_MODEL_ID/u);
     assert.match(bridge, /ensureDefaultModel\(\)/u);
     assert.match(manager, /bundledModelId/u);
-    assert.match(manager, /aasc-server[\\/]res[\\/]models[\\/]llm/u);
+    assert.match(manager, /models[\\/]llm[\\/]bundled/u);
+    assert.match(manager, /AssetManager/u);
+    assert.match(manager, /ensureBundledModelFromAssets/u);
+    assert.match(manager, /bundledModelRoot\.isDirectory\s*\|\|\s*bundledModelRoot\.mkdirs\(\)/u);
     assert.match(manager, /remoteModelManager\.ensureModel/u);
     assert.match(manager, /candidate\.load\(modelDirectory\)/u);
     assert.match(activity, /NativeBridge\(wv, audioFocusController, offlineMode\)/u);
     assert.match(installer, /bundled-manifest\.json/u);
     assert.match(installer, /\.manifest\.json/u);
+    assert.match(installer, /modelAssets/u);
 });
 
 test('offline 原生 ASR/TTS 优先复用 aasc-server/res/models 且首次配置不覆盖用户数据', () => {

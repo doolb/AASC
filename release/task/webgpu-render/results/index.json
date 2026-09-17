@@ -1,0 +1,18 @@
+{
+  "instances": [
+    {
+      "instanceId": "9aded841",
+      "taskName": "webgpu-render",
+      "status": "failed",
+      "timestamp": 1779614921199,
+      "env": "auto",
+      "mode": "one-shot",
+      "displayId": "display-7tksfnsw",
+      "params": {},
+      "taskType": "user",
+      "builtinId": null,
+      "entryFile": "task.js",
+      "error": "浏览器不支持 WebGPU"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
-> 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，服务与 min 通道已发布并通过 LAN/WAN HTTP 清单及组件 hash 复验；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。min 原位升级、回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
+> 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，2026-09-17 修复后的 min v4（versionCode 4、`0.2.2-offline-min`）已正式发布到 LAN/WAN。两站点 manifest 字节一致且签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash、HTTP HEAD 和首段响应校验通过；min v4 的 APK SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`。full v2 APK 另已上传到外网 `apk/aasc-display-offline-v2.apk`，远端大小和完整 hash 与本地一致；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。2026-09-17 重新生成的 min v3 携带 `libaasc_node.so` 并原位安装成功，配置、任务目录和 LLM 模型缓存保留；回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
 
 ## 清单与签名伪代码
 
@@ -103,8 +103,10 @@ loadApkProfile(name):
 buildApk(profile):
     prepare Android MNN/JNI app libraries
     if profile.updateOnly:
-        do not prepare/copy Android server package or Node executable
+        do not prepare/copy Android server package into Runtime assets
         copy only REQUIRED_RUNTIME_LIBRARIES into runtime/arm64-v8a/lib
+        copy libaasc_node.so into Android jniLibs so an in-place APK update
+        keeps the Node launcher executable available after replacing nativeLibraryDir
         write runtime-manifest.updateOnly = true with exact file allowlist
         pass profile.versionCode/versionName to Gradle
     else:

@@ -305,6 +305,8 @@ android-display/
 
 ## 高 DPI 设备 WebView 页面缩放（2026-09-15）
 
+> 2026-09-16 真机复测发现本节的 density 反向缩放使 UI 偏小；历史实现保留供追溯。普通 APK 当前仍以“2026-09-16 尺寸基准校准”为准，Offline APK 以“2026-09-17 Offline 分辨率基准缩放”为准。
+
 ### 问题
 
 高 DPI 手机上，显示端的 `display.html`、`render-display` 任务覆盖层和 APK 内控制端通过 WebView 渲染时整体偏大。原因是页面使用固定 CSS 像素，而 Android WebView 按目标显示屏 density 计算页面缩放；现有 `textZoom=100` 只能约束文字，不能约束进度条、面板、按钮和其他布局尺寸。
@@ -322,6 +324,25 @@ android-display/
 - mdpi 显示屏保持 100% 初始缩放。
 - 非法或缺失 density 时回退 100%，不阻断 WebView 加载。
 - 浏览器控制端和浏览器显示端不经过 Android WebView，因此不改变其现有响应式布局。
+
+### 2026-09-16 尺寸基准校准
+
+真机复测发现，按 `160 / densityDpi` 设置 `WebView.setInitialScale()` 会把高密度页面进一步缩小。Android WebView 已将 CSS 像素按密度映射为密度无关的感知尺寸，而 `setInitialScale()` 本身不考虑屏幕 density；因此手动反向缩放与平台映射叠加后违背了“高分辨率保持原生分辨率、UI 与 720p/mdpi 感知尺寸一致”的目标。
+
+- 继续以 Android mdpi（160 dpi）感知尺寸作为基准，不按输出分辨率比例放大或缩小整个页面。
+- `DisplayWebView` 使用 100% 中性初始比例，不再读取 density 并按其反向缩放。
+- 保留页面 viewport、自适应布局、`textZoom=100` 和禁止手势缩放；布局可根据可用 viewport 重新排布。
+- 不修改设备物理/逻辑分辨率、媒体源分辨率、Native 截图像素、输入坐标协议或推理行为。
+- 显示页、`render-display` 覆盖层和 APK 控制页继续通过同一 WebView 策略获得一致的 CSS/dp 感知尺寸；浏览器页面不受影响。
+
+验证结果（2026-09-16）：策略实现、Android JVM 测试和 Offline APK 构建已完成；SM-N9500 覆盖安装在回收失败安装的临时 staging 后成功。高 DPI 内置屏幕的显示页和控制页截图可读，设备现有分辨率及 density 未更改。`render-display` 结构冒烟通过，其覆盖层与显示页使用同一 WebView；display 2 虚拟屏上的 Activity 已启动，但 Android 9 无法用 `screencap -d 2` 捕获该虚拟屏。
+
+### 2026-09-17 Offline 分辨率基准缩放
+
+- Offline APK 的 WebView 初始比例改为按所属 display Context 的长边像素计算：`round(长边 / 1280 × 100)`；长边 1280 像素为 100%。
+- 例如设备覆盖分辨率 `720x1480` 得到 116%，横屏与竖屏规则一致；普通 APK 继续固定 100%。
+- 宽高无效时回退 100%；不读取或修改 densityDpi，不改变截图像素、媒体源分辨率和输入坐标协议。
+- Android JVM 测试覆盖基准、等比例放大、四舍五入、普通 APK 和无效输入；`allserver-min` 快速包真机原位安装后服务和已有 code/dependencies v3 release 正常启动。
 
 ## 2026-08-26 CPU 配置导致 TTS 页面卡顿修复
 

@@ -334,24 +334,29 @@ mode='none' 占位文本按能力区分:
     跨域控制(绿) / 跨域控制降级(橙) / 不支持跨域控制(灰)
 ```
 
-## 高 DPI WebView 页面缩放伪代码
+## Offline WebView 按分辨率动态缩放伪代码
 
 ```text
-WebViewScalePolicy.initialScalePercent(densityDpi):
-    如果 densityDpi 不是正整数:
+WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels):
+    如果 offlineMode == false:
         返回 100
-    scale = round(160 * 100 / densityDpi)
-    返回 scale 限制在 [25, 100] 范围内
+    如果 widthPixels <= 0 或 heightPixels <= 0:
+        返回 100
+    longEdgePixels = max(widthPixels, heightPixels)
+    返回 max(1, round(longEdgePixels / 1280 * 100))
 
-DisplayWebView.init:
+DisplayWebView.init(context, offlineMode):
     设置 JavaScript、DOM 存储和媒体播放能力
     设置 textZoom = 100
     设置 useWideViewPort = false
     设置 loadWithOverviewMode = false
     禁止用户手势缩放
-    densityDpi = context.resources.displayMetrics.densityDpi
-    initialScale = WebViewScalePolicy.initialScalePercent(densityDpi)
+    metrics = context.resources.displayMetrics
+    initialScale = WebViewScalePolicy.initialScalePercent(
+        offlineMode, metrics.widthPixels, metrics.heightPixels
+    )
     调用 setInitialScale(initialScale)
+    由 Android WebView 按当前 display Context 的像素分辨率应用初始比例
 
 MainActivity.setupWebView:
     用 Activity 当前 display 的 Context 创建 display WebView
@@ -359,20 +364,39 @@ MainActivity.setupWebView:
     两个 WebView 都执行上述初始缩放策略
 
 显示端页面与 render-display 任务:
-    继续使用原始 CSS 像素和任务布局
-    WebView 统一页面缩放后，文字、按钮、进度条、任务覆盖层共同缩放
-    不修改 NativeDisplay 坐标、截图像素和媒体播放尺寸
+    保持页面 viewport 和响应式布局
+    通过平台 density 映射保持 CSS/dp 元素的感知尺寸
+    允许布局随 viewport 尺寸重新排布，不对整页应用 density 反向缩放
+    不修改设备分辨率、NativeDisplay 坐标、截图像素和媒体播放尺寸
 ```
 
-## 高 DPI 缩放测试伪代码
+## Offline 分辨率缩放测试伪代码
 
 ```text
-densityDpi = 160 -> 100%
-densityDpi = 320 -> 50%
-densityDpi = 560 -> 29%
-densityDpi <= 0 -> 100%
-结果始终是整数且不低于 25%
+initialScalePercent(true, 1280, 720) -> 100%
+initialScalePercent(true, 1920, 1080) -> 150%
+initialScalePercent(true, 720, 1480) -> 116%
+initialScalePercent(true, 0, 0) -> 100% 回退
+initialScalePercent(false, 任意有效分辨率) -> 100%
+屏幕物理/逻辑分辨率保持构建前的系统配置
+显示页、控制页和 render-display 内容不叠加 density 反向缩放
 ```
+
+2026-09-16 验证记录:
+    Android JVM 单测 141 项通过，0 failures/errors
+    render-display 结构冒烟通过
+    Offline APK allserver 构建与 ZIP 完整性检查通过
+    真机安装后设备 APK SHA-256 与构建产物一致
+    高 DPI 内置屏显示页、控制页截图验证；display 2 (1920x1080, 160 dpi) Activity 已启动
+    wm size/density 前后不变；未清除应用数据
+    Android 9 screencap 无法捕获 display 2 虚拟屏，未单独截图其 render-display 覆盖层
+
+2026-09-17 验证记录:
+    Android JVM 全量单测 166 项通过，0 failures/errors
+    Offline min v3 快速包包含 libaasc_node.so，ZIP 完整性和 APK 证书校验通过
+    SM-N9500 Android 9 原位安装后 active-release code/dependencies=3/3、pendingHealth=false
+    `/api/status`、`/v1/models`、默认模型 Chat Completions 和显示端 WebSocket 均通过
+    覆盖分辨率 720x1480 的 Offline 长边比例为 116%；wm size/density 前后不变
 
 ## 测试
 

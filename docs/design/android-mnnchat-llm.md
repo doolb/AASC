@@ -62,7 +62,7 @@
               └─ llm.chunk / llm.completed / llm.error
 ```
 
-主服务器是唯一的 OpenAI 协议入口和正式 APK 模型分发入口。APK 显示端只通过已经存在的主服务器显示 WebSocket 接收推理请求，并通过同一连接返回结果；内置 Node.js 子服务器不承载 LLM 协议入口，也不直接访问 ModelScope。offline APK 的模型文件由构建脚本写入 assets，再由 `NodeRuntimeInstaller` 解压到 `filesDir/aasc-server/res/models/llm`；aapt 不支持的隐藏模型 marker 以 `bundled-manifest.json` 打包，安装时仅恢复一个 marker 为 `.manifest.json`，MNN native 直接接收该真实目录，不再复制权重到 `filesDir/models/llm/active`。离线任务只打包可被 Android assets 支持的任务定义，不打包运行时生成的 `.task-links.json`，首次启动缺少该文件时按空任务链运行。
+主服务器是唯一的 OpenAI 协议入口和正式 APK 模型分发入口。APK 显示端只通过已经存在的主服务器显示 WebSocket 接收推理请求，并通过同一连接返回结果；内置 Node.js 子服务器不承载 LLM 协议入口，也不直接访问 ModelScope。offline APK 的 LLM 权重由构建脚本写入独立的 `display-models` assets，Node Runtime 只安装 LLM 清单元数据，不释放权重到 `filesDir/aasc-server/res/models/llm`；显示端首次推理时才将选定模型物化到 `filesDir/models/llm/bundled/<modelId>`，再交给 MNN native 加载。aapt 不支持的隐藏模型 marker 以 `bundled-manifest.json` 打包，显示端复制后恢复为 `.manifest.json`。离线任务只打包可被 Android assets 支持的任务定义，不打包运行时生成的 `.task-links.json`，首次启动缺少该文件时按空任务链运行。
 
 ## MNN 引擎集成
 
@@ -455,7 +455,7 @@ Android 子服务器保留“禁止创建服务端子进程”的能力边界，
 
 offline APK 的 Node 启动完成任务引擎恢复后，调用通用的内置服务确保入口自动创建并运行 `llm-server` 实例。已有 running 实例复用，失败或停止历史不覆盖，首次启动会写入普通任务实例索引，后续重启沿用任务恢复流程。
 
-offline APK 构建时从当前 `config/config.json` 只提取 `llm` 和 `chat` 配置为首次安装种子；安装器仅在 `files/aasc-server/config/config.json` 不存在时写入，已有用户配置永不覆盖。原生 ASR/TTS 在 offline 模式将模型目录指向 `files/aasc-server/res/models/sensevoice` 和 `files/aasc-server/res/models/tts`，不再在 `files/models` 生成第二份；内置模型校验失败时保留资源并报告错误，不删除 APK 解包的模型。
+offline APK 构建时从当前 `config/config.json` 只提取 `llm` 和 `chat` 配置为首次安装种子；安装器仅在 `files/aasc-server/config/config.json` 不存在时写入，已有用户配置永不覆盖。原生 ASR/TTS 在 offline 模式将模型目录指向 `files/aasc-server/res/models/sensevoice` 和 `files/aasc-server/res/models/tts`，不再在 `files/models` 生成第二份；LLM 权重则保留在 `display-models` assets，并由显示端按需物化到 `files/models/llm/bundled/<modelId>`。内置模型校验失败时保留已有完整缓存并报告错误。
 ## 外部模型名映射
 
 主服务器允许 OpenAI 兼容客户端使用外部模型名，服务端在请求进入路由前解析为模型清单中的内部 `modelId`。模型别名只影响网关请求入口，APK、显示端状态和模型下载始终使用内部 `modelId`。

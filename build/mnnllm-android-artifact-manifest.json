@@ -3,7 +3,7 @@
   "status": "ready",
   "revision": "d407447ed56c4121a11ccbd266dc184ca1ead0c2",
   "root": "/mnt/AASC/build/third_party/MNN",
-  "generatedAt": "2026-09-13T09:39:15.119Z",
+  "generatedAt": "2026-09-17T04:52:34.434Z",
   "source": "https://github.com/alibaba/MNN",
   "buildScript": "/mnt/AASC/build/third_party/MNN/project/android/build_64.sh"
 }
