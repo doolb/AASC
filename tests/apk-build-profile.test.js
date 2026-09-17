@@ -80,8 +80,8 @@ test('allserver-min profile 是 update-only、无模型并使用递增 APK 版�
     assert.equal(profile.embeddedNode, true);
     assert.equal(profile.updateOnly, true);
     assert.deepEqual(profile.models, []);
-    assert.equal(profile.versionCode, 4);
-    assert.equal(profile.versionName, '0.2.2-offline-min');
+    assert.equal(profile.versionCode, 6);
+    assert.equal(profile.versionName, '0.2.4-offline-min');
 });
 
 test('allserver-min 必须显式声明 updateOnly 且不得内置模型', async (t) => {

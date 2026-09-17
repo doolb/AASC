@@ -1,6 +1,6 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
-> 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，2026-09-17 修复后的 min v4（versionCode 4、`0.2.2-offline-min`）已正式发布到 LAN/WAN。两站点 manifest 字节一致且签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash、HTTP HEAD 和首段响应校验通过；min v4 的 APK SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`。full v2 APK 另已上传到外网 `apk/aasc-display-offline-v2.apk`，远端大小和完整 hash 与本地一致；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。2026-09-17 重新生成的 min v3 携带 `libaasc_node.so` 并原位安装成功，配置、任务目录和 LLM 模型缓存保留；回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
+> 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，2026-09-17 修复后的 min v4（versionCode 4、`0.2.2-offline-min`）已正式发布到 LAN/WAN。两站点 manifest 字节一致且签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash、HTTP HEAD 和首段响应校验通过；min v4 的 APK SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`。full v2 APK 另已上传到外网 `apk/aasc-display-offline-v2.apk`，远端大小和完整 hash 与本地一致；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。2026-09-17 重新生成的 min v3 携带 `libaasc_node.so` 并原位安装成功，配置、任务目录和 LLM 模型缓存保留；发布器已支持双站点精确清理旧 code/dependencies/min/full 版本。固定 ID/Chat2API 完成按钮对应的 min v6（versionCode 6、`0.2.4-offline-min`）已正式发布到 LAN/WAN，包含 Offline 任务索引迁移逻辑；APK SHA-256 为 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest 字节一致、签名有效、HTTP APK 返回 200 且 Content-Length 正确。回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
 
 ## 清单与签名伪代码
 
@@ -48,7 +48,7 @@ prepareOfflineApk(profile):
         never copy keyPair.privateKeyPem to APK assets or Runtime
 ```
 
-依赖归档在 ZIP 前移除 npm 生成的每层 `node_modules/.bin` 工具软链接目录；其他依赖符号链接和特殊文件均拒绝。发布器先校验本地归档，代码-only 还要求目标已有 hash 匹配的依赖包；版本化归档先安装，清单最后用临时文件原子替换。HTTP 复验流式计算清单内组件的 SHA-256。
+依赖归档在 ZIP 前移除 npm 生成的每层 `node_modules/.bin` 工具软链接目录；其他依赖符号链接和特殊文件均拒绝。发布器先校验本地归档，代码-only 还要求目标已有 hash 匹配的依赖包；版本化归档先安装，清单最后用临时文件原子替换。HTTP 复验流式计算清单内组件的 SHA-256；完整 APK 使用远端 hash/HTTP HEAD 校验，不写入服务更新清单。远端清理脚本通过 `/bin/sh -c` 执行，清理参数使用固定字符集，避免 fish 登录 shell 改变参数含义。
 
 ## 服务更新构建伪代码
 
@@ -118,6 +118,33 @@ buildApk(profile):
 ## 发布伪代码
 
 ```text
+CleanupPolicy:
+    codePattern = code/code-v<digits>.zip
+    dependencyPattern = dependencies/dependencies-v<digits>.zip
+    minApkPattern = apk/aasc-display-offline-min-v<digits>.apk
+    fullApkPattern = apk/aasc-display-offline-v<digits>.apk
+    never match manifest.json, symlinks, directories, logs, models, config,
+        tasks, results, temporary files or any other name
+
+cleanupPublishedArtifacts(targetRoot, signedManifest, currentFullApk? ):
+    keep code.relativeUrl from signedManifest
+    keep dependencies.relativeUrl from signedManifest
+    keep apkMin.relativeUrl when present
+    if currentFullApk is provided: keep it
+    full APK cleanup requires the current full APK path supplied by publishOfflineFullApk
+    for each regular file directly below code/dependencies/apk:
+        if exact CleanupPolicy pattern matches and file is not a keep path:
+            unlink only that file
+    do not follow or remove symlinks
+
+cleanupRemotePublishedArtifacts(remoteRoot, signedManifest, currentFullApk?):
+    execute the same exact-name and regular-file checks with /bin/sh -c
+    if unlink fails: report a retryable cleanup error without changing manifest
+
+aiOfflineExecutionRules:
+    read repository CLAUDE.md and AGENTS.md before changing Offline packaging/publishing
+    keep their Offline APK rules synchronized with this design and spec
+
 publishOfflineUpdate(mode):
     verify every local artifact against signed manifest
     localRoot = /mnt/aasc-offline
@@ -127,18 +154,33 @@ publishOfflineUpdate(mode):
         if mode == "all": upload versioned dependencies archive
         upload signed manifest to manifest.json.tmp-<publishId>
         atomically rename temporary manifest to manifest.json
+        verify target manifest and component hashes
+        cleanupPublishedArtifacts(target, manifest)
+
+publishOfflineFullApk(apkPath, buildManifest):
+    require buildManifest.profile == allserver and updateOnly != true
+    read numeric versionCode from buildManifest
+    targetRelativeUrl = apk/aasc-display-offline-v<versionCode>.apk
+    validate apkPath as regular file and calculate size/SHA-256
+    for target in [localRoot, remoteRoot]:
+        upload targetRelativeUrl atomically without changing manifest.json
+        verify remote/local file hash and HTTP HEAD content length
+        cleanup exact fullApkPattern files except targetRelativeUrl
 
 remoteCommand(host, posixScript):
     # 远端默认 shell 可能不是 POSIX shell（当前主机为 fish）
     execute ssh host /bin/sh -c shellQuote(posixScript)
     before the final rename, set the public manifest temporary file mode to 0644
-    never remove files outside this release's unique versioned names
+    cleanup only exact old versioned artifacts after HTTP verification
     never overwrite the existing aasc-display-offline.apk symlink
 
 publisherCli(argv):
     outputRoot = argv.outputDir or projectRoot/release/offline-update/output
     resolve outputRoot before validating local artifacts
-    invoke publishOfflineUpdate with outputRoot
+    if mode == apk-full:
+        invoke publishOfflineFullApk with --apk and --build-manifest
+    else:
+        invoke publishOfflineUpdate with outputRoot
 ```
 
 The min APK publisher uploads a versioned APK to both targets, then replaces the signed manifest with an updated `apkMin` entry. A failed target remains on its prior signed manifest; a device still verifies every component before applying it.
@@ -252,6 +294,42 @@ offerMinApkUpdate(manifest, currentPackageInfo):
         after returning, reuse verified metadata; do not require another network request
     launch Android PackageInstaller with user confirmation
 
+showMinApkUpdatePrompt(metadata):
+    render floating card with versionName, versionCode and artifact.size
+    card actions = ["下载更新", "稍后"]
+    do not create APK .part file before "下载更新"
+
+onDownloadUpdateClicked():
+    set card phase = "downloading", progress = 0
+    OfflineUpdateManager.checkAndPrepareMinApkUpdate(root, onProgress)
+    onProgress(phase, completedBytes, totalBytes):
+        post to MainActivity main thread
+        update floating progress bar and received/total text
+    after SHA-256 and APK metadata checks:
+        set phase = "installing"
+        submit PackageInstaller session
+    on STATUS_PENDING_USER_ACTION:
+        let Android system display its confirmation page
+    on STATUS_SUCCESS:
+        show "更新完成" and dismiss card after a short delay
+    on failure:
+        show error and "重试", retain current APK and service data
+
+runtimeInstallProgress:
+    phase = "reading_manifest"
+    phase = "runtime_libraries" with copiedBytes / phaseTotalBytes
+    phase = "server_source" with copiedBytes / phaseTotalBytes
+    phase = "node_dependencies" with copiedBytes / phaseTotalBytes
+    phase = "config_and_metadata" with copiedBytes / phaseTotalBytes
+    phase = "starting_node"
+    if installed Runtime is reusable:
+        report phase = "reused" and progress = 100
+
+NodeServerService.sendStatus(status, detail, phase?, completedBytes?, totalBytes?):
+    broadcast only to this package
+    MainActivity renders phase/detail on the existing startup panel
+    never report a completed phase before its files are durable
+
 MainActivity.onNodeStatus(STARTING):
     once per Activity process, run min APK check/download/model materialization off the UI thread
     return to UI thread with result
@@ -288,7 +366,11 @@ Node package tests:
     code-only rejects changed lock fingerprint and preserves deployed dependencies entry
     all output contains code and Android production dependencies with matching lock hash
     manifest signature fails after any signed field changes
-    publish writes packages before manifest and leaves unrelated files/symlinks unchanged
+    publish writes packages before manifest, cleans only stale exact versioned files,
+        and leaves unrelated files/symlinks unchanged
+    code/dependencies/min cleanup keeps the manifest-referenced versions on LAN and WAN
+    full APK publish keeps the selected version and removes only older full APK versions
+    cleanup failure preserves the verified manifest and reports a retryable error
 
 Android JVM tests:
     LAN success, LAN timeout to WAN fallback, both unavailable -> current release

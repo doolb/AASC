@@ -4,6 +4,8 @@ package com.aasc.display
 object ServerConfig {
 
     const val DEFAULT_OFFLINE_SERVER_URL = "https://127.0.0.1:8081"
+    // Offline APK 与 release 任务之间使用的专用显示端身份，普通 APK 不使用该值。
+    const val OFFLINE_DISPLAY_ID = "offline-display"
 
     fun chooseUrl(intentUrl: String?, savedUrl: String?, offlineMode: Boolean = false): String {
         val injected = intentUrl?.trim().orEmpty()
@@ -17,15 +19,20 @@ object ServerConfig {
      * 将配置地址转换为 APK 要加载的正式显示页面。
      * 普通主机地址仍然默认进入 display，兼容既有部署参数。
      */
-    fun pageUrl(input: String): String {
+    fun pageUrl(input: String, displayId: String? = null): String {
         val value = input.trim()
         if (value.isEmpty()) return ""
         val withScheme = if (value.startsWith("http://") || value.startsWith("https://")) value else "https://$value"
         val path = withScheme.substringBefore('?').trimEnd('/')
-        return when {
-            path.endsWith("/display") -> withScheme
-            else -> "$withScheme/display"
+        val query = withScheme.substringAfter('?', "")
+        val displayPath = if (path.endsWith("/display")) path else "$path/display"
+        val queryParts = query.split('&').filter { it.isNotBlank() }.toMutableList()
+        val normalizedDisplayId = displayId?.trim().orEmpty()
+        if (normalizedDisplayId.isNotEmpty()) {
+            queryParts.removeAll { it.substringBefore('=').equals("displayId", ignoreCase = true) }
+            queryParts += "displayId=$normalizedDisplayId"
         }
+        return if (queryParts.isEmpty()) displayPath else "$displayPath?${queryParts.joinToString("&")}"
     }
 
     fun controlPageUrl(input: String): String {

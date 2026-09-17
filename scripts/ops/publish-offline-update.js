@@ -17,6 +17,12 @@ const projectRoot = path.resolve(__dirname, '../..');
 const DEFAULT_LOCAL_ROOT = '/mnt/aasc-offline';
 const DEFAULT_LOCAL_VERIFY_URL = 'http://192.168.1.39/mnt/aasc-offline/';
 const DEFAULT_WAN_VERIFY_URL = 'http://120.79.245.103/mnt/aasc-offline/';
+const CLEANUP_RULES = Object.freeze([
+    { componentName: 'code', directory: 'code', prefix: 'code-v', suffix: '.zip' },
+    { componentName: 'dependencies', directory: 'dependencies', prefix: 'dependencies-v', suffix: '.zip' },
+    { componentName: 'apkMin', directory: 'apk', prefix: 'aasc-display-offline-min-v', suffix: '.apk' },
+    { componentName: 'apkFull', directory: 'apk', prefix: 'aasc-display-offline-v', suffix: '.apk' }
+]);
 
 async function sha256File(filePath) {
     const hash = crypto.createHash('sha256');
@@ -25,8 +31,8 @@ async function sha256File(filePath) {
 }
 
 function validateMode(mode) {
-    if (!['code-only', 'all', 'apk-min'].includes(mode)) {
-        throw new Error('发布模式必须是 code-only、all 或 apk-min');
+    if (!['code-only', 'all', 'apk-min', 'apk-full'].includes(mode)) {
+        throw new Error('发布模式必须是 code-only、all、apk-min 或 apk-full');
     }
 }
 
@@ -47,6 +53,126 @@ function getPublishComponents(manifest, mode) {
     const selected = [components.code];
     if (mode === 'all') selected.push(components.dependencies);
     return selected;
+}
+
+function getCleanupRule(relativePath) {
+    return CLEANUP_RULES.find((rule) => {
+        const directoryPrefix = `${rule.directory}/`;
+        if (!relativePath.startsWith(directoryPrefix)) return false;
+        return parseVersionedFileName(relativePath.slice(directoryPrefix.length), rule) !== null;
+    }) || null;
+}
+
+function parseVersionedFileName(fileName, rule) {
+    if (!fileName.startsWith(rule.prefix) || !fileName.endsWith(rule.suffix)) return null;
+    const version = fileName.slice(rule.prefix.length, -rule.suffix.length);
+    if (!/^\d+$/.test(version)) return null;
+    return { fileName, version };
+}
+
+function createCleanupSpecifications(manifest, options = {}) {
+    const components = manifest?.payload?.components || {};
+    const specifications = [];
+    const componentNames = options.includeApkMin === false
+        ? ['code', 'dependencies']
+        : ['code', 'dependencies', 'apkMin'];
+    for (const componentName of componentNames) {
+        const component = components[componentName];
+        if (!component || typeof component.relativeUrl !== 'string') continue;
+        const rule = CLEANUP_RULES.find((candidate) => candidate.componentName === componentName);
+        if (!rule || !getCleanupRule(component.relativeUrl)) continue;
+        specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
+    }
+    if (options.includeFullApk) {
+        const currentFullApkRelativeUrl = options.currentFullApkRelativeUrl;
+        if (typeof currentFullApkRelativeUrl !== 'string') {
+            throw new Error('完整 APK 清理必须指定当前 full APK 相对路径');
+        }
+        const rule = CLEANUP_RULES.find((candidate) => candidate.componentName === 'apkFull');
+        if (!getCleanupRule(currentFullApkRelativeUrl) || getCleanupRule(currentFullApkRelativeUrl) !== rule) {
+            throw new Error(`完整 APK 相对路径不符合版本命名规则: ${currentFullApkRelativeUrl}`);
+        }
+        specifications.push({ ...rule, keepRelativePath: currentFullApkRelativeUrl });
+    }
+    return specifications;
+}
+
+async function readDirectoryEntries(directoryPath) {
+    try {
+        return await fs.promises.readdir(directoryPath, { withFileTypes: true });
+    } catch (error) {
+        if (error.code === 'ENOENT') return [];
+        throw error;
+    }
+}
+
+async function cleanupLocalPublishedArtifacts(rootDirectory, manifest, options = {}) {
+    const rootPath = path.resolve(rootDirectory);
+    const result = { removedRelativePaths: [], errors: [] };
+    if (rootPath === path.parse(rootPath).root) {
+        result.errors.push({ relativePath: '.', message: `拒绝清理文件系统根目录: ${rootPath}` });
+        return result;
+    }
+    const rootStat = await fs.promises.lstat(rootPath).catch((error) => {
+        if (error.code === 'ENOENT') return null;
+        result.errors.push({ relativePath: '.', message: error.message });
+        return null;
+    });
+    if (!rootStat) return result;
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+        result.errors.push({ relativePath: '.', message: `清理目标根目录不是普通目录: ${rootPath}` });
+        return result;
+    }
+    let specifications;
+    try {
+        specifications = createCleanupSpecifications(manifest, options);
+    } catch (error) {
+        result.errors.push({ relativePath: '.', message: error.message });
+        return result;
+    }
+    for (const specification of specifications) {
+        const directoryPath = path.join(rootPath, specification.directory);
+        const directoryStat = await fs.promises.lstat(directoryPath).catch((error) => {
+            if (error.code === 'ENOENT') return null;
+            result.errors.push({ relativePath: specification.directory, message: error.message });
+            return null;
+        });
+        if (!directoryStat) continue;
+        if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+            result.errors.push({
+                relativePath: specification.directory,
+                message: `清理目录不是普通目录: ${directoryPath}`
+            });
+            continue;
+        }
+        let entries;
+        try {
+            entries = await readDirectoryEntries(directoryPath);
+        } catch (error) {
+            result.errors.push({ relativePath: specification.directory, message: error.message });
+            continue;
+        }
+        for (const entry of entries) {
+            if (entry.isSymbolicLink() || !entry.isFile()) continue;
+            const parsed = parseVersionedFileName(entry.name, specification);
+            if (!parsed) continue;
+            const relativePath = `${specification.directory}/${entry.name}`;
+            if (relativePath === specification.keepRelativePath) continue;
+            const filePath = path.join(directoryPath, entry.name);
+            const fileStat = await fs.promises.lstat(filePath).catch((error) => {
+                result.errors.push({ relativePath, message: error.message });
+                return null;
+            });
+            if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) continue;
+            try {
+                await fs.promises.unlink(filePath);
+                result.removedRelativePaths.push(relativePath);
+            } catch (error) {
+                result.errors.push({ relativePath, message: error.message });
+            }
+        }
+    }
+    return result;
 }
 
 function resolveArtifactPath(artifactRoot, relativePath) {
@@ -188,8 +314,72 @@ function quoteRemoteShellArgument(value) {
     return `'${String(value).replaceAll("'", "'\\\"'\\\"'")}'`;
 }
 
+function quoteRemoteCleanupArgument(value) {
+    const text = String(value);
+    if (!/^[A-Za-z0-9_.\/-]+$/.test(text)) {
+        throw new Error(`远端清理参数包含非法字符: ${text}`);
+    }
+    // 清理参数只来自固定规则和已经校验过的版本文件名，使用双引号避免
+    // 嵌套在登录 shell 的单引号脚本中时被 fish 重新解释。
+    return `"${text}"`;
+}
+
 function buildRemoteShellArguments(command) {
     return ['/bin/sh', '-c', quoteRemoteShellArgument(command)];
+}
+
+function buildRemoteCleanupCommand(remote, manifest, options = {}) {
+    assertRemoteTarget(remote);
+    const specifications = createCleanupSpecifications(manifest, options);
+    if (specifications.length === 0) return null;
+    const lines = [
+        'set -eu',
+        remoteRootAssignment(remote.directory),
+        'cleanup_versioned_files() {',
+        '  directory="$1"',
+        '  prefix="$2"',
+        '  suffix="$3"',
+        '  keep="$4"',
+        '  directory_path="$root/$directory"',
+        '  [ -d "$directory_path" ] || return 0',
+        '  [ -L "$directory_path" ] && return 0',
+        '  for file in "$directory_path"/*; do',
+        '    [ -e "$file" ] || continue',
+        '    [ -L "$file" ] && continue',
+        '    [ -f "$file" ] || continue',
+        '    name=${file##*/}',
+        '    case "$name" in',
+        '      "$prefix"*"$suffix") ;;',
+        '      *) continue ;;',
+        '    esac',
+        '    version=${name#"$prefix"}',
+        '    version=${version%"$suffix"}',
+        '    case "$version" in',
+        '      ""|*[!0-9]*) continue ;;',
+        '    esac',
+        '    [ "$name" = "$keep" ] && continue',
+        '    rm -- "$file"',
+        '  done',
+        '}'
+    ];
+    for (const specification of specifications) {
+        const keepFileName = path.posix.basename(specification.keepRelativePath);
+        lines.push([
+            'cleanup_versioned_files',
+            quoteRemoteCleanupArgument(specification.directory),
+            quoteRemoteCleanupArgument(specification.prefix),
+            quoteRemoteCleanupArgument(specification.suffix),
+            quoteRemoteCleanupArgument(keepFileName)
+        ].join(' '));
+    }
+    return lines.join('\n');
+}
+
+async function cleanupRemotePublishedArtifacts(commandRunner, remote, manifest, options = {}) {
+    const command = buildRemoteCleanupCommand(remote, manifest, options);
+    if (!command) return { removedRelativePaths: [], errors: [] };
+    await runRemoteCommand(commandRunner, remote.host, command);
+    return { removedRelativePaths: [], errors: [] };
 }
 
 async function runRemoteCommand(commandRunner, host, command) {
@@ -306,9 +496,122 @@ async function verifyHttpTarget(baseUrl, manifest, publicKeyPem, fetchImpl = glo
     }
 }
 
+async function verifyHttpArtifactHead(baseUrl, relativePath, expected, fetchImpl = globalThis.fetch) {
+    if (typeof fetchImpl !== 'function') throw new Error('当前 Node.js 不提供 HTTP fetch，无法校验完整 APK 发布目标');
+    const response = await fetchImpl(new URL(relativePath, baseUrl), { method: 'HEAD' });
+    if (!response.ok) {
+        throw new Error(`HTTP 无法读取已发布完整 APK: ${response.status} ${baseUrl}`);
+    }
+    const contentLength = response.headers?.get?.('content-length');
+    if (contentLength === null || contentLength === undefined || contentLength === '') {
+        throw new Error(`HTTP 完整 APK 响应缺少 Content-Length: ${baseUrl}`);
+    }
+    if (Number(contentLength) !== expected.size) {
+        throw new Error(`HTTP 完整 APK Content-Length 不匹配: ${baseUrl}`);
+    }
+    return { size: Number(contentLength) };
+}
+
+function validateFullApkBuildManifest(buildManifest) {
+    if (!buildManifest || typeof buildManifest !== 'object') {
+        throw new Error('完整 APK build manifest 必须是对象');
+    }
+    if (buildManifest.profile !== 'allserver' || buildManifest.updateOnly !== false) {
+        throw new Error('完整 APK 发布只接受 allserver 且 updateOnly=false 的构建产物');
+    }
+    if (!Number.isSafeInteger(buildManifest.versionCode) || buildManifest.versionCode <= 0) {
+        throw new Error('完整 APK build manifest 的 versionCode 必须是正整数');
+    }
+    return buildManifest;
+}
+
+async function readFullApkMetadata(apkPath, buildManifestPath) {
+    const buildManifest = validateFullApkBuildManifest(
+        JSON.parse(await fs.promises.readFile(path.resolve(buildManifestPath), 'utf8'))
+    );
+    const sourcePath = path.resolve(apkPath);
+    const sourceStat = await fs.promises.lstat(sourcePath);
+    if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+        throw new Error(`完整 APK 必须是普通文件: ${sourcePath}`);
+    }
+    if (buildManifest.apk && path.basename(buildManifest.apk) !== path.basename(sourcePath)) {
+        throw new Error(`完整 APK 文件名与 build manifest 不一致: ${sourcePath}`);
+    }
+    const relativeUrl = `apk/aasc-display-offline-v${buildManifest.versionCode}.apk`;
+    const metadata = {
+        versionCode: buildManifest.versionCode,
+        versionName: buildManifest.versionName,
+        relativeUrl,
+        size: sourceStat.size,
+        sha256: await sha256File(sourcePath)
+    };
+    validateRelativePath(relativeUrl);
+    return { sourcePath, buildManifest, metadata };
+}
+
+async function publishOfflineFullApk(options = {}) {
+    const apkPath = options.apkPath;
+    const buildManifestPath = options.buildManifestPath;
+    if (!apkPath || !buildManifestPath) {
+        throw new Error('完整 APK 发布必须指定 apkPath 和 buildManifestPath');
+    }
+    const { sourcePath, buildManifest, metadata } = await readFullApkMetadata(apkPath, buildManifestPath);
+    const publishId = `${Date.now()}-${process.pid}`;
+    const localRoot = options.localRoot ? path.resolve(options.localRoot) : null;
+    const remote = options.remote || null;
+    if (!localRoot && !remote) throw new Error('至少指定 localRoot 或 remote 发布目标');
+    if (remote) assertRemoteTarget(remote);
+    const localPublishedPaths = [];
+    const remotePublishedPaths = [];
+    const cleanupErrors = [];
+
+    if (localRoot) {
+        await installLocalArtifact(sourcePath, localRoot, metadata.relativeUrl, metadata, publishId);
+        localPublishedPaths.push(metadata.relativeUrl);
+        if (options.localVerifyUrl) {
+            await verifyHttpArtifactHead(options.localVerifyUrl, metadata.relativeUrl, metadata, options.fetchImpl);
+        }
+        const cleanupResult = await cleanupLocalPublishedArtifacts(localRoot, null, {
+            includeApkMin: false,
+            includeFullApk: true,
+            currentFullApkRelativeUrl: metadata.relativeUrl
+        });
+        cleanupErrors.push(...cleanupResult.errors.map((error) => ({ target: 'local', ...error })));
+    }
+
+    if (remote) {
+        const commandRunner = options.commandRunner || execFileAsync;
+        await installRemoteArtifact(commandRunner, remote, sourcePath, metadata.relativeUrl, metadata, publishId);
+        remotePublishedPaths.push(metadata.relativeUrl);
+        if (options.remoteVerifyUrl) {
+            await verifyHttpArtifactHead(options.remoteVerifyUrl, metadata.relativeUrl, metadata, options.fetchImpl);
+        }
+        try {
+            await cleanupRemotePublishedArtifacts(commandRunner, remote, null, {
+                includeApkMin: false,
+                includeFullApk: true,
+                currentFullApkRelativeUrl: metadata.relativeUrl
+            });
+        } catch (error) {
+            cleanupErrors.push({ target: 'remote', relativePath: '.', message: error.message });
+        }
+    }
+    return {
+        buildManifest,
+        metadata,
+        publishedRelativePaths: localRoot ? localPublishedPaths : remotePublishedPaths,
+        localPublishedPaths,
+        remotePublishedPaths,
+        cleanupErrors
+    };
+}
+
 async function publishOfflineUpdate(options = {}) {
     const mode = String(options.mode || '').trim();
     validateMode(mode);
+    if (mode === 'apk-full') {
+        throw new Error('apk-full 必须使用 publishOfflineFullApk，并提供完整 APK build manifest');
+    }
     const artifactRoot = path.resolve(options.artifactRoot || '');
     const manifestPath = path.resolve(options.manifestPath || '');
     const keyPair = options.publicKeyPem ? null : await loadOfflineUpdateKeyPair(options);
@@ -337,6 +640,7 @@ async function publishOfflineUpdate(options = {}) {
     if (remote) assertRemoteTarget(remote);
     const localPublishedPaths = [];
     const remotePublishedPaths = [];
+    const cleanupErrors = [];
 
     if (localRoot) {
         for (const component of preserved) {
@@ -355,6 +659,8 @@ async function publishOfflineUpdate(options = {}) {
         if (options.localVerifyUrl) {
             await verifyHttpTarget(options.localVerifyUrl, manifest, publicKeyPem, options.fetchImpl);
         }
+        const cleanupResult = await cleanupLocalPublishedArtifacts(localRoot, manifest);
+        cleanupErrors.push(...cleanupResult.errors.map((error) => ({ target: 'local', ...error })));
     }
 
     if (remote) {
@@ -374,21 +680,47 @@ async function publishOfflineUpdate(options = {}) {
         if (options.remoteVerifyUrl) {
             await verifyHttpTarget(options.remoteVerifyUrl, manifest, publicKeyPem, options.fetchImpl);
         }
+        try {
+            await cleanupRemotePublishedArtifacts(commandRunner, remote, manifest);
+        } catch (error) {
+            cleanupErrors.push({ target: 'remote', relativePath: '.', message: error.message });
+        }
     }
     return {
         manifest,
         publishedRelativePaths: localRoot ? localPublishedPaths : remotePublishedPaths,
         localPublishedPaths,
-        remotePublishedPaths
+        remotePublishedPaths,
+        cleanupErrors
     };
 }
 
 async function runCli(argv = process.argv.slice(2)) {
     try {
         const options = parsePublisherCliArguments(argv);
+        if (!options.remoteDir) throw new Error('外网 SCP 路径尚未确认；请通过 --remote-dir 显式指定目标目录');
+        const remote = { host: 'as@120.79.245.103', directory: options.remoteDir };
+        if (options.mode === 'apk-full') {
+            if (!options.apk || !options.buildManifest) {
+                throw new Error('完整 APK 发布必须通过 --apk 和 --build-manifest 指定输入文件');
+            }
+            const result = await publishOfflineFullApk({
+                apkPath: path.resolve(options.apk),
+                buildManifestPath: path.resolve(options.buildManifest),
+                localRoot: options.localRoot || DEFAULT_LOCAL_ROOT,
+                remote,
+                localVerifyUrl: DEFAULT_LOCAL_VERIFY_URL,
+                remoteVerifyUrl: DEFAULT_WAN_VERIFY_URL
+            });
+            console.log(`局域网已发布: ${result.localPublishedPaths.join(', ')}`);
+            console.log(`外网已发布: ${result.remotePublishedPaths.join(', ')}`);
+            if (result.cleanupErrors.length > 0) {
+                console.warn(`Offline 旧资源清理待重试: ${JSON.stringify(result.cleanupErrors)}`);
+            }
+            return;
+        }
         const keyPair = await loadOfflineUpdateKeyPair();
         if (!options.manifestFile) throw new Error('发布必须通过 --manifest-file 指定本次签名清单');
-        if (!options.remoteDir) throw new Error('外网 SCP 路径尚未确认；请通过 --remote-dir 显式指定目标目录');
         const outputDir = options.outputDir || path.join(projectRoot, 'release/offline-update/output');
         const result = await publishOfflineUpdate({
             mode: options.mode,
@@ -396,12 +728,15 @@ async function runCli(argv = process.argv.slice(2)) {
             manifestPath: path.resolve(options.manifestFile),
             publicKeyPem: keyPair.publicKeyPem,
             localRoot: options.localRoot || DEFAULT_LOCAL_ROOT,
-            remote: { host: 'as@120.79.245.103', directory: options.remoteDir },
+            remote,
             localVerifyUrl: DEFAULT_LOCAL_VERIFY_URL,
             remoteVerifyUrl: DEFAULT_WAN_VERIFY_URL
         });
         console.log(`局域网已发布: ${result.localPublishedPaths.join(', ')}`);
         console.log(`外网已发布: ${result.remotePublishedPaths.join(', ')}`);
+        if (result.cleanupErrors.length > 0) {
+            console.warn(`Offline 旧资源清理待重试: ${JSON.stringify(result.cleanupErrors)}`);
+        }
     } catch (error) {
         console.error(`Offline 更新发布失败: ${error.message}`);
         process.exitCode = 1;
@@ -409,7 +744,9 @@ async function runCli(argv = process.argv.slice(2)) {
 }
 
 function parsePublisherCliArguments(argv) {
-    const supported = new Set(['mode', 'output-dir', 'manifest-file', 'remote-dir', 'local-root']);
+    const supported = new Set([
+        'mode', 'output-dir', 'manifest-file', 'remote-dir', 'local-root', 'apk', 'build-manifest'
+    ]);
     const parsed = {};
     for (let index = 0; index < argv.length; index += 1) {
         const token = argv[index];
@@ -429,7 +766,12 @@ if (require.main === module) runCli();
 
 module.exports = {
     publishOfflineUpdate,
+    publishOfflineFullApk,
+    cleanupLocalPublishedArtifacts,
+    cleanupRemotePublishedArtifacts,
+    buildRemoteCleanupCommand,
     verifyHttpTarget,
+    verifyHttpArtifactHead,
     validateRelativePath,
     assertRemoteTarget,
     parsePublisherCliArguments,

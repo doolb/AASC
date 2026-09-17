@@ -4559,7 +4559,22 @@
             applySleepState('active');
         }
 
+        function getConfiguredDisplayId() {
+            try {
+                const configuredId = new URL(window.location.href).searchParams.get('displayId') || '';
+                return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(configuredId) ? configuredId : '';
+            } catch (_) {
+                return '';
+            }
+        }
+
         function getPersistentDisplayId() {
+            const configuredDisplayId = getConfiguredDisplayId();
+            if (configuredDisplayId) {
+                // Offline APK 通过 URL 注入固定 ID；覆盖旧版本曾保存的随机 ID，确保任务能恢复。
+                localStorage.setItem('displayId', configuredDisplayId);
+                return configuredDisplayId;
+            }
             let id = localStorage.getItem('displayId');
             if (!id) {
                 id = 'display-' + Math.random().toString(36).substring(2, 10);

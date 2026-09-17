@@ -92,6 +92,7 @@
 | Chat2API 普通网页手动外部认证 | [chat2api-manual-external-auth.md](spec/chat2api-manual-external-auth.md) | 普通网页粘贴 Cookie、Provider 专属字段提取、校验和账号保存伪代码 |
 | Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](spec/chat2api-global-responses.md) | 全局 Responses transport、聊天会话映射、Pi Provider 和外部实例停用伪代码 |
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](spec/chat2api-raw-traffic-log-modes.md) | 原始流量日志模式、摘要字段和控制端配置伪代码 |
+| OpenSpec 文档转换技能 | [openspec-to-aasc-docs.md](spec/openspec-to-aasc-docs.md) | OpenSpec 输入解析、design/spec 转换和任务追踪伪代码 |
 | 动态画面填充模式 | [dynamic-fit-mode.md](spec/dynamic-fit-mode.md) | 动态阶段控制器、显示端动画与控制协议伪代码 |
 
 ## 核心模块

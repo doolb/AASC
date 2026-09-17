@@ -63,12 +63,18 @@
 
 ## Android APK
 
+- 🔄进行中 [2026-09-17] Offline min 更新提示、手动下载进度与首包启动阶段进度
+  - 发现 min APK 更新后由用户点击“下载更新”，浮动显示下载/校验/安装进度；下载完成后自动提交系统安装器。
+  - 首次完整 Offline APK 启动显示 Runtime、服务源码、Node 依赖和配置元数据的阶段进度。
+  - 设计：`docs/design/android-offline-hot-update.md`；伪代码：`docs/spec/android-offline-hot-update.md`；任务：`docs/task/20260917_Offline更新提示与首包启动进度.md`。
+
 - 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
   - 服务更新支持 `code-only`（不发布/下载依赖）与 `all`（代码+生产依赖）；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
   - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本次更新相关 Node 定向测试 69/69、Android JVM 全量测试通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
   - full v2/min v3 APK、code/dependencies v3 包及 min v3 更新清单已生成并通过静态完整性/签名校验；min v4 已升版为 `0.2.2-offline-min` 并正式发布，LAN/WAN manifest 字节一致且签名有效。
   - min v4 APK 地址为 `http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk` 和 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk`，大小 `89205130` bytes，SHA-256 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`；LAN HTTP 整包、WAN 远端文件及 WAN HTTP 首段/HEAD 校验通过。
-  - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次仅追加 min v4 版本文件并更新签名清单。
+  - 固定显示端 ID 与 Chat2API 完成按钮的 min v6 已追加发布：`http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v6.apk`、`http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v6.apk`；大小 `89208438` bytes，SHA-256 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest/签名和 HTTP Content-Length 已复验。
+  - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次仅追加 min v6 版本文件并更新签名清单。
   - 独立 RSA 密钥对已接入打包工具并存放于 `~/.config/aasc-user/`；更新包构建已支持临时工作区与输出目录跨文件系统，归档复制到输出同目录临时文件后再原子切换。
   - 外网主机登录 shell 为 fish；发布器已通过 `/bin/sh -c` 执行远端 POSIX 脚本，并在远端 manifest 原子切换前设置 `0644`，真实发布通过。
   - SM-N9500 真机原有 v1 APK 已按测试要求卸载，fresh install full v2 成功，首次解包约 911 MiB；`/api/status`、`/v1/models` 和默认模型聊天通过。

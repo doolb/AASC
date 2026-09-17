@@ -42,6 +42,8 @@ MainActivity 原生“控制端”按钮
 
 登录 Activity 使用单独 Android 进程，使其可以在创建首个 WebView 前设置独立的 WebView 数据目录。登录完成、取消或超时后销毁 WebView 并删除临时 WebView 数据，不影响显示页和控制页的 Cookie。
 
+登录页面顶部原生操作栏固定显示“完成”和“取消”两个按钮，顺序为“完成”在前、“取消”在后。用户点击“完成”时，Activity 先读取当前允许域名的 localStorage/Cookie 并合并已捕获的 Authorization；必填字段齐全则立即返回候选凭据，字段不全则保留登录页面并提示继续登录。该按钮位于原生 WebView 之外，外部 Provider 页面覆盖控制端时仍可操作。
+
 ## 显示端开放协议
 
 Android `display.html` 在能力声明中增加 `androidControlPage: true`。服务端只对声明该能力的显示端显示“开放控制端”设置。
@@ -83,6 +85,7 @@ Android 登录 WebView：
 - 通过 `CookieManager` 获取配置域名的 Cookie，并按 Cookie 名称映射凭据。
 - 只有必填凭据字段齐全时提交一次候选；服务端验证失败时保留登录页面，允许重新捕获。
 - 不向普通日志打印候选值；取消、关闭、超时和成功后清理临时状态。
+- 用户可以手动点击原生“完成”触发一次即时捕获；未捕获完整凭据时不会关闭登录窗口，轮询捕获仍继续运行。
 
 当前内置 Provider 的捕获映射复用 `/mnt/Chat2API` 的 `tokenExtractionConfig.ts`：DeepSeek、GLM、Kimi、MiniMax、MiMo、Perplexity、Qwen、Qwen AI 和 Z.ai。自定义 Provider 没有安全捕获配置时继续使用手工凭据表单。
 
@@ -104,5 +107,6 @@ Android 登录 WebView：
 - 服务端已实现按显示端保存 `androidControlPageOpen`、能力校验、断线重连补发和控制端权威广播。
 - 控制端开关位于选中的 Android 显示端详情/功能面板中，不放在设备卡片本身；Chat2API 登录优先调用 Android 原生桥，桌面端仍保留原有手工登录回退。
 - 普通 APK 和离线 APK 共用原生控制端及隔离登录 WebView 代码；本次已重新构建、安装和启动 offline APK，Provider 真实账号网页登录仍需测试账号现场验收。
+- 原生 Chat2API 登录页顶部已增加“完成”按钮并置于“取消”之前；按钮会即时合并当前页面 localStorage/Cookie 与已捕获 Authorization，字段不全时保留登录页并提示重试。
 - 离线 APK 默认显示控制端入口；启动状态遮罩仅在本地 display 页面成功加载后隐藏，错误页完成回调不得误隐藏遮罩。
 - 普通 APK 已完成真机启动冒烟和无崩溃检查；Provider 真实网页登录需要测试账号，暂留现场验收，不将测试凭据写入项目或日志。

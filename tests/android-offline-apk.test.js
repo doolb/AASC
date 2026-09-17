@@ -161,6 +161,48 @@ test('控制端 WebView 位于显示端 WebView 之上且按钮保持可关闭',
     assert.doesNotMatch(activity, /webContainer\.addView\(control,\s*0\)/u);
 });
 
+test('Offline APK 使用专用固定 displayId 并让 release 任务目标保持一致', () => {
+    const serverConfig = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/ServerConfig.kt'
+    );
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+    const service = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NodeServerService.kt'
+    );
+    const display = read('src/apps/web-mediacenter/ui/public/display.html');
+    const releaseResult = JSON.parse(read('release/task/render-display/results/index.json'));
+    const devResult = JSON.parse(read('res/tasks/render-display/results/index.json'));
+
+    assert.match(serverConfig, /OFFLINE_DISPLAY_ID\s*=\s*"offline-display"/u);
+    assert.match(activity, /val displayId = if \(offlineMode\) ServerConfig\.OFFLINE_DISPLAY_ID/u);
+    assert.match(activity, /ServerConfig\.pageUrl\(mainServerUrl, displayId\)/u);
+    assert.match(service, /migrateOfflineDisplayTaskIndex/u);
+    assert.match(service, /res\/tasks\/render-display\/results\/index\.json/u);
+    assert.match(display, /searchParams\.get\(['"]displayId['"]\)/u);
+    assert.match(display, /configuredDisplayId|configuredId/u);
+    assert.equal(releaseResult.instances[0].displayId, 'offline-display');
+    assert.equal(devResult.instances[0].displayId, 'offline-display');
+});
+
+test('原生 Chat2API 登录页在取消前提供完成按钮并支持即时捕获', () => {
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/Chat2ApiLoginActivity.kt'
+    );
+    const authWebView = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/Chat2ApiAuthWebView.kt'
+    );
+    const completeIndex = activity.indexOf('text = "完成"');
+    const cancelIndex = activity.indexOf('text = "取消"');
+
+    assert.ok(completeIndex >= 0, '登录页顶部必须有原生完成按钮');
+    assert.ok(cancelIndex > completeIndex, '完成按钮必须位于取消按钮之前');
+    assert.match(activity, /completeCapture/u);
+    assert.match(authWebView, /fun completeCapture/u);
+    assert.match(authWebView, /hasRequiredFields/u);
+});
+
 test('offline 启动遮罩不会被错误页 onPageFinished 隐藏', () => {
     const activity = read(
         'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'

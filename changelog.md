@@ -1,5 +1,21 @@
 # Web MediaCenter - 变更日志
 
+### OpenSpec 文档转换技能
+
+- ✅ [2026-09-17] 新增 `.agents/skills/openspec-to-aasc-docs/SKILL.md`，将 OpenSpec 的 proposal/design/specs/tasks 按职责转换为项目 `docs/design/*.md` 与 `docs/spec/*.md`，并要求核实真实代码落点、区分目标方案与已实现状态。
+  - 新增 `docs/design/openspec-to-aasc-docs.md`、`docs/spec/openspec-to-aasc-docs.md` 和 `docs/task/20260917_OpenSpec文档转换技能.md`；同步 `docs/design.md`、`docs/spec.md`、`docs/todo.md`。
+  - 验证覆盖完整输入、缺少 specs、相似模块/虚假路径、未勾选任务和伪代码边界；未修改业务代码。
+
+### Offline 固定显示端 ID 与 Chat2API 原生登录完成按钮
+
+- ✅ [2026-09-17] Offline APK 使用专用 `offline-display`，Android 外部 Chat2API 登录页增加“完成”按钮并置于“取消”之前；显示端/控制端遮挡层级改造暂不处理。
+  - `ServerConfig`、MainActivity 和 display.html 统一固定 ID；release 与开发 render-display 任务目标同步为 `offline-display`，原生页面预置 localStorage 兼容旧服务代码。
+  - `Chat2ApiAuthWebView.completeCapture` 支持原生按钮即时读取 localStorage/Cookie 并合并 Authorization，凭据不完整时保留登录页面。
+  - 仅打包 min 热更：`release/offline-update/output/apk/aasc-display-offline-min-v6.apk`，versionCode `6`，大小 `89208438` bytes，SHA-256 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`；签名证书 SHA-256 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
+  - v6 额外在 Node 服务启动前迁移旧 `render-display` 任务索引中的 displayId，确保仅安装 min 热更也能匹配 `offline-display`；v5 作为中间工件保留、不覆盖。
+  - 验证：Node Chat2API `84/84`、Offline/Chat2API 静态回归 `24/24`、Android JVM `BUILD SUCCESSFUL`、APK ZIP/签名及更新清单验签通过；未执行真实 Provider 登录。
+  - v6 已正式发布到 `http://192.168.1.39/mnt/aasc-offline/` 和 `http://120.79.245.103/mnt/aasc-offline/`；两站点 manifest 字节一致且 RSA 验签通过，LAN/WAN HTTP APK 均返回 200 和正确 Content-Length，WAN 远端 APK hash 与清单一致。
+
 ### Android Offline APK 分辨率缩放与快速包热更新
 
 - ✅ [2026-09-17] Offline APK WebView 初始比例改为按显示分辨率长边动态计算。
@@ -8370,3 +8386,16 @@
   - offline 服务仅在控制端手动切换群聊/私聊时，将全局会话同步到当前在线且语音监听已开启的显示端；不自动开启麦克风，普通部署不变。按显示端独立保存聊天模式和私聊目标已登记为后续待办。
   - 更新 Android Offline 与显示端语音 design/spec/task/todo 文档及回归测试。
   - 验证：定向 Node 测试 21/21、语音状态测试 11/11、手动聊天契约检查和 Android `:app:testDebugUnitTest` 通过；`npm run build:apk:offline` 成功，APK `unzip -tq` 通过。产物 `release/apkbuild/allserver/output/aasc-display-offline.apk` 为 958958786 bytes，SHA-256 `26d1f15c88275cd6553cc31a4798af7cf74103930191a6761cb2ba071c1d9771`；未安装到设备。
+
+### Android Offline 热更新发布
+
+- ✅ [2026-09-17] 自动清理 LAN/WAN Offline 发布目录中的过时版本资源，并记录给 AI/Codex 的打包规则。
+  - `scripts/ops/publish-offline-update.js` 在服务/min 发布完成清单原子切换和验证后，只清理精确匹配的旧 `code-v<数字>.zip`、`dependencies-v<数字>.zip`、`aasc-display-offline-min-v<数字>.apk`；新增 `apk-full` 模式发布完整包 `aasc-display-offline-v<versionCode>.apk`，完整包不改服务 `manifest.json`，但会清理旧 full APK。
+  - 清理同时覆盖 `/mnt/aasc-offline` 和 `as@120.79.245.103:~/a/aasc-offline`，跳过符号链接、目录、日志、模型、配置、任务、results、非版本文件；清理失败不回滚已验证发布并返回可重试错误。
+  - 新增 npm 入口：`npm run publish:offline-apk:full -- --apk <full-apk> --build-manifest <build-manifest> --remote-dir ~/a/aasc-offline`；规则同步写入 `AGENTS.md`、design/spec/task 文档。
+  - 本次实际清理：LAN/WAN 的 code v2、dependencies v2、min v3；两站点 manifest SHA-256 均为 `dea824e7fa8cbc9820cbc7ade8aba88f3e12a9781610a955ea2b9cc3faa390b8`，当前保留 code v3、dependencies v3、min v4，WAN full v2 保留。
+  - 验证：Offline publisher 定向测试 14/14；更新链路 Node 定向测试 34/34；两站点 HTTP 旧 code v2 返回 404，当前资源目录和 manifest 签名保持有效。
+
+- ✅ [2026-09-17] 同步 AI 规则入口。
+  - `CLAUDE.md` 新增 Offline APK 打包目录、资源命名、LAN/WAN 发布顺序、精确清理边界和 Git 提交边界；内容与 `AGENTS.md` 保持一致。
+  - 更新 Offline 热更新 design/spec/task 文档，明确 AI 修改 Offline 资源前必须读取两份规则文件。

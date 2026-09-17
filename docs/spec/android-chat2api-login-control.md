@@ -161,6 +161,7 @@ control onNativeLoginResult(result):
 ```text
 Chat2ApiLoginActivity onCreate:
     在独立进程首次创建 WebView 前设置专用数据目录
+    顶部操作栏按顺序创建“完成”按钮和“取消”按钮
     创建 Chat2ApiAuthWebView
     设置 JavaScript、DOM storage 和安全导航策略
     加载 loginUrl
@@ -183,6 +184,12 @@ Chat2ApiAuthWebView onPageFinished(url):
 Chat2ApiAuthWebView polling:
     每 1000ms 对当前允许域名读取 localStorage 和 Cookie
     必填字段齐全 -> 通过 Activity Result 返回一次 credentials
+
+Chat2ApiLoginActivity onCompleteClick:
+    请求 Chat2ApiAuthWebView 立即读取当前允许域名的 localStorage 和 Cookie
+    将即时结果合并到已捕获的 Authorization/localStorage/Cookie
+    如果必填字段齐全：停止轮询并返回 success credentials
+    否则：保留登录页面，提示用户完成网页登录后再次点击“完成”
 
 Chat2ApiLoginActivity finish:
     停止轮询
@@ -216,7 +223,7 @@ Provider 验证器按 `/mnt/Chat2API/src/main/oauth/adapters` 的现有校验逻
 ## 实现状态与验证边界
 
 ```text
-已实现：服务端 OAuth 捕获配置/Provider 验证、显示端控制端开放协议、控制端详情开关、Android 原生桥和独立登录 Activity/WebView
+已实现：服务端 OAuth 捕获配置/Provider 验证、显示端控制端开放协议、控制端详情开关、Android 原生桥和独立登录 Activity/WebView；登录 Activity 顶部“完成”按钮会触发即时捕获，位于“取消”之前
 已验证：Node Chat2API/显示端定向测试、Android JVM 单元测试、普通 APK Debug 构建/安装/启动、offline APK 构建/卸载重装启动、同源控制端页面和本地聊天回复
 未执行：Provider 真实账号网页登录和接口验证
 ```

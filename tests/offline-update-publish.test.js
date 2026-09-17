@@ -10,6 +10,8 @@ const test = require('node:test');
 
 const {
     publishOfflineUpdate,
+    publishOfflineFullApk,
+    cleanupRemotePublishedArtifacts,
     verifyHttpTarget
 } = require('../scripts/ops/publish-offline-update');
 const {
@@ -18,6 +20,13 @@ const {
 
 function sha256(value) {
     return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+async function writePublishedFile(rootDirectory, relativePath, content) {
+    const target = path.join(rootDirectory, relativePath);
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+    await fs.promises.writeFile(target, content);
+    return target;
 }
 
 async function createFixture(mode) {
@@ -187,6 +196,10 @@ test('publisher validates signature and every component size/hash before changin
     assert.equal(fs.existsSync(fixture.localRoot), false);
 });
 
+test('服务发布接口拒绝把 apk-full 当作代码发布', async () => {
+    await assert.rejects(publishOfflineUpdate({ mode: 'apk-full' }), /publishOfflineFullApk/);
+});
+
 test('publisher refuses to follow or overwrite a symlink in the local release directory', async (t) => {
     const fixture = await createFixture('code-only');
     t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));
@@ -237,10 +250,13 @@ test('publisher sends remote versioned packages before atomically switching the 
         assert.match(args[3], /^'.*'$/s);
     }
     assert.ok(manifestUploadIndex >= 2, '组件包应先于 manifest 上传');
-    assert.equal(calls.at(-1).file, 'ssh');
-    assert.match(calls.at(-1).args.at(-1), /manifest\.json\.tmp/);
-    assert.match(calls.at(-1).args.at(-1), /chmod 0644/);
-    assert.match(calls.at(-1).args.at(-1), /mv/);
+    const manifestRenameCall = calls.findLast(({ file, args }) =>
+        file === 'ssh' && String(args.at(-1)).includes('manifest.json.tmp'));
+    assert.ok(manifestRenameCall);
+    assert.match(manifestRenameCall.args.at(-1), /manifest\.json\.tmp/);
+    assert.match(manifestRenameCall.args.at(-1), /chmod 0644/);
+    assert.match(manifestRenameCall.args.at(-1), /mv/);
+    assert.match(String(calls.at(-1).args.at(-1)), /cleanup_versioned_files/);
 });
 
 test('remote publish failure before the final manifest rename leaves the previous channel untouched', async (t) => {
@@ -266,6 +282,28 @@ test('remote publish failure before the final manifest rename leaves the previou
 
     assert.equal(calls.some(({ file, args }) => file === 'scp' && String(args.at(-1)).includes('manifest.json.tmp')), false);
     assert.equal(calls.some(({ file, args }) => file === 'ssh' && String(args.at(-1)).includes('manifest.json')), false);
+});
+
+test('远端旧资源清理失败不回滚已切换的清单，并返回可重试错误', async (t) => {
+    const fixture = await createFixture('all');
+    t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));
+    const result = await publishOfflineUpdate({
+        mode: 'all',
+        artifactRoot: fixture.artifactRoot,
+        manifestPath: fixture.manifestPath,
+        publicKeyPem: fixture.publicKeyPem,
+        remote: { host: 'as@120.79.245.103', directory: '~/a/aasc-offline' },
+        commandRunner: async (file, args) => {
+            if (file === 'ssh' && String(args.at(-1)).includes('cleanup_versioned_files')) {
+                throw new Error('simulated cleanup failure');
+            }
+            return file === 'ssh' ? { stdout: 'MISSING' } : {};
+        }
+    });
+
+    assert.equal(result.cleanupErrors.length, 1);
+    assert.equal(result.cleanupErrors[0].target, 'remote');
+    assert.match(result.cleanupErrors[0].message, /cleanup failure/);
 });
 
 test('code-only remote publication sends only code archive and manifest', async (t) => {
@@ -318,4 +356,112 @@ test('HTTP verification checks the signed manifest and streams every component h
 test('publisher npm script is registered', async () => {
     const packageJson = JSON.parse(await fs.promises.readFile(path.join(__dirname, '../package.json'), 'utf8'));
     assert.equal(packageJson.scripts['publish:offline-update'], 'node scripts/ops/publish-offline-update.js');
+    assert.equal(packageJson.scripts['publish:offline-apk:full'], 'node scripts/ops/publish-offline-update.js --mode apk-full');
+});
+
+test('发布后只清理精确匹配的旧版本文件，并保留清单版本、非版本文件和符号链接', async (t) => {
+    const fixture = await createFixture('apk-min');
+    t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));
+    for (const relativeUrl of [
+        fixture.manifest.payload.components.code.relativeUrl,
+        fixture.manifest.payload.components.dependencies.relativeUrl
+    ]) {
+        await writePublishedFile(fixture.localRoot, relativeUrl,
+            await fs.promises.readFile(path.join(fixture.artifactRoot, relativeUrl)));
+    }
+    const currentCode = fixture.manifest.payload.components.code.relativeUrl;
+    const currentDependencies = fixture.manifest.payload.components.dependencies.relativeUrl;
+    const currentMin = fixture.manifest.payload.components.apkMin.relativeUrl;
+    await writePublishedFile(fixture.localRoot, 'code/code-v1.zip', 'stale code');
+    await writePublishedFile(fixture.localRoot, 'dependencies/dependencies-v0.zip', 'stale dependencies');
+    await writePublishedFile(fixture.localRoot, 'apk/aasc-display-offline-min-v2.apk', 'stale min');
+    await writePublishedFile(fixture.localRoot, 'apk/aasc-display-offline-v1.apk', 'old full');
+    await writePublishedFile(fixture.localRoot, 'apk/aasc-display-offline-v2.apk', 'current full');
+    await writePublishedFile(fixture.localRoot, 'keep.txt', 'keep');
+    const symlinkTarget = await writePublishedFile(fixture.root, 'outside.apk', 'do not touch');
+    await fs.promises.symlink(symlinkTarget, path.join(fixture.localRoot, 'apk/aasc-display-offline-v0.apk'));
+
+    await publishOfflineUpdate({
+        mode: 'apk-min',
+        artifactRoot: fixture.artifactRoot,
+        manifestPath: fixture.manifestPath,
+        publicKeyPem: fixture.publicKeyPem,
+        localRoot: fixture.localRoot
+    });
+
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, currentCode)), true);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, currentDependencies)), true);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, currentMin)), true);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'code/code-v1.zip')), false);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'dependencies/dependencies-v0.zip')), false);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'apk/aasc-display-offline-min-v2.apk')), false);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'apk/aasc-display-offline-v1.apk')), true);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'apk/aasc-display-offline-v2.apk')), true);
+    assert.equal((await fs.promises.readFile(path.join(fixture.localRoot, 'keep.txt'), 'utf8')), 'keep');
+    const symlinkStat = await fs.promises.lstat(path.join(fixture.localRoot, 'apk/aasc-display-offline-v0.apk'));
+    assert.equal(symlinkStat.isSymbolicLink(), true);
+    assert.equal((await fs.promises.readFile(symlinkTarget, 'utf8')), 'do not touch');
+});
+
+test('完整 Offline APK 发布到本地目标并清理旧 full APK，不覆盖链接或服务清单', async (t) => {
+    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-offline-full-publish-'));
+    t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
+    const localRoot = path.join(root, 'published');
+    const apkPath = path.join(root, 'aasc-display-offline.apk');
+    const apkBytes = Buffer.from('new full offline apk');
+    await fs.promises.writeFile(apkPath, apkBytes);
+    await writePublishedFile(localRoot, 'apk/aasc-display-offline-v1.apk', 'stale full 1');
+    await writePublishedFile(localRoot, 'apk/aasc-display-offline-v2.apk', 'stale full 2');
+    await writePublishedFile(localRoot, 'keep.txt', 'keep');
+    const symlinkTarget = await writePublishedFile(root, 'outside-full.apk', 'keep linked apk');
+    await fs.promises.symlink(symlinkTarget, path.join(localRoot, 'apk/aasc-display-offline.apk'));
+    const manifestPath = path.join(localRoot, 'manifest.json');
+    await fs.promises.writeFile(manifestPath, '{"service":"keep"}\n');
+    const buildManifestPath = path.join(root, 'build-manifest.json');
+    await fs.promises.writeFile(buildManifestPath, JSON.stringify({
+        profile: 'allserver',
+        updateOnly: false,
+        versionCode: 3,
+        versionName: '0.3.0-offline',
+        apk: 'aasc-display-offline.apk'
+    }));
+
+    const result = await publishOfflineFullApk({
+        apkPath,
+        buildManifestPath,
+        localRoot
+    });
+
+    assert.deepEqual(result.localPublishedPaths, ['apk/aasc-display-offline-v3.apk']);
+    assert.equal(fs.existsSync(path.join(localRoot, 'apk/aasc-display-offline-v3.apk')), true);
+    assert.equal(fs.existsSync(path.join(localRoot, 'apk/aasc-display-offline-v1.apk')), false);
+    assert.equal(fs.existsSync(path.join(localRoot, 'apk/aasc-display-offline-v2.apk')), false);
+    assert.equal((await fs.promises.readFile(manifestPath, 'utf8')), '{"service":"keep"}\n');
+    assert.equal((await fs.promises.readFile(path.join(localRoot, 'keep.txt'), 'utf8')), 'keep');
+    assert.equal((await fs.promises.lstat(path.join(localRoot, 'apk/aasc-display-offline.apk'))).isSymbolicLink(), true);
+    assert.equal((await fs.promises.readFile(symlinkTarget, 'utf8')), 'keep linked apk');
+});
+
+test('远端清理脚本只包含受限版本模式和符号链接保护', async (t) => {
+    const fixture = await createFixture('apk-min');
+    t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));
+    const calls = [];
+    await cleanupRemotePublishedArtifacts(async (_file, args) => {
+        calls.push(args);
+        return { stdout: '' };
+    }, {
+        host: 'as@120.79.245.103',
+        directory: '~/a/aasc-offline'
+    }, fixture.manifest, {
+        includeFullApk: true,
+        currentFullApkRelativeUrl: 'apk/aasc-display-offline-v2.apk'
+    });
+    const command = String(calls[0].at(-1));
+    assert.match(command, /code-v/);
+    assert.match(command, /dependencies-v/);
+    assert.match(command, /aasc-display-offline-min-v/);
+    assert.match(command, /aasc-display-offline-v/);
+    assert.match(command, /-L/);
+    assert.match(command, /case/);
+    assert.match(command, /cleanup_versioned_files "code" "code-v"/);
 });

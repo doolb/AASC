@@ -10,6 +10,7 @@ import android.webkit.WebView
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import org.json.JSONObject
 
 /**
@@ -64,16 +65,25 @@ class Chat2ApiLoginActivity : Activity() {
             textSize = 18f
             setTextColor(Color.BLACK)
         }
+        val webView = Chat2ApiAuthWebView(this, profile) { credentials -> finishWithSuccess(credentials) }
+        authWebView = webView
+        val complete = Button(this).apply {
+            text = "完成"
+            setOnClickListener {
+                webView.completeCapture { message ->
+                    Toast.makeText(this@Chat2ApiLoginActivity, message, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
         val cancel = Button(this).apply {
             text = "取消"
             setOnClickListener { finishWithError("用户取消登录") }
         }
         header.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(complete, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         header.addView(cancel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(header)
 
-        val webView = Chat2ApiAuthWebView(this, profile) { credentials -> finishWithSuccess(credentials) }
-        authWebView = webView
         root.addView(webView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
         webView.start(loginUrl)

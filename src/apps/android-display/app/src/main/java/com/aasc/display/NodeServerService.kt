@@ -69,6 +69,36 @@ class NodeServerService : Service() {
             )
         }
 
+        /**
+         * 将旧版本 render-display 结果索引中的随机显示端 ID 迁移到 Offline 专用 ID。
+         * 该方法只修改目标任务的 displayId，不触碰其他任务参数或运行状态。
+         */
+        @JvmStatic
+        fun migrateOfflineDisplayTaskIndex(
+            indexFile: File,
+            fixedDisplayId: String = ServerConfig.OFFLINE_DISPLAY_ID
+        ): Boolean {
+            if (!indexFile.isFile || fixedDisplayId.isBlank()) return false
+            return try {
+                val document = JSONObject(indexFile.readText())
+                val instances = document.optJSONArray("instances") ?: return false
+                var changed = false
+                for (index in 0 until instances.length()) {
+                    val instance = instances.optJSONObject(index) ?: continue
+                    if (instance.optString("taskName") != "render-display") continue
+                    val currentDisplayId = instance.optString("displayId").trim()
+                    if (currentDisplayId.isEmpty() || currentDisplayId == fixedDisplayId) continue
+                    instance.put("displayId", fixedDisplayId)
+                    changed = true
+                }
+                if (!changed) return false
+                indexFile.writeText(document.toString(2) + "\n")
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
         @JvmStatic
         fun nodeModulesDirectory(rootDir: File, activeRelease: ActiveRelease): File =
             if (activeRelease.legacyDependencies) {
@@ -254,6 +284,17 @@ class NodeServerService : Service() {
                 }
                 val updateStatus = manager.checkAndApplyServerUpdate(root)
                 android.util.Log.i("AASC-Node", "Offline 服务更新检查: $updateStatus")
+            }
+            if (offlineMode) {
+                val taskIndexPaths = listOf(
+                    File(root, "res/tasks/render-display/results/index.json"),
+                    File(root, "release/task/render-display/results/index.json")
+                )
+                taskIndexPaths.forEach { indexFile ->
+                    if (migrateOfflineDisplayTaskIndex(indexFile)) {
+                        android.util.Log.i("AASC-Node", "Offline render-display 任务已迁移到 ${ServerConfig.OFFLINE_DISPLAY_ID}")
+                    }
+                }
             }
             val runtimeReadyAt = SystemClock.elapsedRealtime()
             NodeServerConfig.write(

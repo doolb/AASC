@@ -388,7 +388,8 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.startForegroundService(this, serviceIntent)
         }
 
-        val displayPath = ServerConfig.pageUrl(mainServerUrl)
+        val displayId = if (offlineMode) ServerConfig.OFFLINE_DISPLAY_ID else null
+        val displayPath = ServerConfig.pageUrl(mainServerUrl, displayId)
         // 时间戳参数强制绕过 WebView HTTP 缓存（display.html 更新后 APK 重启即加载最新版）
         val url = timestampedUrl(displayPath)
         getSharedPreferences("aasc_display", MODE_PRIVATE).edit().putString("server_url", mainServerUrl).apply()
@@ -630,6 +631,14 @@ class MainActivity : AppCompatActivity() {
             // WebViewClient 回调运行在主线程，在这里缓存 URL，供 JavaScript bridge 线程安全读取。
             override fun onPageStarted(view: WebView, pageUrl: String, favicon: android.graphics.Bitmap?) {
                 bridge?.updateServerOrigin(pageUrl)
+                if (offlineMode && retryOfflinePage) {
+                    // min APK 只替换原生代码，旧 Runtime 中的 display.html 也必须使用固定身份。
+                    // 在页面脚本执行前预置 localStorage，兼容尚未热更服务代码的已安装 full APK。
+                    view.evaluateJavascript(
+                        "try { localStorage.setItem('displayId', '${ServerConfig.OFFLINE_DISPLAY_ID}'); } catch (_) {}",
+                        null
+                    )
+                }
                 if (retryOfflinePage) {
                     // 新一轮主页面请求开始，清除上一轮连接失败状态。
                     offlineDisplayLoadFailed = false
@@ -691,7 +700,8 @@ class MainActivity : AppCompatActivity() {
         offlineDisplayRetryCount += 1
         view.postDelayed({
             if (view === webView && view.visibility == View.VISIBLE) {
-                view.loadUrl(timestampedUrl(ServerConfig.pageUrl(baseUrl)))
+                val displayId = if (offlineMode) ServerConfig.OFFLINE_DISPLAY_ID else null
+                view.loadUrl(timestampedUrl(ServerConfig.pageUrl(baseUrl, displayId)))
             }
         }, 1_000L)
     }

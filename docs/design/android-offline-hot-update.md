@@ -4,7 +4,11 @@
 
 本次执行已将独立 RSA 密钥对接入打包流程，并重新生成 full v2 APK、code/dependencies v3 服务更新包。full APK SHA-256 为 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；code v3 SHA-256 为 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 为 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`。2026-09-17 将修复后的 min APK 升级为 versionCode `4`、版本 `0.2.2-offline-min`，大小 `89205130` bytes，SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`，并正式发布到 LAN/WAN。两站点 manifest 字节一致、RSA 签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash 及 HTTP 206 首段校验通过；WAN HTTP HEAD 返回 `200` 且 Content-Length 正确。full APK 另已上传为 `apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致。真机卸载后 fresh install full v2，首次 Runtime 安装约 94.6 秒；修复 ZIP 目录项规范化白名单后，设备生成 code/dependencies v3 的 `active-release.json`，`pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。2026-09-17 使用含 `libaasc_node.so` 的 min v3 原位安装成功，数据目录和模型缓存保留，服务重新启动并继续使用 code/dependencies v3；回滚及异常降级仍待验收。
 
-方案已确认并进入实现。Node 更新包/发布器、`allserver-min` 构建 profile、Android 签名下载/服务版本切换和 min APK 安装流程已落地；跨文件系统落盘已改为输出目录同目录暂存后原子切换，并有集成回归覆盖 `/tmp` 到工作区输出。Android JVM 单测及更新相关 Node 定向测试通过。服务发布支持 `code-only` 和 `all` 两种模式；Android 原生更新通过 `allserver-min` APK 独立发布。模型在线更新和 `.mmap` 处理不在本期范围。服务双站点发布、full APK fresh install 后的 code/dependencies 热更、min v3 原位升级和 min v4 正式发布已验收；回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
+方案已确认并进入实现。Node 更新包/发布器、`allserver-min` 构建 profile、Android 签名下载/服务版本切换和 min APK 安装流程已落地；跨文件系统落盘已改为输出目录同目录暂存后原子切换，并有集成回归覆盖 `/tmp` 到工作区输出。Android JVM 单测及更新相关 Node 定向测试通过。服务发布支持 `code-only` 和 `all` 两种模式；Android 原生更新通过 `allserver-min` APK 独立发布。模型在线更新和 `.mmap` 处理不在本期范围。服务双站点发布、full APK fresh install 后的 code/dependencies 热更、min v3 原位升级和 min v4 正式发布已验收；发布器现已支持 full/min/code/dependencies 的精确旧版本清理，回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
+
+2026-09-17 为 Offline 固定显示端 ID 和原生 Chat2API“完成”按钮生成并正式发布 min v6 热更包（versionCode 6、`0.2.4-offline-min`）。该包包含原生任务索引迁移逻辑，已同步到 LAN `http://192.168.1.39/mnt/aasc-offline/` 与 WAN `http://120.79.245.103/mnt/aasc-offline/`；APK 大小 `89208438` bytes，SHA-256 为 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`。两站点 manifest 字节一致、签名有效，LAN/WAN HTTP APK 均返回 200 和正确 Content-Length，WAN 远端文件 hash 与清单一致。
+
+本次新增更新可见性：发现更高版本 min APK 后先由用户点击“下载更新”，浮动卡片显示下载、校验和安装阶段；下载完成后自动提交 Android PackageInstaller，系统安装确认仍由用户完成。完整 Offline APK 首次启动显示 Runtime 清单读取、Runtime 动态库、服务源码、Node 依赖和配置迁移等阶段的文件/字节进度；进度回调只在后台线程产生，Activity 在主线程更新遮罩。
 
 ## 需求
 
@@ -15,7 +19,7 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 - 局域网：`http://192.168.1.39/mnt/aasc-offline/`，服务器目录 `/mnt/aasc-offline/`。
 - 外网：`http://120.79.245.103/mnt/aasc-offline/`。根据 HTTP 映射使用 SCP 目录 `as@120.79.245.103:~/a/aasc-offline/`；该目录已做存在性检查并完成本次发布。用户之前输入的 `~/a/aasc-offlin` 少了末尾 `e`，未向该不存在路径写入。
 
-发布器只写本功能命名空间中的版本化文件和最终清单，不清理发布目录，不覆盖已有 APK 链接或其他文件。
+发布器只写本功能命名空间中的版本化文件和最终清单；清单原子切换并完成验证后，仅清理本规则明确匹配且不再被当前发布引用的旧版本文件。清理局限于局域网和外网各自的发布根目录，不覆盖 APK 链接，也不触碰日志、模型、配置、任务、results 或其他文件。2026-09-17 已按该规则清理两站点的旧 code v2、dependencies v2 和 min v3。
 
 远端 SCP 目标的 SSH 登录 shell 不作为脚本解释器；发布器显式通过 `/bin/sh -c` 执行检查、校验和原子切换脚本，确保 fish 等非 POSIX 登录 shell 不改变发布语义。
 
@@ -40,6 +44,14 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 
 启动更新检查先尝试局域网源，连接失败或超时才回退外网源；签名无效、版本字段异常或包校验失败时不接受该源的更新，继续使用当前已安装版本并记录错误。下载地址限定为清单所在源下的相对路径。解压时拒绝绝对路径、`..` 越界、符号链接和特殊文件。
 
+### 发布资源保留与清理
+
+版本化资源发布到局域网和外网两个独立目标。服务清单中的 `code.relativeUrl`、`dependencies.relativeUrl` 和 `apkMin.relativeUrl` 是各自组件的权威保留项；完整 Offline APK 不进入服务更新清单，使用 `apk/aasc-display-offline-v<versionCode>.apk` 命名，完整包发布时保留本次版本。清理规则只匹配以下精确版本文件：`code/code-v<数字>.zip`、`dependencies/dependencies-v<数字>.zip`、`apk/aasc-display-offline-min-v<数字>.apk` 和 `apk/aasc-display-offline-v<数字>.apk`。
+
+每个目标都按“校验本地工件 → 上传版本文件 → 原子替换清单（完整 APK 无清单替换）→ HTTP/远端校验 → 精确清理旧版本”的顺序执行。清理只删除普通文件，不跟随或删除符号链接；当前清单引用的服务包、当前 min APK 和本次/最新完整 APK 必须保留。清理失败不回滚已经验证的发布，返回可重试错误并保留旧文件。
+
+AI 执行约束同步记录：仓库根目录的 `CLAUDE.md` 与 `AGENTS.md` 均必须包含本节规则；后续 AI 修改、打包、发布或清理 Offline 资源前先读取这两个入口及本设计/spec 文档。
+
 ### 服务代码与依赖原子切换
 
 服务检查/应用在 `NodeServerService` 启动 Node 进程之前执行。新代码和依赖先分别下载到临时区，验证签名、大小、hash、依赖指纹、路径与剩余空间后才进入版本化目录。运行布局使用独立组件目录和 release 目录：release 保存代码版本、依赖版本的配对，并在应用私有目录内关联对应依赖；一个原子替换的 active-release 标记决定下次 Node 启动使用的配对。旧 release 在新配对成功启动前保留，可供失败回退。
@@ -58,6 +70,13 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 
 当前 Gradle 构建使用 `assembleDebug`，正式更新必须验证 full/min 两包 `applicationId`、签名证书摘要和递增版本码完全兼容。首次启用需要先构建并安装包含 updater 的完整 offline APK，然后再验证 min 更新通道；不能用 min APK 引导尚无 updater 的旧安装。
 
+### 更新提示与首包启动进度
+
+- 更新清单发现更高 `apkMin.versionCode` 时，Activity 显示版本、大小和“下载更新/稍后”按钮；未点击下载前不创建 APK 下载文件。
+- 用户点击下载后，更新管理器通过回调报告 `downloading` 的已接收字节和清单声明总字节，浮动卡片显示百分比；完成后依次显示 `verifying`、`materializing` 和 `installing`，失败时保留当前版本并提供重试。
+- PackageInstaller 的 `STATUS_PENDING_USER_ACTION`、成功和失败结果通过应用内状态广播回传；不执行静默安装，不在后台强行打开系统页面。
+- 首次完整 Runtime 安装将 manifest 文件按 `runtime`、服务源码、`node_modules` 依赖和配置元数据分类累计已复制字节；NodeServerService 将阶段和进度广播给 MainActivity。快速复用已安装 Runtime 时直接显示“已复用”，不伪造解压进度。
+
 ## 发布与版本顺序
 
 新增入口：
@@ -66,6 +85,7 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 - `npm run publish:offline-update -- --mode=code-only|all`：将版本化服务包先发布到局域网目录和远端目录，最后原子替换各自签名清单；`code-only` 保留原依赖包及清单条目。
 - `npm run build:apk:offline:min`：构建 update-only min APK。
 - `npm run publish:offline-apk:min`：把 min APK 版本文件发布后更新签名清单中的 APK 组件。
+- `npm run publish:offline-apk:full -- --apk <full-apk> --build-manifest <build-manifest>`：把完整 Offline APK 以 versionCode 文件名发布到两个目标，并清理旧完整 APK；完整 APK 不写入服务更新清单。
 
 初次启用先把现有完整 offline APK 更新为带 updater 的版本（版本码从当前 `1` 提升），真机验证同签名原位升级和恢复数据；随后使用严格更高版本码的 min APK 完成一次系统确认安装。安装/签名失败不得卸载旧包或删除应用数据。安装权限设置回跳后复用已验证的缓存更新元数据，不依赖二次联网；Activity 被系统回收后，完整数据目录仍存在时在恢复前台重新验签检查。
 
@@ -76,6 +96,7 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 - 首次启动无网络时可启动旧 release；局域网不可达时回退外网；签名错误时不降级为未签名更新。
 - min APK 可由完整包安装为更新，版本码与签名符合 Android 规则；min fresh install 不启动 Node；升级后 `/api/status`、`/v1/models`、聊天、ASR/TTS、配置和任务 results 均保留。
 - 全量/代码包均包含 `src/apps/web-mediacenter/ui`，验证服务 API 与 UI 代码来自同一代码版本。
+- 新 full/min APK、代码包或依赖包发布后，局域网和外网均只保留当前权威版本；发布目录中的日志、模型、配置、任务、results、非版本文件和符号链接保持不变。
 - 不包含模型下载通道、完整 APK 自动静默安装、服务端 only-dependency 更新、`.mmap` 预生成或删除、显示端业务功能改造。
 远端 HTTP 目录需要能够读取发布清单。由于 SCP 会保留临时文件的受限权限，发布器在远端 manifest 原子切换前将临时清单设为 `0644`；清单只包含公开版本和 hash 信息，不包含签名私钥。
 

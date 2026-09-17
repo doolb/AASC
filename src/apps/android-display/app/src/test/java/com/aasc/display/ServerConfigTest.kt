@@ -61,6 +61,28 @@ class ServerConfigTest {
     }
 
     @Test
+    fun 离线页面地址携带专用固定displayId() {
+        assertEquals(
+            "https://127.0.0.1:8081/display?displayId=offline-display",
+            ServerConfig.pageUrl(
+                "https://127.0.0.1:8081",
+                ServerConfig.OFFLINE_DISPLAY_ID
+            )
+        )
+    }
+
+    @Test
+    fun 固定displayId替换旧查询参数且保留其他参数() {
+        assertEquals(
+            "https://example.test/display?mode=demo&displayId=offline-display",
+            ServerConfig.pageUrl(
+                "https://example.test/display?mode=demo&displayId=display-old",
+                ServerConfig.OFFLINE_DISPLAY_ID
+            )
+        )
+    }
+
+    @Test
     fun 子服务器配置使用主服务器根地址而不是display路径() {
         assertEquals(
             "https://192.168.1.39:8081",

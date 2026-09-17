@@ -98,9 +98,15 @@ onRequestPermissionsResult:
 connect:
     baseUrl = ServerConfig.baseUrl(input)
     start NodeServerService(mainServerUrl = baseUrl, offlineMode = offlineMode)
-    创建显示 WebView(context, offlineMode) 并加载 baseUrl/display
+    displayId = offlineMode ? "offline-display" : null
+    displayUrl = ServerConfig.pageUrl(baseUrl, displayId)
+    创建显示 WebView(context, offlineMode) 并加载 displayUrl
     在 webContainer 左上角（top|start）创建控制按钮并显示
     创建控制 WebView(context, offlineMode)（仍在按钮下方）但初始隐藏
+
+MainActivity.onPageStarted(displayView):
+    如果 offlineMode：在页面脚本执行前将 localStorage.displayId 预置为 "offline-display"
+    兼容已安装 full APK 尚未通过服务 code-only 热更更新 display.html 的情况
 
 WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels):
     如果 offlineMode 为 false：返回 100
@@ -117,6 +123,22 @@ DisplayWebView.init(context, offlineMode):
 toggleControl:
     如果 controlWebView 可见：隐藏并将按钮文字设为“控制端”
     否则：显示 controlWebView，加载 baseUrl/control，并将按钮文字设为“隐藏控制端”
+
+DisplayWebView 页面 ID:
+    configuredId = 从当前 /display URL 的 displayId 查询参数读取
+    如果 configuredId 非空且符合显示端 ID 格式：
+        localStorage.displayId = configuredId
+        WebSocket 连接使用 configuredId
+    否则：沿用原有 localStorage 持久化 ID；不存在时生成 display-* 随机 ID
+
+Release 任务恢复:
+    Offline APK 的 render-display 任务结果 target/displayId = "offline-display"
+    显示端 WebSocket 连接后以 displayId 查找并恢复该任务
+
+NodeServerService Offline 启动迁移:
+    Runtime 安装和服务更新完成后读取 res/tasks/render-display/results/index.json
+    只对 taskName == "render-display" 的实例替换 displayId 为 "offline-display"
+    保留实例状态、参数和其他任务；文件不存在或已是固定 ID 时跳过
 
 onBackPressed:
     如果控制页可见：先隐藏控制页
@@ -166,6 +188,7 @@ Android JVM 测试：
     运行 Android :app:testDebugUnitTest
     在可用环境运行 npm run build:apk:offline
     检查 APK 包名、版本名、文件名和模型 assets
+    Offline APK 启动页固定使用 displayId = "offline-display"；min 热更原生代码在旧 display.html 上预置同名 localStorage
 ```
 
 ## 已验证结果

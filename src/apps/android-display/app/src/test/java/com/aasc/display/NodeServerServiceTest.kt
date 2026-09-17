@@ -3,8 +3,10 @@ package com.aasc.display
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.json.JSONObject
 
 class NodeServerServiceTest {
 
@@ -89,6 +91,29 @@ class NodeServerServiceTest {
                 File(root, "src/apps/server/boot/server-launcher.js").absolutePath,
                 NodeServerService.buildNodeCommand(root).let { it[1] }
             )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun Offline任务索引迁移到专用displayId() {
+        val root = Files.createTempDirectory("aasc-offline-display-task").toFile()
+        val index = File(root, "res/tasks/render-display/results/index.json")
+        index.parentFile?.mkdirs()
+        index.writeText(
+            """
+            {"instances":[{"taskName":"render-display","displayId":"display-old","status":"display_offline"}]}
+            """.trimIndent()
+        )
+
+        try {
+            assertTrue(NodeServerService.migrateOfflineDisplayTaskIndex(index))
+            val migrated = JSONObject(index.readText())
+                .getJSONArray("instances")
+                .getJSONObject(0)
+                .getString("displayId")
+            assertEquals(ServerConfig.OFFLINE_DISPLAY_ID, migrated)
         } finally {
             root.deleteRecursively()
         }

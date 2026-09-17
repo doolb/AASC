@@ -57,6 +57,35 @@ class Chat2ApiAuthWebView(
         loadUrl(loginUrl)
     }
 
+    /**
+     * 原生“完成”按钮使用的即时捕获入口。
+     * 先读取当前允许页面的 localStorage/Cookie，再和已经从请求头捕获的字段合并；
+     * 凭据不完整时只回调提示，不停止 WebView 或既有轮询。
+     */
+    fun completeCapture(onIncomplete: (String) -> Unit) {
+        if (stopped.get()) {
+            onIncomplete("登录捕获已结束")
+            return
+        }
+        // 页面可能已经跳转离开允许域名；只要此前已从允许请求捕获完整字段，仍可安全完成登录。
+        val existing = synchronized(captured) { captured.toMap() }
+        if (Chat2ApiCredentialCapture.hasRequiredFields(profile, existing)) {
+            emitIfComplete()
+            return
+        }
+        val currentUrl = url?.trim().orEmpty().ifEmpty { lastUrl.trim() }
+        if (currentUrl.isEmpty() || !Chat2ApiCredentialCapture.isAllowed(profile, currentUrl)) {
+            onIncomplete("当前页面不在允许的登录来源内")
+            return
+        }
+        readPageCredentials(currentUrl) { merged ->
+            synchronized(captured) { captured.putAll(merged) }
+            if (!emitIfComplete()) {
+                onIncomplete("尚未捕获完整登录凭据，请完成网页登录后重试")
+            }
+        }
+    }
+
     fun stopCapture() {
         if (stopped.compareAndSet(false, true)) {
             mainHandler.removeCallbacksAndMessages(null)
@@ -91,6 +120,22 @@ class Chat2ApiAuthWebView(
     private fun pollCapture() {
         if (stopped.get() || pollCount >= 30 || lastUrl.isBlank()) return
         pollCount += 1
+        val captureUrl = lastUrl
+        readPageCredentials(captureUrl) { merged ->
+            synchronized(captured) { captured.putAll(merged) }
+            emitIfComplete()
+            val snapshot = synchronized(captured) { captured.toMap() }
+            if (!stopped.get() && !Chat2ApiCredentialCapture.hasRequiredFields(profile, snapshot)) {
+                mainHandler.postDelayed({ pollCapture() }, 1_000L)
+            }
+        }
+    }
+
+    private fun readPageCredentials(pageUrl: String, callback: (Map<String, String>) -> Unit) {
+        if (!Chat2ApiCredentialCapture.isAllowed(profile, pageUrl)) {
+            callback(emptyMap())
+            return
+        }
         val storageKeys = JSONArray(profile.localStorageFields.keys.toList()).toString()
         val script = """
             (function() {
@@ -102,23 +147,20 @@ class Chat2ApiAuthWebView(
         """.trimIndent()
         evaluateJavascript(script) { raw ->
             val localStorage = parseLocalStorage(raw)
-            val cookies = CookieManager.getInstance().getCookie(lastUrl)
-            val merged = Chat2ApiCredentialCapture.merge(profile, lastUrl, cookies = cookies, localStorage = localStorage)
-            synchronized(captured) { captured.putAll(merged) }
-            emitIfComplete()
-            if (!stopped.get() && !Chat2ApiCredentialCapture.hasRequiredFields(profile, captured)) {
-                mainHandler.postDelayed({ pollCapture() }, 1_000L)
-            }
+            val cookies = CookieManager.getInstance().getCookie(pageUrl)
+            callback(Chat2ApiCredentialCapture.merge(profile, pageUrl, cookies = cookies, localStorage = localStorage))
         }
     }
 
-    private fun emitIfComplete() {
+    private fun emitIfComplete(): Boolean {
         val snapshot = synchronized(captured) { captured.toMap() }
         if (Chat2ApiCredentialCapture.hasRequiredFields(profile, snapshot)
             && stopped.compareAndSet(false, true)) {
             mainHandler.removeCallbacksAndMessages(null)
             mainHandler.post { onCredentialsCaptured(snapshot) }
+            return true
         }
+        return Chat2ApiCredentialCapture.hasRequiredFields(profile, snapshot)
     }
 
     private fun parseLocalStorage(raw: String?): Map<String, String> {
