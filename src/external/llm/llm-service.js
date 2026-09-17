@@ -15,6 +15,7 @@ const { createResponsesClient } = require('./llm-responses-client');
 const { createChatHistoryStore } = require('./chat-history-store');
 const {
     createThinkOutputFilter,
+    parseThinkOutput,
     stripThinkBlocks
 } = require('./think-output-filter');
 
@@ -1062,6 +1063,12 @@ function addImportantRecord(content, role, name) {
 
 function addMessage(message) {
     const content = message.content ? message.content.substring(0, MAX_MESSAGE_LENGTH) : '';
+    const reasoning = typeof message.reasoning === 'string'
+        ? message.reasoning.substring(0, MAX_MESSAGE_LENGTH)
+        : undefined;
+    const speech = typeof message.speech === 'string'
+        ? message.speech.substring(0, MAX_MESSAGE_LENGTH)
+        : undefined;
     const msg = {
         id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
         timestamp: Date.now(),
@@ -1069,6 +1076,8 @@ function addMessage(message) {
         name: message.name || '',
         ip: message.ip || '',
         content: content,
+        ...(reasoning ? { reasoning } : {}),
+        ...(speech ? { speech } : {}),
         mode: message.mode || chatSession.mode,
         target: message.target || chatSession.privateTarget,
         sessionId: message.sessionId || chatSession.privateSessionId || 'default',
@@ -1253,27 +1262,42 @@ function findLastSentenceBoundary(text) {
 }
 
 /**
- * 统一处理聊天流输出：先过滤模型思考内容，再把可见正文分发给 UI、句子播报和历史。
- * Responses、Chat Completions、Pi/Codex Agent 都复用这一层，避免只有某一种协议泄漏
- * <think> 内容，或在 TTS 侧重新处理时出现显示文字与播报文字不一致。
+ * 统一拆分聊天流：控制端接收最终回答和独立 reasoning，TTS 接收按原顺序去标签的 speech。
+ * Responses、Chat Completions、Pi/Codex Agent 复用同一解析器，避免不同协议的展示和播报边界不一致。
  */
 function createChatStreamOutput(callbacks = {}) {
     const { onChunk, onSentence } = callbacks;
     const filter = createThinkOutputFilter();
     let fullMessage = '';
+    let fullReasoning = '';
+    let fullSpeech = '';
     let pendingText = '';
 
     const publish = (result) => {
         const previousMessage = fullMessage;
+        const previousReasoning = fullReasoning;
         fullMessage = result.message;
-        // 即使过滤器因孤立 </think> 回收了此前暂存内容，也要发送一次空 delta 让前端重绘。
-        if (fullMessage !== previousMessage) onChunk?.(result.delta, fullMessage);
-        if (!result.delta) return;
+        fullReasoning = result.reasoning;
+        fullSpeech = result.speech;
+        // 孤立结束标签可能回收暂存前缀；answer 或 reasoning 改变时都通知界面重绘。
+        if (fullMessage !== previousMessage || fullReasoning !== previousReasoning) {
+            onChunk?.(
+                result.delta,
+                fullMessage,
+                fullReasoning,
+                result.reasoningDelta,
+                result.speechDelta,
+                fullSpeech
+            );
+        }
+        if (!result.speechDelta) return;
 
-        pendingText += result.delta;
+        pendingText += result.speechDelta;
         const sentences = splitIntoSentences(pendingText);
         if (sentences.length < 2) return;
-        for (const sentence of sentences.slice(0, -1)) onSentence?.(sentence, fullMessage);
+        for (const sentence of sentences.slice(0, -1)) {
+            onSentence?.(sentence, fullMessage, fullReasoning, fullSpeech);
+        }
         pendingText = sentences[sentences.length - 1];
     };
 
@@ -1286,6 +1310,12 @@ function createChatStreamOutput(callbacks = {}) {
         },
         getMessage() {
             return fullMessage;
+        },
+        getReasoning() {
+            return fullReasoning;
+        },
+        getSpeech() {
+            return fullSpeech;
         },
         getPendingText() {
             return pendingText;
@@ -1305,6 +1335,8 @@ async function chat(userMessage, options = {}) {
         const transport = normalizeChatTransport(profile);
         const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
         let assistantMessage = '';
+        let assistantReasoning = '';
+        let assistantSpeech = '';
         if (transport.protocol === 'openai-responses') {
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
             const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
@@ -1320,7 +1352,10 @@ async function chat(userMessage, options = {}) {
                 temperature: profile.temperature ?? chatConfig.temperature,
                 stream: false
             });
-            assistantMessage = stripThinkBlocks(extractResponsesText(response));
+            const parsedOutput = parseThinkOutput(extractResponsesText(response));
+            assistantMessage = parsedOutput.answer;
+            assistantReasoning = parsedOutput.reasoning;
+            assistantSpeech = parsedOutput.speech;
             saveResponseReference(responseSessionKey, response, fingerprint);
         } else {
             const requestBody = {
@@ -1339,7 +1374,10 @@ async function chat(userMessage, options = {}) {
             });
             const data = JSON.parse(response);
             if (!data.choices?.[0]?.message) throw new Error('Invalid response format from API');
-            assistantMessage = stripThinkBlocks(data.choices[0].message.content || '');
+            const parsedOutput = parseThinkOutput(data.choices[0].message.content || '');
+            assistantMessage = parsedOutput.answer;
+            assistantReasoning = parsedOutput.reasoning;
+            assistantSpeech = parsedOutput.speech;
         }
 
         const templateId = templateTarget || useTemplate || 'default';
@@ -1349,6 +1387,8 @@ async function chat(userMessage, options = {}) {
             id: Date.now().toString(),
             user: userMessage.substring(0, MAX_MESSAGE_LENGTH),
             assistant: assistantMessage.substring(0, MAX_MESSAGE_LENGTH),
+            reasoning: assistantReasoning.substring(0, MAX_MESSAGE_LENGTH),
+            speech: assistantSpeech.substring(0, MAX_MESSAGE_LENGTH),
             timestamp: Date.now(),
             displayId: displayId,
             mode: mode || chatSession.mode,
@@ -1359,7 +1399,13 @@ async function chat(userMessage, options = {}) {
         });
         trimHistory();
         saveHistory([historyStore.getHistoryFileName({ mode, target })]);
-        return { success: true, message: assistantMessage, history: getHistory() };
+        return {
+            success: true,
+            message: assistantMessage,
+            reasoning: assistantReasoning,
+            speech: assistantSpeech,
+            history: getHistory()
+        };
     } catch (error) {
         console.error('[Chat] API调用失败:', error.message);
         return {
@@ -1447,9 +1493,11 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
             onComplete: (message) => {
                 output.finish(typeof message === 'string' ? message : null);
                 const fullMessage = output.getMessage();
+                const fullReasoning = output.getReasoning();
+                const fullSpeech = output.getSpeech();
                 const pendingText = output.getPendingText();
-                if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage);
-                onComplete?.(fullMessage, getHistory());
+                if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage, fullReasoning, fullSpeech);
+                onComplete?.(fullMessage, getHistory(), fullReasoning, fullSpeech);
             },
             onError: (error) => {
                 reportedError = true;
@@ -1465,9 +1513,13 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
         });
         output.finish(typeof result.message === 'string' ? result.message : null);
         const fullMessage = output.getMessage();
+        const fullReasoning = output.getReasoning();
+        const fullSpeech = output.getSpeech();
         return {
             success: true,
             message: fullMessage,
+            reasoning: fullReasoning,
+            speech: fullSpeech,
             history: getHistory()
         };
     } catch (error) {
@@ -1529,10 +1581,18 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
             });
             output.finish();
             const fullMessage = output.getMessage();
+            const fullReasoning = output.getReasoning();
+            const fullSpeech = output.getSpeech();
             const pendingText = output.getPendingText();
-            if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage);
-            onComplete?.(fullMessage, getHistory());
-            return { success: true, message: fullMessage, history: getHistory() };
+            if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage, fullReasoning, fullSpeech);
+            onComplete?.(fullMessage, getHistory(), fullReasoning, fullSpeech);
+            return {
+                success: true,
+                message: fullMessage,
+                reasoning: fullReasoning,
+                speech: fullSpeech,
+                history: getHistory()
+            };
         } catch (error) {
             console.error('[Chat] Responses 流式API调用失败:', error.message);
             onError?.(error.message);
@@ -1581,18 +1641,22 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
         });
         output.finish();
         const fullMessage = output.getMessage();
+        const fullReasoning = output.getReasoning();
+        const fullSpeech = output.getSpeech();
         const pendingText = output.getPendingText();
         if (pendingText.trim() && onSentence) {
-            onSentence(pendingText.trim(), fullMessage);
+            onSentence(pendingText.trim(), fullMessage, fullReasoning, fullSpeech);
         }
         
         if (onComplete) {
-            onComplete(fullMessage, getHistory());
+            onComplete(fullMessage, getHistory(), fullReasoning, fullSpeech);
         }
         
         return {
             success: true,
             message: fullMessage,
+            reasoning: fullReasoning,
+            speech: fullSpeech,
             history: getHistory()
         };
     } catch (error) {
@@ -1918,6 +1982,7 @@ module.exports = {
     chatStream,
     buildResponsesPayload,
     extractResponsesText,
+    parseThinkOutput,
     stripThinkBlocks,
     createThinkOutputFilter,
     normalizeChatTransport,
