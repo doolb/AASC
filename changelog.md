@@ -23,6 +23,14 @@
   - 已同步 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；直连 IP 的 manifest、签名、APK HTTP 200、Content-Length 和完整 hash 校验通过，旧 min 版本按规则清理且无错误。
   - SM-N9500 当前安装 v10，重启后显示“版本 0.2.12-offline-min，下载大小 85MB。是否下载更新？”，保持手动确认下载。
 
+### Offline code v5 修复 Chat2API 账号凭证按钮
+
+- ✅ [2026-09-18] 修复 Offline 控制端 Chat2API 账户管理弹窗只显示四个顶部按钮的问题，并发布服务代码 v5。
+  - `code/code-v5.zip` 大小 `14005201` bytes，SHA-256 `dae26685353195f23afb4828980b829bb30e5aef6822887233e927714576de9e`；沿用 dependencies v3，不更新 APK。
+  - LAN/WAN 直连 IP 的签名清单均已原子切换到 code v5；远端域名仍只用于 DNS 解析，发布入口使用 `192.168.1.39` 和 `120.79.245.103`。
+  - SM-N9500 重启后日志确认 `已原子切换服务版本 code=5, dependencies=3`；设备加载的 `chat2api.js` 与源码 SHA-256 均为 `9dd599441e8b45b319fff5ecd4832d9db4b4bff2dbd19b61aa3d963463e93e7f`，现在包含“导出账号凭证”和“导入账号凭证”。
+  - 代码包内容检查、清单签名检查、真机热更应用和设备脚本检查通过；外网完整三组件流式复验因服务器限速中止，依赖 v3/min v14 沿用既有已验收资源。
+
 ### Offline 外网更新检查诊断
 
 - ✅ [2026-09-18] 在 SM-N9500 上确认热更域名仅用于 DNS 解析，APK 实际请求使用解析后的 `120.79.245.103`；设备启动时已成功读取外网清单并显示 min v14 下载提示。

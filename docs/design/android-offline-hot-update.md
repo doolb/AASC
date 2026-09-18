@@ -22,6 +22,14 @@ APK 大小 `89245126` bytes，SHA-256 为
 `062aee3158d5534c18b57bf8dcf28dccdffe9b27ebd33cbaa00b35fc0143382f`。LAN/WAN 更新清单均已切换到
 `apk/aasc-display-offline-min-v14.apk`，SM-N9500 v10 启动后已显示 v14 手动下载提示。
 
+2026-09-18 针对 Chat2API 账户管理弹窗只显示四个顶部按钮的问题，已发布服务代码
+`code-v5.zip`（代码版本 5，沿用 dependencies v3）。代码包大小 `14005201` bytes，SHA-256 为
+`dae26685353195f23afb4828980b829bb30e5aef6822887233e927714576de9e`；LAN 和 WAN 直连 IP 的
+签名清单均已切换到 `code/code-v5.zip`，不重新发布 APK 或依赖包。SM-N9500 重启后日志确认
+`code=5, dependencies=3` 已原子切换，设备实际加载的 `chat2api.js` 与当前源码 SHA-256 均为
+`9dd599441e8b45b319fff5ecd4832d9db4b4bff2dbd19b61aa3d963463e93e7f`，弹窗包含“导出账号凭证”和
+“导入账号凭证”两个独立按钮。外网域名仍只用于 DNS 解析，发布验收使用直连 IP。
+
 本次执行已将独立 RSA 密钥对接入打包流程，并重新生成 full v2 APK、code/dependencies v3 服务更新包。full APK SHA-256 为 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；code v3 SHA-256 为 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 为 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`。2026-09-17 将修复后的 min APK 升级为 versionCode `4`、版本 `0.2.2-offline-min`，大小 `89205130` bytes，SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`，并正式发布到 LAN/WAN。两站点 manifest 字节一致、RSA 签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash 及 HTTP 206 首段校验通过；WAN HTTP HEAD 返回 `200` 且 Content-Length 正确。full APK 另已上传为 `apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致。真机卸载后 fresh install full v2，首次 Runtime 安装约 94.6 秒；修复 ZIP 目录项规范化白名单后，设备生成 code/dependencies v3 的 `active-release.json`，`pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。2026-09-17 使用含 `libaasc_node.so` 的 min v3 原位安装成功，数据目录和模型缓存保留，服务重新启动并继续使用 code/dependencies v3；回滚及异常降级仍待验收。
 
 方案已确认并进入实现。Node 更新包/发布器、`allserver-min` 构建 profile、Android 签名下载/服务版本切换和 min APK 安装流程已落地；跨文件系统落盘已改为输出目录同目录暂存后原子切换，并有集成回归覆盖 `/tmp` 到工作区输出。Android JVM 单测及更新相关 Node 定向测试通过。服务发布支持 `code-only` 和 `all` 两种模式；Android 原生更新通过 `allserver-min` APK 独立发布。模型在线更新和 `.mmap` 处理不在本期范围。服务双站点发布、full APK fresh install 后的 code/dependencies 热更、min v3 原位升级和 min v4 正式发布已验收；发布器现已支持 full/min/code/dependencies 的精确旧版本清理，回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。

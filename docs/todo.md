@@ -83,13 +83,14 @@
   - full v12（`0.2.10-offline`）已对齐当前 min versionCode 12 并正式发布为 `aasc-display-offline-v12.apk`，大小 `957319386` bytes，SHA-256 `b107d7963bf4dd18068404427e12f4edc72ff8253e8914e3d1909ca66e6c8183`；LAN/WAN 直连 IP HTTP、Content-Length、远端 hash、APK v2 签名和 ZIP 完整性均通过，旧 full v9 保留。
   - full v13（`0.2.11-offline`）已正式发布本轮 Chat2API 账号凭证与 Android 外部网页恢复代码，文件 `aasc-display-offline-v13.apk`，大小 `957338670` bytes，SHA-256 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`；LAN/WAN 直连 IP HTTP、Content-Length 和远端 hash 均通过，服务 manifest 未替换。
   - min v14（`0.2.12-offline-min`）已配套发布，文件 `aasc-display-offline-min-v14.apk`，大小 `89245126` bytes，SHA-256 `062aee3158d5534c18b57bf8dcf28dccdffe9b27ebd33cbaa00b35fc0143382f`；versionCode 高于 full v13，LAN/WAN 直连 IP 的清单、签名、HTTP 200/Content-Length、完整 hash 和 SM-N9500 v10 更新提示均通过。
+  - Chat2API 账户管理四按钮问题已通过 code-only v5 修复并发布：`code/code-v5.zip`，大小 `14005201` bytes，SHA-256 `dae26685353195f23afb4828980b829bb30e5aef6822887233e927714576de9e`；沿用 dependencies v3 和 apkMin v14。SM-N9500 重启后已原子切换 `code=5, dependencies=3`，设备脚本含独立账号凭证导出/导入按钮。
   - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次追加 min v6、v7、v8 版本文件并更新签名清单。
   - 独立 RSA 密钥对已接入打包工具并存放于 `~/.config/aasc-user/`；更新包构建已支持临时工作区与输出目录跨文件系统，归档复制到输出同目录临时文件后再原子切换。
   - 外网主机登录 shell 为 fish；发布器已通过 `/bin/sh -c` 执行远端 POSIX 脚本，并在远端 manifest 原子切换前设置 `0644`，真实发布通过。
   - SM-N9500 真机原有 v1 APK 已按测试要求卸载，fresh install full v2 成功，首次解包约 911 MiB；`/api/status`、`/v1/models` 和默认模型聊天通过。
   - 已修复 ZIP 目录项规范化后的 `src` / `node_modules` 根目录白名单问题；真机 fresh install 后 code/dependencies v3 成功应用，`active-release.json` 的 `pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。
   - min v3 已携带 `libaasc_node.so` 并在 SM-N9500 Android 9 上原位安装成功；配置、任务、模型缓存和 code/dependencies v3 active release 保留，`/api/status`、`/v1/models`、默认模型聊天和显示端 WebSocket 通过。正式发布的 min v4 已完成双站点工件验收，设备安装回归仍待单独执行。
-  - 仍待：回滚/异常降级、code-only 与 LAN/WAN fallback/bad-hash/低空间场景，以及 ASR/TTS 完整业务回归；v10 缩放曲线已正式发布并从待办移除。
+  - 仍待：回滚/异常降级、code-only 与 LAN/WAN fallback/bad-hash/低空间场景，以及 ASR/TTS 完整业务回归；v10 缩放曲线和本次 code v5 账号按钮发布已完成。
   - 设计：`docs/design/android-offline-hot-update.md`；伪代码：`docs/spec/android-offline-hot-update.md`；任务：`docs/task/2026-09-16_OfflineAPK服务热更新与原生增量APK.md`。
 
 - ⏳可选 [2026-09-15] 统计 offline APK 首次启动的分阶段耗时
