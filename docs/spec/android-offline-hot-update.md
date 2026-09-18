@@ -6,6 +6,8 @@
 
 > 2026-09-18 已发布 Chat2API 账户凭证按钮修复的服务代码 v5。`code/code-v5.zip` 大小 `14005201` bytes、SHA-256 为 `dae26685353195f23afb4828980b829bb30e5aef6822887233e927714576de9e`，沿用 dependencies v3（不触发依赖下载和 APK 安装）。SM-N9500 重启后 `active-release` 原子切换为 `code=5, dependencies=3`；设备加载的 `chat2api.js` 含“导出账号凭证”“导入账号凭证”，其 SHA-256 为 `9dd599441e8b45b319fff5ecd4832d9db4b4bff2dbd19b61aa3d963463e93e7f`。
 
+> 追加验收：min v14 的 APK v2 签名和证书 SHA-256（`a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`）与清单、full v13 一致；SM-N9500 的 Android 应用内 `getPackageArchiveInfo` 仍在 `OfflineUpdateManager.kt:930` 报 signer 不匹配。full v13 通过 `adb install -r` 直接安装成功，作为当前外网整包更新路径。
+
 > 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，2026-09-17 修复后的 min v4（versionCode 4、`0.2.2-offline-min`）已正式发布到 LAN/WAN。两站点 manifest 字节一致且签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash、HTTP HEAD 和首段响应校验通过；min v4 的 APK SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`。full v2 APK 另已上传到外网 `apk/aasc-display-offline-v2.apk`，远端大小和完整 hash 与本地一致；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。2026-09-17 重新生成的 min v3 携带 `libaasc_node.so` 并原位安装成功，配置、任务目录和 LLM 模型缓存保留；发布器已支持双站点精确清理旧 code/dependencies/min/full 版本。固定 ID/Chat2API 完成按钮对应的 min v6（versionCode 6、`0.2.4-offline-min`）已正式发布到 LAN/WAN，包含 Offline 任务索引迁移逻辑；APK SHA-256 为 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest 字节一致、签名有效、HTTP APK 返回 200 且 Content-Length 正确。当前实现已生成并正式发布 min v7（versionCode 7、`0.2.5-offline-min`），APK 大小 `89535999` bytes、SHA-256 为 `80501f7ea36a96377f8cddec3f238e0ec31b2d2bc30681d3f4b650c3ada324af`，LAN/WAN 清单和 APK HTTP 校验通过。SM-N9500 Android 9/API 28 真机已在 Display 2 `Desktop` 虚拟屏运行 v7，窗口为 1920×1018 app 区域、160 dpi，固定 `offline-display` 服务健康接口返回 200，UI 自动化可见浮动“控制端”按钮；因 Display 2 为 `touch NONE` 且无法通过 `screencap -d 2` 取图，本轮未宣称真实触控回归。现行校正以 `1280px@320dpi` 为 100%，Display 2 的 1920×1080@160dpi 目标比例为 75%；回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
 
 > 2026-09-18 已将分辨率与 DPI 校正打包为 min v8（versionCode 8、`0.2.6-offline-min`），APK 大小 `89231402` bytes、SHA-256 为 `470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`，并正式发布到 LAN/WAN。两站点 manifest、HTTP 200/Content-Length 和 WAN 远端 hash 校验通过；SM-N9500 Android 9/API 28 已安装 v8，在 Display 2 运行并确认 Qwen `readyDisplayIds=["offline-display"]`。Display 2 目标比例为 75%；手机 2309 长边、480 dpi 目标比例约 271%。因 `touch NONE` 和 Desktop 虚拟屏截图限制，本轮仍未宣称真实触控回归。
@@ -354,6 +356,14 @@ offerMinApkUpdate(manifest, currentPackageInfo):
         ask the user before opening this app's install permission settings
         after returning, reuse verified metadata; do not require another network request
     launch Android PackageInstaller with user confirmation
+
+validateMinApkArchive(apkFile, metadata):
+    parse APK package info with Android PackageManager
+    compare package, versionCode, versionName and certificate SHA-256
+    if certificate digest differs:
+        reject update and report signer mismatch
+    # SM-N9500/API 28 currently reaches this branch for v14 even though
+    # apksigner and the downloaded file SHA-256 both match the manifest.
 
 showMinApkUpdatePrompt(metadata):
     render floating card with versionName, versionCode and artifact.size

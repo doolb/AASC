@@ -84,6 +84,7 @@
   - full v13（`0.2.11-offline`）已正式发布本轮 Chat2API 账号凭证与 Android 外部网页恢复代码，文件 `aasc-display-offline-v13.apk`，大小 `957338670` bytes，SHA-256 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`；LAN/WAN 直连 IP HTTP、Content-Length 和远端 hash 均通过，服务 manifest 未替换。
   - min v14（`0.2.12-offline-min`）已配套发布，文件 `aasc-display-offline-min-v14.apk`，大小 `89245126` bytes，SHA-256 `062aee3158d5534c18b57bf8dcf28dccdffe9b27ebd33cbaa00b35fc0143382f`；versionCode 高于 full v13，LAN/WAN 直连 IP 的清单、签名、HTTP 200/Content-Length、完整 hash 和 SM-N9500 v10 更新提示均通过。
   - Chat2API 账户管理四按钮问题已通过 code-only v5 修复并发布：`code/code-v5.zip`，大小 `14005201` bytes，SHA-256 `dae26685353195f23afb4828980b829bb30e5aef6822887233e927714576de9e`；沿用 dependencies v3 和 apkMin v14。SM-N9500 重启后已原子切换 `code=5, dependencies=3`，设备脚本含独立账号凭证导出/导入按钮。
+  - 新增待修复：SM-N9500/API 28 应用内 `getPackageArchiveInfo` 在 v14 下载校验阶段报 signer 不匹配；`apksigner`、清单和设备缓存文件均一致。当前先使用 full v13 整包更新，min 校验兼容修复需重新升版发布。
   - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次追加 min v6、v7、v8 版本文件并更新签名清单。
   - 独立 RSA 密钥对已接入打包工具并存放于 `~/.config/aasc-user/`；更新包构建已支持临时工作区与输出目录跨文件系统，归档复制到输出同目录临时文件后再原子切换。
   - 外网主机登录 shell 为 fish；发布器已通过 `/bin/sh -c` 执行远端 POSIX 脚本，并在远端 manifest 原子切换前设置 `0644`，真实发布通过。

@@ -31,6 +31,12 @@
   - SM-N9500 重启后日志确认 `已原子切换服务版本 code=5, dependencies=3`；设备加载的 `chat2api.js` 与源码 SHA-256 均为 `9dd599441e8b45b319fff5ecd4832d9db4b4bff2dbd19b61aa3d963463e93e7f`，现在包含“导出账号凭证”和“导入账号凭证”。
   - 代码包内容检查、清单签名检查、真机热更应用和设备脚本检查通过；外网完整三组件流式复验因服务器限速中止，依赖 v3/min v14 沿用既有已验收资源。
 
+### Offline min v14 签名校验诊断
+
+- ✅ [2026-09-18] 确认 min v14 APK 文件和发布签名材料一致：v2 签名验证通过，证书 SHA-256 为 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`，与 manifest、full v13 一致；本机/LAN/WAN/设备缓存 SHA-256 均为 `062aee3158d5534c18b57bf8dcf28dccdffe9b27ebd33cbaa00b35fc0143382f`。
+  - SM-N9500/API 28 的应用内 `OfflineUpdateManager.kt:930` 仍报告 signer 不匹配，属于归档证书读取/比对路径问题，未修改已发布 v14。
+  - 外网 full v13（`http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v13.apk`）已通过 `adb install -r` 覆盖安装验证；安装后 code=5/dependencies=3 和 Chat2API 账号凭证按钮正常。
+
 ### Offline 外网更新检查诊断
 
 - ✅ [2026-09-18] 在 SM-N9500 上确认热更域名仅用于 DNS 解析，APK 实际请求使用解析后的 `120.79.245.103`；设备启动时已成功读取外网清单并显示 min v14 下载提示。
