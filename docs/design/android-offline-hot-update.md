@@ -13,8 +13,14 @@
 `192.168.1.39` 和 WAN 直连 IP `120.79.245.103`。
 
 现场复核：SM-N9500 当前安装 min v10 时，启动检查可以把 `c.aasc.us` 解析为
-`120.79.245.103` 并成功读取清单，界面显示 min v12 下载提示。完整 APK v13 不进入该清单，
+`120.79.245.103` 并成功读取清单；当前清单已显示 min v14 下载提示。完整 APK v13 不进入该清单，
 仍需单独安装完整包。
+
+2026-09-18 已发布与 full v13 配套的 min APK v14（`0.2.12-offline-min`）。v14 使用
+`versionCode=14`，高于 full v13 的 `versionCode=13`，可以在已安装 full v13 的设备上原位更新；
+APK 大小 `89245126` bytes，SHA-256 为
+`062aee3158d5534c18b57bf8dcf28dccdffe9b27ebd33cbaa00b35fc0143382f`。LAN/WAN 更新清单均已切换到
+`apk/aasc-display-offline-min-v14.apk`，SM-N9500 v10 启动后已显示 v14 手动下载提示。
 
 本次执行已将独立 RSA 密钥对接入打包流程，并重新生成 full v2 APK、code/dependencies v3 服务更新包。full APK SHA-256 为 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；code v3 SHA-256 为 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 为 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`。2026-09-17 将修复后的 min APK 升级为 versionCode `4`、版本 `0.2.2-offline-min`，大小 `89205130` bytes，SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`，并正式发布到 LAN/WAN。两站点 manifest 字节一致、RSA 签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash 及 HTTP 206 首段校验通过；WAN HTTP HEAD 返回 `200` 且 Content-Length 正确。full APK 另已上传为 `apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致。真机卸载后 fresh install full v2，首次 Runtime 安装约 94.6 秒；修复 ZIP 目录项规范化白名单后，设备生成 code/dependencies v3 的 `active-release.json`，`pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。2026-09-17 使用含 `libaasc_node.so` 的 min v3 原位安装成功，数据目录和模型缓存保留，服务重新启动并继续使用 code/dependencies v3；回滚及异常降级仍待验收。
 

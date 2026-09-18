@@ -15,9 +15,17 @@
   - 已同步 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；LAN/WAN 直连 IP HTTP 200、Content-Length 和远端文件 hash 一致，发布器清理无错误。
   - 默认域名 `c.aasc.us` 仍返回 403，发布验收使用 `192.168.1.39` 与 `120.79.245.103` 直连地址；未清理工作区其他已有改动。
 
+### Offline min APK v14 正式发布
+
+- ✅ [2026-09-18] 发布与 full v13 配套的 Offline min APK v14（`0.2.12-offline-min`）。
+  - 文件：`apk/aasc-display-offline-min-v14.apk`；大小 `89245126` bytes；SHA-256 `062aee3158d5534c18b57bf8dcf28dccdffe9b27ebd33cbaa00b35fc0143382f`。
+  - `versionCode=14` 高于 full v13 的 `versionCode=13`，避免原位更新被 Android 判定为降级。
+  - 已同步 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；直连 IP 的 manifest、签名、APK HTTP 200、Content-Length 和完整 hash 校验通过，旧 min 版本按规则清理且无错误。
+  - SM-N9500 当前安装 v10，重启后显示“版本 0.2.12-offline-min，下载大小 85MB。是否下载更新？”，保持手动确认下载。
+
 ### Offline 外网更新检查诊断
 
-- ✅ [2026-09-18] 在 SM-N9500 上确认热更域名仅用于 DNS 解析，APK 实际请求使用解析后的 `120.79.245.103`；设备启动时已成功读取外网清单并显示 min v12 下载提示。
+- ✅ [2026-09-18] 在 SM-N9500 上确认热更域名仅用于 DNS 解析，APK 实际请求使用解析后的 `120.79.245.103`；设备启动时已成功读取外网清单并显示 min v14 下载提示。
   - 完整 APK v13 按设计只发布版本文件，不写入 min 热更新 `manifest.json`，因此不会通过当前更新卡片自动提示完整包；完整包需要单独安装。
 
 ### Chat2API 账号凭证导入导出与 Android 外部网页恢复
