@@ -19,6 +19,7 @@ test('控制端登录返回登录地址，完成后保存账号并只返回脱�
   assert.equal(started.loginUrl, 'https://chat.deepseek.com');
   const result = await service.completeLogin({ state: 'state-1', providerId: 'deepseek', credentials: { token: 'token-secret' }, label: '主账号' });
   assert.equal(result.account.secretConfigured, true);
+  assert.equal(saved.accountId, 'deepseek:user@example.com');
   assert.equal(saved.credentials.token, 'token-secret');
   assert.equal(result.account.credentials, undefined);
 });

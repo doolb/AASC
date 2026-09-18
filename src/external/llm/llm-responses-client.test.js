@@ -94,6 +94,23 @@ test('Responses 客户端将 HTTP 错误转换为可识别错误', async () => {
   }
 });
 
+test('Responses 客户端流式 HTTP 错误保留 Chat2API 的错误 code 和 message', async () => {
+  const server = await startServer((_incoming, response) => {
+    response.writeHead(503, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ error: { message: '没有可用账号', code: 'no_available_account' } }));
+  });
+
+  try {
+    const client = createResponsesClient({ baseUrl: `http://127.0.0.1:${server.address().port}/v1` });
+    await assert.rejects(
+      () => client.stream({ model: 'Qwen3.6-Flash', input: '你好', stream: true }, () => {}),
+      (error) => error.statusCode === 503 && error.code === 'no_available_account' && error.message === '没有可用账号'
+    );
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('Responses 客户端支持显式允许的本机自签名 HTTPS 请求和流式请求', async () => {
   const server = await startHttpsServer((incoming, response) => {
     if (incoming.headers['x-test-stream'] === 'true') {

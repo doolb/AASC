@@ -68,6 +68,24 @@ test('Chat2API 手动认证校验成功后保存账号且不返回凭据', async
   assert.equal(JSON.stringify(result).includes('s1'), false);
 });
 
+test('Chat2API 手动认证新账号按邮箱生成稳定 accountId', async () => {
+  let saved;
+  const service = createChat2ApiManualAccountService({
+    dataStore: {
+      listAccounts: async () => [],
+      saveAccount: async (account) => { saved = account; return { accountId: account.accountId, providerId: account.providerId }; },
+    },
+    providerRegistry: {
+      getProvider: async () => ({ id: 'qwen', name: 'Qwen', enabled: true, credentialFields: [{ name: 'ticket', required: true }] }),
+    },
+    credentialAdapters: {
+      qwen: { validate: async (credentials) => ({ valid: true, credentials, accountInfo: {} }) },
+    },
+  });
+  await service.addManualAccount({ providerId: 'qwen', email: ' User@Example.com ', credentials: { ticket: 'secret' } });
+  assert.equal(saved.accountId, 'qwen:user@example.com');
+});
+
 test('Chat2API 手动认证缺少字段或校验失败时不保存账号', async () => {
   let saveCount = 0;
   let validateCount = 0;

@@ -49,6 +49,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var offlineUpdatePanel: View
     private lateinit var offlineUpdateTitle: TextView
     private lateinit var offlineUpdateMessage: TextView
+    private lateinit var offlineUpdateNotesTitle: TextView
+    private lateinit var offlineUpdateNotes: TextView
     private lateinit var offlineUpdateProgress: ProgressBar
     private lateinit var offlineUpdateDownload: Button
     private lateinit var offlineUpdateLater: Button
@@ -309,6 +311,8 @@ class MainActivity : AppCompatActivity() {
         offlineUpdatePanel = findViewById(R.id.offlineUpdatePanel)
         offlineUpdateTitle = findViewById(R.id.offlineUpdateTitle)
         offlineUpdateMessage = findViewById(R.id.offlineUpdateMessage)
+        offlineUpdateNotesTitle = findViewById(R.id.offlineUpdateNotesTitle)
+        offlineUpdateNotes = findViewById(R.id.offlineUpdateNotes)
         offlineUpdateProgress = findViewById(R.id.offlineUpdateProgress)
         offlineUpdateDownload = findViewById(R.id.offlineUpdateDownload)
         offlineUpdateLater = findViewById(R.id.offlineUpdateLater)
@@ -606,10 +610,20 @@ class MainActivity : AppCompatActivity() {
             metadata.versionName,
             formatBytes(metadata.artifact.size)
         )
+        showMinApkReleaseNotes(metadata.releaseNotes)
         offlineUpdateProgress.visibility = View.GONE
         offlineUpdateDownload.isEnabled = true
         offlineUpdateDownload.visibility = View.VISIBLE
         offlineUpdateLater.visibility = View.VISIBLE
+    }
+
+    /** 更新卡片只显示签名清单中的纯文本日志，缺少日志时保持旧版紧凑布局。 */
+    private fun showMinApkReleaseNotes(releaseNotes: String?) {
+        val normalized = releaseNotes?.trim().orEmpty()
+        val visibility = if (normalized.isEmpty()) View.GONE else View.VISIBLE
+        offlineUpdateNotesTitle.visibility = visibility
+        offlineUpdateNotes.visibility = visibility
+        offlineUpdateNotes.text = normalized
     }
 
     private fun dismissMinApkUpdatePrompt() {

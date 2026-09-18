@@ -35,6 +35,9 @@ const RELEASE_CONFIG_SEED_FILE = 'release-config.json';
 const RELEASE_USER_CONFIG_PREFIX = 'release-userconfig';
 const TASK_LINKS_MARKER_FILE = 'task-links.marker';
 const TASK_LATEST_MARKER_FILE = 'latest.marker';
+// Android aapt/AssetManager 不保证隐藏文件进入 assets；Pi SDK 的 Provider manifest
+// 必须在安装后恢复到原始文件名，因此先使用不带点号的安全 marker。
+const ANDROID_HIDDEN_MANIFEST_MARKER = 'aasc-bundled-manifest.json';
 const { resolveSelectedModelFiles } = require('./apk-build-profile');
 // 历史兼容测试使用的模型列表。正式 profile 构建通过 model ID 和 manifest 解析文件，
 // 此常量仅保留导出，避免破坏旧调用方，不参与新的 release APK 资源选择。
@@ -146,6 +149,9 @@ function isAndroidAssetExcluded(relativePath, isDirectory = false) {
         segment => segment.startsWith('.') || segment.startsWith('_')
     );
     const isHiddenFile = !isDirectory && segments.at(-1)?.startsWith('.');
+    const isNodeModuleManifest = !isDirectory && segments.includes('node_modules') &&
+        segments.at(-1) === '.manifest.json';
+    if (isNodeModuleManifest) return hasUnsupportedDirectory;
     return hasUnsupportedDirectory || isHiddenFile;
 }
 
@@ -481,12 +487,22 @@ async function copyDirectoryWithManifest(sourceRoot, outputRoot, outputPrefix = 
         ))) {
             continue;
         }
-        const outputRelativePath = outputPrefix
-            ? path.join(outputPrefix, relativePath)
-            : relativePath;
+        const outputRelativePath = mapPackagedAssetPath(relativePath, outputPrefix);
         files.push(await copyFileWithManifest(sourceRoot, relativePath, outputRoot, outputRelativePath));
     }
     return files;
+}
+
+function mapPackagedAssetPath(relativePath, outputPrefix = '') {
+    const outputRelativePath = outputPrefix
+        ? path.join(outputPrefix, relativePath)
+        : relativePath;
+    const segments = relativePath.split(path.sep);
+    if (outputPrefix === 'server' && segments.includes('node_modules') &&
+        segments.at(-1) === '.manifest.json') {
+        return path.join(path.dirname(outputRelativePath), ANDROID_HIDDEN_MANIFEST_MARKER);
+    }
+    return outputRelativePath;
 }
 
 async function copyNodeLibrary(runtimeDir, nativeOutputDir) {
@@ -925,6 +941,7 @@ module.exports = {
     RELEASE_USER_CONFIG_PREFIX,
     TASK_LINKS_MARKER_FILE,
     TASK_LATEST_MARKER_FILE,
+    ANDROID_HIDDEN_MANIFEST_MARKER,
     RUNTIME_MODE_FILE,
     REQUIRED_RUNTIME_LIBRARIES,
     REQUIRED_PACKAGE_ENTRIES,
@@ -935,6 +952,7 @@ module.exports = {
     isAndroidAssetExcluded,
     isNpmInternalMetadata,
     isNpmToolShim,
+    mapPackagedAssetPath,
     deriveContentVersion,
     createModelCompatibilityMetadata,
     readOfflineConfigSeed,

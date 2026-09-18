@@ -132,6 +132,29 @@
                 android:textColor="#E6E6E6"
                 android:textSize="14sp" />
 
+            <TextView
+                android:id="@+id/offlineUpdateNotesTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/offline_update_notes_title"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/offlineUpdateNotes"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="6"
+                android:maxWidth="420dp"
+                android:textColor="#E6E6E6"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <ProgressBar
                 android:id="@+id/offlineUpdateProgress"
                 style="?android:attr/progressBarStyleHorizontal"

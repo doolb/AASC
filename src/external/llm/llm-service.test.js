@@ -2,7 +2,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const chat = require('./llm-service');
-const { buildAgentPrompt, getConversationRoundRemoval, validateHistoryScope } = chat;
+const {
+    buildAgentPrompt,
+    getConversationRoundRemoval,
+    validateHistoryScope,
+    pickGlobalChatConfig
+} = chat;
 
 test('Pi 历史重建使用 Assistant 标记而不是旧 AI 标记', () => {
     const prompt = buildAgentPrompt([
@@ -60,4 +65,59 @@ test('私聊清空仍要求助手和具体 sessionId', () => {
         () => validateHistoryScope({ mode: 'private', sessionId: 'default' }),
         /必须指定群聊或具体私聊会话/u
     );
+});
+
+test('外部聊天配置保存只保留全局字段', () => {
+    assert.deepStrictEqual(
+        pickGlobalChatConfig({
+            systemPrompt: '新的提示词',
+            agentBackend: 'codex',
+            codexProxy: 'http://127.0.0.1:7899',
+            llmProfiles: [{ name: 'internal', protocol: 'openai-completions' }],
+            activeProfile: 'internal',
+            mode: 'agent',
+            backend: 'pi'
+        }),
+        {
+            systemPrompt: '新的提示词',
+            agentBackend: 'codex',
+            codexProxy: 'http://127.0.0.1:7899'
+        }
+    );
+});
+
+test('外部保存全局字段不会改动 profile 协议', () => {
+    const originalConfig = chat.getConfig();
+    const originalProfiles = chat.getProfiles();
+    const originalActiveProfile = chat.getActiveProfile();
+    const profiles = [
+        {
+            name: 'internal-completions',
+            protocol: 'openai-completions',
+            apiUrl: 'http://127.0.0.1:8080/v1/chat/completions',
+            model: 'internal-model',
+            mode: 'llm'
+        },
+        {
+            name: 'external-responses',
+            protocol: 'openai-responses',
+            apiUrl: 'https://example.test/v1/chat/completions',
+            model: 'external-model',
+            mode: 'llm'
+        }
+    ];
+
+    try {
+        chat.setProfiles(profiles);
+        chat.setConfig(pickGlobalChatConfig({
+            systemPrompt: '仅更新全局字段',
+            agentBackend: originalConfig.agentBackend
+        }));
+        assert.deepStrictEqual(
+            chat.getProfiles().map(({ name, protocol }) => ({ name, protocol })),
+            profiles.map(({ name, protocol }) => ({ name, protocol }))
+        );
+    } finally {
+        chat.setConfig({ ...originalConfig, llmProfiles: originalProfiles, activeProfile: originalActiveProfile });
+    }
 });

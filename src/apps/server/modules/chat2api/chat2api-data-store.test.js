@@ -130,6 +130,88 @@ test('配置导出按原值保留账号凭据和持久化配置，但不导出 A
   assert.deepEqual(await target.getAccount('deepseek-main'), account);
 });
 
+test('账号凭证独立导出只包含账号，并按 ID 预览确认合并', async () => {
+  const sourceRootDir = await makeTempDir();
+  const source = createChat2ApiDataStore({ rootDir: sourceRootDir });
+  const sourceAccount = {
+    accountId: 'legacy-account',
+    providerId: 'qwen',
+    label: '旧账号',
+    email: 'legacy@example.com',
+    credentials: { ticket: 'ticket-secret' },
+    metadata: { shouldNotExport: true },
+    enabled: true,
+  };
+  await source.writeCollection('config', { host: '0.0.0.0' });
+  await source.writeCollection('providers', [{ providerId: 'qwen', name: 'Qwen' }]);
+  await source.writeCollection('modelMappings', [{ model: 'qwen', actualModel: 'qwen-v1' }]);
+  await source.saveAccount(sourceAccount);
+  const apiKey = await source.createApiKey({ label: '不应导出' });
+
+  const exported = await source.exportAccountCredentials();
+  assert.equal(exported.format, 'aasc-chat2api-accounts');
+  assert.equal(exported.version, 1);
+  assert.equal(exported.accounts.length, 1);
+  assert.equal(exported.accounts[0].accountId, 'legacy-account');
+  assert.equal(exported.accounts[0].credentials.ticket, 'ticket-secret');
+  assert.equal('metadata' in exported.accounts[0], false);
+  assert.equal('config' in exported, false);
+  assert.equal('providers' in exported, false);
+  assert.equal('modelMappings' in exported, false);
+  assert.equal('apiKeys' in exported, false);
+  assert.doesNotMatch(JSON.stringify(exported), new RegExp(apiKey.value));
+
+  const target = createChat2ApiDataStore({ rootDir: await makeTempDir() });
+  await target.writeCollection('providers', [{ providerId: 'qwen', name: 'Qwen' }]);
+  await target.saveAccount({ accountId: 'legacy-account', providerId: 'qwen', label: '本地旧账号', credentials: { ticket: 'old' } });
+  await target.saveAccount({ accountId: 'keep-account', providerId: 'qwen', credentials: { ticket: 'keep' } });
+  const payload = {
+    format: 'aasc-chat2api-accounts',
+    version: 1,
+    accounts: [
+      { accountId: 'legacy-account', providerId: 'qwen', label: '更新后的旧账号', credentials: { ticket: 'new' } },
+      { providerId: 'qwen', email: ' New@Example.com ', credentials: { ticket: 'new-account' } },
+    ],
+  };
+  const preview = await target.previewAccountImport(payload);
+  assert.deepEqual(preview.counts, { new: 1, update: 1, invalid: 0 });
+  assert.equal(preview.items[0].action, 'update');
+  assert.equal(preview.items[1].accountId, 'qwen:new@example.com');
+  assert.doesNotMatch(JSON.stringify(preview), /new-account|old/);
+  await assert.rejects(() => target.mergeAccountImport(payload, 'wrong', true), /确认摘要/);
+  const result = await target.mergeAccountImport(payload, preview.confirmation, true);
+  assert.deepEqual(result.counts, { new: 1, update: 1, invalid: 0 });
+  assert.equal((await target.getAccount('legacy-account')).credentials.ticket, 'new');
+  assert.equal((await target.getAccount('qwen:new@example.com')).credentials.ticket, 'new-account');
+  assert.equal((await target.getAccount('keep-account')).credentials.ticket, 'keep');
+});
+
+test('账号凭证导入拒绝同一文件内重复 accountId', async () => {
+  const store = createChat2ApiDataStore({ rootDir: await makeTempDir() });
+  await assert.rejects(() => store.previewAccountImport({
+    format: 'aasc-chat2api-accounts',
+    version: 1,
+    accounts: [
+      { accountId: 'same', providerId: 'qwen', credentials: { ticket: 'a' } },
+      { accountId: 'same', providerId: 'qwen', credentials: { ticket: 'b' } },
+    ],
+}), /重复/);
+});
+
+test('账号凭证预览确认可稳定合并没有邮箱或手机号的新账号', async () => {
+  const store = createChat2ApiDataStore({ rootDir: await makeTempDir() });
+  await store.writeCollection('providers', [{ providerId: 'qwen', name: 'Qwen' }]);
+  const payload = {
+    format: 'aasc-chat2api-accounts',
+    version: 1,
+    accounts: [{ providerId: 'qwen', credentials: { ticket: 'secret' } }],
+  };
+  const preview = await store.previewAccountImport(payload);
+  const result = await store.mergeAccountImport(payload, preview.confirmation, true);
+  assert.equal(result.counts.new, 1);
+  assert.match(result.accounts[0].accountId, /^qwen-[a-f0-9]{12}$/);
+});
+
 test('一键迁移原 Chat2API data.json，并保留配置与账号凭据', async () => {
   const rootDir = await makeTempDir();
   const legacyDataPath = path.join(rootDir, 'legacy', 'data.json');

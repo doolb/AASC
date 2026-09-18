@@ -13,19 +13,32 @@ class Chat2ApiNativeBridge(private val activity: Activity) {
 
     companion object {
         const val LOGIN_REQUEST_CODE = 1006
+        const val ACCOUNT_WEB_REQUEST_CODE = 1007
     }
 
     @JavascriptInterface
     fun openChat2ApiLogin(sessionJson: String): Boolean {
+        return openLoginActivity(sessionJson, LOGIN_REQUEST_CODE)
+    }
+
+    /**
+     * 打开指定账号的隔离外部网页。sessionJson 只包含一次性 sessionId/consumeUrl，原生桥不读取或记录凭证。
+     */
+    @JavascriptInterface
+    fun openChat2ApiAccountWeb(sessionJson: String): Boolean {
+        return openLoginActivity(sessionJson, ACCOUNT_WEB_REQUEST_CODE)
+    }
+
+    private fun openLoginActivity(sessionJson: String, requestCode: Int): Boolean {
         if (sessionJson.isBlank() || activity.isFinishing || activity.isDestroyed) return false
         val opened = AtomicBoolean(false)
         val completed = CountDownLatch(1)
         val open = {
             try {
                 activity.startActivityForResult(
-                    Intent(activity, Chat2ApiLoginActivity::class.java)
+                        Intent(activity, Chat2ApiLoginActivity::class.java)
                         .putExtra(Chat2ApiLoginActivity.EXTRA_SESSION_JSON, sessionJson),
-                    LOGIN_REQUEST_CODE
+                    requestCode
                 )
                 opened.set(true)
             } catch (_: Exception) {

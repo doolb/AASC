@@ -13,6 +13,7 @@ const { createChat2ApiResponsesService } = require('./chat2api-responses-service
 const { createChat2ApiQwenHistoryService } = require('./chat2api-qwen-history-service');
 const { createChat2ApiCredentialValidators } = require('./chat2api-credential-validators');
 const { createChat2ApiManualAccountService } = require('./chat2api-manual-account-service');
+const { createChat2ApiAccountWebSessionService } = require('./chat2api-account-web-session-service');
 
 const createChat2ApiRuntime = (options = {}) => {
   const dataStore = options.dataStore || createChat2ApiDataStore({ rootDir: options.rootDir });
@@ -43,7 +44,12 @@ const createChat2ApiRuntime = (options = {}) => {
     credentialAdapters,
   });
   const manualAccount = options.manualAccount || createChat2ApiManualAccountService({ dataStore, providerRegistry, credentialAdapters });
-  const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth, manualAccount, qwenHistoryService });
+  const accountWebSession = options.accountWebSession || createChat2ApiAccountWebSessionService({
+    dataStore,
+    providerRegistry,
+    baseUrl: options.accountWebSessionBaseUrl || `http://${options.host || '127.0.0.1'}:${options.port || 8080}`,
+  });
+  const managementService = options.managementService || createChat2ApiManagementService({ dataStore, providerRegistry, oauth, manualAccount, accountWebSession, qwenHistoryService });
   const proxy = options.proxy || createChat2ApiProxyService({
     host: options.host,
     port: options.port,
@@ -57,6 +63,7 @@ const createChat2ApiRuntime = (options = {}) => {
   const start = async () => proxy.start();
   const stop = async () => {
     await oauth.stop();
+    accountWebSession.clear();
     await proxy.stop();
   };
   const getStatus = () => ({
@@ -64,7 +71,7 @@ const createChat2ApiRuntime = (options = {}) => {
     address: proxy.address(),
   });
 
-  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, managementService, proxy, start, stop, getStatus };
+  return { dataStore, providerRegistry, modelMapper, loadBalancer, rawTrafficLogger, coreAdapter, responseSessionStore, responsesService, qwenHistoryService, oauth, manualAccount, accountWebSession, managementService, proxy, start, stop, getStatus };
 };
 
 module.exports = { createChat2ApiRuntime };

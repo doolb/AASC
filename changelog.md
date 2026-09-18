@@ -1,16 +1,89 @@
 # Web MediaCenter - 变更日志
 
+### 显示端聊天与 VRM/MMD 同位分层设计
+
+- ✅ [2026-09-18] 保存浏览器显示端聊天与 VRM/MMD 同位舞台的完整设计。
+  - 新增 `docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260918_显示端聊天与MMD分层设计.md` 和实现计划 `docs/superpowers/plans/2026-09-18-display-chat-mmd.md`。
+  - 确定媒体为最底层，MMD 与聊天共享全屏位置，角色会话切换放在聊天顶部，控制端与显示端共享现有 WebSocket 聊天数据。
+  - 确定浏览器使用 three-vrm 直接加载 VRM，VMD/VRMA 通过受限适配层播放；高级动作使用 `mmd.action.plan`，复杂动作生成异步化。
+  - 本次仅保存文档，未修改业务代码、模型、APK 或发布资源。
+
+### Offline full APK v13 正式发布
+
+- ✅ [2026-09-18] 发布包含本轮 Chat2API 账号凭证导入导出与 Android 外部网页恢复代码的完整 Offline APK v13（`0.2.11-offline`）。
+  - 文件：`apk/aasc-display-offline-v13.apk`；大小 `957338670` bytes；SHA-256 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`。
+  - 已同步 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；LAN/WAN 直连 IP HTTP 200、Content-Length 和远端文件 hash 一致，发布器清理无错误。
+  - 默认域名 `c.aasc.us` 仍返回 403，发布验收使用 `192.168.1.39` 与 `120.79.245.103` 直连地址；未清理工作区其他已有改动。
+
+### Offline 外网更新检查诊断
+
+- ✅ [2026-09-18] 在 SM-N9500 上确认热更域名仅用于 DNS 解析，APK 实际请求使用解析后的 `120.79.245.103`；设备启动时已成功读取外网清单并显示 min v12 下载提示。
+  - 完整 APK v13 按设计只发布版本文件，不写入 min 热更新 `manifest.json`，因此不会通过当前更新卡片自动提示完整包；完整包需要单独安装。
+
+### Chat2API 账号凭证导入导出与 Android 外部网页恢复
+
+- ✅ [2026-09-18] 完成 Chat2API 账号凭证独立导入导出和 Android 外部网页恢复实现。
+  - 服务端新增明文 `aasc-chat2api-accounts` v1 包、字段白名单、按 `accountId` 预览确认合并、旧 ID 保留、新账号邮箱/手机号 ID 和一次性 WebSession。
+  - 控制端新增账号凭证导入/导出、脱敏预览表和“打开外部网页”；Android 使用独立进程 WebView 恢复允许来源的 Cookie/LocalStorage，Authorization-only Provider 回退手动登录。
+  - 改动文件：`chat2api-account-identity.js`、`chat2api-account-web-session-service.js`、Chat2API data store/management/runtime/proxy/manual/OAuth、`chat2api.js`、`chat2api.css`、Android Chat2API WebView/Activity/NativeBridge/restore helper 及对应测试。
+  - 验证：Chat2API `91/91`、Android `:app:testDebugUnitTest`、项目全量 `npm test` `848/848`、`git diff --check` 均通过；未生成或发布 APK，真实账号 Android 现场验收待执行。
+
+### Offline code v4 与 min APK v12 正式发布
+
+### Offline full APK v12 正式发布
+
+- ✅ [2026-09-18] 完整 Offline APK 已对齐 min versionCode 12 并发布为 `aasc-display-offline-v12.apk`（`0.2.10-offline`）。
+  - APK 大小 `957319386` bytes，SHA-256 `b107d7963bf4dd18068404427e12f4edc72ff8253e8914e3d1909ca66e6c8183`。
+  - 已同步 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；LAN/WAN 直连 IP HTTP 200、Content-Length、远端 hash、APK v2 签名和 ZIP 完整性均通过，旧 full v9 保留。
+  - 默认域名 `c.aasc.us` 返回 403，本次发布使用 LAN 和 WAN 直连 IP 验收。
+
+- ✅ [2026-09-18] 发布控制端聊天设置 profile 协议保护修复：服务 code v4 与 Offline min APK v12（`0.2.10-offline-min`）已同步到 LAN/WAN。
+  - code v4：`code/code-v4.zip`，大小 `13996510` bytes，SHA-256 `7ca5adf90be5738ee94b47e31534d574b411a1934e3b0d0db6702955b1247bd2`。
+  - min v12：`apk/aasc-display-offline-min-v12.apk`，大小 `89236426` bytes，SHA-256 `c4c20af9ab6b71c5e0e5dad1b4d3d2f1cdfce8cb7eaee91d6dde0ff1afdcf253`；清单已写入本次更新日志。
+  - LAN/WAN 直连 IP 的 manifest 与 APK 均返回 HTTP 200、Content-Length 正确，清单签名、APK v2 签名、ZIP 完整性和远端文件 hash 已复核；默认域名 `c.aasc.us` 返回 403，未作为验收入口。
+
+### 控制端聊天设置保护 profile 协议
+
+- ✅ [2026-09-18] 修复外部“保存设置”将多个 LLM profile 协议统一写成 `openai-responses` 的问题。
+  - `chat.js` 外部保存只提交全局聊天字段；`llm-service.js` 提供统一字段筛选；`server-app.js` 保存全局配置时保留已有 `llmProfiles` 和 `activeProfile`。
+  - profile 的协议、地址、模型和密钥继续由 `/api/chat/profiles` 专用流程管理，Chat2API 配置保存职责不变。
+  - 验证：定向聊天配置与 LLM 测试 16/16、项目全量 `npm test` 847/847、相关 JavaScript 语法检查通过。
+
 ### Offline 控制端自动缩放修复发布
 
 - ✅ [2026-09-18] 发布 min v11（`0.2.9-offline-min`），仅 Offline 控制端输入框聚焦时禁用页面自动放大。
   - APK 大小 `89235646` bytes，SHA-256 `0b3ab8871ca17e32fa1dc5db767ef8b31049a973d8d678faa471e1ad4ac396da`，文件为 `apk/aasc-display-offline-min-v11.apk`。
   - LAN/WAN HTTP 200、Content-Length、签名清单、APK ZIP 完整性和远端 hash 均通过；旧 min 版本按精确规则清理，full v9 保留。
 
+### Offline Pi SDK 与 Chat2API Responses 修复
+
+- ✅ [2026-09-18] 修复 Offline Runtime 遗漏 Pi SDK Provider hidden manifest，以及 Responses 流式 HTTP 错误丢失上游 code 的问题。
+  - `prepare-android-node-runtime.js` 将 `node_modules/**/.manifest.json` 复制为 `aasc-bundled-manifest.json`；`NodeRuntimeInstaller.kt` 安装后恢复 `.manifest.json` 并删除 marker，含 Pi SDK 的 Runtime 快速复用会校验 manifest。
+  - `llm-responses-client.js` 对非 2xx 流式响应先读取 JSON 错误，再保留 Chat2API 的 HTTP 状态、`code` 和 `message`；`no_available_account` 不再被通用 `responses_request_failed` 覆盖。
+  - 验证：真实 release package marker 资产检查通过；Node Runtime packaging `23/23`、Offline/APK `49/49`、Chat2API Responses/proxy/client `19/19`、external/llm `24/24`、项目全量 `npm test` `845/845`、Android `:app:testDebugUnitTest` BUILD SUCCESSFUL；未发布新 APK，Pi 真机验收待安装新资源后执行。
+
 ### Offline 控制端输入框聚焦自动缩放修复
 
 - ✅ [2026-09-18] 仅对 Offline APK 控制端 WebView 注入 `maximum-scale=1`、`user-scalable=no` viewport 约束，避免软键盘弹出时页面自动放大。
   - `DisplayWebView.kt` 增加控制页专用策略，`MainActivity.kt` 仅为 Offline 控制 WebView 启用；显示端、普通 APK 和服务端浏览器控制端不变。
   - 验证：Offline 静态回归 `26/26`，Android `:app:testDebugUnitTest` `BUILD SUCCESSFUL`；真实键盘触控回归待安装新包后执行。
+
+### Offline Chat2API 本机账号导入验证
+
+- ✅ [2026-09-18] 将当前主机 Chat2API 的 Qwen 账号通过 Offline 同源网关导入 SM-N9500。
+  - 采用“预览 → 明确确认合并”流程，仅导入账号，不覆盖设备 Provider、代理配置和模型映射；凭据未输出到终端、项目或日志。
+  - 验证：设备账号列表显示脱敏账号且 `secretConfigured=true`；`/v1/models` 返回 6 个 Qwen 模型；最小 Chat Completions 请求返回 HTTP 200 和 `OK`。
+  - 追加验证：Offline 模型映射当前已为空；在空映射状态下直接使用 `Qwen3.6` 发送请求仍返回 HTTP 200 和 `OK`，测试结束后保持原映射状态。
+  - 追加边界验证：空映射状态下使用 `Qwen3.6-Flash` 发送聊天请求返回 HTTP 503 `no_available_account`，确认该别名需要显式模型映射；本次未修改设备配置。
+  - 控制端手动聊天验证：临时将 profile 设为 `llm + openai-completions + Qwen3.6` 后，经 Chat2API 代理返回 `OK`；原 `qwen3.5` profile 为 `agent/pi`，真机报错为 Pi Provider manifest 缺失，验证后已恢复原 profile。
+  - 兼容性结论：Android 节点策略未直接禁用 Pi，但 Offline APK 的资源打包过滤隐藏文件，遗漏 `@earendil-works/pi-ai/dist/providers/data/.manifest.json`；当前发布包不能运行 `agent/pi`，需补齐打包/安装恢复后再发布。
+
+### Offline min APK 发布更新日志
+
+- ✅ [2026-09-18] 为 Offline min APK 增加可签名的发布更新日志，并在 Android 更新卡片中展示。
+  - `scripts/ops/offline-min-apk-package.js` 支持 `--release-notes-file <UTF-8 文件>`；日志首尾空白裁剪、保留内部换行，限制 4096 个 Unicode 字符，空日志不写入 `payload.components.apkMin.releaseNotes`。
+  - `OfflineUpdateManifest.kt` 验证并解析可选 `releaseNotes`；`MainActivity.kt`、`activity_main.xml` 和 `strings.xml` 展示最多 6 行纯文本更新内容，旧清单仍隐藏日志区域并沿用原有提示。
+  - 验证：Node Offline/APK 回归 39/39 通过；Android `OfflineUpdateManifestTest` BUILD SUCCESSFUL；`git diff --check` 通过。当前未重新发布 APK，下一次 min 打包可直接携带更新日志。
 
 ### Android Offline full APK 跟随 min v9 发布
 

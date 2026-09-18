@@ -34,6 +34,7 @@
 | 媒体库 | [media-library.md](design/media-library.md) | 多媒体库管理、多协议支持、文件操作 |
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |
 | 聊天系统 | [chat-system.md](design/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
+| 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](design/display-chat-mmd.md) | 浏览器显示端聊天、角色会话、VRM/MMD 同位舞台和动作控制 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 控制端折叠 think、显示端展示 think、TTS 播报去标签内容和私聊清空错误反馈 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](design/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出 |
 | 搜索频道与独立 Pi 搜索进程 | [search-channel.md](design/search-channel.md) | 搜索状态/历史独立展示、LLM 搜索上下文隔离与临时进程回收 |
@@ -99,6 +100,8 @@
 | 私聊聊天 Agent 系统工具 | [private-chat-agent-tools.md](design/private-chat-agent-tools.md) | 私聊 Agent 调用受限系统工具、修复模式安全边界与 Pi/Codex 统一适配 |
 | Chat2API 核心内置任务 | [chat2api-builtin-task.md](design/chat2api-builtin-task.md) | Provider、OAuth、账号、API Key 和 OpenAI 兼容代理内置为常驻任务 |
 | Android Chat2API 登录与控制端开放 | [android-chat2api-login-control.md](design/android-chat2api-login-control.md) | Android APK 隔离 WebView 登录捕获、Provider 验证和按显示端开放控制端 |
+| Chat2API 账号凭证导入导出与 Android 外部网页恢复 | [android-chat2api-credential-transfer.md](design/android-chat2api-credential-transfer.md) | 账号凭证明文 JSON 导入导出、按账号 ID 合并和 Android 隔离 WebView 登录状态恢复 |
+| Offline Pi SDK 与 Chat2API Responses 修复 | [android-offline-pi-sdk-and-chat2api-responses.md](design/android-offline-pi-sdk-and-chat2api-responses.md) | Offline Pi SDK hidden manifest 资源恢复、Runtime 健康检查和 Responses 回归契约 |
 | Chat2API 普通网页手动外部认证 | [chat2api-manual-external-auth.md](design/chat2api-manual-external-auth.md) | 普通网页控制端粘贴外部登录 Cookie，按 Provider 规则提取、验证并保存账号 |
 | Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](design/chat2api-global-responses.md) | 普通聊天、语音、搜索/系统任务和 Pi Agent 统一使用内置 Responses 代理 |
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](design/chat2api-raw-traffic-log-modes.md) | 原始流量完整/简洁日志模式和控制端配置 |

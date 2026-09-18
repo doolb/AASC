@@ -43,6 +43,28 @@ test('聊天配置客户端应只保存全局聊天字段，并在 profile 中�
     assert.match(chatScript, /profile.*apiKey|apiKey.*profile/s);
 });
 
+test('聊天设置外部保存不得提交或回填 profile 配置', () => {
+    assert.match(chatScript, /globalConfig\s*=\s*\{[\s\S]{0,300}systemPrompt[\s\S]{0,300}agentBackend/u);
+    assert.match(chatScript, /body:\s*JSON\.stringify\(globalConfig\)/u);
+    assert.match(chatScript, /this\.config\.systemPrompt\s*=\s*data\.config\.systemPrompt/u);
+    assert.match(chatScript, /this\.config\.agentBackend\s*=\s*data\.config\.agentBackend/u);
+    assert.doesNotMatch(chatScript, /this\.config\s*=\s*\{\s*\.\.\.this\.config,\s*\.\.\.data\.config\s*\}/u);
+});
+
+test('聊天配置接口只使用全局字段筛选并保留 profile', () => {
+    const server = fs.readFileSync(
+        path.join(projectRoot, 'src/apps/server/boot/server-app.js'),
+        'utf8'
+    );
+    assert.match(server, /chat\.pickGlobalChatConfig\(req\.body\)/u);
+    assert.match(server, /config\.get\(['"]chat['"],\s*\{\}\)/u);
+    assert.match(server, /const persistedChatConfig\s*=\s*\{/u);
+    assert.match(server, /storedChatConfig && typeof storedChatConfig === 'object'\s*\? storedChatConfig/u);
+    assert.match(server, /\.\.\.chat\.pickGlobalChatConfig\(newConfig\)/u);
+    assert.match(server, /config\.set\(['"]chat['"],\s*persistedChatConfig\)/u);
+    assert.doesNotMatch(server, /const newConfig = chat\.setConfig\(req\.body\);\s*config\.set\(['"]chat['"], newConfig\)/u);
+});
+
 test('默认配置应将调用协议放在默认 LLM profile 中', () => {
     const defaultConfigSource = fs.readFileSync(
         path.join(projectRoot, 'src/apps/server/modules/config/config-app-service.js'),

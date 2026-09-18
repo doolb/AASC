@@ -174,6 +174,12 @@ test('min 更新需要手动确认下载并显示浮动进度', () => {
     assert.match(layout, /offlineUpdateProgress/u);
     assert.match(layout, /offlineUpdateDownload/u);
     assert.match(layout, /offlineUpdateLater/u);
+    assert.match(layout, /offlineUpdateNotesTitle/u);
+    assert.match(layout, /offlineUpdateNotes/u);
+    assert.match(layout, /android:id="@\+id\/offlineUpdateNotes"[\s\S]*android:maxLines="6"/u);
+    assert.match(activity, /metadata\.releaseNotes/u);
+    assert.match(activity, /offlineUpdateNotes\.maxLines|offlineUpdateNotes/u);
+    assert.match(strings, /name="offline_update_notes_title"/u);
     assert.match(activity, /checkForMinApkUpdate/u);
     assert.match(activity, /showMinApkUpdatePrompt/u);
     assert.match(activity, /startMinApkDownload/u);

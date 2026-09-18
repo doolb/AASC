@@ -228,6 +228,25 @@
     border-radius: 4px;
 }
 
+.chat2api-table-wrap {
+    overflow-x: auto;
+    margin-top: 8px;
+}
+
+.chat2api-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.chat2api-table th,
+.chat2api-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    white-space: nowrap;
+}
+
 .chat2api-dialog .task-card-btn {
     border: 1px solid var(--border-color);
     background: var(--bg-surface-strong);

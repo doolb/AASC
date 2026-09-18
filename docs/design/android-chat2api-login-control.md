@@ -102,6 +102,17 @@ Android 登录 WebView：
 - 控制端开关是显示端入口授权，不等同于 Chat2API API Key 鉴权。
 - Android WebView、服务端和控制端都禁止输出完整 Token、Cookie、Authorization 和 API Key。
 
+## Offline 本机账号导入验证（2026-09-18）
+
+- Offline Chat2API 账号迁移通过本地同源网关的“预览 → 明确确认合并”接口执行，只导入账号集合，不覆盖 Offline 端已有 Provider、代理配置和模型映射。
+- 导入过程不输出凭据；导入后只通过脱敏账号列表、可用模型列表和最小 Chat Completions 请求验证账号可用性。
+
+## Offline 控制端手动聊天验证（2026-09-18）
+
+- 控制端手动聊天必须使用 `mode=llm`、`protocol=openai-completions` 和当前 Chat2API 代理端口；`agent/pi` 配置会转入 Pi Agent 运行时，不会发送 Chat2API 请求。
+- 真机现有 `qwen3.5` 配置的模型为 `Qwen3.6-Flash` 且模式为 `agent/pi`，实际错误来自缺失的 Pi Provider manifest；临时切换为 `Qwen3.6` 的 Chat Completions 配置后，控制端 WebSocket 请求返回 `OK`，测试结束恢复原配置。
+- 历史已发布包曾因 Android 资源打包过滤隐藏文件而遗漏 Pi SDK 的 `pi-ai/dist/providers/data/.manifest.json`；新实现将该文件安全改名为 marker 并在 Runtime 安装后恢复，详见 `android-offline-pi-sdk-and-chat2api-responses.md`。含新资源的 APK 仍需真机安装后完成 agent/pi 验收。
+
 ## 实现状态与本次验收
 
 - 服务端已实现按显示端保存 `androidControlPageOpen`、能力校验、断线重连补发和控制端权威广播。
@@ -110,3 +121,4 @@ Android 登录 WebView：
 - 原生 Chat2API 登录页顶部已增加“完成”按钮并置于“取消”之前；按钮会即时合并当前页面 localStorage/Cookie 与已捕获 Authorization，字段不全时保留登录页并提示重试。
 - 离线 APK 默认显示控制端入口；启动状态遮罩仅在本地 display 页面成功加载后隐藏，错误页完成回调不得误隐藏遮罩。
 - 普通 APK 已完成真机启动冒烟和无崩溃检查；Provider 真实网页登录需要测试账号，暂留现场验收，不将测试凭据写入项目或日志。
+- 2026-09-18 已将本机 Qwen 账号导入 SM-N9500 Offline Chat2API，账号列表和 6 个 Qwen 模型可见，最小 Chat Completions 请求返回成功；凭据未写入项目或日志。

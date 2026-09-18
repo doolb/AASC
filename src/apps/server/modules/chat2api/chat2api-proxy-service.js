@@ -21,19 +21,21 @@ const createChat2ApiProxyService = (options = {}) => {
     failedRequests: 0,
   };
 
-  const sendJson = (response, statusCode, payload) => {
+  const sendJson = (response, statusCode, payload, { noStore = false } = {}) => {
     const body = JSON.stringify(payload);
     response.statusCode = statusCode;
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
+    if (noStore) response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Content-Length', Buffer.byteLength(body));
     response.end(body);
   };
 
-  const sendJsonAttachment = (response, payload, filename) => {
+  const sendJsonAttachment = (response, payload, filename, { noStore = false } = {}) => {
     const body = `${JSON.stringify(payload, null, 2)}\n`;
     response.statusCode = 200;
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    if (noStore) response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Content-Length', Buffer.byteLength(body));
     response.end(body);
   };
@@ -160,6 +162,10 @@ const createChat2ApiProxyService = (options = {}) => {
         sendJsonAttachment(response, await managementService.exportConfig(), 'chat2api-config.json');
         return;
       }
+      if (request.method === 'GET' && url.pathname === '/api/chat2api/accounts/export') {
+        sendJsonAttachment(response, await managementService.exportAccountCredentials(), 'chat2api-accounts.json', { noStore: true });
+        return;
+      }
       const body = ['POST', 'PUT'].includes(request.method) ? await readJson(request) : null;
       const managementResult = await (async () => {
         if (request.method === 'GET' && url.pathname === '/api/chat2api/config') return managementService.getConfig();
@@ -169,6 +175,15 @@ const createChat2ApiProxyService = (options = {}) => {
         if (request.method === 'DELETE' && url.pathname.startsWith('/api/chat2api/providers/')) return managementService.deleteProvider(decodeURIComponent(url.pathname.split('/').pop()));
         if (request.method === 'GET' && url.pathname === '/api/chat2api/accounts') return managementService.listAccounts();
         if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/manual') return managementService.addManualAccount(body);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/import/preview') return managementService.previewAccountImport(body);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/import/merge') return managementService.mergeAccountImport(body && body.data, body && body.confirmation, body && body.confirmed);
+        if (request.method === 'POST' && url.pathname === '/api/chat2api/accounts/web-session/consume') return managementService.consumeAccountWebSession(body && body.sessionId);
+        if (request.method === 'POST' && url.pathname.endsWith('/web-session') && url.pathname.startsWith('/api/chat2api/accounts/')) {
+          const prefix = '/api/chat2api/accounts/';
+          const suffix = '/web-session';
+          const accountId = decodeURIComponent(url.pathname.slice(prefix.length, -suffix.length));
+          return managementService.createAccountWebSession(accountId);
+        }
         if (request.method === 'PUT' && url.pathname.startsWith('/api/chat2api/accounts/')) return managementService.updateAccount(decodeURIComponent(url.pathname.split('/').pop()), body);
         if (request.method === 'DELETE' && url.pathname.startsWith('/api/chat2api/accounts/')) return managementService.deleteAccount(decodeURIComponent(url.pathname.split('/').pop()));
         if (request.method === 'GET' && url.pathname === '/api/chat2api/model-mappings') return managementService.listModelMappings();
@@ -191,7 +206,9 @@ const createChat2ApiProxyService = (options = {}) => {
         error.code = 'not_found';
         throw error;
       })();
-      sendJson(response, 200, await managementResult);
+      sendJson(response, 200, await managementResult, {
+        noStore: url.pathname === '/api/chat2api/accounts/web-session/consume',
+      });
       return;
     }
     if (request.method === 'GET' && url.pathname === '/v1/models') {

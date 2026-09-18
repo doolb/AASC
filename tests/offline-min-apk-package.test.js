@@ -7,7 +7,11 @@ const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 const { signManifestPayload, verifySignedManifest } = require('../scripts/ops/offline-update-package');
-const { createOfflineMinApkArtifact } = require('../scripts/ops/offline-min-apk-package');
+const {
+    createOfflineMinApkArtifact,
+    normalizeReleaseNotes,
+    parseCliArguments
+} = require('../scripts/ops/offline-min-apk-package');
 
 test('min APK 打包清单绑定 APK 签名、应用版本和完整包模型兼容指纹', async (t) => {
     const projectRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-offline-min-package-'));
@@ -64,6 +68,8 @@ test('min APK 打包清单绑定 APK 签名、应用版本和完整包模型兼�
         signature: signManifestPayload(currentPayload, privateKeyPem)
     }));
     const signerSha256 = 'd'.repeat(64);
+    const releaseNotesFile = path.join(projectRoot, 'release-notes.md');
+    await fs.promises.writeFile(releaseNotesFile, '\n修复 Offline 显示缩放\n\n- 1920@160dpi 调整为 100%\n');
     const result = await createOfflineMinApkArtifact({
         projectRoot,
         apkPath,
@@ -71,6 +77,7 @@ test('min APK 打包清单绑定 APK 签名、应用版本和完整包模型兼�
         modelCompatibilityPath: compatibilityPath,
         currentManifestPath,
         outputDir: path.join(projectRoot, 'output'),
+        releaseNotesFile,
         privateKeyPath,
         publicKeyPath,
         commandRunner: async () => ({
@@ -86,5 +93,30 @@ test('min APK 打包清单绑定 APK 签名、应用版本和完整包模型兼�
     assert.equal(result.manifest.payload.components.apkMin.packageName, 'com.aasc.display.offline');
     assert.equal(result.manifest.payload.components.apkMin.signerSha256, signerSha256);
     assert.equal(result.manifest.payload.components.apkMin.modelCompatibilitySha256, modelCompatibilitySha256);
+    assert.equal(result.manifest.payload.components.apkMin.releaseNotes, '修复 Offline 显示缩放\n\n- 1920@160dpi 调整为 100%');
     assert.equal(await fs.promises.readFile(result.apkPath, 'utf8'), 'signed apk bytes');
+});
+
+
+test('min APK 发布参数支持更新日志文件且限制重复参数', () => {
+    assert.deepEqual(parseCliArguments([
+        '--manifest-file', 'manifest.json',
+        '--release-notes-file', 'release-notes.md'
+    ]), {
+        manifestFile: 'manifest.json',
+        releaseNotesFile: 'release-notes.md'
+    });
+    assert.throws(
+        () => parseCliArguments(['--release-notes-file', 'a.md', '--release-notes-file', 'b.md']),
+        /不能重复/u
+    );
+});
+
+test('发布更新日志会裁剪空白并拒绝超出 Unicode 字符上限的内容', () => {
+    assert.equal(normalizeReleaseNotes(' \n\t '), null);
+    assert.equal(normalizeReleaseNotes('  修复完成  '), '修复完成');
+    assert.throws(
+        () => normalizeReleaseNotes('😀'.repeat(4097)),
+        /4096/u
+    );
 });

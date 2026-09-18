@@ -85,12 +85,38 @@ const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) =>
     let dataLines = [];
     let totalBytes = 0;
     let settled = false;
+    const statusCode = response.statusCode || 0;
 
     const fail = (error) => {
       if (settled) return;
       settled = true;
       reject(error);
     };
+
+    if (statusCode < 200 || statusCode >= 300) {
+      // HTTP 错误不是 Responses 事件流：先完整读取 Chat2API JSON 错误，
+      // 避免普通 SSE end 处理抢先把上游 code 覆盖成通用 responses_request_failed。
+      let errorBody = '';
+      response.on('data', (chunk) => {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_RESPONSE_BYTES) {
+          response.destroy(new Error('Responses 错误响应超过大小限制'));
+          return;
+        }
+        errorBody += chunk.toString('utf8');
+      });
+      response.on('end', () => {
+        let payload = null;
+        try {
+          payload = errorBody ? JSON.parse(errorBody) : null;
+        } catch (error) {
+          payload = null;
+        }
+        fail(getRemoteError(payload, statusCode));
+      });
+      response.on('error', fail);
+      return;
+    }
 
     const emitData = () => {
       if (dataLines.length === 0 || settled) {
@@ -149,16 +175,6 @@ const streamSse = ({ url, options, timeoutMs, onEvent, requestOptions = {} }) =>
       }
     });
     response.on('error', fail);
-    if ((response.statusCode || 0) < 200 || (response.statusCode || 0) >= 300) {
-      // 先继续收集错误体，结束时统一转换为 Responses 错误；这里不向回调投递错误 JSON。
-      let errorBody = '';
-      response.on('data', (chunk) => { errorBody += chunk.toString('utf8'); });
-      response.on('end', () => {
-        let payload = null;
-        try { payload = JSON.parse(errorBody); } catch (error) { /* 使用状态码兜底 */ }
-        fail(getRemoteError(payload, response.statusCode || 500));
-      });
-    }
   });
   request.once('error', reject);
   request.setTimeout(timeoutMs, () => request.destroy(new Error('Responses 流式请求超时')));

@@ -51,7 +51,7 @@
       modal.id = 'chat2apiModal';
       modal.className = 'chat2api-modal modal-mask';
       modal.innerHTML = '<div class="chat2api-dialog">' +
-        '<div class="chat2api-header"><strong class="chat2api-title">Chat2API 账户管理</strong><span class="chat2api-header-actions"><button class="task-card-btn" id="chat2apiExportConfig">导出配置</button><button class="task-card-btn" id="chat2apiImportConfig">导入配置</button><input id="chat2apiImportFile" type="file" accept=".json,application/json" hidden><button class="task-card-btn" id="chat2apiImportLegacy">导入原 Chat2API 数据</button><button class="task-card-btn" onclick="Chat2APIControl.close()">关闭</button></span></div>' +
+        '<div class="chat2api-header"><strong class="chat2api-title">Chat2API 账户管理</strong><span class="chat2api-header-actions"><button class="task-card-btn" id="chat2apiExportConfig">导出配置</button><button class="task-card-btn" id="chat2apiImportConfig">导入配置</button><button class="task-card-btn" id="chat2apiExportAccounts">导出账号凭证</button><button class="task-card-btn" id="chat2apiImportAccounts">导入账号凭证</button><input id="chat2apiImportFile" type="file" accept=".json,application/json" hidden><input id="chat2apiImportAccountsFile" type="file" accept=".json,application/json" hidden><button class="task-card-btn" id="chat2apiImportLegacy">导入原 Chat2API 数据</button><button class="task-card-btn" onclick="Chat2APIControl.close()">关闭</button></span></div>' +
         '<div id="chat2apiMessage" class="chat2api-message"></div>' +
         '<div id="chat2apiContent" class="chat2api-content"></div>' +
       '</div>';
@@ -90,7 +90,7 @@
       const providerOptions = providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(provider.name || provider.id)}</option>`).join('');
       const mappingProviderOptions = ['<option value="">自动选择 Provider</option>', ...providers.map((provider) => `<option value="${this.escapeHtml(provider.id)}">${this.escapeHtml(provider.name || provider.id)}</option>`)].join('');
       const mappingAccountOptions = ['<option value="">自动选择账号</option>', ...accounts.map((account) => `<option value="${this.escapeHtml(account.accountId || account.id)}">${this.escapeHtml(account.label || account.name || account.accountId || account.id)}（${this.escapeHtml(account.providerId)}）</option>`)].join('');
-      const accountRows = accounts.length ? accounts.map((account) => `<div class="chat2api-list-row"><span>${this.escapeHtml(account.label || account.accountId)} <small class="chat2api-secondary-text">${this.escapeHtml(account.providerId)}</small></span><span class="chat2api-row-actions"><span class="chat2api-success-text">${account.enabled === false ? '已禁用' : '已登录'}</span><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无已登录账号</div>';
+      const accountRows = accounts.length ? accounts.map((account) => `<div class="chat2api-list-row"><span>${this.escapeHtml(account.label || account.accountId)} <small class="chat2api-secondary-text">${this.escapeHtml(account.providerId)}</small></span><span class="chat2api-row-actions"><span class="chat2api-success-text">${account.enabled === false ? '已禁用' : '已登录'}</span><button class="task-card-btn" data-chat2api-account-web="${this.escapeHtml(account.accountId)}">打开外部网页</button><button class="task-card-btn" data-chat2api-account-toggle="${this.escapeHtml(account.accountId)}">${account.enabled === false ? '启用' : '禁用'}</button><button class="task-card-btn danger" data-chat2api-account-delete="${this.escapeHtml(account.accountId)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无已登录账号</div>';
       const keyRows = apiKeys.length ? apiKeys.map((key) => `<div class="chat2api-list-row"><span>${this.escapeHtml(key.label || key.id)}</span><span class="chat2api-row-actions"><code class="chat2api-code">${this.escapeHtml(key.maskedValue || '')}</code><button class="task-card-btn" data-chat2api-key-disable="${this.escapeHtml(key.id)}">禁用</button><button class="task-card-btn danger" data-chat2api-key-delete="${this.escapeHtml(key.id)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无 API Key</div>';
       const mappingRows = mappings.length ? mappings.map((mapping) => `<div class="chat2api-mapping-row"><span class="chat2api-mapping-values"><code class="chat2api-code">${this.escapeHtml(mapping.model)}</code><span class="chat2api-secondary-text">→</span><code class="chat2api-code">${this.escapeHtml(mapping.actualModel)}</code><small class="chat2api-secondary-text">${this.escapeHtml(mapping.preferredProviderId || mapping.providerId || '自动 Provider')}</small></span><span class="chat2api-row-actions"><button class="task-card-btn" data-chat2api-mapping-edit="${this.escapeHtml(mapping.model)}">编辑</button><button class="task-card-btn danger" data-chat2api-mapping-delete="${this.escapeHtml(mapping.model)}">删除</button></span></div>`).join('') : '<div class="chat2api-empty">暂无模型映射</div>';
       const mappingEditor = `<div id="chat2apiMappingEditor" class="chat2api-mapping-editor" hidden><div class="chat2api-section-heading"><h5 id="chat2apiMappingEditorTitle" class="chat2api-editor-title">新增模型映射</h5><button class="task-card-btn" id="chat2apiMappingCancel" hidden>取消编辑</button></div><div class="chat2api-mapping-form"><label class="chat2api-field">请求模型<input id="chat2apiMappingModel" placeholder="例如 Qwen3.6-Flash"></label><label class="chat2api-field">实际模型<input id="chat2apiMappingActualModel" placeholder="例如 Qwen3.7"></label><label class="chat2api-field">优先 Provider<select id="chat2apiMappingProvider">${mappingProviderOptions}</select></label><label class="chat2api-field">优先账号<select id="chat2apiMappingAccount">${mappingAccountOptions}</select></label></div><button class="task-card-btn primary chat2api-save-button" id="chat2apiMappingSave">保存映射</button></div>`;
@@ -126,10 +126,16 @@
       if (saveConfigButton) saveConfigButton.addEventListener('click', () => this.saveConfig());
       const exportConfigButton = document.getElementById('chat2apiExportConfig');
       if (exportConfigButton) exportConfigButton.addEventListener('click', () => this.exportConfig());
+      const exportAccountsButton = document.getElementById('chat2apiExportAccounts');
+      if (exportAccountsButton) exportAccountsButton.addEventListener('click', () => this.exportAccountCredentials());
       const importConfigButton = document.getElementById('chat2apiImportConfig');
       if (importConfigButton) importConfigButton.addEventListener('click', () => this.openImportPicker());
       const importFileInput = document.getElementById('chat2apiImportFile');
       if (importFileInput) importFileInput.addEventListener('change', () => this.importConfigFile(importFileInput.files && importFileInput.files[0]));
+      const importAccountsButton = document.getElementById('chat2apiImportAccounts');
+      if (importAccountsButton) importAccountsButton.addEventListener('click', () => this.openAccountImportPicker());
+      const importAccountsInput = document.getElementById('chat2apiImportAccountsFile');
+      if (importAccountsInput) importAccountsInput.addEventListener('change', () => this.importAccountCredentialsFile(importAccountsInput.files && importAccountsInput.files[0]));
       const importLegacyButton = document.getElementById('chat2apiImportLegacy');
       if (importLegacyButton) importLegacyButton.addEventListener('click', () => this.importLegacyData());
       const newMappingButton = document.getElementById('chat2apiMappingNew');
@@ -139,6 +145,7 @@
       const cancelMappingButton = document.getElementById('chat2apiMappingCancel');
       if (cancelMappingButton) cancelMappingButton.addEventListener('click', () => this.resetMappingEditor());
       content.querySelectorAll('[data-chat2api-account-toggle]').forEach((button) => button.addEventListener('click', () => this.updateAccount(button.dataset.chat2apiAccountToggle, button.textContent === '启用')));
+      content.querySelectorAll('[data-chat2api-account-web]').forEach((button) => button.addEventListener('click', () => this.openExternalAccountWeb(button.dataset.chat2apiAccountWeb)));
       content.querySelectorAll('[data-chat2api-account-delete]').forEach((button) => button.addEventListener('click', () => this.deleteAccount(button.dataset.chat2apiAccountDelete)));
       content.querySelectorAll('[data-chat2api-key-disable]').forEach((button) => button.addEventListener('click', () => this.disableKey(button.dataset.chat2apiKeyDisable)));
       content.querySelectorAll('[data-chat2api-key-delete]').forEach((button) => button.addEventListener('click', () => this.deleteKey(button.dataset.chat2apiKeyDelete)));
@@ -372,6 +379,89 @@
         window.URL.revokeObjectURL(downloadUrl);
         this.message('配置已导出。文件包含账号 Token/Cookie 等敏感凭据，不包含 API Key 原文。');
       } catch (error) { this.message(`配置导出失败：${error.message}`, true); }
+    },
+
+    async exportAccountCredentials() {
+      try {
+        const response = await fetch(`${this.baseUrl}/api/chat2api/accounts/export`, { headers: { Accept: 'application/json' } });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error && body.error.message ? body.error.message : `请求失败 (${response.status})`);
+        }
+        const blob = await response.blob();
+        const stamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = downloadUrl;
+        anchor.download = `chat2api-accounts-${stamp}.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+        this.message('账号凭证已导出。文件包含 Token/Cookie 等敏感凭据，请妥善保管。');
+      } catch (error) { this.message(`账号凭证导出失败：${error.message}`, true); }
+    },
+
+    openAccountImportPicker() {
+      const input = document.getElementById('chat2apiImportAccountsFile');
+      if (input) {
+        input.value = '';
+        input.click();
+      }
+    },
+
+    renderAccountImportPreview(preview) {
+      const old = document.getElementById('chat2apiAccountImportPreview');
+      if (old) old.remove();
+      const host = document.getElementById('chat2apiContent');
+      if (!host) return;
+      const items = Array.isArray(preview.items) ? preview.items : [];
+      const rows = items.map((item) => `<tr><td>${this.escapeHtml(item.providerId)}</td><td>${this.escapeHtml(item.label || '')}</td><td>${this.escapeHtml(item.email || item.phone || '')}</td><td>${this.escapeHtml(item.accountId)}</td><td>${this.escapeHtml(item.action)}</td><td>${item.secretConfigured ? '已配置' : '缺少凭证'}</td></tr>`).join('');
+      const panel = document.createElement('section');
+      panel.id = 'chat2apiAccountImportPreview';
+      panel.className = 'chat2api-section chat2api-section-wide';
+      panel.innerHTML = `<h4 class="chat2api-section-title">账号凭证导入预览</h4><div class="chat2api-secondary-text">新增 ${Number(preview.counts?.new || 0)} 个，更新 ${Number(preview.counts?.update || 0)} 个，无效 ${Number(preview.counts?.invalid || 0)} 个。凭证值已隐藏。</div><div class="chat2api-table-wrap"><table class="chat2api-table"><thead><tr><th>Provider</th><th>Label</th><th>邮箱/手机号</th><th>账号 ID</th><th>动作</th><th>凭证</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      host.prepend(panel);
+    },
+
+    async importAccountCredentialsFile(file) {
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        const preview = await this.request('/api/chat2api/accounts/import/preview', { method: 'POST', body: JSON.stringify(data) });
+        this.renderAccountImportPreview(preview);
+        const counts = preview.counts || {};
+        if (Number(counts.invalid || 0) > 0) {
+          this.message('账号凭证导入预览包含无效 Provider，已禁止确认。', true);
+          return;
+        }
+        const summary = `将新增 ${Number(counts.new || 0)} 个账号、更新 ${Number(counts.update || 0)} 个账号。同一账号 ID 会更新本地凭证，不会删除其他账号。文件包含敏感凭证，确认继续吗？`;
+        if (!window.confirm(summary)) {
+          this.message('已取消账号凭证导入。');
+          return;
+        }
+        const result = await this.request('/api/chat2api/accounts/import/merge', { method: 'POST', body: JSON.stringify({ data, confirmation: preview.confirmation, confirmed: true }) });
+        await this.refresh();
+        this.message(`账号凭证导入完成：新增 ${Number((result.counts || {}).new || 0)} 个，更新 ${Number((result.counts || {}).update || 0)} 个。`);
+      } catch (error) { this.message(`账号凭证导入失败：${error.message}`, true); }
+    },
+
+    async openExternalAccountWeb(accountId) {
+      try {
+        const session = await this.request(`/api/chat2api/accounts/${encodeURIComponent(accountId)}/web-session`, { method: 'POST', body: '{}' });
+        const nativeSession = {
+          ...session,
+          consumeUrl: `${this.baseUrl.replace(/\/+$/, '')}/api/chat2api/accounts/web-session/consume`,
+        };
+        const hasNativeWeb = typeof window !== 'undefined' && window.NativeControl && typeof window.NativeControl.openChat2ApiAccountWeb === 'function';
+        if (!hasNativeWeb) {
+          this.message('当前环境没有 Android 隔离 WebView，请在 offline APK 中打开外部网页。', true);
+          return;
+        }
+        if (!window.NativeControl.openChat2ApiAccountWeb(JSON.stringify(nativeSession))) {
+          throw new Error('Android 隔离 WebView 未能启动');
+        }
+      } catch (error) { this.message(`打开外部网页失败：${error.message}`, true); }
     },
 
     openImportPicker() {

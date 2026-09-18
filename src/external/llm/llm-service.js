@@ -28,6 +28,21 @@ const IMPORTANT_FILE = path.join(USER_CONFIG_DIR, 'important-records.json');
 const TEMPLATES_FILE = path.join(USER_CONFIG_DIR, 'chat-templates.json');
 const MAX_MESSAGE_LENGTH = 51200;
 
+// /api/chat/config 只允许保存聊天级字段；LLM profile 必须通过 /api/chat/profiles 管理。
+// 保留旧的 URL、模型等字段，是为了兼容仍使用无 profile 配置的调用方。
+const GLOBAL_CHAT_CONFIG_KEYS = Object.freeze([
+    'agentBackend',
+    'codexProxy',
+    'apiUrl',
+    'model',
+    'maxTokens',
+    'temperature',
+    'apiKey',
+    'contextCount',
+    'systemPrompt',
+    'promptFormat'
+]);
+
 const DEFAULT_TEMPLATES = [
     {
         id: '小爱',
@@ -673,6 +688,24 @@ function getConfig() {
         llmProfiles: llmProfiles.map(p => ({ ...p })),
         activeProfile
     };
+}
+
+/**
+ * 从聊天配置请求中提取全局字段。
+ * 外部聊天设置保存可能收到上一次响应中的完整 config，必须在运行时和持久化前
+ * 丢弃 llmProfiles、activeProfile 及其他 profile 字段，避免外部保存改写协议配置。
+ *
+ * @param {object} input 原始聊天配置请求
+ * @returns {object} 只包含全局聊天字段的副本
+ */
+function pickGlobalChatConfig(input = {}) {
+    const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+    return GLOBAL_CHAT_CONFIG_KEYS.reduce((result, key) => {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
+            result[key] = source[key];
+        }
+        return result;
+    }, {});
 }
 
 function setConfig(newConfig) {
@@ -1937,6 +1970,7 @@ module.exports = {
     shutdown,
     getConfig,
     setConfig,
+    pickGlobalChatConfig,
     getProfiles,
     setProfiles,
     switchProfile,

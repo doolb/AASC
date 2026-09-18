@@ -19,6 +19,7 @@
 | 控制端主题与 UI 控件分类 | [ui-theme.md](spec/ui-theme.md) | 主题持久化、主题应用和控件语义标记伪代码 |
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
+| 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](spec/display-chat-mmd.md) | 显示端聊天会话、WebSocket 同步、VRM/MMD 分层和动作协议伪代码 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](spec/chat-output-filter.md) | think/正文/播报文本分流、控制端弹窗、显示端展示和私聊清空错误伪代码 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](spec/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出伪代码 |
 | 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |
@@ -89,6 +90,8 @@
 | 私聊聊天 Agent 系统工具 | [private-chat-agent-tools.md](spec/private-chat-agent-tools.md) | 私聊 Agent 工具注册、服务端校验和 Pi/Codex 统一调用伪代码 |
 | Chat2API 核心内置任务 | [chat2api-builtin-task.md](spec/chat2api-builtin-task.md) | Chat2API 核心代理、Provider、OAuth、账号和任务生命周期伪代码 |
 | Android Chat2API 登录与控制端开放 | [android-chat2api-login-control.md](spec/android-chat2api-login-control.md) | Android WebView 登录捕获、Provider 验证和显示端控制端开放协议伪代码 |
+| Chat2API 账号凭证导入导出与 Android 外部网页恢复 | [android-chat2api-credential-transfer.md](spec/android-chat2api-credential-transfer.md) | 账号凭证包、按 ID 预览合并、一次性网页会话和 WebView 恢复伪代码 |
+| Offline Pi SDK 与 Chat2API Responses 修复 | [android-offline-pi-sdk-and-chat2api-responses.md](spec/android-offline-pi-sdk-and-chat2api-responses.md) | Pi SDK hidden manifest 打包恢复、Runtime 健康检查和 Responses 回归伪代码 |
 | Chat2API 普通网页手动外部认证 | [chat2api-manual-external-auth.md](spec/chat2api-manual-external-auth.md) | 普通网页粘贴 Cookie、Provider 专属字段提取、校验和账号保存伪代码 |
 | Chat2API 全局 Responses 协议 | [chat2api-global-responses.md](spec/chat2api-global-responses.md) | 全局 Responses transport、聊天会话映射、Pi Provider 和外部实例停用伪代码 |
 | Chat2API 日志简洁模式 | [chat2api-raw-traffic-log-modes.md](spec/chat2api-raw-traffic-log-modes.md) | 原始流量日志模式、摘要字段和控制端配置伪代码 |

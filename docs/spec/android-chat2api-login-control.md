@@ -113,6 +113,31 @@ MainActivity.setupWebView():
 普通 APK 和离线 APK 共用上述流程；离线模式只改变 Node 主服务地址和本地模型配置，不改变控制端授权协议。
 离线模式的原生入口默认可用，不因服务端初始化阶段补发的 `enabled=false` 而隐藏；普通 APK 仍完全遵循服务端授权。
 
+## Offline 本机账号导入伪代码
+
+```text
+source = read host Chat2API accounts.json
+payload = {
+    version: 1,
+    format: "aasc-chat2api-config",
+    providers: [],
+    accounts: source.accounts,
+    modelMappings: []
+}
+
+preview = POST /api/chat2api-gateway/{instanceId}/api/chat2api/import/preview(payload)
+require preview.counts.accounts > 0
+merge = POST /api/chat2api-gateway/{instanceId}/api/chat2api/import/merge({ data: payload, confirmed: true })
+require merge.counts.accounts == preview.counts.accounts
+
+accounts = GET /api/chat2api-gateway/{instanceId}/api/chat2api/accounts
+models = GET /api/chat2api-gateway/{instanceId}/v1/models
+request = POST /api/chat2api-gateway/{instanceId}/v1/chat/completions
+验证账号列表脱敏、模型列表非空、最小请求返回成功
+```
+
+导入只写入 Offline Chat2API 数据目录；不打印凭据、不覆盖已有 Provider/代理配置/模型映射，导入失败时保留原账号集合。
+
 ## Chat2API 登录会话
 
 ```text
@@ -223,9 +248,26 @@ Provider 验证器按 `/mnt/Chat2API/src/main/oauth/adapters` 的现有校验逻
 ## 实现状态与验证边界
 
 ```text
+manual control chat verification:
+    inspect active LLM profile and its mode/protocol
+    if mode == agent:
+        route to Pi/Codex runtime; do not treat as Chat2API request
+    if mode == llm and protocol == openai-completions:
+        POST current Chat2API proxy /v1/chat/completions with selected model
+    verify chatResponse.success and returned text
+    restore the original profile after temporary verification
+
+offline Pi runtime prerequisite:
+    package @earendil-works/pi-ai/dist/providers/data/.manifest.json
+    preserve the hidden manifest name or restore it before Pi SDK import
+    verify agent/pi profile on a real Offline APK before publishing
+```
+
+```text
 已实现：服务端 OAuth 捕获配置/Provider 验证、显示端控制端开放协议、控制端详情开关、Android 原生桥和独立登录 Activity/WebView；登录 Activity 顶部“完成”按钮会触发即时捕获，位于“取消”之前
-已验证：Node Chat2API/显示端定向测试、Android JVM 单元测试、普通 APK Debug 构建/安装/启动、offline APK 构建/卸载重装启动、同源控制端页面和本地聊天回复
-未执行：Provider 真实账号网页登录和接口验证
+已验证：Node Chat2API/显示端定向测试、Android JVM 单元测试、普通 APK Debug 构建/安装/启动、offline APK 构建/卸载重装启动、同源控制端页面和本地聊天回复、本机 Qwen 账号导入、空模型映射下的最小 Chat Completions 请求、控制端使用 Qwen3.6 Chat Completions 的真实 WebSocket 请求
+已定位并修复：现有 `qwen3.5` 配置为 `agent/pi` 时，旧 Offline APK 因 Pi Provider manifest 缺失而失败；新 Runtime 通过 `aasc-bundled-manifest.json` 安装恢复 `.manifest.json`，并在快速复用时校验该文件。该配置没有进入 Chat2API 请求链路
+未执行：Provider 真实账号网页登录捕获链路
 ```
 
 ```text

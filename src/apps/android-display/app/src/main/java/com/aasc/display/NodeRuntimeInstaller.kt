@@ -37,6 +37,7 @@ class NodeRuntimeInstaller(
         private const val RELEASE_USER_CONFIG_PREFIX = "release-userconfig"
         private const val TASK_LINKS_MARKER_FILE = "task-links.marker"
         private const val TASK_LATEST_MARKER_FILE = "latest.marker"
+        private const val ANDROID_HIDDEN_MANIFEST_MARKER = "aasc-bundled-manifest.json"
         private const val RUNTIME_LIB_DIR = "runtime/arm64-v8a/lib"
         private const val STAGING_PREFIX = ".staging-"
         private const val BACKUP_PREFIX = ".backup-"
@@ -66,6 +67,7 @@ class NodeRuntimeInstaller(
                     File(root, "package-lock.json")
                 )
                 requiredFiles.all { it.isFile && it.length() > 0L } &&
+                    hasPiSdkManifest(root) &&
                     (mode != OFFLINE_MODE || hasOfflineModels(root)) &&
                     File(root, "config/config.json").isFile &&
                     File(root, RUNTIME_LIB_DIR).listFiles()?.any { it.isFile && it.length() > 0L } == true
@@ -120,6 +122,26 @@ class NodeRuntimeInstaller(
         @JvmStatic
         fun shouldSeedTaskDirectory(root: File): Boolean {
             return !File(root, "res/tasks").exists()
+        }
+
+        /**
+         * Android assets 不能可靠携带隐藏文件；构建器将 node_modules 下的 Provider
+         * manifest 改名为 marker，安装到应用私有目录后在同一目录恢复 Node import 约定。
+         * marker 只包含小型 JSON，不会触碰模型权重或用户目录。
+         */
+        @JvmStatic
+        fun materializeBundledPackageManifests(root: File) {
+            val nodeModulesRoot = File(root, "node_modules")
+            if (!nodeModulesRoot.isDirectory) return
+            nodeModulesRoot.walkTopDown()
+                .filter { it.isFile && it.name == ANDROID_HIDDEN_MANIFEST_MARKER }
+                .forEach { marker ->
+                    val restored = File(marker.parentFile, ".manifest.json")
+                    marker.copyTo(restored, overwrite = true)
+                    check(marker.delete()) {
+                        "无法删除已恢复的 Pi Provider manifest marker: ${marker.absolutePath}"
+                    }
+                }
         }
 
         /**
@@ -199,6 +221,16 @@ class NodeRuntimeInstaller(
             } catch (_: Exception) {
                 false
             }
+        }
+
+        private fun hasPiSdkManifest(root: File): Boolean {
+            val piRoot = File(root, "node_modules/@earendil-works/pi-coding-agent")
+            if (!piRoot.exists()) return true
+            val manifest = File(
+                root,
+                "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/data/.manifest.json"
+            )
+            return manifest.isFile && manifest.length() > 0L
         }
 
         private fun mapAssetPath(assetPath: String): String {
@@ -475,6 +507,7 @@ class NodeRuntimeInstaller(
             if (oldRootMoved) {
                 moveMutableDirectories(backup, root, movedPaths = movedMutableDirectories)
             }
+            materializeBundledPackageManifests(root)
             materializeBundledModelMarkers(root)
             materializeTaskMarkers(root)
             seedFileIfAbsent(root, root, RELEASE_CONFIG_SEED_FILE, "config/config.json")

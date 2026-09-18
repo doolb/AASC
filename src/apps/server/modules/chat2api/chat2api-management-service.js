@@ -15,6 +15,7 @@ const createChat2ApiManagementService = (runtime) => {
   }
   const { dataStore, providerRegistry, oauth } = runtime;
   const manualAccount = runtime.manualAccount;
+  const accountWebSession = runtime.accountWebSession;
   const qwenHistoryService = runtime.qwenHistoryService;
 
   const getConfig = async () => {
@@ -67,6 +68,21 @@ const createChat2ApiManagementService = (runtime) => {
   const disableApiKey = (id) => dataStore.disableApiKey(id);
   const deleteApiKey = (id) => dataStore.deleteApiKey(id);
   const exportConfig = () => dataStore.exportConfiguration();
+  const exportAccountCredentials = () => dataStore.exportAccountCredentials();
+  const previewAccountImport = (input) => dataStore.previewAccountImport(input);
+  const mergeAccountImport = (input, confirmation, confirmed) => dataStore.mergeAccountImport(input, confirmation, confirmed);
+  const createAccountWebSession = (accountId) => {
+    if (!accountWebSession || typeof accountWebSession.createSession !== 'function') {
+      throw new Error('Chat2API 外部网页会话服务不可用');
+    }
+    return accountWebSession.createSession(accountId);
+  };
+  const consumeAccountWebSession = (sessionId) => {
+    if (!accountWebSession || typeof accountWebSession.consumeSession !== 'function') {
+      throw new Error('Chat2API 外部网页会话服务不可用');
+    }
+    return accountWebSession.consumeSession(sessionId);
+  };
   const deleteProvider = async (providerId) => providerRegistry.deleteProvider(providerId, {
     accounts: await dataStore.listAccounts(),
     mappings: await dataStore.listModelMappings(),
@@ -104,6 +120,11 @@ const createChat2ApiManagementService = (runtime) => {
     disableApiKey,
     deleteApiKey,
     exportConfig,
+    exportAccountCredentials,
+    previewAccountImport,
+    mergeAccountImport,
+    createAccountWebSession,
+    consumeAccountWebSession,
     previewImport,
     mergeImport,
     previewLegacyImport,

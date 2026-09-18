@@ -4473,13 +4473,21 @@ app.get('/api/chat/config', (req, res) => {
 
 app.post('/api/chat/config', (req, res) => {
     try {
-        const newConfig = chat.setConfig(req.body);
-        config.set('chat', newConfig);
-        broadcastToControls({ type: 'chatConfigChanged', config: newConfig });
+        // 外部聊天设置只允许更新全局字段，防止把完整响应中的 profile 列表再次写回。
+        const globalConfig = chat.pickGlobalChatConfig(req.body);
+        const newConfig = chat.setConfig(globalConfig);
+        const storedChatConfig = config.get('chat', {});
+        const persistedChatConfig = {
+            ...(storedChatConfig && typeof storedChatConfig === 'object' ? storedChatConfig : {}),
+            ...chat.pickGlobalChatConfig(newConfig)
+        };
+        config.set('chat', persistedChatConfig);
+        const authoritativeConfig = chat.getConfig();
+        broadcastToControls({ type: 'chatConfigChanged', config: authoritativeConfig });
         res.json({
             status: 'success',
             message: '聊天配置已更新',
-            config: newConfig
+            config: authoritativeConfig
         });
     } catch (err) {
         res.status(500).json({ status: 'error', message: '配置更新失败' });

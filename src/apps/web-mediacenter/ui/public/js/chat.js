@@ -765,7 +765,7 @@ const Chat = {
         this.renderPlayOnControlToggle();
     },
     
-    saveConfig() {
+    async saveConfig() {
         const systemPromptInput = document.getElementById('chatSystemPrompt');
         if (systemPromptInput) {
             this.config.systemPrompt = systemPromptInput.value.trim() || '你是一个友好的助手，请用简洁的语言回答问题。';
@@ -773,20 +773,29 @@ const Chat = {
         const agentBackendInput = document.getElementById('chatAgentBackend');
         if (agentBackendInput) this.config.agentBackend = agentBackendInput.value === 'claude' ? 'claude' : 'codex';
 
-        fetch('/api/chat/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(this.config)
-        })
-        .then(res => res.json())
-        .then(data => {
+        // 外部保存只提交全局聊天字段，profile 协议和地址由“保存配置”专用流程维护。
+        const globalConfig = {
+            systemPrompt: this.config.systemPrompt,
+            agentBackend: this.config.agentBackend
+        };
+        try {
+            const response = await fetch('/api/chat/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(globalConfig)
+            });
+            const data = await response.json();
             if (data.status === 'success') {
-                if (data.config) this.config = { ...this.config, ...data.config };
+                if (data.config) {
+                    if (data.config.systemPrompt !== undefined) this.config.systemPrompt = data.config.systemPrompt;
+                    if (data.config.agentBackend !== undefined) this.config.agentBackend = data.config.agentBackend;
+                }
                 window.showToast('配置已保存', 'success');
                 this.hideConfig();
             }
-        })
-        .catch(err => window.showToast('保存配置失败', 'error'));
+        } catch (err) {
+            window.showToast('保存配置失败', 'error');
+        }
     },
     
     render() {

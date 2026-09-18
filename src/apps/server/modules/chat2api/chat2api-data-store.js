@@ -12,6 +12,7 @@ const {
   hashSecret,
   equalSecretHash,
 } = require('./chat2api-secret');
+const { selectAccountId } = require('./chat2api-account-identity');
 
 const DEFAULT_ROOT_DIR = path.join(os.homedir(), '.config', 'aasc-user', 'chat2api');
 const DEFAULT_LEGACY_DATA_PATH = path.join(os.homedir(), '.chat2api', 'data.json');
@@ -24,9 +25,12 @@ const COLLECTION_FILES = Object.freeze({
   responsesSessions: 'responses-sessions.json',
 });
 const EXPORT_FORMAT = 'aasc-chat2api-config';
+const ACCOUNT_EXPORT_FORMAT = 'aasc-chat2api-accounts';
 const IMPORT_COLLECTIONS = Object.freeze(['providers', 'accounts', 'modelMappings']);
 const MAX_IMPORT_ITEMS = 1000;
 const OAUTH_SESSION_TTL_MS = 5 * 60 * 1000;
+const ACCOUNT_INFO_FIELDS = new Set(['id', 'userId', 'realUserID', 'name', 'nickname', 'username', 'email', 'phone']);
+const BUILTIN_PROVIDER_IDS = new Set(['deepseek', 'glm', 'kimi', 'minimax', 'mimo', 'perplexity', 'qwen', 'qwen-ai', 'zai']);
 
 const assertCollectionName = (name) => {
   if (!Object.prototype.hasOwnProperty.call(COLLECTION_FILES, name)) {
@@ -64,6 +68,8 @@ const createChat2ApiDataStore = (options = {}) => {
   const legacyDataPath = path.resolve(options.legacyDataPath || DEFAULT_LEGACY_DATA_PATH);
   const filePath = (name) => path.join(rootDir, COLLECTION_FILES[name]);
   const oauthSessionDir = path.join(rootDir, 'oauth-sessions');
+  const accountImportPreviews = new Map();
+  const ACCOUNT_IMPORT_PREVIEW_TTL_MS = 5 * 60 * 1000;
 
   const ensurePrivateDirectory = async () => {
     await fs.mkdir(rootDir, { recursive: true, mode: 0o700 });
@@ -154,6 +160,41 @@ const createChat2ApiDataStore = (options = {}) => {
     const providerId = ensureId(account.providerId, 'providerId', 'Chat2API 账号');
     return { ...cloneValue(account), accountId, providerId };
   };
+
+  const selectAccountInfo = (accountInfo) => {
+    if (!accountInfo || typeof accountInfo !== 'object' || Array.isArray(accountInfo)) return {};
+    return Object.fromEntries(Object.entries(accountInfo).filter(([key, value]) => (
+      ACCOUNT_INFO_FIELDS.has(key)
+      && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+    )));
+  };
+
+  const selectAccountCredentialFields = (account) => {
+    const result = {
+      accountId: account.accountId,
+      providerId: account.providerId,
+    };
+    for (const field of ['label', 'email', 'phone', 'cookie', 'authMethod', 'enabled']) {
+      if (account[field] !== undefined) result[field] = cloneValue(account[field]);
+    }
+    if (account.accountInfo !== undefined) result.accountInfo = selectAccountInfo(account.accountInfo);
+    if (account.credentials !== undefined) {
+      if (!account.credentials || typeof account.credentials !== 'object' || Array.isArray(account.credentials)) {
+        throw new Error(`Chat2API 账号 ${account.accountId} 的 credentials 必须是对象`);
+      }
+      result.credentials = cloneValue(account.credentials);
+    }
+    return result;
+  };
+
+  const sortKeysDeep = (value) => {
+    if (Array.isArray(value)) return value.map(sortKeysDeep);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeysDeep(value[key])]));
+  };
+
+  const createImportConfirmation = (accounts, items) => hashSecret(JSON.stringify(sortKeysDeep({ accounts, items })));
+  const createAccountImportPayloadHash = (data) => hashSecret(JSON.stringify(sortKeysDeep(data)));
 
   const publicAccount = (account) => ({
     ...sanitizeSecrets(account),
@@ -389,6 +430,142 @@ const createChat2ApiDataStore = (options = {}) => {
     };
   };
 
+  const normalizeAccountCredentialBundle = async (data) => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('Chat2API 账号凭证包必须是对象');
+    }
+    if (data.format !== ACCOUNT_EXPORT_FORMAT || data.version !== 1) {
+      throw new Error('Chat2API 账号凭证包格式或版本不受支持');
+    }
+    const rawAccounts = ensureArray(data.accounts || [], 'accounts');
+    const currentAccounts = await readCollection('accounts', []);
+    ensureArray(currentAccounts, 'accounts');
+    const existingIds = new Set(currentAccounts.map((account) => account.accountId));
+    const incomingIds = new Set();
+    const accounts = rawAccounts.map((rawAccount) => {
+      if (!rawAccount || typeof rawAccount !== 'object' || Array.isArray(rawAccount)) {
+        throw new Error('Chat2API 账号凭证包中的账号必须是对象');
+      }
+      const account = selectAccountCredentialFields(rawAccount);
+      if (!account.providerId || typeof account.providerId !== 'string') {
+        throw new Error('Chat2API 账号凭证包中的账号缺少 providerId');
+      }
+      account.providerId = account.providerId.trim();
+      account.accountId = selectAccountId(account, { existingIds, incomingIds });
+      if (incomingIds.has(account.accountId)) {
+        throw new Error(`Chat2API 账号凭证包包含重复 accountId: ${account.accountId}`);
+      }
+      incomingIds.add(account.accountId);
+      return account;
+    });
+    return accounts;
+  };
+
+  const exportAccountCredentials = async () => {
+    const accounts = await readCollection('accounts', []);
+    ensureArray(accounts, 'accounts');
+    return {
+      format: ACCOUNT_EXPORT_FORMAT,
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      accounts: accounts.map(selectAccountCredentialFields),
+    };
+  };
+
+  const previewAccountImport = async (data) => {
+    const accounts = await normalizeAccountCredentialBundle(data);
+    const [currentAccounts, providers] = await Promise.all([
+      readCollection('accounts', []),
+      readCollection('providers', []),
+    ]);
+    const existingIds = new Set(currentAccounts.map((account) => account.accountId));
+    const providerMap = new Map(providers.map((provider) => [provider.providerId || provider.id, provider]));
+    const items = accounts.map((account) => {
+      const storedProvider = providerMap.get(account.providerId);
+      const providerAvailable = (BUILTIN_PROVIDER_IDS.has(account.providerId) || Boolean(storedProvider))
+        && storedProvider?.enabled !== false;
+      const action = existingIds.has(account.accountId) ? 'update' : 'new';
+      if (!providerAvailable) {
+        return {
+          accountId: account.accountId,
+          providerId: account.providerId,
+          label: account.label || '',
+          email: account.email || '',
+          phone: account.phone || '',
+          action: 'invalid',
+          error: 'provider_unavailable',
+          credentialFields: Object.keys(account.credentials || {}),
+          secretConfigured: hasConfiguredSecret(account),
+        };
+      }
+      return {
+        accountId: account.accountId,
+        providerId: account.providerId,
+        label: account.label || '',
+        email: account.email || '',
+        phone: account.phone || '',
+        action,
+        credentialFields: Object.keys(account.credentials || {}),
+        secretConfigured: hasConfiguredSecret(account),
+      };
+    });
+    const counts = {
+      new: items.filter((item) => item.action === 'new').length,
+      update: items.filter((item) => item.action === 'update').length,
+      invalid: items.filter((item) => item.action === 'invalid').length,
+    };
+    const confirmation = createImportConfirmation(accounts, items);
+    accountImportPreviews.set(confirmation, {
+      payloadHash: createAccountImportPayloadHash(data),
+      accounts,
+      preview: { version: 1, items, counts, confirmation },
+      expiresAt: Date.now() + ACCOUNT_IMPORT_PREVIEW_TTL_MS,
+    });
+    return {
+      version: 1,
+      items,
+      counts,
+      confirmation,
+    };
+  };
+
+  const mergeAccountImport = async (data, confirmation, confirmed) => {
+    if (confirmed !== true) {
+      throw new Error('Chat2API 账号凭证导入必须先预览并明确确认');
+    }
+    const pending = typeof confirmation === 'string' ? accountImportPreviews.get(confirmation) : null;
+    if (!pending || pending.expiresAt <= Date.now() || pending.payloadHash !== createAccountImportPayloadHash(data)) {
+      const error = new Error('Chat2API 账号凭证导入确认摘要已失效，请重新预览');
+      error.statusCode = 409;
+      error.code = 'import_confirmation_mismatch';
+      throw error;
+    }
+    accountImportPreviews.delete(confirmation);
+    const accounts = pending.accounts;
+    const preview = pending.preview;
+    if (preview.counts.invalid > 0) {
+      const error = new Error('Chat2API 账号凭证导入包含不可用 Provider');
+      error.statusCode = 422;
+      error.code = 'import_provider_unavailable';
+      throw error;
+    }
+    const currentAccounts = await readCollection('accounts', []);
+    const currentById = new Map(currentAccounts.map((account) => [account.accountId, account]));
+    const merged = accounts.map((account) => {
+      const current = currentById.get(account.accountId);
+      const next = current ? { ...current, ...account } : account;
+      if (current && account.accountInfo) next.accountInfo = { ...(current.accountInfo || {}), ...account.accountInfo };
+      return validateAccount(next);
+    });
+    const nextAccounts = mergeByKey(currentAccounts, merged, (account) => account.accountId);
+    await writeCollection('accounts', nextAccounts);
+    return {
+      version: 1,
+      counts: preview.counts,
+      accounts: merged.map(publicAccount),
+    };
+  };
+
   const normalizeImport = (data) => {
     if (!data || typeof data !== 'object' || data.version !== 1) {
       throw new Error('Chat2API 导入文件版本不受支持');
@@ -551,6 +728,9 @@ const createChat2ApiDataStore = (options = {}) => {
     readCollection,
     writeCollection,
     exportConfiguration,
+    exportAccountCredentials,
+    previewAccountImport,
+    mergeAccountImport,
     saveAccount,
     listAccounts,
     getAccount,
@@ -580,5 +760,6 @@ const createChat2ApiDataStore = (options = {}) => {
 module.exports = {
   DEFAULT_ROOT_DIR,
   DEFAULT_LEGACY_DATA_PATH,
+  ACCOUNT_EXPORT_FORMAT,
   createChat2ApiDataStore,
 };

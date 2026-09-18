@@ -89,6 +89,55 @@ class NodeRuntimeManifestTest {
     }
 
     @Test
+    fun PiSDK隐藏manifest恢复为原始文件名并删除marker() {
+        val root = Files.createTempDirectory("aasc-pi-manifest-materialize").toFile()
+        try {
+            val marker = File(
+                root,
+                "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/data/aasc-bundled-manifest.json"
+            )
+            marker.parentFile?.mkdirs()
+            marker.writeText("{\"providers\":[]}")
+
+            NodeRuntimeInstaller.materializeBundledPackageManifests(root)
+
+            val restored = File(marker.parentFile, ".manifest.json")
+            assertTrue(restored.isFile)
+            assertEquals("{\"providers\":[]}", restored.readText())
+            assertFalse(marker.exists())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun PiSDK目录存在但manifest缺失时不允许快速复用() {
+        val root = Files.createTempDirectory("aasc-pi-manifest-required").toFile()
+        try {
+            File(root, ".runtime-version").writeText("dev")
+            File(root, "src/apps/server/boot/server-launcher.js").apply {
+                parentFile?.mkdirs()
+                writeText("launcher")
+            }
+            File(root, "package.json").writeText("{}")
+            File(root, "package-lock.json").writeText("{}")
+            File(root, "config/config.json").apply {
+                parentFile?.mkdirs()
+                writeText("{}")
+            }
+            File(root, "runtime/arm64-v8a/lib/libcrypto.so").apply {
+                parentFile?.mkdirs()
+                writeText("library")
+            }
+            File(root, "node_modules/@earendil-works/pi-coding-agent").mkdirs()
+
+            assertFalse(NodeRuntimeInstaller.canReuseInstalledRuntime(root, "dev"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun 离线Runtime快速复用时只检查内置模型元数据不要求LLM文件已解包() {
         val root = Files.createTempDirectory("aasc-offline-runtime-fast-path").toFile()
         try {

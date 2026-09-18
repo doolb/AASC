@@ -413,6 +413,31 @@ test('服务器运行包忽略 Android assets 不支持的隐藏目录和下划�
     assert.equal(result.manifest.files.some(file => file.path.endsWith('/.npmignore')), false);
 });
 
+test('服务器运行包将 node_modules Provider manifest 改名为可打包 marker', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const manifestPath = path.join(
+        packageDir,
+        'node_modules',
+        '@earendil-works',
+        'pi-ai',
+        'dist',
+        'providers',
+        'data',
+        '.manifest.json'
+    );
+    await fs.promises.mkdir(path.dirname(manifestPath), { recursive: true });
+    await fs.promises.writeFile(manifestPath, '{"providers":[]}' + '\n', 'utf8');
+    const runtimeDir = await createRuntime(tempDir);
+    const outputDir = path.join(tempDir, 'output');
+
+    const result = await prepareAndroidNodeRuntime({ packageDir, runtimeDir, outputDir });
+    const markerPath = 'server/node_modules/@earendil-works/pi-ai/dist/providers/data/aasc-bundled-manifest.json';
+
+    assert.equal(result.manifest.files.some(file => file.path === markerPath), true);
+    assert.equal(fs.existsSync(path.join(outputDir, markerPath)), true);
+    assert.equal(fs.existsSync(path.join(outputDir, 'server', 'node_modules', '@earendil-works', 'pi-ai', 'dist', 'providers', 'data', '.manifest.json')), false);
+});
+
 test('服务器运行包保留下划线命名的 Node 依赖文件', async () => {
     const packageDir = await createServerPackage(tempDir);
     const dependencyFile = path.join(

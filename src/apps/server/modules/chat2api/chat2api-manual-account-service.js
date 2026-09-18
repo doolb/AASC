@@ -1,5 +1,5 @@
-const crypto = require('crypto');
 const { sanitizeSecrets } = require('./chat2api-secret');
+const { selectAccountId } = require('./chat2api-account-identity');
 
 // 这些规则来自 Chat2API 的网页登录捕获/手动添加适配器，只映射已确认的字段，避免把未知 Cookie 猜测成 Token。
 const MANUAL_COOKIE_MAPPINGS = Object.freeze({
@@ -102,7 +102,7 @@ const createChat2ApiManualAccountService = ({ dataStore, providerRegistry, crede
     throw new Error('Chat2API 手动账号服务需要 Provider 注册表');
   }
 
-  const addManualAccount = async ({ providerId, credentials, cookie, authMethod, accountId, label, email, accountInfo = {} } = {}) => {
+  const addManualAccount = async ({ providerId, credentials, cookie, authMethod, accountId, label, email, phone, accountInfo = {} } = {}) => {
     if (typeof providerId !== 'string' || providerId.trim().length === 0) {
       throw createServiceError('Chat2API 手动认证缺少 Provider', 400, 'missing_provider');
     }
@@ -140,18 +140,26 @@ const createChat2ApiManualAccountService = ({ dataStore, providerRegistry, crede
         throw createServiceError(validated && validated.error ? validated.error : 'Provider 凭据校验失败', 422, 'credential_validation_failed');
       }
     }
+    const resolvedEmail = email || validated.accountInfo?.email || accountInfo.email;
+    const resolvedPhone = phone || validated.accountInfo?.phone || accountInfo.phone;
+    const existingAccounts = typeof dataStore.listAccounts === 'function' ? await dataStore.listAccounts() : [];
+    const resolvedAccountId = selectAccountId(
+      { accountId, providerId: provider.id, email: resolvedEmail, phone: resolvedPhone },
+      { existingIds: existingAccounts.map((item) => item.accountId) },
+    );
     const now = Date.now();
     const saved = await dataStore.saveAccount({
-      accountId: accountId || `${provider.id}-${crypto.randomBytes(6).toString('hex')}`,
+      ...accountInfo,
+      accountId: resolvedAccountId,
       providerId: provider.id,
       label: label || validated.accountInfo?.name || provider.name,
-      email: email || validated.accountInfo?.email || accountInfo.email,
+      email: resolvedEmail,
+      phone: resolvedPhone,
       credentials: validated.credentials || normalizedCredentials,
       enabled: true,
       status: 'active',
       createdAt: now,
       updatedAt: now,
-      ...accountInfo,
     });
     return { account: sanitizeSecrets(saved) };
   };

@@ -31,6 +31,11 @@
 
 ## 聊天系统
 
+- ⏳待实现 [2026-09-18] 显示端聊天与 VRM/MMD 同位分层
+  - 设计已保存：显示端对象选择、顶部角色会话切换、控制端/显示端共享聊天、媒体底层、MMD 与聊天同位分层、three-vrm 直接加载 VRM、MMDAgent-EX 兼容命令和高级动作计划。
+  - 当前只记录方案，尚未修改显示端、服务端、模型或 APK；首期沿用全局聊天上下文，按 `displayId` 独立保存留待后续。
+  - 关联文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260918_显示端聊天与MMD分层设计.md`、`docs/superpowers/plans/2026-09-18-display-chat-mmd.md`。
+
 - ⏳待处理 [2026-09-16] 将显示端聊天模式与私聊目标按 displayId 独立保存和路由
   - 当前 offline APK 暂时沿用服务进程全局 chatSession，控制端手动切换后同步当前在线且启用语音监听的显示端；后续需支持每个显示端独立的群聊/私聊模式、助手目标、session 和语音路由。
   - 关联任务：`docs/task/2026-09-16_Offline启动权限串行与语音聊天自动路由.md`。
@@ -63,8 +68,6 @@
 
 ## Android APK
 
-- 🔄进行中 [2026-09-18] Offline min APK 发布更新日志：发布清单支持 `releaseNotes`，更新卡片展示版本更新内容；完成测试和构建后移除。
-
 - 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
   - 服务更新支持 `code-only`（不发布/下载依赖）与 `all`（代码+生产依赖）；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
   - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本次更新相关 Node 定向测试 69/69、Android JVM 全量测试通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
@@ -75,7 +78,10 @@
   - v8（`0.2.6-offline-min`）已完成 DPI 校正并正式发布，APK 大小 `89231402` bytes，SHA-256 `470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`；按 `1280px@320dpi=100%` 公式，Display 2 `1920×1080@160dpi` 为 75%。SM-N9500 真机已覆盖安装并确认 Display 2 窗口、固定 `offline-display` 健康接口和 Qwen ready 状态正常。
   - v9（`0.2.7-offline-min`）已完成右下角诊断浮层构建、真机验证和 LAN/WAN 正式发布，APK 大小 `89233662` bytes，SHA-256 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`；UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`。默认域名 `c.aasc.us` 返回备案拦截 403，本次使用 WAN 直接 IP 验收。
   - v11（`0.2.9-offline-min`）已发布本次控制端输入框自动缩放修复，APK 大小 `89235646` bytes，SHA-256 `0b3ab8871ca17e32fa1dc5db767ef8b31049a973d8d678faa471e1ad4ac396da`；LAN/WAN HTTP、清单、签名、ZIP 完整性和远端 hash 均通过，尚未覆盖安装真机。
+  - v12（`0.2.10-offline-min`）已正式发布控制端聊天设置 profile 协议保护；APK 大小 `89236426` bytes，SHA-256 `c4c20af9ab6b71c5e0e5dad1b4d3d2f1cdfce8cb7eaee91d6dde0ff1afdcf253`，服务 code v4 大小 `13996510` bytes、SHA-256 `7ca5adf90be5738ee94b47e31534d574b411a1934e3b0d0db6702955b1247bd2`；更新日志已写入签名清单，LAN/WAN 直连 IP HTTP、清单签名、APK v2 和远端文件校验通过。
   - full 已对齐 min v9（`versionCode=9`、`0.2.7-offline`）并发布为 `aasc-display-offline-v9.apk`，大小 `957310007` bytes，SHA-256 `b1625bdf269e256d98aa45254c14a9531dcdfa3399d0b7d31b18daccbe1f83a7`；LAN/WAN IP HTTP 200、Content-Length 和远端 hash 一致，旧 full v2 已清理，服务 manifest 未替换。
+  - full v12（`0.2.10-offline`）已对齐当前 min versionCode 12 并正式发布为 `aasc-display-offline-v12.apk`，大小 `957319386` bytes，SHA-256 `b107d7963bf4dd18068404427e12f4edc72ff8253e8914e3d1909ca66e6c8183`；LAN/WAN 直连 IP HTTP、Content-Length、远端 hash、APK v2 签名和 ZIP 完整性均通过，旧 full v9 保留。
+  - full v13（`0.2.11-offline`）已正式发布本轮 Chat2API 账号凭证与 Android 外部网页恢复代码，文件 `aasc-display-offline-v13.apk`，大小 `957338670` bytes，SHA-256 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`；LAN/WAN 直连 IP HTTP、Content-Length 和远端 hash 均通过，服务 manifest 未替换。
   - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次追加 min v6、v7、v8 版本文件并更新签名清单。
   - 独立 RSA 密钥对已接入打包工具并存放于 `~/.config/aasc-user/`；更新包构建已支持临时工作区与输出目录跨文件系统，归档复制到输出同目录临时文件后再原子切换。
   - 外网主机登录 shell 为 fish；发布器已通过 `/bin/sh -c` 执行远端 POSIX 脚本，并在远端 manifest 原子切换前设置 `0644`，真实发布通过。
@@ -90,9 +96,11 @@
 
 - ⏳待现场验收 [2026-09-14] Chat2API Android Provider 真实网页登录验证
   - 普通 APK 已完成构建、安装和启动冒烟；仍需使用测试账号验证网页登录、Authorization/localStorage/Cookie 捕获、Provider 接口校验和账号保存。
-  - offline APK 已使用包含当前 Chat2API 源码和生产依赖的运行包重新构建、卸载重装并完成本地聊天/语音接口验收；真实 Provider 登录仍需现场测试账号。
+  - offline APK 已使用包含当前 Chat2API 源码和生产依赖的运行包重新构建、卸载重装并完成本地聊天/语音接口验收；本轮已导入本机 Qwen 账号并完成真实 Chat Completions 请求，空映射下 `Qwen3.6` 成功而 `Qwen3.6-Flash` 返回 `no_available_account`（该别名仍需显式映射）；控制端手动聊天的 `qwen3.5` profile 当前为 `agent/pi`，会因 Pi Provider manifest 缺失报错，真实 WebView 登录捕获仍需现场测试账号。
+  - Offline APK 的 Pi SDK hidden Provider manifest 打包和安装恢复已完成自动化验证；仍待安装新 APK 后执行 `agent/pi` 真机启动验收。Android 节点策略仅明确禁用外部 CLI（Codex），未将 Pi 标记为业务禁用。
   - 2026-09-15 已生成 `release/apkbuild/allserver/output/aasc-display-offline.apk`，内含 release 配置、任务 results 和默认 MNNChat 模型；本次只完成构建与静态校验，未替代真实 Provider 登录验收。
   - 关联文档：`docs/design/android-chat2api-login-control.md`；`docs/spec/android-chat2api-login-control.md`；`docs/task/20260914_Android Chat2API登录与显示端控制端开放.md`。
+
 
 - 🔄进行中 [2026-09-13] Android 子服务器媒体库 `~/` 映射到应用专属外部目录
   - 目标目录为 `/storage/emulated/0/Android/data/com.aasc.display/files`，需完成旧字面 `~` 目录迁移和 APK 真机验证。

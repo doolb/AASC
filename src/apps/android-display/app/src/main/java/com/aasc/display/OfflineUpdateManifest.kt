@@ -23,7 +23,8 @@ data class OfflineMinApkArtifact(
     val artifact: OfflineUpdateArtifact,
     val packageName: String,
     val signerSha256: String,
-    val modelCompatibilitySha256: String
+    val modelCompatibilitySha256: String,
+    val releaseNotes: String? = null
 )
 
 data class OfflineUpdateManifest(
@@ -36,6 +37,7 @@ data class OfflineUpdateManifest(
         private val SHA256_PATTERN = Regex("^[a-fA-F0-9]{64}$")
         private val RELATIVE_PATH_SEGMENT_PATTERN = Regex("^[A-Za-z0-9._-]+$")
         private const val OFFLINE_PACKAGE_NAME = "com.aasc.display.offline"
+        private const val MAX_RELEASE_NOTES_CHARS = 4096
 
         fun parse(rawJson: String, publicKeyPem: String): OfflineUpdateManifest {
             require(publicKeyPem.isNotBlank()) { "Offline 更新验证公钥为空" }
@@ -137,13 +139,26 @@ data class OfflineUpdateManifest(
             val artifact = parseArtifact(value.apply { put("version", versionCode) }, "apkMin")
             val packageName = value.optString("packageName").trim()
             require(packageName == OFFLINE_PACKAGE_NAME) { "Offline 更新 APK 包名不匹配" }
+            val releaseNotes = if (!value.has("releaseNotes") || value.isNull("releaseNotes")) {
+                null
+            } else {
+                val rawReleaseNotes = value.opt("releaseNotes")
+                require(rawReleaseNotes is String) { "Offline 清单 apkMin.releaseNotes 必须是字符串" }
+                val normalized = rawReleaseNotes.trim()
+                require(normalized.isNotEmpty()) { "Offline 清单 apkMin.releaseNotes 不能为空" }
+                require(normalized.codePointCount(0, normalized.length) <= MAX_RELEASE_NOTES_CHARS) {
+                    "Offline 清单 apkMin.releaseNotes 超过 $MAX_RELEASE_NOTES_CHARS 个 Unicode 字符"
+                }
+                normalized
+            }
             return OfflineMinApkArtifact(
                 versionCode = versionCode,
                 versionName = versionName,
                 artifact = artifact,
                 packageName = packageName,
                 signerSha256 = readSha256(value, "signerSha256"),
-                modelCompatibilitySha256 = readSha256(value, "modelCompatibilitySha256")
+                modelCompatibilitySha256 = readSha256(value, "modelCompatibilitySha256"),
+                releaseNotes = releaseNotes
             )
         }
 

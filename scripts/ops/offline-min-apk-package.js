@@ -13,6 +13,24 @@ const {
 const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
 
 const execFileAsync = promisify(execFile);
+const MAX_RELEASE_NOTES_CHARS = 4096;
+
+function normalizeReleaseNotes(value) {
+    if (value === undefined || value === null) return null;
+    const normalized = String(value).trim();
+    if ([...normalized].length > MAX_RELEASE_NOTES_CHARS) {
+        throw new Error(`发布更新日志不能超过 ${MAX_RELEASE_NOTES_CHARS} 个 Unicode 字符`);
+    }
+    return normalized || null;
+}
+
+async function readReleaseNotes(options = {}) {
+    if (options.releaseNotesFile) {
+        const filePath = path.resolve(options.projectRoot || process.cwd(), options.releaseNotesFile);
+        return normalizeReleaseNotes(await fs.promises.readFile(filePath, 'utf8'));
+    }
+    return normalizeReleaseNotes(options.releaseNotes);
+}
 
 async function sha256File(filePath) {
     const hash = crypto.createHash('sha256');
@@ -88,6 +106,11 @@ async function createOfflineMinApkArtifact(options = {}) {
         throw new Error('完整 Offline APK 的 model compatibility 清单无效');
     }
     const signerSha256 = await readSignerSha256(verifiedApkPath, options);
+    const releaseNotes = await readReleaseNotes({
+        projectRoot,
+        releaseNotes: options.releaseNotes,
+        releaseNotesFile: options.releaseNotesFile
+    });
     const previousVersion = currentManifest.payload.components.apkMin?.versionCode;
     if (Number.isSafeInteger(previousVersion) && buildManifest.versionCode <= previousVersion) {
         throw new Error(`min APK versionCode 必须大于已发布版本 ${previousVersion}`);
@@ -102,7 +125,8 @@ async function createOfflineMinApkArtifact(options = {}) {
         modelCompatibilitySha256: compatibility.modelCompatibilitySha256,
         relativeUrl,
         size,
-        sha256
+        sha256,
+        ...(releaseNotes ? { releaseNotes } : {})
     };
     const payload = {
         ...currentManifest.payload,
@@ -139,7 +163,9 @@ async function createOfflineMinApkArtifact(options = {}) {
 }
 
 function parseCliArguments(argv) {
-    const supported = new Set(['apk', 'build-manifest', 'model-compatibility', 'manifest-file', 'output-dir']);
+    const supported = new Set([
+        'apk', 'build-manifest', 'model-compatibility', 'manifest-file', 'output-dir', 'release-notes-file'
+    ]);
     const parsed = {};
     for (let index = 0; index < argv.length; index += 1) {
         const token = argv[index];
@@ -149,8 +175,9 @@ function parseCliArguments(argv) {
         const value = equalIndex >= 0 ? token.slice(equalIndex + 1) : argv[++index];
         if (!supported.has(key)) throw new Error(`未知参数: --${key}`);
         if (typeof value !== 'string' || value.startsWith('--')) throw new Error(`参数 --${key} 缺少值`);
-        if (Object.hasOwn(parsed, key)) throw new Error(`参数 --${key} 不能重复`);
-        parsed[key.replace(/-([a-z])/gu, (_match, letter) => letter.toUpperCase())] = value;
+        const normalizedKey = key.replace(/-([a-z])/gu, (_match, letter) => letter.toUpperCase());
+        if (Object.hasOwn(parsed, normalizedKey)) throw new Error(`参数 --${key} 不能重复`);
+        parsed[normalizedKey] = value;
     }
     return parsed;
 }
@@ -164,6 +191,7 @@ async function runCli(argv = process.argv.slice(2)) {
             buildManifestPath: cli.buildManifest,
             modelCompatibilityPath: cli.modelCompatibility,
             currentManifestPath: cli.manifestFile,
+            releaseNotesFile: cli.releaseNotesFile,
             outputDir: cli.outputDir
         });
         console.log(`min APK: ${result.apkPath}`);
@@ -178,6 +206,8 @@ if (require.main === module) runCli();
 
 module.exports = {
     createOfflineMinApkArtifact,
+    normalizeReleaseNotes,
+    readReleaseNotes,
     readSignerSha256,
     parseCliArguments,
     runCli

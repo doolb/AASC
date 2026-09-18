@@ -82,6 +82,11 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
       listProviders: async () => [{ id: 'deepseek' }],
       addManualAccount: async (input) => ({ account: { accountId: 'manual-1', providerId: input.providerId } }),
       exportConfig: async () => ({ format: 'aasc-chat2api-config', version: 1, config: {}, providers: [], accounts: [], modelMappings: [] }),
+      exportAccountCredentials: async () => ({ format: 'aasc-chat2api-accounts', version: 1, accounts: [] }),
+      previewAccountImport: async () => ({ counts: { new: 1, update: 0, invalid: 0 }, items: [], confirmation: 'confirmation-1' }),
+      mergeAccountImport: async (data, confirmation, confirmed) => ({ data, confirmation, confirmed }),
+      createAccountWebSession: async (accountId) => ({ mode: 'account-web', sessionId: 'session-1', accountId }),
+      consumeAccountWebSession: async (sessionId) => ({ sessionId, loginUrl: 'https://www.qianwen.com', credentials: {} }),
       startLogin: async () => ({ state: 'state-1' }),
       previewLegacyImport: async () => ({ counts: { providers: 1, accounts: 1, modelMappings: 1 } }),
       mergeLegacyImport: async (confirmed) => ({ confirmed }),
@@ -97,6 +102,20 @@ test('代理服务向本机控制端提供 Chat2API 管理接口', async () => {
     assert.equal(exported.statusCode, 200);
     assert.match(exported.headers['content-disposition'], /attachment/);
     assert.equal(JSON.parse(exported.text).format, 'aasc-chat2api-config');
+    const accountExport = await request(service.address().port, { path: '/api/chat2api/accounts/export', method: 'GET' });
+    assert.equal(accountExport.statusCode, 200);
+    assert.equal(JSON.parse(accountExport.text).format, 'aasc-chat2api-accounts');
+    assert.equal(accountExport.headers['cache-control'], 'no-store');
+    const accountPreview = await request(service.address().port, { path: '/api/chat2api/accounts/import/preview', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ format: 'aasc-chat2api-accounts', version: 1, accounts: [] }));
+    assert.equal(accountPreview.statusCode, 200);
+    assert.equal(JSON.parse(accountPreview.text).confirmation, 'confirmation-1');
+    const accountMerge = await request(service.address().port, { path: '/api/chat2api/accounts/import/merge', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ data: { accounts: [] }, confirmation: 'confirmation-1', confirmed: true }));
+    assert.equal(JSON.parse(accountMerge.text).confirmed, true);
+    const webSession = await request(service.address().port, { path: '/api/chat2api/accounts/qwen%3Auser%40example.com/web-session', method: 'POST', headers: { 'Content-Type': 'application/json' } }, '{}');
+    assert.equal(JSON.parse(webSession.text).sessionId, 'session-1');
+    const consumedSession = await request(service.address().port, { path: '/api/chat2api/accounts/web-session/consume', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ sessionId: 'session-1' }));
+    assert.equal(JSON.parse(consumedSession.text).sessionId, 'session-1');
+    assert.equal(consumedSession.headers['cache-control'], 'no-store');
     const login = await request(service.address().port, { path: '/api/chat2api/oauth/start', method: 'POST', headers: { 'Content-Type': 'application/json' } }, JSON.stringify({ providerId: 'deepseek' }));
     assert.equal(login.statusCode, 200);
     assert.equal(JSON.parse(login.text).state, 'state-1');
@@ -146,6 +165,35 @@ test('代理服务提供 Responses 非流式和流式接口', async () => {
     assert.match(stream.text, /response.created/);
     assert.match(stream.text, /data: \[DONE\]/);
     assert.equal(received.length, 2);
+  } finally {
+    await service.stop();
+  }
+});
+
+test('代理服务透传 Responses 上游账号不可用错误', async () => {
+  const service = createChat2ApiProxyService({
+    host: '127.0.0.1', port: 0, config: { enableApiKey: false },
+    coreAdapter: { listModels: async () => ({ object: 'list', data: [] }), forwardChatCompletion: async () => ({ body: {} }) },
+    responsesService: {
+      createResponse: async () => {
+        const error = new Error('没有可用账号');
+        error.statusCode = 503;
+        error.code = 'no_available_account';
+        throw error;
+      },
+    },
+  });
+  await service.start();
+  try {
+    const response = await request(
+      service.address().port,
+      { path: '/v1/responses', method: 'POST', headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify({ model: 'Qwen3.6-Flash', input: '你好' })
+    );
+    const payload = JSON.parse(response.text);
+    assert.equal(response.statusCode, 503);
+    assert.equal(payload.error.code, 'no_available_account');
+    assert.equal(payload.error.message, '没有可用账号');
   } finally {
     await service.stop();
   }

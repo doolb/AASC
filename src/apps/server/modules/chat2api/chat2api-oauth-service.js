@@ -1,5 +1,5 @@
-const crypto = require('crypto');
 const { getAndroidLoginProfile } = require('./chat2api-login-profiles');
+const { selectAccountId } = require('./chat2api-account-identity');
 
 const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAdapters = {} } = {}) => {
   if (!dataStore || typeof dataStore.createOAuthSession !== 'function' || typeof dataStore.consumeOAuthSession !== 'function' || typeof dataStore.saveAccount !== 'function') {
@@ -33,7 +33,7 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
     };
   };
 
-  const completeLogin = async ({ state, providerId, credentials, accountId, label, email, accountInfo = {} } = {}) => {
+  const completeLogin = async ({ state, providerId, credentials, accountId, label, email, phone, accountInfo = {} } = {}) => {
     if (!state || !providerId || !credentials || typeof credentials !== 'object') {
       throw new Error('Chat2API 登录参数不完整');
     }
@@ -72,18 +72,26 @@ const createChat2ApiOAuthService = ({ dataStore, providerRegistry, credentialAda
           throw new Error(`缺少必填凭据字段: ${missing.join(', ')}`);
         }
       }
+      const resolvedEmail = email || validated.accountInfo?.email || accountInfo.email;
+      const resolvedPhone = phone || validated.accountInfo?.phone || accountInfo.phone;
+      const existingAccounts = typeof dataStore.listAccounts === 'function' ? await dataStore.listAccounts() : [];
+      const resolvedAccountId = selectAccountId(
+        { accountId, providerId: provider.id, email: resolvedEmail, phone: resolvedPhone },
+        { existingIds: existingAccounts.map((item) => item.accountId) },
+      );
       const now = Date.now();
       const saved = await dataStore.saveAccount({
-        accountId: accountId || `${provider.id}-${crypto.randomBytes(6).toString('hex')}`,
+        ...accountInfo,
+        accountId: resolvedAccountId,
         providerId: provider.id,
         label: label || validated.accountInfo?.name || provider.name,
-        email: email || validated.accountInfo?.email || accountInfo.email,
+        email: resolvedEmail,
+        phone: resolvedPhone,
         credentials: validated.credentials || credentials,
         enabled: true,
         status: 'active',
         createdAt: now,
         updatedAt: now,
-        ...accountInfo,
       });
       if (!consumedBeforeValidation && !(await dataStore.consumeOAuthSession(state, providerId))) {
         throw new Error('登录状态无效、已过期或 Provider 不匹配');

@@ -420,6 +420,8 @@ processVoiceCommand() 处理其他命令
 
 聊天协议配置归属于 profile：`protocol`、`apiUrl` 和 `apiKey` 必须从当前 profile 一起读取，Responses 模式由 `apiUrl` 派生服务基址。恢复 profile 或切换 profile 时，协议、地址和密钥必须同步切换；旧全局 `responsesBaseUrl`、`responsesApiKey` 会被忽略，不继续参与请求。
 
+聊天设置外部“保存设置”只负责全局聊天字段。该入口不得提交或覆盖 `llmProfiles`、`activeProfile` 以及 profile 内的协议、地址、模型和密钥；LLM profile 只能通过 profile 专用保存接口更新。服务端保存全局字段时必须合并到已有 `config.chat`，保留 profile 配置原值，避免规范化返回值把多个 profile 的协议意外改成同一个 Responses 协议。
+
 ## 临时角色选择消息注册约束
 
 临时角色选择使用 WebSocket 消息 startTemporaryConversation。该消息必须同时存在于服务端控制端消息类型注册表和统一 Fallback 处理器中；只实现 Fallback 分支而未注册消息类型时，WebSocket 层会提前拒绝请求，控制端会一直停留在“切换中”状态。新增控制端消息时，注册表、处理器、控制端错误回包和回归测试必须一起更新。

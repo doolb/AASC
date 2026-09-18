@@ -107,8 +107,15 @@ showConfig():
 
 saveConfig():
     仅读取全局聊天级字段
-    POST /api/chat/config { systemPrompt, agentBackend, ... }
-    以服务端返回的 config 覆盖本地对应字段
+    globalPatch = pickGlobalChatConfig({ systemPrompt, agentBackend, ... })
+    POST /api/chat/config { globalPatch }
+    服务端只持久化 globalPatch，并保留当前 config.chat.llmProfiles 和 activeProfile
+    成功后只使用服务端权威 config 中的全局字段更新本地状态
+    不将返回的 llmProfiles 合并回下一次外部保存请求
+
+pickGlobalChatConfig(input):
+    只保留 agentBackend、codexProxy、apiUrl、model、maxTokens、temperature、apiKey、contextCount、systemPrompt、promptFormat
+    丢弃 llmProfiles、activeProfile、mode、backend 和其他 profile 字段
 
 saveProfile():
     读取并规范化 protocol、apiUrl、apiKey 和其他 profile 字段
@@ -184,6 +191,10 @@ applyProfile(name):
 
 getConfig():
     返回 chatConfig 副本
+
+pickGlobalChatConfig(input):
+    只复制全局聊天字段
+    丢弃 llmProfiles、activeProfile 以及 profile 协议、地址、模型、密钥
 
 setConfig(newConfig):
     更新 chatConfig 字段
@@ -870,7 +881,10 @@ const Chat = {
     saveConfig():
         仅保存全局聊天级字段
         POST /api/chat/config 保存全局聊天配置
-        成功后使用服务端权威 config 更新本地状态
+        服务端先筛选允许的全局聊天字段
+        调用 chat.setConfig(globalPatch)
+        保存 config.chat 时合并 globalPatch，保留原有 llmProfiles 和 activeProfile
+        返回完整权威 config 供展示，但客户端只回填全局字段
     
     saveCommands():
         请求 POST /api/chat/commands

@@ -36,6 +36,30 @@ class OfflineUpdateManifestTest {
     }
 
     @Test
+    fun optionalReleaseNotesAreVerifiedAndParsed() {
+        val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        val payload = validPayload().apply {
+            getJSONObject("components").put("apkMin", validMinApk().put("releaseNotes", "修复缩放\n\n- Display 2 调整为 100%"))
+        }
+        val manifest = signedManifest(payload, keyPair.private.encoded, keyPair.public.encoded)
+
+        val parsed = OfflineUpdateManifest.parse(manifest, publicPem(keyPair.public.encoded))
+
+        assertEquals("修复缩放\n\n- Display 2 调整为 100%", parsed.apkMin?.releaseNotes)
+    }
+
+    @Test
+    fun oversizedReleaseNotesAreRejected() {
+        val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        val payload = validPayload().apply {
+            getJSONObject("components").put("apkMin", validMinApk().put("releaseNotes", "x".repeat(4097)))
+        }
+        val manifest = signedManifest(payload, keyPair.private.encoded, keyPair.public.encoded)
+
+        assertRejected(manifest, publicPem(keyPair.public.encoded), "releaseNotes")
+    }
+
+    @Test
     fun invalidSignatureOrDifferentPublicKeyIsRejected() {
         val signingKeys = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
         val otherKeys = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
@@ -96,6 +120,18 @@ class OfflineUpdateManifestTest {
                 })
             })
         }
+    }
+
+
+    private fun validMinApk(): JSONObject = JSONObject().apply {
+        put("versionCode", 10)
+        put("versionName", "0.2.8-offline-min")
+        put("packageName", "com.aasc.display.offline")
+        put("signerSha256", "d".repeat(64))
+        put("modelCompatibilitySha256", "e".repeat(64))
+        put("relativeUrl", "apk/aasc-display-offline-min-v10.apk")
+        put("size", 789)
+        put("sha256", "f".repeat(64))
     }
 
     private fun signedManifest(payload: JSONObject, privateKeyBytes: ByteArray, publicKeyBytes: ByteArray): String {

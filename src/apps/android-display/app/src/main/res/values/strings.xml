@@ -30,6 +30,7 @@
     <string name="offline_update_title">发现 Offline 更新</string>
     <string name="offline_update_available_default">有新的 min APK 可用</string>
     <string name="offline_update_available">版本 %1$s，下载大小 %2$s。是否下载更新？</string>
+    <string name="offline_update_notes_title">更新内容</string>
     <string name="offline_update_download">下载更新</string>
     <string name="offline_update_later">稍后</string>
     <string name="offline_update_downloading">正在下载 Offline 更新</string>

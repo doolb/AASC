@@ -2,12 +2,19 @@
 
 ## 状态
 
-2026-09-18 当前 full Offline APK 已跟随 min 最新版本 v9：`allserver` 使用
-`versionCode=9`、`versionName=0.2.7-offline`，发布文件为
-`apk/aasc-display-offline-v9.apk`。APK 大小 `957310007` bytes，SHA-256 为
-`b1625bdf269e256d98aa45254c14a9531dcdfa3399d0b7d31b18daccbe1f83a7`；已发布到 LAN/WAN，
-两端文件 hash 和 HTTP Content-Length 均一致，旧 full v2 已按精确规则清理，服务
-`manifest.json` 未被替换。
+2026-09-18 当前 full Offline APK 已发布 v13：`allserver` 使用
+`versionCode=13`、`versionName=0.2.11-offline`，发布文件为
+`apk/aasc-display-offline-v13.apk`。APK 大小 `957338670` bytes，SHA-256 为
+`326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`；已发布到 LAN/WAN，
+两端文件 hash 和 HTTP Content-Length 均一致，服务 `manifest.json` 未被替换。
+
+本次 v13 发布包含 Chat2API 账号凭证导入导出、按账号 ID 合并、一次性 Android 外部网页会话
+以及 Cookie/LocalStorage 白名单恢复实现。默认域名 `c.aasc.us` 返回 403，发布验收使用 LAN
+`192.168.1.39` 和 WAN 直连 IP `120.79.245.103`。
+
+现场复核：SM-N9500 当前安装 min v10 时，启动检查可以把 `c.aasc.us` 解析为
+`120.79.245.103` 并成功读取清单，界面显示 min v12 下载提示。完整 APK v13 不进入该清单，
+仍需单独安装完整包。
 
 本次执行已将独立 RSA 密钥对接入打包流程，并重新生成 full v2 APK、code/dependencies v3 服务更新包。full APK SHA-256 为 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；code v3 SHA-256 为 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 为 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`。2026-09-17 将修复后的 min APK 升级为 versionCode `4`、版本 `0.2.2-offline-min`，大小 `89205130` bytes，SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`，并正式发布到 LAN/WAN。两站点 manifest 字节一致、RSA 签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash 及 HTTP 206 首段校验通过；WAN HTTP HEAD 返回 `200` 且 Content-Length 正确。full APK 另已上传为 `apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致。真机卸载后 fresh install full v2，首次 Runtime 安装约 94.6 秒；修复 ZIP 目录项规范化白名单后，设备生成 code/dependencies v3 的 `active-release.json`，`pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。2026-09-17 使用含 `libaasc_node.so` 的 min v3 原位安装成功，数据目录和模型缓存保留，服务重新启动并继续使用 code/dependencies v3；回滚及异常降级仍待验收。
 
@@ -45,6 +52,10 @@ SHA-256 为 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`�
 再把解析出的 IP 替换回更新 URL 的主机部分访问；不额外设置或保留域名 Host，路径仍使用
 `/mnt/aasc-offline/manifest.json` 及清单中的组件相对路径。LAN 源仍为
 `http://192.168.1.39/mnt/aasc-offline/`，内网优先、外网备用和多 IP 逐个尝试规则保持不变。
+
+2026-09-18 已正式发布完整 Offline APK v12（`0.2.10-offline`），与当前 min versionCode 对齐，文件为 `apk/aasc-display-offline-v12.apk`。APK 大小 `957319386` bytes、SHA-256 为 `b107d7963bf4dd18068404427e12f4edc72ff8253e8914e3d1909ca66e6c8183`；LAN/WAN 直连 IP HTTP 200、Content-Length、远端文件 hash、APK v2 签名和 ZIP 完整性均通过。默认域名 `c.aasc.us` 返回 403，未作为验收入口。
+
+2026-09-18 已正式发布控制端聊天设置修复：服务 code v4 与 Offline min APK v12（`0.2.10-offline-min`）同步到 LAN/WAN。code v4 大小 `13996510` bytes、SHA-256 为 `7ca5adf90be5738ee94b47e31534d574b411a1934e3b0d0db6702955b1247bd2`；min v12 大小 `89236426` bytes、SHA-256 为 `c4c20af9ab6b71c5e0e5dad1b4d3d2f1cdfce8cb7eaee91d6dde0ff1afdcf253`。更新清单携带“控制端聊天设置修复”发布日志，LAN/WAN 直连 IP 的 manifest 与 APK 均返回 HTTP 200、Content-Length 正确，签名和 APK v2 校验通过；默认域名 `c.aasc.us` 当前返回 403，未作为验收入口。
 
 2026-09-18 根据 Display 2 与手机实测结果调整 Offline WebView 缩放曲线：以 `1280px@320dpi` 为 100%，使用
 `round((((长边 / 1280) + (densityDpi / 320)) / 2) × 100)`。目标为 Display 2 `1920×1080@160dpi` 显示 `100%`，
@@ -86,6 +97,8 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 
 发布 min APK 时可通过 `--release-notes-file <UTF-8 文件>` 写入本次更新日志。发布器首尾裁剪日志，保留内部换行，限制为 4096 个 Unicode 字符；空日志不写入清单字段。Android 更新卡片显示版本、大小和日志内容，最多展示 6 行；旧清单缺少 `releaseNotes` 时沿用原有版本/大小提示。
 
+2026-09-18 已完成该能力：`offline-min-apk-package.js` 在生成并验签 `apkMin` 时读取日志文件，Android 清单解析和更新卡片按同一上限处理；Node 39 项 Offline/APK 回归、Android `OfflineUpdateManifestTest` 定向测试均通过，未携带日志的 v10 清单仍保持兼容。
+
 ### 发布资源保留与清理
 
 版本化资源发布到局域网和外网两个独立目标。服务清单中的 `code.relativeUrl`、`dependencies.relativeUrl` 和 `apkMin.relativeUrl` 是各自组件的权威保留项；完整 Offline APK 不进入服务更新清单，使用 `apk/aasc-display-offline-v<versionCode>.apk` 命名，完整包发布时保留本次版本。清理规则只匹配以下精确版本文件：`code/code-v<数字>.zip`、`dependencies/dependencies-v<数字>.zip`、`apk/aasc-display-offline-min-v<数字>.apk` 和 `apk/aasc-display-offline-v<数字>.apk`。
@@ -126,6 +139,7 @@ AI 执行约束同步记录：仓库根目录的 `CLAUDE.md` 与 `AGENTS.md` 均
 - `npm run build:offline-update -- --mode=code-only|all`：生成签名服务更新包及本地校验清单。
 - `npm run publish:offline-update -- --mode=code-only|all`：将版本化服务包先发布到局域网目录和远端目录，最后原子替换各自签名清单；`code-only` 保留原依赖包及清单条目。
 - `npm run build:apk:offline:min`：构建 update-only min APK。
+- `npm run package:offline-apk:min -- --manifest-file <当前清单> --release-notes-file <UTF-8 日志>`：将 min APK、构建清单和本次更新日志写入新的签名本地清单；日志字段随后随 `apk-min` 发布流程上传。
 - `npm run publish:offline-apk:min`：把 min APK 版本文件发布后更新签名清单中的 APK 组件。
 - `npm run publish:offline-apk:full -- --apk <full-apk> --build-manifest <build-manifest>`：把完整 Offline APK 以 versionCode 文件名发布到两个目标，并清理旧完整 APK；完整 APK 不写入服务更新清单。
 

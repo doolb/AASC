@@ -1,12 +1,20 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+> 2026-09-18 已正式发布完整 Offline APK v13（`0.2.11-offline`），文件为 `apk/aasc-display-offline-v13.apk`，大小 `957338670` bytes，SHA-256 为 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`。LAN/WAN 直连 IP HTTP 200、Content-Length 和远端 hash 校验通过；默认域名 `c.aasc.us` 返回 403，使用直连 IP 验收。v13 包含 Chat2API 账号凭证导入导出与 Android 外部网页恢复代码。
+
+> 2026-09-18 计划发布与 full v13 配套的 Offline min APK v14（`0.2.12-offline-min`）。由于 full v13 已占用 versionCode 13，min 热更新使用更高的 versionCode，保证已安装 full v13 的设备可以原位更新。
+
 > 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，2026-09-17 修复后的 min v4（versionCode 4、`0.2.2-offline-min`）已正式发布到 LAN/WAN。两站点 manifest 字节一致且签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash、HTTP HEAD 和首段响应校验通过；min v4 的 APK SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`。full v2 APK 另已上传到外网 `apk/aasc-display-offline-v2.apk`，远端大小和完整 hash 与本地一致；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。2026-09-17 重新生成的 min v3 携带 `libaasc_node.so` 并原位安装成功，配置、任务目录和 LLM 模型缓存保留；发布器已支持双站点精确清理旧 code/dependencies/min/full 版本。固定 ID/Chat2API 完成按钮对应的 min v6（versionCode 6、`0.2.4-offline-min`）已正式发布到 LAN/WAN，包含 Offline 任务索引迁移逻辑；APK SHA-256 为 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest 字节一致、签名有效、HTTP APK 返回 200 且 Content-Length 正确。当前实现已生成并正式发布 min v7（versionCode 7、`0.2.5-offline-min`），APK 大小 `89535999` bytes、SHA-256 为 `80501f7ea36a96377f8cddec3f238e0ec31b2d2bc30681d3f4b650c3ada324af`，LAN/WAN 清单和 APK HTTP 校验通过。SM-N9500 Android 9/API 28 真机已在 Display 2 `Desktop` 虚拟屏运行 v7，窗口为 1920×1018 app 区域、160 dpi，固定 `offline-display` 服务健康接口返回 200，UI 自动化可见浮动“控制端”按钮；因 Display 2 为 `touch NONE` 且无法通过 `screencap -d 2` 取图，本轮未宣称真实触控回归。现行校正以 `1280px@320dpi` 为 100%，Display 2 的 1920×1080@160dpi 目标比例为 75%；回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
 
 > 2026-09-18 已将分辨率与 DPI 校正打包为 min v8（versionCode 8、`0.2.6-offline-min`），APK 大小 `89231402` bytes、SHA-256 为 `470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`，并正式发布到 LAN/WAN。两站点 manifest、HTTP 200/Content-Length 和 WAN 远端 hash 校验通过；SM-N9500 Android 9/API 28 已安装 v8，在 Display 2 运行并确认 Qwen `readyDisplayIds=["offline-display"]`。Display 2 目标比例为 75%；手机 2309 长边、480 dpi 目标比例约 271%。因 `touch NONE` 和 Desktop 虚拟屏截图限制，本轮仍未宣称真实触控回归。
 
 > 2026-09-18 新增右下角分辨率/DPI/缩放诊断浮层后，min v9（versionCode 9、`0.2.7-offline-min`）已构建、安装并正式发布到 LAN/WAN；UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`。v9 大小 `89233662` bytes、SHA-256 为 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`，LAN `192.168.1.39` 和 WAN 直接 IP `120.79.245.103` 的 manifest、HTTP 200/Content-Length 和 WAN 远端 APK hash 已复核一致。默认域名 `c.aasc.us` 当前返回备案拦截 403，未作为本次验收入口。
 
-> 2026-09-18 完整 Offline APK 的发布版本跟随当前 min 最新版本：读取 `allserver-min.versionCode` 作为 full 的 `versionCode`，full 版本名使用 `0.2.7-offline`，目标文件名为 `apk/aasc-display-offline-v9.apk`。若目标已有同版本但 SHA 不同的 full APK，必须先重新构建新版本，禁止覆盖既有版本。
+> 2026-09-18 完整 Offline APK 的发布版本跟随当前 min 最新版本：读取 `allserver-min.versionCode` 作为 full 的 `versionCode`，full 版本名按当前版本生成；本次 versionCode 12 使用 `0.2.10-offline`，目标文件名为 `apk/aasc-display-offline-v12.apk`。若目标已有同版本但 SHA 不同的 full APK，必须先重新构建新版本，禁止覆盖既有版本。
+
+> 2026-09-18 完整 Offline APK v12（`0.2.10-offline`）已与 min versionCode 12 对齐并正式发布，文件为 `apk/aasc-display-offline-v12.apk`。大小 `957319386` bytes、SHA-256 `b107d7963bf4dd18068404427e12f4edc72ff8253e8914e3d1909ca66e6c8183`；LAN/WAN 直连 IP HTTP、Content-Length、远端 hash、APK v2 签名和 ZIP 完整性校验通过。默认域名 `c.aasc.us` 返回 403，使用直连 IP 验收。
+
+> 2026-09-18 控制端聊天设置 profile 协议保护已随服务 code v4 和 Offline min v12（`0.2.10-offline-min`）正式发布。code v4 大小 `13996510` bytes、SHA-256 `7ca5adf90be5738ee94b47e31534d574b411a1934e3b0d0db6702955b1247bd2`；min v12 大小 `89236426` bytes、SHA-256 `c4c20af9ab6b71c5e0e5dad1b4d3d2f1cdfce8cb7eaee91d6dde0ff1afdcf253`。清单包含本次发布更新日志，LAN/WAN 直连 IP 的清单和 APK HTTP 200、Content-Length、签名、APK v2 校验均通过；默认域名 `c.aasc.us` 返回 403，验收使用直连 IP。
 
 > 2026-09-18 缩放曲线校正已完成：`WebViewScalePolicy` 将分辨率比例与 DPI 比例等权混合，
 > `round((((长边 / 1280) + (densityDpi / 320)) / 2) × 100)`；min v10 本地包 SHA-256 为
@@ -54,6 +62,8 @@ MainActivity.showMinApkUpdatePrompt:
     如果 releaseNotes 非空：显示更新内容，最多 6 行并省略尾部
     否则隐藏更新内容区域
 ```
+
+2026-09-18 实现验证：Node 离线 APK/发布参数回归 39/39 通过，Android `OfflineUpdateManifestTest` BUILD SUCCESSFUL；发布日志随 `apkMin` 一起签名，旧清单缺少字段时解析结果为 `null`。
 
 ```text
 loadOfflineUpdateKeyPair(options):
