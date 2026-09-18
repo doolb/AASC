@@ -125,6 +125,23 @@ DisplayWebView.init(context, offlineMode):
     )
     setInitialScale(scale)
 
+DisplayWebView.initControlPageZoomPolicy(disableInputAutoZoom):
+    如果 disableInputAutoZoom == false：不注入控制端专用 viewport
+    否则：页面完成加载后查找 meta[name="viewport"]
+        如果不存在：创建 viewport meta 并加入 head
+        将 content 规范化为 width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no
+    不修改显示 WebView、普通 APK 或服务端 upload.html 源文件
+
+实现状态（2026-09-18）：
+    DisplayWebView 增加 disableInputAutoZoom 参数，MainActivity 仅为 Offline 控制 WebView 传入 true
+    onPageFinished 调用 applyInputAutoZoomPolicy()
+    Offline 静态回归 26/26 通过，Android :app:testDebugUnitTest BUILD SUCCESSFUL
+
+发布状态（2026-09-18）：
+    min v11（versionCode 11、versionName 0.2.9-offline-min）已发布到 LAN/WAN
+    APK 大小 89235646 bytes，SHA-256 为 0b3ab8871ca17e32fa1dc5db767ef8b31049a973d8d678faa471e1ad4ac396da
+    两站点 HTTP 200、Content-Length、远端 hash、签名清单和 APK ZIP 完整性校验通过
+
 toggleControl:
     如果 controlWebView 可见：隐藏并将按钮文字设为“控制端”
     否则：显示 controlWebView，加载 baseUrl/control，并将按钮文字设为“隐藏控制端”
@@ -233,6 +250,8 @@ MainActivity.showMinApkUpdatePrompt:
     releaseNotes 非空时显示更新内容 TextView，最多 6 行并省略尾部
     releaseNotes 为空时隐藏更新内容 TextView
 ```
+
+实现验证：更新内容使用原生 `TextView` 纯文本显示，布局限制最多 6 行并省略尾部；Node 静态回归 39/39、Android `OfflineUpdateManifestTest` 均通过。
 
 ## v10 缩放曲线验证记录（2026-09-18）
 

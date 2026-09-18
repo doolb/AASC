@@ -116,6 +116,22 @@ test('Offline APK 右下角显示分辨率DPI和缩放诊断信息', () => {
     assert.match(activity, /缩放/u);
 });
 
+test('Offline 仅控制端禁用输入框聚焦后的页面自动缩放', () => {
+    const displayWebView = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/DisplayWebView.kt'
+    );
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+
+    assert.match(displayWebView, /disableInputAutoZoom:\s*Boolean\s*=\s*false/u);
+    assert.match(displayWebView, /maximum-scale=1\.0/u);
+    assert.match(displayWebView, /user-scalable=no/u);
+    assert.match(displayWebView, /applyInputAutoZoomPolicy/u);
+    assert.match(activity, /DisplayWebView\(this, offlineMode, disableInputAutoZoom = offlineMode\)/u);
+    assert.match(activity, /view\s+is\s+DisplayWebView[\s\S]*?applyInputAutoZoomPolicy\(\)/u);
+});
+
 test('offline APK 首次解包显示原生启动状态遮罩', () => {
     const layout = read('src/apps/android-display/app/src/main/res/layout/activity_main.xml');
     const strings = read('src/apps/android-display/app/src/main/res/values/strings.xml');

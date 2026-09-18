@@ -851,7 +851,7 @@ class MainActivity : AppCompatActivity() {
         webView = wv
         wv.loadUrl(url)
 
-        val control = DisplayWebView(this, offlineMode)
+        val control = DisplayWebView(this, offlineMode, disableInputAutoZoom = offlineMode)
         control.visibility = View.GONE
         control.addJavascriptInterface(Chat2ApiNativeBridge(this), "NativeControl")
         control.webViewClient = createWebViewClient(null, baseUrl, false)
@@ -939,6 +939,9 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, pageUrl: String) {
                 bridge?.updateServerOrigin(pageUrl)
+                if (view is DisplayWebView) {
+                    view.applyInputAutoZoomPolicy()
+                }
                 if (retryOfflinePage &&
                     !offlineDisplayLoadFailed &&
                     isDisplayPageUrl(pageUrl, baseUrl)) {

@@ -52,6 +52,14 @@
 - 普通 APK、无效参数回退、诊断浮层内容和系统显示/输入协议保持不变。
 - v10 已完成构建、LAN/WAN 正式发布并安装到 SM-N9500 Display 2；UI 自动化读取 `分辨率 1920×1018 | DPI 160 | 缩放 100%`，发布入口使用 LAN 和 WAN 直连 IP。
 
+## Offline 控制端输入框聚焦缩放（2026-09-18）
+
+- Offline 控制端单独关闭输入框获得焦点时的页面自动缩放，避免弹出软键盘后控制页面被放大；显示端 WebView、普通 APK 和用户已有页面缩放行为保持不变。
+- 控制端仍使用 Offline 的初始分辨率/DPI 缩放比例；本次只补充控制页 viewport 的 `maximum-scale=1`、`user-scalable=no` 约束，不修改系统 density、分辨率、键盘高度、输入坐标或显示端媒体渲染。
+- 原生 `DisplayWebView` 通过控制页标记注入一次性 viewport 约束，页面加载完成后执行；若页面已有 viewport 则更新内容，没有则创建，避免修改服务端网页源文件并影响浏览器控制端。
+- 已完成：`DisplayWebView.kt`、`MainActivity.kt` 和 Offline 静态回归已覆盖；Android JVM 单测 `BUILD SUCCESSFUL`。真实控制端键盘回归仍需下一次安装新包后现场确认。
+- v11（`0.2.9-offline-min`）已构建并发布到 LAN/WAN，APK 大小 `89235646` bytes，SHA-256 为 `0b3ab8871ca17e32fa1dc5db767ef8b31049a973d8d678faa471e1ad4ac396da`；两站点 HTTP 200、Content-Length、远端 hash 和签名清单校验通过。此次发布暂未覆盖安装到真机。
+
 ## Android 启动权限串行申请
 
 显示端启动流程先完成现有共享存储权限处理，再依次申请录音、摄像头和 Android 13+ 通知权限。每个权限请求都等待系统回调后才进入下一项；用户拒绝某项时也继续处理后续权限，避免 Android 丢弃同一时刻并发发出的权限对话框。已授权的权限跳过，不重复弹窗。
@@ -71,6 +79,7 @@
 - min APK 签名清单的 `apkMin` 组件可选携带 `releaseNotes`，发布命令从 UTF-8 文件读取并纳入清单签名。
 - Offline 更新卡片检测到新版本时显示版本、大小和更新内容；日志缺失时保持旧版提示，日志最多展示 6 行。
 - 日志只作为纯文本显示，不解析 HTML/Markdown，不改变下载、验签和 PackageInstaller 流程。
+- 2026-09-18 已完成实现并通过 Node 39 项 Offline/APK 回归与 Android `OfflineUpdateManifestTest`；旧清单缺少字段时日志区域保持隐藏。
 
 ## Offline 屏幕诊断信息浮层（2026-09-18）
 

@@ -1,5 +1,17 @@
 # Web MediaCenter - 变更日志
 
+### Offline 控制端自动缩放修复发布
+
+- ✅ [2026-09-18] 发布 min v11（`0.2.9-offline-min`），仅 Offline 控制端输入框聚焦时禁用页面自动放大。
+  - APK 大小 `89235646` bytes，SHA-256 `0b3ab8871ca17e32fa1dc5db767ef8b31049a973d8d678faa471e1ad4ac396da`，文件为 `apk/aasc-display-offline-min-v11.apk`。
+  - LAN/WAN HTTP 200、Content-Length、签名清单、APK ZIP 完整性和远端 hash 均通过；旧 min 版本按精确规则清理，full v9 保留。
+
+### Offline 控制端输入框聚焦自动缩放修复
+
+- ✅ [2026-09-18] 仅对 Offline APK 控制端 WebView 注入 `maximum-scale=1`、`user-scalable=no` viewport 约束，避免软键盘弹出时页面自动放大。
+  - `DisplayWebView.kt` 增加控制页专用策略，`MainActivity.kt` 仅为 Offline 控制 WebView 启用；显示端、普通 APK 和服务端浏览器控制端不变。
+  - 验证：Offline 静态回归 `26/26`，Android `:app:testDebugUnitTest` `BUILD SUCCESSFUL`；真实键盘触控回归待安装新包后执行。
+
 ### Android Offline full APK 跟随 min v9 发布
 
 - ✅ [2026-09-18] 将完整 Offline APK 的版本对齐当前 min 最新版本 v9，并完成双站点发布。

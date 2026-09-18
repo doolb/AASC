@@ -9,7 +9,11 @@ import android.webkit.WebView
 
 // 显示端 WebView：启用 JS/DOM 存储/混合内容，保证 display.html 与跨域 iframe 内容可渲染
 @SuppressLint("SetJavaScriptEnabled")
-class DisplayWebView(context: Context, offlineMode: Boolean) : WebView(context) {
+class DisplayWebView(
+    context: Context,
+    offlineMode: Boolean,
+    private val disableInputAutoZoom: Boolean = false
+) : WebView(context) {
 
     init {
         settings.javaScriptEnabled = true
@@ -51,5 +55,25 @@ class DisplayWebView(context: Context, offlineMode: Boolean) : WebView(context) 
                 }
             }
         }
+    }
+
+    /**
+     * 仅为 Offline 控制端收紧 viewport，防止输入框获取焦点并弹出软键盘时页面自动放大。
+     *
+     * 该策略在页面加载完成后执行，避免修改服务端 upload.html，从而不影响浏览器控制端。
+     * 显示端 WebView 和普通 APK 实例使用默认 false，不会改变已有页面行为。
+     */
+    fun applyInputAutoZoomPolicy() {
+        if (!disableInputAutoZoom) return
+        evaluateJavascript(
+            "(function(){" +
+                "var viewport=document.querySelector('meta[name=\"viewport\"]');" +
+                "if(!viewport){viewport=document.createElement('meta');" +
+                "viewport.name='viewport';" +
+                "(document.head||document.documentElement).appendChild(viewport);}" +
+                "viewport.setAttribute('content','width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');" +
+                "})();",
+            null
+        )
     }
 }

@@ -74,6 +74,7 @@
   - v7（`0.2.5-offline-min`）已正式发布到 LAN/WAN，APK 大小 `89535999` bytes，SHA-256 `80501f7ea36a96377f8cddec3f238e0ec31b2d2bc30681d3f4b650c3ada324af`；SM-N9500 真机已安装并确认 Activity 位于 Display 2，固定 `offline-display` 服务健康接口和 UI 自动化按钮检查通过。v7 校正前按 1280 像素长边计算为 150%；真实触控/截图受 `touch NONE` 和 Desktop 虚拟屏限制未完成，现行比例以 v8 DPI 校正记录为准。
   - v8（`0.2.6-offline-min`）已完成 DPI 校正并正式发布，APK 大小 `89231402` bytes，SHA-256 `470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`；按 `1280px@320dpi=100%` 公式，Display 2 `1920×1080@160dpi` 为 75%。SM-N9500 真机已覆盖安装并确认 Display 2 窗口、固定 `offline-display` 健康接口和 Qwen ready 状态正常。
   - v9（`0.2.7-offline-min`）已完成右下角诊断浮层构建、真机验证和 LAN/WAN 正式发布，APK 大小 `89233662` bytes，SHA-256 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`；UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`。默认域名 `c.aasc.us` 返回备案拦截 403，本次使用 WAN 直接 IP 验收。
+  - v11（`0.2.9-offline-min`）已发布本次控制端输入框自动缩放修复，APK 大小 `89235646` bytes，SHA-256 `0b3ab8871ca17e32fa1dc5db767ef8b31049a973d8d678faa471e1ad4ac396da`；LAN/WAN HTTP、清单、签名、ZIP 完整性和远端 hash 均通过，尚未覆盖安装真机。
   - full 已对齐 min v9（`versionCode=9`、`0.2.7-offline`）并发布为 `aasc-display-offline-v9.apk`，大小 `957310007` bytes，SHA-256 `b1625bdf269e256d98aa45254c14a9531dcdfa3399d0b7d31b18daccbe1f83a7`；LAN/WAN IP HTTP 200、Content-Length 和远端 hash 一致，旧 full v2 已清理，服务 manifest 未替换。
   - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次追加 min v6、v7、v8 版本文件并更新签名清单。
   - 独立 RSA 密钥对已接入打包工具并存放于 `~/.config/aasc-user/`；更新包构建已支持临时工作区与输出目录跨文件系统，归档复制到输出同目录临时文件后再原子切换。
