@@ -39,6 +39,9 @@ class NodeServerService : Service() {
         const val ACTION_STATUS = "com.aasc.display.action.NODE_STATUS"
         const val EXTRA_STATUS = "status"
         const val EXTRA_DETAIL = "detail"
+        const val EXTRA_PHASE = "phase"
+        const val EXTRA_COMPLETED_BYTES = "completed_bytes"
+        const val EXTRA_TOTAL_BYTES = "total_bytes"
         const val STATUS_PREPARING = "preparing"
         const val STATUS_INSTALLING = "installing"
         const val STATUS_STARTING = "starting"
@@ -260,13 +263,24 @@ class NodeServerService : Service() {
      * 通过显式应用内广播通知前台 Activity，避免 Activity 在 Runtime 解包期间只能看到 WebView 错误页。
      * 设置 package 限制接收者，Node 启动细节不会暴露给其他应用。
      */
-    private fun sendStatus(status: String, detail: String? = null) {
+    private fun sendStatus(
+        status: String,
+        detail: String? = null,
+        phase: String? = null,
+        completedBytes: Long? = null,
+        totalBytes: Long? = null
+    ) {
         val intent = Intent(ACTION_STATUS)
             .setPackage(packageName)
             .putExtra(EXTRA_STATUS, status)
         if (!detail.isNullOrBlank()) {
             intent.putExtra(EXTRA_DETAIL, detail)
         }
+        if (!phase.isNullOrBlank()) {
+            intent.putExtra(EXTRA_PHASE, phase)
+        }
+        completedBytes?.let { intent.putExtra(EXTRA_COMPLETED_BYTES, it) }
+        totalBytes?.let { intent.putExtra(EXTRA_TOTAL_BYTES, it) }
         sendBroadcast(intent)
     }
 
@@ -276,7 +290,15 @@ class NodeServerService : Service() {
         try {
             sendStatus(STATUS_PREPARING)
             sendStatus(STATUS_INSTALLING)
-            val root = NodeRuntimeInstaller(this).ensureInstalled()
+            val root = NodeRuntimeInstaller(this).ensureInstalled { progress ->
+                sendStatus(
+                    STATUS_INSTALLING,
+                    progress.detail,
+                    progress.phase,
+                    progress.completedBytes,
+                    progress.totalBytes
+                )
+            }
             val updateManager = if (offlineMode) OfflineUpdateManager(this) else null
             updateManager?.let { manager ->
                 if (manager.rollbackPendingRelease(root)) {

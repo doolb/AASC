@@ -11,6 +11,13 @@ import java.nio.file.Paths
 import java.security.MessageDigest
 import org.json.JSONObject
 
+data class RuntimeInstallProgress(
+    val phase: String,
+    val completedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
+    val detail: String? = null
+)
+
 class NodeRuntimeInstaller(
     private val context: Context,
     private val assetManager: AssetManager = context.assets
@@ -199,7 +206,7 @@ class NodeRuntimeInstaller(
         }
     }
 
-    fun ensureInstalled(): File {
+    fun ensureInstalled(onProgress: ((RuntimeInstallProgress) -> Unit)? = null): File {
         val startedAt = SystemClock.elapsedRealtime()
         val root = File(context.filesDir, ROOT_NAME)
         if (context.resources.getBoolean(R.bool.aasc_update_only_mode)) {
@@ -215,6 +222,7 @@ class NodeRuntimeInstaller(
         val runtimeVersion = readRuntimeVersion()
         val runtimeMode = readRuntimeMode()
         if (runtimeVersion != null && canReuseInstalledRuntime(root, runtimeVersion, runtimeMode)) {
+            onProgress?.invoke(RuntimeInstallProgress("reused", 1L, 1L, "已复用已安装 Runtime"))
             if (runtimeMode == OFFLINE_MODE) markFullOfflineInstall(root)
             android.util.Log.i(
                 "AASC-Node",
@@ -226,6 +234,7 @@ class NodeRuntimeInstaller(
         // 兼容未携带 runtime-version.txt 的旧 APK；只在这个兼容路径解析一次完整 manifest。
         val manifest = readManifest()
         if (runtimeVersion == null && canReuseInstalledRuntime(root, manifest)) {
+            onProgress?.invoke(RuntimeInstallProgress("reused", 1L, 1L, "已复用已安装 Runtime"))
             if (File(root, OFFLINE_MODEL_METADATA_FILE).isFile) markFullOfflineInstall(root)
             android.util.Log.i(
                 "AASC-Node",
@@ -238,14 +247,17 @@ class NodeRuntimeInstaller(
         if (staging.exists()) staging.deleteRecursively()
         staging.mkdirs()
         try {
-            copyManifestFiles(manifest, staging)
+            onProgress?.invoke(RuntimeInstallProgress("reading_manifest", 0L, manifest.files.size.toLong(), "正在读取 Runtime 清单"))
+            copyManifestFiles(manifest, staging, onProgress)
             if (manifest.verifyRuntime) {
+                onProgress?.invoke(RuntimeInstallProgress("verifying", 0L, 1L, "正在校验 Runtime 文件"))
                 validateInstalledFiles(manifest, staging)
             } else {
                 validateInstalledFilePresence(manifest, staging)
                 android.util.Log.i("AASC-Node", "Runtime 已跳过完整 SHA-256 内容校验")
             }
             installCodeFiles(root, staging, manifest.version)
+            onProgress?.invoke(RuntimeInstallProgress("starting_node", 1L, 1L, "Runtime 文件已就绪，正在启动本地服务"))
             if (File(root, OFFLINE_MODEL_METADATA_FILE).isFile) markFullOfflineInstall(root)
             android.util.Log.i(
                 "AASC-Node",
@@ -371,9 +383,18 @@ class NodeRuntimeInstaller(
         }
     }
 
-    private fun copyManifestFiles(manifest: NodeRuntimeManifest, staging: File) {
+    private fun copyManifestFiles(
+        manifest: NodeRuntimeManifest,
+        staging: File,
+        onProgress: ((RuntimeInstallProgress) -> Unit)? = null
+    ) {
         // modelAssets 只属于 APK 的显示端推理资产，不能在这里复制到 Node Runtime。
+        val phaseTotals = manifest.files.groupingBy { runtimeInstallPhase(it.path) }
+            .fold(0L) { total, entry -> total + entry.size }
+        val phaseCompleted = mutableMapOf<String, Long>()
+        val phaseLastReportedAt = mutableMapOf<String, Long>()
         for (entry in manifest.files) {
+            val phase = runtimeInstallPhase(entry.path)
             val outputRelativePath = mapAssetPath(entry.path)
             val output = File(staging, outputRelativePath)
             require(output.canonicalFile.toPath().startsWith(staging.canonicalFile.toPath())) {
@@ -381,10 +402,38 @@ class NodeRuntimeInstaller(
             }
             output.parentFile?.mkdirs()
             assetManager.open(entry.path).use { input ->
-                FileOutputStream(output).use { outputStream -> input.copyTo(outputStream) }
+                FileOutputStream(output).use { outputStream ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        outputStream.write(buffer, 0, count)
+                        phaseCompleted[phase] = (phaseCompleted[phase] ?: 0L) + count
+                        val now = System.currentTimeMillis()
+                        val lastReportedAt = phaseLastReportedAt[phase] ?: 0L
+                        if (phaseCompleted[phase] == phaseTotals[phase] || now - lastReportedAt >= 250L) {
+                            onProgress?.invoke(
+                                RuntimeInstallProgress(
+                                    phase,
+                                    phaseCompleted[phase] ?: 0L,
+                                    phaseTotals[phase] ?: 0L,
+                                    entry.path
+                                )
+                            )
+                            phaseLastReportedAt[phase] = now
+                        }
+                    }
+                }
             }
             if (entry.path == manifest.nodePath) output.setExecutable(true, true)
         }
+    }
+
+    private fun runtimeInstallPhase(path: String): String = when {
+        path.startsWith("runtime/") -> "runtime_libraries"
+        path.startsWith("server/node_modules/") -> "node_dependencies"
+        path.startsWith("server/") -> "server_source"
+        else -> "config_and_metadata"
     }
 
     private fun validateInstalledFiles(manifest: NodeRuntimeManifest, staging: File) {

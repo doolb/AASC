@@ -41,7 +41,7 @@ const DISPLAY_RECORDING_MODES = new Set(['asr', 'single', 'realtime']);
 
 function normalizeTextInputVoiceprintPolicy(value) {
     const normalized = String(value || '').trim().toLowerCase();
-    return value === false || normalized === 'false'
+    return value === undefined || value === null || value === false || normalized === 'false'
         ? TEXT_INPUT_VOICEPRINT_POLICY_DISABLED
         : TEXT_INPUT_VOICEPRINT_POLICY_INHERIT;
 }
@@ -635,7 +635,7 @@ class VoiceDisplay {
         try {
             const currentConfig = JSON.parse(fs.readFileSync(this.configPath, 'utf8'));
             const localTextInputConfig = currentConfig.textInput || this.config.textInput || {
-                requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_INHERIT
+                requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_DISABLED
             };
             // 不持久化 displayId：每台机器用 hostname 自动生成
             const cfg = { ...data.config };
@@ -2117,7 +2117,7 @@ function loadConfig(configPath) {
         maxReconnectAttempts: 5,
         recordingMode: 'mute',
         textInput: {
-            requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_INHERIT
+            requireVoiceprint: TEXT_INPUT_VOICEPRINT_POLICY_DISABLED
         }
     };
 

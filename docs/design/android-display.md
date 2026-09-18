@@ -339,10 +339,17 @@ android-display/
 
 ### 2026-09-17 Offline 分辨率基准缩放
 
-- Offline APK 的 WebView 初始比例改为按所属 display Context 的长边像素计算：`round(长边 / 1280 × 100)`；长边 1280 像素为 100%。
-- 例如设备覆盖分辨率 `720x1480` 得到 116%，横屏与竖屏规则一致；普通 APK 继续固定 100%。
-- 宽高无效时回退 100%；不读取或修改 densityDpi，不改变截图像素、媒体源分辨率和输入坐标协议。
+- Offline APK 的 WebView 初始比例按所属 display Context 的长边像素和 densityDpi 计算：以 `1280px@320dpi` 为 100%，使用 `round((((长边 / 1280) + (densityDpi / 320)) / 2) × 100)`；普通 APK 继续固定 100%。
+- Display 2 的 `1920x1080@160dpi` 得到 100%；手机 `2309x1080@480dpi` 得到 165%，设备覆盖分辨率 `720x1480@280dpi` 得到 102%，横屏与竖屏规则一致。
+- 宽高或 densityDpi 无效时回退 100%；不修改系统 densityDpi、截图像素、媒体源分辨率和输入坐标协议。
 - Android JVM 测试覆盖基准、等比例放大、四舍五入、普通 APK 和无效输入；`allserver-min` 快速包真机原位安装后服务和已有 code/dependencies v3 release 正常启动。
+- 2026-09-18 v10 使用等权混合曲线完成 Android JVM 单测、Offline 静态回归和 min APK 构建并正式发布；Display 2 诊断浮层显示 100%。
+
+### 2026-09-18 Offline 屏幕诊断信息浮层
+
+- Offline APK 在显示容器右下角显示当前应用区域分辨率、densityDpi 和 WebView 初始缩放百分比；普通 APK 不显示。
+- 浮层从所属 Display 的 `displayMetrics` 读取分辨率和 densityDpi，缩放值调用 `WebViewScalePolicy.initialScalePercent` 计算，保证诊断值与 WebView 初始化策略一致。
+- 浮层作为 `webContainer` 的底层诊断子项，启动遮罩、更新卡片和控制端按钮保持更高 elevation；配置变化时刷新文字，不改变原有交互协议。
 
 ## 2026-08-26 CPU 配置导致 TTS 页面卡顿修复
 

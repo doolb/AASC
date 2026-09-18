@@ -17,6 +17,7 @@ const assert = require('assert');
   await page.evaluateOnNewDocument(() => {
     const OrigWS = window.WebSocket;
     window.__wsSends = [];
+    window.__wsMessages = [];
     window.__wsInstance = null;
     window.WebSocket = function(...args) {
       const ws = new OrigWS(...args);
@@ -26,6 +27,10 @@ const assert = require('assert');
         window.__wsSends.push(data);
         return origSend(data);
       };
+      // 捕获初始化消息，等待服务端首轮配置完成后再修改测试状态，避免 restoreState 竞态。
+      ws.addEventListener('message', event => {
+        try { window.__wsMessages.push(JSON.parse(event.data)); } catch (e) {}
+      });
       return ws;
     };
     window.WebSocket.prototype = OrigWS.prototype;
@@ -34,9 +39,18 @@ const assert = require('assert');
     });
   });
 
-  await page.goto('https://127.0.0.1:8081/display', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  // 每次使用新的显示端 ID，避免服务端上一次测试的 restoreState 在断言期间异步覆盖本地状态。
+  const testDisplayId = `display-sleep-test-${Date.now()}`;
+  await page.goto(`https://127.0.0.1:8081/display?displayId=${testDisplayId}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 60000
+  });
   await page.waitForFunction(() => typeof window.checkSleepMode === 'function', { timeout: 15000 });
   await page.waitForFunction(() => window.__wsInstance && window.__wsInstance.readyState === 1, { timeout: 15000 });
+  await page.waitForFunction(
+    () => window.__wsMessages.some(message => message && message.type === 'voiceprintConfig'),
+    { timeout: 15000 }
+  );
 
   // ---- 0. 默认开启 + 页面加载不自动打开激活窗口 ----
   const loadState = await page.evaluate(() => ({ enabled: sleepSettings.enabled, until: activationUntil }));
@@ -542,8 +556,14 @@ const assert = require('assert');
   const vPlaying = await page.evaluate(() => ({ paused: mediaVideo.paused, display: mediaVideo.style.display }));
   assert.strictEqual(vPlaying.paused, false, '视频应正在播放');
   assert.strictEqual(vPlaying.display, 'block', 'video display 应为 block（click 监听条件成立）');
-  // 进入睡眠
-  await page.evaluate(() => applySleepState('sleep'));
+  // 进入睡眠：使用真实的手动覆盖路径，避免 10 秒周期检查因 enabled=false 把测试状态改回 normal。
+  await page.evaluate(() => {
+    const ws = window.__wsInstance;
+    ws.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({
+      type: 'control', action: 'sleepOverride', value: 'sleep'
+    }) }));
+  });
+  await new Promise(r => setTimeout(r, 300));
   const vSlept = await page.evaluate(() => mediaVideo.paused);
   assert.strictEqual(vSlept, true, '睡眠应暂停视频');
   // 睡眠中 click
@@ -598,6 +618,10 @@ const assert = require('assert');
   // ---- 27. 睡眠前单媒体暂停 → 退出睡眠保持暂停（resumeSleepMedia 检查 mediaIsPlaying）----
   const vUrl2 = 'https://127.0.0.1:8081/api/media-libraries/lib_1774720230592/proxy/mnt%2F145842476_p0-%E5%8A%A8%E5%9B%BE.mp4';
   await page.evaluate((u) => {
+    // 清除第 23 步的手动睡眠覆盖，后续单媒体恢复测试由显式 applySleepState 控制。
+    manualSleepMode = null;
+    activationUntil = 0;
+    sleepSettings = { ...sleepSettings, enabled: false };
     applySleepState('normal');
     playlistState = null;             // 清除步骤 25 残留的播放列表，回到单媒体场景
     mediaIsPlaying = false;           // 模拟控制端暂停（handleControl play false 已同步）
@@ -624,7 +648,7 @@ const assert = require('assert');
   const vPlaying2 = await page.evaluate(() => mediaVideo.paused);
   assert.strictEqual(vPlaying2, false, '播放中单媒体应处于播放态');
   await page.evaluate(() => { applySleepState('sleep'); applySleepState('normal'); });
-  await new Promise(r => setTimeout(r, 300));
+  await page.waitForFunction(() => !mediaVideo.paused, { timeout: 5000 });
   const vResumed = await page.evaluate(() => mediaVideo.paused);
   assert.strictEqual(vResumed, false, '睡眠前播放中的单媒体退出睡眠后应恢复播放');
   console.log('PASS: 睡眠前播放中的单媒体退出睡眠恢复播放');

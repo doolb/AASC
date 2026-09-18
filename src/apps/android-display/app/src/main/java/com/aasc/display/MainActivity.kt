@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -20,8 +21,10 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import java.io.File
@@ -40,9 +43,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webContainer: FrameLayout
     private lateinit var controlToggleButton: Button
     private lateinit var offlineStartupPanel: View
-    private lateinit var offlineStartupProgress: View
+    private lateinit var offlineStartupProgress: ProgressBar
     private lateinit var offlineStartupMessage: TextView
     private lateinit var offlineStartupRetry: Button
+    private lateinit var offlineUpdatePanel: View
+    private lateinit var offlineUpdateTitle: TextView
+    private lateinit var offlineUpdateMessage: TextView
+    private lateinit var offlineUpdateProgress: ProgressBar
+    private lateinit var offlineUpdateDownload: Button
+    private lateinit var offlineUpdateLater: Button
+    private lateinit var offlineDisplayInfo: TextView
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
     private var offlineMode = false
@@ -50,6 +60,8 @@ class MainActivity : AppCompatActivity() {
     private var updateOnlyMode = false
     private var minApkUpdateCheckStarted = false
     private var pendingMinApkUpdate: MinApkUpdateResult? = null
+    private var minApkUpdateCandidate: MinApkUpdateResult? = null
+    private var minApkDownloadStarted = false
     private var activityResumed = false
     private var unknownSourcesDialogVisible = false
     private var waitingForUnknownSourcesResult = false
@@ -84,7 +96,24 @@ class MainActivity : AppCompatActivity() {
             if (!embeddedNode || !offlineMode) return
             val status = intent?.getStringExtra(NodeServerService.EXTRA_STATUS).orEmpty()
             val detail = intent?.getStringExtra(NodeServerService.EXTRA_DETAIL)
-            updateOfflineStartupStatus(status, detail)
+            val phase = intent?.getStringExtra(NodeServerService.EXTRA_PHASE)
+            val completedBytes = intent?.getLongExtra(NodeServerService.EXTRA_COMPLETED_BYTES, -1L)
+                ?.takeIf { it >= 0L }
+            val totalBytes = intent?.getLongExtra(NodeServerService.EXTRA_TOTAL_BYTES, -1L)
+                ?.takeIf { it >= 0L }
+            updateOfflineStartupStatus(status, detail, phase, completedBytes, totalBytes)
+        }
+    }
+
+    private val minInstallStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!offlineMode || intent?.action != OfflineApkInstallReceiver.ACTION_INSTALL_STATUS) return
+            val status = intent.getIntExtra(
+                OfflineApkInstallReceiver.EXTRA_INSTALL_STATUS,
+                android.content.pm.PackageInstaller.STATUS_FAILURE
+            )
+            val detail = intent.getStringExtra(OfflineApkInstallReceiver.EXTRA_INSTALL_DETAIL).orEmpty()
+            updateMinApkInstallStatus(status, detail)
         }
     }
 
@@ -237,7 +266,7 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == REQ_INSTALL_UNKNOWN_SOURCES) {
             waitingForUnknownSourcesResult = false
             if (pendingMinApkUpdate != null && offlineUpdateManager.requiresUnknownSourcesApproval()) {
-                pendingMinApkUpdate = null
+                deferMinApkInstall()
                 Toast.makeText(this, "未授权此应用安装 Offline 更新", Toast.LENGTH_LONG).show()
             } else {
                 submitPendingMinApkUpdateIfVisible()
@@ -277,10 +306,18 @@ class MainActivity : AppCompatActivity() {
         offlineStartupProgress = findViewById(R.id.offlineStartupProgress)
         offlineStartupMessage = findViewById(R.id.offlineStartupMessage)
         offlineStartupRetry = findViewById(R.id.offlineStartupRetry)
+        offlineUpdatePanel = findViewById(R.id.offlineUpdatePanel)
+        offlineUpdateTitle = findViewById(R.id.offlineUpdateTitle)
+        offlineUpdateMessage = findViewById(R.id.offlineUpdateMessage)
+        offlineUpdateProgress = findViewById(R.id.offlineUpdateProgress)
+        offlineUpdateDownload = findViewById(R.id.offlineUpdateDownload)
+        offlineUpdateLater = findViewById(R.id.offlineUpdateLater)
+        offlineDisplayInfo = findViewById(R.id.offlineDisplayInfo)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
         embeddedNode = resources.getBoolean(R.bool.aasc_embedded_node)
         updateOnlyMode = resources.getBoolean(R.bool.aasc_update_only_mode)
+        refreshOfflineDisplayInfo()
         if (updateOnlyMode && !NodeRuntimeInstaller.hasFullOfflineInstall(
                 File(filesDir, "aasc-server")
             )) {
@@ -309,14 +346,27 @@ class MainActivity : AppCompatActivity() {
         serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
         controlToggleButton.setOnClickListener { toggleControlPage() }
         offlineStartupRetry.setOnClickListener { connect() }
+        offlineUpdateDownload.setOnClickListener { startMinApkDownload() }
+        offlineUpdateLater.setOnClickListener { dismissMinApkUpdatePrompt() }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                handleBackNavigation()
+            }
+        })
 
         // 先完成共享存储权限流程，避免存储和录音权限授权框并发出现；拒绝后仍继续连接显示端。
         continueStartupAfterStoragePermission()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        refreshOfflineDisplayInfo()
+    }
+
     override fun onStart() {
         super.onStart()
         registerNodeStatusReceiver()
+        registerMinInstallStatusReceiver()
     }
 
     override fun onResume() {
@@ -336,6 +386,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         unregisterNodeStatusReceiver()
+        unregisterMinInstallStatusReceiver()
         super.onStop()
     }
 
@@ -363,6 +414,7 @@ class MainActivity : AppCompatActivity() {
             hideSystemUi()
             webView?.postInvalidate()
             controlWebView?.postInvalidate()
+            if (offlineMode && webView?.visibility == View.VISIBLE) restoreControlPageButton()
         }
     }
 
@@ -432,14 +484,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateOfflineStartupStatus(status: String, detail: String?) {
+    private var minInstallStatusReceiverRegistered = false
+
+    private fun registerMinInstallStatusReceiver() {
+        if (!offlineMode || minInstallStatusReceiverRegistered) return
+        val filter = IntentFilter(OfflineApkInstallReceiver.ACTION_INSTALL_STATUS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(minInstallStatusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(minInstallStatusReceiver, filter)
+        }
+        minInstallStatusReceiverRegistered = true
+    }
+
+    private fun unregisterMinInstallStatusReceiver() {
+        if (!minInstallStatusReceiverRegistered) return
+        try {
+            unregisterReceiver(minInstallStatusReceiver)
+        } catch (error: Exception) {
+            android.util.Log.w("MainActivity", "注销 min APK 安装状态接收器失败: ${error.message}")
+        } finally {
+            minInstallStatusReceiverRegistered = false
+        }
+    }
+
+    private fun updateOfflineStartupStatus(
+        status: String,
+        detail: String?,
+        phase: String? = null,
+        completedBytes: Long? = null,
+        totalBytes: Long? = null
+    ) {
         if (!offlineMode) return
         when (status) {
             NodeServerService.STATUS_PREPARING -> {
                 showOfflineStartupMessage(getString(R.string.offline_startup_preparing), false)
             }
             NodeServerService.STATUS_INSTALLING -> {
-                showOfflineStartupMessage(getString(R.string.offline_startup_installing), false)
+                val phaseMessage = startupPhaseMessage(phase)
+                val progressMessage = formatProgressMessage(phaseMessage, detail, completedBytes, totalBytes)
+                showOfflineStartupMessage(progressMessage, false, completedBytes, totalBytes)
             }
             NodeServerService.STATUS_STARTING -> {
                 showOfflineStartupMessage(getString(R.string.offline_startup_starting), false)
@@ -453,28 +538,192 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 首次本地服务启动完成后检查一次 update-only APK；下载和模型物化均不占用 UI 线程。 */
+    private fun startupPhaseMessage(phase: String?): String = when (phase) {
+        "reading_manifest" -> getString(R.string.offline_startup_reading_manifest)
+        "runtime_libraries" -> getString(R.string.offline_startup_runtime_libraries)
+        "server_source" -> getString(R.string.offline_startup_server_source)
+        "node_dependencies" -> getString(R.string.offline_startup_node_dependencies)
+        "config_and_metadata" -> getString(R.string.offline_startup_config_metadata)
+        "verifying" -> getString(R.string.offline_startup_verifying)
+        "starting_node" -> getString(R.string.offline_startup_starting)
+        "reused" -> getString(R.string.offline_startup_reused)
+        else -> getString(R.string.offline_startup_installing)
+    }
+
+    private fun formatProgressMessage(
+        phaseMessage: String,
+        detail: String?,
+        completedBytes: Long?,
+        totalBytes: Long?
+    ): String {
+        val progress = if (completedBytes != null && totalBytes != null && totalBytes > 0L) {
+            val percent = (completedBytes * 100L / totalBytes).coerceIn(0L, 100L)
+            " $percent%（${formatBytes(completedBytes)}/${formatBytes(totalBytes)}）"
+        } else {
+            ""
+        }
+        val fileDetail = detail?.trim()?.takeIf { it.isNotEmpty() }?.let { "\n$it" }.orEmpty()
+        return "$phaseMessage$progress$fileDetail"
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024L) return "${bytes}B"
+        if (bytes < 1024L * 1024L) return "${bytes / 1024L}KB"
+        return "${bytes / (1024L * 1024L)}MB"
+    }
+
+    /** 首次本地服务启动完成后只检查 update-only APK，不在用户确认前下载。 */
     private fun checkForMinApkUpdateOnce() {
         if (!offlineMode || minApkUpdateCheckStarted) return
         minApkUpdateCheckStarted = true
         Thread({
-            val result = offlineUpdateManager.checkAndPrepareMinApkUpdate(
+            val result = offlineUpdateManager.checkForMinApkUpdate(
                 File(filesDir, "aasc-server")
             )
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                val apkFile = result.apkFile
-                if (apkFile == null) {
+                if (result.metadata == null) {
                     android.util.Log.i("MainActivity", "Offline min APK 更新检查: ${result.status}")
                     return@runOnUiThread
                 }
-                android.util.Log.i("MainActivity", "Offline min APK 更新就绪: ${result.status}")
-                pendingMinApkUpdate = result
-                submitPendingMinApkUpdateIfVisible()
+                android.util.Log.i("MainActivity", "Offline min APK 发现更新: ${result.status}")
+                showMinApkUpdatePrompt(result)
             }
         }, "aasc-min-apk-update-check").apply {
             isDaemon = true
             start()
+        }
+    }
+
+    private fun showMinApkUpdatePrompt(result: MinApkUpdateResult) {
+        val metadata = result.metadata ?: return
+        minApkUpdateCandidate = result
+        minApkDownloadStarted = false
+        offlineUpdatePanel.visibility = View.VISIBLE
+        offlineUpdateTitle.text = getString(R.string.offline_update_title)
+        offlineUpdateMessage.text = getString(
+            R.string.offline_update_available,
+            metadata.versionName,
+            formatBytes(metadata.artifact.size)
+        )
+        offlineUpdateProgress.visibility = View.GONE
+        offlineUpdateDownload.isEnabled = true
+        offlineUpdateDownload.visibility = View.VISIBLE
+        offlineUpdateLater.visibility = View.VISIBLE
+    }
+
+    private fun dismissMinApkUpdatePrompt() {
+        minApkUpdateCandidate = null
+        if (!minApkDownloadStarted) offlineUpdatePanel.visibility = View.GONE
+    }
+
+    /** 用户暂不授予安装权限时恢复更新卡片，保留已发现的版本供下次手动下载。 */
+    private fun deferMinApkInstall() {
+        pendingMinApkUpdate = null
+        minApkDownloadStarted = false
+        val candidate = minApkUpdateCandidate
+        if (candidate?.metadata != null) {
+            showMinApkUpdatePrompt(candidate)
+        } else {
+            offlineUpdatePanel.visibility = View.GONE
+        }
+    }
+
+    /** 用户点击下载后才开始网络传输；进度回调切回主线程更新浮动卡片。 */
+    private fun startMinApkDownload() {
+        if (minApkDownloadStarted || minApkUpdateCandidate?.metadata == null) return
+        minApkDownloadStarted = true
+        offlineUpdateDownload.isEnabled = false
+        offlineUpdateDownload.visibility = View.GONE
+        offlineUpdateLater.visibility = View.GONE
+        offlineUpdateProgress.visibility = View.VISIBLE
+        offlineUpdateProgress.isIndeterminate = true
+        offlineUpdateMessage.text = getString(R.string.offline_update_downloading)
+        Thread({
+            val result = offlineUpdateManager.checkAndPrepareMinApkUpdate(
+                File(filesDir, "aasc-server")
+            ) { progress ->
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) updateMinApkProgress(progress)
+                }
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (result.apkFile == null) {
+                    minApkDownloadStarted = false
+                    offlineUpdateDownload.visibility = View.VISIBLE
+                    offlineUpdateDownload.isEnabled = true
+                    offlineUpdateMessage.text = result.status
+                    offlineUpdateProgress.visibility = View.GONE
+                    offlineUpdateLater.visibility = View.VISIBLE
+                    return@runOnUiThread
+                }
+                pendingMinApkUpdate = result
+                offlineUpdateMessage.text = getString(R.string.offline_update_installing)
+                submitPendingMinApkUpdateIfVisible()
+            }
+        }, "aasc-min-apk-download").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun updateMinApkProgress(progress: OfflineUpdateProgress) {
+        offlineUpdatePanel.visibility = View.VISIBLE
+        offlineUpdateProgress.visibility = View.VISIBLE
+        if (progress.totalBytes > 0L) {
+            offlineUpdateProgress.isIndeterminate = false
+            offlineUpdateProgress.max = 100
+            offlineUpdateProgress.progress = (progress.completedBytes * 100L / progress.totalBytes)
+                .coerceIn(0L, 100L)
+                .toInt()
+        } else {
+            offlineUpdateProgress.isIndeterminate = true
+        }
+        val detail = progress.detail?.trim()?.takeIf { it.isNotEmpty() }
+        offlineUpdateMessage.text = when (progress.phase) {
+            "downloading" -> getString(
+                R.string.offline_update_download_progress,
+                formatBytes(progress.completedBytes),
+                formatBytes(progress.totalBytes)
+            )
+            "verifying" -> getString(R.string.offline_update_verifying)
+            "materializing" -> detail ?: getString(R.string.offline_update_materializing)
+            "ready" -> getString(R.string.offline_update_installing)
+            else -> detail ?: getString(R.string.offline_update_downloading)
+        }
+    }
+
+    private fun updateMinApkInstallStatus(status: Int, detail: String) {
+        if (isFinishing || isDestroyed) return
+        offlineUpdatePanel.visibility = View.VISIBLE
+        offlineUpdateProgress.visibility = View.VISIBLE
+        offlineUpdateProgress.isIndeterminate = false
+        offlineUpdateProgress.max = 100
+        when (status) {
+            android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                offlineUpdateProgress.progress = 100
+                offlineUpdateMessage.text = getString(R.string.offline_update_confirm_install)
+            }
+            android.content.pm.PackageInstaller.STATUS_SUCCESS -> {
+                offlineUpdateProgress.progress = 100
+                offlineUpdateMessage.text = getString(R.string.offline_update_success)
+                offlineUpdateDownload.visibility = View.GONE
+                offlineUpdateLater.visibility = View.GONE
+                offlineUpdatePanel.postDelayed({ offlineUpdatePanel.visibility = View.GONE }, 2_000L)
+            }
+            else -> {
+                minApkDownloadStarted = false
+                offlineUpdateProgress.visibility = View.GONE
+                offlineUpdateMessage.text = if (detail.isBlank()) {
+                    getString(R.string.offline_update_failed)
+                } else {
+                    getString(R.string.offline_update_failed_detail, detail)
+                }
+                offlineUpdateDownload.visibility = View.VISIBLE
+                offlineUpdateDownload.isEnabled = true
+                offlineUpdateLater.visibility = View.VISIBLE
+            }
         }
     }
 
@@ -498,7 +747,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage("系统尚未允许 AASC 安装本应用的更新。是否打开系统设置授权？")
             .setNegativeButton("稍后") { _, _ ->
                 unknownSourcesDialogVisible = false
-                pendingMinApkUpdate = null
+                deferMinApkInstall()
             }
             .setPositiveButton("打开设置") { _, _ ->
                 unknownSourcesDialogVisible = false
@@ -511,13 +760,13 @@ class MainActivity : AppCompatActivity() {
                     )
                 } catch (error: Exception) {
                     waitingForUnknownSourcesResult = false
-                    pendingMinApkUpdate = null
+                    deferMinApkInstall()
                     Toast.makeText(this, "无法打开安装权限设置：${error.message}", Toast.LENGTH_LONG).show()
                 }
             }
             .setOnCancelListener {
                 unknownSourcesDialogVisible = false
-                pendingMinApkUpdate = null
+                deferMinApkInstall()
             }
             .show()
     }
@@ -534,10 +783,52 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showOfflineStartupMessage(message: String, failed: Boolean) {
+    /**
+     * 更新 Offline 右下角诊断信息；数据与 WebView 初始缩放使用同一组 Display metrics 和策略。
+     * 该 TextView 设置为不可交互，避免现场诊断信息遮挡网页输入或控制按钮。
+     */
+    private fun refreshOfflineDisplayInfo() {
+        if (!::offlineDisplayInfo.isInitialized) return
+        if (!offlineMode) {
+            offlineDisplayInfo.visibility = View.GONE
+            return
+        }
+
+        val metrics = resources.displayMetrics
+        val scale = WebViewScalePolicy.initialScalePercent(
+            offlineMode = true,
+            widthPixels = metrics.widthPixels,
+            heightPixels = metrics.heightPixels,
+            densityDpi = metrics.densityDpi
+        )
+        offlineDisplayInfo.text = getString(
+            R.string.offline_display_info,
+            metrics.widthPixels,
+            metrics.heightPixels,
+            metrics.densityDpi,
+            scale
+        )
+        offlineDisplayInfo.visibility = View.VISIBLE
+    }
+
+    private fun showOfflineStartupMessage(
+        message: String,
+        failed: Boolean,
+        completedBytes: Long? = null,
+        totalBytes: Long? = null
+    ) {
         if (!offlineMode) return
         offlineStartupPanel.visibility = View.VISIBLE
         offlineStartupProgress.visibility = if (failed) View.GONE else View.VISIBLE
+        if (!failed && totalBytes != null && totalBytes > 0L && completedBytes != null) {
+            offlineStartupProgress.isIndeterminate = false
+            offlineStartupProgress.max = 100
+            offlineStartupProgress.progress = (completedBytes * 100L / totalBytes)
+                .coerceIn(0L, 100L)
+                .toInt()
+        } else if (!failed) {
+            offlineStartupProgress.isIndeterminate = true
+        }
         offlineStartupRetry.visibility = if (failed) View.VISIBLE else View.GONE
         offlineStartupMessage.text = message
     }
@@ -653,6 +944,7 @@ class MainActivity : AppCompatActivity() {
                     isDisplayPageUrl(pageUrl, baseUrl)) {
                     offlineDisplayRetryCount = 0
                     hideOfflineStartupPanel()
+                    restoreControlPageButton()
                 }
                 super.onPageFinished(view, pageUrl)
             }
@@ -724,11 +1016,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
+    private fun handleBackNavigation() {
         if (controlWebView?.visibility == View.VISIBLE) {
             controlWebView?.visibility = View.GONE
-            controlToggleButton.text = getString(R.string.control_page)
+            restoreControlPageButton()
+            return
+        }
+        if (offlineMode && webView?.visibility == View.VISIBLE && controlPageAllowed) {
+            // 显示页返回时保留当前页面和 WebSocket，不让 WebView 历史覆盖控制端入口。
+            restoreControlPageButton()
             return
         }
         // 后退键回配置页（重新输入服务器地址）
@@ -736,5 +1032,14 @@ class MainActivity : AppCompatActivity() {
         controlWebView?.visibility = View.GONE
         setControlPageAccess(false)
         configBar.visibility = View.VISIBLE
+    }
+
+    private fun restoreControlPageButton() {
+        controlToggleButton.text = getString(R.string.control_page)
+        controlToggleButton.visibility = if (controlPageAllowed && offlineMode) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
     }
 }

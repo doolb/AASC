@@ -45,9 +45,10 @@ test('发送只提交 Enter，不退出输入模式，并支持 30 秒无操作�
 });
 
 test('输入模式声纹策略只在子显示端本地切换', () => {
+    const configuredPolicy = nodeConfig.textInput?.requireVoiceprint;
     assert.ok(
-        nodeConfig.textInput?.requireVoiceprint === 'inherit' || nodeConfig.textInput?.requireVoiceprint === false,
-        '本地策略持久化值只能是 inherit 或 false'
+        configuredPolicy === undefined || configuredPolicy === 'inherit' || configuredPolicy === false,
+        '本地策略持久化值缺失时按 false 处理，否则只能是 inherit 或 false'
     );
     assert.match(nodeMain, /TEXT_INPUT_VOICEPRINT_POLICY_DISABLED\s*=\s*false/u, '本地关闭策略应使用布尔 false');
     assert.match(nodeMain, /requireVoiceprint/u, 'Node 应读取本地输入模式声纹策略');
@@ -64,6 +65,30 @@ test('输入模式声纹策略只在子显示端本地切换', () => {
         nodeMain.slice(toggleStart, toggleEnd),
         /requestTextInputAnnouncement\(/u,
         'Alt+C 切换本地策略不应播报或暂停录音'
+    );
+});
+
+test('缺少本地声纹策略时默认按 false 处理', () => {
+    const normalizeStart = nodeMain.indexOf('function normalizeTextInputVoiceprintPolicy');
+    const normalizeEnd = nodeMain.indexOf('\n}\n\nfunction normalizeDisplayRecordingMode', normalizeStart);
+    const normalizeSource = nodeMain.slice(normalizeStart, normalizeEnd);
+    const defaultConfigStart = nodeMain.indexOf('const defaultConfig = {');
+    const defaultConfigEnd = nodeMain.indexOf('\n    };', defaultConfigStart);
+    const defaultConfigSource = nodeMain.slice(defaultConfigStart, defaultConfigEnd);
+    const updateFallbackStart = nodeMain.indexOf('const localTextInputConfig =');
+    const updateFallbackEnd = nodeMain.indexOf('\n            };', updateFallbackStart);
+    const updateFallbackSource = nodeMain.slice(updateFallbackStart, updateFallbackEnd);
+
+    assert.match(normalizeSource, /value === undefined|value === null/u, 'undefined/null 应归一化为 false');
+    assert.match(
+        defaultConfigSource,
+        /requireVoiceprint:\s*(false|TEXT_INPUT_VOICEPRINT_POLICY_DISABLED)/u,
+        '缺少 textInput 时默认策略应为 false'
+    );
+    assert.match(
+        updateFallbackSource,
+        /requireVoiceprint:\s*(false|TEXT_INPUT_VOICEPRINT_POLICY_DISABLED)/u,
+        '配置更新缺少本地策略时应保留 false 默认值'
     );
 });
 

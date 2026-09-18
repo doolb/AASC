@@ -16,6 +16,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
@@ -30,6 +32,13 @@ data class InstalledServiceVersion(
     val codeVersion: Int,
     val dependencyVersion: Int,
     val lockSha256: String
+)
+
+data class OfflineUpdateProgress(
+    val phase: String,
+    val completedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
+    val detail: String? = null
 )
 
 data class MinApkUpdateResult(
@@ -75,7 +84,7 @@ class OfflineUpdateManager(
         const val CLIENT_METADATA_FILE = "offline-update-client.json"
         const val ACTIVE_RELEASE_FILE = "updates/active-release.json"
         const val LAN_BASE_URL = "http://192.168.1.39/mnt/aasc-offline/"
-        const val WAN_BASE_URL = "http://120.79.245.103/mnt/aasc-offline/"
+        const val WAN_BASE_URL = "http://c.aasc.us/mnt/aasc-offline/"
         private const val TAG = "AASC-Offline-Update"
         private const val CONNECT_TIMEOUT_MS = 4_000
         private const val READ_TIMEOUT_MS = 12_000
@@ -87,6 +96,48 @@ class OfflineUpdateManager(
         private const val MIN_APK_INSTALL_RESERVE_BYTES = 256L * 1024L * 1024L
         const val MIN_APK_INSTALL_ACTION = "com.aasc.display.action.INSTALL_OFFLINE_MIN_APK"
         private val UPDATE_BASE_URLS = listOf(LAN_BASE_URL, WAN_BASE_URL)
+
+        /**
+         * 将更新源的域名替换为解析得到的 IP，同时保留协议、端口和完整路径。
+         * 不在这里设置 Host 头，后续 HttpURLConnection 会按替换后的 IP 建立请求。
+         */
+        @JvmStatic
+        fun replaceUpdateUrlHost(baseUrl: String, resolvedIp: String): String {
+            val sourceUrl = URL(baseUrl)
+            val ip = resolvedIp.trim()
+            require(ip.isNotEmpty()) { "热更源解析地址不能为空" }
+            return URL(sourceUrl.protocol, ip, sourceUrl.port, sourceUrl.file).toString()
+        }
+
+        private fun resolveUpdateBaseUrl(baseUrl: String): List<String> {
+            val sourceUrl = URL(baseUrl)
+            val host = sourceUrl.host.trim()
+            require(host.isNotEmpty()) { "热更源地址缺少主机" }
+
+            // 已经是 IP 时无需再次解析；IPv6 文字地址也直接沿用，避免给数字地址增加 DNS 延迟。
+            if (host.matches(Regex("(\\\\d{1,3}\\\\.){3}\\\\d{1,3}")) || host.contains(':')) {
+                return listOf(baseUrl)
+            }
+
+            val addresses = InetAddress.getAllByName(host).toList()
+            val preferredAddresses = addresses.filterIsInstance<Inet4Address>().ifEmpty { addresses }
+            return preferredAddresses.map { address ->
+                replaceUpdateUrlHost(baseUrl, address.hostAddress)
+            }.distinct()
+        }
+
+        private fun resolveConfiguredUpdateBaseUrls(configuredBaseUrls: Iterable<String>): List<String> {
+            val resolved = linkedSetOf<String>()
+            for (configuredBaseUrl in configuredBaseUrls) {
+                try {
+                    resolved.addAll(resolveUpdateBaseUrl(configuredBaseUrl))
+                } catch (error: IOException) {
+                    Log.w(TAG, "热更源 DNS 解析失败: $configuredBaseUrl - ${error.message}")
+                }
+            }
+            return resolved.toList()
+        }
+
         @JvmStatic
         fun planServiceUpdate(
             installed: InstalledServiceVersion,
@@ -398,29 +449,55 @@ class OfflineUpdateManager(
         }
     }
 
-    /** 验签后下载并预检 update-only APK；模型缓存物化发生在 Android PackageInstaller 之前。 */
-    fun checkAndPrepareMinApkUpdate(root: File): MinApkUpdateResult {
+    /** 只检查是否存在更高版本，不下载 APK，供前台显示手动下载提示。 */
+    fun checkForMinApkUpdate(root: File): MinApkUpdateResult {
         return try {
-            checkAndPrepareMinApkUpdateInternal(root)
+            val candidate = resolveMinApkCandidate(root)
+            if (candidate == null) {
+                MinApkUpdateResult("当前没有可用的 min APK 更新")
+            } else {
+                MinApkUpdateResult(
+                    "发现 min APK ${candidate.metadata.versionName} 更新",
+                    metadata = candidate.metadata
+                )
+            }
         } catch (error: Exception) {
             Log.e(TAG, "Offline min APK 更新检查失败: ${error.message}", error)
             MinApkUpdateResult("拒绝 min APK 更新：${error.message ?: "校验失败"}")
         }
     }
 
-    private fun checkAndPrepareMinApkUpdateInternal(root: File): MinApkUpdateResult {
+    /** 用户确认后下载、验签并预检 update-only APK；模型缓存物化发生在 PackageInstaller 之前。 */
+    fun checkAndPrepareMinApkUpdate(
+        root: File,
+        onProgress: ((OfflineUpdateProgress) -> Unit)? = null
+    ): MinApkUpdateResult {
+        return try {
+            checkAndPrepareMinApkUpdateInternal(root, onProgress)
+        } catch (error: Exception) {
+            Log.e(TAG, "Offline min APK 更新检查失败: ${error.message}", error)
+            MinApkUpdateResult("拒绝 min APK 更新：${error.message ?: "校验失败"}")
+        }
+    }
+
+    private data class MinApkCandidate(
+        val source: ManifestSource,
+        val metadata: OfflineMinApkArtifact,
+        val apkFile: File,
+        val modelIds: List<String>
+    )
+
+    private fun resolveMinApkCandidate(root: File): MinApkCandidate? {
         check(context.packageName == MIN_APK_PACKAGE_NAME) { "当前安装包不是 Offline APK" }
         check(NodeRuntimeInstaller.hasFullOfflineInstall(root)) { "尚未检测到完整 Offline APK 数据目录" }
-        val publicKeyPem = readPublicKeyOrNull() ?: return MinApkUpdateResult("未配置 Offline 更新验证公钥")
-        val source = fetchManifest(publicKeyPem) ?: return MinApkUpdateResult("局域网与外网均无可用更新清单")
-        val minApk = source.manifest.apkMin ?: return MinApkUpdateResult("当前没有发布 min APK 更新")
+        val publicKeyPem = readPublicKeyOrNull() ?: return null
+        val source = fetchManifest(publicKeyPem) ?: return null
+        val minApk = source.manifest.apkMin ?: return null
         require(minApk.packageName == context.packageName) { "min APK applicationId 不匹配" }
 
         val installedInfo = getInstalledPackageInfo()
         val installedVersionCode = packageVersionCode(installedInfo)
-        if (minApk.versionCode <= installedVersionCode) {
-            return MinApkUpdateResult("min APK 已是当前版本")
-        }
+        if (minApk.versionCode <= installedVersionCode) return null
         val installedSigners = signerSha256Digests(installedInfo)
         require(minApk.signerSha256 in installedSigners) {
             "min APK signer 与当前已安装 Offline APK 不一致"
@@ -433,6 +510,19 @@ class OfflineUpdateManager(
         require(modelIds.isNotEmpty()) { "当前完整 Offline APK 没有可保留的 bundled 模型" }
 
         val apkFile = File(root, "updates/apk/aasc-display-offline-min-v${minApk.versionCode}.apk")
+        return MinApkCandidate(source, minApk, apkFile, modelIds)
+    }
+
+    private fun checkAndPrepareMinApkUpdateInternal(
+        root: File,
+        onProgress: ((OfflineUpdateProgress) -> Unit)?
+    ): MinApkUpdateResult {
+        val candidate = resolveMinApkCandidate(root)
+            ?: return MinApkUpdateResult("当前没有可用的 min APK 更新")
+        val source = candidate.source
+        val minApk = candidate.metadata
+        val apkFile = candidate.apkFile
+        onProgress?.invoke(OfflineUpdateProgress("checking", 0L, minApk.artifact.size, "正在检查更新空间"))
         val cachedArtifactExists = apkFile.isFile
         if (cachedArtifactExists) {
             require(apkFile.length() == minApk.artifact.size &&
@@ -441,7 +531,7 @@ class OfflineUpdateManager(
             }
         }
         var modelsToMaterialize = 0L
-        val modelManagers = modelIds.map { modelId ->
+        val modelManagers = candidate.modelIds.map { modelId ->
             val manager = MnnLlmModelManager(context, { null }, bundledModelId = modelId)
             modelsToMaterialize = safeAdd(
                 modelsToMaterialize,
@@ -459,19 +549,30 @@ class OfflineUpdateManager(
         )) { "设备空间不足，未下载或安装 min APK" }
 
         val downloaded = if (cachedArtifactExists) {
+            onProgress?.invoke(OfflineUpdateProgress("downloading", minApk.artifact.size, minApk.artifact.size, "已使用已缓存 APK"))
             DownloadedArtifact(minApk.artifact, apkFile)
         } else {
             check(apkFile.parentFile?.isDirectory == true || apkFile.parentFile?.mkdirs() == true) {
                 "无法创建 min APK 下载目录"
             }
-            downloadArtifact(source, minApk.artifact, apkFile)
+            downloadArtifact(source, minApk.artifact, apkFile, onProgress)
         }
+        onProgress?.invoke(OfflineUpdateProgress("verifying", 0L, 1L, "正在校验 APK 签名和 SHA-256"))
         validateMinApkArchive(downloaded.file, minApk)
 
         // Android 更新 APK 会替换 APK assets；先把完整包中的 bundled MNN 权重物化到 files/models。
         modelManagers.forEachIndexed { index, manager ->
-            manager.ensureBundledModelMaterialized(modelIds[index])
+            onProgress?.invoke(
+                OfflineUpdateProgress(
+                    "materializing",
+                    index.toLong(),
+                    modelManagers.size.toLong(),
+                    "正在准备模型缓存 ${index + 1}/${modelManagers.size}"
+                )
+            )
+            manager.ensureBundledModelMaterialized(candidate.modelIds[index])
         }
+        onProgress?.invoke(OfflineUpdateProgress("ready", 1L, 1L, "APK 已校验，准备提交系统安装"))
         return MinApkUpdateResult(
             "min APK ${minApk.versionName} 已验证，可请求系统安装",
             downloaded.file,
@@ -630,7 +731,7 @@ class OfflineUpdateManager(
 
     private fun fetchManifest(publicKeyPem: String): ManifestSource? {
         var lastError: IOException? = null
-        for (baseUrl in UPDATE_BASE_URLS) {
+        for (baseUrl in resolveConfiguredUpdateBaseUrls(UPDATE_BASE_URLS)) {
             var connection: HttpURLConnection? = null
             try {
                 connection = (URL(URL(baseUrl), "manifest.json").openConnection() as HttpURLConnection).apply {
@@ -657,9 +758,12 @@ class OfflineUpdateManager(
     private fun downloadArtifact(
         source: ManifestSource,
         metadata: OfflineUpdateArtifact,
-        destination: File
+        destination: File,
+        onProgress: ((OfflineUpdateProgress) -> Unit)? = null
     ): DownloadedArtifact {
-        val candidateBases = listOf(source.baseUrl) + UPDATE_BASE_URLS.filterNot { it == source.baseUrl }
+        val candidateBases = resolveConfiguredUpdateBaseUrls(
+            listOf(source.baseUrl) + UPDATE_BASE_URLS
+        )
         var lastError: IOException? = null
         for (baseUrl in candidateBases) {
             val temporary = File(destination.parentFile, "${destination.name}.part")
@@ -675,6 +779,9 @@ class OfflineUpdateManager(
                 if (status !in 200..299) throw IOException("下载 ${metadata.relativeUrl} HTTP $status")
                 val digest = MessageDigest.getInstance("SHA-256")
                 var totalBytes = 0L
+                var lastReportedBytes = 0L
+                var lastReportedAt = 0L
+                onProgress?.invoke(OfflineUpdateProgress("downloading", 0L, metadata.size, metadata.relativeUrl))
                 connection.inputStream.use { input ->
                     FileOutputStream(temporary).use { output ->
                         val buffer = ByteArray(64 * 1024)
@@ -686,6 +793,21 @@ class OfflineUpdateManager(
                             require(totalBytes <= metadata.size) { "更新包大于签名清单声明大小" }
                             digest.update(buffer, 0, count)
                             output.write(buffer, 0, count)
+                            val now = System.currentTimeMillis()
+                            if (totalBytes == metadata.size ||
+                                totalBytes - lastReportedBytes >= 256L * 1024L ||
+                                now - lastReportedAt >= 250L) {
+                                onProgress?.invoke(
+                                    OfflineUpdateProgress(
+                                        "downloading",
+                                        totalBytes,
+                                        metadata.size,
+                                        metadata.relativeUrl
+                                    )
+                                )
+                                lastReportedBytes = totalBytes
+                                lastReportedAt = now
+                            }
                         }
                         output.fd.sync()
                     }

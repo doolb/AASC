@@ -334,16 +334,19 @@ mode='none' 占位文本按能力区分:
     跨域控制(绿) / 跨域控制降级(橙) / 不支持跨域控制(灰)
 ```
 
-## Offline WebView 按分辨率动态缩放伪代码
+## Offline WebView 按分辨率与 DPI 缩放伪代码
 
 ```text
-WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels):
+WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels, densityDpi):
     如果 offlineMode == false:
         返回 100
-    如果 widthPixels <= 0 或 heightPixels <= 0:
+    如果 widthPixels <= 0 或 heightPixels <= 0 或 densityDpi <= 0:
         返回 100
     longEdgePixels = max(widthPixels, heightPixels)
-    返回 max(1, round(longEdgePixels / 1280 * 100))
+    resolutionRatio = longEdgePixels / 1280
+    densityRatio = densityDpi / 320
+    blendedRatio = (resolutionRatio + densityRatio) / 2
+    返回 max(1, round(blendedRatio * 100))
 
 DisplayWebView.init(context, offlineMode):
     设置 JavaScript、DOM 存储和媒体播放能力
@@ -353,7 +356,7 @@ DisplayWebView.init(context, offlineMode):
     禁止用户手势缩放
     metrics = context.resources.displayMetrics
     initialScale = WebViewScalePolicy.initialScalePercent(
-        offlineMode, metrics.widthPixels, metrics.heightPixels
+        offlineMode, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi
     )
     调用 setInitialScale(initialScale)
     由 Android WebView 按当前 display Context 的像素分辨率应用初始比例
@@ -368,18 +371,32 @@ MainActivity.setupWebView:
     通过平台 density 映射保持 CSS/dp 元素的感知尺寸
     允许布局随 viewport 尺寸重新排布，不对整页应用 density 反向缩放
     不修改设备分辨率、NativeDisplay 坐标、截图像素和媒体播放尺寸
+
+OfflineDisplayInfo:
+    如果 offlineMode == false：隐藏右下角诊断浮层
+    metrics = 当前 Activity 所属 display 的 resources.displayMetrics
+    scale = WebViewScalePolicy.initialScalePercent(
+        true, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi
+    )
+    显示“分辨率 {width}×{height} | DPI {densityDpi} | 缩放 {scale}%”
+    浮层不接收输入，层级低于启动遮罩和更新卡片
+
+MainActivity.onConfigurationChanged:
+    Offline 模式下重新计算并刷新诊断浮层文字
 ```
 
-## Offline 分辨率缩放测试伪代码
+## Offline 分辨率与 DPI 缩放测试伪代码
 
 ```text
-initialScalePercent(true, 1280, 720) -> 100%
-initialScalePercent(true, 1920, 1080) -> 150%
-initialScalePercent(true, 720, 1480) -> 116%
-initialScalePercent(true, 0, 0) -> 100% 回退
-initialScalePercent(false, 任意有效分辨率) -> 100%
-屏幕物理/逻辑分辨率保持构建前的系统配置
-显示页、控制页和 render-display 内容不叠加 density 反向缩放
+initialScalePercent(true, 1280, 720, 320) -> 100%
+initialScalePercent(true, 1920, 1080, 160) -> 100%
+initialScalePercent(true, 1920, 1080, 320) -> 125%
+initialScalePercent(true, 720, 1480, 280) -> 102%
+initialScalePercent(true, 0, 0, 320) -> 100% 回退
+initialScalePercent(false, 任意有效分辨率, 任意有效 dpi) -> 100%
+initialScalePercent(true, 1920, 1080, 0) -> 100% 回退
+屏幕物理/逻辑分辨率与系统 density 保持构建前配置
+显示页、控制页和 render-display 内容统一使用分辨率与 dpi 组合比例
 ```
 
 2026-09-16 验证记录:

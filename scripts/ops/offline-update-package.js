@@ -13,7 +13,7 @@ const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
 const SIGNATURE_ALGORITHM = 'SHA256withRSA';
 const UPDATE_BASE_URLS = Object.freeze([
     'http://192.168.1.39/mnt/aasc-offline/',
-    'http://120.79.245.103/mnt/aasc-offline/'
+    'http://c.aasc.us/mnt/aasc-offline/'
 ]);
 
 function canonicalValue(value) {

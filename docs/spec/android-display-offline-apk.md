@@ -108,16 +108,21 @@ MainActivity.onPageStarted(displayView):
     如果 offlineMode：在页面脚本执行前将 localStorage.displayId 预置为 "offline-display"
     兼容已安装 full APK 尚未通过服务 code-only 热更更新 display.html 的情况
 
-WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels):
+WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels, densityDpi):
     如果 offlineMode 为 false：返回 100
-    如果 widthPixels <= 0 或 heightPixels <= 0：返回 100
+    如果 widthPixels <= 0 或 heightPixels <= 0 或 densityDpi <= 0：返回 100
     longEdgePixels = max(widthPixels, heightPixels)
-    返回 round(longEdgePixels / 1280 * 100)，最小为 1
+    resolutionRatio = longEdgePixels / 1280
+    densityRatio = densityDpi / 320
+    blendedRatio = (resolutionRatio + densityRatio) / 2
+    返回 max(1, round(blendedRatio * 100))
 
 DisplayWebView.init(context, offlineMode):
     初始化现有 WebSettings
     metrics = context.resources.displayMetrics
-    scale = WebViewScalePolicy.initialScalePercent(offlineMode, metrics.widthPixels, metrics.heightPixels)
+    scale = WebViewScalePolicy.initialScalePercent(
+        offlineMode, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi
+    )
     setInitialScale(scale)
 
 toggleControl:
@@ -130,6 +135,18 @@ DisplayWebView 页面 ID:
         localStorage.displayId = configuredId
         WebSocket 连接使用 configuredId
     否则：沿用原有 localStorage 持久化 ID；不存在时生成 display-* 随机 ID
+
+OfflineDisplayInfo:
+    如果 offlineMode == false：隐藏诊断浮层
+    metrics = 当前 display Context.resources.displayMetrics
+    scale = WebViewScalePolicy.initialScalePercent(
+        true, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi
+    )
+    将浮层文字设置为“分辨率 {width}×{height} | DPI {densityDpi} | 缩放 {scale}%”
+    将浮层放在 webContainer 右下角，保持非交互、低于启动遮罩和更新卡片
+
+MainActivity.onConfigurationChanged:
+    如果 Offline 模式：重新读取 displayMetrics 并刷新 OfflineDisplayInfo
 
 Release 任务恢复:
     Offline APK 的 render-display 任务结果 target/displayId = "offline-display"
@@ -203,3 +220,22 @@ Android :app:testDebugUnitTest：BUILD SUCCESSFUL
 离线 APK 模型条目：32，451266757 bytes
 离线 APK Runtime manifest：无重复路径，runtime-mode=offline
 ```
+
+## Offline 发布更新日志伪代码
+
+```text
+OfflineUpdateManifest.parse:
+    apkMin.releaseNotes 缺失时返回 null
+    存在时校验为非空字符串且长度不超过 4096 个 Unicode 字符
+
+MainActivity.showMinApkUpdatePrompt:
+    显示版本和大小
+    releaseNotes 非空时显示更新内容 TextView，最多 6 行并省略尾部
+    releaseNotes 为空时隐藏更新内容 TextView
+```
+
+## v10 缩放曲线验证记录（2026-09-18）
+
+- min v10（`0.2.8-offline-min`）已正式发布到 LAN 和 WAN 直连 IP；清单签名有效，APK v2 签名有效。
+- APK SHA-256：`713a0ecd53536afadf5115864e1ea28a90409717aa2bbd95655fbad155ce139e`；发布清单 SHA-256：`bc613aba55e41fced9b01d38cbfc83d0541c4eb5b8b61b4b0d6545dbd6134ac0`。
+- SM-N9500 Display 2 UI 自动化读取 `分辨率 1920×1018 | DPI 160 | 缩放 100%`；固定显示端 ID `offline-display` 和服务健康接口正常。

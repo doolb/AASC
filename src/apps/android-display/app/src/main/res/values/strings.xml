@@ -20,4 +20,26 @@
     <string name="offline_startup_unknown_error">未知启动错误</string>
     <string name="offline_startup_failed">本地服务启动失败：%1$s</string>
     <string name="offline_startup_retry">重试</string>
+    <string name="offline_startup_reading_manifest">正在读取 Runtime 文件清单</string>
+    <string name="offline_startup_runtime_libraries">正在解压 Runtime 动态库</string>
+    <string name="offline_startup_server_source">正在解压服务源码</string>
+    <string name="offline_startup_node_dependencies">正在解压 Node.js 依赖</string>
+    <string name="offline_startup_config_metadata">正在写入配置和任务元数据</string>
+    <string name="offline_startup_verifying">正在校验 Runtime 文件</string>
+    <string name="offline_startup_reused">已复用已安装 Runtime</string>
+    <string name="offline_update_title">发现 Offline 更新</string>
+    <string name="offline_update_available_default">有新的 min APK 可用</string>
+    <string name="offline_update_available">版本 %1$s，下载大小 %2$s。是否下载更新？</string>
+    <string name="offline_update_download">下载更新</string>
+    <string name="offline_update_later">稍后</string>
+    <string name="offline_update_downloading">正在下载 Offline 更新</string>
+    <string name="offline_update_download_progress">正在下载：%1$s / %2$s</string>
+    <string name="offline_update_verifying">正在校验更新包</string>
+    <string name="offline_update_materializing">正在准备模型缓存</string>
+    <string name="offline_update_installing">下载完成，正在提交系统安装</string>
+    <string name="offline_update_confirm_install">请在系统页面确认安装 Offline 更新</string>
+    <string name="offline_update_success">Offline 更新已安装</string>
+    <string name="offline_update_failed">Offline 更新失败，可重试</string>
+    <string name="offline_update_failed_detail">Offline 更新失败：%1$s</string>
+    <string name="offline_display_info">分辨率 %1$d×%2$d | DPI %3$d | 缩放 %4$d%%</string>
 </resources>

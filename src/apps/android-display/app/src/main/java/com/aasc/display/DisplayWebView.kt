@@ -23,13 +23,14 @@ class DisplayWebView(context: Context, offlineMode: Boolean) : WebView(context) 
         settings.useWideViewPort = false
         settings.loadWithOverviewMode = false
         settings.setSupportZoom(false)
-        // 显示页和控制页按 APK 构建模式使用一致的页面比例；Offline 按长边分辨率计算，普通 APK 为 100%。
+        // 显示页和控制页按 APK 构建模式使用一致的页面比例；Offline 同时参考长边分辨率和 densityDpi，普通 APK 为 100%。
         val displayMetrics = resources.displayMetrics
         setInitialScale(
             WebViewScalePolicy.initialScalePercent(
                 offlineMode = offlineMode,
                 widthPixels = displayMetrics.widthPixels,
-                heightPixels = displayMetrics.heightPixels
+                heightPixels = displayMetrics.heightPixels,
+                densityDpi = displayMetrics.densityDpi
             )
         )
         isFocusable = true

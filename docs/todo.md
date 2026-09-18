@@ -63,10 +63,7 @@
 
 ## Android APK
 
-- 🔄进行中 [2026-09-17] Offline min 更新提示、手动下载进度与首包启动阶段进度
-  - 发现 min APK 更新后由用户点击“下载更新”，浮动显示下载/校验/安装进度；下载完成后自动提交系统安装器。
-  - 首次完整 Offline APK 启动显示 Runtime、服务源码、Node 依赖和配置元数据的阶段进度。
-  - 设计：`docs/design/android-offline-hot-update.md`；伪代码：`docs/spec/android-offline-hot-update.md`；任务：`docs/task/20260917_Offline更新提示与首包启动进度.md`。
+- 🔄进行中 [2026-09-18] Offline min APK 发布更新日志：发布清单支持 `releaseNotes`，更新卡片展示版本更新内容；完成测试和构建后移除。
 
 - 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
   - 服务更新支持 `code-only`（不发布/下载依赖）与 `all`（代码+生产依赖）；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
@@ -74,13 +71,17 @@
   - full v2/min v3 APK、code/dependencies v3 包及 min v3 更新清单已生成并通过静态完整性/签名校验；min v4 已升版为 `0.2.2-offline-min` 并正式发布，LAN/WAN manifest 字节一致且签名有效。
   - min v4 APK 地址为 `http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk` 和 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk`，大小 `89205130` bytes，SHA-256 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`；LAN HTTP 整包、WAN 远端文件及 WAN HTTP 首段/HEAD 校验通过。
   - 固定显示端 ID 与 Chat2API 完成按钮的 min v6 已追加发布：`http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v6.apk`、`http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v6.apk`；大小 `89208438` bytes，SHA-256 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest/签名和 HTTP Content-Length 已复验。
-  - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次仅追加 min v6 版本文件并更新签名清单。
+  - v7（`0.2.5-offline-min`）已正式发布到 LAN/WAN，APK 大小 `89535999` bytes，SHA-256 `80501f7ea36a96377f8cddec3f238e0ec31b2d2bc30681d3f4b650c3ada324af`；SM-N9500 真机已安装并确认 Activity 位于 Display 2，固定 `offline-display` 服务健康接口和 UI 自动化按钮检查通过。v7 校正前按 1280 像素长边计算为 150%；真实触控/截图受 `touch NONE` 和 Desktop 虚拟屏限制未完成，现行比例以 v8 DPI 校正记录为准。
+  - v8（`0.2.6-offline-min`）已完成 DPI 校正并正式发布，APK 大小 `89231402` bytes，SHA-256 `470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`；按 `1280px@320dpi=100%` 公式，Display 2 `1920×1080@160dpi` 为 75%。SM-N9500 真机已覆盖安装并确认 Display 2 窗口、固定 `offline-display` 健康接口和 Qwen ready 状态正常。
+  - v9（`0.2.7-offline-min`）已完成右下角诊断浮层构建、真机验证和 LAN/WAN 正式发布，APK 大小 `89233662` bytes，SHA-256 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`；UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`。默认域名 `c.aasc.us` 返回备案拦截 403，本次使用 WAN 直接 IP 验收。
+  - full 已对齐 min v9（`versionCode=9`、`0.2.7-offline`）并发布为 `aasc-display-offline-v9.apk`，大小 `957310007` bytes，SHA-256 `b1625bdf269e256d98aa45254c14a9531dcdfa3399d0b7d31b18daccbe1f83a7`；LAN/WAN IP HTTP 200、Content-Length 和远端 hash 一致，旧 full v2 已清理，服务 manifest 未替换。
+  - full v2 APK 已上传外网 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致；本次追加 min v6、v7、v8 版本文件并更新签名清单。
   - 独立 RSA 密钥对已接入打包工具并存放于 `~/.config/aasc-user/`；更新包构建已支持临时工作区与输出目录跨文件系统，归档复制到输出同目录临时文件后再原子切换。
   - 外网主机登录 shell 为 fish；发布器已通过 `/bin/sh -c` 执行远端 POSIX 脚本，并在远端 manifest 原子切换前设置 `0644`，真实发布通过。
   - SM-N9500 真机原有 v1 APK 已按测试要求卸载，fresh install full v2 成功，首次解包约 911 MiB；`/api/status`、`/v1/models` 和默认模型聊天通过。
   - 已修复 ZIP 目录项规范化后的 `src` / `node_modules` 根目录白名单问题；真机 fresh install 后 code/dependencies v3 成功应用，`active-release.json` 的 `pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。
   - min v3 已携带 `libaasc_node.so` 并在 SM-N9500 Android 9 上原位安装成功；配置、任务、模型缓存和 code/dependencies v3 active release 保留，`/api/status`、`/v1/models`、默认模型聊天和显示端 WebSocket 通过。正式发布的 min v4 已完成双站点工件验收，设备安装回归仍待单独执行。
-  - 仍待：回滚/异常降级、code-only 与 LAN/WAN fallback/bad-hash/低空间场景，以及 ASR/TTS 完整业务回归。
+  - 仍待：回滚/异常降级、code-only 与 LAN/WAN fallback/bad-hash/低空间场景，以及 ASR/TTS 完整业务回归；v10 缩放曲线已正式发布并从待办移除。
   - 设计：`docs/design/android-offline-hot-update.md`；伪代码：`docs/spec/android-offline-hot-update.md`；任务：`docs/task/2026-09-16_OfflineAPK服务热更新与原生增量APK.md`。
 
 - ⏳可选 [2026-09-15] 统计 offline APK 首次启动的分阶段耗时
@@ -138,7 +139,7 @@
 
 - ⏳待现场验收 [2026-09-12] Windows 子显示端语音输入端到端回归
   - 需在 Windows 10/11 同步最新 Node 子显示端代码并重启，验证“开始输入”/“结束输入”提示完成后持续产生 `asrAudio`，普通文本注入、 “返回”、 “发送”保持输入模式、30 秒超时退出及窗口切换保护。
-  - 还需验证 `Alt+C` 在 `inherit`/`false` 间切换、重启后本地持久化；`false` 输入模式请求的实际 ASR 不产生声纹耗时；以及 `voiceRecordingConfig`/`displayRecordingRequest` 不再产生未知消息。
+  - 还需验证 `Alt+C` 在 `inherit`/`false` 间切换、重启后本地持久化；缺失/`undefined`/`null` 的本地策略按 `false` 处理，显式 `inherit` 才跟随服务器；以及 `voiceRecordingConfig`/`displayRecordingRequest` 不再产生未知消息。
   - 当前主服务端已重启加载状态提示播放门控修复；本环境无 Windows，无法替代远端实机验收。
   - 关联文档：`docs/design/windows-voice-text-input.md`、`docs/spec/windows-voice-text-input.md`、`docs/task/2026-09-12_子显示端Windows语音转文字输入.md`、`docs/task/2026-09-12_Windows语音输入超时声纹策略与录音协议修复.md`。
 

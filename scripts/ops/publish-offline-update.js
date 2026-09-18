@@ -16,7 +16,7 @@ const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(__dirname, '../..');
 const DEFAULT_LOCAL_ROOT = '/mnt/aasc-offline';
 const DEFAULT_LOCAL_VERIFY_URL = 'http://192.168.1.39/mnt/aasc-offline/';
-const DEFAULT_WAN_VERIFY_URL = 'http://120.79.245.103/mnt/aasc-offline/';
+const DEFAULT_WAN_VERIFY_URL = 'http://c.aasc.us/mnt/aasc-offline/';
 const CLEANUP_RULES = Object.freeze([
     { componentName: 'code', directory: 'code', prefix: 'code-v', suffix: '.zip' },
     { componentName: 'dependencies', directory: 'dependencies', prefix: 'dependencies-v', suffix: '.zip' },

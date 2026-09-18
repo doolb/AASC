@@ -60,6 +60,22 @@ class OfflineUpdateManagerTest {
     }
 
     @Test
+    fun 热更域名解析后使用IP替换主机并保留路径端口() {
+        val method = OfflineUpdateManager::class.java.declaredMethods.firstOrNull {
+            it.name == "replaceUpdateUrlHost" && it.parameterTypes.size == 2
+        }
+        assertTrue("应提供热更 URL 主机替换方法", method != null)
+
+        val rewritten = method!!.invoke(
+            null,
+            "http://c.aasc.us:8080/mnt/aasc-offline/",
+            "120.79.245.103"
+        ) as String
+
+        assertEquals("http://120.79.245.103:8080/mnt/aasc-offline/", rewritten)
+    }
+
+    @Test
     fun minApk模型兼容指纹与Node发布器规范化结果一致() {
         val compatibility = """{"schemaVersion":1,"modelCompatibilitySha256":"31b71f35b06ce06a77b31a3ebc22a1963af3705cbc36d6014b24d5adece8c20a"}"""
         val modelManifest = """{"models":[{"modelId":"m","revision":"r","assetPrefix":"ignored","files":[{"name":"a_b","assetPath":"display-models/m/a_b","size":2,"sha256":"${"b".repeat(64)}"},{"name":"a-b","assetPath":"display-models/m/a-b","size":1,"sha256":"${"a".repeat(64)}"}]}]}"""

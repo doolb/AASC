@@ -17,7 +17,12 @@ TextInputRecord:
     windowId: 注入时的前台窗口标识
 
 src/apps/voice-display-node/config.json:
-    textInput.requireVoiceprint = "inherit"   # 默认跟随服务器 voiceprint.enabled
+    textInput.requireVoiceprint 缺失、undefined 或 null:
+        按 false 处理，不要求输入模式声纹
+    textInput.requireVoiceprint = "inherit":
+        跟随服务器 voiceprint.enabled
+    textInput.requireVoiceprint = false:
+        不要求输入模式声纹
 ```
 
 ## Windows 输入注入器伪代码
@@ -102,7 +107,9 @@ VoiceDisplay 初始化:
     textInputMode = inactive
     textInputHistory = 空列表
     textInputIdleTimer = null
-    textInputVoiceprintPolicy = config.textInput.requireVoiceprint，仅接受 inherit 或 false，默认 inherit
+    textInputVoiceprintPolicy = config.textInput.requireVoiceprint
+        缺失、undefined 或 null 时归一化为 false
+        显式 inherit 时跟随服务器，显式 false 时关闭输入模式声纹
     serverVoiceprintEnabled = true
     创建 WindowsTextInputInjector
     创建 WindowsGlobalHotkey(onToggleTextInputMode)
@@ -265,7 +272,7 @@ src/apps/voice-display-node/windows-text-input.js:
 src/apps/voice-display-node/main.js:
     在 VoiceDisplay 内维护 textInputMode、textInputHistory、textInputIdleTimer 和本地声纹策略
     启动时注册 Ctrl+Alt+Space 与 Alt+C 两个 WindowsGlobalHotkey，ASR 返回后分流普通文本、返回和发送
-    只在本地保存 textInput.requireVoiceprint，inherit 时读取服务器最新 voiceprintConfig.enabled
+    只在本地保存 textInput.requireVoiceprint；缺失值按 false，显式 inherit 时读取服务器最新 voiceprintConfig.enabled
     用请求开始时的输入模式快照避免快捷键与在途 ASR 结果串路
 
 src/apps/voice-display-node/asr-client.js:

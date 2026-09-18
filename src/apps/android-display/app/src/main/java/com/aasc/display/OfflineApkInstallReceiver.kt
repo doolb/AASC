@@ -13,7 +13,10 @@ class OfflineApkInstallReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != OfflineUpdateManager.MIN_APK_INSTALL_ACTION) return
-        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        val detail = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty()
+        sendInstallStatus(context, status, detail)
+        when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> launchSystemConfirmation(context, intent)
             PackageInstaller.STATUS_SUCCESS -> {
                 deleteInstalledUpdateCache(context, intent.getStringExtra(EXTRA_APK_PATH))
@@ -24,6 +27,15 @@ class OfflineApkInstallReceiver : BroadcastReceiver() {
                 "Offline min APK 安装失败: ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty()}"
             )
         }
+    }
+
+    private fun sendInstallStatus(context: Context, status: Int, detail: String) {
+        context.sendBroadcast(
+            Intent(ACTION_INSTALL_STATUS)
+                .setPackage(context.packageName)
+                .putExtra(EXTRA_INSTALL_STATUS, status)
+                .putExtra(EXTRA_INSTALL_DETAIL, detail)
+        )
     }
 
     private fun launchSystemConfirmation(context: Context, callback: Intent) {
@@ -56,6 +68,9 @@ class OfflineApkInstallReceiver : BroadcastReceiver() {
 
     companion object {
         const val EXTRA_APK_PATH = "offline_min_apk_path"
+        const val ACTION_INSTALL_STATUS = "com.aasc.display.action.OFFLINE_MIN_APK_INSTALL_STATUS"
+        const val EXTRA_INSTALL_STATUS = "offline_min_apk_install_status"
+        const val EXTRA_INSTALL_DETAIL = "offline_min_apk_install_detail"
         private const val TAG = "AASC-Offline-Install"
     }
 }

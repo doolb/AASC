@@ -1,5 +1,53 @@
 # Web MediaCenter - 变更日志
 
+### Android Offline full APK 跟随 min v9 发布
+
+- ✅ [2026-09-18] 将完整 Offline APK 的版本对齐当前 min 最新版本 v9，并完成双站点发布。
+  - `release/apkbuild/allserver/app.json` 使用 `versionCode=9`、`versionName=0.2.7-offline`；APK `release/apkbuild/allserver/output/aasc-display-offline.apk` 大小 `957310007` bytes，SHA-256 `b1625bdf269e256d98aa45254c14a9531dcdfa3399d0b7d31b18daccbe1f83a7`。
+  - 发布文件为 `apk/aasc-display-offline-v9.apk`，已同步到 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；两端文件 hash、IP HTTP 200 和 `Content-Length` 均一致，旧 full v2 已按精确规则清理，服务 `manifest.json` 未替换。
+  - full 构建首次因 Gradle 复用中间目录缺失资源 `.ap_` 失败；重跑 `processDebugResources` 后 `packageDebug` 成功。min v9 真机启动、本地服务、模型列表和 Chat Completions 已先行验证。
+
+### 显示端睡眠测试与 Windows 语音输入缺省声纹策略
+
+- ✅ [2026-09-17] 修复显示端睡眠集成测试的状态竞态，并将 Windows Node 子显示端缺失的本地声纹策略按 `false` 处理。
+  - `tests/display-sleep-mode.test.js` 使用唯一测试 displayId、等待首轮服务配置完成，并通过 `sleepOverride` 手动睡眠路径验证媒体点击守卫，避免 10 秒周期检查或旧 `restoreState` 覆盖测试状态。
+  - `main.js` 将 `textInput.requireVoiceprint` 的缺失、`undefined`、`null` 归一化为 `false`；显式 `inherit` 仍跟随服务器，显式 `false` 继续关闭输入模式声纹要求。
+  - 同步 `docs/design/windows-voice-text-input.md`、`docs/spec/windows-voice-text-input.md`、`docs/usage/voice-conversation.md` 和任务文档。
+  - 验证：显示端睡眠集成测试、Windows Node 语音输入契约测试 `13/13` 通过；完整 `npm test` `839/839` 通过，失败 `0`。
+
+### Offline 更新提示、首包启动进度与返回键修复
+
+- ✅ [2026-09-17] 完成 min APK 手动下载提示、浮动进度和首包 Runtime 阶段进度，并修复 Offline 控制端按钮偶发消失后返回键回退网页的问题。
+  - `OfflineUpdateManager` 在用户点击“下载更新”后报告下载、校验和模型物化进度；`MainActivity` 使用浮动卡片展示百分比，完成后提交 Android PackageInstaller，系统安装确认仍由用户完成。安装被拒绝或取消时恢复可重试提示。
+  - `NodeRuntimeInstaller`、`NodeServerService` 和 `MainActivity` 按 Runtime 动态库、服务源码、Node 依赖及配置元数据报告首包复制阶段；快速复用 Runtime 显示复用状态。
+  - `OnBackPressedDispatcher` 在控制页返回时关闭控制页并恢复浮动控制端按钮，显示页保持当前 URL，不再调用 WebView 历史回退。
+  - min v7：`release/offline-update/output/apk/aasc-display-offline-min-v7.apk`，versionCode `7`、versionName `0.2.5-offline-min`，大小 `89535999` bytes，SHA-256 `80501f7ea36a96377f8cddec3f238e0ec31b2d2bc30681d3f4b650c3ada324af`；签名、ZIP 完整性和 `manifest-apk-min-v7.json` 验签通过，已发布到 `http://192.168.1.39/mnt/aasc-offline/` 和 `http://120.79.245.103/mnt/aasc-offline/`，两站点清单均引用 v7，APK HTTP 200/Content-Length 已复核。
+  - 验证：`tests/android-offline-apk.test.js`、`tests/apk-build-profile.test.js`、`tests/offline-min-apk-package.test.js` 35/35 通过；Android `:app:testDebugUnitTest` BUILD SUCCESSFUL；SM-N9500 Android 9/API 28 已覆盖安装 v7 并在 `mDisplayId=2` 运行，Node 进程、固定 `offline-display` 的 `/api/status`、`/v1/models`、`/display` 和 UI 自动化“控制端”按钮检查通过。
+  - Display 2 `Desktop` 虚拟屏为 1920×1080、app 区域 1920×1018、160 dpi；按 1280 长边基准当前显示比例为 150%。因设备报告 `touch NONE` 且无法用 `screencap -d 2` 取图，本轮未宣称真实点击/返回键手工回归。
+
+### Offline WebView 缩放曲线校正
+
+- ✅ [2026-09-18] 将 Offline WebView 初始缩放从分辨率与 DPI 的乘法组合改为等权混合：`round((((长边 / 1280) + (densityDpi / 320)) / 2) × 100)`。
+  - 目标结果：`1920×1080@160dpi` 为 `100%`，`2309×1080@480dpi` 为 `165%`，`720×1480@280dpi` 为 `102%`；`1920×1080@320dpi` 按实际公式为 `125%`。
+  - 改动文件：`WebViewScalePolicy.kt`、`WebViewScalePolicyTest.kt`，以及 Offline APK design/spec/task 文档；普通 APK 和无效参数回退逻辑保持不变。
+  - 验证：Android JVM 策略单测通过，Offline 静态回归 `37/37`；v10 min APK（`0.2.8-offline-min`）大小 `89233814` bytes、SHA-256 `713a0ecd53536afadf5115864e1ea28a90409717aa2bbd95655fbad155ce139e`，APK v2 签名校验通过；已正式发布到 LAN 和 WAN 直连 IP，manifest SHA-256 为 `bc613aba55e41fced9b01d38cbfc83d0541c4eb5b8b61b4b0d6545dbd6134ac0`，两个入口字节一致、APK HTTP 200/Content-Length 和远端 hash 通过。SM-N9500 Display 2 UI 自动化显示 `分辨率 1920×1018 | DPI 160 | 缩放 100%`，`/api/status` 返回 `status=ok`，固定 `offline-display` 连接正常；默认域名 `c.aasc.us` 403，使用直连 IP 验收。
+
+### Offline WebView 分辨率与 DPI 缩放校正
+
+- ✅ [2026-09-18] Offline WebView 初始比例改为同时使用分辨率长边和所属 Display 的 densityDpi。
+  - `WebViewScalePolicy` 以 `1280px@320dpi` 为 100%，使用 `round((长边 / 1280) × (densityDpi / 320) × 100)`；Display 2 `1920×1080@160dpi` 得到 75%，普通 APK 保持 100%，无效参数回退 100%。
+  - `DisplayWebView` 传入所属 display Context 的 `widthPixels`、`heightPixels` 和 `densityDpi`；不修改系统 density、分辨率、媒体、截图或输入坐标协议。
+  - min v8：`release/offline-update/output/apk/aasc-display-offline-min-v8.apk`，versionCode `8`、versionName `0.2.6-offline-min`，大小 `89231402` bytes，SHA-256 `470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`；签名、ZIP 完整性和 v8 更新清单验签通过。
+  - v8 已正式发布到 `http://192.168.1.39/mnt/aasc-offline/` 和 `http://120.79.245.103/mnt/aasc-offline/`；两站点 manifest、APK HTTP 200/Content-Length 和 WAN 远端 hash 校验通过。
+  - 验证：WebViewScalePolicy Android JVM 单测 `4/4`、Offline 静态回归 `35/35`；SM-N9500 Android 9/API 28 已覆盖安装并在 `mDisplayId=2` 运行，固定 `offline-display` 的 `/api/status`、`/v1/models`（Qwen ready）和 `/display` 返回正常，无 FATAL/ANR 日志。Display 2 `touch NONE`，`screencap -d 2` 不可用，因此未宣称真实点击/返回键手工回归。
+
+### Offline 屏幕诊断信息浮层
+
+- ✅ [2026-09-18] Offline APK 在 `webContainer` 右下角新增不可交互的诊断浮层，显示当前应用区域分辨率、DPI 和 WebView 缩放值；普通 APK 隐藏，启动遮罩、更新卡片和控制端按钮保持更高层级。
+  - `MainActivity` 复用 `resources.displayMetrics` 和 `WebViewScalePolicy` 生成 `分辨率 {width}×{height} | DPI {densityDpi} | 缩放 {scale}%`，配置变化时刷新；`activity_main.xml` 和 `strings.xml` 增加原生 TextView/格式化字符串。
+  - min v9：`release/offline-update/output/apk/aasc-display-offline-min-v9.apk`，versionCode `9`、versionName `0.2.7-offline-min`，大小 `89233662` bytes，SHA-256 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`；ZIP 完整性和 v2 签名校验通过，已正式发布到 LAN `192.168.1.39` 和 WAN 直接 IP `120.79.245.103`。
+  - 验证：Android `:app:testDebugUnitTest` 编译通过，Offline 静态回归 `37/37`；两个 HTTP 入口 manifest 字节、APK HTTP 200/Content-Length 和 WAN 远端 APK hash 一致。SM-N9500 Display 2 UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`。Display 2 报告 `touch NONE`，未执行定向触控回归；默认域名 `c.aasc.us` 当前返回备案拦截 403。
+
 ### OpenSpec 文档转换技能
 
 - ✅ [2026-09-17] 新增 `.agents/skills/openspec-to-aasc-docs/SKILL.md`，将 OpenSpec 的 proposal/design/specs/tasks 按职责转换为项目 `docs/design/*.md` 与 `docs/spec/*.md`，并要求核实真实代码落点、区分目标方案与已实现状态。

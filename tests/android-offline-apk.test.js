@@ -96,6 +96,26 @@ test('显示端控制端按钮位于 WebView 容器左上角且保留浮层布�
     assert.match(strings, /name="control_page">控制端/u);
 });
 
+test('Offline APK 右下角显示分辨率DPI和缩放诊断信息', () => {
+    const layout = read('src/apps/android-display/app/src/main/res/layout/activity_main.xml');
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+    const diagnostic = layout.match(
+        /<TextView\s+android:id="@\+id\/offlineDisplayInfo"[\s\S]*?\/>/u
+    )?.[0];
+
+    assert.ok(diagnostic, '应有 Offline 诊断信息 TextView');
+    assert.match(diagnostic, /android:layout_gravity="bottom\|end"/u);
+    assert.match(diagnostic, /android:clickable="false"/u);
+    assert.match(diagnostic, /android:elevation="8dp"/u);
+    assert.match(activity, /offlineDisplayInfo/u);
+    assert.match(activity, /metrics\.densityDpi/u);
+    assert.match(activity, /WebViewScalePolicy\.initialScalePercent/u);
+    assert.match(activity, /onConfigurationChanged/u);
+    assert.match(activity, /缩放/u);
+});
+
 test('offline APK 首次解包显示原生启动状态遮罩', () => {
     const layout = read('src/apps/android-display/app/src/main/res/layout/activity_main.xml');
     const strings = read('src/apps/android-display/app/src/main/res/values/strings.xml');
@@ -125,6 +145,92 @@ test('offline APK 消费 Node 状态并持续等待本地 display 服务', () =>
     assert.match(service, /STATUS_INSTALLING/u);
     assert.match(service, /STATUS_FAILED/u);
     assert.match(service, /sendStatus/u);
+});
+
+test('min 更新需要手动确认下载并显示浮动进度', () => {
+    const layout = read('src/apps/android-display/app/src/main/res/layout/activity_main.xml');
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+    const strings = read('src/apps/android-display/app/src/main/res/values/strings.xml');
+
+    assert.match(layout, /offlineUpdatePanel/u);
+    assert.match(layout, /offlineUpdateProgress/u);
+    assert.match(layout, /offlineUpdateDownload/u);
+    assert.match(layout, /offlineUpdateLater/u);
+    assert.match(activity, /checkForMinApkUpdate/u);
+    assert.match(activity, /showMinApkUpdatePrompt/u);
+    assert.match(activity, /startMinApkDownload/u);
+    assert.match(activity, /offlineUpdateDownload.setOnClickListener/u);
+    assert.match(activity, /offlineUpdateLater.setOnClickListener/u);
+    const checkStart = activity.indexOf('private fun checkForMinApkUpdateOnce()');
+    const promptStart = activity.indexOf('private fun showMinApkUpdatePrompt', checkStart);
+    const downloadStart = activity.indexOf('private fun startMinApkDownload()');
+    const progressStart = activity.indexOf('private fun updateMinApkProgress', downloadStart);
+    assert.ok(checkStart >= 0 && promptStart > checkStart, '应能定位仅检查更新的启动流程');
+    assert.ok(downloadStart >= 0 && progressStart > downloadStart, '应能定位用户点击后的下载流程');
+    assert.match(activity.slice(checkStart, promptStart), /checkForMinApkUpdate\(/u);
+    assert.doesNotMatch(activity.slice(checkStart, promptStart), /checkAndPrepareMinApkUpdate\(/u);
+    assert.match(activity.slice(downloadStart, progressStart), /checkAndPrepareMinApkUpdate\(/u);
+    assert.match(strings, /name="offline_update_download"/u);
+    assert.match(strings, /name="offline_update_later"/u);
+});
+
+test('Offline 热更外网源使用域名解析后的 IP 且不覆盖 Host', () => {
+    const manager = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/OfflineUpdateManager.kt'
+    );
+
+    assert.match(manager, /WAN_BASE_URL\s*=\s*"http:\/\/c\.aasc\.us\/mnt\/aasc-offline\/"/u);
+    assert.match(manager, /InetAddress\.getAllByName/u);
+    assert.match(manager, /replaceUpdateUrlHost/u);
+    assert.doesNotMatch(manager, /setRequestProperty\(\s*["']Host["']/u);
+});
+
+test('min 更新下载回调报告字节进度并通过安装广播更新状态', () => {
+    const manager = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/OfflineUpdateManager.kt'
+    );
+    const receiver = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/OfflineApkInstallReceiver.kt'
+    );
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+
+    assert.match(manager, /data class OfflineUpdateProgress/u);
+    assert.match(manager, /onProgress:\s*\(\(\s*OfflineUpdateProgress/u);
+    assert.match(manager, /OfflineUpdateProgress\(\s*"downloading"/u);
+    assert.match(manager, /completedBytes/u);
+    assert.match(manager, /totalBytes/u);
+    assert.match(receiver, /ACTION_INSTALL_STATUS/u);
+    assert.match(receiver, /EXTRA_INSTALL_STATUS/u);
+    assert.match(activity, /minInstallStatusReceiver/u);
+    assert.match(activity, /registerReceiver\(minInstallStatusReceiver/u);
+});
+
+test('首包 Runtime 解压按 Runtime、源码、依赖和元数据报告阶段进度', () => {
+    const installer = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NodeRuntimeInstaller.kt'
+    );
+    const service = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/NodeServerService.kt'
+    );
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+
+    assert.match(installer, /data class RuntimeInstallProgress/u);
+    assert.match(installer, /runtime_libraries/u);
+    assert.match(installer, /server_source/u);
+    assert.match(installer, /node_dependencies/u);
+    assert.match(installer, /config_and_metadata/u);
+    assert.match(installer, /onProgress:\s*\(\(\s*RuntimeInstallProgress/u);
+    assert.match(service, /EXTRA_PHASE/u);
+    assert.match(service, /EXTRA_COMPLETED_BYTES/u);
+    assert.match(service, /EXTRA_TOTAL_BYTES/u);
+    assert.match(activity, /completedBytes/u);
+    assert.match(activity, /totalBytes/u);
 });
 
 test('控制端按钮由服务端 Android 能力和开放状态共同控制', () => {
@@ -159,6 +265,19 @@ test('控制端 WebView 位于显示端 WebView 之上且按钮保持可关闭',
         /webContainer\.addView\(wv,\s*0\)[\s\S]*webContainer\.addView\(control,\s*1\)/u
     );
     assert.doesNotMatch(activity, /webContainer\.addView\(control,\s*0\)/u);
+});
+
+test('Offline 返回键关闭控制页并恢复浮动按钮，不回退 WebView 历史', () => {
+    const activity = read(
+        'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'
+    );
+
+    assert.match(activity, /onBackPressedDispatcher\.addCallback/u);
+    assert.match(activity, /private fun handleBackNavigation\(\)/u);
+    assert.match(activity, /restoreControlPageButton/u);
+    assert.match(activity, /controlWebView\?\.visibility\s*=\s*View\.GONE/u);
+    assert.match(activity, /if\s*\(offlineMode\s*&&\s*webView\?\.visibility\s*==\s*View\.VISIBLE\s*&&\s*controlPageAllowed\)/u);
+    assert.doesNotMatch(activity, /webView\?\.goBack\(\)|controlWebView\?\.goBack\(\)/u);
 });
 
 test('Offline APK 使用专用固定 displayId 并让 release 任务目标保持一致', () => {

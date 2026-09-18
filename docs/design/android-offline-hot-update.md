@@ -2,6 +2,13 @@
 
 ## 状态
 
+2026-09-18 当前 full Offline APK 已跟随 min 最新版本 v9：`allserver` 使用
+`versionCode=9`、`versionName=0.2.7-offline`，发布文件为
+`apk/aasc-display-offline-v9.apk`。APK 大小 `957310007` bytes，SHA-256 为
+`b1625bdf269e256d98aa45254c14a9531dcdfa3399d0b7d31b18daccbe1f83a7`；已发布到 LAN/WAN，
+两端文件 hash 和 HTTP Content-Length 均一致，旧 full v2 已按精确规则清理，服务
+`manifest.json` 未被替换。
+
 本次执行已将独立 RSA 密钥对接入打包流程，并重新生成 full v2 APK、code/dependencies v3 服务更新包。full APK SHA-256 为 `9ab99a0a5bde792b5dfb2348dc75e507f64824a51b792102f90d9fc94d019a4d`；code v3 SHA-256 为 `8f1b47e4b5bca1bd2494f95520589af4b007d5ed4be9058ea48d2df43ca6b3c3`，dependencies v3 SHA-256 为 `0ff53a2c8cbc87b736b4a2746b22e652c5b15a75a0354fb4523c37f1bfa85198`。2026-09-17 将修复后的 min APK 升级为 versionCode `4`、版本 `0.2.2-offline-min`，大小 `89205130` bytes，SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`，并正式发布到 LAN/WAN。两站点 manifest 字节一致、RSA 签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash 及 HTTP 206 首段校验通过；WAN HTTP HEAD 返回 `200` 且 Content-Length 正确。full APK 另已上传为 `apk/aasc-display-offline-v2.apk`，远端完整 hash 与本地一致。真机卸载后 fresh install full v2，首次 Runtime 安装约 94.6 秒；修复 ZIP 目录项规范化白名单后，设备生成 code/dependencies v3 的 `active-release.json`，`pendingHealth=false`，`/api/status`、`/v1/models` 和默认模型聊天通过。2026-09-17 使用含 `libaasc_node.so` 的 min v3 原位安装成功，数据目录和模型缓存保留，服务重新启动并继续使用 code/dependencies v3；回滚及异常降级仍待验收。
 
 方案已确认并进入实现。Node 更新包/发布器、`allserver-min` 构建 profile、Android 签名下载/服务版本切换和 min APK 安装流程已落地；跨文件系统落盘已改为输出目录同目录暂存后原子切换，并有集成回归覆盖 `/tmp` 到工作区输出。Android JVM 单测及更新相关 Node 定向测试通过。服务发布支持 `code-only` 和 `all` 两种模式；Android 原生更新通过 `allserver-min` APK 独立发布。模型在线更新和 `.mmap` 处理不在本期范围。服务双站点发布、full APK fresh install 后的 code/dependencies 热更、min v3 原位升级和 min v4 正式发布已验收；发布器现已支持 full/min/code/dependencies 的精确旧版本清理，回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
@@ -10,6 +17,39 @@
 
 本次新增更新可见性：发现更高版本 min APK 后先由用户点击“下载更新”，浮动卡片显示下载、校验和安装阶段；下载完成后自动提交 Android PackageInstaller，系统安装确认仍由用户完成。完整 Offline APK 首次启动显示 Runtime 清单读取、Runtime 动态库、服务源码、Node 依赖和配置迁移等阶段的文件/字节进度；进度回调只在后台线程产生，Activity 在主线程更新遮罩。
 
+Offline 显示页的控制端浮动按钮由 `OnBackPressedDispatcher` 统一处理返回键：控制页打开时返回只关闭控制页并恢复按钮，显示页保持当前 URL，不调用 WebView 历史回退；按钮状态按当前控制权限重新同步，避免按钮偶发消失后只能回退网页。
+
+本次实现已构建并正式发布 min APK v7（`0.2.5-offline-min`）。本地和远端 APK 大小均为
+`89535999` bytes，SHA-256 为 `80501f7ea36a96377f8cddec3f238e0ec31b2d2bc30681d3f4b650c3ada324af`；
+LAN/WAN 清单均引用 `apk/aasc-display-offline-min-v7.apk`，清单签名、APK HTTP 200 和
+`Content-Length: 89535999` 已复核。发布地址为 `http://192.168.1.39/mnt/aasc-offline/` 和
+`http://120.79.245.103/mnt/aasc-offline/`。SM-N9500 Android 9/API 28 真机已覆盖安装 v7 并在
+Display 2 `Desktop` 虚拟屏运行，窗口配置为 1920×1018 app 区域、160 dpi，Node 子进程和
+`/api/status`、`/v1/models`、`/display?displayId=offline-display` 均正常；UI 自动化能看到浮动“控制端”按钮。
+该虚拟屏标记为 `touch NONE`，设备不能将 adb 触控/返回键定向到 Display 2，且 `screencap -d 2`
+无法取得 Desktop 图像，因此本轮未宣称完成真实点击回归。按现有分辨率策略，1920 长边相对 1280
+基准为 75%；本次校正以 `1280px@320dpi` 为 100%，使用 `round((长边 / 1280) × (densityDpi / 320) × 100)`，不修改系统 density。
+
+2026-09-18 已将该校正打包为 min APK v8（`0.2.6-offline-min`），大小 `89231402` bytes，SHA-256 为
+`470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`，并正式发布到 LAN/WAN。
+两站点 manifest 均引用 v8，APK HTTP 返回 200 且 Content-Length 正确，WAN 远端文件 hash 与本地一致。
+SM-N9500 Android 9/API 28 已覆盖安装 v8 并在 Display 2 运行；窗口仍为 1920×1018 app 区域、160 dpi，
+`/api/status`、`/v1/models`（Qwen ready）和 `/display?displayId=offline-display` 均正常。
+
+2026-09-18 新增右下角屏幕诊断浮层后，min APK v9（`0.2.7-offline-min`）已构建并正式发布，大小 `89233662` bytes，
+SHA-256 为 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`。SM-N9500 Display 2 的 UI
+自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`；LAN `192.168.1.39` 和 WAN 直接 IP `120.79.245.103`
+的 manifest 字节、HTTP 200/Content-Length 和 WAN 远端 APK hash 均复核一致。默认域名 `c.aasc.us` 当前返回备案拦截 403，未作为本次发布验收入口。
+
+2026-09-18 外网热更源改为域名配置 `http://c.aasc.us/mnt/aasc-offline/`。Offline APK 检查更新时先将域名解析为 IP，
+再把解析出的 IP 替换回更新 URL 的主机部分访问；不额外设置或保留域名 Host，路径仍使用
+`/mnt/aasc-offline/manifest.json` 及清单中的组件相对路径。LAN 源仍为
+`http://192.168.1.39/mnt/aasc-offline/`，内网优先、外网备用和多 IP 逐个尝试规则保持不变。
+
+2026-09-18 根据 Display 2 与手机实测结果调整 Offline WebView 缩放曲线：以 `1280px@320dpi` 为 100%，使用
+`round((((长边 / 1280) + (densityDpi / 320)) / 2) × 100)`。目标为 Display 2 `1920×1080@160dpi` 显示 `100%`，
+`2309×1080@480dpi` 手机显示 `165%`。min v10（`0.2.8-offline-min`）已完成构建、v2 签名校验、LAN/WAN 正式发布和 SM-N9500 Display 2 验证；APK 大小 `89233814` bytes，SHA-256 为 `713a0ecd53536afadf5115864e1ea28a90409717aa2bbd95655fbad155ce139e`，LAN/WAN manifest 字节一致（SHA-256 `bc613aba55e41fced9b01d38cbfc83d0541c4eb5b8b61b4b0d6545dbd6134ac0`），APK HTTP 200/Content-Length 和 WAN 远端 hash 均通过。UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 100%`，`/api/status` 返回 `status=ok`，固定 `offline-display` 连接正常；默认域名 `c.aasc.us` 仍返回备案拦截 403，发布验收使用 LAN 和 WAN 直连 IP。
+
 ## 需求
 
 Offline APK 需要在不重新安装完整大包的情况下更新服务代码与生产依赖；服务代码有时变化而依赖不变，因此代码更新必须可以单独发布、设备不得因此重新下载 `node_modules`。原生 Android/Kotlin 与 JNI/MNN 库则通过较小的更新 APK 分发，安装在已经安装完整 offline APK 的设备上。
@@ -17,7 +57,7 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 更新源为局域网优先、外网备用：
 
 - 局域网：`http://192.168.1.39/mnt/aasc-offline/`，服务器目录 `/mnt/aasc-offline/`。
-- 外网：`http://120.79.245.103/mnt/aasc-offline/`。根据 HTTP 映射使用 SCP 目录 `as@120.79.245.103:~/a/aasc-offline/`；该目录已做存在性检查并完成本次发布。用户之前输入的 `~/a/aasc-offlin` 少了末尾 `e`，未向该不存在路径写入。
+- 外网配置：`http://c.aasc.us/mnt/aasc-offline/`，解析后使用 IP 替换 URL 主机访问；当前 DNS 预期指向 `120.79.245.103`。根据 HTTP 映射使用 SCP 目录 `as@120.79.245.103:~/a/aasc-offline/`；该目录已做存在性检查并完成本次发布。用户之前输入的 `~/a/aasc-offlin` 少了末尾 `e`，未向该不存在路径写入。
 
 发布器只写本功能命名空间中的版本化文件和最终清单；清单原子切换并完成验证后，仅清理本规则明确匹配且不再被当前发布引用的旧版本文件。清理局限于局域网和外网各自的发布根目录，不覆盖 APK 链接，也不触碰日志、模型、配置、任务、results 或其他文件。2026-09-17 已按该规则清理两站点的旧 code v2、dependencies v2 和 min v3。
 
@@ -27,7 +67,7 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 
 ### 独立服务组件版本
 
-签名清单分别记录 `code`、`dependencies` 和可选 `apk` 组件的版本、相对下载地址、字节数与 SHA-256。自动化测试使用临时 RSA key；本地打包使用 `~/.config/aasc-user/` 中受保护的独立更新签名 key。正式双站点发布前仍需按发布流程验收密钥保管与目标路径。服务包边界如下：
+签名清单分别记录 `code`、`dependencies` 和可选 `apk` 组件的版本、相对下载地址、字节数与 SHA-256。 `apkMin` 可选记录 `releaseNotes`，由发布日志文件提供并纳入同一签名 payload。自动化测试使用临时 RSA key；本地打包使用 `~/.config/aasc-user/` 中受保护的独立更新签名 key。正式双站点发布前仍需按发布流程验收密钥保管与目标路径。服务包边界如下：
 
 - `code`：完整 `src/` 快照（包含显示端网页 UI 和控制端 UI）以及 `package.json`、`package-lock.json`；不含 `node_modules`。
 - `dependencies`：Android 兼容的生产 `node_modules` 快照及其 lockfile 指纹。
@@ -42,7 +82,9 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 
 密钥配置补充：独立更新 RSA 密钥对位于 `~/.config/aasc-user/offline-update-private.pem` 与 `~/.config/aasc-user/offline-update-public.pem`。Node 工具默认读取这两个文件；`AASC_OFFLINE_UPDATE_PRIVATE_KEY`、`AASC_OFFLINE_UPDATE_PUBLIC_KEY` 可分别覆盖。构建 full/min APK 前校验密钥匹配，APK 仅嵌入公钥；私钥文件限制为当前用户可读，不复制到仓库、APK、日志或发布目录。
 
-启动更新检查先尝试局域网源，连接失败或超时才回退外网源；签名无效、版本字段异常或包校验失败时不接受该源的更新，继续使用当前已安装版本并记录错误。下载地址限定为清单所在源下的相对路径。解压时拒绝绝对路径、`..` 越界、符号链接和特殊文件。
+启动更新检查先尝试局域网源，连接失败或超时才回退外网源；外网域名源先解析为一个或多个 IP，实际 HTTP URL 使用解析出的 IP 主机且不覆盖 Host 头。多个解析结果按顺序尝试，全部失败后才报告该源不可用。签名无效、版本字段异常或包校验失败时不接受该源的更新，继续使用当前已安装版本并记录错误。下载地址限定为清单所在源下的相对路径。解压时拒绝绝对路径、`..` 越界、符号链接和特殊文件。
+
+发布 min APK 时可通过 `--release-notes-file <UTF-8 文件>` 写入本次更新日志。发布器首尾裁剪日志，保留内部换行，限制为 4096 个 Unicode 字符；空日志不写入清单字段。Android 更新卡片显示版本、大小和日志内容，最多展示 6 行；旧清单缺少 `releaseNotes` 时沿用原有版本/大小提示。
 
 ### 发布资源保留与清理
 

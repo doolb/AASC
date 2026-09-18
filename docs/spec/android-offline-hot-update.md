@@ -1,6 +1,16 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
-> 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，2026-09-17 修复后的 min v4（versionCode 4、`0.2.2-offline-min`）已正式发布到 LAN/WAN。两站点 manifest 字节一致且签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash、HTTP HEAD 和首段响应校验通过；min v4 的 APK SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`。full v2 APK 另已上传到外网 `apk/aasc-display-offline-v2.apk`，远端大小和完整 hash 与本地一致；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。2026-09-17 重新生成的 min v3 携带 `libaasc_node.so` 并原位安装成功，配置、任务目录和 LLM 模型缓存保留；发布器已支持双站点精确清理旧 code/dependencies/min/full 版本。固定 ID/Chat2API 完成按钮对应的 min v6（versionCode 6、`0.2.4-offline-min`）已正式发布到 LAN/WAN，包含 Offline 任务索引迁移逻辑；APK SHA-256 为 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest 字节一致、签名有效、HTTP APK 返回 200 且 Content-Length 正确。回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
+> 本规格记录 Android 更新目标和伪代码；服务更新包/发布器、min build profile、Android 运行时更新及独立更新密钥接入已实现。full v2/min v3 APK、code/dependencies v3 已完成构建，2026-09-17 修复后的 min v4（versionCode 4、`0.2.2-offline-min`）已正式发布到 LAN/WAN。两站点 manifest 字节一致且签名有效，LAN HTTP 整包 hash、WAN 远端文件 hash、HTTP HEAD 和首段响应校验通过；min v4 的 APK SHA-256 为 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`。full v2 APK 另已上传到外网 `apk/aasc-display-offline-v2.apk`，远端大小和完整 hash 与本地一致；真机 full v2 fresh install 后已成功应用 code/dependencies v3，`active-release.json` 的 `pendingHealth=false`，服务接口、默认模型和 Chat Completions 已通过。2026-09-17 重新生成的 min v3 携带 `libaasc_node.so` 并原位安装成功，配置、任务目录和 LLM 模型缓存保留；发布器已支持双站点精确清理旧 code/dependencies/min/full 版本。固定 ID/Chat2API 完成按钮对应的 min v6（versionCode 6、`0.2.4-offline-min`）已正式发布到 LAN/WAN，包含 Offline 任务索引迁移逻辑；APK SHA-256 为 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest 字节一致、签名有效、HTTP APK 返回 200 且 Content-Length 正确。当前实现已生成并正式发布 min v7（versionCode 7、`0.2.5-offline-min`），APK 大小 `89535999` bytes、SHA-256 为 `80501f7ea36a96377f8cddec3f238e0ec31b2d2bc30681d3f4b650c3ada324af`，LAN/WAN 清单和 APK HTTP 校验通过。SM-N9500 Android 9/API 28 真机已在 Display 2 `Desktop` 虚拟屏运行 v7，窗口为 1920×1018 app 区域、160 dpi，固定 `offline-display` 服务健康接口返回 200，UI 自动化可见浮动“控制端”按钮；因 Display 2 为 `touch NONE` 且无法通过 `screencap -d 2` 取图，本轮未宣称真实触控回归。现行校正以 `1280px@320dpi` 为 100%，Display 2 的 1920×1080@160dpi 目标比例为 75%；回滚、异常降级及 ASR/TTS 完整业务回归仍待验收。
+
+> 2026-09-18 已将分辨率与 DPI 校正打包为 min v8（versionCode 8、`0.2.6-offline-min`），APK 大小 `89231402` bytes、SHA-256 为 `470c19c57ca528d84e87729ece45b74d48a3e2acdfbf124a16751a04786b0d2c`，并正式发布到 LAN/WAN。两站点 manifest、HTTP 200/Content-Length 和 WAN 远端 hash 校验通过；SM-N9500 Android 9/API 28 已安装 v8，在 Display 2 运行并确认 Qwen `readyDisplayIds=["offline-display"]`。Display 2 目标比例为 75%；手机 2309 长边、480 dpi 目标比例约 271%。因 `touch NONE` 和 Desktop 虚拟屏截图限制，本轮仍未宣称真实触控回归。
+
+> 2026-09-18 新增右下角分辨率/DPI/缩放诊断浮层后，min v9（versionCode 9、`0.2.7-offline-min`）已构建、安装并正式发布到 LAN/WAN；UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`。v9 大小 `89233662` bytes、SHA-256 为 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`，LAN `192.168.1.39` 和 WAN 直接 IP `120.79.245.103` 的 manifest、HTTP 200/Content-Length 和 WAN 远端 APK hash 已复核一致。默认域名 `c.aasc.us` 当前返回备案拦截 403，未作为本次验收入口。
+
+> 2026-09-18 完整 Offline APK 的发布版本跟随当前 min 最新版本：读取 `allserver-min.versionCode` 作为 full 的 `versionCode`，full 版本名使用 `0.2.7-offline`，目标文件名为 `apk/aasc-display-offline-v9.apk`。若目标已有同版本但 SHA 不同的 full APK，必须先重新构建新版本，禁止覆盖既有版本。
+
+> 2026-09-18 缩放曲线校正已完成：`WebViewScalePolicy` 将分辨率比例与 DPI 比例等权混合，
+> `round((((长边 / 1280) + (densityDpi / 320)) / 2) × 100)`；min v10 本地包 SHA-256 为
+> `713a0ecd53536afadf5115864e1ea28a90409717aa2bbd95655fbad155ce139e`，LAN/WAN manifest 字节一致（manifest SHA-256 `bc613aba55e41fced9b01d38cbfc83d0541c4eb5b8b61b4b0d6545dbd6134ac0`），Display 2 浮层显示 100%，已正式发布；默认域名 `c.aasc.us` 返回 403，使用直连 IP 验收。
 
 ## 清单与签名伪代码
 
@@ -17,7 +27,8 @@ SignedManifest:
     }
     payload.components.apkMin = optional {
         versionCode, versionName, packageName, signerSha256,
-        modelCompatibilitySha256, relativeUrl, size, sha256
+        modelCompatibilitySha256, relativeUrl, size, sha256,
+        releaseNotes?
     }
     signature.algorithm = "SHA256withRSA"
     signature.value = Base64(sign(privateKey, canonicalJson(payload)))
@@ -26,6 +37,22 @@ canonicalJson(value):
     recursively sort object keys
     preserve array order and JSON scalar values
     encode UTF-8 without BOM or trailing newline
+
+createOfflineMinApkArtifact(options):
+    releaseNotes = read options.releaseNotesFile as UTF-8 text when provided
+    releaseNotes = trim(releaseNotes)
+    require Unicode character count <= 4096
+    如果 releaseNotes 非空：写入 payload.components.apkMin.releaseNotes
+    对包含 releaseNotes 的 payload 重新签名并验证
+
+OfflineUpdateManifest.parse:
+    apkMin.releaseNotes 为可选字符串
+    如果存在：trim 后长度必须 <= 4096；缺少时返回 null
+
+MainActivity.showMinApkUpdatePrompt:
+    显示版本和下载大小
+    如果 releaseNotes 非空：显示更新内容，最多 6 行并省略尾部
+    否则隐藏更新内容区域
 ```
 
 ```text
@@ -102,6 +129,9 @@ loadApkProfile(name):
 
 buildApk(profile):
     prepare Android MNN/JNI app libraries
+    if profile.name == allserver:
+        profile.versionCode = read allserver-min.versionCode
+        require full versionCode does not overwrite a different published SHA-256
     if profile.updateOnly:
         do not prepare/copy Android server package into Runtime assets
         copy only REQUIRED_RUNTIME_LIBRARIES into runtime/arm64-v8a/lib
@@ -194,6 +224,15 @@ checkAndApplyServiceUpdate(root):
     manifest = fetch signed manifest from LAN with short timeout
     if LAN connection fails:
         manifest = fetch signed manifest from WAN with bounded timeout
+    for configured source in priority order:
+        if source host is a domain:
+            resolvedIps = DNS lookup source host
+            for resolvedIp in resolvedIps:
+                requestUrl = replace source host with resolvedIp
+                do not set or preserve the original Host header
+                request manifest and relative components with requestUrl
+        if all resolved IPs fail:
+            continue to next configured source
     if neither source responds:
         return KeepInstalledRelease("offline")
     verify RSA signature with public key embedded in APK
@@ -330,6 +369,17 @@ NodeServerService.sendStatus(status, detail, phase?, completedBytes?, totalBytes
     MainActivity renders phase/detail on the existing startup panel
     never report a completed phase before its files are durable
 
+MainActivity.handleBackNavigation():
+    if controlWebView is visible:
+        hide controlWebView
+        restore controlToggleButton visibility and "控制端" label
+        return
+    if displayWebView is visible and control access is allowed:
+        restore controlToggleButton visibility
+        do not call WebView.goBack()
+        return
+    show configuration page using existing Activity behavior
+
 MainActivity.onNodeStatus(STARTING):
     once per Activity process, run min APK check/download/model materialization off the UI thread
     return to UI thread with result
@@ -385,7 +435,7 @@ Android JVM tests:
     min APK omits model assets/manifest but reuses a verified same-revision cache
 
 Build/device checks:
-    build full allserver at baseline versionCode 2, then allserver-min at 3
+    build allserver full with the current allserver-min versionCode, then verify the full APK target name
     confirm equal package ID and signing-certificate digest
     install full over v1 without uninstall; update to min in place
     verify /api/status, /v1/models, chat, ASR/TTS and display UI
