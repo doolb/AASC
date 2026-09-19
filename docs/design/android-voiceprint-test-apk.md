@@ -67,6 +67,18 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 - 流式 ASR 与现有离线 SenseVoice、Sherpa 声纹模型独立加载；每个连接使用一个 stream，结束或断开时显式释放 native stream。
 - 暂不实现流式声纹；声纹仍在完整语音段或 diarization 分段上执行。
 
+## 原生 ASR 录音输入设备选择（2026-09-19）
+
+独立 ASR 测试 APK 的原生录音页增加输入麦克风选择，解决蓝牙麦克风连接后仍固定使用手机内置 `MIC` 的问题。
+
+- 录音设备来源使用 Android `AudioManager.GET_DEVICES_INPUTS`，仅展示系统当前暴露的输入设备，并保留“系统默认”选项。
+- 原生录音使用 `AudioRecord.Builder` 创建实例，并在启动前通过 `setPreferredDevice` 指定用户选择的 `AudioDeviceInfo`；未选择具体设备时继续由系统路由。
+- 下拉框显示设备名称和输入类型，支持系统暴露的蓝牙、USB、有线耳机和内置麦克风等输入设备，不对设备类型写死为某一种蓝牙协议。
+- 选择结果按 Android 音频设备 ID 保存；设备重新连接后若 ID 仍可用则恢复选择，设备断开或不可用时自动回退到系统默认并在页面状态区提示。
+- 设备列表支持手动刷新，并注册 `AudioDeviceCallback` 监听连接/断开；录音期间锁定选择控件，避免录音线程与设备选择同时变化。
+- Android 12 及以上声明并按需申请 `BLUETOOTH_CONNECT`，权限被拒绝时仍可使用系统默认、内置或其他已暴露输入设备。
+- 本次只改变原生 APK 页面和 `AudioRecorder` 路由；内置 HTTPS 网页的 `getUserMedia` 属于浏览器设备链路，不与原生选择器共享状态。
+
 ## 2026-08-27 首轮真机验证结论
 
 - 使用 SM-N9500（Android 9，arm64-v8a）和 `zh.wav`、`en.wav`、`zh-en.wav`、`zh-en-mix.wav` 完成四流程对照；注册库固定使用 `zh.wav → ZH`、`en.wav → EN`。

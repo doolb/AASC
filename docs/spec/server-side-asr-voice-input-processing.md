@@ -27,6 +27,11 @@
   voiceprint.asrResultDetailLog = true（默认）
   控制端开关修改后通过 POST /api/voiceprint/config 保存
   服务端将字段通过 voiceprintConfig 广播给在线显示端（用于配置同步）
+
+来源字段约束：
+  浏览器显示端只在 multipart/form-data 中发送 displayId，不发送 X-AASC-Display-Id 请求头
+  displayId 必须与建立 /display WebSocket 时使用的持久化 ID 相同
+  服务端只通过 req.body.displayId 绑定在线显示端，不按 IP 猜测浏览器来源
 ```
 
 ## 服务端处理伪代码
@@ -64,6 +69,31 @@
     formatAsrResultLog(logData, false)
     日志只打印 requestId、总文字和错误摘要
   继续执行原有 pending ASR 请求响应，不改变结果处理
+```
+
+## 浏览器显示端来源伪代码
+
+```text
+显示端初始化:
+  displayId = ''
+
+connectWebSocket():
+  persistentId = getPersistentDisplayId()
+  displayId = persistentId
+  连接 /display?displayId=persistentId
+
+收到服务端 displayId 消息:
+  displayId = data.id
+
+sendAudioForRecognition(audioBlob, timing):
+  requestDisplayId = trim(displayId)
+  如果 requestDisplayId 为空:
+    requestDisplayId = getPersistentDisplayId()
+  formData.append('audio', audioBlob)
+  formData.append('displayId', requestDisplayId)
+  formData.append('speechStartAt', timing.speechStartAt)
+  formData.append('speechEndAt', timing.speechEndAt)
+  POST /api/asr/recognize(formData)
 ```
 
 ## 合并伪代码
@@ -121,3 +151,4 @@ sendAudioForRecognition(audioBlob, timing):
 - 显示端上传和回显：`src/apps/web-mediacenter/ui/public/display.html`
 - 控制端最近识别面板的声纹诊断字段：`src/apps/web-mediacenter/ui/public/js/device-list.js`
 - 控制端详细日志开关：`src/apps/web-mediacenter/ui/public/upload.html`、`src/apps/web-mediacenter/ui/public/js/voiceprint-panel.js`
+- 浏览器显示端来源绑定回归：`tests/display-asr-audio-pipeline.test.js`

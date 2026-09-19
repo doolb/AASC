@@ -2428,7 +2428,7 @@ function handleDisplayConversationInput(displayId, text) {
             sendConversationPrompt(
                 displayId,
                 result.event.windowType === 'temporary'
-                    ? '已进入临时对话，三十秒内可以继续说话'
+                    ? pickTemporaryPrompt(TEMPORARY_WAKE_PROMPTS)
                     : '已进入群聊模式'
             );
         }
@@ -2455,6 +2455,8 @@ function handleDisplayConversationInput(displayId, text) {
     } else if (result.event?.type === 'input' && result.event.temporaryConversationStarted) {
         chat.setMode('group', null, { source: 'displayVoice', displayId });
         broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
+        // 助手名带内容首次进入临时模式时先给出短确认；后续临时消息不重复播报。
+        sendConversationPrompt(displayId, pickTemporaryPrompt(TEMPORARY_CONTENT_ACK_PROMPTS));
     }
 
     if (result.state.state !== 'waitingWake' && result.state.state !== 'disabled') {
@@ -4129,8 +4131,13 @@ app.post('/api/voiceprint/register', voiceprintUpload.single('audio'), async (re
                 const timer = setTimeout(() => {
                     pendingVoiceprintExtracts.delete(requestId);
                     reject(new Error('显示端声纹提取超时'));
-                }, 30000);
-                pendingVoiceprintExtracts.set(requestId, { resolve, reject, timer });
+                }, 60000);
+                pendingVoiceprintExtracts.set(requestId, {
+                    displayId: display.id,
+                    resolve,
+                    reject,
+                    timer
+                });
                 try {
                     const sent = sendToDisplay(display.id, { type: 'voiceprintExtract', requestId, audioBase64 });
                     // sendToDisplay 返回 false 表示 ws 未 OPEN（显示端在 find 与 send 之间已断开），
@@ -6049,6 +6056,14 @@ function prepareVoiceTtsPlayback(displayId, data) {
 }
 
 let displayListDebounceTimer = null;
+// 临时 render 刷新诊断默认关闭，保留埋点便于后续现场需要时重新开启。
+const ENABLE_RENDER_REFRESH_DIAGNOSTICS = false;
+const displayListDebug = {
+    windowStartedAt: 0,
+    calls: 0,
+    broadcasts: 0,
+    sources: new Set()
+};
 
 const SILENT_BROADCAST_TYPES = new Set(['logUpdate', 'systemStats', 'task:progress', 'task:widget_update', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'htmlProgress']);
 function broadcastToControls(data) {
@@ -6073,10 +6088,33 @@ function broadcastVoiceprintDbUpdated() {
 }
 
 function broadcastDisplayList() {
+    if (ENABLE_RENDER_REFRESH_DIAGNOSTICS) {
+        const now = Date.now();
+        if (!displayListDebug.windowStartedAt) displayListDebug.windowStartedAt = now;
+        displayListDebug.calls += 1;
+        const stack = String(new Error().stack || '').split('\n');
+        displayListDebug.sources.add(stack[2]?.trim() || 'unknown');
+    }
     if (displayListDebounceTimer) return;
     displayListDebounceTimer = setImmediate(() => {
         displayListDebounceTimer = null;
+        if (ENABLE_RENDER_REFRESH_DIAGNOSTICS) displayListDebug.broadcasts += 1;
         const list = getDisplayList();
+        if (ENABLE_RENDER_REFRESH_DIAGNOSTICS) {
+            const debugNow = Date.now();
+            if (debugNow - displayListDebug.windowStartedAt >= 1000) {
+                console.log('[显示列表] displayList 广播诊断', {
+                    calls: displayListDebug.calls,
+                    broadcasts: displayListDebug.broadcasts,
+                    displayIds: list.map((display) => display.id),
+                    sources: Array.from(displayListDebug.sources)
+                });
+                displayListDebug.windowStartedAt = debugNow;
+                displayListDebug.calls = 0;
+                displayListDebug.broadcasts = 0;
+                displayListDebug.sources.clear();
+            }
+        }
         // 调试：打印每个显示端的 webgpu 能力
         for (const d of list) {
             if (d.capabilities.webgpu !== undefined) log('能力', `广播 displayList: ${d.id} webgpu=${d.capabilities.webgpu ? '可用' : '不可用'}`);
@@ -7443,6 +7481,12 @@ wss.on('connection', (ws, req) => {
                 clearTimeout(pending.startTimer);
                 pending.reject(new Error('显示端已离线，TTS 生成失败'));
             }
+            for (const [requestId, pending] of pendingVoiceprintExtracts) {
+                if (pending.displayId !== displayId) continue;
+                pendingVoiceprintExtracts.delete(requestId);
+                clearTimeout(pending.timer);
+                pending.reject(new Error('显示端已离线，声纹提取失败'));
+            }
             rejectPendingVisionRequestsForDisplay(displayId);
             ws.removeAllListeners();
             if (wsServer) {
@@ -8147,18 +8191,28 @@ function handleDisplayCameraMessage(displayId, data) {
  * 但不会真正调用 LLM，前端就只能看到“发送成功但没有回复”。
  */
 async function handleChatMessageRequest(data, { displayId, ws }) {
+    const isDisplayChatSource = Boolean(displayId && displayClients.get(displayId)?.ws === ws);
+    const sendChatUpdate = (message) => {
+        ws.send(JSON.stringify(message));
+        if (isDisplayChatSource) {
+            broadcastToControls({
+                ...message,
+                displayId
+            });
+        }
+    };
     try {
         // Agent 消息显式使用 assistantType；旧控制端只发 mode=role 时继续兼容。
         const isAgentMessage = data.assistantType === 'agent' ||
             (!data.assistantType && data.mode === 'role');
         if (isAgentMessage) {
             if (Array.isArray(data.images) && data.images.length > 0) {
-                ws.send(JSON.stringify({
+                sendChatUpdate({
                     type: 'chatResponse',
                     requestId: data.requestId,
                     success: false,
                     error: 'Agent 暂不支持图片输入'
-                }));
+                });
                 return;
             }
             const session = chat.getSession();
@@ -8180,12 +8234,12 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
                 onError: (error) => logError('Chat', `Agent TTS生成失败: ${error.message}`)
             });
             if (!data.role) {
-                ws.send(JSON.stringify({ type: 'roleError', message: 'Agent 消息缺少角色' }));
+                sendChatUpdate({ type: 'roleError', message: 'Agent 消息缺少角色' });
                 return;
             }
             // 角色名来自前端输入：先确认存在，避免对不存在的角色静默建孤儿目录。
             if (!aiRoles.list().some(r => r.name === data.role)) {
-                ws.send(JSON.stringify({ type: 'roleError', message: '角色不存在' }));
+                sendChatUpdate({ type: 'roleError', message: '角色不存在' });
                 return;
             }
             await aiRoles.chat(data.role, data.content, {
@@ -8194,19 +8248,19 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
                     broadcastToControls({ type: 'roleList', roles: aiRoles.list() });
                 },
                 onChunk: (chunk, message, requestId) => {
-                    ws.send(JSON.stringify({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message }));
+                    sendChatUpdate({ type: 'chatChunk', requestId: requestId || data.requestId, chunk, message });
                     agentTtsStream.onChunk(chunk);
                 },
                 onComplete: (message, history, requestId) => {
-                    ws.send(JSON.stringify({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history }));
+                    sendChatUpdate({ type: 'chatResponse', requestId: requestId || data.requestId, success: true, message, history });
                     void agentTtsStream.onComplete(message);
                 },
-                onError: (error) => ws.send(JSON.stringify({
+                onError: (error) => sendChatUpdate({
                     type: 'chatResponse',
                     requestId: data.requestId,
                     success: false,
                     error: error instanceof Error ? error.message : error
-                }))
+                })
             });
             return;
         }
@@ -8231,17 +8285,17 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
             temporaryConversation: data.temporaryConversation === true || data.mode === 'temporary',
             temporaryConversationId: data.temporaryConversationId || null,
             sendToControl: (msg) => {
-                ws.send(JSON.stringify(msg));
+                sendChatUpdate(msg);
             }
         });
     } catch (err) {
         logError('Chat', `处理失败: ${err.message}`);
-        ws.send(JSON.stringify({
+        sendChatUpdate({
             type: 'chatResponse',
             requestId: data.requestId,
             success: false,
             error: err.message
-        }));
+        });
     }
 }
 
@@ -8991,7 +9045,7 @@ async function handleControlMessageFallback(data, ws) {
                 } else if (data.type === 'chatHistory') {
                     ws.send(JSON.stringify({
                         type: 'chatHistory',
-                        history: chat.getHistory()
+                        history: chat.getHistory({ preserveThink: data.source === 'displayChat' })
                     }));
                     return;
                 } else if (data.type === 'clearChatHistory') {
@@ -9044,6 +9098,12 @@ async function handleControlMessageFallback(data, ws) {
                         type: 'chatSession',
                         session
                     });
+                    if (data.source === 'displayChat') {
+                        ws.send(JSON.stringify({
+                            type: 'chatSession',
+                            session
+                        }));
+                    }
                     return;
                 } else if (data.type === 'listPrivateSessions') {
                     ws.send(JSON.stringify({

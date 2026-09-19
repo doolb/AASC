@@ -48,7 +48,7 @@
     ]
   },
   "ui": {
-    "controlTheme": "girl-pink"
+    "controlTheme": "mint"
   },
   "display": {
     "versionCheckIntervalMs": 300000
@@ -141,7 +141,7 @@
   "logBlocklist": [],
   "chat": {
     "agentBackend": "codex",
-    "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+    "apiUrl": "http://127.0.0.1:8083/v1/chat/completions",
     "model": "Qwen3.6-Flash",
     "maxTokens": 65536,
     "temperature": 0.7,
@@ -158,11 +158,13 @@
         "maxTokens": 1000,
         "temperature": 0.7,
         "contextCount": 5,
-        "apiKey": ""
+        "apiKey": "",
+        "protocol": "openai-responses"
       },
       {
         "name": "qwen3.5",
-        "apiUrl": "http://127.0.0.1:8082/v1/chat/completions",
+        "protocol": "openai-responses",
+        "apiUrl": "http://127.0.0.1:8083/v1/chat/completions",
         "model": "Qwen3.6-Flash",
         "maxTokens": 65536,
         "temperature": 0.7,
@@ -173,9 +175,6 @@
         "backend": "pi"
       }
     ],
-    "protocol": "openai-responses",
-    "responsesBaseUrl": "https://127.0.0.1:8081/v1",
-    "responsesApiKey": "",
     "codexProxy": "http://127.0.0.1:7899",
     "promptFormat": "raw",
     "mode": "agent",

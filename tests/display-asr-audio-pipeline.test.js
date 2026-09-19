@@ -27,6 +27,34 @@ test('录音显示端使用原始 PCM 公共 ASR，APK 提供端保留原生入�
     assert.doesNotMatch(display, /new MediaRecorder\(/);
 });
 
+test('浏览器显示端 ASR 使用持久化 displayId 绑定来源且不依赖请求头', () => {
+    const display = fs.readFileSync(DISPLAY, 'utf8');
+    const connectStart = display.indexOf('function connectWebSocket()');
+    const connectEnd = display.indexOf('socket.onopen = function()', connectStart);
+    const connectBlock = display.slice(connectStart, connectEnd);
+    const recognitionStart = display.indexOf('async function sendAudioForRecognition');
+    const recognitionEnd = display.indexOf('// 只有服务器选中的 APK 提供端', recognitionStart);
+    const recognitionBlock = display.slice(recognitionStart, recognitionEnd);
+
+    assert.match(display, /let displayId = '';/, '显示端应显式保存运行时来源 ID');
+    assert.match(
+        connectBlock,
+        /const id = getPersistentDisplayId\(\);[\s\S]*displayId = id;/,
+        'WebSocket 连接初始化应立即复用持久化 ID'
+    );
+    assert.match(
+        recognitionBlock,
+        /const requestDisplayId = typeof displayId === 'string'[\s\S]*\? displayId\.trim\(\)[\s\S]*: getPersistentDisplayId\(\);/,
+        'ASR 上传应在运行时 ID 缺失时回退到持久化 ID'
+    );
+    assert.match(
+        recognitionBlock,
+        /formData\.append\(['"]displayId['"], requestDisplayId\)/,
+        'ASR 上传应通过 multipart displayId 字段传递来源'
+    );
+    assert.doesNotMatch(recognitionBlock, /X-AASC-Display-Id/i, '浏览器显示端不应依赖来源请求头');
+});
+
 test('APK 录音不主动启用浏览器回声消除和噪声抑制', () => {
     const display = fs.readFileSync(DISPLAY, 'utf8');
     const recordingBlock = display.match(/micStream = await navigator\.mediaDevices\.getUserMedia\(\{([\s\S]*?)\}\);/);

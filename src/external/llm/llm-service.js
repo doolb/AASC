@@ -888,6 +888,9 @@ function getTemplateSystemPrompt(templateName) {
 }
 
 function getHistory() {
+    // 兼容旧的静态契约和无参数调用；显示端通过可选首参数请求保留 think。
+    const options = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : {};
+    const preserveThink = options.preserveThink === true;
     const all = [];
     for (const messages of Object.values(chatHistories)) {
         // 历史展示不能绑定当前 profile：切换/恢复模型配置后，旧消息仍然是有效记录。
@@ -896,11 +899,11 @@ function getHistory() {
     }
     all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     return all.map((message) => {
-        if (message.role === 'assistant' && typeof message.content === 'string') {
+        if (!preserveThink && message.role === 'assistant' && typeof message.content === 'string') {
             const content = stripThinkBlocks(message.content);
             return content === message.content ? message : { ...message, content };
         }
-        if (typeof message.assistant === 'string') {
+        if (!preserveThink && typeof message.assistant === 'string') {
             const assistant = stripThinkBlocks(message.assistant);
             return assistant === message.assistant ? message : { ...message, assistant };
         }

@@ -126,7 +126,7 @@ Offline APK 控制端手动切换聊天模式:
             转交现有 voiceCommand 处理，不改变会话状态
         否则若纯文本匹配任意已配置角色名:
             设置 activeGroup，windowType=temporary
-            发送临时对话确认
+            从 temporaryWakePrompts 随机选择并发送一条短确认，替换原“已进入临时对话……”提示
             不发送当前纯唤醒文本到聊天
         否则若匹配“开始对话”:
             设置 activeGroup，windowType=conversation
@@ -139,6 +139,7 @@ Offline APK 控制端手动切换聊天模式:
             若 addressedGroupMode == 'temporary'（默认）:
                 设置 activeGroup，windowType=temporary，更新 lastValidInputAt
                 返回 { type: 'input', addressedAssistant, temporaryConversationStarted: true }
+                从 temporaryContentAckPrompts 随机选择并发送一次短确认，再将原始内容发送到临时聊天
             否则（addressedGroupMode == 'oneShot'）:
                 保持 waitingWake，不写入 lastValidInputAt
                 返回 { type: 'input', addressedAssistant, oneShotGroup: true }
@@ -149,6 +150,18 @@ Offline APK 控制端手动切换聊天模式:
             更新状态并发送确认
         否则将文本交给现有 voiceCommand 处理，并标记 conversationActive=true
         有效输入更新 lastValidInputAt
+
+临时模式首次响应:
+    wake 事件且 windowType == temporary:
+        temporaryWakePrompts = ['嗯，我在', '哎，我在', '我在呢', '在呢', '听着呢']
+        随机选择 temporaryWakePrompts 中一项并发送，不发送唤醒文本到聊天
+    input 事件且 temporaryConversationStarted == true:
+        temporaryContentAckPrompts = ['好的', '收到', '明白', '好嘞', '没问题', '交给我吧']
+        随机选择 temporaryContentAckPrompts 中一项并发送，再继续原有聊天处理
+    临时会话后续 input:
+        不重复发送首次确认
+    oneShotGroup == true:
+        不使用临时模式确认文案，保持一次性群聊原有流程
 
 纯助手唤醒判断:
     先执行 parseConversationCommand(text, assistants)
@@ -176,7 +189,8 @@ waitingWake 中的免唤醒范围:
         显示“会话与模式命令”区域
         显示“开始对话” -> 开启持续群聊语音窗口
         显示“结束对话” -> 结束当前语音对话
-        显示“{助手名字}” -> 临时唤醒指定助手并进入群聊
+        显示“{助手名字}” -> 临时唤醒指定助手，随机播报短确认并等待后续内容
+        显示“{助手名字}+内容” -> 临时唤醒指定助手，随机播报短确认并直接处理内容
         显示“你好{助手名字}”或“{助手名字}你好” -> 进入指定助手私聊
         显示“{助手名字}再见”或“再见{助手名字}” -> 结束指定助手私聊
         显示“进入群聊” -> 免唤醒进入持续群聊
@@ -197,7 +211,8 @@ waitingWake 中的免唤醒范围:
     getVoiceCommandHelpText():
         读取 getBuiltinVoiceCommands()
         读取 chat.getCommands() 中的自定义关键词和动作
-        加入私聊、退出私聊、系统记录等会话/系统指令说明
+        加入纯助手名临时唤醒、助手名加内容临时提问、私聊、退出私聊、系统记录等会话/系统指令说明
+        说明临时唤醒和首次带内容处理会随机播报短确认
         按当前配置拼接完整帮助播报文本
     getVoiceCommandHelpText(topic):
         topic 为空 -> 返回完整帮助
@@ -446,10 +461,14 @@ startVoiceRecording():
     getUserMedia(audio)
     PcmAudioCapture.start(stream)
     VAD 检测到语音结束 -> takeWav()
-    POST /api/asr/recognize(audio=wav)
+    POST /api/asr/recognize(audio=wav, displayId=当前持久化显示端ID)
 
 sendAudioForRecognition(wav):
+    requestDisplayId = trim(运行时 displayId)
+    如果 requestDisplayId 为空:
+        requestDisplayId = getPersistentDisplayId()
     POST /api/asr/recognize
+    multipart 表单追加 displayId=requestDisplayId
     服务端 device=server -> 服务端 ASR 识别
     服务端 device=display -> 按 displayClients 当前连接顺序选择第一个 voiceRecognition=true 的显示端
     读取公共接口统一返回

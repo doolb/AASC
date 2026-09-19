@@ -42,10 +42,21 @@
  去重 → 未匹配门控 → 唤醒/命令
 ```
 
+## 浏览器显示端来源绑定
+
+浏览器显示端已经通过 URL 参数或 `localStorage` 持久化自己的 `displayId`，WebSocket 连接和 ASR 上传必须复用同一个 ID。ASR 请求只使用 multipart 表单字段 `displayId`，不新增或依赖 `X-AASC-Display-Id` 请求头。
+
+- 显示端建立或重连 WebSocket 时，先将 `getPersistentDisplayId()` 得到的 ID 写入当前运行时来源变量。
+- 显示端调用 `/api/asr/recognize` 时，优先使用当前运行时 ID；运行时 ID 尚未收到服务端回传时，回退到同一个持久化 ID。
+- 服务端继续通过 `req.body.displayId` 查找在线显示端；字段缺失时只返回 ASR 回显，不进入该显示端的语音命令链路。
+- ASR 提供端可以是另一台具备识别能力的显示端，提供端回传的 `asrResult` 不改变原始录音显示端来源。
+
 ## 兼容与边界
 
 - `displayId` 只用于确认上传来源和路由命令，不能通过 IP 推断来源。
 - 没有 `displayId` 的旧请求仍返回识别结果，但服务端不代替旧显示端发送 `voiceInput`。
+- 浏览器显示端不通过 IP 猜测来源；必须在表单中携带与 WebSocket 连接相同的持久化 `displayId`。
+- 仅使用表单字段完成浏览器显示端来源绑定，不要求浏览器发送自定义来源请求头。
 - 原有 `voiceInput` WebSocket 消息继续兼容，并复用同一套服务端处理函数。
 - 本次不更换 ASR 或声纹模型，不改变相似度算法和阈值含义。
 - 详细日志开关只影响服务端 `asrResult` 日志内容，不影响 ASR 结果、声纹匹配、分段合并、命令门控或控制端 `voiceInput` 回显。
@@ -61,5 +72,6 @@
 
 - 已完成服务端统一处理、相邻同说话人分段合并、未识别声纹分数回显和旧 WebSocket 兼容。
 - 已完成显示端 `displayId`/时间区间上传，显示端仅显示服务端返回的合并结果。
+- 已修复浏览器显示端运行时 ID 尚未同步时 ASR 表单缺少 `displayId` 的问题；连接初始化和上传回退均复用持久化 ID。
 - 已完成 `asrResult` 详细日志格式化、控制端开关和配置保存/广播接入。
 - WebSocket 日志使用当前消息的 `logData` 作为格式化输入；完成态消息可先合并流式文字，普通 `asrResult` 保持原消息字段不变。

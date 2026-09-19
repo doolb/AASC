@@ -20,6 +20,10 @@
 
 ## Android ASR APK
 
+- 🔄进行中 [2026-09-19] 为独立 ASR 测试 APK 增加原生麦克风选择
+  - 支持系统默认、蓝牙、USB/有线等 Android 当前输入设备，录音通过 `AudioRecord.setPreferredDevice` 使用选择设备；设备断开自动回退默认。
+  - 关联文档：`docs/design/android-voiceprint-test-apk.md`；`docs/spec/android-voiceprint-test-apk.md`；`docs/task/20260919_ASR测试APK麦克风选择.md`。
+
 - ⏳待现场验收 [2026-09-11] 在独立 ASR 测试 APK 原生页面使用测试 WAV 完成 Sherpa 声纹注册和三种测试模式回归
   - APK 已构建、安装和启动；设备 UI 自动化桥返回空 root，尚未自动完成注册、单段、多段、快速多段及双降噪开关的点击验证。
   - 2026-09-12 已通过同一 APK 的 HTTPS 测试页面完成三个模型/FP32-INT8 的单段和普通分段回归；原生页面按钮链路仍待单独现场点击验收。

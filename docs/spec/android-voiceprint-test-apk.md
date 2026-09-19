@@ -28,6 +28,73 @@ VoiceprintTestResult:
   embeddingMs
   asrMs
   error
+
+AudioInputDevice:
+  id: Android AudioDeviceInfo.id，系统默认项为空
+  label: 设备产品名 + 输入类型
+  type: Android AudioDeviceInfo.type
+  platformDevice: 可选 AudioDeviceInfo；系统默认项为空
+
+AudioInputSelection:
+  selectedDeviceId: 设备 id 或 SYSTEM_DEFAULT
+  persisted: Boolean
+
+## 原生 ASR 麦克风选择伪代码
+
+```text
+MainActivity 初始化:
+  绑定 audioInputSpinner、refreshAudioInputButton、audioInputStatus
+  创建 AudioRecorder
+  从 SharedPreferences 读取 selectedDeviceId，缺省为 SYSTEM_DEFAULT
+  调用 refreshAudioInputDevices(requestBluetoothPermission=false)
+
+刷新输入设备:
+  如果主动刷新且 Android >= 12 且没有 BLUETOOTH_CONNECT:
+    请求 BLUETOOTH_CONNECT
+    权限回调后重新刷新
+  devices = AudioManager.getDevices(GET_DEVICES_INPUTS)
+  过滤无效设备并按 AudioDeviceInfo.id 去重
+  列表首项固定为 SYSTEM_DEFAULT
+  若持久化设备仍在列表:
+    选中该设备
+  否则:
+    选中 SYSTEM_DEFAULT
+    在状态区提示“原设备不可用，已回退系统默认”
+  将设备名称、输入类型填充到 Spinner
+
+设备连接变化:
+  AudioDeviceCallback.onAudioDevicesAdded/Removed:
+    若当前未录音:
+      刷新输入设备列表
+    若当前正在录音:
+      保持当前录音实例，停止录音后再刷新列表
+
+开始原生录音:
+  selectedDevice = 当前 Spinner 选项
+  若 selectedDevice 为 SYSTEM_DEFAULT:
+    AudioRecorder.start(preferredDevice=null)
+  否则:
+    AudioRecorder.start(preferredDevice=selectedDevice.platformDevice)
+  成功:
+    禁用麦克风 Spinner 和刷新按钮
+    状态显示“录音中 + 当前设备名”
+  失败:
+    释放 AudioRecord
+    保持设备选择不变并显示启动失败
+
+AudioRecorder.start(preferredDevice):
+  获取 16 kHz、单声道、PCM16 的最小缓冲区
+  使用 AudioRecord.Builder 创建 AudioRecord
+  preferredDevice 不为空 -> 调用 setPreferredDevice(preferredDevice)
+  如果指定设备路由失败:
+    释放 AudioRecord 并返回 false
+  启动录音线程，持续读取 PCM16
+
+停止原生录音:
+  停止并释放 AudioRecord
+  恢复麦克风 Spinner 和刷新按钮
+  返回已采集 PCM
+```
 ```
 
 ## 网页流程

@@ -1,5 +1,26 @@
 # Android 显示端原生声纹识别设计补充
 
+## 2026-09-19 声纹模型启动预热与注册等待
+
+### 目标
+
+Offline APK 在显示页初始化阶段与原生 ASR 一起预热声纹模型，保证声纹注册和声纹识别共享同一个已加载的 `VoiceprintEngine`。模型正在加载时，注册请求进入显示端等待队列；模型失败或等待超时才返回错误，不要求用户重新录音。
+
+### 生命周期约束
+
+- Node Runtime 先完成 Offline 模型文件解包，WebView 连接服务端后才触发原生引擎加载。
+- ASR、声纹 embedding、声纹分割模型分别维护 ready 状态，不使用单一模型状态互相覆盖。
+- 注册只依赖声纹引擎 ready；单人识别依赖声纹引擎和声纹库；多人识别额外依赖 ASR。
+- 声纹库同步完成不能单独声明声纹能力 ready。
+- Offline 内置模型只校验和加载，不发起本机 HTTP 下载；在线 APK 保留原有按需下载流程。
+
+### 请求策略
+
+- `voiceprintConfig.enabled=true` 到达后立即启动声纹预热。
+- `voiceprintExtract` 在引擎加载中等待 ready 回调，最长等待 60 秒。
+- ready 后继续执行所有等待中的提取请求；error、禁用、WebSocket 断开或超时则逐个回传明确错误。
+- `voiceprintMatch`、`voiceprintDiarize` 沿用识别端 ready 门控，禁止在模型未 ready 时误报声纹能力。
+
 ## 外部模型加载
 
 APK 下载的声纹模型保存在应用私有目录，并通过绝对路径传给 sherpa-onnx。`SpeakerEmbeddingExtractor` 和 `OfflineSpeakerDiarization` 构造时必须传入空 `AssetManager`，使 AAR 走文件系统加载分支；非空 `AssetManager` 只适用于 APK assets 中的资源。

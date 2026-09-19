@@ -19,12 +19,15 @@ test('android ASR package declares required offline model and HTTP permissions',
   assert.match(build, /tokens\.txt/);
   assert.match(build, /arm64-v8a/);
   assert.match(manifest, /RECORD_AUDIO/);
+  assert.match(manifest, /BLUETOOTH_CONNECT/);
   assert.match(manifest, /INTERNET/);
 });
 
 test('android ASR UI and HTTP endpoints are present', () => {
   const layout = read('3rd/tts-server/android-asr/app/src/main/res/layout/activity_main.xml');
   const main = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/MainActivity.kt');
+  const recorder = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AudioRecorder.kt');
+  const inputDevice = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AudioInputDevice.kt');
   const voiceprintModel = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/VoiceprintModel.kt');
   const server = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrHttpServer.kt');
   const page = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrWebPage.kt');
@@ -34,6 +37,9 @@ test('android ASR UI and HTTP endpoints are present', () => {
   assert.match(layout, /recognizeButton/);
   assert.match(layout, /resultText/);
   assert.match(layout, /cpuModeSpinner/);
+  assert.match(layout, /audioInputSpinner/);
+  assert.match(layout, /refreshAudioInputButton/);
+  assert.match(layout, /audioInputStatus/);
   assert.match(layout, /voiceprintStatus/);
   assert.match(layout, /voiceprintModelSpinner/);
   assert.match(layout, /voiceprintPrecisionSpinner/);
@@ -54,6 +60,12 @@ test('android ASR UI and HTTP endpoints are present', () => {
   assert.match(main, /VoiceprintUiRequest\.create/);
   assert.match(main, /UiStatus\.voiceprintResult/);
   assert.match(main, /reloadVoiceprintVariant/);
+  assert.match(main, /AudioInputDevice\.enumerate/);
+  assert.match(main, /BLUETOOTH_CONNECT/);
+  assert.match(recorder, /start\(preferredDevice: AudioDeviceInfo\? = null\)/);
+  assert.match(recorder, /audioRecord\.setPreferredDevice\(preferredDevice\)/);
+  assert.match(inputDevice, /GET_DEVICES_INPUTS/);
+  assert.match(inputDevice, /TYPE_BLUETOOTH_SCO/);
   assert.match(main, /switchVoiceprintVariantFromHttp/);
   assert.match(main, /R\.string\.http_ready/);
   assert.match(strings, /name="http_ready"/);

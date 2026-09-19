@@ -1,3 +1,6 @@
+// 临时 render 刷新诊断默认关闭，保留埋点便于后续现场需要时重新开启。
+const DEVICE_LIST_RENDER_REFRESH_DIAGNOSTICS_ENABLED = false;
+
 const DeviceList = {
     list: [],
     selectionMode: 'single',
@@ -22,6 +25,35 @@ const DeviceList = {
     displayCameraByDisplay: new Map(),
     // LLM 模型清单由服务端统一下发；每个显示端只保存当前选择的一项。
     llmModelManifest: { models: [] },
+    // 临时诊断：统计控制端显示列表消息和完整 render 的调用频率，确认是否存在异常刷新。
+    _renderDebug: {
+        windowStartedAt: 0,
+        counts: {},
+        callers: new Set(),
+        displayIds: []
+    },
+
+    _recordRenderDebug(event, displayIds = this.list.map((display) => display.id)) {
+        if (!DEVICE_LIST_RENDER_REFRESH_DIAGNOSTICS_ENABLED) return;
+        const now = Date.now();
+        const debug = this._renderDebug;
+        if (!debug.windowStartedAt) debug.windowStartedAt = now;
+        debug.counts[event] = (debug.counts[event] || 0) + 1;
+        debug.displayIds = Array.isArray(displayIds) ? displayIds : [];
+        if (event === 'render') {
+            const stack = String(new Error().stack || '').split('\n');
+            debug.callers.add(stack[3]?.trim() || 'unknown');
+        }
+        if (now - debug.windowStartedAt < 1000) return;
+        console.warn('[DeviceList] 刷新诊断', {
+            counts: { ...debug.counts },
+            displayIds: debug.displayIds,
+            callers: Array.from(debug.callers)
+        });
+        debug.windowStartedAt = now;
+        debug.counts = {};
+        debug.callers.clear();
+    },
 
     getDisplays() {
         return this.list || [];
@@ -1271,6 +1303,7 @@ const DeviceList = {
     },
 
     render() {
+        this._recordRenderDebug('render');
         this.renderToContainer('deviceList');
         this.renderToContainer('mediaDeviceList');
         this.renderVoiceVadPanel();
@@ -2230,6 +2263,7 @@ const DeviceList = {
 
     setDisplayList(list) {
         const nextList = list || [];
+        this._recordRenderDebug('displayList', nextList.map((display) => display.id));
         const onlineIds = new Set(nextList.map((display) => display.id));
         for (const displayId of this.voiceInputByDisplay.keys()) {
             if (!onlineIds.has(displayId)) this.voiceInputByDisplay.delete(displayId);

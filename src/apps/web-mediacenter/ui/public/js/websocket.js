@@ -1,5 +1,14 @@
+// 临时 render 刷新诊断默认关闭，保留埋点便于后续现场需要时重新开启。
+const WEBSOCKET_RENDER_REFRESH_DIAGNOSTICS_ENABLED = false;
+
 const WebSocketManager = {
     ws: null,
+    // 临时诊断：统计服务端 displayList 消息，和 DeviceList.render 日志对照刷新来源。
+    _displayListDebug: {
+        windowStartedAt: 0,
+        count: 0,
+        displayIds: []
+    },
     
     connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -47,6 +56,23 @@ const WebSocketManager = {
         }
         
         if (data.type === 'displayList') {
+            if (WEBSOCKET_RENDER_REFRESH_DIAGNOSTICS_ENABLED) {
+                const debug = this._displayListDebug;
+                const now = Date.now();
+                if (!debug.windowStartedAt) debug.windowStartedAt = now;
+                debug.count += 1;
+                debug.displayIds = Array.isArray(data.list)
+                    ? data.list.map((display) => display.id)
+                    : [];
+                if (now - debug.windowStartedAt >= 1000) {
+                    console.warn('[WebSocketManager] displayList 刷新诊断', {
+                        count: debug.count,
+                        displayIds: debug.displayIds
+                    });
+                    debug.windowStartedAt = now;
+                    debug.count = 0;
+                }
+            }
             if (window.DeviceList) {
                 window.DeviceList.setDisplayList(data.list);
             }

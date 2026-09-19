@@ -13,6 +13,17 @@ window.onVoiceprintModel({state,progress,error,engineReady})  # 模型下载/引
 window.onVoiceprintDb({state:'ready'|'error', speakers, error})  # 声纹库同步结果
 ```
 
+模型就绪状态分为三层：
+
+```
+modelReady   = 内置或下载模型文件校验通过
+engineReady  = VoiceprintEngine.load 成功
+dbReady      = VoiceprintEngine.setDb 完成
+registerReady = engineReady
+matchReady    = engineReady 且 dbReady
+diarizeReady  = engineReady 且 dbReady 且 AsrEngine.ready
+```
+
 ## VoiceprintDbCodec（纯逻辑，JVM 单测）
 
 ```
@@ -69,13 +80,24 @@ voiceprintSyncDb(dbJson)      → VoiceprintDbCodec.speakersFromDb→VoiceprintE
 ## display.html（接入点）
 
 ```
-全局: nativeVoiceprintAvailable/nativeVoiceprintEnabled/nativeVoiceprintReady/nativeVoiceprintMultiSpeaker
-onVoiceprintModel: ready+engineReady → voiceprintReady=true；error → false
-onVoiceprintDb: ready → voiceprintReady=true，log 人数
+全局: nativeVoiceprintAvailable/nativeVoiceprintEnabled/voiceprintEngineReady/voiceprintDbReady/voiceprintReady/nativeVoiceprintMultiSpeaker
+onVoiceprintModel:
+  downloading → 记录加载状态并提示进度
+  ready 且 engineReady=true → voiceprintEngineReady=true，释放等待提取请求
+  error 或 ready 且 engineReady=false → voiceprintEngineReady=false，拒绝等待请求
+onVoiceprintDb:
+  ready → voiceprintDbReady=true；仅当 voiceprintEngineReady 同时为 true 才设置 voiceprintReady=true
+  error → voiceprintDbReady=false，voiceprintReady=false
 detectCapabilities: voiceprintAvailable = nativeVoiceprintAvailable
+WS asrConfig/voiceprintConfig → 在显示页初始化阶段分别触发 ASR 和声纹预热；两个 ready 状态独立上报
 WS voiceprintConfig → 存 enabled/multiSpeaker → voiceprintConfigure + fetch('/api/voiceprint/db')→voiceprintSyncDb
 WS speakerDbUpdated → fetch db → voiceprintSyncDb（静默）
-WS voiceprintExtract → voiceprintExtract(audioBase64) → 回 voiceprintExtracted{embedding}
+WS voiceprintExtract:
+  nativeVoiceprintAvailable=false → 回 voiceprintExtracted{embedding:[],error:'声纹桥不可用'}
+  voiceprintConfig 尚未到达 → 等待配置，最多 60 秒
+  voiceprintEngineReady=false → 等待 engineReady，最多 60 秒
+  ready → 调用 voiceprintExtract(audioBase64) → 回 voiceprintExtracted{embedding}
+  error/超时/断线 → 回 voiceprintExtracted{embedding:[],error}
 handleAsrAudio 原生路径:
   voiceprint enabled+ready:
     multiSpeaker → voiceprintDiarize → asrResult{segments}
@@ -94,7 +116,7 @@ GET  /api/voiceprint/config             # {enabled, extraction, threshold=0.3, m
 POST /api/voiceprint/config             # 校验 + 保存 + 广播 voiceprintConfig
 GET  /api/voiceprint/db                 # {version, dim, speakers}
 POST /api/voiceprint/remove             # 删除某 name 声纹
-POST /api/voiceprint/register           # multipart(audio+name)；extraction='server'→voiceprint-service 提取 / 'display'→中转 APK
+POST /api/voiceprint/register           # multipart(audio+name)；extraction='server'→voiceprint-service 提取 / 'display'→中转 APK；display 等待声纹引擎最多 60 秒
 WS  voiceprintExtract(requestId, audioBase64) → APK 回 voiceprintExtracted{embedding}
 WS  speakerDbUpdated                     # 库变更广播
 asrResult resolve 升级: {text, speaker?, segments?}

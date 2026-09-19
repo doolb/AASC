@@ -287,6 +287,14 @@
         const nativeVoiceprintAvailable = !!(window.NativeDisplay && window.NativeDisplay.voiceprintMatch);
         let voiceprintEnabled = false;
         let voiceprintReady = false;
+        // 声纹模型、声纹引擎和声纹库是三个不同阶段；注册只依赖引擎，识别还依赖声纹库。
+        let voiceprintConfigReceived = false;
+        let voiceprintEngineState = 'not_ready';
+        let voiceprintEngineError = '';
+        let voiceprintEngineReady = false;
+        let voiceprintDbReady = false;
+        const VOICEPRINT_READY_TIMEOUT_MS = 60000;
+        const voiceprintReadyWaiters = new Set();
         let voiceprintMultiSpeaker = true;
         let voiceprintMultiMode = 'fast';
         let voiceprintSpeakerCount = 'AUTO';
@@ -299,13 +307,29 @@
         // 声纹模型下载/引擎加载事件（NativeBridge voiceprintConfigure 触发）
         window.onVoiceprintModel = function(payload) {
             if (!payload) return;
-            if (payload.state === 'ready' && payload.engineReady) {
-                voiceprintReady = true;
+            if (payload.state === 'downloading') {
+                voiceprintEngineState = 'downloading';
+                voiceprintEngineError = '';
+                updateVoiceTextDisplay('声纹模型加载中' + (Number.isFinite(Number(payload.progress)) ? ` ${payload.progress}%` : ''), true);
+                return;
+            }
+            if (payload.state === 'ready' && payload.engineReady === true) {
+                voiceprintEngineState = 'ready';
+                voiceprintEngineError = '';
+                voiceprintEngineReady = true;
+                resolveVoiceprintReadyWaiters();
+                updateVoiceprintReadiness();
                 updateVoiceTextDisplay('声纹引擎已就绪', true);
                 setTimeout(() => updateVoiceTextDisplay('', true), 2000);
-            } else if (payload.state === 'error') {
-                voiceprintReady = false;
-                updateVoiceTextDisplay('声纹模型下载失败: ' + (payload.error || '未知错误'), true);
+                return;
+            }
+            if (payload.state === 'error' || payload.state === 'ready') {
+                voiceprintEngineState = 'error';
+                voiceprintEngineError = payload.error || '声纹引擎加载失败';
+                voiceprintEngineReady = false;
+                rejectVoiceprintReadyWaiters(voiceprintEngineError);
+                updateVoiceprintReadiness();
+                updateVoiceTextDisplay('声纹模型加载失败: ' + voiceprintEngineError, true);
                 setTimeout(() => updateVoiceTextDisplay('', true), 4000);
             }
         };
@@ -314,14 +338,89 @@
         window.onVoiceprintDb = function(payload) {
             if (!payload) return;
             if (payload.state === 'ready') {
-                voiceprintReady = true;
+                voiceprintDbReady = true;
+                updateVoiceprintReadiness();
                 const n = (payload.speakers || []).length;
                 console.log('[声纹] 声纹库已同步', n, '人');
             } else if (payload.state === 'error') {
-                voiceprintReady = false;
+                voiceprintDbReady = false;
+                updateVoiceprintReadiness();
                 console.warn('[声纹] 声纹库同步失败:', payload.error);
             }
         };
+
+        function updateVoiceprintReadiness() {
+            // voiceprintReady 是识别能力，不是单纯的模型能力；注册等待只读取 voiceprintEngineReady。
+            voiceprintReady = voiceprintEnabled && voiceprintEngineReady && voiceprintDbReady;
+        }
+
+        function resolveVoiceprintReadyWaiters() {
+            for (const waiter of [...voiceprintReadyWaiters]) {
+                voiceprintReadyWaiters.delete(waiter);
+                clearTimeout(waiter.timer);
+                waiter.resolve();
+            }
+        }
+
+        function rejectVoiceprintReadyWaiters(message) {
+            for (const waiter of [...voiceprintReadyWaiters]) {
+                voiceprintReadyWaiters.delete(waiter);
+                clearTimeout(waiter.timer);
+                waiter.reject(new Error(message));
+            }
+        }
+
+        function waitForVoiceprintEngineReady() {
+            if (!nativeVoiceprintAvailable) {
+                return Promise.reject(new Error('声纹桥不可用'));
+            }
+            if (voiceprintEngineReady) return Promise.resolve();
+            if (voiceprintConfigReceived && !voiceprintEnabled) {
+                return Promise.reject(new Error('声纹功能未启用'));
+            }
+            if (voiceprintEngineState === 'error') {
+                return Promise.reject(new Error(voiceprintEngineError || '声纹引擎加载失败'));
+            }
+            return new Promise((resolve, reject) => {
+                const waiter = {
+                    resolve,
+                    reject,
+                    timer: setTimeout(() => {
+                        voiceprintReadyWaiters.delete(waiter);
+                        reject(new Error('声纹模型加载超时'));
+                    }, VOICEPRINT_READY_TIMEOUT_MS)
+                };
+                voiceprintReadyWaiters.add(waiter);
+            });
+        }
+
+        function sendVoiceprintExtracted(socket, data, result) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify({
+                type: 'voiceprintExtracted',
+                requestId: data.requestId,
+                embedding: result.embedding || [],
+                error: result.error || ''
+            }));
+        }
+
+        // 声纹注册可能早于异步模型加载完成；等待引擎 ready 后再调用原生提取，避免丢失本次录音。
+        async function handleVoiceprintExtract(data, socket) {
+            if (!nativeVoiceprintAvailable) {
+                sendVoiceprintExtracted(socket, data, { error: '声纹桥不可用' });
+                return;
+            }
+            try {
+                await waitForVoiceprintEngineReady();
+                const result = JSON.parse(nativeBridge.voiceprintExtract(data.audioBase64));
+                sendVoiceprintExtracted(socket, data, result);
+            } catch (error) {
+                sendVoiceprintExtracted(socket, data, {
+                    embedding: [],
+                    error: error.message || '声纹提取失败'
+                });
+            }
+        }
 
         let localAsrStreaming = false;
         window.onNativeAsrModel = function(payload) {
@@ -4679,6 +4778,8 @@
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const id = getPersistentDisplayId();
+            // 先使用本地持久化 ID，避免等待服务端 displayId 消息期间产生无来源 ASR 请求。
+            displayId = id;
             const wsUrl = `${protocol}//${window.location.host}/display?displayId=${id}`;
 
             let socket = null;
@@ -4690,6 +4791,7 @@
                 return;
             }
             displayWs = socket;
+            bindDisplayStageTransport();
 
             socket.onopen = function() {
                 if (!isCurrentDisplaySocket(socket)) return;
@@ -4702,6 +4804,7 @@
                 reportSleepState();
                 reportNativeCpuStatus();
                 reportNativeLlmStatus();
+                bindDisplayStageTransport();
 
                 if (!isAlwaysListening) {
                     pendingAutoStart = true;
@@ -4719,6 +4822,9 @@
                     const data = JSON.parse(event.data);
                     console.log('[显示端] 收到消息:', data.type, data);
                     setCorrelationId(data.correlationId);
+
+                    // 聊天、角色和 MMD 交互消息先交给同页模块；未消费的消息继续走原媒体处理流程。
+                    if (window.DisplayStage && window.DisplayStage.handleServerMessage(data)) return;
 
                     if (data.type === 'serverStartTime') {
                         const storedTime = localStorage.getItem('serverStartTime');
@@ -4893,6 +4999,7 @@
                     }
 
                     if (data.type === 'voiceprintConfig') {
+                        voiceprintConfigReceived = true;
                         pauseRecordingDuringPlayback = data.pauseRecordingDuringPlayback !== false;
                         if (!pauseRecordingDuringPlayback && ttsRecordingPaused) {
                             // 全局关闭时立即恢复本显示端此前因播放而暂停的普通 ASR。
@@ -4915,14 +5022,35 @@
                         voiceprintMultiSpeaker = !!data.multiSpeaker;
                         voiceprintMultiMode = data.multiMode || 'fast';
                         voiceprintSpeakerCount = data.speakerCount || 'AUTO';
+                        voiceprintDbReady = false;
+                        voiceprintEngineReady = false;
+                        voiceprintEngineState = voiceprintEnabled ? 'downloading' : 'not_ready';
+                        voiceprintEngineError = '';
+                        updateVoiceprintReadiness();
+                        if (!voiceprintEnabled) {
+                            rejectVoiceprintReadyWaiters('声纹功能未启用');
+                        }
                         if (nativeVoiceprintAvailable) {
-                            nativeBridge.voiceprintConfigure(JSON.stringify({
-                                enabled: voiceprintEnabled,
-                                threshold: data.threshold || 0.3,
-                                multiSpeaker: voiceprintMultiSpeaker,
-                                multiMode: voiceprintMultiMode,
-                                speakerCount: voiceprintSpeakerCount
-                            }));
+                            try {
+                                const configureResult = JSON.parse(nativeBridge.voiceprintConfigure(JSON.stringify({
+                                    enabled: voiceprintEnabled,
+                                    threshold: data.threshold || 0.3,
+                                    multiSpeaker: voiceprintMultiSpeaker,
+                                    multiMode: voiceprintMultiMode,
+                                    speakerCount: voiceprintSpeakerCount
+                                })));
+                                if (configureResult?.error) {
+                                    voiceprintEngineState = 'error';
+                                    voiceprintEngineError = configureResult.error;
+                                    rejectVoiceprintReadyWaiters(voiceprintEngineError);
+                                    updateVoiceprintReadiness();
+                                }
+                            } catch (error) {
+                                voiceprintEngineState = 'error';
+                                voiceprintEngineError = error.message || '声纹配置失败';
+                                rejectVoiceprintReadyWaiters(voiceprintEngineError);
+                                updateVoiceprintReadiness();
+                            }
                             if (voiceprintEnabled) {
                                 // 拉取权威库重建本地声纹库（WebView 信任自签名证书，走 fetch）
                                 fetch('/api/voiceprint/db')
@@ -4946,38 +5074,8 @@
                     }
 
                     if (data.type === 'voiceprintExtract') {
-                        // register display 模式：中转提取 → 回传 embedding
-                        if (nativeVoiceprintAvailable) {
-                            try {
-                                const res = JSON.parse(nativeBridge.voiceprintExtract(data.audioBase64));
-                                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                                    displayWs.send(JSON.stringify({
-                                        type: 'voiceprintExtracted',
-                                        requestId: data.requestId,
-                                        embedding: res.embedding || [],
-                                        error: res.error || ''
-                                    }));
-                                }
-                            } catch (e) {
-                                if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                                    displayWs.send(JSON.stringify({
-                                        type: 'voiceprintExtracted',
-                                        requestId: data.requestId,
-                                        embedding: [],
-                                        error: e.message
-                                    }));
-                                }
-                            }
-                        } else {
-                            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
-                                displayWs.send(JSON.stringify({
-                                    type: 'voiceprintExtracted',
-                                    requestId: data.requestId,
-                                    embedding: [],
-                                    error: '声纹桥不可用'
-                                }));
-                            }
-                        }
+                        // register display 模式：等待共享声纹引擎就绪后再中转提取。
+                        void handleVoiceprintExtract(data, socket);
                         return;
                     }
 
@@ -5106,6 +5204,28 @@
                     } else if (data.type === 'task:renderUpdate') {
                         // 渲染任务实时数据更新。该消息是高频状态推送，只更新画面，不回传
                         // commandAck，避免服务端广播后在控制端反复生成 renderUpdate 提示。
+                        if (window.ENABLE_RENDER_REFRESH_DIAGNOSTICS === true) {
+                            var renderDebugStats = window._renderTaskDebugStats || (window._renderTaskDebugStats = {});
+                            var renderDebug = renderDebugStats[data.instanceId] || (renderDebugStats[data.instanceId] = {
+                                windowStartedAt: Date.now(),
+                                count: 0
+                            });
+                            renderDebug.count += 1;
+                            var renderDebugNow = Date.now();
+                            if (renderDebugNow - renderDebug.windowStartedAt >= 1000) {
+                                var renderData = data.data;
+                                console.warn('[显示端] task:renderUpdate 刷新诊断', {
+                                    instanceId: data.instanceId,
+                                    sourceInstanceId: data.sourceInstanceId || null,
+                                    count: renderDebug.count,
+                                    dataKeys: renderData && typeof renderData === 'object'
+                                        ? Object.keys(renderData).slice(0, 12)
+                                        : typeof renderData
+                                });
+                                renderDebug.windowStartedAt = renderDebugNow;
+                                renderDebug.count = 0;
+                            }
+                        }
                         var fn = window._renderTaskUpdates && window._renderTaskUpdates[data.instanceId];
                         if (fn) fn(data.data, data.sourceInstanceId);
                     } else if (data.type === 'hardwareStats') {
@@ -6671,8 +6791,12 @@
             try {
                 const formData = new FormData();
                 formData.append('audio', audioBlob, 'recording.wav');
-                if (typeof displayId === 'string' && displayId.trim()) {
-                    formData.append('displayId', displayId.trim());
+                const requestDisplayId = typeof displayId === 'string' && displayId.trim()
+                    ? displayId.trim()
+                    : getPersistentDisplayId();
+                if (requestDisplayId) {
+                    // 浏览器显示端只通过 multipart 表单传递来源，不使用自定义请求头。
+                    formData.append('displayId', requestDisplayId);
                 }
                 const speechStartAt = Number(timing?.speechStartAt);
                 const speechEndAt = Number(timing?.speechEndAt);

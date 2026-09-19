@@ -310,11 +310,6 @@ class NodeServerService : Service() {
                 )
             }
             val updateManager = if (offlineMode) OfflineUpdateManager(this) else null
-            updateManager?.let { manager ->
-                if (manager.rollbackPendingRelease(root)) {
-                    android.util.Log.w("AASC-Node", "上次候选服务未通过启动检查，已回滚到原版本")
-                }
-            }
             if (offlineMode) {
                 val taskIndexPaths = listOf(
                     File(root, "res/tasks/render-display/results/index.json"),

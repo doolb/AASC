@@ -60,6 +60,22 @@ class OfflineUpdateManagerTest {
     }
 
     @Test
+    fun API28归档签名读取会合并现代和旧版证书来源() {
+        val method = OfflineUpdateManager::class.java.declaredMethods.firstOrNull {
+            it.name == "mergeSignerSha256Digests" && it.parameterTypes.size == 2
+        }
+        assertTrue("应提供归档签名摘要合并方法", method != null)
+
+        val merged = method!!.invoke(
+            null,
+            setOf("modern"),
+            setOf("legacy")
+        ) as Set<*>
+
+        assertEquals(setOf("modern", "legacy"), merged)
+    }
+
+    @Test
     fun 热更域名解析后使用IP替换主机并保留路径端口() {
         val method = OfflineUpdateManager::class.java.declaredMethods.firstOrNull {
             it.name == "replaceUpdateUrlHost" && it.parameterTypes.size == 2
