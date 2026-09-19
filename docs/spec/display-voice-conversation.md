@@ -171,6 +171,22 @@ waitingWake 中的免唤醒范围:
     每条 command 包含 id、examples、description、wakeRequired=false
     弹窗展示示例、说明和“无需唤醒”标记
 
+控制端系统指令帮助的会话命令区域:
+    动态内置命令列表渲染完成后:
+        显示“会话与模式命令”区域
+        显示“开始对话” -> 开启持续群聊语音窗口
+        显示“结束对话” -> 结束当前语音对话
+        显示“{助手名字}” -> 临时唤醒指定助手并进入群聊
+        显示“你好{助手名字}”或“{助手名字}你好” -> 进入指定助手私聊
+        显示“{助手名字}再见”或“再见{助手名字}” -> 结束指定助手私聊
+        显示“进入群聊” -> 免唤醒进入持续群聊
+        显示“退出群聊” -> 退出持续群聊并等待再次唤醒
+    再显示“其他系统命令”区域:
+        显示“私聊{助手名字}” -> 从控制端进入指定助手私聊
+        显示“系统记录{内容}” -> 保存重要记录
+    会话控制词和记录命令不放入“无需唤醒”的动态内置命令列表
+    该区域只更新控制端展示文案，不改变语音解析、WebSocket 消息和会话状态机
+
 系统指令语音帮助:
     isBuiltinVoiceCommand('系统。') == true
     processVoiceCommand('系统。') -> { type: 'showHelp' }
@@ -936,6 +952,7 @@ formatAsrResultLog(data):
 ConversationState {
     state: disabled | waitingWake | activeGroup | activePrivate
     target: assistantName | null
+    temporaryRoleName: assistantName | null
     windowType: temporary | conversation | null
     expiresAt: timestamp | null
     timerPaused: boolean
@@ -945,6 +962,8 @@ ConversationState {
 默认配置：
     temporaryWindowMs = 30000
     conversationWindowMs = 180000
+    temporaryHistoryGroups = 10
+    temporaryContextGroups = 3  // 当前会话 1 组 + 最近已结束会话 2 组
 
 normalizeConversationText(text):
     去除首尾空白，并删除中间的空白和中文/英文标点
@@ -956,27 +975,36 @@ parseConversationCommand(text, assistants):
             -> { type: "wake", mode: "group", windowType: "temporary" }
     如果 normalized == "开始对话" -> { type: "wake", mode: "group", windowType: "conversation" }
     如果 normalized == "结束对话" -> { type: "end" }
+    如果 normalized == "进入群聊" -> { type: "wake", mode: "group", windowType: "conversation" }
+    如果 normalized == "退出群聊" -> { type: "endGroup" }
     对每个 assistantName：
         如果 normalized == "你好" + assistantName
             或 normalized == assistantName + "你好"
             -> { type: "wake", mode: "private", windowType: "conversation", target: assistantName }
         如果 normalized == assistantName + "再见"
             或 normalized == "再见" + assistantName
-            -> { type: "endPrivate", target: assistantName }
+            -> { type: "farewell", target: assistantName }
     normalized 已删除空白、Unicode 标点和符号，因此上述两侧顺序都支持夹杂标点、符号或空白
 
 reduceConversationInput(state, text):
     waitingWake + temporary group -> activeGroup, windowType=temporary
     waitingWake + group -> activeGroup, windowType=conversation
     waitingWake + private -> activePrivate, windowType=conversation, target=assistant
-    activePrivate + endPrivate -> waitingWake，并切回群聊上下文
+    activePrivate + farewell(target=当前私聊助手) -> waitingWake，并切回群聊上下文
+    activeGroup + farewell(target=当前临时角色) + windowType=temporary -> waitingWake，结束当前临时会话组
+    activeGroup + endGroup -> waitingWake，并结束当前持续群聊
     activeGroup/activePrivate + end -> waitingWake，并清除窗口信息
     active 状态下普通有效输入 -> 保持 windowType，并更新最后有效输入时间
 
 temporaryConversation:
-    服务端只保留一个全局实例 { id, startedAt, displayId, roleName, templateId, messages[] }
+    服务端只保留一个全局当前实例 { id, startedAt, displayId, roleName, templateId, messages[] }
+    每个临时会话实例的 id 代表一组连续对话
+    一组连续对话在主动结束或 temporaryWindowMs 到期时完成
+    服务端从持久化 temporary 消息按 sessionId 聚合已完成会话组
+    只保留最近 temporaryHistoryGroups 组历史上下文，默认 10 组
+    每次临时请求发送当前会话组和最近 temporaryContextGroups-1 组历史，默认总计 3 组
     新的临时唤醒或 temporaryConversationStarted:
-        清理旧临时实例的 LLM 历史
+        将旧实例视为已完成会话组，不清理其 LLM 历史
         生成新 id，消息置空，广播 { type: "temporaryConversation", action: "reset" }
         其他显示端已有的 activeGroup/windowType=temporary 状态切换到新临时会话并继续共享
     临时用户消息和助手回复只写入该实例及 temporary 会话键，不混入普通群聊页签
@@ -996,6 +1024,7 @@ temporaryConversation:
     服务端校验模板后替换全局实例并广播 roleName/templateId
     临时普通消息只发送 temporaryConversationId，不发送角色提示词
     服务端按当前实例 roleName 调用 getTemplateSystemPrompt()
+    服务端将当前会话组消息与最近历史会话组转换为 historyMessages 发送给 LLM
     getTemplateSystemPrompt() 只包含基础提示词和一个匹配模板
     普通“开始对话”请求仍调用 getGroupSystemPrompt()，包含全部角色模板
 
@@ -1023,12 +1052,27 @@ onAllVoiceTtsPlaybackFinished(displayId):
 配置同步伪代码：
 
 ```text
-控制端发送 { type: "setVoiceConversationConfig", temporaryWindowSeconds, conversationWindowSeconds, addressedGroupMode }
+控制端发送 { type: "setVoiceConversationConfig", temporaryWindowSeconds, conversationWindowSeconds, addressedGroupMode, temporaryHistoryGroups, temporaryContextGroups }
 服务端校验范围并转换为毫秒
 服务端将 addressedGroupMode 规范化为 temporary 或 oneShot，缺失值默认 temporary
+服务端将 temporaryHistoryGroups 规范化为 1..100，缺失值默认 10
+服务端将 temporaryContextGroups 规范化为 1..20，缺失值默认 3
 服务端 config.set("voiceCommand.temporaryConversationWindowMs", normalizedTemporaryMs)
 服务端 config.set("voiceCommand.conversationWindowMs", normalizedConversationMs)
 服务端 config.set("voiceCommand.addressedGroupMode", addressedGroupMode)
+服务端 config.set("voiceCommand.temporaryHistoryGroups", temporaryHistoryGroups)
+服务端 config.set("voiceCommand.temporaryContextGroups", temporaryContextGroups)
 服务端广播 { type: "voiceConversationConfig", ...normalizedConfig }
 控制端收到后只渲染服务端返回的权威值
+```
+
+临时天气播报伪代码：
+
+```text
+接收天气文本
+如果文本未包含 今天/明天/后天 等明确日期词:
+    使用默认城市或文本中的城市
+    播报今天、明天、后天三天逐日天气
+否则:
+    只选择并播报文本指定日期
 ```

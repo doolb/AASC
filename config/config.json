@@ -87,6 +87,8 @@
     "addressedGroupMode": "temporary",
     "temporaryConversationWindowMs": 30000,
     "conversationWindowMs": 180000,
+    "temporaryHistoryGroups": 10,
+    "temporaryContextGroups": 3,
     "defaultWeatherCity": "Chengdu",
     "weatherCities": [
       "北京",

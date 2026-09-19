@@ -186,6 +186,54 @@ function trimHistory() {
     }
 }
 
+/**
+ * 按临时会话组清理过旧历史，保留当前会话和最近若干个已结束会话。
+ * 临时会话的 sessionId 是服务端生成的全局会话 ID，因此同一组消息可能分布在不同 profile/template 键中，
+ * 清理时必须先按 sessionId 汇总，再同步过滤所有历史桶，避免只删除一半消息。
+ */
+function pruneHistorySessions(options = {}) {
+    const mode = options.mode || 'temporary';
+    const maxHistoricalSessions = Math.max(1, Math.round(Number(options.maxHistoricalSessions) || 10));
+    const currentSessionId = String(options.currentSessionId || '').trim();
+    const sessionLatestAt = new Map();
+    for (const message of getAllHistoryMessages()) {
+        if (message?.mode !== mode) continue;
+        const sessionId = String(message.sessionId || '').trim();
+        if (!sessionId) continue;
+        const timestamp = Number(message.timestamp || 0);
+        sessionLatestAt.set(sessionId, Math.max(sessionLatestAt.get(sessionId) || 0, timestamp));
+    }
+
+    const historicalSessionIds = [...sessionLatestAt.entries()]
+        .filter(([sessionId]) => sessionId !== currentSessionId)
+        .sort((left, right) => left[1] - right[1])
+        .slice(-maxHistoricalSessions)
+        .map(([sessionId]) => sessionId);
+    const retainedSessionIds = new Set(historicalSessionIds);
+    if (currentSessionId) retainedSessionIds.add(currentSessionId);
+
+    const affectedFiles = new Set();
+    let removedCount = 0;
+    for (const [key, messages] of Object.entries(chatHistories)) {
+        const keptMessages = messages.filter(message => {
+            if (message?.mode !== mode) return true;
+            const keep = retainedSessionIds.has(String(message.sessionId || '').trim());
+            if (!keep) {
+                removedCount += 1;
+                affectedFiles.add(historyStore.getHistoryFileName(message));
+            }
+            return keep;
+        });
+        if (keptMessages.length === 0) {
+            delete chatHistories[key];
+        } else {
+            chatHistories[key] = keptMessages;
+        }
+    }
+    if (removedCount > 0) saveHistory([...affectedFiles]);
+    return { removedCount, retainedSessionIds: [...retainedSessionIds] };
+}
+
 function init(config = {}, options = {}) {
     localLlmTransportOptions = normalizeLocalLlmTransportOptions(options);
     if (options.piRuntimeManager !== undefined) {
@@ -1210,6 +1258,7 @@ function buildMessages(userMessage, options = {}) {
         mode = null,
         target = null,
         sessionId = null,
+        historyMessages = null,
         profileName = activeProfile,
         promptFormat = chatConfig.promptFormat,
         images = []
@@ -1222,13 +1271,15 @@ function buildMessages(userMessage, options = {}) {
     // 服务器聊天路由可能已经把模板内容作为 systemPrompt 传入，避免 Agent/LLM 收到重复模板。
     const template = selectedTemplate && selectedTemplate.content !== sysPrompt ? selectedTemplate : null;
     const inputBudget = chatConfig.maxTokens || 4096;
-    const sessionHistory = getHistoryForOptions({
-        mode,
-        target,
-        sessionId,
-        profileName,
-        templateId
-    });
+    const sessionHistory = Array.isArray(historyMessages)
+        ? historyMessages
+        : getHistoryForOptions({
+            mode,
+            target,
+            sessionId,
+            profileName,
+            templateId
+        });
     let recentHistory = sessionHistory.slice(-contextCount);
 
     if (recentHistory.length > 0) {
@@ -1361,12 +1412,12 @@ async function chat(userMessage, options = {}) {
     if (activeProfileConfig?.mode === 'agent') {
         return chatStream(userMessage, options, {});
     }
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, images = [] } = options;
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, historyMessages = null, images = [] } = options;
 
     try {
         const profile = activeProfileConfig || getActiveProfileConfig();
         const transport = normalizeChatTransport(profile);
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name });
         let assistantMessage = '';
         let assistantReasoning = '';
         let assistantSpeech = '';
@@ -1486,6 +1537,7 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
         mode = null,
         target = null,
         sessionId = null,
+        historyMessages = null,
         conversationKey = null,
         ephemeral = false
     } = options;
@@ -1513,6 +1565,7 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
             mode,
             target,
             sessionId,
+            historyMessages,
             profileName: profile.name,
             promptFormat: 'openai'
         });
@@ -1567,7 +1620,7 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
 }
 
 async function chatStream(userMessage, options = {}, callbacks = {}) {
-    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, images = [] } = options;
+    const { useTemplate = null, displayId = null, systemPrompt = null, includeHistory = false, contextCount = 0, mode = null, target = null, templateTarget = null, sessionId = null, historyMessages = null, images = [] } = options;
     const { onChunk, onSentence, onComplete, onError } = callbacks;
 
     const activeProfileConfig = llmProfiles.find(profile => profile.name === activeProfile);
@@ -1581,7 +1634,8 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
             contextCount,
             mode,
             target,
-            sessionId
+            sessionId,
+            historyMessages
         }, callbacks, activeProfileConfig);
     }
 
@@ -1590,7 +1644,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     if (transport.protocol === 'openai-responses') {
         const output = createChatStreamOutput({ onChunk, onSentence });
         try {
-            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
+            const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name });
             const responseSessionKey = getResponsesSessionKey({ useTemplate, templateTarget, mode, target, sessionId });
             const fingerprint = getResponsesFingerprint({ useTemplate, templateTarget, systemPrompt }, profile);
             await streamResponsesWithRecovery({
@@ -1636,7 +1690,7 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
     const output = createChatStreamOutput({ onChunk, onSentence });
 
     try {
-        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, images, profileName: profile.name });
+        const messages = buildMessages(userMessage, { useTemplate, templateTarget, systemPrompt, includeHistory, contextCount, mode, target, sessionId, historyMessages, images, profileName: profile.name });
         
         const requestBody = {
             model: profile.model || chatConfig.model,
@@ -1984,6 +2038,7 @@ module.exports = {
     getGroupSystemPrompt,
     getTemplateSystemPrompt,
     getHistory,
+    pruneHistorySessions,
     validateHistoryScope,
     clearHistory,
     deleteConversationRound,

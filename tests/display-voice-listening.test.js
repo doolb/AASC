@@ -99,6 +99,8 @@ assert.match(serverJs, /displayConversationTtsPlaybackKeys/u, '服务端应等�
 assert.match(serverJs, /temporaryConversationWindowMs/u, '服务端应读取临时窗口配置');
 assert.match(serverJs, /conversationWindowMs/u, '服务端应读取持续对话窗口配置');
 assert.match(serverJs, /addressedGroupMode/u, '服务端应支持角色名加内容的模式切换');
+assert.match(serverJs, /temporaryHistoryGroups/u, '服务端应支持临时历史会话组数配置');
+assert.match(serverJs, /temporaryContextGroups/u, '服务端应支持临时上下文会话组数配置');
 assert.match(serverJs, /temporaryConversationReplaced/u, '临时会话替换时应重置其他显示端');
 assert.match(serverJs, /getTemporaryConversation/u, '服务端应提供临时会话快照请求');
 assert.match(serverJs, /clearTemporaryConversation/u, '服务端应提供临时会话清空消息');
@@ -111,6 +113,8 @@ assert.match(voiceprintPanelJs, /temporaryWindowSeconds/u, '控制端应渲染�
 assert.match(voiceprintPanelJs, /conversationWindowSeconds/u, '控制端应渲染持续窗口设置');
 assert.match(voiceprintPanelJs, /setAddressedGroupMode/u, '控制端应提供临时/一次性群聊切换');
 assert.match(voiceprintPanelJs, /addressedGroupMode/u, '控制端应同步角色名加内容模式');
+assert.match(voiceprintPanelJs, /temporaryHistoryGroups/u, '控制端应配置临时历史会话组数');
+assert.match(voiceprintPanelJs, /temporaryContextGroups/u, '控制端应配置临时上下文会话组数');
 const controlChatJs = fs.readFileSync(
     'src/apps/web-mediacenter/ui/public/js/chat.js',
     'utf8'

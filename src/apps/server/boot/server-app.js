@@ -49,6 +49,12 @@ const {
     reduceConversationInput
 } = require('../modules/voice/display-voice-conversation');
 const {
+    DEFAULT_TEMPORARY_HISTORY_GROUPS,
+    DEFAULT_TEMPORARY_CONTEXT_GROUPS,
+    normalizeTemporaryConversationHistoryConfig,
+    selectTemporaryConversationHistory
+} = require('../modules/voice/temporary-conversation-history');
+const {
     beginRepairModeEntry,
     verifyRepairModePassword,
     handleRepairModeInput
@@ -483,7 +489,17 @@ function getVoiceConversationWindowConfig() {
         conversationWindowSeconds: Math.round(conversationWindowMs / 1000),
         addressedGroupMode: normalizeAddressedGroupMode(
             config.get('voiceCommand.addressedGroupMode', 'temporary')
-        )
+        ),
+        ...normalizeTemporaryConversationHistoryConfig({
+            temporaryHistoryGroups: config.get(
+                'voiceCommand.temporaryHistoryGroups',
+                DEFAULT_TEMPORARY_HISTORY_GROUPS
+            ),
+            temporaryContextGroups: config.get(
+                'voiceCommand.temporaryContextGroups',
+                DEFAULT_TEMPORARY_CONTEXT_GROUPS
+            )
+        })
     };
 }
 
@@ -516,10 +532,20 @@ function setVoiceConversationWindowConfig(data, source = 'control') {
             ? current.addressedGroupMode
             : data.addressedGroupMode
     );
+    const historyConfig = normalizeTemporaryConversationHistoryConfig({
+        temporaryHistoryGroups: data?.temporaryHistoryGroups === undefined
+            ? current.temporaryHistoryGroups
+            : data.temporaryHistoryGroups,
+        temporaryContextGroups: data?.temporaryContextGroups === undefined
+            ? current.temporaryContextGroups
+            : data.temporaryContextGroups
+    });
 
     config.set('voiceCommand.temporaryConversationWindowMs', normalizedTemporarySeconds * 1000);
     config.set('voiceCommand.conversationWindowMs', normalizedConversationSeconds * 1000);
     config.set('voiceCommand.addressedGroupMode', addressedGroupMode);
+    config.set('voiceCommand.temporaryHistoryGroups', historyConfig.temporaryHistoryGroups);
+    config.set('voiceCommand.temporaryContextGroups', historyConfig.temporaryContextGroups);
     const normalized = getVoiceConversationWindowConfig();
     broadcastToControls({
         type: 'voiceConversationConfig',
@@ -1670,8 +1696,27 @@ function clearTemporaryChatHistory() {
     }
 }
 
+function pruneTemporaryConversationHistory(currentSessionId) {
+    const conversationConfig = getVoiceConversationWindowConfig();
+    if (typeof chat.pruneHistorySessions !== 'function') return;
+    chat.pruneHistorySessions({
+        mode: 'temporary',
+        currentSessionId,
+        maxHistoricalSessions: conversationConfig.temporaryHistoryGroups
+    });
+}
+
+function getTemporaryConversationHistoryContext(currentSessionId) {
+    const conversationConfig = getVoiceConversationWindowConfig();
+    const selected = selectTemporaryConversationHistory(
+        chat.getHistory(),
+        currentSessionId,
+        conversationConfig
+    );
+    return selected.messages;
+}
+
 function replaceTemporaryConversation(displayId, roleName = null) {
-    clearTemporaryChatHistory();
     clearPendingConversationConfirmation(displayId, 'temporaryConversationReplaced');
     const role = normalizeTemporaryConversationRole(roleName);
     temporaryConversation = {
@@ -1972,6 +2017,7 @@ function sendDisplayConversationState(displayId, reason) {
         type: 'voiceConversationState',
         state: conversation.state,
         target: conversation.target,
+        temporaryRoleName: conversation.temporaryRoleName || null,
         expiresAt: Number.isFinite(conversation.expiresAt) ? conversation.expiresAt : null,
         windowType: conversation.windowType || null,
         timerPaused: conversation.timerPaused === true,
@@ -1990,6 +2036,7 @@ function setDisplayConversationState(displayId, conversation, reason) {
         displayId,
         state: conversation.state,
         target: conversation.target,
+        temporaryRoleName: conversation.temporaryRoleName || null,
         expiresAt: Number.isFinite(conversation.expiresAt) ? conversation.expiresAt : null,
         windowType: conversation.windowType || null,
         timerPaused: conversation.timerPaused === true,
@@ -2356,10 +2403,11 @@ function handleDisplayConversationInput(displayId, text) {
                     : '已进入群聊模式'
             );
         }
-    } else if (result.event?.type === 'group') {
+    } else if (result.event?.type === 'endGroup') {
         chat.setMode('group', null, { source: 'displayVoice', displayId });
         broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
-        sendConversationPrompt(displayId, '已退出私聊，进入群聊模式');
+        clearDisplayConversationTimer(displayId);
+        sendConversationPrompt(displayId, '群聊已退出，请再次唤醒');
     } else if (result.event?.type === 'end') {
         chat.setMode('group', null, { source: 'displayVoice', displayId });
         broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
@@ -2370,6 +2418,11 @@ function handleDisplayConversationInput(displayId, text) {
         broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
         clearDisplayConversationTimer(displayId);
         sendConversationPrompt(displayId, '私聊已结束，请再次唤醒');
+    } else if (result.event?.type === 'endTemporary') {
+        chat.setMode('group', null, { source: 'displayVoice', displayId });
+        broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
+        clearDisplayConversationTimer(displayId);
+        sendConversationPrompt(displayId, '临时对话已结束，请再次唤醒');
     } else if (result.event?.type === 'input' && result.event.temporaryConversationStarted) {
         chat.setMode('group', null, { source: 'displayVoice', displayId });
         broadcastToControls({ type: 'groupMode', displayId, source: 'displayVoice' });
@@ -9698,6 +9751,7 @@ async function handleChatMessage(options) {
     });
     if (isTemporaryConversation) {
         appendTemporaryConversationMessage(userMessageRecord, effectiveTemporaryConversationId);
+        pruneTemporaryConversationHistory(effectiveTemporaryConversationId);
     }
     
     let systemPrompt = null;
@@ -9707,7 +9761,8 @@ async function handleChatMessage(options) {
         systemPrompt = isTemporaryConversation
             ? chat.getTemplateSystemPrompt(temporaryConversation.roleName)
             : chat.getGroupSystemPrompt();
-        contextCount = chat.getConfig().contextCount || (isTemporaryConversation ? 100 : 0);
+        // 临时模式的会话组数量由 temporaryContextGroups 控制；这里给足消息条数上限，最终仍由模型 token 预算裁剪。
+        contextCount = isTemporaryConversation ? 10000 : (chat.getConfig().contextCount || 0);
         if (contextCount > 0) includeHistory = true;
     } else if (effectiveTemplateTarget) {
         const template = chat.getTemplateByName(effectiveTemplateTarget);
@@ -9768,6 +9823,9 @@ async function handleChatMessage(options) {
         target: messageTarget,
         templateTarget: effectiveTemplateTarget,
         sessionId: effectiveSessionId,
+        historyMessages: isTemporaryConversation
+            ? getTemporaryConversationHistoryContext(effectiveTemporaryConversationId)
+            : null,
         images
     }, {
         onChunk: (chunk, fullMessage, reasoning) => {

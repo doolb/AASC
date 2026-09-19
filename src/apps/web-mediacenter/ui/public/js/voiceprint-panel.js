@@ -17,7 +17,9 @@
         voiceConversationConfig: {
             temporaryWindowSeconds: 30,
             conversationWindowSeconds: 180,
-            addressedGroupMode: 'temporary'
+            addressedGroupMode: 'temporary',
+            temporaryHistoryGroups: 10,
+            temporaryContextGroups: 3
         },
 
         init() {
@@ -99,6 +101,8 @@
             if (!panel) return;
             const temporary = this.voiceConversationConfig.temporaryWindowSeconds;
             const conversation = this.voiceConversationConfig.conversationWindowSeconds;
+            const historyGroups = this.voiceConversationConfig.temporaryHistoryGroups;
+            const contextGroups = this.voiceConversationConfig.temporaryContextGroups;
             const addressedGroupMode = this.voiceConversationConfig.addressedGroupMode === 'oneShot'
                 ? 'oneShot'
                 : 'temporary';
@@ -120,6 +124,16 @@
                     <input type="number" min="1" max="3600" step="1" data-voice-conversation-window="conversation" value="${conversation}"
                         style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 秒
                 </label>
+                <label style="display:block;margin-top:8px;font-size:13px;">
+                    临时历史会话
+                    <input type="number" min="1" max="100" step="1" data-voice-conversation-groups="history" value="${historyGroups}"
+                        style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 组
+                </label>
+                <label style="display:block;margin-top:8px;font-size:13px;">
+                    临时上下文会话
+                    <input type="number" min="1" max="20" step="1" data-voice-conversation-groups="context" value="${contextGroups}"
+                        style="width:80px;padding:3px 5px;margin-left:6px;box-sizing:border-box;"> 组（含当前）
+                </label>
             `;
             if (panel.dataset.bound) return;
             panel.dataset.bound = '1';
@@ -130,8 +144,14 @@
                     return;
                 }
                 const input = event.target.closest('[data-voice-conversation-window]');
-                if (!input) return;
-                this.setConversationWindowConfig(input.dataset.voiceConversationWindow, input.value);
+                if (input) {
+                    this.setConversationWindowConfig(input.dataset.voiceConversationWindow, input.value);
+                    return;
+                }
+                const groupInput = event.target.closest('[data-voice-conversation-groups]');
+                if (groupInput) {
+                    this.setConversationGroupConfig(groupInput.dataset.voiceConversationGroups, groupInput.value);
+                }
             });
         },
 
@@ -176,14 +196,43 @@
             return true;
         },
 
+        setConversationGroupConfig(kind, value) {
+            if (!['history', 'context'].includes(kind)) return false;
+            const maximum = kind === 'history' ? 100 : 20;
+            const groups = Math.round(Math.min(maximum, Math.max(1, Number(value))));
+            if (!Number.isFinite(groups)) return false;
+            const next = { ...this.voiceConversationConfig };
+            if (kind === 'history') next.temporaryHistoryGroups = groups;
+            if (kind === 'context') next.temporaryContextGroups = groups;
+            this.voiceConversationConfig = next;
+            this.renderConversationWindowPanel();
+            if (!window.WebSocketManager?.ws || window.WebSocketManager.ws.readyState !== WebSocket.OPEN) {
+                if (window.showToast) window.showToast('语音对话配置发送失败：控制端未连接', 'error');
+                return false;
+            }
+            window.WebSocketManager.ws.send(JSON.stringify({
+                type: 'setVoiceConversationConfig',
+                ...next
+            }));
+            return true;
+        },
+
         handleConversationWindowConfig(data) {
             const temporary = Number(data?.temporaryWindowSeconds);
             const conversation = Number(data?.conversationWindowSeconds);
+            const historyGroups = Number(data?.temporaryHistoryGroups);
+            const contextGroups = Number(data?.temporaryContextGroups);
             if (!Number.isFinite(temporary) || !Number.isFinite(conversation)) return;
             this.voiceConversationConfig = {
                 temporaryWindowSeconds: Math.round(Math.min(3600, Math.max(1, temporary))),
                 conversationWindowSeconds: Math.round(Math.min(3600, Math.max(1, conversation))),
-                addressedGroupMode: data?.addressedGroupMode === 'oneShot' ? 'oneShot' : 'temporary'
+                addressedGroupMode: data?.addressedGroupMode === 'oneShot' ? 'oneShot' : 'temporary',
+                temporaryHistoryGroups: Number.isFinite(historyGroups)
+                    ? Math.round(Math.min(100, Math.max(1, historyGroups)))
+                    : this.voiceConversationConfig.temporaryHistoryGroups,
+                temporaryContextGroups: Number.isFinite(contextGroups)
+                    ? Math.round(Math.min(20, Math.max(1, contextGroups)))
+                    : this.voiceConversationConfig.temporaryContextGroups
             };
             this.renderConversationWindowPanel();
         },

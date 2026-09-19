@@ -94,11 +94,12 @@ function parseConversationCommand(text, assistants) {
     if (normalized === '结束对话') {
         return { type: 'end' };
     }
-    if (normalized === '退出私聊') {
-        return { type: 'group' };
+    if (normalized === '进入群聊') {
+        // 进入群聊是免唤醒入口；返回 wake 事件可以复用 waitingWake 的唤醒状态迁移。
+        return { type: 'wake', mode: 'group', windowType: 'conversation', target: null };
     }
-    if (normalized === '进入群聊模式') {
-        return { type: 'group' };
+    if (normalized === '退出群聊') {
+        return { type: 'endGroup' };
     }
 
     for (const name of names) {
@@ -117,7 +118,7 @@ function parseConversationCommand(text, assistants) {
             return { type: 'wake', mode: 'private', windowType: 'conversation', target: name };
         }
         if (normalized === `${normalizedName}再见` || normalized === `再见${normalizedName}`) {
-            return { type: 'endPrivate', target: name };
+            return { type: 'farewell', target: name };
         }
     }
 
@@ -139,6 +140,9 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
                 ...state,
                 state: command.mode === 'private' ? 'activePrivate' : 'activeGroup',
                 target: command.target,
+                temporaryRoleName: command.windowType === 'temporary'
+                    ? command.assistantName || null
+                    : null,
                 windowType: command.windowType || 'conversation',
                 timerPaused: false,
                 remainingMs: null,
@@ -159,6 +163,7 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
                         ...state,
                         state: 'activeGroup',
                         target: null,
+                        temporaryRoleName: addressedAssistant,
                         windowType: 'temporary',
                         timerPaused: false,
                         remainingMs: null,
@@ -195,8 +200,8 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
             event: command
         };
     }
-    if (command?.type === 'endPrivate') {
-        if (state.state !== 'activePrivate') {
+    if (command?.type === 'endGroup') {
+        if (state.state !== 'activeGroup') {
             return { accepted: false, state, event: null };
         }
         return {
@@ -205,20 +210,24 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
             event: command
         };
     }
-    if (command?.type === 'group') {
-        return {
-            accepted: true,
-            state: {
-                ...state,
-                state: 'activeGroup',
-                target: null,
-                windowType: 'conversation',
-                timerPaused: false,
-                remainingMs: null,
-                lastValidInputAt: now
-            },
-            event: command
-        };
+    if (command?.type === 'farewell') {
+        if (state.state === 'activePrivate' && state.target === command.target) {
+            return {
+                accepted: true,
+                state: createConversationState(true),
+                event: { type: 'endPrivate', target: command.target }
+            };
+        }
+        if (state.state === 'activeGroup'
+            && state.windowType === 'temporary'
+            && (!state.temporaryRoleName || state.temporaryRoleName === command.target)) {
+            return {
+                accepted: true,
+                state: createConversationState(true),
+                event: { type: 'endTemporary', target: command.target }
+            };
+        }
+        return { accepted: false, state, event: null };
     }
     if (command?.type === 'wake') {
         return {
@@ -227,6 +236,9 @@ function reduceConversationInput(currentState, text, assistants, now = Date.now(
                 ...state,
                 state: command.mode === 'private' ? 'activePrivate' : 'activeGroup',
                 target: command.target,
+                temporaryRoleName: command.windowType === 'temporary'
+                    ? command.assistantName || null
+                    : null,
                 windowType: command.windowType || 'conversation',
                 timerPaused: false,
                 remainingMs: null,

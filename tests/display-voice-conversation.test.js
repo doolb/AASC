@@ -42,6 +42,15 @@ function testWakeAndPrivateSwitch() {
         windowType: 'conversation',
         target: null
     });
+    assert.deepStrictEqual(parseConversationCommand('进入群聊', assistants), {
+        type: 'wake',
+        mode: 'group',
+        windowType: 'conversation',
+        target: null
+    });
+    assert.deepStrictEqual(parseConversationCommand('退出群聊', assistants), {
+        type: 'endGroup'
+    });
     assert.deepStrictEqual(parseConversationCommand('小爱', assistants), {
         type: 'wake',
         mode: 'group',
@@ -50,11 +59,11 @@ function testWakeAndPrivateSwitch() {
         assistantName: '小爱'
     });
     assert.deepStrictEqual(parseConversationCommand('再见，小爱', assistants), {
-        type: 'endPrivate',
+        type: 'farewell',
         target: '小爱'
     });
     assert.deepStrictEqual(parseConversationCommand('再见 —— 小 爱', assistants), {
-        type: 'endPrivate',
+        type: 'farewell',
         target: '小爱'
     });
     assert.deepStrictEqual(parseConversationCommand('妲己，你好', assistants), {
@@ -78,7 +87,7 @@ function testWakeAndPrivateSwitch() {
         target: '云雀'
     });
     assert.deepStrictEqual(parseConversationCommand('再见，云雀', alternateAssistants), {
-        type: 'endPrivate',
+        type: 'farewell',
         target: '云雀'
     });
 }
@@ -89,8 +98,18 @@ function testStateTransitions() {
     assert.strictEqual(result.accepted, true);
     assert.strictEqual(result.state.state, 'activeGroup');
     assert.strictEqual(result.state.windowType, 'temporary');
+    assert.strictEqual(result.state.temporaryRoleName, '小爱');
 
-    result = reduceConversationInput(result.state, '小爱你好', assistants, 2000);
+    let temporaryFarewell = reduceConversationInput(result.state, '再见小爱', assistants, 1500);
+    assert.strictEqual(temporaryFarewell.accepted, true);
+    assert.strictEqual(temporaryFarewell.state.state, 'waitingWake');
+    assert.deepStrictEqual(temporaryFarewell.event, {
+        type: 'endTemporary',
+        target: '小爱'
+    });
+
+    result = reduceConversationInput(state, '小爱', assistants, 2000);
+    result = reduceConversationInput(result.state, '小爱你好', assistants, 2500);
     assert.strictEqual(result.state.state, 'activePrivate');
     assert.strictEqual(result.state.target, '小爱');
 
@@ -104,6 +123,19 @@ function testStateTransitions() {
 
     result = reduceConversationInput(result.state, '结束对话', assistants, 5000);
     assert.strictEqual(result.state.state, 'waitingWake');
+
+    result = reduceConversationInput(result.state, '进入群聊', assistants, 6000);
+    assert.strictEqual(result.accepted, true);
+    assert.strictEqual(result.state.state, 'activeGroup');
+    assert.strictEqual(result.state.windowType, 'conversation');
+
+    result = reduceConversationInput(result.state, '退出群聊', assistants, 7000);
+    assert.strictEqual(result.accepted, true);
+    assert.strictEqual(result.state.state, 'waitingWake');
+    assert.deepStrictEqual(result.event, { type: 'endGroup' });
+
+    const ignoredExit = reduceConversationInput(result.state, '退出群聊', assistants, 8000);
+    assert.strictEqual(ignoredExit.accepted, false);
 }
 
 function testDisabledAndExpiry() {

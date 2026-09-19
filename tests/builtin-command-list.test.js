@@ -22,6 +22,17 @@ assert.match(chatJs, /builtinCommands/);
 assert.match(chatJs, /loadBuiltinCommands\(\)/);
 assert.match(chatJs, /renderBuiltinCommands\(\)/);
 assert.match(websocketJs, /data\.type === 'builtinVoiceCommands'/);
+assert.match(chatJs, /进入群聊/);
+assert.match(chatJs, /退出群聊/);
 assert.match(uploadHtml, /id="builtinVoiceCommandsList"/);
+assert.match(uploadHtml, /会话与模式命令/);
+assert.match(uploadHtml, /开始对话/);
+assert.match(uploadHtml, /结束对话/);
+assert.match(uploadHtml, /你好\{助手名字\}/);
+assert.match(uploadHtml, /再见\{助手名字\}/);
+assert.match(uploadHtml, /进入群聊/);
+assert.match(uploadHtml, /退出群聊/);
+assert.match(uploadHtml, /无需再次唤醒/);
+assert.match(uploadHtml, /系统记录\{内容\}/);
 
-console.log('builtin-command-list.test.js: 10/10 passed');
+console.log('builtin-command-list.test.js: 21/21 passed');

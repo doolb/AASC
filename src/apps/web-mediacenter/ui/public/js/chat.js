@@ -1411,9 +1411,9 @@ const Chat = {
     
     handleSystemCommand(text) {
         if (this.session.mode === 'private') {
-            if (text === '退出私聊') {
+            if (['进入群聊', '退出群聊', '退出私聊'].includes(text)) {
                 this.setMode('group', null, 'controlCommand');
-                this.addSystemMessage('已退出私聊模式');
+                this.addSystemMessage(text === '进入群聊' ? '已进入群聊模式' : '已退出群聊模式');
                 return true;
             }
             
@@ -1449,9 +1449,9 @@ const Chat = {
             return true;
         }
         
-        if (text === '退出私聊') {
+        if (['进入群聊', '退出群聊', '退出私聊'].includes(text)) {
             this.setMode('group', null, 'controlCommand');
-            this.addSystemMessage('已退出私聊模式');
+            this.addSystemMessage(text === '进入群聊' ? '已进入群聊模式' : '已退出群聊模式');
             return true;
         }
         
@@ -2386,9 +2386,9 @@ const Chat = {
             return;
         }
         
-        if (text === '退出私聊') {
+        if (['进入群聊', '退出群聊', '退出私聊'].includes(text)) {
             this.setMode('group', null, 'controlVoice');
-            this.addSystemMessage('已退出私聊模式');
+            this.addSystemMessage(text === '进入群聊' ? '已进入群聊模式' : '已退出群聊模式');
             return;
         }
         

@@ -18,6 +18,8 @@ assert.strictEqual(isBuiltinVoiceCommand('请告诉我今天天气怎么样'), t
 assert.strictEqual(isBuiltinVoiceCommand('你好，今天过得怎么样'), false);
 assert.strictEqual(isBuiltinVoiceCommand('你好小爱'), false);
 assert.strictEqual(isBuiltinVoiceCommand('退出私聊'), false);
+assert.strictEqual(isBuiltinVoiceCommand('进入群聊'), false);
+assert.strictEqual(isBuiltinVoiceCommand('退出群聊'), false);
 assert.strictEqual(isBuiltinVoiceCommand('拒绝'), true);
 assert.strictEqual(isBuiltinVoiceCommand('取消。'), true);
 assert.strictEqual(isBuiltinVoiceCommand('确认添加'), true);
@@ -38,6 +40,8 @@ const helpText = getVoiceCommandHelpText({
 assert.match(helpText, /现在几点/);
 assert.match(helpText, /早安/);
 assert.match(helpText, /今日提醒/);
+assert.match(helpText, /进入群聊/);
+assert.match(helpText, /退出群聊/);
 
 assert.deepStrictEqual(parseVoiceHelpRequest('帮助静音'), { topic: '静音' });
 assert.deepStrictEqual(parseVoiceHelpRequest('静音帮助'), { topic: '静音' });
@@ -103,4 +107,4 @@ assert.ok(responseIndex >= 0, '系统帮助应向目标显示端发送完整响�
 assert.ok(responseIndex < ttsWaitIndex, '显示端系统帮助弹窗应先于通用 TTS 生成下发');
 assert.ok(responseIndex < directedTtsWaitIndex, '控制端系统帮助弹窗应先于定向 TTS 生成下发');
 
-console.log('display-voice-builtins.test.js: 33/33 passed');
+console.log('display-voice-builtins.test.js: 37/37 passed');

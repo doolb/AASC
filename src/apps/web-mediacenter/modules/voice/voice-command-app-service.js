@@ -469,7 +469,8 @@ function getVoiceCommandHelpText(commandConfig = chat.getCommands(), topic = '')
         ...builtinHelp,
         '说你好加助手名字或助手名字你好，唤醒进入群聊',
         '说私聊加助手名字，进入私聊模式',
-        '说退出私聊，退出私聊模式',
+        '说进入群聊，免唤醒进入持续群聊',
+        '说退出群聊，退出持续群聊并等待再次唤醒',
         '说结束对话，结束当前语音对话',
         '说系统记录加内容，保存重要记录'
     ];
@@ -2023,7 +2024,7 @@ function handleSystemCommand(text, displayId) {
         return { type: 'systemMessage', content: '请指定有效的助手名字' };
     }
     
-    if (trimmedText === '退出私聊') {
+    if (['进入群聊', '退出群聊', '退出私聊'].includes(trimmedText)) {
         return { type: 'groupMode' };
     }
     

@@ -201,6 +201,25 @@ test('天气城市解析会剔除日期词并支持日期在城市前后', () =>
     assert.equal(resolveWeatherCity('成都明天天气').city, '成都');
     assert.equal(resolveWeatherCity('后天成都天气').city, '成都');
     assert.equal(resolveWeatherCity('今天的天气').requestedCity, '');
+    assert.equal(parseWeatherDateRequest('北京天气').offset, null);
+});
+
+test('未指定日期的城市天气播报三天，指定日期时只播报目标日期', () => {
+    const now = new Date(2026, 7, 29, 10, 30, 0);
+    const weather = normalizeWeatherData(createWeatherPayload(now));
+    const allDays = formatWeatherSpeech(weather);
+    const todayOnly = formatWeatherDateSpeech(
+        weather,
+        parseWeatherDateRequest('北京今天的天气', now)
+    );
+
+    assert.match(allDays, /未来3天/u);
+    assert.match(allDays, /2026-08-29/u);
+    assert.match(allDays, /2026-08-30/u);
+    assert.match(allDays, /2026-08-31/u);
+    assert.match(todayOnly, /2026-08-29/u);
+    assert.doesNotMatch(todayOnly, /2026-08-30/u);
+    assert.doesNotMatch(todayOnly, /2026-08-31/u);
 });
 
 test('今天天气选择接口第一天并保留今日逐时预报', () => {
