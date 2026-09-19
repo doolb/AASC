@@ -108,6 +108,31 @@ assert.match(serverJs, /getTemporaryConversation/u, '服务端应提供临时会
 assert.match(serverJs, /clearTemporaryConversation/u, '服务端应提供临时会话清空消息');
 assert.match(serverJs, /temporaryConversationId/u, '临时聊天请求应携带全局会话 ID');
 assert.match(serverJs, /function ensureTemporaryConversation\(displayId\)/u, '控制端临时发送应确保使用服务端当前全局会话');
+assert.match(
+    serverJs,
+    /const TEMPORARY_WAKE_PROMPTS = Object\.freeze\(\[[\s\S]*?'嗯，我在'[\s\S]*?'听着呢'/u,
+    '纯助手名唤醒应定义完整的随机短确认候选池'
+);
+assert.match(
+    serverJs,
+    /const TEMPORARY_CONTENT_ACK_PROMPTS = Object\.freeze\(\[[\s\S]*?'好的'[\s\S]*?'交给我吧'/u,
+    '助手名带内容首次进入临时模式应定义完整的随机确认候选池'
+);
+assert.match(
+    serverJs,
+    /result\.event\.windowType === 'temporary'[\s\S]*?pickTemporaryPrompt\(TEMPORARY_WAKE_PROMPTS\)/u,
+    '纯助手名唤醒应从候选池随机选择短确认'
+);
+assert.match(
+    serverJs,
+    /result\.event\?\.type === 'input' && result\.event\.temporaryConversationStarted[\s\S]*?pickTemporaryPrompt\(TEMPORARY_CONTENT_ACK_PROMPTS\)/u,
+    '助手名带内容首次进入临时模式应从候选池随机选择确认'
+);
+assert.doesNotMatch(
+    serverJs,
+    /已进入临时对话，三十秒内可以继续说话/u,
+    '旧的临时模式进入长提示不应继续保留'
+);
 assert.match(serverJs, /setVoiceConversationConfig/u, '服务端应提供窗口配置写入消息');
 assert.match(serverJs, /type: 'voiceConversationConfig'/u, '服务端应广播窗口配置权威值');
 assert.match(voiceprintPanelJs, /setVoiceConversationConfig/u, '控制端应发送窗口配置');

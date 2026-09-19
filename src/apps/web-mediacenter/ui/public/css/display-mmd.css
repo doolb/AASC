@@ -1,0 +1,109 @@
+/* 显示端 MMD/VRM 层：Canvas 与聊天共享舞台，不创建独立 viewport。 */
+.display-stage-layers {
+    --display-stage-width: 100vw;
+    --display-stage-height: 100vh;
+    --display-keyboard-inset: 0px;
+    position: fixed;
+    inset: 0;
+    width: var(--display-stage-width);
+    height: var(--display-stage-height);
+    z-index: 200;
+    pointer-events: none;
+    overflow: hidden;
+    contain: layout paint;
+}
+
+.display-mmd-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: none;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 160ms ease;
+}
+
+.display-mmd-layer.is-visible {
+    display: block;
+}
+
+.display-mmd-layer.over-chat {
+    z-index: 30;
+}
+
+#displayMmdCanvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    touch-action: none;
+}
+
+#displayMmdCanvas.is-interactive {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.display-mmd-status {
+    position: absolute;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-width: min(80vw, 420px);
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-secondary) 86%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+    pointer-events: none;
+    text-align: right;
+}
+
+.display-mmd-status:empty {
+    display: none;
+}
+
+.display-mmd-status.is-error {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+}
+
+.display-interaction-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: max(12px, env(safe-area-inset-top))
+        max(12px, env(safe-area-inset-right))
+        max(12px, calc(env(safe-area-inset-bottom) + var(--display-keyboard-inset, 0px)))
+        max(12px, env(safe-area-inset-left));
+    pointer-events: none;
+}
+
+.display-stage-button {
+    min-height: 36px;
+    padding: 7px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+    color: var(--text-primary);
+    font-size: 13px;
+    pointer-events: auto;
+    touch-action: manipulation;
+}
+
+.display-stage-button:active {
+    transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .display-mmd-layer {
+        transition: none;
+    }
+}

@@ -31,16 +31,27 @@
 
 ## 聊天系统
 
+- ⏳待现场验证 [2026-09-19] 临时模式首次唤醒确认提示区分
+  - 纯助手名已改为从“嗯，我在”“哎，我在”“我在呢”“在呢”“听着呢”中随机播报；助手名带内容已从“好的”“收到”“明白”“好嘞”“没问题”“交给我吧”中随机确认，后续临时消息和一次性群聊不重复使用临时确认。
+  - 需使用真实显示端确认短确认与模型回答的连续 TTS 播放顺序，以及显示端 TTS/服务端 TTS 两种配置下的实际播放目标。
+  - 关联文档：`docs/design/display-voice-conversation.md`、`docs/spec/display-voice-conversation.md`、`docs/task/20260919_临时模式唤醒确认提示区分.md`。
+
 - ⏳待现场验证 [2026-09-19] Pi Agent Chat2API 工具格式错误回退普通回复
   - 代码已在 Provider 层对损坏工具协议保留安全普通文本，不执行不完整工具调用，也不向聊天/TTS输出协议残留；需使用真实 Chat2API 模型复现一次缺少开始标签的响应，确认聊天正文和 TTS 均正常恢复。
   - 关联文档：`docs/design/llm-agent-mode.md`、`docs/spec/llm-agent-mode.md`、`docs/task/20260919_Chat2API工具格式错误保留普通回复.md`。
 
-- 🔄进行中 [2026-09-19] 控制端 TTS 输入历史兼容性观察
-  - 已改用独立 `autocomplete` 表单并移除失焦节点重建；浏览器原生历史下拉偶发受 WebView 内部状态抑制，暂不继续处理。
+- 🔄进行中 [2026-09-19] 控制端与显示端 render 刷新来源诊断
+  - 通用 render 诊断打印暂时关闭；TTS 输入历史已移除会导致原生弹窗自动关闭的失焦节点重建，改为独立 autocomplete 表单，后续仅保留通用 render 异常复现任务。
 
-- ⏳待实现 [2026-09-18] 显示端聊天与 VRM/MMD 同位分层
-  - 设计已保存：显示端对象选择、顶部角色会话切换、控制端/显示端共享聊天、媒体底层、MMD 与聊天同位分层、three-vrm 直接加载 VRM、MMDAgent-EX 兼容命令和高级动作计划。
-  - 当前只记录方案，尚未修改显示端、服务端、模型或 APK；首期沿用全局聊天上下文，按 `displayId` 独立保存留待后续。
+- 🔄进行中 [2026-09-19] 显示端聊天与 VRM/MMD 同位分层
+  - 已确认使用单个 `display.html`，拆分 `display-stage.js`、`display-chat.js`、`display-mmd.js` 和独立 CSS，不使用 iframe。
+  - 聊天位于 MMD 上层并可单独隐藏；隐藏后 MMD Canvas 接收点击，通过 Raycaster 触发本地动作，聊天联动默认关闭。
+  - 当前实现范围：同页模块总线、聊天入口/对象选择/会话选择、流式消息、聊天隐藏切换，以及无外部运行时时的 MMD Canvas 交互降级。
+  - 第一阶段已构建并覆盖安装 Offline min v20；code v11 热更健康检查已通过，VRM/three-vrm、VMD/VRMA 本地资源接入和真实模型 Raycaster 留在后续阶段。
+  - 聊天/MMD 两个显示开关已调整到左下角，保留安全区和软键盘内缩。
+  - 已修复 `defer` 模块初始化时序，聊天入口会在模块注册后生成聊天窗口。
+  - render-display 已调整为仅高于媒体层；聊天页面主题化，对象/会话切换改为 HTML 下拉菜单；下拉菜单已区分未选中、悬停/聚焦和已选中颜色；聊天已改为全屏透明背景、控件实色；code v11 已发布并完成真机验收。
+  - 首期沿用全局聊天上下文，按 `displayId` 独立保存留待后续。
   - 关联文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260918_显示端聊天与MMD分层设计.md`、`docs/superpowers/plans/2026-09-18-display-chat-mmd.md`。
 
 - ⏳待处理 [2026-09-16] 将显示端聊天模式与私聊目标按 displayId 独立保存和路由
@@ -148,6 +159,11 @@
 # 当前任务
 
 ## 控制端语音配置
+
+- ⏳待现场验证 [2026-09-19] 浏览器显示端 ASR 来源绑定修复
+  - 代码已让浏览器显示端只通过 multipart 表单 `displayId` 传递持久化来源 ID；已现场验证重启服务端后来源恢复为 `display-izhstb6o`，并成功进入 `voiceInput`/`voiceCommand` 链路。
+  - 仍需在显示端刷新和首次启动场景观察日志不再出现 `requested=-`。
+  - 关联文档：`docs/design/server-side-asr-voice-input-processing.md`、`docs/spec/server-side-asr-voice-input-processing.md`、`docs/task/20260919_修复浏览器显示端ASR来源绑定.md`。
 
 - ⏳待处理 [2026-08-31] active 群聊/私聊中的其他指令按普通聊天发送
   - 当前仅“搜索”已改为 active 会话普通聊天；天气、提醒、播放、静音、报时、录音及其他自定义指令仍按现有命令优先级处理。

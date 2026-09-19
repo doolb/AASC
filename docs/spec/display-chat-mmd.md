@@ -1,6 +1,6 @@
 # 显示端聊天与 VRM/MMD 同位分层实现规格
 
-> 本文只使用伪代码描述计划中的实现，当前版本尚未实现这些流程。
+> 本文只使用伪代码描述实现流程；当前按同一 `display.html` 拆分 JS/CSS 模块的方案实现，不使用 iframe。
 
 ## 1. 状态模型
 
@@ -8,7 +8,7 @@
 结构 DisplayLayerState
   mediaVisible = true
   chatVisible = false
-  mmdVisible = false
+  mmdVisible = true
   mmdOrder = "under-chat"
   viewportWidth
   viewportHeight
@@ -52,6 +52,19 @@
   steps
   fallbackAction
   expiresAt
+
+结构 DisplayModuleBus
+  publish(type, payload)
+  subscribe(type, handler)
+  unsubscribe(type, handler)
+
+结构 DisplayStageRefs
+  mediaLayer
+  mmdLayer
+  chatLayer
+  interactionLayer
+  mmdCanvas
+  chatPanel
 ```
 
 ## 2. 显示端舞台初始化
@@ -69,7 +82,7 @@
   绑定 visualViewport resize、orientationchange、ResizeObserver
   连接现有 display WebSocket
   请求当前聊天快照、角色列表和会话列表
-  默认只显示媒体层和聊天入口
+  默认显示媒体层、MMD 舞台和聊天入口；聊天面板按入口单独打开
 ```
 
 ```text
@@ -81,6 +94,127 @@
   MMD Canvas 的 CSS 尺寸跟随舞台
   MMD Canvas 的实际像素尺寸乘以受限的 devicePixelRatio
   不因为键盘或 devicePixelRatio 改变模型的逻辑缩放
+```
+
+```text
+过程 initializeDisplayModules()
+  等待 DOMContentLoaded，确保所有 defer 模块已完成注册
+  创建同页 DisplayModuleBus
+  创建 DisplayStageRefs 并传给聊天模块和 MMD 模块
+  创建 displayChatController(root=chatLayer, bus, sendWebSocket)
+  创建 displayMmdController(canvas=mmdCanvas, bus, resourceResolver)
+  聊天模块不创建第二条 WebSocket
+  MMD 模块不直接读写聊天历史
+  父页面的 WebSocket 消息按类型发布到 DisplayModuleBus
+  模块销毁时取消所有订阅和 pointer 监听
+```
+
+```text
+过程 renderDisplayLayerOrder()
+  将媒体层设置为基础层
+  将 render-display 覆盖层设置为媒体层之上
+  将 MMD、聊天和交互控制层设置为 render-display 之上
+  不允许 render-display 覆盖聊天输入、会话菜单或显示端开关
+```
+
+```text
+过程 renderHtmlDropdown(kind, items, selectedValue)
+  使用 button 作为当前值入口
+  使用同页 div[role=listbox] 和 button[role=option] 渲染选项
+  点击选项后更新状态并调用既有 selectTarget 或 selectSession 流程
+  点击外部区域或 Escape 时关闭菜单
+  不创建 select 元素，不触发系统原生选择器
+  菜单颜色从根元素主题变量读取
+
+过程 styleHtmlDropdownOption(option)
+  未选中状态使用普通文本色和透明背景
+  悬停或键盘聚焦状态使用浅主题强调色
+  aria-selected=true 状态使用主题 accent-color 背景和 bg-primary 文字
+  已选中状态再次悬停或聚焦时使用 accent-secondary 背景
+  保证未选中、交互中和已选中状态具有可见颜色差异
+```
+
+```text
+过程 layoutFullscreenChat()
+  将聊天层和聊天窗口尺寸设置为舞台宽高的 100%
+  将聊天窗口根背景设置为透明，不使用模糊和卡片阴影
+  将顶部栏、状态栏和输入区设置为实色主题背景
+  将消息列表背景保持透明，使媒体通过空白区域可见
+  将消息气泡、输入框、按钮和下拉菜单保持实色主题控件
+  使用安全区和键盘内缩，不改变媒体与 MMD 的逻辑尺寸
+```
+
+```text
+过程 layoutDisplayInteractionControls()
+  将聊天和 MMD 两个显示开关固定在交互层左下角
+  保留左侧和底部安全区内边距
+  键盘弹出时将底部内边距增加 keyboardInset
+  不改变媒体、MMD 和聊天面板的层级关系
+```
+
+```text
+过程 setChatLayerVisible(visible)
+  如果 visible 为 true
+    chatLayer 显示
+    chatLayer 默认不拦截透明区域的 pointer 事件
+    chatLayer 内实际面板、输入和按钮允许接收 pointer 事件
+  否则
+    chatLayer 隐藏并设置 aria-hidden
+    释放输入焦点
+    mmdLayer 恢复完整 pointer 事件
+  不销毁聊天上下文或 MMD 模型
+```
+
+```text
+过程 handleMmdPointerEvent(event)
+  如果 chatLayer 可见且命中实际聊天控件
+    由聊天控件处理
+    返回
+  如果 MMD 当前不可见
+    返回
+  计算 Canvas 内部坐标和受限 devicePixelRatio
+  如果本地 three-vrm 运行时已就绪，使用 Raycaster 检测当前模型可交互网格
+  否则使用受限的 Canvas 占位命中区，不读取外部资源
+  如果没有命中模型
+    返回
+  根据网格/骨骼映射得到 hitPart
+  执行 hitPart 对应的本地预置动作或表情
+  发布 mmd.interaction，包含 roleId、hitPart、gesture 和时间戳
+```
+
+```text
+过程 handleMmdInteraction(event)
+  校验 roleId、hitPart、gesture 和时间戳
+  如果当前角色或会话不匹配
+    忽略聊天联动
+    返回
+  如果当前角色配置未开启 chatLink
+    只保留本地动作结果
+    返回
+  按冷却时间和 requestId 去重
+  将允许的交互映射为固定聊天事件
+  不直接拼接任意用户可执行文本
+```
+
+```text
+过程 dispatchDisplayServerMessage(message)
+  如果 message.type 是 displayId
+    更新 DisplayStageState.displayId
+  如果 message.type 属于聊天、角色、会话或动作计划消息
+    通过 DisplayModuleBus 发布给对应模块
+  如果消息未被舞台模块消费
+    交回现有媒体消息处理流程
+  不为聊天模块创建第二条 WebSocket
+```
+
+```text
+过程 setMmdLayerVisible(visible)
+  更新 mmdLayer 的 aria-hidden 和可见状态
+  如果 visible 且 chatVisible 为 false
+    开启 MMD Canvas pointer 事件
+  否则
+    关闭 MMD Canvas pointer 事件
+  保留模型、动作和聊天上下文，不因隐藏释放资源
 ```
 
 ## 3. 对象选择和会话切换

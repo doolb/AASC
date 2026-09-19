@@ -449,6 +449,27 @@ let temporaryConversation = {
     templateId: null,
     messages: []
 };
+// 临时模式首次响应使用短句候选池，避免每次唤醒都重复相同播报。
+const TEMPORARY_WAKE_PROMPTS = Object.freeze([
+    '嗯，我在',
+    '哎，我在',
+    '我在呢',
+    '在呢',
+    '听着呢'
+]);
+const TEMPORARY_CONTENT_ACK_PROMPTS = Object.freeze([
+    '好的',
+    '收到',
+    '明白',
+    '好嘞',
+    '没问题',
+    '交给我吧'
+]);
+
+function pickTemporaryPrompt(prompts) {
+    const index = Math.floor(Math.random() * prompts.length);
+    return prompts[index] || prompts[0];
+}
 const pendingConversationConfirmations = new Map();
 const conversationConfirmationTimers = new Map();
 const repairModeStates = new Map();

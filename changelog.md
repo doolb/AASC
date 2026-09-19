@@ -1,5 +1,32 @@
 # Web MediaCenter - 变更日志
 
+### 控制端与显示端 render 刷新诊断
+
+- ✅ [2026-09-19] 恢复控制端 TTS 输入框的浏览器原生历史提示。
+  - `ttsTextInput` 增加稳定 `name` 和 `autocomplete="on"`，并放入独立 `autocomplete="on"` 表单，为浏览器提供稳定表单上下文。
+  - 移除失焦后的输入节点重建逻辑，避免页面代码在原生历史交互过程中主动关闭弹窗。
+  - 不创建自定义历史弹窗，不记录输入内容，不增加 DOM 观察逻辑。
+  - TTS 发送逻辑保持不变，输入历史不读取、不上传。
+
+- ✅ [2026-09-19] 恢复控制端 TTS 文本输入框诊断打印。
+  - 记录 `ttsTextInput` 的初始化、focus/blur、鼠标、输入和 DOM 变化，帮助定位历史建议弹窗自动关闭原因。
+  - 不记录输入原文，不触发 TTS 生成，不改变输入框内容。
+
+- ✅ [2026-09-19] 暂时屏蔽 render 刷新诊断打印。
+  - 保留服务端、控制端和显示端诊断埋点，默认关闭 `ENABLE_RENDER_REFRESH_DIAGNOSTICS`，不改变原有刷新行为。
+
+- 🔄 [2026-09-19] 增加临时刷新来源日志。
+  - 服务端记录 `displayList` 广播调用来源和合并次数；控制端记录 `displayList` 接收与 `DeviceList.render()` 频率；显示端记录 `task:renderUpdate` 各实例频率。
+  - 日志按 1 秒窗口汇总，不改变刷新行为，待现场日志确认具体异常来源后移除或修复。
+
+### 浏览器显示端 ASR 来源绑定
+
+- ✅ [2026-09-19] 修复浏览器显示端已有持久化 `displayId` 但 ASR 请求偶发不携带来源字段的问题。
+  - 显示端建立/重连 WebSocket 时立即复用持久化 ID；ASR 上传时运行时 ID 缺失则回退到同一持久化 ID。
+  - 浏览器 ASR 只通过 multipart 表单 `displayId` 绑定来源，不使用 `X-AASC-Display-Id` 请求头，也不按 IP 猜测来源；ASR 提供端与原始录音来源端可以不同。
+  - 更新 `display.html`、ASR 来源设计/spec/task 文档和显示端 ASR 契约测试。
+  - 现场验证：重启服务端后显示端重连恢复来源 `display-izhstb6o`，`voiceInput` 和 `voiceCommand` 门控均正常；刷新/首次启动场景继续列入 `docs/todo.md`。
+
 ### Pi Agent Chat2API 工具错误回退
 
 - ✅ [2026-09-19] 工具调用协议损坏时保留已生成的普通聊天内容。
@@ -7,14 +34,51 @@
   - `pi-readonly-tools.mjs` 在转换失败且存在安全普通文本时按 `stop` 回放文本，不创建、不执行不完整的 `ToolCall`；没有安全文本时仍返回原有 Provider 错误。
   - 新增缺少开始标签、残留结束标签、半截 JSON 和 Provider 回退契约测试；真实 Chat2API 模型现场复现仍列入 `docs/todo.md`。
 
-### 控制端 TTS 输入历史
+### 临时模式唤醒确认提示
 
-- ✅ [2026-09-19] 调整控制端 TTS 输入历史行为。
-  - `ttsTextInput` 增加稳定 name 和 autocomplete=on，并放入独立 autocomplete=on 表单。
-  - 移除失焦重建输入节点逻辑，避免页面代码主动关闭浏览器原生历史弹窗。
-  - TTS 发送逻辑保持不变；未创建自定义历史弹窗，不读取、不上传输入历史。
+- ✅ [2026-09-19] 区分纯助手名唤醒与助手名带内容的临时模式首次响应。
+  - 纯助手名唤醒替换原“已进入临时对话……”提示，从“嗯，我在”“哎，我在”“我在呢”“在呢”“听着呢”中随机播报一条，不产生聊天消息。
+  - 助手名带内容首次进入临时模式时，从“好的”“收到”“明白”“好嘞”“没问题”“交给我吧”中随机播报一条，再继续处理原始内容；后续临时消息和一次性群聊保持原有行为。
+  - 更新 `server-app.js`、显示端语音监听契约测试及临时语音会话 design/spec/task 文档；定向语音、临时历史、TTS 路由和语法检查通过，真实设备 TTS 顺序验证列入待办。
+
+### 临时模式系统帮助
+
+- ✅ [2026-09-19] 同步更新控制端系统指令帮助页面和语音系统帮助播报。
+  - 补充纯助手名临时唤醒、助手名加内容直接提问两种用法，并说明首次响应会随机播报简短确认。
+  - 更新 `upload.html`、`voice-command-app-service.js`、内置命令列表/语音帮助测试及对应 design/spec/task 文档；不改变语音解析和会话状态机。
+
+### 显示端聊天与 VRM/MMD 同页模块化实现启动
+
+- ✅ [2026-09-19] 修复显示端聊天 HTML 下拉菜单的选项状态颜色并改为全屏透明同位层。
+  - 未选中保持普通文本和透明背景，悬停/聚焦使用浅强调色，已选中使用主题强调色背景，已选中再次交互使用次强调色。
+  - 聊天窗口同步改为全屏同位层，外层和消息列表透明以显示媒体，顶部栏、消息气泡、状态栏、输入区和菜单保持实色。
+  - 增加下拉菜单三态颜色和全屏透明层契约测试；code v11 已发布到 LAN/WAN。
+  - code v11 大小 `14030859` bytes、SHA-256 `bb190c5cefd6c1403a3525850b983348f3f8905bccda4a4f2a32325720fe274b`；SM-N9500 已验证 `pendingHealth=false`、`/api/status` 为 `ok`、无失败更新记录，截图确认空白区域透出媒体且聊天控件保持实色。
+
+- ✅ [2026-09-19] 调整显示端聊天与 render-display 的层级和选择器样式。
+  - render-display 只覆盖媒体层，聊天、MMD 和交互控制层保持在其上方。
+  - 聊天页面改用现有主题变量；对象/会话选择从系统原生 `<select>` 改为同页 HTML 下拉菜单。
+  - code v10 已发布到 LAN/WAN，大小 `14030852` bytes、SHA-256 `91a5a614d34b424a82ae4eb84b34a754d866271c3eff03bd2cbe80e1c1cde347`；SM-N9500 已验证粉色主题、聊天层级和 HTML 下拉菜单。
+
+- ✅ [2026-09-19] 修复显示端点击聊天按钮没有弹出聊天窗口的问题。
+  - `display-stage.js` 等待 `DOMContentLoaded` 后再初始化，避免首个 `defer` 脚本执行时 `DisplayChat` 尚未注册。
+  - 新增初始化时序契约测试；不改变 WebSocket、聊天历史和 MMD 层级逻辑。
+  - code v9 已发布到 LAN/WAN，大小 `14030042` bytes、SHA-256 `0457e0c47d9fb614859300dcfbda430a4fbf4fd61460f7eb524a08a2d4d3d266`；SM-N9500 真机已显示聊天窗口和历史消息。
+
+- ✅ [2026-09-19] 修复 Offline 服务热更新候选版本被启动前立即回滚的问题，并调整显示端交互按钮位置。
+  - `NodeServerService` 不再在启动候选服务前无条件回滚 `pendingHealth` release，改由候选服务启动后的本地健康检查决定提交或回滚。
+  - 聊天/MMD 两个显示开关移到左下角，适配底部安全区和软键盘内缩。
+  - v20 min APK（`0.2.18-offline-min`）已安装到 SM-N9500；code v8 已发布到 LAN/WAN，包大小 `14029890` bytes、SHA-256 `053a7a05ede47c749b6e2d1278e0f418576c281247171655cc0a0a819958dd10`。
+  - code v8 热更后 `active-release.json` 为 code v8、`pendingHealth=false` 且无 `failed-release.json`，`/api/status` 返回 `ok`；真机 UI 自动化确认两个开关位于左下角并避开底部安全区。
+
+- ✅ [2026-09-19] 确认显示端不拆分 iframe 或独立 HTML 文档，改为在单个 `display.html` 中拆分聊天、舞台和 MMD 的 JS/CSS 模块。
+  - 聊天保持在 MMD 上层并可单独隐藏；隐藏后 MMD Canvas 接收点击，通过 Raycaster 触发本地动作。
+  - 本次开始实现前的设计、spec 和任务文档已同步；当前不修改模型、APK 或发布资源。
+  - 首期实现范围补充为同页模块总线、聊天对象/会话壳、流式消息处理、聊天隐藏后的 MMD Canvas 交互降级；不新增 iframe 或第二条 WebSocket。
+  - Offline min v19（`0.2.17-offline-min`）已构建并覆盖安装到 SM-N9500，版本码 19；`https://127.0.0.1:8081/api/status` 返回正常，WebView/ASR 启动日志无新增模块错误。当前 Canvas 为无 three-vrm 运行时的安全占位降级，真实模型接入留待后续阶段。
 
 ### Offline 服务代码更新前台提示与确认
+
 - ✅ [2026-09-19] 服务 code/dependencies 更新已接入 Android 前台确认流程。
   - `OfflineUpdateManager` 只读检查签名清单并返回 code/dependencies 更新候选；`MainActivity` 与 min APK 共用更新卡片，服务更新优先显示版本和下载大小。
   - 用户确认后由 `NodeServerService` 停止旧 Node，后台下载并校验服务包，原子切换 `active-release.json`，重启 Node；失败保留旧 release 并允许重试，候选版本继续执行健康检查和回滚。
@@ -22,6 +86,7 @@
   - 正式发布 min v18：`aasc-display-offline-min-v18.apk`，大小 `89258826` bytes，SHA-256 `491b4e53a84755837b6a1efd7569d42f3d3771b6b4063271e68dd2523b4b22e1`；full v18：`aasc-display-offline-v18.apk`，大小 `995457930` bytes，SHA-256 `b0ad329a0b0e3ac2080248e96ca9637abeab747a873efc6f65d61ddda81ebd4a`。
   - 正式服务清单为 `code=6`、`dependencies=3`、`apkMin=18`；full v18 不写入服务清单。LAN/WAN 清单字节、签名、HTTP Content-Length、APK v2 签名和精确清理均通过。
   - 验证：Node 定向测试 31/31、Android JVM 单测 25/25、full/min APK 源码与版本校验通过；SM-N9500 现场更新卡片、服务切换和声纹注册回归待执行。
+
 ### 临时会话与语音指令
 
 - ✅ [2026-09-19] 增强临时语音会话历史和群聊控制指令。
@@ -37,6 +102,33 @@
   - 服务端通过现有临时会话 WebSocket 快照同步最近历史组，控制端展示开始时间、角色、消息数量和完整消息内容。
   - 历史组仅支持查看和语音回放，查看期间禁用发送与清空，不改变当前临时会话。
   - 验证：临时历史分组 4/4、历史 UI 契约 9/9、语音会话回归 11/11、`git diff --check` 通过。
+
+### 控制端语音帮助
+
+- ✅ [2026-09-19] 更新控制端系统指令帮助内容
+  - 补齐开始/结束对话、助手名临时唤醒、私聊唤醒与结束、进入群聊模式和退出私聊说明，保留私聊与系统记录命令。
+  - 更新 `upload.html`、语音帮助 design/spec/task 文档和内置命令列表契约测试。
+  - 验证：内置命令列表 20/20、语音帮助 33/33、语音会话 11/11、Chat2API 92/92，`git diff --check` 通过。
+
+### Offline 声纹启动预热与注册等待
+
+- ✅ [2026-09-19] 按正式 Offline 热更新流程发布声纹修复 code v6，解决完整 APK 不进入外网更新清单的问题。
+  - 文件：`code/code-v6.zip`；大小 `14006751` bytes；SHA-256 `8bca7a10f49888bccd426d449c7d4ccdf2d75c5c1f1fac796996b1e51eb3c9fa`。
+  - `requiredDependencyVersion=3`，沿用 dependencies v3 和 apkMin v16；LAN/WAN `manifest.json` 已原子切换，清单签名、字节一致、HTTP 200/Content-Length 和远端 hash 均通过。
+  - 完整 APK 不写入服务更新清单；已有 Offline 设备可通过外网更新卡片获取 code v6。SM-N9500 外网更新卡片和声纹注册现场回归待执行。
+
+- ✅ [2026-09-19] 发布包含本次修复的完整 Offline APK v17（`0.2.15-offline`）。
+  - 文件：`apk/aasc-display-offline-v17.apk`；大小 `995442031` bytes；SHA-256 `355826ce69a6b35de08717263fd94672739492d640dd284bc24cdfb9017ea0e5`。
+  - profile 为 `allserver`、`embeddedNode=true`、`updateOnly=false`，内置 embedding 与 segmentation 声纹模型；APK v2 签名通过，证书 SHA-256 为 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
+  - 已发布到 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；两端 HTTP 200、Content-Length、远端 hash 通过，旧 full v15 清理、min v16 保留，服务 `manifest.json` 未替换。
+  - 尚未完成 SM-N9500 真机覆盖安装和现场注册回归。
+
+- ✅ [2026-09-19] 修复 Offline APK 启动后声纹注册过早调用原生桥而显示“模型未就绪”的问题。
+  - `display.html` 在显示端初始化配置阶段预热声纹引擎，并区分模型文件、声纹引擎、声纹库和 ASR 的 ready 状态；注册与识别继续复用同一个 `VoiceprintEngine`。
+  - 声纹注册提取在引擎加载期间等待最多 60 秒；模型失败、禁用、超时和 WebSocket 断开均返回明确错误；服务端按显示端断开立即回收 pending 请求。
+  - `server-app.js` 将 display 注册等待上限统一为 60 秒；新增 `tests/voiceprint-model-readiness.test.js` 回归覆盖状态、预热、超时和断线回收。
+  - 设计、伪代码和任务文档同步更新：`docs/design/voiceprint.md`、`docs/spec/voiceprint.md`、`docs/task/20260919_Offline声纹模型启动预热与注册等待.md`。
+  - 验证：声纹回归测试 6/6、Node 语法检查和 `git diff --check` 通过；完整 APK 构建已使用固定 MNN/NDK 环境进入大型模型资源 asset merge，但运行约 25 分钟仍未完成后安全中止，未发布或替换 APK。
 
 ### Offline 声纹模型与 Chat2API 凭证导出
 

@@ -42,6 +42,8 @@ assert.match(helpText, /早安/);
 assert.match(helpText, /今日提醒/);
 assert.match(helpText, /进入群聊/);
 assert.match(helpText, /退出群聊/);
+assert.match(helpText, /助手名字.*随机播报简短回应.*临时对话/);
+assert.match(helpText, /助手名字加内容.*随机播报简短确认.*处理内容/);
 
 assert.deepStrictEqual(parseVoiceHelpRequest('帮助静音'), { topic: '静音' });
 assert.deepStrictEqual(parseVoiceHelpRequest('静音帮助'), { topic: '静音' });
@@ -107,4 +109,4 @@ assert.ok(responseIndex >= 0, '系统帮助应向目标显示端发送完整响�
 assert.ok(responseIndex < ttsWaitIndex, '显示端系统帮助弹窗应先于通用 TTS 生成下发');
 assert.ok(responseIndex < directedTtsWaitIndex, '控制端系统帮助弹窗应先于定向 TTS 生成下发');
 
-console.log('display-voice-builtins.test.js: 37/37 passed');
+console.log('display-voice-builtins.test.js: 39/39 passed');

@@ -4,7 +4,7 @@
 
 **Goal:** Add a browser display chat application that shares the existing control-side chat state and renders VRM/MMD in the same full-screen stage with configurable visual layering.
 
-**Architecture:** Keep the existing WebSocket chat flow and server-authoritative history/session state. Add a display-only chat shell, a three-vrm runtime with local resource caching, and a bounded action adapter that accepts a high-level `mmd.action.plan` plus a small MMDAgent-EX-compatible low-level command subset. Media remains the bottom layer; chat and MMD share one stage, while an interaction layer remains above both.
+**Architecture:** Keep the existing WebSocket chat flow and server-authoritative history/session state. Keep one `display.html` document, but split chat, stage, VRM/MMD, action adapter, and CSS into focused modules mounted in the same DOM. Use a same-page typed event bus instead of iframe/postMessage. Media remains the bottom layer; chat and MMD share one stage, while an interaction layer remains above both.
 
 **Tech Stack:** Existing Node.js/Express/WebSocket server, native HTML/CSS/JavaScript display UI, three.js, three-vrm, mmd-parser, existing chat/session/history services, and existing browser/Android WebView test tooling.
 
@@ -16,6 +16,7 @@
 - Keep the server as the authority for chat history, session switching, stream completion, and deduplication.
 - Keep media at the bottom of the stage; chat and MMD occupy the same full-screen viewport.
 - Keep the interaction layer above both chat and MMD so the session selector and input cannot be occluded.
+- Do not add independent chat/MMD HTML documents or iframes; use one `display.html` with separate JS/CSS modules and root containers.
 - Load VRM directly in the browser; do not run desktop MMDAgent-EX or require PMX in the browser.
 - Prefer local/offline resources and verified cache entries before external model URLs.
 - Treat action plans and low-level commands as data; never execute scripts, arbitrary URLs, or file-system paths from them.
@@ -52,21 +53,24 @@
 
   Run the project’s existing targeted chat test script from `package.json`; expected result is all existing chat tests plus the new contract assertions passing.
 
-### Task 2: Add the display chat shell and same-stage layout
+### Task 2: Add the same-document stage and display chat shell
 
 **Files:**
 - Modify: `src/apps/web-mediacenter/ui/public/display.html`
 - Modify: `src/apps/web-mediacenter/ui/public/css/display.css`
+- Create: `src/apps/web-mediacenter/ui/public/js/display-stage.js`
 - Create: `src/apps/web-mediacenter/ui/public/js/display-chat.js`
+- Create: `src/apps/web-mediacenter/ui/public/css/display-chat.css`
+- Create: `src/apps/web-mediacenter/ui/public/css/display-mmd.css`
 - Test: display static contract tests and browser interaction tests
 
 **Interfaces:**
 - Consumes: `ChatTarget`, `ChatContext`, existing WebSocket chat messages, and the layer state defined in the spec.
-- Produces: object picker, top session selector, message list, send controls, chat visibility toggle, and `setMmdOrder`/`setChatVisible` state hooks.
+- Produces: same-page module bus, object picker, top session selector, message list, send controls, chat visibility toggle, pointer-event switching, and `setMmdOrder`/`setChatVisible` state hooks.
 
 - [ ] **Step 1: Add the stage containers without changing media element ownership**
 
-  Keep existing media IDs and handlers intact. Add dedicated MMD, chat, and interaction containers with explicit layer order and pointer-event rules.
+  Keep existing media IDs and handlers intact. Add dedicated MMD, chat, and interaction containers with explicit layer order and pointer-event rules. Do not add iframes.
 
 - [ ] **Step 2: Add the object picker and top session selector**
 
@@ -78,23 +82,24 @@
 
 - [ ] **Step 4: Implement mobile stage rules**
 
-  Use dynamic viewport units, safe-area padding, ResizeObserver, and visualViewport keyboard inset. Adjust only the chat input area when the keyboard is visible.
+  Use dynamic viewport units, safe-area padding, ResizeObserver, and visualViewport keyboard inset. Adjust only the chat input area when the keyboard is visible. When chat is hidden, restore MMD pointer input.
 
 - [ ] **Step 5: Run static and browser tests**
 
   Verify object selection, top session switching, stream rendering, chat hide/show, MMD order toggle, media continuity, and no duplicated message after reconnect.
 
-### Task 3: Implement VRM resource loading and runtime lifecycle
+### Task 3: Implement VRM resource loading, same-page runtime, and model touch input
 
 **Files:**
-- Create: `src/apps/web-mediacenter/ui/public/js/display-vrm.js`
+- Create: `src/apps/web-mediacenter/ui/public/js/display-mmd.js`
+- Modify: `src/apps/web-mediacenter/ui/public/css/display-mmd.css`
 - Modify: `src/apps/web-mediacenter/ui/public/display.html` for runtime script/module loading
 - Modify: dependency/build configuration only where three.js, three-vrm, and mmd-parser are already supported by the project’s packaging model
 - Test: resource manifest, cache, load failure, disposal, and browser WebGL tests
 
 **Interfaces:**
 - Consumes: `ModelProfile`, verified local resource URLs, current role ID, and stage resize events.
-- Produces: a loaded VRM instance, model status, disposal hooks, default idle action, and a model-missing fallback that leaves chat/media operational.
+- Produces: a loaded VRM instance, model status, disposal hooks, default idle action, model-missing fallback, Raycaster hit-part events, and a local interaction action that leaves chat/media operational.
 
 - [ ] **Step 1: Define the resource manifest validation assertions**
 

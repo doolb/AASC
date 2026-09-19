@@ -29,10 +29,12 @@ assert.match(uploadHtml, /会话与模式命令/);
 assert.match(uploadHtml, /开始对话/);
 assert.match(uploadHtml, /结束对话/);
 assert.match(uploadHtml, /你好\{助手名字\}/);
+assert.match(uploadHtml, /\{助手名字\}.*随机播报简短回应/);
+assert.match(uploadHtml, /\{助手名字\} \+ 内容.*随机播报简短确认/);
 assert.match(uploadHtml, /再见\{助手名字\}/);
 assert.match(uploadHtml, /进入群聊/);
 assert.match(uploadHtml, /退出群聊/);
 assert.match(uploadHtml, /无需再次唤醒/);
 assert.match(uploadHtml, /系统记录\{内容\}/);
 
-console.log('builtin-command-list.test.js: 21/21 passed');
+console.log('builtin-command-list.test.js: 23/23 passed');

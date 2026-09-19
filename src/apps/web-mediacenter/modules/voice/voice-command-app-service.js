@@ -467,6 +467,8 @@ function getVoiceCommandHelpText(commandConfig = chat.getCommands(), topic = '')
     const sections = [
         '系统指令帮助',
         ...builtinHelp,
+        '说助手名字，随机播报简短回应后进入临时对话并等待后续内容',
+        '说助手名字加内容，随机播报简短确认后直接进入临时对话并处理内容',
         '说你好加助手名字或助手名字你好，唤醒进入群聊',
         '说私聊加助手名字，进入私聊模式',
         '说进入群聊，免唤醒进入持续群聊',
