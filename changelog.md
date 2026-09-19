@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### 控制端 TTS 输入历史
+
+- ✅ [2026-09-19] 调整控制端 TTS 输入历史行为。
+  - `ttsTextInput` 增加稳定 name 和 autocomplete=on，并放入独立 autocomplete=on 表单。
+  - 移除失焦重建输入节点逻辑，避免页面代码主动关闭浏览器原生历史弹窗。
+  - TTS 发送逻辑保持不变；未创建自定义历史弹窗，不读取、不上传输入历史。
+
 ### Offline 服务代码更新前台提示与确认
 - ✅ [2026-09-19] 服务 code/dependencies 更新已接入 Android 前台确认流程。
   - `OfflineUpdateManager` 只读检查签名清单并返回 code/dependencies 更新候选；`MainActivity` 与 min APK 共用更新卡片，服务更新优先显示版本和下载大小。
