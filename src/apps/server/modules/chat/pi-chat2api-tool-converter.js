@@ -176,6 +176,27 @@ function parseChat2ApiToolCalls(text, allowedTools) {
     };
 }
 
+/**
+ * 从工具协议损坏的助手文本中提取安全的普通回复前缀。
+ * 该函数只做展示回退，不解析、不执行任何工具调用。
+ *
+ * @param {string} text 模型返回的助手文本
+ * @returns {string} 可安全展示的普通文本
+ */
+function getSafeChat2ApiFallbackText(text) {
+    const source = String(text || '');
+    const protocolIndex = source.search(CHAT2API_PROTOCOL_TAG_PATTERN);
+    if (protocolIndex < 0) return source.trim();
+
+    let safeText = source.slice(0, protocolIndex);
+    // 上游模型可能先输出 JSON 工具数组，再补出残留的协议结束标签；数组不能展示给用户。
+    const jsonToolArrayMatch = safeText.match(/(?:^|\n)\s*\[\s*\{\s*"name"\s*:/u);
+    if (jsonToolArrayMatch) {
+        safeText = safeText.slice(0, jsonToolArrayMatch.index);
+    }
+    return safeText.trim();
+}
+
 function convertChat2ApiContent(text, allowedTools) {
     const result = parseChat2ApiToolCalls(text, allowedTools);
     return {
@@ -188,5 +209,6 @@ module.exports = {
     CHAT2API_TOOL_CALLS_MARKER,
     DEFAULT_CHAT2API_TOOLS,
     parseChat2ApiToolCalls,
-    convertChat2ApiContent
+    convertChat2ApiContent,
+    getSafeChat2ApiFallbackText
 };

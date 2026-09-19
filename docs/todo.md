@@ -31,6 +31,10 @@
 
 ## 聊天系统
 
+- ⏳待现场验证 [2026-09-19] Pi Agent Chat2API 工具格式错误回退普通回复
+  - 代码已在 Provider 层对损坏工具协议保留安全普通文本，不执行不完整工具调用，也不向聊天/TTS输出协议残留；需使用真实 Chat2API 模型复现一次缺少开始标签的响应，确认聊天正文和 TTS 均正常恢复。
+  - 关联文档：`docs/design/llm-agent-mode.md`、`docs/spec/llm-agent-mode.md`、`docs/task/20260919_Chat2API工具格式错误保留普通回复.md`。
+
 - 🔄进行中 [2026-09-19] 控制端 TTS 输入历史兼容性观察
   - 已改用独立 `autocomplete` 表单并移除失焦节点重建；浏览器原生历史下拉偶发受 WebView 内部状态抑制，暂不继续处理。
 

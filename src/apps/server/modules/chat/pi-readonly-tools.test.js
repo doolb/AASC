@@ -50,6 +50,14 @@ test('扩展源码注册 Chat2API 兼容 Provider 流', () => {
     assert.match(source, /aasc_context_owner/u);
 });
 
+test('工具协议错误时 Provider 回退普通文本且不回放工具调用', () => {
+    const source = fs.readFileSync(extensionFile, 'utf8');
+    assert.match(source, /getSafeChat2ApiFallbackText/u);
+    assert.match(source, /工具调用格式错误，已回退普通文本/u);
+    assert.match(source, /content:\s*\[\{ type: 'text', text: fallbackText \}\]/u);
+    assert.match(source, /stopReason:\s*'stop'/u);
+});
+
 test('扩展源码注册不依赖 fd 的稳定文件查找工具', () => {
     const source = fs.readFileSync(extensionFile, 'utf8');
     const finderSource = fs.readFileSync(findToolFile, 'utf8');

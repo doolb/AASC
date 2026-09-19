@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const {
     DEFAULT_CHAT2API_TOOLS,
     parseChat2ApiToolCalls,
-    convertChat2ApiContent
+    convertChat2ApiContent,
+    getSafeChat2ApiFallbackText
 } = require('./pi-chat2api-tool-converter');
 
 const SAMPLE_READ = '<|CHAT2API|tool_calls><|CHAT2API|invoke name="read"><|parameter=path>\n/mnt/AASC/package.json\n</parameter>\n</function>';
@@ -96,6 +97,28 @@ test('普通文本不被转换', () => {
         convertChat2ApiContent('这是普通回答。', DEFAULT_CHAT2API_TOOLS),
         { text: '这是普通回答。', calls: [] }
     );
+});
+
+test('工具协议损坏时保留普通文本并移除半截 JSON 工具数组', () => {
+    const text = [
+        '好嘞主人，小爱马上去查新闻。',
+        '',
+        '[{"name":"aasc_web_search","query":"智谱 AI 最新新闻 2024"}}]</|CHAT2API|invoke></|CHAT2API|tool_calls>'
+    ].join('\n');
+
+    assert.equal(
+        getSafeChat2ApiFallbackText(text),
+        '好嘞主人，小爱马上去查新闻。'
+    );
+});
+
+test('工具协议从开始标签处损坏时只保留标签前普通文本', () => {
+    const text = '先给你说明。<|CHAT2API|tool_calls><|CHAT2API|invoke name="aasc_web_search"';
+    assert.equal(getSafeChat2ApiFallbackText(text), '先给你说明。');
+});
+
+test('没有协议内容时安全文本回退保持原文', () => {
+    assert.equal(getSafeChat2ApiFallbackText('普通回复。'), '普通回复。');
 });
 
 test('未知工具不会执行', () => {

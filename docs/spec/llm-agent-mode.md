@@ -216,6 +216,12 @@ parseChat2ApiToolCalls(text, allowedTools):
     从普通文本中删除完整 tool_calls 区块
     如果删除后仍有未识别 Chat2API 协议标签 → 返回 malformedProtocol 错误
     返回 remainingText = 删除完整协议区块后的普通文本
+
+getSafeChat2ApiFallbackText(text):
+    找到第一个 Chat2API 协议标签
+    保留该标签之前的文本
+    如果保留文本末尾是从新行开始的 JSON 工具数组 → 删除该数组
+    trim 后返回安全普通文本
 ```
 
 ```text
@@ -226,7 +232,13 @@ createChat2ApiCompatibleProvider(baseProvider):
         如果 source 失败 → 原样生成 error 事件
         result = parseChat2ApiToolCalls(最终消息中的文本, 当前 context.tools)
         如果没有 Chat2API 标签 → 原样回放文本/思考/完成事件
-        如果 result 有错误 → 生成明确 provider error，不回放原始标签
+        如果 result 有错误:
+            fallbackText = getSafeChat2ApiFallbackText(最终消息中的文本)
+            如果 fallbackText 非空:
+                只创建一个普通 text 内容块
+                不创建、不执行任何 toolCall
+                以 stop 状态回放 fallbackText，并记录协议错误摘要
+            否则生成明确 provider error，不回放原始标签
         否则 → 生成普通文本块和 Pi toolCall 块
         stopReason = 存在 calls 时为 toolUse，否则沿用原结果
         发送 done(message)

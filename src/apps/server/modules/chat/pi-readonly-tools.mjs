@@ -15,7 +15,8 @@ import continuationTrackerModule from './pi-responses-continuation.js';
 
 const {
     DEFAULT_CHAT2API_TOOLS,
-    convertChat2ApiContent
+    convertChat2ApiContent,
+    getSafeChat2ApiFallbackText
 } = chat2ApiToolConverter;
 const { createResponsesContinuationTracker } = continuationTrackerModule;
 
@@ -103,7 +104,27 @@ function createChat2ApiCompatibleStream(source, model, context, onResponse) {
 
             const text = getAssistantText(message);
             const allowedTools = context.tools || DEFAULT_CHAT2API_TOOLS;
-            const converted = convertChat2ApiContent(text, allowedTools);
+            let converted;
+            try {
+                converted = convertChat2ApiContent(text, allowedTools);
+            } catch (error) {
+                const fallbackText = getSafeChat2ApiFallbackText(text);
+                if (!fallbackText) {
+                    throw error;
+                }
+
+                // 工具协议损坏时只回放普通文本；不保留或执行任何可能不完整的工具调用。
+                console.warn('[Pi Chat2API] 工具调用格式错误，已回退普通文本:', error.message);
+                const fallbackMessage = {
+                    ...message,
+                    content: [{ type: 'text', text: fallbackText }],
+                    stopReason: 'stop',
+                    errorMessage: undefined
+                };
+                onResponse?.(fallbackMessage);
+                emitAssistantMessage(stream, fallbackMessage);
+                return;
+            }
             if (converted.calls.length === 0) {
                 onResponse?.(message);
                 emitAssistantMessage(stream, message);

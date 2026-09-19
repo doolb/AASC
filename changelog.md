@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### Pi Agent Chat2API 工具错误回退
+
+- ✅ [2026-09-19] 工具调用协议损坏时保留已生成的普通聊天内容。
+  - `pi-chat2api-tool-converter.js` 增加安全文本前缀提取，只删除协议残留和半截 JSON 工具数组，不放宽工具解析或白名单校验。
+  - `pi-readonly-tools.mjs` 在转换失败且存在安全普通文本时按 `stop` 回放文本，不创建、不执行不完整的 `ToolCall`；没有安全文本时仍返回原有 Provider 错误。
+  - 新增缺少开始标签、残留结束标签、半截 JSON 和 Provider 回退契约测试；真实 Chat2API 模型现场复现仍列入 `docs/todo.md`。
+
 ### 控制端 TTS 输入历史
 
 - ✅ [2026-09-19] 调整控制端 TTS 输入历史行为。
