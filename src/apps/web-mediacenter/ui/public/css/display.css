@@ -571,7 +571,8 @@ body {
 
 .render-task-overlay {
     position: fixed;
-    z-index: 500;
+    /* render-display 只覆盖媒体层，聊天/MMD 舞台和交互层保持在其上方。 */
+    z-index: 100;
     pointer-events: none;
     animation: renderTaskFadeIn 0.4s ease;
 }
