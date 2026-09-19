@@ -93,12 +93,15 @@ const createQwenRequest = (request, actualModel, provider, headers, responseSess
   // tongyi_sso_ticket 使用 Cookie 鉴权，Bearer ticket 会触发 Qwen 签名错误。
   delete qwenHeaders.Authorization;
   delete qwenHeaders.authorization;
+  // Qwen 网页聊天请求不强制发送 X-Platform/X-DeviceId；固定或派生设备头会触发上游风控。
+  delete qwenHeaders['X-DeviceId'];
+  delete qwenHeaders['x-deviceid'];
+  delete qwenHeaders['X-Platform'];
+  delete qwenHeaders['x-platform'];
   Object.assign(qwenHeaders, {
     Accept: 'application/json, text/event-stream, text/plain, */*',
     Origin: qwenHeaders.Origin || 'https://www.qianwen.com',
     Referer: qwenHeaders.Referer || 'https://www.qianwen.com/',
-    'X-Platform': 'pc_tongyi',
-    'X-DeviceId': '5b68c267-cd8e-fd0e-148a-18345bc9a104',
   });
   return {
     url: url.toString(),
@@ -430,6 +433,17 @@ const extractQwenResponseId = (data) => data && data.communication && (
   data.communication.reqid || data.communication.sessionid
 );
 
+const createQwenUpstreamError = (data) => {
+  const ret = Array.isArray(data && data.ret) ? data.ret : [];
+  const code = ret[0] || data && (data.errorCode || data.code);
+  const message = ret[1] || data && (data.errorMsg || data.message || data.msg);
+  if (!code && !message) return null;
+  const error = new Error(`Qwen 上游请求失败: ${message || code}`);
+  error.code = String(code || 'qwen_upstream_error');
+  error.statusCode = 403;
+  return error;
+};
+
 const parseSseEvent = (eventBlock) => {
   const dataLines = eventBlock.split(/\r?\n/).filter((line) => line.startsWith('data:'));
   if (dataLines.length === 0) return null;
@@ -611,10 +625,27 @@ const createQwenBody = (content, model, id) => ({
   choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
 });
 
-const normalizeQwenBody = async (data, model, headers, responseSession) => {
+const normalizeQwenBody = async (data, model, headers = {}, responseSession) => {
   if (!data || typeof data[Symbol.asyncIterator] !== 'function') {
+    const upstreamError = createQwenUpstreamError(data);
+    if (upstreamError) throw upstreamError;
     updateNativeState(data, 'qwen', responseSession);
     return createQwenBody(extractQwenContent(data) || '', model, extractQwenResponseId(data));
+  }
+  const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
+  if (contentType.includes('application/json')) {
+    let raw = '';
+    for await (const chunk of decompressStream(data, headers)) raw += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // 非 JSON 的异常响应交给后续 SSE 解析路径保持兼容。
+    }
+    const upstreamError = createQwenUpstreamError(parsed);
+    if (upstreamError) throw upstreamError;
+    updateNativeState(parsed, 'qwen', responseSession);
+    return createQwenBody(extractQwenContent(parsed) || '', model, extractQwenResponseId(parsed));
   }
   let content = '';
   let id;

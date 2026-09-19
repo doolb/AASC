@@ -94,6 +94,9 @@ Chat2API 代理 HTTP 127.0.0.1:{port}
 - 所有内置 Provider 均按原版选择专用请求/响应适配；DeepSeek、GLM、Kimi、MiMo、MiniMax、Perplexity、Qwen AI 和 Z.ai 分别保留其会话、签名、Cookie、gRPC/HTTP2、SSE 或轮询协议边界，统一转换为 OpenAI 输出。
 - 所有网页 Provider 的工具调用均由核心适配层统一转换为 Chat2API `managed_xml` 标签提示；Provider 请求移除原生 `tools`/`tool_choice`，不再由单个 Qwen adapter 独立注入。
 - Qwen Provider 按 `/api/v2/chat` 原生协议生成请求参数，解压 gzip/deflate/br 后兼容 `data.messages`、`multi_load/iframe`、SSE 累计内容和思考标记，避免通用 OpenAI 解析得到空回复。
+- Qwen Provider 的网页聊天请求不强制注入固定或派生的 `X-Platform`/`X-DeviceId`；保持 Cookie、Origin 和 Referer 等网页请求边界，避免额外设备头触发上游风控。
+- Qwen Provider 对上游验证码/风控 JSON 必须返回明确错误，不得把非 SSE 的风控响应归一化为空回复。
+- Qwen Provider 的首轮/续接请求必须分别维护 `session_id`、`parent_req_id` 和 `scene_param`；不得因为普通 OpenAI 请求转换而把已返回的原生状态丢失或把异常上游回复继续固化到后续会话。
 - 旧 AASC LLM 配置继续有效；Chat2API 代理作为独立服务，不自动替换当前 profile。
 
 ### Responses 会话兼容设计

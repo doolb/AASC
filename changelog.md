@@ -1,5 +1,11 @@
 # Web MediaCenter - 变更日志
 
+### Chat2API Qwen Provider
+
+- 🔄 [2026-09-19] 修复 Qwen Chat2API 请求通道的网页头和风控响应处理。
+  - 已确认本地适配器额外注入固定 `X-Platform/X-DeviceId`，且把 Qwen 返回的 `FAIL_SYS_USER_VALIDATE` JSON 当作空成功回复；现已移除强制设备头并返回明确错误。
+  - `session_id`、`parent_req_id`、`scene_param` 首轮/续接保持不变；当前真实上游仍要求验证码，待有效网页登录风控状态后复测答案链路。
+  - 任务文档：`docs/task/20260919_Chat2API_Qwen发送链路修复.md`。
 ### 控制端与显示端 render 刷新诊断
 
 - ✅ [2026-09-19] 恢复控制端 TTS 输入框的浏览器原生历史提示。

@@ -280,6 +280,9 @@ createProviderAdapters(httpClient):
     Qwen AI 使用 chats/new 会话及 chat/completions phase 请求体
     Z.ai 使用 chats/new、请求签名、查询参数和 phase 请求体
     Qwen adapter 使用原生 /api/v2/chat 请求协议，生成 req_id、session_id、nonce、timestamp 和 Qwen 专用消息体
+    Qwen adapter 的网页聊天请求不注入固定 X-Platform/X-DeviceId，保留网页登录 Cookie 鉴权，不发送 ticket Bearer Authorization
+    Qwen adapter 识别 application/json 风控响应中的 ret/errorCode/errorMsg，并返回可识别的上游错误，不生成空成功回复
+    Qwen adapter 首轮使用 scene_param=first_turn 和 parent_req_id=0，续接时只使用 responseSession.nativeState 返回的 session_id/parent_req_id
     Qwen adapter 按响应 content-encoding 解压 gzip、deflate、br 后再读取 SSE 事件
     Qwen adapter 统一按 SSE 事件读取 data.messages，并从 multi_load/iframe 或 text/plain 提取答案内容
     核心适配层统一把所有网页 Provider 的 function tools 转成 managed_xml 标签提示

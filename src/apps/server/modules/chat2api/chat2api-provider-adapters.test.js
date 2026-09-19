@@ -222,6 +222,44 @@ test('Cookie 凭据统一生成 Cookie 头', () => {
   assert.match(headers.Cookie, /xiaomichatbot_ph=p/);
 });
 
+test('Qwen 网页聊天请求不注入共享设备头', () => {
+  const headers = buildProviderHeaders({}, { credentials: { ticket: 'qwen-ticket-a' } }, 'qwen');
+  const request = createQwenRequest(
+    { model: 'Qwen3.6-Flash', messages: [{ role: 'user', content: 'hi' }] },
+    'Qwen3.7',
+    { apiEndpoint: 'https://example.com', chatPath: '/api/v2/chat' },
+    headers,
+    { nativeState: {} },
+  );
+
+  assert.equal(request.headers['X-DeviceId'], undefined);
+  assert.equal(request.headers['X-Platform'], undefined);
+  assert.equal(request.data.scene_param, 'first_turn');
+  assert.equal(request.data.parent_req_id, '0');
+});
+
+test('Qwen 风控 JSON 不再被归一化为空回复', async () => {
+  const adapters = createChat2ApiProviderAdapters({
+    httpClient: {
+      request: async () => ({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        data: Readable.from([JSON.stringify({ ret: ['FAIL_SYS_USER_VALIDATE', '需要完成验证码'] })]),
+      }),
+    },
+  });
+
+  await assert.rejects(
+    () => adapters.qwen({
+      request: { model: 'Qwen3.6-Flash', messages: [{ role: 'user', content: 'hi' }], stream: false },
+      account: { credentials: { ticket: 'ticket-secret' } },
+      provider: { id: 'qwen', apiEndpoint: 'https://example.com', chatPath: '/api/v2/chat', headers: {} },
+      actualModel: 'Qwen3.7',
+    }),
+    /需要完成验证码/u,
+  );
+});
+
 test('Provider adapter 开启调试后记录内部 HTTP 请求并关联核心 requestId', async () => {
   const records = [];
   const adapters = createChat2ApiProviderAdapters({

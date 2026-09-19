@@ -35,6 +35,12 @@
 
 ## 聊天系统
 
+- 🔄进行中 [2026-09-19] 修复 Qwen Chat2API 请求通道返回固定拒答
+  - 已复现：同一账号和 `Qwen3.6-Flash → Qwen3.7` 映射下，本地 Chat2API 会把 Qwen 上游固定拒答或风控 JSON 归一化为空成功回复。
+  - 当前修复：网页聊天请求不再注入固定 `X-Platform/X-DeviceId`；风控 JSON 改为明确错误；保持 Qwen 原生 `session_id/parent_req_id/scene_param` 首轮与续接契约。
+  - 现场验证：当前上游返回 `FAIL_SYS_USER_VALIDATE` 验证码响应，代码已能识别，但仍需有效网页登录风控状态后确认正常答案链路。
+  - 关联文档：`docs/design/chat2api-builtin-task.md`、`docs/spec/chat2api-builtin-task.md`、`docs/task/20260919_Chat2API_Qwen发送链路修复.md`。
+
 - ⏳待现场验证 [2026-09-19] 临时模式首次唤醒确认提示区分
   - 纯助手名已改为从“嗯，我在”“哎，我在”“我在呢”“在呢”“听着呢”中随机播报；助手名带内容已从“好的”“收到”“明白”“好嘞”“没问题”“交给我吧”中随机确认，后续临时消息和一次性群聊不重复使用临时确认。
   - 需使用真实显示端确认短确认与模型回答的连续 TTS 播放顺序，以及显示端 TTS/服务端 TTS 两种配置下的实际播放目标。
