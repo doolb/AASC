@@ -60,6 +60,9 @@ class MainActivity : AppCompatActivity() {
     private var offlineMode = false
     private var embeddedNode = true
     private var updateOnlyMode = false
+    private var serviceUpdateCheckStarted = false
+    private var serviceUpdateCandidate: ServiceUpdateResult? = null
+    private var serviceUpdateStarted = false
     private var minApkUpdateCheckStarted = false
     private var pendingMinApkUpdate: MinApkUpdateResult? = null
     private var minApkUpdateCandidate: MinApkUpdateResult? = null
@@ -350,8 +353,8 @@ class MainActivity : AppCompatActivity() {
         serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
         controlToggleButton.setOnClickListener { toggleControlPage() }
         offlineStartupRetry.setOnClickListener { connect() }
-        offlineUpdateDownload.setOnClickListener { startMinApkDownload() }
-        offlineUpdateLater.setOnClickListener { dismissMinApkUpdatePrompt() }
+        offlineUpdateDownload.setOnClickListener { startAvailableOfflineUpdate() }
+        offlineUpdateLater.setOnClickListener { dismissAvailableOfflineUpdate() }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 handleBackNavigation()
@@ -378,6 +381,7 @@ class MainActivity : AppCompatActivity() {
         activityResumed = true
         // 服务已在后台运行、Activity 被系统回收后恢复时，不一定再次收到 STARTING 广播。
         if (offlineMode && NodeRuntimeInstaller.hasFullOfflineInstall(File(filesDir, "aasc-server"))) {
+            checkForServiceUpdateOnce()
             checkForMinApkUpdateOnce()
         }
         submitPendingMinApkUpdateIfVisible()
@@ -532,7 +536,18 @@ class MainActivity : AppCompatActivity() {
             }
             NodeServerService.STATUS_STARTING -> {
                 showOfflineStartupMessage(getString(R.string.offline_startup_starting), false)
+                checkForServiceUpdateOnce()
                 checkForMinApkUpdateOnce()
+            }
+            NodeServerService.STATUS_SERVICE_UPDATE_APPLYING,
+            NodeServerService.STATUS_SERVICE_UPDATE_PROGRESS -> {
+                updateServiceUpdateProgress(phase, detail, completedBytes, totalBytes)
+            }
+            NodeServerService.STATUS_SERVICE_UPDATE_APPLIED -> {
+                handleServiceUpdateApplied(detail)
+            }
+            NodeServerService.STATUS_SERVICE_UPDATE_FAILED -> {
+                handleServiceUpdateFailed(detail)
             }
             NodeServerService.STATUS_FAILED -> {
                 val failure = detail?.trim()?.takeIf { it.isNotEmpty() }
@@ -576,6 +591,29 @@ class MainActivity : AppCompatActivity() {
         return "${bytes / (1024L * 1024L)}MB"
     }
 
+    /** 启动后只读取一次签名服务清单；真正下载必须经过用户确认。 */
+    private fun checkForServiceUpdateOnce() {
+        if (!offlineMode || serviceUpdateCheckStarted || serviceUpdateStarted) return
+        serviceUpdateCheckStarted = true
+        Thread({
+            val result = offlineUpdateManager.checkForServerUpdate(
+                File(filesDir, "aasc-server")
+            )
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (!result.hasUpdate) {
+                    android.util.Log.i("MainActivity", "Offline 服务更新检查: ${result.status}")
+                    return@runOnUiThread
+                }
+                android.util.Log.i("MainActivity", "Offline 服务发现更新: ${result.status}")
+                showServiceUpdatePrompt(result)
+            }
+        }, "aasc-service-update-check").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
     /** 首次本地服务启动完成后只检查 update-only APK，不在用户确认前下载。 */
     private fun checkForMinApkUpdateOnce() {
         if (!offlineMode || minApkUpdateCheckStarted) return
@@ -599,9 +637,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showServiceUpdatePrompt(result: ServiceUpdateResult) {
+        val codeVersion = result.targetCodeVersion ?: return
+        val dependencyVersion = result.targetDependencyVersion ?: return
+        serviceUpdateCandidate = result
+        serviceUpdateStarted = false
+        offlineUpdatePanel.visibility = View.VISIBLE
+        offlineUpdateTitle.text = getString(R.string.offline_service_update_title)
+        offlineUpdateMessage.text = getString(
+            R.string.offline_service_update_available,
+            codeVersion,
+            dependencyVersion,
+            formatBytes(result.downloadBytes)
+        )
+        showMinApkReleaseNotes(null)
+        offlineUpdateProgress.visibility = View.GONE
+        offlineUpdateDownload.text = getString(R.string.offline_service_update_download)
+        offlineUpdateDownload.isEnabled = true
+        offlineUpdateDownload.visibility = View.VISIBLE
+        offlineUpdateLater.visibility = View.VISIBLE
+    }
+
     private fun showMinApkUpdatePrompt(result: MinApkUpdateResult) {
         val metadata = result.metadata ?: return
         minApkUpdateCandidate = result
+        if (serviceUpdateCandidate != null) return
         minApkDownloadStarted = false
         offlineUpdatePanel.visibility = View.VISIBLE
         offlineUpdateTitle.text = getString(R.string.offline_update_title)
@@ -612,6 +672,7 @@ class MainActivity : AppCompatActivity() {
         )
         showMinApkReleaseNotes(metadata.releaseNotes)
         offlineUpdateProgress.visibility = View.GONE
+        offlineUpdateDownload.text = getString(R.string.offline_update_download)
         offlineUpdateDownload.isEnabled = true
         offlineUpdateDownload.visibility = View.VISIBLE
         offlineUpdateLater.visibility = View.VISIBLE
@@ -626,9 +687,112 @@ class MainActivity : AppCompatActivity() {
         offlineUpdateNotes.text = normalized
     }
 
-    private fun dismissMinApkUpdatePrompt() {
+    private fun startAvailableOfflineUpdate() {
+        if (serviceUpdateCandidate != null) {
+            startServiceUpdate()
+        } else {
+            startMinApkDownload()
+        }
+    }
+
+    private fun dismissAvailableOfflineUpdate() {
+        if (serviceUpdateCandidate != null) {
+            serviceUpdateCandidate = null
+            if (minApkUpdateCandidate?.metadata != null) {
+                showMinApkUpdatePrompt(minApkUpdateCandidate!!)
+            } else {
+                offlineUpdatePanel.visibility = View.GONE
+            }
+            return
+        }
         minApkUpdateCandidate = null
         if (!minApkDownloadStarted) offlineUpdatePanel.visibility = View.GONE
+    }
+
+    /** 用户确认服务更新后交给 NodeServerService，确保停止旧进程再切换 active release。 */
+    private fun startServiceUpdate() {
+        if (serviceUpdateStarted || serviceUpdateCandidate == null) return
+        serviceUpdateStarted = true
+        offlineUpdateDownload.isEnabled = false
+        offlineUpdateDownload.visibility = View.GONE
+        offlineUpdateLater.visibility = View.GONE
+        offlineUpdateProgress.visibility = View.VISIBLE
+        offlineUpdateProgress.isIndeterminate = true
+        offlineUpdateMessage.text = getString(R.string.offline_service_update_downloading)
+        val mainServerUrl = ServerConfig.baseUrl(serverInput.text.toString().trim())
+        val serviceIntent = Intent(this, NodeServerService::class.java)
+            .putExtra(NodeServerService.EXTRA_MAIN_SERVER_URL, mainServerUrl)
+            .putExtra(NodeServerService.EXTRA_OFFLINE_MODE, true)
+            .putExtra(NodeServerService.EXTRA_APPLY_SERVER_UPDATE, true)
+        try {
+            ContextCompat.startForegroundService(this, serviceIntent)
+        } catch (error: Exception) {
+            handleServiceUpdateFailed(error.message)
+        }
+    }
+
+    private fun updateServiceUpdateProgress(
+        phase: String?,
+        detail: String?,
+        completedBytes: Long?,
+        totalBytes: Long?
+    ) {
+        offlineUpdatePanel.visibility = View.VISIBLE
+        offlineUpdateProgress.visibility = View.VISIBLE
+        offlineUpdateDownload.visibility = View.GONE
+        offlineUpdateLater.visibility = View.GONE
+        if (totalBytes != null && totalBytes > 0L && completedBytes != null) {
+            offlineUpdateProgress.isIndeterminate = false
+            offlineUpdateProgress.max = 100
+            offlineUpdateProgress.progress = (completedBytes * 100L / totalBytes)
+                .coerceIn(0L, 100L)
+                .toInt()
+        } else {
+            offlineUpdateProgress.isIndeterminate = true
+        }
+        offlineUpdateMessage.text = when (phase) {
+            "downloading" -> getString(
+                R.string.offline_service_update_download_progress,
+                formatBytes(completedBytes ?: 0L),
+                formatBytes(totalBytes ?: 0L)
+            )
+            "verifying" -> getString(R.string.offline_service_update_verifying)
+            "switching" -> getString(R.string.offline_service_update_switching)
+            else -> detail ?: getString(R.string.offline_service_update_downloading)
+        }
+    }
+
+    private fun handleServiceUpdateApplied(detail: String?) {
+        serviceUpdateCandidate = null
+        serviceUpdateStarted = false
+        offlineUpdateProgress.visibility = View.VISIBLE
+        offlineUpdateProgress.isIndeterminate = false
+        offlineUpdateProgress.progress = 100
+        offlineUpdateMessage.text = detail ?: getString(R.string.offline_service_update_success)
+        offlineUpdateDownload.visibility = View.GONE
+        offlineUpdateLater.visibility = View.GONE
+        offlineUpdatePanel.postDelayed({
+            if (minApkUpdateCandidate?.metadata != null) {
+                showMinApkUpdatePrompt(minApkUpdateCandidate!!)
+            } else {
+                offlineUpdatePanel.visibility = View.GONE
+            }
+        }, 2_000L)
+    }
+
+    private fun handleServiceUpdateFailed(detail: String?) {
+        serviceUpdateStarted = false
+        offlineUpdatePanel.visibility = View.VISIBLE
+        offlineUpdateProgress.visibility = View.GONE
+        offlineUpdateMessage.text = if (detail.isNullOrBlank()) {
+            getString(R.string.offline_service_update_failed)
+        } else {
+            getString(R.string.offline_update_failed_detail, detail)
+        }
+        offlineUpdateDownload.text = getString(R.string.offline_service_update_download)
+        offlineUpdateDownload.visibility = View.VISIBLE
+        offlineUpdateDownload.isEnabled = true
+        offlineUpdateLater.visibility = View.VISIBLE
     }
 
     /** 用户暂不授予安装权限时恢复更新卡片，保留已发现的版本供下次手动下载。 */

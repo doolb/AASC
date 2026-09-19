@@ -47,6 +47,21 @@ data class MinApkUpdateResult(
     val metadata: OfflineMinApkArtifact? = null
 )
 
+data class ServiceUpdateResult(
+    val status: String,
+    val hasUpdate: Boolean = false,
+    val plan: OfflineUpdateManager.ServiceUpdatePlan = OfflineUpdateManager.ServiceUpdatePlan.CURRENT,
+    val installed: InstalledServiceVersion? = null,
+    val targetCodeVersion: Int? = null,
+    val targetDependencyVersion: Int? = null,
+    val downloadBytes: Long = 0L
+)
+
+data class ServiceUpdateApplyResult(
+    val status: String,
+    val applied: Boolean = false
+)
+
 /**
  * Offline APK 的签名更新协调器。构建前 profile 和清单纯校验在 companion object 中，
  * 设备侧下载、安装及版本切换状态由实例方法处理。
@@ -271,6 +286,11 @@ class OfflineUpdateManager(
             return availableBytes >= required
         }
 
+        /** 合并 Android 不同 PackageManager 读取路径返回的证书摘要，并统一大小写。 */
+        @JvmStatic
+        fun mergeSignerSha256Digests(primary: Set<String>, fallback: Set<String>): Set<String> =
+            (primary + fallback).map { it.lowercase() }.toSet()
+
         /** 与 Node 发布器使用相同的规范化字段计算 bundled 模型兼容指纹。 */
         @JvmStatic
         fun parseModelCompatibility(
@@ -440,12 +460,169 @@ class OfflineUpdateManager(
         private const val UNIX_DIRECTORY = 0x4000
     }
 
-    fun checkAndApplyServerUpdate(root: File): String {
+    /** 只读取并验签服务清单，供前台显示服务代码/依赖更新提示，不下载更新包。 */
+    fun checkForServerUpdate(root: File): ServiceUpdateResult {
         return try {
-            checkAndApplyServerUpdateInternal(root)
+            val publicKeyPem = readPublicKeyOrNull()
+                ?: return ServiceUpdateResult("未配置 Offline 更新验证公钥")
+            val source = fetchManifest(publicKeyPem)
+                ?: return ServiceUpdateResult("局域网与外网均无可用更新清单")
+            val current = readInstalledServiceVersion(root)
+            if (isRejectedRelease(root, source.manifest)) {
+                return ServiceUpdateResult(
+                    "候选服务版本此前启动失败，已跳过自动重试",
+                    installed = current,
+                    targetCodeVersion = source.manifest.code.version,
+                    targetDependencyVersion = source.manifest.dependencies.version
+                )
+            }
+            val plan = planServiceUpdate(current, source.manifest)
+            if (plan == ServiceUpdatePlan.CURRENT) {
+                return ServiceUpdateResult("服务已是当前版本", installed = current, plan = plan)
+            }
+            if (plan == ServiceUpdatePlan.NEEDS_ALL) {
+                return ServiceUpdateResult(
+                    "服务版本/依赖指纹不匹配，需要发布 all 更新",
+                    installed = current,
+                    plan = plan,
+                    targetCodeVersion = source.manifest.code.version,
+                    targetDependencyVersion = source.manifest.dependencies.version
+                )
+            }
+            val downloadBytes = when (plan) {
+                ServiceUpdatePlan.CODE_ONLY -> source.manifest.code.size
+                ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.size)
+                    ?: throw IllegalArgumentException("更新下载总大小溢出")
+                else -> 0L
+            }
+            ServiceUpdateResult(
+                status = "发现 Offline 服务更新",
+                hasUpdate = true,
+                plan = plan,
+                installed = current,
+                targetCodeVersion = source.manifest.code.version,
+                targetDependencyVersion = source.manifest.dependencies.version,
+                downloadBytes = downloadBytes
+            )
+        } catch (error: Exception) {
+            Log.e(TAG, "Offline 服务更新检查失败: ${error.message}", error)
+            ServiceUpdateResult("拒绝服务更新：${error.message ?: "检查失败"}")
+        }
+    }
+
+    /** 用户确认后重新读取并验签清单，下载、校验并原子切换服务 release。 */
+    fun applyServerUpdate(
+        root: File,
+        onProgress: ((OfflineUpdateProgress) -> Unit)? = null
+    ): ServiceUpdateApplyResult {
+        return try {
+            val status = checkAndApplyServerUpdateInternal(root, onProgress)
+            ServiceUpdateApplyResult(status, status.startsWith("已应用服务更新"))
         } catch (error: Exception) {
             Log.e(TAG, "服务更新失败，继续使用当前版本: ${error.message}", error)
-            "保留当前版本：${error.message ?: "更新失败"}"
+            ServiceUpdateApplyResult("保留当前版本：${error.message ?: "更新失败"}")
+        }
+    }
+
+    /** 兼容现有启动日志调用；新的前台流程使用 applyServerUpdate。 */
+    fun checkAndApplyServerUpdate(root: File): String {
+        return applyServerUpdate(root).status
+    }
+
+    private fun checkAndApplyServerUpdateInternal(
+        root: File,
+        onProgress: ((OfflineUpdateProgress) -> Unit)? = null
+    ): String {
+        val publicKeyPem = readPublicKeyOrNull() ?: return "未配置 Offline 更新验证公钥"
+        val source = fetchManifest(publicKeyPem) ?: return "局域网与外网均无可用更新清单"
+        if (isRejectedRelease(root, source.manifest)) {
+            return "候选服务版本此前启动失败，已跳过自动重试"
+        }
+        val current = readInstalledServiceVersion(root)
+        val plan = planServiceUpdate(current, source.manifest)
+        if (plan == ServiceUpdatePlan.CURRENT) return "服务已是当前版本"
+        if (plan == ServiceUpdatePlan.NEEDS_ALL) return "服务版本/依赖指纹不匹配，需要发布 all 更新"
+
+        val updatesDirectory = File(root, "updates")
+        check(updatesDirectory.isDirectory || updatesDirectory.mkdirs()) { "无法创建 Offline 更新目录" }
+        val requiredDownloads = when (plan) {
+            ServiceUpdatePlan.CODE_ONLY -> source.manifest.code.size
+            ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.size)
+                ?: throw IllegalArgumentException("更新下载总大小溢出")
+            else -> 0L
+        }
+        onProgress?.invoke(OfflineUpdateProgress("checking", 0L, requiredDownloads, "正在检查服务更新空间"))
+        val initialAvailable = StatFs(root.absolutePath).availableBytes
+        check(hasEnoughSpace(initialAvailable, requiredDownloads, 0L, ROLLBACK_RESERVE_BYTES)) {
+            "设备剩余空间不足，未下载或切换 Offline 服务更新"
+        }
+
+        val stage = File(updatesDirectory, ".staging-${System.currentTimeMillis()}-${android.os.Process.myPid()}")
+        check(stage.mkdir()) { "无法创建 Offline 更新暂存目录" }
+        try {
+            val codeArchive = downloadArtifact(source, source.manifest.code, File(stage, "code.zip"), onProgress)
+            val dependencyArchive = if (plan == ServiceUpdatePlan.ALL) {
+                downloadArtifact(source, source.manifest.dependencies, File(stage, "dependencies.zip"), onProgress)
+            } else {
+                null
+            }
+            onProgress?.invoke(OfflineUpdateProgress("verifying", 0L, 1L, "正在校验服务更新包"))
+            val codeInspection = validateComponentArchive(codeArchive.file, "code")
+            val dependencyInspection = dependencyArchive?.let { validateComponentArchive(it.file, "dependencies") }
+            val expandedBytes = safeAdd(codeInspection.expandedBytes, dependencyInspection?.expandedBytes ?: 0L)
+                ?: throw IllegalArgumentException("更新展开大小溢出")
+            val afterDownloadAvailable = StatFs(root.absolutePath).availableBytes
+            check(hasEnoughSpace(afterDownloadAvailable, 0L, expandedBytes, ROLLBACK_RESERVE_BYTES)) {
+                "设备剩余空间不足以保留回滚版本并解压更新"
+            }
+
+            val codeStage = File(stage, "code")
+            extractZipArchive(codeArchive.file, codeStage)
+            validateCodePackage(codeStage, source.manifest.code)
+            val codeDirectory = installVersionDirectory(
+                stageDirectory = codeStage,
+                destination = File(updatesDirectory, "code/code-v${source.manifest.code.version}"),
+                component = source.manifest.code,
+                kind = "code"
+            )
+
+            val dependencyDirectory = if (dependencyArchive != null) {
+                val dependencyStage = File(stage, "dependencies")
+                extractZipArchive(dependencyArchive.file, dependencyStage)
+                validateDependencyPackage(dependencyStage, source.manifest.dependencies)
+                installVersionDirectory(
+                    stageDirectory = dependencyStage,
+                    destination = File(updatesDirectory, "dependencies/dependencies-v${source.manifest.dependencies.version}"),
+                    component = source.manifest.dependencies,
+                    kind = "dependencies"
+                )
+            } else {
+                null
+            }
+
+            val oldPointer = readReleasePointer(root)
+            val installedDependencyDirectory = dependencyDirectory ?: if (oldPointer?.legacyDependencies == true || oldPointer == null) {
+                File(root, "node_modules")
+            } else {
+                File(updatesDirectory, "dependencies/dependencies-v${current.dependencyVersion}/node_modules")
+            }
+            check(installedDependencyDirectory.isDirectory) { "当前 Android production dependencies 目录不存在" }
+            val pointer = ReleasePointer(
+                codeVersion = source.manifest.code.version,
+                dependencyVersion = source.manifest.dependencies.version,
+                lockSha256 = source.manifest.dependencies.lockSha256.orEmpty(),
+                legacyDependencies = dependencyDirectory == null &&
+                    (oldPointer?.legacyDependencies == true || oldPointer == null),
+                pendingHealth = true,
+                previous = current,
+                previousLegacyDependencies = oldPointer?.legacyDependencies ?: true
+            )
+            onProgress?.invoke(OfflineUpdateProgress("switching", 1L, 1L, "正在切换服务版本"))
+            writeReleasePointer(root, pointer)
+            Log.i(TAG, "已原子切换服务版本 code=${pointer.codeVersion}, dependencies=${pointer.dependencyVersion}")
+            return "已应用服务更新 ${pointer.codeVersion}/${pointer.dependencyVersion}"
+        } finally {
+            stage.deleteRecursively()
         }
     }
 
@@ -629,97 +806,6 @@ class OfflineUpdateManager(
         return true
     }
 
-    private fun checkAndApplyServerUpdateInternal(root: File): String {
-        val publicKeyPem = readPublicKeyOrNull() ?: return "未配置 Offline 更新验证公钥"
-        val source = fetchManifest(publicKeyPem) ?: return "局域网与外网均无可用更新清单"
-        if (isRejectedRelease(root, source.manifest)) {
-            return "候选服务版本此前启动失败，已跳过自动重试"
-        }
-        val current = readInstalledServiceVersion(root)
-        val plan = planServiceUpdate(current, source.manifest)
-        if (plan == ServiceUpdatePlan.CURRENT) return "服务已是当前版本"
-        if (plan == ServiceUpdatePlan.NEEDS_ALL) return "服务版本/依赖指纹不匹配，需要发布 all 更新"
-
-        val updatesDirectory = File(root, "updates")
-        check(updatesDirectory.isDirectory || updatesDirectory.mkdirs()) { "无法创建 Offline 更新目录" }
-        val requiredDownloads = when (plan) {
-            ServiceUpdatePlan.CODE_ONLY -> source.manifest.code.size
-            ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.size)
-                ?: throw IllegalArgumentException("更新下载总大小溢出")
-            else -> 0L
-        }
-        val initialAvailable = StatFs(root.absolutePath).availableBytes
-        check(hasEnoughSpace(initialAvailable, requiredDownloads, 0L, ROLLBACK_RESERVE_BYTES)) {
-            "设备剩余空间不足，未下载或切换 Offline 服务更新"
-        }
-
-        val stage = File(updatesDirectory, ".staging-${System.currentTimeMillis()}-${android.os.Process.myPid()}")
-        check(stage.mkdir()) { "无法创建 Offline 更新暂存目录" }
-        try {
-            val codeArchive = downloadArtifact(source, source.manifest.code, File(stage, "code.zip"))
-            val dependencyArchive = if (plan == ServiceUpdatePlan.ALL) {
-                downloadArtifact(source, source.manifest.dependencies, File(stage, "dependencies.zip"))
-            } else {
-                null
-            }
-            val codeInspection = validateComponentArchive(codeArchive.file, "code")
-            val dependencyInspection = dependencyArchive?.let { validateComponentArchive(it.file, "dependencies") }
-            val expandedBytes = safeAdd(codeInspection.expandedBytes, dependencyInspection?.expandedBytes ?: 0L)
-                ?: throw IllegalArgumentException("更新展开大小溢出")
-            val afterDownloadAvailable = StatFs(root.absolutePath).availableBytes
-            check(hasEnoughSpace(afterDownloadAvailable, 0L, expandedBytes, ROLLBACK_RESERVE_BYTES)) {
-                "设备剩余空间不足以保留回滚版本并解压更新"
-            }
-
-            val codeStage = File(stage, "code")
-            extractZipArchive(codeArchive.file, codeStage)
-            validateCodePackage(codeStage, source.manifest.code)
-            val codeDirectory = installVersionDirectory(
-                stageDirectory = codeStage,
-                destination = File(updatesDirectory, "code/code-v${source.manifest.code.version}"),
-                component = source.manifest.code,
-                kind = "code"
-            )
-
-            val dependencyDirectory = if (dependencyArchive != null) {
-                val dependencyStage = File(stage, "dependencies")
-                extractZipArchive(dependencyArchive.file, dependencyStage)
-                validateDependencyPackage(dependencyStage, source.manifest.dependencies)
-                installVersionDirectory(
-                    stageDirectory = dependencyStage,
-                    destination = File(updatesDirectory, "dependencies/dependencies-v${source.manifest.dependencies.version}"),
-                    component = source.manifest.dependencies,
-                    kind = "dependencies"
-                )
-            } else {
-                null
-            }
-
-            val oldPointer = readReleasePointer(root)
-            val installedDependencyDirectory = dependencyDirectory ?: if (oldPointer?.legacyDependencies == true || oldPointer == null) {
-                File(root, "node_modules")
-            } else {
-                File(updatesDirectory, "dependencies/dependencies-v${current.dependencyVersion}/node_modules")
-            }
-            check(installedDependencyDirectory.isDirectory) { "当前 Android production dependencies 目录不存在" }
-            val pointer = ReleasePointer(
-                codeVersion = source.manifest.code.version,
-                dependencyVersion = source.manifest.dependencies.version,
-                lockSha256 = source.manifest.dependencies.lockSha256.orEmpty(),
-                legacyDependencies = dependencyDirectory == null &&
-                    (oldPointer?.legacyDependencies == true || oldPointer == null),
-                pendingHealth = true,
-                previous = current,
-                previousLegacyDependencies = oldPointer?.legacyDependencies ?: true
-            )
-            writeReleasePointer(root, pointer)
-            Log.i(TAG, "已原子切换服务版本 code=${pointer.codeVersion}, dependencies=${pointer.dependencyVersion}")
-            return "已应用服务更新 ${pointer.codeVersion}/${pointer.dependencyVersion}"
-        } finally {
-            stage.deleteRecursively()
-        }
-    }
-
     private fun readPublicKeyOrNull(): String? {
         return try {
             assetManager.open(PUBLIC_KEY_ASSET).bufferedReader().use { it.readText() }
@@ -887,7 +973,7 @@ class OfflineUpdateManager(
     @Suppress("DEPRECATION")
     private fun getInstalledPackageInfo(): PackageInfo {
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
+            PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
         } else {
             PackageManager.GET_SIGNATURES
         }
@@ -899,25 +985,38 @@ class OfflineUpdateManager(
 
     @Suppress("DEPRECATION")
     private fun signerSha256Digests(info: PackageInfo): Set<String> {
-        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.signingInfo?.apkContentsSigners.orEmpty()
-        } else {
-            info.signatures.orEmpty()
+        val signatures = mutableListOf<android.content.pm.Signature>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.signingInfo?.apkContentsSigners?.let { signatures += it.toList() }
+            info.signingInfo?.signingCertificateHistory?.let { signatures += it.toList() }
         }
+        info.signatures?.let { signatures += it.toList() }
         return signatures.map { signature ->
             MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).toHexString()
         }.toSet()
     }
 
     @Suppress("DEPRECATION")
-    private fun validateMinApkArchive(apkFile: File, metadata: OfflineMinApkArtifact) {
-        require(apkFile.isFile) { "min APK 文件不存在" }
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
+    private fun readArchivePackageInfos(apkFile: File): List<PackageInfo> {
+        val packageManager = context.packageManager
+        val infos = mutableListOf<PackageInfo>()
+        val primaryFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
         } else {
             PackageManager.GET_SIGNATURES
         }
-        val packageInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags)
+        packageManager.getPackageArchiveInfo(apkFile.absolutePath, primaryFlags)?.let { infos += it }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageManager.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNATURES)?.let { infos += it }
+        }
+        return infos
+    }
+
+    @Suppress("DEPRECATION")
+    private fun validateMinApkArchive(apkFile: File, metadata: OfflineMinApkArtifact) {
+        require(apkFile.isFile) { "min APK 文件不存在" }
+        val packageInfos = readArchivePackageInfos(apkFile)
+        val packageInfo = packageInfos.firstOrNull()
             ?: throw IllegalArgumentException("无法解析 min APK 包信息")
         require(packageInfo.packageName == metadata.packageName && packageInfo.packageName == context.packageName) {
             "min APK applicationId 与当前安装包不匹配"
@@ -926,7 +1025,9 @@ class OfflineUpdateManager(
             "min APK versionCode 与签名清单不匹配"
         }
         require(packageInfo.versionName == metadata.versionName) { "min APK versionName 与签名清单不匹配" }
-        val apkSigners = signerSha256Digests(packageInfo)
+        val apkSigners = packageInfos.fold(emptySet<String>()) { merged, info ->
+            mergeSignerSha256Digests(merged, signerSha256Digests(info))
+        }
         require(metadata.signerSha256 in apkSigners) { "min APK signer SHA-256 与签名清单不匹配" }
         require(metadata.signerSha256 in signerSha256Digests(getInstalledPackageInfo())) {
             "min APK signer 与当前已安装 Offline APK 不一致"

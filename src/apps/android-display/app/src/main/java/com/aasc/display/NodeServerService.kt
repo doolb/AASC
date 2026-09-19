@@ -36,6 +36,7 @@ class NodeServerService : Service() {
     companion object {
         const val EXTRA_MAIN_SERVER_URL = "main_server_url"
         const val EXTRA_OFFLINE_MODE = "offline_mode"
+        const val EXTRA_APPLY_SERVER_UPDATE = "apply_server_update"
         const val ACTION_STATUS = "com.aasc.display.action.NODE_STATUS"
         const val EXTRA_STATUS = "status"
         const val EXTRA_DETAIL = "detail"
@@ -46,6 +47,10 @@ class NodeServerService : Service() {
         const val STATUS_INSTALLING = "installing"
         const val STATUS_STARTING = "starting"
         const val STATUS_FAILED = "failed"
+        const val STATUS_SERVICE_UPDATE_APPLYING = "service_update_applying"
+        const val STATUS_SERVICE_UPDATE_PROGRESS = "service_update_progress"
+        const val STATUS_SERVICE_UPDATE_APPLIED = "service_update_applied"
+        const val STATUS_SERVICE_UPDATE_FAILED = "service_update_failed"
         private const val CHANNEL_ID = "aasc_node_server"
         private const val NOTIFICATION_ID = 8081
         private const val MAX_RESTART_ATTEMPTS = 5
@@ -201,6 +206,7 @@ class NodeServerService : Service() {
     private var mainServerUrl = ""
     private var offlineMode = false
     private var safMediaServer: SafMediaServer? = null
+    private val serviceUpdateApplying = java.util.concurrent.atomic.AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -228,6 +234,7 @@ class NodeServerService : Service() {
         val savedOffline = preferences.getBoolean("offline_mode", false)
         val selectedUrl = requestedUrl.ifEmpty { savedUrl }
         val selectedOffline = requestedOffline ?: savedOffline
+        val applyServerUpdate = intent?.getBooleanExtra(EXTRA_APPLY_SERVER_UPDATE, false) == true
         if (selectedUrl.isEmpty()) {
             updateNotification("等待配置主服务器地址")
             sendStatus(STATUS_FAILED, "主服务器地址为空")
@@ -245,6 +252,9 @@ class NodeServerService : Service() {
             restartAttempt = 0
             stopNodeProcess()
             enqueueNodeProcessStart(selectedUrl, selectedOffline)
+        }
+        if (applyServerUpdate && selectedOffline) {
+            enqueueConfirmedServiceUpdate()
         }
         return START_STICKY
     }
@@ -304,8 +314,6 @@ class NodeServerService : Service() {
                 if (manager.rollbackPendingRelease(root)) {
                     android.util.Log.w("AASC-Node", "上次候选服务未通过启动检查，已回滚到原版本")
                 }
-                val updateStatus = manager.checkAndApplyServerUpdate(root)
-                android.util.Log.i("AASC-Node", "Offline 服务更新检查: $updateStatus")
             }
             if (offlineMode) {
                 val taskIndexPaths = listOf(
@@ -399,6 +407,43 @@ class NodeServerService : Service() {
                 else "Node.js 子服务器启动失败：${error.message}"
             )
             scheduleRestart(generation, -1)
+        }
+    }
+
+    /** 用户在前台确认服务更新后，停止当前 Node 再执行服务包下载和原子切换。 */
+    private fun enqueueConfirmedServiceUpdate() {
+        if (!serviceUpdateApplying.compareAndSet(false, true)) {
+            android.util.Log.i("AASC-Node", "Offline 服务更新已在执行，忽略重复请求")
+            return
+        }
+        startExecutor.execute {
+            try {
+                val root = NodeRuntimeInstaller(this).ensureInstalled()
+                sendStatus(STATUS_SERVICE_UPDATE_APPLYING, "正在停止当前服务并准备更新")
+                stopNodeProcess()
+                val result = OfflineUpdateManager(this).applyServerUpdate(root) { progress ->
+                    sendStatus(
+                        STATUS_SERVICE_UPDATE_PROGRESS,
+                        progress.detail,
+                        progress.phase,
+                        progress.completedBytes,
+                        progress.totalBytes
+                    )
+                }
+                if (result.applied || result.status == "服务已是当前版本") {
+                    sendStatus(STATUS_SERVICE_UPDATE_APPLIED, result.status)
+                } else {
+                    sendStatus(STATUS_SERVICE_UPDATE_FAILED, result.status)
+                }
+                restartAttempt = 0
+                enqueueNodeProcessStart(mainServerUrl, offlineMode)
+            } catch (error: Exception) {
+                android.util.Log.e("AASC-Node", "Offline 服务更新执行失败: ${error.message}", error)
+                sendStatus(STATUS_SERVICE_UPDATE_FAILED, error.message ?: "服务更新失败")
+                enqueueNodeProcessStart(mainServerUrl, offlineMode)
+            } finally {
+                serviceUpdateApplying.set(false)
+            }
         }
     }
 

@@ -97,7 +97,7 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- min APK 更新卡片只占据右下角；下载前需要用户明确点击“下载更新”。 -->
+        <!-- 服务代码、生产依赖和 min APK 共用右下角更新卡片；下载前都需要用户明确确认。 -->
         <LinearLayout
             android:id="@+id/offlineUpdatePanel"
             android:layout_width="wrap_content"

@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-17）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-19）
 
 ## 控制端
 
@@ -69,8 +69,9 @@
 ## Android APK
 
 - 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
+  - 🔄待现场验收 [2026-09-19] full v18/min v18（`0.2.16-offline` / `0.2.16-offline-min`）和正式热更新 code v6 已发布，待 SM-N9500 通过外网更新卡片确认服务更新，并验证 Offline 声纹注册不再出现“模型未就绪”。
   - 服务更新支持 `code-only`（不发布/下载依赖）与 `all`（代码+生产依赖）；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
-  - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本次更新相关 Node 定向测试 69/69、Android JVM 全量测试通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
+  - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本轮服务更新 Node 定向测试 31/31、Android JVM 单测 25/25 通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
   - full v2/min v3 APK、code/dependencies v3 包及 min v3 更新清单已生成并通过静态完整性/签名校验；min v4 已升版为 `0.2.2-offline-min` 并正式发布，LAN/WAN manifest 字节一致且签名有效。
   - min v4 APK 地址为 `http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk` 和 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk`，大小 `89205130` bytes，SHA-256 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`；LAN HTTP 整包、WAN 远端文件及 WAN HTTP 首段/HEAD 校验通过。
   - 固定显示端 ID 与 Chat2API 完成按钮的 min v6 已追加发布：`http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v6.apk`、`http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v6.apk`；大小 `89208438` bytes，SHA-256 `0f7af47dbba366758ebbe818994da37f39028bd8174ba6b3dfa8754f33366b68`，两站点 manifest/签名和 HTTP Content-Length 已复验。

@@ -2,6 +2,30 @@
 
 ## 状态
 
+2026-09-19 已发布包含声纹启动预热与注册等待修复的 full Offline APK v17：`allserver` 使用
+`versionCode=17`、`versionName=0.2.15-offline`，发布文件为
+`apk/aasc-display-offline-v17.apk`。APK 大小 `995442031` bytes，SHA-256 为
+`355826ce69a6b35de08717263fd94672739492d640dd284bc24cdfb9017ea0e5`；LAN/WAN 直连 IP HTTP
+均返回 200 和正确 Content-Length，两端文件 SHA-256、APK v2 签名和 full/min 保留关系均通过。
+完整 APK 未写入服务 `manifest.json`；旧 full v15 已按精确规则清理，min v16 保留。
+
+同日已按正式服务热更新流程发布 code v6：`code/code-v6.zip`，大小 `14006751` bytes，SHA-256 为
+`8bca7a10f49888bccd426d449c7d4ccdf2d75c5c1f1fac796996b1e51eb3c9fa`。清单已原子切换到 code v6、
+沿用 dependencies v3 和 min v16；LAN/WAN 清单签名、字节一致性、HTTP Content-Length 和远端 hash 均通过。
+
+当前服务更新交互补充设计：服务 code/dependencies 更新必须在 Android 前台可见。启动后的签名清单检查只负责
+发现候选版本，不再在 Node 启动线程静默下载；发现候选后复用现有 Offline 更新卡片，显示 code/dependencies
+版本和下载大小。用户确认后，`NodeServerService` 停止当前 Node，使用原有分阶段下载、SHA-256/ZIP/lockfile
+校验、active-release 原子切换和健康检查流程，完成或失败后重新拉起 Node；失败继续使用旧 release，并将结果
+回传给 Activity。这样 code-only 与 all 服务更新都能通过同一前台流程触发，min APK 仍保留系统安装确认。
+
+2026-09-19 已完成并正式发布该前台更新能力：min APK v18（`0.2.16-offline-min`）大小 `89258826` bytes，
+SHA-256 为 `491b4e53a84755837b6a1efd7569d42f3d3771b6b4063271e68dd2523b4b22e1`；full APK v18
+（`0.2.16-offline`）大小 `995457930` bytes，SHA-256 为
+`b0ad329a0b0e3ac2080248e96ca9637abeab747a873efc6f65d61ddda81ebd4a`。清单已引用 `code=6`、
+`dependencies=3` 和 `apkMin=18`，LAN/WAN 清单字节一致且签名有效；full v18 作为整包资源单独发布，
+不写入服务清单。两包证书 SHA-256 均为 `a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`。
+
 2026-09-18 当前 full Offline APK 已发布 v13：`allserver` 使用
 `versionCode=13`、`versionName=0.2.11-offline`，发布文件为
 `apk/aasc-display-offline-v13.apk`。APK 大小 `957338670` bytes，SHA-256 为

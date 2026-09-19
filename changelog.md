@@ -1,5 +1,13 @@
 # Web MediaCenter - 变更日志
 
+### Offline 服务代码更新前台提示与确认
+- ✅ [2026-09-19] 服务 code/dependencies 更新已接入 Android 前台确认流程。
+  - `OfflineUpdateManager` 只读检查签名清单并返回 code/dependencies 更新候选；`MainActivity` 与 min APK 共用更新卡片，服务更新优先显示版本和下载大小。
+  - 用户确认后由 `NodeServerService` 停止旧 Node，后台下载并校验服务包，原子切换 `active-release.json`，重启 Node；失败保留旧 release 并允许重试，候选版本继续执行健康检查和回滚。
+  - 改动文件：`OfflineUpdateManager.kt`、`NodeServerService.kt`、`MainActivity.kt`、`activity_main.xml`、`strings.xml`；同步设计/spec/task 文档。
+  - 正式发布 min v18：`aasc-display-offline-min-v18.apk`，大小 `89258826` bytes，SHA-256 `491b4e53a84755837b6a1efd7569d42f3d3771b6b4063271e68dd2523b4b22e1`；full v18：`aasc-display-offline-v18.apk`，大小 `995457930` bytes，SHA-256 `b0ad329a0b0e3ac2080248e96ca9637abeab747a873efc6f65d61ddda81ebd4a`。
+  - 正式服务清单为 `code=6`、`dependencies=3`、`apkMin=18`；full v18 不写入服务清单。LAN/WAN 清单字节、签名、HTTP Content-Length、APK v2 签名和精确清理均通过。
+  - 验证：Node 定向测试 31/31、Android JVM 单测 25/25、full/min APK 源码与版本校验通过；SM-N9500 现场更新卡片、服务切换和声纹注册回归待执行。
 ### 临时会话与语音指令
 
 - ✅ [2026-09-19] 增强临时语音会话历史和群聊控制指令。

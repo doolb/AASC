@@ -1,5 +1,27 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+> 2026-09-19 已发布声纹启动预热与注册等待修复的 full APK v17（`0.2.15-offline`），文件为
+> `apk/aasc-display-offline-v17.apk`，大小 `995442031` bytes，SHA-256 为
+> `355826ce69a6b35de08717263fd94672739492d640dd284bc24cdfb9017ea0e5`。profile 为
+> `allserver`、`embeddedNode=true`、`updateOnly=false`，内置 embedding 和 segmentation 声纹模型；
+> LAN/WAN 直连 IP HTTP 200、Content-Length、远端 hash、APK v2 签名均通过，服务 `manifest.json` 未替换。
+
+> 2026-09-19 变更服务更新交互：服务 code/dependencies 更新不再由 Node 启动流程静默下载；前台先读取并验签
+> 服务清单，显示服务更新卡片，用户确认后由 `NodeServerService` 停止旧 Node、下载校验并原子切换 release，
+> 随后重新启动 Node 并沿用候选版本健康检查和失败回滚。min APK 仍由独立卡片和系统安装确认流程处理。
+
+> 2026-09-19 已正式发布服务更新前台确认能力：min APK v18（`0.2.16-offline-min`）大小 `89258826` bytes，
+> SHA-256 `491b4e53a84755837b6a1efd7569d42f3d3771b6b4063271e68dd2523b4b22e1`；full APK v18
+> （`0.2.16-offline`）大小 `995457930` bytes，SHA-256
+> `b0ad329a0b0e3ac2080248e96ca9637abeab747a873efc6f65d61ddda81ebd4a`。正式清单为 `code=6`、
+> `dependencies=3`、`apkMin=18`，full v18 不进入服务清单；LAN/WAN 清单字节、签名、HTTP Content-Length
+> 和 APK v2 签名均通过。
+
+> 2026-09-19 已正式发布对应的服务代码热更新 v6：`code/code-v6.zip`，大小 `14006751` bytes，SHA-256 为
+> `8bca7a10f49888bccd426d449c7d4ccdf2d75c5c1f1fac796996b1e51eb3c9fa`。清单已原子切换到 code v6，
+> `requiredDependencyVersion=3`，沿用 dependencies v3 和 apkMin v16；LAN/WAN 清单签名、字节一致、
+> HTTP 200/Content-Length 和远端 hash 均通过。full APK 不写入热更新清单。
+
 > 2026-09-19 已发布声纹和凭证导出修复：full v15（`0.2.13-offline`，`995440667` bytes，SHA-256 `346241708a4c2ec4eda24b0ff9c97a1bea80d3d819ec29c7cacab52f141808d9`）内置两个声纹模型；min v16（`0.2.14-offline-min`，`89248606` bytes，SHA-256 `b247b6667047fb6af867741c6f9468366542046ff455d3d710ab903166362c78`）为 update-only 原生修复。两包已同步 LAN/WAN 直连 IP，默认域名 `c.aasc.us` 仍返回 403。
 
 > 2026-09-18 已正式发布完整 Offline APK v13（`0.2.11-offline`），文件为 `apk/aasc-display-offline-v13.apk`，大小 `957338670` bytes，SHA-256 为 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`。LAN/WAN 直连 IP HTTP 200、Content-Length 和远端 hash 校验通过；默认域名 `c.aasc.us` 返回 403，使用直连 IP 验收。v13 包含 Chat2API 账号凭证导入导出与 Android 外部网页恢复代码。
@@ -244,7 +266,7 @@ The min APK publisher uploads a versioned APK to both targets, then replaces the
 ## Android 清单读取与服务更新伪代码
 
 ```text
-checkAndApplyServiceUpdate(root):
+checkForServiceUpdate(root):
     if APK profile is not offline or is update-only:
         return NotApplicable
     manifest = fetch signed manifest from LAN with short timeout
@@ -260,13 +282,23 @@ checkAndApplyServiceUpdate(root):
         if all resolved IPs fail:
             continue to next configured source
     if neither source responds:
-        return KeepInstalledRelease("offline")
+        return NoVisibleUpdate("offline")
     verify RSA signature with public key embedded in APK
     validate schema, versions, safe relative URLs and bounded sizes
 
     installed = read active-release.json or legacyRuntimeVersion
     if code version and dependency version are already active:
-        return Unchanged
+        return NoVisibleUpdate("current")
+
+    if dependency/code fingerprints are incompatible:
+        return NoVisibleUpdate("needs-all-update")
+
+    return VisibleServiceUpdate(plan, target versions, download bytes)
+
+applyConfirmedServiceUpdate(root):
+    require a previously displayed and user-confirmed service update
+    stop the current Node process before changing active-release.json
+    re-fetch and verify the signed manifest; re-plan to prevent stale decisions
 
     if only code differs:
         if installed dependency version != code.requiredDependencyVersion:
@@ -287,6 +319,7 @@ checkAndApplyServiceUpdate(root):
     retain previous active release until candidate passes startup health check
     on failure, restore prior active-release.json and start previous release
     on success, retain active and rollback release; prune only older unreferenced update dirs
+    restart Node and report applied/failed status to the foreground Activity
 
 normalizeZipEntryName(entryName):
     validate the raw safe ZIP path
@@ -322,12 +355,17 @@ NodeServerService.startNodeProcess:
         NodeRuntimeInstaller.applyAllowlistedNativeRuntimeUpdateOnly()
     else:
         NodeRuntimeInstaller.ensureInstalled preserves root/updates as mutable update data
-        OfflineUpdateManager.checkAndApplyServiceUpdate(root)
+        if active-release.json has pendingHealth:
+            OfflineUpdateManager.rollbackPendingRelease(root)
+        do not download service packages during Node startup
 
     release = read active-release.json
     if release is valid:
-        entrypoint = root/updates/releases/<releaseId>/src/apps/server/boot/server-launcher.js
-        nodeModules = root/updates/releases/<releaseId>/node_modules
+        entrypoint = root/updates/code/code-v<release.codeVersion>/src/apps/server/boot/server-launcher.js
+        if release.legacyDependencies:
+            nodeModules = root/node_modules
+        else:
+            nodeModules = root/updates/dependencies/dependencies-v<release.dependencyVersion>/node_modules
     else:
         entrypoint = root/src/apps/server/boot/server-launcher.js
         nodeModules = root/node_modules
@@ -426,22 +464,32 @@ MainActivity.handleBackNavigation():
         hide controlWebView
         restore controlToggleButton visibility and "控制端" label
         return
-    if displayWebView is visible and control access is allowed:
-        restore controlToggleButton visibility
-        do not call WebView.goBack()
-        return
-    show configuration page using existing Activity behavior
+
+NodeServerService.applyConfirmedServiceUpdate:
+    receive an explicit in-app command from MainActivity
+    stop current Node process
+    call applyConfirmedServiceUpdate(root) on the service executor
+    broadcast update progress, success or failure
+    restart Node after success or failure so the old release remains usable on failure
 
 MainActivity.onNodeStatus(STARTING):
-    once per Activity process, run min APK check/download/model materialization off the UI thread
+    once per Activity process, run service manifest check and min APK check off the UI thread
+    if a service update is available, show service code/dependencies versions and download size
+    if a min APK update is available, show the existing APK update card
+    service update and min APK candidates share one card; service update has priority
     return to UI thread with result
     if update is ready: request unknown-source approval or submit PackageInstaller session
     system install receiver launches STATUS_PENDING_USER_ACTION intent
-    never install silently or on fresh update-only app data
+    never install APK silently or on fresh update-only app data
+
+MainActivity.confirmServiceUpdate:
+    send explicit apply command to NodeServerService
+    display download, verification and release-switch progress
+    keep the card retryable on failure
 
 MainActivity.onResume:
     if full Offline data directory exists and no check ran in this Activity process:
-        rerun the signed min APK check
+        rerun the signed service and min APK checks
     process a prepared update only while Activity is foreground-visible
 
 MainActivity.onCreate:

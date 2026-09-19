@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "embeddedNode": true,
   "updateOnly": true,
-  "versionCode": 16,
-  "versionName": "0.2.14-offline-min",
+  "versionCode": 19,
+  "versionName": "0.2.17-offline-min",
   "verifyRuntime": true,
   "features": ["display", "asr", "tts", "llm", "render-display", "native-update"],
   "models": []
