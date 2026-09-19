@@ -4,7 +4,8 @@ const assert = require('assert');
 const {
     normalizeTemporaryConversationHistoryConfig,
     groupTemporaryConversationMessages,
-    selectTemporaryConversationHistory
+    selectTemporaryConversationHistory,
+    getTemporaryConversationHistoryGroups
 } = require('../src/apps/server/modules/voice/temporary-conversation-history');
 
 const createMessage = (sessionId, timestamp, role, content) => ({
@@ -80,7 +81,26 @@ function testHistoryGroupsKeepMostRecentCompletedGroups() {
     assert.strictEqual(groupTemporaryConversationMessages(messages).length, 4);
 }
 
+function testControlHistoryGroupsAreNewestFirstAndReadOnlyPayloadReady() {
+    const messages = [
+        { ...createMessage('one', 100, 'control', '一'), roleName: '小爱' },
+        { ...createMessage('one', 101, 'assistant', '一答'), roleName: '小爱' },
+        { ...createMessage('two', 200, 'control', '二'), roleName: '妲己' },
+        { ...createMessage('two', 201, 'assistant', '二答'), roleName: '妲己' },
+        createMessage('current', 300, 'control', '当前')
+    ];
+    const groups = getTemporaryConversationHistoryGroups(messages, 'current', {
+        temporaryHistoryGroups: 2
+    });
+
+    assert.deepStrictEqual(groups.map(group => group.sessionId), ['two', 'one']);
+    assert.strictEqual(groups[0].roleName, '妲己');
+    assert.strictEqual(groups[0].messageCount, 2);
+    assert.deepStrictEqual(groups[0].messages.map(message => message.content), ['二', '二答']);
+}
+
 testHistoryConfigDefaultsAndBounds();
 testContextContainsCurrentAndRecentTwoGroups();
 testHistoryGroupsKeepMostRecentCompletedGroups();
-console.log('temporary-conversation-history.test.js: 3/3 passed');
+testControlHistoryGroupsAreNewestFirstAndReadOnlyPayloadReady();
+console.log('temporary-conversation-history.test.js: 4/4 passed');

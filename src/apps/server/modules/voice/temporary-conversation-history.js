@@ -95,6 +95,24 @@ function selectTemporaryConversationHistory(messages, currentSessionId, config =
     };
 }
 
+function getTemporaryConversationHistoryGroups(messages, currentSessionId, config = {}) {
+    const selected = selectTemporaryConversationHistory(messages, currentSessionId, config);
+    return selected.historicalGroups.slice().reverse().map(group => {
+        const roleMessage = group.messages.find(message => message.roleName);
+        const assistantMessage = group.messages.find(message => (
+            message.role === 'assistant' && message.name && message.name !== '助手'
+        ));
+        return {
+            sessionId: group.sessionId,
+            startedAt: group.startedAt,
+            endedAt: group.endedAt,
+            roleName: roleMessage?.roleName || assistantMessage?.name || null,
+            messageCount: group.messages.length,
+            messages: group.messages.map(message => ({ ...message }))
+        };
+    });
+}
+
 module.exports = {
     DEFAULT_TEMPORARY_HISTORY_GROUPS,
     DEFAULT_TEMPORARY_CONTEXT_GROUPS,
@@ -106,5 +124,6 @@ module.exports = {
     normalizeTemporaryConversationHistoryConfig,
     normalizeTemporaryHistoryMessages,
     groupTemporaryConversationMessages,
-    selectTemporaryConversationHistory
+    selectTemporaryConversationHistory,
+    getTemporaryConversationHistoryGroups
 };

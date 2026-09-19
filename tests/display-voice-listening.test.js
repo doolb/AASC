@@ -101,6 +101,8 @@ assert.match(serverJs, /conversationWindowMs/u, '服务端应读取持续对话�
 assert.match(serverJs, /addressedGroupMode/u, '服务端应支持角色名加内容的模式切换');
 assert.match(serverJs, /temporaryHistoryGroups/u, '服务端应支持临时历史会话组数配置');
 assert.match(serverJs, /temporaryContextGroups/u, '服务端应支持临时上下文会话组数配置');
+assert.match(serverJs, /historyGroups/u, '服务端应在临时快照中提供历史会话组');
+assert.match(serverJs, /getTemporaryConversationHistoryGroups/u, '服务端应按会话组构造临时历史');
 assert.match(serverJs, /temporaryConversationReplaced/u, '临时会话替换时应重置其他显示端');
 assert.match(serverJs, /getTemporaryConversation/u, '服务端应提供临时会话快照请求');
 assert.match(serverJs, /clearTemporaryConversation/u, '服务端应提供临时会话清空消息');
@@ -127,6 +129,9 @@ assert.match(controlChatJs, /data-chat-tab="temporary"/u, '控制端应增加临
 assert.match(controlChatJs, /handleTemporaryConversation/u, '控制端应渲染临时会话快照');
 assert.match(controlChatJs, /temporaryConversation:\s*mode === 'temporary'/u, '临时页签发送应标记临时会话');
 assert.match(controlChatJs, /temporaryConversationId:\s*mode === 'temporary'/u, '临时页签发送应携带当前临时会话 ID');
+assert.match(controlChatJs, /temporaryHistoryViewSessionId/u, '控制端应维护历史临时会话查看状态');
+assert.match(controlChatJs, /renderTemporaryHistorySelector/u, '控制端应渲染历史临时会话列表');
+assert.match(controlChatJs, /历史临时会话只读查看/u, '历史临时会话应显示只读提示');
 assert.doesNotMatch(controlChatJs, /临时页签只显示语音临时会话/u, '临时页签不应保持只读提示');
 assert.match(controlWebsocketJs, /data.type === 'temporaryConversation'/u, '控制端 WebSocket 应接收临时会话快照');
 assert.match(uploadHtml, /voiceConversationWindowPanel/u, '控制端页面应提供窗口设置面板');

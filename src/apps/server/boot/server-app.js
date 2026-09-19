@@ -52,7 +52,8 @@ const {
     DEFAULT_TEMPORARY_HISTORY_GROUPS,
     DEFAULT_TEMPORARY_CONTEXT_GROUPS,
     normalizeTemporaryConversationHistoryConfig,
-    selectTemporaryConversationHistory
+    selectTemporaryConversationHistory,
+    getTemporaryConversationHistoryGroups
 } = require('../modules/voice/temporary-conversation-history');
 const {
     beginRepairModeEntry,
@@ -1647,13 +1648,19 @@ function getDisplayVoiceAssistantNames() {
 }
 
 function getTemporaryConversationSnapshot() {
+    const conversationConfig = getVoiceConversationWindowConfig();
     return {
         id: temporaryConversation.id,
         startedAt: temporaryConversation.startedAt,
         displayId: temporaryConversation.displayId,
         roleName: temporaryConversation.roleName,
         templateId: temporaryConversation.templateId,
-        messages: temporaryConversation.messages.map(message => ({ ...message }))
+        messages: temporaryConversation.messages.map(message => ({ ...message })),
+        historyGroups: getTemporaryConversationHistoryGroups(
+            chat.getHistory(),
+            temporaryConversation.id,
+            conversationConfig
+        )
     };
 }
 
@@ -1769,6 +1776,7 @@ function appendTemporaryConversationMessage(message, conversationId) {
         timestamp: message.timestamp || Date.now(),
         role: message.role || 'user',
         name: message.name || (message.role === 'assistant' ? '助手' : '用户'),
+        roleName: message.roleName || temporaryConversation.roleName || null,
         content: message.content,
         mode: 'temporary',
         sessionId: conversationId

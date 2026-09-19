@@ -1028,6 +1028,22 @@ temporaryConversation:
     getTemplateSystemPrompt() 只包含基础提示词和一个匹配模板
     普通“开始对话”请求仍调用 getGroupSystemPrompt()，包含全部角色模板
 
+temporaryConversation history for control:
+    groupTemporaryConversationMessages(chat.getHistory(), mode="temporary")
+        按 sessionId 聚合消息
+        排除当前 temporaryConversation.id
+        按结束时间倒序截取 temporaryHistoryGroups 组
+    getTemporaryConversationSnapshot():
+        返回当前 conversation
+        返回 historyGroups: [{ sessionId, startedAt, endedAt, roleName, messageCount, messages[] }]
+    控制端连接、临时会话替换、临时消息更新和 getTemporaryConversation 请求:
+        通过已有 temporaryConversation WebSocket 消息同步 historyGroups
+    控制端临时页签:
+        默认显示当前组 messages
+        点击 historyGroups 中的一组时只读显示该组 messages
+        显示“返回当前对话”后恢复当前组
+        历史组查看期间禁用发送，不能修改 temporaryConversation.id
+
 armConversationTimer(displayId):
     根据 state.windowType 选择 temporaryWindowMs 或 conversationWindowMs
     expiresAt = 当前时间 + 对应窗口
