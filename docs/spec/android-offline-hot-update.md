@@ -1,5 +1,7 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+> 2026-09-19 已发布声纹和凭证导出修复：full v15（`0.2.13-offline`，`995440667` bytes，SHA-256 `346241708a4c2ec4eda24b0ff9c97a1bea80d3d819ec29c7cacab52f141808d9`）内置两个声纹模型；min v16（`0.2.14-offline-min`，`89248606` bytes，SHA-256 `b247b6667047fb6af867741c6f9468366542046ff455d3d710ab903166362c78`）为 update-only 原生修复。两包已同步 LAN/WAN 直连 IP，默认域名 `c.aasc.us` 仍返回 403。
+
 > 2026-09-18 已正式发布完整 Offline APK v13（`0.2.11-offline`），文件为 `apk/aasc-display-offline-v13.apk`，大小 `957338670` bytes，SHA-256 为 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`。LAN/WAN 直连 IP HTTP 200、Content-Length 和远端 hash 校验通过；默认域名 `c.aasc.us` 返回 403，使用直连 IP 验收。v13 包含 Chat2API 账号凭证导入导出与 Android 外部网页恢复代码。
 
 > 2026-09-18 已正式发布与 full v13 配套的 Offline min APK v14（`0.2.12-offline-min`）。由于 full v13 已占用 versionCode 13，min 热更新使用更高的 versionCode；APK 大小 `89245126` bytes，SHA-256 为 `062aee3158d5534c18b57bf8dcf28dccdffe9b27ebd33cbaa00b35fc0143382f`。LAN/WAN 直连 IP 的清单、签名、APK HTTP 200、Content-Length 和完整 hash 校验通过；SM-N9500 当前 v10 启动后显示 v14 手动下载提示。
@@ -362,8 +364,26 @@ validateMinApkArchive(apkFile, metadata):
     compare package, versionCode, versionName and certificate SHA-256
     if certificate digest differs:
         reject update and report signer mismatch
-    # SM-N9500/API 28 currently reaches this branch for v14 even though
-    # apksigner and the downloaded file SHA-256 both match the manifest.
+    # full v14/API 28 now reaches the merged signer set for min v15.
+
+readArchivePackageInfos(apkFile):
+    request GET_SIGNING_CERTIFICATES | GET_SIGNATURES on Android P+
+    request GET_SIGNATURES separately on Android P+ as an API 28 compatibility fallback
+    return all non-null package records for the same archive
+
+signerSha256Digests(packageInfo):
+    collect SigningInfo.apkContentsSigners when available
+    collect SigningInfo.signingCertificateHistory when available
+    collect PackageInfo.signatures when available (including the legacy fallback)
+    hash each certificate byte array with SHA-256 and normalize to lowercase hex
+
+validateMinApkArchive(apkFile, metadata):
+    packageInfos = readArchivePackageInfos(apkFile)
+    require packageInfos is not empty
+    compare package, versionCode and versionName from the first archive record
+    merge signerSha256Digests(packageInfo) from every archive record
+    require metadata.signerSha256 is in merged archive signers
+    require metadata.signerSha256 is in installed package signers
 
 showMinApkUpdatePrompt(metadata):
     render floating card with versionName, versionCode and artifact.size
@@ -439,6 +459,52 @@ NodeRuntimeInstaller.applyAllowlistedNativeRuntimeUpdateOnly:
         tasks, uploads, Android ASR/TTS assets and files/models/llm/bundled
     never run full Runtime root replacement from min APK
 ```
+
+## Offline 声纹模型和凭证导出
+
+### 声纹模型路径伪代码
+
+```text
+NativeBridge 创建 VoiceprintModelManager
+    如果 offlineMode
+        modelDirectory = files/aasc-server/res/models/voiceprint
+    否则
+        modelDirectory = files/models/voiceprint
+
+voiceprintConfigure(config)
+    校验 threshold、multiMode、speakerCount
+    manager.ensureModel(serverOrigin, multiSpeaker)
+    如果是 Offline 内置目录
+        检查 embedding 文件大于 5 MiB
+        按需检查 segmentation 文件大于 500 KiB
+        两个文件有效时回调 ready
+        任一文件缺失时回调 error，不发起网络下载
+    否则
+        按原有接口下载 embedding/segmentation
+    ready 回调中加载 VoiceprintEngine
+    注册请求通过 voiceprintExtract 使用已加载引擎返回 embedding
+```
+
+full Offline profile 必须选择 `voiceprint` 模型目录，Runtime 清单负责校验和解压；min profile 不携带模型，
+依赖已安装 full 包提供的 `aasc-server/res/models/voiceprint`。
+
+### Chat2API 导出伪代码
+
+```text
+控制端请求 /api/chat2api/export 或 /api/chat2api/accounts/export
+    读取 response blob 和既有时间戳文件名
+    如果存在 NativeControl.saveDownloadFile
+        blob 转 base64
+        调用原生桥写入系统 Download 目录
+        Android 10+ 使用 MediaStore Downloads 并结束 pending 状态
+        Android 9 使用公共 Download 目录
+        原生返回失败时提示错误，不静默丢失文件
+    否则
+        使用浏览器 <a download> 回退
+```
+
+原生保存接口只接受单文件名、JSON MIME 类型和有限大小的 base64 数据，拒绝路径分隔符、控制字符和超大
+输入；不记录凭证正文。
 
 ## 测试伪代码
 

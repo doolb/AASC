@@ -10,6 +10,15 @@ const APK_PROFILES = Object.freeze({
     'allserver-min': Object.freeze({ offline: true, embeddedNode: true, updateOnly: true })
 });
 
+// 声纹目录同时保留多种模型规格供服务器或实验使用，Offline 原生引擎只需要这两个文件。
+// 通过显式选择避免 full APK 把未使用的大模型变体全部复制进 Runtime。
+const MODEL_FILE_SELECTIONS = Object.freeze({
+    voiceprint: Object.freeze([
+        'voiceprint/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx',
+        'voiceprint/pyannote_segmentation_3_0_int8.onnx'
+    ])
+});
+
 function assertStringArray(value, fieldName, profileName) {
     if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || item.trim() === '')) {
         throw new Error(`${profileName}/app.json 的 ${fieldName} 必须是非空字符串数组`);
@@ -214,8 +223,9 @@ async function resolveSelectedModelFiles(options = {}) {
             if (llmManifestError) throw llmManifestError;
             throw new Error(`未知模型 ID ${normalizedId}，未找到对应模型目录或 LLM manifest: ${modelRoot}`);
         }
-        const directoryFiles = await collectDirectoryFiles(modelRoot, normalizedId);
-        for (const relativePath of directoryFiles) await addFile(relativePath);
+        const selectedFiles = MODEL_FILE_SELECTIONS[normalizedId]
+            || await collectDirectoryFiles(modelRoot, normalizedId);
+        for (const relativePath of selectedFiles) await addFile(relativePath);
     }
 
     return [...files.values()].sort((left, right) => left.relativePath.localeCompare(right.relativePath));

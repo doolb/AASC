@@ -360,6 +360,40 @@
       } catch (error) { this.message(error.message, true); }
     },
 
+    async blobToBase64(blob) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+      }
+      return window.btoa(binary);
+    },
+
+    async saveExportBlob(blob, fileName) {
+      const nativeBridge = typeof window !== 'undefined' ? window.NativeControl : null;
+      if (nativeBridge && typeof nativeBridge.saveDownloadFile === 'function') {
+        const result = JSON.parse(nativeBridge.saveDownloadFile(
+          fileName,
+          'application/json',
+          await this.blobToBase64(blob)
+        ));
+        if (!result || result.ok !== true) {
+          throw new Error(result && result.error ? result.error : 'Android Download 保存失败');
+        }
+        return true;
+      }
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      return false;
+    },
+
     async exportConfig() {
       try {
         const response = await fetch(`${this.baseUrl}/api/chat2api/export`, { headers: { Accept: 'application/json' } });
@@ -369,15 +403,10 @@
         }
         const blob = await response.blob();
         const stamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = downloadUrl;
-        anchor.download = `chat2api-config-${stamp}.json`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-        this.message('配置已导出。文件包含账号 Token/Cookie 等敏感凭据，不包含 API Key 原文。');
+        const savedNatively = await this.saveExportBlob(blob, `chat2api-config-${stamp}.json`);
+        this.message(savedNatively
+          ? '配置已保存到 Download 文件夹。文件包含账号 Token/Cookie 等敏感凭据，不包含 API Key 原文。'
+          : '配置已导出。文件包含账号 Token/Cookie 等敏感凭据，不包含 API Key 原文。');
       } catch (error) { this.message(`配置导出失败：${error.message}`, true); }
     },
 
@@ -390,15 +419,10 @@
         }
         const blob = await response.blob();
         const stamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = downloadUrl;
-        anchor.download = `chat2api-accounts-${stamp}.json`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-        this.message('账号凭证已导出。文件包含 Token/Cookie 等敏感凭据，请妥善保管。');
+        const savedNatively = await this.saveExportBlob(blob, `chat2api-accounts-${stamp}.json`);
+        this.message(savedNatively
+          ? '账号凭证已保存到 Download 文件夹。文件包含 Token/Cookie 等敏感凭据，请妥善保管。'
+          : '账号凭证已导出。文件包含 Token/Cookie 等敏感凭据，请妥善保管。');
       } catch (error) { this.message(`账号凭证导出失败：${error.message}`, true); }
     },
 

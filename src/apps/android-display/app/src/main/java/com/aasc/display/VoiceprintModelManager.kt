@@ -11,11 +11,13 @@ import java.util.concurrent.Executors
 // 声纹模型管理：embedding（必下）+ segmentation（multiSpeaker 才下），复用 ModelDownloader
 class VoiceprintModelManager(
     private val context: Context,
+    private val modelDirectory: File? = null,
     private val uiHandler: Handler = Handler(Looper.getMainLooper())
 ) {
-    private val modelDir = File(context.filesDir, "models/voiceprint")
-    val embeddingFile = File(modelDir, "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx")
-    val segmentationFile = File(modelDir, "pyannote_segmentation_3_0_int8.onnx")
+    // Offline APK 直接使用 Node Runtime 解压的模型目录；在线 APK 才使用可下载缓存目录。
+    private val modelDir = modelDirectory ?: File(context.filesDir, "models/voiceprint")
+    val embeddingFile = File(modelDir, VoiceprintModelFiles.EMBEDDING_FILE_NAME)
+    val segmentationFile = File(modelDir, VoiceprintModelFiles.SEGMENTATION_FILE_NAME)
     private val downloadPool: ExecutorService = Executors.newSingleThreadExecutor()
     private val lock = Any()
 
@@ -44,10 +46,14 @@ class VoiceprintModelManager(
         }
         downloadPool.execute {
             try {
+                if (modelDirectory != null) {
+                    ensureBundledModel(onModelEvent, needSegmentation)
+                    return@execute
+                }
                 modelDir.mkdirs()
                 // 磁盘已有完整模型则跳过下载（下载一次即可，重启不重复拉取）
-                val embeddingOk = embeddingFile.isFile && embeddingFile.length() > 5L * 1024 * 1024
-                val segOk = !needSegmentation || (segmentationFile.isFile && segmentationFile.length() > 500 * 1024)
+                val embeddingOk = embeddingFile.isFile && embeddingFile.length() > VoiceprintModelFiles.MIN_EMBEDDING_BYTES
+                val segOk = !needSegmentation || (segmentationFile.isFile && segmentationFile.length() > VoiceprintModelFiles.MIN_SEGMENTATION_BYTES)
                 val okEmbedding = embeddingOk || ModelDownloader.download(
                     "$baseUrl/api/voiceprint/model/${embeddingFile.name}", embeddingFile) { p ->
                     progress = p
@@ -69,6 +75,23 @@ class VoiceprintModelManager(
             }
         }
         return "downloading"
+    }
+
+    /**
+     * Offline Runtime 已由 NodeRuntimeInstaller 按清单校验过；原生侧只检查关键文件并直接复用，
+     * 不删除内置资源，也不在缺失时错误地向本机 HTTP 接口发起下载。
+     */
+    private fun ensureBundledModel(onModelEvent: (JSONObject) -> Unit, needSegmentation: Boolean) {
+        if (VoiceprintModelFiles.isComplete(modelDir, needSegmentation)) {
+            state = "ready"
+            progress = 100
+            postModelEvent(JSONObject().put("state", "ready"), onModelEvent)
+            return
+        }
+        state = "error"
+        lastError = "APK 内置声纹模型校验失败"
+        android.util.Log.e("VoiceprintModelManager", "$lastError: ${modelDir.absolutePath}")
+        postModelEvent(JSONObject().put("state", "error").put("error", lastError), onModelEvent)
     }
 
     private fun postModelEvent(json: JSONObject, onModelEvent: (JSONObject) -> Unit) {

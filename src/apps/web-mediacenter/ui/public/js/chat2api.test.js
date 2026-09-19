@@ -84,3 +84,13 @@ test('Chat2API Android 登录优先调用 NativeControl，未提供桥接时保�
   assert.match(source, /completeNativeLogin/);
   assert.match(source, /window\.open/);
 });
+
+test('Chat2API 导出在 Android WebView 优先交给原生 Download 保存并保留浏览器回退', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'chat2api.js'), 'utf8');
+
+  assert.match(source, /saveDownloadFile/);
+  assert.match(source, /saveExportBlob/);
+  assert.match(source, /blobToBase64/);
+  assert.match(source, /chat2api-accounts-\$\{stamp\}\.json/);
+  assert.match(source, /chat2api-config-\$\{stamp\}\.json/);
+});

@@ -180,7 +180,10 @@ class NativeBridge(
     private val visionRuntime by lazy { VisionRuntime(webView.context) }
 
     // ---- 声纹识别桥（speaker identification / 多人分割）----
-   private val voiceprintModelManager = VoiceprintModelManager(webView.context)
+   private val voiceprintModelManager = VoiceprintModelManager(
+       webView.context,
+       offlineVoiceModelDirectory("voiceprint")
+   )
    private var voiceprintEnabled = false
     private var voiceprintThreshold = 0.3f
     private var voiceprintMultiMode = "fast"

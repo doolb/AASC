@@ -16,6 +16,27 @@
 `120.79.245.103` 并成功读取清单；当前清单已显示 min v14 下载提示。完整 APK v13 不进入该清单，
 仍需单独安装完整包。
 
+2026-09-18 已完成 API 28 签名读取兼容：full v14（`0.2.12-offline`）内置双签名读取路径，先覆盖安装
+到 SM-N9500，再由 full v14 成功校验并安装 min v15（`0.2.13-offline-min`）。min v15 大小为
+`89245994` bytes，SHA-256 为 `ad33c255829a01045d47c665d2dc18705eb9233f47502c77d2bb181fc5284def`；
+full v14 大小为 `957339538` bytes，SHA-256 为
+`39b6b907cfa334d98870a7ba20814099bd9f7a074ed7bd8e0de84c907698978e`。两包均沿用证书
+`a57fd4c34c0c769246239a7d8c606b5edb62c215ecf9659448ea178eda3fb7df`，LAN/WAN 直连 IP 文件和清单已验证。
+
+2026-09-18 已确认 Offline v14 声纹注册失败的原因：发布 profile 没有选择 `voiceprint` 模型，原生端
+仍按在线模型路径请求本机接口，导致 embedding 和 segmentation 模型下载失败并返回“模型未就绪”。本次
+修复将声纹模型加入 full v15 的 Runtime 资源，`VoiceprintModelManager` 在 Offline 模式直接复用
+`files/aasc-server/res/models/voiceprint`，在线 APK 继续保留按需下载；min v16 只携带原生修复代码。
+
+同批修复 Offline 控制端 Chat2API 导出：网页 `blob:` 下载改由 `NativeControl.saveDownloadFile` 写入
+系统 Download 目录（Android 10+ 使用 MediaStore，Android 9 使用公共 Download 目录），网页浏览器仍使用
+原有 `<a download>` 回退。文件名保持 `chat2api-config-时间戳.json` 和 `chat2api-accounts-时间戳.json`。
+
+2026-09-19 已完成发布：full v15（`995440667` bytes，SHA-256
+`346241708a4c2ec4eda24b0ff9c97a1bea80d3d819ec29c7cacab52f141808d9`）和 min v16（`89248606` bytes，SHA-256
+`b247b6667047fb6af867741c6f9468366542046ff455d3d710ab903166362c78`）均已同步 LAN/WAN 直连 IP；SM-N9500
+覆盖安装验证了两个声纹模型成功解压并由 Sherpa 加载，min 更新保留 Runtime 模型。
+
 2026-09-18 已发布与 full v13 配套的 min APK v14（`0.2.12-offline-min`）。v14 使用
 `versionCode=14`，高于 full v13 的 `versionCode=13`，可以在已安装 full v13 的设备上原位更新；
 APK 大小 `89245126` bytes，SHA-256 为
@@ -142,6 +163,12 @@ AI 执行约束同步记录：仓库根目录的 `CLAUDE.md` 与 `AGENTS.md` 均
 - 更新包中的显式 update-only Runtime 清单只允许更新 `files/aasc-server/runtime/arm64-v8a/lib/` 下的允许列表原生运行库；min APK 仍携带 `libaasc_node.so` 以保证 Android 原位替换后 Node 入口存在。不得调用完整 Runtime 替换流程，不触碰服务源码、依赖、配置、任务、results、日志、ASR/TTS 模型和 LLM 缓存。
 - 完整 Offline APK 内的 updater 下载 min APK、校验签名清单和 SHA-256 后交给 Android 系统安装器，由用户确认安装。安装 APK 前检查并确保当前 APK 内置的 LLM 模型已物化并 hash 校验到 `files/models/llm/bundled/<modelId>`；空间不足或模型物化失败则延后原生更新，避免升级后 APK asset 被替换而缓存尚不存在。`MnnLlmModelManager` 在读取 APK metadata 前先检查同 revision 缓存；min 不携带模型 manifest/权重，模型 ID/revision 变更仍必须走完整 APK 发布。
 - min APK 替换后，应用私有数据保持原样；Node Runtime 安装器根据 update-only 标志执行受限原生库更新。模型在线更新、复制/预生成 `.mmap` 不属于该步骤。
+
+### Android API 28 min APK 签名读取兼容
+
+SM-N9500（Android 9/API 28）在读取仅包含 APK v2 签名的 min APK 时，`getPackageArchiveInfo` 使用单一 `GET_SIGNING_CERTIFICATES` 标志可能返回不完整的 `SigningInfo`。即使 APK 文件 SHA-256、`apksigner` 证书摘要和已安装包签名一致，旧校验器仍可能把归档签名集合判定为空或不匹配。
+
+min APK 校验器需要同时请求现代签名和兼容的旧签名信息，并合并 `apkContentsSigners`、签名历史及 `PackageInfo.signatures` 的摘要。校验仍必须比较 applicationId、versionCode、versionName、清单证书摘要和当前安装包证书摘要；兼容读取只扩大证书读取来源，不降低签名要求。
 
 当前 Gradle 构建使用 `assembleDebug`，正式更新必须验证 full/min 两包 `applicationId`、签名证书摘要和递增版本码完全兼容。首次启用需要先构建并安装包含 updater 的完整 offline APK，然后再验证 min 更新通道；不能用 min APK 引导尚无 updater 的旧安装。
 

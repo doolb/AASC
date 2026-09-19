@@ -80,8 +80,15 @@ test('allserver-min profile 是 update-only、无模型并使用递增 APK 版�
     assert.equal(profile.embeddedNode, true);
     assert.equal(profile.updateOnly, true);
     assert.deepEqual(profile.models, []);
-    assert.equal(profile.versionCode, 14);
-    assert.equal(profile.versionName, '0.2.12-offline-min');
+    assert.equal(profile.versionCode, 16);
+    assert.equal(profile.versionName, '0.2.14-offline-min');
+});
+
+test('full offline profile 内置声纹模型，供 Offline 原生注册复用', async () => {
+    const projectRoot = path.resolve(__dirname, '..');
+    const profile = await loadApkProfile({ projectRoot, profile: 'allserver' });
+
+    assert.equal(profile.models.includes('voiceprint'), true);
 });
 
 test('allserver-min 必须显式声明 updateOnly 且不得内置模型', async (t) => {
@@ -186,6 +193,24 @@ test('目录型模型扫描跳过 .gitkeep 占位文件', async (t) => {
     });
 
     assert.deepEqual(files.map((file) => file.relativePath), ['sensevoice/model.onnx']);
+});
+
+test('voiceprint 模型只选择原生引擎需要的 embedding 和 segmentation 文件', async (t) => {
+    const projectRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-voiceprint-profile-'));
+    const modelRoot = path.join(projectRoot, 'res', 'models');
+    const voiceprintDir = path.join(modelRoot, 'voiceprint');
+    await fs.promises.mkdir(voiceprintDir, { recursive: true });
+    await fs.promises.writeFile(path.join(voiceprintDir, '3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx'), 'embedding\n');
+    await fs.promises.writeFile(path.join(voiceprintDir, 'pyannote_segmentation_3_0_int8.onnx'), 'segmentation\n');
+    await fs.promises.writeFile(path.join(voiceprintDir, '3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx'), 'unused\n');
+    t.after(() => fs.promises.rm(projectRoot, { recursive: true, force: true }));
+
+    const files = await resolveSelectedModelFiles({ modelRoot, modelIds: ['voiceprint'] });
+
+    assert.deepEqual(files.map((file) => file.relativePath), [
+        'voiceprint/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx',
+        'voiceprint/pyannote_segmentation_3_0_int8.onnx'
+    ]);
 });
 
 test('未知模型 ID 明确失败', async (t) => {

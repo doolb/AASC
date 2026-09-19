@@ -1,5 +1,23 @@
 # Web MediaCenter - 变更日志
 
+### Offline 声纹模型与 Chat2API 凭证导出
+
+- ✅ [2026-09-19] 修复 Offline APK 声纹注册模型未就绪，并发布 full v15/min v16。
+  - full v15 将原生所需的 3D-Speaker embedding 与 pyannote segmentation 文件加入 Runtime；`VoiceprintModelManager` 校验并复用 `files/aasc-server/res/models/voiceprint`，在线 APK 继续使用下载流程。
+  - 控制端 Chat2API 配置和账号凭证导出新增 Android 原生 Download 保存桥，Android 10+ 使用 MediaStore，Android 9 使用公共 Download 目录；普通浏览器保留下载回退，文件名和大小受校验限制。
+  - full v15：`aasc-display-offline-v15.apk`，`995440667` bytes，SHA-256 `346241708a4c2ec4eda24b0ff9c97a1bea80d3d819ec29c7cacab52f141808d9`；min v16：`aasc-display-offline-min-v16.apk`，`89248606` bytes，SHA-256 `b247b6667047fb6af867741c6f9468366542046ff455d3d710ab903166362c78`。
+  - 两包已发布到 LAN `/mnt/aasc-offline` 和 WAN `as@120.79.245.103:~/a/aasc-offline`；直连 IP HTTP、Content-Length、远端 hash 和 APK v2 签名通过，`c.aasc.us` 的 403 仅为域名入口限制。
+  - SM-N9500/API 28 覆盖安装 full v15 后确认两个模型解压并由 Sherpa 加载；再安装 min v16 后模型和 Runtime 保留。Node 定向测试 `20/20`、Android 定向单测 BUILD SUCCESSFUL。
+
+### Offline min APK API 28 签名读取兼容修复
+
+- ✅ [2026-09-18] 修复 Android 9/API 28 归档 APK 签名读取不完整导致 min v14 无法更新的问题。
+  - `OfflineUpdateManager.kt` 同时读取 `GET_SIGNING_CERTIFICATES` 与 `GET_SIGNATURES`，合并当前证书、证书历史和旧版 `PackageInfo.signatures`，仍严格比较清单签名、已安装签名、包名和版本字段。
+  - 先发布并覆盖安装 full v14（`0.2.12-offline`）：`apk/aasc-display-offline-v14.apk`，大小 `957339538` bytes，SHA-256 `39b6b907cfa334d98870a7ba20814099bd9f7a074ed7bd8e0de84c907698978e`。
+  - 再发布 min v15（`0.2.13-offline-min`）：`apk/aasc-display-offline-min-v15.apk`，大小 `89245994` bytes，SHA-256 `ad33c255829a01045d47c665d2dc18705eb9233f47502c77d2bb181fc5284def`；更新日志已写入签名清单。
+  - SM-N9500 真机从 full v14 手动确认下载 min v15，成功进入系统安装器并完成安装；安装后 versionCode=15、Node launcher 和 `offline-display` 连接正常，未出现签名拒绝或 `EADDRINUSE`。
+  - LAN `192.168.1.39` 与 WAN 直连 IP `120.79.245.103` 的 APK HTTP 200、Content-Length、文件 hash 和清单签名均通过；默认域名 `c.aasc.us` 返回 403，发布验收继续使用直连 IP。
+
 ### 显示端聊天与 VRM/MMD 同位分层设计
 
 - ✅ [2026-09-18] 保存浏览器显示端聊天与 VRM/MMD 同位舞台的完整设计。
