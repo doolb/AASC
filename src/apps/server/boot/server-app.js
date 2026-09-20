@@ -452,7 +452,7 @@ let temporaryConversation = {
 // 临时模式首次响应使用短句候选池，避免每次唤醒都重复相同播报。
 const TEMPORARY_WAKE_PROMPTS = Object.freeze([
     '嗯，我在',
-    '哎，我在',
+    '啊，我在',
     '我在呢',
     '在呢',
     '听着呢'

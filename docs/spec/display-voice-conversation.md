@@ -153,7 +153,7 @@ Offline APK 控制端手动切换聊天模式:
 
 临时模式首次响应:
     wake 事件且 windowType == temporary:
-        temporaryWakePrompts = ['嗯，我在', '哎，我在', '我在呢', '在呢', '听着呢']
+        temporaryWakePrompts = ['嗯，我在', '啊，我在', '我在呢', '在呢', '听着呢']
         随机选择 temporaryWakePrompts 中一项并发送，不发送唤醒文本到聊天
     input 事件且 temporaryConversationStarted == true:
         temporaryContentAckPrompts = ['好的', '收到', '明白', '好嘞', '没问题', '交给我吧']
