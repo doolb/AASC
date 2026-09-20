@@ -8712,3 +8712,10 @@
 - ✅ [2026-09-17] 同步 AI 规则入口。
   - `CLAUDE.md` 新增 Offline APK 打包目录、资源命名、LAN/WAN 发布顺序、精确清理边界和 Git 提交边界；内容与 `AGENTS.md` 保持一致。
   - 更新 Offline 热更新 design/spec/task 文档，明确 AI 修改 Offline 资源前必须读取两份规则文件。
+
+### Android MNNChat 本地编译
+
+- ✅ [2026-09-20] 固定 MNN 编译路径并新增独立 npm 命令
+  - `npm run build:mnnllm-android` 现在默认复用 `build/third_party/MNN`、revision `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK `28.2.13676358`。
+  - `npm run prepare:mnnllm-android` 保留为 APK 构建兼容入口；两个命令共用同一脚本，仍支持 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 和 `ANDROID_NDK_HOME` 覆盖。
+  - 验证：MNN 原生编译及 `make install` 成功，复用现有 checkout，未重新打包 APK。

@@ -3,21 +3,23 @@
 /**
  * 准备官方 MNN Android LLM 原生依赖。
  *
- * 该脚本刻意要求调用方明确指定固定的 AASC_MNN_ROOT 和 AASC_MNN_REVISION，
- * 避免构建时无意拉取会变化的 master 或使用未声明的源码目录。
- * 未配置时直接失败，防止生成不具备 LLM 能力的 APK。
+ * 默认复用仓库内已经验证过的 MNN checkout 和固定 revision，避免每次编译
+ * 都需要手动填写路径。CI 或其他开发机仍可通过 AASC_MNN_ROOT、
+ * AASC_MNN_REVISION 和 ANDROID_NDK_HOME 覆盖默认值。
  */
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '../..');
-const configuredRootValue = String(process.env.AASC_MNN_ROOT || '').trim();
+const defaultMnnRoot = path.join(projectRoot, 'build', 'third_party', 'MNN');
+const defaultMnnRevision = 'd407447ed56c4121a11ccbd266dc184ca1ead0c2';
+const configuredRootValue = String(process.env.AASC_MNN_ROOT || defaultMnnRoot).trim();
 const configuredRoot = configuredRootValue ? path.resolve(configuredRootValue) : '';
-const revision = String(process.env.AASC_MNN_REVISION || '').trim();
+const revision = String(process.env.AASC_MNN_REVISION || defaultMnnRevision).trim();
 const androidHome = process.env.ANDROID_HOME || '/opt/android-sdk';
 const ndkRoot = process.env.ANDROID_NDK_HOME
-    || path.join(androidHome, 'ndk', '27.2.12479018');
+    || path.join(androidHome, 'ndk', '28.2.13676358');
 const manifestPath = path.join(projectRoot, 'build', 'mnnllm-android-artifact-manifest.json');
 
 function runGit(args, cwd) {
@@ -48,19 +50,10 @@ function writeBuildManifest(status, extra = {}) {
     }, null, 2) + '\n');
 }
 
-if (!configuredRoot || !revision) {
-    const missing = [
-        !configuredRoot ? 'AASC_MNN_ROOT' : null,
-        !revision ? 'AASC_MNN_REVISION' : null
-    ].filter(Boolean).join('、');
-    writeBuildManifest('error', {
-        reason: `${missing} 未设置；拒绝生成缺少固定官方 MNN-LLM native 依赖的 APK。`
-    });
-    console.error(`[MNN-LLM] 必须设置固定的 ${missing}。`);
-    process.exit(1);
-}
-
 try {
+    console.log(`[MNN-LLM] 源码路径: ${configuredRoot}`);
+    console.log(`[MNN-LLM] 固定 revision: ${revision}`);
+    console.log(`[MNN-LLM] Android NDK: ${ndkRoot}`);
     if (!fs.existsSync(path.join(configuredRoot, '.git'))) {
         fs.mkdirSync(path.dirname(configuredRoot), { recursive: true });
         runGit(['clone', 'https://github.com/alibaba/MNN.git', configuredRoot], projectRoot);

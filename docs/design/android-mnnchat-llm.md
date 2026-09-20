@@ -70,6 +70,8 @@
 
 Android 工程集成阿里 MNN 官方 `apps/Android/MnnLlmChat` 使用的 MNN-LLM 引擎能力，在当前 APK 的 `arm64-v8a` 构建中启用 LLM native 库。构建配置必须启用 MNN LLM、Transformer 融合和 ARM 优化，并保留现有 APK 的 Android 8/API 26 最低版本与 16 KB page size 兼容约束。
 
+MNN 源码默认路径记录为 `build/third_party/MNN`，固定 revision 为 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，默认 NDK 为 `/opt/android-sdk/ndk/28.2.13676358`。维护者可直接运行 `npm run build:mnnllm-android` 编译；APK 构建仍通过 `npm run prepare:mnnllm-android` 自动复用同一准备脚本。`AASC_MNN_ROOT`、`AASC_MNN_REVISION` 和 `ANDROID_NDK_HOME` 可用于覆盖默认值。
+
 MNN 源码和生成的 native 库不直接提交大体积构建产物；通过可重复的准备脚本获取固定上游版本、构建 `arm64-v8a` 库并复制到 APK 构建输入。构建缺少 LLM native 库时必须明确失败，不能静默生成没有 LLM 能力的 APK。
 
 ### Kotlin/JNI 边界

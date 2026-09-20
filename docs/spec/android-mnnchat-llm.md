@@ -288,9 +288,14 @@ switchModel(modelId):
 
 固定阿里官方 MNN 源码 revision，并记录 revision、编译参数、ABI、Android API 和 16 KB page-size 链接参数。目标 ABI 为 `arm64-v8a`，最低 API 保持现有 APK 约束。
 
+MNN 原生编译入口固定复用工作区内的 `build/third_party/MNN`。脚本提供稳定默认值，同时允许 CI 或维护者通过环境变量覆盖路径、revision 和 NDK；未显式传参时不再因为缺少环境变量而失败。
+
 ```text
 prepareMnnLlmNative():
-  checkout pinned Alibaba MNN revision
+  root = env.AASC_MNN_ROOT or projectRoot/build/third_party/MNN
+  revision = env.AASC_MNN_REVISION or pinnedRevision
+  ndk = env.ANDROID_NDK_HOME or ANDROID_HOME/ndk/28.2.13676358
+  checkout pinned Alibaba MNN revision at root
   configure MNN_BUILD_LLM=true
   enable transformer fusion and ARM optimizations
   build/install MNN LLM, transformer and ARM libraries
@@ -299,7 +304,7 @@ prepareMnnLlmNative():
   emit native-artifact-manifest.json with revision and sha256
 ```
 
-构建脚本应复用仓库现有 `npm run` 入口；如果没有现成脚本，新增专用 prepare 脚本，再由 `build:apk` 调用。不得让 APK 在运行时下载 native 库。
+构建脚本应复用仓库现有 `npm run` 入口：`npm run build:mnnllm-android` 是人工编译入口，`npm run prepare:mnnllm-android` 是 APK 构建流程复用的兼容入口，二者使用同一脚本和同一默认配置。不得让 APK 在运行时下载 native 库。
 
 ### 5.2 原生生命周期
 
