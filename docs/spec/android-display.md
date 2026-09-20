@@ -381,6 +381,15 @@ OfflineDisplayInfo:
     显示“分辨率 {width}×{height} | DPI {densityDpi} | 缩放 {scale}%”
     浮层不接收输入，层级低于启动遮罩和更新卡片
 
+MainActivity.updateOfflineStartupStatus(STATUS_STARTING):
+    保持诊断浮层可见
+    启动 30 秒延迟任务
+    延迟任务执行时隐藏 OfflineDisplayInfo
+    不修改 WebViewScalePolicy 或 WebView 实际缩放
+
+MainActivity.onDestroy:
+    取消诊断浮层延迟任务
+
 MainActivity.onConfigurationChanged:
     Offline 模式下重新计算并刷新诊断浮层文字
 ```

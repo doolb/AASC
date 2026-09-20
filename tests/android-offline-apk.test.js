@@ -114,6 +114,10 @@ test('Offline APK 右下角显示分辨率DPI和缩放诊断信息', () => {
     assert.match(activity, /WebViewScalePolicy\.initialScalePercent/u);
     assert.match(activity, /onConfigurationChanged/u);
     assert.match(activity, /缩放/u);
+    assert.match(activity, /NodeServerService\.STATUS_STARTING[\s\S]*?scheduleOfflineDisplayInfoHide\(\)/u);
+    assert.match(activity, /OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS\s*=\s*30_000L/u);
+    assert.match(activity, /mainHandler\.postDelayed\(hideOfflineDisplayInfoRunnable/u);
+    assert.match(activity, /mainHandler\.removeCallbacks\(hideOfflineDisplayInfoRunnable\)/u);
 });
 
 test('Offline 仅控制端禁用输入框聚焦后的页面自动缩放', () => {

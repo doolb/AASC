@@ -8719,3 +8719,23 @@
   - `npm run build:mnnllm-android` 现在默认复用 `build/third_party/MNN`、revision `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK `28.2.13676358`。
   - `npm run prepare:mnnllm-android` 保留为 APK 构建兼容入口；两个命令共用同一脚本，仍支持 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 和 `ANDROID_NDK_HOME` 覆盖。
   - 验证：MNN 原生编译及 `make install` 成功，复用现有 checkout，未重新打包 APK。
+
+### 显示端聊天与语音播报
+
+- ✅ [2026-09-20] 聊天层打开时隐藏播报文字
+  - `display-stage.js` 通过 `display-chat-open` 状态类控制播报字幕可见性；聊天关闭后恢复原有文字状态。
+  - TTS 音频队列、播放逻辑和语音识别链路不变；由于 TTS/ASR 共用文字节点，聊天打开时两类文字均隐藏。
+  - 验证：显示端聊天、播报文字旋转和 UI 定向测试共 23 项通过。
+
+### Offline APK 分辨率诊断
+
+- ✅ [2026-09-20] 将分辨率/DPI/缩放诊断浮层改为在内置 Node 服务进入 `STATUS_STARTING` 后显示 30 秒再自动隐藏。
+  - 不修改 WebView 实际缩放；服务重启时重新计时，Activity 销毁时取消延迟任务。
+  - 验证：Android JVM `:app:testDebugUnitTest` 成功；Offline Node/诊断静态契约测试结果见任务记录。
+
+### Offline 代码包与 min APK 联合发布
+
+- ✅ [2026-09-20] 联合发布 code v12 与 Offline min APK v21，包含聊天播报文字隐藏和服务器启动后 30 秒隐藏分辨率诊断两项修改。
+  - code v12：`15165248` bytes，SHA-256 `d4ba44a7ac644133c95f8a688687cc6ac6535e4ec28c1b4bd47ede2b789ee062`；复用 dependencies v3，未上传新的依赖包。
+  - min v21：`89262778` bytes，SHA-256 `0d85da66dee31bfe4fcc2f8326df30507288d5edaf3a6e08258fdf60ca45591d`；包名 `com.aasc.display.offline`，APK v2 签名和 ZIP 完整性通过。
+  - LAN/WAN-IP 发布、签名清单、HTTP Content-Length、远端 SHA-256 和精确清理均通过；域名 `c.aasc.us` 仍返回 403，未作为验收入口。

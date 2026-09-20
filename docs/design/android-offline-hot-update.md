@@ -228,3 +228,10 @@ min APK 校验器需要同时请求现代签名和兼容的旧签名信息，并
 远端 HTTP 目录需要能够读取发布清单。由于 SCP 会保留临时文件的受限权限，发布器在远端 manifest 原子切换前将临时清单设为 `0644`；清单只包含公开版本和 hash 信息，不包含签名私钥。
 
 ZIP 安全校验统一使用去除目录项尾部 `/` 后的规范化名称；组件白名单必须显式允许 `src` 和 `node_modules` 这两个根目录项，同时继续拒绝 Android 显示端代码、跨组件路径和目录穿越。
+
+## 2026-09-20 code v12 与 min v21 联合发布
+
+- 本次只发布 `code/code-v12.zip` 和 `apk/aasc-display-offline-min-v21.apk`，不生成或上传新的 dependencies 包，继续复用 dependencies v3。
+- code v12 包含显示端聊天打开时隐藏播报文字的代码；min v21 包含 Offline Node 服务进入 `STATUS_STARTING` 后 30 秒隐藏分辨率诊断浮层的原生实现。
+- 发布顺序为先切换 code v12 并保留旧 min v20，再切换 min v21，避免签名清单在中间状态引用未上传的组件。
+- LAN `/mnt/aasc-offline` 与 WAN `as@120.79.245.103:~/a/aasc-offline` 均保留 code v12、dependencies v3、min v21；旧版本仅按精确版本规则清理。域名入口 `c.aasc.us` 仍返回 HTTP 403，本次使用 WAN 直连 IP 验证。

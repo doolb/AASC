@@ -11,6 +11,9 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.view.WindowInsets
@@ -36,6 +39,7 @@ class MainActivity : AppCompatActivity() {
         private const val EXTRA_SERVER_URL = "server_url"
         private const val REQ_STORAGE_TREE = 1005
         private const val REQ_INSTALL_UNKNOWN_SOURCES = 1006
+        private const val OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS = 30_000L
     }
 
     private lateinit var configBar: View
@@ -71,6 +75,14 @@ class MainActivity : AppCompatActivity() {
     private var unknownSourcesDialogVisible = false
     private var waitingForUnknownSourcesResult = false
     private val offlineUpdateManager by lazy { OfflineUpdateManager(this) }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var offlineDisplayInfoHideAtElapsedRealtime = 0L
+    private val hideOfflineDisplayInfoRunnable = Runnable {
+        if (!::offlineDisplayInfo.isInitialized || !offlineMode) return@Runnable
+        if (SystemClock.elapsedRealtime() >= offlineDisplayInfoHideAtElapsedRealtime) {
+            offlineDisplayInfo.visibility = View.GONE
+        }
+    }
     private var controlPageAllowed = false
     private var offlineDisplayRetryCount = 0
     // WebView 连接失败后可能继续回调 onPageFinished；该标记阻止错误页误判为成功页。
@@ -399,6 +411,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
         audioFocusController.abandon()
         super.onDestroy()
     }
@@ -536,6 +549,7 @@ class MainActivity : AppCompatActivity() {
             }
             NodeServerService.STATUS_STARTING -> {
                 showOfflineStartupMessage(getString(R.string.offline_startup_starting), false)
+                scheduleOfflineDisplayInfoHide()
                 checkForServiceUpdateOnce()
                 checkForMinApkUpdateOnce()
             }
@@ -968,6 +982,8 @@ class MainActivity : AppCompatActivity() {
     private fun refreshOfflineDisplayInfo() {
         if (!::offlineDisplayInfo.isInitialized) return
         if (!offlineMode) {
+            mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
+            offlineDisplayInfoHideAtElapsedRealtime = 0L
             offlineDisplayInfo.visibility = View.GONE
             return
         }
@@ -986,7 +1002,27 @@ class MainActivity : AppCompatActivity() {
             metrics.densityDpi,
             scale
         )
+        offlineDisplayInfo.visibility = if (
+            offlineDisplayInfoHideAtElapsedRealtime > 0L
+                && SystemClock.elapsedRealtime() >= offlineDisplayInfoHideAtElapsedRealtime
+        ) {
+            View.GONE
+        } else {
+            View.VISIBLE
+        }
+    }
+
+    /**
+     * Offline Node launcher 成功启动后保留诊断信息 30 秒，随后只隐藏提示浮层。
+     * WebView 的初始缩放已经在创建时确定，这里不重新加载页面或修改缩放比例。
+     */
+    private fun scheduleOfflineDisplayInfoHide() {
+        if (!offlineMode || !::offlineDisplayInfo.isInitialized) return
+        offlineDisplayInfoHideAtElapsedRealtime =
+            SystemClock.elapsedRealtime() + OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS
         offlineDisplayInfo.visibility = View.VISIBLE
+        mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
+        mainHandler.postDelayed(hideOfflineDisplayInfoRunnable, OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS)
     }
 
     private fun showOfflineStartupMessage(

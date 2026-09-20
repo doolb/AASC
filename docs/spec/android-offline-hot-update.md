@@ -91,6 +91,33 @@ MainActivity.showMinApkUpdatePrompt:
     否则隐藏更新内容区域
 ```
 
+## 2026-09-20 联合发布实现记录
+
+```text
+build allserver-min:
+    versionCode = 21
+    versionName = 0.2.19-offline-min
+    verify APK build-manifest and ZIP integrity
+
+build code-only:
+    code.version = 12
+    requiredDependencyVersion = 3
+    requiredLockSha256 = dependencies.lockSha256
+    include display chat source and UI resources
+    do not generate dependencies archive
+
+publish:
+    publish code v12 with manifest retaining apkMin v20
+    publish min v21 with manifest containing code v12 + dependencies v3 + apkMin v21
+    verify signature, file size, SHA-256, HTTP Content-Length and remote hashes
+    clean only versioned obsolete resources
+```
+
+执行结果：code v12 为 `15165248` bytes，SHA-256 为
+`d4ba44a7ac644133c95f8a688687cc6ac6535e4ec28c1b4bd47ede2b789ee062`；min v21 为
+`89262778` bytes，SHA-256 为 `0d85da66dee31bfe4fcc2f8326df30507288d5edaf3a6e08258fdf60ca45591d`。
+LAN/WAN-IP 清单签名和三类资源大小校验通过，发布目录只保留当前 code/dependencies/min 版本及既有 full APK。
+
 2026-09-18 实现验证：Node 离线 APK/发布参数回归 39/39 通过，Android `OfflineUpdateManifestTest` BUILD SUCCESSFUL；发布日志随 `apkMin` 一起签名，旧清单缺少字段时解析结果为 `null`。
 
 ```text

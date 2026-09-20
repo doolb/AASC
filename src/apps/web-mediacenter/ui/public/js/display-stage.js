@@ -100,6 +100,9 @@
 
     function setChatVisible(visible, focus = false) {
         state.chatVisible = visible === true;
+        // 播报文字与聊天共用全屏舞台；聊天打开时隐藏字幕，避免遮挡消息气泡。
+        // 这里只切换页面状态类，不触碰 TTS 音频队列、播放状态或录音状态。
+        if (document.body) document.body.classList.toggle('display-chat-open', state.chatVisible);
         if (refs.chatLayer) {
             refs.chatLayer.classList.toggle('is-visible', state.chatVisible);
             refs.chatLayer.setAttribute('aria-hidden', String(!state.chatVisible));

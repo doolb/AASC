@@ -97,7 +97,7 @@
 ## Android APK
 
 - 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
-  - 🔄待现场验收 [2026-09-19] full v18/min v18（`0.2.16-offline` / `0.2.16-offline-min`）和正式热更新 code v6 已发布，待 SM-N9500 通过外网更新卡片确认服务更新，并验证 Offline 声纹注册不再出现“模型未就绪”。
+  - 🔄待现场验收 [2026-09-20] code v12 与 min v21 已联合发布，包含聊天播报文字隐藏和服务器启动后 30 秒隐藏分辨率诊断；待 SM-N9500 通过外网更新卡片确认 code/min 更新及真机行为。
   - 服务更新支持 `code-only`（不发布/下载依赖）与 `all`（代码+生产依赖）；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
   - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本轮服务更新 Node 定向测试 31/31、Android JVM 单测 25/25 通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
   - full v2/min v3 APK、code/dependencies v3 包及 min v3 更新清单已生成并通过静态完整性/签名校验；min v4 已升版为 `0.2.2-offline-min` 并正式发布，LAN/WAN manifest 字节一致且签名有效。

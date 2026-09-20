@@ -54,6 +54,16 @@ test('聊天隐藏后才允许 MMD Canvas 接收点击，并展示 think 内容'
     assert.match(chat, /<think>/u);
 });
 
+test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {
+    const stage = readPublic('js/display-stage.js');
+    const displayCss = readPublic('css/display.css');
+    const displayHtml = readPublic('display.html');
+    assert.match(stage, /classList\.toggle\('display-chat-open', state\.chatVisible\)/u);
+    assert.match(displayCss, /body\.display-chat-open #voiceTextDisplay\s*\{[\s\S]*display:\s*none !important/u);
+    assert.match(displayHtml, /function showTtsText\(text\)[\s\S]*voiceTextDisplay\.className = 'voice-text-visible'/u);
+    assert.match(displayHtml, /ttsAudio\.play\(\)/u);
+});
+
 test('显示端聊天和 MMD 开关固定在左下角并避让安全区', () => {
     const css = readPublic('css/display-mmd.css');
     assert.match(css, /\.display-interaction-layer\s*\{[\s\S]*align-items:\s*flex-end/u);

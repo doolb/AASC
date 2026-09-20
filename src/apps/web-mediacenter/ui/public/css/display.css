@@ -555,6 +555,11 @@ body {
     text-shadow: 1px 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.8));
 }
 
+/* 聊天层打开时不让播报字幕遮挡聊天内容；关闭聊天后由原有 class 恢复显示。 */
+body.display-chat-open #voiceTextDisplay {
+    display: none !important;
+}
+
 .voice-text-hidden {
     display: none !important;
 }

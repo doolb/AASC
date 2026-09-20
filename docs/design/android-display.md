@@ -349,7 +349,7 @@ android-display/
 
 - Offline APK 在显示容器右下角显示当前应用区域分辨率、densityDpi 和 WebView 初始缩放百分比；普通 APK 不显示。
 - 浮层从所属 Display 的 `displayMetrics` 读取分辨率和 densityDpi，缩放值调用 `WebViewScalePolicy.initialScalePercent` 计算，保证诊断值与 WebView 初始化策略一致。
-- 浮层作为 `webContainer` 的底层诊断子项，启动遮罩、更新卡片和控制端按钮保持更高 elevation；配置变化时刷新文字，不改变原有交互协议。
+- 浮层作为 `webContainer` 的底层诊断子项，启动遮罩、更新卡片和控制端按钮保持更高 elevation；Offline Node 服务进入 `STATUS_STARTING` 后开始 30 秒倒计时并自动隐藏，配置变化时刷新文字，不改变原有交互协议。
 
 ## 2026-08-26 CPU 配置导致 TTS 页面卡顿修复
 
