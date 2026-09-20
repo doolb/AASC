@@ -13,6 +13,7 @@ const {
     createOfflineUpdateArtifacts,
     fetchCurrentManifestFromNetwork,
     parseCliArguments,
+    resolveUpdatePlan,
     signManifestPayload,
     verifySignedManifest
 } = require('../scripts/ops/offline-update-package');
@@ -210,20 +211,60 @@ test('service update builder reads the configured production key pair when PEM v
     assert.equal(verifySignedManifest(result.manifest, fixture.publicKeyPem), true);
 });
 
-test('code-only refuses a package-lock fingerprint that differs from published dependencies', async (t) => {
+test('code-only automatically upgrades to all when the package-lock fingerprint differs', async (t) => {
     const fixture = createFixture();
     t.after(() => removeFixture(fixture));
     fs.appendFileSync(path.join(fixture.projectRoot, 'package-lock.json'), '\n');
 
-    await assert.rejects(
-        createOfflineUpdateArtifacts({
-            ...fixture,
-            mode: 'code-only',
-            codeVersion: 2
-        }),
-        /package-lock|dependencies/i
-    );
-    assert.ok(!fs.existsSync(fixture.outputDir));
+    let commandCount = 0;
+    const result = await createOfflineUpdateArtifacts({
+        ...fixture,
+        mode: 'code-only',
+        codeVersion: 2,
+        commandRunner: async (_file, args, options) => {
+            commandCount += 1;
+            assert.deepEqual(args, ['ci', '--omit=dev', '--ignore-scripts']);
+            const expressDirectory = path.join(options.cwd, 'node_modules/express');
+            await fs.promises.mkdir(expressDirectory, { recursive: true });
+            await fs.promises.writeFile(path.join(expressDirectory, 'package.json'), JSON.stringify({ name: 'express' }));
+        }
+    });
+
+    assert.equal(result.requestedMode, 'code-only');
+    assert.equal(result.mode, 'all');
+    assert.equal(result.autoDependencyUpgrade, true);
+    assert.equal(commandCount, 1);
+    assert.ok(result.dependenciesArchivePath);
+    assert.equal(result.manifest.payload.components.dependencies.version, 2);
+    assert.equal(result.manifest.payload.components.dependencies.lockSha256, sha256(fs.readFileSync(path.join(fixture.projectRoot, 'package-lock.json'))));
+    assert.equal(result.manifest.payload.components.code.requiredDependencyVersion, 2);
+});
+
+test('code-only still rejects an invalid dependency baseline', () => {
+    assert.throws(() => resolveUpdatePlan({
+        requestedMode: 'code-only',
+        currentDependencies: null,
+        lockSha256: 'a'.repeat(64)
+    }), /有效的已发布 dependencies/);
+});
+
+test('automatic dependency version can be explicitly overridden only above the deployed version', () => {
+    assert.deepEqual(resolveUpdatePlan({
+        requestedMode: 'code-only',
+        currentDependencies: { version: 3, lockSha256: 'a'.repeat(64) },
+        lockSha256: 'b'.repeat(64),
+        dependencyVersion: 5
+    }), {
+        mode: 'all',
+        dependencyVersion: 5,
+        autoDependencyUpgrade: true
+    });
+    assert.throws(() => resolveUpdatePlan({
+        requestedMode: 'code-only',
+        currentDependencies: { version: 3, lockSha256: 'a'.repeat(64) },
+        lockSha256: 'b'.repeat(64),
+        dependencyVersion: 3
+    }), /dependencyVersion/);
 });
 
 test('signature verification rejects any modified manifest payload', (t) => {

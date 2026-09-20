@@ -41,6 +41,7 @@
 | Android MNNChat 本地 LLM 与模型分流 | [android-mnnchat-llm.md](spec/android-mnnchat-llm.md) | APK 本地 MNN-LLM 推理、OpenAI 协议网关、模型到多显示端最短队列分流 |
 | Android offline 模型资产按需加载 | [android-offline-model-assets.md](spec/android-offline-model-assets.md) | LLM asset 与 Node Runtime 安装边界、显示端按需物化伪代码 |
 | Android Offline APK 服务热更新与原生增量 APK | [android-offline-hot-update.md](spec/android-offline-hot-update.md) | 签名更新清单、code/dependencies 原子切换、update-only APK 与模型保留伪代码 |
+| Offline 通用数据修复包 | [offline-data-repair.md](spec/offline-data-repair.md) | repair.js 原有业务类调用、运行时自动保存、版本门控、事务回滚与发布伪代码 |
 | 任务 URL 路由注册 | [task-url-route-registration.md](spec/task-url-route-registration.md) | 任务 URL 路由注册器、显示端请求/响应协议和生命周期伪代码 |
 | 本地语音识别 | [sherpa-asr.md](spec/sherpa-asr.md) | sherpa-onnx-wasm懒加载、流式识别、服务端兜底 |
 | ASR 内存上传与 VAD 参数统一 | [asr-memory-upload-vad-unification.md](spec/asr-memory-upload-vad-unification.md) | ASR Buffer 识别、独立进程传递和 500ms VAD 配置伪代码 |

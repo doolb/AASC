@@ -33,6 +33,7 @@
     "@earendil-works/pi-ai": "0.84.2",
     "@earendil-works/pi-coding-agent": "0.84.2",
     "@marsaud/smb2": "^0.18.0",
+    "@pixiv/three-vrm": "2.1.0",
     "axios": "^1.14.0",
     "blessed": "^0.1.81",
     "cheerio": "^1.2.0",
@@ -44,6 +45,7 @@
     "puppeteer-core": "^24.40.0",
     "sherpa-onnx-node": "^1.12.35",
     "systeminformation": "^5.31.12",
+    "three": "0.160.0",
     "ws": "^8.14.2"
   }
 }

@@ -39,6 +39,11 @@
   version
   sha256
   localUrl
+  sourceUrl
+  modelId
+  characterId
+  modelUrl
+  cacheKey
   fallbackResourceId 可为空
   license
   author
@@ -156,10 +161,14 @@
 过程 setChatLayerVisible(visible)
   如果 visible 为 true
     chatLayer 显示
+    页面设置 display-chat-open 状态类
+    voiceTextDisplay 隐藏，但不停止 TTS 音频播放
     chatLayer 默认不拦截透明区域的 pointer 事件
     chatLayer 内实际面板、输入和按钮允许接收 pointer 事件
   否则
     chatLayer 隐藏并设置 aria-hidden
+    页面移除 display-chat-open 状态类
+    voiceTextDisplay 按当前 voice-text-visible 状态恢复
     释放输入焦点
     mmdLayer 恢复完整 pointer 事件
   不销毁聊天上下文或 MMD 模型
@@ -350,29 +359,49 @@
 
 ```text
 过程 loadVrmForTarget(target)
-  根据 target.modelResourceId 查询本地资源清单
-  优先选择本地离线资源或服务端缓存
-  如果没有本地资源
-    不直接加载未登记的外部 URL
-    返回模型缺失状态，聊天继续可用
-  校验 version、sha256、MIME 和大小限制
-  从资源缓存读取或下载到受控缓存
-  使用 GLTFLoader + VRMLoaderPlugin 创建 VRM
+  读取 target.modelProfile.sourceUrl
+  校验 sourceUrl 的协议为 https 且主机为 hub.vroid.com
+  解析 /characters/{characterId}/models/{modelId}
+  请求同源 /api/vrm/model?url={sourceUrl}
+  服务端校验模型 ID 并返回 modelId、characterId、modelUrl 和 cacheKey
+  浏览器优先从 Cache API 读取 modelUrl
+  缓存未命中时请求同源 /api/vrm/model/file?modelId={modelId}
+  服务端向 VRoid optimized_preview 请求 X-Api-Version=11
+  服务端只跟随 hub.vroid.com 到受控 CloudFront 资源的有限重定向
+  校验响应状态、MIME 和下载大小上限
+  使用 AES-256-CBC 解包响应头中的 IV/Key，再用 zstd 解压并校验 GLB 头
+  如果 GLB 包含 PIXIV_vroid_hub_preview_mesh 5.0 扩展
+    根据最终 optimized_preview 资源路径和扩展时间戳生成确定性种子
+    恢复 POSITION accessor 的三个坐标分量
+  使用 GLTFLoader + KTX2Loader + VRMLoaderPlugin 创建 VRM
   清理不必要顶点和关节
   应用 VRM0 朝向修正、角色缩放和默认表情
-  将 VRM 绑定到当前 roleId
+  将 VRM 绑定到当前 roleId 和 modelId
   释放旧角色的动作、表情、场景和事件监听
   启动待机动作
 ```
 
 ```text
 过程 handleVrmLoadFailure(error)
-  记录 resourceId、version、错误分类和 requestId
-  如果存在已校验的旧缓存
-    回退旧缓存并标记为 stale
+  记录 sourceUrl、modelId、错误分类和 requestId
+  如果 Cache API 中存在已下载的 modelUrl 响应
+    回退缓存并标记为 stale
   否则
     显示角色占位状态
     保持聊天和媒体可用
+```
+
+```text
+过程 proxyVroidModel(request, response)
+  解析并校验 modelId 为数字字符串
+  构造 https://hub.vroid.com/api/character_models/{modelId}/optimized_preview
+  带 X-Api-Version=11、Referer 和固定 User-Agent 发起请求
+  最多跟随 3 次重定向
+  只允许 hub.vroid.com 或 cloudfront.net 目标
+  校验下载大小不超过上限
+  读取 AES-CBC + zstd 载荷并校验解压结果为 GLB
+  以 model/gltf-binary 返回恢复后的模型，并设置短期公共缓存
+  非 2xx、超时或超出大小限制时返回可观察的错误
 ```
 
 ## 7. 动作计划和低级命令
@@ -479,4 +508,44 @@
   移除 VRM scene、Canvas 引用和 ResizeObserver
   清理当前运行时缓存，但保留已校验磁盘资源
   确认旧角色不再接收新的 action plan
+```
+
+## 11. 静态模型资源代理
+
+```text
+声明 MmdModelProfile { resourceId, fileName, version, sha256, modelUrl }
+声明 MmdAssetSource { baseUrl = "http://c.aasc.us/mnt/mmd/", fileName }
+
+过程 createStaticMmdModelProfile(fileName, metadata)
+  校验 fileName 只包含安全的单层文件名和允许的 vrm/glb/vrm.zst/glb.zst 扩展名
+  生成 resourceId、version、sha256 和同源 modelUrl
+  不把任意外部 URL 写入模型配置
+  返回 MmdModelProfile
+```
+
+```text
+过程 resolveMmdAssetUrl(baseUrl, fileName, dnsLookup)
+  解析 baseUrl 并确认协议为 http、主机为 c.aasc.us、路径为 /mnt/mmd/
+  解析 c.aasc.us 的 IPv4 地址
+  用解析后的 IP 替换 URL 主机
+  不设置 Host 请求头
+  拼接经过校验的 fileName 并返回资源 URL
+```
+
+```text
+过程 proxyStaticMmdModel(request, response)
+  读取并校验 fileName 或 resourceId
+  通过 resolveMmdAssetUrl 得到 IP 资源地址
+  请求静态资源并限制重定向、响应大小和响应类型
+  校验 GLB/VRM 文件头和可选 sha256
+  以 model/gltf-binary 通过本地 HTTPS 同源接口返回
+  失败时返回可观察错误并保留聊天、媒体和占位角色
+```
+
+```text
+过程 loadDefaultMmdModel()
+  使用 default-vroid.vrm.zst 创建 MmdModelProfile
+  通过 /api/vrm/model/static?file=default-vroid.vrm.zst 获取模型
+  将模型 URL 交给 three-vrm 运行时
+  后续收到 mmd.model.profile 或 vrm.model.profile 时按 fileName 切换模型
 ```

@@ -39,6 +39,12 @@ AudioInputSelection:
   selectedDeviceId: 设备 id 或 SYSTEM_DEFAULT
   persisted: Boolean
 
+BluetoothScoCapture:
+  preferredDeviceType: TYPE_BLUETOOTH_SCO 时启用
+  scoState: DISCONNECTED | CONNECTING | CONNECTED | FAILED
+  captureSampleRate: 蓝牙 SCO 为 8000，其他输入为 16000
+  outputSampleRate: 16000
+
 ## 原生 ASR 麦克风选择伪代码
 
 ```text
@@ -83,17 +89,55 @@ MainActivity 初始化:
     保持设备选择不变并显示启动失败
 
 AudioRecorder.start(preferredDevice):
-  获取 16 kHz、单声道、PCM16 的最小缓冲区
+  如果 preferredDevice.type == TYPE_BLUETOOTH_SCO:
+    保存 AudioManager.mode
+    注册 ACTION_SCO_AUDIO_STATE_UPDATED 动态接收器
+    设置 MODE_IN_COMMUNICATION
+    调用 startBluetoothSco()
+    等待 SCO_AUDIO_STATE_CONNECTED，超时或 DISCONNECTED -> 释放路由并返回失败
+    captureSampleRate = 8000
+  否则:
+    captureSampleRate = 16000
+  获取 captureSampleRate、单声道、PCM16 的最小缓冲区
   使用 AudioRecord.Builder 创建 AudioRecord
   preferredDevice 不为空 -> 调用 setPreferredDevice(preferredDevice)
   如果指定设备路由失败:
     释放 AudioRecord 并返回 false
+  MainActivity 检测到指定设备失败 -> 选择 SYSTEM_DEFAULT 并立即重试一次
+  调用 startRecording 后检查 recordingState == RECORDSTATE_RECORDING
+  启动失败 -> 释放 AudioRecord、停止 SCO 并返回带原因的失败状态
   启动录音线程，持续读取 PCM16
 
 停止原生录音:
   停止并释放 AudioRecord
+  如果使用蓝牙 SCO:
+    调用 stopBluetoothSco()
+    注销状态接收器
+    恢复 AudioManager.mode
+  captureSampleRate == 8000 -> 将采集 Float32 PCM 线性重采样为 16000
   恢复麦克风 Spinner 和刷新按钮
   返回已采集 PCM
+```
+
+实现验收（2026-09-19）:
+
+```text
+AudioInputDeviceTest:
+  覆盖系统默认持久化键、蓝牙设备显示名和无名称设备回退文本
+
+Node ASR APK 契约测试:
+  校验 BLUETOOTH_CONNECT 权限、原生麦克风控件、输入设备枚举和 preferred device 路由
+
+构建验证:
+  npm --prefix 3rd/tts-server run build:android-asr -> BUILD SUCCESSFUL
+  :app:testDebugUnitTest -> BUILD SUCCESSFUL
+  tests/android-asr-apk.test.js、android-asr-native-load.test.js、android-asr-save-wav.test.js -> 8/8
+
+蓝牙 SCO 修复验证:
+  系统枚举到 AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET / Speakerphone-2155
+  旧版本 AudioRecord.start -> status -38，录音结果 0 秒
+  修复版 APK 包含 MODIFY_AUDIO_SETTINGS，已通过 adb push + pm install -r 覆盖安装
+  用户手动点按录音的最终真机时长 -> 待现场确认
 ```
 ```
 

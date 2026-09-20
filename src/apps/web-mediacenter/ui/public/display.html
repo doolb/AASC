@@ -8,6 +8,15 @@
     <link rel="stylesheet" href="css/display.css">
     <link rel="stylesheet" href="css/display-chat.css">
     <link rel="stylesheet" href="css/display-mmd.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./js/vendor/three/three.module.js",
+                "three/addons/": "./js/vendor/three/",
+                "@pixiv/three-vrm": "./js/vendor/three-vrm/three-vrm.module.js"
+            }
+        }
+    </script>
 </head>
 <body>
     <div id="connectionStatus" class="connecting">连接中...</div>
@@ -6369,6 +6378,33 @@
             pcmCapture = null;
         }
 
+        // 正式 APK 的唯一录音流仍由 WebView getUserMedia 创建；这里只在创建前切换系统 SCO 路由。
+        // 浏览器显示端没有 NativeDisplay 时保持原有默认麦克风行为。
+        function ensureBluetoothScoForVoice() {
+            if (!nativeBridge || typeof nativeBridge.startBluetoothScoForVoice !== 'function') return true;
+            try {
+                const rawResult = nativeBridge.startBluetoothScoForVoice();
+                const result = typeof rawResult === 'string' ? JSON.parse(rawResult) : rawResult;
+                if (!result || result.ok !== true) {
+                    console.warn('[录音] 蓝牙 SCO 不可用，回退系统默认麦克风:', result?.error || '未知原因');
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                console.warn('[录音] 蓝牙 SCO 建立异常，回退系统默认麦克风:', error);
+                return false;
+            }
+        }
+
+        function stopBluetoothScoForVoice() {
+            if (!nativeBridge || typeof nativeBridge.stopBluetoothScoForVoice !== 'function') return;
+            try {
+                nativeBridge.stopBluetoothScoForVoice();
+            } catch (error) {
+                console.warn('[录音] 释放蓝牙 SCO 失败:', error);
+            }
+        }
+
         // 统一释放持续监听资源；调用方可以安全重复执行，避免异常/关闭路径留下旧音频图。
         function releaseVoiceRecordingResources() {
             stopSilenceDetection();
@@ -6377,6 +6413,7 @@
                 micStream.getTracks().forEach(track => track.stop());
                 micStream = null;
             }
+            stopBluetoothScoForVoice();
         }
 
         function clearDisplayRecordingTimer() {
@@ -6435,6 +6472,7 @@
         async function startDisplayRecording(session) {
             if (globalRecordingPaused) throw new Error('全局录音已暂停');
             releaseVoiceRecordingResources();
+            ensureBluetoothScoForVoice();
             micStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     // 与普通 ASR 共用原始 PCM 采集设置，控制端回放拿到未经浏览器重编码的音频。
@@ -6640,6 +6678,7 @@
 
                 // 旧资源可能处于半关闭状态，创建新麦克风前先幂等清理，避免覆盖旧引用。
                 releaseVoiceRecordingResources();
+                ensureBluetoothScoForVoice();
                 micStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: {
                         // 关闭浏览器隐式处理，保证 APK 本地 ASR 收到与测试 APK 一致的原始音频。

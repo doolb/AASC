@@ -79,6 +79,10 @@ WeSpeaker 测试入口、模型、运行时和网页模式全部移除；此前�
 - Android 12 及以上声明并按需申请 `BLUETOOTH_CONNECT`，权限被拒绝时仍可使用系统默认、内置或其他已暴露输入设备。
 - 本次只改变原生 APK 页面和 `AudioRecorder` 路由；内置 HTTPS 网页的 `getUserMedia` 属于浏览器设备链路，不与原生选择器共享状态。
 
+实现状态：已完成设备选择初版；蓝牙 SCO 录音建链与 8 kHz 兼容修复见 `20260919_ASR蓝牙SCO录音修复.md`。
+
+蓝牙 SCO 修复状态：已完成 `BluetoothScoController`、8 kHz 采集到 16 kHz 重采样、录音状态校验和失败提示；Debug APK 已重新构建并覆盖安装到 SM-N9500，真实蓝牙录音仍需用户在当前显示层手动点按验收。
+
 ## 2026-08-27 首轮真机验证结论
 
 - 使用 SM-N9500（Android 9，arm64-v8a）和 `zh.wav`、`en.wav`、`zh-en.wav`、`zh-en-mix.wav` 完成四流程对照；注册库固定使用 `zh.wav → ZH`、`en.wav → EN`。

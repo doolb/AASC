@@ -1,5 +1,7 @@
 package com.aasc.display
 
+import android.content.Context
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
@@ -27,6 +29,11 @@ class NativeBridge(
     private val mainHandler: Handler = Handler(Looper.getMainLooper()),
     private val onControlPageAccessChanged: ((Boolean) -> Unit)? = null
 ) {
+
+    private val bluetoothScoController = BluetoothScoController(
+        webView.context.applicationContext,
+        webView.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    )
 
     private companion object {
         const val DEFAULT_OFFLINE_LLM_MODEL_ID = "qwen3.5-0.8b-claude-opus-distilled-mnn"
@@ -146,6 +153,21 @@ class NativeBridge(
     @JavascriptInterface
     fun abandonAudioFocus() {
         audioFocusController.abandon()
+    }
+
+    /** 在 WebView 创建录音流前建立系统蓝牙 SCO 路由；不额外创建 AudioRecord。 */
+    @JavascriptInterface
+    fun startBluetoothScoForVoice(): String = bluetoothScoController.startForVoice()
+
+    /** 统一释放 WebView 录音使用的蓝牙 SCO 路由。 */
+    @JavascriptInterface
+    fun stopBluetoothScoForVoice() {
+        bluetoothScoController.stop()
+    }
+
+    /** Activity 销毁时释放原生桥持有的 SCO 状态。 */
+    fun release() {
+        bluetoothScoController.stop()
     }
 
     @JavascriptInterface

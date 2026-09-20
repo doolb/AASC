@@ -1,11 +1,46 @@
 # Web MediaCenter - 变更日志
 
+### Offline 通用数据修复包
+
+- 🔄 [2026-09-20] 完成支持全配置运行时自动保存和 Offline JS 数据修复包的详细设计。
+  - 定义 `dataRepair` 签名组件、`repair.js` 原有业务类调用、运行时统一保存、版本门控、备份回滚和 Android/Node 协作流程。
+  - 明确不加入控制端 `requiredDataVersion` 并发冲突校验；Chat2API 账号凭据通过敏感业务类支持，但默认不自动允许。
+  - 新增 `docs/design/offline-data-repair.md`、`docs/spec/offline-data-repair.md` 和 `docs/task/20260920_Offline通用数据修复包详细设计.md`；当前仍待代码实现。
+
+- 🔄 [2026-09-20] 根据需求将修复执行模型调整为原有业务类驱动的 `repair.js`。
+  - 修复脚本只调用 `config.set`、Chat2API management service 等白名单服务对象，不直接访问配置路径或 JSON payload。
+
+- 🔄 [2026-09-20] 明确 Offline 数据修复包定位为按设备和 `repairId` 只成功执行一次的配置热修复，不属于代码热更新。
+
+### Android 显示端蓝牙录音
+
+- ✅ [2026-09-20] 正式 APK 接入 AIMIC-M4 标准 Bluetooth SCO 单路录音。
+  - 采用系统 SCO 路由，不引入厂商 SDK 或第二个 AudioRecord；网页 WebView 录音前等待 SCO 连接，停止和页面销毁时恢复音频状态。
+  - SCO 不可用时回退系统默认麦克风；Android JVM 单测、3/3 静态契约测试和 `assembleDebug` 均通过，生成 `app-debug.apk`（51,677,910 bytes，SHA-256 `1293920b896a9262fb5bfaf454075a442dee45e0dd9ce282aabe02989b7784b2`），API 28 真机录音验收待现场完成。
+- ✅ [2026-09-20] 将 `com.aasc.display` Debug APK（versionCode 1/versionName 0.1.0）覆盖安装到 `SM-N9500/API 28 (192.168.1.6:5555)`；尚未替代 AIMIC-M4 实际录音验收。
+
 ### Chat2API Qwen Provider
 
 - 🔄 [2026-09-19] 修复 Qwen Chat2API 请求通道的网页头和风控响应处理。
   - 已确认本地适配器额外注入固定 `X-Platform/X-DeviceId`，且把 Qwen 返回的 `FAIL_SYS_USER_VALIDATE` JSON 当作空成功回复；现已移除强制设备头并返回明确错误。
   - `session_id`、`parent_req_id`、`scene_param` 首轮/续接保持不变；当前真实上游仍要求验证码，待有效网页登录风控状态后复测答案链路。
   - 任务文档：`docs/task/20260919_Chat2API_Qwen发送链路修复.md`。
+
+### Android ASR 测试 APK
+
+- ✅ [2026-09-19] 为原生 ASR 测试页面增加麦克风选择，支持连接蓝牙麦克风。
+  - 新增输入设备下拉框和刷新按钮，枚举 Android 当前暴露的系统默认、蓝牙、USB、有线和内置输入设备；选择结果按设备 ID 持久化，设备断开后自动回退系统默认。
+  - `AudioRecorder` 改用 `AudioRecord.Builder`，录音前通过 `setPreferredDevice` 指定选择的输入设备；录音期间锁定选择控件，并监听系统设备连接变化。
+  - Android 12 及以上按需申请 `BLUETOOTH_CONNECT`，权限拒绝不阻断系统默认录音；内置 HTTPS 网页浏览器录音链路保持不变。
+  - 更新 `AudioInputDevice.kt`、`AudioRecorder.kt`、`MainActivity.kt`、原生布局、字符串和 Manifest；同步更新 ASR APK design/spec/task 文档。
+  - 验证：Debug APK 构建成功；Android `:app:testDebugUnitTest` 成功；ASR Node 定向测试 `8/8` 通过；`git diff --check` 通过。未覆盖安装真机，需现场连接蓝牙麦克风确认设备是否被系统暴露为输入源。
+
+- ✅ [2026-09-19] 修复经典蓝牙 SCO 麦克风录音为 0 秒。
+  - 根因是 Android 9 上 `AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET` 需要先建立异步 SCO 链路，且 SCO 输入使用 8 kHz；旧代码直接以 16 kHz 启动 `AudioRecord`，日志返回 `start() status -38`，录音线程最终得到空 PCM。
+  - 新增 `BluetoothScoController.kt`，录音前等待 `ACTION_SCO_AUDIO_STATE_UPDATED` 进入 CONNECTED，录音结束释放 SCO 并恢复 AudioManager 模式；`AudioRecorder` 将 8 kHz 单声道 PCM 重采样到 ASR 的 16 kHz，并校验实际录音状态/读取错误。
+  - 增加 `MODIFY_AUDIO_SETTINGS` 权限，更新 `AudioResampler`、MainActivity 失败提示、Android 单测和静态契约测试；修复版 APK 已覆盖安装到 `192.168.1.6:5555`，待用户手动录音确认最终时长。
+  - 验证：Debug APK 构建成功；Android `:app:testDebugUnitTest` 成功；ASR Node 定向测试 `8/8` 通过；`git diff --check` 通过。
+
 ### 控制端与显示端 render 刷新诊断
 
 - ✅ [2026-09-19] 恢复控制端 TTS 输入框的浏览器原生历史提示。
@@ -8713,6 +8748,22 @@
   - `CLAUDE.md` 新增 Offline APK 打包目录、资源命名、LAN/WAN 发布顺序、精确清理边界和 Git 提交边界；内容与 `AGENTS.md` 保持一致。
   - 更新 Offline 热更新 design/spec/task 文档，明确 AI 修改 Offline 资源前必须读取两份规则文件。
 
+### 显示端在线 VRM
+
+- ✅ [2026-09-20] 显示端接入 VRoid Hub 在线 VRM 模型加载。
+  - 默认模型使用 `https://hub.vroid.com/en/characters/1786977751194326803/models/3931412591784052736`；服务端新增 profile 解析和同源模型代理，限制来源主机、模型 ID、重定向目标和下载大小。
+  - 服务端解包 VRoid `optimized_preview` 的 AES-256-CBC + zstd 载荷，并按预览扩展恢复 POSITION 顶点后校验 GLB；浏览器端使用本地 `three.js`、`GLTFLoader`、`KTX2Loader` 和 `three-vrm` 动态加载，Cache API 复用恢复后的模型，失败时保留聊天、媒体和占位降级。
+  - 更新 `display-mmd.js`、`display-vrm-runtime.js`、server VRM service、import map、相关依赖、design/spec/task/todo 文档；未将模型二进制写入 APK 或 Git。
+  - 验证：VRM 定向测试 18/18；真实代理 HTTP 200，恢复后的 GLB 58,054,828 bytes；Chromium WebGL2 加载状态为“VRM 模型已加载”；真机 `192.168.1.6:5555` WebView 页面状态为“VRM 模型已加载”，恢复模型可正常生成 WebGL 画面。
+
+### Offline APK 发布
+
+- ✅ [2026-09-20] 发布完整 Offline APK v19（`0.2.17-offline`）
+  - 产物：`apk/aasc-display-offline-v19.apk`，大小 `1011567696` bytes（约 965MiB），SHA-256 `a033ab6ed28e2290a4a95980b9f2e94f20c2f6b5304111e726eccb79250d4902`。
+  - 局域网 `/mnt/aasc-offline` 与外网 IP `120.79.245.103` 的文件大小、SHA-256 和 HTTP 访问均验证通过；远端仅保留当前完整 APK，未触碰日志、模型、配置、任务和 results。
+  - 域名 `c.aasc.us` 当前由 Beaver 返回 HTTP 403，域名入口验证需代理侧放行；IP 入口不受影响。
+  - 构建目录中的 Gradle、Runtime 和解包中间文件未作为发布资源上传，也未提交到 Git。
+
 ### Android MNNChat 本地编译
 
 - ✅ [2026-09-20] 固定 MNN 编译路径并新增独立 npm 命令
@@ -8739,3 +8790,32 @@
   - code v12：`15165248` bytes，SHA-256 `d4ba44a7ac644133c95f8a688687cc6ac6535e4ec28c1b4bd47ede2b789ee062`；复用 dependencies v3，未上传新的依赖包。
   - min v21：`89262778` bytes，SHA-256 `0d85da66dee31bfe4fcc2f8326df30507288d5edaf3a6e08258fdf60ca45591d`；包名 `com.aasc.display.offline`，APK v2 签名和 ZIP 完整性通过。
   - LAN/WAN-IP 发布、签名清单、HTTP Content-Length、远端 SHA-256 和精确清理均通过；域名 `c.aasc.us` 仍返回 403，未作为验收入口。
+
+### 显示端静态 VRM/MMD 模型
+
+- ✅ [2026-09-20] 将默认 VRM 模型迁移到公网静态资源目录并支持 DNS 替换 IP 访问。
+  - 原始模型已上传至 `~/a/mmd/default-vroid.vrm`；压缩资源已上传至 `~/a/mmd/default-vroid.vrm.zst`，大小 `10305941` bytes，SHA-256 为 `dab79dcd608e4f742ea78e4c0a82e312c3437cac83451b46578d719293916cc3`。
+  - 资源根地址使用 `http://c.aasc.us/mnt/mmd/`；APK 内通过本地 HTTPS 同源代理加载，避免 WebView 混合内容拦截。
+  - 后续模型通过安全文件名和 profile 切换，不再依赖 VRoid Hub 临时 CloudFront 地址。
+  - 生成 Offline min APK `0.2.20-offline-min`（versionCode `22`），大小 `89262774` bytes，SHA-256 `72d5162d229283b36cb2c2e5656329109c645c00d54d251d697da579993e284e`；普通服务归档已生成但未作为热更包发布。
+  - 正式 `code-only` 热更包因 `package-lock.json` 与已发布 dependencies v3 的 lock 指纹不一致被安全校验拒绝，未绕过校验。
+  - 验证：静态模型代理返回 HTTP 200，压缩下载约 `45.0s` 后解压为有效 GLB；VRM/显示端定向测试 `23/23`，APK ZIP 完整性通过。
+
+### Offline 热更依赖自动升级
+
+- ✅ [2026-09-20] 实现 `code-only` lockfile 变化时自动切换 `all` 的构建流程。
+  - lock 指纹一致时继续只生成代码包；指纹变化时自动递增 dependencies 版本并同时生成代码包、依赖包和签名清单。
+  - 无有效线上依赖基线时仍拒绝自动猜测；正式上传继续由现有 LAN/WAN 发布命令执行。
+  - 实测 `code-only --code-version 13` 自动生成并发布 code v13（`15169103` bytes，SHA-256 `4681474beee32932798b92367eab35c919a3559558aad67ef37fad69c0657831`）和 dependencies v4（`117378766` bytes，SHA-256 `a5287d536f96b0f80e367d698a23e217d425317f9e3546a9417c810f1d4f03db`）。
+  - LAN/WAN manifest SHA-256 均为 `839b061f98eb15275d64c29846062a060f184424434d6d89a2b3b96735b48cb1`，直连 IP HTTP 200/Content-Length 校验通过；清单仍保留 min v21。
+  - 发布器修复远端 POSIX shell 路径引号和 WAN 验证地址：外网校验使用已解析 IP `120.79.245.103`，不再使用当前返回 403 的域名入口。
+
+### Offline 完整 APK 构建
+
+- ✅ [2026-09-20] 构建完整 Offline APK v22（`0.2.20-offline`）
+  - 使用 `release/apkbuild/allserver`，profile 为 `allserver`、`updateOnly=false`，服务版本为 code v13、dependencies v4。
+  - 产物：[aasc-display-offline.apk](/mnt/AASC/release/apkbuild/allserver/output/aasc-display-offline.apk)，大小 `1011571032` bytes，SHA-256 `176548ec7a8768068160141d6a21bf0a76967f718ebafde6ee8364aff4411ad0`。
+  - 内置默认 MNN 模型 `qwen3.5-0.8b-claude-opus-distilled-mnn` 及 Offline ASR/TTS/声纹模型；`unzip -tq`、build manifest SHA 和资源检查通过。
+  - 已在 ADB 真机 `192.168.1.6:5555` 原位安装启动；`/api/status` 返回 HTTP 200，`/v1/models` 中默认模型已 ready，聊天接口返回非空回复。
+  - 已发布到 LAN `/mnt/aasc-offline/apk/aasc-display-offline-v22.apk` 和 WAN `as@120.79.245.103:~/a/aasc-offline/apk/aasc-display-offline-v22.apk`；两端大小 `1011571032` bytes、SHA-256 `176548ec7a8768068160141d6a21bf0a76967f718ebafde6ee8364aff4411ad0`，外网 HTTP 200/Content-Length 校验通过；服务 `manifest.json` 未修改。
+  - APK、模型和构建中间文件未提交到 Git。

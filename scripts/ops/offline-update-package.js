@@ -162,6 +162,48 @@ function assertNewVersion(next, previous, name) {
     }
 }
 
+function resolveUpdatePlan(options = {}) {
+    const {
+        requestedMode,
+        currentDependencies,
+        lockSha256,
+        dependencyVersion: configuredDependencyVersion
+    } = options;
+    if (requestedMode === 'all') {
+        const dependencyVersion = Number(configuredDependencyVersion);
+        assertVersion(dependencyVersion, 'dependencyVersion');
+        assertNewVersion(dependencyVersion, currentDependencies?.version, 'dependencyVersion');
+        return {
+            mode: 'all',
+            dependencyVersion,
+            autoDependencyUpgrade: false
+        };
+    }
+    if (requestedMode !== 'code-only') {
+        throw new Error(`不支持的 Offline 更新模式: ${requestedMode}`);
+    }
+    if (!currentDependencies || !Number.isSafeInteger(currentDependencies.version) ||
+        typeof currentDependencies.lockSha256 !== 'string') {
+        throw new Error('code-only 需要有效的已发布 dependencies 版本和 lock 指纹');
+    }
+    if (lockSha256 === currentDependencies.lockSha256) {
+        return {
+            mode: 'code-only',
+            dependencyVersion: currentDependencies.version,
+            autoDependencyUpgrade: false
+        };
+    }
+    const dependencyVersion = configuredDependencyVersion === undefined
+        ? currentDependencies.version + 1
+        : Number(configuredDependencyVersion);
+    assertNewVersion(dependencyVersion, currentDependencies.version, 'dependencyVersion');
+    return {
+        mode: 'all',
+        dependencyVersion,
+        autoDependencyUpgrade: true
+    };
+}
+
 function sha256Buffer(buffer) {
     return crypto.createHash('sha256').update(buffer).digest('hex');
 }
@@ -360,8 +402,8 @@ async function loadCurrentManifest(options, publicKeyPem) {
 }
 
 async function createOfflineUpdateArtifacts(options = {}) {
-    const mode = String(options.mode || '').trim();
-    if (!['code-only', 'all'].includes(mode)) throw new Error('更新模式必须是 code-only 或 all');
+    const requestedMode = String(options.mode || '').trim();
+    if (!['code-only', 'all'].includes(requestedMode)) throw new Error('更新模式必须是 code-only 或 all');
     const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
     const outputDir = path.resolve(options.outputDir || path.join(projectRoot, 'release/offline-update/output'));
     const codeVersion = Number(options.codeVersion);
@@ -384,24 +426,16 @@ async function createOfflineUpdateArtifacts(options = {}) {
     ]);
     const packageJson = JSON.parse(packageJsonText);
     const lockSha256 = sha256Buffer(packageLockBuffer);
-    let dependencyVersion = null;
-    if (mode === 'code-only') {
-        const currentDependencies = currentComponents.dependencies;
-        if (!currentDependencies || !Number.isSafeInteger(currentDependencies.version)) {
-            throw new Error('code-only 需要有效的已发布 dependencies 版本');
-        }
-        if (lockSha256 !== currentDependencies.lockSha256) {
-            throw new Error('package-lock.json 指纹与已发布 dependencies 不一致；请使用 all 模式');
-        }
-        if (!packageJson.dependencies || !Object.keys(packageJson.dependencies).length) {
-            throw new Error('服务 package.json 缺少 production dependencies');
-        }
-        dependencyVersion = currentDependencies.version;
-    } else {
-        dependencyVersion = Number(options.dependencyVersion);
-        assertVersion(dependencyVersion, 'dependencyVersion');
-        assertNewVersion(dependencyVersion, currentComponents.dependencies?.version, 'dependencyVersion');
+    if (!packageJson.dependencies || !Object.keys(packageJson.dependencies).length) {
+        throw new Error('服务 package.json 缺少 production dependencies');
     }
+    const updatePlan = resolveUpdatePlan({
+        requestedMode,
+        currentDependencies: currentComponents.dependencies,
+        lockSha256,
+        dependencyVersion: options.dependencyVersion
+    });
+    const { mode, dependencyVersion, autoDependencyUpgrade } = updatePlan;
 
     const zipRunner = options.zipRunner || execFileAsync;
     const commandRunner = options.commandRunner || execFileAsync;
@@ -479,7 +513,9 @@ async function createOfflineUpdateArtifacts(options = {}) {
         await fs.promises.mkdir(manifestDirectory, { recursive: true });
         await atomicallyWriteOutput(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
         return {
+            requestedMode,
             mode,
+            autoDependencyUpgrade,
             manifest,
             manifestPath,
             codeArchivePath,
@@ -536,7 +572,11 @@ async function runCli(argv = process.argv.slice(2)) {
             currentManifest,
             projectRoot
         });
-        console.log(`更新模式: ${result.mode}`);
+        console.log(`请求模式: ${result.requestedMode}`);
+        console.log(`实际模式: ${result.mode}`);
+        if (result.autoDependencyUpgrade) {
+            console.log('检测到 package-lock.json 指纹变化，已自动生成新的 dependencies 包');
+        }
         console.log(`代码包: ${result.codeArchivePath}`);
         if (result.dependenciesArchivePath) console.log(`依赖包: ${result.dependenciesArchivePath}`);
         console.log(`签名清单: ${result.manifestPath}`);
@@ -559,6 +599,7 @@ module.exports = {
     sha256Buffer,
     UPDATE_BASE_URLS,
     fetchCurrentManifestFromNetwork,
+    resolveUpdatePlan,
     parseCliArguments,
     runCli
 };

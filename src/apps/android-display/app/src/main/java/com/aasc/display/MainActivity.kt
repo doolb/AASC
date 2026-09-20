@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var offlineDisplayInfo: TextView
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
+    private var nativeDisplayBridge: NativeBridge? = null
     private var offlineMode = false
     private var embeddedNode = true
     private var updateOnlyMode = false
@@ -103,6 +104,7 @@ class MainActivity : AppCompatActivity() {
     private val REQ_NOTIFICATION_PERMISSION = 1002
     private val REQ_STORAGE_PERMISSION = 1003
     private val REQ_CAMERA_PERMISSION = 1004
+    private val REQ_BLUETOOTH_CONNECT_PERMISSION = 1007
     private var startupContinued = false
     private var startupPermissionIndex = 0
     private var permissionReloadRequired = false
@@ -161,12 +163,25 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
+    private fun requestBluetoothConnectPermissionIfNeeded(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                REQ_BLUETOOTH_CONNECT_PERMISSION
+            )
+            return true
+        }
+        return false
+    }
+
     /** 按启动顺序逐项请求 Android 权限，等待当前权限回调后才会检查下一项。 */
     private fun requestNextStartupPermission() {
-        while (startupPermissionIndex < 3) {
+        while (startupPermissionIndex < 4) {
             val shouldWaitForResult = when (startupPermissionIndex++) {
                 0 -> requestAudioPermissionIfNeeded()
-                1 -> requestCameraPermissionIfNeeded()
+                1 -> requestBluetoothConnectPermissionIfNeeded()
+                2 -> requestCameraPermissionIfNeeded()
                 else -> requestNotificationPermissionIfNeeded()
             }
             if (shouldWaitForResult) return
@@ -266,6 +281,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 requestNextStartupPermission()
             }
+            REQ_BLUETOOTH_CONNECT_PERMISSION -> requestNextStartupPermission()
             REQ_NOTIFICATION_PERMISSION -> requestNextStartupPermission()
         }
     }
@@ -412,6 +428,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
+        nativeDisplayBridge?.release()
         audioFocusController.abandon()
         super.onDestroy()
     }
@@ -1057,6 +1074,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupWebView(url: String, baseUrl: String) {
         val wv = DisplayWebView(this, offlineMode)
         val bridge = NativeBridge(wv, audioFocusController, offlineMode) { allowed -> setControlPageAccess(allowed) }
+        nativeDisplayBridge = bridge
         bridge.updateServerOrigin(url)
         wv.addJavascriptInterface(bridge, "NativeDisplay")
         wv.webViewClient = createWebViewClient(bridge, baseUrl, true)

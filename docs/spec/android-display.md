@@ -433,3 +433,66 @@ initialScalePercent(true, 1920, 1080, 0) -> 100% 回退
 - Android `NodeServerServiceTest` 与 `android-node-runtime-package.test.js`：验证 Node 使用 APK 原生库目录中的 `libaasc_node.so`
 - tests/android-shared-storage.test.js、tests/android-saf-media-provider.test.js 与 Android `SharedStorageAccessTest`/`SafMediaPathTest`：验证 API 28 旧权限、API 29+ SAF 选择边界、虚拟根 `/`、路径安全、Range 和不声明全盘权限
 - 真机：SM-N9500 Android 9/API 28 安装并启动 Debug APK，Node HTTPS 健康接口和旧版媒体库列举返回成功；API 29+ SAF 选择器待 Android 10+ 真机执行
+
+## 正式 APK 蓝牙 SCO 单路录音伪代码（2026-09-20）
+
+```text
+BluetoothScoController(applicationContext):
+    保存 AudioManager、上一次 audio mode、SCO 是否已经由外部打开、广播接收器注册状态
+
+startForVoice(): String:
+    在互斥锁中执行，避免多个 WebView 录音请求并发切换音频路由
+    如果当前控制器已经建立 SCO:
+        返回 { ok: true, route: "bluetooth_sco", alreadyActive: true }
+    尝试枚举 AudioManager.GET_DEVICES_INPUTS
+    如果没有 TYPE_BLUETOOTH_SCO 输入设备:
+        返回 { ok: false, error: "未发现蓝牙 SCO 麦克风" }
+    记录当前 mode 和 isBluetoothScoOn
+    注册 ACTION_SCO_AUDIO_STATE_UPDATED 广播接收器
+    设置 MODE_IN_COMMUNICATION
+    调用 startBluetoothSco()
+    最多等待 8 秒，直到收到 SCO_AUDIO_STATE_CONNECTED
+    已连接时设置 setBluetoothScoOn(true)，标记本次路由已激活
+    超时、断开或 SecurityException:
+        停止本次请求、注销接收器、恢复原 mode/SCO 状态
+        返回 { ok: false, error: "蓝牙 SCO 建立失败" }
+    返回 { ok: true, route: "bluetooth_sco" }
+
+stop():
+    如果本次控制器没有建立路由: return
+    注销 SCO 状态广播接收器
+    如果 SCO 原本未打开:
+        setBluetoothScoOn(false)
+        stopBluetoothSco()
+    恢复 startForVoice() 之前的 AudioManager mode
+    清除本次控制器状态
+
+NativeBridge:
+    startBluetoothScoForVoice() -> 同步返回上述 JSON
+    stopBluetoothScoForVoice() -> 调用 BluetoothScoController.stop()
+    release() -> Activity 销毁时释放 SCO，不创建第二个 AudioRecord
+
+display.html:
+    ensureBluetoothScoForVoice():
+        浏览器无 NativeDisplay 时直接返回 true
+        调用 nativeBridge.startBluetoothScoForVoice()
+        解析 JSON；ok == true 时返回 true
+        ok != true 或调用异常时记录原因并返回 false，继续使用系统默认 getUserMedia 麦克风
+
+    startVoiceRecording / startDisplayRecording:
+        先释放旧的 MediaStream 和旧 SCO
+        ensureBluetoothScoForVoice()
+        再调用 navigator.mediaDevices.getUserMedia({ audio: ... })
+        使用当前 WebView 唯一的 MediaStream/AudioContext 采集原始 PCM
+
+    releaseVoiceRecordingResources:
+        停止 VAD、PCM 图和 MediaStream 轨道
+        调用 nativeBridge.stopBluetoothScoForVoice()
+
+降级:
+    无蓝牙 SCO 输入、权限不足、链路超时或网页不在 APK:
+        不创建额外 AudioRecord；APK 继续使用系统默认 getUserMedia 麦克风
+        如果默认 getUserMedia 也失败，沿用原有录音失败提示并释放已建立的路由
+```
+
+实现状态（2026-09-20）：`BluetoothScoController.kt`、`NativeBridge`、`MainActivity` 和 `display.html` 已按上述伪代码实现；Debug APK 已安装到 SM-N9500/API 28，真机 SCO 连接与音频质量待现场验证。

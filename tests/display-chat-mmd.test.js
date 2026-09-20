@@ -19,6 +19,8 @@ test('display.html 使用同页舞台模块，不为聊天或 MMD 创建 iframe'
     assert.match(html, /js\/display-chat\.js/u);
     assert.match(html, /js\/display-mmd\.js/u);
     assert.match(html, /js\/display-mmd-command-adapter\.js/u);
+    assert.match(html, /type="importmap"/u);
+    assert.match(html, /@pixiv\/three-vrm/u);
     assert.match(html, /css\/display-chat\.css/u);
     assert.match(html, /css\/display-mmd\.css/u);
     assert.doesNotMatch(html, /display(?:Chat|Mmd)[^<]*<iframe/iu);
@@ -28,11 +30,16 @@ test('显示端模块通过现有 WebSocket 注入，不创建第二条连接', 
     const stage = readPublic('js/display-stage.js');
     const chat = readPublic('js/display-chat.js');
     const mmd = readPublic('js/display-mmd.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
     assert.match(stage, /setTransport/u);
     assert.match(stage, /requestInitialSnapshot/u);
     assert.doesNotMatch(stage, /new\s+WebSocket/iu);
     assert.doesNotMatch(chat, /new\s+WebSocket/iu);
     assert.doesNotMatch(mmd, /new\s+WebSocket/iu);
+    assert.match(mmd, /display-vrm-runtime\.js/u);
+    assert.match(vrm, /GLTFLoader/u);
+    assert.match(vrm, /KTX2Loader/u);
+    assert.match(vrm, /VRMLoaderPlugin/u);
     assert.match(chat, /source:\s*'displayChat'/u);
 });
 
@@ -50,6 +57,8 @@ test('聊天隐藏后才允许 MMD Canvas 接收点击，并展示 think 内容'
     assert.match(stage, /setPointerEnabled\(state\.mmdVisible && !state\.chatVisible\)/u);
     assert.match(mmd, /mmd\.interaction/u);
     assert.match(mmd, /fallbackHitTest/u);
+    assert.match(mmd, /default-vroid\.vrm\.zst/u);
+    assert.match(mmd, /\/api\/vrm\/model\/static/u);
     assert.match(chat, /display-chat-think/u);
     assert.match(chat, /<think>/u);
 });
@@ -125,4 +134,18 @@ test('服务端区分显示端聊天同步和控制端 think 历史', () => {
     assert.match(server, /if \(data\.source === 'displayChat'\)/u);
     assert.match(llm, /function getHistory\(\)/u);
     assert.match(llm, /preserveThink/u);
+});
+
+test('服务端提供 VRoid profile 和同源 VRM 代理', () => {
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    const service = fs.readFileSync(path.join(ROOT, 'src/apps/server/modules/vrm/vroid-model-service.js'), 'utf8');
+    assert.match(server, /app\.get\('\/api\/vrm\/model'/u);
+    assert.match(server, /app\.get\('\/api\/vrm\/model\/file'/u);
+    assert.match(server, /app\.get\('\/api\/vrm\/model\/static'/u);
+    assert.match(server, /createStaticMmdModelProfile/u);
+    assert.match(service, /X-Api-Version/u);
+    assert.match(service, /cloudfront\.net/u);
+    assert.match(service, /http:\/\/c\.aasc\.us\/mnt\/mmd\//u);
+    assert.match(service, /resolveStaticMmdAssetUrl/u);
+    assert.match(service, /MAX_MODEL_BYTES/u);
 });

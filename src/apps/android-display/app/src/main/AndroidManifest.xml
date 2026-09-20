@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Android WebView 创建 getUserMedia 录音设备所需的普通安装权限。 -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- 经典蓝牙 SCO 路由；Android 12+ 的 BLUETOOTH_CONNECT 还需运行时授权。 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"

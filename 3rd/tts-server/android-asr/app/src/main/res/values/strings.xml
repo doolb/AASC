@@ -5,6 +5,15 @@
     <string name="model_load_failed">模型加载失败：%1$s</string>
     <string name="record_start">开始录音</string>
     <string name="record_stop">停止录音</string>
+    <string name="audio_input_label">录音麦克风</string>
+    <string name="audio_input_refresh">刷新麦克风列表</string>
+    <string name="audio_input_loading">正在读取可用输入设备…</string>
+    <string name="audio_input_permission_required">如需显示蓝牙麦克风，请允许蓝牙连接权限</string>
+    <string name="audio_input_permission_denied">蓝牙连接权限未授予，仍可使用系统默认或其他可用输入</string>
+    <string name="audio_input_fallback">已保存的麦克风不可用，已回退到系统默认</string>
+    <string name="audio_input_selected">当前输入：%1$s</string>
+    <string name="audio_input_recording">录音中：%1$s</string>
+    <string name="audio_input_connecting">正在连接蓝牙麦克风…</string>
     <string name="select_audio">选择音频</string>
     <string name="play_audio">播放当前音频</string>
     <string name="stop_audio">停止播放</string>

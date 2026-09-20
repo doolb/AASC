@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-19）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-20）
 
 ## 控制端
 
@@ -20,9 +20,9 @@
 
 ## Android ASR APK
 
-- 🔄进行中 [2026-09-19] 为独立 ASR 测试 APK 增加原生麦克风选择
-  - 支持系统默认、蓝牙、USB/有线等 Android 当前输入设备，录音通过 `AudioRecord.setPreferredDevice` 使用选择设备；设备断开自动回退默认。
-  - 关联文档：`docs/design/android-voiceprint-test-apk.md`；`docs/spec/android-voiceprint-test-apk.md`；`docs/task/20260919_ASR测试APK麦克风选择.md`。
+- ⏳待现场验收 [2026-09-19] 修复蓝牙 SCO 麦克风录音为 0 秒
+  - 已完成 SCO 建链等待、8 kHz 采集到 16 kHz 重采样、`AudioRecord` 录音状态校验和失败提示；修复版已覆盖安装到 SM-N9500，待用户手动点按确认真实录音时长。
+  - 关联文档：`docs/design/android-voiceprint-test-apk.md`；`docs/spec/android-voiceprint-test-apk.md`；`docs/task/20260919_ASR蓝牙SCO录音修复.md`。
 
 - ⏳待现场验收 [2026-09-11] 在独立 ASR 测试 APK 原生页面使用测试 WAV 完成 Sherpa 声纹注册和三种测试模式回归
   - APK 已构建、安装和启动；设备 UI 自动化桥返回空 root，尚未自动完成注册、单段、多段、快速多段及双降噪开关的点击验证。
@@ -34,6 +34,11 @@
 ## 文本媒体
 
 ## 聊天系统
+
+- ⏳待处理 [2026-09-20] 实现 Offline 通用数据修复包
+  - 已完成详细设计：使用签名 `repair.js` 直接调用原有业务类，支持运行时自动保存、dataRepair 版本门控、事务备份回滚和失败恢复；不加入控制端 `requiredDataVersion` 并发冲突校验。
+  - 待实现修复引擎、Offline 构建/发布、Android 下载确认和启动前应用流程；Chat2API mini/flash/pro 多 Provider 路由暂不包含在本任务。
+  - 关联文档：`docs/design/offline-data-repair.md`、`docs/spec/offline-data-repair.md`、`docs/task/20260920_Offline通用数据修复包详细设计.md`。
 
 - 🔄进行中 [2026-09-19] 修复 Qwen Chat2API 请求通道返回固定拒答
   - 已复现：同一账号和 `Qwen3.6-Flash → Qwen3.7` 映射下，本地 Chat2API 会把 Qwen 上游固定拒答或风控 JSON 归一化为空成功回复。
@@ -57,7 +62,7 @@
   - 已确认使用单个 `display.html`，拆分 `display-stage.js`、`display-chat.js`、`display-mmd.js` 和独立 CSS，不使用 iframe。
   - 聊天位于 MMD 上层并可单独隐藏；隐藏后 MMD Canvas 接收点击，通过 Raycaster 触发本地动作，聊天联动默认关闭。
   - 当前实现范围：同页模块总线、聊天入口/对象选择/会话选择、流式消息、聊天隐藏切换，以及无外部运行时时的 MMD Canvas 交互降级。
-  - 第一阶段已构建并覆盖安装 Offline min v20；code v11 热更健康检查已通过，VRM/three-vrm、VMD/VRMA 本地资源接入和真实模型 Raycaster 留在后续阶段。
+  - 已完成静态 VRM 模型迁移：默认模型通过 `http://c.aasc.us/mnt/mmd/` 文件资源加载，服务端 DNS 解析为 IPv4 后不保留 Host，并支持 `.vrm`、`.glb` 及 zstd 压缩文件的安全 profile 切换；模型不打入 APK。VMD/VRMA 动作资源和复杂动作生成仍留在后续阶段。
   - 聊天/MMD 两个显示开关已调整到左下角，保留安全区和软键盘内缩。
   - 已修复 `defer` 模块初始化时序，聊天入口会在模块注册后生成聊天窗口。
   - render-display 已调整为仅高于媒体层；聊天页面主题化，对象/会话切换改为 HTML 下拉菜单；下拉菜单已区分未选中、悬停/聚焦和已选中颜色；聊天已改为全屏透明背景、控件实色；code v11 已发布并完成真机验收。
@@ -98,7 +103,7 @@
 
 - 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
   - 🔄待现场验收 [2026-09-20] code v12 与 min v21 已联合发布，包含聊天播报文字隐藏和服务器启动后 30 秒隐藏分辨率诊断；待 SM-N9500 通过外网更新卡片确认 code/min 更新及真机行为。
-  - 服务更新支持 `code-only`（不发布/下载依赖）与 `all`（代码+生产依赖）；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
+  - 服务更新支持 `code-only`（lock 指纹一致时不发布/下载依赖）与 `all`（代码+生产依赖）；`code-only` 检测到 lock 指纹变化时自动升级为 `all` 并递增依赖版本；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
   - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本轮服务更新 Node 定向测试 31/31、Android JVM 单测 25/25 通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
   - full v2/min v3 APK、code/dependencies v3 包及 min v3 更新清单已生成并通过静态完整性/签名校验；min v4 已升版为 `0.2.2-offline-min` 并正式发布，LAN/WAN manifest 字节一致且签名有效。
   - min v4 APK 地址为 `http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk` 和 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk`，大小 `89205130` bytes，SHA-256 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`；LAN HTTP 整包、WAN 远端文件及 WAN HTTP 首段/HEAD 校验通过。
@@ -168,6 +173,12 @@
 
 # 当前任务
 
+## 显示端 VRM/MMD
+
+- 🔄进行中 [2026-09-20] 将默认 VRM 模型改为公网静态资源代理，并支持多模型文件名配置
+  - 静态根地址为 `http://c.aasc.us/mnt/mmd/`，Node 服务解析域名后使用 IP 请求，不保留 Host。
+  - 默认文件为 `default-vroid.vrm`；完成服务端代理、显示端 profile、APK 构建和真机外部网络验证后移除本条。
+
 ## 控制端语音配置
 
 - ⏳待现场验证 [2026-09-19] 浏览器显示端 ASR 来源绑定修复
@@ -181,6 +192,11 @@
   - 当前三种语音会话状态的使用说明见 `docs/usage/voice-conversation.md`。
 
 # Android 显示端音频
+
+- ⏳待现场验收 [2026-09-20] 正式 APK 使用标准 Bluetooth SCO 接入 AIMIC-M4 单路录音
+  - 已完成不接入厂商 SDK 的 SCO 路由、Android 12+ `BLUETOOTH_CONNECT` 权限、无设备/超时回退、录音停止/页面销毁恢复音频模式和自动化验证。
+  - 仍需现场完成 API 28 真机录音、AIMIC-M4 断开回退、连续启停和 Android 12+ 权限流程验证。
+  - 设计：`docs/design/android-display.md`；实现伪代码：`docs/spec/android-display.md`；任务：`docs/task/20260920_正式APK蓝牙SCO录音接入.md`。
 
 ## 外部应用焦点
 

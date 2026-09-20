@@ -360,3 +360,38 @@ ADB 未观察到 ANR/崩溃，但显示端在 TTS 请求期间反复接收 `cpuC
 显示端 `applyCpuConfig()` 改为只调用 `NativeDisplay.cpuConfigureAsync()`，按 `{asr,tts}` 配置 key 去重，缺少异步桥时直接忽略。原生桥异步方法只负责将最新配置放入单线程后台队列并立即返回，后台串行应用配置；ASR/TTS policy 未改变时复用当前 pool。同步 `cpuConfigure()` 保留用于兼容已有原生调用，但不再由页面 WebSocket 路径调用。
 
 声纹模型回调也必须经 `mainHandler.post` 执行 `WebView.evaluateJavascript()`，消除 JavaBridge 线程调用 WebView 的警告。
+
+## 2026-09-20 正式 APK AIMIC-M4 蓝牙 SCO 单路录音
+
+### 需求与范围
+
+- 正式 Android 显示端继续使用系统标准 Bluetooth SCO，不接入未公开的厂商 SDK，也不新增 AIMIC-M4 专用 USB/原生音频协议。
+- 目标是让 AIMIC-M4 这类经典蓝牙免提设备作为正式 APK WebView 的录音输入，保持现有 `display.html` 语音链路和单路录音模型。
+- 不为路由切换再创建第二个 `AudioRecord`；正式 APK 的唯一录音源仍是 display WebView 的 `getUserMedia()`，避免与 WebView 已占用的输入设备冲突。
+
+### 路由设计
+
+- 新增 `BluetoothScoController`，在网页调用 `getUserMedia()` 前枚举 `TYPE_BLUETOOTH_SCO` 输入、切换 `MODE_IN_COMMUNICATION`，启动并等待异步 SCO 连接完成。
+- `NativeBridge.startBluetoothScoForVoice()` 同步等待路由结果后再返回网页；这样网页不会在 SCO 尚未连接时抢先创建录音流。
+- 录音停止、TTS/全局录音暂停、页面销毁时释放 SCO，并恢复进入录音前的音频模式。
+- WebView 无原生桥时保持浏览器原有默认麦克风行为；没有 SCO 输入、权限不足或连接失败时记录原因并回退系统默认 `getUserMedia()`，不改变普通浏览器兼容性。
+- Android 12+ 声明并按需申请 `BLUETOOTH_CONNECT`；Android 7–11 复用旧版蓝牙权限与系统 SCO API。
+
+### 影响边界
+
+- `display.html` 的普通 ASR 与控制端临时录音共用同一套 SCO 前置/释放函数，不改变采样、VAD、PCM 编码和服务端协议。
+- SCO 链路通常由系统以窄带语音路由提供，设备真实采样率由 Android 音频栈决定；网页继续以现有 16 kHz 采集配置请求并由已有 AudioContext 处理。
+- AIMIC-M4 是否暴露为 Android `TYPE_BLUETOOTH_SCO` 输入由系统蓝牙栈决定；若设备只作为 A2DP 输出或未建立 HFP/SCO，则本功能不强行伪装为可用麦克风。
+
+### 验收重点
+
+- API 28 SM-N9500：连接 AIMIC-M4 后，正式 APK 录音不再出现第二个 `AudioRecord` 抢占，`getUserMedia()` 能持续产生 PCM。
+- 无蓝牙/断开/拒绝蓝牙权限：有明确日志，SCO 和音频模式均恢复后回退系统默认麦克风；默认录音仍失败时再结束本次录音。
+
+### 实现结果
+
+- 已新增 `BluetoothScoController`、NativeBridge 开始/停止接口和 Activity 销毁释放逻辑；正式 APK 不创建第二个 `AudioRecord`。
+- 普通 ASR 与控制端临时录音都在 `getUserMedia()` 前尝试 SCO，失败时回退系统默认麦克风。
+- Android JVM `:app:testDebugUnitTest` 已通过；SCO 静态契约测试 3/3 已通过。
+- Debug APK 已安装到 `SM-N9500/API 28 (192.168.1.6:5555)`，包名 `com.aasc.display`，版本 `0.1.0 (versionCode 1)`；AIMIC-M4 连接、断开和 Android 12+ 蓝牙权限现场录音仍需验证。
+- 普通网页显示端、TTS、视频播放、控制端临时录音和页面刷新不残留 SCO 广播接收器或错误音频模式。

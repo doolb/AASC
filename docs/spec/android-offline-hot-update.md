@@ -91,6 +91,36 @@ MainActivity.showMinApkUpdatePrompt:
     否则隐藏更新内容区域
 ```
 
+## 2026-09-20 完整 Offline APK v22 构建验证伪代码
+
+```text
+读取 release/apkbuild/allserver/app.json
+    versionCode = 22
+    versionName = 0.2.20-offline
+    serviceVersions = code 13, dependencies 4
+
+运行 npm run build:apk:offline
+    profile = allserver
+    offline = true
+    embeddedNode = true
+    updateOnly = false
+    生成 release/apkbuild/allserver/output/aasc-display-offline.apk
+
+校验 build-manifest.json
+    profile == allserver
+    versionCode == 22
+    updateOnly != true
+    buildManifest.sha256 == sha256(APK)
+
+校验 APK
+    unzip -tq 通过
+    assets/apk-profile.json.features 包含 display、asr、tts、llm、render-display
+    assets/display-models/qwen3.5-0.8b-claude-opus-distilled-mnn 存在默认模型权重
+    assets/server/res/models 存在 Offline ASR/TTS/声纹模型
+    构建阶段不替换服务 manifest.json；发布阶段按 apk-full 规则上传版本化 full APK
+    完整包不写入服务 manifest.json
+```
+
 ## 2026-09-20 联合发布实现记录
 
 ```text
@@ -152,16 +182,29 @@ buildOfflineUpdate(mode):
     codeVersion = configured monotonic release identifier
     lockSha256 = SHA256(package-lock.json)
 
-    if mode == "code-only":
+    requestedMode = mode
+    effectiveMode = mode
+
+    if requestedMode == "code-only":
         deployedManifest = fetchAndVerifyCurrentManifest(LAN, then WAN)
         deployedDependencies = deployedManifest.payload.components.dependencies
-        require lockSha256 == deployedDependencies.lockSha256
-        require dependency declarations match deployedDependencies.lockSha256
-        create code archive only; do not run npm ci; do not create dependencies archive
+        require deployedDependencies has a valid version and lockSha256
+        if lockSha256 == deployedDependencies.lockSha256:
+            dependencyVersion = deployedDependencies.version
+            create code archive only; do not run npm ci; do not create dependencies archive
+        else:
+            effectiveMode = "all"
+            dependencyVersion = configured dependency version
+                or deployedDependencies.version + 1
+            require dependencyVersion > deployedDependencies.version
+            run npm ci --omit=dev --ignore-scripts in a clean Android package stage
+            create code archive and dependencies archive
         nextManifest = deployedManifest.payload with code entry replaced
 
-    if mode == "all":
+    if requestedMode == "all" or effectiveMode == "all":
         dependencyVersion = configured monotonic dependency identifier
+        if automatic dependency upgrade and no explicit version:
+            dependencyVersion = deployedDependencies.version + 1
         dependencyStage = npm ci --omit=dev --ignore-scripts in clean Android package stage
         validate Android production dependency package
         create code archive and dependencies archive
@@ -180,7 +223,8 @@ buildOfflineUpdate(mode):
     write signed manifest to manifestTemp
     atomically rename manifestTemp to manifest path last
     on manifest write/rename failure, remove manifestTemp
-    return artifact paths, sizes and hashes
+    return requestedMode, effectiveMode, autoDependencyUpgrade,
+        artifact paths, sizes and hashes
 ```
 
 ## APK profile 与 update-only Runtime 构建伪代码
@@ -208,7 +252,7 @@ buildApk(profile):
         prepare the existing full server package and runtime assets
 ```
 
-`code-only` uses the existing signed deployment manifest as the authoritative dependency baseline. If no valid deployed dependency entry is available, lock fingerprints differ, or signing key is missing, stop before creating a publishable manifest.
+`code-only` uses the existing signed deployment manifest as the authoritative dependency baseline. If no valid deployed dependency entry is available or signing key is missing, stop before creating a publishable manifest. If lock fingerprints differ, automatically build a new dependencies component and use it with the code component.
 
 ## 发布伪代码
 
@@ -586,7 +630,9 @@ full Offline profile 必须选择 `voiceprint` 模型目录，Runtime 清单负�
 ```text
 Node package tests:
     code-only output has full src and no node_modules/dependencies archive
-    code-only rejects changed lock fingerprint and preserves deployed dependencies entry
+    code-only with matching lock fingerprint keeps dependencies entry and produces no dependency archive
+    code-only with changed lock fingerprint automatically produces a new dependency archive and all manifest entries
+    code-only without a valid dependency baseline still fails before producing artifacts
     all output contains code and Android production dependencies with matching lock hash
     manifest signature fails after any signed field changes
     publish writes packages before manifest, cleans only stale exact versioned files,

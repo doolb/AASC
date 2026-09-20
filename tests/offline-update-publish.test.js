@@ -12,7 +12,8 @@ const {
     publishOfflineUpdate,
     publishOfflineFullApk,
     cleanupRemotePublishedArtifacts,
-    verifyHttpTarget
+    verifyHttpTarget,
+    buildRemoteShellArguments
 } = require('../scripts/ops/publish-offline-update');
 const {
     signManifestPayload
@@ -21,6 +22,14 @@ const {
 function sha256(value) {
     return crypto.createHash('sha256').update(value).digest('hex');
 }
+
+test('远端 POSIX shell 参数转义不会把绝对路径引号写入实际路径', () => {
+    const [, , quotedCommand] = buildRemoteShellArguments(
+        "set -eu\nroot='/home/as/a/aasc-offline'\ntarget=\"$root/code/code-v13.zip\""
+    );
+    assert.match(quotedCommand, /root='\"'\"'\/home\/as\/a\/aasc-offline'\"'\"'/);
+    assert.doesNotMatch(quotedCommand, /\\\"/);
+});
 
 async function writePublishedFile(rootDirectory, relativePath, content) {
     const target = path.join(rootDirectory, relativePath);

@@ -124,6 +124,19 @@ const { resolveVoicePlaybackTarget } = require('../modules/media/voice-playback-
 const { normalizeTtsPauseText } = require('../modules/media/tts-text-normalizer');
 const { normalizeDisplayCpuStatus, getDisplayTtsConcurrency } = require('../modules/media/display-cpu-status');
 const { createOrderedTaskScheduler } = require('../modules/media/ordered-task-scheduler');
+const {
+    DEFAULT_VROID_MODEL_URL,
+    MAX_MODEL_BYTES,
+    createStaticMmdModelProfile,
+    createVroidModelProfile,
+    decodeStaticMmdModel,
+    readGlbChunks,
+    readModelStream,
+    requestStaticMmdModelStream,
+    restoreVroidPreviewMesh,
+    requestVroidModelStream,
+    unwrapVroidModelPayload
+} = require('../modules/vrm/vroid-model-service');
 const { createAndroidControlPageAccess } = require('../modules/display/android-control-page-access');
 const {
     ModelManifestService,
@@ -2534,6 +2547,79 @@ app.use('/res/tasks', express.static(path.join(PROJECT_ROOT, 'res', 'tasks')));
 app.use('/models', express.static(path.join(PROJECT_ROOT, 'res', 'models')));
 app.use('/js/lib', express.static(path.join(NODE_MODULES_ROOT, 'onnxruntime-web', 'dist')));
 app.use(express.json({ limit: '50mb' }));
+
+// VRoid 页面地址只用于解析模型 ID；浏览器实际加载同源代理，避免 WebView 直接处理
+// VRoid Hub 的临时重定向、CORS 和临时 URL 过期问题。模型二进制不进入 APK 或 Git。
+app.get('/api/vrm/model', (req, res) => {
+    try {
+        if (typeof req.query.file === 'string' && req.query.file.trim()) {
+            const model = createStaticMmdModelProfile(req.query.file.trim(), {
+                version: typeof req.query.version === 'string' ? req.query.version.trim() : undefined,
+                sha256: typeof req.query.sha256 === 'string' ? req.query.sha256.trim() : undefined
+            });
+            res.json({ status: 'success', model });
+            return;
+        }
+        const sourceUrl = typeof req.query.url === 'string' && req.query.url.trim()
+            ? req.query.url.trim()
+            : DEFAULT_VROID_MODEL_URL;
+        const profile = createVroidModelProfile(sourceUrl);
+        res.json({ status: 'success', model: profile });
+    } catch (error) {
+        res.status(error.statusCode || 400).json({ status: 'error', message: error.message });
+    }
+});
+
+app.get('/api/vrm/model/static', async (req, res) => {
+    const fileName = typeof req.query.file === 'string' ? req.query.file.trim() : '';
+    try {
+        const result = await requestStaticMmdModelStream({ fileName });
+        const downloadedModel = await readModelStream(result.response);
+        const model = decodeStaticMmdModel(downloadedModel, fileName);
+        readGlbChunks(model);
+        res.status(200);
+        res.setHeader('Content-Type', 'model/gltf-binary');
+        res.setHeader('Content-Length', String(model.length));
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+        res.setHeader('X-AASC-VRM-Source', 'static-mmd-ip-resolved');
+        res.end(model);
+    } catch (error) {
+        res.status(error.statusCode || 502).json({
+            status: 'error',
+            message: error.message,
+            maxBytes: MAX_MODEL_BYTES
+        });
+    }
+});
+
+app.get('/api/vrm/model/file', async (req, res) => {
+    const modelId = typeof req.query.modelId === 'string' ? req.query.modelId : '';
+    const characterId = typeof req.query.characterId === 'string' ? req.query.characterId : '';
+    const sourceUrl = characterId && modelId
+        ? `https://hub.vroid.com/characters/${characterId}/models/${modelId}`
+        : DEFAULT_VROID_MODEL_URL;
+    try {
+        const result = await requestVroidModelStream({ modelId, sourceUrl });
+        const encryptedModel = await readModelStream(result.response);
+        const model = restoreVroidPreviewMesh(
+            unwrapVroidModelPayload(encryptedModel),
+            result.sourceUrl
+        );
+        res.status(200);
+        res.setHeader('Content-Type', 'model/gltf-binary');
+        res.setHeader('Content-Length', String(model.length));
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+        res.setHeader('X-AASC-VRM-Source', 'vroid-optimized-preview-restored');
+        res.end(model);
+    } catch (error) {
+        res.status(error.statusCode || 502).json({
+            status: 'error',
+            message: error.message,
+            maxBytes: MAX_MODEL_BYTES
+        });
+    }
+});
+
 // 任务实例路由统一复用主服务 8081；未命中的请求继续交给后续静态资源和既有业务路由。
 app.use((req, res, next) => {
     try {

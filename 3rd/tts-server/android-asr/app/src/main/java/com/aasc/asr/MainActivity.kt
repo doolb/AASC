@@ -2,7 +2,13 @@ package com.aasc.asr
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -36,6 +42,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playAudioButton: Button
     private lateinit var saveAudioButton: Button
     private lateinit var cpuModeSpinner: Spinner
+    private lateinit var audioInputSpinner: Spinner
+    private lateinit var refreshAudioInputButton: Button
+    private lateinit var audioInputStatus: TextView
     private lateinit var httpStatus: TextView
     private lateinit var httpPortInput: EditText
     private lateinit var httpToggleButton: Button
@@ -52,6 +61,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var testMultiFastButton: Button
     private lateinit var voiceprintResult: TextView
     private val background: ExecutorService = Executors.newCachedThreadPool()
+    private val audioManager: AudioManager by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var audioInputDevices = listOf(AudioInputDevice.systemDefault())
+    private var selectedAudioInputDevice = AudioInputDevice.systemDefault()
+    private var refreshingAudioInputs = false
+    private var bluetoothPermissionDenied = false
     private var selectedSamples: FloatArray? = null
     @Volatile
     private var selectedCpuMode = CpuMode.AUTO
@@ -67,6 +82,21 @@ class MainActivity : AppCompatActivity() {
 
     private val requestRecordPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startRecording() else audioStatus.text = "麦克风权限被拒绝"
+    }
+
+    private val requestBluetoothConnectPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        bluetoothPermissionDenied = !granted
+        refreshAudioInputDevices(requestBluetoothPermission = false)
+    }
+
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+            refreshAudioInputsAfterDeviceChange()
+        }
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+            refreshAudioInputsAfterDeviceChange()
+        }
     }
 
     private val selectAudio = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -93,9 +123,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         bindViews()
         setupCpuMode()
-        recorder = AudioRecorder()
+        recorder = AudioRecorder(this, audioManager)
         coordinator = AsrCoordinator(engine, denoiseEngine)
         voiceprintCoordinator = VoiceprintTestCoordinator(engine, voiceprintEngine, denoiseEngine)
+        setupAudioInput()
         setupVoiceprintModel()
         refreshVoiceprintStatus()
         loadModel()
@@ -110,6 +141,9 @@ class MainActivity : AppCompatActivity() {
         playAudioButton = findViewById(R.id.playAudioButton)
         saveAudioButton = findViewById(R.id.saveAudioButton)
         cpuModeSpinner = findViewById(R.id.cpuModeSpinner)
+        audioInputSpinner = findViewById(R.id.audioInputSpinner)
+        refreshAudioInputButton = findViewById(R.id.refreshAudioInputButton)
+        audioInputStatus = findViewById(R.id.audioInputStatus)
         httpStatus = findViewById(R.id.httpStatus)
         httpPortInput = findViewById(R.id.httpPortInput)
         httpToggleButton = findViewById(R.id.httpToggleButton)
@@ -136,6 +170,7 @@ class MainActivity : AppCompatActivity() {
         testMultiFastButton.setOnClickListener { testVoiceprint(VoiceprintMode.SHERPA_MULTI_FAST) }
         httpToggleButton.setOnClickListener { toggleHttpServer() }
         httpToggleButton.isEnabled = false
+        refreshAudioInputButton.setOnClickListener { refreshAudioInputDevices(requestBluetoothPermission = true) }
         setupVoiceprintSpeakerCount()
     }
 
@@ -154,6 +189,79 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
         }
+    }
+
+    /** 配置原生 ASR 的输入设备选择，并恢复上次可用的设备。 */
+    private fun setupAudioInput() {
+        val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
+        audioInputSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                if (refreshingAudioInputs) return
+                val device = audioInputDevices.getOrNull(position) ?: return
+                selectedAudioInputDevice = device
+                preferences.edit().putString(AUDIO_INPUT_DEVICE_KEY, device.persistenceKey).apply()
+                audioInputStatus.text = getString(R.string.audio_input_selected, device.displayName)
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        }
+        refreshAudioInputDevices(requestBluetoothPermission = false)
+    }
+
+    /**
+     * 读取当前输入设备。只有用户主动刷新时才触发蓝牙权限申请，避免 APK 首次启动就弹权限框。
+     */
+    private fun refreshAudioInputDevices(requestBluetoothPermission: Boolean) {
+        if (requestBluetoothPermission && needsBluetoothConnectPermission()) {
+            audioInputStatus.setText(R.string.audio_input_permission_required)
+            requestBluetoothConnectPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            return
+        }
+        val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
+        val persistedKey = preferences.getString(AUDIO_INPUT_DEVICE_KEY, AudioInputDevice.SYSTEM_DEFAULT_KEY)
+            ?: AudioInputDevice.SYSTEM_DEFAULT_KEY
+        val devices = try {
+            AudioInputDevice.enumerate(audioManager)
+        } catch (_: SecurityException) {
+            bluetoothPermissionDenied = true
+            listOf(AudioInputDevice.systemDefault())
+        } catch (_: Exception) {
+            listOf(AudioInputDevice.systemDefault())
+        }
+        audioInputDevices = devices
+        val restored = devices.firstOrNull { it.persistenceKey == persistedKey }
+        val selected = restored ?: devices.first()
+        val fellBack = restored == null && persistedKey != AudioInputDevice.SYSTEM_DEFAULT_KEY
+        selectedAudioInputDevice = selected
+        if (fellBack) preferences.edit().putString(AUDIO_INPUT_DEVICE_KEY, selected.persistenceKey).apply()
+
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, devices.map { it.displayName })
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        refreshingAudioInputs = true
+        audioInputSpinner.adapter = adapter
+        audioInputSpinner.setSelection(devices.indexOf(selected).coerceAtLeast(0), false)
+        refreshingAudioInputs = false
+        audioInputStatus.text = when {
+            fellBack -> getString(R.string.audio_input_fallback)
+            bluetoothPermissionDenied -> getString(R.string.audio_input_permission_denied)
+            else -> getString(R.string.audio_input_selected, selected.displayName)
+        }
+        updateAudioInputControls()
+    }
+
+    private fun refreshAudioInputsAfterDeviceChange() {
+        if (!::recorder.isInitialized || recorder.isRecording()) return
+        mainHandler.post { refreshAudioInputDevices(requestBluetoothPermission = false) }
+    }
+
+    private fun needsBluetoothConnectPermission(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+
+    private fun updateAudioInputControls() {
+        val enabled = !recorder.isRecording()
+        audioInputSpinner.isEnabled = enabled
+        refreshAudioInputButton.isEnabled = enabled
     }
 
     private fun setupVoiceprintSpeakerCount() {
@@ -305,14 +413,21 @@ class MainActivity : AppCompatActivity() {
             recordButton.isEnabled = false
             background.execute {
                 val samples = recorder.stop()
+                val recordingError = recorder.errorMessage()
                 runOnUiThread {
                     audioPlayer.stop()
                     playAudioButton.isEnabled = true
                     saveAudioButton.isEnabled = samples.isNotEmpty()
                     recordButton.isEnabled = true
                     recordButton.setText(R.string.record_start)
+                    updateAudioInputControls()
+                    refreshAudioInputDevices(requestBluetoothPermission = false)
                     selectedSamples = samples
-                    audioStatus.text = "录音完成：${samples.size / AudioRecorder.SAMPLE_RATE} 秒"
+                    audioStatus.text = when {
+                        samples.isNotEmpty() -> "录音完成：${samples.size / AudioRecorder.SAMPLE_RATE} 秒"
+                        recordingError != null -> "录音失败：$recordingError"
+                        else -> "录音完成：0 秒"
+                    }
                 }
             }
         } else if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -321,11 +436,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRecording() {
-        if (recorder.start()) {
-            saveAudioButton.isEnabled = false
-            recordButton.setText(R.string.record_stop)
-            audioStatus.text = "录音中…"
-        } else audioStatus.text = "无法启动录音"
+        // 开始前重新读取设备，处理用户在页面停留期间拔出或断开蓝牙麦克风的情况。
+        refreshAudioInputDevices(requestBluetoothPermission = false)
+        val selectedDevice = selectedAudioInputDevice
+        recordButton.isEnabled = false
+        audioStatus.text = if (selectedDevice.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+            getString(R.string.audio_input_connecting)
+        } else {
+            "正在启动录音…"
+        }
+        background.execute {
+            var started = recorder.start(selectedDevice.platformDevice)
+            var actualDevice = selectedDevice
+            var fellBackToDefault = false
+            if (!started && !selectedDevice.isSystemDefault) {
+                // 设备可能在刷新和创建 AudioRecord 之间断开，失败时立即回退系统默认，避免整次录音不可用。
+                actualDevice = audioInputDevices.firstOrNull { it.isSystemDefault } ?: AudioInputDevice.systemDefault()
+                started = recorder.start(preferredDevice = null)
+                fellBackToDefault = started
+            }
+            runOnUiThread {
+                recordButton.isEnabled = true
+                if (fellBackToDefault) {
+                    selectedAudioInputDevice = actualDevice
+                    getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit()
+                        .putString(AUDIO_INPUT_DEVICE_KEY, actualDevice.persistenceKey)
+                        .apply()
+                    audioInputSpinner.setSelection(0, false)
+                    audioInputStatus.setText(R.string.audio_input_fallback)
+                }
+                if (started) {
+                    saveAudioButton.isEnabled = false
+                    recordButton.setText(R.string.record_stop)
+                    updateAudioInputControls()
+                    audioStatus.text = getString(R.string.audio_input_recording, actualDevice.displayName)
+                } else {
+                    updateAudioInputControls()
+                    audioStatus.text = "录音启动失败：${recorder.errorMessage() ?: "请检查麦克风和蓝牙连接"}"
+                }
+            }
+        }
     }
 
     private fun saveCurrentWav() {
@@ -620,8 +770,20 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    override fun onStart() {
+        super.onStart()
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, mainHandler)
+        refreshAudioInputDevices(requestBluetoothPermission = false)
+    }
+
+    override fun onStop() {
+        audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+        super.onStop()
+    }
+
     companion object {
         private const val PREFERENCES = "asr-preferences"
         private const val CPU_MODE_KEY = "cpu-mode"
+        private const val AUDIO_INPUT_DEVICE_KEY = "audio-input-device"
     }
 }

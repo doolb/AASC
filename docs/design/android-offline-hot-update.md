@@ -147,10 +147,10 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 
 - `code`：完整 `src/` 快照（包含显示端网页 UI 和控制端 UI）以及 `package.json`、`package-lock.json`；不含 `node_modules`。
 - `dependencies`：Android 兼容的生产 `node_modules` 快照及其 lockfile 指纹。
-- `code-only`：生成并发布完整代码包；沿用当前依赖包，不生成、不上传、不下载依赖包。代码声明所需依赖版本及 lockfile 指纹，设备不匹配时保留旧版本并报告需要 `all` 更新。
+- `code-only`：优先生成并发布完整代码包；当当前 `package-lock.json` 与已发布依赖的 lockfile 指纹一致时沿用当前依赖包，不生成、不上传、不下载依赖包。检测到指纹变化时，自动升级为 `all`，递增依赖版本并同时生成代码包和依赖包，避免代码包声明的新依赖无法在设备上运行。
 - `all`：重新生成代码包和依赖包，设备在一个版本切换事务中同时应用两者。
 
-`code-only` 构建前必须确认当前 `package-lock.json` 与已发布依赖的指纹一致；依赖声明或锁文件变化时拒绝代码单独发布，要求使用 `all`。不提供只更新 dependencies 的模式，避免依赖更新后与旧代码不兼容。
+`code-only` 构建前必须读取当前已发布清单。若依赖条目有效且 lockfile 指纹一致，则保持 code-only；若指纹变化，则使用当前依赖版本加一作为新依赖版本，自动切换为 all 并生成两个组件。若没有有效的已发布依赖基线，仍拒绝自动推断，必须显式使用 `all` 或 bootstrap。这样不会把依赖变更误发布为只含代码的更新。
 
 ### 签名清单和下载
 
@@ -218,7 +218,7 @@ min APK 校验器需要同时请求现代签名和兼容的旧签名信息，并
 
 ## 验收与范围
 
-- `code-only` 不执行生产依赖安装，不生成或上传依赖档案；新代码和现有依赖匹配时生效，不匹配时旧 release 继续可用。
+- lock 指纹匹配时 `code-only` 不执行生产依赖安装，不生成或上传依赖档案；指纹变化时构建自动升级为 `all`，只有代码包和新依赖包都通过校验后才形成可发布清单。
 - `all` 同时生成、校验并切换源码和依赖；故意损坏任一包、制造路径穿越或空间不足时不得切换 active release。
 - 首次启动无网络时可启动旧 release；局域网不可达时回退外网；签名错误时不降级为未签名更新。
 - min APK 可由完整包安装为更新，版本码与签名符合 Android 规则；min fresh install 不启动 Node；升级后 `/api/status`、`/v1/models`、聊天、ASR/TTS、配置和任务 results 均保留。
@@ -235,3 +235,10 @@ ZIP 安全校验统一使用去除目录项尾部 `/` 后的规范化名称；�
 - code v12 包含显示端聊天打开时隐藏播报文字的代码；min v21 包含 Offline Node 服务进入 `STATUS_STARTING` 后 30 秒隐藏分辨率诊断浮层的原生实现。
 - 发布顺序为先切换 code v12 并保留旧 min v20，再切换 min v21，避免签名清单在中间状态引用未上传的组件。
 - LAN `/mnt/aasc-offline` 与 WAN `as@120.79.245.103:~/a/aasc-offline` 均保留 code v12、dependencies v3、min v21；旧版本仅按精确版本规则清理。域名入口 `c.aasc.us` 仍返回 HTTP 403，本次使用 WAN 直连 IP 验证。
+
+## 2026-09-20 完整 Offline APK v22 构建
+
+- 使用 `release/apkbuild/allserver` 生成完整 Offline APK，`updateOnly=false`，与当前 min versionCode 22 对齐。
+- 包内同时保留 Offline Node 服务、生产依赖、ASR/TTS/声纹模型、默认 MNN 模型和显示端资源；服务版本元数据为 code v13、dependencies v4。
+- 已在 ADB 真机 `192.168.1.6:5555` 原位安装并启动验证；`/api/status`、`/v1/models` 和本机聊天接口均正常。
+- 完整 APK 已发布到 LAN `/mnt/aasc-offline/apk/aasc-display-offline-v22.apk` 和 WAN `as@120.79.245.103:~/a/aasc-offline/apk/aasc-display-offline-v22.apk`；不替换服务 `manifest.json`。

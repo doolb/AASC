@@ -20,6 +20,7 @@ test('android ASR package declares required offline model and HTTP permissions',
   assert.match(build, /arm64-v8a/);
   assert.match(manifest, /RECORD_AUDIO/);
   assert.match(manifest, /BLUETOOTH_CONNECT/);
+  assert.match(manifest, /MODIFY_AUDIO_SETTINGS/);
   assert.match(manifest, /INTERNET/);
 });
 
@@ -28,6 +29,7 @@ test('android ASR UI and HTTP endpoints are present', () => {
   const main = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/MainActivity.kt');
   const recorder = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AudioRecorder.kt');
   const inputDevice = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AudioInputDevice.kt');
+  const sco = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/BluetoothScoController.kt');
   const voiceprintModel = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/VoiceprintModel.kt');
   const server = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrHttpServer.kt');
   const page = read('3rd/tts-server/android-asr/app/src/main/java/com/aasc/asr/AsrWebPage.kt');
@@ -64,8 +66,13 @@ test('android ASR UI and HTTP endpoints are present', () => {
   assert.match(main, /BLUETOOTH_CONNECT/);
   assert.match(recorder, /start\(preferredDevice: AudioDeviceInfo\? = null\)/);
   assert.match(recorder, /audioRecord\.setPreferredDevice\(preferredDevice\)/);
+  assert.match(recorder, /BLUETOOTH_SCO_SAMPLE_RATE = 8000/);
+  assert.match(recorder, /AudioResampler\.resampleMono/);
+  assert.match(recorder, /recordingState != AudioRecord\.RECORDSTATE_RECORDING/);
   assert.match(inputDevice, /GET_DEVICES_INPUTS/);
   assert.match(inputDevice, /TYPE_BLUETOOTH_SCO/);
+  assert.match(sco, /startBluetoothSco/);
+  assert.match(sco, /ACTION_SCO_AUDIO_STATE_UPDATED/);
   assert.match(main, /switchVoiceprintVariantFromHttp/);
   assert.match(main, /R\.string\.http_ready/);
   assert.match(strings, /name="http_ready"/);
