@@ -94,6 +94,11 @@ class OfflineUpdateManager(
 
     data class ZipInspection(val expandedBytes: Long, val entryNames: Set<String>)
 
+    data class DependencyDirectoryResolution(
+        val directory: File,
+        val legacyDependencies: Boolean
+    )
+
     companion object {
         const val PUBLIC_KEY_ASSET = "offline-update-public-key.pem"
         const val CLIENT_METADATA_FILE = "offline-update-client.json"
@@ -192,6 +197,80 @@ class OfflineUpdateManager(
                 return ServiceUpdatePlan.ALL
             }
             return ServiceUpdatePlan.NEEDS_ALL
+        }
+
+        /**
+         * code-only 不应因为旧 active-release 使用 legacy-root 就跳过已经安装的依赖包。
+         * 只有目录、node_modules 和安装校验标记全部匹配时，才把热更依赖目录提升为当前来源。
+         */
+        @JvmStatic
+        fun resolveCodeOnlyDependencyDirectory(
+            root: File,
+            dependencyVersion: Int,
+            dependencySha256: String,
+            previousDependencyVersion: Int?,
+            previousLegacyDependencies: Boolean?
+        ): DependencyDirectoryResolution {
+            val candidate = File(root, "updates/dependencies/dependencies-v$dependencyVersion")
+            if (isVerifiedDependencyDirectory(candidate, dependencyVersion, dependencySha256)) {
+                return DependencyDirectoryResolution(
+                    File(candidate, "node_modules"),
+                    legacyDependencies = false
+                )
+            }
+
+            if (previousLegacyDependencies == true || previousLegacyDependencies == null) {
+                return DependencyDirectoryResolution(
+                    File(root, "node_modules"),
+                    legacyDependencies = true
+                )
+            }
+
+            val fallbackVersion = previousDependencyVersion ?: dependencyVersion
+            return DependencyDirectoryResolution(
+                File(root, "updates/dependencies/dependencies-v$fallbackVersion/node_modules"),
+                legacyDependencies = false
+            )
+        }
+
+        private fun isVerifiedDependencyDirectory(
+            directory: File,
+            expectedVersion: Int,
+            expectedSha256: String
+        ): Boolean {
+            return hasDependencyDirectoryMarker(directory, expectedVersion) { sha256 ->
+                sha256.equals(expectedSha256, ignoreCase = true)
+            }
+        }
+
+        private fun hasDependencyDirectoryMarker(
+            directory: File,
+            expectedVersion: Int,
+            sha256Matches: (String) -> Boolean
+        ): Boolean {
+            if (!directory.isDirectory || !File(directory, "node_modules").isDirectory) return false
+            val marker = File(directory, ".offline-update-verified.json")
+            return runCatching {
+                val metadata = JSONObject(marker.readText())
+                val markerSha256 = metadata.optString("sha256").lowercase()
+                metadata.optString("kind") == "dependencies" &&
+                    metadata.optInt("version", -1) == expectedVersion &&
+                    markerSha256.matches(Regex("^[a-f0-9]{64}$")) &&
+                    sha256Matches(markerSha256)
+            }.getOrDefault(false)
+        }
+
+        private fun hasDependencyPackageMetadata(
+            directory: File,
+            expectedVersion: Int,
+            expectedLockSha256: String
+        ): Boolean {
+            if (!directory.isDirectory || !File(directory, "node_modules/express/package.json").isFile) return false
+            return runCatching {
+                val metadata = JSONObject(File(directory, "dependency-manifest.json").readText())
+                metadata.optInt("version", -1) == expectedVersion &&
+                    metadata.optString("lockSha256").equals(expectedLockSha256, ignoreCase = true)
+            }.getOrDefault(false)
         }
 
         @JvmStatic
@@ -510,6 +589,30 @@ class OfflineUpdateManager(
         }
     }
 
+    /**
+     * 修复旧版 active release 已指向 legacy-root、但目标版本热更依赖已经存在的状态。
+     * 该迁移不联网、不下载文件，优先信任安装器 marker；兼容旧流程时使用依赖包自身的
+     * version/lockSha256/express 元数据校验，并保留当前健康检查状态。
+     */
+    fun repairLegacyDependencyPointer(root: File): Boolean {
+        val pointer = readReleasePointer(root) ?: return false
+        if (!pointer.legacyDependencies) return false
+        val dependencyDirectory = File(root, "updates/dependencies/dependencies-v${pointer.dependencyVersion}")
+        val markerValid = hasDependencyDirectoryMarker(dependencyDirectory, pointer.dependencyVersion) { true }
+        val packageMetadataValid = hasDependencyPackageMetadata(
+            dependencyDirectory,
+            pointer.dependencyVersion,
+            pointer.lockSha256
+        )
+        if (!markerValid && !packageMetadataValid) {
+            Log.w(TAG, "未自动修复 legacy-root：热更依赖目录校验失败 ${dependencyDirectory.absolutePath}")
+            return false
+        }
+        writeReleasePointer(root, pointer.copy(legacyDependencies = false))
+        Log.i(TAG, "已将 active release 依赖来源从 legacy-root 修复为 dependencies-v${pointer.dependencyVersion}")
+        return true
+    }
+
     /** 用户确认后重新读取并验签清单，下载、校验并原子切换服务 release。 */
     fun applyServerUpdate(
         root: File,
@@ -601,18 +704,24 @@ class OfflineUpdateManager(
             }
 
             val oldPointer = readReleasePointer(root)
-            val installedDependencyDirectory = dependencyDirectory ?: if (oldPointer?.legacyDependencies == true || oldPointer == null) {
-                File(root, "node_modules")
+            val dependencyResolution = if (dependencyDirectory == null) {
+                resolveCodeOnlyDependencyDirectory(
+                    root = root,
+                    dependencyVersion = source.manifest.dependencies.version,
+                    dependencySha256 = source.manifest.dependencies.sha256,
+                    previousDependencyVersion = oldPointer?.dependencyVersion ?: current.dependencyVersion,
+                    previousLegacyDependencies = oldPointer?.legacyDependencies
+                )
             } else {
-                File(updatesDirectory, "dependencies/dependencies-v${current.dependencyVersion}/node_modules")
+                DependencyDirectoryResolution(dependencyDirectory, legacyDependencies = false)
             }
+            val installedDependencyDirectory = dependencyResolution.directory
             check(installedDependencyDirectory.isDirectory) { "当前 Android production dependencies 目录不存在" }
             val pointer = ReleasePointer(
                 codeVersion = source.manifest.code.version,
                 dependencyVersion = source.manifest.dependencies.version,
                 lockSha256 = source.manifest.dependencies.lockSha256.orEmpty(),
-                legacyDependencies = dependencyDirectory == null &&
-                    (oldPointer?.legacyDependencies == true || oldPointer == null),
+                legacyDependencies = dependencyResolution.legacyDependencies,
                 pendingHealth = true,
                 previous = current,
                 previousLegacyDependencies = oldPointer?.legacyDependencies ?: true

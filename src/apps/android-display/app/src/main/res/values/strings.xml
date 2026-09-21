@@ -44,6 +44,7 @@
     <string name="offline_update_notes_title">更新内容</string>
     <string name="offline_update_download">下载更新</string>
     <string name="offline_update_later">稍后</string>
+    <string name="offline_update_collapsed">更新</string>
     <string name="offline_update_downloading">正在下载 Offline 更新</string>
     <string name="offline_update_download_progress">正在下载：%1$s / %2$s</string>
     <string name="offline_update_verifying">正在校验更新包</string>

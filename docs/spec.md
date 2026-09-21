@@ -16,6 +16,7 @@
 | 提醒功能 | [reminder.md](spec/reminder.md) | 提醒数据结构、触发逻辑、定时检查 |
 | 时间监听 | [timeListener.md](spec/timeListener.md) | 时间变化事件监听、事件类型、API接口 |
 | 侧边栏导航 | [sidebar.md](spec/sidebar.md) | 侧边栏布局、面板切换、交互逻辑 |
+| 控制端运行版本显示 | [runtime-version-display.md](spec/runtime-version-display.md) | 运行版本读取、AASC 节点状态返回和服务器面板渲染伪代码 |
 | 控制端主题与 UI 控件分类 | [ui-theme.md](spec/ui-theme.md) | 主题持久化、主题应用和控件语义标记伪代码 |
 | 媒体库 | [media-library.md](spec/media-library.md) | 媒体库提供者、管理器、前端模块实现 |
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |

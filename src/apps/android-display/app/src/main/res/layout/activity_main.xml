@@ -39,7 +39,8 @@
             android:id="@+id/controlToggleButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical|start"
+            android:layout_gravity="top|start"
+            android:layout_margin="12dp"
             android:elevation="12dp"
             android:text="@string/control_page"
             android:visibility="gone" />
@@ -182,8 +183,28 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:text="@string/offline_update_download" />
-            </LinearLayout>
+                </LinearLayout>
         </LinearLayout>
+
+        <!-- 更新卡片无操作收起后保留右侧可点击入口，避免遮挡显示端内容。 -->
+        <TextView
+            android:id="@+id/offlineUpdateCollapsedTab"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="8dp"
+            android:background="#E68A00"
+            android:clickable="true"
+            android:elevation="31dp"
+            android:focusable="true"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp"
+            android:text="@string/offline_update_collapsed"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:visibility="gone" />
 
         <!-- Offline 现场诊断信息位于右下角，不接收输入，层级低于启动遮罩和更新卡片。 -->
         <TextView

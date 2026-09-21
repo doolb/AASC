@@ -45,12 +45,13 @@
 ## Offline APK 打包与发布规则
 
 1. `build:apk:offline` 使用 `release/apkbuild/allserver` 打包完整 Offline APK；`build:apk:offline:min` 使用 `release/apkbuild/allserver-min` 打包 update-only min APK。`release/config`、`release/userconfig`、`release/task` 是打包输入种子，首次启动恢复预先定义的任务和 results，不在 `app.json` 额外硬编码 tasks。
-2. Offline 发布资源分为完整 APK、min APK、代码包和生产依赖包。完整 APK 使用 `apk/aasc-display-offline-v<versionCode>.apk`，不写入服务更新 `manifest.json`；min APK 使用 `apk/aasc-display-offline-min-v<versionCode>.apk`；服务包使用 `code/code-v<version>.zip` 和 `dependencies/dependencies-v<version>.zip`。
-3. 发布顺序固定为：校验文件大小/SHA-256/签名与 profile → 上传版本化文件 → 原子替换服务 `manifest.json`（完整 APK 不替换清单）→ 验证 LAN/WAN → 精确清理旧版本。
-4. 清理只允许删除当前发布根目录下、名称严格匹配数字版本的普通文件：`code-v*.zip`、`dependencies-v*.zip`、`aasc-display-offline-min-v*.apk`、`aasc-display-offline-v*.apk`。服务清单引用的 code/dependencies/min 必须保留；完整 APK 发布时保留本次 versionCode。禁止删除或跟随符号链接，禁止触碰 logs、models、config、task、results、非版本文件和临时文件。
-5. 局域网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 独立执行发布和清理；远端命令必须显式使用 `/bin/sh -c`，不能依赖登录 shell。
-6. 清理失败不回滚已经校验并切换的发布，必须报告可重试错误；不得用 `git clean`、递归删除工作区或手工删除未经过精确规则确认的资源。
-7. 默认不把日志、模型、APK、ZIP、构建中间文件提交到 Git；只有用户明确要求提交发布资源时才提交，并先检查目标与大小。
+2. 常规修改默认只生成并发布服务 code/dependencies 与 update-only min APK；只有用户明确要求完整包时，才执行 full APK 构建和发布。
+3. Offline 发布资源分为完整 APK、min APK、代码包和生产依赖包。完整 APK 使用 `apk/aasc-display-offline-v<versionCode>.apk`，不写入服务更新 `manifest.json`；min APK 使用 `apk/aasc-display-offline-min-v<versionCode>.apk`；服务包使用 `code/code-v<version>.zip` 和 `dependencies/dependencies-v<version>.zip`。
+4. 发布顺序固定为：校验文件大小/SHA-256/签名与 profile → 上传版本化文件 → 原子替换服务 `manifest.json`（完整 APK 不替换清单）→ 验证 LAN/WAN → 精确清理旧版本。
+5. 清理只允许删除当前发布根目录下、名称严格匹配数字版本的普通文件：`code-v*.zip`、`dependencies-v*.zip`、`aasc-display-offline-min-v*.apk`、`aasc-display-offline-v*.apk`。服务清单引用的 code/dependencies/min 必须保留；完整 APK 发布时保留本次 versionCode。禁止删除或跟随符号链接，禁止触碰 logs、models、config、task、results、非版本文件和临时文件。
+6. 局域网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 独立执行发布和清理；远端命令必须显式使用 `/bin/sh -c`，不能依赖登录 shell。
+7. 清理失败不回滚已经校验并切换的发布，必须报告可重试错误；不得用 `git clean`、递归删除工作区或手工删除未经过精确规则确认的资源。
+8. 默认不把日志、模型、APK、ZIP、构建中间文件提交到 Git；只有用户明确要求提交发布资源时才提交，并先检查目标与大小。
 
 ## 任务记录格式
 

@@ -73,6 +73,41 @@ test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {
     assert.match(displayCss, /#voiceTextDisplay\[data-chat-suppressed="true"\][\s\S]*display:\s*none !important/u);
     assert.match(displayHtml, /function showTtsText\(text\)[\s\S]*voiceTextDisplay\.className = 'voice-text-visible'/u);
     assert.match(displayHtml, /ttsAudio\.play\(\)/u);
+    assert.match(stage, /refreshVoiceTextVisibility/u);
+    assert.match(displayHtml, /DisplayStage\?\.refreshVoiceTextVisibility/u);
+});
+
+test('聊天层隐藏和重新显示时保留当前角色与会话选择', () => {
+    const chat = readPublic('js/display-chat.js');
+    assert.match(chat, /hiddenSelection/u);
+    assert.match(chat, /state\.hiddenSelection = cloneSelection\(\)/u);
+    assert.match(chat, /restoreHiddenSelection\(\)/u);
+    assert.match(chat, /roleTarget: state\.session\.roleTarget/u);
+});
+
+test('聊天层打开时同步当前监听对象并暂停当前显示端服务器倒计时', () => {
+    const stage = readPublic('js/display-stage.js');
+    const chat = readPublic('js/display-chat.js');
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    assert.match(chat, /getVoiceConversationContext/u);
+    assert.match(chat, /state\.bus\.publish\('chat\.selection'/u);
+    assert.match(stage, /type: 'displayChatVisibility'/u);
+    assert.match(stage, /syncDisplayChatVoiceContext\(state\.chatVisible\)/u);
+    assert.match(server, /displayTypes: \[[\s\S]*'displayChatVisibility'/u);
+    assert.match(server, /function handleDisplayChatVisibility\(displayId, data\)/u);
+    assert.match(server, /chatLayerPauseRemainingMs/u);
+    assert.match(server, /preserveRemaining: true/u);
+});
+
+test('显示端接收语音聊天输入并按 requestId 渲染流式回复', () => {
+    const stage = readPublic('js/display-stage.js');
+    const chat = readPublic('js/display-chat.js');
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    assert.match(stage, /'chatInput'/u);
+    assert.match(chat, /message\.type === 'chatInput'/u);
+    assert.match(chat, /state\.streaming\.has\(requestId\)/u);
+    assert.match(server, /const sendVoiceChatUpdate =/u);
+    assert.match(server, /sendToDisplay\(targetDisplayId, msg\)/u);
 });
 
 test('聊天输入区将发送和清空按钮竖向放在输入框右侧', () => {
@@ -107,7 +142,7 @@ test('render-display 只位于媒体层之上，聊天舞台位于 render-displa
     const displayCss = readPublic('css/display.css');
     const mmdCss = readPublic('css/display-mmd.css');
     assert.match(displayCss, /\.render-task-overlay\s*\{[\s\S]*z-index:\s*100/u);
-    assert.match(mmdCss, /\.display-stage-layers\s*\{[\s\S]*z-index:\s*200/u);
+    assert.match(mmdCss, /\.display-stage-layers\s*\{[\s\S]*z-index:\s*3000/u);
 });
 
 test('显示端聊天对象和会话使用 HTML 下拉菜单并复用主题变量', () => {

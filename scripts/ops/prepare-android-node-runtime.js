@@ -38,8 +38,12 @@ const TASK_LATEST_MARKER_FILE = 'latest.marker';
 // Android aapt/AssetManager 不保证隐藏文件进入 assets；Pi SDK 的 Provider manifest
 // 必须在安装后恢复到原始文件名，因此先使用不带点号的安全 marker。
 const ANDROID_HIDDEN_MANIFEST_MARKER = 'aasc-bundled-manifest.json';
+// Gradle 的 assets 默认使用 <dir>_* 过滤以下划线目录；OpenAI 6.x 的 Responses
+// parser 又必须保留 `_vendor` 这个 Node 模块路径，因此 APK 物理资源使用安全 marker，
+// 安装到应用私有目录后由 NodeRuntimeInstaller 恢复原目录名。
+const ANDROID_OPENAI_VENDOR_MARKER = 'aasc-openai-vendor';
 // openai 6.x 把 Responses 流解析器放在私有 _vendor 目录中。该目录不是构建生成物，
-// 但 Android AssetManager 对以下划线目录不稳定，因此这里只放行这一棵必需目录树。
+// 但 Android AssetManager 对以下划线目录不稳定，因此只放行每个 OpenAI 包下的必需目录树。
 const REQUIRED_ANDROID_RUNTIME_DIRECTORY_PREFIXES = Object.freeze([
     ['node_modules', 'openai', '_vendor']
 ]);
@@ -153,9 +157,14 @@ function isNpmInternalMetadata(relativePath) {
 
 function isRequiredAndroidRuntimeDirectory(relativePath) {
     const segments = relativePath.split(path.sep);
-    return REQUIRED_ANDROID_RUNTIME_DIRECTORY_PREFIXES.some((prefix) => (
+    const hasTopLevelRequiredDirectory = REQUIRED_ANDROID_RUNTIME_DIRECTORY_PREFIXES.some((prefix) => (
         segments.length >= prefix.length && prefix.every((segment, index) => segments[index] === segment)
     ));
+    const hasNestedOpenAiVendorDirectory = segments.some((segment, index) => (
+        segment === 'node_modules' && segments[index + 1] === 'openai' &&
+        segments[index + 2] === '_vendor'
+    ));
+    return hasTopLevelRequiredDirectory || hasNestedOpenAiVendorDirectory;
 }
 
 function isAndroidAssetExcluded(relativePath, isDirectory = false) {
@@ -521,6 +530,18 @@ function mapPackagedAssetPath(relativePath, outputPrefix = '') {
         segments.at(-1) === '.manifest.json') {
         return path.join(path.dirname(outputRelativePath), ANDROID_HIDDEN_MANIFEST_MARKER);
     }
+    const nodeModulesIndex = segments.findIndex((segment, index) => (
+        segment === 'node_modules' && segments[index + 1] === 'openai' &&
+        segments[index + 2] === '_vendor'
+    ));
+    if (outputPrefix === 'server' && nodeModulesIndex >= 0) {
+        return path.join(
+            outputPrefix,
+            ...segments.slice(0, nodeModulesIndex + 2),
+            ANDROID_OPENAI_VENDOR_MARKER,
+            ...segments.slice(nodeModulesIndex + 3)
+        );
+    }
     return outputRelativePath;
 }
 
@@ -589,17 +610,37 @@ function assertRequiredPackageEntries(packageDir) {
 }
 
 async function validateRequiredAndroidRuntimeAssets(packageDir) {
-    const openAiPackageDir = path.join(packageDir, 'node_modules', 'openai');
-    if (!fs.existsSync(openAiPackageDir)) return;
-    const parserPath = path.join(openAiPackageDir, '_vendor', 'partial-json-parser', 'parser.mjs');
-    let parserStat;
-    try {
-        parserStat = await fs.promises.stat(parserPath);
-    } catch {
-        throw new Error(`服务器运行包缺少 OpenAI Responses parser: ${path.relative(packageDir, parserPath)}`);
+    const packageFiles = await listFiles(packageDir);
+    const openAiPackageDirs = new Set();
+    const topLevelOpenAiPackageDir = path.join(packageDir, 'node_modules', 'openai');
+    if (fs.existsSync(topLevelOpenAiPackageDir)) {
+        openAiPackageDirs.add(path.join('node_modules', 'openai'));
     }
-    if (!parserStat.isFile() || parserStat.size === 0) {
-        throw new Error(`服务器运行包的 OpenAI Responses parser 不是非空普通文件: ${path.relative(packageDir, parserPath)}`);
+    for (const relativePath of packageFiles) {
+        const segments = relativePath.split(path.sep);
+        for (let index = 0; index < segments.length - 1; index += 1) {
+            if (segments[index] === 'node_modules' && segments[index + 1] === 'openai') {
+                openAiPackageDirs.add(path.join(...segments.slice(0, index + 2)));
+            }
+        }
+    }
+    for (const openAiPackageRelativePath of openAiPackageDirs) {
+        const parserPath = path.join(
+            packageDir,
+            openAiPackageRelativePath,
+            '_vendor',
+            'partial-json-parser',
+            'parser.mjs'
+        );
+        let parserStat;
+        try {
+            parserStat = await fs.promises.stat(parserPath);
+        } catch {
+            throw new Error(`服务器运行包缺少 OpenAI Responses parser: ${path.relative(packageDir, parserPath)}`);
+        }
+        if (!parserStat.isFile() || parserStat.size === 0) {
+            throw new Error(`服务器运行包的 OpenAI Responses parser 不是非空普通文件: ${path.relative(packageDir, parserPath)}`);
+        }
     }
 }
 
@@ -977,6 +1018,7 @@ module.exports = {
     TASK_LINKS_MARKER_FILE,
     TASK_LATEST_MARKER_FILE,
     ANDROID_HIDDEN_MANIFEST_MARKER,
+    ANDROID_OPENAI_VENDOR_MARKER,
     RUNTIME_MODE_FILE,
     REQUIRED_RUNTIME_LIBRARIES,
     REQUIRED_PACKAGE_ENTRIES,

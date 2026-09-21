@@ -259,6 +259,30 @@ MainActivity.showMinApkUpdatePrompt:
     显示版本和大小
     releaseNotes 非空时显示更新内容 TextView，最多 6 行并省略尾部
     releaseNotes 为空时隐藏更新内容 TextView
+
+MainActivity 更新卡片自动收起:
+    更新卡片显示或用户触摸卡片时启动 10 秒无触摸计时
+    如果计时结束且卡片仍可见:
+        隐藏完整更新卡片
+        显示右侧收起入口
+    如果服务更新或 min APK 下载/校验正在进行:
+        不取消后台任务
+        不因进度回调自动展开卡片
+    用户点击右侧收起入口:
+        显示完整更新卡片
+        重新启动 10 秒无触摸计时
+    下载失败或需要系统安装确认:
+        显示完整更新卡片
+
+MainActivity Offline 缩放诊断提示:
+    Node 服务状态变为 starting:
+        显示分辨率、DPI 和 WebView 缩放值
+        设置 10 秒后的隐藏时间
+    到达隐藏时间:
+        隐藏 offlineDisplayInfo
+    配置变化时:
+        重新计算并刷新提示文本
+        保留原隐藏截止时间
 ```
 
 实现验证：更新内容使用原生 `TextView` 纯文本显示，布局限制最多 6 行并省略尾部；Node 静态回归 39/39、Android `OfflineUpdateManifestTest` 均通过。
@@ -268,3 +292,35 @@ MainActivity.showMinApkUpdatePrompt:
 - min v10（`0.2.8-offline-min`）已正式发布到 LAN 和 WAN 直连 IP；清单签名有效，APK v2 签名有效。
 - APK SHA-256：`713a0ecd53536afadf5115864e1ea28a90409717aa2bbd95655fbad155ce139e`；发布清单 SHA-256：`bc613aba55e41fced9b01d38cbfc83d0541c4eb5b8b61b4b0d6545dbd6134ac0`。
 - SM-N9500 Display 2 UI 自动化读取 `分辨率 1920×1018 | DPI 160 | 缩放 100%`；固定显示端 ID `offline-display` 和服务健康接口正常。
+
+## APK 原生 OpenAI `_vendor` 资源路径（2026-09-21）
+
+```text
+prepareAndroidNodeRuntime:
+    从服务器生产依赖读取 node_modules/openai/_vendor/**
+    运行包逻辑路径继续保留 node_modules/openai/_vendor/**
+    写入 APK assets 时，将该目录映射为 node_modules/openai/aasc-openai-vendor/**
+    runtime-manifest 使用映射后的可打包路径，避免 Gradle 的 <dir>_* 过滤规则丢失资源
+
+NodeRuntimeInstaller:
+    从 manifest 读取并校验 aasc-openai-vendor/**
+    安装到 staging 后，将 node_modules/openai/aasc-openai-vendor 重命名为 node_modules/openai/_vendor
+    之后才切换 staging 为正式 aasc-server 目录
+
+验证：
+    APK 中必须存在 aasc-openai-vendor/partial-json-parser/parser.mjs
+    APK 中不得依赖 openai/_vendor 物理目录
+    安装完成后的私有目录必须存在 openai/_vendor/partial-json-parser/parser.mjs
+    Pi SDK 内嵌的 node_modules/openai/_vendor/** 使用同样的映射和恢复规则
+    ChatCompletionStream.mjs 的 ../_vendor 导入必须可解析
+```
+
+实现验证：完整 Offline APK v22（`0.2.20-offline`）已生成；APK ZIP 中顶层和 Pi SDK
+嵌套 OpenAI 包均包含 `aasc-openai-vendor/partial-json-parser/parser.mjs`，不存在物理
+`openai/_vendor` assets 路径；`unzip -t` 全量校验通过。Node 定向测试 25/25、Android
+JVM `:app:testDebugUnitTest` BUILD SUCCESSFUL。
+
+发布验证（2026-09-21）：完整 APK 升级为 v23（`0.2.21-offline`），min APK 升级为 v32
+（`0.2.30-offline-min`）；两端发布根目录仅保留当前完整/min 版本，服务清单保留 code v19
+和 dependencies v4。LAN/WAN 的完整 APK 和 min APK 均返回 HTTP 200，Content-Length 与
+本地构建产物一致。

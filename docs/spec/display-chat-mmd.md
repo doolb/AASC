@@ -593,3 +593,118 @@
   将模型 URL 交给 three-vrm 运行时
   后续收到 mmd.model.profile 或 vrm.model.profile 时按 fileName 切换模型
 ```
+
+## 2026-09-21 聊天层隐藏恢复与语音聊天同步
+
+```text
+过程 setDisplayChatVisible(visible)
+  只切换 displayChatLayer 的可见状态和 aria-hidden
+  不重建聊天 DOM，不清空 state.session、state.history 或 state.streaming
+  如果 visible 为 true
+    用当前 state.session 渲染对象、角色和会话选择器
+  如果 visible 为 false
+    释放输入焦点，但保留当前对象、角色和会话选择
+```
+
+```text
+过程 handleDisplayChatInput(message)
+  校验 requestId、displayId 和 content
+  如果 displayId 属于当前显示端
+    追加用户气泡
+    创建 requestId 对应的“正在思考”流式气泡
+    将 requestId 保存到 streaming
+```
+
+```text
+过程 sendVoiceChatUpdate(displayId, message)
+  向控制端广播 message
+  同时向 displayId 对应的显示端发送 message
+  仅用于语音输入触发的聊天消息，不改变普通语音命令的目标
+```
+
+```text
+过程 setVoiceTextVisible(text, visible)
+  更新 voiceTextDisplay 的文本和语音状态 class
+  如果 displayChatLayer 可见
+    写入 chatSuppressed=true
+    使用最高优先级隐藏 voiceTextDisplay
+  否则
+    清除 chatSuppressed
+    按当前播放/识别状态恢复文字显示
+```
+
+## 2026-09-21 聊天层联动语音监听会话
+
+```text
+声明 DisplayChatVoiceContext { visible, mode, target }
+声明 VoiceConversationState { state, target, expiresAt, timerPaused, remainingMs }
+
+函数 getDisplayChatVoiceContext()
+  如果 session.mode == "private"
+    返回 { mode: "private", target: session.privateTarget }
+  如果 session.mode == "role"
+    返回 { mode: "private", target: session.roleTarget }
+  返回 { mode: "group", target: null }
+```
+
+```text
+过程 syncDisplayChatVoiceContext(visible)
+  context = getDisplayChatVoiceContext()
+  通过当前显示端 WebSocket 发送
+    { type: "displayChatVisibility", visible, mode: context.mode, target: context.target }
+
+过程 onDisplayChatTargetChanged()
+  如果聊天层可见
+    syncDisplayChatVoiceContext(true)
+```
+
+```text
+过程 handleDisplayChatVisibility(displayId, message)
+  校验 visible 为布尔值
+  校验 mode 只能是 group/private；private 必须有非空 target
+  记录当前显示端 chatLayerVisible
+  如果显示端未启用语音监听
+    不修改 disabled 会话状态
+    返回
+  如果 visible == true
+    取得当前 active 会话剩余时间；没有 active 会话时使用当前会话窗口时长
+    清除服务器计时器
+    设置 activeGroup 或 activePrivate、target、timerPaused=true、remainingMs
+    广播权威 voiceConversationState
+  如果 visible == false 且当前会话 timerPaused == true
+    使用 remainingMs 创建新的服务端到期时间
+    设置 timerPaused=false
+    广播权威 voiceConversationState
+```
+
+```text
+过程 resumeDisplayConversationTimer(displayId, preserveRemaining)
+  如果 preserveRemaining 且 remainingMs 有效
+    expiresAt = 当前时间 + remainingMs
+  否则
+    expiresAt = 当前时间 + 当前会话窗口时长
+  由服务端 setTimeout 负责到期迁移到 waitingWake
+  显示端只按 expiresAt/remainingMs 更新倒计时 UI
+```
+
+## 13. Android 入口与聊天下方语音 UI 层级
+
+```text
+常量 DISPLAY_STAGE_Z_INDEX = 3000
+常量 DISPLAY_VOICE_STATUS_Z_INDEX = 2000
+常量 DISPLAY_VOICE_TEXT_Z_INDEX = 1000
+
+过程 layoutControlEntry()
+  controlToggleButton.gravity = TOP | START
+  controlToggleButton.marginLeft = 12dp
+  controlToggleButton.marginTop = 12dp
+  折叠状态仍使用左侧窄把手；展开状态仍使用完整「控制端」按钮
+
+过程 renderDisplayVoiceLayers()
+  displayStageLayers.zIndex = DISPLAY_STAGE_Z_INDEX
+  voiceStatusRow.zIndex = DISPLAY_VOICE_STATUS_Z_INDEX
+  voiceTextDisplay.zIndex = DISPLAY_VOICE_TEXT_Z_INDEX
+  voiceConversationCountdown 与 voiceConversationConfirmationCountdown 继续沿用原有位置、旋转和计时刷新
+  因 displayStageLayers 的整体层级高于语音状态/文字，聊天层、MMD 和交互控件始终覆盖 TTS 文字与聊天倒计时
+  聊天打开或异步 TTS 文本更新时，不改变倒计时状态，不允许语音文字越过聊天层
+```

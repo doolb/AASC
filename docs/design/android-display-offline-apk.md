@@ -96,3 +96,28 @@
 - 诊断数据复用 `DisplayWebView` 使用的所属 Display `displayMetrics` 和 `WebViewScalePolicy`，避免浮层显示值与实际缩放策略不一致。
 - 浮层只在 Offline APK 显示，普通 APK 保持原有界面；更新卡片、启动遮罩和控制端按钮保持更高层级，诊断文字不抢占交互区域。
 - 屏幕配置变化时重新读取当前 metrics 并刷新文字；不修改系统 density、分辨率、媒体尺寸、截图像素和输入坐标协议。
+
+## Offline 更新卡片与缩放诊断提示自动隐藏（2026-09-21）
+
+- 更新卡片在等待用户确认、服务代码/依赖下载、校验、安装提交等状态下，10 秒没有触摸操作时收起到右侧入口；后台下载和校验继续执行，不取消任务。
+- 收起后保留右侧“更新”入口，点击入口只恢复完整卡片并继续显示实时进度；下载失败或需要用户确认安装时重新展开卡片，保证错误和系统确认提示可见。
+- 更新卡片收到进度刷新时不因为后台进度自动展开，也不重置“无触摸 10 秒”计时；用户主动触摸卡片才重新开始计时。
+- 分辨率/DPI/WebView 缩放诊断浮层在 Offline Node 服务启动成功后显示 10 秒，随后自动隐藏；屏幕配置变化仍刷新当前值，但不会改变 WebView 缩放比例。
+
+## APK 原生 OpenAI `_vendor` 资源路径修复（2026-09-21）
+
+Android Gradle 的 assets 默认忽略以下划线开头的目录，导致完整 Offline APK 中虽然保留了
+`openai/lib/ChatCompletionStream.mjs`，却丢失其依赖的 `openai/_vendor`。构建器将 `_vendor`
+仅在 APK assets 中映射为 `aasc-openai-vendor`，安装器完成 SHA-256 校验后再恢复为标准
+`openai/_vendor`，不改变生产依赖包、代码热更新包和 Node.js 的模块导入路径。
+
+该映射只作用于完整 APK 的内置 Runtime；min APK 不携带服务器依赖，code/dependencies
+热更新包继续使用原始 `_vendor` 目录。构建和 Android JVM 测试必须同时覆盖 APK 物理路径、
+安装后逻辑路径以及 `ChatCompletionStream.mjs` 的导入目标。
+
+实现结果：顶层 OpenAI 包和 Pi SDK 内嵌 OpenAI 包均已覆盖；完整 APK v22 的 ZIP 结构和
+压缩数据校验通过，安装器单元测试确认 marker 只重命名为 `_vendor`，不进行二次文件复制。
+
+发布结果：修复后的完整 APK 使用 v23 发布，min APK 使用 v32 发布；完整 APK 不写入服务
+manifest，min APK 发布时原子更新 manifest 并继续引用 code v19/dependencies v4。内网和
+外网均完成资源 hash/Content-Length 校验及旧版本精确清理。

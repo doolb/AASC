@@ -111,6 +111,25 @@ class NodeRuntimeManifestTest {
     }
 
     @Test
+    fun OpenAI_vendor目录从APK安全marker恢复且不复制文件() {
+        val root = Files.createTempDirectory("aasc-openai-vendor-materialize").toFile()
+        try {
+            val marker = File(root, "node_modules/openai/aasc-openai-vendor/partial-json-parser/parser.mjs")
+            marker.parentFile?.mkdirs()
+            marker.writeText("export const partialParse = () => null;")
+
+            NodeRuntimeInstaller.materializeBundledOpenAiVendor(root)
+
+            val restored = File(root, "node_modules/openai/_vendor/partial-json-parser/parser.mjs")
+            assertTrue(restored.isFile)
+            assertEquals("export const partialParse = () => null;", restored.readText())
+            assertFalse(File(root, "node_modules/openai/aasc-openai-vendor").exists())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun PiSDK目录存在但manifest缺失时不允许快速复用() {
         val root = Files.createTempDirectory("aasc-pi-manifest-required").toFile()
         try {

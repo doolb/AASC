@@ -38,6 +38,7 @@ class NodeRuntimeInstaller(
         private const val TASK_LINKS_MARKER_FILE = "task-links.marker"
         private const val TASK_LATEST_MARKER_FILE = "latest.marker"
         private const val ANDROID_HIDDEN_MANIFEST_MARKER = "aasc-bundled-manifest.json"
+        private const val ANDROID_OPENAI_VENDOR_MARKER = "aasc-openai-vendor"
         private const val RUNTIME_LIB_DIR = "runtime/arm64-v8a/lib"
         private const val STAGING_PREFIX = ".staging-"
         private const val BACKUP_PREFIX = ".backup-"
@@ -167,6 +168,27 @@ class NodeRuntimeInstaller(
                 complete
             } catch (_: Exception) {
                 false
+            }
+        }
+
+        /**
+         * Gradle assets 会过滤以下划线开头的目录，构建器因此将 OpenAI 的 `_vendor`
+         * 暂时命名为安全 marker。Runtime 完成校验并切换前恢复 Node 的标准模块路径，
+         * 不复制 parser 或其他依赖文件，避免首次启动增加一次大目录拷贝。
+         */
+        @JvmStatic
+        fun materializeBundledOpenAiVendor(root: File) {
+            val markers = root.walkTopDown()
+                .filter { it.isDirectory && it.name == ANDROID_OPENAI_VENDOR_MARKER && it.parentFile?.name == "openai" }
+                .toList()
+            for (marker in markers) {
+                val restored = File(marker.parentFile, "_vendor")
+                check(!restored.exists()) {
+                    "OpenAI `_vendor` 已存在，无法恢复 APK marker: ${restored.absolutePath}"
+                }
+                check(marker.renameTo(restored)) {
+                    "无法恢复 OpenAI `_vendor` 目录: ${marker.absolutePath}"
+                }
             }
         }
 
@@ -507,6 +529,7 @@ class NodeRuntimeInstaller(
             if (oldRootMoved) {
                 moveMutableDirectories(backup, root, movedPaths = movedMutableDirectories)
             }
+            materializeBundledOpenAiVendor(root)
             materializeBundledPackageManifests(root)
             materializeBundledModelMarkers(root)
             materializeTaskMarkers(root)

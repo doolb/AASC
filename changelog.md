@@ -1,5 +1,70 @@
 # Web MediaCenter - 变更日志
 
+### OpenAI `_vendor` 修复包联合发布
+
+- ✅ [2026-09-21] 重新构建并发布完整 Offline APK v23 与 min APK v32。
+  - 完整 APK `0.2.21-offline`：`1,012,056,819` bytes，SHA-256 `16232db682a1c52f7aa7492f61850ff4cfff34c1869be370a3cc27f95cfc9ff4`。
+  - min APK `0.2.30-offline-min`：`89,273,298` bytes，SHA-256 `d68679c7d93c0550e909ab36fae0a59ee1c2e8cb278fd74bc9451f96cf81933a`。
+  - LAN/WAN 已同步完整 v23、min v32、code v19 和 dependencies v4；HTTP 200、Content-Length、SHA-256、签名和旧版本精确清理验证通过。
+
+### Offline APK 原生 OpenAI `_vendor` 路径
+
+- ✅ [2026-09-21] 修复完整 Offline APK 中 Android Gradle 过滤 `openai/_vendor` 导致 Pi/Responses 聊天缺少 `partial-json-parser` 的问题。
+  - `prepare-android-node-runtime.js` 将顶层和 Pi SDK 嵌套 OpenAI 包的 `_vendor` 映射为 `aasc-openai-vendor` APK marker；`NodeRuntimeInstaller.kt` 安装校验后仅重命名恢复为 `_vendor`。
+  - code/dependencies 热更新包保持原始 `_vendor` 路径，不增加模型或重复依赖复制。
+  - Node 定向测试 25/25、Android JVM `:app:testDebugUnitTest` 通过；完整 Offline APK v22（`0.2.20-offline`）大小 `1,012,056,819` bytes，SHA-256 `92f4f14084bbe7a3c75cec2879de3f8f93616c0359ec6c953f035150319ca57e`，ZIP 全量校验通过。
+  - 本次未发布到 LAN/WAN，未提交 APK、模型和构建中间文件。
+
+### Offline 真机依赖来源验收
+
+- ✅ [2026-09-21] 使用 ADB 真机确认 v31 min APK 与服务热更版本独立，修正现场对 `legacy-root` 的误判路径。
+  - 覆盖安装 `0.2.29-offline-min` 后，设备原 active release 仍为 code v15/dependencies v4；启动检查已发现 code v19，说明 min APK 不会静默替换已有服务代码，需确认 code-only 更新。
+  - 应用已发布 code v19 并重启 display 2 后，`/api/status` 返回 `code=v19`、`dependencies=v4`、`dependencySource=active-release`；`AASC_NODE_MODULES_DIR` 实际指向 `updates/dependencies/dependencies-v4/node_modules`，不再使用 `legacy-root`。
+  - 设备当前 APK 为 v31，Node 服务、llm-server 自动恢复和显示端连接正常；ADB 临时 staging 文件已清理，未修改模型、日志或工作区构建产物。
+  - 进一步切换到内屏 display 0，打开控制端“服务器”页面复核，页面显示服务代码 v19、依赖 v4、versioned 代码/依赖路径和 `active-release`，未显示 `legacy-root`。
+
+### Offline code-only 依赖目录选择修复
+
+- ✅ [2026-09-21] 修复 code-only 服务代码更新在旧 active release 为 `legacyDependencies=true` 时，仍错误使用根目录 `node_modules` 的问题。
+  - `OfflineUpdateManager` 按签名清单动态读取 `dependencyVersion`，优先校验对应 `updates/dependencies/dependencies-v<版本>` 的 `node_modules` 和 `.offline-update-verified.json`；校验通过写入 `legacyDependencies=false`，校验失败才回退 legacy-root。
+  - Offline Node 启动前增加旧 active release 本地迁移：已有目标版本依赖 marker 有效时，原子切换为 versioned dependencies 目录，已安装 code v19 的设备安装 min APK 后即可修复来源，不需要重新下载代码包。
+  - 新增热更依赖优先和校验失败回退 JVM 单测，Android `testDebugUnitTest` 25/25 通过。
+  - min APK v29：`0.2.27-offline-min`，`89271142` bytes，SHA-256 `21ca0b7bf5c887a45507a60c86e2c0c9c4d4b11afaf6a2704aa9505d3ab79399`；清单保持 code v19、dependencies v4。LAN/WAN 发布、清单签名一致性、HTTP Content-Length、APK v2 签名和旧 min 精确清理通过。
+  - 相关任务：`docs/task/2026-09-21_修复code-only依赖legacy-root选择.md`。
+  - 相关 Node 定向回归 58 项中 57 项通过；唯一失败为既有固定 `displayId` 测试数据不一致，与本次依赖选择修复无关。
+  - 本次只发布 min APK，不发布完整 Offline APK。
+
+### Offline 更新收起入口进度与控制端边缘布局
+
+- ✅ [2026-09-21] 更新提示收起入口根据下载字节进度显示左侧填充，校验/安装/成功/失败使用状态色；总大小未知时不伪造百分比。
+  - 控制端收起按钮贴合左上角边缘，展开完整按钮时恢复 12dp 安全边距。
+  - 修正 legacy-root 迁移兼容校验：没有旧 marker 时，使用依赖包自身 version、lockSha256 和 express 元数据确认对应 versioned dependencies 目录。
+  - min APK v31：`0.2.29-offline-min`，`89272786` bytes，SHA-256 `57539cf8fbf296c5da687cd959deae60bd64bdb5ab0832b25d5d8ab5bfa3cbed`；LAN/WAN 清单一致，HTTP 200/Content-Length、APK v2 签名和远端 SHA-256 校验通过；本次不发布完整 Offline APK。
+
+### Offline 服务代码与 min APK 联合发布
+
+- ✅ [2026-09-21] 发布服务代码 v19 和 Offline min APK v27。
+  - code v19：`15179747` bytes，SHA-256 `64fd98c66b7b095e338128b93439da527afaa9a1605a8529f7d9630350050664`；携带服务代码路径、依赖路径和依赖来源版本诊断字段。
+  - min v27：`0.2.25-offline-min`，`89268938` bytes，SHA-256 `fda13933088589868028f5d43c6426ec6cc74ec77a22c66f03a77d9dd3f4ff1e`；固定 MNN checkout 构建成功，沿用 dependencies v4。
+  - LAN/WAN 清单已切换到 code 19、dependencies 4、apkMin 27；签名、HTTP 200、资源 hash 和旧 min 精确清理通过，未发布完整 APK。
+  - 定向发布/构建测试 32/32 通过；Gradle 构建结束时 Kotlin daemon 清理命令有非零返回，但 APK 生成和 hash 校验成功。
+  - 任务：`docs/task/2026-09-21_发布服务代码v19与Offline_min_v27.md`。
+
+### 运行版本路径诊断
+
+- ✅ [2026-09-21] 控制端版本打印增加服务代码和依赖实际路径。
+  - `runtime-version-info.js` 返回 `codePath`、`dependenciesPath` 和 `dependencySource`；路径分别来自实际代码入口根目录和 `AASC_NODE_MODULES_DIR`，不再根据版本号推断。
+  - `server-app.js` 将路径字段同步到 AASC 节点 metadata 和 `/api/status`；`server-list.js` 在当前版本摘要和服务器卡片中显示完整路径及依赖来源。
+  - 定向测试 `runtime-version-info`、`server-list-ui` 共 8/8 通过，Node 语法检查和 `git diff --check` 通过；本次未重打 APK、未发布代码包。
+  - 设计：`docs/design/runtime-version-display.md`；伪代码：`docs/spec/runtime-version-display.md`；任务：`docs/task/2026-09-21_版本打印增加服务代码与依赖路径.md`。
+
+### Offline 更新卡片与缩放诊断提示
+
+- 🔄 [2026-09-21] 更新卡片在下载、校验和安装流程中支持 10 秒无触摸自动收起，后台任务继续运行；右侧入口可恢复进度，失败或需要系统确认时重新展开。
+  - `MainActivity.kt` 不再由服务更新/min APK 下载状态阻止收起，进度回调不再强制展开；分辨率/DPI/缩放诊断提示由服务启动成功后 30 秒隐藏调整为 10 秒隐藏。
+  - 更新 `tests/android-offline-apk.test.js`、Offline design/spec/task 文档。
+  - 静态回归 25/26；唯一失败为既有固定 `displayId` 测试数据不一致。Android JVM 单测因当前环境缺少 `AASC_MNN_ROOT` 官方 MNN checkout 暂未执行成功，尚未发布 APK。
+
 ### APK 控制端入口边缘收缩
 
 - ✅ [2026-09-21] 将 Android 原生控制端按钮改为左侧边缘收缩入口。
@@ -8822,6 +8887,35 @@
 - ✅ [2026-09-17] 同步 AI 规则入口。
   - `CLAUDE.md` 新增 Offline APK 打包目录、资源命名、LAN/WAN 发布顺序、精确清理边界和 Git 提交边界；内容与 `AGENTS.md` 保持一致。
   - 更新 Offline 热更新 design/spec/task 文档，明确 AI 修改 Offline 资源前必须读取两份规则文件。
+
+### 显示端聊天与 Offline 更新提示
+
+- ✅ [2026-09-21] 控制端服务器面板显示运行版本，并发布服务代码 v18。
+  - 新增 `runtime-version-info.js`，统一读取 active release、APK 内置基线和显示端版本；AASC 节点 metadata 与 `/api/status` 返回 APK、服务代码、依赖和显示端版本。
+  - `server-list.js`、`upload.html`、`upload.css` 增加当前运行版本摘要和服务器卡片版本明细，兼容没有版本 metadata 的旧节点。
+  - 验证：运行版本与服务器列表定向测试 7/7、Node.js 语法检查和 diff 检查通过；发布 `code/code-v18.zip`（15179493 bytes，SHA-256 `f5f5f442b7460a6994979ee96485dc7faf64a25427f475c9ba3459542f615b88`），沿用 dependencies v4，未重打 APK。
+  - 内网 `/mnt/aasc-offline` 与外网 `as@120.79.245.103:~/a/aasc-offline` 清单均已切换到 code 18 / dependencies 4 / min v26；远端哈希和 IP HTTP 200 验证通过。
+
+- ✅ [2026-09-21] 修复更新提示面板和显示端语音聊天同步
+  - `MainActivity.kt`、`activity_main.xml` 增加更新卡片 10 秒无操作右侧收起入口；下载、校验、安装和失败重试期间保持完整面板。
+  - `display-chat.js`、`display-stage.js` 保留聊天层隐藏前的角色/会话选择，并消费语音聊天的 `chatInput`。
+  - `display.html` 强化聊天打开期间 TTS/ASR 文字隐藏；`server-app.js` 将语音聊天流式消息同步回发到原显示端。
+  - 验证：显示端相关定向测试 20/20、Android JVM 25/25、JS 语法检查通过；未构建 APK。
+
+- ✅ [2026-09-21] 显示端聊天层联动当前语音监听模式并暂停独立倒计时。
+  - `display-stage.js`、`display-chat.js` 上报聊天层可见性和当前聊天对象；`server-app.js` 按 `displayId` 保存暂停剩余时间，关闭聊天层后继续服务端倒计时。
+  - 群聊使用 `activeGroup`，私聊/角色聊天使用 `activePrivate`；不影响其他显示端，也不修改持久化配置。
+  - 验证：聊天、语音会话和 TTS 回归测试 24/24，JS 语法检查通过；未构建 APK。
+
+- ✅ [2026-09-21] 修复 Offline 控制端入口和聊天下方语音 UI 层级。
+  - `activity_main.xml`、`MainActivity.kt` 将控制端入口恢复为左上角 `12dp` 吸附；折叠把手和展开按钮行为保持不变。
+  - `display-mmd.css` 将同页聊天/MMD 舞台层级调整为 `z-index: 3000`，高于语音状态行、聊天倒计时和 TTS 播报文字，避免聊天打开期间异步 TTS 刷新穿透聊天层。
+  - 不修改服务端倒计时、TTS 音频队列或聊天路由；显示端、Android 入口定向测试和 Kotlin 编译通过；未构建完整或 min APK。
+
+- ✅ [2026-09-21] 按默认增量发布规则发布本次修复。
+  - 发布 code v16：`code/code-v16.zip`，`15177617` bytes，SHA-256 `bf64c71a3d4af7126ee7371cf9f5c82bf192148ab32ec1925ae6f9d8bdcd27a1`；沿用 dependencies v4，未重复发布依赖包。
+  - 发布 Offline min APK v25（`0.2.23-offline-min`）：`89269050` bytes，SHA-256 `28c9cfe391079377ff49428d0126ea69f3c1c536b4a5616140fa3a213edf75dc`。
+  - LAN `/mnt/aasc-offline` 与 WAN `as@120.79.245.103:~/a/aasc-offline` 的清单已切换到 code 16 / dependencies 4 / min v25；HTTP 200、Content-Length、远端 hash、APK ZIP 和 v2 签名均通过。本次未构建完整 APK。
 
 ### 显示端在线 VRM
 

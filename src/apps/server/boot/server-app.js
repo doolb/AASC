@@ -102,6 +102,7 @@ const { normalizeNodeRegistration } = require('../../../framework/aasc/node-prot
 const { AascNodeConnector } = require('../../../framework/aasc/node-connector');
 const { buildNormalReplayMessages } = require('../../../framework/aasc/media-replay');
 const { ServerReleaseService } = require('../modules/aasc/server-release-service');
+const { getRuntimeVersionInfo } = require('../modules/aasc/runtime-version-info');
 const {
     createAndroidCapabilityUnavailableError,
     getAndroidNodePolicy
@@ -860,7 +861,14 @@ function registerMainAascServer(localIP, protocol) {
             role: 'main-server',
             protocol,
             platform: process.platform,
-            arch: process.arch
+            arch: process.arch,
+            versions: getRuntimeVersionInfo({
+                projectRoot: PROJECT_ROOT,
+                codeRoot: CODE_ROOT,
+                nodeModulesRoot: NODE_MODULES_ROOT,
+                serverVersion: process.env.AASC_SERVER_VERSION,
+                displayVersion: getDisplayVersion()
+            })
         },
         runtime: getAascRuntime()
     });
@@ -1025,7 +1033,14 @@ function startAascNodeConnector(localIP, protocol) {
         metadata: {
             role: 'subserver',
             platform: process.platform,
-            arch: process.arch
+            arch: process.arch,
+            versions: getRuntimeVersionInfo({
+                projectRoot: PROJECT_ROOT,
+                codeRoot: CODE_ROOT,
+                nodeModulesRoot: NODE_MODULES_ROOT,
+                serverVersion: process.env.AASC_SERVER_VERSION,
+                displayVersion: getDisplayVersion()
+            })
         },
         heartbeatIntervalMs: config.get('aasc.heartbeatIntervalMs', 30000),
         reconnectMinMs: config.get('aasc.reconnectMinMs', 1000),
@@ -1143,7 +1158,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'tts'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -2087,7 +2102,17 @@ function setDisplayConversationState(displayId, conversation, reason) {
     });
 }
 
-function armDisplayConversationTimer(displayId) {
+function getDisplayConversationRemainingMs(conversation, fallbackWindowMs) {
+    if (conversation?.timerPaused === true && Number.isFinite(conversation.remainingMs)) {
+        return Math.max(0, conversation.remainingMs);
+    }
+    if (Number.isFinite(conversation?.expiresAt)) {
+        return Math.max(0, conversation.expiresAt - Date.now());
+    }
+    return fallbackWindowMs;
+}
+
+function armDisplayConversationTimer(displayId, options = {}) {
     clearDisplayConversationTimer(displayId);
     const displayData = displayClients.get(displayId);
     const current = displayData?.state?.voiceConversation;
@@ -2095,25 +2120,43 @@ function armDisplayConversationTimer(displayId) {
 
     // 服务端是会话到期时间的唯一来源；显示端据此展示倒计时，避免本地计时与实际退出时刻漂移。
     const windowMs = getVoiceConversationWindowMs(current.windowType);
-    const expiresAt = Date.now() + windowMs;
+    const optionRemainingMs = Number(options.remainingMs);
+    const timerMs = Number.isFinite(optionRemainingMs)
+        ? Math.max(0, optionRemainingMs)
+        : windowMs;
+    if (displayData.state.chatLayerVisible === true) {
+        const remainingMs = Number.isFinite(displayData.state.chatLayerPauseRemainingMs)
+            ? Math.max(0, displayData.state.chatLayerPauseRemainingMs)
+            : getDisplayConversationRemainingMs(current, timerMs);
+        displayData.state.chatLayerPauseRemainingMs = remainingMs;
+        setDisplayConversationState(displayId, {
+            ...current,
+            expiresAt: null,
+            timerPaused: true,
+            remainingMs
+        }, options.reason || 'chatLayerOpened');
+        return;
+    }
+    const expiresAt = Date.now() + timerMs;
     setDisplayConversationState(displayId, {
         ...current,
         expiresAt,
         timerPaused: false,
         remainingMs: null
-    }, 'conversationTimerStarted');
+    }, options.reason || 'conversationTimerStarted');
     const timer = setTimeout(() => {
         const displayData = displayClients.get(displayId);
         if (!displayData || !isDisplayVoiceListeningEnabled(displayData)) return;
         const conversation = displayData.state.voiceConversation;
         if (!['activeGroup', 'activePrivate'].includes(conversation?.state)) return;
+        displayData.state.chatLayerPauseRemainingMs = null;
         setDisplayConversationState(displayId, createConversationState(true), 'timeout');
-        log('语音', `显示端 ${displayId} ${Math.round(windowMs / 1000)}秒无有效对话，等待重新唤醒`);
-    }, windowMs);
+        log('语音', `显示端 ${displayId} ${Math.round(timerMs / 1000)}秒无有效对话，等待重新唤醒`);
+    }, timerMs);
     displayConversationTimers.set(displayId, timer);
 }
 
-function pauseDisplayConversationTimer(displayId) {
+function pauseDisplayConversationTimer(displayId, reason = 'ttsPlaybackStarted') {
     clearDisplayConversationTimer(displayId);
     const displayData = displayClients.get(displayId);
     const current = displayData?.state?.voiceConversation;
@@ -2128,16 +2171,78 @@ function pauseDisplayConversationTimer(displayId) {
         ...current,
         timerPaused: true,
         remainingMs
-    }, 'ttsPlaybackStarted');
+    }, reason);
     return true;
 }
 
-function resumeDisplayConversationTimer(displayId) {
+function resumeDisplayConversationTimer(displayId, options = {}) {
     const displayData = displayClients.get(displayId);
     const current = displayData?.state?.voiceConversation;
     if (!current || !['activeGroup', 'activePrivate'].includes(current.state)) return false;
-    armDisplayConversationTimer(displayId);
+    if (displayData.state.chatLayerVisible === true) return false;
+    const preserveRemaining = options.preserveRemaining === true
+        && Number.isFinite(current.remainingMs);
+    const remainingMs = preserveRemaining ? Math.max(0, current.remainingMs) : null;
+    displayData.state.chatLayerPauseRemainingMs = null;
+    armDisplayConversationTimer(displayId, {
+        ...(remainingMs !== null ? { remainingMs } : {}),
+        reason: options.reason || 'conversationTimerStarted'
+    });
     return true;
+}
+
+function normalizeDisplayChatVoiceContext(data) {
+    const mode = data?.mode === 'private' ? 'private' : 'group';
+    const target = mode === 'private' ? String(data?.target || '').trim() : null;
+    if (mode === 'private' && !target) return { mode: 'group', target: null };
+    return { mode, target };
+}
+
+function handleDisplayChatVisibility(displayId, data) {
+    const displayData = displayClients.get(displayId);
+    if (!displayData || typeof data?.visible !== 'boolean') return;
+
+    const visible = data.visible === true;
+    const context = normalizeDisplayChatVoiceContext(data);
+    displayData.state.chatLayerVisible = visible;
+    displayData.state.chatLayerVoiceMode = context.mode;
+    displayData.state.chatLayerVoiceTarget = context.target;
+
+    if (!isDisplayVoiceListeningEnabled(displayData)) {
+        displayData.state.chatLayerPauseRemainingMs = null;
+        return;
+    }
+
+    const current = displayData.state.voiceConversation || createConversationState(true);
+    if (visible) {
+        const fallbackWindowMs = getVoiceConversationWindowMs(current.windowType || 'conversation');
+        const remainingMs = ['activeGroup', 'activePrivate'].includes(current.state)
+            ? getDisplayConversationRemainingMs(current, fallbackWindowMs)
+            : fallbackWindowMs;
+        clearDisplayConversationTimer(displayId);
+        clearPendingConversationConfirmation(displayId, 'chatLayerOpened');
+        displayData.state.chatLayerPauseRemainingMs = remainingMs;
+        setDisplayConversationState(displayId, {
+            ...current,
+            state: context.mode === 'private' ? 'activePrivate' : 'activeGroup',
+            target: context.target,
+            lastValidInputAt: Date.now(),
+            windowType: current.windowType || 'conversation',
+            expiresAt: null,
+            timerPaused: true,
+            remainingMs
+        }, 'chatLayerOpened');
+        return;
+    }
+
+    const ttsPlaybackKeys = displayConversationTtsPlaybackKeys.get(displayId);
+    if (ttsPlaybackKeys?.size) return;
+    if (['activeGroup', 'activePrivate'].includes(current.state) && current.timerPaused === true) {
+        resumeDisplayConversationTimer(displayId, {
+            preserveRemaining: true,
+            reason: 'chatLayerClosed'
+        });
+    }
 }
 
 function clearDisplayConversationTtsPlaybackKey(displayId, playbackKey) {
@@ -2146,7 +2251,12 @@ function clearDisplayConversationTtsPlaybackKey(displayId, playbackKey) {
     keys.delete(playbackKey);
     if (keys.size === 0) {
         displayConversationTtsPlaybackKeys.delete(displayId);
-        resumeDisplayConversationTimer(displayId);
+        const displayData = displayClients.get(displayId);
+        if (displayData?.state?.chatLayerVisible === true) return;
+        resumeDisplayConversationTimer(displayId, {
+            preserveRemaining: Number.isFinite(displayData?.state?.chatLayerPauseRemainingMs),
+            reason: 'ttsPlaybackFinished'
+        });
     }
 }
 
@@ -2155,6 +2265,7 @@ function syncDisplayConversationListeningState(displayId, reason) {
     if (!displayData) return;
     if (!isDisplayVoiceListeningEnabled(displayData)) {
         clearDisplayConversationTimer(displayId);
+        displayData.state.chatLayerPauseRemainingMs = null;
         clearPendingConversationConfirmation(displayId, 'listeningDisabled');
         clearRepairMode(displayId, 'listeningDisabled');
         setDisplayConversationState(displayId, createConversationState(false), reason || 'listeningDisabled');
@@ -2163,6 +2274,13 @@ function syncDisplayConversationListeningState(displayId, reason) {
     const current = displayData.state.voiceConversation;
     if (!current || current.state === 'disabled') {
         setDisplayConversationState(displayId, createConversationState(true), reason || 'listeningEnabled');
+        if (displayData.state.chatLayerVisible === true) {
+            handleDisplayChatVisibility(displayId, {
+                visible: true,
+                mode: displayData.state.chatLayerVoiceMode,
+                target: displayData.state.chatLayerVoiceTarget
+            });
+        }
     }
 }
 
@@ -5332,7 +5450,14 @@ app.get('/api/status', (req, res) => {
         uptime: Math.floor((Date.now() - serverStartTime) / 1000),
         displayCount: displayClients.size,
         controlCount: controlClients.size,
-        serverStartTime: serverStartTime
+        serverStartTime: serverStartTime,
+        versions: getRuntimeVersionInfo({
+            projectRoot: PROJECT_ROOT,
+            codeRoot: CODE_ROOT,
+            nodeModulesRoot: NODE_MODULES_ROOT,
+            serverVersion: process.env.AASC_SERVER_VERSION,
+            displayVersion: getDisplayVersion()
+        })
     });
 });
 
@@ -8055,6 +8180,11 @@ function formatVoiceprintScore(value) {
 function handleDisplayMessageFallback(displayId, data, ws) {
     const displayData = displayClients.get(displayId);
 
+    if (data.type === 'displayChatVisibility') {
+        handleDisplayChatVisibility(displayId, data);
+        return;
+    }
+
     if (data.type === 'chatMessage') {
         void handleChatMessageRequest(data, { displayId, ws });
         return;
@@ -8923,6 +9053,12 @@ async function handleControlMessageFallback(data, ws) {
                             const sendToControl = isDisplayVoiceInput
                                 ? (msg) => broadcastToControls(msg)
                                 : (msg) => ws.send(JSON.stringify(msg));
+                            const sendVoiceChatUpdate = (msg) => {
+                                sendToControl(msg);
+                                if (isDisplayVoiceInput && targetDisplayId) {
+                                    sendToDisplay(targetDisplayId, msg);
+                                }
+                            };
                             
                             const callbacks = playOnControl ? {
                                 onResult: async (text) => {
@@ -9097,7 +9233,7 @@ async function handleControlMessageFallback(data, ws) {
                                             skipHistory: skipHistory || false,
                                             temporaryConversation: data.temporaryConversation === true,
                                             temporaryConversationId: data.temporaryConversationId || null,
-                                            sendToControl: sendToControl
+                                            sendToControl: sendVoiceChatUpdate
                                         });
                                     },
                                     onSearch: async (searchResult) => {
@@ -10135,6 +10271,8 @@ async function handleChatMessage(options) {
             content: displayContent || content,
             displayId: voiceOriginDisplayId,
             mode: messageMode,
+            target: messageTarget,
+            role: effectiveTemplateTarget,
             temporaryConversation: isTemporaryConversation,
             temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
         });

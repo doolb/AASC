@@ -90,6 +90,37 @@
         return enabled.length > 0 ? enabled.map(escapeHtml).join('、') : '无可用能力';
     }
 
+    function formatVersions(versions, fallback) {
+        if (!versions || typeof versions !== 'object') {
+            return formatValue(fallback);
+        }
+        const fields = [
+            ['APK', versions.apk],
+            ['服务代码', versions.code],
+            ['依赖', versions.dependencies],
+            ['显示端', versions.display],
+            ['服务代码路径', versions.codePath],
+            ['依赖路径', versions.dependenciesPath],
+            ['依赖来源', versions.dependencySource]
+        ].filter(([, value]) => value !== undefined && value !== null && value !== '');
+        if (fields.length === 0) return formatValue(fallback);
+        return fields.map(([label, value]) => `${label}: ${escapeHtml(value)}`).join('<br>');
+    }
+
+    function renderCurrentVersionSummary(servers) {
+        const element = getElement('serverVersionSummary');
+        if (!element) return;
+        const current = servers.find(server => isCurrentServer(server.url)) || servers[0];
+        if (!current) {
+            element.textContent = '未发现服务器版本信息';
+            return;
+        }
+        element.innerHTML = formatVersions(
+            current.metadata?.versions || current.versions,
+            current.version
+        );
+    }
+
     function normalizeServerUrl(value) {
         let parsed;
         try {
@@ -139,7 +170,7 @@
                     <div><dt>控制端</dt><dd>${formatRuntimeCount(server, 'controlCount')}</dd></div>
                     <div><dt>媒体库</dt><dd>${formatRuntimeCount(server, 'libraryCount')}</dd></div>
                     <div><dt>优先级</dt><dd>${formatValue(server.priority, '不适用')}</dd></div>
-                    <div><dt>版本</dt><dd>${formatValue(server.version)}</dd></div>
+                    <div><dt>版本</dt><dd>${formatVersions(server.metadata?.versions || server.versions, server.version)}</dd></div>
                     <div><dt>能力</dt><dd>${formatCapabilities(server.capabilities)}</dd></div>
                     <div><dt>最后心跳</dt><dd>${formatLastHealthCheck(server.lastHeartbeatAt || server.lastHealthCheck)}</dd></div>
                 </dl>
@@ -270,6 +301,7 @@
 
         render(servers = state.servers) {
             const contentElement = getElement('serverListContent');
+            renderCurrentVersionSummary(servers);
             if (!contentElement) {
                 return;
             }

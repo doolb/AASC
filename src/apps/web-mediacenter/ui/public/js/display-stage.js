@@ -10,6 +10,7 @@
         'chatChunk',
         'chatHistory',
         'chatHistoryError',
+        'chatInput',
         'chatResponse',
         'chatSession',
         'privateSessionCreated',
@@ -90,6 +91,25 @@
         state.transport = typeof transport === 'function' ? transport : null;
         publish('transport.changed', { available: state.transport !== null });
         requestInitialSnapshot();
+        if (state.initialized && state.transport) syncDisplayChatVoiceContext(state.chatVisible);
+    }
+
+    function getDisplayChatVoiceContext() {
+        if (root.DisplayChat && typeof root.DisplayChat.getVoiceConversationContext === 'function') {
+            return root.DisplayChat.getVoiceConversationContext();
+        }
+        return { mode: 'group', target: null };
+    }
+
+    function syncDisplayChatVoiceContext(visible) {
+        const context = getDisplayChatVoiceContext();
+        send({
+            type: 'displayChatVisibility',
+            visible: visible === true,
+            mode: context.mode,
+            target: context.target,
+            displayId: state.displayId
+        });
     }
 
     function updatePointerRouting() {
@@ -107,6 +127,7 @@
             // 记录到 data 属性，防止后续 showTtsText 改写 className 后字幕重新出现。
             refs.voiceTextDisplay.dataset.chatSuppressed = String(state.chatVisible);
             refs.voiceTextDisplay.setAttribute('aria-hidden', String(state.chatVisible));
+            applyVoiceTextVisibility();
         }
         if (refs.chatLayer) {
             refs.chatLayer.classList.toggle('is-visible', state.chatVisible);
@@ -121,6 +142,19 @@
         }
         updatePointerRouting();
         publish('chat.visibility', { visible: state.chatVisible });
+        if (state.initialized) syncDisplayChatVoiceContext(state.chatVisible);
+    }
+
+    function applyVoiceTextVisibility() {
+        if (!refs.voiceTextDisplay) return;
+        const suppressed = state.chatVisible === true;
+        refs.voiceTextDisplay.dataset.chatSuppressed = String(suppressed);
+        refs.voiceTextDisplay.setAttribute('aria-hidden', String(suppressed));
+        if (suppressed) {
+            refs.voiceTextDisplay.style.setProperty('display', 'none', 'important');
+        } else {
+            refs.voiceTextDisplay.style.removeProperty('display');
+        }
     }
 
     function setMmdVisible(visible) {
@@ -200,6 +234,9 @@
         if (root.DisplayChat && typeof root.DisplayChat.init === 'function') {
             root.DisplayChat.init({ root: refs.chatLayer, bus, send, getState: () => ({ ...state }) });
         }
+        bus.subscribe('chat.selection', () => {
+            if (state.chatVisible) syncDisplayChatVoiceContext(true);
+        });
         if (root.DisplayMmd && typeof root.DisplayMmd.init === 'function') {
             root.DisplayMmd.init({
                 canvas: refs.mmdCanvas,
@@ -233,6 +270,7 @@
         handleServerMessage,
         initialize,
         publish,
+        refreshVoiceTextVisibility: applyVoiceTextVisibility,
         send,
         setChatVisible,
         setMmdOrder,

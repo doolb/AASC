@@ -1,10 +1,24 @@
 # Android Offline APK 热更新与原生增量 APK 实现规格（伪代码）
 
+> 2026-09-21 修复 code-only 依赖来源选择：清单中的任意 `dependencyVersion` 都先匹配对应热更目录和 marker；旧流程缺 marker 时再校验依赖包自身 version、lockSha256 和 express 元数据，匹配成功写入 `legacyDependencies=false`，否则回退 `legacy-root`。启动已有旧 active release 时执行本地迁移。当前已发布 min APK v31（`0.2.29-offline-min`），未发布完整 APK。
+
+> 真机验收补充：min APK v31 覆盖安装不会自动替换已有 active service code；旧设备仍可能显示 code v15，需在更新卡片中确认 code-only 更新。code v19 应用后，`/api/status.versions.dependencySource` 必须为 `active-release`，`codePath` 指向 `updates/code/code-v19`，`dependenciesPath` 和 `AASC_NODE_MODULES_DIR` 指向 `updates/dependencies/dependencies-v4/node_modules`。
+> 内屏 display 0 控制端“服务器”页面验收同样必须显示 `active-release`，不能显示 `legacy-root`。
+
+> 2026-09-21 已完成 code v19 与 Offline min APK v27 联合发布：code 包大小 `15179747` bytes、SHA-256 `64fd98c66b7b095e338128b93439da527afaa9a1605a8529f7d9630350050664`；min APK `0.2.25-offline-min` 大小 `89268938` bytes、SHA-256 `fda13933088589868028f5d43c6426ec6cc74ec77a22c66f03a77d9dd3f4ff1e`。继续复用 dependencies v4，清单已切换到 `code=19`、`dependencies=4`、`apkMin=27`；LAN/WAN 清单、签名、HTTP、远端 hash 和旧 min 精确清理均通过，未发布完整 APK。
+
 > 2026-09-19 已发布声纹启动预热与注册等待修复的 full APK v17（`0.2.15-offline`），文件为
 > `apk/aasc-display-offline-v17.apk`，大小 `995442031` bytes，SHA-256 为
 > `355826ce69a6b35de08717263fd94672739492d640dd284bc24cdfb9017ea0e5`。profile 为
 > `allserver`、`embeddedNode=true`、`updateOnly=false`，内置 embedding 和 segmentation 声纹模型；
 > LAN/WAN 直连 IP HTTP 200、Content-Length、远端 hash、APK v2 签名均通过，服务 `manifest.json` 未替换。
+
+> 2026-09-21 本次只发布增量资源：`code/code-v16.zip`（`15177617` bytes，SHA-256
+> `bf64c71a3d4af7126ee7371cf9f5c82bf192148ab32ec1925ae6f9d8bdcd27a1`）和 Offline min APK v25
+>（`0.2.23-offline-min`，`89269050` bytes，SHA-256
+> `28c9cfe391079377ff49428d0126ea69f3c1c536b4a5616140fa3a213edf75dc`）。依赖沿用 v4，不重复上传；
+> LAN/WAN 清单签名、HTTP 200/Content-Length、远端文件 hash、APK ZIP 完整性和 v2 签名均通过，
+> 本次未构建完整 APK。默认发布策略为 code/min 增量发布，只有任务明确要求时才生成 full APK。
 
 > 2026-09-19 变更服务更新交互：服务 code/dependencies 更新不再由 Node 启动流程静默下载；前台先读取并验签
 > 服务清单，显示服务更新卡片，用户确认后由 `NodeServerService` 停止旧 Node、下载校验并原子切换 release，
@@ -89,6 +103,47 @@ MainActivity.showMinApkUpdatePrompt:
     显示版本和下载大小
     如果 releaseNotes 非空：显示更新内容，最多 6 行并省略尾部
     否则隐藏更新内容区域
+```
+
+### 更新提示面板自动收起伪代码
+
+```text
+声明 OFFLINE_UPDATE_PANEL_COLLAPSE_DELAY_MS = 10000
+
+过程 showOfflineUpdatePrompt(candidate)
+  保存 candidate
+  显示完整更新面板
+  隐藏右侧收起入口
+  重置收起定时器
+
+过程 scheduleOfflineUpdatePanelCollapse()
+  取消旧定时器
+  如果更新已进入下载、校验、安装或失败操作状态
+    返回
+  十秒后如果用户没有操作
+    隐藏完整面板
+    显示右侧收起入口
+
+过程 expandOfflineUpdatePanel()
+  隐藏右侧收起入口
+  显示完整面板
+  重置收起定时器
+
+过程 startOfflineUpdate()
+  取消收起定时器
+  保持完整面板显示
+  进入现有下载/校验/安装流程
+
+过程 updateCollapsedTabProgress(phase, completedBytes, totalBytes)
+  statusColor = phase 对应的下载/校验/安装/成功/失败颜色
+  如果 phase == downloading 且 totalBytes > 0
+    level = clamp(completedBytes / totalBytes, 0, 1)
+  否则如果 phase 属于 verifying/materializing/ready/installing/success/failed
+    level = 1
+  否则
+    level = 0
+  使用底色 + 左侧 ScaleDrawable(statusColor, level) 组成按钮背景
+  收起入口可见时显示这个背景；展开面板不改变现有布局
 ```
 
 ## 2026-09-20 完整 Offline APK v22 构建验证伪代码
@@ -253,6 +308,39 @@ buildApk(profile):
 ```
 
 `code-only` uses the existing signed deployment manifest as the authoritative dependency baseline. If no valid deployed dependency entry is available or signing key is missing, stop before creating a publishable manifest. If lock fingerprints differ, automatically build a new dependencies component and use it with the code component.
+
+## code-only 依赖目录修复伪代码
+
+```text
+resolveCodeOnlyDependency(root, dependencyVersion, dependencySha256, previousDependencyVersion, previousLegacy):
+    candidate = root/updates/dependencies/dependencies-v<dependencyVersion>
+    marker = candidate/.offline-update-verified.json
+
+    如果 candidate/node_modules 是目录，且 marker.kind == dependencies，
+       marker.version == dependencyVersion，marker.sha256 == dependencySha256:
+        返回 { directory: candidate/node_modules, legacyDependencies: false }
+
+    如果 previousLegacy == true 或 previousLegacy 缺失:
+        返回 { directory: root/node_modules, legacyDependencies: true }
+
+    fallbackVersion = previousDependencyVersion 或 dependencyVersion
+    返回 {
+        directory: root/updates/dependencies/dependencies-v<fallbackVersion>/node_modules,
+        legacyDependencies: false
+    }
+
+应用 code-only release:
+    codeDirectory = 安装并校验 code-v<codeVersion>
+    dependency = resolveCodeOnlyDependency(...)
+    要求 dependency.directory 为目录
+    写入 active-release.json:
+        codeVersion = 新代码版本
+        dependencyVersion = 清单依赖版本
+        legacyDependencies = dependency.legacyDependencies
+    NodeServerService 启动时：
+        legacyDependencies == false → 使用 updates/dependencies/dependencies-v<dependencyVersion>/node_modules
+        legacyDependencies == true → 仅兼容使用 root/node_modules
+```
 
 ## 发布伪代码
 

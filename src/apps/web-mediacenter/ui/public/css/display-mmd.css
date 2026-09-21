@@ -7,7 +7,9 @@
     inset: 0;
     width: var(--display-stage-width);
     height: var(--display-stage-height);
-    z-index: 200;
+    /* 聊天/MMD 舞台必须整体高于独立的语音状态、TTS 文字和聊天倒计时，
+       避免聊天打开期间异步播报刷新再次盖住消息气泡。 */
+    z-index: 3000;
     pointer-events: none;
     overflow: hidden;
     contain: layout paint;

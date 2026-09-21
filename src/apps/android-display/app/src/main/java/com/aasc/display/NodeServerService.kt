@@ -311,6 +311,9 @@ class NodeServerService : Service() {
             }
             val updateManager = if (offlineMode) OfflineUpdateManager(this) else null
             if (offlineMode) {
+                if (updateManager?.repairLegacyDependencyPointer(root) == true) {
+                    android.util.Log.i("AASC-Node", "Offline active release 已自动切换到已安装的热更依赖")
+                }
                 val taskIndexPaths = listOf(
                     File(root, "res/tasks/render-display/results/index.json"),
                     File(root, "release/task/render-display/results/index.json")

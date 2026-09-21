@@ -115,7 +115,7 @@ test('Offline APK 右下角显示分辨率DPI和缩放诊断信息', () => {
     assert.match(activity, /onConfigurationChanged/u);
     assert.match(activity, /缩放/u);
     assert.match(activity, /NodeServerService\.STATUS_STARTING[\s\S]*?scheduleOfflineDisplayInfoHide\(\)/u);
-    assert.match(activity, /OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS\s*=\s*30_000L/u);
+    assert.match(activity, /OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS\s*=\s*10_000L/u);
     assert.match(activity, /mainHandler\.postDelayed\(hideOfflineDisplayInfoRunnable/u);
     assert.match(activity, /mainHandler\.removeCallbacks\(hideOfflineDisplayInfoRunnable\)/u);
 });
@@ -178,6 +178,7 @@ test('min 更新需要手动确认下载并显示浮动进度', () => {
     assert.match(layout, /offlineUpdateProgress/u);
     assert.match(layout, /offlineUpdateDownload/u);
     assert.match(layout, /offlineUpdateLater/u);
+    assert.match(layout, /offlineUpdateCollapsedTab/u);
     assert.match(layout, /offlineUpdateNotesTitle/u);
     assert.match(layout, /offlineUpdateNotes/u);
     assert.match(layout, /android:id="@\+id\/offlineUpdateNotes"[\s\S]*android:maxLines="6"/u);
@@ -189,6 +190,38 @@ test('min 更新需要手动确认下载并显示浮动进度', () => {
     assert.match(activity, /startMinApkDownload/u);
     assert.match(activity, /offlineUpdateDownload.setOnClickListener/u);
     assert.match(activity, /offlineUpdateLater.setOnClickListener/u);
+    assert.match(activity, /OFFLINE_UPDATE_PANEL_COLLAPSE_DELAY_MS = 10_000L/u);
+    assert.match(activity, /collapseOfflineUpdatePanel/u);
+    assert.match(activity, /expandOfflineUpdatePanel/u);
+    assert.match(activity, /offlineUpdatePanelCollapseRunnable/u);
+    assert.match(activity, /updateCollapsedUpdateTab/u);
+    assert.match(activity, /ScaleDrawable/u);
+    assert.match(activity, /boundedCompleted\s*\*\s*10_000L\s*\/\s*totalBytes/u);
+    assert.match(activity, /"downloading"\s*->\s*Color\.parseColor/u);
+    assert.match(activity, /"success"\s*->\s*Color\.parseColor/u);
+    assert.match(activity, /"failed"\s*->\s*Color\.parseColor/u);
+    assert.match(activity, /layoutParams\.leftMargin = if \(collapsed\) 0 else dp\(12\)/u);
+    assert.match(activity, /layoutParams\.topMargin = if \(collapsed\) 0 else dp\(12\)/u);
+    const collapseRunnableStart = activity.indexOf('private val offlineUpdatePanelCollapseRunnable');
+    const scheduleCollapseStart = activity.indexOf('private fun scheduleOfflineUpdatePanelCollapse');
+    const collapsePanelStart = activity.indexOf('private fun collapseOfflineUpdatePanel');
+    assert.ok(collapseRunnableStart >= 0 && scheduleCollapseStart > collapseRunnableStart);
+    assert.ok(collapsePanelStart > scheduleCollapseStart);
+    assert.doesNotMatch(
+        activity.slice(collapseRunnableStart, scheduleCollapseStart),
+        /serviceUpdateStarted\s*\|\|\s*minApkDownloadStarted/u,
+        '下载期间也应允许更新卡片自动收起'
+    );
+    assert.doesNotMatch(
+        activity.slice(scheduleCollapseStart, collapsePanelStart),
+        /serviceUpdateStarted\s*\|\|\s*minApkDownloadStarted/u,
+        '下载期间也应安排更新卡片收起计时'
+    );
+    assert.match(
+        activity,
+        /offlineUpdatePanel\.visibility\s*==\s*View\.VISIBLE\)\s*\{\s*scheduleOfflineUpdatePanelCollapse\(\)/u,
+        '回到前台时下载中的更新卡片也应恢复收起计时'
+    );
     const checkStart = activity.indexOf('private fun checkForMinApkUpdateOnce()');
     const promptStart = activity.indexOf('private fun showMinApkUpdatePrompt', checkStart);
     const downloadStart = activity.indexOf('private fun startMinApkDownload()');
@@ -200,6 +233,7 @@ test('min 更新需要手动确认下载并显示浮动进度', () => {
     assert.match(activity.slice(downloadStart, progressStart), /checkAndPrepareMinApkUpdate\(/u);
     assert.match(strings, /name="offline_update_download"/u);
     assert.match(strings, /name="offline_update_later"/u);
+    assert.match(strings, /name="offline_update_collapsed"/u);
 });
 
 test('Offline 热更外网源使用域名解析后的 IP 且不覆盖 Host', () => {

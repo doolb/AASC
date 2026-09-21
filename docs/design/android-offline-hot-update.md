@@ -2,6 +2,15 @@
 
 ## 状态
 
+2026-09-21 已修复 code-only 更新错误沿用 `legacy-root` 的问题：应用 code-only release 时优先校验清单指定的 `updates/dependencies/dependencies-v<dependencyVersion>` 目录及 `.offline-update-verified.json`，有效时写入 `legacyDependencies=false`；仅在热更依赖目录不可用时保留旧根目录回退。针对旧流程没有 marker 的设备，Offline Node 启动迁移还会校验依赖包自身的 version、lockSha256 和 express 元数据。控制端收起入口贴合左上角屏幕边缘，展开态保留安全边距。当前 min APK v31（`0.2.29-offline-min`）已发布，完整 Offline APK 未构建。
+
+ADB 真机验收确认：min APK 版本和 active 服务版本独立，覆盖安装 v31 后旧设备仍可能继续运行 active code v15；服务更新检查会发现 code v19，但需要用户确认 code-only 下载。将已发布 code v19 应用到真机后，`/api/status` 和 Node 环境均确认依赖来源为 `active-release`，实际路径为 `updates/code/code-v19` 与 `updates/dependencies/dependencies-v4/node_modules`，不再使用 `legacy-root`。
+内屏 display 0 的控制端“服务器”页面也已复核显示相同的 v19/v4、versioned 路径和 `active-release` 来源。
+
+2026-09-21 已完成服务代码路径诊断和 Offline min APK 联合发布：服务代码 `code/code-v19.zip`，大小 `15179747` bytes，SHA-256 为 `64fd98c66b7b095e338128b93439da527afaa9a1605a8529f7d9630350050664`；Offline min APK v27（`0.2.25-offline-min`），大小 `89268938` bytes，SHA-256 为 `fda13933088589868028f5d43c6426ec6cc74ec77a22c66f03a77d9dd3f4ff1e`。依赖沿用 v4，LAN/WAN 清单已签名切换到 code 19、dependencies 4、apkMin 27；旧 min APK 按精确规则清理，未构建或发布完整 Offline APK。
+
+2026-09-21 按“通常只发布增量资源，只有明确说明才打整包”的发布约定，完成显示端聊天联动监听模式和服务端倒计时暂停修复的增量发布：服务代码 `code/code-v16.zip`，大小 `15177617` bytes，SHA-256 为 `bf64c71a3d4af7126ee7371cf9f5c82bf192148ab32ec1925ae6f9d8bdcd27a1`；沿用 dependencies v4，未重复发布依赖包；Offline min APK v25（`0.2.23-offline-min`），大小 `89269050` bytes，SHA-256 为 `28c9cfe391079377ff49428d0126ea69f3c1c536b4a5616140fa3a213edf75dc`。LAN/WAN 清单已签名切换到 code 16、dependencies 4、apkMin 25；两个入口均返回 HTTP 200 和正确 Content-Length，远端 SSH 文件 hash 与清单一致；本次未构建或发布完整 Offline APK。
+
 2026-09-19 已发布包含声纹启动预热与注册等待修复的 full Offline APK v17：`allserver` 使用
 `versionCode=17`、`versionName=0.2.15-offline`，发布文件为
 `apk/aasc-display-offline-v17.apk`。APK 大小 `995442031` bytes，SHA-256 为
@@ -150,6 +159,11 @@ Offline APK 需要在不重新安装完整大包的情况下更新服务代码�
 - `code-only`：优先生成并发布完整代码包；当当前 `package-lock.json` 与已发布依赖的 lockfile 指纹一致时沿用当前依赖包，不生成、不上传、不下载依赖包。检测到指纹变化时，自动升级为 `all`，递增依赖版本并同时生成代码包和依赖包，避免代码包声明的新依赖无法在设备上运行。
 - `all`：重新生成代码包和依赖包，设备在一个版本切换事务中同时应用两者。
 
+code-only 应用时，设备必须按以下顺序选择依赖目录：先检查当前清单要求的
+`updates/dependencies/dependencies-v<dependencyVersion>` 是否包含有效的
+`.offline-update-verified.json`、匹配的版本/hash 标记和 `node_modules`；有效时无论旧指针是否为
+`legacyDependencies=true`，都切换为该热更依赖目录并写入 `legacyDependencies=false`。只有热更依赖目录不存在或校验标记不匹配时，才允许继续使用旧根目录 `node_modules` 的 legacy-root 兼容路径。
+
 `code-only` 构建前必须读取当前已发布清单。若依赖条目有效且 lockfile 指纹一致，则保持 code-only；若指纹变化，则使用当前依赖版本加一作为新依赖版本，自动切换为 all 并生成两个组件。若没有有效的已发布依赖基线，仍拒绝自动推断，必须显式使用 `all` 或 bootstrap。这样不会把依赖变更误发布为只含代码的更新。
 
 ### 签名清单和下载
@@ -202,6 +216,15 @@ min APK 校验器需要同时请求现代签名和兼容的旧签名信息，并
 - 用户点击下载后，更新管理器通过回调报告 `downloading` 的已接收字节和清单声明总字节，浮动卡片显示百分比；完成后依次显示 `verifying`、`materializing` 和 `installing`，失败时保留当前版本并提供重试。
 - PackageInstaller 的 `STATUS_PENDING_USER_ACTION`、成功和失败结果通过应用内状态广播回传；不执行静默安装，不在后台强行打开系统页面。
 - 首次完整 Runtime 安装将 manifest 文件按 `runtime`、服务源码、`node_modules` 依赖和配置元数据分类累计已复制字节；NodeServerService 将阶段和进度广播给 MainActivity。快速复用已安装 Runtime 时直接显示“已复用”，不伪造解压进度。
+
+### 更新提示面板自动收起
+
+- 发现待更新版本后显示完整更新卡片，并从最后一次显示/用户操作开始计时 10 秒。
+- 10 秒内没有点击时，卡片收起到屏幕右侧，仅保留可点击的“更新”边缘入口；点击入口恢复完整卡片。
+- 收起入口在下载阶段显示进度填充：按已完成字节/总字节计算左侧填充比例，未完成区域保留底色；校验、安装、成功和失败状态使用对应状态色。
+- 控制端收起入口位于左上角时不保留边距，展开为完整按钮时恢复 12dp 安全边距。
+- 用户点击下载后进入下载、校验、安装或失败重试状态时保持完整卡片，不因定时器隐藏进度和操作按钮。
+- Activity 销毁时取消定时任务；更新候选切换、下载完成或错误状态重新显示完整卡片并重新计时。
 
 ## 发布与版本顺序
 

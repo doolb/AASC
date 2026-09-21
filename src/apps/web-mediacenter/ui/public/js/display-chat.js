@@ -22,6 +22,7 @@
         privateSessions: [],
         streaming: new Map(),
         requestSequence: 0,
+        hiddenSelection: null,
         send: null,
         bus: null,
         root: null,
@@ -51,9 +52,67 @@
             privateSessionId: typeof session.privateSessionId === 'string'
                 ? session.privateSessionId
                 : 'default',
-            roleTarget: state.session.roleTarget || null,
+            roleTarget: typeof session.roleTarget === 'string'
+                ? session.roleTarget
+                : (mode === 'role' ? state.session.roleTarget : null),
             playOnControl: session.playOnControl === true
         };
+    }
+
+    function cloneSelection() {
+        return {
+            mode: state.session.mode,
+            privateTarget: state.session.privateTarget,
+            privateSessionId: state.session.privateSessionId || 'default',
+            roleTarget: state.session.roleTarget,
+            playOnControl: state.session.playOnControl === true
+        };
+    }
+
+    function getVoiceConversationContext() {
+        if (state.session.mode === 'private' && state.session.privateTarget) {
+            return { mode: 'private', target: state.session.privateTarget };
+        }
+        if (state.session.mode === 'role' && state.session.roleTarget) {
+            return { mode: 'private', target: state.session.roleTarget };
+        }
+        return { mode: 'group', target: null };
+    }
+
+    function notifyVoiceConversationContext() {
+        if (state.bus) state.bus.publish('chat.selection', getVoiceConversationContext());
+    }
+
+    function requestSessionHistory() {
+        state.send({
+            type: 'chatHistory',
+            source: 'displayChat',
+            mode: state.session.mode,
+            target: state.session.privateTarget,
+            sessionId: state.session.privateSessionId
+        });
+    }
+
+    function restoreHiddenSelection() {
+        if (!state.hiddenSelection) return;
+        state.session = {
+            ...state.session,
+            ...state.hiddenSelection
+        };
+        state.hiddenSelection = null;
+        state.send({
+            type: 'setChatSession',
+            session: cloneSelection(),
+            source: 'displayChat',
+            displayId: state.displayId
+        });
+        requestSessionHistory();
+        if (state.session.mode === 'private' && state.session.privateTarget) {
+            state.send({ type: 'listPrivateSessions', target: state.session.privateTarget });
+        }
+        renderHeader();
+        renderHistory();
+        notifyVoiceConversationContext();
     }
 
     function getSelectedTargetValue() {
@@ -314,6 +373,7 @@
 
     function selectTarget(value) {
         const target = parseTarget(value);
+        state.hiddenSelection = null;
         state.session = {
             ...state.session,
             mode: target.mode,
@@ -326,6 +386,7 @@
             mode: state.session.mode,
             privateTarget: state.session.privateTarget,
             privateSessionId: state.session.privateSessionId,
+            roleTarget: state.session.roleTarget,
             playOnControl: state.session.playOnControl
         };
         state.send({
@@ -334,41 +395,32 @@
             source: 'displayChat',
             displayId: state.displayId
         });
-        state.send({
-            type: 'chatHistory',
-            source: 'displayChat',
-            mode: state.session.mode,
-            target: state.session.privateTarget,
-            sessionId: state.session.privateSessionId
-        });
+        requestSessionHistory();
         if (state.session.mode === 'private' && state.session.privateTarget) {
             state.send({ type: 'listPrivateSessions', target: state.session.privateTarget });
         }
         renderHeader();
         renderHistory();
+        notifyVoiceConversationContext();
     }
 
     function selectSession(sessionId) {
         const nextSessionId = String(sessionId || 'default');
         state.session.privateSessionId = nextSessionId;
+        state.hiddenSelection = null;
         state.send({
             type: 'setChatSession',
             session: {
                 mode: state.session.mode,
                 privateTarget: state.session.privateTarget,
                 privateSessionId: nextSessionId,
+                roleTarget: state.session.roleTarget,
                 playOnControl: state.session.playOnControl
             },
             source: 'displayChat',
             displayId: state.displayId
         });
-        state.send({
-            type: 'chatHistory',
-            source: 'displayChat',
-            mode: state.session.mode,
-            target: state.session.privateTarget,
-            sessionId: nextSessionId
-        });
+        requestSessionHistory();
     }
 
     function renderShell() {
@@ -495,6 +547,7 @@
             if (state.session.mode === 'role') state.session.roleTarget = previousRole;
             if (state.session.mode !== 'private') state.privateSessions = [];
             renderHeader();
+            if (state.visible) notifyVoiceConversationContext();
             return true;
         }
         if (message.type === 'chatHistory') {
@@ -519,6 +572,19 @@
             return true;
         }
         if (message.type === 'privateSessionDeleted' || message.type === 'privateSessionSwitched') {
+            return true;
+        }
+        if (message.type === 'chatInput') {
+            if (message.displayId && state.displayId && message.displayId !== state.displayId) return true;
+            const requestId = String(message.requestId || '');
+            const content = String(message.content || '').trim();
+            if (!requestId || !content || state.streaming.has(requestId)) return true;
+            appendMessage('user', content);
+            const streaming = appendMessage('assistant', '正在思考…', {
+                requestId,
+                author: state.session.roleTarget || state.session.privateTarget || state.assistantName
+            });
+            state.streaming.set(requestId, streaming);
             return true;
         }
         if (message.type === 'chatChunk') {
@@ -565,10 +631,19 @@
     }
 
     function setVisible(visible, focus = false) {
-        state.visible = visible === true;
+        const nextVisible = visible === true;
+        const visibilityChanged = nextVisible !== state.visible;
+        if (!nextVisible && visibilityChanged) {
+            state.hiddenSelection = cloneSelection();
+        }
+        state.visible = nextVisible;
         if (state.root) {
             state.root.classList.toggle('is-visible', state.visible);
             state.root.setAttribute('aria-hidden', String(!state.visible));
+        }
+        if (state.visible && visibilityChanged) {
+            restoreHiddenSelection();
+            renderHeader();
         }
         if (state.visible && focus && state.refs.input) state.refs.input.focus();
         if (!state.visible && document.activeElement === state.refs.input) state.refs.input.blur();
@@ -597,6 +672,7 @@
     }
 
     root.DisplayChat = Object.freeze({
+        getVoiceConversationContext,
         handleServerMessage,
         init,
         resize,

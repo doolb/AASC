@@ -38,6 +38,48 @@ class OfflineUpdateManagerTest {
     }
 
     @Test
+    fun codeOnly优先使用已校验的热更依赖而不是legacyRoot() {
+        val root = temporaryFolder.newFolder("server-root")
+        val dependencyDirectory = File(root, "updates/dependencies/dependencies-v4")
+        check(File(dependencyDirectory, "node_modules").mkdirs())
+        File(dependencyDirectory, ".offline-update-verified.json").writeText(
+            """{"kind":"dependencies","version":4,"sha256":"${DEPENDENCY_SHA256}"}"""
+        )
+
+        val resolution = OfflineUpdateManager.resolveCodeOnlyDependencyDirectory(
+            root = root,
+            dependencyVersion = 4,
+            dependencySha256 = DEPENDENCY_SHA256,
+            previousDependencyVersion = 4,
+            previousLegacyDependencies = true
+        )
+
+        assertEquals(File(dependencyDirectory, "node_modules").absolutePath, resolution.directory.absolutePath)
+        assertFalse(resolution.legacyDependencies)
+    }
+
+    @Test
+    fun codeOnly热更依赖校验失败时保留legacyRoot兼容回退() {
+        val root = temporaryFolder.newFolder("server-root")
+        val dependencyDirectory = File(root, "updates/dependencies/dependencies-v4")
+        check(File(dependencyDirectory, "node_modules").mkdirs())
+        File(dependencyDirectory, ".offline-update-verified.json").writeText(
+            """{"kind":"dependencies","version":4,"sha256":"${"0".repeat(64)}"}"""
+        )
+
+        val resolution = OfflineUpdateManager.resolveCodeOnlyDependencyDirectory(
+            root = root,
+            dependencyVersion = 4,
+            dependencySha256 = DEPENDENCY_SHA256,
+            previousDependencyVersion = 4,
+            previousLegacyDependencies = true
+        )
+
+        assertEquals(File(root, "node_modules").absolutePath, resolution.directory.absolutePath)
+        assertTrue(resolution.legacyDependencies)
+    }
+
+    @Test
     fun 过期清单和dependencyOnly变化都不能降级或单独切换依赖() {
         val stale = manifest(codeVersion = 2, dependencyVersion = 1, lock = LOCK_A)
         val dependencyOnly = manifest(codeVersion = 3, dependencyVersion = 2, lock = LOCK_B)
@@ -185,5 +227,6 @@ class OfflineUpdateManagerTest {
     companion object {
         private val LOCK_A = "c".repeat(64)
         private val LOCK_B = "d".repeat(64)
+        private val DEPENDENCY_SHA256 = "b".repeat(64)
     }
 }

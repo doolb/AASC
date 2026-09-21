@@ -413,7 +413,7 @@ test('服务器运行包忽略 Android assets 不支持的隐藏目录和下划�
     assert.equal(result.manifest.files.some(file => file.path.endsWith('/.npmignore')), false);
 });
 
-test('服务器运行包保留 OpenAI Responses 所需的 _vendor parser', async () => {
+test('服务器运行包将 OpenAI _vendor parser 映射为可打包 marker', async () => {
     const packageDir = await createServerPackage(tempDir);
     const parserPath = path.join(
         packageDir,
@@ -425,14 +425,50 @@ test('服务器运行包保留 OpenAI Responses 所需的 _vendor parser', async
     );
     await fs.promises.mkdir(path.dirname(parserPath), { recursive: true });
     await fs.promises.writeFile(parserPath, 'export const parse = () => null;\n', 'utf8');
+    const nestedParserPath = path.join(
+        packageDir,
+        'node_modules',
+        '@earendil-works',
+        'pi-coding-agent',
+        'node_modules',
+        'openai',
+        '_vendor',
+        'partial-json-parser',
+        'parser.mjs'
+    );
+    await fs.promises.mkdir(path.dirname(nestedParserPath), { recursive: true });
+    await fs.promises.writeFile(nestedParserPath, 'export const parse = () => null;\n', 'utf8');
     const runtimeDir = await createRuntime(tempDir);
     const outputDir = path.join(tempDir, 'output');
 
     const result = await prepareAndroidNodeRuntime({ packageDir, runtimeDir, outputDir });
-    const assetPath = 'server/node_modules/openai/_vendor/partial-json-parser/parser.mjs';
+    const assetPath = 'server/node_modules/openai/aasc-openai-vendor/partial-json-parser/parser.mjs';
 
     assert.equal(result.manifest.files.some(file => file.path === assetPath), true);
     assert.equal(fs.existsSync(path.join(outputDir, assetPath)), true);
+    assert.equal(
+        result.manifest.files.some(file => file.path === 'server/node_modules/openai/_vendor/partial-json-parser/parser.mjs'),
+        false
+    );
+    assert.equal(
+        fs.existsSync(path.join(outputDir, 'server', 'node_modules', 'openai', '_vendor', 'partial-json-parser', 'parser.mjs')),
+        false
+    );
+    assert.equal(
+        fs.existsSync(path.join(
+            outputDir,
+            'server',
+            'node_modules',
+            '@earendil-works',
+            'pi-coding-agent',
+            'node_modules',
+            'openai',
+            'aasc-openai-vendor',
+            'partial-json-parser',
+            'parser.mjs'
+        )),
+        true
+    );
 });
 
 test('服务器运行包缺少 OpenAI Responses parser 时在构建前失败', async () => {

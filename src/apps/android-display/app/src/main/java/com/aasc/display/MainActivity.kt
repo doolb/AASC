@@ -8,6 +8,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.ScaleDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -40,8 +44,9 @@ class MainActivity : AppCompatActivity() {
         private const val EXTRA_SERVER_URL = "server_url"
         private const val REQ_STORAGE_TREE = 1005
         private const val REQ_INSTALL_UNKNOWN_SOURCES = 1006
-        private const val OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS = 30_000L
+        private const val OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS = 10_000L
         private const val OFFLINE_UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1_000L
+        private const val OFFLINE_UPDATE_PANEL_COLLAPSE_DELAY_MS = 10_000L
     }
 
     private lateinit var configBar: View
@@ -60,6 +65,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var offlineUpdateProgress: ProgressBar
     private lateinit var offlineUpdateDownload: Button
     private lateinit var offlineUpdateLater: Button
+    private lateinit var offlineUpdateCollapsedTab: TextView
     private lateinit var offlineDisplayInfo: TextView
     private var webView: DisplayWebView? = null
     private var controlWebView: DisplayWebView? = null
@@ -74,6 +80,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingMinApkUpdate: MinApkUpdateResult? = null
     private var minApkUpdateCandidate: MinApkUpdateResult? = null
     private var minApkDownloadStarted = false
+    private var offlineUpdatePanelCollapsed = false
     private var activityResumed = false
     private var unknownSourcesDialogVisible = false
     private var waitingForUnknownSourcesResult = false
@@ -87,6 +94,11 @@ class MainActivity : AppCompatActivity() {
             runOfflineUpdateChecksIfReady()
             mainHandler.postDelayed(this, OFFLINE_UPDATE_CHECK_INTERVAL_MS.toLong())
         }
+    }
+    private val offlineUpdatePanelCollapseRunnable = Runnable {
+        if (!activityResumed || !offlineMode) return@Runnable
+        if (!::offlineUpdatePanel.isInitialized || offlineUpdatePanel.visibility != View.VISIBLE) return@Runnable
+        collapseOfflineUpdatePanel()
     }
     private var offlineDisplayInfoHideAtElapsedRealtime = 0L
     private val hideOfflineDisplayInfoRunnable = Runnable {
@@ -359,6 +371,7 @@ class MainActivity : AppCompatActivity() {
         offlineUpdateProgress = findViewById(R.id.offlineUpdateProgress)
         offlineUpdateDownload = findViewById(R.id.offlineUpdateDownload)
         offlineUpdateLater = findViewById(R.id.offlineUpdateLater)
+        offlineUpdateCollapsedTab = findViewById(R.id.offlineUpdateCollapsedTab)
         offlineDisplayInfo = findViewById(R.id.offlineDisplayInfo)
         setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
@@ -396,6 +409,13 @@ class MainActivity : AppCompatActivity() {
         offlineStartupRetry.setOnClickListener { connect() }
         offlineUpdateDownload.setOnClickListener { startAvailableOfflineUpdate() }
         offlineUpdateLater.setOnClickListener { dismissAvailableOfflineUpdate() }
+        offlineUpdateCollapsedTab.setOnClickListener { expandOfflineUpdatePanel() }
+        offlineUpdatePanel.setOnTouchListener { _, event ->
+            if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                scheduleOfflineUpdatePanelCollapse()
+            }
+            false
+        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 handleBackNavigation()
@@ -422,12 +442,16 @@ class MainActivity : AppCompatActivity() {
         activityResumed = true
         runOfflineUpdateChecksIfReady()
         scheduleOfflineUpdateChecks()
+        if (offlineUpdatePanel.visibility == View.VISIBLE) {
+            scheduleOfflineUpdatePanelCollapse()
+        }
         submitPendingMinApkUpdateIfVisible()
     }
 
     override fun onPause() {
         activityResumed = false
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
+        cancelOfflineUpdatePanelCollapse()
         super.onPause()
     }
 
@@ -440,6 +464,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
         mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
+        cancelOfflineUpdatePanelCollapse()
         nativeDisplayBridge?.release()
         audioFocusController.abandon()
         super.onDestroy()
@@ -458,6 +483,96 @@ class MainActivity : AppCompatActivity() {
         if (!NodeRuntimeInstaller.hasFullOfflineInstall(File(filesDir, "aasc-server"))) return
         checkForServiceUpdateOnce()
         checkForMinApkUpdateOnce()
+    }
+
+    /** 显示完整更新卡片并重新开始 10 秒无触摸收起计时。 */
+    private fun showOfflineUpdatePanel() {
+        cancelOfflineUpdatePanelCollapse()
+        offlineUpdatePanelCollapsed = false
+        offlineUpdatePanel.visibility = View.VISIBLE
+        offlineUpdateCollapsedTab.visibility = View.GONE
+        updateCollapsedUpdateTab(null)
+        scheduleOfflineUpdatePanelCollapse()
+    }
+
+    private fun scheduleOfflineUpdatePanelCollapse() {
+        cancelOfflineUpdatePanelCollapse()
+        if (!activityResumed || !offlineMode) return
+        if (offlineUpdatePanel.visibility != View.VISIBLE) return
+        mainHandler.postDelayed(
+            offlineUpdatePanelCollapseRunnable,
+            OFFLINE_UPDATE_PANEL_COLLAPSE_DELAY_MS
+        )
+    }
+
+    private fun cancelOfflineUpdatePanelCollapse() {
+        mainHandler.removeCallbacks(offlineUpdatePanelCollapseRunnable)
+    }
+
+    private fun collapseOfflineUpdatePanel() {
+        cancelOfflineUpdatePanelCollapse()
+        offlineUpdatePanelCollapsed = true
+        offlineUpdatePanel.visibility = View.GONE
+        offlineUpdateCollapsedTab.visibility = View.VISIBLE
+    }
+
+    private fun expandOfflineUpdatePanel() {
+        cancelOfflineUpdatePanelCollapse()
+        offlineUpdatePanelCollapsed = false
+        offlineUpdateCollapsedTab.visibility = View.GONE
+        offlineUpdatePanel.visibility = View.VISIBLE
+        scheduleOfflineUpdatePanelCollapse()
+    }
+
+    private fun hideOfflineUpdatePanel() {
+        cancelOfflineUpdatePanelCollapse()
+        offlineUpdatePanelCollapsed = false
+        offlineUpdatePanel.visibility = View.GONE
+        offlineUpdateCollapsedTab.visibility = View.GONE
+    }
+
+    /**
+     * 更新右侧收起入口的状态背景。下载阶段按真实字节比例填充左侧，其他阶段使用状态色，
+     * 这样入口即使收起也能反馈当前进度；总大小未知时只显示底色，不伪造百分比。
+     */
+    private fun updateCollapsedUpdateTab(
+        phase: String?,
+        completedBytes: Long? = null,
+        totalBytes: Long? = null
+    ) {
+        if (!::offlineUpdateCollapsedTab.isInitialized) return
+        val baseColor = Color.parseColor("#E68A00")
+        val progressColor = when (phase) {
+            "downloading" -> Color.parseColor("#1976D2")
+            "verifying", "materializing" -> Color.parseColor("#7B1FA2")
+            "ready", "installing", "switching" -> Color.parseColor("#00897B")
+            "success" -> Color.parseColor("#2E7D32")
+            "failed" -> Color.parseColor("#C62828")
+            else -> baseColor
+        }
+        val level = when {
+            phase == "downloading" && totalBytes != null && totalBytes > 0L && completedBytes != null -> {
+                val boundedCompleted = completedBytes.coerceIn(0L, totalBytes)
+                (boundedCompleted * 10_000L / totalBytes).coerceIn(0L, 10_000L).toInt()
+            }
+            phase in setOf("verifying", "materializing", "ready", "installing", "switching", "success", "failed") -> 10_000
+            else -> 0
+        }
+        val cornerRadius = 8f * resources.displayMetrics.density
+        val background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(baseColor)
+            this.cornerRadius = cornerRadius
+        }
+        val progress = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(progressColor)
+            this.cornerRadius = cornerRadius
+        }
+        val scaledProgress = ScaleDrawable(progress, Gravity.START, 1f, 0f).apply {
+            setLevel(level)
+        }
+        offlineUpdateCollapsedTab.background = LayerDrawable(arrayOf(background, scaledProgress))
     }
 
     // singleTask Activity 被部署脚本再次启动时不会重新执行 onCreate，需要在新 Intent 中恢复配置。
@@ -710,7 +825,7 @@ class MainActivity : AppCompatActivity() {
         val dependencyVersion = result.targetDependencyVersion ?: return
         serviceUpdateCandidate = result
         serviceUpdateStarted = false
-        offlineUpdatePanel.visibility = View.VISIBLE
+        showOfflineUpdatePanel()
         offlineUpdateTitle.text = getString(R.string.offline_service_update_title)
         offlineUpdateMessage.text = getString(
             R.string.offline_service_update_available,
@@ -731,7 +846,7 @@ class MainActivity : AppCompatActivity() {
         minApkUpdateCandidate = result
         if (serviceUpdateCandidate != null) return
         minApkDownloadStarted = false
-        offlineUpdatePanel.visibility = View.VISIBLE
+        showOfflineUpdatePanel()
         offlineUpdateTitle.text = getString(R.string.offline_update_title)
         offlineUpdateMessage.text = getString(
             R.string.offline_update_available,
@@ -769,23 +884,26 @@ class MainActivity : AppCompatActivity() {
             if (minApkUpdateCandidate?.metadata != null) {
                 showMinApkUpdatePrompt(minApkUpdateCandidate!!)
             } else {
-                offlineUpdatePanel.visibility = View.GONE
+                hideOfflineUpdatePanel()
             }
             return
         }
         minApkUpdateCandidate = null
-        if (!minApkDownloadStarted) offlineUpdatePanel.visibility = View.GONE
+        if (!minApkDownloadStarted) hideOfflineUpdatePanel()
     }
 
     /** 用户确认服务更新后交给 NodeServerService，确保停止旧进程再切换 active release。 */
     private fun startServiceUpdate() {
         if (serviceUpdateStarted || serviceUpdateCandidate == null) return
+        cancelOfflineUpdatePanelCollapse()
+        expandOfflineUpdatePanel()
         serviceUpdateStarted = true
         offlineUpdateDownload.isEnabled = false
         offlineUpdateDownload.visibility = View.GONE
         offlineUpdateLater.visibility = View.GONE
         offlineUpdateProgress.visibility = View.VISIBLE
         offlineUpdateProgress.isIndeterminate = true
+        updateCollapsedUpdateTab("downloading")
         offlineUpdateMessage.text = getString(R.string.offline_service_update_downloading)
         val mainServerUrl = ServerConfig.baseUrl(serverInput.text.toString().trim())
         val serviceIntent = Intent(this, NodeServerService::class.java)
@@ -805,7 +923,6 @@ class MainActivity : AppCompatActivity() {
         completedBytes: Long?,
         totalBytes: Long?
     ) {
-        offlineUpdatePanel.visibility = View.VISIBLE
         offlineUpdateProgress.visibility = View.VISIBLE
         offlineUpdateDownload.visibility = View.GONE
         offlineUpdateLater.visibility = View.GONE
@@ -818,6 +935,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             offlineUpdateProgress.isIndeterminate = true
         }
+        updateCollapsedUpdateTab(phase, completedBytes, totalBytes)
         offlineUpdateMessage.text = when (phase) {
             "downloading" -> getString(
                 R.string.offline_service_update_download_progress,
@@ -836,6 +954,7 @@ class MainActivity : AppCompatActivity() {
         offlineUpdateProgress.visibility = View.VISIBLE
         offlineUpdateProgress.isIndeterminate = false
         offlineUpdateProgress.progress = 100
+        updateCollapsedUpdateTab("success")
         offlineUpdateMessage.text = detail ?: getString(R.string.offline_service_update_success)
         offlineUpdateDownload.visibility = View.GONE
         offlineUpdateLater.visibility = View.GONE
@@ -843,14 +962,15 @@ class MainActivity : AppCompatActivity() {
             if (minApkUpdateCandidate?.metadata != null) {
                 showMinApkUpdatePrompt(minApkUpdateCandidate!!)
             } else {
-                offlineUpdatePanel.visibility = View.GONE
+                hideOfflineUpdatePanel()
             }
         }, 2_000L)
     }
 
     private fun handleServiceUpdateFailed(detail: String?) {
         serviceUpdateStarted = false
-        offlineUpdatePanel.visibility = View.VISIBLE
+        showOfflineUpdatePanel()
+        updateCollapsedUpdateTab("failed")
         offlineUpdateProgress.visibility = View.GONE
         offlineUpdateMessage.text = if (detail.isNullOrBlank()) {
             getString(R.string.offline_service_update_failed)
@@ -871,19 +991,22 @@ class MainActivity : AppCompatActivity() {
         if (candidate?.metadata != null) {
             showMinApkUpdatePrompt(candidate)
         } else {
-            offlineUpdatePanel.visibility = View.GONE
+            hideOfflineUpdatePanel()
         }
     }
 
-    /** 用户点击下载后才开始网络传输；进度回调切回主线程更新浮动卡片。 */
+    /** 用户点击下载后才开始网络传输；进度回调切回主线程更新浮动卡片，卡片可在下载期间收起。 */
     private fun startMinApkDownload() {
         if (minApkDownloadStarted || minApkUpdateCandidate?.metadata == null) return
+        cancelOfflineUpdatePanelCollapse()
+        expandOfflineUpdatePanel()
         minApkDownloadStarted = true
         offlineUpdateDownload.isEnabled = false
         offlineUpdateDownload.visibility = View.GONE
         offlineUpdateLater.visibility = View.GONE
         offlineUpdateProgress.visibility = View.VISIBLE
         offlineUpdateProgress.isIndeterminate = true
+        updateCollapsedUpdateTab("downloading")
         offlineUpdateMessage.text = getString(R.string.offline_update_downloading)
         Thread({
             val result = offlineUpdateManager.checkAndPrepareMinApkUpdate(
@@ -897,6 +1020,7 @@ class MainActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (result.apkFile == null) {
                     minApkDownloadStarted = false
+                    showOfflineUpdatePanel()
                     offlineUpdateDownload.visibility = View.VISIBLE
                     offlineUpdateDownload.isEnabled = true
                     offlineUpdateMessage.text = result.status
@@ -915,7 +1039,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateMinApkProgress(progress: OfflineUpdateProgress) {
-        offlineUpdatePanel.visibility = View.VISIBLE
         offlineUpdateProgress.visibility = View.VISIBLE
         if (progress.totalBytes > 0L) {
             offlineUpdateProgress.isIndeterminate = false
@@ -926,6 +1049,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             offlineUpdateProgress.isIndeterminate = true
         }
+        updateCollapsedUpdateTab(progress.phase, progress.completedBytes, progress.totalBytes)
         val detail = progress.detail?.trim()?.takeIf { it.isNotEmpty() }
         offlineUpdateMessage.text = when (progress.phase) {
             "downloading" -> getString(
@@ -942,24 +1066,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateMinApkInstallStatus(status: Int, detail: String) {
         if (isFinishing || isDestroyed) return
-        offlineUpdatePanel.visibility = View.VISIBLE
+        cancelOfflineUpdatePanelCollapse()
+        expandOfflineUpdatePanel()
         offlineUpdateProgress.visibility = View.VISIBLE
         offlineUpdateProgress.isIndeterminate = false
         offlineUpdateProgress.max = 100
         when (status) {
             android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 offlineUpdateProgress.progress = 100
+                updateCollapsedUpdateTab("installing")
                 offlineUpdateMessage.text = getString(R.string.offline_update_confirm_install)
             }
             android.content.pm.PackageInstaller.STATUS_SUCCESS -> {
                 offlineUpdateProgress.progress = 100
+                updateCollapsedUpdateTab("success")
                 offlineUpdateMessage.text = getString(R.string.offline_update_success)
                 offlineUpdateDownload.visibility = View.GONE
                 offlineUpdateLater.visibility = View.GONE
-                offlineUpdatePanel.postDelayed({ offlineUpdatePanel.visibility = View.GONE }, 2_000L)
+                offlineUpdatePanel.postDelayed({ hideOfflineUpdatePanel() }, 2_000L)
             }
             else -> {
                 minApkDownloadStarted = false
+                updateCollapsedUpdateTab("failed")
                 offlineUpdateProgress.visibility = View.GONE
                 offlineUpdateMessage.text = if (detail.isBlank()) {
                     getString(R.string.offline_update_failed)
@@ -1069,7 +1197,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Offline Node launcher 成功启动后保留诊断信息 30 秒，随后只隐藏提示浮层。
+     * Offline Node launcher 成功启动后保留诊断信息 10 秒，随后只隐藏提示浮层。
      * WebView 的初始缩放已经在创建时确定，这里不重新加载页面或修改缩放比例。
      */
     private fun scheduleOfflineDisplayInfoHide() {
@@ -1163,7 +1291,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 更新原生入口的收缩/展开外观；布局重心固定在左侧中部，天然贴合屏幕边缘。 */
+    /** 更新原生入口的收缩/展开外观；入口固定在左上角并保留安全边距，避免落到屏幕垂直中部。 */
     private fun setControlButtonState(state: AndroidControlAccess.ButtonState) {
         controlButtonState = state
         if (!::controlToggleButton.isInitialized) return
@@ -1173,10 +1301,10 @@ class MainActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
-        layoutParams.gravity = Gravity.START or Gravity.CENTER_VERTICAL
-        layoutParams.leftMargin = 0
+        layoutParams.gravity = Gravity.START or Gravity.TOP
+        layoutParams.leftMargin = if (collapsed) 0 else dp(12)
         layoutParams.rightMargin = 0
-        layoutParams.topMargin = 0
+        layoutParams.topMargin = if (collapsed) 0 else dp(12)
         layoutParams.bottomMargin = 0
         if (collapsed) {
             layoutParams.width = dp(42)

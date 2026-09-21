@@ -9,6 +9,10 @@ const displayCss = fs.readFileSync(
     'src/apps/web-mediacenter/ui/public/css/display.css',
     'utf8'
 );
+const displayStageCss = fs.readFileSync(
+    'src/apps/web-mediacenter/ui/public/css/display-mmd.css',
+    'utf8'
+);
 
 assert.match(displayHtml, /<script src="js\/chat-markdown\.js"><\/script>/u, '显示端应加载安全 Markdown 渲染器');
 const voiceResponseStart = displayHtml.indexOf('function showVoiceResponsePopup');
@@ -76,6 +80,9 @@ assert.match(displayHtml, /function updateVoiceConversationCountdown\(\)/u, '显
 assert.match(displayHtml, /setInterval\([^\n]*updateVoiceConversationCountdown/u, '倒计时应按秒刷新');
 assert.match(displayCss, /\.voice-conversation-countdown\s*\{/u, '倒计时应有独立样式');
 assert.match(displayCss, /\.voice-status-row\s*\{[\s\S]*?flex-direction:\s*column/u, '倒计时应位于状态第一行下方');
+assert.match(displayStageCss, /\.display-stage-layers\s*\{[\s\S]*?z-index:\s*3000/u, '聊天舞台应高于独立语音 UI');
+assert.match(displayCss, /\.voice-status-row\s*\{[\s\S]*?z-index:\s*2000/u, '语音状态行应保留在聊天舞台下方');
+assert.match(displayCss, /#voiceTextDisplay\s*\{[\s\S]*?z-index:\s*1000/u, 'TTS 播报文字应保留在聊天舞台下方');
 assert.match(displayHtml, /element\.style\.right\s*=\s*offset/);
 assert.match(displayHtml, /element\.style\.top\s*=\s*'50%'/);
 assert.match(displayHtml, /translateX\(-50%\)/);

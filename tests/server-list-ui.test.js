@@ -48,6 +48,7 @@ test('控制端包含服务器导航入口、只读列表面板和服务器列�
     assert.match(html, /id="serverAddressInput"/);
     assert.match(html, /id="serverAddressConnectBtn"/);
     assert.match(html, /id="serverMediaIndexContent"/);
+    assert.match(html, /id="serverVersionSummary"/);
 });
 
 test('服务器列表加载 AASC 节点目录接口并渲染节点信息', async () => {
@@ -67,6 +68,17 @@ test('服务器列表加载 AASC 节点目录接口并渲染节点信息', async
                         latency: 12,
                         currentDisplays: 2,
                         runtime: { displayCount: 2, controlCount: 1, libraryCount: 3 },
+                        metadata: {
+                            versions: {
+                                apk: 'apk-0.2.24-offline-min',
+                                code: 'v17',
+                                dependencies: 'v4',
+                                display: '1789980000000',
+                                codePath: '/data/data/com.aasc.display.offline/files/aasc-server/updates/code/code-v17',
+                                dependenciesPath: '/data/data/com.aasc.display.offline/files/aasc-server/updates/dependencies/dependencies-v4/node_modules',
+                                dependencySource: 'active-release'
+                            }
+                        },
                         lastHeartbeatAt: '2026-09-05T13:20:00.000Z'
                     }]
                 };
@@ -84,6 +96,10 @@ test('服务器列表加载 AASC 节点目录接口并渲染节点信息', async
     assert.match(elements.serverListContent.innerHTML, /显示端<\/dt><dd>2 \/ 未限制/);
     assert.match(elements.serverListContent.innerHTML, /控制端<\/dt><dd>1/);
     assert.match(elements.serverListContent.innerHTML, /媒体库<\/dt><dd>3/);
+    assert.match(elements.serverListContent.innerHTML, /服务代码: v17/);
+    assert.match(elements.serverListContent.innerHTML, /服务代码路径: \/data\/data\/com\.aasc\.display\.offline\/files\/aasc-server\/updates\/code\/code-v17/);
+    assert.match(elements.serverListContent.innerHTML, /依赖路径: \/data\/data\/com\.aasc\.display\.offline\/files\/aasc-server\/updates\/dependencies\/dependencies-v4\/node_modules/);
+    assert.match(elements.serverListContent.innerHTML, /依赖来源: active-release/);
     assert.match(elements.serverListContent.innerHTML, /最后心跳/);
     assert.match(elements.serverListContent.innerHTML, /连接/);
 });
