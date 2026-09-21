@@ -121,3 +121,11 @@ Android Gradle 的 assets 默认忽略以下划线开头的目录，导致完整
 发布结果：修复后的完整 APK 使用 v23 发布，min APK 使用 v32 发布；完整 APK 不写入服务
 manifest，min APK 发布时原子更新 manifest 并继续引用 code v19/dependencies v4。内网和
 外网均完成资源 hash/Content-Length 校验及旧版本精确清理。
+
+## 完整 APK 基线 active release 初始化（待处理，2026-09-21）
+
+当前完整 Offline APK 将内置代码和依赖直接安装到 Runtime 根目录，并通过
+`offline-update-client.json` 记录基线版本；首次安装不会创建
+`updates/active-release.json`、版本化 code 目录或版本化 dependencies 目录。
+因此首次 code-only 更新若找不到对应的版本化依赖，会把根目录内置依赖写入
+active release 并标记为 `legacy-root`。该问题只记录在此，暂不改变启动和更新行为。

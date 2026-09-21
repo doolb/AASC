@@ -324,3 +324,20 @@ JVM `:app:testDebugUnitTest` BUILD SUCCESSFUL。
 （`0.2.30-offline-min`）；两端发布根目录仅保留当前完整/min 版本，服务清单保留 code v19
 和 dependencies v4。LAN/WAN 的完整 APK 和 min APK 均返回 HTTP 200，Content-Length 与
 本地构建产物一致。
+
+## 完整 APK 基线 active release 初始化（待处理，2026-09-21）
+
+```text
+首次完整 Offline APK 安装:
+    安装根目录代码与 node_modules
+    读取 offline-update-client.json 作为 bundled-baseline
+    不创建 updates/active-release.json
+
+首次 code-only 更新且没有对应版本化 dependencies:
+    代码安装到 updates/code/code-vN
+    依赖回退到 Runtime 根目录 node_modules
+    写入 active-release.json(legacyDependencies = true)
+```
+
+该行为暂时保留，后续需要决定是否在首次安装时生成版本化基线 release，或增加独立的
+`bundled-baseline` 依赖来源字段，避免把完整包内置依赖显示为 `legacy-root`。
