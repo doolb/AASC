@@ -28,6 +28,29 @@
 
 ### Android ASR 测试 APK
 
+- ✅ [2026-09-21] 增加原生录音底部悬浮控制和完整音量折线图。
+  - 录音切换按钮固定在屏幕底部中央，滚动页面时保持可见；录音线程复用约 100 ms PCM 读取块生成音量包络，结束后由单个自定义视图绘制完整时间轴折线。
+  - 保留现有蓝牙 SCO 路由、实际路由、峰值和 RMS 诊断；Node 契约测试 `3/3`、Android JVM 单测 `29/29`，SM-N9500 蓝牙 ID 922 真机录音和图表显示通过。
+  - APK `280663752 bytes`，SHA-256 `76a7c9aa0c09eaf2a4266e7cab88761e89ed44f2b4efb3649a962fb78f26c47c`，已发布为 `apk/android-asr.apk` 到 LAN/WAN。
+
+- ✅ [2026-09-21] 修复测试 APK 体积异常偏大的旧构建填充问题。
+  - 当前 APK 为 `503,520,540 bytes`；主要有效内容来自 SenseVoice ASR、流式 ASR、base FP32 声纹模型和 ONNX/Sherpa 原生库。
+  - 重新构建后 APK 为 `280,663,752 bytes`，旧的约 223 MB 全零填充消失；ZIP、真机安装和双端 HTTP 发布校验通过。
+
+- ✅ [2026-09-21] 测试 APK 临时精简声纹模型包，仅保留 `ERes2Net-base FP32` 和多人分段所需的 Pyannote segmentation。
+  - 同步收敛 Gradle 资源白名单、原生/网页选项、HTTP 校验、Android 单测和 Node 静态契约测试；使用 `Sync` 清理旧构建遗留模型资源。
+  - 验证：APK 仅含两个声纹资源，大小 `503,520,540 bytes`，SHA-256 `3320ac65eb5df2e264211260ef828ddae21471d42da4face2365c5cff9e1a727`；Android JVM 单测 `29/29`、Node 契约测试 `3/3`、真机覆盖安装成功。
+
+- ✅ [2026-09-21] 修复测试 APK Bluetooth SCO 已连接但录音无数据的问题。
+  - 除了同步 SCO 开关保存、打开、错误处理和停止恢复逻辑，还会在每次蓝牙录音前清理旧 SCO 状态并重新建链，避免复用历史粘滞的 CONNECTED 状态。
+  - 验证：Debug APK 已安装到 `SM-N9500 / 192.168.1.6:5555`，蓝牙设备 ID 922 现场录音已确认有声音；内置主麦克风 ID 10 录音峰值/RMS 也正常。
+
+- ✅ [2026-09-20] 修复 ASR 测试 APK 内置麦克风区分和无声诊断。
+  - 主内置麦克风（设备 ID 10、`bottom`）作为首次运行优先选择，后置输入通过 `address=back` 显示为独立的“内置后置麦克风”；所有具体输入项显示设备 ID，避免四个麦克风现场无法区分。
+  - `AudioRecorder` 使用 `READ_BLOCKING`，停止前读取实际 `routedDevice`，统计样本数、PCM16 峰值和 RMS；PCM 全零时页面明确显示“录音完成但没有有效声音”。
+  - 新增 `AudioCaptureStats.kt`、Android 单测和 ASR 静态契约断言；更新 `AudioInputDevice.kt`、`AudioRecorder.kt`、`MainActivity.kt` 及对应 design/spec/task/todo 文档，任务记录为 `docs/task/20260920_ASR测试APK内置麦克风无声诊断.md`。
+  - 验证：`npm --prefix 3rd/tts-server run build:android-asr` 构建成功；Android JVM 单测 29/29；`tests/android-asr-apk.test.js` 3/3；Debug APK 已覆盖安装到 `SM-N9500 / 192.168.1.6:5555`。实际三种麦克风录音峰值和回放仍待现场确认。
+
 - ✅ [2026-09-19] 为原生 ASR 测试页面增加麦克风选择，支持连接蓝牙麦克风。
   - 新增输入设备下拉框和刷新按钮，枚举 Android 当前暴露的系统默认、蓝牙、USB、有线和内置输入设备；选择结果按设备 ID 持久化，设备断开后自动回退系统默认。
   - `AudioRecorder` 改用 `AudioRecord.Builder`，录音前通过 `setPreferredDevice` 指定选择的输入设备；录音期间锁定选择控件，并监听系统设备连接变化。

@@ -25,7 +25,9 @@ class BluetoothScoController(
     private var receiverRegistered = false
     private var requestedByController = false
     private var modeChangedByController = false
+    private var scoFlagChangedByController = false
     private var previousMode = AudioManager.MODE_NORMAL
+    private var previousScoOn = false
 
     /** 为经典蓝牙 SCO 输入建立音频链路；非 SCO 设备不改变系统音频路由。 */
     fun startForInput(device: AudioDeviceInfo): Boolean {
@@ -33,49 +35,70 @@ class BluetoothScoController(
         synchronized(this) {
             if (receiverRegistered) return true
             val connectedLatch = CountDownLatch(1)
+            var requestStarted = false
             var connectedByBroadcast = false
+            var terminalState: Int? = null
             val stateReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     val state = intent?.getIntExtra(
                         AudioManager.EXTRA_SCO_AUDIO_STATE,
                         AudioManager.SCO_AUDIO_STATE_ERROR
                     ) ?: AudioManager.SCO_AUDIO_STATE_ERROR
-                    if (state == AudioManager.SCO_AUDIO_STATE_CONNECTED) connectedByBroadcast = true
-                    if (state == AudioManager.SCO_AUDIO_STATE_CONNECTED ||
-                        state == AudioManager.SCO_AUDIO_STATE_DISCONNECTED
-                    ) connectedLatch.countDown()
+                    if (!requestStarted) return
+                    when (state) {
+                        AudioManager.SCO_AUDIO_STATE_CONNECTED -> {
+                            connectedByBroadcast = true
+                            connectedLatch.countDown()
+                        }
+                        AudioManager.SCO_AUDIO_STATE_DISCONNECTED,
+                        AudioManager.SCO_AUDIO_STATE_ERROR -> {
+                            terminalState = state
+                            connectedLatch.countDown()
+                        }
+                    }
                 }
             }
             receiver = stateReceiver
             return try {
                 val filter = IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED)
-                val stickyIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     appContext.registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
                 } else {
                     @Suppress("DEPRECATION")
                     appContext.registerReceiver(stateReceiver, filter)
                 }
                 receiverRegistered = true
-                val stickyState = stickyIntent?.getIntExtra(
-                    AudioManager.EXTRA_SCO_AUDIO_STATE,
-                    AudioManager.SCO_AUDIO_STATE_DISCONNECTED
-                )
-                val alreadyConnected = stickyState == AudioManager.SCO_AUDIO_STATE_CONNECTED ||
-                    audioManager.isBluetoothScoOn
-                if (alreadyConnected) return true
-
+                previousScoOn = audioManager.isBluetoothScoOn
                 previousMode = audioManager.mode
+                if (previousScoOn) {
+                    @Suppress("DEPRECATION")
+                    audioManager.stopBluetoothSco()
+                    @Suppress("DEPRECATION")
+                    audioManager.isBluetoothScoOn = false
+                    scoFlagChangedByController = true
+                }
+
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 modeChangedByController = true
+                requestStarted = true
+                requestedByController = true
                 @Suppress("DEPRECATION")
                 audioManager.startBluetoothSco()
-                requestedByController = true
                 val connected = connectedLatch.await(SCO_CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS) &&
-                    (connectedByBroadcast || audioManager.isBluetoothScoOn || stickyState == AudioManager.SCO_AUDIO_STATE_CONNECTED)
+                    terminalState != AudioManager.SCO_AUDIO_STATE_DISCONNECTED &&
+                    terminalState != AudioManager.SCO_AUDIO_STATE_ERROR &&
+                    (connectedByBroadcast || audioManager.isBluetoothScoOn)
                 if (!connected) {
                     stopLocked()
                     false
-                } else true
+                } else {
+                    if (!audioManager.isBluetoothScoOn) {
+                        @Suppress("DEPRECATION")
+                        audioManager.isBluetoothScoOn = true
+                        scoFlagChangedByController = true
+                    }
+                    true
+                }
             } catch (_: Exception) {
                 stopLocked()
                 false
@@ -93,6 +116,14 @@ class BluetoothScoController(
             @Suppress("DEPRECATION")
             audioManager.stopBluetoothSco()
         }
+        if (scoFlagChangedByController) {
+            try {
+                @Suppress("DEPRECATION")
+                audioManager.isBluetoothScoOn = previousScoOn
+            } catch (_: Exception) {
+                // SCO 已断开时部分系统可能拒绝修改标志，不能阻止后续资源清理。
+            }
+        }
         if (receiverRegistered) {
             try {
                 appContext.unregisterReceiver(receiver)
@@ -105,6 +136,7 @@ class BluetoothScoController(
         requestedByController = false
         if (modeChangedByController) audioManager.mode = previousMode
         modeChangedByController = false
+        scoFlagChangedByController = false
     }
 
     companion object {

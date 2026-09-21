@@ -45,16 +45,13 @@ object AsrWebPage {
   </section>
   <section>
     <h2>Sherpa 声纹测试</h2>
-    <label for="voiceprintModel">声纹模型（切换后需重新注册）</label><br>
+    <label for="voiceprintModel">声纹模型（当前仅 base）</label><br>
     <select id="voiceprintModel" disabled>
       <option value="eres2net-base">ERes2Net-base</option>
-      <option value="eres2net-large">ERes2Net-large</option>
-      <option value="eres2netv2">ERes2NetV2</option>
     </select>
-    <label for="voiceprintPrecision">声纹精度（INT8 仅用于 A/B 测试）</label><br>
+    <label for="voiceprintPrecision">声纹精度（当前仅 FP32）</label><br>
     <select id="voiceprintPrecision" disabled>
       <option value="fp32">FP32</option>
-      <option value="int8">INT8</option>
     </select>
     <p id="voiceprintStatus" class="muted">正在检查声纹模型状态…</p>
     <p class="muted">先在上方选择 WAV，填写名称并注册；随后选择待测 WAV，运行单段或多段流程。</p>

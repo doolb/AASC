@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-20）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-21）
 
 ## 控制端
 
@@ -19,10 +19,6 @@
   - 关联任务：`docs/task/2026-08-30_群聊历史遗留工具调用异常.md`。
 
 ## Android ASR APK
-
-- ⏳待现场验收 [2026-09-19] 修复蓝牙 SCO 麦克风录音为 0 秒
-  - 已完成 SCO 建链等待、8 kHz 采集到 16 kHz 重采样、`AudioRecord` 录音状态校验和失败提示；修复版已覆盖安装到 SM-N9500，待用户手动点按确认真实录音时长。
-  - 关联文档：`docs/design/android-voiceprint-test-apk.md`；`docs/spec/android-voiceprint-test-apk.md`；`docs/task/20260919_ASR蓝牙SCO录音修复.md`。
 
 - ⏳待现场验收 [2026-09-11] 在独立 ASR 测试 APK 原生页面使用测试 WAV 完成 Sherpa 声纹注册和三种测试模式回归
   - APK 已构建、安装和启动；设备 UI 自动化桥返回空 root，尚未自动完成注册、单段、多段、快速多段及双降噪开关的点击验证。

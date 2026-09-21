@@ -24,7 +24,7 @@ class AudioInputDeviceTest {
             platformDevice = null
         )
 
-        assertEquals("蓝牙麦克风（蓝牙麦克风）", device.displayName)
+        assertEquals("蓝牙麦克风 · 蓝牙麦克风 · ID 7", device.displayName)
         assertEquals("7", device.persistenceKey)
     }
 
@@ -37,6 +37,20 @@ class AudioInputDeviceTest {
             platformDevice = null
         )
 
-        assertEquals("未命名输入设备（USB 音频设备）", device.displayName)
+        assertEquals("未命名输入设备 · USB 音频设备 · ID 8", device.displayName)
+    }
+
+    @Test
+    fun backMicrophoneHasExplicitLabel() {
+        assertEquals("内置后置麦克风", AudioInputDevice.typeName(AudioDeviceInfo.TYPE_BUILTIN_MIC, "back"))
+    }
+
+    @Test
+    fun firstBuiltinMicrophoneIsPreferredForFreshInstall() {
+        val defaultDevice = AudioInputDevice.systemDefault()
+        val mainMicrophone = AudioInputDevice(10, AudioDeviceInfo.TYPE_BUILTIN_MIC, "phone", null)
+        val backMicrophone = AudioInputDevice(11, AudioDeviceInfo.TYPE_BUILTIN_MIC, "phone", null)
+
+        assertEquals(mainMicrophone, AudioInputDevice.preferredDefault(listOf(defaultDevice, mainMicrophone, backMicrophone)))
     }
 }

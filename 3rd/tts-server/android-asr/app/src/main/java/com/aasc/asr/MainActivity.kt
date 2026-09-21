@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -36,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recorder: AudioRecorder
     private lateinit var modelStatus: TextView
     private lateinit var audioStatus: TextView
+    private lateinit var audioVolumeChart: VolumeChartView
     private lateinit var resultText: TextView
     private lateinit var recordButton: Button
     private lateinit var recognizeButton: Button
@@ -109,6 +111,8 @@ class MainActivity : AppCompatActivity() {
                     audioPlayer.stop()
                     playAudioButton.isEnabled = true
                     selectedSamples = samples
+                    audioVolumeChart.setVolumePoints(AudioVolumeEnvelope.fromSamples(samples))
+                    audioVolumeChart.visibility = if (samples.isEmpty()) View.GONE else View.VISIBLE
                     saveAudioButton.isEnabled = samples.isNotEmpty()
                     audioStatus.text = "已选择音频：${samples.size / AudioRecorder.SAMPLE_RATE} 秒"
                 }
@@ -135,6 +139,7 @@ class MainActivity : AppCompatActivity() {
     private fun bindViews() {
         modelStatus = findViewById(R.id.modelStatus)
         audioStatus = findViewById(R.id.audioStatus)
+        audioVolumeChart = findViewById(R.id.audioVolumeChart)
         resultText = findViewById(R.id.resultText)
         recordButton = findViewById(R.id.recordButton)
         recognizeButton = findViewById(R.id.recognizeButton)
@@ -218,8 +223,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val preferences = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
-        val persistedKey = preferences.getString(AUDIO_INPUT_DEVICE_KEY, AudioInputDevice.SYSTEM_DEFAULT_KEY)
-            ?: AudioInputDevice.SYSTEM_DEFAULT_KEY
+        val persistedKey = preferences.getString(AUDIO_INPUT_DEVICE_KEY, null)
         val devices = try {
             AudioInputDevice.enumerate(audioManager)
         } catch (_: SecurityException) {
@@ -229,11 +233,17 @@ class MainActivity : AppCompatActivity() {
             listOf(AudioInputDevice.systemDefault())
         }
         audioInputDevices = devices
-        val restored = devices.firstOrNull { it.persistenceKey == persistedKey }
-        val selected = restored ?: devices.first()
-        val fellBack = restored == null && persistedKey != AudioInputDevice.SYSTEM_DEFAULT_KEY
+        val restored = persistedKey?.let { key -> devices.firstOrNull { it.persistenceKey == key } }
+        val selected = restored ?: if (persistedKey == null) {
+            AudioInputDevice.preferredDefault(devices)
+        } else {
+            devices.first()
+        }
+        val fellBack = restored == null && persistedKey != null && persistedKey != AudioInputDevice.SYSTEM_DEFAULT_KEY
         selectedAudioInputDevice = selected
-        if (fellBack) preferences.edit().putString(AUDIO_INPUT_DEVICE_KEY, selected.persistenceKey).apply()
+        if (fellBack || persistedKey == null) {
+            preferences.edit().putString(AUDIO_INPUT_DEVICE_KEY, selected.persistenceKey).apply()
+        }
 
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, devices.map { it.displayName })
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -414,6 +424,7 @@ class MainActivity : AppCompatActivity() {
             background.execute {
                 val samples = recorder.stop()
                 val recordingError = recorder.errorMessage()
+                val captureStats = recorder.captureStats()
                 runOnUiThread {
                     audioPlayer.stop()
                     playAudioButton.isEnabled = true
@@ -423,10 +434,15 @@ class MainActivity : AppCompatActivity() {
                     updateAudioInputControls()
                     refreshAudioInputDevices(requestBluetoothPermission = false)
                     selectedSamples = samples
+                    audioVolumeChart.setVolumePoints(captureStats.volumeEnvelope)
+                    audioVolumeChart.visibility = if (captureStats.volumeEnvelope.isEmpty()) View.GONE else View.VISIBLE
                     audioStatus.text = when {
-                        samples.isNotEmpty() -> "录音完成：${samples.size / AudioRecorder.SAMPLE_RATE} 秒"
+                        samples.isNotEmpty() && captureStats.hasSignal ->
+                            "录音完成：${samples.size / AudioRecorder.SAMPLE_RATE} 秒；${captureStats.summary()}"
+                        samples.isNotEmpty() ->
+                            "录音完成但没有有效声音；${captureStats.summary()}"
                         recordingError != null -> "录音失败：$recordingError"
-                        else -> "录音完成：0 秒"
+                        else -> "录音完成：0 秒；${captureStats.summary()}"
                     }
                 }
             }
@@ -438,6 +454,8 @@ class MainActivity : AppCompatActivity() {
     private fun startRecording() {
         // 开始前重新读取设备，处理用户在页面停留期间拔出或断开蓝牙麦克风的情况。
         refreshAudioInputDevices(requestBluetoothPermission = false)
+        audioVolumeChart.clear()
+        audioVolumeChart.visibility = View.GONE
         val selectedDevice = selectedAudioInputDevice
         recordButton.isEnabled = false
         audioStatus.text = if (selectedDevice.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {

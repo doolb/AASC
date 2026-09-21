@@ -114,6 +114,8 @@ npm --prefix 3rd/tts-server run build:android-asr
 adb install -r 3rd/tts-server/android-asr/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+当前测试 APK 暂时只内置 `ERes2Net-base FP32` 声纹模型和多人分段所需的 Pyannote 模型，不包含 large、V2 或 INT8 声纹 embedding 模型。
+
 打开 APK 后先录音或选择 WAV。普通 ASR 的“ASR 文字降噪”只影响文字识别；Sherpa 区域的“声纹降噪”只影响声纹注册、分段和匹配。输入名称后点击“注册当前音频声纹”，再使用单段、多段或快速多段测试；多人测试可选择自动估计或 1-5 人。结果区域会显示 ASR 文本、匹配名称、相似度、阈值、阶段耗时，以及每个分段的 speaker、相似度、文字和错误。
 
 声纹注册库只保存在 APK 进程内存中，重启 APK 后需要重新注册。APK 内置网页与原生页面共用当前进程的声纹协调器和注册库；网页入口仍可通过 APK 显示的 HTTPS 地址访问。

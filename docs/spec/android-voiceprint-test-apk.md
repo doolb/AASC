@@ -39,10 +39,21 @@ AudioInputSelection:
   selectedDeviceId: 设备 id 或 SYSTEM_DEFAULT
   persisted: Boolean
 
+AudioCaptureStats:
+  requestedDeviceId: 本次请求的设备 id 或 null
+  routedDeviceId: AudioRecord 实际路由设备 id 或 null
+  routedDeviceName: 实际路由设备名称或“未知”
+  sampleCount: 录音线程收到的样本数
+  peakAmplitude: PCM16 绝对峰值
+  rmsAmplitude: PCM16 均方根幅度
+  hasSignal: peakAmplitude > 0
+
 BluetoothScoCapture:
   preferredDeviceType: TYPE_BLUETOOTH_SCO 时启用
   scoState: DISCONNECTED | CONNECTING | CONNECTED | FAILED
-  captureSampleRate: 蓝牙 SCO 为 8000，其他输入为 16000
+  previousScoOn: 录音前 AudioManager.isBluetoothScoOn
+  scoFlagChangedByController: 是否由测试 APK 设置过 isBluetoothScoOn
+  captureSampleRate: 蓝牙 SCO 宽带优先 16000，初始化失败时回退 8000，其他输入为 16000
   outputSampleRate: 16000
 
 ## 原生 ASR 麦克风选择伪代码
@@ -51,7 +62,8 @@ BluetoothScoCapture:
 MainActivity 初始化:
   绑定 audioInputSpinner、refreshAudioInputButton、audioInputStatus
   创建 AudioRecorder
-  从 SharedPreferences 读取 selectedDeviceId，缺省为 SYSTEM_DEFAULT
+  从 SharedPreferences 读取 selectedDeviceId
+  首次运行且存在 TYPE_BUILTIN_MIC 时默认选择主内置麦克风；否则选择 SYSTEM_DEFAULT
   调用 refreshAudioInputDevices(requestBluetoothPermission=false)
 
 刷新输入设备:
@@ -61,11 +73,15 @@ MainActivity 初始化:
   devices = AudioManager.getDevices(GET_DEVICES_INPUTS)
   过滤无效设备并按 AudioDeviceInfo.id 去重
   列表首项固定为 SYSTEM_DEFAULT
+  TYPE_BUILTIN_MIC 显示为“内置麦克风（主/底部）”
+  TYPE_BUILTIN_MIC 且 address=back 时显示为“内置后置麦克风”
+  其他设备名称附带稳定设备 id，便于现场区分多个输入源
   若持久化设备仍在列表:
     选中该设备
   否则:
-    选中 SYSTEM_DEFAULT
-    在状态区提示“原设备不可用，已回退系统默认”
+    首次运行且存在主内置麦克风 -> 选中主内置麦克风
+    否则选中 SYSTEM_DEFAULT
+    设备曾经存在但当前不可用 -> 在状态区提示“原设备不可用，已回退”
   将设备名称、输入类型填充到 Spinner
 
 设备连接变化:
@@ -91,32 +107,50 @@ MainActivity 初始化:
 AudioRecorder.start(preferredDevice):
   如果 preferredDevice.type == TYPE_BLUETOOTH_SCO:
     保存 AudioManager.mode
+    保存 AudioManager.isBluetoothScoOn
     注册 ACTION_SCO_AUDIO_STATE_UPDATED 动态接收器
-    设置 MODE_IN_COMMUNICATION
-    调用 startBluetoothSco()
-    等待 SCO_AUDIO_STATE_CONNECTED，超时或 DISCONNECTED -> 释放路由并返回失败
-    captureSampleRate = 8000
+    注册时收到的 sticky CONNECTED 只作为历史信息，不作为本次连接成功依据
+    录音前无论是否 isBluetoothScoOn=true，都先停止旧 SCO 并清除旧开关
+    设置 MODE_IN_COMMUNICATION -> 调用 startBluetoothSco()
+    只等待本次请求产生的 SCO_AUDIO_STATE_CONNECTED，ERROR、超时或 DISCONNECTED -> 释放路由并返回失败
+    连接成功且原来未开启 SCO -> 设置 isBluetoothScoOn=true 并记录由控制器修改
+    captureOptions = [
+      { audioSource: VOICE_COMMUNICATION, sampleRate: 16000 },
+      { audioSource: VOICE_COMMUNICATION, sampleRate: 8000 }
+    ]
   否则:
-    captureSampleRate = 16000
-  获取 captureSampleRate、单声道、PCM16 的最小缓冲区
-  使用 AudioRecord.Builder 创建 AudioRecord
-  preferredDevice 不为空 -> 调用 setPreferredDevice(preferredDevice)
-  如果指定设备路由失败:
-    释放 AudioRecord 并返回 false
+    captureOptions = [{ audioSource: MIC, sampleRate: 16000 }]
+  依次尝试 captureOptions:
+    获取 sampleRate、单声道、PCM16 的最小缓冲区
+    使用 audioSource 和 sampleRate 创建 AudioRecord
+    preferredDevice 不为空 -> 创建前调用 setPreferredDevice(preferredDevice)
+    调用 startRecording 后检查 recordingState == RECORDSTATE_RECORDING
+    preferredDevice 不为空 -> 启动后再次调用 setPreferredDevice(preferredDevice)
+    preferredDevice.type == TYPE_BLUETOOTH_SCO 且 routedDevice.type != TYPE_BLUETOOTH_SCO -> 释放并尝试下一个格式
+  所有 captureOptions 都失败 -> 释放 AudioRecord、停止 SCO 并返回 false
   MainActivity 检测到指定设备失败 -> 选择 SYSTEM_DEFAULT 并立即重试一次
-  调用 startRecording 后检查 recordingState == RECORDSTATE_RECORDING
   启动失败 -> 释放 AudioRecord、停止 SCO 并返回带原因的失败状态
+  读取模式使用 READ_BLOCKING，避免无数据时空转
   启动录音线程，持续读取 PCM16
+  录音线程同时累计 sampleCount、peakAmplitude、rmsAmplitude
 
 停止原生录音:
+  在释放 AudioRecord 前读取 routedDevice，记录实际路由设备
   停止并释放 AudioRecord
   如果使用蓝牙 SCO:
     调用 stopBluetoothSco()
+    如果 isBluetoothScoOn 由控制器修改 -> 恢复录音前保存的开关值
     注销状态接收器
     恢复 AudioManager.mode
   captureSampleRate == 8000 -> 将采集 Float32 PCM 线性重采样为 16000
   恢复麦克风 Spinner 和刷新按钮
-  返回已采集 PCM
+  生成 AudioCaptureStats
+  返回已采集 PCM 和最近一次 AudioCaptureStats
+
+录音结果显示:
+  samples 非空且 hasSignal -> 显示录音时长、实际路由设备、峰值和 RMS
+  samples 非空但 peakAmplitude == 0 -> 显示“录音数据为全零”及实际路由设备
+  samples 为空 -> 显示录音错误和 sampleCount，便于区分启动失败与无声输入
 ```
 
 实现验收（2026-09-19）:
@@ -136,9 +170,32 @@ Node ASR APK 契约测试:
 蓝牙 SCO 修复验证:
   系统枚举到 AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET / Speakerphone-2155
   旧版本 AudioRecord.start -> status -38，录音结果 0 秒
-  修复版 APK 包含 MODIFY_AUDIO_SETTINGS，已通过 adb push + pm install -r 覆盖安装
-  用户手动点按录音的最终真机时长 -> 待现场确认
+  修复版 APK 包含 MODIFY_AUDIO_SETTINGS，已通过 adb install -r 覆盖安装
+  每次蓝牙录音前停止旧 SCO、清除旧 isBluetoothScoOn 并重新建链，避免复用历史 CONNECTED 状态
+  蓝牙设备 ID 922 在 SM-N9500 真机录音已确认有声音
 ```
+```
+
+实现验收（2026-09-20，内置麦克风无声诊断修复）:
+
+```text
+AudioInputDeviceTest:
+  覆盖主内置麦克风默认选择、后置 address=back 类型名和设备 ID 显示
+
+AudioCaptureStatsTest:
+  覆盖 PCM 全零无声判断、非零峰值有效信号判断和实际路由摘要
+
+Node ASR APK 契约测试:
+  3/3 通过，校验 READ_BLOCKING、实际路由统计、内置麦克风区分和首次默认选择
+
+构建验证:
+  npm --prefix 3rd/tts-server run build:android-asr -> BUILD SUCCESSFUL
+  :app:testDebugUnitTest -> BUILD SUCCESSFUL，29 个测试通过
+  Debug APK 已覆盖安装到 SM-N9500 / 192.168.1.6:5555
+
+现场验收:
+  主内置麦克风 ID 10 录音样本、峰值和 RMS 正常；蓝牙设备 ID 922 已确认录音有声音
+  测试 APK 当前仅包含 base FP32 与 Pyannote 两个声纹资源，已完成覆盖安装
 ```
 
 ## 网页流程
@@ -932,5 +989,93 @@ AsrHttpServer:
   读取 16 kHz WAV -> Sherpa 兼容 80 维 Fbank -> CalibrationDataReader
   ONNX Runtime quantize_static 生成三个 _int8.onnx 文件
   使用未参与校准的 WAV 对 FP32/INT8 输出做 cosine 和推理耗时对比
+```
+
+## 测试 APK 临时精简声纹模型包（2026-09-20）
+
+本轮测试 APK 暂时不再打包全部声纹 embedding 模型，仅保留 `ERes2Net-base FP32`；多人分段仍保留共用的 `pyannote_segmentation_3_0_int8.onnx`。
+
+```text
+bundledVoiceprintModelFiles = [
+  "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+  "pyannote_segmentation_3_0_int8.onnx"
+]
+prepareBundledVoiceprintModels = Sync(bundledVoiceprintModelFiles)
+  // 同步任务清理 generated/assets/voiceprint 中上一次构建遗留的模型
+
+VoiceprintModel:
+  values() = [ERES2NET_BASE]
+  fromId("eres2net-base") -> ERES2NET_BASE
+  其他模型 ID -> null
+
+VoiceprintPrecision:
+  values() = [FP32]
+  缺省或 "fp32" -> FP32
+  "int8" -> null
+
+VoiceprintModelVariant:
+  embeddingFileName = ERES2NET_BASE 的 FP32 文件名
+
+VoiceprintModelFiles.ALL_FILE_NAMES:
+  = [base FP32 embedding, pyannote segmentation]
+
+原生页面、内置网页和 HTTP 状态/切换接口：
+  只显示并接受 base + FP32；模型/精度枚举不再暴露 large、V2 或 INT8。
+  请求不可用模型或精度时返回 400，不尝试从 APK 外部加载文件。
+```
+
+## 测试 APK 体积诊断（2026-09-21）
+
+```text
+APK 体积检查:
+  读取 APK ZIP 中各条目的 file_size 和 compress_size
+  按资源类别汇总模型、原生库、DEX 和资源文件
+  使用 zipinfo 检查中央目录、条目偏移和填充区
+
+当前观测:
+  有效 ZIP 压缩内容约 280 MB
+  SenseVoice ASR model.int8.onnx 约 239 MB 未压缩
+  streaming ASR 模型约 51 MB 未压缩
+  base FP32 声纹模型约 40 MB，Pyannote 约 1.5 MB
+  ONNX/Sherpa 原生库约 32 MB
+  APK 文件实际约 503 MB
+  资源表前存在约 223 MB 全零填充区
+
+处理结论:
+  声纹模型精简只减少声纹资源，不会移除 ASR/streaming/native 资源
+  旧构建产物的 223 MB 填充在重新构建后消失
+  新 APK = 280663752 bytes，ZIP 完整性、真机安装和 LAN/WAN HTTP Content-Length 校验通过
+```
+
+## 原生录音悬浮控制与音量折线图（2026-09-21）
+
+```text
+页面布局:
+  根节点使用 FrameLayout
+  ScrollView 继续承载原有 ASR、声纹和 HTTP 控件
+  ScrollView 底部预留悬浮层高度，避免内容被遮挡
+  底部中央添加浮动录音控制层，覆盖在 ScrollView 之上
+  录音未开始 -> recordButton 显示“开始录音”
+  录音进行中 -> recordButton 显示“停止录音”，并锁定输入设备选择
+
+录音音量采集:
+  AudioRecorder.recordLoop 每次读取约 100 ms 的 PCM16 数据
+  对当前读取块计算 peakAmplitude、sumSquares 和 sampleCount
+  volumePoint = blockPeak / 32768.0
+  将 volumePoint 按时间顺序追加到本次录音的 volumeEnvelope
+  stop() 将 volumeEnvelope 与 AudioCaptureStats 一起返回
+
+音量图显示:
+  录音结束且 volumeEnvelope 非空 -> 显示完整时间轴音量折线
+  纵轴固定 0.0～1.0，横轴覆盖本次录音全部采样块
+  音量全零时仍绘制零线，并保留“没有有效声音”状态
+  选择 WAV 文件或开始新录音时清空旧图或替换为新音频数据
+
+实现验收:
+  Node 契约测试 = 3/3
+  Android JVM 单测 = 29/29
+  SM-N9500 蓝牙 ID 922 录音成功，实际路由和音量折线图显示正常
+  LAN/WAN 发布文件 = apk/android-asr.apk
+  LAN/WAN HTTP = 200，Content-Length = 280663752
 ```
 ```

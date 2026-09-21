@@ -10,24 +10,20 @@ import org.junit.Test
 
 class VoiceprintModelTest {
     @Test
-    fun exposesThreeVoiceprintModelsInStableOrder() {
+    fun exposesOnlyBaseVoiceprintModel() {
         assertEquals(
-            listOf(
-                VoiceprintModel.ERES2NET_BASE,
-                VoiceprintModel.ERES2NET_LARGE,
-                VoiceprintModel.ERES2NET_V2
-            ),
+            listOf(VoiceprintModel.ERES2NET_BASE),
             VoiceprintModel.values().toList()
         )
         assertEquals("eres2net-base", VoiceprintModel.ERES2NET_BASE.id)
-        assertEquals("eres2net-large", VoiceprintModel.ERES2NET_LARGE.id)
-        assertEquals("eres2netv2", VoiceprintModel.ERES2NET_V2.id)
-        assertEquals(VoiceprintModel.ERES2NET_V2, VoiceprintModel.fromId("ERES2NETV2"))
+        assertEquals(VoiceprintModel.ERES2NET_BASE, VoiceprintModel.fromId("ERES2NET-BASE"))
+        assertNull(VoiceprintModel.fromId("eres2net-large"))
+        assertNull(VoiceprintModel.fromId("eres2netv2"))
         assertNull(VoiceprintModel.fromId("unknown"))
     }
 
     @Test
-    fun modelDirectoryRequiresAllThreeEmbeddingsAndSegmentation() {
+    fun modelDirectoryRequiresBaseEmbeddingAndSegmentation() {
         val directory = Files.createTempDirectory("voiceprint-model-").toFile()
         assertFalse(VoiceprintModelFiles.isComplete(directory))
 

@@ -1,6 +1,6 @@
 package com.aasc.asr
 
-// 独立测试 APK 支持的声纹 embedding 模型；默认使用当前已验证的 ERes2Net-base。
+// 独立测试 APK 暂时只内置当前已验证的 ERes2Net-base FP32 声纹模型。
 enum class VoiceprintModel(
     val id: String,
     val displayName: String,
@@ -10,16 +10,6 @@ enum class VoiceprintModel(
         id = "eres2net-base",
         displayName = "ERes2Net-base",
         embeddingFileName = "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
-    ),
-    ERES2NET_LARGE(
-        id = "eres2net-large",
-        displayName = "ERes2Net-large",
-        embeddingFileName = "3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx"
-    ),
-    ERES2NET_V2(
-        id = "eres2netv2",
-        displayName = "ERes2NetV2",
-        embeddingFileName = "3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common.onnx"
     );
 
     companion object {
@@ -41,8 +31,7 @@ enum class VoiceprintPrecision(
     val id: String,
     val displayName: String
 ) {
-    FP32("fp32", "FP32"),
-    INT8("int8", "INT8");
+    FP32("fp32", "FP32");
 
     companion object {
         fun fromId(value: String?): VoiceprintPrecision? {
@@ -67,8 +56,5 @@ data class VoiceprintModelVariant(
         get() = "${model.displayName} (${precision.displayName})"
 
     val embeddingFileName: String
-        get() = when (precision) {
-            VoiceprintPrecision.FP32 -> model.embeddingFileName
-            VoiceprintPrecision.INT8 -> "${model.embeddingFileName.removeSuffix(".onnx")}_int8.onnx"
-        }
+        get() = model.embeddingFileName
 }

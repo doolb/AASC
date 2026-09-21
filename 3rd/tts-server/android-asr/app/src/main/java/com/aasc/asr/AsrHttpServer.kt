@@ -268,12 +268,12 @@ class AsrHttpServer(
     private fun handleVoiceprintModel(output: OutputStream, request: HttpRequest) {
         val model = VoiceprintModel.fromId(request.queryValue("model"))
         if (model == null) {
-            respond(output, 400, HttpJson.error("model 必须是 eres2net-base、eres2net-large 或 eres2netv2"))
+            respond(output, 400, HttpJson.error("model 必须是 eres2net-base"))
             return
         }
         val precision = VoiceprintPrecision.fromId(request.queryValue("precision"))
         if (precision == null) {
-            respond(output, 400, HttpJson.error("precision 必须是 fp32 或 int8"))
+            respond(output, 400, HttpJson.error("precision 必须是 fp32"))
             return
         }
         val variant = model.variant(precision)

@@ -25,7 +25,7 @@ data class AudioInputDevice(
         get() {
             if (isSystemDefault) return SYSTEM_DEFAULT_LABEL
             val name = productName.trim().ifEmpty { "未命名输入设备" }
-            return "$name（${typeName(type)}）"
+            return "$name · ${typeName(type, platformDevice?.address)} · ID $id"
         }
 
     companion object {
@@ -38,6 +38,12 @@ data class AudioInputDevice(
             productName = SYSTEM_DEFAULT_LABEL,
             platformDevice = null
         )
+
+        /** 首次运行优先使用设备上通常质量更稳定的主内置麦克风。 */
+        fun preferredDefault(devices: List<AudioInputDevice>): AudioInputDevice =
+            devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+                ?: devices.firstOrNull { it.isSystemDefault }
+                ?: devices.first()
 
         /** 获取当前系统暴露的输入设备，并把系统默认放在首位。 */
         fun enumerate(audioManager: AudioManager): List<AudioInputDevice> {
@@ -57,8 +63,12 @@ data class AudioInputDevice(
             return listOf(systemDefault()) + devices
         }
 
-        fun typeName(type: Int): String = when (type) {
-            AudioDeviceInfo.TYPE_BUILTIN_MIC -> "内置麦克风"
+        fun typeName(type: Int, address: String? = null): String {
+            if (type == AudioDeviceInfo.TYPE_BUILTIN_MIC && address.equals(BACK_MIC_ADDRESS, ignoreCase = true)) {
+                return "内置后置麦克风"
+            }
+            return when (type) {
+            AudioDeviceInfo.TYPE_BUILTIN_MIC -> "内置主麦克风（底部）"
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "蓝牙麦克风"
             AudioDeviceInfo.TYPE_BLE_HEADSET -> "蓝牙 LE 麦克风"
             AudioDeviceInfo.TYPE_WIRED_HEADSET -> "有线耳机麦克风"
@@ -72,6 +82,9 @@ data class AudioInputDevice(
             AudioDeviceInfo.TYPE_AUX_LINE -> "辅助线路输入"
             AudioDeviceInfo.TYPE_IP -> "网络音频输入"
             else -> "其他输入设备"
+            }
         }
+
+        private const val BACK_MIC_ADDRESS = "back"
     }
 }
