@@ -44,6 +44,16 @@ assert.match(
     /callbacks\.onTts/,
     '语音命令服务应支持调用方注入 TTS 路由'
 );
+assert.match(
+    voiceCommand,
+    /shouldSendDisplayAction[\s\S]*action[\s\S]*sendToDisplay/u,
+    '语音命令服务应允许调用方按显示端能力抑制重复的天气详情弹窗'
+);
+assert.match(
+    server,
+    /callbacks\.shouldSendDisplayAction[\s\S]*action !== 'weatherResult'[\s\S]*hasManualVoicePlayback\(targetDisplayId\)/u,
+    '天气详情弹窗应只作为无 voicePlayback 来源端的文字兜底'
+);
 assert.doesNotMatch(
     voiceCommand,
     /tts\.generateTTS\(/,

@@ -549,7 +549,9 @@ async function speakVoiceResponse(displayId, text, action = 'response', extra = 
     // 显示端语音输入通过 onTts 进入服务端通用 TTS 生成和目标选择流程。
     if (callbacks && callbacks.onTts) {
         await callbacks.onTts(text);
-        if (displayId && sendToDisplay) {
+        const shouldSendDisplayAction = typeof callbacks.shouldSendDisplayAction !== 'function'
+            || callbacks.shouldSendDisplayAction({ displayId, action, text, extra }) !== false;
+        if (displayId && sendToDisplay && shouldSendDisplayAction) {
             sendToDisplay(displayId, {
                 type: 'voiceCommand',
                 action,

@@ -9109,6 +9109,10 @@ async function handleControlMessageFallback(data, ws) {
                                     }
                                 }
                             };
+                            // 有语音播放能力的来源端已经收到天气 TTS；天气详情只给无声来源端做文字兜底。
+                            callbacks.shouldSendDisplayAction = ({ action }) => (
+                                action !== 'weatherResult' || !hasManualVoicePlayback(targetDisplayId)
+                            );
                             
                             const result = await voiceCommand.processVoiceCommand(
                                 data.text,
@@ -10413,7 +10417,9 @@ async function handleChatMessage(options) {
                 temporaryConversation: isTemporaryConversation,
                 temporaryConversationId: isTemporaryConversation ? effectiveTemporaryConversationId : null
             });
-            if (voiceOriginDisplayId) {
+            // 有语音播放能力的来源端已经通过 tts/playAudio 收到回复；只有无语音能力时
+            // 才发送 response 文字兜底，避免同一条普通聊天同时出现 TTS 文字和响应弹窗。
+            if (voiceOriginDisplayId && !hasManualVoicePlayback(voiceOriginDisplayId)) {
                 sendToDisplay(voiceOriginDisplayId, {
                     type: 'voiceCommand',
                     action: 'response',

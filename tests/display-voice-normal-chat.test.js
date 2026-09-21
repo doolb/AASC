@@ -40,8 +40,13 @@ assert.match(
 );
 assert.match(
     completeHandler,
-    /detailText:\s*speech\s*\|\|\s*fullMessage/,
-    '语音普通聊天完成后显示端气泡应收到按生成顺序去标签的 think 与回答'
+    /voiceOriginDisplayId\s*&&\s*!hasManualVoicePlayback\(voiceOriginDisplayId\)[\s\S]*detailText:\s*speech\s*\|\|\s*fullMessage/u,
+    '只有无语音播放能力的来源端才接收按生成顺序去标签的文字兜底弹窗'
+);
+assert.match(
+    server,
+    /function hasManualVoicePlayback\(displayId\)[\s\S]*voicePlayback === true/u,
+    '普通聊天语音兜底必须复用显示端 voicePlayback 能力判断'
 );
 const sentenceStart = handler.indexOf('onSentence:');
 const sentenceEnd = handler.indexOf('onComplete:', sentenceStart);

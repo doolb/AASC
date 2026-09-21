@@ -764,5 +764,42 @@
   显示端聊天窗口按 requestId 更新用户气泡和流式回复
 ```
 
+```text
+过程 sendVoiceChatCompletionFallback(displayId, fullMessage, speech)
+  如果来源显示端具有 voicePlayback 能力
+    不发送 voiceCommand/action=response 兜底弹窗
+    由 tts/playAudio 和聊天气泡展示本次回复
+    返回
+  如果来源显示端不具有 voicePlayback 能力
+    发送 voiceCommand/action=response
+    detailText 使用 speech 或 fullMessage
+    由显示端播报辅助层显示文字兜底
+```
+
 实现约束：聊天打开时不停止天气/TTS 音频；弹窗隐藏使用 CSS 状态而不是删除 DOM，
 以便聊天关闭后按原计时自动恢复或自然过期。
+
+## 15. 普通聊天回复的语音能力兜底（2026-09-21）
+
+- 普通语音聊天完成回传按来源显示端的 `voicePlayback` 能力分流。
+- 有语音播放能力的显示端只接收 TTS 音频/播报文字和聊天同步消息，不再重复创建 response 弹窗。
+- 没有语音播放能力的显示端继续接收 `voiceCommand/action=response`，作为文字显示兜底。
+- 语音实际切换到其他显示端播放时，兜底判断仍基于来源显示端能力，不改变既有播放目标选择规则。
+
+## 16. 天气播报的语音能力兜底（2026-09-21）
+
+```text
+过程 sendWeatherResult(displayId, speechText, detailText, weather)
+  如果来源显示端具有 voicePlayback 能力
+    由 tts/playAudio 播报 speechText
+    不发送 voiceCommand/action=weatherResult
+    返回
+  如果来源显示端不具有 voicePlayback 能力
+    发送 voiceCommand/action=weatherResult
+    text 使用 speechText
+    detailText 使用 detailText
+    由显示端播报辅助层显示天气详情文字兜底
+```
+
+- 天气实际 TTS 目标选择仍由现有通用语音路由决定；只按来源显示端能力决定是否发送天气详情兜底弹窗。
+- 天气详情弹窗仍使用 `displayBroadcastLayer` 和 `chat-suppressible` 状态；聊天打开时隐藏，关闭后按原生命周期恢复。

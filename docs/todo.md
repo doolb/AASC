@@ -63,6 +63,7 @@
   - 已修复 `defer` 模块初始化时序，聊天入口会在模块注册后生成聊天窗口。
   - render-display 已调整为仅高于媒体层；聊天页面主题化，对象/会话切换改为 HTML 下拉菜单；下拉菜单已区分未选中、悬停/聚焦和已选中颜色；聊天已改为全屏透明背景、控件实色；code v11 已发布并完成真机验收。
   - 普通 `response` TTS 弹窗已统一进入 MMD 与聊天之间的播报辅助层，聊天打开时隐藏，关闭后按原生命周期恢复；code v21 与 dependencies v5 已发布到 LAN/WAN。
+  - 已修复普通聊天和天气播报在有 `voicePlayback` 能力的来源端重复显示文字弹窗的问题；code v23 已发布到 LAN/WAN，沿用 dependencies v5。
   - 首期沿用全局聊天上下文，按 `displayId` 独立保存留待后续。
   - 关联文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260918_显示端聊天与MMD分层设计.md`、`docs/superpowers/plans/2026-09-18-display-chat-mmd.md`。
 
