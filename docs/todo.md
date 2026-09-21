@@ -62,6 +62,7 @@
   - 聊天/MMD 两个显示开关已调整到左下角，保留安全区和软键盘内缩。
   - 已修复 `defer` 模块初始化时序，聊天入口会在模块注册后生成聊天窗口。
   - render-display 已调整为仅高于媒体层；聊天页面主题化，对象/会话切换改为 HTML 下拉菜单；下拉菜单已区分未选中、悬停/聚焦和已选中颜色；聊天已改为全屏透明背景、控件实色；code v11 已发布并完成真机验收。
+  - 普通 `response` TTS 弹窗已统一进入 MMD 与聊天之间的播报辅助层，聊天打开时隐藏，关闭后按原生命周期恢复；code v21 与 dependencies v5 已发布到 LAN/WAN。
   - 首期沿用全局聊天上下文，按 `displayId` 独立保存留待后续。
   - 关联文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260918_显示端聊天与MMD分层设计.md`、`docs/superpowers/plans/2026-09-18-display-chat-mmd.md`。
 
@@ -100,7 +101,9 @@
 - 🔄进行中 [2026-09-16] Offline APK 服务热更新与原生增量 APK
   - 🔄待现场验收 [2026-09-20] code v12 与 min v21 已联合发布，包含聊天播报文字隐藏和服务器启动后 30 秒隐藏分辨率诊断；待 SM-N9500 通过外网更新卡片确认 code/min 更新及真机行为。
   - [2026-09-21] 更新卡片下载/校验/安装期间已支持 10 秒无触摸收起，收起入口按进度填充并显示状态色；分辨率/DPI/缩放诊断提示改为 10 秒隐藏；修复 code-only 在已有热更依赖时错误使用 `legacy-root`，并在 Offline Node 启动时迁移旧 active release，按清单动态选择依赖版本；控制端收起按钮贴合屏幕边缘。Android JVM 单测 25/25 通过；min APK v31（`0.2.29-offline-min`）已构建并发布，仍待真机现场安装验收。
+  - 待处理：完整 Offline APK 首次安装不创建 `updates/active-release.json`；首次 code-only 更新找不到版本化依赖目录时会将根目录内置依赖标记为 `legacy-root`。暂不修复，后续需确定是否在首次启动初始化版本化基线 release。
   - 服务更新支持 `code-only`（lock 指纹一致时不发布/下载依赖）与 `all`（代码+生产依赖）；`code-only` 检测到 lock 指纹变化时自动升级为 `all` 并递增依赖版本；`allserver-min` 只更新原生代码和 allowlist Runtime 动态库，保留服务数据与模型缓存。
+
   - Node 更新包/发布器与 Android 验签、服务代码/依赖切换、APK 签名/包名/版本检查及系统安装流程已实现；本轮服务更新 Node 定向测试 31/31、Android JVM 单测 25/25 通过。全量 `npm test` 为 826/827，唯一失败是既有 Windows 子显示端声纹策略断言，与本任务无关。
   - full v2/min v3 APK、code/dependencies v3 包及 min v3 更新清单已生成并通过静态完整性/签名校验；min v4 已升版为 `0.2.2-offline-min` 并正式发布，LAN/WAN manifest 字节一致且签名有效。
   - min v4 APK 地址为 `http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk` 和 `http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v4.apk`，大小 `89205130` bytes，SHA-256 `be31e437ca17488fab20eefd1874be2a1b40689cac59f667873e761dd17b1027`；LAN HTTP 整包、WAN 远端文件及 WAN HTTP 首段/HEAD 校验通过。

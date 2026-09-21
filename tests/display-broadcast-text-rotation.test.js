@@ -82,7 +82,7 @@ test('播报文本整体跟随90°/180°/270°旋转且不使用竖排字形', (
 test('播报文本字号按约定放大50%', () => {
     assert.match(
         DISPLAY_CSS,
-        /\n\s*#voiceTextDisplay\s*\{\s*position: fixed;\s*font-size:\s*36px/u,
+        /\n\s*#voiceTextDisplay\s*\{\s*position: absolute;\s*font-size:\s*36px/u,
         '未找到播报文本桌面端 36px 样式'
     );
     assert.match(
@@ -129,7 +129,7 @@ test('90°和270°旋转使用交换后的逻辑画布重新适配文本位置',
 test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限制尺寸', () => {
     assert.match(
         DISPLAY_HTML,
-        /data\.action === 'weatherResult'[\s\S]*const detailText = data\.detailText \|\| data\.text[\s\S]*showVoiceResponsePopup\(detailText, calculateWeatherPopupDuration\(detailText\)\)/u
+        /data\.action === 'weatherResult'[\s\S]*const detailText = data\.detailText \|\| data\.text[\s\S]*showVoiceResponsePopup\([\s\S]*?detailText,[\s\S]*?calculateWeatherPopupDuration\(detailText\),[\s\S]*?layer:\s*'broadcast'[\s\S]*?suppressWhenChatVisible:\s*true/u
     );
     const weatherPopupFunction = DISPLAY_HTML.match(
         /function showVoiceResponsePopup\(text, durationMs = 5000, options = \{\}\)[\s\S]*?\n        \}\n        \n        function showSearchResultPopup/u
@@ -161,6 +161,11 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
     );
     assert.match(
         DISPLAY_HTML,
+        /data\.action === 'response'[\s\S]*?showVoiceResponsePopup\([\s\S]*?layer:\s*'broadcast'[\s\S]*?suppressWhenChatVisible:\s*true/u,
+        '普通 TTS 响应必须进入播报层并在聊天打开时隐藏'
+    );
+    assert.match(
+        DISPLAY_HTML,
         /function getRotationPopupElements\(\)[\s\S]*voice-response-popup[\s\S]*voice-confirm-popup[\s\S]*reminder-popup/u,
         '旋转布局必须包含天气响应及同类动态弹窗'
     );
@@ -171,11 +176,47 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
     );
     assert.match(
         DISPLAY_HTML,
-        /document\.body\.appendChild\(popup\);[\s\S]*applyRotationPopupLayout\(getRotationLayout\(\)\)/u,
+        /\(parent \|\| document\.body\)\.appendChild\(popup\);[\s\S]*applyRotationPopupLayout\(getRotationLayout\(\)\)/u,
         '动态弹窗创建后必须立即应用当前旋转'
     );
+    assert.match(DISPLAY_HTML, /id="displayBroadcastLayer"[\s\S]*id="voiceTextDisplay"/u);
+    assert.match(DISPLAY_HTML, /function appendRotationPopup\(popup, options = \{\}\)[\s\S]*options\.layer === 'broadcast'/u);
+    assert.match(DISPLAY_HTML, /options\.suppressWhenChatVisible === true[\s\S]*display-chat-suppressible/u);
     assert.match(DISPLAY_CSS, /--popup-rotation/u);
     assert.match(DISPLAY_CSS, /popupPulse[\s\S]*var\(--popup-rotation\)/u);
+});
+
+test('普通 TTS 响应在聊天打开时位于播报层下方并隐藏', async () => {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1200, height: 800 });
+    await page.goto(`http://127.0.0.1:${server.address().port}/display.html?displayId=response-popup-test`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000
+    });
+    await page.waitForFunction(() => (
+        typeof window.handleVoiceCommand === 'function'
+        && typeof window.DisplayStage?.setChatVisible === 'function'
+    ), { timeout: 10000 });
+
+    const state = await page.evaluate(() => {
+        window.handleVoiceCommand({ action: 'response', text: '普通语音响应测试' });
+        const popup = document.querySelector('.voice-response-popup');
+        const before = {
+            parentId: popup?.parentElement?.id || null,
+            display: popup ? getComputedStyle(popup).display : null
+        };
+        window.DisplayStage.setChatVisible(true);
+        const hidden = popup ? getComputedStyle(popup).display : null;
+        window.DisplayStage.setChatVisible(false);
+        const restored = popup ? getComputedStyle(popup).display : null;
+        return { before, hidden, restored };
+    });
+
+    assert.equal(state.before.parentId, 'displayBroadcastLayer');
+    assert.notEqual(state.before.display, 'none');
+    assert.equal(state.hidden, 'none');
+    assert.notEqual(state.restored, 'none');
+    await page.close();
 });
 
 test('实际旋转后的长中文固定文本包围盒保持在视口内', async () => {

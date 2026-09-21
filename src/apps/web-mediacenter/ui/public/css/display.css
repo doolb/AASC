@@ -540,13 +540,12 @@ body {
 }
 
 #voiceTextDisplay {
-    position: fixed;
+    position: absolute;
     font-size: 36px;
     padding: 12px 20px;
     border-radius: 12px;
     background: var(--bg-secondary, rgba(0, 0, 0, 0.8));
     color: var(--text-primary, #fff);
-    z-index: 1000;
     max-width: 400px;
     overflow: hidden;
     word-wrap: break-word;
@@ -562,6 +561,11 @@ body.display-chat-open #voiceTextDisplay {
 
 /* TTS 新文本可能在聊天打开后继续到达；data 属性保证 class 切换也不会穿透聊天层。 */
 #voiceTextDisplay[data-chat-suppressed="true"] {
+    display: none !important;
+}
+
+/* 天气详情弹窗留在播报辅助层中，聊天打开时隐藏，关闭后由原有超时自然恢复或移除。 */
+body.display-chat-open .display-chat-suppressible {
     display: none !important;
 }
 

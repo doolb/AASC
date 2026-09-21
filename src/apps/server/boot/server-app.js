@@ -9020,6 +9020,8 @@ async function handleControlMessageFallback(data, ws) {
                             const playOnControl = data.playOnControl || false;
                             const targetDisplayId = data.displayId || displayId;
                             const isDisplayVoiceInput = displayData?.ws === ws;
+                            const isDisplayChatVoiceInput = isDisplayVoiceInput
+                                && displayData?.state?.chatLayerVisible === true;
                             let voicePlaybackTargetId = null;
                             const rememberCurrentPlaybackTarget = ({ displayId: playbackDisplayId }) => {
                                 voicePlaybackTargetId = playbackDisplayId;
@@ -9040,6 +9042,7 @@ async function handleControlMessageFallback(data, ws) {
                             }
 
                             if (isDisplayVoiceInput
+                                && !isDisplayChatVoiceInput
                                 && data.conversationActive === true
                                 && conversationConfirmationMode !== 'off'
                                 && !voiceCommand.isWakeFreeVoiceCommand(data.text)) {
@@ -9283,7 +9286,7 @@ async function handleControlMessageFallback(data, ws) {
                                     skipHistory: result.skipHistory || false,
                                     temporaryConversation: data.temporaryConversation === true,
                                     temporaryConversationId: data.temporaryConversationId || null,
-                                    sendToControl: sendToControl
+                                    sendToControl: sendVoiceChatUpdate
                                 });
                             } else if (result.type === 'privateMode' || result.type === 'groupMode') {
                                 sendToControl({

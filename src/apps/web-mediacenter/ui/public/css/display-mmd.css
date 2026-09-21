@@ -33,6 +33,18 @@
     z-index: 30;
 }
 
+/* 播报文字/天气详情位于 MMD 上方、聊天下方；聊天打开时只隐藏其内容，不销毁计时节点。 */
+.display-stage-broadcast-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    pointer-events: none;
+}
+
+.display-stage-broadcast-layer .voice-response-popup {
+    position: absolute;
+}
+
 #displayMmdCanvas {
     position: absolute;
     inset: 0;

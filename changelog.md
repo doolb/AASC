@@ -1,11 +1,38 @@
 # Web MediaCenter - 变更日志
 
+### 显示端普通 TTS 播报层级修复与依赖包发布
+
+- ✅ [2026-09-21] 修复普通 `voiceCommand` response TTS 弹窗显示在聊天层上方且聊天打开后仍可见的问题。
+  - `display.html` 将普通 response 弹窗与天气详情统一追加到 `displayBroadcastLayer`，并设置 `suppressWhenChatVisible=true`。
+  - 聊天打开时普通 TTS 弹窗、天气详情和播报文字统一隐藏；聊天关闭后，仍未到期的弹窗按原计时恢复，不停止音频。
+  - 新增普通 TTS 弹窗浏览器回归测试；显示端相关定向测试 `32/32` 通过。
+- ✅ [2026-09-21] 生成并发布新的 Offline 服务代码和生产依赖包。
+  - code v21：`15,180,143` bytes，SHA-256 `098a0775c6a22977e3747512d3eaab48ce3bc8c0a32780dbc3995ee8c2ef49e8`。
+  - dependencies v5：`117,378,766` bytes，SHA-256 `27d938041099dfae5819602870bed148202b86fd7414e952235962c2eeaa2547`；lockfile 指纹为 `d0d0d4af2176a1168411ceaca7d24f9e7dc52d8e5c20a1b3f0dd2b15e837626e`。
+  - 依赖包已确认包含 `openai/_vendor/partial-json-parser/parser.mjs`，代码包和依赖包 ZIP 完整性校验通过。
+  - LAN/WAN 清单均切换到 code v21/dependencies v5，清单签名和两端 HTTP `HEAD` 大小校验通过；旧 code v20/dependencies v4 已精确清理。
+  - 外网流式下载校验因服务器响应缓慢未使用发布器长连接验收，改用远端 `sha256sum` 复核，远端 hash 与本地一致。
+
+### 显示端播报辅助层与聊天语音自动发送
+
+- ✅ [2026-09-21] 完成显示端聊天层与 MMD 播报层级及语音自动发送修复。
+  - `display.html`/`display-mmd.css` 增加播报辅助层；TTS 文字和天气详情位于 MMD 上方、聊天层下方，聊天打开时隐藏天气详情和播报文字但不停止音频或重置弹窗计时。
+  - `server-app.js` 对聊天层打开期间的显示端语音输入跳过普通对话确认拦截，并将 `chatInput`、`chatChunk`、`chatResponse` 同步回传来源显示端和控制端。
+  - 更新 `display-chat-mmd`、`display-voice-ui`、`display-broadcast-text-rotation` 和普通语音聊天契约测试；31 项定向测试全部通过。
+  - 仅发布服务代码包 code v20：`15,180,145` bytes，SHA-256 `fb35203c3ad8ea7fbef191ce7fcf7162310ff102f30746ced0e038e673cff15f`；复用 dependencies v4，未发布 APK 或依赖包。
+  - LAN/WAN 清单均切换到 code v20，HTTP manifest/Content-Length、远端文件 SHA 校验通过，旧 code v19 已按版本规则清理。
+
 ### OpenAI `_vendor` 修复包联合发布
 
 - ✅ [2026-09-21] 重新构建并发布完整 Offline APK v23 与 min APK v32。
   - 完整 APK `0.2.21-offline`：`1,012,056,819` bytes，SHA-256 `16232db682a1c52f7aa7492f61850ff4cfff34c1869be370a3cc27f95cfc9ff4`。
   - min APK `0.2.30-offline-min`：`89,273,298` bytes，SHA-256 `d68679c7d93c0550e909ab36fae0a59ee1c2e8cb278fd74bc9451f96cf81933a`。
   - LAN/WAN 已同步完整 v23、min v32、code v19 和 dependencies v4；HTTP 200、Content-Length、SHA-256、签名和旧版本精确清理验证通过。
+
+### Offline APK 基线 active release 问题记录
+
+- 📝 [2026-09-21] 记录完整 Offline APK 首次安装不创建 `updates/active-release.json` 的现状。
+  - 首次 code-only 更新在缺少版本化依赖目录时会将根目录内置依赖标记为 `legacy-root`；暂不处理，后续再确定版本化基线初始化方案。
 
 ### Offline APK 原生 OpenAI `_vendor` 路径
 

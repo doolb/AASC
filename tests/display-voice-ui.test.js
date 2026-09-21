@@ -82,7 +82,8 @@ assert.match(displayCss, /\.voice-conversation-countdown\s*\{/u, '倒计时应�
 assert.match(displayCss, /\.voice-status-row\s*\{[\s\S]*?flex-direction:\s*column/u, '倒计时应位于状态第一行下方');
 assert.match(displayStageCss, /\.display-stage-layers\s*\{[\s\S]*?z-index:\s*3000/u, '聊天舞台应高于独立语音 UI');
 assert.match(displayCss, /\.voice-status-row\s*\{[\s\S]*?z-index:\s*2000/u, '语音状态行应保留在聊天舞台下方');
-assert.match(displayCss, /#voiceTextDisplay\s*\{[\s\S]*?z-index:\s*1000/u, 'TTS 播报文字应保留在聊天舞台下方');
+assert.match(displayStageCss, /\.display-stage-broadcast-layer\s*\{[\s\S]*?z-index:\s*15/u, 'TTS 播报文字应位于 MMD 上方的辅助层');
+assert.match(displayStageCss, /\.display-stage-broadcast-layer[\s\S]*?\.display-stage-broadcast-layer \.voice-response-popup\s*\{[\s\S]*?position:\s*absolute/u, '天气详情应挂在播报辅助层内');
 assert.match(displayHtml, /element\.style\.right\s*=\s*offset/);
 assert.match(displayHtml, /element\.style\.top\s*=\s*'50%'/);
 assert.match(displayHtml, /translateX\(-50%\)/);

@@ -34,7 +34,6 @@
         <div id="voiceConversationCountdown" class="voice-conversation-countdown" aria-hidden="true"></div>
         <div id="voiceConversationConfirmationCountdown" class="voice-conversation-countdown voice-conversation-countdown-confirmation" aria-hidden="true"></div>
     </div>
-    <div id="voiceTextDisplay" class="voice-text-hidden"></div>
     <div id="taskStatusDisplay" class="task-status-hidden">
         <div class="task-status-title">模型推理中</div>
         <div class="task-status-model" id="taskStatusModel"></div>
@@ -66,6 +65,9 @@
         <div id="displayMmdLayer" class="display-mmd-layer" aria-hidden="true">
             <canvas id="displayMmdCanvas" aria-label="MMD 角色画布"></canvas>
             <div id="displayMmdStatus" class="display-mmd-status" role="status" aria-live="polite"></div>
+        </div>
+        <div id="displayBroadcastLayer" class="display-stage-broadcast-layer" aria-hidden="true">
+            <div id="voiceTextDisplay" class="voice-text-hidden"></div>
         </div>
         <section id="displayChatLayer" class="display-chat-layer" aria-hidden="true"></section>
         <div id="displayInteractionLayer" class="display-interaction-layer">
@@ -1085,8 +1087,11 @@
             });
         }
 
-        function appendRotationPopup(popup) {
-            document.body.appendChild(popup);
+        function appendRotationPopup(popup, options = {}) {
+            const parent = options.layer === 'broadcast'
+                ? document.getElementById('displayBroadcastLayer')
+                : null;
+            (parent || document.body).appendChild(popup);
             applyRotationPopupLayout(getRotationLayout());
         }
 
@@ -1232,7 +1237,7 @@
                     ? `${rotationLayout.margin}px`
                     : `${rotationLayout.margin * 8}px`;
                 element.dataset.voiceCentered = 'true';
-                element.style.position = 'fixed';
+                element.style.position = element === voiceTextDisplay ? 'absolute' : 'fixed';
                 element.style.bottom = '';
                 element.style.top = '';
                 element.style.left = '';
@@ -2583,7 +2588,11 @@
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
                 }
                 const detailText = data.detailText || data.text;
-                showVoiceResponsePopup(detailText, calculateWeatherPopupDuration(detailText));
+                showVoiceResponsePopup(
+                    detailText,
+                    calculateWeatherPopupDuration(detailText),
+                    { layer: 'broadcast', suppressWhenChatVisible: true }
+                );
             } else if (data.action === 'searchResult') {
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
@@ -2594,7 +2603,11 @@
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
                 }
                 const detailText = data.detailText || data.text;
-                showVoiceResponsePopup(detailText, calculateWeatherPopupDuration(detailText));
+                showVoiceResponsePopup(
+                    detailText,
+                    calculateWeatherPopupDuration(detailText),
+                    { layer: 'broadcast', suppressWhenChatVisible: true }
+                );
             } else if (data.action === 'playChoices') {
                 if (data.audioUrl) {
                     queueTts({ audioUrl: data.audioUrl, text: data.text });
@@ -2653,9 +2666,12 @@
             if (options.conversationConfirmationId) {
                 popup.dataset.conversationConfirmationId = options.conversationConfirmationId;
             }
+            if (options.suppressWhenChatVisible === true) {
+                popup.classList.add('display-chat-suppressible');
+            }
             // 详情文本可能来自 LLM，必须复用安全 Markdown 渲染器，禁止把原始 HTML 直接插入页面。
             popup.innerHTML = `<div class="voice-response-content">${ChatMarkdown.render(text)}</div>`;
-            appendRotationPopup(popup);
+            appendRotationPopup(popup, options);
             
             setTimeout(() => {
                 if (popup.parentElement) {

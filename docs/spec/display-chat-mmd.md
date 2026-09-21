@@ -66,6 +66,7 @@
 结构 DisplayStageRefs
   mediaLayer
   mmdLayer
+  broadcastLayer
   chatLayer
   interactionLayer
   mmdCanvas
@@ -79,9 +80,10 @@
 ```text
 过程 initializeDisplayStage()
   读取现有媒体层，不改变媒体播放状态
-  创建 mediaLayer、mmdLayer、chatLayer、interactionLayer
+  创建 mediaLayer、mmdLayer、broadcastLayer、chatLayer、interactionLayer
   将 mediaLayer 放到层级 0
   将 mmdLayer 放到层级 10
+  将 broadcastLayer 放到层级 15
   将 chatLayer 放到层级 20
   将 interactionLayer 放到层级 30
   设置舞台高度为当前 visualViewport 的动态高度
@@ -168,12 +170,14 @@
     chatLayer 显示
     页面设置 display-chat-open 状态类
     voiceTextDisplay 隐藏，但不停止 TTS 音频播放
+    broadcastLayer 中标记为 chat-suppressible 的播报弹窗隐藏，但不删除节点或重置过期计时
     chatLayer 默认不拦截透明区域的 pointer 事件
     chatLayer 内实际面板、输入和按钮允许接收 pointer 事件
   否则
     chatLayer 隐藏并设置 aria-hidden
     页面移除 display-chat-open 状态类
     voiceTextDisplay 按当前 voice-text-visible 状态恢复
+    broadcastLayer 中仍存在且未到期的 chat-suppressible 播报弹窗恢复显示
     释放输入焦点
     mmdLayer 恢复完整 pointer 事件
   不销毁聊天上下文或 MMD 模型
@@ -692,7 +696,9 @@
 ```text
 常量 DISPLAY_STAGE_Z_INDEX = 3000
 常量 DISPLAY_VOICE_STATUS_Z_INDEX = 2000
-常量 DISPLAY_VOICE_TEXT_Z_INDEX = 1000
+常量 DISPLAY_MMD_Z_INDEX = 10
+常量 DISPLAY_BROADCAST_Z_INDEX = 15
+常量 DISPLAY_CHAT_Z_INDEX = 20
 
 过程 layoutControlEntry()
   controlToggleButton.gravity = TOP | START
@@ -703,8 +709,60 @@
 过程 renderDisplayVoiceLayers()
   displayStageLayers.zIndex = DISPLAY_STAGE_Z_INDEX
   voiceStatusRow.zIndex = DISPLAY_VOICE_STATUS_Z_INDEX
-  voiceTextDisplay.zIndex = DISPLAY_VOICE_TEXT_Z_INDEX
+  displayMmdLayer.zIndex = DISPLAY_MMD_Z_INDEX
+  displayBroadcastLayer.zIndex = DISPLAY_BROADCAST_Z_INDEX
+  displayChatLayer.zIndex = DISPLAY_CHAT_Z_INDEX
+  voiceTextDisplay 挂在 displayBroadcastLayer 内并使用绝对定位
   voiceConversationCountdown 与 voiceConversationConfirmationCountdown 继续沿用原有位置、旋转和计时刷新
-  因 displayStageLayers 的整体层级高于语音状态/文字，聊天层、MMD 和交互控件始终覆盖 TTS 文字与聊天倒计时
+  因 displayChatLayer 高于 displayBroadcastLayer，聊天层始终覆盖 TTS 文字与天气详情；交互控件继续高于所有舞台内容
   聊天打开或异步 TTS 文本更新时，不改变倒计时状态，不允许语音文字越过聊天层
 ```
+
+## 14. 播报辅助层与聊天层语音自动发送
+
+```text
+声明 DisplayBroadcastLayer { mmdBelow, chatAbove, popupNodes }
+
+过程 appendChatAwareWeatherPopup(popup)
+  将 popup 放入 displayBroadcastLayer
+  标记 popup 为 chat-suppressible
+  popup 的生命周期计时继续运行
+
+过程 appendChatAwareResponsePopup(popup)
+  将普通 response 类型的 TTS popup 放入 displayBroadcastLayer
+  标记 popup 为 chat-suppressible
+  popup 的生命周期计时继续运行
+
+过程 setDisplayChatVisible(visible)
+  切换 body.display-chat-open
+  如果 visible == true
+    隐藏 displayBroadcastLayer 中的 chat-suppressible 天气弹窗
+    隐藏 displayBroadcastLayer 中的 chat-suppressible 普通 TTS 弹窗
+    隐藏 voiceTextDisplay
+  如果 visible == false
+    恢复仍存在且未到期的天气弹窗
+    恢复仍存在且未到期的普通 TTS 弹窗
+    恢复仍为 voice-text-visible 的 TTS 文字
+```
+
+```text
+过程 processDisplayVoiceInput(displayId, finalText)
+  读取当前显示端 chatLayerVisible 和聊天监听上下文
+  如果 chatLayerVisible == true 且 finalText 为最终识别文本
+    绕过普通语音对话确认拦截
+    使用当前聊天会话调用 handleChatMessage
+    sendToControl 同时发送给控制端和发起语音的显示端
+  否则
+    沿用原有 voiceCommand 唤醒、确认和指令路由
+```
+
+```text
+过程 handleVoiceChatResponse(message)
+  向控制端广播 chatInput/chatChunk/chatResponse
+  如果来源是显示端语音输入
+    额外向来源 displayId 发送同一消息
+  显示端聊天窗口按 requestId 更新用户气泡和流式回复
+```
+
+实现约束：聊天打开时不停止天气/TTS 音频；弹窗隐藏使用 CSS 状态而不是删除 DOM，
+以便聊天关闭后按原计时自动恢复或自然过期。

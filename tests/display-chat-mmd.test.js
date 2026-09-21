@@ -77,6 +77,19 @@ test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {
     assert.match(displayHtml, /DisplayStage\?\.refreshVoiceTextVisibility/u);
 });
 
+test('天气详情位于 MMD 上方、聊天层下方，并在聊天关闭后按原计时恢复', () => {
+    const html = readPublic('display.html');
+    const mmdCss = readPublic('css/display-mmd.css');
+    const displayCss = readPublic('css/display.css');
+    assert.match(html, /id="displayMmdLayer"[\s\S]*id="displayBroadcastLayer"[\s\S]*id="displayChatLayer"/u);
+    assert.match(mmdCss, /\.display-mmd-layer\s*\{[\s\S]*?z-index:\s*10/u);
+    assert.match(mmdCss, /\.display-stage-broadcast-layer\s*\{[\s\S]*?z-index:\s*15/u);
+    assert.match(readPublic('css/display-chat.css'), /\.display-chat-layer\s*\{[\s\S]*?z-index:\s*20/u);
+    assert.match(displayCss, /body\.display-chat-open \.display-chat-suppressible\s*\{[\s\S]*display:\s*none !important/u);
+    assert.match(html, /data\.action === 'weatherResult'[\s\S]*suppressWhenChatVisible:\s*true/u);
+    assert.match(html, /setTimeout\(\(\) => \{[\s\S]*popup\.remove\(\)/u);
+});
+
 test('聊天层隐藏和重新显示时保留当前角色与会话选择', () => {
     const chat = readPublic('js/display-chat.js');
     assert.match(chat, /hiddenSelection/u);
@@ -108,6 +121,13 @@ test('显示端接收语音聊天输入并按 requestId 渲染流式回复', () 
     assert.match(chat, /state\.streaming\.has\(requestId\)/u);
     assert.match(server, /const sendVoiceChatUpdate =/u);
     assert.match(server, /sendToDisplay\(targetDisplayId, msg\)/u);
+});
+
+test('聊天层语音输入绕过普通确认并把聊天流回传来源显示端', () => {
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    assert.match(server, /const isDisplayChatVoiceInput = isDisplayVoiceInput[\s\S]*chatLayerVisible === true/u);
+    assert.match(server, /if \(isDisplayVoiceInput[\s\S]*!isDisplayChatVoiceInput[\s\S]*conversationConfirmationMode/u);
+    assert.match(server, /result\.type === 'chat'[\s\S]*sendToControl: sendVoiceChatUpdate/u);
 });
 
 test('聊天输入区将发送和清空按钮竖向放在输入框右侧', () => {

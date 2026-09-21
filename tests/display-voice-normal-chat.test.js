@@ -144,8 +144,8 @@ assert.ok(chatInputStart >= 0 && chatInputEnd > chatInputStart, '控制端应提
 assert.match(chat.slice(chatInputStart, chatInputEnd), /showStreamingMessage/);
 assert.match(
     display,
-    /const detailText = data\.detailText \|\| data\.text[\s\S]{0,140}showVoiceResponsePopup\(detailText, calculateWeatherPopupDuration\(detailText\)\)/,
-    '来源显示端普通语音回复应按文字长度显示 detailText 弹窗'
+    /const detailText = data\.detailText \|\| data\.text[\s\S]*showVoiceResponsePopup\([\s\S]*?detailText,[\s\S]*?calculateWeatherPopupDuration\(detailText\),[\s\S]*?layer:\s*'broadcast'[\s\S]*?suppressWhenChatVisible:\s*true/u,
+    '来源显示端普通语音回复应按文字长度显示 detailText 弹窗，并在聊天打开时隐藏'
 );
 
 console.log('display-voice-normal-chat.test.js: contract checks passed');
