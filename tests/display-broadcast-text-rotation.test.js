@@ -79,19 +79,64 @@ test('播报文本整体跟随90°/180°/270°旋转且不使用竖排字形', (
     }
 });
 
-test('播报文本字号按约定放大50%', () => {
+test('播报文本字号按视口和文本长度自适应', () => {
     assert.match(
         DISPLAY_CSS,
-        /\n\s*#voiceTextDisplay\s*\{\s*position: absolute;\s*font-size:\s*36px/u,
-        '未找到播报文本桌面端 36px 样式'
+        /#voiceTextDisplay\s*\{[\s\S]*?font-size:\s*clamp\(16px,\s*3\.5vw,\s*36px\)/u,
+        '未找到播报文本自适应基础字号'
     );
     assert.match(
         DISPLAY_CSS,
-        /@media \(max-width: 768px\)[\s\S]*?#voiceTextDisplay\s*\{\s*font-size:\s*27px/u,
-        '未找到播报文本移动端 27px 样式'
+        /#voiceTextDisplay\s*\{[\s\S]*?max-height:\s*calc\(100vh\s*-\s*16px\)[\s\S]*?overflow-y:\s*auto/u,
+        '播报文本应限制最大高度并允许纵向滚动'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /function getVoiceTextAdaptiveMetrics\(layout\)[\s\S]*?textScale[\s\S]*?fontSize[\s\S]*?edgeMargin/u,
+        '播报文本应根据视口和文本长度计算字号与边距'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /function applyVoiceTextAdaptiveLayout\(layout\)[\s\S]*?style\.fontSize[\s\S]*?style\.maxWidth[\s\S]*?style\.maxHeight/u,
+        '播报文本应把自适应结果应用到实际节点'
     );
     assert.doesNotMatch(DISPLAY_CSS, /@keyframes voice-pulse\s*\{[^}]*transform:\s*scale/u);
     assert.doesNotMatch(DISPLAY_CSS, /@keyframes voice-text-fade-in\s*\{[^}]*transform:/u);
+});
+
+test('300% 缩放下播报文字字号和旋转包围盒仍适配手机视口', async () => {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 360, height: 800, deviceScaleFactor: 3 });
+    await page.goto(`http://127.0.0.1:${server.address().port}/display.html?displayId=voice-adaptive-mobile-test`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000
+    });
+    await page.waitForFunction(() => typeof window.handleControl === 'function', { timeout: 10000 });
+
+    const result = await page.evaluate(() => {
+        const voiceText = document.getElementById('voiceTextDisplay');
+        voiceText.textContent = '这是一段较长的语音播报文字，用于验证三倍缩放和竖屏旋转时不会超出屏幕。'.repeat(3);
+        voiceText.className = 'voice-text-visible';
+        handleControl({ action: 'rotate', value: 90 });
+        return new Promise((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                const rect = voiceText.getBoundingClientRect();
+                resolve({
+                    rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+                    fontSize: Number.parseFloat(getComputedStyle(voiceText).fontSize),
+                    innerWidth: window.innerWidth,
+                    innerHeight: window.innerHeight
+                });
+            }));
+        });
+    });
+
+    assert.ok(result.fontSize >= 16 && result.fontSize <= 36, `字号未限制在自适应范围: ${JSON.stringify(result)}`);
+    assert.ok(result.rect.left >= -1, `300% 缩放后文字左侧越界: ${JSON.stringify(result)}`);
+    assert.ok(result.rect.right <= result.innerWidth + 1, `300% 缩放后文字右侧越界: ${JSON.stringify(result)}`);
+    assert.ok(result.rect.top >= -1, `300% 缩放后文字顶部越界: ${JSON.stringify(result)}`);
+    assert.ok(result.rect.bottom <= result.innerHeight + 1, `300% 缩放后文字底部越界: ${JSON.stringify(result)}`);
+    await page.close();
 });
 
 test('媒体名字号按约定放大一倍', () => {
@@ -402,7 +447,9 @@ test('90°和270°旋转后的文本包围盒贴合对应四角锚点', async ()
     for (const angle of [90, 270]) {
         const voiceCenterProperty = angle === 90 ? 'right' : 'left';
         for (const name of ['voiceStatusRow', 'voiceText']) {
-            const voiceOffset = name === 'voiceStatusRow' ? 20 : 160;
+            const voiceOffset = name === 'voiceStatusRow'
+                ? 20
+                : Math.round(Math.min(32, Math.max(8, Math.min(1200, 800) * 0.04)));
             const voiceCenterExpected = angle === 90 ? 1200 - voiceOffset : voiceOffset;
             const box = positions[angle][name];
             assert.ok(

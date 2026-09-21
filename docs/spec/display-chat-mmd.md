@@ -803,3 +803,29 @@
 
 - 天气实际 TTS 目标选择仍由现有通用语音路由决定；只按来源显示端能力决定是否发送天气详情兜底弹窗。
 - 天气详情弹窗仍使用 `displayBroadcastLayer` 和 `chat-suppressible` 状态；聊天打开时隐藏，关闭后按原生命周期恢复。
+
+## 17. TTS 播报文字自适应布局（2026-09-21）
+
+```text
+过程 getVoiceTextAdaptiveMetrics(rotationLayout, text)
+  shortSide = min(rotationLayout.layoutWidth, rotationLayout.layoutHeight)
+  edgeMargin = clamp(round(shortSide * 0.04), 8, 32)
+  availableWidth = max(rotationLayout.layoutWidth - edgeMargin * 2, 1)
+  viewportScale = clamp(shortSide / 720, 0.6, 1)
+  widthScale = clamp(availableWidth / 720, 0.6, 1)
+  textScale = clamp(1 - max(text.length - 60, 0) / 500, 0.65, 1)
+  fontSize = clamp(36 * min(viewportScale, widthScale) * textScale, 16, 36)
+  返回 edgeMargin、availableWidth、fontSize、maxHeight
+```
+
+```text
+过程 applyVoiceTextAdaptiveLayout(rotationLayout)
+  设置 voiceTextDisplay 的 font-size 为 metrics.fontSize
+  设置 max-width 为 metrics.availableWidth
+  设置 max-height 为旋转逻辑画布高度减动态安全边距
+  设置 overflow-wrap、word-break 和 overflow-y，保证长文本不越出视口
+  90/270 度旋转时使用同一 edgeMargin 作为左右侧边距
+```
+
+- 字号和边距使用 CSS 像素逻辑视口计算，不依赖设备物理 DPI；300% Android 缩放后仍按 WebView 实际可用区域适配。
+- 自适应只改变播报文字视觉布局，不改变 TTS 音频队列、聊天隐藏逻辑和旋转方向。

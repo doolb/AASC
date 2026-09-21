@@ -374,8 +374,8 @@ body {
     }
     
     #voiceTextDisplay {
-        font-size: 27px;
-        padding: 8px 14px;
+        font-size: clamp(16px, 3.5vw, 36px);
+        padding: clamp(6px, 1.2vw, 12px) clamp(10px, 1.8vw, 20px);
         border-radius: 8px;
     }
 }
@@ -541,14 +541,19 @@ body {
 
 #voiceTextDisplay {
     position: absolute;
-    font-size: 36px;
-    padding: 12px 20px;
+    box-sizing: border-box;
+    font-size: clamp(16px, 3.5vw, 36px);
+    padding: clamp(6px, 1.2vw, 12px) clamp(10px, 1.8vw, 20px);
     border-radius: 12px;
     background: var(--bg-secondary, rgba(0, 0, 0, 0.8));
     color: var(--text-primary, #fff);
-    max-width: 400px;
-    overflow: hidden;
-    word-wrap: break-word;
+    width: fit-content;
+    max-width: min(80vw, 720px);
+    max-height: calc(100vh - 16px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     /* 只过渡透明度，避免 max-width、定位和旋转变换出现越界动画。 */
     transition: opacity 0.3s ease;
     text-shadow: 1px 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.8));

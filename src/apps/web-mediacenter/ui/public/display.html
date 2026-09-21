@@ -1059,6 +1059,44 @@
             };
         }
 
+        function clampVoiceTextMetric(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        // 300% Android 缩放时 WebView 的 CSS 视口可能明显变小，不能继续使用固定字号和固定侧边距。
+        // 所有计算都基于旋转后的逻辑画布，避免物理 DPI 放大后文字越界或竖屏两侧留白过大。
+        function getVoiceTextAdaptiveMetrics(layout) {
+            const shortSide = Math.max(Math.min(layout.layoutWidth, layout.layoutHeight), 1);
+            const textLength = Array.from(voiceTextDisplay?.textContent || '').length;
+            const edgeMargin = Math.round(clampVoiceTextMetric(shortSide * 0.04, 8, 32));
+            const availableWidth = Math.max(layout.layoutWidth - edgeMargin * 2, 1);
+            const viewportScale = clampVoiceTextMetric(shortSide / 720, 0.6, 1);
+            const widthScale = clampVoiceTextMetric(availableWidth / 720, 0.6, 1);
+            const textScale = clampVoiceTextMetric(
+                1 - Math.max(textLength - 60, 0) / 500,
+                0.65,
+                1
+            );
+            const fontSize = Math.round(clampVoiceTextMetric(
+                36 * Math.min(viewportScale, widthScale) * textScale,
+                16,
+                36
+            ));
+            const maxHeight = Math.max(layout.layoutHeight - layout.margin * 2, fontSize * 2);
+            return { edgeMargin, availableWidth, fontSize, maxHeight };
+        }
+
+        function applyVoiceTextAdaptiveLayout(layout) {
+            if (!voiceTextDisplay) return;
+            const metrics = getVoiceTextAdaptiveMetrics(layout);
+            voiceTextDisplay.style.fontSize = `${metrics.fontSize}px`;
+            voiceTextDisplay.style.maxWidth = `${metrics.availableWidth}px`;
+            voiceTextDisplay.style.maxHeight = `${metrics.maxHeight}px`;
+            voiceTextDisplay.style.overflowY = 'auto';
+            voiceTextDisplay.style.overflowWrap = 'anywhere';
+            voiceTextDisplay.style.wordBreak = 'break-word';
+        }
+
         function getRotationTextElements() {
             return [
                 connectionStatus,
@@ -1126,7 +1164,7 @@
             }
             const edgeMargin = element === voiceStatusRow
                 ? layout.margin
-                : layout.margin * 8;
+                : getVoiceTextAdaptiveMetrics(layout).edgeMargin;
             if (currentRotation === 90) {
                 element.style.right = `${edgeMargin + height / 2}px`;
                 element.style.top = `calc(50% + ${(width - height) / 2}px)`;
@@ -1173,10 +1211,13 @@
             const textElements = getRotationTextElements();
             const maxWidth = Math.max(layout.layoutWidth - layout.margin * 2, 1);
             const maxHeight = Math.max(layout.layoutHeight - layout.margin * 2, 1);
+            applyVoiceTextAdaptiveLayout(layout);
             textElements.forEach((element) => {
                 if (!element) return;
-                element.style.maxWidth = `${maxWidth}px`;
-                element.style.maxHeight = `${maxHeight}px`;
+                if (element !== voiceTextDisplay) {
+                    element.style.maxWidth = `${maxWidth}px`;
+                    element.style.maxHeight = `${maxHeight}px`;
+                }
             });
             textElements.forEach((element) => repositionRotationTextElement(element, layout));
             applyRotationPopupLayout(layout);
@@ -1188,6 +1229,7 @@
             if (voiceTextDisplay && voiceTextDisplay.classList.contains('voice-text-visible')) {
                 voiceTextDisplay.style.display = 'block';
                 const immediateLayout = getRotationLayout();
+                applyVoiceTextAdaptiveLayout(immediateLayout);
                 applyVoiceCenteredAnchor(voiceTextDisplay, immediateLayout);
                 applyVoiceCenteredAnchor(voiceStatusRow, immediateLayout);
             }
@@ -1230,6 +1272,7 @@
             monitorWrapper.style.width = `${VOICE_MONITOR_WIDTH}px`;
             monitorWrapper.style.alignItems = 'center';
             monitorWrapper.style.flexDirection = 'column';
+            applyVoiceTextAdaptiveLayout(rotationLayout);
 
             [voiceStatusRow, voiceTextDisplay].forEach((element, index) => {
                 if (!element) return;
