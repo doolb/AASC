@@ -49,6 +49,36 @@ class OfflineUpdateManifestTest {
     }
 
     @Test
+    fun dataRepair组件校验版本脚本摘要和能力() {
+        val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        val payload = validPayload().apply {
+            getJSONObject("components").put("dataRepair", validDataRepair())
+        }
+        val manifest = signedManifest(payload, keyPair.private.encoded, keyPair.public.encoded)
+
+        val parsed = OfflineUpdateManifest.parse(manifest, publicPem(keyPair.public.encoded))
+
+        assertEquals(5, parsed.dataRepair?.repairVersion)
+        assertEquals("repair-model-config", parsed.dataRepair?.repairId)
+        assertEquals(listOf("chat2api.config", "chat2api.model-mappings"), parsed.dataRepair?.capabilities)
+        assertEquals(0, parsed.dataRepair?.requiredDataVersion)
+        assertEquals(1, parsed.dataRepair?.targetDataVersion)
+    }
+
+    @Test
+    fun dataRepair访问账号时必须显式声明敏感配置() {
+        val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        val payload = validPayload().apply {
+            getJSONObject("components").put("dataRepair", validDataRepair().apply {
+                put("capabilities", org.json.JSONArray(listOf("chat2api.accounts")))
+            })
+        }
+        val manifest = signedManifest(payload, keyPair.private.encoded, keyPair.public.encoded)
+
+        assertRejected(manifest, publicPem(keyPair.public.encoded), "sensitive")
+    }
+
+    @Test
     fun oversizedReleaseNotesAreRejected() {
         val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
         val payload = validPayload().apply {
@@ -132,6 +162,20 @@ class OfflineUpdateManifestTest {
         put("relativeUrl", "apk/aasc-display-offline-min-v10.apk")
         put("size", 789)
         put("sha256", "f".repeat(64))
+    }
+
+    private fun validDataRepair(): JSONObject = JSONObject().apply {
+        put("repairVersion", 5)
+        put("repairId", "repair-model-config")
+        put("requiredCodeVersion", 4)
+        put("requiredDataVersion", 0)
+        put("targetDataVersion", 1)
+        put("capabilities", org.json.JSONArray(listOf("chat2api.config", "chat2api.model-mappings")))
+        put("sensitive", false)
+        put("scriptSha256", "1".repeat(64))
+        put("relativeUrl", "data/data-repair-v5.zip")
+        put("size", 321)
+        put("sha256", "2".repeat(64))
     }
 
     private fun signedManifest(payload: JSONObject, privateKeyBytes: ByteArray, publicKeyBytes: ByteArray): String {

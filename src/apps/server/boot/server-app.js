@@ -11,6 +11,8 @@ const multer = require('multer');
 const config = require('../modules/config/config-app-service');
 const { isControlTheme, normalizeControlTheme } = require('../modules/config/control-theme-config');
 const { USER_CONFIG_DIR } = require('../modules/config/user-config-paths');
+const { createDataRepairRunner } = require('../modules/data-repair/data-repair-js-runner');
+const { createChat2ApiRuntime } = require('../modules/chat2api/chat2api-runtime');
 const LogFileWriter = require('../../../framework/observability/log-file-writer');
 const voiceprintStore = require('../modules/voiceprint/voiceprint-store');
 // 声纹权威库变更时广播：让所有显示端重拉权威库重建本地 SpeakerEmbeddingManager
@@ -1055,7 +1057,62 @@ function startAascNodeConnector(localIP, protocol) {
     return connector;
 }
 
-mediaLibraryManager.init().then(() => {
+async function applyPendingDataRepairBeforeListen() {
+    const pendingPath = path.join(PROJECT_ROOT, 'data-repair', 'pending-repair.json');
+    if (!fs.existsSync(pendingPath)) return;
+
+    let chat2apiRuntime = null;
+    try {
+        chat2apiRuntime = createChat2ApiRuntime({
+            rootDir: path.join(USER_CONFIG_DIR, 'chat2api'),
+            projectRoot: PROJECT_ROOT,
+            host: '127.0.0.1',
+            port: 8080
+        });
+        const chat2apiRoot = chat2apiRuntime.dataStore.rootDir;
+        const managedFiles = [
+            path.join(PROJECT_ROOT, 'config', 'config.json'),
+            path.join(USER_CONFIG_DIR, 'userconfig.json'),
+            ...[
+                'config.json',
+                'providers.json',
+                'accounts.json',
+                'api-keys.json',
+                'model-mappings.json',
+                'responses-sessions.json'
+            ].map((fileName) => path.join(chat2apiRoot, fileName))
+        ];
+        const runner = createDataRepairRunner({
+            projectRoot: PROJECT_ROOT,
+            services: {
+                config,
+                chat2api: chat2apiRuntime.managementService
+            },
+            managedFiles,
+            logger: console,
+            onApplied: () => {
+                // 修复发生在监听前，此时还没有控制端连接；服务对象本身已完成内存刷新。
+                log('数据修复', '启动前数据修复已提交');
+            }
+        });
+        const result = await runner.applyPendingRepair();
+        if (result.status !== 'not-found') {
+            log('数据修复', `启动前修复结果: ${result.status}${result.repairId ? ` (${result.repairId})` : ''}`);
+        }
+    } catch (error) {
+        logError('数据修复', `启动前数据修复未执行: ${error.message}`);
+    } finally {
+        if (chat2apiRuntime) {
+            try {
+                await chat2apiRuntime.stop();
+            } catch (error) {
+                logError('数据修复', `释放临时 Chat2API 服务失败: ${error.message}`);
+            }
+        }
+    }
+}
+
+applyPendingDataRepairBeforeListen().finally(() => mediaLibraryManager.init()).then(() => {
     log('媒体库', '媒体库初始化完成');
     
     const localRoutes = mediaLibraryManager.getLocalLibraryRoutes();

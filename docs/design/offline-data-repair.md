@@ -2,7 +2,7 @@
 
 ## 状态
 
-设计阶段。当前不修改运行时代码、不发布数据修复包；本设计先确定基于原有业务类的 JS 修复脚本、签名发布、运行时自动保存、版本门控和失败回滚契约。
+已完成首版实现。当前版本已经落地基于原有业务类的 JS 修复脚本、签名发布、运行时自动保存、版本门控和失败回滚；暂未发布具体业务修复包。
 
 ## 目标
 
@@ -84,7 +84,7 @@ Offline 启动兜底:
 
 ## 运行时自动保存
 
-所有可修改配置都通过原有业务类进入，不允许修复脚本直接修改 JSON 文件后继续使用旧内存对象。业务类的保存动作由 `RuntimeDataManager` 统一包裹，负责校验、事务、内存刷新和广播。
+所有可修改配置都通过原有业务类进入，不允许修复脚本直接修改 JSON 文件后继续使用旧内存对象。当前首版由数据修复执行器复用业务类的保存方法，并对已注册配置文件执行快照、原子恢复和状态提交；控制端既有远程配置流程继续负责规范化、内存刷新和广播。后续如需扩展更多业务类，再将其注册到同一执行器的能力白名单。
 
 运行时修改流程：
 
@@ -222,7 +222,7 @@ data-repair/state.json
 
 ## 事务、备份和回滚
 
-修复引擎使用进程级修复锁，保证同一时刻只有一个修复任务。原有业务类的单项保存接口由事务代理包裹，避免脚本中途失败后留下半套配置。
+修复引擎使用进程级修复锁，保证同一时刻只有一个修复任务。首版采用“调用原有业务类 + 已注册文件快照回滚”的事务实现，避免脚本中途失败后留下半套配置；业务类继续负责自身的字段校验和原子保存。
 
 备份目录：
 
@@ -244,6 +244,20 @@ data-repair/backups/<repairId>/
 10. 通过本地健康检查后清理事务暂存区。
 
 任一阶段失败都恢复所有已替换文件，删除临时状态，保留旧数据版本。
+
+## 已落地实现
+
+| 层次 | 实现位置 | 结果 |
+|---|---|---|
+| Node 执行器 | `src/apps/server/modules/data-repair/data-repair-js-runner.js` | 受限 VM 执行 `repair.js`，白名单注入 `config`、用户配置和 Chat2API 管理服务；校验版本、敏感能力、脚本 hash，成功按 `repairId` 记录，失败恢复快照 |
+| 服务启动 | `src/apps/server/boot/server-app.js` | 在监听端口前读取 `data-repair/pending-repair.json`，复用现有配置服务和 Chat2API management service 执行修复 |
+| 构建 | `scripts/ops/offline-update-package.js` | `--mode=data-repair` 生成只含 `repair.js` 的 `data/data-repair-v<N>.zip`，写入签名 `dataRepair` 组件 |
+| 发布 | `scripts/ops/publish-offline-update.js` | 支持 dataRepair 独立发布、LAN/WAN 原子切换和严格版本文件清理 |
+| Android 清单与下载 | `OfflineUpdateManifest.kt`、`OfflineUpdateManager.kt` | 识别版本门控、hash、敏感标记；支持仅数据修复包下载、校验和 pending marker |
+| Android 启动参数 | `NodeServerService.kt` | 将当前 APK versionCode 传给 Node，供 `requiredApkVersionCode` 门控 |
+| Android 提示 | `MainActivity.kt`、`strings.xml` | 数据修复作为独立更新类型显示确认文案 |
+
+首版的能力白名单包括主配置、用户/显示配置、Chat2API 配置、Provider、账号和模型映射；账号能力必须声明 `sensitive=true`。修复包只允许根目录 `repair.js`，不提供文件路径、`require`、`process`、网络或命令执行能力。
 
 ## Offline 更新流程
 

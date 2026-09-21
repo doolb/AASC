@@ -21,6 +21,7 @@ const DEFAULT_WAN_VERIFY_URL = 'http://120.79.245.103/mnt/aasc-offline/';
 const CLEANUP_RULES = Object.freeze([
     { componentName: 'code', directory: 'code', prefix: 'code-v', suffix: '.zip' },
     { componentName: 'dependencies', directory: 'dependencies', prefix: 'dependencies-v', suffix: '.zip' },
+    { componentName: 'dataRepair', directory: 'data', prefix: 'data-repair-v', suffix: '.zip' },
     { componentName: 'apkMin', directory: 'apk', prefix: 'aasc-display-offline-min-v', suffix: '.apk' },
     { componentName: 'apkFull', directory: 'apk', prefix: 'aasc-display-offline-v', suffix: '.apk' }
 ]);
@@ -32,8 +33,8 @@ async function sha256File(filePath) {
 }
 
 function validateMode(mode) {
-    if (!['code-only', 'all', 'apk-min', 'apk-full'].includes(mode)) {
-        throw new Error('发布模式必须是 code-only、all、apk-min 或 apk-full');
+    if (!['code-only', 'all', 'data-repair', 'apk-min', 'apk-full'].includes(mode)) {
+        throw new Error('发布模式必须是 code-only、all、data-repair、apk-min 或 apk-full');
     }
 }
 
@@ -47,6 +48,10 @@ function validateRelativePath(relativePath) {
 
 function getPublishComponents(manifest, mode) {
     const components = manifest.payload.components;
+    if (mode === 'data-repair') {
+        if (!components.dataRepair) throw new Error('data-repair 发布要求签名清单包含 dataRepair 组件');
+        return [components.dataRepair];
+    }
     if (mode === 'apk-min') {
         if (!components.apkMin) throw new Error('apk-min 发布要求签名清单包含 apkMin 组件');
         return [components.apkMin];
@@ -75,7 +80,7 @@ function createCleanupSpecifications(manifest, options = {}) {
     const components = manifest?.payload?.components || {};
     const specifications = [];
     const componentNames = options.includeApkMin === false
-        ? ['code', 'dependencies']
+        ? ['code', 'dependencies', 'dataRepair']
         : ['code', 'dependencies', 'apkMin'];
     for (const componentName of componentNames) {
         const component = components[componentName];
@@ -83,6 +88,15 @@ function createCleanupSpecifications(manifest, options = {}) {
         const rule = CLEANUP_RULES.find((candidate) => candidate.componentName === componentName);
         if (!rule || !getCleanupRule(component.relativeUrl)) continue;
         specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
+    }
+    if (options.includeDataRepair !== false) {
+        const component = components.dataRepair;
+        if (component && typeof component.relativeUrl === 'string') {
+            const rule = CLEANUP_RULES.find((candidate) => candidate.componentName === 'dataRepair');
+            if (rule && getCleanupRule(component.relativeUrl)) {
+                specifications.push({ ...rule, keepRelativePath: component.relativeUrl });
+            }
+        }
     }
     if (options.includeFullApk) {
         const currentFullApkRelativeUrl = options.currentFullApkRelativeUrl;
@@ -631,6 +645,10 @@ async function publishOfflineUpdate(options = {}) {
 
     const preserved = mode === 'code-only'
         ? [manifest.payload.components.dependencies]
+        : mode === 'data-repair'
+            ? Object.entries(manifest.payload.components)
+                .filter(([name, component]) => name !== 'dataRepair' && component && component.relativeUrl)
+                .map(([, component]) => component)
         : mode === 'apk-min'
             ? [manifest.payload.components.code, manifest.payload.components.dependencies]
             : [];
@@ -646,7 +664,7 @@ async function publishOfflineUpdate(options = {}) {
     if (localRoot) {
         for (const component of preserved) {
             const result = await inspectLocalTarget(localRoot, component.relativeUrl, component);
-            if (!result.exists) throw new Error(`code-only 发布要求目标已有匹配依赖包: ${component.relativeUrl}`);
+            if (!result.exists) throw new Error(`${mode} 发布要求目标已有匹配资源: ${component.relativeUrl}`);
         }
         for (const { component } of uploads) {
             await inspectLocalTarget(localRoot, component.relativeUrl, component);
@@ -669,7 +687,7 @@ async function publishOfflineUpdate(options = {}) {
         for (const component of [...preserved, ...uploads.map(({ component }) => component)]) {
             const exists = await inspectRemoteTarget(commandRunner, remote, component.relativeUrl, component);
             if (preserved.includes(component) && !exists) {
-                throw new Error(`code-only 发布要求远端已有匹配依赖包: ${component.relativeUrl}`);
+                throw new Error(`${mode} 发布要求远端已有匹配资源: ${component.relativeUrl}`);
             }
         }
         for (const { component, artifactPath } of uploads) {

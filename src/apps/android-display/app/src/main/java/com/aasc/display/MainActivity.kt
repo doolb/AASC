@@ -826,16 +826,33 @@ class MainActivity : AppCompatActivity() {
         serviceUpdateCandidate = result
         serviceUpdateStarted = false
         showOfflineUpdatePanel()
-        offlineUpdateTitle.text = getString(R.string.offline_service_update_title)
-        offlineUpdateMessage.text = getString(
-            R.string.offline_service_update_available,
-            codeVersion,
-            dependencyVersion,
-            formatBytes(result.downloadBytes)
-        )
-        showMinApkReleaseNotes(null)
+        val repair = result.dataRepair
+        val sensitiveNotice = if (repair?.sensitive == true) "\n⚠ 包含敏感配置" else ""
+        if (result.plan == OfflineUpdateManager.ServiceUpdatePlan.DATA_REPAIR_ONLY && repair != null) {
+            offlineUpdateTitle.text = getString(R.string.offline_data_repair_title)
+            offlineUpdateMessage.text = getString(
+                R.string.offline_data_repair_available,
+                repair.repairVersion,
+                formatBytes(result.downloadBytes),
+                sensitiveNotice
+            )
+            showMinApkReleaseNotes(repair.releaseNotes)
+        } else {
+            offlineUpdateTitle.text = getString(R.string.offline_service_update_title)
+            offlineUpdateMessage.text = getString(
+                R.string.offline_service_update_available,
+                codeVersion,
+                dependencyVersion,
+                formatBytes(result.downloadBytes) + sensitiveNotice
+            )
+            showMinApkReleaseNotes(null)
+        }
         offlineUpdateProgress.visibility = View.GONE
-        offlineUpdateDownload.text = getString(R.string.offline_service_update_download)
+        offlineUpdateDownload.text = if (result.plan == OfflineUpdateManager.ServiceUpdatePlan.DATA_REPAIR_ONLY && repair != null) {
+            getString(R.string.offline_data_repair_download)
+        } else {
+            getString(R.string.offline_service_update_download)
+        }
         offlineUpdateDownload.isEnabled = true
         offlineUpdateDownload.visibility = View.VISIBLE
         offlineUpdateLater.visibility = View.VISIBLE

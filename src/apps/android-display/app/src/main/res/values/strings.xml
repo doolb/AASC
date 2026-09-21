@@ -39,6 +39,9 @@
     <string name="offline_service_update_switching">正在切换服务版本</string>
     <string name="offline_service_update_success">Offline 服务更新已完成</string>
     <string name="offline_service_update_failed">Offline 服务更新失败，可重试</string>
+    <string name="offline_data_repair_title">发现 Offline 数据修复</string>
+    <string name="offline_data_repair_available">数据修复版本 v%1$d，下载大小 %2$s%3$s。是否应用？</string>
+    <string name="offline_data_repair_download">应用数据修复</string>
     <string name="offline_update_available_default">有新的 min APK 可用</string>
     <string name="offline_update_available">版本 %1$s，下载大小 %2$s。是否下载更新？</string>
     <string name="offline_update_notes_title">更新内容</string>

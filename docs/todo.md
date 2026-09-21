@@ -31,11 +31,6 @@
 
 ## 聊天系统
 
-- ⏳待处理 [2026-09-20] 实现 Offline 通用数据修复包
-  - 已完成详细设计：使用签名 `repair.js` 直接调用原有业务类，支持运行时自动保存、dataRepair 版本门控、事务备份回滚和失败恢复；不加入控制端 `requiredDataVersion` 并发冲突校验。
-  - 待实现修复引擎、Offline 构建/发布、Android 下载确认和启动前应用流程；Chat2API mini/flash/pro 多 Provider 路由暂不包含在本任务。
-  - 关联文档：`docs/design/offline-data-repair.md`、`docs/spec/offline-data-repair.md`、`docs/task/20260920_Offline通用数据修复包详细设计.md`。
-
 - 🔄进行中 [2026-09-19] 修复 Qwen Chat2API 请求通道返回固定拒答
   - 已复现：同一账号和 `Qwen3.6-Flash → Qwen3.7` 映射下，本地 Chat2API 会把 Qwen 上游固定拒答或风控 JSON 归一化为空成功回复。
   - 当前修复：网页聊天请求不再注入固定 `X-Platform/X-DeviceId`；风控 JSON 改为明确错误；保持 Qwen 原生 `session_id/parent_req_id/scene_param` 首轮与续接契约。

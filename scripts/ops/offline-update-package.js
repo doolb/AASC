@@ -10,6 +10,15 @@ const { loadOfflineUpdateKeyPair } = require('./offline-update-signing');
 
 const execFileAsync = promisify(execFile);
 const CODE_ENTRYPOINT = 'src/apps/server/boot/server-launcher.js';
+const DATA_REPAIR_ENTRYPOINT = 'repair.js';
+const DATA_REPAIR_CAPABILITIES = Object.freeze([
+    'config',
+    'user-config',
+    'chat2api.config',
+    'chat2api.providers',
+    'chat2api.accounts',
+    'chat2api.model-mappings'
+]);
 const SIGNATURE_ALGORITHM = 'SHA256withRSA';
 const UPDATE_BASE_URLS = Object.freeze([
     'http://192.168.1.39/mnt/aasc-offline/',
@@ -101,6 +110,45 @@ function validateManifestComponents(manifest) {
             !isSha256(apkMin.signerSha256) || !isSha256(apkMin.modelCompatibilitySha256)) {
             throw new Error('Offline 清单 apkMin 包名、签名证书或模型兼容指纹无效');
         }
+    }
+    if (manifest.payload.components.dataRepair !== undefined) {
+        validateDataRepairComponent(manifest.payload.components.dataRepair);
+    }
+}
+
+function validateDataRepairComponent(component) {
+    validateArtifactEntry(component, 'dataRepair');
+    if (component.repairVersion !== component.version ||
+        typeof component.repairId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(component.repairId)) {
+        throw new Error('Offline 清单 dataRepair repairId/repairVersion 无效');
+    }
+    if (!Number.isSafeInteger(component.requiredCodeVersion) || component.requiredCodeVersion < 1 ||
+        !Number.isSafeInteger(component.requiredDataVersion) || component.requiredDataVersion < 0 ||
+        !Number.isSafeInteger(component.targetDataVersion) || component.targetDataVersion < component.requiredDataVersion) {
+        throw new Error('Offline 清单 dataRepair 版本门控字段无效');
+    }
+    if (component.requiredApkVersionCode !== undefined &&
+        (!Number.isSafeInteger(component.requiredApkVersionCode) || component.requiredApkVersionCode < 1)) {
+        throw new Error('Offline 清单 dataRepair.requiredApkVersionCode 无效');
+    }
+    if (!isSha256(component.scriptSha256)) throw new Error('Offline 清单 dataRepair.scriptSha256 无效');
+    if (!Array.isArray(component.capabilities) || component.capabilities.length === 0 ||
+        component.capabilities.some((value) => typeof value !== 'string' || value.trim() === '')) {
+        throw new Error('Offline 清单 dataRepair.capabilities 无效');
+    }
+    if (new Set(component.capabilities).size !== component.capabilities.length ||
+        component.capabilities.some((value) => !DATA_REPAIR_CAPABILITIES.includes(value))) {
+        throw new Error('Offline 清单 dataRepair.capabilities 包含未注册能力');
+    }
+    if (component.sensitive !== undefined && typeof component.sensitive !== 'boolean') {
+        throw new Error('Offline 清单 dataRepair.sensitive 必须是布尔值');
+    }
+    if (component.capabilities.includes('chat2api.accounts') && component.sensitive !== true) {
+        throw new Error('Offline 清单 dataRepair 访问 Chat2API 账号必须声明 sensitive');
+    }
+    if (component.releaseNotes !== undefined &&
+        (typeof component.releaseNotes !== 'string' || component.releaseNotes.trim().length > 4096)) {
+        throw new Error('Offline 清单 dataRepair.releaseNotes 无效');
     }
 }
 
@@ -401,8 +449,120 @@ async function loadCurrentManifest(options, publicKeyPem) {
     return manifest;
 }
 
+function parseRepairCapabilities(value) {
+    const capabilities = Array.isArray(value)
+        ? value
+        : String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+    const normalized = [...new Set(capabilities.map((item) => String(item).trim()))];
+    if (normalized.length === 0) throw new Error('dataRepair 至少需要一个 capability');
+    return normalized;
+}
+
+async function createDataRepairArtifacts(options = {}) {
+    const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
+    const outputDir = path.resolve(options.outputDir || path.join(projectRoot, 'release/offline-update/output'));
+    const keyPair = await loadOfflineUpdateKeyPair(options);
+    const { privateKeyPem, publicKeyPem } = keyPair;
+    const currentManifest = await loadCurrentManifest(options, publicKeyPem);
+    if (!currentManifest) throw new Error('构建 dataRepair 必须先取得当前已发布 Offline 清单');
+    const repairFile = path.resolve(options.dataRepairFile || '');
+    const repairStat = await fs.promises.lstat(repairFile).catch(() => null);
+    if (!repairStat?.isFile() || repairStat.isSymbolicLink()) {
+        throw new Error(`dataRepair 脚本必须是普通文件: ${repairFile}`);
+    }
+    if (path.basename(repairFile) !== DATA_REPAIR_ENTRYPOINT) {
+        throw new Error(`dataRepair 脚本必须命名为 ${DATA_REPAIR_ENTRYPOINT}`);
+    }
+    if (repairStat.size < 1 || repairStat.size > 512 * 1024) {
+        throw new Error('dataRepair 脚本大小必须在 1 到 524288 字节之间');
+    }
+    const repairVersion = Number(options.repairVersion);
+    assertVersion(repairVersion, 'repairVersion');
+    const currentComponent = currentManifest.payload.components.dataRepair;
+    assertNewVersion(repairVersion, currentComponent?.version, 'repairVersion');
+    const requiredCodeVersion = Number(options.requiredCodeVersion || currentManifest.payload.components.code.version);
+    assertVersion(requiredCodeVersion, 'requiredCodeVersion');
+    const requiredDataVersion = options.requiredDataVersion === undefined
+        ? Number(currentComponent?.targetDataVersion || 0)
+        : Number(options.requiredDataVersion);
+    const targetDataVersion = options.targetDataVersion === undefined
+        ? requiredDataVersion + 1
+        : Number(options.targetDataVersion);
+    if (!Number.isSafeInteger(requiredDataVersion) || requiredDataVersion < 0 ||
+        !Number.isSafeInteger(targetDataVersion) || targetDataVersion < requiredDataVersion) {
+        throw new Error('requiredDataVersion/targetDataVersion 无效');
+    }
+    const repairId = String(options.repairId || `data-repair-${repairVersion}`).trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(repairId)) throw new Error('repairId 无效');
+    const capabilities = parseRepairCapabilities(options.repairCapabilities || options.capabilities);
+    const sensitive = options.sensitive === true || options.sensitive === 'true';
+    if (capabilities.includes('chat2api.accounts') && !sensitive) {
+        throw new Error('dataRepair 访问 Chat2API 账号必须通过 --sensitive=true 显式允许');
+    }
+    const repairSource = await fs.promises.readFile(repairFile);
+    const workDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'aasc-data-repair-'));
+    const stagingDirectory = path.join(workDirectory, 'data-repair');
+    const archivePath = path.join(workDirectory, `data-repair-v${repairVersion}.zip`);
+    const finalArchivePath = path.join(outputDir, 'data', path.basename(archivePath));
+    try {
+        await fs.promises.mkdir(stagingDirectory, { recursive: true });
+        await fs.promises.writeFile(path.join(stagingDirectory, DATA_REPAIR_ENTRYPOINT), repairSource, { flag: 'wx' });
+        await createZip(stagingDirectory, archivePath, options.zipRunner || execFileAsync);
+        if (fs.existsSync(finalArchivePath)) throw new Error(`dataRepair 版本文件已存在，拒绝覆盖: ${finalArchivePath}`);
+        const dataRepair = {
+            version: repairVersion,
+            repairVersion,
+            repairId,
+            requiredCodeVersion,
+            ...(options.requiredApkVersionCode === undefined
+                ? {}
+                : { requiredApkVersionCode: Number(options.requiredApkVersionCode) }),
+            requiredDataVersion,
+            targetDataVersion,
+            capabilities,
+            sensitive,
+            scriptSha256: sha256Buffer(repairSource),
+            ...(options.releaseNotes ? { releaseNotes: String(options.releaseNotes).trim() } : {}),
+            ...(await describeArtifact(archivePath, `data/data-repair-v${repairVersion}.zip`))
+        };
+        const payload = {
+            ...currentManifest.payload,
+            generatedAt: options.generatedAt || new Date().toISOString(),
+            components: {
+                ...currentManifest.payload.components,
+                dataRepair
+            }
+        };
+        const manifest = {
+            payload,
+            signature: signManifestPayload(payload, privateKeyPem)
+        };
+        verifySignedManifest(manifest, publicKeyPem);
+        validateManifestComponents(manifest);
+        const manifestDirectory = path.join(outputDir, 'manifests');
+        const manifestPath = path.join(manifestDirectory, `manifest-data-repair-v${repairVersion}.json`);
+        if (fs.existsSync(manifestPath)) throw new Error(`dataRepair 清单文件已存在，拒绝覆盖: ${manifestPath}`);
+        await fs.promises.mkdir(path.dirname(finalArchivePath), { recursive: true });
+        await atomicallyCopyToOutput(archivePath, finalArchivePath);
+        await fs.promises.mkdir(manifestDirectory, { recursive: true });
+        await atomicallyWriteOutput(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+        return {
+            requestedMode: 'data-repair',
+            mode: 'data-repair',
+            manifest,
+            manifestPath,
+            dataRepairArchivePath: finalArchivePath,
+            publicKeyPem,
+            publicKeyPath: keyPair.publicKeyPath
+        };
+    } finally {
+        await fs.promises.rm(workDirectory, { recursive: true, force: true });
+    }
+}
+
 async function createOfflineUpdateArtifacts(options = {}) {
     const requestedMode = String(options.mode || '').trim();
+    if (requestedMode === 'data-repair') return createDataRepairArtifacts(options);
     if (!['code-only', 'all'].includes(requestedMode)) throw new Error('更新模式必须是 code-only 或 all');
     const projectRoot = path.resolve(options.projectRoot || path.resolve(__dirname, '../..'));
     const outputDir = path.resolve(options.outputDir || path.join(projectRoot, 'release/offline-update/output'));
@@ -544,13 +704,26 @@ function parseCliArguments(argv) {
             continue;
         }
         const value = equalIndex >= 0 ? token.slice(equalIndex + 1) : argv[++index];
-        if (!['mode', 'code-version', 'dependency-version', 'output-dir', 'manifest-file'].includes(key)) {
+        if (!['mode', 'code-version', 'dependency-version', 'output-dir', 'manifest-file',
+            'data-repair-file', 'repair-version', 'repair-id', 'required-code-version',
+            'required-apk-version-code', 'required-data-version', 'target-data-version',
+            'repair-capabilities', 'release-notes', 'sensitive'].includes(key)) {
             throw new Error(`未知构建参数: --${key}`);
         }
         if (typeof value !== 'string' || value.startsWith('--')) throw new Error(`参数 --${key} 缺少值`);
         const fieldName = key.replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
         if (Object.prototype.hasOwnProperty.call(parsed, fieldName)) throw new Error(`参数 --${key} 不能重复`);
-        parsed[fieldName] = key.endsWith('version') ? Number(value) : value;
+        const numericKeys = new Set([
+            'code-version',
+            'dependency-version',
+            'repair-version',
+            'required-code-version',
+            'required-apk-version-code',
+            'required-data-version',
+            'target-data-version'
+        ]);
+        parsed[fieldName] = numericKeys.has(key) ? Number(value) :
+            key === 'sensitive' ? value === 'true' : value;
     }
     return parsed;
 }
@@ -579,6 +752,7 @@ async function runCli(argv = process.argv.slice(2)) {
         }
         console.log(`代码包: ${result.codeArchivePath}`);
         if (result.dependenciesArchivePath) console.log(`依赖包: ${result.dependenciesArchivePath}`);
+        if (result.dataRepairArchivePath) console.log(`数据修复包: ${result.dataRepairArchivePath}`);
         console.log(`签名清单: ${result.manifestPath}`);
         console.log(`验证公钥: ${result.publicKeyPath || '由调用方提供'}`);
     } catch (error) {
@@ -591,6 +765,7 @@ if (require.main === module) runCli();
 
 module.exports = {
     createOfflineUpdateArtifacts,
+    createDataRepairArtifacts,
     canonicalJson,
     signManifestPayload,
     verifySignedManifest,
@@ -600,6 +775,7 @@ module.exports = {
     UPDATE_BASE_URLS,
     fetchCurrentManifestFromNetwork,
     resolveUpdatePlan,
+    validateDataRepairComponent,
     parseCliArguments,
     runCli
 };

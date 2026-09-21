@@ -154,7 +154,8 @@ class NodeServerService : Service() {
             safBaseUrl: String? = null,
             safToken: String? = null,
             androidMediaHome: String? = null,
-            nodeModulesDirectory: File? = null
+            nodeModulesDirectory: File? = null,
+            apkVersionCode: Int? = null
         ): Map<String, String> {
             val runtimeLibraryPath = File(rootDir, "runtime/arm64-v8a/lib").absolutePath
             val inheritedLibraryPath = System.getenv("LD_LIBRARY_PATH")?.trim().orEmpty()
@@ -190,6 +191,9 @@ class NodeServerService : Service() {
             }
             if (!androidMediaHome.isNullOrBlank()) {
                 environment["AASC_ANDROID_MEDIA_HOME"] = androidMediaHome
+            }
+            if (apkVersionCode != null && apkVersionCode > 0) {
+                environment["AASC_APK_VERSION_CODE"] = apkVersionCode.toString()
             }
             return environment
         }
@@ -355,7 +359,8 @@ class NodeServerService : Service() {
                     safConnection?.baseUrl,
                     safConnection?.token,
                     androidMediaHome,
-                    nodeModulesDirectory
+                    nodeModulesDirectory,
+                    readAppVersionCode()
                 )
             )
             val process = processBuilder.start()
@@ -604,6 +609,17 @@ class NodeServerService : Service() {
         } catch (error: Exception) {
             android.util.Log.w("AASC-Node", "读取 APK 版本失败: ${error.message}")
             "unknown"
+        }
+    }
+
+    private fun readAppVersionCode(): Int? {
+        return try {
+            @Suppress("DEPRECATION")
+            val info = packageManager.getPackageInfo(packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toInt() else info.versionCode
+        } catch (error: Exception) {
+            android.util.Log.w("AASC-Node", "读取 APK versionCode 失败: ${error.message}")
+            null
         }
     }
 

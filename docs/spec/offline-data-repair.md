@@ -252,3 +252,71 @@ dataRepairStatus:
 ```
 
 状态只记录 repairId、版本、服务能力、变更数量、hash、时间和错误码，不记录敏感配置内容。
+
+## 当前代码对应的实现伪代码
+
+```text
+createDataRepairRunner(options):
+    projectRoot = options.projectRoot
+    services = options.services
+    managedFiles = options.managedFiles
+    codeVersion = options.codeVersion or runtime version pointer
+    apkVersionCode = options.apkVersionCode or environment value
+    create process-local operation queue
+
+applyPendingRepair():
+    read projectRoot/data-repair/pending-repair.json
+    if not found:
+        return not-found
+    validate format, schema, repairId, versions, script path, scriptSha256 and capabilities
+    read and normalize projectRoot/data-repair/state.json
+    if repairId already applied:
+        remove pending marker
+        return skipped
+    if code/APK/data version gate is not satisfied:
+        keep pending marker
+        return waiting or rejected
+    read only signed repair.js and verify scriptSha256
+    snapshot managedFiles and state.json
+    expose only registered methods from options.services
+    execute repair.js in vm context with code generation, require, process and network disabled
+    if execution and state write succeed:
+        write target dataVersion and appliedRepairs atomically
+        remove pending marker
+        return applied
+    else:
+        restore managedFiles and state snapshot
+        keep pending marker for retry
+        return rolled-back
+```
+
+```text
+createDataRepairArtifacts(options):
+    load current signed Offline manifest
+    require dataRepairFile is ordinary repair.js and <= 512 KiB
+    require repairVersion greater than existing dataRepair version
+    zip only repair.js as data/data-repair-v<repairVersion>.zip
+    calculate archive sha256 and scriptSha256
+    merge dataRepair metadata into existing signed payload
+    sign and write versioned manifest
+```
+
+```text
+Android apply server update:
+    parse optional components.dataRepair
+    if repair is not already applied:
+        download dataRepair artifact
+        verify archive size and sha256
+        extract to updates/data-repair/data-repair-v<repairVersion>
+        require exact file set { repair.js }
+        write data-repair/pending-repair.json
+    restart Node
+
+Node server boot:
+    before media/listen initialization:
+        if pending marker exists:
+            create temporary Chat2API runtime management service
+            applyPendingRepair()
+            stop temporary runtime
+    then continue normal server listen
+```

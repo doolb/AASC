@@ -96,10 +96,36 @@ async function createFixture(mode) {
             sha256: sha256(apkBytes)
         };
     }
+    let dataRepair;
+    if (mode === 'data-repair') {
+        const repairBytes = Buffer.from('repair script archive');
+        const relativeUrl = 'data/data-repair-v1.zip';
+        await fs.promises.mkdir(path.dirname(path.join(artifactRoot, relativeUrl)), { recursive: true });
+        await fs.promises.writeFile(path.join(artifactRoot, relativeUrl), repairBytes);
+        dataRepair = {
+            version: 1,
+            repairVersion: 1,
+            repairId: 'publish-repair-1',
+            requiredCodeVersion: codeVersion,
+            requiredDataVersion: 0,
+            targetDataVersion: 1,
+            capabilities: ['chat2api.config'],
+            sensitive: false,
+            scriptSha256: '1'.repeat(64),
+            relativeUrl,
+            size: repairBytes.length,
+            sha256: sha256(repairBytes)
+        };
+    }
     const payload = {
         schemaVersion: 1,
         generatedAt: '2026-09-16T00:00:00.000Z',
-        components: { code, dependencies, ...(apkMin ? { apkMin } : {}) }
+        components: {
+            code,
+            dependencies,
+            ...(apkMin ? { apkMin } : {}),
+            ...(dataRepair ? { dataRepair } : {})
+        }
     };
     const manifest = {
         payload,
@@ -156,6 +182,33 @@ test('all publishes both component archives before exposing its signed manifest'
     ]);
     assert.deepEqual(JSON.parse(await fs.promises.readFile(path.join(fixture.localRoot, 'manifest.json'), 'utf8')),
         JSON.parse(await fs.promises.readFile(fixture.manifestPath, 'utf8')));
+});
+
+test('data-repair 发布只上传修复包并保留当前代码和依赖组件', async (t) => {
+    const fixture = await createFixture('data-repair');
+    t.after(() => fs.promises.rm(fixture.root, { recursive: true, force: true }));
+    for (const relativeUrl of [
+        fixture.manifest.payload.components.code.relativeUrl,
+        fixture.manifest.payload.components.dependencies.relativeUrl
+    ]) {
+        await writePublishedFile(fixture.localRoot, relativeUrl,
+            await fs.promises.readFile(path.join(fixture.artifactRoot, relativeUrl)));
+    }
+
+    const result = await publishOfflineUpdate({
+        mode: 'data-repair',
+        artifactRoot: fixture.artifactRoot,
+        manifestPath: fixture.manifestPath,
+        publicKeyPem: fixture.publicKeyPem,
+        localRoot: fixture.localRoot
+    });
+
+    assert.deepEqual(result.publishedRelativePaths, [
+        'data/data-repair-v1.zip',
+        'manifest.json'
+    ]);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'code/code-v2.zip')), true);
+    assert.equal(fs.existsSync(path.join(fixture.localRoot, 'dependencies/dependencies-v1.zip')), true);
 });
 
 test('apk-min 发布只上传 min APK，先验证并保留已有代码和依赖组件', async (t) => {

@@ -158,6 +158,33 @@ test('all builds matching source and Android production dependency archives', as
     assert.equal(verifySignedManifest(result.manifest, fixture.publicKeyPem), true);
 });
 
+test('data-repair builds a signed archive containing only repair.js and preserves the current components', async (t) => {
+    const fixture = createFixture();
+    t.after(() => removeFixture(fixture));
+    const repairFile = path.join(fixture.projectRoot, 'repair.js');
+    await fs.promises.writeFile(repairFile, "module.exports = async ({ services }) => services.config.set('server.port', 8082);\n");
+
+    const result = await createOfflineUpdateArtifacts({
+        ...fixture,
+        mode: 'data-repair',
+        dataRepairFile: repairFile,
+        repairVersion: 1,
+        repairId: 'server-config-1',
+        requiredCodeVersion: 1,
+        requiredDataVersion: 0,
+        targetDataVersion: 1,
+        repairCapabilities: ['config']
+    });
+
+    assert.deepEqual(archiveEntries(result.dataRepairArchivePath), ['repair.js']);
+    assert.equal(result.manifest.payload.components.code.version, 1);
+    assert.equal(result.manifest.payload.components.dataRepair.repairId, 'server-config-1');
+    assert.equal(result.manifest.payload.components.dataRepair.scriptSha256, sha256(
+        fs.readFileSync(repairFile)
+    ));
+    assert.equal(verifySignedManifest(result.manifest, fixture.publicKeyPem), true);
+});
+
 test('all publishes code, dependencies, and manifest when output is on a different filesystem', async (t) => {
     const fixture = createFixture();
     const outputDir = fs.mkdtempSync(path.join(__dirname, '.offline-update-output-'));

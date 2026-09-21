@@ -178,6 +178,38 @@ class OfflineUpdateManagerTest {
     }
 
     @Test
+    fun dataRepair只允许根目录repair脚本() {
+        assertTrue(OfflineUpdateManager.isAllowedComponentEntry("dataRepair", "repair.js"))
+        assertFalse(OfflineUpdateManager.isAllowedComponentEntry("dataRepair", "src/repair.js"))
+        assertFalse(OfflineUpdateManager.isAllowedComponentEntry("dataRepair", "config.json"))
+    }
+
+    @Test
+    fun dataRepair按repairId读取已应用状态() {
+        val root = temporaryFolder.newFolder("server-root")
+        val stateDirectory = File(root, "data-repair")
+        check(stateDirectory.mkdirs())
+        File(stateDirectory, "state.json").writeText(
+            """{"dataVersion":1,"appliedRepairs":[{"repairId":"repair-1"}]}"""
+        )
+        val artifact = OfflineUpdateArtifact(5, "data/data-repair-v5.zip", 10, "a".repeat(64))
+        val repair = OfflineDataRepairArtifact(
+            repairVersion = 5,
+            repairId = "repair-1",
+            artifact = artifact,
+            requiredCodeVersion = 4,
+            requiredApkVersionCode = null,
+            requiredDataVersion = 0,
+            targetDataVersion = 1,
+            scriptSha256 = "b".repeat(64),
+            capabilities = listOf("config"),
+            sensitive = false
+        )
+
+        assertTrue(OfflineUpdateManager.isDataRepairApplied(root, repair))
+    }
+
+    @Test
     fun ZIP展开前校验路径并验证实际写入大小() {
         val archive = temporaryFolder.newFile("code.zip")
         ZipOutputStream(FileOutputStream(archive)).use { zip ->

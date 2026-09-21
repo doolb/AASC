@@ -54,7 +54,8 @@ data class ServiceUpdateResult(
     val installed: InstalledServiceVersion? = null,
     val targetCodeVersion: Int? = null,
     val targetDependencyVersion: Int? = null,
-    val downloadBytes: Long = 0L
+    val downloadBytes: Long = 0L,
+    val dataRepair: OfflineDataRepairArtifact? = null
 )
 
 data class ServiceUpdateApplyResult(
@@ -75,7 +76,8 @@ class OfflineUpdateManager(
         CURRENT,
         CODE_ONLY,
         ALL,
-        NEEDS_ALL
+        NEEDS_ALL,
+        DATA_REPAIR_ONLY
     }
 
     private data class ManifestSource(val baseUrl: String, val manifest: OfflineUpdateManifest)
@@ -197,6 +199,18 @@ class OfflineUpdateManager(
                 return ServiceUpdatePlan.ALL
             }
             return ServiceUpdatePlan.NEEDS_ALL
+        }
+
+        @JvmStatic
+        fun isDataRepairApplied(root: File, repair: OfflineDataRepairArtifact): Boolean {
+            val stateFile = File(root, "data-repair/state.json")
+            if (!stateFile.isFile) return false
+            return runCatching {
+                val applied = JSONObject(stateFile.readText()).optJSONArray("appliedRepairs") ?: return@runCatching false
+                (0 until applied.length()).any { index ->
+                    applied.optJSONObject(index)?.optString("repairId") == repair.repairId
+                }
+            }.getOrDefault(false)
         }
 
         /**
@@ -467,6 +481,7 @@ class OfflineUpdateManager(
                 "dependencies" -> normalizedEntryName == "node_modules" ||
                     normalizedEntryName == "dependency-manifest.json" ||
                     normalizedEntryName.startsWith("node_modules/")
+                "dataRepair" -> normalizedEntryName == "repair.js"
                 else -> false
             }
         }
@@ -556,8 +571,21 @@ class OfflineUpdateManager(
                 )
             }
             val plan = planServiceUpdate(current, source.manifest)
+            val pendingRepair = source.manifest.dataRepair?.takeUnless { isDataRepairApplied(root, it) }
             if (plan == ServiceUpdatePlan.CURRENT) {
-                return ServiceUpdateResult("服务已是当前版本", installed = current, plan = plan)
+                if (pendingRepair == null) {
+                    return ServiceUpdateResult("服务已是当前版本", installed = current, plan = plan)
+                }
+                return ServiceUpdateResult(
+                    status = "发现 Offline 数据修复",
+                    hasUpdate = true,
+                    plan = ServiceUpdatePlan.DATA_REPAIR_ONLY,
+                    installed = current,
+                    targetCodeVersion = current.codeVersion,
+                    targetDependencyVersion = current.dependencyVersion,
+                    downloadBytes = pendingRepair.artifact.size,
+                    dataRepair = pendingRepair
+                )
             }
             if (plan == ServiceUpdatePlan.NEEDS_ALL) {
                 return ServiceUpdateResult(
@@ -565,7 +593,8 @@ class OfflineUpdateManager(
                     installed = current,
                     plan = plan,
                     targetCodeVersion = source.manifest.code.version,
-                    targetDependencyVersion = source.manifest.dependencies.version
+                    targetDependencyVersion = source.manifest.dependencies.version,
+                    dataRepair = pendingRepair
                 )
             }
             val downloadBytes = when (plan) {
@@ -573,7 +602,8 @@ class OfflineUpdateManager(
                 ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.size)
                     ?: throw IllegalArgumentException("更新下载总大小溢出")
                 else -> 0L
-            }
+            }?.let { base -> if (pendingRepair == null) base else safeAdd(base, pendingRepair.artifact.size) }
+                ?: throw IllegalArgumentException("更新下载总大小溢出")
             ServiceUpdateResult(
                 status = "发现 Offline 服务更新",
                 hasUpdate = true,
@@ -581,7 +611,8 @@ class OfflineUpdateManager(
                 installed = current,
                 targetCodeVersion = source.manifest.code.version,
                 targetDependencyVersion = source.manifest.dependencies.version,
-                downloadBytes = downloadBytes
+                downloadBytes = downloadBytes,
+                dataRepair = pendingRepair
             )
         } catch (error: Exception) {
             Log.e(TAG, "Offline 服务更新检查失败: ${error.message}", error)
@@ -620,7 +651,10 @@ class OfflineUpdateManager(
     ): ServiceUpdateApplyResult {
         return try {
             val status = checkAndApplyServerUpdateInternal(root, onProgress)
-            ServiceUpdateApplyResult(status, status.startsWith("已应用服务更新"))
+            ServiceUpdateApplyResult(
+                status,
+                status.startsWith("已应用服务更新") || status.startsWith("已准备数据修复")
+            )
         } catch (error: Exception) {
             Log.e(TAG, "服务更新失败，继续使用当前版本: ${error.message}", error)
             ServiceUpdateApplyResult("保留当前版本：${error.message ?: "更新失败"}")
@@ -643,17 +677,22 @@ class OfflineUpdateManager(
         }
         val current = readInstalledServiceVersion(root)
         val plan = planServiceUpdate(current, source.manifest)
-        if (plan == ServiceUpdatePlan.CURRENT) return "服务已是当前版本"
+        val pendingRepair = source.manifest.dataRepair?.takeUnless { isDataRepairApplied(root, it) }
+        if (plan == ServiceUpdatePlan.CURRENT && pendingRepair == null) return "服务已是当前版本"
         if (plan == ServiceUpdatePlan.NEEDS_ALL) return "服务版本/依赖指纹不匹配，需要发布 all 更新"
+        val effectivePlan = if (plan == ServiceUpdatePlan.CURRENT) ServiceUpdatePlan.DATA_REPAIR_ONLY else plan
 
         val updatesDirectory = File(root, "updates")
         check(updatesDirectory.isDirectory || updatesDirectory.mkdirs()) { "无法创建 Offline 更新目录" }
-        val requiredDownloads = when (plan) {
+        val requiredDownloads = when (effectivePlan) {
             ServiceUpdatePlan.CODE_ONLY -> source.manifest.code.size
             ServiceUpdatePlan.ALL -> safeAdd(source.manifest.code.size, source.manifest.dependencies.size)
                 ?: throw IllegalArgumentException("更新下载总大小溢出")
+            ServiceUpdatePlan.DATA_REPAIR_ONLY -> 0L
             else -> 0L
-        }
+        }.let { base ->
+            if (pendingRepair == null) base else safeAdd(base, pendingRepair.artifact.size)
+        } ?: throw IllegalArgumentException("更新下载总大小溢出")
         onProgress?.invoke(OfflineUpdateProgress("checking", 0L, requiredDownloads, "正在检查服务更新空间"))
         val initialAvailable = StatFs(root.absolutePath).availableBytes
         check(hasEnoughSpace(initialAvailable, requiredDownloads, 0L, ROLLBACK_RESERVE_BYTES)) {
@@ -663,31 +702,44 @@ class OfflineUpdateManager(
         val stage = File(updatesDirectory, ".staging-${System.currentTimeMillis()}-${android.os.Process.myPid()}")
         check(stage.mkdir()) { "无法创建 Offline 更新暂存目录" }
         try {
-            val codeArchive = downloadArtifact(source, source.manifest.code, File(stage, "code.zip"), onProgress)
-            val dependencyArchive = if (plan == ServiceUpdatePlan.ALL) {
+            val codeArchive = if (effectivePlan != ServiceUpdatePlan.DATA_REPAIR_ONLY) {
+                downloadArtifact(source, source.manifest.code, File(stage, "code.zip"), onProgress)
+            } else {
+                null
+            }
+            val dependencyArchive = if (effectivePlan == ServiceUpdatePlan.ALL) {
                 downloadArtifact(source, source.manifest.dependencies, File(stage, "dependencies.zip"), onProgress)
             } else {
                 null
             }
+            val repairArchive = pendingRepair?.let {
+                downloadArtifact(source, it.artifact, File(stage, "data-repair.zip"), onProgress)
+            }
             onProgress?.invoke(OfflineUpdateProgress("verifying", 0L, 1L, "正在校验服务更新包"))
-            val codeInspection = validateComponentArchive(codeArchive.file, "code")
+            val codeInspection = codeArchive?.let { validateComponentArchive(it.file, "code") }
             val dependencyInspection = dependencyArchive?.let { validateComponentArchive(it.file, "dependencies") }
-            val expandedBytes = safeAdd(codeInspection.expandedBytes, dependencyInspection?.expandedBytes ?: 0L)
+            val repairInspection = repairArchive?.let { validateComponentArchive(it.file, "dataRepair") }
+            val expandedBytes = safeAdd(codeInspection?.expandedBytes ?: 0L, dependencyInspection?.expandedBytes ?: 0L)
+                ?.let { safeAdd(it, repairInspection?.expandedBytes ?: 0L) }
                 ?: throw IllegalArgumentException("更新展开大小溢出")
             val afterDownloadAvailable = StatFs(root.absolutePath).availableBytes
             check(hasEnoughSpace(afterDownloadAvailable, 0L, expandedBytes, ROLLBACK_RESERVE_BYTES)) {
                 "设备剩余空间不足以保留回滚版本并解压更新"
             }
 
-            val codeStage = File(stage, "code")
-            extractZipArchive(codeArchive.file, codeStage)
-            validateCodePackage(codeStage, source.manifest.code)
-            val codeDirectory = installVersionDirectory(
-                stageDirectory = codeStage,
-                destination = File(updatesDirectory, "code/code-v${source.manifest.code.version}"),
-                component = source.manifest.code,
-                kind = "code"
-            )
+            val codeDirectory = if (codeArchive != null) {
+                val codeStage = File(stage, "code")
+                extractZipArchive(codeArchive.file, codeStage)
+                validateCodePackage(codeStage, source.manifest.code)
+                installVersionDirectory(
+                    stageDirectory = codeStage,
+                    destination = File(updatesDirectory, "code/code-v${source.manifest.code.version}"),
+                    component = source.manifest.code,
+                    kind = "code"
+                )
+            } else {
+                null
+            }
 
             val dependencyDirectory = if (dependencyArchive != null) {
                 val dependencyStage = File(stage, "dependencies")
@@ -715,21 +767,42 @@ class OfflineUpdateManager(
             } else {
                 DependencyDirectoryResolution(dependencyDirectory, legacyDependencies = false)
             }
-            val installedDependencyDirectory = dependencyResolution.directory
-            check(installedDependencyDirectory.isDirectory) { "当前 Android production dependencies 目录不存在" }
-            val pointer = ReleasePointer(
-                codeVersion = source.manifest.code.version,
-                dependencyVersion = source.manifest.dependencies.version,
-                lockSha256 = source.manifest.dependencies.lockSha256.orEmpty(),
-                legacyDependencies = dependencyResolution.legacyDependencies,
-                pendingHealth = true,
-                previous = current,
-                previousLegacyDependencies = oldPointer?.legacyDependencies ?: true
-            )
+            if (codeDirectory != null) {
+                val installedDependencyDirectory = dependencyResolution.directory
+                check(installedDependencyDirectory.isDirectory) { "当前 Android production dependencies 目录不存在" }
+                val pointer = ReleasePointer(
+                    codeVersion = source.manifest.code.version,
+                    dependencyVersion = source.manifest.dependencies.version,
+                    lockSha256 = source.manifest.dependencies.lockSha256.orEmpty(),
+                    legacyDependencies = dependencyResolution.legacyDependencies,
+                    pendingHealth = true,
+                    previous = current,
+                    previousLegacyDependencies = oldPointer?.legacyDependencies ?: true
+                )
+                onProgress?.invoke(OfflineUpdateProgress("switching", 1L, 1L, "正在切换服务版本"))
+                writeReleasePointer(root, pointer)
+                Log.i(TAG, "已原子切换服务版本 code=${pointer.codeVersion}, dependencies=${pointer.dependencyVersion}")
+            }
+
+            repairArchive?.let {
+                val repairMetadata = pendingRepair ?: throw IllegalStateException("数据修复包元数据缺失")
+                val repairStage = File(stage, "data-repair")
+                extractZipArchive(it.file, repairStage)
+                validateDataRepairPackage(repairStage, repairMetadata)
+                val repairDirectory = installVersionDirectory(
+                    stageDirectory = repairStage,
+                    destination = File(updatesDirectory, "data-repair/data-repair-v${repairMetadata.repairVersion}"),
+                    component = repairMetadata.artifact,
+                    kind = "dataRepair"
+                )
+                writePendingDataRepair(root, repairMetadata, repairDirectory)
+            }
             onProgress?.invoke(OfflineUpdateProgress("switching", 1L, 1L, "正在切换服务版本"))
-            writeReleasePointer(root, pointer)
-            Log.i(TAG, "已原子切换服务版本 code=${pointer.codeVersion}, dependencies=${pointer.dependencyVersion}")
-            return "已应用服务更新 ${pointer.codeVersion}/${pointer.dependencyVersion}"
+            return if (codeDirectory == null) {
+                "已准备数据修复 ${pendingRepair?.repairId ?: "unknown"}"
+            } else {
+                "已应用服务更新 ${source.manifest.code.version}/${source.manifest.dependencies.version}"
+            }
         } finally {
             stage.deleteRecursively()
         }
@@ -1037,6 +1110,10 @@ class OfflineUpdateManager(
             require(inspection.entryNames.contains("package.json") && inspection.entryNames.contains("package-lock.json")) {
                 "服务代码更新包缺少 package 元信息"
             }
+        } else if (component == "dataRepair") {
+            require(inspection.entryNames.contains("repair.js")) {
+                "dataRepair 更新包缺少 repair.js"
+            }
         } else {
             require(inspection.entryNames.contains("dependency-manifest.json")) {
                 "依赖更新包缺少 dependency-manifest.json"
@@ -1046,6 +1123,43 @@ class OfflineUpdateManager(
             }
         }
         return inspection
+    }
+
+    private fun validateDataRepairPackage(directory: File, expected: OfflineDataRepairArtifact) {
+        val script = File(directory, "repair.js")
+        require(script.isFile) { "dataRepair 更新包缺少 repair.js" }
+        require(sha256File(script).equals(expected.scriptSha256, ignoreCase = true)) {
+            "dataRepair repair.js SHA-256 与签名清单不匹配"
+        }
+        val entries = directory.walkTopDown()
+            .filter { it.isFile }
+            .map { it.relativeTo(directory).invariantSeparatorsPath }
+            .toSet()
+        require(entries == setOf("repair.js")) { "dataRepair 更新包只能包含 repair.js" }
+    }
+
+    private fun writePendingDataRepair(
+        root: File,
+        metadata: OfflineDataRepairArtifact,
+        installedDirectory: File
+    ) {
+        val pendingFile = File(root, "data-repair/pending-repair.json")
+        val script = File(installedDirectory, "repair.js")
+        val scriptRelativePath = script.relativeTo(root).invariantSeparatorsPath
+        val pending = JSONObject()
+            .put("format", "aasc-offline-data-repair")
+            .put("schemaVersion", 1)
+            .put("repairId", metadata.repairId)
+            .put("repairVersion", metadata.repairVersion)
+            .put("requiredCodeVersion", metadata.requiredCodeVersion)
+            .put("requiredDataVersion", metadata.requiredDataVersion)
+            .put("targetDataVersion", metadata.targetDataVersion)
+            .put("script", scriptRelativePath)
+            .put("scriptSha256", metadata.scriptSha256)
+            .put("capabilities", org.json.JSONArray(metadata.capabilities))
+            .put("sensitive", metadata.sensitive)
+        metadata.requiredApkVersionCode?.let { pending.put("requiredApkVersionCode", it) }
+        writeJsonAtomically(pendingFile, pending)
     }
 
     private fun validateCodePackage(directory: File, expected: OfflineUpdateArtifact) {

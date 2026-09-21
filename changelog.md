@@ -164,10 +164,17 @@
 
 ### Offline 通用数据修复包
 
+- ✅ [2026-09-21] 实现通用 Offline JS 数据修复包及 Android/Node 应用链路。
+  - 新增 `data-repair-js-runner.js`：受限 VM 执行签名 `repair.js`，复用原有配置和 Chat2API 管理类，支持能力白名单、版本门控、按设备 `repairId` 幂等、快照回滚和失败重试。
+  - 更新 Offline 构建/发布脚本：支持 `build:offline-data-repair`、`publish:offline-data-repair`，生成只含 `repair.js` 的 `data/data-repair-v<N>.zip`，并对清单、hash、LAN/WAN 和旧版本执行既有校验规则。
+  - 更新 Android 清单解析、更新计划、下载校验、pending marker、Node 启动前应用和数据修复提示；账号能力必须显式声明 `sensitive=true`。
+  - Node 修复器与 Offline 构建/发布专项测试共 `35/35` 通过；Node 语法检查和 `git diff --check` 通过。Android Gradle `:app:testDebugUnitTest` 在固定 MNN 环境下通过。
+  - 本次不包含 mini/flash/pro 多 Provider 路由业务内容，后续可通过 `repair.js` 调用已注册 Chat2API 管理服务完成配置。
+
 - 🔄 [2026-09-20] 完成支持全配置运行时自动保存和 Offline JS 数据修复包的详细设计。
   - 定义 `dataRepair` 签名组件、`repair.js` 原有业务类调用、运行时统一保存、版本门控、备份回滚和 Android/Node 协作流程。
   - 明确不加入控制端 `requiredDataVersion` 并发冲突校验；Chat2API 账号凭据通过敏感业务类支持，但默认不自动允许。
-  - 新增 `docs/design/offline-data-repair.md`、`docs/spec/offline-data-repair.md` 和 `docs/task/20260920_Offline通用数据修复包详细设计.md`；当前仍待代码实现。
+  - 新增 `docs/design/offline-data-repair.md`、`docs/spec/offline-data-repair.md` 和 `docs/task/20260920_Offline通用数据修复包详细设计.md`。
 
 - 🔄 [2026-09-20] 根据需求将修复执行模型调整为原有业务类驱动的 `repair.js`。
   - 修复脚本只调用 `config.set`、Chat2API management service 等白名单服务对象，不直接访问配置路径或 JSON payload。
