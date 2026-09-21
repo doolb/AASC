@@ -66,6 +66,33 @@
         return 'group';
     }
 
+    function getChatTtsConversationId() {
+        const session = state.session || {};
+        const values = [
+            session.mode || 'group',
+            session.mode === 'private' ? session.privateTarget : '',
+            session.privateSessionId || 'default',
+            session.mode === 'role' ? session.roleTarget : ''
+        ];
+        return values.map((value) => String(value || '').replaceAll('|', '%7C')).join('|');
+    }
+
+    function stopConversationTts({ phase = null, notify = false } = {}) {
+        const conversationId = getChatTtsConversationId();
+        if (root.DisplayTtsController?.stopChatTts) {
+            root.DisplayTtsController.stopChatTts(conversationId, phase);
+        }
+        state.send({
+            type: 'tts',
+            action: 'stop',
+            chatOnly: true,
+            chatTtsConversationId: conversationId,
+            ...(phase ? { chatTtsPhase: phase } : {}),
+            displayId: state.displayId
+        });
+        if (notify && root.showToast) root.showToast('已停止当前聊天播报', 'success');
+    }
+
     function buildTargets() {
         const targets = [{ value: 'group', title: '群聊', hint: '所有角色' }];
         if (state.assistantName) {
@@ -252,6 +279,8 @@
         if (!input) return;
         const content = input.value.trim();
         if (!content) return;
+        // 新消息先清理本地播放队列并通知服务端，使上一轮迟到的音频失效。
+        stopConversationTts();
         const requestId = `display-chat-${Date.now()}-${++state.requestSequence}`;
         const target = state.session.mode === 'private' ? state.session.privateTarget : null;
         const message = {
@@ -266,6 +295,7 @@
             target,
             templateTarget: null,
             sessionId: state.session.privateSessionId || 'default',
+            chatTtsConversationId: getChatTtsConversationId(),
             playOnControl: state.session.playOnControl === true
         };
         if (!state.send(message)) {
@@ -570,6 +600,7 @@
         handleServerMessage,
         init,
         resize,
-        setVisible
+        setVisible,
+        stopConversationTts
     });
 }(window));

@@ -1,5 +1,57 @@
 # Web MediaCenter - 变更日志
 
+### APK 控制端入口边缘收缩
+
+- ✅ [2026-09-21] 将 Android 原生控制端按钮改为左侧边缘收缩入口。
+  - 收缩态显示“控”标签，第一次点击只展开完整“控制端”按钮，第二次点击才打开控制端页面；关闭页面、返回显示端或撤销授权后恢复收缩态。
+  - 不改变 Offline 默认可用、普通 APK 授权规则、WebView 图层和启动遮罩层级。
+  - Android JVM 单元测试 `185/185` 通过，Debug APK 构建成功；本次未重打完整 Offline APK。
+
+### Offline Pi 聊天 `partial-json` 依赖修复
+
+- ✅ [2026-09-20] 修复 Offline APK 的 Pi Agent 聊天找不到 `openai/_vendor/partial-json-parser/parser.mjs`。
+  - `scripts/ops/prepare-android-node-runtime.js` 对 OpenAI `_vendor` 目录树建立最小白名单并增加构建预检；Pi Runtime 和 readonly tools 从 `AASC_NODE_MODULES_DIR` 的 active dependency 根加载。
+  - 新增 `src/apps/server/modules/chat/pi-runtime-module-paths.js` 及回归测试，更新 Pi/Android Runtime 相关 spec、design、task 文档。
+  - 定向回归 `42/42` 通过；code-only v15 已在 LAN 真机 Offline v24 上热更新，日志确认请求进入本机 `llm-server`/MNN，未再出现 parser 缺失。
+  - 真机最终单条回复仍受 MNN 本地请求超时影响，归入后续模型执行稳定性问题；本次未替换或重新发布完整 APK。
+
+### 显示端聊天操作布局与 MMD 控制
+
+- ✅ [2026-09-20] 完成显示端聊天输入布局、聊天期间播报文字隐藏和控制端 MMD 显示开关。
+  - `display-chat.css` 将输入框与操作区改为两列布局，发送/清空按钮在输入框右侧纵向排列。
+  - `display-stage.js`、`display.css` 在聊天打开时隐藏播报文字，同时保持 TTS 音频队列和播放链路；聊天关闭后恢复文字显示条件。
+  - `upload.html`、`controls.js`、`websocket.js` 和 `display.html` 增加 `mmdVisibility` 控制消息及 ACK 状态同步，只作用于当前选中的显示端，不销毁 MMD/VRM 模型。
+  - 验证：显示端聊天/MMD 契约测试 `15/15`；播报文字旋转回归 `9/9`；JS 语法检查和 `git diff --check` 通过。
+
+### 聊天 TTS 打断与 Offline 定时更新
+
+- ✅ [2026-09-20] 完成聊天 TTS 会话打断和 Offline 前台定时更新。
+  - 服务端为聊天会话维护 TTS 代次，流式句子携带 `think`/`answer` 阶段；新消息、停止按钮和答案阶段切换会使旧思维链/旧回复音频失效。
+  - 显示端在聊天、角色按钮后增加“停止播报”，只清理当前会话的 TTS；控制端发送新消息或点击停止时也只清理当前会话，媒体和报时队列不受影响。
+  - Offline `MainActivity` 在前台启动/恢复时检查更新，前台每 10 分钟再次检查，暂停/销毁时取消回调；更新下载、验签、安装和回滚流程保持不变。
+  - 新增 `docs/design/chat-tts-interruption-and-offline-update.md`、`docs/spec/chat-tts-interruption-and-offline-update.md`、`docs/task/20260920_聊天TTS打断与Offline定时更新.md` 和 `tests/chat-tts-interruption.test.js`。
+  - 验证：Node 定向回归 `60/60`；Android `:app:testDebugUnitTest` `182/182`；JavaScript 语法检查和 `git diff --check` 通过。`allserver-min` v24 已构建并发布，大小 `89264782` bytes，SHA-256 `faed86143a39eff7fa398b2815b9952e35867c68d5776cd0d9a565cec195c7b6`。
+  - code v14 大小 `15173599` bytes、SHA-256 `a0fd191e9d9b2eeabb9e56807b0c6715818cd5e60f9b31c518b085b6d5f6aa8d`；复用 dependencies v4。code v14、dependencies v4、min v24 已同步到 LAN/WAN，清单签名、HTTP、远端 hash 和旧版本精确清理均通过。
+  - min 下载地址：`http://192.168.1.39/mnt/aasc-offline/apk/aasc-display-offline-min-v24.apk`、`http://120.79.245.103/mnt/aasc-offline/apk/aasc-display-offline-min-v24.apk`。
+
+### Android Offline 设备类别缩放系数
+
+- ✅ [2026-09-20] 将 Offline WebView 缩放改为按运行时设备类别和 Display metrics 计算缩放因子。
+  - 通过 `smallestScreenWidthDp` 区分手机与电脑；手机系数为 `1.108705`，电脑系数为 `1.0`，缩放因子通用限制为 `1.0～3.0`。
+  - `2309×1080@480dpi` 仅作为验算样例，手机计算结果为因子 `3.0`，不包含设备分辨率特判；显示页、控制页和诊断浮层共用分类结果。
+  - 新增 `WebViewDeviceClass`、`WebViewScalePolicy.scaleFactor()` 及对应 Android JVM 测试；`BUILD SUCCESSFUL`，Offline 静态回归 `25/26`，唯一失败为既有固定 displayId 测试数据不一致。
+- ✅ [2026-09-20] 发布设备类别缩放系数修正版 Offline min APK，`allserver-min` versionCode 从 `22` 升至 `23`，versionName 为 `0.2.21-offline-min`。
+  - 发布文件为 `aasc-display-offline-min-v23.apk`，大小 `89264066` bytes，SHA-256 为 `dfed13b4b2a1946dd14c64ae0cfae1881ea1728184d82a43ea58c92e533950d0`；LAN/WAN 签名清单验签、HTTP `200`/`Content-Length` 和旧 min 精确清理通过。
+
+### Android Offline 手机 UI 缩放
+
+- ✅ [2026-09-20] 将 Offline APK 手机页面缩放上限校正到 `200%`。
+  - `WebViewScalePolicy` 从等权平均改为按运行时 display metrics 计算的 `clamp(round((长边 / 1280) × (densityDpi / 320) × 100), 100, 200)`；`2309×1080@480dpi` 仅作为验算样例，由 `165%` 调整为上限 `200%`，不包含设备特判。
+  - 显示页、控制页和诊断浮层继续复用同一策略；未改变系统分辨率、媒体层、模型渲染尺寸或输入坐标协议。
+  - 更新 `WebViewScalePolicyTest.kt`、Android 显示端 design/spec 和 `docs/task/20260920_Offline手机UI缩放校正至200.md`。
+  - Android JVM `:app:testDebugUnitTest` 通过，`git diff --check` 通过；Offline 静态回归 `37/39`，两个既有失败为历史 displayId 和过期 versionCode 测试数据不一致，本次未修改。
+  - min v22（`0.2.20-offline-min`）已发布到 LAN/WAN，APK 大小 `89262738` bytes，SHA-256 为 `cda5cca9a2d124e3c718c04d1db3d88c117e6f57180ecca15f1b9f8b6ac4393b`；两端签名清单、HTTP 200/Content-Length、APK ZIP 完整性和旧 min 精确清理通过，code/dependencies 保持 `13/4`。
+
 ### Offline 通用数据修复包
 
 - 🔄 [2026-09-20] 完成支持全配置运行时自动保存和 Offline JS 数据修复包的详细设计。

@@ -53,6 +53,7 @@ const Chat = {
     audioQueue: [],
     isPlayingAudio: false,
     currentAudio: null,
+    currentAudioItem: null,
     silenceStartTime: null,
     audioContext: null,
     analyser: null,
@@ -777,6 +778,54 @@ const Chat = {
         this.saveSession();
         this.renderPlayOnControlToggle();
     },
+
+    getChatTtsConversationId() {
+        const session = this.session || {};
+        const values = [
+            session.mode || 'group',
+            session.mode === 'private' ? session.privateTarget : '',
+            session.privateSessionId || 'default',
+            session.mode === 'role' ? session.roleTarget : ''
+        ];
+        return values.map((value) => String(value || '').replaceAll('|', '%7C')).join('|');
+    },
+
+    stopChatTts({ phase = null, notify = false, sendRemote = true } = {}) {
+        const conversationId = this.getChatTtsConversationId();
+        const matches = (item) => item?.chatTtsConversationId === conversationId
+            && (!phase || item.chatTtsPhase === phase);
+        this.audioQueue = this.audioQueue.filter((item) => !matches(item));
+        if (this.currentAudioItem && matches(this.currentAudioItem)) {
+            try {
+                this.currentAudio?.pause();
+                this.currentAudio.currentTime = 0;
+            } catch (error) {
+                console.warn('停止控制端聊天 TTS 失败:', error);
+            }
+            this.currentAudio = null;
+            this.currentAudioItem = null;
+            this.isPlayingAudio = false;
+            this.processAudioQueue();
+        }
+        if (sendRemote && window.WebSocketManager?.ws?.readyState === WebSocket.OPEN) {
+            const message = {
+                type: 'tts',
+                action: 'stop',
+                chatOnly: true,
+                chatTtsConversationId: conversationId,
+                ...(phase ? { chatTtsPhase: phase } : {}),
+                playOnControl: this.session.playOnControl === true
+            };
+            const selectionMode = window.DisplayList ? window.DisplayList.selectionMode : 'single';
+            if (selectionMode === 'all' || selectionMode === 'adaptive') {
+                message.displayIds = window.DisplayList?.getSelectedDisplayIds?.() || [];
+            } else {
+                message.displayId = window.currentDisplayId || null;
+            }
+            window.WebSocketManager.ws.send(JSON.stringify(message));
+        }
+        if (notify) window.showToast('已停止当前聊天播报', 'success');
+    },
     
     async saveConfig() {
         const systemPromptInput = document.getElementById('chatSystemPrompt');
@@ -1417,6 +1466,7 @@ const Chat = {
         }
 
         const requestId = `${Date.now()}-${++this.requestCounter}`;
+        this.stopChatTts();
         this.activeRequestId = requestId;
         this.isLoading = true;
         this.currentStreamingMessage = '';
@@ -1463,6 +1513,7 @@ const Chat = {
                 temporaryConversationId: mode === 'temporary'
                     ? (this.temporaryConversation.id || null)
                     : null,
+                chatTtsConversationId: this.getChatTtsConversationId(),
                 playOnControl: this.session.playOnControl
             };
 
@@ -1897,8 +1948,8 @@ const Chat = {
         }
     },
     
-    playOnControlDevice(audioUrl, text) {
-        this.audioQueue.push({ audioUrl, text });
+    playOnControlDevice(audioUrl, text, metadata = {}) {
+        this.audioQueue.push({ audioUrl, text, ...metadata });
         this.processAudioQueue();
     },
     
@@ -1918,13 +1969,16 @@ const Chat = {
         }
         
         this.isPlayingAudio = true;
-        const { audioUrl, text } = this.audioQueue.shift();
+        const item = this.audioQueue.shift();
+        const { audioUrl, text } = item;
         
         const audio = new Audio(audioUrl);
         this.currentAudio = audio;
+        this.currentAudioItem = item;
         
         audio.onended = () => {
             this.currentAudio = null;
+            this.currentAudioItem = null;
             this.isPlayingAudio = false;
             this.processAudioQueue();
         };
@@ -1932,6 +1986,7 @@ const Chat = {
         audio.onerror = () => {
             window.showToast('音频播放失败', 'error');
             this.currentAudio = null;
+            this.currentAudioItem = null;
             this.isPlayingAudio = false;
             this.processAudioQueue();
         };
@@ -1940,6 +1995,7 @@ const Chat = {
             console.error('播放失败:', err);
             window.showToast('音频播放失败', 'error');
             this.currentAudio = null;
+            this.currentAudioItem = null;
             this.isPlayingAudio = false;
             this.processAudioQueue();
         });
@@ -2709,8 +2765,17 @@ const Chat = {
                 this.wasListeningBeforePlayback = this.isAlwaysListening;
                 this.stopListening();
             }
-            this.playOnControlDevice(data.audioUrl, data.text);
+            this.playOnControlDevice(data.audioUrl, data.text, {
+                chatTtsConversationId: data.chatTtsConversationId,
+                chatTtsPhase: data.chatTtsPhase
+            });
         }
+    },
+
+    handleStopChatTts(data) {
+        if (!data?.chatTtsConversationId) return;
+        if (data.chatTtsConversationId !== this.getChatTtsConversationId()) return;
+        this.stopChatTts({ phase: data.chatTtsPhase || null, sendRemote: false });
     },
     
     renderSearchHistory() {

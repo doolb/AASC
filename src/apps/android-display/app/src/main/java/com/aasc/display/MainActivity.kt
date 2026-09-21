@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
+import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.SslErrorHandler
@@ -40,6 +41,7 @@ class MainActivity : AppCompatActivity() {
         private const val REQ_STORAGE_TREE = 1005
         private const val REQ_INSTALL_UNKNOWN_SOURCES = 1006
         private const val OFFLINE_DISPLAY_INFO_HIDE_DELAY_MS = 30_000L
+        private const val OFFLINE_UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1_000L
     }
 
     private lateinit var configBar: View
@@ -77,6 +79,15 @@ class MainActivity : AppCompatActivity() {
     private var waitingForUnknownSourcesResult = false
     private val offlineUpdateManager by lazy { OfflineUpdateManager(this) }
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val offlineUpdateCheckRunnable = object : Runnable {
+        override fun run() {
+            if (!activityResumed) return
+            if (!serviceUpdateStarted) serviceUpdateCheckStarted = false
+            if (!minApkDownloadStarted) minApkUpdateCheckStarted = false
+            runOfflineUpdateChecksIfReady()
+            mainHandler.postDelayed(this, OFFLINE_UPDATE_CHECK_INTERVAL_MS.toLong())
+        }
+    }
     private var offlineDisplayInfoHideAtElapsedRealtime = 0L
     private val hideOfflineDisplayInfoRunnable = Runnable {
         if (!::offlineDisplayInfo.isInitialized || !offlineMode) return@Runnable
@@ -85,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private var controlPageAllowed = false
+    private var controlButtonState = AndroidControlAccess.ButtonState.COLLAPSED
     private var offlineDisplayRetryCount = 0
     // WebView 连接失败后可能继续回调 onPageFinished；该标记阻止错误页误判为成功页。
     private var offlineDisplayLoadFailed = false
@@ -348,6 +360,7 @@ class MainActivity : AppCompatActivity() {
         offlineUpdateDownload = findViewById(R.id.offlineUpdateDownload)
         offlineUpdateLater = findViewById(R.id.offlineUpdateLater)
         offlineDisplayInfo = findViewById(R.id.offlineDisplayInfo)
+        setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
         val connectBtn = findViewById<Button>(R.id.connectBtn)
         offlineMode = resources.getBoolean(R.bool.aasc_offline_mode)
         embeddedNode = resources.getBoolean(R.bool.aasc_embedded_node)
@@ -379,7 +392,7 @@ class MainActivity : AppCompatActivity() {
         serverInput.setText(selectedServerUrl)
         connectBtn.setOnClickListener { connect() }
         serverInput.setOnEditorActionListener { _, _, _ -> connect(); true }
-        controlToggleButton.setOnClickListener { toggleControlPage() }
+        controlToggleButton.setOnClickListener { handleControlButtonClick() }
         offlineStartupRetry.setOnClickListener { connect() }
         offlineUpdateDownload.setOnClickListener { startAvailableOfflineUpdate() }
         offlineUpdateLater.setOnClickListener { dismissAvailableOfflineUpdate() }
@@ -407,16 +420,14 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
-        // 服务已在后台运行、Activity 被系统回收后恢复时，不一定再次收到 STARTING 广播。
-        if (offlineMode && NodeRuntimeInstaller.hasFullOfflineInstall(File(filesDir, "aasc-server"))) {
-            checkForServiceUpdateOnce()
-            checkForMinApkUpdateOnce()
-        }
+        runOfflineUpdateChecksIfReady()
+        scheduleOfflineUpdateChecks()
         submitPendingMinApkUpdateIfVisible()
     }
 
     override fun onPause() {
         activityResumed = false
+        mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         super.onPause()
     }
 
@@ -428,9 +439,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(hideOfflineDisplayInfoRunnable)
+        mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
         nativeDisplayBridge?.release()
         audioFocusController.abandon()
         super.onDestroy()
+    }
+
+    /** Offline 更新只在前台检查，避免页面不可见时持续占用网络和线程。 */
+    private fun scheduleOfflineUpdateChecks() {
+        mainHandler.removeCallbacks(offlineUpdateCheckRunnable)
+        if (offlineMode && activityResumed) {
+            mainHandler.postDelayed(offlineUpdateCheckRunnable, OFFLINE_UPDATE_CHECK_INTERVAL_MS.toLong())
+        }
+    }
+
+    private fun runOfflineUpdateChecksIfReady() {
+        if (!offlineMode || !activityResumed) return
+        if (!NodeRuntimeInstaller.hasFullOfflineInstall(File(filesDir, "aasc-server"))) return
+        checkForServiceUpdateOnce()
+        checkForMinApkUpdateOnce()
     }
 
     // singleTask Activity 被部署脚本再次启动时不会重新执行 onCreate，需要在新 Intent 中恢复配置。
@@ -631,9 +658,14 @@ class MainActivity : AppCompatActivity() {
                 File(filesDir, "aasc-server")
             )
             runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (isFinishing || isDestroyed) {
+                    serviceUpdateCheckStarted = false
+                    return@runOnUiThread
+                }
                 if (!result.hasUpdate) {
                     android.util.Log.i("MainActivity", "Offline 服务更新检查: ${result.status}")
+                    // 本轮无更新后释放检查闸门；如果检查线程在后台完成，下一次 onResume 仍可立即重试。
+                    serviceUpdateCheckStarted = false
                     return@runOnUiThread
                 }
                 android.util.Log.i("MainActivity", "Offline 服务发现更新: ${result.status}")
@@ -654,9 +686,14 @@ class MainActivity : AppCompatActivity() {
                 File(filesDir, "aasc-server")
             )
             runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (isFinishing || isDestroyed) {
+                    minApkUpdateCheckStarted = false
+                    return@runOnUiThread
+                }
                 if (result.metadata == null) {
                     android.util.Log.i("MainActivity", "Offline min APK 更新检查: ${result.status}")
+                    // 本轮无更新后释放检查闸门；后台完成后回到前台可立即重新检查。
+                    minApkUpdateCheckStarted = false
                     return@runOnUiThread
                 }
                 android.util.Log.i("MainActivity", "Offline min APK 发现更新: ${result.status}")
@@ -1006,11 +1043,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         val metrics = resources.displayMetrics
+        val deviceClass = WebViewScalePolicy.deviceClass(resources.configuration.smallestScreenWidthDp)
         val scale = WebViewScalePolicy.initialScalePercent(
             offlineMode = true,
             widthPixels = metrics.widthPixels,
             heightPixels = metrics.heightPixels,
-            densityDpi = metrics.densityDpi
+            densityDpi = metrics.densityDpi,
+            deviceClass = deviceClass
         )
         offlineDisplayInfo.text = getString(
             R.string.offline_display_info,
@@ -1098,17 +1137,65 @@ class MainActivity : AppCompatActivity() {
         if (!controlPageAllowed) return
         if (control.visibility == View.VISIBLE) {
             control.visibility = View.GONE
-            controlToggleButton.text = getString(R.string.control_page)
+            setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
             controlToggleButton.visibility = View.VISIBLE
             return
         }
         control.visibility = View.VISIBLE
         controlToggleButton.visibility = View.VISIBLE
+        setControlButtonState(AndroidControlAccess.ButtonState.EXPANDED)
         controlToggleButton.text = getString(R.string.hide_control_page)
         if (control.url.isNullOrBlank()) {
             val mainServerUrl = ServerConfig.baseUrl(serverInput.text.toString())
             control.loadUrl(timestampedUrl(ServerConfig.controlPageUrl(mainServerUrl)))
         }
+    }
+
+    /** 收缩标签点击只展开完整入口，避免单次误触直接覆盖显示端页面。 */
+    private fun handleControlButtonClick() {
+        if (!controlPageAllowed) return
+        val pageVisible = controlWebView?.visibility == View.VISIBLE
+        when (AndroidControlAccess.clickAction(pageVisible, controlButtonState)) {
+            AndroidControlAccess.ButtonClickAction.EXPAND -> {
+                setControlButtonState(AndroidControlAccess.ButtonState.EXPANDED)
+            }
+            AndroidControlAccess.ButtonClickAction.TOGGLE_PAGE -> toggleControlPage()
+        }
+    }
+
+    /** 更新原生入口的收缩/展开外观；布局重心固定在左侧中部，天然贴合屏幕边缘。 */
+    private fun setControlButtonState(state: AndroidControlAccess.ButtonState) {
+        controlButtonState = state
+        if (!::controlToggleButton.isInitialized) return
+        val collapsed = state == AndroidControlAccess.ButtonState.COLLAPSED
+        val layoutParams = (controlToggleButton.layoutParams as? FrameLayout.LayoutParams)
+            ?: FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            )
+        layoutParams.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+        layoutParams.leftMargin = 0
+        layoutParams.rightMargin = 0
+        layoutParams.topMargin = 0
+        layoutParams.bottomMargin = 0
+        if (collapsed) {
+            layoutParams.width = dp(42)
+            layoutParams.height = dp(72)
+            controlToggleButton.text = getString(R.string.control_page_handle)
+            controlToggleButton.contentDescription = getString(R.string.control_page_expand)
+            controlToggleButton.setPadding(dp(2), dp(4), dp(2), dp(4))
+        } else {
+            layoutParams.width = FrameLayout.LayoutParams.WRAP_CONTENT
+            layoutParams.height = FrameLayout.LayoutParams.WRAP_CONTENT
+            controlToggleButton.text = getString(R.string.control_page)
+            controlToggleButton.contentDescription = getString(R.string.control_page)
+            controlToggleButton.setPadding(dp(8), dp(4), dp(8), dp(4))
+        }
+        controlToggleButton.layoutParams = layoutParams
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     private fun setControlPageAccess(allowed: Boolean) {
@@ -1118,8 +1205,9 @@ class MainActivity : AppCompatActivity() {
         val controlVisible = controlWebView?.visibility == View.VISIBLE
         if (!effectiveAllowed && controlVisible) {
             controlWebView?.visibility = View.GONE
-            controlToggleButton.text = getString(R.string.control_page)
+            setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
         }
+        if (!effectiveAllowed) setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
         controlToggleButton.visibility = if (AndroidControlAccess.shouldShowButton(effectiveAllowed, controlVisible)) View.VISIBLE else View.GONE
     }
 
@@ -1270,7 +1358,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun restoreControlPageButton() {
-        controlToggleButton.text = getString(R.string.control_page)
+        setControlButtonState(AndroidControlAccess.ButtonState.COLLAPSED)
         controlToggleButton.visibility = if (controlPageAllowed && offlineMode) {
             View.VISIBLE
         } else {

@@ -24,22 +24,31 @@ async function playAgentTts({
     isTtsSuppressed = () => false,
     allowRepairModeTts = false,
     getDisplayIds = null,
-    resolveDisplayId = null
+    resolveDisplayId = null,
+    chatTtsConversationId = null,
+    chatTtsPhase = 'answer',
+    isTtsCurrent = () => true
 }) {
     let sentences = splitIntoSentences(message).filter((sentence) => !isPunctuationOnly(sentence));
     if (sentences.length === 0 && message && !isPunctuationOnly(message)) sentences = [message];
     const scheduler = ttsScheduler || createOrderedTaskScheduler({ concurrency: ttsConcurrency });
 
     const tasks = sentences.map((sentence) => scheduler.enqueue(async () => {
-            if (isTtsSuppressed() && !allowRepairModeTts) return null;
+            if (!isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return null;
             const cleanText = stripMarkdown(sentence);
             const audioPath = await generateTTS(cleanText);
             return { audioPath, sentence };
         }).then((result) => {
-            if (!result || (isTtsSuppressed() && !allowRepairModeTts)) return;
+            if (!result || !isTtsCurrent(chatTtsPhase) || (isTtsSuppressed() && !allowRepairModeTts)) return;
             const { audioPath, sentence } = result;
             const audioUrl = `/uploads/tts/${path.basename(audioPath)}`;
-            const audioMessage = { type: 'tts', action: 'playAudio', audioUrl, text: sentence };
+            const audioMessage = {
+                type: 'tts',
+                action: 'playAudio',
+                audioUrl,
+                text: sentence,
+                ...(chatTtsConversationId ? { chatTtsConversationId, chatTtsPhase } : {})
+            };
             const resolvedDisplayIds = typeof getDisplayIds === 'function'
                 ? getDisplayIds()
                 : displayIds;
@@ -48,7 +57,12 @@ async function playAgentTts({
             const targetDisplayId = hasSingleTargetResolver ? resolveDisplayId() : null;
 
             if (playOnControl) {
-                sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
+                sendToControl({
+                    type: 'playOnControl',
+                    audioUrl,
+                    text: sentence,
+                    ...(chatTtsConversationId ? { chatTtsConversationId, chatTtsPhase } : {})
+                });
             } else if (targetDisplayId) {
                 sendToDisplay(targetDisplayId, audioMessage, { allowRepairModeTts });
             } else if (hasSingleTargetResolver) {

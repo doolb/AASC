@@ -67,6 +67,14 @@ test('扩展源码注册不依赖 fd 的稳定文件查找工具', () => {
     assert.doesNotMatch(source, /ensureTool\(['"]fd['"]\)/u);
 });
 
+test('扩展从 active dependency 根加载 Pi 模块', () => {
+    const source = fs.readFileSync(extensionFile, 'utf8');
+    assert.match(source, /pi-runtime-module-paths\.js/u);
+    assert.match(source, /resolveActivePiModule/u);
+    assert.match(source, /@earendil-works\/pi-ai/u);
+    assert.match(source, /@earendil-works\/pi-coding-agent/u);
+});
+
 test('稳定文件查找工具可以在没有 fd 时查找 package.json', async () => {
     const finder = await import(pathToFileURL(findToolFile).href);
     const results = await finder.findFiles(

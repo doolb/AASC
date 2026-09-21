@@ -34,6 +34,7 @@
 | 媒体库 | [media-library.md](design/media-library.md) | 多媒体库管理、多协议支持、文件操作 |
 | 提醒功能 | [reminder.md](design/reminder.md) | 定时提醒、语音播报、弹窗提示 |
 | 聊天系统 | [chat-system.md](design/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
+| 聊天 TTS 打断与 Offline 定时更新 | [chat-tts-interruption-and-offline-update.md](design/chat-tts-interruption-and-offline-update.md) | 聊天会话 TTS 代次/think 阶段打断、显示端停止按钮和 Offline 前台更新轮询 |
 | 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](design/display-chat-mmd.md) | 浏览器显示端聊天、角色会话、VRM/MMD 同位舞台和动作控制 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](design/chat-output-filter.md) | 控制端折叠 think、显示端展示 think、TTS 播报去标签内容和私聊清空错误反馈 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](design/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出 |

@@ -109,6 +109,7 @@
   - v9（`0.2.7-offline-min`）已完成右下角诊断浮层构建、真机验证和 LAN/WAN 正式发布，APK 大小 `89233662` bytes，SHA-256 `32181e75e3dbfe7b381bd0660f49778860ca62c4683bc69d7dbb3254eef549b7`；UI 自动化读取到 `分辨率 1920×1018 | DPI 160 | 缩放 75%`。默认域名 `c.aasc.us` 返回备案拦截 403，本次使用 WAN 直接 IP 验收。
   - v11（`0.2.9-offline-min`）已发布本次控制端输入框自动缩放修复，APK 大小 `89235646` bytes，SHA-256 `0b3ab8871ca17e32fa1dc5db767ef8b31049a973d8d678faa471e1ad4ac396da`；LAN/WAN HTTP、清单、签名、ZIP 完整性和远端 hash 均通过，尚未覆盖安装真机。
   - v12（`0.2.10-offline-min`）已正式发布控制端聊天设置 profile 协议保护；APK 大小 `89236426` bytes，SHA-256 `c4c20af9ab6b71c5e0e5dad1b4d3d2f1cdfce8cb7eaee91d6dde0ff1afdcf253`，服务 code v4 大小 `13996510` bytes、SHA-256 `7ca5adf90be5738ee94b47e31534d574b411a1934e3b0d0db6702955b1247bd2`；更新日志已写入签名清单，LAN/WAN 直连 IP HTTP、清单签名、APK v2 和远端文件校验通过。
+  - [2026-09-20] 聊天 TTS 打断与 Offline 前台定时更新已联合发布：code v14（`15173599` bytes，SHA-256 `a0fd191e9d9b2eeabb9e56807b0c6715818cd5e60f9b31c518b085b6d5f6aa8d`）复用 dependencies v4；min v24（`0.2.22-offline-min`，`89264782` bytes，SHA-256 `faed86143a39eff7fa398b2815b9952e35867c68d5776cd0d9a565cec195c7b6`）已同步 LAN/WAN，清单/签名/HTTP/远端 hash 和旧版本精确清理通过。
   - full 已对齐 min v9（`versionCode=9`、`0.2.7-offline`）并发布为 `aasc-display-offline-v9.apk`，大小 `957310007` bytes，SHA-256 `b1625bdf269e256d98aa45254c14a9531dcdfa3399d0b7d31b18daccbe1f83a7`；LAN/WAN IP HTTP 200、Content-Length 和远端 hash 一致，旧 full v2 已清理，服务 manifest 未替换。
   - full v12（`0.2.10-offline`）已对齐当前 min versionCode 12 并正式发布为 `aasc-display-offline-v12.apk`，大小 `957319386` bytes，SHA-256 `b107d7963bf4dd18068404427e12f4edc72ff8253e8914e3d1909ca66e6c8183`；LAN/WAN 直连 IP HTTP、Content-Length、远端 hash、APK v2 签名和 ZIP 完整性均通过，旧 full v9 保留。
   - full v13（`0.2.11-offline`）已正式发布本轮 Chat2API 账号凭证与 Android 外部网页恢复代码，文件 `aasc-display-offline-v13.apk`，大小 `957338670` bytes，SHA-256 `326d30feada394860925d2f11320bd4fb60b84cae1a710135303b89be203429c`；LAN/WAN 直连 IP HTTP、Content-Length 和远端 hash 均通过，服务 manifest 未替换。
@@ -130,8 +131,8 @@
 
 - ⏳待现场验收 [2026-09-14] Chat2API Android Provider 真实网页登录验证
   - 普通 APK 已完成构建、安装和启动冒烟；仍需使用测试账号验证网页登录、Authorization/localStorage/Cookie 捕获、Provider 接口校验和账号保存。
-  - offline APK 已使用包含当前 Chat2API 源码和生产依赖的运行包重新构建、卸载重装并完成本地聊天/语音接口验收；本轮已导入本机 Qwen 账号并完成真实 Chat Completions 请求，空映射下 `Qwen3.6` 成功而 `Qwen3.6-Flash` 返回 `no_available_account`（该别名仍需显式映射）；控制端手动聊天的 `qwen3.5` profile 当前为 `agent/pi`，会因 Pi Provider manifest 缺失报错，真实 WebView 登录捕获仍需现场测试账号。
-  - Offline APK 的 Pi SDK hidden Provider manifest 打包和安装恢复已完成自动化验证；仍待安装新 APK 后执行 `agent/pi` 真机启动验收。Android 节点策略仅明确禁用外部 CLI（Codex），未将 Pi 标记为业务禁用。
+  - offline APK 已使用包含当前 Chat2API 源码和生产依赖的运行包重新构建、卸载重装并完成本地聊天/语音接口验收；本轮已导入本机 Qwen 账号并完成真实 Chat Completions 请求，空映射下 `Qwen3.6` 成功而 `Qwen3.6-Flash` 返回 `no_available_account`（该别名仍需显式映射）；控制端手动聊天的 `qwen3.5` profile 当前为 `agent/pi`，真实 WebView 登录捕获仍需现场测试账号，Pi Provider manifest 缺失问题已由 code-only v15 修复并在真机日志中确认不再出现。
+  - Offline APK 的 Pi SDK hidden Provider manifest 打包、安装恢复和 active dependency 选择已完成自动化及真机链路验证；真机单条 Pi 回复仍受 MNN 请求超时/服务进程稳定性影响，需另立任务处理。Android 节点策略仅明确禁用外部 CLI（Codex），未将 Pi 标记为业务禁用。
   - 2026-09-15 已生成 `release/apkbuild/allserver/output/aasc-display-offline.apk`，内含 release 配置、任务 results 和默认 MNNChat 模型；本次只完成构建与静态校验，未替代真实 Provider 登录验收。
   - 关联文档：`docs/design/android-chat2api-login-control.md`；`docs/spec/android-chat2api-login-control.md`；`docs/task/20260914_Android Chat2API登录与显示端控制端开放.md`。
 
@@ -186,6 +187,13 @@
   - 当前仅“搜索”已改为 active 会话普通聊天；天气、提醒、播放、静音、报时、录音及其他自定义指令仍按现有命令优先级处理。
   - 后续逐项确认并调整；`进入群聊` 已按当前需求支持等待唤醒状态下免唤醒进入持续群聊，其他等待唤醒命令规则暂不改变。
   - 当前三种语音会话状态的使用说明见 `docs/usage/voice-conversation.md`。
+
+# Android 显示端缩放
+
+- ✅已完成 [2026-09-20] 发布设备类别缩放系数修正版 Offline min APK
+  - 代码已按 `smallestScreenWidthDp` 区分手机/电脑；手机系数 `1.108705`，电脑系数 `1.0`，缩放因子通用限制为 `1.0～3.0`。
+  - `2309×1080@480dpi` 仅作为验算样例，手机计算结果为因子 `3.0`；versionCode `23`、versionName `0.2.21-offline-min` 已发布到 LAN/WAN。
+  - APK 大小 `89264066` bytes，SHA-256 `dfed13b4b2a1946dd14c64ae0cfae1881ea1728184d82a43ea58c92e533950d0`；两端签名清单、HTTP `200`/`Content-Length` 和旧 min 精确清理通过。
 
 # Android 显示端音频
 

@@ -70,6 +70,8 @@
   interactionLayer
   mmdCanvas
   chatPanel
+  voiceTextDisplay
+  mmdVisibilityControls
 ```
 
 ## 2. 显示端舞台初始化
@@ -147,6 +149,9 @@
   将消息列表背景保持透明，使媒体通过空白区域可见
   将消息气泡、输入框、按钮和下拉菜单保持实色主题控件
   使用安全区和键盘内缩，不改变媒体与 MMD 的逻辑尺寸
+  将 compose 设置为两列布局：输入框占据剩余空间，操作区固定在右侧
+  将发送按钮和清空按钮按纵向排列
+  在窄屏下保持操作区最小可用宽度，禁止按钮覆盖输入框
 ```
 
 ```text
@@ -172,6 +177,22 @@
     释放输入焦点
     mmdLayer 恢复完整 pointer 事件
   不销毁聊天上下文或 MMD 模型
+```
+
+```text
+过程 updateVoiceTextVisibility(chatVisible)
+  如果 chatVisible 为 true
+    voiceTextDisplay 设置为隐藏状态
+    voiceTextDisplay.dataset.chatSuppressed 设置为 "true"
+    不清理 voiceTextDisplay 当前文本
+    不停止 TTS 音频、队列或播放回调
+  否则
+    voiceTextDisplay.dataset.chatSuppressed 设置为 "false"
+    如果 voiceTextDisplay 仍有当前播报文本
+      恢复 voice-text-visible 状态
+    否则
+      保持 voice-text-hidden 状态
+  showTtsText 在 chatVisible 为 true 时只更新缓存文本，不显示 DOM 文字
 ```
 
 ```text
@@ -341,6 +362,29 @@
     暂停渲染循环、动作采样和非必要骨骼计算
   不清理已缓存的模型资源
 ```
+
+```text
+过程 sendSelectedDisplayMmdVisibility(visible)
+  如果当前没有选中的 displayId
+    显示“请先选择显示端”
+    返回
+  发送 { type: "control", displayId, action: "mmdVisibility", value: visible }
+  控制端更新对应按钮的 active 状态
+```
+
+```text
+过程 handleDisplayControl(message)
+  如果 message.type 不是 control 或 message.action 不是 mmdVisibility
+    交回已有控制消息处理流程
+    返回
+  调用 DisplayStage.setMmdVisible(message.value === true)
+  更新显示端角色按钮文字、aria-expanded 和 MMD pointer 状态
+  返回 control ack，不改变媒体播放状态
+```
+
+实现约束：`body.display-chat-open` 和 `#voiceTextDisplay[data-chat-suppressed="true"]` 都使用 `display: none !important`。这样即使现有 TTS/语音识别流程重新设置 `voiceTextDisplay.className` 或行内布局，也不会在聊天打开期间显示播报文字。
+
+2026-09-20 实现映射：`display-chat.css` 负责输入区两列及按钮纵排；`display-stage.js` 维护聊天可见性和字幕抑制状态；`controls.js`/`websocket.js` 负责控制端按钮和 ACK；`display.html` 处理 `mmdVisibility` 并回传状态。
 
 ```text
 过程 setMmdOrder(order)

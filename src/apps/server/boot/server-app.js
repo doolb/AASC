@@ -1143,7 +1143,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -6383,6 +6383,85 @@ let pendingDisplayTtsRequestId = 0;
 const TTS_START_ACK_TIMEOUT_MS = 3000;
 const TTS_GENERATION_TIMEOUT_MS = 60000;
 
+// 聊天 TTS 的生成可能跨越多次异步队列。每个会话只保留当前代次，
+// 旧代次即使稍后完成，也不能再把音频发送到显示端或控制端。
+const chatTtsGenerationStates = new Map();
+
+function buildChatTtsConversationId({ mode = 'group', target = null, sessionId = 'default', role = null } = {}) {
+    return [mode || 'group', target || '', sessionId || 'default', role || '']
+        .map((value) => String(value).replaceAll('|', '%7C'))
+        .join('|');
+}
+
+function beginChatTtsGeneration(conversationId) {
+    const previous = chatTtsGenerationStates.get(conversationId);
+    const state = {
+        generation: (previous?.generation || 0) + 1,
+        answerStarted: false
+    };
+    chatTtsGenerationStates.set(conversationId, state);
+    return { conversationId, generation: state.generation };
+}
+
+function isCurrentChatTtsGeneration(token, phase = 'answer') {
+    if (!token?.conversationId) return true;
+    const state = chatTtsGenerationStates.get(token.conversationId);
+    if (!state || state.generation !== token.generation) return false;
+    return phase !== 'think' || state.answerStarted !== true;
+}
+
+function markChatTtsAnswerStarted(token) {
+    if (!token?.conversationId) return;
+    const state = chatTtsGenerationStates.get(token.conversationId);
+    if (state?.generation === token.generation) state.answerStarted = true;
+}
+
+function cancelChatTtsGeneration(conversationId, phase = null) {
+    if (!conversationId) return;
+    const state = chatTtsGenerationStates.get(conversationId) || { generation: 0, answerStarted: false };
+    if (phase === 'think') {
+        state.answerStarted = true;
+    } else {
+        state.generation += 1;
+        state.answerStarted = false;
+    }
+    chatTtsGenerationStates.set(conversationId, state);
+}
+
+function createChatTtsStopMessage(conversationId, phase = null) {
+    return {
+        type: 'tts',
+        action: 'stop',
+        chatOnly: true,
+        chatTtsConversationId: conversationId,
+        ...(phase ? { chatTtsPhase: phase } : {})
+    };
+}
+
+function stopChatTtsPlayback({
+    conversationId,
+    phase = null,
+    displayId = null,
+    displayIds = [],
+    playOnControl = false,
+    sendToControl = null,
+    ws = null
+} = {}) {
+    if (!conversationId) return;
+    cancelChatTtsGeneration(conversationId, phase);
+    const message = createChatTtsStopMessage(conversationId, phase);
+    if (playOnControl) {
+        const controlMessage = { type: 'stopChatTts', ...message };
+        if (typeof sendToControl === 'function') sendToControl(controlMessage);
+        else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(controlMessage));
+    }
+
+    const targets = Array.isArray(displayIds) && displayIds.length > 0
+        ? displayIds
+        : (displayId ? [displayId] : []);
+    for (const targetId of targets) sendToDisplay(targetId, message);
+}
+
 // 向显示端发送 TTS 生成请求，等待 base64 WAV 回包；超时 60s
 function sendTtsGenerateToDisplay(display, text, requestId) {
     return new Promise((resolve, reject) => {
@@ -7976,6 +8055,27 @@ function formatVoiceprintScore(value) {
 function handleDisplayMessageFallback(displayId, data, ws) {
     const displayData = displayClients.get(displayId);
 
+    if (data.type === 'chatMessage') {
+        void handleChatMessageRequest(data, { displayId, ws });
+        return;
+    }
+
+    if (data.type === 'tts' && data.action === 'stop') {
+        if (data.chatOnly && data.chatTtsConversationId) {
+            stopChatTtsPlayback({
+                conversationId: data.chatTtsConversationId,
+                phase: data.chatTtsPhase || null,
+                displayId,
+                displayIds: data.displayIds || [],
+                playOnControl: data.playOnControl === true,
+                ws
+            });
+        } else {
+            sendToDisplay(displayId, data);
+        }
+        return;
+    }
+
     if (handleTextMediaDisplayMessage({
         displayId,
         data,
@@ -8278,6 +8378,21 @@ function handleDisplayCameraMessage(displayId, data) {
  */
 async function handleChatMessageRequest(data, { displayId, ws }) {
     const isDisplayChatSource = Boolean(displayId && displayClients.get(displayId)?.ws === ws);
+    const sessionSnapshot = chat.getSession();
+    const requestedMode = data.mode || sessionSnapshot.mode || 'group';
+    const requestedTarget = requestedMode === 'private'
+        ? (data.target || sessionSnapshot.privateTarget || null)
+        : null;
+    const requestedSessionId = data.sessionId || sessionSnapshot.privateSessionId || 'default';
+    const chatTtsConversationId = data.chatTtsConversationId || buildChatTtsConversationId({
+        mode: requestedMode,
+        target: requestedTarget,
+        sessionId: requestedSessionId,
+        role: requestedMode === 'role' ? data.role : null
+    });
+    const targetDisplayId = data.displayId || displayId || null;
+    const targetDisplayIds = Array.isArray(data.displayIds) ? data.displayIds : [];
+    const playOnControl = data.playOnControl === true || sessionSnapshot.playOnControl === true;
     const sendChatUpdate = (message) => {
         ws.send(JSON.stringify(message));
         if (isDisplayChatSource) {
@@ -8288,6 +8403,17 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
         }
     };
     try {
+        // 新一轮聊天在服务端也立即使旧一轮失效；即使旧客户端未先发送 stop，
+        // 迟到的 TTS 生成回包也不会再进入播放队列。
+        stopChatTtsPlayback({
+            conversationId: chatTtsConversationId,
+            displayId: targetDisplayId,
+            displayIds: targetDisplayIds,
+            playOnControl,
+            sendToControl: sendChatUpdate
+        });
+        const chatTtsToken = beginChatTtsGeneration(chatTtsConversationId);
+
         // Agent 消息显式使用 assistantType；旧控制端只发 mode=role 时继续兼容。
         const isAgentMessage = data.assistantType === 'agent' ||
             (!data.assistantType && data.mode === 'role');
@@ -8301,10 +8427,6 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
                 });
                 return;
             }
-            const session = chat.getSession();
-            const targetDisplayId = data.displayId || displayId;
-            const targetDisplayIds = data.displayIds || [];
-            const playOnControl = data.playOnControl || session.playOnControl;
             const preferredDisplayId = targetDisplayIds[0] || targetDisplayId || null;
             const agentTtsStream = createAgentTtsStream({
                 playOnControl,
@@ -8316,6 +8438,8 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
                 generateTTS: (text) => generateTtsWithFallback(text, undefined, undefined, preferredDisplayId),
                 sendToControl: (ttsMessage) => ws.send(JSON.stringify(ttsMessage)),
                 sendToDisplay,
+                chatTtsConversationId,
+                isTtsCurrent: () => isCurrentChatTtsGeneration(chatTtsToken, 'answer'),
                 isTtsSuppressed: isRepairModeTtsSuppressed,
                 onError: (error) => logError('Chat', `Agent TTS生成失败: ${error.message}`)
             });
@@ -8351,10 +8475,6 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
             return;
         }
 
-        const session = chat.getSession();
-        const targetDisplayId = data.displayId || displayId;
-        const targetDisplayIds = data.displayIds || [];
-
         await handleChatMessage({
             requestId: data.requestId,
             content: data.content,
@@ -8362,11 +8482,13 @@ async function handleChatMessageRequest(data, { displayId, ws }) {
             displayContent: data.displayContent || data.content,
             displayId: targetDisplayId,
             displayIds: targetDisplayIds,
-            playOnControl: data.playOnControl || session.playOnControl,
+            playOnControl,
             templateTarget: data.templateTarget || data.target,
-            mode: data.mode || session.mode,
-            target: data.mode === 'private' ? (data.target || session.privateTarget) : null,
-            sessionId: data.sessionId || session.privateSessionId || 'default',
+            mode: requestedMode,
+            target: requestedTarget,
+            sessionId: requestedSessionId,
+            chatTtsConversationId,
+            chatTtsToken,
             // 控制端临时页签沿用服务端唯一临时会话；旧客户端只发 mode 时也兼容识别。
             temporaryConversation: data.temporaryConversation === true || data.mode === 'temporary',
             temporaryConversationId: data.temporaryConversationId || null,
@@ -9602,7 +9724,18 @@ async function handleControlMessageFallback(data, ws) {
                     sendToDisplay(displayId, data);
                 } else if (data.type === 'tts') {
                     if (data.action === 'stop') {
-                        sendToDisplaysWithCapability('voicePlayback', data);
+                        if (data.chatOnly && data.chatTtsConversationId) {
+                            stopChatTtsPlayback({
+                                conversationId: data.chatTtsConversationId,
+                                phase: data.chatTtsPhase || null,
+                                displayId,
+                                displayIds: data.displayIds || [],
+                                playOnControl: data.playOnControl === true,
+                                ws
+                            });
+                        } else {
+                            sendToDisplaysWithCapability('voicePlayback', data);
+                        }
                     } else if (data.action === 'play' && data.text) {
                         if (isRepairModeTtsSuppressed()) return;
                         (async () => {
@@ -9885,6 +10018,8 @@ async function handleChatMessage(options) {
         sessionId,
         skipHistory = false,
         allowRepairModeTts = false,
+        chatTtsConversationId = null,
+        chatTtsToken = null,
         temporaryConversation: temporaryConversationRequested = false,
         temporaryConversationId = null,
         sendToControl
@@ -9966,6 +10101,22 @@ async function handleChatMessage(options) {
     const preferredDisplayId = displayIds[0]
         || (routeVoiceToPreferredDisplay ? voiceOriginDisplayId || displayId : displayId)
         || null;
+    const ttsConversationId = chatTtsConversationId || buildChatTtsConversationId({
+        mode: messageMode,
+        target: messageTarget,
+        sessionId: effectiveSessionId,
+        role: effectiveTemplateTarget
+    });
+    if (!chatTtsToken) {
+        stopChatTtsPlayback({
+            conversationId: ttsConversationId,
+            displayId,
+            displayIds,
+            playOnControl,
+            sendToControl
+        });
+    }
+    const ttsToken = chatTtsToken || beginChatTtsGeneration(ttsConversationId);
     const ttsScheduler = tts ? createTtsGenerationScheduler(preferredDisplayId) : null;
     const sendChatResponse = (payload) => {
         const responseLength = typeof payload.message === 'string' ? payload.message.length : 0;
@@ -10007,24 +10158,45 @@ async function handleChatMessage(options) {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             sendToControl({ type: 'chatChunk', requestId: effectiveRequestId, chunk, message: fullMessage, reasoning });
         },
-        onSentence: (sentence) => {
+        onSentence: (sentence, _fullMessage, _fullReasoning, _fullSpeech, speechPhase = 'answer') => {
             if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return;
             if (!tts || isPunctuationOnly(sentence)) return;
             if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return;
+            if (!isCurrentChatTtsGeneration(ttsToken, speechPhase)) return;
+            if (speechPhase === 'answer' && ttsToken?.conversationId) {
+                const previousState = chatTtsGenerationStates.get(ttsToken.conversationId);
+                if (!previousState?.answerStarted) {
+                    markChatTtsAnswerStarted(ttsToken);
+                    stopChatTtsPlayback({
+                        conversationId: ttsConversationId,
+                        phase: 'think',
+                        displayId,
+                        displayIds,
+                        playOnControl,
+                        sendToControl
+                    });
+                }
+            }
+            const ttsPhase = speechPhase === 'think' ? 'think' : 'answer';
             ttsScheduler.enqueue(async () => {
                 if (isTemporaryConversation && effectiveTemporaryConversationId !== temporaryConversation.id) return null;
                 if (isRepairModeTtsSuppressed() && !allowRepairModeTts) return null;
+                if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return null;
                 const cleanText = stripMarkdown(sentence);
                 const audioPath = await generateTtsWithFallback(cleanText, undefined, undefined, preferredDisplayId);
                 return { audioPath, sentence };
             }).then((result) => {
                 if (!result || (isRepairModeTtsSuppressed() && !allowRepairModeTts)) return;
+                if (!isCurrentChatTtsGeneration(ttsToken, ttsPhase)) return;
                 const { audioPath, sentence } = result;
                 const fileName = path.basename(audioPath);
                 const audioUrl = `/uploads/tts/${fileName}`;
+                const ttsMetadata = ttsConversationId
+                    ? { chatTtsConversationId: ttsConversationId, chatTtsPhase: ttsPhase }
+                    : {};
 
                 if (playOnControl) {
-                    sendToControl({ type: 'playOnControl', audioUrl, text: sentence });
+                    sendToControl({ type: 'playOnControl', audioUrl, text: sentence, ...ttsMetadata });
                 } else if (routeVoiceToPreferredDisplay) {
                     const targetDisplayId = resolveCurrentVoicePlaybackTarget(preferredDisplayId);
                     if (!targetDisplayId) {
@@ -10036,6 +10208,7 @@ async function handleChatMessage(options) {
                         action: 'playAudio',
                         audioUrl: audioUrl,
                         text: sentence,
+                        ...ttsMetadata,
                         voiceConversationDisplayId: voiceOriginDisplayId || displayId || null
                     });
                     if (sent) {
@@ -10051,6 +10224,7 @@ async function handleChatMessage(options) {
                             action: 'playAudio',
                             audioUrl: audioUrl,
                             text: sentence,
+                            ...ttsMetadata,
                             voiceConversationDisplayId: voiceOriginDisplayId || displayId || null
                         });
                     }
@@ -10060,6 +10234,7 @@ async function handleChatMessage(options) {
                         action: 'playAudio',
                         audioUrl: audioUrl,
                         text: sentence,
+                        ...ttsMetadata,
                         voiceConversationDisplayId: voiceOriginDisplayId || displayId || null
                     });
                 }

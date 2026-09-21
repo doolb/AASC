@@ -345,6 +345,13 @@ android-display/
 - Android JVM 测试覆盖基准、等比例放大、四舍五入、普通 APK 和无效输入；`allserver-min` 快速包真机原位安装后服务和已有 code/dependencies v3 release 正常启动。
 - 2026-09-18 v10 使用等权混合曲线完成 Android JVM 单测、Offline 静态回归和 min APK 构建并正式发布；Display 2 诊断浮层显示 100%。
 
+### 2026-09-20 Offline 手机缩放上限校正
+
+- 由于现场设备 `2309×1080@480dpi` 按等权混合仅得到 `165%`，Offline WebView 初始比例改为按 `smallestScreenWidthDp` 区分手机/电脑，再使用运行时 display metrics 和设备类别系数计算，不做设备特判。
+- 伪代码为 `scaleFactor = clamp((长边 / 1280) × (densityDpi / 320) × deviceCoefficient, 1.0, 3.0)`，手机系数 `1.108705`，电脑系数 `1.0`，最终通过 `round(scaleFactor × 100)` 转换为 WebView 百分比。
+- 该策略使 `2309×480dpi` 手机验算样例达到因子 `3.0`，同时避免低密度 Display 2 缩到 `75%`；其他设备按自身 metrics 计算，页面布局、媒体层和原生显示坐标保持不变。
+- Android JVM 单元测试需覆盖设备分类、系数和手机验算样例；上一版 min v22 已发布，本次系数调整需重新构建后再发布。
+
 ### 2026-09-18 Offline 屏幕诊断信息浮层
 
 - Offline APK 在显示容器右下角显示当前应用区域分辨率、densityDpi 和 WebView 初始缩放百分比；普通 APK 不显示。

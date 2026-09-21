@@ -102,6 +102,11 @@
     transform: translateY(1px);
 }
 
+.display-stage-button-danger {
+    border-color: color-mix(in srgb, var(--danger-color) 65%, var(--border-color));
+    color: var(--danger-color);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .display-mmd-layer {
         transition: none;

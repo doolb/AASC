@@ -1358,7 +1358,35 @@ function createChatStreamOutput(callbacks = {}) {
     let fullMessage = '';
     let fullReasoning = '';
     let fullSpeech = '';
-    let pendingText = '';
+    let pendingSpeech = { text: '', phase: 'answer' };
+
+    const emitPendingSentence = () => {
+        const text = pendingSpeech.text.trim();
+        if (!text) return;
+        onSentence?.(text, fullMessage, fullReasoning, fullSpeech, pendingSpeech.phase);
+        pendingSpeech = { text: '', phase: pendingSpeech.phase };
+    };
+
+    const appendSpeechSegments = (segments) => {
+        for (const segment of segments) {
+            const text = typeof segment?.text === 'string' ? segment.text : '';
+            if (!text) continue;
+            const phase = segment.phase === 'think' ? 'think' : 'answer';
+            if (pendingSpeech.text && pendingSpeech.phase !== phase) {
+                // think 结束而 answer 开始时，即使 think 没有句末标点，也要先播完
+                // 已确认的思维链，再让答案接管播放器。
+                emitPendingSentence();
+            }
+            pendingSpeech.phase = phase;
+            pendingSpeech.text += text;
+            const sentences = splitIntoSentences(pendingSpeech.text);
+            if (sentences.length < 2) continue;
+            for (const sentence of sentences.slice(0, -1)) {
+                onSentence?.(sentence, fullMessage, fullReasoning, fullSpeech, phase);
+            }
+            pendingSpeech.text = sentences[sentences.length - 1];
+        }
+    };
 
     const publish = (result) => {
         const previousMessage = fullMessage;
@@ -1378,14 +1406,10 @@ function createChatStreamOutput(callbacks = {}) {
             );
         }
         if (!result.speechDelta) return;
-
-        pendingText += result.speechDelta;
-        const sentences = splitIntoSentences(pendingText);
-        if (sentences.length < 2) return;
-        for (const sentence of sentences.slice(0, -1)) {
-            onSentence?.(sentence, fullMessage, fullReasoning, fullSpeech);
-        }
-        pendingText = sentences[sentences.length - 1];
+        appendSpeechSegments(result.speechSegments || [{
+            text: result.speechDelta,
+            phase: result.reasoningDelta && !result.delta ? 'think' : 'answer'
+        }]);
     };
 
     return {
@@ -1405,7 +1429,12 @@ function createChatStreamOutput(callbacks = {}) {
             return fullSpeech;
         },
         getPendingText() {
-            return pendingText;
+            return pendingSpeech.text;
+        },
+        getPendingSpeechSegments() {
+            return pendingSpeech.text
+                ? [{ text: pendingSpeech.text, phase: pendingSpeech.phase }]
+                : [];
         }
     };
 }
@@ -1584,8 +1613,9 @@ async function chatStreamWithAgent(userMessage, options, callbacks, profile) {
                 const fullMessage = output.getMessage();
                 const fullReasoning = output.getReasoning();
                 const fullSpeech = output.getSpeech();
-                const pendingText = output.getPendingText();
-                if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage, fullReasoning, fullSpeech);
+                for (const pending of output.getPendingSpeechSegments()) {
+                    onSentence?.(pending.text, fullMessage, fullReasoning, fullSpeech, pending.phase);
+                }
                 onComplete?.(fullMessage, getHistory(), fullReasoning, fullSpeech);
             },
             onError: (error) => {
@@ -1673,8 +1703,9 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
             const fullMessage = output.getMessage();
             const fullReasoning = output.getReasoning();
             const fullSpeech = output.getSpeech();
-            const pendingText = output.getPendingText();
-            if (pendingText.trim()) onSentence?.(pendingText.trim(), fullMessage, fullReasoning, fullSpeech);
+            for (const pending of output.getPendingSpeechSegments()) {
+                onSentence?.(pending.text, fullMessage, fullReasoning, fullSpeech, pending.phase);
+            }
             onComplete?.(fullMessage, getHistory(), fullReasoning, fullSpeech);
             return {
                 success: true,
@@ -1733,9 +1764,10 @@ async function chatStream(userMessage, options = {}, callbacks = {}) {
         const fullMessage = output.getMessage();
         const fullReasoning = output.getReasoning();
         const fullSpeech = output.getSpeech();
-        const pendingText = output.getPendingText();
-        if (pendingText.trim() && onSentence) {
-            onSentence(pendingText.trim(), fullMessage, fullReasoning, fullSpeech);
+        for (const pending of output.getPendingSpeechSegments()) {
+            if (onSentence) {
+                onSentence(pending.text, fullMessage, fullReasoning, fullSpeech, pending.phase);
+            }
         }
         
         if (onComplete) {

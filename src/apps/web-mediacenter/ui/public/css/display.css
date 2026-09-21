@@ -560,6 +560,11 @@ body.display-chat-open #voiceTextDisplay {
     display: none !important;
 }
 
+/* TTS 新文本可能在聊天打开后继续到达；data 属性保证 class 切换也不会穿透聊天层。 */
+#voiceTextDisplay[data-chat-suppressed="true"] {
+    display: none !important;
+}
+
 .voice-text-hidden {
     display: none !important;
 }

@@ -73,6 +73,8 @@
                     aria-controls="displayChatLayer" aria-expanded="false">聊天</button>
             <button id="displayMmdToggle" class="display-stage-button" type="button"
                     aria-controls="displayMmdLayer" aria-expanded="false">角色</button>
+            <button id="displayChatTtsStop" class="display-stage-button display-stage-button-danger" type="button"
+                    aria-label="停止当前聊天播报">停止播报</button>
         </div>
     </div>
     
@@ -2170,6 +2172,50 @@
             scheduleTtsRecordingResume();
         }
 
+        function isChatTtsItemMatch(item, conversationId, phase = null) {
+            if (!item || item.chatTtsConversationId !== conversationId) return false;
+            return !phase || item.chatTtsPhase === phase;
+        }
+
+        function stopChatTtsPlayback(conversationId, phase = null) {
+            if (!conversationId) return;
+            const matches = (item) => isChatTtsItemMatch(item, conversationId, phase);
+            const removedBatchIds = new Set();
+            const queuedItems = ttsQueue.filter((item) => {
+                if (!matches(item)) return true;
+                if (item.voiceTtsBatchId) removedBatchIds.add(item.voiceTtsBatchId);
+                return false;
+            });
+            const currentMatches = matches(currentTtsItem);
+            if (currentTtsItem && currentMatches) {
+                if (currentTtsItem.voiceTtsBatchId) removedBatchIds.add(currentTtsItem.voiceTtsBatchId);
+                clearTtsRecovery();
+                const playbackId = currentTtsItem.voiceTtsPlaybackId;
+                currentTtsItem = null;
+                ttsPlaybackToken++;
+                ttsAudio.pause();
+                ttsAudio.currentTime = 0;
+                isPlayingTts = false;
+                hideTtsText();
+                sendVoiceTtsPlaybackFinished(playbackId);
+            }
+            ttsQueue = queuedItems;
+            for (const batchId of removedBatchIds) {
+                const stillExists = currentTtsItem?.voiceTtsBatchId === batchId
+                    || ttsQueue.some((item) => item.voiceTtsBatchId === batchId);
+                if (!stillExists) ttsBatchPlaybackStates.delete(batchId);
+            }
+            if (!isPlayingTts) playNextTts();
+            endTtsVideoCoordinationIfIdle();
+            scheduleTtsRecordingResume();
+        }
+
+        // 显示端聊天按钮和同页聊天模块共享本地队列控制器；非聊天 TTS 不会被误清空。
+        window.DisplayTtsController = Object.freeze({
+            stopAll: stopTtsPlayback,
+            stopChatTts: stopChatTtsPlayback
+        });
+
         function startTtsAudio(item, audioUrl) {
             if (currentTtsItem !== item || !isPlayingTts) return;
             item.audioUrl = audioUrl;
@@ -2293,7 +2339,9 @@
                     text: data.text,
                     voiceTtsPlaybackId: data.voiceTtsPlaybackId,
                     voiceTtsBatchId: data.voiceTtsBatchId,
-                    voiceTtsBatchEnd: data.voiceTtsBatchEnd === true
+                    voiceTtsBatchEnd: data.voiceTtsBatchEnd === true,
+                    chatTtsConversationId: data.chatTtsConversationId,
+                    chatTtsPhase: data.chatTtsPhase
                 });
             } else if (data.action === 'playAudio') {
                 queueTts({
@@ -2301,10 +2349,16 @@
                     text: data.text,
                     voiceTtsPlaybackId: data.voiceTtsPlaybackId,
                     voiceTtsBatchId: data.voiceTtsBatchId,
-                    voiceTtsBatchEnd: data.voiceTtsBatchEnd === true
+                    voiceTtsBatchEnd: data.voiceTtsBatchEnd === true,
+                    chatTtsConversationId: data.chatTtsConversationId,
+                    chatTtsPhase: data.chatTtsPhase
                 });
             } else if (data.action === 'stop') {
-                stopTtsPlayback();
+                if (data.chatOnly && data.chatTtsConversationId) {
+                    stopChatTtsPlayback(data.chatTtsConversationId, data.chatTtsPhase || null);
+                } else {
+                    stopTtsPlayback();
+                }
                 clearRemoteTextPlayback();
             } else if (data.action === 'setAutoTts') {
                 autoTtsEnabled = data.enabled;
@@ -4361,6 +4415,13 @@
                     setControlMode(data.value === true);
                     break;
 
+                case 'mmdVisibility':
+                    // 只切换 MMD/VRM 层的可见性，不销毁模型、动作或聊天上下文。
+                    if (window.DisplayStage && typeof window.DisplayStage.setMmdVisible === 'function') {
+                        window.DisplayStage.setMmdVisible(data.value === true);
+                    }
+                    break;
+
                 case 'controlInput':
                     // 控制端输入转发：鼠标/滚轮/键盘/文本
                     dispatchControlInput(data);
@@ -5172,6 +5233,9 @@
                             let ackExtra = null;
                             if (data.action === 'sleepSettings' || data.action === 'sleepActivate' || data.action === 'sleepOverride') {
                                 ackExtra = { sleepState: sleepState };
+                            }
+                            if (data.action === 'mmdVisibility') {
+                                ackExtra = { mmdVisible: data.value === true };
                             }
                             sendCommandAck('control', true, data.action, ackExtra);
                         }

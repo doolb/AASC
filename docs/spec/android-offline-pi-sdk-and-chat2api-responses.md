@@ -1,6 +1,51 @@
 # Offline Pi SDK 与 Chat2API Responses 实现规范
 
-本文使用伪代码描述 Offline Pi SDK 隐藏 manifest 资源恢复和 Chat2API Responses 回归契约，和实际 JavaScript/Kotlin 实现保持同步。
+本文使用伪代码描述 Offline Pi SDK 资源打包、active dependency 选择和 Chat2API Responses 回归契约，和实际 JavaScript/Kotlin 实现保持同步。
+
+## Android Pi 运行时依赖
+
+```text
+REQUIRED_ANDROID_RUNTIME_DIRECTORIES = {
+    "node_modules/openai/_vendor"
+}
+
+isAndroidAssetExcluded(relativePath, isDirectory):
+    directorySegments = isDirectory ? relativePath 的全部段 : relativePath 去掉文件名
+    if directorySegments 包含点号目录:
+        return true
+    if directorySegments 包含下划线目录，且不在 REQUIRED_ANDROID_RUNTIME_DIRECTORIES 目录树内:
+        return true
+    if relativePath 是 node_modules 下的 .manifest.json:
+        return false
+    if relativePath 是普通隐藏文件:
+        return true
+    return false
+
+validateRequiredAndroidRuntimeAssets(packageRoot):
+    if packageRoot/package.json 声明了 openai:
+        要求 packageRoot/node_modules/openai/_vendor/partial-json-parser/parser.mjs
+            是非空普通文件
+        否则构建失败并报告缺失路径
+
+copyServerRuntime(packageRoot, outputRoot):
+    validateRequiredAndroidRuntimeAssets(packageRoot)
+    按 isAndroidAssetExcluded 复制服务文件
+    要求输出包含 server/node_modules/openai/_vendor/partial-json-parser/parser.mjs
+```
+
+```text
+resolveActivePiModule(packageName, relativeEntry):
+    root = AASC_NODE_MODULES_DIR 或项目 node_modules
+    absolutePath = root/packageName/relativeEntry
+    如果 absolutePath 是普通文件:
+        返回 absolutePath 的 file URL
+    否则返回裸包名作为兼容回退
+
+loadPiRuntime():
+    codingAgent = import(resolveActivePiModule("@earendil-works/pi-coding-agent", "dist/index.js"))
+    readonlyTools 使用同一个 active root 加载 pi-ai、pi-ai/compat 和 pi-coding-agent
+    不从 server 目录祖先的基础 node_modules 重新解析 Pi 依赖
+```
 
 ## Android Runtime 资产映射
 
@@ -8,7 +53,9 @@
 常量 ANDROID_HIDDEN_MANIFEST_MARKER = "aasc-bundled-manifest.json"
 
 isAndroidAssetExcluded(relativePath, isDirectory):
-    if relativePath 的目录段包含点号目录或下划线目录:
+    if relativePath 的目录段包含点号目录:
+        return true
+    if relativePath 的目录段包含下划线目录，且不是 openai/_vendor 目录树:
         return true
     if isDirectory:
         return false
@@ -113,8 +160,11 @@ proxy POST /v1/responses:
 
 ```text
 已实现：node_modules Provider manifest 使用 aasc-bundled-manifest.json 打包，安装器恢复为 .manifest.json
+已实现：保留 openai/_vendor/partial-json-parser/parser.mjs，并在声明 openai 依赖时执行 APK 资产预检
+已实现：Pi SDK 与 readonly tools 从 AASC_NODE_MODULES_DIR 的 active dependency 根加载，避免基础 node_modules 覆盖更新依赖
 已实现：Pi SDK 目录存在时，Runtime 快速复用要求 providers/data/.manifest.json 为非空普通文件
 已实现：Responses 客户端非 2xx 流式响应先读取 JSON 错误，保留上游状态和错误字段
-已验证：Node Runtime packaging 23 项、Offline/APK 49 项、Chat2API Responses/proxy/client 19 项、external/llm 24 项、项目全量 npm test 845 项、Android JVM 全量单测通过
-待验证：安装含新 marker 的 APK 后，在真实 Offline 设备执行 agent/pi 首次启动和控制端聊天
+已验证：Node Runtime packaging、Pi active dependency 选择和 Chat2API Responses/proxy/client 回归通过
+已验证：code-only v15 在已有 Offline v24 真机热更新后，Pi Agent 请求已进入本机 llm-server/MNN 链路，日志不再出现 partial-json/parser.mjs 缺失
+待处理：真机单条 Pi 聊天仍受 MNN 请求超时/服务进程稳定性影响；该问题与本次依赖文件缺失不同，需另立任务处理
 ```

@@ -413,6 +413,43 @@ test('服务器运行包忽略 Android assets 不支持的隐藏目录和下划�
     assert.equal(result.manifest.files.some(file => file.path.endsWith('/.npmignore')), false);
 });
 
+test('服务器运行包保留 OpenAI Responses 所需的 _vendor parser', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const parserPath = path.join(
+        packageDir,
+        'node_modules',
+        'openai',
+        '_vendor',
+        'partial-json-parser',
+        'parser.mjs'
+    );
+    await fs.promises.mkdir(path.dirname(parserPath), { recursive: true });
+    await fs.promises.writeFile(parserPath, 'export const parse = () => null;\n', 'utf8');
+    const runtimeDir = await createRuntime(tempDir);
+    const outputDir = path.join(tempDir, 'output');
+
+    const result = await prepareAndroidNodeRuntime({ packageDir, runtimeDir, outputDir });
+    const assetPath = 'server/node_modules/openai/_vendor/partial-json-parser/parser.mjs';
+
+    assert.equal(result.manifest.files.some(file => file.path === assetPath), true);
+    assert.equal(fs.existsSync(path.join(outputDir, assetPath)), true);
+});
+
+test('服务器运行包缺少 OpenAI Responses parser 时在构建前失败', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    await fs.promises.mkdir(path.join(packageDir, 'node_modules', 'openai'), { recursive: true });
+    const runtimeDir = await createRuntime(tempDir);
+
+    await assert.rejects(
+        () => prepareAndroidNodeRuntime({
+            packageDir,
+            runtimeDir,
+            outputDir: path.join(tempDir, 'output')
+        }),
+        /缺少 OpenAI Responses parser/u
+    );
+});
+
 test('服务器运行包将 node_modules Provider manifest 改名为可打包 marker', async () => {
     const packageDir = await createServerPackage(tempDir);
     const manifestPath = path.join(

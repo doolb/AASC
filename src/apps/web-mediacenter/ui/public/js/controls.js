@@ -1,6 +1,7 @@
 const Controls = {
     isPlaying: false,
     textPlaybackState: 'stopped',
+    mmdVisible: null,
     
     togglePlayPause() {
         this.isPlaying = !this.isPlaying;
@@ -372,6 +373,29 @@ const Controls = {
                 window.Crop.updateBox();
             }
         }, 100);
+    },
+
+    // MMD/VRM 只控制当前选中的显示端，复用现有 control WebSocket 消息。
+    setMmdVisibility(visible) {
+        if (typeof visible !== 'boolean') return;
+        if (!window.currentDisplayId) {
+            if (window.showToast) window.showToast('请先选择显示端', 'warning');
+            return;
+        }
+        this.updateMmdVisibilityState(visible);
+        if (window.WebSocketManager) {
+            window.WebSocketManager.sendControl('mmdVisibility', visible);
+        }
+    },
+
+    updateMmdVisibilityState(visible) {
+        if (typeof visible !== 'boolean') return;
+        this.mmdVisible = visible;
+        document.querySelectorAll('[data-mmd-visibility]').forEach((button) => {
+            button.classList.toggle('active', button.dataset.mmdVisibility === String(visible));
+        });
+        const status = document.getElementById('mmdVisibilityStatus');
+        if (status) status.textContent = `当前状态：${visible ? '显示 MMD' : '隐藏 MMD'}`;
     },
     
     setFitMode(fit) {

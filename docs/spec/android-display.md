@@ -337,16 +337,25 @@ mode='none' 占位文本按能力区分:
 ## Offline WebView 按分辨率与 DPI 缩放伪代码
 
 ```text
-WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels, densityDpi):
+WebViewScalePolicy.deviceClass(smallestScreenWidthDp):
+    如果 smallestScreenWidthDp > 0 且 smallestScreenWidthDp < 600：返回 PHONE
+    返回 COMPUTER
+
+WebViewScalePolicy.scaleFactor(offlineMode, widthPixels, heightPixels, densityDpi, deviceClass):
     如果 offlineMode == false:
-        返回 100
+        返回 1.0
     如果 widthPixels <= 0 或 heightPixels <= 0 或 densityDpi <= 0:
-        返回 100
+        返回 1.0
     longEdgePixels = max(widthPixels, heightPixels)
     resolutionRatio = longEdgePixels / 1280
     densityRatio = densityDpi / 320
-    blendedRatio = (resolutionRatio + densityRatio) / 2
-    返回 max(1, round(blendedRatio * 100))
+    deviceCoefficient = deviceClass == PHONE ? 1.108705 : 1.0
+    rawScaleFactor = resolutionRatio × densityRatio × deviceCoefficient
+    返回 clamp(rawScaleFactor, 1.0, 3.0)
+
+WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels, densityDpi, deviceClass):
+    scaleFactor = scaleFactor(offlineMode, widthPixels, heightPixels, densityDpi, deviceClass)
+    返回 round(scaleFactor × 100)
 
 DisplayWebView.init(context, offlineMode):
     设置 JavaScript、DOM 存储和媒体播放能力
@@ -355,8 +364,9 @@ DisplayWebView.init(context, offlineMode):
     设置 loadWithOverviewMode = false
     禁止用户手势缩放
     metrics = context.resources.displayMetrics
+    deviceClass = WebViewScalePolicy.deviceClass(context.resources.configuration.smallestScreenWidthDp)
     initialScale = WebViewScalePolicy.initialScalePercent(
-        offlineMode, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi
+        offlineMode, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi, deviceClass
     )
     调用 setInitialScale(initialScale)
     由 Android WebView 按当前 display Context 的像素分辨率应用初始比例
@@ -399,8 +409,10 @@ MainActivity.onConfigurationChanged:
 ```text
 initialScalePercent(true, 1280, 720, 320) -> 100%
 initialScalePercent(true, 1920, 1080, 160) -> 100%
-initialScalePercent(true, 1920, 1080, 320) -> 125%
-initialScalePercent(true, 720, 1480, 280) -> 102%
+initialScalePercent(true, 1920, 1080, 320, COMPUTER) -> 150%
+initialScalePercent(true, 720, 1480, 280, PHONE) -> 112%
+scaleFactor(true, 2309, 1080, 480, PHONE) -> 3.0（上限）
+initialScalePercent(true, 2309, 1080, 480, PHONE) -> 300%
 initialScalePercent(true, 0, 0, 320) -> 100% 回退
 initialScalePercent(false, 任意有效分辨率, 任意有效 dpi) -> 100%
 initialScalePercent(true, 1920, 1080, 0) -> 100% 回退

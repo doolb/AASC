@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { pathToFileURL } = require('node:url');
+const { resolveActivePiModule } = require('./pi-runtime-module-paths');
 const {
     normalizeAgentProfile,
     normalizeChatTemplate,
@@ -66,7 +67,10 @@ class PiRuntimeManager {
         this.requestTimeoutMs = options.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS;
         this.requestQueueTimeoutMs = options.requestQueueTimeoutMs || DEFAULT_REQUEST_QUEUE_TIMEOUT_MS;
         this.logger = typeof options.logger === 'function' ? options.logger : () => {};
-        this.sdkLoader = options.sdkLoader || (() => import('@earendil-works/pi-coding-agent'));
+        this.sdkLoader = options.sdkLoader || (() => import(resolveActivePiModule(
+            '@earendil-works/pi-coding-agent',
+            'dist/index.js'
+        )));
         this.readonlyToolsLoader = options.readonlyToolsLoader || (() => import(
             pathToFileURL(path.join(__dirname, 'pi-readonly-tools.mjs')).href
         ));

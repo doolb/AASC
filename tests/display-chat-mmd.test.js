@@ -68,9 +68,32 @@ test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {
     const displayCss = readPublic('css/display.css');
     const displayHtml = readPublic('display.html');
     assert.match(stage, /classList\.toggle\('display-chat-open', state\.chatVisible\)/u);
+    assert.match(stage, /dataset\.chatSuppressed = String\(state\.chatVisible\)/u);
     assert.match(displayCss, /body\.display-chat-open #voiceTextDisplay\s*\{[\s\S]*display:\s*none !important/u);
+    assert.match(displayCss, /#voiceTextDisplay\[data-chat-suppressed="true"\][\s\S]*display:\s*none !important/u);
     assert.match(displayHtml, /function showTtsText\(text\)[\s\S]*voiceTextDisplay\.className = 'voice-text-visible'/u);
     assert.match(displayHtml, /ttsAudio\.play\(\)/u);
+});
+
+test('聊天输入区将发送和清空按钮竖向放在输入框右侧', () => {
+    const chat = readPublic('js/display-chat.js');
+    const css = readPublic('css/display-chat.css');
+    assert.match(chat, /<textarea data-role="input"[\s\S]*<div class="display-chat-compose-actions">[\s\S]*data-action="clear"[\s\S]*display-chat-send/u);
+    assert.match(css, /\.display-chat-compose\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto/u);
+    assert.match(css, /\.display-chat-compose-actions\s*\{[\s\S]*flex-direction:\s*column/u);
+});
+
+test('控制端通过 control/mmdVisibility 控制当前显示端的 MMD 层', () => {
+    const controls = readPublic('js/controls.js');
+    const websocket = readPublic('js/websocket.js');
+    const display = readPublic('display.html');
+    const upload = readPublic('upload.html');
+    assert.match(upload, /data-mmd-visibility="true"[\s\S]*显示 MMD/u);
+    assert.match(upload, /data-mmd-visibility="false"[\s\S]*隐藏 MMD/u);
+    assert.match(controls, /sendControl\('mmdVisibility', visible\)/u);
+    assert.match(websocket, /extraData\.mmdVisible/u);
+    assert.match(display, /case 'mmdVisibility'/u);
+    assert.match(display, /ackExtra = \{ mmdVisible: data\.value === true \}/u);
 });
 
 test('显示端聊天和 MMD 开关固定在左下角并避让安全区', () => {

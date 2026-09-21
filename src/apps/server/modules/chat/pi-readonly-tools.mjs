@@ -1,17 +1,27 @@
-import {
-    Type,
-    createAssistantMessageEventStream,
-    createProvider
-} from '@earendil-works/pi-ai';
 import { stat as fsStat } from 'node:fs/promises';
 import nodePath from 'node:path';
-import { openAIResponsesApi } from '@earendil-works/pi-ai/compat';
-import { defineTool } from '@earendil-works/pi-coding-agent';
+import runtimeModulePaths from './pi-runtime-module-paths.js';
 import { parseSearchResults, readOnlyFetch } from './pi-readonly-tools.js';
 import chat2ApiToolConverter from './pi-chat2api-tool-converter.js';
 import { FIND_DEFAULT_LIMIT, findFiles } from './pi-find-tool.mjs';
 import { normalizePiApiKey } from './pi-runtime-policy.js';
 import continuationTrackerModule from './pi-responses-continuation.js';
+
+const { resolveActivePiModule } = runtimeModulePaths;
+const [piAiModule, piAiCompatModule, piCodingAgentModule] = await Promise.all([
+    import(resolveActivePiModule('@earendil-works/pi-ai', 'dist/index.js')),
+    import(resolveActivePiModule('@earendil-works/pi-ai', 'dist/compat.js', {
+        fallbackSpecifier: '@earendil-works/pi-ai/compat'
+    })),
+    import(resolveActivePiModule('@earendil-works/pi-coding-agent', 'dist/index.js'))
+]);
+const {
+    Type,
+    createAssistantMessageEventStream,
+    createProvider
+} = piAiModule;
+const { openAIResponsesApi } = piAiCompatModule;
+const { defineTool } = piCodingAgentModule;
 
 const {
     DEFAULT_CHAT2API_TOOLS,

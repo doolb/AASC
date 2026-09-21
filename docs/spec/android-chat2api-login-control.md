@@ -83,14 +83,24 @@ MainActivity onCreate:
 NativeDisplay.setControlPageAccess(enabled):
     effectiveAllowed = offlineMode == true or enabled == true
     主线程设置 controlPageAllowed = effectiveAllowed
+    controlButtonState = COLLAPSED
     controlToggleButton.visible = effectiveAllowed and controlWebView 未显示
     effectiveAllowed == false -> 隐藏控制 WebView
 
-MainActivity toggleControlPage():
+MainActivity onControlButtonClick():
     if controlPageAllowed == false:
         return
+    if controlWebView 未显示 and controlButtonState == COLLAPSED:
+        controlButtonState = EXPANDED
+        更新为完整“控制端”按钮
+        return
     显示或隐藏 controlWebView
-    首次显示 -> 加载同源 ServerConfig.controlPageUrl(serverUrl)
+    controlWebView 显示 -> 加载同源 ServerConfig.controlPageUrl(serverUrl)
+    controlWebView 隐藏 -> controlButtonState = COLLAPSED
+
+MainActivity onDisplayLayoutChanged():
+    保持收缩入口贴合左侧边缘
+    保持按钮位于 controlWebView 上方且不改变 WebView 层级
 ```
 
 ```text
@@ -112,6 +122,8 @@ MainActivity.setupWebView():
 
 普通 APK 和离线 APK 共用上述流程；离线模式只改变 Node 主服务地址和本地模型配置，不改变控制端授权协议。
 离线模式的原生入口默认可用，不因服务端初始化阶段补发的 `enabled=false` 而隐藏；普通 APK 仍完全遵循服务端授权。
+
+当前实现补充：`controlButtonState` 使用 `COLLAPSED/EXPANDED` 两态；左侧中部收缩标签第一次点击只切换到 `EXPANDED`，只有展开态再次点击才切换控制 WebView。页面关闭、返回显示页或撤销授权时回到 `COLLAPSED`。
 
 ## Offline 本机账号导入伪代码
 

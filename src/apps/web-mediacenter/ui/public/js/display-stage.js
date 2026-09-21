@@ -103,6 +103,11 @@
         // 播报文字与聊天共用全屏舞台；聊天打开时隐藏字幕，避免遮挡消息气泡。
         // 这里只切换页面状态类，不触碰 TTS 音频队列、播放状态或录音状态。
         if (document.body) document.body.classList.toggle('display-chat-open', state.chatVisible);
+        if (refs.voiceTextDisplay) {
+            // 记录到 data 属性，防止后续 showTtsText 改写 className 后字幕重新出现。
+            refs.voiceTextDisplay.dataset.chatSuppressed = String(state.chatVisible);
+            refs.voiceTextDisplay.setAttribute('aria-hidden', String(state.chatVisible));
+        }
         if (refs.chatLayer) {
             refs.chatLayer.classList.toggle('is-visible', state.chatVisible);
             refs.chatLayer.setAttribute('aria-hidden', String(!state.chatVisible));
@@ -175,8 +180,10 @@
         refs.mmdLayer = document.getElementById('displayMmdLayer');
         refs.chatLayer = document.getElementById('displayChatLayer');
         refs.mmdCanvas = document.getElementById('displayMmdCanvas');
+        refs.voiceTextDisplay = document.getElementById('voiceTextDisplay');
         refs.chatToggle = document.getElementById('displayChatToggle');
         refs.mmdToggle = document.getElementById('displayMmdToggle');
+        refs.chatTtsStop = document.getElementById('displayChatTtsStop');
         if (!refs.stage || !refs.chatLayer || !refs.mmdLayer) return;
 
         if (refs.chatToggle) {
@@ -184,6 +191,11 @@
         }
         if (refs.mmdToggle) {
             refs.mmdToggle.addEventListener('click', () => setMmdVisible(!state.mmdVisible));
+        }
+        if (refs.chatTtsStop) {
+            refs.chatTtsStop.addEventListener('click', () => {
+                root.DisplayChat?.stopConversationTts({ notify: true });
+            });
         }
         if (root.DisplayChat && typeof root.DisplayChat.init === 'function') {
             root.DisplayChat.init({ root: refs.chatLayer, bus, send, getState: () => ({ ...state }) });

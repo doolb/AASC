@@ -135,12 +135,16 @@ test('chatStream Responses 分流 think、控制端正文和按顺序播报的�
                 temperature: 0.1
             }]
         });
-        const chunks = [];
-        const sentences = [];
-        const completions = [];
+    const chunks = [];
+    const sentences = [];
+    const sentencePhases = [];
+    const completions = [];
         const result = await llmService.chatStream('喂喂喂', {}, {
             onChunk: (delta, message, reasoning) => chunks.push({ delta, message, reasoning }),
-            onSentence: (sentence) => sentences.push(sentence),
+            onSentence: (sentence, _message, _reasoning, _speech, phase) => {
+                sentences.push(sentence);
+                sentencePhases.push(phase);
+            },
             onComplete: (message, _history, reasoning, speech) => completions.push({ message, reasoning, speech })
         });
 
@@ -149,6 +153,7 @@ test('chatStream Responses 分流 think、控制端正文和按顺序播报的�
         assert.equal(result.reasoning, '先检查条件。');
         assert.equal(result.speech, '先检查条件。答案是四。');
         assert.deepEqual(sentences, ['先检查条件。', '答案是四。']);
+        assert.deepEqual(sentencePhases, ['think', 'answer']);
         assert.deepEqual(completions, [{
             message: '答案是四。',
             reasoning: '先检查条件。',

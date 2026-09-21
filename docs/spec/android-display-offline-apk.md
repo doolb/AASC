@@ -108,20 +108,30 @@ MainActivity.onPageStarted(displayView):
     如果 offlineMode：在页面脚本执行前将 localStorage.displayId 预置为 "offline-display"
     兼容已安装 full APK 尚未通过服务 code-only 热更更新 display.html 的情况
 
-WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels, densityDpi):
-    如果 offlineMode 为 false：返回 100
-    如果 widthPixels <= 0 或 heightPixels <= 0 或 densityDpi <= 0：返回 100
+WebViewScalePolicy.deviceClass(smallestScreenWidthDp):
+    如果 smallestScreenWidthDp > 0 且 smallestScreenWidthDp < 600：返回 PHONE
+    返回 COMPUTER
+
+WebViewScalePolicy.scaleFactor(offlineMode, widthPixels, heightPixels, densityDpi, deviceClass):
+    如果 offlineMode 为 false：返回 1.0
+    如果 widthPixels <= 0 或 heightPixels <= 0 或 densityDpi <= 0：返回 1.0
     longEdgePixels = max(widthPixels, heightPixels)
     resolutionRatio = longEdgePixels / 1280
     densityRatio = densityDpi / 320
-    blendedRatio = (resolutionRatio + densityRatio) / 2
-    返回 max(1, round(blendedRatio * 100))
+    deviceCoefficient = deviceClass == PHONE ? 1.108705 : 1.0
+    rawScaleFactor = resolutionRatio × densityRatio × deviceCoefficient
+    返回 clamp(rawScaleFactor, 1.0, 3.0)
+
+WebViewScalePolicy.initialScalePercent(offlineMode, widthPixels, heightPixels, densityDpi, deviceClass):
+    scaleFactor = scaleFactor(offlineMode, widthPixels, heightPixels, densityDpi, deviceClass)
+    返回 round(scaleFactor × 100)
 
 DisplayWebView.init(context, offlineMode):
     初始化现有 WebSettings
     metrics = context.resources.displayMetrics
+    deviceClass = WebViewScalePolicy.deviceClass(context.resources.configuration.smallestScreenWidthDp)
     scale = WebViewScalePolicy.initialScalePercent(
-        offlineMode, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi
+        offlineMode, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi, deviceClass
     )
     setInitialScale(scale)
 

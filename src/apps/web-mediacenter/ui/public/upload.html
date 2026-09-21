@@ -187,6 +187,15 @@
                 <h2>显示控制</h2>
             <div class="control-grid">
                 <div class="control-item">
+                    <label>MMD / VRM 角色层</label>
+                    <div class="control-buttons">
+                        <button class="control-btn" data-mmd-visibility="true" onclick="Controls.setMmdVisibility(true)">显示 MMD</button>
+                        <button class="control-btn" data-mmd-visibility="false" onclick="Controls.setMmdVisibility(false)">隐藏 MMD</button>
+                    </div>
+                    <div id="mmdVisibilityStatus" style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.65);">当前状态：未同步</div>
+                </div>
+
+                <div class="control-item">
                     <label>画面填充</label>
                     <div class="control-buttons">
                         <button class="control-btn" data-fit="contain" onclick="sendFitMode('contain')">适应</button>

@@ -95,4 +95,37 @@ class ServerConfigTest {
         assertFalse(AndroidControlAccess.shouldShowButton(allowed = false, pageVisible = false))
         assertTrue(AndroidControlAccess.shouldShowButton(allowed = true, pageVisible = false))
     }
+
+    @Test
+    fun 收缩入口第一次点击只展开完整按钮() {
+        assertEquals(
+            AndroidControlAccess.ButtonClickAction.EXPAND,
+            AndroidControlAccess.clickAction(
+                pageVisible = false,
+                state = AndroidControlAccess.ButtonState.COLLAPSED
+            )
+        )
+    }
+
+    @Test
+    fun 展开入口第二次点击才切换控制端页面() {
+        assertEquals(
+            AndroidControlAccess.ButtonClickAction.TOGGLE_PAGE,
+            AndroidControlAccess.clickAction(
+                pageVisible = false,
+                state = AndroidControlAccess.ButtonState.EXPANDED
+            )
+        )
+    }
+
+    @Test
+    fun 控制端页面可见时点击入口切换页面() {
+        assertEquals(
+            AndroidControlAccess.ButtonClickAction.TOGGLE_PAGE,
+            AndroidControlAccess.clickAction(
+                pageVisible = true,
+                state = AndroidControlAccess.ButtonState.EXPANDED
+            )
+        )
+    }
 }

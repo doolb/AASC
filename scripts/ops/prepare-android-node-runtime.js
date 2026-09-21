@@ -38,6 +38,18 @@ const TASK_LATEST_MARKER_FILE = 'latest.marker';
 // Android aapt/AssetManager 不保证隐藏文件进入 assets；Pi SDK 的 Provider manifest
 // 必须在安装后恢复到原始文件名，因此先使用不带点号的安全 marker。
 const ANDROID_HIDDEN_MANIFEST_MARKER = 'aasc-bundled-manifest.json';
+// openai 6.x 把 Responses 流解析器放在私有 _vendor 目录中。该目录不是构建生成物，
+// 但 Android AssetManager 对以下划线目录不稳定，因此这里只放行这一棵必需目录树。
+const REQUIRED_ANDROID_RUNTIME_DIRECTORY_PREFIXES = Object.freeze([
+    ['node_modules', 'openai', '_vendor']
+]);
+const REQUIRED_ANDROID_RUNTIME_ASSET = path.join(
+    'node_modules',
+    'openai',
+    '_vendor',
+    'partial-json-parser',
+    'parser.mjs'
+);
 const { resolveSelectedModelFiles } = require('./apk-build-profile');
 // 历史兼容测试使用的模型列表。正式 profile 构建通过 model ID 和 manifest 解析文件，
 // 此常量仅保留导出，避免破坏旧调用方，不参与新的 release APK 资源选择。
@@ -139,15 +151,22 @@ function isNpmInternalMetadata(relativePath) {
     return segments.at(-1) === '.package-lock.json' && segments.at(-2) === 'node_modules';
 }
 
+function isRequiredAndroidRuntimeDirectory(relativePath) {
+    const segments = relativePath.split(path.sep);
+    return REQUIRED_ANDROID_RUNTIME_DIRECTORY_PREFIXES.some((prefix) => (
+        segments.length >= prefix.length && prefix.every((segment, index) => segments[index] === segment)
+    ));
+}
+
 function isAndroidAssetExcluded(relativePath, isDirectory = false) {
     const segments = relativePath.split(path.sep);
     // 只有目录名会影响 Android AssetManager 的遍历；Node 依赖中存在大量以下划线
     // 开头的合法 JavaScript 文件（例如 readable-stream/lib/_stream_readable.js），
     // 不能按文件名过滤，否则运行时会出现 MODULE_NOT_FOUND。
     const directorySegments = isDirectory ? segments : segments.slice(0, -1);
-    const hasUnsupportedDirectory = directorySegments.some(
-        segment => segment.startsWith('.') || segment.startsWith('_')
-    );
+    const hasUnsupportedDirectory = directorySegments.some(segment => segment.startsWith('.')) ||
+        (directorySegments.some(segment => segment.startsWith('_')) &&
+            !isRequiredAndroidRuntimeDirectory(directorySegments.join(path.sep)));
     const isHiddenFile = !isDirectory && segments.at(-1)?.startsWith('.');
     const isNodeModuleManifest = !isDirectory && segments.includes('node_modules') &&
         segments.at(-1) === '.manifest.json';
@@ -569,6 +588,21 @@ function assertRequiredPackageEntries(packageDir) {
     }
 }
 
+async function validateRequiredAndroidRuntimeAssets(packageDir) {
+    const openAiPackageDir = path.join(packageDir, 'node_modules', 'openai');
+    if (!fs.existsSync(openAiPackageDir)) return;
+    const parserPath = path.join(openAiPackageDir, '_vendor', 'partial-json-parser', 'parser.mjs');
+    let parserStat;
+    try {
+        parserStat = await fs.promises.stat(parserPath);
+    } catch {
+        throw new Error(`服务器运行包缺少 OpenAI Responses parser: ${path.relative(packageDir, parserPath)}`);
+    }
+    if (!parserStat.isFile() || parserStat.size === 0) {
+        throw new Error(`服务器运行包的 OpenAI Responses parser 不是非空普通文件: ${path.relative(packageDir, parserPath)}`);
+    }
+}
+
 async function copyCertificates(certDir, outputDir) {
     if (!certDir) return [];
     const resolvedCertDir = resolveRequiredDirectory(certDir, 'AASC_ANDROID_NODE_CERT_DIR');
@@ -748,6 +782,7 @@ async function prepareAndroidNodeRuntime(options = {}) {
     }
     assertRuntimeLibraries(runtimeDir);
     assertRequiredPackageEntries(packageDir);
+    await validateRequiredAndroidRuntimeAssets(packageDir);
 
     const temporaryOutputDir = `${outputDir}.tmp-${process.pid}-${Date.now()}`;
     const temporaryNativeOutputDir = `${nativeOutputDir}.tmp-${process.pid}-${Date.now()}`;
@@ -950,6 +985,8 @@ module.exports = {
     assertSafeRelativePath,
     assertRuntimeLibraries,
     isAndroidAssetExcluded,
+    isRequiredAndroidRuntimeDirectory,
+    validateRequiredAndroidRuntimeAssets,
     isNpmInternalMetadata,
     isNpmToolShim,
     mapPackagedAssetPath,

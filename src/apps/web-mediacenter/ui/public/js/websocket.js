@@ -515,6 +515,10 @@ const WebSocketManager = {
             if (window.Chat) {
                 window.Chat.handlePlayOnControl(data);
             }
+        } else if (data.type === 'stopChatTts') {
+            if (window.Chat) {
+                window.Chat.handleStopChatTts(data);
+            }
         } else if (data.type === 'newChatMessage') {
             if (window.Chat) {
                 window.Chat.handleNewMessage(data);
@@ -551,6 +555,10 @@ const WebSocketManager = {
             }
             if (data.commandType === 'control' && data.extraData && data.extraData.sleepState && window.Controls) {
                 window.Controls.updateSleepStatus(data.extraData.sleepState);
+            }
+            if (data.commandType === 'control' && data.extraData
+                && typeof data.extraData.mmdVisible === 'boolean' && window.Controls) {
+                window.Controls.updateMmdVisibilityState(data.extraData.mmdVisible);
             }
             if (window.SelfTest) {
                 window.SelfTest.handleAck(data);
