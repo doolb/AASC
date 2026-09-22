@@ -686,17 +686,21 @@ body.display-chat-open .display-chat-suppressible {
     position: fixed;
     top: 50%;
     left: 50%;
+    box-sizing: border-box;
     --popup-rotation: 0deg;
+    --popup-edge-gap: clamp(12px, 5vw, 64px);
     transform: translate(-50%, -50%) rotate(var(--popup-rotation));
     background: var(--bg-secondary, linear-gradient(135deg, rgba(0, 0, 0, 0.95), rgba(30, 30, 30, 0.95)));
     border: 2px solid var(--success-color, #4CAF50);
     border-radius: 16px;
-    padding: 30px 50px;
+    width: calc(100% - (var(--popup-edge-gap) * 2));
+    max-width: calc(100% - (var(--popup-edge-gap) * 2));
+    padding: clamp(8px, 2.5vw, 24px) clamp(8px, 3vw, 24px);
     text-align: center;
     animation: popupPulse 0.3s ease;
     z-index: 10000;
     box-shadow: 0 0 40px var(--shadow-color, rgba(76, 175, 80, 0.4));
-    max-width: 80%;
+    overflow-x: hidden;
 }
 
 .voice-response-content {

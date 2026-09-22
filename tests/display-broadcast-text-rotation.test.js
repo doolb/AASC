@@ -216,8 +216,13 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
     );
     assert.match(
         DISPLAY_HTML,
-        /function applyRotationPopupLayout\(layout\)[\s\S]*layout\.layoutWidth[\s\S]*layout\.layoutHeight[\s\S]*currentRotation/u,
-        '动态弹窗必须按旋转后的逻辑宽高和当前角度布局'
+        /function getRotationPopupAdaptiveMetrics\(layout\)[\s\S]*logicalWidth[\s\S]*layout\.layoutWidth[\s\S]*Math\.min\(64[\s\S]*Math\.max\(12[\s\S]*logicalWidth \* 0\.05[\s\S]*layout\.layoutHeight/u,
+        '动态弹窗必须按当前逻辑视口的 5% 计算边距，并限制在 12px-64px'
+    );
+    assert.match(
+        DISPLAY_HTML,
+        /function applyRotationPopupLayout\(layout\)[\s\S]*getRotationPopupAdaptiveMetrics\(layout\)[\s\S]*--popup-edge-gap[\s\S]*popup\.style\.width/u,
+        'TTS/天气弹窗必须按动态边距使用可用视口宽度'
     );
     assert.match(
         DISPLAY_HTML,
@@ -228,6 +233,9 @@ test('天气响应等动态弹窗应随显示端旋转并使用逻辑画布限�
     assert.match(DISPLAY_HTML, /function appendRotationPopup\(popup, options = \{\}\)[\s\S]*options\.layer === 'broadcast'/u);
     assert.match(DISPLAY_HTML, /options\.suppressWhenChatVisible === true[\s\S]*display-chat-suppressible/u);
     assert.match(DISPLAY_CSS, /--popup-rotation/u);
+    assert.match(DISPLAY_CSS, /--popup-edge-gap:\s*clamp\(12px,\s*5vw,\s*64px\)/u);
+    assert.match(DISPLAY_CSS, /\.voice-response-popup\s*\{[\s\S]*box-sizing:\s*border-box[\s\S]*width:\s*calc\(100%/u);
+    assert.match(DISPLAY_CSS, /\.voice-response-popup\s*\{[\s\S]*max-width:\s*calc\(100%/u);
     assert.match(DISPLAY_CSS, /popupPulse[\s\S]*var\(--popup-rotation\)/u);
 });
 
@@ -262,6 +270,80 @@ test('普通 TTS 响应在聊天打开时位于播报层下方并隐藏', async 
     assert.equal(state.hidden, 'none');
     assert.notEqual(state.restored, 'none');
     await page.close();
+});
+
+test('300% 缩放下 TTS 和天气弹窗按当前逻辑视口自适应左右空隙', async () => {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 360, height: 800, deviceScaleFactor: 3 });
+    await page.goto(`http://127.0.0.1:${server.address().port}/display.html?displayId=popup-adaptive-mobile-test`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000
+    });
+    await page.waitForFunction(() => typeof window.handleVoiceCommand === 'function', { timeout: 10000 });
+
+    const boxes = await page.evaluate(async () => {
+        const waitForPopupAnimation = () => new Promise((resolve) => {
+            const popup = document.querySelector('.voice-response-popup');
+            if (!popup) {
+                resolve();
+                return;
+            }
+            const finish = () => {
+                popup.removeEventListener('animationend', finish);
+                requestAnimationFrame(resolve);
+            };
+            popup.addEventListener('animationend', finish, { once: true });
+        });
+        const readBox = () => {
+            const popup = document.querySelector('.voice-response-popup');
+            const rect = popup.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, width: rect.width };
+        };
+        window.handleVoiceCommand({ action: 'response', text: '普通语音播报文字' });
+        await waitForPopupAnimation();
+        const response = readBox();
+        window.handleVoiceCommand({
+            action: 'weatherResult',
+            text: '成都今天晴天，温度22度',
+            detailText: '成都当前天气：晴天，温度22℃，湿度50%。未来3天预报。'
+        });
+        await waitForPopupAnimation();
+        return {
+            response,
+            weather: readBox(),
+            viewportWidth: window.innerWidth
+        };
+    });
+
+    const expectedEdgeGap = Math.min(64, Math.max(12, Math.round(boxes.viewportWidth * 0.05)));
+    for (const [name, box] of Object.entries({ response: boxes.response, weather: boxes.weather })) {
+        assert.ok(Math.abs(box.left - expectedEdgeGap) <= 1, `${name} 弹窗左侧未按当前逻辑视口自适应: ${JSON.stringify({ box, expectedEdgeGap, viewportWidth: boxes.viewportWidth })}`);
+        assert.ok(Math.abs((boxes.viewportWidth - box.right) - expectedEdgeGap) <= 1, `${name} 弹窗右侧未按当前逻辑视口自适应: ${JSON.stringify({ box, expectedEdgeGap, viewportWidth: boxes.viewportWidth })}`);
+    }
+    await page.close();
+});
+
+test('弹窗边距随不同逻辑视口宽度变化并受上下限约束', async () => {
+    const readEdgeGap = async (width, height) => {
+        const page = await browser.newPage();
+        await page.setViewport({ width, height, deviceScaleFactor: 3 });
+        await page.goto(`http://127.0.0.1:${server.address().port}/display.html?displayId=popup-gap-${width}`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 20000
+        });
+        await page.waitForFunction(() => typeof window.handleVoiceCommand === 'function', { timeout: 10000 });
+        const edgeGap = await page.evaluate(() => {
+            window.handleVoiceCommand({ action: 'response', text: '边距测试' });
+            const popup = document.querySelector('.voice-response-popup');
+            return Number.parseFloat(getComputedStyle(popup).getPropertyValue('--popup-edge-gap'));
+        });
+        await page.close();
+        return edgeGap;
+    };
+
+    assert.equal(await readEdgeGap(360, 800), 18);
+    assert.equal(await readEdgeGap(1200, 800), 60);
+    assert.equal(await readEdgeGap(2400, 1200), 64);
 });
 
 test('实际旋转后的长中文固定文本包围盒保持在视口内', async () => {

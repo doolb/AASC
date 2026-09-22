@@ -263,6 +263,10 @@ const WebSocketManager = {
                 if (data.state.dynamicFitConfig !== undefined && window.Controls) {
                     window.Controls.setDynamicFitConfig(data.state.dynamicFitConfig);
                 }
+
+                if (typeof data.state.mmdVisible === 'boolean' && window.Controls) {
+                    window.Controls.updateMmdVisibilityState(data.state.mmdVisible);
+                }
                 
                 if (data.state.fit !== undefined && window.Controls) {
                     window.Controls.setFitMode(data.state.fit);
@@ -366,6 +370,16 @@ const WebSocketManager = {
                 }
             } else {
                 console.log('[WS] displayState displayId 不匹配，跳过处理');
+            }
+        } else if (data.type === 'mmdVisibilityChanged') {
+            // 服务端广播的是按 displayId 保存后的权威值，只更新当前选中的显示端。
+            if (data.displayId === window.currentDisplayId
+                && typeof data.visible === 'boolean' && window.Controls) {
+                window.Controls.updateMmdVisibilityState(data.visible);
+            }
+        } else if (data.type === 'mmdVisibilityError') {
+            if (data.displayId === window.currentDisplayId && window.showToast) {
+                window.showToast(data.message || 'MMD 状态更新失败', 'error');
             }
         } else if (data.type === 'sleepStateReport') {
             // 显示端睡眠状态上报：匹配当前选中显示端才更新按钮

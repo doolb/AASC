@@ -189,6 +189,7 @@
   },
   "defaultDisplayState": {
     "currentMedia": null,
+    "mmdVisible": true,
     "currentMediaProgress": null,
     "rotation": 0,
     "fit": "contain",

@@ -70,7 +70,9 @@
 
 Android 工程集成阿里 MNN 官方 `apps/Android/MnnLlmChat` 使用的 MNN-LLM 引擎能力，在当前 APK 的 `arm64-v8a` 构建中启用 LLM native 库。构建配置必须启用 MNN LLM、Transformer 融合和 ARM 优化，并保留现有 APK 的 Android 8/API 26 最低版本与 16 KB page size 兼容约束。
 
-MNN 源码默认路径记录为 `build/third_party/MNN`，固定 revision 为 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，默认 NDK 为 `/opt/android-sdk/ndk/28.2.13676358`。维护者可直接运行 `npm run build:mnnllm-android` 编译；APK 构建仍通过 `npm run prepare:mnnllm-android` 自动复用同一准备脚本。`AASC_MNN_ROOT`、`AASC_MNN_REVISION` 和 `ANDROID_NDK_HOME` 可用于覆盖默认值。
+MNN 源码默认路径记录为 `build/third_party/MNN`，固定 revision 为 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，默认 NDK 为 `/opt/android-sdk/ndk/28.2.13676358`。维护者可直接运行 `npm run build:mnnllm-android` 编译；APK 构建仍通过 `npm run prepare:mnnllm-android` 自动复用同一准备脚本。`AASC_MNN_ROOT`、`AASC_MNN_REVISION` 和 `ANDROID_NDK_HOME` 可用于覆盖默认值。MNN root/revision 由共享构建配置解析，`build-apk.js` 会将解析结果显式传给 Gradle；直接运行 Gradle 时也回退到相同的仓库 checkout 和固定 revision，不要求当前 shell 预先 export 环境变量。
+
+2026-09-22 已使用上述默认 checkout/revision 重打包并发布 `allserver-min` update-only APK v33；构建命令自动将 MNN root/revision 注入 prepare 脚本和 Gradle，未要求手动设置 `AASC_MNN_ROOT`。同批服务代码发布为 code v29，沿用 dependencies v5。
 
 MNN 源码和生成的 native 库不直接提交大体积构建产物；通过可重复的准备脚本获取固定上游版本、构建 `arm64-v8a` 库并复制到 APK 构建输入。构建缺少 LLM native 库时必须明确失败，不能静默生成没有 LLM 能力的 APK。
 
@@ -423,7 +425,7 @@ LLM 在现有 APK 大小核并发面板中增加独立一行，不复用 ASR 或
 - 2026-09-13 已完成 MNN 双 runtime 线程配置同步：JNI 将同一 LLM policy 线程数同时写入顶层 `thread_num` 和 `mllm.thread_num`，视觉/多模态 processor runtime 不再保留模型目录默认线程数；契约测试、APK 构建和真机日志已验证 4→2 的两处配置同步。
 - 2026-09-13 已完成网关默认模型映射：`llm-server` 任务卡片声明“默认映射”按钮，控制端弹窗编辑外部模型名到内部 `modelId`，服务端沿用 WebSocket 配置流程校验、持久化、连接初始化补发和权威广播，网关请求按 manifest/alias 优先、动态映射兜底解析。
 - 2026-09-13 已修复默认映射按钮未显示：内置任务注册表 `listTasks()` 保留 `configButton` 元数据，任务列表 WebSocket 端到端返回并由控制端渲染该按钮。
-- 已新增 `npm run prepare:mnnllm-android`；该脚本要求固定 `AASC_MNN_ROOT` 和 `AASC_MNN_REVISION`，`build:apk` 会先准备官方依赖，CMake 缺少官方产物时直接失败。
+- 已新增 `npm run prepare:mnnllm-android`；该脚本默认复用固定 checkout/revision，`AASC_MNN_ROOT` 和 `AASC_MNN_REVISION` 只作为覆盖项，`build:apk` 会先准备官方依赖并将解析配置传给 Gradle，CMake 缺少官方产物时直接失败。
 - Android Gradle 配置已按 AGP 9 的 DSL 分层：`CMakeLists.txt` 路径保留在模块级 `externalNativeBuild`，`-DAASC_MNN_ROOT` 放入 `defaultConfig.externalNativeBuild.cmake.arguments`。
 - 已通过 Node 定向测试 13/13（本次协议边界测试）；使用官方 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`、Android NDK 28.2.13676358 完成 `npm run build:apk`，安装到 `192.168.1.6:5555` 并以 `npm run start:apk:display` 无参数启动。Chat/Responses 文本和图片协议已用 Qwen3.5 真机验证；长稳压测仍属于后续可选项。
 ## 任务实例入口

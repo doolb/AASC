@@ -1319,7 +1319,7 @@ class MainActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
         layoutParams.gravity = Gravity.START or Gravity.TOP
-        layoutParams.leftMargin = if (collapsed) 0 else dp(12)
+        layoutParams.leftMargin = if (collapsed) -dp(21) else dp(12)
         layoutParams.rightMargin = 0
         layoutParams.topMargin = if (collapsed) 0 else dp(12)
         layoutParams.bottomMargin = 0

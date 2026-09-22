@@ -22,6 +22,7 @@ const USER_CONFIG_FILE = path.join(USER_CONFIG_DIR, 'userconfig.json');
 
 const defaultDisplayState = {
     currentMedia: null,
+    mmdVisible: true,
     currentMediaProgress: null,
     rotation: 0,
     fit: 'contain',

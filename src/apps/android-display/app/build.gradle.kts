@@ -37,14 +37,23 @@ val nodeRuntimeJniLibsDirectory = project.findProperty("aascNodeRuntimeJniLibsDi
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?.let { file(it) }
+val defaultMnnRoot = rootProject.file("../../../build/third_party/MNN")
+val defaultMnnRevision = "d407447ed56c4121a11ccbd266dc184ca1ead0c2"
 val mnnRoot = project.findProperty("aascMnnRoot")
     ?.toString()
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: System.getenv("AASC_MNN_ROOT")?.trim()?.takeIf { it.isNotEmpty() }
-    ?: error("缺少固定 AASC_MNN_ROOT；请先设置官方 MNN checkout 路径，再运行 npm run prepare:mnnllm-android")
-check(!System.getenv("AASC_MNN_REVISION").isNullOrBlank()) {
-    "缺少固定 AASC_MNN_REVISION；请先锁定官方 MNN revision，再运行 npm run prepare:mnnllm-android"
+    ?: defaultMnnRoot.absolutePath
+val mnnRevision = project.findProperty("aascMnnRevision")
+    ?.toString()
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("AASC_MNN_REVISION")?.trim()?.takeIf { it.isNotEmpty() }
+    ?: defaultMnnRevision
+val mnnRootDirectory = file(mnnRoot)
+check(mnnRootDirectory.resolve("CMakeLists.txt").isFile) {
+    "MNN checkout 不存在或不完整: ${mnnRootDirectory.absolutePath}（revision=$mnnRevision）"
 }
 
 // AGP 9.0+ 内置 Kotlin 支持，无需 org.jetbrains.kotlin.android 插件

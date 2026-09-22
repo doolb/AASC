@@ -5,6 +5,7 @@
 本次增量：LLM 网关任务卡片已增加默认模型映射按钮和 WebSocket 配置弹窗，配置服务端完成校验、持久化、连接初始化补发及多控制端权威广播；网关在 manifest 未命中时读取动态映射。
 本次增量：配置文件缺少 `llm.defaultModelMappings` 时默认保留 `qwen3.5-0.8b` 到 `qwen3.5-0.8b-claude-opus-distilled-mnn` 的映射；显式保存空数组仍表示用户主动关闭该入口别名。
 2026-09-15 已用当前源码和完整 Android Runtime 重新构建 offline APK：`aasc-display-offline.apk`，大小 1073094719 bytes，SHA-256 为 `7471f2db9f6f78a9e228399ae1e663c491e3d634233876663beb349b6a6dd53f`；已安装到 `192.168.1.6:5555` 的 SM-N9500，未生成 `.mmap`。
+2026-09-22 `allserver-min` 重打包使用 `build/third_party/MNN` 和固定 revision `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，Gradle 参数由 `build-apk.js` 自动传入；产物为 versionCode 33、versionName `0.2.31-offline-min` 的 update-only APK，ZIP、v2 签名和 SHA-256 校验通过。服务代码同步发布为 code v29，依赖沿用 v5。
 本次增量：任务引擎已增加实例级 URL 路由注册；服务端和显示端任务均复用 AASC `8081`，显示端通过 `task:route_request` / `task:route_response` 执行，不新增网页监听端口。
 模型增量：新增 `qwen3.5-0.8b-claude-opus-distilled-mnn`，ModelScope source 固定为 `MNN/Qwen3.5-0.8B-Claude-4.6-Opus-Reasoning-Distilled-MNN@c1bc31b15286afa708f37f690099d10f21d1cc74`；清单包含 `llm.*` 与 `visual.*` 运行文件。本次任务补齐 `enable_thinking=false` 和图片消息到 MNN `MultimodalPrompt` 的实现。
 
@@ -305,6 +306,26 @@ prepareMnnLlmNative():
 ```
 
 构建脚本应复用仓库现有 `npm run` 入口：`npm run build:mnnllm-android` 是人工编译入口，`npm run prepare:mnnllm-android` 是 APK 构建流程复用的兼容入口，二者使用同一脚本和同一默认配置。不得让 APK 在运行时下载 native 库。
+
+```text
+resolveMnnBuildConfig(projectRoot, environment):
+  root = environment.AASC_MNN_ROOT or projectRoot/build/third_party/MNN
+  revision = environment.AASC_MNN_REVISION or pinnedRevision
+  return absolute root and revision
+
+buildApk:
+  mnnConfig = resolveMnnBuildConfig(projectRoot, environment)
+  run prepare:mnnllm-android with mnnConfig in its environment
+  invoke Gradle with -PaascMnnRoot=mnnConfig.root
+  invoke Gradle with -PaascMnnRevision=mnnConfig.revision
+
+direct Gradle:
+  root = Gradle property or AASC_MNN_ROOT or projectRoot/../../../build/third_party/MNN
+  revision = Gradle property or AASC_MNN_REVISION or pinnedRevision
+  validate root contains official MNN checkout
+```
+
+`prepare-mnnllm-android.js`、`build-apk.js` 和 `app/build.gradle.kts` 不再各自维护互相冲突的默认路径；环境变量仍可覆盖默认配置。
 
 ### 5.2 原生生命周期
 
@@ -614,7 +635,7 @@ integration/device:
 
 ## 12. 实施状态
 
-本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。模型二进制和官方 MNN checkout 不提交到仓库；构建必须设置固定 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 并运行 `npm run prepare:mnnllm-android`，缺失依赖时 CMake 直接失败。Gradle 将根目录通过 `defaultConfig.externalNativeBuild.cmake.arguments` 传给 CMake，避免 AGP 9 模块级 DSL 不提供 `arguments` 属性。当前已使用 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 完成 `npm run build:apk`；native ELF 的 LOAD 对齐为 `0x4000`；APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动。Chat `image_url` 和 Responses `input_image` 已用 Qwen3.5 真机验证，图片进入 `MultimodalPrompt` 并清理临时文件。双 runtime 线程配置同步任务 `docs/task/2026-09-13_MNN双runtime线程配置同步.md` 已完成，真机同一 APK 进程 PID `27146` 的下一次推理日志同时显示顶层与 `mllm` `thread_num=2`。
+本规格根据已确认设计完成伪代码落地，并已同步到服务端、Android bridge、WebSocket 页面和 CPU 配置实现。`enable_thinking` 与图片理解的增量任务为 `docs/task/2026-09-13_LLM不思考与图片理解支持.md`。模型二进制和官方 MNN checkout 不提交到仓库；构建默认复用固定 `build/third_party/MNN` checkout 和 `d407447ed56c4121a11ccbd266dc184ca1ead0c2`，也可通过 `AASC_MNN_ROOT`、`AASC_MNN_REVISION` 覆盖。`build-apk.js` 会把解析后的配置传给 `prepare:mnnllm-android` 和 Gradle，直接运行 Gradle 时也使用同一默认值；缺失依赖时 CMake 直接失败。Gradle 将根目录通过 `defaultConfig.externalNativeBuild.cmake.arguments` 传给 CMake，避免 AGP 9 模块级 DSL 不提供 `arguments` 属性。当前已使用 MNN 3.6.1 提交 `d407447ed56c4121a11ccbd266dc184ca1ead0c2` 和 NDK 28.2.13676358 完成 `npm run build:apk`；native ELF 的 LOAD 对齐为 `0x4000`；APK 已安装到 `192.168.1.6:5555` 并用 `npm run start:apk:display` 无参数启动。Chat `image_url` 和 Responses `input_image` 已用 Qwen3.5 真机验证，图片进入 `MultimodalPrompt` 并清理临时文件。双 runtime 线程配置同步任务 `docs/task/2026-09-13_MNN双runtime线程配置同步.md` 已完成，真机同一 APK 进程 PID `27146` 的下一次推理日志同时显示顶层与 `mllm` `thread_num=2`。
 本次任务已完成：默认模型映射配置由 `llm-server` 任务卡片入口维护，服务端使用 `llm.defaultModelMappings.set/get` WebSocket 消息完成规范化校验、持久化、重连补发和多控制端广播；配置字段缺失时保留内置 Qwen 映射，显式空数组仍可关闭；`LlmGatewayService` 在 manifest 内置模型名/alias 未命中时再查找动态映射。
 ## 11. 本地 LLM 网关任务实例
 

@@ -264,6 +264,7 @@ handleDisplayDisconnect(displayId, ws):
 | restoreState | 恢复状态 | `{ type, state }` |
 | media | 媒体数据 | `{ type, url, mediaType, ... }` |
 | control | 控制指令 | `{ type, action, value }` |
+| control/mmdVisibility | MMD 可见性指令 | `{ type: 'control', action: 'mmdVisibility', value: boolean }` |
 | reminder | 提醒消息 | `{ type, action, title, time, content }` |
 | tts | TTS 播放 | `{ type, action, audioUrl, text }` |
 
@@ -279,6 +280,7 @@ handleDisplayDisconnect(displayId, ws):
 | chatHistory | 聊天历史 | `{ type, history }` |
 | voiceInput | 显示端语音输入 | `{ type, displayId, text, isFinal, fullText }` |
 | commandAck | 显式命令确认 | `{ type, displayId, commandType, success, details, timestamp }`；`task:renderUpdate`、`hardwareStats` 等高频状态推送不产生此消息 |
+| mmdVisibilityChanged | MMD 可见性权威状态 | `{ type, displayId, visible: boolean }` |
 | serverLog | 实时日志条目 | `{ type, entry: { id, timestamp, time, category, level, device, message, displayId } }` |
 | logHistory | 日志历史 | `{ type, entries: [...], categories: [...] }` |
 | systemStats | 系统监控数据 | `{ type, stats: { timestamp, cpu, memory, uptime } }` |
@@ -292,6 +294,7 @@ handleDisplayDisconnect(displayId, ws):
 | voiceInput | 语音输入 | `{ type, text, isFinal, fullText }` |
 | voiceStatus | 语音识别状态 | `{ type, supported, listening }` |
 | commandAck | 命令确认 | `{ type, commandType, success, details, timestamp }` |
+| mmdVisibilityRequest | 显示端请求保存 MMD 可见性 | `{ type, displayId, visible: boolean }` |
 | playStateReport | 播放状态上报 | `{ type, isPlaying }`（显示端上报真实播放状态：播放/暂停命令、显示新媒体、重连恢复后；服务端存 displayData.state.isPlaying 并持久化 + 转发控制端） |
 
 ### 控制端 -> 服务端
@@ -381,8 +384,13 @@ pagehide:
             如果 displayId 匹配当前选择:
                 更新 Crop 组件
                 更新 Controls 组件
+                使用 state.mmdVisible 更新 MMD 单按钮
                 更新音量显示
                 更新播放状态
+
+        如果 type === 'mmdVisibilityChanged':
+            如果 displayId 匹配当前选择:
+                更新 Controls.mmdVisible 和单个 MMD 切换按钮
         
         如果 type === 'chatChunk':
             调用 Chat.handleChunk()
@@ -407,6 +415,24 @@ pagehide:
         检查 currentDisplayId
         发送 { type: 'control', displayId, action, value }
         显示成功提示
+
+    toggleMmdVisibility():
+        如果 mmdVisible 不是布尔值:
+            显示状态未同步提示
+            返回
+        发送 control/mmdVisibility，value = not mmdVisible
+
+显示端点击 MMD 按钮:
+    desiredVisible = not DisplayStage.mmdVisible
+    发送 { type: 'mmdVisibilityRequest', displayId, visible: desiredVisible }
+    先更新本地舞台以保证操作即时反馈
+
+服务器处理 mmdVisibilityRequest 或 control/mmdVisibility:
+    校验目标 displayId 在线且 visible 是布尔值
+    写入 displayData.state.mmdVisible
+    调用 config.updateDisplayStateById(displayId, ip, { mmdVisible: visible })
+    向显示端发送 { type: 'control', action: 'mmdVisibility', value: visible }
+    向所有控制端广播 { type: 'mmdVisibilityChanged', displayId, visible }
     
     sendMedia(mediaData):
         检查 currentDisplayId

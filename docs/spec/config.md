@@ -66,6 +66,7 @@ const defaultConfig = {
 
 const defaultDisplayState = {
     currentMedia: null,
+    mmdVisible: true,
     rotation: 0,
     fit: 'contain',
     crop: { x: 0, y: 0, width: 100, height: 100 },
@@ -311,6 +312,12 @@ updateDisplayStateById(displayId, legacyIp, partialState):
     state = 合并 state 与 partialState 与 {displayId}
     写回 states[displayId]
     返回 state
+
+MMD 可见性持久化:
+    partialState = { mmdVisible: visible }
+    visible 只接受布尔值
+    使用 displayId 作为稳定键，不使用 IP 覆盖其他显示端
+    旧状态缺少 mmdVisible 时读取为 true
 ```
 
 新的显示端状态不得以 IP 作为主键；`legacyIp` 只允许用于一次性兼容迁移。

@@ -20,6 +20,7 @@ const {
     resolveReleaseRuntimeContext,
     validateReleaseRuntimeContext
 } = require('../../src/core/release-runtime-context');
+const { resolveMnnBuildConfig } = require('./mnn-build-config');
 
 const execFileAsync = promisify(execFile);
 const ANDROID_APP_DIR_NAME = path.join('src', 'apps', 'android-display');
@@ -170,6 +171,12 @@ async function buildApk(options = {}) {
         ...process.env,
         ANDROID_HOME: androidHome
     };
+    const mnnBuildConfig = resolveMnnBuildConfig({
+        projectRoot,
+        environment: commandEnvironment
+    });
+    commandEnvironment.AASC_MNN_ROOT = mnnBuildConfig.root;
+    commandEnvironment.AASC_MNN_REVISION = mnnBuildConfig.revision;
     await runCommand(commandRunner, process.env.npm_execpath || 'npm', ['run', 'prepare:mnnllm-android'], {
         cwd: projectRoot,
         env: commandEnvironment,
@@ -198,6 +205,8 @@ async function buildApk(options = {}) {
         `-PaascBuildDirectory=${plan.gradleDir}`,
         `-PaascNodeRuntimeAssetsDir=${plan.runtimeAssetsDir}`,
         `-PaascNodeRuntimeJniLibsDir=${plan.runtimeJniLibsDir}`,
+        `-PaascMnnRoot=${mnnBuildConfig.root}`,
+        `-PaascMnnRevision=${mnnBuildConfig.revision}`,
         '--no-daemon'
     ];
     try {

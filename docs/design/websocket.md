@@ -7,6 +7,15 @@
 | `/display` | 显示端连接 |
 | `/control` | 控制端连接 |
 
+MMD 可见性沿用上述两个端点的现有 WebSocket 生命周期：控制端和显示端都通过服务器改变
+`displayStates[displayId].mmdVisible`，服务器广播权威状态，不增加独立 HTTP 配置接口。
+
+| 消息 | 方向 | 说明 |
+|------|------|------|
+| `control/mmdVisibility` | 控制端 → 服务器 → 显示端 | 控制当前显示端的 MMD 可见性 |
+| `mmdVisibilityRequest` | 显示端 → 服务器 | 显示端手动切换 MMD，请求服务器保存 |
+| `mmdVisibilityChanged` | 服务器 → 控制端 | 广播按 `displayId` 保存后的权威状态 |
+
 ### 显示端录音方式与输入设备
 
 | 消息 | 方向 | 说明 |

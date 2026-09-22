@@ -2124,6 +2124,10 @@ const DeviceList = {
         if (window.MediaLibrary && typeof window.MediaLibrary.clearPlaylistPanel === 'function') {
             window.MediaLibrary.clearPlaylistPanel();
         }
+        if (window.Controls && typeof window.Controls.resetMmdVisibilityState === 'function') {
+            // 切换显示端时先清掉旧显示端的按钮状态，等待 getState 返回新目标的权威值。
+            window.Controls.resetMmdVisibilityState();
+        }
         this.selectedNodeId = id;
         window.currentDisplayId = id;
         try {

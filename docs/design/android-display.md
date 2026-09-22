@@ -440,3 +440,9 @@ ADB 未观察到 ANR/崩溃，但显示端在 TTS 请求期间反复接收 `cpuC
 
 - 已完成服务端 WebSocket 配置、控制端选择控件、WebView 设备枚举、Native `AudioRecord` 设备路由和统一 PCM/VAD/ASR 链路。
 - 已完成 Android JVM、录音生命周期、双录音协议契约测试和 `npm run build:apk`；带完整 Node Runtime 的 `withserver` APK 已安装到 SM-N9500 并正常启动，真机上的内置麦克风、AIMIC-M4 SCO、USB/蓝牙设备切换仍需现场验证。
+
+## 2026-09-22 控制端入口收起边缘位置
+
+- 控制端入口仍使用左上角 `START | TOP` 布局和既有点击状态机。
+- 收起态窄把手宽度固定为 42dp，左边距改为 -21dp、上边距改为 0dp，使约半个把手贴在屏幕外；展开态恢复 12dp 左/上安全边距。
+- 只改变收起态视觉位置，不改变入口可见性、控制端 WebView 展开逻辑和显示端页面加载。

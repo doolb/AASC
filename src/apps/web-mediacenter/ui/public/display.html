@@ -1189,13 +1189,27 @@
             );
         }
 
+        function getRotationPopupAdaptiveMetrics(layout) {
+            // 使用当前旋转后的逻辑视口计算边距，避免 Android WebView 放大后仍沿用原始屏幕的固定像素。
+            const logicalWidth = Math.max(layout.layoutWidth, 1);
+            const edgeGap = Math.min(64, Math.max(12, Math.round(logicalWidth * 0.05)));
+            return {
+                edgeGap,
+                maxWidth: Math.max(layout.layoutWidth - edgeGap * 2, 1),
+                maxHeight: Math.max(layout.layoutHeight - edgeGap * 2, 1)
+            };
+        }
+
         function applyRotationPopupLayout(layout) {
-            const maxWidth = Math.max(layout.layoutWidth - layout.margin * 2, 1);
-            const maxHeight = Math.max(layout.layoutHeight - layout.margin * 2, 1);
+            const metrics = getRotationPopupAdaptiveMetrics(layout);
             getRotationPopupElements().forEach((popup) => {
                 popup.style.setProperty('--popup-rotation', `${currentRotation}deg`);
-                popup.style.maxWidth = `${maxWidth}px`;
-                popup.style.maxHeight = `${maxHeight}px`;
+                popup.style.setProperty('--popup-edge-gap', `${metrics.edgeGap}px`);
+                popup.style.maxWidth = `${metrics.maxWidth}px`;
+                popup.style.maxHeight = `${metrics.maxHeight}px`;
+                if (popup.classList.contains('voice-response-popup')) {
+                    popup.style.width = `${metrics.maxWidth}px`;
+                }
                 popup.style.overflowY = 'auto';
             });
         }
@@ -2893,6 +2907,12 @@
         
         function handleRestoreState(state) {
             if (!state) return;
+
+            if (typeof state.mmdVisible === 'boolean' && window.DisplayStage
+                && typeof window.DisplayStage.setMmdVisible === 'function') {
+                // 兼容服务端将 MMD 状态随 restoreState 一并下发的版本；实时 control 消息仍是最终权威值。
+                window.DisplayStage.setMmdVisible(state.mmdVisible);
+            }
 
             if (state.dynamicFitConfig !== undefined) {
                 dynamicFitConfig = normalizeDynamicFitConfig(state.dynamicFitConfig);

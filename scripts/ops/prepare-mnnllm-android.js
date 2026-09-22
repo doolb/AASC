@@ -10,13 +10,13 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { resolveMnnBuildConfig } = require('./mnn-build-config');
 
 const projectRoot = path.resolve(__dirname, '../..');
-const defaultMnnRoot = path.join(projectRoot, 'build', 'third_party', 'MNN');
-const defaultMnnRevision = 'd407447ed56c4121a11ccbd266dc184ca1ead0c2';
-const configuredRootValue = String(process.env.AASC_MNN_ROOT || defaultMnnRoot).trim();
-const configuredRoot = configuredRootValue ? path.resolve(configuredRootValue) : '';
-const revision = String(process.env.AASC_MNN_REVISION || defaultMnnRevision).trim();
+const { root: configuredRoot, revision } = resolveMnnBuildConfig({
+    projectRoot,
+    environment: process.env
+});
 const androidHome = process.env.ANDROID_HOME || '/opt/android-sdk';
 const ndkRoot = process.env.ANDROID_NDK_HOME
     || path.join(androidHome, 'ndk', '28.2.13676358');

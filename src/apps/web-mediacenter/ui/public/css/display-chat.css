@@ -156,6 +156,7 @@
     --dropdown-option-selected-background: color-mix(in srgb, var(--accent-color) 62%, var(--bg-primary));
     --dropdown-option-selected-hover-background: color-mix(in srgb, var(--accent-secondary) 72%, var(--bg-primary));
     display: block;
+    position: relative;
     width: 100%;
     padding: 8px 9px;
     border: 0;
@@ -178,6 +179,7 @@
 }
 
 .display-chat-dropdown-option[aria-selected="true"],
+.display-chat-dropdown-option[data-selected="true"],
 .display-chat-dropdown-option.is-selected {
     background: var(--dropdown-option-selected-background);
     border-left-color: var(--accent-secondary);
@@ -186,15 +188,19 @@
 }
 
 .display-chat-dropdown-option[aria-selected="true"]::after,
+.display-chat-dropdown-option[data-selected="true"]::after,
 .display-chat-dropdown-option.is-selected::after {
     float: right;
     margin-left: 8px;
     color: var(--accent-secondary);
     content: '✓';
+    font-weight: 800;
 }
 
 .display-chat-dropdown-option[aria-selected="true"]:hover,
 .display-chat-dropdown-option[aria-selected="true"]:focus-visible,
+.display-chat-dropdown-option[data-selected="true"]:hover,
+.display-chat-dropdown-option[data-selected="true"]:focus-visible,
 .display-chat-dropdown-option.is-selected:hover,
 .display-chat-dropdown-option.is-selected:focus-visible {
     background: var(--dropdown-option-selected-hover-background);
@@ -228,6 +234,7 @@
 }
 
 :root[data-theme-mode="light"] button.display-chat-dropdown-option[aria-selected="true"],
+:root[data-theme-mode="light"] button.display-chat-dropdown-option[data-selected="true"],
 :root[data-theme-mode="light"] button.display-chat-dropdown-option.is-selected {
     background: var(--accent-color) !important;
     background: var(--dropdown-option-selected-background) !important;
@@ -237,6 +244,8 @@
 
 :root[data-theme-mode="light"] button.display-chat-dropdown-option[aria-selected="true"]:hover,
 :root[data-theme-mode="light"] button.display-chat-dropdown-option[aria-selected="true"]:focus-visible,
+:root[data-theme-mode="light"] button.display-chat-dropdown-option[data-selected="true"]:hover,
+:root[data-theme-mode="light"] button.display-chat-dropdown-option[data-selected="true"]:focus-visible,
 :root[data-theme-mode="light"] button.display-chat-dropdown-option.is-selected:hover,
 :root[data-theme-mode="light"] button.display-chat-dropdown-option.is-selected:focus-visible {
     background: var(--accent-secondary) !important;

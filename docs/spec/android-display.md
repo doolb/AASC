@@ -571,3 +571,25 @@ display.html.refreshAudioInputDevices():
 ```
 
 实现状态（2026-09-22）：已新增 `AudioInputDevice.kt`、`NativeAudioCaptureController.kt`、`NativePcmAudioCapture` 及控制端 WebSocket 配置链路；`:app:testDebugUnitTest`、`:app:assembleDebug`、`npm run build:apk` 和双录音契约测试通过。带完整 Node Runtime 的 APK 已安装并启动，当前尚未完成 AIMIC-M4/多内置麦克风录音路由验收。
+
+## 2026-09-22 控制端入口收起边缘布局
+
+```text
+过程 setControlButtonState(state)
+  layoutParams.gravity = START | TOP
+  如果 state == COLLAPSED
+    layoutParams.width = 42dp
+    layoutParams.height = 72dp
+    layoutParams.leftMargin = -21dp
+    layoutParams.topMargin = 0dp
+    保留半个窄把手供用户点击
+  否则
+    layoutParams.width = WRAP_CONTENT
+    layoutParams.leftMargin = 12dp
+    layoutParams.topMargin = 12dp
+    显示完整控制端入口
+  应用 layoutParams
+```
+
+- 收起态负边距只影响原生按钮位置；点击仍进入既有 `EXPAND`/`TOGGLE_PAGE` 状态转换。
+- 不改变 `controlPageAllowed`、WebView 可见性或页面 URL。

@@ -376,6 +376,15 @@ const Controls = {
     },
 
     // MMD/VRM 只控制当前选中的显示端，复用现有 control WebSocket 消息。
+    // 控制端只保留一个切换按钮，按钮文字始终描述下一步可执行动作。
+    toggleMmdVisibility() {
+        if (typeof this.mmdVisible !== 'boolean') {
+            if (window.showToast) window.showToast('MMD 状态尚未同步', 'warning');
+            return;
+        }
+        this.setMmdVisibility(!this.mmdVisible);
+    },
+
     setMmdVisibility(visible) {
         if (typeof visible !== 'boolean') return;
         if (!window.currentDisplayId) {
@@ -391,11 +400,28 @@ const Controls = {
     updateMmdVisibilityState(visible) {
         if (typeof visible !== 'boolean') return;
         this.mmdVisible = visible;
-        document.querySelectorAll('[data-mmd-visibility]').forEach((button) => {
-            button.classList.toggle('active', button.dataset.mmdVisibility === String(visible));
-        });
+        const button = document.getElementById('mmdVisibilityToggle');
+        if (button) {
+            button.disabled = false;
+            button.textContent = visible ? '隐藏 MMD' : '显示 MMD';
+            button.classList.toggle('active', visible);
+            button.setAttribute('aria-pressed', String(visible));
+        }
         const status = document.getElementById('mmdVisibilityStatus');
         if (status) status.textContent = `当前状态：${visible ? '显示 MMD' : '隐藏 MMD'}`;
+    },
+
+    resetMmdVisibilityState() {
+        this.mmdVisible = null;
+        const button = document.getElementById('mmdVisibilityToggle');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'MMD 状态同步中';
+            button.classList.remove('active');
+            button.setAttribute('aria-pressed', 'false');
+        }
+        const status = document.getElementById('mmdVisibilityStatus');
+        if (status) status.textContent = '当前状态：同步中';
     },
     
     setFitMode(fit) {
