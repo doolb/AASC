@@ -1,4 +1,4 @@
-# Web MediaCenter - 未完成任务列表（更新于 2026-09-21）
+# Web MediaCenter - 未完成任务列表（更新于 2026-09-22，code v30/min v33 已发布）
 
 ## 控制端
 
@@ -56,10 +56,13 @@
   - 已完成静态 VRM 模型迁移：默认模型通过 `http://c.aasc.us/mnt/mmd/` 文件资源加载，服务端 DNS 解析为 IPv4 后不保留 Host，并支持 `.vrm`、`.glb` 及 zstd 压缩文件的安全 profile 切换；模型不打入 APK。VMD/VRMA 动作资源和复杂动作生成仍留在后续阶段。
   - 聊天/MMD 两个显示开关已调整到左下角，保留安全区和软键盘内缩。
   - 已修复 `defer` 模块初始化时序，聊天入口会在模块注册后生成聊天窗口。
-  - render-display 已调整为仅高于媒体层；聊天页面主题化，对象/会话切换改为 HTML 下拉菜单；下拉菜单已区分未选中、悬停/聚焦和已选中颜色；聊天已改为全屏透明背景、控件实色；code v11 已发布并完成真机验收。
+  - render-display 已调整为仅高于媒体层；聊天页面主题化，对象/会话切换改为 HTML 下拉菜单；下拉菜单已区分未选中、悬停/聚焦和已选中颜色；聊天输入操作区位于输入框下方并横向排列；聊天已改为全屏透明背景、控件实色；code v11 已发布并完成真机验收。
   - 普通 `response` TTS 弹窗已统一进入 MMD 与聊天之间的播报辅助层，聊天打开时隐藏，关闭后按原生命周期恢复；code v21 与 dependencies v5 已发布到 LAN/WAN。
   - 已修复普通聊天和天气播报在有 `voicePlayback` 能力的来源端重复显示文字弹窗的问题；code v23 已发布到 LAN/WAN，沿用 dependencies v5。
   - TTS 播报文字已按逻辑画布和文本长度自适应字号与竖屏边距；code v24 已发布到 LAN/WAN，沿用 dependencies v5。
+  - TTS 和天气响应弹窗改为按当前逻辑视口宽度的 5% 动态计算左右边距，并限制在 12px–64px，适配 100%/200%/300% WebView 缩放；聊天下拉选中项保持深色、未选中项保持浅色。code v27 已发布到 LAN/WAN，沿用 dependencies v5 和 min APK v32。
+  - 角色/会话下拉菜单已统一状态样式，聊天操作区恢复输入框右侧竖排并调整为发送在上、清空在下；定向测试 20/20 通过，code v28 已发布到 LAN/WAN，沿用 dependencies v5 和 min APK v32。
+  - 多助手/群聊对象名称和历史范围切换已修复；角色继续使用 `roleHistory`，定向测试 35/35 通过；code v30 已发布到 LAN/WAN，沿用 dependencies v5 和 min APK v33。
   - 首期沿用全局聊天上下文，按 `displayId` 独立保存留待后续。
   - 关联文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260918_显示端聊天与MMD分层设计.md`、`docs/superpowers/plans/2026-09-18-display-chat-mmd.md`。
 

@@ -10,6 +10,7 @@
         visible: false,
         displayId: null,
         assistantName: '助手',
+        assistantNames: ['助手'],
         roles: [],
         targets: [],
         session: {
@@ -21,6 +22,7 @@
         history: [],
         privateSessions: [],
         streaming: new Map(),
+        ignoredRequestIds: new Set(),
         requestSequence: 0,
         hiddenSelection: null,
         send: null,
@@ -84,13 +86,83 @@
     }
 
     function requestSessionHistory() {
+        const isPrivate = state.session.mode === 'private';
+        const isRole = state.session.mode === 'role';
+        if (isRole) {
+            state.send({
+                type: 'roleHistory',
+                role: state.session.roleTarget
+            });
+            return;
+        }
         state.send({
             type: 'chatHistory',
             source: 'displayChat',
             mode: state.session.mode,
-            target: state.session.privateTarget,
-            sessionId: state.session.privateSessionId
+            target: isPrivate
+                ? state.session.privateTarget
+                : (isRole ? state.session.roleTarget : null),
+            sessionId: isPrivate ? state.session.privateSessionId : 'default'
         });
+    }
+
+    function getHistoryScopeKey(session = state.session) {
+        const mode = session.mode || 'group';
+        const target = mode === 'private'
+            ? (session.privateTarget || '')
+            : (mode === 'role' ? (session.roleTarget || '') : '');
+        const sessionId = mode === 'private'
+            ? (session.privateSessionId || 'default')
+            : 'default';
+        return `${mode}|${target}|${sessionId}`;
+    }
+
+    function isHistoryItemInCurrentSession(item) {
+        if (!item || typeof item !== 'object') return false;
+        const mode = state.session.mode || 'group';
+        const itemMode = item.mode || 'group';
+        if (mode === 'group') return itemMode === 'group';
+        if (mode === 'private') {
+            return itemMode === 'private'
+                && item.target === state.session.privateTarget
+                && (item.sessionId || 'default') === (state.session.privateSessionId || 'default');
+        }
+        if (mode === 'role') {
+            return itemMode === 'role' && item.target === state.session.roleTarget;
+        }
+        return itemMode === mode;
+    }
+
+    function filterHistoryForCurrentSession(history) {
+        return (Array.isArray(history) ? history : []).filter(isHistoryItemInCurrentSession);
+    }
+
+    function abandonStreamingMessages() {
+        for (const requestId of state.streaming.keys()) {
+            state.ignoredRequestIds.add(requestId);
+        }
+        state.streaming.clear();
+    }
+
+    function updateAssistantConfig(config = {}) {
+        const configuredNames = Array.isArray(config.assistants)
+            ? config.assistants.map((assistant) => (
+                typeof assistant === 'string' ? assistant : assistant?.name
+            ))
+            : [];
+        const candidates = [
+            config.defaultName,
+            ...configuredNames,
+            config.assistantName,
+            config.name
+        ];
+        const names = [];
+        for (const candidate of candidates) {
+            const name = String(candidate || '').trim();
+            if (name && !names.includes(name)) names.push(name);
+        }
+        state.assistantNames = names.length > 0 ? names : ['助手'];
+        state.assistantName = state.assistantNames[0];
     }
 
     function restoreHiddenSelection() {
@@ -153,24 +225,23 @@
     }
 
     function buildTargets() {
-        const targets = [{ value: 'group', title: '群聊', hint: '所有角色' }];
-        if (state.assistantName) {
+        const targets = [{ value: 'group', title: '群聊', kind: 'group' }];
+        for (const assistantName of state.assistantNames) {
             targets.push({
-                value: `private:${state.assistantName}`,
-                title: state.assistantName,
-                hint: '私聊'
+                value: `private:${assistantName}`,
+                title: assistantName,
+                kind: 'assistant'
             });
         }
         for (const role of state.roles) {
             const name = typeof role === 'string' ? role : role?.name;
             if (!name) continue;
-            targets.push({ value: `role:${name}`, title: name, hint: '角色' });
-            targets.push({ value: `private:${name}`, title: name, hint: '私聊' });
+            targets.push({ value: `role:${name}`, title: name, kind: 'assistant' });
         }
         const seen = new Set();
         state.targets = targets.filter((target) => {
-            if (seen.has(target.value)) return false;
-            seen.add(target.value);
+            if (seen.has(target.title)) return false;
+            seen.add(target.title);
             return true;
         });
     }
@@ -215,10 +286,13 @@
         refs.menu.replaceChildren();
         for (const item of items) {
             const option = document.createElement('button');
+            const isSelected = item.value === selected?.value;
             option.type = 'button';
-            option.className = 'display-chat-dropdown-option';
+            option.className = `display-chat-dropdown-option${isSelected ? ' is-selected' : ''}`;
             option.setAttribute('role', 'option');
-            option.setAttribute('aria-selected', String(item.value === selected?.value));
+            option.setAttribute('aria-selected', String(isSelected));
+            option.dataset.selected = String(isSelected);
+            if (item.kind) option.dataset.targetKind = item.kind;
             option.textContent = item.label;
             option.addEventListener('click', () => {
                 closeDropdowns();
@@ -236,7 +310,8 @@
             { toggle: state.refs.targetToggle, menu: state.refs.targetMenu },
             state.targets.map((target) => ({
                 value: target.value,
-                label: `${target.title} · ${target.hint}`
+                label: target.title,
+                kind: target.kind
             })),
             selectedValue,
             selectTarget
@@ -310,7 +385,7 @@
     function renderHistory() {
         if (!state.refs.messages) return;
         state.refs.messages.replaceChildren();
-        for (const item of state.history) {
+        for (const item of filterHistoryForCurrentSession(state.history)) {
             if (!item || typeof item !== 'object') continue;
             if (item.user !== undefined || item.assistant !== undefined) {
                 if (item.user) appendMessage('user', item.user);
@@ -373,6 +448,7 @@
 
     function selectTarget(value) {
         const target = parseTarget(value);
+        abandonStreamingMessages();
         state.hiddenSelection = null;
         state.session = {
             ...state.session,
@@ -389,6 +465,8 @@
             roleTarget: state.session.roleTarget,
             playOnControl: state.session.playOnControl
         };
+        state.history = [];
+        renderHistory();
         state.send({
             type: 'setChatSession',
             session,
@@ -400,14 +478,16 @@
             state.send({ type: 'listPrivateSessions', target: state.session.privateTarget });
         }
         renderHeader();
-        renderHistory();
         notifyVoiceConversationContext();
     }
 
     function selectSession(sessionId) {
         const nextSessionId = String(sessionId || 'default');
+        abandonStreamingMessages();
         state.session.privateSessionId = nextSessionId;
         state.hiddenSelection = null;
+        state.history = [];
+        renderHistory();
         state.send({
             type: 'setChatSession',
             session: {
@@ -465,8 +545,8 @@
                     <form class="display-chat-compose" data-role="compose">
                         <textarea data-role="input" rows="2" maxlength="51200" placeholder="输入消息…" aria-label="聊天输入"></textarea>
                         <div class="display-chat-compose-actions">
-                            <button type="button" data-action="clear">清空</button>
                             <button type="submit" class="display-chat-send">发送</button>
+                            <button type="button" data-action="clear">清空</button>
                         </div>
                     </form>
                 </section>
@@ -536,23 +616,38 @@
         }
         if (message.type === 'assistantConfig') {
             const config = message.config || {};
-            state.assistantName = config.assistantName || config.name || '助手';
+            updateAssistantConfig(config);
             buildTargets();
             renderHeader();
             return true;
         }
         if (message.type === 'chatSession') {
+            const previousScopeKey = getHistoryScopeKey();
             const previousRole = state.session.roleTarget;
             state.session = normalizeSession(message.session || {});
             if (state.session.mode === 'role') state.session.roleTarget = previousRole;
             if (state.session.mode !== 'private') state.privateSessions = [];
+            const nextScopeKey = getHistoryScopeKey();
+            if (previousScopeKey !== nextScopeKey) {
+                abandonStreamingMessages();
+                state.history = [];
+                renderHistory();
+                if (state.visible) requestSessionHistory();
+            }
             renderHeader();
             if (state.visible) notifyVoiceConversationContext();
             return true;
         }
         if (message.type === 'chatHistory') {
-            state.history = Array.isArray(message.history) ? message.history : [];
+            state.history = filterHistoryForCurrentSession(message.history);
             renderHistory();
+            return true;
+        }
+        if (message.type === 'roleHistory') {
+            if (state.session.mode === 'role' && message.role === state.session.roleTarget) {
+                state.history = filterHistoryForCurrentSession(message.history);
+                renderHistory();
+            }
             return true;
         }
         if (message.type === 'chatHistoryError') {
@@ -590,6 +685,7 @@
         if (message.type === 'chatChunk') {
             const requestId = String(message.requestId || '');
             if (!requestId) return true;
+            if (state.ignoredRequestIds.has(requestId)) return true;
             const previous = state.streaming.get(requestId);
             const current = previous?.dataset.content || '';
             const chunk = typeof message.chunk === 'string'
@@ -605,6 +701,10 @@
         }
         if (message.type === 'chatResponse') {
             const requestId = String(message.requestId || '');
+            if (state.ignoredRequestIds.has(requestId)) {
+                state.ignoredRequestIds.delete(requestId);
+                return true;
+            }
             if (!message.success) {
                 replaceStreamingMessage(requestId, `错误：${message.error || '聊天请求失败'}`, {
                     author: '系统'
@@ -623,7 +723,7 @@
             });
             state.streaming.delete(requestId);
             if (Array.isArray(message.history)) {
-                state.history = message.history;
+                state.history = filterHistoryForCurrentSession(message.history);
             }
             return true;
         }

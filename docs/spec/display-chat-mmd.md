@@ -152,7 +152,7 @@
   将消息气泡、输入框、按钮和下拉菜单保持实色主题控件
   使用安全区和键盘内缩，不改变媒体与 MMD 的逻辑尺寸
   将 compose 设置为两列布局：输入框占据剩余空间，操作区固定在右侧
-  将发送按钮和清空按钮按纵向排列
+  将发送按钮和清空按钮按纵向排列，发送按钮位于上方
   在窄屏下保持操作区最小可用宽度，禁止按钮覆盖输入框
 ```
 
@@ -295,6 +295,92 @@
   收到 chatHistory 后清空当前消息视图并渲染新历史
   清理旧会话未完成的动作计划引用
   保留输入草稿，但不自动发送到新会话
+```
+
+```text
+过程 normalizeAssistantNames(assistantConfig)
+  candidates = []
+  依次加入 defaultName、assistants[].name 或 assistants[] 字符串、assistantName、name
+  删除空值并按名称去重
+  如果 candidates 为空
+    返回 ["助手"]
+  返回 candidates
+```
+
+```text
+过程 buildDisplayChatTargets(assistantConfig, roleList)
+  targets = [{ value: "group", title: "群聊", kind: "group" }]
+  对 normalizeAssistantNames(assistantConfig) 的每个 assistantName
+    添加 { value: "private:" + assistantName, title: assistantName, kind: "assistant" }
+  对 roleList 的每个角色
+    添加 { value: "role:" + role.name, title: role.name, kind: "assistant" }
+  按显示名称去重，保留内部路由值和目标类型
+  返回 targets
+```
+
+```text
+过程 requestScopedChatHistory()
+  如果 currentContext.mode == "role"
+    发送现有 WebSocket roleHistory { role: currentContext.roleTarget }
+    返回
+  发送现有 WebSocket 消息 {
+    type: "chatHistory",
+    source: "displayChat",
+    mode: currentContext.mode,
+    target: currentContext.mode == "private" ? currentContext.privateTarget : null,
+    sessionId: currentContext.mode == "private" ? currentContext.privateSessionId : "default"
+  }
+  不读取本机聊天目录，不拼接 Android filesDir 或 HOME 路径
+```
+
+```text
+过程 handleScopedChatHistory(snapshot)
+  如果 snapshot.type == "roleHistory"
+    仅当 snapshot.role == currentContext.roleTarget 时替换角色历史
+    返回
+  如果 snapshot 不是当前对象和会话的响应
+    忽略或放入后台缓存
+    返回
+  清空当前消息视图
+  只渲染 snapshot.history
+```
+
+```text
+服务端 handleChatHistoryRequest(data)
+  如果 data.source == "displayChat"
+    scope = { mode: data.mode || "group", target: data.target, sessionId: data.sessionId }
+    history = chat.getHistory(scope + { preserveThink: true })
+  否则
+    history = chat.getHistory({ preserveThink: false })
+  通过当前 WebSocket 返回 chatHistory
+```
+
+## 23. code v30 发布验证（2026-09-22）
+
+```text
+构建 Offline code-only 更新包
+  使用当前已发布清单作为基线
+  codeVersion = 30
+  requiredDependencyVersion = 5
+  保留 apkMin.versionCode = 33
+  签名并校验 code/dependencies lock 指纹
+
+发布到局域网和外网
+  原子上传 code/code-v30.zip
+  保留 dependencies/dependencies-v5.zip 和 apk/aasc-display-offline-min-v33.apk
+  原子替换 manifest.json
+  校验两端清单签名、版本和 Content-Length
+  校验本地与远端文件 SHA-256
+  精确删除旧 code-v* 版本，不触碰模型、日志、配置和非版本资源
+```
+
+```text
+过程 controlHandleChatSession(snapshot)
+  用服务端 session 覆盖本地 session
+  更新模式和会话选择器
+  重新执行 renderHistory()
+  如果当前页面未拥有对应历史快照
+    通过现有历史接口请求，而不是访问文件
 ```
 
 ## 4. 聊天同步
@@ -829,3 +915,177 @@
 
 - 字号和边距使用 CSS 像素逻辑视口计算，不依赖设备物理 DPI；300% Android 缩放后仍按 WebView 实际可用区域适配。
 - 自适应只改变播报文字视觉布局，不改变 TTS 音频队列、聊天隐藏逻辑和旋转方向。
+
+## 18. TTS/天气弹窗逻辑视口边距适配（2026-09-22）
+
+```text
+过程 getVoicePopupAdaptiveMetrics(rotationLayout)
+  logicalWidth = max(rotationLayout.layoutWidth, 1)
+  edgeGap = clamp(round(logicalWidth * 0.05), 12, 64)
+  maxWidth = max(logicalWidth - edgeGap * 2, 1)
+  maxHeight = max(rotationLayout.layoutHeight - edgeGap * 2, 1)
+  返回 edgeGap、maxWidth、maxHeight
+```
+
+```text
+过程 applyRotationPopupLayout(rotationLayout)
+  对每个 voice-response-popup
+    使用 border-box，确保 padding 计入 maxWidth
+    设置 --popup-edge-gap = metrics.edgeGap
+    设置 maxWidth = metrics.maxWidth
+    设置 maxHeight = metrics.maxHeight
+    保持当前旋转角度和纵向滚动
+```
+
+- TTS 和天气详情共用同一组弹窗宽度/边距规则，左右空隙按旋转后的当前逻辑视口宽度的 5% 计算，并限制在 12px–64px。
+- 边距使用当前 CSS/逻辑视口计算，不直接使用物理分辨率或首次加载的固定像素，避免 Android 200%/300% WebView 缩放时固定边距占据过大比例。
+- 弹窗的聊天隐藏、旋转层级和生命周期不变。
+
+## 19. 聊天下拉选项状态对比（2026-09-22）
+
+```text
+过程 renderDropdown(items, selectedValue)
+  对每个 option
+    selected = item.value 等于当前选中值
+    设置 aria-selected = selected
+    设置 data-selected = selected
+    selected 时增加 is-selected 状态标记
+```
+
+- 未选中项使用浅色菜单表面和次要主题文字；选中项使用较深的主题强调背景、主文字、加粗和左侧状态标记。
+- 悬停/聚焦样式不能覆盖选中项的最终状态，避免选中和未选中显示成同一种颜色。
+- 角色对象下拉菜单和聊天会话下拉菜单必须共用同一套 HTML option 状态样式，不能只有其中一个下拉框区分选中状态。
+
+## 20. 聊天输入操作区位置（2026-09-22）
+
+```text
+  过程 renderShell()
+    渲染聊天 textarea
+  在 textarea 右侧渲染 display-chat-compose-actions
+  操作区使用纵向布局
+  发送按钮位于清空按钮上方
+  发送按钮保留主题强调色
+```
+
+- 输入框与操作按钮保持原有左右布局，避免改变已适配的手机交互区域。
+- 清空和发送按钮仍复用原有事件与 WebSocket 协议，只调整视觉位置和布局方向。
+
+## 21. 聊天对象标签和目标类型样式（2026-09-22）
+
+```text
+过程 buildTargets()
+  创建目标 { value: "group", title: "群聊", kind: "group" }
+  将默认助手和角色列表转换为 { value, title: assistantName, kind: "assistant" }
+  按 title 去重，避免同一助手同时显示 role/private 两个重复选项
+  不把所有角色、私聊或角色等路由提示拼接到 title
+```
+
+```text
+过程 renderTargetOptions()
+  对每个 target
+    label = target.title
+    kind = target.kind
+  调用 renderDropdown(items, selectedValue)
+
+过程 renderDropdown(items, selectedValue)
+  将 item.kind 写入 option.dataset.targetKind
+  保留 value、aria-selected、data-selected 和 is-selected
+```
+
+- 群聊选项的显示文字必须严格为“群聊”；助手/角色选项只显示名称。
+- 群聊使用 `data-target-kind="group"`，助手/角色使用 `data-target-kind="assistant"`；两类选项的未选中和选中背景均需有可辨识差异。
+- `parseTarget()` 保留现有 `group`、`role:<name>` 和 `private:<name>` 内部路由，不因显示文字简化而改变聊天目标。
+- 会话下拉菜单不设置目标类型，继续使用通用下拉样式。
+
+## 22. Android 控制端收起入口边缘吸附（2026-09-22）
+
+```text
+过程 setControlButtonState(state)
+  设置入口 gravity = TOP | START
+  如果 state == COLLAPSED
+    width = 42dp
+    leftMargin = -21dp
+    topMargin = 0dp
+    保留约半个窄把手可见
+  否则
+    恢复 leftMargin = 12dp
+    topMargin = 12dp
+    显示完整控制端按钮
+```
+
+- 负边距只用于收起态，展开态继续保留安全边距和原有点击状态机。
+- 不改变控制端入口的可见性判断、页面展开逻辑或显示端 WebView 布局。
+
+## 19. MMD 可见性双向同步与显示端状态持久化（2026-09-22）
+
+```text
+结构 DisplayState
+  mmdVisible = true
+  其他已有媒体、旋转、裁剪、播放和语音状态字段保持不变
+```
+
+```text
+过程 toggleControlMmdVisibility()
+  如果 currentDisplayId 不存在
+    显示“请先选择显示端”
+    返回
+  如果 Controls.mmdVisible 不是布尔值
+    显示“正在同步 MMD 状态”
+    返回
+  desiredVisible = not Controls.mmdVisible
+  发送 { type: "control", displayId: currentDisplayId,
+         action: "mmdVisibility", value: desiredVisible }
+```
+
+```text
+过程 applyMmdVisibilityState(displayData, desiredVisible)
+  如果 desiredVisible 不是布尔值
+    返回失败
+  displayData.state.mmdVisible = desiredVisible
+  使用 updateDisplayStateById(displayData.displayId, displayData.ip,
+    { mmdVisible: desiredVisible }) 持久化
+  发送 { type: "control", action: "mmdVisibility", value: desiredVisible }
+    到目标显示端
+  广播 { type: "mmdVisibilityChanged", displayId: displayData.displayId,
+         visible: desiredVisible } 到所有控制端
+  返回成功
+```
+
+```text
+过程 handleDisplayMmdVisibilityRequest(displayId, visible)
+  由显示端手动切换产生 mmdVisibilityRequest 消息
+  服务端按 displayId 找到 displayData
+  调用 applyMmdVisibilityState(displayData, visible)
+  显示端按服务器广播的 control/mmdVisibility 应用最终状态
+```
+
+```text
+过程 setDisplayMmdVisibility(visible)
+  state.mmdVisible = visible === true
+  更新 displayMmdLayer 的 is-visible 和 aria-hidden
+  更新 displayMmdToggle 的 aria-expanded 和按钮文字
+  调用 DisplayMmd.setVisible(state.mmdVisible)
+  按 mmdVisible 与 chatVisible 更新 MMD pointer 路由
+```
+
+```text
+过程 clickDisplayMmdToggle()
+  desiredVisible = not DisplayStage.state.mmdVisible
+  如果 display WebSocket 已连接
+    发送 { type: "mmdVisibilityRequest", displayId, visible: desiredVisible }
+    先应用本地视觉状态
+  否则
+    保持现状并显示连接错误
+```
+
+```text
+过程 restoreDisplayMmdVisibility(displayState)
+  显示端连接时服务端读取 displayStates[displayId].mmdVisible
+  缺失字段按 true 兼容旧状态
+  服务端发送 control/mmdVisibility
+  显示端按服务器值更新按钮和 MMD 层
+```
+
+控制端只保留一个切换按钮；控制端、显示端和多个控制端最终都以服务端保存并广播的
+`mmdVisible` 为准。状态按 `displayId` 隔离，不新增 HTTP 配置接口，不改变模型加载、动作
+上下文和聊天会话生命周期。

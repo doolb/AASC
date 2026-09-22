@@ -130,25 +130,37 @@ test('聊天层语音输入绕过普通确认并把聊天流回传来源显示�
     assert.match(server, /result\.type === 'chat'[\s\S]*sendToControl: sendVoiceChatUpdate/u);
 });
 
-test('聊天输入区将发送和清空按钮竖向放在输入框右侧', () => {
+test('聊天输入区将发送和清空按钮竖向放在输入框右侧且发送在上', () => {
     const chat = readPublic('js/display-chat.js');
     const css = readPublic('css/display-chat.css');
-    assert.match(chat, /<textarea data-role="input"[\s\S]*<div class="display-chat-compose-actions">[\s\S]*data-action="clear"[\s\S]*display-chat-send/u);
+    assert.match(chat, /<textarea data-role="input"[\s\S]*<div class="display-chat-compose-actions">[\s\S]*display-chat-send[\s\S]*data-action="clear"/u);
     assert.match(css, /\.display-chat-compose\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\) auto/u);
-    assert.match(css, /\.display-chat-compose-actions\s*\{[\s\S]*flex-direction:\s*column/u);
+    assert.match(css, /\.display-chat-compose-actions\s*\{[\s\S]*flex-direction:\s*column[\s\S]*min-width:\s*4\.5rem/u);
+    assert.match(css, /\.display-chat-compose-actions button\s*\{[\s\S]*flex:\s*1 1 0/u);
 });
 
-test('控制端通过 control/mmdVisibility 控制当前显示端的 MMD 层', () => {
+test('控制端通过单按钮控制 MMD，显示端手动操作同步到服务端', () => {
     const controls = readPublic('js/controls.js');
     const websocket = readPublic('js/websocket.js');
+    const stage = readPublic('js/display-stage.js');
     const display = readPublic('display.html');
     const upload = readPublic('upload.html');
-    assert.match(upload, /data-mmd-visibility="true"[\s\S]*显示 MMD/u);
-    assert.match(upload, /data-mmd-visibility="false"[\s\S]*隐藏 MMD/u);
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    const config = fs.readFileSync(path.join(ROOT, 'src/apps/server/modules/config/config-app-service.js'), 'utf8');
+    assert.match(upload, /id="mmdVisibilityToggle"[\s\S]*MMD 状态同步中/u);
+    assert.doesNotMatch(upload, /data-mmd-visibility=/u);
+    assert.match(controls, /toggleMmdVisibility()/u);
     assert.match(controls, /sendControl\('mmdVisibility', visible\)/u);
+    assert.match(controls, /button\.textContent = visible \? '隐藏 MMD' : '显示 MMD'/u);
     assert.match(websocket, /extraData\.mmdVisible/u);
+    assert.match(websocket, /mmdVisibilityChanged/u);
+    assert.match(stage, /mmdVisibilityRequest/u);
     assert.match(display, /case 'mmdVisibility'/u);
     assert.match(display, /ackExtra = \{ mmdVisible: data\.value === true \}/u);
+    assert.match(server, /mmdVisibilityRequest/u);
+    assert.match(server, /mmdVisible: true/u);
+    assert.match(server, /persistDisplayState\(displayData, \{ mmdVisible: normalizedVisible \}\)/u);
+    assert.match(config, /mmdVisible: true/u);
 });
 
 test('显示端聊天和 MMD 开关固定在左下角并避让安全区', () => {
@@ -175,12 +187,62 @@ test('显示端聊天对象和会话使用 HTML 下拉菜单并复用主题变�
     assert.match(css, /var\(--accent-color\)/u);
 });
 
+test('聊天对象下拉只显示群聊或助手名称并保留内部目标路由', () => {
+    const chat = readPublic('js/display-chat.js');
+    assert.match(chat, /const targets = \[\{ value: 'group', title: '群聊', kind: 'group' \}\]/u);
+    assert.match(chat, /for \(const assistantName of state\.assistantNames\)/u);
+    assert.match(chat, /value: `private:\$\{assistantName\}`,\s*title: assistantName,\s*kind: 'assistant'/u);
+    assert.match(chat, /targets\.push\(\{ value: `role:\$\{name\}`, title: name, kind: 'assistant' \}\)/u);
+    assert.match(chat, /label: target\.title,\s*kind: target\.kind/u);
+    assert.match(chat, /option\.dataset\.targetKind = item\.kind/u);
+    assert.doesNotMatch(chat, /target\.title\} · \$\{target\.hint\}/u);
+    assert.doesNotMatch(chat, /hint: '(?:所有角色|私聊|角色)'/u);
+});
+
+test('显示端多助手和群聊历史通过服务器范围接口切换', () => {
+    const chat = readPublic('js/display-chat.js');
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    const llm = fs.readFileSync(path.join(ROOT, 'src/external/llm/llm-service.js'), 'utf8');
+    assert.match(chat, /config\.defaultName[\s\S]*\.\.\.configuredNames/u);
+    assert.match(chat, /type: 'chatHistory',[\s\S]*source: 'displayChat',[\s\S]*mode: state\.session\.mode/u);
+    assert.match(chat, /if \(isRole\)[\s\S]*type: 'roleHistory'/u);
+    assert.match(chat, /message\.type === 'roleHistory'/u);
+    assert.match(readPublic('js/display-stage.js'), /'roleHistory'/u);
+    assert.match(chat, /state\.history = filterHistoryForCurrentSession\(message\.history\)/u);
+    assert.match(chat, /state\.history = \[\];[\s\S]*renderHistory\(\);[\s\S]*type: 'setChatSession'/u);
+    assert.match(server, /const historyOptions = isDisplayChatSource[\s\S]*mode: data\.mode \|\| 'group'/u);
+    assert.match(server, /chat\.getHistory\(historyOptions\)/u);
+    assert.match(llm, /function filterHistoryByScope\(messages, options = \{\}\)/u);
+    assert.match(llm, /messageMode === 'private'[\s\S]*message\.target/u);
+});
+
+test('控制端收到会话广播后重新渲染当前历史', () => {
+    const chat = readPublic('js/chat.js');
+    assert.match(chat, /handleSession\(data\)[\s\S]*this\.renderSessionSelector\(\);[\s\S]*this\.renderHistory\(\);/u);
+});
+
 test('HTML 下拉菜单区分未选中、悬停和已选中颜色', () => {
+    const chat = readPublic('js/display-chat.js');
     const css = readPublic('css/display-chat.css');
+    const activity = fs.readFileSync(
+        path.join(ROOT, 'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'),
+        'utf8'
+    );
+    assert.match(chat, /const isSelected = item\.value === selected\?\.value/u);
+    assert.match(chat, /option\.dataset\.selected = String\(isSelected\)/u);
+    assert.match(chat, /display-chat-dropdown-option.*is-selected/u);
+    assert.match(chat, /function renderTargetOptions\(\)[\s\S]*renderDropdown/u);
+    assert.match(chat, /function renderSessionOptions\(\)[\s\S]*renderDropdown/u);
     assert.match(css, /\.display-chat-dropdown-option:hover,[\s\S]*color-mix\(in srgb, var\(--accent-color\) 14%/u);
-    assert.match(css, /\.display-chat-dropdown-option\[aria-selected="true"\]\s*\{[\s\S]*background:\s*var\(--accent-color\)/u);
-    assert.match(css, /\.display-chat-dropdown-option\[aria-selected="true"\]:hover,[\s\S]*background:\s*var\(--accent-secondary\)/u);
-    assert.match(css, /\.display-chat-dropdown-option\[aria-selected="true"\]\s*\{[\s\S]*color:\s*var\(--bg-primary\)/u);
+    assert.match(css, /\.display-chat-dropdown-option\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--bg-surface-strong\) 82%, var\(--bg-primary\)\)/u);
+    assert.match(css, /\.display-chat-dropdown-option\[aria-selected="true"\],[\s\S]*\.display-chat-dropdown-option\.is-selected\s*\{[\s\S]*background:\s*var\(--dropdown-option-selected-background\)[\s\S]*border-left-color:\s*var\(--accent-secondary\)[\s\S]*color:\s*var\(--text-primary\)/u);
+    assert.match(css, /\.display-chat-dropdown-option\[aria-selected="true"\]::after,[\s\S]*content:\s*'✓'/u);
+    assert.match(css, /\.display-chat-dropdown-option\.is-selected:hover,[\s\S]*background:\s*var\(--dropdown-option-selected-hover-background\)/u);
+    assert.match(css, /\.display-chat-dropdown-option\[data-target-kind="group"\][\s\S]*--dropdown-option-selected-background/u);
+    assert.match(css, /\.display-chat-dropdown-option\[data-target-kind="assistant"\][\s\S]*--dropdown-option-selected-background/u);
+    assert.match(css, /--dropdown-option-background:\s*color-mix\(in srgb, var\(--accent-color\) 12%, var\(--bg-surface-strong\)\)/u);
+    assert.match(activity, /layoutParams\.leftMargin = if \(collapsed\) -dp\(21\) else dp\(12\)/u);
+    assert.match(activity, /layoutParams\.topMargin = if \(collapsed\) 0 else dp\(12\)/u);
 });
 
 test('显示端聊天全屏同位，外层背景透明而聊天控件使用实色主题背景', () => {
@@ -212,6 +274,7 @@ test('服务端区分显示端聊天同步和控制端 think 历史', () => {
     assert.match(server, /if \(data\.source === 'displayChat'\)/u);
     assert.match(llm, /function getHistory\(\)/u);
     assert.match(llm, /preserveThink/u);
+    assert.match(llm, /filterHistoryByScope/u);
 });
 
 test('服务端提供 VRoid profile 和同源 VRM 代理', () => {

@@ -1,5 +1,27 @@
 # Web MediaCenter - 变更日志
 
+### 显示端聊天对象与历史范围
+
+- ✅ [2026-09-22] 修复显示端多个助手、群聊和会话切换时的对象名称与聊天历史串线问题。
+  - `display-chat.js` 读取 `assistantConfig.defaultName/assistants[]`，每个助手使用独立私聊目标；群聊仍只显示“群聊”。
+  - `server-app.js` 将显示端 `chatHistory` 的 `mode/target/sessionId` 交给聊天服务筛选；显示端只通过服务器 WebSocket 获取历史，不读取 APK 内部文件路径。
+  - `llm-service.js` 新增范围历史筛选，兼容缺少 `mode` 的旧群聊记录；角色对象继续复用既有 `roleHistory` 接口；控制端收到 `chatSession` 后立即重绘当前历史。
+  - 定向契约测试 `35/35`、JavaScript 语法检查和 `git diff --check` 通过。
+  - 已发布 code v30：`15,197,504` bytes，SHA-256 `4d826b408a3043a6e2d3e8fbcb99ed3ac1890c6408045aa65fef2ab029345b63`；沿用 dependencies v5 和 min APK v33，未重新打包 APK 或依赖包。
+  - LAN/WAN 清单签名、版本、HTTP Content-Length、本地/远端落盘 SHA-256 均通过；旧 code 版本已按精确规则清理。
+  - 相关文档：`docs/design/display-chat-mmd.md`、`docs/spec/display-chat-mmd.md`、`docs/task/20260922_显示端聊天对象和历史切换修复.md`。
+
+### MNN 构建路径自动传递
+
+- ✅ [2026-09-22] 修复 MNN checkout 已存在但 Gradle 仍要求手动设置 `AASC_MNN_ROOT` 的构建配置断点。
+  - 新增共享 MNN root/revision 解析；`build-apk.js` 将解析结果显式传给 `prepare:mnnllm-android` 和 Gradle。
+  - Gradle 直接运行时回退到 `build/third_party/MNN` 与固定 revision，环境变量仍可覆盖。
+  - MNN 构建契约测试 7/7、脚本语法检查和 `git diff --check` 通过；Android JVM 重测被工作区中已有的长时间 `assembleDebug` 进程占用 Gradle 锁，已停止本次等待进程，未中断已有构建。
+  - 使用 `npm run build:apk:offline:min` 成功重打包 min APK versionCode 32（`0.2.30-offline-min`），产物 `89293934` bytes，SHA-256 `832a9a493f5749d792f936520ecf37edb43346292250998b8ab28ff13ca8af49`；ZIP、v2 签名和相关定向测试 `28/28` 通过。本次未安装或发布。
+  - 随后将 min versionCode 升至 33（`0.2.31-offline-min`）重新构建并发布；code v29 同步发布，dependencies v5 复用。LAN/WAN manifest 均切换为 code 29 / dependencies 5 / min 33，版本化旧 code/min 已精确清理。
+  - code v29：`15196338` bytes，SHA-256 `7af473a539a4573e6b14cce4af404424e920796fa0d2ad02c0a88ccd24546810`；min v33：`89293934` bytes，SHA-256 `2e8339f434ebab462013543f564dbbaa6c5e430862797794182b3366c7eb934a`。HTTP manifest/Content-Length、两端落盘 SHA-256、APK ZIP 和 v2 签名通过。
+  - 相关任务：`docs/task/20260922_MNN构建路径自动传递.md`。
+
 ### 后端依赖打包方案记录
 
 - 📝 [2026-09-22] 记录后续使用 esbuild 处理后端纯 JavaScript 依赖的预研方案，当前暂不实施。
@@ -15,6 +37,56 @@
   - 新增 `AudioInputDevice.kt`、`NativeAudioCaptureController.kt` 和 `NativePcmAudioCapture`；Native PCM16 分块复用现有 VAD、WAV、声纹和 ASR 上传链路，蓝牙输入继续使用 SCO。
   - 更新 `server-app.js`、`display.html`、`pcm-audio-capture.js`、`device-list.js`、`websocket.js`、`NativeBridge.kt`、`BluetoothScoController.kt` 及对应 design/spec/task 文档；新增 `tests/display-audio-capture-config.test.js`。
   - 验证：`:app:testDebugUnitTest`、`:app:assembleDebug` 和 `npm run build:apk` 通过；录音/SCO/生命周期定向测试 11/11、双录音契约测试 4/4 通过；相关 JS 语法检查和 `git diff --check` 通过。带完整 Node Runtime 的 `withserver` APK 为 `release/apkbuild/withserver/output/aasc-display.apk`，约 253MB，SHA-256 为 `52867d9259235ea248932004ce043a8b8df0da3169d0a9222610400457a16ef3`；已安装到 `SM-N9500 (192.168.1.6:5555)` 并启动，内置 Node 服务和显示端 WebSocket 均正常，无 `runtime-manifest.json` 或崩溃错误。全量 Node 测试本轮曾为 897/902，5 项中 2 项由本次代码形态调整触发的回归已修复，剩余 3 项为现有 Offline/版本基线断言；AIMIC-M4 实际路由和录音电平仍待现场操作验证。
+
+### MMD 可见性双向同步
+
+- ✅ [2026-09-22] 控制端 MMD 显示/隐藏改为单个切换按钮，服务端按 `displayId` 持久化并广播权威状态。
+  - 显示端手动切换通过 `mmdVisibilityRequest` 回传服务器，控制端通过 `mmdVisibilityChanged` 同步；显示端重连恢复已保存状态。
+  - 更新 `server-app.js`、`config-app-service.js`、`upload.html`、`controls.js`、`websocket.js`、`device-list.js`、`display-stage.js`、`display.html` 及对应设计/spec/task 文档。
+  - 定向 MMD 契约测试 20/20、JavaScript 语法检查和 `git diff --check` 通过；全量测试 900/902，2 项既有 Offline/APK 现场断言失败。
+
+### 原始分辨率固定弹窗边距与聊天下拉状态
+
+- ✅ [2026-09-22] 修复 TTS/天气弹窗在当前 WebView 缩放下仍显得过大的问题，并强化聊天下拉选中状态。
+  - `display.html` 首次记录 `screen.width/screen.height`，弹窗每侧边距固定为旋转后原始分辨率宽度的 10%，不再使用当前 CSS 视口或缩放值重新计算。
+  - `display-chat.js` 为下拉选项同步 `aria-selected`、`data-selected` 和 `is-selected`；`display-chat.css` 增加主题强调背景、文字、左侧边框、加粗和勾号，确保选中与未选中明显区分。
+  - 显示端定向测试 33/33 通过，浏览器计算样式确认选中/未选中颜色和状态标记不同，`git diff --check` 通过。
+  - 本轮尚未发布新的 code 包、依赖包或 APK；现有 code v25 不包含本轮修改。
+
+### WebView 缩放自适应弹窗边距
+
+- ✅ [2026-09-22] 修正 300% 缩放下弹窗左右空白仍过大的问题。
+  - 弹窗边距不再使用首次原始分辨率转换出的固定 CSS 像素，改为按当前旋转逻辑视口宽度的 5% 动态计算，并限制在 12px–64px。
+  - 下拉列表改为未选中浅色菜单表面、选中深色主题强调背景，并保留主文字、左侧标记和勾号。
+  - 弹窗/旋转测试 13/13、聊天契约测试 20/20、语音 UI 契约测试 1/1 通过；`node --check` 与 `git diff --check` 通过。
+  - 已发布 code v27：大小 `15,196,243` bytes，SHA-256 `485034edd66164e4b6fbcc1f28ff2a8fbbd3ab945c5aaa7eb5ef910abe288558`；沿用 dependencies v5 和 min APK v32，未重新打 APK 或依赖包。
+  - LAN/WAN manifest 验签、清单哈希、code/dependencies/min APK 的 HTTP `HEAD` 大小和远端磁盘 SHA-256 均匹配；旧 code v26 已按版本规则精确清理。
+
+### 聊天角色/会话下拉与操作区布局
+
+- ✅ [2026-09-22] 调整显示端聊天的角色/会话下拉状态和输入操作区位置。
+  - 角色对象和聊天会话两个 HTML 下拉菜单统一复用选中深色、未选中浅色的状态样式。
+  - 聊天操作区恢复输入框右侧竖排，仅交换按钮顺序为发送在上、清空在下，保持原有事件和发送协议不变。
+  - 显示端聊天契约测试 20/20、语法检查和 `git diff --check` 通过；已发布 code v28：大小 `15,196,245` bytes，SHA-256 `4f6df211fa76875ed85738cedae053049135bd3b7a2c620c7ff6d160baf39306`，沿用 dependencies v5 和 min APK v32；播报文本提前换行问题暂不处理。
+  - LAN/WAN manifest 验签、清单哈希、code/dependencies/min APK 的 HTTP `HEAD` 大小和远端磁盘 SHA-256 均匹配；旧 code v27 已按版本规则精确清理。
+
+### 群聊/助手下拉标签与控制端入口收起位置
+
+- ✅ [2026-09-22] 调整显示端聊天对象标签和 Android 控制端收起入口。
+  - 群聊下拉项只显示“群聊”；助手/角色项只显示名称，内部仍保留原有 group/role/private 路由值。
+  - 群聊和助手项通过 `data-target-kind` 使用不同底色；会话下拉继续复用通用选中状态。
+  - Android 收起把手左移半个 42dp 按钮，展开态恢复 12dp 安全边距。
+  - 乱码暂按字体/Emoji 缺失、UTF-8 解码错和非法字节三类现象记录，本轮不修改协议编码。
+  - 显示端契约测试 21/21、JavaScript 语法检查和 `git diff --check` 通过；Android JVM 单测因环境未设置固定 `AASC_MNN_ROOT`，在 Gradle 配置阶段阻断，未产生本次改动的编译结论；未打包或发布 APK/代码包。
+
+### TTS/天气弹窗视口宽度适配
+
+- ✅ [2026-09-21] 修复高 DPI/300% 缩放下 TTS 和天气详情弹窗左右空隙过大的问题。
+  - `display.html` 按旋转后的逻辑视口计算弹窗最大宽高和 `8px–20px` 动态安全边距；`display.css` 使用 `border-box`、100% 视口宽度规则并移除原 `80% max-width` 与固定大内边距叠加。
+  - 新增 360×800、`deviceScaleFactor=3` 浏览器回归，等待 `popupPulse` 入场动画结束后验证 TTS 与天气弹窗实际包围盒，避免把临时动画缩放误判为布局宽度。
+  - 显示端定向测试 `33/33` 通过，`git diff --check` 通过。
+  - 已发布服务代码 code v25：`15,189,231` bytes，SHA-256 `bf729f756a5a5fbe7b87af78af8046d824a6f3cae83c1e16cb3c1ec908858372`；沿用 dependencies v5 和 min APK v32，未重新打包 APK 或依赖包。
+  - LAN/WAN manifest 验签和字节一致性、三类资源 HTTP `HEAD` 大小、远端 SHA-256 均通过；旧 code v24 已精确清理。
 
 ### TTS 播报文字自适应布局
 

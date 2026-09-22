@@ -2719,6 +2719,8 @@ const Chat = {
             this.renderModeIndicator();
             this.renderPlayOnControlToggle();
             this.renderSessionSelector();
+            // chatSession 是服务端广播的权威上下文；切换对象后立即按当前范围重绘，避免沿用上一对象的消息。
+            this.renderHistory();
             if (this.session.mode === 'private' && this.session.privateTarget) {
                 this.loadSessions(this.session.privateTarget);
             }

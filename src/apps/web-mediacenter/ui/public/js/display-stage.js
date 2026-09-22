@@ -18,12 +18,14 @@
         'privateSessions',
         'privateSessionSwitched',
         'roleError',
+        'roleHistory',
         'roleList'
     ]);
     const state = {
         initialized: false,
         chatVisible: false,
-        mmdVisible: false,
+        // MMD 默认显示；服务端连接后会用按 displayId 保存的权威值覆盖它。
+        mmdVisible: true,
         mmdOrder: 'under-chat',
         displayId: null,
         transport: null,
@@ -174,6 +176,25 @@
         publish('mmd.visibility', { visible: state.mmdVisible });
     }
 
+    function requestMmdVisibility() {
+        const desiredVisible = !state.mmdVisible;
+        const sent = send({
+            type: 'mmdVisibilityRequest',
+            displayId: state.displayId,
+            visible: desiredVisible
+        });
+        if (!sent) {
+            publish('mmd.visibility.error', {
+                visible: desiredVisible,
+                message: '显示端 WebSocket 未连接'
+            });
+            return false;
+        }
+        // 先更新本地画面，服务端随后下发同一权威值，保证点击时没有可感知延迟。
+        setMmdVisible(desiredVisible);
+        return true;
+    }
+
     function setMmdOrder(order) {
         state.mmdOrder = order === 'over-chat' ? 'over-chat' : 'under-chat';
         if (refs.mmdLayer) refs.mmdLayer.classList.toggle('over-chat', state.mmdOrder === 'over-chat');
@@ -224,7 +245,7 @@
             refs.chatToggle.addEventListener('click', () => setChatVisible(!state.chatVisible, !state.chatVisible));
         }
         if (refs.mmdToggle) {
-            refs.mmdToggle.addEventListener('click', () => setMmdVisible(!state.mmdVisible));
+            refs.mmdToggle.addEventListener('click', requestMmdVisibility);
         }
         if (refs.chatTtsStop) {
             refs.chatTtsStop.addEventListener('click', () => {
@@ -247,8 +268,8 @@
             });
         }
         setChatVisible(false);
-        // MMD 是显示端主舞台，默认显示；聊天仍由独立入口按需打开并位于其上层。
-        setMmdVisible(true);
+        // MMD 是显示端主舞台，默认显示；如果服务端消息已先到达则保留其状态。
+        setMmdVisible(state.mmdVisible);
         setMmdOrder('under-chat');
         window.addEventListener('resize', resize, { passive: true });
         window.addEventListener('orientationchange', resize, { passive: true });
@@ -270,6 +291,7 @@
         handleServerMessage,
         initialize,
         publish,
+        requestMmdVisibility,
         refreshVoiceTextVisibility: applyVoiceTextVisibility,
         send,
         setChatVisible,

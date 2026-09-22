@@ -887,6 +887,41 @@ function getTemplateSystemPrompt(templateName) {
     ].filter(Boolean).join('\n\n');
 }
 
+function filterHistoryByScope(messages, options = {}) {
+    const source = Array.isArray(messages) ? messages : [];
+    const hasScope = ['mode', 'target', 'sessionId'].some((key) => (
+        Object.prototype.hasOwnProperty.call(options, key)
+    ));
+    if (!hasScope) return [...source];
+
+    const mode = options.mode || 'group';
+    const target = options.target || null;
+    const sessionId = options.sessionId || (mode === 'private' ? 'default' : null);
+
+    return source.filter((message) => {
+        const messageMode = message?.mode || 'group';
+        if (mode === 'group') {
+            return messageMode === 'group';
+        }
+        if (mode === 'private') {
+            return messageMode === 'private'
+                && (message.target || null) === target
+                && (message.sessionId || 'default') === sessionId;
+        }
+        if (mode === 'role') {
+            return messageMode === 'role' && (!target || message.target === target);
+        }
+        if (mode === 'temporary') {
+            return messageMode === 'temporary'
+                && (!target || message.target === target)
+                && (!sessionId || (message.sessionId || 'default') === sessionId);
+        }
+        return messageMode === mode
+            && (!target || message.target === target)
+            && (!sessionId || (message.sessionId || 'default') === sessionId);
+    });
+}
+
 function getHistory() {
     // 兼容旧的静态契约和无参数调用；显示端通过可选首参数请求保留 think。
     const options = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : {};
@@ -897,8 +932,9 @@ function getHistory() {
         // LLM 上下文仍由 getHistoryForOptions() 按 profile 隔离，这里只负责控制端历史展示。
         all.push(...messages);
     }
-    all.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-    return all.map((message) => {
+    const scoped = filterHistoryByScope(all, options);
+    scoped.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    return scoped.map((message) => {
         if (!preserveThink && message.role === 'assistant' && typeof message.content === 'string') {
             const content = stripThinkBlocks(message.content);
             return content === message.content ? message : { ...message, content };
@@ -2073,6 +2109,7 @@ module.exports = {
     getGroupSystemPrompt,
     getTemplateSystemPrompt,
     getHistory,
+    filterHistoryByScope,
     pruneHistorySessions,
     validateHistoryScope,
     clearHistory,

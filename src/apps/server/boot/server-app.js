@@ -1215,7 +1215,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility'', 'tts'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'mmdVisibilityRequest', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1763,6 +1763,7 @@ function normalizeDynamicFitConfig(value) {
 function createDisplayState() {
     return {
         currentMedia: null,
+        mmdVisible: true,
         currentMediaProgress: null,
         currentHtmlScroll: null,
         rotation: 0,
@@ -2720,6 +2721,45 @@ function updateDisplayPlaybackProgress(displayData, partialState, forcePersist =
 function persistDisplayState(displayData, partialState) {
     if (!displayData) return null;
     return config.updateDisplayStateById(displayData.displayId, displayData.ip, partialState);
+}
+
+function normalizeMmdVisibility(value, fallback = true) {
+    return typeof value === 'boolean' ? value : fallback;
+}
+
+function updateDisplayMmdVisibility(displayData, visible) {
+    if (!displayData || typeof visible !== 'boolean') {
+        return { ok: false, message: 'MMD 可见性必须是布尔值' };
+    }
+
+    const normalizedVisible = normalizeMmdVisibility(visible);
+    try {
+        persistDisplayState(displayData, { mmdVisible: normalizedVisible });
+        displayData.state.mmdVisible = normalizedVisible;
+        sendToDisplay(displayData.displayId, {
+            type: 'control',
+            action: 'mmdVisibility',
+            value: normalizedVisible
+        });
+        broadcastToControls({
+            type: 'mmdVisibilityChanged',
+            displayId: displayData.displayId,
+            visible: normalizedVisible
+        });
+        return { ok: true, visible: normalizedVisible };
+    } catch (error) {
+        logError('配置', `保存显示端 ${displayData.displayId} 的 MMD 状态失败: ${error.message}`);
+        return { ok: false, message: 'MMD 状态保存失败' };
+    }
+}
+
+function sendMmdVisibilityError(ws, displayId, message) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({
+        type: 'mmdVisibilityError',
+        displayId,
+        message
+    }));
 }
 
 const androidControlPageAccess = createAndroidControlPageAccess({
@@ -6063,6 +6103,7 @@ function getDisplayList() {
             ip: data.ip,
             isSubDisplay: data.isSubDisplay || data.state.isSubDisplay || false,
             canvasSize: data.state.canvasSize,
+            mmdVisible: normalizeMmdVisibility(data.state.mmdVisible),
             rotation: data.state.rotation || 0,
             browserInfo: data.state.browserInfo,
             voiceSupported: data.state.voiceSupported,
@@ -7528,6 +7569,7 @@ wss.on('connection', (ws, req) => {
             state: {
                 ...createDisplayState(),
                 ...savedState,
+                mmdVisible: normalizeMmdVisibility(savedState?.mmdVisible),
                 dynamicFitConfig: normalizeDynamicFitConfig(savedState?.dynamicFitConfig),
                 vadThreshold: normalizeVadThreshold(savedState?.vadThreshold),
                 vadSilenceDurationMs: normalizeVadDuration(
@@ -7571,6 +7613,12 @@ wss.on('connection', (ws, req) => {
         
         ws.send(JSON.stringify({ type: 'serverStartTime', time: serverStartTime }));
         ws.send(JSON.stringify({ type: 'displayId', id: displayId, ip: clientIP }));
+        // 显示端连接时先收到服务器保存的 MMD 权威值，避免旧页面默认值覆盖持久化设置。
+        ws.send(JSON.stringify({
+            type: 'control',
+            action: 'mmdVisibility',
+            value: normalizeMmdVisibility(displayClients.get(displayId)?.state.mmdVisible)
+        }));
         ws.send(JSON.stringify({ type: 'globalRecordingPauseState', paused: globalRecordingPaused }));
         ws.send(JSON.stringify({ type: 'controlThemeChanged', theme: getControlTheme() }));
         ws.send(JSON.stringify({ type: 'displayVersionConfig', ...getDisplayVersionConfig() }));
@@ -8296,6 +8344,12 @@ function formatVoiceprintScore(value) {
 
 function handleDisplayMessageFallback(displayId, data, ws) {
     const displayData = displayClients.get(displayId);
+
+    if (data.type === 'mmdVisibilityRequest') {
+        const result = updateDisplayMmdVisibility(displayData, data.visible);
+        if (!result.ok) sendMmdVisibilityError(ws, displayId, result.message);
+        return;
+    }
 
     if (data.type === 'displayChatVisibility') {
         handleDisplayChatVisibility(displayId, data);
@@ -9594,10 +9648,26 @@ async function handleControlMessageFallback(data, ws) {
                     })();
                     return;
                 } else if (data.type === 'chatHistory') {
-                    ws.send(JSON.stringify({
-                        type: 'chatHistory',
-                        history: chat.getHistory({ preserveThink: data.source === 'displayChat' })
-                    }));
+                    try {
+                        const isDisplayChatSource = data.source === 'displayChat';
+                        const historyOptions = isDisplayChatSource
+                            ? {
+                                mode: data.mode || 'group',
+                                target: ['private', 'role'].includes(data.mode) ? data.target : null,
+                                sessionId: data.mode === 'private'
+                                    ? (data.sessionId || 'default')
+                                    : null,
+                                preserveThink: data.source === 'displayChat'
+                            }
+                            : { preserveThink: false };
+                        ws.send(JSON.stringify({
+                            type: 'chatHistory',
+                            history: chat.getHistory(historyOptions)
+                        }));
+                    } catch (error) {
+                        logError('Chat', `读取 WebSocket 聊天历史失败: ${error.message}`);
+                        ws.send(JSON.stringify({ type: 'chatHistoryError', message: error.message }));
+                    }
                     return;
                 } else if (data.type === 'clearChatHistory') {
                     try {
@@ -10023,6 +10093,11 @@ async function handleControlMessageFallback(data, ws) {
                     }
                     sendToDisplay(displayId, data.media);
                 } else if (data.type === 'control') {
+                    if (data.action === 'mmdVisibility') {
+                        const result = updateDisplayMmdVisibility(displayData, data.value);
+                        if (!result.ok) sendMmdVisibilityError(ws, displayId, result.message);
+                        return;
+                    }
                     if (handleTextMediaControlMessage({
                         displayId,
                         data,
