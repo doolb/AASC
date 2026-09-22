@@ -842,7 +842,8 @@ async function prepareAndroidNodeRuntime(options = {}) {
         );
         files.push(...runtimeFiles);
         const nodeFile = await copyNodeLibrary(runtimeDir, temporaryNativeOutputDir);
-        const excludedPrefixes = [];
+        // PMX/VMD 与纹理始终经服务同源代理按需读取，不能随任何 Runtime profile 进入 APK assets。
+        const excludedPrefixes = [path.join('res', 'models', 'mmd')];
         if (includeOfflineModels) excludedPrefixes.push('res/models');
         if (includeOfflineTasks) excludedPrefixes.push('res/tasks');
         files.push(...await copyDirectoryWithManifest(

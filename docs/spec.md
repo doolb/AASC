@@ -22,7 +22,7 @@
 | 聊天系统 | [chat-system.md](spec/chat-system.md) | 群聊/私聊、AI助手、系统指令、语音播报 |
 | 聊天 TTS 打断与 Offline 定时更新 | [chat-tts-interruption-and-offline-update.md](spec/chat-tts-interruption-and-offline-update.md) | 聊天 TTS 会话代次/阶段协议、前端队列清理和 Android 前台轮询伪代码 |
 | 显示端聊天与 VRM/MMD 同位分层 | [display-chat-mmd.md](spec/display-chat-mmd.md) | 显示端聊天会话、WebSocket 同步、VRM/MMD 分层和动作协议伪代码 |
-| 本地 PMX 模型与 VMD 动作接入 | [mmd-pmx-vmd-local.md](spec/mmd-pmx-vmd-local.md) | PMX/VMD 本地资源注册、加载、播放、释放、灯光和安全约束伪代码 |
+| PMX/VMD 与 Offline 静态代理 | [mmd-pmx-vmd-local.md](spec/mmd-pmx-vmd-local.md) | PMX/VMD 本地资源注册、固定公网同源代理、加载、播放、释放、灯光和安全约束伪代码 |
 | 聊天 think 分流与私聊清空交互 | [chat-output-filter.md](spec/chat-output-filter.md) | think/正文/播报文本分流、控制端弹窗、显示端展示和私聊清空错误伪代码 |
 | 聊天历史安全持久化 | [chat-history-persistence.md](spec/chat-history-persistence.md) | 历史文件保护、aasc-user 上一天完整快照、聊天/配置导入导出伪代码 |
 | 语音命令 | [voiceCommand.md](spec/voiceCommand.md) | 语音状态显示、提醒、报时、搜索、AI助手响应 |

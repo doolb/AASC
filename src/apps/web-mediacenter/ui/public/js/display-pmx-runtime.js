@@ -2,7 +2,7 @@
  * 浏览器端 PMX/VMD 运行时。
  *
  * PMX 的纹理路径由 MMDLoader 以 PMX 所在目录为基准解析，因此模型目录、tex/
- * 和 toon/ 必须由服务端以同源 /models 路径提供。运行时只接受已由显示模块
+ * 和 toon/ 必须由服务端以同源模型或静态代理路径提供。运行时只接受已由显示模块
  * 校验过的 profile/resourceId，不接受动作计划传入的任意 URL。
  */
 import * as THREE from 'three';
@@ -10,7 +10,10 @@ import { MMDAnimationHelper } from 'three/addons/animation/MMDAnimationHelper.js
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
 
 const TARGET_MODEL_HEIGHT = 1.75;
-const MMD_MODEL_PREFIX = '/models/mmd/';
+const MMD_MODEL_PREFIXES = Object.freeze([
+    '/models/mmd/',
+    '/api/mmd/static/mmd/'
+]);
 const SHADOW_MAP_SIZE = 1024;
 const SHADOW_FRUSTUM_MARGIN = 1.18;
 const MAX_MODEL_PITCH_RADIANS = Math.PI / 4;
@@ -45,9 +48,10 @@ const disposeObject = (root) => {
 };
 
 const isSameOriginMmdAsset = (url, extension) => {
-    if (typeof url !== 'string' || !url.startsWith(MMD_MODEL_PREFIX)) return false;
-    if (url.includes('://') || url.includes('..') || /[?#]/u.test(url)) return false;
-    return url.toLowerCase().endsWith(extension);
+    if (typeof url !== 'string' || url.includes('://') || url.startsWith('//')
+        || url.includes('..') || /[?#\\]/u.test(url)) return false;
+    return MMD_MODEL_PREFIXES.some((prefix) => url.startsWith(prefix))
+        && url.toLowerCase().endsWith(extension);
 };
 
 const waitForManagedLoad = (startLoad, label) => new Promise((resolve, reject) => {
@@ -407,7 +411,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
             throw new Error('动作资源不在当前 PMX profile 白名单中');
         }
         if (!isSameOriginMmdAsset(profile.motionUrl, '.vmd')) {
-            throw new Error('VMD 地址必须是同源 /models/mmd 资源');
+            throw new Error('VMD 地址必须是同源 MMD 资源');
         }
     };
 

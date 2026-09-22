@@ -1,15 +1,181 @@
 const crypto = require('node:crypto');
+const dns = require('node:dns').promises;
 const fs = require('node:fs/promises');
+const net = require('node:net');
 const path = require('node:path');
+const { Readable } = require('node:stream');
 
 const MMD_MANIFEST_RELATIVE_PATH = path.join('mmd', 'manifest.json');
 const RESOURCE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
+const STATIC_MMD_TIMEOUT_MS = 300000;
+const STATIC_MMD_PROXY_PREFIX = '/api/mmd/static/';
+
+const STATIC_MMD_RELEASE = Object.freeze({
+  host: 'c.aasc.us',
+  publicPath: '/mnt/mmd/miya-v1/',
+  resourceId: 'miya-default',
+  motionResourceId: 'miya-default-motion',
+  modelPath: 'mmd/miya/miya.pmx',
+  motionPath: 'mmd/motions/miya-default.vmd',
+  playMode: 'loop',
+  version: 'ca07d84b494577f5dab90d71465bc08e01ec036fe66278a2393313b6febf56c6',
+  files: Object.freeze([
+    ['mmd/miya/miya.pmx', 4908850, 'ef8f5c366b5a9761ded99215426d824b822c8035055e45397521e0fa0c80bf8d'],
+    ['mmd/miya/tex/1.png', 522908, 'd8a676dd5f76dd40925f926e051ce94563674bb9a37afa00609094567e5e264b'],
+    ['mmd/miya/tex/1q.png', 667270, 'ec912073f6d75a454e7e2263d9820e9880bd39db8327f1443dd57804feb72da8'],
+    ['mmd/miya/tex/2.png', 1038189, '9d57fc713e0fe0ef99a3713048f92e406732e10a9c702b86fed371080e834ade'],
+    ['mmd/miya/tex/2q.png', 948170, '677266bcb970b42ceac6a1633f57a670855d0211436d8269b15a65d46defbf8e'],
+    ['mmd/miya/tex/3.1.png', 24313, '4b60220cec5b0d958b0b77d936ff82f9317cf475c59abf5413378d8c91c6e03e'],
+    ['mmd/miya/tex/3.png', 354468, '3b8ad670a287ea888187c537a07abec48632f5da612faea9de9bc67f3080d060'],
+    ['mmd/miya/tex/4.png', 302085, '9daaa9eac3569dddd881a9edec903e2b5e836b37ab5a9937c3347bba0ca3f633'],
+    ['mmd/miya/tex/5.png', 1163640, '4bba5edecf5bbf6711d14a985be069908bcafa5e64a395a6452a70ce17acd83c'],
+    ['mmd/miya/tex/5q.png', 1011518, 'b8f5029b7f5d17ce59d2c07bd61f6eb4f81355e70481518fffb2473dd308f694'],
+    ['mmd/miya/tex/7.png', 870412, 'd88014e12cce67de05263d625cec0683a15b48966025dc397f505b319203a529'],
+    ['mmd/miya/tex/8.1.png', 1212408, '1cc067cb7fbb49a3f728e85cb8876b6199563f3de1a2578a0a9250a0e5c67e69'],
+    ['mmd/miya/tex/8.2.png', 271304, 'a9ef6f408c71d4681b68c944eba194d9980e963b1092b2149208da4bcd44d0e5'],
+    ['mmd/motions/miya-default.vmd', 134051, '3f83325c7a4a0606e6d72c43ff7752a685c6617214d4df66d6e08af3dd367cad'],
+  ].map((file) => Object.freeze(file))),
+});
+
+const STATIC_MMD_ASSETS = new Map(STATIC_MMD_RELEASE.files.map(([assetPath, size, sha256]) => [assetPath, Object.freeze({
+  path: assetPath,
+  size,
+  sha256,
+  contentType: assetPath.endsWith('.png') ? 'image/png' : 'application/octet-stream',
+})]));
 
 const createMmdError = (message, statusCode = 503) => {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+};
+
+const normalizeStaticMmdAssetPath = (value) => {
+  if (typeof value !== 'string'
+    || !value
+    || value.includes('\\')
+    || value.includes('://')
+    || value.startsWith('//')
+    || /[?#%]/u.test(value)) {
+    throw createMmdError('MMD static asset path is unsafe', 400);
+  }
+  const segments = value.split('/');
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')
+    || value.startsWith('/')
+    || /^[A-Za-z]:/u.test(value)
+    || !value.startsWith('mmd/')) {
+    throw createMmdError('MMD static asset path is unsafe', 400);
+  }
+  return value;
+};
+
+const resolveStaticMmdAsset = (relativePath) => {
+  const normalizedPath = normalizeStaticMmdAssetPath(relativePath);
+  const asset = STATIC_MMD_ASSETS.get(normalizedPath);
+  if (!asset) throw createMmdError(`Unknown MMD static asset: ${normalizedPath}`, 404);
+  return { ...asset };
+};
+
+const createStaticMmdResourceProfile = () => ({
+  resourceId: STATIC_MMD_RELEASE.resourceId,
+  modelType: 'pmx',
+  modelUrl: `${STATIC_MMD_PROXY_PREFIX}${STATIC_MMD_RELEASE.modelPath}`,
+  motionResourceId: STATIC_MMD_RELEASE.motionResourceId,
+  motionUrl: `${STATIC_MMD_PROXY_PREFIX}${STATIC_MMD_RELEASE.motionPath}`,
+  playMode: STATIC_MMD_RELEASE.playMode,
+  version: STATIC_MMD_RELEASE.version,
+});
+
+const resolveStaticMmdAssetUrl = async (relativePath, { lookup = dns.lookup } = {}) => {
+  const asset = resolveStaticMmdAsset(relativePath);
+  const source = new URL(`http://${STATIC_MMD_RELEASE.host}${STATIC_MMD_RELEASE.publicPath}`);
+  if (source.protocol !== 'http:'
+    || source.hostname.toLowerCase() !== STATIC_MMD_RELEASE.host
+    || source.pathname !== STATIC_MMD_RELEASE.publicPath) {
+    throw createMmdError('MMD static release source is invalid', 502);
+  }
+  const resolvedAddresses = await lookup(source.hostname, { all: true, family: 4, verbatim: false });
+  const address = Array.isArray(resolvedAddresses) ? resolvedAddresses[0]?.address : resolvedAddresses?.address;
+  if (!address || net.isIP(address) !== 4) {
+    throw createMmdError('MMD static release has no IPv4 address', 502);
+  }
+  source.hostname = address;
+  source.pathname = `${STATIC_MMD_RELEASE.publicPath}${asset.path}`;
+  return source.toString();
+};
+
+const requestFetch = async (target, { timeoutMs = STATIC_MMD_TIMEOUT_MS, headers = {}, redirect = 'manual' } = {}) => {
+  const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(timeoutMs)
+    : undefined;
+  const response = await fetch(target, {
+    headers,
+    redirect,
+    ...(signal ? { signal } : {}),
+  });
+  return {
+    statusCode: response.status,
+    headers: Object.fromEntries(response.headers.entries()),
+    body: response.body && typeof Readable.fromWeb === 'function' ? Readable.fromWeb(response.body) : null,
+  };
+};
+
+const getResponseHeader = (headers, name) => {
+  if (!headers) return null;
+  if (typeof headers.get === 'function') return headers.get(name);
+  return headers[name] || headers[name.toLowerCase()] || null;
+};
+
+const asNodeReadable = (stream) => {
+  if (!stream) return null;
+  if (typeof stream.on === 'function') return stream;
+  if (typeof Readable.fromWeb === 'function' && typeof stream.getReader === 'function') return Readable.fromWeb(stream);
+  return null;
+};
+
+const requestStaticMmdAsset = async ({ relativePath, lookup = dns.lookup, request = requestFetch } = {}) => {
+  const asset = resolveStaticMmdAsset(relativePath);
+  const sourceUrl = await resolveStaticMmdAssetUrl(asset.path, { lookup });
+  const response = await request(sourceUrl, {
+    timeoutMs: STATIC_MMD_TIMEOUT_MS,
+    redirect: 'manual',
+    headers: {
+      Accept: `${asset.contentType}, application/octet-stream;q=0.9, */*;q=0.8`,
+      'User-Agent': 'AASC-MMD-Static-Proxy/1.0',
+    },
+  });
+  const statusCode = Number(response?.statusCode ?? response?.status);
+  if (statusCode !== 200) {
+    throw createMmdError(`MMD static asset upstream returned HTTP ${statusCode || 'unknown'}`, 502);
+  }
+  const contentLength = getResponseHeader(response.headers, 'content-length');
+  if (!/^\d+$/u.test(String(contentLength || '')) || Number(contentLength) !== asset.size) {
+    throw createMmdError(`MMD static asset Content-Length is invalid: ${asset.path}`, 502);
+  }
+  const stream = asNodeReadable(response.body || response);
+  if (!stream) throw createMmdError(`MMD static asset response has no body: ${asset.path}`, 502);
+
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buffer.length;
+    if (total > asset.size) {
+      stream.destroy?.();
+      throw createMmdError(`MMD static asset exceeds declared size: ${asset.path}`, 502);
+    }
+    chunks.push(buffer);
+  }
+  if (total !== asset.size) {
+    throw createMmdError(`MMD static asset size is incomplete: ${asset.path}`, 502);
+  }
+  const content = Buffer.concat(chunks, total);
+  const digest = crypto.createHash('sha256').update(content).digest('hex');
+  if (digest !== asset.sha256) {
+    throw createMmdError(`MMD static asset checksum mismatch: ${asset.path}`, 502);
+  }
+  return { content, contentType: asset.contentType, sourceUrl };
 };
 
 const normalizeManifestPath = (value, label) => {
@@ -98,6 +264,11 @@ const loadMmdResourceManifest = async ({ modelRoot } = {}) => {
   try {
     manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
   } catch (error) {
+    if (error?.code === 'ENOENT') {
+      const missingManifestError = createMmdError('MMD manifest is missing', 503);
+      missingManifestError.code = 'MMD_MANIFEST_MISSING';
+      throw missingManifestError;
+    }
     throw createMmdError(`Unable to load MMD manifest: ${error.message}`, 503);
   }
   if (!manifest || manifest.schemaVersion !== 1 || !Array.isArray(manifest.resources) || manifest.resources.length === 0) {
@@ -148,9 +319,25 @@ const createMmdResourceProfile = (resource, { basePath = '/models' } = {}) => {
   };
 };
 
+const loadPreferredMmdResources = async ({ modelRoot } = {}) => {
+  try {
+    const manifest = await loadMmdResourceManifest({ modelRoot });
+    return manifest.resources.map((resource) => createMmdResourceProfile(resource));
+  } catch (error) {
+    if (error?.code === 'MMD_MANIFEST_MISSING') return [createStaticMmdResourceProfile()];
+    throw error;
+  }
+};
+
 module.exports = {
   MMD_MANIFEST_RELATIVE_PATH,
+  STATIC_MMD_RELEASE,
+  createStaticMmdResourceProfile,
   createMmdResourceProfile,
   loadMmdResourceManifest,
+  loadPreferredMmdResources,
+  requestStaticMmdAsset,
+  resolveStaticMmdAsset,
+  resolveStaticMmdAssetUrl,
   resolveMmdResource,
 };

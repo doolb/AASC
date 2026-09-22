@@ -9221,3 +9221,17 @@
   - 已在 ADB 真机 `192.168.1.6:5555` 原位安装启动；`/api/status` 返回 HTTP 200，`/v1/models` 中默认模型已 ready，聊天接口返回非空回复。
   - 已发布到 LAN `/mnt/aasc-offline/apk/aasc-display-offline-v22.apk` 和 WAN `as@120.79.245.103:~/a/aasc-offline/apk/aasc-display-offline-v22.apk`；两端大小 `1011571032` bytes、SHA-256 `176548ec7a8768068160141d6a21bf0a76967f718ebafde6ee8364aff4411ad0`，外网 HTTP 200/Content-Length 校验通过；服务 `manifest.json` 未修改。
   - APK、模型和构建中间文件未提交到 Git。
+### MMD 公网静态资源镜像
+
+- ✅ [2026-09-22] 发布已在本地验证的米娅 PMX/VMD 资源至 `http://120.79.245.103/mnt/mmd/miya-v1/`。
+  - 上传 `manifest.json`、PMX、12 张 PNG 纹理和 VMD 共 15 个文件、`13,432,441` bytes；源 ZIP、README、代码、APK、日志及既有默认 VRM 均未改动。
+  - 远端隐藏暂存目录逐文件复核大小/SHA-256 后原子切换；公网全部资源 HTTP `200`/`Content-Length` 校验通过，manifest、PMX 和 VMD 的完整下载 SHA-256 与本地一致。
+  - 当前显示端默认仍使用本地 `/models/mmd/...`，没有发布 APK 或服务代码，也没有切换 WAN 默认 profile。
+
+### Offline MMD 同源代理
+
+- ✅ [2026-09-22] 为既有 Offline APK 服务代码完成米娅 PMX/VMD 静态代理支持
+  - `mmd-resource-service.js` 固定 `miya-v1` 的 PMX、12 张纹理和 VMD 白名单，按 IPv4 解析 `c.aasc.us`，在 HTTP 状态、长度和 SHA-256 全部校验后才向 `/api/mmd/static/mmd/...` 返回完整内容；本地有效 manifest 保持优先，只有清单缺失才回退。
+  - `display-mmd.js` 与 `display-pmx-runtime.js` 只新增固定同源静态前缀；`prepare-android-node-runtime.js` 始终排除 `res/models/mmd`，PMX/VMD/纹理不进入 Runtime 或模型 assets。
+  - 验证：MMD 服务 11/11、显示端 42/42、新 Runtime 边界用例 1/1 通过；合并定向集 74/79，5 项为 Windows 软链接权限、执行位和旧 Runtime 断言基线失败。`npm test` 为 876/931，55 项已知环境/平台基线失败。
+  - 未构建或发布 full APK、min APK、服务更新包；没有提交模型二进制、APK 或 ZIP。

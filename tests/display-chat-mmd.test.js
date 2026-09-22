@@ -421,3 +421,12 @@ test('显示端默认请求本地 PMX/VMD 清单且不把资源加入 Offline AP
     assert.match(server, /modelRoot:\s*path\.join\(PROJECT_ROOT, 'res', 'models'\)/u);
     assert.doesNotMatch(mmd, /release\/apkbuild|build:apk/u);
 });
+
+test('服务端为 Offline MMD 注册固定同源静态路径代理且保留 VRM 静态路由', () => {
+    const server = fs.readFileSync(path.join(ROOT, 'src/apps/server/boot/server-app.js'), 'utf8');
+    assert.match(server, /loadPreferredMmdResources/u);
+    assert.match(server, /requestStaticMmdAsset/u);
+    assert.ok(server.includes('app.get(/^\\/api\\/mmd\\/static\\/'));
+    assert.match(server, /MMD 静态资源不接受查询参数/u);
+    assert.match(server, /app\.get\('\/api\/vrm\/model\/static'/u);
+});

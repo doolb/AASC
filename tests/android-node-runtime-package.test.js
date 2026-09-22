@@ -622,6 +622,35 @@ test('离线 Runtime 按选定模型复制并写入离线元数据', async () =>
     assert.equal(manifestPaths.some(file => file.endsWith('yolo11s.onnx')), false);
 });
 
+test('Offline Runtime 不打包未被 profile 选择的 MMD PMX、VMD 或纹理', async () => {
+    const packageDir = await createServerPackage(tempDir);
+    const runtimeDir = await createRuntime(tempDir);
+    const mmdFiles = [
+        ['res/models/mmd/miya/miya.pmx', 'PMX model'],
+        ['res/models/mmd/miya/tex/1.png', 'texture'],
+        ['res/models/mmd/motions/miya-default.vmd', 'VMD motion']
+    ];
+    for (const [relativePath, content] of mmdFiles) {
+        const filePath = path.join(packageDir, ...relativePath.split('/'));
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.promises.writeFile(filePath, content, 'utf8');
+    }
+
+    const result = await prepareAndroidNodeRuntime({
+        packageDir,
+        runtimeDir,
+        outputDir: path.join(tempDir, 'output')
+    });
+    const packagedPaths = [
+        ...result.manifest.files.map((file) => file.path),
+        ...result.manifest.modelAssets.map((file) => file.path)
+    ];
+
+    assert.equal(packagedPaths.some((filePath) => filePath.startsWith('server/res/models/mmd/')), false);
+    assert.equal(packagedPaths.some((filePath) => /\.(?:pmx|vmd)$/iu.test(filePath)), false);
+    assert.equal(packagedPaths.includes('server/res/models/mmd/miya/tex/1.png'), false);
+});
+
 test('离线 Runtime 必须包含 MNNChat 默认模型的清单和全部运行文件', () => {
     const requiredFiles = [
         'llm/manifest.json',

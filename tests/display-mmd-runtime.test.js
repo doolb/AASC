@@ -60,6 +60,24 @@ test('display MMD selects PMX or VRM runtime from a validated model profile', ()
   assert.match(displayMmd, /motionResourceId/u);
 });
 
+test('PMX profile validation accepts only local and fixed static same-origin MMD paths', () => {
+  const displayMmd = readPublic('js/display-mmd.js');
+  const pmxRuntime = readPublic('js/display-pmx-runtime.js');
+  for (const source of [displayMmd, pmxRuntime]) {
+    assert.match(source, /MMD_MODEL_PREFIXES\s*=\s*Object\.freeze\(\s*\[/u);
+    assert.match(source, /'\/models\/mmd\/'/u);
+    assert.match(source, /'\/api\/mmd\/static\/mmd\/'/u);
+    assert.match(source, /url\.includes\(':\/\/'\)/u);
+    assert.match(source, /url\.startsWith\('\/\/'\)/u);
+    assert.match(source, /url\.includes\('\.\.'\)/u);
+    assert.match(source, /\[\?#\\\\\]/u);
+    assert.match(source, /MMD_MODEL_PREFIXES\.some\(\(prefix\) => url\.startsWith\(prefix\)\)/u);
+    assert.doesNotMatch(source, /https?:\/\/[^'"\s]*miya-v1/u);
+  }
+  assert.match(displayMmd, /isSameOriginMmdAsset\(profile\.modelUrl, '\.pmx'\)/u);
+  assert.match(pmxRuntime, /isSameOriginMmdAsset\(profile\.motionUrl, '\.vmd'\)/u);
+});
+
 test('PMX runtime exposes looping model and motion lifecycle methods', () => {
   const source = readPublic('js/display-pmx-runtime.js');
   assert.match(source, /MMDLoader/u);

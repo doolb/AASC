@@ -141,8 +141,8 @@ const {
     unwrapVroidModelPayload
 } = require('../modules/vrm/vroid-model-service');
 const {
-    createMmdResourceProfile,
-    loadMmdResourceManifest
+    loadPreferredMmdResources,
+    requestStaticMmdAsset
 } = require('../modules/mmd/mmd-resource-service');
 const { createAndroidControlPageAccess } = require('../modules/display/android-control-page-access');
 const {
@@ -2837,12 +2837,29 @@ app.get('/api/vrm/model', (req, res) => {
     }
 });
 
+app.get(/^\/api\/mmd\/static\/(.+)$/u, async (req, res) => {
+    if (Object.keys(req.query || {}).length > 0) {
+        res.status(400).json({ status: 'error', message: 'MMD 静态资源不接受查询参数' });
+        return;
+    }
+    try {
+        const asset = await requestStaticMmdAsset({ relativePath: req.params[0] });
+        res.status(200);
+        res.setHeader('Content-Type', asset.contentType);
+        res.setHeader('Content-Length', String(asset.content.length));
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('X-AASC-MMD-Source', 'static-miya-v1-ip-resolved');
+        res.end(asset.content);
+    } catch (error) {
+        res.status(error.statusCode || 502).json({ status: 'error', message: error.message });
+    }
+});
+
 app.get('/api/mmd/resources', async (req, res) => {
     try {
-        const manifest = await loadMmdResourceManifest({
+        const resources = await loadPreferredMmdResources({
             modelRoot: path.join(PROJECT_ROOT, 'res', 'models')
         });
-        const resources = manifest.resources.map((resource) => createMmdResourceProfile(resource));
         res.json({ status: 'success', resources });
     } catch (error) {
         res.status(error.statusCode || 503).json({

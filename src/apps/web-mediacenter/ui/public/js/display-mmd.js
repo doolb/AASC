@@ -9,6 +9,10 @@
     const DEFAULT_STATIC_MODEL_FILE = 'default-vroid.vrm.zst';
     const STATIC_MODEL_FILE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:vrm|glb)(?:\.zst)?$/u;
     const DEFAULT_MMD_RESOURCE_ID = 'miya-default';
+    const MMD_MODEL_PREFIXES = Object.freeze([
+        '/models/mmd/',
+        '/api/mmd/static/mmd/'
+    ]);
     const DEFAULT_MODEL_PROFILE = Object.freeze({
         roleId: 'default-miya',
         name: '米娅',
@@ -346,19 +350,17 @@
         return state.runtimePromise;
     }
 
-    function isSafeLocalMmdUrl(url, extension) {
-        return typeof url === 'string'
-            && url.startsWith('/models/mmd/')
-            && !url.includes('://')
-            && !url.includes('..')
-            && !/[?#]/u.test(url)
+    function isSameOriginMmdAsset(url, extension) {
+        if (typeof url !== 'string' || url.includes('://') || url.startsWith('//')
+            || url.includes('..') || /[?#\\]/u.test(url)) return false;
+        return MMD_MODEL_PREFIXES.some((prefix) => url.startsWith(prefix))
             && url.toLowerCase().endsWith(extension);
     }
 
     async function resolvePmxProfile(profile) {
         if (profile.modelType === 'pmx'
-            && isSafeLocalMmdUrl(profile.modelUrl, '.pmx')
-            && (!profile.motionUrl || isSafeLocalMmdUrl(profile.motionUrl, '.vmd'))
+            && isSameOriginMmdAsset(profile.modelUrl, '.pmx')
+            && (!profile.motionUrl || isSameOriginMmdAsset(profile.motionUrl, '.vmd'))
             && typeof profile.motionResourceId === 'string') {
             return { ...profile };
         }
@@ -373,8 +375,8 @@
         const resource = payload.resources.find((entry) => entry.resourceId === profile.resourceId)
             || payload.resources[0];
         if (!resource || resource.modelType !== 'pmx'
-            || !isSafeLocalMmdUrl(resource.modelUrl, '.pmx')
-            || !isSafeLocalMmdUrl(resource.motionUrl, '.vmd')) {
+            || !isSameOriginMmdAsset(resource.modelUrl, '.pmx')
+            || !isSameOriginMmdAsset(resource.motionUrl, '.vmd')) {
             throw new Error('服务端没有返回有效的 PMX 资源清单');
         }
         return { ...profile, ...resource };
