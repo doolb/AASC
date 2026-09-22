@@ -246,11 +246,12 @@
         const travelled = Math.hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y);
         if (!drag.didRotate && travelled < POINTER_DRAG_THRESHOLD) return;
         const deltaX = point.x - drag.lastPoint.x;
+        const deltaY = point.y - drag.lastPoint.y;
         drag.lastPoint = point;
         drag.didRotate = true;
         state.canvas.classList.add('is-dragging');
-        if (Math.abs(deltaX) < Number.EPSILON) return;
-        state.runtime?.rotateModelBy?.(deltaX * ROTATION_RADIANS_PER_PIXEL);
+        if (Math.abs(deltaX) < Number.EPSILON && Math.abs(deltaY) < Number.EPSILON) return;
+        state.runtime?.rotateModelBy?.(deltaX * ROTATION_RADIANS_PER_PIXEL, deltaY * ROTATION_RADIANS_PER_PIXEL);
     }
 
     function handlePointerUp(event) {

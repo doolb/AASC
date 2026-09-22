@@ -236,10 +236,14 @@
     返回
   currentPoint = 计算 Canvas 坐标
   deltaX = currentPoint.x - lastPoint.x
+  deltaY = currentPoint.y - lastPoint.y
   总位移未超过拖动阈值
     只更新 lastPoint
     返回
-  调用 runtime.rotateModelBy(deltaX 转为 Y 轴弧度)
+  将 deltaX 转为 Y 轴转身弧度
+  将 deltaY 转为 X 轴俯仰弧度
+  调用 runtime.rotateModelBy(yawRadians, pitchRadians)
+  runtime 将 X 轴俯仰限制在 -45° 到 45°
   更新 lastPoint
 
 过程 handleMmdPointerUpOrCancel(event)

@@ -143,10 +143,22 @@ test('MMD 空白区域拖动只旋转本地角色并保留命中角色的点击�
     assert.match(mmd, /function handlePointerMove\(event\)[\s\S]*state\.blankDrag[\s\S]*rotateModelBy/u);
     assert.match(mmd, /function finishBlankDrag\(pointerId\)[\s\S]*releasePointerCapture[\s\S]*finishModelRotation/u);
     assert.match(mmd, /function handlePointerUp\(event\)[\s\S]*finishBlankDrag\(event\.pointerId\)[\s\S]*triggerInteraction/u);
-    assert.match(pmx, /const rotateModelBy = \(radians\)[\s\S]*currentMesh\.rotation\.y \+= delta/u);
+    assert.match(pmx, /const rotateModelBy = \(yawRadians, pitchRadians = 0\)[\s\S]*currentMesh\.rotation\.y \+= yawDelta/u);
     assert.match(pmx, /const finishModelRotation = \(\)[\s\S]*fitShadowCamera\(currentMesh\)/u);
-    assert.match(vrm, /function rotateModelBy\(radians\)[\s\S]*currentVrm\.scene\.rotation\.y \+= delta/u);
+    assert.match(vrm, /function rotateModelBy\(yawRadians, pitchRadians = 0\)[\s\S]*currentVrm\.scene\.rotation\.y \+= yawDelta/u);
     assert.match(vrm, /function finishModelRotation\(\)[\s\S]*fitShadowCamera\(currentVrm\.scene\)/u);
+});
+
+test('MMD 空白区域上下拖动以受限俯仰角旋转 PMX 和 VRM 角色', () => {
+    const mmd = readPublic('js/display-mmd.js');
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(mmd, /const deltaY = point\.y - drag\.lastPoint\.y/u);
+    assert.match(mmd, /rotateModelBy\?\.\(deltaX \* ROTATION_RADIANS_PER_PIXEL, deltaY \* ROTATION_RADIANS_PER_PIXEL\)/u);
+    assert.match(pmx, /MAX_MODEL_PITCH_RADIANS\s*=\s*Math\.PI \/ 4/u);
+    assert.match(pmx, /currentMesh\.rotation\.x\s*=\s*Math\.max\(-MAX_MODEL_PITCH_RADIANS, Math\.min\(MAX_MODEL_PITCH_RADIANS, currentMesh\.rotation\.x \+ pitchDelta\)\)/u);
+    assert.match(vrm, /MAX_MODEL_PITCH_RADIANS\s*=\s*Math\.PI \/ 4/u);
+    assert.match(vrm, /currentVrm\.scene\.rotation\.x\s*=\s*Math\.max\(-MAX_MODEL_PITCH_RADIANS, Math\.min\(MAX_MODEL_PITCH_RADIANS, currentVrm\.scene\.rotation\.x \+ pitchDelta\)\)/u);
 });
 
 test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {

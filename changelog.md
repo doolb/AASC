@@ -7,6 +7,11 @@
   - PMX/VRM runtime 复用统一的旋转和拖动结束接口，拖动结束后刷新阴影范围；旋转不持久化、不广播，也不影响动作、聊天与灯光。
   - 新增拖动交互契约测试；`node --test tests/display-chat-mmd.test.js` 31/31、三份相关脚本语法检查和 `git diff --check` 通过。全量 `npm test` 仍受既有 Windows 环境/远端基线依赖阻断，未修改无关模块。
 
+- ✅ [2026-09-22] 扩展空白区域拖动，支持上下俯仰角色。
+  - `pointermove` 同时传递水平和纵向位移；PMX/VRM runtime 以 X 轴处理纵向俯仰，并限制在上下各 45°，防止模型翻转。
+  - 命中角色后的点击互动、动作播放、阴影结束刷新与本地非持久化行为保持不变。
+  - 验证：`node --test tests/display-chat-mmd.test.js` 32/32 通过；`display-mmd.js`、PMX runtime、VRM runtime 的语法检查通过。
+
 ### 显示端聊天下拉菜单选中态颜色
 
 - ✅ [2026-09-22] 修复聊天对象和会话两个下拉菜单中选中项与未选中项底色难以区分的问题。

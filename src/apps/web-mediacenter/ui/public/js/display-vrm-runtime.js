@@ -16,6 +16,7 @@ const MODEL_CACHE_NAME = 'aasc-vrm-models-v2';
 const TARGET_MODEL_HEIGHT = 1.75;
 const SHADOW_MAP_SIZE = 1024;
 const SHADOW_FRUSTUM_MARGIN = 1.18;
+const MAX_MODEL_PITCH_RADIANS = Math.PI / 4;
 
 async function readCachedModel(url) {
     if (typeof caches === 'undefined') return null;
@@ -288,11 +289,14 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         frameHandle = 0;
     }
 
-    function rotateModelBy(radians) {
+    function rotateModelBy(yawRadians, pitchRadians = 0) {
         if (!currentVrm?.scene) return false;
-        const delta = Number(radians);
-        if (!Number.isFinite(delta) || Math.abs(delta) < Number.EPSILON) return false;
-        currentVrm.scene.rotation.y += delta;
+        const yawDelta = Number(yawRadians);
+        const pitchDelta = Number(pitchRadians);
+        if (!Number.isFinite(yawDelta) || !Number.isFinite(pitchDelta)) return false;
+        if (Math.abs(yawDelta) < Number.EPSILON && Math.abs(pitchDelta) < Number.EPSILON) return false;
+        currentVrm.scene.rotation.y += yawDelta;
+        currentVrm.scene.rotation.x = Math.max(-MAX_MODEL_PITCH_RADIANS, Math.min(MAX_MODEL_PITCH_RADIANS, currentVrm.scene.rotation.x + pitchDelta));
         keyLight.shadow.needsUpdate = true;
         startRendering();
         return true;
