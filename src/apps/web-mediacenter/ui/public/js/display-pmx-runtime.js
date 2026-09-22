@@ -14,6 +14,8 @@ const MMD_MODEL_PREFIX = '/models/mmd/';
 const SHADOW_MAP_SIZE = 1024;
 const SHADOW_FRUSTUM_MARGIN = 1.18;
 const MAX_MODEL_PITCH_RADIANS = Math.PI / 4;
+const ROTATION_EASING_PER_SECOND = 1 / 0.14;
+const ROTATION_SETTLE_EPSILON = 0.0005;
 
 const classifyHit = (object) => {
     const name = String(object?.name || '').toLowerCase();
@@ -102,6 +104,20 @@ const normalizeModel = (mesh) => {
     mesh.position.z -= center.z;
 };
 
+function createModelRotationPivot(model) {
+    const pivot = new THREE.Group();
+    if (!model?.isObject3D) return pivot;
+    const bounds = new THREE.Box3().setFromObject(model);
+    if (!bounds.isEmpty()) {
+        pivot.position.copy(bounds.getCenter(new THREE.Vector3()));
+    }
+    // attach 保持模型当前世界变换，使贴地、骨骼动画和资源自身姿态不被枢轴改变。
+    pivot.updateWorldMatrix(true, false);
+    model.updateWorldMatrix(true, false);
+    pivot.attach(model);
+    return pivot;
+}
+
 export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     if (!canvas) throw new Error('PMX Canvas 不存在');
 
@@ -187,7 +203,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         keyLight.castShadow = shadowEnabled;
         shadowPlane.visible = shadowEnabled;
         applyShadowFlags(currentMesh);
-        fitShadowCamera(currentMesh);
+        fitShadowCamera(currentRotationPivot || currentMesh);
     };
 
     const normalizeLightNumber = (value, minimum, maximum, fallback) => {
@@ -234,6 +250,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let currentMesh = null;
+    let currentRotationPivot = null;
+    const rotationState = {
+        targetYaw: 0,
+        targetPitch: 0,
+        fitShadowWhenSettled: false
+    };
     let currentProfile = null;
     let currentMotionResourceId = null;
     let motionSequence = 0;
@@ -243,6 +265,35 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     let visible = true;
     let disposed = false;
     let fallbackObject = null;
+
+    function resetModelRotation() {
+        rotationState.targetYaw = currentRotationPivot?.rotation.y || 0;
+        rotationState.targetPitch = currentRotationPivot?.rotation.x || 0;
+        rotationState.fitShadowWhenSettled = false;
+    }
+
+    function updateModelRotation(delta) {
+        if (!currentRotationPivot) return false;
+        const yawDistance = rotationState.targetYaw - currentRotationPivot.rotation.y;
+        const pitchDistance = rotationState.targetPitch - currentRotationPivot.rotation.x;
+        const settled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
+            && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON;
+        if (settled) {
+            currentRotationPivot.rotation.y = rotationState.targetYaw;
+            currentRotationPivot.rotation.x = rotationState.targetPitch;
+            if (rotationState.fitShadowWhenSettled) {
+                rotationState.fitShadowWhenSettled = false;
+                currentRotationPivot.updateWorldMatrix(true, true);
+                fitShadowCamera(currentRotationPivot);
+            }
+            return false;
+        }
+        const easing = 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
+        currentRotationPivot.rotation.y += yawDistance * easing;
+        currentRotationPivot.rotation.x += pitchDistance * easing;
+        keyLight.shadow.needsUpdate = true;
+        return true;
+    }
 
     const clearFallback = () => {
         if (!fallbackObject) return;
@@ -289,9 +340,12 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         motionSequence += 1;
         stopMotion();
         if (!currentMesh) return;
-        scene.remove(currentMesh);
+        scene.remove(currentRotationPivot || currentMesh);
+        currentRotationPivot?.remove(currentMesh);
         disposeObject(currentMesh);
         currentMesh = null;
+        currentRotationPivot = null;
+        resetModelRotation();
     };
 
     const renderFrame = (now) => {
@@ -300,6 +354,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         const delta = Math.min(0.1, Math.max(0, (now - lastFrameAt) / 1000));
         lastFrameAt = now;
         if (helper.current) helper.current.update(delta);
+        updateModelRotation(delta);
         renderer.render(scene, camera);
         frameHandle = requestAnimationFrame(renderFrame);
     };
@@ -425,12 +480,14 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
             clearFallback();
             disposeCurrentModel();
             currentMesh = stagedMesh;
+            currentRotationPivot = createModelRotationPivot(currentMesh);
+            resetModelRotation();
             currentProfile = profile;
             helper.current = stagedHelper;
             currentMotionResourceId = profile.motionResourceId || null;
             applyShadowFlags(currentMesh);
-            scene.add(currentMesh);
-            fitShadowCamera(currentMesh);
+            scene.add(currentRotationPivot);
+            fitShadowCamera(currentRotationPivot);
             stagedMesh = null;
             stagedHelper = null;
             onStatus('PMX 模型已加载');
@@ -465,29 +522,33 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     };
 
     const rotateModelBy = (yawRadians, pitchRadians = 0) => {
-        if (!currentMesh) return false;
+        if (!currentMesh || !currentRotationPivot) return false;
         const yawDelta = Number(yawRadians);
         const pitchDelta = Number(pitchRadians);
         if (!Number.isFinite(yawDelta) || !Number.isFinite(pitchDelta)) return false;
         if (Math.abs(yawDelta) < Number.EPSILON && Math.abs(pitchDelta) < Number.EPSILON) return false;
-        currentMesh.rotation.y += yawDelta;
-        currentMesh.rotation.x = Math.max(-MAX_MODEL_PITCH_RADIANS, Math.min(MAX_MODEL_PITCH_RADIANS, currentMesh.rotation.x + pitchDelta));
-        keyLight.shadow.needsUpdate = true;
+        rotationState.targetYaw += yawDelta;
+        rotationState.targetPitch = Math.max(
+            -MAX_MODEL_PITCH_RADIANS,
+            Math.min(MAX_MODEL_PITCH_RADIANS, rotationState.targetPitch + pitchDelta)
+        );
         startRendering();
         return true;
     };
 
     const finishModelRotation = () => {
-        if (!currentMesh) return false;
-        fitShadowCamera(currentMesh);
+        if (!currentRotationPivot) return false;
+        rotationState.fitShadowWhenSettled = true;
+        updateModelRotation(0);
+        startRendering();
         return true;
     };
 
     const raycast = (point) => {
-        if (!currentMesh || !point) return null;
+        if (!currentRotationPivot || !point) return null;
         pointer.set(Number(point.normalizedX) || 0, Number(point.normalizedY) || 0);
         raycaster.setFromCamera(pointer, camera);
-        const intersections = raycaster.intersectObject(currentMesh, true);
+        const intersections = raycaster.intersectObject(currentRotationPivot, true);
         return intersections.length ? classifyHit(intersections[0].object) : null;
     };
 

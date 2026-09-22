@@ -243,18 +243,39 @@
   将 deltaX 转为 Y 轴转身弧度
   将 deltaY 转为 X 轴俯仰弧度
   调用 runtime.rotateModelBy(yawRadians, pitchRadians)
-  runtime 将 X 轴俯仰限制在 -45° 到 45°
+  runtime 更新旋转枢轴的目标 Y 轴与受限 X 轴俯仰，X 轴限制在 -45° 到 45°
   更新 lastPoint
 
 过程 handleMmdPointerUpOrCancel(event)
   如果 event.pointerId 属于空白拖动
     释放 pointer capture
-    调用 runtime.finishModelRotation() 更新阴影范围
+    调用 runtime.finishModelRotation() 标记角度收敛后的阴影范围刷新
     清空拖动状态，不发布 mmd.interaction
     返回
   如果角色命中且总位移不超过点击阈值
     执行既有角色触摸互动
   清空按下状态
+```
+
+```text
+过程 createModelRotationPivot(model)
+  bounds = 计算归一化且贴地模型的包围盒
+  pivot.position = bounds.center
+  保持 model 当前世界变换，将 model 挂到 pivot
+  返回 pivot
+
+过程 updateModelRotation(delta)
+  targetYaw 和 targetPitch 保存拖动目标角度
+  easing = 1 - exp(-每秒缓动系数 * delta)
+  pivot 的 X/Y 角度按 easing 逼近目标角度
+  当 X/Y 均进入收敛阈值
+    写入最终角度
+    如果等待阴影刷新
+      按 pivot 的最终范围更新阴影相机
+
+过程 finishModelRotation()
+  标记等待旋转收敛后的阴影刷新
+  保持渲染循环直到完成收敛
 ```
 
 ```text

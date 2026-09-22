@@ -143,10 +143,10 @@ test('MMD 空白区域拖动只旋转本地角色并保留命中角色的点击�
     assert.match(mmd, /function handlePointerMove\(event\)[\s\S]*state\.blankDrag[\s\S]*rotateModelBy/u);
     assert.match(mmd, /function finishBlankDrag\(pointerId\)[\s\S]*releasePointerCapture[\s\S]*finishModelRotation/u);
     assert.match(mmd, /function handlePointerUp\(event\)[\s\S]*finishBlankDrag\(event\.pointerId\)[\s\S]*triggerInteraction/u);
-    assert.match(pmx, /const rotateModelBy = \(yawRadians, pitchRadians = 0\)[\s\S]*currentMesh\.rotation\.y \+= yawDelta/u);
-    assert.match(pmx, /const finishModelRotation = \(\)[\s\S]*fitShadowCamera\(currentMesh\)/u);
-    assert.match(vrm, /function rotateModelBy\(yawRadians, pitchRadians = 0\)[\s\S]*currentVrm\.scene\.rotation\.y \+= yawDelta/u);
-    assert.match(vrm, /function finishModelRotation\(\)[\s\S]*fitShadowCamera\(currentVrm\.scene\)/u);
+    assert.match(pmx, /const rotateModelBy = \(yawRadians, pitchRadians = 0\)[\s\S]*rotationState\.targetYaw \+= yawDelta/u);
+    assert.match(pmx, /const finishModelRotation = \(\)[\s\S]*fitShadowWhenSettled/u);
+    assert.match(vrm, /function rotateModelBy\(yawRadians, pitchRadians = 0\)[\s\S]*rotationState\.targetYaw \+= yawDelta/u);
+    assert.match(vrm, /function finishModelRotation\(\)[\s\S]*fitShadowWhenSettled/u);
 });
 
 test('MMD 空白区域上下拖动以受限俯仰角旋转 PMX 和 VRM 角色', () => {
@@ -156,9 +156,24 @@ test('MMD 空白区域上下拖动以受限俯仰角旋转 PMX 和 VRM 角色', 
     assert.match(mmd, /const deltaY = point\.y - drag\.lastPoint\.y/u);
     assert.match(mmd, /rotateModelBy\?\.\(deltaX \* ROTATION_RADIANS_PER_PIXEL, deltaY \* ROTATION_RADIANS_PER_PIXEL\)/u);
     assert.match(pmx, /MAX_MODEL_PITCH_RADIANS\s*=\s*Math\.PI \/ 4/u);
-    assert.match(pmx, /currentMesh\.rotation\.x\s*=\s*Math\.max\(-MAX_MODEL_PITCH_RADIANS, Math\.min\(MAX_MODEL_PITCH_RADIANS, currentMesh\.rotation\.x \+ pitchDelta\)\)/u);
+    assert.match(pmx, /rotationState\.targetPitch\s*=\s*Math\.max\(\s*-MAX_MODEL_PITCH_RADIANS,[\s\S]*rotationState\.targetPitch \+ pitchDelta/u);
     assert.match(vrm, /MAX_MODEL_PITCH_RADIANS\s*=\s*Math\.PI \/ 4/u);
-    assert.match(vrm, /currentVrm\.scene\.rotation\.x\s*=\s*Math\.max\(-MAX_MODEL_PITCH_RADIANS, Math\.min\(MAX_MODEL_PITCH_RADIANS, currentVrm\.scene\.rotation\.x \+ pitchDelta\)\)/u);
+    assert.match(vrm, /rotationState\.targetPitch\s*=\s*Math\.max\(\s*-MAX_MODEL_PITCH_RADIANS,[\s\S]*rotationState\.targetPitch \+ pitchDelta/u);
+});
+
+test('PMX 和 VRM 以模型中心枢轴缓动旋转，并在静止后更新阴影范围', () => {
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(pmx, /function createModelRotationPivot\(model\)[\s\S]*bounds\.getCenter[\s\S]*pivot\.attach\(model\)/u);
+    assert.match(pmx, /ROTATION_EASING_PER_SECOND/u);
+    assert.match(pmx, /function updateModelRotation\(delta\)[\s\S]*Math\.exp\(-ROTATION_EASING_PER_SECOND \* delta\)/u);
+    assert.match(pmx, /currentRotationPivot\.rotation\.x/u);
+    assert.match(pmx, /finishModelRotation[\s\S]*fitShadowWhenSettled/u);
+    assert.match(vrm, /function createModelRotationPivot\(model\)[\s\S]*bounds\.getCenter[\s\S]*pivot\.attach\(model\)/u);
+    assert.match(vrm, /ROTATION_EASING_PER_SECOND/u);
+    assert.match(vrm, /function updateModelRotation\(delta\)[\s\S]*Math\.exp\(-ROTATION_EASING_PER_SECOND \* delta\)/u);
+    assert.match(vrm, /currentRotationPivot\.rotation\.x/u);
+    assert.match(vrm, /finishModelRotation[\s\S]*fitShadowWhenSettled/u);
 });
 
 test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {

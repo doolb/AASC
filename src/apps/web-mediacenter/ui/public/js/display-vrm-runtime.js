@@ -17,6 +17,8 @@ const TARGET_MODEL_HEIGHT = 1.75;
 const SHADOW_MAP_SIZE = 1024;
 const SHADOW_FRUSTUM_MARGIN = 1.18;
 const MAX_MODEL_PITCH_RADIANS = Math.PI / 4;
+const ROTATION_EASING_PER_SECOND = 1 / 0.14;
+const ROTATION_SETTLE_EPSILON = 0.0005;
 
 async function readCachedModel(url) {
     if (typeof caches === 'undefined') return null;
@@ -63,6 +65,20 @@ function normalizeModel(vrm) {
     vrm.scene.position.x -= scaledCenter.x;
     vrm.scene.position.y -= scaledBox.min.y;
     vrm.scene.position.z -= scaledCenter.z;
+}
+
+function createModelRotationPivot(model) {
+    const pivot = new THREE.Group();
+    if (!model?.isObject3D) return pivot;
+    const bounds = new THREE.Box3().setFromObject(model);
+    if (!bounds.isEmpty()) {
+        pivot.position.copy(bounds.getCenter(new THREE.Vector3()));
+    }
+    // attach 保持模型当前世界变换，使贴地、骨骼动画和资源自身姿态不被枢轴改变。
+    pivot.updateWorldMatrix(true, false);
+    model.updateWorldMatrix(true, false);
+    pivot.attach(model);
+    return pivot;
 }
 
 function classifyHit(object) {
@@ -159,7 +175,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         keyLight.castShadow = shadowEnabled;
         shadowPlane.visible = shadowEnabled;
         applyShadowFlags(currentVrm?.scene);
-        fitShadowCamera(currentVrm?.scene);
+        fitShadowCamera(currentRotationPivot || currentVrm?.scene);
     };
 
     const normalizeLightNumber = (value, minimum, maximum, fallback) => {
@@ -211,9 +227,44 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let currentVrm = null;
+    let currentRotationPivot = null;
+    const rotationState = {
+        targetYaw: 0,
+        targetPitch: 0,
+        fitShadowWhenSettled: false
+    };
     let frameHandle = 0;
     let lastFrameAt = performance.now();
     let visible = true;
+
+    function resetModelRotation() {
+        rotationState.targetYaw = currentRotationPivot?.rotation.y || 0;
+        rotationState.targetPitch = currentRotationPivot?.rotation.x || 0;
+        rotationState.fitShadowWhenSettled = false;
+    }
+
+    function updateModelRotation(delta) {
+        if (!currentRotationPivot) return false;
+        const yawDistance = rotationState.targetYaw - currentRotationPivot.rotation.y;
+        const pitchDistance = rotationState.targetPitch - currentRotationPivot.rotation.x;
+        const settled = Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
+            && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON;
+        if (settled) {
+            currentRotationPivot.rotation.y = rotationState.targetYaw;
+            currentRotationPivot.rotation.x = rotationState.targetPitch;
+            if (rotationState.fitShadowWhenSettled) {
+                rotationState.fitShadowWhenSettled = false;
+                currentRotationPivot.updateWorldMatrix(true, true);
+                fitShadowCamera(currentRotationPivot);
+            }
+            return false;
+        }
+        const easing = 1 - Math.exp(-ROTATION_EASING_PER_SECOND * delta);
+        currentRotationPivot.rotation.y += yawDistance * easing;
+        currentRotationPivot.rotation.x += pitchDistance * easing;
+        keyLight.shadow.needsUpdate = true;
+        return true;
+    }
 
     function renderFrame(now) {
         frameHandle = 0;
@@ -221,6 +272,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         const delta = Math.min(0.1, Math.max(0, (now - lastFrameAt) / 1000));
         lastFrameAt = now;
         if (currentVrm) currentVrm.update(delta);
+        updateModelRotation(delta);
         renderer.render(scene, camera);
         frameHandle = requestAnimationFrame(renderFrame);
     }
@@ -233,9 +285,12 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
 
     function disposeCurrentModel() {
         if (!currentVrm) return;
-        scene.remove(currentVrm.scene);
+        scene.remove(currentRotationPivot || currentVrm.scene);
+        currentRotationPivot?.remove(currentVrm.scene);
         VRMUtils.deepDispose(currentVrm.scene);
         currentVrm = null;
+        currentRotationPivot = null;
+        resetModelRotation();
     }
 
     function resize(width, height, devicePixelRatio = window.devicePixelRatio || 1) {
@@ -272,9 +327,11 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         normalizeModel(nextVrm);
         disposeCurrentModel();
         currentVrm = nextVrm;
+        currentRotationPivot = createModelRotationPivot(currentVrm.scene);
+        resetModelRotation();
         applyShadowFlags(currentVrm.scene);
-        scene.add(currentVrm.scene);
-        fitShadowCamera(currentVrm.scene);
+        scene.add(currentRotationPivot);
+        fitShadowCamera(currentRotationPivot);
         onStatus('VRM 模型已加载');
         startRendering();
     }
@@ -290,29 +347,33 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     }
 
     function rotateModelBy(yawRadians, pitchRadians = 0) {
-        if (!currentVrm?.scene) return false;
+        if (!currentVrm?.scene || !currentRotationPivot) return false;
         const yawDelta = Number(yawRadians);
         const pitchDelta = Number(pitchRadians);
         if (!Number.isFinite(yawDelta) || !Number.isFinite(pitchDelta)) return false;
         if (Math.abs(yawDelta) < Number.EPSILON && Math.abs(pitchDelta) < Number.EPSILON) return false;
-        currentVrm.scene.rotation.y += yawDelta;
-        currentVrm.scene.rotation.x = Math.max(-MAX_MODEL_PITCH_RADIANS, Math.min(MAX_MODEL_PITCH_RADIANS, currentVrm.scene.rotation.x + pitchDelta));
-        keyLight.shadow.needsUpdate = true;
+        rotationState.targetYaw += yawDelta;
+        rotationState.targetPitch = Math.max(
+            -MAX_MODEL_PITCH_RADIANS,
+            Math.min(MAX_MODEL_PITCH_RADIANS, rotationState.targetPitch + pitchDelta)
+        );
         startRendering();
         return true;
     }
 
     function finishModelRotation() {
-        if (!currentVrm?.scene) return false;
-        fitShadowCamera(currentVrm.scene);
+        if (!currentRotationPivot) return false;
+        rotationState.fitShadowWhenSettled = true;
+        updateModelRotation(0);
+        startRendering();
         return true;
     }
 
     function raycast(point) {
-        if (!currentVrm || !point) return null;
+        if (!currentVrm || !currentRotationPivot || !point) return null;
         pointer.set(Number(point.normalizedX) || 0, Number(point.normalizedY) || 0);
         raycaster.setFromCamera(pointer, camera);
-        const intersections = raycaster.intersectObject(currentVrm.scene, true);
+        const intersections = raycaster.intersectObject(currentRotationPivot, true);
         return intersections.length ? classifyHit(intersections[0].object) : null;
     }
 
