@@ -136,10 +136,13 @@
   菜单颜色从根元素主题变量读取
 
 过程 styleHtmlDropdownOption(option)
-  未选中状态使用普通文本色和透明背景
-  悬停或键盘聚焦状态使用浅主题强调色
-  aria-selected=true 状态使用主题 accent-color 背景和 bg-primary 文字
-  已选中状态再次悬停或聚焦时使用 accent-secondary 背景
+  未选中状态直接使用 card-background，与主题预览小卡片保持同一底色，不使用透明背景或 target-kind 染色
+  悬停或键盘聚焦状态使用比未选中略深的浅主题强调色背景
+  aria-selected=true 或 is-selected 状态使用独立的选中背景、主文字、加粗和左侧标记
+  已选中状态再次悬停或聚焦时使用 selected-hover 背景，不被普通 hover 覆盖
+  选中项追加 ✓ 视觉标识
+  group 和 assistant 只覆盖选中背景，不覆盖未选中背景
+  浅色主题通用 button 渐变为 important 时，使用 :root[data-theme-mode="light"] button.display-chat-dropdown-option 的 important 状态规则覆盖它
   保证未选中、交互中和已选中状态具有可见颜色差异
 ```
 

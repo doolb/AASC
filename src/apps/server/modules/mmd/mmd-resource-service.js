@@ -49,8 +49,8 @@ const validateResource = async (resource, modelRoot) => {
   if (resource.modelType !== 'pmx') {
     throw createMmdError('MMD modelType must be pmx', 503);
   }
-  if (resource.playMode !== 'once') {
-    throw createMmdError('MMD playMode must be once', 503);
+  if (resource.playMode !== 'loop' && resource.playMode !== 'once') {
+    throw createMmdError('MMD playMode must be loop or once', 503);
   }
   if (!RESOURCE_ID_PATTERN.test(resource.motionResourceId || '')) {
     throw createMmdError('MMD motionResourceId is invalid', 503);
@@ -130,7 +130,9 @@ const createSameOriginModelUrl = (basePath, relativePath) => {
 };
 
 const createMmdResourceProfile = (resource, { basePath = '/models' } = {}) => {
-  if (!resource || resource.modelType !== 'pmx' || resource.playMode !== 'once') {
+  if (!resource
+    || resource.modelType !== 'pmx'
+    || (resource.playMode !== 'loop' && resource.playMode !== 'once')) {
     throw createMmdError('MMD resource profile is invalid', 503);
   }
   const modelPath = normalizeManifestPath(resource.modelPath, 'modelPath');

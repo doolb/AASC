@@ -292,26 +292,35 @@ test('控制端收到会话广播后重新渲染当前历史', () => {
     assert.match(chat, /handleSession\(data\)[\s\S]*this\.renderSessionSelector\(\);[\s\S]*this\.renderHistory\(\);/u);
 });
 
-test('HTML 下拉菜单区分未选中、悬停和已选中颜色', () => {
+test('HTML 下拉菜单在浅色主题通用按钮皮肤下仍保留状态底色', () => {
     const chat = readPublic('js/display-chat.js');
     const css = readPublic('css/display-chat.css');
-    const activity = fs.readFileSync(
-        path.join(ROOT, 'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'),
-        'utf8'
-    );
+    const theme = readPublic('css/theme.css');
     assert.match(chat, /const isSelected = item\.value === selected\?\.value/u);
     assert.match(chat, /option\.dataset\.selected = String\(isSelected\)/u);
     assert.match(chat, /display-chat-dropdown-option.*is-selected/u);
     assert.match(chat, /function renderTargetOptions\(\)[\s\S]*renderDropdown/u);
     assert.match(chat, /function renderSessionOptions\(\)[\s\S]*renderDropdown/u);
-    assert.match(css, /\.display-chat-dropdown-option:hover,[\s\S]*color-mix\(in srgb, var\(--accent-color\) 14%/u);
-    assert.match(css, /\.display-chat-dropdown-option\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--bg-surface-strong\) 82%, var\(--bg-primary\)\)/u);
+    assert.match(css, /\.display-chat-dropdown-option:hover,[\s\S]*color-mix\(in srgb, var\(--card-background\) 78%, var\(--accent-color\)\)/u);
+    assert.match(css, /\.display-chat-dropdown-option\s*\{[\s\S]*background:\s*var\(--card-background\)/u);
     assert.match(css, /\.display-chat-dropdown-option\[aria-selected="true"\],[\s\S]*\.display-chat-dropdown-option\.is-selected\s*\{[\s\S]*background:\s*var\(--dropdown-option-selected-background\)[\s\S]*border-left-color:\s*var\(--accent-secondary\)[\s\S]*color:\s*var\(--text-primary\)/u);
     assert.match(css, /\.display-chat-dropdown-option\[aria-selected="true"\]::after,[\s\S]*content:\s*'✓'/u);
     assert.match(css, /\.display-chat-dropdown-option\.is-selected:hover,[\s\S]*background:\s*var\(--dropdown-option-selected-hover-background\)/u);
     assert.match(css, /\.display-chat-dropdown-option\[data-target-kind="group"\][\s\S]*--dropdown-option-selected-background/u);
     assert.match(css, /\.display-chat-dropdown-option\[data-target-kind="assistant"\][\s\S]*--dropdown-option-selected-background/u);
-    assert.match(css, /--dropdown-option-background:\s*color-mix\(in srgb, var\(--accent-color\) 12%, var\(--bg-surface-strong\)\)/u);
+    assert.match(css, /--dropdown-option-background:\s*var\(--card-background\)/u);
+    assert.doesNotMatch(css, /\.display-chat-dropdown-option\[data-target-kind="(?:group|assistant)"\][\s\S]*--dropdown-option-background/u);
+    assert.match(theme, /:root\[data-theme-mode="light"\]\s+button:not\(\.file-label\)[\s\S]*background:\s*linear-gradient\([^;]+\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\]\s+button\.display-chat-dropdown-option\s*\{[\s\S]*background:\s*var\(--card-background\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\]\s+button\.display-chat-dropdown-option:hover,[\s\S]*background:\s*var\(--dropdown-option-hover-background\)\s*!important/u);
+    assert.match(css, /:root\[data-theme-mode="light"\]\s+button\.display-chat-dropdown-option\.is-selected\s*\{[\s\S]*background:\s*var\(--dropdown-option-selected-background\)\s*!important/u);
+});
+
+test('Android 控制端收起入口保持边缘吸附', () => {
+    const activity = fs.readFileSync(
+        path.join(ROOT, 'src/apps/android-display/app/src/main/java/com/aasc/display/MainActivity.kt'),
+        'utf8'
+    );
     assert.match(activity, /layoutParams\.leftMargin = if \(collapsed\) -dp\(21\) else dp\(12\)/u);
     assert.match(activity, /layoutParams\.topMargin = if \(collapsed\) 0 else dp\(12\)/u);
 });

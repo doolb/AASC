@@ -60,13 +60,16 @@ test('display MMD selects PMX or VRM runtime from a validated model profile', ()
   assert.match(displayMmd, /motionResourceId/u);
 });
 
-test('PMX runtime exposes one-shot model and motion lifecycle methods', () => {
+test('PMX runtime exposes looping model and motion lifecycle methods', () => {
   const source = readPublic('js/display-pmx-runtime.js');
   assert.match(source, /MMDLoader/u);
   assert.match(source, /MMDAnimationHelper/u);
   assert.match(source, /loadMotion/u);
   assert.match(source, /playMotion/u);
-  assert.match(source, /loop:\s*false/u);
+  assert.match(source, /THREE\.LoopRepeat/u);
+  assert.match(source, /Infinity/u);
+  assert.match(source, /playMode/u);
+  assert.match(source, /THREE\.LoopOnce/u);
   assert.match(source, /requestAnimationFrame/u);
   assert.match(source, /dispose/u);
 });

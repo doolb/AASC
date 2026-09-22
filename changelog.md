@@ -1,5 +1,29 @@
 # Web MediaCenter - 变更日志
 
+### 显示端聊天下拉菜单选中态颜色
+
+- ✅ [2026-09-22] 修复聊天对象和会话两个下拉菜单中选中项与未选中项底色难以区分的问题。
+  - `display-chat.css` 为普通、悬停/聚焦、选中和选中悬停/聚焦状态提供明确的非透明背景；选中项增加左侧强调标记、加粗和 `✓` 标识。
+  - 群聊、助手对象可使用不同的选中色，未选中项统一使用浅色；会话菜单继续复用同一套状态样式，未修改选择逻辑和 WebSocket 协议。
+  - CSS 契约检查 8/8、JavaScript 语法检查和 `git diff --check` 通过；综合显示端测试仍受两个既有控制端/Android 断言阻断，未改动无关基线。
+  - 本轮仅处理本地显示端，不构建 Offline APK、不上传外网。
+
+- ✅ [2026-09-22] 根据显示端截图把未选中项进一步改为近白浅色。
+  - 普通项改为直接复用主题预览小卡片的 `--card-background`，悬停使用卡片背景 78% 与强调色 22% 的混色；群聊/助手不再覆盖普通项底色，只保留选中态差异。
+  - 新回归用例已先在旧 CSS 上失败、修改后通过；本地服务器实际响应已确认包含 `--card-background` 声明。本地 HTTPS 页面受未受信任开发证书拦截，未绕过证书验证进行自动截图。
+
+- ✅ [2026-09-22] 修复浅色主题通用按钮皮肤覆盖下拉菜单状态的问题。
+  - 根因是 `theme.css` 对 `button:not(.file-label)` 使用强调渐变和 `!important`，导致未选中项即使使用小卡片底色也被统一染绿。
+  - `display-chat.css` 以相同主题限定层级覆盖下拉项的基础、悬停、选中与选中悬停状态；只影响 `.display-chat-dropdown-option`。
+
+### 修复 MMD 动作结束回到 T-pose
+
+- ✅ [2026-09-22] 将本地 PMX/VMD 默认动作从一次性播放改为循环播放。
+  - 安装器和本地 manifest 默认使用 `playMode=loop`；runtime 使用 `THREE.LoopRepeat` 和 `Infinity`，动作结束后从头继续，不再回到绑定的 T-pose。
+  - 显式 `playMode=once` 仍兼容，并设置 `clampWhenFinished` 保持最后一帧。
+  - 根因是旧实现硬编码 `LoopOnce` 且关闭了 `clampWhenFinished`；资源安装、MMD 服务和 runtime 定向测试 `17/17` 通过。
+  - 本次只改本地显示端，不构建 Offline APK、不上传外网。
+
 ### 优化 MMD 阴影质量
 
 - ✅ [2026-09-22] 将 PMX/VRM 阴影贴图从 `512×512` 提升到 `1024×1024`，并依据模型包围盒动态收紧阴影相机范围。
@@ -60,7 +84,7 @@
 ### 显示端本地 PMX/VMD 模型接入
 
 - ✅ [2026-09-22] 在本地 Node 服务和浏览器显示端将默认角色切换为 Aplaybox 米娅 PMX 模型，并接入对应 VMD 动作。
-  - 新增 ZIP 校验/解压脚本、MMD manifest、`GET /api/mmd/resources`、本地 vendored Three.js MMDLoader 依赖、PMX runtime 和 VMD `LoopOnce` 播放；动作计划只接受白名单 `resourceId`。
+  - 新增 ZIP 校验/解压脚本、MMD manifest、`GET /api/mmd/resources`、本地 vendored Three.js MMDLoader 依赖、PMX runtime 和 VMD 默认 `LoopRepeat` 播放；动作计划只接受白名单 `resourceId`。
   - 保留 VRM runtime、VRM 代理和 Canvas 占位降级；模型类型切换会释放旧 runtime、场景和动画循环。模型与生成清单不提交 Git。
   - 验证：资源安装测试 4/4、MMD 服务/显示端契约测试合计 36/36；本地 HTTPS API、PMX、12 个 PNG 纹理和 VMD 均 HTTP 200；Chromium 状态为“PMX 模型已加载”，WebGL 可用且无页面异常。
 - 本地下载包的 `toon/` 目录为空，运行时使用 MMDLoader 内置 toon 数据纹理；本阶段未构建 Offline APK、未上传 LAN/WAN 外网。

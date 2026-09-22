@@ -147,34 +147,102 @@
 }
 
 .display-chat-dropdown-option {
+    /*
+     * 未选中项直接复用主题小卡片底色，确保预览和实际下拉菜单一致；
+     * target-kind 只能区分选中态，不能把普通项重新染成强调色。
+     */
+    --dropdown-option-background: var(--card-background);
+    --dropdown-option-hover-background: color-mix(in srgb, var(--card-background) 78%, var(--accent-color));
+    --dropdown-option-selected-background: color-mix(in srgb, var(--accent-color) 62%, var(--bg-primary));
+    --dropdown-option-selected-hover-background: color-mix(in srgb, var(--accent-secondary) 72%, var(--bg-primary));
     display: block;
     width: 100%;
     padding: 8px 9px;
     border: 0;
+    border-left: 3px solid transparent;
     border-radius: 6px;
-    background: transparent;
+    background: var(--card-background);
+    background: var(--dropdown-option-background);
     color: var(--text-primary);
     text-align: left;
     cursor: pointer;
-    transition: background-color 120ms ease, color 120ms ease;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .display-chat-dropdown-option:hover,
 .display-chat-dropdown-option:focus-visible {
-    background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-surface-strong));
+    background: var(--card-background);
+    background: color-mix(in srgb, var(--card-background) 78%, var(--accent-color));
+    background: var(--dropdown-option-hover-background);
     color: var(--accent-color);
 }
 
-.display-chat-dropdown-option[aria-selected="true"] {
-    background: var(--accent-color);
-    color: var(--bg-primary);
+.display-chat-dropdown-option[aria-selected="true"],
+.display-chat-dropdown-option.is-selected {
+    background: var(--dropdown-option-selected-background);
+    border-left-color: var(--accent-secondary);
+    color: var(--text-primary);
     font-weight: 650;
 }
 
+.display-chat-dropdown-option[aria-selected="true"]::after,
+.display-chat-dropdown-option.is-selected::after {
+    float: right;
+    margin-left: 8px;
+    color: var(--accent-secondary);
+    content: '✓';
+}
+
 .display-chat-dropdown-option[aria-selected="true"]:hover,
-.display-chat-dropdown-option[aria-selected="true"]:focus-visible {
-    background: var(--accent-secondary);
-    color: var(--bg-primary);
+.display-chat-dropdown-option[aria-selected="true"]:focus-visible,
+.display-chat-dropdown-option.is-selected:hover,
+.display-chat-dropdown-option.is-selected:focus-visible {
+    background: var(--dropdown-option-selected-hover-background);
+    border-left-color: var(--accent-secondary);
+    color: var(--text-primary);
+}
+
+.display-chat-dropdown-option[data-target-kind="group"] {
+    --dropdown-option-selected-background: color-mix(in srgb, var(--accent-color) 62%, var(--bg-primary));
+}
+
+.display-chat-dropdown-option[data-target-kind="assistant"] {
+    --dropdown-option-selected-background: color-mix(in srgb, var(--accent-secondary) 62%, var(--bg-primary));
+}
+
+/*
+ * 浅色主题为通用 button 注入了 !important 的强调渐变。下拉项是列表状态，
+ * 不能继承该按钮皮肤；以下选择器与通用规则同层级且在其后加载，保留四种状态。
+ */
+:root[data-theme-mode="light"] button.display-chat-dropdown-option {
+    background: var(--card-background) !important;
+    color: var(--text-primary) !important;
+    border-color: transparent !important;
+}
+
+:root[data-theme-mode="light"] button.display-chat-dropdown-option:hover,
+:root[data-theme-mode="light"] button.display-chat-dropdown-option:focus-visible {
+    background: var(--card-background) !important;
+    background: var(--dropdown-option-hover-background) !important;
+    color: var(--accent-color) !important;
+}
+
+:root[data-theme-mode="light"] button.display-chat-dropdown-option[aria-selected="true"],
+:root[data-theme-mode="light"] button.display-chat-dropdown-option.is-selected {
+    background: var(--accent-color) !important;
+    background: var(--dropdown-option-selected-background) !important;
+    border-left-color: var(--accent-secondary) !important;
+    color: var(--text-primary) !important;
+}
+
+:root[data-theme-mode="light"] button.display-chat-dropdown-option[aria-selected="true"]:hover,
+:root[data-theme-mode="light"] button.display-chat-dropdown-option[aria-selected="true"]:focus-visible,
+:root[data-theme-mode="light"] button.display-chat-dropdown-option.is-selected:hover,
+:root[data-theme-mode="light"] button.display-chat-dropdown-option.is-selected:focus-visible {
+    background: var(--accent-secondary) !important;
+    background: var(--dropdown-option-selected-hover-background) !important;
+    border-left-color: var(--accent-secondary) !important;
+    color: var(--text-primary) !important;
 }
 
 .display-chat-messages {

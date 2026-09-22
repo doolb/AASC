@@ -30,7 +30,7 @@ const createFixture = async (resourceOverrides = {}) => {
     modelPath: 'mmd/miya/miya.pmx',
     motionResourceId: 'miya-default-motion',
     motionPath: 'mmd/motions/miya-default.vmd',
-    playMode: 'once',
+    playMode: 'loop',
     version: 'test-version',
     files: files.map(({ path: filePath, content }) => ({
       path: filePath,
@@ -66,7 +66,7 @@ test('resolveMmdResource and createMmdResourceProfile only produce same-origin p
     assert.equal(profile.modelUrl, '/models/mmd/miya/miya.pmx');
     assert.equal(profile.motionResourceId, 'miya-default-motion');
     assert.equal(profile.motionUrl, '/models/mmd/motions/miya-default.vmd');
-    assert.equal(profile.playMode, 'once');
+    assert.equal(profile.playMode, 'loop');
     assert.equal(profile.modelUrl.startsWith('http'), false);
     assert.equal(profile.motionUrl.startsWith('http'), false);
     assert.throws(() => resolveMmdResource('https://example.com/model.pmx', { manifest }), /unknown|not found|不存在|未知/i);
@@ -78,7 +78,7 @@ test('resolveMmdResource and createMmdResourceProfile only produce same-origin p
 test('manifest loader rejects invalid model type, paths and missing declared files', async () => {
   const cases = [
     { modelType: 'vrm', message: /modelType|pmx/i },
-    { playMode: 'loop', message: /playMode|once/i },
+    { playMode: 'unsupported', message: /playMode|loop|once/i },
     { modelPath: 'https://example.com/model.pmx', message: /path|路径|relative/i },
     { modelPath: '../outside.pmx', message: /path|路径|relative/i },
     { files: [{ path: 'mmd/not-found.pmx', size: 1, sha256: 'a'.repeat(64) }], message: /regular|file|文件/i },

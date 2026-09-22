@@ -9,7 +9,7 @@
 ## 2. 资源
 
 - 模型：PMX 2.0，包含 `tex/` 和 `toon/` 相对纹理目录。
-- 动作：VMD 0002，作为默认动作播放一次。
+- 动作：VMD 0002，默认循环播放；显式单次播放时保持动作最后一帧，不回退到 T-pose。
 - 本地资源目录：`res/models/mmd/miya/` 与 `res/models/mmd/motions/`。
 
 ## 3. 运行时方案
@@ -25,7 +25,7 @@
 - 模型来源：[Aplaybox 米娅 Miya](https://www.aplaybox.com/details/model/VXOJHQfoLr6E)；动作来源：[Aplaybox 星铁联动大白兔奶糖](https://www.aplaybox.com/details/motion/9D1EFP26zPay)。资源按来源页面的非商业和视频用途限制使用。
 - `scripts/models/install-local-mmd-assets.js` 从 `D:\down` 的两个 ZIP 校验 PMX/VMD 文件头、相对路径和 SHA-256，并生成被 Git 忽略的 `res/models/mmd/manifest.json`。
 - 服务端新增 `GET /api/mmd/resources`，只返回 manifest 中的同源 `/models/mmd/` profile；VRM 代理接口保持不变。
-- 显示端按 `modelType` 在 PMX 和 VRM runtime 间切换；切换前释放旧 renderer、场景和动画循环。PMX 使用本地 vendored Three.js 0.160.0 MMDLoader/MMDAnimationHelper，VMD 按 `playMode=once` 播放。
+- 显示端按 `modelType` 在 PMX 和 VRM runtime 间切换；切换前释放旧 renderer、场景和动画循环。PMX 使用本地 vendored Three.js 0.160.0 MMDLoader/MMDAnimationHelper，VMD 默认按 `playMode=loop` 使用 `LoopRepeat + Infinity` 播放；单次模式保持最后一帧。
 - 本次下载包的 `toon/` 目录只有空目录条目，没有可复制的 toon 文件；MMDLoader 对模型默认 toon 贴图使用内置数据纹理。`tex/` 下的 12 个 PNG 已通过本地服务请求验证。
 - 浏览器验证结果：Chromium 忽略本地开发证书后打开 `https://127.0.0.1:8081/display`，状态为“PMX 模型已加载”，WebGL 可用，PMX、12 个 PNG 纹理和 VMD 请求均 HTTP 200，页面无异常。
 

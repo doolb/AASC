@@ -331,15 +331,16 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         'VMD 动作'
     );
 
-    const createMotionHelper = (mesh, clip) => {
+    const createMotionHelper = (mesh, clip, playMode = 'loop') => {
+        const shouldLoop = playMode !== 'once';
         const nextHelper = new MMDAnimationHelper({ sync: false, pmxAnimation: true });
         // physics=false 避免浏览器端额外加载 Ammo；IK 和 grant 仍由 helper 更新。
-        nextHelper.add(mesh, { animation: clip, physics: false, loop: false });
+        nextHelper.add(mesh, { animation: clip, physics: false });
         const animationState = nextHelper.objects.get(mesh);
         const action = animationState?.mixer?._actions?.[0];
         if (action) {
-            action.setLoop(THREE.LoopOnce, 1);
-            action.clampWhenFinished = false;
+            action.setLoop(shouldLoop ? THREE.LoopRepeat : THREE.LoopOnce, shouldLoop ? Infinity : 1);
+            action.clampWhenFinished = !shouldLoop;
             action.reset().play();
         }
         return nextHelper;
@@ -357,7 +358,7 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
     const prepareMotion = async (mesh, profile, resourceId) => {
         validateMotionResource(profile, resourceId);
         const clip = await loadAnimationClip(profile.motionUrl, mesh);
-        return createMotionHelper(mesh, clip);
+        return createMotionHelper(mesh, clip, profile.playMode);
     };
 
     const disposeStagedResources = (mesh, stagedHelper) => {

@@ -8,7 +8,7 @@
   modelType = "pmx"
   modelUrl = "/models/mmd/miya/miya.pmx"
   motionUrl = "/models/mmd/motions/miya-default.vmd"
-  playMode = "once"
+  playMode = "loop"
   version
 ```
 
@@ -64,8 +64,11 @@
   用 MMDLoader.loadAnimation 读取 VMD
   将动作绑定到当前 PMX 模型并构造 nextHelper
   动作准备成功后再替换当前 helper
-  按 playMode == "once" 播放一次
-  VMD 播放结束后停止动作，不重新创建加载任务
+  如果 playMode == "loop"
+    设置 AnimationAction 为 LoopRepeat，重复次数为 Infinity
+  否则
+    设置 AnimationAction 为 LoopOnce，并保持最后一帧姿势
+  VMD 播放结束后不得回退到模型绑定的 T-pose
   如果动作加载失败
     保留模型静止显示
     记录可观察错误
@@ -174,7 +177,7 @@
 ```text
 过程 GET /api/mmd/resources()
   从 res/models/mmd/manifest.json 读取清单
-  校验 modelType=pmx、playMode=once、相对路径和 regular file
+  校验 modelType=pmx、playMode=loop 或 once、相对路径和 regular file
   校验声明文件大小与 SHA-256
   为每个资源构造 /models/{encoded relative path} 同源地址
   忽略请求查询参数，不接受外部 URL
@@ -186,7 +189,7 @@
   如果 profile.modelType == pmx
     动态加载 display-pmx-runtime.js
     用 MMDLoader 加载 PMX 和相对纹理
-    用 MMDAnimationHelper 绑定 VMD，设置 LoopOnce
+    用 MMDAnimationHelper 绑定 VMD；默认设置 LoopRepeat + Infinity，显式 once 时设置 LoopOnce 并保持最后一帧
   否则
     动态加载既有 display-vrm-runtime.js
   如果运行时类型改变

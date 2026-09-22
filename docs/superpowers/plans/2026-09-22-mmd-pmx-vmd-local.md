@@ -44,7 +44,7 @@
 
 - [ ] **Step 1: Write the failing resource contract tests**
 
-  Add tests that create temporary ZIP files containing one PMX entry, `tex/` and `toon/` entries, one VMD entry, and a note file. Assert that `installMmdAssets({ modelZip, motionZip, outputRoot })` returns a manifest with `modelType: 'pmx'`, fixed ASCII paths `miya/miya.pmx` and `motions/miya-default.vmd`, `motionResourceId: 'miya-default-motion'`, SHA-256 entries, and `playMode: 'once'`. Add rejection cases for missing PMX, missing VMD, a path traversal entry, a non-regular entry, and invalid PMX/VMD headers.
+  Add tests that create temporary ZIP files containing one PMX entry, `tex/` and `toon/` entries, one VMD entry, and a note file. Assert that `installMmdAssets({ modelZip, motionZip, outputRoot })` returns a manifest with `modelType: 'pmx'`, fixed ASCII paths `miya/miya.pmx` and `motions/miya-default.vmd`, `motionResourceId: 'miya-default-motion'`, SHA-256 entries, and default `playMode: 'loop'`. Add rejection cases for missing PMX, missing VMD, a path traversal entry, a non-regular entry, and invalid PMX/VMD headers.
 
 - [ ] **Step 2: Run the focused tests to verify they fail**
 
@@ -95,7 +95,7 @@
 
 - [ ] **Step 3: Implement manifest validation and profile generation**
 
-  Load only `res/models/mmd/manifest.json`; validate `schemaVersion`, resource IDs, relative file paths, `modelType === 'pmx'`, `playMode === 'once'`, and declared regular files under the MMD model root. Resolve the default resource without accepting query-supplied file paths. Return model and motion paths as same-origin `/models/...` URLs with encoded segments.
+  Load only `res/models/mmd/manifest.json`; validate `schemaVersion`, resource IDs, relative file paths, `modelType === 'pmx'`, `playMode === 'loop'` or `playMode === 'once'`, and declared regular files under the MMD model root. Resolve the default resource without accepting query-supplied file paths. Return model and motion paths as same-origin `/models/...` URLs with encoded segments.
 
 - [ ] **Step 4: Register `GET /api/mmd/resources`**
 
@@ -161,7 +161,7 @@
 
 - [ ] **Step 1: Extend contract tests for runtime selection and action routing**
 
-  Assert that the default profile has `modelType: 'pmx'`, `resourceId`, `motionResourceId`, a PMX URL, a VMD URL and `playMode: 'once'`; VRM profiles still select `display-vrm-runtime.js`; PMX profiles select `display-pmx-runtime.js`; `MOTION_ADD` uses a registered motion resource ID; arbitrary motion URLs are rejected; `dispose` is called when the profile type changes.
+  Assert that the default profile has `modelType: 'pmx'`, `resourceId`, `motionResourceId`, a PMX URL, a VMD URL and `playMode: 'loop'`; VRM profiles still select `display-vrm-runtime.js`; PMX profiles select `display-pmx-runtime.js`; `MOTION_ADD` uses a registered motion resource ID; arbitrary motion URLs are rejected; `dispose` is called when the profile type changes.
 
 - [ ] **Step 2: Run the runtime contract tests to verify they fail**
 
@@ -173,9 +173,9 @@
 
   In `display-pmx-runtime.js`, create a transparent `THREE.WebGLRenderer`, scene, camera, lighting, `MMDLoader`, `MMDAnimationHelper`, and `THREE.Raycaster`. Load the PMX URL with `MMDLoader.load`; use the PMX URL directory as the texture base; compute the model bounding box; normalize height to the existing stage target; center the model; add it to the scene; and start a `requestAnimationFrame` loop only when visible. Keep animation updates and rendering in one loop.
 
-- [ ] **Step 4: Implement one-shot VMD playback and failure cleanup**
+- [ ] **Step 4: Implement looping VMD playback and failure cleanup**
 
-  Load the VMD with `MMDLoader.loadAnimation(profile.motionUrl, mesh)`, add it to `MMDAnimationHelper` with `loop: false`, and stop/remove the action when the animation duration is reached. On any model, texture or motion error, dispose partial resources, set the status message, and return control to the existing Canvas placeholder without interrupting chat/media.
+  Load the VMD with `MMDLoader.loadAnimation(profile.motionUrl, mesh)`, add it to `MMDAnimationHelper`, and set the action to `LoopRepeat + Infinity` when `playMode=loop`; for `playMode=once`, clamp the final pose instead of allowing a return to T-pose. On any model, texture or motion error, dispose partial resources, set the status message, and return control to the existing Canvas placeholder without interrupting chat/media.
 
 - [ ] **Step 5: Implement profile dispatch in `display-mmd.js`**
 
@@ -223,7 +223,7 @@
 
 - [ ] **Step 4: Verify the browser display**
 
-  Open `/display`, enable the role layer, and confirm the PMX model is visible, the VMD plays once, the first empty frames do not fail loading, and chat/media continue working. Hide and show the MMD layer, refresh the page, and confirm rendering resumes without duplicate animation loops.
+  Open `/display`, enable the role layer, and confirm the PMX model is visible, the VMD loops without returning to T-pose, the first empty frames do not fail loading, and chat/media continue working. Hide and show the MMD layer, refresh the page, and confirm rendering resumes without duplicate animation loops.
 
 - [ ] **Step 5: Update completion docs and remove the completed todo item**
 

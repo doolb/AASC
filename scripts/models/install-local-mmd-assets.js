@@ -181,7 +181,7 @@ const installMmdAssets = async ({
         modelPath: MODEL_OUTPUT_PATH,
         motionResourceId,
         motionPath: MOTION_OUTPUT_PATH,
-        playMode: 'once',
+        playMode: 'loop',
         version,
         files: modelFiles.concat(motionFile),
       }],

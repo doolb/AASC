@@ -127,7 +127,7 @@ test('installMmdAssets extracts PMX/VMD resources and writes a fixed manifest', 
       assert.equal(resource.modelPath, 'mmd/miya/miya.pmx');
       assert.equal(resource.motionResourceId, 'miya-default-motion');
       assert.equal(resource.motionPath, 'mmd/motions/miya-default.vmd');
-      assert.equal(resource.playMode, 'once');
+      assert.equal(resource.playMode, 'loop');
       assert.equal(resource.version.length, 64);
       assert.deepEqual(
         resource.files.map((file) => file.path),
