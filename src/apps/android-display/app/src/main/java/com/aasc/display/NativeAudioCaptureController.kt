@@ -80,7 +80,7 @@ class NativeAudioCaptureController(
             if (started == null && selectedDevice != null) {
                 fallback = true
                 fallbackReason = lastError ?: "所选原生输入设备启动失败"
-                bluetoothScoController.stop()
+                bluetoothScoController.stopForInput()
                 started = tryStart(null)
             }
             if (started == null) {
@@ -201,7 +201,7 @@ class NativeAudioCaptureController(
                 lastError = error.message ?: "AudioRecord 启动失败"
             }
         }
-        if (usesBluetoothSco) bluetoothScoController.stop()
+        if (usesBluetoothSco) bluetoothScoController.stopForInput()
         return null
     }
 
@@ -294,7 +294,7 @@ class NativeAudioCaptureController(
         try { activeRecorder?.release() } catch (_: Exception) { }
         recorder = null
         recordThread = null
-        bluetoothScoController.stop()
+        bluetoothScoController.stopForInput()
         lastStatus = JSONObject()
             .put("ok", true)
             .put("state", "stopped")

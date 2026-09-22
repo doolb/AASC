@@ -156,7 +156,9 @@
         const { elements } = state;
         elements.toggle.addEventListener('click', (event) => {
             event.stopPropagation();
-            setPanelOpen(elements.panel.hidden);
+            const nextOpen = elements.panel.hidden;
+            if (nextOpen) root.DisplayMmdAr?.closePanel?.();
+            setPanelOpen(nextOpen);
         });
         elements.panel.addEventListener('click', (event) => event.stopPropagation());
         elements.reset.addEventListener('click', () => {
@@ -192,7 +194,10 @@
         bindEvents();
     }
 
-    root.DisplayMmdLighting = Object.freeze({ initialize });
+    root.DisplayMmdLighting = Object.freeze({
+        close: () => setPanelOpen(false),
+        initialize
+    });
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initialize, { once: true });
     } else {

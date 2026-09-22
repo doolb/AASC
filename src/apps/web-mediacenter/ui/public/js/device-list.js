@@ -417,6 +417,38 @@ const DeviceList = {
         this.render();
     },
 
+    handleAudioOutputConfigChanged(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display) return;
+        display.audioOutputDeviceKey = this.normalizeAudioOutputDeviceKey(data.deviceKey);
+        this.render();
+    },
+
+    handleAudioOutputDevices(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display || !Array.isArray(data.devices)) return;
+        display.capabilities = {
+            ...(display.capabilities || {}),
+            audioOutputDevices: data.devices
+        };
+        this.render();
+    },
+
+    handleAudioOutputStatus(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display) return;
+        display.audioOutputStatus = {
+            state: data.state || 'unknown',
+            requestedDeviceKey: this.normalizeAudioOutputDeviceKey(data.requestedDeviceKey),
+            actualDevice: data.actualDevice || null,
+            routingMode: data.routingMode || 'default',
+            fallback: data.fallback === true,
+            error: data.error || null,
+            fallbackReason: data.fallbackReason || null
+        };
+        this.render();
+    },
+
     handleVoiceCaptureStatus(data) {
         const display = this.list.find((item) => item.id === data?.displayId);
         if (!display) return;
@@ -443,6 +475,12 @@ const DeviceList = {
         return normalized && normalized.length <= 512 ? normalized : 'default';
     },
 
+    normalizeAudioOutputDeviceKey(deviceKey) {
+        if (typeof deviceKey !== 'string') return 'default';
+        const normalized = deviceKey.trim();
+        return normalized && normalized.length <= 512 ? normalized : 'default';
+    },
+
     getVoiceCaptureMode(display) {
         return this.normalizeVoiceCaptureMode(display?.voiceCaptureMode);
     },
@@ -461,6 +499,30 @@ const DeviceList = {
         const typeName = String(device?.typeName || '').trim();
         if (name && typeName && !name.includes(typeName)) return `${name} · ${typeName}`;
         return name || typeName || String(device?.key || '输入设备');
+    },
+
+    getAudioOutputDeviceKey(display) {
+        return this.normalizeAudioOutputDeviceKey(display?.audioOutputDeviceKey);
+    },
+
+    getAudioOutputDevices(display) {
+        const devices = display?.capabilities?.audioOutputDevices;
+        return Array.isArray(devices) ? devices : [];
+    },
+
+    getAudioOutputDeviceLabel(device) {
+        const name = String(device?.name || '').trim();
+        const typeName = String(device?.typeName || '').trim();
+        if (name && typeName && !name.includes(typeName)) return `${name} · ${typeName}`;
+        return name || typeName || String(device?.key || '输出设备');
+    },
+
+    getAudioOutputDeviceKeyForDisplay(display) {
+        const currentKey = this.getAudioOutputDeviceKey(display);
+        const devices = this.getAudioOutputDevices(display);
+        return currentKey === 'default' || devices.some((device) => device.key === currentKey)
+            ? currentKey
+            : 'default';
     },
 
     getVoiceCaptureDeviceKeyForMode(display, captureMode) {
@@ -488,6 +550,26 @@ const DeviceList = {
     requestAudioInputDevices(displayId) {
         return this.sendDisplayRecordingMessage({
             type: 'requestAudioInputDevices',
+            displayId
+        });
+    },
+
+    setAudioOutputConfig(displayId, deviceKey) {
+        const display = this.list.find((item) => item.id === displayId);
+        const normalizedKey = this.normalizeAudioOutputDeviceKey(deviceKey);
+        if (!display || !this.sendDisplayRecordingMessage({
+            type: 'setAudioOutputConfig',
+            displayId,
+            deviceKey: normalizedKey
+        })) return false;
+        display.audioOutputDeviceKey = normalizedKey;
+        this.render();
+        return true;
+    },
+
+    requestAudioOutputDevices(displayId) {
+        return this.sendDisplayRecordingMessage({
+            type: 'requestAudioOutputDevices',
             displayId
         });
     },
@@ -973,6 +1055,23 @@ const DeviceList = {
             : captureStatus?.state === 'error'
                 ? `失败：${captureStatus.error || '录音启动失败'}`
                 : '尚未启动录音';
+        const outputDeviceKey = this.getAudioOutputDeviceKeyForDisplay(display);
+        const outputDevices = this.getAudioOutputDevices(display);
+        const outputDeviceOptions = [
+            { key: 'default', label: '系统默认' },
+            ...outputDevices.filter((device) => device.key !== 'default')
+                .map((device) => ({ key: device.key, label: this.getAudioOutputDeviceLabel(device) }))
+        ];
+        const outputStatus = display.audioOutputStatus;
+        const outputStatusText = outputStatus?.state === 'applied'
+            ? (outputStatus.fallback
+                ? `已回退：${outputStatus.fallbackReason || '系统默认输出'}`
+                : (outputStatus.actualDevice
+                    ? `实际：${this.getAudioOutputDeviceLabel(outputStatus.actualDevice)}`
+                    : `已应用：${outputStatus.routingMode === 'system_default' ? '系统媒体路由' : '系统默认'}`))
+            : outputStatus?.state === 'error'
+                ? `失败：${outputStatus.error || '输出路由失败'}`
+                : '尚未设置输出路由';
         const recordingButtonText = recordingSession?.state === 'started' || recordingSession?.state === 'requested'
             ? (recordingMode === 'realtime' ? '停止实时录音' : '停止单次录音')
             : (recordingMode === 'realtime' ? '🔴 开始实时录音' : '🎙️ 单次录音并播放');
@@ -1007,6 +1106,13 @@ const DeviceList = {
                     </label>
                     <button type="button" data-audio-input-refresh data-display-id="${displayId}">刷新麦克风</button>
                     <span class="display-recording-state">${this.escapeHtml(captureStatusText)}</span>
+                    <label class="display-recording-mode">输出设备
+                        <select data-audio-output-device data-display-id="${displayId}">
+                            ${outputDeviceOptions.map((device) => `<option value="${this.escapeHtml(device.key)}" ${device.key === outputDeviceKey ? 'selected' : ''}>${this.escapeHtml(device.label)}</option>`).join('')}
+                        </select>
+                    </label>
+                    <button type="button" data-audio-output-refresh data-display-id="${displayId}">刷新输出</button>
+                    <span class="display-recording-state">${this.escapeHtml(outputStatusText)}</span>
                     <label class="display-recording-mode">录音模式
                         <select data-voice-recording-mode data-display-id="${displayId}">
                             <option value="asr" ${recordingMode === 'asr' ? 'selected' : ''}>普通 ASR</option>
@@ -1175,6 +1281,12 @@ const DeviceList = {
                 this.requestAudioInputDevices(refreshAudio.dataset.displayId);
                 return;
             }
+            const refreshOutput = event.target.closest('[data-audio-output-refresh]');
+            if (refreshOutput && !refreshOutput.disabled) {
+                event.stopPropagation();
+                this.requestAudioOutputDevices(refreshOutput.dataset.displayId);
+                return;
+            }
             const applyButton = event.target.closest('[data-vad-apply]');
             if (applyButton) {
                 event.stopPropagation();
@@ -1238,6 +1350,12 @@ const DeviceList = {
                     this.getVoiceCaptureMode(display),
                     inputDevice.value
                 );
+                return;
+            }
+            const outputDevice = event.target.closest('[data-audio-output-device]');
+            if (outputDevice) {
+                event.stopPropagation();
+                this.setAudioOutputConfig(outputDevice.dataset.displayId, outputDevice.value);
             }
         });
     },

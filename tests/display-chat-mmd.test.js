@@ -52,6 +52,54 @@ test('灯光按钮位于时间区域下方并提供默认开启的阴影开关',
     assert.match(lighting, /shadowEnabled/u);
 });
 
+test('显示端定位入口位于右上角灯光按钮正下方，不新增 AI 模式按钮', () => {
+    const html = readPublic('display.html');
+    const css = readPublic('css/display-mmd.css');
+    const ar = readPublic('js/display-mmd-ar.js');
+    assert.match(html, /id="displayMmdLightingToggle"[\s\S]*id="displayArTargetToggle"[\s\S]*id="displayMmdLightingPanel"/u);
+    assert.match(html, /id="displayArTargetPanel"[\s\S]*id="displayArCalibration"/u);
+    assert.match(html, /js\/display-mmd-ar\.js/u);
+    assert.match(css, /\.display-stage-lighting-control\s*\{[\s\S]*flex-direction:\s*column/u);
+    assert.match(css, /\.display-mmd-ar-panel\s*\{/u);
+    assert.doesNotMatch(html, /displayAiModeToggle/u);
+    assert.match(ar, /aasc-mmd-ar/u);
+    assert.match(ar, /displayArTargetToggle/u);
+});
+
+test('AR 第一阶段只在显示端本地管理目标并释放摄像头', () => {
+    const ar = readPublic('js/display-mmd-ar.js');
+    assert.match(ar, /indexedDB\.open/u);
+    assert.match(ar, /getUserMedia/u);
+    assert.match(ar, /selectedQuad/u);
+    assert.match(ar, /requestVideoFrameCallback/u);
+    assert.match(ar, /DisplayMmdImageTargetTracker/u);
+    assert.match(ar, /pagehide/u);
+    assert.match(ar, /track\.stop\(\)/u);
+    assert.doesNotMatch(ar, /new\s+WebSocket/u);
+    assert.doesNotMatch(ar, /fetch\(/u);
+});
+
+test('AR 体感观察只控制虚拟相机，不覆盖屏幕拖动的角色旋转', () => {
+    const html = readPublic('display.html');
+    const ar = readPublic('js/display-mmd-ar.js');
+    const mmd = readPublic('js/display-mmd.js');
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(html, /id="displayArMotionEnabled"[\s\S]*体感观察（只移动视角）/u);
+    assert.match(html, /id="displayArMotionSensitivity"/u);
+    assert.match(html, /id="displayArMotionRecenter"/u);
+    assert.match(ar, /deviceorientation/u);
+    assert.match(ar, /DisplayMmd\?\.setCameraViewRotation/u);
+    assert.match(ar, /不调用 rotateModelBy/u);
+    assert.match(ar, /resetCameraViewRotation/u);
+    assert.match(mmd, /setCameraViewRotation/u);
+    assert.match(mmd, /resetCameraViewRotation/u);
+    assert.match(pmx, /setCameraViewRotation/u);
+    assert.match(pmx, /updateCameraView/u);
+    assert.match(vrm, /setCameraViewRotation/u);
+    assert.match(vrm, /updateCameraView/u);
+});
+
 test('显示端模块通过现有 WebSocket 注入，不创建第二条连接', () => {
     const stage = readPublic('js/display-stage.js');
     const chat = readPublic('js/display-chat.js');

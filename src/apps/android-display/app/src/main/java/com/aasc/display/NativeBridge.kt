@@ -42,6 +42,10 @@ class NativeBridge(
         mainHandler,
         bluetoothScoController
     )
+    private val nativeAudioOutputController = NativeAudioOutputController(
+        audioManager,
+        bluetoothScoController
+    )
 
     private companion object {
         const val DEFAULT_OFFLINE_LLM_MODEL_ID = "qwen3.5-0.8b-claude-opus-distilled-mnn"
@@ -170,7 +174,7 @@ class NativeBridge(
     /** 统一释放 WebView 录音使用的蓝牙 SCO 路由。 */
     @JavascriptInterface
     fun stopBluetoothScoForVoice() {
-        bluetoothScoController.stop()
+        bluetoothScoController.stopForVoice()
     }
 
     /** 返回当前 Android 系统暴露的原生音频输入设备。 */
@@ -190,9 +194,23 @@ class NativeBridge(
     @JavascriptInterface
     fun nativeAudioCaptureStatus(): String = nativeAudioCaptureController.status()
 
+    /** 返回当前 Android 系统暴露的原生音频输出设备。 */
+    @JavascriptInterface
+    fun listAudioOutputDevices(): String = nativeAudioOutputController.listDevices()
+
+    /** 按控制端下发的 key 设置 WebView/原生媒体的系统输出路由。 */
+    @JavascriptInterface
+    fun setAudioOutputDevice(configJson: String): String =
+        nativeAudioOutputController.apply(configJson)
+
+    /** 查询当前输出请求、实际路由和系统回退状态。 */
+    @JavascriptInterface
+    fun audioOutputStatus(): String = nativeAudioOutputController.status()
+
     /** Activity 销毁时释放原生桥持有的 SCO 状态。 */
     fun release() {
         nativeAudioCaptureController.release()
+        nativeAudioOutputController.release()
         bluetoothScoController.stop()
     }
 

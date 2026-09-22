@@ -149,6 +149,142 @@
     display: none;
 }
 
+/* 图片定位入口和灯光按钮共用右上角控件列，定位按钮固定在灯光按钮下方。 */
+.display-mmd-ar-panel {
+    width: min(320px, 86vw);
+    max-height: min(72vh, 620px);
+    overflow-y: auto;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    color: var(--text-primary);
+    pointer-events: auto;
+    overscroll-behavior: contain;
+}
+
+.display-mmd-ar-panel[hidden] {
+    display: none;
+}
+
+.display-mmd-ar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+
+.display-mmd-ar-status-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.display-mmd-ar-field {
+    display: grid;
+    gap: 6px;
+    margin: 10px 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.display-mmd-ar-field input,
+.display-mmd-ar-field select {
+    width: 100%;
+    min-height: 32px;
+    box-sizing: border-box;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+.display-mmd-ar-motion-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.display-mmd-ar-motion-toggle input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent-color);
+}
+
+.display-mmd-ar-field output {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.display-mmd-ar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.display-mmd-ar-action {
+    min-height: 32px;
+    padding: 5px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.display-mmd-ar-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.display-mmd-ar-action:not(:disabled):hover,
+.display-mmd-ar-action:not(:disabled):focus-visible {
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+}
+
+.display-mmd-ar-action-danger {
+    color: var(--danger-color);
+}
+
+.display-mmd-ar-message,
+.display-mmd-ar-hint {
+    margin: 10px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.display-mmd-ar-calibration[hidden] {
+    display: none;
+}
+
+.display-mmd-ar-camera,
+.display-mmd-ar-canvas {
+    display: block;
+    width: 100%;
+    max-height: 36vh;
+    margin-top: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #111;
+    object-fit: contain;
+    touch-action: none;
+}
+
+.display-mmd-ar-canvas {
+    cursor: crosshair;
+}
+
 .display-mmd-lighting-header {
     display: flex;
     align-items: center;
@@ -236,6 +372,10 @@
 
 @media (max-width: 560px) {
     .display-mmd-lighting-panel {
+        max-height: 68vh;
+    }
+
+    .display-mmd-ar-panel {
         max-height: 68vh;
     }
 }

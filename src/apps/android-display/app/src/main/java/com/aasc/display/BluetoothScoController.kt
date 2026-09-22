@@ -30,6 +30,7 @@ class BluetoothScoController(
     private var scoFlagChangedByController = false
     private var previousMode = AudioManager.MODE_NORMAL
     private var previousScoOn = false
+    private val owners = mutableSetOf<String>()
 
     /**
      * 为 WebView 录音建立蓝牙 SCO；调用方会在返回成功后再创建 MediaStream。
@@ -47,18 +48,37 @@ class BluetoothScoController(
         if (bluetoothInput == null) {
             return result(ok = false, error = "未发现蓝牙 SCO 麦克风")
         }
-        return startForInputResult(bluetoothInput).toString()
+        return startOwned("webview", bluetoothInput).toString()
     }
 
     /** 为 Native AudioRecord 指定的蓝牙输入设备建立 SCO。 */
     fun startForInput(device: AudioDeviceInfo): Boolean {
         if (device.type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) return true
-        return startForInputResult(device).optBoolean("ok", false)
+        return startOwned("native", device).optBoolean("ok", false)
     }
 
-    private fun startForInputResult(device: AudioDeviceInfo): JSONObject {
+    /** API 26–30 的输出路由也可能需要同一条 SCO 链路，使用独立 owner 避免录音停止时误释放输出。 */
+    fun acquireForOutput(device: AudioDeviceInfo): Boolean {
+        if (device.type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) return true
+        return startOwned("output", device).optBoolean("ok", false)
+    }
+
+    fun stopForVoice() {
+        stopOwned("webview")
+    }
+
+    fun stopForInput() {
+        stopOwned("native")
+    }
+
+    fun releaseOutput() {
+        stopOwned("output")
+    }
+
+    private fun startOwned(owner: String, device: AudioDeviceInfo): JSONObject {
         synchronized(this) {
             if (routeActive) {
+                owners.add(owner)
                 return JSONObject()
                     .put("ok", true)
                     .put("route", "bluetooth_sco")
@@ -106,6 +126,7 @@ class BluetoothScoController(
                     audioManager.isBluetoothScoOn
                 if (alreadyConnected) {
                     routeActive = true
+                    owners.add(owner)
                     resultJson(ok = true, route = "bluetooth_sco", alreadyActive = true)
                 } else {
                     audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
@@ -126,6 +147,7 @@ class BluetoothScoController(
                             scoFlagChangedByController = true
                         }
                         routeActive = true
+                        owners.add(owner)
                         resultJson(ok = true, route = "bluetooth_sco")
                     }
                 }
@@ -142,7 +164,15 @@ class BluetoothScoController(
     /** 释放本次建立的路由，并恢复进入录音前的音频模式。 */
     fun stop() {
         synchronized(this) {
+            owners.clear()
             stopLocked()
+        }
+    }
+
+    private fun stopOwned(owner: String) {
+        synchronized(this) {
+            owners.remove(owner)
+            if (owners.isEmpty()) stopLocked()
         }
     }
 
@@ -173,6 +203,7 @@ class BluetoothScoController(
         receiver = null
         receiverRegistered = false
         requestedByController = false
+        owners.clear()
         if (modeChangedByController) {
             try {
                 audioManager.mode = previousMode

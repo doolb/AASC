@@ -47,8 +47,8 @@ test('显示端断开时会立即回收声纹注册等待', () => {
 
 test('声纹配置关闭时会拒绝等待中的注册请求', () => {
     const display = read('src/apps/web-mediacenter/ui/public/display.html');
-    const configStart = display.indexOf("if (data.type === 'voiceprintConfig')");
-    const configEnd = display.indexOf("if (data.type === 'speakerDbUpdated')", configStart);
+    const configStart = display.indexOf('function applyVoiceprintConfig(data)');
+    const configEnd = display.indexOf('async function prewarmNativeAsrModel()', configStart);
     const configBody = display.slice(configStart, configEnd);
     assert.match(configBody, /rejectVoiceprintReadyWaiters\('声纹功能未启用'\)/u);
 });
@@ -57,8 +57,8 @@ test('ASR 与声纹均在显示端初始化配置阶段触发预热', () => {
     const display = read('src/apps/web-mediacenter/ui/public/display.html');
     const asrStart = display.indexOf("if (data.type === 'asrConfig')");
     const asrEnd = display.indexOf("if (data.type === 'ttsConfig')", asrStart);
-    const voiceprintStart = display.indexOf("if (data.type === 'voiceprintConfig')");
-    const voiceprintEnd = display.indexOf("if (data.type === 'speakerDbUpdated')", voiceprintStart);
+    const voiceprintStart = display.indexOf('function configureNativeVoiceprint()');
+    const voiceprintEnd = display.indexOf('function applyVoiceprintConfig(data)', voiceprintStart);
     assert.match(display.slice(asrStart, asrEnd), /nativeBridge\.asrEnsureModel\(\)/u);
     assert.match(display.slice(voiceprintStart, voiceprintEnd), /nativeBridge\.voiceprintConfigure\(/u);
 });

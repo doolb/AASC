@@ -255,6 +255,39 @@ handleDisplayDisconnect(displayId, ws):
 
 ## 消息类型
 
+### 声音输出设备选择伪代码
+
+```text
+控制端选择:
+    发送 { type: setAudioOutputConfig, displayId, deviceKey }
+
+服务器:
+    如果 displayId 不在线:
+        回传 audioOutputConfigError
+    否则:
+        deviceKey = normalizeAudioOutputDeviceKey(data.deviceKey)
+        display.state.audioOutputDeviceKey = deviceKey
+        config.updateDisplayStateById(displayId, ip, { audioOutputDeviceKey: deviceKey })
+        sendToDisplay(displayId, { type: audioOutputConfig, displayId, deviceKey })
+        broadcastToControls({ type: displayAudioOutputConfigChanged, displayId, deviceKey })
+
+设备列表:
+    控制端发送 requestAudioOutputDevices
+    服务器转发到显示端
+    显示端回传 audioOutputDevices
+    服务器限制最多 64 项并广播给控制端
+
+状态回报:
+    显示端回传 audioOutputStatus
+    服务器保存当前内存状态并广播控制端
+    status.actualDevice 为空时不得从 requestedDeviceKey 推断实际设备
+
+显示端重连:
+    服务器从 display state 读取 audioOutputDeviceKey
+    连接初始化发送 audioOutputConfig
+    显示端重新应用；设备断开则回退 default 并保留请求 key
+```
+
 ### 服务端 -> 显示端
 
 | 类型 | 说明 | 数据 |

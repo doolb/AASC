@@ -42,8 +42,13 @@ const webVoiceprintStart = display.indexOf("if (data.type === 'voiceprintConfig'
 const webVoiceprintEnd = display.indexOf("if (data.type === 'speakerDbUpdated')", webVoiceprintStart);
 assert.ok(webVoiceprintStart >= 0 && webVoiceprintEnd > webVoiceprintStart, '网页显示端应存在 voiceprintConfig 处理分支');
 const webVoiceprintHandler = display.slice(webVoiceprintStart, webVoiceprintEnd);
-assert.match(webVoiceprintHandler, /vadSilenceDurationMs/, '网页显示端应应用 voiceprintConfig 的静音时长');
-assert.match(webVoiceprintHandler, /vadMinSpeechDurationMs/, '网页显示端应应用 voiceprintConfig 的最短语音时长');
+assert.match(webVoiceprintHandler, /applyVoiceprintConfig\(data\)/, '网页显示端应复用 voiceprintConfig 配置入口');
+const webVoiceprintApplyStart = display.indexOf('function applyVoiceprintConfig(data)');
+const webVoiceprintApplyEnd = display.indexOf('async function prewarmNativeAsrModel()', webVoiceprintApplyStart);
+assert.ok(webVoiceprintApplyStart >= 0 && webVoiceprintApplyEnd > webVoiceprintApplyStart, '网页显示端应存在统一声纹配置函数');
+const webVoiceprintApply = display.slice(webVoiceprintApplyStart, webVoiceprintApplyEnd);
+assert.match(webVoiceprintApply, /vadSilenceDurationMs/, '网页显示端应应用 voiceprintConfig 的静音时长');
+assert.match(webVoiceprintApply, /vadMinSpeechDurationMs/, '网页显示端应应用 voiceprintConfig 的最短语音时长');
 
 const nodeVoiceprintStart = nodeDisplay.indexOf('handleVoiceprintConfig(data)');
 const nodeVoiceprintEnd = nodeDisplay.indexOf('handleVoiceVadConfig(data)', nodeVoiceprintStart);

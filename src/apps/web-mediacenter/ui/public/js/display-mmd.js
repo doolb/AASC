@@ -88,7 +88,8 @@
         runtimePromise: null,
         runtimeUnavailable: false,
         loadSequence: 0,
-        lighting: normalizeMmdLighting(DEFAULT_MMD_LIGHTING)
+        lighting: normalizeMmdLighting(DEFAULT_MMD_LIGHTING),
+        cameraViewRotation: { yaw: 0, pitch: 0 }
     };
 
     function setStatus(message, isError = false) {
@@ -311,6 +312,30 @@
         };
     }
 
+    function normalizeCameraViewRotation(yaw, pitch) {
+        const safeYaw = Number(yaw);
+        const safePitch = Number(pitch);
+        return {
+            yaw: Number.isFinite(safeYaw) ? Math.max(-Math.PI, Math.min(Math.PI, safeYaw)) : 0,
+            pitch: Number.isFinite(safePitch)
+                ? Math.max(-Math.PI / 4, Math.min(Math.PI / 4, safePitch))
+                : 0
+        };
+    }
+
+    function setCameraViewRotation(yaw, pitch) {
+        state.cameraViewRotation = normalizeCameraViewRotation(yaw, pitch);
+        state.runtime?.setCameraViewRotation?.(
+            state.cameraViewRotation.yaw,
+            state.cameraViewRotation.pitch
+        );
+        return { ...state.cameraViewRotation };
+    }
+
+    function resetCameraViewRotation() {
+        return setCameraViewRotation(0, 0);
+    }
+
     async function ensureRuntime(modelType = 'vrm') {
         if (state.runtime && state.runtimeType === modelType) return state.runtime;
         if (state.runtime && state.runtimeType !== modelType) {
@@ -337,6 +362,10 @@
                 state.runtimeType = modelType;
                 state.runtime.setLighting?.(state.lighting);
                 state.runtime.setVisible(state.visible);
+                state.runtime.setCameraViewRotation?.(
+                    state.cameraViewRotation.yaw,
+                    state.cameraViewRotation.pitch
+                );
                 resizeCanvas(state.width, state.height);
                 return state.runtime;
             })
@@ -496,6 +525,8 @@
         init,
         loadModel,
         resize: resizeCanvas,
+        resetCameraViewRotation,
+        setCameraViewRotation,
         setLighting,
         setPointerEnabled,
         setVisible

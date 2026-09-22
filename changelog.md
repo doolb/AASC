@@ -1,5 +1,22 @@
 # Web MediaCenter - 变更日志
 
+### MMD 图片基准图 AR 设计记录
+
+- 📝 [2026-09-22] 完成普通图片拍照、手动四角选区、本地图像目标跟踪和 MMD 姿态叠加的 design/spec 设计，识别引擎仍待接入。
+  - 首期目标保存在显示端 IndexedDB，摄像头帧不上传服务器；不包含 ARCore/WebXR、深度遮挡和真实地面识别。
+  - 新增 `docs/design/mmd-image-ar.md`、`docs/spec/mmd-image-ar.md` 和 `docs/task/20260922_MMD图片基准图AR设计.md`；未安装识别依赖、未生成 APK 或服务发布包。
+  - 入口布局补充为显示端右上角“灯光”按钮正下方新增“定位”按钮；不新增重复的 AI 模式按钮，定位面板支持目标管理、拍照校准和运行中切换。
+- ✅ [2026-09-22] 完成 MMD 图片基准图 AR 第一阶段入口和本地校准流程。
+  - `display.html` 和 `display-mmd.css` 在右上角灯光按钮正下方增加“定位”入口；`display-mmd-ar.js` 实现 IndexedDB 定位图保存、读取、删除、拍照和四角拖动选区。
+  - `display-mmd-lighting.js` 增加面板互斥关闭能力；定位图切换保留摄像头/MMD 生命周期设计，不新增服务端接口或 WebSocket 消息。
+  - 识别引擎尚未接入时明确显示“识别引擎未就绪”。验证：AR 入口/本地数据契约测试 36/36、脚本语法检查通过。
+- ✅ [2026-09-22] 增加 AR 放大角色的六轴体感观察。
+  - 定位面板增加体感开关、灵敏度和重新居中；`deviceorientation` 只更新 PMX/VRM 虚拟相机观察角度，不调用角色 `rotateModelBy`。
+  - 屏幕拖动仍负责角色自身旋转；传感器权限拒绝或设备不支持时回退为普通拖动观察。验证：显示端测试 37/37、AR/PMX/VRM 脚本语法检查和 `git diff --check` 通过。
+- ✅ [2026-09-22] 发布 MMD 图片基准图 AR 第一阶段服务代码。
+  - 生成并同步 `code/code-v32.zip` 到局域网 `/mnt/aasc-offline` 和外网 `~/a/aasc-offline`；大小 `15321083` bytes，SHA-256 为 `28fbb04089acc08fcc74b734346c1b85a02991926ac5052220f11ded322e1788`。
+  - 采用 `code-only`，继续使用 `dependencies-v6.zip` 和 min APK v33；完整 APK v23 未替换。局域网/外网 manifest 签名、代码包 SHA-256 和精确版本清理验证通过。
+
 ### 显示端 MMD 空白区域拖动旋转
 
 - ✅ [2026-09-22] 在 `displayMmdCanvas` 的空白区域拖动时旋转本地 PMX/VRM 角色。
@@ -9235,3 +9252,19 @@
   - `display-mmd.js` 与 `display-pmx-runtime.js` 只新增固定同源静态前缀；`prepare-android-node-runtime.js` 始终排除 `res/models/mmd`，PMX/VMD/纹理不进入 Runtime 或模型 assets。
   - 验证：MMD 服务 11/11、显示端 42/42、新 Runtime 边界用例 1/1 通过；合并定向集 74/79，5 项为 Windows 软链接权限、执行位和旧 Runtime 断言基线失败。`npm test` 为 876/931，55 项已知环境/平台基线失败。
   - 未构建或发布 full APK、min APK、服务更新包；没有提交模型二进制、APK 或 ZIP。
+
+### Android 显示端音频
+
+- ✅ [2026-09-22] 增加控制端选择正式 APK 声音输出设备。
+  - Android 新增输出设备枚举、NativeBridge 路由接口和 API 26–30 系统默认回退；蓝牙 SCO 使用独立 owner，录音停止不会误释放输出链路。
+  - 服务端通过 WebSocket 持久化 `audioOutputDeviceKey`，显示端重连/重启后恢复；控制端新增输出设备选择、刷新和实际路由/回退状态显示。
+  - 同步更新 design/spec/task 文档；输出设备与录音链路契约测试已补充。
+- ✅ [2026-09-22] 修复输出设备路由控制器的 Kotlin 可空设备句柄编译错误并重打正式 `withserver` APK。
+  - 产物：[aasc-display.apk](/mnt/AASC/release/apkbuild/withserver/output/aasc-display.apk)，大小 `267309818` bytes，SHA-256 `d12bcfca3f984a5b89b6546355f9af7f207c0322ca8818d32fccc9ff93ecae4e`。
+  - `:app:assembleDebug`、`npm run build:apk` 和 APK ZIP 完整性检查通过；未自动安装，未提交 APK、模型、日志和 ZIP。
+- ✅ [2026-09-22] 网页显示端在 WebSocket 建立后提前触发 ASR/声纹模型预热。
+  - 仅修改 `src/apps/web-mediacenter/ui/public/display.html`，复用既有 `/api/config/asrDevice`、`/api/voiceprint/config` 和 NativeBridge 接口；相同声纹配置去重，失败保留原有首请求回退。
+  - 未修改 Android 原生层、服务端、控制端和 WebSocket 协议；静态契约测试、相关回归测试、内联脚本语法检查和 diff 检查通过。
+- ✅ [2026-09-22] 修复显示端重连时恢复已保存的声音输出设备。
+  - 服务端按 `displayId` 保存的 `audioOutputDeviceKey` 下发后，网页端即使发现 key 未变化也会重新调用原生输出路由；设备不可用时保留请求值并回报回退状态。
+  - 未修改 Android 原生层、服务端和控制端；输出设备及相关回归测试 13/13 通过，未重打 APK。

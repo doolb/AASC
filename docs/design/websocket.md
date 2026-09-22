@@ -27,6 +27,19 @@ MMD 可见性沿用上述两个端点的现有 WebSocket 生命周期：控制�
 | `audioInputDevices` | 显示端 → 服务器 → 控制端 | 回传按录音方式分组的输入设备列表 |
 | `voiceCaptureStatus` | 显示端 → 服务器 → 控制端 | 回传当前方式、请求设备、实际设备、采样率和回退错误 |
 
+### 显示端声音输出设备
+
+| 消息 | 方向 | 说明 |
+|------|------|------|
+| `setAudioOutputConfig` | 控制端 → 服务器 | 按 `displayId` 设置输出设备稳定 key |
+| `audioOutputConfig` | 服务器 → 显示端 | 下发规范化后的权威输出设备 key |
+| `displayAudioOutputConfigChanged` | 服务器 → 控制端 | 广播指定显示端保存后的权威配置 |
+| `requestAudioOutputDevices` | 控制端 → 服务器 → 显示端 | 请求目标显示端刷新原生输出列表 |
+| `audioOutputDevices` | 显示端 → 服务器 → 控制端 | 回传原生输出设备和系统默认选项 |
+| `audioOutputStatus` | 显示端 → 服务器 → 控制端 | 回传实际路由、routingMode、fallback 和错误 |
+
+输出配置只持久化 `audioOutputDeviceKey`。Android 12+ 优先使用通信路由；Android 8–11 对 WebView 媒体流只能报告系统默认媒体路由或回退，不能将临时 Android device id 写入服务端。
+
 ## 显示端同 ID 重连生命周期
 
 浏览器显示端会将 `displayId` 保存在 `localStorage`，网络抖动、页面刷新或测试浏览器重连时可能复用同一个 ID。服务端必须保证一个 `displayId` 只对应一个当前 WebSocket：新连接接管前关闭旧连接，旧连接的异步 `close` 事件不能删除新连接；连接登记层和业务层的显示端列表也必须保持单条记录。

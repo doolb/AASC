@@ -74,6 +74,66 @@
             <div class="display-stage-lighting-control">
                 <button id="displayMmdLightingToggle" class="display-stage-button" type="button"
                         aria-controls="displayMmdLightingPanel" aria-expanded="false">灯光</button>
+                <button id="displayArTargetToggle" class="display-stage-button" type="button"
+                        aria-controls="displayArTargetPanel" aria-expanded="false">定位</button>
+                <section id="displayArTargetPanel" class="display-mmd-ar-panel" hidden
+                         aria-label="图片定位设置">
+                    <div class="display-mmd-ar-header">
+                        <strong>图片定位</strong>
+                        <span id="displayArTargetStatus" class="display-mmd-ar-status-label">未启用</span>
+                    </div>
+                    <label class="display-mmd-ar-field">
+                        <span>当前定位图</span>
+                        <select id="displayArTargetSelect">
+                            <option value="">未选择</option>
+                        </select>
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>定位图名称</span>
+                        <input id="displayArTargetName" type="text" maxlength="80" placeholder="例如：客厅海报">
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>实际宽度（毫米，可选）</span>
+                        <input id="displayArPhysicalWidth" type="number" min="1" max="100000" step="1"
+                               inputmode="decimal" placeholder="未填写时使用相对尺度">
+                    </label>
+                    <label class="display-mmd-ar-motion-toggle">
+                        <input id="displayArMotionEnabled" type="checkbox">
+                        <span>体感观察（只移动视角）</span>
+                    </label>
+                    <label class="display-mmd-ar-field">
+                        <span>体感灵敏度 <output id="displayArMotionSensitivityValue">1.00</output></span>
+                        <input id="displayArMotionSensitivity" type="range" min="0.25" max="2" step="0.05" value="1">
+                    </label>
+                    <button id="displayArMotionRecenter" class="display-mmd-ar-action" type="button" disabled>
+                        重新居中
+                    </button>
+                    <p id="displayArMotionMessage" class="display-mmd-ar-message" role="status" aria-live="polite">
+                        体感观察关闭
+                    </p>
+                    <div class="display-mmd-ar-actions">
+                        <button id="displayArCalibrationButton" class="display-mmd-ar-action" type="button">拍照校准</button>
+                        <button id="displayArStartButton" class="display-mmd-ar-action" type="button" disabled>开始定位</button>
+                        <button id="displayArStopButton" class="display-mmd-ar-action" type="button" disabled>停止定位</button>
+                        <button id="displayArDeleteButton" class="display-mmd-ar-action display-mmd-ar-action-danger"
+                                type="button" disabled>删除定位图</button>
+                    </div>
+                    <p id="displayArTargetMessage" class="display-mmd-ar-message" role="status" aria-live="polite">
+                        尚未选择定位图
+                    </p>
+                    <div id="displayArCalibration" class="display-mmd-ar-calibration" hidden>
+                        <video id="displayArCameraVideo" class="display-mmd-ar-camera" autoplay muted playsinline></video>
+                        <canvas id="displayArCalibrationCanvas" class="display-mmd-ar-canvas" hidden></canvas>
+                        <p id="displayArCalibrationHint" class="display-mmd-ar-hint">
+                            先拍摄当前画面，再拖动四个角点框选定位区域。
+                        </p>
+                        <div class="display-mmd-ar-actions">
+                            <button id="displayArCaptureButton" class="display-mmd-ar-action" type="button">拍摄当前画面</button>
+                            <button id="displayArSaveButton" class="display-mmd-ar-action" type="button" disabled>保存定位图</button>
+                            <button id="displayArCancelButton" class="display-mmd-ar-action" type="button">取消校准</button>
+                        </div>
+                    </div>
+                </section>
                 <section id="displayMmdLightingPanel" class="display-mmd-lighting-panel" hidden
                          aria-label="角色灯光设置">
                     <div class="display-mmd-lighting-header">
@@ -151,6 +211,7 @@
     <script src="js/display-chat.js" defer></script>
     <script src="js/display-mmd.js" defer></script>
     <script src="js/display-mmd-lighting.js" defer></script>
+    <script src="js/display-mmd-ar.js" defer></script>
     <script src="js/display-mmd-command-adapter.js" defer></script>
     <script>
         // 临时 render 刷新诊断默认关闭，避免现场控制台持续输出高频日志。
@@ -305,6 +366,9 @@
         let voiceInputDeviceKey = 'default';
         let audioInputDevices = { webview: [], native: [] };
         let nativeAudioCaptureStatus = null;
+        let audioOutputDeviceKey = 'default';
+        let audioOutputDevices = [];
+        let nativeAudioOutputStatus = null;
         // 普通 ASR 持续监听与控制端临时录音共用采集链路，但会话用途必须分开，避免误送 ASR。
         let activeRecordingPurpose = 'asr';
         let voiceRecordingMode = 'asr';
@@ -371,6 +435,10 @@
         let voiceprintMultiSpeaker = true;
         let voiceprintMultiMode = 'fast';
         let voiceprintSpeakerCount = 'AUTO';
+        let voiceprintThreshold = 0.3;
+        // 网页显示端预热只复用现有 NativeBridge；配置键用于合并 HTTP 预热和 WebSocket 权威配置。
+        let voiceprintConfigKey = '';
+        let displaySpeechPrewarmPromise = null;
         // 全局声纹设置：默认播放 TTS 时暂停普通 ASR，配置关闭后保持录音。
         let pauseRecordingDuringPlayback = true;
         // 正式显示端统一使用中文 ASR，不向用户暴露语言选择。
@@ -465,6 +533,147 @@
                 };
                 voiceprintReadyWaiters.add(waiter);
             });
+        }
+
+        function buildVoiceprintConfigKey(data) {
+            const threshold = Number(data?.threshold);
+            return JSON.stringify({
+                enabled: data?.enabled === true,
+                threshold: Number.isFinite(threshold) && threshold > 0 ? threshold : 0.3,
+                multiSpeaker: data?.multiSpeaker === true,
+                multiMode: data?.multiMode || 'fast',
+                speakerCount: data?.speakerCount || 'AUTO'
+            });
+        }
+
+        function syncNativeVoiceprintDb() {
+            if (!nativeVoiceprintAvailable || !voiceprintEnabled ||
+                !nativeBridge || typeof nativeBridge.voiceprintSyncDb !== 'function') return;
+            fetch('/api/voiceprint/db', { cache: 'no-store' })
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                })
+                .then(db => nativeBridge.voiceprintSyncDb(JSON.stringify(db)))
+                .catch(error => console.warn('[声纹] 拉取声纹库失败:', error));
+        }
+
+        function configureNativeVoiceprint() {
+            if (!nativeVoiceprintAvailable || !nativeBridge ||
+                typeof nativeBridge.voiceprintConfigure !== 'function') return;
+            try {
+                const configureResult = JSON.parse(nativeBridge.voiceprintConfigure(JSON.stringify({
+                    enabled: voiceprintEnabled,
+                    threshold: voiceprintThreshold,
+                    multiSpeaker: voiceprintMultiSpeaker,
+                    multiMode: voiceprintMultiMode,
+                    speakerCount: voiceprintSpeakerCount
+                })));
+                if (configureResult?.error) {
+                    voiceprintEngineState = 'error';
+                    voiceprintEngineError = configureResult.error;
+                    rejectVoiceprintReadyWaiters(voiceprintEngineError);
+                    updateVoiceprintReadiness();
+                }
+            } catch (error) {
+                voiceprintEngineState = 'error';
+                voiceprintEngineError = error.message || '声纹配置失败';
+                rejectVoiceprintReadyWaiters(voiceprintEngineError);
+                updateVoiceprintReadiness();
+            }
+            syncNativeVoiceprintDb();
+        }
+
+        function applyVoiceprintConfig(data) {
+            if (!data || typeof data !== 'object') return false;
+            const nextConfigKey = buildVoiceprintConfigKey(data);
+            const changed = nextConfigKey !== voiceprintConfigKey;
+            voiceprintConfigReceived = true;
+            pauseRecordingDuringPlayback = data.pauseRecordingDuringPlayback !== false;
+            if (!pauseRecordingDuringPlayback && ttsRecordingPaused) {
+                // 全局关闭时立即恢复本显示端此前因播放而暂停的普通 ASR。
+                resumeVoiceRecordingAfterTts();
+            }
+            if (data.vadSilenceDurationMs !== undefined) {
+                vadSilenceDurationMs = normalizeVadDuration(
+                    data.vadSilenceDurationMs,
+                    vadSilenceDurationMs
+                );
+            }
+            if (data.vadMinSpeechDurationMs !== undefined) {
+                vadMinSpeechDurationMs = normalizeVadDuration(
+                    data.vadMinSpeechDurationMs,
+                    vadMinSpeechDurationMs
+                );
+            }
+            asrDenoiseEnabled = !!data.denoise;
+            voiceprintEnabled = !!data.enabled;
+            const threshold = Number(data.threshold);
+            voiceprintThreshold = Number.isFinite(threshold) && threshold > 0 ? threshold : 0.3;
+            voiceprintMultiSpeaker = !!data.multiSpeaker;
+            voiceprintMultiMode = data.multiMode || 'fast';
+            voiceprintSpeakerCount = data.speakerCount || 'AUTO';
+            if (!changed) return false;
+
+            voiceprintConfigKey = nextConfigKey;
+            voiceprintDbReady = false;
+            voiceprintEngineReady = false;
+            voiceprintEngineState = voiceprintEnabled ? 'downloading' : 'not_ready';
+            voiceprintEngineError = '';
+            updateVoiceprintReadiness();
+            if (!voiceprintEnabled) {
+                rejectVoiceprintReadyWaiters('声纹功能未启用');
+            }
+            configureNativeVoiceprint();
+            return true;
+        }
+
+        async function prewarmNativeAsrModel() {
+            if (!nativeAsrAvailable || !nativeBridge ||
+                typeof nativeBridge.asrEnsureModel !== 'function') return;
+            try {
+                const response = await fetch('/api/config/asrDevice', { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const config = await response.json();
+                if (config.device !== 'display') return;
+                if (typeof nativeBridge.asrConfigure === 'function') {
+                    nativeBridge.asrConfigure(asrLanguageMode, asrDenoiseEnabled);
+                }
+                const state = JSON.parse(nativeBridge.asrStatus());
+                if (state.state === 'ready') {
+                    nativeAsrReady = true;
+                    reportLocalAsrProviderAvailability(true);
+                } else if (state.state === 'not_ready' ||
+                    (state.state === 'error' && !(state.error || '').includes('内存不足'))) {
+                    nativeBridge.asrEnsureModel();
+                }
+            } catch (error) {
+                console.warn('[ASR] 显示端启动预热失败:', error.message);
+            }
+        }
+
+        async function prewarmNativeVoiceprintModel() {
+            if (!nativeVoiceprintAvailable || !nativeBridge ||
+                typeof nativeBridge.voiceprintConfigure !== 'function') return;
+            try {
+                const response = await fetch('/api/voiceprint/config', { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const config = await response.json();
+                applyVoiceprintConfig(config);
+            } catch (error) {
+                console.warn('[声纹] 显示端启动预热失败:', error.message);
+            }
+        }
+
+        function prewarmDisplaySpeechModels() {
+            if (displaySpeechPrewarmPromise) return displaySpeechPrewarmPromise;
+            displaySpeechPrewarmPromise = Promise.all([
+                prewarmNativeAsrModel(),
+                prewarmNativeVoiceprintModel()
+            ]).finally(() => {
+                displaySpeechPrewarmPromise = null;
+            });
+            return displaySpeechPrewarmPromise;
         }
 
         function sendVoiceprintExtracted(socket, data, result) {
@@ -5041,6 +5250,8 @@
                 // 每次连接都重新查询服务端 ASR，避免服务器重启期间的一次未就绪状态永久残留。
                 clearAsrStatusRetryTimer();
                 void checkAsrStatus();
+                // 显示端连接建立后提前触发现有 ASR/声纹模型加载，避免第一条语音请求承担初始化耗时。
+                void prewarmDisplaySpeechModels();
             };
             
             socket.onmessage = function(event) {
@@ -5112,8 +5323,18 @@
                         return;
                     }
 
+                    if (data.type === 'audioOutputConfig') {
+                        handleAudioOutputConfig(data);
+                        return;
+                    }
+
                     if (data.type === 'requestAudioInputDevices') {
                         void refreshAudioInputDevices();
+                        return;
+                    }
+
+                    if (data.type === 'requestAudioOutputDevices') {
+                        void refreshAudioOutputDevices();
                         return;
                     }
 
@@ -5236,66 +5457,7 @@
                     }
 
                     if (data.type === 'voiceprintConfig') {
-                        voiceprintConfigReceived = true;
-                        pauseRecordingDuringPlayback = data.pauseRecordingDuringPlayback !== false;
-                        if (!pauseRecordingDuringPlayback && ttsRecordingPaused) {
-                            // 全局关闭时立即恢复本显示端此前因播放而暂停的普通 ASR。
-                            resumeVoiceRecordingAfterTts();
-                        }
-                        if (data.vadSilenceDurationMs !== undefined) {
-                            vadSilenceDurationMs = normalizeVadDuration(
-                                data.vadSilenceDurationMs,
-                                vadSilenceDurationMs
-                            );
-                        }
-                        if (data.vadMinSpeechDurationMs !== undefined) {
-                            vadMinSpeechDurationMs = normalizeVadDuration(
-                                data.vadMinSpeechDurationMs,
-                                vadMinSpeechDurationMs
-                            );
-                        }
-                        asrDenoiseEnabled = !!data.denoise;
-                        voiceprintEnabled = !!data.enabled;
-                        voiceprintMultiSpeaker = !!data.multiSpeaker;
-                        voiceprintMultiMode = data.multiMode || 'fast';
-                        voiceprintSpeakerCount = data.speakerCount || 'AUTO';
-                        voiceprintDbReady = false;
-                        voiceprintEngineReady = false;
-                        voiceprintEngineState = voiceprintEnabled ? 'downloading' : 'not_ready';
-                        voiceprintEngineError = '';
-                        updateVoiceprintReadiness();
-                        if (!voiceprintEnabled) {
-                            rejectVoiceprintReadyWaiters('声纹功能未启用');
-                        }
-                        if (nativeVoiceprintAvailable) {
-                            try {
-                                const configureResult = JSON.parse(nativeBridge.voiceprintConfigure(JSON.stringify({
-                                    enabled: voiceprintEnabled,
-                                    threshold: data.threshold || 0.3,
-                                    multiSpeaker: voiceprintMultiSpeaker,
-                                    multiMode: voiceprintMultiMode,
-                                    speakerCount: voiceprintSpeakerCount
-                                })));
-                                if (configureResult?.error) {
-                                    voiceprintEngineState = 'error';
-                                    voiceprintEngineError = configureResult.error;
-                                    rejectVoiceprintReadyWaiters(voiceprintEngineError);
-                                    updateVoiceprintReadiness();
-                                }
-                            } catch (error) {
-                                voiceprintEngineState = 'error';
-                                voiceprintEngineError = error.message || '声纹配置失败';
-                                rejectVoiceprintReadyWaiters(voiceprintEngineError);
-                                updateVoiceprintReadiness();
-                            }
-                            if (voiceprintEnabled) {
-                                // 拉取权威库重建本地声纹库（WebView 信任自签名证书，走 fetch）
-                                fetch('/api/voiceprint/db')
-                                    .then(r => r.json())
-                                    .then(db => nativeBridge.voiceprintSyncDb(JSON.stringify(db)))
-                                    .catch(e => console.warn('[声纹] 拉取声纹库失败:', e));
-                            }
-                        }
+                        applyVoiceprintConfig(data);
                         return;
                     }
 
@@ -6224,6 +6386,7 @@
                 webViewAudioCapture: !!navigator.mediaDevices?.getUserMedia,
                 nativeAudioCapture: !!(nativeBridge && typeof nativeBridge.startNativeAudioCapture === 'function'),
                 audioInputDevices,
+                audioOutputDevices,
                 displayText: true,
                 webgl: (function() {
                     try {
@@ -6304,6 +6467,8 @@
             capabilities.cameraCapture = !!navigator.mediaDevices?.getUserMedia;
             const inputDevices = await refreshAudioInputDevices();
             capabilities.audioInputDevices = inputDevices;
+            const outputDevices = await refreshAudioOutputDevices();
+            capabilities.audioOutputDevices = outputDevices;
             capabilities.webViewAudioCapture = !!navigator.mediaDevices?.getUserMedia;
             capabilities.nativeAudioCapture = !!(nativeBridge && typeof nativeBridge.startNativeAudioCapture === 'function');
             
@@ -6407,6 +6572,7 @@
                     webViewAudioCapture: !!navigator.mediaDevices?.getUserMedia,
                     nativeAudioCapture: !!(nativeBridge && typeof nativeBridge.startNativeAudioCapture === 'function'),
                     audioInputDevices,
+                    audioOutputDevices,
                     llm: {
                         enabled: currentCapabilities?.llm?.enabled !== false,
                         supported: nativeLlmStatus?.supported === true,
@@ -6455,6 +6621,9 @@
                             ? data.capabilities.audioInputDevices.native
                             : audioInputDevices.native
                     };
+                }
+                if (Array.isArray(data.capabilities.audioOutputDevices)) {
+                    audioOutputDevices = data.capabilities.audioOutputDevices;
                 }
                 voiceListeningEnabled = data.capabilities.voiceRecording === true;
                 console.log('[能力] 能力已更新:', data.capabilities);
@@ -6682,6 +6851,78 @@
             return nextDevices;
         }
 
+        function normalizeAudioOutputDeviceKey(deviceKey) {
+            if (typeof deviceKey !== 'string') return 'default';
+            const normalized = deviceKey.trim();
+            return normalized && normalized.length <= 512 ? normalized : 'default';
+        }
+
+        function sendAudioOutputDevices() {
+            if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return;
+            displayWs.send(JSON.stringify({ type: 'audioOutputDevices', devices: audioOutputDevices }));
+        }
+
+        function sendAudioOutputStatus(status = {}) {
+            const payload = {
+                type: 'audioOutputStatus',
+                state: status.state || 'unknown',
+                requestedDeviceKey: audioOutputDeviceKey,
+                actualDevice: status.actualDevice || null,
+                routingMode: status.routingMode || 'default',
+                fallback: status.fallback === true,
+                error: status.error || null,
+                fallbackReason: status.fallbackReason || null
+            };
+            nativeAudioOutputStatus = payload;
+            if (displayWs && displayWs.readyState === WebSocket.OPEN) {
+                displayWs.send(JSON.stringify(payload));
+            }
+        }
+
+        function applyAudioOutputDevice(deviceKey) {
+            audioOutputDeviceKey = normalizeAudioOutputDeviceKey(deviceKey);
+            if (!nativeBridge || typeof nativeBridge.setAudioOutputDevice !== 'function') {
+                sendAudioOutputStatus({
+                    state: 'unsupported',
+                    fallback: audioOutputDeviceKey !== 'default',
+                    fallbackReason: '当前显示端没有原生输出路由能力'
+                });
+                return;
+            }
+            try {
+                const result = JSON.parse(nativeBridge.setAudioOutputDevice(
+                    JSON.stringify({ deviceKey: audioOutputDeviceKey })
+                ));
+                sendAudioOutputStatus(result);
+            } catch (error) {
+                sendAudioOutputStatus({
+                    state: 'error',
+                    error: error.message || '设置输出设备失败'
+                });
+            }
+        }
+
+        async function refreshAudioOutputDevices() {
+            let nextDevices = [];
+            if (nativeBridge && typeof nativeBridge.listAudioOutputDevices === 'function') {
+                try {
+                    const result = JSON.parse(nativeBridge.listAudioOutputDevices());
+                    if (result.ok === true && Array.isArray(result.devices)) {
+                        nextDevices = result.devices;
+                    }
+                } catch (error) {
+                    console.warn('[播放] 刷新 Native 输出设备失败:', error);
+                }
+            }
+            audioOutputDevices = nextDevices;
+            if (currentCapabilities) currentCapabilities.audioOutputDevices = nextDevices;
+            sendAudioOutputDevices();
+            if (displayWs && displayWs.readyState === WebSocket.OPEN && currentCapabilities) {
+                displayWs.send(JSON.stringify({ type: 'capabilities', capabilities: currentCapabilities }));
+            }
+            return nextDevices;
+        }
+
         function sendDisplayRecordingMessage(message) {
             if (!displayWs || displayWs.readyState !== WebSocket.OPEN) return false;
             try {
@@ -6743,6 +6984,14 @@
                     setTimeout(() => void startVoiceRecording(), 0);
                 }
             }
+        }
+
+        function handleAudioOutputConfig(data) {
+            const nextDeviceKey = normalizeAudioOutputDeviceKey(data.deviceKey);
+            audioOutputDeviceKey = nextDeviceKey;
+            console.log('[播放] 输出设备已更新:', audioOutputDeviceKey);
+            // 服务端下发的是权威恢复指令；即使 key 没变化，也要重新建立原生路由，覆盖 WebSocket/系统音频状态丢失。
+            applyAudioOutputDevice(audioOutputDeviceKey);
         }
         
         function initVoiceRecognition() {

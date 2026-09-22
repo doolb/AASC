@@ -17,6 +17,7 @@ const TARGET_MODEL_HEIGHT = 1.75;
 const SHADOW_MAP_SIZE = 1024;
 const SHADOW_FRUSTUM_MARGIN = 1.18;
 const MAX_MODEL_PITCH_RADIANS = Math.PI / 4;
+const MAX_CAMERA_PITCH_RADIANS = Math.PI / 4;
 const ROTATION_EASING_PER_SECOND = 1 / 0.14;
 const ROTATION_SETTLE_EPSILON = 0.0005;
 
@@ -108,6 +109,54 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
     camera.position.set(0, TARGET_MODEL_HEIGHT * 0.55, TARGET_MODEL_HEIGHT * 2.8);
+    const cameraTarget = new THREE.Vector3(0, TARGET_MODEL_HEIGHT * 0.5, 0);
+    const cameraDistance = TARGET_MODEL_HEIGHT * 2.8;
+    const cameraViewState = {
+        targetYaw: 0,
+        targetPitch: 0,
+        currentYaw: 0,
+        currentPitch: 0
+    };
+
+    const applyCameraView = () => {
+        const cosPitch = Math.cos(cameraViewState.currentPitch);
+        camera.position.set(
+            Math.sin(cameraViewState.currentYaw) * cosPitch * cameraDistance,
+            cameraTarget.y + Math.sin(cameraViewState.currentPitch) * cameraDistance,
+            Math.cos(cameraViewState.currentYaw) * cosPitch * cameraDistance
+        );
+        camera.lookAt(cameraTarget);
+    };
+
+    const updateCameraView = (delta) => {
+        const yawDistance = cameraViewState.targetYaw - cameraViewState.currentYaw;
+        const pitchDistance = cameraViewState.targetPitch - cameraViewState.currentPitch;
+        if (Math.abs(yawDistance) < ROTATION_SETTLE_EPSILON
+            && Math.abs(pitchDistance) < ROTATION_SETTLE_EPSILON) {
+            cameraViewState.currentYaw = cameraViewState.targetYaw;
+            cameraViewState.currentPitch = cameraViewState.targetPitch;
+            applyCameraView();
+            return false;
+        }
+        const easing = 1 - Math.exp(-ROTATION_EASING_PER_SECOND * Math.max(0, delta));
+        cameraViewState.currentYaw += yawDistance * easing;
+        cameraViewState.currentPitch += pitchDistance * easing;
+        applyCameraView();
+        return true;
+    };
+
+    const setCameraViewRotation = (yawRadians, pitchRadians = 0) => {
+        const yaw = Number(yawRadians);
+        const pitch = Number(pitchRadians);
+        if (!Number.isFinite(yaw) || !Number.isFinite(pitch)) return false;
+        cameraViewState.targetYaw = Math.max(-Math.PI, Math.min(Math.PI, yaw));
+        cameraViewState.targetPitch = Math.max(
+            -MAX_CAMERA_PITCH_RADIANS,
+            Math.min(MAX_CAMERA_PITCH_RADIANS, pitch)
+        );
+        startRendering();
+        return true;
+    };
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
@@ -273,6 +322,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         lastFrameAt = now;
         if (currentVrm) currentVrm.update(delta);
         updateModelRotation(delta);
+        updateCameraView(delta);
         renderer.render(scene, camera);
         frameHandle = requestAnimationFrame(renderFrame);
     }
@@ -301,7 +351,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         renderer.setSize(safeWidth, safeHeight, false);
         camera.aspect = safeWidth / safeHeight;
         camera.updateProjectionMatrix();
-        camera.lookAt(0, TARGET_MODEL_HEIGHT * 0.5, 0);
+        applyCameraView();
         startRendering();
     }
 
@@ -408,6 +458,7 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         raycast,
         resize,
         rotateModelBy,
+        setCameraViewRotation,
         setLighting,
         setVisible
     });

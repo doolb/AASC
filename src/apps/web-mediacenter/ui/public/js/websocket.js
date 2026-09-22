@@ -137,13 +137,26 @@ const WebSocketManager = {
             if (window.DeviceList) {
                 window.DeviceList.handleAudioInputDevices(data);
             }
+        } else if (data.type === 'displayAudioOutputConfigChanged' || data.type === 'audioOutputConfig') {
+            if (window.DeviceList) {
+                window.DeviceList.handleAudioOutputConfigChanged(data);
+            }
+        } else if (data.type === 'audioOutputDevices') {
+            if (window.DeviceList) {
+                window.DeviceList.handleAudioOutputDevices(data);
+            }
+        } else if (data.type === 'audioOutputStatus') {
+            if (window.DeviceList) {
+                window.DeviceList.handleAudioOutputStatus(data);
+            }
         } else if (data.type === 'voiceCaptureStatus') {
             if (window.DeviceList) {
                 window.DeviceList.handleVoiceCaptureStatus(data);
             }
-        } else if (data.type === 'voiceCaptureConfigError' || data.type === 'audioInputDevicesError') {
+        } else if (data.type === 'voiceCaptureConfigError' || data.type === 'audioInputDevicesError'
+            || data.type === 'audioOutputConfigError' || data.type === 'audioOutputDevicesError') {
             if (window.showToast) {
-                window.showToast(data.message || '录音配置操作失败', 'error');
+                window.showToast(data.message || '音频设备配置操作失败', 'error');
             }
         } else if (data.type === 'displayRecordingStatus') {
             if (window.DeviceList) {

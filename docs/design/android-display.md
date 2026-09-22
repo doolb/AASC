@@ -441,8 +441,62 @@ ADB 未观察到 ANR/崩溃，但显示端在 TTS 请求期间反复接收 `cpuC
 - 已完成服务端 WebSocket 配置、控制端选择控件、WebView 设备枚举、Native `AudioRecord` 设备路由和统一 PCM/VAD/ASR 链路。
 - 已完成 Android JVM、录音生命周期、双录音协议契约测试和 `npm run build:apk`；带完整 Node Runtime 的 `withserver` APK 已安装到 SM-N9500 并正常启动，真机上的内置麦克风、AIMIC-M4 SCO、USB/蓝牙设备切换仍需现场验证。
 
+## 2026-09-22 控制端选择正式 APK 声音输出设备
+
+### 需求目标
+
+- 控制端在现有显示端语音/录音设置中选择目标显示端的声音输出设备，并按 `displayId` 保存。
+- 显示端重连或 Android APK 重启后，服务端重新下发已保存的输出设备 key；显示端通过原生桥重新应用路由。
+- 控制端同时看到原生输出设备列表、请求设备、实际路由、路由方式和系统回退原因。
+
+### 路由策略
+
+- Android 12/API 31 及以上优先调用 `AudioManager.setCommunicationDevice`，成功时返回实际通信路由设备。
+- Android 8/API 26 至 Android 11/API 30 没有面向 WebView 媒体流的通用输出设备选择 API：内置扬声器/听筒使用系统扬声器开关，蓝牙 SCO 复用带 owner 的 SCO 控制器，其他有线/蓝牙媒体设备交给系统默认媒体路由。
+- 不支持精确路由时不伪造实际设备，状态使用 `routingMode=system_default` 或 `fallback=true` 标识；“系统默认”始终可恢复。
+- 输出路由与录音路由共享 SCO 控制器但使用独立 owner，停止录音不会释放仍被输出配置占用的 SCO 链路。
+
+### 范围与限制
+
+- 本次选择作用于正式 APK 的 WebView/原生媒体系统路由，不新增厂商 AIMIC SDK，也不改变浏览器显示端默认输出行为。
+- WebView/Chromium 是否允许系统通信路由影响普通媒体流由 Android/WebView 版本决定；API 26–30 的任意 A2DP/有线设备选择只能作为系统默认媒体路由请求，控制端会显示降级状态。
+- 服务器只持久化稳定 `audioOutputDeviceKey`，不持久化 Android 临时 device id 或旧连接的实际设备对象。
+
+### 实现状态
+
+- 已新增 `AudioOutputDevice.kt`、`NativeAudioOutputController.kt`、NativeBridge 输出方法、服务端远程配置、控制端选择/刷新/状态展示。
+- 已为显示端能力声明、显示端重连恢复、输出设备列表和回退状态增加 WebSocket 消息与契约测试；正式 `withserver` APK 已重新构建并通过 ZIP 完整性校验。
+- Android API 26–30 的蓝牙/有线精确媒体路由和 API 31+ 真机路由仍需现场设备验收；不影响系统默认输出回退。
+
 ## 2026-09-22 控制端入口收起边缘位置
 
 - 控制端入口仍使用左上角 `START | TOP` 布局和既有点击状态机。
 - 收起态窄把手宽度固定为 42dp，左边距改为 -21dp、上边距改为 0dp，使约半个把手贴在屏幕外；展开态恢复 12dp 左/上安全边距。
 - 只改变收起态视觉位置，不改变入口可见性、控制端 WebView 展开逻辑和显示端页面加载。
+
+## 2026-09-22 网页显示端语音模型启动预热
+
+### 需求目标
+
+- 只在网页显示端提前触发现有的 ASR 与声纹模型加载，不修改 Android 原生层、服务端、控制端或 WebSocket 协议。
+- 显示端 WebSocket 建立后，根据服务端已有的 ASR/声纹配置，在第一条语音请求前调用现有 NativeBridge 模型接口。
+- 预热必须幂等、后台执行且失败可回退；模型未就绪时现有首请求错误处理继续生效。
+
+### 预热策略
+
+- 通过既有 `/api/config/asrDevice` 和 `/api/voiceprint/config` 读取当前配置；ASR 仅当设备为 `display` 时触发原生模型预热，声纹按现有启用状态和 NativeBridge 配置流程触发预热。
+- ASR 预热复用 `NativeDisplay.asrStatus()`/`asrEnsureModel()`；声纹预热复用现有 `voiceprintConfigure()`，使用服务端实际阈值、多人模式和人数配置，避免新增桥方法。
+- WebSocket 后续下发相同配置时只更新页面状态，不重复触发相同 NativeBridge 配置；配置变化仍允许重新加载。
+- 服务端在显示端重连时下发保存的输出设备 key，网页端把该消息视为权威恢复指令，即使 key 未变化也重新调用原生路由，确保 WebSocket/系统音频状态被重新建立。
+- 页面重连或刷新时重建本轮预热状态；页面离开不发送额外请求，原有 Android 生命周期负责释放原生资源。
+
+### 边界与限制
+
+- 本次仅改变网页显示端触发时机；服务器内部 ASR/声纹服务的启动和模型生命周期不改。
+- 服务端 ASR 模式下不强制下载显示端 ASR 模型；声纹配置仍保留原有显示端 NativeBridge 配置行为，避免改变既有识别/注册兼容性。
+- 浏览器 WASM `SherpaASR` 保留原有按配置初始化逻辑；本次重点覆盖正式 APK 的现有 NativeBridge 模型加载入口。
+
+### 实现状态
+
+- 已完成：仅修改 `display.html`，在 WebSocket 建立后异步触发 ASR/声纹预热，并对相同声纹配置去重。
+- 已完成：预热失败不阻塞页面和既有首请求回退；未修改 Android 原生层、服务端、控制端或 WebSocket 协议。

@@ -572,6 +572,111 @@ display.html.refreshAudioInputDevices():
 
 实现状态（2026-09-22）：已新增 `AudioInputDevice.kt`、`NativeAudioCaptureController.kt`、`NativePcmAudioCapture` 及控制端 WebSocket 配置链路；`:app:testDebugUnitTest`、`:app:assembleDebug`、`npm run build:apk` 和双录音契约测试通过。带完整 Node Runtime 的 APK 已安装并启动，当前尚未完成 AIMIC-M4/多内置麦克风录音路由验收。
 
+## 正式 APK 声音输出设备选择伪代码（2026-09-22）
+
+```text
+服务端创建显示状态:
+    audioOutputDeviceKey = normalizeAudioOutputDeviceKey(savedState.audioOutputDeviceKey)
+    audioOutputStatus = savedState.audioOutputStatus 或 null
+
+显示端连接:
+    发送 { type: audioOutputConfig, deviceKey: state.audioOutputDeviceKey }
+    显示端声明 capabilities.audioOutputDevices
+
+NativeBridge.listAudioOutputDevices():
+    枚举 AudioManager.GET_DEVICES_OUTPUTS
+    为每个 AudioDeviceInfo 生成 native-output:{type}:{address 或 productName+id}
+    在首位追加 { key: default, name: 系统默认 }
+    返回 { ok: true, devices }
+
+控制端刷新输出设备:
+    发送 { type: requestAudioOutputDevices, displayId }
+    服务器转发给目标显示端
+    显示端调用 NativeBridge.listAudioOutputDevices()
+    回传 { type: audioOutputDevices, devices }
+    服务器规范化列表并广播到控制端
+
+控制端选择输出设备:
+    发送 { type: setAudioOutputConfig, displayId, deviceKey }
+    服务器校验 displayId 和 key 长度
+    非法 key 回退 default
+    持久化 display.audioOutputDeviceKey
+    下发 { type: audioOutputConfig, displayId, deviceKey }
+    广播 displayAudioOutputConfigChanged 和 displayList
+
+显示端应用输出配置:
+    audioOutputDeviceKey = normalize(deviceKey)
+    如果存在 NativeDisplay.setAudioOutputDevice:
+        调用 setAudioOutputDevice({ deviceKey })
+        解析 state、actualDevice、routingMode、fallback、error
+    否则标记 unsupported/fallback
+    回传 { type: audioOutputStatus, requestedDeviceKey, actualDevice,
+        routingMode, fallback, fallbackReason, error }
+
+NativeAudioOutputController.apply(config):
+    deviceKey == default:
+        API 31+ 调用 clearCommunicationDevice()
+        释放输出 owner 的 SCO
+        恢复进入路由前的旧版扬声器状态
+        返回 default
+    deviceKey 无法解析:
+        恢复系统默认
+        返回 fallback=true 和设备不可用原因
+    API 31+:
+        调用 setCommunicationDevice(device)
+        成功返回 communication 路由和 communicationDevice
+        失败恢复系统默认并返回 fallback
+    API 26–30:
+        内置扬声器/听筒切换 isSpeakerphoneOn
+        蓝牙 SCO 通过 BluetoothScoController.acquireForOutput 保持 output owner
+        A2DP/有线设备关闭强制扬声器，交给系统媒体路由
+        任意媒体路由不能精确确认时返回 routingMode=system_default
+
+显示端重连或 APK 重启:
+    服务器再次发送保存的 audioOutputConfig
+    显示端接收 audioOutputConfig 后无条件重新调用 applyAudioOutputDevice(savedKey)
+    即使 savedKey 与页面内存中的 key 相同，也重新建立原生输出路由
+    设备已断开时保持请求 key，实际路由回退 default，并将原因显示给控制端
+```
+
+实现状态（2026-09-22）：输出设备枚举、原生桥、远程配置、控制端 UI、按 displayId 持久化、重连强制恢复和状态回报已实现；Android 旧版本任意媒体设备的系统路由限制按上述 `system_default/fallback` 状态暴露，未伪造精确实际设备。正式 `withserver` APK 已重新构建，输出文件为 `release/apkbuild/withserver/output/aasc-display.apk`，并通过 ZIP 完整性校验。
+
+## 2026-09-22 网页显示端语音模型启动预热伪代码
+
+```text
+显示端 WebSocket onopen:
+    prewarmDisplaySpeechModels()
+
+prewarmDisplaySpeechModels():
+    如果本轮页面已经预热:
+        返回
+    标记本轮预热已启动
+    并行读取 /api/config/asrDevice 和 /api/voiceprint/config
+
+    如果 NativeDisplay.asrStatus 存在 且 asrDevice == display:
+        读取 asrStatus
+        如果 state != ready 且不是内存不足错误:
+            调用 NativeDisplay.asrEnsureModel()
+        继续监听既有 onNativeAsrModel 状态
+
+    如果 NativeDisplay.voiceprintMatch 存在 且 voiceprint 配置允许本地声纹能力:
+        用服务端配置生成 voiceprint 配置键
+        如果配置键不是本轮已配置键:
+            调用 NativeDisplay.voiceprintConfigure(config)
+        拉取 /api/voiceprint/db，复用既有 voiceprintSyncDb
+
+收到 WebSocket voiceprintConfig/asrConfig:
+    更新页面权威状态
+    配置键相同则不重复调用 NativeBridge
+    配置键变化则按原有流程重新配置模型
+
+页面重连或刷新:
+    清除本轮预热键
+    下一次 WebSocket onopen 重新按当前配置预热
+```
+
+实现状态（2026-09-22）：预热逻辑仅落在 `display.html`，ASR 按 `asrDevice=device:display` 触发，声纹复用既有配置流程并按配置键去重；未新增 Android 原生方法、服务端接口或 WebSocket 消息。
+
 ## 2026-09-22 控制端入口收起边缘布局
 
 ```text
