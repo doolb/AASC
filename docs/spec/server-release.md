@@ -53,3 +53,33 @@ ServerReleaseService.streamPackage(response):
 - 发布包生成是显式运维动作，不绑定 `/server` 或 `/server/package` 请求。
 - 修改源码后必须重新执行 `npm run build:server-package`，再更新子服务器。
 - APK 不属于该发布包。
+
+## esbuild 后端依赖打包预研伪代码（仅记录，未实施）
+
+```
+变量 bundleEntry = "src/apps/server/boot/server-app.js"
+变量 launcherEntry = "src/apps/server/boot/server-launcher.js"
+变量 bundleOutput = "build/server-bundle/server-app.cjs"
+变量 externalPackages = 原生模块、Puppeteer、动态运行时依赖
+
+npm run build:server-bundle:
+    读取 package-lock.json 和当前项目代码
+    使用 esbuild 以 Node.js、CommonJS、生产模式构建 bundleEntry
+    将 externalPackages 保留为运行时依赖，不内联原生模块或二进制资源
+    保留 launcherEntry 的稳定启动协议
+    复制 bundle 依赖的静态资源、任务脚本和运行时辅助文件
+    生成 bundle manifest、文件大小、SHA-256 和依赖清单
+    不修改现有 server 发布清单
+
+bundle 预发布验证:
+    使用 bundle 启动服务
+    验证 HTTP、WebSocket、ASR、TTS、声纹、Chat2API 和任务系统
+    验证动态任务 require、用户配置、模型/资源路径和数据修复包
+    任一契约失败则保留源码发布方式，不切换正式入口
+
+正式接入评估:
+    更新 server 发布包的入口和文件清单
+    更新 Android Offline Runtime manifest 的 entrypoint 和内容版本
+    验证 code-only、dependencies-only、all 更新及失败回滚
+    验证通过后才允许 bundle 进入正式发布
+```

@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### 后端依赖打包方案记录
+
+- 📝 [2026-09-22] 记录后续使用 esbuild 处理后端纯 JavaScript 依赖的预研方案，当前暂不实施。
+  - 保留现有源码发布、服务器启动入口、动态任务、数据修复包和 Offline APK 运行包流程。
+  - 计划将原生 ASR/TTS/声纹模块、Puppeteer、模型和动态依赖外置，先生成独立验证 bundle，再决定是否接入正式发布。
+  - 相关文档：`docs/design/server-release.md`、`docs/spec/server-release.md`、`docs/task/20260922_esbuild后端依赖打包方案.md`。
+
 ### TTS 播报文字自适应布局
 
 - ✅ [2026-09-21] 修复 Android 高 DPI/300% 缩放下 TTS 播报文字超出屏幕、竖屏左右留白过大的问题。

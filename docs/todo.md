@@ -89,6 +89,12 @@
 
 ## 开发工具
 
+- ⏳待处理 [2026-09-22] 使用 esbuild 处理后端纯 JavaScript 依赖
+  - 仅记录方案，暂不安装 esbuild、暂不创建 bundle、暂不改变服务器启动入口和 Offline APK 发布链路。
+  - 预期采用纯 JS 依赖内联、ASR/TTS/声纹原生模块和 Puppeteer 外置、动态任务与数据修复能力保持兼容的混合方式。
+  - 正式实施前需要完成服务启动、模型加载、动态任务、数据修复、服务器更新、Offline APK manifest 和回滚测试。
+  - 关联文档：`docs/design/server-release.md`、`docs/spec/server-release.md`、`docs/task/20260922_esbuild后端依赖打包方案.md`。
+
 ## 媒体播放
 
 ## AI 角色
