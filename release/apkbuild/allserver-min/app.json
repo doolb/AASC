@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "embeddedNode": true,
   "updateOnly": true,
-  "versionCode": 32,
-  "versionName": "0.2.30-offline-min",
+  "versionCode": 33,
+  "versionName": "0.2.31-offline-min",
   "verifyRuntime": true,
   "features": ["display", "asr", "tts", "llm", "render-display", "native-update"],
   "models": []
