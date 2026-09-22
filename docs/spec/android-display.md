@@ -508,3 +508,66 @@ display.html:
 ```
 
 实现状态（2026-09-20）：`BluetoothScoController.kt`、`NativeBridge`、`MainActivity` 和 `display.html` 已按上述伪代码实现；Debug APK 已安装到 SM-N9500/API 28，真机 SCO 连接与音频质量待现场验证。
+
+## 正式 APK 双录音方式与麦克风选择伪代码（2026-09-22）
+
+```text
+显示端连接:
+    读取持久化 voiceCaptureMode，非法值回退 webview
+    读取持久化 voiceInputDeviceKey，空值回退 default
+    发送 { type: voiceCaptureConfig, captureMode, deviceKey }
+
+NativeBridge.listAudioInputDevices():
+    枚举 AudioManager.GET_DEVICES_INPUTS
+    为每个 AudioDeviceInfo 生成稳定逻辑键:
+        native:{type}:{address；没有地址时使用 productName + id}
+    返回 { ok: true, devices: [{ key, id, type, name, address }] }
+
+display.html.refreshAudioInputDevices():
+    获取 navigator.mediaDevices.enumerateDevices() 的 audioinput
+    为每个 WebView 设备生成 webview:{deviceId} 逻辑键
+    调用 NativeDisplay.listAudioInputDevices() 获取 native 设备
+    更新 capabilities.audioInputDevices.webview/native
+    发送 { type: audioInputDevices, devices } 和 capabilities
+
+控制端 setVoiceCaptureConfig:
+    校验 displayId 已连接
+    captureMode 只允许 webview/native，非法值回退 webview
+    deviceKey 只允许 default 或受限长度字符串，非法值回退 default
+    config.set(display.voiceCaptureMode/deviceKey)
+    更新 displayData.state
+    发送 { type: voiceCaptureConfig, captureMode, deviceKey } 到显示端
+    广播 displayVoiceCaptureConfigChanged 和 displayList
+
+显示端收到 voiceCaptureConfig:
+    保存规范化 captureMode/deviceKey
+    如果当前正在采集:
+        停止 VAD、PCM 采集、MediaStream 或 AudioRecord
+        按原用途重新启动采集
+
+启动 WebView 录音:
+    找到 voiceInputDeviceKey 对应的 WebView deviceId
+    不存在时省略 exact deviceId，使用系统默认设备
+    getUserMedia({ audio: { deviceId: { exact }, echoCancellation:false,
+        noiseSuppression:false, sampleRate:16000 } })
+    使用 PcmAudioCapture、现有 VAD 和 sendAudioForRecognition
+
+启动 Native 录音:
+    将 voiceInputDeviceKey 传给 NativeBridge.startNativeAudioCapture
+    目标为蓝牙 SCO 时先建立 BluetoothScoController.startForInput
+    使用 AudioRecord VOICE_RECOGNITION、16kHz mono PCM16
+    16kHz 创建失败时按设备能力尝试兼容采样率
+    setPreferredDevice 后启动并读取 routedDevice
+    录音线程每约 100ms 将 PCM16 base64 回调 window.onNativeAudioChunk
+    NativePcmAudioCapture 将 PCM 转 Float32、计算 RMS、缓存语音段
+    复用现有 JS VAD、WAV 编码、声纹和 ASR 上传
+    回报 requestedDevice、actualDevice、sampleRate、fallback/error
+
+统一释放:
+    停止 VAD 和 PCM 缓冲
+    停止 MediaStream 或 Native AudioRecord
+    释放 Bluetooth SCO
+    发送 voiceCaptureStatus stopped
+```
+
+实现状态（2026-09-22）：已新增 `AudioInputDevice.kt`、`NativeAudioCaptureController.kt`、`NativePcmAudioCapture` 及控制端 WebSocket 配置链路；`:app:testDebugUnitTest`、`:app:assembleDebug`、`npm run build:apk` 和双录音契约测试通过。带完整 Node Runtime 的 APK 已安装并启动，当前尚未完成 AIMIC-M4/多内置麦克风录音路由验收。

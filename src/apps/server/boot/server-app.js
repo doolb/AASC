@@ -1215,7 +1215,7 @@ async function startServer() {
             // 注册显示端消息 handler // 委托给现有的 handleDisplayMessageFallback
             registerTextMediaDisplayHandlers({
                 wsServer,
-                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility', 'tts'],
+                displayTypes: ['canvasSize', 'browserInfo', 'voiceInput', 'voiceStatus', 'voiceCaptureStatus', 'audioInputDevices', 'voiceConversationTtsFinished', 'voiceTtsPlaybackFinished', 'mediaNameTts', 'textInputAnnouncement', 'voiceVadNoiseResult', 'displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult', 'displayCameraDevices', 'displayCameraStatus', 'displayCameraFrame', 'displayCameraResult', 'capabilities', 'cpuStatus', 'commandAck', 'videoProgress', 'audioProgress', 'playlistProgress', 'tempMediaInfo', 'htmlProgress', 'controlScreenshot', 'sleepStateReport', 'playStateReport', 'textProgress', 'chatMessage', 'displayChatVisibility'', 'tts'],
                 handleDisplayMessage: handleDisplayMessageFallback
             }, textMediaTtsService);
 
@@ -1308,7 +1308,7 @@ async function startServer() {
                 'getVoiceConversationConfig', 'setVoiceConversationConfig',
                 'getTemporaryConversation', 'clearTemporaryConversation',
                 'startTemporaryConversation',
-                'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'requestDisplayRecording', 'stopDisplayRecording',
+                'setVoiceVad', 'detectVoiceNoise', 'setVoiceRecordingMode', 'setVoiceCaptureConfig', 'requestAudioInputDevices', 'requestDisplayRecording', 'stopDisplayRecording',
                 'listDisplayCameras', 'requestDisplayCamera', 'stopDisplayCamera',
                 'setGlobalRecordingPause',
                 'playlistRequest', 'playlistControl'
@@ -1642,6 +1642,51 @@ function normalizeVoiceRecordingMode(value) {
     return DISPLAY_RECORDING_MODES.includes(value) ? value : 'asr';
 }
 
+const VOICE_CAPTURE_MODES = ['webview', 'native'];
+const DEFAULT_VOICE_CAPTURE_MODE = 'webview';
+const DEFAULT_VOICE_INPUT_DEVICE_KEY = 'default';
+
+function normalizeVoiceCaptureMode(value) {
+    return VOICE_CAPTURE_MODES.includes(value) ? value : DEFAULT_VOICE_CAPTURE_MODE;
+}
+
+function normalizeVoiceInputDeviceKey(value) {
+    if (typeof value !== 'string') return DEFAULT_VOICE_INPUT_DEVICE_KEY;
+    const normalized = value.trim();
+    if (!normalized || normalized.length > 512) return DEFAULT_VOICE_INPUT_DEVICE_KEY;
+    return normalized;
+}
+
+function normalizeAudioInputDevice(device) {
+    if (!device || typeof device !== 'object') return null;
+    const key = normalizeVoiceInputDeviceKey(device.key);
+    if (key === DEFAULT_VOICE_INPUT_DEVICE_KEY && device.key !== DEFAULT_VOICE_INPUT_DEVICE_KEY) return null;
+    return {
+        key,
+        deviceId: typeof device.deviceId === 'string' ? device.deviceId.slice(0, 512) : '',
+        id: Number.isInteger(device.id) ? device.id : null,
+        type: Number.isInteger(device.type) ? device.type : 0,
+        typeName: typeof device.typeName === 'string' ? device.typeName.slice(0, 120) : '',
+        name: typeof device.name === 'string'
+            ? device.name.slice(0, 160)
+            : (typeof device.label === 'string' ? device.label.slice(0, 160) : ''),
+        label: typeof device.label === 'string' ? device.label.slice(0, 160) : '',
+        address: typeof device.address === 'string' ? device.address.slice(0, 256) : ''
+    };
+}
+
+function normalizeAudioInputDevices(value) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const normalizeList = (items) => (Array.isArray(items) ? items : [])
+        .slice(0, 64)
+        .map(normalizeAudioInputDevice)
+        .filter(Boolean);
+    return {
+        webview: normalizeList(source.webview),
+        native: normalizeList(source.native)
+    };
+}
+
 const SUB_DISPLAY_CAPABILITIES = {
     mediaRendering: false,
     voicePlayback: true,
@@ -1738,6 +1783,9 @@ function createDisplayState() {
         vadSilenceDurationMs: DEFAULT_VAD_SILENCE_DURATION_MS,
         vadMinSpeechDurationMs: DEFAULT_VAD_MIN_SPEECH_DURATION_MS,
         voiceRecordingMode: 'asr',
+        voiceCaptureMode: DEFAULT_VOICE_CAPTURE_MODE,
+        voiceInputDeviceKey: DEFAULT_VOICE_INPUT_DEVICE_KEY,
+        voiceCaptureStatus: null,
         voiceConversation: createConversationState(true)
     };
 }
@@ -6025,6 +6073,9 @@ function getDisplayList() {
             vadSilenceDurationMs: globalVoiceVadConfig.vadSilenceDurationMs,
             vadMinSpeechDurationMs: globalVoiceVadConfig.vadMinSpeechDurationMs,
             voiceRecordingMode: normalizeVoiceRecordingMode(data.state.voiceRecordingMode),
+            voiceCaptureMode: normalizeVoiceCaptureMode(data.state.voiceCaptureMode),
+            voiceInputDeviceKey: normalizeVoiceInputDeviceKey(data.state.voiceInputDeviceKey),
+            voiceCaptureStatus: data.state.voiceCaptureStatus || null,
             capabilities: caps,
             androidControlPageSupported: caps.androidControlPage === true,
             androidControlPageOpen: caps.androidControlPage === true && data.state.androidControlPageOpen === true,
@@ -7488,6 +7539,9 @@ wss.on('connection', (ws, req) => {
                     DEFAULT_VAD_MIN_SPEECH_DURATION_MS
                 ),
                 voiceRecordingMode: normalizeVoiceRecordingMode(savedState?.voiceRecordingMode),
+                voiceCaptureMode: normalizeVoiceCaptureMode(savedState?.voiceCaptureMode),
+                voiceInputDeviceKey: normalizeVoiceInputDeviceKey(savedState?.voiceInputDeviceKey),
+                voiceCaptureStatus: savedState?.voiceCaptureStatus || null,
                 isSubDisplay: isSubDisplay,
                 capabilities: isSubDisplay ? { ...SUB_DISPLAY_CAPABILITIES } : null
             }
@@ -7554,6 +7608,12 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({
             type: 'voiceRecordingConfig',
             mode: normalizeVoiceRecordingMode(displayClients.get(displayId)?.state.voiceRecordingMode)
+        }));
+
+        ws.send(JSON.stringify({
+            type: 'voiceCaptureConfig',
+            captureMode: normalizeVoiceCaptureMode(displayClients.get(displayId)?.state.voiceCaptureMode),
+            deviceKey: normalizeVoiceInputDeviceKey(displayClients.get(displayId)?.state.voiceInputDeviceKey)
         }));
 
         ws.send(JSON.stringify({
@@ -8457,6 +8517,33 @@ function handleDisplayMessageFallback(displayId, data, ws) {
     } else if (['displayRecordingStatus', 'displayRecordingChunk', 'displayRecordingResult'].includes(data.type)) {
         // 显示端录音数据只进入对应的临时会话，不进入 ASR、声纹或广播链路。
         handleDisplayRecordingMessage(displayId, data);
+    } else if (data.type === 'audioInputDevices' && displayData) {
+        const devices = normalizeAudioInputDevices(data.devices);
+        displayData.state.capabilities = mergeDisplayCapabilities(
+            {
+                ...(displayData.state.capabilities || DEFAULT_CAPABILITIES),
+                audioInputDevices: devices
+            },
+            displayData.state.userCapabilities
+        );
+        broadcastToControls({ type: 'audioInputDevices', displayId, devices });
+        broadcastDisplayList();
+        log('录音', `显示端 ${displayId} 输入设备列表已更新: webview=${devices.webview.length}, native=${devices.native.length}`);
+    } else if (data.type === 'voiceCaptureStatus' && displayData) {
+        const actualDevice = normalizeAudioInputDevice(data.actualDevice);
+        const status = {
+            state: typeof data.state === 'string' ? data.state.slice(0, 32) : 'unknown',
+            captureMode: normalizeVoiceCaptureMode(data.captureMode),
+            requestedDeviceKey: normalizeVoiceInputDeviceKey(data.requestedDeviceKey),
+            actualDevice,
+            sampleRate: Number.isInteger(data.sampleRate) ? data.sampleRate : null,
+            fallback: data.fallback === true,
+            error: typeof data.error === 'string' ? data.error.slice(0, 300) : null,
+            fallbackReason: typeof data.fallbackReason === 'string' ? data.fallbackReason.slice(0, 300) : null
+        };
+        displayData.state.voiceCaptureStatus = status;
+        broadcastToControls({ type: 'voiceCaptureStatus', displayId, ...status });
+        broadcastDisplayList();
     } else if (data.type === 'voiceInput' && displayData) {
         // 兼容旧版显示端主动回传 voiceInput；新版显示端由 ASR HTTP 入口直接调用同一处理函数。
         processDisplayVoiceInput(displayId, data, ws);
@@ -8479,8 +8566,14 @@ function handleDisplayMessageFallback(displayId, data, ws) {
         broadcastDisplayList();
         log('能力', `显示端 ${displayId} CPU 状态已更新，TTS 槽位=${cpuStatus.tts.totalCoreCount}`);
     } else if (data.type === 'capabilities' && displayData) {
+        const incomingCapabilities = data.capabilities && typeof data.capabilities === 'object'
+            ? { ...data.capabilities }
+            : {};
+        if (Object.prototype.hasOwnProperty.call(incomingCapabilities, 'audioInputDevices')) {
+            incomingCapabilities.audioInputDevices = normalizeAudioInputDevices(incomingCapabilities.audioInputDevices);
+        }
         displayData.state.capabilities = mergeDisplayCapabilities(
-            data.capabilities,
+            incomingCapabilities,
             displayData.state.userCapabilities
         );
         // 重连后恢复用户手动覆盖的能力值
@@ -8725,6 +8818,56 @@ async function handleControlMessageFallback(data, ws) {
         config.set('display.versionCheckIntervalMs', intervalMs);
         broadcastDisplayVersionConfig();
         log('配置', `显示端代码检测间隔已更新为 ${intervalMs}ms`);
+        return;
+    }
+
+    if (data.type === 'setVoiceCaptureConfig') {
+        if (!displayData) {
+            ws.send(JSON.stringify({
+                type: 'voiceCaptureConfigError',
+                displayId,
+                message: '显示端不存在或已断开'
+            }));
+            return;
+        }
+        const captureMode = normalizeVoiceCaptureMode(data.captureMode);
+        const deviceKey = normalizeVoiceInputDeviceKey(data.deviceKey);
+        displayData.state.voiceCaptureMode = captureMode;
+        displayData.state.voiceInputDeviceKey = deviceKey;
+        persistDisplayState(displayData, {
+            voiceCaptureMode: captureMode,
+            voiceInputDeviceKey: deviceKey
+        });
+        const message = {
+            type: 'voiceCaptureConfig',
+            displayId,
+            captureMode,
+            deviceKey
+        };
+        sendToDisplay(displayId, message);
+        broadcastToControls({ type: 'displayVoiceCaptureConfigChanged', ...message });
+        ws.send(JSON.stringify(message));
+        broadcastDisplayList();
+        log('录音', `显示端 ${displayId} 采集方式已更新: mode=${captureMode}, device=${deviceKey}`);
+        return;
+    }
+
+    if (data.type === 'requestAudioInputDevices') {
+        if (!displayData) {
+            ws.send(JSON.stringify({
+                type: 'audioInputDevicesError',
+                displayId,
+                message: '显示端不存在或已断开'
+            }));
+            return;
+        }
+        if (!sendToDisplay(displayId, { type: 'requestAudioInputDevices' })) {
+            ws.send(JSON.stringify({
+                type: 'audioInputDevicesError',
+                displayId,
+                message: '显示端当前不可用'
+            }));
+        }
         return;
     }
 

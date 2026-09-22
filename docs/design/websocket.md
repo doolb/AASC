@@ -7,6 +7,17 @@
 | `/display` | 显示端连接 |
 | `/control` | 控制端连接 |
 
+### 显示端录音方式与输入设备
+
+| 消息 | 方向 | 说明 |
+|------|------|------|
+| `setVoiceCaptureConfig` | 控制端 → 服务器 | 按显示端设置 `webview/native` 录音方式和 `deviceKey` |
+| `voiceCaptureConfig` | 服务器 → 显示端 | 下发服务端规范化后的权威录音配置 |
+| `displayVoiceCaptureConfigChanged` | 服务器 → 控制端 | 广播指定显示端的权威配置 |
+| `requestAudioInputDevices` | 控制端 → 服务器 → 显示端 | 请求目标显示端刷新 WebView/Native 输入设备列表 |
+| `audioInputDevices` | 显示端 → 服务器 → 控制端 | 回传按录音方式分组的输入设备列表 |
+| `voiceCaptureStatus` | 显示端 → 服务器 → 控制端 | 回传当前方式、请求设备、实际设备、采样率和回退错误 |
+
 ## 显示端同 ID 重连生命周期
 
 浏览器显示端会将 `displayId` 保存在 `localStorage`，网络抖动、页面刷新或测试浏览器重连时可能复用同一个 ID。服务端必须保证一个 `displayId` 只对应一个当前 WebSocket：新连接接管前关闭旧连接，旧连接的异步 `close` 事件不能删除新连接；连接登记层和业务层的显示端列表也必须保持单条记录。

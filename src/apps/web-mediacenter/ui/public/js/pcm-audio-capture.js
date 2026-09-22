@@ -198,5 +198,132 @@
         }
     }
 
+    // Native AudioRecord 通过 JavaScript bridge 回传 PCM16 分块时使用的采集器。
+    // 接口刻意保持与 PcmAudioCapture 的 beginSegment/takeWav/setPaused/stop 一致，
+    // 这样 display.html 的 VAD、单次录音和实时录音不需要复制两套业务逻辑。
+    class NativePcmAudioCapture {
+        constructor(options = {}) {
+            this.targetSampleRate = options.targetSampleRate || 16000;
+            this.segmentMode = options.segmentMode === true;
+            this.preRollMs = Math.max(Number(options.preRollMs) || 300, 0);
+            this.segmentActive = !this.segmentMode;
+            this.streamOnly = options.streamOnly === true;
+            this.onChunk = typeof options.onChunk === 'function' ? options.onChunk : null;
+            this.onLevel = typeof options.onLevel === 'function' ? options.onLevel : null;
+            this.sourceSampleRate = 0;
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.preRollSampleLimit = 0;
+            this.chunks = [];
+            this.latestRms = 0;
+            this.active = false;
+            this.paused = false;
+            this.isNative = true;
+        }
+
+        start(sampleRate = 16000) {
+            if (this.active) throw new Error('原生 PCM 录音已在进行中');
+            this.sourceSampleRate = Math.max(Number(sampleRate) || 16000, 1);
+            this.preRollSampleLimit = Math.max(1, Math.round(this.sourceSampleRate * this.preRollMs / 1000));
+            this.segmentActive = !this.segmentMode;
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.chunks = [];
+            this.latestRms = 0;
+            this.paused = false;
+            this.active = true;
+            return this;
+        }
+
+        feedPcm16(base64, sampleRate) {
+            if (!this.active || this.paused) return;
+            const sourceRate = Math.max(Number(sampleRate) || this.sourceSampleRate || 16000, 1);
+            const binary = atob(String(base64 || ''));
+            const sampleCount = Math.floor(binary.length / 2);
+            if (!sampleCount) return;
+            const samples = new Float32Array(sampleCount);
+            let sumSquares = 0;
+            for (let index = 0; index < sampleCount; index += 1) {
+                const low = binary.charCodeAt(index * 2);
+                const high = binary.charCodeAt(index * 2 + 1);
+                let value = (high << 8) | low;
+                if (value & 0x8000) value -= 0x10000;
+                const normalized = value < 0 ? value / 0x8000 : value / 0x7fff;
+                samples[index] = normalized;
+                sumSquares += normalized * normalized;
+            }
+            this.sourceSampleRate = sourceRate;
+            this.latestRms = Math.sqrt(sumSquares / sampleCount);
+            if (this.segmentMode && !this.segmentActive) {
+                this.appendPreRoll(samples);
+            } else {
+                if (!this.streamOnly) this.chunks.push(samples);
+                if (this.onChunk) this.onChunk(samples, sourceRate);
+            }
+            if (this.onLevel) this.onLevel(this.latestRms);
+        }
+
+        appendPreRoll(samples) {
+            this.preRollChunks.push(samples);
+            this.preRollSampleCount += samples.length;
+            while (this.preRollSampleCount > this.preRollSampleLimit && this.preRollChunks.length > 0) {
+                const firstChunk = this.preRollChunks[0];
+                const overflow = this.preRollSampleCount - this.preRollSampleLimit;
+                if (firstChunk.length <= overflow) {
+                    this.preRollChunks.shift();
+                    this.preRollSampleCount -= firstChunk.length;
+                    continue;
+                }
+                this.preRollChunks[0] = firstChunk.slice(overflow);
+                this.preRollSampleCount -= overflow;
+            }
+        }
+
+        beginSegment() {
+            if (!this.active || this.paused) return false;
+            if (!this.segmentMode) return true;
+            if (this.segmentActive) return false;
+            this.chunks = this.preRollChunks.slice();
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.segmentActive = true;
+            return true;
+        }
+
+        setPaused(paused) {
+            if (!this.active) return;
+            this.paused = paused === true;
+            this.chunks = [];
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.segmentActive = !this.segmentMode;
+        }
+
+        takeWav() {
+            if (!this.active || this.chunks.length === 0 || (this.segmentMode && !this.segmentActive)) return null;
+            const sampleCount = this.chunks.reduce((total, chunk) => total + chunk.length, 0);
+            const samples = new Float32Array(sampleCount);
+            let offset = 0;
+            this.chunks.forEach((chunk) => {
+                samples.set(chunk, offset);
+                offset += chunk.length;
+            });
+            this.chunks = [];
+            if (this.segmentMode) this.segmentActive = false;
+            return PcmAudioCapture.encodeWav(samples, this.sourceSampleRate, this.targetSampleRate);
+        }
+
+        stop() {
+            this.active = false;
+            this.paused = false;
+            this.chunks = [];
+            this.preRollChunks = [];
+            this.preRollSampleCount = 0;
+            this.preRollSampleLimit = 0;
+            this.segmentActive = !this.segmentMode;
+        }
+    }
+
     global.PcmAudioCapture = PcmAudioCapture;
+    global.NativePcmAudioCapture = NativePcmAudioCapture;
 })(window);

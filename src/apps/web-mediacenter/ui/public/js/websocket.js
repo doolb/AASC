@@ -129,6 +129,22 @@ const WebSocketManager = {
             if (window.DeviceList) {
                 window.DeviceList.handleDisplayRecordingModeChanged(data);
             }
+        } else if (data.type === 'displayVoiceCaptureConfigChanged' || data.type === 'voiceCaptureConfig') {
+            if (window.DeviceList) {
+                window.DeviceList.handleVoiceCaptureConfigChanged(data);
+            }
+        } else if (data.type === 'audioInputDevices') {
+            if (window.DeviceList) {
+                window.DeviceList.handleAudioInputDevices(data);
+            }
+        } else if (data.type === 'voiceCaptureStatus') {
+            if (window.DeviceList) {
+                window.DeviceList.handleVoiceCaptureStatus(data);
+            }
+        } else if (data.type === 'voiceCaptureConfigError' || data.type === 'audioInputDevicesError') {
+            if (window.showToast) {
+                window.showToast(data.message || '录音配置操作失败', 'error');
+            }
         } else if (data.type === 'displayRecordingStatus') {
             if (window.DeviceList) {
                 window.DeviceList.handleDisplayRecordingStatus(data);

@@ -402,3 +402,41 @@ ADB 未观察到 ANR/崩溃，但显示端在 TTS 请求期间反复接收 `cpuC
 - Android JVM `:app:testDebugUnitTest` 已通过；SCO 静态契约测试 3/3 已通过。
 - Debug APK 已安装到 `SM-N9500/API 28 (192.168.1.6:5555)`，包名 `com.aasc.display`，版本 `0.1.0 (versionCode 1)`；AIMIC-M4 连接、断开和 Android 12+ 蓝牙权限现场录音仍需验证。
 - 普通网页显示端、TTS、视频播放、控制端临时录音和页面刷新不残留 SCO 广播接收器或错误音频模式。
+
+## 2026-09-22 正式 APK 双录音方式与控制端麦克风选择
+
+### 需求目标
+
+- 正式 APK 同时支持 WebView `getUserMedia` 和 Native `AudioRecord` 两种录音方式。
+- 控制端按 `displayId` 选择录音方式和输入设备，服务端通过现有 WebSocket 远端配置流程保存并广播权威值。
+- WebView 方式继续使用 `enumerateDevices()` + `getUserMedia({ audio: { deviceId } })`，保持现有 JS PCM、VAD、WAV 和 ASR 链路。
+- Native 方式由 `AudioRecord` 按 Android `AudioDeviceInfo` 选择设备，分块回调 16-bit PCM 到 WebView，复用现有 JS VAD 和 ASR 上传链路；不新增第二套 ASR 业务协议。
+- 控制端同时显示请求设备、实际路由设备、录音方式、采样率和回退原因，便于区分“设备不存在”“路由回退”和“录音启动失败”。
+
+### 配置与边界
+
+- `voiceRecordingMode` 继续表示普通 ASR、单次录音、实时录音，不与录音实现方式混用。
+- 新增 `voiceCaptureMode`：`webview`（默认）或 `native`。
+- 新增 `voiceInputDeviceKey`：`default` 或显示端能力列表中的稳定逻辑键；WebView `deviceId` 和 Android 原生设备 ID 不直接混用。
+- 配置以显示端为粒度持久化；显示端断线期间使用 `webview` + `default` 本地默认值，重连后接受服务器权威配置。
+- 配置在录音空闲时立即生效；正在录音时先停止当前采集，再按新配置重新启动；设备不可用时回退系统默认设备并上报实际设备。
+- WebView 设备是否能被 Chromium/WebView 暴露由系统实现决定；Native 设备选择用于需要精确 Android 路由的场景。
+- Native 经典蓝牙输入仍使用 SCO；蓝牙链路本身的采样率和带宽限制不因录音方式切换而消失。
+
+### 数据流
+
+```
+控制端选择方式/设备
+    -> /control WebSocket
+    -> 服务端规范化、按 displayId 持久化并广播
+    -> /display WebSocket
+    -> display.html 选择 WebView deviceId 或 NativeBridge AudioRecord
+    -> 统一生成 16kHz mono PCM WAV
+    -> 现有 VAD、声纹、ASR 和 voiceInput 链路
+    -> 回报实际方式、设备、采样率和回退状态
+```
+
+### 实现状态
+
+- 已完成服务端 WebSocket 配置、控制端选择控件、WebView 设备枚举、Native `AudioRecord` 设备路由和统一 PCM/VAD/ASR 链路。
+- 已完成 Android JVM、录音生命周期、双录音协议契约测试和 `npm run build:apk`；带完整 Node Runtime 的 `withserver` APK 已安装到 SM-N9500 并正常启动，真机上的内置麦克风、AIMIC-M4 SCO、USB/蓝牙设备切换仍需现场验证。

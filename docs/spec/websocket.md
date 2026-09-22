@@ -954,3 +954,31 @@ function updateCropDisplayInfo(info):
     
     渲染 items 到 grid 容器
 ```
+
+## 双录音方式配置伪代码
+
+```text
+控制端:
+    从当前 displayList 读取 display.voiceCaptureMode/deviceKey
+    发送 { type: setVoiceCaptureConfig, displayId, captureMode, deviceKey }
+    或发送 { type: requestAudioInputDevices, displayId }
+
+服务器:
+    校验 displayId
+    captureMode 不在 webview/native -> webview
+    deviceKey 不是 default 或合法字符串 -> default
+    config.set(display.voiceCaptureMode/deviceKey)
+    displayData.state 更新规范化值
+    sendToDisplay(displayId, { type: voiceCaptureConfig, captureMode, deviceKey })
+    broadcastToControls({ type: displayVoiceCaptureConfigChanged, ...权威值 })
+
+显示端:
+    收到 voiceCaptureConfig 后停止正在运行的录音链路
+    captureMode == webview:
+        使用 WebView audioinput deviceId 创建 getUserMedia
+    captureMode == native:
+        使用 NativeBridge AudioRecord 和 AudioDeviceInfo 创建 PCM 采集
+    设备不存在:
+        使用系统默认设备并标记 fallback=true
+    回传 voiceCaptureStatus
+```

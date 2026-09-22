@@ -14,8 +14,8 @@ import java.util.concurrent.TimeUnit
 /**
  * 管理正式显示端的经典蓝牙 SCO 路由。
  *
- * 这里刻意不创建 AudioRecord：正式 APK 的录音由 display WebView 的 getUserMedia
- * 持有，控制器只负责在其创建前准备系统音频路由，避免两个输入客户端互相抢占。
+ * 控制器只负责准备经典蓝牙 SCO 路由；录音数据由 WebView 或 Native AudioRecord
+ * 持有，二者不会同时启动，避免两个输入客户端互相抢占。
  */
 class BluetoothScoController(
     context: Context,
@@ -36,21 +36,33 @@ class BluetoothScoController(
      * JavaScript bridge 线程可以等待异步 SCO 广播，不阻塞 Activity 主线程。
      */
     fun startForVoice(): String {
+        val bluetoothInput = try {
+            audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
+        } catch (error: SecurityException) {
+            return result(ok = false, error = "读取蓝牙麦克风权限不足：${error.message ?: "请允许蓝牙连接权限"}")
+        } catch (error: Exception) {
+            return result(ok = false, error = "读取蓝牙麦克风失败：${error.message ?: "系统音频设备不可用"}")
+        }
+        if (bluetoothInput == null) {
+            return result(ok = false, error = "未发现蓝牙 SCO 麦克风")
+        }
+        return startForInputResult(bluetoothInput).toString()
+    }
+
+    /** 为 Native AudioRecord 指定的蓝牙输入设备建立 SCO。 */
+    fun startForInput(device: AudioDeviceInfo): Boolean {
+        if (device.type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) return true
+        return startForInputResult(device).optBoolean("ok", false)
+    }
+
+    private fun startForInputResult(device: AudioDeviceInfo): JSONObject {
         synchronized(this) {
             if (routeActive) {
-                return result(ok = true, route = "bluetooth_sco", alreadyActive = true)
-            }
-
-            val bluetoothInput = try {
-                audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
-                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
-            } catch (error: SecurityException) {
-                return result(ok = false, error = "读取蓝牙麦克风权限不足：${error.message ?: "请允许蓝牙连接权限"}")
-            } catch (error: Exception) {
-                return result(ok = false, error = "读取蓝牙麦克风失败：${error.message ?: "系统音频设备不可用"}")
-            }
-            if (bluetoothInput == null) {
-                return result(ok = false, error = "未发现蓝牙 SCO 麦克风")
+                return JSONObject()
+                    .put("ok", true)
+                    .put("route", "bluetooth_sco")
+                    .put("alreadyActive", true)
             }
 
             previousMode = audioManager.mode
@@ -94,7 +106,7 @@ class BluetoothScoController(
                     audioManager.isBluetoothScoOn
                 if (alreadyConnected) {
                     routeActive = true
-                    result(ok = true, route = "bluetooth_sco", alreadyActive = true)
+                    resultJson(ok = true, route = "bluetooth_sco", alreadyActive = true)
                 } else {
                     audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                     modeChangedByController = true
@@ -106,7 +118,7 @@ class BluetoothScoController(
                         (connectedByBroadcast || audioManager.isBluetoothScoOn)
                     if (!connected) {
                         stopLocked()
-                        result(ok = false, error = "蓝牙 SCO 连接超时")
+                        resultJson(ok = false, error = "蓝牙 SCO 连接超时")
                     } else {
                         if (!audioManager.isBluetoothScoOn) {
                             @Suppress("DEPRECATION")
@@ -114,15 +126,15 @@ class BluetoothScoController(
                             scoFlagChangedByController = true
                         }
                         routeActive = true
-                        result(ok = true, route = "bluetooth_sco")
+                        resultJson(ok = true, route = "bluetooth_sco")
                     }
                 }
             } catch (error: SecurityException) {
                 stopLocked()
-                result(ok = false, error = "启动蓝牙 SCO 权限不足：${error.message ?: "请允许蓝牙连接权限"}")
+                resultJson(ok = false, error = "启动蓝牙 SCO 权限不足：${error.message ?: "请允许蓝牙连接权限"}")
             } catch (error: Exception) {
                 stopLocked()
-                result(ok = false, error = "启动蓝牙 SCO 失败：${error.message ?: "系统音频路由不可用"}")
+                resultJson(ok = false, error = "启动蓝牙 SCO 失败：${error.message ?: "系统音频路由不可用"}")
             }
         }
     }
@@ -179,11 +191,20 @@ class BluetoothScoController(
         alreadyActive: Boolean = false,
         error: String? = null
     ): String {
+        return resultJson(ok, route, alreadyActive, error).toString()
+    }
+
+    private fun resultJson(
+        ok: Boolean,
+        route: String? = null,
+        alreadyActive: Boolean = false,
+        error: String? = null
+    ): JSONObject {
         val json = JSONObject().put("ok", ok)
         if (route != null) json.put("route", route)
         if (alreadyActive) json.put("alreadyActive", true)
         if (!error.isNullOrBlank()) json.put("error", error)
-        return json.toString()
+        return json
     }
 
     private companion object {

@@ -7,6 +7,15 @@
   - 计划将原生 ASR/TTS/声纹模块、Puppeteer、模型和动态依赖外置，先生成独立验证 bundle，再决定是否接入正式发布。
   - 相关文档：`docs/design/server-release.md`、`docs/spec/server-release.md`、`docs/task/20260922_esbuild后端依赖打包方案.md`。
 
+### 正式 APK 双录音方式与控制端麦克风选择
+
+- ✅ [2026-09-22] 正式 APK 支持 WebView `getUserMedia` 与 Native `AudioRecord` 两种录音方式，控制端可按显示端选择采集方式和输入设备。
+  - 服务端新增 `voiceCaptureMode`、`voiceInputDeviceKey` 的 WebSocket 远端配置、设备列表和实际路由状态回报；配置按 `displayId` 持久化并广播规范化权威值。
+  - 控制端在语音 VAD 卡片提供采集方式、输入设备、刷新设备和实际采样率/回退状态；显示端通过 WebView `deviceId` 或 `NativeBridge` 选择输入链路。
+  - 新增 `AudioInputDevice.kt`、`NativeAudioCaptureController.kt` 和 `NativePcmAudioCapture`；Native PCM16 分块复用现有 VAD、WAV、声纹和 ASR 上传链路，蓝牙输入继续使用 SCO。
+  - 更新 `server-app.js`、`display.html`、`pcm-audio-capture.js`、`device-list.js`、`websocket.js`、`NativeBridge.kt`、`BluetoothScoController.kt` 及对应 design/spec/task 文档；新增 `tests/display-audio-capture-config.test.js`。
+  - 验证：`:app:testDebugUnitTest`、`:app:assembleDebug` 和 `npm run build:apk` 通过；录音/SCO/生命周期定向测试 11/11、双录音契约测试 4/4 通过；相关 JS 语法检查和 `git diff --check` 通过。带完整 Node Runtime 的 `withserver` APK 为 `release/apkbuild/withserver/output/aasc-display.apk`，约 253MB，SHA-256 为 `52867d9259235ea248932004ce043a8b8df0da3169d0a9222610400457a16ef3`；已安装到 `SM-N9500 (192.168.1.6:5555)` 并启动，内置 Node 服务和显示端 WebSocket 均正常，无 `runtime-manifest.json` 或崩溃错误。全量 Node 测试本轮曾为 897/902，5 项中 2 项由本次代码形态调整触发的回归已修复，剩余 3 项为现有 Offline/版本基线断言；AIMIC-M4 实际路由和录音电平仍待现场操作验证。
+
 ### TTS 播报文字自适应布局
 
 - ✅ [2026-09-21] 修复 Android 高 DPI/300% 缩放下 TTS 播报文字超出屏幕、竖屏左右留白过大的问题。

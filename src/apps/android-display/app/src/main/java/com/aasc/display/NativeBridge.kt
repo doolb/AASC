@@ -30,9 +30,17 @@ class NativeBridge(
     private val onControlPageAccessChanged: ((Boolean) -> Unit)? = null
 ) {
 
+    private val audioManager = webView.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val bluetoothScoController = BluetoothScoController(
         webView.context.applicationContext,
-        webView.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager
+    )
+    private val nativeAudioCaptureController = NativeAudioCaptureController(
+        webView.context.applicationContext,
+        webView,
+        audioManager,
+        mainHandler,
+        bluetoothScoController
     )
 
     private companion object {
@@ -165,8 +173,26 @@ class NativeBridge(
         bluetoothScoController.stop()
     }
 
+    /** 返回当前 Android 系统暴露的原生音频输入设备。 */
+    @JavascriptInterface
+    fun listAudioInputDevices(): String = nativeAudioCaptureController.listDevices()
+
+    /** 启动 Native AudioRecord；PCM 分块通过 window.onNativeAudioChunk 回调页面。 */
+    @JavascriptInterface
+    fun startNativeAudioCapture(configJson: String): String =
+        nativeAudioCaptureController.start(configJson)
+
+    /** 停止 Native AudioRecord，并释放可能建立的蓝牙 SCO。 */
+    @JavascriptInterface
+    fun stopNativeAudioCapture(): String = nativeAudioCaptureController.stop()
+
+    /** 查询 Native AudioRecord 当前方式、实际设备和采样率。 */
+    @JavascriptInterface
+    fun nativeAudioCaptureStatus(): String = nativeAudioCaptureController.status()
+
     /** Activity 销毁时释放原生桥持有的 SCO 状态。 */
     fun release() {
+        nativeAudioCaptureController.release()
         bluetoothScoController.stop()
     }
 

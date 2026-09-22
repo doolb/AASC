@@ -396,6 +396,102 @@ const DeviceList = {
         this.render();
     },
 
+    handleVoiceCaptureConfigChanged(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display) return;
+        display.voiceCaptureMode = this.normalizeVoiceCaptureMode(data.captureMode);
+        display.voiceInputDeviceKey = this.normalizeVoiceInputDeviceKey(data.deviceKey);
+        this.render();
+    },
+
+    handleAudioInputDevices(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display || !data.devices) return;
+        display.capabilities = {
+            ...(display.capabilities || {}),
+            audioInputDevices: {
+                webview: Array.isArray(data.devices.webview) ? data.devices.webview : [],
+                native: Array.isArray(data.devices.native) ? data.devices.native : []
+            }
+        };
+        this.render();
+    },
+
+    handleVoiceCaptureStatus(data) {
+        const display = this.list.find((item) => item.id === data?.displayId);
+        if (!display) return;
+        display.voiceCaptureStatus = {
+            state: data.state || 'unknown',
+            captureMode: this.normalizeVoiceCaptureMode(data.captureMode),
+            requestedDeviceKey: this.normalizeVoiceInputDeviceKey(data.requestedDeviceKey),
+            actualDevice: data.actualDevice || null,
+            sampleRate: Number.isInteger(data.sampleRate) ? data.sampleRate : null,
+            fallback: data.fallback === true,
+            error: data.error || null,
+            fallbackReason: data.fallbackReason || null
+        };
+        this.render();
+    },
+
+    normalizeVoiceCaptureMode(mode) {
+        return ['webview', 'native'].includes(mode) ? mode : 'webview';
+    },
+
+    normalizeVoiceInputDeviceKey(deviceKey) {
+        if (typeof deviceKey !== 'string') return 'default';
+        const normalized = deviceKey.trim();
+        return normalized && normalized.length <= 512 ? normalized : 'default';
+    },
+
+    getVoiceCaptureMode(display) {
+        return this.normalizeVoiceCaptureMode(display?.voiceCaptureMode);
+    },
+
+    getVoiceInputDeviceKey(display) {
+        return this.normalizeVoiceInputDeviceKey(display?.voiceInputDeviceKey);
+    },
+
+    getVoiceInputDevices(display, captureMode) {
+        const devices = display?.capabilities?.audioInputDevices?.[captureMode];
+        return Array.isArray(devices) ? devices : [];
+    },
+
+    getVoiceInputDeviceLabel(device) {
+        const name = String(device?.label || device?.name || '').trim();
+        const typeName = String(device?.typeName || '').trim();
+        if (name && typeName && !name.includes(typeName)) return `${name} · ${typeName}`;
+        return name || typeName || String(device?.key || '输入设备');
+    },
+
+    getVoiceCaptureDeviceKeyForMode(display, captureMode) {
+        const currentKey = this.getVoiceInputDeviceKey(display);
+        const devices = this.getVoiceInputDevices(display, captureMode);
+        return currentKey === 'default' || devices.some((device) => device.key === currentKey)
+            ? currentKey
+            : 'default';
+    },
+
+    setVoiceCaptureConfig(displayId, captureMode, deviceKey) {
+        const display = this.list.find((item) => item.id === displayId);
+        if (!display || !this.sendDisplayRecordingMessage({
+            type: 'setVoiceCaptureConfig',
+            displayId,
+            captureMode: this.normalizeVoiceCaptureMode(captureMode),
+            deviceKey: this.normalizeVoiceInputDeviceKey(deviceKey)
+        })) return false;
+        display.voiceCaptureMode = this.normalizeVoiceCaptureMode(captureMode);
+        display.voiceInputDeviceKey = this.normalizeVoiceInputDeviceKey(deviceKey);
+        this.render();
+        return true;
+    },
+
+    requestAudioInputDevices(displayId) {
+        return this.sendDisplayRecordingMessage({
+            type: 'requestAudioInputDevices',
+            displayId
+        });
+    },
+
     normalizeVoiceRecordingMode(mode) {
         return ['asr', 'single', 'realtime'].includes(mode) ? mode : 'asr';
     },
@@ -863,6 +959,20 @@ const DeviceList = {
         const recordingMode = this.getVoiceRecordingMode(display);
         const recordingSession = this.getDisplayRecordingSession(display.id);
         const recordingLabel = this.getDisplayRecordingLabel(display.id);
+        const captureMode = this.getVoiceCaptureMode(display);
+        const captureDeviceKey = this.getVoiceCaptureDeviceKeyForMode(display, captureMode);
+        const captureDevices = this.getVoiceInputDevices(display, captureMode);
+        const captureDeviceOptions = [
+            { key: 'default', label: '系统默认' },
+            ...captureDevices.filter((device) => device.key !== 'default')
+                .map((device) => ({ key: device.key, label: this.getVoiceInputDeviceLabel(device) }))
+        ];
+        const captureStatus = display.voiceCaptureStatus;
+        const captureStatusText = captureStatus?.state === 'started'
+            ? `实际：${this.getVoiceInputDeviceLabel(captureStatus.actualDevice)}${captureStatus.sampleRate ? ` · ${captureStatus.sampleRate}Hz` : ''}${captureStatus.fallback ? ' · 已回退' : ''}`
+            : captureStatus?.state === 'error'
+                ? `失败：${captureStatus.error || '录音启动失败'}`
+                : '尚未启动录音';
         const recordingButtonText = recordingSession?.state === 'started' || recordingSession?.state === 'requested'
             ? (recordingMode === 'realtime' ? '停止实时录音' : '停止单次录音')
             : (recordingMode === 'realtime' ? '🔴 开始实时录音' : '🎙️ 单次录音并播放');
@@ -884,6 +994,19 @@ const DeviceList = {
                 </div>
                 <div class="display-vad-noise-result" title="最近一次底噪检测结果">${vadNoiseText}</div>
                 <div class="display-vad-recording-controls">
+                    <label class="display-recording-mode">采集方式
+                        <select data-voice-capture-mode data-display-id="${displayId}">
+                            <option value="webview" ${captureMode === 'webview' ? 'selected' : ''}>WebView getUserMedia</option>
+                            <option value="native" ${captureMode === 'native' ? 'selected' : ''}>Native AudioRecord</option>
+                        </select>
+                    </label>
+                    <label class="display-recording-mode">输入设备
+                        <select data-voice-input-device data-display-id="${displayId}">
+                            ${captureDeviceOptions.map((device) => `<option value="${this.escapeHtml(device.key)}" ${device.key === captureDeviceKey ? 'selected' : ''}>${this.escapeHtml(device.label)}</option>`).join('')}
+                        </select>
+                    </label>
+                    <button type="button" data-audio-input-refresh data-display-id="${displayId}">刷新麦克风</button>
+                    <span class="display-recording-state">${this.escapeHtml(captureStatusText)}</span>
                     <label class="display-recording-mode">录音模式
                         <select data-voice-recording-mode data-display-id="${displayId}">
                             <option value="asr" ${recordingMode === 'asr' ? 'selected' : ''}>普通 ASR</option>
@@ -1046,6 +1169,12 @@ const DeviceList = {
         if (!container || container.dataset.voiceVadControlsBound) return;
         container.dataset.voiceVadControlsBound = '1';
         container.addEventListener('click', (event) => {
+            const refreshAudio = event.target.closest('[data-audio-input-refresh]');
+            if (refreshAudio && !refreshAudio.disabled) {
+                event.stopPropagation();
+                this.requestAudioInputDevices(refreshAudio.dataset.displayId);
+                return;
+            }
             const applyButton = event.target.closest('[data-vad-apply]');
             if (applyButton) {
                 event.stopPropagation();
@@ -1086,6 +1215,29 @@ const DeviceList = {
             if (mode) {
                 event.stopPropagation();
                 this.setVoiceRecordingMode(mode.dataset.displayId, mode.value);
+                return;
+            }
+            const captureMode = event.target.closest('[data-voice-capture-mode]');
+            if (captureMode) {
+                event.stopPropagation();
+                const display = this.list.find((item) => item.id === captureMode.dataset.displayId);
+                const nextMode = this.normalizeVoiceCaptureMode(captureMode.value);
+                this.setVoiceCaptureConfig(
+                    captureMode.dataset.displayId,
+                    nextMode,
+                    this.getVoiceCaptureDeviceKeyForMode(display, nextMode)
+                );
+                return;
+            }
+            const inputDevice = event.target.closest('[data-voice-input-device]');
+            if (inputDevice) {
+                event.stopPropagation();
+                const display = this.list.find((item) => item.id === inputDevice.dataset.displayId);
+                this.setVoiceCaptureConfig(
+                    inputDevice.dataset.displayId,
+                    this.getVoiceCaptureMode(display),
+                    inputDevice.value
+                );
             }
         });
     },
