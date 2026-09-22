@@ -60,6 +60,10 @@
     cursor: pointer;
 }
 
+#displayMmdCanvas.is-interactive.is-dragging {
+    cursor: grabbing;
+}
+
 .display-mmd-status {
     position: absolute;
     right: max(12px, env(safe-area-inset-right));

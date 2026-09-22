@@ -1,5 +1,12 @@
 # Web MediaCenter - 变更日志
 
+### 显示端 MMD 空白区域拖动旋转
+
+- ✅ [2026-09-22] 在 `displayMmdCanvas` 的空白区域拖动时旋转本地 PMX/VRM 角色。
+  - `pointerdown` 先通过现有 Raycaster 判定角色命中；命中角色保持原有 `mmd.interaction` 轻点反馈，只有空白起点捕获 pointer 并按水平位移旋转 Y 轴。
+  - PMX/VRM runtime 复用统一的旋转和拖动结束接口，拖动结束后刷新阴影范围；旋转不持久化、不广播，也不影响动作、聊天与灯光。
+  - 新增拖动交互契约测试；`node --test tests/display-chat-mmd.test.js` 31/31、三份相关脚本语法检查和 `git diff --check` 通过。全量 `npm test` 仍受既有 Windows 环境/远端基线依赖阻断，未修改无关模块。
+
 ### 显示端聊天下拉菜单选中态颜色
 
 - ✅ [2026-09-22] 修复聊天对象和会话两个下拉菜单中选中项与未选中项底色难以区分的问题。

@@ -288,6 +288,22 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         frameHandle = 0;
     }
 
+    function rotateModelBy(radians) {
+        if (!currentVrm?.scene) return false;
+        const delta = Number(radians);
+        if (!Number.isFinite(delta) || Math.abs(delta) < Number.EPSILON) return false;
+        currentVrm.scene.rotation.y += delta;
+        keyLight.shadow.needsUpdate = true;
+        startRendering();
+        return true;
+    }
+
+    function finishModelRotation() {
+        if (!currentVrm?.scene) return false;
+        fitShadowCamera(currentVrm.scene);
+        return true;
+    }
+
     function raycast(point) {
         if (!currentVrm || !point) return null;
         pointer.set(Number(point.normalizedX) || 0, Number(point.normalizedY) || 0);
@@ -319,5 +335,15 @@ export function createDisplayVrmRuntime({ canvas, onStatus = () => {} } = {}) {
         ktx2Loader.dispose();
     }
 
-    return Object.freeze({ dispose, handleActionPlan, load, raycast, resize, setLighting, setVisible });
+    return Object.freeze({
+        dispose,
+        finishModelRotation,
+        handleActionPlan,
+        load,
+        raycast,
+        resize,
+        rotateModelBy,
+        setLighting,
+        setVisible
+    });
 }

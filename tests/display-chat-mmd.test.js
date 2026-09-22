@@ -134,6 +134,21 @@ test('聊天隐藏后才允许 MMD Canvas 接收点击，并展示 think 内容'
     assert.match(chat, /<think>/u);
 });
 
+test('MMD 空白区域拖动只旋转本地角色并保留命中角色的点击互动', () => {
+    const mmd = readPublic('js/display-mmd.js');
+    const pmx = readPublic('js/display-pmx-runtime.js');
+    const vrm = readPublic('js/display-vrm-runtime.js');
+    assert.match(mmd, /POINTER_DRAG_THRESHOLD/u);
+    assert.match(mmd, /function handlePointerDown\(event\)[\s\S]*const hitPart = raycast\(point\)[\s\S]*if \(hitPart\)/u);
+    assert.match(mmd, /function handlePointerMove\(event\)[\s\S]*state\.blankDrag[\s\S]*rotateModelBy/u);
+    assert.match(mmd, /function finishBlankDrag\(pointerId\)[\s\S]*releasePointerCapture[\s\S]*finishModelRotation/u);
+    assert.match(mmd, /function handlePointerUp\(event\)[\s\S]*finishBlankDrag\(event\.pointerId\)[\s\S]*triggerInteraction/u);
+    assert.match(pmx, /const rotateModelBy = \(radians\)[\s\S]*currentMesh\.rotation\.y \+= delta/u);
+    assert.match(pmx, /const finishModelRotation = \(\)[\s\S]*fitShadowCamera\(currentMesh\)/u);
+    assert.match(vrm, /function rotateModelBy\(radians\)[\s\S]*currentVrm\.scene\.rotation\.y \+= delta/u);
+    assert.match(vrm, /function finishModelRotation\(\)[\s\S]*fitShadowCamera\(currentVrm\.scene\)/u);
+});
+
 test('聊天打开时隐藏播报文字但不改变 TTS 播放链路', () => {
     const stage = readPublic('js/display-stage.js');
     const displayCss = readPublic('css/display.css');

@@ -23,6 +23,9 @@
         keyPosition: Object.freeze({ x: 1.5, y: 3, z: 2.5 }),
         shadowEnabled: true
     });
+    const POINTER_DRAG_THRESHOLD = 8;
+    const POINTER_TAP_THRESHOLD = 18;
+    const ROTATION_RADIANS_PER_PIXEL = Math.PI / 360;
 
     function clamp(value, minimum, maximum, fallback) {
         const number = Number(value);
@@ -72,6 +75,7 @@
         modelReady: false,
         modelProfile: null,
         pressedPoint: null,
+        blankDrag: null,
         pulseUntil: 0,
         lastInteractionAt: 0,
         animationFrame: null,
@@ -197,28 +201,79 @@
         if (state.bus) state.bus.publish('mmd.interaction', event);
     }
 
+    function finishBlankDrag(pointerId) {
+        const drag = state.blankDrag;
+        if (!drag || drag.pointerId !== pointerId) return false;
+        if (state.canvas?.hasPointerCapture?.(pointerId)) {
+            state.canvas.releasePointerCapture(pointerId);
+        }
+        state.blankDrag = null;
+        state.canvas?.classList.remove('is-dragging');
+        if (drag.didRotate && typeof state.runtime?.finishModelRotation === 'function') {
+            state.runtime.finishModelRotation();
+        }
+        return true;
+    }
+
+    function cancelPointerInteraction() {
+        const pointerId = state.blankDrag?.pointerId;
+        if (typeof pointerId === 'number') finishBlankDrag(pointerId);
+        state.pressedPoint = null;
+    }
+
     function handlePointerDown(event) {
         if (!state.pointerEnabled || !state.visible) return;
-        state.pressedPoint = getCanvasPoint(event);
+        const point = getCanvasPoint(event);
+        const hitPart = raycast(point);
+        if (hitPart) {
+            state.pressedPoint = { point, hitPart, pointerId: event.pointerId };
+            return;
+        }
+        state.pressedPoint = null;
+        state.blankDrag = {
+            pointerId: event.pointerId,
+            startPoint: point,
+            lastPoint: point,
+            didRotate: false
+        };
+        state.canvas.setPointerCapture?.(event.pointerId);
+    }
+
+    function handlePointerMove(event) {
+        const drag = state.blankDrag;
+        if (!state.pointerEnabled || !state.visible || !drag || drag.pointerId !== event.pointerId) return;
+        const point = getCanvasPoint(event);
+        const travelled = Math.hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y);
+        if (!drag.didRotate && travelled < POINTER_DRAG_THRESHOLD) return;
+        const deltaX = point.x - drag.lastPoint.x;
+        drag.lastPoint = point;
+        drag.didRotate = true;
+        state.canvas.classList.add('is-dragging');
+        if (Math.abs(deltaX) < Number.EPSILON) return;
+        state.runtime?.rotateModelBy?.(deltaX * ROTATION_RADIANS_PER_PIXEL);
     }
 
     function handlePointerUp(event) {
-        if (!state.pointerEnabled || !state.visible || !state.pressedPoint) return;
+        if (!state.pointerEnabled || !state.visible) return;
+        if (finishBlankDrag(event.pointerId)) return;
+        const pressedPoint = state.pressedPoint;
+        if (!pressedPoint || pressedPoint.pointerId !== event.pointerId) return;
         const point = getCanvasPoint(event);
-        const distance = Math.hypot(point.x - state.pressedPoint.x, point.y - state.pressedPoint.y);
+        const distance = Math.hypot(point.x - pressedPoint.point.x, point.y - pressedPoint.point.y);
         state.pressedPoint = null;
-        if (distance > 18) return;
-        const hitPart = raycast(point);
-        if (hitPart) triggerInteraction(hitPart, point);
+        if (distance > POINTER_TAP_THRESHOLD) return;
+        triggerInteraction(pressedPoint.hitPart, point);
     }
 
     function setPointerEnabled(enabled) {
         state.pointerEnabled = enabled === true;
+        if (!state.pointerEnabled) cancelPointerInteraction();
         if (state.canvas) state.canvas.classList.toggle('is-interactive', state.pointerEnabled);
     }
 
     function setVisible(visible) {
         state.visible = visible === true;
+        if (!state.visible) cancelPointerInteraction();
         if (state.runtime) state.runtime.setVisible(state.visible);
         if (state.visible && !state.modelReady && !state.runtime) {
             setStatus('正在准备角色模型…');
@@ -359,6 +414,7 @@
         const sequence = ++state.loadSequence;
         state.modelProfile = { ...profile };
         state.modelReady = false;
+        cancelPointerInteraction();
         setStatus('正在准备角色模型…');
         try {
             const resolvedProfile = await resolveProfile(state.modelProfile);
@@ -408,8 +464,10 @@
             });
         }
         state.canvas.addEventListener('pointerdown', handlePointerDown, { passive: true });
+        state.canvas.addEventListener('pointermove', handlePointerMove, { passive: true });
         state.canvas.addEventListener('pointerup', handlePointerUp, { passive: true });
-        state.canvas.addEventListener('pointercancel', () => {
+        state.canvas.addEventListener('pointercancel', (event) => {
+            finishBlankDrag(event.pointerId);
             state.pressedPoint = null;
         }, { passive: true });
         state.initialized = true;

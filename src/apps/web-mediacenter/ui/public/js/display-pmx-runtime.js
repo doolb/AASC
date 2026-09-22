@@ -463,6 +463,22 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         frameHandle = 0;
     };
 
+    const rotateModelBy = (radians) => {
+        if (!currentMesh) return false;
+        const delta = Number(radians);
+        if (!Number.isFinite(delta) || Math.abs(delta) < Number.EPSILON) return false;
+        currentMesh.rotation.y += delta;
+        keyLight.shadow.needsUpdate = true;
+        startRendering();
+        return true;
+    };
+
+    const finishModelRotation = () => {
+        if (!currentMesh) return false;
+        fitShadowCamera(currentMesh);
+        return true;
+    };
+
     const raycast = (point) => {
         if (!currentMesh || !point) return null;
         pointer.set(Number(point.normalizedX) || 0, Number(point.normalizedY) || 0);
@@ -491,6 +507,8 @@ export function createDisplayPmxRuntime({ canvas, onStatus = () => {} } = {}) {
         loadMotion,
         playMotion,
         raycast,
+        rotateModelBy,
+        finishModelRotation,
         resize,
         setLighting,
         setVisible,

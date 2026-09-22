@@ -220,6 +220,40 @@
 ```
 
 ```text
+过程 handleMmdPointerDown(event)
+  如果 MMD Canvas 不可交互或不可见
+    返回
+  startPoint = 计算 Canvas 坐标
+  hitPart = Raycaster(startPoint)
+  如果 hitPart 存在
+    保存 hitPart 和 startPoint，保留既有点击判定
+    返回
+  保存空白拖动的 pointerId、startPoint、lastPoint
+  捕获当前 pointerId，保证移出 Canvas 后仍可结束拖动
+
+过程 handleMmdPointerMove(event)
+  如果 event.pointerId 不属于空白拖动
+    返回
+  currentPoint = 计算 Canvas 坐标
+  deltaX = currentPoint.x - lastPoint.x
+  总位移未超过拖动阈值
+    只更新 lastPoint
+    返回
+  调用 runtime.rotateModelBy(deltaX 转为 Y 轴弧度)
+  更新 lastPoint
+
+过程 handleMmdPointerUpOrCancel(event)
+  如果 event.pointerId 属于空白拖动
+    释放 pointer capture
+    调用 runtime.finishModelRotation() 更新阴影范围
+    清空拖动状态，不发布 mmd.interaction
+    返回
+  如果角色命中且总位移不超过点击阈值
+    执行既有角色触摸互动
+  清空按下状态
+```
+
+```text
 过程 handleMmdInteraction(event)
   校验 roleId、hitPart、gesture 和时间戳
   如果当前角色或会话不匹配
